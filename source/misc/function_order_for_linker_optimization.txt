@@ -1,0 +1,1679 @@
+; This file boosts performance by telling the linker how to physically order the functions inside the EXE.
+; When functions that call each other (or that are called together) are near each other, they cooperate better
+; with the CPU cache.  I believe this is because the cache and/or OS has a certain memory block size such as 4 KB.
+; So when a block gets brought into the cache, it tends to bring in nearby functions with it.  Since there's only
+; a small number of blocks available, having strongly related code sections adjacent to each other improves the
+; percentage of "good code" in the cache.
+
+; Putting small, frequently-called functions (even ones that don't call each other) adjacent to each other
+; might be more beneficial than sandwiching big functions with small functions they call.
+
+; Testing shows that semicolons can be used for comments, even at the end of a line.
+
+; Info from http://www.kegel.com/mangle.html (not necessarily complete or accurate)
+; Operator names are represented by a question mark followed by a single character rather than being spelled out:
+; myclass::myclass          ?0
+; myclass::~myclass         ?1
+; myclass::operator new     ?2
+; myclass::operator delete  ?3
+; myclass::operator=        ?4
+; myclass::operator+        ?H
+; myclass::operator++       ?E
+
+; Data Type Codes
+; signed char    C
+; char           D
+; unsigned char  E
+; short          F
+; unsigned short G
+; int            H
+; unsigned int   I
+; long           J
+; unsigned long  K
+; float          M
+; double         N
+; long double    O
+; pointer        P (see below)
+; array          Q (see below)
+; struct/class   V (see below)
+; void           X (terminates argument list)
+; elipsis        Z (terminates argument list)
+
+; NOTE: A CLEAN+BUILD is usually necessary to properly put changes made in this file into effect, at least in MSVC++ 7.1
+
+?UTOA@@YAPADKPAD@Z  ; Rarely called, so keep them outermost from the others.
+_ultoa
+
+?ATOU64@@YA_KPAD@Z  ; Rarely called, so keep them outermost from the others.
+_strtoui64          ;
+
+_strtoi64  ; Used only for hex conversion, which is somewhat rare, so keep it fairly outer/away.
+strtol     ;
+
+_isctype         ; Called internally by atof().
+_fltin           ;
+;_pctype         ; Same, but can't be custom ordered.
+;__mb_cur_max    ;
+;strlen          ;
+atof             ;
+?ATOF@@YANPAD@Z  ; ATOF is called far less often than ATOI64 (though perhaps about the same as ATOI().
+
+?PerformLoop@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@_J_N@Z  ; Performs best here (higher up) at the moment.
+?PerformAssign@Line@@AAE?AW4ResultType@@XZ
+?Free@Var@@QAEXH_N@Z  ; Called fairly often by the main Var::Assign().
+?Assign@Var@@QAE?AW4ResultType@@PADK_N1@Z  ; Assign MAIN
+?Assign@Var@@QAE?AW4ResultType@@AAUExprTokenType@@@Z  ; Assign a Token.
+
+; Some below also used by ExpandExpression to write results back out to the deref buffer, and for conversion of numbers to strings:
+_itoa
+?ITOA@@YAPADHPAD@Z                    ; Used by assign-int.
+?Assign@Var@@QAE?AW4ResultType@@H@Z   ; Assign an Int
+?Assign@Var@@QAE?AW4ResultType@@K@Z   ; Assign an unsigned long (DWORD)
+?Assign@Var@@QAE?AW4ResultType@@_J@Z  ; Assign an Int64
+?ITOA64@@YAPAD_JPAD@Z                 ; Used by assign-int64
+_i64toa
+
+atoi             ; Used for 32-bit integers, which are less frequently called/converted than 64-bit.
+?ATOI@@YAHPAD@Z  ;
+
+; IsHex is a focal point, so hang two things off it: above and below (proceed in proximity order in each direction). IsHex() calls omit_leading_whitespace(), so put that here too.  The order of importance is probably ATOI64, ATOF, then ATOI based on expected calling frequency.
+?omit_leading_whitespace@@YAPADPAD@Z  ; Called by IsHex(). Formerly was faster when moved further below than this.
+?IsHex@@YA_NPAD@Z
+
+?ATOI64@@YA_JPAD@Z
+_atoi64
+?IsPureNumeric@@YA?AW4SymbolType@@PADHHHH@Z  ; util.obj
+; Probably intrinsic: strchr (warning LNK4065: '_strchr' cannot be ordered)
+
+?FreeAndRestoreFunctionVars@Var@@SAXAAVFunc@@AAPAUVarBkp@@AAH@Z
+?ConvertToNonAliasIfNecessary@Var@@QAEXXZ  ; Called only when a function has ByRef paramters.
+?UpdateAlias@Var@@QAEXPAV1@@Z              ; Called only when a function has ByRef paramters.
+
+?LengthIgnoreBinaryClip@Var@@QAEKXZ
+?length@?3??Length@Var@@QAEAAKXZ@4KA  ; Possibly corresponds to: static VarSizeType length
+?Length@Var@@QAEAAKXZ
+?Type@Var@@QAEEXZ
+?Contents@Var@@QAEPADXZ
+?Get@Var@@QAEKPAD@Z
+
+?GetExpandedArgSize@Line@@QAEK_NQAPAVVar@@@Z
+?ExpandArg@Line@@QAEPADPADHPAVVar@@@Z
+?ExpandArgs@Line@@QAE?AW4ResultType@@KQAPAVVar@@@Z
+
+; Exploit (build from) both sides of this function, above and below.
+?ExecUntil@Line@@QAE?AW4ResultType@@W4ExecUntilMode@@PAPADPAPAV1@@Z
+?Execute@Label@@QAE?AW4ResultType@@XZ  ; application.obj
+
+?EvaluateCondition@Line@@AAE?AW4ResultType@@XZ
+?Perform@Line@@AAE?AW4ResultType@@XZ
+
+; CENTRAL/PIVOT, but sometimes performs better below most of the primaries rather than in the middle of functions it calls (perhaps because it's so large).
+?ExpandExpression@Line@@QAEPADHAAW4ResultType@@AAPAD1AAIQAPADI@Z
+?Call@Func@@QAE?AW4ResultType@@AAPAD@Z
+
+
+;;;;;;;;;;;;;;;;;;
+; BELOW THIS POINT are things not very central to performance.  They're individual clusters of related commands:
+;;;;;;;;;;;;;;;;;;
+
+; These seem too unimportant to justify imposing them between ExecUntil and EvalCondtion/Perform:
+?PerformLoopParse@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@@Z
+?PerformLoopParseCSV@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@@Z
+?PerformLoopFilePattern@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@W4FileLoopModeType@@_NPAD@Z  ; script.obj
+
+; No point because strncpy "cannot be ordered" (probably intrinsic):
+;strncpy
+;?strlcpy@@YAXPADPBDI@Z
+
+?ConvertDllArgType@@YAXQAPADAAUDYNAPARM@@@Z
+?BIF_DllCall@@YAXAAUExprTokenType@@QAPAU1@H@Z   ; Sandwich technique (i.e. this function between two it calls)
+?DynaCall@@YA?ATDYNARESULT@@HPAXQAUDYNAPARM@@HAAK0H@Z
+
+?ltrim@@YAIPADI@Z
+?rtrim@@YAIPADI@Z
+?trim@@YAIPADI@Z
+
+?snprintf@@YAHPADHPBDZZ
+_vsnprintf  ; Sandwiching this function between the other two seems likely to yield best results.
+?snprintfcat@@YAHPADHPBDZZ
+_scprintf
+sprintf
+fprintf
+printf
+
+?global_clear_state@@YAXAAUglobal_struct@@@Z
+?global_init@@YAXAAUglobal_struct@@@Z
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+; APPLICATION
+?InputTimeout@@YGXPAUHWND__@@IIK@Z
+??0input_type@@QAE@XZ  ; From Globaldata
+?Input@Line@@AAE?AW4ResultType@@XZ
+?CollectInput@@YA_NAAUtagKBDLLHOOKSTRUCT@@EG_N1AAIAAJ@Z
+
+?MsgBoxTimeout@@YGXPAUHWND__@@IIK@Z
+?UninterruptibleTimeout@@YGXPAUHWND__@@IIK@Z
+
+?Disable@ScriptTimer@@QAEXXZ
+?CheckScriptTimers@@YA_NXZ
+?MsgMonitor@@YA_NPAUHWND__@@IIJPAUtagMSG@@AAJ@Z
+
+?ResumeUnderlyingThread@@YAXPAUglobal_struct@@PAD_N@Z
+?UpdateTrayIcon@Script@@QAEX_N@Z  ; Called by or in conjunction with above/below.
+?InitNewThread@@YAXH_N0E@Z
+
+?MsgSleep@@YA_NHW4MessageMode@@@Z
+?IsCycleComplete@@YA?AW4ResultType@@HK_N@Z
+?PollJoysticks@@YAXXZ
+
+?ActionExec@Script@@QAE?AW4ResultType@@PAD00_N0PAPAX11PAVVar@@@Z
+?DoRunAs@Script@@QAE?AW4ResultType@@PAD0_N1GPAVVar@@AAU_PROCESS_INFORMATION@@AA_NAAPAX0@Z
+
+; HOTSTRING
+??_GHotstring@@QAEPAXI@Z
+??0Hotstring@@QAE@PAVLabel@@PAD11_N@Z
+??1Hotstring@@QAE@XZ
+??2Hotstring@@SAPAXI@Z
+??3Hotstring@@SAXPAX@Z
+?AddHotstring@Hotstring@@SA?AW4ResultType@@PAVLabel@@PAD11_N@Z
+?DoReplace@Hotstring@@QAEXJ@Z
+?ParseOptions@Hotstring@@SAXPADAAH1AAW4SendModes@@AA_N3333333@Z
+?Perform@Hotstring@@QAE?AW4ResultType@@XZ
+?SuspendAll@Hotstring@@SAX_N@Z
+
+; HOTKEY
+?HotCriterionAllowsFiring@@YAPAUHWND__@@EPAD0@Z
+?SetGlobalHotTitleText@@YA?AW4ResultType@@PAD0@Z
+
+?RequireHook@Hotkey@@SAXE@Z
+?IsCompletelyDisabled@Hotkey@@QAE_NXZ
+?IsExemptFromSuspend@Hotkey@@QAE_NXZ
+?IsExemptFromSuspend@Label@@QAE_NXZ
+
+??_GHotkey@@AAEPAXI@Z
+??0Hotkey@@AAE@GPAVLabel@@GPAD_N2@Z
+??1Hotkey@@AAE@XZ
+??2Hotkey@@CAPAXI@Z
+??3Hotkey@@CAXPAX@Z
+?AddHotkey@Hotkey@@SAPAV1@PAVLabel@@GPAD_N2@Z
+?ConvertAltTab@Hotkey@@SAGPAD_N@Z
+?CriterionFiringIsCertain@Hotkey@@SA_NAAG_NAAEAA_NPAD@Z  ; hotkey.obj
+?DisableParent@Hotkey@@AAE_NXZ
+?Dynamic@Hotkey@@SA?AW4ResultType@@PAD00PAVLabel@@@Z
+?EnableParent@Hotkey@@AAE_NXZ
+?FindHotkeyByTrueNature@Hotkey@@SAPAV1@PADAA_N@Z
+?FindHotkeyContainingModLR@Hotkey@@SAPAV1@E@Z
+?TextInterpret@Hotkey@@SA?AW4ResultType@@PADPAV1@_N@Z
+?TextToKey@Hotkey@@SA?AW4ResultType@@PAD0_NPAV1@1@Z
+?TextToModifiers@Hotkey@@SAPADPADPAV1@PAUHotkeyProperties@1@@Z
+?ToText@Hotkey@@QAEPADPADH_N@Z
+?TriggerJoyHotkeys@Hotkey@@SAXHK@Z
+?Unregister@Hotkey@@AAE?AW4ResultType@@XZ
+?InstallKeybdHook@Hotkey@@SAXXZ
+?InstallMouseHook@Hotkey@@SAXXZ
+?ListHotkeys@Hotkey@@SAPADPADH@Z
+?ManifestAllHotkeysHotstringsHooks@Hotkey@@SAXXZ
+?PrefixHasNoEnabledSuffixes@Hotkey@@SA_NH_N@Z
+?Register@Hotkey@@AAE?AW4ResultType@@XZ
+?ResetRunAgainAfterFinished@Hotkey@@SAXXZ
+
+; HOTKEY VARIANT
+?PerformIsAllowed@Hotkey@@QAE_NAAUHotkeyVariant@@@Z
+?RunAgainAfterFinished@Hotkey@@SAXAAUHotkeyVariant@@@Z
+?AddVariant@Hotkey@@QAEPAUHotkeyVariant@@PAVLabel@@_N@Z
+?CriterionAllowsFiring@Hotkey@@QAEPAUHotkeyVariant@@PAPAUHWND__@@@Z
+?Disable@Hotkey@@AAE_NAAUHotkeyVariant@@@Z
+?Enable@Hotkey@@AAE_NAAUHotkeyVariant@@@Z
+?FindVariant@Hotkey@@QAEPAUHotkeyVariant@@XZ
+?Perform@Hotkey@@QAEXAAUHotkeyVariant@@@Z
+
+; KEYBOARD_MOUSE
+?CleanupEventArray@@YAXH@Z
+?ExpandEventArray@@YA?AW4ResultType@@XZ
+?PutKeybdEventIntoArray@@YAXEEGKK@Z
+?PutMouseEventIntoArray@@YAXKKKK@Z
+
+?ActiveWindowLayoutHasAltGr@@YA_NXZ
+?AdjustKeyState@@YAXQAEE@Z
+?CharToVKAndModifiers@@YAEDPAEPAUHKL__@@@Z
+?ConvertModifiers@@YAEI@Z
+?ConvertModifiersLR@@YAIE@Z
+?ConvertMouseButton@Line@@SAHPAD_N1@Z
+?DisguiseWinAltIfNeeded@@YAXE_N@Z
+?DoKeyDelay@@YAXH@Z
+?DoMouseDelay@@YAXXZ
+
+?GetKeyName@@YAPADEGPADH@Z
+?GetModifierLRState@@YAE_N@Z
+?SetModifierLRState@@YAXEEPAUHWND__@@_N1K@Z
+
+?InitEventArray@@YAXPAXIE@Z
+?KeyEvent@@YAXW4KeyEventTypes@@EGPAUHWND__@@_NK@Z
+?KeyToModifiersLR@@YAEEGPA_N@Z
+?LayoutHasAltGr@@YA?AW4ResultType@@PAUHKL__@@W41@@Z
+?ModifiersLRToText@@YAPADEPAD@Z
+
+?MouseClick@@YAXEHHHHW4KeyEventTypes@@_N@Z
+?MouseClickDrag@@YAXEHHHHH_N@Z
+?MouseEvent@@YAXKKKK@Z
+?MouseMove@@YAXAAH0AAKH_N@Z
+?ParseClickOptions@@YAXPADAAH1AAEAAW4KeyEventTypes@@1AA_N@Z
+?PerformClick@@YA?AW4ResultType@@PAD@Z
+?PerformMouse@@YA?AW4ResultType@@EPAD00000000@Z
+?PerformMouseCommon@@YAXEEHHHHHW4KeyEventTypes@@H_N@Z
+
+?sc_to_vk@@YAEG@Z
+?vk_to_sc@@YAGE_N@Z
+?SCtoKeyName@@YAPADGPADH@Z
+
+?SendASC@@YAXPAD@Z
+?SendEventArray@@YAXAAHE@Z
+?SendKey@@YAXEGEEHW4KeyEventTypes@@EPAUHWND__@@HH_N@Z
+?SendKeys@@YAXPAD_NW4SendModes@@PAUHWND__@@@Z
+?SendKeySpecial@@YAXDH@Z
+?PlaybackProc@@YGJHIJ@Z
+
+?TextToSC@@YAGPAD@Z
+?TextToSpecial@@YAEPADIAAW4KeyEventTypes@@AAE_N@Z
+?TextToVK@@YAEPADPAE_N2PAUHKL__@@@Z
+?ToggleKeyState@@YA?AW4ToggleValueType@@EW41@@Z
+?ToggleNumlockWin9x@@YAXXZ
+?UpdateKeyEventHistory@@YAX_NEG@Z
+?VKtoKeyName@@YAPADEGPADH@Z
+
+; MT19937AR-COK.OBJ
+?genrand_int31@@YAJXZ
+?genrand_int32@@YAKXZ
+?genrand_real1@@YANXZ
+?init_genrand@@YAXK@Z
+
+; SCRIPT
+??0ScriptTimer@@QAE@PAVLabel@@@Z
+??2ScriptTimer@@SAPAXI@Z
+?ChangePauseState@Line@@QAE?AW4ResultType@@W4ToggleValueType@@_N@Z
+
+?ConvertBlockInput@Line@@SA?AW4ToggleValueType@@PAD@Z
+?ConvertControlCmd@Line@@SA?AW4ControlCmds@@PAD@Z
+?ConvertControlGetCmd@Line@@SA?AW4ControlGetCmds@@PAD@Z
+?ConvertCoordModeAttrib@Line@@SAEPAD@Z
+?ConvertDriveCmd@Line@@SA?AW4DriveCmds@@PAD@Z
+?ConvertDriveGetCmd@Line@@SA?AW4DriveGetCmds@@PAD@Z
+?ConvertGuiCommand@Line@@SA?AW4GuiCommands@@PADPAHPAPAD@Z
+?ConvertGuiControl@Line@@SAEPAD@Z
+?ConvertGuiControlCmd@Line@@QAE?AW4GuiControlCmds@@PADPAHPAPAD@Z
+?ConvertGuiControlGetCmd@Line@@SA?AW4GuiControlGetCmds@@PADPAH@Z
+?ConvertLoopMode@Line@@SA?AW4FileLoopModeType@@PAD@Z
+?ConvertMsgBoxResult@Line@@SAHPAD@Z
+?ConvertOnOff@Line@@SA?AW4ToggleValueType@@PADW42@@Z
+?ConvertOnOffAlways@Line@@SA?AW4ToggleValueType@@PADW42@@Z
+?ConvertOnOffToggle@Line@@SA?AW4ToggleValueType@@PADW42@@Z
+?ConvertOnOffTogglePermit@Line@@SA?AW4ToggleValueType@@PADW42@@Z
+?ConvertProcessCmd@Line@@SA?AW4ProcessCmds@@PAD@Z
+?ConvertRunMode@Line@@SAHPAD@Z
+?ConvertSendMode@Line@@SA?AW4SendModes@@PADW42@@Z
+?ConvertStringCaseSense@Line@@SA?AW4StringCaseSenseType@@PAD@Z
+?ConvertSysGetCmd@Line@@SA?AW4SysGetCmds@@PAD@Z
+?ConvertThreadCommand@Line@@SA?AW4ThreadCommands@@PAD@Z
+?ConvertTitleMatchMode@Line@@SA?AW4TitleMatchModes@@PAD@Z
+?ConvertTransformCmd@Line@@SA?AW4TransformCmds@@PAD@Z
+?ConvertVariableTypeName@Line@@SA?AW4VariableTypeType@@PAD@Z
+?ConvertWinGetCmd@Line@@SA?AW4WinGetCmds@@PAD@Z
+?ConvertWinSetAttribute@Line@@SA?AW4WinSetAttributes@@PAD@Z
+?SoundConvertComponentType@Line@@SAKPADPAH@Z
+?SoundConvertControlType@Line@@SAKPAD@Z
+
+?CreateTrayIcon@Script@@QAEXXZ
+?Edit@Script@@QAE?AW4ResultType@@XZ
+
+?AllDestructAndExit@Hotkey@@SAXH@Z
+?ExitApp@Script@@QAE?AW4ResultType@@W4ExitReasons@@PADH@Z
+?TerminateApp@Script@@QAEXH@Z
+
+;;;;;;;;;;;;;;;;;;;;
+; BUILT-IN VARIABLES
+;;;;;;;;;;;;;;;;;;;;
+?BIV_LoopField@@YAKPAD0@Z   ; Performance-sensitive ones kept adjacent.
+?BIV_LoopIndex@@YAKPAD0@Z   ;
+?BIV_True_False@@YAKPAD0@Z  ;
+
+?BIV_AhkPath@@YAKPAD0@Z
+?BIV_AhkVersion@@YAKPAD0@Z
+?BIV_AppData@@YAKPAD0@Z
+?BIV_AutoTrim@@YAKPAD0@Z
+?BIV_BatchLines@@YAKPAD0@Z
+?BIV_Caret@@YAKPAD0@Z
+?BIV_ComSpec@@YAKPAD0@Z
+?BIV_ControlDelay@@YAKPAD0@Z
+?BIV_Cursor@@YAKPAD0@Z
+?BIV_DateTime@@YAKPAD0@Z
+?BIV_DefaultMouseSpeed@@YAKPAD0@Z
+?BIV_Desktop@@YAKPAD0@Z
+?BIV_DetectHiddenText@@YAKPAD0@Z
+?BIV_DetectHiddenWindows@@YAKPAD0@Z
+?BIV_EndChar@@YAKPAD0@Z
+?BIV_EventInfo@@YAKPAD0@Z
+?BIV_ExitReason@@YAKPAD0@Z
+?BIV_FormatFloat@@YAKPAD0@Z
+?BIV_FormatInteger@@YAKPAD0@Z
+?BIV_Gui@@YAKPAD0@Z
+?BIV_GuiControl@@YAKPAD0@Z
+	?ControlGetName@GuiType@@SAKIIPAD@Z  ; Called by above.
+?BIV_GuiEvent@@YAKPAD0@Z
+?BIV_IconFile@@YAKPAD0@Z
+?BIV_IconHidden@@YAKPAD0@Z
+?BIV_IconNumber@@YAKPAD0@Z
+?BIV_IconTip@@YAKPAD0@Z
+?BIV_IPAddress@@YAKPAD0@Z  ; script_autoit.obj
+?BIV_IsAdmin@@YAKPAD0@Z  ; script_autoit.obj
+?BIV_IsSuspended@@YAKPAD0@Z
+?BIV_KeyDelay@@YAKPAD0@Z
+?BIV_Language@@YAKPAD0@Z
+?BIV_LastError@@YAKPAD0@Z
+?BIV_LineFile@@YAKPAD0@Z
+?BIV_LineNumber@@YAKPAD0@Z
+?BIV_LoopFileAttrib@@YAKPAD0@Z
+?BIV_LoopFileDir@@YAKPAD0@Z
+?BIV_LoopFileExt@@YAKPAD0@Z
+?BIV_LoopFileFullPath@@YAKPAD0@Z
+?BIV_LoopFileLongPath@@YAKPAD0@Z
+?BIV_LoopFileName@@YAKPAD0@Z
+?BIV_LoopFileShortName@@YAKPAD0@Z
+?BIV_LoopFileShortPath@@YAKPAD0@Z
+?BIV_LoopFileSize@@YAKPAD0@Z
+?BIV_LoopFileTime@@YAKPAD0@Z
+?BIV_MMM_DDD@@YAKPAD0@Z
+?BIV_MouseDelay@@YAKPAD0@Z
+?BIV_MyDocuments@@YAKPAD0@Z
+?BIV_Now@@YAKPAD0@Z
+?BIV_OSType@@YAKPAD0@Z
+?BIV_OSVersion@@YAKPAD0@Z
+?BIV_PriorHotkey@@YAKPAD0@Z
+?BIV_ProgramFiles@@YAKPAD0@Z
+?BIV_Programs@@YAKPAD0@Z
+?BIV_ScreenWidth_Height@@YAKPAD0@Z
+?BIV_ScriptDir@@YAKPAD0@Z
+?BIV_ScriptFullPath@@YAKPAD0@Z
+?BIV_ScriptName@@YAKPAD0@Z
+?BIV_Space_Tab@@YAKPAD0@Z
+?BIV_StartMenu@@YAKPAD0@Z
+?BIV_Startup@@YAKPAD0@Z
+?BIV_StringCaseSense@@YAKPAD0@Z
+?BIV_Temp@@YAKPAD0@Z
+?BIV_ThisFunc@@YAKPAD0@Z
+?BIV_ThisHotkey@@YAKPAD0@Z
+?BIV_ThisLabel@@YAKPAD0@Z
+?BIV_ThisMenu@@YAKPAD0@Z
+?BIV_ThisMenuItem@@YAKPAD0@Z
+?BIV_ThisMenuItemPos@@YAKPAD0@Z
+?BIV_TickCount@@YAKPAD0@Z
+?BIV_TimeIdle@@YAKPAD0@Z
+?BIV_TimeIdlePhysical@@YAKPAD0@Z
+?BIV_TimeSincePriorHotkey@@YAKPAD0@Z
+?BIV_TimeSinceThisHotkey@@YAKPAD0@Z
+?BIV_TitleMatchMode@@YAKPAD0@Z
+?BIV_TitleMatchModeSpeed@@YAKPAD0@Z
+?BIV_UserName_ComputerName@@YAKPAD0@Z
+?BIV_WinDelay@@YAKPAD0@Z
+?BIV_WinDir@@YAKPAD0@Z
+?BIV_WorkingDir@@YAKPAD0@Z
+
+??0LoopReadFileStruct@@QAE@PAU_iobuf@@PAD@Z  ; Constructor.
+?PerformLoopReadFile@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@PAU_iobuf@@PAD@Z
+?BIV_LoopReadLine@@YAKPAD0@Z  ; script2.obj
+
+?BIV_LoopRegKey@@YAKPAD0@Z  ; script2.obj
+?BIV_LoopRegName@@YAKPAD0@Z  ; script2.obj
+?BIV_LoopRegSubKey@@YAKPAD0@Z  ; script2.obj
+?BIV_LoopRegTimeModified@@YAKPAD0@Z  ; script2.obj
+?BIV_LoopRegType@@YAKPAD0@Z  ; script2.obj
+?PerformLoopReg@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@W4FileLoopModeType@@_NPAUHKEY__@@5PAD@Z
+??0RegItemStruct@@QAE@PAUHKEY__@@0PAD@Z
+?InitForSubkeys@RegItemStruct@@QAEXXZ
+?InitForValues@RegItemStruct@@QAEXXZ
+?RegConvertRootKey@Line@@SAPADPADIPAUHKEY__@@@Z
+?RegConvertRootKey@Line@@SAPAUHKEY__@@PADPA_N@Z
+?RegConvertValueType@Line@@SAHPAD@Z
+?RegConvertValueType@Line@@SAPADPADIK@Z
+?RegDelete@Line@@AAE?AW4ResultType@@PAUHKEY__@@PAD1@Z
+?RegRead@Line@@AAE?AW4ResultType@@PAUHKEY__@@PAD1@Z
+?RegRemoveSubkeys@Line@@CA_NPAUHKEY__@@@Z
+?RegWrite@Line@@AAE?AW4ResultType@@KPAUHKEY__@@PAD11@Z
+?IniDelete@Line@@AAE?AW4ResultType@@PAD00@Z
+?IniRead@Line@@AAE?AW4ResultType@@PAD000@Z
+?IniWrite@Line@@AAE?AW4ResultType@@PAD000@Z
+
+?Reload@Script@@QAE?AW4ResultType@@_N@Z
+?ScriptBlockInput@Line@@SA?AW4ResultType@@_N@Z
+?StrToTitleCase@@YAPADPAD@Z
+?ToggleSuspendState@Line@@SAXXZ
+?UpdateOrCreateTimer@Script@@QAE?AW4ResultType@@PAVLabel@@PAD1_N2@Z
+?ValidateMouseCoords@Line@@SA?AW4ResultType@@PAD0@Z
+
+; SCRIPT2.OBJ
+??$swap@J@@YAXAAJ0@Z
+
+; LIB_PCRE
+pcre_study
+pcre_compile
+pcre_compile2
+_pcre_is_newline  ; lib_pcre.lib(pcre_newline.obj)
+_pcre_was_newline  ; lib_pcre.lib(pcre_newline.obj)
+pcre_exec
+_pcre_try_flipped
+pcre_fullinfo
+pcre_copy_named_substring
+pcre_copy_substring
+pcre_free_substring
+pcre_free_substring_list
+pcre_get_named_substring
+pcre_get_stringnumber
+pcre_get_stringtable_entries
+pcre_get_substring
+pcre_get_substring_list
+
+?get_compiled_regex@@YAPAUreal_pcre@@PADAA_NAAPAUpcre_extra@@PAUExprTokenType@@@Z
+?RegExMatch@@YAPADPAD0@Z
+?BIF_RegEx@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?RegExReplace@@YAXAAUExprTokenType@@QAPAU1@HPAUreal_pcre@@PAUpcre_extra@@PADHHQAHH@Z
+_expand   ; LIBC.lib(expand.obj)
+?PredictReplacementSize@@YAHHHHHHH@Z  ; util.obj
+?StrReplace@@YAIPAD00W4StringCaseSenseType@@IIPAPADPAI@Z
+?StringReplace@Line@@AAE?AW4ResultType@@XZ  ; script2.obj
+
+InitializeCriticalSection@4
+LeaveCriticalSection@4
+DeleteCriticalSection@4
+EnterCriticalSection@4
+
+?ArgMustBeDereferenced@Line@@QAE?AW4ResultType@@PAVVar@@HQAPAV3@@Z ; Seldom called; only for isolated input variables.
+?ResolveAlias@Var@@QAEPAV1@XZ
+?ResolveVarOfArg@Line@@QAEPAVVar@@H_N@Z
+
+?GetVarType@Script@@SAPAXPAD@Z  ; Called by both AddVar() [below] and ResolveVarOfArg() [above]
+
+??0Var@@QAE@PADPAX_N@Z  ; Constructor.
+??2Var@@SAPAXI@Z  ; Operator-New.
+?AddVar@Script@@QAEPAVVar@@PADIHH@Z  ; script.obj
+?FindOrAddVar@Script@@QAEPAVVar@@PADIHPA_N@Z
+?FindVar@Script@@QAEPAVVar@@PADIPAHHPA_N2@Z
+
+?SetLengthFromContents@Var@@QAEXXZ
+?BIF_VarSetCapacity@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?Capacity@Var@@QAEKXZ
+?Close@Var@@QAE?AW4ResultType@@_N@Z
+?ArgLength@Line@@QAEIH@Z
+?IsBinaryClip@Var@@QAE_NXZ
+?IsNonStaticLocal@Var@@QAE_NXZ
+?IsLocal@Var@@QAE_NXZ
+
+; Called only when a function recurses or has more than one instance, which is rare:
+?BackupFunctionVars@Var@@SA?AW4ResultType@@AAVFunc@@AAPAUVarBkp@@AAH@Z
+?Backup@Var@@QAEXAAUVarBkp@@@Z
+
+?AcceptNewMem@Var@@QAEXPADK@Z
+?AppendIfRoom@Var@@QAE?AW4ResultType@@PADK@Z
+?Assign@Var@@QAE?AW4ResultType@@N@Z  ; Kept away from central section because most scripts don't use doubles.  Assign a Double (calls snprintf).
+?AssignHWND@Var@@QAE?AW4ResultType@@PAUHWND__@@@Z  ; Assign an HWND.
+?OverwriteAttrib@Var@@QAEXE@Z
+
+;;;;;;;;;;;;;;;;;;;;
+; BUILT-IN FUNCTIONS (and related)
+;;;;;;;;;;;;;;;;;;;;
+?ExprTokenToDouble@@YANAAUExprTokenType@@@Z
+?ExprTokenToDoubleOrInt@@YA?AW4ResultType@@AAUExprTokenType@@@Z
+?ExprTokenToInt64@@YA_JAAUExprTokenType@@@Z
+?ExprTokenToString@@YAPADAAUExprTokenType@@PAD@Z
+; >>> Frequently-called and perf-sensitive, so keep the following near ExprTokenToString() above <<<
+?BIF_InStr@@YAXAAUExprTokenType@@QAPAU1@H@Z  ; Often called close together in scripts.
+?BIF_SubStr@@YAXAAUExprTokenType@@QAPAU1@H@Z ;
+?BIF_StrLen@@YAXAAUExprTokenType@@QAPAU1@H@Z ;
+
+?BIF_LV_AddInsertModify@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_LV_Delete@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_LV_GetNextOrCount@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_LV_GetText@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_LV_InsertModifyDeleteCol@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_LV_SetImageList@@YAXAAUExprTokenType@@QAPAU1@H@Z
+
+?BIF_IL_Add@@YAXAAUExprTokenType@@QAPAU1@H@Z      ; ImageList functions: kept between ListView and TreeView functions.
+?BIF_IL_Create@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_IL_Destroy@@YAXAAUExprTokenType@@QAPAU1@H@Z
+
+?BIF_TV_AddModifyDelete@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_TV_Get@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_TV_GetRelatedItem@@YAXAAUExprTokenType@@QAPAU1@H@Z
+
+?BIF_StatusBar@@YAXAAUExprTokenType@@QAPAU1@H@Z
+
+?BIF_Asc@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_Chr@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_NumGet@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_NumPut@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_FileExist@@YAXAAUExprTokenType@@QAPAU1@H@Z
+
+?ScriptGetJoyState@@YANW4JoyControls@@HAAUExprTokenType@@_N@Z
+?ScriptGetKeyState@@YA_NEW4KeyStateTypes@@@Z
+?BIF_GetKeyState@@YAXAAUExprTokenType@@QAPAU1@H@Z
+
+?BIF_IsLabel@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_OnMessage@@YAXAAUExprTokenType@@QAPAU1@H@Z
+
+?RegisterCallbackCStub@@YGIPAIPAD@Z
+?BIF_RegisterCallback@@YAXAAUExprTokenType@@QAPAU1@H@Z
+
+?BIF_WinExistActive@@YAXAAUExprTokenType@@QAPAU1@H@Z
+
+?BIF_Abs@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_Mod@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_Round@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_FloorCeil@@YAXAAUExprTokenType@@QAPAU1@H@Z
+
+?BIF_Exp@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_SqrtLogLn@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_Cos@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_Sin@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_Tan@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_ASinACos@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_ATan@@YAXAAUExprTokenType@@QAPAU1@H@Z
+
+qmathAcos@8
+qmathAsin@8
+qmathAtan@8
+qmathCeil@8
+qmathCos@8
+qmathExp@8
+qmathFabs@8
+qmathFloor@8
+qmathFmod@16
+qmathHypot@16
+qmathLog@8
+qmathLog10@8
+qmathPow@16
+qmathSin@8
+qmathSqrt@8
+qmathTan@8
+?Transform@Line@@AAE?AW4ResultType@@PAD00@Z
+?Deref@Line@@QAE?AW4ResultType@@PAVVar@@PAD@Z
+
+?rgb_to_bgr@@YAKK@Z
+?ImageSearch@Line@@AAE?AW4ResultType@@HHHHPAD@Z
+?getbits@@YAPAKPAUHBITMAP__@@PAUHDC__@@AAJ2AA_NH@Z
+?PixelSearch@Line@@AAE?AW4ResultType@@HHHHKHPAD_N@Z
+?PixelGetColor@Line@@AAE?AW4ResultType@@HHPAD@Z
+
+?ControlClick@Line@@AAE?AW4ResultType@@EHPAD00000@Z
+?ControlFocus@Line@@AAE?AW4ResultType@@PAD0000@Z
+?ControlGetFocus@Line@@AAE?AW4ResultType@@PAD000@Z
+?ControlGetListView@Line@@AAE?AW4ResultType@@AAVVar@@PAUHWND__@@PAD@Z
+?ControlGetPos@Line@@AAE?AW4ResultType@@PAD0000@Z
+?ControlGetText@Line@@AAE?AW4ResultType@@PAD0000@Z
+?ControlMove@Line@@AAE?AW4ResultType@@PAD00000000@Z
+?ControlSend@Line@@AAE?AW4ResultType@@PAD00000_N@Z
+?ControlSetText@Line@@AAE?AW4ResultType@@PAD00000@Z
+?ConvertEscapeChar@Line@@SAHPAD@Z
+?ConvertEscapeCharGetLine@Line@@SAIPADHPAU_iobuf@@@Z
+?ConvertJoy@@YAHPADPAH_N@Z
+
+?DerefTimeout@@YGXPAUHWND__@@IIK@Z
+?FreeDerefBufIfLarge@Line@@SAXXZ
+
+?Drive@Line@@AAE?AW4ResultType@@PAD00@Z
+?DriveGet@Line@@AAE?AW4ResultType@@PAD0@Z
+?DriveLock@Line@@AAE?AW4ResultType@@D_N@Z
+?DriveSpace@Line@@AAE?AW4ResultType@@PAD_N@Z
+
+?EnumMonitorProc@@YGHPAUHMONITOR__@@PAUHDC__@@PAUtagRECT@@J@Z
+?EnvGet@Line@@AAE?AW4ResultType@@PAD@Z
+
+?FileAppend@Line@@AAE?AW4ResultType@@PAD0PAULoopReadFileStruct@@@Z
+?FileCreateDir@Line@@AAE?AW4ResultType@@PAD@Z
+?FileDelete@Line@@AAE?AW4ResultType@@XZ
+?FileGetAttrib@Line@@AAE?AW4ResultType@@PAD@Z
+?FileGetSize@Line@@AAE?AW4ResultType@@PAD0@Z
+?FileGetTime@Line@@AAE?AW4ResultType@@PADD@Z
+?FileInstall@Line@@AAE?AW4ResultType@@PAD00@Z
+?FileIsFilteredOut@Line@@SA_NAAU_WIN32_FIND_DATAA@@W4FileLoopModeType@@PADI@Z
+?FileRead@Line@@AAE?AW4ResultType@@PAD@Z
+?FileReadLine@Line@@AAE?AW4ResultType@@PAD0@Z
+?FileSelectFile@Line@@AAE?AW4ResultType@@PAD000@Z
+?FileSetAttrib@Line@@AAEHPAD0W4FileLoopModeType@@_N2@Z
+?FileSetTime@Line@@AAEHPAD0DW4FileLoopModeType@@_N2@Z
+
+?FormatTime@Line@@AAE?AW4ResultType@@PAD0@Z
+?GetAHKInstallDir@@YAKPAD@Z
+?GetJumpTarget@Line@@QAEPAVLabel@@_N@Z  ; script2.obj
+?GetKeyJoyState@Line@@AAE?AW4ResultType@@PAD0@Z
+?GetNextTreeItem@@YAPAU_TREEITEM@@PAUHWND__@@PAU1@@Z
+?HandleMenuItem@@YA_NPAUHWND__@@GI@Z
+
+?InputBox@@YA?AW4ResultType@@PAVVar@@PAD1_NHHHHN1@Z
+?InputBoxProc@@YGHPAUHWND__@@IIJ@Z
+?InputBoxTimeout@@YGXPAUHWND__@@IIK@Z
+?MainWindowProc@@YGJPAUHWND__@@IIJ@Z
+
+?Splash@Line@@AAE?AW4ResultType@@PAD00000_N@Z
+?SplashTextOn@Line@@AAE?AW4ResultType@@HHPAD0@Z
+
+?IsJumpValid@Line@@QAEPAVLabel@@AAV2@@Z  ; script2.obj
+?MouseGetPos@Line@@AAE?AW4ResultType@@K@Z
+?PerformShowWindow@Line@@AAE?AW4ResultType@@EPAD000@Z
+?PerformWait@Line@@AAE?AW4ResultType@@XZ  ; script2.obj
+
+?ProcessExist9x2000@@YAKPAD0@Z
+?ProcessExistNT4@@YAKPAD0@Z
+?ProcessExist@@YAKPAD0@Z
+?ScriptProcess@Line@@AAE?AW4ResultType@@PAD00@Z
+
+?ScriptPostSendMessage@Line@@AAE?AW4ResultType@@_N@Z
+?SetToggleState@Line@@CA?AW4ResultType@@EAAW4ToggleValueType@@PAD@Z
+
+?SortByNakedFilename@@YAHPBX0@Z
+?SortRandom@@YAHPBX0@Z
+?SortWithOptions@@YAHPBX0@Z
+?PerformSort@Line@@AAE?AW4ResultType@@PAD0@Z  ; Sandwiched in between its sort methods.
+?SortUDF@@YAHPBX0@Z
+
+?SoundGetWaveVolume@Line@@AAE?AW4ResultType@@PAUHWAVEOUT__@@@Z
+?SoundPlay@Line@@AAE?AW4ResultType@@PAD_N@Z
+?SoundSetGet@Line@@AAE?AW4ResultType@@PADKHKI@Z
+?SoundSetWaveVolume@Line@@AAE?AW4ResultType@@PADPAUHWAVEOUT__@@@Z
+?SplitPath@Line@@AAE?AW4ResultType@@PAD@Z
+?StatusBarGetText@Line@@AAE?AW4ResultType@@PAD0000@Z
+?StatusBarWait@Line@@AAE?AW4ResultType@@PAD0000000@Z
+?StringSplit@Line@@AAE?AW4ResultType@@PAD000@Z
+?SysGet@Line@@AAE?AW4ResultType@@PAD0@Z
+?ToolTip@Line@@AAE?AW4ResultType@@PAD000@Z
+?TrayTip@Line@@AAE?AW4ResultType@@PAD000@Z
+
+; SCRIPT_AUTOIT
+?Control@Line@@AAE?AW4ResultType@@PAD000000@Z
+?ControlGet@Line@@AAE?AW4ResultType@@PAD000000@Z
+?DoIncrementalMouseMove@@YAXHHHHH@Z
+
+?FileCreateShortcut@Line@@AAE?AW4ResultType@@PAD00000000@Z
+?FileGetShortcut@Line@@AAE?AW4ResultType@@PAD@Z
+?FileGetVersion@Line@@AAE?AW4ResultType@@PAD@Z
+?FileRecycle@Line@@AAE?AW4ResultType@@PAD@Z
+?FileRecycleEmpty@Line@@AAE?AW4ResultType@@PAD@Z
+?FileSelectFolder@Line@@AAE?AW4ResultType@@PAD00@Z
+?FileSelectFolderCallback@@YGHPAUHWND__@@IJJ@Z
+
+?URLDownloadToFileA@Line@@AAE?AW4ResultType@@PAD0@Z
+
+?Util_GetFullPathName@Line@@SAXPBDPAD@Z
+?strip_trailing_backslash@@YAIPAD@Z  ; script.obj
+
+?Util_CopyDir@Line@@SA_NPBD0_N@Z
+?Util_CopyFile@Line@@SAHPBD0_N1@Z
+?Util_CreateDir@Line@@SA_NPBD@Z
+?Util_DoesFileExist@Line@@SA_NPBD@Z
+?Util_ExpandFilenameWildcard@Line@@SAXPBD0PAD@Z
+?Util_ExpandFilenameWildcardPart@Line@@SAXPBD0PAD@Z
+?Util_IsDifferentVolumes@Line@@SA_NPBD0@Z
+?Util_IsDir@Line@@SA_NPBD@Z
+?Util_MoveDir@Line@@SA_NPBD0H@Z
+?Util_RemoveDir@Line@@SA_NPBD_N@Z
+?Util_Shutdown@@YA_NH@Z
+?Util_ShutdownHandler@@YAHPAUHWND__@@K@Z
+?Util_WinKill@@YAXPAUHWND__@@@Z
+?WinMenuSelectItem@Line@@AAE?AW4ResultType@@PAD0000000000@Z
+
+; SCRIPT_GUI.OBJ
+??0GuiType@@QAE@H@Z
+?AddControl@GuiType@@QAE?AW4ResultType@@EPAD0@Z
+?Cancel@GuiType@@QAE?AW4ResultType@@XZ
+?Clear@GuiType@@QAE?AW4ResultType@@XZ
+?Close@GuiType@@QAE?AW4ResultType@@XZ
+?ControlAddContents@GuiType@@QAEXAAUGuiControlType@@PADHPAUGuiControlOptionsType@@@Z
+?ControlCheckRadioButton@GuiType@@QAEXAAUGuiControlType@@II@Z
+?ControlGetContents@GuiType@@QAE?AW4ResultType@@AAVVar@@AAUGuiControlType@@PAD@Z
+?ControlGetDefaultSliderThickness@GuiType@@QAEHKH@Z
+?ControlGetListViewMode@GuiType@@SAKPAUHWND__@@@Z
+?ControlGetPosOfFocusedItem@GuiType@@QAEXAAUGuiControlType@@AAUtagPOINT@@@Z
+?ControlInitOptions@GuiType@@QAEXAAUGuiControlOptionsType@@AAUGuiControlType@@@Z
+?ControlInvertSliderIfNeeded@GuiType@@QAEHAAUGuiControlType@@H@Z
+?ControlOverrideBkColor@GuiType@@QAE_NAAUGuiControlType@@@Z
+?ControlParseOptions@GuiType@@QAE?AW4ResultType@@PADAAUGuiControlOptionsType@@AAUGuiControlType@@I@Z
+?ControlSetListViewOptions@GuiType@@QAEXAAUGuiControlType@@AAUGuiControlOptionsType@@@Z
+?ControlSetProgressOptions@GuiType@@QAEXAAUGuiControlType@@AAUGuiControlOptionsType@@K@Z
+?ControlSetSliderOptions@GuiType@@QAEXAAUGuiControlType@@AAUGuiControlOptionsType@@@Z
+?ControlSetTreeViewOptions@GuiType@@QAEXAAUGuiControlType@@AAUGuiControlOptionsType@@@Z
+?ControlSetUpDownOptions@GuiType@@QAEXAAUGuiControlType@@AAUGuiControlOptionsType@@@Z
+?ControlUpdateCurrentTab@GuiType@@QAEXAAUGuiControlType@@_N@Z
+?Create@GuiType@@QAE?AW4ResultType@@XZ
+?Destroy@GuiType@@SA?AW4ResultType@@I@Z
+?DestroyIconIfUnused@GuiType@@SAXPAUHICON__@@@Z
+?Escape@GuiType@@QAE?AW4ResultType@@XZ
+?Event@GuiType@@QAEXIIGI@Z
+?FindControl@GuiType@@QAEIPAD@Z
+?FindControl@GuiType@@QAEPAUGuiControlType@@PAUHWND__@@_N@Z
+?FindGui@GuiType@@SAPAV1@PAUHWND__@@@Z
+
+?FindFont@GuiType@@SAHAAUFontType@@@Z
+?FindOrCreateFont@GuiType@@SAHPAD0PAUFontType@@PAK@Z
+?FontEnumProc@@YGHPAUtagENUMLOGFONTEXA@@PAUtagNEWTEXTMETRICEXA@@KJ@Z
+?FontExist@@YA_NPAUHDC__@@PAD@Z
+
+?FindGroup@GuiType@@QAEHIAAI0@Z
+?FindTabControl@GuiType@@QAEPAUGuiControlType@@E@Z
+?FindTabIndexByName@GuiType@@QAEHAAUGuiControlType@@PAD_N@Z
+?GetControlCountOnTabPage@GuiType@@QAEHEE@Z
+?GetNonClientArea@GuiType@@QAEXAAJ0@Z
+?GetPositionOfTabClientArea@GuiType@@QAE?AUtagPOINT@@AAUGuiControlType@@@Z
+?GetTotalWidthAndHeight@GuiType@@QAEXAAJ0@Z
+?GuiControl@Line@@AAE?AW4ResultType@@PAD00@Z
+?GuiControlGet@Line@@AAE?AW4ResultType@@PAD00@Z
+?GuiWindowProc@@YGJPAUHWND__@@IIJ@Z
+?HotkeyToText@GuiType@@SAPADGPAD@Z
+?LV_GeneralSort@@YGHJJJ@Z
+?LV_Int32Sort@@YGHJJJ@Z
+?LV_Sort@GuiType@@SAXAAUGuiControlType@@H_ND@Z
+?ParseOptions@GuiType@@QAE?AW4ResultType@@PADAA_NAAW4ToggleValueType@@@Z
+?PerformGui@Script@@QAE?AW4ResultType@@PAD000@Z
+?SelectAdjacentTab@GuiType@@QAE?AW4ResultType@@AAUGuiControlType@@_N11@Z
+?SetCurrentFont@GuiType@@QAE?AW4ResultType@@PAD0@Z
+?SetLabels@GuiType@@QAEXPAD@Z
+?Show@GuiType@@QAE?AW4ResultType@@PAD0@Z
+?Submit@GuiType@@QAE?AW4ResultType@@_N@Z
+?TabWindowProc@@YGJPAUHWND__@@IIJ@Z
+?TextToHotkey@GuiType@@SAGPAD@Z
+?UpdateMenuBars@GuiType@@SAXPAUHMENU__@@@Z
+
+; SCRIPT_MENU.OBJ
+??0UserMenu@@QAE@PAD@Z
+??0UserMenuItem@@QAE@PADIIPAVLabel@@PAVUserMenu@@2@Z
+
+?AddItem@UserMenu@@QAE?AW4ResultType@@PADIPAVLabel@@PAV1@0@Z
+?AddMenu@Script@@QAEPAVUserMenu@@PAD@Z
+?FindMenuItemByID@Script@@QAEPAVUserMenuItem@@I@Z
+
+?AppendStandardItems@UserMenu@@QAE?AW4ResultType@@XZ
+?ApplyColor@UserMenu@@QAEX_N@Z
+?CheckItem@UserMenu@@QAE?AW4ResultType@@PAVUserMenuItem@@@Z
+?ContainsMenu@UserMenu@@QAE_NPAV1@@Z
+?ConvertMenuCommand@Line@@SA?AW4MenuCommands@@PAD@Z
+?Create@UserMenu@@QAE?AW4ResultType@@W4MenuTypeType@@@Z
+?DeleteAllItems@UserMenu@@QAE?AW4ResultType@@XZ
+?DeleteItem@UserMenu@@QAE?AW4ResultType@@PAVUserMenuItem@@0@Z
+?Destroy@UserMenu@@QAE?AW4ResultType@@XZ
+?DisableItem@UserMenu@@QAE?AW4ResultType@@PAVUserMenuItem@@@Z
+?Display@UserMenu@@QAE?AW4ResultType@@_NHH@Z
+?EnableItem@UserMenu@@QAE?AW4ResultType@@PAVUserMenuItem@@@Z
+?ExcludeStandardItems@UserMenu@@QAE?AW4ResultType@@XZ
+?FindMenu@Script@@QAEPAVUserMenu@@PAD@Z
+?GetItemPos@UserMenu@@QAEIPAD@Z
+?GetSubmenuPos@UserMenu@@QAEIPAUHMENU__@@@Z
+?IncludeStandardItems@UserMenu@@QAE?AW4ResultType@@XZ
+?ModifyItem@UserMenu@@QAE?AW4ResultType@@PAVUserMenuItem@@PAVLabel@@PAV1@PAD@Z
+?PerformMenu@Script@@QAE?AW4ResultType@@PAD0000@Z
+?RenameItem@UserMenu@@QAE?AW4ResultType@@PAVUserMenuItem@@PAD@Z
+?ScriptDeleteMenu@Script@@QAE?AW4ResultType@@PAVUserMenu@@@Z
+?SetColor@UserMenu@@QAEXPAD_N@Z
+?SetDefault@UserMenu@@QAE?AW4ResultType@@PAVUserMenuItem@@@Z
+?ToggleCheckItem@UserMenu@@QAE?AW4ResultType@@PAVUserMenuItem@@@Z
+?ToggleEnableItem@UserMenu@@QAE?AW4ResultType@@PAVUserMenuItem@@@Z
+?UncheckItem@UserMenu@@QAE?AW4ResultType@@PAVUserMenuItem@@@Z
+?UpdateName@UserMenu@@QAE?AW4ResultType@@PAVUserMenuItem@@PAD@Z
+?UpdateOptions@UserMenu@@QAEXPAVUserMenuItem@@PAD@Z
+
+; UTIL.OBJ
+??_H@YGXPAXIHP6EPAX0@Z@Z
+?AllocInterProcMem@@YAPAXAAPAXKPAUHWND__@@@Z
+?AssignColor@@YAXPADAAKAAPAUHBRUSH__@@@Z
+?CenterWindow@@YA?AUtagPOINT@@HH@Z
+?ColorNameToBGR@@YAKPAD@Z
+?ConvertEscapeSequences@@YAPADPADD_N@Z
+?ConvertFilespecToCorrectCase@@YAPADPAD@Z
+?FreeInterProcMem@@YAXPAX0@Z
+?GetFileSize64@@YA_KPAX@Z
+?GetISOWeekNumber@@YAHPADHHH@Z
+?GetLastErrorText@@YAPADPADH_N@Z
+?GetVirtualDesktopRect@@YAXAAUtagRECT@@@Z
+?GetYDay@@YAHHH_N@Z
+?IsStringInList@@YA_NPAD0_N@Z
+
+?IconToBitmap@@YAPAUHBITMAP__@@PAUHICON__@@_N@Z
+?LoadPicture@@YAPAUHBITMAP__@@PADHHAAHH_N@Z
+??0GdiplusStartupInput@Gdiplus@@QAE@P6GXW4DebugEventLevel@1@PAD@ZHH@Z
+
+?MySetWindowTheme@@YAJPAUHWND__@@PBG1@Z
+?ReadRegString@@YAKPAUHKEY__@@PAD11I@Z  ; util.obj
+?GetEnvVarReliable@@YAKPAD0@Z
+?ScreenToWindow@@YAXAAUtagPOINT@@PAUHWND__@@@Z
+
+?lstrcasestr@@YAPADPBD0@Z
+?strcasestr@@YAPADPBD0@Z
+?strlcpy@@YAXPADPBDI@Z
+?strlicmp@@YAHPAD0II@Z
+?strrstr@@YAPADPAD0W4StringCaseSenseType@@H@Z
+?omit_trailing_whitespace@@YAPADPAD0@Z
+?omit_leading_any@@YAPADPAD0I@Z
+?omit_trailing_any@@YAIPAD00@Z
+?StrChrAny@@YAPADPAD0@Z
+?rtrim_with_nbsp@@YAIPADI@Z
+
+?TranslateLFtoCRLF@@YAPADPAD@Z
+?WindowToScreen@@YAXAAH0@Z
+
+?FileTimeSecondsUntil@@YA_JPAU_FILETIME@@0@Z
+?FileTimeToYYYYMMDD@@YAPADPADAAU_FILETIME@@_N@Z
+?SystemTimeToYYYYMMDD@@YAPADPADAAU_SYSTEMTIME@@@Z
+?YYYYMMDDSecondsUntil@@YA_JPAD0AA_N@Z
+?YYYYMMDDToFileTime@@YA?AW4ResultType@@PADAAU_FILETIME@@@Z
+?YYYYMMDDToSystemTime@@YA?AW4ResultType@@PADAAU_SYSTEMTIME@@_N@Z
+?YYYYMMDDToSystemTime2@@YAKPADPAU_SYSTEMTIME@@@Z
+
+?DoesFilePatternExist@@YA_NPADPAK@Z
+?FileAttribToStr@@YAPADPADK@Z
+
+; WINDOW RELATED
+?WinGet@Line@@AAE?AW4ResultType@@PAD0000@Z
+?WinGetClass@Line@@AAE?AW4ResultType@@PAD000@Z
+?WinGetControlList@Line@@AAE?AW4ResultType@@AAVVar@@PAUHWND__@@_N@Z
+?WinGetList@@YA?AW4ResultType@@AAVVar@@W4WinGetCmds@@PAD222@Z
+?WinGetPos@Line@@AAE?AW4ResultType@@PAD000@Z
+?WinGetText@Line@@AAE?AW4ResultType@@PAD000@Z
+?WinGetTitle@Line@@AAE?AW4ResultType@@PAD000@Z
+?WinMove@Line@@AAE?AW4ResultType@@PAD0000000@Z
+?WinSet@Line@@AAE?AW4ResultType@@PAD00000@Z
+?WinSetRegion@@YA?AW4ResultType@@PAUHWND__@@PAD@Z
+?WinSetTitle@Line@@AAE?AW4ResultType@@PAD0000@Z
+
+?DetermineTargetWindow@Line@@QAEPAUHWND__@@PAD000@Z
+?AttemptSetForeground@@YAPAUHWND__@@PAU1@0@Z
+?ControlExist@@YAPAUHWND__@@PAU1@PAD@Z
+?DialogPrep@@YA_NXZ
+
+?EnumChildFindPoint@@YGHPAUHWND__@@J@Z
+?EnumChildFindSeqNum@@YGHPAUHWND__@@J@Z
+?EnumChildGetControlList@@YGHPAUHWND__@@J@Z
+?EnumChildGetText@@YGHPAUHWND__@@J@Z
+
+?EnumChildFind@@YGHPAUHWND__@@J@Z
+?EnumControlFind@@YGHPAUHWND__@@J@Z
+?EnumDialog@@YGHPAUHWND__@@J@Z
+?EnumParentFind@@YGHPAUHWND__@@J@Z
+?EnumParentFindOwned@@YGHPAUHWND__@@J@Z
+?FindOurTopDialog@@YAPAUHWND__@@XZ
+
+?GetNonChildParent@@YAPAUHWND__@@PAU1@@Z
+?GetTopChild@@YAPAUHWND__@@PAU1@@Z
+?GetValidLastUsedWindow@@YAPAUHWND__@@AAUglobal_struct@@@Z
+?GetWindowTextTimeout@@YAHPAUHWND__@@PADHI@Z
+
+??0WindowSearch@@QAE@XZ
+?IsMatch@WindowSearch@@QAEPAUHWND__@@_N@Z
+?IsTextMatch@@YA_NPAD0@Z
+?SetCandidate@WindowSearch@@QAEXPAUHWND__@@@Z
+?SetCriteria@WindowSearch@@QAE?AW4ResultType@@AAUglobal_struct@@PAD111@Z
+?UpdateCandidateAttributes@WindowSearch@@QAEXXZ
+
+?IsWindowHung@@YA_NPAUHWND__@@@Z
+
+?MsgBox@@YAHH@Z
+?MsgBox@@YAHPADI0NPAUHWND__@@@Z
+
+?SetForegroundLockTimeout@@YAXXZ
+?SetForegroundWindowEx@@YAPAUHWND__@@PAU1@@Z
+?StatusBarUtil@@YA?AW4ResultType@@PAVVar@@PAUHWND__@@HPADHH@Z
+?WinActivate@@YAPAUHWND__@@AAUglobal_struct@@PAD111_NQAPAU1@H@Z
+?WinActive@@YAPAUHWND__@@AAUglobal_struct@@PAD111_N@Z
+?WinClose@@YAPAUHWND__@@AAUglobal_struct@@PAD1H11_N@Z
+?WinClose@@YAPAUHWND__@@PAU1@H_N@Z
+?WindowOwnsOthers@@YAPAUHWND__@@PAU1@@Z
+?WinExist@@YAPAUHWND__@@AAUglobal_struct@@PAD111_N2QAPAU1@H@Z
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+; AdvApi
+AdjustTokenPrivileges@24
+CloseServiceHandle@4
+GetUserNameA@8
+LockServiceDatabase@4
+LookupPrivilegeValueA@12
+OpenProcessToken@12
+OpenSCManagerA@12
+RegCloseKey@4
+RegConnectRegistryA@12
+RegCreateKeyExA@36
+RegDeleteKeyA@8
+RegDeleteValueA@8
+RegEnumKeyExA@32
+RegEnumValueA@32
+RegOpenKeyExA@20
+RegQueryInfoKeyA@48
+RegQueryValueExA@24
+RegSetValueExA@24
+UnlockServiceDatabase@4
+
+; ComCtl32
+CreateStatusWindowA@16
+ImageList_AddMasked@12
+ImageList_Create@20
+ImageList_Destroy@4
+ImageList_GetIconSize@12
+ImageList_ReplaceIcon@12
+InitCommonControls@0
+
+; ComDlg32
+GetOpenFileNameA@4
+GetSaveFileNameA@4
+
+; Gdi32
+BitBlt@36
+CreateCompatibleBitmap@12
+CreateCompatibleDC@4
+CreateDCA@16
+CreateEllipticRgn@16
+CreateFontA@56
+CreatePolygonRgn@12
+CreateRectRgn@16
+CreateRoundRectRgn@24
+CreateSolidBrush@4
+DeleteDC@4
+DeleteObject@4
+EnumFontFamiliesExA@20
+ExcludeClipRect@20
+FillRgn@12
+GetClipBox@8
+GetClipRgn@8
+GetDeviceCaps@8
+GetDIBits@28
+GetObjectA@12
+GetPixel@12
+GetStockObject@4
+GetSystemPaletteEntries@16
+GetTextFaceA@12
+GetTextMetricsA@8
+SelectObject@8
+SetBkColor@8
+SetBkMode@8
+SetTextColor@8
+
+; Kernel32
+Beep@8
+CloseHandle@4
+CompareStringA@24
+CopyFileA@12
+CreateDirectoryA@8
+CreateFileA@28
+CreateFileMappingA@24
+CreateMutexA@12
+CreateProcessA@40
+CreateThread@24
+DeleteFileA@4
+DeviceIoControl@32
+ExitProcess@4
+FileTimeToLocalFileTime@8
+FileTimeToSystemTime@8
+FindClose@4
+FindFirstFileA@8
+FindNextFileA@8
+FlushFileBuffers@4
+FormatMessageA@28
+FreeEnvironmentStringsA@4
+FreeEnvironmentStringsW@4
+FreeLibrary@4
+GetACP@0
+GetCommandLineA@0
+GetComputerNameA@8
+GetCPInfo@8
+GetCurrentDirectoryA@8
+GetCurrentProcess@0
+GetCurrentProcessId@0
+GetCurrentThreadId@0
+GetDateFormatA@24
+GetDiskFreeSpaceA@20
+GetDriveTypeA@4
+GetEnvironmentStrings@0
+GetEnvironmentStringsW@0
+GetEnvironmentVariableA@12
+GetExitCodeProcess@8
+GetExitCodeThread@8
+GetFileAttributesA@4
+GetFileSize@8
+GetFileType@4
+GetFullPathNameA@16
+GetLastError@0
+GetLocaleInfoA@16
+GetLocalTime@4
+GetModuleFileNameA@12
+GetModuleHandleA@4
+GetOEMCP@0
+GetPrivateProfileStringA@24
+GetProcAddress@8
+GetShortPathNameA@12
+GetStartupInfoA@4
+GetStdHandle@4
+GetStringTypeA@20
+GetStringTypeW@16
+GetSystemInfo@4
+GetSystemTime@4
+GetSystemTimeAsFileTime@4
+GetTempPathA@8
+GetTickCount@0
+GetTimeFormatA@24
+GetVersionExA@4
+GetVolumeInformationA@32
+GetWindowsDirectoryA@8
+GlobalAlloc@8
+GlobalFree@4
+GlobalLock@4
+GlobalSize@4
+GlobalUnlock@4
+HeapAlloc@12
+HeapCreate@12
+HeapDestroy@4
+HeapFree@12
+HeapReAlloc@16
+HeapSize@12
+InterlockedExchange@8
+IsBadWritePtr@8
+LCMapStringA@24
+LCMapStringW@24
+LoadLibraryA@4
+LocalFileTimeToFileTime@8
+lstrcmpiA@8
+MapViewOfFile@20
+MoveFileA@8
+MulDiv@12
+MultiByteToWideChar@24
+OpenProcess@12
+OutputDebugStringA@4
+QueryPerformanceCounter@4
+ReadFile@20
+ReadProcessMemory@20
+RemoveDirectoryA@4
+RtlUnwind@16
+SetCurrentDirectoryA@4
+SetEndOfFile@4
+SetEnvironmentVariableA@8
+SetErrorMode@4
+SetFileAttributesA@8
+SetFilePointer@16
+SetFileTime@16
+SetHandleCount@4
+SetLastError@4
+SetPriorityClass@8
+SetStdHandle@8
+SetThreadPriority@8
+SetVolumeLabelA@8
+Sleep@4
+SystemTimeToFileTime@8
+TerminateProcess@8
+UnhandledExceptionFilter@4
+UnmapViewOfFile@4
+VirtualAlloc@16
+VirtualFree@12
+VirtualProtect@16
+VirtualQuery@12
+WideCharToMultiByte@32
+WriteFile@20
+WritePrivateProfileStringA@16
+WriteProcessMemory@20
+
+; LIBC
+__isascii
+__iscsym
+__iscsymf
+__toascii
+isalnum
+isalpha
+iscntrl
+isdigit
+isgraph
+islower
+isprint
+ispunct
+isspace
+isupper
+isxdigit
+_filbuf
+__endstdio
+__initstdio
+__iob_func
+_flsbuf
+_fptostr
+_freebuf
+_getbuf
+_openfile
+_ftbuf
+_stbuf
+__crtGetEnvironmentStringsA
+__crtLCMapStringA
+__crtGetStringTypeA
+atol
+calloc
+__dtold
+_fltout
+_chsize
+_close
+_fcloseall
+_commit
+__ansicp
+__convertcp
+__crtExitProcess
+_c_exit
+_cexit
+_cinit
+_exit
+exit
+_fptrap
+_FF_MSGBANNER
+_GET_RTERRMSG
+_NMSG_WRITE
+__crtMessageBoxA
+__pctype_func
+__pwctype_func
+_cfltcvt
+_cftoe
+_cftof
+_cftog
+_cropzeros
+_fassign
+_forcdecpt
+_positive
+??3@YAXPAX@Z
+_dosmaperr
+_ValidateEH3RN
+fclose
+_flush
+_flushall
+fflush
+fgets
+_fsopen
+fopen
+_setdefaultprecision
+__setfflag
+_cfltcvt_init
+_fpclear
+_fpmath
+fputs
+free
+fwrite
+?_query_new_handler@@YAP6AHI@ZXZ
+?_set_new_handler@@YAP6AHI@ZP6AHI@Z@Z
+_callnewh
+__heap_select
+_get_heap_handle
+_heap_init
+_heap_term
+_clearfp
+_control87
+_controlfp
+_fpreset
+_statusfp
+_RTC_Initialize
+_RTC_Terminate
+_atodbl
+_atoflt
+_atoldbl
+_CopyMan
+_FillZeroMan
+_IncMan
+_IsZeroMan
+_ld12cvt
+_ld12tod
+_ld12tof
+_ld12told
+_RoundMan
+_ShrMan
+_ZeroTail
+_ioinit
+_ioterm
+_isatty
+_chvalidator
+_ismbbalnum
+_ismbbalpha
+_ismbbgraph
+_ismbbkalnum
+_ismbbkana
+_ismbbkprint
+_ismbbkpunct
+_ismbblead
+_ismbbprint
+_ismbbpunct
+_ismbbtrail
+_ismbcspace
+_lseek
+_lseeki64
+
+_heap_alloc
+_nh_malloc
+malloc
+_strdup
+
+__add_12
+__addl
+__mtold12
+__shl_12
+__shr_12
+__initmbctable
+_getmbcp
+_setmbcp
+_mbsnbcpy
+_msize
+??2@YAPAXI@Z
+__onexitinit
+_onexit
+atexit
+_open
+_sopen
+_alloc_osfhnd
+_free_osfhnd
+_get_osfhandle
+_open_osfhandle
+_set_osfhnd
+_output
+qsort
+_read
+realloc
+_resetstkoflw
+rewind
+__sbh_alloc_block
+__sbh_alloc_new_group
+__sbh_alloc_new_region
+__sbh_find_block
+__sbh_free_block
+__sbh_heap_check
+__sbh_heap_init
+__sbh_heapmin
+__sbh_resize_block
+_get_sbh_threshold
+_set_sbh_threshold
+@__security_check_cookie@4
+__security_init_cookie
+__buffer_overrun
+__security_error_handler
+__set_buffer_overrun_handler
+_set_security_error_handler
+_setmode
+_splitpath
+_setargv
+_setenvp
+_getstream
+__strgtold12
+__STRINGTOLD
+_stricmp
+_strnicmp
+strtoul
+__ld12mul
+__multtenpow12
+_ms_p5_mp_test_fdiv
+_ms_p5_test_fdiv
+_tolower
+tolower
+_toupper
+toupper
+wctomb
+_wincmdln
+_amsg_exit
+WinMainCRTStartup
+__CppXcptFilter
+_XcptFilter
+_write
+$I10_OUTPUT
+_ltoa
+_ui64toa
+
+; ole32.lib(ole32.dll)
+CoCreateInstance@20
+CoInitialize@4
+CoUninitialize@0
+CreateStreamOnHGlobal@12
+
+; oleaut32.lib(OLEAUT32.dll)
+OleLoadPicture@20
+
+; shell32.lib(SHELL32.dll)
+DragFinish@4
+DragQueryFileA@16
+DragQueryPoint@8
+ExtractIconA@12
+SHBrowseForFolderA@4
+Shell_NotifyIconA@8
+ShellExecuteExA@4
+SHFileOperationA@4
+SHGetDesktopFolder@4
+SHGetMalloc@4
+SHGetPathFromIDListA@8
+
+; user32.lib(USER32.dll)
+AdjustWindowRectEx@16
+AppendMenuA@16
+AttachThreadInput@12
+BringWindowToTop@4
+CallNextHookEx@16
+CallWindowProcA@20
+ChangeClipboardChain@8
+CharLowerA@4
+CharUpperA@4
+CheckMenuItem@12
+CheckRadioButton@16
+ClientToScreen@8
+CloseClipboard@0
+CopyImage@20
+CountClipboardFormats@0
+CreateMenu@0
+CreatePopupMenu@0
+CreateWindowExA@48
+DefDlgProcA@16
+DefWindowProcA@16
+DeleteMenu@12
+DestroyIcon@4
+DestroyMenu@4
+DestroyWindow@4
+DialogBoxParamA@20
+DispatchMessageA@4
+DrawIconEx@36
+DrawTextA@20
+EmptyClipboard@0
+EnableMenuItem@12
+EnableWindow@8
+EndDialog@8
+EnumChildWindows@12
+EnumClipboardFormats@4
+EnumWindows@8
+ExitWindowsEx@8
+FillRect@12
+FindWindowA@8
+FlashWindow@8
+GetAsyncKeyState@4
+GetCaretPos@4
+GetClassLongA@8
+GetClassNameA@12
+GetClientRect@8
+GetClipboardData@4
+GetClipboardFormatNameA@12
+GetCursor@0
+GetCursorPos@4
+GetDC@4
+GetDesktopWindow@0
+GetDlgCtrlID@4
+GetDlgItem@8
+GetFocus@0
+GetForegroundWindow@0
+GetIconInfo@8
+GetKeyboardLayout@4
+GetKeyboardState@4
+GetKeyNameTextA@12
+GetKeyState@4
+GetMenu@4
+GetMenuItemCount@4
+GetMenuItemID@8
+GetMenuStringA@20
+GetMessageA@16
+GetMessagePos@0
+GetParent@4
+GetQueueStatus@4
+GetSubMenu@8
+GetSysColor@4
+GetSysColorBrush@4
+GetSystemMetrics@4
+GetTopWindow@4
+GetWindow@8
+GetWindowLongA@8
+GetWindowRect@8
+GetWindowTextA@12
+GetWindowTextLengthA@4
+GetWindowThreadProcessId@8
+IntersectRect@12
+InvalidateRect@12
+IsCharAlphaA@4
+IsCharAlphaNumericA@4
+IsCharLowerA@4
+IsCharUpperA@4
+IsClipboardFormatAvailable@4
+IsDialogMessageA@8
+IsIconic@4
+IsMenu@4
+IsWindow@4
+IsWindowEnabled@4
+IsWindowVisible@4
+IsZoomed@4
+keybd_event@16
+KillTimer@8
+LoadAcceleratorsA@8
+LoadCursorA@8
+LoadImageA@24
+MapVirtualKeyA@8
+MapWindowPoints@16
+MessageBeep@4
+MessageBoxA@16
+mouse_event@20
+MoveWindow@24
+OpenClipboard@4
+PeekMessageA@20
+PostMessageA@16
+PostQuitMessage@4
+PostThreadMessageA@16
+PtInRect@12
+RedrawWindow@16
+RegisterClassExA@4
+RegisterHotKey@16
+RegisterWindowMessageA@4
+ReleaseDC@8
+ScreenToClient@8
+SendDlgItemMessageA@20
+SendMessageA@16
+SendMessageTimeoutA@28
+SetActiveWindow@4
+SetClipboardData@8
+SetClipboardViewer@4
+SetDlgItemTextA@12
+SetFocus@4
+SetForegroundWindow@4
+SetKeyboardState@4
+SetMenu@8
+SetMenuDefaultItem@12
+SetMenuItemInfoA@16
+SetRect@20
+SetTimer@16
+SetWindowLongA@12
+SetWindowPos@28
+SetWindowRgn@12
+SetWindowsHookExA@16
+SetWindowTextA@8
+ShowWindow@8
+SystemParametersInfoA@16
+ToAsciiEx@24
+TrackPopupMenuEx@24
+TranslateAcceleratorA@12
+TranslateMessage@4
+UnhookWindowsHookEx@4
+UnregisterHotKey@8
+UpdateWindow@4
+VkKeyScanExA@8
+WindowFromPoint@8
+
+; version.lib(VERSION.dll)
+GetFileVersionInfoA@16
+GetFileVersionInfoSizeA@8
+VerQueryValueA@16
+
+; winmm.lib(WINMM.dll)
+joyGetDevCapsA@12
+joyGetPosEx@8
+mciSendStringA@16
+mixerClose@4
+mixerGetControlDetailsA@12
+mixerGetDevCapsA@12
+mixerGetLineControlsA@12
+mixerGetLineInfoA@12
+mixerOpen@20
+mixerSetControlDetails@12
+waveOutGetVolume@8
+waveOutSetVolume@8
+
+; wsock32.lib(WSOCK32.dll)
+gethostbyname@4
+gethostname@8
+inet_ntoa@4
+WSACleanup@0
+WSAStartup@8
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; Clipboard
+?ReadClipboardFromFile@Line@@AAE?AW4ResultType@@PAX@Z
+?WriteClipboardToFile@Line@@AAE?AW4ResultType@@PAD@Z
+??0Clipboard@@QAE@XZ
+?AbortWrite@Clipboard@@QAE?AW4ResultType@@PAD@Z
+?Close@Clipboard@@QAE?AW4ResultType@@PAD@Z
+?Commit@Clipboard@@QAE?AW4ResultType@@I@Z
+?Get@Clipboard@@QAEIPAD@Z
+?GetClipboardDataTimeout@Clipboard@@QAEPAXI@Z
+?IsReadyForWrite@Clipboard@@QAE_NXZ
+?Open@Clipboard@@QAE?AW4ResultType@@XZ
+?PrepareForWrite@Clipboard@@QAEPADI@Z
+?Set@Clipboard@@QAE?AW4ResultType@@PADI@Z
+?Contents@Clipboard@@QAEPADXZ
+?AssignClipboardAll@Var@@QAE?AW4ResultType@@XZ  ; var.obj
+?AssignBinaryClip@Var@@QAE?AW4ResultType@@AAV1@@Z  ; var.obj
+
+; Hook
+?AddRemoveHooks@@YAXE_N@Z
+?AllowIt@@YAJQAUHHOOK__@@HIJEG_NPAUKeyHistoryItem@@G1@Z
+?ArgHasDeref@Line@@QAE_NH@Z
+?ChangeHookState@@YAXQAPAVHotkey@@HEE@Z
+?DualStateNumpadKeyIsDown@@YA_NXZ
+?FreeHookMem@@YAXXZ
+?GetActiveHooks@@YAEXZ
+?GetHookStatus@@YAXPADH@Z
+?HookThreadProc@@YGKPAX@Z
+?IsDualStateNumpadKey@@YA_NEG@Z
+
+?IsIgnored@@YA_NK@Z
+?IsMouseVK@@YA_NE@Z
+?KeybdEventIsPhysical@@YA_NKE_N@Z
+?LowLevelCommon@@YAJQAUHHOOK__@@HIJEG_NKK@Z
+?LowLevelKeybdProc@@YGJHIJ@Z
+?LowLevelMouseProc@@YGJHIJ@Z
+?ResetHook@@YAX_NE0@Z
+?ResetKeyTypeState@@YAXAAUkey_type@@@Z
+?SetModifierAsPrefix@@YAXEG_N@Z
+?sort_most_general_before_least@@YAHPBX0@Z
+?SuppressThisKeyFunc@@YAJQAUHHOOK__@@JEG_NPAUKeyHistoryItem@@GIJ@Z
+?SystemHasAnotherKeybdHook@@YA_NXZ
+?SystemHasAnotherMouseHook@@YA_NXZ
+?UpdateKeybdState@@YAXAAUtagKBDLLHOOKSTRUCT@@EG_N1@Z
+
+; OS Version Stuff
+??0OS_Version@@QAE@XZ
+?IsWinXPorLater@OS_Version@@QAE_NXZ
+?IsWinMeorLater@OS_Version@@QAE_NXZ
+?IsWin2000orLater@OS_Version@@QAE_NXZ
+?IsWinNT4@OS_Version@@QAE_NXZ
+?IsWin2000@OS_Version@@QAE_NXZ
+?IsWin2003@OS_Version@@QAE_NXZ
+?IsWin95@OS_Version@@QAE_NXZ
+?IsWin98@OS_Version@@QAE_NXZ
+?IsWinNT@OS_Version@@QAE_NXZ
+?IsWinVista@OS_Version@@QAE_NXZ
+?IsWinXP@OS_Version@@QAE_NXZ
+?IsWin98orLater@OS_Version@@QAE_NXZ
+?IsWin9x@OS_Version@@QAE_NXZ
+?IsWinNT4orLater@OS_Version@@QAE_NXZ
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; Put things that are strictly load-time together, which accomplishes two purposes:
+; 1) Might make script loading perform better.
+; 2) Prevents code that runs only at load-time from getting interspersed with runtime code, which should
+;    improve runtime caching.
+?ArgIsVar@Line@@SAEEH@Z
+?AutoExecSectionTimeout@@YGXPAUHWND__@@IIK@Z
+?AutoExecSection@Script@@QAE?AW4ResultType@@XZ
+
+?SetWorkingDir@@YAXPAD@Z
+?LoadFromFile@Script@@QAEI_N@Z  ; script.obj
+?LoadIncludedFile@Script@@QAE?AW4ResultType@@PAD_N1@Z
+?GetLine@Script@@AAEIPADHHPAU_iobuf@@@Z
+?IsFunction@@YA_NPADPA_N@Z
+?IsDirective@Script@@AAE?AW4ResultType@@PAD@Z
+
+?ParseAndAddLine@Script@@AAE?AW4ResultType@@PADEE000I@Z
+?AddLine@Script@@AAE?AW4ResultType@@EQAPADE0@Z
+?CloseAndReturn@Script@@AAE?AW4ResultType@@PAU_iobuf@@PAEW42@@Z
+
+?LineError@Line@@QAE?AW4ResultType@@PADW42@0@Z
+?ScriptError@Script@@QAE?AW4ResultType@@PAD0@Z
+
+?ToText@Var@@QAEPADPADH_N@Z
+?ListVars@Script@@QAEPADPADH@Z
+?ShowMainWindow@@YA?AW4ResultType@@W4MainWindowModes@@_N@Z
+?ToText@Line@@QAEPADPADH_NK1@Z
+?VicinityToText@Line@@QAEPADPADH@Z
+?LogToText@Line@@SAPADPADH@Z
+?ListKeyHistory@Script@@QAEPADPADH@Z
+
+?ConvertActionType@Script@@CAEPAD@Z
+?ConvertOldActionType@Script@@CAEPAD@Z
+?LegacyArgIsExpression@@YA_NPAD0@Z
+?ParseActionType@Script@@AAEPADPAD0_N@Z
+?ParseDerefs@Script@@AAE?AW4ResultType@@PAD0PAUDerefType@@AAH@Z
+
+?StartsWithAssignmentOp@Line@@SA_NPAD@Z  ; script.obj
+?PreparseBlocks@Script@@AAEPAVLine@@PAV2@_N0@Z
+?PreparseError@Line@@QAEPAV1@PAD0@Z
+?PreparseIfElse@Script@@AAEPAVLine@@PAV2@W4ExecUntilMode@@PAX222@Z
+
+??_GSimpleHeap@@AAEPAXI@Z
+??0SimpleHeap@@AAE@XZ
+??1SimpleHeap@@AAE@XZ
+?CreateBlock@SimpleHeap@@CAPAV1@XZ
+?Malloc@SimpleHeap@@SAPADI@Z
+?Malloc@SimpleHeap@@SAPADPADI@Z
+?Delete@SimpleHeap@@SAXPAX@Z
+
+?FindFuncInLibrary@Script@@QAEPAVFunc@@PADIAA_N@Z  ; script.obj
+?FindFunc@Script@@QAEPAVFunc@@PADI@Z
+?AddFunc@Script@@QAEPAVFunc@@PADI_N@Z
+?DefineFunc@Script@@QAE?AW4ResultType@@PADQAPAVVar@@@Z
+??2Func@@SAPAXI@Z
+??0Func@@QAE@PAD_N@Z
+
+WinMain@16
+?CreateWindows@Script@@QAE?AW4ResultType@@XZ
+?Init@Script@@QAE?AW4ResultType@@PAD_N@Z
+?Init@OS_Version@@QAEXXZ
+
+??0Script@@QAE@XZ  ; Constructor (always ?0)
+??1Script@@QAE@XZ  ; Destructor (always ?1)
+??0Line@@QAE@GIEQAUArgStruct@@E@Z  ; Constructor
+??2Line@@SAPAXI@Z  ; Operator-New (always ?2)
+
+?FindLabel@Script@@QAEPAVLabel@@PAD@Z
+?AddLabel@Script@@AAE?AW4ResultType@@PAD_N@Z
+??2Label@@SAPAXI@Z  ; Operator-New
+??0Label@@QAE@PAD@Z ; Constructor.
+
+?FindGroup@Script@@QAEPAVWinGroup@@PAD_N@Z
+?ActUponAll@WinGroup@@QAE?AW4ResultType@@EH@Z
+?AddGroup@Script@@QAE?AW4ResultType@@PAD@Z
+??0WinGroup@@QAE@PAD@Z  ; Constructor
+??2WinGroup@@SAPAXI@Z   ; Operator-New
+?Activate@WinGroup@@QAE?AW4ResultType@@_NPAVWindowSpec@@PAPAVLabel@@@Z  ; WinGroup.obj
+?IsMember@WinGroup@@QAEPAVWindowSpec@@PAUHWND__@@AAUglobal_struct@@@Z
+??0WindowSpec@@QAE@PAD0PAVLabel@@00@Z  ; WinGroup.obj
+??2WindowSpec@@SAPAXI@Z
+
+?AddWindow@WinGroup@@QAE?AW4ResultType@@PAD0PAVLabel@@00@Z  ; WinGroup.obj
+?CloseAndGoToNext@WinGroup@@QAE?AW4ResultType@@_N@Z
+?Deactivate@WinGroup@@QAE?AW4ResultType@@_N@Z
+?EnumParentActUponAll@@YGHPAUHWND__@@J@Z
+?EnumParentFindAnyExcept@@YGHPAUHWND__@@J@Z
+?IsEmpty@WinGroup@@QAE_NXZ
+?MarkAsVisited@WinGroup@@CAXPAUHWND__@@@Z
+?Update@WinGroup@@AAE?AW4ResultType@@_N@Z
+
+?ValidateName@Var@@SA?AW4ResultType@@PAD_NH@Z
