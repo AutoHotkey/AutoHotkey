@@ -48,6 +48,7 @@ enum ExecUntilMode {NORMAL_MODE, UNTIL_RETURN, UNTIL_BLOCK_END, ONLY_ONE_LINE};
 #define ATTR_LOOP_REG (void *)4
 #define ATTR_LOOP_READ_FILE (void *)5
 #define ATTR_LOOP_PARSE (void *)6
+#define ATTR_LOOP_WHILE (void *)7 // Lexikos: This is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
 typedef void *AttributeType;
 
 enum FileLoopModeType {FILE_LOOP_INVALID, FILE_LOOP_FILES_ONLY, FILE_LOOP_FILES_AND_FOLDERS, FILE_LOOP_FOLDERS_ONLY};
@@ -542,6 +543,7 @@ private:
 	ResultType PerformLoopParse(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
 	ResultType Line::PerformLoopParseCSV(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
 	ResultType PerformLoopReadFile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine, FILE *aReadFile, char *aWriteFileName);
+	ResultType Line::PerformLoopWhile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
 	ResultType Perform();
 
 	ResultType MouseGetPos(DWORD aOptions);
@@ -856,6 +858,8 @@ public:
 	char *ExpandArg(char *aBuf, int aArgIndex, Var *aArgVar = NULL);
 	char *ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget, char *&aDerefBuf
 		, size_t &aDerefBufSize, char *aArgDeref[], size_t aExtraSize);
+
+	ResultType EvaluateHotCriterionExpression(); // Lexikos: Called by MainWindowProc to handle an AHK_HOT_IF_EXPR message.
 
 	ResultType Deref(Var *aOutputVar, char *aBuf);
 
@@ -1680,6 +1684,10 @@ public:
 		{
 			if (!stricmp(aBuf, "WheelUp") || !stricmp(aBuf, "WU")) return VK_WHEEL_UP;
 			if (!stricmp(aBuf, "WheelDown") || !stricmp(aBuf, "WD")) return VK_WHEEL_DOWN;
+#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
+			if (!stricmp(aBuf, "WheelLeft") || !stricmp(aBuf, "WL")) return VK_WHEEL_LEFT;
+			if (!stricmp(aBuf, "WheelRight") || !stricmp(aBuf, "WR")) return VK_WHEEL_RIGHT;
+#endif
 		}
 		return 0;
 	}
@@ -2606,7 +2614,9 @@ VarSizeType BIV_TimeIdle(char *aBuf, char *aVarName);
 VarSizeType BIV_TimeIdlePhysical(char *aBuf, char *aVarName);
 VarSizeType BIV_IPAddress(char *aBuf, char *aVarName);
 VarSizeType BIV_IsAdmin(char *aBuf, char *aVarName);
-
+// Lexikos: Added BIV_IsPaused and BIV_IsCritical.
+VarSizeType BIV_IsPaused(char *aBuf, char *aVarName);
+VarSizeType BIV_IsCritical(char *aBuf, char *aVarName);
 
 
 ////////////////////////

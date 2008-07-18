@@ -1,0 +1,27 @@
+AutoHotkey v1.0.47.06 custom build by Lexikos.
+
+The included project file is for Visual C++ Express Edition 2008.
+
+--- L1
+
+Added #if (expression) directive:
+   Creates context-sensitive hotkeys and hotstrings. Such hotkeys perform a different action (or none at all) depending on the result of evaluating (expression). Note: (expression) may be executed and evaluated twice by a hook hotkey if the first evaluation returns true. This is a design quirk of AutoHotkey, and is explained in the comments--search application.cpp for "inefficiency of calling HotCriterionAllowsFiring() twice".
+
+Added Hotkey, If, exact-expression-text:
+   Allows existing hotkey variants to be modified and new hotkey variants to be created for existing #If statements. ErrorLevel is set to 1 if exact-expression-text is not an exact match for an existing #If statement (excluding the "#If").
+
+Added support for WM_MOUSEHWHEEL in Windows Vista. Includes hotkey and Send support - use WheelLeft, WheelRight, WL and WR in place of WheelUp, WheelDown, WU and WD. This feature is enabled only if _WIN32_WINNT >= 0x0600 (see stdafx.h).
+
+Added While, expression - continue looping until the expression evaluates to false. Note: One-true-brace style not yet supported.
+
+Increased MAX_THREADS_LIMIT to 200, which is closer to the real limit on my system. This allows more recursion of callbacks which start a new thread (i.e. without the "Fast" option.)
+
+Fixed Access Violation caused by WinGetClass + subclassed window.
+
+Fixed Access Violation caused by empty dynamic function references.
+
+Changed dynamic function calls to allow any number of parameters to be passed. Excess parameters are still evaluated, but are discarded before calling the function.
+
+Added built-in variables A_IsPaused, which indicates whether the underlying thread is paused.
+
+Added built-in variable A_IsCritical, which indicates whether the current thread has been marked (un)interruptible by the "Critical" command.

@@ -33,7 +33,8 @@ DWORD Hotkey::sJoyHotkeyCount = 0;
 
 
 
-HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, char *aWinTitle, char *aWinText)
+// Lexikos: Added aHotExprIndex for #if (expression).
+HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, char *aWinTitle, char *aWinText, int aHotExprIndex)
 // This is a global function because it's used by both hotkeys and hotstrings.
 // In addition to being called by the hook thread, this can now be called by the main thread.
 // That happens when a WM_HOTKEY message arrives that is non-hook (such as for Win9x).
@@ -51,6 +52,11 @@ HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, char *aWinTitle, c
 	case HOT_IF_NOT_EXIST:
 		found_hwnd = WinExist(g_default, aWinTitle, aWinText, "", "", false, false); // Thread-safe.
 		break;
+	// Lexikos: Handling of #if (expression) hotkey variants.
+	case HOT_IF_EXPR:
+		// Expression evaluation must be done in the main thread. If the message times out, the hotkey/hotstring is not allowed to fire.
+		DWORD_PTR res;
+		return (SendMessageTimeout(g_hWnd, AHK_HOT_IF_EXPR, (WPARAM)aHotExprIndex, 0, SMTO_BLOCK | SMTO_ABORTIFHUNG, 1000, &res) && res == CONDITION_TRUE) ? (HWND)1 : NULL;
 	default: // HOT_NO_CRITERION (listed last because most callers avoids calling here by checking this value first).
 		return (HWND)1; // Always allow hotkey to fire.
 	}
@@ -517,7 +523,8 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC)
 			if (   vp->mEnabled // This particular variant within its parent hotkey is enabled.
 				&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
 				&& (!vp->mHotCriterion || HotCriterionAllowsFiring(vp->mHotCriterion
-					, vp->mHotWinTitle, vp->mHotWinText))   ) // ... and its critieria allow it to fire.
+					// Lexikos: Added vp->mHotExprIndex for #if (expression).
+					, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex))   ) // ... and its critieria allow it to fire.
 				return false; // At least one of this prefix's suffixes is eligible for firing.
 	}
 	// Since above didn't return, no hotkeys were found for this prefix that are capable of firing.
@@ -560,7 +567,8 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
 		if (   vp->mEnabled // This particular variant within its parent hotkey is enabled.
 			&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
 			&& (!vp->mHotCriterion || (found_hwnd = HotCriterionAllowsFiring(vp->mHotCriterion
-				, vp->mHotWinTitle, vp->mHotWinText)))   ) // ... and its critieria allow it to fire.
+				// Lexikos: Added vp->mHotExprIndex for #if (expression).
+				, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex)))   ) // ... and its critieria allow it to fire.
 		{
 			if (vp->mHotCriterion) // Since this is the first criteria hotkey, it takes precedence.
 				return vp;
@@ -870,6 +878,37 @@ ResultType Hotkey::Dynamic(char *aHotkeyName, char *aLabelName, char *aOptions, 
 		else
 			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	}
+
+	// Lexikos: Allow "Hotkey, If, exact-expression-text" to reference existing #if expressions.
+	if (!stricmp(aHotkeyName, "If"))
+	{
+		if (*aOptions)
+		{	// Let the script know of this error since it may indicate an unescaped comma in the expression text.
+			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		}
+		if (!*aLabelName)
+		{
+			g_HotCriterion = HOT_NO_CRITERION;
+		}
+		else
+		{
+			int i;
+			for (i = 0; i < g_HotExprLineCount; ++i)
+			{
+				if (!strcmp(aLabelName, g_HotExprLines[i]->mArg[0].text))
+				{
+					g_HotCriterion = HOT_IF_EXPR;
+					g_HotWinTitle = g_HotExprLines[i]->mArg[0].text;
+					g_HotWinText = "";
+					g_HotExprIndex = i;
+					break;
+				}
+			}
+			if (i == g_HotExprLineCount)
+				return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		}
+		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	}
 
 	// For maintainability (and script readability), don't support "U" as a substitute for "UseErrorLevel",
@@ -1501,6 +1540,7 @@ HotkeyVariant *Hotkey::AddVariant(Label *aJumpToLabel, bool aSuffixHasTilde)
 	v.mHotCriterion = g_HotCriterion; // If this hotkey is an alt-tab one (mHookAction), this is stored but ignored until/unless the Hotkey command converts it into a non-alt-tab hotkey.
 	v.mHotWinTitle = g_HotWinTitle;
 	v.mHotWinText = g_HotWinText;  // The value of this and other globals used above can vary during load-time.
+	v.mHotExprIndex = g_HotExprIndex;	// Lexikos: Added mHotExprIndex for #if (expression).
 	v.mEnabled = true;
 	if (aSuffixHasTilde)
 	{
@@ -1783,7 +1823,11 @@ ResultType Hotkey::TextToKey(char *aText, char *aHotkeyName, bool aIsModifier, H
 	{
 		if (aIsModifier)
 		{
+#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
+			if (temp_vk == VK_WHEEL_DOWN || temp_vk == VK_WHEEL_UP || temp_vk == VK_WHEEL_LEFT || temp_vk == VK_WHEEL_RIGHT)
+#else
 			if (temp_vk == VK_WHEEL_DOWN || temp_vk == VK_WHEEL_UP)
+#endif
 			{
 				if (aUseErrorLevel)
 					g_ErrorLevel->Assign(HOTKEY_EL_UNSUPPORTED_PREFIX);
@@ -2381,6 +2425,7 @@ Hotstring::Hotstring(Label *aJumpToLabel, char *aOptions, char *aHotstring, char
 	, mHotCriterion(g_HotCriterion)
 	, mHotWinTitle(g_HotWinTitle), mHotWinText(g_HotWinText)
 	, mConstructedOK(false)
+	, mHotExprIndex(g_HotExprIndex)	// Lexikos: Added mHotExprIndex for #if (expression).
 {
 	// Insist on certain qualities so that they never need to be checked other than here:
 	if (!mJumpToLabel) // Caller has already ensured that aHotstring is not blank.

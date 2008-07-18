@@ -46,7 +46,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	#ifdef _DEBUG
 		//char *script_filespec = "C:\\Util\\AutoHotkey.ahk";
 		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\GUI Demo.ahk";
-		char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\MAIN.ahk";
+		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\MAIN.ahk";
 		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\Expressions.ahk";
 		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\Line Continuation.ahk";
 		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\DllCall.ahk";
@@ -58,6 +58,11 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\Send command.ahk";
 		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Ref\\ImageSearch\\TEST SUITE\\MAIN.ahk";
 		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\New Text Document.ahk";
+		//char *script_filespec = "..\\Test\\HotIfExpr.ahk";
+		//char *script_filespec = "..\\Test\\DynFunc.ahk";
+		char *script_filespec = "Z:\\~acc.ahk";
+		//char *script_filespec = "..\\..\\..\\Documents\\AutoHotkey\\Gestures\\Gestures 3.0.ahk";
+		//char *script_filespec = "..\\..\\..\\Documents\\AutoHotkey\\hk.ahk";
 	#else
 		char *script_filespec = NULL; // Set default as "unspecified/omitted".
 	#endif

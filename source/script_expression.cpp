@@ -1128,6 +1128,8 @@ end_of_infix_to_postfix:
 					this_token.marker = "";         // Set default in case of early goto.  Must be done after above.
 					this_token.symbol = SYM_STRING; //
 
+					// Lexikos: Changed "goto push_this_token" to "goto double_deref_fail" so expression evaluation can be aborted if a dynamic function reference fails to resolve.
+
 					// Loadtime validation has ensured that none of these derefs are function-calls
 					// (i.e. deref->is_function is alway false).  Loadtime logic seems incapable of
 					// producing function-derefs inside something that would later be interpreted
@@ -1138,12 +1140,12 @@ end_of_infix_to_postfix:
 						// Copy the chars that occur prior to deref->marker into the buffer:
 						for (; cp < deref->marker && var_name_length < MAX_VAR_NAME_LENGTH; left_buf[var_name_length++] = *cp++);
 						if (var_name_length >= MAX_VAR_NAME_LENGTH && cp < deref->marker) // The variable name would be too long!
-							goto push_this_token; // For simplicity and in keeping with the tradition that expressions generally don't display runtime errors, just treat it as a blank.
+							goto double_deref_fail; // For simplicity and in keeping with the tradition that expressions generally don't display runtime errors, just treat it as a blank (or abort if this is a dynamic function call.)
 						// Now copy the contents of the dereferenced var.  For all cases, aBuf has already
 						// been verified to be large enough, assuming the value hasn't changed between the
 						// time we were called and the time the caller calculated the space needed.
 						if (deref->var->Get() > (VarSizeType)(MAX_VAR_NAME_LENGTH - var_name_length)) // The variable name would be too long!
-							goto push_this_token; // For simplicity and in keeping with the tradition that expressions generally don't display runtime errors, just treat it as a blank.
+							goto double_deref_fail; // For simplicity and in keeping with the tradition that expressions generally don't display runtime errors, just treat it as a blank (or abort if this is a dynamic function call.)
 						var_name_length += deref->var->Get(left_buf + var_name_length);
 						// Finally, jump over the dereference text. Note that in the case of an expression, there might not
 						// be any percent signs within the text of the dereference, e.g. x + y, not %x% + %y%.
@@ -1154,7 +1156,7 @@ end_of_infix_to_postfix:
 					for (; *cp && var_name_length < MAX_VAR_NAME_LENGTH; left_buf[var_name_length++] = *cp++);
 					if (var_name_length >= MAX_VAR_NAME_LENGTH && *cp // The variable name would be too long!
 						|| !var_name_length) // It resolves to an empty string (e.g. a simple dynamic var like %Var% where Var is blank).
-						goto push_this_token; // For simplicity and in keeping with the tradition that expressions generally don't display runtime errors, just treat it as a blank.
+						goto double_deref_fail; // For simplicity and in keeping with the tradition that expressions generally don't display runtime errors, just treat it as a blank (or abort if this is a dynamic function call.)
 
 					// Terminate the buffer, even if nothing was written into it:
 					left_buf[var_name_length] = '\0';
@@ -1167,8 +1169,9 @@ end_of_infix_to_postfix:
 						// called incorrectly by the script, the expression is aborted like it would be for other
 						// syntax errors.
 						if (   !(deref->func = g_script.FindFunc(left_buf, var_name_length)) // Below relies on short-circuit boolean order, with this line being executed first.
-							|| deref->param_count > deref->func->mParamCount    // param_count was set by the
-							|| deref->param_count < deref->func->mMinParams   ) // infix processing code.
+							// Lexikos: Disabled these checks so dynamic function calls may be less strict, in combination with some other modifications.
+							/*|| deref->param_count > deref->func->mParamCount    // param_count was set by the
+							|| deref->param_count < deref->func->mMinParams*/   ) // infix processing code.
 							goto abnormal_end;
 						// The SYM_FUNC following this SYM_DYNAMIC uses the same deref as above.
 						continue;
@@ -1408,6 +1411,10 @@ end_of_infix_to_postfix:
 				// instances of this function on the call-stack and yet SYM_VAR to be one of this function's own
 				// locals or formal params because it would have no legitimate origin.
 
+				// Lexikos: Discard surplus parameters for dynamic function calls.
+				if (actual_param_count > func.mParamCount)
+					stack_count -= actual_param_count - func.mParamCount;
+
 				j = func.mParamCount - 1; // The index of the last formal parameter. Relied upon by BOTH loops below.
 				// The following loop will have zero iterations unless at least one formal parameter lacks an actual,
 				// which should be possible only if the parameter is optional (i.e. has a default value).
@@ -1424,7 +1431,8 @@ end_of_infix_to_postfix:
 					case PARAM_DEFAULT_STR:   this_formal_param.var->Assign(this_formal_param.default_str);    break;
 					case PARAM_DEFAULT_INT:   this_formal_param.var->Assign(this_formal_param.default_int64);  break;
 					case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
-					//case PARAM_DEFAULT_NONE: Not possible due to the nature of this loop and due to load-time validation.
+					// Lexikos: Allow dynamic function calls to pass fewer parameters than are declared.
+					case PARAM_DEFAULT_NONE:  this_formal_param.var->Assign(); break;
 					}
 				}
 				// Pop the actual number of params involved in this function-call off the stack.  Load-time
@@ -2424,7 +2432,13 @@ end_of_infix_to_postfix:
 			// Now fall through and push this_token onto the stack as an operand for use by future operators.
 			// This is because by convention, an assignment like "x+=1" produces a usable operand.
 		}
-
+		goto push_this_token;
+double_deref_fail:
+		for (; deref->marker; ++deref);  // A deref with a NULL marker terminates the list, and also indicates whether this is a dynamic function call. deref has been set by the caller, and may or may not be the NULL marker deref.
+		// Lexikos: Abort expression evaluation if a dynamic function reference fails to resolve.
+		if (deref->is_function)
+			goto abnormal_end;
+		// FALL THROUGH TO push_this_token.
 push_this_token:
 		if (!this_token.circuit_token) // It's not capable of short-circuit.
 			STACK_PUSH(&this_token);   // Push the result onto the stack for use as an operand by a future operator.

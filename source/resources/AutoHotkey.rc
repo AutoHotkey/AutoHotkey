@@ -27,7 +27,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 // RT_MANIFEST
 //
 
-CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST             "AutoHotkey.exe.manifest"
+//CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST             "AutoHotkey.exe.manifest"
 
 #ifdef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////

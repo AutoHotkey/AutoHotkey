@@ -2106,6 +2106,9 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, char *aOptions, char
 	UINT msg_down, msg_up;
 	WPARAM wparam;
 	bool vk_is_wheel = aVK == VK_WHEEL_UP || aVK == VK_WHEEL_DOWN;
+#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
+	bool vk_is_hwheel = aVK == VK_WHEEL_LEFT || aVK == VK_WHEEL_RIGHT;
+#endif
 
 	if (vk_is_wheel)
 	{
@@ -2133,6 +2136,12 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, char *aOptions, char
         //if (g_MouseHook)
 		//	wparam |= g_mouse_buttons_logical;
 	}
+#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
+	else if (vk_is_hwheel)
+	{
+		wparam = (aClickCount * ((aVK == VK_WHEEL_LEFT) ? -WHEEL_DELTA : WHEEL_DELTA)) << 16;
+	}
+#endif
 	else
 	{
 		switch (aVK)
@@ -2173,6 +2182,13 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, char *aOptions, char
 		PostMessage(control_window, WM_MOUSEWHEEL, wparam, lparam);
 		DoControlDelay;
 	}
+#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
+	else if (vk_is_hwheel)
+	{
+		PostMessage(control_window, WM_MOUSEHWHEEL, wparam, lparam);
+		DoControlDelay;
+	}
+#endif
 	else
 	{
 		for (int i = 0; i < aClickCount; ++i)
@@ -3355,13 +3371,15 @@ ResultType Line::WinGetTitle(char *aTitle, char *aText, char *aExcludeTitle, cha
 
 ResultType Line::WinGetClass(char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText)
 {
+	// Lexikos: Some changes here to fix a potential Access Violation which occurs when WinGetClass is used with a window whose window procedure has been overridden by script.
+	Var &output_var = *OUTPUT_VAR;
 	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
 	if (!target_window)
-		return OUTPUT_VAR->Assign();
+		return output_var.Assign();
 	char class_name[WINDOW_CLASS_SIZE];
 	if (!GetClassName(target_window, class_name, sizeof(class_name)))
-		return OUTPUT_VAR->Assign();
-	return OUTPUT_VAR->Assign(class_name);
+		return output_var.Assign();
+	return output_var.Assign(class_name);
 }
 
 
@@ -5235,6 +5253,11 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		// SendMessage, 0x44, 1029,,, %A_ScriptFullPath% - AutoHotkey
 		// SendMessage, 1029,,,, %A_ScriptFullPath% - AutoHotkey  ; Same as above but not sent via TRANSLATE.
 		return GetCurrentProcessId(); // Don't use ReplyMessage because then our thread can't reply to itself with this answer.
+
+	case AHK_HOT_IF_EXPR: // Lexikos: HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
+		if ((int)wParam > -1 && (int)wParam < g_HotExprLineCount)
+			return g_HotExprLines[(int)wParam]->EvaluateHotCriterionExpression();
+		return 0;
 
 	HANDLE_MENU_LOOP // Cases for WM_ENTERMENULOOP and WM_EXITMENULOOP.
 
@@ -11318,6 +11341,29 @@ VarSizeType BIV_TimeIdlePhysical(char *aBuf, char *aVarName)
 	if (!aBuf)
 		return MAX_NUMBER_LENGTH; // IMPORTANT: Conservative estimate because tick might change between 1st & 2nd calls.
 	return (VarSizeType)strlen(ITOA64(GetTickCount() - g_TimeLastInputPhysical, aBuf)); // Switching keyboard layouts/languages sometimes sees to throw off the timestamps of the incoming events in the hook.
+}
+
+
+// Lexikos: Added BIV_IsPaused and BIV_IsCritical.
+
+VarSizeType BIV_IsPaused(char *aBuf, char *aVarName)
+{
+	if (aBuf)
+	{
+		*aBuf++ = g.UnderlyingThreadIsPaused ? '1' : '0';
+		*aBuf = '\0';
+	}
+	return 1;
+}
+
+VarSizeType BIV_IsCritical(char *aBuf, char *aVarName)
+{
+	if (aBuf)
+	{
+		*aBuf++ = g.ThreadIsCritical ? '1' : '0';
+		*aBuf = '\0';
+	}
+	return 1;
 }
 
 

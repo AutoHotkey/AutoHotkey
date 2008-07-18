@@ -338,6 +338,14 @@ LRESULT CALLBACK LowLevelMouseProc(int aCode, WPARAM wParam, LPARAM lParam)
 			sc = (wheel_delta > 0 ? wheel_delta : -wheel_delta) / WHEEL_DELTA; // Friendless of conversion seems to outweigh lack of flexibility if future OSes change the 120 default.
 			key_up = false; // Always consider wheel movements to be "key down" events.
 			break;
+#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
+		case WM_MOUSEHWHEEL:
+			wheel_delta = GET_WHEEL_DELTA_WPARAM(event.mouseData);
+			vk = wheel_delta < 0 ? VK_WHEEL_LEFT : VK_WHEEL_RIGHT;
+			sc = (wheel_delta > 0 ? wheel_delta : -wheel_delta) / WHEEL_DELTA;
+			key_up = false;
+			break;
+#endif
 		case WM_LBUTTONUP: vk = VK_LBUTTON;	break;
 		case WM_RBUTTONUP: vk = VK_RBUTTON; break;
 		case WM_MBUTTONUP: vk = VK_MBUTTON; break;
@@ -449,7 +457,11 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	// the notch count from pKeyHistoryCurr->sc.
 	pKeyHistoryCurr->sc = aSC; // Will be zero if our caller is the mouse hook (except for wheel notch count).
 	// After logging the wheel notch count (above), purify aSC for readability and maintainability.
+#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
+	if (aVK == VK_WHEEL_DOWN || aVK == VK_WHEEL_UP || aVK == VK_WHEEL_LEFT || aVK == VK_WHEEL_RIGHT)
+#else
 	if (aVK == VK_WHEEL_DOWN || aVK == VK_WHEEL_UP)
+#endif
 		aSC = 0; // Also relied upon by by sc_takes_precedence below.
 
 	bool is_artificial;
@@ -2749,7 +2761,8 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 					// ... v1.0.41: Or it's a perfect match but the right window isn't active or doesn't exist.
 					// In that case, continue searching for other matches in case the script contains
 					// hotstrings that would trigger simultaneously were it not for the "only one" rule.
-					|| !HotCriterionAllowsFiring(hs.mHotCriterion, hs.mHotWinTitle, hs.mHotWinText)   )
+					// Lexikos: Added hs.mHotExprLine for #if (expression).
+					|| !HotCriterionAllowsFiring(hs.mHotCriterion, hs.mHotWinTitle, hs.mHotWinText, hs.mHotExprIndex)   )
 					continue; // No match or not eligible to fire.
 					// v1.0.42: The following scenario defeats the ability to give criterion hotstrings
 					// precedence over non-criterion:
@@ -4368,6 +4381,10 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 		// probably better to have a false value in them:
 		g_PhysicalKeyState[VK_WHEEL_DOWN] = 0;
 		g_PhysicalKeyState[VK_WHEEL_UP] = 0;
+#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
+		g_PhysicalKeyState[VK_WHEEL_LEFT] = 0;
+		g_PhysicalKeyState[VK_WHEEL_RIGHT] = 0;
+#endif
 
 		if (aResetKVKandKSC)
 		{
@@ -4378,6 +4395,10 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 			ResetKeyTypeState(kvk[VK_XBUTTON2]);
 			ResetKeyTypeState(kvk[VK_WHEEL_DOWN]);
 			ResetKeyTypeState(kvk[VK_WHEEL_UP]);
+#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
+			ResetKeyTypeState(kvk[VK_WHEEL_LEFT]);
+			ResetKeyTypeState(kvk[VK_WHEEL_RIGHT]);
+#endif
 		}
 	}
 
