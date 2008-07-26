@@ -13538,6 +13538,11 @@ void BIF_IsLabel(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 }
 
 
+void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount) // Lexikos: IsFunc - for use with dynamic function calls.
+{
+	aResultToken.value_int64 = g_script.FindFunc(ExprTokenToString(*aParam[0], aResultToken.buf)) ? 1 : 0;
+}
+
 
 void BIF_GetKeyState(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {

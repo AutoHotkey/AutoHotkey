@@ -7058,6 +7058,8 @@ Func *Script::FindFunc(char *aFuncName, size_t aFuncNameLength)
 	}
 	else if (!stricmp(func_name, "IsLabel"))
 		bif = BIF_IsLabel;
+	else if (!stricmp(func_name, "IsFunc")) // Lexikos: IsFunc - for use with dynamic function calls.
+		bif = BIF_IsFunc;
 	else if (!stricmp(func_name, "DllCall"))
 	{
 		bif = BIF_DllCall;
