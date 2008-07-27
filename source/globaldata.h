@@ -105,6 +105,7 @@ extern int g_HotExprIndex;
 extern Line **g_HotExprLines;
 extern int g_HotExprLineCount;
 extern int g_HotExprLineCountMax;
+extern UINT g_HotExprTimeout;
 
 extern MenuTypeType g_MenuIsVisible;
 extern int g_nMessageBoxes;

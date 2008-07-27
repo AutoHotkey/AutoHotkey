@@ -2747,6 +2747,13 @@ inline ResultType Script::IsDirective(char *aBuf)
 
 		return CONDITION_TRUE;
 	}
+	// Lexikos: Allow #if timeout to be adjusted.
+	if (IS_DIRECTIVE_MATCH("#IfTimeout"))
+	{
+		if (parameter)
+			g_HotExprTimeout = ATOU(parameter);
+		return CONDITION_TRUE;
+	}
 
 	if (!strnicmp(aBuf, "#IfWin", 6))
 	{
@@ -3276,6 +3283,13 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 					// No further action is required for the word "global" by itself.
 					return OK;
 				}
+				// Lexikos: Added assume-static mode. For now, this requires "static" to be placed above local or global variable declarations.
+				else if (declare_type == VAR_DECLARE_STATIC && mNextLineIsFunctionBody && g.CurrentFunc->mDefaultVarType == VAR_ASSUME_NONE)
+				{
+					g.CurrentFunc->mDefaultVarType = VAR_ASSUME_STATIC;
+					// No further action is required for the word "static" by itself.
+					return OK;
+				}
 				// Otherwise, it's the word "local"/"static" by itself or "global" by itself but that occurs too far down in the body.
 				return ScriptError(ERR_UNRECOGNIZED_ACTION, aLineText); // Vague error since so rare.
 			}
@@ -3300,17 +3314,24 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 			}
 			else // Since this isn't the first line of the function's body, mDefaultVarType has aleady been set permanently.
 			{
+				// Lexikos: Changed this section to support VAR_ASSUME_STATIC.
 				// Seems best to flag errors since they might be an indication to the user that something
 				// is being done incorrectly in this function, not to mention being a reminder about what
 				// mode the function is in:
-				if (g.CurrentFunc->mDefaultVarType == VAR_ASSUME_GLOBAL)
+				switch (g.CurrentFunc->mDefaultVarType)
 				{
+				case VAR_ASSUME_GLOBAL:
 					if (declare_type == VAR_DECLARE_GLOBAL)
 						return ScriptError("Global variables do not need to be declared in this function.", aLineText);
-				}
-				else // Must be VAR_ASSUME_LOCAL at this stage.
+					break;
+				case VAR_ASSUME_LOCAL:
 					if (declare_type == VAR_DECLARE_LOCAL)
 						return ScriptError("Local variables do not need to be declared in this function.", aLineText);
+					break;
+				case VAR_ASSUME_STATIC:
+					if (declare_type == VAR_DECLARE_STATIC)
+						return ScriptError("Static variables do not need to be declared in this function.", aLineText);
+				}
 			}
 			// Since above didn't break or return, a variable is being declared as an exception to the
 			// mode specified by mDefaultVarType (except if it's a static, which would be an exception
@@ -3320,8 +3341,9 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 			// variable) because otherwise it would have already displayed an "unnecessary declaration" error
 			// and returned above.  But if the declare_type is static, and given that all static variables are
 			// local, inversion is necessary only if the current mode isn't LOCAL:
-			bool is_already_exception, is_exception = (declare_type != VAR_DECLARE_STATIC
-				|| g.CurrentFunc->mDefaultVarType == VAR_ASSUME_GLOBAL); // Above has ensured that NONE can't be in effect by the time we reach the first static.
+			bool is_already_exception, is_exception = ((declare_type == VAR_DECLARE_GLOBAL) != (g.CurrentFunc->mDefaultVarType == VAR_ASSUME_GLOBAL));
+				// Lexikos: Changed above check to support VAR_ASSUME_STATIC - i.e. when declaring a local, it is only an "exception" if the function is assume-global.
+				/*(declare_type != VAR_DECLARE_STATIC || g.CurrentFunc->mDefaultVarType == VAR_ASSUME_GLOBAL);*/ // Above has ensured that NONE can't be in effect by the time we reach the first static.
 			bool open_brace_was_added, belongs_to_if_or_else_or_loop;
 			VarSizeType var_name_length;
 			char *item;
@@ -3359,6 +3381,9 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 				}
 				if (declare_type == VAR_DECLARE_STATIC)
 					var->OverwriteAttrib(VAR_ATTRIB_STATIC);
+				// Lexikos: Remove VAR_ATTRIB_STATIC, which is set by AddVar if the current function is assume-static.
+				else if (declare_type == VAR_DECLARE_LOCAL && g.CurrentFunc->mDefaultVarType == VAR_ASSUME_STATIC)
+					var->OverwriteAttrib(0);
 
 				item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
 
@@ -4488,7 +4513,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 	// Loop {   ; Known limitation: Overlaps with file-pattern loop that retrieves single file of name "{".
 	// Loop 5 { ; Also overlaps, this time with file-pattern loop that retrieves numeric filename ending in '{'.
 	// Loop %Var% {  ; Similar, but like the above seems acceptable given extreme rarity of user intending a file pattern.
-	if (aActionType == ACT_LOOP && nArgs == 1 && arg[0][0])  // A loop with exactly one, non-blank arg.
+	if (aActionType == ACT_LOOP && nArgs == 1 && arg[0][0] || aActionType == ACT_WHILE)  // A loop with exactly one, non-blank arg. // Lexikos: Do the same for While.
 	{
 		char *arg1 = arg[0]; // For readability and possibly performance.
 		// A loop with the above criteria (exactly one arg) can only validly be a normal/counting loop or
@@ -7673,6 +7698,12 @@ Var *Script::AddVar(char *aVarName, size_t aVarNameLength, int aInsertPos, int a
 		return NULL;
 	}
 
+	if (aIsLocal == 1 && g.CurrentFunc->mDefaultVarType == VAR_ASSUME_STATIC)
+	{	// Lexikos: Current function is assume-static, so set static attribute.
+		//	This will be overwritten (again) if this variable is being explicitly declared "local".
+		the_new_var->OverwriteAttrib(VAR_ATTRIB_STATIC);
+	}
+
 	// If there's a lazy var list, aInsertPos provided by the caller is for it, so this new variable
 	// always gets inserted into that list because there's always room for one more (because the
 	// previously added variable would have purged it if it had reached capacity).
@@ -8884,7 +8915,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 		// line (e.g. control stmts such as IF and LOOP).  Also, don't expand
 		// ACT_ASSIGN because a more efficient way of dereferencing may be possible
 		// in that case:
-		if (line->mActionType != ACT_ASSIGN)
+		if (line->mActionType != ACT_ASSIGN && line->mActionType != ACT_WHILE) // Lexikos: Exclude ACT_WHILE so A_Index can be set before the expression is evaluated.
 		{
 			result = line->ExpandArgs();
 			// As of v1.0.31, ExpandArgs() will also return EARLY_EXIT if a function call inside one of this
@@ -10474,6 +10505,11 @@ ResultType Line::PerformLoopWhile(char **apReturnValue, bool &aContinueMainLoop,
 
 	for (;; ++g.mLoopIteration)
 	{
+		// Evaluate the expression only now that A_Index has been set.
+		result = ExpandArgs();
+		if (result != OK)
+			return result;
+
 		// See comments under ACT_IFEXPR in EvaluateCondition() for details about this section.
 		cp = ARG1;
 		if (!*cp)
@@ -10500,11 +10536,6 @@ ResultType Line::PerformLoopWhile(char **apReturnValue, bool &aContinueMainLoop,
 				aJumpToLine = jump_to_line;
 			break;
 		}
-
-		// This is done at the end of the loop because ExecUntil calls ExpandArgs once.
-		result = ExpandArgs();
-		if (result != OK)
-			return result;
 
 	} // for()
 

@@ -56,7 +56,7 @@ HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, char *aWinTitle, c
 	case HOT_IF_EXPR:
 		// Expression evaluation must be done in the main thread. If the message times out, the hotkey/hotstring is not allowed to fire.
 		DWORD_PTR res;
-		return (SendMessageTimeout(g_hWnd, AHK_HOT_IF_EXPR, (WPARAM)aHotExprIndex, 0, SMTO_BLOCK | SMTO_ABORTIFHUNG, 1000, &res) && res == CONDITION_TRUE) ? (HWND)1 : NULL;
+		return (SendMessageTimeout(g_hWnd, AHK_HOT_IF_EXPR, (WPARAM)aHotExprIndex, 0, SMTO_BLOCK | SMTO_ABORTIFHUNG, g_HotExprTimeout, &res) && res == CONDITION_TRUE) ? (HWND)1 : NULL;
 	default: // HOT_NO_CRITERION (listed last because most callers avoids calling here by checking this value first).
 		return (HWND)1; // Always allow hotkey to fire.
 	}

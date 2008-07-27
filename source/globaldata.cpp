@@ -114,6 +114,7 @@ int g_HotExprIndex = -1; // The index of the Line containing the expression defi
 Line **g_HotExprLines = NULL; // Array of pointers to expression lines, allocated when needed.
 int g_HotExprLineCount = 0; // Number of expression lines currently present.
 int g_HotExprLineCountMax = 0; // Current capacity of g_HotExprLines.
+UINT g_HotExprTimeout = 1000; // Timeout for #if (expression) evaluation, in milliseconds.
 
 MenuTypeType g_MenuIsVisible = MENU_TYPE_NONE;
 int g_nMessageBoxes = 0;

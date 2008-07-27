@@ -1835,6 +1835,7 @@ public:
 	#define VAR_ASSUME_NONE 0
 	#define VAR_ASSUME_LOCAL 1
 	#define VAR_ASSUME_GLOBAL 2
+	#define VAR_ASSUME_STATIC 3 // Lexikos: Assume local and static.
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
 	UCHAR mDefaultVarType;
 	bool mIsBuiltIn; // Determines contents of union. Keep this member adjacent/contiguous with the above.
