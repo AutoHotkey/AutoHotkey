@@ -33,8 +33,7 @@ GNU General Public License for more details.
 // it makes available in the code, it seems best to stick with it and instead patch anything that needs it
 // (such as ToolTip).  Hopefully, ToolTip is the only thing in the current code base that needs patching
 // (perhaps the only reason it was broken in the first place was a bug or oversight by MS).
-//#define _WIN32_WINNT 0x0501
-#define _WIN32_WINNT 0x0600 // For WM_MOUSEHWHEEL (Vista-only horizontal wheel support).
+#define _WIN32_WINNT 0x0501
 #define _WIN32_IE 0x0501  // Added for v1.0.35 to have MCS_NOTODAY resolve as expected, and possibly solve other problems on newer systems.
 
 #ifdef _MSC_VER
@@ -64,4 +63,11 @@ GNU General Public License for more details.
 	//#include "window.h"  // Not to be confused with "windows.h"
 	//#include "util.h"
 	//#include "SimpleHeap.h"
+#endif
+
+// Lexikos: Defining _WIN32_WINNT 0x0600 seems to break TrayTip in non-English Windows, and possibly other things.
+//			Instead, define only the necessary constants for Vista-only horizontal wheel support.
+#if (_WIN32_WINNT < 0x0600)
+#define WM_MOUSEHWHEEL                  0x020E
+#define MOUSEEVENTF_HWHEEL      0x01000 /* hwheel button rolled */
 #endif

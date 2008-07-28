@@ -8491,6 +8491,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_file = ATTR_LOOP_UNKNOWN;
 			else if (aLoopTypeFile == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
 				loop_type_file = ATTR_LOOP_NORMAL;
+			else if (aLoopTypeFile == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
+				loop_type_file = ATTR_LOOP_WHILE;
 
 			// The section is the same as above except for registry vs. file loops:
 			loop_type_reg = ATTR_NONE;
@@ -8500,6 +8502,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_reg = ATTR_LOOP_UNKNOWN;
 			else if (aLoopTypeReg == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
 				loop_type_reg = ATTR_LOOP_NORMAL;
+			else if (aLoopTypeReg == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
+				loop_type_reg = ATTR_LOOP_WHILE;
 
 			// Same as above except for READ-FILE loops:
 			loop_type_read = ATTR_NONE;
@@ -8509,6 +8513,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_read = ATTR_LOOP_UNKNOWN;
 			else if (aLoopTypeRead == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
 				loop_type_read = ATTR_LOOP_NORMAL;
+			else if (aLoopTypeRead == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
+				loop_type_read = ATTR_LOOP_WHILE;
 
 			// Same as above except for PARSING loops:
 			loop_type_parse = ATTR_NONE;
@@ -8518,6 +8524,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_parse = ATTR_LOOP_UNKNOWN;
 			else if (aLoopTypeParse == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
 				loop_type_parse = ATTR_LOOP_NORMAL;
+			else if (aLoopTypeParse == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
+				loop_type_parse = ATTR_LOOP_WHILE;
 
 			// Check if the IF's action-line is something we want to recurse.  UPDATE: Always
 			// recurse because other line types, such as Goto and Gosub, need to be preparsed
