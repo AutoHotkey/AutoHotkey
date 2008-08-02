@@ -1278,11 +1278,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				break;
 
 			default: // hotkey
-#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Support horizontal wheel if compiling for Vista.
+				// Lexikos: Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
 				if (hk->mVK == VK_WHEEL_DOWN || hk->mVK == VK_WHEEL_UP || hk->mVK == VK_WHEEL_LEFT || hk->mVK == VK_WHEEL_RIGHT) // If this is true then also: msg.message==AHK_HOOK_HOTKEY
-#else
-				if (hk->mVK == VK_WHEEL_DOWN || hk->mVK == VK_WHEEL_UP) // If this is true then also: msg.message==AHK_HOOK_HOTKEY
-#endif
 					g.EventInfo = (DWORD)msg.lParam; // v1.0.43.03: Override the thread default of 0 with the number of notches by which the wheel was turned.
 					// Above also works for RunAgainAfterFinished since that feature reuses the same thread attributes set above.
 				g.hWndLastUsed = criterion_found_hwnd; // v1.0.42. Even if the window is invalid for some reason, IsWindow() and such are called whenever the script accesses it (GetValidLastUsedWindow()).

@@ -1823,11 +1823,8 @@ ResultType Hotkey::TextToKey(char *aText, char *aHotkeyName, bool aIsModifier, H
 	{
 		if (aIsModifier)
 		{
-#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
+			// Lexikos: Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
 			if (temp_vk == VK_WHEEL_DOWN || temp_vk == VK_WHEEL_UP || temp_vk == VK_WHEEL_LEFT || temp_vk == VK_WHEEL_RIGHT)
-#else
-			if (temp_vk == VK_WHEEL_DOWN || temp_vk == VK_WHEEL_UP)
-#endif
 			{
 				if (aUseErrorLevel)
 					g_ErrorLevel->Assign(HOTKEY_EL_UNSUPPORTED_PREFIX);

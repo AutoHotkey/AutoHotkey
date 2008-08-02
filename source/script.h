@@ -1684,10 +1684,9 @@ public:
 		{
 			if (!stricmp(aBuf, "WheelUp") || !stricmp(aBuf, "WU")) return VK_WHEEL_UP;
 			if (!stricmp(aBuf, "WheelDown") || !stricmp(aBuf, "WD")) return VK_WHEEL_DOWN;
-#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
+			// Lexikos: Vista-only support for horizontal scrolling.
 			if (!stricmp(aBuf, "WheelLeft") || !stricmp(aBuf, "WL")) return VK_WHEEL_LEFT;
 			if (!stricmp(aBuf, "WheelRight") || !stricmp(aBuf, "WR")) return VK_WHEEL_RIGHT;
-#endif
 		}
 		return 0;
 	}

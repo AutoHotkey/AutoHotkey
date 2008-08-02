@@ -61,14 +61,10 @@ GNU General Public License for more details.
 // to indicate failure by many functions that deal with virtual keys.
 // 0x88 - 0x8F : unassigned
 // 0x97 - 0x9F : unassigned (this range seems less likely to be used)
-#if (_WIN32_WINNT >= 0x0600)
-#define VK_NEW_MOUSE_FIRST 0x9A
+#define VK_NEW_MOUSE_FIRST 0x9A // was 0x9C
 // Lexikos: Fake virtual keys for Vista-only horizontal scrolling support.
 #define VK_WHEEL_LEFT      0x9A
 #define VK_WHEEL_RIGHT     0x9B
-#else
-#define VK_NEW_MOUSE_FIRST 0x9C
-#endif
 #define VK_LBUTTON_LOGICAL 0x9C // v1.0.43: Added to support swapping of left/right mouse buttons in Control Panel.
 #define VK_RBUTTON_LOGICAL 0x9D //
 #define VK_WHEEL_DOWN      0x9E

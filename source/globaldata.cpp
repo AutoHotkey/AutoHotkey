@@ -681,10 +681,9 @@ modifier is specified along with it:
 // Custom/fake VKs for use by the mouse hook (supported only in WinNT SP3 and beyond?):
 , {"WheelDown", VK_WHEEL_DOWN}
 , {"WheelUp", VK_WHEEL_UP}
-#if (_WIN32_WINNT >= 0x0600) // Lexikos: Added pseudo-keys for Vista-only horizontal scrolling support.
+// Lexikos: Added fake VKs for Vista-only horizontal scrolling support.
 , {"WheelLeft", VK_WHEEL_LEFT}
 , {"WheelRight", VK_WHEEL_RIGHT}
-#endif
 
 , {"Browser_Back", VK_BROWSER_BACK}
 , {"Browser_Forward", VK_BROWSER_FORWARD}

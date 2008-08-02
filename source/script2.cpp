@@ -2106,9 +2106,8 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, char *aOptions, char
 	UINT msg_down, msg_up;
 	WPARAM wparam;
 	bool vk_is_wheel = aVK == VK_WHEEL_UP || aVK == VK_WHEEL_DOWN;
-#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
+	// Lexikos: Vista-only support for horizontal scrolling.
 	bool vk_is_hwheel = aVK == VK_WHEEL_LEFT || aVK == VK_WHEEL_RIGHT;
-#endif
 
 	if (vk_is_wheel)
 	{
@@ -2136,12 +2135,10 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, char *aOptions, char
         //if (g_MouseHook)
 		//	wparam |= g_mouse_buttons_logical;
 	}
-#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
-	else if (vk_is_hwheel)
+	else if (vk_is_hwheel)	// Lexikos: Vista-only support for horizontal scrolling.
 	{
 		wparam = (aClickCount * ((aVK == VK_WHEEL_LEFT) ? -WHEEL_DELTA : WHEEL_DELTA)) << 16;
 	}
-#endif
 	else
 	{
 		switch (aVK)
@@ -2182,13 +2179,11 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, char *aOptions, char
 		PostMessage(control_window, WM_MOUSEWHEEL, wparam, lparam);
 		DoControlDelay;
 	}
-#if (_WIN32_WINNT >= 0x0600)	// Lexikos: Vista-only support for horizontal scrolling.
-	else if (vk_is_hwheel)
+	else if (vk_is_hwheel)	// Lexikos: Vista-only support for horizontal scrolling.
 	{
 		PostMessage(control_window, WM_MOUSEHWHEEL, wparam, lparam);
 		DoControlDelay;
 	}
-#endif
 	else
 	{
 		for (int i = 0; i < aClickCount; ++i)
