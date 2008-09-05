@@ -22,6 +22,8 @@ GNU General Public License for more details.
 #include "script.h" // For the global script object and g_ErrorLevel
 #include "os_version.h" // For the global OS_Version object
 
+#include "Debugger.h"
+
 extern HINSTANCE g_hInstance;
 extern DWORD g_MainThreadID;
 extern DWORD g_HookThreadID;

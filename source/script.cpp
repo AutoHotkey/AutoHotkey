@@ -614,7 +614,9 @@ ResultType Script::AutoExecSection()
 		mLastScriptRest = mLastPeekTime = GetTickCount();
 
 		++g_nThreads;
+		DEBUGGER_STACK_PUSH(SE_Thread, mFirstLine, desc, "auto-execute")
 		ResultType result = mFirstLine->ExecUntil(UNTIL_RETURN);
+		DEBUGGER_STACK_POP()
 		--g_nThreads;
 
 		KILL_AUTOEXEC_TIMER  // This also does "g.AllowThreadToBeInterrupted = true"
@@ -707,6 +709,9 @@ ResultType Script::ExitApp(ExitReasons aExitReason, char *aBuf, int aExitCode)
 		snprintf(buf, sizeof(buf), "Critical Error: %s\n\n" WILL_EXIT, aBuf);
 		// To avoid chance of more errors, don't use MsgBox():
 		MessageBox(g_hWnd, buf, g_script.mFileSpec, MB_OK | MB_SETFOREGROUND | MB_APPLMODAL);
+#if SCRIPT_DEBUG
+		g_Debugger.Exit(aExitReason);
+#endif
 		TerminateApp(CRITICAL_ERROR); // Only after the above.
 	}
 
@@ -716,10 +721,15 @@ ResultType Script::ExitApp(ExitReasons aExitReason, char *aBuf, int aExitCode)
 	// condition should be added to the below if statement:
 	static bool sExitLabelIsRunning = false;
 	if (!mOnExitLabel || sExitLabelIsRunning)  // || !mIsReadyToExecute
+	{
+#if SCRIPT_DEBUG
+		g_Debugger.Exit(aExitReason);
+#endif
 		// In the case of sExitLabelIsRunning == true:
 		// There is another instance of this function beneath us on the stack.  Since we have
 		// been called, this is a true exit condition and we exit immediately:
 		TerminateApp(aExitCode);
+	}
 
 	// Otherwise, the script contains the special RunOnExit label that we will run here instead
 	// of exiting.  And since it does, we know that the script is in a ready-to-execute state
@@ -773,14 +783,26 @@ ResultType Script::ExitApp(ExitReasons aExitReason, char *aBuf, int aExitCode)
 	g_script.UpdateTrayIcon();
 
 	sExitLabelIsRunning = true;
+	DEBUGGER_STACK_PUSH(SE_Thread, mOnExitLabel->mJumpToLine, desc, mOnExitLabel->mName)
 	if (mOnExitLabel->Execute() == FAIL)
+	{
+#if SCRIPT_DEBUG
+		g_Debugger.Exit(EXIT_ERROR);
+#endif
 		// If the subroutine encounters a failure condition such as a runtime error, exit immediately.
 		// Otherwise, there will be no way to exit the script if the subroutine fails on each attempt.
 		TerminateApp(aExitCode);
+	}
+	DEBUGGER_STACK_POP()
 	sExitLabelIsRunning = false;  // In case the user wanted the thread to end normally (see above).
 
 	if (terminate_afterward)
+	{
+#if SCRIPT_DEBUG
+		g_Debugger.Exit(aExitReason);
+#endif
 		TerminateApp(aExitCode);
+	}
 
 	// Otherwise:
 	ResumeUnderlyingThread(&global_saved, ErrorLevel_saved, false);
@@ -1113,7 +1135,7 @@ ResultType Script::LoadIncludedFile(char *aFileSpec, bool aAllowDuplicateInclude
 		// to support automatic "include once" behavior.  So just ignore repeats:
 		if (!aAllowDuplicateInclude)
 			for (int f = 0; f < source_file_index; ++f) // Here, source_file_index==Line::sSourceFileCount
-				if (!lstrcmpi(Line::sSourceFile[f], full_path)) // Case insensitive like the file system (testing shows that "Ä" == "ä" in the NTFS, which is hopefully how lstrcmpi works regardless of locale).
+				if (!lstrcmpi(Line::sSourceFile[f], full_path)) // Case insensitive like the file system (testing shows that "ï¿½" == "ï¿½" in the NTFS, which is hopefully how lstrcmpi works regardless of locale).
 					return OK;
 		// The file is added to the list further below, after the file has been opened, in case the
 		// opening fails and aIgnoreLoadFailure==true.
@@ -1913,7 +1935,7 @@ examine_line:
 					&& (remap_dest_vk = hotkey_flag[1] ? TextToVK(cp = Hotkey::TextToModifiers(hotkey_flag, NULL)) : 0xFF)   ) // And the action appears to be a remap destination rather than a command.
 					// For above:
 					// Fix for v1.0.44.07: Set remap_dest_vk to 0xFF if hotkey_flag's length is only 1 because:
-					// 1) It allows a destination key that doesn't exist in the keyboard layout (such as 6::ð in
+					// 1) It allows a destination key that doesn't exist in the keyboard layout (such as 6::ï¿½ in
 					//    English).
 					// 2) It improves performance a little by not calling TextToVK except when the destination key
 					//    might be a mouse button or some longer key name whose actual/correct VK value is relied
@@ -2116,8 +2138,8 @@ examine_line:
 				// v1.0.44.03: Don't allow anything that ends in "::" (other than a line consisting only
 				// of "::") to be a normal label.  Assume it's a command instead (if it actually isn't, a
 				// later stage will report it as "invalid hotkey"). This change avoids the situation in
-				// which a hotkey like ^!ä:: is seen as invalid because the current keyboard layout doesn't
-				// have a "ä" key. Without this change, if such a hotkey appears at the top of the script,
+				// which a hotkey like ^!ï¿½:: is seen as invalid because the current keyboard layout doesn't
+				// have a "ï¿½" key. Without this change, if such a hotkey appears at the top of the script,
 				// its subroutine would execute immediately as a normal label, which would be especially
 				// bad if the hotkey were something like the "Shutdown" command.
 				if (buf[buf_length - 2] == ':' && buf_length > 2) // i.e. allow "::" as a normal label, but consider anything else with double-colon to be a failed-hotkey label that terminates the auto-exec section.
@@ -6346,7 +6368,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 		break;
 
 	case ACT_GETKEYSTATE:
-		// v1.0.44.03: Don't validate single-character key names because although a character like ü might have no
+		// v1.0.44.03: Don't validate single-character key names because although a character like ï¿½ might have no
 		// matching VK in system's default layout, that layout could change to something which does have a VK for it.
 		if (aArgc > 1 && !line.ArgHasDeref(2) && strlen(new_raw_arg2) > 1 && !TextToVK(new_raw_arg2) && !ConvertJoy(new_raw_arg2))
 			return ScriptError(ERR_INVALID_KEY_OR_BUTTON, new_raw_arg2);
@@ -8903,6 +8925,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 		// be run so that the time it takes to run will be reflected in the ListLines log.
         g_script.mCurrLine = line;  // Simplifies error reporting when we get deep into function calls.
 
+#ifdef SCRIPT_DEBUG
+		if (g_Debugger.IsConnected())
+			g_Debugger.PreExecLine(line);
+#endif
+
 		// Maintain a circular queue of the lines most recently executed:
 		sLog[sLogNext] = line; // The code actually runs faster this way than if this were combined with the above.
 		// Get a fresh tick in case tick_now is out of date.  Strangely, it takes benchmarks 3% faster
@@ -9879,6 +9906,7 @@ ResultType Line::EvaluateHotCriterionExpression()
 	//InitNewThread(0, false, true, ACT_IFEXPR);
 	// Critical seems to improve reliability, either because the thread completes faster (i.e. before the timeout) or because we check for messages less often.
 	InitNewThread(0, false, true, ACT_CRITICAL);
+	DEBUGGER_STACK_PUSH(SE_Thread, this, desc, "#If")
 	g_script.UpdateTrayIcon();
 
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
@@ -9888,6 +9916,7 @@ ResultType Line::EvaluateHotCriterionExpression()
 	if (result == OK)
 		result = EvaluateCondition();
 
+	DEBUGGER_STACK_POP()
 	ResumeUnderlyingThread(&global_saved, ErrorLevel_saved, true);
 
 	return result;
@@ -11051,7 +11080,7 @@ __forceinline ResultType Line::Perform() // __forceinline() currently boosts per
 		return EnvGet(ARG2);
 
 	case ACT_ENVSET:
-		// MSDN: "If [the 2nd] parameter is NULL, the variable is deleted from the current process’s environment."
+		// MSDN: "If [the 2nd] parameter is NULL, the variable is deleted from the current processï¿½s environment."
 		// My: Though it seems okay, for now, just to set it to be blank if the user omitted the 2nd param or
 		// left it blank (AutoIt3 does this too).  Also, no checking is currently done to ensure that ARG2
 		// isn't longer than 32K, since future OSes may support longer env. vars.  SetEnvironmentVariable()
@@ -12831,7 +12860,7 @@ ResultType Script::ActionExec(char *aAction, char *aParams, char *aWorkingDir, b
 			// MSDN: "If [lpCurrentDirectory] is NULL, the new process is created with the same
 			// current drive and directory as the calling process." (i.e. since caller may have
 			// specified a NULL aWorkingDir).  Also, we pass NULL in for the first param so that
-			// it will behave the following way (hopefully under all OSes): "the first white-space – delimited
+			// it will behave the following way (hopefully under all OSes): "the first white-space ï¿½ delimited
 			// token of the command line specifies the module name. If you are using a long file name that
 			// contains a space, use quoted strings to indicate where the file name ends and the arguments
 			// begin (see the explanation for the lpApplicationName parameter). If the file name does not

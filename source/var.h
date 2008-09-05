@@ -181,6 +181,18 @@ public:
 		return (mType == VAR_ALIAS) ? mAliasFor->mType : mType;
 	}
 
+#ifdef SCRIPT_DEBUG
+	__forceinline VarTypeType RealType()
+	{
+		return mType;
+	}
+
+	__forceinline bool IsStatic()
+	{
+		return (mAttrib & VAR_ATTRIB_STATIC);
+	}
+#endif
+
 	__forceinline bool IsLocal()
 	{
 		// Since callers want to know whether this variable is local, even if it's a local alias for a

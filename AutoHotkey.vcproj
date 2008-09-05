@@ -43,7 +43,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;SCRIPT_DEBUG"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
@@ -131,7 +131,7 @@
 				EnableIntrinsicFunctions="true"
 				FavorSizeOrSpeed="1"
 				OmitFramePointers="true"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;SCRIPT_DEBUG"
 				StringPooling="true"
 				ExceptionHandling="0"
 				BasicRuntimeChecks="0"
@@ -141,7 +141,7 @@
 				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
-				WarnAsError="true"
+				WarnAsError="false"
 				DebugInformationFormat="0"
 			/>
 			<Tool
@@ -290,6 +290,7 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
+				CommandLine="&quot;$(ProjectDir)PostBuildSC.ahk&quot;"
 			/>
 		</Configuration>
 		<Configuration
@@ -386,6 +387,7 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
+				CommandLine="&quot;$(ProjectDir)PostBuildSC.ahk&quot;"
 			/>
 		</Configuration>
 	</Configurations>
@@ -407,6 +409,10 @@
 			</File>
 			<File
 				RelativePath=".\source\clipboard.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\source\Debugger.cpp"
 				>
 			</File>
 			<File
@@ -522,6 +528,10 @@
 			</File>
 			<File
 				RelativePath=".\source\clipboard.h"
+				>
+			</File>
+			<File
+				RelativePath=".\source\Debugger.h"
 				>
 			</File>
 			<File

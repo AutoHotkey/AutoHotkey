@@ -1001,8 +1001,8 @@ ResultType Line::Transform(char *aCmd, char *aValue1, char *aValue2)
 		// It's possible that using just the &#number convention (e.g. &#128 through &#255;) would be
 		// more appropriate for some users, but that mode can be added in the future if it is ever
 		// needed (by passing a mode setting for aValue2):
-		// €‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿
-		// ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		static const char *sHtml[128] = { // v1.0.40.02: Removed leading '&' and trailing ';' to reduce code size.
 			  "euro", "#129", "sbquo", "fnof", "bdquo", "hellip", "dagger", "Dagger"
 			, "circ", "permil", "Scaron", "lsaquo", "OElig", "#141", "#381", "#143"
@@ -14092,7 +14092,7 @@ UINT __stdcall RegisterCallbackCStub(UINT *params, char *address) // Used by BIF
 // (not many of those). Win32 is quite picky about the stack always being 4 byte-aligned, (I have seen only one
 // application which defied that and it was a patched ported DOS mixed mode application). The Win32 calling
 // convention assumes that the parameter size equals the pointer size. 64 integers on Win32 are passed on
-// pointers, or as two 32 bit halves for some functions…
+// pointers, or as two 32 bit halves for some functionsï¿½
 {
 	#define DEFAULT_CB_RETURN_VALUE 0  // The value returned to the callback's caller if script doesn't provide one.
 
@@ -14143,7 +14143,7 @@ UINT __stdcall RegisterCallbackCStub(UINT *params, char *address) // Used by BIF
 		if (g_nFileDialogs) // If a FileSelectFile dialog is present, ensure the new thread starts at the right working-dir.
 			SetCurrentDirectory(g_WorkingDir); // See MsgSleep() for details.
 		InitNewThread(0, false, true, func.mJumpToLine->mActionType);
-
+		DEBUGGER_STACK_PUSH(SE_Thread, func.mJumpToLine, desc, func.mName)
 	}
 	else // Backup/restore only A_EventInfo. This avoids callbacks changing A_EventInfo for the current thread/context (that would be counterintuitive and a source of script bugs).
 		EventInfo_saved = g.EventInfo;
@@ -14182,7 +14182,10 @@ UINT __stdcall RegisterCallbackCStub(UINT *params, char *address) // Used by BIF
 	Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
 
 	if (cb.create_new_thread)
+	{
+		DEBUGGER_STACK_POP()
 		ResumeUnderlyingThread(&global_saved, ErrorLevel_saved, true);
+	}
 	else
 		g.EventInfo = EventInfo_saved;
 

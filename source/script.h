@@ -28,6 +28,7 @@ GNU General Public License for more details.
 #ifdef AUTOHOTKEYSC
 	#include "lib\exearc_read.h"
 #endif
+#include "Debugger.h"
 
 #include "os_version.h" // For the global OS_Version object
 EXTERN_OSVER; // For the access to the g_os version object without having to include globaldata.h
@@ -686,6 +687,11 @@ public:
 	Line *mPrevLine, *mNextLine; // The prev & next lines adjacent to this one in the linked list; NULL if none.
 	Line *mRelatedLine;  // e.g. the "else" that belongs to this "if"
 	Line *mParentLine; // Indicates the parent (owner) of this line.
+
+#ifdef SCRIPT_DEBUG
+	Breakpoint *mBreakpoint;
+#endif
+
 	// Probably best to always use ARG1 even if other things have supposedly verfied
 	// that it exists, since it's count-check should make the dereference of a NULL
 	// pointer (or accessing non-existent array elements) virtually impossible.
@@ -1746,6 +1752,9 @@ public:
 		: mFileIndex(aFileIndex), mLineNumber(aFileLineNumber), mActionType(aActionType)
 		, mAttribute(ATTR_NONE), mArgc(aArgc), mArg(aArg)
 		, mPrevLine(NULL), mNextLine(NULL), mRelatedLine(NULL), mParentLine(NULL)
+#ifdef SCRIPT_DEBUG
+		, mBreakpoint(NULL)
+#endif
 		{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
@@ -1789,7 +1798,9 @@ public:
 	{
 		Label *prev_label = g.CurrentLabel; // This will be non-NULL when a subroutine is called from inside another subroutine.
 		g.CurrentLabel = this;
+		DEBUGGER_STACK_PUSH(SE_Sub, mJumpToLine, sub, this)
 		ResultType result = mJumpToLine->ExecUntil(UNTIL_RETURN); // The script loader has ensured that Label::mJumpToLine can't be NULL.
+		DEBUGGER_STACK_POP()
 		g.CurrentLabel = prev_label;
 		return result;
 	}
@@ -1874,7 +1885,24 @@ public:
 		// for a command that references A_Index in two of its args such as the following:
 		// ToolTip, O, ((cos(A_Index) * 500) + 500), A_Index
 		++mInstances;
+		DEBUGGER_STACK_PUSH(SE_Func, mJumpToLine, func, this)
 		ResultType result = mJumpToLine->ExecUntil(UNTIL_BLOCK_END, &aReturnValue);
+#ifdef SCRIPT_DEBUG
+		if (g_Debugger.IsConnected())
+		{
+			if (result == EARLY_RETURN)
+			{
+				// Find the end of this function.
+				Line *line;
+				for (line = mJumpToLine; line && (line->mActionType != ACT_BLOCK_END || !line->mAttribute); line = line->mNextLine);
+				// Give user the opportunity to inspect variables before returning.
+				if (line)
+					g_Debugger.PreExecLine(line);
+			}
+			g_Debugger.StackPop();
+		}
+		//DEBUGGER_STACK_POP()
+#endif
 		--mInstances;
 		// Restore the original value in case this function is called from inside another function.
 		// Due to the synchronous nature of recursion and recursion-collapse, this should keep
@@ -2330,6 +2358,10 @@ class Script
 {
 private:
 	friend class Hotkey;
+#ifdef SCRIPT_DEBUG
+	friend class Debugger;
+#endif
+
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
 	UINT mLineCount;                  // The number of lines.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.

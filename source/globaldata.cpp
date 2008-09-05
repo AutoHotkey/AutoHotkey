@@ -21,6 +21,8 @@ GNU General Public License for more details.
 #include "script.h" // For the global script object and g_ErrorLevel
 #include "os_version.h" // For the global OS_Version object
 
+#include "Debugger.h"
+
 // Since at least some of some of these (e.g. g_modifiersLR_logical) should not
 // be kept in the struct since it's not correct to save and restore their
 // state, don't keep anything in the global_struct except those things
