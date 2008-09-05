@@ -957,7 +957,7 @@ int Debugger::WriteVarSizeAndData(Var *aVar, VarSizeType aMaxData)
 	{
 		// Get() returns the maximum length, not always the actual length of the value.
 		// We need at least this much buffer space to retrieve the variable data.
-		min_space_needed = length = aVar->Get();
+		min_space_needed = (length = aVar->Get()) + 1;
 	}
 
 	// Calculate maximum length of base64-encoded variable data.
