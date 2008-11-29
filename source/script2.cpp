@@ -11651,8 +11651,11 @@ void ConvertDllArgType(char *aBuf[], DYNAPARM &aDynaParam)
 				aDynaParam.passed_by_address = false;
 				aDynaParam.is_unsigned = false;
 			}
-			else // First iteration, so aDynaParam.type's value will be set by the second.
+			else // First iteration, so aDynaParam.type's value will be set by the second (however, the loop's own condition will skip the second iteration if the second type_string is NULL).
+			{
+				aDynaParam.type = DLL_ARG_INVALID; // Set in case: 1) the second iteration is skipped by the loop's own condition (since the caller doesn't always initialize "type"); or 2) the second iteration can't find a valid type.
 				continue;
+			}
 		}
 		// Since above didn't "continue", the type is explicitly valid so "return" to ensure that
 		// the second iteration doesn't run (in case this is the first iteration):

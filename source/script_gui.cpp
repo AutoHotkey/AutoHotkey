@@ -869,6 +869,12 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			return OK;
 		// Since above didn't return, act upon the enabled/disable:
 		EnableWindow(control.hwnd, guicontrol_cmd == GUICONTROL_CMD_ENABLE ? TRUE : FALSE);
+		
+		// Lexikos: Disabling the focused control seems to have odd side-effects, including preventing GuiEscape from working.
+		//	The following is an apparent workaround with no apparent side-effects:
+		if (GetForegroundWindow() == gui.mHwnd)
+			SetFocus(gui.mHwnd);
+		
 		if (control.type == GUI_CONTROL_TAB) // This control is a tab control.
 			// Update the control so that its current tab's controls will all be enabled or disabled (now
 			// that the tab control itself has just been enabled or disabled):

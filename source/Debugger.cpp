@@ -873,6 +873,7 @@ DEBUGGER_COMMAND(Debugger::context_get)
 
 	Var **var, **var_end; // An array of pointers-to-var.
 	
+	// TODO: Include the lazy-var arrays!!!
 	if (context_id == PC_Local)
 	{
 		if (g.CurrentFunc)
