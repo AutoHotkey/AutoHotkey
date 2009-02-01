@@ -5512,6 +5512,46 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
+	// Lexikos: This case must exist in both self-contained and normal builds.
+	case ACT_SETFORMAT:
+		if (aArgc < 1)
+			break;
+		if (line.ArgHasDeref(1)) // Something like "SetFormat, %Var%, ..."
+		{
+			g_WriteCacheDisabledInt64 = true;
+			g_WriteCacheDisabledDouble = true;
+		}
+		else
+		{
+			if (!stricmp(new_raw_arg1, "Float"))
+			{
+#ifndef AUTOHOTKEYSC
+				if (aArgc > 1 && !line.ArgHasDeref(2))
+				{
+					if (!IsPureNumeric(new_raw_arg2, true, false, true, true) // v1.0.46.11: Allow impure numbers to support scientific notation; e.g. 0.6e or 0.6E.
+						|| strlen(new_raw_arg2) >= sizeof(g.FormatFloat) - 2)
+						return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
+				}
+#endif
+				g_WriteCacheDisabledDouble = true;
+			}
+			else if (!stricmp(new_raw_arg1, "Integer"))
+			{
+#ifndef AUTOHOTKEYSC
+				if (aArgc > 1 && !line.ArgHasDeref(2) && toupper(*new_raw_arg2) != 'H' && toupper(*new_raw_arg2) != 'D')
+					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
+#endif
+				g_WriteCacheDisabledInt64 = true;
+			}
+#ifndef AUTOHOTKEYSC
+			else
+				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
+#endif
+		}
+		// Size must be less than sizeof() minus 2 because need room to prepend the '%' and append
+		// the 'f' to make it a valid format specifier string:
+		break;
+
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
 	case ACT_RETURN:
 		if (aArgc > 0 && !g.CurrentFunc)
@@ -5857,39 +5897,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 	case ACT_SETTITLEMATCHMODE:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertTitleMatchMode(new_raw_arg1))
 			return ScriptError(ERR_TITLEMATCHMODE, new_raw_arg1);
-		break;
-
-	case ACT_SETFORMAT:
-		if (aArgc < 1)
-			break;
-		if (line.ArgHasDeref(1)) // Something like "SetFormat, %Var%, ..."
-		{
-			g_WriteCacheDisabledInt64 = true;
-			g_WriteCacheDisabledDouble = true;
-		}
-		else
-		{
-			if (!stricmp(new_raw_arg1, "Float"))
-			{
-				if (aArgc > 1 && !line.ArgHasDeref(2))
-				{
-					if (!IsPureNumeric(new_raw_arg2, true, false, true, true) // v1.0.46.11: Allow impure numbers to support scientific notation; e.g. 0.6e or 0.6E.
-						|| strlen(new_raw_arg2) >= sizeof(g.FormatFloat) - 2)
-						return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-				}
-				g_WriteCacheDisabledDouble = true;
-			}
-			else if (!stricmp(new_raw_arg1, "Integer"))
-			{
-				if (aArgc > 1 && !line.ArgHasDeref(2) && toupper(*new_raw_arg2) != 'H' && toupper(*new_raw_arg2) != 'D')
-					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-				g_WriteCacheDisabledInt64 = true;
-			}
-			else
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		}
-		// Size must be less than sizeof() minus 2 because need room to prepend the '%' and append
-		// the 'f' to make it a valid format specifier string:
 		break;
 
 	case ACT_TRANSFORM:
