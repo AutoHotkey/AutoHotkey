@@ -70,6 +70,8 @@ HHOOK g_PlaybackHook = NULL;
 bool g_ForceLaunch = false;
 bool g_WinActivateForce = false;
 SingleInstanceType g_AllowOnlyOneInstance = ALLOW_MULTI_INSTANCE;
+bool g_WriteCacheDisabledInt64 = false;
+bool g_WriteCacheDisabledDouble = false;
 bool g_persistent = false;  // Whether the script should stay running even after the auto-exec section finishes.
 bool g_NoEnv = false; // BOOL vs. bool didn't help performance in spite of the frequent accesses to it.
 bool g_NoTrayIcon = false;
@@ -278,10 +280,10 @@ Action g_act[] =
 	, {"Repeat", 0, 1, 1, {1, 0}}  // Iteration Count: was mandatory in AutoIt2 but doesn't seem necessary here.
 	, {"Else", 0, 0, 0, NULL}
 
-	, {"between", 1, 3, 3, NULL}, {"not between", 1, 3, 3, NULL}  // Min 1 to allow #2 and #3 to be the empty string.
 	, {"in", 2, 2, 2, NULL}, {"not in", 2, 2, 2, NULL}
 	, {"contains", 2, 2, 2, NULL}, {"not contains", 2, 2, 2, NULL}  // Very similar to "in" and "not in"
 	, {"is", 2, 2, 2, NULL}, {"is not", 2, 2, 2, NULL}
+	, {"between", 1, 3, 3, NULL}, {"not between", 1, 3, 3, NULL}  // Min 1 to allow #2 and #3 to be the empty string.
 	, {"", 1, 1, 1, {1, 0}} // ACT_IFEXPR's name should be "" so that Line::ToText() will properly display it.
 
 	// Comparison operators take 1 param (if they're being compared to blank) or 2.
@@ -500,7 +502,7 @@ Action g_act[] =
 	, {"SetControlDelay", 1, 1, 1, {1, 0}} // Delay in ms (numeric, negative allowed)
 	, {"SetBatchLines", 1, 1, 1, NULL} // Can be non-numeric, such as 15ms, or a number (to indicate line count).
 	, {"SetTitleMatchMode", 1, 1, 1, NULL} // Allowed values: 1, 2, slow, fast
-	, {"SetFormat", 1, 2, 2, NULL} // Float|Integer, FormatString (for float) or H|D (for int)
+	, {"SetFormat", 2, 2, 2, NULL} // Float|Integer, FormatString (for float) or H|D (for int)
 	, {"FormatTime", 1, 3, 3 H, NULL} // OutputVar, YYYYMMDDHH24MISS, Format (format is last to avoid having to escape commas in it).
 
 	, {"Suspend", 0, 1, 1, NULL} // On/Off/Toggle/Permit/Blank (blank is the same as toggle)
@@ -683,7 +685,7 @@ modifier is specified along with it:
 // Custom/fake VKs for use by the mouse hook (supported only in WinNT SP3 and beyond?):
 , {"WheelDown", VK_WHEEL_DOWN}
 , {"WheelUp", VK_WHEEL_UP}
-// Lexikos: Added fake VKs for Vista-only horizontal scrolling support.
+// Lexikos: Added fake VKs for support for horizontal scrolling in Windows Vista and later.
 , {"WheelLeft", VK_WHEEL_LEFT}
 , {"WheelRight", VK_WHEEL_RIGHT}
 

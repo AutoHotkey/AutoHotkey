@@ -108,7 +108,7 @@
 				EnableIntrinsicFunctions="true"
 				FavorSizeOrSpeed="2"
 				OmitFramePointers="true"
-				PreprocessorDefinitions="WIN32;NDEBUG;_LIB;HAVE_CONFIG_H"
+				PreprocessorDefinitions="WIN32;NDEBUG;_LIB;HAVE_CONFIG_H;_CRT_SECURE_NO_WARNINGS"
 				StringPooling="true"
 				ExceptionHandling="0"
 				RuntimeLibrary="0"

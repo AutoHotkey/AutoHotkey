@@ -781,10 +781,10 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 			, SMTO_ABORTIFHUNG, 2000, &length)
 			|| length == CB_ERR) // Probably impossible given the way it was called above.  Also, CB_ERR == LB_ERR. Relies on short-circuit boolean order.
 		{
-			output_var.Close(); // In case it's the clipboard.
+			output_var.Close();
 			return output_var.Assign(); // Let ErrorLevel tell the story.
 		}
-		output_var.Close(); // In case it's the clipboard.
+		output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 		output_var.Length() = length;  // Update to actual vs. estimated length.
 		break;
 
@@ -847,7 +847,7 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 			// Above: In this case, seems better to use \n rather than pipe as default delimiter in case
 			// the listbox/combobox contains any real pipes.
 		}
-		output_var.Close(); // In case it's the clipboard.
+		output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 		output_var.Length() = (VarSizeType)length;  // Update it to the actual length, which can vary from the estimate.
 		break;
 
@@ -1209,9 +1209,9 @@ ResultType Line::FileSelectFolder(char *aRootDir, char *aOptions, char *aGreetin
 ResultType Line::FileGetShortcut(char *aShortcutFile) // Credited to Holger <Holger.Kotsch at GMX de>.
 {
 	Var *output_var_target = ARGVAR2; // These might be omitted in the parameter list, so it's okay if 
-	Var *output_var_dir = ARGVAR3;    // they resolve to NULL.
-	Var *output_var_arg = ARGVAR4;
-	Var *output_var_desc = ARGVAR5;
+	Var *output_var_dir = ARGVAR3;    // they resolve to NULL.  Also, load-time validation has ensured
+	Var *output_var_arg = ARGVAR4;    // that these are valid output variables (e.g. not built-in vars).
+	Var *output_var_desc = ARGVAR5;   // Load-time validation has ensured that these are valid output variables (e.g. not built-in vars).
 	Var *output_var_icon = ARGVAR6;
 	Var *output_var_icon_idx = ARGVAR7;
 	Var *output_var_show_state = ARGVAR8;

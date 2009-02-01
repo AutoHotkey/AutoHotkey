@@ -29,6 +29,8 @@ GNU General Public License for more details.
 
 int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
+	setvbuf(stdout, NULL, _IONBF, 0); // Lexikos: Disable stdout buffering to make it a more effective debugging tool.
+
 	// Init any globals not in "struct g" that need it:
 	g_hInstance = hInstance;
 	InitializeCriticalSection(&g_CriticalRegExCache); // v1.0.45.04: Must be done early so that it's unconditional, so that DeleteCriticalSection() in the script destructor can also be unconditional (deleting when never initialized can crash, at least on Win 9x).
@@ -303,6 +305,13 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	// top part is something that's very involved and requires user interaction:
 	Hotkey::ManifestAllHotkeysHotstringsHooks(); // We want these active now in case auto-execute never returns (e.g. loop)
 	g_script.mIsReadyToExecute = true; // This is done only now for error reporting purposes in Hotkey.cpp.
+	Var *clipboard_var = g_script.FindVar("Clipboard");
+	if (clipboard_var)
+		// This is done here rather than upon variable creation speed up runtime/dynamic variable creation.
+		// Since the clipboard can be changed by activity outside the program, don't read-cache its contents.
+		// Since other applications and the user should see any changes the program makes to the clipboard,
+		// don't write-cache it either.
+		clipboard_var->DisableCache();
 
 	// Run the auto-execute part at the top of the script (this call might never return):
 	ResultType result = g_script.AutoExecSection();

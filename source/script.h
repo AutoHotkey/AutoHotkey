@@ -178,6 +178,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_BYREF "Caller must pass a variable to this ByRef parameter."
 #define ERR_ELSE_WITH_NO_IF "ELSE with no matching IF"
 #define ERR_OUTOFMEM "Out of memory."  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
+#define ERR_EXPR_TOO_LONG "Expression too long"
 #define ERR_MEM_LIMIT_REACHED "Memory limit reached (see #MaxMem in the help file)." ERR_ABORT
 #define ERR_NO_LABEL "Target label does not exist."
 #define ERR_MENU "Menu does not exist."
@@ -335,6 +336,7 @@ struct ArgStruct
 	WORD length; // Keep adjacent to above so that it uses no extra memory. This member was added in v1.0.44.14 to improve runtime performance.  It relies on the fact that an arg's literal text can't be longer than LINE_SIZE.
 	char *text;
 	DerefType *deref;  // Will hold a NULL-terminated array of var-deref locations within <text>.
+	ExprTokenType *postfix;  // An array of tokens in postfix order. Also used for ACT_ADD and others to store pre-converted binary integers.
 };
 
 
@@ -397,7 +399,7 @@ typedef UCHAR ArgCountType;
 
 
 enum DllArgTypes {DLL_ARG_INVALID, DLL_ARG_STR, DLL_ARG_INT, DLL_ARG_SHORT, DLL_ARG_CHAR, DLL_ARG_INT64
-	, DLL_ARG_FLOAT, DLL_ARG_DOUBLE};
+	, DLL_ARG_FLOAT, DLL_ARG_DOUBLE};  // Some sections might rely on DLL_ARG_INVALID being 0.
 
 
 // Note that currently this value must fit into a sc_type variable because that is how TextToKey()
@@ -743,8 +745,9 @@ public:
 	// This is because for performance reasons, the sArgVar entry for omitted args isn't
 	// initialized, so may have an old/obsolete value from some previous command.
 	#define OUTPUT_VAR (*sArgVar) // ExpandArgs() has ensured this first ArgVar is always initialized, so there's never any need to check mArgc > 0.
-	#define ARGVARRAW1 (*sArgVar) // i.e. sArgVar[0], and same as OUTPUT_VAR (it's a duplicate to help readability).
-	#define ARGVARRAW2 (sArgVar[1]) // It's called RAW because its user is responsible for ensuring the arg exists by checking mArgc at loadtime or runtime.
+	#define ARGVARRAW1 (*sArgVar)   // i.e. sArgVar[0], and same as OUTPUT_VAR (it's a duplicate to help readability).
+	#define ARGVARRAW2 (sArgVar[1]) // It's called RAW because its user is responsible for ensuring the arg
+	#define ARGVARRAW3 (sArgVar[2]) // exists by checking mArgc at loadtime or runtime.
 	#define ARGVAR1 ARGVARRAW1 // This first one doesn't need the check below because ExpandArgs() has ensured it's initialized.
 	#define ARGVAR2 (mArgc > 1 ? sArgVar[1] : NULL) // Caller relies on the check of mArgc because for performance,
 	#define ARGVAR3 (mArgc > 2 ? sArgVar[2] : NULL) // sArgVar[] isn't initialied for parameters the script
@@ -782,8 +785,8 @@ public:
 	// be used without first having checked that arg.text is blank:
 	#define VAR(arg) ((Var *)arg.deref)
 	// Uses arg number (i.e. the first arg is 1, not 0).  Caller must ensure that ArgNum >= 1 and that
-	// the arg in question is an input or output variable (since that isn't checked there):
-	#define ARG_HAS_VAR(ArgNum) (mArgc >= ArgNum && (*mArg[ArgNum-1].text || mArg[ArgNum-1].deref))
+	// the arg in question is an input or output variable (since that isn't checked there).
+	//#define ARG_HAS_VAR(ArgNum) (mArgc >= ArgNum && (*mArg[ArgNum-1].text || mArg[ArgNum-1].deref))
 
 	// Shouldn't go much higher than 400 since the main window's Edit control is currently limited
 	// to 64KB to be compatible with the Win9x limit.  Avg. line length is probably under 100 for
@@ -857,14 +860,21 @@ public:
 		return false;
 	}
 
-	size_t ArgLength(int aArgNum);
+	#define ArgLength(aArgNum) ArgIndexLength((aArgNum)-1)
+	#define ArgToDouble(aArgNum) ArgIndexToDouble((aArgNum)-1)
+	#define ArgToInt64(aArgNum) ArgIndexToInt64((aArgNum)-1)
+	#define ArgToInt(aArgNum) (int)ArgToInt64(aArgNum) // Benchmarks show that having a "real" ArgToInt() that calls ATOI vs. ATOI64 (and ToInt() vs. ToInt64()) doesn't measurably improve performance.
+	__int64 ArgIndexToInt64(int aArgIndex);
+	double ArgIndexToDouble(int aArgIndex);
+	size_t ArgIndexLength(int aArgIndex);
+
 	Var *ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary = true);
 	ResultType ExpandArgs(VarSizeType aSpaceNeeded = VARSIZE_ERROR, Var *aArgVar[] = NULL);
-	VarSizeType GetExpandedArgSize(bool aCalcDerefBufSize, Var *aArgVar[]);
+	VarSizeType GetExpandedArgSize(Var *aArgVar[]);
 	char *ExpandArg(char *aBuf, int aArgIndex, Var *aArgVar = NULL);
 	char *ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget, char *&aDerefBuf
 		, size_t &aDerefBufSize, char *aArgDeref[], size_t aExtraSize);
-
+	ResultType ExpressionToPostfix(ArgStruct &aArg);
 	ResultType EvaluateHotCriterionExpression(); // Lexikos: Called by MainWindowProc to handle an AHK_HOT_IF_EXPR message.
 
 	ResultType Deref(Var *aOutputVar, char *aBuf);
@@ -1043,22 +1053,23 @@ public:
 
 	ResultType ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[]);
 
-	bool ArgHasDeref(int aArgNum)
+	#define ArgHasDeref(aArgNum) ArgIndexHasDeref((aArgNum)-1)
+	bool ArgIndexHasDeref(int aArgIndex)
 	// This function should always be called in lieu of doing something like "strchr(arg.text, g_DerefChar)"
 	// because that method is unreliable due to the possible presence of literal (escaped) g_DerefChars
 	// in the text.
-	// Caller must ensure that aArgNum should be 1 or greater.
+	// Caller must ensure that aArgIndex is 0 or greater.
 	{
 #ifdef _DEBUG
-		if (aArgNum < 1)
+		if (aArgIndex < 0)
 		{
 			LineError("DEBUG: BAD", WARN);
-			aArgNum = 1;  // But let it continue.
+			aArgIndex = 0;  // But let it continue.
 		}
 #endif
-		if (aArgNum > mArgc) // Arg doesn't exist.
+		if (aArgIndex >= mArgc) // Arg doesn't exist.
 			return false;
-		ArgStruct &arg = mArg[aArgNum - 1]; // For performance.
+		ArgStruct &arg = mArg[aArgIndex]; // For performance.
 		// Return false if it's not of a type caller wants deemed to have derefs.
 		if (arg.type == ARG_TYPE_NORMAL)
 			return arg.deref && arg.deref[0].marker; // Relies on short-circuit boolean evaluation order to prevent NULL-deref.
@@ -1690,7 +1701,7 @@ public:
 		{
 			if (!stricmp(aBuf, "WheelUp") || !stricmp(aBuf, "WU")) return VK_WHEEL_UP;
 			if (!stricmp(aBuf, "WheelDown") || !stricmp(aBuf, "WD")) return VK_WHEEL_DOWN;
-			// Lexikos: Vista-only support for horizontal scrolling.
+			// Lexikos: Support horizontal scrolling in Windows Vista and later.
 			if (!stricmp(aBuf, "WheelLeft") || !stricmp(aBuf, "WL")) return VK_WHEEL_LEFT;
 			if (!stricmp(aBuf, "WheelRight") || !stricmp(aBuf, "WR")) return VK_WHEEL_RIGHT;
 		}
@@ -2708,10 +2719,14 @@ void BIF_IL_Create(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 void BIF_IL_Destroy(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_IL_Add(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
-__int64 ExprTokenToInt64(ExprTokenType &aToken);
-double ExprTokenToDouble(ExprTokenType &aToken);
-char *ExprTokenToString(ExprTokenType &aToken, char *aBuf);
-ResultType ExprTokenToDoubleOrInt(ExprTokenType &aToken);
+BOOL LegacyResultToBOOL(char *aResult);
+BOOL LegacyVarToBOOL(Var &aVar);
+BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber);
+SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
+__int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPure = FALSE);
+double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE, BOOL aIsPure = FALSE);
+char *TokenToString(ExprTokenType &aToken, char *aBuf = NULL);
+ResultType TokenToDoubleOrInt64(ExprTokenType &aToken);
 
 char *RegExMatch(char *aHaystack, char *aNeedleRegEx);
 void SetWorkingDir(char *aNewDir);

@@ -25,6 +25,10 @@ char Var::sEmptyString[] = ""; // For explanation, see its declaration in .h fil
 
 ResultType Var::AssignHWND(HWND aWnd)
 {
+	// For backward compatibility, tradition, and the fact that operations involving HWNDs tend not to
+	// be nearly as performance-critical as pure-math expressions, HWNDs are stored as a hex string,
+	// and thus UpdateBinaryInt64() isn't called here.
+	//
 	// Convert to unsigned 64-bit to support for 64-bit pointers.  Since most script operations --
 	// such as addition and comparison -- read strings in as signed 64-bit, it is documented that
 	// math and other numerical operations should never be performed on these while they exist
@@ -41,56 +45,94 @@ ResultType Var::AssignHWND(HWND aWnd)
 
 
 
-ResultType Var::Assign(DWORD aValueToAssign) // For some reason, this function is actually faster when not inline.
+ResultType Var::Assign(Var &aVar)
+// Assign some other variable to the "this" variable.
+// Although this->Type() can be VAR_CLIPBOARD, caller must ensure that aVar.Type()==VAR_NORMAL.
 // Returns OK or FAIL.
 {
-	char value_string[256];
-	return Assign(UTOA(aValueToAssign, value_string));
-}
+	// Below relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
+	Var &source_var = aVar.mType == VAR_ALIAS ? *aVar.mAliasFor : aVar;
+	Var &target_var = *(mType == VAR_ALIAS ? mAliasFor : this);
 
+	if (source_var.mAttrib & VAR_ATTRIB_HAS_VALID_INT64) // A binary Int64 is cached.
+	{
+		if (!(source_var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE)) // Since contents are in sync with the cached binary integer, must also copy the text contents to preserve any leading/trailing whitespace in it.
+		{
+			// Since source_var's contents are in sync with its cached binary number, in addition to copying
+			// source_var's binary number, must also copy its text contents if it has any leading/trailing
+			// whitespace or unusual formatting that the script may rely on to be copied.  For example:
+			//    Var := " 055. "  ; Leading+trailing whitespace, leading zero, and trailing decimal point.
+			//    if (Var == 55)     ; This statement causes Var to acquire a cached binary number, yet it's in sync with contents because it represents contents (but not necessarily vice versa).
+			//    ...
+			// It seems worth peeking into beginning and end of var to check for such special formatting
+			// because it potentially avoids the copying of mContents, which in turn potentially avoids
+			// allocating or expanding memory for target_var.mContents.
+			int c1 = *source_var.mContents; // For performance, resolve once and store as int vs. char.
+			int c2 = source_var.mContents[source_var.mLength-1]; // No need to check mLength>0 because at this point there's a cached binary number AND mContents is in sync with it, so mContents is non-empty by definition.
+			if (   IS_SPACE_OR_TAB(c1) // IS_SPACE_OR_TAB() is the rule used by IsPureNumeric() to permit
+				|| IS_SPACE_OR_TAB(c2) // leading/trailing whitespace, so it's the right rule to determine whether mContents is technically numeric yet in an unusual format.
+				|| c1 == '0' || c1 == '+'   ) // Retain leading '0' and '+' (even hex like "0x5" because script might rely on exact formatting of such numbers to be retained in mContents).
+				// No need to check for leading/trailing '.' or scientific notation because those would
+				// never have caused an integer to be cached (float instead), so they wouldn't occur in this
+				// section.  Also, integers that are too long (and thus perhaps intended to be a series
+				// of digits rather than an integer) are not checked because they're partially checked
+				// at loadtime, and if encountered here at runtime, the mere fact that a cached integer
+				// exists for that string implies the script has done something to cache it, such as
+				// "if (var > 15)", which implies the script is currently using that variable as a number.
+				// So it seems too rare to justify extra checking such as mLength > MAX_INTEGER_LENGTH.
+			{
+				if (!target_var.Assign(source_var.mContents, source_var.mLength)) // Pass length to improve performance. It isn't necessary to call Contents()/Length() because they must be already up-to-date due to earlier checks.
+					return FAIL;
+				// Below must be done AFTER the above because above's Assign() invalidates the cache, but the
+				// cache should be left valid.
+				target_var.UpdateBinaryInt64(source_var.mContentsInt64, VAR_ATTRIB_HAS_VALID_INT64); // All callers of UpdateBinaryInt64() must ensure that mContents is a pure number (e.g. NOT 123abc).
+				return OK;
+			}
+			//else it doesn't have any leading/trailing space or unusual formatting to preserve, so can
+			// write to the cache, which allows mContents to be updated later on demand.
+		}
+		//else number cache is out-of-sync with mContents, so there is no need to copy over mContents because
+		// it will get overwritten by the cached number the next time someone anyone calls Contents().
 
+		// Since above didn't return, copy the cached number only, not mContents.  But must also mark
+		// the mContents as out-of-date because it will be kept blank until something actually needs it.
+		target_var.UpdateBinaryInt64(source_var.mContentsInt64, VAR_ATTRIB_HAS_VALID_INT64|VAR_ATTRIB_CONTENTS_OUT_OF_DATE);
+		return OK;
+	}
 
-ResultType Var::Assign(int aValueToAssign) // For some reason, this function is actually faster when not inline.
-{
-	char value_string[256];
-	// ITOA() seems to perform quite a bit better than sprintf() in this case:
-	return Assign(ITOA(aValueToAssign, value_string));
-	//snprintf(value_string, sizeof(value_string), "%d", aValueToAssign);
-	//return Assign(value_string);
-}
+	if (source_var.mAttrib & VAR_ATTRIB_HAS_VALID_DOUBLE) // A binary double is cached.
+	{
+		if (!(source_var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE)) // See comments in similar section above.
+		{
+			// Analyzing the mContents of floating point variables (like was done for cached integers above)
+			// doesn't seem worth it because benchmarks show that in percentage terms, caching floats doesn't
+			// have offer nearly as much performance improvement as caching integers. In addition, the analysis
+			// would be much more complicated -- so much so that it might entirely negate any performance
+			// benefits, not to mention the extra code size/complexity.  Here is an example of one of the
+			// issues:
+			//    Var := 1.12345678  ; Assign higher precision than the default SetFormat.
+			//    if (Var > 5)  ; This creates a cached binary double in Var.
+			//       Sleep -1
+			//    Var2 := Var  ; If this were to copy only the cached double (and not mContents too), the next time someone asked for Var's text, SetFormat would wrongly be applied to it, resulting in a loss of displayed precision (but not internal precision).
+			// Other examples that would be affected include 1.0 (low precision), 1.0e1 (scientific notation),
+			// .5 (leading decimal point), 5. (trailing decimal point), and also the cases that affect
+			// integers such as "005.5", "+5.5", and leading/trailing whitespace.
+			if (!target_var.Assign(source_var.mContents, source_var.mLength)) // See comments in similar section above.
+				return FAIL;
+			// Below must be done AFTER the above because above's Assign() invalidates the cache, but the
+			// cache should be left valid.
+			target_var.UpdateBinaryDouble(source_var.mContentsDouble); // All callers of UpdateBinaryDouble() must ensure that mContents is a pure number (e.g. NOT 123abc).
+		}
+		else
+			target_var.UpdateBinaryDouble(source_var.mContentsDouble, VAR_ATTRIB_CONTENTS_OUT_OF_DATE); // See comments in similar section above.
+		return OK;
+	}
 
+	if (source_var.mAttrib & VAR_ATTRIB_BINARY_CLIP) // Caller has ensured that source_var's Type() is VAR_NORMAL.
+		return target_var.AssignBinaryClip(source_var); // Caller wants a variable with binary contents assigned (copied) to another variable (usually VAR_CLIPBOARD).
 
-
-ResultType Var::Assign(__int64 aValueToAssign) // For some reason, this function is actually faster when not inline.
-// Returns OK or FAIL.
-{
-	char value_string[256];
-	return Assign(ITOA64(aValueToAssign, value_string));
-}
-
-
-// Currently not needed:
-//ResultType Var::Assign(unsigned __int64 aValueToAssign)
-//// Since most script features that "read in" a number from a string (such as addition and comparison)
-//// read the strings as signed values, this function here should only be used when it is documented
-//// that math and comparisons should not be performed on such values.
-//// Returns OK or FAIL.
-//{
-//	char value_string[256];
-//	UTOA64(aValueToAssign, value_string);
-//	return Assign(value_string);
-//}
-
-
-
-ResultType Var::Assign(double aValueToAssign)
-// It's best to call this method -- rather than manually converting to double -- so that the
-// digits/formatting/precision is consistent throughout the program.
-// Returns OK or FAIL.
-{
-	char value_string[MAX_FORMATTED_NUMBER_LENGTH + 1];
-	return Assign(value_string
-		, snprintf(value_string, sizeof(value_string), g.FormatFloat, aValueToAssign)); // "%0.6f"; %f can handle doubles in MSVC++.);
+	// Otherwise:
+	return target_var.Assign(source_var.mContents, source_var.mLength); // Pass length to improve performance. It isn't necessary to call Contents()/Length() because they must be already up-to-date because there is no binary number to update them from (if there were, the above would have returned).  Also, caller ensured Type()==VAR_NORMAL.
 }
 
 
@@ -105,18 +147,16 @@ ResultType Var::Assign(ExprTokenType &aToken)
 	switch (aToken.symbol)
 	{
 	case SYM_INTEGER: return Assign(aToken.value_int64); // Listed first for performance because it's Likely the most common from our callers.
-	case SYM_VAR:
-	{
-		// Below: Caller has ensured that aToken.var's Type() is always VAR_NORMAL.
-		// Below also relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &source_var = *(aToken.var->mType == VAR_ALIAS ? aToken.var->mAliasFor : aToken.var);
-		return (source_var.mAttrib & VAR_ATTRIB_BINARY_CLIP) // Caller has ensured that source_var's Type() is VAR_NORMAL.
-			? AssignBinaryClip(source_var) // Caller wants a variable with binary contents assigned (copied) to another variable (usually VAR_CLIPBOARD).
-			: Assign(source_var.mContents, source_var.mLength); // Pass length to improve performance.
-	}
+	case SYM_OPERAND: // Listed near the top for performance.
+		if (aToken.buf) // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
+			return Assign(*(__int64 *)aToken.buf);
+		//else don't return; continue on to the bottom.
+		break;
+	case SYM_VAR:     return Assign(*aToken.var); // Caller has ensured that var->Type()==VAR_NORMAL (it's only VAR_CLIPBOARD for certain expression lvalues, which would never be assigned here because aToken is an rvalue).
 	case SYM_FLOAT:   return Assign(aToken.value_double); // Listed last because it's probably the least common.
-	default:          return Assign(aToken.marker); // SYM_STRING or SYM_OPERAND.
 	}
+	// Since above didn't return, it's SYM_STRING, or a SYM_OPERAND that lacks a binary-integer counterpart.
+	return Assign(aToken.marker);
 }
 
 
@@ -250,7 +290,7 @@ ResultType Var::AssignClipboardAll()
 	// Otherwise, the variable's mLength member would be set to something too high (the estimate),
 	// which might cause problems elsewhere.
 	LPVOID hglobal_locked;
-	LPVOID binary_contents = mContents;
+	LPVOID binary_contents = mContents; // mContents vs. Contents() is okay due to the call to Assign() above.
 	VarSizeType added_size, actual_space_used;
 	for (actual_space_used = sizeof(format), format = 0; format = EnumClipboardFormats(format);)
 	{
@@ -292,7 +332,7 @@ ResultType Var::AssignClipboardAll()
 	g_clip.Close();
 	*(UINT *)binary_contents = 0; // Final termination (must be UINT, see above).
 	mLength = actual_space_used - 1; // Omit the final zero-byte from the length in case any other routines assume that exactly one zero exists at the end of var's length.
-	mAttrib |= VAR_ATTRIB_BINARY_CLIP;
+	mAttrib |= VAR_ATTRIB_BINARY_CLIP; // VAR_ATTRIB_CONTENTS_OUT_OF_DATE and VAR_ATTRIB_CACHE were already removed by earlier call to Assign().
 	return OK;
 }
 
@@ -312,15 +352,16 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 	// Resolve early for maintainability.
 	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 	Var &source_var = (aSourceVar.mType == VAR_ALIAS) ? *aSourceVar.mAliasFor : aSourceVar;
+	source_var.UpdateContents(); // Update mContents/mLength (probably not necessary because caller is supposed to ensure that aSourceVar->IsBinaryClip()==true).
 
 	if (mType == VAR_NORMAL) // Copy a binary variable to another variable that isn't the clipboard.
 	{
-		if (source_var.mContents == mContents) // v1.0.45: source==dest, so nothing to do. It's compared this way in case aSourceVar is a ByRef/alias. This covers even that situation.
+		if (source_var.mContents == Contents()) // source_var.mContents vs. Contents() is okay (see above). v1.0.45: source==dest, so nothing to do. It's compared this way in case aSourceVar is a ByRef/alias. This covers even that situation.
 			return OK;
-		if (!Assign(NULL, source_var.mLength))
+		if (!Assign(NULL, source_var.mLength)) // source_var.mLength vs. Length() is okay (see above).
 			return FAIL; // Above should have already reported the error.
-		memcpy(mContents, source_var.mContents, source_var.mLength + 1); // Add 1 not sizeof(format). Note that mContents might have just changed due Assign() above.
-		mAttrib |= VAR_ATTRIB_BINARY_CLIP;
+		memcpy(Contents(), source_var.mContents, source_var.mLength + 1); // Add 1 not sizeof(format). Contents() vs. a variable for the same because mContents might have just changed due Assign() above.
+		mAttrib |= VAR_ATTRIB_BINARY_CLIP; // VAR_ATTRIB_CACHE and VAR_ATTRIB_CONTENTS_OUT_OF_DATE were already removed by earlier call to Assign().
 		return OK; // No need to call Close() in this case.
 	}
 
@@ -413,7 +454,7 @@ ResultType Var::Assign(char *aBuf, VarSizeType aLength, bool aExactSize, bool aO
 			do_assign = false;
 	else // Caller provided a non-NULL buffer.
 		if (aLength == VARSIZE_MAX) // Caller wants us to determine its length.
-			aLength = (mContents == aBuf) ? mLength : (VarSizeType)strlen(aBuf); // v1.0.45: Added optimization check: (mContents == aBuf).
+			aLength = (mContents == aBuf) ? Length() : (VarSizeType)strlen(aBuf); // v1.0.45: Added optimization check: (mContents == aBuf).
 		//else leave aLength as the caller-specified value in case it's explicitly shorter than the apparent length.
 	if (!aBuf)
 		aBuf = "";  // From here on, make sure it's the empty string for all uses (read-only empty string vs. sEmptyString seems more appropriate in this case).
@@ -445,7 +486,7 @@ ResultType Var::Assign(char *aBuf, VarSizeType aLength, bool aExactSize, bool aO
 
 	if (space_needed < 2) // Variable is being assigned the empty string (or a deref that resolves to it).
 	{
-		Free(free_it_if_large ? VAR_FREE_IF_LARGE : VAR_NEVER_FREE); // This also makes the variable blank and removes VAR_ATTRIB_BINARY_CLIP.
+		Free(free_it_if_large ? VAR_FREE_IF_LARGE : VAR_NEVER_FREE); // This also makes the variable blank and removes VAR_ATTRIB_OFTEN_REMOVED.
 		return OK;
 	}
 
@@ -454,7 +495,7 @@ ResultType Var::Assign(char *aBuf, VarSizeType aLength, bool aExactSize, bool aO
 	// For simplicity, this is done unconditionally even though it should be needed only
 	// when do_assign is true. It's the caller's responsibility to turn on the binary-clip
 	// attribute (if appropriate) by calling Var::Close() with the right option.
-	mAttrib &= ~VAR_ATTRIB_BINARY_CLIP;
+	mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
 	// HOWEVER, other things like making mLength 0 and mContents blank are not done here for performance
 	// reasons (it seems too rare that early return/failure will occur below, since it's only due to
 	// out-of-memory... and even if it does happen, there a probably no consequences to leaving the variable
@@ -540,7 +581,7 @@ ResultType Var::Assign(char *aBuf, VarSizeType aLength, bool aExactSize, bool aO
 				{
 					mCapacity = 0;             // Invariant: Anyone setting mCapacity to 0 must also set
 					mContents = sEmptyString;  // mContents to the empty string.
-					mLength = 0;
+					mLength = 0;               // mAttrib was already updated higher above.
 				}
 				// IMPORTANT: else it's the empty string (a constant) or it points to memory on SimpleHeap,
 				// so don't change mContents/Capacity (that would cause a memory leak for reasons described elsewhere).
@@ -612,6 +653,7 @@ VarSizeType Var::Get(char *aBuf)
 	switch(mType)
 	{
 	case VAR_NORMAL: // Listed first for performance.
+		UpdateContents();  // Update mContents and mLength, if necessary.
 		if (!g_NoEnv && !mLength) // If auto-env retrival is on and the var is empty, check to see if it's really an env. var.
 		{
 			// Regardless of whether aBuf is NULL or not, we don't know at this stage
@@ -684,7 +726,7 @@ VarSizeType Var::Get(char *aBuf)
 			//elapsed_time -= %start_time%
 			//msgbox, elapsed_time = %elapsed_time%
 			//return
-			for (char *cp = mContents; *cp; *aBuf++ = *cp++);
+			for (char *cp = mContents; *cp; *aBuf++ = *cp++); // UpdateContents() was already called higher above to update mContents.
 			*aBuf = '\0';
 		}
 		else
@@ -771,7 +813,7 @@ void Var::Free(int aWhenToFree, bool aExcludeAliases)
 		return; // This is the only case in which the variable ISN'T made blank.
 
 	mLength = 0; // Writing to union is safe because above already ensured that "this" isn't an alias.
-	mAttrib &= ~VAR_ATTRIB_BINARY_CLIP; // Even if it isn't free'd, variable will be made blank. So it seems proper to always remove the binary_clip attribute (since it can't be used that way after it's been made blank).
+	mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED; // Even if it isn't free'd, variable will be made blank. So it seems proper to always remove the binary_clip attribute (since it can't be used that way after it's been made blank).
 
 	switch (mHowAllocated)
 	{
@@ -858,17 +900,18 @@ ResultType Var::AppendIfRoom(char *aStr, VarSizeType aLength)
 		return FAIL; // CHECK THIS FIRST, BEFORE BELOW, BECAUSE CALLERS ALWAYS WANT IT TO BE A FAILURE.
 	if (!aLength) // Consider the appending of nothing (even onto unsupported things like clipboard) to be a success.
 		return OK;
-	VarSizeType var_length = LengthIgnoreBinaryClip(); // Get the apparent length because one caller is a concat that wants consistent behavior of the .= operator regardless of whether this shortcut succeeds or not.
+	VarSizeType var_length = var.LengthIgnoreBinaryClip(); // Get the apparent length because one caller is a concat that wants consistent behavior of the .= operator regardless of whether this shortcut succeeds or not.
 	VarSizeType new_length = var_length + aLength;
 	if (new_length >= var.mCapacity) // Not enough room.
 		return FAIL;
-	memmove(var.mContents + var_length, aStr, aLength);  // memmove() vs. memcpy() in case there's any overlap between source and dest.
+	memmove(var.mContents + var_length, aStr, aLength);  // mContents was updated via LengthIgnoreBinaryClip() above. Use memmove() vs. memcpy() in case there's any overlap between source and dest.
 	var.mContents[new_length] = '\0'; // Terminate it as a separate step in case caller passed a length shorter than the apparent length of aStr.
 	var.mLength = new_length;
 	// If this is a binary-clip variable, appending has probably "corrupted" it; so don't allow it to ever be
 	// put back onto the clipboard as binary data (the routine that does that is designed to detect corruption,
-	// but it might not be perfect since corruption is so rare).
-	var.mAttrib &= ~VAR_ATTRIB_BINARY_CLIP;
+	// but it might not be perfect since corruption is so rare).  Also remove the other flags that are no longer
+	// appropriate:
+	var.mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED; // This also removes VAR_ATTRIB_NOT_NUMERIC because appending some digits to an empty variable would make it numeric.
 	return OK;
 }
 
@@ -890,12 +933,14 @@ void Var::AcceptNewMem(char *aNewMem, VarSizeType aLength)
 	}
 	else // VAR_NORMAL
 	{
-		var.Free(VAR_ALWAYS_FREE); // Release the variable's old memory.
+		var.Free(VAR_ALWAYS_FREE); // Release the variable's old memory. This also removes flags VAR_ATTRIB_OFTEN_REMOVED.
 		var.mHowAllocated = ALLOC_MALLOC; // Must always be this type to avoid complications and possible memory leaks.
-		var.mAttrib &= ~VAR_ATTRIB_BINARY_CLIP; // New memory is always non-binary-clip.  A new parameter could be added to change this if it's ever needed.
 		var.mContents = aNewMem;
 		var.mLength = aLength;
 		var.mCapacity = (VarSizeType)_msize(aNewMem); // Get actual capacity in case it's a lot bigger than aLength+1. _msize() is only about 36 bytes of code and probably a very fast call.
+		// Already done by Free() above:
+		//var.mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED; // New memory is always non-binary-clip.  A new parameter could be added to change this if it's ever needed.
+
 		// Shrink the memory if there's a lot of wasted space because the extra capacity is seldom utilized
 		// in real-world scripts.
 		// A simple rule seems best because shrinking is probably fast regardless of the sizes involved,
@@ -923,17 +968,16 @@ void Var::AcceptNewMem(char *aNewMem, VarSizeType aLength)
 
 void Var::SetLengthFromContents()
 // Function added in v1.0.43.06.  It updates the mLength member to reflect the actual current length of mContents.
+// Caller must ensure that Type() is VAR_NORMAL.
 {
 	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
 	VarSizeType capacity = var.Capacity();
-	// Below uses Contents() and Length() vs. direct members for better maintainability, even though
-	// it might not be strictly necessary.
-	char *contents = var.Contents();
+	var.UpdateContents(); // Ensure mContents and mLength are up-to-date.
 	if (capacity > 0)
 	{
- 		contents[capacity - 1] = '\0';  // Caller wants us to ensure it's terminated, to avoid crashing strlen() below.
-		var.mLength = (VarSizeType)strlen(contents);
+ 		var.mContents[capacity - 1] = '\0';  // Caller wants us to ensure it's terminated, to avoid crashing strlen() below.
+		var.mLength = (VarSizeType)strlen(var.mContents);
 	}
 	//else it has no capacity, so do nothing (it could also be a reserved/built-in variable).
 }
@@ -986,6 +1030,7 @@ void Var::Backup(VarBkp &aVarBkp)
 {
 	aVarBkp.mVar = this; // Allows the restoration process to always know its target without searching.
 	aVarBkp.mContents = mContents;
+	aVarBkp.mContentsInt64 = mContentsInt64; // This also copies the other member of the union: mContentsDouble.
 	aVarBkp.mLength = mLength; // Since it's a union, it might actually be backing up mAliasFor (happens at least for recursive functions that pass parameters ByRef).
 	aVarBkp.mCapacity = mCapacity;
 	aVarBkp.mHowAllocated = mHowAllocated; // This might be ALLOC_SIMPLE or ALLOC_NONE if backed up variable was at the lowest layer of the call stack.
@@ -1006,7 +1051,7 @@ void Var::Backup(VarBkp &aVarBkp)
 	if (mType != VAR_ALIAS) // Fix for v1.0.42.07: Don't reset mLength if the other member of the union is in effect.
 		mLength = 0;        // Otherwise, functions that recursively pass ByRef parameters can crash because mType stays as VAR_ALIAS.
 	mHowAllocated = ALLOC_MALLOC; // Never NONE because that would permit SIMPLE. See comments higher above.
-	mAttrib &= ~VAR_ATTRIB_BINARY_CLIP; // But the VAR_ATTRIB_STATIC flag isn't altered.
+	mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED; // But the VAR_ATTRIB_STATIC flag isn't altered.
 }
 
 
@@ -1030,9 +1075,10 @@ void Var::FreeAndRestoreFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVar
 			VarBkp &bkp = aVarBackup[i]; // Resolve only once for performance.
 			Var &var = *bkp.mVar;        //
 			var.mContents = bkp.mContents;
+			var.mContentsInt64 = bkp.mContentsInt64; // This also copies the other member of the union: mContentsDouble.
 			var.mLength = bkp.mLength; // Since it's a union, it might actually be restoring mAliasFor, which is desired.
 			var.mCapacity = bkp.mCapacity;
-			var.mHowAllocated = bkp.mHowAllocated; // This might be ALLOC_SIMPLE or ALLOC_NONE if backed up variable was at the lowest layer of the call stack.
+			var.mHowAllocated = bkp.mHowAllocated; // This might be ALLOC_SIMPLE or ALLOC_NONE if backed-up variable was at the lowest layer of the call stack.
 			var.mAttrib = bkp.mAttrib;
 			var.mType = bkp.mType;
 		}

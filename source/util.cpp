@@ -297,7 +297,12 @@ SymbolType IsPureNumeric(char *aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespa
 	, BOOL aAllowFloat, BOOL aAllowImpure)  // BOOL vs. bool might squeeze a little more performance out of this frequently-called function.
 // String can contain whitespace.
 // If aBuf doesn't contain something purely numeric, PURE_NOT_NUMERIC is returned.  The same happens if
-// aBuf contains a float but aAllowFloat is false.  Otherwise, PURE_INTEGER or PURE_FLOAT is returned.
+// aBuf contains a float but aAllowFloat is false.  (The aAllowFloat parameter isn't strictly necessary
+// because the caller could just check whether the return value is/isn't PURE_FLOAT to get the same effect.
+// However, supporting aAllowFloat seems to greatly improve maintainability because it saves many callers
+// from having to compare the return value to PURE_INTEGER [they can just interpret the return value as BOOL].
+// It also improves readability due to the "Is" part of the function name.  So it seems worth keeping.)
+// Otherwise, PURE_INTEGER or PURE_FLOAT is returned.
 // If aAllowAllWhitespace==true and the string is blank or all whitespace, PURE_INTEGER is returned.
 // Obsolete comment: Making this non-inline reduces the size of the compressed EXE by only 2K.  Since this
 // function is called so often, it seems preferable to keep it inline for performance.
@@ -343,7 +348,7 @@ SymbolType IsPureNumeric(char *aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespa
 			break; // The number qualifies as pure, so fall through to the logic at the bottom. (It would already have returned elsewhere in the loop if the number is impure).
 		if (c == '.')
 		{
-			if (!aAllowFloat || has_decimal_point || is_hex)
+			if (!aAllowFloat || has_decimal_point || is_hex) // If aAllowFloat==false, a decimal point at the very end of the number is considered non-numeric even if aAllowImpure==true.  Some callers like "case ACT_ADD" might rely on this.
 				// i.e. if aBuf contains 2 decimal points, it can't be a valid number.
 				// Note that decimal points are allowed in hexadecimal strings, e.g. 0xFF.EE.
 				// But since that format doesn't seem to be supported by VC++'s atof() and probably

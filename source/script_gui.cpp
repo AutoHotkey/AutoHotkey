@@ -6424,11 +6424,11 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 			length = SendMessage(aControl.hwnd, CB_GETLBTEXT, (WPARAM)index, (LPARAM)aOutputVar.Contents());
 			if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
 			{
-				aOutputVar.Close(); // In case it's the clipboard.
+				aOutputVar.Close();
 				return aOutputVar.Assign();
 			}
 			aOutputVar.Length() = (VarSizeType)length;  // Update it to the actual length, which can vary from the estimate.
-			return aOutputVar.Close(); // In case it's the clipboard.
+			return aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 
 		case GUI_CONTROL_LISTBOX:
 			if (GetWindowLong(aControl.hwnd, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
@@ -6537,12 +6537,12 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 				length = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)index, (LPARAM)aOutputVar.Contents());
 				if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
 				{
-					aOutputVar.Close(); // In case it's the clipboard.
+					aOutputVar.Close();
 					return aOutputVar.Assign();
 				}
 			}
 			aOutputVar.Length() = (VarSizeType)length;  // Update it to the actual length, which can vary from the estimate.
-			return aOutputVar.Close(); // In case it's the clipboard.
+			return aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 
 		case GUI_CONTROL_TAB:
 			index = TabCtrl_GetCurSel(aControl.hwnd); // Get index of currently selected item.
@@ -6603,7 +6603,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 		StrReplace(aOutputVar.Contents(), "\r\n", "\n", SCS_SENSITIVE);
 		aOutputVar.Length() = (VarSizeType)strlen(aOutputVar.Contents());
 	}
-	return aOutputVar.Close();  // In case it's the clipboard.
+	return aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 }
 
 

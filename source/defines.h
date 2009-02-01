@@ -33,7 +33,7 @@ GNU General Public License for more details.
 #endif
 
 #define NAME_P "AutoHotkey"
-#define NAME_VERSION "1.0.47.06.L" // Lexikos: Added .L for AutoHotkey_L.
+#define NAME_VERSION "1.0.47.07.L14" // Lexikos: Added .Ln for AutoHotkey_L revision n.
 #define NAME_PV NAME_P " v" NAME_VERSION
 
 // Window class names: Changing these may result in new versions not being able to detect any old instances
@@ -195,7 +195,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				Var *var;         // for SYM_VAR
 				char *marker;     // for SYM_STRING and SYM_OPERAND.
 			};
-			char *buf; // This doesn't increase the total size of the struct. It's used by built-in functions and perhaps other misc. purposes.
+			char *buf; // Due to the outermost union, this doesn't increase the total size of the struct. It's used by SYM_FUNC (helps built-in functions), SYM_DYNAMIC, SYM_OPERAND, and perhaps other misc. purposes.
 		};  
 	};
 	// Note that marker's str-length should not be stored in this struct, even though it might be readily
@@ -208,6 +208,9 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	// which is the default alignment (for performance reasons) in any struct that contains 8-byte members
 	// such as double and __int64.
 };
+#define MAX_TOKENS 512 // Max number of operators/operands.  Seems enough to handle anything realistic, while conserving call-stack space.
+#define STACK_PUSH(token_ptr) stack[stack_count++] = token_ptr
+#define STACK_POP stack[--stack_count]  // To be used as the r-value for an assignment.
 
 // But the array that goes with these actions is in globaldata.cpp because
 // otherwise it would be a little cumbersome to declare the extern version
@@ -221,7 +224,8 @@ enum enum_act {
 , ACT_ASSIGN_FIRST = ACT_ASSIGN, ACT_ASSIGN_LAST = ACT_DIV
 , ACT_REPEAT // Never parsed directly, only provided as a translation target for the old command (see other notes).
 , ACT_ELSE   // Parsed at a lower level than most commands to support same-line ELSE-actions (e.g. "else if").
-, ACT_IFBETWEEN, ACT_IFNOTBETWEEN, ACT_IFIN, ACT_IFNOTIN, ACT_IFCONTAINS, ACT_IFNOTCONTAINS, ACT_IFIS, ACT_IFISNOT
+, ACT_IFIN, ACT_IFNOTIN, ACT_IFCONTAINS, ACT_IFNOTCONTAINS, ACT_IFIS, ACT_IFISNOT
+, ACT_IFBETWEEN, ACT_IFNOTBETWEEN
 , ACT_IFEXPR  // i.e. if (expr)
  // *** *** *** KEEP ALL OLD-STYLE/AUTOIT V2 IFs AFTER THIS (v1.0.20 bug fix). *** *** ***
  , ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION
@@ -230,12 +234,13 @@ enum enum_act {
  // and it relies upon the fact that ACT_IFEQUAL is first in the series and ACT_IFLESSOREQUAL last.
 , ACT_IFEQUAL = ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION, ACT_IFNOTEQUAL, ACT_IFGREATER, ACT_IFGREATEROREQUAL
 , ACT_IFLESS, ACT_IFLESSOREQUAL
+, ACT_FIRST_OPTIMIZED_IF = ACT_IFBETWEEN, ACT_LAST_OPTIMIZED_IF = ACT_IFLESSOREQUAL
 , ACT_FIRST_COMMAND // i.e the above aren't considered commands for parsing/searching purposes.
 , ACT_IFWINEXIST = ACT_FIRST_COMMAND
 , ACT_IFWINNOTEXIST, ACT_IFWINACTIVE, ACT_IFWINNOTACTIVE
 , ACT_IFINSTRING, ACT_IFNOTINSTRING
 , ACT_IFEXIST, ACT_IFNOTEXIST, ACT_IFMSGBOX
-, ACT_FIRST_IF = ACT_IFBETWEEN, ACT_LAST_IF = ACT_IFMSGBOX  // Keep this range updated with any new IFs that are added.
+, ACT_FIRST_IF = ACT_IFIN, ACT_LAST_IF = ACT_IFMSGBOX  // Keep this range updated with any new IFs that are added.
 , ACT_MSGBOX, ACT_INPUTBOX, ACT_SPLASHTEXTON, ACT_SPLASHTEXTOFF, ACT_PROGRESS, ACT_SPLASHIMAGE
 , ACT_TOOLTIP, ACT_TRAYTIP, ACT_INPUT
 , ACT_TRANSFORM, ACT_STRINGLEFT, ACT_STRINGRIGHT, ACT_STRINGMID
@@ -315,7 +320,7 @@ enum enum_act_old {
 #define ACT_IS_ALWAYS_ALLOWED(ActionType) (ActionType == ACT_EXITAPP || ActionType == ACT_PAUSE \
 	|| ActionType == ACT_EDIT || ActionType == ACT_RELOAD || ActionType == ACT_KEYHISTORY \
 	|| ActionType == ACT_LISTLINES || ActionType == ACT_LISTVARS || ActionType == ACT_LISTHOTKEYS)
-#define ACT_IS_ASSIGN(ActionType) (ActionType >= ACT_ASSIGN_FIRST && ActionType <= ACT_ASSIGN_LAST)
+#define ACT_IS_ASSIGN(ActionType) (ActionType <= ACT_ASSIGN_LAST && ActionType >= ACT_ASSIGN_FIRST) // Ordered for short-circuit performance.
 #define ACT_IS_IF(ActionType) (ActionType >= ACT_FIRST_IF && ActionType <= ACT_LAST_IF)
 #define ACT_IS_IF_OR_ELSE_OR_LOOP(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE || ActionType == ACT_LOOP || ActionType == ACT_WHILE) // Lexikos: Added check for ACT_WHILE.
 #define ACT_IS_IF_OLD(ActionType, OldActionType) (ActionType >= ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION && ActionType <= ACT_LAST_IF) \
@@ -357,10 +362,11 @@ enum enum_act_old {
 #define MAX_TOOLTIPS_STR "20"   // Keep this in sync with above.
 #define MAX_FILEDIALOGS 4
 #define MAX_FOLDERDIALOGS 4
-#define MAX_NUMBER_LENGTH 20
-#define MAX_NUMBER_SIZE (MAX_NUMBER_LENGTH + 1)
-// Above is the maximum length of a 64-bit number when expressed as decimal or hex string.
-// e.g. -9223372036854775808 or (unsigned) 18446744073709551616
+
+#define MAX_NUMBER_LENGTH 255                   // Large enough to allow custom zero or space-padding via %10.2f, etc.
+#define MAX_NUMBER_SIZE (MAX_NUMBER_LENGTH + 1) // But not too large because some things might rely on this being fairly small.
+#define MAX_INTEGER_LENGTH 20                     // Max length of a 64-bit number when expressed as decimal or
+#define MAX_INTEGER_SIZE (MAX_INTEGER_LENGTH + 1) // hex string; e.g. -9223372036854775808 or (unsigned) 18446744073709551616 or (hex) -0xFFFFFFFFFFFFFFFF.
 
 // Hot-strings:
 // memmove() and proper detection of long hotstrings rely on buf being at least this large:

@@ -349,7 +349,7 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 	// Not supported: max_children, max_depth - not applicable until we have arrays/objects.
 	else if (!strcmp(feature_name, "max_data"))
 		setting = _ultoa(mMaxPropertyData, (char*)_alloca(MAX_NUMBER_SIZE), 10);
-	// TODO: STOPPING state for retrieving variable values, etc. after the script finishes, then implement supports_postmortem feature name.
+	// TODO: STOPPING state for retrieving variable values, etc. after the script finishes, then implement supports_postmortem feature name. Requires debugger client support.
 	else
 	{
 		supported = !strcmp(feature_name, "run")
@@ -873,7 +873,7 @@ DEBUGGER_COMMAND(Debugger::context_get)
 
 	Var **var, **var_end; // An array of pointers-to-var.
 	
-	// TODO: Include the lazy-var arrays!!!
+	// TODO: Include the lazy-var arrays for completeness. Low priority since lazy-var arrays are used only for 10001+ variables, and most conventional debugger interfaces would generally not be useful with that many variables.
 	if (context_id == PC_Local)
 	{
 		if (g.CurrentFunc)
@@ -1334,7 +1334,7 @@ int Debugger::redirect_std(char *aArgs, char *aCommandName)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	// TODO: Support redirecting of stdout, or at least the * (stdout) mode of FileAppend.
-	// TODO: Support reporting of non-critical errors through "stderr" redirection.
+	// TODO: Support reporting of non-critical errors through "stderr" redirection. Alternately redirect OutputDebug.
 	mResponseBuf.WriteF("<response command=\"%s\" success=\"%s\" transaction_id=\"%s\"/>"
 						, aCommandName, *new_mode=='0' ? "1" : "0", transaction_id);
 

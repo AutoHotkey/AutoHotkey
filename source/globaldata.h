@@ -66,6 +66,8 @@ extern HHOOK g_PlaybackHook;
 extern bool g_ForceLaunch;
 extern bool g_WinActivateForce;
 extern SingleInstanceType g_AllowOnlyOneInstance;
+extern bool g_WriteCacheDisabledInt64;
+extern bool g_WriteCacheDisabledDouble;
 extern bool g_persistent;
 extern bool g_NoEnv;
 extern bool g_NoTrayIcon;
@@ -90,7 +92,7 @@ extern int g_MaxHistoryKeys;
 
 extern VarSizeType g_MaxVarCapacity;
 // This value is the absolute limit:
-#define MAX_THREADS_LIMIT 200	// Lexikos: Changed to a much less restrictive value, closer to the real limit on my system.
+#define MAX_THREADS_LIMIT 200	// Lexikos: This was 20, but seemed unreasonably low. Actual limit would depend on the script, and maybe the system.
 #define MAX_THREADS_DEFAULT 10
 extern UCHAR g_MaxThreadsPerHotkey;
 extern int g_MaxThreadsTotal;

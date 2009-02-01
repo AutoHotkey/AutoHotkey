@@ -58,45 +58,66 @@ _fltin           ;
 atof             ;
 ?ATOF@@YANPAD@Z  ; ATOF is called far less often than ATOI64 (though perhaps about the same as ATOI().
 
-?PerformLoop@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@_J_N@Z  ; Performs best here (higher up) at the moment.
-?PerformAssign@Line@@AAE?AW4ResultType@@XZ
-?Free@Var@@QAEXH_N@Z  ; Called fairly often by the main Var::Assign().
-?Assign@Var@@QAE?AW4ResultType@@PADK_N1@Z  ; Assign MAIN
-?Assign@Var@@QAE?AW4ResultType@@AAUExprTokenType@@@Z  ; Assign a Token.
-
 ; Some below also used by ExpandExpression to write results back out to the deref buffer, and for conversion of numbers to strings:
 _itoa
 ?ITOA@@YAPADHPAD@Z                    ; Used by assign-int.
-?Assign@Var@@QAE?AW4ResultType@@H@Z   ; Assign an Int
-?Assign@Var@@QAE?AW4ResultType@@K@Z   ; Assign an unsigned long (DWORD)
-?Assign@Var@@QAE?AW4ResultType@@_J@Z  ; Assign an Int64
 ?ITOA64@@YAPAD_JPAD@Z                 ; Used by assign-int64
 _i64toa
 
 atoi             ; Used for 32-bit integers, which are less frequently called/converted than 64-bit.
 ?ATOI@@YAHPAD@Z  ;
 
-; IsHex is a focal point, so hang two things off it: above and below (proceed in proximity order in each direction). IsHex() calls omit_leading_whitespace(), so put that here too.  The order of importance is probably ATOI64, ATOF, then ATOI based on expected calling frequency.
+?PerformAssign@Line@@AAE?AW4ResultType@@XZ  ; Not called that often by modern scripts, so kept a bit farther out.
+
+; A tight group of *small* things that are called very frequently:
+?PerformLoop@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@_J_N@Z  ; Performs best here (higher up) at the moment.
+?Free@Var@@QAEXH_N@Z  ; Called fairly often by the main Var::Assign().
+?Assign@Var@@QAE?AW4ResultType@@PADK_N1@Z  ; Assign MAIN
+?Assign@Var@@QAE?AW4ResultType@@AAV1@@Z  ; Assign var-to-var.
+?Assign@Var@@QAE?AW4ResultType@@AAUExprTokenType@@@Z  ; Assign a Token.
+?UpdateBinaryInt64@Var@@QAEX_JE@Z  ; script.obj
+?ToInt64@Var@@QAE_JH@Z  ; Calls UpdateBinaryInt64().
+?TokenToInt64@@YA_JAAUExprTokenType@@H@Z  ; script2.obj
+?TokenIsPureNumeric@@YA?AW4SymbolType@@AAUExprTokenType@@@Z  ; script2.obj
+?Assign@Var@@QAE?AW4ResultType@@_J@Z  ; Assign an Int64
+?Assign@Var@@QAE?AW4ResultType@@H@Z   ; Assign an Int
+?Assign@Var@@QAE?AW4ResultType@@K@Z   ; Assign an unsigned long (DWORD)
+
+?LengthIgnoreBinaryClip@Var@@QAEKXZ
+?Length@Var@@QAEAAKXZ
+?Type@Var@@QAEEXZ
+?UpdateContents@Var@@QAEXXZ  ; application.obj
+?Contents@Var@@QAEPADH@Z  ; application.obj
+
+; IsHex is a focal point, so hang two things off it: above and below (proceed in proximity order in
+; each direction). IsHex() calls omit_leading_whitespace(), so put that here too.  The order of
+; importance is probably ATOI64, ATOF, then ATOI based on expected calling frequency.
 ?omit_leading_whitespace@@YAPADPAD@Z  ; Called by IsHex(). Formerly was faster when moved further below than this.
 ?IsHex@@YA_NPAD@Z
 
 ?ATOI64@@YA_JPAD@Z
 _atoi64
+?HasContents@Var@@QAEHXZ  ; Small and called from a lot of places.
 ?IsPureNumeric@@YA?AW4SymbolType@@PADHHHH@Z  ; util.obj
+?IsNonBlankIntegerOrFloat@Var@@QAE?AW4SymbolType@@H@Z  ; script.obj
+
+?TokenToBOOL@@YAHAAUExprTokenType@@W4SymbolType@@@Z  ; script2.obj
+?LegacyResultToBOOL@@YAHPAD@Z  ; script2.obj
+?LegacyVarToBOOL@@YAHAAVVar@@@Z  ; script2.obj
 ; Probably intrinsic: strchr (warning LNK4065: '_strchr' cannot be ordered)
 
-?FreeAndRestoreFunctionVars@Var@@SAXAAVFunc@@AAPAUVarBkp@@AAH@Z
-?ConvertToNonAliasIfNecessary@Var@@QAEXXZ  ; Called only when a function has ByRef paramters.
-?UpdateAlias@Var@@QAEXPAV1@@Z              ; Called only when a function has ByRef paramters.
+?TokenToDoubleOrInt64@Var@@QAE?AW4ResultType@@AAUExprTokenType@@@Z  ; script2.obj
+?TokenToDoubleOrInt64@@YA?AW4ResultType@@AAUExprTokenType@@@Z
+?TokenToDouble@@YANAAUExprTokenType@@HH@Z  ; script2.obj
+?ToDouble@Var@@QAENH@Z  ; script.obj
+?TokenToString@@YAPADAAUExprTokenType@@PAD@Z
+; >>> Frequently-called and perf-sensitive, so keep the following near TokenToString() above <<<
+?BIF_InStr@@YAXAAUExprTokenType@@QAPAU1@H@Z  ; Often called close together in scripts.
+?BIF_SubStr@@YAXAAUExprTokenType@@QAPAU1@H@Z ;
+?BIF_StrLen@@YAXAAUExprTokenType@@QAPAU1@H@Z ;
 
-?LengthIgnoreBinaryClip@Var@@QAEKXZ
-?length@?3??Length@Var@@QAEAAKXZ@4KA  ; Possibly corresponds to: static VarSizeType length
-?Length@Var@@QAEAAKXZ
-?Type@Var@@QAEEXZ
-?Contents@Var@@QAEPADXZ
 ?Get@Var@@QAEKPAD@Z
-
-?GetExpandedArgSize@Line@@QAEK_NQAPAVVar@@@Z
+?GetExpandedArgSize@Line@@QAEKQAPAVVar@@@Z  ; script_expression.obj
 ?ExpandArg@Line@@QAEPADPADHPAVVar@@@Z
 ?ExpandArgs@Line@@QAE?AW4ResultType@@KQAPAVVar@@@Z
 
@@ -110,11 +131,37 @@ _atoi64
 ; CENTRAL/PIVOT, but sometimes performs better below most of the primaries rather than in the middle of functions it calls (perhaps because it's so large).
 ?ExpandExpression@Line@@QAEPADHAAW4ResultType@@AAPAD1AAIQAPADI@Z
 ?Call@Func@@QAE?AW4ResultType@@AAPAD@Z
+?FreeAndRestoreFunctionVars@Var@@SAXAAVFunc@@AAPAUVarBkp@@AAH@Z  ; Frequently-called, even for non-recursive functions.
+?ConvertToNonAliasIfNecessary@Var@@QAEXXZ  ; Called only when a function has ByRef paramters.
+?UpdateAlias@Var@@QAEXPAV1@@Z              ; Called only when a function has ByRef paramters.
+
+; Frequently-called things from different categories combined into one area:
+?BIV_LoopField@@YAKPAD0@Z   ; Performance-sensitive ones kept adjacent.
+?BIV_LoopIndex@@YAKPAD0@Z   ;
+?BIV_True_False@@YAKPAD0@Z  ;
+
+
+;;;;;;;;;;;;;;;;;;
+; MEDIUM PRIORITY
+;;;;;;;;;;;;;;;;;;
+
+; Generally not called by anything performance-crucial:
+?ArgIndexToInt64@Line@@QAE_JH@Z  ; script.obj
+?ArgIndexToDouble@Line@@QAENH@Z  ; script.obj
+
+?ConvertDllArgType@@YAXQAPADAAUDYNAPARM@@@Z
+?BIF_DllCall@@YAXAAUExprTokenType@@QAPAU1@H@Z   ; Sandwich technique (i.e. this function between two it calls)
+?DynaCall@@YA?ATDYNARESULT@@HPAXQAUDYNAPARM@@HAAK0H@Z
+?BIF_NumGet@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_NumPut@@YAXAAUExprTokenType@@QAPAU1@H@Z
 
 
 ;;;;;;;;;;;;;;;;;;
 ; BELOW THIS POINT are things not very central to performance.  They're individual clusters of related commands:
 ;;;;;;;;;;;;;;;;;;
+
+?HasUnflushedBinaryNumber@Var@@QAEHXZ  ; script2.obj
+?DisableCache@Var@@QAEXXZ  ; script_expression.obj
 
 ; These seem too unimportant to justify imposing them between ExecUntil and EvalCondtion/Perform:
 ?PerformLoopParse@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@@Z
@@ -124,10 +171,6 @@ _atoi64
 ; No point because strncpy "cannot be ordered" (probably intrinsic):
 ;strncpy
 ;?strlcpy@@YAXPADPBDI@Z
-
-?ConvertDllArgType@@YAXQAPADAAUDYNAPARM@@@Z
-?BIF_DllCall@@YAXAAUExprTokenType@@QAPAU1@H@Z   ; Sandwich technique (i.e. this function between two it calls)
-?DynaCall@@YA?ATDYNARESULT@@HPAXQAUDYNAPARM@@HAAK0H@Z
 
 ?ltrim@@YAIPADI@Z
 ?rtrim@@YAIPADI@Z
@@ -143,6 +186,36 @@ printf
 
 ?global_clear_state@@YAXAAUglobal_struct@@@Z
 ?global_init@@YAXAAUglobal_struct@@@Z
+
+?ArgMustBeDereferenced@Line@@QAE?AW4ResultType@@PAVVar@@HQAPAV3@@Z ; Seldom called; only for isolated input variables.
+?ResolveAlias@Var@@QAEPAV1@XZ
+?ResolveVarOfArg@Line@@QAEPAVVar@@H_N@Z
+?GetVarType@Script@@SAPAXPAD@Z  ; Called by both AddVar() [below] and ResolveVarOfArg() [above]
+??0Var@@QAE@PADPAX_N@Z  ; Constructor.
+??2Var@@SAPAXI@Z  ; Operator-New.
+?AddVar@Script@@QAEPAVVar@@PADIHH@Z  ; script.obj
+?FindOrAddVar@Script@@QAEPAVVar@@PADIHPA_N@Z
+?FindVar@Script@@QAEPAVVar@@PADIPAHHPA_N2@Z
+
+?SetLengthFromContents@Var@@QAEXXZ
+?BIF_VarSetCapacity@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?Capacity@Var@@QAEKXZ
+?Close@Var@@QAE?AW4ResultType@@_N@Z
+?ArgIndexLength@Line@@QAEIH@Z  ; script.obj
+?IsBinaryClip@Var@@QAE_NXZ
+?IsNonStaticLocal@Var@@QAE_NXZ
+?IsLocal@Var@@QAE_NXZ
+
+; Called only when a function recurses or has more than one instance, which is rare:
+?BackupFunctionVars@Var@@SA?AW4ResultType@@AAVFunc@@AAPAUVarBkp@@AAH@Z
+?Backup@Var@@QAEXAAUVarBkp@@@Z
+
+?AcceptNewMem@Var@@QAEXPADK@Z
+?AppendIfRoom@Var@@QAE?AW4ResultType@@PADK@Z
+?UpdateBinaryDouble@Var@@QAEXNE@Z  ; script.obj
+?Assign@Var@@QAE?AW4ResultType@@N@Z  ; Kept away from central section because most scripts don't use doubles.  Assign a Double (calls snprintf).
+?AssignHWND@Var@@QAE?AW4ResultType@@PAUHWND__@@@Z  ; Assign an HWND.
+?AddAttrib@Var@@QAEXE@Z  ; script.obj
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -327,6 +400,7 @@ printf
 ?SoundConvertControlType@Line@@SAKPAD@Z
 
 ?CreateTrayIcon@Script@@QAEXXZ
+?EnableOrDisableViewMenuItems@Script@@QAEXPAUHMENU__@@I@Z  ; script.obj
 ?Edit@Script@@QAE?AW4ResultType@@XZ
 
 ?AllDestructAndExit@Hotkey@@SAXH@Z
@@ -336,10 +410,6 @@ printf
 ;;;;;;;;;;;;;;;;;;;;
 ; BUILT-IN VARIABLES
 ;;;;;;;;;;;;;;;;;;;;
-?BIV_LoopField@@YAKPAD0@Z   ; Performance-sensitive ones kept adjacent.
-?BIV_LoopIndex@@YAKPAD0@Z   ;
-?BIV_True_False@@YAKPAD0@Z  ;
-
 ?BIV_AhkPath@@YAKPAD0@Z
 ?BIV_AhkVersion@@YAKPAD0@Z
 ?BIV_AppData@@YAKPAD0@Z
@@ -489,49 +559,10 @@ LeaveCriticalSection@4
 DeleteCriticalSection@4
 EnterCriticalSection@4
 
-?ArgMustBeDereferenced@Line@@QAE?AW4ResultType@@PAVVar@@HQAPAV3@@Z ; Seldom called; only for isolated input variables.
-?ResolveAlias@Var@@QAEPAV1@XZ
-?ResolveVarOfArg@Line@@QAEPAVVar@@H_N@Z
-
-?GetVarType@Script@@SAPAXPAD@Z  ; Called by both AddVar() [below] and ResolveVarOfArg() [above]
-
-??0Var@@QAE@PADPAX_N@Z  ; Constructor.
-??2Var@@SAPAXI@Z  ; Operator-New.
-?AddVar@Script@@QAEPAVVar@@PADIHH@Z  ; script.obj
-?FindOrAddVar@Script@@QAEPAVVar@@PADIHPA_N@Z
-?FindVar@Script@@QAEPAVVar@@PADIPAHHPA_N2@Z
-
-?SetLengthFromContents@Var@@QAEXXZ
-?BIF_VarSetCapacity@@YAXAAUExprTokenType@@QAPAU1@H@Z
-?Capacity@Var@@QAEKXZ
-?Close@Var@@QAE?AW4ResultType@@_N@Z
-?ArgLength@Line@@QAEIH@Z
-?IsBinaryClip@Var@@QAE_NXZ
-?IsNonStaticLocal@Var@@QAE_NXZ
-?IsLocal@Var@@QAE_NXZ
-
-; Called only when a function recurses or has more than one instance, which is rare:
-?BackupFunctionVars@Var@@SA?AW4ResultType@@AAVFunc@@AAPAUVarBkp@@AAH@Z
-?Backup@Var@@QAEXAAUVarBkp@@@Z
-
-?AcceptNewMem@Var@@QAEXPADK@Z
-?AppendIfRoom@Var@@QAE?AW4ResultType@@PADK@Z
-?Assign@Var@@QAE?AW4ResultType@@N@Z  ; Kept away from central section because most scripts don't use doubles.  Assign a Double (calls snprintf).
-?AssignHWND@Var@@QAE?AW4ResultType@@PAUHWND__@@@Z  ; Assign an HWND.
-?OverwriteAttrib@Var@@QAEXE@Z
 
 ;;;;;;;;;;;;;;;;;;;;
 ; BUILT-IN FUNCTIONS (and related)
 ;;;;;;;;;;;;;;;;;;;;
-?ExprTokenToDouble@@YANAAUExprTokenType@@@Z
-?ExprTokenToDoubleOrInt@@YA?AW4ResultType@@AAUExprTokenType@@@Z
-?ExprTokenToInt64@@YA_JAAUExprTokenType@@@Z
-?ExprTokenToString@@YAPADAAUExprTokenType@@PAD@Z
-; >>> Frequently-called and perf-sensitive, so keep the following near ExprTokenToString() above <<<
-?BIF_InStr@@YAXAAUExprTokenType@@QAPAU1@H@Z  ; Often called close together in scripts.
-?BIF_SubStr@@YAXAAUExprTokenType@@QAPAU1@H@Z ;
-?BIF_StrLen@@YAXAAUExprTokenType@@QAPAU1@H@Z ;
-
 ?BIF_LV_AddInsertModify@@YAXAAUExprTokenType@@QAPAU1@H@Z
 ?BIF_LV_Delete@@YAXAAUExprTokenType@@QAPAU1@H@Z
 ?BIF_LV_GetNextOrCount@@YAXAAUExprTokenType@@QAPAU1@H@Z
@@ -551,8 +582,6 @@ EnterCriticalSection@4
 
 ?BIF_Asc@@YAXAAUExprTokenType@@QAPAU1@H@Z
 ?BIF_Chr@@YAXAAUExprTokenType@@QAPAU1@H@Z
-?BIF_NumGet@@YAXAAUExprTokenType@@QAPAU1@H@Z
-?BIF_NumPut@@YAXAAUExprTokenType@@QAPAU1@H@Z
 ?BIF_FileExist@@YAXAAUExprTokenType@@QAPAU1@H@Z
 
 ?ScriptGetJoyState@@YANW4JoyControls@@HAAUExprTokenType@@_N@Z
@@ -562,7 +591,7 @@ EnterCriticalSection@4
 ?BIF_IsLabel@@YAXAAUExprTokenType@@QAPAU1@H@Z
 ?BIF_OnMessage@@YAXAAUExprTokenType@@QAPAU1@H@Z
 
-?RegisterCallbackCStub@@YGIPAIPAD@Z
+?RegisterCallbackCStub@@YGIPAIPAD@Z  ; This is perhaps a bit to large to be put with "Call" other small functions that it calls.
 ?BIF_RegisterCallback@@YAXAAUExprTokenType@@QAPAU1@H@Z
 
 ?BIF_WinExistActive@@YAXAAUExprTokenType@@QAPAU1@H@Z
@@ -1542,7 +1571,7 @@ WSAStartup@8
 ; Hook
 ?AddRemoveHooks@@YAXE_N@Z
 ?AllowIt@@YAJQAUHHOOK__@@HIJEG_NPAUKeyHistoryItem@@G1@Z
-?ArgHasDeref@Line@@QAE_NH@Z
+?ArgIndexHasDeref@Line@@QAE_NH@Z
 ?ChangeHookState@@YAXQAPAVHotkey@@HEE@Z
 ?DualStateNumpadKeyIsDown@@YA_NXZ
 ?FreeHookMem@@YAXXZ
@@ -1623,6 +1652,7 @@ WSAStartup@8
 ?ParseDerefs@Script@@AAE?AW4ResultType@@PAD0PAUDerefType@@AAH@Z
 
 ?StartsWithAssignmentOp@Line@@SA_NPAD@Z  ; script.obj
+?ExpressionToPostfix@Line@@QAE?AW4ResultType@@AAUArgStruct@@@Z  ; script.obj
 ?PreparseBlocks@Script@@AAEPAVLine@@PAV2@_N0@Z
 ?PreparseError@Line@@QAEPAV1@PAD0@Z
 ?PreparseIfElse@Script@@AAEPAVLine@@PAV2@W4ExecUntilMode@@PAX222@Z

@@ -2005,7 +2005,7 @@ void MouseClick(vk_type aVK, int aX, int aY, int aRepeatCount, int aSpeed, KeyEv
 		MouseEvent(event_flags | MOUSEEVENTF_WHEEL, -(aRepeatCount * WHEEL_DELTA), aX, aY);
 		return;
 	}
-	// Lexikos: Vista-only support for horizontal scrolling.
+	// Lexikos: Support horizontal scrolling in Windows Vista and later.
 	else if (aVK == VK_WHEEL_LEFT)
 	{
 		MouseEvent(event_flags | MOUSEEVENTF_HWHEEL, -(aRepeatCount * WHEEL_DELTA), aX, aY);

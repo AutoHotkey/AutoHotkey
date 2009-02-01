@@ -1842,9 +1842,16 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 			func.mParam[1].var->Assign((DWORD)alParam);
 			if (func.mParamCount > 2) // Assign parameter #3: Message number (in case this function monitors more than one).
 			{
-				func.mParam[2].var->AssignHWND((HWND)(size_t)aMsg); // Write msg number as hex because it's a lot more common. Casting issues make it easier to retain the name "AssignHWND".
+				// For performance and due to rarity of use, message number and HWND are now written out as numbers
+				// rather than hex, which allows binary-number optimizations.
+				// OLDER: Write msg number as hex because it's a lot more common. Casting issues make it easier
+				// to retain the name "AssignHWND".
+				//func.mParam[2].var->AssignHWND((HWND)(size_t)aMsg);
+				func.mParam[2].var->Assign((DWORD)aMsg);
 				if (func.mParamCount > 3) // Assign parameter #4: HWND (listed last since most scripts won't use it for anything).
-					func.mParam[3].var->AssignHWND(aWnd); // Can be a parent or child window.
+					// See comment above:
+					//func.mParam[3].var->AssignHWND(aWnd);
+					func.mParam[3].var->Assign((DWORD)(size_t)aWnd); // Can be a parent or child window.
 			}
 		}
 	}
@@ -2074,8 +2081,11 @@ VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime)
 	// in case "g" is no longer the original thread due to another thread having interrupted it.
 	// Consequently, MsgBox's with an OK button won't be 100% reliable with the timeout feature
 	// if an interrupting thread is running at the time the box times out.  This is in the help
-	// file as a known limitation:
-	if (g.DialogHWND == hWnd) // Regardless of whether IsWindow() is true.
+	// file as a known limitation.  Perhaps in the future it can be solved by setting some new
+	// member of "g" that tells ResumeUnderlyingThread() to keep passing back "hWnd" as threads
+	// are resumed until the thread whose g.DialogHWND matches that hwnd.  That thread's
+	// g.MsgBoxTimedOut could then be set to true just before the thread is resumed.
+	if (g.DialogHWND == hWnd) // Regardless of whether IsWindow() is true.  See also: above comment.
 		g.MsgBoxTimedOut = true;
 }
 

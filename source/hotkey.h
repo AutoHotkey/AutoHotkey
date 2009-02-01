@@ -24,7 +24,7 @@ EXTERN_SCRIPT;  // For g_script.
 // Due to control/alt/shift modifiers, quite a lot of hotkey combinations are possible, so support any
 // conceivable use.  Note: Increasing this value will increase the memory required (i.e. any arrays
 // that use this value):
-#define MAX_HOTKEYS 700
+#define MAX_HOTKEYS 1000  // Raised from 700 to 1000 in v1.0.47.07 because at least one person needed more.
 
 // Note: 0xBFFF is the largest ID that can be used with RegisterHotkey().
 // But further limit this to 0x3FFF (16,383) so that the two highest order bits

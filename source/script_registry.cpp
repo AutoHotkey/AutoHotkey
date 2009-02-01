@@ -186,7 +186,7 @@ ResultType Line::RegRead(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 			}
 			g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 			output_var.Length() = (VarSizeType)strlen(contents); // Due to conservative buffer sizes above, length is probably too large by 3. So update to reflect the true length.
-			return output_var.Close();  // In case it's the clipboard.
+			return output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 
 		case REG_BINARY:
 		{
@@ -219,7 +219,7 @@ ResultType Line::RegRead(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 			}
 			contents[j] = '\0'; // Terminate
 			g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-			return output_var.Close();  // In case it's the clipboard.  Length() was already set by the earlier call to Assign().
+			return output_var.Close(); // Length() was already set by the earlier call to Assign().
 		}
 	}
 
@@ -399,6 +399,14 @@ bool Line::RegRemoveSubkeys(HKEY hRegKey)
 ResultType Line::RegDelete(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 {
 	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
+
+	// Fix for v1.0.47.07: Don't remove the entire key if it's a root key!  According to MSDN,
+	// the root key would be opened by RegOpenKeyEx() further below whenever aRegSubkey is NULL
+	// or an empty string. aValueName is also checked to preserve the ability to delete a value
+	// that exists directly under a root key.
+	if (   !aRootKey
+		|| (!aRegSubkey || !*aRegSubkey) && (!aValueName || !*aValueName)   ) // See comment above.
+		return OK;  // Let ErrorLevel tell the story.
 
 	HKEY	hRegKey;
 

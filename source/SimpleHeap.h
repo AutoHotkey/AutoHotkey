@@ -52,7 +52,7 @@ private:
 	SimpleHeap();  // Private constructor, since we want only the static methods to be able to create new objects.
 	~SimpleHeap();
 public:
-	static UINT GetBlockCount() {return sBlockCount;}
+//	static UINT GetBlockCount() {return sBlockCount;}
 	static char *Malloc(char *aBuf, size_t aLength = -1); // Return a block of memory to the caller and copy aBuf into it.
 	static char *Malloc(size_t aSize); // Return a block of memory to the caller.
 	static void Delete(void *aPtr);

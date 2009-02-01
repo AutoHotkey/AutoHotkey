@@ -338,7 +338,7 @@ LRESULT CALLBACK LowLevelMouseProc(int aCode, WPARAM wParam, LPARAM lParam)
 			sc = (wheel_delta > 0 ? wheel_delta : -wheel_delta) / WHEEL_DELTA; // Friendless of conversion seems to outweigh lack of flexibility if future OSes change the 120 default.
 			key_up = false; // Always consider wheel movements to be "key down" events.
 			break;
-		// Lexikos: Vista-only support for horizontal scrolling.
+		// Lexikos: Support horizontal scrolling in Windows Vista and later.
 		case WM_MOUSEHWHEEL:
 			wheel_delta = GET_WHEEL_DELTA_WPARAM(event.mouseData);
 			vk = wheel_delta < 0 ? VK_WHEEL_LEFT : VK_WHEEL_RIGHT;
@@ -4378,7 +4378,7 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 		// probably better to have a false value in them:
 		g_PhysicalKeyState[VK_WHEEL_DOWN] = 0;
 		g_PhysicalKeyState[VK_WHEEL_UP] = 0;
-		// Lexikos: Vista-only support for horizontal scrolling.
+		// Lexikos: Support horizontal scrolling in Windows Vista and later.
 		g_PhysicalKeyState[VK_WHEEL_LEFT] = 0;
 		g_PhysicalKeyState[VK_WHEEL_RIGHT] = 0;
 
@@ -4391,7 +4391,7 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 			ResetKeyTypeState(kvk[VK_XBUTTON2]);
 			ResetKeyTypeState(kvk[VK_WHEEL_DOWN]);
 			ResetKeyTypeState(kvk[VK_WHEEL_UP]);
-			// Lexikos: Vista-only support for horizontal scrolling.
+			// Lexikos: Support horizontal scrolling in Windows Vista and later.
 			ResetKeyTypeState(kvk[VK_WHEEL_LEFT]);
 			ResetKeyTypeState(kvk[VK_WHEEL_RIGHT]);
 		}

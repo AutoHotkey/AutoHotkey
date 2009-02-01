@@ -39,7 +39,10 @@ char *SimpleHeap::Malloc(char *aBuf, size_t aLength)
 		g_script.ScriptError(ERR_OUTOFMEM, aBuf);
 		return NULL; // Callers may rely on NULL vs. "" being returned in the event of failure.
 	}
-	memcpy(new_buf, aBuf, aLength + 1); // memcpy() typically benchmarks slightly faster than strcpy().
+	if (aLength)
+		memcpy(new_buf, aBuf, aLength); // memcpy() typically benchmarks slightly faster than strcpy().
+	//else only a terminator is needed.
+	new_buf[aLength] = '\0'; // Terminate here for when aLength==0 and for the memcpy above so that caller's aBuf doesn't have to be terminated.
 	return new_buf;
 }
 
