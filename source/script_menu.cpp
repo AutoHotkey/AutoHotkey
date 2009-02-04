@@ -618,7 +618,7 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 		mFirstMenuItem = aMenuItem->mNextMenuItem; // Can be NULL if the list will now be empty.
 	CHANGE_DEFAULT_IF_NEEDED  // Should do this before freeing aMenuItem's memory.
 	if (mMenu) // Delete the item from the menu.
-		DeleteMenu(mMenu, aMenuItem_ID, aMenuItem_MF_BY);
+		RemoveMenu(mMenu, aMenuItem_ID, aMenuItem_MF_BY); // Lexikos: DeleteMenu destroys any sub-menu handle associated with the item, so use RemoveMenu.
 	if (aMenuItem->mName != Var::sEmptyString)
 		delete aMenuItem->mName; // Since it was separately allocated.
 	delete aMenuItem; // Do this last when its contents are no longer needed.

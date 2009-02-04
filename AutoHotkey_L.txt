@@ -1,3 +1,0 @@
-AutoHotkey v1.0.47.06 custom build by Lexikos.
-
-The included project file is for Visual C++ Express Edition 2008.

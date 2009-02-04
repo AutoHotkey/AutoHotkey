@@ -4,3 +4,6 @@ However, it is also known to compile on:
 Microsoft Visual C++ 2005 (8.x): Requires a few modifications to project settings.
 Microsoft Visual C++ 2005 Express (a free compiler): For detailed instructions,
 see http://www.autohotkey.com/forum/topic19154.html
+
+
+NOTE: AutoHotkey_L is developed and compiled on Microsoft Visual C++ 2008 Express Edition.

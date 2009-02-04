@@ -33,7 +33,10 @@ GNU General Public License for more details.
 #endif
 
 #define NAME_P "AutoHotkey"
-#define NAME_VERSION "1.0.47.07.L14" // Lexikos: Added .Ln for AutoHotkey_L revision n.
+#ifndef NAME_L_REVISION
+#define NAME_L_REVISION ".L16" // Lexikos: Added .Ln for AutoHotkey_L revision n.
+#endif
+#define NAME_VERSION "1.0.47.07" NAME_L_REVISION
 #define NAME_PV NAME_P " v" NAME_VERSION
 
 // Window class names: Changing these may result in new versions not being able to detect any old instances
