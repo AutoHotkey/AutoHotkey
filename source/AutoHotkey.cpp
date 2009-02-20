@@ -29,7 +29,7 @@ GNU General Public License for more details.
 
 int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
-	setvbuf(stdout, NULL, _IONBF, 0); // Lexikos: Disable stdout buffering to make it a more effective debugging tool.
+	setvbuf(stdout, NULL, _IONBF, 0); // Lexikos: (L17) Disable stdout buffering to make it a more effective debugging tool.
 
 	// Init any globals not in "struct g" that need it:
 	g_hInstance = hInstance;
@@ -101,7 +101,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		}
 #endif
 #ifdef SCRIPT_DEBUG
-		// Lexikos: Allow a debug session to be initiated by command-line.
+		// Allow a debug session to be initiated by command-line.
 		else if (!g_Debugger.IsConnected() && !strnicmp(param, "/Debug", 6) && (param[6] == '\0' || param[6] == '='))
 		{
 			if (param[6] == '=')
@@ -293,7 +293,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	}
 
 #ifdef SCRIPT_DEBUG
-	// Lexikos: Initiate debug session now if applicable.
+	// Initiate debug session now if applicable.
 	if (g_DebuggerHost && g_Debugger.Connect(g_DebuggerHost, g_DebuggerPort) == DEBUGGER_E_OK)
 	{
 		g_Debugger.ProcessCommands();

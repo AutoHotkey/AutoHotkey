@@ -62,7 +62,7 @@ GNU General Public License for more details.
 // 0x88 - 0x8F : unassigned
 // 0x97 - 0x9F : unassigned (this range seems less likely to be used)
 #define VK_NEW_MOUSE_FIRST 0x9A // was 0x9C
-// Lexikos: Fake virtual keys for support for horizontal scrolling in Windows Vista and later.
+// Lexikos: (L4) Fake virtual keys for support for horizontal scrolling in Windows Vista and later.
 #define VK_WHEEL_LEFT      0x9A
 #define VK_WHEEL_RIGHT     0x9B
 #define VK_LBUTTON_LOGICAL 0x9C // v1.0.43: Added to support swapping of left/right mouse buttons in Control Panel.

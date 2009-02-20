@@ -759,7 +759,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				if (hs->mHotCriterion)
 				{
 					// For details, see comments in the hotkey section of this switch().
-					// Lexikos: Added hs->mHotExprIndex for #if (expression).
+					// Lexikos: (L4) Added hs->mHotExprIndex for #if (expression).
 					if (   !(criterion_found_hwnd = HotCriterionAllowsFiring(hs->mHotCriterion, hs->mHotWinTitle, hs->mHotWinText, hs->mHotExprIndex))   )
 						// Hotstring is no longer eligible to fire even though it was when the hook sent us
 						// the message.  Abort the firing even though the hook may have already started
@@ -1286,7 +1286,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				break;
 
 			default: // hotkey
-				// Lexikos: Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
+				// Lexikos: (L4) Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
 				if (hk->mVK == VK_WHEEL_DOWN || hk->mVK == VK_WHEEL_UP || hk->mVK == VK_WHEEL_LEFT || hk->mVK == VK_WHEEL_RIGHT) // If this is true then also: msg.message==AHK_HOOK_HOTKEY
 					g.EventInfo = (DWORD)msg.lParam; // v1.0.43.03: Override the thread default of 0 with the number of notches by which the wheel was turned.
 					// Above also works for RunAgainAfterFinished since that feature reuses the same thread attributes set above.

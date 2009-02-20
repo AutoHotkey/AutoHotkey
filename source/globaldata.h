@@ -92,7 +92,7 @@ extern int g_MaxHistoryKeys;
 
 extern VarSizeType g_MaxVarCapacity;
 // This value is the absolute limit:
-#define MAX_THREADS_LIMIT 200	// Lexikos: This was 20, but seemed unreasonably low. Actual limit would depend on the script, and maybe the system.
+#define MAX_THREADS_LIMIT 20
 #define MAX_THREADS_DEFAULT 10
 extern UCHAR g_MaxThreadsPerHotkey;
 extern int g_MaxThreadsTotal;
@@ -104,7 +104,7 @@ extern char *g_HotWinTitle;
 extern char *g_HotWinText;
 extern HotkeyCriterion *g_FirstHotCriterion, *g_LastHotCriterion;
 
-// Lexikos: Added global variables for #if (expression). See globaldata.cpp for comments.
+// Lexikos: (L4) Added global variables for #if (expression). See globaldata.cpp for comments.
 extern int g_HotExprIndex;
 extern Line **g_HotExprLines;
 extern int g_HotExprLineCount;

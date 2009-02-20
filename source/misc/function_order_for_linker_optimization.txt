@@ -775,7 +775,7 @@ qmathTan@8
 ?ControlUpdateCurrentTab@GuiType@@QAEXAAUGuiControlType@@_N@Z
 ?Create@GuiType@@QAE?AW4ResultType@@XZ
 ?Destroy@GuiType@@SA?AW4ResultType@@I@Z
-?DestroyIconIfUnused@GuiType@@SAXPAUHICON__@@@Z
+?DestroyIconsIfUnused@GuiType@@SAXPAUHICON__@@@Z
 ?Escape@GuiType@@QAE?AW4ResultType@@XZ
 ?Event@GuiType@@QAEXIIGI@Z
 ?FindControl@GuiType@@QAEIPAD@Z

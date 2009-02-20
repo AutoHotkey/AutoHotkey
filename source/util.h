@@ -570,7 +570,11 @@ DWORD ReadRegString(HKEY aRootKey, char *aSubkey, char *aValueName, char *aBuf, 
 HBITMAP LoadPicture(char *aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
 	, bool aUseGDIPlusIfAvailable);
 HBITMAP IconToBitmap(HICON ahIcon, bool aDestroyIcon);
+HBITMAP IconToBitmap32(HICON aIcon, bool aDestroyIcon); // Lexikos: Used for menu icons on Vista+. Creates a 32-bit (ARGB) device-independent bitmap from an icon.
 int CALLBACK FontEnumProc(ENUMLOGFONTEX *lpelfe, NEWTEXTMETRICEX *lpntme, DWORD FontType, LPARAM lParam);
 bool IsStringInList(char *aStr, char *aList, bool aFindExactMatch);
+
+int ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex); // Lexikos: (L17) Find integer ID of resource from index. i.e. IconNumber -> resource ID.
+HICON ExtractIconFromExecutable(char *aFilespec, int aIconNumber, int aWidth, int aHeight); // Lexikos: (L17) Extract icon of the appropriate size from an executable (or compatible) file.
 
 #endif

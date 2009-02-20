@@ -338,7 +338,7 @@ LRESULT CALLBACK LowLevelMouseProc(int aCode, WPARAM wParam, LPARAM lParam)
 			sc = (wheel_delta > 0 ? wheel_delta : -wheel_delta) / WHEEL_DELTA; // Friendless of conversion seems to outweigh lack of flexibility if future OSes change the 120 default.
 			key_up = false; // Always consider wheel movements to be "key down" events.
 			break;
-		// Lexikos: Support horizontal scrolling in Windows Vista and later.
+		// Lexikos: (L4) Support horizontal scrolling in Windows Vista and later.
 		case WM_MOUSEHWHEEL:
 			wheel_delta = GET_WHEEL_DELTA_WPARAM(event.mouseData);
 			vk = wheel_delta < 0 ? VK_WHEEL_LEFT : VK_WHEEL_RIGHT;
@@ -457,7 +457,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	// the notch count from pKeyHistoryCurr->sc.
 	pKeyHistoryCurr->sc = aSC; // Will be zero if our caller is the mouse hook (except for wheel notch count).
 	// After logging the wheel notch count (above), purify aSC for readability and maintainability.
-	// Lexikos: Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
+	// Lexikos: (L4) Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
 	if (aVK == VK_WHEEL_DOWN || aVK == VK_WHEEL_UP || aVK == VK_WHEEL_LEFT || aVK == VK_WHEEL_RIGHT)
 		aSC = 0; // Also relied upon by by sc_takes_precedence below.
 
@@ -2758,7 +2758,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 					// ... v1.0.41: Or it's a perfect match but the right window isn't active or doesn't exist.
 					// In that case, continue searching for other matches in case the script contains
 					// hotstrings that would trigger simultaneously were it not for the "only one" rule.
-					// Lexikos: Added hs.mHotExprLine for #if (expression).
+					// Lexikos: (L4) Added hs.mHotExprLine for #if (expression).
 					|| !HotCriterionAllowsFiring(hs.mHotCriterion, hs.mHotWinTitle, hs.mHotWinText, hs.mHotExprIndex)   )
 					continue; // No match or not eligible to fire.
 					// v1.0.42: The following scenario defeats the ability to give criterion hotstrings
@@ -4378,7 +4378,7 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 		// probably better to have a false value in them:
 		g_PhysicalKeyState[VK_WHEEL_DOWN] = 0;
 		g_PhysicalKeyState[VK_WHEEL_UP] = 0;
-		// Lexikos: Support horizontal scrolling in Windows Vista and later.
+		// Lexikos: (L4) Support horizontal scrolling in Windows Vista and later.
 		g_PhysicalKeyState[VK_WHEEL_LEFT] = 0;
 		g_PhysicalKeyState[VK_WHEEL_RIGHT] = 0;
 
@@ -4391,7 +4391,7 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 			ResetKeyTypeState(kvk[VK_XBUTTON2]);
 			ResetKeyTypeState(kvk[VK_WHEEL_DOWN]);
 			ResetKeyTypeState(kvk[VK_WHEEL_UP]);
-			// Lexikos: Support horizontal scrolling in Windows Vista and later.
+			// Lexikos: (L4) Support horizontal scrolling in Windows Vista and later.
 			ResetKeyTypeState(kvk[VK_WHEEL_LEFT]);
 			ResetKeyTypeState(kvk[VK_WHEEL_RIGHT]);
 		}

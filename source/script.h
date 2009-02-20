@@ -49,7 +49,7 @@ enum ExecUntilMode {NORMAL_MODE, UNTIL_RETURN, UNTIL_BLOCK_END, ONLY_ONE_LINE};
 #define ATTR_LOOP_REG (void *)4
 #define ATTR_LOOP_READ_FILE (void *)5
 #define ATTR_LOOP_PARSE (void *)6
-#define ATTR_LOOP_WHILE (void *)7 // Lexikos: This is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
+#define ATTR_LOOP_WHILE (void *)7 // Lexikos: (L4) This is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
 typedef void *AttributeType;
 
 enum FileLoopModeType {FILE_LOOP_INVALID, FILE_LOOP_FILES_ONLY, FILE_LOOP_FILES_AND_FOLDERS, FILE_LOOP_FOLDERS_ONLY};
@@ -546,7 +546,7 @@ private:
 	ResultType PerformLoopParse(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
 	ResultType Line::PerformLoopParseCSV(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
 	ResultType PerformLoopReadFile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine, FILE *aReadFile, char *aWriteFileName);
-	ResultType Line::PerformLoopWhile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
+	ResultType Line::PerformLoopWhile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: (L4) ACT_WHILE.
 	ResultType Perform();
 
 	ResultType MouseGetPos(DWORD aOptions);
@@ -875,7 +875,7 @@ public:
 	char *ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget, char *&aDerefBuf
 		, size_t &aDerefBufSize, char *aArgDeref[], size_t aExtraSize);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
-	ResultType EvaluateHotCriterionExpression(); // Lexikos: Called by MainWindowProc to handle an AHK_HOT_IF_EXPR message.
+	ResultType EvaluateHotCriterionExpression(); // Lexikos: (L4) Called by MainWindowProc to handle an AHK_HOT_IF_EXPR message.
 
 	ResultType Deref(Var *aOutputVar, char *aBuf);
 
@@ -1701,7 +1701,7 @@ public:
 		{
 			if (!stricmp(aBuf, "WheelUp") || !stricmp(aBuf, "WU")) return VK_WHEEL_UP;
 			if (!stricmp(aBuf, "WheelDown") || !stricmp(aBuf, "WD")) return VK_WHEEL_DOWN;
-			// Lexikos: Support horizontal scrolling in Windows Vista and later.
+			// Lexikos: (L4) Support horizontal scrolling in Windows Vista and later.
 			if (!stricmp(aBuf, "WheelLeft") || !stricmp(aBuf, "WL")) return VK_WHEEL_LEFT;
 			if (!stricmp(aBuf, "WheelRight") || !stricmp(aBuf, "WR")) return VK_WHEEL_RIGHT;
 		}
@@ -1856,7 +1856,7 @@ public:
 	#define VAR_ASSUME_NONE 0
 	#define VAR_ASSUME_LOCAL 1
 	#define VAR_ASSUME_GLOBAL 2
-	#define VAR_ASSUME_STATIC 3 // Lexikos: Assume local and static.
+	#define VAR_ASSUME_STATIC 3 // Lexikos: (L8) Assume local and static.
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
 	UCHAR mDefaultVarType;
 	bool mIsBuiltIn; // Determines contents of union. Keep this member adjacent/contiguous with the above.
@@ -2030,6 +2030,10 @@ public:
 	UINT GetSubmenuPos(HMENU ahMenu);
 	UINT GetItemPos(char *aMenuItemName);
 	bool ContainsMenu(UserMenu *aMenu);
+	// Lexikos: (L17) Functions for menu icons.
+	ResultType SetItemIcon(UserMenuItem *aMenuItem, char *aFilename, int aIconNumber, int aWidth);
+	ResultType ApplyItemIcon(UserMenuItem *aMenuItem);
+	ResultType RemoveItemIcon(UserMenuItem *aMenuItem);
 };
 
 
@@ -2048,6 +2052,24 @@ public:
 	// due to byte-alignment:
 	bool mEnabled, mChecked;
 	UserMenuItem *mNextMenuItem;  // Next item in linked list
+	
+	union
+	{
+		// Lexikos: (L17) Implementation of menu item icons is OS-dependent (g_os.IsWinVista()).
+		
+		// Older versions of Windows do not support alpha channels in menu item bitmaps, so owner-drawing
+		// must be used for icons with transparent backgrounds to appear correctly. Owner-drawing also
+		// prevents the icon colours from inverting when the item is selected. DrawIcon() gives the best
+		// results, so we store the icon handle as is.
+		//
+		HICON mIcon;
+		
+		// Windows Vista and later support alpha channels via 32-bit bitmaps. Since owner-drawing prevents
+		// visual styles being applied to menus, we convert each icon to a 32-bit bitmap, calculating the
+		// alpha channel as necessary. This is done only once, when the icon is initially set.
+		//
+		HBITMAP mBitmap;
+	};
 
 	// Constructor:
 	UserMenuItem(char *aName, size_t aNameCapacity, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, UserMenu *aMenu);
@@ -2208,7 +2230,8 @@ public:
 	COLORREF mBackgroundColorCtl; // Background color for controls.
 	HBRUSH mBackgroundBrushCtl;   // Brush corresponding to the above.
 	HDROP mHdrop;                 // Used for drag and drop operations.
-	HICON mIconEligibleForDestruction; // The window's SysMenu icon, which can be destroyed when the window is destroyed if nothing else is using it.
+	HICON mIconEligibleForDestruction; // The window's icon, which can be destroyed when the window is destroyed if nothing else is using it.
+	HICON mIconEligibleForDestructionSmall; // Lexikos: (L17) A window may have two icons: ICON_SMALL and ICON_BIG.
 	int mMarginX, mMarginY, mPrevX, mPrevY, mPrevWidth, mPrevHeight, mMaxExtentRight, mMaxExtentDown
 		, mSectionX, mSectionY, mMaxExtentRightSection, mMaxExtentDownSection;
 	LONG mMinWidth, mMinHeight, mMaxWidth, mMaxHeight;
@@ -2248,7 +2271,7 @@ public:
 		, mCurrentColor(CLR_DEFAULT)
 		, mBackgroundColorWin(CLR_DEFAULT), mBackgroundBrushWin(NULL)
 		, mBackgroundColorCtl(CLR_DEFAULT), mBackgroundBrushCtl(NULL)
-		, mHdrop(NULL), mIconEligibleForDestruction(NULL)
+		, mHdrop(NULL), mIconEligibleForDestruction(NULL), mIconEligibleForDestructionSmall(NULL)
 		, mMarginX(COORD_UNSPECIFIED), mMarginY(COORD_UNSPECIFIED) // These will be set when the first control is added.
 		, mPrevX(0), mPrevY(0)
 		, mPrevWidth(0), mPrevHeight(0) // Needs to be zero for first control to start off at right offset.
@@ -2266,7 +2289,7 @@ public:
 	}
 
 	static ResultType Destroy(GuiIndexType aWindowIndex);
-	static void DestroyIconIfUnused(HICON ahIcon);
+	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // Lexikos: (L17) Renamed function and added parameter to also handle the window's small icon.
 	ResultType Create();
 	void SetLabels(char *aLabelPrefix);
 	static void UpdateMenuBars(HMENU aMenu);
@@ -2473,6 +2496,7 @@ public:
 	WCHAR *mRunAsUser, *mRunAsPass, *mRunAsDomain; // Memory is allocated at runtime, upon first use.
 
 	HICON mCustomIcon;  // NULL unless the script has loaded a custom icon during its runtime.
+	HICON mCustomIconSmall; // Lexikos: (L17) Use separate big/small icons for best results.
 	char *mCustomIconFile; // Filename of icon.  Allocated on first use.
 	bool mIconFrozen; // If true, the icon does not change state when the state of pause or suspend changes.
 	char *mTrayIconTip;  // Custom tip text for tray icon.  Allocated on first use.
@@ -2531,7 +2555,7 @@ public:
 	char *ListVars(char *aBuf, int aBufSize);
 	char *ListKeyHistory(char *aBuf, int aBufSize);
 
-	ResultType PerformMenu(char *aMenu, char *aCommand, char *aParam3, char *aParam4, char *aOptions);
+	ResultType PerformMenu(char *aMenu, char *aCommand, char *aParam3, char *aParam4, char *aOptions, char *aOptions2); // Lexikos: (L17) Added aOptions2 for Icon sub-command (icon width). Arg was previously reserved/unused.
 	UserMenu *FindMenu(char *aMenuName);
 	UserMenu *AddMenu(char *aMenuName);
 	ResultType ScriptDeleteMenu(UserMenu *aMenu);
@@ -2682,7 +2706,7 @@ void BIF_Chr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_IsLabel(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // Lexikos: IsFunc - for use with dynamic function calls.
+void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // Lexikos: (L7) IsFunc - for use with dynamic function calls.
 void BIF_GetKeyState(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_FileExist(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);

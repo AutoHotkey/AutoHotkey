@@ -65,7 +65,7 @@ GNU General Public License for more details.
 	//#include "SimpleHeap.h"
 #endif
 
-// Lexikos: Defining _WIN32_WINNT 0x0600 seems to break TrayTip in non-English Windows, and possibly other things.
+// Lexikos: (L9) Defining _WIN32_WINNT 0x0600 seems to break TrayTip in non-English Windows, and possibly other things.
 //			Instead, define only the necessary constants for horizontal wheel support in Windows Vista and later.
 #if (_WIN32_WINNT < 0x0600)
 #define WM_MOUSEHWHEEL                  0x020E

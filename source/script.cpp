@@ -60,7 +60,7 @@ Script::Script()
 #endif
 	, mLinesExecutedThisCycle(0), mUninterruptedLineCountMax(1000), mUninterruptibleTime(15)
 	, mRunAsUser(NULL), mRunAsPass(NULL), mRunAsDomain(NULL)
-	, mCustomIcon(NULL) // Normally NULL unless there's a custom tray icon loaded dynamically.
+	, mCustomIcon(NULL), mCustomIconSmall(NULL) // Normally NULL unless there's a custom tray icon loaded dynamically.
 	, mCustomIconFile(NULL), mIconFrozen(false), mTrayIconTip(NULL) // Allocated on first use.
 	, mCustomIconNumber(0)
 {
@@ -165,7 +165,10 @@ Script::~Script() // Destructor.
 	// Above: Probably best to have removed icon from tray and destroyed any Gui/Splash windows that were
 	// using it prior to getting rid of the script's custom icon below:
 	if (mCustomIcon)
+	{
 		DestroyIcon(mCustomIcon);
+		DestroyIcon(mCustomIconSmall); // Should always be non-NULL if mCustomIcon is non-NULL.
+	}
 
 	// Since they're not associated with a window, we must free the resources for all popup menus.
 	// Update: Even if a menu is being used as a GUI window's menu bar, see note above for why menu
@@ -533,9 +536,9 @@ void Script::CreateTrayIcon()
 	mNIC.uCallbackMessage = AHK_NOTIFYICON;
 #ifdef AUTOHOTKEYSC
 	// i.e. don't override the user's custom icon:
-	mNIC.hIcon = mCustomIcon ? mCustomIcon : (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(mCompiledHasCustomIcon ? IDI_MAIN : g_IconTray), IMAGE_ICON, 0, 0, LR_SHARED);
-#else
-	mNIC.hIcon = mCustomIcon ? mCustomIcon : (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(g_IconTray), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
+	mNIC.hIcon = mCustomIconSmall ? mCustomIconSmall : (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(mCompiledHasCustomIcon ? IDI_MAIN : g_IconTray), IMAGE_ICON, 0, 0, LR_SHARED);
+#else // Lexikos: (L17) Always use small icon for tray.
+	mNIC.hIcon = mCustomIconSmall ? mCustomIconSmall : (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(g_IconTray), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
 #endif
 	UPDATE_TIP_FIELD
 	// If we were called due to an Explorer crash, I don't think it's necessary to call
@@ -569,7 +572,7 @@ void Script::UpdateTrayIcon(bool aForceUpdate)
 		icon = g_IconTray;
 #endif
 	// Use the custom tray icon if the icon is normal (non-paused & non-suspended):
-	mNIC.hIcon = (mCustomIcon && (mIconFrozen || (!g.IsPaused && !g_IsSuspended))) ? mCustomIcon
+	mNIC.hIcon = (mCustomIconSmall && (mIconFrozen || (!g.IsPaused && !g_IsSuspended))) ? mCustomIconSmall // Lexikos: (L17) Always use small icon for tray.
 		: (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(icon), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED for simplicity and performance more than to conserve memory in this case.
 	if (Shell_NotifyIcon(NIM_MODIFY, &mNIC))
 	{
@@ -937,7 +940,7 @@ LineNumberType Script::LoadFromFile(bool aScriptWasNotspecified)
 	if (   !(mPlaceholderLabel = new Label(""))   ) // Not added to linked list since it's never looked up.
 		return LOADING_FAILED;
 
-	// Lexikos: Changed this next section to support lines added for #if (expression).
+	// Lexikos: (L4) Changed this next section to support lines added for #if (expression).
 	// Each #if (expression) is pre-parsed *before* the main script in order for
 	// function library auto-inclusions to be processed correctly.
 
@@ -2695,7 +2698,7 @@ inline ResultType Script::IsDirective(char *aBuf)
 		return CONDITION_TRUE;
 	}
 
-	// Lexikos: Handle #if (expression) directive.
+	// Lexikos: (L4) Handle #if (expression) directive.
 	if (IS_DIRECTIVE_MATCH("#If"))
 	{
 		if (!parameter) // The omission of the parameter indicates that any existing criteria should be turned off.
@@ -2769,7 +2772,7 @@ inline ResultType Script::IsDirective(char *aBuf)
 
 		return CONDITION_TRUE;
 	}
-	// Lexikos: Allow #if timeout to be adjusted.
+	// Lexikos: (L4) Allow #if timeout to be adjusted.
 	if (IS_DIRECTIVE_MATCH("#IfTimeout"))
 	{
 		if (parameter)
@@ -2786,7 +2789,7 @@ inline ResultType Script::IsDirective(char *aBuf)
 			g_HotCriterion = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
 		else // It starts with #IfWin but isn't Active or Exist: Don't alter g_HotCriterion.
 			return CONDITION_FALSE; // Indicate unknown directive since there are currently no other possibilities.
-		g_HotExprIndex = -1;	// Lexikos: For consistency, don't allow mixing of #if and other #ifWin criterion.
+		g_HotExprIndex = -1;	// Lexikos: (L4) For consistency, don't allow mixing of #if and other #ifWin criterion.
 		if (!parameter) // The omission of the parameter indicates that any existing criteria should be turned off.
 		{
 			g_HotCriterion = HOT_NO_CRITERION; // Indicate that no criteria are in effect for subsequent hotkeys.
@@ -3305,7 +3308,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 					// No further action is required for the word "global" by itself.
 					return OK;
 				}
-				// Lexikos: Added assume-static mode. For now, this requires "static" to be placed above local or global variable declarations.
+				// Lexikos: (L8) Added assume-static mode. For now, this requires "static" to be placed above local or global variable declarations.
 				else if (declare_type == VAR_DECLARE_STATIC && mNextLineIsFunctionBody && g.CurrentFunc->mDefaultVarType == VAR_ASSUME_NONE)
 				{
 					g.CurrentFunc->mDefaultVarType = VAR_ASSUME_STATIC;
@@ -3336,7 +3339,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 			}
 			else // Since this isn't the first line of the function's body, mDefaultVarType has aleady been set permanently.
 			{
-				// Lexikos: Changed this section to support VAR_ASSUME_STATIC.
+				// Lexikos: (L8) Changed this section to support VAR_ASSUME_STATIC.
 				// Seems best to flag errors since they might be an indication to the user that something
 				// is being done incorrectly in this function, not to mention being a reminder about what
 				// mode the function is in:
@@ -3364,7 +3367,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 			// and returned above.  But if the declare_type is static, and given that all static variables are
 			// local, inversion is necessary only if the current mode isn't LOCAL:
 			bool is_already_exception, is_exception = ((declare_type == VAR_DECLARE_GLOBAL) != (g.CurrentFunc->mDefaultVarType == VAR_ASSUME_GLOBAL));
-				// Lexikos: Changed above check to support VAR_ASSUME_STATIC - i.e. when declaring a local, it is only an "exception" if the function is assume-global.
+				// Lexikos: (L8) Changed above check to support VAR_ASSUME_STATIC - i.e. when declaring a local, it is only an "exception" if the function is assume-global.
 				/*(declare_type != VAR_DECLARE_STATIC || g.CurrentFunc->mDefaultVarType == VAR_ASSUME_GLOBAL);*/ // Above has ensured that NONE can't be in effect by the time we reach the first static.
 			bool open_brace_was_added, belongs_to_if_or_else_or_loop;
 			VarSizeType var_name_length;
@@ -3403,7 +3406,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 				}
 				if (declare_type == VAR_DECLARE_STATIC)
 					var->AddAttrib(VAR_ATTRIB_STATIC);
-				// Lexikos: Remove VAR_ATTRIB_STATIC, which is set by AddVar if the current function is assume-static.
+				// Lexikos: (L8) Remove VAR_ATTRIB_STATIC, which is set by AddVar if the current function is assume-static.
 				else if (declare_type == VAR_DECLARE_LOCAL && g.CurrentFunc->mDefaultVarType == VAR_ASSUME_STATIC)
 					var->RemoveAttrib(VAR_ATTRIB_STATIC);
 
@@ -5428,7 +5431,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 		line.mAttribute = ATTR_LOOP_NORMAL;
 		break;
 
-	case ACT_WHILE: // Lexikos: ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
+	case ACT_WHILE: // Lexikos: (L4) ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
 		line.mAttribute = ATTR_LOOP_WHILE;
 		break;
 
@@ -5512,7 +5515,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
-	// Lexikos: This case must exist in both self-contained and normal builds.
+	// Lexikos: (L15) This case must exist in both self-contained and normal builds.
 	case ACT_SETFORMAT:
 		if (aArgc < 1)
 			break;
@@ -6054,8 +6057,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 			switch(menu_cmd)
 			{
 			case MENU_CMD_TIP:
-			case MENU_CMD_ICON:
-			case MENU_CMD_NOICON:
+			//case MENU_CMD_ICON: // Lexikos: (L17) Now valid for other menus, used to set menu item icons.
+			//case MENU_CMD_NOICON:
 			case MENU_CMD_MAINWINDOW:
 			case MENU_CMD_NOMAINWINDOW:
 			case MENU_CMD_CLICK:
@@ -6079,7 +6082,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 			case MENU_CMD_STANDARD:
 			case MENU_CMD_NOSTANDARD:
 			case MENU_CMD_DELETEALL:
-			case MENU_CMD_NOICON:
+			//case MENU_CMD_NOICON: // Lexikos: (L17) Parameter #3 is now used to specify a menu item whose icon should be removed.
 			case MENU_CMD_MAINWINDOW:
 			case MENU_CMD_NOMAINWINDOW:
 				if (*new_raw_arg3 || *new_raw_arg4 || *NEW_RAW_ARG5 || *NEW_RAW_ARG6)
@@ -6098,6 +6101,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 			case MENU_CMD_DELETE:
 			case MENU_CMD_TIP:
 			case MENU_CMD_CLICK:
+			case MENU_CMD_NOICON: // Lexikos: See comment in section above.
 				if (   menu_cmd != MENU_CMD_RENAME && (*new_raw_arg4 || *NEW_RAW_ARG5 || *NEW_RAW_ARG6)   )
 					return ScriptError("Parameter #4 and beyond should be omitted in this case.", new_raw_arg4);
 				switch(menu_cmd)
@@ -6106,6 +6110,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 				case MENU_CMD_TIP:
 				case MENU_CMD_DEFAULT:
 				case MENU_CMD_DELETE:
+				case MENU_CMD_NOICON:
 					break;  // i.e. for commands other than the above, do the default below.
 				default:
 					if (!*new_raw_arg3)
@@ -7126,7 +7131,7 @@ Func *Script::FindFunc(char *aFuncName, size_t aFuncNameLength)
 	}
 	else if (!stricmp(func_name, "IsLabel"))
 		bif = BIF_IsLabel;
-	else if (!stricmp(func_name, "IsFunc")) // Lexikos: IsFunc - for use with dynamic function calls.
+	else if (!stricmp(func_name, "IsFunc")) // Lexikos: (L7) IsFunc - for use with dynamic function calls.
 		bif = BIF_IsFunc;
 	else if (!stricmp(func_name, "DllCall"))
 	{
@@ -7808,7 +7813,7 @@ Var *Script::AddVar(char *aVarName, size_t aVarNameLength, int aInsertPos, int a
 	}
 
 	if (aIsLocal == 1 && g.CurrentFunc->mDefaultVarType == VAR_ASSUME_STATIC)
-	{	// Lexikos: Current function is assume-static, so set static attribute.
+	{	// Lexikos: (L8) Current function is assume-static, so set static attribute.
 		//	This will be overwritten (again) if this variable is being explicitly declared "local".
 		the_new_var->AddAttrib(VAR_ATTRIB_STATIC);
 	}
@@ -8172,7 +8177,7 @@ void *Script::GetVarType(char *aVarName)
 	if (!strcmp(lower, "ahkversion")) return BIV_AhkVersion;
 	if (!strcmp(lower, "ahkpath")) return BIV_AhkPath;
 
-	// Lexikos: Added BIV_IsPaused and BIV_IsCritical.
+	// Lexikos: (L4) Added BIV_IsPaused and BIV_IsCritical.
 	if (!strcmp(lower, "ispaused")) return BIV_IsPaused;
 	if (!strcmp(lower, "iscritical")) return BIV_IsCritical;
 
@@ -8587,7 +8592,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 	AttributeType loop_type_file, loop_type_reg, loop_type_read, loop_type_parse;
 	for (Line *line = aStartingLine; line != NULL;)
 	{
-		if (ACT_IS_IF(line->mActionType) || line->mActionType == ACT_LOOP || line->mActionType == ACT_REPEAT || line->mActionType == ACT_WHILE) // Lexikos: Added check for ACT_WHILE.
+		if (ACT_IS_IF(line->mActionType) || line->mActionType == ACT_LOOP || line->mActionType == ACT_REPEAT || line->mActionType == ACT_WHILE) // Lexikos: (L4) Added check for ACT_WHILE.
 		{
 			// ActionType is an IF or a LOOP.
 			line_temp = line->mNextLine;  // line_temp is now this IF's or LOOP's action-line.
@@ -8614,7 +8619,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_file = ATTR_LOOP_UNKNOWN;
 			else if (aLoopTypeFile == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
 				loop_type_file = ATTR_LOOP_NORMAL;
-			else if (aLoopTypeFile == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
+			else if (aLoopTypeFile == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: (L4) ACT_WHILE
 				loop_type_file = ATTR_LOOP_WHILE;
 
 			// The section is the same as above except for registry vs. file loops:
@@ -8625,7 +8630,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_reg = ATTR_LOOP_UNKNOWN;
 			else if (aLoopTypeReg == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
 				loop_type_reg = ATTR_LOOP_NORMAL;
-			else if (aLoopTypeReg == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
+			else if (aLoopTypeReg == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: (L4) ACT_WHILE
 				loop_type_reg = ATTR_LOOP_WHILE;
 
 			// Same as above except for READ-FILE loops:
@@ -8636,7 +8641,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_read = ATTR_LOOP_UNKNOWN;
 			else if (aLoopTypeRead == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
 				loop_type_read = ATTR_LOOP_NORMAL;
-			else if (aLoopTypeRead == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
+			else if (aLoopTypeRead == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: (L4) ACT_WHILE
 				loop_type_read = ATTR_LOOP_WHILE;
 
 			// Same as above except for PARSING loops:
@@ -8647,7 +8652,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_parse = ATTR_LOOP_UNKNOWN;
 			else if (aLoopTypeParse == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
 				loop_type_parse = ATTR_LOOP_NORMAL;
-			else if (aLoopTypeParse == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
+			else if (aLoopTypeParse == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: (L4) ACT_WHILE
 				loop_type_parse = ATTR_LOOP_WHILE;
 
 			// Check if the IF's action-line is something we want to recurse.  UPDATE: Always
@@ -8702,7 +8707,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			// so always continue on to evaluate the IF's ELSE, if present:
 			if (line_temp->mActionType == ACT_ELSE)
 			{
-				if (line->mActionType == ACT_LOOP || line->mActionType == ACT_REPEAT || line->mActionType == ACT_WHILE) // Lexikos: Added check for ACT_WHILE.
+				if (line->mActionType == ACT_LOOP || line->mActionType == ACT_REPEAT || line->mActionType == ACT_WHILE) // Lexikos: (L4) Added check for ACT_WHILE.
 				{
 					 // this can't be our else, so let the caller handle it.
 					if (aMode != ONLY_ONE_LINE)
@@ -8800,7 +8805,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		case ACT_HOTKEY:
 			if (   *line_raw_arg2 && !line->ArgHasDeref(2)
 				&& !line->ArgHasDeref(1) && strnicmp(line_raw_arg1, "IfWin", 5) // v1.0.42: Omit IfWinXX from validation.
-				&& strnicmp(line_raw_arg1, "If", 2)	)	// Lexikos: Also omit If from validation - for #if (expression).
+				&& strnicmp(line_raw_arg1, "If", 2)	)	// Lexikos: (L4) Also omit If from validation - for #if (expression).
 				if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
 					if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
 						return line->PreparseError(ERR_NO_LABEL);
@@ -10025,7 +10030,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 		// line (e.g. control stmts such as IF and LOOP).  Also, don't expand
 		// ACT_ASSIGN because a more efficient way of dereferencing may be possible
 		// in that case:
-		if (line->mActionType != ACT_ASSIGN && line->mActionType != ACT_WHILE) // Lexikos: Exclude ACT_WHILE so A_Index can be set before the expression is evaluated.
+		if (line->mActionType != ACT_ASSIGN && line->mActionType != ACT_WHILE) // Lexikos: (L4) Exclude ACT_WHILE so A_Index can be set before the expression is evaluated.
 		{
 			result = line->ExpandArgs();
 			// As of v1.0.31, ExpandArgs() will also return EARLY_EXIT if a function call inside one of this
@@ -10291,7 +10296,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 
 		case ACT_LOOP:
 		case ACT_REPEAT:
-		case ACT_WHILE: // Lexikos: mAttribute should be ATTR_LOOP_WHILE.
+		case ACT_WHILE: // Lexikos: (L4) mAttribute should be ATTR_LOOP_WHILE.
 		{
 			HKEY root_key_type; // For registry loops, this holds the type of root key, independent of whether it is local or remote.
 			AttributeType attr = line->mAttribute;
@@ -10448,7 +10453,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 					// it saved.  But in any case, changing that now might break existing scripts).
 					result = OK;
 				break;
-			case ATTR_LOOP_WHILE: // Lexikos: ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
+			case ATTR_LOOP_WHILE: // Lexikos: (L4) ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
 				result = line->PerformLoopWhile(apReturnValue, continue_main_loop, jump_to_line);
 				break;
 			}
@@ -11014,7 +11019,7 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 	return if_condition ? CONDITION_TRUE : CONDITION_FALSE;
 }
 
-// Lexikos: Evaluate an expression used to define #if hotkey variant criterion.
+// Lexikos: (L4) Evaluate an expression used to define #if hotkey variant criterion.
 //	This is called by MainWindowProc when it receives an AHK_HOT_IF_EXPR message.
 ResultType Line::EvaluateHotCriterionExpression()
 {
@@ -11706,7 +11711,7 @@ ResultType Line::PerformLoopReadFile(char **apReturnValue, bool &aContinueMainLo
 }
 
 
-// Lexikos: ACT_WHILE
+// Lexikos: (L4) ACT_WHILE
 ResultType Line::PerformLoopWhile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine) /*LEXWHILE*/
 {
 	ResultType result;
@@ -13013,7 +13018,7 @@ __forceinline ResultType Line::Perform() // __forceinline() currently boosts per
 		return FormatTime(ARG2, ARG3);
 
 	case ACT_MENU:
-		return g_script.PerformMenu(FIVE_ARGS);
+		return g_script.PerformMenu(SIX_ARGS); // Lexikos: (L17) Changed from FIVE_ARGS to access previously "reserved" arg (for use by Menu,,Icon).
 
 	case ACT_GUI:
 		return g_script.PerformGui(FOUR_ARGS);

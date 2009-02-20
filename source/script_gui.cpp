@@ -870,7 +870,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 		// Since above didn't return, act upon the enabled/disable:
 		EnableWindow(control.hwnd, guicontrol_cmd == GUICONTROL_CMD_ENABLE ? TRUE : FALSE);
 		
-		// Lexikos: Disabling the focused control seems to have odd side-effects, including preventing GuiEscape from working.
+		// Lexikos: (L13) Disabling the focused control seems to have odd side-effects, including preventing GuiEscape from working.
 		//	The following is an apparent workaround with no apparent side-effects:
 		if (GetForegroundWindow() == gui.mHwnd)
 			SetFocus(gui.mHwnd);
@@ -1312,12 +1312,13 @@ ResultType GuiType::Destroy(GuiIndexType aWindowIndex)
 	//gui.mHwnd = NULL;
 	//gui.mControlCount = 0; // All child windows (controls) are automatically destroyed with parent.
 	HICON icon_eligible_for_destruction = gui.mIconEligibleForDestruction;
+	HICON icon_eligible_for_destruction_small = gui.mIconEligibleForDestructionSmall;
 	free(gui.mControl); // Free the control array, which was previously malloc'd.
 	delete g_gui[aWindowIndex]; // After this, the var "gui" is invalid so should not be referenced, i.e. the next line.
 	g_gui[aWindowIndex] = NULL;
 	--sGuiCount; // This count is maintained to help performance in the main event loop and other places.
 	if (icon_eligible_for_destruction && icon_eligible_for_destruction != g_script.mCustomIcon) // v1.0.37.07.
-		DestroyIconIfUnused(icon_eligible_for_destruction); // Must be done only after "g_gui[aWindowIndex] = NULL".
+		DestroyIconsIfUnused(icon_eligible_for_destruction, icon_eligible_for_destruction_small); // Must be done only after "g_gui[aWindowIndex] = NULL".
 	// For simplicity and performance, any fonts used *solely* by a destroyed window are destroyed
 	// only when the program terminates.  Another reason for this is that sometimes a destroyed window
 	// is soon recreated to use the same fonts it did before.
@@ -1326,7 +1327,7 @@ ResultType GuiType::Destroy(GuiIndexType aWindowIndex)
 
 
 
-void GuiType::DestroyIconIfUnused(HICON ahIcon)
+void GuiType::DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall)
 // Caller has ensured that the GUI window previously using ahIcon has been destroyed prior to calling
 // this function.
 {
@@ -1346,6 +1347,8 @@ void GuiType::DestroyIconIfUnused(HICON ahIcon)
 	// Since above didn't return, this icon is not currently in use by a GUI window.  The caller has
 	// authorized us to destroy it.
 	DestroyIcon(ahIcon);
+	// Lexikos: (L17) Small icon should always also be unused at this point.
+	DestroyIcon(ahIconSmall);
 }
 
 
@@ -1390,14 +1393,15 @@ ResultType GuiType::Create()
 		, mOwner, NULL, g_hInstance, NULL))   )
 		return FAIL;
 
-	HICON main_icon;
+	// Lexikos: (L17) Use separate big/small icons for best results.
+	HICON big_icon, small_icon;
 	if (g_script.mCustomIcon)
 	{
-		main_icon = g_script.mCustomIcon;
-		mIconEligibleForDestruction = main_icon;
+		mIconEligibleForDestruction = big_icon = g_script.mCustomIcon;
+		mIconEligibleForDestructionSmall = small_icon = g_script.mCustomIconSmall; // Should always be non-NULL if mCustomIcon is non-NULL.
 	}
 	else
-		main_icon = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
+		big_icon = small_icon = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
 		// Unlike mCustomIcon, leave mIconEligibleForDestruction NULL because a shared HICON such as one
 		// loaded via LR_SHARED should never be destroyed.
 	// Setting the small icon puts it in the upper left corner of the dialog window.
@@ -1413,8 +1417,8 @@ ResultType GuiType::Create()
 	// 2) It's owned by another GUI window but it has the WS_EX_APPWINDOW style (might force a taskbar button):
 	//    Same effect as in #1.
 	// 3) Possibly other ways.
-	SendMessage(mHwnd, WM_SETICON, ICON_SMALL, (LPARAM)main_icon); // Testing shows that a zero is returned for both;
-	SendMessage(mHwnd, WM_SETICON, ICON_BIG, (LPARAM)main_icon);   // i.e. there is no previous icon to destroy in this case.
+	SendMessage(mHwnd, WM_SETICON, ICON_SMALL, (LPARAM)small_icon); // Testing shows that a zero is returned for both;
+	SendMessage(mHwnd, WM_SETICON, ICON_BIG, (LPARAM)big_icon);   // i.e. there is no previous icon to destroy in this case.
 
 	return OK;
 }

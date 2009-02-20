@@ -113,7 +113,7 @@ char *g_HotWinTitle = ""; // In spite of the above being the primary indicator,
 char *g_HotWinText = "";  // these are initialized for maintainability.
 HotkeyCriterion *g_FirstHotCriterion = NULL, *g_LastHotCriterion = NULL;
 
-// Lexikos: Added global variables for #if (expression).
+// Lexikos: (L4) Added global variables for #if (expression).
 int g_HotExprIndex = -1; // The index of the Line containing the expression defined by the most recent #if (expression) directive.
 Line **g_HotExprLines = NULL; // Array of pointers to expression lines, allocated when needed.
 int g_HotExprLineCount = 0; // Number of expression lines currently present.
@@ -392,7 +392,7 @@ Action g_act[] =
 	, {"Return", 0, 1, 1, {1, 0}}
 	, {"Exit", 0, 1, 1, {1, 0}} // ExitCode
 	, {"Loop", 0, 4, 4, NULL} // Iteration Count or FilePattern or root key name [,subkey name], FileLoopMode, Recurse? (custom validation for these last two)
-	, {"While", 1, 1, 1, {1, 0}} // LoopCondition	// Lexikos: Added g_act entry for ACT_WHILE.
+	, {"While", 1, 1, 1, {1, 0}} // LoopCondition	// Lexikos: (L4) Added g_act entry for ACT_WHILE.
 	, {"Break", 0, 0, 0, NULL}, {"Continue", 0, 0, 0, NULL}
 	, {"{", 0, 0, 0, NULL}, {"}", 0, 0, 0, NULL}
 
@@ -685,7 +685,7 @@ modifier is specified along with it:
 // Custom/fake VKs for use by the mouse hook (supported only in WinNT SP3 and beyond?):
 , {"WheelDown", VK_WHEEL_DOWN}
 , {"WheelUp", VK_WHEEL_UP}
-// Lexikos: Added fake VKs for support for horizontal scrolling in Windows Vista and later.
+// Lexikos: (L4) Added fake VKs for support for horizontal scrolling in Windows Vista and later.
 , {"WheelLeft", VK_WHEEL_LEFT}
 , {"WheelRight", VK_WHEEL_RIGHT}
 

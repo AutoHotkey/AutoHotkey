@@ -611,12 +611,21 @@ ResultType Line::Splash(char *aOptions, char *aSubText, char *aMainText, char *a
 		// Setting the small icon puts it in the upper left corner of the dialog window.
 		// Setting the big icon makes the dialog show up correctly in the Alt-Tab menu (but big seems to
 		// have no effect unless the window is unowned, i.e. it has a button on the task bar).
-		LPARAM main_icon = (LPARAM)(g_script.mCustomIcon ? g_script.mCustomIcon
-			: LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED)); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
+		
+		// Lexikos: (L17) Use separate big/small icons for best results.
+		LPARAM big_icon, small_icon;
+		if (g_script.mCustomIcon)
+		{
+			big_icon = (LPARAM)g_script.mCustomIcon;
+			small_icon = (LPARAM)g_script.mCustomIconSmall; // Should always be non-NULL when mCustomIcon is non-NULL.
+		}
+		else
+			big_icon = small_icon = (LPARAM)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
+
 		if (style & WS_SYSMENU)
-			SendMessage(splash.hwnd, WM_SETICON, ICON_SMALL, main_icon);
+			SendMessage(splash.hwnd, WM_SETICON, ICON_SMALL, small_icon);
 		if (!owned)
-			SendMessage(splash.hwnd, WM_SETICON, ICON_BIG, main_icon);
+			SendMessage(splash.hwnd, WM_SETICON, ICON_BIG, big_icon);
 	}
 
 	// Update client rect in case it was resized due to being too large (above) or in case the OS
@@ -2106,7 +2115,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, char *aOptions, char
 	UINT msg_down, msg_up;
 	WPARAM wparam;
 	bool vk_is_wheel = aVK == VK_WHEEL_UP || aVK == VK_WHEEL_DOWN;
-	// Lexikos: Support horizontal scrolling in Windows Vista and later.
+	// Lexikos: (L4) Support horizontal scrolling in Windows Vista and later.
 	bool vk_is_hwheel = aVK == VK_WHEEL_LEFT || aVK == VK_WHEEL_RIGHT;
 
 	if (vk_is_wheel)
@@ -2135,7 +2144,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, char *aOptions, char
         //if (g_MouseHook)
 		//	wparam |= g_mouse_buttons_logical;
 	}
-	else if (vk_is_hwheel)	// Lexikos: Support horizontal scrolling in Windows Vista and later.
+	else if (vk_is_hwheel)	// Lexikos: (L4) Support horizontal scrolling in Windows Vista and later.
 	{
 		wparam = (aClickCount * ((aVK == VK_WHEEL_LEFT) ? -WHEEL_DELTA : WHEEL_DELTA)) << 16;
 	}
@@ -2179,7 +2188,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, char *aOptions, char
 		PostMessage(control_window, WM_MOUSEWHEEL, wparam, lparam);
 		DoControlDelay;
 	}
-	else if (vk_is_hwheel)	// Lexikos: Support horizontal scrolling in Windows Vista and later.
+	else if (vk_is_hwheel)	// Lexikos: (L4) Support horizontal scrolling in Windows Vista and later.
 	{
 		PostMessage(control_window, WM_MOUSEHWHEEL, wparam, lparam);
 		DoControlDelay;
@@ -5257,10 +5266,56 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		// SendMessage, 1029,,,, %A_ScriptFullPath% - AutoHotkey  ; Same as above but not sent via TRANSLATE.
 		return GetCurrentProcessId(); // Don't use ReplyMessage because then our thread can't reply to itself with this answer.
 
-	case AHK_HOT_IF_EXPR: // Lexikos: HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
+	case AHK_HOT_IF_EXPR: // Lexikos: (L4) HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
 		if ((int)wParam > -1 && (int)wParam < g_HotExprLineCount)
 			return g_HotExprLines[(int)wParam]->EvaluateHotCriterionExpression();
 		return 0;
+
+	case WM_MEASUREITEM: // Lexikos: (L17) Measure menu icon. Not used on Windows Vista or later.
+		if (hWnd == g_hWnd && wParam == 0 && !g_os.IsWinVista())
+		{
+			LPMEASUREITEMSTRUCT measure_item_struct = (LPMEASUREITEMSTRUCT)lParam;
+
+			UserMenuItem *menu_item = g_script.FindMenuItemByID((UINT)measure_item_struct->itemID);
+
+			if (menu_item && menu_item->mIcon)
+			{
+				BOOL size_is_valid = FALSE;
+				ICONINFO icon_info;
+				if (GetIconInfo(menu_item->mIcon, &icon_info))
+				{
+					BITMAP icon_bitmap;
+					if (GetObject(icon_info.hbmColor, sizeof(BITMAP), &icon_bitmap))
+					{
+						// Return size of icon.
+						measure_item_struct->itemWidth = icon_bitmap.bmWidth;
+						measure_item_struct->itemHeight = icon_bitmap.bmHeight;
+						size_is_valid = TRUE;
+					}
+					DeleteObject(icon_info.hbmColor);
+					DeleteObject(icon_info.hbmMask);
+				}
+				return size_is_valid;
+			}
+		}
+		break;
+
+	case WM_DRAWITEM: // Lexikos: (L17) Draw menu icon. Not used on Windows Vista or later.
+		if (hWnd == g_hWnd && wParam == 0 && !g_os.IsWinVista())
+		{
+			LPDRAWITEMSTRUCT draw_item_struct = (LPDRAWITEMSTRUCT)lParam;
+
+			UserMenuItem *menu_item = g_script.FindMenuItemByID((UINT)draw_item_struct->itemID);
+
+			if (menu_item && menu_item->mIcon)
+			{
+				// Draw icon at actual size at requested position.
+				DrawIconEx(draw_item_struct->hDC
+							, draw_item_struct->rcItem.left, draw_item_struct->rcItem.top
+							, menu_item->mIcon, 0, 0, 0, NULL, DI_NORMAL);
+			}
+		}
+		break;
 
 	HANDLE_MENU_LOOP // Cases for WM_ENTERMENULOOP and WM_EXITMENULOOP.
 
@@ -5731,10 +5786,19 @@ BOOL CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
 
 		// Setting the small icon puts it in the upper left corner of the dialog window.
 		// Setting the big icon makes the dialog show up correctly in the Alt-Tab menu.
-		LPARAM main_icon = (LPARAM)(g_script.mCustomIcon ? g_script.mCustomIcon
-			: LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED)); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
-		SendMessage(hWndDlg, WM_SETICON, ICON_SMALL, main_icon);
-		SendMessage(hWndDlg, WM_SETICON, ICON_BIG, main_icon);
+		
+		// Lexikos: (L17) Use separate big/small icons for best results.
+		LPARAM big_icon, small_icon;
+		if (g_script.mCustomIcon)
+		{
+			big_icon = (LPARAM)g_script.mCustomIcon;
+			small_icon = (LPARAM)g_script.mCustomIconSmall; // Should always be non-NULL when mCustomIcon is non-NULL.
+		}
+		else
+			big_icon = small_icon = (LPARAM)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
+
+		SendMessage(hWndDlg, WM_SETICON, ICON_SMALL, small_icon);
+		SendMessage(hWndDlg, WM_SETICON, ICON_BIG, big_icon);
 
 		// For the timeout, use a timer ID that doesn't conflict with MsgBox's IDs (which are the
 		// integers 1 through the max allowed number of msgboxes).  Use +3 vs. +1 for a margin of safety
@@ -11396,7 +11460,7 @@ VarSizeType BIV_TimeIdlePhysical(char *aBuf, char *aVarName)
 }
 
 
-// Lexikos: Added BIV_IsPaused and BIV_IsCritical.
+// Lexikos: (L4) Added BIV_IsPaused and BIV_IsCritical.
 
 VarSizeType BIV_IsPaused(char *aBuf, char *aVarName)
 {
@@ -12350,7 +12414,7 @@ void BIF_InStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 }
 
 
-// Lexikos: Moved to separate function from RegExMatch, for use with callouts.
+// Lexikos: (L14) Moved to separate function from RegExMatch, for use with callouts.
 void RegExSetSubpatternVars(char *haystack, pcre *re, pcre_extra *extra, bool get_positions_not_substrings, Var &output_var, int *offset, int pattern_count, int captured_pattern_count, char *&mem_to_free)
 {
 	// OTHERWISE, CONTINUE ON TO STORE THE SUBSTRINGS THAT MATCHED THE SUBPATTERNS (EVEN IF PCRE_ERROR_NOMATCH).
@@ -12531,7 +12595,7 @@ void *RegExResolveUserCallout(const char *aCalloutParam, int aCalloutParamLength
 	return (void *)callout_func;
 }
 
-struct RegExCalloutData // Lexikos: Used by BIF_RegEx to pass necessary info to RegExCallout.
+struct RegExCalloutData // Lexikos: (L14) Used by BIF_RegEx to pass necessary info to RegExCallout.
 {
 	pcre *re;
 	char *re_text; // original NeedleRegEx
@@ -12690,10 +12754,10 @@ pcre *get_compiled_regex(char *aRegEx, bool &aGetPositionsNotSubstrings, pcre_ex
 //    aGetPositionsNotSubstrings
 //    aExtra
 //    (but it doesn't change ErrorLevel on success, not even if aResultToken!=NULL)
-// Lexikos: aOptionsLength is used by callouts to adjust cb->pattern_position to be relative to beginning of actual user-specified NeedleRegEx instead of string seen by PCRE.
+// Lexikos: (L14) aOptionsLength is used by callouts to adjust cb->pattern_position to be relative to beginning of actual user-specified NeedleRegEx instead of string seen by PCRE.
 {	
 	if (!pcre_callout)
-	{	// Lexikos: Ensure these are initialized, even for ::RegExMatch() (to allow (?C) in window title regexes).
+	{	// Lexikos: (L14) Ensure these are initialized, even for ::RegExMatch() (to allow (?C) in window title regexes).
 		pcre_callout = &RegExCallout;
 		pcre_resolve_user_callout = &RegExResolveUserCallout;
 	}
@@ -12830,7 +12894,7 @@ pcre *get_compiled_regex(char *aRegEx, bool &aGetPositionsNotSubstrings, pcre_ex
 		case 'J': pcre_options |= PCRE_DUPNAMES;       break; //
 		case 'U': pcre_options |= PCRE_UNGREEDY;       break; //
 		case 'X': pcre_options |= PCRE_EXTRA;          break; //
-		case 'C': pcre_options |= PCRE_AUTO_CALLOUT;   break; // Lexikos: PCRE_AUTO_CALLOUT causes callouts to be created with callout_number == 255 before each item in the pattern.
+		case 'C': pcre_options |= PCRE_AUTO_CALLOUT;   break; // Lexikos: (L14) PCRE_AUTO_CALLOUT causes callouts to be created with callout_number == 255 before each item in the pattern.
 		case '\a':pcre_options = (pcre_options & ~PCRE_NEWLINE_BITS) | PCRE_NEWLINE_ANY; break; // v1.0.46.06: alert/bell (i.e. `a) is used for PCRE_NEWLINE_ANY.
 		case '\n':pcre_options = (pcre_options & ~PCRE_NEWLINE_BITS) | PCRE_NEWLINE_LF; break; // See below.
 			// Above option: Could alternatively have called it "LF" rather than or in addition to "`n", but that
@@ -13438,7 +13502,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	int number_of_ints_in_offset = pattern_count * 3; // PCRE uses 3 ints for each (sub)pattern: 2 for offsets and 1 for its internal use.
 	int *offset = (int *)_alloca(number_of_ints_in_offset * sizeof(int)); // _alloca() boosts performance and seems safe because subpattern_count would usually have to be ridiculously high to cause a stack overflow.
 
-	// Lexikos: Currently necessary only to support callouts (?C).
+	// Lexikos: (L14) Currently necessary only to support callouts (?C).
 	//
 	RegExCalloutData callout_data;
 	callout_data.re = re;
@@ -13522,7 +13586,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 		}
 	}
 	
-	// Lexikos: Moved this section into a function to allow it to be used by callouts.
+	// Lexikos: (L14) Moved this section into a function to allow it to be used by callouts.
 	if (pattern_count > 1)
 		RegExSetSubpatternVars(haystack, re, extra, get_positions_not_substrings, output_var, offset, pattern_count, captured_pattern_count, mem_to_free);
 
@@ -13730,7 +13794,7 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 		break;
 	case 8:
 		if (is_integer)
-			*(__int64 *)target = int64_to_write; // Unsigned 64-bit not supported because variables/expressions can't support them.
+			*(__int64 *)target = int64_to_write;
 		else // Double (64-bit).
 			*(double *)target = TokenToDouble(token_to_write);
 		break;
@@ -13760,7 +13824,7 @@ void BIF_IsLabel(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 }
 
 
-void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount) // Lexikos: IsFunc - for use with dynamic function calls.
+void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount) // Lexikos: (L7) IsFunc - for use with dynamic function calls.
 {
 	aResultToken.value_int64 = g_script.FindFunc(TokenToString(*aParam[0], aResultToken.buf)) ? 1 : 0;
 }
@@ -14564,7 +14628,7 @@ void BIF_StatusBar(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	case 'I': // SB_SetIcon()
 		int unused, icon_number;
 		icon_number = (aParamCount < 2) ? 1 : (int)TokenToInt64(*aParam[1]);
-		if (icon_number < 1) // Must be >0 to tell LoadPicture that "icon must be loaded, never a bitmap".
+		if (icon_number == 0) // Must be != 0 to tell LoadPicture that "icon must be loaded, never a bitmap".
 			icon_number = 1;
 		if (hicon = (HICON)LoadPicture(TokenToString(*aParam[0], buf) // Load-time validation has ensured there is at least one parameter.
 			, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON) // Apparently the bar won't scale them for us.

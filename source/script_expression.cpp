@@ -259,7 +259,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 						// called incorrectly by the script, the expression is aborted like it would be for other
 						// syntax errors.
 						if (   !(deref->func = g_script.FindFunc(left_buf, var_name_length)) // Below relies on short-circuit boolean order, with this line being executed first.
-							// Lexikos: Disabled these checks so dynamic function calls may be less strict, in combination with some other modifications.
+							// Lexikos: (L4) Disabled these checks so dynamic function calls may be less strict, in combination with some other modifications.
 							/*|| deref->param_count > deref->func->mParamCount    // param_count was set by the
 							|| deref->param_count < deref->func->mMinParams*/   ) // infix processing code.
 							goto abnormal_end;
@@ -505,7 +505,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 				// instances of this function on the call-stack and yet SYM_VAR to be one of this function's own
 				// locals or formal params because it would have no legitimate origin.
 
-				// Lexikos: Discard surplus parameters for dynamic function calls.
+				// Lexikos: (L4) Discard surplus parameters for dynamic function calls.
 				if (actual_param_count > func.mParamCount)
 					stack_count -= actual_param_count - func.mParamCount;
 
@@ -525,7 +525,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					case PARAM_DEFAULT_STR:   this_formal_param.var->Assign(this_formal_param.default_str);    break;
 					case PARAM_DEFAULT_INT:   this_formal_param.var->Assign(this_formal_param.default_int64);  break;
 					case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
-					// Lexikos: Allow dynamic function calls to pass fewer parameters than are declared.
+					// Lexikos: (L4) Allow dynamic function calls to pass fewer parameters than are declared.
 					case PARAM_DEFAULT_NONE:  this_formal_param.var->Assign(); break;
 					}
 				}
