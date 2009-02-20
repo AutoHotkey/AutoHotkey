@@ -34,7 +34,7 @@ GNU General Public License for more details.
 
 #define NAME_P "AutoHotkey"
 #ifndef NAME_L_REVISION
-#define NAME_L_REVISION ".L17" // Lexikos: (L14) Added .Ln for AutoHotkey_L revision n.
+#define NAME_L_REVISION ".L18" // Lexikos: (L14) Added .Ln for AutoHotkey_L revision n.
 #endif
 #define NAME_VERSION "1.0.47.07" NAME_L_REVISION
 #define NAME_PV NAME_P " v" NAME_VERSION

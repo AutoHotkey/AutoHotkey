@@ -1170,7 +1170,10 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					else if (this_postfix[1].symbol == SYM_ASSIGN // Next operation is ":=".
 						&& stack_count && stack[stack_count-1]->symbol == SYM_VAR // i.e. let the next iteration handle it instead of doing it here.  Further below relies on this having been checked.
 						&& stack[stack_count-1]->var->Type() == VAR_NORMAL) // Don't do clipboard here because: 1) AcceptNewMem() doesn't support it; 2) Could probably use Assign() and then make its result be a newly added mem_count item, but the code complexity doesn't seem worth it given the rarity.
+					{
 						temp_var = stack[stack_count-1]->var;
+						done_and_have_an_output_var = FALSE;
+					}
 					else
 						temp_var = NULL;
 
