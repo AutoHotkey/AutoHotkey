@@ -178,7 +178,7 @@ ResultType Line::PixelGetColor(int aX, int aY, char *aOptions)
 	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
 	output_var.Assign(); // Init to empty string regardless of whether we succeed here.
 
-	if (!(g.CoordMode & COORD_MODE_PIXEL)) // Using relative vs. screen coordinates.
+	if (!(g->CoordMode & COORD_MODE_PIXEL)) // Using relative vs. screen coordinates.
 	{
 		// Convert from relative to absolute (screen) coordinates:
 		RECT rect;
@@ -505,7 +505,7 @@ ResultType Line::Control(char *aCmd, char *aValue, char *aControl, char *aTitle,
 		// CB_SHOWDROPDOWN: Although the return value (dwResult) is always TRUE, SendMessageTimeout()
 		// will return failure if it times out:
 		if (!SendMessageTimeout(control_window, CB_SHOWDROPDOWN
-			, (WPARAM)(control_cmd == CONTROL_CMD_SHOWDROPDOWN ? TRUE : FALSE)
+			, (WPARAM)(control_cmd == CONTROL_CMD_SHOWDROPDOWN)
 			, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			return OK;  // Let ErrorLevel tell the story.
 		break;
@@ -780,10 +780,10 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 			, SMTO_ABORTIFHUNG, 2000, &length)
 			|| length == CB_ERR) // Probably impossible given the way it was called above.  Also, CB_ERR == LB_ERR. Relies on short-circuit boolean order.
 		{
-			output_var.Close(); // In case it's the clipboard.
+			output_var.Close();
 			return output_var.Assign(); // Let ErrorLevel tell the story.
 		}
-		output_var.Close(); // In case it's the clipboard.
+		output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 		output_var.Length() = length;  // Update to actual vs. estimated length.
 		break;
 
@@ -846,7 +846,7 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 			// Above: In this case, seems better to use \n rather than pipe as default delimiter in case
 			// the listbox/combobox contains any real pipes.
 		}
-		output_var.Close(); // In case it's the clipboard.
+		output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 		output_var.Length() = (VarSizeType)length;  // Update it to the actual length, which can vary from the estimate.
 		break;
 
@@ -1177,7 +1177,10 @@ ResultType Line::FileSelectFolder(char *aRootDir, char *aOptions, char *aGreetin
 	bi.lpszTitle = greeting;
 
 	DWORD options = *aOptions ? ATOI(aOptions) : FSF_ALLOW_CREATE;
-	bi.ulFlags = 0x0040 | ((options & FSF_ALLOW_CREATE) ? 0 : 0x200) | ((options & (DWORD)FSF_EDITBOX) ? BIF_EDITBOX : 0);
+	bi.ulFlags =
+		  ((options & FSF_NONEWDIALOG)    ? 0           : BIF_NEWDIALOGSTYLE) // v1.0.48: Added to support BartPE/WinPE.
+		| ((options & FSF_ALLOW_CREATE)   ? 0           : BIF_NONEWFOLDERBUTTON)
+		| ((options & FSF_EDITBOX)        ? BIF_EDITBOX : 0);
 
 	char Result[2048];
 	bi.pszDisplayName = Result;  // This will hold the user's choice.
@@ -1208,9 +1211,9 @@ ResultType Line::FileSelectFolder(char *aRootDir, char *aOptions, char *aGreetin
 ResultType Line::FileGetShortcut(char *aShortcutFile) // Credited to Holger <Holger.Kotsch at GMX de>.
 {
 	Var *output_var_target = ARGVAR2; // These might be omitted in the parameter list, so it's okay if 
-	Var *output_var_dir = ARGVAR3;    // they resolve to NULL.
-	Var *output_var_arg = ARGVAR4;
-	Var *output_var_desc = ARGVAR5;
+	Var *output_var_dir = ARGVAR3;    // they resolve to NULL.  Also, load-time validation has ensured
+	Var *output_var_arg = ARGVAR4;    // that these are valid output variables (e.g. not built-in vars).
+	Var *output_var_desc = ARGVAR5;   // Load-time validation has ensured that these are valid output variables (e.g. not built-in vars).
 	Var *output_var_icon = ARGVAR6;
 	Var *output_var_icon_idx = ARGVAR7;
 	Var *output_var_show_state = ARGVAR8;
@@ -1493,6 +1496,16 @@ bool Line::Util_CopyDir(const char *szInputSource, const char *szInputDest, bool
 	//FileOp.fAnyOperationsAborted	= FALSE;
 	//FileOp.hwnd					= NULL;
 
+	// If the source directory contains any saved webpages consisting of a SiteName.htm file and a
+	// corresponding directory named SiteName_files, the following may indicate an error even when the
+	// copy is successful. Under Windows XP at least, the return value is 7 under these conditions,
+	// which according to WinError.h is "ERROR_ARENA_TRASHED: The storage control blocks were destroyed."
+	// However, since this error might occur under a variety of circumstances, it probably wouldn't be
+	// proper to consider it a non-error.
+	// I also checked GetLastError() after calling SHFileOperation(), but it does not appear to be
+	// valid/useful in this case (MSDN mentions this fact but isn't clear about it).
+	// The issue appears to affect only FileCopyDir, not FileMoveDir or FileRemoveDir.  It also seems
+	// unlikely to affect FileCopy/FileMove because they never copy directories.
 	return !SHFileOperation(&FileOp);
 }
 

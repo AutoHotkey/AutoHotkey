@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -24,7 +24,7 @@ GNU General Public License for more details.
 
 ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char *aParam4)
 {
-	int window_index = g.GuiDefaultWindowIndex; // Which window to operate upon.  Initialized to thread's default.
+	int window_index = g->GuiDefaultWindowIndex; // Which window to operate upon.  Initialized to thread's default.
 	char *options; // This will contain something that is meaningful only when gui_command == GUI_CMD_OPTIONS.
 	GuiCommands gui_command = Line::ConvertGuiCommand(aCommand, &window_index, &options);
 	if (gui_command == GUI_CMD_INVALID)
@@ -41,11 +41,11 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 		return GuiType::Destroy(window_index);
 
 	case GUI_CMD_DEFAULT:
-		// Change the "default" member, not g.GuiWindowIndex because that contains the original
+		// Change the "default" member, not g->GuiWindowIndex because that contains the original
 		// window number reponsible for launching this thread, which should not be changed because it is
 		// used to produce the contents of A_Gui.  Also, it's okay if the specify window index doesn't
 		// currently exist.
-		g.GuiDefaultWindowIndex = window_index;
+		g->GuiDefaultWindowIndex = window_index;
 		return OK;
 	}
 
@@ -73,7 +73,7 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 		case GUI_CMD_OPTIONS:
 			if (!stricmp(options, "+LastFoundExist"))
 			{
-				g.hWndLastUsed = NULL;
+				g->hWndLastUsed = NULL;
 				return OK;
 			}
 			break;
@@ -117,11 +117,11 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 	if (gui_command == GUI_CMD_OPTIONS)
 	{
 		if (set_last_found_window)
-			g.hWndLastUsed = gui.mHwnd;
+			g->hWndLastUsed = gui.mHwnd;
 		// Fix for v1.0.35.05: Must do the following only if gui_command==GUI_CMD_OPTIONS, otherwise
 		// the own_dialogs setting will get reset during other commands such as "Gui Show", "Gui Add"
 		if (own_dialogs != TOGGLE_INVALID) // v1.0.35.06: Plus or minus "OwnDialogs" was present rather than being entirely absent.
-			g.DialogOwnerIndex = (own_dialogs == TOGGLED_ON) ? window_index : MAX_GUI_WINDOWS; // Reset to out-of-bounds when "-OwnDialogs" is present.
+			g->DialogOwnerIndex = (own_dialogs == TOGGLED_ON) ? window_index : MAX_GUI_WINDOWS; // Reset to out-of-bounds when "-OwnDialogs" is present.
 		return OK;
 	}
 
@@ -315,7 +315,7 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 {
 	char *options; // This will contain something that is meaningful only when gui_command == GUICONTROL_CMD_OPTIONS.
-	int window_index = g.GuiDefaultWindowIndex; // Which window to operate upon.  Initialized to thread's default.
+	int window_index = g->GuiDefaultWindowIndex; // Which window to operate upon.  Initialized to thread's default.
 	GuiControlCmds guicontrol_cmd = Line::ConvertGuiControlCmd(aCommand, &window_index, &options);
 	if (guicontrol_cmd == GUICONTROL_CMD_INVALID)
 		// This is caught at load-time 99% of the time and can only occur here if the sub-command name
@@ -868,7 +868,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 				// is not this control's: Do not disable or re-enable the control in this case.
 			return OK;
 		// Since above didn't return, act upon the enabled/disable:
-		EnableWindow(control.hwnd, guicontrol_cmd == GUICONTROL_CMD_ENABLE ? TRUE : FALSE);
+		EnableWindow(control.hwnd, guicontrol_cmd == GUICONTROL_CMD_ENABLE);
 		if (control.type == GUI_CONTROL_TAB) // This control is a tab control.
 			// Update the control so that its current tab's controls will all be enabled or disabled (now
 			// that the tab control itself has just been enabled or disabled):
@@ -1076,7 +1076,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 {
 	Var &output_var = *OUTPUT_VAR;
-	int window_index = g.GuiDefaultWindowIndex; // Which window to operate upon.  Initialized to thread's default.
+	int window_index = g->GuiDefaultWindowIndex; // Which window to operate upon.  Initialized to thread's default.
 	GuiControlGetCmds guicontrolget_cmd = Line::ConvertGuiControlGetCmd(aCommand, &window_index);
 	if (guicontrolget_cmd == GUICONTROLGET_CMD_INVALID)
 	{
@@ -6198,7 +6198,7 @@ ResultType GuiType::Submit(bool aHideIt)
 				// for multiple selections is left intact.
 				if (selection_number == -1)
 					selection_number = 0;
-				// Convert explicitly to decimal so that g.FormatIntAsHex is not obeyed.
+				// Convert explicitly to decimal so that g->FormatIntAsHex is not obeyed.
 				// This is so that this result matches the decimal format tradition set by
 				// the "1" and "0" strings normally used for radios and checkboxes:
 				_itoa(selection_number, temp, 10); // selection_number can be legitimately zero.
@@ -6418,11 +6418,11 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 			length = SendMessage(aControl.hwnd, CB_GETLBTEXT, (WPARAM)index, (LPARAM)aOutputVar.Contents());
 			if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
 			{
-				aOutputVar.Close(); // In case it's the clipboard.
+				aOutputVar.Close();
 				return aOutputVar.Assign();
 			}
 			aOutputVar.Length() = (VarSizeType)length;  // Update it to the actual length, which can vary from the estimate.
-			return aOutputVar.Close(); // In case it's the clipboard.
+			return aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 
 		case GUI_CONTROL_LISTBOX:
 			if (GetWindowLong(aControl.hwnd, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
@@ -6531,12 +6531,12 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 				length = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)index, (LPARAM)aOutputVar.Contents());
 				if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
 				{
-					aOutputVar.Close(); // In case it's the clipboard.
+					aOutputVar.Close();
 					return aOutputVar.Assign();
 				}
 			}
 			aOutputVar.Length() = (VarSizeType)length;  // Update it to the actual length, which can vary from the estimate.
-			return aOutputVar.Close(); // In case it's the clipboard.
+			return aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 
 		case GUI_CONTROL_TAB:
 			index = TabCtrl_GetCurSel(aControl.hwnd); // Get index of currently selected item.
@@ -6597,7 +6597,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 		StrReplace(aOutputVar.Contents(), "\r\n", "\n", SCS_SENSITIVE);
 		aOutputVar.Length() = (VarSizeType)strlen(aOutputVar.Contents());
 	}
-	return aOutputVar.Close();  // In case it's the clipboard.
+	return aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 }
 
 
@@ -6633,7 +6633,7 @@ GuiIndexType GuiType::FindControl(char *aControlID)
 			if (mControl[u].output_var == var)
 				return u;  // Match found.
 	}
-	if (g.CurrentFunc // v1.0.46.15: Since above failed to match: if we're in a function (which is checked for performance reasons), search for a static or ByRef-that-points-to-a-global-or-static because both should be supported.
+	if (g->CurrentFunc // v1.0.46.15: Since above failed to match: if we're in a function (which is checked for performance reasons), search for a static or ByRef-that-points-to-a-global-or-static because both should be supported.
 		&& (var = g_script.FindVar(aControlID, 0, NULL, ALWAYS_USE_LOCAL)))
 	{
 		// No need to do "var = var->ResolveAlias()" because the line above never finds locals, only globals.
@@ -6939,13 +6939,13 @@ int GuiType::FindFont(FontType &aFont)
 LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 {
 	// If a message pump other than our own is running -- such as that of a dialog like MsgBox -- it will
-	// dispatch messages directly here.  This is detected by means of g.CalledByIsDialogMessageOrDispatch==false.
+	// dispatch messages directly here.  This is detected by means of g->CalledByIsDialogMessageOrDispatch==false.
 	// Such messages need to be checked here because MsgSleep hasn't seen the message and thus hasn't
-	// done the check. The g.CalledByIsDialogMessageOrDispatch method relies on the fact that we never call
+	// done the check. The g->CalledByIsDialogMessageOrDispatch method relies on the fact that we never call
 	// MsgSleep here for the types of messages dispatched from MsgSleep, which seems true.  Also, if
-	// we do lauch a monitor thread here via MsgMonitor, that means g.CalledByIsDialogMessageOrDispatch==false.
+	// we do lauch a monitor thread here via MsgMonitor, that means g->CalledByIsDialogMessageOrDispatch==false.
 	// Therefore, any calls to MsgSleep made by the new thread can't corrupt our caller's settings of
-	// g.CalledByIsDialogMessageOrDispatch because in that case, our caller isn't MsgSleep's IsDialog/Dispatch.
+	// g->CalledByIsDialogMessageOrDispatch because in that case, our caller isn't MsgSleep's IsDialog/Dispatch.
 	// As an added precaution against the complexity of these message issues (only one of several such scenarios
 	// is described above), CalledByIsDialogMessageOrDispatch is put into the g-struct rather than being
 	// a normal global.  That way, a thread's calls to MsgSleep can't interfere with the value of
@@ -6953,10 +6953,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	// unnecessary, it adds maintainability.
 	LRESULT msg_reply;
 	if (g_MsgMonitorCount // Count is checked here to avoid function-call overhead.
-		&& (!g.CalledByIsDialogMessageOrDispatch || g.CalledByIsDialogMessageOrDispatchMsg != iMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
+		&& (!g->CalledByIsDialogMessageOrDispatch || g->CalledByIsDialogMessageOrDispatchMsg != iMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
 		&& MsgMonitor(hWnd, iMsg, wParam, lParam, NULL, msg_reply))
 		return msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
-	g.CalledByIsDialogMessageOrDispatch = false;
+	g->CalledByIsDialogMessageOrDispatch = false;
 	// Fixed for v1.0.40.01: The above line was added to resolve a case where our caller did make the value
 	// true but the message it sent us results in a recursive call to us (such as when the user resizes a
 	// window by dragging its borders: that apparently starts a loop in DefDlgProc that calls this
@@ -7941,8 +7941,26 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// And in any case, pass it on to DefDlgProc() in case it does any extra cleanup:
 		break;
 
-	// Cases for WM_ENTERMENULOOP and WM_EXITMENULOOP:
-	HANDLE_MENU_LOOP
+	// For WM_ENTERMENULOOP/WM_EXITMENULOOP, there is similar code in MainWindowProc(), so maintain them together.
+	// WM_ENTERMENULOOP: One of the MENU BAR menus has been displayed, and then we know the user is is still in
+	// the menu bar, even moving to different menus and/or menu items, until WM_EXITMENULOOP is received.
+	// Note: It seems that when window's menu bar is being displayed/navigated by the user, our thread
+	// is tied up in a message loop other than our own.  In other words, it's very similar to the
+	// TrackPopupMenuEx() call used to handle the tray menu, which is why g_MenuIsVisible can be used
+	// for both types of menus to indicate to MainWindowProc() that timed subroutines should not be
+	// checked or allowed to launch during such times.  Also, "break" is used rather than "return 0"
+	// to let DefWindowProc()/DefaultDlgProc() take whatever action it needs to do for these.
+	// UPDATE: The value of g_MenuIsVisible is checked before changing it because it might already be
+	// set to MENU_TYPE_POPUP (apparently, TrackPopupMenuEx sometimes/always generates WM_ENTERMENULOOP).
+	// BAR vs. POPUP currently doesn't matter (as long as its non-zero); thus, the above is done for
+	// maintainability.
+	case WM_ENTERMENULOOP:
+		if (!g_MenuIsVisible) // See comments above.
+			g_MenuIsVisible = MENU_TYPE_BAR;
+		break;
+	case WM_EXITMENULOOP:
+		g_MenuIsVisible = MENU_TYPE_NONE; // See comments above.
+		break;
 
 	} // switch()
 
@@ -8338,6 +8356,7 @@ char *GuiType::HotkeyToText(WORD aHotkey, char *aBuf)
 		}
 	}
 	// Since above didn't return, use a simple lookup on VK, since it gives preference to non-extended keys.
+
 	// KNOWN ISSUE: Someone pointed out that the following will typically produce ^A instead of ^a, which will
 	// produce an unwanted shift keystroke if for some reason the script uses the Send command to send the hotkey.
 	// However, for the following reasons, it seems best not to try to "fix" it:
@@ -8350,12 +8369,20 @@ char *GuiType::HotkeyToText(WORD aHotkey, char *aBuf)
 	// 4) Using the Send command to send the hotkey seems very rare; the script would normally Gosub the hotkey's
 	//    subroutine instead.
 	VKtoKeyName(vk, 0, cp, 100);
-	// The above call might be produce an unknown key-name via GetKeyName().  Since it seems so rare and
-	// the exact string to be returned (e.g. SC vs. VK) is uncertain/debatable: For now, it seems best to
-	// leave it as its native-language name rather than attempting to convert it to an SC or VK that
-	// can be compatible with GetKeyState or the Hotkey command:
-	//if (!TextToVK(cp))
-	//	sprintf(cp, "vk%02X", vk);
+
+	// v1.0.48: The above calls GetKeyName(), which calls GetKeyNameText(), which produces the character's
+	// name rather than the character iself if the VK is a dead key (e.g. Zircumflex rather than ^ in the
+	// German keyboard layout).  Since such names are not currently supported by commands like
+	// Hotkey/GetKeyState/Send, try another method to convert it.  Testing shows that MapVirtualKey() produces
+	// the correct character, at least for dead keys in the German keyboard layout.
+	if (*cp  // cp can be blank when the user has pressed only some modifiers so far, such as Ctrl+Alt.
+		&& !TextToVK(cp)) // Check if it would be a valid hotkey name.  See comment-block above.
+	{
+		if (*cp = (char)MapVirtualKey(vk, 2)) // It is not necessary to call the Ex() version of MapVirtualKey because this hotkey control is one of our own, so its language/layout should be the same as this thread's
+			cp[1] = '\0'; // It seems unlikely that TextToVK() won't find a reverse mapping for the character found above, so that isn't checked. This whole situation is rare anyway because it only occurs for dead keys.
+		else // Might never happen, but here for completeness.
+			sprintf(cp, "vk%02X", vk); // If this weren't done, arguably the name that was just in cp prior to MapVirtualKey() should be put back in there (or never taken out in the first place).
+	}
 	return aBuf;
 }
 

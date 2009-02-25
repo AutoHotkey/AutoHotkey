@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -33,7 +33,7 @@ GNU General Public License for more details.
 #endif
 
 #define NAME_P "AutoHotkey"
-#define NAME_VERSION "1.0.47.06"
+#define NAME_VERSION "1.0.48.00"
 #define NAME_PV NAME_P " v" NAME_VERSION
 
 // Window class names: Changing these may result in new versions not being able to detect any old instances
@@ -195,7 +195,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				Var *var;         // for SYM_VAR
 				char *marker;     // for SYM_STRING and SYM_OPERAND.
 			};
-			char *buf; // This doesn't increase the total size of the struct. It's used by built-in functions and perhaps other misc. purposes.
+			char *buf; // Due to the outermost union, this doesn't increase the total size of the struct. It's used by SYM_FUNC (helps built-in functions), SYM_DYNAMIC, SYM_OPERAND, and perhaps other misc. purposes.
 		};  
 	};
 	// Note that marker's str-length should not be stored in this struct, even though it might be readily
@@ -208,6 +208,9 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	// which is the default alignment (for performance reasons) in any struct that contains 8-byte members
 	// such as double and __int64.
 };
+#define MAX_TOKENS 512 // Max number of operators/operands.  Seems enough to handle anything realistic, while conserving call-stack space.
+#define STACK_PUSH(token_ptr) stack[stack_count++] = token_ptr
+#define STACK_POP stack[--stack_count]  // To be used as the r-value for an assignment.
 
 // But the array that goes with these actions is in globaldata.cpp because
 // otherwise it would be a little cumbersome to declare the extern version
@@ -221,7 +224,8 @@ enum enum_act {
 , ACT_ASSIGN_FIRST = ACT_ASSIGN, ACT_ASSIGN_LAST = ACT_DIV
 , ACT_REPEAT // Never parsed directly, only provided as a translation target for the old command (see other notes).
 , ACT_ELSE   // Parsed at a lower level than most commands to support same-line ELSE-actions (e.g. "else if").
-, ACT_IFBETWEEN, ACT_IFNOTBETWEEN, ACT_IFIN, ACT_IFNOTIN, ACT_IFCONTAINS, ACT_IFNOTCONTAINS, ACT_IFIS, ACT_IFISNOT
+, ACT_IFIN, ACT_IFNOTIN, ACT_IFCONTAINS, ACT_IFNOTCONTAINS, ACT_IFIS, ACT_IFISNOT
+, ACT_IFBETWEEN, ACT_IFNOTBETWEEN
 , ACT_IFEXPR  // i.e. if (expr)
  // *** *** *** KEEP ALL OLD-STYLE/AUTOIT V2 IFs AFTER THIS (v1.0.20 bug fix). *** *** ***
  , ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION
@@ -230,12 +234,13 @@ enum enum_act {
  // and it relies upon the fact that ACT_IFEQUAL is first in the series and ACT_IFLESSOREQUAL last.
 , ACT_IFEQUAL = ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION, ACT_IFNOTEQUAL, ACT_IFGREATER, ACT_IFGREATEROREQUAL
 , ACT_IFLESS, ACT_IFLESSOREQUAL
+, ACT_FIRST_OPTIMIZED_IF = ACT_IFBETWEEN, ACT_LAST_OPTIMIZED_IF = ACT_IFLESSOREQUAL
 , ACT_FIRST_COMMAND // i.e the above aren't considered commands for parsing/searching purposes.
 , ACT_IFWINEXIST = ACT_FIRST_COMMAND
 , ACT_IFWINNOTEXIST, ACT_IFWINACTIVE, ACT_IFWINNOTACTIVE
 , ACT_IFINSTRING, ACT_IFNOTINSTRING
 , ACT_IFEXIST, ACT_IFNOTEXIST, ACT_IFMSGBOX
-, ACT_FIRST_IF = ACT_IFBETWEEN, ACT_LAST_IF = ACT_IFMSGBOX  // Keep this range updated with any new IFs that are added.
+, ACT_FIRST_IF = ACT_IFIN, ACT_LAST_IF = ACT_IFMSGBOX  // Keep this range updated with any new IFs that are added.
 , ACT_MSGBOX, ACT_INPUTBOX, ACT_SPLASHTEXTON, ACT_SPLASHTEXTOFF, ACT_PROGRESS, ACT_SPLASHIMAGE
 , ACT_TOOLTIP, ACT_TRAYTIP, ACT_INPUT
 , ACT_TRANSFORM, ACT_STRINGLEFT, ACT_STRINGRIGHT, ACT_STRINGMID
@@ -254,7 +259,7 @@ enum enum_act {
 , ACT_CLIPWAIT, ACT_KEYWAIT
 , ACT_SLEEP, ACT_RANDOM
 , ACT_GOTO, ACT_GOSUB, ACT_ONEXIT, ACT_HOTKEY, ACT_SETTIMER, ACT_CRITICAL, ACT_THREAD, ACT_RETURN, ACT_EXIT
-, ACT_LOOP, ACT_BREAK, ACT_CONTINUE
+, ACT_LOOP, ACT_WHILE, ACT_BREAK, ACT_CONTINUE // v1.0.48: Lexikos: Added ACT_WHILE.
 , ACT_BLOCK_BEGIN, ACT_BLOCK_END
 , ACT_WINACTIVATE, ACT_WINACTIVATEBOTTOM
 , ACT_WINWAIT, ACT_WINWAITCLOSE, ACT_WINWAITACTIVE, ACT_WINWAITNOTACTIVE
@@ -315,9 +320,10 @@ enum enum_act_old {
 #define ACT_IS_ALWAYS_ALLOWED(ActionType) (ActionType == ACT_EXITAPP || ActionType == ACT_PAUSE \
 	|| ActionType == ACT_EDIT || ActionType == ACT_RELOAD || ActionType == ACT_KEYHISTORY \
 	|| ActionType == ACT_LISTLINES || ActionType == ACT_LISTVARS || ActionType == ACT_LISTHOTKEYS)
-#define ACT_IS_ASSIGN(ActionType) (ActionType >= ACT_ASSIGN_FIRST && ActionType <= ACT_ASSIGN_LAST)
+#define ACT_IS_ASSIGN(ActionType) (ActionType <= ACT_ASSIGN_LAST && ActionType >= ACT_ASSIGN_FIRST) // Ordered for short-circuit performance.
 #define ACT_IS_IF(ActionType) (ActionType >= ACT_FIRST_IF && ActionType <= ACT_LAST_IF)
-#define ACT_IS_IF_OR_ELSE_OR_LOOP(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE || ActionType == ACT_LOOP)
+#define ACT_IS_IF_OR_ELSE_OR_LOOP(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
+	|| ActionType == ACT_LOOP || ActionType == ACT_WHILE) // Lexikos: Added check for ACT_WHILE.
 #define ACT_IS_IF_OLD(ActionType, OldActionType) (ActionType >= ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION && ActionType <= ACT_LAST_IF) \
 	&& (ActionType < ACT_IFEQUAL || ActionType > ACT_IFLESSOREQUAL || (OldActionType >= OLD_IFEQUAL && OldActionType <= OLD_IFLESSOREQUAL))
 	// All the checks above must be done so that cmds such as IfMsgBox (which are both "old" and "new")
@@ -335,7 +341,7 @@ enum enum_act_old {
 // that value is used to indicate failure by DialogBox():
 #define AHK_TIMEOUT -2
 // And these to prevent mutual dependency problem between window.h and globaldata.h:
-#define MAX_MSGBOXES 7
+#define MAX_MSGBOXES 7 // Probably best not to change this because it's used by OurTimers to set the timer IDs, which should probably be kept the same for backward compatibility.
 #define MAX_INPUTBOXES 4
 #define MAX_PROGRESS_WINDOWS 10  // Allow a lot for downloads and such.
 #define MAX_PROGRESS_WINDOWS_STR "10" // Keep this in sync with above.
@@ -357,10 +363,11 @@ enum enum_act_old {
 #define MAX_TOOLTIPS_STR "20"   // Keep this in sync with above.
 #define MAX_FILEDIALOGS 4
 #define MAX_FOLDERDIALOGS 4
-#define MAX_NUMBER_LENGTH 20
-#define MAX_NUMBER_SIZE (MAX_NUMBER_LENGTH + 1)
-// Above is the maximum length of a 64-bit number when expressed as decimal or hex string.
-// e.g. -9223372036854775808 or (unsigned) 18446744073709551616
+
+#define MAX_NUMBER_LENGTH 255                   // Large enough to allow custom zero or space-padding via %10.2f, etc.
+#define MAX_NUMBER_SIZE (MAX_NUMBER_LENGTH + 1) // But not too large because some things might rely on this being fairly small.
+#define MAX_INTEGER_LENGTH 20                     // Max length of a 64-bit number when expressed as decimal or
+#define MAX_INTEGER_SIZE (MAX_INTEGER_LENGTH + 1) // hex string; e.g. -9223372036854775808 or (unsigned) 18446744073709551616 or (hex) -0xFFFFFFFFFFFFFFFF.
 
 // Hot-strings:
 // memmove() and proper detection of long hotstrings rely on buf being at least this large:
@@ -375,7 +382,7 @@ typedef UCHAR HookType;
 #define HOOK_MOUSE 0x02
 #define HOOK_FAIL  0xFF
 
-#define EXTERN_G extern global_struct g
+#define EXTERN_G extern global_struct *g
 #define EXTERN_OSVER extern OS_Version g_os
 #define EXTERN_CLIPBOARD extern Clipboard g_clip
 #define EXTERN_SCRIPT extern Script g_script
@@ -425,7 +432,7 @@ typedef UCHAR HookType;
 #define LONG_OPERATION_UPDATE \
 {\
 	tick_now = GetTickCount();\
-	if (tick_now - g_script.mLastPeekTime > g.PeekFrequency)\
+	if (tick_now - g_script.mLastPeekTime > ::g->PeekFrequency)\
 	{\
 		if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))\
 			MsgSleep(-1);\
@@ -438,7 +445,7 @@ typedef UCHAR HookType;
 #define LONG_OPERATION_UPDATE_FOR_SENDKEYS \
 {\
 	tick_now = GetTickCount();\
-	if (tick_now - g_script.mLastPeekTime > g.PeekFrequency)\
+	if (tick_now - g_script.mLastPeekTime > ::g->PeekFrequency)\
 	{\
 		if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))\
 			SLEEP_WITHOUT_INTERRUPTION(-1) \
@@ -536,8 +543,8 @@ struct global_struct
 	GuiIndexType GuiWindowIndex, GuiControlIndex; // The GUI window index and control index that launched this thread.
 	GuiIndexType GuiDefaultWindowIndex; // This thread's default GUI window, used except when specified "Gui, 2:Add, ..."
 	GuiIndexType DialogOwnerIndex; // This thread's GUI owner, if any. Stored as Index vs. HWND to insulate against the case where a GUI window has been destroyed and recreated with a new HWND.
-	#define THREAD_DIALOG_OWNER ((g.DialogOwnerIndex < MAX_GUI_WINDOWS && g_gui[g.DialogOwnerIndex]) \
-		? g_gui[g.DialogOwnerIndex]->mHwnd : NULL) // Above line relies on short-circuit eval. oder.
+	#define THREAD_DIALOG_OWNER ((::g->DialogOwnerIndex < MAX_GUI_WINDOWS && g_gui[::g->DialogOwnerIndex]) \
+	? g_gui[::g->DialogOwnerIndex]->mHwnd : NULL) // Above line relies on short-circuit eval. oder.
 	int WinDelay;  // negative values may be used as special flags.
 	int ControlDelay; // negative values may be used as special flags.
 	int KeyDelay;     //
@@ -557,6 +564,8 @@ struct global_struct
 	// All these one-byte members are kept adjacent to make the struct smaller, which helps conserve stack space:
 	SendModes SendMode;
 	DWORD PeekFrequency; // DWORD vs. UCHAR might improve performance a little since it's checked so often.
+	DWORD ThreadStartTime;
+	int UninterruptibleDuration; // Must be int to preserve negative values found in g_script.mUninterruptibleTime.
 	DWORD CalledByIsDialogMessageOrDispatchMsg; // Detects that fact that some messages (like WM_KEYDOWN->WM_NOTIFY for UpDown controls) are translated to different message numbers by IsDialogMessage (and maybe Dispatch too).
 	bool CalledByIsDialogMessageOrDispatch; // Helps avoid launching a monitor function twice for the same message.  This would probably be okay if it were a normal global rather than in the g-struct, but due to messaging complexity, this lends peace of mind and robustness.
 	bool TitleFindFast; // Whether to use the fast mode of searching window text, or the more thorough slow mode.
@@ -572,8 +581,18 @@ struct global_struct
 	bool AutoTrim;
 	bool FormatIntAsHex;
 	bool MsgBoxTimedOut; // Doesn't require initialization.
-	bool IsPaused, UnderlyingThreadIsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
+	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
 };
+
+inline void global_maximize_interruptibility(global_struct &g)
+{
+	g.AllowThreadToBeInterrupted = true;
+	g.UninterruptibleDuration = 0; // 0 means uninterruptibility times out instantly.  Some callers may want this so that this "g" can be used to launch other threads (e.g. threadless callbacks) using 0 as their default.
+	g.ThreadIsCritical = false;
+	g.AllowTimers = true;
+	#define PRIORITY_MINIMUM INT_MIN
+	g.Priority = PRIORITY_MINIMUM; // Ensure minimum priority so that it can always be interrupted.
+}
 
 inline void global_clear_state(global_struct &g)
 // Reset those values that represent the condition or state created by previously executed commands
@@ -586,7 +605,6 @@ inline void global_clear_state(global_struct &g)
 	//g.hWndToRestore = NULL;
 	g.MsgBoxResult = 0;
 	g.IsPaused = false;
-	g.UnderlyingThreadIsPaused = false;
 	g.UninterruptedLineCount = 0;
 	g.DialogOwnerIndex = MAX_GUI_WINDOWS; // Initialized to out-of-bounds.
 	g.CalledByIsDialogMessageOrDispatch = false; // CalledByIsDialogMessageOrDispatchMsg doesn't need to be cleared because it's value is only considered relevant when CalledByIsDialogMessageOrDispatch==true.
@@ -622,9 +640,9 @@ inline void global_init(global_struct &g)
 	#define DEFAULT_PEEK_FREQUENCY 5
 	g.PeekFrequency = DEFAULT_PEEK_FREQUENCY; // v1.0.46. See comments in ACT_CRITICAL.
 	g.AllowThreadToBeInterrupted = true; // Separate from g_AllowInterruption so that they can have independent values.
+	g.UninterruptibleDuration = 0; // 0 means uninterruptibility times out instantly.  Some callers may want this so that this "g" can be used to launch other threads (e.g. threadless callbacks) using 0 as their default.
 	g.AllowTimers = true;
 	g.ThreadIsCritical = false;
-	#define PRIORITY_MINIMUM INT_MIN
 	g.Priority = 0;
 	g.LastError = 0;
 	g.GuiEvent = GUI_EVENT_NONE;

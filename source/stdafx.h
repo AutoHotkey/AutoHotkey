@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -63,4 +63,11 @@ GNU General Public License for more details.
 	//#include "window.h"  // Not to be confused with "windows.h"
 	//#include "util.h"
 	//#include "SimpleHeap.h"
+#endif
+
+// Lexikos: Defining _WIN32_WINNT 0x0600 seems to break TrayTip in non-English Windows, and possibly other things.
+//			Instead, define only the necessary constants for horizontal wheel support in Windows Vista and later.
+#if (_WIN32_WINNT < 0x0600)
+#define WM_MOUSEHWHEEL      0x020E
+#define MOUSEEVENTF_HWHEEL  0x01000 /* hwheel button rolled */
 #endif

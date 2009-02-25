@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -16,7 +16,7 @@ GNU General Public License for more details.
 
 #include "stdafx.h" // pre-compiled headers
 #include "keyboard_mouse.h"
-#include "globaldata.h" // for g.KeyDelay
+#include "globaldata.h" // for g->KeyDelay
 #include "application.h" // for MsgSleep()
 #include "util.h"  // for strlicmp()
 #include "window.h" // for IsWindowHung()
@@ -101,6 +101,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 {
 	if (!*aKeys)
 		return;
+	global_struct &g = *::g; // Reduces code size and may improve performance.
 
 	// Might be better to do this prior to changing capslock state.  UPDATE: In v1.0.44.03, the following section
 	// has been moved to the top of the function because:
@@ -158,7 +159,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 	else // Use best-guess instead.
 	{
 		// Even if TickCount has wrapped due to system being up more than about 49 days,
-		// DWORD math still gives the right answer as long as g_script.mThisHotkeyStartTime
+		// DWORD subtraction still gives the right answer as long as g_script.mThisHotkeyStartTime
 		// itself isn't more than about 49 days ago:
 		if ((GetTickCount() - g_script.mThisHotkeyStartTime) < (DWORD)g_HotkeyModifierTimeout) // Elapsed time < timeout-value
 			mods_down_physically_orig = mods_current & g_script.mThisHotkeyModifiersLR; // Bitwise AND is set intersection.
@@ -374,7 +375,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 			case '{':
 			{
 				if (   !(end_pos = strchr(aKeys + 1, '}'))   ) // Ignore it and due to rarity, don't reset mods_for_next_key.
-					continue; // This check is relied upon by some things below that assume a '}' is preset prior to the terminator.
+					continue; // This check is relied upon by some things below that assume a '}' is present prior to the terminator.
 				aKeys = omit_leading_whitespace(aKeys + 1); // v1.0.43: Skip leading whitespace inside the braces to be more flexible.
 				if (   !(key_text_length = end_pos - aKeys)   )
 				{
@@ -383,6 +384,19 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 						// The literal string "{}}" has been encountered, which is interpreted as a single "}".
 						++end_pos;
 						key_text_length = 1;
+					}
+					else if (IS_SPACE_OR_TAB(end_pos[1])) // v1.0.48: Support "{} down}", "{} downtemp}" and "{} up}".
+					{
+						next_word = omit_leading_whitespace(end_pos + 1);
+						if (   !strnicmp(next_word, "Down", 4) // "Down" or "DownTemp" (or likely enough).
+							|| !strnicmp(next_word, "Up", 2)   )
+						{
+							if (   !(end_pos = strchr(next_word, '}'))   ) // See comments at similar section above.
+								continue;
+							key_text_length = end_pos - aKeys; // This result must be non-zero due to the checks above.
+						}
+						else
+							goto brace_case_end;  // The loop's ++aKeys will now skip over the '}', ignoring it.
 					}
 					else // Empty braces {} were encountered (or all whitespace, but literal whitespace isn't sent).
 						goto brace_case_end;  // The loop's ++aKeys will now skip over the '}', ignoring it.
@@ -543,7 +557,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 					// each other, make sure they're in the state intended by the user before beginning:
 					SetModifierLRState(persistent_modifiers_for_this_SendKeys
 						, sSendMode ? sEventModifiersLR : GetModifierLRState()
-						, aTargetWindow, false, false); // It also does DoKeyDelay(g.PressDuration).
+						, aTargetWindow, false, false); // It also does DoKeyDelay(g->PressDuration).
 					for (int i = 0; i < repeat_count; ++i)
 					{
 						// Don't tell it to save & restore modifiers because special keys like this one
@@ -659,7 +673,7 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 			// Assume that the same modifiers that were phys+logically down before the Send are still
 			// physically down (though not necessarily logically, since the Send may have released them),
 			// but do this only if the timeout period didn't expire (or the user specified that it never
-			// times out; i.e. elapsed time < timeout-value; DWORD math gives the right answer even if
+			// times out; i.e. elapsed time < timeout-value; DWORD subtraction gives the right answer even if
 			// tick-count has wrapped around).
 			mods_down_physically = (g_HotkeyModifierTimeout < 0 // It never times out or...
 				|| (GetTickCount() - g_script.mThisHotkeyStartTime) < (DWORD)g_HotkeyModifierTimeout) // It didn't time out.
@@ -726,7 +740,7 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 		// there generally shouldn't be any up-events for Alt or Win because SendKey() would have already
 		// released them.  One possible exception to this is when the user physically released Alt or Win
 		// during the send (perhaps only during specific sensitive/vulnerable moments).
-		SetModifierLRState(mods_to_set, GetModifierLRState(), aTargetWindow, true, true); // It also does DoKeyDelay(g.PressDuration).
+		SetModifierLRState(mods_to_set, GetModifierLRState(), aTargetWindow, true, true); // It also does DoKeyDelay(g->PressDuration).
 	} // End of non-array Send.
 
 	// For peace of mind and because that's how it was tested originally, the following is done
@@ -851,13 +865,13 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 			// not responsible for that type of disguising here.
 			SetModifierLRState(modifiersLR_specified, sSendMode ? sEventModifiersLR : GetModifierLRState()
 				, aTargetWindow, false, true, KEY_IGNORE); // See keyboard_mouse.h for explantion of KEY_IGNORE.
-			// SetModifierLRState() also does DoKeyDelay(g.PressDuration).
+			// SetModifierLRState() also does DoKeyDelay(g->PressDuration).
 		}
 
 		// v1.0.42.04: Mouse clicks are now handled here in the same loop as keystrokes so that the modifiers
 		// will be readjusted (above) if the user presses/releases modifier keys during the mouse clicks.
 		if (vk_is_mouse && !aTargetWindow)
-			MouseClick(aVK, aX, aY, 1, g.DefaultMouseSpeed, aEventType, aMoveOffset);
+			MouseClick(aVK, aX, aY, 1, g->DefaultMouseSpeed, aEventType, aMoveOffset);
 			// Above: Since it's rare to send more than one click, it seems best to simplify and reduce code size
 			// by not doing more than one click at a time event when mode is SendInput/Play.
 		else
@@ -921,7 +935,7 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 			& (MOD_LWIN|MOD_RWIN|MOD_LALT|MOD_RALT); // ... but restrict them to only Win/Alt.
 		if (win_alt_to_be_released)
 			SetModifierLRState(state_now & ~win_alt_to_be_released
-				, state_now, aTargetWindow, true, false); // It also does DoKeyDelay(g.PressDuration).
+				, state_now, aTargetWindow, true, false); // It also does DoKeyDelay(g->PressDuration).
 	}
 }
 
@@ -1194,11 +1208,11 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam)
 			{
 				event.paramL = source_event.x;
 				event.paramH = source_event.y;
-				if (!(g.CoordMode & COORD_MODE_MOUSE) && !sThisEventIsScreenCoord) // Coordinates are relative to the window that is active now (during realtime playback).
+				if (!(g->CoordMode & COORD_MODE_MOUSE) && !sThisEventIsScreenCoord) // Coordinates are relative to the window that is active now (during realtime playback).
 					WindowToScreen((int &)event.paramL, (int &)event.paramH); // Playback uses screen coords.
 			}
 		}
-		LRESULT time_until_event = (int)(sThisEventTime - GetTickCount()); // Cast to int to avoid loss of negatives from DWORD math.
+		LRESULT time_until_event = (int)(sThisEventTime - GetTickCount()); // Cast to int to avoid loss of negatives from DWORD subtraction.
 		if (time_until_event > 0)
 			return time_until_event;
 		// Otherwise, the event is scheduled to occur immediately (or is overdue).  In case HC_GETNEXT can be
@@ -1489,10 +1503,10 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 		if (aEventType != KEYUP)  // i.e. always do it for KEYDOWNANDUP
 			PostMessage(aTargetWindow, WM_KEYDOWN, aVK, lParam | 0x00000001);
 		// The press-duration delay is done only when this is a down-and-up because otherwise,
-		// the normal g.KeyDelay will be in effect.  In other words, it seems undesirable in
+		// the normal g->KeyDelay will be in effect.  In other words, it seems undesirable in
 		// most cases to do both delays for only "one half" of a keystroke:
 		if (aDoKeyDelay && aEventType == KEYDOWNANDUP)
-			DoKeyDelay(g.PressDuration); // Since aTargetWindow!=NULL, sSendMode!=SM_PLAY, so no need for to ever use the SendPlay press-duration.
+			DoKeyDelay(g->PressDuration); // Since aTargetWindow!=NULL, sSendMode!=SM_PLAY, so no need for to ever use the SendPlay press-duration.
 		if (aEventType != KEYDOWN)  // i.e. always do it for KEYDOWNANDUP
 			PostMessage(aTargetWindow, WM_KEYUP, aVK, lParam | 0xC0000001);
 	}
@@ -1624,10 +1638,10 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 				UpdateKeyEventHistory(false, aVK, aSC); // Should be thread-safe since if no hook means only one thread ever sends keystrokes (with possible exception of mouse hook, but that seems too rare).
 		}
 		// The press-duration delay is done only when this is a down-and-up because otherwise,
-		// the normal g.KeyDelay will be in effect.  In other words, it seems undesirable in
+		// the normal g->KeyDelay will be in effect.  In other words, it seems undesirable in
 		// most cases to do both delays for only "one half" of a keystroke:
 		if (aDoKeyDelay && aEventType == KEYDOWNANDUP) // Hook should never specify a delay, so no need to check if caller is hook.
-			DoKeyDelay(sSendMode == SM_PLAY ? g.PressDurationPlay : g.PressDuration); // DoKeyDelay() is not thread safe but since the hook thread should never pass true for aKeyDelay, it shouldn't be an issue.
+			DoKeyDelay(sSendMode == SM_PLAY ? g->PressDurationPlay : g->PressDuration); // DoKeyDelay() is not thread safe but since the hook thread should never pass true for aKeyDelay, it shouldn't be an issue.
 		if (aEventType != KEYDOWN)  // i.e. always do it for KEYDOWNANDUP
 		{
 			event_flags |= KEYEVENTF_KEYUP;
@@ -1678,7 +1692,7 @@ ResultType PerformClick(char *aOptions)
 
 	ParseClickOptions(aOptions, x, y, vk, event_type, repeat_count, move_offset);
 	PerformMouseCommon(repeat_count < 1 ? ACT_MOUSEMOVE : ACT_MOUSECLICK // Treat repeat-count<1 as a move (like {click}).
-		, vk, x, y, 0, 0, repeat_count, event_type, g.DefaultMouseSpeed, move_offset);
+		, vk, x, y, 0, 0, repeat_count, event_type, g->DefaultMouseSpeed, move_offset);
 
 	return OK; // For caller convenience.
 }
@@ -1803,7 +1817,7 @@ ResultType PerformMouse(ActionTypeType aActionType, char *aButton, char *aX1, ch
 		, *aX2 ? ATOI(aX2) : COORD_UNSPECIFIED  // These two are blank except for dragging.
 		, *aY2 ? ATOI(aY2) : COORD_UNSPECIFIED  //
 		, repeat_count, event_type
-		, *aSpeed ? ATOI(aSpeed) : g.DefaultMouseSpeed
+		, *aSpeed ? ATOI(aSpeed) : g->DefaultMouseSpeed
 		, toupper(*aOffsetMode) == 'R'); // aMoveOffset.
 
 	return OK; // For caller convenience.
@@ -1822,7 +1836,7 @@ void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY
 	#define MAX_PERFORM_MOUSE_EVENTS 10
 	INPUT event_array[MAX_PERFORM_MOUSE_EVENTS]; // Use type INPUT vs. PlaybackEvent since the former is larger (i.e. enough to hold either one).
 
-	sSendMode = g.SendMode;
+	sSendMode = g->SendMode;
 	if (sSendMode == SM_INPUT || sSendMode == SM_INPUT_FALLBACK_TO_PLAY)
 	{
 		if (!sMySendInput || SystemHasAnotherMouseHook()) // See similar section in SendKeys() for details.
@@ -1892,8 +1906,8 @@ void MouseClickDrag(vk_type aVK, int aX1, int aY1, int aX2, int aY2, int aSpeed,
 	else if (aVK == VK_RBUTTON_LOGICAL)
 		aVK = sSendMode != SM_PLAY && GetSystemMetrics(SM_SWAPBUTTON) ? VK_LBUTTON : VK_RBUTTON;
 
-	// MSDN: If [event_flags] is not MOUSEEVENTF_WHEEL, MOUSEEVENTF_XDOWN, or MOUSEEVENTF_XUP, then [event_data]
-	// should be zero. 
+	// MSDN: If [event_flags] is not MOUSEEVENTF_WHEEL, [MOUSEEVENTF_HWHEEL,] MOUSEEVENTF_XDOWN,
+	// or MOUSEEVENTF_XUP, then [event_data] should be zero. 
 	DWORD event_down, event_up, event_flags = 0, event_data = 0; // Set defaults for some.
 	switch (aVK)
 	{
@@ -1995,17 +2009,23 @@ void MouseClick(vk_type aVK, int aX, int aY, int aRepeatCount, int aSpeed, KeyEv
 	// some existing scripts.  Maybe it can be a script option in the future.  In the meantime,
 	// it seems best not to adjust the modifiers for any mouse events and just document that
 	// behavior in the MouseClick command.
-	if (aVK == VK_WHEEL_UP)
+	switch (aVK)
 	{
+	case VK_WHEEL_UP:
 		MouseEvent(event_flags | MOUSEEVENTF_WHEEL, aRepeatCount * WHEEL_DELTA, aX, aY);  // It ignores aX and aY when MOUSEEVENTF_MOVE is absent.
 		return;
-	}
-	else if (aVK == VK_WHEEL_DOWN)
-	{
+	case VK_WHEEL_DOWN:
 		MouseEvent(event_flags | MOUSEEVENTF_WHEEL, -(aRepeatCount * WHEEL_DELTA), aX, aY);
 		return;
+	// v1.0.48: Lexikos: Support horizontal scrolling in Windows Vista and later.
+	case VK_WHEEL_LEFT:
+		MouseEvent(event_flags | MOUSEEVENTF_HWHEEL, -(aRepeatCount * WHEEL_DELTA), aX, aY);
+		return;
+	case VK_WHEEL_RIGHT:
+		MouseEvent(event_flags | MOUSEEVENTF_HWHEEL, aRepeatCount * WHEEL_DELTA, aX, aY);
+		return;
 	}
-	// Otherwise:
+	// Since above didn't return:
 
 	// Although not thread-safe, the following static vars seem okay because:
 	// 1) This function is currently only called by the main thread.
@@ -2037,7 +2057,7 @@ void MouseClick(vk_type aVK, int aX, int aY, int aRepeatCount, int aSpeed, KeyEv
 		// (see detailed comments below).  Furthermore, if the MouseMove were supported in array-mode,
 		// it would require that GetCursorPos() below be conditionally replaced with something like
 		// the following (since when in array-mode, the cursor hasn't actually moved *yet*):
-		//		if (!(g.CoordMode & COORD_MODE_MOUSE))  // Moving mouse relative to the active window.
+		//		if (!(g->CoordMode & COORD_MODE_MOUSE))  // Moving mouse relative to the active window.
 		//			WindowToScreen(aX_orig, aY_orig);
 		// Known limitation: the work-around described below isn't as complete for SendPlay as it is
 		// for the other modes: because dragging the title bar of one of this thread's windows with a
@@ -2255,7 +2275,7 @@ void MouseMove(int &aX, int &aY, DWORD &aEventFlags, int aSpeed, bool aMoveOffse
 			aY += cursor_pos.y;
 		}
 	}
-	else if (!(g.CoordMode & COORD_MODE_MOUSE))  // Moving mouse relative to the active window (rather than screen).
+	else if (!(g->CoordMode & COORD_MODE_MOUSE))  // Moving mouse relative to the active window (rather than screen).
 		WindowToScreen(aX, aY);  // None of this is done for playback mode since that mode already returned higher above.
 
 	if (sSendMode == SM_INPUT) // Track predicted cursor position for use by subsequent events put into the array.
@@ -2462,10 +2482,10 @@ void PutMouseEventIntoArray(DWORD aEventFlags, DWORD aData, DWORD aX, DWORD aY)
 		// 1) MOUSEEVENTF_MOVE by itself.
 		// 2) MOUSEEVENTF_MOVE with a click event or wheel turn (in this case MOUSEEVENTF_MOVE is permitted but
 		//    not required, since all mouse events in playback mode must have explicit coordinates at the
-		//    time they're playbed back).
+		//    time they're played back).
 		// 3) A click event or wheel turn by itself (same remark as above).
 		// Bits are isolated in what should be a future-proof way (also omits MSG_OFFSET_MOUSE_MOVE bit).
-		switch (aEventFlags & (0xFFF & ~MOUSEEVENTF_MOVE))
+		switch (aEventFlags & (0x1FFF & ~MOUSEEVENTF_MOVE)) // v1.0.48: 0x1FFF vs. 0xFFF to support MOUSEEVENTF_HWHEEL.
 		{
 		case 0:                      this_event.message = WM_MOUSEMOVE; break; // It's a movement without a click.
 		// In cases other than the above, it's a click or wheel turn with optional WM_MOUSEMOVE too.
@@ -2478,6 +2498,7 @@ void PutMouseEventIntoArray(DWORD aEventFlags, DWORD aData, DWORD aX, DWORD aY)
 		case MOUSEEVENTF_XDOWN:      this_event.message = WM_XBUTTONDOWN; break;
 		case MOUSEEVENTF_XUP:        this_event.message = WM_XBUTTONUP; break;
 		case MOUSEEVENTF_WHEEL:      this_event.message = WM_MOUSEWHEEL; break;
+		case MOUSEEVENTF_HWHEEL:     this_event.message = WM_MOUSEHWHEEL; break; // v1.0.48
 		// WHEEL: No info comes into journal-record about which direction the wheel was turned (nor by how many
 		// notches).  In addition, it appears impossible to specify such info when playing back the event.
 		// Therefore, playback usually produces downward wheel movement (but upward in some apps like
@@ -2731,7 +2752,7 @@ void DoKeyDelay(int aDelay)
 
 void DoMouseDelay() // Helper function for the mouse functions below.
 {
-	int mouse_delay = sSendMode == SM_PLAY ? g.MouseDelayPlay : g.MouseDelay;
+	int mouse_delay = sSendMode == SM_PLAY ? g->MouseDelayPlay : g->MouseDelay;
 	if (mouse_delay < 0) // To support user-specified KeyDelay of -1 (fastest send rate).
 		return;
 	if (sSendMode)
@@ -3213,7 +3234,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 	// supposed to be capitalized.
 	// g_MainThreadID is the only thread of our process that owns any windows.
 
-	int press_duration = (sSendMode == SM_PLAY) ? g.PressDurationPlay : g.PressDuration;
+	int press_duration = (sSendMode == SM_PLAY) ? g->PressDurationPlay : g->PressDuration;
 	if (press_duration > -1) // SM_PLAY does use DoKeyDelay() to store a delay item in the event array.
 		// Since modifiers were changed by the above, do a key-delay if the special intra-keystroke
 		// delay is in effect.
@@ -3952,7 +3973,8 @@ char *GetKeyName(vk_type aVK, sc_type aSC, char *aBuf, int aBufSize)
 	// Use 0x02000000 to tell it that we want it to give left/right specific info, lctrl/rctrl etc.
 	// Relies on short-circuit boolean order.  v1.0.43: WheelDown/Up store the notch/turn count in SC,
 	// so don't consider that to be a valid SC:
-	if (!aSC || aVK == VK_WHEEL_DOWN || aVK == VK_WHEEL_UP || !GetKeyNameText((long)(aSC) << 16, aBuf, (int)(aBufSize/sizeof(TCHAR))))
+	// Lexikos: Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
+	if (!aSC || IS_WHEEL_VK(aVK) || !GetKeyNameText((long)(aSC) << 16, aBuf, (int)(aBufSize/sizeof(TCHAR))))
 	{
 		int j;
 		for (j = 0; j < g_key_to_vk_count; ++j)

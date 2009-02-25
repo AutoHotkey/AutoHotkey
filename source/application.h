@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -39,78 +39,37 @@ bool MsgSleep(int aSleepDuration = INTERVAL_UNSPECIFIED, MessageMode aMode = RET
 //    unpredictable behavior.
 #define SLEEP_WITHOUT_INTERRUPTION(aSleepTime) \
 {\
-	g_AllowInterruption = false;\
+	g_AllowInterruption = FALSE;\
 	MsgSleep(aSleepTime);\
-	g_AllowInterruption = true;\
+	g_AllowInterruption = TRUE;\
 }
-
-// Whether we should allow the script's current quasi-thread to be interrupted by
-// either a newly pressed hotkey or a timed subroutine that is due to be run.
-// Note that the 2 variables used here are independent of each other to support
-// the case where an uninterruptible operation such as SendKeys() happens to occur
-// while g.AllowThreadToBeInterrupted is true, in which case we would want the
-// completion of that operation to affect only the status of g_AllowInterruption,
-// not g.AllowThreadToBeInterrupted.
-#define INTERRUPTIBLE (g.AllowThreadToBeInterrupted && g_AllowInterruption && !g_MenuIsVisible)
-#define INTERRUPTIBLE_IN_EMERGENCY (g_AllowInterruption && !g_MenuIsVisible)
-
-// The DISABLE_UNINTERRUPTIBLE_SUB macro below must always kill the timer if it exists -- even if
-// the timer hasn't expired yet.  This is because if the timer were to fire when interruptibility had
-// already been previously restored, it's possible that it would set g.AllowThreadToBeInterrupted
-// to be true even when some other code had had the opporutunity to set it to false by intent.
-// In other words, once g.AllowThreadToBeInterrupted is set to true the first time, it should not be
-// set a second time "just to be sure" because by then it may already by in use by someone else
-// for some other purpose.
-// It's possible for the SetBatchLines command to have changed the values of g_script.mUninterruptibleTime
-// and g_script.mUninterruptedLineCountMax since the time InitNewThread() was called.  If they were
-// changed so that subroutines are always interruptible, that seems to be handled correctly.
-// If they were changed so that subroutines are never interruptible, that seems to be okay too.
-// It doesn't seem like any combination of starting vs. ending interruptibility is a particular
-// problem, so no special handling is done here (just keep it simple).
-// UPDATE: g.AllowThreadToBeInterrupted is always made true even if both settings are negative,
-// since our callers would all want us to do it unconditionally.  This is because there's no need to
-// keep it false even when all subroutines are permanently uninterruptible, since it will be made
-// false every time a new subroutine launches.
-// Macro notes:
-// Reset in case the timer hasn't yet expired and ExecUntil() didn't get a chance to do it:
-// ...
-// Since this timer is of the type that calls a function directly, rather than placing
-// msgs in our msg queue, it should not be necessary to worry about removing its messages
-// from the msg queue.
-// UPDATE: The below is now the same as KILL_UNINTERRUPTIBLE_TIMER because all of its callers
-// have finished running the current thread (i.e. the current thread is about to be destroyed):
-//#define DISABLE_UNINTERRUPTIBLE_SUB \
-//{\
-//	g.AllowThreadToBeInterrupted = true;\
-//	KILL_UNINTERRUPTIBLE_TIMER \
-//}
-//#define DISABLE_UNINTERRUPTIBLE_SUB	KILL_UNINTERRUPTIBLE_TIMER
 
 // Have this be dynamically resolved each time.  For example, when MsgSleep() uses this
 // while in mode WAIT_FOR_MESSSAGES, its msg loop should use this macro in case the
 // value of g_AllowInterruption changes from one iteration to the next.  Thankfully,
 // MS made WM_HOTKEY have a very high value, so filtering in this way should not exclude
 // any other important types of messages:
-#define MSG_FILTER_MAX (INTERRUPTIBLE ? 0 : WM_HOTKEY - 1)
+#define MSG_FILTER_MAX (IsInterruptible() ? 0 : WM_HOTKEY - 1)
+#define INTERRUPTIBLE_IN_EMERGENCY (g_AllowInterruption && !g_MenuIsVisible)
 
 // Do a true Sleep() for short sleeps on Win9x because it is much more accurate than the MsgSleep()
 // method on that OS, at least for when short sleeps are done on Win98SE:
 #define DoWinDelay \
-	if (g.WinDelay > -1)\
+	if (::g->WinDelay > -1)\
 	{\
-		if (g.WinDelay < 25 && g_os.IsWin9x())\
-			Sleep(g.WinDelay);\
+		if (::g->WinDelay < 25 && g_os.IsWin9x())\
+			Sleep(::g->WinDelay);\
 		else\
-			MsgSleep(g.WinDelay);\
+			MsgSleep(::g->WinDelay);\
 	}
 
 #define DoControlDelay \
-	if (g.ControlDelay > -1)\
+	if (g->ControlDelay > -1)\
 	{\
-		if (g.ControlDelay < 25 && g_os.IsWin9x())\
-			Sleep(g.ControlDelay);\
+		if (g->ControlDelay < 25 && g_os.IsWin9x())\
+			Sleep(g->ControlDelay);\
 		else\
-			MsgSleep(g.ControlDelay);\
+			MsgSleep(g->ControlDelay);\
 	}
 
 ResultType IsCycleComplete(int aSleepDuration, DWORD aStartTime, bool aAllowEarlyReturn);
@@ -128,12 +87,15 @@ void PollJoysticks();
 
 bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg, LRESULT &aMsgReply);
 
-void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThreadCount, ActionTypeType aTypeOfFirstLine);
-void ResumeUnderlyingThread(global_struct *pSavedStruct, char *aSavedErrorLevel, bool aKillInterruptibleTimer);
+void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThreadCountAndUpdateTrayIcon
+	, ActionTypeType aTypeOfFirstLine);
+void ResumeUnderlyingThread(char *aSavedErrorLevel);
+BOOL IsInterruptible();
 
 VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
 VOID CALLBACK AutoExecSectionTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
 VOID CALLBACK UninterruptibleTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
 VOID CALLBACK InputTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
+VOID CALLBACK RefreshInterruptibility(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
 
 #endif

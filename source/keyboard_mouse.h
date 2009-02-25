@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -61,11 +61,14 @@ GNU General Public License for more details.
 // to indicate failure by many functions that deal with virtual keys.
 // 0x88 - 0x8F : unassigned
 // 0x97 - 0x9F : unassigned (this range seems less likely to be used)
-#define VK_NEW_MOUSE_FIRST 0x9C
-#define VK_LBUTTON_LOGICAL 0x9C // v1.0.43: Added to support swapping of left/right mouse buttons in Control Panel.
-#define VK_RBUTTON_LOGICAL 0x9D //
+#define VK_NEW_MOUSE_FIRST 0x9A
+#define VK_LBUTTON_LOGICAL 0x9A // v1.0.43: Added to support swapping of left/right mouse buttons in Control Panel.
+#define VK_RBUTTON_LOGICAL 0x9B //
+#define VK_WHEEL_LEFT      0x9C // v1.0.48: Lexikos: Fake virtual keys for support for horizontal scrolling in
+#define VK_WHEEL_RIGHT     0x9D // Windows Vista and later.
 #define VK_WHEEL_DOWN      0x9E
 #define VK_WHEEL_UP        0x9F
+#define IS_WHEEL_VK(aVK) ((aVK) >= VK_WHEEL_LEFT && (aVK) <= VK_WHEEL_UP)
 #define VK_NEW_MOUSE_LAST  0x9F
 
 // These are the only keys for which another key with the same VK exists.  Therefore, use scan code for these.
@@ -276,7 +279,7 @@ void CleanupEventArray(int aFinalKeyDelay);
 
 EXTERN_G; // For the DoKeyDelay() prototype below.
 extern SendModes sSendMode;
-void DoKeyDelay(int aDelay = (sSendMode == SM_PLAY) ? g.KeyDelayPlay : g.KeyDelay);
+void DoKeyDelay(int aDelay = (sSendMode == SM_PLAY) ? g->KeyDelayPlay : g->KeyDelay);
 void DoMouseDelay();
 void UpdateKeyEventHistory(bool aKeyUp, vk_type aVK, sc_type aSC);
 #define KEYEVENT_PHYS(event_type, vk, sc) KeyEvent(event_type, vk, sc, NULL, false, KEY_PHYS_IGNORE)

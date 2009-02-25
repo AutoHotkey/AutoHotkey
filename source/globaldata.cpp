@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -69,25 +69,25 @@ bool g_ForceLaunch = false;
 bool g_WinActivateForce = false;
 SingleInstanceType g_AllowOnlyOneInstance = ALLOW_MULTI_INSTANCE;
 bool g_persistent = false;  // Whether the script should stay running even after the auto-exec section finishes.
-bool g_NoEnv = false; // BOOL vs. bool didn't help performance in spite of the frequent accesses to it.
 bool g_NoTrayIcon = false;
 #ifdef AUTOHOTKEYSC
 	bool g_AllowMainWindow = false;
 #endif
 bool g_AllowSameLineComments = true;
 bool g_MainTimerExists = false;
-bool g_UninterruptibleTimerExists = false;
 bool g_AutoExecTimerExists = false;
 bool g_InputTimerExists = false;
 bool g_DerefTimerExists = false;
 bool g_SoundWasPlayed = false;
 bool g_IsSuspended = false;  // Make this separate from g_AllowInterruption since that is frequently turned off & on.
-bool g_AllowInterruption = true;
 bool g_DeferMessagesForUnderlyingPump = false;
+BOOL g_WriteCacheDisabledInt64 = FALSE;  // BOOL vs. bool might improve performance a little for
+BOOL g_WriteCacheDisabledDouble = FALSE; // frequently-accessed variables (it has helped performance in
+BOOL g_NoEnv = FALSE;                    // ExpandExpression(), but didn't seem to help performance in g_NoEnv.
+BOOL g_AllowInterruption = TRUE;         //
 int g_nLayersNeedingTimer = 0;
 int g_nThreads = 0;
 int g_nPausedThreads = 0;
-bool g_IdleIsPaused = false;
 int g_MaxHistoryKeys = 40;
 
 // g_MaxVarCapacity is used to prevent a buggy script from consuming all available system RAM. It is defined
@@ -95,7 +95,7 @@ int g_MaxHistoryKeys = 40;
 // The chosen default seems big enough to be flexible, yet small enough to not be a problem on 99% of systems:
 VarSizeType g_MaxVarCapacity = 64 * 1024 * 1024;
 UCHAR g_MaxThreadsPerHotkey = 1;
-int g_MaxThreadsTotal = 10;
+int g_MaxThreadsTotal = MAX_THREADS_DEFAULT;
 // On my system, the repeat-rate (which is probably set to XP's default) is such that between 20
 // and 25 keys are generated per second.  Therefore, 50 in 2000ms seems like it should allow the
 // key auto-repeat feature to work on most systems without triggering the warning dialog.
@@ -179,7 +179,8 @@ int g_IconTraySuspend = (g_IconTray == IDI_MAIN) ? IDI_SUSPEND : IDI_TRAY_WIN9X_
 
 DWORD g_OriginalTimeout;
 
-global_struct g, g_default;
+global_struct g_default, g_startup, *g_array;
+global_struct *g = &g_startup; // g_startup provides a non-NULL placeholder during script loading. Afterward it's replaced with an array.
 
 // I considered maintaining this on a per-quasi-thread basis (i.e. in global_struct), but the overhead
 // of having to check and restore the working directory when a suspended thread is resumed (especially
@@ -236,7 +237,7 @@ bool g_BlockMouseMove = false;
 // v1.0.45 The following macro sets the high-bit for those commands that require overlap-checking of their
 // input/output variables during runtime (commands that don't have an output variable never need this byte
 // set, and runtime performance is improved even for them).  Some of commands are given the high-bit even
-// though they might not strictly require it because rarity/performance/maintainability say its best to do
+// though they might not strictly require it because rarity/performance/maintainability say it's best to do
 // so when in doubt.  Search on "MaxParamsAu2WithHighBit" for more details.
 #define H |(char)0x80
 
@@ -269,10 +270,10 @@ Action g_act[] =
 	, {"Repeat", 0, 1, 1, {1, 0}}  // Iteration Count: was mandatory in AutoIt2 but doesn't seem necessary here.
 	, {"Else", 0, 0, 0, NULL}
 
-	, {"between", 1, 3, 3, NULL}, {"not between", 1, 3, 3, NULL}  // Min 1 to allow #2 and #3 to be the empty string.
 	, {"in", 2, 2, 2, NULL}, {"not in", 2, 2, 2, NULL}
 	, {"contains", 2, 2, 2, NULL}, {"not contains", 2, 2, 2, NULL}  // Very similar to "in" and "not in"
 	, {"is", 2, 2, 2, NULL}, {"is not", 2, 2, 2, NULL}
+	, {"between", 1, 3, 3, NULL}, {"not between", 1, 3, 3, NULL}  // Min 1 to allow #2 and #3 to be the empty string.
 	, {"", 1, 1, 1, {1, 0}} // ACT_IFEXPR's name should be "" so that Line::ToText() will properly display it.
 
 	// Comparison operators take 1 param (if they're being compared to blank) or 2.
@@ -381,6 +382,7 @@ Action g_act[] =
 	, {"Return", 0, 1, 1, {1, 0}}
 	, {"Exit", 0, 1, 1, {1, 0}} // ExitCode
 	, {"Loop", 0, 4, 4, NULL} // Iteration Count or FilePattern or root key name [,subkey name], FileLoopMode, Recurse? (custom validation for these last two)
+	, {"While", 1, 1, 1, {1, 0}} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
 	, {"Break", 0, 0, 0, NULL}, {"Continue", 0, 0, 0, NULL}
 	, {"{", 0, 0, 0, NULL}, {"}", 0, 0, 0, NULL}
 
@@ -490,7 +492,7 @@ Action g_act[] =
 	, {"SetControlDelay", 1, 1, 1, {1, 0}} // Delay in ms (numeric, negative allowed)
 	, {"SetBatchLines", 1, 1, 1, NULL} // Can be non-numeric, such as 15ms, or a number (to indicate line count).
 	, {"SetTitleMatchMode", 1, 1, 1, NULL} // Allowed values: 1, 2, slow, fast
-	, {"SetFormat", 1, 2, 2, NULL} // Float|Integer, FormatString (for float) or H|D (for int)
+	, {"SetFormat", 2, 2, 2, NULL} // Float|Integer, FormatString (for float) or H|D (for int)
 	, {"FormatTime", 1, 3, 3 H, NULL} // OutputVar, YYYYMMDDHH24MISS, Format (format is last to avoid having to escape commas in it).
 
 	, {"Suspend", 0, 1, 1, NULL} // On/Off/Toggle/Permit/Blank (blank is the same as toggle)
@@ -673,6 +675,9 @@ modifier is specified along with it:
 // Custom/fake VKs for use by the mouse hook (supported only in WinNT SP3 and beyond?):
 , {"WheelDown", VK_WHEEL_DOWN}
 , {"WheelUp", VK_WHEEL_UP}
+// Lexikos: Added fake VKs for support for horizontal scrolling in Windows Vista and later.
+, {"WheelLeft", VK_WHEEL_LEFT}
+, {"WheelRight", VK_WHEEL_RIGHT}
 
 , {"Browser_Back", VK_BROWSER_BACK}
 , {"Browser_Forward", VK_BROWSER_FORWARD}

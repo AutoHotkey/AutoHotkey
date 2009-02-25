@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -24,7 +24,7 @@ EXTERN_SCRIPT;  // For g_script.
 // Due to control/alt/shift modifiers, quite a lot of hotkey combinations are possible, so support any
 // conceivable use.  Note: Increasing this value will increase the memory required (i.e. any arrays
 // that use this value):
-#define MAX_HOTKEYS 700
+#define MAX_HOTKEYS 1000  // Raised from 700 to 1000 in v1.0.48 because at least one person needed more.
 
 // Note: 0xBFFF is the largest ID that can be used with RegisterHotkey().
 // But further limit this to 0x3FFF (16,383) so that the two highest order bits
@@ -213,7 +213,7 @@ public:
 	static bool CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, UCHAR &aNoSuppress
 		, bool &aFireWithNoSuppress, char *aSingleChar);
 	static void TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown);
-	void Perform(HotkeyVariant &aVariant);
+	void PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant);
 	static void ManifestAllHotkeysHotstringsHooks();
 	static void RequireHook(HookType aWhichHook) {sWhichHookAlways |= aWhichHook;}
 	static ResultType TextInterpret(char *aName, Hotkey *aThisHotkey, bool aUseErrorLevel);
@@ -244,7 +244,8 @@ public:
 		// might make "infinite key loops" harder to catch because the rate of incoming hotkeys
 		// would be slowed down to prevent the subroutines from running concurrently:
 		return aVariant.mExistingThreads < aVariant.mMaxThreads
-			|| (ACT_IS_ALWAYS_ALLOWED(aVariant.mJumpToLabel->mJumpToLine->mActionType));
+			|| (ACT_IS_ALWAYS_ALLOWED(aVariant.mJumpToLabel->mJumpToLine->mActionType)); // See below.
+		// Although our caller may have already called ACT_IS_ALWAYS_ALLOWED(), it was for a different reason.
 	}
 
 	bool IsExemptFromSuspend() // A hotkey is considered exempt if even one of its variants is exempt.
@@ -344,7 +345,7 @@ public:
 		, mDetectWhenInsideWord, mDoReset, mConstructedOK;
 
 	static void SuspendAll(bool aSuspend);
-	ResultType Perform();
+	ResultType PerformInNewThreadMadeByCaller();
 	void DoReplace(LPARAM alParam);
 	static ResultType AddHotstring(Label *aJumpToLabel, char *aOptions, char *aHotstring, char *aReplacement
 		, bool aHasContinuationSection);

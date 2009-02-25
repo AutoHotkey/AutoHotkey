@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -110,7 +110,7 @@ ResultType WinGroup::CloseAndGoToNext(bool aStartWithMostRecent)
 	HWND fore_win = GetForegroundWindow();
 	// Even if it's NULL, don't return since the legacy behavior is to continue on to the final part below.
 
-	WindowSpec *win_spec = IsMember(fore_win, g);
+	WindowSpec *win_spec = IsMember(fore_win, *g);
 	if (   (mIsModeActivate && win_spec) || (!mIsModeActivate && !win_spec)   )
 	{
 		// If the user is using a GroupActivate hotkey, we don't want to close
@@ -162,7 +162,7 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec, L
 		// marking it as visited, because we want to stay on this window under
 		// the assumption that it was newly revealed due to a window on top
 		// of it having just been closed:
-		if (win_to_activate_next == IsMember(active_window, g))
+		if (win_to_activate_next == IsMember(active_window, *g))
 		{
 			group_is_active = true;
 			MarkAsVisited(active_window);
@@ -175,7 +175,7 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec, L
 	}
 	else // Caller didn't tell us which, so determine it.
 	{
-		if (win_to_activate_next = IsMember(active_window, g)) // Foreground window is a member of this group.
+		if (win_to_activate_next = IsMember(active_window, *g)) // Foreground window is a member of this group.
 		{
 			// Set it to activate this same WindowSpec again in case there's
 			// more than one that matches (e.g. multiple notepads).  But first,
@@ -216,7 +216,7 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec, L
 		// because when the sequence wraps around to the beginning, the windows will
 		// occur in the same order that they did the first time, rather than going
 		// backwards through the sequence (which is counterintuitive for the user):
-		if (   activate_win = WinActivate(g, win->mTitle, win->mText, win->mExcludeTitle, win->mExcludeText
+		if (   activate_win = WinActivate(*g, win->mTitle, win->mText, win->mExcludeTitle, win->mExcludeText
 			// This next line is whether to find last or first match.  We always find the oldest
 			// (bottommost) match except when the user has specifically asked to start with the
 			// most recent.  But it only makes sense to start with the most recent if the
@@ -295,7 +295,7 @@ ResultType WinGroup::Deactivate(bool aStartWithMostRecent)
 		return FAIL;  // It already displayed the error for us.
 
 	HWND active_window = GetForegroundWindow();
-	if (IsMember(active_window, g))
+	if (IsMember(active_window, *g))
 		sAlreadyVisitedCount = 0;
 
 	// Activate the next unvisited non-member:
@@ -416,7 +416,7 @@ BOOL CALLBACK EnumParentFindAnyExcept(HWND aWnd, LPARAM lParam)
 
 	if (!IsWindowVisible(aWnd))
 		// Skip these because we alwayswant them to stay invisible, regardless
-		// of the setting for g.DetectHiddenWindows:
+		// of the setting for g->DetectHiddenWindows:
 		return TRUE;
 
 	// UPDATE: Because the window of class Shell_TrayWnd (the taskbar) is also always-on-top,
@@ -451,7 +451,7 @@ BOOL CALLBACK EnumParentFindAnyExcept(HWND aWnd, LPARAM lParam)
 	for (WindowSpec *win = ws.mFirstWinSpec;;)
 	{
 		// For each window in the linked list, check if aWnd is a match for it:
-		if (ws.SetCriteria(g, win->mTitle, win->mText, win->mExcludeTitle, win->mExcludeText) && ws.IsMatch(true))
+		if (ws.SetCriteria(*g, win->mTitle, win->mText, win->mExcludeTitle, win->mExcludeText) && ws.IsMatch(true))
 			// Match found, so aWnd is a member of the group. But we want to find non-members only,
 			// so keep searching:
 			return TRUE;
@@ -488,7 +488,7 @@ BOOL CALLBACK EnumParentActUponAll(HWND aWnd, LPARAM lParam)
 
 	// Skip windows the command isn't supposed to detect.  ACT_WINSHOW is exempt because
 	// hidden windows are always detected by the WinShow command:
-	if (!(g.DetectHiddenWindows || ws.mActionType == ACT_WINSHOW || IsWindowVisible(aWnd)))
+	if (!(g->DetectHiddenWindows || ws.mActionType == ACT_WINSHOW || IsWindowVisible(aWnd)))
 		return TRUE;
 
 	int nCmdShow;
@@ -497,7 +497,7 @@ BOOL CALLBACK EnumParentActUponAll(HWND aWnd, LPARAM lParam)
 	for (WindowSpec *win = ws.mFirstWinSpec;;)
 	{
 		// For each window in the linked list, check if aWnd is a match for it:
-		if (ws.SetCriteria(g, win->mTitle, win->mText, win->mExcludeTitle, win->mExcludeText) && ws.IsMatch())
+		if (ws.SetCriteria(*g, win->mTitle, win->mText, win->mExcludeTitle, win->mExcludeText) && ws.IsMatch())
 		{
 			// Match found, so aWnd is a member of the group.  In addition, IsMatch() has set
 			// the value of ws.mFoundParent to tell our caller that at least one window was acted upon.
