@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -739,8 +739,9 @@ void Hotkey::TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown)
 
 
 
-void Hotkey::Perform(HotkeyVariant &aVariant)
+void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 // Caller is reponsible for having called PerformIsAllowed() before calling us.
+// Caller must have already created a new thread for us, and must close the thread when we return.
 {
 	static bool sDialogIsDisplayed = false;  // Prevents double-display caused by key buffering.
 	if (sDialogIsDisplayed) // Another recursion layer is already displaying the warning dialog below.
@@ -759,7 +760,7 @@ void Hotkey::Perform(HotkeyVariant &aVariant)
 	// Note: A tickcount in the past can be subtracted from one in the future to find
 	// the true difference between them, even if the system's uptime is greater than
 	// 49 days and the future one has wrapped but the past one hasn't.  This is
-	// due to the nature of DWORD math.  The only time this calculation will be
+	// due to the nature of DWORD subtraction.  The only time this calculation will be
 	// unreliable is when the true difference between the past and future
 	// tickcounts itself is greater than about 49 days:
 	time_until_now = (sTimeNow - sTimePrev);
@@ -784,10 +785,10 @@ void Hotkey::Perform(HotkeyVariant &aVariant)
 		// This is now needed since hotkeys can still fire while a messagebox is displayed.
 		// Seems safest to do this even if it isn't always necessary:
 		sDialogIsDisplayed = true;
-		g_AllowInterruption = false;
+		g_AllowInterruption = FALSE;
 		if (MsgBox(error_text, MB_YESNO) == IDNO)
 			g_script.ExitApp(EXIT_CRITICAL); // Might not actually Exit if there's an OnExit subroutine.
-		g_AllowInterruption = true;
+		g_AllowInterruption = TRUE;
 		sDialogIsDisplayed = false;
 	}
 	// The display_warning var is needed due to the fact that there's an OR in this condition:
@@ -1097,9 +1098,9 @@ ResultType Hotkey::Dynamic(char *aHotkeyName, char *aLabelName, char *aOptions, 
 				if (variant)
 				{
 					variant->mMaxThreads = atoi(cp + 1);
-					if (variant->mMaxThreads > MAX_THREADS_LIMIT)
-						// For now, keep this limited to prevent stack overflow due to too many pseudo-threads.
-						variant->mMaxThreads = MAX_THREADS_LIMIT;
+					if (variant->mMaxThreads > g_MaxThreadsTotal) // To avoid array overflow, this limit must by obeyed except where otherwise documented.
+						// Older comment: Keep this limited to prevent stack overflow due to too many pseudo-threads.
+						variant->mMaxThreads = g_MaxThreadsTotal;
 					else if (variant->mMaxThreads < 1)
 						variant->mMaxThreads = 1;
 				}
@@ -1825,8 +1826,7 @@ ResultType Hotkey::TextToKey(char *aText, char *aHotkeyName, bool aIsModifier, H
 	{
 		if (aIsModifier)
 		{
-			// Lexikos: (L4) Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
-			if (temp_vk == VK_WHEEL_DOWN || temp_vk == VK_WHEEL_UP || temp_vk == VK_WHEEL_LEFT || temp_vk == VK_WHEEL_RIGHT)
+			if (IS_WHEEL_VK(temp_vk)) // Lexikos: Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
 			{
 				if (aUseErrorLevel)
 					g_ErrorLevel->Assign(HOTKEY_EL_UNSUPPORTED_PREFIX);
@@ -2260,11 +2260,13 @@ void Hotstring::SuspendAll(bool aSuspend)
 
 
 
-ResultType Hotstring::Perform()
+ResultType Hotstring::PerformInNewThreadMadeByCaller()
 // Returns OK or FAIL.  Caller has already ensured that the backspacing (if specified by mDoBackspace)
-// has been done.
+// has been done.  Caller must have already created a new thread for us, and must close the thread when
+// we return.
 {
-	if (mExistingThreads >= mMaxThreads && !ACT_IS_ALWAYS_ALLOWED(mJumpToLabel->mJumpToLine->mActionType))
+	// Although our caller may have already called ACT_IS_ALWAYS_ALLOWED(), it was for a different reason:
+	if (mExistingThreads >= mMaxThreads && !ACT_IS_ALWAYS_ALLOWED(mJumpToLabel->mJumpToLine->mActionType)) // See above.
 		return FAIL;
 	// See Hotkey::Perform() for details about this.  For hot strings -- which also use the
 	// g_script.mThisHotkeyStartTime value to determine whether g_script.mThisHotkeyModifiersLR
@@ -2284,6 +2286,7 @@ void Hotstring::DoReplace(LPARAM alParam)
 // LOWORD(alParam) is the char from the set of EndChars that the user had to press to trigger the hotkey.
 // This is not applicable if mEndCharRequired is false, in which case caller should have passed zero.
 {
+	global_struct &g = *::g; // Reduces code size and may improve performance.
 	// The below buffer allows room for the longest replacement text plus MAX_HOTSTRING_LENGTH for the
 	// optional backspaces, +10 for the possible presence of {Raw} and a safety margin.
 	char SendBuf[LINE_SIZE + MAX_HOTSTRING_LENGTH + 10] = "";

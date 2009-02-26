@@ -400,7 +400,7 @@ ResultType Line::RegDelete(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 {
 	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
 
-	// Fix for v1.0.47.07: Don't remove the entire key if it's a root key!  According to MSDN,
+	// Fix for v1.0.48: Don't remove the entire key if it's a root key!  According to MSDN,
 	// the root key would be opened by RegOpenKeyEx() further below whenever aRegSubkey is NULL
 	// or an empty string. aValueName is also checked to preserve the ability to delete a value
 	// that exists directly under a root key.
@@ -408,12 +408,8 @@ ResultType Line::RegDelete(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 		|| (!aRegSubkey || !*aRegSubkey) && (!aValueName || !*aValueName)   ) // See comment above.
 		return OK;  // Let ErrorLevel tell the story.
 
-	HKEY	hRegKey;
-
-	if (!aRootKey)
-		return OK;  // Let ErrorLevel tell the story.
-
 	// Open the key we want
+	HKEY hRegKey;
 	if (RegOpenKeyEx(aRootKey, aRegSubkey, 0, KEY_READ | KEY_WRITE, &hRegKey) != ERROR_SUCCESS)
 		return OK;  // Let ErrorLevel tell the story.
 

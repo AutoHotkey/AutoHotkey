@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -315,7 +315,7 @@ LRESULT CALLBACK LowLevelMouseProc(int aCode, WPARAM wParam, LPARAM lParam)
 		// movement, even if that movement came from a source other than an AHK script (such as some other
 		// macro program).
 
-	// MSDN: WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, or WM_RBUTTONUP.
+	// MSDN: WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL [, WM_MOUSEHWHEEL], WM_RBUTTONDOWN, or WM_RBUTTONUP.
 	// But what about the middle button?  It's undocumented, but it is received.
 	// What about doubleclicks (e.g. WM_LBUTTONDBLCLK): I checked: They are NOT received.
 	// This is expected because each click in a doubleclick could be separately suppressed by
@@ -328,24 +328,25 @@ LRESULT CALLBACK LowLevelMouseProc(int aCode, WPARAM wParam, LPARAM lParam)
 	switch (wParam)
 	{
 		case WM_MOUSEWHEEL:
+		case WM_MOUSEHWHEEL: // v1.0.48: Lexikos: Support horizontal scrolling in Windows Vista and later.
 			// MSDN: "A positive value indicates that the wheel was rotated forward, away from the user;
 			// a negative value indicates that the wheel was rotated backward, toward the user. One wheel
 			// click is defined as WHEEL_DELTA, which is 120."  Testing shows that on XP at least, the
 			// abs(delta) is greater than 120 when the user turns the wheel quickly (also depends on
 			// granularity of wheel hardware); i.e. the system combines multiple turns into a single event.
 			wheel_delta = GET_WHEEL_DELTA_WPARAM(event.mouseData); // Must typecast to short (not int) via macro, otherwise the conversion to negative/positive number won't be correct.
-			vk = wheel_delta < 0 ? VK_WHEEL_DOWN : VK_WHEEL_UP;
-			sc = (wheel_delta > 0 ? wheel_delta : -wheel_delta) / WHEEL_DELTA; // Friendless of conversion seems to outweigh lack of flexibility if future OSes change the 120 default.
+			if (wParam == WM_MOUSEWHEEL)
+				vk = wheel_delta < 0 ? VK_WHEEL_DOWN : VK_WHEEL_UP;
+			else
+				vk = wheel_delta < 0 ? VK_WHEEL_LEFT : VK_WHEEL_RIGHT;
+			// Dividing by WHEEL_DELTA was a mistake because some mice can yield detas less than 120.
+			// However, this behavior is kept for backward compatibility because some scripts may rely
+			// on A_EventInfo==0 meaning "delta is between 1 and 119".  WheelLeft/Right were also done
+			// that way because consistency may be more important than correctness.  In the future, perhaps
+			// an A_EventInfo2 can be added, or some hotkey aliases like "FineWheelXXX".
+			sc = (wheel_delta > 0 ? wheel_delta : -wheel_delta) / WHEEL_DELTA; // See above. Note that sc is unsigned.
 			key_up = false; // Always consider wheel movements to be "key down" events.
 			break;
-		// Lexikos: (L4) Support horizontal scrolling in Windows Vista and later.
-		case WM_MOUSEHWHEEL:
-			wheel_delta = GET_WHEEL_DELTA_WPARAM(event.mouseData);
-			vk = wheel_delta < 0 ? VK_WHEEL_LEFT : VK_WHEEL_RIGHT;
-			sc = (wheel_delta > 0 ? wheel_delta : -wheel_delta) / WHEEL_DELTA;
-			key_up = false;
-			break;
-
 		case WM_LBUTTONUP: vk = VK_LBUTTON;	break;
 		case WM_RBUTTONUP: vk = VK_RBUTTON; break;
 		case WM_MBUTTONUP: vk = VK_MBUTTON; break;
@@ -457,8 +458,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	// the notch count from pKeyHistoryCurr->sc.
 	pKeyHistoryCurr->sc = aSC; // Will be zero if our caller is the mouse hook (except for wheel notch count).
 	// After logging the wheel notch count (above), purify aSC for readability and maintainability.
-	// Lexikos: (L4) Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
-	if (aVK == VK_WHEEL_DOWN || aVK == VK_WHEEL_UP || aVK == VK_WHEEL_LEFT || aVK == VK_WHEEL_RIGHT)
+	if (IS_WHEEL_VK(aVK)) // Lexikos: Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
 		aSC = 0; // Also relied upon by by sc_takes_precedence below.
 
 	bool is_artificial;
@@ -4179,7 +4179,7 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 				}
 			}
 		}
-		if (GetTickCount() - start_time > 500) // DWORD math yields correct result even when TickCount has wrapped.
+		if (GetTickCount() - start_time > 500) // DWORD subtraction yields correct result even when TickCount has wrapped.
 			break;
 		// v1.0.43: The following sleeps for 0 rather than some longer time because:
 		// 1) In nearly all cases, this loop should do only one iteration because a Sleep(0) should guaranty
@@ -4225,12 +4225,12 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 		// to avoid the possibility that the script will continue to call this function recursively, resulting
 		// in an infinite stack of MsgBoxes. This approach is similar to that used in Hotkey::Perform()
 		// for the #MaxHotkeysPerInterval warning dialog:
-		g_AllowInterruption = false; 
+		g_AllowInterruption = FALSE; 
 		// Below is a generic message to reduce code size.  Failure is rare, but has been known to happen when
 		// certain types of games are running).
 		MsgBox("Warning: The keyboard and/or mouse hook could not be activated; "
 			"some parts of the script will not function.");
-		g_AllowInterruption = true;
+		g_AllowInterruption = TRUE;
 	}
 }
 
@@ -4378,7 +4378,7 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 		// probably better to have a false value in them:
 		g_PhysicalKeyState[VK_WHEEL_DOWN] = 0;
 		g_PhysicalKeyState[VK_WHEEL_UP] = 0;
-		// Lexikos: (L4) Support horizontal scrolling in Windows Vista and later.
+		// Lexikos: Support horizontal scrolling in Windows Vista and later.
 		g_PhysicalKeyState[VK_WHEEL_LEFT] = 0;
 		g_PhysicalKeyState[VK_WHEEL_RIGHT] = 0;
 
@@ -4391,7 +4391,7 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 			ResetKeyTypeState(kvk[VK_XBUTTON2]);
 			ResetKeyTypeState(kvk[VK_WHEEL_DOWN]);
 			ResetKeyTypeState(kvk[VK_WHEEL_UP]);
-			// Lexikos: (L4) Support horizontal scrolling in Windows Vista and later.
+			// Lexikos: Support horizontal scrolling in Windows Vista and later.
 			ResetKeyTypeState(kvk[VK_WHEEL_LEFT]);
 			ResetKeyTypeState(kvk[VK_WHEEL_RIGHT]);
 		}

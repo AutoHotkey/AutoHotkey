@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -146,8 +146,12 @@ ResultType YYYYMMDDToSystemTime(char *aYYYYMMDD, SYSTEMTIME &aSystemTime, bool a
 	{
 		strlcpy(temp, aYYYYMMDD + 4, 3);
 		aSystemTime.wMonth = atoi(temp);  // Unlike "struct tm", SYSTEMTIME uses 1 for January, not 0.
-		if (aSystemTime.wMonth < 1 || aSystemTime.wMonth > 12) // v1.0.46.07: Must validate month since it's used to access an array further below.
-			aSystemTime.wMonth = 1; // For simplicity and due to extreme rarity, just choose an in-range value.
+		// v1.0.46.07: Unlike the other date/time components, which are validated further below by the call to
+		// SystemTimeToFileTime(), "month" must be validated in advance because it's used to access an array
+		// further below.
+		if (aSystemTime.wMonth < 1 || aSystemTime.wMonth > 12) // See comment above.
+			return FAIL; // v1.0.48: Indicate that it's invalid so that caller's like "if var is time" can properly detect badly-formatted dates.
+			//aSystemTime.wMonth = 1; // For simplicity and due to extreme rarity, just choose an in-range value.
 	}
 	else
 		aSystemTime.wMonth = 1;
@@ -1415,7 +1419,7 @@ char *GetLastErrorText(char *aBuf, int aBufSize, bool aUpdateLastError)
 	}
 	DWORD last_error = GetLastError();
 	if (aUpdateLastError)
-		g.LastError = last_error;
+		g->LastError = last_error;
 	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, last_error, 0, aBuf, (DWORD)aBufSize - 1, NULL);
 	return aBuf;
 }

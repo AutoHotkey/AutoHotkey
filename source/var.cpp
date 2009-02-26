@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -28,18 +28,21 @@ ResultType Var::AssignHWND(HWND aWnd)
 	// For backward compatibility, tradition, and the fact that operations involving HWNDs tend not to
 	// be nearly as performance-critical as pure-math expressions, HWNDs are stored as a hex string,
 	// and thus UpdateBinaryInt64() isn't called here.
+	// Older comment: Always assign as hex for better compatibility with Spy++ and other apps that
+	// report window handles.
 	//
+	// Until there is a 64-bit version, the following is no longer done due to the reasons commented
+	// at the bottom of BIF_WinExistActive():
 	// Convert to unsigned 64-bit to support for 64-bit pointers.  Since most script operations --
 	// such as addition and comparison -- read strings in as signed 64-bit, it is documented that
 	// math and other numerical operations should never be performed on these while they exist
 	// as strings in script variables:
 	//#define ASSIGN_HWND_TO_VAR(var, hwnd) var->Assign((unsigned __int64)hwnd)
-	// UPDATE: Always assign as hex for better compatibility with Spy++ and other apps that
-	// report window handles:
-	char buf[64];
-	*buf = '0';
+	char buf[MAX_INTEGER_SIZE];
+	buf[0] = '0';
 	buf[1] = 'x';
-	_ui64toa((unsigned __int64)aWnd, buf + 2, 16);
+	_ultoa((UINT)(size_t)aWnd, buf + 2, 16); // Type-casting: See comments in BIF_WinExistActive().
+	// OLD method (fixed to include (size_t)): _ui64toa((unsigned __int64)(size_t)aWnd, buf + 2, 16);
 	return Assign(buf);
 }
 
@@ -85,14 +88,14 @@ ResultType Var::Assign(Var &aVar)
 					return FAIL;
 				// Below must be done AFTER the above because above's Assign() invalidates the cache, but the
 				// cache should be left valid.
-				target_var.UpdateBinaryInt64(source_var.mContentsInt64, VAR_ATTRIB_HAS_VALID_INT64); // All callers of UpdateBinaryInt64() must ensure that mContents is a pure number (e.g. NOT 123abc).
+				target_var.UpdateBinaryInt64(source_var.mContentsInt64); // Except when passing VAR_ATTRIB_CONTENTS_OUT_OF_DATE, all callers of UpdateBinaryInt64() must ensure that mContents is a pure number (e.g. NOT 123abc).
 				return OK;
 			}
 			//else it doesn't have any leading/trailing space or unusual formatting to preserve, so can
 			// write to the cache, which allows mContents to be updated later on demand.
 		}
 		//else number cache is out-of-sync with mContents, so there is no need to copy over mContents because
-		// it will get overwritten by the cached number the next time someone anyone calls Contents().
+		// it will get overwritten by the cached number the next time anyone calls Contents().
 
 		// Since above didn't return, copy the cached number only, not mContents.  But must also mark
 		// the mContents as out-of-date because it will be kept blank until something actually needs it.
@@ -106,7 +109,7 @@ ResultType Var::Assign(Var &aVar)
 		{
 			// Analyzing the mContents of floating point variables (like was done for cached integers above)
 			// doesn't seem worth it because benchmarks show that in percentage terms, caching floats doesn't
-			// have offer nearly as much performance improvement as caching integers. In addition, the analysis
+			// offer nearly as much performance improvement as caching integers. In addition, the analysis
 			// would be much more complicated -- so much so that it might entirely negate any performance
 			// benefits, not to mention the extra code size/complexity.  Here is an example of one of the
 			// issues:
@@ -121,7 +124,7 @@ ResultType Var::Assign(Var &aVar)
 				return FAIL;
 			// Below must be done AFTER the above because above's Assign() invalidates the cache, but the
 			// cache should be left valid.
-			target_var.UpdateBinaryDouble(source_var.mContentsDouble); // All callers of UpdateBinaryDouble() must ensure that mContents is a pure number (e.g. NOT 123abc).
+			target_var.UpdateBinaryDouble(source_var.mContentsDouble); // When not passing VAR_ATTRIB_CONTENTS_OUT_OF_DATE, all callers of UpdateBinaryDouble() must ensure that mContents is a pure number (e.g. NOT 123abc).
 		}
 		else
 			target_var.UpdateBinaryDouble(source_var.mContentsDouble, VAR_ATTRIB_CONTENTS_OUT_OF_DATE); // See comments in similar section above.
@@ -149,8 +152,19 @@ ResultType Var::Assign(ExprTokenType &aToken)
 	case SYM_INTEGER: return Assign(aToken.value_int64); // Listed first for performance because it's Likely the most common from our callers.
 	case SYM_OPERAND: // Listed near the top for performance.
 		if (aToken.buf) // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
-			return Assign(*(__int64 *)aToken.buf);
-		//else don't return; continue on to the bottom.
+		{
+			if (*aToken.marker != '0') // It's not an unusual format like 00123 (leading zeroes) or 0xFF (hex).
+				return Assign(*(__int64 *)aToken.buf);
+			// Otherwise, it's something like 0xFF or 00123. For backward compatibility, preserve that formatting
+			// in case the contents of this variable will go on to be displayed or used in a string operation.
+			// The following "double assign" is similar to that in Var::Assign(Var &aVar):
+			if (!Assign(aToken.marker))
+				return FAIL;
+			// Below must be done AFTER the above because above's Assign() invalidates the cache, but the
+			// cache should be left valid.
+			UpdateBinaryInt64(*(__int64 *)aToken.buf); // Except when passing VAR_ATTRIB_CONTENTS_OUT_OF_DATE, all callers of UpdateBinaryInt64() must ensure that mContents is a pure number (e.g. NOT 123abc).
+		}
+		//else there is no binary integer; so don't return, continue on to the bottom.
 		break;
 	case SYM_VAR:     return Assign(*aToken.var); // Caller has ensured that var->Type()==VAR_NORMAL (it's only VAR_CLIPBOARD for certain expression lvalues, which would never be assigned here because aToken is an rvalue).
 	case SYM_FLOAT:   return Assign(aToken.value_double); // Listed last because it's probably the least common.
@@ -498,8 +512,8 @@ ResultType Var::Assign(char *aBuf, VarSizeType aLength, bool aExactSize, bool aO
 	mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
 	// HOWEVER, other things like making mLength 0 and mContents blank are not done here for performance
 	// reasons (it seems too rare that early return/failure will occur below, since it's only due to
-	// out-of-memory... and even if it does happen, there a probably no consequences to leaving the variable
-	// the way it is now (rather than forcing it to be black) since the script thread that caused the error
+	// out-of-memory... and even if it does happen, there are probably no consequences to leaving the variable
+	// the way it is now (rather than forcing it to be blank) since the script thread that caused the error
 	// will be ended.
 
 	if (space_needed > mCapacity)
@@ -513,12 +527,12 @@ ResultType Var::Assign(char *aBuf, VarSizeType aLength, bool aExactSize, bool aO
 		case ALLOC_SIMPLE:
 			if (space_needed <= MAX_ALLOC_SIMPLE)
 			{
-				// v1.0.31: Conserve memory within large arrays by allowing elements of length 1 or 7, for such
+				// v1.0.31: Conserve memory within large arrays by allowing elements of length 3 or 7, for such
 				// things as the storage of boolean values, or the storage of short numbers (it's best to use
 				// multiples of 4 for size due to byte alignment in SimpleHeap; e.g. lengths of 3 and 7).
 				// Because the above checked that space_needed > mCapacity, the capacity will increase but
 				// never decrease in this section, which prevent a memory leak by only ever wasting a maximum
-				// of 2+7+MAX_ALLOC_SIMPLE for each variable (and then only in the worst case -- in the average
+				// of 4+8+MAX_ALLOC_SIMPLE for each variable (and then only in the worst case -- in the average
 				// case, it saves memory by avoiding the overhead incurred for each separate malloc'd block).
 				if (space_needed < 5) // Even for aExactSize, it seems best to prevent variables from having only a zero terminator in them because that would usually waste 3 bytes due to byte alignment in SimpleHeap.
 					new_size = 4; // v1.0.45: Increased from 2 to 4 to exploit byte alignment in SimpleHeap.
@@ -602,6 +616,7 @@ ResultType Var::Assign(char *aBuf, VarSizeType aLength, bool aExactSize, bool aO
 		// set in their sections above) are updated together so that they stay consistent with each other:
 		mContents = new_mem;
 		mCapacity = (VarSizeType)new_size;
+		mAttrib &= ~VAR_ATTRIB_CACHE_DISABLED; // If the script previously took the address of this variable, that address is no longer valid; so there is no need to protect against the script directly accessing this variable. This is never reached for VAR_CLIPBOARD, so that isn't checked.
 	} // if (space_needed > mCapacity)
 
 	if (do_assign)
@@ -643,7 +658,9 @@ ResultType Var::Assign(char *aBuf, VarSizeType aLength, bool aExactSize, bool aO
 VarSizeType Var::Get(char *aBuf)
 // Returns the length of this var's contents.  In addition, if aBuf isn't NULL, it will copy the contents into aBuf.
 {
-	// For v1.0.25, don't do this because in some cases the existing contents of aBuf will not
+	// Aliases: VAR_ALIAS is checked and handled further down than in most other functions.
+	//
+	// For v1.0.25, don't do the following because in some cases the existing contents of aBuf will not
 	// be altered.  Instead, it will be set to blank as needed further below.
 	//if (aBuf) *aBuf = '\0';  // Init early to get it out of the way, in case of early return.
 	DWORD result;
@@ -847,6 +864,7 @@ void Var::Free(int aWhenToFree, bool aExcludeAliases)
 				free(mContents);
 				mCapacity = 0;             // Invariant: Anyone setting mCapacity to 0 must also set
 				mContents = sEmptyString;  // mContents to the empty string.
+				mAttrib &= ~VAR_ATTRIB_CACHE_DISABLED; // If the script previously took the address of this variable, that address is no longer valid; so there is no need to protect against the script directly accessing this variable. This is never reached for VAR_CLIPBOARD, so that isn't checked.
 				// BUT DON'T CHANGE mHowAllocated to ALLOC_NONE (see comments further below).
 			}
 			else // Don't actually free it, but make it blank (callers rely on this).
@@ -938,6 +956,7 @@ void Var::AcceptNewMem(char *aNewMem, VarSizeType aLength)
 		var.mContents = aNewMem;
 		var.mLength = aLength;
 		var.mCapacity = (VarSizeType)_msize(aNewMem); // Get actual capacity in case it's a lot bigger than aLength+1. _msize() is only about 36 bytes of code and probably a very fast call.
+		var.mAttrib &= ~VAR_ATTRIB_CACHE_DISABLED; // This isn't always done by Free() above, so do it here in case it wasn't (it seems too unlikely to have to check whether aNewMem==the_old_mem_address).  Reason: If the script previously took the address of this variable, that address is no longer valid; so there is no need to protect against the script directly accessing this variable.
 		// Already done by Free() above:
 		//var.mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED; // New memory is always non-binary-clip.  A new parameter could be added to change this if it's ever needed.
 
@@ -1051,7 +1070,9 @@ void Var::Backup(VarBkp &aVarBkp)
 	if (mType != VAR_ALIAS) // Fix for v1.0.42.07: Don't reset mLength if the other member of the union is in effect.
 		mLength = 0;        // Otherwise, functions that recursively pass ByRef parameters can crash because mType stays as VAR_ALIAS.
 	mHowAllocated = ALLOC_MALLOC; // Never NONE because that would permit SIMPLE. See comments higher above.
-	mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED; // But the VAR_ATTRIB_STATIC flag isn't altered.
+	mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_CACHE_DISABLED); // But the VAR_ATTRIB_STATIC flag isn't altered.
+	// Above: Removing VAR_ATTRIB_CACHE_DISABLED doesn't cost anything in performance and might help cases where
+	// a recursively-called function does numeric, cache-only operations on a variable that has zero capacity
 }
 
 

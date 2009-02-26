@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -19,7 +19,7 @@ GNU General Public License for more details.
 
 #include "stdafx.h" // pre-compiled headers
 #include "defines.h"
-EXTERN_G;  // For ITOA() and related functions' use of g.FormatIntAsHex
+EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 
 #define IS_SPACE_OR_TAB(c) (c == ' ' || c == '\t')
 #define IS_SPACE_OR_TAB_OR_NBSP(c) (c == ' ' || c == '\t' || c == -96) // Use a negative to support signed chars.
@@ -375,7 +375,7 @@ inline double ATOF(char *buf)
 
 inline char *ITOA(int value, char *buf)
 {
-	if (g.FormatIntAsHex)
+	if (g->FormatIntAsHex)
 	{
 		char *our_buf_temp = buf;
 		// Negative hex numbers need special handling, otherwise something like zero minus one would create
@@ -395,7 +395,7 @@ inline char *ITOA(int value, char *buf)
 
 inline char *ITOA64(__int64 value, char *buf)
 {
-	if (g.FormatIntAsHex)
+	if (g->FormatIntAsHex)
 	{
 		char *our_buf_temp = buf;
 		if (value < 0)
@@ -412,7 +412,7 @@ inline char *ITOA64(__int64 value, char *buf)
 
 inline char *UTOA(unsigned long value, char *buf)
 {
-	if (g.FormatIntAsHex)
+	if (g->FormatIntAsHex)
 	{
 		*buf = '0';
 		*(buf + 1) = 'x';
@@ -427,7 +427,7 @@ inline char *UTOA(unsigned long value, char *buf)
 // Not currently used:
 //inline char *UTOA64(unsigned __int64 value, char *buf) 
 //{
-//	if (g.FormatIntAsHex)
+//	if (g->FormatIntAsHex)
 //	{
 //		*buf = '0';
 //		*(buf + 1) = 'x';
@@ -462,11 +462,11 @@ inline char *UTOA(unsigned long value, char *buf)
 // the program when the new locale-case-insensitive mode is in effect.
 #define strcmp2(str1, str2, string_case_sense) ((string_case_sense) == SCS_INSENSITIVE ? stricmp(str1, str2) \
 	: ((string_case_sense) == SCS_INSENSITIVE_LOCALE ? lstrcmpi(str1, str2) : strcmp(str1, str2)))
-#define g_strcmp(str1, str2) strcmp2(str1, str2, g.StringCaseSense)
+#define g_strcmp(str1, str2) strcmp2(str1, str2, ::g->StringCaseSense)
 // The most common mode is listed first for performance:
 #define strstr2(haystack, needle, string_case_sense) ((string_case_sense) == SCS_INSENSITIVE ? strcasestr(haystack, needle) \
 	: ((string_case_sense) == SCS_INSENSITIVE_LOCALE ? lstrcasestr(haystack, needle) : strstr(haystack, needle)))
-#define g_strstr(haystack, needle) strstr2(haystack, needle, g.StringCaseSense)
+#define g_strstr(haystack, needle) strstr2(haystack, needle, ::g->StringCaseSense)
 // For the following, caller must ensure that len1 and len2 aren't beyond the terminated length of the string
 // because CompareString() might not stop at the terminator when a length is specified.  Also, CompareString()
 // returns 0 on failure, but failure occurs only when parameter/flag is invalid, which should never happen in

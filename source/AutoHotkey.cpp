@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -160,19 +160,19 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		return CRITICAL_ERROR;  // Realistically should never happen.
 	var->Assign(script_param_num - 1);
 
-	global_init(g);  // Set defaults prior to the below, since below might override them for AutoIt2 scripts.
+	global_init(*g);  // Set defaults prior to the below, since below might override them for AutoIt2 scripts.
 
 // Set up the basics of the script:
 #ifdef AUTOHOTKEYSC
-	if (g_script.Init("", restart_mode) != OK) 
+	if (g_script.Init(*g, "", restart_mode) != OK) 
 #else
-	if (g_script.Init(script_filespec, restart_mode) != OK)  // Set up the basics of the script, using the above.
+	if (g_script.Init(*g, script_filespec, restart_mode) != OK)  // Set up the basics of the script, using the above.
 #endif
 		return CRITICAL_ERROR;
 
 	// Set g_default now, reflecting any changes made to "g" above, in case AutoExecSection(), below,
 	// never returns, perhaps because it contains an infinite loop (intentional or not):
-	CopyMemory(&g_default, &g, sizeof(global_struct));
+	CopyMemory(&g_default, g, sizeof(global_struct));
 
 	// Could use CreateMutex() but that seems pointless because we have to discover the
 	// hWnd of the existing process so that we can close or restart it, so we would have
@@ -304,8 +304,9 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	// top part (the auto-execute part) of the script so that they will be in effect even if the
 	// top part is something that's very involved and requires user interaction:
 	Hotkey::ManifestAllHotkeysHotstringsHooks(); // We want these active now in case auto-execute never returns (e.g. loop)
-	g_script.mIsReadyToExecute = true; // This is done only now for error reporting purposes in Hotkey.cpp.
-	Var *clipboard_var = g_script.FindVar("Clipboard");
+	g_script.mIsReadyToExecute = true; // This is done only after the above to support error reporting in Hotkey.cpp.
+
+	Var *clipboard_var = g_script.FindOrAddVar("Clipboard"); // Add it if it doesn't exist, in case the script accesses "Clipboard" via a dynamic variable.
 	if (clipboard_var)
 		// This is done here rather than upon variable creation speed up runtime/dynamic variable creation.
 		// Since the clipboard can be changed by activity outside the program, don't read-cache its contents.
@@ -314,40 +315,12 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		clipboard_var->DisableCache();
 
 	// Run the auto-execute part at the top of the script (this call might never return):
-	ResultType result = g_script.AutoExecSection();
-	// If no hotkeys are in effect, the user hasn't requested a hook to be activated, and the script
-	// doesn't contain the #Persistent directive we're done unless the OnExit subroutine doesn't exit:
-	if (!IS_PERSISTENT) // Resolve macro again in case any of its components changed since the last time.
-		g_script.ExitApp(result == FAIL ? EXIT_ERROR : EXIT_EXIT);
-
-	// The below is done even if AutoExecSectionTimeout() already set the values once.
-	// This is because when the AutoExecute section finally does finish, by definition it's
-	// supposed to store the global settings that are currently in effect as the default values.
-	// In other words, the only purpose of AutoExecSectionTimeout() is to handle cases where
-	// the AutoExecute section takes a long time to complete, or never completes (perhaps because
-	// it is being used by the script as a "backround thread" of sorts):
-	// Save the values of KeyDelay, WinDelay etc. in case they were changed by the auto-execute part
-	// of the script.  These new defaults will be put into effect whenever a new hotkey subroutine
-	// is launched.  Each launched subroutine may then change the values for its own purposes without
-	// affecting the settings for other subroutines:
-	global_clear_state(g);  // Start with a "clean slate" in both g and g_default.
-	CopyMemory(&g_default, &g, sizeof(global_struct)); // Above has set g.IsPaused==false in case it's ever possible that it's true as a result of AutoExecSection().
-	// After this point, the values in g_default should never be changed.
-
-	// It seems best to set ErrorLevel to NONE after the auto-execute part of the script is done.
-	// However, we do not set it to NONE right before launching each new hotkey subroutine because
-	// it's more flexible that way (i.e. the user may want one hotkey subroutine to use the value of
-	// ErrorLevel set by another).  This reset was also done by LoadFromFile(), but we do it again
-	// here in case the auto-exectute section changed it:
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-
-	// Since we're about to enter the script's idle state, set the "idle thread" to
-	// be minimum priority so that it can always be "interrupted" (though technically,
-	// there is no actual idle quasi-thread, so it can't really be interrupted):
-	g.Priority = PRIORITY_MINIMUM;
-	g.ThreadIsCritical = false;            // v1.0.38.04: Prevent the idle thread from being seen as uninterruptible.
-	g.AllowTimers = true;                  // v1.0.40.01: Similar to above.
-	g.AllowThreadToBeInterrupted = true;   // This is the primary line, the one above is not strictly necessary (just for maintainability).
+	if (!g_script.AutoExecSection()) // Can't run script at all. Due to rarity, just abort.
+		return CRITICAL_ERROR;
+	// REMEMBER: The call above will never return if one of the following happens:
+	// 1) The AutoExec section never finishes (e.g. infinite loop).
+	// 2) The AutoExec function uses uses the Exit or ExitApp command to terminate the script.
+	// 3) The script isn't persistent and its last line is reached (in which case an ExitApp is implicit).
 
 	// Call it in this special mode to kick off the main event loop.
 	// Be sure to pass something >0 for the first param or it will

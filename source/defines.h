@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -34,9 +34,9 @@ GNU General Public License for more details.
 
 #define NAME_P "AutoHotkey"
 #ifndef NAME_L_REVISION
-#define NAME_L_REVISION ".L18" // Lexikos: (L14) Added .Ln for AutoHotkey_L revision n.
+#define NAME_L_REVISION ".L19" // Lexikos: (L14) Added .Ln for AutoHotkey_L revision n.
 #endif
-#define NAME_VERSION "1.0.47.07" NAME_L_REVISION
+#define NAME_VERSION "1.0.48.00" NAME_L_REVISION
 #define NAME_PV NAME_P " v" NAME_VERSION
 
 // Window class names: Changing these may result in new versions not being able to detect any old instances
@@ -262,7 +262,7 @@ enum enum_act {
 , ACT_CLIPWAIT, ACT_KEYWAIT
 , ACT_SLEEP, ACT_RANDOM
 , ACT_GOTO, ACT_GOSUB, ACT_ONEXIT, ACT_HOTKEY, ACT_SETTIMER, ACT_CRITICAL, ACT_THREAD, ACT_RETURN, ACT_EXIT
-, ACT_LOOP, ACT_WHILE, ACT_BREAK, ACT_CONTINUE // Lexikos: (L4) Added ACT_WHILE.
+, ACT_LOOP, ACT_WHILE, ACT_BREAK, ACT_CONTINUE // v1.0.48: Lexikos: Added ACT_WHILE.
 , ACT_BLOCK_BEGIN, ACT_BLOCK_END
 , ACT_WINACTIVATE, ACT_WINACTIVATEBOTTOM
 , ACT_WINWAIT, ACT_WINWAITCLOSE, ACT_WINWAITACTIVE, ACT_WINWAITNOTACTIVE
@@ -325,7 +325,8 @@ enum enum_act_old {
 	|| ActionType == ACT_LISTLINES || ActionType == ACT_LISTVARS || ActionType == ACT_LISTHOTKEYS)
 #define ACT_IS_ASSIGN(ActionType) (ActionType <= ACT_ASSIGN_LAST && ActionType >= ACT_ASSIGN_FIRST) // Ordered for short-circuit performance.
 #define ACT_IS_IF(ActionType) (ActionType >= ACT_FIRST_IF && ActionType <= ACT_LAST_IF)
-#define ACT_IS_IF_OR_ELSE_OR_LOOP(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE || ActionType == ACT_LOOP || ActionType == ACT_WHILE) // Lexikos: (L4) Added check for ACT_WHILE.
+#define ACT_IS_IF_OR_ELSE_OR_LOOP(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
+	|| ActionType == ACT_LOOP || ActionType == ACT_WHILE) // Lexikos: Added check for ACT_WHILE.
 #define ACT_IS_IF_OLD(ActionType, OldActionType) (ActionType >= ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION && ActionType <= ACT_LAST_IF) \
 	&& (ActionType < ACT_IFEQUAL || ActionType > ACT_IFLESSOREQUAL || (OldActionType >= OLD_IFEQUAL && OldActionType <= OLD_IFLESSOREQUAL))
 	// All the checks above must be done so that cmds such as IfMsgBox (which are both "old" and "new")
@@ -343,7 +344,7 @@ enum enum_act_old {
 // that value is used to indicate failure by DialogBox():
 #define AHK_TIMEOUT -2
 // And these to prevent mutual dependency problem between window.h and globaldata.h:
-#define MAX_MSGBOXES 7
+#define MAX_MSGBOXES 7 // Probably best not to change this because it's used by OurTimers to set the timer IDs, which should probably be kept the same for backward compatibility.
 #define MAX_INPUTBOXES 4
 #define MAX_PROGRESS_WINDOWS 10  // Allow a lot for downloads and such.
 #define MAX_PROGRESS_WINDOWS_STR "10" // Keep this in sync with above.
@@ -384,7 +385,7 @@ typedef UCHAR HookType;
 #define HOOK_MOUSE 0x02
 #define HOOK_FAIL  0xFF
 
-#define EXTERN_G extern global_struct g
+#define EXTERN_G extern global_struct *g
 #define EXTERN_OSVER extern OS_Version g_os
 #define EXTERN_CLIPBOARD extern Clipboard g_clip
 #define EXTERN_SCRIPT extern Script g_script
@@ -434,7 +435,7 @@ typedef UCHAR HookType;
 #define LONG_OPERATION_UPDATE \
 {\
 	tick_now = GetTickCount();\
-	if (tick_now - g_script.mLastPeekTime > g.PeekFrequency)\
+	if (tick_now - g_script.mLastPeekTime > ::g->PeekFrequency)\
 	{\
 		if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))\
 			MsgSleep(-1);\
@@ -447,7 +448,7 @@ typedef UCHAR HookType;
 #define LONG_OPERATION_UPDATE_FOR_SENDKEYS \
 {\
 	tick_now = GetTickCount();\
-	if (tick_now - g_script.mLastPeekTime > g.PeekFrequency)\
+	if (tick_now - g_script.mLastPeekTime > ::g->PeekFrequency)\
 	{\
 		if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))\
 			SLEEP_WITHOUT_INTERRUPTION(-1) \
@@ -545,8 +546,8 @@ struct global_struct
 	GuiIndexType GuiWindowIndex, GuiControlIndex; // The GUI window index and control index that launched this thread.
 	GuiIndexType GuiDefaultWindowIndex; // This thread's default GUI window, used except when specified "Gui, 2:Add, ..."
 	GuiIndexType DialogOwnerIndex; // This thread's GUI owner, if any. Stored as Index vs. HWND to insulate against the case where a GUI window has been destroyed and recreated with a new HWND.
-	#define THREAD_DIALOG_OWNER ((g.DialogOwnerIndex < MAX_GUI_WINDOWS && g_gui[g.DialogOwnerIndex]) \
-		? g_gui[g.DialogOwnerIndex]->mHwnd : NULL) // Above line relies on short-circuit eval. oder.
+	#define THREAD_DIALOG_OWNER ((::g->DialogOwnerIndex < MAX_GUI_WINDOWS && g_gui[::g->DialogOwnerIndex]) \
+	? g_gui[::g->DialogOwnerIndex]->mHwnd : NULL) // Above line relies on short-circuit eval. oder.
 	int WinDelay;  // negative values may be used as special flags.
 	int ControlDelay; // negative values may be used as special flags.
 	int KeyDelay;     //
@@ -566,6 +567,8 @@ struct global_struct
 	// All these one-byte members are kept adjacent to make the struct smaller, which helps conserve stack space:
 	SendModes SendMode;
 	DWORD PeekFrequency; // DWORD vs. UCHAR might improve performance a little since it's checked so often.
+	DWORD ThreadStartTime;
+	int UninterruptibleDuration; // Must be int to preserve negative values found in g_script.mUninterruptibleTime.
 	DWORD CalledByIsDialogMessageOrDispatchMsg; // Detects that fact that some messages (like WM_KEYDOWN->WM_NOTIFY for UpDown controls) are translated to different message numbers by IsDialogMessage (and maybe Dispatch too).
 	bool CalledByIsDialogMessageOrDispatch; // Helps avoid launching a monitor function twice for the same message.  This would probably be okay if it were a normal global rather than in the g-struct, but due to messaging complexity, this lends peace of mind and robustness.
 	bool TitleFindFast; // Whether to use the fast mode of searching window text, or the more thorough slow mode.
@@ -581,8 +584,18 @@ struct global_struct
 	bool AutoTrim;
 	bool FormatIntAsHex;
 	bool MsgBoxTimedOut; // Doesn't require initialization.
-	bool IsPaused, UnderlyingThreadIsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
+	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
 };
+
+inline void global_maximize_interruptibility(global_struct &g)
+{
+	g.AllowThreadToBeInterrupted = true;
+	g.UninterruptibleDuration = 0; // 0 means uninterruptibility times out instantly.  Some callers may want this so that this "g" can be used to launch other threads (e.g. threadless callbacks) using 0 as their default.
+	g.ThreadIsCritical = false;
+	g.AllowTimers = true;
+	#define PRIORITY_MINIMUM INT_MIN
+	g.Priority = PRIORITY_MINIMUM; // Ensure minimum priority so that it can always be interrupted.
+}
 
 inline void global_clear_state(global_struct &g)
 // Reset those values that represent the condition or state created by previously executed commands
@@ -595,7 +608,6 @@ inline void global_clear_state(global_struct &g)
 	//g.hWndToRestore = NULL;
 	g.MsgBoxResult = 0;
 	g.IsPaused = false;
-	g.UnderlyingThreadIsPaused = false;
 	g.UninterruptedLineCount = 0;
 	g.DialogOwnerIndex = MAX_GUI_WINDOWS; // Initialized to out-of-bounds.
 	g.CalledByIsDialogMessageOrDispatch = false; // CalledByIsDialogMessageOrDispatchMsg doesn't need to be cleared because it's value is only considered relevant when CalledByIsDialogMessageOrDispatch==true.
@@ -631,9 +643,9 @@ inline void global_init(global_struct &g)
 	#define DEFAULT_PEEK_FREQUENCY 5
 	g.PeekFrequency = DEFAULT_PEEK_FREQUENCY; // v1.0.46. See comments in ACT_CRITICAL.
 	g.AllowThreadToBeInterrupted = true; // Separate from g_AllowInterruption so that they can have independent values.
+	g.UninterruptibleDuration = 0; // 0 means uninterruptibility times out instantly.  Some callers may want this so that this "g" can be used to launch other threads (e.g. threadless callbacks) using 0 as their default.
 	g.AllowTimers = true;
 	g.ThreadIsCritical = false;
-	#define PRIORITY_MINIMUM INT_MIN
 	g.Priority = 0;
 	g.LastError = 0;
 	g.GuiEvent = GUI_EVENT_NONE;

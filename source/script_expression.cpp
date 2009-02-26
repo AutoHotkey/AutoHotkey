@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -85,7 +85,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 	///////////////////////////////
 	// EVALUATE POSTFIX EXPRESSION
 	///////////////////////////////
-	int i, j, s, actual_param_count, delta;
+	int i, j, actual_param_count, count_of_actuals_that_have_formals, delta;
 	SymbolType right_is_number, left_is_number, result_symbol;
 	double right_double, left_double;
 	__int64 right_int64, left_int64;
@@ -139,14 +139,14 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 				if (!SYM_DYNAMIC_IS_DOUBLE_DEREF(this_token)) // It's a built-in variable or potential environment variable.
 				{
 					// Check if it's a normal variable rather than a built-in or environment variable.
-					// This happens when g_NoEnv==false.
+					// This happens when g_NoEnv==FALSE.
 					if (this_token.var->Type() == VAR_NORMAL && this_token.var->HasContents()) // v1.0.46.07: It's not a built-in or environment variable.
 					{
 						this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with one limited exception) is relied upon in several places such as built-in functions.
 						goto push_this_token;
 					}
 					// Otherwise, it's an environment variable, built-in variable, or normal variable of zero-length
-					// (and it is also known now that g_NoEnv==false because otherwise the loadtime
+					// (and it is also known now that g_NoEnv==FALSE because otherwise the loadtime
 					// ExpressionToPostfix() would never have made this item into SYM_DYNAMIC under these conditions).
 					result_size = this_token.var->Get() + 1; // Get() is used even for environment vars because it has a cache that improves their performance.
 					if (result_size == 1)
@@ -259,15 +259,27 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 						// called incorrectly by the script, the expression is aborted like it would be for other
 						// syntax errors.
 						if (   !(deref->func = g_script.FindFunc(left_buf, var_name_length)) // Below relies on short-circuit boolean order, with this line being executed first.
-							// Lexikos: (L4) Disabled these checks so dynamic function calls may be less strict, in combination with some other modifications.
-							/*|| deref->param_count > deref->func->mParamCount    // param_count was set by the
-							|| deref->param_count < deref->func->mMinParams*/   ) // infix processing code.
+							|| deref->param_count < deref->func->mMinParams // param_count was set by the infix processing code.
+							//|| deref->param_count > deref->func->mParamCount // Not checked; see below.
+							)
 							goto abnormal_end;
+						// v1.0.48: Although passing too many parameters is useful (due to the absence of a
+						// means to dynamically execute code; e.g. Eval()), passing too few parameters (and
+						// treating the missing ones as optional) seems a little inappropriate because it would
+						// allow the function's caller to second-guess the function's designer (the designer
+						// could provide a default value if a parameter is capable of being omitted). Another
+						// issue might be misbehavior by built-in functions that assume that the minimum
+						// number of parameters are present due to prior validation. So either all the built-in
+						// functions would have to be reviewed, or the minimum would have to be enforced for
+						// them but not user-defined functions, which is inconsistent. Finally, allowing too-few
+						// parameters seems like it would reduce the ability to detect script bugs at runtime.
+						//
 						// Since the SYM_FUNC associated with the SYM_DYNAMIC points to the SAME deref as above,
 						// updating the above also updates the SYM_FUNC (which might otherwise be difficult to
-						// find in the postfix array because I think a function call's parameters lie between
-						// its SYM_DYNAMIC and its SYM_FUNC within the postfix array.
-						continue;
+						// find in the postfix array because I think a function call's parameters (which may
+						// not have been evaluated/collapsed yet?) lie between its SYM_DYNAMIC and its SYM_FUNC
+						// within the postfix array.
+						continue; // Nothing more needs to be done (see above), so move on to the next postfix item.
 					}
 
 					// In v1.0.31, FindOrAddVar() vs. FindVar() is called below to support the passing of non-existent
@@ -323,14 +335,11 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 			actual_param_count = this_token.deref->param_count; // For performance.
 			if (actual_param_count > stack_count) // Prevent stack underflow (probably impossible if actual_param_count is accurate).
 				goto abnormal_end;
+			// Adjust the stack early to simplify.  Above already confirmed that the following won't underflow.
+			// Pop the actual number of params involved in this function-call off the stack.
+			stack_count -= actual_param_count; // Now stack[stack_count] is the leftmost item in an array of function-parameters, which simplifies processing later on.
 			if (func.mIsBuiltIn)
 			{
-				// Adjust the stack early to simplify.  Above already confirmed that this won't underflow.
-				// Pop the actual number of params involved in this function-call off the stack.  Load-time
-				// validation has ensured that this number is always less than or equal to the number of
-				// parameters formally defined by the function.  Therefore, there should never be any leftover
-				// function-params on the stack after this is done:
-				stack_count -= actual_param_count; // The function called below will see this portion of the stack as an array of its parameters.
 				this_token.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
 				this_token.marker = func.mName;  // Inform function of which built-in function called it (allows code sharing/reduction). Can't use circuit_token because it's value is still needed later below.
 				this_token.buf = left_buf;       // mBIF() can use this to store a string result, and for other purposes.
@@ -351,7 +360,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 				// memory over to output_var via AcceptNewMem(); 2) Set circuit_token to NULL to indicate to
 				// us that it is a user of circuit_token.
 
-				// CALL THE FUNCTION:
+				// CALL THE BUILT-IN FUNCTION:
 				func.mBIF(this_token, stack + stack_count, actual_param_count);
 
 				// RESTORE THE CIRCUIT TOKEN (after handling what came back inside it):
@@ -440,6 +449,9 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 			}
 			else // It's not a built-in function, or it's a built-in that was overridden with a custom function.
 			{
+				count_of_actuals_that_have_formals = (actual_param_count > func.mParamCount)
+					? func.mParamCount  // Omit any actuals that lack formals (this can happen when a dynamic call passes too many parameters).
+					: actual_param_count;
 				// If there are other instances of this function already running, either via recursion or
 				// an interrupted quasi-thread, back up the local variables of the instance that lies immediately
 				// beneath ours (in turn, that instance is responsible for backing up any instance that lies
@@ -467,13 +479,9 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					// first one's conversion must occur prior to calling BackupFunctionVars().  In addition, there
 					// might be other interdependencies between formals and actuals if a function is calling itself
 					// recursively.
-					for (j = (actual_param_count < func.mParamCount ? actual_param_count : func.mParamCount) - 1
-						, s = stack_count // Above line starts at the first formal parameter that has an actual.
-						; j > -1; --j) // For each formal parameter (reverse order to mirror the nature of the stack).
+					for (j = 0; j < count_of_actuals_that_have_formals; ++j) // For each actual parameter than has a formal.
 					{
-						// --s below moves on to the next item in the stack (without popping):  A check higher
-						// above has already ensured that this won't cause stack underflow:
-						ExprTokenType &this_stack_token = *stack[--s]; // Traditional, but doesn't measurably reduce code size and it's unlikely to help performance due to actual flow of control in this case.
+						ExprTokenType &this_stack_token = *stack[stack_count + j]; // stack[stack_count] is the first actual parameter. A check higher above has already ensured that this line won't cause stack overflow.
 						if (this_stack_token.symbol == SYM_VAR && !func.mParam[j].is_byref)
 						{
 							// Since this formal parameter is passed by value, if it's SYM_VAR, convert it to
@@ -505,14 +513,9 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 				// instances of this function on the call-stack and yet SYM_VAR to be one of this function's own
 				// locals or formal params because it would have no legitimate origin.
 
-				// Lexikos: (L4) Discard surplus parameters for dynamic function calls.
-				if (actual_param_count > func.mParamCount)
-					stack_count -= actual_param_count - func.mParamCount;
-
-				j = func.mParamCount - 1; // The index of the last formal parameter. Relied upon by BOTH loops below.
 				// The following loop will have zero iterations unless at least one formal parameter lacks an actual,
 				// which should be possible only if the parameter is optional (i.e. has a default value).
-				for (; j >= actual_param_count; --j) // For each formal parameter that lacks an actual (reverse order to mirror the nature of the stack).
+				for (j = actual_param_count; j < func.mParamCount; ++j) // For each formal parameter that lacks an actual, provide a default value.
 				{
 					// The following worsens performance by 7% under UPX 2.0 but is the faster method on UPX 3.0.
 					// This could merely be due to unpredictable cache hits/misses in a my particular CPU.
@@ -525,17 +528,14 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					case PARAM_DEFAULT_STR:   this_formal_param.var->Assign(this_formal_param.default_str);    break;
 					case PARAM_DEFAULT_INT:   this_formal_param.var->Assign(this_formal_param.default_int64);  break;
 					case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
-					// Lexikos: (L4) Allow dynamic function calls to pass fewer parameters than are declared.
-					case PARAM_DEFAULT_NONE:  this_formal_param.var->Assign(); break;
+					//case PARAM_DEFAULT_NONE: Not possible due to the nature of this loop and due to
+					// validation at loadtime or during earlier validation of dynamic function call.
 					}
 				}
-				// Pop the actual number of params involved in this function-call off the stack.  Load-time
-				// validation has ensured that this number is always less than or equal to the number of
-				// parameters formally defined by the function.  Therefore, there should never be any leftover
-				// params on the stack after this is done.  Relies upon the value of j established above:
-				for (; j > -1; --j) // For each formal parameter that has a matching actual (reverse order to mirror the nature of the stack).
+
+				for (j = 0; j < count_of_actuals_that_have_formals; ++j) // For each actual parameter than has a formal, assign the actual to the formal.
 				{
-					ExprTokenType &token = *STACK_POP; // A check higher above has already ensured that this won't cause stack underflow.
+					ExprTokenType &token = *stack[stack_count + j]; // stack[stack_count] is the first actual parameter. A check higher above has already ensured that this line won't cause stack overflow.
 					// Below uses IS_OPERAND rather than checking for only SYM_OPERAND because the stack can contain
 					// both generic and specific operands.  Specific operands were evaluated by a previous iteration
 					// of this section.  Generic ones were pushed as-is onto the stack by a previous iteration.
@@ -594,10 +594,10 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					goto normal_end_skip_output_var; // output_var is left unchanged in these cases.
 				}
 				// Since above didn't goto, this isn't an early return, so proceed normally.
-				if (done = EXPR_IS_DONE) // Resolve macro only once for use in more than one place below.
+				if (done = EXPR_IS_DONE) // Assign. Resolve macro only once for use in more than one place below.
 				{
 					if (output_var // i.e. this is ACT_ASSIGNEXPR and we've now produced the final result.
-						&& !(var_backup && g.CurrentFunc == &func && output_var->IsNonStaticLocal())) // Ordered for short-circuit performance.
+						&& !(var_backup && g->CurrentFunc == &func && output_var->IsNonStaticLocal())) // Ordered for short-circuit performance.
 						// Above line is a fix for v1.0.45.03: It detects whether output_var is among the variables
 						// that are about to be restored from backup.  If it is, we can't assign to it now
 						// because it's currently a local that belongs to the instance we're in the middle of
@@ -675,7 +675,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					// See the comment section higher above for examples.
 					Var &output_var_internal = *stack[stack_count-1]->var; // Above has already confirmed that it's SYM_VAR and VAR_NORMAL.
 					if (output_var_internal.Type() == VAR_NORMAL // Don't do clipboard here because don't want its result to be SYM_VAR, yet there's no place to store that result (i.e. need to continue on to make-persistent further below to get some memory for it).
-						&& !(var_backup && g.CurrentFunc == &func && output_var_internal.IsNonStaticLocal())) // Ordered for short-circuit performance.
+						&& !(var_backup && g->CurrentFunc == &func && output_var_internal.IsNonStaticLocal())) // Ordered for short-circuit performance.
 						// v1.0.46.09: The above line is a fix for a bug caused by 1.0.46.06's optimization below.
 						// For details, see comments in a similar line higher above.
 					{
@@ -859,7 +859,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 		if (this_token.symbol == SYM_COMMA) // This can only be a statement-separator comma, not a function comma, since function commas weren't put into the postfix array.
 			// Do nothing other than discarding the right-side operand that was just popped off the stack.
 			// This collapses the two sub-statements delimated by a given comma into a single result for
-			// subequent uses by another operator.  Unlike C++, the leftmost operand is preserved, not the
+			// subsequent uses by another operator.  Unlike C++, the leftmost operand is preserved, not the
 			// rightmost.  This is because it's faster to just discard the topmost item on the stack, but
 			// more importantly it allows ACT_ASSIGNEXPR, ACT_ADD, and others to work properly.  For example:
 			//    Var:=5, Var1:=(Var2:=1, Var3:=2)
@@ -1128,11 +1128,11 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 				result_symbol = SYM_INTEGER; // Set default.  Boolean results are treated as integers.
 				switch(this_token.symbol)
 				{
-				case SYM_EQUAL:     this_token.value_int64 = !((g.StringCaseSense == SCS_INSENSITIVE)
+				case SYM_EQUAL:     this_token.value_int64 = !((g->StringCaseSense == SCS_INSENSITIVE)
 										? stricmp(left_string, right_string)
 										: lstrcmpi(left_string, right_string)); break; // i.e. use the "more correct mode" except when explicitly told to use the fast mode (v1.0.43.03).
 				case SYM_EQUALCASE: this_token.value_int64 = !strcmp(left_string, right_string); break; // Case sensitive.
-				// The rest all obey g.StringCaseSense since they have no case sensitive counterparts:
+				// The rest all obey g->StringCaseSense since they have no case sensitive counterparts:
 				case SYM_NOTEQUAL:  this_token.value_int64 = g_strcmp(left_string, right_string) ? 1 : 0; break;
 				case SYM_GT:        this_token.value_int64 = g_strcmp(left_string, right_string) > 0; break;
 				case SYM_LT:        this_token.value_int64 = g_strcmp(left_string, right_string) < 0; break;
@@ -1160,7 +1160,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					left_length = (left.symbol == SYM_VAR) ? left.var->LengthIgnoreBinaryClip() : strlen(left_string);
 					result_size = right_length + left_length + 1;
 
-					if (sym_assign_var)  // Fix for v1.0.47.07: These 2 lines were added, and they must take
+					if (sym_assign_var)  // Fix for v1.0.48: These 2 lines were added, and they must take
 						temp_var = NULL; // precendence over the other checks below to allow an expression like the following to work: var := var2 .= "abc"
 					else if (output_var && EXPR_IS_DONE) // i.e. this is ACT_ASSIGNEXPR and we're at the final operator, a concat.
 					{
@@ -1187,7 +1187,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 							// same as one of the sources, freeing it beforehand would obviously be a problem.
 							if (temp_var->AppendIfRoom(right_string, (VarSizeType)right_length))
 							{
-								if (done_and_have_an_output_var) // Fix for v1.0.47.07: Checking "temp_var == output_var" would not be enough for cases like v := (v := v . "a") . "b"
+								if (done_and_have_an_output_var) // Fix for v1.0.48: Checking "temp_var == output_var" would not be enough for cases like v := (v := v . "a") . "b"
 									goto normal_end_skip_output_var; // Nothing more to do because it has even taken care of output_var already.
 								else // temp_var is from look-ahead to a future assignment.
 								{
@@ -1216,7 +1216,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 								memcpy(result, left_string, left_length);  // Not +1 because don't need the zero terminator.
 							memcpy(result + left_length, right_string, right_length + 1); // +1 to include its zero terminator.
 							temp_var->Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-							if (done_and_have_an_output_var) // Fix for v1.0.47.07: Checking "temp_var == output_var" would not be enough for cases like v := (v := v . "a") . "b"
+							if (done_and_have_an_output_var) // Fix for v1.0.48: Checking "temp_var == output_var" would not be enough for cases like v := (v := "a" . "b") . "c".
 								goto normal_end_skip_output_var; // Nothing more to do because it has even taken care of output_var already.
 							else // temp_var is from look-ahead to a future assignment.
 							{
@@ -1247,7 +1247,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					if (result_size <= (int)(aDerefBufSize - (target - aDerefBuf))) // There is room at the end of our deref buf, so use it.
 					{
 						this_token.marker = target;
-						target += result_size;  // Adjust target for potential future use by another concat or functionc call.
+						target += result_size;  // Adjust target for potential future use by another concat or function call.
 					}
 					else if (result_size < EXPR_SMALL_MEM_LIMIT && alloca_usage < EXPR_ALLOCA_LIMIT) // See comments at EXPR_SMALL_MEM_LIMIT.
 					{
@@ -1299,8 +1299,8 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 				// above.  This is because it is not legal to perform ~, &, |, or ^ on doubles, and also
 				// because this behavior conforms to that of the Transform command.  Any floating point
 				// operands are truncated to integers prior to doing the bitwise operation.
-				right_int64 = TokenToInt64(right, right_is_number == PURE_INTEGER); // It can't be SYM_STRING because in here, both right and
-				left_int64 = TokenToInt64(left, left_is_number == PURE_INTEGER);   // left are known to be numbers (otherwise an earlier "else if" would have executed instead of this one).
+				right_int64 = TokenToInt64(right, right_is_number==PURE_INTEGER); // It can't be SYM_STRING because in here, both right and
+				left_int64 = TokenToInt64(left, left_is_number==PURE_INTEGER);    // left are known to be numbers (otherwise an earlier "else if" would have executed instead of this one).
 				result_symbol = SYM_INTEGER; // Set default.
 				switch(this_token.symbol)
 				{
@@ -1494,9 +1494,7 @@ non_null_circuit_token:
 				{
 					// No more cascading is needed because this AND/OR isn't the left branch of another.
 					// This will be the final result of this AND/OR because it's right branch was discarded
-					// above without having been evaluated nor any of its functions called.  It's safe to use
-					// this_token vs. this_postfix below, for performance, because the value in its circuit_token
-					// member no longer matters:
+					// above without having been evaluated nor any of its functions called.
 					this_token.symbol = SYM_INTEGER;
 					this_token.value_int64 = left_branch_is_true; // Assign a pure 1 (for SYM_OR) or 0 (for SYM_AND).
 					this_token.circuit_token = circuit_token; // In case circuit_token->symbol == SYM_IFF_THEN.
@@ -1541,7 +1539,7 @@ non_null_circuit_token:
 		goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
 	}
 
-	if (mActionType == ACT_IFEXPR) // This is an optimization that improves the speed of ACT_IFEXPR by up to 50% (simple expressions like "if (x < y)" see the biggest speedup).
+	if (mActionType == ACT_IFEXPR || mActionType == ACT_WHILE) // This is an optimization that improves the speed of ACT_IFEXPR and probably ACT_WHILE by up to 50% (simple expressions like "if (x < y)" see the biggest speedup).
 	{
 		BOOL result_is_true;
 		switch (result_token.symbol)
@@ -1580,7 +1578,7 @@ non_null_circuit_token:
 	case SYM_FLOAT:
 		// In case of float formats that are too long to be supported, use snprint() to restrict the length.
 		 // %f probably defaults to %0.6f.  %f can handle doubles in MSVC++.
-		aTarget += snprintf(aTarget, MAX_NUMBER_SIZE, g.FormatFloat, result_token.value_double) + 1; // +1 because that's what callers want; i.e. the position after the terminator.
+		aTarget += snprintf(aTarget, MAX_NUMBER_SIZE, g->FormatFloat, result_token.value_double) + 1; // +1 because that's what callers want; i.e. the position after the terminator.
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
 	case SYM_STRING:
 	case SYM_OPERAND:
@@ -1711,7 +1709,9 @@ normal_end_skip_output_var:
 	// in the postfix loop above the push_this_token label.  Also, keeping seldom-reached code at the end
 	// may improve how well the code fits into the CPU cache.
 double_deref_fail: // For the rare cases when the name of a dynamic function call is too long or improper.
-	for (; deref->marker; ++deref);  // A deref with a NULL marker terminates the list, and also indicates whether this is a dynamic function call. deref has been set by the caller, and may or may not be the NULL marker deref. 
+	// A deref with a NULL marker terminates the list, and also indicates whether this is a dynamic function
+	// call. "deref" has been set by the caller, and may or may not be the NULL marker deref.
+	for (; deref->marker; ++deref);
 	if (deref->is_function)
 		goto abnormal_end;
 	else
@@ -1920,7 +1920,7 @@ ResultType Line::ExpandArgs(VarSizeType aSpaceNeeded, Var *aArgVar[])
 				// the pointer to be the variable itself.  However, this can only
 				// be done if the var is the clipboard or a non-environment
 				// normal var (since zero-length normal vars need to be fetched via
-				// GetEnvironmentVariable() when g_NoEnv==false).
+				// GetEnvironmentVariable() when g_NoEnv==FALSE).
 				// Update: Changed it so that it will deref the clipboard if it contains only
 				// files and no text, so that the files will be transcribed into the deref buffer.
 				// This is because the clipboard object needs a memory area into which to write
@@ -1932,6 +1932,7 @@ ResultType Line::ExpandArgs(VarSizeType aSpaceNeeded, Var *aArgVar[])
 				arg_deref[i] = // The following is ordered for short-circuit performance:
 					(   ACT_IS_ASSIGN(mActionType) && i == 1  // By contrast, for the below i==anything (all args):
 					|| (mActionType <= ACT_LAST_OPTIMIZED_IF && mActionType >= ACT_FIRST_OPTIMIZED_IF) // Ordered for short-circuit performance.
+					//|| mActionType == ACT_WHILE // Not necessary to check this one because loadtime leaves ACT_WHILE as an expression in all common cases. Also, there's no easy way to get ACT_WHILE into the range above due to the overlap of other ranges in enum_act.
 					) && the_only_var_of_this_arg->Type() == VAR_NORMAL // Otherwise, users of this optimization would have to reproduced more of the logic in ArgMustBeDereferenced().
 					? "" : the_only_var_of_this_arg->Contents(); // See "Update #2" comment above.
 				break;
@@ -2147,7 +2148,7 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 // (since normally output vars lie to the left of all input vars, so it doesn't seem worth doing anything
 // more complicated).
 // Returns CONDITION_TRUE, CONDITION_FALSE, or FAIL.
-// There are some other functions like ArgLengt() that have procedures similar to this one, so
+// There are some other functions like ArgLength() and ACT_ADD that have procedures similar to this one, so
 // maintain them together.
 {
 	if (mActionType == ACT_SORT) // See PerformSort() for why it's always dereferenced.
@@ -2163,7 +2164,7 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 		return CLIPBOARD_CONTAINS_ONLY_FILES ? CONDITION_TRUE : CONDITION_FALSE;
 	if (aVar_type != VAR_NORMAL || (!g_NoEnv && !aVar->HasContents()) || aVar == g_ErrorLevel) // v1.0.43.08: Added g_NoEnv.
 		// Reserved vars must always be dereferenced due to their volatile nature.
-		// When g_NoEnv==false, normal vars of length zero are dereferenced because they might exist
+		// When g_NoEnv==FALSE, normal vars of length zero are dereferenced because they might exist
 		// as system environment variables, whose contents are also potentially volatile (i.e. they
 		// are sometimes changed by outside forces).
 		// As of v1.0.25.12, g_ErrorLevel is always dereferenced also so that a command that sets ErrorLevel

@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -64,7 +64,7 @@ HWND WinActivate(global_struct &aSettings, char *aTitle, char *aText, char *aExc
 			return NULL;
 	}
 	// Above has ensured that target_window is non-NULL, that it is a valid window, and that
-	// it is eligible due to g.DetectHiddenWindows being true or the window not being hidden
+	// it is eligible due to g->DetectHiddenWindows being true or the window not being hidden
 	// (or being one of the script's GUI windows).
 	return SetForegroundWindowEx(target_window);
 }
@@ -1113,15 +1113,15 @@ int MsgBox(char *aText, UINT uType, char *aTitle, double aTimeout, HWND aOwner)
 
 	// v1.0.33: The following is a workaround for the fact that an MsgBox with only an OK button
 	// doesn't obey EndDialog()'s parameter:
-	g.DialogHWND = NULL;
-	g.MsgBoxTimedOut = false;
+	g->DialogHWND = NULL;
+	g->MsgBoxTimedOut = false;
 
 	// At this point, we know a dialog will be displayed.  See macro's comments for details:
 	DIALOG_PREP // Must be done prior to POST_AHK_DIALOG() below.
 	POST_AHK_DIALOG((DWORD)(aTimeout * 1000))
 
 	++g_nMessageBoxes;  // This value will also be used as the Timer ID if there's a timeout.
-	g.MsgBoxResult = MessageBox(aOwner, text, title, uType);
+	g->MsgBoxResult = MessageBox(aOwner, text, title, uType);
 	--g_nMessageBoxes;
 	// Above's use of aOwner: MsgBox, FileSelectFile, and other dialogs seem to consider aOwner to be NULL
 	// when aOwner is minimized or hidden.
@@ -1151,12 +1151,12 @@ int MsgBox(char *aText, UINT uType, char *aTitle, double aTimeout, HWND aOwner)
 	// and why the behavior varies:
 	// Unfortunately, it appears that MessageBox() will return zero rather
 	// than AHK_TIMEOUT that was specified in EndDialog() at least under WinXP.
-	if (g.MsgBoxTimedOut || (!g.MsgBoxResult && aTimeout > 0)) // v1.0.33: Added g.MsgBoxTimedOut, see comment higher above.
+	if (g->MsgBoxTimedOut || (!g->MsgBoxResult && aTimeout > 0)) // v1.0.33: Added g->MsgBoxTimedOut, see comment higher above.
 		// Assume it timed out rather than failed, since failure should be VERY rare.
-		g.MsgBoxResult = AHK_TIMEOUT;
+		g->MsgBoxResult = AHK_TIMEOUT;
 	// else let the caller handle the display of the error message because only it knows
 	// whether to also tell the user something like "the script will not continue".
-	return g.MsgBoxResult;
+	return g->MsgBoxResult;
 }
 
 
@@ -1833,10 +1833,10 @@ void SetForegroundLockTimeout()
 bool DialogPrep()
 // Having it as a function vs. macro should reduce code size due to expansion of macros inside.
 {
-	bool thread_was_critical = g.ThreadIsCritical;
-	g.ThreadIsCritical = false;
-	MAKE_THREAD_INTERRUPTIBLE
-	if (HIWORD(GetQueueStatus(QS_ALLEVENTS)))
+	bool thread_was_critical = g->ThreadIsCritical;
+	g->ThreadIsCritical = false;
+	g->AllowThreadToBeInterrupted = true;
+	if (HIWORD(GetQueueStatus(QS_ALLEVENTS))) // See DIALOG_PREP for explanation.
 		MsgSleep(-1);
-	return thread_was_critical; // Caller is responsible for using this to later restore g.ThreadIsCritical.
+	return thread_was_critical; // Caller is responsible for using this to later restore g->ThreadIsCritical.
 }

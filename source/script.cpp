@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -51,7 +51,7 @@ Script::Script()
 	, mFuncExceptionVar(NULL), mFuncExceptionVarCount(0)
 	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true), mMenuUseErrorLevel(false)
 	, mFileSpec(""), mFileDir(""), mFileName(""), mOurEXE(""), mOurEXEDir(""), mMainWindowTitle("")
-	, mIsReadyToExecute(false), AutoExecSectionIsRunning(false)
+	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
 	, mIsRestart(false), mIsAutoIt2(false), mErrorStdOut(false)
 #ifdef AUTOHOTKEYSC
 	, mCompiledHasCustomIcon(false)
@@ -215,7 +215,7 @@ Script::~Script() // Destructor.
 
 
 
-ResultType Script::Init(char *aScriptFilename, bool aIsRestart)
+ResultType Script::Init(global_struct &g, char *aScriptFilename, bool aIsRestart)
 // Returns OK or FAIL.
 // Caller has provided an empty string for aScriptFilename if this is a compiled script.
 // Otherwise, aScriptFilename can be NULL if caller hasn't determined the filename of the script yet.
@@ -556,12 +556,12 @@ void Script::UpdateTrayIcon(bool aForceUpdate)
 		return;
 	static bool icon_shows_paused = false;
 	static bool icon_shows_suspended = false;
-	if (!aForceUpdate && (mIconFrozen || (g.IsPaused == icon_shows_paused && g_IsSuspended == icon_shows_suspended)))
+	if (!aForceUpdate && (mIconFrozen || (g->IsPaused == icon_shows_paused && g_IsSuspended == icon_shows_suspended)))
 		return; // it's already in the right state
 	int icon;
-	if (g.IsPaused && g_IsSuspended)
+	if (g->IsPaused && g_IsSuspended)
 		icon = IDI_PAUSE_SUSPEND;
-	else if (g.IsPaused)
+	else if (g->IsPaused)
 		icon = IDI_PAUSE;
 	else if (g_IsSuspended)
 		icon = g_IconTraySuspend;
@@ -572,11 +572,11 @@ void Script::UpdateTrayIcon(bool aForceUpdate)
 		icon = g_IconTray;
 #endif
 	// Use the custom tray icon if the icon is normal (non-paused & non-suspended):
-	mNIC.hIcon = (mCustomIconSmall && (mIconFrozen || (!g.IsPaused && !g_IsSuspended))) ? mCustomIconSmall // Lexikos: (L17) Always use small icon for tray.
+	mNIC.hIcon = (mCustomIconSmall && (mIconFrozen || (!g->IsPaused && !g_IsSuspended))) ? mCustomIconSmall // Lexikos: (L17) Always use small icon for tray.
 		: (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(icon), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED for simplicity and performance more than to conserve memory in this case.
 	if (Shell_NotifyIcon(NIM_MODIFY, &mNIC))
 	{
-		icon_shows_paused = g.IsPaused;
+		icon_shows_paused = g->IsPaused;
 		icon_shows_suspended = g_IsSuspended;
 	}
 	// else do nothing, just leave it in the same state.
@@ -585,10 +585,41 @@ void Script::UpdateTrayIcon(bool aForceUpdate)
 
 
 ResultType Script::AutoExecSection()
+// Returns FAIL if can't run due to critical error.  Otherwise returns OK.
 {
-	if (!mIsReadyToExecute)
-		return FAIL;
-	if (mFirstLine != NULL)
+	// Now that g_MaxThreadsTotal has been permanently set by the processing of script directives like
+	// #MaxThreads, an appropriately sized array can be allocated:
+	if (   !(g_array = (global_struct *)malloc((g_MaxThreadsTotal+TOTAL_ADDITIONAL_THREADS) * sizeof(global_struct)))   )
+		return FAIL; // Due to rarity, just abort. It wouldn't be safe to run ExitApp() due to possibility of an OnExit routine.
+	CopyMemory(g_array, g, sizeof(global_struct)); // Copy the temporary/startup "g" into array[0] to preserve historical behaviors that may rely on the idle thread starting with that "g".
+	g = g_array; // Must be done after above.
+
+	// v1.0.48: Due to switching from SET_UNINTERRUPTIBLE_TIMER to IsInterruptible():
+	// In spite of the comments in IsInterruptible(), periodically have a timer call IsInterruptible() due to
+	// the following scenario:
+	// - Interrupt timeout is 60 seconds (or 60 milliseconds for that matter).
+	// - For some reason IsInterrupt() isn't called for 24+ hours even though there is a current/active thread.
+	// - RefreshInterruptibility() fires at 23 hours and marks the thread interruptible.
+	// - Sometime after that, one of the following happens:
+	//      Computer is suspended/hibernated and stays that way for 50+ days.
+	//      IsInterrupt() is never called (except by RefreshInterruptibility()) for 50+ days.
+	//      (above is currently unlikely because MSG_FILTER_MAX calls IsInterruptible())
+	// In either case, RefreshInterruptibility() has prevented the uninterruptibility duration from being
+	// wrongly extended by up to 100% of g_script.mUninterruptibleTime.  This isn't a big deal if
+	// g_script.mUninterruptibleTime is low (like it almost always is); but if it's fairly large, say an hour,
+	// this can prevent an unwanted extension of up to 1 hour.
+	// Although any call frequency less than 49.7 days should work, currently calling once per 23 hours
+	// in case any older operating systems have a SetTimer() limit of less than 0x7FFFFFFF (and also to make
+	// it less likely that a long suspend/hibernate would cause the above issue).  The following was
+	// actually tested on Windows XP and a message does indeed arrive 23 hours after the script starts.
+	SetTimer(g_hWnd, TIMER_ID_REFRESH_INTERRUPTIBILITY, 23*60*60*1000, RefreshInterruptibility); // 3rd param must not exceed 0x7FFFFFFF (2147483647; 24.8 days).
+
+	ResultType ExecUntil_result;
+
+	if (!mFirstLine) // In case it's ever possible to be empty.
+		ExecUntil_result = OK;
+		// And continue on to do normal exit routine so that the right ExitCode is returned by the program.
+	else
 	{
 		// Choose a timeout that's a reasonable compromise between the following competing priorities:
 		// 1) That we want hotkeys to be responsive as soon as possible after the program launches
@@ -610,7 +641,7 @@ ResultType Script::AutoExecSection()
 		// unless someone actually reports that such a thing ever happens.  Still, to reduce the chance
 		// of such a thing ever happening, it seems best to boost the timeout from 50 up to 100:
 		SET_AUTOEXEC_TIMER(100);
-		AutoExecSectionIsRunning = true;
+		mAutoExecSectionIsRunning = true;
 
 		// v1.0.25: This is now done here, closer to the actual execution of the first line in the script,
 		// to avoid an unnecessary Sleep(10) that would otherwise occur in ExecUntil:
@@ -618,15 +649,59 @@ ResultType Script::AutoExecSection()
 
 		++g_nThreads;
 		DEBUGGER_STACK_PUSH(SE_Thread, mFirstLine, desc, "auto-execute")
-		ResultType result = mFirstLine->ExecUntil(UNTIL_RETURN);
+		ResultType result = mFirstLine->ExecUntil(UNTIL_RETURN); // Might never return (e.g. infinite loop or ExitApp).
 		DEBUGGER_STACK_POP()
 		--g_nThreads;
+		// Our caller will take care of setting g_default properly.
 
-		KILL_AUTOEXEC_TIMER  // This also does "g.AllowThreadToBeInterrupted = true"
-		AutoExecSectionIsRunning = false;
-
-		return result;
+		KILL_AUTOEXEC_TIMER // See also: AutoExecSectionTimeout().
+		mAutoExecSectionIsRunning = false;
 	}
+	// REMEMBER: The ExecUntil() call above will never return if the AutoExec section never finishes
+	// (e.g. infinite loop) or it uses Exit/ExitApp.
+
+	// The below is done even if AutoExecSectionTimeout() already set the values once.
+	// This is because when the AutoExecute section finally does finish, by definition it's
+	// supposed to store the global settings that are currently in effect as the default values.
+	// In other words, the only purpose of AutoExecSectionTimeout() is to handle cases where
+	// the AutoExecute section takes a long time to complete, or never completes (perhaps because
+	// it is being used by the script as a "backround thread" of sorts):
+	// Save the values of KeyDelay, WinDelay etc. in case they were changed by the auto-execute part
+	// of the script.  These new defaults will be put into effect whenever a new hotkey subroutine
+	// is launched.  Each launched subroutine may then change the values for its own purposes without
+	// affecting the settings for other subroutines:
+	global_clear_state(*g);  // Start with a "clean slate" in both g_default and g (in case things like InitNewThread() check some of the values in g prior to launching a new thread).
+
+	// Always want g_default.AllowInterruption==true so that InitNewThread()  doesn't have to
+	// set it except when Critical or "Thread Interrupt" require it.  If the auto-execute section ended
+	// without anyone needing to call IsInterruptible() on it, AllowInterruption could be false
+	// even when Critical is off.
+	// Even if the still-running AutoExec section has turned on Critical, the assignment below is still okay
+	// because InitNewThread() adjusts AllowInterruption based on the value of ThreadIsCritical.
+	// See similar code in AutoExecSectionTimeout().
+	g->AllowThreadToBeInterrupted = true; // Mostly for the g_default line below. See comments above.
+	CopyMemory(&g_default, g, sizeof(global_struct)); // g->IsPaused has been set to false higher above in case it's ever possible that it's true as a result of AutoExecSection().
+	// After this point, the values in g_default should never be changed.
+	global_maximize_interruptibility(*g); // See below.
+	// Now that any changes made by the AutoExec section have been saved to g_default (including
+	// the commands Critical and Thread), ensure that the very first g-item is always interruptible.
+	// This avoids having to treat the first g-item as special in various places.
+
+	// It seems best to set ErrorLevel to NONE after the auto-execute part of the script is done.
+	// However, it isn't set to NONE right before launching each new thread (e.g. hotkey subroutine)
+	// because it's more flexible that way (i.e. the user may want one hotkey subroutine to use the value
+	// of ErrorLevel set by another).  This reset was also done by LoadFromFile(), but it is done again
+	// here in case the auto-execute section changed it:
+	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+
+	// BEFORE DOING THE BELOW, "g" and "g_default" should be set up properly in case there's an OnExit
+	// routine (even non-persistent scripts can have one).
+	// If no hotkeys are in effect, the user hasn't requested a hook to be activated, and the script
+	// doesn't contain the #Persistent directive we're done unless there is an OnExit subroutine and it
+	// doesn't do "ExitApp":
+	if (!IS_PERSISTENT) // Resolve macro again in case any of its components changed since the last time.
+		g_script.ExitApp(ExecUntil_result == FAIL ? EXIT_ERROR : EXIT_EXIT);
+
 	return OK;
 }
 
@@ -639,10 +714,10 @@ ResultType Script::Edit()
 #else
 	// This is here in case a compiled script ever uses the Edit command.  Since the "Edit This
 	// Script" menu item is not available for compiled scripts, it can't be called from there.
-	TitleMatchModes old_mode = g.TitleMatchMode;
-	g.TitleMatchMode = FIND_ANYWHERE;
-	HWND hwnd = WinExist(g, mFileName, "", mMainWindowTitle, ""); // Exclude our own main window.
-	g.TitleMatchMode = old_mode;
+	TitleMatchModes old_mode = g->TitleMatchMode;
+	g->TitleMatchMode = FIND_ANYWHERE;
+	HWND hwnd = WinExist(*g, mFileName, "", mMainWindowTitle, ""); // Exclude our own main window.
+	g->TitleMatchMode = old_mode;
 	if (hwnd)
 	{
 		char class_name[32];
@@ -730,7 +805,10 @@ ResultType Script::ExitApp(ExitReasons aExitReason, char *aBuf, int aExitCode)
 #endif
 		// In the case of sExitLabelIsRunning == true:
 		// There is another instance of this function beneath us on the stack.  Since we have
-		// been called, this is a true exit condition and we exit immediately:
+		// been called, this is a true exit condition and we exit immediately.
+		// MUST NOT create a new thread when sExitLabelIsRunning because g_array allows only one
+		// extra thread for ExitApp() (which allows it to run even when MAX_THREADS_EMERGENCY has
+		// been reached).  See TOTAL_ADDITIONAL_THREADS.
 		TerminateApp(aExitCode);
 	}
 
@@ -747,14 +825,9 @@ ResultType Script::ExitApp(ExitReasons aExitReason, char *aBuf, int aExitCode)
 	// to returning to our caller:
 	char ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
 	strlcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), sizeof(ErrorLevel_saved)); // Save caller's errorlevel.
-	global_struct global_saved;
-	CopyMemory(&global_saved, &g, sizeof(global_struct));
-	InitNewThread(0, true, true, ACT_INVALID); // Since this special thread should always run, no checking of g_MaxThreadsTotal is done before calling this.
+	InitNewThread(0, true, true, ACT_INVALID); // Uninterruptibility is handled below. Since this special thread should always run, no checking of g_MaxThreadsTotal is done before calling this.
 
-	if (g_nFileDialogs) // See MsgSleep() for comments on this.
-		SetCurrentDirectory(g_WorkingDir);
-
-	// Use g.AllowThreadToBeInterrupted to forbid any hotkeys, timers, or user defined menu items
+	// Turn on uninterruptibility to forbid any hotkeys, timers, or user defined menu items
 	// to interrupt.  This is mainly done for peace-of-mind (since possible interactions due to
 	// interruptions have not been studied) and the fact that this most users would not want this
 	// subroutine to be interruptible (it usually runs quickly anyway).  Another reason to make
@@ -763,27 +836,20 @@ ResultType Script::ExitApp(ExitReasons aExitReason, char *aBuf, int aExitCode)
 	// would not be safe.  Finally, if a logoff or shutdown is occurring, it seems best to prevent
 	// timed subroutines from running -- which might take too much time and prevent the exit from
 	// occurring in a timely fashion.  An option can be added via the FutureUse param to make it
-	// interruptible if there is ever a demand for that.  UPDATE: g_AllowInterruption is now used
-	// instead of g.AllowThreadToBeInterrupted for two reasons:
+	// interruptible if there is ever a demand for that.
+	// UPDATE: g_AllowInterruption is now used instead of g->AllowThreadToBeInterrupted for two reasons:
 	// 1) It avoids the need to do "int mUninterruptedLineCountMax_prev = g_script.mUninterruptedLineCountMax;"
 	//    (Disable this item so that ExecUntil() won't automatically make our new thread uninterruptible
 	//    after it has executed a certain number of lines).
-	// 2) If the thread we're interrupting is uninterruptible, the uinterruptible timer might be
-	//    currently pending.  When it fires, it would make the OnExit subroutine interruptible
+	// 2) Mostly obsolete: If the thread we're interrupting is uninterruptible, the uinterruptible timer
+	//    might be currently pending.  When it fires, it would make the OnExit subroutine interruptible
 	//    rather than the underlying subroutine.  The above fixes the first part of that problem.
 	//    The 2nd part is fixed by reinstating the timer when the uninterruptible thread is resumed.
 	//    This special handling is only necessary here -- not in other places where new threads are
 	//    created -- because OnExit is the only type of thread that can interrupt an uninterruptible
 	//    thread.
-	bool g_AllowInterruption_prev = g_AllowInterruption;  // Save current setting.
-	g_AllowInterruption = false; // Mark the thread just created above as permanently uninterruptible (i.e. until it finishes and is destroyed).
-
-	// This addresses the 2nd part of the problem described in the above large comment:
-	bool uninterruptible_timer_was_pending = g_UninterruptibleTimerExists;
-
-	// If the current quasi-thread is paused, the thread we're about to launch
-	// will not be, so the icon needs to be checked:
-	g_script.UpdateTrayIcon();
+	BOOL g_AllowInterruption_prev = g_AllowInterruption;  // Save current setting.
+	g_AllowInterruption = FALSE; // Mark the thread just created above as permanently uninterruptible (i.e. until it finishes and is destroyed).
 
 	sExitLabelIsRunning = true;
 	DEBUGGER_STACK_PUSH(SE_Thread, mOnExitLabel->mJumpToLine, desc, mOnExitLabel->mName)
@@ -808,20 +874,8 @@ ResultType Script::ExitApp(ExitReasons aExitReason, char *aBuf, int aExitCode)
 	}
 
 	// Otherwise:
-	ResumeUnderlyingThread(&global_saved, ErrorLevel_saved, false);
+	ResumeUnderlyingThread(ErrorLevel_saved);
 	g_AllowInterruption = g_AllowInterruption_prev;  // Restore original setting.
-	if (uninterruptible_timer_was_pending)
-		// Update: An alternative to the below would be to make the current thread interruptible
-		// right before the OnExit thread interrupts it, and keep it that way.
-		// Below macro recreates the timer if it doesn't already exists (i.e. if it fired during
-		// the running of the OnExit subroutine).  Although such a firing would have had
-		// no negative impact on the OnExit subroutine (since it's kept always-uninterruptible
-		// via g_AllowInterruption), reinstate the timer so that it will make the thread
-		// we're resuming interruptible.  The interval might not be exactly right -- since we
-		// don't know when the thread started -- but it seems relatively unimportant to
-		// worry about such accuracy given how rare and usually-inconsequential this whole
-		// scenario is:
-		SET_UNINTERRUPTIBLE_TIMER
 
 	return OK;  // for caller convenience.
 }
@@ -854,7 +908,7 @@ LineNumberType Script::LoadFromFile(bool aScriptWasNotspecified)
 // Returns the number of non-comment lines that were loaded, or LOADING_FAILED on error.
 {
 	mNoHotkeyLabels = true;  // Indicate that there are no hotkey labels, since we're (re)loading the entire file.
-	mIsReadyToExecute = AutoExecSectionIsRunning = false;
+	mIsReadyToExecute = mAutoExecSectionIsRunning = false;
 	if (!mFileSpec || !*mFileSpec) return LOADING_FAILED;
 
 #ifndef AUTOHOTKEYSC  // When not in stand-alone mode, read an external script file.
@@ -1749,7 +1803,7 @@ ResultType Script::LoadIncludedFile(char *aFileSpec, bool aAllowDuplicateInclude
 				// }
 				// In the above, the first would automatically be deemed a function call by means of
 				// the check higher above (by virtue of the fact that the line after it isn't an open-brace).
-				if (g.CurrentFunc)
+				if (g->CurrentFunc)
 				{
 					// Though it might be allowed in the future -- perhaps to have nested functions have
 					// access to their parent functions' local variables, or perhaps just to improve
@@ -1904,7 +1958,7 @@ examine_line:
 		// Treat a naked "::" as a normal label whose label name is colon:
 		if (is_label = (hotkey_flag && hotkey_flag > buf)) // It's a hotkey/hotstring label.
 		{
-			if (g.CurrentFunc)
+			if (g->CurrentFunc)
 			{
 				// Even if it weren't for the reasons below, the first hotkey/hotstring label in a script
 				// will end the auto-execute section with a "return".  Therefore, if this restriction here
@@ -2647,7 +2701,7 @@ inline ResultType Script::IsDirective(char *aBuf)
 
 	if (IS_DIRECTIVE_MATCH("#NoEnv"))
 	{
-		g_NoEnv = true;
+		g_NoEnv = TRUE;
 		return CONDITION_TRUE;
 	}
 	if (IS_DIRECTIVE_MATCH("#NoTrayIcon"))
@@ -2712,7 +2766,7 @@ inline ResultType Script::IsDirective(char *aBuf)
 
 		ResultType res;
 
-		Func *currentFunc = g.CurrentFunc;
+		Func *currentFunc = g->CurrentFunc;
 		bool nextLineIsFunctionBody = mNextLineIsFunctionBody;
 		Var **funcExceptionVar = mFuncExceptionVar;
 		Func *lastFunc = mLastFunc;
@@ -2722,7 +2776,7 @@ inline ResultType Script::IsDirective(char *aBuf)
 		//  b) AddLine doesn't make our dummy line the body of a function in cases such as this:
 		//		function() {
 		//		#if expression
-		g.CurrentFunc = NULL;
+		g->CurrentFunc = NULL;
 		mNextLineIsFunctionBody = false;
 		mFuncExceptionVar = NULL;
 		mLastFunc = NULL;
@@ -2748,7 +2802,7 @@ inline ResultType Script::IsDirective(char *aBuf)
 		--mLineCount;
 
 		// Restore the properties we overrode earlier.
-		g.CurrentFunc = currentFunc;
+		g->CurrentFunc = currentFunc;
 		mNextLineIsFunctionBody = nextLineIsFunctionBody;
 		mFuncExceptionVar = funcExceptionVar;
 		mLastFunc = lastFunc;
@@ -2913,7 +2967,7 @@ inline ResultType Script::IsDirective(char *aBuf)
 			// Use value as a temp holder since it's int vs. UCHAR and can thus detect very large or negative values:
 			value = ATOI(parameter);  // parameter was set to the right position by the above macro
 			if (value > MAX_THREADS_LIMIT) // For now, keep this limited to prevent stack overflow due to too many pseudo-threads.
-				value = MAX_THREADS_LIMIT;
+				value = MAX_THREADS_LIMIT; // UPDATE: To avoid array overflow, this limit must by obeyed except where otherwise documented.
 			else if (value < 1)
 				value = 1;
 			g_MaxThreadsPerHotkey = value; // Note: g_MaxThreadsPerHotkey is UCHAR.
@@ -2931,7 +2985,7 @@ inline ResultType Script::IsDirective(char *aBuf)
 		{
 			value = ATOI(parameter);  // parameter was set to the right position by the above macro
 			if (value > MAX_THREADS_LIMIT) // For now, keep this limited to prevent stack overflow due to too many pseudo-threads.
-				value = MAX_THREADS_LIMIT;
+				value = MAX_THREADS_LIMIT; // UPDATE: To avoid array overflow, this limit must by obeyed except where otherwise documented.
 			else if (value < 1)
 				value = 1;
 			g_MaxThreadsTotal = value;
@@ -3253,13 +3307,9 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 	{
 		for (;;) // A loop with only one iteration so that "break" can be used instead of a lot of nested if's.
 		{
-			if (!g.CurrentFunc) // Not inside a function body, so "Global"/"Local"/"Static" get no special treatment.
+			if (!g->CurrentFunc) // Not inside a function body, so "Global"/"Local"/"Static" get no special treatment.
 				break;
 
-			#define VAR_DECLARE_NONE   0
-			#define VAR_DECLARE_GLOBAL 1
-			#define VAR_DECLARE_LOCAL  2
-			#define VAR_DECLARE_STATIC 3
 			int declare_type;
 			char *cp;
 			if (!strnicmp(aLineText, "Global", 6)) // Checked first because it's more common than the others.
@@ -3296,29 +3346,26 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 				if (!result) // It's probably operator, e.g. local = %var%
 					break;
 			}
-			else // It's the word "global", "local", "static" by itself.  But only global is valid that way (when it's the first line in the function body).
+			else // It's the word "global", "local", "static" by itself.  But only global or static is valid that way (when it's the first line in the function body).
 			{
 				// All of the following must be checked to catch back-to-back conflicting declarations such
 				// as these:
-				// global x
-				// global  ; Should be an error because global vars are implied/automatic.
-				if (declare_type == VAR_DECLARE_GLOBAL && mNextLineIsFunctionBody && g.CurrentFunc->mDefaultVarType == VAR_ASSUME_NONE)
+				//    global x
+				//    global  ; Should be an error because global vars are implied/automatic.
+				// v1.0.48: Lexikos: Added assume-static mode. For now, this requires "static" to be
+				// placed above local or global variable declarations.
+				if (declare_type != VAR_DECLARE_LOCAL  // i.e. VAR_DECLARE_GLOBAL or VAR_DECLARE_STATIC (can't due be VAR_DECLARE_NONE due to checks higher above).
+					&& mNextLineIsFunctionBody && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE)
 				{
-					g.CurrentFunc->mDefaultVarType = VAR_ASSUME_GLOBAL;
-					// No further action is required for the word "global" by itself.
+					g->CurrentFunc->mDefaultVarType = declare_type;
+					// No further action is required for the word "global" or "static" by itself.
 					return OK;
 				}
-				// Lexikos: (L8) Added assume-static mode. For now, this requires "static" to be placed above local or global variable declarations.
-				else if (declare_type == VAR_DECLARE_STATIC && mNextLineIsFunctionBody && g.CurrentFunc->mDefaultVarType == VAR_ASSUME_NONE)
-				{
-					g.CurrentFunc->mDefaultVarType = VAR_ASSUME_STATIC;
-					// No further action is required for the word "static" by itself.
-					return OK;
-				}
-				// Otherwise, it's the word "local"/"static" by itself or "global" by itself but that occurs too far down in the body.
+				// Otherwise, it's the word "local" by itself (which isn't allowed since it's the default),
+				// or it's the word global or static by itself, but it occurs too far down in the body.
 				return ScriptError(ERR_UNRECOGNIZED_ACTION, aLineText); // Vague error since so rare.
 			}
-			if (mNextLineIsFunctionBody && g.CurrentFunc->mDefaultVarType == VAR_ASSUME_NONE)
+			if (mNextLineIsFunctionBody && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE)
 			{
 				// Both of the above must be checked to catch back-to-back conflicting declarations such
 				// as these:
@@ -3335,40 +3382,36 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 				// Therefore, if the first line of the function body is "static MyVar", VAR_DECLARE_LOCAL
 				// goes into effect permanently, which can be worked around by using the word "global"
 				// as the first word of the function instead.
-				g.CurrentFunc->mDefaultVarType = declare_type == VAR_DECLARE_LOCAL ? VAR_ASSUME_GLOBAL : VAR_ASSUME_LOCAL;
+				g->CurrentFunc->mDefaultVarType = declare_type == VAR_DECLARE_LOCAL ? VAR_DECLARE_GLOBAL : VAR_DECLARE_LOCAL;
 			}
 			else // Since this isn't the first line of the function's body, mDefaultVarType has aleady been set permanently.
 			{
-				// Lexikos: (L8) Changed this section to support VAR_ASSUME_STATIC.
-				// Seems best to flag errors since they might be an indication to the user that something
-				// is being done incorrectly in this function, not to mention being a reminder about what
-				// mode the function is in:
-				switch (g.CurrentFunc->mDefaultVarType)
+				if (declare_type == g->CurrentFunc->mDefaultVarType) // Can't be VAR_DECLARE_NONE at this point.
 				{
-				case VAR_ASSUME_GLOBAL:
+					// Seems best to flag redundant/unnecessary declarations since they might be an indication
+					// to the user that something is being done incorrectly in this function. This errors also
+					// remind the user what mode the function is in:
 					if (declare_type == VAR_DECLARE_GLOBAL)
-						return ScriptError("Global variables do not need to be declared in this function.", aLineText);
-					break;
-				case VAR_ASSUME_LOCAL:
+						return ScriptError("Global variables must not be declared in this function.", aLineText);
 					if (declare_type == VAR_DECLARE_LOCAL)
-						return ScriptError("Local variables do not need to be declared in this function.", aLineText);
-					break;
-				case VAR_ASSUME_STATIC:
-					if (declare_type == VAR_DECLARE_STATIC)
-						return ScriptError("Static variables do not need to be declared in this function.", aLineText);
+						return ScriptError("Local variables must not be declared in this function.", aLineText);
+					// In assume-static mode, allow declarations in case they contain initializers.
+					// Would otherwise lose the ability to "initialize only once upon startup".
+					//if (declare_type == VAR_DECLARE_STATIC)
+					//	return ScriptError("Static variables must not be declared in this function.", aLineText);
 				}
 			}
 			// Since above didn't break or return, a variable is being declared as an exception to the
-			// mode specified by mDefaultVarType (except if it's a static, which would be an exception
-			// only if VAR_ASSUME_GLOBAL is in effect, since statics are implicitly local).
+			// mode specified by mDefaultVarType.
 
-			// If the declare_type is local or global, inversion must be done (i.e. this will be an exception
-			// variable) because otherwise it would have already displayed an "unnecessary declaration" error
-			// and returned above.  But if the declare_type is static, and given that all static variables are
-			// local, inversion is necessary only if the current mode isn't LOCAL:
-			bool is_already_exception, is_exception = ((declare_type == VAR_DECLARE_GLOBAL) != (g.CurrentFunc->mDefaultVarType == VAR_ASSUME_GLOBAL));
-				// Lexikos: (L8) Changed above check to support VAR_ASSUME_STATIC - i.e. when declaring a local, it is only an "exception" if the function is assume-global.
-				/*(declare_type != VAR_DECLARE_STATIC || g.CurrentFunc->mDefaultVarType == VAR_ASSUME_GLOBAL);*/ // Above has ensured that NONE can't be in effect by the time we reach the first static.
+			// v1.0.48: A declaration is an exception to this function's assume-mode when the
+			// declaration's general nature as a local-or-global (in which static is considered local)
+			// differs from that of the current mode.  In other words, a static or local declaration is
+			// not an exception unless this function is assume-global.  Also, earlier logic has ensured
+			// that mDefaultVarType!=VAR_DECLARE_NONE by the time the first variable declaration is reached.
+			// Lexikos: Changed the following to support assume-static mode - i.e. when declaring a local,
+			// it is only an "exception" if the function is assume-global.
+			bool is_exception = ((declare_type == VAR_DECLARE_GLOBAL) != (g->CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL));
 			bool open_brace_was_added, belongs_to_if_or_else_or_loop;
 			VarSizeType var_name_length;
 			char *item;
@@ -3384,19 +3427,20 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 
 				int always_use;
 				if (is_exception)
-					always_use = g.CurrentFunc->mDefaultVarType == VAR_ASSUME_GLOBAL ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL;
+					always_use = g->CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL;
 				else
 					always_use = ALWAYS_USE_DEFAULT;
 
 				Var *var;
+				bool is_already_exception;
 				if (   !(var = FindOrAddVar(item, var_name_length, always_use, &is_already_exception))   )
 					return FAIL; // It already displayed the error.
 				if (is_already_exception) // It was already in the exception list (previously declared).
 					return ScriptError("Duplicate declaration.", item);
 				if (var->Type() != VAR_NORMAL || !strlicmp(item, "ErrorLevel", var_name_length)) // Shouldn't be declared either way (global or local).
 					return ScriptError("Built-in variables must not be declared.", item);
-				for (int i = 0; i < g.CurrentFunc->mParamCount; ++i) // Search by name to find both global and local declarations.
-					if (!strlicmp(item, g.CurrentFunc->mParam[i].var->mName, var_name_length))
+				for (int i = 0; i < g->CurrentFunc->mParamCount; ++i) // Search by name to find both global and local declarations.
+					if (!strlicmp(item, g->CurrentFunc->mParam[i].var->mName, var_name_length))
 						return ScriptError("Parameters must not be declared.", item);
 				if (is_exception)
 				{
@@ -3405,10 +3449,11 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 					mFuncExceptionVar[mFuncExceptionVarCount++] = var;
 				}
 				if (declare_type == VAR_DECLARE_STATIC)
-					var->AddAttrib(VAR_ATTRIB_STATIC);
-				// Lexikos: (L8) Remove VAR_ATTRIB_STATIC, which is set by AddVar if the current function is assume-static.
-				else if (declare_type == VAR_DECLARE_LOCAL && g.CurrentFunc->mDefaultVarType == VAR_ASSUME_STATIC)
-					var->RemoveAttrib(VAR_ATTRIB_STATIC);
+					var->ConvertToStatic();
+				else if (declare_type == VAR_DECLARE_LOCAL && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_STATIC) // v1.0.48: Lexikos.
+					// For explicitly-declared locals, remove VAR_ATTRIB_STATIC because AddVar() earlier set it
+					// as a default due to assume-static mode.
+					var->ConvertToNonStatic();
 
 				item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
 
@@ -3522,15 +3567,29 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 							var->Assign(right_side_of_operator);
 					}
 				}
-				else // A non-static initializer, so a line of code must be produced that will executed at runtime every time the function is called.
+				else // A non-static initializer, so a line of code must be produced that will be executed at runtime every time the function is called.
 				{
+					// PERFORMANCE: As of v1.0.48 (with cached binary numbers and pre-postfixed expressions),
+					// assignments of literal integers to variables are up to 10% slower when done as a combined
+					// (comma-separated) expression rather than each as a separate line.  However,  this slowness
+					// eventually disappears and may even reverse as more and more such expressions are combined
+					// into a single expression (e.g. the following is almost the same speed either way:
+					// x:=1,y:=22,z:=333,a:=4444,b:=55555).  By contrast, assigning a literal string, another
+					// variable, or a complex expression is the opposite: they are always faster when done via
+					// commas, and they continue to get faster and faster as more expressions are merged into a
+					// single comma-separated expression. In light of this, a future version could combine ONLY
+					// those declarations that have initializers into a single comma-separately expression rather
+					// than making a separate expression for each.  However, since it's not always faster to do
+					// so (e.g. x:=0,y:=1 is faster as separate statements), and since it is somewhat rare to
+					// have a long chain of initializers, and since these performance differences are documented,
+					// it might not be worth changing.
 					char *line_to_add;
+					char new_buf[LINE_SIZE]; // Declared outside the braces below so that it stays in scope long enough. Using so much stack space here and in caller seems unlikely to affect performance, so _alloca seems unlikely to help.
 					if (convert_the_operator) // Convert first '=' in item to be ":=".
 					{
 						// Prevent any chance of overflow by using new_buf (overflow might otherwise occur in cases
 						// such as this sub-statement being the very last one in the declaration list, and being
 						// at the limit of the buffer's capacity).
-						char new_buf[LINE_SIZE]; // Using so much stack space here and in caller seems unlikely to affect performance, so _alloca seems unlikely to help.
 						StrReplace(strcpy(new_buf, item), "=", ":=", SCS_SENSITIVE, 1); // Can't overflow because there's only one replacement and we know item's length can't be that close to the capacity limit.
 						line_to_add = new_buf;
 					}
@@ -3692,7 +3751,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 						else
 						{
 							next_word = omit_leading_whitespace(operation + 2);
-							if (strnicmp(next_word, "not", 3))
+							if (strnicmp(next_word, "not", 3)) // No need to check for whitespace after the word "not" because things like "if var is notxxx" are never valid.
 								aActionType = ACT_IFIS;
 							else
 							{
@@ -3722,7 +3781,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 				case 'n':  // It's either "not in", "not between", or "not contains"
 				case 'N':
 					// Must fall back to ACT_IFEXPR, otherwise "if not var_name_beginning_with_n" is a syntax error.
-					if (strnicmp(operation, "not", 3))
+					if (strnicmp(operation, "not", 3) || !IS_SPACE_OR_TAB(operation[3])) // Fix for v1.0.48: Must also check for whitespace after the word "not" to avoid a syntax error for lines like "if not note".
 						aActionType = ACT_IFEXPR;
 					else
 					{
@@ -3910,7 +3969,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 						// 1) Math treatment of blanks as zero in ACT_ADD/SUB/etc.
 						// 2) EnvDiv's special behavior, which is different than both true divide and floor divide.
 						// 3) Possibly add/sub's date/time math.
-						// 4) For performance, don't want trivial assignments to become ACT_EXPRESSION.
+						// 4) Maybe obsolete: For performance, don't want trivial assignments to become ACT_EXPRESSION.
 						char *cp;
 						for (in_quotes = false, open_parens = 0, cp = action_args + 2; *cp; ++cp)
 						{
@@ -4165,6 +4224,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 		// Otherwise do more checking:
 		if (delimiter_count)
 		{
+			char *cp;
 			// If the first apparent arg is not a non-blank pure number or there are apparently
 			// only 2 args present (i.e. 1 delimiter in the arg list), assume the command is being
 			// used in its 1-parameter mode:
@@ -4195,18 +4255,16 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 					// processed normally without an override.  Otherwise, do more checking:
 					if (delimiter_count == 3) // i.e. 3 delimiters, which means 4 params.
 					{
-						// If the 4th parameter isn't blank or pure numeric (i.e. even if it's a pure
-						// deref, since trying to figure out what's a pure deref is somewhat complicated
-						// at this early stage of parsing), assume the user didn't intend it to be the
-						// MsgBox timeout (since that feature is rarely used), instead intending it
-						// to be part of parameter #3.
+						// If the 4th parameter isn't blank or pure numeric, assume the user didn't
+						// intend it to be the MsgBox timeout (since that feature is rarely used),
+						// instead intending it to be part of parameter #3.
 						if (!IsPureNumeric(delimiter[2] + 1, false, true, true))
 						{
 							// Not blank and not a int or float.  Update for v1.0.20: Check if it's a
 							// single deref.  If so, assume that deref contains the timeout and thus
 							// 4-param mode is in effect.  This allows the timeout to be contained in
 							// a variable, which was requested by one user:
-							char *cp = omit_leading_whitespace(delimiter[2] + 1);
+							cp = omit_leading_whitespace(delimiter[2] + 1);
 							// Relies on short-circuit boolean order:
 							if (*cp != g_DerefChar || literal_map[cp - action_args]) // not a proper deref char.
 								max_params_override = 3;
@@ -4219,10 +4277,38 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 						// that all the other delimiters were intended to be literal.
 					}
 					else if (delimiter_count > 3) // i.e. 4 or more delimiters, which means 5 or more params.
-						// Since it has too many delimiters to be 4-param mode, Assume it's 3-param mode
-						// so that non-escaped commas in parameters 4 and beyond will be all treated as
-						// strings that are part of parameter #3.
-						max_params_override = 3;
+					{
+						// v1.0.48: This section extends smart comma handling so that if parameter #3 (Text)
+						// is an expression, any commas in it won't interfere with the Timeout parameter.
+						// For example, the timeout parameter below should work now:
+						//    MsgBox 0, Title, % Func(x,y), 1
+						//
+						// If the "Text" parameter is an expression then commas inside it can't be intended to
+						// be literal/displayed by the user unless they're enclosed in quotes; but in that case,
+						// the smartness below isn't needed because it's provided by the parameter-parsing logic
+						// in a later section.  So in that case it seems safe to avoid setting max_params_override,
+						// which fixes examples like the one above.  The code further below does this.
+						//
+						// By contrast, fixing the second parameter (Title) in a similar way would be more
+						// difficult and/or would be more likely to break existing scripts.  For example if "title"
+						// is an expression but "text" is NOT an expression, there might be some commas in "text"
+						// that are currently handled as smart/auto-literal, and those cases should be preserved
+						// for backward compatibility.
+						//
+						// If expressions in the "title" parameter ever are fixed to not interfere with the
+						// Timeout parameter, perhaps the best way to do it would be to verify that it's an
+						// expression, then skip over any commas that are enclosed in quotes or parentheses so that
+						// the "real" commas can be counted and used by the rest of the smart-comma logic.
+						//
+						// For the section below, see comments at the similar code section above:
+						cp = omit_leading_whitespace(delimiter[1] + 1); // Parameter #3, the "text" parameter.
+						if (   *cp != g_DerefChar || literal_map[cp - action_args] // not a proper deref char...
+							|| !IS_SPACE_OR_TAB(cp[1])   ) // ...or it's not followed by a space or tab, so it isn't "% ".
+							// Since it has too many delimiters to be 4-param mode and since there is no "% "
+							// expression present, assume it's 3-param mode so that non-escaped commas in
+							// parameters 4 and beyond will be all treated as strings that are part of parameter #3.
+							max_params_override = 3;
+					}
 					//else if 3 params or less: Don't override via max_params_override, just parse it normally.
 				}
 			}
@@ -4545,7 +4631,8 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 	// Loop {   ; Known limitation: Overlaps with file-pattern loop that retrieves single file of name "{".
 	// Loop 5 { ; Also overlaps, this time with file-pattern loop that retrieves numeric filename ending in '{'.
 	// Loop %Var% {  ; Similar, but like the above seems acceptable given extreme rarity of user intending a file pattern.
-	if (aActionType == ACT_LOOP && nArgs == 1 && arg[0][0])  // A loop with exactly one, non-blank arg.
+	if ((aActionType == ACT_LOOP || aActionType == ACT_WHILE)
+		&& nArgs == 1 && arg[0][0])  // A loop with exactly one, non-blank arg.
 	{
 		char *arg1 = arg[0]; // For readability and possibly performance.
 		// A loop with the above criteria (exactly one arg) can only validly be a normal/counting loop or
@@ -4562,7 +4649,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 		//    b) Loop %Var% {            ; Similar as above, which means all three of these unintentionally support
 		//    c) Loop filename{          ; OTB for some types of file loops because it's not worth the code size to "unsupport" them.
 		//    d) Loop *.txt {            ; Like the above: Unintentionally supported, but not documnented.
-		//
+		//    e) (While-loops are also checked here now)
 		// Insist that no characters follow the '{' in case the user intended it to be a file-pattern loop
 		// such as "Loop {literal-filename".
 		char *arg1_last_char = arg1 + strlen(arg1) - 1;
@@ -4571,7 +4658,10 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 			add_openbrace_afterward = true;
 			*arg1_last_char = '\0';  // Since it will be fully handled here, remove the brace from further consideration.
 			if (!rtrim(arg1)) // Trimmed down to nothing, so only a brace was present: remove the arg completely.
-				nArgs = 0;    // This makes later stages recognize it as an infinite loop rather than a zero-iteration loop.
+				if (aActionType == ACT_LOOP)
+					nArgs = 0;    // This makes later stages recognize it as an infinite loop rather than a zero-iteration loop.
+				else // ACT_WHILE
+					return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
 		}
 	}
 
@@ -4901,10 +4991,17 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 						}
 						// Otherwise, it might be an expression so do the final checks.
 						// Override the original false default of is_expression unless an exception applies.
-						// Since ACT_ASSIGNEXPR is not a legacy command, none of the legacy exceptions need
-						// to be applied to it.  For other commands, if any telltale character is present
-						// it's definitely an expression and the complex check after this one isn't needed:
-						if (aActionType == ACT_ASSIGNEXPR || StrChrAny(this_new_arg.text, EXPR_TELLTALES))
+						// Since ACT_ASSIGNEXPR and ACT_WHILE aren't legacy commands, don't call
+						// LegacyArgIsExpression() for them because that would cause things like x:=%y% and
+						// "while %x%" to behave the same as x:=y and "while x:, which would be inconsistent
+						// with how expressions are supposed to work. ACT_RETURN should have been excluded
+						// too; but it was left out for so long that it was thought best to document and keep
+						// the unexpected behavior of "return %x%".
+						// For other commands, if any telltale character is present it's definitely an
+						// expression because this is an arg that's marked as a number-or-expression.
+						// So telltales avoid the need for the complex check further below.
+						if (aActionType == ACT_ASSIGNEXPR || aActionType == ACT_WHILE // See above.
+							|| StrChrAny(this_new_arg.text, EXPR_TELLTALES)) // See above.
 							this_new_arg.is_expression = true;
 						else
 							this_new_arg.is_expression = LegacyArgIsExpression(this_new_arg.text, this_aArgMap);
@@ -5023,7 +5120,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 							if ((*op_begin == 'o' || *op_begin == 'O') && (op_begin[1] == 'r' || op_begin[1] == 'R'))
 							{	// "OR" was found.
 								op_begin[0] = '|'; // v1.0.45: Transform into easier-to-parse symbols for improved
-								op_begin[1] = '|'; // runtime performance and reduced code size.
+								op_begin[1] = '|'; // runtime performance and reduced code size.  v1.0.48: It no longer helps runtime performance, but it's kept because changing moving it to ExpressionToPostfix() isn't likely to have much benefit.
 								continue;
 							}
 						}
@@ -5037,7 +5134,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 									&& (op_begin[2] == 'd' || op_begin[2] == 'D')   )
 								{	// "AND" was found.
 									op_begin[0] = '&'; // v1.0.45: Transform into easier-to-parse symbols for
-									op_begin[1] = '&'; // improved runtime performance and reduced code size.
+									op_begin[1] = '&'; // improved runtime performance and reduced code size.  v1.0.48: It no longer helps runtime performance, but it's kept because changing moving it to ExpressionToPostfix() isn't likely to have much benefit.
 									op_begin[2] = ' '; // A space is used lieu of the complexity of the below.
 									// Above seems better than below even though below would make it look a little
 									// nicer in ListLines.  BELOW CAN'T WORK because this_new_arg.deref[] can contain
@@ -5212,10 +5309,15 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 				// Var := X + 1 ... Var := Var2 "xyz" ... Var := -Var2
 				if (deref_count == 1 && Var::ValidateName(this_new_arg.text, false, DISPLAY_NO_ERROR)) // Single isolated deref.
 				{
-					this_new_arg.is_expression = false;
-					// But aActionType is left as ACT_ASSIGNEXPR because it might be necessary to avoid
-					// having AutoTrim take effect for := (which it never should).  In addition,
-					// ACT_ASSIGNEXPR probably performs better than ACT_ASSIGN when is_expression==false.
+					// ACT_WHILE performs less than 4% faster as a non-expression in these cases, and keeping
+					// it as an expression avoids an extra check in a critical spot of ExpandArgs (near
+					// mActionType <= ACT_LAST_OPTIMIZED_IF).
+					if (aActionType != ACT_WHILE)
+						this_new_arg.is_expression = false;
+					// But if aActionType is ACT_ASSIGNEXPR, it's left as ACT_ASSIGNEXPR vs. ACT_ASSIGN
+					// because it might be necessary to avoid having AutoTrim take effect for := (which
+					// it never should).  In addition, ACT_ASSIGNEXPR probably performs better than
+					// ACT_ASSIGN when is_expression==false.
 				}
 				else if (deref_count && !StrChrAny(this_new_arg.text, EXPR_OPERAND_TERMINATORS)) // No spaces, tabs, etc.
 				{
@@ -5431,7 +5533,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 		line.mAttribute = ATTR_LOOP_NORMAL;
 		break;
 
-	case ACT_WHILE: // Lexikos: (L4) ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
+	case ACT_WHILE: // Lexikos: ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
 		line.mAttribute = ATTR_LOOP_WHILE;
 		break;
 
@@ -5515,41 +5617,40 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
-	// Lexikos: (L15) This case must exist in both self-contained and normal builds.
-	case ACT_SETFORMAT:
+	case ACT_SETFORMAT: // Must be done even when AUTOHOTKEYSC is defined so that g_WriteCacheDisabledInt64/Double is properly updated.
 		if (aArgc < 1)
 			break;
 		if (line.ArgHasDeref(1)) // Something like "SetFormat, %Var%, ..."
 		{
-			g_WriteCacheDisabledInt64 = true;
-			g_WriteCacheDisabledDouble = true;
+			// For the following and other sections further below that disable the cache, can't wait until
+			// runtime execution encounters SetFormat to disable caching because script might rely on the
+			// *default* format being *immediately* written out prior to the script changing SetFormat at
+			// some later time.
+			g_WriteCacheDisabledInt64 = TRUE;
+			g_WriteCacheDisabledDouble = TRUE;
 		}
 		else
 		{
-			if (!stricmp(new_raw_arg1, "Float"))
+			if (!strnicmp(new_raw_arg1, "Float", 5))
 			{
-#ifndef AUTOHOTKEYSC
+				if (stricmp(new_raw_arg1 + 5, "Fast")) // Cache is left enabled when the new FloatFast/IntegerFast mode is present.
+					g_WriteCacheDisabledDouble = TRUE;
 				if (aArgc > 1 && !line.ArgHasDeref(2))
 				{
 					if (!IsPureNumeric(new_raw_arg2, true, false, true, true) // v1.0.46.11: Allow impure numbers to support scientific notation; e.g. 0.6e or 0.6E.
-						|| strlen(new_raw_arg2) >= sizeof(g.FormatFloat) - 2)
+						|| strlen(new_raw_arg2) >= sizeof(g->FormatFloat) - 2)
 						return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 				}
-#endif
-				g_WriteCacheDisabledDouble = true;
 			}
-			else if (!stricmp(new_raw_arg1, "Integer"))
+			else if (!strnicmp(new_raw_arg1, "Integer", 7))
 			{
-#ifndef AUTOHOTKEYSC
+				if (stricmp(new_raw_arg1 + 7, "Fast")) // Cache is left enabled when the new FloatFast/IntegerFast mode is present.
+					g_WriteCacheDisabledInt64 = TRUE;
 				if (aArgc > 1 && !line.ArgHasDeref(2) && toupper(*new_raw_arg2) != 'H' && toupper(*new_raw_arg2) != 'D')
 					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-#endif
-				g_WriteCacheDisabledInt64 = true;
 			}
-#ifndef AUTOHOTKEYSC
 			else
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-#endif
 		}
 		// Size must be less than sizeof() minus 2 because need room to prepend the '%' and append
 		// the 'f' to make it a valid format specifier string:
@@ -5557,7 +5658,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
 	case ACT_RETURN:
-		if (aArgc > 0 && !g.CurrentFunc)
+		if (aArgc > 0 && !g->CurrentFunc)
 			return ScriptError("Return's parameter should be blank except inside a function.");
 		break;
 
@@ -6417,8 +6518,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 	{
 		mLastFunc->mJumpToLine = the_new_line;
 		mNextLineIsFunctionBody = false;
-		if (g.CurrentFunc->mDefaultVarType == VAR_ASSUME_NONE)
-			g.CurrentFunc->mDefaultVarType = VAR_ASSUME_LOCAL;  // Set default since no override was discovered at the top of the body.
+		if (g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE)
+			g->CurrentFunc->mDefaultVarType = VAR_DECLARE_LOCAL;  // Set default since no override was discovered at the top of the body.
 	}
 
 	// No checking for unbalanced blocks is done here.  That is done by PreparseBlocks() because
@@ -6434,7 +6535,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 		// definitions inside of other function definitions (to help script maintainability); 2) If
 		// mOpenBlockCount is 0 or negative, that will be caught as a syntax error by PreparseBlocks(),
 		// which yields a more informative error message that we could here.
-		if (mLastFunc && !mLastFunc->mJumpToLine) // If this stmt is true, caller has ensured that g.CurrentFunc isn't NULL.
+		if (mLastFunc && !mLastFunc->mJumpToLine) // If this stmt is true, caller has ensured that g->CurrentFunc isn't NULL.
 		{
 			// The above check relies upon the fact that mLastFunc->mIsBuiltIn must be false at this stage,
 			// which is the case because any non-overridden built-in function won't get added until after all
@@ -6449,10 +6550,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 	else if (aActionType == ACT_BLOCK_END)
 	{
 		--mOpenBlockCount;
-		if (g.CurrentFunc && !mOpenBlockCount) // Any negative mOpenBlockCount is caught by a different stage.
+		if (g->CurrentFunc && !mOpenBlockCount) // Any negative mOpenBlockCount is caught by a different stage.
 		{
 			line.mAttribute = ATTR_TRUE;  // Flag this ACT_BLOCK_END as the ending brace of a function's body.
-			g.CurrentFunc = NULL;
+			g->CurrentFunc = NULL;
 			mFuncExceptionVar = NULL;  // Notify FindVar() that there is no exception list to search.
 		}
 	}
@@ -6571,16 +6672,16 @@ ResultType Script::DefineFunc(char *aBuf, Var *aFuncExceptionVar[])
 			found_func->mParamCount = 0; // Revert to the default appropriate for non-built-in functions.
 			found_func->mMinParams = 0;  //
 			found_func->mJumpToLine = NULL; // Fixed for v1.0.35.12: Must reset for detection elsewhere.
-			g.CurrentFunc = found_func;
+			g->CurrentFunc = found_func;
 		}
 	}
 	else
-		// The value of g.CurrentFunc must be set here rather than by our caller since AddVar(), which we call,
+		// The value of g->CurrentFunc must be set here rather than by our caller since AddVar(), which we call,
 		// relies upon it having been done.
-		if (   !(g.CurrentFunc = AddFunc(aBuf, param_start - aBuf, false))   )
+		if (   !(g->CurrentFunc = AddFunc(aBuf, param_start - aBuf, false))   )
 			return FAIL; // It already displayed the error.
 
-	Func &func = *g.CurrentFunc; // For performance and convenience.
+	Func &func = *g->CurrentFunc; // For performance and convenience.
 	int insert_pos;
 	size_t param_length, value_length;
 	FuncParam param[MAX_FUNCTION_PARAMS];
@@ -6615,7 +6716,7 @@ ResultType Script::DefineFunc(char *aBuf, Var *aFuncExceptionVar[])
 			return ScriptError(ERR_BLANK_PARAM, aBuf); // Reporting aBuf vs. param_start seems more informative since Vicinity isn't shown.
 
 		// This will search for local variables, never globals, by virtue of the fact that this
-		// new function's mDefaultVarType is always VAR_ASSUME_NONE at this early stage of its creation:
+		// new function's mDefaultVarType is always VAR_DECLARE_NONE at this early stage of its creation:
 		if (this_param.var = FindVar(param_start, param_length, &insert_pos))  // Assign.
 			return ScriptError("Duplicate parameter.", param_start);
 		if (   !(this_param.var = AddVar(param_start, param_length, insert_pos, 2))   ) // Pass 2 as last parameter to mean "it's a local but more specifically a function's parameter".
@@ -6684,6 +6785,10 @@ ResultType Script::DefineFunc(char *aBuf, Var *aFuncExceptionVar[])
 					switch(IsPureNumeric(buf, true, false, true))
 					{
 					case PURE_INTEGER:
+						// It's always been somewhat inconsistent that for parameter default values,
+						// numbers like 0xFF and 0123 do not preserve their formatting (unlike func(0123)
+						// and y:=0xFF, which do preserve it). But for backward compatibility and
+						// performance, it seems best to keep it this way.
 						this_param.default_type = PARAM_DEFAULT_INT;
 						this_param.default_int64 = ATOI64(buf);
 						break;
@@ -6937,7 +7042,7 @@ Func *Script::FindFunc(char *aFuncName, size_t aFuncNameLength)
 	BuiltInFunctionType bif;
 	char *suffix = func_name + 3;
 
-	if (!strnicmp(func_name, "LV_", 3)) // It's a ListView function.
+	if (!strnicmp(func_name, "LV_", 3)) // As a built-in function, LV_* can only be a ListView function.
 	{
 		suffix = func_name + 3;
 		if (!stricmp(suffix, "GetNext"))
@@ -7004,7 +7109,7 @@ Func *Script::FindFunc(char *aFuncName, size_t aFuncNameLength)
 		else
 			return NULL;
 	}
-	else if (!strnicmp(func_name, "TV_", 3)) // It's a TreeView function.
+	else if (!strnicmp(func_name, "TV_", 3)) // As a built-in function, TV_* can only be a TreeView function.
 	{
 		suffix = func_name + 3;
 		if (!stricmp(suffix, "Add"))
@@ -7131,7 +7236,7 @@ Func *Script::FindFunc(char *aFuncName, size_t aFuncNameLength)
 	}
 	else if (!stricmp(func_name, "IsLabel"))
 		bif = BIF_IsLabel;
-	else if (!stricmp(func_name, "IsFunc")) // Lexikos: (L7) IsFunc - for use with dynamic function calls.
+	else if (!stricmp(func_name, "IsFunc"))
 		bif = BIF_IsFunc;
 	else if (!stricmp(func_name, "DllCall"))
 	{
@@ -7318,8 +7423,8 @@ size_t Line::ArgIndexLength(int aArgIndex)
 		Var &var = *sArgVar[aArgIndex]; // For performance and convenience.
 		if (   var.Type() == VAR_NORMAL  // This and below ordered for short-circuit performance based on types of input expected from caller.
 			&& !(g_act[mActionType].MaxParamsAu2WithHighBit & 0x80) // Although the ones that have the highbit set are hereby omitted from the fast method, the nature of almost all of the highbit commands is such that their performance won't be measurably affected. See ArgMustBeDereferenced() for more info.
-			&& (g_NoEnv || var.HasContents()) // v1.0.46.02: Recognize environment variables (when g_NoEnv==false) by falling through to strlen() for them.
-			&& sArgVar[aArgIndex] != g_ErrorLevel   ) // Mostly for maintainability because the following situation is very rare: If it's g_ErrorLevel, use the deref version instead because if g_ErrorLevel is an input variable in the caller's command, and the caller changes ErrorLevel (such as to set a default) prior to calling this function, the changed/new ErrorLevel will be used rather than its original value (which is usually undesirable).
+			&& (g_NoEnv || var.HasContents()) // v1.0.46.02: Recognize environment variables (when g_NoEnv==FALSE) by falling through to strlen() for them.
+			&& &var != g_ErrorLevel   ) // Mostly for maintainability because the following situation is very rare: If it's g_ErrorLevel, use the deref version instead because if g_ErrorLevel is an input variable in the caller's command, and the caller changes ErrorLevel (such as to set a default) prior to calling this function, the changed/new ErrorLevel will be used rather than its original value (which is usually undesirable).
 			//&& !var.IsBinaryClip())  // This check isn't necessary because the line below handles it.
 			return var.LengthIgnoreBinaryClip(); // Do it the fast way (unless it's binary clipboard, in which case this call will internally call strlen()).
 	}
@@ -7331,7 +7436,7 @@ size_t Line::ArgIndexLength(int aArgIndex)
 
 
 __int64 Line::ArgIndexToInt64(int aArgIndex)
-// This function is similar to ArgLength(), so maintain them together.
+// This function is similar to ArgIndexLength(), so maintain them together.
 // Callers must call this only at times when sArgDeref and sArgVar are defined/meaningful.
 // Caller must ensure that aArgIndex is 0 or greater.
 {
@@ -7342,27 +7447,27 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 		aArgIndex = 0;  // But let it continue.
 	}
 #endif
-	if (aArgIndex >= mArgc) // See ArgLength() for comments.
+	if (aArgIndex >= mArgc) // See ArgIndexLength() for comments.
 		return 0; // i.e. treat it as ATOI64("").
-	// SEE THIS POSITION IN ARGLENGTH() FOR IMPORTANT COMMENTS ABOUT THE BELOW.
+	// SEE THIS POSITION IN ArgIndexLength() FOR IMPORTANT COMMENTS ABOUT THE BELOW.
 	if (sArgVar[aArgIndex])
 	{
 		Var &var = *sArgVar[aArgIndex];
-		if (   var.Type() == VAR_NORMAL  // See ArgLength() for comments about this line and below.
+		if (   var.Type() == VAR_NORMAL  // See ArgIndexLength() for comments about this line and below.
 			&& !(g_act[mActionType].MaxParamsAu2WithHighBit & 0x80)
 			&& (g_NoEnv || var.HasContents())
-			&& sArgVar[aArgIndex] != g_ErrorLevel
+			&& &var != g_ErrorLevel
 			&& !var.IsBinaryClip()   )
 			return var.ToInt64(FALSE);
 	}
 	// Otherwise:
-	return ATOI64(sArgDeref[aArgIndex]); // See ArgLength() for comments.
+	return ATOI64(sArgDeref[aArgIndex]); // See ArgIndexLength() for comments.
 }
 
 
 
 double Line::ArgIndexToDouble(int aArgIndex)
-// This function is similar to ArgLength(), so maintain them together.
+// This function is similar to ArgIndexLength(), so maintain them together.
 // Callers must call this only at times when sArgDeref and sArgVar are defined/meaningful.
 // Caller must ensure that aArgIndex is 0 or greater.
 {
@@ -7373,21 +7478,21 @@ double Line::ArgIndexToDouble(int aArgIndex)
 		aArgIndex = 0;  // But let it continue.
 	}
 #endif
-	if (aArgIndex >= mArgc) // See ArgLength() for comments.
+	if (aArgIndex >= mArgc) // See ArgIndexLength() for comments.
 		return 0.0; // i.e. treat it as ATOF("").
 	// SEE THIS POSITION IN ARGLENGTH() FOR IMPORTANT COMMENTS ABOUT THE BELOW.
 	if (sArgVar[aArgIndex])
 	{
 		Var &var = *sArgVar[aArgIndex];
-		if (   var.Type() == VAR_NORMAL  // See ArgLength() for comments about this line and below.
+		if (   var.Type() == VAR_NORMAL  // See ArgIndexLength() for comments about this line and below.
 			&& !(g_act[mActionType].MaxParamsAu2WithHighBit & 0x80)
 			&& (g_NoEnv || var.HasContents())
-			&& sArgVar[aArgIndex] != g_ErrorLevel
+			&& &var != g_ErrorLevel
 			&& !var.IsBinaryClip()   )
 			return var.ToDouble(FALSE);
 	}
 	// Otherwise:
-	return ATOF(sArgDeref[aArgIndex]); // See ArgLength() for comments.
+	return ATOF(sArgDeref[aArgIndex]); // See ArgIndexLength() for comments.
 }
 
 
@@ -7579,6 +7684,7 @@ Var *Script::FindVar(char *aVarName, size_t aVarNameLength, int *apInsertPos, in
 	char var_name[MAX_VAR_NAME_LENGTH + 1];
 	strlcpy(var_name, aVarName, aVarNameLength + 1);  // +1 to convert length to size.
 
+	global_struct &g = *::g; // Reduces code size and may improve performance.
 	Var *found_var = NULL; // Set default.
 	bool is_local;
 	if (aAlwaysUse == ALWAYS_USE_GLOBAL)
@@ -7608,7 +7714,7 @@ Var *Script::FindVar(char *aVarName, size_t aVarNameLength, int *apInsertPos, in
 	}
 	else // aAlwaysUse == ALWAYS_USE_DEFAULT
 	{
-		is_local = g.CurrentFunc && g.CurrentFunc->mDefaultVarType != VAR_ASSUME_GLOBAL; // i.e. ASSUME_LOCAL or ASSUME_NONE
+		is_local = g.CurrentFunc && g.CurrentFunc->mDefaultVarType != VAR_DECLARE_GLOBAL; // i.e. ASSUME_LOCAL or ASSUME_NONE
 		if (mFuncExceptionVar) // Caller has ensured that this non-NULL if and only if g.CurrentFunc is non-NULL.
 		{
 			int i;
@@ -7622,7 +7728,7 @@ Var *Script::FindVar(char *aVarName, size_t aVarNameLength, int *apInsertPos, in
 				}
 			}
 			// The following section is necessary because a function's parameters are not put into the
-			// exception list during load-time.  Thus, for an VAR_ASSUME_GLOBAL function, these are basically
+			// exception list during load-time.  Thus, for an assume-global function, these are basically
 			// treated as exceptions too.
 			// If this function is one that assumes variables are global, the function's parameters are
 			// implicitly declared local because parameters are always local:
@@ -7633,7 +7739,7 @@ Var *Script::FindVar(char *aVarName, size_t aVarNameLength, int *apInsertPos, in
 			// indicate that a local of the same name as a global should take precedence.  This adds more
 			// flexibility/benefit than its costs in terms of confusion because otherwise there would be
 			// no way to dynamically reference the local variables of an assume-global function.
-			if (g.CurrentFunc->mDefaultVarType == VAR_ASSUME_GLOBAL && !is_local) // g.CurrentFunc is also known to be non-NULL in this case.
+			if (g.CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL && !is_local) // g.CurrentFunc is also known to be non-NULL in this case.
 			{
 				for (i = 0; i < g.CurrentFunc->mParamCount; ++i)
 					if (!stricmp(var_name, g.CurrentFunc->mParam[i].var->mName)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
@@ -7730,10 +7836,10 @@ Var *Script::FindVar(char *aVarName, size_t aVarNameLength, int *apInsertPos, in
 		{
 			// In this case, callers want to fall back to globals when a local wasn't found.  However,
 			// they want the insertion (if our caller will be doing one) to insert according to the
-			// current assume-mode.  Therefore, if the mode is VAR_ASSUME_GLOBAL, pass the apIsLocal
+			// current assume-mode.  Therefore, if the mode is assume-global, pass the apIsLocal
 			// and apInsertPos variables to FindVar() so that it will update them to be global.
 			// Otherwise, do not pass them since they were already set correctly by us above.
-			if (g.CurrentFunc->mDefaultVarType == VAR_ASSUME_GLOBAL)
+			if (g.CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL)
 				return FindVar(aVarName, aVarNameLength, apInsertPos, ALWAYS_USE_GLOBAL, NULL, apIsLocal);
 			else
 				return FindVar(aVarName, aVarNameLength, NULL, ALWAYS_USE_GLOBAL);
@@ -7749,7 +7855,7 @@ Var *Script::FindVar(char *aVarName, size_t aVarNameLength, int *apInsertPos, in
 
 Var *Script::AddVar(char *aVarName, size_t aVarNameLength, int aInsertPos, int aIsLocal)
 // Returns the address of the new variable or NULL on failure.
-// Caller must ensure that g.CurrentFunc!=NULL whenever aIsLocal==true.
+// Caller must ensure that g->CurrentFunc!=NULL whenever aIsLocal==true.
 // Caller must ensure that aVarName isn't NULL and that this isn't a duplicate variable name.
 // In addition, it has provided aInsertPos, which is the insertion point so that the list stays sorted.
 // Finally, aIsLocal has been provided to indicate which list, global or local, should receive this
@@ -7812,17 +7918,16 @@ Var *Script::AddVar(char *aVarName, size_t aVarNameLength, int aInsertPos, int a
 		return NULL;
 	}
 
-	if (aIsLocal == 1 && g.CurrentFunc->mDefaultVarType == VAR_ASSUME_STATIC)
-	{	// Lexikos: (L8) Current function is assume-static, so set static attribute.
-		//	This will be overwritten (again) if this variable is being explicitly declared "local".
-		the_new_var->AddAttrib(VAR_ATTRIB_STATIC);
-	}
+	if (aIsLocal == 1 && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_STATIC)
+		// v1.0.48: Lexikos: Current function is assume-static, so set static attribute.
+		// This will be overwritten (again) if this variable is being explicitly declared "local".
+		the_new_var->ConvertToStatic();
 
 	// If there's a lazy var list, aInsertPos provided by the caller is for it, so this new variable
 	// always gets inserted into that list because there's always room for one more (because the
 	// previously added variable would have purged it if it had reached capacity).
-	Var **lazy_var = aIsLocal ? g.CurrentFunc->mLazyVar : mLazyVar;
-	int &lazy_var_count = aIsLocal ? g.CurrentFunc->mLazyVarCount : mLazyVarCount; // Used further below too.
+	Var **lazy_var = aIsLocal ? g->CurrentFunc->mLazyVar : mLazyVar;
+	int &lazy_var_count = aIsLocal ? g->CurrentFunc->mLazyVarCount : mLazyVarCount; // Used further below too.
 	if (lazy_var)
 	{
 		if (aInsertPos != lazy_var_count) // Need to make room at the indicated position for this variable.
@@ -7846,9 +7951,9 @@ Var *Script::AddVar(char *aVarName, size_t aVarNameLength, int aInsertPos, int a
 
 	// Create references to whichever variable list (local or global) is being acted upon.  These
 	// references simplify the code:
-	Var **&var = aIsLocal ? g.CurrentFunc->mVar : mVar; // This needs to be a ref. too in case it needs to be realloc'd.
-	int &var_count = aIsLocal ? g.CurrentFunc->mVarCount : mVarCount;
-	int &var_count_max = aIsLocal ? g.CurrentFunc->mVarCountMax : mVarCountMax;
+	Var **&var = aIsLocal ? g->CurrentFunc->mVar : mVar; // This needs to be a ref. too in case it needs to be realloc'd.
+	int &var_count = aIsLocal ? g->CurrentFunc->mVarCount : mVarCount;
+	int &var_count_max = aIsLocal ? g->CurrentFunc->mVarCountMax : mVarCountMax;
 	int alloc_count;
 
 	// Since the above would have returned if the lazy list is present but not yet full, if the left side
@@ -7870,7 +7975,7 @@ Var *Script::AddVar(char *aVarName, size_t aVarNameLength, int aInsertPos, int a
 			alloc_count = 100000;
 			// This is also the threshold beyond which the lazy list is used to accelerate performance.
 			// Create the permanent lazy list:
-			Var **&lazy_var = aIsLocal ? g.CurrentFunc->mLazyVar : mLazyVar;
+			Var **&lazy_var = aIsLocal ? g->CurrentFunc->mLazyVar : mLazyVar;
 			if (   !(lazy_var = (Var **)malloc(MAX_LAZY_VARS * sizeof(Var *)))   )
 			{
 				ScriptError(ERR_OUTOFMEM);
@@ -8058,6 +8163,8 @@ void *Script::GetVarType(char *aVarName)
 	if (!strcmp(lower, "controldelay")) return BIV_ControlDelay;
 	if (!strcmp(lower, "mousedelay")) return BIV_MouseDelay;
 	if (!strcmp(lower, "defaultmousespeed")) return BIV_DefaultMouseSpeed;
+	if (!strcmp(lower, "ispaused")) return BIV_IsPaused;
+	if (!strcmp(lower, "iscritical")) return BIV_IsCritical;
 	if (!strcmp(lower, "issuspended")) return BIV_IsSuspended;
 
 	if (!strcmp(lower, "iconhidden")) return BIV_IconHidden;
@@ -8176,10 +8283,6 @@ void *Script::GetVarType(char *aVarName)
 		|| !strcmp(lower, "tab")) return BIV_Space_Tab;
 	if (!strcmp(lower, "ahkversion")) return BIV_AhkVersion;
 	if (!strcmp(lower, "ahkpath")) return BIV_AhkPath;
-
-	// Lexikos: (L4) Added BIV_IsPaused and BIV_IsCritical.
-	if (!strcmp(lower, "ispaused")) return BIV_IsPaused;
-	if (!strcmp(lower, "iscritical")) return BIV_IsCritical;
 
 	// Since above didn't return:
 	return (void *)VAR_NORMAL;
@@ -8458,7 +8561,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 				}
 			} // for each deref of this arg
 			} // if (this_arg.deref)
-			if (!line->ExpressionToPostfix(this_arg)) // At this stage, this_arg.is_expression is known to be true.
+			if (!line->ExpressionToPostfix(this_arg)) // At this stage, this_arg.is_expression is known to be true. Doing this here, after the script has been loaded, might improve the compactness/adjacent-ness of the compiled expressions in memory, which might improve performance due to CPU caching.
 			{
 				abort = true; // So that the caller doesn't also report an error.
 				return NULL; // The function above already displayed the error msg.
@@ -8592,7 +8695,10 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 	AttributeType loop_type_file, loop_type_reg, loop_type_read, loop_type_parse;
 	for (Line *line = aStartingLine; line != NULL;)
 	{
-		if (ACT_IS_IF(line->mActionType) || line->mActionType == ACT_LOOP || line->mActionType == ACT_REPEAT || line->mActionType == ACT_WHILE) // Lexikos: (L4) Added check for ACT_WHILE.
+		if (   ACT_IS_IF(line->mActionType)
+			|| line->mActionType == ACT_LOOP
+			|| line->mActionType == ACT_WHILE // Lexikos: Added check for ACT_WHILE.
+			|| line->mActionType == ACT_REPEAT   )
 		{
 			// ActionType is an IF or a LOOP.
 			line_temp = line->mNextLine;  // line_temp is now this IF's or LOOP's action-line.
@@ -8619,7 +8725,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_file = ATTR_LOOP_UNKNOWN;
 			else if (aLoopTypeFile == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
 				loop_type_file = ATTR_LOOP_NORMAL;
-			else if (aLoopTypeFile == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: (L4) ACT_WHILE
+			else if (aLoopTypeFile == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
 				loop_type_file = ATTR_LOOP_WHILE;
 
 			// The section is the same as above except for registry vs. file loops:
@@ -8630,7 +8736,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_reg = ATTR_LOOP_UNKNOWN;
 			else if (aLoopTypeReg == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
 				loop_type_reg = ATTR_LOOP_NORMAL;
-			else if (aLoopTypeReg == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: (L4) ACT_WHILE
+			else if (aLoopTypeReg == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
 				loop_type_reg = ATTR_LOOP_WHILE;
 
 			// Same as above except for READ-FILE loops:
@@ -8641,7 +8747,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_read = ATTR_LOOP_UNKNOWN;
 			else if (aLoopTypeRead == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
 				loop_type_read = ATTR_LOOP_NORMAL;
-			else if (aLoopTypeRead == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: (L4) ACT_WHILE
+			else if (aLoopTypeRead == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
 				loop_type_read = ATTR_LOOP_WHILE;
 
 			// Same as above except for PARSING loops:
@@ -8652,7 +8758,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_parse = ATTR_LOOP_UNKNOWN;
 			else if (aLoopTypeParse == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
 				loop_type_parse = ATTR_LOOP_NORMAL;
-			else if (aLoopTypeParse == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: (L4) ACT_WHILE
+			else if (aLoopTypeParse == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
 				loop_type_parse = ATTR_LOOP_WHILE;
 
 			// Check if the IF's action-line is something we want to recurse.  UPDATE: Always
@@ -8707,7 +8813,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			// so always continue on to evaluate the IF's ELSE, if present:
 			if (line_temp->mActionType == ACT_ELSE)
 			{
-				if (line->mActionType == ACT_LOOP || line->mActionType == ACT_REPEAT || line->mActionType == ACT_WHILE) // Lexikos: (L4) Added check for ACT_WHILE.
+				if (line->mActionType == ACT_LOOP || line->mActionType == ACT_WHILE || line->mActionType == ACT_REPEAT) // Lexikos: Added check for ACT_WHILE.
 				{
 					 // this can't be our else, so let the caller handle it.
 					if (aMode != ONLY_ONE_LINE)
@@ -9648,7 +9754,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 			break;
 
 		case SYM_IFF_ELSE: // i.e. this infix symbol is ':'.
-			if (stack_symbol == SYM_BEGIN) // An ELSE with no matching IF/THEN (load-time currently doesn't validate/detect this).
+			if (stack_symbol == SYM_BEGIN) // An ELSE with no matching IF/THEN.
 				return LineError("A \":\" is missing its \"?\""); // Below relies on the above check having been done, to avoid underflow.
 			// Otherwise:
 			this_postfix = STACK_POP; // There should be no danger of stack underflow in the following because SYM_BEGIN always exists at the bottom of the stack.
@@ -9775,9 +9881,10 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 						// on the right side (for consistency and since such a ternary would be stand-alone,
 						// which is a rare use for ternary).  Also cascade to the right to treat things like
 						// x=y=z as assignments because its intuitiveness seems to outweigh other considerations.
-						// In a future version, these transformations could be done at loadtime to improve runtime
-						// performance; but currently that seems more complex than it's worth (and loadtime
-						// performance and code size shouldn't be entirely ignored).
+						// The following comment is somewhat obsolete because it now IS done at loadtime:
+						// In a future version, the above transformations could be done at loadtime to improve
+						// runtime performance; but currently that seems more complex than it's worth (and
+						// loadtime performance and code size shouldn't be entirely ignored).
 						for (fwd_infix = this_infix + 1;; fwd_infix += 2)
 						{
 							// The following is checked first to simplify things and avoid any chance of reading
@@ -9840,8 +9947,8 @@ end_of_infix_to_postfix:
 		if (new_token.symbol == SYM_OPERAND)
 		{
 			if (IsPureNumeric(new_token.marker, true, false, true) != PURE_INTEGER)
-				new_token.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer, which can increase performance of complex expressions by up to 20%.
-			else
+				new_token.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
+			else // Pre-convert to binary integer, which can increase performance of complex expressions by up to 20%.
 			{
 				if (   !(new_token.buf = SimpleHeap::Malloc(sizeof(__int64)))   )
 					return LineError(ERR_OUTOFMEM);
@@ -9931,6 +10038,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 	Label *jump_to_label;  // For use with Gosub & Goto & GroupActivate.
 	ResultType if_condition, result;
 	LONG_OPERATION_INIT
+	global_struct &g = *::g; // Reduces code size and may improve performance. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
 
 	for (Line *line = this; line != NULL;)
 	{
@@ -9970,14 +10078,15 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 		// because the script is now in charge of this thread's interruptibility.
 		if (!g.AllowThreadToBeInterrupted && !g.ThreadIsCritical && g_script.mUninterruptedLineCountMax > -1) // Ordered for short-circuit performance.
 		{
-			// Note that there is a timer that handles the UninterruptibleTime setting, so we don't
-			// have handle that setting here.  But that timer is killed by the DISABLE_UNINTERRUPTIBLE
-			// macro we call below.  This is because we don't want the timer to "fire" after we've
-			// already met the conditions which allow interruptibility to be restored, because if
-			// it did, it might interfere with the fact that some other code might already be using
-			// g.AllowThreadToBeInterrupted again for its own purpose:
-			if (g.UninterruptedLineCount > g_script.mUninterruptedLineCountMax)
-				MAKE_THREAD_INTERRUPTIBLE
+			// To preserve backward compatibility, ExecUntil() must be the one to check
+			// g.UninterruptedLineCount and update g.AllowThreadToBeInterrupted, rather than doing
+			// those things on-demand in IsInterruptible().  If those checks were moved to
+			// IsInterruptible(), they might compare against a different/changed value of
+			// g_script.mUninterruptedLineCountMax because IsInterruptible() is called only upon demand.
+			// THIS SECTION DOES NOT CHECK g.ThreadStartTime because that only needs to be
+			// checked on demand by callers of IsInterruptible().
+			if (g.UninterruptedLineCount > g_script.mUninterruptedLineCountMax) // See above.
+				g.AllowThreadToBeInterrupted = true;
 			else
 				// Incrementing this unconditionally makes it a cruder measure than g.LinesPerCycle,
 				// but it seems okay to be less accurate for this purpose:
@@ -10030,7 +10139,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 		// line (e.g. control stmts such as IF and LOOP).  Also, don't expand
 		// ACT_ASSIGN because a more efficient way of dereferencing may be possible
 		// in that case:
-		if (line->mActionType != ACT_ASSIGN && line->mActionType != ACT_WHILE) // Lexikos: (L4) Exclude ACT_WHILE so A_Index can be set before the expression is evaluated.
+		if (line->mActionType != ACT_ASSIGN && line->mActionType != ACT_WHILE)
 		{
 			result = line->ExpandArgs();
 			// As of v1.0.31, ExpandArgs() will also return EARLY_EXIT if a function call inside one of this
@@ -10296,7 +10405,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 
 		case ACT_LOOP:
 		case ACT_REPEAT:
-		case ACT_WHILE: // Lexikos: (L4) mAttribute should be ATTR_LOOP_WHILE.
+		case ACT_WHILE: // Lexikos: mAttribute should be ATTR_LOOP_WHILE.
 		{
 			HKEY root_key_type; // For registry loops, this holds the type of root key, independent of whether it is local or remote.
 			AttributeType attr = line->mAttribute;
@@ -10405,6 +10514,9 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 				result = line->PerformLoop(apReturnValue, continue_main_loop, jump_to_line
 					, iteration_limit, is_infinite);
 				break;
+			case ATTR_LOOP_WHILE: // Lexikos: ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
+				result = line->PerformLoopWhile(apReturnValue, continue_main_loop, jump_to_line);
+				break;
 			case ATTR_LOOP_PARSE:
 				// The phrase "csv" is unique enough since user can always rearrange the letters
 				// to do a literal parse using C, S, and V as delimiters:
@@ -10452,9 +10564,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 					// of ErrorLevel, perhaps changing its value too often when the user would want
 					// it saved.  But in any case, changing that now might break existing scripts).
 					result = OK;
-				break;
-			case ATTR_LOOP_WHILE: // Lexikos: (L4) ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
-				result = line->PerformLoopWhile(apReturnValue, continue_main_loop, jump_to_line);
 				break;
 			}
 
@@ -10682,8 +10791,9 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 	{
 	case ACT_IFEXPR: // Listed first for performance.
 		// The following is ordered for short-circuit performance. No need to check if it's g_ErrorLevel
-		// because ACT_IFEXPR doesn't internally change ErrorLevel.  Also, RAW is safe because loadtime
-		// validation ensured there is at least 1 arg:
+		// (like ArgMustBeDereferenced() does) because ACT_IFEXPR doesn't internally change ErrorLevel.
+		// Also, RAW is safe because loadtime validation ensured there is at least 1 arg. (There is a
+		// section similar to the below in PerformLoopWhile(), so maintain them together.)
 		if_condition = (ARGVARRAW1 && !*ARG1 && ARGVARRAW1->Type() == VAR_NORMAL)
 			? LegacyVarToBOOL(*ARGVARRAW1) // 30% faster than having ExpandArgs() resolve ARG1 even when it's a naked variable.
 			: LegacyResultToBOOL(ARG1); // CAN'T simply check *ARG1=='1' because the loadtime routine has various ways of setting if_expresion to false for things that are normally expressions.
@@ -10708,8 +10818,9 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 		// they will be compared as strings rather than as numbers):
 
 		// Notes about the macros below:
-		// Ordered for short-circuit performance. No need to check if it's g_ErrorLevel because the commands
-		// that use these macros don't internally change ErrorLevel.
+		// Ordered for short-circuit performance. No need to check if it's g_ErrorLevel (like
+		// ArgMustBeDereferenced() does) because the commands that use these macros don't internally
+		// change ErrorLevel.
 		// RAW is safe (for arg_var1) because loadtime validation ensured there is at least 1 arg.
 		// For arg_var1, it isn't necessary to check ARGVARRAW1!=NULL because arg1 is ARG_TYPE_INPUT_VAR
 		// for all the commands that use these macros, so loadtime validation ensures ARGVARRAW1!=NULL.
@@ -10815,9 +10926,9 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 			char *arg1_as_string = ARG1_AS_STRING; // Resolve only once.
 			char *arg2_as_string = ARG2_AS_STRING; //
 			char *arg3_as_string = ARG3_AS_STRING; //
-			if (g.StringCaseSense == SCS_INSENSITIVE) // The most common mode is listed first for performance.
+			if (g->StringCaseSense == SCS_INSENSITIVE) // The most common mode is listed first for performance.
 				if_condition = !(stricmp(arg1_as_string, arg2_as_string) < 0 || stricmp(arg1_as_string, arg3_as_string) > 0);
-			else if (g.StringCaseSense == SCS_INSENSITIVE_LOCALE)
+			else if (g->StringCaseSense == SCS_INSENSITIVE_LOCALE)
 				if_condition = lstrcmpi(arg1_as_string, arg2_as_string) > -1 && lstrcmpi(arg1_as_string, arg3_as_string) < 1;
 			else  // case sensitive
 				if_condition = !(strcmp(arg1_as_string, arg2_as_string) < 0 || strcmp(arg1_as_string, arg3_as_string) > 0);
@@ -10838,11 +10949,13 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 
 	case ACT_IFINSTRING:
 	case ACT_IFNOTINSTRING:
+	{
 		// The most common mode is listed first for performance:
 		if_condition = g_strstr(ARG1, ARG2) != NULL; // To reduce code size, resolve large macro only once for both these commands.
 		if (mActionType == ACT_IFNOTINSTRING)
 			if_condition = !if_condition;
 		break;
+	}
 
 	case ACT_IFIN:
 	case ACT_IFNOTIN:
@@ -10983,16 +11096,16 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 	// handle all-blank params:
 	case ACT_IFWINEXIST:
 		// NULL-check this way avoids compiler warnings:
-		if_condition = (WinExist(g, FOUR_ARGS, false, true) != NULL);
+		if_condition = (WinExist(*g, FOUR_ARGS, false, true) != NULL);
 		break;
 	case ACT_IFWINNOTEXIST:
-		if_condition = !WinExist(g, FOUR_ARGS, false, true); // Seems best to update last-used even here.
+		if_condition = !WinExist(*g, FOUR_ARGS, false, true); // Seems best to update last-used even here.
 		break;
 	case ACT_IFWINACTIVE:
-		if_condition = (WinActive(g, FOUR_ARGS, true) != NULL);
+		if_condition = (WinActive(*g, FOUR_ARGS, true) != NULL);
 		break;
 	case ACT_IFWINNOTACTIVE:
-		if_condition = !WinActive(g, FOUR_ARGS, true);
+		if_condition = !WinActive(*g, FOUR_ARGS, true);
 		break;
 
 	case ACT_IFEXIST:
@@ -11008,12 +11121,12 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 		// Seems best not to report runtime error for such a rare thing, just let it discover "false" further below:
 		//if (!mb_result)
 		//	return LineError(ERR_PARAM1_INVALID ERR_ABORT, FAIL, ARG1);
-		if_condition = (g.MsgBoxResult == mb_result);
+		if_condition = (g->MsgBoxResult == mb_result);
 		break;
 	}
 #ifdef _DEBUG
 	default: // Should never happen, but return an error if it does.
-		return LineError("DEBUG: EvaluateCondition(): Unhandled windowing action type." ERR_ABORT);
+		return LineError("DEBUG: EvaluateCondition(): Unhandled type of IF." ERR_ABORT);
 #endif
 	}
 	return if_condition ? CONDITION_TRUE : CONDITION_FALSE;
@@ -11035,15 +11148,9 @@ ResultType Line::EvaluateHotCriterionExpression()
 	// See MsgSleep() for comments about the following section.
 	char ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
 	strlcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), sizeof(ErrorLevel_saved));
-	global_struct global_saved;
-	CopyMemory(&global_saved, &g, sizeof(global_struct));
-	if (g_nFileDialogs)
-		SetCurrentDirectory(g_WorkingDir);
-	//InitNewThread(0, false, true, ACT_IFEXPR);
 	// Critical seems to improve reliability, either because the thread completes faster (i.e. before the timeout) or because we check for messages less often.
 	InitNewThread(0, false, true, ACT_CRITICAL);
 	DEBUGGER_STACK_PUSH(SE_Thread, this, desc, "#If")
-	g_script.UpdateTrayIcon();
 
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
 
@@ -11053,7 +11160,7 @@ ResultType Line::EvaluateHotCriterionExpression()
 		result = EvaluateCondition();
 
 	DEBUGGER_STACK_POP()
-	ResumeUnderlyingThread(&global_saved, ErrorLevel_saved, true);
+	ResumeUnderlyingThread(ErrorLevel_saved);
 
 	return result;
 }
@@ -11066,6 +11173,8 @@ ResultType Line::PerformLoop(char **apReturnValue, bool &aContinueMainLoop, Line
 {
 	ResultType result;
 	Line *jump_to_line;
+	global_struct &g = *::g; // Primarily for performance in this case.
+
 	for (; aIsInfinite || g.mLoopIteration <= aIterationLimit; ++g.mLoopIteration)
 	{
 		// Execute once the body of the loop (either just one statement or a block of statements).
@@ -11128,6 +11237,55 @@ ResultType Line::PerformLoop(char **apReturnValue, bool &aContinueMainLoop, Line
 
 
 
+// Lexikos: ACT_WHILE
+ResultType Line::PerformLoopWhile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine)
+{
+	ResultType result;
+	Line *jump_to_line;
+	global_struct &g = *::g; // Might slightly speed up the loop below.
+
+	for (;; ++g.mLoopIteration)
+	{
+		// Evaluate the expression only now that A_Index has been set.
+		result = ExpandArgs();
+		if (result != OK)
+			return result;
+
+		// The following section is similar to the one at ACT_IFEXPR in EvaluateCondition(), so maintain
+		// them together (for consistency, it seems best to use the same legacy boolean methods as
+		// "if (expression)"):
+		if (ARGVARRAW1 && !*ARG1 && ARGVARRAW1->Type() == VAR_NORMAL)
+		{
+			if (!LegacyVarToBOOL(*ARGVARRAW1))
+				break;
+		}
+		else
+			if (!LegacyResultToBOOL(ARG1))
+				break;
+
+		// CONCERNING ALL THE REST OF THIS FUNCTION: See comments in PerformLoop() for details.
+		if (mNextLine->mActionType == ACT_BLOCK_BEGIN)
+			do
+				result = mNextLine->mNextLine->ExecUntil(UNTIL_BLOCK_END, apReturnValue, &jump_to_line);
+			while (jump_to_line == mNextLine);
+		else
+			result = mNextLine->ExecUntil(ONLY_ONE_LINE, apReturnValue, &jump_to_line);
+		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
+			return result;
+		if (jump_to_line)
+		{
+			if (jump_to_line == this)
+				aContinueMainLoop = true;
+			else
+				aJumpToLine = jump_to_line;
+			break;
+		}
+	} // for()
+	return OK; // The script's loop is now over.
+}
+
+
+
 ResultType Line::PerformLoopFilePattern(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
 	, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, char *aFilePattern)
 // Note: Even if aFilePattern is just a directory (i.e. with not wildcard pattern), it seems best
@@ -11157,8 +11315,8 @@ ResultType Line::PerformLoopFilePattern(char **apReturnValue, bool &aContinueMai
 		file_path_length = 0;
 	}
 
-	// g.mLoopFile is the current file of the file-loop that encloses this file-loop, if any.
-	// The below is our own current_file, which will take precedence over g.mLoopFile if this
+	// g->mLoopFile is the current file of the file-loop that encloses this file-loop, if any.
+	// The below is our own current_file, which will take precedence over g->mLoopFile if this
 	// loop is a file-loop:
 	BOOL file_found;
 	WIN32_FIND_DATA new_current_file;
@@ -11171,6 +11329,8 @@ ResultType Line::PerformLoopFilePattern(char **apReturnValue, bool &aContinueMai
 
 	ResultType result;
 	Line *jump_to_line;
+	global_struct &g = *::g; // Primarily for performance in this case.
+
 	for (; file_found; ++g.mLoopIteration)
 	{
 		g.mLoopFile = &new_current_file; // inner file-loop's file takes precedence over any outer file-loop's.
@@ -11307,6 +11467,7 @@ ResultType Line::PerformLoopReg(char **apReturnValue, bool &aContinueMainLoop, L
 	ResultType result;
 	Line *jump_to_line;
 	DWORD i;
+	global_struct &g = *::g; // Primarily for performance in this case.
 
 	// See comments in PerformLoop() for details about this section.
 	// Note that &reg_item is passed to ExecUntil() rather than... (comment was never finished).
@@ -11370,7 +11531,7 @@ ResultType Line::PerformLoopReg(char **apReturnValue, bool &aContinueMainLoop, L
 	// Going in reverse order allows keys to be deleted without disrupting the enumeration,
 	// at least in some cases:
 	reg_item.InitForSubkeys();
-	char subkey_full_path[MAX_REG_ITEM_LENGTH + 1]; // But doesn't include the root key name, which is not only by design but testing shows that if it did, the length could go over 260.
+	char subkey_full_path[MAX_REG_ITEM_SIZE]; // But doesn't include the root key name, which is not only by design but testing shows that if it did, the length could go over MAX_REG_ITEM_SIZE.
 	for (i = count_subkeys - 1;; --i) // Will have zero iterations if there are no subkeys.
 	{
 		// Don't use CONTINUE in loops such as this due to the loop-ending condition being explicitly
@@ -11459,6 +11620,7 @@ ResultType Line::PerformLoopParse(char **apReturnValue, bool &aContinueMainLoop,
 	Line *jump_to_line;
 	char *field, *field_end, saved_char;
 	size_t field_length;
+	global_struct &g = *::g; // Primarily for performance in this case.
 
 	for (field = buf;;)
 	{ 
@@ -11561,6 +11723,7 @@ ResultType Line::PerformLoopParseCSV(char **apReturnValue, bool &aContinueMainLo
 	char *field, *field_end, saved_char;
 	size_t field_length;
 	bool field_is_enclosed_in_quotes;
+	global_struct &g = *::g; // Primarily for performance in this case.
 
 	for (field = buf;;)
 	{
@@ -11671,6 +11834,7 @@ ResultType Line::PerformLoopReadFile(char **apReturnValue, bool &aContinueMainLo
 	size_t line_length;
 	ResultType result;
 	Line *jump_to_line;
+	global_struct &g = *::g; // Primarily for performance in this case.
 
 	for (; fgets(loop_info.mCurrentLine, sizeof(loop_info.mCurrentLine), loop_info.mReadFile);)
 	{ 
@@ -11711,65 +11875,17 @@ ResultType Line::PerformLoopReadFile(char **apReturnValue, bool &aContinueMainLo
 }
 
 
-// Lexikos: (L4) ACT_WHILE
-ResultType Line::PerformLoopWhile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine) /*LEXWHILE*/
-{
-	ResultType result;
-	Line *jump_to_line;
-	char *cp;
-	bool loop_condition;
 
-	for (;; ++g.mLoopIteration)
-	{
-		// Evaluate the expression only now that A_Index has been set.
-		result = ExpandArgs();
-		if (result != OK)
-			return result;
-
-		// See comments under ACT_IFEXPR in EvaluateCondition() for details about this section.
-		cp = ARG1;
-		if (!*cp)
-			loop_condition = false;
-		else if (!IsPureNumeric(cp, true, false, true))
-			loop_condition = true;
-		else
-			loop_condition = (ATOF(cp) != 0.0);
-
-		if (!loop_condition)
-			break;
-
-		// See comments in PerformLoop() for details about this section.
-		result = mNextLine->ExecUntil(ONLY_ONE_LINE, apReturnValue, &jump_to_line);
-		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-		{
-			return result;
-		}
-		if (jump_to_line) // See comments in PerformLoop() about this section.
-		{
-			if (jump_to_line == this)
-				aContinueMainLoop = true;
-			else
-				aJumpToLine = jump_to_line;
-			break;
-		}
-
-	} // for()
-
-	// The script's loop is now over.
-	return OK;
-}
-
-
-
-__forceinline ResultType Line::Perform() // __forceinline() currently boosts performance a bit, though it's probably more due to the butterly effect and cache hits/misses.
+__forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() reduces code size a little (since this function is called from only one place) and boosts performance a bit, though it's probably more due to the butterly effect and cache hits/misses.
 // Performs only this line's action.
 // Returns OK or FAIL.
 // The function should not be called to perform any flow-control actions such as
 // Goto, Gosub, Return, Block-Begin, Block-End, If, Else, etc.
 {
-	char buf_temp[MAX_REG_ITEM_LENGTH + 1], *contents; // For registry and other things.
+	char buf_temp[MAX_REG_ITEM_SIZE], *contents; // For registry and other things.
 	WinGroup *group; // For the group commands.
 	Var *arg_var2, *output_var = OUTPUT_VAR; // Okay if NULL. Users of it should only consider it valid if their first arg is actually an output_variable.
+	global_struct &g = *::g; // Reduces code size due to replacing so many g-> with g. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
 	BOOL arg2_has_binary_integer;
 	ToggleValueType toggle;  // For commands that use on/off/neutral.
 	// Use signed values for these in case they're really given an explicit negative value:
@@ -11859,8 +11975,8 @@ __forceinline ResultType Line::Perform() // __forceinline() currently boosts per
 	// will be considered to be zero for all of the below math functions:
 	case ACT_ADD:
 		// Notes about the macro below:
-		// Ordered for short-circuit performance. No need to check if it's g_ErrorLevel because the commands
-		// that use it don't internally change ErrorLevel.
+		// Ordered for short-circuit performance. No need to check if it's g_ErrorLevel (like
+		// ArgMustBeDereferenced() does) because the commands that use it don't internally change ErrorLevel.
 		// RAW is safe because loadtime validation ensured there are at least 2 args.
 		// ACT_ADD/SUB/MULT/DIV are one of the few places that pass true to IsNonBlankIntegerOrFloat(true).
 		// This is for backward compatibility.
@@ -12233,7 +12349,7 @@ __forceinline ResultType Line::Perform() // __forceinline() currently boosts per
 		return PerformMouse(mActionType, "", ARG1, ARG2, "", "", ARG3, ARG4);
 
 	case ACT_MOUSEGETPOS:
-		return MouseGetPos(ATOU(ARG5));
+		return MouseGetPos(ArgToUInt(5));
 
 	case ACT_WINACTIVATE:
 	case ACT_WINACTIVATEBOTTOM:
@@ -12494,46 +12610,49 @@ __forceinline ResultType Line::Perform() // __forceinline() currently boosts per
 		return OK;
 
 	case ACT_CRITICAL:
-		// For code size reduction, no runtime validation is done (only load-time).  Thus, anything other
-		// than "Off" (especially NEUTRAL) is considered to be "On":
-		toggle = ConvertOnOff(ARG1, NEUTRAL);
-		if (g.ThreadIsCritical = (toggle != TOGGLED_OFF)) // Assign.
+	{
+		// v1.0.46: When the current thread is critical, have the script check messages less often to
+		// reduce situations where an OnMesage or GUI message must be discarded due to "thread already
+		// running".  Using 16 rather than the default of 5 solves reliability problems in a custom-menu-draw
+		// script and probably many similar scripts -- even when the system is under load (though 16 might not
+		// be enough during an extreme load depending on the exact preemption/timeslice dynamics involved).
+		// DON'T GO TOO HIGH because this setting reduces response time for ALL messages, even those that
+		// don't launch script threads (especially painting/drawing and other screen-update events).
+		// Future enhancement: Could allow the value of 16 to be customized via something like "Critical 25".
+		// However, it seems best not to allow it to go too high (say, no more than 2000) because that would
+		// cause the script to completely hang if the critical thread never finishes, or takes a long time
+		// to finish.  A configurable limit might also allow things to work better on Win9x because it has
+		// a bigger tickcount granularity.
+		// Some hardware has a tickcount granularity of 15 instead of 10, so this covers more variations.
+		DWORD peek_frequency_when_critical_is_on = 16; // Set default.  See below.
+		// v1.0.48: Below supports "Critical 0" as meaning "Off" to improve compatibility with A_IsCritical.
+		// In fact, for performance, only the following are no recognized as turning on Critical:
+		//     - "On"
+		//     - ""
+		//     - Integer other than 0.
+		// Everything else, if considered to be "Off", including "Off", "Any non-blank string that
+		// doesn't start with a non-zero number", and zero itself.
+		g.ThreadIsCritical = !*ARG1 // i.e. a first arg that's omitted or blank is the same as "ON". See comments above.
+			|| !stricmp(ARG1, "ON")
+			|| (peek_frequency_when_critical_is_on = ArgToUInt(1)); // Non-zero integer also turns it on. Relies on short-circuit boolean order.
+		if (g.ThreadIsCritical) // Critical has been turned on. (For simplicity even if it was already on, the following is done.)
 		{
-			// v1.0.46: When the current thread is critical, have the script check messages less often to
-			// reduce situations where an OnMesage or GUI message must be discarded due to "thread already
-			// running".  Using 16 rather than the default of 5 solves reliability problems in a custom-menu-draw
-			// script and probably many similar scripts -- even when the system is under load (though 16 might not
-			// be enough during an extreme load depending on the exact preemption/timeslice dynamics involved).
-			// DON'T GO TOO HIGH because this setting reduces response time for ALL messages, even those that
-			// don't launch script threads (especially painting/drawing and other screen-update events).
-			// Future enhancement: Could allow the value of 16 to be customized via something like "Critical 25".
-			// However, it seems best not to allow it to go too high (say, no more than 2000) because that would
-			// cause the script to completely hang if the critical thread never finishes, or takes a long time
-			// to finish.  A configurable limit might also allow things to work better on Win9x because it has
-			// a bigger tickcount granularity.
-			if (!*ARG1 || toggle == TOGGLED_ON) // i.e. an omitted first arg is the same as "ON".
-				g.PeekFrequency = 16; // Some hardware has a tickcount granularity of 15 instead of 10, so this covers more variations.
-			else // ARG1 is present but it's not "On" or "Off"; so treat it as a number.
-				g.PeekFrequency = ATOU(ARG1); // For flexibility (and due to rarity), don't bother checking if too large/small (even if it is it's probably inconsequential).
+			g.PeekFrequency = peek_frequency_when_critical_is_on;
 			g.AllowThreadToBeInterrupted = false;
 			g.LinesPerCycle = -1;      // v1.0.47: It seems best to ensure SetBatchLines -1 is in effect because
 			g.IntervalBeforeRest = -1; // otherwise it may check messages during the interval that it isn't supposed to.
 		}
-		else
+		else // Critical has been turned off.
 		{
+			// Since Critical is being turned off, allow thread to be immediately interrupted regardless of
+			// any "Thread Interrupt" settings.
 			g.PeekFrequency = DEFAULT_PEEK_FREQUENCY;
 			g.AllowThreadToBeInterrupted = true;
 		}
-		// If it's being turned off, allow thread to be immediately interrupted regardless of any
-		// "Thread Interrupt" settings.
-		// Now that the thread's interruptibility has been explicitly set, the script is in charge
-		// of managing this thread's interruptibility, thus kill the timer unconditionally:
-		KILL_UNINTERRUPTIBLE_TIMER  // Done here for maintainability and performance, even though UninterruptibleTimeout() will also kill it.
-		// Although the above kills the timer, it does not remove any WM_TIMER message that it might already
-		// have placed into the queue.  And since we have other types of timers, purging the queue of all
-		// WM_TIMERS would be too great a loss of maintainability and reliability.  To solve this,
-		// UninterruptibleTimeout() checks the value of g.ThreadIsCritical.
+		// Once ACT_CRITICAL returns, the thread's interruptibility has been explicitly set; so the script
+		// is now in charge of managing this thread's interruptibility.
 		return OK;
+	}
 
 	case ACT_THREAD:
 		switch (ConvertThreadCommand(ARG1))
@@ -12603,7 +12722,7 @@ __forceinline ResultType Line::Perform() // __forceinline() currently boosts per
 	{
 		if (!output_var) // v1.0.42.03: Special mode to change the seed.
 		{
-			init_genrand(ATOU(ARG2)); // It's documented that an unsigned 32-bit number is required.
+			init_genrand(ArgToUInt(2)); // It's documented that an unsigned 32-bit number is required.
 			return OK;
 		}
 		bool use_float = IsPureNumeric(ARG2, true, false, true) == PURE_FLOAT
@@ -12678,7 +12797,7 @@ __forceinline ResultType Line::Perform() // __forceinline() currently boosts per
 		// It simply calls the function with the two DWORD values provided. It avoids setting
 		// ErrorLevel because failure is rare and also because a script might want play a beep
 		// right before displaying an error dialog that uses the previous value of ErrorLevel.
-		Beep(*ARG1 ? ATOU(ARG1) : 523, *ARG2 ? ATOU(ARG2) : 150);
+		Beep(*ARG1 ? ArgToUInt(1) : 523, *ARG2 ? ArgToUInt(2) : 150);
 		return OK;
 
 	case ACT_SOUNDPLAY:
@@ -12979,7 +13098,7 @@ __forceinline ResultType Line::Perform() // __forceinline() currently boosts per
 	case ACT_SETFORMAT:
 		// For now, it doesn't seem necessary to have runtime validation of the first parameter.
 		// Just ignore the command if it's not valid:
-		if (!stricmp(ARG1, "Float"))
+		if (!strnicmp(ARG1, "Float", 5)) // "nicmp" vs. "icmp" so that Float and FloatFast are treated the same (loadtime validation already took notice of the Fast flag).
 		{
 			// -2 to allow room for the letter 'f' and the '%' that will be added:
 			if (ArgLength(2) >= sizeof(g.FormatFloat) - 2) // A variable that resolved to something too long.
@@ -12995,7 +13114,7 @@ __forceinline ResultType Line::Perform() // __forceinline() currently boosts per
 				, dot_pos ? "" : "." // Add a dot if none was specified so that "0" is the same as "0.", which seems like the most user-friendly approach; it's also easier to document in the help file.
 				, IsPureNumeric(ARG2, true, true, true) ? "f" : ""); // If it's not pure numeric, assume the user already included the desired letter (e.g. SetFormat, Float, 0.6e).
 		}
-		else if (!stricmp(ARG1, "Integer"))
+		else if (!strnicmp(ARG1, "Integer", 7)) // "nicmp" vs. "icmp" so that Integer and IntegerFast are treated the same (loadtime validation already took notice of the Fast flag).
 		{
 			switch(*ARG2)
 			{
@@ -13556,10 +13675,24 @@ void Line::ToggleSuspendState()
 
 
 
+void Line::PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause)
+{
+	if (g <= g_array) // Guard against underflow. This condition can occur when the script thread that called us is the AutoExec section or a callback running in the idle/0 thread.
+		return;
+	if (g[-1].IsPaused == aTrueForPauseFalseForUnpause) // It's already in the right state.
+		return; // Return early because doing the updates further below would be wrong in this case.
+	g[-1].IsPaused = aTrueForPauseFalseForUnpause; // Update the pause state to that specified by caller.
+	if (aTrueForPauseFalseForUnpause) // The underlying thread is being paused when it was unpaused before.
+		++g_nPausedThreads; // For this purpose the idle thread is counted as a paused thread.
+	else // The underlying thread is being unpaused when it was paused before.
+		--g_nPausedThreads;
+}
+
+
+
 ResultType Line::ChangePauseState(ToggleValueType aChangeTo, bool aAlwaysOperateOnUnderlyingThread)
+// Currently designed to be called only by the Pause command (ACT_PAUSE).
 // Returns OK or FAIL.
-// Note: g_Idle must be false since we're always called from a script subroutine, not from
-// the tray menu.  Therefore, the value of g_Idle need never be checked here.
 {
 	switch (aChangeTo)
 	{
@@ -13575,19 +13708,20 @@ ResultType Line::ChangePauseState(ToggleValueType aChangeTo, bool aAlwaysOperate
 		// (which can be the idle thread) isn't paused the following flag-change will be ignored at a later
 		// stage. This method also relies on the fact that the current thread cannot itself be paused right
 		// now because it is what got us here.
-		g.UnderlyingThreadIsPaused = false; // Necessary even for the "idle thread" (otherwise, the Pause command wouldn't be able to unpause it).
+		PauseUnderlyingThread(false); // Necessary even for the "idle thread" (otherwise, the Pause command wouldn't be able to unpause it).
 		return OK;
 	case NEUTRAL: // the user omitted the parameter entirely, which is considered the same as "toggle"
 	case TOGGLE:
 		// Update for v1.0.37.06: "Pause" and "Pause Toggle" are more useful if they always apply to the
 		// thread immediately beneath the current thread rather than "any underlying thread that's paused".
-		if (g.UnderlyingThreadIsPaused)
+		if (g > g_array && g[-1].IsPaused) // Checking g>g_array avoids any chance of underflow, which might otherwise happen if this is called by the AutoExec section or a threadless callback running in thread #0.
 		{
-			g.UnderlyingThreadIsPaused = false; // Flag it to be unpaused when it gets resumed.
+			PauseUnderlyingThread(false);
 			return OK;
 		}
-		// Otherwise, since the underlying thread is not paused, continue onward to do the "pause enabled"
-		// logic below:
+		//ELSE since the underlying thread is not paused, continue onward to do the "pause enabled" logic below.
+		// (This is the historical behavior because it allows a hotkey like F1::Pause to toggle the script's
+		// pause state on and off -- even though what's really happening involves multiple threads.)
 		break;
 	default: // TOGGLE_INVALID or some other disallowed value.
 		// We know it's a variable because otherwise the loading validation would have caught it earlier:
@@ -13597,7 +13731,7 @@ ResultType Line::ChangePauseState(ToggleValueType aChangeTo, bool aAlwaysOperate
 	// Since above didn't return, pause should be turned on.
 	if (aAlwaysOperateOnUnderlyingThread) // v1.0.37.06: Allow underlying thread to be directly paused rather than pausing the current thread.
 	{
-		g.UnderlyingThreadIsPaused = true; // If the underlying thread is already paused, this flag change will be ignored at a later stage.
+		PauseUnderlyingThread(true); // If the underlying thread is already paused, this flag change will be ignored at a later stage.
 		return OK;
 	}
 	// Otherwise, pause the current subroutine (which by definition isn't paused since it had to be 
@@ -13613,10 +13747,9 @@ ResultType Line::ChangePauseState(ToggleValueType aChangeTo, bool aAlwaysOperate
 	// in case we are in a hotkey subroutine and in case this hotkey has a buffered repeat-again
 	// action pending, which the user probably wouldn't want to happen after the script is unpaused:
 	Hotkey::ResetRunAgainAfterFinished();
-	g.IsPaused = true;
-	++g_nPausedThreads; // Always incremented because we're never called to pause the "idle thread", only real threads.
+	g->IsPaused = true;
+	++g_nPausedThreads; // For this purpose the idle thread is counted as a paused thread.
 	g_script.UpdateTrayIcon();
-	CheckMenuItem(GetMenu(g_hWnd), ID_FILE_PAUSE, MF_CHECKED);
 	return OK;
 }
 
@@ -13795,13 +13928,13 @@ char *Script::ListVars(char *aBuf, int aBufSize) // aBufSize should be an int to
 // into aBuf and returning the position in aBuf of its new string terminator.
 {
 	char *aBuf_orig = aBuf;
-	if (g.CurrentFunc)
+	if (g->CurrentFunc)
 	{
 		// This definition might help compiler string pooling by ensuring it stays the same for both usages:
 		#define LIST_VARS_UNDERLINE "\r\n--------------------------------------------------\r\n"
 		// Start at the oldest and continue up through the newest:
-		aBuf += snprintf(aBuf, BUF_SPACE_REMAINING, "Local Variables for %s()%s", g.CurrentFunc->mName, LIST_VARS_UNDERLINE);
-		Func &func = *g.CurrentFunc; // For performance.
+		aBuf += snprintf(aBuf, BUF_SPACE_REMAINING, "Local Variables for %s()%s", g->CurrentFunc->mName, LIST_VARS_UNDERLINE);
+		Func &func = *g->CurrentFunc; // For performance.
 		for (int i = 0; i < func.mVarCount; ++i)
 			if (func.mVar[i]->Type() == VAR_NORMAL) // Don't bother showing clipboard and other built-in vars.
 				aBuf = func.mVar[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
@@ -13811,7 +13944,7 @@ char *Script::ListVars(char *aBuf, int aBufSize) // aBufSize should be an int to
 	// However, 99.9% of scripts do not use the lazy list, so it seems too rare to worry about other
 	// than document it in the ListVars command in the help file:
 	aBuf += snprintf(aBuf, BUF_SPACE_REMAINING, "%sGlobal Variables (alphabetical)%s"
-		, g.CurrentFunc ? "\r\n\r\n" : "", LIST_VARS_UNDERLINE);
+		, g->CurrentFunc ? "\r\n\r\n" : "", LIST_VARS_UNDERLINE);
 	// Start at the oldest and continue up through the newest:
 	for (int i = 0; i < mVarCount; ++i)
 		if (mVar[i]->Type() == VAR_NORMAL) // Don't bother showing clipboard and other built-in vars.
@@ -13874,7 +14007,8 @@ char *Script::ListKeyHistory(char *aBuf, int aBufSize) // aBufSize should be an 
 		//, INTERRUPTIBLE ? "yes" : "no"
 		, g_nThreads > 1 ? g_nThreads - 1 : 0
 		, g_nThreads > 1 ? " (preempted: they will resume when the current thread finishes)" : ""
-		, g_nPausedThreads, g_nThreads, g_nLayersNeedingTimer
+		, g_nPausedThreads - (g_array[0].IsPaused && !mAutoExecSectionIsRunning)  // Historically thread #0 isn't counted as a paused thread unless the auto-exec section is running but paused.
+		, g_nThreads, g_nLayersNeedingTimer
 		, ModifiersLRToText(GetModifierLRState(true), LRtext));
 	GetHookStatus(aBuf, BUF_SPACE_REMAINING);
 	aBuf += strlen(aBuf); // Adjust for what GetHookStatus() wrote to the buffer.
@@ -14184,7 +14318,7 @@ ResultType Script::ActionExec(char *aAction, char *aParams, char *aWorkingDir, b
 
 	// Otherwise, success:
 	if (aUpdateLastError)
-		g.LastError = 0; // Force zero to indicate success, which seems more maintainable and reliable than calling GetLastError() right here.
+		g->LastError = 0; // Force zero to indicate success, which seems more maintainable and reliable than calling GetLastError() right here.
 
 	// If aProcess isn't NULL, the caller wanted the process handle left open and so it must eventually call
 	// CloseHandle().  Otherwise, we should close the process if it's non-NULL (it can be NULL in the case of

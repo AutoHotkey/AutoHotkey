@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -34,6 +34,21 @@ GNU General Public License for more details.
 EXTERN_OSVER; // For the access to the g_os version object without having to include globaldata.h
 EXTERN_G;
 
+#define MAX_THREADS_LIMIT UCHAR_MAX // Uses UCHAR_MAX (255) because some variables that store a thread count are UCHARs.
+#define MAX_THREADS_DEFAULT 10 // Must not be higher than above.
+#define EMERGENCY_THREADS 2 // This is the number of extra threads available after g_MaxThreadsTotal has been reached for the following to launch: hotkeys/etc. whose first line is something important like ExitApp or Pause. (see #MaxThreads documentation).
+#define MAX_THREADS_EMERGENCY (g_MaxThreadsTotal + EMERGENCY_THREADS)
+#define TOTAL_ADDITIONAL_THREADS (EMERGENCY_THREADS + 2) // See below.
+// Must allow two beyond EMERGENCY_THREADS: One for the AutoExec/idle thread and one so that ExitApp()
+// can run even when MAX_THREADS_EMERGENCY has been reached.
+// Explanation: If/when AutoExec() finishes, although it no longer needs g_array[0] (not even
+// AutoExecSectionTimeout() needs it because it either won't be called or it will return early),
+// at least the following might still use g_array[0]:
+// 1) Threadless (fast-mode) callbacks that have no controlling script thread; see RegisterCallbackCStub().
+// 2) g_array[0].IsPaused indicates whether the script is in a paused state while idle.
+// In addition, it probably simplifies the code not to reclaim g_array[0]; e.g. ++g and --g can be done
+// unconditionally when creating new threads.
+
 enum ExecUntilMode {NORMAL_MODE, UNTIL_RETURN, UNTIL_BLOCK_END, ONLY_ONE_LINE};
 
 // It's done this way so that mAttribute can store a pointer or one of these constants.
@@ -49,7 +64,7 @@ enum ExecUntilMode {NORMAL_MODE, UNTIL_RETURN, UNTIL_BLOCK_END, ONLY_ONE_LINE};
 #define ATTR_LOOP_REG (void *)4
 #define ATTR_LOOP_READ_FILE (void *)5
 #define ATTR_LOOP_PARSE (void *)6
-#define ATTR_LOOP_WHILE (void *)7 // Lexikos: (L4) This is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
+#define ATTR_LOOP_WHILE (void *)7 // Lexikos: This is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
 typedef void *AttributeType;
 
 enum FileLoopModeType {FILE_LOOP_INVALID, FILE_LOOP_FILES_ONLY, FILE_LOOP_FILES_AND_FOLDERS, FILE_LOOP_FOLDERS_ONLY};
@@ -84,28 +99,6 @@ enum VariableTypeType {VAR_TYPE_INVALID, VAR_TYPE_NUMBER, VAR_TYPE_INTEGER, VAR_
 	GetSystemTimeAsFileTime(&ft);\
 	init_genrand(ft.dwLowDateTime);\
 }
-
-// Notes about the below macro:
-// One of the menus in the menu bar has been displayed, and the we know the user is is still in
-// the menu bar, even moving to different menus and/or menu items, until WM_EXITMENULOOP is received.
-// Note: It seems that when window's menu bar is being displayed/navigated by the user, our thread
-// is tied up in a message loop other than our own.  In other words, it's very similar to the
-// TrackPopupMenuEx() call used to handle the tray menu, which is why g_MenuIsVisible can be used
-// for both types of menus to indicate to MainWindowProc() that timed subroutines should not be
-// checked or allowed to launch during such times.  Also, "break" is used rather than "return 0"
-// to let DefWindowProc()/DefaultDlgProc() take whatever action it needs to do for these.
-// UPDATE: The value of g_MenuIsVisible is checked before changing it because it might already be
-// set to MENU_TYPE_POPUP (apparently, TrackPopupMenuEx sometimes/always generates WM_ENTERMENULOOP).
-// BAR vs. POPUP currently doesn't matter (as long as its non-zero); thus, the above is done for
-// maintainability.
-#define HANDLE_MENU_LOOP \
-	case WM_ENTERMENULOOP:\
-		if (!g_MenuIsVisible)\
-			g_MenuIsVisible = MENU_TYPE_BAR;\
-		break;\
-	case WM_EXITMENULOOP:\
-		g_MenuIsVisible = MENU_TYPE_NONE;\
-		break;
 
 #define IS_PERSISTENT (Hotkey::sHotkeyCount || Hotstring::sHotstringCount || g_KeybdHook || g_MouseHook || g_persistent)
 
@@ -342,20 +335,22 @@ struct ArgStruct
 
 // Some of these lengths and such are based on the MSDN example at
 // http://msdn.microsoft.com/library/default.asp?url=/library/en-us/sysinfo/base/enumerating_registry_subkeys.asp:
-// UPDATE for v1.0.44.07: Someone reported that a stack overflow was possible, implying that it only happens
+// FIX FOR v1.0.48: 
+// OLDER (v1.0.44.07): Someone reported that a stack overflow was possible, implying that it only happens
 // during extremely deep nesting of subkey names (perhaps a hundred or more nested subkeys).  Upon review, it seems
 // that the prior limit of 16383 for value-name-length is higher than needed; testing shows that a value name can't
 // be longer than 259 (limit might even be 255 if API vs. RegEdit is used to create the name).  Testing also shows
 // that the total path name of a registry item (including item/value name but excluding the name of the root key)
-// obeys the same limit.
-#define MAX_REG_ITEM_LENGTH 259
+// obeys the same limit BUT ONLY within the RegEdit GUI.  RegEdit seems capable of importing subkeys whose names
+// (even without any value name appended) are longer than 259 characters (see comments higher above).
+#define MAX_REG_ITEM_SIZE 1024 // Needs to be greater than 260 (see comments above), but I couldn't find any documentation at MSDN or the web about the max length of a subkey name.  One example at MSDN RegEnumKeyEx() uses MAX_KEY_LENGTH=255 and MAX_VALUE_NAME=16383, but clearly MAX_KEY_LENGTH should be larger.
 #define REG_SUBKEY -2 // Custom type, not standard in Windows.
 struct RegItemStruct
 {
 	HKEY root_key_type, root_key;  // root_key_type is always a local HKEY, whereas root_key can be a remote handle.
-	char subkey[MAX_REG_ITEM_LENGTH + 1];  // The branch of the registry where this subkey or value is located.
-	char name[MAX_REG_ITEM_LENGTH + 1]; // The subkey or value name.
-	DWORD type; // Value Type (e.g REG_DWORD). This is the length used by MSDN in their example code.
+	char subkey[MAX_REG_ITEM_SIZE];  // The branch of the registry where this subkey or value is located.
+	char name[MAX_REG_ITEM_SIZE]; // The subkey or value name.
+	DWORD type; // Value Type (e.g REG_DWORD).
 	FILETIME ftLastWriteTime; // Non-initialized.
 	void InitForValues() {ftLastWriteTime.dwHighDateTime = ftLastWriteTime.dwLowDateTime = 0;}
 	void InitForSubkeys() {type = REG_SUBKEY;}  // To distinguish REG_DWORD and such from the subkeys themselves.
@@ -546,7 +541,7 @@ private:
 	ResultType PerformLoopParse(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
 	ResultType Line::PerformLoopParseCSV(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
 	ResultType PerformLoopReadFile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine, FILE *aReadFile, char *aWriteFileName);
-	ResultType Line::PerformLoopWhile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: (L4) ACT_WHILE.
+	ResultType PerformLoopWhile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
 	ResultType Perform();
 
 	ResultType MouseGetPos(DWORD aOptions);
@@ -572,6 +567,7 @@ private:
 	// Bitwise flags:
 	#define FSF_ALLOW_CREATE 0x01
 	#define FSF_EDITBOX      0x02
+	#define FSF_NONEWDIALOG  0x04
 	ResultType FileSelectFolder(char *aRootDir, char *aOptions, char *aGreeting);
 
 	ResultType FileGetShortcut(char *aShortcutFile);
@@ -864,6 +860,7 @@ public:
 	#define ArgToDouble(aArgNum) ArgIndexToDouble((aArgNum)-1)
 	#define ArgToInt64(aArgNum) ArgIndexToInt64((aArgNum)-1)
 	#define ArgToInt(aArgNum) (int)ArgToInt64(aArgNum) // Benchmarks show that having a "real" ArgToInt() that calls ATOI vs. ATOI64 (and ToInt() vs. ToInt64()) doesn't measurably improve performance.
+	#define ArgToUInt(aArgNum) (UINT)ArgToInt64(aArgNum) // Similar to what ATOU() does.
 	__int64 ArgIndexToInt64(int aArgIndex);
 	double ArgIndexToDouble(int aArgIndex);
 	size_t ArgIndexLength(int aArgIndex);
@@ -1701,7 +1698,7 @@ public:
 		{
 			if (!stricmp(aBuf, "WheelUp") || !stricmp(aBuf, "WU")) return VK_WHEEL_UP;
 			if (!stricmp(aBuf, "WheelDown") || !stricmp(aBuf, "WD")) return VK_WHEEL_DOWN;
-			// Lexikos: (L4) Support horizontal scrolling in Windows Vista and later.
+			// Lexikos: Support horizontal scrolling in Windows Vista and later.
 			if (!stricmp(aBuf, "WheelLeft") || !stricmp(aBuf, "WL")) return VK_WHEEL_LEFT;
 			if (!stricmp(aBuf, "WheelRight") || !stricmp(aBuf, "WR")) return VK_WHEEL_RIGHT;
 		}
@@ -1751,6 +1748,7 @@ public:
 	char *ToText(char *aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false);
 
 	static void ToggleSuspendState();
+	static void PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause);
 	ResultType ChangePauseState(ToggleValueType aChangeTo, bool aAlwaysOperateOnUnderlyingThread);
 	static ResultType ScriptBlockInput(bool aEnable);
 
@@ -1807,12 +1805,12 @@ public:
 	ResultType Execute()
 	// This function was added in v1.0.46.16 to support A_ThisLabel.
 	{
-		Label *prev_label = g.CurrentLabel; // This will be non-NULL when a subroutine is called from inside another subroutine.
-		g.CurrentLabel = this;
+		Label *prev_label =g->CurrentLabel; // This will be non-NULL when a subroutine is called from inside another subroutine.
+		g->CurrentLabel = this;
 		DEBUGGER_STACK_PUSH(SE_Sub, mJumpToLine, sub, this)
 		ResultType result = mJumpToLine->ExecUntil(UNTIL_RETURN); // The script loader has ensured that Label::mJumpToLine can't be NULL.
 		DEBUGGER_STACK_POP()
-		g.CurrentLabel = prev_label;
+		g->CurrentLabel = prev_label;
 		return result;
 	}
 
@@ -1853,12 +1851,13 @@ public:
 	int mInstances; // How many instances currently exist on the call stack (due to recursion or thread interruption).  Future use: Might be used to limit how deep recursion can go to help prevent stack overflow.
 	Func *mNextFunc; // Next item in linked list.
 
-	#define VAR_ASSUME_NONE 0
-	#define VAR_ASSUME_LOCAL 1
-	#define VAR_ASSUME_GLOBAL 2
-	#define VAR_ASSUME_STATIC 3 // Lexikos: (L8) Assume local and static.
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
 	UCHAR mDefaultVarType;
+	#define VAR_DECLARE_NONE   0
+	#define VAR_DECLARE_GLOBAL 1
+	#define VAR_DECLARE_LOCAL  2
+	#define VAR_DECLARE_STATIC 3
+
 	bool mIsBuiltIn; // Determines contents of union. Keep this member adjacent/contiguous with the above.
 	// Note that it's possible for a built-in function such as WinExist() to become a normal/UDF via
 	// override in the script.  So mIsBuiltIn should always be used to determine whether the function
@@ -1872,8 +1871,8 @@ public:
 		// outermost function call of a line consisting only of function calls, namely ACT_EXPRESSION)
 		// would not be significant because the Return command's expression (arg1) must still be evaluated
 		// in case it calls any functions that have side-effects, e.g. "return LogThisError()".
-		Func *prev_func = g.CurrentFunc; // This will be non-NULL when a function is called from inside another function.
-		g.CurrentFunc = this;
+		Func *prev_func = g->CurrentFunc; // This will be non-NULL when a function is called from inside another function.
+		g->CurrentFunc = this;
 		// Although a GOTO that jumps to a position outside of the function's body could be supported,
 		// it seems best not to for these reasons:
 		// 1) The extreme rarity of a legitimate desire to intentionally do so.
@@ -1884,7 +1883,7 @@ public:
 		//    back into the function body belongs to the Gosub and not the function itself.
 		// 3) More difficult to maintain because we have handle jump_to_line the same way ExecUntil() does,
 		//    checking aResult the same way it does, then checking jump_to_line the same way it does, etc.
-		// Fix for v1.0.31.05: g.mLoopFile and the other g_script members that follow it are
+		// Fix for v1.0.31.05: g->mLoopFile and the other g_script members that follow it are
 		// now passed to ExecUntil() for two reasons (update for v1.0.44.14: now they're implicitly "passed"
 		// because they're done via parameter anymore):
 		// 1) To fix the fact that any function call in one parameter of a command would reset
@@ -1917,8 +1916,8 @@ public:
 		--mInstances;
 		// Restore the original value in case this function is called from inside another function.
 		// Due to the synchronous nature of recursion and recursion-collapse, this should keep
-		// g.CurrentFunc accurate, even amidst the asynchronous saving and restoring of "g" itself:
-		g.CurrentFunc = prev_func;
+		// g->CurrentFunc accurate, even amidst the asynchronous saving and restoring of "g" itself:
+		g->CurrentFunc = prev_func;
 		return result;
 	}
 
@@ -1928,7 +1927,7 @@ public:
 		, mParam(NULL), mParamCount(0), mMinParams(0)
 		, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 		, mInstances(0), mNextFunc(NULL)
-		, mDefaultVarType(VAR_ASSUME_NONE)
+		, mDefaultVarType(VAR_DECLARE_NONE)
 		, mIsBuiltIn(aIsBuiltIn)
 	{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
@@ -2091,6 +2090,7 @@ struct FontType
 	bool strikeout;
 	int point_size; // Decided to use int vs. float to simplify the code in many places. Fractional sizes seem rarely needed.
 	int weight;
+	DWORD quality; // Lexikos: (L19) Allow control over font quality (anti-aliasing, etc.).
 	HFONT hfont;
 };
 
@@ -2477,7 +2477,7 @@ public:
 	char *mOurEXEDir;  // Same as above but just the containing diretory (for convenience).
 	char *mMainWindowTitle; // Will hold our main window's title, for consistency & convenience.
 	bool mIsReadyToExecute;
-	bool AutoExecSectionIsRunning;
+	bool mAutoExecSectionIsRunning;
 	bool mIsRestart; // The app is restarting rather than starting from scratch.
 	bool mIsAutoIt2; // Whether this script is considered to be an AutoIt2 script.
 	bool mErrorStdOut; // true if load-time syntax errors should be sent to stdout vs. a MsgBox.
@@ -2486,7 +2486,7 @@ public:
 #else
 	FILE *mIncludeLibraryFunctionsThenExit;
 #endif
-	__int64 mLinesExecutedThisCycle; // Use 64-bit to match the type of g.LinesPerCycle
+	__int64 mLinesExecutedThisCycle; // Use 64-bit to match the type of g->LinesPerCycle
 	int mUninterruptedLineCountMax; // 32-bit for performance (since huge values seem unnecessary here).
 	int mUninterruptibleTime;
 	DWORD mLastScriptRest, mLastPeekTime;
@@ -2504,7 +2504,7 @@ public:
 
 	UserMenu *mTrayMenu; // Our tray menu, which should be destroyed upon exiting the program.
     
-	ResultType Init(char *aScriptFilename, bool aIsRestart);
+	ResultType Init(global_struct &g, char *aScriptFilename, bool aIsRestart);
 	ResultType CreateWindows();
 	void EnableOrDisableViewMenuItems(HMENU aMenu, UINT aFlags);
 	void CreateTrayIcon();
@@ -2607,6 +2607,8 @@ VarSizeType BIV_WinDelay(char *aBuf, char *aVarName);
 VarSizeType BIV_ControlDelay(char *aBuf, char *aVarName);
 VarSizeType BIV_MouseDelay(char *aBuf, char *aVarName);
 VarSizeType BIV_DefaultMouseSpeed(char *aBuf, char *aVarName);
+VarSizeType BIV_IsPaused(char *aBuf, char *aVarName);
+VarSizeType BIV_IsCritical(char *aBuf, char *aVarName);
 VarSizeType BIV_IsSuspended(char *aBuf, char *aVarName);
 #ifdef AUTOHOTKEYSC  // A_IsCompiled is left blank/undefined in uncompiled scripts.
 VarSizeType BIV_IsCompiled(char *aBuf, char *aVarName);
@@ -2681,9 +2683,7 @@ VarSizeType BIV_TimeIdle(char *aBuf, char *aVarName);
 VarSizeType BIV_TimeIdlePhysical(char *aBuf, char *aVarName);
 VarSizeType BIV_IPAddress(char *aBuf, char *aVarName);
 VarSizeType BIV_IsAdmin(char *aBuf, char *aVarName);
-// Lexikos: Added BIV_IsPaused and BIV_IsCritical.
-VarSizeType BIV_IsPaused(char *aBuf, char *aVarName);
-VarSizeType BIV_IsCritical(char *aBuf, char *aVarName);
+
 
 
 ////////////////////////
@@ -2706,7 +2706,7 @@ void BIF_Chr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_IsLabel(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // Lexikos: (L7) IsFunc - for use with dynamic function calls.
+void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_GetKeyState(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_FileExist(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
@@ -2747,8 +2747,8 @@ BOOL LegacyResultToBOOL(char *aResult);
 BOOL LegacyVarToBOOL(Var &aVar);
 BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
-__int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPure = FALSE);
-double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE, BOOL aIsPure = FALSE);
+__int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPureInteger = FALSE);
+double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE, BOOL aIsPureFloat = FALSE);
 char *TokenToString(ExprTokenType &aToken, char *aBuf = NULL);
 ResultType TokenToDoubleOrInt64(ExprTokenType &aToken);
 

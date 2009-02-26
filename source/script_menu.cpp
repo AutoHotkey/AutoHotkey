@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -192,7 +192,7 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 			}
 			return OK;
 		}
-		// else: request to remove menu item icon will be processed below.
+		// else: this request to remove a menu item's icon will be processed below.
 		break;
 
 	case MENU_CMD_CLICK:
@@ -658,7 +658,7 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 		mFirstMenuItem = aMenuItem->mNextMenuItem; // Can be NULL if the list will now be empty.
 	CHANGE_DEFAULT_IF_NEEDED  // Should do this before freeing aMenuItem's memory.
 	if (mMenu) // Delete the item from the menu.
-		RemoveMenu(mMenu, aMenuItem_ID, aMenuItem_MF_BY); // Lexikos: (L16) DeleteMenu destroys any sub-menu handle associated with the item, so use RemoveMenu.
+		RemoveMenu(mMenu, aMenuItem_ID, aMenuItem_MF_BY); // v1.0.48: Lexikos: DeleteMenu() destroys any sub-menu handle associated with the item, so use RemoveMenu. Otherwise the submenu handle stored somewhere else in memory would suddenly become invalid.
 	RemoveItemIcon(aMenuItem); // Lexikos: (L17) Free icon or bitmap.
 	if (aMenuItem->mName != Var::sEmptyString)
 		delete aMenuItem->mName; // Since it was separately allocated.
@@ -1247,7 +1247,7 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 	{
 		// These are okay even if the menu items don't exist (perhaps because the user customized the menu):
 		CheckMenuItem(mMenu, ID_TRAY_SUSPEND, g_IsSuspended ? MF_CHECKED : MF_UNCHECKED);
-		CheckMenuItem(mMenu, ID_TRAY_PAUSE, g.IsPaused ? MF_CHECKED : MF_UNCHECKED);
+		CheckMenuItem(mMenu, ID_TRAY_PAUSE, g->IsPaused ? MF_CHECKED : MF_UNCHECKED);
 	}
 
 	POINT pt;
@@ -1259,7 +1259,7 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 			pt.x = aX;
 		if (aY != COORD_UNSPECIFIED)
 			pt.y = aY;
-		if (!(g.CoordMode & COORD_MODE_MENU))  // Using coords relative to the active window (rather than screen).
+		if (!(g->CoordMode & COORD_MODE_MENU))  // Using coords relative to the active window (rather than screen).
 			WindowToScreen((int &)pt.x, (int &)pt.y);
 	}
 
@@ -1319,7 +1319,7 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 	}
 	// Apparently, the HWND parameter of TrackPopupMenuEx() can be g_hWnd even if one of the script's
 	// other (non-main) windows is foreground. The menu still seems to operate correctly.
-	g_MenuIsVisible = MENU_TYPE_POPUP; // It seems this is also set by HANDLE_MENU_LOOP because apparently, TrackPopupMenuEx generates WM_ENTERMENULOOP. So it's done here just for added safety in case WM_ENTERMENULOOP isn't ALWAYS generated.
+	g_MenuIsVisible = MENU_TYPE_POPUP; // It seems this is also set by WM_ENTERMENULOOP because apparently, TrackPopupMenuEx generates WM_ENTERMENULOOP. So it's done here just for added safety in case WM_ENTERMENULOOP isn't ALWAYS generated.
 	TrackPopupMenuEx(mMenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt.x, pt.y, g_hWnd, NULL);
 	g_MenuIsVisible = MENU_TYPE_NONE;
 	// MSDN recommends this to prevent menu from closing on 2nd click.  MSDN also says that it's only

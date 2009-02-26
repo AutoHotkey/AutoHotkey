@@ -1,7 +1,7 @@
 /*
 AutoHotkey
 
-Copyright 2003-2008 Chris Mallett (support@autohotkey.com)
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -49,7 +49,7 @@ inline bool IsTextMatch(char *aHaystack, char *aNeedle)
 {
 	if (!*aNeedle) // The empty string is always found, regardless of mode.
 		return true;
-	switch(g.TitleMatchMode)
+	switch(g->TitleMatchMode)
 	{
 	case FIND_ANYWHERE:        return strstr(aHaystack, aNeedle);
 	case FIND_REGEX:           return RegExMatch(aHaystack, aNeedle);
@@ -287,8 +287,8 @@ void SetForegroundLockTimeout();
 // pending threads will launch right before the dialog is displayed.  But later, when the user
 // dismisses the dialog, the thread becomes critical again.
 // 
-// Update for v1.0.38.04: Rather than setting AllowThreadToBeInterrupted unconditionally to
-// true, make it reflect the state of g.ThreadIsCritical.  This increases flexbility by allowing
+// Update for v1.0.38.04: Rather than setting AllowInterruption unconditionally to
+// true, make it reflect the state of g->ThreadIsCritical.  This increases flexbility by allowing
 // threads to stay interrruptible even when they're displaying a dialog.  In such cases, an
 // incoming thread-event such as a hotkey will get routed to our MainWindowProc by the dialog's
 // message pump; and from there it will get reposted to our queue, and then get pumped again.
@@ -321,8 +321,8 @@ void SetForegroundLockTimeout();
 // displaying a dialog and waiting for it to finish.
 #define DIALOG_END \
 {\
-	g.ThreadIsCritical = thread_was_critical;\
-	g.AllowThreadToBeInterrupted = !thread_was_critical;\
+	g->ThreadIsCritical = thread_was_critical;\
+	g->AllowThreadToBeInterrupted = !thread_was_critical;\
 }
 bool DialogPrep();
 

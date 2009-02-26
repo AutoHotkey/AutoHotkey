@@ -876,10 +876,10 @@ DEBUGGER_COMMAND(Debugger::context_get)
 	// TODO: Include the lazy-var arrays for completeness. Low priority since lazy-var arrays are used only for 10001+ variables, and most conventional debugger interfaces would generally not be useful with that many variables.
 	if (context_id == PC_Local)
 	{
-		if (g.CurrentFunc)
+		if (g->CurrentFunc)
 		{
-			var = g.CurrentFunc->mVar;
-			var_end = var + g.CurrentFunc->mVarCount;
+			var = g->CurrentFunc->mVar;
+			var_end = var + g->CurrentFunc->mVarCount;
 		}
 		else
 			var_end = var = NULL;
