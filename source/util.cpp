@@ -2241,6 +2241,13 @@ HICON ExtractIconFromExecutable(char *aFilespec, int aIconNumber, int aWidth, in
 		FreeLibrary(hdatafile);
 	}
 
+	// (L20) Fall back to ExtractIcon if the above method failed. This may work on some versions of Windows where
+	// ExtractIcon supports 16-bit "executables" (such as ICL files) that cannot be loaded by LoadLibraryEx.
+	// However, resource ID -1 is not supported, and if multiple icon sizes exist in the file, the first is used
+	// rather than the most appropriate.
+	if (!hicon)
+		hicon = ExtractIcon(0, aFilespec, aIconNumber > 0 ? aIconNumber - 1 : aIconNumber < -1 ? aIconNumber : 0);
+
 	return hicon;
 }
 

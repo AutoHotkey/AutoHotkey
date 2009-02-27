@@ -649,7 +649,7 @@ ResultType Script::AutoExecSection()
 
 		++g_nThreads;
 		DEBUGGER_STACK_PUSH(SE_Thread, mFirstLine, desc, "auto-execute")
-		ResultType result = mFirstLine->ExecUntil(UNTIL_RETURN); // Might never return (e.g. infinite loop or ExitApp).
+		ExecUntil_result = mFirstLine->ExecUntil(UNTIL_RETURN); // Might never return (e.g. infinite loop or ExitApp).
 		DEBUGGER_STACK_POP()
 		--g_nThreads;
 		// Our caller will take care of setting g_default properly.

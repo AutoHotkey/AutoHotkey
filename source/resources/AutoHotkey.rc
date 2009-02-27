@@ -167,20 +167,20 @@ BEGIN
         BEGIN
 #ifdef AUTOHOTKEYSC
             VALUE "FileDescription", ""
-            VALUE "FileVersion", "1, 0, 47, 07"
+            VALUE "FileVersion", "1, 0, 48, 00"
             VALUE "InternalName", ""
             VALUE "LegalCopyright", ""
             VALUE "OriginalFilename", ""
             VALUE "ProductName", ""
-            VALUE "ProductVersion", "1, 0, 47, 07"
+            VALUE "ProductVersion", "1, 0, 48, 00"
 #else
             VALUE "FileDescription", "AutoHotkey_L"
-            VALUE "FileVersion", "1, 0, 47, 07"
+            VALUE "FileVersion", "1, 0, 48, 00"
             VALUE "InternalName", "AutoHotkey_L"
             VALUE "LegalCopyright", "Copyright (C) 2008"
             VALUE "OriginalFilename", "AutoHotkey.rc"
             VALUE "ProductName", "AutoHotkey_L"
-            VALUE "ProductVersion", "1, 0, 47, 07"
+            VALUE "ProductVersion", "1, 0, 48, 00"
 #endif
         END
     END
