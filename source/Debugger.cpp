@@ -16,11 +16,7 @@ freely, subject to the following restrictions:
     in a product, an acknowledgment in the product documentation would be
     appreciated but is not required.
 
-    2. Altered source versions must be plainly marked as such, and must not be
-    misrepresented as being the original software.
-
-    3. This notice may not be removed or altered from any source
-    distribution.
+    2. Altered source versions must not be misrepresented as being the original software.
 */
 
 #ifdef SCRIPT_DEBUG
@@ -293,7 +289,7 @@ DEBUGGER_COMMAND(Debugger::status)
 	default:			status = "break";
 	}
 
-	mResponseBuf.WriteF("<response command=\"status\" status=\"%s\" reason=\"ok\" transaction_id=\"%s\"/>"
+	mResponseBuf.WriteF("<response command=\"status\" status=\"%s\" reason=\"ok\" transaction_id=\"%e\"/>"
 						, status, transaction_id);
 
 	return SendResponse();
@@ -381,7 +377,7 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 			|| !strcmp(feature_name, "stop");
 	}
 
-	mResponseBuf.WriteF("<response command=\"feature_get\" feature_name=\"%s\" supported=\"%i\" transaction_id=\"%s\">%s</response>"
+	mResponseBuf.WriteF("<response command=\"feature_get\" feature_name=\"%e\" supported=\"%i\" transaction_id=\"%e\">%s</response>"
 						, feature_name, (int)supported, transaction_id, setting);
 
 	return SendResponse();
@@ -423,7 +419,7 @@ DEBUGGER_COMMAND(Debugger::feature_set)
 		success = true;
 	}
 
-	mResponseBuf.WriteF("<response command=\"feature_set\" feature=\"%s\" success=\"%i\" transaction_id=\"%s\"/>"
+	mResponseBuf.WriteF("<response command=\"feature_set\" feature=\"%e\" success=\"%i\" transaction_id=\"%e\"/>"
 						, feature_name, (int)success, transaction_id);
 
 	return SendResponse();
@@ -431,6 +427,12 @@ DEBUGGER_COMMAND(Debugger::feature_set)
 
 DEBUGGER_COMMAND(Debugger::stop)
 {
+	// See DEBUGGER_COMMAND_INIT_TRANSACTION_ID.
+	if (!strncmp(aArgs, "-i ", 3) && !strstr(aArgs + 3, " -"))
+		mContinuationTransactionId = aArgs + 3;
+	else // Seems appropriate to ignore invalid args for stop command.
+		mContinuationTransactionId = "";
+
 	Exit(EXIT_EXIT);
 	// Bypass OnExit subroutine.
 	g_script.TerminateApp(0);
@@ -535,7 +537,7 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 				line->mBreakpoint->state = state;
 				line->mBreakpoint->temporary = temporary;
 
-				mResponseBuf.WriteF("<response command=\"breakpoint_set\" transaction_id=\"%s\" state=\"%s\" id=\"%i\"/>"
+				mResponseBuf.WriteF("<response command=\"breakpoint_set\" transaction_id=\"%e\" state=\"%s\" id=\"%i\"/>"
 					, transaction_id, state ? "enabled" : "disabled", line->mBreakpoint->id);
 
 				return SendResponse();
@@ -589,7 +591,7 @@ DEBUGGER_COMMAND(Debugger::breakpoint_get)
 	{
 		if (line->mBreakpoint && line->mBreakpoint->id == breakpoint_id)
 		{
-			mResponseBuf.WriteF("<response command=\"breakpoint_get\" transaction_id=\"%s\">", transaction_id);
+			mResponseBuf.WriteF("<response command=\"breakpoint_get\" transaction_id=\"%e\">", transaction_id);
 			WriteBreakpointXml(line->mBreakpoint, line);
 			mResponseBuf.Write("</response>");
 
@@ -738,7 +740,7 @@ DEBUGGER_COMMAND(Debugger::breakpoint_list)
 {
 	DEBUGGER_COMMAND_INIT_TRANSACTION_ID;
 	
-	mResponseBuf.WriteF("<response command=\"breakpoint_list\" transaction_id=\"%s\">", transaction_id);
+	mResponseBuf.WriteF("<response command=\"breakpoint_list\" transaction_id=\"%e\">", transaction_id);
 	
 	Line *line;
 	for (line = g_script.mFirstLine; line; line = line->mNextLine)
@@ -758,7 +760,7 @@ DEBUGGER_COMMAND(Debugger::stack_depth)
 {
 	DEBUGGER_COMMAND_INIT_TRANSACTION_ID;
 
-	mResponseBuf.WriteF("<response command=\"stack_depth\" depth=\"%i\" transaction_id=\"%s\"/>"
+	mResponseBuf.WriteF("<response command=\"stack_depth\" depth=\"%i\" transaction_id=\"%e\"/>"
 						, mStackDepth, transaction_id);
 
 	return SendResponse();
@@ -798,7 +800,7 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 	if (!transaction_id)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
-	mResponseBuf.WriteF("<response command=\"stack_get\" transaction_id=\"%s\">", transaction_id);
+	mResponseBuf.WriteF("<response command=\"stack_get\" transaction_id=\"%e\">", transaction_id);
 	
 	int level = 0;
 	for (StackEntry *se = mStackTop; se != mStack; se = se->lower)
@@ -811,13 +813,13 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 			switch (se->type)
 			{
 			case SE_Thread:
-				mResponseBuf.WriteF("%s (thread)", se->desc);
+				mResponseBuf.WriteF("%e (thread)", se->desc); // %e to escape characters which desc may contain (e.g. "a & b" in hotkey name).
 				break;
 			case SE_Func:
-				mResponseBuf.WriteF("%s()", se->func->mName);
+				mResponseBuf.WriteF("%s()", se->func->mName); // %s because function names should never contain characters which need escaping.
 				break;
 			case SE_Sub:
-				mResponseBuf.WriteF("%s:", se->sub->mName);
+				mResponseBuf.WriteF("%e:", se->sub->mName); // %e because label/hotkey names may contain almost anything.
 				break;
 			}
 			mResponseBuf.Write("\"/>");
@@ -834,7 +836,7 @@ DEBUGGER_COMMAND(Debugger::context_names)
 {
 	DEBUGGER_COMMAND_INIT_TRANSACTION_ID;
 
-	mResponseBuf.WriteF("<response command=\"context_names\" transaction_id=\"%s\"><context name=\"Local\" id=\"0\"/><context name=\"Global\" id=\"1\"/></response>"
+	mResponseBuf.WriteF("<response command=\"context_names\" transaction_id=\"%e\"><context name=\"Local\" id=\"0\"/><context name=\"Global\" id=\"1\"/></response>"
 						, transaction_id);
 
 	return SendResponse();
@@ -867,7 +869,7 @@ DEBUGGER_COMMAND(Debugger::context_get)
 	if (!transaction_id)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
-	// TODO: Support retrieving variables at a given stack depth.
+	// TODO: Support setting/retrieving variables at a given stack depth. See also property_get_or_value and property_set.
 	if (depth != 0)
 		return DEBUGGER_E_INVALID_STACK_DEPTH;
 
@@ -892,7 +894,7 @@ DEBUGGER_COMMAND(Debugger::context_get)
 	else
 		return DEBUGGER_E_INVALID_CONTEXT;
 
-	mResponseBuf.WriteF("<response command=\"context_get\" context=\"%i\" transaction_id=\"%s\">"
+	mResponseBuf.WriteF("<response command=\"context_get\" context=\"%i\" transaction_id=\"%e\">"
 						, context_id, transaction_id);
 
 	for ( ; var < var_end; ++var)
@@ -908,7 +910,7 @@ DEBUGGER_COMMAND(Debugger::typemap_get)
 	DEBUGGER_COMMAND_INIT_TRANSACTION_ID;
 	
 	// Send a basic type-map with string = string.
-	mResponseBuf.WriteF("<response command=\"typemap_get\" transaction_id=\"%s\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"><map type=\"string\" name=\"string\" xsi:type=\"xsd:string\"/></response>"
+	mResponseBuf.WriteF("<response command=\"typemap_get\" transaction_id=\"%e\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"><map type=\"string\" name=\"string\" xsi:type=\"xsd:string\"/></response>"
 						, transaction_id);
 
 	return SendResponse();
@@ -1045,7 +1047,6 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	// Currently only stack depth 0 (the top-most running function) is supported.
-	// TODO: Support retrieving variables at a given stack depth.
 	if (depth != 0)
 		return DEBUGGER_E_INVALID_STACK_DEPTH;
 
@@ -1084,7 +1085,7 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 		if (strlen(name) > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name, true, DISPLAY_NO_ERROR))
 			name = "(invalid)";
 
-		mResponseBuf.WriteF("<response command=\"property_get\" transaction_id=\"%s\"><property name=\"%s\" fullname=\"%s\" type=\"undefined\" facet=\"\" size=\"0\" children=\"0\"/></response>"
+		mResponseBuf.WriteF("<response command=\"property_get\" transaction_id=\"%e\"><property name=\"%e\" fullname=\"%e\" type=\"undefined\" facet=\"\" size=\"0\" children=\"0\"/></response>"
 							, transaction_id, name, name);
 
 		return SendResponse();
@@ -1092,14 +1093,14 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 
 	if (aIsPropertyGet)
 	{
-		mResponseBuf.WriteF("<response command=\"property_get\" transaction_id=\"%s\">"
+		mResponseBuf.WriteF("<response command=\"property_get\" transaction_id=\"%e\">"
 							, transaction_id);
 		
 		WritePropertyXml(var, max_data);
 	}
 	else
 	{
-		mResponseBuf.WriteF("<response command=\"property_value\" transaction_id=\"%s\" encoding=\"base64\" size=\""
+		mResponseBuf.WriteF("<response command=\"property_value\" transaction_id=\"%e\" encoding=\"base64\" size=\""
 							, transaction_id);
 
 		WriteVarSizeAndData(var, max_data);
@@ -1146,7 +1147,6 @@ DEBUGGER_COMMAND(Debugger::property_set)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	// Currently only stack depth 0 (the top-most running function) is supported.
-	// TODO: Support setting variables at a given stack depth.
 	if (depth != 0)
 		return DEBUGGER_E_INVALID_STACK_DEPTH;
 
@@ -1165,7 +1165,7 @@ DEBUGGER_COMMAND(Debugger::property_set)
 
 	bool success = var && var->Assign(new_value, Base64Decode(new_value, new_value));
 
-	mResponseBuf.WriteF("<response command=\"property_set\" success=\"%i\" transaction_id=\"%s\"/>"
+	mResponseBuf.WriteF("<response command=\"property_set\" success=\"%i\" transaction_id=\"%e\"/>"
 						, (int)success, transaction_id);
 
 	return SendResponse();
@@ -1214,7 +1214,7 @@ DEBUGGER_COMMAND(Debugger::source)
 			if (!(source_file = fopen(filename, "rb")))
 				return DEBUGGER_E_CAN_NOT_OPEN_FILE;
 			
-			mResponseBuf.WriteF("<response command=\"source\" success=\"1\" transaction_id=\"%s\" encoding=\"base64\">"
+			mResponseBuf.WriteF("<response command=\"source\" success=\"1\" transaction_id=\"%e\" encoding=\"base64\">"
 								, transaction_id);
 
 			if (begin_line == 0 && end_line == UINT_MAX)
@@ -1302,7 +1302,7 @@ DEBUGGER_COMMAND(Debugger::source)
 	//	- Something failed and used 'break'.
 	//	- The requested file is not a known source file of this script.
 	mResponseBuf.mDataUsed = 0;
-	mResponseBuf.WriteF("<response command=\"source\" success=\"0\" transaction_id=\"%s\"/>"
+	mResponseBuf.WriteF("<response command=\"source\" success=\"0\" transaction_id=\"%e\"/>"
 						, transaction_id);
 	
 	return SendResponse();
@@ -1335,7 +1335,7 @@ int Debugger::redirect_std(char *aArgs, char *aCommandName)
 
 	// TODO: Support redirecting of stdout, or at least the * (stdout) mode of FileAppend.
 	// TODO: Support reporting of non-critical errors through "stderr" redirection. Alternately redirect OutputDebug.
-	mResponseBuf.WriteF("<response command=\"%s\" success=\"%s\" transaction_id=\"%s\"/>"
+	mResponseBuf.WriteF("<response command=\"%s\" success=\"%s\" transaction_id=\"%e\"/>"
 						, aCommandName, *new_mode=='0' ? "1" : "0", transaction_id);
 
 	return SendResponse();
@@ -1357,7 +1357,7 @@ DEBUGGER_COMMAND(Debugger::redirect_stderr)
 
 int Debugger::SendErrorResponse(char *aCommandName, char *aTransactionId, int aError, char *aExtraAttributes)
 {
-	mResponseBuf.WriteF("<response command=\"%s\" transaction_id=\"%s"
+	mResponseBuf.WriteF("<response command=\"%s\" transaction_id=\"%e"
 		, aCommandName, aTransactionId);
 	
 	if (aExtraAttributes)
@@ -1372,13 +1372,13 @@ int Debugger::SendErrorResponse(char *aCommandName, char *aTransactionId, int aE
 
 int Debugger::SendStandardResponse(char *aCommandName, char *aTransactionId)
 {
-	mResponseBuf.WriteF("<response command=\"%s\" transaction_id=\"%s\"/>"
+	mResponseBuf.WriteF("<response command=\"%s\" transaction_id=\"%e\"/>"
 						, aCommandName, aTransactionId);
 
 	return SendResponse();
 }
 
-int Debugger::SendContinuationResponse()
+int Debugger::SendContinuationResponse(char *aStatus, char *aReason)
 {
 	char *command;
 
@@ -1392,8 +1392,8 @@ int Debugger::SendContinuationResponse()
 		command = "run";
 	}
 
-	mResponseBuf.WriteF("<response command=\"%s\" status=\"break\" reason=\"ok\" transaction_id=\"%s\"/>"
-						, command, mContinuationTransactionId);
+	mResponseBuf.WriteF("<response command=\"%s\" status=\"%s\" reason=\"%s\" transaction_id=\"%e\"/>"
+						, command, aStatus, aReason, mContinuationTransactionId);
 
 	return SendResponse();
 }
@@ -1510,13 +1510,23 @@ int Debugger::Connect(char *aAddress, char *aPort)
 			{
 				mSocket = s;
 
+				char *ide_key = "", *session = "";
+				int size;
+
+				if (size = GetEnvironmentVariable("DBGP_IDEKEY", NULL, 0))
+				{
+					ide_key = (char*)_alloca(size);
+					GetEnvironmentVariable("DBGP_IDEKEY", ide_key, size);
+				}
+				if (size = GetEnvironmentVariable("DBGP_COOKIE", NULL, 0))
+				{
+					session = (char*)_alloca(size);
+					GetEnvironmentVariable("DBGP_COOKIE", session, size);
+				}
+
 				// Write init message.
-				mResponseBuf.Write("<init appid=\"" NAME_P "\" ide_key=\"");
-				mResponseBuf.WriteEnvironmentVar("DBGP_IDEKEY");
-				mResponseBuf.Write("\" session=\"");
-				mResponseBuf.WriteEnvironmentVar("DBGP_COOKIE");
-				mResponseBuf.WriteF("\" thread=\"%u\" parent=\"\" language=\"" NAME_P "\" protocol_version=\"1.0\" fileuri=\""
-					, GetCurrentThreadId());
+				mResponseBuf.WriteF("<init appid=\"" NAME_P "\" ide_key=\"%e\" session=\"%e\" thread=\"%u\" parent=\"\" language=\"" NAME_P "\" protocol_version=\"1.0\" fileuri=\""
+					, ide_key, session, GetCurrentThreadId());
 				mResponseBuf.WriteFileURI(g_script.mFileSpec);
 				mResponseBuf.Write("\"/>");
 
@@ -1563,14 +1573,8 @@ void Debugger::Exit(ExitReasons aExitReason)
 {
 	if (mSocket == INVALID_SOCKET)
 		return;
-
-	mResponseBuf.WriteF("<response command=\"%s\" status=\"stopped\" reason=\"%s\" transaction_id=\"%s\"/>"
-		, "run" // command
-		, aExitReason == EXIT_ERROR ? "error" : "ok" // reason
-		, ""); // transaction_id
-	
-	// Don't care if it fails, since we may be exiting due to a previous failure.
-	SendResponse();
+	// Don't care if it fails as we may be exiting due to a previous failure.
+	SendContinuationResponse("stopped", aExitReason == EXIT_ERROR ? "error" : "ok");
 	Disconnect();
 }
 
@@ -1771,13 +1775,13 @@ int Debugger::Buffer::Write(char *aData, DWORD aDataSize)
 	return DEBUGGER_E_OK;
 }
 
-// Write formatted data into the buffer. Supports %s (char*), %i (int), %u (unsigned int).
+// Write formatted data into the buffer. Supports %s (char*), %e (char*, "&'<> escaped), %i (int), %u (unsigned int).
 int Debugger::Buffer::WriteF(char *aFormat, ...)
 {
 	int i, err;
 	DWORD len;
-	char c, *f, *s;
-	char n[MAX_NUMBER_SIZE];
+	char c, *format_ptr, *s, *param_ptr, *entity;
+	char number_buf[MAX_NUMBER_SIZE];
 	va_list vl;
 	
 	for (len = 0, i = 0; i < 2; ++i)
@@ -1785,21 +1789,63 @@ int Debugger::Buffer::WriteF(char *aFormat, ...)
 		va_start(vl, aFormat);
 
 		// Calculate the required buffer size.
-		for (f = aFormat; c = *f; ++f)
+		for (format_ptr = aFormat; c = *format_ptr; ++format_ptr)
 		{
 			if (c == '%')
 			{
-				c = *++f;
-				
-				switch (c)
+				switch (format_ptr[1])
 				{
-				case 's':	s = va_arg(vl, char*);							break;
-				case 'i':	s = _itoa(va_arg(vl, int), n, 10);				break;
-				case 'u':	s = _ultoa(va_arg(vl, unsigned long), n, 10);	break;
-				default:	s = NULL;
+				case 's': s = va_arg(vl, char*); break;
+				case 'i': s = _itoa(va_arg(vl, int), number_buf, 10); break;
+				case 'u': s = _ultoa(va_arg(vl, unsigned long), number_buf, 10); break;
+
+				case 'e': // String, replace "&'<> with appropriate XML entity.
+				{
+					s = va_arg(vl, char*);
+					if (i == 0)
+					{
+						for (param_ptr = s; *param_ptr; ++param_ptr)
+						{
+							switch (*param_ptr)
+							{
+							case '"': case '\'':	len += 6; break; // &quot; or &apos;
+							case '&':				len += 5; break; // &amp;
+							case '<': case '>':		len += 4; break; // &lt; or &gt;
+							default: ++len;
+							}
+						}
+					}
+					else
+					{
+						for (param_ptr = s; c = *param_ptr; ++param_ptr)
+						{
+							switch (c)
+							{
+							case '"': entity = "quot"; break;
+							case '\'': entity = "apos"; break;
+							case '&': entity = "amp"; break;
+							case '<': entity = "lt"; break;
+							case '>': entity = "gt"; break;
+							default:
+								mData[mDataUsed++] = c;
+								continue;
+							}
+							// One of: "'&<> - entity is set to the appropriate entity name.
+							mDataUsed += sprintf(mData + mDataUsed, "&%s;", entity);
+						}
+					}
+					++format_ptr; // Skip %, outer loop will skip format char.
+					//s = NULL; // Skip section below.
+					//break;
+					continue;
 				}
+
+				default:
+					s = NULL; // Skip section below.
+				} // switch (format_ptr[1])
+
 				if (s)
-				{
+				{	// %s, %i or %u.
 					if (i == 0)
 					{	// Calculate required buffer space on first iteration.
 						len += strlen(s);
@@ -1810,14 +1856,16 @@ int Debugger::Buffer::WriteF(char *aFormat, ...)
 						memcpy(mData + mDataUsed, s, len);
 						mDataUsed += len;
 					}
+					++format_ptr; // Skip %, outer loop will skip format char.
 					continue;
 				}
-			}
+			} // if (c == '%')
+			// Count or copy character as is.
 			if (i == 0)
 				++len;
 			else
-				mData[mDataUsed++] = *f;
-		}
+				mData[mDataUsed++] = *format_ptr;
+		} // for (format_ptr = aFormat; c = *format_ptr; ++format_ptr)
 
 		va_end(vl);
 
@@ -1826,28 +1874,7 @@ int Debugger::Buffer::WriteF(char *aFormat, ...)
 			if (mDataUsed + len > mDataSize && (err = Expand(mDataUsed + len)))
 				return err;
 		}
-	}
-
-	return DEBUGGER_E_OK;
-}
-
-// Write the value of an environment variable into the buffer.
-int Debugger::Buffer::WriteEnvironmentVar(char *aName, char *aDefaultValue)
-{
-	int len, err;
-
-	if (len = GetEnvironmentVariable(aName, NULL, 0))
-	{
-		if (mDataUsed + len > mDataSize && (err = Expand(mDataUsed + len)))
-			return err;
-
-		GetEnvironmentVariable(aName, mData + mDataUsed, len);
-		mDataUsed += len-1; // -1 to exclude terminating null character
-	}
-	else if (aDefaultValue)
-	{
-		return Write(aDefaultValue, len);
-	}
+	} // for (len = 0, i = 0; i < 2; ++i)
 
 	return DEBUGGER_E_OK;
 }
@@ -1875,7 +1902,7 @@ int Debugger::Buffer::WriteFileURI(char *aPath)
 	// Write to the buffer, encoding as we go.
 	for (char *ptr = aPath; c = *ptr; ++ptr)
 	{
-		if (isalnum(c) || strchr("-_.!~*'()/", c))
+		if (isalnum(c) || strchr("-_.!~*()/", c))
 		{
 			mData[mDataUsed++] = (char)c;
 		}
@@ -1908,8 +1935,8 @@ void Debugger::DecodeURI(char *aUri)
 		end -= 8;
 		memmove(aUri, aUri + 8, end - aUri);
 	}
-	// Some debugger UI programmers seem to be of the misconception that file://path is
-	// valid (it should be file:///path or file://server/path), so we'll support it.
+	// Some debugger UI's use file://path even though it is invalid (it should be file:///path or file://server/path).
+	// For compatibility with these UI's, support file://.
 	else if (!strnicmp(aUri, "file://", 7))
 	{
 		end -= 7;

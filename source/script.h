@@ -1807,9 +1807,9 @@ public:
 	{
 		Label *prev_label =g->CurrentLabel; // This will be non-NULL when a subroutine is called from inside another subroutine.
 		g->CurrentLabel = this;
-		DEBUGGER_STACK_PUSH(SE_Sub, mJumpToLine, sub, this)
+			DEBUGGER_STACK_PUSH(SE_Sub, mJumpToLine, sub, this)
 		ResultType result = mJumpToLine->ExecUntil(UNTIL_RETURN); // The script loader has ensured that Label::mJumpToLine can't be NULL.
-		DEBUGGER_STACK_POP()
+			DEBUGGER_STACK_POP()
 		g->CurrentLabel = prev_label;
 		return result;
 	}
@@ -1895,7 +1895,7 @@ public:
 		// for a command that references A_Index in two of its args such as the following:
 		// ToolTip, O, ((cos(A_Index) * 500) + 500), A_Index
 		++mInstances;
-		DEBUGGER_STACK_PUSH(SE_Func, mJumpToLine, func, this)
+			DEBUGGER_STACK_PUSH(SE_Func, mJumpToLine, func, this)
 		ResultType result = mJumpToLine->ExecUntil(UNTIL_BLOCK_END, &aReturnValue);
 #ifdef SCRIPT_DEBUG
 		if (g_Debugger.IsConnected())
@@ -1911,6 +1911,7 @@ public:
 			}
 			g_Debugger.StackPop();
 		}
+		// Not used because function calls require extra work to allow the user to inspect variables before returning:
 		//DEBUGGER_STACK_POP()
 #endif
 		--mInstances;

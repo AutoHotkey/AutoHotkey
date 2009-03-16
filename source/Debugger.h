@@ -69,7 +69,7 @@ freely, subject to the following restrictions:
 // Buffer size required for a given XML message size, plus protocol overhead.
 // Format: data_length NULL xml_tag data NULL
 //#define DEBUGGER_XML_SIZE_REQUIRED(xml_size) (MAX_NUMBER_LENGTH + DEBUGGER_XML_TAG_SIZE + xml_size + 2)
-#define DEBUGGER_RESPONSE_OVERHEAD (MAX_NUMBER_LENGTH + DEBUGGER_XML_TAG_SIZE + 2)
+#define DEBUGGER_RESPONSE_OVERHEAD (MAX_INTEGER_LENGTH + DEBUGGER_XML_TAG_SIZE + 2)
 
 class Debugger;
 
@@ -129,6 +129,8 @@ struct StackEntry
 		se->aDataType = aData; \
 		g_Debugger.StackPush(se); \
 	}
+// Func::Call() calls StackPop() directly rather than using this macro, as it requires extra work to allow the user
+// to inspect variables before actually returning. If this macro is changed, also update that section.
 #define DEBUGGER_STACK_POP() \
 	if (g_Debugger.IsConnected()) \
 		g_Debugger.StackPop();
@@ -195,7 +197,7 @@ public:
 
 
 	Debugger() : mSocket(INVALID_SOCKET), mInternalState(DIS_Starting), mStackDepth(0)
-		, mMaxPropertyData(1024)
+		, mMaxPropertyData(1024), mContinuationTransactionId("")
 	{
 		// Create root entry for simplicity.
 		mStackTop = mStack = new StackEntry();
@@ -210,7 +212,6 @@ private:
 	public:
 		int Write(char *aData, DWORD aDataSize=MAXDWORD);
 		int WriteF(char *aFormat, ...);
-		int WriteEnvironmentVar(char *aName, char *aDefaultValue=NULL);
 		int WriteFileURI(char *aPath);
 		int Expand();
 		int Expand(DWORD aRequiredSize);
@@ -254,7 +255,7 @@ private:
 	int SendResponse();
 	int SendErrorResponse(char *aCommandName, char *aTransactionId, int aError=999, char *aExtraAttributes=NULL);
 	int SendStandardResponse(char *aCommandName, char *aTransactionId);
-	int SendContinuationResponse();
+	int SendContinuationResponse(char *aStatus="break", char *aReason="ok");
 
 	int WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine);
 	int WritePropertyXml(Var *aVar, VarSizeType aMaxData=VARSIZE_MAX);

@@ -648,9 +648,9 @@ ResultType Script::AutoExecSection()
 		mLastScriptRest = mLastPeekTime = GetTickCount();
 
 		++g_nThreads;
-		DEBUGGER_STACK_PUSH(SE_Thread, mFirstLine, desc, "auto-execute")
+			DEBUGGER_STACK_PUSH(SE_Thread, mFirstLine, desc, "auto-execute")
 		ExecUntil_result = mFirstLine->ExecUntil(UNTIL_RETURN); // Might never return (e.g. infinite loop or ExitApp).
-		DEBUGGER_STACK_POP()
+			DEBUGGER_STACK_POP()
 		--g_nThreads;
 		// Our caller will take care of setting g_default properly.
 
@@ -5310,10 +5310,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 				if (deref_count == 1 && Var::ValidateName(this_new_arg.text, false, DISPLAY_NO_ERROR)) // Single isolated deref.
 				{
 					// ACT_WHILE performs less than 4% faster as a non-expression in these cases, and keeping
-					// it as an expression avoids an extra check in a critical spot of ExpandArgs (near
-					// mActionType <= ACT_LAST_OPTIMIZED_IF).
-					if (aActionType != ACT_WHILE)
-						this_new_arg.is_expression = false;
+					// it as an expression avoids an extra check in a performance-sensitive spot of ExpandArgs
+					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).
+					if (aActionType != ACT_WHILE) // If it is ACT_WHILE, it would be something like "while x" in this case. Keep those as expressions for the reason above.
+						this_new_arg.is_expression = false; // In addition to being an optimization, doing this might also be necessary for things like "Var := ClipboardAll" to work properly.
 					// But if aActionType is ACT_ASSIGNEXPR, it's left as ACT_ASSIGNEXPR vs. ACT_ASSIGN
 					// because it might be necessary to avoid having AutoTrim take effect for := (which
 					// it never should).  In addition, ACT_ASSIGNEXPR probably performs better than
@@ -5346,9 +5346,14 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 					// Also, the first deref (indeed, all of them) should point to a percent sign, since
 					// there should not be any way for non-percent derefs to get mixed in with cases
 					// 2 or 3.
-					if (!deref[0].is_function && *deref[0].marker == g_DerefChar) // This appears to be case #2 or #3.
+					if (!deref[0].is_function && *deref[0].marker == g_DerefChar // This appears to be case #2 or #3.
+						&& aActionType != ACT_WHILE) // Nearly doubles the speed of "while %x%" and "while Array%i%" to leave WHILE as an expression.  But y:=%x% and y:=Array%i% are about the same speed either way, and "if %x%" never reaches this point because for compatibility(?), it's the same as "if x".
 					{
-						// Set it up so that x:=Array%i% behaves the same as StringTrimRight, Out, Array%i%, 0.
+						// The comment below is probably obsolete -- and perhaps so is this entire optimization
+						// because expressions are faster now.  But in case it's necessary for anything related
+						// to backward compatibility, it's kept (it may also reduce memory utilization a little
+						// because it avoids making simple things into expressions, which require extra memory).
+						// OLD: Set it up so that x:=Array%i% behaves the same as StringTrimRight, Out, Array%i%, 0.
 						this_new_arg.is_expression = false;
 						this_new_arg.type = ARG_TYPE_INPUT_VAR;
 					}
@@ -10792,8 +10797,7 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 	case ACT_IFEXPR: // Listed first for performance.
 		// The following is ordered for short-circuit performance. No need to check if it's g_ErrorLevel
 		// (like ArgMustBeDereferenced() does) because ACT_IFEXPR doesn't internally change ErrorLevel.
-		// Also, RAW is safe because loadtime validation ensured there is at least 1 arg. (There is a
-		// section similar to the below in PerformLoopWhile(), so maintain them together.)
+		// Also, RAW is safe because loadtime validation ensured there is at least 1 arg.
 		if_condition = (ARGVARRAW1 && !*ARG1 && ARGVARRAW1->Type() == VAR_NORMAL)
 			? LegacyVarToBOOL(*ARGVARRAW1) // 30% faster than having ExpandArgs() resolve ARG1 even when it's a naked variable.
 			: LegacyResultToBOOL(ARG1); // CAN'T simply check *ARG1=='1' because the loadtime routine has various ways of setting if_expresion to false for things that are normally expressions.
@@ -11251,17 +11255,12 @@ ResultType Line::PerformLoopWhile(char **apReturnValue, bool &aContinueMainLoop,
 		if (result != OK)
 			return result;
 
-		// The following section is similar to the one at ACT_IFEXPR in EvaluateCondition(), so maintain
-		// them together (for consistency, it seems best to use the same legacy boolean methods as
-		// "if (expression)"):
-		if (ARGVARRAW1 && !*ARG1 && ARGVARRAW1->Type() == VAR_NORMAL)
-		{
-			if (!LegacyVarToBOOL(*ARGVARRAW1))
-				break;
-		}
-		else
-			if (!LegacyResultToBOOL(ARG1))
-				break;
+		// Unlike if(expression), performance isn't significantly improved to make cases like
+		// "while x" and "while %x%" into non-expressions (the latter actually performs much
+		// better as an expression).  That is why the following check is much simpler than the
+		// one used at at ACT_IFEXPR in EvaluateCondition():
+		if (!LegacyResultToBOOL(ARG1))
+			break;
 
 		// CONCERNING ALL THE REST OF THIS FUNCTION: See comments in PerformLoop() for details.
 		if (mNextLine->mActionType == ACT_BLOCK_BEGIN)

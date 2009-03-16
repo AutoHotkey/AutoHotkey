@@ -1180,12 +1180,12 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				else if (event_is_control_generated) // An earlier stage has ensured pcontrol isn't NULL in this case.
 					pcontrol->attrib |= GUI_CONTROL_ATTRIB_LABEL_IS_RUNNING; // Must be careful to set this flag only when the event is control-generated, not for a drag-and-drop onto the control, or context menu on the control, etc.
 
-				DEBUGGER_STACK_PUSH(SE_Thread, gui_label->mJumpToLine, desc, gui_label->mName)
+					DEBUGGER_STACK_PUSH(SE_Thread, gui_label->mJumpToLine, desc, gui_label->mName)
 
 				// LAUNCH GUI THREAD:
 				gui_label->Execute();
 
-				DEBUGGER_STACK_POP()
+					DEBUGGER_STACK_POP()
 
 				// Bug-fix for v1.0.22: If the above ExecUntil() performed a "Gui Destroy", the
 				// pointers below are now invalid so should not be dereferenced.  In such a case,
@@ -1239,9 +1239,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					g.GuiEvent = GUI_EVENT_NORMAL;
 					g.GuiWindowIndex = g.GuiDefaultWindowIndex = pgui->mWindowIndex; // But leave GuiControl at its default, which flags this event as from a menu item.
 				}
-				DEBUGGER_STACK_PUSH(SE_Thread, menu_item->mLabel->mJumpToLine, desc, menu_item->mLabel->mName)
+					DEBUGGER_STACK_PUSH(SE_Thread, menu_item->mLabel->mJumpToLine, desc, menu_item->mLabel->mName)
 				menu_item->mLabel->Execute();
-				DEBUGGER_STACK_POP()
+					DEBUGGER_STACK_POP()
 				break;
 
 			case AHK_HOTSTRING:
@@ -1255,9 +1255,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// ACT_IS_ALWAYS_ALLOWED() was already checked above.
 				// The message poster has ensured that g_script.mOnClipboardChangeLabel is non-NULL and valid.
 				g_script.mOnClipboardChangeIsRunning = true;
-				DEBUGGER_STACK_PUSH(SE_Thread, g_script.mOnClipboardChangeLabel->mJumpToLine, desc, g_script.mOnClipboardChangeLabel->mName)
+					DEBUGGER_STACK_PUSH(SE_Thread, g_script.mOnClipboardChangeLabel->mJumpToLine, desc, g_script.mOnClipboardChangeLabel->mName)
 				g_script.mOnClipboardChangeLabel->Execute();
-				DEBUGGER_STACK_POP()
+					DEBUGGER_STACK_POP()
 				g_script.mOnClipboardChangeIsRunning = false;
 				break;
 
@@ -1630,7 +1630,10 @@ bool CheckScriptTimers()
 		// launches new threads.
 
 		++timer.mExistingThreads;
+			// Lexikos: (L21) L19 omitted this by accident. Since the StackEntry is only allocated and pushed onto the debugger's call stack if the debugger is actually connected, it seems unnecessary to optimise this for multiple consecutive timer executions.
+			DEBUGGER_STACK_PUSH(SE_Thread, timer.mLabel->mJumpToLine, desc, timer.mLabel->mName)
 		timer.mLabel->Execute();
+			DEBUGGER_STACK_POP()
 		--timer.mExistingThreads;
 	} // for() each timer.
 
@@ -1821,12 +1824,12 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
 	++monitor.instance_count;
 
-	DEBUGGER_STACK_PUSH(SE_Thread, func.mJumpToLine, desc, func.mName)
+		DEBUGGER_STACK_PUSH(SE_Thread, func.mJumpToLine, desc, func.mName)
 
 	char *return_value;
 	func.Call(return_value); // Call the UDF.
 	
-	DEBUGGER_STACK_POP()
+		DEBUGGER_STACK_POP()
 
 	// Fix for v1.0.47: Must handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value
 	// might be the contents of one of the function's local variables (which are about to be free'd).
