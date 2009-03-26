@@ -2511,10 +2511,25 @@ bool IsStringInList(char *aStr, char *aList, bool aFindExactMatch)
 	// such as the following:
 	// if var in string,,with,,literal,,commas
 	char buf[LINE_SIZE];
-    char *this_field = aList, *next_field, *cp;
+    char *this_field = aList, *next_field, *cp, *end_buf = buf + sizeof(buf) - 1;
 
 	while (*this_field)  // For each field in aList.
 	{
+		// Lexikos: (L22) Copy only one field at a time, translating ,, to , as we go. Benchmarks considerably faster in many cases, especially with long lists of short fields.
+		for (cp = buf, next_field = this_field; cp < end_buf && *next_field; ++cp, ++next_field) //L
+		{
+			if (*next_field == ',') // Check if this is a delimiter or literal comma.
+			{
+				++next_field;
+				if (*next_field != ',') // Was it a delimiter?
+					break;
+				// Otherwise next_field now points at the second comma, so continue copying.
+			}
+			*cp = *next_field;
+		}
+		// Terminate the string in the buffer.
+		*cp = '\0';
+/*
 		// To avoid the need to constantly check for buffer overflow (i.e. to keep it simple),
 		// just copy up to the limit of the buffer:
 		strlcpy(buf, this_field, sizeof(buf));
@@ -2539,7 +2554,7 @@ bool IsStringInList(char *aStr, char *aList, bool aFindExactMatch)
 
 		if (*next_field)  // The end of the field occurred prior to the end of aList.
 			++next_field; // Point it to the character after the delimiter (otherwise, leave it where it is).
-
+*/
 		if (*buf) // It is possible for this to be blank only for the first field.  Example: if var in ,abc
 		{
 			if (aFindExactMatch)
