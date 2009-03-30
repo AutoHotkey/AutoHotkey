@@ -853,6 +853,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 
 	case GUICONTROL_CMD_ENABLE:
 	case GUICONTROL_CMD_DISABLE:
+	{
 		// GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED is maintained for use with tab controls.  It allows controls
 		// on inactive tabs to be marked for later enabling.  It also allows explicitly disabled controls to
 		// stay disabled even when their tab/page becomes active. It is updated unconditionally for simplicity
@@ -867,12 +868,15 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 				// ... or either there is no current tab/page (or there are no tabs at all) or the one selected
 				// is not this control's: Do not disable or re-enable the control in this case.
 			return OK;
+
+		// Lexikos: (L23) Restrict focus workaround to when the control is/was actually focused. Fixes a bug introduced by L13: enabling or disabling a control caused the active Edit control to reselect its text.
+		bool gui_control_was_focused = GetForegroundWindow() == gui.mHwnd && GetFocus() == control.hwnd;
+
 		// Since above didn't return, act upon the enabled/disable:
 		EnableWindow(control.hwnd, guicontrol_cmd == GUICONTROL_CMD_ENABLE);
 		
-		// Lexikos: (L13) Disabling the focused control seems to have odd side-effects, including preventing GuiEscape from working.
-		//	The following is an apparent workaround with no apparent side-effects:
-		if (GetForegroundWindow() == gui.mHwnd)
+		// Lexikos: (L23) Only if EnableWindow removed the keyboard focus entirely, reset the focus.
+		if (gui_control_was_focused && !GetFocus())
 			SetFocus(gui.mHwnd);
 		
 		if (control.type == GUI_CONTROL_TAB) // This control is a tab control.
@@ -880,6 +884,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			// that the tab control itself has just been enabled or disabled):
 			gui.ControlUpdateCurrentTab(control, false);
 		return OK;
+	}
 
 	case GUICONTROL_CMD_SHOW:
 	case GUICONTROL_CMD_HIDE:
