@@ -33,7 +33,7 @@ DWORD Hotkey::sJoyHotkeyCount = 0;
 
 
 
-// Lexikos: (L4) Added aHotExprIndex for #if (expression).
+// L4: Added aHotExprIndex for #if (expression).
 HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, char *aWinTitle, char *aWinText, int aHotExprIndex)
 // This is a global function because it's used by both hotkeys and hotstrings.
 // In addition to being called by the hook thread, this can now be called by the main thread.
@@ -52,7 +52,7 @@ HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, char *aWinTitle, c
 	case HOT_IF_NOT_EXIST:
 		found_hwnd = WinExist(g_default, aWinTitle, aWinText, "", "", false, false); // Thread-safe.
 		break;
-	// Lexikos: (L4) Handling of #if (expression) hotkey variants.
+	// L4: Handling of #if (expression) hotkey variants.
 	case HOT_IF_EXPR:
 		// Expression evaluation must be done in the main thread. If the message times out, the hotkey/hotstring is not allowed to fire.
 		DWORD_PTR res;
@@ -523,7 +523,7 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC)
 			if (   vp->mEnabled // This particular variant within its parent hotkey is enabled.
 				&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
 				&& (!vp->mHotCriterion || HotCriterionAllowsFiring(vp->mHotCriterion
-					// Lexikos: (L4) Added vp->mHotExprIndex for #if (expression).
+					// L4: Added vp->mHotExprIndex for #if (expression).
 					, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex))   ) // ... and its critieria allow it to fire.
 				return false; // At least one of this prefix's suffixes is eligible for firing.
 	}
@@ -567,7 +567,7 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
 		if (   vp->mEnabled // This particular variant within its parent hotkey is enabled.
 			&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
 			&& (!vp->mHotCriterion || (found_hwnd = HotCriterionAllowsFiring(vp->mHotCriterion
-				// Lexikos: (L4) Added vp->mHotExprIndex for #if (expression).
+				// L4: Added vp->mHotExprIndex for #if (expression).
 				, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex)))   ) // ... and its critieria allow it to fire.
 		{
 			if (vp->mHotCriterion) // Since this is the first criteria hotkey, it takes precedence.
@@ -883,7 +883,7 @@ ResultType Hotkey::Dynamic(char *aHotkeyName, char *aLabelName, char *aOptions, 
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 	}
 
-	// Lexikos: (L4) Allow "Hotkey, If, exact-expression-text" to reference existing #if expressions.
+	// L4: Allow "Hotkey, If, exact-expression-text" to reference existing #if expressions.
 	if (!stricmp(aHotkeyName, "If"))
 	{
 		if (*aOptions)
@@ -1543,7 +1543,7 @@ HotkeyVariant *Hotkey::AddVariant(Label *aJumpToLabel, bool aSuffixHasTilde)
 	v.mHotCriterion = g_HotCriterion; // If this hotkey is an alt-tab one (mHookAction), this is stored but ignored until/unless the Hotkey command converts it into a non-alt-tab hotkey.
 	v.mHotWinTitle = g_HotWinTitle;
 	v.mHotWinText = g_HotWinText;  // The value of this and other globals used above can vary during load-time.
-	v.mHotExprIndex = g_HotExprIndex;	// Lexikos: (L4) Added mHotExprIndex for #if (expression).
+	v.mHotExprIndex = g_HotExprIndex;	// L4: Added mHotExprIndex for #if (expression).
 	v.mEnabled = true;
 	if (aSuffixHasTilde)
 	{
@@ -2429,7 +2429,7 @@ Hotstring::Hotstring(Label *aJumpToLabel, char *aOptions, char *aHotstring, char
 	, mHotCriterion(g_HotCriterion)
 	, mHotWinTitle(g_HotWinTitle), mHotWinText(g_HotWinText)
 	, mConstructedOK(false)
-	, mHotExprIndex(g_HotExprIndex)	// Lexikos: (L4) Added mHotExprIndex for #if (expression).
+	, mHotExprIndex(g_HotExprIndex)	// L4: Added mHotExprIndex for #if (expression).
 {
 	// Insist on certain qualities so that they never need to be checked other than here:
 	if (!mJumpToLabel) // Caller has already ensured that aHotstring is not blank.

@@ -58,7 +58,7 @@ enum HotkeyTypeEnum {HK_NORMAL, HK_KEYBD_HOOK, HK_MOUSE_HOOK, HK_BOTH_HOOKS, HK_
 #define HK_TYPE_IS_HOOK(type) (type > HK_NORMAL && type < HK_JOYSTICK)
 
 typedef UCHAR HotCriterionType;
-// Lexikos: (L4) Added HOT_IF_EXPR and aHotExprIndex for #if (expression).
+// L4: Added HOT_IF_EXPR and aHotExprIndex for #if (expression).
 enum HotCriterionEnum {HOT_NO_CRITERION, HOT_IF_ACTIVE, HOT_IF_NOT_ACTIVE, HOT_IF_EXIST, HOT_IF_NOT_EXIST, HOT_IF_EXPR}; // HOT_NO_CRITERION must be zero.
 HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, char *aWinTitle, char *aWinText, int aHotExprIndex); // Used by hotkeys and hotstrings.
 ResultType SetGlobalHotTitleText(char *aWinTitle, char *aWinText);
@@ -78,7 +78,7 @@ struct HotkeyVariant
 	Label *mJumpToLabel;
 	DWORD mRunAgainTime;
 	char *mHotWinTitle, *mHotWinText;
-	int mHotExprIndex; // Lexikos: (L4) g_HotExprLines index of the expression which controls whether this variant may activate.
+	int mHotExprIndex; // L4: g_HotExprLines index of the expression which controls whether this variant may activate.
 	HotkeyVariant *mNextVariant;
 	int mPriority;
 	// Keep members that are less than 32-bit adjacent to each other to conserve memory in with the default
@@ -336,7 +336,7 @@ public:
 	Label *mJumpToLabel;
 	char *mString, *mReplacement, *mHotWinTitle, *mHotWinText;
 	int mPriority, mKeyDelay;
-	int mHotExprIndex; // Lexikos: (L4) g_HotExprLines index of the expression which controls whether this hotstring may activate.
+	int mHotExprIndex; // L4: g_HotExprLines index of the expression which controls whether this hotstring may activate.
 
 	// Keep members that are smaller than 32-bit adjacent with each other to conserve memory (due to 4-byte alignment).
 	SendModes mSendMode;

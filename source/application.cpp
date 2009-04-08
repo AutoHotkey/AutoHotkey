@@ -752,7 +752,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				if (hs->mHotCriterion)
 				{
 					// For details, see comments in the hotkey section of this switch().
-					// Lexikos: (L4) Added hs->mHotExprIndex for #if (expression).
+					// L4: Added hs->mHotExprIndex for #if (expression).
 					if (   !(criterion_found_hwnd = HotCriterionAllowsFiring(hs->mHotCriterion, hs->mHotWinTitle, hs->mHotWinText, hs->mHotExprIndex))   )
 						// Hotstring is no longer eligible to fire even though it was when the hook sent us
 						// the message.  Abort the firing even though the hook may have already started
@@ -1630,7 +1630,7 @@ bool CheckScriptTimers()
 		// launches new threads.
 
 		++timer.mExistingThreads;
-			// Lexikos: (L21) L19 omitted this by accident. Since the StackEntry is only allocated and pushed onto the debugger's call stack if the debugger is actually connected, it seems unnecessary to optimise this for multiple consecutive timer executions.
+			// L21: L19 omitted this by accident. Since the StackEntry is only allocated and pushed onto the debugger's call stack if the debugger is actually connected, it seems unnecessary to optimise this for multiple consecutive timer executions.
 			DEBUGGER_STACK_PUSH(SE_Thread, timer.mLabel->mJumpToLine, desc, timer.mLabel->mName)
 		timer.mLabel->Execute();
 			DEBUGGER_STACK_POP()

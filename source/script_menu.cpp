@@ -66,7 +66,7 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 		return OK;
 
 	case MENU_CMD_ICON:
-		// Lexikos: (L17) If is_tray and aParam3 is omitted or aParam4 is an integer, set the tray icon. Otherwise set a menu item icon.
+		// L17: If is_tray and aParam3 is omitted or aParam4 is an integer, set the tray icon. Otherwise set a menu item icon.
 		if (is_tray)
 		{
 			bool mIconFrozen_prev = mIconFrozen;
@@ -141,7 +141,7 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 					icon_number = 1; // One vs. Zero tells LoadIcon: "must load icon, never a bitmap (e.g. no gif/jpg/png)".
 
 				int image_type;
-				// Lexikos: (L17) For best results, load separate small and large icons.
+				// L17: For best results, load separate small and large icons.
 				HICON new_icon_small;
 				HICON new_icon = NULL; // Initialize to detect failure to load either icon.
 				if ( new_icon_small = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), image_type, icon_number, false) ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
@@ -178,7 +178,7 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 		break;
 
 	case MENU_CMD_NOICON:
-		if (is_tray && !*aParam3) // Lexikos: (L17) "Menu, Tray, NoIcon, xxx" removes icon from tray menu item xxx.
+		if (is_tray && !*aParam3) // L17: "Menu, Tray, NoIcon, xxx" removes icon from tray menu item xxx.
 		{
 			g_NoTrayIcon = true;
 			if (mNIC.hWnd) // Since it exists, destroy it.
@@ -446,7 +446,7 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 		return menu->SetDefault(menu_item);
 	case MENU_CMD_DELETE:
 		return menu->DeleteItem(menu_item, menu_item_prev);
-	// Lexikos: (L17) Set or remove a menu item's icon.
+	// L17: Set or remove a menu item's icon.
 	case MENU_CMD_ICON:
 		// aOptions2: Icon width if specified. Defaults to system small icon size; original icon size will be used if aOptions2 is "0".
 		if (!menu->SetItemIcon(menu_item, aParam4, ATOI(aOptions), !*aOptions2 ? GetSystemMetrics(SM_CXSMICON) : ATOI(aOptions2)))
@@ -633,7 +633,7 @@ UserMenuItem::UserMenuItem(char *aName, size_t aNameCapacity, UINT aMenuID, Labe
 	: mName(aName), mNameCapacity(aNameCapacity), mMenuID(aMenuID), mLabel(aLabel), mSubmenu(aSubmenu), mMenu(aMenu)
 	, mPriority(0) // default priority = 0
 	, mEnabled(true), mChecked(false), mNextMenuItem(NULL)
-	, mIcon(NULL) // Lexikos: (L17) Initialize mIcon/mBitmap union.
+	, mIcon(NULL) // L17: Initialize mIcon/mBitmap union.
 {
 	if (aMenu->mMenu)
 	{
@@ -659,7 +659,7 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 	CHANGE_DEFAULT_IF_NEEDED  // Should do this before freeing aMenuItem's memory.
 	if (mMenu) // Delete the item from the menu.
 		RemoveMenu(mMenu, aMenuItem_ID, aMenuItem_MF_BY); // v1.0.48: Lexikos: DeleteMenu() destroys any sub-menu handle associated with the item, so use RemoveMenu. Otherwise the submenu handle stored somewhere else in memory would suddenly become invalid.
-	RemoveItemIcon(aMenuItem); // Lexikos: (L17) Free icon or bitmap.
+	RemoveItemIcon(aMenuItem); // L17: Free icon or bitmap.
 	if (aMenuItem->mName != Var::sEmptyString)
 		delete aMenuItem->mName; // Since it was separately allocated.
 	delete aMenuItem; // Do this last when its contents are no longer needed.
@@ -1046,7 +1046,7 @@ ResultType UserMenu::Create(MenuTypeType aMenuType)
 		}
 		AppendMenu(mMenu, flags, mi->mSubmenu ? (UINT_PTR)mi->mSubmenu->mMenu : mi->mMenuID, mi->mName);
 		
-		if (mi->mIcon) // Lexikos: (L17) Check mIcon/mBitmap union, apply icon if necessary.
+		if (mi->mIcon) // L17: Check mIcon/mBitmap union, apply icon if necessary.
 			ApplyItemIcon(mi);
 	}
 	if (mDefault)
@@ -1058,7 +1058,7 @@ ResultType UserMenu::Create(MenuTypeType aMenuType)
 	// which is why false is passed:
 	ApplyColor(false);
 
-	// Lexikos: (L17) Apply default style to merge checkmark/icon columns in menu.
+	// L17: Apply default style to merge checkmark/icon columns in menu.
 	MENUINFO menu_info;
 	menu_info.cbSize = sizeof(MENUINFO);
 	menu_info.fMask = MIM_STYLE;
@@ -1427,7 +1427,7 @@ bool UserMenu::ContainsMenu(UserMenu *aMenu)
 }
 
 
-// Lexikos: (L17) Menu-item icon functions.
+// L17: Menu-item icon functions.
 
 ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, char *aFilename, int aIconNumber, int aWidth)
 {

@@ -574,7 +574,7 @@ HBITMAP IconToBitmap32(HICON aIcon, bool aDestroyIcon); // Lexikos: Used for men
 int CALLBACK FontEnumProc(ENUMLOGFONTEX *lpelfe, NEWTEXTMETRICEX *lpntme, DWORD FontType, LPARAM lParam);
 bool IsStringInList(char *aStr, char *aList, bool aFindExactMatch);
 
-int ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex); // Lexikos: (L17) Find integer ID of resource from index. i.e. IconNumber -> resource ID.
-HICON ExtractIconFromExecutable(char *aFilespec, int aIconNumber, int aWidth, int aHeight); // Lexikos: (L17) Extract icon of the appropriate size from an executable (or compatible) file.
+int ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex); // L17: Find integer ID of resource from index. i.e. IconNumber -> resource ID.
+HICON ExtractIconFromExecutable(char *aFilespec, int aIconNumber, int aWidth, int aHeight); // L17: Extract icon of the appropriate size from an executable (or compatible) file.
 
 #endif

@@ -612,7 +612,7 @@ ResultType Line::Splash(char *aOptions, char *aSubText, char *aMainText, char *a
 		// Setting the big icon makes the dialog show up correctly in the Alt-Tab menu (but big seems to
 		// have no effect unless the window is unowned, i.e. it has a button on the task bar).
 		
-		// Lexikos: (L17) Use separate big/small icons for best results.
+		// L17: Use separate big/small icons for best results.
 		LPARAM big_icon, small_icon;
 		if (g_script.mCustomIcon)
 		{
@@ -5263,12 +5263,12 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		// SendMessage, 1029,,,, %A_ScriptFullPath% - AutoHotkey  ; Same as above but not sent via TRANSLATE.
 		return GetCurrentProcessId(); // Don't use ReplyMessage because then our thread can't reply to itself with this answer.
 
-	case AHK_HOT_IF_EXPR: // Lexikos: (L4) HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
+	case AHK_HOT_IF_EXPR: // L4: HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
 		if ((int)wParam > -1 && (int)wParam < g_HotExprLineCount)
 			return g_HotExprLines[(int)wParam]->EvaluateHotCriterionExpression();
 		return 0;
 
-	case WM_MEASUREITEM: // Lexikos: (L17) Measure menu icon. Not used on Windows Vista or later.
+	case WM_MEASUREITEM: // L17: Measure menu icon. Not used on Windows Vista or later.
 		if (hWnd == g_hWnd && wParam == 0 && !g_os.IsWinVista())
 		{
 			LPMEASUREITEMSTRUCT measure_item_struct = (LPMEASUREITEMSTRUCT)lParam;
@@ -5297,7 +5297,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		}
 		break;
 
-	case WM_DRAWITEM: // Lexikos: (L17) Draw menu icon. Not used on Windows Vista or later.
+	case WM_DRAWITEM: // L17: Draw menu icon. Not used on Windows Vista or later.
 		if (hWnd == g_hWnd && wParam == 0 && !g_os.IsWinVista())
 		{
 			LPDRAWITEMSTRUCT draw_item_struct = (LPDRAWITEMSTRUCT)lParam;
@@ -5785,7 +5785,7 @@ BOOL CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
 		// Setting the small icon puts it in the upper left corner of the dialog window.
 		// Setting the big icon makes the dialog show up correctly in the Alt-Tab menu.
 		
-		// Lexikos: (L17) Use separate big/small icons for best results.
+		// L17: Use separate big/small icons for best results.
 		LPARAM big_icon, small_icon;
 		if (g_script.mCustomIcon)
 		{
@@ -12423,7 +12423,7 @@ void BIF_InStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 }
 
 
-// Lexikos: (L14) Moved to separate function from RegExMatch, for use with callouts.
+// L14: Moved to separate function from RegExMatch, for use with callouts.
 void RegExSetSubpatternVars(char *haystack, pcre *re, pcre_extra *extra, bool get_positions_not_substrings, Var &output_var, int *offset, int pattern_count, int captured_pattern_count, char *&mem_to_free)
 {
 	// OTHERWISE, CONTINUE ON TO STORE THE SUBSTRINGS THAT MATCHED THE SUBPATTERNS (EVEN IF PCRE_ERROR_NOMATCH).
@@ -12604,7 +12604,7 @@ void *RegExResolveUserCallout(const char *aCalloutParam, int aCalloutParamLength
 	return (void *)callout_func;
 }
 
-struct RegExCalloutData // Lexikos: (L14) Used by BIF_RegEx to pass necessary info to RegExCallout.
+struct RegExCalloutData // L14: Used by BIF_RegEx to pass necessary info to RegExCallout.
 {
 	pcre *re;
 	char *re_text; // original NeedleRegEx
@@ -12763,10 +12763,10 @@ pcre *get_compiled_regex(char *aRegEx, bool &aGetPositionsNotSubstrings, pcre_ex
 //    aGetPositionsNotSubstrings
 //    aExtra
 //    (but it doesn't change ErrorLevel on success, not even if aResultToken!=NULL)
-// Lexikos: (L14) aOptionsLength is used by callouts to adjust cb->pattern_position to be relative to beginning of actual user-specified NeedleRegEx instead of string seen by PCRE.
+// L14: aOptionsLength is used by callouts to adjust cb->pattern_position to be relative to beginning of actual user-specified NeedleRegEx instead of string seen by PCRE.
 {	
 	if (!pcre_callout)
-	{	// Lexikos: (L14) Ensure these are initialized, even for ::RegExMatch() (to allow (?C) in window title regexes).
+	{	// L14: Ensure these are initialized, even for ::RegExMatch() (to allow (?C) in window title regexes).
 		pcre_callout = &RegExCallout;
 		pcre_resolve_user_callout = &RegExResolveUserCallout;
 	}
@@ -12903,7 +12903,7 @@ pcre *get_compiled_regex(char *aRegEx, bool &aGetPositionsNotSubstrings, pcre_ex
 		case 'J': pcre_options |= PCRE_DUPNAMES;       break; //
 		case 'U': pcre_options |= PCRE_UNGREEDY;       break; //
 		case 'X': pcre_options |= PCRE_EXTRA;          break; //
-		case 'C': pcre_options |= PCRE_AUTO_CALLOUT;   break; // Lexikos: (L14) PCRE_AUTO_CALLOUT causes callouts to be created with callout_number == 255 before each item in the pattern.
+		case 'C': pcre_options |= PCRE_AUTO_CALLOUT;   break; // L14: PCRE_AUTO_CALLOUT causes callouts to be created with callout_number == 255 before each item in the pattern.
 		case '\a':pcre_options = (pcre_options & ~PCRE_NEWLINE_BITS) | PCRE_NEWLINE_ANY; break; // v1.0.46.06: alert/bell (i.e. `a) is used for PCRE_NEWLINE_ANY.
 		case '\n':pcre_options = (pcre_options & ~PCRE_NEWLINE_BITS) | PCRE_NEWLINE_LF; break; // See below.
 			// Above option: Could alternatively have called it "LF" rather than or in addition to "`n", but that
@@ -13511,7 +13511,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	int number_of_ints_in_offset = pattern_count * 3; // PCRE uses 3 ints for each (sub)pattern: 2 for offsets and 1 for its internal use.
 	int *offset = (int *)_alloca(number_of_ints_in_offset * sizeof(int)); // _alloca() boosts performance and seems safe because subpattern_count would usually have to be ridiculously high to cause a stack overflow.
 
-	// Lexikos: (L14) Currently necessary only to support callouts (?C).
+	// L14: Currently necessary only to support callouts (?C).
 	//
 	RegExCalloutData callout_data;
 	callout_data.re = re;
@@ -13595,7 +13595,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 		}
 	}
 	
-	// Lexikos: (L14) Moved this section into a function to allow it to be used by callouts.
+	// L14: Moved this section into a function to allow it to be used by callouts.
 	if (pattern_count > 1)
 		RegExSetSubpatternVars(haystack, re, extra, get_positions_not_substrings, output_var, offset, pattern_count, captured_pattern_count, mem_to_free);
 
@@ -16071,7 +16071,7 @@ void BIF_IL_Add(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	else
 	{
 		icon_number = param3; // LoadPicture() properly handles any wrong/negative value that might be here.
-		ImageList_GetIconSize(himl, &width, &height); // Lexikos: (L19) Determine the width/height of images in the image list to ensure icons are loaded at the correct size.
+		ImageList_GetIconSize(himl, &width, &height); // L19: Determine the width/height of images in the image list to ensure icons are loaded at the correct size.
 	}
 
 	int image_type;

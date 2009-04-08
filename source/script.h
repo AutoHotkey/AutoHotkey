@@ -872,7 +872,7 @@ public:
 	char *ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget, char *&aDerefBuf
 		, size_t &aDerefBufSize, char *aArgDeref[], size_t aExtraSize);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
-	ResultType EvaluateHotCriterionExpression(); // Lexikos: (L4) Called by MainWindowProc to handle an AHK_HOT_IF_EXPR message.
+	ResultType EvaluateHotCriterionExpression(); // L4: Called by MainWindowProc to handle an AHK_HOT_IF_EXPR message.
 
 	ResultType Deref(Var *aOutputVar, char *aBuf);
 
@@ -2030,7 +2030,7 @@ public:
 	UINT GetSubmenuPos(HMENU ahMenu);
 	UINT GetItemPos(char *aMenuItemName);
 	bool ContainsMenu(UserMenu *aMenu);
-	// Lexikos: (L17) Functions for menu icons.
+	// L17: Functions for menu icons.
 	ResultType SetItemIcon(UserMenuItem *aMenuItem, char *aFilename, int aIconNumber, int aWidth);
 	ResultType ApplyItemIcon(UserMenuItem *aMenuItem);
 	ResultType RemoveItemIcon(UserMenuItem *aMenuItem);
@@ -2055,7 +2055,7 @@ public:
 	
 	union
 	{
-		// Lexikos: (L17) Implementation of menu item icons is OS-dependent (g_os.IsWinVista()).
+		// L17: Implementation of menu item icons is OS-dependent (g_os.IsWinVista()).
 		
 		// Older versions of Windows do not support alpha channels in menu item bitmaps, so owner-drawing
 		// must be used for icons with transparent backgrounds to appear correctly. Owner-drawing also
@@ -2091,7 +2091,7 @@ struct FontType
 	bool strikeout;
 	int point_size; // Decided to use int vs. float to simplify the code in many places. Fractional sizes seem rarely needed.
 	int weight;
-	DWORD quality; // Lexikos: (L19) Allow control over font quality (anti-aliasing, etc.).
+	DWORD quality; // L19: Allow control over font quality (anti-aliasing, etc.).
 	HFONT hfont;
 };
 
@@ -2232,7 +2232,7 @@ public:
 	HBRUSH mBackgroundBrushCtl;   // Brush corresponding to the above.
 	HDROP mHdrop;                 // Used for drag and drop operations.
 	HICON mIconEligibleForDestruction; // The window's icon, which can be destroyed when the window is destroyed if nothing else is using it.
-	HICON mIconEligibleForDestructionSmall; // Lexikos: (L17) A window may have two icons: ICON_SMALL and ICON_BIG.
+	HICON mIconEligibleForDestructionSmall; // L17: A window may have two icons: ICON_SMALL and ICON_BIG.
 	int mMarginX, mMarginY, mPrevX, mPrevY, mPrevWidth, mPrevHeight, mMaxExtentRight, mMaxExtentDown
 		, mSectionX, mSectionY, mMaxExtentRightSection, mMaxExtentDownSection;
 	LONG mMinWidth, mMinHeight, mMaxWidth, mMaxHeight;
@@ -2290,7 +2290,7 @@ public:
 	}
 
 	static ResultType Destroy(GuiIndexType aWindowIndex);
-	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // Lexikos: (L17) Renamed function and added parameter to also handle the window's small icon.
+	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
 	ResultType Create();
 	void SetLabels(char *aLabelPrefix);
 	static void UpdateMenuBars(HMENU aMenu);
@@ -2497,7 +2497,7 @@ public:
 	WCHAR *mRunAsUser, *mRunAsPass, *mRunAsDomain; // Memory is allocated at runtime, upon first use.
 
 	HICON mCustomIcon;  // NULL unless the script has loaded a custom icon during its runtime.
-	HICON mCustomIconSmall; // Lexikos: (L17) Use separate big/small icons for best results.
+	HICON mCustomIconSmall; // L17: Use separate big/small icons for best results.
 	char *mCustomIconFile; // Filename of icon.  Allocated on first use.
 	bool mIconFrozen; // If true, the icon does not change state when the state of pause or suspend changes.
 	char *mTrayIconTip;  // Custom tip text for tray icon.  Allocated on first use.
@@ -2556,7 +2556,7 @@ public:
 	char *ListVars(char *aBuf, int aBufSize);
 	char *ListKeyHistory(char *aBuf, int aBufSize);
 
-	ResultType PerformMenu(char *aMenu, char *aCommand, char *aParam3, char *aParam4, char *aOptions, char *aOptions2); // Lexikos: (L17) Added aOptions2 for Icon sub-command (icon width). Arg was previously reserved/unused.
+	ResultType PerformMenu(char *aMenu, char *aCommand, char *aParam3, char *aParam4, char *aOptions, char *aOptions2); // L17: Added aOptions2 for Icon sub-command (icon width). Arg was previously reserved/unused.
 	UserMenu *FindMenu(char *aMenuName);
 	UserMenu *AddMenu(char *aMenuName);
 	ResultType ScriptDeleteMenu(UserMenu *aMenu);

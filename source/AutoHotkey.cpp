@@ -29,7 +29,7 @@ GNU General Public License for more details.
 
 int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
-	setvbuf(stdout, NULL, _IONBF, 0); // Lexikos: (L17) Disable stdout buffering to make it a more effective debugging tool.
+	setvbuf(stdout, NULL, _IONBF, 0); // L17: Disable stdout buffering to make it a more effective debugging tool.
 
 	// Init any globals not in "struct g" that need it:
 	g_hInstance = hInstance;

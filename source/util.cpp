@@ -1771,7 +1771,7 @@ HBITMAP LoadPicture(char *aFilespec, int aWidth, int aHeight, int &aImageType, i
 	//    ICL files (v1.0.43.05): Apparently ICL files are an unofficial file format. Someone on the newsgroups
 	//    said that an ICL is an "ICon Library... a renamed 16-bit Windows .DLL (an NE format executable) which
 	//    typically contains nothing but a resource section. The ICL extension seems to be used by convention."
-	// Lexikos: (L17) Support negative numbers to mean resource IDs. These are supported by the resource extraction method directly, and by ExtractIcon if aIconNumber < -1.
+	// L17: Support negative numbers to mean resource IDs. These are supported by the resource extraction method directly, and by ExtractIcon if aIconNumber < -1.
 	bool ExtractIcon_was_used = aIconNumber > 1 || aIconNumber < 0 || (file_ext && (
 		   !stricmp(file_ext, "exe")
 		|| !stricmp(file_ext, "dll")
@@ -1799,7 +1799,7 @@ HBITMAP LoadPicture(char *aFilespec, int aWidth, int aHeight, int &aImageType, i
 	{
 		aImageType = IMAGE_ICON;
 
-		// Lexikos: (L17) Manually extract the most appropriately sized icon resource for the best results.
+		// L17: Manually extract the most appropriately sized icon resource for the best results.
 		hbitmap = (HBITMAP)ExtractIconFromExecutable(aFilespec, aIconNumber, aWidth, aHeight);
 
 		// At this time it seems unnecessary to fall back to any of the following methods:
@@ -1941,7 +1941,7 @@ HBITMAP LoadPicture(char *aFilespec, int aWidth, int aHeight, int &aImageType, i
 			// was recognized as an icon container (such as AutoHotkeySC.bin) and thus wasn't handled higher above.
 			//hbitmap = (HBITMAP)ExtractIcon(g_hInstance, aFilespec, aIconNumber - 1);
 
-			// Lexikos: (L17) Manually extract the most appropriately sized icon resource for the best results.
+			// L17: Manually extract the most appropriately sized icon resource for the best results.
 			hbitmap = (HBITMAP)ExtractIconFromExecutable(aFilespec, aIconNumber, aWidth, aHeight);
 
 			if (hbitmap < (HBITMAP)2) // i.e. it's NULL or 1. Return value of 1 means "incorrect file type".
@@ -2187,7 +2187,7 @@ BOOL CALLBACK ResourceIndexToIdEnumProc(HMODULE hModule, LPCTSTR lpszType, LPTST
 	return TRUE; // Continue
 }
 
-// Lexikos: (L17) Find integer ID of resource from one-based index. i.e. IconNumber -> resource ID.
+// L17: Find integer ID of resource from one-based index. i.e. IconNumber -> resource ID.
 int ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex)
 {
 	ResourceIndexToIdEnumData enum_data;
@@ -2200,7 +2200,7 @@ int ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex)
 	return enum_data.result;
 }
 
-// Lexikos: (L17) Extract icon of the appropriate size from an executable (or compatible) file.
+// L17: Extract icon of the appropriate size from an executable (or compatible) file.
 HICON ExtractIconFromExecutable(char *aFilespec, int aIconNumber, int aWidth, int aHeight)
 {
 	HICON hicon = NULL;
@@ -2241,7 +2241,7 @@ HICON ExtractIconFromExecutable(char *aFilespec, int aIconNumber, int aWidth, in
 		FreeLibrary(hdatafile);
 	}
 
-	// (L20) Fall back to ExtractIcon if the above method failed. This may work on some versions of Windows where
+	// L20: Fall back to ExtractIcon if the above method failed. This may work on some versions of Windows where
 	// ExtractIcon supports 16-bit "executables" (such as ICL files) that cannot be loaded by LoadLibraryEx.
 	// However, resource ID -1 is not supported, and if multiple icon sizes exist in the file, the first is used
 	// rather than the most appropriate.
@@ -2515,7 +2515,7 @@ bool IsStringInList(char *aStr, char *aList, bool aFindExactMatch)
 
 	while (*this_field)  // For each field in aList.
 	{
-		// Lexikos: (L22) Copy only one field at a time, translating ,, to , as we go. Benchmarks considerably faster in many cases, especially with long lists of short fields.
+		// L22: Copy only one field at a time, translating ,, to , as we go. Benchmarks considerably faster in many cases, especially with long lists of short fields.
 		for (cp = buf, next_field = this_field; cp < end_buf && *next_field; ++cp, ++next_field) //L
 		{
 			if (*next_field == ',') // Check if this is a delimiter or literal comma.

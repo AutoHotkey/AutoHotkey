@@ -99,7 +99,7 @@ extern char *g_HotWinTitle;
 extern char *g_HotWinText;
 extern HotkeyCriterion *g_FirstHotCriterion, *g_LastHotCriterion;
 
-// Lexikos: (L4) Added global variables for #if (expression). See globaldata.cpp for comments.
+// L4: Added global variables for #if (expression). See globaldata.cpp for comments.
 extern int g_HotExprIndex;
 extern Line **g_HotExprLines;
 extern int g_HotExprLineCount;

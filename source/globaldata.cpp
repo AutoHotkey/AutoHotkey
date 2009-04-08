@@ -111,7 +111,7 @@ char *g_HotWinTitle = ""; // In spite of the above being the primary indicator,
 char *g_HotWinText = "";  // these are initialized for maintainability.
 HotkeyCriterion *g_FirstHotCriterion = NULL, *g_LastHotCriterion = NULL;
 
-// Lexikos: (L4) Added global variables for #if (expression).
+// L4: Added global variables for #if (expression).
 int g_HotExprIndex = -1; // The index of the Line containing the expression defined by the most recent #if (expression) directive.
 Line **g_HotExprLines = NULL; // Array of pointers to expression lines, allocated when needed.
 int g_HotExprLineCount = 0; // Number of expression lines currently present.

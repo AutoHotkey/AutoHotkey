@@ -537,7 +537,7 @@ void Script::CreateTrayIcon()
 #ifdef AUTOHOTKEYSC
 	// i.e. don't override the user's custom icon:
 	mNIC.hIcon = mCustomIconSmall ? mCustomIconSmall : (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(mCompiledHasCustomIcon ? IDI_MAIN : g_IconTray), IMAGE_ICON, 0, 0, LR_SHARED);
-#else // Lexikos: (L17) Always use small icon for tray.
+#else // L17: Always use small icon for tray.
 	mNIC.hIcon = mCustomIconSmall ? mCustomIconSmall : (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(g_IconTray), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
 #endif
 	UPDATE_TIP_FIELD
@@ -572,7 +572,7 @@ void Script::UpdateTrayIcon(bool aForceUpdate)
 		icon = g_IconTray;
 #endif
 	// Use the custom tray icon if the icon is normal (non-paused & non-suspended):
-	mNIC.hIcon = (mCustomIconSmall && (mIconFrozen || (!g->IsPaused && !g_IsSuspended))) ? mCustomIconSmall // Lexikos: (L17) Always use small icon for tray.
+	mNIC.hIcon = (mCustomIconSmall && (mIconFrozen || (!g->IsPaused && !g_IsSuspended))) ? mCustomIconSmall // L17: Always use small icon for tray.
 		: (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(icon), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED for simplicity and performance more than to conserve memory in this case.
 	if (Shell_NotifyIcon(NIM_MODIFY, &mNIC))
 	{
@@ -994,7 +994,7 @@ LineNumberType Script::LoadFromFile(bool aScriptWasNotspecified)
 	if (   !(mPlaceholderLabel = new Label(""))   ) // Not added to linked list since it's never looked up.
 		return LOADING_FAILED;
 
-	// Lexikos: (L4) Changed this next section to support lines added for #if (expression).
+	// L4: Changed this next section to support lines added for #if (expression).
 	// Each #if (expression) is pre-parsed *before* the main script in order for
 	// function library auto-inclusions to be processed correctly.
 
@@ -2752,7 +2752,7 @@ inline ResultType Script::IsDirective(char *aBuf)
 		return CONDITION_TRUE;
 	}
 
-	// Lexikos: (L4) Handle #if (expression) directive.
+	// L4: Handle #if (expression) directive.
 	if (IS_DIRECTIVE_MATCH("#If"))
 	{
 		if (!parameter) // The omission of the parameter indicates that any existing criteria should be turned off.
@@ -2826,7 +2826,7 @@ inline ResultType Script::IsDirective(char *aBuf)
 
 		return CONDITION_TRUE;
 	}
-	// Lexikos: (L4) Allow #if timeout to be adjusted.
+	// L4: Allow #if timeout to be adjusted.
 	if (IS_DIRECTIVE_MATCH("#IfTimeout"))
 	{
 		if (parameter)
@@ -2843,7 +2843,7 @@ inline ResultType Script::IsDirective(char *aBuf)
 			g_HotCriterion = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
 		else // It starts with #IfWin but isn't Active or Exist: Don't alter g_HotCriterion.
 			return CONDITION_FALSE; // Indicate unknown directive since there are currently no other possibilities.
-		g_HotExprIndex = -1;	// Lexikos: (L4) For consistency, don't allow mixing of #if and other #ifWin criterion.
+		g_HotExprIndex = -1;	// L4: For consistency, don't allow mixing of #if and other #ifWin criterion.
 		if (!parameter) // The omission of the parameter indicates that any existing criteria should be turned off.
 		{
 			g_HotCriterion = HOT_NO_CRITERION; // Indicate that no criteria are in effect for subsequent hotkeys.
@@ -6163,7 +6163,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 			switch(menu_cmd)
 			{
 			case MENU_CMD_TIP:
-			//case MENU_CMD_ICON: // Lexikos: (L17) Now valid for other menus, used to set menu item icons.
+			//case MENU_CMD_ICON: // L17: Now valid for other menus, used to set menu item icons.
 			//case MENU_CMD_NOICON:
 			case MENU_CMD_MAINWINDOW:
 			case MENU_CMD_NOMAINWINDOW:
@@ -6188,7 +6188,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 			case MENU_CMD_STANDARD:
 			case MENU_CMD_NOSTANDARD:
 			case MENU_CMD_DELETEALL:
-			//case MENU_CMD_NOICON: // Lexikos: (L17) Parameter #3 is now used to specify a menu item whose icon should be removed.
+			//case MENU_CMD_NOICON: // L17: Parameter #3 is now used to specify a menu item whose icon should be removed.
 			case MENU_CMD_MAINWINDOW:
 			case MENU_CMD_NOMAINWINDOW:
 				if (*new_raw_arg3 || *new_raw_arg4 || *NEW_RAW_ARG5 || *NEW_RAW_ARG6)
@@ -8916,7 +8916,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		case ACT_HOTKEY:
 			if (   *line_raw_arg2 && !line->ArgHasDeref(2)
 				&& !line->ArgHasDeref(1) && strnicmp(line_raw_arg1, "IfWin", 5) // v1.0.42: Omit IfWinXX from validation.
-				&& strnicmp(line_raw_arg1, "If", 2)	)	// Lexikos: (L4) Also omit If from validation - for #if (expression).
+				&& strnicmp(line_raw_arg1, "If", 2)	)	// L4: Also omit If from validation - for #if (expression).
 				if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
 					if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
 						return line->PreparseError(ERR_NO_LABEL);
@@ -11136,7 +11136,7 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 	return if_condition ? CONDITION_TRUE : CONDITION_FALSE;
 }
 
-// Lexikos: (L4) Evaluate an expression used to define #if hotkey variant criterion.
+// L4: Evaluate an expression used to define #if hotkey variant criterion.
 //	This is called by MainWindowProc when it receives an AHK_HOT_IF_EXPR message.
 ResultType Line::EvaluateHotCriterionExpression()
 {
@@ -13136,7 +13136,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return FormatTime(ARG2, ARG3);
 
 	case ACT_MENU:
-		return g_script.PerformMenu(SIX_ARGS); // Lexikos: (L17) Changed from FIVE_ARGS to access previously "reserved" arg (for use by Menu,,Icon).
+		return g_script.PerformMenu(SIX_ARGS); // L17: Changed from FIVE_ARGS to access previously "reserved" arg (for use by Menu,,Icon).
 
 	case ACT_GUI:
 		return g_script.PerformGui(FOUR_ARGS);

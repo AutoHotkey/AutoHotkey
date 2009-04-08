@@ -869,13 +869,13 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 				// is not this control's: Do not disable or re-enable the control in this case.
 			return OK;
 
-		// Lexikos: (L23) Restrict focus workaround to when the control is/was actually focused. Fixes a bug introduced by L13: enabling or disabling a control caused the active Edit control to reselect its text.
+		// L23: Restrict focus workaround to when the control is/was actually focused. Fixes a bug introduced by L13: enabling or disabling a control caused the active Edit control to reselect its text.
 		bool gui_control_was_focused = GetForegroundWindow() == gui.mHwnd && GetFocus() == control.hwnd;
 
 		// Since above didn't return, act upon the enabled/disable:
 		EnableWindow(control.hwnd, guicontrol_cmd == GUICONTROL_CMD_ENABLE);
 		
-		// Lexikos: (L23) Only if EnableWindow removed the keyboard focus entirely, reset the focus.
+		// L23: Only if EnableWindow removed the keyboard focus entirely, reset the focus.
 		if (gui_control_was_focused && !GetFocus())
 			SetFocus(gui.mHwnd);
 		
@@ -1352,7 +1352,7 @@ void GuiType::DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall)
 	// Since above didn't return, this icon is not currently in use by a GUI window.  The caller has
 	// authorized us to destroy it.
 	DestroyIcon(ahIcon);
-	// Lexikos: (L17) Small icon should always also be unused at this point.
+	// L17: Small icon should always also be unused at this point.
 	DestroyIcon(ahIconSmall);
 }
 
@@ -1398,7 +1398,7 @@ ResultType GuiType::Create()
 		, mOwner, NULL, g_hInstance, NULL))   )
 		return FAIL;
 
-	// Lexikos: (L17) Use separate big/small icons for best results.
+	// L17: Use separate big/small icons for best results.
 	HICON big_icon, small_icon;
 	if (g_script.mCustomIcon)
 	{
@@ -6804,7 +6804,7 @@ int GuiType::FindOrCreateFont(char *aOptions, char *aFontName, FontType *aFounda
 		strlcpy(font.name, aFontName, MAX_FONT_NAME_LENGTH+1);
 	COLORREF color = CLR_NONE; // Because we want to treat CLR_DEFAULT as a real color.
 
-	// Lexikos: (L19) Set default quality to that of previous versions.
+	// L19: Set default quality to that of previous versions.
 	font.quality = PROOF_QUALITY;
 
 	// Temp vars:
@@ -6889,7 +6889,7 @@ int GuiType::FindOrCreateFont(char *aOptions, char *aFontName, FontType *aFounda
 			font.weight = atoi(cp + 1);
 			break;
 
-		case 'Q': // Lexikos: (L19) Allow control over font quality (anti-aliasing, etc.).
+		case 'Q': // L19: Allow control over font quality (anti-aliasing, etc.).
 			font.quality = atoi(cp + 1);
 			break;
 
