@@ -874,6 +874,7 @@ public:
 
 	Label *GetJumpTarget(bool aIsDereferenced);
 	Label *IsJumpValid(Label &aTargetLabel);
+	BOOL IsOutsideAnyFunctionBody();
 
 	HWND DetermineTargetWindow(char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText);
 
@@ -1797,6 +1798,9 @@ public:
 	{
 		Label *prev_label =g->CurrentLabel; // This will be non-NULL when a subroutine is called from inside another subroutine.
 		g->CurrentLabel = this;
+		// I'm pretty sure it's not valid for the following call to ExecUntil() to tell us to jump
+		// somewhere, because the called function, or a layer even deeper, should handle the goto
+		// prior to returning to us?  So the last parameter is omitted:
 		ResultType result = mJumpToLine->ExecUntil(UNTIL_RETURN); // The script loader has ensured that Label::mJumpToLine can't be NULL.
 		g->CurrentLabel = prev_label;
 		return result;
@@ -2346,7 +2350,7 @@ private:
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
-	int mOpenBlockCount; // How many blocks are currently open.
+	int mCurrentFuncOpenBlockCount; // While loading the script, this is how many blocks are currently open in the current function's body.
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	Var **mFuncExceptionVar;   // A list of variables declared explicitly local or global.
 	int mFuncExceptionVarCount; // The number of items in the array.

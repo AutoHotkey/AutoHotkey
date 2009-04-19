@@ -41,6 +41,7 @@ public:
 	bool	IsWinXP(void) {return m_bWinXP;}					// Returns true if WinXP
 	bool	IsWin2003(void) {return m_bWin2003;}				// Returns true if Win2003
 	bool	IsWinVista(void) {return m_bWinVista;}				// Returns true if WinVista (v1.0.44.13)
+	bool	IsWinVistaOrLater(void) {return m_bWinVistaOrLater;}// Returns true if WinVista or later (v1.0.48.01)
 	bool	IsWinNT4orLater(void) {return m_bWinNT4orLater;}	// Returns true if WinNT 4+
 	bool	IsWin2000orLater(void) {return m_bWin2000orLater;}	// Returns true if Win2000+
 	bool	IsWinXPorLater(void) {return m_bWinXPorLater;}		// Returns true if WinXP+
@@ -72,6 +73,7 @@ private:
 	bool			m_bWinXP;
 	bool			m_bWin2003;
 	bool			m_bWinVista;
+	bool			m_bWinVistaOrLater;
 	bool			m_bWinXPorLater;
 	bool			m_bWin2000;
 	bool			m_bWin2000orLater;

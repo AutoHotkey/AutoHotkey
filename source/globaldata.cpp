@@ -508,7 +508,7 @@ Action g_act[] =
 	, {"SetCapslockState", 0, 1, 1, NULL} // same
 	, {"SetStoreCapslockMode", 1, 1, 1, NULL} // On/Off
 
-	, {"KeyHistory", 0, 2, 2, NULL}, {"ListLines", 0, 0, 0, NULL}
+	, {"KeyHistory", 0, 2, 2, NULL}, {"ListLines", 0, 1, 1, NULL}
 	, {"ListVars", 0, 0, 0, NULL}, {"ListHotkeys", 0, 0, 0, NULL}
 
 	, {"Edit", 0, 0, 0, NULL}
@@ -518,7 +518,7 @@ Action g_act[] =
 	, {"GuiControl", 0, 3, 3 H, NULL} // Sub-cmd (defaults to "contents"), ControlName/ID, Text
 	, {"GuiControlGet", 1, 4, 4, NULL} // OutputVar, Sub-cmd (defaults to "contents"), ControlName/ID (defaults to control assoc. with OutputVar), Text/FutureUse
 
-	, {"ExitApp", 0, 1, 1, NULL}  // Optional exit-code
+	, {"ExitApp", 0, 1, 1, {1, 0}}  // Optional exit-code. v1.0.48.01: Allow an expression like ACT_EXIT does.
 	, {"Shutdown", 1, 1, 1, {1, 0}} // Seems best to make the first param (the flag/code) mandatory.
 };
 // Below is the most maintainable way to determine the actual count?

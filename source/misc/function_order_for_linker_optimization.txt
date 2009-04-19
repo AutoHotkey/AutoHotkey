@@ -316,7 +316,7 @@ printf
 ?ConvertModifiers@@YAEI@Z
 ?ConvertModifiersLR@@YAIE@Z
 ?ConvertMouseButton@Line@@SAHPAD_N1@Z
-?DisguiseWinAltIfNeeded@@YAXE_N@Z
+?DisguiseWinAltIfNeeded@@YAXE@Z  ; keyboard_mouse.obj
 ?DoKeyDelay@@YAXH@Z
 ?DoMouseDelay@@YAXXZ
 
@@ -1613,6 +1613,7 @@ WSAStartup@8
 ?IsWin98@OS_Version@@QAE_NXZ
 ?IsWinNT@OS_Version@@QAE_NXZ
 ?IsWinVista@OS_Version@@QAE_NXZ
+?IsWinVistaOrLater@OS_Version@@QAE_NXZ
 ?IsWinXP@OS_Version@@QAE_NXZ
 ?IsWin98orLater@OS_Version@@QAE_NXZ
 ?IsWin9x@OS_Version@@QAE_NXZ
