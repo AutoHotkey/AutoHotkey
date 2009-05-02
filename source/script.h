@@ -881,6 +881,7 @@ public:
 
 	Label *GetJumpTarget(bool aIsDereferenced);
 	Label *IsJumpValid(Label &aTargetLabel);
+	BOOL IsOutsideAnyFunctionBody();
 
 	HWND DetermineTargetWindow(char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText);
 
@@ -1808,6 +1809,9 @@ public:
 		Label *prev_label =g->CurrentLabel; // This will be non-NULL when a subroutine is called from inside another subroutine.
 		g->CurrentLabel = this;
 			DEBUGGER_STACK_PUSH(SE_Sub, mJumpToLine, sub, this)
+		// I'm pretty sure it's not valid for the following call to ExecUntil() to tell us to jump
+		// somewhere, because the called function, or a layer even deeper, should handle the goto
+		// prior to returning to us?  So the last parameter is omitted:
 		ResultType result = mJumpToLine->ExecUntil(UNTIL_RETURN); // The script loader has ensured that Label::mJumpToLine can't be NULL.
 			DEBUGGER_STACK_POP()
 		g->CurrentLabel = prev_label;
@@ -1849,7 +1853,7 @@ public:
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
 	int mInstances; // How many instances currently exist on the call stack (due to recursion or thread interruption).  Future use: Might be used to limit how deep recursion can go to help prevent stack overflow.
-	Func *mNextFunc; // Next item in linked list.
+	//Func *mNextFunc; // Next item in linked list. // L27: Replaced linked list with binary-searchable array Script::mFunc.
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
 	UCHAR mDefaultVarType;
@@ -1927,7 +1931,7 @@ public:
 		, mBIF(NULL)
 		, mParam(NULL), mParamCount(0), mMinParams(0)
 		, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
-		, mInstances(0), mNextFunc(NULL)
+		, mInstances(0) /*, mNextFunc(NULL)*/
 		, mDefaultVarType(VAR_DECLARE_NONE)
 		, mIsBuiltIn(aIsBuiltIn)
 	{}
@@ -2055,7 +2059,7 @@ public:
 	
 	union
 	{
-		// L17: Implementation of menu item icons is OS-dependent (g_os.IsWinVista()).
+		// L17: Implementation of menu item icons is OS-dependent (g_os.IsWinVistaOrLater()).
 		
 		// Older versions of Windows do not support alpha channels in menu item bitmaps, so owner-drawing
 		// must be used for icons with transparent backgrounds to appear correctly. Owner-drawing also
@@ -2400,11 +2404,13 @@ private:
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
 	UINT mLineCount;                  // The number of lines.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
-	Func *mFirstFunc, *mLastFunc;     // The first and last functions in the linked list.
+	Func /**mFirstFunc,*/ *mLastFunc;     // The first and last functions in the linked list.
+	Func **mFunc; // L27: Use a binary-searchable array to speed up function searches (especially beneficial for dynamic function calls).
+	int mFuncCount, mFuncCountMax;
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
-	int mOpenBlockCount; // How many blocks are currently open.
+	int mCurrentFuncOpenBlockCount; // While loading the script, this is how many blocks are currently open in the current function's body.
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	Var **mFuncExceptionVar;   // A list of variables declared explicitly local or global.
 	int mFuncExceptionVarCount; // The number of items in the array.
@@ -2528,8 +2534,8 @@ public:
 #ifndef AUTOHOTKEYSC
 	Func *FindFuncInLibrary(char *aFuncName, size_t aFuncNameLength, bool &aErrorWasShown);
 #endif
-	Func *FindFunc(char *aFuncName, size_t aFuncNameLength = 0);
-	Func *AddFunc(char *aFuncName, size_t aFuncNameLength, bool aIsBuiltIn);
+	Func *FindFunc(char *aFuncName, size_t aFuncNameLength = 0, int *apInsertPos = NULL); // L27: Added apInsertPos for binary-search.
+	Func *AddFunc(char *aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos); // L27: Added aInsertPos for binary-search.
 
 	#define ALWAYS_USE_DEFAULT  0
 	#define ALWAYS_USE_GLOBAL   1
@@ -2566,6 +2572,15 @@ public:
 		for (UserMenu *m = mFirstMenu; m; m = m->mNextMenu)
 			for (mi = m->mFirstMenuItem; mi; mi = mi->mNextMenuItem)
 				if (mi->mMenuID == aID)
+					return mi;
+		return NULL;
+	}
+	UserMenuItem *FindMenuItemBySubmenu(HMENU aSubmenu) // L26: Used by WM_MEASUREITEM/WM_DRAWITEM to find the menu item with an associated submenu. Fixes icons on such items when owner-drawn menus are in use.
+	{
+		UserMenuItem *mi;
+		for (UserMenu *m = mFirstMenu; m; m = m->mNextMenu)
+			for (mi = m->mFirstMenuItem; mi; mi = mi->mNextMenuItem)
+				if (mi->mSubmenu && mi->mSubmenu->mMenu == aSubmenu)
 					return mi;
 		return NULL;
 	}

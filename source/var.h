@@ -142,6 +142,8 @@ private:
 	// but even if it's not a fluke, it doesn't seem worth the increase in memory for scripts with many
 	// thousands of variables.
 
+	friend class Line; // For access to mBIV.
+
 	void UpdateBinaryInt64(__int64 aInt64, VarAttribType aAttrib = VAR_ATTRIB_HAS_VALID_INT64)
 	// When caller doesn't include VAR_ATTRIB_CONTENTS_OUT_OF_DATE in aAttrib, CALLER MUST ENSURE THAT
 	// mContents CONTAINS A PURE NUMBER; i.e. it mustn't contain something non-numeric at the end such as
@@ -304,7 +306,11 @@ public:
 		case VAR_ATTRIB_HAS_VALID_DOUBLE: return PURE_FLOAT;
 		case VAR_ATTRIB_NOT_NUMERIC: return PURE_NOT_NUMERIC;
 		}
-		// Since above didn't return, its numeric status isn't yet known, so determine it.
+		// Since above didn't return, its numeric status isn't yet known, so determine it.  To conform to
+		// historical behavior (backward compatibility), the following doesn't check MAX_INEGER_LENGTH.
+		// So any string of digits that is too long to be a legitimate number is still treated as a number
+		// anyway (overflow).  Most of our callers are expressions anyway, in which case any unquoted
+		// series of digits is always a number, never a string.
 		SymbolType is_pure_numeric = IsPureNumeric(var.Contents(), true, false, true, aAllowImpure); // Contents() vs. mContents to support VAR_CLIPBOARD lvalue in a pure expression such as "clipboard:=1,clipboard+=5"
 		if (is_pure_numeric == PURE_NOT_NUMERIC && !(var.mAttrib & VAR_ATTRIB_CACHE_DISABLED))
 			var.mAttrib |= VAR_ATTRIB_NOT_NUMERIC;

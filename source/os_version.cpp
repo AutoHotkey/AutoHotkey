@@ -133,7 +133,8 @@ void OS_Version::Init(void)
 	m_bWinNT4	= false;	m_bWinNT4orLater	= false;
 	m_bWin2000	= false;	m_bWin2000orLater	= false;
 	m_bWinXP	= false;	m_bWinXPorLater		= false;
-	m_bWin2003  = false;    m_bWinVista			= false;
+	m_bWin2003  = false;
+	m_bWinVista = false;	m_bWinVistaOrLater	= false;
 
 	m_bWin98	= false;	m_bWin98orLater		= false;
 	m_bWin95	= false;	m_bWin95orLater		= false;
@@ -169,12 +170,16 @@ void OS_Version::Init(void)
 				}
 				break;
 
-			case 6:								// Windows Vista
-				m_bWinNT4orLater = true;
-				m_bWin2000orLater = true;
-				m_bWinXPorLater = true;
-				m_bWinVista = true;
-				break;
+			default:
+				if (m_dwMajorVersion > 5)
+				{
+					m_bWinVista = (m_dwMajorVersion == 6);
+					m_bWinVistaOrLater = true;
+					m_bWinNT4orLater = true;
+					m_bWin2000orLater = true;
+					m_bWinXPorLater = true;
+				}
+  				break;
 
 		} // End Switch
 	}

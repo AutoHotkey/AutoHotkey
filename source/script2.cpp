@@ -1923,12 +1923,15 @@ ResultType Line::PerformWait()
 				// the user to find out the culprit thread by showing its line in the log (and usually
 				// it will appear as the very last line, since usually the script is idle and thus the
 				// currently active thread is the one that's still waiting for the window).
-				sLog[sLogNext] = this;
-				sLogTick[sLogNext++] = start_time; // Store a special value so that Line::LogToText() can report that its "still waiting" from earlier.
-				if (sLogNext >= LINE_LOG_SIZE)
-					sLogNext = 0;
-				// The lines above are the similar to those used in ExecUntil(), so the two should be
-				// maintained together.
+				if (g->ListLinesIsEnabled)
+				{
+					sLog[sLogNext] = this;
+					sLogTick[sLogNext++] = start_time; // Store a special value so that Line::LogToText() can report that its "still waiting" from earlier.
+					if (sLogNext >= LINE_LOG_SIZE)
+						sLogNext = 0;
+					// The lines above are the similar to those used in ExecUntil(), so the two should be
+					// maintained together.
+				}
 			}
 		}
 		else // Done waiting.
@@ -5269,11 +5272,13 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		return 0;
 
 	case WM_MEASUREITEM: // L17: Measure menu icon. Not used on Windows Vista or later.
-		if (hWnd == g_hWnd && wParam == 0 && !g_os.IsWinVista())
+		if (hWnd == g_hWnd && wParam == 0 && !g_os.IsWinVistaOrLater())
 		{
 			LPMEASUREITEMSTRUCT measure_item_struct = (LPMEASUREITEMSTRUCT)lParam;
 
-			UserMenuItem *menu_item = g_script.FindMenuItemByID((UINT)measure_item_struct->itemID);
+			UserMenuItem *menu_item = g_script.FindMenuItemByID(measure_item_struct->itemID);
+			if (!menu_item) // L26: Check if the menu item is one with a submenu.
+				menu_item = g_script.FindMenuItemBySubmenu((HMENU)measure_item_struct->itemID);
 
 			if (menu_item && menu_item->mIcon)
 			{
@@ -5298,11 +5303,13 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		break;
 
 	case WM_DRAWITEM: // L17: Draw menu icon. Not used on Windows Vista or later.
-		if (hWnd == g_hWnd && wParam == 0 && !g_os.IsWinVista())
+		if (hWnd == g_hWnd && wParam == 0 && !g_os.IsWinVistaOrLater())
 		{
 			LPDRAWITEMSTRUCT draw_item_struct = (LPDRAWITEMSTRUCT)lParam;
 
-			UserMenuItem *menu_item = g_script.FindMenuItemByID((UINT)draw_item_struct->itemID);
+			UserMenuItem *menu_item = g_script.FindMenuItemByID(draw_item_struct->itemID);
+			if (!menu_item) // L26: Check if the menu item is one with a submenu.
+				menu_item = g_script.FindMenuItemBySubmenu((HMENU)draw_item_struct->itemID);
 
 			if (menu_item && menu_item->mIcon)
 			{
@@ -6511,7 +6518,7 @@ ResultType Line::PerformAssign()
 	// ResolveVarOfArg() in GetExpandedArgSize, if it's dynamic) would have prevented us from getting this far.
 
 	// Above must be checked prior to below since each uses "postfix" in a different way.
-	if (mArgc > 1 && mArg[1].postfix) // There is a cached binary integer. is_expression is known to be false for ACT_ASSIGN, so no need to check it (since expression's use of postfix takes precendence over binary integer).
+	if (mArgc > 1 && mArg[1].postfix) // There is a cached binary integer. is_expression is known to be false for ACT_ASSIGN, so no need to check it (since expression's use of postfix takes precedence over binary integer).
 		return output_var.Assign(*(__int64 *)mArg[1].postfix);
 
 	ArgStruct *arg2_with_at_least_one_deref;
@@ -10056,9 +10063,17 @@ Label *Line::IsJumpValid(Label &aTargetLabel)
 	LineError("A Goto/Gosub must not jump into a block that doesn't enclose it."); // Omit GroupActivate from the error msg since that is rare enough to justify the increase in common-case clarify.
 	return NULL;
 	// Above currently doesn't attempt to detect runtime vs. load-time for the purpose of appending
-	// ERR_ABORT.
+	// ERR_ABORT (currently this function is called only during runtime).
 }
 
+
+BOOL Line::IsOutsideAnyFunctionBody() // v1.0.48.02
+{
+	for (Line *ancestor = mParentLine; ancestor != NULL; ancestor = ancestor->mParentLine)
+		if (ancestor->mAttribute == ATTR_TRUE && ancestor->mActionType == ACT_BLOCK_BEGIN) // Ordered for short-circuit performance.
+			return FALSE; // ATTR_TRUE marks an open-brace as belonging to a function's body, so indicate this this line is inside a function.
+	return TRUE; // Indicate that this line is not inside any function body.
+}
 
 
 ////////////////////////
@@ -10960,7 +10975,11 @@ VarSizeType BIV_LoopFileExt(char *aBuf, char *aVarName)
 	{
 		// The loop handler already prepended the script's directory in here for us:
 		if (file_ext = strrchr(g->mLoopFile->cFileName, '.'))
+		{
 			++file_ext;
+			if (strchr(file_ext, '\\')) // v1.0.48.01: Disqualify periods found in the path instead of the filename; e.g. path.name\FileWithNoExtension.
+				file_ext = "";
+		}
 		else // Reset to empty string vs. NULL.
 			file_ext = "";
 	}
@@ -11198,7 +11217,13 @@ VarSizeType BIV_LoopIndex(char *aBuf, char *aVarName)
 
 VarSizeType BIV_ThisFunc(char *aBuf, char *aVarName)
 {
-	char *name = g->CurrentFunc ? g->CurrentFunc->mName : "";
+	char *name;
+	if (g->CurrentFunc)
+		name = g->CurrentFunc->mName;
+	else if (g->CurrentFuncGosub) // v1.0.48.02: For flexibility and backward compatibility, support A_ThisFunc even when a function Gosubs an external subroutine.
+		name = g->CurrentFuncGosub->mName;
+	else
+		name = "";
 	if (aBuf)
 		strcpy(aBuf, name);
 	return (VarSizeType)strlen(name);
@@ -14480,7 +14505,7 @@ UINT __stdcall RegisterCallbackCStub(UINT *params, char *address) // Used by BIF
 
 	// Need to check if backup of function's variables is needed in case:
 	// 1) The UDF is assigned to more than one callback, in which case the UDF could be running more than once
-	//    simultantously.
+	//    simultaneously.
 	// 2) The callback is intended to be reentrant (e.g. a subclass/WindowProc that doesn't use Critical).
 	// 3) Script explicitly calls the UDF in addition to using it as a callback.
 	//
@@ -14527,8 +14552,14 @@ UINT __stdcall RegisterCallbackCStub(UINT *params, char *address) // Used by BIF
 	else
 	{
 		g->EventInfo = EventInfo_saved;
-		if (g == g_array) // The script function called above used the idle thread! This can happen when a fast-mode callback has been invoked via message (i.e. the documentation advises against the fast mode when there is no script thread controlling the callback).
+		if (g == g_array && !g_script.mAutoExecSectionIsRunning)
+			// If the function just called used thread #0 and the AutoExec section isn't running, that means
+			// the AutoExec section definitely didn't launch or control the callback (even if it is running,
+			// it's not 100% certain it launched the callback). This can happen when a fast-mode callback has
+			// been invoked via message, though the documentation advises against the fast mode when there is
+			// no script thread controlling the callback.
 			global_maximize_interruptibility(*g); // In case the script function called above used commands like Critical or "Thread Interrupt", ensure the idle thread is interruptible.  This avoids having to treat the idle thread as special in other places.
+		//else never alter the interruptibility of AutoExec while it's running because it has its own method to do that.
 		if (pause_after_execute) // See comments where it's defined.
 		{
 			g->IsPaused = true;
@@ -16109,13 +16140,14 @@ BOOL LegacyResultToBOOL(char *aResult)
 // rather than TokenToBOOL() so that expressions internally treat numerically-zero strings as zero just like
 // they do for variables (which will probably remain true as long as variables stay generic/untyped).
 {
-	if (!*aResult) // Must be checked first because otherwise IsPureNumeric() would consider "" to be non-numeric and thus TRUE.
+	UINT c1 = (UCHAR)*aResult; // UINT vs. UCHAR might squeenze a little more performance out of it.
+	if (c1 > 48)     // Any UCHAR greater than '0' can't be a space(32), tab(9), '+'(43), or '-'(45), or '.'(46)...
+		return TRUE; // ...so any string starting with c1>48 can't be anything that's false (e.g. " 0", "+0", "-0", ".0", "0").
+	if (!c1 // Besides performance, must be checked anyway because otherwise IsPureNumeric() would consider "" to be non-numeric and thus TRUE.
+		|| c1 == 48 && !aResult[1]) // The string "0" seems common enough to detect explicitly, for performance.
 		return FALSE;
-	// The following check isn't strictly necessary; it helps performance by avoiding checks further below.
-	if (*aResult >= '1' && *aResult <= '9') // Don't check !='0' because things like ".0" and "  0" should probably be false.
-		return TRUE;
 	// IsPureNumeric() is called below because there are many variants of a false string:
-	// e.g. "0", "0.0", "0x0", ".0", and " 0" (leading spaces).
+	// e.g. "0", "0.0", "0x0", ".0", "+0", "-0", and " 0" (leading spaces/tabs).
 	switch (IsPureNumeric(aResult, true, false, true)) // It's purely numeric and not all whitespace (and due to earlier check, it's not blank).
 	{
 	case PURE_INTEGER: return ATOI64(aResult) != 0; // Could call ATOF() for both integers and floats; but ATOI64() probably performs better, and a float comparison to 0.0 might be a slower than an integer comparison to 0.
@@ -16234,8 +16266,9 @@ double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex, BOOL aIsPureFloat
 char *TokenToString(ExprTokenType &aToken, char *aBuf)
 // Supports Type() VAR_NORMAL and VAR-CLIPBOARD.
 // Returns "" on failure to simplify logic in callers.  Otherwise, it returns either aBuf (if aBuf was needed
-// for the conversion) or the token's own string.  Caller has ensured that aBuf is at least
-// MAX_NUMBER_SIZE in size.
+// for the conversion) or the token's own string.  aBuf may be NULL, in which case the caller presumably knows
+// that this token is SYM_STRING or SYM_OPERAND (or caller wants "" back for anything other than those).
+// If aBuf is not NULL, caller has ensured that aBuf is at least MAX_NUMBER_SIZE in size.
 {
 	switch (aToken.symbol)
 	{

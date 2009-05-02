@@ -52,6 +52,7 @@ static HookType sHooksToRemoveDuringSendInput;
 static SendModes sSendMode = SM_EVENT; // Whether a SendInput or Hook array is currently being constructed.
 static bool sAbortArraySend;         // No init needed.
 static bool sFirstCallForThisEvent;  //
+static bool sInBlindMode;            //
 static DWORD sThisEventTime;         //
 
 // Dyamically resolve SendInput() because otherwise the app won't launch at all on Windows 95/NT-pre-SP3:
@@ -60,7 +61,7 @@ static MySendInputType sMySendInput = (MySendInputType)GetProcAddress(GetModuleH
 // Above will be NULL for Win95/NT-pre-SP3.
 
 
-void DisguiseWinAltIfNeeded(vk_type aVK, bool aInBlindMode)
+void DisguiseWinAltIfNeeded(vk_type aVK)
 // For v1.0.25, the following situation is fixed by the code below: If LWin or LAlt
 // becomes a persistent modifier (e.g. via Send {LWin down}) and the user physically
 // releases LWin immediately before: 1) the {LWin up} is scheduled; and 2) SendKey()
@@ -81,7 +82,7 @@ void DisguiseWinAltIfNeeded(vk_type aVK, bool aInBlindMode)
 	// Caller has ensured that aVK is about to have a key-up event, so if the event immediately
 	// prior to this one is a key-down of the same type of modifier key, it's our job here
 	// to send the disguising keystrokes now (if appropriate).
-	if (sPrevEventType == KEYDOWN && sPrevEventModifierDown != aVK && !aInBlindMode
+	if (sPrevEventType == KEYDOWN && sPrevEventModifierDown != aVK && !sInBlindMode
 		// SendPlay mode can't display Start Menu, so no need for disguise keystrokes (such keystrokes might cause
 		// unwanted effects in certain games):
 		&& ((aVK == VK_LWIN || aVK == VK_RWIN) && (sPrevVK == VK_LWIN || sPrevVK == VK_RWIN) && sSendMode != SM_PLAY
@@ -94,7 +95,7 @@ void DisguiseWinAltIfNeeded(vk_type aVK, bool aInBlindMode)
 void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow)
 // The aKeys string must be modifiable (not constant), since for performance reasons,
 // it's allowed to be temporarily altered by this function.  mThisHotkeyModifiersLR, if non-zero,
-// shoul be the set of modifiers used to trigger the hotkey that called the subroutine
+// should be the set of modifiers used to trigger the hotkey that called the subroutine
 // containing the Send that got us here.  If any of those modifiers are still down,
 // they will be released prior to sending the batch of keys specified in <aKeys>.
 // v1.0.43: aSendModeOrig was added.
@@ -102,6 +103,61 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 	if (!*aKeys)
 		return;
 	global_struct &g = *::g; // Reduces code size and may improve performance.
+	// For performance and also to reserve future flexibility, recognize {Blind} only when it's the first item
+	// in the string.
+	if (sInBlindMode = !aSendRaw && !strnicmp(aKeys, "{Blind}", 7)) // Don't allow {Blind} while in raw mode due to slight chance {Blind} is intended to be sent as a literal string.
+		// Blind Mode (since this seems too obscure to document, it's mentioned here):  Blind Mode relies
+		// on modifiers already down for something like ^c because ^c is saying "manifest a ^c", which will
+		// happen if ctrl is already down.  By contrast, Blind does not release shift to produce lowercase
+		// letters because avoiding that adds flexibility that couldn't be achieved otherwise.
+		// Thus, ^c::Send {Blind}c produces the same result when ^c is substituted for the final c.
+		// But Send {Blind}{LControl down} will generate the extra events even if ctrl already down.
+		aKeys += 7; // Remove "{Blind}" from further consideration.
+
+	int orig_key_delay = g.KeyDelay;
+	int orig_press_duration = g.PressDuration;
+	if (aSendModeOrig == SM_INPUT || aSendModeOrig == SM_INPUT_FALLBACK_TO_PLAY) // Caller has ensured aTargetWindow==NULL for SendInput and SendPlay modes.
+	{
+		// Both of these modes fall back to a different mode depending on whether some other script
+		// is running with a keyboard/mouse hook active.  Of course, the detection of this isn't foolproof
+		// because older versions of AHK may be running and/or other apps with LL keyboard hooks. It's
+		// just designed to add a lot of value for typical usage because SendInput is prefered due to it
+		// being considerably faster than SendPlay, especially for long replacements when the CPU is under
+		// heavy load.
+		if (   !sMySendInput // Win95/NT-pre-SP3 don't support SendInput, so fall back to the specified mode.
+			|| SystemHasAnotherKeybdHook() // This function has been benchmarked to ensure it doesn't yield our timeslice, etc.  200 calls take 0ms according to tick-count, even when CPU is maxed.
+			|| !aSendRaw && SystemHasAnotherMouseHook() && strcasestr(aKeys, "{Click")   ) // Ordered for short-circuit boolean performance.  v1.0.43.09: Fixed to be strcasestr vs. !strcasestr
+		{
+			// Need to detect in advance what type of array to build (for performance and code size).  That's why
+			// it done this way, and here are the comments about it:
+			// strcasestr() above has an unwanted amount of overhead if aKeys is huge, but it seems acceptable
+			// because it's called only when system has another mouse hook but *not* another keybd hook (very rare).
+			// Also, for performance reasons, {LButton and such are not checked for, which is documented and seems
+			// justified because the new {Click} method is expected to become prevalent, especially since this
+			// whole section only applies when the new SendInput mode is in effect.
+			// Finally, checking aSendRaw isn't foolproof because the string might contain {Raw} prior to {Click,
+			// but the complexity and performance of checking for that seems unjustified given the rarity,
+			// especially since there are almost never any consequences to reverting to hook mode vs. SendInput.
+			if (aSendModeOrig == SM_INPUT_FALLBACK_TO_PLAY)
+				aSendModeOrig = SM_PLAY;
+			else // aSendModeOrig == SM_INPUT, so fall back to EVENT.
+			{
+				aSendModeOrig = SM_EVENT;
+				// v1.0.43.08: When SendInput reverts to SendEvent mode, the majority of users would want
+				// a fast sending rate that is more comparable to SendInput's speed that the default KeyDelay
+				// of 10ms.  PressDuration may be generally superior to KeyDelay because it does a delay after
+				// each changing of modifier state (which tends to improve reliability for certain apps).
+				// The following rules seem likely to be the best benefit in terms of speed and reliability:
+				// KeyDelay 0+,-1+ --> -1, 0
+				// KeyDelay -1, 0+ --> -1, 0
+				// KeyDelay -1,-1 --> -1, -1
+				g.PressDuration = (g.KeyDelay < 0 && g.PressDuration < 0) ? -1 : 0;
+				g.KeyDelay = -1; // Above line must be done before this one.
+			}
+		}
+		else // SendInput is available and no other impacting hooks are obviously present on the system, so use SendInput unconditionally.
+			aSendModeOrig = SM_INPUT; // Resolve early so that other sections don't have to consider SM_INPUT_FALLBACK_TO_PLAY a valid value.
+	}
 
 	// Might be better to do this prior to changing capslock state.  UPDATE: In v1.0.44.03, the following section
 	// has been moved to the top of the function because:
@@ -122,6 +178,53 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 	}
 	else
 	{
+		// v1.0.48.01: On Vista or later, work around the fact that an "L" keystroke (physical or artificial) will
+		// lock the computer whenever either Windows key is physically pressed down (artificially releasing the
+		// Windows key isn't enough to solve it because Win+L is apparently detected aggressively like
+		// Ctrl-Alt-Delete.  Unlike the handling of SM_INPUT in another section, this one here goes into
+		// effect for all Sends because waiting for an "L" keystroke to be sent would be too late since the
+		// Windows would have already been artificially released by then, so IsKeyDownAsync() wouldn't be
+		// able to detect when the user physically releases the key.
+		if (   (g_script.mThisHotkeyModifiersLR & (MOD_LWIN|MOD_RWIN)) // Limit the scope to only those hotkeys that have a Win modifier, since anything outside that scope hasn't been fully analyzed.
+			&& (GetTickCount() - g_script.mThisHotkeyStartTime) < (DWORD)50 // Ensure g_script.mThisHotkeyModifiersLR is up-to-date enough to be reliable.
+			&& sSendMode == SM_EVENT // SM_INPUT's workaround for Vista is handled by another section.
+			&& !sInBlindMode // The philosophy of blind-mode is that the script should have full control, so don't do any waiting during blind mode.
+			&& g_os.IsWinVistaOrLater() // Only Vista (and presumably later OSes) check the physical state of the Windows key for Win+L.
+			&& GetCurrentThreadId() == g_MainThreadID // Exclude the hook thread because it isn't allowed to call anything like MsgSleep, nor are any calls from the hook thread within the understood/analyzed scope of this workaround.
+			)
+		{
+			bool wait_for_win_key_release;
+			if (aSendRaw)
+				wait_for_win_key_release = StrChrAny(aKeys, "Ll") != NULL;
+			else
+			{
+				// It seems worthwhile to scan for any "L" characters to avoid waiting for the release
+				// of the Windows key when there are no L's.  For performance and code size, the check
+				// below isn't comprehensive (e.g. it fails to consider things like {L} and #L).
+				// Although RegExMatch() could be used instead of the below, that would use up one of
+				// the RegEx cache entries, plus it would probably perform worse.  So scan manually.
+				char *L_pos, *brace_pos;
+				for (wait_for_win_key_release = false, brace_pos = aKeys; L_pos = StrChrAny(brace_pos, "Ll");)
+				{
+					// Encountering a #L seems too rare, and the consequences too mild (or nonexistent), to
+					// justify the following commented-out section:
+					//if (L_pos > aKeys && L_pos[-1] == '#') // A simple check; it won't detect things like #+L.
+					//	brace_pos = L_pos + 1;
+					//else
+					if (!(brace_pos = StrChrAny(L_pos + 1, "{}")) || *brace_pos == '{') // See comment below.
+					{
+						wait_for_win_key_release = true;
+						break;
+					}
+					//else it found a '}' without a preceding '{', which means this "L" is inside braces.
+					// For simplicity, ignore such L's (probably not a perfect check, but seems worthwhile anyway).
+				}
+			}
+			if (wait_for_win_key_release)
+				while (IsKeyDownAsync(VK_LWIN) || IsKeyDownAsync(VK_RWIN)) // Even if the keyboard hook is installed, it seems best to use IsKeyDownAsync() vs. g_PhysicalKeyState[] because it's more likely to produce consistent behavior.
+					SLEEP_WITHOUT_INTERRUPTION(INTERVAL_UNSPECIFIED); // Seems best not to allow other threads to launch, for maintainability and because SendKeys() isn't designed to be interruptible.
+		}
+
 		// v1.0.44.03: The following change is meaningful only to people who use more than one keyboard layout.
 		// It seems that the vast majority of them would want the Send command (as well as other features like
 		// Hotstrings and the Input command) to adapt to the keyboard layout of the active window (or target window
@@ -190,17 +293,9 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 	// basically get stuck down even after the send was over:
 	sModifiersLR_persistent &= mods_current & ~mods_down_physically_and_logically;
 	modLR_type persistent_modifiers_for_this_SendKeys, extra_persistent_modifiers_for_blind_mode;
-	bool in_blind_mode; // For performance and also to reserve future flexibility, recognize {Blind} only when it's the first item in the string.
-	if (in_blind_mode = !aSendRaw && !strnicmp(aKeys, "{Blind}", 7)) // Don't allow {Blind} while in raw mode due to slight chance {Blind} is intended to be sent as a literal string.
-	{
-		// Blind Mode (since this seems too obscure to document, it's mentioned here):  Blind Mode relies
-		// on modifiers already down for something like ^c because ^c is saying "manifest a ^c", which will
-		// happen if ctrl is already down.  By contrast, Blind does not release shift to produce lowercase
-		// letters because avoiding that adds flexibility that couldn't be achieved otherwise.
-		// Thus, ^c::Send {Blind}c produces the same result when ^c is substituted for the final c.
-		// But Send {Blind}{LControl down} will generate the extra events even if ctrl already down.
-		aKeys += 7; // Remove "{Blind}" from further consideration (essential for "SendRaw {Blind}").
-		// The following value is usually zero unless the user is currently holding down
+	if (sInBlindMode)
+  	{
+  		// The following value is usually zero unless the user is currently holding down
 		// some modifiers as part of a hotkey. These extra modifiers are the ones that
 		// this send operation (along with all its calls to SendKey and similar) should
 		// consider to be down for the duration of the Send (unless they go up via an
@@ -233,7 +328,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 		// Only under either of the above conditions can the state of Capslock be reliably
 		// retrieved and changed.  Remember that apps like MS Word have an auto-correct feature that
 		// might make it wrongly seem that the turning off of Capslock below needs a Sleep(0) to take effect.
-		prior_capslock_state = g.StoreCapslockMode && !in_blind_mode
+		prior_capslock_state = g.StoreCapslockMode && !sInBlindMode
 			? ToggleKeyState(VK_CAPITAL, TOGGLED_OFF)
 			: TOGGLE_INVALID; // In blind mode, don't do store capslock (helps remapping and also adds flexibility).
 	}
@@ -244,51 +339,6 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 		// it's disabled for now:
 		//CapslockOffWin9x();
 		prior_capslock_state = TOGGLE_INVALID;
-	}
-
-	int orig_key_delay = g.KeyDelay;
-	int orig_press_duration = g.PressDuration;
-	if (aSendModeOrig == SM_INPUT || aSendModeOrig == SM_INPUT_FALLBACK_TO_PLAY)
-	{
-		// Both of these modes fall back to a different mode depending on whether some other script
-		// is running with a keyboard/mouse hook active.  Of course, the detection of this isn't foolproof
-		// because older versions of AHK may be running and/or other apps with LL keyboard hooks. It's
-		// just designed to add a lot of value for typical usage because SendInput is prefered due to it
-		// being considerably faster than SendPlay, especially for long replacements when the CPU is under
-		// heavy load.
-		if (   !sMySendInput // Win95/NT-pre-SP3 don't support SendInput, so fall back to the specified mode.
-			|| SystemHasAnotherKeybdHook() // This function has been benchmarked to ensure it doesn't yield our timeslice, etc.  200 calls take 0ms according to tick-count, even when CPU is maxed.
-			|| !aSendRaw && SystemHasAnotherMouseHook() && strcasestr(aKeys, "{Click")   ) // Ordered for short-circuit boolean performance.  v1.0.43.09: Fixed to be strcasestr vs. !strcasestr
-		{
-			// Need to detect in advance what type of array to build (for performance and code size).  That's why
-			// it done this way, and here are the comments about it:
-			// strcasestr() above has an unwanted amount of overhead if aKeys is huge, but it seems acceptable
-			// because it's called only when system has another mouse hook but *not* another keybd hook (very rare).
-			// Also, for performance reasons, {LButton and such are not checked for, which is documented and seems
-			// justified because the new {Click} method is expected to become prevalent, especially since this
-			// whole section only applies when the new SendInput mode is in effect.
-			// Finally, checking aSendRaw isn't foolproof because the string might contain {Raw} prior to {Click,
-			// but the complexity and performance of checking for that seems unjustified given the rarity,
-			// especially since there are almost never any consequences to reverting to hook mode vs. SendInput.
-			if (aSendModeOrig == SM_INPUT_FALLBACK_TO_PLAY)
-				aSendModeOrig = SM_PLAY;
-			else // aSendModeOrig == SM_INPUT, so fall back to EVENT.
-			{
-				aSendModeOrig = SM_EVENT;
-				// v1.0.43.08: When SendInput reverts to SendEvent mode, the majority of users would want
-				// a fast sending rate that is more comparable to SendInput's speed that the default KeyDelay
-				// of 10ms.  PressDuration may be generally superior to KeyDelay because it does a delay after
-				// each changing of modifier state (which tends to improve reliability for certain apps).
-				// The following rules seem likely to be the best benefit in terms of speed and reliability:
-				// KeyDelay 0+,-1+ --> -1, 0
-				// KeyDelay -1, 0+ --> -1, 0
-				// KeyDelay -1,-1 --> -1, -1
-				g.PressDuration = (g.KeyDelay < 0 && g.PressDuration < 0) ? -1 : 0;
-				g.KeyDelay = -1; // Above line must be done before this one.
-			}
-		}
-		else // SendInput is available and no other impacting hooks are obviously present on the system, so use SendInput unconditionally.
-			aSendModeOrig = SM_INPUT; // Resolve early so that other sections don't have to consider SM_INPUT_FALLBACK_TO_PLAY a valid value.
 	}
 
 	// sSendMode must be set only after setting Capslock state above, because the hook method
@@ -493,7 +543,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 							}
 							else if (event_type == KEYUP) // *not* KEYDOWNANDUP, since that would be an intentional activation of the Start Menu or menu bar.
 							{
-								DisguiseWinAltIfNeeded(vk, in_blind_mode);
+								DisguiseWinAltIfNeeded(vk);
 								sModifiersLR_persistent &= ~key_as_modifiersLR;
 								// By contrast with KEYDOWN, KEYUP should also remove this modifier
 								// from extra_persistent_modifiers_for_blind_mode if it happens to be
@@ -549,7 +599,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 						if (event_type == KEYDOWN)
 							this_event_modifier_down = vk;
 						else // It must be KEYUP because TextToSpecial() never returns KEYDOWNANDUP.
-							DisguiseWinAltIfNeeded(vk, in_blind_mode);
+							DisguiseWinAltIfNeeded(vk);
 					}
 					// Since we're here, repeat_count > 0.
 					// v1.0.42.04: A previous call to SendKey() or SendKeySpecial() might have left modifiers
@@ -649,7 +699,7 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 				// v1.0.40: SendKeySpecial sends only keybd_event keystrokes, not ControlSend style keystrokes:
 				if (!aTargetWindow) // In this mode, mods_for_next_key is ignored due to being unsupported.
 					SendKeySpecial(*aKeys, 1);
-				//else do nothing since it's there's no known way to send the keystokes.
+				//else do nothing since there's no known way to send the keystokes.
 			}
 			mods_for_next_key = 0;  // Safest to reset this regardless of whether a key was sent.
 		}
@@ -688,7 +738,7 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 			//    they know there are other LL hooks in the system.  In any case, there's no known solution
 			//    for it, so nothing can be done.
 			mods_to_set = persistent_modifiers_for_this_SendKeys
-				| (in_blind_mode ? 0 : (mods_down_physically_orig & ~mods_down_physically_but_not_logically_orig)); // The last item is usually 0.
+				| (sInBlindMode ? 0 : (mods_down_physically_orig & ~mods_down_physically_but_not_logically_orig)); // The last item is usually 0.
 			// Above: When in blind mode, don't restore physical modifiers.  This is done to allow a hotkey
 			// such as the following to release Shift:
 			//    +space::SendInput/Play {Blind}{Shift up}
@@ -730,7 +780,7 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 		// v1.0.42.04: Now that SendKey() is lazy about releasing Ctrl and/or Shift (but not Win/Alt),
 		// the section below also releases Ctrl/Shift if appropriate.  See SendKey() for more details.
 		mods_to_set = persistent_modifiers_for_this_SendKeys; // Set default.
-		if (in_blind_mode) // This section is not needed for the array-sending modes because they exploit uninterruptibility to perform a more reliable restoration.
+		if (sInBlindMode) // This section is not needed for the array-sending modes because they exploit uninterruptibility to perform a more reliable restoration.
 		{
 			// At the end of a blind-mode send, modifiers are restored differently than normal. One
 			// reason for this is to support the explicit ability for a Send to turn off a hotkey's
@@ -869,6 +919,29 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 	// in pressed down even after it's sent.
 	modLR_type modifiersLR_specified = aModifiersLR | aModifiersLRPersistent;
 	bool vk_is_mouse = IsMouseVK(aVK); // Caller has ensured that VK is non-zero when it wants a mouse click.
+
+	// v1.0.48.01: On Vista or later, work around the fact that an "L" keystroke (physical or artificial) will
+	// lock the computer whenever either Windows key is physically pressed down (artificially releasing the
+	// Windows key isn't enough to solve it because Win+L is apparently detected aggressively like Ctrl-Alt-Delete).
+	// Must do the following check BEFORE calling anything like SetModifierLRState() because that is likely to defeat
+	// the ability to detect when the user has physically released LWin/RWin.
+	if (   aVK == 'L' // The virtual key of a letter A-Z is the same as the Ascii code of the uppercase letter.
+		&& sSendMode == SM_INPUT // SM_EVENT is handled in another section. SM_PLAY is reported to be incapable of locking the computer.
+		&& !sInBlindMode // The philosophy of blind-mode is that the script should have full control, so don't do any waiting during blind mode.
+		&& !aTargetWindow // i.e. ControlSend (which is incapable of locking the computer).
+		&& g_os.IsWinVistaOrLater() // Only Vista (and presumably later OSes) check the physical state of the Windows key for Win+L.
+		&& !(modifiersLR_specified & (MOD_LWIN|MOD_RWIN)) // Exclude any #L keystrokes because they are usually intended by the user to lock the computer.
+		&& (g_script.mThisHotkeyModifiersLR & (MOD_LWIN|MOD_RWIN)) // Limit the scope to only those hotkeys that have a Win modifier, since anything outside that scope hasn't been fully analyzed.
+		&& (GetTickCount() - g_script.mThisHotkeyStartTime) < (DWORD)50 // Ensure g_script.mThisHotkeyModifiersLR is up-to-date enough to be reliable.
+		&& aRepeatCount > 0
+		//&& aEventType != KEYUP // An up-event without a down-event is unlikely to need this workaround, but due to rarity (and in case it is necessary for up-events) don't check.
+		&& GetCurrentThreadId() == g_MainThreadID // Exclude the hook thread because it isn't allowed to call anything like MsgSleep, nor are any calls from the hook thread within the understood/analyzed scope of this workaround.
+		)
+		while (IsKeyDownAsync(VK_LWIN) || IsKeyDownAsync(VK_RWIN)) // Even if the keyboard hook is installed, it seems best to use IsKeyDownAsync() vs. g_PhysicalKeyState[] because it's more likely to produce consistent behavior.
+			SLEEP_WITHOUT_INTERRUPTION(INTERVAL_UNSPECIFIED); // Seems best not to allow other threads to launch, for maintainability and because SendKeys() isn't designed to be interruptible. Also, INTERVAL_UNSPECIFIED performs better.
+			// Sleeping indefinitely seems like the lesser evil compared to having it timeout after a few seconds
+			// because having the PC become accidentally locked might have side effects such as the script continuing
+			// to operate while an incorrect/unintended window is active.
 
 	LONG_OPERATION_INIT
 	for (int i = 0; i < aRepeatCount; ++i)
@@ -1483,7 +1556,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 	// One exception to this is something like "ControlSend, Edit1, {Control down}", which explicitly
 	// calls us with a target window.  This exception is by design and has been bug-fixed and documented
 	// in ControlSend for v1.0.21:
-	if (aTargetWindow) // This block should be thread-safe because hook thread never calls it in this mode.
+	if (aTargetWindow) // This block shouldn't affect overall thread-safety because hook thread never calls it in this mode.
 	{
 		if (KeyToModifiersLR(aVK, aSC))
 		{
@@ -1573,7 +1646,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 		// any chance that block-input will get stuck on due to two threads simultaneously reading+changing
 		// g_BlockInput (changes occur via calls to ScriptBlockInput).
 		bool we_turned_blockinput_off = g_BlockInput && (aVK == VK_MENU || aVK == VK_LMENU || aVK == VK_RMENU)
-			&& g_os.IsWinNT4orLater() && GetCurrentThreadId() == g_MainThreadID; // Ordered for short-circuit performance.
+			&& !caller_is_keybd_hook && g_os.IsWinNT4orLater(); // Ordered for short-circuit performance.
 		if (we_turned_blockinput_off)
 			Line::ScriptBlockInput(false);
 
@@ -1598,7 +1671,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 			else
 			{
 				control_vk = g_os.IsWin2000orLater() ? VK_LCONTROL : VK_CONTROL;
-				lcontrol_was_down = GetAsyncKeyState(control_vk) & 0x8000;
+				lcontrol_was_down = IsKeyDownAsync(control_vk);
 				// Add extra detection of AltGr if hook is installed, which has been show to be useful for some
 				// scripts where the other AltGr detection methods don't occur in a timely enough fashion.
 				// The following method relies upon the fact that it's impossible for the hook to receive
@@ -1667,7 +1740,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 					}
 					else if (!lcontrol_was_down) // i.e. if LControl was already down, this detection method isn't possible.
 						// Called this way, it updates the specified layout as long as keybd_event's call to the hook didn't already determine it to be FALSE or TRUE:
-						target_layout_has_altgr = LayoutHasAltGr(target_keybd_layout, (GetAsyncKeyState(control_vk) & 0x8000) ? CONDITION_TRUE : CONDITION_FALSE);
+						target_layout_has_altgr = LayoutHasAltGr(target_keybd_layout, IsKeyDownAsync(control_vk) ? CONDITION_TRUE : CONDITION_FALSE);
 						// Above also updates sTargetLayoutHasAltGr in cases where target_layout_has_altgr is an alias/reference for it.
 				}
 			}
@@ -1703,7 +1776,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 					}
 					else if (lcontrol_was_down) // i.e. if LControl was already up, this detection method isn't possible.
 						// See similar section above for comments:
-						target_layout_has_altgr = LayoutHasAltGr(target_keybd_layout, (GetAsyncKeyState(control_vk) & 0x8000) ? CONDITION_FALSE : CONDITION_TRUE);
+						target_layout_has_altgr = LayoutHasAltGr(target_keybd_layout, IsKeyDownAsync(control_vk) ? CONDITION_FALSE : CONDITION_TRUE);
 				}
 			}
 			if (do_key_history)
@@ -2859,10 +2932,10 @@ void UpdateKeyEventHistory(bool aKeyUp, vk_type aVK, sc_type aSC)
 
 ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue)
 // Toggle the given aVK into another state.  For performance, it is the caller's responsibility to
-// ensure that aVK is a toggleable key such as capslock, numlock, or scrolllock.
+// ensure that aVK is a toggleable key such as capslock, numlock, insert, or scrolllock.
 // Returns the state the key was in before it was changed (but it's only a best-guess under Win9x).
 {
-	// Can't use GetAsyncKeyState() because it doesn't have this info:
+	// Can't use IsKeyDownAsync/GetAsyncKeyState() because it doesn't have this info:
 	ToggleValueType starting_state = IsKeyToggledOn(aVK) ? TOGGLED_ON : TOGGLED_OFF;
 	if (aToggleValue != TOGGLED_ON && aToggleValue != TOGGLED_OFF) // Shouldn't be called this way.
 		return starting_state;

@@ -149,8 +149,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,48,00
- PRODUCTVERSION 1,0,48,00
+ FILEVERSION 1,0,48,02
+ PRODUCTVERSION 1,0,48,02
  FILEFLAGSMASK 0x17L
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -167,20 +167,20 @@ BEGIN
         BEGIN
 #ifdef AUTOHOTKEYSC
             VALUE "FileDescription", ""
-            VALUE "FileVersion", "1, 0, 48, 00"
+            VALUE "FileVersion", "1, 0, 48, 02"
             VALUE "InternalName", ""
             VALUE "LegalCopyright", ""
             VALUE "OriginalFilename", ""
             VALUE "ProductName", ""
-            VALUE "ProductVersion", "1, 0, 48, 00"
+            VALUE "ProductVersion", "1, 0, 48, 02"
 #else
             VALUE "FileDescription", "AutoHotkey_L"
-            VALUE "FileVersion", "1, 0, 48, 00"
+            VALUE "FileVersion", "1, 0, 48, 02"
             VALUE "InternalName", "AutoHotkey_L"
             VALUE "LegalCopyright", "Copyright (C) 2008"
             VALUE "OriginalFilename", "AutoHotkey.rc"
             VALUE "ProductName", "AutoHotkey_L"
-            VALUE "ProductVersion", "1, 0, 48, 00"
+            VALUE "ProductVersion", "1, 0, 48, 02"
 #endif
         END
     END

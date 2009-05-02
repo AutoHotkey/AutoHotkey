@@ -140,11 +140,51 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 				{
 					// Check if it's a normal variable rather than a built-in or environment variable.
 					// This happens when g_NoEnv==FALSE.
-					if (this_token.var->Type() == VAR_NORMAL && this_token.var->HasContents()) // v1.0.46.07: It's not a built-in or environment variable.
-					{
-						this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with one limited exception) is relied upon in several places such as built-in functions.
-						goto push_this_token;
-					}
+					switch (this_token.var->Type())
+  					{
+					case VAR_NORMAL:
+						if (this_token.var->HasContents()) // v1.0.46.07: It's not an environment variable.
+						{
+							this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with one limited exception) is relied upon in several places such as built-in functions.
+							goto push_this_token;
+						}
+						break;
+					case VAR_BUILTIN: // v1.0.48.02: Ensure it's VAR_BUILTIN prior to below because mBIV is a union with mCapacity.
+						if (this_token.var->mBIV == BIV_LoopIndex) // v1.0.48.01: Improve performance of A_Index by treating it as an integer rather than a string in expressions (avoids conversions to/from strings).
+						{
+							this_token.value_int64 = g->mLoopIteration;
+							this_token.symbol = SYM_INTEGER;
+							goto push_this_token;
+						}
+						if (this_token.var->mBIV == BIV_True_False) // v1.0.48.02: True/False often used with function calls, so seems worthwhile for performance.
+						{
+							this_token.value_int64 = (this_token.var->mName[4] == '\0'); // True's 5th character is the string terminator, unlike Fals[e].
+							this_token.symbol = SYM_INTEGER;
+							goto push_this_token;
+						}
+						if (this_token.var->mBIV == BIV_EventInfo) // v1.0.48.02: A_EventInfo is used often enough in performance-sensitive numeric contexts to seem worth special treatment like A_Index; e.g. LV_GetText(RowText, A_EventInfo) or RegisterCallback()'s A_EventInfo.
+						{
+							this_token.value_int64 = g->EventInfo;
+							this_token.symbol = SYM_INTEGER;
+							goto push_this_token;
+						}
+						// ABOVE: Goto's and simple assignments (like the SYM_INTEGER ones above) are only a few
+						// bytes in code size, so it would probably cost more than it's worth in performance
+						// and code size to merge them into a code section shared by all of the above.  Although
+						// each comparison "this_token.var->mBIV == BIV_xxx" is surprisingly large in OBJ size,
+						// the resulting EXE does not reflect this: even 27 such comparisons and sections (all
+						// to a different BIV) don't increase the uncompressed EXE size.
+						//
+						// OTHER CANDIDATES FOR THE ABOVE:
+						// A_TickCount: Usually not performance-critical.
+						// A_GuiWidth/Height: Maybe not used in expressions often enough.
+						// A_GuiX/Y: Not performance-critical and/or too rare: Popup menu, DropFiles, PostMessage's coords.
+						// A_Gui: Hard to say.
+						// A_LastError: Seems too rare to justify the code size and loss of performance here.
+						// A_Msec: Would help but it's probably rarely used; probably has poor granularity, not likely to be better than A_TickCount.
+						// A_TimeIdle/Physical: These are seldom performance-critical.
+						break; // case VAR_BUILTIN
+  					}
 					// Otherwise, it's an environment variable, built-in variable, or normal variable of zero-length
 					// (and it is also known now that g_NoEnv==FALSE because otherwise the loadtime
 					// ExpressionToPostfix() would never have made this item into SYM_DYNAMIC under these conditions).
@@ -866,9 +906,16 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 			// Without the behavior implemented here, the above would wrongly put Var3's rvalue into Var2.
 			continue;
 
-		if (this_token.symbol != SYM_ASSIGN) // SYM_ASSIGN doesn't need "right" to be resolved.
+		switch (this_token.symbol)
+		{
+		case SYM_ASSIGN:        // These don't need "right_is_number" to be resolved. v1.0.48.01: Also avoid
+		case SYM_CONCAT:        // resolving right_is_number for CONCAT because TokenIsPureNumeric() will take
+		case SYM_ASSIGN_CONCAT: // a long time if the string is very long and consists entirely of digits/whitespace.
+			break;
+		default:
 			// If the operand is still generic/undetermined, find out whether it is a string, integer, or float:
 			right_is_number = TokenIsPureNumeric(right); // If it's SYM_VAR, it can be the clipboard in this case, but it works even then.
+		}
 
 		// IF THIS IS A UNARY OPERATOR, we now have the single operand needed to perform the operation.
 		// The cases in the switch() below are all unary operators.  The other operators are handled
@@ -1112,13 +1159,16 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 			}
 
 			// The following section needs done even for assignments such as += because the type of value
-			// inside the target variable (integer vs. float vs. string) must be known to determine how
+			// inside the target variable (integer vs. float vs. string) must be known, to determine how
 			// the operation should proceed.
 			// Since above didn't goto/break, this is a non-unary operator that needs further processing.
-			// If the operand is still generic/undetermined, find out whether it is a string, integer, or float:
-			left_is_number = TokenIsPureNumeric(left);
-
-			if (!right_is_number || !left_is_number || this_token.symbol == SYM_CONCAT)
+			// If the operand is still generic/undetermined, find out whether it is a string, integer, or float.
+			// Fix for v1.0.48.01: For performance, call TokenIsPureNumeric(left) only as a last resort
+			// because "left" could be a very long string consisting entirely of digits or whitespace, which
+			// would make the call take a long time.  MUST NOT check the value of right_is_number until after
+			// checking for SYM_CONCAT because for SYM_CONCAT, right_is_number was left uninitialized at an
+			// earlier stage (for performance).
+			if (this_token.symbol == SYM_CONCAT || !right_is_number || !(left_is_number = TokenIsPureNumeric(left))) // See comment above.
 			{
 				// Above check has ensured that at least one of them is a string.  But the other
 				// one might be a number such as in 5+10="15", in which 5+10 would be a numerical
@@ -1539,7 +1589,7 @@ non_null_circuit_token:
 		goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
 	}
 
-	if (mActionType == ACT_IFEXPR || mActionType == ACT_WHILE) // This is an optimization that improves the speed of ACT_IFEXPR and probably ACT_WHILE by up to 50% (simple expressions like "if (x < y)" see the biggest speedup).
+	if (mActionType == ACT_IFEXPR || mActionType == ACT_WHILE) // This is an optimization that improves the speed of ACT_IFEXPR by up to 50% (ACT_WHILE is probably improved by only up-to-15%). Simple expressions like "if (x < y)" see the biggest speedup.
 	{
 		BOOL result_is_true;
 		switch (result_token.symbol)

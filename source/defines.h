@@ -34,9 +34,9 @@ GNU General Public License for more details.
 
 #define NAME_P "AutoHotkey"
 #ifndef NAME_L_REVISION
-#define NAME_L_REVISION ".L25" // L14: Added .Ln for AutoHotkey_L revision n.
+#define NAME_L_REVISION ".L29" // L14: Added .Ln for AutoHotkey_L revision n.
 #endif
-#define NAME_VERSION "1.0.48.00" NAME_L_REVISION
+#define NAME_VERSION "1.0.48.02" NAME_L_REVISION
 #define NAME_PV NAME_P " v" NAME_VERSION
 
 // Window class names: Changing these may result in new versions not being able to detect any old instances
@@ -558,6 +558,7 @@ struct global_struct
 	int MouseDelayPlay; //
 	char FormatFloat[32];
 	Func *CurrentFunc; // v1.0.46.16: The function whose body is currently being processed at load-time, or being run at runtime (if any).
+	Func *CurrentFuncGosub; // v1.0.48.02: Allows A_ThisFunc to work even when a function Gosubs an external subroutine.
 	Label *CurrentLabel; // The label that is currently awaiting its matching "return" (if any).
 	HWND hWndLastUsed;  // In many cases, it's better to use GetValidLastUsedWindow() when referring to this.
 	//HWND hWndToRestore;
@@ -585,6 +586,7 @@ struct global_struct
 	bool FormatIntAsHex;
 	bool MsgBoxTimedOut; // Doesn't require initialization.
 	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
+	bool ListLinesIsEnabled;
 };
 
 inline void global_maximize_interruptibility(global_struct &g)
@@ -603,6 +605,7 @@ inline void global_clear_state(global_struct &g)
 // future threads if it occurs in the auto-execute section, but ErrorLevel shouldn't).
 {
 	g.CurrentFunc = NULL;
+	g.CurrentFuncGosub = NULL;
 	g.CurrentLabel = NULL;
 	g.hWndLastUsed = NULL;
 	//g.hWndToRestore = NULL;
@@ -675,6 +678,7 @@ inline void global_init(global_struct &g)
 	g.AutoTrim = true;  // AutoIt2's default, and overall the best default in most cases.
 	strcpy(g.FormatFloat, "%0.6f");
 	g.FormatIntAsHex = false;
+	g.ListLinesIsEnabled = true;
 	// For FormatFloat:
 	// I considered storing more than 6 digits to the right of the decimal point (which is the default
 	// for most Unices and MSVC++ it seems).  But going beyond that makes things a little weird for many

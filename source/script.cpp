@@ -43,11 +43,11 @@ Script::Script()
 	, mNextClipboardViewer(NULL), mOnClipboardChangeIsRunning(false), mOnClipboardChangeLabel(NULL)
 	, mOnExitLabel(NULL), mExitReason(EXIT_NONE)
 	, mFirstLabel(NULL), mLastLabel(NULL)
-	, mFirstFunc(NULL), mLastFunc(NULL)
+	, /*mFirstFunc(NULL),*/ mLastFunc(NULL), mFunc(NULL), mFuncCount(0), mFuncCountMax(0)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
-	, mOpenBlockCount(0), mNextLineIsFunctionBody(false)
+	, mCurrentFuncOpenBlockCount(0), mNextLineIsFunctionBody(false)
 	, mFuncExceptionVar(NULL), mFuncExceptionVarCount(0)
 	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true), mMenuUseErrorLevel(false)
 	, mFileSpec(""), mFileDir(""), mFileName(""), mOurEXE(""), mOurEXEDir(""), mMainWindowTitle("")
@@ -1834,7 +1834,7 @@ ResultType Script::LoadIncludedFile(char *aFileSpec, bool aAllowDuplicateInclude
 		// By doing the following section prior to checking for hotkey and hotstring labels, double colons do
 		// not need to be escaped inside naked function calls and function definitions such as the following:
 		// fn("::")      ; Function call.
-		// fn(Str="::")  ; Function definition with default value for its param (though technically, strings other than "" aren't yet supported).
+		// fn(Str="::")  ; Function definition with default value for its parameter.
 		if (IsFunction(buf, &pending_function_has_brace)) // If true, it's either a function definition or a function call (to be distinguished later).
 		{
 			// Defer this line until the next line comes in, which helps determine whether this line is
@@ -5462,13 +5462,19 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 				&& !((aActionType == ACT_ASSIGN || aActionType == ACT_ASSIGNEXPR) // Only these need extra checking because the display format of the number doesn't matter for ADD/SUB/IFEQUAL/IFGREATER/etc. because they treat anything that looks like a number (any format) as a pure number.
 					&& (
 							   *new_raw_arg2 == '0' || *new_raw_arg2 == '+' // Assign hex or any unusually-formatted integers the old way so that the format is retained in case its important to the operation of the script (e.g. x:="005", x:=005, x:="0x5", x:="+5", x:=+5).
-							|| new_arg[1].length > MAX_INTEGER_LENGTH // Integers that are too long are probably intended to be a series of characters/digits, so assign them the old way to keep all of the digits.
+							|| new_arg[1].length > 18 // See below.
+							// Integers that are too long are probably intended to be a series of characters/digits,
+							// so assign them the old way to keep all of the digits.  Fix for v1.0.48.01: Reduced the
+							// limit from MAX_INTEGER_LENGTH (20) to 18 so that the assignment (:= and =) of integers
+							// that are 19 or 20 digits long work as they did prior to v1.0.48 (some of such integers
+							// would overflow a signed 64-bit value, so keep all of them as strings).
+							//
 							// The following can't happen anymore because x:="string" is no longer translated
 							// into is_expression==false.  There are some reasons given in a section higher above:
 							//|| IS_SPACE_OR_TAB(new_raw_arg2[new_arg[1].length-1]) // Trailing whitespace, which can happen from something like x:="abc ".
 							//|| IS_SPACE_OR_TAB(*new_raw_arg2) // This can happen via translation of x:=" abc " to x:= abc at an earlier stage.
 							// Any LITERAL whitespace around a LITERAL number has always been ignored/omitted,
-							// so storing binary integers for things like "x = 1" and "x := 1" to should behave
+							// so storing binary integers for things like "x = 1" and "x := 1" should behave
 							// as before, with the exception of "SetFormat, Integer, Hex", which will now be obeyed
 							// by such assignments when it wasn't before.
 						))   )
@@ -6531,14 +6537,14 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 	// it displays more informative error messages:
 	if (aActionType == ACT_BLOCK_BEGIN)
 	{
-		++mOpenBlockCount;
+		++mCurrentFuncOpenBlockCount; // It's okay to increment unconditionally because it is reset to zero every time a new function definition is entered.
 		// It's only necessary to check mLastFunc, not the one(s) that come before it, to see if its
 		// mJumpToLine is NULL.  This is because our caller has made it impossible for a function
 		// to ever have been defined in the first place if it lacked its opening brace.  Search on
-		// "consecutive function" for more comments.  In addition, the following does not check
-		// that mOpenBlockCount is exactly 1, because: 1) Want to be able to support function
+  		// "consecutive function" for more comments.  In addition, the following does not check
+		// that mCurrentFuncOpenBlockCount is exactly 1, because: 1) Want to be able to support function
 		// definitions inside of other function definitions (to help script maintainability); 2) If
-		// mOpenBlockCount is 0 or negative, that will be caught as a syntax error by PreparseBlocks(),
+		// mCurrentFuncOpenBlockCount is 0 or negative, that will be caught as a syntax error by PreparseBlocks(),
 		// which yields a more informative error message that we could here.
 		if (mLastFunc && !mLastFunc->mJumpToLine) // If this stmt is true, caller has ensured that g->CurrentFunc isn't NULL.
 		{
@@ -6554,8 +6560,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 	}
 	else if (aActionType == ACT_BLOCK_END)
 	{
-		--mOpenBlockCount;
-		if (g->CurrentFunc && !mOpenBlockCount) // Any negative mOpenBlockCount is caught by a different stage.
+		--mCurrentFuncOpenBlockCount; // It's okay to increment unconditionally because it is reset to zero every time a new function definition is entered.
+		if (g->CurrentFunc && !mCurrentFuncOpenBlockCount) // Any negative mCurrentFuncOpenBlockCount is caught by a different stage.
 		{
 			line.mAttribute = ATTR_TRUE;  // Flag this ACT_BLOCK_END as the ending brace of a function's body.
 			g->CurrentFunc = NULL;
@@ -6581,7 +6587,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 	{
 		for (Label *label = mLastLabel; label != NULL && label->mJumpToLine == NULL; label = label->mPrevLabel)
 		{
-			if (line.mActionType == ACT_BLOCK_BEGIN && line.mAttribute) // Non-zero mAttribute signfies the open-brace of a function body.
+			if (line.mActionType == ACT_BLOCK_BEGIN && line.mAttribute == ATTR_TRUE) // Non-zero mAttribute signfies the open-brace of a function body.
 				return ScriptError("A label must not point to a function.");
 			if (line.mActionType == ACT_ELSE)
 				return ScriptError("A label must not point to an ELSE.");
@@ -6665,8 +6671,9 @@ ResultType Script::DefineFunc(char *aBuf, Var *aFuncExceptionVar[])
 // declared as either local or global) within the body of the function.
 {
 	char *param_end, *param_start = strchr(aBuf, '('); // Caller has ensured that this will return non-NULL.
-
-	Func *found_func = FindFunc(aBuf, param_start - aBuf);
+	int insert_pos;
+	
+	Func *found_func = FindFunc(aBuf, param_start - aBuf, &insert_pos);
 	if (found_func)
 	{
 		if (!found_func->mIsBuiltIn)
@@ -6683,11 +6690,11 @@ ResultType Script::DefineFunc(char *aBuf, Var *aFuncExceptionVar[])
 	else
 		// The value of g->CurrentFunc must be set here rather than by our caller since AddVar(), which we call,
 		// relies upon it having been done.
-		if (   !(g->CurrentFunc = AddFunc(aBuf, param_start - aBuf, false))   )
+		if (   !(g->CurrentFunc = AddFunc(aBuf, param_start - aBuf, false, insert_pos))   )
 			return FAIL; // It already displayed the error.
 
+	mCurrentFuncOpenBlockCount = 0; // v1.0.48.01: Initializing this here makes function definions work properly when they're inside a block.
 	Func &func = *g->CurrentFunc; // For performance and convenience.
-	int insert_pos;
 	size_t param_length, value_length;
 	FuncParam param[MAX_FUNCTION_PARAMS];
 	int param_count = 0;
@@ -7014,12 +7021,15 @@ Func *Script::FindFuncInLibrary(char *aFuncName, size_t aFuncNameLength, bool &a
 
 
 
-Func *Script::FindFunc(char *aFuncName, size_t aFuncNameLength)
+Func *Script::FindFunc(char *aFuncName, size_t aFuncNameLength, int *apInsertPos) // L27: Added apInsertPos for binary-search.
 // Returns the Function whose name matches aFuncName (which caller has ensured isn't NULL).
 // If it doesn't exist, NULL is returned.
 {
 	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = strlen(aFuncName);
+
+	if (apInsertPos) // L27: Set default for maintainability.
+		*apInsertPos = -1;
 
 	// For the below, no error is reported because callers don't want that.  Instead, simply return
 	// NULL to indicate that names that are illegal or too long are not found.  If the caller later
@@ -7034,9 +7044,26 @@ Func *Script::FindFunc(char *aFuncName, size_t aFuncNameLength)
 	strlcpy(func_name, aFuncName, aFuncNameLength + 1);  // +1 to convert length to size.
 
 	Func *pfunc;
+	/*
 	for (pfunc = mFirstFunc; pfunc; pfunc = pfunc->mNextFunc)
 		if (!stricmp(func_name, pfunc->mName)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			return pfunc; // Match found.
+	*/
+	// L27: Use binary search in array rather than linear search through a linked list.  Speeds up dynamic function calls (on average).
+	int left, right, mid, result;
+	for (left = 0, right = mFuncCount - 1; left <= right;)
+	{
+		mid = (left + right) / 2;
+		result = stricmp(func_name, mFunc[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+		if (result > 0)
+			left = mid + 1;
+		else if (result < 0)
+			right = mid - 1;
+		else // Match found.
+			return mFunc[mid];
+	}
+	if (apInsertPos)
+		*apInsertPos = left;
 
 	// Since above didn't return, there is no match.  See if it's a built-in function that hasn't yet
 	// been added to the function list.
@@ -7311,7 +7338,7 @@ Func *Script::FindFunc(char *aFuncName, size_t aFuncNameLength)
 
 	// Since above didn't return, this is a built-in function that hasn't yet been added to the list.
 	// Add it now:
-	if (   !(pfunc = AddFunc(func_name, aFuncNameLength, true))   )
+	if (   !(pfunc = AddFunc(func_name, aFuncNameLength, true, left))   ) // L27: left contains the position within mFunc to insert the function.  Cannot use *apInsertPos as caller may have omitted it or passed NULL.
 		return NULL;
 
 	pfunc->mBIF = bif;
@@ -7323,7 +7350,7 @@ Func *Script::FindFunc(char *aFuncName, size_t aFuncNameLength)
 
 
 
-Func *Script::AddFunc(char *aFuncName, size_t aFuncNameLength, bool aIsBuiltIn)
+Func *Script::AddFunc(char *aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos) // L27: Added aInsertPos for binary-search.
 // This function should probably not be called by anyone except FindOrAddFunc, which has already done
 // the dupe-checking.
 // Returns the address of the new function or NULL on failure.
@@ -7386,11 +7413,34 @@ Func *Script::AddFunc(char *aFuncName, size_t aFuncNameLength, bool aIsBuiltIn)
 	// of functions.  This is because functions brought in dynamically from a library will then be at the
 	// beginning of the list, which allows the function lookup that immediately follows library-loading to
 	// find a match almost immediately.
-	if (!mFirstFunc) // The list is empty, so this will be the first and last item.
+	/*if (!mFirstFunc) // The list is empty, so this will be the first and last item.
 		mFirstFunc = the_new_func;
 	else
-		mLastFunc->mNextFunc = the_new_func;
-	// This must be done after the above:
+		mLastFunc->mNextFunc = the_new_func;*/
+	
+	// L27: Replaced linked list with binary-searchable array.
+	if (mFuncCount == mFuncCountMax)
+	{
+		// Allocate or expand function list.
+		int alloc_count = mFuncCountMax ? mFuncCountMax * 2 : 100;
+
+		Func **temp = (Func **)realloc(mFunc, alloc_count * sizeof(Func *)); // If passed NULL, realloc() will do a malloc().
+		if (!temp)
+		{
+			ScriptError(ERR_OUTOFMEM);
+			return NULL;
+		}
+		mFunc = temp;
+		mFuncCountMax = alloc_count;
+	}
+
+	if (aInsertPos != mFuncCount) // Need to make room at the indicated position for this variable.
+		memmove(mFunc + aInsertPos + 1, mFunc + aInsertPos, (mFuncCount - aInsertPos) * sizeof(Func *));
+	//else both are zero or the item is being inserted at the end of the list, so it's easy.
+	mFunc[aInsertPos] = the_new_func;
+	++mFuncCount;
+
+	// OBSOLETE COMMENT: This must be done after the above:
 	mLastFunc = the_new_func; // There's at least one spot in the code that relies on mLastFunc being the most recently added function.
 
 	return the_new_func;
@@ -8580,8 +8630,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 		if (ACT_IS_IF_OR_ELSE_OR_LOOP(line->mActionType) || line->mActionType == ACT_REPEAT)
 		{
 			// In this case, the loader should have already ensured that line->mNextLine is not NULL.
-
-			if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN && line->mNextLine->mAttribute)
+			if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN && line->mNextLine->mAttribute == ATTR_TRUE)
 			{
 				abort = true; // So that the caller doesn't also report an error.
 				return line->PreparseError("Improper line below this."); // Short message since so rare. A function must not be defined directly below an IF/ELSE/LOOP because runtime evaluation won't handle it properly.
@@ -8692,12 +8741,14 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 // only when aStartingLine's ActionType is something recursable such
 // as IF and BEGIN_BLOCK.  Otherwise, it won't return after only one line.
 {
+	static BOOL sInFunctionBody = FALSE; // Improves loadtime performance by allowing IsOutsideAnyFunctionBody() to be called only when necessary.
 	// Don't check aStartingLine here at top: only do it at the bottom
 	// for it's differing return values.
 	Line *line_temp;
 	// Although rare, a statement can be enclosed in more than one type of special loop,
 	// e.g. both a file-loop and a reg-loop:
 	AttributeType loop_type_file, loop_type_reg, loop_type_read, loop_type_parse;
+
 	for (Line *line = aStartingLine; line != NULL;)
 	{
 		if (   ACT_IS_IF(line->mActionType)
@@ -8868,6 +8919,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		switch (line->mActionType)
 		{
 		case ACT_BLOCK_BEGIN:
+			if (line->mAttribute == ATTR_TRUE) // This is the opening brace of a function definition.
+				sInFunctionBody = TRUE; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
 			line = PreparseIfElse(line->mNextLine, UNTIL_BLOCK_END, aLoopTypeFile, aLoopTypeReg, aLoopTypeRead
 				, aLoopTypeParse);
 			// "line" is now either NULL due to an error, or the location of the END_BLOCK itself.
@@ -8875,6 +8928,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				return NULL; // Error.
 			break;
 		case ACT_BLOCK_END:
+			if (line->mAttribute == ATTR_TRUE) // This is the closing brace of a function definition.
+				sInFunctionBody = FALSE; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
 			if (aMode == ONLY_ONE_LINE)
 				 // Syntax error.  The caller would never expect this single-line to be an
 				 // end-block.  UPDATE: I think this is impossible because callers only use
@@ -8895,14 +8950,23 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				return line->PreparseError("Break/Continue must be enclosed by a Loop.");
 			break;
 
-		case ACT_GOTO:  // These two must be done here (i.e. *after* all the script lines have been added),
-		case ACT_GOSUB: // so that labels both above and below each Gosub/Goto can be resolved.
+		case ACT_GOSUB: // These two must be done here (i.e. *after* all the script lines have been added),
+		case ACT_GOTO:  // so that labels both above and below each Gosub/Goto can be resolved.
 			if (line->ArgHasDeref(1))
 				// Since the jump-point contains a deref, it must be resolved at runtime:
 				line->mRelatedLine = NULL;
-			else
+  			else
+			{
 				if (!line->GetJumpTarget(false))
 					return NULL; // Error was already displayed by called function.
+				if (   line->mActionType == ACT_GOSUB && sInFunctionBody
+					&& ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()   ) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
+					// Since this Gosub and its target line are both inside a function, they must both
+					// be in the same function because otherwise GetJumpTarget() would have reported
+					// the target as invalid.
+					line->mAttribute = ATTR_TRUE; // v1.0.48.02: To improve runtime performance, mark this Gosub as having a target that is outside of any function body.
+				//else leave above at its line-constructor default of ATTR_NONE.
+			}
 			break;
 
 		// These next 4 must also be done here (i.e. *after* all the script lines have been added),
@@ -10041,6 +10105,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 
 	Line *jump_to_line; // Don't use *apJumpToLine because it might not exist.
 	Label *jump_to_label;  // For use with Gosub & Goto & GroupActivate.
+	BOOL jumping_from_inside_function_to_outside;
 	ResultType if_condition, result;
 	LONG_OPERATION_INIT
 	global_struct &g = *::g; // Reduces code size and may improve performance. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
@@ -10124,16 +10189,19 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 			g_Debugger.PreExecLine(line);
 #endif
 
-		// Maintain a circular queue of the lines most recently executed:
-		sLog[sLogNext] = line; // The code actually runs faster this way than if this were combined with the above.
-		// Get a fresh tick in case tick_now is out of date.  Strangely, it makes benchmarks 3% faster
-		// on my system with this line than without it, but that's probably just a quirk of the build
-		// or the CPU's caching.  It was already shown previously that the released version of 1.0.09
-		// was almost 2% faster than an early version of this version (yet even now, that prior version
-		// benchmarks slower than this one, which I can't explain).
-		sLogTick[sLogNext++] = GetTickCount();  // Incrementing here vs. separately benches a little faster.
-		if (sLogNext >= LINE_LOG_SIZE)
-			sLogNext = 0;
+		if (g.ListLinesIsEnabled)
+		{
+			// Maintain a circular queue of the lines most recently executed:
+			sLog[sLogNext] = line; // The code actually runs faster this way than if this were combined with the above.
+			// Get a fresh tick in case tick_now is out of date.  Strangely, it makes benchmarks 3% faster
+			// on my system with this line than without it, but that's probably just a quirk of the build
+			// or the CPU's caching.  It was already shown previously that the released version of 1.0.09
+			// was almost 2% faster than an early version of this version (yet even now, that prior version
+			// benchmarks slower than this one, which I can't explain).
+			sLogTick[sLogNext++] = GetTickCount();  // Incrementing here vs. separately benches a little faster.
+			if (sLogNext >= LINE_LOG_SIZE)
+				sLogNext = 0;
+		}
 
 		// Do this only after the opportunity to Sleep (above) has passed, because during
 		// that sleep, a new subroutine might be launched which would likely overwrite the
@@ -10296,17 +10364,39 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 			// A single gosub can cause an infinite loop if misused (i.e. recusive gosubs),
 			// so be sure to do this to prevent the program from hanging:
 			++g_script.mLinesExecutedThisCycle;
-			if (   !(jump_to_label = (Label *)line->mRelatedLine)   )
+			if (line->mRelatedLine)
+			{
+				jump_to_label = (Label *)line->mRelatedLine;
+				jumping_from_inside_function_to_outside = (line->mAttribute == ATTR_TRUE); // ATTR_TRUE was set by loadtime routines for any ACT_GOSUB that needs it.
+			}
+			else
+			{
 				// The label is a dereference, otherwise it would have been resolved at load-time.
-				// So send true because we don't want to update its mRelatedLine.  This is because
-				// we want to resolve the label every time through the loop in case the variable
-				// that contains the label changes, e.g. Gosub, %MyLabel%
+				// So pass "true" below because don't want to update its mRelatedLine.  This is because
+				// the label should be resolved every time through the loop in case the variable that
+				// contains the label changes, e.g. Gosub, %MyLabel%
 				if (   !(jump_to_label = line->GetJumpTarget(true))   )
 					return FAIL; // Error was already displayed by called function.
-			// I'm pretty sure it's not valid for this call to ExecUntil() to tell us to jump
-			// somewhere, because the called function, or a layer even deeper, should handle
-			// the goto prior to returning to us?  So the last parameter is omitted:
+				// Below is ordered for short-circuit performance.
+				jumping_from_inside_function_to_outside = g.CurrentFunc && jump_to_label->mJumpToLine->IsOutsideAnyFunctionBody();
+			}
+
+			// v1.0.48.02: When a Gosub that lies inside a function body jumps outside of the function,
+			// any references to dynamic variables should resolve to globals not locals. In addition,
+			// GUI commands that lie inside such an external subroutine (such as GuiControl and
+			// GuiControlGet) should behave as though they are not inside the function.
+			if (jumping_from_inside_function_to_outside)
+			{
+				g.CurrentFuncGosub = g.CurrentFunc;
+				g.CurrentFunc = NULL;
+			}
 			result = jump_to_label->Execute();
+			if (jumping_from_inside_function_to_outside)
+			{
+				g.CurrentFunc = g.CurrentFuncGosub;
+				g.CurrentFuncGosub = NULL; // Seems more maintainable to do it here vs. when the UDF returns, but debatable which is better overall for performance.
+			}
+
 			// Must do these return conditions in this specific order:
 			if (result == FAIL || result == EARLY_EXIT)
 				return result;
@@ -10360,13 +10450,22 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 				group->Activate(*ARG2 && !stricmp(ARG2, "R"), NULL, &jump_to_label);
 				if (jump_to_label)
 				{
-					if (!line->IsJumpValid(*jump_to_label))
-						// This check probably isn't necessary since IsJumpValid() is mostly
-						// for Goto's.  But just in case the gosub's target label is some
-						// crazy place:
+					if (!line->IsJumpValid(*jump_to_label)) // Should be checked here rather than at the time that GroupAdd specified the label because it's from HERE that the jump will actually be done.
 						return FAIL;
-					// This section is just like the Gosub code above, so maintain them together.
+
+					// The section below is just like the Gosub code above, so maintain them together.
+					jumping_from_inside_function_to_outside = g.CurrentFunc && jump_to_label->mJumpToLine->IsOutsideAnyFunctionBody();
+					if (jumping_from_inside_function_to_outside)
+					{
+						g.CurrentFuncGosub = g.CurrentFunc;
+						g.CurrentFunc = NULL;
+					}
 					result = jump_to_label->Execute();
+					if (jumping_from_inside_function_to_outside)
+					{
+						g.CurrentFunc = g.CurrentFuncGosub;
+						g.CurrentFuncGosub = NULL; // Seems more maintainable to do it here vs. when the UDF returns, but debatable which is better overall for performance.
+					}
 					if (result == FAIL || result == EARLY_EXIT)
 						return result;
 				}
@@ -10655,7 +10754,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, char **apReturnValue, Line **apJ
 			return g_script.ExitApp(EXIT_EXIT, NULL, (int)line->ArgIndexToInt64(0));
 
 		case ACT_BLOCK_BEGIN:
-			if (line->mAttribute) // This is the ACT_BLOCK_BEGIN that starts a function's body.
+			if (line->mAttribute == ATTR_TRUE) // This is the ACT_BLOCK_BEGIN that starts a function's body.
 			{
 				// Anytime this happens at runtime it means a function has been defined inside the
 				// auto-execute section, a block, or other place the flow of execution can reach
@@ -11187,10 +11286,13 @@ ResultType Line::PerformLoop(char **apReturnValue, bool &aContinueMainLoop, Line
 		{
 			// Simple loops are about 6% faster by omitting the open-brace from ListLines, so
 			// it seems worth it:
-			//sLog[sLogNext] = mNextLine; // See comments in ExecUntil() about this section.
-			//sLogTick[sLogNext++] = GetTickCount();
-			//if (sLogNext >= LINE_LOG_SIZE)
-			//	sLogNext = 0;
+			//if (g.ListLinesIsEnabled)
+			//{
+			//	sLog[sLogNext] = mNextLine; // See comments in ExecUntil() about this section.
+			//	sLogTick[sLogNext++] = GetTickCount();
+			//	if (sLogNext >= LINE_LOG_SIZE)
+			//		sLogNext = 0;
+			//}
 
 			// If this loop has a block under it rather than just a single line, take a shortcut
 			// and directly execute the block.  This avoids one recursive call to ExecUntil()
@@ -12921,7 +13023,23 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// Otherwise:
 		return ShowMainWindow(MAIN_MODE_KEYHISTORY, false); // Pass "unrestricted" when the command is explicitly used in the script.
 	case ACT_LISTLINES:
-		return ShowMainWindow(MAIN_MODE_LINES, false); // Pass "unrestricted" when the command is explicitly used in the script.
+		if (   (toggle = ConvertOnOff(ARG1, NEUTRAL)) == NEUTRAL   )
+			return ShowMainWindow(MAIN_MODE_LINES, false); // Pass "unrestricted" when the command is explicitly used in the script.
+		if (g.ListLinesIsEnabled)
+		{
+			// Since ExecUntil() just logged this ListLines Off in the line history, remove it to avoid
+			// cluttering the line history with distracting lines that the user probably wouldn't want to see.
+			// Might be especially useful in cases where a timer fires frequently (even if such a timer
+			// used "ListLines Off" as its top line, that line itself would appear very frequently in the line
+			// history).  v1.0.48.03: Fixed so that the below executes only when ListLines was previously "On".
+			if (sLogNext > 0)
+				--sLogNext;
+			else
+				sLogNext = LINE_LOG_SIZE - 1;
+			sLog[sLogNext] = NULL; // Without this, one of the lines in the history would be invalid due to the circular nature of the line history array, which would also cause the line history to show the wrong chronlogical order in some cases.
+		}
+		g.ListLinesIsEnabled = (toggle == TOGGLED_ON);
+		return OK;
 	case ACT_LISTVARS:
 		return ShowMainWindow(MAIN_MODE_VARS, false); // Pass "unrestricted" when the command is explicitly used in the script.
 	case ACT_LISTHOTKEYS:
@@ -13484,7 +13602,7 @@ char *Line::LogToText(char *aBuf, int aBufSize) // aBufSize should be an int to 
 			if (line_index >= LINE_LOG_SIZE) // wrap around, because sLog is a circular queue
 				line_index -= LINE_LOG_SIZE; // Don't just reset it to zero because an offset larger than one may have been added to it.
 			if (!sLog[line_index]) // No line has yet been logged in this slot.
-				continue;
+				continue; // ACT_LISTLINES and other things might rely on "continue" isntead of halting the loop here.
 			this_item_is_special = next_item_is_special;
 			next_item_is_special = false;  // Set default.
 			if (i + 1 < lines_to_show)  // There are still more lines to be processed
@@ -13927,13 +14045,14 @@ char *Script::ListVars(char *aBuf, int aBufSize) // aBufSize should be an int to
 // into aBuf and returning the position in aBuf of its new string terminator.
 {
 	char *aBuf_orig = aBuf;
-	if (g->CurrentFunc)
+	Func *current_func = g->CurrentFunc ? g->CurrentFunc : g->CurrentFuncGosub;
+	if (current_func)
 	{
 		// This definition might help compiler string pooling by ensuring it stays the same for both usages:
 		#define LIST_VARS_UNDERLINE "\r\n--------------------------------------------------\r\n"
 		// Start at the oldest and continue up through the newest:
-		aBuf += snprintf(aBuf, BUF_SPACE_REMAINING, "Local Variables for %s()%s", g->CurrentFunc->mName, LIST_VARS_UNDERLINE);
-		Func &func = *g->CurrentFunc; // For performance.
+		aBuf += snprintf(aBuf, BUF_SPACE_REMAINING, "Local Variables for %s()%s", current_func->mName, LIST_VARS_UNDERLINE);
+		Func &func = *current_func; // For performance.
 		for (int i = 0; i < func.mVarCount; ++i)
 			if (func.mVar[i]->Type() == VAR_NORMAL) // Don't bother showing clipboard and other built-in vars.
 				aBuf = func.mVar[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
@@ -13943,7 +14062,7 @@ char *Script::ListVars(char *aBuf, int aBufSize) // aBufSize should be an int to
 	// However, 99.9% of scripts do not use the lazy list, so it seems too rare to worry about other
 	// than document it in the ListVars command in the help file:
 	aBuf += snprintf(aBuf, BUF_SPACE_REMAINING, "%sGlobal Variables (alphabetical)%s"
-		, g->CurrentFunc ? "\r\n\r\n" : "", LIST_VARS_UNDERLINE);
+		, current_func ? "\r\n\r\n" : "", LIST_VARS_UNDERLINE);
 	// Start at the oldest and continue up through the newest:
 	for (int i = 0; i < mVarCount; ++i)
 		if (mVar[i]->Type() == VAR_NORMAL) // Don't bother showing clipboard and other built-in vars.

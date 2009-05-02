@@ -41,6 +41,7 @@
 
 ; NOTE: A CLEAN+BUILD is usually necessary to properly put changes made in this file into effect, at least in MSVC++ 7.1
 
+_ui64toa  ; As of 2/17/2009, this one isn't called directly anymore, so not sure why it was suddenly reported as missing from this file.
 ?UTOA@@YAPADKPAD@Z  ; Rarely called, so keep them outermost from the others.
 _ultoa
 
@@ -70,12 +71,13 @@ atoi             ; Used for 32-bit integers, which are less frequently called/co
 ?PerformAssign@Line@@AAE?AW4ResultType@@XZ  ; Not called that often by modern scripts, so kept a bit farther out.
 
 ; A tight group of *small* things that are called very frequently:
+?PerformLoopWhile@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@@Z
 ?PerformLoop@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@_J_N@Z  ; Performs best here (higher up) at the moment.
 ?Free@Var@@QAEXH_N@Z  ; Called fairly often by the main Var::Assign().
 ?Assign@Var@@QAE?AW4ResultType@@PADK_N1@Z  ; Assign MAIN
 ?Assign@Var@@QAE?AW4ResultType@@AAV1@@Z  ; Assign var-to-var.
 ?Assign@Var@@QAE?AW4ResultType@@AAUExprTokenType@@@Z  ; Assign a Token.
-?UpdateBinaryInt64@Var@@QAEX_JE@Z  ; script.obj
+?UpdateBinaryInt64@Var@@AAEX_JE@Z  ; application.obj
 ?ToInt64@Var@@QAE_JH@Z  ; Calls UpdateBinaryInt64().
 ?TokenToInt64@@YA_JAAUExprTokenType@@H@Z  ; script2.obj
 ?TokenIsPureNumeric@@YA?AW4SymbolType@@AAUExprTokenType@@@Z  ; script2.obj
@@ -86,7 +88,7 @@ atoi             ; Used for 32-bit integers, which are less frequently called/co
 ?LengthIgnoreBinaryClip@Var@@QAEKXZ
 ?Length@Var@@QAEAAKXZ
 ?Type@Var@@QAEEXZ
-?UpdateContents@Var@@QAEXXZ  ; application.obj
+?UpdateContents@Var@@AAEXXZ  ; application.obj
 ?Contents@Var@@QAEPADH@Z  ; application.obj
 
 ; IsHex is a focal point, so hang two things off it: above and below (proceed in proximity order in
@@ -212,10 +214,11 @@ printf
 
 ?AcceptNewMem@Var@@QAEXPADK@Z
 ?AppendIfRoom@Var@@QAE?AW4ResultType@@PADK@Z
-?UpdateBinaryDouble@Var@@QAEXNE@Z  ; script.obj
+?UpdateBinaryDouble@Var@@AAEXNE@Z  ; script.obj
 ?Assign@Var@@QAE?AW4ResultType@@N@Z  ; Kept away from central section because most scripts don't use doubles.  Assign a Double (calls snprintf).
 ?AssignHWND@Var@@QAE?AW4ResultType@@PAUHWND__@@@Z  ; Assign an HWND.
-?AddAttrib@Var@@QAEXE@Z  ; script.obj
+?ConvertToNonStatic@Var@@QAEXXZ  ; script.obj
+?ConvertToStatic@Var@@QAEXXZ  ; script.obj
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -229,16 +232,13 @@ printf
 ?CollectInput@@YA_NAAUtagKBDLLHOOKSTRUCT@@EG_N1AAIAAJ@Z
 
 ?MsgBoxTimeout@@YGXPAUHWND__@@IIK@Z
-?UninterruptibleTimeout@@YGXPAUHWND__@@IIK@Z
 
-?Disable@ScriptTimer@@QAEXXZ
-?CheckScriptTimers@@YA_NXZ
-?MsgMonitor@@YA_NPAUHWND__@@IIJPAUtagMSG@@AAJ@Z
-
-?ResumeUnderlyingThread@@YAXPAUglobal_struct@@PAD_N@Z
 ?UpdateTrayIcon@Script@@QAEX_N@Z  ; Called by or in conjunction with above/below.
+?MsgMonitor@@YA_NPAUHWND__@@IIJPAUtagMSG@@AAJ@Z
+?ResumeUnderlyingThread@@YAXPAD@Z  ; application.obj
 ?InitNewThread@@YAXH_N0E@Z
-
+?CheckScriptTimers@@YA_NXZ
+?IsInterruptible@@YAHXZ  ; application.obj
 ?MsgSleep@@YA_NHW4MessageMode@@@Z
 ?IsCycleComplete@@YA?AW4ResultType@@HK_N@Z
 ?PollJoysticks@@YAXXZ
@@ -255,7 +255,7 @@ printf
 ?AddHotstring@Hotstring@@SA?AW4ResultType@@PAVLabel@@PAD11_N@Z
 ?DoReplace@Hotstring@@QAEXJ@Z
 ?ParseOptions@Hotstring@@SAXPADAAH1AAW4SendModes@@AA_N3333333@Z
-?Perform@Hotstring@@QAE?AW4ResultType@@XZ
+?PerformInNewThreadMadeByCaller@Hotstring@@QAE?AW4ResultType@@XZ  ; hotkey.obj
 ?SuspendAll@Hotstring@@SAX_N@Z
 
 ; HOTKEY
@@ -302,7 +302,7 @@ printf
 ?Disable@Hotkey@@AAE_NAAUHotkeyVariant@@@Z
 ?Enable@Hotkey@@AAE_NAAUHotkeyVariant@@@Z
 ?FindVariant@Hotkey@@QAEPAUHotkeyVariant@@XZ
-?Perform@Hotkey@@QAEXAAUHotkeyVariant@@@Z
+?PerformInNewThreadMadeByCaller@Hotkey@@QAEXAAUHotkeyVariant@@@Z  ; hotkey.obj
 
 ; KEYBOARD_MOUSE
 ?CleanupEventArray@@YAXH@Z
@@ -316,7 +316,7 @@ printf
 ?ConvertModifiers@@YAEI@Z
 ?ConvertModifiersLR@@YAIE@Z
 ?ConvertMouseButton@Line@@SAHPAD_N1@Z
-?DisguiseWinAltIfNeeded@@YAXE_N@Z
+?DisguiseWinAltIfNeeded@@YAXE@Z  ; keyboard_mouse.obj
 ?DoKeyDelay@@YAXH@Z
 ?DoMouseDelay@@YAXXZ
 
@@ -365,9 +365,11 @@ printf
 ?init_genrand@@YAXK@Z
 
 ; SCRIPT
+?Disable@ScriptTimer@@QAEXXZ
 ??0ScriptTimer@@QAE@PAVLabel@@@Z
 ??2ScriptTimer@@SAPAXI@Z
 ?ChangePauseState@Line@@QAE?AW4ResultType@@W4ToggleValueType@@_N@Z
+?PauseUnderlyingThread@Line@@SAX_N@Z  ; script.obj
 
 ?ConvertBlockInput@Line@@SA?AW4ToggleValueType@@PAD@Z
 ?ConvertControlCmd@Line@@SA?AW4ControlCmds@@PAD@Z
@@ -439,6 +441,8 @@ printf
 ?BIV_IconTip@@YAKPAD0@Z
 ?BIV_IPAddress@@YAKPAD0@Z  ; script_autoit.obj
 ?BIV_IsAdmin@@YAKPAD0@Z  ; script_autoit.obj
+?BIV_IsPaused@@YAKPAD0@Z
+?BIV_IsCritical@@YAKPAD0@Z
 ?BIV_IsSuspended@@YAKPAD0@Z
 ?BIV_KeyDelay@@YAKPAD0@Z
 ?BIV_Language@@YAKPAD0@Z
@@ -589,8 +593,10 @@ EnterCriticalSection@4
 ?BIF_GetKeyState@@YAXAAUExprTokenType@@QAPAU1@H@Z
 
 ?BIF_IsLabel@@YAXAAUExprTokenType@@QAPAU1@H@Z
+?BIF_IsFunc@@YAXAAUExprTokenType@@QAPAU1@H@Z
 ?BIF_OnMessage@@YAXAAUExprTokenType@@QAPAU1@H@Z
 
+?global_maximize_interruptibility@@YAXAAUglobal_struct@@@Z  ; script.obj
 ?RegisterCallbackCStub@@YGIPAIPAD@Z  ; This is perhaps a bit to large to be put with "Call" other small functions that it calls.
 ?BIF_RegisterCallback@@YAXAAUExprTokenType@@QAPAU1@H@Z
 
@@ -775,7 +781,7 @@ qmathTan@8
 ?ControlUpdateCurrentTab@GuiType@@QAEXAAUGuiControlType@@_N@Z
 ?Create@GuiType@@QAE?AW4ResultType@@XZ
 ?Destroy@GuiType@@SA?AW4ResultType@@I@Z
-?DestroyIconsIfUnused@GuiType@@SAXPAUHICON__@@@Z
+?DestroyIconIfUnused@GuiType@@SAXPAUHICON__@@@Z
 ?Escape@GuiType@@QAE?AW4ResultType@@XZ
 ?Event@GuiType@@QAEXIIGI@Z
 ?FindControl@GuiType@@QAEIPAD@Z
@@ -1350,7 +1356,6 @@ _XcptFilter
 _write
 $I10_OUTPUT
 _ltoa
-_ui64toa
 
 ; ole32.lib(ole32.dll)
 CoCreateInstance@20
@@ -1395,7 +1400,8 @@ CreatePopupMenu@0
 CreateWindowExA@48
 DefDlgProcA@16
 DefWindowProcA@16
-DeleteMenu@12
+RemoveMenu@12  ; user32.lib(USER32.dll)
+; DeleteMenu@12
 DestroyIcon@4
 DestroyMenu@4
 DestroyWindow@4
@@ -1607,6 +1613,7 @@ WSAStartup@8
 ?IsWin98@OS_Version@@QAE_NXZ
 ?IsWinNT@OS_Version@@QAE_NXZ
 ?IsWinVista@OS_Version@@QAE_NXZ
+?IsWinVistaOrLater@OS_Version@@QAE_NXZ
 ?IsWinXP@OS_Version@@QAE_NXZ
 ?IsWin98orLater@OS_Version@@QAE_NXZ
 ?IsWin9x@OS_Version@@QAE_NXZ
@@ -1622,6 +1629,12 @@ WSAStartup@8
 ?ArgIsVar@Line@@SAEEH@Z
 ?AutoExecSectionTimeout@@YGXPAUHWND__@@IIK@Z
 ?AutoExecSection@Script@@QAE?AW4ResultType@@XZ
+
+WinMain@16
+?CreateWindows@Script@@QAE?AW4ResultType@@XZ
+?Init@Script@@QAE?AW4ResultType@@AAUglobal_struct@@PAD_N@Z  ; script.obj
+?Init@OS_Version@@QAEXXZ
+?RefreshInterruptibility@@YGXPAUHWND__@@IIK@Z  ; application.obj
 
 ?SetWorkingDir@@YAXPAD@Z
 ?LoadFromFile@Script@@QAEI_N@Z  ; script.obj
@@ -1671,11 +1684,6 @@ WSAStartup@8
 ?DefineFunc@Script@@QAE?AW4ResultType@@PADQAPAVVar@@@Z
 ??2Func@@SAPAXI@Z
 ??0Func@@QAE@PAD_N@Z
-
-WinMain@16
-?CreateWindows@Script@@QAE?AW4ResultType@@XZ
-?Init@Script@@QAE?AW4ResultType@@PAD_N@Z
-?Init@OS_Version@@QAEXXZ
 
 ??0Script@@QAE@XZ  ; Constructor (always ?0)
 ??1Script@@QAE@XZ  ; Destructor (always ?1)

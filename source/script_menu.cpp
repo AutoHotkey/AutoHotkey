@@ -694,6 +694,7 @@ ResultType UserMenu::DeleteAllItems()
 	{
 		menu_item_to_delete = mi;
 		mi = mi->mNextMenuItem;
+		RemoveItemIcon(menu_item_to_delete); // L26: Free icon or bitmap!
 		if (menu_item_to_delete->mName != Var::sEmptyString)
 			delete menu_item_to_delete->mName; // Since it was separately allocated.
 		delete menu_item_to_delete;
@@ -1434,37 +1435,55 @@ ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, char *aFilename, int a
 	if (!*aFilename || (*aFilename == '*' && !aFilename[1]))
 		return RemoveItemIcon(aMenuItem);
 
-	// TODO: Determine whether this is necessary on Vista. Would it be possible to use a PNG as an icon?
-	//		 Consider feasibility of allowing bitmaps in owner-drawn menus on Windows < Vista. For maximum accuracy, icons should be kept as icons (e.g. for monochrome icons with XOR masks).
-	if (aIconNumber == 0)
-		aIconNumber = 1; // Must be != 0 to tell LoadPicture that "icon must be loaded, never a bitmap".
+	// L29: The bitmap/icon returned by LoadPicture is converted to the appropriate format automatically,
+	// so the following is no longer necessary:
+	//if (aIconNumber == 0)
+	//	aIconNumber = 1; // Must be != 0 to tell LoadPicture that "icon must be loaded, never a bitmap".
 
 	int image_type;
 	HICON new_icon;
-	// Always load as icon, even if we will be converting it to a 32-bit bitmap.
 	// Currently height is always -1 and cannot be overriden. -1 means maintain aspect ratio, usually 1:1 for icons.
 	if ( !(new_icon = (HICON)LoadPicture(aFilename, aWidth, -1, image_type, aIconNumber, false)) )
 		return FAIL;
 
-	ResultType result = OK;
+	HBITMAP new_copy;
 
-	if (g_os.IsWinVista())
+	if (g_os.IsWinVistaOrLater())
 	{
+		if (image_type == IMAGE_ICON) // Convert to 32-bit bitmap:
+		{
+			new_copy = IconToBitmap32(new_icon, true);
+			// Even if conversion failed, we have no further use for the icon:
+			DestroyIcon(new_icon);
+			if (!new_copy)
+				return FAIL;
+			new_icon = (HICON)new_copy;
+		}
+
 		if (aMenuItem->mBitmap) // Delete previous bitmap.
 			DeleteObject(aMenuItem->mBitmap);
-
-		aMenuItem->mBitmap = IconToBitmap32(new_icon, true);
-
-		// Even if conversion failed, we have no further use for the icon:
-		DestroyIcon(new_icon);
 	}
 	else
 	{
+		if (image_type == IMAGE_BITMAP) // Convert to icon:
+		{
+			ICONINFO iconinfo;
+			iconinfo.fIcon = TRUE;
+			iconinfo.hbmMask = (HBITMAP)new_icon;
+			iconinfo.hbmColor = (HBITMAP)new_icon;
+			new_copy = (HBITMAP)CreateIconIndirect(&iconinfo);
+			// Even if conversion failed, we have no further use for the bitmap:
+			DeleteObject((HBITMAP)new_icon);
+			if (!new_copy)
+				return FAIL;
+			new_icon = (HICON)new_copy;
+		}
+
 		if (aMenuItem->mIcon) // Delete previous icon.
 			DestroyIcon(aMenuItem->mIcon);
-
-		aMenuItem->mIcon = new_icon;
 	}
+	// Also sets mBitmap via union:
+	aMenuItem->mIcon = new_icon;
 
 	if (mMenu)
 		ApplyItemIcon(aMenuItem);
@@ -1481,7 +1500,7 @@ ResultType UserMenu::ApplyItemIcon(UserMenuItem *aMenuItem)
 		item_info.cbSize = sizeof(MENUITEMINFO);
 		item_info.fMask = MIIM_BITMAP;
 		// Set HBMMENU_CALLBACK or 32-bit bitmap as appropriate.
-		item_info.hbmpItem = g_os.IsWinVista() ? aMenuItem->mBitmap : HBMMENU_CALLBACK;
+		item_info.hbmpItem = g_os.IsWinVistaOrLater() ? aMenuItem->mBitmap : HBMMENU_CALLBACK;
 		SetMenuItemInfo(mMenu, aMenuItem_ID, aMenuItem_MF_BY, &item_info);
 	}
 	return OK;
@@ -1497,10 +1516,10 @@ ResultType UserMenu::RemoveItemIcon(UserMenuItem *aMenuItem)
 			item_info.cbSize = sizeof(MENUITEMINFO);
 			item_info.fMask = MIIM_BITMAP;
 			item_info.hbmpItem = NULL;
-			// If g_os.IsWinVista(), this removes the bitmap we set. Otherwise it removes HBMMENU_CALLBACK, therefore disabling owner-drawing.
+			// If g_os.IsWinVistaOrLater(), this removes the bitmap we set. Otherwise it removes HBMMENU_CALLBACK, therefore disabling owner-drawing.
 			SetMenuItemInfo(mMenu, aMenuItem_ID, aMenuItem_MF_BY, &item_info);
 		}
-		if (g_os.IsWinVista()) // Free the appropriate union member.
+		if (g_os.IsWinVistaOrLater()) // Free the appropriate union member.
 			DeleteObject(aMenuItem->mBitmap);
 		else
 			DestroyIcon(aMenuItem->mIcon);

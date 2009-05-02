@@ -2109,7 +2109,7 @@ Hotkey *Hotkey::FindHotkeyContainingModLR(modLR_type aModifiersLR) // , HotkeyID
 //Hotkey *Hotkey::FindHotkeyWithThisModifier(vk_type aVK, sc_type aSC)
 //// Returns the address of the hotkey if found, NULL otherwise.
 //// Answers the question: What is the first hotkey with mModifierVK or mModifierSC equal to those given?
-//// A non-zero vk param will take precendence over any non-zero value for sc.
+//// A non-zero vk param will take precedence over any non-zero value for sc.
 //{
 //	if (!aVK & !aSC)
 //		return NULL;
