@@ -680,10 +680,12 @@ qmathTan@8
 
 ?FormatTime@Line@@AAE?AW4ResultType@@PAD0@Z
 ?GetAHKInstallDir@@YAKPAD@Z
-?GetJumpTarget@Line@@QAEPAVLabel@@_N@Z  ; script2.obj
 ?GetKeyJoyState@Line@@AAE?AW4ResultType@@PAD0@Z
 ?GetNextTreeItem@@YAPAU_TREEITEM@@PAUHWND__@@PAU1@@Z
 ?HandleMenuItem@@YA_NPAUHWND__@@GI@Z
+
+?GetJumpTarget@Line@@QAEPAVLabel@@_N@Z  ; script2.obj
+?IsOutsideAnyFunctionBody@Line@@QAEHXZ  ; script2.obj
 
 ?InputBox@@YA?AW4ResultType@@PAVVar@@PAD1_NHHHHN1@Z
 ?InputBoxProc@@YGHPAUHWND__@@IIJ@Z
@@ -1645,7 +1647,7 @@ WinMain@16
 
 ?ParseAndAddLine@Script@@AAE?AW4ResultType@@PADEE000I@Z
 ?AddLine@Script@@AAE?AW4ResultType@@EQAPADE0@Z
-?CloseAndReturn@Script@@AAE?AW4ResultType@@PAU_iobuf@@PAEW42@@Z
+?CloseAndReturnFailFunc@Script@@AAE?AW4ResultType@@PAU_iobuf@@@Z  ; script.obj
 
 ?LineError@Line@@QAE?AW4ResultType@@PADW42@0@Z
 ?ScriptError@Script@@QAE?AW4ResultType@@PAD0@Z

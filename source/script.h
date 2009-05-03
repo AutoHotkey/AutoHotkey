@@ -2370,10 +2370,12 @@ private:
 	NOTIFYICONDATA mNIC; // For ease of adding and deleting our tray icon.
 
 #ifdef AUTOHOTKEYSC
-	ResultType CloseAndReturn(HS_EXEArc_Read *fp, UCHAR *aBuf, ResultType return_value);
+	#define CloseAndReturnFail(fp, aBuf) CloseAndReturnFailFunc(fp, aBuf)
+	ResultType CloseAndReturnFailFunc(HS_EXEArc_Read *fp, UCHAR *aBuf);
 	size_t GetLine(char *aBuf, int aMaxCharsToRead, int aInContinuationSection, UCHAR *&aMemFile);
 #else
-	ResultType CloseAndReturn(FILE *fp, UCHAR *aBuf, ResultType return_value);
+	#define CloseAndReturnFail(fp, aBuf) CloseAndReturnFailFunc(fp)
+	ResultType CloseAndReturnFailFunc(FILE *fp);
 	size_t GetLine(char *aBuf, int aMaxCharsToRead, int aInContinuationSection, FILE *fp);
 #endif
 	ResultType IsDirective(char *aBuf);

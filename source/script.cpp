@@ -1305,7 +1305,7 @@ ResultType Script::LoadIncludedFile(char *aFileSpec, bool aAllowDuplicateInclude
 		// tested).
 		if (!strnicmp(buf, "#CommentFlag", 12)) // Have IsDirective() process this now (it will also process it again later, which is harmless).
 			if (IsDirective(buf) == FAIL) // IsDirective() already displayed the error.
-				return CloseAndReturn(fp, script_buf, FAIL);
+				return CloseAndReturnFail(fp, script_buf);
 
 		// Read in the next line (if that next line is the start of a continuation secttion, append
 		// it to the line currently being processed:
@@ -1517,7 +1517,7 @@ ResultType Script::LoadIncludedFile(char *aFileSpec, bool aAllowDuplicateInclude
 						if (buf_length + next_buf_length >= LINE_SIZE - 1) // -1 to account for the extra space added below.
 						{
 							ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, next_buf);
-							return CloseAndReturn(fp, script_buf, FAIL);
+							return CloseAndReturnFail(fp, script_buf);
 						}
 						if (*next_buf != ',') // Insert space before expression operators so that built/combined expression works correctly (some operators like 'and', 'or', '.', and '?' currently require spaces on either side) and also for readability of ListLines.
 							buf[buf_length++] = ' ';
@@ -1629,7 +1629,7 @@ ResultType Script::LoadIncludedFile(char *aFileSpec, bool aAllowDuplicateInclude
 			if (next_buf_length == -1) // Compare directly to -1 since length is unsigned.
 			{
 				ScriptError(ERR_MISSING_CLOSE_PAREN, buf);
-				return CloseAndReturn(fp, script_buf, FAIL);
+				return CloseAndReturnFail(fp, script_buf);
 			}
 			if (next_buf_length == -2) // v1.0.45.03: Special flag that means "this is a commented-out line to be
 				continue;              // entirely omitted from the continuation section." Compare directly to -2 since length is unsigned.
@@ -1696,7 +1696,7 @@ ResultType Script::LoadIncludedFile(char *aFileSpec, bool aAllowDuplicateInclude
 			if (buf_length + next_buf_length + suffix_length >= LINE_SIZE)
 			{
 				ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, cp);
-				return CloseAndReturn(fp, script_buf, FAIL);
+				return CloseAndReturnFail(fp, script_buf);
 			}
 
 			++continuation_line_count;
@@ -1762,18 +1762,18 @@ ResultType Script::LoadIncludedFile(char *aFileSpec, bool aAllowDuplicateInclude
 					// script readability and maintainability -- it's currently not allowed because of
 					// the practice of maintaining the func_exception_var list on our stack:
 					ScriptError("Functions cannot contain functions.", pending_function);
-					return CloseAndReturn(fp, script_buf, FAIL);
+					return CloseAndReturnFail(fp, script_buf);
 				}
 				if (!DefineFunc(pending_function, func_exception_var))
-					return CloseAndReturn(fp, script_buf, FAIL);
+					return CloseAndReturnFail(fp, script_buf);
 				if (pending_function_has_brace) // v1.0.41: Support one-true-brace for function def, e.g. fn() {
 					if (!AddLine(ACT_BLOCK_BEGIN))
-						return CloseAndReturn(fp, script_buf, FAIL);
+						return CloseAndReturnFail(fp, script_buf);
 			}
 			else // It's a function call on a line by itself, such as fn(x). It can't be if(..) because another section checked that.
 			{
 				if (!ParseAndAddLine(pending_function, ACT_EXPRESSION))
-					return CloseAndReturn(fp, script_buf, FAIL);
+					return CloseAndReturnFail(fp, script_buf);
 				mCurrLine = NULL; // Prevents showing misleading vicinity lines if the line after a function call is a syntax error.
 			}
 			mCombinedLineNumber = saved_line_number;
@@ -1923,13 +1923,13 @@ examine_line:
 				// safely exist inside a function body and since the body is a block, other validation
 				// ensures that a Gosub or Goto can't jump to it from outside the function.
 				ScriptError("Hotkeys/hotstrings are not allowed inside functions.", buf);
-				return CloseAndReturn(fp, script_buf, FAIL);
+				return CloseAndReturnFail(fp, script_buf);
 			}
 			if (mLastLine && mLastLine->mActionType == ACT_IFWINACTIVE)
 			{
 				mCurrLine = mLastLine; // To show vicinity lines.
 				ScriptError("IfWin should be #IfWin.", buf);
-				return CloseAndReturn(fp, script_buf, FAIL);
+				return CloseAndReturnFail(fp, script_buf);
 			}
 			*hotkey_flag = '\0'; // Terminate so that buf is now the label itself.
 			hotkey_flag += HOTKEY_FLAG_LENGTH;  // Now hotkey_flag is the hotkey's action, if any.
@@ -2033,7 +2033,7 @@ examine_line:
 			{\
 				mNoHotkeyLabels = false;\
 				if (!AddLine(ACT_RETURN, NULL, UCHAR_MAX))\
-					return CloseAndReturn(fp, script_buf, FAIL);\
+					return CloseAndReturnFail(fp, script_buf);\
 				mCurrLine = NULL;\
 			}
 			CHECK_mNoHotkeyLabels
@@ -2043,7 +2043,7 @@ examine_line:
 			// ::abc::
 			// :c:abc::
 			if (!AddLabel(buf, true)) // Always add a label before adding the first line of its section.
-				return CloseAndReturn(fp, script_buf, FAIL);
+				return CloseAndReturnFail(fp, script_buf);
 			hook_action = 0; // Set default.
 			if (*hotkey_flag) // This hotkey's action is on the same line as its label.
 			{
@@ -2053,12 +2053,12 @@ examine_line:
 					// via Goto/Gosub:
 					if (   !(hook_action = Hotkey::ConvertAltTab(hotkey_flag, false))   )
 						if (!ParseAndAddLine(hotkey_flag, IsFunction(hotkey_flag) ? ACT_EXPRESSION : ACT_INVALID)) // It can't be a function definition vs. call since it's a single-line hotkey.
-							return CloseAndReturn(fp, script_buf, FAIL);
+							return CloseAndReturnFail(fp, script_buf);
 				// Also add a Return that's implicit for a single-line hotkey.  This is also
 				// done for auto-replace hotstrings in case gosub/goto is ever used to jump
 				// to their labels:
 				if (!AddLine(ACT_RETURN))
-					return CloseAndReturn(fp, script_buf, FAIL);
+					return CloseAndReturnFail(fp, script_buf);
 			}
 
 			if (hotstring_start)
@@ -2070,7 +2070,7 @@ examine_line:
 					// best to report it this way in case the hotstring is inside a #Include file,
 					// so that the correct file name and approximate line number are shown:
 					ScriptError("This hotstring is missing its abbreviation.", buf); // Display buf vs. hotkey_flag in case the line is simply "::::".
-					return CloseAndReturn(fp, script_buf, FAIL);
+					return CloseAndReturnFail(fp, script_buf);
 				}
 				// In the case of hotstrings, hotstring_start is the beginning of the hotstring itself,
 				// i.e. the character after the second colon.  hotstring_options is NULL if no options,
@@ -2083,7 +2083,7 @@ examine_line:
 				// hotstrings) because of all the hotstring options.
 				if (!Hotstring::AddHotstring(mLastLabel, hotstring_options ? hotstring_options : ""
 					, hotstring_start, hotkey_flag, has_continuation_section))
-					return CloseAndReturn(fp, script_buf, FAIL);
+					return CloseAndReturnFail(fp, script_buf);
 			}
 			else // It's a hotkey vs. hotstring.
 			{
@@ -2105,18 +2105,18 @@ examine_line:
 						{
 							mCurrLine = NULL;  // Prevents showing unhelpful vicinity lines.
 							ScriptError("Duplicate hotkey.", buf);
-							return CloseAndReturn(fp, script_buf, FAIL);
+							return CloseAndReturnFail(fp, script_buf);
 						}
 						if (!hk->AddVariant(mLastLabel, suffix_has_tilde))
 						{
 							ScriptError(ERR_OUTOFMEM, buf);
-							return CloseAndReturn(fp, script_buf, FAIL);
+							return CloseAndReturnFail(fp, script_buf);
 						}
 					}
 				}
 				else // No parent hotkey yet, so create it.
 					if (   !(hk = Hotkey::AddHotkey(mLastLabel, hook_action, NULL, suffix_has_tilde, false))   )
-						return CloseAndReturn(fp, script_buf, FAIL); // It already displayed the error.
+						return CloseAndReturnFail(fp, script_buf); // It already displayed the error.
 			}
 			goto continue_main_loop; // In lieu of "continue", for performance.
 		} // if (is_label = ...)
@@ -2127,7 +2127,7 @@ examine_line:
 			if (buf_length == 1) // v1.0.41.01: Properly handle the fact that this line consists of only a colon.
 			{
 				ScriptError(ERR_UNRECOGNIZED_ACTION, buf);
-				return CloseAndReturn(fp, script_buf, FAIL);
+				return CloseAndReturnFail(fp, script_buf);
 			}
 			// Labels (except hotkeys) must contain no whitespace, delimiters, or escape-chars.
 			// This is to avoid problems where a legitimate action-line ends in a colon,
@@ -2160,7 +2160,7 @@ examine_line:
 				buf[--buf_length] = '\0';  // Remove the trailing colon.
 				rtrim(buf, buf_length); // Has already been ltrimmed.
 				if (!AddLabel(buf, false))
-					return CloseAndReturn(fp, script_buf, FAIL);
+					return CloseAndReturnFail(fp, script_buf);
 				goto continue_main_loop; // In lieu of "continue", for performance.
 			}
 		}
@@ -2179,7 +2179,7 @@ examine_line:
 				mCombinedLineNumber = saved_line_number;
 				goto continue_main_loop; // In lieu of "continue", for performance.
 			case FAIL: // IsDirective() already displayed the error.
-				return CloseAndReturn(fp, script_buf, FAIL);
+				return CloseAndReturnFail(fp, script_buf);
 			//case CONDITION_FALSE: Do nothing; let processing below handle it.
 			}
 		}
@@ -2192,7 +2192,7 @@ examine_line:
 		if (*buf == '}')
 		{
 			if (!AddLine(ACT_BLOCK_END))
-				return CloseAndReturn(fp, script_buf, FAIL);
+				return CloseAndReturnFail(fp, script_buf);
 			// The following allows the next stage to see "else" or "else {" if it's present:
 			if (   !*(buf = omit_leading_whitespace(buf + 1))   )
 				goto continue_main_loop; // It's just a naked "}", so no more processing needed for this line.
@@ -2220,19 +2220,19 @@ examine_line:
 			if (*buf == '{')
 			{
 				if (!AddLine(ACT_BLOCK_BEGIN))
-					return CloseAndReturn(fp, script_buf, FAIL);
+					return CloseAndReturnFail(fp, script_buf);
 				if (   *(action_end = omit_leading_whitespace(buf + 1))   )  // There is an action to the right of the '{'.
 				{
 					mCurrLine = NULL;  // To signify that we're in transition, trying to load a new one.
 					if (!ParseAndAddLine(action_end, IsFunction(action_end) ? ACT_EXPRESSION : ACT_INVALID)) // If it's a function, it must be a call vs. a definition because a function can't be defined on the same line as an open-brace.
-						return CloseAndReturn(fp, script_buf, FAIL);
+						return CloseAndReturnFail(fp, script_buf);
 				}
 				// Otherwise, there was either no same-line action or the same-line action was successfully added,
 				// so do nothing.
 			}
 			else
 				if (!ParseAndAddLine(buf))
-					return CloseAndReturn(fp, script_buf, FAIL);
+					return CloseAndReturnFail(fp, script_buf);
 		}
 		else // This line is an ELSE, possibly with another command immediately after it (on the same line).
 		{
@@ -2241,13 +2241,13 @@ examine_line:
 			// don't want because we wouldn't have access to the corresponding literal-map to
 			// figure out the proper use of escaped characters:
 			if (!AddLine(ACT_ELSE))
-				return CloseAndReturn(fp, script_buf, FAIL);
+				return CloseAndReturnFail(fp, script_buf);
 			mCurrLine = NULL;  // To signify that we're in transition, trying to load a new one.
 			action_end = omit_leading_whitespace(action_end); // Now action_end is the word after the ELSE.
 			if (*action_end == g_delimiter) // Allow "else, action"
 				action_end = omit_leading_whitespace(action_end + 1);
 			if (*action_end && !ParseAndAddLine(action_end, IsFunction(action_end) ? ACT_EXPRESSION : ACT_INVALID)) // If it's a function, it must be a call vs. a definition because a function can't be defined on the same line as an Else.
-				return CloseAndReturn(fp, script_buf, FAIL);
+				return CloseAndReturnFail(fp, script_buf);
 			// Otherwise, there was either no same-line action or the same-line action was successfully added,
 			// so do nothing.
 		}
@@ -2331,7 +2331,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 				mCurrLine = NULL; // v1.0.40.04: Prevents showing misleading vicinity lines for a syntax-error such as %::%
 				sprintf(buf, "{Blind}%s%s{%s DownTemp}", extra_event, remap_dest_modifiers, remap_dest); // v1.0.44.05: DownTemp vs. Down. See Send's DownTemp handler for details.
 				if (!AddLine(ACT_SEND, &buf, 1, NULL)) // v1.0.40.04: Check for failure due to bad remaps such as %::%.
-					return CloseAndReturn(fp, script_buf, FAIL);
+					return CloseAndReturnFail(fp, script_buf);
 				AddLine(ACT_RETURN);
 				// Add key-up hotkey label, e.g. *LButton up::
 				buf_length = sprintf(buf, "*%s up::", remap_source); // Should be no risk of buffer overflow due to prior validation.
@@ -2362,7 +2362,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		saved_line_number = mCombinedLineNumber;
 		mCombinedLineNumber = pending_function_line_number; // Done so that any syntax errors that occur during the calls below will report the correct line number.
 		if (!ParseAndAddLine(pending_function, ACT_EXPRESSION)) // Must be function call vs. definition since otherwise the above would have detected the opening brace beneath it and already cleared pending_function.
-			return CloseAndReturn(fp, script_buf, FAIL);
+			return CloseAndReturnFail(fp, script_buf);
 		mCombinedLineNumber = saved_line_number;
 	}
 
@@ -2379,18 +2379,17 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 
 // Small inline to make LoadIncludedFile() code cleaner.
 #ifdef AUTOHOTKEYSC
-inline ResultType Script::CloseAndReturn(HS_EXEArc_Read *fp, UCHAR *aBuf, ResultType aReturnValue)
+inline ResultType Script::CloseAndReturnFailFunc(HS_EXEArc_Read *fp, UCHAR *aBuf)
 {
 	free(aBuf);
 	fp->Close();
-	return aReturnValue;
+	return FAIL;
 }
 #else
-inline ResultType Script::CloseAndReturn(FILE *fp, UCHAR *aBuf, ResultType aReturnValue)
+inline ResultType Script::CloseAndReturnFailFunc(FILE *fp)
 {
-	// aBuf is unused in this case.
 	fclose(fp);
-	return aReturnValue;
+	return FAIL;
 }
 #endif
 
@@ -12812,18 +12811,20 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		if (   (toggle = ConvertOnOff(ARG1, NEUTRAL)) == NEUTRAL   )
 			return ShowMainWindow(MAIN_MODE_LINES, false); // Pass "unrestricted" when the command is explicitly used in the script.
 		// Otherwise:
-		if (g.ListLinesIsEnabled != (toggle == TOGGLED_ON)) // It's not already set to the specified value.
+		if (g.ListLinesIsEnabled)
 		{
-			g.ListLinesIsEnabled = (toggle == TOGGLED_ON);
-			// Remove "ListLines On/Off" from the line history to avoid cluttering it, especially in cases
-			// where a timer fires frequently (even if such a timer used "ListLines Off" as its top line,
-			// that line iself would appear very frequently in the line history).
+			// Since ExecUntil() just logged this ListLines On/Off in the line history, remove it to avoid
+			// cluttering the line history with distracting lines that the user probably wouldn't want to see.
+			// Might be especially useful in cases where a timer fires frequently (even if such a timer
+			// used "ListLines Off" as its top line, that line itself would appear very frequently in the line
+			// history).  v1.0.48.03: Fixed so that the below executes only when ListLines was previously "On".
 			if (sLogNext > 0)
 				--sLogNext;
 			else
 				sLogNext = LINE_LOG_SIZE - 1;
 			sLog[sLogNext] = NULL; // Without this, one of the lines in the history would be invalid due to the circular nature of the line history array, which would also cause the line history to show the wrong chronlogical order in some cases.
 		}
+		g.ListLinesIsEnabled = (toggle == TOGGLED_ON);
 		return OK;
 	case ACT_LISTVARS:
 		return ShowMainWindow(MAIN_MODE_VARS, false); // Pass "unrestricted" when the command is explicitly used in the script.

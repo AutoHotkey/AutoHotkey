@@ -4500,6 +4500,12 @@ void ResetKeyTypeState(key_type &key)
 	key.it_put_shift_down = false;
 	key.down_performed_action = false;
 	key.was_just_used = 0;
+	key.hotkey_to_fire_upon_release = HOTKEY_ID_INVALID;
+	// ABOVE line was added in v1.0.48.03 to fix various ways in which the hook didn't receive the key-down
+	// hotkey that goes with this key-up, resulting in hotkey_to_fire_upon_release being left at its initial
+	// value of zero (which is a valid hotkey ID).  Examples include:
+	// The hotkey command being used to create a key-up hotkey while that key is being held down.
+	// The script being reloaded or (re)started while the key is being held down.
 }
 
 
