@@ -9537,7 +9537,7 @@ ResultType Line::FileGetTime(char *aFilespec, char aWhichTime)
 	WIN32_FIND_DATA found_file;
 	HANDLE file_search = FindFirstFile(aFilespec, &found_file);
 	if (file_search == INVALID_HANDLE_VALUE)
-		return OK;  // Let ErrorLevel Tell the story.
+		return OK;  // Let ErrorLevel tell the story.
 	FindClose(file_search);
 
 	FILETIME local_file_time;
@@ -9751,18 +9751,17 @@ int Line::FileSetTime(char *aYYYYMMDD, char *aFilePattern, char aWhichTime
 
 ResultType Line::FileGetSize(char *aFilespec, char *aGranularity)
 {
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default
 	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.
 
 	if (!aFilespec || !*aFilespec)
-		return OK;  // Let ErrorLevel indicate an error, since this is probably not what the user intended.
+		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);  // Let ErrorLevel indicate an error, since this is probably not what the user intended.
 
-	// Don't use CreateFile() & FileGetSize() size they will fail to work on a file that's in use.
+	// Don't use CreateFile() & FileGetSize() because they will fail to work on a file that's in use.
 	// Research indicates that this method has no disadvantages compared to the other method.
 	WIN32_FIND_DATA found_file;
 	HANDLE file_search = FindFirstFile(aFilespec, &found_file);
 	if (file_search == INVALID_HANDLE_VALUE)
-		return OK;  // Let ErrorLevel Tell the story.
+		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);  // Let ErrorLevel tell the story.
 	FindClose(file_search);
 
 	unsigned __int64 size = (found_file.nFileSizeHigh * (unsigned __int64)MAXDWORD) + found_file.nFileSizeLow;

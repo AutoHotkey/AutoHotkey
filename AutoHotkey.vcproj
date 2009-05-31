@@ -84,6 +84,7 @@
 			/>
 			<Tool
 				Name="VCManifestTool"
+				AdditionalManifestFiles="source\resources\AutoHotkey.exe.manifest"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -179,6 +180,7 @@
 			/>
 			<Tool
 				Name="VCManifestTool"
+				AdditionalManifestFiles="source\resources\AutoHotkey.exe.manifest"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -275,6 +277,7 @@
 			/>
 			<Tool
 				Name="VCManifestTool"
+				AdditionalManifestFiles="source\resources\AutoHotkey.exe.manifest"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -372,6 +375,7 @@
 			/>
 			<Tool
 				Name="VCManifestTool"
+				AdditionalManifestFiles="source\resources\AutoHotkey.exe.manifest"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"

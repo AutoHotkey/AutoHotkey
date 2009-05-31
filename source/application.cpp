@@ -272,10 +272,14 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				if (!do_special_msg_filter && (focused_control = GetFocus()))
 				{
 					GetClassName(focused_control, wnd_class_name, sizeof(wnd_class_name));
-					do_special_msg_filter = !stricmp(wnd_class_name, "SysTreeView32"); // A TreeView owned by our thread has focus (includes FileSelectFolder's TreeView).
+					do_special_msg_filter = !stricmp(wnd_class_name, "SysTreeView32") // A TreeView owned by our thread has focus (includes FileSelectFolder's TreeView).
+						|| !stricmp(wnd_class_name, "SysListView32");
 				}
 				if (do_special_msg_filter)
 				{
+					// v1.0.48.03: Below now applies to SysListView32 because otherwise a timer that runs
+					// while the user is dragging a rectangle around a selection (Marquee) can cause the
+					// mouse button to appear to be stuck down down after the user releases it.
 					// v1.0.44.12: Below now applies to FileSelectFile dialogs too (see reason above).
 					// v1.0.44.11: Since one of our thread's TreeViews has focus (even in FileSelectFolder), this
 					// section is a work-around for the fact that the TreeView's message pump (somewhere beneath
