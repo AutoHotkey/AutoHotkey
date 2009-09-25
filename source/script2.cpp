@@ -2799,6 +2799,30 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 	WPARAM wparam = (mArgc > 1 && mArg[1].text[0] == '"') ? (WPARAM)sArgDeref[1] : ArgToUInt(2);
 	LPARAM lparam = (mArgc > 2 && mArg[2].text[0] == '"') ? (LPARAM)sArgDeref[2] : ArgToUInt(3);
 
+	// Fixed for v1.0.48.04: Make copies of the wParam and lParam variables (if eligible for updating) prior
+	// to sending the message in case the message triggers a callback or OnMessage function, which would be
+	// likely to change the contents of the mArg array before we're doing using them after the Post/SendMsg.
+	// Seems best to do the above EVEN for PostMessage in case it can ever trigger a SendMessage internally
+	// (I seem to remember that the OS sometimes converts a PostMessage call into a SendMessage if the
+	// origin and destination are the same thread.)
+	// v1.0.43.06: If either wParam or lParam contained the address of a variable, update the mLength
+	// member after sending the message in case the receiver of the message wrote something to the buffer.
+	// This is similar to the way "Str" parameters work in DllCall.
+	Var *var_to_update[2];
+	int i;
+	for (i = 1; i < 3; ++i) // Two iterations: wParam and lParam.
+	{
+		if (mArgc > i) // The arg exists.
+		{
+			ArgStruct &this_arg = mArg[i];
+			var_to_update[i-1] = this_arg.text[0] == '&'  // Must start with '&', so things like 5+&MyVar aren't supported.
+				&& this_arg.deref && !this_arg.deref->is_function
+				&& this_arg.deref->var->Type() == VAR_NORMAL // Check VAR_NORMAL to be extra-certain it can't be the clipboard or a built-in variable (ExpandExpression() probably prevents taking the address of such a variable, but might not stop it from being in the deref array that way).
+				? this_arg.deref->var
+				: NULL;
+		}
+	}
+
 	if (aUseSend)
 	{
 		DWORD dwResult;
@@ -2814,21 +2838,10 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	}
 
-	// v1.0.43.06: If either wParam or lParam contained the address of a variable, update the mLength
-	// member in case the receiver of the message wrote something to the buffer.  This is similar to the
-	// way "Str" parameters work in DllCall.
-	for (int i = 1; i < 3; ++i) // Two iterations: wParam and lParam.
-	{
-		if (mArgc > i) // The arg exists.
-		{
-			ArgStruct &this_arg = mArg[i];
-			if (   this_arg.text[0] == '&'  // Must start with '&', so things like 5+&MyVar aren't supported.
-				&& this_arg.deref && !this_arg.deref->is_function && this_arg.deref->var->Type() == VAR_NORMAL   ) // Check VAR_NORMAL to be extra-certain it can't be the clipboard or a built-in variable (ExpandExpression() probably prevents taking the address of such a variable, but might not stop it from being in the deref array that way).
-				this_arg.deref->var->SetLengthFromContents();
-		}
-	}
+	for (i = 0; i < 2; ++i) // Two iterations: wParam and lParam.
+		if (var_to_update[i])
+			var_to_update[i]->SetLengthFromContents();
 
-	// By design (since this is a power user feature), no ControlDelay is done here.
 	return OK;
 }
 
@@ -8587,7 +8600,7 @@ ResultType Line::FileCreateDir(char *aDirSpec)
 	// If it has a backslash, make sure all its parent directories exist before we attempt
 	// to create this directory:
 	char *last_backslash = strrchr(aDirSpec, '\\');
-	if (last_backslash)
+	if (last_backslash > aDirSpec) // v1.0.48.04: Changed "last_backslash" to "last_backslash > aDirSpec" so that an aDirSpec with a leading \ (but no other backslashes), such as \dir, is supported.
 	{
 		char parent_dir[MAX_PATH];
 		if (strlen(aDirSpec) >= sizeof(parent_dir)) // avoid overflow
@@ -8838,17 +8851,18 @@ ResultType Line::FileAppend(char *aFilespec, char *aBuf, LoopReadFileStruct *aCu
 	bool file_was_already_open = fp;
 
 	bool open_as_binary = (*aFilespec == '*');
-	if (open_as_binary && !*(aFilespec + 1)) // Naked "*" means write to stdout.
-		// Avoid puts() in case it bloats the code in some compilers. i.e. fputs() is already used,
-		// so using it again here shouldn't bloat it:
-		return g_ErrorLevel->Assign(fputs(aBuf, stdout) ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE); // fputs() returns 0 on success.
-		
 	if (open_as_binary)
+	{
 		// Do not do this because it's possible for filenames to start with a space
 		// (even though Explorer itself won't let you create them that way):
 		//write_filespec = omit_leading_whitespace(write_filespec + 1);
 		// Instead just do this:
 		++aFilespec;
+		if (!*aFilespec) // Naked "*" means write to stdout.
+			// Avoid puts() in case it bloats the code in some compilers. i.e. fputs() is already used,
+			// so using it again here shouldn't bloat it:
+			return g_ErrorLevel->Assign(fputs(aBuf, stdout) ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE); // fputs() returns 0 on success.
+	}
 	else if (!file_was_already_open) // As of 1.0.25, auto-detect binary if that mode wasn't explicitly specified.
 	{
 		// sArgVar is used for two reasons:
@@ -8884,7 +8898,7 @@ ResultType Line::FileAppend(char *aFilespec, char *aBuf, LoopReadFileStruct *aCu
 		// text mode -- is so rare as to be close to non-existent.  If this behavior
 		// is ever specifically needed, the script can explicitly places some \r\r\n's
 		// in the file and then write it as binary mode.
-		open_as_binary = strstr(aBuf, "\r\n");
+		open_as_binary = strstr(aBuf, "\r\n"); // Performance: The following could be done instead, but seems likely to cause some scripts to write \r\r\n and even \r\r\r\n due to the text having both \n and \r\n in it: char *first_newline = strchr(aBuf, '\n')... open_as_binary = first_newline > aBuf && aBuf[-1] == '\r'
 		// Due to "else if", the above will not turn off binary mode if binary was explicitly specified.
 		// That is useful to write Unix style text files whose lines end in solitary linefeeds.
 	}
@@ -11262,7 +11276,7 @@ VarSizeType BIV_EndChar(char *aBuf, char *aVarName)
 		*aBuf++ = g_script.mEndChar;
 		*aBuf = '\0';
 	}
-	return 1;
+	return g_script.mEndChar ? 1 : 0; // v1.0.48.04: Fixed to support a NULL char, which happens when the hotstring has the "no ending character required" option.
 }
 
 
@@ -12790,7 +12804,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 					// this whole "empty_string_is_not_a_match" section of code executes for most patterns anyway,
 					// so performance seems less of a concern).
 					if (!pcre_fullinfo(aRE, aExtra, PCRE_INFO_OPTIONS, &pcre_options) // Success.
-						&& (pcre_options & PCRE_NEWLINE_ANY)) // See comment above.
+						&& (pcre_options & PCRE_NEWLINE_ANY))
 					{
 						result[result_length++] = '\n'; // This can't overflow because the size calculations in a previous iteration reserved 3 bytes: 1 for this character, 1 for the possible LF that follows CR, and 1 for the terminator.
 						++aStartingOffset; // Skip over this LF because it "belongs to" the CR that preceded it.
@@ -12840,8 +12854,9 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 			goto set_count_and_return; // Goto vs. break to leave aResultToken.marker set to aHaystack and replacement_count set to 0, and let ErrorLevel tell the story.
 		}
 
-		// Otherwise (since above didn't return, break, or continue), a match has been found (i.e. captured_pattern_count > 0;
-		// it should never be 0 in this case because that only happens when offset[] is too small, which it isn't).
+		// Otherwise (since above didn't return or break or continue), a match has been found (i.e.
+		// captured_pattern_count > 0; it should never be 0 in this case because that only happens
+		// when offset[] is too small, which it isn't).
 		++replacement_count;
 		--limit; // It's okay if it goes below -1 because all negatives are treated as "replace all".
 		match_pos = aHaystack + aOffset[0]; // This is the location in aHaystack of the entire-pattern match.
@@ -13022,14 +13037,15 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 
 		// If we're here, a match was found.
 		// Technique and comments from pcredemo.c:
-		// If the previous match was NOT for an empty string, we can just start the next match at the end
+		// If the previous match was NOT an empty string, we can just start the next match at the end
 		// of the previous one.
-		// If the previous match WAS for an empty string, we can't do that, as it would lead to an
+		// If the previous match WAS an empty string, we can't do that, as it would lead to an
 		// infinite loop. Instead, a special call of pcre_exec() is made with the PCRE_NOTEMPTY and
 		// PCRE_ANCHORED flags set. The first of these tells PCRE that an empty string is not a valid match;
 		// other possibilities must be tried. The second flag restricts PCRE to one match attempt at the
-		// initial string position. If this match succeeds, an alternative to the empty string match has been
-		// found, and we can proceed round the loop.
+		// initial string position. If this match succeeds, that means there are two valid matches at the
+		// SAME position: one for the empty string, and other for a non-empty string after it.  BOTH of
+		// these matches are considered valid, and BOTH are eligible for replacement by RegExReplace().
 		//
 		// The following may be one example of this concept:
 		// In the string "xy", replace the pattern "x?" by "z".  The traditional/proper answer (achieved by
@@ -13043,10 +13059,15 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		// 
 		// If this match is "" (length 0), then by definitition we just found a match in normal mode, not
 		// PCRE_NOTEMPTY mode (since that mode isn't capable of finding "").  Thus, empty_string_is_not_a_match
-		// is currently 0.
-		if (aOffset[0] == aOffset[1]) // A match was found but it's "".
-			empty_string_is_not_a_match = PCRE_NOTEMPTY | PCRE_ANCHORED; // Try to find a non-"" match at the same position by switching to an alternate mode and doing another iteration.
-		//else not an empty match, so advance to next candidate section of haystack and resume searching.
+		// is currently 0.  If "" was just found (and replaced), now try to find a second match at the same
+		// position, but one that isn't "". This is done by switching to an alternate mode and doing another
+		// iteration. Otherwise (the match found above wasn't "") advance to next candidate section of haystack
+		// and resume searching.
+		// v1.0.48.04: Fixed line below to reset to 0 (if appropriate) so that it doesn't get stuck in
+		// PCRE_NOTEMPTY-mode for one extra iteration.  Otherwise there are too few replacements (4 vs. 5)
+		// in examples like:
+		//    RegExReplace("ABC", "Z*|A", "x")
+		empty_string_is_not_a_match = (aOffset[0] == aOffset[1]) ? PCRE_NOTEMPTY|PCRE_ANCHORED : 0;
 		aStartingOffset = aOffset[1]; // In either case, set starting offset to the candidate for the next search.
 	} // for()
 
@@ -15945,7 +15966,7 @@ __int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPureInteger)
 	{
 		case SYM_INTEGER: return aToken.value_int64; // Fixed in v1.0.45 not to cast to int.
 		case SYM_OPERAND: // Listed near the top for performance.
-			if (aToken.buf) // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
+			if (aToken.buf) // The "buf" of a SYM_OPERAND is non-NULL if points to a pure integer.
 				return *(__int64 *)aToken.buf;
 			//else don't return; continue on to the bottom.
 			break;

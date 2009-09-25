@@ -481,7 +481,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 				}
 				// Since above didn't goto, "result" is not SYM_INTEGER/FLOAT/VAR, and not "".  Therefore, it's
 				// either a pointer to static memory (such as a constant string), or more likely the small buf
-				// we gave to the BIF for storing small strings.  For simplicity assume its the buf, which is
+				// we gave to the BIF for storing small strings.  For simplicity assume it's the buf, which is
 				// volatile and must be made persistent if called for below.
 				result = this_token.marker; // Marker can be used because symbol will never be SYM_VAR in this case.
 				if (make_result_persistent) // At this stage, this means that the above wasn't able to determine its correct value yet.
@@ -1692,7 +1692,7 @@ non_null_circuit_token:
 				goto abort;
 			}
 			if (new_buf_size > LARGE_DEREF_BUF_SIZE)
-				++sLargeDerefBufs; // And if the old deref buf was larger too, this value is decremented later below.
+				++sLargeDerefBufs; // And if the old deref buf was larger too, this value is decremented later below. SET_DEREF_TIMER() is handled by our caller because aDerefBufSize is updated further below, which the caller will see.
 
 			// Copy only that portion of the old buffer that is in front of our portion of the buffer
 			// because we no longer need our portion (except for result.marker if it happens to be
@@ -1869,9 +1869,7 @@ ResultType Line::ExpandArgs(VarSizeType aSpaceNeeded, Var *aArgVar[])
 	// is safe from interrupting threads overwriting its deref buffer.  It's true that a call to a
 	// script function will usually result in MsgSleep(), and thus allow interruptions, but those
 	// interruptions would hit some other deref buffer, not that of our layer.
-	char *our_deref_buf = sDerefBuf; // For detecting whether ExpandExpression() caused a new buffer to be created.
-	size_t our_deref_buf_size = sDerefBufSize;
-	SET_S_DEREF_BUF(NULL, 0);
+	PRIVATIZE_S_DEREF_BUF;
 
 	ResultType result, result_to_return = OK;  // Set default return value.
 	Var *the_only_var_of_this_arg;
@@ -2049,20 +2047,9 @@ end:
 	// automatically).  This is because prior to returning, each recursion layer properly frees any extra deref
 	// buffer it was responsible for creating.  It only has to free at most one such buffer because each layer of
 	// ExpandArgs() on the call-stack can never be blamed for creating more than one extra buffer.
-	if (our_deref_buf)
-	{
-		// Must always restore the original buffer, not keep the new one, because our caller needs
-		// the arg_deref addresses, which point into the original buffer.
-		if (sDerefBuf)
-		{
-			free(sDerefBuf);
-			if (sDerefBufSize > LARGE_DEREF_BUF_SIZE)
-				--sLargeDerefBufs;
-		}
-		SET_S_DEREF_BUF(our_deref_buf, our_deref_buf_size);
-	}
-	//else the original buffer is NULL, so keep any new sDerefBuf that might have been created (should
-	// help avg-case performance).
+	// Must always restore the original buffer (if there was one), not keep the new one, because our
+	// caller needs the arg_deref addresses, which point into the original buffer.
+	DEPRIVATIZE_S_DEREF_BUF;
 
 	// For v1.0.31, this is no done right before returning so that any script function calls
 	// made by our calls to ExpandExpression() will now be done.  There might still be layers
@@ -2084,11 +2071,10 @@ end:
 	//    scenarios, that seems rare.  In addition, the consequences seem to be limited to
 	//    some slight memory inefficiency.
 	// It could be aruged that the timer should only be activated when a hypothetical static
-	// var sLayersthat we maintain here indicates that we're the only layer.  However, if that
+	// var sLayers that we maintain here indicates that we're the only layer.  However, if that
 	// were done and the launch of a script function creates (directly or through thread
 	// interruption, indirectly) a large deref buffer, and that thread is waiting for something
 	// such as WinWait, that large deref buffer would never get freed.
-	#define SET_DEREF_TIMER(aTimeoutValue) g_DerefTimerExists = SetTimer(g_hWnd, TIMER_ID_DEREF, aTimeoutValue, DerefTimeout);
 	if (sDerefBufSize > LARGE_DEREF_BUF_SIZE)
 		SET_DEREF_TIMER(10000) // Reset the timer right before the deref buf is possibly about to become idle.
 

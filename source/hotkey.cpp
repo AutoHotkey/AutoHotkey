@@ -2239,8 +2239,7 @@ ResultType Hotstring::PerformInNewThreadMadeByCaller()
 
 
 void Hotstring::DoReplace(LPARAM alParam)
-// LOWORD(alParam) is the char from the set of EndChars that the user had to press to trigger the hotkey.
-// This is not applicable if mEndCharRequired is false, in which case caller should have passed zero.
+// alParam contains details about how the hotstring was triggered.
 {
 	global_struct &g = *::g; // Reduces code size and may improve performance.
 	// The below buffer allows room for the longest replacement text plus MAX_HOTSTRING_LENGTH for the
@@ -2258,8 +2257,9 @@ void Hotstring::DoReplace(LPARAM alParam)
 		int backspace_count = mStringLength - 1;
 		if (mEndCharRequired)
 			++backspace_count;
-		if (!mEndCharRequired && LOWORD(alParam)) // Added for v1.0.44.09 as a dead key fix (see CollectInput()).
-			--backspace_count;
+		else
+			if (LOWORD(alParam)) // Added for v1.0.44.09 as a dead key fix (see CollectInput()).
+				--backspace_count;
 		for (int i = 0; i < backspace_count; ++i)
 			*start_of_replacement++ = '\b';  // Use raw backspaces, not {BS n}, in case the send will be raw.
 		*start_of_replacement = '\0'; // Terminate the string created above.
@@ -2273,20 +2273,19 @@ void Hotstring::DoReplace(LPARAM alParam)
 			CharUpper(start_of_replacement);
 		else if (case_conform_mode == CASE_CONFORM_FIRST_CAP)
 			*start_of_replacement = (char)ltoupper(*start_of_replacement);
-	}
-
-	if (*mReplacement && !mOmitEndChar) // The ending character (if present) needs to be sent too.
-	{
-		// Send the final character in raw mode so that chars such as !{} are sent properly.
-		// v1.0.43: Avoid two separate calls to SendKeys because:
-		// 1) It defeats the uninterruptibility of the hotstring's replacement by allowing the user's
-		//    buffered keystrokes to take effect in between the two calls to SendKeys.
-		// 2) Performance: Avoids having to install the playback hook twice, etc.
-		char end_char;
-		if (mEndCharRequired && (end_char = (char)LOWORD(alParam))) // Must now check mEndCharRequired because LOWORD has been overloaded with context-sensitive meanings.
+		if (!mOmitEndChar) // The ending character (if present) needs to be sent too.
 		{
-			start_of_replacement += strlen(start_of_replacement);
-			sprintf(start_of_replacement, "%s%c", mSendRaw ? "" : "{Raw}", (char)end_char); // v1.0.43.02: Don't send "{Raw}" if already in raw mode!
+			// Send the final character in raw mode so that chars such as !{} are sent properly.
+			// v1.0.43: Avoid two separate calls to SendKeys because:
+			// 1) It defeats the uninterruptibility of the hotstring's replacement by allowing the user's
+			//    buffered keystrokes to take effect in between the two calls to SendKeys.
+			// 2) Performance: Avoids having to install the playback hook twice, etc.
+			char end_char;
+			if (mEndCharRequired && (end_char = (char)LOWORD(alParam))) // Must now check mEndCharRequired because LOWORD has been overloaded with context-sensitive meanings.
+			{
+				start_of_replacement += strlen(start_of_replacement);
+				sprintf(start_of_replacement, "%s%c", mSendRaw ? "" : "{Raw}", (char)end_char); // v1.0.43.02: Don't send "{Raw}" if already in raw mode!
+			}
 		}
 	}
 

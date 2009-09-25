@@ -68,7 +68,7 @@ inline bool IsTextMatch(char *aHaystack, char *aNeedle)
 // Note: MSDN says (for functions like GetWindowText): "Specifies the maximum number of characters to
 // copy to the buffer, including the NULL character. If the text exceeds this limit, it is truncated."
 #define WINDOW_TEXT_SIZE 32767
-#define WINDOW_CLASS_SIZE 1024  // Haven't found anything that documents how long one can be, so use this.
+#define WINDOW_CLASS_SIZE 257  // MSDN implies length can't be greater than 256: "The maximum length for [WNDCLASS] lpszClassName is 256. If lpszClassName is greater than the maximum length, the RegisterClass function will fail."
 
 // Bitwise fields to support multiple criteria in v1.0.36.02
 #define CRITERION_TITLE 0x01

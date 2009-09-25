@@ -38,7 +38,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	if (aMode == RETURN_AFTER_MESSAGES_SPECIAL_FILTER)
 	{
 		aMode = RETURN_AFTER_MESSAGES; // To simplify things further below, eliminate the mode RETURN_AFTER_MESSAGES_SPECIAL_FILTER from further consideration.
-		// g_DeferMessagesForUnderlyingPump is a global because the instance of MsgSleep on the calls stack
+		// g_DeferMessagesForUnderlyingPump is a global because the instance of MsgSleep on the call stack
 		// that set it to true could launch new thread(s) that call MsgSleep again (i.e. a new layer), and a global
 		// is the easiest way to inform all such MsgSleeps that there's a non-standard msg pump beneath them on the
 		// call stack.
@@ -340,7 +340,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// UPDATE: The section marked "OLD" below is apparently not quite true: although Peek() has been
 				// caught yielding our timeslice, it's now difficult to reproduce.  Perhaps it doesn't consistently
 				// yield (maybe it depends on the relative priority of competing processes) and even when/if it
-				// does yield, it might somehow not as long or as good as Sleep(0).  This is evidenced by the fact
+				// does yield, it might somehow not be as long or as good as Sleep(0).  This is evidenced by the fact
 				// that some of my script's WinWaitClose's finish too quickly when the Sleep(0) is omitted after a
 				// Peek() that returned FALSE.
 				// OLD (mostly obsolete in light of above): It is not necessary to actually do the Sleep(0) when
@@ -779,7 +779,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// Otherwise, continue on and let a new thread be created to handle this hotstring.
 				// Since this isn't an auto-replace hotstring, set this value to support
 				// the built-in variable A_EndChar:
-				g_script.mEndChar = (char)LOWORD(msg.lParam);
+				g_script.mEndChar = hs->mEndCharRequired ? (char)LOWORD(msg.lParam) : 0; // v1.0.48.04: Explicitly set 0 when hs->mEndCharRequired==false because LOWORD is used for something else in that case.
 				type_of_first_line = hs->mJumpToLabel->mJumpToLine->mActionType;
 				break;
 

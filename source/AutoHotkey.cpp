@@ -247,6 +247,12 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	// At this point, it is nearly certain that the script will be executed.
 
+	// v1.0.48.04: Turn off buffering on stdout so that "FileAppend, Text, *" will write text immediately
+	// rather than lazily. This helps debugging, IPC, and other uses, probably with relatively little
+	// impact on performance given the OS's built-in caching.  I looked at the source code for setvbuf()
+	// and it seems like it should execute very quickly.  Code size seems to be about 75 bytes.
+	setvbuf(stdout, NULL, _IONBF, 0); // Must be done PRIOR to writing anything to stdout.
+
 	if (g_MaxHistoryKeys && (g_KeyHistory = (KeyHistoryItem *)malloc(g_MaxHistoryKeys * sizeof(KeyHistoryItem))))
 		ZeroMemory(g_KeyHistory, g_MaxHistoryKeys * sizeof(KeyHistoryItem)); // Must be zeroed.
 	//else leave it NULL as it was initialized in globaldata.

@@ -1067,7 +1067,8 @@ bool IsFunction(char *aBuf, bool *aPendingFunctionHasBrace = NULL)
 	// v1.0.40.04: Added condition "action_end != aBuf" to allow a hotkey or remap or hotkey such as
 	// such as "(::" to work even if it ends in a close-parenthesis such as "(::)" or "(::MsgBox )"
 	if (   !(action_end && *action_end == '(' && action_end != aBuf
-		&& (action_end - aBuf != 2 || strnicmp(aBuf, "IF", 2)))
+		&& (action_end - aBuf != 2 || strnicmp(aBuf, "IF", 2))
+		&& (action_end - aBuf != 5 || strnicmp(aBuf, "WHILE", 5))) // v1.0.48.04: Recognize While() as loop rather than a function because many programmers are in the habit of writing while() and if().
 		|| action_end[1] == ':'   ) // v1.0.44.07: This prevents "$(::fn_call()" from being seen as a function-call vs. hotkey-with-call.  For simplicity and due to rarity, omit_leading_whitespace() isn't called; i.e. assumes that the colon immediate follows the '('.
 		return false;
 	char *aBuf_last_char = action_end + strlen(action_end) - 1; // Above has already ensured that action_end is "(...".
@@ -3517,7 +3518,8 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 			// Detect all types of IF-statements.
 			/////////////////////////////////////
 			char *operation, *next_word;
-			if (*action_args == '(') // i.e. if (expression)
+			if (   *action_args == '(' // i.e. if (expression)
+				|| *action_args == g_DerefChar && IS_SPACE_OR_TAB(action_args[1])   ) // v1.0.48.04: "if % expr" is always an expressions. This check was added to allow lines like "if % IniWinCount = b" to work rather than being misinterpreted as "if var in", "if var is", and possibly other things.  However, "if %var%..." is NOT always an expression because it might be something like: if %A_Index%Array <> unquoted_literal_string
 			{
 				// To support things like the following, the outermost enclosing parentheses are not removed:
 				// if (x < 3) or (x > 6)
@@ -5535,6 +5537,22 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 		// the 'f' to make it a valid format specifier string:
 		break;
 
+	case ACT_STRINGSPLIT: // v1.0.48.04: Moved this section so that it is done even when AUTOHOTKEYSC is defined, because the steps below are necessary for both.
+		if (*new_raw_arg1 && !line.ArgHasDeref(1)) // The output array must be a legal name.
+		{
+			// 1.0.46.10: Fixed to look up ArrayName0 in advance (here at loadtime) so that runtime can
+			// know whether it's local or global.  This is necessary because only here at loadtime
+			// is there any awareness of the current function's list of declared variables (to conserve
+			// memory, that list is longer available at runtime).
+			char temp_var_name[MAX_VAR_NAME_LENGTH + 10]; // Provide extra room for trailing "0", and to detect names that are too long.
+			snprintf(temp_var_name, sizeof(temp_var_name), "%s0", new_raw_arg1);
+			if (   !(the_new_line->mAttribute = FindOrAddVar(temp_var_name))   )
+				return FAIL;  // The above already displayed the error.
+		}
+		//else it's a dynamic array name.  Since that's very rare, just use the old runtime behavior for
+		// backward compatibility.
+		break;
+
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
 	case ACT_RETURN:
 		if (aArgc > 0 && !g->CurrentFunc)
@@ -5598,22 +5616,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 	case ACT_STRINGGETPOS:
 		if (*new_raw_arg4 && !line.ArgHasDeref(4) && !strchr("LR1", toupper(*new_raw_arg4)))
 			return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
-		break;
-
-	case ACT_STRINGSPLIT:
-		if (*new_raw_arg1 && !line.ArgHasDeref(1)) // The output array must be a legal name.
-		{
-			// 1.0.46.10: Fixed to look up ArrayName0 in advance (here at loadtime) so that runtime can
-			// know whether it's local or global.  This is necessary because only here at loadtime
-			// is there any awareness of the current function's list of declared variables (to conserve
-			// memory, that list is longer available at runtime).
-			char temp_var_name[MAX_VAR_NAME_LENGTH + 10]; // Provide extra room for trailing "0", and to detect names that are too long.
-			snprintf(temp_var_name, sizeof(temp_var_name), "%s0", new_raw_arg1);
-			if (   !(the_new_line->mAttribute = FindOrAddVar(temp_var_name))   )
-				return FAIL;  // The above already displayed the error.
-		}
-		//else it's a dynamic array name.  Since that's very rare, just use the old runtime behavior for
-		// backward compatibility.
 		break;
 
 	case ACT_REGREAD:
@@ -6172,9 +6174,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, char *aArg[], ArgCountTyp
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 			case GUICONTROL_CMD_CONTENTS:
 			case GUICONTROL_CMD_TEXT:
+			case GUICONTROL_CMD_MOVEDRAW:
 				break; // Do nothing for the above commands since Param3 is optional.
 			case GUICONTROL_CMD_MOVE:
-			case GUICONTROL_CMD_MOVEDRAW:
 			case GUICONTROL_CMD_CHOOSE:
 			case GUICONTROL_CMD_CHOOSESTRING:
 				if (!*new_raw_arg3)
@@ -11483,7 +11485,7 @@ ResultType Line::PerformLoopParse(char **apReturnValue, bool &aContinueMainLoop,
 	#define LOOP_PARSE_BUF_SIZE 40000                          //
 	if (space_needed <= LOOP_PARSE_BUF_SIZE)
 	{
-		stack_buf = (char *)_alloca(LOOP_PARSE_BUF_SIZE); // Helps performance.  See comments above.
+		stack_buf = (char *)_alloca(space_needed); // Helps performance.  See comments above.
 		buf = stack_buf;
 	}
 	else
@@ -11590,7 +11592,7 @@ ResultType Line::PerformLoopParseCSV(char **apReturnValue, bool &aContinueMainLo
 	char *stack_buf, *buf;
 	if (space_needed <= LOOP_PARSE_BUF_SIZE)
 	{
-		stack_buf = (char *)_alloca(LOOP_PARSE_BUF_SIZE); // Helps performance.  See comments above.
+		stack_buf = (char *)_alloca(space_needed); // Helps performance.  See comments above.
 		buf = stack_buf;
 	}
 	else
@@ -14007,56 +14009,6 @@ ResultType Script::ActionExec(char *aAction, char *aParams, char *aWorkingDir, b
 			shell_action = first_phrase;
 			shell_params = second_phrase ? second_phrase : "";
 		}
-		else
-		{
-// Rather than just consider the first phrase to be the executable and the rest to be the param, we check it
-// for a proper extension so that the user can launch a document name containing spaces, without having to
-// enclose it in double quotes.  UPDATE: Want to be able to support executable filespecs without requiring them
-// to be enclosed in double quotes.  Therefore, search the entire string, rather than just first_phrase, for
-// the left-most occurrence of a valid executable extension.  This should be fine since the user can still
-// pass in EXEs and such as params as long as the first executable is fully qualified with its real extension
-// so that we can tell that it's the action and not one of the params.
-
-// This method is rather crude because is doesn't handle an extensionless executable such as "notepad test.txt"
-// It's important that it finds the first occurrence of an executable extension in case there are other
-// occurrences in the parameters.  Also, .pif and .lnk are currently not considered executables for this purpose
-// since they probably don't accept parameters:
-			strcpy(parse_buf, aAction);  // Restore the original value in case it was changed. parse_buf is already known to be large enough.
-			char *action_extension;
-			if (   !(action_extension = strcasestr(parse_buf, ".exe "))   )
-				if (   !(action_extension = strcasestr(parse_buf, ".exe\""))   )
-					if (   !(action_extension = strcasestr(parse_buf, ".bat "))   )
-						if (   !(action_extension = strcasestr(parse_buf, ".bat\""))   )
-							if (   !(action_extension = strcasestr(parse_buf, ".com "))   )
-								if (   !(action_extension = strcasestr(parse_buf, ".com\""))   )
-									// Not 100% sure that .cmd and .hta are genuine executables in every sense:
-									if (   !(action_extension = strcasestr(parse_buf, ".cmd "))   )
-										if (   !(action_extension = strcasestr(parse_buf, ".cmd\""))   )
-											if (   !(action_extension = strcasestr(parse_buf, ".hta "))   )
-												action_extension = strcasestr(parse_buf, ".hta\"");
-
-			if (action_extension)
-			{
-				shell_action = parse_buf;
-				// +4 for the 3-char extension with the period:
-				shell_params = action_extension + 4;  // exec_params is now the start of params, or empty-string.
-				if (*shell_params == '"')
-					// Exclude from shell_params since it's probably belongs to the action, not the params
-					// (i.e. it's paired with another double-quote at the start):
-					++shell_params;
-				if (*shell_params)
-				{
-					// Terminate the <aAction> string in the right place.  For this to work correctly,
-					// at least one space must exist between action & params (shortcoming?):
-					*shell_params = '\0';
-					++shell_params;
-					ltrim(shell_params); // Might be empty string after this, which is ok.
-				}
-				// else there doesn't appear to be any params, so just leave shell_params set to empty string.
-			}
-			// else there's no extension: so assume the whole <aAction> is a document name to be opened by
-			// the shell.  So leave shell_action and shell_params set their original defaults.
-		}
 	}
 
 	// This is distinct from hprocess being non-NULL because the two aren't always the
@@ -14173,6 +14125,58 @@ ResultType Script::ActionExec(char *aAction, char *aParams, char *aWorkingDir, b
 		}
 		else
 		{
+			if (!aParams)
+			{
+// Rather than just consider the first phrase to be the executable and the rest to be the param, we check it
+// for a proper extension so that the user can launch a document name containing spaces, without having to
+// enclose it in double quotes.  UPDATE: Want to be able to support executable filespecs without requiring them
+// to be enclosed in double quotes.  Therefore, search the entire string, rather than just first_phrase, for
+// the left-most occurrence of a valid executable extension.  This should be fine since the user can still
+// pass in EXEs and such as params as long as the first executable is fully qualified with its real extension
+// so that we can tell that it's the action and not one of the params.
+
+// This method is rather crude because is doesn't handle an extensionless executable such as "notepad test.txt"
+// It's important that it finds the first occurrence of an executable extension in case there are other
+// occurrences in the parameters.  Also, .pif and .lnk are currently not considered executables for this purpose
+// since they probably don't accept parameters:
+				strcpy(parse_buf, aAction);  // Restore the original value in case it was changed. parse_buf is already known to be large enough.
+				char *action_extension;
+				if (   !(action_extension = strcasestr(parse_buf, ".exe "))   )
+					if (   !(action_extension = strcasestr(parse_buf, ".exe\""))   )
+						if (   !(action_extension = strcasestr(parse_buf, ".bat "))   )
+							if (   !(action_extension = strcasestr(parse_buf, ".bat\""))   )
+								if (   !(action_extension = strcasestr(parse_buf, ".com "))   )
+									if (   !(action_extension = strcasestr(parse_buf, ".com\""))   )
+										// Not 100% sure that .cmd and .hta are genuine executables in every sense:
+										if (   !(action_extension = strcasestr(parse_buf, ".cmd "))   )
+											if (   !(action_extension = strcasestr(parse_buf, ".cmd\""))   )
+												if (   !(action_extension = strcasestr(parse_buf, ".hta "))   )
+													action_extension = strcasestr(parse_buf, ".hta\"");
+
+				if (action_extension)
+				{
+					shell_action = parse_buf;
+					// +4 for the 3-char extension with the period:
+					shell_params = action_extension + 4;  // exec_params is now the start of params, or empty-string.
+					if (*shell_params == '"')
+						// Exclude from shell_params since it's probably belongs to the action, not the params
+						// (i.e. it's paired with another double-quote at the start):
+						++shell_params;
+					if (*shell_params)
+					{
+						// Terminate the <aAction> string in the right place.  For this to work correctly,
+						// at least one space must exist between action & params (shortcoming?):
+						*shell_params = '\0';
+						++shell_params;
+						ltrim(shell_params); // Might be empty string after this, which is ok.
+					}
+					// else there doesn't appear to be any params, so just leave shell_params set to empty string.
+				}
+				// else there's no extension: so assume the whole <aAction> is a document name to be opened by
+				// the shell.  So leave shell_action and shell_params set their original defaults.
+			}
+			//else aParams!=NULL, so the extra parsing in the block above isn't necessary.
+
 			sei.lpVerb = NULL;  // A better choice than "open" because NULL causes default verb to be used.
 			sei.lpFile = shell_action;
 			sei.lpParameters = *shell_params ? shell_params : NULL; // Above has ensured that shell_params isn't NULL.

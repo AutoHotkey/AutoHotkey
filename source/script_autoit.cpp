@@ -978,6 +978,7 @@ ResultType Line::URLDownloadToFile(char *aURL, char *aFilespec)
 	typedef HINTERNET (WINAPI *MyInternetOpenUrl)(HINTERNET hInternet, LPCTSTR, LPCTSTR, DWORD, DWORD, LPDWORD);
 	typedef BOOL (WINAPI *MyInternetCloseHandle)(HINTERNET);
 	typedef BOOL (WINAPI *MyInternetReadFileEx)(HINTERNET, LPINTERNET_BUFFERS, DWORD, DWORD);
+	typedef BOOL (WINAPI *MyInternetReadFile)(HINTERNET, LPVOID, DWORD, LPDWORD);
 
 	#ifndef INTERNET_OPEN_TYPE_PRECONFIG_WITH_NO_AUTOPROXY
 		#define INTERNET_OPEN_TYPE_PRECONFIG_WITH_NO_AUTOPROXY 4
@@ -989,7 +990,8 @@ ResultType Line::URLDownloadToFile(char *aURL, char *aFilespec)
 	MyInternetOpenUrl lpfnInternetOpenUrl = (MyInternetOpenUrl)GetProcAddress(hinstLib, "InternetOpenUrlA");
 	MyInternetCloseHandle lpfnInternetCloseHandle = (MyInternetCloseHandle)GetProcAddress(hinstLib, "InternetCloseHandle");
 	MyInternetReadFileEx lpfnInternetReadFileEx = (MyInternetReadFileEx)GetProcAddress(hinstLib, "InternetReadFileExA");
-	if (!(lpfnInternetOpen && lpfnInternetOpenUrl && lpfnInternetCloseHandle && lpfnInternetReadFileEx))
+	MyInternetReadFile lpfnInternetReadFile = (MyInternetReadFile)GetProcAddress(hinstLib, "InternetReadFile"); // Called unconditionally to reduce code size and because the time required is likely insignificant compared to network latency.
+	if (!(lpfnInternetOpen && lpfnInternetOpenUrl && lpfnInternetCloseHandle && lpfnInternetReadFileEx && lpfnInternetReadFile))
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 
 	// v1.0.44.07: Set default to INTERNET_FLAG_RELOAD vs. 0 because the vast majority of usages would want
@@ -1055,15 +1057,28 @@ ResultType Line::URLDownloadToFile(char *aURL, char *aFilespec)
 	// having it return the moment there is any data in the buffer, the program is made more
 	// responsive, especially when the download is very slow and/or one of the hooks is installed:
 	BOOL result;
-	while (result = lpfnInternetReadFileEx(hFile, &buffers, IRF_NO_WAIT, NULL)) // Assign
+	if (*aURL == 'h' || *aURL == 'H')
 	{
-		if (!buffers.dwBufferLength) // Transfer is complete.
-			break;
-		LONG_OPERATION_UPDATE  // Done in between the net-read and the file-write to improve avg. responsiveness.
-		fwrite(bufData, buffers.dwBufferLength, 1, fptr);
-		buffers.dwBufferLength = sizeof(bufData);  // Reset buffer capacity for next iteration.
+		while (result = lpfnInternetReadFileEx(hFile, &buffers, IRF_NO_WAIT, NULL)) // Assign
+		{
+			if (!buffers.dwBufferLength) // Transfer is complete.
+				break;
+			LONG_OPERATION_UPDATE  // Done in between the net-read and the file-write to improve avg. responsiveness.
+			fwrite(bufData, buffers.dwBufferLength, 1, fptr);
+			buffers.dwBufferLength = sizeof(bufData);  // Reset buffer capacity for next iteration.
+		}
 	}
-
+	else // v1.0.48.04: This section adds support for FTP and perhaps Gopher by using InternetReadFile() instead of InternetReadFileEx().
+	{
+		DWORD number_of_bytes_read;
+		while (result = lpfnInternetReadFile(hFile, bufData, sizeof(bufData), &number_of_bytes_read))
+		{
+			if (!number_of_bytes_read)
+				break;
+			LONG_OPERATION_UPDATE
+			fwrite(bufData, number_of_bytes_read, 1, fptr);
+		}
+	}
 	// Close internet session:
 	lpfnInternetCloseHandle(hFile);
 	lpfnInternetCloseHandle(hInet);

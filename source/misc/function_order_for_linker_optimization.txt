@@ -1335,6 +1335,7 @@ _setmode
 _splitpath
 _setargv
 _setenvp
+setvbuf
 _getstream
 __strgtold12
 __STRINGTOLD

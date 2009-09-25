@@ -211,7 +211,7 @@ private:
 				// "%0.6f"; %f can handle doubles in MSVC++:
 				var.Assign(value_string, snprintf(value_string, sizeof(value_string), g->FormatFloat, var.mContentsDouble));
 				// In this case, read-caching should be disabled for scripts that use "SetFormat Float" because
-				// they they might rely on SetFormat having rounded floats off to FAR fewer decimal places (or
+				// they might rely on SetFormat having rounded floats off to FAR fewer decimal places (or
 				// even to integers via "SetFormat, Float, 0").  Such scripts can use read-caching only when
 				// mContents has been used to update the cache, not vice versa.  This restriction doesn't seem
 				// to be necessary for "SetFormat Integer" because there should be no loss of precision when

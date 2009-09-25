@@ -514,22 +514,6 @@ class Label; // Forward declaration so that each can use the other.
 class Line
 {
 private:
-	#define SET_S_DEREF_BUF(ptr, size) sDerefBuf = ptr, sDerefBufSize = size
-	#define NULLIFY_S_DEREF_BUF \
-	{\
-		SET_S_DEREF_BUF(NULL, 0);\
-		if (sDerefBufSize > LARGE_DEREF_BUF_SIZE)\
-			--sLargeDerefBufs;\
-	}
-	static char *sDerefBuf;  // Buffer to hold the values of any args that need to be dereferenced.
-	static size_t sDerefBufSize;
-	static int sLargeDerefBufs;
-
-	// Static because only one line can be Expanded at a time (not to mention the fact that we
-	// wouldn't want the size of each line to be expanded by this size):
-	static char *sArgDeref[MAX_ARGS];
-	static Var *sArgVar[MAX_ARGS];
-
 	ResultType EvaluateCondition();
 	ResultType Line::PerformLoop(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
 		, __int64 aIterationLimit, bool aIsInfinite);
@@ -672,6 +656,43 @@ private:
 	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, char *aToggleText);
 
 public:
+	#define SET_S_DEREF_BUF(ptr, size) Line::sDerefBuf = ptr, Line::sDerefBufSize = size
+
+	#define NULLIFY_S_DEREF_BUF \
+	{\
+		SET_S_DEREF_BUF(NULL, 0);\
+		if (sDerefBufSize > LARGE_DEREF_BUF_SIZE)\
+			--sLargeDerefBufs;\
+	}
+
+	#define PRIVATIZE_S_DEREF_BUF \
+		char *our_deref_buf = Line::sDerefBuf;\
+		size_t our_deref_buf_size = Line::sDerefBufSize;\
+		SET_S_DEREF_BUF(NULL, 0) // For detecting whether ExpandExpression() caused a new buffer to be created.
+
+	#define DEPRIVATIZE_S_DEREF_BUF \
+		if (our_deref_buf)\
+		{\
+			if (Line::sDerefBuf)\
+			{\
+				free(Line::sDerefBuf);\
+				if (Line::sDerefBufSize > LARGE_DEREF_BUF_SIZE)\
+					--Line::sLargeDerefBufs;\
+			}\
+			SET_S_DEREF_BUF(our_deref_buf, our_deref_buf_size);\
+		}
+		//else the original buffer is NULL, so keep any new sDerefBuf that might have been created (should
+		// help avg-case performance).
+
+	static char *sDerefBuf;  // Buffer to hold the values of any args that need to be dereferenced.
+	static size_t sDerefBufSize;
+	static int sLargeDerefBufs;
+
+	// Static because only one line can be Expanded at a time (not to mention the fact that we
+	// wouldn't want the size of each line to be expanded by this size):
+	static char *sArgDeref[MAX_ARGS];
+	static Var *sArgVar[MAX_ARGS];
+
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
 	ActionTypeType mActionType; // What type of line this is.

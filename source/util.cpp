@@ -146,12 +146,8 @@ ResultType YYYYMMDDToSystemTime(char *aYYYYMMDD, SYSTEMTIME &aSystemTime, bool a
 	{
 		strlcpy(temp, aYYYYMMDD + 4, 3);
 		aSystemTime.wMonth = atoi(temp);  // Unlike "struct tm", SYSTEMTIME uses 1 for January, not 0.
-		// v1.0.46.07: Unlike the other date/time components, which are validated further below by the call to
-		// SystemTimeToFileTime(), "month" must be validated in advance because it's used to access an array
-		// further below.
-		if (aSystemTime.wMonth < 1 || aSystemTime.wMonth > 12) // See comment above.
-			return FAIL; // v1.0.48: Indicate that it's invalid so that caller's like "if var is time" can properly detect badly-formatted dates.
-			//aSystemTime.wMonth = 1; // For simplicity and due to extreme rarity, just choose an in-range value.
+		// v1.0.48: Changed not to provide a default when month number is out-of-range.
+		// This allows callers like "if var is time" to properly detect badly-formatted dates.
 	}
 	else
 		aSystemTime.wMonth = 1;
@@ -190,11 +186,23 @@ ResultType YYYYMMDDToSystemTime(char *aYYYYMMDD, SYSTEMTIME &aSystemTime, bool a
 
 	aSystemTime.wMilliseconds = 0;  // Always set to zero in this case.
 
-	// Day-of-week code by Tomohiko Sakamoto:
-	static int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
-	int y = aSystemTime.wYear;
-	y -= aSystemTime.wMonth < 3;
-	aSystemTime.wDayOfWeek = (y + y/4 - y/100 + y/400 + t[aSystemTime.wMonth-1] + aSystemTime.wDay) % 7;
+	// v1.0.46.07: Unlike the other date/time components, which are validated further below by the call to
+	// SystemTimeToFileTime(), "month" must be validated in advance because it's used to access an array
+	// in the day-of-week code further below.
+	// v1.0.48.04: To fix FormatTime and possibly other things, don't return FAIL when month is out-of-range unless
+	// aDoValidate==false, and not even then (for maintainability) because a section further below handles it.
+	if (aSystemTime.wMonth < 1 || aSystemTime.wMonth > 12) // Month must be validated prior to accessing the array further below.
+		// Set an in-range default, which caller is likely to ignore if it passed true for aDoValidate
+		// because the validation further below will also detect the out-of-range month and return FAIL.
+		aSystemTime.wDayOfWeek = 1;
+	else // Month is in-range, which is necessary for the method below to work safely.
+	{
+		// Day-of-week code by Tomohiko Sakamoto:
+		static int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+		int y = aSystemTime.wYear;
+		y -= aSystemTime.wMonth < 3;
+		aSystemTime.wDayOfWeek = (y + y/4 - y/100 + y/400 + t[aSystemTime.wMonth-1] + aSystemTime.wDay) % 7;
+	}
 
 	if (aDoValidate)
 	{
@@ -204,8 +212,8 @@ ResultType YYYYMMDDToSystemTime(char *aYYYYMMDD, SYSTEMTIME &aSystemTime, bool a
 		// less than 1601, which for simplicity is enforced globally throughout the program
 		// since none of the Windows API calls seem to support earlier years.
 		return SystemTimeToFileTime(&aSystemTime, &ft) ? OK : FAIL;
-		// Above: The st.wDayOfWeek member is ignored, but that's okay since only the YYYYMMDDHH24MISS part
-		// needs validation.
+		// Above: The st.wDayOfWeek member is ignored by the above (but might be used by our caller), but
+		// that's okay because it shouldn't need validation.
 	}
 	return OK;
 }
