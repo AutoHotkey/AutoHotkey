@@ -103,6 +103,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 	if (!*aKeys)
 		return;
 	global_struct &g = *::g; // Reduces code size and may improve performance.
+
 	// For performance and also to reserve future flexibility, recognize {Blind} only when it's the first item
 	// in the string.
 	if (sInBlindMode = !aSendRaw && !strnicmp(aKeys, "{Blind}", 7)) // Don't allow {Blind} while in raw mode due to slight chance {Blind} is intended to be sent as a literal string.
@@ -187,7 +188,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 		// able to detect when the user physically releases the key.
 		if (   (g_script.mThisHotkeyModifiersLR & (MOD_LWIN|MOD_RWIN)) // Limit the scope to only those hotkeys that have a Win modifier, since anything outside that scope hasn't been fully analyzed.
 			&& (GetTickCount() - g_script.mThisHotkeyStartTime) < (DWORD)50 // Ensure g_script.mThisHotkeyModifiersLR is up-to-date enough to be reliable.
-			&& sSendMode == SM_EVENT // SM_INPUT's workaround for Vista is handled by another section.
+			&& aSendModeOrig == SM_EVENT // SM_INPUT's workaround for Vista is handled by another section. v1.0.48.04: Fixed sSendMode to be aSendModeOrig.
 			&& !sInBlindMode // The philosophy of blind-mode is that the script should have full control, so don't do any waiting during blind mode.
 			&& g_os.IsWinVistaOrLater() // Only Vista (and presumably later OSes) check the physical state of the Windows key for Win+L.
 			&& GetCurrentThreadId() == g_MainThreadID // Exclude the hook thread because it isn't allowed to call anything like MsgSleep, nor are any calls from the hook thread within the understood/analyzed scope of this workaround.
@@ -294,8 +295,8 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 	sModifiersLR_persistent &= mods_current & ~mods_down_physically_and_logically;
 	modLR_type persistent_modifiers_for_this_SendKeys, extra_persistent_modifiers_for_blind_mode;
 	if (sInBlindMode)
-  	{
-  		// The following value is usually zero unless the user is currently holding down
+	{
+		// The following value is usually zero unless the user is currently holding down
 		// some modifiers as part of a hotkey. These extra modifiers are the ones that
 		// this send operation (along with all its calls to SendKey and similar) should
 		// consider to be down for the duration of the Send (unless they go up via an

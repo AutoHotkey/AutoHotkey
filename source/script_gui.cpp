@@ -32,13 +32,18 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 	if (window_index < 0 || window_index >= MAX_GUI_WINDOWS)
 		return ScriptError("Max window number is " MAX_GUI_WINDOWS_STR "." ERR_ABORT, aCommand);
 
+	PRIVATIZE_S_DEREF_BUF;  // See comments in GuiControl() about this.
+	ResultType result = OK; // Set default return value for use with all instances of "goto" further below.
+	// EVERYTHING below this point should use "result" and "goto return_the_result" instead of "return".
+
 	// First completely handle any sub-command that doesn't require the window to exist.
 	// In other words, don't auto-create the window before doing this command like we do
 	// for the others:
 	switch(gui_command)
 	{
 	case GUI_CMD_DESTROY:
-		return GuiType::Destroy(window_index);
+		result = GuiType::Destroy(window_index);
+		goto return_the_result;
 
 	case GUI_CMD_DEFAULT:
 		// Change the "default" member, not g->GuiWindowIndex because that contains the original
@@ -46,7 +51,7 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 		// used to produce the contents of A_Gui.  Also, it's okay if the specify window index doesn't
 		// currently exist.
 		g->GuiDefaultWindowIndex = window_index;
-		return OK;
+		goto return_the_result;
 	}
 
 
@@ -65,7 +70,7 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 		case GUI_CMD_MINIMIZE:
 		case GUI_CMD_MAXIMIZE:
 		case GUI_CMD_RESTORE:
-			return OK; // Nothing needs to be done since the window object doesn't exist.
+			goto return_the_result; // Nothing needs to be done since the window object doesn't exist.
 
 		// v1.0.43.09:
 		// Don't overload "+LastFound" because it would break existing scripts that rely on the window
@@ -74,19 +79,23 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 			if (!stricmp(options, "+LastFoundExist"))
 			{
 				g->hWndLastUsed = NULL;
-				return OK;
+				goto return_the_result;
 			}
 			break;
 		}
 
 		// Otherwise: Create the object and (later) its window, since all the other sub-commands below need it:
 		if (   !(g_gui[window_index] = new GuiType(window_index))   )
-			return FAIL; // No error displayed since extremely rare.
+		{
+			result = FAIL; // No error displayed since extremely rare.
+			goto return_the_result;
+		}
 		if (   !(g_gui[window_index]->mControl = (GuiControlType *)malloc(GUI_CONTROL_BLOCK_SIZE * sizeof(GuiControlType)))   )
 		{
 			delete g_gui[window_index];
 			g_gui[window_index] = NULL;
-			return FAIL; // No error displayed since extremely rare.
+			result = FAIL; // No error displayed since extremely rare.
+			goto return_the_result;
 		}
 		g_gui[window_index]->mControlCapacity = GUI_CONTROL_BLOCK_SIZE;
 		// Probably better to increment here rather than in constructor in case GuiType objects
@@ -102,7 +111,10 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 	ToggleValueType own_dialogs = TOGGLE_INVALID;
 	if (gui_command == GUI_CMD_OPTIONS)
 		if (!gui.ParseOptions(options, set_last_found_window, own_dialogs))
-			return FAIL;  // It already displayed the error.
+		{
+			result = FAIL; // It already displayed the error.
+			goto return_the_result;
+		}
 
 	// Create the window if needed.  Since it should not be possible for our window to get destroyed
 	// without our knowning about it (via the explicit handling in its window proc), it shouldn't
@@ -110,7 +122,8 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 	if (!gui.mHwnd && !gui.Create())
 	{
 		GuiType::Destroy(window_index); // Get rid of the object so that it stays in sync with the window's existence.
-		return ScriptError("Could not create window." ERR_ABORT);
+		result = ScriptError("Could not create window." ERR_ABORT);
+		goto return_the_result;
 	}
 
 	// After creating the window, return from any commands that were fully handled above:
@@ -122,7 +135,7 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 		// the own_dialogs setting will get reset during other commands such as "Gui Show", "Gui Add"
 		if (own_dialogs != TOGGLE_INVALID) // v1.0.35.06: Plus or minus "OwnDialogs" was present rather than being entirely absent.
 			g->DialogOwnerIndex = (own_dialogs == TOGGLED_ON) ? window_index : MAX_GUI_WINDOWS; // Reset to out-of-bounds when "-OwnDialogs" is present.
-		return OK;
+		goto return_the_result;
 	}
 
 	GuiControls gui_control_type = GUI_CONTROL_INVALID;
@@ -132,15 +145,19 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 	{
 	case GUI_CMD_ADD:
 		if (   !(gui_control_type = Line::ConvertGuiControl(aParam2))   )
-			return ScriptError(ERR_PARAM2_INVALID ERR_ABORT, aParam2);
-		return gui.AddControl(gui_control_type, aParam3, aParam4); // It already displayed any error.
+		{
+			result = ScriptError(ERR_PARAM2_INVALID ERR_ABORT, aParam2);
+			goto return_the_result;
+		}
+		result = gui.AddControl(gui_control_type, aParam3, aParam4); // It already displayed any error.
+		goto return_the_result;
 
 	case GUI_CMD_MARGIN:
 		if (*aParam2)
 			gui.mMarginX = ATOI(aParam2); // Seems okay to allow negative margins.
 		if (*aParam3)
 			gui.mMarginY = ATOI(aParam3); // Seems okay to allow negative margins.
-		return OK;
+		goto return_the_result;
 		
 	case GUI_CMD_MENU:
 		UserMenu *menu;
@@ -150,38 +167,45 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 			// TRAY menu, since it should be obvious that it cannot be used as a menu bar (since it
 			// must always be of the popup type):
 			if (   !(menu = FindMenu(aParam2)) || menu == g_script.mTrayMenu   ) // Relies on short-circuit boolean.
-				return ScriptError(ERR_MENU ERR_ABORT, aParam2);
+			{
+				result = ScriptError(ERR_MENU ERR_ABORT, aParam2);
+				goto return_the_result;
+			}
 			menu->Create(MENU_TYPE_BAR);  // Ensure the menu physically exists and is the "non-popup" type (for a menu bar).
 		}
 		else
 			menu = NULL;
 		SetMenu(gui.mHwnd, menu ? menu->mMenu : NULL);  // Add or remove the menu.
-		return OK;
+		goto return_the_result;
 
 	case GUI_CMD_SHOW:
-		return gui.Show(aParam2, aParam3);
+		result = gui.Show(aParam2, aParam3);
+		goto return_the_result;
 
 	case GUI_CMD_SUBMIT:
-		return gui.Submit(stricmp(aParam2, "NoHide"));
+		result = gui.Submit(stricmp(aParam2, "NoHide"));
+		goto return_the_result;
 
 	case GUI_CMD_CANCEL:
-		return gui.Cancel();
+		result = gui.Cancel();
+		goto return_the_result;
 
 	case GUI_CMD_MINIMIZE:
 		// If the window is hidden, it is unhidden as a side-effect (this happens even for SW_SHOWMINNOACTIVE).
 		ShowWindow(gui.mHwnd, SW_MINIMIZE);
-		return OK;
+		goto return_the_result;
 
 	case GUI_CMD_MAXIMIZE:
 		ShowWindow(gui.mHwnd, SW_MAXIMIZE); // If the window is hidden, it is unhidden as a side-effect.
-		return OK;
+		goto return_the_result;
 
 	case GUI_CMD_RESTORE:
 		ShowWindow(gui.mHwnd, SW_RESTORE); // If the window is hidden, it is unhidden as a side-effect.
-		return OK;
+		goto return_the_result;
 
 	case GUI_CMD_FONT:
-		return gui.SetCurrentFont(aParam2, aParam3);
+		result = gui.SetCurrentFont(aParam2, aParam3);
+		goto return_the_result;
 
 	case GUI_CMD_LISTVIEW:
 	case GUI_CMD_TREEVIEW:
@@ -206,7 +230,7 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 			}
 			//else it seems best never to change ite to be "no control" since it doesn't seem to have much use.
 		}
-		return OK;
+		goto return_the_result;
 
 	case GUI_CMD_TAB:
 	{
@@ -220,7 +244,10 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 			{
 				index = ATOI(aParam3) - 1;
 				if (index < 0 || index > MAX_TAB_CONTROLS - 1)
-					return ScriptError(ERR_PARAM3_INVALID ERR_ABORT, aParam3);
+				{
+					result = ScriptError(ERR_PARAM3_INVALID ERR_ABORT, aParam3);
+					goto return_the_result;
+				}
 				if (index != gui.mCurrentTabControlIndex) // This is checked early in case of early return in the next section due to error.
 				{
 					gui.mCurrentTabControlIndex = index;
@@ -246,7 +273,10 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 				{
 					index = ATOI(aParam2) - 1;
 					if (index < 0 || index > MAX_TABS_PER_CONTROL - 1)
-						return ScriptError(ERR_PARAM2_INVALID ERR_ABORT, aParam2);
+					{
+						result = ScriptError(ERR_PARAM2_INVALID ERR_ABORT, aParam2);
+						goto return_the_result;
+					}
 				}
 				else
 				{
@@ -255,14 +285,17 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 					if (tab_control)
 						index = gui.FindTabIndexByName(*tab_control, aParam2, exact_match); // Returns -1 on failure.
 					if (index == -1)
-						return ScriptError("Tab name doesn't exist yet." ERR_ABORT, aParam2);
+					{
+						result =ScriptError("Tab name doesn't exist yet." ERR_ABORT, aParam2);
+						goto return_the_result;
+					}
 				}
 				gui.mCurrentTabIndex = index;
 			}
 			if (gui.mCurrentTabIndex != prev_tab_index || gui.mCurrentTabControlIndex != prev_tab_control_index)
 				gui.mInRadioGroup = false; // A fix for v1.0.38.02, see comments at similar line above.
 		}
-		return OK;
+		goto return_the_result;
 	}
 		
 	case GUI_CMD_COLOR:
@@ -294,7 +327,7 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 			// Force the window to repaint so that colors take effect immediately.
 			// UpdateWindow() isn't enough sometimes/always, so do something more aggressive:
 			InvalidateRect(gui.mHwnd, NULL, TRUE);
-		return OK;
+		goto return_the_result;
 
 	case GUI_CMD_FLASH:
 		// Note that FlashWindowEx() would have to be loaded dynamically since it is not available
@@ -303,11 +336,15 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 		// and at a certain frequency, and other options such as only-taskbar-button or only-caption.
 		// Set FlashWindowEx() for more ideas:
 		FlashWindow(gui.mHwnd, stricmp(aParam2, "Off") ? TRUE : FALSE);
-		return OK;
+		goto return_the_result;
 
 	} // switch()
 
-	return FAIL;  // Should never be reached, but avoids compiler warning and improves bug detection.
+	result = FAIL;  // Should never be reached, but avoids compiler warning and improves bug detection.
+
+return_the_result:
+	DEPRIVATIZE_S_DEREF_BUF;
+	return result;
 }
 
 
@@ -337,12 +374,26 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 	// Beyond this point, errors are rare so set the default to "no error":
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 
+	// Fixed for v1.0.48.04: Some operations on a GUI control can trigger a callback or OnMessage function;
+	// e.g. SendMessage(control.hwnd, STM_SETIMAGE, ...). Such a function is then likely to change the contents
+	// of the deref buffer, which would then alter the contents of the parameters used by commands like
+	// GuiControl.  To prevent that, make the current deref buffer private until this function returns. That
+	// forces any newly launched callback or OnMessage function to create a new deref buffer if it needs one.
+	// The main alternative to this method is to make copies of all the parameters and point the parameters to
+	// the copies.  But since the parameters might be very large, that method could peform much worse and would
+	// be more complicated, especially since 99.9% of the time, the copies would turn out to be unnecessary
+	// because the action doesn't wind up triggering any callback or OnMessage function.
+	PRIVATIZE_S_DEREF_BUF;
+	ResultType result = OK; // Set default return value for use with all instances of "goto" further below.
+	// EVERYTHING below this point should use "result" and "goto return_the_result" instead of "return".
+
 	char *malloc_buf;
 	RECT rect;
 	WPARAM checked;
 	GuiControlType *tab_control;
 	int new_pos;
 	SYSTEMTIME st[2];
+	int selection_index;
 	bool do_redraw_if_in_tab = false;
 	bool do_redraw_unconditionally = false;
 
@@ -353,7 +404,8 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 	{
 		GuiControlOptionsType go; // Its contents not currently used here, but it might be in the future.
 		gui.ControlInitOptions(go, control);
-		return gui.ControlParseOptions(options, go, control, control_index);
+		result = gui.ControlParseOptions(options, go, control, control_index);
+		goto return_the_result;
 	}
 
 	case GUICONTROL_CMD_CONTENTS:
@@ -456,7 +508,10 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			int image_type;
 			if (   !(control.union_hbitmap = LoadPicture(aParam3, width, height, image_type, icon_number
 				, control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))   )
-				return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			{
+				g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				goto return_the_result;
+			}
 			DWORD style = GetWindowLong(control.hwnd, GWL_STYLE);
 			DWORD style_image_type = style & 0x0F;
 			style &= ~0x0F;  // Purge the low-order four bits in case style-image-type needs to be altered below.
@@ -529,11 +584,11 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 					if (control.type == GUI_CONTROL_RADIO)
 					{
 						gui.ControlCheckRadioButton(control, control_index, checked);
-						return OK;
+						goto return_the_result;
 					}
 					// Otherwise, we're operating upon a checkbox.
 					SendMessage(control.hwnd, BM_SETCHECK, checked, 0);
-					return OK;
+					goto return_the_result;
 				}
 				//else the default SetWindowText() action will be taken below.
 			}
@@ -545,7 +600,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			// Due to the fact that an LV's first col. can't be directly deleted and other complexities,
 			// this is not currently supported (also helps reduce code size).  The built-in function
 			// for modifying columns should be used instead.  Similar for TreeView.
-			return OK;
+			goto return_the_result;
 
 		case GUI_CONTROL_EDIT:
 			// Note that TranslateLFtoCRLF() will return the original buffer we gave it if no translation
@@ -556,7 +611,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			SetWindowText(control.hwnd,  malloc_buf ? malloc_buf : aParam3); // malloc_buf is checked again in case the mem alloc failed.
 			if (malloc_buf && malloc_buf != aParam3)
 				free(malloc_buf);
-			return OK;
+			goto return_the_result;
 
 		case GUI_CONTROL_DATETIME:
 			if (guicontrol_cmd == GUICONTROL_CMD_CONTENTS)
@@ -605,7 +660,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 				// This both adds and removes the custom format depending on aParma3:
 				DateTime_SetFormat(control.hwnd, use_custom_format ? aParam3 : NULL); // NULL removes any custom format so that the underlying style format is revealed.
 			}
-			return OK;
+			goto return_the_result;
 
 		case GUI_CONTROL_MONTHCAL:
 			if (*aParam3)
@@ -627,11 +682,11 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 				break;
 			}
 			//else blank, so do nothing (control does not support having "no selection").
-			return OK; // Don't break since don't the other actions below to be taken.
+			goto return_the_result; // Don't break since don't the other actions below to be taken.
 
 		case GUI_CONTROL_HOTKEY:
 			SendMessage(control.hwnd, HKM_SETHOTKEY, gui.TextToHotkey(aParam3), 0); // This will set it to "None" if aParam3 is blank.
-			return OK; // Don't break since don't the other actions below to be taken.
+			goto return_the_result; // Don't break since don't the other actions below to be taken.
 		
 		case GUI_CONTROL_UPDOWN:
 			if (*aParam3 == '+') // Apply as delta from its current position.
@@ -654,7 +709,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			// valid value."
 			SendMessage(control.hwnd, (control.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) ? UDM_SETPOS32 : UDM_SETPOS
 				, 0, new_pos); // Unnecessary to cast to short in the case of UDM_SETPOS, since it ignores the high-order word.
-			return OK; // Don't break since don't the other actions below to be taken.
+			goto return_the_result; // Don't break since don't the other actions below to be taken.
 
 		case GUI_CONTROL_SLIDER:
 			// Confirmed this fact from MSDN: That the control automatically deals with out-of-range values
@@ -673,7 +728,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			else
 				SendMessage(control.hwnd, TBM_SETPOS, TRUE, gui.ControlInvertSliderIfNeeded(control, ATOI(aParam3)));
 				// Above msg has no return value.
-			return OK; // Don't break since don't the other actions below to be taken.
+			goto return_the_result; // Don't break since don't the other actions below to be taken.
 
 		case GUI_CONTROL_PROGRESS:
 			// Confirmed through testing (PBM_DELTAPOS was also tested): The control automatically deals
@@ -684,11 +739,11 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 				SendMessage(control.hwnd, PBM_DELTAPOS, ATOI(aParam3 + 1), 0);
 			else
 				SendMessage(control.hwnd, PBM_SETPOS, ATOI(aParam3), 0);
-			return OK; // Don't break since don't the other actions below to be taken.
+			goto return_the_result; // Don't break since don't the other actions below to be taken.
 
 		case GUI_CONTROL_STATUSBAR:
 			SetWindowText(control.hwnd, aParam3);
-			return OK;
+			goto return_the_result;
 
 		default: // Namely the following:
 		//case GUI_CONTROL_DROPDOWNLIST:
@@ -735,10 +790,9 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			gui.ControlAddContents(control, aParam3, 0);
 			if (control.type == GUI_CONTROL_TAB && list_replaced)
 			{
-
 				// In case replacement tabs deleted the currently active tab, update the tab.
 				// The "false" param will cause focus to jump to first item in z-order if
-				// a the control that previously had focus was inside a tab that was just
+				// the control that previously had focus was inside a tab that was just
 				// deleted (seems okay since this kind of operation is fairly rare):
 				gui.ControlUpdateCurrentTab(control, false);
 				// Must invalidate part of parent window to get controls to redraw correctly, at least
@@ -752,7 +806,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 				// styles such as TCS_VERTICAL:
 				InvalidateRect(gui.mHwnd, NULL, TRUE); // TRUE = Seems safer to erase, not knowing all possible overlaps.
 			}
-			return OK; // Don't break since don't the other actions below to be taken.
+			goto return_the_result; // Don't break since don't the other actions below to be taken.
 		} // inner switch() for control's type for contents/txt sub-commands.
 
 		if (do_redraw_if_in_tab) // Excludes the SetWindowText() below, but might need changing for future control types.
@@ -766,7 +820,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 		SetWindowText(control.hwnd, aParam3); // Seems more reliable to set text before doing the redraw, plus it saves code size.
 		if (do_redraw_unconditionally)
 			break;
-		return OK;
+		goto return_the_result;
 
 	case GUICONTROL_CMD_MOVE:
 	case GUICONTROL_CMD_MOVEDRAW:
@@ -811,7 +865,10 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			, width == COORD_UNSPECIFIED ? rect.right - rect.left : width
 			, height == COORD_UNSPECIFIED ? rect.bottom - rect.top : height
 			, TRUE))  // Do repaint.
-			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		{
+			g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			goto return_the_result;
+		}
 
 		// Note that GUI_CONTROL_UPDOWN has no special handling here.  This is because unlike slider buddies,
 		// whose only purpose is to label the control, an up-down's is also content-linked to it, so the
@@ -845,11 +902,12 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			MapWindowPoints(NULL, gui.mHwnd, (LPPOINT)&rect, 2); // Convert rect to client coordinates (not the same as GetClientRect()).
 			InvalidateRect(gui.mHwnd, &rect, TRUE); // Seems safer to use TRUE, not knowing all possible overlaps, etc.
 		}
-		return OK;
+		goto return_the_result;
 	}
 
 	case GUICONTROL_CMD_FOCUS:
-		return SetFocus(control.hwnd) ? OK : g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		result = SetFocus(control.hwnd) ? OK : g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		goto return_the_result;
 
 	case GUICONTROL_CMD_ENABLE:
 	case GUICONTROL_CMD_DISABLE:
@@ -862,13 +920,24 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			control.attrib &= ~GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED;
 		else
 			control.attrib |= GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED;
-		if ((tab_control = gui.FindTabControl(control.tab_control_index)) // It belongs to a tab control that already exists.
-			&& ((GetWindowLong(tab_control->hwnd, GWL_STYLE) & WS_DISABLED) // But its tab control is disabled...
-				|| TabCtrl_GetCurSel(tab_control->hwnd) != control.tab_index))
-				// ... or either there is no current tab/page (or there are no tabs at all) or the one selected
-				// is not this control's: Do not disable or re-enable the control in this case.
-			return OK;
-
+		if (tab_control = gui.FindTabControl(control.tab_control_index)) // It belongs to a tab control that already exists.
+		{
+			
+			if (GetWindowLong(tab_control->hwnd, GWL_STYLE) & WS_DISABLED) // But its tab control is disabled...
+				goto return_the_result;
+			selection_index = TabCtrl_GetCurSel(tab_control->hwnd);
+			if (selection_index != control.tab_index && selection_index != -1)
+				// There is no current tab/page or the one selected is not this control's:
+				// Do not disable or re-enable the control in this case.
+				// v1.0.48.04: Above now also checks for -1, which is a tab control containing zero tabs/pages.
+				// The controls on such a tab control might be wrongly/inadvertently visible because
+				// ControlUpdateCurrentTab() isn't capable of handling that situation.  Since fixing
+				// ControlUpdateCurrentTab() would reduce backward compatibility -- and in case anyone is
+				// using tabless tab controls for anything -- it seems best to allow these "wrongly visible"
+				// controls to be explicitly manipulated by GuiControl Enable/Disable and Hide/Show.
+				goto return_the_result;
+		}
+		
 		// L23: Restrict focus workaround to when the control is/was actually focused. Fixes a bug introduced by L13: enabling or disabling a control caused the active Edit control to reselect its text.
 		bool gui_control_was_focused = GetForegroundWindow() == gui.mHwnd && GetFocus() == control.hwnd;
 
@@ -883,7 +952,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			// Update the control so that its current tab's controls will all be enabled or disabled (now
 			// that the tab control itself has just been enabled or disabled):
 			gui.ControlUpdateCurrentTab(control, false);
-		return OK;
+		goto return_the_result;
 	}
 
 	case GUICONTROL_CMD_SHOW:
@@ -891,29 +960,31 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 		// GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN is maintained for use with tab controls.  It allows controls
 		// on inactive tabs to be marked for later showing.  It also allows explicitly hidden controls to
 		// stay hidden even when their tab/page becomes active. It is updated unconditionally for simplicity
-		// and maintainability.  
+		// and maintainability.
 		if (guicontrol_cmd == GUICONTROL_CMD_SHOW)
 			control.attrib &= ~GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN;
 		else
 			control.attrib |= GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN;
-		if ((tab_control = gui.FindTabControl(control.tab_control_index)) // It belongs to a tab control that already exists.
-			&& (!(GetWindowLong(tab_control->hwnd, GWL_STYLE) & WS_VISIBLE) // But its tab control is hidden...
-				|| TabCtrl_GetCurSel(tab_control->hwnd) != control.tab_index))
-				// ... or either there is no current tab/page (or there are no tabs at all) or the one selected
-				// is not this control's: Do not show or hide the control in this case.
-			return OK;
+		if (tab_control = gui.FindTabControl(control.tab_control_index)) // It belongs to a tab control that already exists.
+		{
+			
+			if (!(GetWindowLong(tab_control->hwnd, GWL_STYLE) & WS_VISIBLE)) // But its tab control is hidden...
+				goto return_the_result;
+			selection_index = TabCtrl_GetCurSel(tab_control->hwnd);
+			if (selection_index != control.tab_index && selection_index != -1)
+				goto return_the_result; // v1.0.48.04: Concerning the line above, see comments in GUICONTROL_CMD_DISABLE.
+		}
 		// Since above didn't return, act upon the show/hide:
 		ShowWindow(control.hwnd, guicontrol_cmd == GUICONTROL_CMD_SHOW ? SW_SHOWNOACTIVATE : SW_HIDE);
 		if (control.type == GUI_CONTROL_TAB) // This control is a tab control.
 			// Update the control so that its current tab's controls will all be shown or hidden (now
 			// that the tab control itself has just been shown or hidden):
 			gui.ControlUpdateCurrentTab(control, false);
-		return OK;
+		goto return_the_result;
 
 	case GUICONTROL_CMD_CHOOSE:
 	case GUICONTROL_CMD_CHOOSESTRING:
 	{
-		int selection_index;
 		int extra_actions = 0; // Set default.
 		if (*aParam3 == gui.mDelimiter) // First extra action.
 		{
@@ -939,12 +1010,18 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			else
 				selection_index = ATOI(aParam3) - 1;
 			if (selection_index < 0 || selection_index > MAX_TABS_PER_CONTROL - 1)
-				return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			{
+				g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				goto return_the_result;
+			}
 			int previous_selection_index = TabCtrl_GetCurSel(control.hwnd);
 			if (!extra_actions || (GetWindowLong(control.hwnd, GWL_STYLE) & TCS_BUTTONS))
 			{
 				if (TabCtrl_SetCurSel(control.hwnd, selection_index) == -1)
-					return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				{
+					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+					goto return_the_result;
+				}
 				// In this case but not the "else" below, must update the tab to show the proper controls:
 				if (previous_selection_index != selection_index)
 					gui.ControlUpdateCurrentTab(control, extra_actions > 0); // And set focus if the more forceful extra_actions was done.
@@ -953,9 +1030,12 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			{
 				TabCtrl_SetCurFocus(control.hwnd, selection_index); // No return value, so check for success below.
 				if (TabCtrl_GetCurSel(control.hwnd) != selection_index)
-					return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				{
+					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+					goto return_the_result;
+				}
 			}
-			return OK;
+			goto return_the_result;
 		}
 		// Otherwise, it's not a tab control, but a ListBox/DropDownList/Combo or other control:
 		if (*aParam3 == gui.mDelimiter && control.type != GUI_CONTROL_TAB) // Second extra action.
@@ -993,7 +1073,8 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 			y_msg = LBN_DBLCLK;
 			break;
 		default:  // Not a supported control type.
-			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			goto return_the_result;
 		} // switch(control.type)
 
 		if (guicontrol_cmd == GUICONTROL_CMD_CHOOSESTRING)
@@ -1004,38 +1085,56 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 				// in this case.
 				LRESULT found_item = SendMessage(control.hwnd, msg, -1, (LPARAM)aParam3);
 				if (found_item == CB_ERR) // CB_ERR == LB_ERR
-					return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				{
+					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+					goto return_the_result;
+				}
 				if (SendMessage(control.hwnd, LB_SETSEL, TRUE, found_item) == CB_ERR) // CB_ERR == LB_ERR
-					return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				{
+					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+					goto return_the_result;
+				}
 			}
 			else // Fixed 1 to be -1 in v1.0.35.05:
 				if (SendMessage(control.hwnd, msg, -1, (LPARAM)aParam3) == CB_ERR) // CB_ERR == LB_ERR
-					return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				{
+					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+					goto return_the_result;
+				}
 		}
 		else // Choose by position vs. string.
 		{
 			selection_index = ATOI(aParam3) - 1;
 			if (selection_index < 0)
-				return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			{
+				g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				goto return_the_result;
+			}
 			if (msg == LB_SETSEL) // Multi-select, so use the cumulative method.
 			{
 				if (SendMessage(control.hwnd, msg, TRUE, selection_index) == CB_ERR) // CB_ERR == LB_ERR
-					return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				{
+					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+					goto return_the_result;
+				}
 			}
 			else
 				if (SendMessage(control.hwnd, msg, selection_index, 0) == CB_ERR) // CB_ERR == LB_ERR
-					return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				{
+					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+					goto return_the_result;
+				}
 		}
 		int control_id = GUI_INDEX_TO_ID(control_index);
 		if (extra_actions > 0)
 			SendMessage(gui.mHwnd, WM_COMMAND, (WPARAM)MAKELONG(control_id, x_msg), (LPARAM)control.hwnd);
 		if (extra_actions > 1)
 			SendMessage(gui.mHwnd, WM_COMMAND, (WPARAM)MAKELONG(control_id, y_msg), (LPARAM)control.hwnd);
-		return OK;
+		goto return_the_result;
 	} // case
 
 	case GUICONTROL_CMD_FONT:
-		// Done in regardless of USES_FONT_AND_TEXT_COLOR to allow future OSes or common control updates
+		// Done regardless of USES_FONT_AND_TEXT_COLOR to allow future OSes or common control updates
 		// to be given an explicit font, even though it would have no effect currently:
 		SendMessage(control.hwnd, WM_SETFONT, (WPARAM)gui.sFont[gui.mCurrentFontIndex].hfont, 0);
 		if (USES_FONT_AND_TEXT_COLOR(control.type)) // Must check this to avoid corrupting union_hbitmap.
@@ -1062,7 +1161,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 		InvalidateRect(control.hwnd, NULL, TRUE); // Required for refresh, at least for edit controls, probably some others.
 		// Note: The DateTime_SetMonthCalFont() macro is not used for GUI_CONTROL_DATETIME because
 		// WM_SETFONT+InvalidateRect() above appear to be sufficient for it too.
-		return OK;
+		goto return_the_result;
 	} // switch()
 
 	// If the above didn't return, it wants this check:
@@ -1079,7 +1178,10 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 		//InvalidateRect(control.hwnd, NULL, TRUE);
 		//InvalidateRect(tab_control->hwnd, NULL, TRUE);
 	}
-	return OK;
+
+return_the_result:
+	DEPRIVATIZE_S_DEREF_BUF;
+	return result;
 }
 
 
@@ -1112,6 +1214,10 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 	// Beyond this point, errors are rare so set the default to "no error":
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 
+	PRIVATIZE_S_DEREF_BUF;  // GuiControlGet() needs this in case it triggers a callback in the script (e.g. subclassing). See also the comments in GuiControl().
+	ResultType result = OK; // Set default return value for use with all instances of "goto" further below.
+	// EVERYTHING below this point should use "result" and "goto return_the_result" instead of "return".
+
 	// Handle GUICONTROLGET_CMD_FOCUS(V) early since it doesn't need a specified ControlID:
 	if (guicontrolget_cmd == GUICONTROLGET_CMD_FOCUS || guicontrolget_cmd == GUICONTROLGET_CMD_FOCUSV)
 	{
@@ -1119,7 +1225,10 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 		cah.hwnd = GetFocus();
 		GuiControlType *pcontrol;
 		if (!cah.hwnd || !(pcontrol = gui.FindControl(cah.hwnd))) // Relies on short-circuit boolean order.
-			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		{
+			g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			goto return_the_result;
+		}
 		char focused_control[WINDOW_CLASS_SIZE];
 		if (guicontrolget_cmd == GUICONTROLGET_CMD_FOCUSV) // v1.0.43.06.
 			// GUI_HWND_TO_INDEX vs FindControl() is enough because FindControl() was alraedy called above:
@@ -1129,21 +1238,31 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 			// This section is the same as that in ControlGetFocus():
 			cah.class_name = focused_control;
 			if (!GetClassName(cah.hwnd, focused_control, sizeof(focused_control) - 5)) // -5 to allow room for sequence number.
-				return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			{
+				g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				goto return_the_result;
+			}
 			cah.class_count = 0;  // Init for the below.
 			cah.is_found = false; // Same.
 			EnumChildWindows(gui.mHwnd, EnumChildFindSeqNum, (LPARAM)&cah);
 			if (!cah.is_found) // Should be impossible due to FindControl() having already found it above.
-				return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			{
+				g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				goto return_the_result;
+			}
 			// Append the class sequence number onto the class name set the output param to be that value:
 			snprintfcat(focused_control, sizeof(focused_control), "%d", cah.class_count);
 		}
-		return output_var.Assign(focused_control); // And leave ErrorLevel set to NONE.
+		output_var.Assign(focused_control); // And leave ErrorLevel set to NONE.
+		goto return_the_result;
 	}
 
 	GuiIndexType control_index = gui.FindControl(aControlID);
 	if (control_index >= gui.mControlCount) // Not found.
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	{
+		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		goto return_the_result;
+	}
 	GuiControlType &control = gui.mControl[control_index];   // For performance and convenience.
 
 	switch(guicontrolget_cmd)
@@ -1151,7 +1270,8 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 	case GUICONTROLGET_CMD_CONTENTS:
 		// Because the below returns FAIL only if a critical error occurred, g_ErrorLevel is
 		// left at NONE as set above for all cases.
-		return gui.ControlGetContents(output_var, control, aParam3);
+		result = gui.ControlGetContents(output_var, control, aParam3);
+		goto return_the_result;
 
 	case GUICONTROLGET_CMD_POS:
 	{
@@ -1172,28 +1292,42 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 		if (   !(var = g_script.FindOrAddVar(var_name
 			, snprintf(var_name, sizeof(var_name), "%sX", output_var.mName)
 			, always_use))   ) // Called with output_var to enhance performance.
-			return FAIL;  // It will have already displayed the error.
+		{
+			result = FAIL; // It will have already displayed the error.
+			goto return_the_result;
+		}
 		var->Assign(pt.x);
 		if (   !(var = g_script.FindOrAddVar(var_name
 			, snprintf(var_name, sizeof(var_name), "%sY", output_var.mName)
 			, always_use))   ) // Called with output_var to enhance performance.
-			return FAIL;  // It will have already displayed the error.
+		{
+			result = FAIL; // It will have already displayed the error.
+			goto return_the_result;
+		}
 		var->Assign(pt.y);
 		if (   !(var = g_script.FindOrAddVar(var_name
 			, snprintf(var_name, sizeof(var_name), "%sW", output_var.mName)
 			, always_use))   ) // Called with output_var to enhance performance.
-			return FAIL;  // It will have already displayed the error.
+		{
+			result = FAIL; // It will have already displayed the error.
+			goto return_the_result;
+		}
 		var->Assign(rect.right - rect.left);
 		if (   !(var = g_script.FindOrAddVar(var_name
 			, snprintf(var_name, sizeof(var_name), "%sH", output_var.mName)
 			, always_use))   ) // Called with output_var to enhance performance.
-			return FAIL;  // It will have already displayed the error.
-		return var->Assign(rect.bottom - rect.top);
+		{
+			result = FAIL; // It will have already displayed the error.
+			goto return_the_result;
+		}
+		result = var->Assign(rect.bottom - rect.top);
+		goto return_the_result;
 	}
 
 	case GUICONTROLGET_CMD_ENABLED:
 		// See commment below.
-		return output_var.Assign(IsWindowEnabled(control.hwnd) ? "1" : "0");
+		result = output_var.Assign(IsWindowEnabled(control.hwnd) ? "1" : "0");
+		goto return_the_result;
 
 	case GUICONTROLGET_CMD_VISIBLE:
 		// From working on Window Spy, I seem to remember that IsWindowVisible() uses different standards
@@ -1202,13 +1336,19 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 		// this "visible" sub-cmd is kept separate from some figure command such as "GuiControlGet, Out, Style":
 		// 1) The style method is cumbersome to script with since it requires bitwise operates afterward.
 		// 2) IsVisible() uses a different standard of detection than simply checking WS_VISIBLE.
-		return output_var.Assign(IsWindowVisible(control.hwnd) ? "1" : "0");
+		result = output_var.Assign(IsWindowVisible(control.hwnd) ? "1" : "0");
+		goto return_the_result;
 
 	case GUICONTROLGET_CMD_HWND: // v1.0.46.16: Although it overlaps with HwndOutputVar, Majkinetor wanted this to help with encapsulation/modularization.
-		return output_var.AssignHWND(control.hwnd); // See also: CONTROLGET_CMD_HWND
+		result = output_var.AssignHWND(control.hwnd); // See also: CONTROLGET_CMD_HWND
+		goto return_the_result;
 	} // switch()
 
-	return FAIL;  // Should never be reached, but avoids compiler warning and improves bug detection.
+	result = FAIL;  // Should never be reached, but avoids compiler warning and improves bug detection.
+
+return_the_result:
+	DEPRIVATIZE_S_DEREF_BUF;
+	return result;
 }
 
 
@@ -6886,7 +7026,7 @@ int GuiType::FindOrCreateFont(char *aOptions, char *aFontName, FontType *aFounda
 			break;
 
 		case 'W':
-			font.weight = atoi(cp + 1);
+			font.weight = atoi(cp + 1); // atoi() vs. ATOI() because some option letters (above) are also hex letters, and atoi() stops converting upon reaching the first non-digit character.
 			break;
 
 		case 'Q': // L19: Allow control over font quality (anti-aliasing, etc.).

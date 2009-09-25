@@ -152,6 +152,7 @@ _atoi64
 ?ArgIndexToDouble@Line@@QAENH@Z  ; script.obj
 
 ?ConvertDllArgType@@YAXQAPADAAUDYNAPARM@@@Z
+?GetDllProcAddress@@YAPAXPADPAPAUHINSTANCE__@@@Z
 ?BIF_DllCall@@YAXAAUExprTokenType@@QAPAU1@H@Z   ; Sandwich technique (i.e. this function between two it calls)
 ?DynaCall@@YA?ATDYNARESULT@@HPAXQAUDYNAPARM@@HAAK0H@Z
 ?BIF_NumGet@@YAXAAUExprTokenType@@QAPAU1@H@Z
@@ -259,7 +260,7 @@ printf
 ?SuspendAll@Hotstring@@SAX_N@Z
 
 ; HOTKEY
-?HotCriterionAllowsFiring@@YAPAUHWND__@@EPAD0@Z
+?HotCriterionAllowsFiring@@YAPAUHWND__@@EPAD0H@Z
 ?SetGlobalHotTitleText@@YA?AW4ResultType@@PAD0@Z
 
 ?RequireHook@Hotkey@@SAXE@Z
@@ -407,7 +408,7 @@ printf
 
 ?AllDestructAndExit@Hotkey@@SAXH@Z
 ?ExitApp@Script@@QAE?AW4ResultType@@W4ExitReasons@@PADH@Z
-?TerminateApp@Script@@QAEXH@Z
+?TerminateApp@Script@@QAEXW4ExitReasons@@H@Z
 
 ;;;;;;;;;;;;;;;;;;;;
 ; BUILT-IN VARIABLES
@@ -549,7 +550,7 @@ pcre_get_stringtable_entries
 pcre_get_substring
 pcre_get_substring_list
 
-?get_compiled_regex@@YAPAUreal_pcre@@PADAA_NAAPAUpcre_extra@@PAUExprTokenType@@@Z
+?get_compiled_regex@@YAPAUreal_pcre@@PADAA_NAAPAUpcre_extra@@PAHPAUExprTokenType@@@Z
 ?RegExMatch@@YAPADPAD0@Z
 ?BIF_RegEx@@YAXAAUExprTokenType@@QAPAU1@H@Z
 ?RegExReplace@@YAXAAUExprTokenType@@QAPAU1@HPAUreal_pcre@@PAUpcre_extra@@PADHHQAHH@Z
@@ -781,7 +782,7 @@ qmathTan@8
 ?ControlUpdateCurrentTab@GuiType@@QAEXAAUGuiControlType@@_N@Z
 ?Create@GuiType@@QAE?AW4ResultType@@XZ
 ?Destroy@GuiType@@SA?AW4ResultType@@I@Z
-?DestroyIconIfUnused@GuiType@@SAXPAUHICON__@@@Z
+?DestroyIconsIfUnused@GuiType@@SAXPAUHICON__@@0@Z
 ?Escape@GuiType@@QAE?AW4ResultType@@XZ
 ?Event@GuiType@@QAEXIIGI@Z
 ?FindControl@GuiType@@QAEIPAD@Z
@@ -844,7 +845,7 @@ qmathTan@8
 ?GetSubmenuPos@UserMenu@@QAEIPAUHMENU__@@@Z
 ?IncludeStandardItems@UserMenu@@QAE?AW4ResultType@@XZ
 ?ModifyItem@UserMenu@@QAE?AW4ResultType@@PAVUserMenuItem@@PAVLabel@@PAV1@PAD@Z
-?PerformMenu@Script@@QAE?AW4ResultType@@PAD0000@Z
+?PerformMenu@Script@@QAE?AW4ResultType@@PAD00000@Z
 ?RenameItem@UserMenu@@QAE?AW4ResultType@@PAVUserMenuItem@@PAD@Z
 ?ScriptDeleteMenu@Script@@QAE?AW4ResultType@@PAVUserMenu@@@Z
 ?SetColor@UserMenu@@QAEXPAD_N@Z
@@ -875,7 +876,7 @@ qmathTan@8
 ?LoadPicture@@YAPAUHBITMAP__@@PADHHAAHH_N@Z
 ??0GdiplusStartupInput@Gdiplus@@QAE@P6GXW4DebugEventLevel@1@PAD@ZHH@Z
 
-?MySetWindowTheme@@YAJPAUHWND__@@PBG1@Z
+?MySetWindowTheme@@YAJPAUHWND__@@PB_W1@Z
 ?ReadRegString@@YAKPAUHKEY__@@PAD11I@Z  ; util.obj
 ?GetEnvVarReliable@@YAKPAD0@Z
 ?ScreenToWindow@@YAXAAUtagPOINT@@PAUHWND__@@@Z
@@ -1645,7 +1646,7 @@ WinMain@16
 
 ?ParseAndAddLine@Script@@AAE?AW4ResultType@@PADEE000I@Z
 ?AddLine@Script@@AAE?AW4ResultType@@EQAPADE0@Z
-?CloseAndReturn@Script@@AAE?AW4ResultType@@PAU_iobuf@@PAEW42@@Z
+?CloseAndReturnFailFunc@Script@@AAE?AW4ResultType@@PAU_iobuf@@@Z
 
 ?LineError@Line@@QAE?AW4ResultType@@PADW42@0@Z
 ?ScriptError@Script@@QAE?AW4ResultType@@PAD0@Z
@@ -1664,7 +1665,7 @@ WinMain@16
 ?ParseActionType@Script@@AAEPADPAD0_N@Z
 ?ParseDerefs@Script@@AAE?AW4ResultType@@PAD0PAUDerefType@@AAH@Z
 
-?StartsWithAssignmentOp@Line@@SA_NPAD@Z  ; script.obj
+; ?StartsWithAssignmentOp@Line@@SA_NPAD@Z  ; script.obj
 ?ExpressionToPostfix@Line@@QAE?AW4ResultType@@AAUArgStruct@@@Z  ; script.obj
 ?PreparseBlocks@Script@@AAEPAVLine@@PAV2@_N0@Z
 ?PreparseError@Line@@QAEPAV1@PAD0@Z

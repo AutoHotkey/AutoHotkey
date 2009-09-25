@@ -38,7 +38,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	if (aMode == RETURN_AFTER_MESSAGES_SPECIAL_FILTER)
 	{
 		aMode = RETURN_AFTER_MESSAGES; // To simplify things further below, eliminate the mode RETURN_AFTER_MESSAGES_SPECIAL_FILTER from further consideration.
-		// g_DeferMessagesForUnderlyingPump is a global because the instance of MsgSleep on the calls stack
+		// g_DeferMessagesForUnderlyingPump is a global because the instance of MsgSleep on the call stack
 		// that set it to true could launch new thread(s) that call MsgSleep again (i.e. a new layer), and a global
 		// is the easiest way to inform all such MsgSleeps that there's a non-standard msg pump beneath them on the
 		// call stack.
@@ -340,7 +340,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// UPDATE: The section marked "OLD" below is apparently not quite true: although Peek() has been
 				// caught yielding our timeslice, it's now difficult to reproduce.  Perhaps it doesn't consistently
 				// yield (maybe it depends on the relative priority of competing processes) and even when/if it
-				// does yield, it might somehow not as long or as good as Sleep(0).  This is evidenced by the fact
+				// does yield, it might somehow not be as long or as good as Sleep(0).  This is evidenced by the fact
 				// that some of my script's WinWaitClose's finish too quickly when the Sleep(0) is omitted after a
 				// Peek() that returned FALSE.
 				// OLD (mostly obsolete in light of above): It is not necessary to actually do the Sleep(0) when
@@ -780,7 +780,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// Otherwise, continue on and let a new thread be created to handle this hotstring.
 				// Since this isn't an auto-replace hotstring, set this value to support
 				// the built-in variable A_EndChar:
-				g_script.mEndChar = (char)LOWORD(msg.lParam);
+				g_script.mEndChar = hs->mEndCharRequired ? (char)LOWORD(msg.lParam) : 0; // v1.0.48.04: Explicitly set 0 when hs->mEndCharRequired==false because LOWORD is used for something else in that case.
 				type_of_first_line = hs->mJumpToLabel->mJumpToLine->mActionType;
 				break;
 
@@ -1830,20 +1830,24 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 
 		DEBUGGER_STACK_PUSH(SE_Thread, func.mJumpToLine, desc, func.mName)
 
-	char *return_value;
-	func.Call(return_value); // Call the UDF.
+	ExprTokenType result_token; // L31
+	func.Call(&result_token); // Call the UDF.
 	
 		DEBUGGER_STACK_POP()
 
 	// Fix for v1.0.47: Must handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value
 	// might be the contents of one of the function's local variables (which are about to be free'd).
-	bool block_further_processing = *return_value; // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
+	bool block_further_processing = !TokenIsEmptyString(result_token); // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
 	if (block_further_processing)
-		aMsgReply = (LPARAM)ATOI64(return_value); // Use 64-bit in case it's an unsigned number greater than 0x7FFFFFFF, in which case this allows it to wrap around to a negative.
+		aMsgReply = (LPARAM)TokenToInt64(result_token); // Use 64-bit in case it's an unsigned number greater than 0x7FFFFFFF, in which case this allows it to wrap around to a negative.
 	//else leave aMsgReply uninitialized because we'll be returning false later below, which tells our caller
 	// to ignore aMsgReply.
+	if (result_token.symbol == SYM_OBJECT) // L31
+		result_token.object->Release();
+
 	Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
 	ResumeUnderlyingThread(ErrorLevel_saved);
+
 	// Check that the msg_index item still exists (it may have been deleted during the thread that just finished,
 	// either by the thread itself or some other thread that interrupted it).  BIF_OnMessage has been sure to
 	// reset deleted array elements to have a NULL func.  Even so, the following scenario could happen:

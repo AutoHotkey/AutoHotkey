@@ -2808,6 +2808,30 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 	WPARAM wparam = (mArgc > 1 && mArg[1].text[0] == '"') ? (WPARAM)sArgDeref[1] : ArgToUInt(2);
 	LPARAM lparam = (mArgc > 2 && mArg[2].text[0] == '"') ? (LPARAM)sArgDeref[2] : ArgToUInt(3);
 
+	// Fixed for v1.0.48.04: Make copies of the wParam and lParam variables (if eligible for updating) prior
+	// to sending the message in case the message triggers a callback or OnMessage function, which would be
+	// likely to change the contents of the mArg array before we're doing using them after the Post/SendMsg.
+	// Seems best to do the above EVEN for PostMessage in case it can ever trigger a SendMessage internally
+	// (I seem to remember that the OS sometimes converts a PostMessage call into a SendMessage if the
+	// origin and destination are the same thread.)
+	// v1.0.43.06: If either wParam or lParam contained the address of a variable, update the mLength
+	// member after sending the message in case the receiver of the message wrote something to the buffer.
+	// This is similar to the way "Str" parameters work in DllCall.
+	Var *var_to_update[2];
+	int i;
+	for (i = 1; i < 3; ++i) // Two iterations: wParam and lParam.
+	{
+		if (mArgc > i) // The arg exists.
+		{
+			ArgStruct &this_arg = mArg[i];
+			var_to_update[i-1] = this_arg.text[0] == '&'  // Must start with '&', so things like 5+&MyVar aren't supported.
+				&& this_arg.deref && !this_arg.deref->is_function
+				&& this_arg.deref->var->Type() == VAR_NORMAL // Check VAR_NORMAL to be extra-certain it can't be the clipboard or a built-in variable (ExpandExpression() probably prevents taking the address of such a variable, but might not stop it from being in the deref array that way).
+				? this_arg.deref->var
+				: NULL;
+		}
+	}
+
 	if (aUseSend)
 	{
 		DWORD dwResult;
@@ -2823,21 +2847,10 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	}
 
-	// v1.0.43.06: If either wParam or lParam contained the address of a variable, update the mLength
-	// member in case the receiver of the message wrote something to the buffer.  This is similar to the
-	// way "Str" parameters work in DllCall.
-	for (int i = 1; i < 3; ++i) // Two iterations: wParam and lParam.
-	{
-		if (mArgc > i) // The arg exists.
-		{
-			ArgStruct &this_arg = mArg[i];
-			if (   this_arg.text[0] == '&'  // Must start with '&', so things like 5+&MyVar aren't supported.
-				&& this_arg.deref && !this_arg.deref->is_function && this_arg.deref->var->Type() == VAR_NORMAL   ) // Check VAR_NORMAL to be extra-certain it can't be the clipboard or a built-in variable (ExpandExpression() probably prevents taking the address of such a variable, but might not stop it from being in the deref array that way).
-				this_arg.deref->var->SetLengthFromContents();
-		}
-	}
+	for (i = 0; i < 2; ++i) // Two iterations: wParam and lParam.
+		if (var_to_update[i])
+			var_to_update[i]->SetLengthFromContents();
 
-	// By design (since this is a power user feature), no ControlDelay is done here.
 	return OK;
 }
 
@@ -6671,7 +6684,7 @@ ResultType Line::PerformAssign()
 			// Since expanding the size of output_var while preserving its existing contents would
 			// likely be a slow operation, revert to the normal method rather than the fast-append
 			// mode.  Expand the args then continue on normally to the below.
-			if (ExpandArgs(space_needed, arg_var) != OK) // In this case, both params were previously calculated by GetExpandedArgSize().
+			if (ExpandArgs(NULL, space_needed, arg_var) != OK) // In this case, both params were previously calculated by GetExpandedArgSize().
 				return FAIL;
 		}
 		else // there's enough capacity in output_var to accept the text to be appended.
@@ -7148,30 +7161,33 @@ int SortUDF(const void *a1, const void *a2)
 	// thing that called the sort in the first place.
 	//g_script.UpdateTrayIcon();
 
-	char *return_value;
+	ExprTokenType result_token; // L31
 	g_SortFunc->mParam[0].var->Assign(*(char **)a1); // For simplicity and due to extreme rarity, parameters beyond
 	g_SortFunc->mParam[1].var->Assign(*(char **)a2); // the first 2 aren't populated even if they have default values.
 	if (g_SortFunc->mParamCount > 2)
 		g_SortFunc->mParam[2].var->Assign((__int64)(*(char **)a2 - *(char **)a1)); // __int64 to allow for a list greater than 2 GB, though that is currently impossible.
-	g_SortFunc->Call(return_value); // Call the UDF.
+	g_SortFunc->Call(&result_token); // Call the UDF.
 
 	// MUST handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value might be
 	// the contents of one of the function's local variables (which are about to be free'd).
 	int returned_int;
-	if (*return_value) // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
+	if (!TokenIsEmptyString(result_token)) // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
 	{
 		// Using float vs. int makes sort up to 46% slower, so decided to use int. Must use ATOI64 vs. ATOI
 		// because otherwise a negative might overflow/wrap into a positive (at least with the MSVC++
 		// implementation of ATOI).
 		// ATOI64()'s implementation (and probably any/all others?) truncates any decimal portion;
 		// e.g. 0.8 and 0.3 both yield 0.
-		__int64 i64 = ATOI64(return_value);
+		__int64 i64 = TokenToInt64(result_token);
 		if (i64 > 0)  // Maybe there's a faster/better way to do these checks. Can't simply typecast to an int because some large positives wrap into negative, maybe vice versa.
 			returned_int = 1;
 		else if (i64 < 0)
 			returned_int = -1;
 		else
 			returned_int = 0;
+
+		if (result_token.symbol == SYM_OBJECT) // L31
+			result_token.object->Release();
 	}
 	else
 		returned_int = 0;
@@ -8660,7 +8676,7 @@ ResultType Line::FileCreateDir(char *aDirSpec)
 	// If it has a backslash, make sure all its parent directories exist before we attempt
 	// to create this directory:
 	char *last_backslash = strrchr(aDirSpec, '\\');
-	if (last_backslash)
+	if (last_backslash > aDirSpec) // v1.0.48.04: Changed "last_backslash" to "last_backslash > aDirSpec" so that an aDirSpec with a leading \ (but no other backslashes), such as \dir, is supported.
 	{
 		char parent_dir[MAX_PATH];
 		if (strlen(aDirSpec) >= sizeof(parent_dir)) // avoid overflow
@@ -8911,17 +8927,18 @@ ResultType Line::FileAppend(char *aFilespec, char *aBuf, LoopReadFileStruct *aCu
 	bool file_was_already_open = fp;
 
 	bool open_as_binary = (*aFilespec == '*');
-	if (open_as_binary && !*(aFilespec + 1)) // Naked "*" means write to stdout.
-		// Avoid puts() in case it bloats the code in some compilers. i.e. fputs() is already used,
-		// so using it again here shouldn't bloat it:
-		return g_ErrorLevel->Assign(fputs(aBuf, stdout) ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE); // fputs() returns 0 on success.
-		
 	if (open_as_binary)
+	{
 		// Do not do this because it's possible for filenames to start with a space
 		// (even though Explorer itself won't let you create them that way):
 		//write_filespec = omit_leading_whitespace(write_filespec + 1);
 		// Instead just do this:
 		++aFilespec;
+		if (!*aFilespec) // Naked "*" means write to stdout.
+			// Avoid puts() in case it bloats the code in some compilers. i.e. fputs() is already used,
+			// so using it again here shouldn't bloat it:
+			return g_ErrorLevel->Assign(fputs(aBuf, stdout) ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE); // fputs() returns 0 on success.
+	}
 	else if (!file_was_already_open) // As of 1.0.25, auto-detect binary if that mode wasn't explicitly specified.
 	{
 		// sArgVar is used for two reasons:
@@ -8957,7 +8974,7 @@ ResultType Line::FileAppend(char *aFilespec, char *aBuf, LoopReadFileStruct *aCu
 		// text mode -- is so rare as to be close to non-existent.  If this behavior
 		// is ever specifically needed, the script can explicitly places some \r\r\n's
 		// in the file and then write it as binary mode.
-		open_as_binary = strstr(aBuf, "\r\n");
+		open_as_binary = strstr(aBuf, "\r\n"); // Performance: The following could be done instead, but seems likely to cause some scripts to write \r\r\n and even \r\r\r\n due to the text having both \n and \r\n in it: char *first_newline = strchr(aBuf, '\n')... open_as_binary = first_newline > aBuf && aBuf[-1] == '\r'
 		// Due to "else if", the above will not turn off binary mode if binary was explicitly specified.
 		// That is useful to write Unix style text files whose lines end in solitary linefeeds.
 	}
@@ -11334,7 +11351,7 @@ VarSizeType BIV_EndChar(char *aBuf, char *aVarName)
 		*aBuf++ = g_script.mEndChar;
 		*aBuf = '\0';
 	}
-	return 1;
+	return g_script.mEndChar ? 1 : 0; // v1.0.48.04: Fixed to support a NULL char, which happens when the hotstring has the "no ending character required" option.
 }
 
 
@@ -11813,6 +11830,74 @@ void ConvertDllArgType(char *aBuf[], DYNAPARM &aDynaParam)
 
 
 
+void *GetDllProcAddress(char *aDllFileFunc, HMODULE *hmodule_to_free) // L31: Contains code extracted from BIF_DllCall for reuse in ExpressionToPostfix.
+{
+	int i;
+	void *function = NULL;
+	char param1_buf[MAX_PATH*2], *function_name, *dll_name; // Must use MAX_PATH*2 because the function name is INSIDE the Dll file, and thus MAX_PATH can be exceeded.
+	// Define the standard libraries here. If they reside in %SYSTEMROOT%\system32 it is not
+	// necessary to specify the full path (it wouldn't make sense anyway).
+	static HMODULE sStdModule[] = {GetModuleHandle("user32"), GetModuleHandle("kernel32")
+		, GetModuleHandle("comctl32"), GetModuleHandle("gdi32")}; // user32 is listed first for performance.
+	static int sStdModule_count = sizeof(sStdModule) / sizeof(HMODULE);
+
+	// Make a modifiable copy of param1 so that the DLL name and function name can be parsed out easily, and so that "A" can be appended if necessary (e.g. MessageBoxA):
+	strlcpy(param1_buf, aDllFileFunc, sizeof(param1_buf) - 1); // -1 to reserve space for the "A" suffix later below.
+	if (   !(function_name = strrchr(param1_buf, '\\'))   ) // No DLL name specified, so a search among standard defaults will be done.
+	{
+		dll_name = NULL;
+		function_name = param1_buf;
+
+		// Since no DLL was specified, search for the specified function among the standard modules.
+		for (i = 0; i < sStdModule_count; ++i)
+			if (   sStdModule[i] && (function = (void *)GetProcAddress(sStdModule[i], function_name))   )
+				break;
+		if (!function)
+		{
+			// Since the absence of the "A" suffix (e.g. MessageBoxA) is so common, try it that way
+			// but only here with the standard libraries since the risk of ambiguity (calling the wrong
+			// function) seems unacceptably high in a custom DLL.  For example, a custom DLL might have
+			// function called "AA" but not one called "A".
+			strcat(function_name, "A"); // 1 byte of memory was already reserved above for the 'A'.
+			for (i = 0; i < sStdModule_count; ++i)
+				if (   sStdModule[i] && (function = (void *)GetProcAddress(sStdModule[i], function_name))   )
+					break;
+		}
+	}
+	else // DLL file name is explicitly present.
+	{
+		dll_name = param1_buf;
+		*function_name = '\0';  // Terminate dll_name to split it off from function_name.
+		++function_name; // Set it to the character after the last backslash.
+
+		// Get module handle. This will work when DLL is already loaded and might improve performance if
+		// LoadLibrary is a high-overhead call even when the library already being loaded.  If
+		// GetModuleHandle() fails, fall back to LoadLibrary().
+		HMODULE hmodule;
+		if (   !(hmodule = GetModuleHandle(dll_name))    )
+			if (   !hmodule_to_free  ||  !(hmodule = *hmodule_to_free = LoadLibrary(dll_name))   )
+			{
+				if (hmodule_to_free) // L31: BIF_DllCall wants us to set ErrorLevel.  ExpressionToPostfix passes NULL.
+					g_ErrorLevel->Assign("-3"); // Stage 3 error: DLL couldn't be loaded.
+				return NULL;
+			}
+		if (   !(function = (void *)GetProcAddress(hmodule, function_name))   )
+		{
+			// v1.0.34: If it's one of the standard libraries, try the "A" suffix.
+			for (i = 0; i < sStdModule_count; ++i)
+				if (hmodule == sStdModule[i]) // Match found.
+				{
+					strcat(function_name, "A"); // 1 byte of memory was already reserved above for the 'A'.
+					function = (void *)GetProcAddress(hmodule, function_name);
+					break;
+				}
+		}
+	}
+	return function;
+}
+
+
+
 void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 // Stores a number or a SYM_STRING result in aResultToken.
 // Sets ErrorLevel to the error code appropriate to any problem that occurred.
@@ -11871,7 +11956,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 	{
 		// Check validity of this arg's return type:
 		ExprTokenType &token = *aParam[aParamCount - 1];
-		if (IS_NUMERIC(token.symbol)) // The return type should be a string, not something purely numeric.
+		if (IS_NUMERIC(token.symbol) || token.symbol == SYM_OBJECT) // The return type should be a string, not something purely numeric.
 		{
 			g_ErrorLevel->Assign("-2"); // Stage 2 error: Invalid return type or arg type.
 			return;
@@ -12058,65 +12143,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
     
 	if (!function) // The function's address hasn't yet been determined.
 	{
-		char param1_buf[MAX_PATH*2], *function_name, *dll_name; // Must use MAX_PATH*2 because the function name is INSIDE the Dll file, and thus MAX_PATH can be exceeded.
-		// Define the standard libraries here. If they reside in %SYSTEMROOT%\system32 it is not
-		// necessary to specify the full path (it wouldn't make sense anyway).
-		static HMODULE sStdModule[] = {GetModuleHandle("user32"), GetModuleHandle("kernel32")
-			, GetModuleHandle("comctl32"), GetModuleHandle("gdi32")}; // user32 is listed first for performance.
-		static int sStdModule_count = sizeof(sStdModule) / sizeof(HMODULE);
-
-		// Make a modifiable copy of param1 so that the DLL name and function name can be parsed out easily, and so that "A" can be appended if necessary (e.g. MessageBoxA):
-		strlcpy(param1_buf, aParam[0]->symbol == SYM_VAR ? aParam[0]->var->Contents() : aParam[0]->marker, sizeof(param1_buf) - 1); // -1 to reserve space for the "A" suffix later below.
-		if (   !(function_name = strrchr(param1_buf, '\\'))   ) // No DLL name specified, so a search among standard defaults will be done.
-		{
-			dll_name = NULL;
-			function_name = param1_buf;
-
-			// Since no DLL was specified, search for the specified function among the standard modules.
-			for (i = 0; i < sStdModule_count; ++i)
-				if (   sStdModule[i] && (function = (void *)GetProcAddress(sStdModule[i], function_name))   )
-					break;
-			if (!function)
-			{
-				// Since the absence of the "A" suffix (e.g. MessageBoxA) is so common, try it that way
-				// but only here with the standard libraries since the risk of ambiguity (calling the wrong
-				// function) seems unacceptably high in a custom DLL.  For example, a custom DLL might have
-				// function called "AA" but not one called "A".
-				strcat(function_name, "A"); // 1 byte of memory was already reserved above for the 'A'.
-				for (i = 0; i < sStdModule_count; ++i)
-					if (   sStdModule[i] && (function = (void *)GetProcAddress(sStdModule[i], function_name))   )
-						break;
-			}
-		}
-		else // DLL file name is explicitly present.
-		{
-			dll_name = param1_buf;
-			*function_name = '\0';  // Terminate dll_name to split it off from function_name.
-			++function_name; // Set it to the character after the last backslash.
-
-			// Get module handle. This will work when DLL is already loaded and might improve performance if
-			// LoadLibrary is a high-overhead call even when the library already being loaded.  If
-			// GetModuleHandle() fails, fall back to LoadLibrary().
-			HMODULE hmodule;
-			if (   !(hmodule = GetModuleHandle(dll_name))    )
-				if (   !(hmodule = hmodule_to_free = LoadLibrary(dll_name))   )
-				{
-					g_ErrorLevel->Assign("-3"); // Stage 3 error: DLL couldn't be loaded.
-					return;
-				}
-			if (   !(function = (void *)GetProcAddress(hmodule, function_name))   )
-			{
-				// v1.0.34: If it's one of the standard libraries, try the "A" suffix.
-				for (i = 0; i < sStdModule_count; ++i)
-					if (hmodule == sStdModule[i]) // Match found.
-					{
-						strcat(function_name, "A"); // 1 byte of memory was already reserved above for the 'A'.
-						function = (void *)GetProcAddress(hmodule, function_name);
-						break;
-					}
-			}
-		}
-
+		function = GetDllProcAddress(aParam[0]->symbol == SYM_VAR ? aParam[0]->var->Contents() : aParam[0]->marker, &hmodule_to_free);
 		if (!function)
 		{
 			g_ErrorLevel->Assign("-4"); // Stage 4 error: Function could not be found in the DLL(s).
@@ -12730,7 +12757,6 @@ int RegExCallout(pcre_callout_block *cb)
 		// Restore g.CurrentFunc - func.Call() will also save, overwrite and restore it.
 		g->CurrentFunc = prev_func;
 
-
 		if (func.mParamCount > 1)
 		{
 			// Callout number
@@ -12761,12 +12787,15 @@ int RegExCallout(pcre_callout_block *cb)
 	//++cb->start_match;
 	//++cb->current_position;
 
-	char *return_value;
-	func.Call(return_value); // Call the UDF.
+	ExprTokenType result_token;
+	func.Call(&result_token); // Call the UDF.
 
 	// MUST handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value
 	// might be the contents of one of the function's local variables (which are about to be freed).
-	int number_to_return = *return_value ? ATOU(return_value) : 0; // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
+	int number_to_return = (int)TokenToInt64(result_token); // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
+	if (result_token.symbol == SYM_OBJECT) // L31
+		result_token.object->Release();
+
 	Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
 
 	g->EventInfo = EventInfo_saved;
@@ -13205,7 +13234,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 					// this whole "empty_string_is_not_a_match" section of code executes for most patterns anyway,
 					// so performance seems less of a concern).
 					if (!pcre_fullinfo(aRE, aExtra, PCRE_INFO_OPTIONS, &pcre_options) // Success.
-						&& (pcre_options & PCRE_NEWLINE_ANY)) // See comment above.
+						&& (pcre_options & PCRE_NEWLINE_ANY))
 					{
 						result[result_length++] = '\n'; // This can't overflow because the size calculations in a previous iteration reserved 3 bytes: 1 for this character, 1 for the possible LF that follows CR, and 1 for the terminator.
 						++aStartingOffset; // Skip over this LF because it "belongs to" the CR that preceded it.
@@ -13255,8 +13284,9 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 			goto set_count_and_return; // Goto vs. break to leave aResultToken.marker set to aHaystack and replacement_count set to 0, and let ErrorLevel tell the story.
 		}
 
-		// Otherwise (since above didn't return, break, or continue), a match has been found (i.e. captured_pattern_count > 0;
-		// it should never be 0 in this case because that only happens when offset[] is too small, which it isn't).
+		// Otherwise (since above didn't return or break or continue), a match has been found (i.e.
+		// captured_pattern_count > 0; it should never be 0 in this case because that only happens
+		// when offset[] is too small, which it isn't).
 		++replacement_count;
 		--limit; // It's okay if it goes below -1 because all negatives are treated as "replace all".
 		match_pos = aHaystack + aOffset[0]; // This is the location in aHaystack of the entire-pattern match.
@@ -13437,14 +13467,15 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 
 		// If we're here, a match was found.
 		// Technique and comments from pcredemo.c:
-		// If the previous match was NOT for an empty string, we can just start the next match at the end
+		// If the previous match was NOT an empty string, we can just start the next match at the end
 		// of the previous one.
-		// If the previous match WAS for an empty string, we can't do that, as it would lead to an
+		// If the previous match WAS an empty string, we can't do that, as it would lead to an
 		// infinite loop. Instead, a special call of pcre_exec() is made with the PCRE_NOTEMPTY and
 		// PCRE_ANCHORED flags set. The first of these tells PCRE that an empty string is not a valid match;
 		// other possibilities must be tried. The second flag restricts PCRE to one match attempt at the
-		// initial string position. If this match succeeds, an alternative to the empty string match has been
-		// found, and we can proceed round the loop.
+		// initial string position. If this match succeeds, that means there are two valid matches at the
+		// SAME position: one for the empty string, and other for a non-empty string after it.  BOTH of
+		// these matches are considered valid, and BOTH are eligible for replacement by RegExReplace().
 		//
 		// The following may be one example of this concept:
 		// In the string "xy", replace the pattern "x?" by "z".  The traditional/proper answer (achieved by
@@ -13458,10 +13489,15 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		// 
 		// If this match is "" (length 0), then by definitition we just found a match in normal mode, not
 		// PCRE_NOTEMPTY mode (since that mode isn't capable of finding "").  Thus, empty_string_is_not_a_match
-		// is currently 0.
-		if (aOffset[0] == aOffset[1]) // A match was found but it's "".
-			empty_string_is_not_a_match = PCRE_NOTEMPTY | PCRE_ANCHORED; // Try to find a non-"" match at the same position by switching to an alternate mode and doing another iteration.
-		//else not an empty match, so advance to next candidate section of haystack and resume searching.
+		// is currently 0.  If "" was just found (and replaced), now try to find a second match at the same
+		// position, but one that isn't "". This is done by switching to an alternate mode and doing another
+		// iteration. Otherwise (the match found above wasn't "") advance to next candidate section of haystack
+		// and resume searching.
+		// v1.0.48.04: Fixed line below to reset to 0 (if appropriate) so that it doesn't get stuck in
+		// PCRE_NOTEMPTY-mode for one extra iteration.  Otherwise there are too few replacements (4 vs. 5)
+		// in examples like:
+		//    RegExReplace("ABC", "Z*|A", "x")
+		empty_string_is_not_a_match = (aOffset[0] == aOffset[1]) ? PCRE_NOTEMPTY|PCRE_ANCHORED : 0;
 		aStartingOffset = aOffset[1]; // In either case, set starting offset to the candidate for the next search.
 	} // for()
 
@@ -14537,10 +14573,13 @@ UINT __stdcall RegisterCallbackCStub(UINT *params, char *address) // Used by BIF
 
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount(); // Somewhat debatable, but might help minimize interruptions when the callback is called via message (e.g. subclassing a control; overriding a WindowProc).
 
-	char *return_value;
-	func.Call(return_value); // Call the UDF.  Call()'s own return value (e.g. EARLY_EXIT or FAIL) is ignored because it wouldn't affect the handling below.
+	ExprTokenType result_token; // L31
+	func.Call(&result_token); // Call the UDF.  Call()'s own return value (e.g. EARLY_EXIT or FAIL) is ignored because it wouldn't affect the handling below.
 
-	UINT number_to_return = *return_value ? ATOU(return_value) : DEFAULT_CB_RETURN_VALUE; // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
+	UINT number_to_return = (UINT)TokenToInt64(result_token); // L31: For simplicity, DEFAULT_CB_RETURN_VALUE is not used - DEFAULT_CB_RETURN_VALUE is 0, which TokenToInt64 will return if the token is empty.
+	if (result_token.symbol == SYM_OBJECT) // L31
+		result_token.object->Release();
+
 	Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count); // ABOVE must be done BEFORE this because return_value might be the contents of one of the function's local variables (which are about to be free'd).
 
 	if (cb.create_new_thread)
@@ -16126,6 +16165,62 @@ void BIF_IL_Add(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 
 
+void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount) // L31
+{
+	char trim_type = toupper(*aResultToken.marker); // aResultToken.marker points to the name of the Func which was called.
+
+	// All return values are SYM_STRING, so set that now:
+	aResultToken.symbol = SYM_STRING;
+
+	if (IS_NUMERIC(aParam[0]->symbol))
+	{
+		// Take a shortcut for SYM_INTEGER/SYM_FLOAT.
+		aResultToken.marker = TokenToString(*aParam[0], aResultToken.buf);
+		return;
+	}
+
+	char *str = TokenToString(*aParam[0]);
+	char *result = str; // Prior validation has ensured at least 1 param.
+	int extract_length = EXPR_TOKEN_LENGTH(aParam[0], str);
+
+	char omit_list_buf[MAX_NUMBER_SIZE]; // Support SYM_INTEGER/SYM_FLOAT even though it doesn't seem likely to happen.
+	char *omit_list;
+	if (aParamCount > 1)
+		omit_list = TokenToString(*aParam[1], omit_list_buf);
+	else
+		omit_list = " \t"; // Space and tab.
+
+	if (trim_type != 'R') // i.e. it's Trim() or LTrim()
+	{
+		result = omit_leading_any(result, omit_list, extract_length);
+		extract_length -= (result - str); // Adjust for omitted characters.
+	}
+	if (extract_length && trim_type != 'L') // i.e. it's Trim() or RTrim();  THE LINE BELOW REQUIRES extract_length >= 1.
+		extract_length = omit_trailing_any(result, omit_list, result + extract_length - 1);
+
+	if (extract_length < MAX_NUMBER_LENGTH)
+	{
+		// Small enough to fit in caller's buf:
+		aResultToken.marker = aResultToken.buf;
+	}
+	else
+	{
+		// Caller has provided a NULL circuit_token as a means of passing back memory we allocate here.
+		// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
+		if ( !(aResultToken.circuit_token = (ExprTokenType *)malloc(extract_length + 1)) )
+		{
+			// Out of memory.
+			aResultToken.marker = "";
+			return;
+		}
+		aResultToken.marker = (char *)aResultToken.circuit_token; // Store the address of the result for the caller.
+		aResultToken.buf = (char *)(size_t)extract_length; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
+	}
+	memcpy(aResultToken.marker, result, extract_length);
+	aResultToken.marker[extract_length] = '\0'; // Must be done separately from the memcpy() because the memcpy() might just be taking a substring (i.e. long before result's terminator).
+}
+
+
 
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
@@ -16185,6 +16280,8 @@ BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber)
 	case PURE_FLOAT: // Convert to float, not int, so that a number between 0.0001 and 0.9999 is is considered "true".
 		return TokenToDouble(aToken, FALSE, TRUE) != 0.0; // Pass FALSE for aCheckForHex since PURE_FLOAT is never hex.
 	default:
+		if (aToken.symbol == SYM_OBJECT || (aToken.symbol == SYM_VAR && aToken.var->HasObject())) // L31: Treat objects as "true".
+			return TRUE;
 		// This generally includes all SYM_STRINGs (even ones that are all digits such as "123") and all
 		// non-numeric SYM_OPERANDS.
 		// The only tokens considered FALSE are numeric 0 or 0.0, or an empty string.  All non-blank
@@ -16203,8 +16300,25 @@ SymbolType TokenIsPureNumeric(ExprTokenType &aToken)
 	case SYM_VAR:     return aToken.var->IsNonBlankIntegerOrFloat(); // Supports VAR_NORMAL and VAR_CLIPBOARD.
 	case SYM_OPERAND: return aToken.buf ? PURE_INTEGER // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
 			: IsPureNumeric(TokenToString(aToken), true, false, true);
+	case SYM_OBJECT: // L31: Fall through to below; objects are currently treated as empty strings in most cases.
 	case SYM_STRING:  return PURE_NOT_NUMERIC; // Explicitly-marked strings are not numeric, which allows numeric strings to be compared as strings rather than as numbers.
 	default: return aToken.symbol; // SYM_INTEGER or SYM_FLOAT
+	}
+}
+
+
+
+BOOL TokenIsEmptyString(ExprTokenType &aToken) // L31
+{
+	switch (aToken.symbol)
+	{
+	case SYM_OPERAND:
+	case SYM_STRING:
+		return !*aToken.marker;
+	case SYM_VAR:
+		return !aToken.var->HasContents();
+	default:
+		return FALSE;
 	}
 }
 
@@ -16224,12 +16338,13 @@ __int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPureInteger)
 	{
 		case SYM_INTEGER: return aToken.value_int64; // Fixed in v1.0.45 not to cast to int.
 		case SYM_OPERAND: // Listed near the top for performance.
-			if (aToken.buf) // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
+			if (aToken.buf) // The "buf" of a SYM_OPERAND is non-NULL if points to a pure integer.
 				return *(__int64 *)aToken.buf;
 			//else don't return; continue on to the bottom.
 			break;
 		case SYM_FLOAT: return (__int64)aToken.value_double; // 1.0.48: fixed to cast to __int64 vs. int.
 		case SYM_VAR: return aToken.var->ToInt64(aIsPureInteger);
+		case SYM_OBJECT: return 0; // L31: Returning the IObject* doesn't seem appropriate since it would rarely be useful, and other uses treat objects as an empty string.
 	}
 	// Since above didn't return, it's SYM_STRING, or a SYM_OPERAND that lacks a binary-integer counterpart.
 	return ATOI64(aToken.marker); // Fixed in v1.0.45 to use ATOI64 vs. ATOI().
@@ -16255,6 +16370,7 @@ double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex, BOOL aIsPureFloat
 				return (double)*(__int64 *)aToken.buf;
 			//else continue on to the bottom.
 			break;
+		case SYM_OBJECT: return 0; // L31: Treat like empty string.
 	}
 	// Since above didn't return, it's SYM_STRING or a SYM_OPERAND that lacks a binary-integer counterpart.
 	return aCheckForHex ? ATOF(aToken.marker) : atof(aToken.marker); // atof() omits the check for hexadecimal.
@@ -16289,6 +16405,7 @@ char *TokenToString(ExprTokenType &aToken, char *aBuf)
 		}
 		//else continue on to return the default at the bottom.
 		break;
+	//case SYM_OBJECT: // L31: Treat objects as empty strings (or TRUE where appropriate).
 	//default: // Not an operand: continue on to return the default at the bottom.
 	}
 	return "";
@@ -16321,6 +16438,11 @@ ResultType TokenToDoubleOrInt64(ExprTokenType &aToken)
 			// Otherwise:
 			str = aToken.marker;
 			break;
+		case SYM_OBJECT: // L31: Treat objects as empty strings (or TRUE where appropriate).
+			aToken.object->Release(); // Must be done before converting this token to something else.
+			aToken.symbol = SYM_STRING;
+			aToken.marker = ""; // For completeness.  Some callers such as BIF_Abs() rely on this being done.
+			// FALL THROUGH TO BELOW
 		default:  // Not an operand. Haven't found a way to produce this situation yet, but safe to assume it's possible.
 			return FAIL;
 	}
@@ -16338,6 +16460,19 @@ ResultType TokenToDoubleOrInt64(ExprTokenType &aToken)
 		return FAIL;
 	}
 	return OK; // Since above didn't return, indicate success.
+}
+
+
+
+IObject *TokenToObject(ExprTokenType &aToken)
+// L31: Returns IObject* from SYM_OBJECT or SYM_VAR (where var->HasObject()), NULL for other tokens.
+// Caller if responsible for calling AddRef() if that is appropriate.
+{
+	if (aToken.symbol == SYM_OBJECT)
+		return aToken.object;
+	if (aToken.symbol == SYM_VAR && aToken.var->HasObject())
+		return aToken.var->Object();
+	return NULL;
 }
 
 

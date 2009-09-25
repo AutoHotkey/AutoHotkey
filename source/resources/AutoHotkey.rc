@@ -105,6 +105,7 @@ IDI_PAUSE_SUSPEND       ICON                    "icon_pause_suspend.ico"
 IDI_FILETYPE            ICON                    "icon_filetype.ico"
 IDI_TRAY_WIN9X          ICON                    "icon_tray_win9x.ico"
 IDI_TRAY_WIN9X_SUSPEND  ICON                    "icon_tray_win9x_suspend.ico"
+IDI_TRAY                ICON                    "icon_tray.ico"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -149,8 +150,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,48,03
- PRODUCTVERSION 1,0,48,03
+ FILEVERSION 1,0,48,04
+ PRODUCTVERSION 1,0,48,04
  FILEFLAGSMASK 0x17L
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -167,20 +168,20 @@ BEGIN
         BEGIN
 #ifdef AUTOHOTKEYSC
             VALUE "FileDescription", ""
-            VALUE "FileVersion", "1, 0, 48, 03"
+            VALUE "FileVersion", "1, 0, 48, 04"
             VALUE "InternalName", ""
             VALUE "LegalCopyright", ""
             VALUE "OriginalFilename", ""
             VALUE "ProductName", ""
-            VALUE "ProductVersion", "1, 0, 48, 03"
+            VALUE "ProductVersion", "1, 0, 48, 04"
 #else
             VALUE "FileDescription", "AutoHotkey_L"
-            VALUE "FileVersion", "1, 0, 48, 03"
+            VALUE "FileVersion", "1, 0, 48, 04"
             VALUE "InternalName", "AutoHotkey_L"
-            VALUE "LegalCopyright", "Copyright (C) 2008"
+            VALUE "LegalCopyright", "Copyright (C) 2009"
             VALUE "OriginalFilename", "AutoHotkey.rc"
             VALUE "ProductName", "AutoHotkey_L"
-            VALUE "ProductVersion", "1, 0, 48, 03"
+            VALUE "ProductVersion", "1, 0, 48, 04"
 #endif
         END
     END

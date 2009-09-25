@@ -163,12 +163,17 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_MISSING_OUTPUT_VAR "Requires at least one of its output variables."
 #define ERR_MISSING_OPEN_PAREN "Missing \"(\""
 #define ERR_MISSING_OPEN_BRACE "Missing \"{\""
+#define ERR_MISSING_OPEN_BRACKET "Missing \"[\"" // L31
 #define ERR_MISSING_CLOSE_PAREN "Missing \")\""
 #define ERR_MISSING_CLOSE_BRACE "Missing \"}\""
+#define ERR_MISSING_CLOSE_BRACKET "Missing \"]\"" // L31
+#define ERR_MISMATCHED_BRACKET_PAREN "Mismatched [] or ()" // L31
 #define ERR_MISSING_CLOSE_QUOTE "Missing close-quote" // No period after short phrases.
 #define ERR_MISSING_COMMA "Missing comma"             //
 #define ERR_BLANK_PARAM "Blank parameter"             //
 #define ERR_BYREF "Caller must pass a variable to this ByRef parameter."
+#define ERR_TOO_MANY_PARAMS "Too many parameters passed to function." // L31
+#define ERR_TOO_FEW_PARAMS "Too few parameters passed to function." // L31
 #define ERR_ELSE_WITH_NO_IF "ELSE with no matching IF"
 #define ERR_OUTOFMEM "Out of memory."  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
 #define ERR_EXPR_TOO_LONG "Expression too long"
@@ -192,6 +197,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_PERCENT "Must be between -100 and 100."
 #define ERR_MOUSE_SPEED "Mouse speed must be between 0 and " MAX_MOUSE_SPEED_STR "."
 #define ERR_VAR_IS_READONLY "Not allowed as an output variable."
+#define ERR_INVALID_DOT "Unsupported use of \".\"" // L31
 
 //----------------------------------------------------------------------------------
 
@@ -515,33 +521,17 @@ class Label; // Forward declaration so that each can use the other.
 class Line
 {
 private:
-	#define SET_S_DEREF_BUF(ptr, size) sDerefBuf = ptr, sDerefBufSize = size
-	#define NULLIFY_S_DEREF_BUF \
-	{\
-		SET_S_DEREF_BUF(NULL, 0);\
-		if (sDerefBufSize > LARGE_DEREF_BUF_SIZE)\
-			--sLargeDerefBufs;\
-	}
-	static char *sDerefBuf;  // Buffer to hold the values of any args that need to be dereferenced.
-	static size_t sDerefBufSize;
-	static int sLargeDerefBufs;
-
-	// Static because only one line can be Expanded at a time (not to mention the fact that we
-	// wouldn't want the size of each line to be expanded by this size):
-	static char *sArgDeref[MAX_ARGS];
-	static Var *sArgVar[MAX_ARGS];
-
 	ResultType EvaluateCondition();
-	ResultType Line::PerformLoop(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
+	ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine
 		, __int64 aIterationLimit, bool aIsInfinite);
-	ResultType Line::PerformLoopFilePattern(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
+	ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, char *aFilePattern);
-	ResultType PerformLoopReg(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
+	ResultType PerformLoopReg(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, HKEY aRootKeyType, HKEY aRootKey, char *aRegSubkey);
-	ResultType PerformLoopParse(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
-	ResultType Line::PerformLoopParseCSV(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
-	ResultType PerformLoopReadFile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine, FILE *aReadFile, char *aWriteFileName);
-	ResultType PerformLoopWhile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
+	ResultType PerformLoopParse(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine);
+	ResultType Line::PerformLoopParseCSV(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine);
+	ResultType PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, FILE *aReadFile, char *aWriteFileName);
+	ResultType PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
 	ResultType Perform();
 
 	ResultType MouseGetPos(DWORD aOptions);
@@ -673,6 +663,43 @@ private:
 	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, char *aToggleText);
 
 public:
+	#define SET_S_DEREF_BUF(ptr, size) Line::sDerefBuf = ptr, Line::sDerefBufSize = size
+
+	#define NULLIFY_S_DEREF_BUF \
+	{\
+		SET_S_DEREF_BUF(NULL, 0);\
+		if (sDerefBufSize > LARGE_DEREF_BUF_SIZE)\
+			--sLargeDerefBufs;\
+	}
+
+	#define PRIVATIZE_S_DEREF_BUF \
+		char *our_deref_buf = Line::sDerefBuf;\
+		size_t our_deref_buf_size = Line::sDerefBufSize;\
+		SET_S_DEREF_BUF(NULL, 0) // For detecting whether ExpandExpression() caused a new buffer to be created.
+
+	#define DEPRIVATIZE_S_DEREF_BUF \
+		if (our_deref_buf)\
+		{\
+			if (Line::sDerefBuf)\
+			{\
+				free(Line::sDerefBuf);\
+				if (Line::sDerefBufSize > LARGE_DEREF_BUF_SIZE)\
+					--Line::sLargeDerefBufs;\
+			}\
+			SET_S_DEREF_BUF(our_deref_buf, our_deref_buf_size);\
+		}
+		//else the original buffer is NULL, so keep any new sDerefBuf that might have been created (should
+		// help avg-case performance).
+
+	static char *sDerefBuf;  // Buffer to hold the values of any args that need to be dereferenced.
+	static size_t sDerefBufSize;
+	static int sLargeDerefBufs;
+
+	// Static because only one line can be Expanded at a time (not to mention the fact that we
+	// wouldn't want the size of each line to be expanded by this size):
+	static char *sArgDeref[MAX_ARGS];
+	static Var *sArgVar[MAX_ARGS];
+
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
 	ActionTypeType mActionType; // What type of line this is.
@@ -803,23 +830,22 @@ public:
 
 	static void FreeDerefBufIfLarge();
 
-	ResultType ExecUntil(ExecUntilMode aMode, char **apReturnValue = NULL, Line **apJumpToLine = NULL);
+	ResultType ExecUntil(ExecUntilMode aMode, ExprTokenType *apReturnValue = NULL, Line **apJumpToLine = NULL);
 
 	// The following are characters that can't legally occur after an AND or OR.  It excludes all unary operators
 	// "!~*&-+" as well as the parentheses chars "()":
 	#define EXPR_CORE "<>=/|^,:"
 	// The characters common to both EXPR_TELLTALES and EXPR_OPERAND_TERMINATORS:
-	#define EXPR_COMMON " \t" EXPR_CORE "*&~!()"  // Space and Tab are included at the beginning for performance.
-	#define EXPR_COMMON_FORBIDDEN_BYREF "<>/|^,*&~!" // Omits space/tab because operators like := can have them. Omits colon because want to be able to pass a ternary byref. Omits = because colon is omitted (otherwise the logic is written in a way that wouldn't allow :=). Omits parentheses because a variable or assignment can be enclosed in them even though they're redundant.
+	#define EXPR_COMMON " \t" EXPR_CORE "*&~!()[]"  // Space and Tab are included at the beginning for performance.  L31: Added [] for array-like syntax.
 	#define CONTINUATION_LINE_SYMBOLS EXPR_CORE ".+-*&!?~" // v1.0.46.
 	// Characters whose presence in a mandatory-numeric param make it an expression for certain.
 	// + and - are not included here because legacy numeric parameters can contain unary plus or minus,
 	// e.g. WinMove, -%x%, -%y%:
 	#define EXPR_TELLTALES EXPR_COMMON "\""
 	// Characters that mark the end of an operand inside an expression.  Double-quote must not be included:
-	#define EXPR_OPERAND_TERMINATORS EXPR_COMMON "+-"
-	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS "\"" // Excludes '.' and '?' since they need special treatment due to the present/future allowance of them inside the names of variable and functions.
-	#define EXPR_FORBIDDEN_BYREF EXPR_COMMON_FORBIDDEN_BYREF ".+-\"" // Dot is also included.
+	#define EXPR_OPERAND_TERMINATORS_EX_DOT EXPR_COMMON "+-?" // L31: Used in a few places where '.' needs special treatment.
+	#define EXPR_OPERAND_TERMINATORS EXPR_OPERAND_TERMINATORS_EX_DOT "." // L31: Used in expressions where '.' is always an operator.
+	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS "\"" // L31: COMMENT NOW OBSOLETE -- Excludes '.' and '?' since they need special treatment due to the present/future allowance of them inside the names of variable and functions.
 	#define EXPR_ILLEGAL_CHARS "'\\;`{}" // Characters illegal in an expression.
 	// The following HOTSTRING option recognizer is kept somewhat forgiving/non-specific for backward compatibility
 	// (e.g. scripts may have some invalid hotstring options, which are simply ignored).  This definition is here
@@ -830,31 +856,9 @@ public:
 	#define IS_HOTSTRING_OPTION(chr) (isalnum(chr) || strchr("?*- \t", chr))
 	// The characters below are ordered with most-often used ones first, for performance:
 	#define DEFINE_END_FLAGS \
-		char end_flags[] = {' ', g_delimiter, '(', '\t', '<', '>', ':', '=', '+', '-', '*', '/', '!', '~', '&', '|', '^', '\0'}; // '\0' must be last.
+		char end_flags[] = {' ', g_delimiter, '(', '\t', '<', '>', ':', '=', '+', '-', '*', '/', '!', '~', '&', '|', '^', '[', ']', '\0'}; // '\0' must be last.  L31: Added '[' and ']' for standalone ObjSet/Get to work as ACT_EXPRESSION (']' mostly for intuitive error-reporting).  "Get" is allowed for simplicity and for future use with functions-as-values (e.g. varContainingFunc[..params..]).
 		// '?' and '.' are omitted from the above because they require special handling due to being permitted
 		// in the curruent or future names of variables and functions.
-	static bool StartsWithAssignmentOp(char *aStr) // RELATED TO ABOVE, so kept adjacent to it.
-	// Returns true if aStr begins with an assignment operator such as :=, >>=, ++, etc.
-	// For simplicity, this doesn't check that what comes AFTER an operator is valid.  For example,
-	// :== isn't valid, yet is reported as valid here because it starts with :=.
-	// Caller is responsible for having omitted leading whitespace, if desired.
-	{
-		if (!(*aStr && aStr[1])) // Relies on short-circuit boolean order.
-			return false;
-		char cp0 = *aStr;
-		switch(aStr[1])
-		{
-		// '=' is listed first for performance, since it's the most common.
-		case '=': return strchr(":+-*.|&^/", cp0); // Covers :=, +=, -=, *=, .=, |=, &=, ^=, /= (9 operators).
-		case '+': // Fall through to below. Covers ++.
-		case '-': return cp0 == aStr[1]; // Covers --.
-		case '/': // Fall through to below. Covers //=.
-		case '>': // Fall through to below. covers >>=.
-		case '<': return cp0 == aStr[1] && aStr[2] == '='; // Covers <<=.
-		}
-		// Otherwise:
-		return false;
-	}
 
 	#define ArgLength(aArgNum) ArgIndexLength((aArgNum)-1)
 	#define ArgToDouble(aArgNum) ArgIndexToDouble((aArgNum)-1)
@@ -866,11 +870,11 @@ public:
 	size_t ArgIndexLength(int aArgIndex);
 
 	Var *ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary = true);
-	ResultType ExpandArgs(VarSizeType aSpaceNeeded = VARSIZE_ERROR, Var *aArgVar[] = NULL);
+	ResultType ExpandArgs(ExprTokenType *aResultToken = NULL, VarSizeType aSpaceNeeded = VARSIZE_ERROR, Var *aArgVar[] = NULL);
 	VarSizeType GetExpandedArgSize(Var *aArgVar[]);
 	char *ExpandArg(char *aBuf, int aArgIndex, Var *aArgVar = NULL);
-	char *ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget, char *&aDerefBuf
-		, size_t &aDerefBufSize, char *aArgDeref[], size_t aExtraSize);
+	char *ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType *aResultToken
+		, char *&aTarget, char *&aDerefBuf, size_t &aDerefBufSize, char *aArgDeref[], size_t aExtraSize);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
 	ResultType EvaluateHotCriterionExpression(); // L4: Called by MainWindowProc to handle an AHK_HOT_IF_EXPR message.
 
@@ -1853,7 +1857,8 @@ public:
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
 	int mInstances; // How many instances currently exist on the call stack (due to recursion or thread interruption).  Future use: Might be used to limit how deep recursion can go to help prevent stack overflow.
-	//Func *mNextFunc; // Next item in linked list. // L27: Replaced linked list with binary-searchable array Script::mFunc.
+	Func *mNextFunc; // Next item in linked list. // L27: Replaced linked list with binary-searchable array Script::mFunc.
+	// L31: Re-enabled mNextFunc.  See AddFunc for comments.
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
 	UCHAR mDefaultVarType;
@@ -1867,9 +1872,14 @@ public:
 	// override in the script.  So mIsBuiltIn should always be used to determine whether the function
 	// is truly built-in, not its name.
 
-	ResultType Call(char *&aReturnValue) // Making this a function vs. inline doesn't measurably impact performance.
+	ResultType Call(ExprTokenType *aResultToken) // Making this a function vs. inline doesn't measurably impact performance.
 	{
-		aReturnValue = ""; // Init to default in case function doesn't return a value or it EXITs or fails.
+		if (aResultToken) // L31: Return value is returned via token rather than char** to support objects (and binary numbers as an added benefit).
+		{
+			// Init to default in case function doesn't return a value or it EXITs or fails.
+			aResultToken->symbol = SYM_STRING;
+			aResultToken->marker = "";
+		}
 		// Launch the function similar to Gosub (i.e. not as a new quasi-thread):
 		// The performance gain of conditionally passing NULL in place of result (when this is the
 		// outermost function call of a line consisting only of function calls, namely ACT_EXPRESSION)
@@ -1899,8 +1909,11 @@ public:
 		// for a command that references A_Index in two of its args such as the following:
 		// ToolTip, O, ((cos(A_Index) * 500) + 500), A_Index
 		++mInstances;
-			DEBUGGER_STACK_PUSH(SE_Func, mJumpToLine, func, this)
-		ResultType result = mJumpToLine->ExecUntil(UNTIL_BLOCK_END, &aReturnValue);
+
+		DEBUGGER_STACK_PUSH(SE_Func, mJumpToLine, func, this)
+
+		ResultType result = mJumpToLine->ExecUntil(UNTIL_BLOCK_END, aResultToken);
+
 #ifdef SCRIPT_DEBUG
 		if (g_Debugger.IsConnected())
 		{
@@ -1918,6 +1931,7 @@ public:
 		// Not used because function calls require extra work to allow the user to inspect variables before returning:
 		//DEBUGGER_STACK_POP()
 #endif
+
 		--mInstances;
 		// Restore the original value in case this function is called from inside another function.
 		// Due to the synchronous nature of recursion and recursion-collapse, this should keep
@@ -2404,7 +2418,7 @@ private:
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
 	UINT mLineCount;                  // The number of lines.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
-	Func /**mFirstFunc,*/ *mLastFunc;     // The first and last functions in the linked list.
+	Func *mFirstFunc, *mLastFunc;     // The first and last functions in the linked list.
 	Func **mFunc; // L27: Use a binary-searchable array to speed up function searches (especially beneficial for dynamic function calls).
 	int mFuncCount, mFuncCountMax;
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
@@ -2522,7 +2536,7 @@ public:
 	ResultType Edit();
 	ResultType Reload(bool aDisplayErrors);
 	ResultType ExitApp(ExitReasons aExitReason, char *aBuf = NULL, int ExitCode = 0);
-	void TerminateApp(int aExitCode);
+	void TerminateApp(ExitReasons aExitReason, int aExitCode); // L31: Added aExitReason. See script.cpp.
 #ifdef AUTOHOTKEYSC
 	LineNumberType LoadFromFile();
 #else
@@ -2714,6 +2728,7 @@ VarSizeType BIV_IsAdmin(char *aBuf, char *aVarName);
 	? token_raw->var->Length()\
 	: strlen(token_as_string)
 
+void *GetDllProcAddress(char *aDllFileFunc, HMODULE *hmodule_to_free = NULL); // L31: Contains code extracted from BIF_DllCall for reuse in ExpressionToPostfix.
 void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
@@ -2761,14 +2776,26 @@ void BIF_IL_Create(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 void BIF_IL_Destroy(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_IL_Add(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
+void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // L31: Also handles LTrim and RTrim.
+
+
+void BIF_IsObject(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // L31
+
+// L31: See script_object.cpp for comments.
+void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+
+
 BOOL LegacyResultToBOOL(char *aResult);
 BOOL LegacyVarToBOOL(Var &aVar);
 BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
+BOOL TokenIsEmptyString(ExprTokenType &aToken);
 __int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPureInteger = FALSE);
 double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE, BOOL aIsPureFloat = FALSE);
 char *TokenToString(ExprTokenType &aToken, char *aBuf = NULL);
 ResultType TokenToDoubleOrInt64(ExprTokenType &aToken);
+IObject *TokenToObject(ExprTokenType &aToken); // L31
 
 char *RegExMatch(char *aHaystack, char *aNeedleRegEx);
 void SetWorkingDir(char *aNewDir);

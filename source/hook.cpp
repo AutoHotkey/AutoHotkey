@@ -2878,12 +2878,13 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				// 2) Two ending characters would appear in pre-1.0.43 versions: one where the user typed
 				//    it and one at the end, which is clearly incorrect.
 				aHotstringWparamToPost = u; // Override the default set by caller.
-				aHotstringLparamToPost = MAKELONG(hs.mEndCharRequired && hs.mDoBackspace
-					? (UCHAR)g_HSBuf[g_HSBufLength - 1]
-					: (dead_key_sequence_complete && suppress_hotstring_final_char) // v1.0.44.09: See comments below.
+				aHotstringLparamToPost = MAKELONG(
+					hs.mEndCharRequired  // v1.0.48.04: Fixed to omit "&& hs.mDoBackspace" so that A_EndChar is set properly even for option "B0" (no backspacing).
+						? (UCHAR)g_HSBuf[g_HSBufLength - 1]  // Used by A_EndChar and Hotstring::DoReplace().
+						: (dead_key_sequence_complete && suppress_hotstring_final_char) // v1.0.44.09: See comments below.
 					, case_conform_mode);
 				// v1.0.44.09: dead_key_sequence_complete was added above to tell DoReplace() to do one fewer
-				// backspaces in cases where the final/triggering key of a hotstring is a the second key of
+				// backspaces in cases where the final/triggering key of a hotstring is the second key of
 				// a dead key sequence (such as a tilde in Portuguese followed by virtually any character).
 				// What happens in that case is that the dead key is suppressed (for the reasons described in
 				// the dead keys handler), but so is the key that follows it when suppress_hotstring_final_char

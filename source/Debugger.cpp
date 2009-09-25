@@ -1,7 +1,7 @@
 /*
 Debugger.cpp - Main body of AutoHotkey debugger engine.
 
-Copyright (c) 2008 Steve Gray
+Original code by Steve Gray.
 
 This software is provided 'as-is', without any express or implied
 warranty. In no event will the authors be held liable for any damages
@@ -9,14 +9,7 @@ arising from the use of this software.
 
 Permission is granted to anyone to use this software for any purpose,
 including commercial applications, and to alter it and redistribute it
-freely, subject to the following restrictions:
-
-    1. The origin of this software must not be misrepresented; you must not
-    claim that you wrote the original software. If you use this software
-    in a product, an acknowledgment in the product documentation would be
-    appreciated but is not required.
-
-    2. Altered source versions must not be misrepresented as being the original software.
+freely, without restriction.
 */
 
 #ifdef SCRIPT_DEBUG
@@ -43,7 +36,7 @@ int Debugger::PreExecLine(Line *aLine)
 
 	mStackTop->line = aLine;
 
-	if (bp && bp->state /*== BS_Enabled*/)
+	if (bp && bp->state == BS_Enabled)
 	{
 		if (bp->temporary)
 		{
@@ -55,7 +48,8 @@ int Debugger::PreExecLine(Line *aLine)
 	else if ((mInternalState == DIS_StepInto
 			|| mInternalState == DIS_StepOut && mStackDepth < mContinuationDepth
 			|| mInternalState == DIS_StepOver && mStackDepth <= mContinuationDepth)
-			&& aLine->mActionType != ACT_BLOCK_BEGIN && (aLine->mActionType != ACT_BLOCK_END || aLine->mAttribute) // For now, ignore { and }, except for function-end.
+			// L31: The following check is no longer done because a) ACT_BLOCK_BEGIN belonging to an IF/ELSE/LOOP is now skipped; and b) allowing step to break at ACT_BLOCK_END makes program flow a little easier to follow in some cases.
+			//&& aLine->mActionType != ACT_BLOCK_BEGIN && (aLine->mActionType != ACT_BLOCK_END || aLine->mAttribute) // For now, ignore { and }, except for function-end.
 			&& aLine->mLineNumber) // Some scripts (i.e. LowLevel/code.ahk) use mLineNumber==0 to indicate the Line has been generated and injected by the script.
 	{
 		return ProcessCommands();
@@ -433,9 +427,8 @@ DEBUGGER_COMMAND(Debugger::stop)
 	else // Seems appropriate to ignore invalid args for stop command.
 		mContinuationTransactionId = "";
 
-	Exit(EXIT_EXIT);
-	// Bypass OnExit subroutine.
-	g_script.TerminateApp(0);
+	// Call g_script.TerminateApp instead of g_script.ExitApp to bypass OnExit subroutine.
+	g_script.TerminateApp(EXIT_EXIT, 0); // This also causes this->Exit() to be called.
 	
 	// Should never be reached, but must be here to avoid a compile error:
 	return DEBUGGER_E_INTERNAL_ERROR;

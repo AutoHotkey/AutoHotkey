@@ -134,6 +134,9 @@ ResultType Var::Assign(Var &aVar)
 	if (source_var.mAttrib & VAR_ATTRIB_BINARY_CLIP) // Caller has ensured that source_var's Type() is VAR_NORMAL.
 		return target_var.AssignBinaryClip(source_var); // Caller wants a variable with binary contents assigned (copied) to another variable (usually VAR_CLIPBOARD).
 
+	if (source_var.IsObject()) // L31
+		return target_var.Assign(source_var.mObject);
+
 	// Otherwise:
 	return target_var.Assign(source_var.mContents, source_var.mLength); // Pass length to improve performance. It isn't necessary to call Contents()/Length() because they must be already up-to-date because there is no binary number to update them from (if there were, the above would have returned).  Also, caller ensured Type()==VAR_NORMAL.
 }
@@ -168,6 +171,7 @@ ResultType Var::Assign(ExprTokenType &aToken)
 		break;
 	case SYM_VAR:     return Assign(*aToken.var); // Caller has ensured that var->Type()==VAR_NORMAL (it's only VAR_CLIPBOARD for certain expression lvalues, which would never be assigned here because aToken is an rvalue).
 	case SYM_FLOAT:   return Assign(aToken.value_double); // Listed last because it's probably the least common.
+	case SYM_OBJECT:  return Assign(aToken.object); // L31
 	}
 	// Since above didn't return, it's SYM_STRING, or a SYM_OPERAND that lacks a binary-integer counterpart.
 	return Assign(aToken.marker);
@@ -504,6 +508,9 @@ ResultType Var::Assign(char *aBuf, VarSizeType aLength, bool aExactSize, bool aO
 		return OK;
 	}
 
+	if (IsObject()) // L31: Release this variable's reference to its object.
+		ReleaseObject();
+
 	// The below is done regardless of whether the section that follows it fails and returns early because
 	// it's the correct thing to do in all cases.
 	// For simplicity, this is done unconditionally even though it should be needed only
@@ -829,6 +836,9 @@ void Var::Free(int aWhenToFree, bool aExcludeAliases)
 	if (aWhenToFree == VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC && (mAttrib & VAR_ATTRIB_STATIC))
 		return; // This is the only case in which the variable ISN'T made blank.
 
+	if (IsObject()) // L31: Release this variable's reference to its object.
+		ReleaseObject();
+
 	mLength = 0; // Writing to union is safe because above already ensured that "this" isn't an alias.
 	mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED; // Even if it isn't free'd, variable will be made blank. So it seems proper to always remove the binary_clip attribute (since it can't be used that way after it's been made blank).
 
@@ -925,6 +935,8 @@ ResultType Var::AppendIfRoom(char *aStr, VarSizeType aLength)
 	memmove(var.mContents + var_length, aStr, aLength);  // mContents was updated via LengthIgnoreBinaryClip() above. Use memmove() vs. memcpy() in case there's any overlap between source and dest.
 	var.mContents[new_length] = '\0'; // Terminate it as a separate step in case caller passed a length shorter than the apparent length of aStr.
 	var.mLength = new_length;
+	if (IsObject()) // L31: Release this variable's reference to its object.
+		ReleaseObject();
 	// If this is a binary-clip variable, appending has probably "corrupted" it; so don't allow it to ever be
 	// put back onto the clipboard as binary data (the routine that does that is designed to detect corruption,
 	// but it might not be perfect since corruption is so rare).  Also remove the other flags that are no longer
@@ -1070,7 +1082,7 @@ void Var::Backup(VarBkp &aVarBkp)
 	if (mType != VAR_ALIAS) // Fix for v1.0.42.07: Don't reset mLength if the other member of the union is in effect.
 		mLength = 0;        // Otherwise, functions that recursively pass ByRef parameters can crash because mType stays as VAR_ALIAS.
 	mHowAllocated = ALLOC_MALLOC; // Never NONE because that would permit SIMPLE. See comments higher above.
-	mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_CACHE_DISABLED); // But the VAR_ATTRIB_STATIC flag isn't altered.
+	mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_CACHE_DISABLED | VAR_ATTRIB_OBJECT); // But the VAR_ATTRIB_STATIC flag isn't altered.
 	// Above: Removing VAR_ATTRIB_CACHE_DISABLED doesn't cost anything in performance and might help cases where
 	// a recursively-called function does numeric, cache-only operations on a variable that has zero capacity
 }
@@ -1124,24 +1136,26 @@ ResultType Var::ValidateName(char *aName, bool aIsRuntime, int aDisplayError)
 	{
 		// ispunct(): @ # $ _ [ ] ? ! % & " ' ( ) * + - ^ . / \ : ; , < = > ` ~ | { }
 		// Of the above, it seems best to disallow the following:
-		// () future: user-defined functions, e.g. var = myfunc2(myfunc1() + 2)
-		// ! future "not"
+		// () reserved: user-defined functions, e.g. var = myfunc2(myfunc1() + 2)
+		// ! reserved: "not"
 		// % reserved: deref char
-		// & future: "and" or "bitwise and"
+		// & reserved: "and" or "bitwise and"
 		// ' seems too iffy
 		// " seems too iffy
 		// */-+ reserved: math
 		// , reserved: delimiter
-		// . future: structs
-		// : seems too iffy
+		// . reserved: objects
+		// : reserved: ternary
+		// ? reserved: ternary
 		// ; reserved: comment
 		// \ seems too iffy
 		// <=> reserved: comparison
-		// ^ future: "exp/power"
+		// ^ reserved: "bitwise xor"
 		// ` reserved: escape char
 		// {} reserved: blocks
-		// | future: "or" or "bitwise or"
-		// ~ future: "bitwise not"
+		// | reserved: "or" or "bitwise or"
+		// ~ reserved: "bitwise not"
+		// [] reserved: array/object indexing
 
 		// Rewritten for v1.0.36.02 to enhance performance and also forbid characters such as linefeed and
 		// alert/bell inside variable names.  Ordered to maximize short-circuit performance for the most-often
@@ -1149,7 +1163,7 @@ ResultType Var::ValidateName(char *aName, bool aIsRuntime, int aDisplayError)
 		c = *cp;  // For performance.
 		if ((c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') // It's not a core/legacy alphanumberic.
 			&& c >= 0 // It's not an extended ASCII character such as €/¶/¿ (for simplicity and backward compatibility, these are always allowed).
-			&& !strchr("_[]$?#@", c)) // It's not a permitted punctunation mark.
+			&& !strchr("_$#@", c)) // It's not a permitted punctunation mark.  L31: Removed [], now reserved for array/object indexing. Also removed ? while I was at it.
 		{
 			if (aDisplayError)
 			{

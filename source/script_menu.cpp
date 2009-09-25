@@ -1063,7 +1063,6 @@ ResultType UserMenu::Create(MenuTypeType aMenuType)
 	MENUINFO menu_info;
 	menu_info.cbSize = sizeof(MENUINFO);
 	menu_info.fMask = MIM_STYLE;
-	// TODO: Menu sub-command for overriding default style.
 	menu_info.dwStyle = MNS_CHECKORBMP;
 	SetMenuInfo(mMenu, &menu_info);
 

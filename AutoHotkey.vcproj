@@ -156,7 +156,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalOptions="/SAFESEH:NO /Verbose"
+				AdditionalOptions="/SAFESEH:NO /IGNORE:4037"
 				AdditionalDependencies="wsock32.lib winmm.lib version.lib comctl32.lib"
 				OutputFile="$(OutDir)/AutoHotkey.exe"
 				LinkIncremental="1"
@@ -493,6 +493,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\source\script_object.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\source\script_registry.cpp"
 				>
 			</File>
@@ -584,6 +588,10 @@
 			</File>
 			<File
 				RelativePath=".\source\script.h"
+				>
+			</File>
+			<File
+				RelativePath=".\source\script_object.h"
 				>
 			</File>
 			<File

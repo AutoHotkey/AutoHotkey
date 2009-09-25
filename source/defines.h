@@ -32,11 +32,12 @@ GNU General Public License for more details.
 #pragma warning(disable:4800)
 #endif
 
-#define NAME_P "AutoHotkey"
 #ifndef NAME_L_REVISION
-#define NAME_L_REVISION ".L30" // L14: Added .Ln for AutoHotkey_L revision n.
+#define NAME_L_REVISION ".L31" // L14: Added .Ln for AutoHotkey_L revision n.
 #endif
-#define NAME_VERSION "1.0.48.03" NAME_L_REVISION
+
+#define NAME_P "AutoHotkey"
+#define NAME_VERSION "1.0.48.04" NAME_L_REVISION
 #define NAME_PV NAME_P " v" NAME_VERSION
 
 // Window class names: Changing these may result in new versions not being able to detect any old instances
@@ -143,12 +144,13 @@ enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
 #define IS_NUMERIC(symbol) ((symbol) == SYM_INTEGER || (symbol) == SYM_FLOAT) // Ordered for short-circuit performance.
 	, SYM_VAR // An operand that is a variable's contents.
 	, SYM_OPERAND // Generic/undetermined type of operand.
+	, SYM_OBJECT // L31: Represents an IObject interface pointer.
 	, SYM_DYNAMIC // An operand that needs further processing during the evaluation phase.
 	, SYM_OPERAND_END // Marks the symbol after the last operand.  This value is used below.
 	, SYM_BEGIN = SYM_OPERAND_END  // SYM_BEGIN is a special marker to simplify the code.
 #define IS_OPERAND(symbol) ((symbol) < SYM_OPERAND_END)
 	, SYM_POST_INCREMENT, SYM_POST_DECREMENT // Kept in this position for use by YIELDS_AN_OPERAND() [helps performance].
-	, SYM_CPAREN, SYM_OPAREN, SYM_COMMA  // CPAREN (close-paren) must come right before OPAREN and must be the first non-operand symbol other than SYM_BEGIN.
+	, SYM_CPAREN, SYM_CBRACKET, SYM_GET, SYM_OPAREN, SYM_OBRACKET, SYM_COMMA  // CPAREN (close-paren) must come right before OPAREN and must be the first non-operand symbol other than SYM_BEGIN.
 #define YIELDS_AN_OPERAND(symbol) ((symbol) < SYM_OPAREN) // CPAREN also covers the tail end of a function call.  Post-inc/dec yields an operand for things like Var++ + 2.  Definitely needs the parentheses around symbol.
 	, SYM_ASSIGN, SYM_ASSIGN_ADD, SYM_ASSIGN_SUBTRACT, SYM_ASSIGN_MULTIPLY, SYM_ASSIGN_DIVIDE, SYM_ASSIGN_FLOORDIVIDE
 	, SYM_ASSIGN_BITOR, SYM_ASSIGN_BITXOR, SYM_ASSIGN_BITAND, SYM_ASSIGN_BITSHIFTLEFT, SYM_ASSIGN_BITSHIFTRIGHT
@@ -172,12 +174,27 @@ enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
 	, SYM_POWER    // See comments near precedence array for why this takes precedence over SYM_NEGATIVE.
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
 	, SYM_FUNC     // A call to a function.
+	/*, SYM_GET*/, SYM_SET // L31: These are used only during load-time, before they are converted to SYM_FUNC.  SYM_GET was moved into the range for YIELDS_AN_OPERAND().
+	, SYM_REGEXMATCH // L31: Experimental ~= RegExMatch operator, equivalent to a RegExMatch call in two-parameter mode.
 	, SYM_COUNT    // Must be last because it's the total symbol count for everything above.
 	, SYM_INVALID = SYM_COUNT // Some callers may rely on YIELDS_AN_OPERAND(SYM_INVALID)==false.
 };
 // These two are macros for maintainability (i.e. seeing them together here helps maintain them together).
 #define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) (token.buf) // SYM_DYNAMICs other than doubles have NULL buf, at least at the stage this macro is called.
 #define SYM_DYNAMIC_IS_VAR_NORMAL_OR_CLIP(token) (!(token)->buf && ((token)->var->Type() == VAR_NORMAL || (token)->var->Type() == VAR_CLIPBOARD)) // i.e. it's an evironment variable or the clipboard, not a built-in variable or double-deref.
+
+
+struct ExprTokenType; // Forward declaration for use below.
+struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
+{
+	// Simple reference-counting mechanism.  Usage should be similar to IUnknown (COM).
+	virtual ULONG STDMETHODCALLTYPE AddRef(void) = 0;
+    virtual ULONG STDMETHODCALLTYPE Release(void) = 0;
+
+	// See script_object.cpp for comments.
+	virtual ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount) = 0;
+};//~L31
+
 
 struct DerefType; // Forward declarations for use below.
 class Var;        //
@@ -194,6 +211,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 		{
 			union // These nested structs and unions minimize the token size by overlapping data.
 			{
+				IObject *object;
 				DerefType *deref; // for SYM_FUNC
 				Var *var;         // for SYM_VAR
 				char *marker;     // for SYM_STRING and SYM_OPERAND.
