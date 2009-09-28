@@ -2830,6 +2830,8 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 				? this_arg.deref->var
 				: NULL;
 		}
+		else
+			var_to_update[i-1] = NULL;
 	}
 
 	if (aUseSend)
