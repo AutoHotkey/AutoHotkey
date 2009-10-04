@@ -659,7 +659,10 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType *
 				}
 
 				if (IS_NUMERIC(this_token.symbol) || this_token.symbol == SYM_OBJECT) // No need for make_result_persistent or early Assign(). Any numeric result can be considered final because it's already stored in permanent memory (namely the token itself).  L31: This also applies to SYM_OBJECT.
+				{
+					Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count); // L33: Added this line - it was overlooked in L31.
 					goto push_this_token; // For code simplicity, the optimization for numeric results is done at a later stage.
+				}
 				//else this_token is SYM_STRING or SYM_OPERAND.
 				result = this_token.marker;
 
@@ -923,6 +926,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType *
 			// And very soon, the outer loop will skip over the SYM_IFF_ELSE just found above.
 			right.circuit_token = this_token.circuit_token->circuit_token; // Can be NULL (in fact, it usually is).
 			this_token = right;   // Struct copy to set things up for push_this_token, which in turn is needed
+			right.symbol = SYM_INTEGER; // L33: Bugfix.  Since only one reference is counted and this reference is no longer needed, "disable" it.  This avoids calling Release too many times; an alternative would be to call AddRef (if this is an object) and let Release be called later.
 			goto push_this_token; // (rather than a simple STACK_PUSH(right)) because it checks for *cascading* short circuit in cases where this ternary's result is the boolean condition of another ternary.
 		}
 
@@ -1824,7 +1828,7 @@ non_null_circuit_token:
 
 	case SYM_OBJECT: // L31: Objects are always treated as empty strings; except with ACT_RETURN, which was handled above, and any usage which expects a boolean result.
 		result_to_return = "";
-		break;
+		goto normal_end_skip_output_var;
 
 	default: // Result contains a non-operand symbol such as an operator.
 		goto abnormal_end;

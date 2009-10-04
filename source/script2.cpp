@@ -2830,7 +2830,7 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 				? this_arg.deref->var
 				: NULL;
 		}
-		else
+		else // L32: Bugfix - var_to_update must be initialised.
 			var_to_update[i-1] = NULL;
 	}
 

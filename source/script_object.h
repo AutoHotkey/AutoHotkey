@@ -251,7 +251,6 @@ protected:
 	// Takes a token and outputs a key value (of type indicated by return value) and begin/end offsets where
 	// keys of this type are stored in the mFields array.  inline because currently used in only one place.
 	{
-		// TODO: Detect values which are outside the 32-bit signed range, including those outside the 64-bit signed range (such as 0x8000000000000000); treat them as strings instead.
 		if (TokenIsPureNumeric(key_token) == PURE_INTEGER)
 		{
 			// Treat all integer keys (even numeric strings) as pure integers for consistency and performance.

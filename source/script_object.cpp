@@ -39,29 +39,40 @@ Member Function Declarations:
 
 void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	IObject *obj;
+	IObject *obj = NULL;
 
-	//char *type_name = aResultToken.marker + 3; // Omit "Obj" prefix
-	//for (int t = 0; t < g_ObjTypeCount; ++t)
-	//{
-	//	if (!stricmp(type_name, g_ObjTypes[t].name))
-	//	{
-			//obj = g_ObjTypes[t].ctor(aParam, aParamCount);
-			obj = Object::Create(aParam, aParamCount);
-			if (obj)
-			{
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = obj;
-				// DO NOT ADDREF: after we return, the only reference will be in aResultToken.
-			}
-			else
-			{
-				aResultToken.symbol = SYM_STRING;
-				aResultToken.marker = "";
-			}
-	//		return;
-	//	}
-	//}
+	if (aParamCount == 1) // L33: POTENTIALLY UNSAFE - Cast IObject address to object reference.
+	{
+		obj = (IObject *)TokenToInt64(*aParam[0]);
+		if (obj < (IObject *)1024) // Prevent some obvious errors.
+			obj = NULL;
+		else
+			obj->AddRef();
+	}
+	else
+	{
+		//char *type_name = aResultToken.marker + 3; // Omit "Obj" prefix
+		//for (int t = 0; t < g_ObjTypeCount; ++t)
+		//{
+		//	if (!stricmp(type_name, g_ObjTypes[t].name))
+		//	{
+				//obj = g_ObjTypes[t].ctor(aParam, aParamCount);
+				obj = Object::Create(aParam, aParamCount);
+		//	}
+		//}
+	}
+
+	if (obj)
+	{
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = obj;
+		// DO NOT ADDREF: after we return, the only reference will be in aResultToken.
+	}
+	else
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = "";
+	}
 }
 
 
@@ -228,13 +239,13 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 			if (aResultToken.symbol == SYM_STRING || aResultToken.symbol == SYM_OPERAND) // SYM_VAR is not currently possible.
 			{
 				char *buf;
-				size_t size;
+				size_t len;
 				// Make a persistent copy of the string in case it is the contents of one of the function's local variables.
-				if ( *aResultToken.marker && (buf = (char *)malloc(size = strlen(aResultToken.marker) + 1)) )
+				if ( *aResultToken.marker && (buf = (char *)malloc(1 + (len = strlen(aResultToken.marker)))) )
 				{
-					aResultToken.marker = strcpy(buf, aResultToken.marker);
+					aResultToken.marker = (char *)memcpy(buf, aResultToken.marker, len + 1);
 					aResultToken.circuit_token = (ExprTokenType *)buf;
-					aResultToken.buf = (char *)size;
+					aResultToken.buf = (char *)len; // L33: Bugfix - buf is the length of the string, not the size of the memory allocation.
 				}
 				else
 					aResultToken.marker = "";
@@ -278,6 +289,8 @@ IObject *Object::Create(ExprTokenType *aParam[], int aParamCount)
 			// For future consideration: Maybe it *should* bypass the meta-mechanism?
 			obj->Invoke(result_token, this_token, IT_SET, aParam + i, 2);
 
+			if (result_token.symbol == SYM_OBJECT) // L33: Bugfix.  Invoke must assume the result will be used and as a result we must account for this object reference:
+				result_token.object->Release();
 			if (result_token.circuit_token) // Currently should never happen, but may happen in future.
 				free(result_token.circuit_token);
 		}
@@ -302,7 +315,21 @@ bool Object::Delete()
 
 		param = &g_MetaFuncId[3]; // "__Delete"
 
+		// L33: Privatize the last recursion layer's deref buffer in case it is in use by our caller.
+		// It's done here rather than in Var::FreeAndRestoreFunctionVars or CallFunc (even though the
+		// below might not actually call any script functions) because this function is probably
+		// executed much less often in most cases.
+		PRIVATIZE_S_DEREF_BUF;
+
 		mBase->Invoke(result_token, this_token, IT_CALL_METAFUNC, &param, 1);
+
+		DEPRIVATIZE_S_DEREF_BUF; // L33: See above.
+
+		// L33: Release result if given, although typically there should not be one:
+		if (result_token.circuit_token)
+			free(result_token.circuit_token);
+		if (result_token.symbol == SYM_OBJECT)
+			result_token.object->Release();
 
 		// Above may pass the script a reference to this object to allow cleanup routines to free any
 		// associated resources.  Deleting it is only safe if the script no longer holds any references
@@ -520,10 +547,12 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		if (IS_INVOKE_META) // For now it does not seem intuitive to allow obj.n:=v to alter obj's meta-object's fields.
 			return INVOKE_NOT_HANDLED; // Note this doesn't apply to obj.base.base:=foo since that is not via the meta-mechanism.
 
+		ExprTokenType &value_param = *aParam[1];
+
 		// Must be handled before inserting a new field:
 		if (!field && key_type == SYM_STRING && !stricmp(key.s, "base"))
 		{
-			IObject *obj = TokenToObject(*aParam[1]);
+			IObject *obj = TokenToObject(value_param);
 			if (obj)
 			{
 				obj->AddRef(); // for mBase
@@ -538,9 +567,9 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			return OK;
 		}
 
-		if ( TokenIsEmptyString(*aParam[1])
+		if ( TokenIsEmptyString(value_param)
 			|| !(field || (field = Insert(key_type, key, insert_pos)))
-			|| !field->Assign(*aParam[1]) ) // THIS LINE MAY HANDLE THE ASSIGNMENT
+			|| !field->Assign(value_param) ) // THIS LINE MAY HANDLE THE ASSIGNMENT
 		{
 			// Caller passed "" or a string assignment failed due to low memory. Remove this field;
 			//	attempting to retrieve it later will return "" unless overridden by meta-object.
@@ -552,14 +581,42 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			aResultToken.marker = "";
 		}
 		else
-			field->Get(aResultToken);
+		{
+			if (value_param.symbol == SYM_OPERAND || value_param.symbol == SYM_STRING)
+			{
+				// L33: Use value_param since our copy may be freed prematurely in some (possibly rare) cases:
+				aResultToken.symbol = value_param.symbol;
+				aResultToken.marker = value_param.marker;
+			}
+			else
+				field->Get(value_param);
+		}
 		
 		return OK;
 	}
 	//else: IS_INVOKE_GET
 	if (field)
 	{
-		field->Get(aResultToken);
+		if (field->symbol == SYM_OPERAND)
+		{
+			char *buf;
+			size_t len;
+			// L33: Make a persistent copy; our copy might be freed indirectly by releasing this object.
+			//		Prior to L33, callers took care of this UNLESS this was the last op in an expression.
+			if (buf = (char *)malloc(1 + (len = strlen(field->marker))))
+			{
+				aResultToken.marker = (char *)memcpy(buf, field->marker, len + 1);
+				aResultToken.circuit_token = (ExprTokenType *)buf;
+				aResultToken.buf = (char *)len;
+			}
+			else
+				aResultToken.marker = "";
+
+			aResultToken.symbol = SYM_OPERAND;
+		}
+		else
+			field->Get(aResultToken);
+
 		return OK;
 	}
 	if (key_type == SYM_STRING && !stricmp(key.s, "base"))

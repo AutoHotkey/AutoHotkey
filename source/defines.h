@@ -33,7 +33,7 @@ GNU General Public License for more details.
 #endif
 
 #ifndef NAME_L_REVISION
-#define NAME_L_REVISION ".L32" // L14: Added .Ln for AutoHotkey_L revision n.
+#define NAME_L_REVISION ".L33" // L14: Added .Ln for AutoHotkey_L revision n.
 #endif
 
 #define NAME_P "AutoHotkey"
@@ -187,12 +187,12 @@ enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
 struct ExprTokenType; // Forward declaration for use below.
 struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 {
+	// See script_object.cpp for comments.
+	virtual ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount) = 0;
+	
 	// Simple reference-counting mechanism.  Usage should be similar to IUnknown (COM).
 	virtual ULONG STDMETHODCALLTYPE AddRef(void) = 0;
     virtual ULONG STDMETHODCALLTYPE Release(void) = 0;
-
-	// See script_object.cpp for comments.
-	virtual ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount) = 0;
 };//~L31
 
 

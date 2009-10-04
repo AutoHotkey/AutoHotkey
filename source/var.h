@@ -430,23 +430,28 @@ public:
 	// See TokenToDoubleOrInt64 for comments.
 	{
 		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		switch (aToken.symbol = var.IsNonBlankIntegerOrFloat())
+		// L33: For greater compatibility with the official release and L revisions prior to L31,
+		// this section was changed to avoid converting numeric strings to SYM_INTEGER/SYM_FLOAT.
+		switch(var.mAttrib & VAR_ATTRIB_CACHE)
 		{
-		case PURE_INTEGER:
-			aToken.value_int64 = var.ToInt64(TRUE);
-			break;
-		case PURE_FLOAT:
-			aToken.value_double = var.ToDouble(TRUE);
-			break;
+		case VAR_ATTRIB_HAS_VALID_INT64:
+			aToken.symbol = SYM_INTEGER;
+			aToken.value_int64 = var.mContentsInt64;
+			return;
+		case VAR_ATTRIB_HAS_VALID_DOUBLE:
+			aToken.symbol = SYM_FLOAT;
+			aToken.value_double = var.mContentsDouble;
+			return;
 		default:
-			if (var.HasObject())
+			if (var.IsObject())
 			{
 				aToken.symbol = SYM_OBJECT;
 				aToken.object = var.mObject;
 				aToken.object->AddRef();
-				break;
+				return;
 			}
 			//else contains a regular string.
+			aToken.symbol = SYM_STRING;
 			aToken.marker = var.Contents();
 		}
 	}
