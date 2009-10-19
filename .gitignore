@@ -1,0 +1,9 @@
+*.[oO][bB][jJ]
+*.[eE][xX][eE]
+
+*.ncb
+*.user
+*.suo
+
+Debug*/
+Release*/
