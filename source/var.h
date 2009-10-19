@@ -226,7 +226,7 @@ private:
 public:
 	// Testing shows that due to data alignment, keeping mType adjacent to the other less-than-4-size member
 	// above it reduces size of each object by 4 bytes.
-	char *mName;    // The name of the var.
+	TCHAR *mName;    // The name of the var.
 
 	// sEmptyString is a special *writable* memory area for empty variables (those with zero capacity).
 	// Although making it writable does make buffer overflows difficult to detect and analyze (since they

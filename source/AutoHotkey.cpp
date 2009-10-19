@@ -27,7 +27,7 @@ GNU General Public License for more details.
 // hook functions.
 
 
-int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
+int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
 {
 	// Init any globals not in "struct g" that need it:
 	g_hInstance = hInstance;
@@ -44,22 +44,22 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 #ifndef AUTOHOTKEYSC
 	#ifdef _DEBUG
-		//char *script_filespec = "C:\\Util\\AutoHotkey.ahk";
-		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\GUI Demo.ahk";
-		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\MAIN.ahk";
-		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\Expressions.ahk";
-		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\Line Continuation.ahk";
-		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\DllCall.ahk";
-		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\RegExMatch & RegExReplace.ahk";
-		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\Win commands, all cases.ahk";
-		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\GUI Date.ahk";
-		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\GUI ListView.ahk";
-		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\OnMessage.ahk";
-		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\Send command.ahk";
-		//char *script_filespec = "C:\\A-Source\\AutoHotkey\\Ref\\ImageSearch\\TEST SUITE\\MAIN.ahk";
-		char *script_filespec = "C:\\A-Source\\AutoHotkey\\Test\\New Text Document.ahk";
+		//TCHAR *script_filespec = _T("C:\\Util\\AutoHotkey.ahk");
+		//TCHAR *script_filespec = _T("C:\\A-Source\\AutoHotkey\\Test\\GUI Demo.ahk");
+		//TCHAR *script_filespec = _T("C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\MAIN.ahk");
+		//TCHAR *script_filespec = _T("C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\Expressions.ahk");
+		//TCHAR *script_filespec = _T("C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\Line Continuation.ahk");
+		//TCHAR *script_filespec = _T(_T("C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\DllCall.ahk"));
+		//TCHAR *script_filespec = _T("C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\RegExMatch & RegExReplace.ahk");
+		//TCHAR *script_filespec = _T("C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\Win commands, all cases.ahk");
+		//TCHAR *script_filespec = _T("C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\GUI Date.ahk");
+		//TCHAR *script_filespec = _T("C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\GUI ListView.ahk");
+		//TCHAR *script_filespec = _T("C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\OnMessage.ahk");
+		//TCHAR *script_filespec = _T("C:\\A-Source\\AutoHotkey\\Test\\TEST SUITES\\Send command.ahk");
+		//TCHAR *script_filespec = _T("C:\\A-Source\\AutoHotkey\\Ref\\ImageSearch\\TEST SUITE\\MAIN.ahk");
+		TCHAR *script_filespec = _T("C:\\A-Source\\AutoHotkey\\Test\\New Text Document.ahk");
 	#else
-		char *script_filespec = NULL; // Set default as "unspecified/omitted".
+		TCHAR *script_filespec = NULL; // Set default as "unspecified/omitted".
 	#endif
 #endif
 
