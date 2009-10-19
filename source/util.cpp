@@ -18,7 +18,7 @@ GNU General Public License for more details.
 #include <olectl.h> // for OleLoadPicture()
 #include <Gdiplus.h> // Used by LoadPicture().
 #include "util.h"
-#include "globaldata.h"
+//#include "globaldata.h"
 
 
 int GetYDay(int aMon, int aDay, bool aIsLeapYear)
@@ -40,7 +40,7 @@ int GetYDay(int aMon, int aDay, bool aIsLeapYear)
 
 
 
-int GetISOWeekNumber(char *aBuf, int aYear, int aYDay, int aWDay)
+int GetISOWeekNumber(LPTSTR aBuf, int aYear, int aYDay, int aWDay)
 // Caller must ensure that aBuf is of size 7 or greater, that aYear is a valid year (e.g. 2005),
 // that aYDay is between 1 and 366, and that aWDay is between 0 and 6 (day of the week).
 // Produces the week number in YYYYNN format, e.g. 200501.
@@ -71,14 +71,14 @@ int GetISOWeekNumber(char *aBuf, int aYear, int aYDay, int aWDay)
 		}
 	}
 
-	// Use snprintf() for safety; that is, in case year contains a value longer than 4 digits.
+	// Use sntprintf() for safety; that is, in case year contains a value longer than 4 digits.
 	// This also adds the leading zeros in front of year and week number, if needed.
-	return snprintf(aBuf, 7, "%04d%02d", year, (days / 7) + 1); // Return the length of the string produced.
+	return sntprintf(aBuf, 7, _T("%04d%02d"), year, (days / 7) + 1); // Return the length of the string produced.
 }
 
 
 
-ResultType YYYYMMDDToFileTime(char *aYYYYMMDD, FILETIME &aFileTime)
+ResultType YYYYMMDDToFileTime(LPTSTR aYYYYMMDD, FILETIME &aFileTime)
 {
 	SYSTEMTIME st;
 	YYYYMMDDToSystemTime(aYYYYMMDD, st, false);  // "false" because it's validated below.
@@ -91,7 +91,7 @@ ResultType YYYYMMDDToFileTime(char *aYYYYMMDD, FILETIME &aFileTime)
 
 
 
-DWORD YYYYMMDDToSystemTime2(char *aYYYYMMDD, SYSTEMTIME *aSystemTime)
+DWORD YYYYMMDDToSystemTime2(LPTSTR aYYYYMMDD, SYSTEMTIME *aSystemTime)
 // Calls YYYYMMDDToSystemTime() to fill up to two elements of the aSystemTime array.
 // Returns a GDTR bitwise combination to indicate which of the two elements, or both, are valid.
 // Caller must ensure that aYYYYMMDD is a modifiable string since it's temporarily altered and restored here.
@@ -99,20 +99,20 @@ DWORD YYYYMMDDToSystemTime2(char *aYYYYMMDD, SYSTEMTIME *aSystemTime)
 	DWORD gdtr = 0;
 	if (!*aYYYYMMDD)
 		return gdtr;
-	if (*aYYYYMMDD != '-') // Since first char isn't a dash, there is a minimum present.
+	if (*aYYYYMMDD != _T('-')) // Since first char isn't a dash, there is a minimum present.
 	{
-		char *cp;
-		if (cp = strchr(aYYYYMMDD + 1, '-'))
-			*cp = '\0'; // Temporarily terminate in case only the leading part of the YYYYMMDD format is present.  Otherwise, the dash and other chars would be considered invalid fields.
+		LPTSTR cp;
+		if (cp = _tcschr(aYYYYMMDD + 1, _T('-')))
+			*cp = _T('\0'); // Temporarily terminate in case only the leading part of the YYYYMMDD format is present.  Otherwise, the dash and other chars would be considered invalid fields.
 		if (YYYYMMDDToSystemTime(aYYYYMMDD, aSystemTime[0], true)) // Date string is valid.
 			gdtr |= GDTR_MIN; // Indicate that minimum is present.
 		if (cp)
 		{
-			*cp = '-'; // Undo the temp. termination.
+			*cp = _T('-'); // Undo the temp. termination.
 			aYYYYMMDD = cp + 1; // Set it to the maximum's position for use below.
 		}
 		else // No dash, so there is no maximum.  Indicate this by making aYYYYMMDD empty.
-			aYYYYMMDD = "";
+			aYYYYMMDD = _T("");
 	}
 	else // *aYYYYMMDD=='-', so only the maximum is present; thus there will be no minimum.
 		++aYYYYMMDD; // Skip over the dash to set it to the maximum's position.
@@ -126,7 +126,7 @@ DWORD YYYYMMDDToSystemTime2(char *aYYYYMMDD, SYSTEMTIME *aSystemTime)
 
 
 
-ResultType YYYYMMDDToSystemTime(char *aYYYYMMDD, SYSTEMTIME &aSystemTime, bool aDoValidate)
+ResultType YYYYMMDDToSystemTime(LPTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool aDoValidate)
 // Although aYYYYMMDD need not be terminated at the end of the YYYYMMDDHH24MISS string (as long as
 // the string's capacity is at least 14), it should be terminated if only the leading part
 // of the YYYYMMDDHH24MISS format is present.
@@ -136,16 +136,16 @@ ResultType YYYYMMDDToSystemTime(char *aYYYYMMDD, SYSTEMTIME &aSystemTime, bool a
 // (Windows generally does not support earlier years).
 {
 	// sscanf() is avoided because it adds 2 KB to the compressed EXE size.
-	char temp[16];
-	size_t length = strlen(aYYYYMMDD); // Use this rather than incrementing the pointer in case there are ever partial fields such as 20051 vs. 200501.
+	TCHAR temp[16];
+	size_t length = _tcslen(aYYYYMMDD); // Use this rather than incrementing the pointer in case there are ever partial fields such as 20051 vs. 200501.
 
-	strlcpy(temp, aYYYYMMDD, 5);
-	aSystemTime.wYear = atoi(temp);
+	tcslcpy(temp, aYYYYMMDD, 5);
+	aSystemTime.wYear = _ttoi(temp);
 
 	if (length > 4) // It has a month component.
 	{
-		strlcpy(temp, aYYYYMMDD + 4, 3);
-		aSystemTime.wMonth = atoi(temp);  // Unlike "struct tm", SYSTEMTIME uses 1 for January, not 0.
+		tcslcpy(temp, aYYYYMMDD + 4, 3);
+		aSystemTime.wMonth = _ttoi(temp);  // Unlike "struct tm", SYSTEMTIME uses 1 for January, not 0.
 		// v1.0.48: Changed not to provide a default when month number is out-of-range.
 		// This allows callers like "if var is time" to properly detect badly-formatted dates.
 	}
@@ -154,32 +154,32 @@ ResultType YYYYMMDDToSystemTime(char *aYYYYMMDD, SYSTEMTIME &aSystemTime, bool a
 
 	if (length > 6) // It has a day-of-month component.
 	{
-		strlcpy(temp, aYYYYMMDD + 6, 3);
-		aSystemTime.wDay = atoi(temp);
+		tcslcpy(temp, aYYYYMMDD + 6, 3);
+		aSystemTime.wDay = _ttoi(temp);
 	}
 	else
 		aSystemTime.wDay = 1;
 
 	if (length > 8) // It has an hour component.
 	{
-		strlcpy(temp, aYYYYMMDD + 8, 3);
-		aSystemTime.wHour = atoi(temp);
+		tcslcpy(temp, aYYYYMMDD + 8, 3);
+		aSystemTime.wHour = _ttoi(temp);
 	}
 	else
 		aSystemTime.wHour = 0;   // Midnight.
 
 	if (length > 10) // It has a minutes component.
 	{
-		strlcpy(temp, aYYYYMMDD + 10, 3);
-		aSystemTime.wMinute = atoi(temp);
+		tcslcpy(temp, aYYYYMMDD + 10, 3);
+		aSystemTime.wMinute = _ttoi(temp);
 	}
 	else
 		aSystemTime.wMinute = 0;
 
 	if (length > 12) // It has a seconds component.
 	{
-		strlcpy(temp, aYYYYMMDD + 12, 3);
-		aSystemTime.wSecond = atoi(temp);
+		tcslcpy(temp, aYYYYMMDD + 12, 3);
+		aSystemTime.wSecond = _ttoi(temp);
 	}
 	else
 		aSystemTime.wSecond = 0;
@@ -220,7 +220,7 @@ ResultType YYYYMMDDToSystemTime(char *aYYYYMMDD, SYSTEMTIME &aSystemTime, bool a
 
 
 
-char *FileTimeToYYYYMMDD(char *aBuf, FILETIME &aTime, bool aConvertToLocalTime)
+LPTSTR FileTimeToYYYYMMDD(LPTSTR aBuf, FILETIME &aTime, bool aConvertToLocalTime)
 // Returns aBuf.
 {
 	FILETIME ft;
@@ -231,19 +231,19 @@ char *FileTimeToYYYYMMDD(char *aBuf, FILETIME &aTime, bool aConvertToLocalTime)
 	SYSTEMTIME st;
 	if (FileTimeToSystemTime(&ft, &st))
 		return SystemTimeToYYYYMMDD(aBuf, st);
-	*aBuf = '\0';
+	*aBuf = _T('\0');
 	return aBuf;
 }
 
 
 
-char *SystemTimeToYYYYMMDD(char *aBuf, SYSTEMTIME &aTime)
+LPTSTR SystemTimeToYYYYMMDD(LPTSTR aBuf, SYSTEMTIME &aTime)
 // Returns aBuf.
 // Remember not to offer a "aConvertToLocalTime" option, because calling SystemTimeToTzSpecificLocalTime()
 // on Win9x apparently results in an invalid time because the function is implemented only as a stub on
 // those OSes.
 {
-	sprintf(aBuf, "%04d%02d%02d" "%02d%02d%02d"
+	_stprintf(aBuf, _T("%04d%02d%02d") _T("%02d%02d%02d")
 		, aTime.wYear, aTime.wMonth, aTime.wDay
 		, aTime.wHour, aTime.wMinute, aTime.wSecond);
 	return aBuf;
@@ -251,7 +251,7 @@ char *SystemTimeToYYYYMMDD(char *aBuf, SYSTEMTIME &aTime)
 
 
 
-__int64 YYYYMMDDSecondsUntil(char *aYYYYMMDDStart, char *aYYYYMMDDEnd, bool &aFailed)
+__int64 YYYYMMDDSecondsUntil(LPTSTR aYYYYMMDDStart, LPTSTR aYYYYMMDDEnd, bool &aFailed)
 // Returns the number of seconds from aYYYYMMDDStart until aYYYYMMDDEnd.
 // If aYYYYMMDDStart is blank, the current time will be used in its place.
 {
@@ -305,7 +305,7 @@ __int64 FileTimeSecondsUntil(FILETIME *pftStart, FILETIME *pftEnd)
 
 
 
-SymbolType IsPureNumeric(char *aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
+SymbolType IsPureNumeric(LPTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
 	, BOOL aAllowFloat, BOOL aAllowImpure)  // BOOL vs. bool might squeeze a little more performance out of this frequently-called function.
 // String can contain whitespace.
 // If aBuf doesn't contain something purely numeric, PURE_NOT_NUMERIC is returned.  The same happens if
@@ -323,14 +323,14 @@ SymbolType IsPureNumeric(char *aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespa
 	if (!*aBuf) // The string is empty or consists entirely of whitespace.
 		return aAllowAllWhitespace ? PURE_INTEGER : PURE_NOT_NUMERIC;
 
-	if (*aBuf == '-')
+	if (*aBuf == _T('-'))
 	{
 		if (aAllowNegative)
 			++aBuf;
 		else
 			return PURE_NOT_NUMERIC;
 	}
-	else if (*aBuf == '+')
+	else if (*aBuf == _T('+'))
 		++aBuf;
 
 	// Relies on short circuit boolean order to prevent reading beyond the end of the string:
@@ -358,7 +358,7 @@ SymbolType IsPureNumeric(char *aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespa
 		}
 		if (!c) // End of string was encountered.
 			break; // The number qualifies as pure, so fall through to the logic at the bottom. (It would already have returned elsewhere in the loop if the number is impure).
-		if (c == '.')
+		if (c == _T('.'))
 		{
 			if (!aAllowFloat || has_decimal_point || is_hex) // If aAllowFloat==false, a decimal point at the very end of the number is considered non-numeric even if aAllowImpure==true.  Some callers like "case ACT_ADD" might rely on this.
 				// i.e. if aBuf contains 2 decimal points, it can't be a valid number.
@@ -371,7 +371,7 @@ SymbolType IsPureNumeric(char *aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespa
 		}
 		else
 		{
-			if (is_hex ? !isxdigit(c) : (c < '0' || c > '9')) // And since we're here, it's not '.' either.
+			if (is_hex ? !_istxdigit(c) : (c < _T('0') || c > _T('9'))) // And since we're here, it's not '.' either.
 			{
 				if (aAllowImpure) // Since aStr starts with a number (as verified above), it is considered a number.
 				{
@@ -385,12 +385,12 @@ SymbolType IsPureNumeric(char *aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespa
 					// As written below, this actually tolerates malformed scientific notation such as numbers
 					// containing two or more E's (e.g. 1.0e4e+5e-6,).  But for performance and due to rarity,
 					// it seems best not to check for them.
-					if (toupper(c) != 'E' // v1.0.46.11: Support scientific notation in floating point numbers.
+					if (_totupper(c) != _T('E') // v1.0.46.11: Support scientific notation in floating point numbers.
 						|| !(has_decimal_point && has_at_least_one_digit)) // But it must have a decimal point and at least one digit to the left of the 'E'. This avoids variable names like "1e4" from being seen as sci-notation literals (for backward compatibility). Some callers rely on this check.
 						return PURE_NOT_NUMERIC;
-					if (aBuf[1] == '-' || aBuf[1] == '+') // The optional sign is present on the exponent.
+					if (aBuf[1] == _T('-') || aBuf[1] == _T('+')) // The optional sign is present on the exponent.
 						++aBuf; // Omit it from further consideration so that the outer loop doesn't see it as an extra/illegal sign.
-					if (aBuf[1] < '0' || aBuf[1] > '9')
+					if (aBuf[1] < _T('0') || aBuf[1] > _T('9'))
 						// Even if it is an 'e', ensure what follows it is a valid exponent.  Some callers rely
 						// on this check, such as ones that expect "0.6e" to be non-numeric (for "SetFormat Float") 
 						return PURE_NOT_NUMERIC;
@@ -409,7 +409,7 @@ SymbolType IsPureNumeric(char *aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespa
 
 
 
-void strlcpy(char *aDst, const char *aSrc, size_t aDstSize) // Non-inline because it benches slightly faster that way.
+void tcslcpy(LPTSTR aDst, LPCTSTR aSrc, size_t aDstSize) // Non-inline because it benches slightly faster that way.
 // Caller must ensure that aDstSize is greater than 0.
 // Caller must ensure that the entire capacity of aDst is writable, EVEN WHEN it knows that aSrc is much shorter
 // than the aDstSize.  This is because the call to strncpy (which is used for its superior performance) zero-fills
@@ -427,13 +427,13 @@ void strlcpy(char *aDst, const char *aSrc, size_t aDstSize) // Non-inline becaus
 	// It might be worthwhile to have a custom char-copying-loop here someday so that number of characters
 	// actually copied (not including the zero terminator) can be returned to callers who want it.
 	--aDstSize; // Convert from size to length (caller has ensured that aDstSize > 0).
-	strncpy(aDst, aSrc, aDstSize); // NOTE: In spite of its zero-filling, strncpy() benchmarks considerably faster than a custom loop, probably because it uses 32-bit memory operations vs. 8-bit.
-	aDst[aDstSize] = '\0';
+	_tcsncpy(aDst, aSrc, aDstSize); // NOTE: In spite of its zero-filling, strncpy() benchmarks considerably faster than a custom loop, probably because it uses 32-bit memory operations vs. 8-bit.
+	aDst[aDstSize] = _T('\0');
 }
 
 
 
-int snprintf(char *aBuf, int aBufSize, const char *aFormat, ...)
+int sntprintf(LPTSTR aBuf, int aBufSize, LPCTSTR aFormat, ...)
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // aBuf will always be terminated here except when aBufSize is <= zero (in which case the caller should
 // already have terminated it).  If aBufSize is greater than zero but not large enough to hold the
@@ -451,8 +451,8 @@ int snprintf(char *aBuf, int aBufSize, const char *aFormat, ...)
 	va_list ap;
 	va_start(ap, aFormat);
 	// Must use _vsnprintf() not _snprintf() because of the way va_list is handled:
-	int result = _vsnprintf(aBuf, aBufSize, aFormat, ap); // "returns the number of characters written, not including the terminating null character, or a negative value if an output error occurs"
-	aBuf[aBufSize - 1] = '\0'; // Confirmed through testing: Must terminate at this exact spot because _vsnprintf() doesn't always do it.
+	int result = _vsntprintf(aBuf, aBufSize, aFormat, ap); // "returns the number of characters written, not including the terminating null character, or a negative value if an output error occurs"
+	aBuf[aBufSize - 1] = _T('\0'); // Confirmed through testing: Must terminate at this exact spot because _vsnprintf() doesn't always do it.
 	// Fix for v1.0.34: If result==aBufSize, must reduce result by 1 to return an accurate result to the
 	// caller.  In other words, if the line above turned the last character into a terminator, one less character
 	// is now present in aBuf.
@@ -461,9 +461,9 @@ int snprintf(char *aBuf, int aBufSize, const char *aFormat, ...)
 	return result > -1 ? result : aBufSize - 1; // Never return a negative value.  See comment under function definition, above.
 }
 
+#ifdef TRANSLATED
 
-
-int snprintfcat(char *aBuf, int aBufSize, const char *aFormat, ...)
+int sntprintfcat(char *aBuf, int aBufSize, const char *aFormat, ...)
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // aBuf will always be terminated here except when the amount of space left in the buffer is zero or less.
 // (in which case the caller should already have terminated it).  If aBufSize is greater than zero but not
@@ -763,7 +763,7 @@ ret0:
 
 char *lstrcasestr(const char *phaystack, const char *pneedle)
 // This is the locale-obeying variant of strcasestr.  It uses CharUpper/Lower in place of toupper/lower,
-// which sees chars like ä as the same as Ä (depending on code page/locale).  This function is about
+// which sees chars like ?as the same as ?(depending on code page/locale).  This function is about
 // 1 to 8 times slower than strcasestr() depending on factors such as how many partial matches for needle
 // are in haystack.
 // License: GNU GPL
@@ -2324,3 +2324,5 @@ bool IsStringInList(char *aStr, char *aList, bool aFindExactMatch)
 
 	return false;  // No match found.
 }
+
+#endif

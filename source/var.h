@@ -63,7 +63,11 @@ struct VarBkp // This should be kept in sync with any changes to the Var class. 
 {
 	__int64 mContentsInt64; // 64-bit members kept at the top of the struct to reduce the chance that they'll span 2 vs. 1 64-bit regions.
 	Var *mVar; // Used to save the target var to which these backed up contents will later be restored.
-	char *mContents;
+	union
+	{
+		char *mByteContents;
+		TCHAR *mCharContents;
+	};
 	union
 	{
 		VarSizeType mLength;
@@ -112,7 +116,11 @@ private:
 		__int64 mContentsInt64;
 		double mContentsDouble;
 	};
-	char *mContents;
+	union
+	{
+		char *mByteContents;
+		TCHAR *mCharContents;
+	};
 	union
 	{
 		VarSizeType mLength;  // How much is actually stored in it currently, excluding the zero terminator.

@@ -37,6 +37,9 @@ GNU General Public License for more details.
 #define _WIN32_IE 0x0501  // Added for v1.0.35 to have MCS_NOTODAY resolve as expected, and possibly solve other problems on newer systems.
 
 #ifdef _MSC_VER
+	#if _MSC_VER >= 1400
+		#define _CRT_NON_CONFORMING_SWPRINTFS
+	#endif
 	// C RunTime Header Files
 	#include <stdio.h>
 	#include <stdlib.h>
@@ -44,7 +47,7 @@ GNU General Public License for more details.
 	#include <limits.h> // for UINT_MAX, UCHAR_MAX, etc.
 	#include <malloc.h> // For _alloca()
 	//#include <memory.h>
-	//#include <tchar.h>
+	#include <tchar.h>
 
 	#include <windows.h>
 	#include <commctrl.h> // for status bar functions. Must be included after <windows.h>.
