@@ -1,0 +1,207 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+//#include "afxres.h"
+#include <winresrc.h>
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English (U.S.) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+#endif //_WIN32
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// RT_MANIFEST
+//
+
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST             "AutoHotkey.exe.manifest"
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "//#include ""afxres.h""\r\n"
+    "#include <winresrc.h>\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDR_MENU_MAIN MENU 
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&Reload Script\tCtrl+R",      ID_FILE_RELOADSCRIPT
+        MENUITEM "&Edit Script\tCtrl+E",        ID_FILE_EDITSCRIPT
+        MENUITEM "&Window Spy",                 ID_FILE_WINDOWSPY
+        MENUITEM SEPARATOR
+        MENUITEM "&Pause Script\tPause",        ID_FILE_PAUSE
+        MENUITEM "&Suspend Hotkeys",            ID_FILE_SUSPEND
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit (Terminate Script)",    ID_FILE_EXIT
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Lines most recently executed\tCtrl+L", ID_VIEW_LINES
+        MENUITEM "&Variables and their contents\tCtrl+V", ID_VIEW_VARIABLES
+        MENUITEM "&Hotkeys and their methods\tCtrl+H", ID_VIEW_HOTKEYS
+        MENUITEM "&Key history and script info\tCtrl+K", ID_VIEW_KEYHISTORY
+        MENUITEM SEPARATOR
+        MENUITEM "&Refresh\tF5",                ID_VIEW_REFRESH
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&User Manual\tF1",            ID_HELP_USERMANUAL
+        MENUITEM "&Web Site",                   ID_HELP_WEBSITE
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDI_MAIN                ICON                    "icon_main.ico"
+IDI_SUSPEND             ICON                    "icon_suspend.ico"
+IDI_PAUSE               ICON                    "icon_pause.ico"
+IDI_PAUSE_SUSPEND       ICON                    "icon_pause_suspend.ico"
+IDI_FILETYPE            ICON                    "icon_filetype.ico"
+IDI_TRAY_WIN9X          ICON                    "icon_tray_win9x.ico"
+IDI_TRAY_WIN9X_SUSPEND  ICON                    "icon_tray_win9x_suspend.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_INPUTBOX DIALOGEX 0, 0, 210, 83
+STYLE DS_SETFONT | DS_SETFOREGROUND | DS_FIXEDSYS | DS_CENTER | WS_POPUP | 
+    WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
+CAPTION "Dialog"
+FONT 10, "MS Shell Dlg", 400, 0, 0x0
+BEGIN
+    EDITTEXT        IDC_INPUTEDIT,2,51,207,12,ES_AUTOHSCROLL
+    DEFPUSHBUTTON   "OK",IDOK,51,67,31,12
+    PUSHBUTTON      "Cancel",IDCANCEL,129,67,31,12
+    LTEXT           "Prompt",IDC_INPUTPROMPT,3,2,205,48
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Accelerator
+//
+
+IDR_ACCELERATOR1 ACCELERATORS 
+BEGIN
+    VK_F1,          ID_HELP_USERMANUAL,     VIRTKEY, NOINVERT
+    "H",            ID_VIEW_HOTKEYS,        VIRTKEY, CONTROL, NOINVERT
+    "K",            ID_VIEW_KEYHISTORY,     VIRTKEY, CONTROL, NOINVERT
+    "L",            ID_VIEW_LINES,          VIRTKEY, CONTROL, NOINVERT
+    VK_F5,          ID_VIEW_REFRESH,        VIRTKEY, NOINVERT
+    "V",            ID_VIEW_VARIABLES,      VIRTKEY, CONTROL, NOINVERT
+    VK_PAUSE,       ID_FILE_PAUSE,          VIRTKEY, NOINVERT
+    "E",            ID_FILE_EDITSCRIPT,     VIRTKEY, CONTROL, NOINVERT
+    "R",            ID_FILE_RELOADSCRIPT,   VIRTKEY, CONTROL, NOINVERT
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,48,05
+ PRODUCTVERSION 1,0,48,05
+ FILEFLAGSMASK 0x17L
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x4L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+#ifdef AUTOHOTKEYSC
+            VALUE "FileDescription", ""
+            VALUE "FileVersion", "1, 0, 48, 05"
+            VALUE "InternalName", ""
+            VALUE "LegalCopyright", ""
+            VALUE "OriginalFilename", ""
+            VALUE "ProductName", ""
+            VALUE "ProductVersion", "1, 0, 48, 05"
+#else
+            VALUE "FileDescription", "AutoHotkey"
+            VALUE "FileVersion", "1, 0, 48, 05"
+            VALUE "InternalName", "AutoHotkey"
+            VALUE "LegalCopyright", "Copyright (C) 2009"
+            VALUE "OriginalFilename", "AutoHotkey.rc"
+            VALUE "ProductName", "AutoHotkey"
+            VALUE "ProductVersion", "1, 0, 48, 05"
+#endif
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+#endif    // English (U.S.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+

@@ -1,0 +1,344 @@
+/*
+AutoHotkey
+
+Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+*/
+
+#ifndef keyboard_h
+#define keyboard_h
+
+#include "defines.h"
+
+// The max number of keystrokes to Send prior to taking a break to pump messages:
+#define MAX_LUMP_KEYS 50
+
+// Logging keys to a file is disabled in the main version in an effort to prevent
+// AutoHotkey from being branded as a key logger or trojan by various security firms and
+// security software. Uncomment this line to re-enabled logging of keys to a file:
+// #define ENABLE_KEY_HISTORY_FILE
+
+// Maybe define more of these later, perhaps with ifndef (since they should be in the normal header, and probably
+// will be eventually):
+// ALREADY DEFINED: #define VK_HELP 0x2F
+// In case a compiler with a non-updated header file is used:
+#ifndef VK_BROWSER_BACK
+	#define VK_BROWSER_BACK        0xA6
+	#define VK_BROWSER_FORWARD     0xA7
+	#define VK_BROWSER_REFRESH     0xA8
+	#define VK_BROWSER_STOP        0xA9
+	#define VK_BROWSER_SEARCH      0xAA
+	#define VK_BROWSER_FAVORITES   0xAB
+	#define VK_BROWSER_HOME        0xAC
+	#define VK_VOLUME_MUTE         0xAD
+	#define VK_VOLUME_DOWN         0xAE
+	#define VK_VOLUME_UP           0xAF
+	#define VK_MEDIA_NEXT_TRACK    0xB0
+	#define VK_MEDIA_PREV_TRACK    0xB1
+	#define VK_MEDIA_STOP          0xB2
+	#define VK_MEDIA_PLAY_PAUSE    0xB3
+	#define VK_LAUNCH_MAIL         0xB4
+	#define VK_LAUNCH_MEDIA_SELECT 0xB5
+	#define VK_LAUNCH_APP1         0xB6
+	#define VK_LAUNCH_APP2         0xB7
+#endif
+
+// Create some "fake" virtual keys to simplify sections of the code.
+// According to winuser.h, the following ranges (among others)
+// are considered "unassigned" rather than "reserved", so should be
+// fairly safe to use for the foreseeable future.  0xFF should probably
+// be avoided since it's sometimes used as a failure indictor by API
+// calls.  And 0x00 should definitely be avoided because it is used
+// to indicate failure by many functions that deal with virtual keys.
+// 0x88 - 0x8F : unassigned
+// 0x97 - 0x9F : unassigned (this range seems less likely to be used)
+#define VK_NEW_MOUSE_FIRST 0x9A
+#define VK_LBUTTON_LOGICAL 0x9A // v1.0.43: Added to support swapping of left/right mouse buttons in Control Panel.
+#define VK_RBUTTON_LOGICAL 0x9B //
+#define VK_WHEEL_LEFT      0x9C // v1.0.48: Lexikos: Fake virtual keys for support for horizontal scrolling in
+#define VK_WHEEL_RIGHT     0x9D // Windows Vista and later.
+#define VK_WHEEL_DOWN      0x9E
+#define VK_WHEEL_UP        0x9F
+#define IS_WHEEL_VK(aVK) ((aVK) >= VK_WHEEL_LEFT && (aVK) <= VK_WHEEL_UP)
+#define VK_NEW_MOUSE_LAST  0x9F
+
+// These are the only keys for which another key with the same VK exists.  Therefore, use scan code for these.
+// If use VK for some of these (due to them being more likely to be used as hotkeys, thus minimizing the
+// use of the keyboard hook), be sure to use SC for its counterpart.
+// Always use the compressed version of scancode, i.e. 0x01 for the high-order byte rather than vs. 0xE0.
+#define SC_NUMPADENTER 0x11C
+#define SC_INSERT 0x152
+#define SC_DELETE 0x153
+#define SC_HOME 0x147
+#define SC_END 0x14F
+#define SC_UP 0x148
+#define SC_DOWN 0x150
+#define SC_LEFT 0x14B
+#define SC_RIGHT 0x14D
+#define SC_PGUP 0x149
+#define SC_PGDN 0x151
+
+// These are the same scan codes as their counterpart except the extended flag is 0 rather than
+// 1 (0xE0 uncompressed):
+#define SC_ENTER 0x1C
+// In addition, the below dual-state numpad keys share the same scan code (but different vk's)
+// regardless of the state of numlock:
+#define SC_NUMPADDEL 0x53
+#define SC_NUMPADINS 0x52
+#define SC_NUMPADEND 0x4F
+#define SC_NUMPADHOME 0x47
+#define SC_NUMPADCLEAR 0x4C
+#define SC_NUMPADUP 0x48
+#define SC_NUMPADDOWN 0x50
+#define SC_NUMPADLEFT 0x4B
+#define SC_NUMPADRIGHT 0x4D
+#define SC_NUMPADPGUP 0x49
+#define SC_NUMPADPGDN 0x51
+
+#define SC_NUMPADDOT SC_NUMPADDEL
+#define SC_NUMPAD0 SC_NUMPADINS
+#define SC_NUMPAD1 SC_NUMPADEND
+#define SC_NUMPAD2 SC_NUMPADDOWN
+#define SC_NUMPAD3 SC_NUMPADPGDN
+#define SC_NUMPAD4 SC_NUMPADLEFT
+#define SC_NUMPAD5 SC_NUMPADCLEAR
+#define SC_NUMPAD6 SC_NUMPADRIGHT
+#define SC_NUMPAD7 SC_NUMPADHOME
+#define SC_NUMPAD8 SC_NUMPADUP
+#define SC_NUMPAD9 SC_NUMPADPGUP
+
+// These both have a unique vk and a unique sc (on most keyboards?), but they're listed here because
+// MapVirtualKey doesn't support them under Win9x (except maybe NumLock itself):
+#define SC_NUMLOCK 0x145
+#define SC_NUMPADDIV 0x135
+#define SC_NUMPADMULT 0x037
+#define SC_NUMPADSUB 0x04A
+#define SC_NUMPADADD 0x04E
+
+// Note: A KeyboardProc() (hook) actually receives 0x36 for RSHIFT under both WinXP and Win98se, not 0x136.
+// All the below have been verified to be accurate under Win98se and XP (except rctrl and ralt in XP).
+#define SC_LCONTROL 0x01D
+#define SC_RCONTROL 0x11D
+#define SC_LSHIFT 0x02A
+#define SC_RSHIFT 0x136 // Must be extended, at least on WinXP, or there will be problems, e.g. SetModifierLRState().
+#define SC_LALT 0x038
+#define SC_RALT 0x138
+#define SC_LWIN 0x15B
+#define SC_RWIN 0x15C
+
+// UPDATE for v1.0.39: Changed sc_type to USHORT vs. UINT to save memory in structs such as sc_hotkey.
+// This saves 60K of memory in one place, and possibly there are other large savings too.
+// The following older comment dates back to 2003/inception and I don't remember its exact intent,
+// but there is no current storage of mouse message constants in scan code variables:
+// OLD: Although only need 9 bits for compressed and 16 for uncompressed scan code, use a full 32 bits 
+// so that mouse messages (WPARAM) can be stored as scan codes.  Formerly USHORT (which is always 16-bit).
+typedef USHORT sc_type; // Scan code.
+typedef UCHAR vk_type;  // Virtual key.
+typedef UINT mod_type;  // Standard Windows modifier type for storing MOD_CONTROL, MOD_WIN, MOD_ALT, MOD_SHIFT.
+
+// The maximum number of virtual keys and scan codes that can ever exist.
+// As of WinXP, these are absolute limits, except for scan codes for which there might conceivably
+// be more if any non-standard keyboard or keyboard drivers generate scan codes that don't start
+// with either 0x00 or 0xE0.  UPDATE: Decided to allow all possible scancodes, rather than just 512,
+// since a lookup array for the 16-bit scan code value will only consume 64K of RAM if the element
+// size is one char.  UPDATE: decided to go back to 512 scan codes, because WinAPI's KeyboardProc()
+// itself can only handle that many (a 9-bit value).  254 is the largest valid vk, according to the
+// WinAPI docs (I think 255 is value that is sometimes returned to indicate an invalid vk).  But
+// just in case something ever tries to access such arrays using the largest 8-bit value (255), add
+// 1 to make it 0xFF, thus ensuring array indexes will always be in-bounds if they are 8-bit values.
+#define VK_MAX 0xFF
+#define SC_MAX 0x1FF
+
+typedef UCHAR modLR_type; // Only the left-right win/alt/ctrl/shift rather than their generic counterparts.
+#define MODLR_MAX 0xFF
+#define MODLR_COUNT 8
+#define MOD_LCONTROL 0x01
+#define MOD_RCONTROL 0x02
+#define MOD_LALT 0x04
+#define MOD_RALT 0x08
+#define MOD_LSHIFT 0x10
+#define MOD_RSHIFT 0x20
+#define MOD_LWIN 0x40
+#define MOD_RWIN 0x80
+
+
+struct CachedLayoutType
+{
+	HKL hkl;
+	ResultType has_altgr;
+};
+
+struct key_to_vk_type // Map key names to virtual keys.
+{
+	char *key_name;
+	vk_type vk;
+};
+
+struct key_to_sc_type // Map key names to scan codes.
+{
+	char *key_name;
+	sc_type sc;
+};
+
+enum KeyStateTypes {KEYSTATE_LOGICAL, KEYSTATE_PHYSICAL, KEYSTATE_TOGGLE}; // For use with GetKeyJoyState(), etc.
+enum KeyEventTypes {KEYDOWN, KEYUP, KEYDOWNANDUP};
+
+void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow = NULL);
+void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModifiersLRPersistent
+	, int aRepeatCount, KeyEventTypes aEventType, modLR_type aKeyAsModifiersLR, HWND aTargetWindow
+	, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED, bool aMoveOffset = false);
+void SendKeySpecial(char aChar, int aRepeatCount);
+void SendASC(char *aAscii);
+
+struct PlaybackEvent
+{
+	UINT message;
+	union
+	{
+		struct
+		{
+			sc_type sc; // Placed above vk for possibly better member stacking/alignment.
+			vk_type vk;
+		};
+		struct
+		{
+			// Screen coordinates, which can be negative.  SHORT vs. INT is used because the likelihood
+			// have having a virtual display surface wider or taller than 32,767 seems too remote to
+			// justify increasing the struct size, which would impact the stack space and dynamic memory
+			// used by every script every time it uses the playback method to send keystrokes or clicks.
+			// Note: WM_LBUTTONDOWN uses WORDs vs. SHORTs, but they're not really comparable because
+			// journal playback/record both use screen coordinates but WM_LBUTTONDOWN et. al. use client
+			// coordinates.
+			SHORT x;
+			SHORT y;
+		};
+		DWORD time_to_wait; // This member is present only when message==0; otherwise, a struct is present.
+	};
+};
+LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam);
+//#define JOURNAL_RECORD_MODE  // Uncomment this line to debug/analyze via a crude journal record feature in place of SendPlay.
+#ifdef JOURNAL_RECORD_MODE
+	LRESULT CALLBACK RecordProc(int aCode, WPARAM wParam, LPARAM lParam);
+#endif
+
+
+// Below uses a pseudo-random value.  It's best that this be constant so that if multiple instances
+// of the app are running, they will all ignore each other's keyboard & mouse events.  Also, a value
+// close to UINT_MAX might be a little better since it's might be less likely to be used as a pointer
+// value by any apps that send keybd events whose ExtraInfo is really a pointer value:
+#define KEY_IGNORE 0xFFC3D44F
+#define KEY_PHYS_IGNORE (KEY_IGNORE - 1)  // Same as above but marked as physical for other instances of the hook.
+#define KEY_IGNORE_ALL_EXCEPT_MODIFIER (KEY_IGNORE - 2)  // Non-physical and ignored only if it's not a modifier.
+
+// The default in the below is KEY_IGNORE_ALL_EXCEPT_MODIFIER, which causes standard calls to
+// KeyEvent() to update g_modifiersLR_logical_non_ignored the same way it updates g_modifiersLR_logical.
+// This is done because only the Send command has a realistic chance of interfering with (or being
+// interfered with by) hook hotkeys (namely the modifiers used to decide whether to trigger them).
+// There are two types of problems:
+// 1) Hotkeys not firing due to Send having temporarily released one of that hotkey's modifiers that
+//    the user is still holding down.  This causes the hotkey's suffix to flow through to the system,
+//    which is usually undesirable.  This happens when the user is holding down a hotkey to auto-repeat
+//    it, and perhaps other times.
+// 2) The wrong hotkey firing because Send has temporarily put a modifier into effect and (once again)
+//    the user is holding down the hotkey to auto-repeat it.  If the Send's temp-down modifier happens
+//    to make the hotkey suffix match a different set of modifiers, the wrong hotkey would fire.
+void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC = 0, HWND aTargetWindow = NULL
+	, bool aDoKeyDelay = false, DWORD aExtraInfo = KEY_IGNORE_ALL_EXCEPT_MODIFIER);
+
+ResultType PerformClick(char *aOptions);
+void ParseClickOptions(char *aOptions, int &aX, int &aY, vk_type &aVK, KeyEventTypes &aEventType
+	, int &aRepeatCount, bool &aMoveOffset);
+ResultType PerformMouse(ActionTypeType aActionType, char *aButton, char *aX1, char *aY1, char *aX2, char *aY2
+	, char *aSpeed, char *aOffsetMode, char *aRepeatCount = "", char *aDownUp = "");
+void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY1, int aX2, int aY2
+	, int aRepeatCount, KeyEventTypes aEventType, int aSpeed, bool aMoveOffset);
+
+void MouseClickDrag(vk_type aVK // Which button.
+	, int aX1, int aY1, int aX2, int aY2, int aSpeed, bool aMoveOffset);
+void MouseClick(vk_type aVK // Which button.
+	, int aX, int aY, int aRepeatCount, int aSpeed, KeyEventTypes aEventType, bool aMoveOffset = false);
+void MouseMove(int &aX, int &aY, DWORD &aEventFlags, int aSpeed, bool aMoveOffset);
+void MouseEvent(DWORD aEventFlags, DWORD aData, DWORD aX = COORD_UNSPECIFIED, DWORD aY = COORD_UNSPECIFIED);
+
+#define MSG_OFFSET_MOUSE_MOVE 0x80000000  // Bitwise flag, should be near/at high-order bit to avoid overlap messages.
+void PutKeybdEventIntoArray(modLR_type aKeyAsModifiersLR, vk_type aVK, sc_type aSC, DWORD aEventFlags, DWORD aExtraInfo);
+void PutMouseEventIntoArray(DWORD aEventFlags, DWORD aData, DWORD aX, DWORD aY);
+ResultType ExpandEventArray();
+void InitEventArray(void *aMem, UINT aMaxEvents, modLR_type aModifiersLR);
+void SendEventArray(int &aFinalKeyDelay, modLR_type aModsDuringSend);
+void CleanupEventArray(int aFinalKeyDelay);
+
+EXTERN_G; // For the DoKeyDelay() prototype below.
+extern SendModes sSendMode;
+void DoKeyDelay(int aDelay = (sSendMode == SM_PLAY) ? g->KeyDelayPlay : g->KeyDelay);
+void DoMouseDelay();
+void UpdateKeyEventHistory(bool aKeyUp, vk_type aVK, sc_type aSC);
+#define KEYEVENT_PHYS(event_type, vk, sc) KeyEvent(event_type, vk, sc, NULL, false, KEY_PHYS_IGNORE)
+
+ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue);
+void ToggleNumlockWin9x();
+//void CapslockOffWin9x();
+
+#define STD_MODS_TO_DISGUISE (MOD_LALT|MOD_RALT|MOD_LWIN|MOD_RWIN)
+void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, HWND aTargetWindow
+	, bool aDisguiseDownWinAlt, bool aDisguiseUpWinAlt, DWORD aExtraInfo = KEY_IGNORE_ALL_EXCEPT_MODIFIER);
+modLR_type GetModifierLRState(bool aExplicitlyGet = false);
+
+// The IsKeyDown9xNT() method is needed because GetKeyState() does not return the proper
+// state under Win9x, at least for the modifier keys under certain conditions.  The
+// AutoIt3 author indicates that GetAsyncKeyState() is also unreliable and he uses
+// this same method, so it seems best for now.  Specify GetAsyncKeyState() first due
+// to performance of short-circuit boolean.  v1.0.42.01: Fixed to use 0x8000 vs. 0x80000000
+// with GetAsyncKeyState (though luckily, because of the way a negative short gets promoted
+// to a negative int, the old way of using 0x80000000 worked too).
+#define IsKeyDown9xNT(vk) (   (GetAsyncKeyState(vk) & 0x8000) || ((GetKeyState(vk) & 0x8000))   )
+#define IsKeyDown2kXP(vk) (GetKeyState(vk) & 0x8000)
+#define IsKeyDownAsync(vk) (GetAsyncKeyState(vk) & 0x8000)
+#define IsKeyToggledOn(vk) (GetKeyState(vk) & 0x01)
+
+void AdjustKeyState(BYTE aKeyState[], modLR_type aModifiersLR);
+modLR_type KeyToModifiersLR(vk_type aVK, sc_type aSC = 0, bool *pIsNeutral = NULL);
+modLR_type ConvertModifiers(mod_type aModifiers);
+mod_type ConvertModifiersLR(modLR_type aModifiersLR);
+char *ModifiersLRToText(modLR_type aModifiersLR, char *aBuf);
+
+#define LAYOUT_UNDETERMINED FAIL
+bool ActiveWindowLayoutHasAltGr();
+ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr = LAYOUT_UNDETERMINED);
+
+//---------------------------------------------------------------------
+
+char *SCtoKeyName(sc_type aSC, char *aBuf, int aBufSize);
+char *VKtoKeyName(vk_type aVK, sc_type aSC, char *aBuf, int aBufSize);
+sc_type TextToSC(char *aText);
+vk_type TextToVK(char *aText, modLR_type *pModifiersLR = NULL, bool aExcludeThoseHandledByScanCode = false
+	, bool aAllowExplicitVK = true, HKL aKeybdLayout = GetKeyboardLayout(0));
+vk_type CharToVKAndModifiers(char aChar, modLR_type *pModifiersLR, HKL aKeybdLayout);
+vk_type TextToSpecial(char *aText, UINT aTextLength, KeyEventTypes &aEventTypem, modLR_type &aModifiersLR
+	, bool aUpdatePersistent);
+
+#ifdef ENABLE_KEY_HISTORY_FILE
+ResultType KeyHistoryToFile(char *aFilespec = NULL, char aType = '\0', bool aKeyUp = false
+	, vk_type aVK = 0, sc_type aSC = 0);
+#endif
+
+char *GetKeyName(vk_type aVK, sc_type aSC, char *aBuf, int aBufSize);
+sc_type vk_to_sc(vk_type aVK, bool aReturnSecondary = false);
+vk_type sc_to_vk(sc_type aSC);
+
+inline bool IsMouseVK(vk_type aVK)
+{
+	return aVK >= VK_LBUTTON && aVK <= VK_XBUTTON2 && aVK != VK_CANCEL
+		|| aVK >= VK_NEW_MOUSE_FIRST && aVK <= VK_NEW_MOUSE_LAST;
+}
+
+#endif
