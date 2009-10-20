@@ -17,7 +17,8 @@ GNU General Public License for more details.
 #ifndef defines_h
 #define defines_h
 
-#include "stdafx.h" // pre-compiled headers
+// shouldn't be here
+//#include "stdafx.h" // pre-compiled headers
 
 // Disable silly performance warning about converting int to bool:
 // Unlike other typecasts from a larger type to a smaller, I'm 99% sure
@@ -689,6 +690,13 @@ inline void global_init(global_struct &g)
 
 #define ERRORLEVEL_SAVED_SIZE 128 // The size that can be remembered (saved & restored) if a thread is interrupted. Big in case user put something bigger than a number in g_ErrorLevel.
 
-#define CHECK_UNICODE __declspec(deprecated(_T("Please check what you want are bytes or characters.")))
+#ifndef UNICODE_CHECKED
+// These will be removed when things are done.
+#define UNICODE_CHECK __declspec(deprecated(_T("Please check what you want are bytes or characters.")))
+UNICODE_CHECK inline size_t CHECK_SIZEOF(size_t n) { return n; }
+#define SIZEOF(c) CHECK_SIZEOF(sizeof(c))
+#else
+#define UNICODE_CHECK
+#endif
 
 #endif

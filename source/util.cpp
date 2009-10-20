@@ -15,6 +15,7 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
+#define UNICODE_CHECKED
 #include <olectl.h> // for OleLoadPicture()
 #include <Gdiplus.h> // Used by LoadPicture().
 #include "util.h"
@@ -1361,13 +1362,13 @@ LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFullFileSpec)
 			return aFullFileSpec;
 		FindClose(file_search);
 		// Append the case-corrected version of this directory name:
-		sntprintfcat(built_filespec, sizeof(built_filespec), _T("%s\\"), found_file.cFileName);
+		sntprintfcat(built_filespec, _countof(built_filespec), _T("%s\\"), found_file.cFileName);
 	}
 	// Now do the filename itself:
 	if (   (file_search = FindFirstFile(aFullFileSpec, &found_file)) == INVALID_HANDLE_VALUE   )
 		return aFullFileSpec;
 	FindClose(file_search);
-	sntprintfcat(built_filespec, sizeof(built_filespec), _T("%s"), found_file.cFileName);
+	sntprintfcat(built_filespec, _countof(built_filespec), _T("%s"), found_file.cFileName);
 	// It might be possible for the new one to be longer than the old, e.g. if some 8.3 short
 	// names were converted to long names by the process.  Thus, the caller should ensure that
 	// aFullFileSpec is large enough:

@@ -24,9 +24,9 @@ GNU General Public License for more details.
 #include "var.h" // for a script's variables.
 #include "WinGroup.h" // for a script's Window Groups.
 #include "Util.h" // for FileTimeToYYYYMMDD(), strlcpy()
-#include "resources\resource.h"  // For tray icon.
+#include "resources/resource.h"  // For tray icon.
 #ifdef AUTOHOTKEYSC
-	#include "lib\exearc_read.h"
+	#include "lib/exearc_read.h"
 #endif
 
 #include "os_version.h" // For the global OS_Version object
@@ -1777,9 +1777,9 @@ public:
 		, mAttribute(ATTR_NONE), mArgc(aArgc), mArg(aArg)
 		, mPrevLine(NULL), mNextLine(NULL), mRelatedLine(NULL), mParentLine(NULL)
 		{}
-	CHECK_UNICODE
+	UNICODE_CHECK
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	CHECK_UNICODE
+	UNICODE_CHECK
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}  // Intentionally does nothing because we're using SimpleHeap for everything.
 	void operator delete[](void *aPtr) {}
@@ -1834,9 +1834,9 @@ public:
 		, mJumpToLine(NULL)
 		, mPrevLabel(NULL), mNextLabel(NULL)
 	{}
-	CHECK_UNICODE
+	UNICODE_CHECK
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	CHECK_UNICODE
+	UNICODE_CHECK
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
@@ -1930,9 +1930,9 @@ public:
 		, mDefaultVarType(VAR_DECLARE_NONE)
 		, mIsBuiltIn(aIsBuiltIn)
 	{}
-	CHECK_UNICODE
+	UNICODE_CHECK
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	CHECK_UNICODE
+	UNICODE_CHECK
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
@@ -1958,9 +1958,9 @@ public:
 		, mExistingThreads(0), mTimeLastRun(0)
 		, mEnabled(false), mRunOnlyOnce(false), mNextTimer(NULL)  // Note that mEnabled must default to false for the counts to be right.
 	{}
-	CHECK_UNICODE
+	UNICODE_CHECK
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	CHECK_UNICODE
+	UNICODE_CHECK
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
@@ -2433,7 +2433,7 @@ public:
 	Label *mPlaceholderLabel; // Used in place of a NULL label to simplify code.
 	TCHAR mThisMenuItemName[MAX_MENU_NAME_LENGTH + 1];
 	TCHAR mThisMenuName[MAX_MENU_NAME_LENGTH + 1];
-	LPTSTR mThisHotkeyName, *mPriorHotkeyName;
+	LPTSTR mThisHotkeyName, mPriorHotkeyName;
 	HWND mNextClipboardViewer;
 	bool mOnClipboardChangeIsRunning;
 	Label *mOnClipboardChangeLabel, *mOnExitLabel;  // The label to run when the script terminates (NULL if none).

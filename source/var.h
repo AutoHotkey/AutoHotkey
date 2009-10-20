@@ -546,7 +546,7 @@ public:
 		return sEmptyString; // For reserved vars (but this method should probably never be called for them).
 	}
 
-	CHECK_UNICODE
+	UNICODE_CHECK
 	TCHAR *Contents(BOOL aAllowUpdate = TRUE)
 	{
 		return CharContents(aAllowUpdate);

@@ -15,6 +15,7 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
+#define UNICODE_CHECKED
 // These includes should probably a superset of those in globaldata.h:
 #include "hook.h" // For KeyHistoryItem and probably other things.
 #include "clipboard.h"  // For the global clipboard object
@@ -525,7 +526,7 @@ Action g_act[] =
 // Due to C++ lang. restrictions, can't easily make this a const because constants
 // automatically get static (internal) linkage, thus such a var could never be
 // used outside this module:
-int g_ActionCount = sizeof(g_act) / sizeof(Action);
+int g_ActionCount = _countof(g_act);
 
 
 
@@ -546,7 +547,7 @@ Action g_old_act[] =
 	, {_T("WinGetActiveTitle"), 1, 1, 1, NULL} // <Title Var>
 	, {_T("WinGetActiveStats"), 5, 5, 5, NULL} // <Title Var>, <Width Var>, <Height Var>, <Xpos Var>, <Ypos Var>
 };
-int g_OldActionCount = sizeof(g_old_act) / sizeof(Action);
+int g_OldActionCount = _countof(g_old_act);
 
 
 key_to_vk_type g_key_to_vk[] =
@@ -699,8 +700,8 @@ modifier is specified along with it:
 , {_T("Launch_App2"), VK_LAUNCH_APP2}
 
 // Probably safest to terminate it this way, with a flag value.  (plus this makes it a little easier
-// to code some loops, maybe).  Can also calculate how many elements are in the array using sizeof(array)
-// divided by sizeof(element).  UPDATE: Decided not to do this in case ever decide to sort this array; don't
+// to code some loops, maybe).  Can also calculate how many elements are in the array using SIZEOF(array)
+// divided by SIZEOF(element).  UPDATE: Decided not to do this in case ever decide to sort this array; don't
 // want to rely on the fact that this will wind up in the right position after the sort (even though it
 // should):
 //, {_T(""), 0}
@@ -746,8 +747,8 @@ key_to_sc_type g_key_to_sc[] =
 
 
 // Can calc the counts only after the arrays are initialized above:
-int g_key_to_vk_count = sizeof(g_key_to_vk) / sizeof(key_to_vk_type);
-int g_key_to_sc_count = sizeof(g_key_to_sc) / sizeof(key_to_sc_type);
+int g_key_to_vk_count = _countof(g_key_to_vk);
+int g_key_to_sc_count = _countof(g_key_to_sc);
 
 KeyHistoryItem *g_KeyHistory = NULL; // Array is allocated during startup.
 int g_KeyHistoryNext = 0;

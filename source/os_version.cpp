@@ -101,14 +101,14 @@ void OS_Version::Init(void)
 	m_dwBuildNumber		= m_OSvi.dwBuildNumber;
 
 	// Get CSD information
-	nTemp = (int)strlen(m_OSvi.szCSDVersion);
+	nTemp = (int)_tcslen(m_OSvi.szCSDVersion);
 
 	if (nTemp > 0)
 	{
 		//	strip trailing
 		for (i=nTemp-1; i>0; i--)
 		{
-			if ((char) m_OSvi.szCSDVersion[i] != ' ') 
+			if (m_OSvi.szCSDVersion[i] != ' ') 
 				break;
 			m_OSvi.szCSDVersion[i] = '\0';
 		}
@@ -117,18 +117,20 @@ void OS_Version::Init(void)
 		nTemp = i;
 		for (i=0; i<nTemp; i++)
 		{
-			if ((char) m_OSvi.szCSDVersion[i] != ' ') 
+			if (m_OSvi.szCSDVersion[i] != ' ') 
 				break;
 		}
-		strcpy(m_szCSDVersion, &m_OSvi.szCSDVersion[i]);
+		_tcscpy(m_szCSDVersion, &m_OSvi.szCSDVersion[i]);
 	}
 	else
 		m_szCSDVersion[0] = '\0';				// No CSD info, make it blank to avoid errors
 
 
 	// Set all options to false by default
+#ifndef UNICODE
 	m_bWinNT	= false;
 	m_bWin9x	= false;
+#endif
 
 	m_bWinNT4	= false;	m_bWinNT4orLater	= false;
 	m_bWin2000	= false;	m_bWin2000orLater	= false;
@@ -136,16 +138,19 @@ void OS_Version::Init(void)
 	m_bWin2003  = false;
 	m_bWinVista = false;	m_bWinVistaOrLater	= false;
 
+#ifndef UNICODE
 	m_bWin98	= false;	m_bWin98orLater		= false;
 	m_bWin95	= false;	m_bWin95orLater		= false;
 	m_bWinMe	= false;	m_bWinMeorLater		= false;
-
+#endif
 
 	// Work out if NT or 9x
+#ifndef UNICODE
 	if (m_OSvi.dwPlatformId == VER_PLATFORM_WIN32_NT)
 	{
 		// Windows NT
 		m_bWinNT = true;
+#endif
 
 		switch (m_dwMajorVersion)
 		{
@@ -182,6 +187,7 @@ void OS_Version::Init(void)
 				break;
 
 		} // End Switch
+#ifndef UNICODE
 	}
 	else
 	{
@@ -205,6 +211,7 @@ void OS_Version::Init(void)
 				break;
 		} // End Switch
 	} // End If
+#endif
 
 } // Init()
 
