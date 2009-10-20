@@ -21,8 +21,22 @@ GNU General Public License for more details.
 #include "defines.h"
 EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 
+#ifdef UNICODE
+#define tmemcpy			wmemcpy
+#define tmemmove		wmemmove
+#define tmemset			wmemset
+#define tmalloc(c)		malloc((c) << 1)
+#define trealloc(p, c)	realloc((p), (c) << 1)
+#else
+#define tmemcpy			memcpy
+#define tmemmove		memmove
+#define tmemset			memset
+#define tmalloc(c)		malloc(c)
+#define trealloc(p, c)	realloc((p), (c))
+#endif
+
 #define IS_SPACE_OR_TAB(c) (c == ' ' || c == '\t')
-#ifndef _UNICODE
+#ifndef UNICODE
 #define IS_SPACE_OR_TAB_OR_NBSP(c) (c == ' ' || c == '\t' || c == -96) // Use a negative to support signed chars.
 #else
 #define IS_SPACE_OR_TAB_OR_NBSP(c) IS_SPACE_OR_TAB(c) // wchar_t is unsigned
@@ -31,13 +45,8 @@ EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 // v1.0.43.04: The following are macros to avoid crash bugs caused by improper casting, namely a failure to cast
 // a signed char to UCHAR before promoting it to LPSTR, which crashes since CharLower/Upper would interpret
 // such a high unsigned value as an address rather than a single char.
-#ifndef _UNICODE
-#define ltolower(ch) CharLower((LPSTR)(UCHAR)(ch))  // "L" prefix stands for "locale", like lstrcpy.
-#define ltoupper(ch) CharUpper((LPSTR)(UCHAR)(ch))  // For performance, some callers don't want return value cast to char.
-#else
-#define ltolower(ch) CharLower((LPWSTR)(ch))
-#define ltoupper(ch) CharUpper((LPWSTR)(ch))
-#endif
+#define ltolower(ch) CharLower((LPTSTR)(TBYTE)(ch))  // "L" prefix stands for "locale", like lstrcpy.
+#define ltoupper(ch) CharUpper((LPTSTR)(TBYTE)(ch))  // For performance, some callers don't want return value cast to char.
 
 // NOTE: MOVING THINGS OUT OF THIS FILE AND INTO util.cpp can hurt benchmarks by 10% or more, so be careful
 // when doing so (even when the change seems inconsequential, it can impact benchmarks due to quirks of code
@@ -319,10 +328,10 @@ inline bool IsHex(LPCTSTR aBuf) // 10/17/2006: __forceinline worsens performance
 	aBuf = omit_leading_whitespace(aBuf); // i.e. caller doesn't have to have ltrimmed.
 	if (!*aBuf)
 		return false;
-	if (*aBuf == _T('-') || *aBuf == _T('+'))
+	if (*aBuf == '-' || *aBuf == '+')
 		++aBuf;
 	// The "0x" prefix must be followed by at least one hex digit, otherwise it's not considered hex:
-	#define IS_HEX(buf) (*buf == _T('0') && (*(buf + 1) == _T('x') || *(buf + 1) == _T('X')) && isxdigit(*(buf + 2)))
+	#define IS_HEX(buf) (*buf == '0' && (*(buf + 1) == 'x' || *(buf + 1) == 'X') && isxdigit(*(buf + 2)))
 	return IS_HEX(aBuf);
 }
 
@@ -395,9 +404,9 @@ inline LPTSTR ITOA(int value, LPTSTR buf)
 		// a huge 0xffffffffffffffff value, which would subsequently not be read back in correctly as
 		// a negative number (but UTOA() doesn't need this since there can't be negatives in that case).
 		if (value < 0)
-			*our_buf_temp++ = _T('-');
-		*our_buf_temp++ = _T('0');
-		*our_buf_temp++ = _T('x');
+			*our_buf_temp++ = '-';
+		*our_buf_temp++ = '0';
+		*our_buf_temp++ = 'x';
 		_itot(value < 0 ? -(int)value : value, our_buf_temp, 16);
 		// Must not return the result of the above because it's our_buf_temp and we want buf.
 		return buf;
@@ -412,9 +421,9 @@ inline LPTSTR ITOA64(__int64 value, LPTSTR buf)
 	{
 		LPTSTR our_buf_temp = buf;
 		if (value < 0)
-			*our_buf_temp++ = _T('-');
-		*our_buf_temp++ = _T('0');
-		*our_buf_temp++ = _T('x');
+			*our_buf_temp++ = '-';
+		*our_buf_temp++ = '0';
+		*our_buf_temp++ = 'x';
 		_i64tot(value < 0 ? -(__int64)value : value, our_buf_temp, 16);
 		// Must not return the result of the above because it's our_buf_temp and we want buf.
 		return buf;
@@ -427,8 +436,8 @@ inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 {
 	if (g->FormatIntAsHex)
 	{
-		*buf = _T('0');
-		*(buf + 1) = _T('x');
+		*buf = '0';
+		*(buf + 1) = 'x';
 		_ultot(value, buf + 2, 16);
 		// Must not return the result of the above because it's buf + 2 and we want buf.
 		return buf;
@@ -442,8 +451,8 @@ inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 //{
 //	if (g->FormatIntAsHex)
 //	{
-//		*buf = _T('0');
-//		*(buf + 1) = _T('x');
+//		*buf = '0';
+//		*(buf + 1) = 'x';
 //		return _ui64tot(value, buf + 2, 16);
 //	}
 //	else
@@ -452,7 +461,7 @@ inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 
 
 
-//inline LPTSTR _tcscatmove(LPTSTR aDst, LPCTSTR aSrc)
+//inline LPTSTR tcscatmove(LPTSTR aDst, LPCTSTR aSrc)
 //// Same as strcat() but allows aSrc and aDst to overlap.
 //// Unlike strcat(), it doesn't return aDst.  Instead, it returns the position
 //// in aDst where aSrc was appended.
@@ -475,9 +484,9 @@ inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 // the program when the new locale-case-insensitive mode is in effect.
 #define tcscmp2(str1, str2, string_case_sense) ((string_case_sense) == SCS_INSENSITIVE ? _tcsicmp(str1, str2) \
 	: ((string_case_sense) == SCS_INSENSITIVE_LOCALE ? lstrcmpi(str1, str2) : _tcscmp(str1, str2)))
-#define g_tcscmp(str1, str2) strcmp2(str1, str2, ::g->StringCaseSense)
+#define g_tcscmp(str1, str2) tcscmp2(str1, str2, ::g->StringCaseSense)
 // The most common mode is listed first for performance:
-#define tcsstr2(haystack, needle, string_case_sense) ((string_case_sense) == SCS_INSENSITIVE ? _tcscasestr(haystack, needle) \
+#define tcsstr2(haystack, needle, string_case_sense) ((string_case_sense) == SCS_INSENSITIVE ? tcscasestr(haystack, needle) \
 	: ((string_case_sense) == SCS_INSENSITIVE_LOCALE ? lstrcasestr(haystack, needle) : _tcsstr(haystack, needle)))
 #define g_tcsstr(haystack, needle) tcsstr2(haystack, needle, ::g->StringCaseSense)
 // For the following, caller must ensure that len1 and len2 aren't beyond the terminated length of the string
@@ -570,14 +579,14 @@ HRESULT MySetWindowTheme(HWND hwnd, LPCWSTR pszSubAppName, LPCWSTR pszSubIdList)
 //HRESULT MyEnableThemeDialogTexture(HWND hwnd, DWORD dwFlags);
 LPTSTR ConvertEscapeSequences(LPTSTR aBuf, TCHAR aEscapeChar, bool aAllowEscapedSpace);
 POINT CenterWindow(int aWidth, int aHeight);
-bool FontExist(HDC aHdc, LPTSTR aTypeface);
+bool FontExist(HDC aHdc, LPCTSTR aTypeface);
 void ScreenToWindow(POINT &aPoint, HWND aHwnd);
 void WindowToScreen(int &aX, int &aY);
 void GetVirtualDesktopRect(RECT &aRect);
 LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd);
 void FreeInterProcMem(HANDLE aHandle, LPVOID aMem);
 
-DWORD GetEnvVarReliable(LPTSTR aEnvVarName, LPTSTR aBuf);
+DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf);
 DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, size_t aBufSize);
 
 HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber

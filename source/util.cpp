@@ -18,8 +18,7 @@ GNU General Public License for more details.
 #include <olectl.h> // for OleLoadPicture()
 #include <Gdiplus.h> // Used by LoadPicture().
 #include "util.h"
-//#include "globaldata.h"
-
+#include "globaldata.h"
 
 int GetYDay(int aMon, int aDay, bool aIsLeapYear)
 // Returns a number between 1 and 366.
@@ -99,16 +98,16 @@ DWORD YYYYMMDDToSystemTime2(LPTSTR aYYYYMMDD, SYSTEMTIME *aSystemTime)
 	DWORD gdtr = 0;
 	if (!*aYYYYMMDD)
 		return gdtr;
-	if (*aYYYYMMDD != _T('-')) // Since first char isn't a dash, there is a minimum present.
+	if (*aYYYYMMDD != '-') // Since first char isn't a dash, there is a minimum present.
 	{
 		LPTSTR cp;
-		if (cp = _tcschr(aYYYYMMDD + 1, _T('-')))
-			*cp = _T('\0'); // Temporarily terminate in case only the leading part of the YYYYMMDD format is present.  Otherwise, the dash and other chars would be considered invalid fields.
+		if (cp = _tcschr(aYYYYMMDD + 1, '-'))
+			*cp = '\0'; // Temporarily terminate in case only the leading part of the YYYYMMDD format is present.  Otherwise, the dash and other chars would be considered invalid fields.
 		if (YYYYMMDDToSystemTime(aYYYYMMDD, aSystemTime[0], true)) // Date string is valid.
 			gdtr |= GDTR_MIN; // Indicate that minimum is present.
 		if (cp)
 		{
-			*cp = _T('-'); // Undo the temp. termination.
+			*cp = '-'; // Undo the temp. termination.
 			aYYYYMMDD = cp + 1; // Set it to the maximum's position for use below.
 		}
 		else // No dash, so there is no maximum.  Indicate this by making aYYYYMMDD empty.
@@ -231,7 +230,7 @@ LPTSTR FileTimeToYYYYMMDD(LPTSTR aBuf, FILETIME &aTime, bool aConvertToLocalTime
 	SYSTEMTIME st;
 	if (FileTimeToSystemTime(&ft, &st))
 		return SystemTimeToYYYYMMDD(aBuf, st);
-	*aBuf = _T('\0');
+	*aBuf = '\0';
 	return aBuf;
 }
 
@@ -323,14 +322,14 @@ SymbolType IsPureNumeric(LPTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitesp
 	if (!*aBuf) // The string is empty or consists entirely of whitespace.
 		return aAllowAllWhitespace ? PURE_INTEGER : PURE_NOT_NUMERIC;
 
-	if (*aBuf == _T('-'))
+	if (*aBuf == '-')
 	{
 		if (aAllowNegative)
 			++aBuf;
 		else
 			return PURE_NOT_NUMERIC;
 	}
-	else if (*aBuf == _T('+'))
+	else if (*aBuf == '+')
 		++aBuf;
 
 	// Relies on short circuit boolean order to prevent reading beyond the end of the string:
@@ -358,7 +357,7 @@ SymbolType IsPureNumeric(LPTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitesp
 		}
 		if (!c) // End of string was encountered.
 			break; // The number qualifies as pure, so fall through to the logic at the bottom. (It would already have returned elsewhere in the loop if the number is impure).
-		if (c == _T('.'))
+		if (c == '.')
 		{
 			if (!aAllowFloat || has_decimal_point || is_hex) // If aAllowFloat==false, a decimal point at the very end of the number is considered non-numeric even if aAllowImpure==true.  Some callers like "case ACT_ADD" might rely on this.
 				// i.e. if aBuf contains 2 decimal points, it can't be a valid number.
@@ -371,7 +370,7 @@ SymbolType IsPureNumeric(LPTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitesp
 		}
 		else
 		{
-			if (is_hex ? !_istxdigit(c) : (c < _T('0') || c > _T('9'))) // And since we're here, it's not '.' either.
+			if (is_hex ? !_istxdigit(c) : (c < '0' || c > '9')) // And since we're here, it's not '.' either.
 			{
 				if (aAllowImpure) // Since aStr starts with a number (as verified above), it is considered a number.
 				{
@@ -385,12 +384,12 @@ SymbolType IsPureNumeric(LPTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitesp
 					// As written below, this actually tolerates malformed scientific notation such as numbers
 					// containing two or more E's (e.g. 1.0e4e+5e-6,).  But for performance and due to rarity,
 					// it seems best not to check for them.
-					if (_totupper(c) != _T('E') // v1.0.46.11: Support scientific notation in floating point numbers.
+					if (_totupper(c) != 'E' // v1.0.46.11: Support scientific notation in floating point numbers.
 						|| !(has_decimal_point && has_at_least_one_digit)) // But it must have a decimal point and at least one digit to the left of the 'E'. This avoids variable names like "1e4" from being seen as sci-notation literals (for backward compatibility). Some callers rely on this check.
 						return PURE_NOT_NUMERIC;
-					if (aBuf[1] == _T('-') || aBuf[1] == _T('+')) // The optional sign is present on the exponent.
+					if (aBuf[1] == '-' || aBuf[1] == '+') // The optional sign is present on the exponent.
 						++aBuf; // Omit it from further consideration so that the outer loop doesn't see it as an extra/illegal sign.
-					if (aBuf[1] < _T('0') || aBuf[1] > _T('9'))
+					if (aBuf[1] < '0' || aBuf[1] > '9')
 						// Even if it is an 'e', ensure what follows it is a valid exponent.  Some callers rely
 						// on this check, such as ones that expect "0.6e" to be non-numeric (for "SetFormat Float") 
 						return PURE_NOT_NUMERIC;
@@ -428,7 +427,7 @@ void tcslcpy(LPTSTR aDst, LPCTSTR aSrc, size_t aDstSize) // Non-inline because i
 	// actually copied (not including the zero terminator) can be returned to callers who want it.
 	--aDstSize; // Convert from size to length (caller has ensured that aDstSize > 0).
 	_tcsncpy(aDst, aSrc, aDstSize); // NOTE: In spite of its zero-filling, strncpy() benchmarks considerably faster than a custom loop, probably because it uses 32-bit memory operations vs. 8-bit.
-	aDst[aDstSize] = _T('\0');
+	aDst[aDstSize] = '\0';
 }
 
 
@@ -452,7 +451,7 @@ int sntprintf(LPTSTR aBuf, int aBufSize, LPCTSTR aFormat, ...)
 	va_start(ap, aFormat);
 	// Must use _vsnprintf() not _snprintf() because of the way va_list is handled:
 	int result = _vsntprintf(aBuf, aBufSize, aFormat, ap); // "returns the number of characters written, not including the terminating null character, or a negative value if an output error occurs"
-	aBuf[aBufSize - 1] = _T('\0'); // Confirmed through testing: Must terminate at this exact spot because _vsnprintf() doesn't always do it.
+	aBuf[aBufSize - 1] = '\0'; // Confirmed through testing: Must terminate at this exact spot because _vsnprintf() doesn't always do it.
 	// Fix for v1.0.34: If result==aBufSize, must reduce result by 1 to return an accurate result to the
 	// caller.  In other words, if the line above turned the last character into a terminator, one less character
 	// is now present in aBuf.
@@ -461,9 +460,9 @@ int sntprintf(LPTSTR aBuf, int aBufSize, LPCTSTR aFormat, ...)
 	return result > -1 ? result : aBufSize - 1; // Never return a negative value.  See comment under function definition, above.
 }
 
-#ifdef TRANSLATED
 
-int sntprintfcat(char *aBuf, int aBufSize, const char *aFormat, ...)
+
+int sntprintfcat(LPTSTR aBuf, int aBufSize, LPCTSTR aFormat, ...)
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // aBuf will always be terminated here except when the amount of space left in the buffer is zero or less.
 // (in which case the caller should already have terminated it).  If aBufSize is greater than zero but not
@@ -478,7 +477,7 @@ int sntprintfcat(char *aBuf, int aBufSize, const char *aFormat, ...)
 {
 	// The following should probably never be changed without a full suite of tests to ensure the
 	// change doesn't cause the finicky _vsnprintf() to break something.
-	size_t length = strlen(aBuf);
+	size_t length = _tcslen(aBuf);
 	int space_remaining = (int)(aBufSize - length); // Must cast to int to avoid loss of negative values.
 	if (space_remaining < 1) // Can't even terminate it (no room) so just indicate that no characters were copied.
 		return 0;
@@ -486,7 +485,7 @@ int sntprintfcat(char *aBuf, int aBufSize, const char *aFormat, ...)
 	va_list ap;
 	va_start(ap, aFormat);
 	// Must use vsnprintf() not snprintf() because of the way va_list is handled:
-	int result = _vsnprintf(aBuf, (size_t)space_remaining, aFormat, ap); // "returns the number of characters written, not including the terminating null character, or a negative value if an output error occurs"
+	int result = _vsntprintf(aBuf, (size_t)space_remaining, aFormat, ap); // "returns the number of characters written, not including the terminating null character, or a negative value if an output error occurs"
 	aBuf[space_remaining - 1] = '\0'; // Confirmed through testing: Must terminate at this exact spot because _vsnprintf() doesn't always do it.
 	return result > -1 ? result : space_remaining - 1; // Never return a negative value.  See comment under function definition, above.
 }
@@ -494,12 +493,12 @@ int sntprintfcat(char *aBuf, int aBufSize, const char *aFormat, ...)
 
 
 // Not currently used by anything, so commented out to possibly reduce code size:
-//int strlcmp(char *aBuf1, char *aBuf2, UINT aLength1, UINT aLength2)
+//int tcslcmp(LPTSTR aBuf1, LPTSTR aBuf2, UINT aLength1, UINT aLength2)
 //// Case sensitive version.  See strlicmp() comments below.
 //{
 //	if (!aBuf1 || !aBuf2) return 0;
-//	if (aLength1 == UINT_MAX) aLength1 = (UINT)strlen(aBuf1);
-//	if (aLength2 == UINT_MAX) aLength2 = (UINT)strlen(aBuf2);
+//	if (aLength1 == UINT_MAX) aLength1 = (UINT)_tcslen(aBuf1);
+//	if (aLength2 == UINT_MAX) aLength2 = (UINT)_tcslen(aBuf2);
 //	UINT least_length = aLength1 < aLength2 ? aLength1 : aLength2;
 //	int diff;
 //	for (UINT i = 0; i < least_length; ++i)
@@ -510,7 +509,7 @@ int sntprintfcat(char *aBuf, int aBufSize, const char *aFormat, ...)
 
 
 
-int strlicmp(char *aBuf1, char *aBuf2, UINT aLength1, UINT aLength2)
+int tcslicmp(LPTSTR aBuf1, LPTSTR aBuf2, UINT aLength1, UINT aLength2)
 // Similar to strnicmp but considers each aBuf to be a string of length aLength if aLength was
 // specified.  In other words, unlike strnicmp() which would consider strnicmp("ab", "abc", 2)
 // [example verified correct] to be a match, this function would consider them to be
@@ -525,12 +524,16 @@ int strlicmp(char *aBuf1, char *aBuf2, UINT aLength1, UINT aLength2)
 // length of the respective aBuf will be used.
 {
 	if (!aBuf1 || !aBuf2) return 0;
-	if (aLength1 == UINT_MAX) aLength1 = (UINT)strlen(aBuf1);
-	if (aLength2 == UINT_MAX) aLength2 = (UINT)strlen(aBuf2);
+	if (aLength1 == UINT_MAX) aLength1 = (UINT)_tcslen(aBuf1);
+	if (aLength2 == UINT_MAX) aLength2 = (UINT)_tcslen(aBuf2);
 	UINT least_length = aLength1 < aLength2 ? aLength1 : aLength2;
 	int diff;
 	for (UINT i = 0; i < least_length; ++i)
+#ifndef UNICODE
 		if (   diff = (int)((UCHAR)toupper(aBuf1[i]) - (UCHAR)toupper(aBuf2[i]))   )
+#else
+		if (   diff = (int)(towupper(aBuf1[i]) - towupper(aBuf2[i]))   )
+#endif
 			return diff;
 	// Since the above didn't return, the strings are equal if they're the same length.
 	// Otherwise, the longer one is considered greater than the shorter one since the
@@ -541,7 +544,7 @@ int strlicmp(char *aBuf1, char *aBuf2, UINT aLength1, UINT aLength2)
 
 
 
-char *strrstr(char *aStr, char *aPattern, StringCaseSenseType aStringCaseSense, int aOccurrence)
+LPTSTR tcsrstr(LPTSTR aStr, LPTSTR aPattern, StringCaseSenseType aStringCaseSense, int aOccurrence)
 // Returns NULL if not found, otherwise the address of the found string.
 // This could probably use a faster algorithm someday.  For now it seems adequate because
 // scripts rarely use it and when they do, it's usually on short haystack strings (such as
@@ -549,20 +552,20 @@ char *strrstr(char *aStr, char *aPattern, StringCaseSenseType aStringCaseSense, 
 {
 	if (aOccurrence < 1)
 		return NULL;
-	size_t aStr_length = strlen(aStr);
+	size_t aStr_length = _tcslen(aStr);
 	if (!*aPattern)
 		// The empty string is found in every string, and since we're searching from the right, return
 		// the position of the zero terminator to indicate the situation:
 		return aStr + aStr_length;
 
-	size_t aPattern_length = strlen(aPattern);
-	char aPattern_last_char = aPattern[aPattern_length - 1];
-	char aPattern_last_char_lower = (aStringCaseSense == SCS_INSENSITIVE_LOCALE)
-		? (char)ltolower(aPattern_last_char)
-		: tolower(aPattern_last_char);
+	size_t aPattern_length = _tcslen(aPattern);
+	TCHAR aPattern_last_char = aPattern[aPattern_length - 1];
+	TCHAR aPattern_last_char_lower = (aStringCaseSense == SCS_INSENSITIVE_LOCALE)
+		? (TCHAR)ltolower(aPattern_last_char)
+		: _totlower(aPattern_last_char);
 
 	int occurrence = 0;
-	char *match_starting_pos = aStr + aStr_length - 1;
+	LPTSTR match_starting_pos = aStr + aStr_length - 1;
 
 	// Keep finding matches from the right until the Nth occurrence (specified by the caller) is found.
 	for (;;)
@@ -570,17 +573,17 @@ char *strrstr(char *aStr, char *aPattern, StringCaseSenseType aStringCaseSense, 
 		if (match_starting_pos < aStr)
 			return NULL;  // No further matches are possible.
 		// Find (from the right) the first occurrence of aPattern's last char:
-		char *last_char_match;
+		LPTSTR last_char_match;
 		for (last_char_match = match_starting_pos; last_char_match >= aStr; --last_char_match)
 		{
 			if (aStringCaseSense == SCS_INSENSITIVE) // The most common mode is listed first for performance.
 			{
-				if (tolower(*last_char_match) == aPattern_last_char_lower)
+				if (_totlower(*last_char_match) == aPattern_last_char_lower)
 					break;
 			}
 			else if (aStringCaseSense == SCS_INSENSITIVE_LOCALE)
 			{
-				if ((char)ltolower(*last_char_match) == aPattern_last_char_lower)
+				if ((TCHAR)ltolower(*last_char_match) == aPattern_last_char_lower)
 					break;
 			}
 			else // Case sensitive.
@@ -595,7 +598,7 @@ char *strrstr(char *aStr, char *aPattern, StringCaseSenseType aStringCaseSense, 
 
 		// Now that aPattern's last character has been found in aStr, ensure the rest of aPattern
 		// exists in aStr to the left of last_char_match:
-		char *full_match, *cp;
+		TCHAR *full_match, *cp;
 		bool found;
 		for (found = false, cp = aPattern + aPattern_length - 2, full_match = last_char_match - 1;; --cp, --full_match)
 		{
@@ -612,7 +615,7 @@ char *strrstr(char *aStr, char *aPattern, StringCaseSenseType aStringCaseSense, 
 
 			if (aStringCaseSense == SCS_INSENSITIVE) // The most common mode is listed first for performance.
 			{
-				if (tolower(*full_match) != tolower(*cp))
+				if (_totlower(*full_match) != _totlower(*cp))
 					break;
 			}
 			else if (aStringCaseSense == SCS_INSENSITIVE_LOCALE)
@@ -635,7 +638,7 @@ char *strrstr(char *aStr, char *aPattern, StringCaseSenseType aStringCaseSense, 
 
 
 
-char *strcasestr(const char *phaystack, const char *pneedle)
+LPTSTR tcscasestr(LPCTSTR phaystack, LPCTSTR pneedle)
 	// To make this work with MS Visual C++, this version uses tolower/toupper() in place of
 	// _tolower/_toupper(), since apparently in GNU C, the underscore macros are identical
 	// to the non-underscore versions; but in MS the underscore ones do an unconditional
@@ -672,17 +675,17 @@ char *strcasestr(const char *phaystack, const char *pneedle)
 	// Faster looping by precalculating bl, bu, cl, cu before looping.
 	// 2004 Apr 08	Jose Da Silva, digital@joescat@com
 {
-	register const unsigned char *haystack, *needle;
+	register const TBYTE *haystack, *needle;
 	register unsigned bl, bu, cl, cu;
 	
-	haystack = (const unsigned char *) phaystack;
-	needle = (const unsigned char *) pneedle;
+	haystack = (const TBYTE *) phaystack;
+	needle = (const TBYTE *) pneedle;
 
-	bl = tolower(*needle);
+	bl = _totlower(*needle);
 	if (bl != '\0')
 	{
 		// Scan haystack until the first character of needle is found:
-		bu = toupper(bl);
+		bu = _totupper(bl);
 		haystack--;				/* possible ANSI violation */
 		do
 		{
@@ -693,17 +696,17 @@ char *strcasestr(const char *phaystack, const char *pneedle)
 		while ((cl != bl) && (cl != bu));
 
 		// See if the rest of needle is a one-for-one match with this part of haystack:
-		cl = tolower(*++needle);
+		cl = _totlower(*++needle);
 		if (cl == '\0')  // Since needle consists of only one character, it is already a match as found above.
 			goto foundneedle;
-		cu = toupper(cl);
+		cu = _totupper(cl);
 		++needle;
 		goto jin;
 		
 		for (;;)
 		{
 			register unsigned a;
-			register const unsigned char *rhaystack, *rneedle;
+			register const TBYTE *rhaystack, *rneedle;
 			do
 			{
 				a = *++haystack;
@@ -729,23 +732,23 @@ jin:
 			
 			rhaystack = haystack-- + 1;
 			rneedle = needle;
-			a = tolower(*rneedle);
+			a = _totlower(*rneedle);
 			
-			if (tolower(*rhaystack) == (int) a)
+			if (_totlower(*rhaystack) == (int) a)
 			do
 			{
 				if (a == '\0')
 					goto foundneedle;
 				++rhaystack;
-				a = tolower(*++needle);
-				if (tolower(*rhaystack) != (int) a)
+				a = _totlower(*++needle);
+				if (_totlower(*rhaystack) != (int) a)
 					break;
 				if (a == '\0')
 					goto foundneedle;
 				++rhaystack;
-				a = tolower(*++needle);
+				a = _totlower(*++needle);
 			}
-			while (tolower(*rhaystack) == (int) a);
+			while (_totlower(*rhaystack) == (int) a);
 			
 			needle = rneedle;		/* took the register-poor approach */
 			
@@ -754,14 +757,14 @@ jin:
 		} // for(;;)
 	} // if (bl != '\0')
 foundneedle:
-	return (char*) haystack;
+	return (LPTSTR) haystack;
 ret0:
 	return 0;
 }
 
 
 
-char *lstrcasestr(const char *phaystack, const char *pneedle)
+LPTSTR lstrcasestr(LPCTSTR phaystack, LPCTSTR pneedle)
 // This is the locale-obeying variant of strcasestr.  It uses CharUpper/Lower in place of toupper/lower,
 // which sees chars like ?as the same as ?(depending on code page/locale).  This function is about
 // 1 to 8 times slower than strcasestr() depending on factors such as how many partial matches for needle
@@ -770,11 +773,11 @@ char *lstrcasestr(const char *phaystack, const char *pneedle)
 // Copyright (C) 1994,1996,1997,1998,1999,2000 Free Software Foundation, Inc.
 // See strcasestr() for more comments.
 {
-	register const unsigned char *haystack, *needle;
+	register const TBYTE *haystack, *needle;
 	register unsigned bl, bu, cl, cu;
 	
-	haystack = (const unsigned char *) phaystack;
-	needle = (const unsigned char *) pneedle;
+	haystack = (const TBYTE *) phaystack;
+	needle = (const TBYTE *) pneedle;
 
 	bl = (UINT)(size_t)ltolower(*needle); // Double cast avoids compiler warning without increasing code size.
 	if (bl != 0)
@@ -801,7 +804,7 @@ char *lstrcasestr(const char *phaystack, const char *pneedle)
 		for (;;)
 		{
 			register unsigned a;
-			register const unsigned char *rhaystack, *rneedle;
+			register const TBYTE *rhaystack, *rneedle;
 			do
 			{
 				a = *++haystack;
@@ -852,15 +855,15 @@ jin:
 		} // for(;;)
 	} // if (bl != '\0')
 foundneedle:
-	return (char*) haystack;
+	return (LPTSTR) haystack;
 ret0:
 	return 0;
 }
 
 
 
-UINT StrReplace(char *aHaystack, char *aOld, char *aNew, StringCaseSenseType aStringCaseSense
-	, UINT aLimit, size_t aSizeLimit, char **aDest, size_t *aHaystackLength)
+UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType aStringCaseSense
+	, UINT aLimit, size_t aSizeLimit, TCHAR **aDest, size_t *aHaystackLength)
 // Replaces all (or aLimit) occurrences of aOld with aNew in aHaystack.
 // On success, it returns the number of replacements done (0 if none).  On failure (out of memory), it returns 0
 // (and if aDest isn't NULL, it also sets *aDest to NULL on failure).
@@ -900,17 +903,17 @@ UINT StrReplace(char *aHaystack, char *aOld, char *aNew, StringCaseSenseType aSt
 
 	// THINGS TO SET NOW IN CASE OF EARLY RETURN OR GOTO:
 	// Set up the input/output lengths:
-	size_t haystack_length = aHaystackLength ? *aHaystackLength : strlen(aHaystack); // For performance, use caller's length if it was provided.
+	size_t haystack_length = aHaystackLength ? *aHaystackLength : _tcslen(aHaystack); // For performance, use caller's length if it was provided.
 	size_t length_temp; // Just a placeholder/memory location used by the alias below.
 	size_t &result_length = aHaystackLength ? *aHaystackLength : length_temp; // Make an alias for convenience and maintainability (if this is an output parameter for our caller, this step takes care that in advance).
 	// Set up the output buffer:
-	char *result_temp; // In mode #1, holds temporary memory that is freed before we return.
-	char *&result = aDest ? *aDest : result_temp; // Make an alias for convenience and maintainability (if aDest is non-NULL, it's an output parameter for our caller, and this step takes care that in advance).
+	LPTSTR result_temp; // In mode #1, holds temporary memory that is freed before we return.
+	LPTSTR &result = aDest ? *aDest : result_temp; // Make an alias for convenience and maintainability (if aDest is non-NULL, it's an output parameter for our caller, and this step takes care that in advance).
 	result = NULL;     // It's allocated only upon first use to avoid a potentially massive allocation that might
 	result_length = 0; // be wasted and cause swapping (not to mention that we'll have better ability to estimate the correct total size after the first replacement is discovered).
 	size_t result_size = 0;
 	// Variables used by both replacement methods.
-	char *src, *match_pos;
+	LPTSTR src, match_pos;
 	// END OF INITIAL SETUP.
 
 	// From now on, result_length and result should be kept up-to-date because they may have been set up
@@ -926,8 +929,8 @@ UINT StrReplace(char *aHaystack, char *aOld, char *aNew, StringCaseSenseType aSt
 		return 0; // Report "no replacements".
 	}
 
-	size_t aOld_length = strlen(aOld);
-	size_t aNew_length = strlen(aNew);
+	size_t aOld_length = _tcslen(aOld);
+	size_t aNew_length = _tcslen(aNew);
 	int length_delta = (int)(aNew_length - aOld_length); // Cast to int to avoid loss of unsigned. A negative delta means the replacment substring is smaller than what it's replacing.
 
 	if (aSizeLimit != -1) // Caller provided a size *restriction*, so if necessary reduce aLimit to stay within bounds.  Compare directly to -1 due to unsigned.
@@ -962,11 +965,11 @@ UINT StrReplace(char *aHaystack, char *aOld, char *aNew, StringCaseSenseType aSt
 
 	// Below uses a temp var. because realloc() returns NULL on failure but leaves original block allocated.
 	// Note that if it's given a NULL pointer, realloc() does a malloc() instead.
-	char *realloc_temp;
+	LPTSTR realloc_temp;
 	#define STRREPLACE_REALLOC(size) \
 	{\
 		result_size = size;\
-		if (   !(realloc_temp = (char *)realloc(result, result_size))   )\
+		if (   !(realloc_temp = (LPTSTR)realloc(result, result_size * sizeof(TCHAR)))   )\
 			goto out_of_mem;\
 		result = realloc_temp;\
 	}
@@ -977,7 +980,7 @@ UINT StrReplace(char *aHaystack, char *aOld, char *aNew, StringCaseSenseType aSt
 
 	// Perform the replacement:
 	for (replacement_count = 0, src = aHaystack
-		; aLimit && (match_pos = strstr2(src, aOld, aStringCaseSense));) // Relies on short-circuit boolean order.
+		; aLimit && (match_pos = tcsstr2(src, aOld, aStringCaseSense));) // Relies on short-circuit boolean order.
 	{
 		++replacement_count;
 		--aLimit;
@@ -993,13 +996,13 @@ UINT StrReplace(char *aHaystack, char *aOld, char *aNew, StringCaseSenseType aSt
 		// is to copy over the part of haystack that appears before the match.
 		if (haystack_portion_length)
 		{
-			memcpy(result + result_length, src, haystack_portion_length);
+			tmemcpy(result + result_length, src, haystack_portion_length);
 			result_length += haystack_portion_length;
 		}
 		// Now append the replacement string in place of the old string.
 		if (aNew_length)
 		{
-			memcpy(result + result_length, aNew, aNew_length);
+			tmemcpy(result + result_length, aNew, aNew_length);
 			result_length += aNew_length;
 		}
 		//else omit it altogether; i.e. replace every aOld with the empty string.
@@ -1027,7 +1030,7 @@ UINT StrReplace(char *aHaystack, char *aOld, char *aNew, StringCaseSenseType aSt
 		new_result_length = result_length + haystack_portion_length;
 		if (new_result_length >= result_size) // Uses >= to allow room for terminator.
 			STRREPLACE_REALLOC(new_result_length + 1); // This will return if an alloc error occurs.
-		memcpy(result + result_length, src, haystack_portion_length); // memcpy() usually benches a little faster than strcpy().
+		tmemcpy(result + result_length, src, haystack_portion_length); // memcpy() usually benches a little faster than strcpy().
 		result_length = new_result_length; // Remember that result_length is actually an output for our caller, so even if for no other reason, it must be kept accurate for that.
 	}
 	result[result_length] = '\0'; // Must terminate it unconditionally because other sections usually don't do it.
@@ -1036,7 +1039,7 @@ UINT StrReplace(char *aHaystack, char *aOld, char *aNew, StringCaseSenseType aSt
 	{
 		// Since caller didn't provide destination memory, copy the result from our temporary memory (that was used
 		// for performance) back into the caller's original buf (which has already been confirmed to be large enough).
-		memcpy(aHaystack, result, result_length + 1); // Include the zero terminator.
+		tmemcpy(aHaystack, result, result_length + 1); // Include the zero terminator.
 		free(result); // Free the temp. mem that was used for performance.
 	}
 	return replacement_count;  // The output parameters have already been populated properly above.
@@ -1065,7 +1068,7 @@ in_place_method:
 	//for ( ; ptr = StrReplace(aHaystack, aOld, aNew, aStringCaseSense); ); // Note that this very different from the below.
 
 	for (replacement_count = 0, src = aHaystack
-		; aLimit && (match_pos = strstr2(src, aOld, aStringCaseSense)) // Relies on short-circuit boolean order.
+		; aLimit && (match_pos = tcsstr2(src, aOld, aStringCaseSense)) // Relies on short-circuit boolean order.
 		; --aLimit, ++replacement_count)
 	{
 		src = match_pos + aNew_length;  // The next search should start at this position when all is adjusted below.
@@ -1073,12 +1076,12 @@ in_place_method:
 		{
 			// Since new string can't fit exactly in place of old string, adjust the target area to
 			// accept exactly the right length so that the rest of the string stays unaltered:
-			memmove(src, match_pos + aOld_length
-				, haystack_length - (match_pos - aHaystack) - aOld_length + 1); // +1 to include zero terminator.
+			tmemmove(src, match_pos + aOld_length
+				, (haystack_length - (match_pos - aHaystack)) - aOld_length + 1); // +1 to include zero terminator.
 			// Above: Calculating length vs. using strlen() makes overall speed of the operation about
 			// twice as fast for some typical test cases in a 2 MB buffer such as replacing \r\n with \n.
 		}
-		memcpy(match_pos, aNew, aNew_length); // Perform the replacement.
+		tmemcpy(match_pos, aNew, aNew_length); // Perform the replacement.
 		// Must keep haystack_length updated as we go, for use with memmove() above:
 		haystack_length += length_delta; // Note that length_delta will be negative if aNew is shorter than aOld.
 	}
@@ -1207,7 +1210,7 @@ int PredictReplacementSize(int aLengthDelta, int aReplacementCount, int aLimit, 
 
 
 
-char *TranslateLFtoCRLF(char *aString)
+LPTSTR TranslateLFtoCRLF(LPTSTR aString)
 // Can't use StrReplace() for this because any CRLFs originally present in aString are not changed (i.e. they
 // don't become CRCRLF) [there may be other reasons].
 // Translates any naked LFs in aString to CRLF.  If there are none, the original string is returned.
@@ -1216,7 +1219,7 @@ char *TranslateLFtoCRLF(char *aString)
 {
 	UINT naked_LF_count = 0;
 	size_t length = 0;
-	char *cp;
+	LPTSTR cp;
 
 	for (cp = aString; *cp; ++cp)
 	{
@@ -1229,12 +1232,12 @@ char *TranslateLFtoCRLF(char *aString)
 		return aString;  // The original string is returned, which the caller must check for (vs. new string).
 
 	// Allocate the new memory that will become the caller's responsibility:
-	char *buf = (char *)malloc(length + naked_LF_count + 1);  // +1 for zero terminator.
+	LPTSTR buf = (LPTSTR)malloc(length + naked_LF_count + 1);  // +1 for zero terminator.
 	if (!buf)
 		return NULL;
 
 	// Now perform the translation.
-	char *dp = buf; // Destination.
+	LPTSTR dp = buf; // Destination.
 	for (cp = aString; *cp; ++cp)
 	{
 		if (*cp == '\n' && (cp == aString || cp[-1] != '\r')) // Relies on short-circuit boolean order.
@@ -1248,7 +1251,7 @@ char *TranslateLFtoCRLF(char *aString)
 
 
 
-bool DoesFilePatternExist(char *aFilePattern, DWORD *aFileAttr)
+bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr)
 // Returns true if the file/folder exists or false otherwise.
 // If non-NULL, aFileAttr's DWORD is set to the attributes of the file/folder if a match is found.
 // If there is no match, its contents are undefined.
@@ -1258,8 +1261,8 @@ bool DoesFilePatternExist(char *aFilePattern, DWORD *aFileAttr)
 	// Such volume names are obtained from GetVolumeNameForVolumeMountPoint() and perhaps other functions.
 	// However, testing shows that wildcards beyond that first one should be seen as real wildcards
 	// because the wildcard match-method below does work for such volume names.
-	char *cp = strncmp(aFilePattern, "\\\\?\\", 4) ? aFilePattern : aFilePattern + 4;
-	if (StrChrAny(cp, "?*"))
+	LPTSTR cp = _tcsncmp(aFilePattern, _T("\\\\?\\"), 4) ? aFilePattern : aFilePattern + 4;
+	if (StrChrAny(cp, _T("?*")))
 	{
 		WIN32_FIND_DATA wfd;
 		HANDLE hFile = FindFirstFile(aFilePattern, &wfd);
@@ -1282,16 +1285,16 @@ bool DoesFilePatternExist(char *aFilePattern, DWORD *aFileAttr)
 
 
 #ifdef _DEBUG
-ResultType FileAppend(char *aFilespec, char *aLine, bool aAppendNewline)
+ResultType FileAppend(LPTSTR aFilespec, LPTSTR aLine, bool aAppendNewline)
 {
 	if (!aFilespec || !aLine) return FAIL;
 	if (!*aFilespec) return FAIL;
-	FILE *fp = fopen(aFilespec, "a");
+	FILE *fp = _tfopen(aFilespec, _T("a"));
 	if (fp == NULL)
 		return FAIL;
-	fputs(aLine, fp);
+	_fputts(aLine, fp);
 	if (aAppendNewline)
-		putc('\n', fp);
+		_puttc('\n', fp);
 	fclose(fp);
 	return OK;
 }
@@ -1299,7 +1302,7 @@ ResultType FileAppend(char *aFilespec, char *aLine, bool aAppendNewline)
 
 
 
-char *ConvertFilespecToCorrectCase(char *aFullFileSpec)
+LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFullFileSpec)
 // aFullFileSpec must be a modifiable string since it will be converted to proper case.
 // Also, it should be at least MAX_PATH is size because if it contains any short (8.3)
 // components, they will be converted into their long names.
@@ -1311,14 +1314,14 @@ char *ConvertFilespecToCorrectCase(char *aFullFileSpec)
 // function, but that might not support UNCs correctly.
 {
 	if (!aFullFileSpec || !*aFullFileSpec) return aFullFileSpec;
-	size_t length = strlen(aFullFileSpec);
+	size_t length = _tcslen(aFullFileSpec);
 	if (length < 2 || length >= MAX_PATH) return aFullFileSpec;
 	// Start with something easy, the drive letter:
 	if (aFullFileSpec[1] == ':')
-		aFullFileSpec[0] = toupper(aFullFileSpec[0]);
+		aFullFileSpec[0] = _totupper(aFullFileSpec[0]);
 	// else it might be a UNC that has no drive letter.
-	char built_filespec[MAX_PATH], *dir_start, *dir_end;
-	if (dir_start = strchr(aFullFileSpec, ':'))
+	TCHAR built_filespec[MAX_PATH], *dir_start, *dir_end;
+	if (dir_start = _tcschr(aFullFileSpec, ':'))
 		// MSDN: "To examine any directory other than a root directory, use an appropriate
 		// path to that directory, with no trailing backslash. For example, an argument of
 		// "C:\windows" will return information about the directory "C:\windows", not about
@@ -1327,7 +1330,7 @@ char *ConvertFilespecToCorrectCase(char *aFullFileSpec)
 		dir_start += 2; // Skip over the first backslash that goes with the drive letter.
 	else // it's probably a UNC
 	{
-		if (strncmp(aFullFileSpec, "\\\\", 2))
+		if (_tcsncmp(aFullFileSpec, _T("\\\\"), 2))
 			// It doesn't appear to be a UNC either, so not sure how to deal with it.
 			return aFullFileSpec;
 		// I think MS says you can't use FindFirstFile() directly on a share name, so we
@@ -1336,20 +1339,20 @@ char *ConvertFilespecToCorrectCase(char *aFullFileSpec)
 		// lpFileName of the form "\\server\service\*" but you cannot use an lpFileName that
 		// points to the share itself, such as "\\server\service".
 		dir_start = aFullFileSpec + 2;
-		char *end_of_server_name = strchr(dir_start, '\\');
+		LPTSTR end_of_server_name = _tcschr(dir_start, '\\');
 		if (end_of_server_name)
 		{
 			dir_start = end_of_server_name + 1;
-			char *end_of_share_name = strchr(dir_start, '\\');
+			LPTSTR end_of_share_name = _tcschr(dir_start, '\\');
 			if (end_of_share_name)
 				dir_start = end_of_share_name + 1;
 		}
 	}
 	// Init the new string (the filespec we're building), e.g. copy just the "c:\\" part.
-	strlcpy(built_filespec, aFullFileSpec, dir_start - aFullFileSpec + 1);
+	tcslcpy(built_filespec, aFullFileSpec, dir_start - aFullFileSpec + 1);
 	WIN32_FIND_DATA found_file;
 	HANDLE file_search;
-	for (dir_end = dir_start; dir_end = strchr(dir_end, '\\'); ++dir_end)
+	for (dir_end = dir_start; dir_end = _tcschr(dir_end, '\\'); ++dir_end)
 	{
 		*dir_end = '\0';  // Temporarily terminate.
 		file_search = FindFirstFile(aFullFileSpec, &found_file);
@@ -1358,23 +1361,23 @@ char *ConvertFilespecToCorrectCase(char *aFullFileSpec)
 			return aFullFileSpec;
 		FindClose(file_search);
 		// Append the case-corrected version of this directory name:
-		snprintfcat(built_filespec, sizeof(built_filespec), "%s\\", found_file.cFileName);
+		sntprintfcat(built_filespec, sizeof(built_filespec), _T("%s\\"), found_file.cFileName);
 	}
 	// Now do the filename itself:
 	if (   (file_search = FindFirstFile(aFullFileSpec, &found_file)) == INVALID_HANDLE_VALUE   )
 		return aFullFileSpec;
 	FindClose(file_search);
-	snprintfcat(built_filespec, sizeof(built_filespec), "%s", found_file.cFileName);
+	sntprintfcat(built_filespec, sizeof(built_filespec), _T("%s"), found_file.cFileName);
 	// It might be possible for the new one to be longer than the old, e.g. if some 8.3 short
 	// names were converted to long names by the process.  Thus, the caller should ensure that
 	// aFullFileSpec is large enough:
-	strcpy(aFullFileSpec, built_filespec);
+	_tcscpy(aFullFileSpec, built_filespec);
 	return aFullFileSpec;
 }
 
 
 
-char *FileAttribToStr(char *aBuf, DWORD aAttr)
+LPTSTR FileAttribToStr(LPTSTR aBuf, DWORD aAttr)
 // Caller must ensure that aAttr is valid (i.e. that it's not 0xFFFFFFFF).
 {
 	if (!aBuf) return aBuf;
@@ -1415,7 +1418,7 @@ unsigned __int64 GetFileSize64(HANDLE aFileHandle)
 
 
 
-char *GetLastErrorText(char *aBuf, int aBufSize, bool aUpdateLastError)
+LPTSTR GetLastErrorText(LPTSTR aBuf, int aBufSize, bool aUpdateLastError)
 // aBufSize is an int to preserve any negative values the caller might pass in.
 {
 	if (aBufSize < 1)
@@ -1434,7 +1437,7 @@ char *GetLastErrorText(char *aBuf, int aBufSize, bool aUpdateLastError)
 
 
 
-void AssignColor(char *aColorName, COLORREF &aColor, HBRUSH &aBrush)
+void AssignColor(LPTSTR aColorName, COLORREF &aColor, HBRUSH &aBrush)
 // Assign the color indicated in aColorName (either a name or a hex RGB value) to both
 // aColor and aBrush, deleting any prior handle in aBrush first.  If the color cannot
 // be determined, it will always be set to CLR_DEFAULT (and aBrush set to NULL to match).
@@ -1448,7 +1451,7 @@ void AssignColor(char *aColorName, COLORREF &aColor, HBRUSH &aBrush)
 		color = ColorNameToBGR(aColorName);
 		if (color == CLR_NONE) // A matching color name was not found, so assume it's a hex color value.
 			// It seems strtol() automatically handles the optional leading "0x" if present:
-			color = rgb_to_bgr(strtol(aColorName, NULL, 16));
+			color = rgb_to_bgr(_tcstol(aColorName, NULL, 16));
 			// if aColorName does not contain something hex-numeric, black (0x00) will be assumed,
 			// which seems okay given how rare such a problem would be.
 	}
@@ -1467,28 +1470,28 @@ void AssignColor(char *aColorName, COLORREF &aColor, HBRUSH &aBrush)
 
 
 
-COLORREF ColorNameToBGR(char *aColorName)
+COLORREF ColorNameToBGR(LPTSTR aColorName)
 // These are the main HTML color names.  Returns CLR_NONE if a matching HTML color name can't be found.
 // Returns CLR_DEFAULT only if aColorName is the word Default.
 {
 	if (!aColorName || !*aColorName) return CLR_NONE;
-	if (!stricmp(aColorName, "Black"))  return 0x000000;  // These colors are all in BGR format, not RGB.
-	if (!stricmp(aColorName, "Silver")) return 0xC0C0C0;
-	if (!stricmp(aColorName, "Gray"))   return 0x808080;
-	if (!stricmp(aColorName, "White"))  return 0xFFFFFF;
-	if (!stricmp(aColorName, "Maroon")) return 0x000080;
-	if (!stricmp(aColorName, "Red"))    return 0x0000FF;
-	if (!stricmp(aColorName, "Purple")) return 0x800080;
-	if (!stricmp(aColorName, "Fuchsia"))return 0xFF00FF;
-	if (!stricmp(aColorName, "Green"))  return 0x008000;
-	if (!stricmp(aColorName, "Lime"))   return 0x00FF00;
-	if (!stricmp(aColorName, "Olive"))  return 0x008080;
-	if (!stricmp(aColorName, "Yellow")) return 0x00FFFF;
-	if (!stricmp(aColorName, "Navy"))   return 0x800000;
-	if (!stricmp(aColorName, "Blue"))   return 0xFF0000;
-	if (!stricmp(aColorName, "Teal"))   return 0x808000;
-	if (!stricmp(aColorName, "Aqua"))   return 0xFFFF00;
-	if (!stricmp(aColorName, "Default"))return CLR_DEFAULT;
+	if (!_tcsicmp(aColorName, _T("Black")))  return 0x000000;  // These colors are all in BGR format, not RGB.
+	if (!_tcsicmp(aColorName, _T("Silver"))) return 0xC0C0C0;
+	if (!_tcsicmp(aColorName, _T("Gray")))   return 0x808080;
+	if (!_tcsicmp(aColorName, _T("White")))  return 0xFFFFFF;
+	if (!_tcsicmp(aColorName, _T("Maroon"))) return 0x000080;
+	if (!_tcsicmp(aColorName, _T("Red")))    return 0x0000FF;
+	if (!_tcsicmp(aColorName, _T("Purple"))) return 0x800080;
+	if (!_tcsicmp(aColorName, _T("Fuchsia")))return 0xFF00FF;
+	if (!_tcsicmp(aColorName, _T("Green")))  return 0x008000;
+	if (!_tcsicmp(aColorName, _T("Lime")))   return 0x00FF00;
+	if (!_tcsicmp(aColorName, _T("Olive")))  return 0x008080;
+	if (!_tcsicmp(aColorName, _T("Yellow"))) return 0x00FFFF;
+	if (!_tcsicmp(aColorName, _T("Navy")))   return 0x800000;
+	if (!_tcsicmp(aColorName, _T("Blue")))   return 0xFF0000;
+	if (!_tcsicmp(aColorName, _T("Teal")))   return 0x808000;
+	if (!_tcsicmp(aColorName, _T("Aqua")))   return 0xFFFF00;
+	if (!_tcsicmp(aColorName, _T("Default")))return CLR_DEFAULT;
 	return CLR_NONE;
 }
 
@@ -1516,12 +1519,12 @@ POINT CenterWindow(int aWidth, int aHeight)
 
 
 
-bool FontExist(HDC aHdc, char *aTypeface)
+bool FontExist(HDC aHdc, LPCTSTR aTypeface)
 {
 	LOGFONT lf;
 	lf.lfCharSet = DEFAULT_CHARSET;  // Enumerate all char sets.
 	lf.lfPitchAndFamily = 0;  // Must be zero.
-	strlcpy(lf.lfFaceName, aTypeface, LF_FACESIZE);
+	tcslcpy(lf.lfFaceName, aTypeface, LF_FACESIZE);
 	bool font_exists = false;
 	EnumFontFamiliesEx(aHdc, &lf, (FONTENUMPROC)FontEnumProc, (LPARAM)&font_exists, 0);
 	return font_exists;
@@ -1587,7 +1590,7 @@ void GetVirtualDesktopRect(RECT &aRect)
 
 
 
-DWORD GetEnvVarReliable(char *aEnvVarName, char *aBuf)
+DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf)
 // Returns the length of what has been copied into aBuf.
 // Caller has ensured that aBuf is large enough (though anything >=32767 is always large enough).
 // This function was added in v1.0.46.08 to fix a long-standing bug that was more fully revealed
@@ -1611,13 +1614,13 @@ DWORD GetEnvVarReliable(char *aEnvVarName, char *aBuf)
 	//
 	// Don't use a size greater than 32767 because that will cause it to fail on Win95 (tested by Robert Yalkin).
 	// According to MSDN, 32767 is exactly large enough to handle the largest variable plus its zero terminator.
-	char buf[32767];
-	DWORD length = GetEnvironmentVariable(aEnvVarName, buf, sizeof(buf));
+	TCHAR buf[32767];
+	DWORD length = GetEnvironmentVariable(aEnvVarName, buf, _countof(buf));
 	// GetEnvironmentVariable() could be called twice, the first time to get the actual size.  But that would
 	// probably perform worse since GetEnvironmentVariable() is a very slow function.  In addition, it would
 	// add code complexity, so it seems best to fetch it into a large buffer then just copy it to dest-var.
 	if (length) // Probably always true under the conditions in effect for our callers.
-		memcpy(aBuf, buf, length + 1); // memcpy() usually benches a little faster than strcpy().
+		tmemcpy(aBuf, buf, length + 1); // memcpy() usually benches a little faster than strcpy().
 	else // Failure. The buffer's contents might be undefined in this case.
 		*aBuf = '\0'; // Caller's buf should always have room for an empty string. So make it empty for maintainability, even if not strictly required by caller.
 	return length;
@@ -1625,7 +1628,7 @@ DWORD GetEnvVarReliable(char *aEnvVarName, char *aBuf)
 
 
 
-DWORD ReadRegString(HKEY aRootKey, char *aSubkey, char *aValueName, char *aBuf, size_t aBufSize)
+DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, size_t aBufSize)
 // Returns the length of the string (0 if empty).
 // Caller must ensure that size of aBuf is REALLY aBufSize (even when it knows aBufSize is more than
 // it needs) because the API apparently reads/writes parts of the buffer beyond the string it writes!
@@ -1683,6 +1686,7 @@ LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd)
 {
 	// ALLOCATE APPROPRIATE TYPE OF MEMORY (depending on OS type)
 	LPVOID mem;
+#ifndef UNICODE
 	if (g_os.IsWin9x()) // Use file-mapping method.
 	{
 		if (   !(aHandle = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, aSize, NULL))   )
@@ -1690,6 +1694,7 @@ LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd)
 		mem = MapViewOfFile(aHandle, FILE_MAP_ALL_ACCESS, 0, 0, 0);
 	}
 	else // NT/2k/XP/2003 or later.  Use the VirtualAllocEx() so that caller can use Read/WriteProcessMemory().
+#endif
 	{
 		DWORD pid;
 		GetWindowThreadProcessId(aHwnd, &pid);
@@ -1699,7 +1704,7 @@ LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd)
 			return NULL; // Let ErrorLevel tell the story.
 		// Load function dynamically to allow program to launch on win9x:
 		typedef LPVOID (WINAPI *MyVirtualAllocExType)(HANDLE, LPVOID, SIZE_T, DWORD, DWORD);
-		static MyVirtualAllocExType MyVirtualAllocEx = (MyVirtualAllocExType)GetProcAddress(GetModuleHandle("kernel32")
+		static MyVirtualAllocExType MyVirtualAllocEx = (MyVirtualAllocExType)GetProcAddress(GetModuleHandle(_T("kernel32"))
 			, "VirtualAllocEx");
 		// Reason for using VirtualAllocEx(): When sending LVITEM structures to a control in a remote process, the
 		// structure and its pszText buffer must both be memory inside the remote process rather than in our own.
@@ -1717,13 +1722,15 @@ void FreeInterProcMem(HANDLE aHandle, LPVOID aMem)
 // Caller has ensured that aMem is a file-mapping for Win9x and a VirtualAllocEx block for NT/2k/XP+.
 // Similarly, it has ensured that aHandle is a file-mapping handle for Win9x and a process handle for NT/2k/XP+.
 {
+#ifndef UNICODE
 	if (g_os.IsWin9x())
 		UnmapViewOfFile(aMem);
 	else
+#endif
 	{
 		// Load function dynamically to allow program to launch on win9x:
 		typedef BOOL (WINAPI *MyVirtualFreeExType)(HANDLE, LPVOID, SIZE_T, DWORD);
-		static MyVirtualFreeExType MyVirtualFreeEx = (MyVirtualFreeExType)GetProcAddress(GetModuleHandle("kernel32")
+		static MyVirtualFreeExType MyVirtualFreeEx = (MyVirtualFreeExType)GetProcAddress(GetModuleHandle(_T("kernel32"))
 			, "VirtualFreeEx");
 		MyVirtualFreeEx(aHandle, aMem, 0, MEM_RELEASE); // Size 0 is used with MEM_RELEASE.
 	}
@@ -1734,7 +1741,7 @@ void FreeInterProcMem(HANDLE aHandle, LPVOID aMem)
 
 
 
-HBITMAP LoadPicture(char *aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
+HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
 	, bool aUseGDIPlusIfAvailable)
 // Returns NULL on failure.
 // If aIconNumber > 0, an HICON or HCURSOR is returned (both should be interchangeable), never an HBITMAP.
@@ -1759,7 +1766,7 @@ HBITMAP LoadPicture(char *aFilespec, int aWidth, int aHeight, int &aImageType, i
 	if (aIconNumber < 0) // Allowed to be called this way by GUI and others (to avoid need for validation of user input there).
 		aIconNumber = 0; // Use the default behavior, which is "load icon or bitmap, whichever is most appropriate".
 
-	char *file_ext = strrchr(aFilespec, '.');
+	LPTSTR file_ext = _tcsrchr(aFilespec, '.');
 	if (file_ext)
 		++file_ext;
 
@@ -1779,26 +1786,26 @@ HBITMAP LoadPicture(char *aFilespec, int aWidth, int aHeight, int &aImageType, i
 	//    said that an ICL is an "ICon Library... a renamed 16-bit Windows .DLL (an NE format executable) which
 	//    typically contains nothing but a resource section. The ICL extension seems to be used by convention."
 	bool ExtractIcon_was_used = aIconNumber > 1 || (file_ext && (
-		   !stricmp(file_ext, "exe")
-		|| !stricmp(file_ext, "dll")
-		|| !stricmp(file_ext, "icl") // Icon library: Unofficial dll container, see notes above.
-		|| !stricmp(file_ext, "cpl") // Control panel extension/applet (ExtractIcon is said to work on these).
-		|| !stricmp(file_ext, "scr") // Screen saver (ExtractIcon should work since these are really EXEs).
+		   !_tcsicmp(file_ext, _T("exe"))
+		|| !_tcsicmp(file_ext, _T("dll"))
+		|| !_tcsicmp(file_ext, _T("icl")) // Icon library: Unofficial dll container, see notes above.
+		|| !_tcsicmp(file_ext, _T("cpl")) // Control panel extension/applet (ExtractIcon is said to work on these).
+		|| !_tcsicmp(file_ext, _T("scr")) // Screen saver (ExtractIcon should work since these are really EXEs).
 		// v1.0.44: Below are now omitted to reduce code size and improve performance. They are still supported
 		// indirectly because ExtractIcon is attempted whenever LoadImage() fails further below.
-		//|| !stricmp(file_ext, "drv") // Driver (ExtractIcon is said to work on these).
-		//|| !stricmp(file_ext, "ocx") // OLE/ActiveX Control Extension
-		//|| !stricmp(file_ext, "vbx") // Visual Basic Extension
-		//|| !stricmp(file_ext, "acm") // Audio Compression Manager Driver
-		//|| !stricmp(file_ext, "bpl") // Delphi Library (like a DLL?)
+		//|| !_tcsicmp(file_ext, _T("drv")) // Driver (ExtractIcon is said to work on these).
+		//|| !_tcsicmp(file_ext, _T("ocx")) // OLE/ActiveX Control Extension
+		//|| !_tcsicmp(file_ext, _T("vbx")) // Visual Basic Extension
+		//|| !_tcsicmp(file_ext, _T("acm")) // Audio Compression Manager Driver
+		//|| !_tcsicmp(file_ext, _T("bpl")) // Delphi Library (like a DLL?)
 		// Not supported due to rarity, code size, performance, and uncertainty of whether ExtractIcon works on them.
 		// Update for v1.0.44: The following are now supported indirectly because ExtractIcon is attempted whenever
 		// LoadImage() fails further below.
-		//|| !stricmp(file_ext, "nil") // Norton Icon Library 
-		//|| !stricmp(file_ext, "wlx") // Total/Windows Commander Lister Plug-in
-		//|| !stricmp(file_ext, "wfx") // Total/Windows Commander File System Plug-in
-		//|| !stricmp(file_ext, "wcx") // Total/Windows Commander Plug-in
-		//|| !stricmp(file_ext, "wdx") // Total/Windows Commander Plug-in
+		//|| !_tcsicmp(file_ext, _T("nil")) // Norton Icon Library 
+		//|| !_tcsicmp(file_ext, _T("wlx")) // Total/Windows Commander Lister Plug-in
+		//|| !_tcsicmp(file_ext, _T("wfx")) // Total/Windows Commander File System Plug-in
+		//|| !_tcsicmp(file_ext, _T("wcx")) // Total/Windows Commander Plug-in
+		//|| !_tcsicmp(file_ext, _T("wdx")) // Total/Windows Commander Plug-in
 		));
 	if (ExtractIcon_was_used)
 	{
@@ -1818,11 +1825,11 @@ HBITMAP LoadPicture(char *aFilespec, int aWidth, int aHeight, int &aImageType, i
 		aImageType = IMAGE_ICON; // Should be suitable for cursors too, since they're interchangeable for the most part.
 	else if (file_ext) // Make an initial guess of the type of image if the above didn't already determine the type.
 	{
-		if (!stricmp(file_ext, "ico"))
+		if (!_tcsicmp(file_ext, _T("ico")))
 			aImageType = IMAGE_ICON;
-		else if (!stricmp(file_ext, "cur") || !stricmp(file_ext, "ani"))
+		else if (!_tcsicmp(file_ext, _T("cur")) || !_tcsicmp(file_ext, _T("ani")))
 			aImageType = IMAGE_CURSOR;
-		else if (!stricmp(file_ext, "bmp"))
+		else if (!_tcsicmp(file_ext, _T("bmp")))
 			aImageType = IMAGE_BITMAP;
 		//else for other extensions, leave set to "unknown" so that the below knows to use IPic or GDI+ to load it.
 	}
@@ -1834,7 +1841,7 @@ HBITMAP LoadPicture(char *aFilespec, int aWidth, int aHeight, int &aImageType, i
 
 	// Caller should ensure that aUseGDIPlusIfAvailable==false when aIconNumber > 0, since it makes no sense otherwise.
 	HINSTANCE hinstGDI = NULL;
-	if (aUseGDIPlusIfAvailable && !(hinstGDI = LoadLibrary("gdiplus"))) // Relies on short-circuit boolean order for performance.
+	if (aUseGDIPlusIfAvailable && !(hinstGDI = LoadLibrary(_T("gdiplus")))) // Relies on short-circuit boolean order for performance.
 		aUseGDIPlusIfAvailable = false; // Override any original "true" value as a signal for the section below.
 
 	if (!hbitmap && aImageType > -1 && !aUseGDIPlusIfAvailable)
@@ -1923,10 +1930,10 @@ HBITMAP LoadPicture(char *aFilespec, int aWidth, int aHeight, int &aImageType, i
 		// since all it does is look at the file's extension, not its contents.  However, it doesn't
 		// need to be 100% accurate because its only purpose is to detect whether the higher-overhead
 		// calls to GdiPlus can be avoided.
-		if (aUseGDIPlusIfAvailable || !file_ext || (stricmp(file_ext, "jpg")
-			&& stricmp(file_ext, "jpeg") && stricmp(file_ext, "gif"))) // Non-standard file type (BMP is already handled above).
+		if (aUseGDIPlusIfAvailable || !file_ext || (_tcsicmp(file_ext, _T("jpg"))
+			&& _tcsicmp(file_ext, _T("jpeg")) && _tcsicmp(file_ext, _T("gif")))) // Non-standard file type (BMP is already handled above).
 			if (!hinstGDI) // We don't yet have a handle from an earlier call to LoadLibary().
-				hinstGDI = LoadLibrary("gdiplus");
+				hinstGDI = LoadLibrary(_T("gdiplus"));
 		// If it is suspected that the file type isn't supported, try to use GdiPlus if available.
 		// If it's not available, fall back to the old method in case the filename doesn't properly
 		// reflect its true contents (i.e. in case it really is a JPG/GIF/BMP internally).
@@ -1951,9 +1958,13 @@ HBITMAP LoadPicture(char *aFilespec, int aWidth, int aHeight, int &aImageType, i
 			Gdiplus::GpBitmap *pgdi_bitmap;
 			if (DynGdiplusStartup && DynGdiplusStartup(&token, &gdi_input, NULL) == Gdiplus::Ok)
 			{
+#ifndef UNICODE
 				WCHAR filespec_wide[MAX_PATH];
 				ToWideChar(aFilespec, filespec_wide, MAX_PATH); // Dest. size is in wchars, not bytes.
 				if (DynGdipCreateBitmapFromFile(filespec_wide, &pgdi_bitmap) == Gdiplus::Ok)
+#else
+				if (DynGdipCreateBitmapFromFile(aFilespec, &pgdi_bitmap) == Gdiplus::Ok)
+#endif
 				{
 					if (DynGdipCreateHBITMAPFromBitmap(pgdi_bitmap, &hbitmap, CLR_DEFAULT) != Gdiplus::Ok)
 						hbitmap = NULL; // Set to NULL to be sure.
@@ -2195,7 +2206,7 @@ HRESULT MySetWindowTheme(HWND hwnd, LPCWSTR pszSubAppName, LPCWSTR pszSubIdList)
 	// Theme DLL is normally available only on XP+, but an attempt to load it is made unconditionally
 	// in case older OSes can ever have it.
 	HRESULT hresult = !S_OK; // Set default as "failure".
-	HINSTANCE hinstTheme = LoadLibrary("uxtheme");
+	HINSTANCE hinstTheme = LoadLibrary(_T("uxtheme"));
 	if (hinstTheme)
 	{
 		typedef HRESULT (WINAPI *MySetWindowThemeType)(HWND, LPCWSTR, LPCWSTR);
@@ -2215,7 +2226,7 @@ HRESULT MySetWindowTheme(HWND hwnd, LPCWSTR pszSubAppName, LPCWSTR pszSubIdList)
 //	// Theme DLL is normally available only on XP+, but an attempt to load it is made unconditionally
 //	// in case older OSes can ever have it.
 //	HRESULT hresult = !S_OK; // Set default as "failure".
-//	HINSTANCE hinstTheme = LoadLibrary("uxtheme");
+//	HINSTANCE hinstTheme = LoadLibrary(_T("uxtheme"));
 //	if (hinstTheme)
 //	{
 //		typedef HRESULT (WINAPI *MyEnableThemeDialogTextureType)(HWND, DWORD);
@@ -2229,12 +2240,12 @@ HRESULT MySetWindowTheme(HWND hwnd, LPCWSTR pszSubAppName, LPCWSTR pszSubIdList)
 
 
 
-char *ConvertEscapeSequences(char *aBuf, char aEscapeChar, bool aAllowEscapedSpace)
+LPTSTR ConvertEscapeSequences(LPTSTR aBuf, TCHAR aEscapeChar, bool aAllowEscapedSpace)
 // Replaces any escape sequences in aBuf with their reduced equivalent.  For example, if aEscapeChar
 // is accent, Each `n would become a literal linefeed.  aBuf's length should always be the same or
 // lower than when the process started, so there is no chance of overflow.
 {
-	char *cp, *cp1;
+	LPTSTR cp, cp1;
 	for (cp = aBuf; ; ++cp)  // Increment to skip over the symbol just found by the inner for().
 	{
 		for (; *cp && *cp != aEscapeChar; ++cp);  // Find the next escape char.
@@ -2264,25 +2275,25 @@ char *ConvertEscapeSequences(char *aBuf, char aEscapeChar, bool aAllowEscapedSpa
 			// `c -> c (i.e. unknown escape sequences resolve to the char after the `)
 		}
 		// Below has a final +1 to include the terminator:
-		MoveMemory(cp, cp1, strlen(cp1) + 1);
+		tmemmove(cp, cp1, _tcslen(cp1) + 1);
 	}
 	return aBuf;
 }
 
 
 
-bool IsStringInList(char *aStr, char *aList, bool aFindExactMatch)
+bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch)
 // Checks if aStr exists in aList (which is a comma-separated list).
 // If aStr is blank, aList must start with a delimiting comma for there to be a match.
 {
 	// Must use a temp. buffer because otherwise there's no easy way to properly match upon strings
 	// such as the following:
 	// if var in string,,with,,literal,,commas
-	char buf[LINE_SIZE];
-	char *next_field, *cp, *end_buf = buf + sizeof(buf) - 1;
+	TCHAR buf[LINE_SIZE];
+	TCHAR *next_field, *cp, *end_buf = buf + _countof(buf) - 1;
 
 	// v1.0.48.01: Performance improved by Lexikos.
-	for (char *this_field = aList; *this_field; this_field = next_field) // For each field in aList.
+	for (TCHAR *this_field = aList; *this_field; this_field = next_field) // For each field in aList.
 	{
 		for (cp = buf, next_field = this_field; *next_field && cp < end_buf; ++cp, ++next_field) // For each char in the field, copy it over to temporary buffer.
 		{
@@ -2305,11 +2316,11 @@ bool IsStringInList(char *aStr, char *aList, bool aFindExactMatch)
 		{
 			if (aFindExactMatch)
 			{
-				if (!g_strcmp(aStr, buf)) // Match found
+				if (!g_tcscmp(aStr, buf)) // Match found
 					return true;
 			}
 			else // Substring match
-				if (g_strstr(aStr, buf)) // Match found
+				if (g_tcsstr(aStr, buf)) // Match found
 					return true;
 		}
 		else // First item in the list is the empty string.
@@ -2324,5 +2335,3 @@ bool IsStringInList(char *aStr, char *aList, bool aFindExactMatch)
 
 	return false;  // No match found.
 }
-
-#endif
