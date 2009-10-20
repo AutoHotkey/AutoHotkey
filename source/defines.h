@@ -32,9 +32,9 @@ GNU General Public License for more details.
 #pragma warning(disable:4800)
 #endif
 
-#define NAME_P "AutoHotkey"
-#define NAME_VERSION "1.0.48.05"
-#define NAME_PV NAME_P " v" NAME_VERSION
+#define NAME_P _T("AutoHotkey")
+#define NAME_VERSION _T("1.0.48.05")
+#define NAME_PV NAME_P _T(" v") NAME_VERSION
 
 // Window class names: Changing these may result in new versions not being able to detect any old instances
 // that may be running (such as the use of FindWindow() in WinMain()).  It may also have other unwanted
@@ -44,12 +44,12 @@ GNU General Public License for more details.
 // MSDN: "Because window classes are process specific, window class names need to be unique only within
 // the same process. Also, because class names occupy space in the system's private atom table, you
 // should keep class name strings as short a possible:
-#define WINDOW_CLASS_MAIN "AutoHotkey"
-#define WINDOW_CLASS_SPLASH "AutoHotkey2"
-#define WINDOW_CLASS_GUI "AutoHotkeyGUI" // There's a section in Script::Edit() that relies on these all starting with "AutoHotkey".
+#define WINDOW_CLASS_MAIN _T("AutoHotkey")
+#define WINDOW_CLASS_SPLASH _T("AutoHotkey2")
+#define WINDOW_CLASS_GUI _T("AutoHotkeyGUI") // There's a section in Script::Edit() that relies on these all starting with "AutoHotkey".
 
-#define EXT_AUTOIT2 ".aut"
-#define EXT_AUTOHOTKEY ".ahk"
+#define EXT_AUTOIT2 _T(".aut")
+#define EXT_AUTOHOTKEY _T(".ahk")
 #define CONVERSION_FLAG (EXT_AUTOIT2 EXT_AUTOHOTKEY)
 #define CONVERSION_FLAG_LENGTH 8
 
@@ -193,9 +193,9 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 			{
 				DerefType *deref; // for SYM_FUNC
 				Var *var;         // for SYM_VAR
-				char *marker;     // for SYM_STRING and SYM_OPERAND.
+				LPTSTR marker;     // for SYM_STRING and SYM_OPERAND.
 			};
-			char *buf; // Due to the outermost union, this doesn't increase the total size of the struct. It's used by SYM_FUNC (helps built-in functions), SYM_DYNAMIC, SYM_OPERAND, and perhaps other misc. purposes.
+			LPTSTR buf; // Due to the outermost union, this doesn't increase the total size of the struct. It's used by SYM_FUNC (helps built-in functions), SYM_DYNAMIC, SYM_OPERAND, and perhaps other misc. purposes.
 		};  
 	};
 	// Note that marker's str-length should not be stored in this struct, even though it might be readily
@@ -344,11 +344,11 @@ enum enum_act_old {
 #define MAX_MSGBOXES 7 // Probably best not to change this because it's used by OurTimers to set the timer IDs, which should probably be kept the same for backward compatibility.
 #define MAX_INPUTBOXES 4
 #define MAX_PROGRESS_WINDOWS 10  // Allow a lot for downloads and such.
-#define MAX_PROGRESS_WINDOWS_STR "10" // Keep this in sync with above.
+#define MAX_PROGRESS_WINDOWS_STR _T("10") // Keep this in sync with above.
 #define MAX_SPLASHIMAGE_WINDOWS 10
-#define MAX_SPLASHIMAGE_WINDOWS_STR "10" // Keep this in sync with above.
+#define MAX_SPLASHIMAGE_WINDOWS_STR _T("10") // Keep this in sync with above.
 #define MAX_GUI_WINDOWS 99  // Things that parse the "NN:" prefix for Gui/GuiControl might rely on this being 2-digit.
-#define MAX_GUI_WINDOWS_STR "99" // Keep this in sync with above.
+#define MAX_GUI_WINDOWS_STR _T("99") // Keep this in sync with above.
 #define MAX_MSG_MONITORS 500
 
 // IMPORTANT: Before ever changing the below, note that it will impact the IDs of menu items created
@@ -360,7 +360,7 @@ enum enum_act_old {
 #define NO_EVENT_INFO 0 // For backward compatibility with documented contents of A_EventInfo, this should be kept as 0 vs. something more special like UINT_MAX.
 
 #define MAX_TOOLTIPS 20
-#define MAX_TOOLTIPS_STR "20"   // Keep this in sync with above.
+#define MAX_TOOLTIPS_STR _T("20")   // Keep this in sync with above.
 #define MAX_FILEDIALOGS 4
 #define MAX_FOLDERDIALOGS 4
 
@@ -457,10 +457,10 @@ typedef UCHAR HookType;
 // Defining these here avoids awkwardness due to the fact that globaldata.cpp
 // does not (for design reasons) include globaldata.h:
 typedef UCHAR ActionTypeType; // If ever have more than 256 actions, will have to change this (but it would increase code size due to static data in g_act).
-#pragma pack(1) // v1.0.45: Reduces code size a little without impacting runtime performance because this struct is hardly ever accessed during runtime.
+#pragma pack(push, 1) // v1.0.45: Reduces code size a little without impacting runtime performance because this struct is hardly ever accessed during runtime.
 struct Action
 {
-	char *Name;
+	LPTSTR Name;
 	// Just make them int's, rather than something smaller, because the collection
 	// of actions will take up very little memory.  Int's are probably faster
 	// for the processor to access since they are the native word size, or something:
@@ -472,7 +472,7 @@ struct Action
 	// is used by g_act to build static data into the code.  Testing shows that the compiler
 	// will generate a warning even when not in debug mode in the unlikely event that a constant
 	// larger than 127 is ever stored in one of these:
-	char MinParams, MaxParams, MaxParamsAu2WithHighBit;
+	TCHAR MinParams, MaxParams, MaxParamsAu2WithHighBit;
 	// Array indicating which args must be purely numeric.  The first arg is
 	// number 1, the second 2, etc (i.e. it doesn't start at zero).  The list
 	// is ended with a zero, much like a string.  The compiler will notify us
@@ -480,7 +480,7 @@ struct Action
 	#define MAX_NUMERIC_PARAMS 7
 	ActionTypeType NumericParams[MAX_NUMERIC_PARAMS];
 };
-#pragma pack()  // Calling pack with no arguments restores the default value (which is 8, but "the alignment of a member will be on a boundary that is either a multiple of n or a multiple of the size of the member, whichever is smaller.")
+#pragma pack(pop)
 
 // Values are hard-coded for some of the below because they must not deviate from the documented, numerical
 // TitleMatchModes:
@@ -490,7 +490,7 @@ typedef UINT GuiIndexType; // Some things rely on it being unsigned to avoid the
 typedef UINT GuiEventType; // Made a UINT vs. enum so that illegal/underflow/overflow values are easier to detect.
 
 // The following array and enum must be kept in sync with each other:
-#define GUI_EVENT_NAMES {"", "Normal", "DoubleClick", "RightClick", "ColClick"}
+#define GUI_EVENT_NAMES {_T(""), _T("Normal"), _T("DoubleClick"), _T("RightClick"), _T("ColClick")}
 enum GuiEventTypes {GUI_EVENT_NONE  // NONE must be zero for any uses of ZeroMemory(), synonymous with false, etc.
 	, GUI_EVENT_NORMAL, GUI_EVENT_DBLCLK // Try to avoid changing this and the other common ones in case anyone automates a script via SendMessage (though that does seem very unlikely).
 	, GUI_EVENT_RCLK, GUI_EVENT_COLCLK
@@ -528,7 +528,7 @@ struct global_struct
 	WIN32_FIND_DATA *mLoopFile;  // The file of the current file-loop, if applicable.
 	RegItemStruct *mLoopRegItem; // The registry subkey or value of the current registry enumeration loop.
 	LoopReadFileStruct *mLoopReadFile;  // The file whose contents are currently being read by a File-Read Loop.
-	char *mLoopField;  // The field of the current string-parsing loop.
+	LPTSTR mLoopField;  // The field of the current string-parsing loop.
 	// v1.0.44.14: The above mLoop attributes were moved into this structure from the script class
 	// because they're more approriate as thread-attributes rather than being global to the entire script.
 
@@ -553,7 +553,7 @@ struct global_struct
 	int PressDurationPlay; // 
 	int MouseDelay;     // negative values may be used as special flags.
 	int MouseDelayPlay; //
-	char FormatFloat[32];
+	TCHAR FormatFloat[32];
 	Func *CurrentFunc; // v1.0.46.16: The function whose body is currently being processed at load-time, or being run at runtime (if any).
 	Func *CurrentFuncGosub; // v1.0.48.02: Allows A_ThisFunc to work even when a function Gosubs an external subroutine.
 	Label *CurrentLabel; // The label that is currently awaiting its matching "return" (if any).
@@ -667,13 +667,13 @@ inline void global_init(global_struct &g)
 	g.MouseDelayPlay = -1;
 	#define DEFAULT_MOUSE_SPEED 2
 	#define MAX_MOUSE_SPEED 100
-	#define MAX_MOUSE_SPEED_STR "100"
+	#define MAX_MOUSE_SPEED_STR _T("100")
 	g.DefaultMouseSpeed = DEFAULT_MOUSE_SPEED;
 	g.CoordMode = 0;  // All the flags it contains are off by default.
 	g.StringCaseSense = SCS_INSENSITIVE;  // AutoIt2 default, and it does seem best.
 	g.StoreCapslockMode = true;  // AutoIt2 (and probably 3's) default, and it makes a lot of sense.
 	g.AutoTrim = true;  // AutoIt2's default, and overall the best default in most cases.
-	strcpy(g.FormatFloat, "%0.6f");
+	_tcscpy(g.FormatFloat, _T("%0.6f"));
 	g.FormatIntAsHex = false;
 	g.ListLinesIsEnabled = true;
 	// For FormatFloat:
@@ -688,5 +688,7 @@ inline void global_init(global_struct &g)
 }
 
 #define ERRORLEVEL_SAVED_SIZE 128 // The size that can be remembered (saved & restored) if a thread is interrupted. Big in case user put something bigger than a number in g_ErrorLevel.
+
+#define CHECK_UNICODE __declspec(deprecated(_T("Please check what you want are bytes or characters.")))
 
 #endif

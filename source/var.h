@@ -383,7 +383,7 @@ public:
 			aToken.value_double = var.ToDouble(TRUE);
 			break;
 		default: // Not a pure number.
-			aToken.marker = ""; // For completeness.  Some callers such as BIF_Abs() rely on this being done.
+			aToken.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
 			return FAIL;
 		}
 		return OK; // Since above didn't return, indicate success.
