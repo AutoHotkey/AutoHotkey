@@ -546,7 +546,7 @@ public:
 		return sEmptyString; // For reserved vars (but this method should probably never be called for them).
 	}
 
-	__declspec(deprecated("Please check what you want are bytes or characters"))
+	CHECK_UNICODE
 	TCHAR *Contents(BOOL aAllowUpdate = TRUE)
 	{
 		return CharContents(aAllowUpdate);
