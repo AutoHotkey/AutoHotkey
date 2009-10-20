@@ -133,72 +133,72 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 //    a matching HWND.
 
 
-#define ERR_ABORT_NO_SPACES "The current thread will exit."
-#define ERR_ABORT "  " ERR_ABORT_NO_SPACES
-#define WILL_EXIT "The program will exit."
-#define OLD_STILL_IN_EFFECT "The script was not reloaded; the old version will remain in effect."
-#define ERR_CONTINUATION_SECTION_TOO_LONG "Continuation section too long."
-#define ERR_UNRECOGNIZED_ACTION "This line does not contain a recognized action."
-#define ERR_NONEXISTENT_HOTKEY "Nonexistent hotkey."
-#define ERR_NONEXISTENT_VARIANT "Nonexistent hotkey variant (IfWin)."
-#define ERR_NONEXISTENT_FUNCTION "Call to nonexistent function."
-#define ERR_EXE_CORRUPTED "EXE corrupted"
-#define ERR_PARAM1_INVALID "Parameter #1 invalid"
-#define ERR_PARAM2_INVALID "Parameter #2 invalid"
-#define ERR_PARAM3_INVALID "Parameter #3 invalid"
-#define ERR_PARAM4_INVALID "Parameter #4 invalid"
-#define ERR_PARAM5_INVALID "Parameter #5 invalid"
-#define ERR_PARAM6_INVALID "Parameter #6 invalid"
-#define ERR_PARAM7_INVALID "Parameter #7 invalid"
-#define ERR_PARAM8_INVALID "Parameter #8 invalid"
-#define ERR_PARAM1_REQUIRED "Parameter #1 required"
-#define ERR_PARAM2_REQUIRED "Parameter #2 required"
-#define ERR_PARAM3_REQUIRED "Parameter #3 required"
-#define ERR_PARAM4_OMIT "Parameter #4 should be omitted in this case."
-#define ERR_PARAM2_MUST_BE_BLANK "Parameter #2 must be blank in this case."
-#define ERR_PARAM3_MUST_BE_BLANK "Parameter #3 must be blank in this case."
-#define ERR_PARAM4_MUST_BE_BLANK "Parameter #4 must be blank in this case."
-#define ERR_INVALID_KEY_OR_BUTTON "Invalid key or button name"
-#define ERR_MISSING_OUTPUT_VAR "Requires at least one of its output variables."
-#define ERR_MISSING_OPEN_PAREN "Missing \"(\""
-#define ERR_MISSING_OPEN_BRACE "Missing \"{\""
-#define ERR_MISSING_CLOSE_PAREN "Missing \")\""
-#define ERR_MISSING_CLOSE_BRACE "Missing \"}\""
-#define ERR_MISSING_CLOSE_QUOTE "Missing close-quote" // No period after short phrases.
-#define ERR_MISSING_COMMA "Missing comma"             //
-#define ERR_BLANK_PARAM "Blank parameter"             //
-#define ERR_BYREF "Caller must pass a variable to this ByRef parameter."
-#define ERR_ELSE_WITH_NO_IF "ELSE with no matching IF"
-#define ERR_OUTOFMEM "Out of memory."  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
-#define ERR_EXPR_TOO_LONG "Expression too long"
-#define ERR_MEM_LIMIT_REACHED "Memory limit reached (see #MaxMem in the help file)." ERR_ABORT
-#define ERR_NO_LABEL "Target label does not exist."
-#define ERR_MENU "Menu does not exist."
-#define ERR_SUBMENU "Submenu does not exist."
-#define ERR_WINDOW_PARAM "Requires at least one of its window parameters."
-#define ERR_ON_OFF "Requires ON/OFF/blank"
-#define ERR_ON_OFF_LOCALE "Requires ON/OFF/LOCALE"
-#define ERR_ON_OFF_TOGGLE "Requires ON/OFF/TOGGLE/blank"
-#define ERR_ON_OFF_TOGGLE_PERMIT "Requires ON/OFF/TOGGLE/PERMIT/blank"
-#define ERR_TITLEMATCHMODE "Requires 1/2/3/Slow/Fast"
-#define ERR_MENUTRAY "Supported only for the tray menu"
-#define ERR_REG_KEY "Invalid registry root key"
-#define ERR_REG_VALUE_TYPE "Invalid registry value type"
-#define ERR_INVALID_DATETIME "Invalid YYYYMMDDHHMISS value"
-#define ERR_MOUSE_BUTTON "Invalid mouse button"
-#define ERR_MOUSE_COORD "X & Y must be either both absent or both present."
-#define ERR_DIVIDEBYZERO "Divide by zero"
-#define ERR_PERCENT "Must be between -100 and 100."
-#define ERR_MOUSE_SPEED "Mouse speed must be between 0 and " MAX_MOUSE_SPEED_STR "."
-#define ERR_VAR_IS_READONLY "Not allowed as an output variable."
+#define ERR_ABORT_NO_SPACES _T("The current thread will exit.")
+#define ERR_ABORT _T("  ") ERR_ABORT_NO_SPACES
+#define WILL_EXIT _T("The program will exit.")
+#define OLD_STILL_IN_EFFECT _T("The script was not reloaded; the old version will remain in effect.")
+#define ERR_CONTINUATION_SECTION_TOO_LONG _T("Continuation section too long.")
+#define ERR_UNRECOGNIZED_ACTION _T("This line does not contain a recognized action.")
+#define ERR_NONEXISTENT_HOTKEY _T("Nonexistent hotkey.")
+#define ERR_NONEXISTENT_VARIANT _T("Nonexistent hotkey variant (IfWin).")
+#define ERR_NONEXISTENT_FUNCTION _T("Call to nonexistent function.")
+#define ERR_EXE_CORRUPTED _T("EXE corrupted")
+#define ERR_PARAM1_INVALID _T("Parameter #1 invalid")
+#define ERR_PARAM2_INVALID _T("Parameter #2 invalid")
+#define ERR_PARAM3_INVALID _T("Parameter #3 invalid")
+#define ERR_PARAM4_INVALID _T("Parameter #4 invalid")
+#define ERR_PARAM5_INVALID _T("Parameter #5 invalid")
+#define ERR_PARAM6_INVALID _T("Parameter #6 invalid")
+#define ERR_PARAM7_INVALID _T("Parameter #7 invalid")
+#define ERR_PARAM8_INVALID _T("Parameter #8 invalid")
+#define ERR_PARAM1_REQUIRED _T("Parameter #1 required")
+#define ERR_PARAM2_REQUIRED _T("Parameter #2 required")
+#define ERR_PARAM3_REQUIRED _T("Parameter #3 required")
+#define ERR_PARAM4_OMIT _T("Parameter #4 should be omitted in this case.")
+#define ERR_PARAM2_MUST_BE_BLANK _T("Parameter #2 must be blank in this case.")
+#define ERR_PARAM3_MUST_BE_BLANK _T("Parameter #3 must be blank in this case.")
+#define ERR_PARAM4_MUST_BE_BLANK _T("Parameter #4 must be blank in this case.")
+#define ERR_INVALID_KEY_OR_BUTTON _T("Invalid key or button name")
+#define ERR_MISSING_OUTPUT_VAR _T("Requires at least one of its output variables.")
+#define ERR_MISSING_OPEN_PAREN _T("Missing \"(\"")
+#define ERR_MISSING_OPEN_BRACE _T("Missing \"{\"")
+#define ERR_MISSING_CLOSE_PAREN _T("Missing \")\"")
+#define ERR_MISSING_CLOSE_BRACE _T("Missing \"}\"")
+#define ERR_MISSING_CLOSE_QUOTE _T("Missing close-quote") // No period after short phrases.
+#define ERR_MISSING_COMMA _T("Missing comma")             //
+#define ERR_BLANK_PARAM _T("Blank parameter")             //
+#define ERR_BYREF _T("Caller must pass a variable to this ByRef parameter.")
+#define ERR_ELSE_WITH_NO_IF _T("ELSE with no matching IF")
+#define ERR_OUTOFMEM _T("Out of memory.")  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
+#define ERR_EXPR_TOO_LONG _T("Expression too long")
+#define ERR_MEM_LIMIT_REACHED _T("Memory limit reached (see #MaxMem in the help file).") ERR_ABORT
+#define ERR_NO_LABEL _T("Target label does not exist.")
+#define ERR_MENU _T("Menu does not exist.")
+#define ERR_SUBMENU _T("Submenu does not exist.")
+#define ERR_WINDOW_PARAM _T("Requires at least one of its window parameters.")
+#define ERR_ON_OFF _T("Requires ON/OFF/blank")
+#define ERR_ON_OFF_LOCALE _T("Requires ON/OFF/LOCALE")
+#define ERR_ON_OFF_TOGGLE _T("Requires ON/OFF/TOGGLE/blank")
+#define ERR_ON_OFF_TOGGLE_PERMIT _T("Requires ON/OFF/TOGGLE/PERMIT/blank")
+#define ERR_TITLEMATCHMODE _T("Requires 1/2/3/Slow/Fast")
+#define ERR_MENUTRAY _T("Supported only for the tray menu")
+#define ERR_REG_KEY _T("Invalid registry root key")
+#define ERR_REG_VALUE_TYPE _T("Invalid registry value type")
+#define ERR_INVALID_DATETIME _T("Invalid YYYYMMDDHHMISS value")
+#define ERR_MOUSE_BUTTON _T("Invalid mouse button")
+#define ERR_MOUSE_COORD _T("X & Y must be either both absent or both present.")
+#define ERR_DIVIDEBYZERO _T("Divide by zero")
+#define ERR_PERCENT _T("Must be between -100 and 100.")
+#define ERR_MOUSE_SPEED _T("Mouse speed must be between 0 and ") MAX_MOUSE_SPEED_STR _T(".")
+#define ERR_VAR_IS_READONLY _T("Not allowed as an output variable.")
 
 //----------------------------------------------------------------------------------
 
 void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed);
-DWORD ProcessExist9x2000(char *aProcess, char *aProcessName);
-DWORD ProcessExistNT4(char *aProcess, char *aProcessName);
+DWORD ProcessExist9x2000(LPTSTR aProcess, LPTSTR aProcessName);
+DWORD ProcessExistNT4(LPTSTR aProcess, LPTSTR aProcessName);
 
-inline DWORD ProcessExist(char *aProcess, char *aProcessName = NULL)
+inline DWORD ProcessExist(LPTSTR aProcess, LPTSTR aProcessName = NULL)
 {
 	return g_os.IsWinNT4() ? ProcessExistNT4(aProcess, aProcessName)
 		: ProcessExist9x2000(aProcess, aProcessName);
@@ -211,20 +211,20 @@ void Util_WinKill(HWND hWnd);
 enum MainWindowModes {MAIN_MODE_NO_CHANGE, MAIN_MODE_LINES, MAIN_MODE_VARS
 	, MAIN_MODE_HOTKEYS, MAIN_MODE_KEYHISTORY, MAIN_MODE_REFRESH};
 ResultType ShowMainWindow(MainWindowModes aMode = MAIN_MODE_NO_CHANGE, bool aRestricted = true);
-DWORD GetAHKInstallDir(char *aBuf);
+DWORD GetAHKInstallDir(LPTSTR aBuf);
 
 
 struct InputBoxType
 {
-	char *title;
-	char *text;
+	LPTSTR title;
+	LPTSTR text;
 	int width;
 	int height;
 	int xpos;
 	int ypos;
 	Var *output_var;
-	char password_char;
-	char *default_string;
+	TCHAR password_char;
+	LPTSTR default_string;
 	DWORD timeout;
 	HWND hwnd;
 };
@@ -269,8 +269,8 @@ inline void swap(T &v1, T &v2) {
 }
 
 #define INPUTBOX_DEFAULT INT_MIN
-ResultType InputBox(Var *aOutputVar, char *aTitle, char *aText, bool aHideInput
-	, int aWidth, int aHeight, int aX, int aY, double aTimeout, char *aDefault);
+ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInput
+	, int aWidth, int aHeight, int aX, int aY, double aTimeout, LPTSTR aDefault);
 BOOL CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
 VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
@@ -300,7 +300,7 @@ typedef UCHAR DerefParamCountType;
 class Func; // Forward declaration for use below.
 struct DerefType
 {
-	char *marker;
+	LPTSTR marker;
 	union
 	{
 		Var *var;
@@ -326,7 +326,7 @@ struct ArgStruct
 	// multiple of 4, if adjacent to each other, consume less memory due to default byte alignment
 	// setting [which helps performance]).
 	WORD length; // Keep adjacent to above so that it uses no extra memory. This member was added in v1.0.44.14 to improve runtime performance.  It relies on the fact that an arg's literal text can't be longer than LINE_SIZE.
-	char *text;
+	LPTSTR text;
 	DerefType *deref;  // Will hold a NULL-terminated array of var-deref locations within <text>.
 	ExprTokenType *postfix;  // An array of tokens in postfix order. Also used for ACT_ADD and others to store pre-converted binary integers.
 };
@@ -347,26 +347,26 @@ struct ArgStruct
 struct RegItemStruct
 {
 	HKEY root_key_type, root_key;  // root_key_type is always a local HKEY, whereas root_key can be a remote handle.
-	char subkey[MAX_REG_ITEM_SIZE];  // The branch of the registry where this subkey or value is located.
-	char name[MAX_REG_ITEM_SIZE]; // The subkey or value name.
+	TCHAR subkey[MAX_REG_ITEM_SIZE];  // The branch of the registry where this subkey or value is located.
+	TCHAR name[MAX_REG_ITEM_SIZE]; // The subkey or value name.
 	DWORD type; // Value Type (e.g REG_DWORD).
 	FILETIME ftLastWriteTime; // Non-initialized.
 	void InitForValues() {ftLastWriteTime.dwHighDateTime = ftLastWriteTime.dwLowDateTime = 0;}
 	void InitForSubkeys() {type = REG_SUBKEY;}  // To distinguish REG_DWORD and such from the subkeys themselves.
-	RegItemStruct(HKEY aRootKeyType, HKEY aRootKey, char *aSubKey)
+	RegItemStruct(HKEY aRootKeyType, HKEY aRootKey, LPTSTR aSubKey)
 		: root_key_type(aRootKeyType), root_key(aRootKey), type(REG_NONE)
 	{
 		*name = '\0';
 		// Make a local copy on the caller's stack so that if the current script subroutine is
 		// interrupted to allow another to run, the contents of the deref buffer is saved here:
-		strlcpy(subkey, aSubKey, sizeof(subkey));
+		tcslcpy(subkey, aSubKey, _countof(subkey));
 		// Even though the call may work with a trailing backslash, it's best to remove it
 		// so that consistent results are delivered to the user.  For example, if the script
 		// is enumerating recursively into a subkey, subkeys deeper down will not include the
 		// trailing backslash when they are reported.  So the user's own subkey should not
 		// have one either so that when A_ScriptSubKey is referenced in the script, it will
 		// always show up as the value without a trailing backslash:
-		size_t length = strlen(subkey);
+		size_t length = _tcsclen(subkey);
 		if (length && subkey[length - 1] == '\\')
 			subkey[length - 1] = '\0';
 	}
@@ -375,14 +375,14 @@ struct RegItemStruct
 struct LoopReadFileStruct
 {
 	FILE *mReadFile, *mWriteFile;
-	char mWriteFileName[MAX_PATH];
+	TCHAR mWriteFileName[MAX_PATH];
 	#define READ_FILE_LINE_SIZE (64 * 1024)  // This is also used by FileReadLine().
-	char mCurrentLine[READ_FILE_LINE_SIZE];
-	LoopReadFileStruct(FILE *aReadFile, char *aWriteFileName)
+	TCHAR mCurrentLine[READ_FILE_LINE_SIZE];
+	LoopReadFileStruct(FILE *aReadFile, LPTSTR aWriteFileName)
 		: mReadFile(aReadFile), mWriteFile(NULL) // mWriteFile is opened by FileAppend() only upon first use.
 	{
 		// Use our own buffer because caller's is volatile due to possibly being in the deref buffer:
-		strlcpy(mWriteFileName, aWriteFileName, sizeof(mWriteFileName));
+		tcslcpy(mWriteFileName, aWriteFileName, _countof(mWriteFileName));
 		*mCurrentLine = '\0';
 	}
 };
@@ -481,7 +481,7 @@ enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero du
 
 enum ThreadCommands {THREAD_CMD_INVALID, THREAD_CMD_PRIORITY, THREAD_CMD_INTERRUPT, THREAD_CMD_NOTIMERS};
 
-#define PROCESS_PRIORITY_LETTERS "LBNAHR"
+#define PROCESS_PRIORITY_LETTERS _T("LBNAHR")
 enum ProcessCmds {PROCESS_CMD_INVALID, PROCESS_CMD_EXIST, PROCESS_CMD_CLOSE, PROCESS_CMD_PRIORITY
 	, PROCESS_CMD_WAIT, PROCESS_CMD_WAITCLOSE};
 
@@ -515,73 +515,73 @@ class Line
 {
 private:
 	ResultType EvaluateCondition();
-	ResultType Line::PerformLoop(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
+	ResultType Line::PerformLoop(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
 		, __int64 aIterationLimit, bool aIsInfinite);
-	ResultType Line::PerformLoopFilePattern(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
-		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, char *aFilePattern);
-	ResultType PerformLoopReg(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
-		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, HKEY aRootKeyType, HKEY aRootKey, char *aRegSubkey);
-	ResultType PerformLoopParse(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
-	ResultType Line::PerformLoopParseCSV(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
-	ResultType PerformLoopReadFile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine, FILE *aReadFile, char *aWriteFileName);
-	ResultType PerformLoopWhile(char **apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
+	ResultType Line::PerformLoopFilePattern(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
+		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LPTSTR aFilePattern);
+	ResultType PerformLoopReg(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
+		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, HKEY aRootKeyType, HKEY aRootKey, LPTSTR aRegSubkey);
+	ResultType PerformLoopParse(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
+	ResultType Line::PerformLoopParseCSV(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
+	ResultType PerformLoopReadFile(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine, FILE *aReadFile, LPTSTR aWriteFileName);
+	ResultType PerformLoopWhile(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
 	ResultType Perform();
 
 	ResultType MouseGetPos(DWORD aOptions);
-	ResultType FormatTime(char *aYYYYMMDD, char *aFormat);
+	ResultType FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat);
 	ResultType PerformAssign();
 	ResultType StringReplace();
-	ResultType StringSplit(char *aArrayName, char *aInputString, char *aDelimiterList, char *aOmitList);
-	ResultType SplitPath(char *aFileSpec);
-	ResultType PerformSort(char *aContents, char *aOptions);
-	ResultType GetKeyJoyState(char *aKeyName, char *aOption);
-	ResultType DriveSpace(char *aPath, bool aGetFreeSpace);
-	ResultType Drive(char *aCmd, char *aValue, char *aValue2);
-	ResultType DriveLock(char aDriveLetter, bool aLockIt);
-	ResultType DriveGet(char *aCmd, char *aValue);
-	ResultType SoundSetGet(char *aSetting, DWORD aComponentType, int aComponentInstance
+	ResultType StringSplit(LPTSTR aArrayName, LPTSTR aInputString, LPTSTR aDelimiterList, LPTSTR aOmitList);
+	ResultType SplitPath(LPTSTR aFileSpec);
+	ResultType PerformSort(LPTSTR aContents, LPTSTR aOptions);
+	ResultType GetKeyJoyState(LPTSTR aKeyName, LPTSTR aOption);
+	ResultType DriveSpace(LPTSTR aPath, bool aGetFreeSpace);
+	ResultType Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2);
+	ResultType DriveLock(TCHAR aDriveLetter, bool aLockIt);
+	ResultType DriveGet(LPTSTR aCmd, LPTSTR aValue);
+	ResultType SoundSetGet(LPTSTR aSetting, DWORD aComponentType, int aComponentInstance
 		, DWORD aControlType, UINT aMixerID);
 	ResultType SoundGetWaveVolume(HWAVEOUT aDeviceID);
-	ResultType SoundSetWaveVolume(char *aVolume, HWAVEOUT aDeviceID);
-	ResultType SoundPlay(char *aFilespec, bool aSleepUntilDone);
-	ResultType URLDownloadToFile(char *aURL, char *aFilespec);
-	ResultType FileSelectFile(char *aOptions, char *aWorkingDir, char *aGreeting, char *aFilter);
+	ResultType SoundSetWaveVolume(LPTSTR aVolume, HWAVEOUT aDeviceID);
+	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
+	ResultType URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec);
+	ResultType FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGreeting, LPTSTR aFilter);
 
 	// Bitwise flags:
 	#define FSF_ALLOW_CREATE 0x01
 	#define FSF_EDITBOX      0x02
 	#define FSF_NONEWDIALOG  0x04
-	ResultType FileSelectFolder(char *aRootDir, char *aOptions, char *aGreeting);
+	ResultType FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGreeting);
 
-	ResultType FileGetShortcut(char *aShortcutFile);
-	ResultType FileCreateShortcut(char *aTargetFile, char *aShortcutFile, char *aWorkingDir, char *aArgs
-		, char *aDescription, char *aIconFile, char *aHotkey, char *aIconNumber, char *aRunState);
-	ResultType FileCreateDir(char *aDirSpec);
-	ResultType FileRead(char *aFilespec);
-	ResultType FileReadLine(char *aFilespec, char *aLineNumber);
-	ResultType FileAppend(char *aFilespec, char *aBuf, LoopReadFileStruct *aCurrentReadFile);
-	ResultType WriteClipboardToFile(char *aFilespec);
+	ResultType FileGetShortcut(LPTSTR aShortcutFile);
+	ResultType FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
+		, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState);
+	ResultType FileCreateDir(LPTSTR aDirSpec);
+	ResultType FileRead(LPTSTR aFilespec);
+	ResultType FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber);
+	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *aCurrentReadFile);
+	ResultType WriteClipboardToFile(LPTSTR aFilespec);
 	ResultType ReadClipboardFromFile(HANDLE hfile);
 	ResultType FileDelete();
-	ResultType FileRecycle(char *aFilePattern);
-	ResultType FileRecycleEmpty(char *aDriveLetter);
-	ResultType FileInstall(char *aSource, char *aDest, char *aFlag);
+	ResultType FileRecycle(LPTSTR aFilePattern);
+	ResultType FileRecycleEmpty(LPTSTR aDriveLetter);
+	ResultType FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag);
 
-	ResultType FileGetAttrib(char *aFilespec);
-	int FileSetAttrib(char *aAttributes, char *aFilePattern, FileLoopModeType aOperateOnFolders
+	ResultType FileGetAttrib(LPTSTR aFilespec);
+	int FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
 		, bool aDoRecurse, bool aCalledRecursively = false);
-	ResultType FileGetTime(char *aFilespec, char aWhichTime);
-	int FileSetTime(char *aYYYYMMDD, char *aFilePattern, char aWhichTime
+	ResultType FileGetTime(LPTSTR aFilespec, TCHAR aWhichTime);
+	int FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
 		, FileLoopModeType aOperateOnFolders, bool aDoRecurse, bool aCalledRecursively = false);
-	ResultType FileGetSize(char *aFilespec, char *aGranularity);
-	ResultType FileGetVersion(char *aFilespec);
+	ResultType FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity);
+	ResultType FileGetVersion(LPTSTR aFilespec);
 
-	ResultType IniRead(char *aFilespec, char *aSection, char *aKey, char *aDefault);
-	ResultType IniWrite(char *aValue, char *aFilespec, char *aSection, char *aKey);
-	ResultType IniDelete(char *aFilespec, char *aSection, char *aKey);
-	ResultType RegRead(HKEY aRootKey, char *aRegSubkey, char *aValueName);
-	ResultType RegWrite(DWORD aValueType, HKEY aRootKey, char *aRegSubkey, char *aValueName, char *aValue);
-	ResultType RegDelete(HKEY aRootKey, char *aRegSubkey, char *aValueName);
+	ResultType IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR aDefault);
+	ResultType IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
+	ResultType IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
+	ResultType RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName);
+	ResultType RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName, LPTSTR aValue);
+	ResultType RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName);
 	static bool RegRemoveSubkeys(HKEY hRegKey);
 
 	#define DESTROY_SPLASH \
@@ -590,70 +590,70 @@ private:
 			DestroyWindow(g_hWndSplash);\
 		g_hWndSplash = NULL;\
 	}
-	ResultType SplashTextOn(int aWidth, int aHeight, char *aTitle, char *aText);
-	ResultType Splash(char *aOptions, char *aSubText, char *aMainText, char *aTitle, char *aFontName
-		, char *aImageFile, bool aSplashImage);
+	ResultType SplashTextOn(int aWidth, int aHeight, LPTSTR aTitle, LPTSTR aText);
+	ResultType Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTSTR aTitle, LPTSTR aFontName
+		, LPTSTR aImageFile, bool aSplashImage);
 
-	ResultType ToolTip(char *aText, char *aX, char *aY, char *aID);
-	ResultType TrayTip(char *aTitle, char *aText, char *aTimeout, char *aOptions);
-	ResultType Transform(char *aCmd, char *aValue1, char *aValue2);
+	ResultType ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID);
+	ResultType TrayTip(LPTSTR aTitle, LPTSTR aText, LPTSTR aTimeout, LPTSTR aOptions);
+	ResultType Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2);
 	ResultType Input(); // The Input command.
 
 	#define SW_NONE -1
-	ResultType PerformShowWindow(ActionTypeType aActionType, char *aTitle = "", char *aText = ""
-		, char *aExcludeTitle = "", char *aExcludeText = "");
+	ResultType PerformShowWindow(ActionTypeType aActionType, LPTSTR aTitle = _T(""), LPTSTR aText = _T("")
+		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
 	ResultType PerformWait();
 
-	ResultType WinMove(char *aTitle, char *aText, char *aX, char *aY
-		, char *aWidth = "", char *aHeight = "", char *aExcludeTitle = "", char *aExcludeText = "");
-	ResultType WinMenuSelectItem(char *aTitle, char *aText, char *aMenu1, char *aMenu2
-		, char *aMenu3, char *aMenu4, char *aMenu5, char *aMenu6, char *aMenu7
-		, char *aExcludeTitle, char *aExcludeText);
-	ResultType ControlSend(char *aControl, char *aKeysToSend, char *aTitle, char *aText
-		, char *aExcludeTitle, char *aExcludeText, bool aSendRaw);
-	ResultType ControlClick(vk_type aVK, int aClickCount, char *aOptions, char *aControl
-		, char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText);
-	ResultType ControlMove(char *aControl, char *aX, char *aY, char *aWidth, char *aHeight
-		, char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText);
-	ResultType ControlGetPos(char *aControl, char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText);
-	ResultType ControlGetFocus(char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText);
-	ResultType ControlFocus(char *aControl, char *aTitle, char *aText
-		, char *aExcludeTitle, char *aExcludeText);
-	ResultType ControlSetText(char *aControl, char *aNewText, char *aTitle, char *aText
-		, char *aExcludeTitle, char *aExcludeText);
-	ResultType ControlGetText(char *aControl, char *aTitle, char *aText
-		, char *aExcludeTitle, char *aExcludeText);
-	ResultType ControlGetListView(Var &aOutputVar, HWND aHwnd, char *aOptions);
-	ResultType Control(char *aCmd, char *aValue, char *aControl, char *aTitle, char *aText
-		, char *aExcludeTitle, char *aExcludeText);
-	ResultType ControlGet(char *aCommand, char *aValue, char *aControl, char *aTitle, char *aText
-		, char *aExcludeTitle, char *aExcludeText);
-	ResultType GuiControl(char *aCommand, char *aControlID, char *aParam3);
-	ResultType GuiControlGet(char *aCommand, char *aControlID, char *aParam3);
-	ResultType StatusBarGetText(char *aPart, char *aTitle, char *aText
-		, char *aExcludeTitle, char *aExcludeText);
-	ResultType StatusBarWait(char *aTextToWaitFor, char *aSeconds, char *aPart, char *aTitle, char *aText
-		, char *aInterval, char *aExcludeTitle, char *aExcludeText);
+	ResultType WinMove(LPTSTR aTitle, LPTSTR aText, LPTSTR aX, LPTSTR aY
+		, LPTSTR aWidth = _T(""), LPTSTR aHeight = _T(""), LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
+	ResultType WinMenuSelectItem(LPTSTR aTitle, LPTSTR aText, LPTSTR aMenu1, LPTSTR aMenu2
+		, LPTSTR aMenu3, LPTSTR aMenu4, LPTSTR aMenu5, LPTSTR aMenu6, LPTSTR aMenu7
+		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType ControlSend(LPTSTR aControl, LPTSTR aKeysToSend, LPTSTR aTitle, LPTSTR aText
+		, LPTSTR aExcludeTitle, LPTSTR aExcludeText, bool aSendRaw);
+	ResultType ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPTSTR aControl
+		, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType ControlMove(LPTSTR aControl, LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
+		, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType ControlGetPos(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType ControlGetFocus(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType ControlFocus(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
+		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType ControlSetText(LPTSTR aControl, LPTSTR aNewText, LPTSTR aTitle, LPTSTR aText
+		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
+		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions);
+	ResultType Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
+		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType ControlGet(LPTSTR aCommand, LPTSTR aValue, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
+		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3);
+	ResultType GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3);
+	ResultType StatusBarGetText(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
+		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType StatusBarWait(LPTSTR aTextToWaitFor, LPTSTR aSeconds, LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
+		, LPTSTR aInterval, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ScriptPostSendMessage(bool aUseSend);
-	ResultType ScriptProcess(char *aCmd, char *aProcess, char *aParam3);
-	ResultType WinSet(char *aAttrib, char *aValue, char *aTitle, char *aText
-		, char *aExcludeTitle, char *aExcludeText);
-	ResultType WinSetTitle(char *aTitle, char *aText, char *aNewTitle
-		, char *aExcludeTitle = "", char *aExcludeText = "");
-	ResultType WinGetTitle(char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText);
-	ResultType WinGetClass(char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText);
-	ResultType WinGet(char *aCmd, char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText);
+	ResultType ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3);
+	ResultType WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aText
+		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType WinSetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aNewTitle
+		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
+	ResultType WinGetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType WinGetClass(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType WinGetControlList(Var &aOutputVar, HWND aTargetWindow, bool aFetchHWNDs);
-	ResultType WinGetText(char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText);
-	ResultType WinGetPos(char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText);
-	ResultType EnvGet(char *aEnvVarName);
-	ResultType SysGet(char *aCmd, char *aValue);
+	ResultType WinGetText(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType WinGetPos(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType EnvGet(LPTSTR aEnvVarName);
+	ResultType SysGet(LPTSTR aCmd, LPTSTR aValue);
 	ResultType PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorBGR, int aVariation
-		, char *aOptions, bool aIsPixelGetColor);
-	ResultType ImageSearch(int aLeft, int aTop, int aRight, int aBottom, char *aImageFile);
-	ResultType PixelGetColor(int aX, int aY, char *aOptions);
+		, LPTSTR aOptions, bool aIsPixelGetColor);
+	ResultType ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTSTR aImageFile);
+	ResultType PixelGetColor(int aX, int aY, LPTSTR aOptions);
 
-	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, char *aToggleText);
+	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
 
 public:
 	#define SET_S_DEREF_BUF(ptr, size) Line::sDerefBuf = ptr, Line::sDerefBufSize = size
@@ -666,7 +666,7 @@ public:
 	}
 
 	#define PRIVATIZE_S_DEREF_BUF \
-		char *our_deref_buf = Line::sDerefBuf;\
+		LPTSTR our_deref_buf = Line::sDerefBuf;\
 		size_t our_deref_buf_size = Line::sDerefBufSize;\
 		SET_S_DEREF_BUF(NULL, 0) // For detecting whether ExpandExpression() caused a new buffer to be created.
 
@@ -684,13 +684,13 @@ public:
 		//else the original buffer is NULL, so keep any new sDerefBuf that might have been created (should
 		// help avg-case performance).
 
-	static char *sDerefBuf;  // Buffer to hold the values of any args that need to be dereferenced.
+	static LPTSTR sDerefBuf;  // Buffer to hold the values of any args that need to be dereferenced.
 	static size_t sDerefBufSize;
 	static int sLargeDerefBufs;
 
 	// Static because only one line can be Expanded at a time (not to mention the fact that we
 	// wouldn't want the size of each line to be expanded by this size):
-	static char *sArgDeref[MAX_ARGS];
+	static LPTSTR sArgDeref[MAX_ARGS];
 	static Var *sArgVar[MAX_ARGS];
 
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
@@ -716,40 +716,40 @@ public:
 	// when the user has omitted an arg in between two non-blank args).  Later, might
 	// want to review if any of the API calls used expect a string whose contents are
 	// modifiable.
-	#define RAW_ARG1 (mArgc > 0 ? mArg[0].text : "")
-	#define RAW_ARG2 (mArgc > 1 ? mArg[1].text : "")
-	#define RAW_ARG3 (mArgc > 2 ? mArg[2].text : "")
-	#define RAW_ARG4 (mArgc > 3 ? mArg[3].text : "")
-	#define RAW_ARG5 (mArgc > 4 ? mArg[4].text : "")
-	#define RAW_ARG6 (mArgc > 5 ? mArg[5].text : "")
-	#define RAW_ARG7 (mArgc > 6 ? mArg[6].text : "")
-	#define RAW_ARG8 (mArgc > 7 ? mArg[7].text : "")
+	#define RAW_ARG1 (mArgc > 0 ? mArg[0].text : _T(""))
+	#define RAW_ARG2 (mArgc > 1 ? mArg[1].text : _T(""))
+	#define RAW_ARG3 (mArgc > 2 ? mArg[2].text : _T(""))
+	#define RAW_ARG4 (mArgc > 3 ? mArg[3].text : _T(""))
+	#define RAW_ARG5 (mArgc > 4 ? mArg[4].text : _T(""))
+	#define RAW_ARG6 (mArgc > 5 ? mArg[5].text : _T(""))
+	#define RAW_ARG7 (mArgc > 6 ? mArg[6].text : _T(""))
+	#define RAW_ARG8 (mArgc > 7 ? mArg[7].text : _T(""))
 
-	#define LINE_RAW_ARG1 (line->mArgc > 0 ? line->mArg[0].text : "")
-	#define LINE_RAW_ARG2 (line->mArgc > 1 ? line->mArg[1].text : "")
-	#define LINE_RAW_ARG3 (line->mArgc > 2 ? line->mArg[2].text : "")
-	#define LINE_RAW_ARG4 (line->mArgc > 3 ? line->mArg[3].text : "")
-	#define LINE_RAW_ARG5 (line->mArgc > 4 ? line->mArg[4].text : "")
-	#define LINE_RAW_ARG6 (line->mArgc > 5 ? line->mArg[5].text : "")
-	#define LINE_RAW_ARG7 (line->mArgc > 6 ? line->mArg[6].text : "")
-	#define LINE_RAW_ARG8 (line->mArgc > 7 ? line->mArg[7].text : "")
-	#define LINE_RAW_ARG9 (line->mArgc > 8 ? line->mArg[8].text : "")
+	#define LINE_RAW_ARG1 (line->mArgc > 0 ? line->mArg[0].text : _T(""))
+	#define LINE_RAW_ARG2 (line->mArgc > 1 ? line->mArg[1].text : _T(""))
+	#define LINE_RAW_ARG3 (line->mArgc > 2 ? line->mArg[2].text : _T(""))
+	#define LINE_RAW_ARG4 (line->mArgc > 3 ? line->mArg[3].text : _T(""))
+	#define LINE_RAW_ARG5 (line->mArgc > 4 ? line->mArg[4].text : _T(""))
+	#define LINE_RAW_ARG6 (line->mArgc > 5 ? line->mArg[5].text : _T(""))
+	#define LINE_RAW_ARG7 (line->mArgc > 6 ? line->mArg[6].text : _T(""))
+	#define LINE_RAW_ARG8 (line->mArgc > 7 ? line->mArg[7].text : _T(""))
+	#define LINE_RAW_ARG9 (line->mArgc > 8 ? line->mArg[8].text : _T(""))
 	
-	#define NEW_RAW_ARG1 (aArgc > 0 ? new_arg[0].text : "") // Helps performance to use this vs. LINE_RAW_ARG where possible.
-	#define NEW_RAW_ARG2 (aArgc > 1 ? new_arg[1].text : "")
-	#define NEW_RAW_ARG3 (aArgc > 2 ? new_arg[2].text : "")
-	#define NEW_RAW_ARG4 (aArgc > 3 ? new_arg[3].text : "")
-	#define NEW_RAW_ARG5 (aArgc > 4 ? new_arg[4].text : "")
-	#define NEW_RAW_ARG6 (aArgc > 5 ? new_arg[5].text : "")
-	#define NEW_RAW_ARG7 (aArgc > 6 ? new_arg[6].text : "")
-	#define NEW_RAW_ARG8 (aArgc > 7 ? new_arg[7].text : "")
-	#define NEW_RAW_ARG9 (aArgc > 8 ? new_arg[8].text : "")
+	#define NEW_RAW_ARG1 (aArgc > 0 ? new_arg[0].text : _T("")) // Helps performance to use this vs. LINE_RAW_ARG where possible.
+	#define NEW_RAW_ARG2 (aArgc > 1 ? new_arg[1].text : _T(""))
+	#define NEW_RAW_ARG3 (aArgc > 2 ? new_arg[2].text : _T(""))
+	#define NEW_RAW_ARG4 (aArgc > 3 ? new_arg[3].text : _T(""))
+	#define NEW_RAW_ARG5 (aArgc > 4 ? new_arg[4].text : _T(""))
+	#define NEW_RAW_ARG6 (aArgc > 5 ? new_arg[5].text : _T(""))
+	#define NEW_RAW_ARG7 (aArgc > 6 ? new_arg[6].text : _T(""))
+	#define NEW_RAW_ARG8 (aArgc > 7 ? new_arg[7].text : _T(""))
+	#define NEW_RAW_ARG9 (aArgc > 8 ? new_arg[8].text : _T(""))
 	
-	#define SAVED_ARG1 (mArgc > 0 ? arg[0] : "")
-	#define SAVED_ARG2 (mArgc > 1 ? arg[1] : "")
-	#define SAVED_ARG3 (mArgc > 2 ? arg[2] : "")
-	#define SAVED_ARG4 (mArgc > 3 ? arg[3] : "")
-	#define SAVED_ARG5 (mArgc > 4 ? arg[4] : "")
+	#define SAVED_ARG1 (mArgc > 0 ? arg[0] : _T(""))
+	#define SAVED_ARG2 (mArgc > 1 ? arg[1] : _T(""))
+	#define SAVED_ARG3 (mArgc > 2 ? arg[2] : _T(""))
+	#define SAVED_ARG4 (mArgc > 3 ? arg[3] : _T(""))
+	#define SAVED_ARG5 (mArgc > 4 ? arg[4] : _T(""))
 
 	// For the below, it is the caller's responsibility to ensure that mArgc is
 	// large enough (either via load-time validation or a runtime check of mArgc).
@@ -809,46 +809,46 @@ public:
 	static int sLogNext;
 
 #ifdef AUTOHOTKEYSC  // Reduces code size to omit things that are unused, and helps catch bugs at compile-time.
-	static char *sSourceFile[1]; // Only need to be able to hold the main script since compiled scripts don't support dynamic including.
+	static LPTSTR sSourceFile[1]; // Only need to be able to hold the main script since compiled scripts don't support dynamic including.
 #else
-	static char **sSourceFile;   // Will hold an array of strings.
+	static LPTSTR *sSourceFile;   // Will hold an array of strings.
 	static int sMaxSourceFiles;  // Maximum number of items it can currently hold.
 #endif
 	static int sSourceFileCount; // Number of items in the above array.
 
 	static void FreeDerefBufIfLarge();
 
-	ResultType ExecUntil(ExecUntilMode aMode, char **apReturnValue = NULL, Line **apJumpToLine = NULL);
+	ResultType ExecUntil(ExecUntilMode aMode, LPTSTR *apReturnValue = NULL, Line **apJumpToLine = NULL);
 
 	// The following are characters that can't legally occur after an AND or OR.  It excludes all unary operators
 	// "!~*&-+" as well as the parentheses chars "()":
-	#define EXPR_CORE "<>=/|^,:"
+	#define EXPR_CORE _T("<>=/|^,:")
 	// The characters common to both EXPR_TELLTALES and EXPR_OPERAND_TERMINATORS:
-	#define EXPR_COMMON " \t" EXPR_CORE "*&~!()"  // Space and Tab are included at the beginning for performance.
-	#define EXPR_COMMON_FORBIDDEN_BYREF "<>/|^,*&~!" // Omits space/tab because operators like := can have them. Omits colon because want to be able to pass a ternary byref. Omits = because colon is omitted (otherwise the logic is written in a way that wouldn't allow :=). Omits parentheses because a variable or assignment can be enclosed in them even though they're redundant.
-	#define CONTINUATION_LINE_SYMBOLS EXPR_CORE ".+-*&!?~" // v1.0.46.
+	#define EXPR_COMMON _T(" \t") EXPR_CORE _T("*&~!()")  // Space and Tab are included at the beginning for performance.
+	#define EXPR_COMMON_FORBIDDEN_BYREF _T("<>/|^,*&~!") // Omits space/tab because operators like := can have them. Omits colon because want to be able to pass a ternary byref. Omits = because colon is omitted (otherwise the logic is written in a way that wouldn't allow :=). Omits parentheses because a variable or assignment can be enclosed in them even though they're redundant.
+	#define CONTINUATION_LINE_SYMBOLS EXPR_CORE _T(".+-*&!?~") // v1.0.46.
 	// Characters whose presence in a mandatory-numeric param make it an expression for certain.
 	// + and - are not included here because legacy numeric parameters can contain unary plus or minus,
 	// e.g. WinMove, -%x%, -%y%:
-	#define EXPR_TELLTALES EXPR_COMMON "\""
+	#define EXPR_TELLTALES EXPR_COMMON _T("\"")
 	// Characters that mark the end of an operand inside an expression.  Double-quote must not be included:
-	#define EXPR_OPERAND_TERMINATORS EXPR_COMMON "+-"
-	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS "\"" // Excludes '.' and '?' since they need special treatment due to the present/future allowance of them inside the names of variable and functions.
-	#define EXPR_FORBIDDEN_BYREF EXPR_COMMON_FORBIDDEN_BYREF ".+-\"" // Dot is also included.
-	#define EXPR_ILLEGAL_CHARS "'\\;`{}" // Characters illegal in an expression.
+	#define EXPR_OPERAND_TERMINATORS EXPR_COMMON _T("+-")
+	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS _T("\"") // Excludes '.' and '?' since they need special treatment due to the present/future allowance of them inside the names of variable and functions.
+	#define EXPR_FORBIDDEN_BYREF EXPR_COMMON_FORBIDDEN_BYREF _T(".+-\"") // Dot is also included.
+	#define EXPR_ILLEGAL_CHARS _T("'\\;`{}") // Characters illegal in an expression.
 	// The following HOTSTRING option recognizer is kept somewhat forgiving/non-specific for backward compatibility
 	// (e.g. scripts may have some invalid hotstring options, which are simply ignored).  This definition is here
 	// because it's related to continuation line symbols. Also, avoid ever adding "&" to hotstring options because
 	// it might introduce ambiguity in the differentiation of things like:
 	//    : & x::hotkey action
 	//    : & *::abbrev with leading colon::
-	#define IS_HOTSTRING_OPTION(chr) (isalnum(chr) || strchr("?*- \t", chr))
+	#define IS_HOTSTRING_OPTION(chr) (_istalnum(chr) || _tcschr(_T("?*- \t"), chr))
 	// The characters below are ordered with most-often used ones first, for performance:
 	#define DEFINE_END_FLAGS \
-		char end_flags[] = {' ', g_delimiter, '(', '\t', '<', '>', ':', '=', '+', '-', '*', '/', '!', '~', '&', '|', '^', '\0'}; // '\0' must be last.
+		TCHAR end_flags[] = {' ', g_delimiter, '(', '\t', '<', '>', ':', '=', '+', '-', '*', '/', '!', '~', '&', '|', '^', '\0'}; // '\0' must be last.
 		// '?' and '.' are omitted from the above because they require special handling due to being permitted
 		// in the curruent or future names of variables and functions.
-	static bool StartsWithAssignmentOp(char *aStr) // RELATED TO ABOVE, so kept adjacent to it.
+	static bool StartsWithAssignmentOp(LPTSTR aStr) // RELATED TO ABOVE, so kept adjacent to it.
 	// Returns true if aStr begins with an assignment operator such as :=, >>=, ++, etc.
 	// For simplicity, this doesn't check that what comes AFTER an operator is valid.  For example,
 	// :== isn't valid, yet is reported as valid here because it starts with :=.
@@ -856,11 +856,11 @@ public:
 	{
 		if (!(*aStr && aStr[1])) // Relies on short-circuit boolean order.
 			return false;
-		char cp0 = *aStr;
+		TCHAR cp0 = *aStr;
 		switch(aStr[1])
 		{
 		// '=' is listed first for performance, since it's the most common.
-		case '=': return strchr(":+-*.|&^/", cp0); // Covers :=, +=, -=, *=, .=, |=, &=, ^=, /= (9 operators).
+		case '=': return _tcschr(_T(":+-*.|&^/"), cp0); // Covers :=, +=, -=, *=, .=, |=, &=, ^=, /= (9 operators).
 		case '+': // Fall through to below. Covers ++.
 		case '-': return cp0 == aStr[1]; // Covers --.
 		case '/': // Fall through to below. Covers //=.
@@ -883,25 +883,25 @@ public:
 	Var *ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary = true);
 	ResultType ExpandArgs(VarSizeType aSpaceNeeded = VARSIZE_ERROR, Var *aArgVar[] = NULL);
 	VarSizeType GetExpandedArgSize(Var *aArgVar[]);
-	char *ExpandArg(char *aBuf, int aArgIndex, Var *aArgVar = NULL);
-	char *ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget, char *&aDerefBuf
-		, size_t &aDerefBufSize, char *aArgDeref[], size_t aExtraSize);
+	LPTSTR ExpandArg(LPTSTR aBuf, int aArgIndex, Var *aArgVar = NULL);
+	LPTSTR ExpandExpression(int aArgIndex, ResultType &aResult, LPTSTR &aTarget, LPTSTR &aDerefBuf
+		, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
 
-	ResultType Deref(Var *aOutputVar, char *aBuf);
+	ResultType Deref(Var *aOutputVar, LPTSTR aBuf);
 
 	static bool FileIsFilteredOut(WIN32_FIND_DATA &aCurrentFile, FileLoopModeType aFileLoopMode
-		, char *aFilePath, size_t aFilePathLength);
+		, LPTSTR aFilePath, size_t aFilePathLength);
 
 	Label *GetJumpTarget(bool aIsDereferenced);
 	Label *IsJumpValid(Label &aTargetLabel);
 	BOOL IsOutsideAnyFunctionBody();
 
-	HWND DetermineTargetWindow(char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText);
+	HWND DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 
 #ifndef AUTOHOTKEYSC
-	static int ConvertEscapeChar(char *aFilespec);
-	static size_t ConvertEscapeCharGetLine(char *aBuf, int aMaxCharsToRead, FILE *fp);
+	static int ConvertEscapeChar(LPTSTR aFilespec);
+	static size_t ConvertEscapeCharGetLine(LPTSTR aBuf, int aMaxCharsToRead, FILE *fp);
 #endif  // The functions above are not needed by the self-contained version.
 
 	
@@ -1075,7 +1075,7 @@ public:
 #ifdef _DEBUG
 		if (aArgIndex < 0)
 		{
-			LineError("DEBUG: BAD", WARN);
+			LineError(_T("DEBUG: BAD"), WARN);
 			aArgIndex = 0;  // But let it continue.
 		}
 #endif
@@ -1089,7 +1089,7 @@ public:
 			return (arg.type == ARG_TYPE_INPUT_VAR);
 	}
 
-	static HKEY RegConvertRootKey(char *aBuf, bool *aIsRemoteRegistry = NULL)
+	static HKEY RegConvertRootKey(LPTSTR aBuf, bool *aIsRemoteRegistry = NULL)
 	{
 		// Even if the computer name is a single letter, it seems like using a colon as delimiter is ok
 		// (e.g. a:HKEY_LOCAL_MACHINE), since we wouldn't expect the root key to be used as a filename
@@ -1108,16 +1108,16 @@ public:
 		// The following is a list of illegal characters in a computer name:
 		// regEx.Pattern = "`|~|!|@|#|\$|\^|\&|\*|\(|\)|\=|\+|{|}|\\|;|:|'|<|>|/|\?|\||%"
 
-		char *colon_pos = strrchr(aBuf, ':');
-		char *key_name = colon_pos ? omit_leading_whitespace(colon_pos + 1) : aBuf;
+		LPTSTR colon_pos = _tcsrchr(aBuf, ':');
+		LPTSTR key_name = colon_pos ? omit_leading_whitespace(colon_pos + 1) : aBuf;
 		if (aIsRemoteRegistry) // Caller wanted the below put into the output parameter.
 			*aIsRemoteRegistry = (colon_pos != NULL);
 		HKEY root_key = NULL; // Set default.
-		if (!stricmp(key_name, "HKLM") || !stricmp(key_name, "HKEY_LOCAL_MACHINE"))       root_key = HKEY_LOCAL_MACHINE;
-		else if (!stricmp(key_name, "HKCR") || !stricmp(key_name, "HKEY_CLASSES_ROOT"))   root_key = HKEY_CLASSES_ROOT;
-		else if (!stricmp(key_name, "HKCC") || !stricmp(key_name, "HKEY_CURRENT_CONFIG")) root_key = HKEY_CURRENT_CONFIG;
-		else if (!stricmp(key_name, "HKCU") || !stricmp(key_name, "HKEY_CURRENT_USER"))   root_key = HKEY_CURRENT_USER;
-		else if (!stricmp(key_name, "HKU") || !stricmp(key_name, "HKEY_USERS"))           root_key = HKEY_USERS;
+		if (!_tcsicmp(key_name, _T("HKLM")) || !_tcsicmp(key_name, _T("HKEY_LOCAL_MACHINE")))       root_key = HKEY_LOCAL_MACHINE;
+		else if (!_tcsicmp(key_name, _T("HKCR")) || !_tcsicmp(key_name, _T("HKEY_CLASSES_ROOT")))   root_key = HKEY_CLASSES_ROOT;
+		else if (!_tcsicmp(key_name, _T("HKCC")) || !_tcsicmp(key_name, _T("HKEY_CURRENT_CONFIG"))) root_key = HKEY_CURRENT_CONFIG;
+		else if (!_tcsicmp(key_name, _T("HKCU")) || !_tcsicmp(key_name, _T("HKEY_CURRENT_USER")))   root_key = HKEY_CURRENT_USER;
+		else if (!_tcsicmp(key_name, _T("HKU")) || !_tcsicmp(key_name, _T("HKEY_USERS")))           root_key = HKEY_USERS;
 		if (!root_key)  // Invalid or unsupported root key name.
 			return NULL;
 		if (!aIsRemoteRegistry || !colon_pos) // Either caller didn't want it opened, or it doesn't need to be.
@@ -1126,59 +1126,59 @@ public:
 		// It seems best to require the two leading backslashes in case the computer name contains
 		// spaces (just in case spaces are allowed on some OSes or perhaps for Unix interoperability, etc.).
 		// Therefore, make no attempt to trim leading and trailing spaces from the computer name:
-		char computer_name[128];
-		strlcpy(computer_name, aBuf, sizeof(computer_name));
+		TCHAR computer_name[128];
+		tcslcpy(computer_name, aBuf, _countof(computer_name));
 		computer_name[colon_pos - aBuf] = '\0';
 		HKEY remote_key;
 		return (RegConnectRegistry(computer_name, root_key, &remote_key) == ERROR_SUCCESS) ? remote_key : NULL;
 	}
 
-	static char *RegConvertRootKey(char *aBuf, size_t aBufSize, HKEY aRootKey)
+	static LPTSTR RegConvertRootKey(LPTSTR aBuf, size_t aBufSize, HKEY aRootKey)
 	{
 		// switch() doesn't directly support expression of type HKEY:
-		if (aRootKey == HKEY_LOCAL_MACHINE)       strlcpy(aBuf, "HKEY_LOCAL_MACHINE", aBufSize);
-		else if (aRootKey == HKEY_CLASSES_ROOT)   strlcpy(aBuf, "HKEY_CLASSES_ROOT", aBufSize);
-		else if (aRootKey == HKEY_CURRENT_CONFIG) strlcpy(aBuf, "HKEY_CURRENT_CONFIG", aBufSize);
-		else if (aRootKey == HKEY_CURRENT_USER)   strlcpy(aBuf, "HKEY_CURRENT_USER", aBufSize);
-		else if (aRootKey == HKEY_USERS)          strlcpy(aBuf, "HKEY_USERS", aBufSize);
+		if (aRootKey == HKEY_LOCAL_MACHINE)       tcslcpy(aBuf, _T("HKEY_LOCAL_MACHINE"), aBufSize);
+		else if (aRootKey == HKEY_CLASSES_ROOT)   tcslcpy(aBuf, _T("HKEY_CLASSES_ROOT"), aBufSize);
+		else if (aRootKey == HKEY_CURRENT_CONFIG) tcslcpy(aBuf, _T("HKEY_CURRENT_CONFIG"), aBufSize);
+		else if (aRootKey == HKEY_CURRENT_USER)   tcslcpy(aBuf, _T("HKEY_CURRENT_USER"), aBufSize);
+		else if (aRootKey == HKEY_USERS)          tcslcpy(aBuf, _T("HKEY_USERS"), aBufSize);
 		else if (aBufSize)                        *aBuf = '\0'; // Make it be the empty string for anything else.
 		// These are either unused or so rarely used (DYN_DATA on Win9x) that they aren't supported:
 		// HKEY_PERFORMANCE_DATA, HKEY_PERFORMANCE_TEXT, HKEY_PERFORMANCE_NLSTEXT, HKEY_DYN_DATA
 		return aBuf;
 	}
-	static int RegConvertValueType(char *aValueType)
+	static int RegConvertValueType(LPTSTR aValueType)
 	{
-		if (!stricmp(aValueType, "REG_SZ")) return REG_SZ;
-		if (!stricmp(aValueType, "REG_EXPAND_SZ")) return REG_EXPAND_SZ;
-		if (!stricmp(aValueType, "REG_MULTI_SZ")) return REG_MULTI_SZ;
-		if (!stricmp(aValueType, "REG_DWORD")) return REG_DWORD;
-		if (!stricmp(aValueType, "REG_BINARY")) return REG_BINARY;
+		if (!_tcsicmp(aValueType, _T("REG_SZ"))) return REG_SZ;
+		if (!_tcsicmp(aValueType, _T("REG_EXPAND_SZ"))) return REG_EXPAND_SZ;
+		if (!_tcsicmp(aValueType, _T("REG_MULTI_SZ"))) return REG_MULTI_SZ;
+		if (!_tcsicmp(aValueType, _T("REG_DWORD"))) return REG_DWORD;
+		if (!_tcsicmp(aValueType, _T("REG_BINARY"))) return REG_BINARY;
 		return REG_NONE; // Unknown or unsupported type.
 	}
-	static char *RegConvertValueType(char *aBuf, size_t aBufSize, DWORD aValueType)
+	static LPTSTR RegConvertValueType(LPTSTR aBuf, size_t aBufSize, DWORD aValueType)
 	{
 		switch(aValueType)
 		{
-		case REG_SZ: strlcpy(aBuf, "REG_SZ", aBufSize); return aBuf;
-		case REG_EXPAND_SZ: strlcpy(aBuf, "REG_EXPAND_SZ", aBufSize); return aBuf;
-		case REG_BINARY: strlcpy(aBuf, "REG_BINARY", aBufSize); return aBuf;
-		case REG_DWORD: strlcpy(aBuf, "REG_DWORD", aBufSize); return aBuf;
-		case REG_DWORD_BIG_ENDIAN: strlcpy(aBuf, "REG_DWORD_BIG_ENDIAN", aBufSize); return aBuf;
-		case REG_LINK: strlcpy(aBuf, "REG_LINK", aBufSize); return aBuf;
-		case REG_MULTI_SZ: strlcpy(aBuf, "REG_MULTI_SZ", aBufSize); return aBuf;
-		case REG_RESOURCE_LIST: strlcpy(aBuf, "REG_RESOURCE_LIST", aBufSize); return aBuf;
-		case REG_FULL_RESOURCE_DESCRIPTOR: strlcpy(aBuf, "REG_FULL_RESOURCE_DESCRIPTOR", aBufSize); return aBuf;
-		case REG_RESOURCE_REQUIREMENTS_LIST: strlcpy(aBuf, "REG_RESOURCE_REQUIREMENTS_LIST", aBufSize); return aBuf;
-		case REG_QWORD: strlcpy(aBuf, "REG_QWORD", aBufSize); return aBuf;
-		case REG_SUBKEY: strlcpy(aBuf, "KEY", aBufSize); return aBuf;  // Custom (non-standard) type.
+		case REG_SZ: tcslcpy(aBuf, _T("REG_SZ"), aBufSize); return aBuf;
+		case REG_EXPAND_SZ: tcslcpy(aBuf, _T("REG_EXPAND_SZ"), aBufSize); return aBuf;
+		case REG_BINARY: tcslcpy(aBuf, _T("REG_BINARY"), aBufSize); return aBuf;
+		case REG_DWORD: tcslcpy(aBuf, _T("REG_DWORD"), aBufSize); return aBuf;
+		case REG_DWORD_BIG_ENDIAN: tcslcpy(aBuf, _T("REG_DWORD_BIG_ENDIAN"), aBufSize); return aBuf;
+		case REG_LINK: tcslcpy(aBuf, _T("REG_LINK"), aBufSize); return aBuf;
+		case REG_MULTI_SZ: tcslcpy(aBuf, _T("REG_MULTI_SZ"), aBufSize); return aBuf;
+		case REG_RESOURCE_LIST: tcslcpy(aBuf, _T("REG_RESOURCE_LIST"), aBufSize); return aBuf;
+		case REG_FULL_RESOURCE_DESCRIPTOR: tcslcpy(aBuf, _T("REG_FULL_RESOURCE_DESCRIPTOR"), aBufSize); return aBuf;
+		case REG_RESOURCE_REQUIREMENTS_LIST: tcslcpy(aBuf, _T("REG_RESOURCE_REQUIREMENTS_LIST"), aBufSize); return aBuf;
+		case REG_QWORD: tcslcpy(aBuf, _T("REG_QWORD"), aBufSize); return aBuf;
+		case REG_SUBKEY: tcslcpy(aBuf, _T("KEY"), aBufSize); return aBuf;  // Custom (non-standard) type.
 		default: if (aBufSize) *aBuf = '\0'; return aBuf;  // Make it be the empty string for REG_NONE and anything else.
 		}
 	}
 
-	static DWORD SoundConvertComponentType(char *aBuf, int *aInstanceNumber = NULL)
+	static DWORD SoundConvertComponentType(LPTSTR aBuf, int *aInstanceNumber = NULL)
 	{
-		char *colon_pos = strchr(aBuf, ':');
-		UINT length_to_check = (UINT)(colon_pos ? colon_pos - aBuf : strlen(aBuf));
+		LPTSTR colon_pos = _tcschr(aBuf, ':');
+		UINT length_to_check = (UINT)(colon_pos ? colon_pos - aBuf : _tcsclen(aBuf));
 		if (aInstanceNumber) // Caller wanted the below put into the output parameter.
 		{
 			if (colon_pos)
@@ -1190,25 +1190,25 @@ public:
 			else
 				*aInstanceNumber = 1;
 		}
-		if (!strlicmp(aBuf, "Master", length_to_check)
-			|| !strlicmp(aBuf, "Speakers", length_to_check))   return MIXERLINE_COMPONENTTYPE_DST_SPEAKERS;
-		if (!strlicmp(aBuf, "Headphones", length_to_check))    return MIXERLINE_COMPONENTTYPE_DST_HEADPHONES;
-		if (!strlicmp(aBuf, "Digital", length_to_check))       return MIXERLINE_COMPONENTTYPE_SRC_DIGITAL;
-		if (!strlicmp(aBuf, "Line", length_to_check))          return MIXERLINE_COMPONENTTYPE_SRC_LINE;
-		if (!strlicmp(aBuf, "Microphone", length_to_check))    return MIXERLINE_COMPONENTTYPE_SRC_MICROPHONE;
-		if (!strlicmp(aBuf, "Synth", length_to_check))         return MIXERLINE_COMPONENTTYPE_SRC_SYNTHESIZER;
-		if (!strlicmp(aBuf, "CD", length_to_check))            return MIXERLINE_COMPONENTTYPE_SRC_COMPACTDISC;
-		if (!strlicmp(aBuf, "Telephone", length_to_check))     return MIXERLINE_COMPONENTTYPE_SRC_TELEPHONE;
-		if (!strlicmp(aBuf, "PCSpeaker", length_to_check))     return MIXERLINE_COMPONENTTYPE_SRC_PCSPEAKER;
-		if (!strlicmp(aBuf, "Wave", length_to_check))          return MIXERLINE_COMPONENTTYPE_SRC_WAVEOUT;
-		if (!strlicmp(aBuf, "Aux", length_to_check))           return MIXERLINE_COMPONENTTYPE_SRC_AUXILIARY;
-		if (!strlicmp(aBuf, "Analog", length_to_check))        return MIXERLINE_COMPONENTTYPE_SRC_ANALOG;
+		if (!tcslicmp(aBuf, _T("Master"), length_to_check)
+			|| !tcslicmp(aBuf, _T("Speakers"), length_to_check))   return MIXERLINE_COMPONENTTYPE_DST_SPEAKERS;
+		if (!tcslicmp(aBuf, _T("Headphones"), length_to_check))    return MIXERLINE_COMPONENTTYPE_DST_HEADPHONES;
+		if (!tcslicmp(aBuf, _T("Digital"), length_to_check))       return MIXERLINE_COMPONENTTYPE_SRC_DIGITAL;
+		if (!tcslicmp(aBuf, _T("Line"), length_to_check))          return MIXERLINE_COMPONENTTYPE_SRC_LINE;
+		if (!tcslicmp(aBuf, _T("Microphone"), length_to_check))    return MIXERLINE_COMPONENTTYPE_SRC_MICROPHONE;
+		if (!tcslicmp(aBuf, _T("Synth"), length_to_check))         return MIXERLINE_COMPONENTTYPE_SRC_SYNTHESIZER;
+		if (!tcslicmp(aBuf, _T("CD"), length_to_check))            return MIXERLINE_COMPONENTTYPE_SRC_COMPACTDISC;
+		if (!tcslicmp(aBuf, _T("Telephone"), length_to_check))     return MIXERLINE_COMPONENTTYPE_SRC_TELEPHONE;
+		if (!tcslicmp(aBuf, _T("PCSpeaker"), length_to_check))     return MIXERLINE_COMPONENTTYPE_SRC_PCSPEAKER;
+		if (!tcslicmp(aBuf, _T("Wave"), length_to_check))          return MIXERLINE_COMPONENTTYPE_SRC_WAVEOUT;
+		if (!tcslicmp(aBuf, _T("Aux"), length_to_check))           return MIXERLINE_COMPONENTTYPE_SRC_AUXILIARY;
+		if (!tcslicmp(aBuf, _T("Analog"), length_to_check))        return MIXERLINE_COMPONENTTYPE_SRC_ANALOG;
 		// v1.0.37.06: The following was added because it's legitimate on some sound cards such as
 		// SB Audigy's recording (dest #2) Wave/Mp3 volume:
-		if (!strlicmp(aBuf, "N/A", length_to_check))           return MIXERLINE_COMPONENTTYPE_SRC_UNDEFINED; // 0x1000
+		if (!tcslicmp(aBuf, _T("N/A"), length_to_check))           return MIXERLINE_COMPONENTTYPE_SRC_UNDEFINED; // 0x1000
 		return MIXERLINE_COMPONENTTYPE_DST_UNDEFINED; // Zero.
 	}
-	static DWORD SoundConvertControlType(char *aBuf)
+	static DWORD SoundConvertControlType(LPTSTR aBuf)
 	{
 		// v1.0.37.06: The following was added to allow unnamed control types (if any) to be accessed via number:
 		if (IsPureNumeric(aBuf, false, false, true)) // Seems best to allowing floating point here, since .000 on the end might happen sometimes.
@@ -1217,118 +1217,118 @@ public:
 		// values are not included here, such as MIXERCONTROL_CONTROLTYPE_FADER, which seems to be a type
 		// of sound control rather than a quality of the sound itself.  For performance, put the most
 		// often used ones up top.
-		if (!stricmp(aBuf, "Vol")
-			|| !stricmp(aBuf, "Volume")) return MIXERCONTROL_CONTROLTYPE_VOLUME;
-		if (!stricmp(aBuf, "OnOff"))     return MIXERCONTROL_CONTROLTYPE_ONOFF;
-		if (!stricmp(aBuf, "Mute"))      return MIXERCONTROL_CONTROLTYPE_MUTE;
-		if (!stricmp(aBuf, "Mono"))      return MIXERCONTROL_CONTROLTYPE_MONO;
-		if (!stricmp(aBuf, "Loudness"))  return MIXERCONTROL_CONTROLTYPE_LOUDNESS;
-		if (!stricmp(aBuf, "StereoEnh")) return MIXERCONTROL_CONTROLTYPE_STEREOENH;
-		if (!stricmp(aBuf, "BassBoost")) return MIXERCONTROL_CONTROLTYPE_BASS_BOOST;
-		if (!stricmp(aBuf, "Pan"))       return MIXERCONTROL_CONTROLTYPE_PAN;
-		if (!stricmp(aBuf, "QSoundPan")) return MIXERCONTROL_CONTROLTYPE_QSOUNDPAN;
-		if (!stricmp(aBuf, "Bass"))      return MIXERCONTROL_CONTROLTYPE_BASS;
-		if (!stricmp(aBuf, "Treble"))    return MIXERCONTROL_CONTROLTYPE_TREBLE;
-		if (!stricmp(aBuf, "Equalizer")) return MIXERCONTROL_CONTROLTYPE_EQUALIZER;
+		if (!_tcsicmp(aBuf, _T("Vol"))
+			|| !_tcsicmp(aBuf, _T("Volume"))) return MIXERCONTROL_CONTROLTYPE_VOLUME;
+		if (!_tcsicmp(aBuf, _T("OnOff")))     return MIXERCONTROL_CONTROLTYPE_ONOFF;
+		if (!_tcsicmp(aBuf, _T("Mute")))      return MIXERCONTROL_CONTROLTYPE_MUTE;
+		if (!_tcsicmp(aBuf, _T("Mono")))      return MIXERCONTROL_CONTROLTYPE_MONO;
+		if (!_tcsicmp(aBuf, _T("Loudness")))  return MIXERCONTROL_CONTROLTYPE_LOUDNESS;
+		if (!_tcsicmp(aBuf, _T("StereoEnh"))) return MIXERCONTROL_CONTROLTYPE_STEREOENH;
+		if (!_tcsicmp(aBuf, _T("BassBoost"))) return MIXERCONTROL_CONTROLTYPE_BASS_BOOST;
+		if (!_tcsicmp(aBuf, _T("Pan")))       return MIXERCONTROL_CONTROLTYPE_PAN;
+		if (!_tcsicmp(aBuf, _T("QSoundPan"))) return MIXERCONTROL_CONTROLTYPE_QSOUNDPAN;
+		if (!_tcsicmp(aBuf, _T("Bass")))      return MIXERCONTROL_CONTROLTYPE_BASS;
+		if (!_tcsicmp(aBuf, _T("Treble")))    return MIXERCONTROL_CONTROLTYPE_TREBLE;
+		if (!_tcsicmp(aBuf, _T("Equalizer"))) return MIXERCONTROL_CONTROLTYPE_EQUALIZER;
 		#define MIXERCONTROL_CONTROLTYPE_INVALID 0xFFFFFFFF // 0 might be a valid type, so use something definitely undefined.
 		return MIXERCONTROL_CONTROLTYPE_INVALID;
 	}
 
-	static TitleMatchModes ConvertTitleMatchMode(char *aBuf)
+	static TitleMatchModes ConvertTitleMatchMode(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return MATCHMODE_INVALID;
 		if (*aBuf == '1' && !*(aBuf + 1)) return FIND_IN_LEADING_PART;
 		if (*aBuf == '2' && !*(aBuf + 1)) return FIND_ANYWHERE;
 		if (*aBuf == '3' && !*(aBuf + 1)) return FIND_EXACT;
-		if (!stricmp(aBuf, "RegEx")) return FIND_REGEX; // Goes with the above, not fast/slow below.
+		if (!_tcsicmp(aBuf, _T("RegEx"))) return FIND_REGEX; // Goes with the above, not fast/slow below.
 
-		if (!stricmp(aBuf, "FAST")) return FIND_FAST;
-		if (!stricmp(aBuf, "SLOW")) return FIND_SLOW;
+		if (!_tcsicmp(aBuf, _T("FAST"))) return FIND_FAST;
+		if (!_tcsicmp(aBuf, _T("SLOW"))) return FIND_SLOW;
 		return MATCHMODE_INVALID;
 	}
 
-	static SysGetCmds ConvertSysGetCmd(char *aBuf)
+	static SysGetCmds ConvertSysGetCmd(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return SYSGET_CMD_INVALID;
 		if (IsPureNumeric(aBuf)) return SYSGET_CMD_METRICS;
-		if (!stricmp(aBuf, "MonitorCount")) return SYSGET_CMD_MONITORCOUNT;
-		if (!stricmp(aBuf, "MonitorPrimary")) return SYSGET_CMD_MONITORPRIMARY;
-		if (!stricmp(aBuf, "Monitor")) return SYSGET_CMD_MONITORAREA; // Called "Monitor" vs. "MonitorArea" to make it easier to remember.
-		if (!stricmp(aBuf, "MonitorWorkArea")) return SYSGET_CMD_MONITORWORKAREA;
-		if (!stricmp(aBuf, "MonitorName")) return SYSGET_CMD_MONITORNAME;
+		if (!_tcsicmp(aBuf, _T("MonitorCount"))) return SYSGET_CMD_MONITORCOUNT;
+		if (!_tcsicmp(aBuf, _T("MonitorPrimary"))) return SYSGET_CMD_MONITORPRIMARY;
+		if (!_tcsicmp(aBuf, _T("Monitor"))) return SYSGET_CMD_MONITORAREA; // Called "Monitor" vs. "MonitorArea" to make it easier to remember.
+		if (!_tcsicmp(aBuf, _T("MonitorWorkArea"))) return SYSGET_CMD_MONITORWORKAREA;
+		if (!_tcsicmp(aBuf, _T("MonitorName"))) return SYSGET_CMD_MONITORNAME;
 		return SYSGET_CMD_INVALID;
 	}
 
-	static TransformCmds ConvertTransformCmd(char *aBuf)
+	static TransformCmds ConvertTransformCmd(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return TRANS_CMD_INVALID;
-		if (!stricmp(aBuf, "Asc")) return TRANS_CMD_ASC;
-		if (!stricmp(aBuf, "Chr")) return TRANS_CMD_CHR;
-		if (!stricmp(aBuf, "Deref")) return TRANS_CMD_DEREF;
-		if (!stricmp(aBuf, "Unicode")) return TRANS_CMD_UNICODE;
-		if (!stricmp(aBuf, "HTML")) return TRANS_CMD_HTML;
-		if (!stricmp(aBuf, "Mod")) return TRANS_CMD_MOD;
-		if (!stricmp(aBuf, "Pow")) return TRANS_CMD_POW;
-		if (!stricmp(aBuf, "Exp")) return TRANS_CMD_EXP;
-		if (!stricmp(aBuf, "Sqrt")) return TRANS_CMD_SQRT;
-		if (!stricmp(aBuf, "Log")) return TRANS_CMD_LOG;
-		if (!stricmp(aBuf, "Ln")) return TRANS_CMD_LN;  // Natural log.
-		if (!stricmp(aBuf, "Round")) return TRANS_CMD_ROUND;
-		if (!stricmp(aBuf, "Ceil")) return TRANS_CMD_CEIL;
-		if (!stricmp(aBuf, "Floor")) return TRANS_CMD_FLOOR;
-		if (!stricmp(aBuf, "Abs")) return TRANS_CMD_ABS;
-		if (!stricmp(aBuf, "Sin")) return TRANS_CMD_SIN;
-		if (!stricmp(aBuf, "Cos")) return TRANS_CMD_COS;
-		if (!stricmp(aBuf, "Tan")) return TRANS_CMD_TAN;
-		if (!stricmp(aBuf, "ASin")) return TRANS_CMD_ASIN;
-		if (!stricmp(aBuf, "ACos")) return TRANS_CMD_ACOS;
-		if (!stricmp(aBuf, "ATan")) return TRANS_CMD_ATAN;
-		if (!stricmp(aBuf, "BitAnd")) return TRANS_CMD_BITAND;
-		if (!stricmp(aBuf, "BitOr")) return TRANS_CMD_BITOR;
-		if (!stricmp(aBuf, "BitXOr")) return TRANS_CMD_BITXOR;
-		if (!stricmp(aBuf, "BitNot")) return TRANS_CMD_BITNOT;
-		if (!stricmp(aBuf, "BitShiftLeft")) return TRANS_CMD_BITSHIFTLEFT;
-		if (!stricmp(aBuf, "BitShiftRight")) return TRANS_CMD_BITSHIFTRIGHT;
+		if (!_tcsicmp(aBuf, _T("Asc"))) return TRANS_CMD_ASC;
+		if (!_tcsicmp(aBuf, _T("Chr"))) return TRANS_CMD_CHR;
+		if (!_tcsicmp(aBuf, _T("Deref"))) return TRANS_CMD_DEREF;
+		if (!_tcsicmp(aBuf, _T("Unicode"))) return TRANS_CMD_UNICODE;
+		if (!_tcsicmp(aBuf, _T("HTML"))) return TRANS_CMD_HTML;
+		if (!_tcsicmp(aBuf, _T("Mod"))) return TRANS_CMD_MOD;
+		if (!_tcsicmp(aBuf, _T("Pow"))) return TRANS_CMD_POW;
+		if (!_tcsicmp(aBuf, _T("Exp"))) return TRANS_CMD_EXP;
+		if (!_tcsicmp(aBuf, _T("Sqrt"))) return TRANS_CMD_SQRT;
+		if (!_tcsicmp(aBuf, _T("Log"))) return TRANS_CMD_LOG;
+		if (!_tcsicmp(aBuf, _T("Ln"))) return TRANS_CMD_LN;  // Natural log.
+		if (!_tcsicmp(aBuf, _T("Round"))) return TRANS_CMD_ROUND;
+		if (!_tcsicmp(aBuf, _T("Ceil"))) return TRANS_CMD_CEIL;
+		if (!_tcsicmp(aBuf, _T("Floor"))) return TRANS_CMD_FLOOR;
+		if (!_tcsicmp(aBuf, _T("Abs"))) return TRANS_CMD_ABS;
+		if (!_tcsicmp(aBuf, _T("Sin"))) return TRANS_CMD_SIN;
+		if (!_tcsicmp(aBuf, _T("Cos"))) return TRANS_CMD_COS;
+		if (!_tcsicmp(aBuf, _T("Tan"))) return TRANS_CMD_TAN;
+		if (!_tcsicmp(aBuf, _T("ASin"))) return TRANS_CMD_ASIN;
+		if (!_tcsicmp(aBuf, _T("ACos"))) return TRANS_CMD_ACOS;
+		if (!_tcsicmp(aBuf, _T("ATan"))) return TRANS_CMD_ATAN;
+		if (!_tcsicmp(aBuf, _T("BitAnd"))) return TRANS_CMD_BITAND;
+		if (!_tcsicmp(aBuf, _T("BitOr"))) return TRANS_CMD_BITOR;
+		if (!_tcsicmp(aBuf, _T("BitXOr"))) return TRANS_CMD_BITXOR;
+		if (!_tcsicmp(aBuf, _T("BitNot"))) return TRANS_CMD_BITNOT;
+		if (!_tcsicmp(aBuf, _T("BitShiftLeft"))) return TRANS_CMD_BITSHIFTLEFT;
+		if (!_tcsicmp(aBuf, _T("BitShiftRight"))) return TRANS_CMD_BITSHIFTRIGHT;
 		return TRANS_CMD_INVALID;
 	}
 
-	static MenuCommands ConvertMenuCommand(char *aBuf)
+	static MenuCommands ConvertMenuCommand(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return MENU_CMD_INVALID;
-		if (!stricmp(aBuf, "Show")) return MENU_CMD_SHOW;
-		if (!stricmp(aBuf, "UseErrorLevel")) return MENU_CMD_USEERRORLEVEL;
-		if (!stricmp(aBuf, "Add")) return MENU_CMD_ADD;
-		if (!stricmp(aBuf, "Rename")) return MENU_CMD_RENAME;
-		if (!stricmp(aBuf, "Check")) return MENU_CMD_CHECK;
-		if (!stricmp(aBuf, "Uncheck")) return MENU_CMD_UNCHECK;
-		if (!stricmp(aBuf, "ToggleCheck")) return MENU_CMD_TOGGLECHECK;
-		if (!stricmp(aBuf, "Enable")) return MENU_CMD_ENABLE;
-		if (!stricmp(aBuf, "Disable")) return MENU_CMD_DISABLE;
-		if (!stricmp(aBuf, "ToggleEnable")) return MENU_CMD_TOGGLEENABLE;
-		if (!stricmp(aBuf, "Standard")) return MENU_CMD_STANDARD;
-		if (!stricmp(aBuf, "NoStandard")) return MENU_CMD_NOSTANDARD;
-		if (!stricmp(aBuf, "Color")) return MENU_CMD_COLOR;
-		if (!stricmp(aBuf, "Default")) return MENU_CMD_DEFAULT;
-		if (!stricmp(aBuf, "NoDefault")) return MENU_CMD_NODEFAULT;
-		if (!stricmp(aBuf, "Delete")) return MENU_CMD_DELETE;
-		if (!stricmp(aBuf, "DeleteAll")) return MENU_CMD_DELETEALL;
-		if (!stricmp(aBuf, "Tip")) return MENU_CMD_TIP;
-		if (!stricmp(aBuf, "Icon")) return MENU_CMD_ICON;
-		if (!stricmp(aBuf, "NoIcon")) return MENU_CMD_NOICON;
-		if (!stricmp(aBuf, "Click")) return MENU_CMD_CLICK;
-		if (!stricmp(aBuf, "MainWindow")) return MENU_CMD_MAINWINDOW;
-		if (!stricmp(aBuf, "NoMainWindow")) return MENU_CMD_NOMAINWINDOW;
+		if (!_tcsicmp(aBuf, _T("Show"))) return MENU_CMD_SHOW;
+		if (!_tcsicmp(aBuf, _T("UseErrorLevel"))) return MENU_CMD_USEERRORLEVEL;
+		if (!_tcsicmp(aBuf, _T("Add"))) return MENU_CMD_ADD;
+		if (!_tcsicmp(aBuf, _T("Rename"))) return MENU_CMD_RENAME;
+		if (!_tcsicmp(aBuf, _T("Check"))) return MENU_CMD_CHECK;
+		if (!_tcsicmp(aBuf, _T("Uncheck"))) return MENU_CMD_UNCHECK;
+		if (!_tcsicmp(aBuf, _T("ToggleCheck"))) return MENU_CMD_TOGGLECHECK;
+		if (!_tcsicmp(aBuf, _T("Enable"))) return MENU_CMD_ENABLE;
+		if (!_tcsicmp(aBuf, _T("Disable"))) return MENU_CMD_DISABLE;
+		if (!_tcsicmp(aBuf, _T("ToggleEnable"))) return MENU_CMD_TOGGLEENABLE;
+		if (!_tcsicmp(aBuf, _T("Standard"))) return MENU_CMD_STANDARD;
+		if (!_tcsicmp(aBuf, _T("NoStandard"))) return MENU_CMD_NOSTANDARD;
+		if (!_tcsicmp(aBuf, _T("Color"))) return MENU_CMD_COLOR;
+		if (!_tcsicmp(aBuf, _T("Default"))) return MENU_CMD_DEFAULT;
+		if (!_tcsicmp(aBuf, _T("NoDefault"))) return MENU_CMD_NODEFAULT;
+		if (!_tcsicmp(aBuf, _T("Delete"))) return MENU_CMD_DELETE;
+		if (!_tcsicmp(aBuf, _T("DeleteAll"))) return MENU_CMD_DELETEALL;
+		if (!_tcsicmp(aBuf, _T("Tip"))) return MENU_CMD_TIP;
+		if (!_tcsicmp(aBuf, _T("Icon"))) return MENU_CMD_ICON;
+		if (!_tcsicmp(aBuf, _T("NoIcon"))) return MENU_CMD_NOICON;
+		if (!_tcsicmp(aBuf, _T("Click"))) return MENU_CMD_CLICK;
+		if (!_tcsicmp(aBuf, _T("MainWindow"))) return MENU_CMD_MAINWINDOW;
+		if (!_tcsicmp(aBuf, _T("NoMainWindow"))) return MENU_CMD_NOMAINWINDOW;
 		return MENU_CMD_INVALID;
 	}
 
-	static GuiCommands ConvertGuiCommand(char *aBuf, int *aWindowIndex = NULL, char **aOptions = NULL)
+	static GuiCommands ConvertGuiCommand(LPTSTR aBuf, int *aWindowIndex = NULL, LPTSTR *aOptions = NULL)
 	{
 		// Notes about the below macro:
 		// "< 3" avoids ambiguity with a future use such as "gui +cmd:whatever" while still allowing
 		// up to 99 windows, e.g. "gui 99:add"
 		// omit_leading_whitespace(): Move the buf pointer to the location of the sub-command.
 		#define DETERMINE_WINDOW_INDEX \
-			char *colon_pos = strchr(aBuf, ':');\
+			LPTSTR colon_pos = _tcschr(aBuf, ':');\
 			if (colon_pos && colon_pos - aBuf < 3)\
 			{\
 				if (aWindowIndex)\
@@ -1341,27 +1341,27 @@ public:
 			*aOptions = aBuf; // Return position where options start to the caller.
 		if (!*aBuf || *aBuf == '+' || *aBuf == '-') // Assume a var ref that resolves to blank is "options" (for runtime flexibility).
 			return GUI_CMD_OPTIONS;
-		if (!stricmp(aBuf, "Add")) return GUI_CMD_ADD;
-		if (!stricmp(aBuf, "Show")) return GUI_CMD_SHOW;
-		if (!stricmp(aBuf, "Submit")) return GUI_CMD_SUBMIT;
-		if (!stricmp(aBuf, "Cancel") || !stricmp(aBuf, "Hide")) return GUI_CMD_CANCEL;
-		if (!stricmp(aBuf, "Minimize")) return GUI_CMD_MINIMIZE;
-		if (!stricmp(aBuf, "Maximize")) return GUI_CMD_MAXIMIZE;
-		if (!stricmp(aBuf, "Restore")) return GUI_CMD_RESTORE;
-		if (!stricmp(aBuf, "Destroy")) return GUI_CMD_DESTROY;
-		if (!stricmp(aBuf, "Margin")) return GUI_CMD_MARGIN;
-		if (!stricmp(aBuf, "Menu")) return GUI_CMD_MENU;
-		if (!stricmp(aBuf, "Font")) return GUI_CMD_FONT;
-		if (!stricmp(aBuf, "Tab")) return GUI_CMD_TAB;
-		if (!stricmp(aBuf, "ListView")) return GUI_CMD_LISTVIEW;
-		if (!stricmp(aBuf, "TreeView")) return GUI_CMD_TREEVIEW;
-		if (!stricmp(aBuf, "Default")) return GUI_CMD_DEFAULT;
-		if (!stricmp(aBuf, "Color")) return GUI_CMD_COLOR;
-		if (!stricmp(aBuf, "Flash")) return GUI_CMD_FLASH;
+		if (!_tcsicmp(aBuf, _T("Add"))) return GUI_CMD_ADD;
+		if (!_tcsicmp(aBuf, _T("Show"))) return GUI_CMD_SHOW;
+		if (!_tcsicmp(aBuf, _T("Submit"))) return GUI_CMD_SUBMIT;
+		if (!_tcsicmp(aBuf, _T("Cancel")) || !_tcsicmp(aBuf, _T("Hide"))) return GUI_CMD_CANCEL;
+		if (!_tcsicmp(aBuf, _T("Minimize"))) return GUI_CMD_MINIMIZE;
+		if (!_tcsicmp(aBuf, _T("Maximize"))) return GUI_CMD_MAXIMIZE;
+		if (!_tcsicmp(aBuf, _T("Restore"))) return GUI_CMD_RESTORE;
+		if (!_tcsicmp(aBuf, _T("Destroy"))) return GUI_CMD_DESTROY;
+		if (!_tcsicmp(aBuf, _T("Margin"))) return GUI_CMD_MARGIN;
+		if (!_tcsicmp(aBuf, _T("Menu"))) return GUI_CMD_MENU;
+		if (!_tcsicmp(aBuf, _T("Font"))) return GUI_CMD_FONT;
+		if (!_tcsicmp(aBuf, _T("Tab"))) return GUI_CMD_TAB;
+		if (!_tcsicmp(aBuf, _T("ListView"))) return GUI_CMD_LISTVIEW;
+		if (!_tcsicmp(aBuf, _T("TreeView"))) return GUI_CMD_TREEVIEW;
+		if (!_tcsicmp(aBuf, _T("Default"))) return GUI_CMD_DEFAULT;
+		if (!_tcsicmp(aBuf, _T("Color"))) return GUI_CMD_COLOR;
+		if (!_tcsicmp(aBuf, _T("Flash"))) return GUI_CMD_FLASH;
 		return GUI_CMD_INVALID;
 	}
 
-	GuiControlCmds ConvertGuiControlCmd(char *aBuf, int *aWindowIndex = NULL, char **aOptions = NULL)
+	GuiControlCmds ConvertGuiControlCmd(LPTSTR aBuf, int *aWindowIndex = NULL, LPTSTR *aOptions = NULL)
 	{
 		DETERMINE_WINDOW_INDEX
 		if (aOptions)
@@ -1379,197 +1379,197 @@ public:
 			return GUICONTROL_CMD_CONTENTS;
 		if (*aBuf == '+' || *aBuf == '-') // Assume a var ref that resolves to blank is "options" (for runtime flexibility).
 			return GUICONTROL_CMD_OPTIONS;
-		if (!stricmp(aBuf, "Text")) return GUICONTROL_CMD_TEXT;
-		if (!stricmp(aBuf, "Move")) return GUICONTROL_CMD_MOVE;
-		if (!stricmp(aBuf, "MoveDraw")) return GUICONTROL_CMD_MOVEDRAW;
-		if (!stricmp(aBuf, "Focus")) return GUICONTROL_CMD_FOCUS;
-		if (!stricmp(aBuf, "Choose")) return GUICONTROL_CMD_CHOOSE;
-		if (!stricmp(aBuf, "ChooseString")) return GUICONTROL_CMD_CHOOSESTRING;
-		if (!stricmp(aBuf, "Font")) return GUICONTROL_CMD_FONT;
+		if (!_tcsicmp(aBuf, _T("Text"))) return GUICONTROL_CMD_TEXT;
+		if (!_tcsicmp(aBuf, _T("Move"))) return GUICONTROL_CMD_MOVE;
+		if (!_tcsicmp(aBuf, _T("MoveDraw"))) return GUICONTROL_CMD_MOVEDRAW;
+		if (!_tcsicmp(aBuf, _T("Focus"))) return GUICONTROL_CMD_FOCUS;
+		if (!_tcsicmp(aBuf, _T("Choose"))) return GUICONTROL_CMD_CHOOSE;
+		if (!_tcsicmp(aBuf, _T("ChooseString"))) return GUICONTROL_CMD_CHOOSESTRING;
+		if (!_tcsicmp(aBuf, _T("Font"))) return GUICONTROL_CMD_FONT;
 
 		// v1.0.38.02: Anything not already returned from above supports an optional boolean suffix.
 		// The following example would hide the control: GuiControl, Show%VarContainingFalse%, MyControl
 		// To support hex (due to the 'x' in it), search from the left rather than the right for the
 		// first digit:
-		char *suffix;
-		for (suffix = aBuf; *suffix && !isdigit(*suffix); ++suffix);
+		LPTSTR suffix;
+		for (suffix = aBuf; *suffix && !_istdigit(*suffix); ++suffix);
 		bool invert = (*suffix ? !ATOI(suffix) : false);
-		if (!strnicmp(aBuf, "Enable", 6)) return invert ? GUICONTROL_CMD_DISABLE : GUICONTROL_CMD_ENABLE;
-		if (!strnicmp(aBuf, "Disable", 7)) return invert ? GUICONTROL_CMD_ENABLE : GUICONTROL_CMD_DISABLE;
-		if (!strnicmp(aBuf, "Show", 4)) return invert ? GUICONTROL_CMD_HIDE : GUICONTROL_CMD_SHOW;
-		if (!strnicmp(aBuf, "Hide", 4)) return invert ? GUICONTROL_CMD_SHOW : GUICONTROL_CMD_HIDE;
+		if (!_tcsnicmp(aBuf, _T("Enable"), 6)) return invert ? GUICONTROL_CMD_DISABLE : GUICONTROL_CMD_ENABLE;
+		if (!_tcsnicmp(aBuf, _T("Disable"), 7)) return invert ? GUICONTROL_CMD_ENABLE : GUICONTROL_CMD_DISABLE;
+		if (!_tcsnicmp(aBuf, _T("Show"), 4)) return invert ? GUICONTROL_CMD_HIDE : GUICONTROL_CMD_SHOW;
+		if (!_tcsnicmp(aBuf, _T("Hide"), 4)) return invert ? GUICONTROL_CMD_SHOW : GUICONTROL_CMD_HIDE;
 
 		return GUICONTROL_CMD_INVALID;
 	}
 
-	static GuiControlGetCmds ConvertGuiControlGetCmd(char *aBuf, int *aWindowIndex = NULL)
+	static GuiControlGetCmds ConvertGuiControlGetCmd(LPTSTR aBuf, int *aWindowIndex = NULL)
 	{
 		DETERMINE_WINDOW_INDEX
 		if (!*aBuf) return GUICONTROLGET_CMD_CONTENTS; // The implicit command when nothing was specified.
-		if (!stricmp(aBuf, "Pos")) return GUICONTROLGET_CMD_POS;
-		if (!stricmp(aBuf, "Focus")) return GUICONTROLGET_CMD_FOCUS;
-		if (!stricmp(aBuf, "FocusV")) return GUICONTROLGET_CMD_FOCUSV; // Returns variable vs. ClassNN.
-		if (!stricmp(aBuf, "Enabled")) return GUICONTROLGET_CMD_ENABLED;
-		if (!stricmp(aBuf, "Visible")) return GUICONTROLGET_CMD_VISIBLE;
-		if (!stricmp(aBuf, "Hwnd")) return GUICONTROLGET_CMD_HWND;
+		if (!_tcsicmp(aBuf, _T("Pos"))) return GUICONTROLGET_CMD_POS;
+		if (!_tcsicmp(aBuf, _T("Focus"))) return GUICONTROLGET_CMD_FOCUS;
+		if (!_tcsicmp(aBuf, _T("FocusV"))) return GUICONTROLGET_CMD_FOCUSV; // Returns variable vs. ClassNN.
+		if (!_tcsicmp(aBuf, _T("Enabled"))) return GUICONTROLGET_CMD_ENABLED;
+		if (!_tcsicmp(aBuf, _T("Visible"))) return GUICONTROLGET_CMD_VISIBLE;
+		if (!_tcsicmp(aBuf, _T("Hwnd"))) return GUICONTROLGET_CMD_HWND;
 		return GUICONTROLGET_CMD_INVALID;
 	}
 
-	static GuiControls ConvertGuiControl(char *aBuf)
+	static GuiControls ConvertGuiControl(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return GUI_CONTROL_INVALID;
-		if (!stricmp(aBuf, "Text")) return GUI_CONTROL_TEXT;
-		if (!stricmp(aBuf, "Edit")) return GUI_CONTROL_EDIT;
-		if (!stricmp(aBuf, "Button")) return GUI_CONTROL_BUTTON;
-		if (!stricmp(aBuf, "Checkbox")) return GUI_CONTROL_CHECKBOX;
-		if (!stricmp(aBuf, "Radio")) return GUI_CONTROL_RADIO;
-		if (!stricmp(aBuf, "DDL") || !stricmp(aBuf, "DropDownList")) return GUI_CONTROL_DROPDOWNLIST;
-		if (!stricmp(aBuf, "ComboBox")) return GUI_CONTROL_COMBOBOX;
-		if (!stricmp(aBuf, "ListBox")) return GUI_CONTROL_LISTBOX;
-		if (!stricmp(aBuf, "ListView")) return GUI_CONTROL_LISTVIEW;
-		if (!stricmp(aBuf, "TreeView")) return GUI_CONTROL_TREEVIEW;
+		if (!_tcsicmp(aBuf, _T("Text"))) return GUI_CONTROL_TEXT;
+		if (!_tcsicmp(aBuf, _T("Edit"))) return GUI_CONTROL_EDIT;
+		if (!_tcsicmp(aBuf, _T("Button"))) return GUI_CONTROL_BUTTON;
+		if (!_tcsicmp(aBuf, _T("Checkbox"))) return GUI_CONTROL_CHECKBOX;
+		if (!_tcsicmp(aBuf, _T("Radio"))) return GUI_CONTROL_RADIO;
+		if (!_tcsicmp(aBuf, _T("DDL")) || !_tcsicmp(aBuf, _T("DropDownList"))) return GUI_CONTROL_DROPDOWNLIST;
+		if (!_tcsicmp(aBuf, _T("ComboBox"))) return GUI_CONTROL_COMBOBOX;
+		if (!_tcsicmp(aBuf, _T("ListBox"))) return GUI_CONTROL_LISTBOX;
+		if (!_tcsicmp(aBuf, _T("ListView"))) return GUI_CONTROL_LISTVIEW;
+		if (!_tcsicmp(aBuf, _T("TreeView"))) return GUI_CONTROL_TREEVIEW;
 		// Keep those seldom used at the bottom for performance:
-		if (!stricmp(aBuf, "UpDown")) return GUI_CONTROL_UPDOWN;
-		if (!stricmp(aBuf, "Slider")) return GUI_CONTROL_SLIDER;
-		if (!stricmp(aBuf, "Progress")) return GUI_CONTROL_PROGRESS;
-		if (!stricmp(aBuf, "Tab")) return GUI_CONTROL_TAB;
-		if (!stricmp(aBuf, "Tab2")) return GUI_CONTROL_TAB2; // v1.0.47.05: Used only temporarily: becomes TAB vs. TAB2 upon creation.
-		if (!stricmp(aBuf, "GroupBox")) return GUI_CONTROL_GROUPBOX;
-		if (!stricmp(aBuf, "Pic") || !stricmp(aBuf, "Picture")) return GUI_CONTROL_PIC;
-		if (!stricmp(aBuf, "DateTime")) return GUI_CONTROL_DATETIME;
-		if (!stricmp(aBuf, "MonthCal")) return GUI_CONTROL_MONTHCAL;
-		if (!stricmp(aBuf, "Hotkey")) return GUI_CONTROL_HOTKEY;
-		if (!stricmp(aBuf, "StatusBar")) return GUI_CONTROL_STATUSBAR;
+		if (!_tcsicmp(aBuf, _T("UpDown"))) return GUI_CONTROL_UPDOWN;
+		if (!_tcsicmp(aBuf, _T("Slider"))) return GUI_CONTROL_SLIDER;
+		if (!_tcsicmp(aBuf, _T("Progress"))) return GUI_CONTROL_PROGRESS;
+		if (!_tcsicmp(aBuf, _T("Tab"))) return GUI_CONTROL_TAB;
+		if (!_tcsicmp(aBuf, _T("Tab2"))) return GUI_CONTROL_TAB2; // v1.0.47.05: Used only temporarily: becomes TAB vs. TAB2 upon creation.
+		if (!_tcsicmp(aBuf, _T("GroupBox"))) return GUI_CONTROL_GROUPBOX;
+		if (!_tcsicmp(aBuf, _T("Pic")) || !_tcsicmp(aBuf, _T("Picture"))) return GUI_CONTROL_PIC;
+		if (!_tcsicmp(aBuf, _T("DateTime"))) return GUI_CONTROL_DATETIME;
+		if (!_tcsicmp(aBuf, _T("MonthCal"))) return GUI_CONTROL_MONTHCAL;
+		if (!_tcsicmp(aBuf, _T("Hotkey"))) return GUI_CONTROL_HOTKEY;
+		if (!_tcsicmp(aBuf, _T("StatusBar"))) return GUI_CONTROL_STATUSBAR;
 		return GUI_CONTROL_INVALID;
 	}
 
-	static ThreadCommands ConvertThreadCommand(char *aBuf)
+	static ThreadCommands ConvertThreadCommand(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return THREAD_CMD_INVALID;
-		if (!stricmp(aBuf, "Priority")) return THREAD_CMD_PRIORITY;
-		if (!stricmp(aBuf, "Interrupt")) return THREAD_CMD_INTERRUPT;
-		if (!stricmp(aBuf, "NoTimers")) return THREAD_CMD_NOTIMERS;
+		if (!_tcsicmp(aBuf, _T("Priority"))) return THREAD_CMD_PRIORITY;
+		if (!_tcsicmp(aBuf, _T("Interrupt"))) return THREAD_CMD_INTERRUPT;
+		if (!_tcsicmp(aBuf, _T("NoTimers"))) return THREAD_CMD_NOTIMERS;
 		return THREAD_CMD_INVALID;
 	}
 	
-	static ProcessCmds ConvertProcessCmd(char *aBuf)
+	static ProcessCmds ConvertProcessCmd(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return PROCESS_CMD_INVALID;
-		if (!stricmp(aBuf, "Exist")) return PROCESS_CMD_EXIST;
-		if (!stricmp(aBuf, "Close")) return PROCESS_CMD_CLOSE;
-		if (!stricmp(aBuf, "Priority")) return PROCESS_CMD_PRIORITY;
-		if (!stricmp(aBuf, "Wait")) return PROCESS_CMD_WAIT;
-		if (!stricmp(aBuf, "WaitClose")) return PROCESS_CMD_WAITCLOSE;
+		if (!_tcsicmp(aBuf, _T("Exist"))) return PROCESS_CMD_EXIST;
+		if (!_tcsicmp(aBuf, _T("Close"))) return PROCESS_CMD_CLOSE;
+		if (!_tcsicmp(aBuf, _T("Priority"))) return PROCESS_CMD_PRIORITY;
+		if (!_tcsicmp(aBuf, _T("Wait"))) return PROCESS_CMD_WAIT;
+		if (!_tcsicmp(aBuf, _T("WaitClose"))) return PROCESS_CMD_WAITCLOSE;
 		return PROCESS_CMD_INVALID;
 	}
 
-	static ControlCmds ConvertControlCmd(char *aBuf)
+	static ControlCmds ConvertControlCmd(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return CONTROL_CMD_INVALID;
-		if (!stricmp(aBuf, "Check")) return CONTROL_CMD_CHECK;
-		if (!stricmp(aBuf, "Uncheck")) return CONTROL_CMD_UNCHECK;
-		if (!stricmp(aBuf, "Enable")) return CONTROL_CMD_ENABLE;
-		if (!stricmp(aBuf, "Disable")) return CONTROL_CMD_DISABLE;
-		if (!stricmp(aBuf, "Show")) return CONTROL_CMD_SHOW;
-		if (!stricmp(aBuf, "Hide")) return CONTROL_CMD_HIDE;
-		if (!stricmp(aBuf, "Style")) return CONTROL_CMD_STYLE;
-		if (!stricmp(aBuf, "ExStyle")) return CONTROL_CMD_EXSTYLE;
-		if (!stricmp(aBuf, "ShowDropDown")) return CONTROL_CMD_SHOWDROPDOWN;
-		if (!stricmp(aBuf, "HideDropDown")) return CONTROL_CMD_HIDEDROPDOWN;
-		if (!stricmp(aBuf, "TabLeft")) return CONTROL_CMD_TABLEFT;
-		if (!stricmp(aBuf, "TabRight")) return CONTROL_CMD_TABRIGHT;
-		if (!stricmp(aBuf, "Add")) return CONTROL_CMD_ADD;
-		if (!stricmp(aBuf, "Delete")) return CONTROL_CMD_DELETE;
-		if (!stricmp(aBuf, "Choose")) return CONTROL_CMD_CHOOSE;
-		if (!stricmp(aBuf, "ChooseString")) return CONTROL_CMD_CHOOSESTRING;
-		if (!stricmp(aBuf, "EditPaste")) return CONTROL_CMD_EDITPASTE;
+		if (!_tcsicmp(aBuf, _T("Check"))) return CONTROL_CMD_CHECK;
+		if (!_tcsicmp(aBuf, _T("Uncheck"))) return CONTROL_CMD_UNCHECK;
+		if (!_tcsicmp(aBuf, _T("Enable"))) return CONTROL_CMD_ENABLE;
+		if (!_tcsicmp(aBuf, _T("Disable"))) return CONTROL_CMD_DISABLE;
+		if (!_tcsicmp(aBuf, _T("Show"))) return CONTROL_CMD_SHOW;
+		if (!_tcsicmp(aBuf, _T("Hide"))) return CONTROL_CMD_HIDE;
+		if (!_tcsicmp(aBuf, _T("Style"))) return CONTROL_CMD_STYLE;
+		if (!_tcsicmp(aBuf, _T("ExStyle"))) return CONTROL_CMD_EXSTYLE;
+		if (!_tcsicmp(aBuf, _T("ShowDropDown"))) return CONTROL_CMD_SHOWDROPDOWN;
+		if (!_tcsicmp(aBuf, _T("HideDropDown"))) return CONTROL_CMD_HIDEDROPDOWN;
+		if (!_tcsicmp(aBuf, _T("TabLeft"))) return CONTROL_CMD_TABLEFT;
+		if (!_tcsicmp(aBuf, _T("TabRight"))) return CONTROL_CMD_TABRIGHT;
+		if (!_tcsicmp(aBuf, _T("Add"))) return CONTROL_CMD_ADD;
+		if (!_tcsicmp(aBuf, _T("Delete"))) return CONTROL_CMD_DELETE;
+		if (!_tcsicmp(aBuf, _T("Choose"))) return CONTROL_CMD_CHOOSE;
+		if (!_tcsicmp(aBuf, _T("ChooseString"))) return CONTROL_CMD_CHOOSESTRING;
+		if (!_tcsicmp(aBuf, _T("EditPaste"))) return CONTROL_CMD_EDITPASTE;
 		return CONTROL_CMD_INVALID;
 	}
 
-	static ControlGetCmds ConvertControlGetCmd(char *aBuf)
+	static ControlGetCmds ConvertControlGetCmd(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return CONTROLGET_CMD_INVALID;
-		if (!stricmp(aBuf, "Checked")) return CONTROLGET_CMD_CHECKED;
-		if (!stricmp(aBuf, "Enabled")) return CONTROLGET_CMD_ENABLED;
-		if (!stricmp(aBuf, "Visible")) return CONTROLGET_CMD_VISIBLE;
-		if (!stricmp(aBuf, "Tab")) return CONTROLGET_CMD_TAB;
-		if (!stricmp(aBuf, "FindString")) return CONTROLGET_CMD_FINDSTRING;
-		if (!stricmp(aBuf, "Choice")) return CONTROLGET_CMD_CHOICE;
-		if (!stricmp(aBuf, "List")) return CONTROLGET_CMD_LIST;
-		if (!stricmp(aBuf, "LineCount")) return CONTROLGET_CMD_LINECOUNT;
-		if (!stricmp(aBuf, "CurrentLine")) return CONTROLGET_CMD_CURRENTLINE;
-		if (!stricmp(aBuf, "CurrentCol")) return CONTROLGET_CMD_CURRENTCOL;
-		if (!stricmp(aBuf, "Line")) return CONTROLGET_CMD_LINE;
-		if (!stricmp(aBuf, "Selected")) return CONTROLGET_CMD_SELECTED;
-		if (!stricmp(aBuf, "Style")) return CONTROLGET_CMD_STYLE;
-		if (!stricmp(aBuf, "ExStyle")) return CONTROLGET_CMD_EXSTYLE;
-		if (!stricmp(aBuf, "Hwnd")) return CONTROLGET_CMD_HWND;
+		if (!_tcsicmp(aBuf, _T("Checked"))) return CONTROLGET_CMD_CHECKED;
+		if (!_tcsicmp(aBuf, _T("Enabled"))) return CONTROLGET_CMD_ENABLED;
+		if (!_tcsicmp(aBuf, _T("Visible"))) return CONTROLGET_CMD_VISIBLE;
+		if (!_tcsicmp(aBuf, _T("Tab"))) return CONTROLGET_CMD_TAB;
+		if (!_tcsicmp(aBuf, _T("FindString"))) return CONTROLGET_CMD_FINDSTRING;
+		if (!_tcsicmp(aBuf, _T("Choice"))) return CONTROLGET_CMD_CHOICE;
+		if (!_tcsicmp(aBuf, _T("List"))) return CONTROLGET_CMD_LIST;
+		if (!_tcsicmp(aBuf, _T("LineCount"))) return CONTROLGET_CMD_LINECOUNT;
+		if (!_tcsicmp(aBuf, _T("CurrentLine"))) return CONTROLGET_CMD_CURRENTLINE;
+		if (!_tcsicmp(aBuf, _T("CurrentCol"))) return CONTROLGET_CMD_CURRENTCOL;
+		if (!_tcsicmp(aBuf, _T("Line"))) return CONTROLGET_CMD_LINE;
+		if (!_tcsicmp(aBuf, _T("Selected"))) return CONTROLGET_CMD_SELECTED;
+		if (!_tcsicmp(aBuf, _T("Style"))) return CONTROLGET_CMD_STYLE;
+		if (!_tcsicmp(aBuf, _T("ExStyle"))) return CONTROLGET_CMD_EXSTYLE;
+		if (!_tcsicmp(aBuf, _T("Hwnd"))) return CONTROLGET_CMD_HWND;
 		return CONTROLGET_CMD_INVALID;
 	}
 
-	static DriveCmds ConvertDriveCmd(char *aBuf)
+	static DriveCmds ConvertDriveCmd(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return DRIVE_CMD_INVALID;
-		if (!stricmp(aBuf, "Eject")) return DRIVE_CMD_EJECT;
-		if (!stricmp(aBuf, "Lock")) return DRIVE_CMD_LOCK;
-		if (!stricmp(aBuf, "Unlock")) return DRIVE_CMD_UNLOCK;
-		if (!stricmp(aBuf, "Label")) return DRIVE_CMD_LABEL;
+		if (!_tcsicmp(aBuf, _T("Eject"))) return DRIVE_CMD_EJECT;
+		if (!_tcsicmp(aBuf, _T("Lock"))) return DRIVE_CMD_LOCK;
+		if (!_tcsicmp(aBuf, _T("Unlock"))) return DRIVE_CMD_UNLOCK;
+		if (!_tcsicmp(aBuf, _T("Label"))) return DRIVE_CMD_LABEL;
 		return DRIVE_CMD_INVALID;
 	}
 
-	static DriveGetCmds ConvertDriveGetCmd(char *aBuf)
+	static DriveGetCmds ConvertDriveGetCmd(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return DRIVEGET_CMD_INVALID;
-		if (!stricmp(aBuf, "List")) return DRIVEGET_CMD_LIST;
-		if (!stricmp(aBuf, "FileSystem") || !stricmp(aBuf, "FS")) return DRIVEGET_CMD_FILESYSTEM;
-		if (!stricmp(aBuf, "Label")) return DRIVEGET_CMD_LABEL;
-		if (!strnicmp(aBuf, "SetLabel:", 9)) return DRIVEGET_CMD_SETLABEL;  // Uses strnicmp() vs. stricmp().
-		if (!stricmp(aBuf, "Serial")) return DRIVEGET_CMD_SERIAL;
-		if (!stricmp(aBuf, "Type")) return DRIVEGET_CMD_TYPE;
-		if (!stricmp(aBuf, "Status")) return DRIVEGET_CMD_STATUS;
-		if (!stricmp(aBuf, "StatusCD")) return DRIVEGET_CMD_STATUSCD;
-		if (!stricmp(aBuf, "Capacity") || !stricmp(aBuf, "Cap")) return DRIVEGET_CMD_CAPACITY;
+		if (!_tcsicmp(aBuf, _T("List"))) return DRIVEGET_CMD_LIST;
+		if (!_tcsicmp(aBuf, _T("FileSystem")) || !_tcsicmp(aBuf, _T("FS"))) return DRIVEGET_CMD_FILESYSTEM;
+		if (!_tcsicmp(aBuf, _T("Label"))) return DRIVEGET_CMD_LABEL;
+		if (!_tcsnicmp(aBuf, _T("SetLabel:"), 9)) return DRIVEGET_CMD_SETLABEL;  // Uses strnicmp() vs. stricmp().
+		if (!_tcsicmp(aBuf, _T("Serial"))) return DRIVEGET_CMD_SERIAL;
+		if (!_tcsicmp(aBuf, _T("Type"))) return DRIVEGET_CMD_TYPE;
+		if (!_tcsicmp(aBuf, _T("Status"))) return DRIVEGET_CMD_STATUS;
+		if (!_tcsicmp(aBuf, _T("StatusCD"))) return DRIVEGET_CMD_STATUSCD;
+		if (!_tcsicmp(aBuf, _T("Capacity")) || !_tcsicmp(aBuf, _T("Cap"))) return DRIVEGET_CMD_CAPACITY;
 		return DRIVEGET_CMD_INVALID;
 	}
 
-	static WinSetAttributes ConvertWinSetAttribute(char *aBuf)
+	static WinSetAttributes ConvertWinSetAttribute(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return WINSET_INVALID;
-		if (!stricmp(aBuf, "Trans") || !stricmp(aBuf, "Transparent")) return WINSET_TRANSPARENT;
-		if (!stricmp(aBuf, "TransColor")) return WINSET_TRANSCOLOR;
-		if (!stricmp(aBuf, "AlwaysOnTop") || !stricmp(aBuf, "Topmost")) return WINSET_ALWAYSONTOP;
-		if (!stricmp(aBuf, "Bottom")) return WINSET_BOTTOM;
-		if (!stricmp(aBuf, "Top")) return WINSET_TOP;
-		if (!stricmp(aBuf, "Style")) return WINSET_STYLE;
-		if (!stricmp(aBuf, "ExStyle")) return WINSET_EXSTYLE;
-		if (!stricmp(aBuf, "Redraw")) return WINSET_REDRAW;
-		if (!stricmp(aBuf, "Enable")) return WINSET_ENABLE;
-		if (!stricmp(aBuf, "Disable")) return WINSET_DISABLE;
-		if (!stricmp(aBuf, "Region")) return WINSET_REGION;
+		if (!_tcsicmp(aBuf, _T("Trans")) || !_tcsicmp(aBuf, _T("Transparent"))) return WINSET_TRANSPARENT;
+		if (!_tcsicmp(aBuf, _T("TransColor"))) return WINSET_TRANSCOLOR;
+		if (!_tcsicmp(aBuf, _T("AlwaysOnTop")) || !_tcsicmp(aBuf, _T("Topmost"))) return WINSET_ALWAYSONTOP;
+		if (!_tcsicmp(aBuf, _T("Bottom"))) return WINSET_BOTTOM;
+		if (!_tcsicmp(aBuf, _T("Top"))) return WINSET_TOP;
+		if (!_tcsicmp(aBuf, _T("Style"))) return WINSET_STYLE;
+		if (!_tcsicmp(aBuf, _T("ExStyle"))) return WINSET_EXSTYLE;
+		if (!_tcsicmp(aBuf, _T("Redraw"))) return WINSET_REDRAW;
+		if (!_tcsicmp(aBuf, _T("Enable"))) return WINSET_ENABLE;
+		if (!_tcsicmp(aBuf, _T("Disable"))) return WINSET_DISABLE;
+		if (!_tcsicmp(aBuf, _T("Region"))) return WINSET_REGION;
 		return WINSET_INVALID;
 	}
 
 
-	static WinGetCmds ConvertWinGetCmd(char *aBuf)
+	static WinGetCmds ConvertWinGetCmd(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return WINGET_CMD_ID;  // If blank, return the default command.
-		if (!stricmp(aBuf, "ID")) return WINGET_CMD_ID;
-		if (!stricmp(aBuf, "IDLast")) return WINGET_CMD_IDLAST;
-		if (!stricmp(aBuf, "PID")) return WINGET_CMD_PID;
-		if (!stricmp(aBuf, "ProcessName")) return WINGET_CMD_PROCESSNAME;
-		if (!stricmp(aBuf, "Count")) return WINGET_CMD_COUNT;
-		if (!stricmp(aBuf, "List")) return WINGET_CMD_LIST;
-		if (!stricmp(aBuf, "MinMax")) return WINGET_CMD_MINMAX;
-		if (!stricmp(aBuf, "Style")) return WINGET_CMD_STYLE;
-		if (!stricmp(aBuf, "ExStyle")) return WINGET_CMD_EXSTYLE;
-		if (!stricmp(aBuf, "Transparent")) return WINGET_CMD_TRANSPARENT;
-		if (!stricmp(aBuf, "TransColor")) return WINGET_CMD_TRANSCOLOR;
-		if (!strnicmp(aBuf, "ControlList", 11))
+		if (!_tcsicmp(aBuf, _T("ID"))) return WINGET_CMD_ID;
+		if (!_tcsicmp(aBuf, _T("IDLast"))) return WINGET_CMD_IDLAST;
+		if (!_tcsicmp(aBuf, _T("PID"))) return WINGET_CMD_PID;
+		if (!_tcsicmp(aBuf, _T("ProcessName"))) return WINGET_CMD_PROCESSNAME;
+		if (!_tcsicmp(aBuf, _T("Count"))) return WINGET_CMD_COUNT;
+		if (!_tcsicmp(aBuf, _T("List"))) return WINGET_CMD_LIST;
+		if (!_tcsicmp(aBuf, _T("MinMax"))) return WINGET_CMD_MINMAX;
+		if (!_tcsicmp(aBuf, _T("Style"))) return WINGET_CMD_STYLE;
+		if (!_tcsicmp(aBuf, _T("ExStyle"))) return WINGET_CMD_EXSTYLE;
+		if (!_tcsicmp(aBuf, _T("Transparent"))) return WINGET_CMD_TRANSPARENT;
+		if (!_tcsicmp(aBuf, _T("TransColor"))) return WINGET_CMD_TRANSCOLOR;
+		if (!_tcsnicmp(aBuf, _T("ControlList"), 11))
 		{
 			aBuf += 11;
 			if (!*aBuf)
 				return WINGET_CMD_CONTROLLIST;
-			if (!stricmp(aBuf, "Hwnd"))
+			if (!_tcsicmp(aBuf, _T("Hwnd")))
 				return WINGET_CMD_CONTROLLISTHWND;
 			// Otherwise fall through to the below.
 		}
@@ -1577,86 +1577,86 @@ public:
 		return WINGET_CMD_INVALID;
 	}
 
-	static ToggleValueType ConvertOnOff(char *aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
+	static ToggleValueType ConvertOnOff(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, or blank.
 	{
 		if (!aBuf || !*aBuf) return NEUTRAL;
-		if (!stricmp(aBuf, "ON")) return TOGGLED_ON;
-		if (!stricmp(aBuf, "OFF")) return TOGGLED_OFF;
+		if (!_tcsicmp(aBuf, _T("ON"))) return TOGGLED_ON;
+		if (!_tcsicmp(aBuf, _T("OFF"))) return TOGGLED_OFF;
 		return aDefault;
 	}
 
-	static ToggleValueType ConvertOnOffAlways(char *aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
+	static ToggleValueType ConvertOnOffAlways(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, ALWAYSON, ALWAYSOFF, or blank.
 	{
 		if (!aBuf || !*aBuf) return NEUTRAL;
-		if (!stricmp(aBuf, "On")) return TOGGLED_ON;
-		if (!stricmp(aBuf, "Off")) return TOGGLED_OFF;
-		if (!stricmp(aBuf, "AlwaysOn")) return ALWAYS_ON;
-		if (!stricmp(aBuf, "AlwaysOff")) return ALWAYS_OFF;
+		if (!_tcsicmp(aBuf, _T("On"))) return TOGGLED_ON;
+		if (!_tcsicmp(aBuf, _T("Off"))) return TOGGLED_OFF;
+		if (!_tcsicmp(aBuf, _T("AlwaysOn"))) return ALWAYS_ON;
+		if (!_tcsicmp(aBuf, _T("AlwaysOff"))) return ALWAYS_OFF;
 		return aDefault;
 	}
 
-	static ToggleValueType ConvertOnOffToggle(char *aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
+	static ToggleValueType ConvertOnOffToggle(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, TOGGLE, or blank.
 	{
 		if (!aBuf || !*aBuf) return NEUTRAL;
-		if (!stricmp(aBuf, "On")) return TOGGLED_ON;
-		if (!stricmp(aBuf, "Off")) return TOGGLED_OFF;
-		if (!stricmp(aBuf, "Toggle")) return TOGGLE;
+		if (!_tcsicmp(aBuf, _T("On"))) return TOGGLED_ON;
+		if (!_tcsicmp(aBuf, _T("Off"))) return TOGGLED_OFF;
+		if (!_tcsicmp(aBuf, _T("Toggle"))) return TOGGLE;
 		return aDefault;
 	}
 
-	static StringCaseSenseType ConvertStringCaseSense(char *aBuf)
+	static StringCaseSenseType ConvertStringCaseSense(LPTSTR aBuf)
 	{
-		if (!stricmp(aBuf, "On")) return SCS_SENSITIVE;
-		if (!stricmp(aBuf, "Off")) return SCS_INSENSITIVE;
-		if (!stricmp(aBuf, "Locale")) return SCS_INSENSITIVE_LOCALE;
+		if (!_tcsicmp(aBuf, _T("On"))) return SCS_SENSITIVE;
+		if (!_tcsicmp(aBuf, _T("Off"))) return SCS_INSENSITIVE;
+		if (!_tcsicmp(aBuf, _T("Locale"))) return SCS_INSENSITIVE_LOCALE;
 		return SCS_INVALID;
 	}
 
-	static ToggleValueType ConvertOnOffTogglePermit(char *aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
+	static ToggleValueType ConvertOnOffTogglePermit(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, TOGGLE, PERMIT, or blank.
 	{
 		if (!aBuf || !*aBuf) return NEUTRAL;
-		if (!stricmp(aBuf, "On")) return TOGGLED_ON;
-		if (!stricmp(aBuf, "Off")) return TOGGLED_OFF;
-		if (!stricmp(aBuf, "Toggle")) return TOGGLE;
-		if (!stricmp(aBuf, "Permit")) return TOGGLE_PERMIT;
+		if (!_tcsicmp(aBuf, _T("On"))) return TOGGLED_ON;
+		if (!_tcsicmp(aBuf, _T("Off"))) return TOGGLED_OFF;
+		if (!_tcsicmp(aBuf, _T("Toggle"))) return TOGGLE;
+		if (!_tcsicmp(aBuf, _T("Permit"))) return TOGGLE_PERMIT;
 		return aDefault;
 	}
 
-	static ToggleValueType ConvertBlockInput(char *aBuf)
+	static ToggleValueType ConvertBlockInput(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return NEUTRAL;  // For backward compatibility, blank is not considered INVALID.
-		if (!stricmp(aBuf, "On")) return TOGGLED_ON;
-		if (!stricmp(aBuf, "Off")) return TOGGLED_OFF;
-		if (!stricmp(aBuf, "Send")) return TOGGLE_SEND;
-		if (!stricmp(aBuf, "Mouse")) return TOGGLE_MOUSE;
-		if (!stricmp(aBuf, "SendAndMouse")) return TOGGLE_SENDANDMOUSE;
-		if (!stricmp(aBuf, "Default")) return TOGGLE_DEFAULT;
-		if (!stricmp(aBuf, "MouseMove")) return TOGGLE_MOUSEMOVE;
-		if (!stricmp(aBuf, "MouseMoveOff")) return TOGGLE_MOUSEMOVEOFF;
+		if (!_tcsicmp(aBuf, _T("On"))) return TOGGLED_ON;
+		if (!_tcsicmp(aBuf, _T("Off"))) return TOGGLED_OFF;
+		if (!_tcsicmp(aBuf, _T("Send"))) return TOGGLE_SEND;
+		if (!_tcsicmp(aBuf, _T("Mouse"))) return TOGGLE_MOUSE;
+		if (!_tcsicmp(aBuf, _T("SendAndMouse"))) return TOGGLE_SENDANDMOUSE;
+		if (!_tcsicmp(aBuf, _T("Default"))) return TOGGLE_DEFAULT;
+		if (!_tcsicmp(aBuf, _T("MouseMove"))) return TOGGLE_MOUSEMOVE;
+		if (!_tcsicmp(aBuf, _T("MouseMoveOff"))) return TOGGLE_MOUSEMOVEOFF;
 		return TOGGLE_INVALID;
 	}
 
-	static SendModes ConvertSendMode(char *aBuf, SendModes aValueToReturnIfInvalid)
+	static SendModes ConvertSendMode(LPTSTR aBuf, SendModes aValueToReturnIfInvalid)
 	{
-		if (!stricmp(aBuf, "Play")) return SM_PLAY;
-		if (!stricmp(aBuf, "Event")) return SM_EVENT;
-		if (!strnicmp(aBuf, "Input", 5)) // This IF must be listed last so that it can fall through to bottom line.
+		if (!_tcsicmp(aBuf, _T("Play"))) return SM_PLAY;
+		if (!_tcsicmp(aBuf, _T("Event"))) return SM_EVENT;
+		if (!_tcsnicmp(aBuf, _T("Input"), 5)) // This IF must be listed last so that it can fall through to bottom line.
 		{
 			aBuf += 5;
-			if (!*aBuf || !stricmp(aBuf, "ThenEvent")) // "ThenEvent" is supported for backward compatibiltity with 1.0.43.00.
+			if (!*aBuf || !_tcsicmp(aBuf, _T("ThenEvent"))) // "ThenEvent" is supported for backward compatibiltity with 1.0.43.00.
 				return SM_INPUT;
-			if (!stricmp(aBuf, "ThenPlay"))
+			if (!_tcsicmp(aBuf, _T("ThenPlay")))
 				return SM_INPUT_FALLBACK_TO_PLAY;
 			//else fall through and return the indication of invalidity.
 		}
 		return aValueToReturnIfInvalid;
 	}
 
-	static FileLoopModeType ConvertLoopMode(char *aBuf)
+	static FileLoopModeType ConvertLoopMode(LPTSTR aBuf)
 	// Returns the file loop mode, or FILE_LOOP_INVALID if aBuf contains an invalid mode.
 	{
 		switch (ATOI(aBuf))
@@ -1669,88 +1669,88 @@ public:
 		return FILE_LOOP_INVALID;
 	}
 
-	static int ConvertMsgBoxResult(char *aBuf)
+	static int ConvertMsgBoxResult(LPTSTR aBuf)
 	// Returns the matching ID, or zero if none.
 	{
 		if (!aBuf || !*aBuf) return 0;
 		// Keeping the most oft-used ones up top helps perf. a little:
-		if (!stricmp(aBuf, "YES")) return IDYES;
-		if (!stricmp(aBuf, "NO")) return IDNO;
-		if (!stricmp(aBuf, "OK")) return IDOK;
-		if (!stricmp(aBuf, "CANCEL")) return IDCANCEL;
-		if (!stricmp(aBuf, "ABORT")) return IDABORT;
-		if (!stricmp(aBuf, "IGNORE")) return IDIGNORE;
-		if (!stricmp(aBuf, "RETRY")) return IDRETRY;
-		if (!stricmp(aBuf, "CONTINUE")) return IDCONTINUE; // v1.0.44.08: For use with 2000/XP's "Cancel/Try Again/Continue" MsgBox.
-		if (!stricmp(aBuf, "TRYAGAIN")) return IDTRYAGAIN; //
-		if (!stricmp(aBuf, "Timeout")) return AHK_TIMEOUT; // Our custom result value.
+		if (!_tcsicmp(aBuf, _T("YES"))) return IDYES;
+		if (!_tcsicmp(aBuf, _T("NO"))) return IDNO;
+		if (!_tcsicmp(aBuf, _T("OK"))) return IDOK;
+		if (!_tcsicmp(aBuf, _T("CANCEL"))) return IDCANCEL;
+		if (!_tcsicmp(aBuf, _T("ABORT"))) return IDABORT;
+		if (!_tcsicmp(aBuf, _T("IGNORE"))) return IDIGNORE;
+		if (!_tcsicmp(aBuf, _T("RETRY"))) return IDRETRY;
+		if (!_tcsicmp(aBuf, _T("CONTINUE"))) return IDCONTINUE; // v1.0.44.08: For use with 2000/XP's "Cancel/Try Again/Continue" MsgBox.
+		if (!_tcsicmp(aBuf, _T("TRYAGAIN"))) return IDTRYAGAIN; //
+		if (!_tcsicmp(aBuf, _T("Timeout"))) return AHK_TIMEOUT; // Our custom result value.
 		return 0;
 	}
 
-	static int ConvertRunMode(char *aBuf)
+	static int ConvertRunMode(LPTSTR aBuf)
 	// Returns the matching WinShow mode, or SW_SHOWNORMAL if none.
 	// These are also the modes that AutoIt3 uses.
 	{
 		// For v1.0.19, this was made more permissive (the use of strcasestr vs. stricmp) to support
 		// the optional word ErrorLevel inside this parameter:
 		if (!aBuf || !*aBuf) return SW_SHOWNORMAL;
-		if (strcasestr(aBuf, "MIN")) return SW_MINIMIZE;
-		if (strcasestr(aBuf, "MAX")) return SW_MAXIMIZE;
-		if (strcasestr(aBuf, "HIDE")) return SW_HIDE;
+		if (tcscasestr(aBuf, _T("MIN"))) return SW_MINIMIZE;
+		if (tcscasestr(aBuf, _T("MAX"))) return SW_MAXIMIZE;
+		if (tcscasestr(aBuf, _T("HIDE"))) return SW_HIDE;
 		return SW_SHOWNORMAL;
 	}
 
-	static int ConvertMouseButton(char *aBuf, bool aAllowWheel = true, bool aUseLogicalButton = false)
+	static int ConvertMouseButton(LPTSTR aBuf, bool aAllowWheel = true, bool aUseLogicalButton = false)
 	// Returns the matching VK, or zero if none.
 	{
-		if (!*aBuf || !stricmp(aBuf, "LEFT") || !stricmp(aBuf, "L"))
+		if (!*aBuf || !_tcsicmp(aBuf, _T("LEFT")) || !_tcsicmp(aBuf, _T("L")))
 			return aUseLogicalButton ? VK_LBUTTON_LOGICAL : VK_LBUTTON; // Some callers rely on this default when !*aBuf.
-		if (!stricmp(aBuf, "RIGHT") || !stricmp(aBuf, "R")) return aUseLogicalButton ? VK_RBUTTON_LOGICAL : VK_RBUTTON;
-		if (!stricmp(aBuf, "MIDDLE") || !stricmp(aBuf, "M")) return VK_MBUTTON;
-		if (!stricmp(aBuf, "X1")) return VK_XBUTTON1;
-		if (!stricmp(aBuf, "X2")) return VK_XBUTTON2;
+		if (!_tcsicmp(aBuf, _T("RIGHT")) || !_tcsicmp(aBuf, _T("R"))) return aUseLogicalButton ? VK_RBUTTON_LOGICAL : VK_RBUTTON;
+		if (!_tcsicmp(aBuf, _T("MIDDLE")) || !_tcsicmp(aBuf, _T("M"))) return VK_MBUTTON;
+		if (!_tcsicmp(aBuf, _T("X1"))) return VK_XBUTTON1;
+		if (!_tcsicmp(aBuf, _T("X2"))) return VK_XBUTTON2;
 		if (aAllowWheel)
 		{
-			if (!stricmp(aBuf, "WheelUp") || !stricmp(aBuf, "WU")) return VK_WHEEL_UP;
-			if (!stricmp(aBuf, "WheelDown") || !stricmp(aBuf, "WD")) return VK_WHEEL_DOWN;
+			if (!_tcsicmp(aBuf, _T("WheelUp")) || !_tcsicmp(aBuf, _T("WU"))) return VK_WHEEL_UP;
+			if (!_tcsicmp(aBuf, _T("WheelDown")) || !_tcsicmp(aBuf, _T("WD"))) return VK_WHEEL_DOWN;
 			// Lexikos: Support horizontal scrolling in Windows Vista and later.
-			if (!stricmp(aBuf, "WheelLeft") || !stricmp(aBuf, "WL")) return VK_WHEEL_LEFT;
-			if (!stricmp(aBuf, "WheelRight") || !stricmp(aBuf, "WR")) return VK_WHEEL_RIGHT;
+			if (!_tcsicmp(aBuf, _T("WheelLeft")) || !_tcsicmp(aBuf, _T("WL"))) return VK_WHEEL_LEFT;
+			if (!_tcsicmp(aBuf, _T("WheelRight")) || !_tcsicmp(aBuf, _T("WR"))) return VK_WHEEL_RIGHT;
 		}
 		return 0;
 	}
 
-	static CoordModeAttribType ConvertCoordModeAttrib(char *aBuf)
+	static CoordModeAttribType ConvertCoordModeAttrib(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return 0;
-		if (!stricmp(aBuf, "Pixel")) return COORD_MODE_PIXEL;
-		if (!stricmp(aBuf, "Mouse")) return COORD_MODE_MOUSE;
-		if (!stricmp(aBuf, "ToolTip")) return COORD_MODE_TOOLTIP;
-		if (!stricmp(aBuf, "Caret")) return COORD_MODE_CARET;
-		if (!stricmp(aBuf, "Menu")) return COORD_MODE_MENU;
+		if (!_tcsicmp(aBuf, _T("Pixel"))) return COORD_MODE_PIXEL;
+		if (!_tcsicmp(aBuf, _T("Mouse"))) return COORD_MODE_MOUSE;
+		if (!_tcsicmp(aBuf, _T("ToolTip"))) return COORD_MODE_TOOLTIP;
+		if (!_tcsicmp(aBuf, _T("Caret"))) return COORD_MODE_CARET;
+		if (!_tcsicmp(aBuf, _T("Menu"))) return COORD_MODE_MENU;
 		return 0;
 	}
 
-	static VariableTypeType ConvertVariableTypeName(char *aBuf)
+	static VariableTypeType ConvertVariableTypeName(LPTSTR aBuf)
 	// Returns the matching type, or zero if none.
 	{
 		if (!aBuf || !*aBuf) return VAR_TYPE_INVALID;
-		if (!stricmp(aBuf, "Integer")) return VAR_TYPE_INTEGER;
-		if (!stricmp(aBuf, "Float")) return VAR_TYPE_FLOAT;
-		if (!stricmp(aBuf, "Number")) return VAR_TYPE_NUMBER;
-		if (!stricmp(aBuf, "Time")) return VAR_TYPE_TIME;
-		if (!stricmp(aBuf, "Date")) return VAR_TYPE_TIME;  // "date" is just an alias for "time".
-		if (!stricmp(aBuf, "Digit")) return VAR_TYPE_DIGIT;
-		if (!stricmp(aBuf, "Xdigit")) return VAR_TYPE_XDIGIT;
-		if (!stricmp(aBuf, "Alnum")) return VAR_TYPE_ALNUM;
-		if (!stricmp(aBuf, "Alpha")) return VAR_TYPE_ALPHA;
-		if (!stricmp(aBuf, "Upper")) return VAR_TYPE_UPPER;
-		if (!stricmp(aBuf, "Lower")) return VAR_TYPE_LOWER;
-		if (!stricmp(aBuf, "Space")) return VAR_TYPE_SPACE;
+		if (!_tcsicmp(aBuf, _T("Integer"))) return VAR_TYPE_INTEGER;
+		if (!_tcsicmp(aBuf, _T("Float"))) return VAR_TYPE_FLOAT;
+		if (!_tcsicmp(aBuf, _T("Number"))) return VAR_TYPE_NUMBER;
+		if (!_tcsicmp(aBuf, _T("Time"))) return VAR_TYPE_TIME;
+		if (!_tcsicmp(aBuf, _T("Date"))) return VAR_TYPE_TIME;  // "date" is just an alias for "time".
+		if (!_tcsicmp(aBuf, _T("Digit"))) return VAR_TYPE_DIGIT;
+		if (!_tcsicmp(aBuf, _T("Xdigit"))) return VAR_TYPE_XDIGIT;
+		if (!_tcsicmp(aBuf, _T("Alnum"))) return VAR_TYPE_ALNUM;
+		if (!_tcsicmp(aBuf, _T("Alpha"))) return VAR_TYPE_ALPHA;
+		if (!_tcsicmp(aBuf, _T("Upper"))) return VAR_TYPE_UPPER;
+		if (!_tcsicmp(aBuf, _T("Lower"))) return VAR_TYPE_LOWER;
+		if (!_tcsicmp(aBuf, _T("Space"))) return VAR_TYPE_SPACE;
 		return VAR_TYPE_INVALID;
 	}
 
-	static ResultType ValidateMouseCoords(char *aX, char *aY)
+	static ResultType ValidateMouseCoords(LPTSTR aX, LPTSTR aY)
 	{
 		// OK: Both are absent, which is the signal to use the current position.
 		// OK: Both are present (that they are numeric is validated elsewhere).
@@ -1758,18 +1758,18 @@ public:
 		return (!*aX && !*aY) || (*aX && *aY) ? OK : FAIL;
 	}
 
-	static char *LogToText(char *aBuf, int aBufSize);
-	char *VicinityToText(char *aBuf, int aBufSize);
-	char *ToText(char *aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false);
+	static LPTSTR LogToText(LPTSTR aBuf, int aBufSize);
+	LPTSTR VicinityToText(LPTSTR aBuf, int aBufSize);
+	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false);
 
 	static void ToggleSuspendState();
 	static void PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause);
 	ResultType ChangePauseState(ToggleValueType aChangeTo, bool aAlwaysOperateOnUnderlyingThread);
 	static ResultType ScriptBlockInput(bool aEnable);
 
-	Line *PreparseError(char *aErrorText, char *aExtraInfo = "");
+	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
-	ResultType LineError(char *aErrorText, ResultType aErrorType = FAIL, char *aExtraInfo = "");
+	ResultType LineError(LPTSTR aErrorText, ResultType aErrorType = FAIL, LPTSTR aExtraInfo = _T(""));
 
 	Line(FileIndexType aFileIndex, LineNumberType aFileLineNumber, ActionTypeType aActionType
 		, ArgStruct aArg[], ArgCountType aArgc) // Constructor
@@ -1777,23 +1777,25 @@ public:
 		, mAttribute(ATTR_NONE), mArgc(aArgc), mArg(aArg)
 		, mPrevLine(NULL), mNextLine(NULL), mRelatedLine(NULL), mParentLine(NULL)
 		{}
+	CHECK_UNICODE
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	CHECK_UNICODE
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}  // Intentionally does nothing because we're using SimpleHeap for everything.
 	void operator delete[](void *aPtr) {}
 
 	// AutoIt3 functions:
-	static bool Util_CopyDir(const char *szInputSource, const char *szInputDest, bool bOverwrite);
-	static bool Util_MoveDir(const char *szInputSource, const char *szInputDest, int OverwriteMode);
-	static bool Util_RemoveDir(const char *szInputSource, bool bRecurse);
-	static int Util_CopyFile(const char *szInputSource, const char *szInputDest, bool bOverwrite, bool bMove);
-	static void Util_ExpandFilenameWildcard(const char *szSource, const char *szDest, char *szExpandedDest);
-	static void Util_ExpandFilenameWildcardPart(const char *szSource, const char *szDest, char *szExpandedDest);
-	static bool Util_CreateDir(const char *szDirName);
-	static bool Util_DoesFileExist(const char *szFilename);
-	static bool Util_IsDir(const char *szPath);
-	static void Util_GetFullPathName(const char *szIn, char *szOut);
-	static bool Util_IsDifferentVolumes(const char *szPath1, const char *szPath2);
+	static bool Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite);
+	static bool Util_MoveDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int OverwriteMode);
+	static bool Util_RemoveDir(LPCTSTR szInputSource, bool bRecurse);
+	static int Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite, bool bMove);
+	static void Util_ExpandFilenameWildcard(LPCTSTR szSource, LPCTSTR szDest, LPTSTR szExpandedDest);
+	static void Util_ExpandFilenameWildcardPart(LPCTSTR szSource, LPCTSTR szDest, LPTSTR szExpandedDest);
+	static bool Util_CreateDir(LPCTSTR szDirName);
+	static bool Util_DoesFileExist(LPCTSTR szFilename);
+	static bool Util_IsDir(LPCTSTR szPath);
+	static void Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut);
+	static bool Util_IsDifferentVolumes(LPCTSTR szPath1, LPCTSTR szPath2);
 };
 
 
@@ -1801,7 +1803,7 @@ public:
 class Label
 {
 public:
-	char *mName;
+	LPTSTR mName;
 	Line *mJumpToLine;
 	Label *mPrevLabel, *mNextLabel;  // Prev & Next items in linked list.
 
@@ -1811,7 +1813,7 @@ public:
 		// being suspended themselves except when their first parameter is the literal
 		// word "on":
 		return mJumpToLine->mActionType == ACT_SUSPEND && (!mJumpToLine->mArgc || mJumpToLine->ArgHasDeref(1)
-			|| stricmp(mJumpToLine->mArg[0].text, "On"));
+			|| _tcsicmp(mJumpToLine->mArg[0].text, _T("On")));
 	}
 
 	ResultType Execute()
@@ -1827,12 +1829,14 @@ public:
 		return result;
 	}
 
-	Label(char *aLabelName)
+	Label(LPTSTR aLabelName)
 		: mName(aLabelName) // Caller gave us a pointer to dynamic memory for this (or an empty string in the case of mPlaceholderLabel).
 		, mJumpToLine(NULL)
 		, mPrevLabel(NULL), mNextLabel(NULL)
 	{}
+	CHECK_UNICODE
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	CHECK_UNICODE
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
@@ -1846,7 +1850,7 @@ struct FuncParam
 	Var *var;
 	WORD is_byref; // Boolean, but defined as WORD in case it helps data alignment and/or performance (BOOL vs. WORD didn't help benchmarks).
 	WORD default_type;
-	union {char *default_str; __int64 default_int64; double default_double;};
+	union {LPTSTR default_str; __int64 default_int64; double default_double;};
 };
 
 typedef void (* BuiltInFunctionType)(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
@@ -1854,7 +1858,7 @@ typedef void (* BuiltInFunctionType)(ExprTokenType &aResultToken, ExprTokenType 
 class Func
 {
 public:
-	char *mName;
+	LPTSTR mName;
 	union {BuiltInFunctionType mBIF; Line *mJumpToLine;};
 	FuncParam *mParam;  // Will hold an array of FuncParams.
 	int mParamCount; // The number of items in the above array.  This is also the function's maximum number of params.
@@ -1876,9 +1880,9 @@ public:
 	// override in the script.  So mIsBuiltIn should always be used to determine whether the function
 	// is truly built-in, not its name.
 
-	ResultType Call(char *&aReturnValue) // Making this a function vs. inline doesn't measurably impact performance.
+	ResultType Call(LPTSTR &aReturnValue) // Making this a function vs. inline doesn't measurably impact performance.
 	{
-		aReturnValue = ""; // Init to default in case function doesn't return a value or it EXITs or fails.
+		aReturnValue = _T(""); // Init to default in case function doesn't return a value or it EXITs or fails.
 		// Launch the function similar to Gosub (i.e. not as a new quasi-thread):
 		// The performance gain of conditionally passing NULL in place of result (when this is the
 		// outermost function call of a line consisting only of function calls, namely ACT_EXPRESSION)
@@ -1917,7 +1921,7 @@ public:
 		return result;
 	}
 
-	Func(char *aFuncName, bool aIsBuiltIn) // Constructor.
+	Func(LPTSTR aFuncName, bool aIsBuiltIn) // Constructor.
 		: mName(aFuncName) // Caller gave us a pointer to dynamic memory for this.
 		, mBIF(NULL)
 		, mParam(NULL), mParamCount(0), mMinParams(0)
@@ -1926,7 +1930,9 @@ public:
 		, mDefaultVarType(VAR_DECLARE_NONE)
 		, mIsBuiltIn(aIsBuiltIn)
 	{}
+	CHECK_UNICODE
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	CHECK_UNICODE
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
@@ -1952,7 +1958,9 @@ public:
 		, mExistingThreads(0), mTimeLastRun(0)
 		, mEnabled(false), mRunOnlyOnce(false), mNextTimer(NULL)  // Note that mEnabled must default to false for the counts to be right.
 	{}
+	CHECK_UNICODE
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	CHECK_UNICODE
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
@@ -1976,7 +1984,7 @@ class UserMenuItem;  // Forward declaration since classes use each other (i.e. a
 class UserMenu
 {
 public:
-	char *mName;  // Dynamically allocated.
+	LPTSTR mName;  // Dynamically allocated.
 	UserMenuItem *mFirstMenuItem, *mLastMenuItem, *mDefault;
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
@@ -1992,7 +2000,7 @@ public:
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
 
-	UserMenu(char *aName) // Constructor
+	UserMenu(LPTSTR aName) // Constructor
 		: mName(aName), mFirstMenuItem(NULL), mLastMenuItem(NULL), mDefault(NULL)
 		, mIncludeStandardItems(false), mClickCount(2), mMenuItemCount(0), mNextMenu(NULL), mMenu(NULL)
 		, mMenuType(MENU_TYPE_POPUP) // The MENU_TYPE_NONE flag is not used in this context.  Default = POPUP.
@@ -2000,13 +2008,13 @@ public:
 	{
 	}
 
-	ResultType AddItem(char *aName, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, char *aOptions);
+	ResultType AddItem(LPTSTR aName, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, LPTSTR aOptions);
 	ResultType DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev);
 	ResultType DeleteAllItems();
-	ResultType ModifyItem(UserMenuItem *aMenuItem, Label *aLabel, UserMenu *aSubmenu, char *aOptions);
-	void UpdateOptions(UserMenuItem *aMenuItem, char *aOptions);
-	ResultType RenameItem(UserMenuItem *aMenuItem, char *aNewName);
-	ResultType UpdateName(UserMenuItem *aMenuItem, char *aNewName);
+	ResultType ModifyItem(UserMenuItem *aMenuItem, Label *aLabel, UserMenu *aSubmenu, LPTSTR aOptions);
+	void UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions);
+	ResultType RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName);
+	ResultType UpdateName(UserMenuItem *aMenuItem, LPTSTR aNewName);
 	ResultType CheckItem(UserMenuItem *aMenuItem);
 	ResultType UncheckItem(UserMenuItem *aMenuItem);
 	ResultType ToggleCheckItem(UserMenuItem *aMenuItem);
@@ -2017,13 +2025,13 @@ public:
 	ResultType IncludeStandardItems();
 	ResultType ExcludeStandardItems();
 	ResultType Create(MenuTypeType aMenuType = MENU_TYPE_NONE); // NONE means UNSPECIFIED in this context.
-	void SetColor(char *aColorName, bool aApplyToSubmenus);
+	void SetColor(LPTSTR aColorName, bool aApplyToSubmenus);
 	void ApplyColor(bool aApplyToSubmenus);
 	ResultType AppendStandardItems();
 	ResultType Destroy();
 	ResultType Display(bool aForceToForeground = true, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED);
 	UINT GetSubmenuPos(HMENU ahMenu);
-	UINT GetItemPos(char *aMenuItemName);
+	UINT GetItemPos(LPTSTR aMenuItemName);
 	bool ContainsMenu(UserMenu *aMenu);
 };
 
@@ -2032,7 +2040,7 @@ public:
 class UserMenuItem
 {
 public:
-	char *mName;  // Dynamically allocated.
+	LPTSTR mName;  // Dynamically allocated.
 	size_t mNameCapacity;
 	UINT mMenuID;
 	Label *mLabel;
@@ -2045,7 +2053,7 @@ public:
 	UserMenuItem *mNextMenuItem;  // Next item in linked list
 
 	// Constructor:
-	UserMenuItem(char *aName, size_t aNameCapacity, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, UserMenu *aMenu);
+	UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, UserMenu *aMenu);
 
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
@@ -2056,7 +2064,7 @@ public:
 struct FontType
 {
 	#define MAX_FONT_NAME_LENGTH 63  // Longest name I've seen is 29 chars, "Franklin Gothic Medium Italic". Anyway, there's protection against overflow.
-	char name[MAX_FONT_NAME_LENGTH + 1];
+	TCHAR name[MAX_FONT_NAME_LENGTH + 1];
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
 	bool italic;
@@ -2154,7 +2162,7 @@ struct GuiControlOptionsType
 	SYSTEMTIME sys_time_range[2];
 	DWORD gdtr, gdtr_range; // Used in connection with sys_time and sys_time_range.
 	ResultType redraw;  // Whether the state of WM_REDRAW should be changed.
-	char password_char; // When zeroed, indicates "use default password" for an edit control with the password style.
+	TCHAR password_char; // When zeroed, indicates "use default password" for an edit control with the password style.
 	bool range_changed;
 	bool color_changed; // To discern when a control has been put back to the default color. [v1.0.26]
 	bool start_new_section;
@@ -2191,7 +2199,7 @@ public:
 	bool mInRadioGroup; // Whether the control currently being created is inside a prior radio-group.
 	bool mUseTheme;  // Whether XP theme and styles should be applied to the parent window and subsequently added controls.
 	HWND mOwner;  // The window that owns this one, if any.  Note that Windows provides no way to change owners after window creation.
-	char mDelimiter;  // The default field delimiter when adding items to ListBox, DropDownList, ListView, etc.
+	TCHAR mDelimiter;  // The default field delimiter when adding items to ListBox, DropDownList, ListView, etc.
 	int mCurrentFontIndex;
 	GuiControlType *mCurrentListView, *mCurrentTreeView; // The ListView and TreeView upon which the LV/TV functions operate.
 	TabControlIndexType mTabControlCount;
@@ -2263,27 +2271,27 @@ public:
 	static ResultType Destroy(GuiIndexType aWindowIndex);
 	static void DestroyIconIfUnused(HICON ahIcon);
 	ResultType Create();
-	void SetLabels(char *aLabelPrefix);
+	void SetLabels(LPTSTR aLabelPrefix);
 	static void UpdateMenuBars(HMENU aMenu);
-	ResultType AddControl(GuiControls aControlType, char *aOptions, char *aText);
+	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText);
 
-	ResultType ParseOptions(char *aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs);
+	ResultType ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs);
 	void GetNonClientArea(LONG &aWidth, LONG &aHeight);
 	void GetTotalWidthAndHeight(LONG &aWidth, LONG &aHeight);
 
-	ResultType ControlParseOptions(char *aOptions, GuiControlOptionsType &aOpt, GuiControlType &aControl
+	ResultType ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &aOpt, GuiControlType &aControl
 		, GuiIndexType aControlIndex = -1); // aControlIndex is not needed upon control creation.
 	void ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aControl);
-	void ControlAddContents(GuiControlType &aControl, char *aContent, int aChoice, GuiControlOptionsType *aOpt = NULL);
-	ResultType Show(char *aOptions, char *aTitle);
+	void ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt = NULL);
+	ResultType Show(LPTSTR aOptions, LPTSTR aTitle);
 	ResultType Clear();
 	ResultType Cancel();
 	ResultType Close(); // Due to SC_CLOSE, etc.
 	ResultType Escape(); // Similar to close, except typically called when the user presses ESCAPE.
 	ResultType Submit(bool aHideIt);
-	ResultType ControlGetContents(Var &aOutputVar, GuiControlType &aControl, char *aMode = "");
+	ResultType ControlGetContents(Var &aOutputVar, GuiControlType &aControl, LPTSTR aMode = _T(""));
 
-	static VarSizeType ControlGetName(GuiIndexType aGuiWindowIndex, GuiIndexType aControlIndex, char *aBuf);
+	static VarSizeType ControlGetName(GuiIndexType aGuiWindowIndex, GuiIndexType aControlIndex, LPTSTR aBuf);
 	static GuiType *FindGui(HWND aHwnd) // Find which GUI object owns the specified window.
 	{
 		#define EXTERN_GUI extern GuiType *g_gui[MAX_GUI_WINDOWS]
@@ -2308,7 +2316,7 @@ public:
 	}
 
 
-	GuiIndexType FindControl(char *aControlID);
+	GuiIndexType FindControl(LPTSTR aControlID);
 	GuiControlType *FindControl(HWND aHwnd, bool aRetrieveIndexInstead = false)
 	{
 		GuiIndexType index = GUI_HWND_TO_INDEX(aHwnd); // Retrieves a small negative on failure, which will be out of bounds when converted to unsigned.
@@ -2327,15 +2335,15 @@ public:
 	}
 	int FindGroup(GuiIndexType aControlIndex, GuiIndexType &aGroupStart, GuiIndexType &aGroupEnd);
 
-	ResultType SetCurrentFont(char *aOptions, char *aFontName);
-	static int FindOrCreateFont(char *aOptions = "", char *aFontName = "", FontType *aFoundationFont = NULL
+	ResultType SetCurrentFont(LPTSTR aOptions, LPTSTR aFontName);
+	static int FindOrCreateFont(LPTSTR aOptions = _T(""), LPTSTR aFontName = _T(""), FontType *aFoundationFont = NULL
 		, COLORREF *aColor = NULL);
 	static int FindFont(FontType &aFont);
 
 	void Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEvent = GUI_EVENT_NONE, UINT aEventInfo = 0);
 
-	static WORD TextToHotkey(char *aText);
-	static char *HotkeyToText(WORD aHotkey, char *aBuf);
+	static WORD TextToHotkey(LPTSTR aText);
+	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
 	void ControlCheckRadioButton(GuiControlType &aControl, GuiIndexType aControlIndex, WPARAM aCheckType);
 	void ControlSetUpDownOptions(GuiControlType &aControl, GuiControlOptionsType &aOpt);
 	int ControlGetDefaultSliderThickness(DWORD aStyle, int aThumbThickness);
@@ -2348,13 +2356,13 @@ public:
 
 	void ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFirstControl);
 	GuiControlType *FindTabControl(TabControlIndexType aTabControlIndex);
-	int FindTabIndexByName(GuiControlType &aTabControl, char *aName, bool aExactMatch = false);
+	int FindTabIndexByName(GuiControlType &aTabControl, LPTSTR aName, bool aExactMatch = false);
 	int GetControlCountOnTabPage(TabControlIndexType aTabControlIndex, TabIndexType aTabIndex);
 	POINT GetPositionOfTabClientArea(GuiControlType &aTabControl);
 	ResultType SelectAdjacentTab(GuiControlType &aTabControl, bool aMoveToRight, bool aFocusFirstControl
 		, bool aWrapAround);
 	void ControlGetPosOfFocusedItem(GuiControlType &aControl, POINT &aPoint);
-	static void LV_Sort(GuiControlType &aControl, int aColumnIndex, bool aSortOnlyIfEnabled, char aForceDirection = '\0');
+	static void LV_Sort(GuiControlType &aControl, int aColumnIndex, bool aSortOnlyIfEnabled, TCHAR aForceDirection = '\0');
 	static DWORD ControlGetListViewMode(HWND aWnd);
 };
 
@@ -2386,30 +2394,30 @@ private:
 	bool mNoHotkeyLabels;
 	bool mMenuUseErrorLevel;  // Whether runtime errors should be displayed by the Menu command, vs. ErrorLevel.
 
-	#define UPDATE_TIP_FIELD strlcpy(mNIC.szTip, (mTrayIconTip && *mTrayIconTip) ? mTrayIconTip \
-		: (mFileName ? mFileName : NAME_P), sizeof(mNIC.szTip));
+	#define UPDATE_TIP_FIELD tcslcpy(mNIC.szTip, (mTrayIconTip && *mTrayIconTip) ? mTrayIconTip \
+		: (mFileName ? mFileName : NAME_P), _countof(mNIC.szTip));
 	NOTIFYICONDATA mNIC; // For ease of adding and deleting our tray icon.
 
 #ifdef AUTOHOTKEYSC
 	#define CloseAndReturnFail(fp, aBuf) CloseAndReturnFailFunc(fp, aBuf)
 	ResultType CloseAndReturnFailFunc(HS_EXEArc_Read *fp, UCHAR *aBuf);
-	size_t GetLine(char *aBuf, int aMaxCharsToRead, int aInContinuationSection, UCHAR *&aMemFile);
+	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, UCHAR *&aMemFile);
 #else
 	#define CloseAndReturnFail(fp, aBuf) CloseAndReturnFailFunc(fp)
 	ResultType CloseAndReturnFailFunc(FILE *fp);
-	size_t GetLine(char *aBuf, int aMaxCharsToRead, int aInContinuationSection, FILE *fp);
+	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, FILE *fp);
 #endif
-	ResultType IsDirective(char *aBuf);
+	ResultType IsDirective(LPTSTR aBuf);
 
-	ResultType ParseAndAddLine(char *aLineText, ActionTypeType aActionType = ACT_INVALID
-		, ActionTypeType aOldActionType = OLD_INVALID, char *aActionName = NULL
-		, char *aEndMarker = NULL, char *aLiteralMap = NULL, size_t aLiteralMapLength = 0);
-	ResultType ParseDerefs(char *aArgText, char *aArgMap, DerefType *aDeref, int &aDerefCount);
-	char *ParseActionType(char *aBufTarget, char *aBufSource, bool aDisplayErrors);
-	static ActionTypeType ConvertActionType(char *aActionTypeString);
-	static ActionTypeType ConvertOldActionType(char *aActionTypeString);
-	ResultType AddLabel(char *aLabelName, bool aAllowDupe);
-	ResultType AddLine(ActionTypeType aActionType, char *aArg[] = NULL, ArgCountType aArgc = 0, char *aArgMap[] = NULL);
+	ResultType ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType = ACT_INVALID
+		, ActionTypeType aOldActionType = OLD_INVALID, LPTSTR aActionName = NULL
+		, LPTSTR aEndMarker = NULL, LPTSTR aLiteralMap = NULL, size_t aLiteralMapLength = 0);
+	ResultType ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount);
+	LPTSTR ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool aDisplayErrors);
+	static ActionTypeType ConvertActionType(LPTSTR aActionTypeString);
+	static ActionTypeType ConvertOldActionType(LPTSTR aActionTypeString);
+	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
+	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, ArgCountType aArgc = 0, LPTSTR aArgMap[] = NULL);
 
 	// These aren't in the Line class because I think they're easier to implement
 	// if aStartingLine is allowed to be NULL (for recursive calls).  If they
@@ -2423,9 +2431,9 @@ private:
 public:
 	Line *mCurrLine;     // Seems better to make this public than make Line our friend.
 	Label *mPlaceholderLabel; // Used in place of a NULL label to simplify code.
-	char mThisMenuItemName[MAX_MENU_NAME_LENGTH + 1];
-	char mThisMenuName[MAX_MENU_NAME_LENGTH + 1];
-	char *mThisHotkeyName, *mPriorHotkeyName;
+	TCHAR mThisMenuItemName[MAX_MENU_NAME_LENGTH + 1];
+	TCHAR mThisMenuName[MAX_MENU_NAME_LENGTH + 1];
+	LPTSTR mThisHotkeyName, *mPriorHotkeyName;
 	HWND mNextClipboardViewer;
 	bool mOnClipboardChangeIsRunning;
 	Label *mOnClipboardChangeLabel, *mOnExitLabel;  // The label to run when the script terminates (NULL if none).
@@ -2438,14 +2446,14 @@ public:
 	UINT mMenuCount;
 
 	DWORD mThisHotkeyStartTime, mPriorHotkeyStartTime;  // Tickcount timestamp of when its subroutine began.
-	char mEndChar;  // The ending character pressed to trigger the most recent non-auto-replace hotstring.
+	TCHAR mEndChar;  // The ending character pressed to trigger the most recent non-auto-replace hotstring.
 	modLR_type mThisHotkeyModifiersLR;
-	char *mFileSpec; // Will hold the full filespec, for convenience.
-	char *mFileDir;  // Will hold the directory containing the script file.
-	char *mFileName; // Will hold the script's naked file name.
-	char *mOurEXE; // Will hold this app's module name (e.g. C:\Program Files\AutoHotkey\AutoHotkey.exe).
-	char *mOurEXEDir;  // Same as above but just the containing diretory (for convenience).
-	char *mMainWindowTitle; // Will hold our main window's title, for consistency & convenience.
+	LPTSTR mFileSpec; // Will hold the full filespec, for convenience.
+	LPTSTR mFileDir;  // Will hold the directory containing the script file.
+	LPTSTR mFileName; // Will hold the script's naked file name.
+	LPTSTR mOurEXE; // Will hold this app's module name (e.g. C:\Program Files\AutoHotkey\AutoHotkey.exe).
+	LPTSTR mOurEXEDir;  // Same as above but just the containing diretory (for convenience).
+	LPTSTR mMainWindowTitle; // Will hold our main window's title, for consistency & convenience.
 	bool mIsReadyToExecute;
 	bool mAutoExecSectionIsRunning;
 	bool mIsRestart; // The app is restarting rather than starting from scratch.
@@ -2466,14 +2474,14 @@ public:
 	WCHAR *mRunAsUser, *mRunAsPass, *mRunAsDomain; // Memory is allocated at runtime, upon first use.
 
 	HICON mCustomIcon;  // NULL unless the script has loaded a custom icon during its runtime.
-	char *mCustomIconFile; // Filename of icon.  Allocated on first use.
+	LPTSTR mCustomIconFile; // Filename of icon.  Allocated on first use.
 	bool mIconFrozen; // If true, the icon does not change state when the state of pause or suspend changes.
-	char *mTrayIconTip;  // Custom tip text for tray icon.  Allocated on first use.
+	LPTSTR mTrayIconTip;  // Custom tip text for tray icon.  Allocated on first use.
 	UINT mCustomIconNumber; // The number of the icon inside the above file.
 
 	UserMenu *mTrayMenu; // Our tray menu, which should be destroyed upon exiting the program.
     
-	ResultType Init(global_struct &g, char *aScriptFilename, bool aIsRestart);
+	ResultType Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestart);
 	ResultType CreateWindows();
 	void EnableOrDisableViewMenuItems(HMENU aMenu, UINT aFlags);
 	void CreateTrayIcon();
@@ -2481,52 +2489,52 @@ public:
 	ResultType AutoExecSection();
 	ResultType Edit();
 	ResultType Reload(bool aDisplayErrors);
-	ResultType ExitApp(ExitReasons aExitReason, char *aBuf = NULL, int ExitCode = 0);
+	ResultType ExitApp(ExitReasons aExitReason, LPTSTR aBuf = NULL, int ExitCode = 0);
 	void TerminateApp(int aExitCode);
 #ifdef AUTOHOTKEYSC
 	LineNumberType LoadFromFile();
 #else
 	LineNumberType LoadFromFile(bool aScriptWasNotspecified);
 #endif
-	ResultType LoadIncludedFile(char *aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
-	ResultType UpdateOrCreateTimer(Label *aLabel, char *aPeriod, char *aPriority, bool aEnable
+	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
+	ResultType UpdateOrCreateTimer(Label *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
 		, bool aUpdatePriorityOnly);
 
-	ResultType DefineFunc(char *aBuf, Var *aFuncExceptionVar[]);
+	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[]);
 #ifndef AUTOHOTKEYSC
-	Func *FindFuncInLibrary(char *aFuncName, size_t aFuncNameLength, bool &aErrorWasShown);
+	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown);
 #endif
-	Func *FindFunc(char *aFuncName, size_t aFuncNameLength = 0);
-	Func *AddFunc(char *aFuncName, size_t aFuncNameLength, bool aIsBuiltIn);
+	Func *FindFunc(LPTSTR aFuncName, size_t aFuncNameLength = 0);
+	Func *AddFunc(LPTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn);
 
 	#define ALWAYS_USE_DEFAULT  0
 	#define ALWAYS_USE_GLOBAL   1
 	#define ALWAYS_USE_LOCAL    2
 	#define ALWAYS_PREFER_LOCAL 3
-	Var *FindOrAddVar(char *aVarName, size_t aVarNameLength = 0, int aAlwaysUse = ALWAYS_USE_DEFAULT
+	Var *FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength = 0, int aAlwaysUse = ALWAYS_USE_DEFAULT
 		, bool *apIsException = NULL);
-	Var *FindVar(char *aVarName, size_t aVarNameLength = 0, int *apInsertPos = NULL
+	Var *FindVar(LPTSTR aVarName, size_t aVarNameLength = 0, int *apInsertPos = NULL
 		, int aAlwaysUse = ALWAYS_USE_DEFAULT, bool *apIsException = NULL
 		, bool *apIsLocal = NULL);
-	Var *AddVar(char *aVarName, size_t aVarNameLength, int aInsertPos, int aIsLocal);
-	static void *GetVarType(char *aVarName);
+	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aIsLocal);
+	static void *GetVarType(LPTSTR aVarName);
 
-	WinGroup *FindGroup(char *aGroupName, bool aCreateIfNotFound = false);
-	ResultType AddGroup(char *aGroupName);
-	Label *FindLabel(char *aLabelName);
+	WinGroup *FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound = false);
+	ResultType AddGroup(LPTSTR aGroupName);
+	Label *FindLabel(LPTSTR aLabelName);
 
-	ResultType DoRunAs(char *aCommandLine, char *aWorkingDir, bool aDisplayErrors, bool aUpdateLastError, WORD aShowWindow
-		, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, char *aSystemErrorText);
-	ResultType ActionExec(char *aAction, char *aParams = NULL, char *aWorkingDir = NULL
-		, bool aDisplayErrors = true, char *aRunShowMode = NULL, HANDLE *aProcess = NULL
+	ResultType DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, bool aUpdateLastError, WORD aShowWindow
+		, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, LPTSTR aSystemErrorText);
+	ResultType ActionExec(LPTSTR aAction, LPTSTR aParams = NULL, LPTSTR aWorkingDir = NULL
+		, bool aDisplayErrors = true, LPTSTR aRunShowMode = NULL, HANDLE *aProcess = NULL
 		, bool aUpdateLastError = false, bool aUseRunAs = false, Var *aOutputVar = NULL);
 
-	char *ListVars(char *aBuf, int aBufSize);
-	char *ListKeyHistory(char *aBuf, int aBufSize);
+	LPTSTR ListVars(LPTSTR aBuf, int aBufSize);
+	LPTSTR ListKeyHistory(LPTSTR aBuf, int aBufSize);
 
-	ResultType PerformMenu(char *aMenu, char *aCommand, char *aParam3, char *aParam4, char *aOptions);
-	UserMenu *FindMenu(char *aMenuName);
-	UserMenu *AddMenu(char *aMenuName);
+	ResultType PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions);
+	UserMenu *FindMenu(LPTSTR aMenuName);
+	UserMenu *AddMenu(LPTSTR aMenuName);
 	ResultType ScriptDeleteMenu(UserMenu *aMenu);
 	UserMenuItem *FindMenuItemByID(UINT aID)
 	{
@@ -2538,12 +2546,12 @@ public:
 		return NULL;
 	}
 
-	ResultType PerformGui(char *aCommand, char *aControlType, char *aOptions, char *aParam4);
+	ResultType PerformGui(LPTSTR aCommand, LPTSTR aControlType, LPTSTR aOptions, LPTSTR aParam4);
 
 	// Call this SciptError to avoid confusion with Line's error-displaying functions:
-	ResultType ScriptError(char *aErrorText, char *aExtraInfo = ""); // , ResultType aErrorType = FAIL);
+	ResultType ScriptError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T("")); // , ResultType aErrorType = FAIL);
 
-	#define SOUNDPLAY_ALIAS "AHK_PlayMe"  // Used by destructor and SoundPlay().
+	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
 
 	Script();
 	~Script();
@@ -2559,99 +2567,99 @@ public:
 ////////////////////////
 // BUILT-IN VARIABLES //
 ////////////////////////
-VarSizeType BIV_True_False(char *aBuf, char *aVarName);
-VarSizeType BIV_MMM_DDD(char *aBuf, char *aVarName);
-VarSizeType BIV_DateTime(char *aBuf, char *aVarName);
-VarSizeType BIV_BatchLines(char *aBuf, char *aVarName);
-VarSizeType BIV_TitleMatchMode(char *aBuf, char *aVarName);
-VarSizeType BIV_TitleMatchModeSpeed(char *aBuf, char *aVarName);
-VarSizeType BIV_DetectHiddenWindows(char *aBuf, char *aVarName);
-VarSizeType BIV_DetectHiddenText(char *aBuf, char *aVarName);
-VarSizeType BIV_AutoTrim(char *aBuf, char *aVarName);
-VarSizeType BIV_StringCaseSense(char *aBuf, char *aVarName);
-VarSizeType BIV_FormatInteger(char *aBuf, char *aVarName);
-VarSizeType BIV_FormatFloat(char *aBuf, char *aVarName);
-VarSizeType BIV_KeyDelay(char *aBuf, char *aVarName);
-VarSizeType BIV_WinDelay(char *aBuf, char *aVarName);
-VarSizeType BIV_ControlDelay(char *aBuf, char *aVarName);
-VarSizeType BIV_MouseDelay(char *aBuf, char *aVarName);
-VarSizeType BIV_DefaultMouseSpeed(char *aBuf, char *aVarName);
-VarSizeType BIV_IsPaused(char *aBuf, char *aVarName);
-VarSizeType BIV_IsCritical(char *aBuf, char *aVarName);
-VarSizeType BIV_IsSuspended(char *aBuf, char *aVarName);
+VarSizeType BIV_True_False(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_MMM_DDD(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_DateTime(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_BatchLines(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_TitleMatchMode(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_TitleMatchModeSpeed(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_DetectHiddenWindows(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_DetectHiddenText(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_AutoTrim(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_StringCaseSense(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_FormatInteger(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_FormatFloat(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_KeyDelay(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_WinDelay(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ControlDelay(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_MouseDelay(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_DefaultMouseSpeed(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_IsPaused(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_IsCritical(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_IsSuspended(LPTSTR aBuf, LPTSTR aVarName);
 #ifdef AUTOHOTKEYSC  // A_IsCompiled is left blank/undefined in uncompiled scripts.
-VarSizeType BIV_IsCompiled(char *aBuf, char *aVarName);
+VarSizeType BIV_IsCompiled(LPTSTR aBuf, LPTSTR aVarName);
 #endif
-VarSizeType BIV_LastError(char *aBuf, char *aVarName);
-VarSizeType BIV_IconHidden(char *aBuf, char *aVarName);
-VarSizeType BIV_IconTip(char *aBuf, char *aVarName);
-VarSizeType BIV_IconFile(char *aBuf, char *aVarName);
-VarSizeType BIV_IconNumber(char *aBuf, char *aVarName);
-VarSizeType BIV_ExitReason(char *aBuf, char *aVarName);
-VarSizeType BIV_Space_Tab(char *aBuf, char *aVarName);
-VarSizeType BIV_AhkVersion(char *aBuf, char *aVarName);
-VarSizeType BIV_AhkPath(char *aBuf, char *aVarName);
-VarSizeType BIV_TickCount(char *aBuf, char *aVarName);
-VarSizeType BIV_Now(char *aBuf, char *aVarName);
-VarSizeType BIV_OSType(char *aBuf, char *aVarName);
-VarSizeType BIV_OSVersion(char *aBuf, char *aVarName);
-VarSizeType BIV_Language(char *aBuf, char *aVarName);
-VarSizeType BIV_UserName_ComputerName(char *aBuf, char *aVarName);
-VarSizeType BIV_WorkingDir(char *aBuf, char *aVarName);
-VarSizeType BIV_WinDir(char *aBuf, char *aVarName);
-VarSizeType BIV_Temp(char *aBuf, char *aVarName);
-VarSizeType BIV_ComSpec(char *aBuf, char *aVarName);
-VarSizeType BIV_ProgramFiles(char *aBuf, char *aVarName);
-VarSizeType BIV_AppData(char *aBuf, char *aVarName);
-VarSizeType BIV_Desktop(char *aBuf, char *aVarName);
-VarSizeType BIV_StartMenu(char *aBuf, char *aVarName);
-VarSizeType BIV_Programs(char *aBuf, char *aVarName);
-VarSizeType BIV_Startup(char *aBuf, char *aVarName);
-VarSizeType BIV_MyDocuments(char *aBuf, char *aVarName);
-VarSizeType BIV_Caret(char *aBuf, char *aVarName);
-VarSizeType BIV_Cursor(char *aBuf, char *aVarName);
-VarSizeType BIV_ScreenWidth_Height(char *aBuf, char *aVarName);
-VarSizeType BIV_ScriptName(char *aBuf, char *aVarName);
-VarSizeType BIV_ScriptDir(char *aBuf, char *aVarName);
-VarSizeType BIV_ScriptFullPath(char *aBuf, char *aVarName);
-VarSizeType BIV_LineNumber(char *aBuf, char *aVarName);
-VarSizeType BIV_LineFile(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopFileName(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopFileShortName(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopFileExt(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopFileDir(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopFileFullPath(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopFileLongPath(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopFileShortPath(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopFileTime(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopFileAttrib(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopFileSize(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopRegType(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopRegKey(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopRegSubKey(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopRegName(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopRegTimeModified(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopReadLine(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopField(char *aBuf, char *aVarName);
-VarSizeType BIV_LoopIndex(char *aBuf, char *aVarName);
-VarSizeType BIV_ThisFunc(char *aBuf, char *aVarName);
-VarSizeType BIV_ThisLabel(char *aBuf, char *aVarName);
-VarSizeType BIV_ThisMenuItem(char *aBuf, char *aVarName);
-VarSizeType BIV_ThisMenuItemPos(char *aBuf, char *aVarName);
-VarSizeType BIV_ThisMenu(char *aBuf, char *aVarName);
-VarSizeType BIV_ThisHotkey(char *aBuf, char *aVarName);
-VarSizeType BIV_PriorHotkey(char *aBuf, char *aVarName);
-VarSizeType BIV_TimeSinceThisHotkey(char *aBuf, char *aVarName);
-VarSizeType BIV_TimeSincePriorHotkey(char *aBuf, char *aVarName);
-VarSizeType BIV_EndChar(char *aBuf, char *aVarName);
-VarSizeType BIV_Gui(char *aBuf, char *aVarName);
-VarSizeType BIV_GuiControl(char *aBuf, char *aVarName);
-VarSizeType BIV_GuiEvent(char *aBuf, char *aVarName);
-VarSizeType BIV_EventInfo(char *aBuf, char *aVarName);
-VarSizeType BIV_TimeIdle(char *aBuf, char *aVarName);
-VarSizeType BIV_TimeIdlePhysical(char *aBuf, char *aVarName);
-VarSizeType BIV_IPAddress(char *aBuf, char *aVarName);
-VarSizeType BIV_IsAdmin(char *aBuf, char *aVarName);
+VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_IconHidden(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_IconTip(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_IconFile(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_IconNumber(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ExitReason(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_Space_Tab(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_AhkVersion(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_AhkPath(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_TickCount(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_Now(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_OSType(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_Language(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_UserName_ComputerName(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_WinDir(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_Temp(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ComSpec(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ProgramFiles(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_AppData(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_Desktop(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_StartMenu(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_Programs(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_Startup(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_MyDocuments(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_Caret(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_Cursor(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ScreenWidth_Height(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ScriptName(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ScriptDir(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ScriptFullPath(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LineNumber(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LineFile(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopFileName(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopFileShortName(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopFileExt(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopFileDir(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopFileFullPath(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopFileLongPath(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopFileShortPath(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopFileTime(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopFileAttrib(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopFileSize(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopRegType(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopRegKey(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopRegSubKey(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopRegName(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopRegTimeModified(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopReadLine(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopField(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_LoopIndex(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ThisFunc(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ThisLabel(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ThisMenuItem(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ThisMenu(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ThisHotkey(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_PriorHotkey(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_TimeSinceThisHotkey(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_TimeSincePriorHotkey(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_EndChar(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_GuiControl(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_GuiEvent(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_EventInfo(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_TimeIdle(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_TimeIdlePhysical(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_IPAddress(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_IsAdmin(LPTSTR aBuf, LPTSTR aVarName);
 
 
 
@@ -2663,7 +2671,7 @@ VarSizeType BIV_IsAdmin(char *aBuf, char *aVarName);
 #define EXPR_TOKEN_LENGTH(token_raw, token_as_string) \
 (token_raw->symbol == SYM_VAR && !token_raw->var->IsBinaryClip()) \
 	? token_raw->var->Length()\
-	: strlen(token_as_string)
+	: _tcsclen(token_as_string)
 
 void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
@@ -2712,18 +2720,18 @@ void BIF_IL_Create(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 void BIF_IL_Destroy(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_IL_Add(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
-BOOL LegacyResultToBOOL(char *aResult);
+BOOL LegacyResultToBOOL(LPTSTR aResult);
 BOOL LegacyVarToBOOL(Var &aVar);
 BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
 __int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPureInteger = FALSE);
 double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE, BOOL aIsPureFloat = FALSE);
-char *TokenToString(ExprTokenType &aToken, char *aBuf = NULL);
+LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL);
 ResultType TokenToDoubleOrInt64(ExprTokenType &aToken);
 
-char *RegExMatch(char *aHaystack, char *aNeedleRegEx);
-void SetWorkingDir(char *aNewDir);
-int ConvertJoy(char *aBuf, int *aJoystickID = NULL, bool aAllowOnlyButtons = false);
+LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
+void SetWorkingDir(LPTSTR aNewDir);
+int ConvertJoy(LPTSTR aBuf, int *aJoystickID = NULL, bool aAllowOnlyButtons = false);
 bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType);
 double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, bool aUseBoolForUpDown);
 
