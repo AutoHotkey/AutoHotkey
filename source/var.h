@@ -79,7 +79,7 @@ struct VarBkp // This should be kept in sync with any changes to the Var class. 
 	VarTypeType mType;
 	// Not needed in the backup:
 	//bool mIsLocal;
-	//char *mName;
+	//TCHAR *mName;
 };
 
 
@@ -208,7 +208,7 @@ private:
 		{
 			// THE FOLLOWING ISN'T NECESSARY BECAUSE THE ASSIGN() CALLS BELOW DO IT:
 			//var.mAttrib &= ~VAR_ATTRIB_CONTENTS_OUT_OF_DATE;
-			char value_string[MAX_NUMBER_SIZE];
+			TCHAR value_string[MAX_NUMBER_SIZE];
 			if (var.mAttrib & VAR_ATTRIB_HAS_VALID_INT64)
 			{
 				var.Assign(ITOA64(var.mContentsInt64, value_string)); // Return value currently not checked for this or the below.
@@ -217,7 +217,7 @@ private:
 			else if (var.mAttrib & VAR_ATTRIB_HAS_VALID_DOUBLE)
 			{
 				// "%0.6f"; %f can handle doubles in MSVC++:
-				var.Assign(value_string, snprintf(value_string, sizeof(value_string), g->FormatFloat, var.mContentsDouble));
+				var.Assign(value_string, sntprintf(value_string, _countof(value_string), g->FormatFloat, var.mContentsDouble));
 				// In this case, read-caching should be disabled for scripts that use "SetFormat Float" because
 				// they might rely on SetFormat having rounded floats off to FAR fewer decimal places (or
 				// even to integers via "SetFormat, Float, 0").  Such scripts can use read-caching only when
@@ -246,7 +246,7 @@ public:
 	// The biggest offender of buffer overflow in sEmptyString is DllCall, which happens most frequently
 	// when a script forgets to call VarSetCapacity before psssing a buffer to some function that writes a
 	// string to it.  There is now some code there that tries to detect when that happens.
-	static char sEmptyString[1]; // See above.
+	static TCHAR sEmptyString[1]; // See above.
 
 	VarSizeType Get(char *aBuf = NULL);
 	ResultType AssignHWND(HWND aWnd);
@@ -254,7 +254,7 @@ public:
 	ResultType Assign(ExprTokenType &aToken);
 	ResultType AssignClipboardAll();
 	ResultType AssignBinaryClip(Var &aSourceVar);
-	ResultType Assign(char *aBuf = NULL, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true);
+	ResultType Assign(TCHAR *aBuf = NULL, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true);
 
 	inline ResultType Assign(DWORD aValueToAssign) // For some reason, this function is actually faster when not __forceinline.
 	{
@@ -409,7 +409,7 @@ public:
 	#define DISPLAY_FUNC_ERROR 2
 	static ResultType ValidateName(char *aName, bool aIsRuntime = false, int aDisplayError = DISPLAY_VAR_ERROR);
 
-	char *ToText(char *aBuf, int aBufSize, bool aAppendNewline)
+	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline)
 	// Caller must ensure that Type() == VAR_NORMAL.
 	// aBufSize is an int so that any negative values passed in from caller are not lost.
 	// Caller has ensured that aBuf isn't NULL.
@@ -421,10 +421,10 @@ public:
 		// v1.0.44.14: Changed it so that ByRef/Aliases report their own name rather than the target's/caller's
 		// (it seems more useful and intuitive).
 		var.UpdateContents(); // Update mContents and mLength for use below.
-		char *aBuf_orig = aBuf;
-		aBuf += snprintf(aBuf, BUF_SPACE_REMAINING, "%s[%u of %u]: %-1.60s%s", mName // mName not var.mName (see comment above).
+		LPTSTR aBuf_orig = aBuf;
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[%u of %u]: %-1.60s%s"), mName // mName not var.mName (see comment above).
 			, var.mLength, var.mCapacity ? (var.mCapacity - 1) : 0  // Use -1 since it makes more sense to exclude the terminator.
-			, var.mContents, var.mLength > 60 ? "..." : "");
+			, var.mCharContents, var.mLength > 60 ? _T("...") : _T(""));
 		if (aAppendNewline && BUF_SPACE_REMAINING >= 2)
 		{
 			*aBuf++ = '\r';
@@ -523,10 +523,10 @@ public:
 		// Return the apparent length of the string (i.e. the position of its first binary zero).
 		return (var.mType == VAR_NORMAL && !(var.mAttrib & VAR_ATTRIB_BINARY_CLIP))
 			? var.Length() // Use Length() vs. mLength so that the length is updated if necessary.
-			: strlen(var.Contents()); // Use Contents() vs. mContents to support VAR_CLIPBOARD.
+			: _tcslen(var.Contents()); // Use Contents() vs. mContents to support VAR_CLIPBOARD.
 	}
 
-	char *Contents(BOOL aAllowUpdate = TRUE)
+	TCHAR *CharContents(BOOL aAllowUpdate = TRUE)
 	// Callers should almost always pass TRUE for aAllowUpdate because any caller who wants to READ from
 	// mContents would almost always want it up-to-date.  Any caller who wants to WRITE to mContents would
 	// would almost always have called Assign(NULL, ...) prior to calling Contents(), which would have
@@ -537,13 +537,19 @@ public:
 		if ((var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE) && aAllowUpdate) // VAR_ATTRIB_CONTENTS_OUT_OF_DATE is checked here and in the function below, for performance.
 			var.UpdateContents(); // This also clears the VAR_ATTRIB_CONTENTS_OUT_OF_DATE flag.
 		if (var.mType == VAR_NORMAL)
-			return var.mContents;
+			return var.mCharContents;
 		if (var.mType == VAR_CLIPBOARD)
 			// The returned value will be a writable mem area if clipboard is open for write.
 			// Otherwise, the clipboard will be opened physically, if it isn't already, and
 			// a pointer to its contents returned to the caller:
 			return g_clip.Contents();
 		return sEmptyString; // For reserved vars (but this method should probably never be called for them).
+	}
+
+	__declspec(deprecated("Please check what you want are bytes or characters"))
+	TCHAR *Contents(BOOL aAllowUpdate = TRUE)
+	{
+		return CharContents(aAllowUpdate);
 	}
 
 	void ConvertToStatic()
@@ -631,9 +637,9 @@ public:
 	}
 
 	// Constructor:
-	Var(char *aVarName, void *aType, bool aIsLocal)
+	Var(LPTSTR aVarName, void *aType, bool aIsLocal)
 		// The caller must ensure that aVarName is non-null.
-		: mContents(sEmptyString) // Invariant: Anyone setting mCapacity to 0 must also set mContents to the empty string.
+		: mCharContents(sEmptyString) // Invariant: Anyone setting mCapacity to 0 must also set mContents to the empty string.
 		// Doesn't need initialization: , mContentsInt64(NULL)
 		, mLength(0) // This also initializes mAliasFor within the same union.
 		, mHowAllocated(ALLOC_NONE)
