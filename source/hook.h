@@ -187,11 +187,11 @@ struct input_type
 	sc_type EndingSC;
 	bool EndedBySC;  // Whether the Ending key was one handled by VK or SC.
 	bool EndingRequiredShift;  // Whether the key that terminated the input was one that needed the SHIFT key.
-	char **match; // Array of strings, each string is a match-phrase which if entered, terminates the input.
+	LPTSTR *match; // Array of strings, each string is a match-phrase which if entered, terminates the input.
 	UINT MatchCount; // The number of strings currently in the array.
 	UINT MatchCountMax; // The maximum number of strings that the match array can contain.
 	#define INPUT_ARRAY_BLOCK_SIZE 1024  // The increment by which the above array expands.
-	char *MatchBuf; // The is the buffer whose contents are pointed to by the match array.
+	LPTSTR MatchBuf; // The is the buffer whose contents are pointed to by the match array.
 	UINT MatchBufSize; // The capacity of the above above buffer.
 	bool BackspaceIsUndo;
 	bool CaseSensitive;
@@ -199,7 +199,7 @@ struct input_type
 	bool TranscribeModifiedKeys; // Whether the input command will attempt to transcribe modified keys such as ^c.
 	bool Visible;
 	bool FindAnywhere;
-	char *buffer; // Stores the user's actual input.
+	LPTSTR buffer; // Stores the user's actual input.
 	int BufferLength; // The current length of what the user entered.
 	int BufferLengthMax; // The maximum allowed length of the input.
 	input_type::input_type() // A simple constructor to initialize the fields that need it.
@@ -226,7 +226,7 @@ struct KeyHistoryItem
 	// no longer be possible without adding complexity to the logging function.  Seems best
 	// to keep it simple:
 #define KEY_HISTORY_WINDOW_TITLE_SIZE 100
-	char target_window[KEY_HISTORY_WINDOW_TITLE_SIZE];
+	TCHAR target_window[KEY_HISTORY_WINDOW_TITLE_SIZE];
 };
 
 
@@ -267,6 +267,6 @@ void ResetHook(bool aAllModifiersUp = false, HookType aWhichHook = (HOOK_KEYBD |
 HookType GetActiveHooks();
 void FreeHookMem();
 void ResetKeyTypeState(key_type &key);
-void GetHookStatus(char *aBuf, int aBufSize);
+void GetHookStatus(LPTSTR aBuf, int aBufSize);
 
 #endif
