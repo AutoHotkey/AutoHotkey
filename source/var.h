@@ -50,8 +50,8 @@ enum VarTypes
 typedef UCHAR VarTypeType;     // UCHAR vs. VarTypes to save memory.
 typedef UCHAR AllocMethodType; // UCHAR vs. AllocMethod to save memory.
 typedef UCHAR VarAttribType;   // Same.
-typedef DWORD VarSizeType;     // Up to 4 gig if sizeof(UINT) is 4.  See next line.
-#define VARSIZE_MAX MAXDWORD
+typedef UINT_PTR VarSizeType;  // jackieku(2009-10-23): Change this to UINT_PTR to ensure its size is the same with a pointer.
+#define VARSIZE_MAX ((VarSizeType) ~0)
 #define VARSIZE_ERROR VARSIZE_MAX
 
 class Var; // Forward declaration.
@@ -70,10 +70,10 @@ struct VarBkp // This should be kept in sync with any changes to the Var class. 
 	};
 	union
 	{
-		VarSizeType mLength;
+		VarSizeType mByteLength;
 		Var *mAliasFor;
 	};
-	VarSizeType mCapacity;
+	VarSizeType mByteCapacity;
 	AllocMethodType mHowAllocated;
 	VarAttribType mAttrib;
 	VarTypeType mType;
@@ -82,6 +82,8 @@ struct VarBkp // This should be kept in sync with any changes to the Var class. 
 	//TCHAR *mName;
 };
 
+#pragma warning(push)
+#pragma warning(disable: 4995 4996)
 
 // Concerning "#pragma pack" below:
 // Default pack would otherwise be 8, which would cause the 64-bit mContentsInt64 member to increase the size
@@ -89,8 +91,8 @@ struct VarBkp // This should be kept in sync with any changes to the Var class. 
 // loss from doing this, perhaps because variables are currently stored in a linked list rather than an
 // array. (In an array, having the struct size be a multiple of 8 would prevent every other struct in the array
 // from having its 64-bit members span more than one 64-bit region in memory, which might reduce performance.)
-#pragma pack(4) // 32-bit vs. 64-bit. See above.
-typedef VarSizeType (* BuiltInVarType)(char *aBuf, char *aVarName);
+#pragma pack(push, 4) // 32-bit vs. 64-bit. See above.
+typedef VarSizeType (* BuiltInVarType)(LPTSTR aBuf, LPTSTR aVarName);
 class Var
 {
 private:
@@ -119,16 +121,16 @@ private:
 	union
 	{
 		char *mByteContents;
-		TCHAR *mCharContents;
+		LPTSTR mCharContents;
 	};
 	union
 	{
-		VarSizeType mLength;  // How much is actually stored in it currently, excluding the zero terminator.
-		Var *mAliasFor;       // The variable for which this variable is an alias.
+		VarSizeType mByteLength;  // How much is actually stored in it currently, excluding the zero terminator.
+		Var *mAliasFor;           // The variable for which this variable is an alias.
 	};
 	union
 	{
-		VarSizeType mCapacity; // In bytes.  Includes the space for the zero terminator.
+		VarSizeType mByteCapacity; // In bytes.  Includes the space for the zero terminator.
 		BuiltInVarType mBIV;
 	};
 	AllocMethodType mHowAllocated; // Keep adjacent/contiguous with the below to save memory.
@@ -231,6 +233,9 @@ private:
 		}
 	}
 
+	// Doesn't the compiler know these should be inlined?
+	VarSizeType _CharLength() { return mByteLength / sizeof(TCHAR); }
+	VarSizeType _CharCapacity() { return mByteCapacity / sizeof(TCHAR); }
 public:
 	// Testing shows that due to data alignment, keeping mType adjacent to the other less-than-4-size member
 	// above it reduces size of each object by 4 bytes.
@@ -248,7 +253,7 @@ public:
 	// string to it.  There is now some code there that tries to detect when that happens.
 	static TCHAR sEmptyString[1]; // See above.
 
-	VarSizeType Get(char *aBuf = NULL);
+	VarSizeType Get(LPTSTR aBuf = NULL);
 	ResultType AssignHWND(HWND aWnd);
 	ResultType Assign(Var &aVar);
 	ResultType Assign(ExprTokenType &aToken);
@@ -396,7 +401,7 @@ public:
 	#define VAR_NEVER_FREE                     3
 	#define VAR_FREE_IF_LARGE                  4
 	void Free(int aWhenToFree = VAR_ALWAYS_FREE, bool aExcludeAliases = false);
-	ResultType AppendIfRoom(char *aStr, VarSizeType aLength);
+	ResultType AppendIfRoom(LPTSTR aStr, VarSizeType aLength);
 	void AcceptNewMem(char *aNewMem, VarSizeType aLength);
 	void SetLengthFromContents();
 
@@ -407,7 +412,7 @@ public:
 	#define DISPLAY_NO_ERROR   0  // Must be zero.
 	#define DISPLAY_VAR_ERROR  1
 	#define DISPLAY_FUNC_ERROR 2
-	static ResultType ValidateName(char *aName, bool aIsRuntime = false, int aDisplayError = DISPLAY_VAR_ERROR);
+	static ResultType ValidateName(LPCTSTR aName, bool aIsRuntime = false, int aDisplayError = DISPLAY_VAR_ERROR);
 
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline)
 	// Caller must ensure that Type() == VAR_NORMAL.
@@ -423,8 +428,8 @@ public:
 		var.UpdateContents(); // Update mContents and mLength for use below.
 		LPTSTR aBuf_orig = aBuf;
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[%u of %u]: %-1.60s%s"), mName // mName not var.mName (see comment above).
-			, var.mLength, var.mCapacity ? (var.mCapacity - 1) : 0  // Use -1 since it makes more sense to exclude the terminator.
-			, var.mCharContents, var.mLength > 60 ? _T("...") : _T(""));
+			, var._CharLength(), var._CharCapacity() ? (var._CharCapacity() - 1) : 0  // Use -1 since it makes more sense to exclude the terminator.
+			, var.mCharContents, var._CharLength() > 60 ? _T("...") : _T(""));
 		if (aAppendNewline && BUF_SPACE_REMAINING >= 2)
 		{
 			*aBuf++ = '\r';
@@ -464,7 +469,7 @@ public:
 		return (mType == VAR_ALIAS ? mAliasFor->mAttrib : mAttrib) & VAR_ATTRIB_BINARY_CLIP;
 	}
 
-	VarSizeType Capacity() // __forceinline() on Capacity, Length, and/or Contents bloats the code and reduces performance.
+	VarSizeType ByteCapacity() // __forceinline() on Capacity, Length, and/or Contents bloats the code and reduces performance.
 	// Capacity includes the zero terminator (though if capacity is zero, there will also be a zero terminator in mContents due to it being "").
 	{
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
@@ -472,7 +477,17 @@ public:
 		// Fix for v1.0.37: Callers want the clipboard's capacity returned, if it has a capacity.  This is
 		// because Capacity() is defined as being the size available in Contents(), which for the clipboard
 		// would be a pointer to the clipboard-buffer-to-be-written (or zero if none).
-		return var.mType == VAR_CLIPBOARD ? g_clip.mCapacity : var.mCapacity;
+		return var.mType == VAR_CLIPBOARD ? g_clip.mCapacity : var.mByteCapacity;
+	}
+
+	VarSizeType CharCapacity()
+	{
+		return ByteCapacity() / sizeof(TCHAR); 
+	}
+
+	UNICODE_CHECK VarSizeType Capacity()
+	{
+		return CharCapacity();
 	}
 
 	BOOL HasContents()
@@ -481,7 +496,7 @@ public:
 	{
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		return (var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE) ? TRUE : var.mLength; // i.e. the only time var.mLength isn't a valid indicator of an empty variable is when VAR_ATTRIB_CONTENTS_OUT_OF_DATE, in which case the variable is non-empty because there is a binary number in it.
+		return (var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE) ? TRUE : !!var.mByteLength; // i.e. the only time var.mLength isn't a valid indicator of an empty variable is when VAR_ATTRIB_CONTENTS_OUT_OF_DATE, in which case the variable is non-empty because there is a binary number in it.
 	}
 
 	BOOL HasUnflushedBinaryNumber()
@@ -491,7 +506,7 @@ public:
 		return var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE; // VAR_ATTRIB_CONTENTS_OUT_OF_DATE implies that either VAR_ATTRIB_HAS_VALID_INT64 or VAR_ATTRIB_HAS_VALID_DOUBLE is also present.
 	}
 
-	VarSizeType &Length() // __forceinline() on Capacity, Length, and/or Contents bloats the code and reduces performance.
+	VarSizeType &ByteLength() // __forceinline() on Capacity, Length, and/or Contents bloats the code and reduces performance.
 	// This should not be called to discover a non-NORMAL var's length (nor that of an environment variable)
 	// because their lengths aren't knowable without calling Get().
 	// Returns a reference so that caller can use this function as an lvalue.
@@ -502,7 +517,7 @@ public:
 		{
 			if (var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE)
 				var.UpdateContents();  // Update mContents (and indirectly, mLength).
-			return var.mLength;
+			return var.mByteLength;
 		}
 		// Since the length of the clipboard isn't normally tracked, we just return a
 		// temporary storage area for the caller to use.  Note: This approach is probably
@@ -511,6 +526,16 @@ public:
 		// be called for them:
 		static VarSizeType length; // Must be static so that caller can use its contents. See above.
 		return length;
+	}
+
+	VarSizeType CharLength()
+	{
+		return ByteLength() / sizeof(TCHAR);
+	}
+
+	UNICODE_CHECK VarSizeType Length()
+	{
+		return CharLength();
 	}
 
 	VarSizeType LengthIgnoreBinaryClip()
@@ -641,7 +666,7 @@ public:
 		// The caller must ensure that aVarName is non-null.
 		: mCharContents(sEmptyString) // Invariant: Anyone setting mCapacity to 0 must also set mContents to the empty string.
 		// Doesn't need initialization: , mContentsInt64(NULL)
-		, mLength(0) // This also initializes mAliasFor within the same union.
+		, mByteLength(0) // This also initializes mAliasFor within the same union.
 		, mHowAllocated(ALLOC_NONE)
 		, mAttrib(0) // Seems best not to init empty vars to VAR_ATTRIB_NOT_NUMERIC because it would reduce maintainability, plus finding out whether an empty var is numeric via IsPureNumeric() is a very fast operation.
 		, mIsLocal(aIsLocal)
@@ -655,14 +680,18 @@ public:
 		else
 		{
 			mType = (VarTypeType)aType;
-			mCapacity = 0; // This also initializes mBIV within the same union.
+			mByteCapacity = 0; // This also initializes mBIV within the same union.
 		}
 	}
+	UNICODE_CHECK
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	UNICODE_CHECK
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
 }; // class Var
-#pragma pack() // Calling pack with no arguments restores the default value (which is 8, but "the alignment of a member will be on a boundary that is either a multiple of n or a multiple of the size of the member, whichever is smaller.")
+#pragma pack(pop) // Calling pack with no arguments restores the default value (which is 8, but "the alignment of a member will be on a boundary that is either a multiple of n or a multiple of the size of the member, whichever is smaller.")
+
+#pragma warning(pop)
 
 #endif
