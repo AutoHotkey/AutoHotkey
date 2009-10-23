@@ -34,8 +34,8 @@ public:
 	void	Init(void);											// Call first before use
 
 #ifdef UNICODE
-	bool	IsWinNT(void) {return true;}
-	bool	IsWin9x(void) {return false;}
+//	bool	IsWinNT(void) {return true;}
+//	bool	IsWin9x(void) {return false;}
 #else
 	bool	IsWinNT(void) {return m_bWinNT;}					// Returns true if NT/2k/XP and family.
 	bool	IsWin9x(void) {return m_bWin9x;}					// Returns true if 9x
@@ -52,12 +52,12 @@ public:
 	bool	IsWinXPorLater(void) {return m_bWinXPorLater;}		// Returns true if WinXP+
 
 #ifdef UNICODE
-	bool	IsWin95(void) {return false;}
-	bool	IsWin98(void) {return false;}
-	bool	IsWinMe(void) {return false;}
-	bool	IsWin95orLater(void) {return false;}
-	bool	IsWin98orLater(void) {return false;}
-	bool	IsWinMeorLater(void) {return false;}
+	//bool	IsWin95(void) {return false;}
+	//bool	IsWin98(void) {return false;}
+	//bool	IsWinMe(void) {return false;}
+	//bool	IsWin95orLater(void) {return false;}
+	//bool	IsWin98orLater(void) {return false;}
+	//bool	IsWinMeorLater(void) {return false;}
 #else
 	bool	IsWin95(void) {return m_bWin95;}					// Returns true if 95
 	bool	IsWin98(void) {return m_bWin98;}					// Returns true if 98

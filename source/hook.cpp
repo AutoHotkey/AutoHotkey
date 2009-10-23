@@ -4229,8 +4229,8 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 		g_AllowInterruption = FALSE; 
 		// Below is a generic message to reduce code size.  Failure is rare, but has been known to happen when
 		// certain types of games are running).
-		MsgBox("Warning: The keyboard and/or mouse hook could not be activated; "
-			"some parts of the script will not function.");
+		MsgBox(_T("Warning: The keyboard and/or mouse hook could not be activated; ")
+			_T("some parts of the script will not function."));
 		g_AllowInterruption = TRUE;
 	}
 }

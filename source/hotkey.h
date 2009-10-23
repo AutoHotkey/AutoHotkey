@@ -44,7 +44,7 @@ EXTERN_SCRIPT;  // For g_script.
 #define HOTKEY_ID_TOGGLE               0x03
 #define IS_ALT_TAB(id) (id > HOTKEY_ID_MAX && id < HOTKEY_ID_INVALID)
 
-#define COMPOSITE_DELIMITER " & "
+#define COMPOSITE_DELIMITER _T(" & ")
 #define COMPOSITE_DELIMITER_LENGTH 3
 
 // Smallest workable size: to save mem in some large arrays that use this:
@@ -59,14 +59,14 @@ enum HotkeyTypeEnum {HK_NORMAL, HK_KEYBD_HOOK, HK_MOUSE_HOOK, HK_BOTH_HOOKS, HK_
 
 typedef UCHAR HotCriterionType;
 enum HotCriterionEnum {HOT_NO_CRITERION, HOT_IF_ACTIVE, HOT_IF_NOT_ACTIVE, HOT_IF_EXIST, HOT_IF_NOT_EXIST}; // HOT_NO_CRITERION must be zero.
-HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, char *aWinTitle, char *aWinText); // Used by hotkeys and hotstrings.
-ResultType SetGlobalHotTitleText(char *aWinTitle, char *aWinText);
+HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, LPTSTR aWinText); // Used by hotkeys and hotstrings.
+ResultType SetGlobalHotTitleText(LPTSTR aWinTitle, LPTSTR aWinText);
 
 
 
 struct HotkeyCriterion
 {
-	char *mHotWinTitle, *mHotWinText;
+	LPTSTR mHotWinTitle, mHotWinText;
 	HotkeyCriterion *mNextCriterion;
 };
 
@@ -76,7 +76,7 @@ struct HotkeyVariant
 {
 	Label *mJumpToLabel;
 	DWORD mRunAgainTime;
-	char *mHotWinTitle, *mHotWinText;
+	LPTSTR mHotWinTitle, mHotWinText;
 	HotkeyVariant *mNextVariant;
 	int mPriority;
 	// Keep members that are less than 32-bit adjacent to each other to conserve memory in with the default
@@ -147,7 +147,7 @@ private:
 
 	// For now, constructor & destructor are private so that only static methods can create new
 	// objects.  This allow proper tracking of which OS hotkey IDs have been used.
-	Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction, char *aName, bool aSuffixHasTilde, bool aUseErrorLevel);
+	Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel);
 	~Hotkey() {if (mIsRegistered) Unregister();}
 
 public:
@@ -155,7 +155,7 @@ public:
 	HotkeyIDType mID;  // Must be unique for each hotkey of a given thread.
 	HookActionType mHookAction;
 
-	char *mName; // Points to the label name for static hotkeys, or a dynamically-allocated string for dynamic hotkeys.
+	LPTSTR mName; // Points to the label name for static hotkeys, or a dynamically-allocated string for dynamic hotkeys.
 	sc_type mSC; // Scan code.  All vk's have a scan code, but not vice versa.
 	sc_type mModifierSC; // If mModifierVK is zero, this scan code, if non-zero, will be used as the modifier.
 	mod_type mModifiers;  // MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, or some additive or bitwise-or combination of these.
@@ -192,44 +192,44 @@ public:
 
 	static void AllDestructAndExit(int exit_code);
 
-	#define HOTKEY_EL_BADLABEL           "1" // Set as strings so that SetFormat doesn't affect their appearance (for use with "If ErrorLevel in 5,6").
-	#define HOTKEY_EL_INVALID_KEYNAME    "2"
-	#define HOTKEY_EL_UNSUPPORTED_PREFIX "3"
-	#define HOTKEY_EL_ALTTAB             "4"
-	#define HOTKEY_EL_NOTEXIST           "5"
-	#define HOTKEY_EL_NOTEXISTVARIANT    "6"
-	#define HOTKEY_EL_WIN9X              "50"
-	#define HOTKEY_EL_NOREG              "51"
-	#define HOTKEY_EL_MAXCOUNT           "98" // 98 allows room for other ErrorLevels to be added in between.
-	#define HOTKEY_EL_MEM                "99"
-	static ResultType Dynamic(char *aHotkeyName, char *aLabelName, char *aOptions, Label *aJumpToLabel);
+	#define HOTKEY_EL_BADLABEL           _T("1") // Set as strings so that SetFormat doesn't affect their appearance (for use with "If ErrorLevel in 5,6").
+	#define HOTKEY_EL_INVALID_KEYNAME    _T("2")
+	#define HOTKEY_EL_UNSUPPORTED_PREFIX _T("3")
+	#define HOTKEY_EL_ALTTAB             _T("4")
+	#define HOTKEY_EL_NOTEXIST           _T("5")
+	#define HOTKEY_EL_NOTEXISTVARIANT    _T("6")
+	#define HOTKEY_EL_WIN9X              _T("50")
+	#define HOTKEY_EL_NOREG              _T("51")
+	#define HOTKEY_EL_MAXCOUNT           _T("98") // 98 allows room for other ErrorLevels to be added in between.
+	#define HOTKEY_EL_MEM                _T("99")
+	static ResultType Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions, Label *aJumpToLabel);
 
-	static Hotkey *AddHotkey(Label *aJumpToLabel, HookActionType aHookAction, char *aName, bool aSuffixHasTilde, bool aUseErrorLevel);
+	static Hotkey *AddHotkey(Label *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel);
 	HotkeyVariant *FindVariant();
 	HotkeyVariant *AddVariant(Label *aJumpToLabel, bool aSuffixHasTilde);
 	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC);
 	HotkeyVariant *CriterionAllowsFiring(HWND *aFoundHWND = NULL);
 	static HotkeyVariant *CriterionAllowsFiring(HotkeyIDType aHotkeyID, HWND &aFoundHWND);
 	static bool CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, UCHAR &aNoSuppress
-		, bool &aFireWithNoSuppress, char *aSingleChar);
+		, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
 	static void TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown);
 	void PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant);
 	static void ManifestAllHotkeysHotstringsHooks();
 	static void RequireHook(HookType aWhichHook) {sWhichHookAlways |= aWhichHook;}
-	static ResultType TextInterpret(char *aName, Hotkey *aThisHotkey, bool aUseErrorLevel);
+	static ResultType TextInterpret(LPTSTR aName, Hotkey *aThisHotkey, bool aUseErrorLevel);
 
 	struct HotkeyProperties // Struct used by TextToModifiers() and its callers.
 	{
 		mod_type modifiers;
 		modLR_type modifiersLR;
-		char prefix_text[32];  // Has to be large enough to hold the largest key name in g_key_to_vk,
-		char suffix_text[32];  // which is probably "Browser_Favorites" (17).
+		TCHAR prefix_text[32];  // Has to be large enough to hold the largest key name in g_key_to_vk,
+		TCHAR suffix_text[32];  // which is probably "Browser_Favorites" (17).
 		bool suffix_has_tilde; // As opposed to "prefix has tilde".
 		bool has_asterisk;
 		bool is_key_up;
 	};
-	static char *TextToModifiers(char *aText, Hotkey *aThisHotkey, HotkeyProperties *aProperties = NULL);
-	static ResultType TextToKey(char *aText, char *aHotkeyName, bool aIsModifier, Hotkey *aThisHotkey, bool aUseErrorLevel);
+	static LPTSTR TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperties *aProperties = NULL);
+	static ResultType TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier, Hotkey *aThisHotkey, bool aUseErrorLevel);
 
 	static void InstallKeybdHook();
 	static void InstallMouseHook();
@@ -286,37 +286,37 @@ public:
 				vp->mRunAgainAfterFinished = false;
 	}
 
-	static HookActionType ConvertAltTab(char *aBuf, bool aAllowOnOff)
+	static HookActionType ConvertAltTab(LPTSTR aBuf, bool aAllowOnOff)
 	{
 		if (!aBuf || !*aBuf) return 0;
-		if (!stricmp(aBuf, "AltTab")) return HOTKEY_ID_ALT_TAB;
-		if (!stricmp(aBuf, "ShiftAltTab")) return HOTKEY_ID_ALT_TAB_SHIFT;
-		if (!stricmp(aBuf, "AltTabMenu")) return HOTKEY_ID_ALT_TAB_MENU;
-		if (!stricmp(aBuf, "AltTabAndMenu")) return HOTKEY_ID_ALT_TAB_AND_MENU;
-		if (!stricmp(aBuf, "AltTabMenuDismiss")) return HOTKEY_ID_ALT_TAB_MENU_DISMISS;
+		if (!_tcsicmp(aBuf, _T("AltTab"))) return HOTKEY_ID_ALT_TAB;
+		if (!_tcsicmp(aBuf, _T("ShiftAltTab"))) return HOTKEY_ID_ALT_TAB_SHIFT;
+		if (!_tcsicmp(aBuf, _T("AltTabMenu"))) return HOTKEY_ID_ALT_TAB_MENU;
+		if (!_tcsicmp(aBuf, _T("AltTabAndMenu"))) return HOTKEY_ID_ALT_TAB_AND_MENU;
+		if (!_tcsicmp(aBuf, _T("AltTabMenuDismiss"))) return HOTKEY_ID_ALT_TAB_MENU_DISMISS;
 		if (aAllowOnOff)
 		{
-			if (!stricmp(aBuf, "On")) return HOTKEY_ID_ON;
-			if (!stricmp(aBuf, "Off")) return HOTKEY_ID_OFF;
-			if (!stricmp(aBuf, "Toggle")) return HOTKEY_ID_TOGGLE;
+			if (!_tcsicmp(aBuf, _T("On"))) return HOTKEY_ID_ON;
+			if (!_tcsicmp(aBuf, _T("Off"))) return HOTKEY_ID_OFF;
+			if (!_tcsicmp(aBuf, _T("Toggle"))) return HOTKEY_ID_TOGGLE;
 		}
 		return 0;
 	}
 
-	static Hotkey *FindHotkeyByTrueNature(char *aName, bool &aSuffixHasTilde);
+	static Hotkey *FindHotkeyByTrueNature(LPTSTR aName, bool &aSuffixHasTilde);
 	static Hotkey *FindHotkeyContainingModLR(modLR_type aModifiersLR);  //, HotkeyIDType hotkey_id_to_omit);
 	//static Hotkey *FindHotkeyWithThisModifier(vk_type aVK, sc_type aSC);
 	//static Hotkey *FindHotkeyBySC(sc2_type aSC2, mod_type aModifiers, modLR_type aModifiersLR);
 
-	static char *ListHotkeys(char *aBuf, int aBufSize);
-	char *ToText(char *aBuf, int aBufSize, bool aAppendNewline);
+	static LPTSTR ListHotkeys(LPTSTR aBuf, int aBufSize);
+	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline);
 };
 
 
 ///////////////////////////////////////////////////////////////////////////////////
 
 #define MAX_HOTSTRING_LENGTH 40  // Hard to imagine a need for more than this, and most are only a few chars long.
-#define MAX_HOTSTRING_LENGTH_STR "40"  // Keep in sync with the above.
+#define MAX_HOTSTRING_LENGTH_STR _T("40")  // Keep in sync with the above.
 #define HOTSTRING_BLOCK_SIZE 1024
 typedef UINT HotstringIDType;
 
@@ -332,7 +332,7 @@ public:
 	static bool mAtLeastOneEnabled; // v1.0.44.08: For performance, such as avoiding calling ToAsciiEx() in the hook.
 
 	Label *mJumpToLabel;
-	char *mString, *mReplacement, *mHotWinTitle, *mHotWinText;
+	LPTSTR mString, mReplacement, mHotWinTitle, mHotWinText;
 	int mPriority, mKeyDelay;
 
 	// Keep members that are smaller than 32-bit adjacent with each other to conserve memory (due to 4-byte alignment).
@@ -346,15 +346,16 @@ public:
 
 	static void SuspendAll(bool aSuspend);
 	ResultType PerformInNewThreadMadeByCaller();
+	UNICODE_CHECK
 	void DoReplace(LPARAM alParam);
-	static ResultType AddHotstring(Label *aJumpToLabel, char *aOptions, char *aHotstring, char *aReplacement
+	static ResultType AddHotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
 		, bool aHasContinuationSection);
-	static void ParseOptions(char *aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
+	static void ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
 		, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, bool &aSendRaw
 		, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset);
 
 	// Constructor & destructor:
-	Hotstring(Label *aJumpToLabel, char *aOptions, char *aHotstring, char *aReplacement, bool aHasContinuationSection);
+	Hotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement, bool aHasContinuationSection);
 	~Hotstring() {}  // Note that mReplacement is sometimes malloc'd, sometimes from SimpleHeap, and sometimes the empty string.
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}

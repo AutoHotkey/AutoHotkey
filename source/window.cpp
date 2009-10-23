@@ -15,12 +15,13 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
+#define UNICODE_CHECKED
 #include "window.h"
 #include "util.h" // for strlcpy()
 #include "application.h" // for MsgSleep()
 
 
-HWND WinActivate(global_struct &aSettings, char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText
+HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
 	, bool aFindLastMatch, HWND aAlreadyVisited[], int aAlreadyVisitedCount)
 {
 	// If window is already active, be sure to leave it that way rather than activating some
@@ -73,7 +74,7 @@ HWND WinActivate(global_struct &aSettings, char *aTitle, char *aText, char *aExc
 
 #ifdef _DEBUG_WINACTIVATE
 #define LOGF "c:\\AutoHotkey SetForegroundWindowEx.txt"
-HWND AttemptSetForeground(HWND aTargetWindow, HWND aForeWindow, char *aTargetTitle)
+HWND AttemptSetForeground(HWND aTargetWindow, HWND aForeWindow, LPTSTR aTargetTitle)
 #else
 HWND AttemptSetForeground(HWND aTargetWindow, HWND aForeWindow)
 #endif
@@ -109,7 +110,7 @@ HWND AttemptSetForeground(HWND aTargetWindow, HWND aForeWindow)
 #ifdef _DEBUG_WINACTIVATE
 		if (!result)
 		{
-			FileAppend(LOGF, "SetForegroundWindow() indicated failure even though it succeeded: ", false);
+			FileAppend(LOGF, _T("SetForegroundWindow() indicated failure even though it succeeded: "), false);
 			FileAppend(LOGF, aTargetTitle);
 		}
 #endif
@@ -124,7 +125,7 @@ HWND AttemptSetForeground(HWND aTargetWindow, HWND aForeWindow)
 #ifdef _DEBUG_WINACTIVATE
 	if (result)
 	{
-		FileAppend(LOGF, "SetForegroundWindow() indicated success even though it failed: ", false);
+		FileAppend(LOGF, _T("SetForegroundWindow() indicated success even though it failed: "), false);
 		FileAppend(LOGF, aTargetTitle);
 	}
 #endif
@@ -148,15 +149,15 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 		return NULL;
 
 #ifdef _DEBUG_WINACTIVATE
-	char win_name[64];
-	GetWindowText(aTargetWindow, win_name, sizeof(win_name));
+	TCHAR win_name[64];
+	GetWindowText(aTargetWindow, win_name, _countof(win_name));
 #endif
 
 	HWND orig_foreground_wnd = GetForegroundWindow();
 	// AutoIt3: If there is not any foreground window, then input focus is on the TaskBar.
 	// MY: It is definitely possible for GetForegroundWindow() to return NULL, even on XP.
 	if (!orig_foreground_wnd)
-		orig_foreground_wnd = FindWindow("Shell_TrayWnd", NULL);
+		orig_foreground_wnd = FindWindow(_T("Shell_TrayWnd"), NULL);
 
 	if (aTargetWindow == orig_foreground_wnd) // It's already the active window.
 		return aTargetWindow;
@@ -213,7 +214,7 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 	// only.
 
 #ifdef _DEBUG_WINACTIVATE
-	char buf[1024];
+	TCHAR buf[1024];
 #endif
 
 	bool is_attached_my_to_fore = false, is_attached_fore_to_target = false;
@@ -258,7 +259,7 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 #ifdef _DEBUG_WINACTIVATE
 			if (i > 0) // More than one attempt was needed.
 			{
-				snprintf(buf, sizeof(buf), "AttachThreadInput attempt #%d indicated success: %s"
+				sntprintf(buf, _countof(buf), _T("AttachThreadInput attempt #%d indicated success: %s")
 					, i + 1, win_name);
 				FileAppend(LOGF, buf);
 			}
@@ -314,19 +315,19 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 		new_foreground_wnd = AttemptSetForeground(aTargetWindow, orig_foreground_wnd);
 #else // debug mode
 		IF_ATTEMPT_SET_FORE
-			FileAppend(LOGF, "2-alts ok: ", false);
+			FileAppend(LOGF, _T("2-alts ok: "), false);
 		else
 		{
-			FileAppend(LOGF, "2-alts (which is the last resort) failed.  ", false);
+			FileAppend(LOGF, _T("2-alts (which is the last resort) failed.  "), false);
 			HWND h = GetForegroundWindow();
 			if (h)
 			{
-				char fore_name[64];
-				GetWindowText(h, fore_name, sizeof(fore_name));
-				FileAppend(LOGF, "Foreground: ", false);
+				TCHAR fore_name[64];
+				GetWindowText(h, fore_name, _countof(fore_name));
+				FileAppend(LOGF, _T("Foreground: "), false);
 				FileAppend(LOGF, fore_name, false);
 			}
-			FileAppend(LOGF, ".  Was trying to activate: ", false);
+			FileAppend(LOGF, _T(".  Was trying to activate: "), false);
 		}
 		FileAppend(LOGF, win_name);
 #endif
@@ -376,8 +377,8 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 
 
 
-HWND WinClose(global_struct &aSettings, char *aTitle, char *aText, int aTimeToWaitForClose
-	, char *aExcludeTitle, char *aExcludeText, bool aKillIfHung)
+HWND WinClose(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, int aTimeToWaitForClose
+	, LPTSTR aExcludeTitle, LPTSTR aExcludeText, bool aKillIfHung)
 // Return the HWND of any found-window to the caller so that it has the option of waiting
 // for it to become an invalid (closed) window.
 {
@@ -489,7 +490,7 @@ HWND WinClose(HWND aWnd, int aTimeToWaitForClose, bool aKillIfHung)
 
 
 	
-HWND WinActive(global_struct &aSettings, char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText
+HWND WinActive(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
 	, bool aUpdateLastUsed)
 // This function must be kept thread-safe because it may be called (indirectly) by hook thread too.
 // In addition, it must not change the value of anything in aSettings except when aUpdateLastUsed==true.
@@ -532,7 +533,7 @@ HWND WinActive(global_struct &aSettings, char *aTitle, char *aText, char *aExclu
 
 
 
-HWND WinExist(global_struct &aSettings, char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText
+HWND WinExist(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
 	, bool aFindLastMatch, bool aUpdateLastUsed, HWND aAlreadyVisited[], int aAlreadyVisitedCount)
 // This function must be kept thread-safe because it may be called (indirectly) by hook thread too.
 // In addition, it must not change the value of anything in aSettings except when aUpdateLastUsed==true.
@@ -658,7 +659,7 @@ BOOL CALLBACK EnumChildFind(HWND aWnd, LPARAM lParam)
 	// which should help conserve stack space on average.  Can't use the ws.mCandidateTitle
 	// buffer because ws.mFindLastMatch might be true, in which case the original title must
 	// be preserved.
-	char win_text[WINDOW_TEXT_SIZE];
+	TCHAR win_text[WINDOW_TEXT_SIZE];
 	WindowSearch &ws = *(WindowSearch *)lParam;  // For performance and convenience.
 
 	if (!(ws.mSettings->DetectHiddenText || IsWindowVisible(aWnd))) // This text element should not be detectible by the script.
@@ -666,9 +667,9 @@ BOOL CALLBACK EnumChildFind(HWND aWnd, LPARAM lParam)
 
 	// The below was formerly outsourced to the following function, but since it is only called from here,
 	// it has been moved inline:
-	// int GetWindowTextByTitleMatchMode(HWND aWnd, char *aBuf = NULL, int aBufSize = 0)
-	int text_length = ws.mSettings->TitleFindFast ? GetWindowText(aWnd, win_text, sizeof(win_text))
-		: GetWindowTextTimeout(aWnd, win_text, sizeof(win_text));  // The slower method that is able to get text from more types of controls (e.g. large edit controls).
+	// int GetWindowTextByTitleMatchMode(HWND aWnd, LPTSTR aBuf = NULL, int aBufSize = 0)
+	int text_length = ws.mSettings->TitleFindFast ? GetWindowText(aWnd, win_text, _countof(win_text))
+		: GetWindowTextTimeout(aWnd, win_text, _countof(win_text));  // The slower method that is able to get text from more types of controls (e.g. large edit controls).
 	// Older idea that for the above that was not adopted:
 	// Only if GetWindowText() gets 0 length would we try the other method (and of course, don't bother
 	// using GetWindowTextTimeout() at all if "fast" mode is in effect).  The problem with this is that
@@ -691,7 +692,7 @@ BOOL CALLBACK EnumChildFind(HWND aWnd, LPARAM lParam)
 				return FALSE; // Parent can't be a match, so stop searching its children.
 		}
 		else // For backward compatibility, all modes other than RegEx behave as follows.
-			if (strstr(win_text, ws.mCriterionExcludeText))
+			if (_tcsstr(win_text, ws.mCriterionExcludeText))
 				// Since this child window contains the specified ExcludeText anywhere inside its text,
 				// the parent window is always a non-match.
 				return FALSE; // Parent can't be a match, so stop searching its children.
@@ -712,7 +713,7 @@ BOOL CALLBACK EnumChildFind(HWND aWnd, LPARAM lParam)
 		}
 	}
 	else // For backward compatibility, all modes other than RegEx behave as follows.
-		if (strstr(win_text, ws.mCriterionText)) // Match found.
+		if (_tcsstr(win_text, ws.mCriterionText)) // Match found.
 		{
 			ws.mFoundChild = aWnd;
 			return FALSE; // Match found, so stop searching.
@@ -738,7 +739,7 @@ BOOL CALLBACK EnumChildFind(HWND aWnd, LPARAM lParam)
 
 
 
-ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, char *aTextToWaitFor
+ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR aTextToWaitFor
 	, int aWaitTime, int aCheckInterval)
 // aOutputVar is allowed to be NULL if aTextToWaitFor isn't NULL or blank. aBarHwnd is allowed
 // to be NULL because in that case, the caller wants us to set ErrorLevel appropriately and also
@@ -780,9 +781,13 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, char *
 		|| !(remote_buf = AllocInterProcMem(handle, WINDOW_TEXT_SIZE + 1, aBarHwnd))) // Alloc mem last.
 		return OK; // Let ErrorLevel tell the story.
 
-	char buf_for_nt[WINDOW_TEXT_SIZE + 1]; // Needed only for NT/2k/XP: the local counterpart to the buf allocated remotely above.
+	TCHAR buf_for_nt[WINDOW_TEXT_SIZE + 1]; // Needed only for NT/2k/XP: the local counterpart to the buf allocated remotely above.
+#ifndef UNICODE
 	bool is_win9x = g_os.IsWin9x();
-	char *local_buf = is_win9x ? (char *)remote_buf : buf_for_nt; // Local is the same as remote for Win9x.
+	LPTSTR local_buf = is_win9x ? (LPTSTR )remote_buf : buf_for_nt; // Local is the same as remote for Win9x.
+#else
+	LPTSTR local_buf = buf_for_nt;
+#endif
 
 	DWORD result, start_time;
 	--aPartNumber; // Convert to zero-based for use below.
@@ -801,7 +806,9 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, char *
 			// Retrieve the bar's text:
 			if (SendMessageTimeout(aBarHwnd, SB_GETTEXT, aPartNumber, (LPARAM)remote_buf, SMTO_ABORTIFHUNG, SB_TIMEOUT, &result))
 			{
+#ifndef UNICODE
 				if (!is_win9x)
+#endif
 				{
 					if (!ReadProcessMemory(handle, remote_buf, local_buf, LOWORD(result) + 1, NULL)) // +1 to include the terminator (verified: length doesn't include zero terminator).
 					{
@@ -859,7 +866,7 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, char *
 
 
 
-HWND ControlExist(HWND aParentWindow, char *aClassNameAndNum)
+HWND ControlExist(HWND aParentWindow, LPTSTR aClassNameAndNum)
 // This can return target_window itself for cases such as ahk_id %ControlHWND%.
 {
 	if (!aParentWindow)
@@ -871,14 +878,14 @@ HWND ControlExist(HWND aParentWindow, char *aClassNameAndNum)
 		// directly on the specified control's HWND rather than some sub-child.
 
 	WindowSearch ws;
-	bool is_class_name = isdigit(aClassNameAndNum[strlen(aClassNameAndNum) - 1]);
+	bool is_class_name = _istdigit(aClassNameAndNum[_tcslen(aClassNameAndNum) - 1]);
 
 	if (is_class_name)
 	{
 		// Tell EnumControlFind() to search by Class+Num.  Don't call ws.SetCriteria() because
 		// that has special handling for ahk_id, ahk_class, etc. in the first parameter.
-		strlcpy(ws.mCriterionClass, aClassNameAndNum, sizeof(ws.mCriterionClass));
-		ws.mCriterionText = "";
+		tcslcpy(ws.mCriterionClass, aClassNameAndNum, _countof(ws.mCriterionClass));
+		ws.mCriterionText = _T("");
 	}
 	else // Tell EnumControlFind() to search the control's text.
 	{
@@ -921,7 +928,7 @@ BOOL CALLBACK EnumControlFind(HWND aWnd, LPARAM lParam)
 		// necessary to do this in a way functionally identical to the below
 		// so that Window Spy's sequence numbers match the ones generated here:
 		// Concerning strnicmp(), see lstrcmpi note below for why a locale-insensitive match isn't done instead.
-		if (length && !strnicmp(ws.mCriterionClass, ws.mCandidateTitle, length)) // Preliminary match of base class name.
+		if (length && !_tcsnicmp(ws.mCriterionClass, ws.mCandidateTitle, length)) // Preliminary match of base class name.
 		{
 			// mAlreadyVisitedCount was initialized to zero by WindowSearch's constructor.  It is used
 			// to accumulate how many quasi-matches on this class have been found so far.  Also,
@@ -932,10 +939,10 @@ BOOL CALLBACK EnumControlFind(HWND aWnd, LPARAM lParam)
 			// would be found above as a preliminary match.  The below would copy "1" into the buffer,
 			// which is correctly deemed not to match "01".  By contrast, the atoi() method would give
 			// the wrong result because the two numbers are numerically equal.
-			_itoa(++ws.mAlreadyVisitedCount, ws.mCandidateTitle, 10);  // Overwrite the buffer to contain only the count.
+			_itot(++ws.mAlreadyVisitedCount, ws.mCandidateTitle, 10);  // Overwrite the buffer to contain only the count.
 			// lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior
 			// across multiple locales:
-			if (!stricmp(ws.mCandidateTitle, ws.mCriterionClass + length)) // The counts match too, so it's a full match.
+			if (!_tcsicmp(ws.mCandidateTitle, ws.mCriterionClass + length)) // The counts match too, so it's a full match.
 			{
 				ws.mFoundChild = aWnd; // Save this in here for return to the caller.
 				return FALSE; // stop the enumeration.
@@ -963,7 +970,7 @@ BOOL CALLBACK EnumControlFind(HWND aWnd, LPARAM lParam)
 		// TitleMatchMode will be in effect for this also.  Also, it's case sensitivity
 		// helps increase selectivity, which is helpful due to how common short or ambiguous
 		// control names tend to be:
-		GetWindowText(aWnd, ws.mCandidateTitle, sizeof(ws.mCandidateTitle));
+		GetWindowText(aWnd, ws.mCandidateTitle, _countof(ws.mCandidateTitle));
 		if (IsTextMatch(ws.mCandidateTitle, ws.mCriterionText))
 		{
 			ws.mFoundChild = aWnd; // save this in here for return to the caller.
@@ -980,14 +987,14 @@ BOOL CALLBACK EnumControlFind(HWND aWnd, LPARAM lParam)
 
 int MsgBox(int aValue)
 {
-	char str[128];
-	snprintf(str, sizeof(str), "Value = %d (0x%X)", aValue, aValue);
+	TCHAR str[128];
+	sntprintf(str, _countof(str), _T("Value = %d (0x%X)"), aValue, aValue);
 	return MsgBox(str);
 }
 
 
 
-int MsgBox(char *aText, UINT uType, char *aTitle, double aTimeout, HWND aOwner)
+int MsgBox(LPTSTR aText, UINT uType, LPTSTR aTitle, double aTimeout, HWND aOwner)
 // Returns 0 if the attempt failed because of too many existing MessageBox windows,
 // or if MessageBox() itself failed.
 // MB_SETFOREGROUND or some similar setting appears to dismiss some types of screen savers (if active).
@@ -1005,14 +1012,14 @@ int MsgBox(char *aText, UINT uType, char *aTitle, double aTimeout, HWND aOwner)
 		// But must increment this so that the recursive call allows the last MsgBox
 		// to be displayed:
 		++g_nMessageBoxes;
-		MsgBox("The maximum number of MsgBoxes has been reached.");
+		MsgBox(_T("The maximum number of MsgBoxes has been reached."));
 		--g_nMessageBoxes;
 		return 0;
 	}
 
 	// Set these in case the caller explicitly called it with a NULL, overriding the default:
 	if (!aText)
-		aText = "";
+		aText = _T("");
 	if (!aTitle || !*aTitle)
 		// If available, the script's filename seems a much better title in case the user has
 		// more than one script running:
@@ -1031,10 +1038,10 @@ int MsgBox(char *aText, UINT uType, char *aTitle, double aTimeout, HWND aOwner)
 	// Note: 8000 chars is about the max you could ever fit on-screen at 1024x768 on some
 	// XP systems, but it will hold much more before refusing to display at all (i.e.
 	// MessageBox() returning failure), perhaps about 150K:
-	char text[MSGBOX_TEXT_SIZE];
-	char title[DIALOG_TITLE_SIZE];
-	strlcpy(text, aText, sizeof(text));
-	strlcpy(title, aTitle, sizeof(title));
+	TCHAR text[MSGBOX_TEXT_SIZE];
+	TCHAR title[DIALOG_TITLE_SIZE];
+	tcslcpy(text, aText, _countof(text));
+	tcslcpy(title, aTitle, _countof(title));
 
 	uType |= MB_SETFOREGROUND;  // Always do these so that caller doesn't have to specify.
 
@@ -1193,11 +1200,11 @@ BOOL CALLBACK EnumDialog(HWND aWnd, LPARAM lParam)
 	GetWindowThreadProcessId(aWnd, &pid);
 	if (pid == pah.pid)
 	{
-		char buf[32];
-		GetClassName(aWnd, buf, sizeof(buf));
+		TCHAR buf[32];
+		GetClassName(aWnd, buf, _countof(buf));
 		// This is the class name for windows created via MessageBox(), GetOpenFileName(), and probably
 		// other things that use modal dialogs:
-		if (!strcmp(buf, "#32770"))
+		if (!_tcscmp(buf, _T("#32770")))
 		{
 			pah.hwnd = aWnd;  // An output value for the caller.
 			return FALSE;  // We're done.
@@ -1287,7 +1294,7 @@ HWND GetTopChild(HWND aParent)
 	//	//if (GetTopWindow(hwnd_top))
 	//	//	hwnd_top = GetTopWindow(hwnd_top);
 	//	char class_name[64];
-	//	GetClassName(next_top, class_name, sizeof(class_name));
+	//	GetClassName(next_top, class_name, SIZEOF(class_name));
 	//	MsgBox(class_name);
 	//}
 
@@ -1340,28 +1347,30 @@ bool IsWindowHung(HWND aWnd)
 	// thread and calls the appropriate window procedure.  Messages sent between threads are
 	// processed only when the receiving thread executes message retrieval code. The sending
 	// thread is blocked until the receiving thread processes the message."
+#ifndef UNICODE
 	if (g_os.IsWin9x())
 	{
 		typedef BOOL (WINAPI *MyIsHungThread)(DWORD);
-		static MyIsHungThread IsHungThread = (MyIsHungThread)GetProcAddress(GetModuleHandle("user32")
+		static MyIsHungThread IsHungThread = (MyIsHungThread)GetProcAddress(GetModuleHandle(_T("user32"))
 			, "IsHungThread");
 		// When function not available, fall back to the old method:
 		return IsHungThread ? IsHungThread(GetWindowThreadProcessId(aWnd, NULL)) : Slow_IsWindowHung;
 	}
+#endif
 
 	// Otherwise: NT/2k/XP/2003 or later, so try to use the newer method.
 	// The use of IsHungAppWindow() (supported under Win2k+) is discouraged by MS,
 	// but it's useful to prevent the script from getting hung when it tries to do something
 	// to a hung window.
 	typedef BOOL (WINAPI *MyIsHungAppWindow)(HWND);
-	static MyIsHungAppWindow IsHungAppWindow = (MyIsHungAppWindow)GetProcAddress(GetModuleHandle("user32")
+	static MyIsHungAppWindow IsHungAppWindow = (MyIsHungAppWindow)GetProcAddress(GetModuleHandle(_T("user32"))
 		, "IsHungAppWindow");
 	return IsHungAppWindow ? IsHungAppWindow(aWnd) : Slow_IsWindowHung;
 }
 
 
 
-int GetWindowTextTimeout(HWND aWnd, char *aBuf, int aBufSize, UINT aTimeout)
+int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf, int aBufSize, UINT aTimeout)
 // This function must be kept thread-safe because it may be called (indirectly) by hook thread too.
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // Returns the length of what would be copied (not including the zero terminator).
@@ -1385,9 +1394,11 @@ int GetWindowTextTimeout(HWND aWnd, char *aBuf, int aBufSize, UINT aTimeout)
 	if (!aWnd || (aBuf && aBufSize < 1)) // No HWND or no room left in buffer (some callers rely on this check).
 		return 0; // v1.0.40.04: Fixed to return 0 rather than setting aBuf to NULL and continuing (callers don't want that).
 
+#ifndef UNICODE
 	// Override for Win95 because AutoIt3 author says it might crash otherwise:
 	if (aBufSize > WINDOW_TEXT_SIZE && g_os.IsWin95())
 		aBufSize = WINDOW_TEXT_SIZE;
+#endif
 
 	LRESULT result, length;
 	if (aBuf)
@@ -1419,7 +1430,7 @@ int GetWindowTextTimeout(HWND aWnd, char *aBuf, int aBufSize, UINT aTimeout)
 		// is used in lieu of strlen() for performance reasons (because sometimes the text is huge).
 		// It assumes that there will be no more than one additional terminator to the left of the
 		// indicated length, which so far seems to be true:
-		for (char *cp = aBuf + length; cp >= aBuf; --cp)
+		for (LPTSTR cp = aBuf + length; cp >= aBuf; --cp)
 		{
 			if (!*cp)
 			{
@@ -1456,7 +1467,7 @@ int GetWindowTextTimeout(HWND aWnd, char *aBuf, int aBufSize, UINT aTimeout)
 		// 80 vs. 188
 		//char buf[32000];
 		//LRESULT length2;
-		//result = SendMessageTimeout(aWnd, WM_GETTEXT, (WPARAM)sizeof(buf), (LPARAM)buf
+		//result = SendMessageTimeout(aWnd, WM_GETTEXT, (WPARAM)SIZEOF(buf), (LPARAM)buf
 		//	, SMTO_ABORTIFHUNG, aTimeout, (LPDWORD)&length2);
 		//if (length2 != length)
 		//{
@@ -1478,7 +1489,7 @@ int GetWindowTextTimeout(HWND aWnd, char *aBuf, int aBufSize, UINT aTimeout)
 
 
 
-ResultType WindowSearch::SetCriteria(global_struct &aSettings, char *aTitle, char *aText, char *aExcludeTitle, char *aExcludeText)
+ResultType WindowSearch::SetCriteria(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 // Returns FAIL if the new criteria can't possibly match a window (due to ahk_id being in invalid
 // window or the specfied ahk_group not existing).  Otherwise, it returns OK.
 // Callers must ensure that aText, aExcludeTitle, and aExcludeText point to buffers whose contents
@@ -1496,25 +1507,25 @@ ResultType WindowSearch::SetCriteria(global_struct &aSettings, char *aTitle, cha
 	// *during* the duration of any one set of criteria.
 	bool exclude_title_became_non_blank = *aExcludeTitle && !*mCriterionExcludeTitle;
 	mCriterionExcludeTitle = aExcludeTitle;
-	mCriterionExcludeTitleLength = strlen(mCriterionExcludeTitle); // Pre-calculated for performance.
+	mCriterionExcludeTitleLength = _tcslen(mCriterionExcludeTitle); // Pre-calculated for performance.
 	mCriterionText = aText;
 	mCriterionExcludeText = aExcludeText;
 	mSettings = &aSettings;
 
 	DWORD orig_criteria = mCriteria;
-	char *ahk_flag, *cp, buf[MAX_VAR_NAME_LENGTH + 1];
+	TCHAR *ahk_flag, *cp, buf[MAX_VAR_NAME_LENGTH + 1];
 	int criteria_count;
 	size_t size;
 
 	for (mCriteria = 0, ahk_flag = aTitle, criteria_count = 0;; ++criteria_count, ahk_flag += 4) // +4 only since an "ahk_" string that isn't qualified may have been found.
 	{
-		if (   !(ahk_flag = strcasestr(ahk_flag, "ahk_"))   ) // No other special strings are present.
+		if (   !(ahk_flag = tcscasestr(ahk_flag, _T("ahk_")))   ) // No other special strings are present.
 		{
 			if (!criteria_count) // Since no special "ahk_" criteria were present, it is CRITERION_TITLE by default.
 			{
 				mCriteria = CRITERION_TITLE; // In this case, there is only one criterion.
-				strlcpy(mCriterionTitle, aTitle, sizeof(mCriterionTitle));
-				mCriterionTitleLength = strlen(mCriterionTitle); // Pre-calculated for performance.
+				tcslcpy(mCriterionTitle, aTitle, _countof(mCriterionTitle));
+				mCriterionTitleLength = _tcslen(mCriterionTitle); // Pre-calculated for performance.
 			}
 			break;
 		}
@@ -1529,7 +1540,7 @@ ResultType WindowSearch::SetCriteria(global_struct &aSettings, char *aTitle, cha
 		// Since above didn't "continue", it meets the basic test.  But is it an exact match for one of the
 		// special criteria strings?  If not, it's really part of the title criterion instead.
 		cp = ahk_flag + 4;
-		if (!strnicmp(cp, "id", 2))
+		if (!_tcsnicmp(cp, _T("id"), 2))
 		{
 			cp += 2;
 			mCriteria |= CRITERION_ID;
@@ -1541,13 +1552,13 @@ ResultType WindowSearch::SetCriteria(global_struct &aSettings, char *aTitle, cha
 				return FAIL; // Inform caller of invalid criteria.  No need to do anything else further below.
 			}
 		}
-		else if (!strnicmp(cp, "pid", 3))
+		else if (!_tcsnicmp(cp, _T("pid"), 3))
 		{
 			cp += 3;
 			mCriteria |= CRITERION_PID;
 			mCriterionPID = ATOU(cp);
 		}
-		else if (!strnicmp(cp, "class", 5))
+		else if (!_tcsnicmp(cp, _T("class"), 5))
 		{
 			cp += 5;
 			mCriteria |= CRITERION_CLASS;
@@ -1555,8 +1566,8 @@ ResultType WindowSearch::SetCriteria(global_struct &aSettings, char *aTitle, cha
 			// calling omit_leading_whitespace().  But now this should probably be kept for backward compatibility.
 			// Besides, even if it's possible for a class name to start with a space, a RegEx dot or other symbol
 			// can be used to match it via SetTitleMatchMode RegEx.
-			strlcpy(mCriterionClass, omit_leading_whitespace(cp), sizeof(mCriterionClass)); // Copy all of the remaining string to simplify the below.
-			for (cp = mCriterionClass; cp = strcasestr(cp, "ahk_"); cp += 4)  // Fix for v1.0.47.06: strstr() changed to strcasestr() for consistency with the other sections.
+			tcslcpy(mCriterionClass, omit_leading_whitespace(cp), _countof(mCriterionClass)); // Copy all of the remaining string to simplify the below.
+			for (cp = mCriterionClass; cp = tcscasestr(cp, _T("ahk_")); cp += 4)  // Fix for v1.0.47.06: strstr() changed to strcasestr() for consistency with the other sections.
 			{
 				// This loop truncates any other criteria from the class criteria.  It's not a complete
 				// solution because it doesn't validate that what comes after the "ahk_" string is a
@@ -1578,12 +1589,12 @@ ResultType WindowSearch::SetCriteria(global_struct &aSettings, char *aTitle, cha
 					// there is a legitimate "ahk_" string after this one.
 			} // for()
 		}
-		else if (!strnicmp(cp, "group", 5))
+		else if (!_tcsnicmp(cp, _T("group"), 5))
 		{
 			cp += 5;
 			mCriteria |= CRITERION_GROUP;
-			strlcpy(buf, omit_leading_whitespace(cp), sizeof(buf));
-			if (cp = StrChrAny(buf, " \t")) // Group names can't contain spaces, so terminate at the first one to exclude any "ahk_" criteria that come afterward.
+			tcslcpy(buf, omit_leading_whitespace(cp), _countof(buf));
+			if (cp = StrChrAny(buf, _T(" \t"))) // Group names can't contain spaces, so terminate at the first one to exclude any "ahk_" criteria that come afterward.
 				*cp = '\0';
 			if (   !(mCriterionGroup = g_script.FindGroup(buf))   )
 				return FAIL; // No such group: Inform caller of invalid criteria.  No need to do anything else further below.
@@ -1606,10 +1617,10 @@ ResultType WindowSearch::SetCriteria(global_struct &aSettings, char *aTitle, cha
 			// required to delimit the special "ahk_" string.  Any other spaces or tabs to the left of
 			// that one are considered literal (for flexibility):
 			size = ahk_flag - aTitle; // This will always be greater than one due to other checks above, which will result in at least one non-whitespace character in the title criterion.
-			if (size > sizeof(mCriterionTitle)) // Prevent overflow.
-				size = sizeof(mCriterionTitle);
-			strlcpy(mCriterionTitle, aTitle, size); // Copy only the eligible substring as the criteria.
-			mCriterionTitleLength = strlen(mCriterionTitle); // Pre-calculated for performance.
+			if (size > _countof(mCriterionTitle)) // Prevent overflow.
+				size = _countof(mCriterionTitle);
+			tcslcpy(mCriterionTitle, aTitle, size); // Copy only the eligible substring as the criteria.
+			mCriterionTitleLength = _tcslen(mCriterionTitle); // Pre-calculated for performance.
 		}
 	}
 
@@ -1633,12 +1644,12 @@ void WindowSearch::UpdateCandidateAttributes()
 	if (!mCandidateParent || !mCriteria)
 		return;
 	if ((mCriteria & CRITERION_TITLE) || *mCriterionExcludeTitle) // Need the window's title in both these cases.
-		if (!GetWindowText(mCandidateParent, mCandidateTitle, sizeof(mCandidateTitle)))
+		if (!GetWindowText(mCandidateParent, mCandidateTitle, _countof(mCandidateTitle)))
 			*mCandidateTitle = '\0'; // Failure or blank title is okay.
 	if (mCriteria & CRITERION_PID) // In which case mCriterionPID should already be filled in, though it might be an explicitly specified zero.
 		GetWindowThreadProcessId(mCandidateParent, &mCandidatePID);
 	if (mCriteria & CRITERION_CLASS)
-		GetClassName(mCandidateParent, mCandidateClass, sizeof(mCandidateClass)); // Limit to WINDOW_CLASS_SIZE in this case since that's the maximum that can be searched.
+		GetClassName(mCandidateParent, mCandidateClass, _countof(mCandidateClass)); // Limit to WINDOW_CLASS_SIZE in this case since that's the maximum that can be searched.
 	// Nothing to do for these:
 	//CRITERION_GROUP:    Can't be pre-processed at this stage.
 	//CRITERION_ID:       It is mCandidateParent, which has already been set by SetCandidate().
@@ -1664,11 +1675,11 @@ HWND WindowSearch::IsMatch(bool aInvert)
 		switch(mSettings->TitleMatchMode)
 		{
 		case FIND_ANYWHERE:
-			if (!strstr(mCandidateTitle, mCriterionTitle)) // Suitable even if mCriterionTitle is blank, though that's already ruled out above.
+			if (!_tcsstr(mCandidateTitle, mCriterionTitle)) // Suitable even if mCriterionTitle is blank, though that's already ruled out above.
 				return NULL;
 			break;
 		case FIND_IN_LEADING_PART:
-			if (strncmp(mCandidateTitle, mCriterionTitle, mCriterionTitleLength)) // Suitable even if mCriterionTitle is blank, though that's already ruled out above. If it were possible, mCriterionTitleLength would be 0 and thus strncmp would yield 0 to indicate "strings are equal".
+			if (_tcsncmp(mCandidateTitle, mCriterionTitle, mCriterionTitleLength)) // Suitable even if mCriterionTitle is blank, though that's already ruled out above. If it were possible, mCriterionTitleLength would be 0 and thus strncmp would yield 0 to indicate "strings are equal".
 				return NULL;
 			break;
 		case FIND_REGEX:
@@ -1676,7 +1687,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 				return NULL;
 			break;
 		default: // Exact match.
-			if (strcmp(mCandidateTitle, mCriterionTitle))
+			if (_tcscmp(mCandidateTitle, mCriterionTitle))
 				return NULL;
 		}
 		// If above didn't return, it's a match so far so continue onward to the other checks.
@@ -1690,7 +1701,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 				return NULL;
 		}
 		else // For backward compatibility, all other modes use exact-match for Class.
-			if (strcmp(mCandidateClass, mCriterionClass)) // Doesn't match the required class name.
+			if (_tcscmp(mCandidateClass, mCriterionClass)) // Doesn't match the required class name.
 				return NULL;
 		// If nothing above returned, it's a match so far so continue onward to the other checks.
 	}
@@ -1726,11 +1737,11 @@ HWND WindowSearch::IsMatch(bool aInvert)
 		switch(mSettings->TitleMatchMode)
 		{
 		case FIND_ANYWHERE:
-			if (strstr(mCandidateTitle, mCriterionExcludeTitle))
+			if (_tcsstr(mCandidateTitle, mCriterionExcludeTitle))
 				return NULL;
 			break;
 		case FIND_IN_LEADING_PART:
-			if (!strncmp(mCandidateTitle, mCriterionExcludeTitle, mCriterionExcludeTitleLength))
+			if (!_tcsncmp(mCandidateTitle, mCriterionExcludeTitle, mCriterionExcludeTitleLength))
 				return NULL;
 			break;
 		case FIND_REGEX:
@@ -1738,7 +1749,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 				return NULL;
 			break;
 		default: // Exact match.
-			if (!strcmp(mCandidateTitle, mCriterionExcludeTitle))
+			if (!_tcscmp(mCandidateTitle, mCriterionExcludeTitle))
 				return NULL;
 		}
 		// If above didn't return, WinTitle and ExcludeTitle are both satisified.  So continue
@@ -1778,13 +1789,13 @@ HWND WindowSearch::IsMatch(bool aInvert)
 	{
 		// Make it longer than Max var name so that FindOrAddVar() will be able to spot and report
 		// var names that are too long:
-		char var_name[MAX_VAR_NAME_LENGTH + 20];
+		TCHAR var_name[MAX_VAR_NAME_LENGTH + 20];
 		// To help performance (in case the linked list of variables is huge), tell it where
 		// to start the search.  Use the base array name rather than the preceding element because,
 		// for example, Array19 is alphabetially less than Array2, so we can't rely on the
 		// numerical ordering:
 		Var *array_item = g_script.FindOrAddVar(var_name
-			, snprintf(var_name, sizeof(var_name), "%s%u", mArrayStart->mName, mFoundCount)
+			, sntprintf(var_name, _countof(var_name), _T("%s%u"), mArrayStart->mName, mFoundCount)
 			, mArrayStart->IsLocal() ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL);
 		if (array_item)
 			array_item->AssignHWND(mFoundParent);
@@ -1806,7 +1817,11 @@ void SetForegroundLockTimeout()
 {
 	// Even though they may not help in all OSs and situations, this lends peace-of-mind.
 	// (it doesn't appear to help on my XP?)
-	if (g_os.IsWin98orLater() || g_os.IsWin2000orLater())
+	if (
+#ifndef UNICODE
+		g_os.IsWin98orLater() ||
+#endif
+		g_os.IsWin2000orLater())
 	{
 		// Don't check for failure since this operation isn't critical, and don't want
 		// users continually haunted by startup error if for some reason this doesn't

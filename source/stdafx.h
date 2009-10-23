@@ -54,6 +54,10 @@ GNU General Public License for more details.
 	#include <mmsystem.h> // for mciSendString() and waveOutSetVolume()
 	#include <commdlg.h> // for OPENFILENAME
 
+	// ATL alternatives
+	#include "KuString.h"
+	#include "StringConv.h"
+
 	// It's probably best not to do these, because I think they would then be included
 	// for everything, even modules that don't need it, which might result in undesired
 	// dependencies sneaking in, or subtle naming conflicts:
