@@ -3972,20 +3972,37 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 					aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				break;
 			case '.': // L34: Handle dot differently now that dot is considered an action end flag. Detects some more errors and allows some valid expressions which weren't previously allowed.
-				if (action_args_2nd_char != '=')
-				{
-					// not .=
-					char *cp;
-					for (cp = action_args + 1; isalnum(*cp) || *cp == '_'; ++cp);
-					if (cp == action_args + 1)
-						// no valid identifier, so not a valid object op
-						break;
-					if (*cp != '(' && *cp != '[' && strncmp(omit_leading_whitespace(cp),":=",2))
-						// invalid or not supported standalone; i.e. not x.y() or x.y[] or x.y:=z
-						break;
+				if (action_args_2nd_char == '=')
+				{	// Concat-assign .=
+					aActionType = ACT_EXPRESSION;
 				}
-				// This line was not ruled out by the above, so it must be a supported standalone expression.
-				aActionType = ACT_EXPRESSION;
+				else
+				{
+					char *id_begin = action_args + 1;
+					char *cp;
+					for (;;) // L35: Loop to fix x.y.z() and similar.
+					{
+						for (cp = id_begin; isalnum(*cp) || *cp == '_'; ++cp); // Find end of identifier.
+						if (cp == id_begin)
+							// No valid identifier, doesn't look like a valid expression.
+							break;
+						if (*cp == '(')
+						{	// Allow function/method Call as standalone expression.
+							aActionType = ACT_EXPRESSION;
+							break;
+						}
+						cp = omit_leading_whitespace(cp);
+						if (*cp == '[' || *cp == ':' && cp[1] == '=')
+						{	// Allow Set and bracketed Get as standalone expression.
+							aActionType = ACT_EXPRESSION;
+							break;
+						}
+						if (*cp != '.')
+							// Get without brackets, or something else not allowed as standalone expression.
+							break;
+						id_begin = cp + 1;
+					}
+				}
 				break;
 			//default: Leave aActionType set to ACT_INVALID. This also covers case '\0' in case that's possible.
 			} // switch()
