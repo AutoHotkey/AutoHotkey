@@ -845,7 +845,7 @@ public:
 	// Characters that mark the end of an operand inside an expression.  Double-quote must not be included:
 	#define EXPR_OPERAND_TERMINATORS_EX_DOT EXPR_COMMON "+-?" // L31: Used in a few places where '.' needs special treatment.
 	#define EXPR_OPERAND_TERMINATORS EXPR_OPERAND_TERMINATORS_EX_DOT "." // L31: Used in expressions where '.' is always an operator.
-	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS "\"" // L31: COMMENT NOW OBSOLETE -- Excludes '.' and '?' since they need special treatment due to the present/future allowance of them inside the names of variable and functions.
+	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS "\""
 	#define EXPR_ILLEGAL_CHARS "'\\;`{}" // Characters illegal in an expression.
 	// The following HOTSTRING option recognizer is kept somewhat forgiving/non-specific for backward compatibility
 	// (e.g. scripts may have some invalid hotstring options, which are simply ignored).  This definition is here
@@ -856,9 +856,9 @@ public:
 	#define IS_HOTSTRING_OPTION(chr) (isalnum(chr) || strchr("?*- \t", chr))
 	// The characters below are ordered with most-often used ones first, for performance:
 	#define DEFINE_END_FLAGS \
-		char end_flags[] = {' ', g_delimiter, '(', '\t', '<', '>', ':', '=', '+', '-', '*', '/', '!', '~', '&', '|', '^', '[', ']', '\0'}; // '\0' must be last.  L31: Added '[' and ']' for standalone ObjSet/Get to work as ACT_EXPRESSION (']' mostly for intuitive error-reporting).  "Get" is allowed for simplicity and for future use with functions-as-values (e.g. varContainingFunc[..params..]).
-		// '?' and '.' are omitted from the above because they require special handling due to being permitted
-		// in the curruent or future names of variables and functions.
+		char end_flags[] = {' ', g_delimiter, '(', '\t', '<', '>', ':', '=', '+', '-', '*', '/', '!', '~', '&', '|', '^', '[', '.', '?', '\0'}; // '\0' must be last.
+		// L31: Added '[' for standalone ObjSet/Get to work as ACT_EXPRESSION.  "Get" is allowed for simplicity and for future use with functions-as-values (e.g. varContainingFunc[]).
+		// L34: Added '.' and changed dot handling to fix x.=y, improve support in other areas, catch more errors and give slightly better error messages.
 
 	#define ArgLength(aArgNum) ArgIndexLength((aArgNum)-1)
 	#define ArgToDouble(aArgNum) ArgIndexToDouble((aArgNum)-1)

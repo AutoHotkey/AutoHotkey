@@ -414,8 +414,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	{
 		if (field)
 		{
-			ResultType r;
-
 			if (field->symbol == SYM_OBJECT)
 			{
 				ExprTokenType field_token;
@@ -429,36 +427,34 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				// Consequently, if 'that[this]' contains a value, it is invoked; seems obscure but rare, and could
 				// also be of use (for instance, as a means to remove the 'this' parameter or replace it with 'that').
 				aParam[0] = &aThisToken;
-				r = field->object->Invoke(aResultToken, field_token, IT_CALL, aParam, aParamCount);
+				ResultType r = field->object->Invoke(aResultToken, field_token, IT_CALL, aParam, aParamCount);
 				aParam[0] = tmp;
 				return r;
 			}
-
-			if (field->symbol != SYM_OPERAND)
-				return INVOKE_NOT_HANDLED;
-			
-			Func *func = g_script.FindFunc(field->marker);
-			if (func)
+			else if (field->symbol == SYM_OPERAND)
 			{
-				// At this point, aIdCount == 1 and aParamCount includes only the explicit parameters for the call.
-				if (IS_INVOKE_META)
+				Func *func = g_script.FindFunc(field->marker);
+				if (func)
 				{
-					// Called indirectly by means of the meta-object mechanism (mBase); treat it as a "method call".
-					// For this type of call, "this" object is included as the first parameter.  To do this, aParam[0] is
-					// temporarily overwritten with a pointer to aThisToken.  Note that aThisToken contains the original
-					// object specified in script, not the real "this" which is actually a meta-object/base of that object.
-					ExprTokenType *tmp = aParam[0];
-					aParam[0] = &aThisToken;
-					// Call the function.
-					r = CallFunc(*func, aResultToken, aParam, aParamCount);
-					aParam[0] = tmp;
-					return r;
+					// At this point, aIdCount == 1 and aParamCount includes only the explicit parameters for the call.
+					if (IS_INVOKE_META)
+					{
+						ExprTokenType *tmp = aParam[0];
+						// Called indirectly by means of the meta-object mechanism (mBase); treat it as a "method call".
+						// For this type of call, "this" object is included as the first parameter.  To do this, aParam[0] is
+						// temporarily overwritten with a pointer to aThisToken.  Note that aThisToken contains the original
+						// object specified in script, not the real "this" which is actually a meta-object/base of that object.
+						aParam[0] = &aThisToken;
+						ResultType r = CallFunc(*func, aResultToken, aParam, aParamCount);
+						aParam[0] = tmp;
+						return r;
+					}
+					else
+						// This object directly contains a function name.  Assume this object is intended
+						// as a simple array of functions; do not pass aThisToken as is done above.
+						// aParam + 1 vs aParam because aParam[0] is the key which was used to find this field, not a parameter of the call.
+						return CallFunc(*func, aResultToken, aParam + 1, aParamCount - 1);
 				}
-				else
-					// This object directly contains a function name.  Assume this object is intended
-					// as a simple array of functions; do not pass aThisToken as is done above.
-					// aParam + 1 vs aParam because aParam[0] is the key which was used to find this field, not a parameter of the call.
-					return CallFunc(*func, aResultToken, aParam + 1, aParamCount - 1);
 			}
 		}
 		// Since above has not handled this call, check for built-in methods.
@@ -531,7 +527,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				}
 			}
 		}
-		if (!obj) // No field or no object in field - if this is SET, 'new Object()' or Insert() also failed.
+		if (!obj) // Object was not successfully found or created.
 			return OK;
 		// obj now contains a pointer to the object contained by this field, possibly newly created above.
 		ExprTokenType obj_token;
@@ -540,7 +536,9 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		// References in obj_token and obj weren't counted (AddRef wasn't called), so Release() does not
 		// need to be called before returning, and accessing obj after calling Invoke() would not be safe
 		// since it could Release() the object (by overwriting our field via script) as a side-effect.
-		return obj->Invoke(aResultToken, obj_token, aFlags, aParam + 1, aParamCount - 1);
+		return obj->Invoke(aResultToken, obj_token, aFlags & ~IF_META, aParam + 1, aParamCount - 1); // L34: Remove IF_META to allow the object to invoke its own meta-functions.
+		// Above may return INVOKE_NOT_HANDLED in cases such as obj[a,b] where obj[a] exists but obj[a][b] does not.
+		// NEEDS CONFIRMATION: This means that if obj.base[a] exists, [b] may exist in either obj.base[a] or obj[a].
 	}
 	else if (IS_INVOKE_SET)
 	{
@@ -567,20 +565,22 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			return OK;
 		}
 
-		if ( TokenIsEmptyString(value_param)
-			|| !(field || (field = Insert(key_type, key, insert_pos)))
-			|| !field->Assign(value_param) ) // THIS LINE MAY HANDLE THE ASSIGNMENT
-		{
-			// Caller passed "" or a string assignment failed due to low memory. Remove this field;
-			//	attempting to retrieve it later will return "" unless overridden by meta-object.
-			if (field)
-				Remove(field, key_type);
+		//if ( TokenIsEmptyString(value_param)
+		//	|| !(field || (field = Insert(key_type, key, insert_pos)))
+		//	|| !field->Assign(value_param) ) // THIS LINE MAY HANDLE THE ASSIGNMENT
+		//{
+		//	// A string assignment failed due to low memory. Remove this field;
+		//	// attempting to retrieve it later will return "" unless overridden by meta-object.
+		//	if (field)
+		//		Remove(field, key_type);
 
-			// Ensure an empty string is returned (this may not be necessary if caller set a default).
-			aResultToken.symbol = SYM_STRING;
-			aResultToken.marker = "";
-		}
-		else
+		//	// Ensure an empty string is returned (this may not be necessary if caller set a default).
+		//	aResultToken.symbol = SYM_STRING;
+		//	aResultToken.marker = "";
+		//}
+		//else
+		// L34: Assigning an empty string no longer removes the field.
+		if ( (field || (field = Insert(key_type, key, insert_pos))) && field->Assign(value_param) )
 		{
 			if (value_param.symbol == SYM_OPERAND || value_param.symbol == SYM_STRING)
 			{
@@ -589,7 +589,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				aResultToken.marker = value_param.marker;
 			}
 			else
-				field->Get(value_param);
+				field->Get(aResultToken); // L34: Corrected this to be aResultToken instead of value_param (broken by L33).
 		}
 		
 		return OK;
@@ -655,7 +655,7 @@ ResultType Object::_Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	}
 	//else: specified field doesn't exist or has a non-numeric key; in the latter case we will simply overwrite it.
 
-	if ( field || (field = Insert(key_type, key, insert_pos)) ) // For simplicity, TokenIsEmptyString() is not checked in this case.
+	if ( field || (field = Insert(key_type, key, insert_pos)) )
 	{
 		// Assign this field its new value:
 		field->Assign(*aParam[1]);
@@ -703,6 +703,14 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	}
 	else
 	{
+		if (!min_field) // Nothing to remove.
+		{
+			// L34: Must not continue since min_pos points at the wrong key or an invalid location.
+			// Empty result is reserved for invalid parameters; zero indicates no key(s) were found.
+			aResultToken.symbol = SYM_INTEGER;	
+			aResultToken.value_int64 = 0;
+			return OK;
+		}
 		max_pos = min_pos + 1;
 		max_key.i = min_key.i; // Used only if min_key_type == SYM_INTEGER; safe even in other cases.
 	}

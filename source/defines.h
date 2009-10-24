@@ -33,11 +33,11 @@ GNU General Public License for more details.
 #endif
 
 #ifndef NAME_L_REVISION
-#define NAME_L_REVISION ".L33" // L14: Added .Ln for AutoHotkey_L revision n.
+#define NAME_L_REVISION ".L34" // L14: Added .Ln for AutoHotkey_L revision n.
 #endif
 
 #define NAME_P "AutoHotkey"
-#define NAME_VERSION "1.0.48.04" NAME_L_REVISION
+#define NAME_VERSION "1.0.48.05" NAME_L_REVISION
 #define NAME_PV NAME_P " v" NAME_VERSION
 
 // Window class names: Changing these may result in new versions not being able to detect any old instances

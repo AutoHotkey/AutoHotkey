@@ -873,9 +873,6 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 // Note that g_script's destructor takes care of most other cleanup work, such as destroying
 // tray icons, menus, and unowned windows such as ToolTip.
 {
-#ifdef SCRIPT_DEBUG
-	g_Debugger.Exit(aExitReason);
-#endif
 	// L31: Release objects stored in variables, where possible.
 	if (aExitCode != CRITICAL_ERROR) // i.e. Avoid making matters worse if CRITICAL_ERROR.
 	{
@@ -903,6 +900,9 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 					f.mLazyVar[v]->ReleaseObject();
 		}
 	}
+#ifdef SCRIPT_DEBUG // L34: Exit debugger *after* the above to allow debugging of any invoked __Delete handlers.
+	g_Debugger.Exit(aExitReason);
+#endif
 
 	// We call DestroyWindow() because MainWindowProc() has left that up to us.
 	// DestroyWindow() will cause MainWindowProc() to immediately receive and process the
@@ -3663,7 +3663,22 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 	// Above has ensured that end_marker is the address of the last character of the action name,
 	// or NULL if there is no action name.
 	// Find the arguments (not to be confused with exec_params) of this action, if it has any:
-	char *action_args = end_marker ? omit_leading_whitespace(end_marker + 1) : aLineText;
+	char *action_args; //= end_marker ? omit_leading_whitespace(end_marker + 1) : aLineText;
+	bool could_be_named_action;
+	if (end_marker)
+	{
+		action_args = omit_leading_whitespace(end_marker + 1);
+		// L34: Require that named commands and their args are delimited with a space, tab or comma.
+		// Detects errors such as "MsgBox< foo" or "If!foo" and allows things like "control[x]:=y".
+		char end_char = end_marker[1];
+		could_be_named_action = (end_char == g_delimiter || !end_char || IS_SPACE_OR_TAB(end_char));
+	}
+	else
+	{
+		action_args = aLineText;
+		// Since this entire line is the action's arg, it can't contain an action name.
+		could_be_named_action = false;
+	}
 	// Now action_args is either the first delimiter or the first parameter (if the optional first
 	// delimiter was omitted).
 	bool add_openbrace_afterward = false; // v1.0.41: Set default for use in supporting brace in "if (expr) {" and "Loop {".
@@ -3679,7 +3694,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 	}
 	else if (!aActionType && !aOldActionType) // i.e. the caller hasn't yet determined this line's action type.
 	{
-		if (!stricmp(action_name, "IF")) // It's an IF-statement.
+		if (could_be_named_action && !stricmp(action_name, "IF")) // It's an IF-statement.
 		{
 			/////////////////////////////////////
 			// Detect all types of IF-statements.
@@ -3913,7 +3928,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 			case ':':
 				// v1.0.40: Allow things like "MsgBox :: test" to be valid by insisting that '=' follows ':'.
 				if (action_args_2nd_char == '=') // i.e. :=
-					aActionType = strchr(action_name, '.') ? ACT_EXPRESSION : ACT_ASSIGNEXPR; // L31: "obj.member := value" must be handled as a standalone expression.
+					aActionType = ACT_ASSIGNEXPR;
 				break;
 			case '+':
 				// Support for ++i (and in the next case, --i).  In these cases, action_name must be either
@@ -3943,7 +3958,6 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 				else if (action_args_2nd_char == '/' && action_args[2] == '=') // i.e. //=
 					aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				break;
-			case '.':
 			case '|':
 			case '&':
 			case '^':
@@ -3956,6 +3970,22 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 			case '<':
 				if (action_args_2nd_char == *action_args && action_args[2] == '=') // i.e. >>= and <<=
 					aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
+				break;
+			case '.': // L34: Handle dot differently now that dot is considered an action end flag. Detects some more errors and allows some valid expressions which weren't previously allowed.
+				if (action_args_2nd_char != '=')
+				{
+					// not .=
+					char *cp;
+					for (cp = action_args + 1; isalnum(*cp) || *cp == '_'; ++cp);
+					if (cp == action_args + 1)
+						// no valid identifier, so not a valid object op
+						break;
+					if (*cp != '(' && *cp != '[' && strncmp(omit_leading_whitespace(cp),":=",2))
+						// invalid or not supported standalone; i.e. not x.y() or x.y[] or x.y:=z
+						break;
+				}
+				// This line was not ruled out by the above, so it must be a supported standalone expression.
+				aActionType = ACT_EXPRESSION;
 				break;
 			//default: Leave aActionType set to ACT_INVALID. This also covers case '\0' in case that's possible.
 			} // switch()
@@ -4063,7 +4093,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 	// Now the above has ensured that action_args is the first parameter itself, or empty-string if none.
 	// If action_args now starts with a delimiter, it means that the first param is blank/empty.
 
-	if (!aActionType && !aOldActionType) // Caller nor logic above has yet determined the action.
+	if (!aActionType && could_be_named_action && !aOldActionType) // Caller nor logic above has yet determined the action.
 		if (   !(aActionType = ConvertActionType(action_name))   ) // Is this line a command?
 			aOldActionType = ConvertOldActionType(action_name);    // If not, is it an old-command?
 
@@ -4076,8 +4106,7 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 			aActionType = ACT_LOOP;
 			add_openbrace_afterward = true;
 		}
-		else if (*action_args == '?' && IS_SPACE_OR_TAB(action_args[1]) // '?' currently requires a trailing space or tab because variable names can contain '?' (except '?' by itself).  For simplicty, no NBSP check.
-			|| strchr(EXPR_ALL_SYMBOLS, *action_args))
+		else if (strchr(EXPR_ALL_SYMBOLS, *action_args))
 		{
 			char *question_mark;
 			if ((*action_args == '+' || *action_args == '-') && action_args[1] == *action_args) // Post-inc/dec. See comments further below.
@@ -4098,8 +4127,8 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 				}
 				action_args = aLineText; // Since this is an assignment and/or expression, use the line's full text for later parsing.
 			}
-			else if (*action_args == '?' // Don't need a leading space if first char is '?' (though should have a trailing, but for simplicity it isn't checked).
-				|| (question_mark = strstr(action_args, " ? ")) && strchr(question_mark, ':')) // Rough check (see comments below). Relies on short-circuit boolean order.
+			else if (*action_args == '?'  // L34: Below no longer requires spaces around '?'.
+				|| (question_mark = strchr(action_args,'?')) && strchr(question_mark,':')) // Rough check (see comments below). Relies on short-circuit boolean order.
 			{
 				// To avoid hindering load-time error detection such as misspelled command names, allow stand-alone
 				// expressions only for things that can produce a side-effect (currently only ternaries like
@@ -4745,8 +4774,6 @@ inline char *Script::ParseActionType(char *aBufTarget, char *aBufSource, bool aD
 	char *end_marker = StrChrAny(aBufSource, end_flags);
 	if (end_marker) // Found a delimiter.
 	{
-		//if (*end_marker == '=' && end_marker > aBufSource && end_marker[-1] == '.') // Relies on short-circuit boolean order.
-		//	--end_marker; // v1.0.46.01: Support .=, but not any use of '.' because that is reserved as a struct/member operator.
 		if (end_marker > aBufSource) // The delimiter isn't very first char in aBufSource.
 			--end_marker;
 		// else we allow it to be the first char to support "++i" etc.
@@ -10017,6 +10044,10 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 		case SYM_IFF_ELSE: // i.e. this infix symbol is ':'.
 			if (stack_symbol == SYM_BEGIN) // An ELSE with no matching IF/THEN.
 				return LineError("A \":\" is missing its \"?\""); // Below relies on the above check having been done, to avoid underflow.
+			if (stack_symbol == SYM_OPAREN) // L34: Additional syntax validation.
+				return LineError("Missing \")\" before \":\"");
+			if (stack_symbol == SYM_OBRACKET)
+				return LineError("Missing \"]\" before \":\"");
 			// Otherwise:
 			this_postfix = STACK_POP; // There should be no danger of stack underflow in the following because SYM_BEGIN always exists at the bottom of the stack.
 			if (stack_symbol == SYM_IFF_THEN) // See comments near the bottom of this case. The first found "THEN" on the stack must be the one that goes with this "ELSE".

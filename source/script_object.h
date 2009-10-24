@@ -106,7 +106,7 @@ protected:
 		
 		bool Assign(char *str, size_t len = -1, bool exact_size = false)
 		{
-			if (!str || !*str && len < 1) // Sanity check.  Caller *may* remove field/avoid creating it if we return false.  Passing len >= 1 allows copying \0, so don't check *str in that case.  Ordered for short-circuit performance ((len < 1) is commonnly true).
+			if (!str || !*str && len < 1) // If empty string or null pointer, free our contents.  Passing len >= 1 allows copying \0, so don't check *str in that case.  Ordered for short-circuit performance (len is usually -1).
 			{
 				Free();
 				marker = Var::sEmptyString;
@@ -170,8 +170,9 @@ protected:
 				if (val_as_obj = TokenToObject(val)) // SYM_OBJECT or SYM_VAR with var containing object.
 				{
 					Free(); // Free string or object, if applicable.
+					val_as_obj->AddRef();
 					symbol = SYM_OBJECT; // Set symbol *after* calling Free().
-					(object = val_as_obj)->AddRef();
+					object = val_as_obj;
 				}
 				else
 				{

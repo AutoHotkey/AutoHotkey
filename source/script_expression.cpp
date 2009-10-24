@@ -1703,11 +1703,21 @@ non_null_circuit_token:
 		goto normal_end_skip_output_var; // ACT_IFEXPR never has an output_var.
 	}
 
-	if (aResultToken && (IS_NUMERIC(result_token.symbol) || result_token.symbol == SYM_OBJECT)) // L31
+	if (aResultToken) // L31
 	{
-		aResultToken->symbol = result_token.symbol;
-		aResultToken->value_int64 = result_token.value_int64;
-		return ""; // Must not return NULL; any other value should be ignored.
+		if (IS_NUMERIC(result_token.symbol) || result_token.symbol == SYM_OBJECT)
+		{	// Return numeric or object result as-is.
+			aResultToken->symbol = result_token.symbol;
+			aResultToken->value_int64 = result_token.value_int64;
+			return ""; // Must not return NULL; any other value is OK (will be ignored).
+		}
+		if (result_token.symbol == SYM_VAR && result_token.var->HasObject())
+		{	// L34: Allow returning of objects contained by variables; 'return var' was already supported since that is not treated as an expression.
+			aResultToken->symbol = SYM_OBJECT;
+			aResultToken->object = result_token.var->Object();
+			aResultToken->object->AddRef();
+			return "";
+		}
 	}
 	//else result is a string.  Since it may be contained by a temporary memory block which we will free before returning, just return it as per usual.
 
