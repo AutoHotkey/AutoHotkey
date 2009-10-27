@@ -690,11 +690,12 @@ inline void global_init(global_struct &g)
 
 #define ERRORLEVEL_SAVED_SIZE 128 // The size that can be remembered (saved & restored) if a thread is interrupted. Big in case user put something bigger than a number in g_ErrorLevel.
 
-#ifndef UNICODE_CHECKED
 // These will be removed when things are done.
+#ifndef UNICODE_CHECKED
 #define UNICODE_CHECK __declspec(deprecated(_T("Please check what you want are bytes or characters.")))
 UNICODE_CHECK inline size_t CHECK_SIZEOF(size_t n) { return n; }
 #define SIZEOF(c) CHECK_SIZEOF(sizeof(c))
+#pragma deprecated(memcpy, memset, memmove, malloc, realloc, _alloca, alloca)
 #else
 #define UNICODE_CHECK
 #endif

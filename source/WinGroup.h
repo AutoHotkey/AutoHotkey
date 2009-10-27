@@ -31,11 +31,11 @@ class Label;
 class WindowSpec
 {
 public:
-	char *mTitle, *mText, *mExcludeTitle, *mExcludeText;
+	LPTSTR mTitle, mText, mExcludeTitle, mExcludeText;
 	Label *mJumpToLabel;
 	WindowSpec *mNextWindow;  // Next item in linked list.
-	WindowSpec(char *aTitle = "", char *aText = "", Label *aJumpToLabel = NULL
-		, char *aExcludeTitle = "", char *aExcludeText = "")
+	WindowSpec(LPTSTR aTitle = _T(""), LPTSTR aText = _T(""), Label *aJumpToLabel = NULL
+		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""))
 		// Caller should have allocated some dynamic memory for the given args if they're not
 		// the empty string.  We just set our member variables to be equal to the given pointers.
 		: mTitle(aTitle), mText(aText), mExcludeTitle(aExcludeTitle), mExcludeText(aExcludeText)
@@ -76,19 +76,19 @@ private:
 	ResultType Update(bool aIsModeActivate);
 
 public:
-	char *mName;    // The name of the group.
+	LPTSTR mName;    // The name of the group.
 	WindowSpec *mFirstWindow, *mLastWindow;
 	WinGroup *mNextGroup;  // Next item in linked list.
 	UINT mWindowCount;
 
-	ResultType AddWindow(char *aTitle, char *aText, Label *aJumpToLabel, char *aExcludeTitle, char *aExcludeText);
+	ResultType AddWindow(LPTSTR aTitle, LPTSTR aText, Label *aJumpToLabel, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ActUponAll(ActionTypeType aActionType, int aTimeToWaitForClose);
 	ResultType CloseAndGoToNext(bool aStartWithMostRecent);
 	ResultType Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec = NULL, Label **aJumpToLabel = NULL);
 	ResultType Deactivate(bool aStartWithMostRecent);
 	bool IsEmpty() {return mFirstWindow == NULL;}
 	WindowSpec *IsMember(HWND aWnd, global_struct &aSettings);
-	WinGroup(char *aGroupName)
+	WinGroup(LPTSTR aGroupName)
 		// The caller must ensure that aGroupName is non-null and non-empty-string.
 		: mName(aGroupName) // Caller gave us a pointer to dynamic memory for this.
 		, mFirstWindow(NULL), mLastWindow(NULL)

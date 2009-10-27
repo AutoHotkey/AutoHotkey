@@ -43,7 +43,7 @@
    email: m-mat@math.sci.hiroshima-u.ac.jp
 */
 
-#include "StdAfx.h"								// Pre-compiled headers
+#include "stdafx.h"								// Pre-compiled headers
 //#include <time.h> // Don't rely on any of these functions due to their code size.
 #include "mt19937ar-cok.h"
 

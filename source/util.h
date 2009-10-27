@@ -25,12 +25,14 @@ EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 #define tmemcpy			wmemcpy
 #define tmemmove		wmemmove
 #define tmemset			wmemset
+#define tmemcmp			wmemcmp
 #define tmalloc(c)		malloc((c) << 1)
 #define trealloc(p, c)	realloc((p), (c) << 1)
 #else
 #define tmemcpy			memcpy
 #define tmemmove		memmove
 #define tmemset			memset
+#define tmemcmp			memcmp
 #define tmalloc(c)		malloc(c)
 #define trealloc(p, c)	realloc((p), (c))
 #endif
@@ -203,7 +205,7 @@ inline size_t ltrim(LPTSTR aStr, size_t aLength = -1)
 			aLength = _tcslen(ptr); // Set aLength as new/trimmed length, for use below and also as the return value.
 		else // v1.0.25.05 bug-fix: Must adjust the length provided by caller to reflect what we did here.
 			aLength -= offset;
-		memmove(aStr, ptr, (aLength + 1) * sizeof(TCHAR)); // +1 to include the '\0'.  memmove() permits source & dest to overlap.
+		tmemmove(aStr, ptr, aLength + 1); // +1 to include the '\0'.  memmove() permits source & dest to overlap.
 	}
 	return aLength; // This will return -1 if the block above didn't execute and caller didn't specify the length.
 }
@@ -514,7 +516,11 @@ inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 // (also, avoiding mbstowcs slightly reduces code size).  If there's ever a case where performance is
 // important, create a simple casting loop (see mbstowcs.c for an example) that converts source to dest,
 // and test if it performs significantly better than MultiByteToWideChar(CP_ACP...).
+#ifdef UNICODE
+#define ToWideChar(source, dest, dest_size_in_wchars) wcsncpy(dest, source, dest_size_in_wchars)
+#else
 #define ToWideChar(source, dest, dest_size_in_wchars) MultiByteToWideChar(CP_ACP, 0, source, -1, dest, dest_size_in_wchars)
+#endif
 //
 // #2: FROM UTF-8 TO UNICODE (UTF-16). dest_size_in_wchars includes the terminator.  MSDN: "For UTF-8, dwFlags must be set to either 0 or MB_ERR_INVALID_CHARS. Otherwise, the function fails with ERROR_INVALID_FLAGS."
 #define UTF8ToWideChar(source, dest, dest_size_in_wchars) MultiByteToWideChar(CP_UTF8, 0, source, -1, dest, dest_size_in_wchars)
