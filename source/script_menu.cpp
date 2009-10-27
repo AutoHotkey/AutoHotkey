@@ -15,13 +15,14 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
+#define UNICODE_CHECKED
 #include "script.h"
 #include "globaldata.h" // for a lot of things
 #include "application.h" // for MsgSleep()
 #include "window.h" // for SetForegroundWindowEx()
 
 
-ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char *aParam4, char *aOptions)
+ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions)
 {
 	if (mMenuUseErrorLevel)
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Set default, which is "none" for the Menu command.
@@ -34,7 +35,7 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 	if (menu_command == MENU_CMD_INVALID)
 		RETURN_MENU_ERROR(ERR_PARAM2_INVALID, aCommand);
 
-	bool is_tray = !stricmp(aMenu, "tray");
+	bool is_tray = !_tcsicmp(aMenu, _T("tray"));
 
 	// Handle early on anything that doesn't require the menu to be found or created:
 	switch(menu_command)
@@ -51,9 +52,9 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 		if (*aParam3)
 		{
 			if (!mTrayIconTip)
-				mTrayIconTip = SimpleHeap::Malloc(sizeof(mNIC.szTip)); // SimpleHeap improves avg. case mem load.
+				mTrayIconTip = (LPTSTR) SimpleHeap::Malloc(sizeof(mNIC.szTip)); // SimpleHeap improves avg. case mem load.
 			if (mTrayIconTip)
-				strlcpy(mTrayIconTip, aParam3, sizeof(mNIC.szTip));
+				tcslcpy(mTrayIconTip, aParam3, _countof(mNIC.szTip));
 		}
 		else // Restore tip to default.
 			if (mTrayIconTip)
@@ -125,7 +126,7 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 		int image_type;
 		HICON new_icon;
 		if (   !(new_icon = (HICON)LoadPicture(aParam3, 0, 0, image_type, icon_number, false))   ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
-			RETURN_MENU_ERROR("Can't load icon.", aParam3);
+			RETURN_MENU_ERROR(_T("Can't load icon."), aParam3);
 		GuiType::DestroyIconIfUnused(mCustomIcon); // This destroys it if non-NULL and it's not used by an GUI windows.
 
 		mCustomIcon = new_icon;
@@ -133,16 +134,16 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 		// Allocate the full MAX_PATH in case the contents grow longer later.
 		// SimpleHeap improves avg. case mem load:
 		if (!mCustomIconFile)
-			mCustomIconFile = SimpleHeap::Malloc(MAX_PATH);
+			mCustomIconFile = (LPTSTR) SimpleHeap::Malloc(MAX_PATH * sizeof(TCHAR));
 		if (mCustomIconFile)
 		{
 			// Get the full path in case it's a relative path.  This is documented and it's done in case
 			// the script ever changes its working directory:
-			char full_path[MAX_PATH], *filename_marker;
-			if (GetFullPathName(aParam3, sizeof(full_path) - 1, full_path, &filename_marker))
-				strlcpy(mCustomIconFile, full_path, MAX_PATH);
+			TCHAR full_path[MAX_PATH], *filename_marker;
+			if (GetFullPathName(aParam3, _countof(full_path) - 1, full_path, &filename_marker))
+				tcslcpy(mCustomIconFile, full_path, MAX_PATH);
 			else
-				strlcpy(mCustomIconFile, aParam3, MAX_PATH);
+				tcslcpy(mCustomIconFile, aParam3, MAX_PATH);
 		}
 
 		if (!g_NoTrayIcon)
@@ -220,7 +221,7 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 		if (menu_command != MENU_CMD_ADD && menu_command != MENU_CMD_STANDARD)
 			RETURN_MENU_ERROR(ERR_MENU, aMenu);
 		if (   !(menu = AddMenu(aMenu))   )
-			RETURN_MENU_ERROR("Menu name too long.", aMenu); // Could also be "out of mem" but that's too rare to display.
+			RETURN_MENU_ERROR(_T("Menu name too long."), aMenu); // Could also be "out of mem" but that's too rare to display.
 	}
 
 	// The above has found or added the menu for use below.
@@ -232,20 +233,20 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 	case MENU_CMD_ADD:
 		if (*aParam3) // Since a menu item name was given, it's not a separator line.
 			break;    // Let a later switch() handle it.
-		if (!menu->AddItem("", 0, NULL, NULL, ""))
-			RETURN_MENU_ERROR(ERR_OUTOFMEM, "");  // Out of mem should be the only possibility in this case.
+		if (!menu->AddItem(_T(""), 0, NULL, NULL, _T("")))
+			RETURN_MENU_ERROR(ERR_OUTOFMEM, _T(""));  // Out of mem should be the only possibility in this case.
 		return OK;
 	case MENU_CMD_DELETE:
 		if (*aParam3) // Since a menu item name was given, an item is being deleted, not the whole menu.
 			break;    // Let a later switch() handle it.
 		if (menu == mTrayMenu)
-			RETURN_MENU_ERROR("Tray menu must not be deleted.", "");
+			RETURN_MENU_ERROR(_T("Tray menu must not be deleted."), _T(""));
 		if (!ScriptDeleteMenu(menu))
-			RETURN_MENU_ERROR("Can't delete menu (in use?).", menu->mName); // Possibly in use as a menu bar.
+			RETURN_MENU_ERROR(_T("Can't delete menu (in use?)."), menu->mName); // Possibly in use as a menu bar.
 		return OK;
 	case MENU_CMD_DELETEALL:
 		if (!menu->DeleteAllItems())
-			RETURN_MENU_ERROR("Can't delete items (in use?).", menu->mName); // Possibly in use as a menu bar.
+			RETURN_MENU_ERROR(_T("Can't delete items (in use?)."), menu->mName); // Possibly in use as a menu bar.
 		return OK;
 	case MENU_CMD_DEFAULT:
 		if (*aParam3) // Since a menu item has been specified, let a later switch() handle it.
@@ -260,24 +261,24 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 		menu->ExcludeStandardItems(); // Since failure is very rare, no check of its return value is done.
 		return OK;
 	case MENU_CMD_COLOR:
-		menu->SetColor(aParam3, stricmp(aParam4, "Single"));
+		menu->SetColor(aParam3, _tcsicmp(aParam4, _T("Single")));
 		return OK;
 	}
 
 	// All the remaining commands need a menu item to operate upon, or some other requirement met below.
 
-	char *new_name = "";
+	LPTSTR new_name = _T("");
 	if (menu_command == MENU_CMD_RENAME) // aParam4 contains the menu item's new name in this case.
 	{
 		new_name = aParam4;
-		aParam4 = "";
+		aParam4 = _T("");
 	}
 
 	// The above has handled all cases that don't require a menu item to be found or added,
 	// including the adding separator lines.  So at the point, it is necessary to either find
 	// or create a menu item.  The latter only occurs for the ADD command.
 	if (!*aParam3)
-		RETURN_MENU_ERROR("Parameter #3 must not be blank in this case.", "");
+		RETURN_MENU_ERROR(_T("Parameter #3 must not be blank in this case."), _T(""));
 
 	// Find the menu item name AND its previous item (needed for the DELETE command) in the linked list:
 	UserMenuItem *mi, *menu_item = NULL, *menu_item_prev = NULL; // Set defaults.
@@ -309,7 +310,7 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 				// menu is not included anywhere in the nested hierarchy of that submenu's submenus.
 				// The OS doesn't seem to like that, creating empty or strange menus if it's attempted:
 				if (   submenu && (submenu == menu || submenu->ContainsMenu(menu))   )
-					RETURN_MENU_ERROR("Submenu must not contain its parent menu.", aParam4);
+					RETURN_MENU_ERROR(_T("Submenu must not contain its parent menu."), aParam4);
 			}
 			else // It's a label.
 				if (   !(target_label = FindLabel(aParam4))   )
@@ -323,7 +324,7 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 			// Seems best not to create menu items on-demand like this because they might get put into
 			// an incorrect position (i.e. it seems better than menu changes be kept separate from
 			// menu additions):
-			RETURN_MENU_ERROR("Nonexistent menu item.", aParam3);
+			RETURN_MENU_ERROR(_T("Nonexistent menu item."), aParam3);
 
 		// Otherwise: Adding a new item that doesn't yet exist.
 		// Need to find a menuID that isn't already in use by one of the other menu items.
@@ -377,9 +378,9 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 				break;
 		}
 		if (id_in_use) // All ~64000 IDs are in use!
-			RETURN_MENU_ERROR("Too many menu items.", aParam3); // Short msg since so rare.
+			RETURN_MENU_ERROR(_T("Too many menu items."), aParam3); // Short msg since so rare.
 		if (!menu->AddItem(aParam3, sLastFreeID, target_label, submenu, aOptions))
-			RETURN_MENU_ERROR("Menu item name too long.", aParam3); // Can also happen due to out-of-mem, but that's too rare to display.
+			RETURN_MENU_ERROR(_T("Menu item name too long."), aParam3); // Can also happen due to out-of-mem, but that's too rare to display.
 		return OK;  // Item has been successfully added with the correct properties.
 	} // if (!menu_item)
 
@@ -397,7 +398,7 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 		return menu->ModifyItem(menu_item, target_label, submenu, aOptions);
 	case MENU_CMD_RENAME:
 		if (!menu->RenameItem(menu_item, new_name))
-			RETURN_MENU_ERROR("Menu item name already in use (or too long).", new_name);
+			RETURN_MENU_ERROR(_T("Menu item name already in use (or too long)."), new_name);
 		return OK;
 	case MENU_CMD_CHECK:
 		return menu->CheckItem(menu_item);
@@ -421,7 +422,7 @@ ResultType Script::PerformMenu(char *aMenu, char *aCommand, char *aParam3, char 
 
 
 
-UserMenu *Script::FindMenu(char *aMenuName)
+UserMenu *Script::FindMenu(LPTSTR aMenuName)
 // Returns the UserMenu whose name matches aMenuName, or NULL if not found.
 {
 	if (!aMenuName || !*aMenuName) return NULL;
@@ -433,19 +434,19 @@ UserMenu *Script::FindMenu(char *aMenuName)
 
 
 
-UserMenu *Script::AddMenu(char *aMenuName)
+UserMenu *Script::AddMenu(LPTSTR aMenuName)
 // Caller must have already ensured aMenuName doesn't exist yet in the list.
 // Returns the newly created UserMenu object.
 {
 	if (!aMenuName || !*aMenuName) return NULL;
-	size_t length = strlen(aMenuName);
+	size_t length = _tcslen(aMenuName);
 	if (length > MAX_MENU_NAME_LENGTH)
 		return NULL;  // Caller should show error if desired.
 	// After mem is allocated, the object takes charge of its later deletion:
-	char *name_dynamic = new char[length + 1];  // +1 for terminator.
+	LPTSTR name_dynamic = new TCHAR [length + 1];  // +1 for terminator.
 	if (!name_dynamic)
 		return NULL;  // Caller should show error if desired.
-	strcpy(name_dynamic, aMenuName);
+	_tcscpy(name_dynamic, aMenuName);
 	UserMenu *menu = new UserMenu(name_dynamic);
 	if (!menu)
 	{
@@ -549,20 +550,20 @@ ResultType Script::ScriptDeleteMenu(UserMenu *aMenu)
 
 
 
-ResultType UserMenu::AddItem(char *aName, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, char *aOptions)
+ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, LPTSTR aOptions)
 // Caller must have already ensured that aName does not yet exist as a user-defined menu item
 // in this->mMenu.
 {
-	size_t length = strlen(aName);
+	size_t length = _tcslen(aName);
 	if (length > MAX_MENU_NAME_LENGTH)
 		return FAIL;  // Caller should show error if desired.
 	// After mem is allocated, the object takes charge of its later deletion:
-	char *name_dynamic;
+	LPTSTR name_dynamic;
 	if (length)
 	{
-		if (   !(name_dynamic = new char[length + 1])   )  // +1 for terminator.
+		if (   !(name_dynamic = new TCHAR [length + 1])   )  // +1 for terminator.
 			return FAIL;  // Caller should show error if desired.
-		strcpy(name_dynamic, aName);
+		_tcscpy(name_dynamic, aName);
 	}
 	else
 		name_dynamic = Var::sEmptyString; // So that it can be detected as a non-allocated empty string.
@@ -589,7 +590,7 @@ ResultType UserMenu::AddItem(char *aName, UINT aMenuID, Label *aLabel, UserMenu 
 
 
 
-UserMenuItem::UserMenuItem(char *aName, size_t aNameCapacity, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, UserMenu *aMenu)
+UserMenuItem::UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, UserMenu *aMenu)
 // UserMenuItem Constructor.
 	: mName(aName), mNameCapacity(aNameCapacity), mMenuID(aMenuID), mLabel(aLabel), mSubmenu(aSubmenu), mMenu(aMenu)
 	, mPriority(0) // default priority = 0
@@ -665,7 +666,7 @@ ResultType UserMenu::DeleteAllItems()
 
 
 
-ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, Label *aLabel, UserMenu *aSubmenu, char *aOptions)
+ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, Label *aLabel, UserMenu *aSubmenu, LPTSTR aOptions)
 // Modify the label, submenu, or options of a menu item (exactly one of these should be NULL and the
 // other not except when updating only the options).
 // If a menu item becomes a submenu, we don't relinquish its ID in case it's ever made a normal item
@@ -730,19 +731,19 @@ ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, Label *aLabel, UserMenu
 
 
 
-void UserMenu::UpdateOptions(UserMenuItem *aMenuItem, char *aOptions)
+void UserMenu::UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions)
 {
 	if (toupper(*aOptions) == 'P')
-		aMenuItem->mPriority = atoi(aOptions + 1);
+		aMenuItem->mPriority = _ttoi(aOptions + 1);
 }
 
 
 
-ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, char *aNewName)
+ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName)
 // Caller should specify "" for aNewName to convert aMenuItem into a separator.
 // Returns FAIL if the new name conflicts with an existing name.
 {
-	if (strlen(aNewName) > MAX_MENU_NAME_LENGTH)
+	if (_tcslen(aNewName) > MAX_MENU_NAME_LENGTH)
 		return FAIL; // Caller should diplay error if desired.
 
 	if (!mMenu) // Just update the member variables for later use when the menu is created.
@@ -782,17 +783,17 @@ ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, char *aNewName)
 
 
 
-ResultType UserMenu::UpdateName(UserMenuItem *aMenuItem, char *aNewName)
+ResultType UserMenu::UpdateName(UserMenuItem *aMenuItem, LPTSTR aNewName)
 // Caller should already have ensured that aMenuItem is not too long.
 {
-	size_t new_length = strlen(aNewName);
+	size_t new_length = _tcslen(aNewName);
 	if (new_length)
 	{
 		if (new_length >= aMenuItem->mNameCapacity) // Too small, so reallocate.
 		{
 			// Use a temp var. so that mName will never wind up being NULL (relied on by other things).
 			// This also retains the original menu name if the allocation fails:
-			char *temp = new char[new_length + 1];  // +1 for terminator.
+			LPTSTR temp = new TCHAR [new_length + 1];  // +1 for terminator.
 			if (!temp)
 				return FAIL;
 			// Otherwise:
@@ -801,7 +802,7 @@ ResultType UserMenu::UpdateName(UserMenuItem *aMenuItem, char *aNewName)
 			aMenuItem->mName = temp;
 			aMenuItem->mNameCapacity = new_length + 1;
 		}
-		strcpy(aMenuItem->mName, aNewName);
+		_tcscpy(aMenuItem->mName, aNewName);
 	}
 	else // It will become a separator.
 	{
@@ -956,7 +957,7 @@ ResultType UserMenu::Create(MenuTypeType aMenuType)
 		if (aMenuType == MENU_TYPE_NONE || aMenuType == mMenuType)
 			return OK;
 		else // It exists but it's the wrong type.  Destroy and recreate it (but keep TRAY always as popup type).
-			if (!stricmp(mName, "tray") || !Destroy()) // Could not be destroyed, perhaps because it is attached to a window as a menu bar.
+			if (!_tcsicmp(mName, _T("tray")) || !Destroy()) // Could not be destroyed, perhaps because it is attached to a window as a menu bar.
 				return FAIL;
 	}
 	if (aMenuType == MENU_TYPE_NONE) // Since caller didn't specify and it's about to be (re)created, assume popup.
@@ -1019,11 +1020,15 @@ ResultType UserMenu::Create(MenuTypeType aMenuType)
 
 
 
-void UserMenu::SetColor(char *aColorName, bool aApplyToSubmenus)
+void UserMenu::SetColor(LPTSTR aColorName, bool aApplyToSubmenus)
 {
 	// Avoid the overhead of creating HBRUSH's on OSes that don't support SetMenuInfo().
 	// Perhaps there is some other way to change menu background color on Win95/NT?
-	if (g_os.IsWin95() || g_os.IsWinNT4())
+	if (
+#ifndef UNICODE
+		g_os.IsWin95() ||
+#endif
+		g_os.IsWinNT4())
 		return;
 	AssignColor(aColorName, mColor, mBrush);  // Takes care of deleting old brush, etc.
 	// To avoid complications, such as a submenu being detached from its parent and then its parent
@@ -1050,7 +1055,7 @@ void UserMenu::ApplyColor(bool aApplyToSubmenus)
 {
 	// Must fetch function address dynamically or program won't launch at all on Win95/NT:
 	typedef BOOL (WINAPI *MySetMenuInfoType)(HMENU, LPCMENUINFO);
-	static MySetMenuInfoType MySetMenuInfo = (MySetMenuInfoType)GetProcAddress(GetModuleHandle("user32"), "SetMenuInfo");
+	static MySetMenuInfoType MySetMenuInfo = (MySetMenuInfoType)GetProcAddress(GetModuleHandle(_T("user32")), "SetMenuInfo");
 	if (!MySetMenuInfo)
 		return;
 	MENUINFO mi = {0}; 
@@ -1071,24 +1076,24 @@ ResultType UserMenu::AppendStandardItems()
 #ifdef AUTOHOTKEYSC
 	if (g_AllowMainWindow)
 	{
-		AppendMenu(mMenu, MF_STRING, ID_TRAY_OPEN, "&Open");
+		AppendMenu(mMenu, MF_STRING, ID_TRAY_OPEN, _T("&Open"));
 		if (this == g_script.mTrayMenu && !mDefault) // No user-defined default menu item, so use the standard one.
 			SetMenuDefaultItem(mMenu, ID_TRAY_OPEN, FALSE); // Seems to have no function other than appearance.
 	}
 #else
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_OPEN, "&Open");
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_HELP, "&Help");
+	AppendMenu(mMenu, MF_STRING, ID_TRAY_OPEN, _T("&Open"));
+	AppendMenu(mMenu, MF_STRING, ID_TRAY_HELP, _T("&Help"));
 	AppendMenu(mMenu, MF_SEPARATOR, 0, NULL);
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_WINDOWSPY, "&Window Spy");
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_RELOADSCRIPT, "&Reload This Script");
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_EDITSCRIPT, "&Edit This Script");
+	AppendMenu(mMenu, MF_STRING, ID_TRAY_WINDOWSPY, _T("&Window Spy"));
+	AppendMenu(mMenu, MF_STRING, ID_TRAY_RELOADSCRIPT, _T("&Reload This Script"));
+	AppendMenu(mMenu, MF_STRING, ID_TRAY_EDITSCRIPT, _T("&Edit This Script"));
 	AppendMenu(mMenu, MF_SEPARATOR, 0, NULL);
 	if (this == g_script.mTrayMenu && !mDefault) // No user-defined default menu item, so use the standard one.
 		SetMenuDefaultItem(mMenu, ID_TRAY_OPEN, FALSE); // Seems to have no function other than appearance.
 #endif
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_SUSPEND, "&Suspend Hotkeys");
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_PAUSE, "&Pause Script");
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_EXIT, "E&xit");
+	AppendMenu(mMenu, MF_STRING, ID_TRAY_SUSPEND, _T("&Suspend Hotkeys"));
+	AppendMenu(mMenu, MF_STRING, ID_TRAY_PAUSE, _T("&Pause Script"));
+	AppendMenu(mMenu, MF_STRING, ID_TRAY_EXIT, _T("E&xit"));
 	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary (though it would be rare anyone would want the menu bar containing the std items).
 	return OK;  // For caller convenience.
 }
@@ -1344,16 +1349,16 @@ UINT UserMenu::GetSubmenuPos(HMENU ahMenu)
 
 
 
-UINT UserMenu::GetItemPos(char *aMenuItemName)
+UINT UserMenu::GetItemPos(LPTSTR aMenuItemName)
 // aMenuItemName will be searched for in this->mMenu.
 // Returns UINT_MAX if this->mMenu is NULL or if aMenuItemName can't be found in this->mMenu.
 {
 	if (!mMenu)
 		return UINT_MAX;
 	int menu_item_count = GetMenuItemCount(mMenu);
-	char buf[MAX_MENU_NAME_LENGTH + 2];  // +2 due to uncertainty over whether GetMenuString()'s nMaxCount includes room for terminator.
+	TCHAR buf[MAX_MENU_NAME_LENGTH + 2];  // +2 due to uncertainty over whether GetMenuString()'s nMaxCount includes room for terminator.
 	for (int i = 0; i < menu_item_count; ++i)
-		if (GetMenuString(mMenu, i, buf, sizeof(buf) - 1, MF_BYPOSITION))
+		if (GetMenuString(mMenu, i, buf, _countof(buf) - 1, MF_BYPOSITION))
 			if (!lstrcmpi(buf, aMenuItemName))  // A case insensitive match was found.
 				return i;
 	return UINT_MAX;  // No match found.

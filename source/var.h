@@ -528,6 +528,12 @@ public:
 		return length;
 	}
 
+	VarSizeType SetCharLength(VarSizeType len)
+	{
+		 ByteLength() = len * sizeof(TCHAR);
+		 return len;
+	}
+
 	VarSizeType CharLength()
 	{
 		return ByteLength() / sizeof(TCHAR);

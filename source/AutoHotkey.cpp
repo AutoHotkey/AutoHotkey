@@ -15,6 +15,7 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
+#define UNICODE_CHECKED
 #include "globaldata.h" // for access to many global vars
 #include "application.h" // for MsgSleep()
 #include "window.h" // For MsgBox() & SetForegroundLockTimeout()
@@ -33,7 +34,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	g_hInstance = hInstance;
 	InitializeCriticalSection(&g_CriticalRegExCache); // v1.0.45.04: Must be done early so that it's unconditional, so that DeleteCriticalSection() in the script destructor can also be unconditional (deleting when never initialized can crash, at least on Win 9x).
 
-	if (!GetCurrentDirectory(sizeof(g_WorkingDir), g_WorkingDir)) // Needed for the FileSelectFile() workaround.
+	if (!GetCurrentDirectory(_countof(g_WorkingDir), g_WorkingDir)) // Needed for the FileSelectFile() workaround.
 		*g_WorkingDir = '\0';
 	// Unlike the below, the above must not be Malloc'd because the contents can later change to something
 	// as large as MAX_PATH by means of the SetWorkingDir command.
@@ -76,17 +77,17 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// and will be added as variables %1% %2% etc.
 	// The above rules effectively make it impossible to autostart AutoHotkey.ini with parameters
 	// unless the filename is explicitly given (shouldn't be an issue for 99.9% of people).
-	char var_name[32], *param; // Small size since only numbers will be used (e.g. %1%, %2%).
+	TCHAR var_name[32], *param; // Small size since only numbers will be used (e.g. %1%, %2%).
 	Var *var;
 	bool switch_processing_is_complete = false;
 	int script_param_num = 1;
 
 	for (int i = 1; i < __argc; ++i) // Start at 1 because 0 contains the program name.
 	{
-		param = __argv[i]; // For performance and convenience.
+		param = __targv[i]; // For performance and convenience.
 		if (switch_processing_is_complete) // All args are now considered to be input parameters for the script.
 		{
-			if (   !(var = g_script.FindOrAddVar(var_name, sprintf(var_name, "%d", script_param_num)))   )
+			if (   !(var = g_script.FindOrAddVar(var_name, _stprintf(var_name, _T("%d"), script_param_num)))   )
 				return CRITICAL_ERROR;  // Realistically should never happen.
 			var->Assign(param);
 			++script_param_num;
@@ -94,20 +95,20 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		// Insist that switches be an exact match for the allowed values to cut down on ambiguity.
 		// For example, if the user runs "CompiledScript.exe /find", we want /find to be considered
 		// an input parameter for the script rather than a switch:
-		else if (!stricmp(param, "/R") || !stricmp(param, "/restart"))
+		else if (!_tcsicmp(param, _T("/R")) || !_tcsicmp(param, _T("/restart")))
 			restart_mode = true;
-		else if (!stricmp(param, "/F") || !stricmp(param, "/force"))
+		else if (!_tcsicmp(param, _T("/F")) || !_tcsicmp(param, _T("/force")))
 			g_ForceLaunch = true;
-		else if (!stricmp(param, "/ErrorStdOut"))
+		else if (!_tcsicmp(param, _T("/ErrorStdOut")))
 			g_script.mErrorStdOut = true;
 #ifndef AUTOHOTKEYSC // i.e. the following switch is recognized only by AutoHotkey.exe (especially since recognizing new switches in compiled scripts can break them, unlike AutoHotkey.exe).
-		else if (!stricmp(param, "/iLib")) // v1.0.47: Build an include-file so that ahk2exe can include library functions called by the script.
+		else if (!_tcsicmp(param, _T("/iLib"))) // v1.0.47: Build an include-file so that ahk2exe can include library functions called by the script.
 		{
 			++i; // Consume the next parameter too, because it's associated with this one.
 			if (i >= __argc) // Missing the expected filename parameter.
 				return CRITICAL_ERROR;
 			// For performance and simplicity, open/crease the file unconditionally and keep it open until exit.
-			if (   !(g_script.mIncludeLibraryFunctionsThenExit = fopen(__argv[i], "w"))   ) // Can't open the temp file.
+			if (   !(g_script.mIncludeLibraryFunctionsThenExit = _tfopen(__targv[i], _T("w")))   ) // Can't open the temp file.
 				return CRITICAL_ERROR;
 		}
 #endif
@@ -125,19 +126,19 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 #ifndef AUTOHOTKEYSC
 	if (script_filespec)// Script filename was explicitly specified, so check if it has the special conversion flag.
 	{
-		size_t filespec_length = strlen(script_filespec);
+		size_t filespec_length = _tcslen(script_filespec);
 		if (filespec_length >= CONVERSION_FLAG_LENGTH)
 		{
-			char *cp = script_filespec + filespec_length - CONVERSION_FLAG_LENGTH;
+			LPTSTR cp = script_filespec + filespec_length - CONVERSION_FLAG_LENGTH;
 			// Now cp points to the first dot in the CONVERSION_FLAG of script_filespec (if it has one).
-			if (!stricmp(cp, CONVERSION_FLAG))
+			if (!_tcsicmp(cp, CONVERSION_FLAG))
 				return Line::ConvertEscapeChar(script_filespec);
 		}
 	}
 #endif
 
 	// Like AutoIt2, store the number of script parameters in the script variable %0%, even if it's zero:
-	if (   !(var = g_script.FindOrAddVar("0"))   )
+	if (   !(var = g_script.FindOrAddVar(_T("0")))   )
 		return CRITICAL_ERROR;  // Realistically should never happen.
 	var->Assign(script_param_num - 1);
 
@@ -192,8 +193,8 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			if (g_AllowOnlyOneInstance == SINGLE_INSTANCE_IGNORE)
 				return 0;
 			if (g_AllowOnlyOneInstance != SINGLE_INSTANCE_REPLACE)
-				if (MsgBox("An older instance of this script is already running.  Replace it with this"
-					" instance?\nNote: To avoid this message, see #SingleInstance in the help file."
+				if (MsgBox(_T("An older instance of this script is already running.  Replace it with this")
+					_T(" instance?\nNote: To avoid this message, see #SingleInstance in the help file.")
 					, MB_YESNO, g_script.mFileName) == IDNO)
 					return 0;
 			// Otherwise:
@@ -226,7 +227,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 				// This can happen if the previous instance has an OnExit subroutine that takes a long
 				// time to finish, or if it's waiting for a network drive to timeout or some other
 				// operation in which it's thread is occupied.
-				if (MsgBox("Could not close the previous instance of this script.  Keep waiting?", 4) == IDNO)
+				if (MsgBox(_T("Could not close the previous instance of this script.  Keep waiting?"), 4) == IDNO)
 					return CRITICAL_ERROR;
 				interval_count = 0;
 			}
@@ -267,7 +268,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		// Windows 95/NT without the updated DLL (otherwise the program would not launch at all).
 		typedef BOOL (WINAPI *MyInitCommonControlsExType)(LPINITCOMMONCONTROLSEX);
 		MyInitCommonControlsExType MyInitCommonControlsEx = (MyInitCommonControlsExType)
-			GetProcAddress(GetModuleHandle("comctl32"), "InitCommonControlsEx"); // LoadLibrary shouldn't be necessary because comctl32 in linked by compiler.
+			GetProcAddress(GetModuleHandle(_T("comctl32")), "InitCommonControlsEx"); // LoadLibrary shouldn't be necessary because comctl32 in linked by compiler.
 		if (MyInitCommonControlsEx)
 		{
 			INITCOMMONCONTROLSEX icce;
@@ -285,7 +286,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	Hotkey::ManifestAllHotkeysHotstringsHooks(); // We want these active now in case auto-execute never returns (e.g. loop)
 	g_script.mIsReadyToExecute = true; // This is done only after the above to support error reporting in Hotkey.cpp.
 
-	Var *clipboard_var = g_script.FindOrAddVar("Clipboard"); // Add it if it doesn't exist, in case the script accesses "Clipboard" via a dynamic variable.
+	Var *clipboard_var = g_script.FindOrAddVar(_T("Clipboard")); // Add it if it doesn't exist, in case the script accesses "Clipboard" via a dynamic variable.
 	if (clipboard_var)
 		// This is done here rather than upon variable creation speed up runtime/dynamic variable creation.
 		// Since the clipboard can be changed by activity outside the program, don't read-cache its contents.
