@@ -3549,8 +3549,10 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 	// NOTE: Some sections rely on the fact that no warning dialogs are displayed if the hook is
 	// called for but the OS doesn't support it.  For example, ManifestAllHotkeysHotstringsHooks()
 	// doesn't check the OS version in many cases when marking hotkeys as hook hotkeys.
+#ifndef UNICODE
 	if (g_os.IsWin9x())
 		return;
+#endif
 
 	// Determine the set of hooks that should be activated or deactivated.
 	HookType hooks_to_be_active = aWhichHook | aWhichHookAlways; // Bitwise union.

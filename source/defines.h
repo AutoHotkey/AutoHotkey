@@ -690,12 +690,22 @@ inline void global_init(global_struct &g)
 
 #define ERRORLEVEL_SAVED_SIZE 128 // The size that can be remembered (saved & restored) if a thread is interrupted. Big in case user put something bigger than a number in g_ErrorLevel.
 
+#ifdef UNICODE
+#define WINAPI_SUFFIX "W"
+#else
+#define WINAPI_SUFFIX "A"
+#endif
+
+#define __S(x) #x
+#define _S(x) __S(x)
+#define MY_WARN(n) __FILE__ "(" _S(__LINE__) ") : warning C" __S(n) ": "
+
 // These will be removed when things are done.
 #ifndef UNICODE_CHECKED
 #define UNICODE_CHECK __declspec(deprecated(_T("Please check what you want are bytes or characters.")))
 UNICODE_CHECK inline size_t CHECK_SIZEOF(size_t n) { return n; }
 #define SIZEOF(c) CHECK_SIZEOF(sizeof(c))
-#pragma deprecated(memcpy, memset, memmove, malloc, realloc, _alloca, alloca)
+#pragma deprecated(memcpy, memset, memmove, malloc, realloc, _alloca, alloca, toupper, tolower)
 #else
 #define UNICODE_CHECK
 #endif

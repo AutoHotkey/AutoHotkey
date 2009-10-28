@@ -28,6 +28,7 @@ EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 #define tmemcmp			wmemcmp
 #define tmalloc(c)		malloc((c) << 1)
 #define trealloc(p, c)	realloc((p), (c) << 1)
+#define talloca(c)		_alloca((c) << 1)
 #else
 #define tmemcpy			memcpy
 #define tmemmove		memmove
@@ -35,6 +36,7 @@ EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 #define tmemcmp			memcmp
 #define tmalloc(c)		malloc(c)
 #define trealloc(p, c)	realloc((p), (c))
+#define talloca(c)		_alloca(c)
 #endif
 
 #define IS_SPACE_OR_TAB(c) (c == ' ' || c == '\t')
@@ -55,7 +57,7 @@ EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 // generation and caching).
 
 
-inline LPTSTR StrToTitleCase(LPTSTR aStr)
+inline LPSTR StrToTitleCaseA(LPSTR aStr)
 // Inline functions like the following probably don't actually get put inline by the compiler (since it knows
 // it's not worth it).  However, changing this to be non-inline has a significant impact on benchmarks even
 // though the function is never called by those benchmarks, probably due to coincidences in how the generated
@@ -63,27 +65,60 @@ inline LPTSTR StrToTitleCase(LPTSTR aStr)
 // drop the benchmarks significantly.
 {
 	if (!aStr) return aStr;
-	LPTSTR aStr_orig = aStr;	
+	LPSTR aStr_orig = aStr;	
 	for (bool convert_next_alpha_char_to_upper = true; *aStr; ++aStr)
 	{
-		if (IsCharAlpha(*aStr)) // Use this to better support chars from non-English languages.
+		if (IsCharAlphaA(*aStr)) // Use this to better support chars from non-English languages.
 		{
 			if (convert_next_alpha_char_to_upper)
 			{
-				*aStr = (TCHAR)ltoupper(*aStr);
+				*aStr = (char)CharUpperA((LPSTR)(UCHAR)*aStr);
 				convert_next_alpha_char_to_upper = false;
 			}
 			else
-				*aStr = (TCHAR)ltolower(*aStr);
+				*aStr = (char)CharLowerA((LPSTR)(UCHAR)*aStr);
 		}
 		else
-			if (_istspace((UCHAR)*aStr))
+			if (isspace((UCHAR)*aStr))
 				convert_next_alpha_char_to_upper = true;
 		// Otherwise, it's a digit, punctuation mark, etc. so nothing needs to be done.
 	}
 	return aStr_orig;
 }
 
+
+
+inline LPWSTR StrToTitleCaseW(LPWSTR aStr)
+{
+	if (!aStr) return aStr;
+	LPWSTR aStr_orig = aStr;	
+	for (bool convert_next_alpha_char_to_upper = true; *aStr; ++aStr)
+	{
+		if (IsCharAlphaW(*aStr)) // Use this to better support chars from non-English languages.
+		{
+			if (convert_next_alpha_char_to_upper)
+			{
+				*aStr = (wchar_t)CharUpperW((LPWSTR)*aStr);
+				convert_next_alpha_char_to_upper = false;
+			}
+			else
+				*aStr = (wchar_t)CharLowerW((LPWSTR)*aStr);
+		}
+		else
+			if (iswspace(*aStr))
+				convert_next_alpha_char_to_upper = true;
+		// Otherwise, it's a digit, punctuation mark, etc. so nothing needs to be done.
+	}
+	return aStr_orig;
+}
+
+
+
+#ifdef UNICODE
+#define StrToTitleCase StrToTitleCaseW
+#else
+#define StrToTitleCase StrToTitleCaseA
+#endif
 
 
 inline LPTSTR StrChrAny(LPTSTR aStr, LPTSTR aCharList)
@@ -528,6 +563,8 @@ inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 // #3: FROM UNICODE (UTF-16) TO UTF-8. dest_size_in_bytes includes the terminator.
 #define WideCharToUTF8(source, dest, dest_size_in_bytes) WideCharToMultiByte(CP_UTF8, 0, source, -1, dest, dest_size_in_bytes, NULL, NULL)
 
+#define UTF8StrLen(str, cch) MultiByteToWideChar(CP_UTF8, 0, (str), (cch), NULL, 0)
+
 // v1.0.44.03: Callers now use the following macro rather than the old approach.  However, this change
 // is meaningful only to people who use more than one keyboard layout.  In the case of hotstrings:
 // It seems that the vast majority of them would want the Hotstring monitoring to adhere to the active
@@ -554,10 +591,16 @@ LPTSTR SystemTimeToYYYYMMDD(LPTSTR aBuf, SYSTEMTIME &aTime);
 __int64 YYYYMMDDSecondsUntil(LPTSTR aYYYYMMDDStart, LPTSTR aYYYYMMDDEnd, bool &aFailed);
 __int64 FileTimeSecondsUntil(FILETIME *pftStart, FILETIME *pftEnd);
 
-SymbolType IsPureNumeric(LPTSTR aBuf, BOOL aAllowNegative = false // BOOL vs. bool might squeeze a little more performance out of this frequently-called function.
+SymbolType IsPureNumeric(LPCTSTR aBuf, BOOL aAllowNegative = false // BOOL vs. bool might squeeze a little more performance out of this frequently-called function.
 	, BOOL aAllowAllWhitespace = true, BOOL aAllowFloat = false, BOOL aAllowImpure = false);
 
-void tcslcpy(LPTSTR aDst, LPCTSTR aSrc, size_t aDstSize);
+void strlcpy(LPSTR aDst, LPCSTR aSrc, size_t aDstSize);
+void wcslcpy(LPWSTR aDst, LPCWSTR aSrc, size_t aDstSize);
+#ifdef UNICODE
+#define tcslcpy wcslcpy
+#else
+#define tcslcpy strlcpy
+#endif
 int sntprintf(LPTSTR aBuf, int aBufSize, LPCTSTR aFormat, ...);
 int sntprintfcat(LPTSTR aBuf, int aBufSize, LPCTSTR aFormat, ...);
 // Not currently used by anything, so commented out to possibly reduce code size:

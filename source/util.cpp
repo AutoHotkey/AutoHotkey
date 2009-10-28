@@ -305,7 +305,7 @@ __int64 FileTimeSecondsUntil(FILETIME *pftStart, FILETIME *pftEnd)
 
 
 
-SymbolType IsPureNumeric(LPTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
+SymbolType IsPureNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
 	, BOOL aAllowFloat, BOOL aAllowImpure)  // BOOL vs. bool might squeeze a little more performance out of this frequently-called function.
 // String can contain whitespace.
 // If aBuf doesn't contain something purely numeric, PURE_NOT_NUMERIC is returned.  The same happens if
@@ -409,7 +409,7 @@ SymbolType IsPureNumeric(LPTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitesp
 
 
 
-void tcslcpy(LPTSTR aDst, LPCTSTR aSrc, size_t aDstSize) // Non-inline because it benches slightly faster that way.
+void strlcpy(LPSTR aDst, LPCSTR aSrc, size_t aDstSize) // Non-inline because it benches slightly faster that way.
 // Caller must ensure that aDstSize is greater than 0.
 // Caller must ensure that the entire capacity of aDst is writable, EVEN WHEN it knows that aSrc is much shorter
 // than the aDstSize.  This is because the call to strncpy (which is used for its superior performance) zero-fills
@@ -427,7 +427,16 @@ void tcslcpy(LPTSTR aDst, LPCTSTR aSrc, size_t aDstSize) // Non-inline because i
 	// It might be worthwhile to have a custom char-copying-loop here someday so that number of characters
 	// actually copied (not including the zero terminator) can be returned to callers who want it.
 	--aDstSize; // Convert from size to length (caller has ensured that aDstSize > 0).
-	_tcsncpy(aDst, aSrc, aDstSize); // NOTE: In spite of its zero-filling, strncpy() benchmarks considerably faster than a custom loop, probably because it uses 32-bit memory operations vs. 8-bit.
+	strncpy(aDst, aSrc, aDstSize); // NOTE: In spite of its zero-filling, strncpy() benchmarks considerably faster than a custom loop, probably because it uses 32-bit memory operations vs. 8-bit.
+	aDst[aDstSize] = '\0';
+}
+
+
+
+void wcslcpy(LPWSTR aDst, LPCWSTR aSrc, size_t aDstSize)
+{
+	--aDstSize;
+	wcsncpy(aDst, aSrc, aDstSize);
 	aDst[aDstSize] = '\0';
 }
 

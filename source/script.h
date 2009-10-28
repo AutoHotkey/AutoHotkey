@@ -366,7 +366,7 @@ struct RegItemStruct
 		// trailing backslash when they are reported.  So the user's own subkey should not
 		// have one either so that when A_ScriptSubKey is referenced in the script, it will
 		// always show up as the value without a trailing backslash:
-		size_t length = _tcsclen(subkey);
+		size_t length = _tcslen(subkey);
 		if (length && subkey[length - 1] == '\\')
 			subkey[length - 1] = '\0';
 	}
@@ -1178,7 +1178,7 @@ public:
 	static DWORD SoundConvertComponentType(LPTSTR aBuf, int *aInstanceNumber = NULL)
 	{
 		LPTSTR colon_pos = _tcschr(aBuf, ':');
-		UINT length_to_check = (UINT)(colon_pos ? colon_pos - aBuf : _tcsclen(aBuf));
+		UINT length_to_check = (UINT)(colon_pos ? colon_pos - aBuf : _tcslen(aBuf));
 		if (aInstanceNumber) // Caller wanted the below put into the output parameter.
 		{
 			if (colon_pos)
@@ -2671,7 +2671,7 @@ VarSizeType BIV_IsAdmin(LPTSTR aBuf, LPTSTR aVarName);
 #define EXPR_TOKEN_LENGTH(token_raw, token_as_string) \
 (token_raw->symbol == SYM_VAR && !token_raw->var->IsBinaryClip()) \
 	? token_raw->var->Length()\
-	: _tcsclen(token_as_string)
+	: _tcslen(token_as_string)
 
 void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);

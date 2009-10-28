@@ -54,6 +54,7 @@ bool MsgSleep(int aSleepDuration = INTERVAL_UNSPECIFIED, MessageMode aMode = RET
 
 // Do a true Sleep() for short sleeps on Win9x because it is much more accurate than the MsgSleep()
 // method on that OS, at least for when short sleeps are done on Win98SE:
+#ifndef UNICODE
 #define DoWinDelay \
 	if (::g->WinDelay > -1)\
 	{\
@@ -71,6 +72,19 @@ bool MsgSleep(int aSleepDuration = INTERVAL_UNSPECIFIED, MessageMode aMode = RET
 		else\
 			MsgSleep(g->ControlDelay);\
 	}
+#else
+#define DoWinDelay \
+	if (::g->WinDelay > -1)\
+	{\
+		MsgSleep(::g->WinDelay);\
+	}
+
+#define DoControlDelay \
+	if (g->ControlDelay > -1)\
+	{\
+		MsgSleep(g->ControlDelay);\
+	}
+#endif
 
 ResultType IsCycleComplete(int aSleepDuration, DWORD aStartTime, bool aAllowEarlyReturn);
 

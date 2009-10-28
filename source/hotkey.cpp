@@ -2429,7 +2429,7 @@ Hotstring::Hotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LP
 		// hotstrings can be disabled but never entirely deleted, it's not a memory leak in either case
 		// since memory allocated by either method will be freed when the program exits.
 		size_t size = _tcslen(aReplacement) + 1;
-		if (   !(mReplacement = (size > MAX_ALLOC_SIMPLE) ? (LPTSTR)malloc(size * sizeof(TCHAR)) : (LPTSTR)SimpleHeap::Malloc(size * sizeof(TCHAR)))   )
+		if (   !(mReplacement = (size > MAX_ALLOC_SIMPLE) ? (LPTSTR)tmalloc(size) : (LPTSTR)SimpleHeap::Malloc(size * sizeof(TCHAR)))   )
 		{
 			g_script.ScriptError(ERR_OUTOFMEM); // Short msg since very rare.
 			return;

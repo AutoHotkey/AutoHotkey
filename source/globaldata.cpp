@@ -175,7 +175,11 @@ OS_Version g_os;  // OS version object, courtesy of AutoIt3.
 // in places other than the tray.  Also note that the red icons look okay, at least on Win98,
 // because they are "red enough" not to suffer the graying effect from the palette shifting done
 // by the OS:
-int g_IconTray = (g_os.IsWinXPorLater() || g_os.IsWinMeorLater()) ? IDI_MAIN : IDI_TRAY_WIN9X;
+int g_IconTray = (g_os.IsWinXPorLater()
+#ifndef UNICODE
+	|| g_os.IsWinMeorLater()
+#endif
+	) ? IDI_MAIN : IDI_TRAY_WIN9X;
 int g_IconTraySuspend = (g_IconTray == IDI_MAIN) ? IDI_SUSPEND : IDI_TRAY_WIN9X_SUSPEND;
 
 DWORD g_OriginalTimeout;

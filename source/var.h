@@ -233,7 +233,6 @@ private:
 		}
 	}
 
-	// Doesn't the compiler know these should be inlined?
 	VarSizeType _CharLength() { return mByteLength / sizeof(TCHAR); }
 	VarSizeType _CharCapacity() { return mByteCapacity / sizeof(TCHAR); }
 public:
@@ -402,7 +401,7 @@ public:
 	#define VAR_FREE_IF_LARGE                  4
 	void Free(int aWhenToFree = VAR_ALWAYS_FREE, bool aExcludeAliases = false);
 	ResultType AppendIfRoom(LPTSTR aStr, VarSizeType aLength);
-	void AcceptNewMem(char *aNewMem, VarSizeType aLength);
+	void AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength);
 	void SetLengthFromContents();
 
 	static ResultType BackupFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVarBackupCount);

@@ -214,7 +214,7 @@ struct KeyHistoryItem
 {
 	vk_type vk;
 	sc_type sc;
-	char event_type; // space=none, i=ignored, s=suppressed, h=hotkey, etc.
+	TCHAR event_type; // space=none, i=ignored, s=suppressed, h=hotkey, etc.
 	bool key_up;
 	float elapsed_time;  // Time since prior key or mouse button, in seconds.
 	// It seems better to store the foreground window's title rather than its HWND since keystrokes

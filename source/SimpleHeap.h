@@ -53,7 +53,8 @@ private:
 	~SimpleHeap();
 public:
 //	static UINT GetBlockCount() {return sBlockCount;}
-	static char *Malloc(char *aBuf, size_t aLength = -1); // Return a block of memory to the caller and copy aBuf into it.
+	UNICODE_CHECK static char *Malloc(char *aBuf, size_t aLength = -1); // Return a block of memory to the caller and copy aBuf into it.
+	static wchar_t *Malloc(wchar_t *aBuf, size_t aLength = -1);
 	static char *Malloc(size_t aSize); // Return a block of memory to the caller.
 	static void Delete(void *aPtr);
 	//static void DeleteAll();

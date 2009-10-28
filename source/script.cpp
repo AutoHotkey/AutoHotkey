@@ -264,7 +264,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	if (   !(mFileSpec = SimpleHeap::Malloc(buf))   )  // The full spec is stored for convenience, and it's relied upon by mIncludeLibraryFunctionsThenExit.
 		return FAIL;  // It already displayed the error for us.
 	filename_marker[-1] = '\0'; // Terminate buf in this position to divide the string.
-	size_t filename_length = _tcsclen(filename_marker);
+	size_t filename_length = _tcslen(filename_marker);
 	if (   mIsAutoIt2 = (filename_length >= 4 && !_tcsicmp(filename_marker + filename_length - 4, EXT_AUTOIT2))   )
 	{
 		// Set the old/AutoIt2 defaults for maximum safety and compatibilility.
@@ -338,7 +338,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	*buf = '"';
 	if (GetModuleFileName(NULL, buf + 1, _countof(buf) - 2)) // -2 to leave room for the enclosing double quotes.
 	{
-		size_t buf_length = _tcsclen(buf);
+		size_t buf_length = _tcslen(buf);
 		buf[buf_length++] = '"';
 		buf[buf_length] = '\0';
 		if (   !(mOurEXE = SimpleHeap::Malloc(buf))   )
@@ -1072,7 +1072,7 @@ bool IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace = NULL)
 		&& (action_end - aBuf != 5 || _tcsnicmp(aBuf, _T("WHILE"), 5))) // v1.0.48.04: Recognize While() as loop rather than a function because many programmers are in the habit of writing while() and if().
 		|| action_end[1] == ':'   ) // v1.0.44.07: This prevents "$(::fn_call()" from being seen as a function-call vs. hotkey-with-call.  For simplicity and due to rarity, omit_leading_whitespace() isn't called; i.e. assumes that the colon immediate follows the '('.
 		return false;
-	LPTSTR aBuf_last_char = action_end + _tcsclen(action_end) - 1; // Above has already ensured that action_end is "(...".
+	LPTSTR aBuf_last_char = action_end + _tcslen(action_end) - 1; // Above has already ensured that action_end is "(...".
 	if (aPendingFunctionHasBrace) // Caller specified that an optional open-brace may be present at the end of aBuf.
 	{
 		if (*aPendingFunctionHasBrace = (*aBuf_last_char == '{')) // Caller has ensured that aBuf is rtrim'd.
@@ -1574,7 +1574,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 				{
 					// Find the end of this option item:
 					if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )  // Space or tab.
-						option_end = next_option + _tcsclen(next_option); // Set to position of zero terminator instead.
+						option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
 
 					// Temporarily terminate to help eliminate ambiguity for words contained inside other words,
 					// such as hypothetical "Checked" inside of "CheckedGray":
@@ -1589,7 +1589,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						// which allows space to be used by itself and also at the beginning or end of a string
 						// containing other chars.
 						ConvertEscapeSequences(suffix, g_EscapeChar, true);
-						suffix_length = _tcsclen(suffix);
+						suffix_length = _tcslen(suffix);
 					}
 					else if (!_tcsnicmp(next_option, _T("LTrim"), 5))
 						do_ltrim = (next_option[5] != '0');  // i.e. Only an explicit zero will turn it off.
@@ -1698,7 +1698,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 				}
 
 				if (replacement_count) // Update the length if any actual replacements were done.
-					next_buf_length = _tcsclen(next_buf);
+					next_buf_length = _tcslen(next_buf);
 			} // Handling of a normal line within a continuation section.
 
 			// Must check the combined length only after anything that might have expanded the string above.
@@ -1884,7 +1884,7 @@ examine_line:
 					// `c -> c (i.e. unknown escape sequences resolve to the char after the `)
 				}
 				// Below has a final +1 to include the terminator:
-				tmemmove(cp, cp1, _tcsclen(cp1) + 1);
+				tmemmove(cp, cp1, _tcslen(cp1) + 1);
 				// Since single colons normally do not need to be escaped, this increments one extra
 				// for double-colons to skip over the entire pair so that its second colon
 				// is not seen as part of the hotstring's final double-colon.  Example:
@@ -1969,7 +1969,7 @@ examine_line:
 					remap_dest_is_mouse = IsMouseVK(remap_dest_vk);
 					remap_keybd_to_mouse = !remap_source_is_mouse && remap_dest_is_mouse;
 					sntprintf(remap_source, _countof(remap_source), _T("%s%s")
-						, _tcsclen(cp1) == 1 && IsCharUpper(*cp1) ? _T("+") : _T("")  // Allow A::b to be different than a::b.
+						, _tcslen(cp1) == 1 && IsCharUpper(*cp1) ? _T("+") : _T("")  // Allow A::b to be different than a::b.
 						, buf); // Include any modifiers too, e.g. ^b::c.
 					tcslcpy(remap_dest, cp, _countof(remap_dest));      // But exclude modifiers here; they're wanted separately.
 					tcslcpy(remap_dest_modifiers, hotkey_flag, _countof(remap_dest_modifiers));
@@ -2205,7 +2205,7 @@ examine_line:
 			// The following allows the next stage to see "else" or "else {" if it's present:
 			if (   !*(buf = omit_leading_whitespace(buf + 1))   )
 				goto continue_main_loop; // It's just a naked "}", so no more processing needed for this line.
-			buf_length = _tcsclen(buf); // Update for possible use below.
+			buf_length = _tcslen(buf); // Update for possible use below.
 		}
 		// First do a little special handling to support actions on the same line as their
 		// ELSE, e.g.:
@@ -2449,7 +2449,7 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 		*aBuf = '\0';  // Reset since on error, contents added by fgets() are indeterminate.
 		return -1;
 	}
-	aBuf_length = _tcsclen(aBuf);
+	aBuf_length = _tcslen(aBuf);
 	if (!aBuf_length)
 		return 0;
 	if (aBuf[aBuf_length-1] == '\n')
@@ -2484,7 +2484,7 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 			if (*cp == ')') // This isn't the last line of the continuation section, so leave the line untrimmed (caller will apply the ltrim setting on its own).
 			{
 				ltrim(aBuf); // Ltrim this line unconditionally so that caller will see that it starts with ')' without having to do extra steps.
-				aBuf_length = _tcsclen(aBuf); // ltrim() doesn't always return an accurate length, so do it this way.
+				aBuf_length = _tcslen(aBuf); // ltrim() doesn't always return an accurate length, so do it this way.
 			}
 		}
 	}
@@ -2543,7 +2543,7 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 					// it would probably break existing scripts that rely on the fact that accents do not need
 					// to be escaped inside #Include.  Also, the likelihood of "`;" appearing literally in a
 					// legitimate #Include file seems vanishingly small.
-					tmemmove(prevp, prevp + 1, _tcsclen(prevp + 1) + 1);  // +1 for the terminator.
+					tmemmove(prevp, prevp + 1, _tcslen(prevp + 1) + 1);  // +1 for the terminator.
 					--aBuf_length;
 					// Then continue looking for others.
 				}
@@ -2570,7 +2570,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	LPTSTR directive_end, parameter_raw;
 	if (   !(directive_end = StrChrAny(aBuf, end_flags))   )
 	{
-		directive_end = aBuf + _tcsclen(aBuf); // Point it to the zero terminator.
+		directive_end = aBuf + _tcslen(aBuf); // Point it to the zero terminator.
 		parameter_raw = NULL;
 	}
 	else
@@ -2961,7 +2961,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 					return ScriptError(ERR_PARAM1_INVALID, aBuf);
 			}
 			tcslcpy(g_CommentFlag, parameter, MAX_COMMENT_FLAG_LENGTH + 1);
-			g_CommentFlagLength = _tcsclen(g_CommentFlag);  // Keep this in sync with above.
+			g_CommentFlagLength = _tcslen(g_CommentFlag);  // Keep this in sync with above.
 		}
 		return CONDITION_TRUE;
 	}
@@ -3303,7 +3303,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			{
 				LPTSTR item_end = StrChrAny(item, _T(", \t=:"));  // Comma, space or tab, equal-sign, colon.
 				if (!item_end) // This is probably the last/only variable in the list; e.g. the "x" in "local x"
-					item_end = item + _tcsclen(item);
+					item_end = item + _tcslen(item);
 				var_name_length = (VarSizeType)(item_end - item);
 
 				int always_use;
@@ -3547,7 +3547,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				if (operation = StrChrAny(action_args, end_flags))
 					operation = omit_leading_whitespace(operation);
 				else
-					operation = action_args + _tcsclen(action_args); // Point it to the NULL terminator instead.
+					operation = action_args + _tcslen(action_args); // Point it to the NULL terminator instead.
 
 				// v1.0.42: Fix "If not Installed" not be seen as "If var-named-'not' in MatchList", being
 				// careful not to break "If NotInstalled in MatchList".  The following are also fixed in
@@ -3697,7 +3697,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			if (aActionType == ACT_IFEXPR) // There are various ways above for aActionType to become ACT_IFEXPR.
 			{
 				// Since this is ACT_IFEXPR, action_args is known not to be an empty string, which is relied on below.
-				LPTSTR action_args_last_char = action_args + _tcsclen(action_args) - 1; // Shouldn't be a whitespace char since those should already have been removed at an earlier stage.
+				LPTSTR action_args_last_char = action_args + _tcslen(action_args) - 1; // Shouldn't be a whitespace char since those should already have been removed at an earlier stage.
 				if (*action_args_last_char == '{') // This is an if-expression statement with an open-brace on the same line.
 				{
 					*action_args_last_char = '\0';
@@ -3820,7 +3820,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						// Set up aLineText and action_args to be parsed later on as a list of two parameters:
 						// The variable name followed by the amount to be added or subtracted (e.g. "ScriptVar, 1").
 						// We're not changing the length of aLineText by doing this, so it should be large enough:
-						size_t new_length = _tcsclen(action_args);
+						size_t new_length = _tcslen(action_args);
 						// Since action_args is just a pointer into the aLineText buffer (which caller has ensured
 						// is modifiable), use memmove() so that overlapping source & dest are properly handled:
 						tmemmove(aLineText, action_args, new_length + 1); // +1 to include the zero terminator.
@@ -4064,7 +4064,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				// So these are also done as well, and don't need an explicit check:
 				// g_EscapeChar , g_delimiter , (when g_CommentFlagLength > 1 ??): *g_CommentFlag
 				// Below has a final +1 to include the terminator:
-				tmemcpy(action_args + i, action_args + i + 1, _tcsclen(action_args + i + 1) + 1);
+				tmemcpy(action_args + i, action_args + i + 1, _tcslen(action_args + i + 1) + 1);
 				literal_map[i] = 1;  // In the map, mark this char as literal.
 			}
 			// else: Do nothing, even if the value is zero (the string's terminator).
@@ -4534,7 +4534,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		//    e) (While-loops are also checked here now)
 		// Insist that no characters follow the '{' in case the user intended it to be a file-pattern loop
 		// such as "Loop {literal-filename".
-		LPTSTR arg1_last_char = arg1 + _tcsclen(arg1) - 1;
+		LPTSTR arg1_last_char = arg1 + _tcslen(arg1) - 1;
 		if (*arg1_last_char == '{')
 		{
 			add_openbrace_afterward = true;
@@ -4563,7 +4563,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	//       Gosub, Sub1
 	return ParseAndAddLine(subaction_start, subaction_type, suboldaction_type, subaction_name, subaction_end_marker
 		, literal_map + (subaction_end_marker - action_args) // Pass only the relevant substring of literal_map.
-		, _tcsclen(subaction_end_marker));
+		, _tcslen(subaction_end_marker));
 }
 
 
@@ -4593,7 +4593,7 @@ inline LPTSTR Script::ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool
 		// else we allow it to be the first char to support "++i" etc.
 	}
 	else // No delimiter found, so set end_marker to the location of the last char in string.
-		end_marker = aBufSource + _tcsclen(aBufSource) - 1;
+		end_marker = aBufSource + _tcslen(aBufSource) - 1;
 	// Now end_marker is the character just prior to the first delimiter or whitespace,
 	// or (in the case of ++ and --) the first delimiter itself.  Find the end of
 	// the action-type name by omitting trailing whitespace:
@@ -4836,7 +4836,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 			// (if the alloc fails, an inaccurate length won't matter because it's an program-abort situation).
 			// The length must fit into a WORD, which it will since each arg is literal text from a script's line,
 			// which is limited to LINE_SIZE. The length member was added in v1.0.44.14 to boost runtime performance.
-			this_new_arg.length = (WORD)_tcsclen(this_aArg);
+			this_new_arg.length = (WORD)_tcslen(this_aArg);
 			if (   !(this_new_arg.text = SimpleHeap::Malloc(this_aArg, this_new_arg.length))   )
 				return FAIL;  // It already displayed the error for us.
 
@@ -5532,7 +5532,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 				if (aArgc > 1 && !line.ArgHasDeref(2))
 				{
 					if (!IsPureNumeric(new_raw_arg2, true, false, true, true) // v1.0.46.11: Allow impure numbers to support scientific notation; e.g. 0.6e or 0.6E.
-						|| _tcsclen(new_raw_arg2) >= _countof(g->FormatFloat) - 2)
+						|| _tcslen(new_raw_arg2) >= _countof(g->FormatFloat) - 2)
 						return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 				}
 			}
@@ -6395,12 +6395,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 	case ACT_GETKEYSTATE:
 		// v1.0.44.03: Don't validate single-character key names because although a character like ?might have no
 		// matching VK in system's default layout, that layout could change to something which does have a VK for it.
-		if (aArgc > 1 && !line.ArgHasDeref(2) && _tcsclen(new_raw_arg2) > 1 && !TextToVK(new_raw_arg2) && !ConvertJoy(new_raw_arg2))
+		if (aArgc > 1 && !line.ArgHasDeref(2) && _tcslen(new_raw_arg2) > 1 && !TextToVK(new_raw_arg2) && !ConvertJoy(new_raw_arg2))
 			return ScriptError(ERR_INVALID_KEY_OR_BUTTON, new_raw_arg2);
 		break;
 
 	case ACT_KEYWAIT: // v1.0.44.03: See comment above.
-		if (aArgc > 0 && !line.ArgHasDeref(1) && _tcsclen(new_raw_arg1) > 1 && !TextToVK(new_raw_arg1) && !ConvertJoy(new_raw_arg1))
+		if (aArgc > 0 && !line.ArgHasDeref(1) && _tcslen(new_raw_arg1) > 1 && !TextToVK(new_raw_arg1) && !ConvertJoy(new_raw_arg1))
 			return ScriptError(ERR_INVALID_KEY_OR_BUTTON, new_raw_arg1);
 		break;
 #endif  // The above section is in place only if when not AUTOHOTKEYSC.
@@ -6813,7 +6813,7 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 	// Above must ensure that all sLib[].path elements are non-NULL (but they can be "" to indicate "no library").
 
 	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
-		aFuncNameLength = _tcsclen(aFuncName);
+		aFuncNameLength = _tcslen(aFuncName);
 
 	TCHAR *dest, *first_underscore, class_name_buf[MAX_VAR_NAME_LENGTH + 1];
 	LPTSTR naked_filename = aFuncName;               // Set up for the first iteration.
@@ -6907,7 +6907,7 @@ Func *Script::FindFunc(LPTSTR aFuncName, size_t aFuncNameLength)
 // If it doesn't exist, NULL is returned.
 {
 	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
-		aFuncNameLength = _tcsclen(aFuncName);
+		aFuncNameLength = _tcslen(aFuncName);
 
 	// For the below, no error is reported because callers don't want that.  Instead, simply return
 	// NULL to indicate that names that are illegal or too long are not found.  If the caller later
@@ -7218,7 +7218,7 @@ Func *Script::AddFunc(LPTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn)
 // The caller must already have verified that this isn't a duplicate function.
 {
 	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
-		aFuncNameLength = _tcsclen(aFuncName);
+		aFuncNameLength = _tcslen(aFuncName);
 
 	if (aFuncNameLength > MAX_VAR_NAME_LENGTH)
 	{
@@ -7323,7 +7323,7 @@ size_t Line::ArgIndexLength(int aArgIndex)
 	}
 	// Otherwise, length isn't known due to no variable, a built-in variable, or an environment variable.
 	// So do it the slow way.
-	return _tcsclen(sArgDeref[aArgIndex]);
+	return _tcslen(sArgDeref[aArgIndex]);
 }
 
 
@@ -7563,7 +7563,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 	if (!*aVarName)
 		return NULL;
 	if (!aVarNameLength) // Caller didn't specify, so use the entire string.
-		aVarNameLength = _tcsclen(aVarName);
+		aVarNameLength = _tcslen(aVarName);
 
 	// For the below, no error is reported because callers don't want that.  Instead, simply return
 	// NULL to indicate that names that are illegal or too long are not found.  When the caller later
@@ -7758,7 +7758,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	if (!*aVarName) // Should never happen, so just silently indicate failure.
 		return NULL;
 	if (!aVarNameLength) // Caller didn't specify, so use the entire string.
-		aVarNameLength = _tcsclen(aVarName);
+		aVarNameLength = _tcslen(aVarName);
 
 	if (aVarNameLength > MAX_VAR_NAME_LENGTH)
 	{
@@ -8210,7 +8210,7 @@ ResultType Script::AddGroup(LPTSTR aGroupName)
 // In addition, if this function is being called by one thread while another thread is calling FindGroup(),
 // the thread-safety notes in FindGroup() apply.
 {
-	size_t aGroupName_length = _tcsclen(aGroupName);
+	size_t aGroupName_length = _tcslen(aGroupName);
 	if (aGroupName_length > MAX_VAR_NAME_LENGTH)
 		return ScriptError(_T("Group name too long."), aGroupName);
 	if (!Var::ValidateName(aGroupName, false, DISPLAY_NO_ERROR)) // Seems best to use same validation as var names.
@@ -11207,7 +11207,7 @@ ResultType Line::PerformLoopFilePattern(LPTSTR *apReturnValue, bool &aContinueMa
 	{
 		_tcscpy(naked_filename_or_pattern, last_backslash + 1); // Naked filename.  No danger of overflow due size of src vs. dest.
 		*(last_backslash + 1) = '\0';  // Convert file_path to be the file's path, but use +1 to retain the final backslash on the string.
-		file_path_length = _tcsclen(file_path);
+		file_path_length = _tcslen(file_path);
 	}
 	else
 	{
@@ -11298,7 +11298,7 @@ ResultType Line::PerformLoopFilePattern(LPTSTR *apReturnValue, bool &aContinueMa
 		return OK; // Nothing more to do.
 	// Otherwise, recurse into any subdirectories found inside this parent directory.
 
-	size_t path_and_pattern_length = file_path_length + _tcsclen(naked_filename_or_pattern); // Calculated only once for performance.
+	size_t path_and_pattern_length = file_path_length + _tcslen(naked_filename_or_pattern); // Calculated only once for performance.
 	do
 	{
 		if (!(new_current_file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) // We only want directories (except "." and "..").
@@ -11309,7 +11309,7 @@ ResultType Line::PerformLoopFilePattern(LPTSTR *apReturnValue, bool &aContinueMa
 			// with a truncated full-path-name, which caused the last_backslash-finding logic to find the wrong
 			// backslash, which in turn caused infinite recursion and a stack overflow (i.e. caused by the
 			// full-path-name getting truncated in the same spot every time, endlessly).
-			|| path_and_pattern_length + _tcsclen(new_current_file.cFileName) > _countof(file_path) - 2) // -2 to reflect: 1) the backslash to be added between cFileName and naked_filename_or_pattern; 2) the zero terminator.
+			|| path_and_pattern_length + _tcslen(new_current_file.cFileName) > _countof(file_path) - 2) // -2 to reflect: 1) the backslash to be added between cFileName and naked_filename_or_pattern; 2) the zero terminator.
 			continue;
 		// Build the new search pattern, which consists of the original file_path + the subfolder name
 		// we just discovered + the original pattern:
@@ -11498,12 +11498,12 @@ ResultType Line::PerformLoopParse(LPTSTR *apReturnValue, bool &aContinueMainLoop
 	#define LOOP_PARSE_BUF_SIZE 40000                          //
 	if (space_needed <= LOOP_PARSE_BUF_SIZE)
 	{
-		stack_buf = (LPTSTR)_alloca(space_needed * sizeof(TCHAR)); // Helps performance.  See comments above.
+		stack_buf = (LPTSTR)talloca(space_needed); // Helps performance.  See comments above.
 		buf = stack_buf;
 	}
 	else
 	{
-		if (   !(buf = (LPTSTR)malloc(space_needed * sizeof(TCHAR)))   )
+		if (   !(buf = (LPTSTR)tmalloc(space_needed))   )
 			// Probably best to consider this a critical error, since on the rare times it does happen, the user
 			// would probably want to know about it immediately.
 			return LineError(ERR_OUTOFMEM, FAIL, ARG2);
@@ -11528,7 +11528,7 @@ ResultType Line::PerformLoopParse(LPTSTR *apReturnValue, bool &aContinueMainLoop
 		if (*delimiters)
 		{
 			if (   !(field_end = StrChrAny(field, delimiters))   ) // No more delimiters found.
-				field_end = field + _tcsclen(field);  // Set it to the position of the zero terminator instead.
+				field_end = field + _tcslen(field);  // Set it to the position of the zero terminator instead.
 		}
 		else // Since no delimiters, every char in the input string is treated as a separate field.
 		{
@@ -11605,12 +11605,12 @@ ResultType Line::PerformLoopParseCSV(LPTSTR *apReturnValue, bool &aContinueMainL
 	LPTSTR stack_buf, buf;
 	if (space_needed <= LOOP_PARSE_BUF_SIZE)
 	{
-		stack_buf = (LPTSTR)_alloca(space_needed * sizeof(TCHAR)); // Helps performance.  See comments above.
+		stack_buf = (LPTSTR)talloca(space_needed); // Helps performance.  See comments above.
 		buf = stack_buf;
 	}
 	else
 	{
-		if (   !(buf = (LPTSTR)malloc(space_needed * sizeof(TCHAR)))   )
+		if (   !(buf = (LPTSTR)tmalloc(space_needed))   )
 			return LineError(ERR_OUTOFMEM, FAIL, ARG2);
 		stack_buf = NULL; // For comparison purposes later below.
 	}
@@ -11647,7 +11647,7 @@ ResultType Line::PerformLoopParseCSV(LPTSTR *apReturnValue, bool &aContinueMainL
 			{
 				// This is the last field in the string, so set field_end to the position of
 				// the zero terminator instead:
-				field_end = field + _tcsclen(field);
+				field_end = field + _tcslen(field);
 				break;
 			}
 			if (field_is_enclosed_in_quotes)
@@ -11657,7 +11657,7 @@ ResultType Line::PerformLoopParseCSV(LPTSTR *apReturnValue, bool &aContinueMainL
 				// literal double-quote and then keep searching for the real ending quote:
 				if (field_end[1] == '"')  // A pair of quotes was encountered.
 				{
-					tmemmove(field_end, field_end + 1, _tcsclen(field_end + 1) + 1); // +1 to include terminator.
+					tmemmove(field_end, field_end + 1, _tcslen(field_end + 1) + 1); // +1 to include terminator.
 					++field_end; // Skip over the literal double quote that we just produced.
 					continue; // Keep looking for the "real" ending quote.
 				}
@@ -11739,7 +11739,7 @@ ResultType Line::PerformLoopReadFile(LPTSTR *apReturnValue, bool &aContinueMainL
 
 	for (; _fgetts(loop_info.mCurrentLine, _countof(loop_info.mCurrentLine), loop_info.mReadFile);)
 	{ 
-		line_length = _tcsclen(loop_info.mCurrentLine);
+		line_length = _tcslen(loop_info.mCurrentLine);
 		if (line_length && loop_info.mCurrentLine[line_length - 1] == '\n') // Remove newlines like FileReadLine does.
 			loop_info.mCurrentLine[--line_length] = '\0';
 		g.mLoopReadFile = &loop_info;
@@ -13384,7 +13384,7 @@ ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
 	} // for() (first and second passes)
 
 	*dest = '\0';  // Terminate the output variable.
-	aOutputVar->SetCharLength((VarSizeType)_tcsclen(aOutputVar->Contents())); // Update to actual in case estimate was too large.
+	aOutputVar->SetCharLength((VarSizeType)_tcslen(aOutputVar->Contents())); // Update to actual in case estimate was too large.
 	return aOutputVar->Close();  // In case it's the clipboard.
 }
 
@@ -13525,7 +13525,7 @@ LPTSTR Line::VicinityToText(LPTSTR aBuf, int aBufSize) // aBufSize should be an 
 			tcslcpy(aBuf, _T("--->\t"), BUF_SPACE_REMAINING);
 		else
 			tcslcpy(aBuf, _T("\t"), BUF_SPACE_REMAINING);
-		aBuf += _tcsclen(aBuf);
+		aBuf += _tcslen(aBuf);
 		space_remaining = BUF_SPACE_REMAINING;  // Resolve macro only once for performance.
 		// Truncate large lines so that the dialog is more readable:
 		aBuf = line->ToText(aBuf, space_remaining < 500 ? space_remaining : 500, false);
@@ -13761,7 +13761,7 @@ ResultType Line::LineError(LPTSTR aErrorText, ResultType aErrorType, LPTSTR aExt
 			// Use format specifier to make sure really huge strings that get passed our
 			// way, such as a var containing clipboard text, are kept to a reasonable size:
 			buf_marker += sntprintfcat(buf, _countof(buf), _T("Specifically: %-1.100s%s\n\n")
-			, aExtraInfo, _tcsclen(aExtraInfo) > 100 ? _T("...") : _T(""));
+			, aExtraInfo, _tcslen(aExtraInfo) > 100 ? _T("...") : _T(""));
 		buf_marker = VicinityToText(buf_marker, (int)(_countof(buf) - (buf_marker - buf))); // Cast to int to avoid loss of negative values.
 		if (aErrorType == CRITICAL_ERROR || (aErrorType == FAIL && !g_script.mIsReadyToExecute))
 			tcslcpy(buf_marker, g_script.mIsRestart ? (_T("\n") OLD_STILL_IN_EFFECT) : (_T("\n") WILL_EXIT)
@@ -13840,7 +13840,7 @@ ResultType Script::ScriptError(LPTSTR aErrorText, LPTSTR aExtraInfo) //, ResultT
 		{
 			cp += sntprintf(cp, buf_space_remaining, _T("Line Text: %-1.100s%s\nError: ")  // i.e. the word "Error" is omitted as being too noisy when there's no ExtraInfo to put into the dialog.
 				, aExtraInfo // aExtraInfo defaults to "" so this is safe.
-				, _tcsclen(aExtraInfo) > 100 ? _T("...") : _T(""));
+				, _tcslen(aExtraInfo) > 100 ? _T("...") : _T(""));
 			buf_space_remaining = (int)(_countof(buf) - (cp - buf));
 		}
 		sntprintf(cp, buf_space_remaining, _T("%s\n\n%s"), aErrorText, mIsRestart ? OLD_STILL_IN_EFFECT : WILL_EXIT);
@@ -13912,7 +13912,7 @@ LPTSTR Script::ListKeyHistory(LPTSTR aBuf, int aBufSize) // aBufSize should be a
 			sntprintfcat(timer_list, _countof(timer_list) - 3, _T("%s "), timer->mLabel->mName); // Allow room for "..."
 	if (*timer_list)
 	{
-		size_t length = _tcsclen(timer_list);
+		size_t length = _tcslen(timer_list);
 		if (length > (_countof(timer_list) - 5))
 			tcslcpy(timer_list + length, _T("..."), _countof(timer_list) - length);
 		else if (timer_list[length - 1] == ' ')
@@ -13943,7 +13943,7 @@ LPTSTR Script::ListKeyHistory(LPTSTR aBuf, int aBufSize) // aBufSize should be a
 		, g_nThreads, g_nLayersNeedingTimer
 		, ModifiersLRToText(GetModifierLRState(true), LRtext));
 	GetHookStatus(aBuf, BUF_SPACE_REMAINING);
-	aBuf += _tcsclen(aBuf); // Adjust for what GetHookStatus() wrote to the buffer.
+	aBuf += _tcslen(aBuf); // Adjust for what GetHookStatus() wrote to the buffer.
 	return aBuf + sntprintf(aBuf, BUF_SPACE_REMAINING, g_KeyHistory ? _T("\r\nPress [F5] to refresh.")
 		: _T("\r\nKey History has been disabled via #KeyHistory 0."));
 }
@@ -13968,7 +13968,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 	// Launching nothing is always a success:
 	if (!aAction || !*aAction) return OK;
 
-	size_t aAction_length = _tcsclen(aAction);
+	size_t aAction_length = _tcslen(aAction);
 	if (aAction_length >= LINE_SIZE) // Max length supported by CreateProcess() is 32 KB. But there hasn't been any demand to go above 16 KB, so seems little need to support it (plus it reduces risk of stack overflow).
 	{
         if (aDisplayErrors)
@@ -14073,7 +14073,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		LPTSTR command_line; // Need a new buffer other than parse_buf because parse_buf's contents may still be pointed to directly or indirectly for use further below.
 		if (aParams && *aParams)
 		{
-			command_line = (LPTSTR)_alloca((aAction_length + _tcsclen(aParams) + 10) * sizeof(TCHAR)); // +10 to allow room for space, terminator, and any extra chars that might get added in the future.
+			command_line = (LPTSTR)_alloca((aAction_length + _tcslen(aParams) + 10) * sizeof(TCHAR)); // +10 to allow room for space, terminator, and any extra chars that might get added in the future.
 			_stprintf(command_line, _T("%s %s"), aAction, aParams);
 		}
 		else // We're running the original action from caller.
@@ -14241,9 +14241,9 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 				_T("\nAction: <%-0.400s%s>")
 				_T("%s")
 				_T("\nParams: <%-0.400s%s>\n\n") ERR_ABORT_NO_SPACES
-				, shell_action, _tcsclen(shell_action) > 400 ? _T("...") : _T("")
+				, shell_action, _tcslen(shell_action) > 400 ? _T("...") : _T("")
 				, verb_text
-				, shell_params, _tcsclen(shell_params) > 400 ? _T("...") : _T("")
+				, shell_params, _tcslen(shell_params) > 400 ? _T("...") : _T("")
 				);
 			ScriptError(error_text, system_error_text);
 		}

@@ -298,7 +298,7 @@ ResultType Var::AssignClipboardAll()
 		return FAIL; // Above should have already reported the error.
 	}
 
-#pragma message("The following codes must be checked it is Unicode-safe or not.\n")
+#pragma message(MY_WARN(9999) "The following codes must be checked it is Unicode-safe or not.\n")
 	// Retrieve and store all the clipboard formats.  Because failures of GetClipboardData() are now
 	// tolerated, it seems safest to recalculate the actual size (actual_space_needed) of the data
 	// in case it varies from that found in the estimation phase.  This is especially necessary in
@@ -381,7 +381,7 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 		return OK; // No need to call Close() in this case.
 	}
 
-#pragma message("!! The following codes must be checked it is Unicode-safe or not.\n")
+#pragma message(MY_WARN(9999) "The following codes must be checked it is Unicode-safe or not.\n")
 	// SINCE ABOVE DIDN'T RETURN, A VARIABLE CONTAINING BINARY CLIPBOARD DATA IS BEING COPIED BACK ONTO THE CLIPBOARD.
 	if (!g_clip.Open())
 		return g_script.ScriptError(CANT_OPEN_CLIPBOARD_WRITE);
@@ -939,7 +939,7 @@ ResultType Var::AppendIfRoom(LPTSTR aStr, VarSizeType aLength)
 
 
 
-void Var::AcceptNewMem(char *aNewMem, VarSizeType aLength)
+void Var::AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 // Caller provides a new malloc'd memory block (currently must be non-NULL).  That block and its
 // contents are directly hung onto this variable in place of its old block, which is freed (except
 // in the case of VAR_CLIPBOARD, in which case the memory is copied onto the clipboard then freed).
@@ -950,8 +950,7 @@ void Var::AcceptNewMem(char *aNewMem, VarSizeType aLength)
 	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
 	if (var.mType == VAR_CLIPBOARD)
 	{
-#pragma message("!! The following codes must be checked it is Unicode-safe or not.\n")
-		var.Assign((LPTSTR) aNewMem, aLength / sizeof(TCHAR)); // Clipboard requires GlobalAlloc memory so can't directly accept aNewMem.  So just copy it the normal way.
+		var.Assign(aNewMem, aLength); // Clipboard requires GlobalAlloc memory so can't directly accept aNewMem.  So just copy it the normal way.
 		free(aNewMem); // Caller gave it to us to take charge of, but we have no further use for it.
 	}
 	else // VAR_NORMAL
@@ -987,8 +986,6 @@ void Var::AcceptNewMem(char *aNewMem, VarSizeType aLength)
 		}
 	}
 }
-
-
 
 void Var::SetLengthFromContents()
 // Function added in v1.0.43.06.  It updates the mLength member to reflect the actual current length of mContents.
