@@ -15,6 +15,8 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
+#define UNICODE_CHECKED
+#include "defines.h" // UNICODE_CHECK
 #include "SimpleHeap.h"
 #include "globaldata.h" // for g_script, so that errors can be centrally reported here.
 
@@ -36,7 +38,11 @@ char *SimpleHeap::Malloc(char *aBuf, size_t aLength)
 	char *new_buf;
 	if (   !(new_buf = SimpleHeap::Malloc(aLength + 1))   ) // +1 for the zero terminator.
 	{
-		g_script.ScriptError(ERR_OUTOFMEM, aBuf);
+		g_script.ScriptError(ERR_OUTOFMEM
+#ifndef UNICODE
+			, aBuf
+#endif
+		);
 		return NULL; // Callers may rely on NULL vs. "" being returned in the event of failure.
 	}
 	if (aLength)
@@ -54,9 +60,13 @@ wchar_t *SimpleHeap::Malloc(wchar_t *aBuf, size_t aLength)
 	if (aLength == -1) // Caller wanted us to calculate it.  Compare directly to -1 since aLength is unsigned.
 		aLength = wcslen(aBuf) * sizeof(wchar_t);
 	wchar_t *new_buf;
-	if (   !(new_buf = SimpleHeap::Malloc(aLength + sizeof(wchar_t)))   ) // +2 for the zero terminator.
+	if (   !(new_buf = (wchar_t *) SimpleHeap::Malloc(aLength + sizeof(wchar_t)))   ) // +2 for the zero terminator.
 	{
-		g_script.ScriptError(ERR_OUTOFMEM, aBuf);
+		g_script.ScriptError(ERR_OUTOFMEM
+#ifdef UNICODE
+			, aBuf
+#endif
+		);
 		return NULL; // Callers may rely on NULL vs. "" being returned in the event of failure.
 	}
 	if (aLength)

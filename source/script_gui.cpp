@@ -22,15 +22,15 @@ GNU General Public License for more details.
 #include "qmath.h" // for qmathLog()
 
 
-ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char *aParam4)
+ResultType Script::PerformGui(LPTSTR aCommand, LPTSTR aParam2, LPTSTR aParam3, LPTSTR aParam4)
 {
 	int window_index = g->GuiDefaultWindowIndex; // Which window to operate upon.  Initialized to thread's default.
-	char *options; // This will contain something that is meaningful only when gui_command == GUI_CMD_OPTIONS.
+	LPTSTR options; // This will contain something that is meaningful only when gui_command == GUI_CMD_OPTIONS.
 	GuiCommands gui_command = Line::ConvertGuiCommand(aCommand, &window_index, &options);
 	if (gui_command == GUI_CMD_INVALID)
 		return ScriptError(ERR_PARAM1_INVALID ERR_ABORT, aCommand);
 	if (window_index < 0 || window_index >= MAX_GUI_WINDOWS)
-		return ScriptError("Max window number is " MAX_GUI_WINDOWS_STR "." ERR_ABORT, aCommand);
+		return ScriptError(_T("Max window number is ") MAX_GUI_WINDOWS_STR _T(".") ERR_ABORT, aCommand);
 
 	PRIVATIZE_S_DEREF_BUF;  // See comments in GuiControl() about this.
 	ResultType result = OK; // Set default return value for use with all instances of "goto" further below.
@@ -76,7 +76,7 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 		// Don't overload "+LastFound" because it would break existing scripts that rely on the window
 		// being created by +LastFound.
 		case GUI_CMD_OPTIONS:
-			if (!stricmp(options, "+LastFoundExist"))
+			if (!_tcsicmp(options, _T("+LastFoundExist")))
 			{
 				g->hWndLastUsed = NULL;
 				goto return_the_result;
@@ -122,7 +122,7 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 	if (!gui.mHwnd && !gui.Create())
 	{
 		GuiType::Destroy(window_index); // Get rid of the object so that it stays in sync with the window's existence.
-		result = ScriptError("Could not create window." ERR_ABORT);
+		result = ScriptError(_T("Could not create window.") ERR_ABORT);
 		goto return_the_result;
 	}
 
@@ -183,7 +183,7 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 		goto return_the_result;
 
 	case GUI_CMD_SUBMIT:
-		result = gui.Submit(stricmp(aParam2, "NoHide"));
+		result = gui.Submit(_tcsicmp(aParam2, _T("NoHide")));
 		goto return_the_result;
 
 	case GUI_CMD_CANCEL:
@@ -266,7 +266,7 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 					// "Gui Tab" will find that a later use of "Gui Tab, TabName" won't work unless
 					// the third parameter (which tab control) is explicitly specified.
 					gui.mCurrentTabControlIndex = gui.mTabControlCount ? gui.mTabControlCount - 1 : 0;
-				bool exact_match = !stricmp(aParam4, "Exact"); // v1.0.37.03.
+				bool exact_match = !_tcsicmp(aParam4, _T("Exact")); // v1.0.37.03.
 				// Unlike "GuiControl, Choose", in this case, don't allow negatives since that would just
 				// generate an error msg further below:
 				if (!exact_match && IsPureNumeric(aParam2, false, false))
@@ -286,7 +286,7 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 						index = gui.FindTabIndexByName(*tab_control, aParam2, exact_match); // Returns -1 on failure.
 					if (index == -1)
 					{
-						result =ScriptError("Tab name doesn't exist yet." ERR_ABORT, aParam2);
+						result =ScriptError(_T("Tab name doesn't exist yet.") ERR_ABORT, aParam2);
 						goto return_the_result;
 					}
 				}
@@ -335,7 +335,7 @@ ResultType Script::PerformGui(char *aCommand, char *aParam2, char *aParam3, char
 		// sophisticated parameters can be made available to flash the window a given number of times
 		// and at a certain frequency, and other options such as only-taskbar-button or only-caption.
 		// Set FlashWindowEx() for more ideas:
-		FlashWindow(gui.mHwnd, stricmp(aParam2, "Off") ? TRUE : FALSE);
+		FlashWindow(gui.mHwnd, _tcsicmp(aParam2, _T("Off")) ? TRUE : FALSE);
 		goto return_the_result;
 
 	} // switch()
@@ -349,9 +349,9 @@ return_the_result:
 
 
 
-ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
+ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 {
-	char *options; // This will contain something that is meaningful only when gui_command == GUICONTROL_CMD_OPTIONS.
+	LPTSTR options; // This will contain something that is meaningful only when gui_command == GUICONTROL_CMD_OPTIONS.
 	int window_index = g->GuiDefaultWindowIndex; // Which window to operate upon.  Initialized to thread's default.
 	GuiControlCmds guicontrol_cmd = Line::ConvertGuiControlCmd(aCommand, &window_index, &options);
 	if (guicontrol_cmd == GUICONTROL_CMD_INVALID)
@@ -387,7 +387,7 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 	ResultType result = OK; // Set default return value for use with all instances of "goto" further below.
 	// EVERYTHING below this point should use "result" and "goto return_the_result" instead of "return".
 
-	char *malloc_buf;
+	LPTSTR malloc_buf;
 	RECT rect;
 	WPARAM checked;
 	GuiControlType *tab_control;
@@ -459,25 +459,26 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 					DeleteObject((HGDIOBJ)SendMessage(control.hwnd, STM_SETIMAGE, IMAGE_BITMAP, NULL));
 
 			// Parse any options that are present in front of the filename:
-			char *next_option = omit_leading_whitespace(aParam3);
+			LPTSTR next_option = omit_leading_whitespace(aParam3);
 			if (*next_option == '*') // Options are present.  Must check this here and in the for-loop to avoid omitting legitimate whitespace in a filename that starts with spaces.
 			{
-				char *option_end, orig_char;
+				LPTSTR option_end;
+				TCHAR orig_char;
 				for (; *next_option == '*'; next_option = omit_leading_whitespace(option_end))
 				{
 					// Find the end of this option item:
-					if (   !(option_end = StrChrAny(next_option, " \t"))   )  // Space or tab.
-						option_end = next_option + strlen(next_option); // Set to position of zero terminator instead.
+					if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )  // Space or tab.
+						option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
 					// Permanently terminate in between options to help eliminate ambiguity for words contained
 					// inside other words, and increase confidence in decimal and hexadecimal conversion.
 					orig_char = *option_end;
 					*option_end = '\0';
 					++next_option; // Skip over the asterisk.  It might point to a zero terminator now.
-					if (!strnicmp(next_option, "Icon", 4))
+					if (!_tcsnicmp(next_option, _T("Icon"), 4))
 						icon_number = ATOI(next_option + 4); // LoadPicture() correctly handles any negative value.
 					else
 					{
-						switch (toupper(*next_option))
+						switch (_totupper(*next_option))
 						{
 						case 'W':
 							width = ATOI(next_option + 1);
@@ -645,9 +646,9 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 					// not a named style.  It can always be applied numerically if desired.  Update:
 					// DTS_SHORTDATECENTURYFORMAT is now applied by default upon creation, which can be overridden
 					// explicitly via -0x0C in the control's options.
-					if (!stricmp(aParam3, "LongDate")) // LongDate seems more readable than "Long".  It also matches the keyword used by FormatTime.
+					if (!_tcsicmp(aParam3, _T("LongDate"))) // LongDate seems more readable than "Long".  It also matches the keyword used by FormatTime.
 						style |= DTS_LONGDATEFORMAT; // Competing styles were already purged above.
-					else if (!stricmp(aParam3, "Time"))
+					else if (!_tcsicmp(aParam3, _T("Time")))
 						style |= DTS_TIMEFORMAT; // Competing styles were already purged above.
 					else // Custom format.
 						use_custom_format = true;
@@ -830,25 +831,25 @@ ResultType Line::GuiControl(char *aCommand, char *aControlID, char *aParam3)
 		int width = COORD_UNSPECIFIED;
 		int height = COORD_UNSPECIFIED;
 
-		for (char *cp = aParam3; *cp; ++cp)
+		for (LPTSTR cp = aParam3; *cp; ++cp)
 		{
-			switch(toupper(*cp))
+			switch(_totupper(*cp))
 			{
 			// For options such as W, H, X and Y:
-			// Use atoi() vs. ATOI() to avoid interpreting something like 0x01B as hex when in fact
+			// Use _ttoi() vs. ATOI() to avoid interpreting something like 0x01B as hex when in fact
 			// the B was meant to be an option letter (though in this case, none of the hex digits are
 			// currently used as option letters):
 			case 'W':
-				width = atoi(cp + 1);
+				width = _ttoi(cp + 1);
 				break;
 			case 'H':
-				height = atoi(cp + 1);
+				height = _ttoi(cp + 1);
 				break;
 			case 'X':
-				xpos = atoi(cp + 1);
+				xpos = _ttoi(cp + 1);
 				break;
 			case 'Y':
-				ypos = atoi(cp + 1);
+				ypos = _ttoi(cp + 1);
 				break;
 			}
 		}
@@ -1175,7 +1176,7 @@ return_the_result:
 
 
 
-ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
+ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 {
 	Var &output_var = *OUTPUT_VAR;
 	int window_index = g->GuiDefaultWindowIndex; // Which window to operate upon.  Initialized to thread's default.
@@ -1218,7 +1219,7 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 			g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 			goto return_the_result;
 		}
-		char focused_control[WINDOW_CLASS_SIZE];
+		TCHAR focused_control[WINDOW_CLASS_SIZE];
 		if (guicontrolget_cmd == GUICONTROLGET_CMD_FOCUSV) // v1.0.43.06.
 			// GUI_HWND_TO_INDEX vs FindControl() is enough because FindControl() was alraedy called above:
 			GuiType::ControlGetName(window_index, GUI_HWND_TO_INDEX(pcontrol->hwnd), focused_control);
@@ -1226,7 +1227,7 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 		{
 			// This section is the same as that in ControlGetFocus():
 			cah.class_name = focused_control;
-			if (!GetClassName(cah.hwnd, focused_control, sizeof(focused_control) - 5)) // -5 to allow room for sequence number.
+			if (!GetClassName(cah.hwnd, focused_control, _countof(focused_control) - 5)) // -5 to allow room for sequence number.
 			{
 				g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 				goto return_the_result;
@@ -1240,7 +1241,7 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 				goto return_the_result;
 			}
 			// Append the class sequence number onto the class name set the output param to be that value:
-			snprintfcat(focused_control, sizeof(focused_control), "%d", cah.class_count);
+			sntprintfcat(focused_control, _countof(focused_control), _T("%d"), cah.class_count);
 		}
 		output_var.Assign(focused_control); // And leave ErrorLevel set to NONE.
 		goto return_the_result;
@@ -1275,11 +1276,11 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 		ScreenToClient(gui.mHwnd, &pt);  // Failure seems too rare to check for.
 		// Make it longer than Max var name so that FindOrAddVar() will be able to spot and report
 		// var names that are too long:
-		char var_name[MAX_VAR_NAME_LENGTH + 20];
+		TCHAR var_name[MAX_VAR_NAME_LENGTH + 20];
 		Var *var;
 		int always_use = output_var.IsLocal() ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL;
 		if (   !(var = g_script.FindOrAddVar(var_name
-			, snprintf(var_name, sizeof(var_name), "%sX", output_var.mName)
+			, sntprintf(var_name, _countof(var_name), _T("%sX"), output_var.mName)
 			, always_use))   ) // Called with output_var to enhance performance.
 		{
 			result = FAIL; // It will have already displayed the error.
@@ -1287,7 +1288,7 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 		}
 		var->Assign(pt.x);
 		if (   !(var = g_script.FindOrAddVar(var_name
-			, snprintf(var_name, sizeof(var_name), "%sY", output_var.mName)
+			, sntprintf(var_name, _countof(var_name), _T("%sY"), output_var.mName)
 			, always_use))   ) // Called with output_var to enhance performance.
 		{
 			result = FAIL; // It will have already displayed the error.
@@ -1295,7 +1296,7 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 		}
 		var->Assign(pt.y);
 		if (   !(var = g_script.FindOrAddVar(var_name
-			, snprintf(var_name, sizeof(var_name), "%sW", output_var.mName)
+			, sntprintf(var_name, _countof(var_name), _T("%sW"), output_var.mName)
 			, always_use))   ) // Called with output_var to enhance performance.
 		{
 			result = FAIL; // It will have already displayed the error.
@@ -1303,7 +1304,7 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 		}
 		var->Assign(rect.right - rect.left);
 		if (   !(var = g_script.FindOrAddVar(var_name
-			, snprintf(var_name, sizeof(var_name), "%sH", output_var.mName)
+			, sntprintf(var_name, _countof(var_name), _T("%sH"), output_var.mName)
 			, always_use))   ) // Called with output_var to enhance performance.
 		{
 			result = FAIL; // It will have already displayed the error.
@@ -1315,7 +1316,7 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 
 	case GUICONTROLGET_CMD_ENABLED:
 		// See commment below.
-		result = output_var.Assign(IsWindowEnabled(control.hwnd) ? "1" : "0");
+		result = output_var.Assign(IsWindowEnabled(control.hwnd) ? _T("1") : _T("0"));
 		goto return_the_result;
 
 	case GUICONTROLGET_CMD_VISIBLE:
@@ -1325,7 +1326,7 @@ ResultType Line::GuiControlGet(char *aCommand, char *aControlID, char *aParam3)
 		// this "visible" sub-cmd is kept separate from some figure command such as "GuiControlGet, Out, Style":
 		// 1) The style method is cumbersome to script with since it requires bitwise operates afterward.
 		// 2) IsVisible() uses a different standard of detection than simply checking WS_VISIBLE.
-		result = output_var.Assign(IsWindowVisible(control.hwnd) ? "1" : "0");
+		result = output_var.Assign(IsWindowVisible(control.hwnd) ? _T("1") : _T("0"));
 		goto return_the_result;
 
 	case GUICONTROLGET_CMD_HWND: // v1.0.46.16: Although it overlaps with HwndOutputVar, Majkinetor wanted this to help with encapsulation/modularization.
@@ -1507,7 +1508,7 @@ ResultType GuiType::Create()
 		wc.cbWndExtra = DLGWINDOWEXTRA;  // So that it will be the type that uses DefDlgProc() vs. DefWindowProc().
 		if (!RegisterClassEx(&wc))
 		{
-			MsgBox("RegClass"); // Short/generic msg since so rare.
+			MsgBox(_T("RegClass")); // Short/generic msg since so rare.
 			return FAIL;
 		}
 		sGuiInitialized = true;
@@ -1555,7 +1556,7 @@ ResultType GuiType::Create()
 
 
 
-void GuiType::SetLabels(char *aLabelPrefix)
+void GuiType::SetLabels(LPTSTR aLabelPrefix)
 // v1.0.44.09: Allow custom label prefix to be set; e.g. MyGUI vs. "5Gui" or "2Gui".  This increases flexibility
 // for scripts that dynamically create a varying number of windows, and also allows multiple windows to call the
 // same set of subroutines.
@@ -1568,36 +1569,37 @@ void GuiType::SetLabels(char *aLabelPrefix)
 	mLabelsHaveBeenSet = true; // Although it's value only matters in some contexts, it's set unconditionally for simplicity.
 
 	#define MAX_GUI_PREFIX_LENGTH 255
-	char *label_suffix, label_name[MAX_GUI_PREFIX_LENGTH+64]; // Labels are unlimited in length, but keep prefix+suffix relatively short so that it stays reasonable (to make it easier to limit it in the future should that ever be desirable).
+	LPTSTR label_suffix;
+	TCHAR label_name[MAX_GUI_PREFIX_LENGTH+64]; // Labels are unlimited in length, but keep prefix+suffix relatively short so that it stays reasonable (to make it easier to limit it in the future should that ever be desirable).
 	if (aLabelPrefix)
-		strlcpy(label_name, aLabelPrefix, MAX_GUI_PREFIX_LENGTH+1); // Reserve the rest of label_name's size for the suffix below to ensure no chance of overflow.
+		tcslcpy(label_name, aLabelPrefix, MAX_GUI_PREFIX_LENGTH+1); // Reserve the rest of label_name's size for the suffix below to ensure no chance of overflow.
 	else // Caller is indicating that the defaults should be used.
 	{
 		if (mWindowIndex > 0) // Prepend the window number for windows other than the first.
-			sprintf(label_name, "%dGui", mWindowIndex + 1);
+			_stprintf(label_name, _T("%dGui"), mWindowIndex + 1);
 		else
-			strcpy(label_name, "Gui");
+			_tcscpy(label_name, _T("Gui"));
 	}
-	label_suffix = label_name + strlen(label_name); // This is the position at which the rest of the label name will be copied.
+	label_suffix = label_name + _tcslen(label_name); // This is the position at which the rest of the label name will be copied.
 
 	// Find the label to run automatically when the form closes (if any):
-	strcpy(label_suffix, "Close");
+	_tcscpy(label_suffix, _T("Close"));
 	mLabelForClose = g_script.FindLabel(label_name);  // OK if NULL (closing the window is the same as "gui, cancel").
 
 	// Find the label to run automatically when the user presses Escape (if any):
-	strcpy(label_suffix, "Escape");
+	_tcscpy(label_suffix, _T("Escape"));
 	mLabelForEscape = g_script.FindLabel(label_name);  // OK if NULL (pressing ESCAPE does nothing).
 
 	// Find the label to run automatically when the user resizes the window (if any):
-	strcpy(label_suffix, "Size");
+	_tcscpy(label_suffix, _T("Size"));
 	mLabelForSize = g_script.FindLabel(label_name);  // OK if NULL.
 
 	// Find the label to run automatically when the user invokes context menu via AppsKey, Rightclick, or Shift-F10:
-	strcpy(label_suffix, "ContextMenu");
+	_tcscpy(label_suffix, _T("ContextMenu"));
 	mLabelForContextMenu = g_script.FindLabel(label_name);  // OK if NULL (leaves context menu unhandled).
 
 	// Find the label to run automatically when files are dropped onto the window:
-	strcpy(label_suffix, "DropFiles");
+	_tcscpy(label_suffix, _T("DropFiles"));
 	if ((mLabelForDropFiles = g_script.FindLabel(label_name))  // OK if NULL (dropping files is disallowed).
 		&& !mHdrop) // i.e. don't allow user to visibly drop files onto window if a drop is already queued or running.
 		mExStyle |= WS_EX_ACCEPTFILES; // Makes the window accept drops. Otherwise, the WM_DROPFILES msg is not received.
@@ -1644,10 +1646,10 @@ void GuiType::UpdateMenuBars(HMENU aMenu)
 
 
 
-ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *aText)
+ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText)
 // Caller must have ensured that mHwnd is non-NULL (i.e. that the parent window already exists).
 {
-	#define TOO_MANY_CONTROLS "Too many controls." ERR_ABORT // Short msg since so rare.
+	#define TOO_MANY_CONTROLS _T("Too many controls.") ERR_ABORT // Short msg since so rare.
 	if (mControlCount >= MAX_CONTROLS_PER_GUI)
 		return g_script.ScriptError(TOO_MANY_CONTROLS);
 	if (mControlCount >= mControlCapacity) // The section below on the above check already having been done.
@@ -1657,7 +1659,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		// Expand the array by one block:
 		GuiControlType *realloc_temp;  // Needed since realloc returns NULL on failure but leaves original block allocated.
 		if (   !(realloc_temp = (GuiControlType *)realloc(mControl  // If passed NULL, realloc() will do a malloc().
-			, (mControlCapacity + GUI_CONTROL_BLOCK_SIZE) * sizeof(GuiControlType)))   )
+			, (mControlCapacity + GUI_CONTROL_BLOCK_SIZE) * sizeof(GuiControlType)))   ) 
 			return g_script.ScriptError(TOO_MANY_CONTROLS); // A non-specific msg since this error is so rare.
 		mControl = realloc_temp;
 		mControlCapacity += GUI_CONTROL_BLOCK_SIZE;
@@ -1677,7 +1679,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 	if (aControlType == GUI_CONTROL_TAB)
 	{
 		if (mTabControlCount == MAX_TAB_CONTROLS)
-			return g_script.ScriptError("Too many tab controls." ERR_ABORT); // Short msg since so rare.
+			return g_script.ScriptError(_T("Too many tab controls.") ERR_ABORT); // Short msg since so rare.
 		// For now, don't allow a tab control to be create inside another tab control because it raises
 		// doubt and probably would create complications.  If it ever is allowed, note that
 		// control.tab_index stores this tab control's index (0 for the first tab control, 1 for the
@@ -1688,7 +1690,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 	else if (aControlType == GUI_CONTROL_STATUSBAR)
 	{
 		if (mStatusBarHwnd)
-			return g_script.ScriptError("Too many status bars." ERR_ABORT); // Short msg since so rare.
+			return g_script.ScriptError(_T("Too many status bars.") ERR_ABORT); // Short msg since so rare.
 		control.tab_control_index = MAX_TAB_CONTROLS; // Indicate that bar isn't owned by any tab control.
 		// No need to do the following because ZeroMem did it:
 		//control.tab_index = 0; // Ignored but set for maintainability/consistency.
@@ -1903,7 +1905,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 	// spaces/tabs/dashes (this also improves backward compatibility).
 	DWORD contains_bs_multiline_if_applicable =
 		(opt.width != COORD_UNSPECIFIED || opt.height != COORD_UNSPECIFIED
-			|| opt.row_count > 1.5 || StrChrAny(aText, "\n\r")) // Both LF and CR can start new lines.
+			|| opt.row_count > 1.5 || StrChrAny(aText, _T("\n\r"))) // Both LF and CR can start new lines.
 		? (BS_MULTILINE & ~opt.style_remove) // Add BS_MULTILINE unless it was explicitly removed.
 		: 0; // Otherwise: Omit BS_MULTILINE (unless it was explicitly added [the "0" is verified correct]) because on some unsuual DPI settings (i.e. DPIs other than 96 or 120), DrawText() sometimes yields a width that is slightly too narrow, which causes unwanted wrapping in single-line checkboxes/radios/buttons.
 
@@ -1962,7 +1964,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 	case GUI_CONTROL_EDIT:
 		// This is done for maintainability and peace-of-mind, though it might not strictly be required
 		// to be done at this stage:
-		if (opt.row_count > 1.5 || strchr(aText, '\n')) // Multiple rows or contents contain newline.
+		if (opt.row_count > 1.5 || _tcschr(aText, '\n')) // Multiple rows or contents contain newline.
 			style |= (ES_MULTILINE & ~opt.style_remove); // Add multiline unless it was explicitly removed.
 		// This next check is relied upon by other things.  If this edit has the multiline style either
 		// due to the above check or any other reason, provide other default styles if those styles
@@ -2022,12 +2024,12 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 	if (aControlType == GUI_CONTROL_BUTTON
 		&& !control.jump_to_label && !(control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL))
 	{
-		char label_name[1024]; // Subroutine labels are nearly unlimited in length, so use a size to cover anything realistic.
+		TCHAR label_name[1024]; // Subroutine labels are nearly unlimited in length, so use a size to cover anything realistic.
 		if (mWindowIndex > 0) // Prepend the window number for windows other than the first.
-			_itoa(mWindowIndex + 1, label_name, 10);
+			_itot(mWindowIndex + 1, label_name, 10);
 		else
 			*label_name = '\0';
-		snprintfcat(label_name, sizeof(label_name), "Button%s", aText);
+		sntprintfcat(label_name, _countof(label_name), _T("Button%s"), aText);
 		// Remove spaces and ampersands.  Although ampersands are legal in labels, it seems
 		// more friendly to omit them in the automatic-label label name.  Note that a button
 		// or menu item can contain a literal ampersand by using two ampersands, such as
@@ -2035,16 +2037,16 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		// v1.0.46.01: tabs and accents are also removed since labels can't contain them.
 		// However, colons are NOT removed because labels CAN contain them (except at the very end;
 		// but due to rarity and backward compatibility, it doesn't seem worth adding code size for that).
-		StrReplace(label_name, "\r", "", SCS_SENSITIVE);
-		StrReplace(label_name, "\n", "", SCS_SENSITIVE);
-		StrReplace(label_name, "\t", "", SCS_SENSITIVE);
-		StrReplace(label_name, " ", "", SCS_SENSITIVE);
-		StrReplace(label_name, "&", "", SCS_SENSITIVE);
-		StrReplace(label_name, "`", "", SCS_SENSITIVE);
+		StrReplace(label_name, _T("\r"), _T(""), SCS_SENSITIVE);
+		StrReplace(label_name, _T("\n"), _T(""), SCS_SENSITIVE);
+		StrReplace(label_name, _T("\t"), _T(""), SCS_SENSITIVE);
+		StrReplace(label_name, _T(" "), _T(""), SCS_SENSITIVE);
+		StrReplace(label_name, _T("&"), _T(""), SCS_SENSITIVE);
+		StrReplace(label_name, _T("`"), _T(""), SCS_SENSITIVE);
 		// Alternate method, but seems considerably larger in code size based on OBJ size:
-		//char *string_list[] = {"\r", "\n", " ", "\t", "&", "`", NULL}; // \r is separate from \n in case they're ever unpaired. Last char must be NULL to terminate the list.
-		//for (char **cp = string_list; *cp; ++cp)
-		//	StrReplace(label_name, *cp, "", SCS_SENSITIVE);
+		//LPTSTR string_list[] = {_T("\r"), _T("\n"), _T(" "), _T("\t"), _T("&"), _T("`"), NULL}; // \r is separate from \n in case they're ever unpaired. Last char must be NULL to terminate the list.
+		//for (LPTSTR *cp = string_list; *cp; ++cp)
+		//	StrReplace(label_name, *cp, _T(""), SCS_SENSITIVE);
 		control.jump_to_label = g_script.FindLabel(label_name);  // OK if NULL (the button will do nothing).
 	}
 
@@ -2370,7 +2372,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 			draw_rect.right = (opt.width == COORD_UNSPECIFIED) ? 0 : opt.width - extra_width; // extra_width
 			draw_rect.bottom = (opt.height == COORD_UNSPECIFIED) ? 0 : opt.height;
 			// If no text, "H" is used in case the function requires a non-empty string to give consistent results:
-			int draw_height = DrawText(hdc, *aText ? aText : "H", -1, &draw_rect, draw_format);
+			int draw_height = DrawText(hdc, *aText ? aText : _T("H"), -1, &draw_rect, draw_format);
 			int draw_width = draw_rect.right - draw_rect.left;
 			// Even if either height or width was already explicitly specified above, it seems best to
 			// override it if DrawText() says it's not big enough.  REASONING: It seems too rare that
@@ -2544,7 +2546,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 	bool retrieve_dimensions = false;       //
 	int item_height, min_list_height;
 	RECT rect;
-	char *malloc_buf;
+	LPTSTR malloc_buf;
 	HMENU control_id = (HMENU)(size_t)GUI_INDEX_TO_ID(mControlCount); // Cast to size_t avoids compiler warning.
 
 	bool font_was_set = false;          // "
@@ -2581,7 +2583,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 	{
 	case GUI_CONTROL_TEXT:
 		// Seems best to omit SS_NOPREFIX by default so that ampersand can be used to create shortcut keys.
-		control.hwnd = CreateWindowEx(exstyle, "static", aText, style
+		control.hwnd = CreateWindowEx(exstyle, _T("static"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
 		break;
 
@@ -2592,7 +2594,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 			opt.height = 0;  // Use zero to tell LoadPicture() to keep original height.
 		// Must set its caption to aText so that documented ability to refer to a picture by its original
 		// filename is possible:
-		if (control.hwnd = CreateWindowEx(exstyle, "static", aText, style
+		if (control.hwnd = CreateWindowEx(exstyle, _T("static"), aText, style
 			, opt.x, opt.y, opt.width, opt.height  // OK if zero, control creation should still succeed.
 			, mHwnd, control_id, g_hInstance, NULL))
 		{
@@ -2698,7 +2700,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		// wrap the text, at least on XP.  Since it's strange-looking to have multiple lines, newlines
 		// should be rarely present anyway.  Also, BS_NOTIFY seems to have no effect on GroupBoxes (it
 		// never sends any BN_CLICKED/BN_DBLCLK messages).  This has been verified twice.
-		control.hwnd = CreateWindowEx(exstyle, "button", aText, style
+		control.hwnd = CreateWindowEx(exstyle, _T("button"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
 		break;
 
@@ -2707,7 +2709,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		// newlines in the button's name will start a new line of text as the user intended.
 		// In addition, this causes automatic wrapping to occur if the user specified a width
 		// too small to fit the entire line.
-		if (control.hwnd = CreateWindowEx(exstyle, "button", aText, style
+		if (control.hwnd = CreateWindowEx(exstyle, _T("button"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			if (style & BS_DEFPUSHBUTTON)
@@ -2756,7 +2758,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		// The BS_NOTIFY style is not a good idea for checkboxes because although it causes the control
 		// to send BN_DBLCLK messages, any rapid clicks by the user on (for example) a tri-state checkbox
 		// are seen only as one click for the purpose of changing the box's state.
-		if (control.hwnd = CreateWindowEx(exstyle, "button", aText, style
+		if (control.hwnd = CreateWindowEx(exstyle, _T("button"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			if (opt.checked != BST_UNCHECKED) // Set the specified state.
@@ -2765,7 +2767,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		break;
 
 	case GUI_CONTROL_RADIO:
-		control.hwnd = CreateWindowEx(exstyle, "button", aText, style
+		control.hwnd = CreateWindowEx(exstyle, _T("button"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
 		// opt.checked is handled later below.
 		break;
@@ -2782,7 +2784,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		// as the control's caption, rather than the name of the variable.  The name of the variable
 		// isn't that useful anymore anyway since GuiControl(Get) can access controls directly by
 		// their current output-var names:
-		if (control.hwnd = CreateWindowEx(exstyle, "Combobox", "", style
+		if (control.hwnd = CreateWindowEx(exstyle, _T("Combobox"), _T(""), style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			// Set font unconditionally to simplify calculations, which help ensure that at least one item
@@ -2817,7 +2819,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 
 	case GUI_CONTROL_LISTBOX:
 		// See GUI_CONTROL_COMBOBOX above for why empty string is passed in as the caption:
-		if (control.hwnd = CreateWindowEx(exstyle, "Listbox", "", style
+		if (control.hwnd = CreateWindowEx(exstyle, _T("Listbox"), _T(""), style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			if (opt.tabstop_count)
@@ -2860,7 +2862,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 	case GUI_CONTROL_LISTVIEW:
 		if (opt.listview_view != LV_VIEW_TILE) // It was ensured earlier that listview_view can be set to LV_VIEW_TILE only for XP or later.
 			style = (style & ~LVS_TYPEMASK) | opt.listview_view; // Create control in the correct view mode whenever possible (TILE is the exception because it can't be expressed via style).
-		if (control.hwnd = CreateWindowEx(exstyle, WC_LISTVIEW, "", style, opt.x, opt.y // exstyle does apply to ListViews.
+		if (control.hwnd = CreateWindowEx(exstyle, WC_LISTVIEW, _T(""), style, opt.x, opt.y // exstyle does apply to ListViews.
 			, opt.width, opt.height == COORD_UNSPECIFIED ? 200 : opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			if (   !(control.union_lv_attrib = (lv_attrib_type *)malloc(sizeof(lv_attrib_type)))   )
@@ -2922,7 +2924,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 					// The following approach doesn't seem to give back useful info about the total height of a
 					// tile and the border beneath it, so it isn't used:
 					//LVTILEVIEWINFO tvi;
-					//tvi.cbSize = sizeof(LVTILEVIEWINFO);
+					//tvi.cbSize = SIZEOF(LVTILEVIEWINFO);
 					//tvi.dwMask = LVTVIM_TILESIZE | LVTVIM_LABELMARGIN;
 					//ListView_GetTileViewInfo(control.hwnd, &tvi);
 					// The following might not be perfect for integral scrolling purposes, but it does seem
@@ -2976,7 +2978,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		break;
 
 	case GUI_CONTROL_TREEVIEW:
-		if (control.hwnd = CreateWindowEx(exstyle, WC_TREEVIEW, "", style, opt.x, opt.y
+		if (control.hwnd = CreateWindowEx(exstyle, WC_TREEVIEW, _T(""), style, opt.x, opt.y
 			, opt.width, opt.height == COORD_UNSPECIFIED ? 200 : opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			mCurrentTreeView = &control;
@@ -3035,7 +3037,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		// is needed.  Otherwise, it will return a new buffer which we are responsible for freeing
 		// when done (or NULL if it failed to allocate the memory).
 		malloc_buf = (*aText && (style & ES_MULTILINE)) ? TranslateLFtoCRLF(aText) : aText;
-		if (control.hwnd = CreateWindowEx(exstyle, "edit", malloc_buf ? malloc_buf : aText, style  // malloc_buf is checked again in case mem alloc failed.
+		if (control.hwnd = CreateWindowEx(exstyle, _T("edit"), malloc_buf ? malloc_buf : aText, style  // malloc_buf is checked again in case mem alloc failed.
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			// As documented in MSDN, setting a password char will have no effect for multi-line edits
@@ -3071,9 +3073,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 			// can always be applied numerically if desired. Update: DTS_SHORTDATECENTURYFORMAT is
 			// now applied by default higher above, which can be overridden explicitly via -0x0C
 			// in the control's options.
-			if (!stricmp(aText, "LongDate")) // LongDate seems more readable than "Long".  It also matches the keyword used by FormatTime.
+			if (!_tcsicmp(aText, _T("LongDate"))) // LongDate seems more readable than "Long".  It also matches the keyword used by FormatTime.
 				style = (style & ~(DTS_SHORTDATECENTURYFORMAT | DTS_TIMEFORMAT)) | DTS_LONGDATEFORMAT; // Purify.
-			else if (!stricmp(aText, "Time"))
+			else if (!_tcsicmp(aText, _T("Time")))
 				style = (style & ~(DTS_SHORTDATECENTURYFORMAT | DTS_LONGDATEFORMAT)) | DTS_TIMEFORMAT;  // Purify.
 			else // Custom format. Don't purify (to retain the underlying default in case custom format is ever removed).
 				use_custom_format = true;
@@ -3081,7 +3083,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		if (opt.choice == 2) // "ChooseNone" was present, so ensure DTS_SHOWNONE is present to allow it.
 			style |= DTS_SHOWNONE;
 		//else it's blank, so retain the default DTS_SHORTDATEFORMAT (0x0000).
-		if (control.hwnd = CreateWindowEx(exstyle, DATETIMEPICK_CLASS, "", style
+		if (control.hwnd = CreateWindowEx(exstyle, DATETIMEPICK_CLASS, _T(""), style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			if (use_custom_format)
@@ -3112,7 +3114,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		}
 		// Create the control with arbitrary width/height if no width/height were explicitly specified.
 		// It will be resized after creation by querying the control:
-		if (control.hwnd = CreateWindowEx(exstyle, MONTHCAL_CLASS, "", style, opt.x, opt.y
+		if (control.hwnd = CreateWindowEx(exstyle, MONTHCAL_CLASS, _T(""), style, opt.x, opt.y
 			, opt.width < 0 ? 100 : opt.width  // Negative width has special meaning upon creation (see below).
 			, opt.height == COORD_UNSPECIFIED ? 100 : opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
@@ -3205,7 +3207,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 	case GUI_CONTROL_HOTKEY:
 		// In this case, not only doesn't the caption appear anywhere, it's not set either (or at least
 		// not retrievable via GetWindowText()):
-		if (control.hwnd = CreateWindowEx(exstyle, HOTKEY_CLASS, "", style
+		if (control.hwnd = CreateWindowEx(exstyle, HOTKEY_CLASS, _T(""), style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			if (*aText)
@@ -3258,7 +3260,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		// retrieved and used to figure out how to resize the buddy in cases where its width-set-automatically
 		// -based-on-contents should not be squished as a result of buddying.
 		// should not be squi
-		if (control.hwnd = CreateWindowEx(exstyle, UPDOWN_CLASS, "", style
+		if (control.hwnd = CreateWindowEx(exstyle, UPDOWN_CLASS, _T(""), style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			if (provide_buddy_manually) // v1.0.42.02 (see comment where provide_buddy_manually is initialized).
@@ -3342,7 +3344,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		break;
 
 	case GUI_CONTROL_SLIDER:
-		if (control.hwnd = CreateWindowEx(exstyle, TRACKBAR_CLASS, "", style
+		if (control.hwnd = CreateWindowEx(exstyle, TRACKBAR_CLASS, _T(""), style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			ControlSetSliderOptions(control, opt); // Fix for v1.0.25.08: This must be done prior to the below.
@@ -3357,7 +3359,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		break;
 
 	case GUI_CONTROL_PROGRESS:
-		if (control.hwnd = CreateWindowEx(exstyle, PROGRESS_CLASS, "", style
+		if (control.hwnd = CreateWindowEx(exstyle, PROGRESS_CLASS, _T(""), style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			// Progress bars don't default to mBackgroundColorCtl for their background color because it
@@ -3376,7 +3378,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 		break;
 
 	case GUI_CONTROL_TAB:
-		if (control.hwnd = CreateWindowEx(exstyle, WC_TABCONTROL, "", style
+		if (control.hwnd = CreateWindowEx(exstyle, WC_TABCONTROL, _T(""), style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			// For v1.0.23, theme is removed unconditionally for Tab controls because if an XP theme is
@@ -3438,7 +3440,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 
 	// Below also serves as a bug check, i.e. GUI_CONTROL_INVALID or some unknown type.
 	if (!control.hwnd)
-		return g_script.ScriptError("Can't create control." ERR_ABORT);
+		return g_script.ScriptError(_T("Can't create control.") ERR_ABORT);
 	// Otherwise the above control creation succeeded.
 	++mControlCount;
 	mControlWidthWasSetByContents = control_width_was_set_by_contents; // Set for use by next control, if any.
@@ -3611,7 +3613,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, char *aOptions, char *a
 
 
 
-ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs)
+ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs)
 // This function is similar to ControlParseOptions() further below, so should be maintained alongside it.
 // Caller must have already initialized aSetLastFoundWindow/, bool &aOwnDialogs with desired starting values.
 // Caller must ensure that aOptions is a modifiable string, since this method temporarily alters it.
@@ -3629,7 +3631,8 @@ ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, Togg
 	DWORD style_orig = mStyle;
 	DWORD exstyle_orig = mExStyle;
 
-	char *pos_of_the_x, *next_option, *option_end, orig_char;
+	LPTSTR pos_of_the_x, next_option, option_end;
+	TCHAR orig_char;
 	bool adding; // Whether this option is beeing added (+) or removed (-).
 
 	for (next_option = aOptions; *next_option; next_option = omit_leading_whitespace(option_end))
@@ -3657,8 +3660,8 @@ ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, Togg
 		if (!*next_option) // In case the entire option string ends in a naked + or -.
 			break;
 		// Find the end of this option item:
-		if (   !(option_end = StrChrAny(next_option, " \t"))   )  // Space or tab.
-			option_end = next_option + strlen(next_option); // Set to position of zero terminator instead.
+		if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )  // Space or tab.
+			option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
 		if (option_end == next_option)
 			continue; // i.e. the string contains a + or - with a space or tab after it, which is intentionally ignored.
 
@@ -3668,7 +3671,7 @@ ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, Togg
 		*option_end = '\0';
 
 		// Attributes and option words:
-		if (!strnicmp(next_option, "Owner", 5))
+		if (!_tcsnicmp(next_option, _T("Owner"), 5))
 		{
 			if (!mHwnd)
 			{
@@ -3678,7 +3681,7 @@ ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, Togg
 				{
 					if (option_end - next_option > 5) // Length is greater than 5, so it has a number (e.g. Owned1).
 					{
-						// Using ATOI() vs. atoi() seems okay in these cases since spaces are required
+						// Using ATOI() vs. _ttoi() seems okay in these cases since spaces are required
 						// between options:
 						owner_window_index = ATOI(next_option + 5) - 1;
 						if (owner_window_index > -1 && owner_window_index < MAX_GUI_WINDOWS
@@ -3686,7 +3689,7 @@ ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, Togg
 							&& g_gui[owner_window_index] && g_gui[owner_window_index]->mHwnd) // Relies on short-circuit boolean order.
 							mOwner = g_gui[owner_window_index]->mHwnd;
 						else
-							return g_script.ScriptError("Invalid or nonexistent owner window." ERR_ABORT, next_option);
+							return g_script.ScriptError(_T("Invalid or nonexistent owner window.") ERR_ABORT, next_option);
 					}
 					else
 						mOwner = g_hWnd; // Make a window owned (by script's main window) omits its taskbar button.
@@ -3695,7 +3698,7 @@ ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, Togg
 			//else mHwnd!=NULL. Since OS provides no way to change an existing window's owner, do nothing as documented.
 		}
 
-		else if (!stricmp(next_option, "AlwaysOnTop"))
+		else if (!_tcsicmp(next_option, _T("AlwaysOnTop")))
 		{
 			// If the window already exists, SetWindowLong() isn't enough.  Must use SetWindowPos()
 			// to make it take effect.
@@ -3715,26 +3718,26 @@ ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, Togg
 			if (adding) mExStyle |= WS_EX_TOPMOST; else mExStyle &= ~WS_EX_TOPMOST;
 		}
 
-		else if (!stricmp(next_option, "Border"))
+		else if (!_tcsicmp(next_option, _T("Border")))
 			if (adding) mStyle |= WS_BORDER; else mStyle &= ~WS_BORDER;
 
-		else if (!stricmp(next_option, "Caption"))
+		else if (!_tcsicmp(next_option, _T("Caption")))
 			// To remove title bar successfully, the WS_POPUP style must also be applied:
 			if (adding) mStyle |= WS_CAPTION; else mStyle = mStyle & ~WS_CAPTION | WS_POPUP;
 
-		else if (!strnicmp(next_option, "Delimiter", 9))
+		else if (!_tcsnicmp(next_option, _T("Delimiter"), 9))
 		{
 			next_option += 9;
 			// For simplicity, the value of "adding" is ignored since no use is forseeable for "-Delimiter".
-			if (!stricmp(next_option, "Tab"))
+			if (!_tcsicmp(next_option, _T("Tab")))
 				mDelimiter = '\t';
-			else if (!stricmp(next_option, "Space"))
+			else if (!_tcsicmp(next_option, _T("Space")))
 				mDelimiter = ' ';
 			else
 				mDelimiter = *next_option ? *next_option : '|';
 		}
 
-		else if (!stricmp(next_option, "Disabled"))
+		else if (!_tcsicmp(next_option, _T("Disabled")))
 		{
 			if (mHwnd)
 			{
@@ -3751,7 +3754,7 @@ ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, Togg
 			if (adding) mStyle |= WS_DISABLED; else mStyle &= ~WS_DISABLED;
 		}
 
-		else if (!strnicmp(next_option, "Label", 5)) // v1.0.44.09: Allow custom label prefix for the reasons described in SetLabels().
+		else if (!_tcsnicmp(next_option, _T("Label"), 5)) // v1.0.44.09: Allow custom label prefix for the reasons described in SetLabels().
 		{
 			if (adding)
 				SetLabels(next_option + 5);
@@ -3763,18 +3766,18 @@ ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, Togg
 			// Alternative: Could also use some char that's illegal in labels to indicate one or more of the above.
 		}
 
-		else if (!strnicmp(next_option, "LastFound", 9)) // strnicmp so that "LastFoundExist" is also recognized.
+		else if (!_tcsnicmp(next_option, _T("LastFound"), 9)) // _tcsnicmp so that "LastFoundExist" is also recognized.
 			aSetLastFoundWindow = true; // Regardless of whether "adding" is true or false.
 
-		else if (!stricmp(next_option, "MaximizeBox")) // See above comment.
+		else if (!_tcsicmp(next_option, _T("MaximizeBox"))) // See above comment.
 			if (adding) mStyle |= WS_MAXIMIZEBOX|WS_SYSMENU; else mStyle &= ~WS_MAXIMIZEBOX;
 
-		else if (!stricmp(next_option, "MinimizeBox"))
+		else if (!_tcsicmp(next_option, _T("MinimizeBox")))
 			// WS_MINIMIZEBOX requires WS_SYSMENU to take effect.  It can be explicitly omitted
 			// via "+MinimizeBox -SysMenu" if that functionality is ever needed.
 			if (adding) mStyle |= WS_MINIMIZEBOX|WS_SYSMENU; else mStyle &= ~WS_MINIMIZEBOX;
 
-		else if (!strnicmp(next_option, "MinSize", 7)) // v1.0.44.13: Added for use with WM_GETMINMAXINFO.
+		else if (!_tcsnicmp(next_option, _T("MinSize"), 7)) // v1.0.44.13: Added for use with WM_GETMINMAXINFO.
 		{
 			next_option += 7;
 			if (adding)
@@ -3788,12 +3791,12 @@ ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, Togg
 					// applied only once.  Examples of such situations are when one of the coordinates is omitted,
 					// or when +MinSize is specified prior to the first "Gui Show" but +MaxSize is specified after.
 					GetNonClientArea(nc_width, nc_height);
-					// atoi() vs. ATOI() is used below to avoid ambiguity of "x" being hex 0x vs. a delimiter.
-					if ((pos_of_the_x = StrChrAny(next_option, "Xx")) && pos_of_the_x[1]) // Kept simple due to rarity of transgressions and their being inconsequential.
-						mMinHeight = atoi(pos_of_the_x + 1) + nc_height;
+					// _ttoi() vs. ATOI() is used below to avoid ambiguity of "x" being hex 0x vs. a delimiter.
+					if ((pos_of_the_x = StrChrAny(next_option, _T("Xx"))) && pos_of_the_x[1]) // Kept simple due to rarity of transgressions and their being inconsequential.
+						mMinHeight = _ttoi(pos_of_the_x + 1) + nc_height;
 					//else it's "MinSize333" or "MinSize333x", so leave height unchanged as documented.
 					if (pos_of_the_x != next_option) // There's no 'x' or it lies to the right of next_option.
-						mMinWidth = atoi(next_option) + nc_width; // atoi() automatically stops converting when it reaches non-numeric character.
+						mMinWidth = _ttoi(next_option) + nc_width; // _ttoi() automatically stops converting when it reaches non-numeric character.
 					//else it's "MinSizeX333", so leave width unchanged as documented.
 				}
 				else // Since no width or height was specified:
@@ -3810,7 +3813,7 @@ ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, Togg
 			}
 		}
 
-		else if (!strnicmp(next_option, "MaxSize", 7)) // v1.0.44.13: Added for use with WM_GETMINMAXINFO.
+		else if (!_tcsnicmp(next_option, _T("MaxSize"), 7)) // v1.0.44.13: Added for use with WM_GETMINMAXINFO.
 		{
 			// SEE "MinSize" section above for more comments because the section below is nearly identical to it.
 			next_option += 7;
@@ -3819,10 +3822,10 @@ ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, Togg
 				if (*next_option)
 				{
 					GetNonClientArea(nc_width, nc_height);
-					if ((pos_of_the_x = StrChrAny(next_option, "Xx")) && pos_of_the_x[1]) // Kept simple due to rarity of transgressions and their being inconsequential.
-						mMaxHeight = atoi(pos_of_the_x + 1) + nc_height;
+					if ((pos_of_the_x = StrChrAny(next_option, _T("Xx"))) && pos_of_the_x[1]) // Kept simple due to rarity of transgressions and their being inconsequential.
+						mMaxHeight = _ttoi(pos_of_the_x + 1) + nc_height;
 					if (pos_of_the_x != next_option) // There's no 'x' or it lies to the right of next_option.
-						mMaxWidth = atoi(next_option) + nc_width; // atoi() automatically stops converting when it reaches non-numeric character.
+						mMaxWidth = _ttoi(next_option) + nc_width; // _ttoi() automatically stops converting when it reaches non-numeric character.
 				}
 				else // No width or height was specified. See comment in "MinSize" for details about this.
 					GetTotalWidthAndHeight(mMaxWidth, mMaxHeight); // If window hasn't yet been shown for the first time, this will set them to COORD_CENTERED, which tells the first-show routine to get the total width/height.
@@ -3834,29 +3837,29 @@ ResultType GuiType::ParseOptions(char *aOptions, bool &aSetLastFoundWindow, Togg
 			}
 		}
 
-		else if (!stricmp(next_option, "OwnDialogs"))
+		else if (!_tcsicmp(next_option, _T("OwnDialogs")))
 			aOwnDialogs = (adding ? TOGGLED_ON : TOGGLED_OFF);
 
-		else if (!stricmp(next_option, "Resize")) // Minus removes either or both.
+		else if (!_tcsicmp(next_option, _T("Resize"))) // Minus removes either or both.
 			if (adding) mStyle |= WS_SIZEBOX|WS_MAXIMIZEBOX; else mStyle &= ~(WS_SIZEBOX|WS_MAXIMIZEBOX);
 
-		else if (!stricmp(next_option, "SysMenu"))
+		else if (!_tcsicmp(next_option, _T("SysMenu")))
 			if (adding) mStyle |= WS_SYSMENU; else mStyle &= ~WS_SYSMENU;
 
-		else if (!stricmp(next_option, "Theme"))
+		else if (!_tcsicmp(next_option, _T("Theme")))
 			mUseTheme = adding;
 			// But don't apply/remove theme from parent window because that is usually undesirable.
 			// This is because even old apps running on XP still have the new parent window theme,
 			// at least for their title bar and title bar buttons (except console apps, maybe).
 
-		else if (!stricmp(next_option, "ToolWindow"))
+		else if (!_tcsicmp(next_option, _T("ToolWindow")))
 			// WS_EX_TOOLWINDOW provides narrower title bar, omits task bar button, and omits
 			// entry in the alt-tab menu.
 			if (adding) mExStyle |= WS_EX_TOOLWINDOW; else mExStyle &= ~WS_EX_TOOLWINDOW;
 
 		// This one should be near the bottom since "E" is fairly vague and might be contained at the start
 		// of future option words such as Edge, Exit, etc.
-		else if (toupper(*next_option) == 'E') // Extended style
+		else if (_totupper(*next_option) == 'E') // Extended style
 		{
 			++next_option; // Skip over the E itself.
 			if (IsPureNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "E".
@@ -3981,7 +3984,7 @@ void GuiType::GetTotalWidthAndHeight(LONG &aWidth, LONG &aHeight)
 
 
 
-ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &aOpt, GuiControlType &aControl
+ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &aOpt, GuiControlType &aControl
 	, GuiIndexType aControlIndex)
 // Caller must have already initialized aOpt with zeroes or any other desired starting values.
 // Caller must ensure that aOptions is a modifiable string, since this method temporarily alters it.
@@ -3990,7 +3993,8 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 	// back through a means that doesn't corrupt the union:
 	COLORREF &color_main = (aControl.type == GUI_CONTROL_LISTVIEW || aControl.type == GUI_CONTROL_PIC)
 		? aOpt.color_listview : aControl.union_color;
-	char *next_option, *option_end, orig_char;
+	LPTSTR next_option, option_end;
+	TCHAR orig_char;
 	bool adding; // Whether this option is beeing added (+) or removed (-).
 	GuiControlType *tab_control;
 	RECT rect;
@@ -4021,8 +4025,8 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 		if (!*next_option) // In case the entire option string ends in a naked + or -.
 			break;
 		// Find the end of this option item:
-		if (   !(option_end = StrChrAny(next_option, " \t"))   )  // Space or tab.
-			option_end = next_option + strlen(next_option); // Set to position of zero terminator instead.
+		if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )  // Space or tab.
+			option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
 		if (option_end == next_option)
 			continue; // i.e. the string contains a + or - with a space or tab after it, which is intentionally ignored.
 
@@ -4032,9 +4036,9 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 		*option_end = '\0';
 
 		// Attributes:
-		if (!stricmp(next_option, "Section")) // Adding and removing are treated the same in this case.
+		if (!_tcsicmp(next_option, _T("Section"))) // Adding and removing are treated the same in this case.
 			aOpt.start_new_section = true;    // Ignored by caller when control already exists.
-		else if (!stricmp(next_option, "AltSubmit") && aControl.type != GUI_CONTROL_EDIT)
+		else if (!_tcsicmp(next_option, _T("AltSubmit")) && aControl.type != GUI_CONTROL_EDIT)
 		{
 			// v1.0.44: Don't allow control's AltSubmit bit to be set unless it's valid option for
 			// that type.  This protects the GUI_CONTROL_ATTRIB_ALTSUBMIT bit from being corrupted
@@ -4061,10 +4065,10 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 		}
 
 		// Content of control (these are currently only effective if the control is being newly created):
-		else if (!strnicmp(next_option, "Checked", 7)) // Caller knows to ignore if inapplicable. Applicable for ListView too.
+		else if (!_tcsnicmp(next_option, _T("Checked"), 7)) // Caller knows to ignore if inapplicable. Applicable for ListView too.
 		{
 			next_option += 7;
-			if (!stricmp(next_option, "Gray")) // Radios can't have the 3rd/gray state, but for simplicity it's permitted.
+			if (!_tcsicmp(next_option, _T("Gray"))) // Radios can't have the 3rd/gray state, but for simplicity it's permitted.
 				if (adding) aOpt.checked = BST_INDETERMINATE; else aOpt.checked = BST_UNCHECKED;
 			else
 			{
@@ -4092,7 +4096,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				}
 			} // Non-checkedGRAY
 		} // Checked.
-		else if (!strnicmp(next_option, "Choose", 6))
+		else if (!_tcsnicmp(next_option, _T("Choose"), 6))
 		{
 			// "CHOOSE" provides an easier way to conditionally select a different item at the time
 			// the control is added.  Example: gui, add, ListBox, vMyList Choose%choice%, %MyItemList%
@@ -4103,7 +4107,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				switch (aControl.type)
 				{
 				case GUI_CONTROL_DATETIME:
-					if (!stricmp(next_option, "None"))
+					if (!_tcsicmp(next_option, _T("None")))
 						aOpt.choice = 2; // Special flag value to indicate "none".
 					else // See if it's a valid date-time.
 						if (YYYYMMDDToSystemTime(next_option, aOpt.sys_time[0], true)) // Date string is valid.
@@ -4129,11 +4133,11 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 		}
 
 		// Styles (general):
-		else if (!stricmp(next_option, "Border"))
+		else if (!_tcsicmp(next_option, _T("Border")))
 			if (adding) aOpt.style_add |= WS_BORDER; else aOpt.style_remove |= WS_BORDER;
-		else if (!stricmp(next_option, "VScroll")) // Seems harmless in this case not to check aControl.type to ensure it's an input-capable control.
+		else if (!_tcsicmp(next_option, _T("VScroll"))) // Seems harmless in this case not to check aControl.type to ensure it's an input-capable control.
 			if (adding) aOpt.style_add |= WS_VSCROLL; else aOpt.style_remove |= WS_VSCROLL;
-		else if (!strnicmp(next_option, "HScroll", 7)) // Seems harmless in this case not to check aControl.type to ensure it's an input-capable control.
+		else if (!_tcsnicmp(next_option, _T("HScroll"), 7)) // Seems harmless in this case not to check aControl.type to ensure it's an input-capable control.
 		{
 			if (aControl.type == GUI_CONTROL_TREEVIEW)
 				// Testing shows that Tree doesn't seem to fully support removal of hscroll bar after creation.
@@ -4150,15 +4154,15 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				else
 					aOpt.style_remove |= WS_HSCROLL;
 		}
-		else if (!stricmp(next_option, "Tabstop")) // Seems harmless in this case not to check aControl.type to ensure it's an input-capable control.
+		else if (!_tcsicmp(next_option, _T("Tabstop"))) // Seems harmless in this case not to check aControl.type to ensure it's an input-capable control.
 			if (adding) aOpt.style_add |= WS_TABSTOP; else aOpt.style_remove |= WS_TABSTOP;
-		else if (!stricmp(next_option, "NoTab")) // Supported for backward compatibility and it might be more ergonomic for "Gui Add".
+		else if (!_tcsicmp(next_option, _T("NoTab"))) // Supported for backward compatibility and it might be more ergonomic for "Gui Add".
 			if (adding) aOpt.style_remove |= WS_TABSTOP; else aOpt.style_add |= WS_TABSTOP;
-		else if (!stricmp(next_option, "Group")) // Because it starts with 'G', this overlaps with g-label, but seems well worth it in this case.
+		else if (!_tcsicmp(next_option, _T("Group"))) // Because it starts with 'G', this overlaps with g-label, but seems well worth it in this case.
 			if (adding) aOpt.style_add |= WS_GROUP; else aOpt.style_remove |= WS_GROUP;
-		else if (!stricmp(next_option, "Redraw"))  // Seems a little more intuitive/memorable than "Draw".
+		else if (!_tcsicmp(next_option, _T("Redraw")))  // Seems a little more intuitive/memorable than "Draw".
 			aOpt.redraw = adding ? CONDITION_TRUE : CONDITION_FALSE; // Otherwise leave it at its default of 0.
-		else if (!strnicmp(next_option, "Disabled", 8))
+		else if (!_tcsnicmp(next_option, _T("Disabled"), 8))
 		{
 			// As of v1.0.26, Checked/Hidden/Disabled can be followed by an optional 1/0/-1 so that
 			// there is a way for a script to set the starting state by reading from an INI or registry
@@ -4176,7 +4180,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 			else
 				if (adding) aOpt.style_add |= WS_DISABLED; else aOpt.style_remove |= WS_DISABLED;
 		}
-		else if (!strnicmp(next_option, "Hidden", 6))
+		else if (!_tcsnicmp(next_option, _T("Hidden"), 6))
 		{
 			// As of v1.0.26, Checked/Hidden/Disabled can be followed by an optional 1/0/-1 so that
 			// there is a way for a script to set the starting state by reading from an INI or registry
@@ -4194,7 +4198,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 			else
 				if (adding) aOpt.style_remove |= WS_VISIBLE; else aOpt.style_add |= WS_VISIBLE;
 		}
-		else if (!stricmp(next_option, "Wrap"))
+		else if (!_tcsicmp(next_option, _T("Wrap")))
 		{
 			switch(aControl.type)
 			{
@@ -4232,7 +4236,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 			//case GUI_CONTROL_PROGRESS:
 			}
 		}
-		else if (!strnicmp(next_option, "Background", 10))
+		else if (!_tcsnicmp(next_option, _T("Background"), 10))
 		{
 			next_option += 10;  // To help maintainability, point it to the optional suffix here.
 			switch(aControl.type)
@@ -4248,8 +4252,8 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				{
 					aOpt.color_bk = ColorNameToBGR(next_option);
 					if (aOpt.color_bk == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
-						// It seems strtol() automatically handles the optional leading "0x" if present:
-						aOpt.color_bk = rgb_to_bgr(strtol(next_option, NULL, 16));
+						// It seems _tcstol() automatically handles the optional leading "0x" if present:
+						aOpt.color_bk = rgb_to_bgr(_tcstol(next_option, NULL, 16));
 						// if next_option did not contain something hex-numeric, black (0x00) will be assumed,
 						// which seems okay given how rare such a problem would be.
 				}
@@ -4260,15 +4264,15 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				if (adding)
 				{
 					aControl.attrib &= ~GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT;
-					if (!stricmp(next_option, "Trans"))
+					if (!_tcsicmp(next_option, _T("Trans")))
 						aControl.attrib |= GUI_CONTROL_ATTRIB_BACKGROUND_TRANS; // This is mutually exclusive of the above anyway.
 					else
 						aControl.attrib &= ~GUI_CONTROL_ATTRIB_BACKGROUND_TRANS;
 					// In the future, something like the below can help support background colors for individual controls.
 					//COLORREF background_color = ColorNameToBGR(next_option + 10);
 					//if (background_color == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
-					//	// It seems strtol() automatically handles the optional leading "0x" if present:
-					//	background_color = rgb_to_bgr(strtol(next_option, NULL, 16));
+					//	// It seems _tcstol() automatically handles the optional leading "0x" if present:
+					//	background_color = rgb_to_bgr(_tcstol(next_option, NULL, 16));
 					//	// if next_option did not contain something hex-numeric, black (0x00) will be assumed,
 					//	// which seems okay given how rare such a problem would be.
 				}
@@ -4283,47 +4287,47 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				}
 			} // switch(aControl.type)
 		} // Option "Background".
-		else if (!stricmp(next_option, "Group")) // This overlaps with g-label, but seems well worth it in this case.
+		else if (!_tcsicmp(next_option, _T("Group"))) // This overlaps with g-label, but seems well worth it in this case.
 			if (adding) aOpt.style_add |= WS_GROUP; else aOpt.style_remove |= WS_GROUP;
-		else if (!stricmp(next_option, "Theme"))
+		else if (!_tcsicmp(next_option, _T("Theme")))
 			aOpt.use_theme = adding;
-		else if (!strnicmp(next_option, "Hwnd", 4))
+		else if (!_tcsnicmp(next_option, _T("Hwnd"), 4))
 			aOpt.hwnd_output_var = g_script.FindOrAddVar(next_option + 4, 0, ALWAYS_PREFER_LOCAL); // ALWAYS_PREFER_LOCAL is debatable, but for simplicity it seems best since it causes HwndOutputVar to behave the same as the vVar option.
 
 		// Picture / ListView
-		else if (!strnicmp(next_option, "Icon", 4)) // Caller should ignore aOpt.icon_number if it isn't applicable for this control type.
+		else if (!_tcsnicmp(next_option, _T("Icon"), 4)) // Caller should ignore aOpt.icon_number if it isn't applicable for this control type.
 		{
 			next_option += 4;
 			if (aControl.type == GUI_CONTROL_LISTVIEW) // Unconditional regardless of the value of "adding".
-				aOpt.listview_view = stricmp(next_option, "Small") ? LVS_ICON : LVS_SMALLICON;
+				aOpt.listview_view = _tcsicmp(next_option, _T("Small")) ? LVS_ICON : LVS_SMALLICON;
 			else
 				if (adding)
 					aOpt.icon_number = ATOI(next_option);
 				//else do nothing (not currently implemented)
 		}
-		else if (!stricmp(next_option, "Report"))
+		else if (!_tcsicmp(next_option, _T("Report")))
 			aOpt.listview_view = LVS_REPORT; // Unconditional regardless of the value of "adding".
-		else if (!stricmp(next_option, "List"))
+		else if (!_tcsicmp(next_option, _T("List")))
 			aOpt.listview_view = LVS_LIST; // Unconditional regardless of the value of "adding".
-		else if (!stricmp(next_option, "Tile")) // Fortunately, subsequent changes to the control's style do not pop it out of Tile mode. It's apparently smart enough to do that only when the LVS_TYPEMASK bits change.
+		else if (!_tcsicmp(next_option, _T("Tile"))) // Fortunately, subsequent changes to the control's style do not pop it out of Tile mode. It's apparently smart enough to do that only when the LVS_TYPEMASK bits change.
 		{
 			if (g_os.IsWinXPorLater()) // Checking OS version here simplifies code in other places.
 				aOpt.listview_view = LV_VIEW_TILE; // LV_VIEW_TILE is compatible with LVS values such as LVS_REPORT because it doesn't overlap/conflict with them.
 		}
-		else if (aControl.type == GUI_CONTROL_LISTVIEW && !stricmp(next_option, "Hdr"))
+		else if (aControl.type == GUI_CONTROL_LISTVIEW && !_tcsicmp(next_option, _T("Hdr")))
 			if (adding) aOpt.style_remove |= LVS_NOCOLUMNHEADER; else aOpt.style_add |= LVS_NOCOLUMNHEADER;
-		else if (aControl.type == GUI_CONTROL_LISTVIEW && !strnicmp(next_option, "NoSort", 6))
+		else if (aControl.type == GUI_CONTROL_LISTVIEW && !_tcsnicmp(next_option, _T("NoSort"), 6))
 		{
-			if (!stricmp(next_option + 6, "Hdr")) // Prevents the header from being clickable like a set of buttons.
+			if (!_tcsicmp(next_option + 6, _T("Hdr"))) // Prevents the header from being clickable like a set of buttons.
 				if (adding) aOpt.style_add |= LVS_NOSORTHEADER; else aOpt.style_remove |= LVS_NOSORTHEADER; // Testing shows it can't be changed after the control is created.
 			else // Header is still clickable (unless above is *also* specified), but has no automatic sorting.
 				aOpt.listview_no_auto_sort = adding;
 		}
-		else if (aControl.type == GUI_CONTROL_LISTVIEW && !stricmp(next_option, "Grid"))
+		else if (aControl.type == GUI_CONTROL_LISTVIEW && !_tcsicmp(next_option, _T("Grid")))
 			if (adding) aOpt.listview_style |= LVS_EX_GRIDLINES; else aOpt.listview_style &= ~LVS_EX_GRIDLINES;
-		else if (!strnicmp(next_option, "Count", 5)) // Script should only provide the option for ListViews.
+		else if (!_tcsnicmp(next_option, _T("Count"), 5)) // Script should only provide the option for ListViews.
 			aOpt.limit = ATOI(next_option + 5); // For simplicity, the value of "adding" is ignored.
-		else if (!strnicmp(next_option, "LV", 2))
+		else if (!_tcsnicmp(next_option, _T("LV"), 2))
 		{
 			next_option += 2;
 			if (IsPureNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "LV".
@@ -4332,7 +4336,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				if (adding) aOpt.listview_style |= given_lvstyle; else aOpt.listview_style &= ~given_lvstyle;
 			}
 		}
-		else if (!strnicmp(next_option, "ImageList", 9))
+		else if (!_tcsnicmp(next_option, _T("ImageList"), 9))
 		{
 			if (adding)
 				aOpt.himagelist = (HIMAGELIST)(size_t)ATOU(next_option + 9);
@@ -4342,13 +4346,13 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 		}
 
 		// Button
-		else if (aControl.type == GUI_CONTROL_BUTTON && !stricmp(next_option, "Default"))
+		else if (aControl.type == GUI_CONTROL_BUTTON && !_tcsicmp(next_option, _T("Default")))
 			if (adding) aOpt.style_add |= BS_DEFPUSHBUTTON; else aOpt.style_remove |= BS_DEFPUSHBUTTON;
-		else if (aControl.type == GUI_CONTROL_CHECKBOX && !stricmp(next_option, "Check3")) // Radios can't have the 3rd/gray state.
+		else if (aControl.type == GUI_CONTROL_CHECKBOX && !_tcsicmp(next_option, _T("Check3"))) // Radios can't have the 3rd/gray state.
 			if (adding) aOpt.style_add |= BS_AUTO3STATE; else aOpt.style_remove |= BS_AUTO3STATE;
 
 		// Edit (and upper/lowercase for combobox/ddl, and others)
-		else if (!stricmp(next_option, "ReadOnly"))
+		else if (!_tcsicmp(next_option, _T("ReadOnly")))
 		{
 			switch (aControl.type)
 			{
@@ -4369,7 +4373,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				break;
 			}
 		}
-		else if (!stricmp(next_option, "Multi"))
+		else if (!_tcsicmp(next_option, _T("Multi")))
 		{
 			// It was named "multi" vs. multiline and/or "MultiSel" because it seems easier to
 			// remember in these cases.  In fact, any time two styles can be combined into one
@@ -4391,34 +4395,34 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				break;
 			}
 		}
-		else if (aControl.type == GUI_CONTROL_EDIT && !stricmp(next_option, "WantReturn"))
+		else if (aControl.type == GUI_CONTROL_EDIT && !_tcsicmp(next_option, _T("WantReturn")))
 			if (adding) aOpt.style_add |= ES_WANTRETURN; else aOpt.style_remove |= ES_WANTRETURN;
-		else if (aControl.type == GUI_CONTROL_EDIT && !stricmp(next_option, "WantTab"))
+		else if (aControl.type == GUI_CONTROL_EDIT && !_tcsicmp(next_option, _T("WantTab")))
 			if (adding) aControl.attrib |= GUI_CONTROL_ATTRIB_ALTBEHAVIOR; else aControl.attrib &= ~GUI_CONTROL_ATTRIB_ALTBEHAVIOR;
-		else if (aControl.type == GUI_CONTROL_EDIT && !stricmp(next_option, "WantCtrlA")) // v1.0.44: Presence of AltSubmit bit means DON'T want Ctrl-A.
+		else if (aControl.type == GUI_CONTROL_EDIT && !_tcsicmp(next_option, _T("WantCtrlA"))) // v1.0.44: Presence of AltSubmit bit means DON'T want Ctrl-A.
 			if (adding) aControl.attrib &= ~GUI_CONTROL_ATTRIB_ALTSUBMIT; else aControl.attrib |= GUI_CONTROL_ATTRIB_ALTSUBMIT;
 		else if ((aControl.type == GUI_CONTROL_LISTVIEW || aControl.type == GUI_CONTROL_TREEVIEW)
-			&& !stricmp(next_option, "WantF2")) // v1.0.44: All an F2 keystroke to edit the focused item.
+			&& !_tcsicmp(next_option, _T("WantF2"))) // v1.0.44: All an F2 keystroke to edit the focused item.
 			// Since WantF2 is the initial default, a script will almost never specify WantF2.  Therefore, it's
 			// probably not worth the code size to put -ReadOnly into effect automatically for +WantF2.
 			if (adding) aControl.attrib &= ~GUI_CONTROL_ATTRIB_ALTBEHAVIOR; else aControl.attrib |= GUI_CONTROL_ATTRIB_ALTBEHAVIOR;
-		else if (aControl.type == GUI_CONTROL_EDIT && !stricmp(next_option, "Number"))
+		else if (aControl.type == GUI_CONTROL_EDIT && !_tcsicmp(next_option, _T("Number")))
 			if (adding) aOpt.style_add |= ES_NUMBER; else aOpt.style_remove |= ES_NUMBER;
-		else if (!stricmp(next_option, "Lowercase"))
+		else if (!_tcsicmp(next_option, _T("Lowercase")))
 		{
 			if (aControl.type == GUI_CONTROL_EDIT)
 				if (adding) aOpt.style_add |= ES_LOWERCASE; else aOpt.style_remove |= ES_LOWERCASE;
 			else if (aControl.type == GUI_CONTROL_COMBOBOX || aControl.type == GUI_CONTROL_DROPDOWNLIST)
 				if (adding) aOpt.style_add |= CBS_LOWERCASE; else aOpt.style_remove |= CBS_LOWERCASE;
 		}
-		else if (!stricmp(next_option, "Uppercase"))
+		else if (!_tcsicmp(next_option, _T("Uppercase")))
 		{
 			if (aControl.type == GUI_CONTROL_EDIT)
 				if (adding) aOpt.style_add |= ES_UPPERCASE; else aOpt.style_remove |= ES_UPPERCASE;
 			else if (aControl.type == GUI_CONTROL_COMBOBOX || aControl.type == GUI_CONTROL_DROPDOWNLIST)
 				if (adding) aOpt.style_add |= CBS_UPPERCASE; else aOpt.style_remove |= CBS_UPPERCASE;
 		}
-		else if (aControl.type == GUI_CONTROL_EDIT && !strnicmp(next_option, "Password", 8))
+		else if (aControl.type == GUI_CONTROL_EDIT && !_tcsnicmp(next_option, _T("Password"), 8))
 		{
 			// Allow a space to be the masking character, since it's conceivable that might
 			// be wanted in cases where someone doesn't wany anyone to know they're typing a password.
@@ -4444,7 +4448,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 					SendMessage(aControl.hwnd, EM_SETPASSWORDCHAR, 0, 0);
 			}
 		}
-		else if (!strnicmp(next_option, "Limit", 5)) // This is used for Hotkey controls also.
+		else if (!_tcsnicmp(next_option, _T("Limit"), 5)) // This is used for Hotkey controls also.
 		{
 			if (adding)
 			{
@@ -4457,9 +4461,9 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 		}
 
 		// Combo/DropDownList/ListBox/ListView
-		else if (aControl.type == GUI_CONTROL_COMBOBOX && !stricmp(next_option, "Simple")) // DDL is not equipped to handle this style.
+		else if (aControl.type == GUI_CONTROL_COMBOBOX && !_tcsicmp(next_option, _T("Simple"))) // DDL is not equipped to handle this style.
 			if (adding) aOpt.style_add |= CBS_SIMPLE; else aOpt.style_remove |= CBS_SIMPLE;
-		else if (!strnicmp(next_option, "Sort", 4))
+		else if (!_tcsnicmp(next_option, _T("Sort"), 4))
 		{
 			switch(aControl.type)
 			{
@@ -4468,7 +4472,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				break;
 			case GUI_CONTROL_LISTVIEW: // LVS_SORTDESCENDING is not a named style due to rarity of use.
 				if (adding)
-					aOpt.style_add |= stricmp(next_option + 4, "Desc") ? LVS_SORTASCENDING : LVS_SORTDESCENDING;
+					aOpt.style_add |= _tcsicmp(next_option + 4, _T("Desc")) ? LVS_SORTASCENDING : LVS_SORTDESCENDING;
 				else
 					aOpt.style_remove |= LVS_SORTASCENDING|LVS_SORTDESCENDING;
 				break;
@@ -4480,7 +4484,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 		}
 
 		// UpDown
-		else if (aControl.type == GUI_CONTROL_UPDOWN && !stricmp(next_option, "Horz"))
+		else if (aControl.type == GUI_CONTROL_UPDOWN && !_tcsicmp(next_option, _T("Horz")))
 			if (adding)
 			{
 				aOpt.style_add |= UDS_HORZ;
@@ -4490,11 +4494,11 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				aOpt.style_remove |= UDS_HORZ; // But don't add UDS_AUTOBUDDY since it seems undesirable most of the time.
 
 		// Slider
-		else if (aControl.type == GUI_CONTROL_SLIDER && !stricmp(next_option, "Invert")) // Not called "Reverse" to avoid confusion with the non-functional style of that name.
+		else if (aControl.type == GUI_CONTROL_SLIDER && !_tcsicmp(next_option, _T("Invert"))) // Not called "Reverse" to avoid confusion with the non-functional style of that name.
 			if (adding) aControl.attrib |= GUI_CONTROL_ATTRIB_ALTBEHAVIOR; else aControl.attrib &= ~GUI_CONTROL_ATTRIB_ALTBEHAVIOR;
-		else if (aControl.type == GUI_CONTROL_SLIDER && !stricmp(next_option, "NoTicks"))
+		else if (aControl.type == GUI_CONTROL_SLIDER && !_tcsicmp(next_option, _T("NoTicks")))
 			if (adding) aOpt.style_add |= TBS_NOTICKS; else aOpt.style_remove |= TBS_NOTICKS;
-		else if (aControl.type == GUI_CONTROL_SLIDER && !strnicmp(next_option, "TickInterval", 12))
+		else if (aControl.type == GUI_CONTROL_SLIDER && !_tcsnicmp(next_option, _T("TickInterval"), 12))
 		{
 			if (adding)
 			{
@@ -4507,7 +4511,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				aOpt.tick_interval = -1;  // Signal it to remove the ticks later below (if the window exists).
 			}
 		}
-		else if (!strnicmp(next_option, "Line", 4))
+		else if (!_tcsnicmp(next_option, _T("Line"), 4))
 		{
 			next_option += 4;
 			if (aControl.type == GUI_CONTROL_SLIDER)
@@ -4516,18 +4520,18 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 					aOpt.line_size = ATOI(next_option);
 				//else removal not supported.
 			}
-			else if (aControl.type == GUI_CONTROL_TREEVIEW && toupper(*next_option) == 'S')
+			else if (aControl.type == GUI_CONTROL_TREEVIEW && _totupper(*next_option) == 'S')
 				// Seems best to consider TVS_HASLINES|TVS_LINESATROOT to be an inseparable group since
 				// one without the other is rare (script can always be overridden by specifying numeric styles):
 				if (adding) aOpt.style_add |= TVS_HASLINES|TVS_LINESATROOT; else aOpt.style_remove |= TVS_HASLINES|TVS_LINESATROOT;
 		}
-		else if (aControl.type == GUI_CONTROL_SLIDER && !strnicmp(next_option, "Page", 4))
+		else if (aControl.type == GUI_CONTROL_SLIDER && !_tcsnicmp(next_option, _T("Page"), 4))
 		{
 			if (adding)
 				aOpt.page_size = ATOI(next_option + 4);
 			//else removal not supported.
 		}
-		else if (aControl.type == GUI_CONTROL_SLIDER && !strnicmp(next_option, "Thick", 5))
+		else if (aControl.type == GUI_CONTROL_SLIDER && !_tcsnicmp(next_option, _T("Thick"), 5))
 		{
 			if (adding)
 			{
@@ -4537,7 +4541,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 			else // Removing the style is enough to reset its appearance on both XP Theme and Classic Theme.
 				aOpt.style_remove |= TBS_FIXEDLENGTH;
 		}
-		else if (!strnicmp(next_option, "ToolTip", 7))
+		else if (!_tcsnicmp(next_option, _T("ToolTip"), 7))
 		{
 			next_option += 7;
 			// Below was commented out because the SBARS_TOOLTIPS doesn't seem to do much, if anything.
@@ -4553,7 +4557,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				if (adding)
 				{
 					aOpt.tip_side = -1;  // Set default.
-					switch(toupper(*next_option))
+					switch(_totupper(*next_option))
 					{
 					case 'T': aOpt.tip_side = TBTS_TOP; break;
 					case 'L': aOpt.tip_side = TBTS_LEFT; break;
@@ -4570,12 +4574,12 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 					aOpt.style_remove |= TBS_TOOLTIPS;
 			}
 		}
-		else if (aControl.type == GUI_CONTROL_SLIDER && !strnicmp(next_option, "Buddy", 5))
+		else if (aControl.type == GUI_CONTROL_SLIDER && !_tcsnicmp(next_option, _T("Buddy"), 5))
 		{
 			if (adding)
 			{
 				next_option += 5;
-				char which_buddy = *next_option;
+				TCHAR which_buddy = *next_option;
 				if (which_buddy) // i.e. it's not the zero terminator
 				{
 					++next_option; // Now it should point to the variable name of the buddy control.
@@ -4600,7 +4604,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 		}
 
 		// Progress and Slider
-		else if (!stricmp(next_option, "Vertical"))
+		else if (!_tcsicmp(next_option, _T("Vertical")))
 		{
 			// Seems best not to recognize Vertical for Tab controls since Left and Right
 			// already cover it very well.
@@ -4610,14 +4614,14 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				if (adding) aOpt.style_add |= PBS_VERTICAL; else aOpt.style_remove |= PBS_VERTICAL;
 			//else do nothing, not a supported type
 		}
-		else if (!strnicmp(next_option, "Range", 5)) // Caller should ignore aOpt.range_min/max if it isn't applicable for this control type.
+		else if (!_tcsnicmp(next_option, _T("Range"), 5)) // Caller should ignore aOpt.range_min/max if it isn't applicable for this control type.
 		{
 			if (adding)
 			{
 				next_option += 5; // Helps with omitting the first minus sign, if any, below.
 				if (*next_option) // Prevent reading beyond the zero terminator due to next_option+1 in some places below.
 				{
-					char *cp;
+					LPTSTR cp;
 					if (aControl.type == GUI_CONTROL_DATETIME || aControl.type == GUI_CONTROL_MONTHCAL)
 					{
 						// Note: aOpt.range_changed is not set for these control types. aOpt.gdtr_range is used instead.
@@ -4638,7 +4642,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 					{
 						aOpt.range_changed = true;
 						aOpt.range_min = ATOI(next_option);
-						if (cp = strchr(next_option + 1, '-')) // +1 to omit the min's minus sign, if it has one.
+						if (cp = _tcschr(next_option + 1, '-')) // +1 to omit the min's minus sign, if it has one.
 							aOpt.range_max = ATOI(cp + 1);
 					}
 				}
@@ -4648,18 +4652,18 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 		}
 
 		// Progress
-		else if (aControl.type == GUI_CONTROL_PROGRESS && !stricmp(next_option, "Smooth"))
+		else if (aControl.type == GUI_CONTROL_PROGRESS && !_tcsicmp(next_option, _T("Smooth")))
 			if (adding) aOpt.style_add |= PBS_SMOOTH; else aOpt.style_remove |= PBS_SMOOTH;
 
 		// Tab control
-		else if (!stricmp(next_option, "Buttons"))
+		else if (!_tcsicmp(next_option, _T("Buttons")))
 		{
 			if (aControl.type == GUI_CONTROL_TAB)
 				if (adding) aOpt.style_add |= TCS_BUTTONS; else aOpt.style_remove |= TCS_BUTTONS;
 			else if (aControl.type == GUI_CONTROL_TREEVIEW)
 				if (adding) aOpt.style_add |= TVS_HASBUTTONS; else aOpt.style_remove |= TVS_HASBUTTONS;
 		}
-		else if (aControl.type == GUI_CONTROL_TAB && !stricmp(next_option, "Bottom"))
+		else if (aControl.type == GUI_CONTROL_TAB && !_tcsicmp(next_option, _T("Bottom")))
 			if (adding)
 			{
 				aOpt.style_add |= TCS_BOTTOM;
@@ -4669,7 +4673,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				aOpt.style_remove |= TCS_BOTTOM;
 
 		// Styles (alignment/justification):
-		else if (!stricmp(next_option, "Center"))
+		else if (!_tcsicmp(next_option, _T("Center")))
 			if (adding)
 			{
 				switch (aControl.type)
@@ -4750,7 +4754,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				}
 			}
 
-		else if (!stricmp(next_option, "Right"))
+		else if (!_tcsicmp(next_option, _T("Right")))
 			if (adding)
 			{
 				switch (aControl.type)
@@ -4850,7 +4854,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				}
 			}
 
-		else if (!stricmp(next_option, "Left"))
+		else if (!_tcsicmp(next_option, _T("Left")))
 		{
 			if (adding)
 			{
@@ -4968,7 +4972,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				// The option word consists of only one character, so ignore allow except the below
 				// since mandatory arg should immediately follow it.  Example: An isolated letter H
 				// should do nothing rather than cause the height to be set to zero.
-				switch (toupper(next_option[-1]))
+				switch (_totupper(next_option[-1]))
 				{
 				case 'C':
 					if (!adding && aControl.type != GUI_CONTROL_PIC && color_main != CLR_DEFAULT)
@@ -4989,7 +4993,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 			}
 
 			// Since above didn't "continue", there is text after the option letter, so take action accordingly.
-			switch (toupper(next_option[-1]))
+			switch (_totupper(next_option[-1]))
 			{
 			case 'G': // "Gosub" a label when this control is clicked or changed.
 				// For reasons of potential future use and compatibility, don't allow subroutines to be
@@ -5000,19 +5004,19 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 					// If control's hwnd exists, we were called from a caller who wants ErrorLevel set
 					// instead of a message displayed:
 					return aControl.hwnd ? g_ErrorLevel->Assign(ERRORLEVEL_ERROR)
-						: g_script.ScriptError("This control type should not have an associated subroutine."
+						: g_script.ScriptError(_T("This control type should not have an associated subroutine.")
 							ERR_ABORT, next_option - 1);
 				Label *candidate_label;
 				if (   !(candidate_label = g_script.FindLabel(next_option))   )
 				{
 					// If there is no explicit label, fall back to a special action if one is available
 					// for this keyword:
-					if (!stricmp(next_option, "Cancel"))
+					if (!_tcsicmp(next_option, _T("Cancel")))
 						aControl.attrib |= GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL;
 					// When the below is added, it should probably be made mutually exclusive of the above, probably
 					// by devoting two bits in the field for a total of three possible implicit actions (since the
 					// fourth is reserved as 00 = no action):
-					//else if (!stricmp(label_name, "Clear")) -->
+					//else if (!_tcsicmp(label_name, "Clear")) -->
 					//	control.options |= GUI_CONTROL_ATTRIB_IMPLICIT_CLEAR;
 					else // Since a non-special label was explicitly specified, it's an error that it can't be found.
 						return aControl.hwnd ? g_ErrorLevel->Assign(ERRORLEVEL_ERROR)
@@ -5063,7 +5067,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				// that they point to the global instead.  But that is pretty ugly and doesn't seem worth it.
 				candidate_var = candidate_var->ResolveAlias(); // Update it to its target if it's an alias.  This might be relied upon by Gui::FindControl() and other things, and also the section below.
 				if (candidate_var->IsNonStaticLocal()) // Note that an alias can point to a local vs. global var.
-					return g_script.ScriptError("A control's variable must be global or static." ERR_ABORT, next_option - 1);
+					return g_script.ScriptError(_T("A control's variable must be global or static.") ERR_ABORT, next_option - 1);
 				// Another reason that the above always resolves aliases is because it allows the next
 				// check below to find true duplicates, even if different aliases are used to create the
 				// controls (i.e. if two alias both point to the same global).
@@ -5078,7 +5082,7 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				for (u = 0; u < mControlCount; ++u)
 					if (mControl[u].output_var == candidate_var)
 						return aControl.hwnd ? g_ErrorLevel->Assign(ERRORLEVEL_ERROR)
-							: g_script.ScriptError("The same variable cannot be used for more than one control." // It used to say "one control per window" but that seems more confusing than it's worth.
+							: g_script.ScriptError(_T("The same variable cannot be used for more than one control.") // It used to say "one control per window" but that seems more confusing than it's worth.
 								ERR_ABORT, next_option - 1);
 				aControl.output_var = candidate_var;
 				break;
@@ -5098,8 +5102,8 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				COLORREF new_color;
 				new_color = ColorNameToBGR(next_option);
 				if (new_color == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
-					// It seems strtol() automatically handles the optional leading "0x" if present:
-					new_color = rgb_to_bgr(strtol(next_option, NULL, 16));
+					// It seems _tcstol() automatically handles the optional leading "0x" if present:
+					new_color = rgb_to_bgr(_tcstol(next_option, NULL, 16));
 					// if next_option did not contain something hex-numeric, black (0x00) will be assumed,
 					// which seems okay given how rare such a problem would be.
 				if (color_main != new_color || &color_main == &aOpt.color_listview) // Always indicate that it changed if it's not a stored attribute of the control (so that cDefault can be detected).
@@ -5110,14 +5114,14 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				break;
 
 			case 'W':
-				if (toupper(*next_option) == 'P') // Use the previous control's value.
+				if (_totupper(*next_option) == 'P') // Use the previous control's value.
 					aOpt.width = mPrevWidth + ATOI(next_option + 1);
 				else
 					aOpt.width = ATOI(next_option);
 				break;
 
 			case 'H':
-				if (toupper(*next_option) == 'P') // Use the previous control's value.
+				if (_totupper(*next_option) == 'P') // Use the previous control's value.
 					aOpt.height = mPrevHeight + ATOI(next_option + 1);
 				else
 					aOpt.height = ATOI(next_option);
@@ -5149,19 +5153,19 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				// For the M and P sub-options, not that the +/- prefix is optional.  The number is simply
 				// read in as-is (though the use of + is more self-documenting in this case than omitting
 				// the sign entirely).
-				else if (toupper(*next_option) == 'M') // Use the X margin
+				else if (_totupper(*next_option) == 'M') // Use the X margin
 				{
 					aOpt.x = mMarginX + ATOI(next_option + 1);
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = mMaxExtentDown + mMarginY;
 				}
-				else if (toupper(*next_option) == 'P') // Use the previous control's X position.
+				else if (_totupper(*next_option) == 'P') // Use the previous control's X position.
 				{
 					aOpt.x = mPrevX + ATOI(next_option + 1);
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = mPrevY;  // Since moving in the X direction, retain the same Y as previous control.
 				}
-				else if (toupper(*next_option) == 'S') // Use the saved X position
+				else if (_totupper(*next_option) == 'S') // Use the saved X position
 				{
 					aOpt.x = mSectionX + ATOI(next_option + 1);
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
@@ -5201,19 +5205,19 @@ ResultType GuiType::ControlParseOptions(char *aOptions, GuiControlOptionsType &a
 				// For the M and P sub-options, not that the +/- prefix is optional.  The number is simply
 				// read in as-is (though the use of + is more self-documenting in this case than omitting
 				// the sign entirely).
-				else if (toupper(*next_option) == 'M') // Use the Y margin
+				else if (_totupper(*next_option) == 'M') // Use the Y margin
 				{
 					aOpt.y = mMarginY + ATOI(next_option + 1);
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.x = mMaxExtentRight + mMarginX;
 				}
-				else if (toupper(*next_option) == 'P') // Use the previous control's Y position.
+				else if (_totupper(*next_option) == 'P') // Use the previous control's Y position.
 				{
 					aOpt.y = mPrevY + ATOI(next_option + 1);
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.x = mPrevX;  // Since moving in the Y direction, retain the same X as previous control.
 				}
-				else if (toupper(*next_option) == 'S') // Use the saved Y position
+				else if (_totupper(*next_option) == 'S') // Use the saved Y position
 				{
 					aOpt.y = mSectionY + ATOI(next_option + 1);
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
@@ -5586,7 +5590,7 @@ void GuiType::ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aC
 
 
 
-void GuiType::ControlAddContents(GuiControlType &aControl, char *aContent, int aChoice, GuiControlOptionsType *aOpt)
+void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt)
 // If INT_MIN is specified for aChoice, aControl should be the ListView to which a new row is being added.
 // In that case, aOpt should be non-NULL.
 // Caller must ensure that aContent is a writable memory area, since this function temporarily
@@ -5619,7 +5623,7 @@ void GuiType::ControlAddContents(GuiControlType &aControl, char *aContent, int a
 	}
 
 	bool temporarily_terminated;
-	char *this_field, *next_field;
+	LPTSTR this_field, next_field;
 	LRESULT item_index;
 	int requested_index = 0;
 
@@ -5641,14 +5645,14 @@ void GuiType::ControlAddContents(GuiControlType &aControl, char *aContent, int a
 		// that are a self-contained CSV list.  Of course, the pipe character itself is "sacrificed" and
 		// cannot be used literally due to this method.  That limitation can now be avoided by specifying
 		// a custom delimiter.
-		if (next_field = strchr(this_field, mDelimiter)) // Assign
+		if (next_field = _tcschr(this_field, mDelimiter)) // Assign
 		{
 			*next_field = '\0';  // Temporarily terminate (caller has ensured this is safe).
 			temporarily_terminated = true;
 		}
 		else
 		{
-			next_field = this_field + strlen(this_field);  // Point it to the end of the string.
+			next_field = this_field + _tcslen(this_field);  // Point it to the end of the string.
 			temporarily_terminated = false;
 		}
 
@@ -5738,7 +5742,7 @@ void GuiType::ControlAddContents(GuiControlType &aControl, char *aContent, int a
 
 
 
-ResultType GuiType::Show(char *aOptions, char *aText)
+ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 {
 	if (!mHwnd)
 		return OK;  // Make this a harmless attempt.
@@ -5798,14 +5802,14 @@ ResultType GuiType::Show(char *aOptions, char *aText)
 	else
 		show_mode = SW_SHOWNORMAL;
 
-	for (char *cp = aOptions; *cp; ++cp)
+	for (LPTSTR cp = aOptions; *cp; ++cp)
 	{
-		switch(toupper(*cp))
+		switch(_totupper(*cp))
 		{
-		// For options such as W, H, X and Y: Use atoi() vs. ATOI() to avoid interpreting something like 0x01B
+		// For options such as W, H, X and Y: Use _ttoi() vs. ATOI() to avoid interpreting something like 0x01B
 		// as hex when in fact the B was meant to be an option letter.
 		case 'A':
-			if (!strnicmp(cp, "AutoSize", 8))
+			if (!_tcsnicmp(cp, _T("AutoSize"), 8))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
 				// 7 vs. 8 to avoid the loop's addition ++cp from reading beyond the length of the string:
@@ -5814,7 +5818,7 @@ ResultType GuiType::Show(char *aOptions, char *aText)
 			}
 			break;
 		case 'C':
-			if (!strnicmp(cp, "Center", 6))
+			if (!_tcsnicmp(cp, _T("Center"), 6))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
 				// 5 vs. 6 to avoid the loop's addition ++cp from reading beyond the length of the string:
@@ -5828,14 +5832,14 @@ ResultType GuiType::Show(char *aOptions, char *aText)
 			}
 			break;
 		case 'M':
-			if (!strnicmp(cp, "Minimize", 8)) // Seems best to reserve "Min" for other things, such as Min W/H. "Minimize" is also more self-documenting.
+			if (!_tcsnicmp(cp, _T("Minimize"), 8)) // Seems best to reserve "Min" for other things, such as Min W/H. "Minimize" is also more self-documenting.
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
 				// 7 vs. 8 to avoid the loop's addition ++cp from reading beyond the length of the string:
 				cp += 7;
 				show_mode = SW_MINIMIZE;  // Seems more typically useful/desirable than SW_SHOWMINIMIZED.
 			}
-			else if (!strnicmp(cp, "Maximize", 8))
+			else if (!_tcsnicmp(cp, _T("Maximize"), 8))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
 				// 7 vs. 8 to avoid the loop's addition ++cp from reading beyond the length of the string:
@@ -5844,14 +5848,14 @@ ResultType GuiType::Show(char *aOptions, char *aText)
 			}
 			break;
 		case 'N':
-			if (!strnicmp(cp, "NA", 2))
+			if (!_tcsnicmp(cp, _T("NA"), 2))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
 				// 1 vs. 2 to avoid the loop's addition ++cp from reading beyond the length of the string:
 				cp += 1;
 				show_mode = SW_SHOWNA;
 			}
-			else if (!strnicmp(cp, "NoActivate", 10))
+			else if (!_tcsnicmp(cp, _T("NoActivate"), 10))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
 				// 9 vs. 10 to avoid the loop's addition ++cp from reading beyond the length of the string:
@@ -5860,7 +5864,7 @@ ResultType GuiType::Show(char *aOptions, char *aText)
 			}
 			break;
 		case 'R':
-			if (!strnicmp(cp, "Restore", 7))
+			if (!_tcsnicmp(cp, _T("Restore"), 7))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
 				// 6 vs. 7 to avoid the loop's addition ++cp from reading beyond the length of the string:
@@ -5869,10 +5873,10 @@ ResultType GuiType::Show(char *aOptions, char *aText)
 			}
 			break;
 		case 'W':
-			width = atoi(cp + 1);
+			width = _ttoi(cp + 1);
 			break;
 		case 'H':
-			if (!strnicmp(cp, "Hide", 4))
+			if (!_tcsnicmp(cp, _T("Hide"), 4))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
 				// 3 vs. 4 to avoid the loop's addition ++cp from reading beyond the length of the string:
@@ -5881,25 +5885,25 @@ ResultType GuiType::Show(char *aOptions, char *aText)
 			}
 			else
 				// Allow any width/height to be specified so that the window can be "rolled up" to its title bar:
-				height = atoi(cp + 1);
+				height = _ttoi(cp + 1);
 			break;
 		case 'X':
-			if (!strnicmp(cp + 1, "Center", 6))
+			if (!_tcsnicmp(cp + 1, _T("Center"), 6))
 			{
 				cp += 6; // 6 in this case since we're working with cp + 1
 				x = COORD_CENTERED;
 			}
 			else
-				x = atoi(cp + 1);
+				x = _ttoi(cp + 1);
 			break;
 		case 'Y':
-			if (!strnicmp(cp + 1, "Center", 6))
+			if (!_tcsnicmp(cp + 1, _T("Center"), 6))
 			{
 				cp += 6; // 6 in this case since we're working with cp + 1
 				y = COORD_CENTERED;
 			}
 			else
-				y = atoi(cp + 1);
+				y = _ttoi(cp + 1);
 			break;
 		// Otherwise: Ignore other characters, such as the digits that occur after the P/X/Y option letters.
 		} // switch()
@@ -6301,7 +6305,7 @@ ResultType GuiType::Submit(bool aHideIt)
 	GuiIndexType u;
 	for (u = 0; u < mControlCount; ++u)
 		if (mControl[u].output_var && mControl[u].type != GUI_CONTROL_RADIO)
-			ControlGetContents(*mControl[u].output_var, mControl[u], "Submit");
+			ControlGetContents(*mControl[u].output_var, mControl[u], _T("Submit"));
 
 	// Handle GUI_CONTROL_RADIO separately so that any radio group that has a single variable
 	// to share among all its members can be given special treatment:
@@ -6310,7 +6314,7 @@ ResultType GuiType::Submit(bool aHideIt)
 	Var *group_var = NULL;         // The last-found output variable of the current group.
 	int selection_number = 0;      // Which radio in the current group is selected (0 if none).
 	Var *output_var;
-	char temp[32];
+	TCHAR temp[32];
     
 	// The below uses <= so that it goes one beyond the limit.  This allows the final radio group
 	// (if any) to be noticed in the case where the very last control in the window is a radio button.
@@ -6341,7 +6345,7 @@ ResultType GuiType::Submit(bool aHideIt)
 				// Convert explicitly to decimal so that g->FormatIntAsHex is not obeyed.
 				// This is so that this result matches the decimal format tradition set by
 				// the "1" and "0" strings normally used for radios and checkboxes:
-				_itoa(selection_number, temp, 10); // selection_number can be legitimately zero.
+				_itot(selection_number, temp, 10); // selection_number can be legitimately zero.
 				group_var->Assign(temp); // group_var should not be NULL since group_radios_with_var == 1
 			}
 			if (u == mControlCount) // The last control in the window is a radio and its group was just processed.
@@ -6365,11 +6369,11 @@ ResultType GuiType::Submit(bool aHideIt)
 				else
 					selection_number = group_radios;
 				if (output_var)
-					output_var->Assign("1");
+					output_var->Assign(_T("1"));
 			}
 			else
 				if (output_var)
-					output_var->Assign("0");
+					output_var->Assign(_T("0"));
 		}
 	} // for()
 
@@ -6380,7 +6384,7 @@ ResultType GuiType::Submit(bool aHideIt)
 
 
 
-VarSizeType GuiType::ControlGetName(GuiIndexType aGuiWindowIndex, GuiIndexType aControlIndex, char *aBuf)
+VarSizeType GuiType::ControlGetName(GuiIndexType aGuiWindowIndex, GuiIndexType aControlIndex, LPTSTR aBuf)
 // Caller has ensured that aGuiWindowIndex is less than MAX_GUI_WINDOWS.
 // We're returning the length of the var's contents, not the size.
 {
@@ -6399,7 +6403,7 @@ VarSizeType GuiType::ControlGetName(GuiIndexType aGuiWindowIndex, GuiIndexType a
 	{
 		// Caller has already ensured aBuf is large enough.
 		if (control.output_var)
-			return (VarSizeType)strlen(strcpy(aBuf, control.output_var->mName));
+			return (VarSizeType)_tcslen(_tcscpy(aBuf, control.output_var->mName));
 		else // Fall back to getting the leading characters of its caption (most often used for buttons).
 			#define A_GUICONTROL_TEXT_LENGTH (MAX_ALLOC_SIMPLE - 1)
 			return GetWindowText(control.hwnd, aBuf, A_GUICONTROL_TEXT_LENGTH + 1); // +1 is verified correct.
@@ -6408,7 +6412,7 @@ VarSizeType GuiType::ControlGetName(GuiIndexType aGuiWindowIndex, GuiIndexType a
 	}
 	// Otherwise, just return the length:
 	if (control.output_var)
-		return (VarSizeType)strlen(control.output_var->mName);
+		return (VarSizeType)_tcslen(control.output_var->mName);
 	// Otherwise: Fall back to getting the leading characters of its caption (most often used for buttons)
 	VarSizeType length = GetWindowTextLength(control.hwnd);
 	return (length > A_GUICONTROL_TEXT_LENGTH) ? A_GUICONTROL_TEXT_LENGTH : length;
@@ -6416,10 +6420,11 @@ VarSizeType GuiType::ControlGetName(GuiIndexType aGuiWindowIndex, GuiIndexType a
 
 
 
-ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl, char *aMode)
+ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl, LPTSTR aMode)
 {
-	char *cp, buf[1024]; // For various uses.
-	bool submit_mode = !stricmp(aMode, "Submit");
+	LPTSTR cp;
+	TCHAR buf[1024]; // For various uses.
+	bool submit_mode = !_tcsicmp(aMode, _T("Submit"));
 	int pos;
 	LRESULT sel_count, i;  // LRESULT is a signed type (same as int/long).
 	SYSTEMTIME st[2];
@@ -6450,7 +6455,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 
 	case GUI_CONTROL_DATETIME:
 		return aOutputVar.Assign(DateTime_GetSystemtime(aControl.hwnd, st) == GDT_VALID
-			? SystemTimeToYYYYMMDD(buf, st[0]) : ""); // Blank string whenever GDT_NONE/GDT_ERROR.
+			? SystemTimeToYYYYMMDD(buf, st[0]) : _T("")); // Blank string whenever GDT_NONE/GDT_ERROR.
 
 	case GUI_CONTROL_MONTHCAL:
 		if (GetWindowLong(aControl.hwnd, GWL_STYLE) & MCS_MULTISELECT)
@@ -6479,7 +6484,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 		return aOutputVar.Assign(buf);
 	} // switch (aControl.type)
 
-	if (stricmp(aMode, "Text")) // Non-text, i.e. don't unconditionally use the simple GetWindowText() method.
+	if (_tcsicmp(aMode, _T("Text"))) // Non-text, i.e. don't unconditionally use the simple GetWindowText() method.
 	{
 		// The caller wants the contents of the control, which is often different from its
 		// caption/text.  Any control types not mentioned in the switch() below will fall through
@@ -6501,15 +6506,15 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 			switch (SendMessage(aControl.hwnd, BM_GETCHECK, 0, 0))
 			{
 			case BST_CHECKED:
-				return aOutputVar.Assign("1");
+				return aOutputVar.Assign(_T("1"));
 			case BST_UNCHECKED:
-				return aOutputVar.Assign("0");
+				return aOutputVar.Assign(_T("0"));
 			case BST_INDETERMINATE:
 				// Seems better to use a value other than blank because blank might sometimes represent the
 				// state of an unintialized or unfetched control.  In other words, a blank variable often
 				// has an external meaning that transcends the more specific meaning often desirable when
 				// retrieving the state of the control:
-				return aOutputVar.Assign("-1");
+				return aOutputVar.Assign(_T("-1"));
 			}
 			return FAIL; // Shouldn't be reached since ZERO(BST_UNCHECKED) is returned on failure.
 
@@ -6534,7 +6539,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 				// item's position should be retrieved in AltSubmit mode (even for non-AltSubmit mode, this
 				// should be done because the case of the item in the drop-list is usually preferable to any
 				// varying case the user may have manually typed).
-				if (GetWindowText(aControl.hwnd, buf, sizeof(buf))) // Buf size should be enough for anything realistic.
+				if (GetWindowText(aControl.hwnd, buf, _countof(buf))) // Buf size should be enough for anything realistic.
 				{
 					index = SendMessage(aControl.hwnd, CB_FINDSTRINGEXACT, -1, (LPARAM)&buf); // It's not case sensitive.
 					if (index == CB_ERR)
@@ -6561,7 +6566,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 				aOutputVar.Close();
 				return aOutputVar.Assign();
 			}
-			aOutputVar.Length() = (VarSizeType)length;  // Update it to the actual length, which can vary from the estimate.
+			aOutputVar.SetCharLength(length);  // Update it to the actual length, which can vary from the estimate.
 			return aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 
 		case GUI_CONTROL_LISTBOX:
@@ -6586,8 +6591,8 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 					// characters in the list, one delim after each item except the last:
 					for (length = sel_count - 1, i = 0; i < sel_count; ++i)
 					{
-						_itoa(item[i] + 1, buf, 10);  // +1 to convert from zero-based to 1-based.
-						length += strlen(buf);
+						_itot(item[i] + 1, buf, 10);  // +1 to convert from zero-based to 1-based.
+						length += _tcslen(buf);
 					}
 				}
 				else
@@ -6622,8 +6627,8 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 					{
 						if (i) // Serves to add delimiter after each item except the last (helps parsing loop).
 							*cp++ = mDelimiter;
-						_itoa(item[i] + 1, cp, 10);  // +1 to convert from zero-based to 1-based.
-						cp += strlen(cp);  // Point it to the terminator in preparation for the next write.
+						_itot(item[i] + 1, cp, 10);  // +1 to convert from zero-based to 1-based.
+						cp += _tcslen(cp);  // Point it to the terminator in preparation for the next write.
 					}
 				}
 				else // Store item text vs. position.
@@ -6675,7 +6680,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 					return aOutputVar.Assign();
 				}
 			}
-			aOutputVar.Length() = (VarSizeType)length;  // Update it to the actual length, which can vary from the estimate.
+			aOutputVar.SetCharLength(length);  // Update it to the actual length, which can vary from the estimate.
 			return aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 
 		case GUI_CONTROL_TAB:
@@ -6688,7 +6693,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 			TCITEM tci;
 			tci.mask = TCIF_TEXT;
 			tci.pszText = buf;
-			tci.cchTextMax = sizeof(buf) - 1; // MSDN example uses -1.
+			tci.cchTextMax = _countof(buf) - 1; // MSDN example uses -1.
 			if (TabCtrl_GetItem(aControl.hwnd, index, &tci))
 				return aOutputVar.Assign(tci.pszText);
 			return aOutputVar.Assign();
@@ -6726,7 +6731,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 	if (aOutputVar.Assign(NULL, (VarSizeType)length) != OK)
 		return FAIL;  // It already displayed the error.
 	// Update length using the actual length, rather than the estimate provided by GetWindowTextLength():
-	if (   !(aOutputVar.Length() = (VarSizeType)GetWindowText(aControl.hwnd, aOutputVar.Contents(), (int)(length + 1)))   )
+	if (   !(aOutputVar.SetCharLength(GetWindowText(aControl.hwnd, aOutputVar.Contents(), (int)(length + 1))))   )
 		// There was no text to get.  Set to blank explicitly just to be sure.
 		*aOutputVar.Contents() = '\0';  // Safe because Assign() gave us a non-constant memory area.
 	else if (aControl.type == GUI_CONTROL_EDIT) // Auto-translate CRLF to LF for better compatibility with other script commands.
@@ -6734,15 +6739,15 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 		// Since edit controls tend to have many hard returns in them, use "true" for the last param to
 		// enhance performance.  This performance gain is extreme when the control contains thousands
 		// of CRLFs:
-		StrReplace(aOutputVar.Contents(), "\r\n", "\n", SCS_SENSITIVE);
-		aOutputVar.Length() = (VarSizeType)strlen(aOutputVar.Contents());
+		StrReplace(aOutputVar.Contents(), _T("\r\n"), _T("\n"), SCS_SENSITIVE);
+		aOutputVar.SetCharLength(_tcslen(aOutputVar.Contents()));
 	}
 	return aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 }
 
 
 
-GuiIndexType GuiType::FindControl(char *aControlID)
+GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 // Find the index of the control that matches the string, which can be either:
 // 1) The name of a control's associated output variable.
 // 2) Class+NN
@@ -6834,7 +6839,7 @@ int GuiType::FindGroup(GuiIndexType aControlIndex, GuiIndexType &aGroupStart, Gu
 
 
 
-ResultType GuiType::SetCurrentFont(char *aOptions, char *aFontName)
+ResultType GuiType::SetCurrentFont(LPTSTR aOptions, LPTSTR aFontName)
 {
 	COLORREF color;
 	int font_index = FindOrCreateFont(aOptions, aFontName, &sFont[mCurrentFontIndex], &color);
@@ -6852,7 +6857,7 @@ ResultType GuiType::SetCurrentFont(char *aOptions, char *aFontName)
 
 
 
-int GuiType::FindOrCreateFont(char *aOptions, char *aFontName, FontType *aFoundationFont, COLORREF *aColor)
+int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoundationFont, COLORREF *aColor)
 // Returns the index of existing or new font within the sFont array (an index is returned so that
 // caller can see that this is the default-gui-font whenever index 0 is returned).  Returns -1
 // on error, but still sets *aColor to be the color name, if any was specified in aOptions.
@@ -6926,18 +6931,18 @@ int GuiType::FindOrCreateFont(char *aOptions, char *aFontName, FontType *aFounda
 	// The caller must ensure that mCurrentFontIndex array element exists:
 	FontType font = *aFoundationFont;
 	if (*aFontName)
-		strlcpy(font.name, aFontName, MAX_FONT_NAME_LENGTH+1);
+		tcslcpy(font.name, aFontName, MAX_FONT_NAME_LENGTH+1);
 	COLORREF color = CLR_NONE; // Because we want to treat CLR_DEFAULT as a real color.
 
 	// Temp vars:
-	char color_str[32], *space_pos;
+	TCHAR color_str[32], *space_pos;
 
-	for (char *cp = aOptions; *cp; ++cp)
+	for (LPTSTR cp = aOptions; *cp; ++cp)
 	{
-		switch(toupper(*cp))
+		switch(_totupper(*cp))
 		{
 		case 'B':
-			if (!strnicmp(cp, "bold", 4))
+			if (!_tcsnicmp(cp, _T("bold"), 4))
 			{
 				font.weight = FW_BOLD;
 				cp += 3;  // Skip over the word itself to prevent next interation from seeing it as option letters.
@@ -6945,7 +6950,7 @@ int GuiType::FindOrCreateFont(char *aOptions, char *aFontName, FontType *aFounda
 			break;
 
 		case 'I':
-			if (!strnicmp(cp, "italic", 6))
+			if (!_tcsnicmp(cp, _T("italic"), 6))
 			{
 				font.italic = true;
 				cp += 5;  // Skip over the word itself to prevent next interation from seeing it as option letters.
@@ -6953,7 +6958,7 @@ int GuiType::FindOrCreateFont(char *aOptions, char *aFontName, FontType *aFounda
 			break;
 
 		case 'N':
-			if (!strnicmp(cp, "norm", 4))
+			if (!_tcsnicmp(cp, _T("norm"), 4))
 			{
 				font.italic = false;
 				font.underline = false;
@@ -6964,7 +6969,7 @@ int GuiType::FindOrCreateFont(char *aOptions, char *aFontName, FontType *aFounda
 			break;
 
 		case 'U':
-			if (!strnicmp(cp, "underline", 9))
+			if (!_tcsnicmp(cp, _T("underline"), 9))
 			{
 				font.underline = true;
 				cp += 8;  // Skip over the word itself to prevent next interation from seeing it as option letters.
@@ -6972,43 +6977,43 @@ int GuiType::FindOrCreateFont(char *aOptions, char *aFontName, FontType *aFounda
 			break;
 
 		case 'C': // Color
-			strlcpy(color_str, cp + 1, sizeof(color_str));
-			if (space_pos = StrChrAny(color_str, " \t"))  // space or tab
+			tcslcpy(color_str, cp + 1, _countof(color_str));
+			if (space_pos = StrChrAny(color_str, _T(" \t")))  // space or tab
 				*space_pos = '\0';
 			//else a color name can still be present if it's at the end of the string.
 			color = ColorNameToBGR(color_str);
 			if (color == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
 			{
 				// For v1.0.22, this is no longer done because want to support an optional leading 0x
-				// if it is present, e.g. 0xFFAABB.  It seems strtol() automatically handles the
+				// if it is present, e.g. 0xFFAABB.  It seems _tcstol() automatically handles the
 				// optional leading "0x" if present:
-				//if (strlen(color_str) > 6)
+				//if (_tcslen(color_str) > 6)
 				//	color_str[6] = '\0';  // Shorten to exactly 6 chars, which happens if no space/tab delimiter is present.
-				color = rgb_to_bgr(strtol(color_str, NULL, 16));
+				color = rgb_to_bgr(_tcstol(color_str, NULL, 16));
 				// if color_str does not contain something hex-numeric, black (0x00) will be assumed,
 				// which seems okay given how rare such a problem would be.
 			}
 			// Skip over the color string to avoid interpreting hex digits or color names as option letters:
-			cp += strlen(color_str);
+			cp += _tcslen(color_str);
 			break;
 
 		// For options such as S and W:
-		// Use atoi()/atof() vs. ATOI()/ATOF() to avoid interpreting something like 0x01B as hex when in fact
+		// Use _ttoi()/_tstof() vs. ATOI()/ATOF() to avoid interpreting something like 0x01B as hex when in fact
 		// the B was meant to be an option letter:
 		case 'S':
-			// Seems best to allow fractional point sizes via atof, though it might usually get rounded
+			// Seems best to allow fractional point sizes via _tstof, though it might usually get rounded
 			// by the OS anyway (at the time font is created):
-			if (!strnicmp(cp, "strike", 6))
+			if (!_tcsnicmp(cp, _T("strike"), 6))
 			{
 				font.strikeout = true;
 				cp += 5;  // Skip over the word itself to prevent next interation from seeing it as option letters.
 			}
 			else
-				font.point_size = (int)(atof(cp + 1) + 0.5);  // Round to nearest int.
+				font.point_size = (int)(_tstof(cp + 1) + 0.5);  // Round to nearest int.
 			break;
 
 		case 'W':
-			font.weight = atoi(cp + 1); // atoi() vs. ATOI() because some option letters (above) are also hex letters, and atoi() stops converting upon reaching the first non-digit character.
+			font.weight = _ttoi(cp + 1); // _ttoi() vs. ATOI() because some option letters (above) are also hex letters, and _ttoi() stops converting upon reaching the first non-digit character.
 			break;
 
 		// Otherwise: Ignore other characters, such as the digits that occur after the P/X/Y option letters.
@@ -7026,7 +7031,7 @@ int GuiType::FindOrCreateFont(char *aOptions, char *aFontName, FontType *aFounda
 	// The reason it's done this way is that CreateFont() does not always (ever?) fail if given a
 	// non-existent typeface:
 	if (!FontExist(hdc, font.name)) // Fall back to foundation font's type face, as documented.
-		strcpy(font.name, aFoundationFont ? aFoundationFont->name : sFont[0].name);
+		_tcscpy(font.name, aFoundationFont ? aFoundationFont->name : sFont[0].name);
 
 	ReleaseDC(HWND_DESKTOP, hdc);
 	hdc = NULL;
@@ -7040,7 +7045,7 @@ int GuiType::FindOrCreateFont(char *aOptions, char *aFontName, FontType *aFounda
 	// Since above didn't return, create the font if there's room.
 	if (sFontCount >= MAX_GUI_FONTS)
 	{
-		g_script.ScriptError("Too many fonts." ERR_ABORT);  // Short msg since so rare.
+		g_script.ScriptError(_T("Too many fonts.") ERR_ABORT);  // Short msg since so rare.
 		return -1;
 	}
 
@@ -7051,7 +7056,7 @@ int GuiType::FindOrCreateFont(char *aOptions, char *aFontName, FontType *aFounda
 		, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, PROOF_QUALITY, FF_DONTCARE, font.name))   )
 		// OUT_DEFAULT_PRECIS/OUT_TT_PRECIS ... DEFAULT_QUALITY/PROOF_QUALITY
 	{
-		g_script.ScriptError("Can't create font." ERR_ABORT);  // Short msg since so rare.
+		g_script.ScriptError(_T("Can't create font.") ERR_ABORT);  // Short msg since so rare.
 		return -1;
 	}
 
@@ -7064,7 +7069,7 @@ int GuiType::FindOrCreateFont(char *aOptions, char *aFontName, FontType *aFounda
 int GuiType::FindFont(FontType &aFont)
 {
 	for (int i = 0; i < sFontCount; ++i)
-		if (!stricmp(sFont[i].name, aFont.name) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales.
+		if (!_tcsicmp(sFont[i].name, aFont.name) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales.
 			&& sFont[i].point_size == aFont.point_size
 			&& sFont[i].weight == aFont.weight
 			&& sFont[i].italic == aFont.italic
@@ -7112,7 +7117,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	GuiIndexType control_index;
 	RECT rect;
 	bool text_color_was_changed;
-	char buf[1024];
+	TCHAR buf[1024];
 
 	switch (iMsg)
 	{
@@ -7919,7 +7924,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		TCITEM tci;
 		tci.mask = TCIF_TEXT;
 		tci.pszText = buf;
-		tci.cchTextMax = sizeof(buf) - 1; // MSDN example uses -1.
+		tci.cchTextMax = _countof(buf) - 1; // MSDN example uses -1.
 		// Set text color if needed:
         COLORREF prev_color = CLR_INVALID;
 		if (control.union_color != CLR_DEFAULT)
@@ -7935,10 +7940,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			// (ampersands do cause underlined letters, even though they currently have no effect).
 			if (TabCtrl_GetCurSel(control.hwnd) != lpdis->itemID)
 				lpdis->rcItem.top += 3; // For some reason, the non-current tabs' rects are a little off.
-			DrawText(lpdis->hDC, tci.pszText, (int)strlen(tci.pszText), &lpdis->rcItem
+			DrawText(lpdis->hDC, tci.pszText, (int)_tcslen(tci.pszText), &lpdis->rcItem
 				, DT_CENTER|DT_VCENTER|DT_SINGLELINE); // DT_VCENTER requires DT_SINGLELINE.
 			// Cruder method, probably not always accurate depending on theme/display-settings/etc.:
-			//TextOut(lpdis->hDC, lpdis->rcItem.left + 5, lpdis->rcItem.top + 3, tci.pszText, (int)strlen(tci.pszText));
+			//TextOut(lpdis->hDC, lpdis->rcItem.left + 5, lpdis->rcItem.top + 3, tci.pszText, (int)_tcslen(tci.pszText));
 		}
 		if (prev_color != CLR_INVALID) // Put the previous color back into effect for this DC.
 			SetTextColor(lpdis->hDC, prev_color);
@@ -8401,7 +8406,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 
 
 
-WORD GuiType::TextToHotkey(char *aText)
+WORD GuiType::TextToHotkey(LPTSTR aText)
 // Returns a WORD (not a DWORD -- MSDN is wrong about that) compatible with the HKM_SETHOTKEY message:
 // LOBYTE is the virtual key.
 // HIBYTE is a set of modifiers:
@@ -8466,12 +8471,12 @@ WORD GuiType::TextToHotkey(char *aText)
 
 
 
-char *GuiType::HotkeyToText(WORD aHotkey, char *aBuf)
+LPTSTR GuiType::HotkeyToText(WORD aHotkey, LPTSTR aBuf)
 // Caller has ensured aBuf is large enough to hold any hotkey name.
 // Returns aBuf.
 {
 	BYTE modifiers = HIBYTE(aHotkey); // In this case, both the VK and the modifiers are bytes, not words.
-	char *cp = aBuf;
+	LPTSTR cp = aBuf;
 	if (modifiers & HOTKEYF_SHIFT)
 		*cp++ = '+';
 	if (modifiers & HOTKEYF_CONTROL)
@@ -8521,7 +8526,7 @@ char *GuiType::HotkeyToText(WORD aHotkey, char *aBuf)
 		if (*cp = (char)MapVirtualKey(vk, 2)) // It is not necessary to call the Ex() version of MapVirtualKey because this hotkey control is one of our own, so its language/layout should be the same as this thread's
 			cp[1] = '\0'; // It seems unlikely that TextToVK() won't find a reverse mapping for the character found above, so that isn't checked. This whole situation is rare anyway because it only occurs for dead keys.
 		else // Might never happen, but here for completeness.
-			sprintf(cp, "vk%02X", vk); // If this weren't done, arguably the name that was just in cp prior to MapVirtualKey() should be put back in there (or never taken out in the first place).
+			_stprintf(cp, _T("vk%02X"), vk); // If this weren't done, arguably the name that was just in cp prior to MapVirtualKey() should be put back in there (or never taken out in the first place).
 	}
 	return aBuf;
 }
@@ -9008,7 +9013,7 @@ GuiControlType *GuiType::FindTabControl(TabControlIndexType aTabControlIndex)
 
 
 
-int GuiType::FindTabIndexByName(GuiControlType &aTabControl, char *aName, bool aExactMatch)
+int GuiType::FindTabIndexByName(GuiControlType &aTabControl, LPTSTR aName, bool aExactMatch)
 // Find the first tab in this tab control whose leading-part-of-name matches aName.
 // Return int vs. TabIndexType so that failure can be indicated.
 {
@@ -9020,12 +9025,12 @@ int GuiType::FindTabIndexByName(GuiControlType &aTabControl, char *aName, bool a
 
 	TCITEM tci;
 	tci.mask = TCIF_TEXT;
-	char buf[1024];
+	TCHAR buf[1024];
 	tci.pszText = buf;
-	tci.cchTextMax = sizeof(buf) - 1; // MSDN example uses -1.
+	tci.cchTextMax = _countof(buf) - 1; // MSDN example uses -1.
 
-	size_t aName_length = strlen(aName);
-	if (aName_length >= sizeof(buf)) // Checking this early avoids having to check it in the loop.
+	size_t aName_length = _tcslen(aName);
+	if (aName_length >= _countof(buf)) // Checking this early avoids having to check it in the loop.
 		return -1; // No match possible.
 
 	for (int i = 0; i < tab_count; ++i)
@@ -9034,7 +9039,7 @@ int GuiType::FindTabIndexByName(GuiControlType &aTabControl, char *aName, bool a
 		{
 			if (aExactMatch)
 			{
-				if (!strcmp(tci.pszText, aName))  // Match found.
+				if (!_tcscmp(tci.pszText, aName))  // Match found.
 					return i;
 			}
 			else
@@ -9241,8 +9246,8 @@ struct LV_SortType
 	LVITEM lvi;
 	HWND hwnd;
 	lv_col_type col;
-	char buf1[LV_TEXT_BUF_SIZE];
-	char buf2[LV_TEXT_BUF_SIZE];
+	TCHAR buf1[LV_TEXT_BUF_SIZE];
+	TCHAR buf2[LV_TEXT_BUF_SIZE];
 	bool sort_ascending;
 	bool incoming_is_index;
 };
@@ -9305,7 +9310,7 @@ int CALLBACK LV_GeneralSort(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
 	// LVM_GETITEMTEXT even though it isn't documented): "Applications should not assume that the text will
 	// necessarily be placed in the specified buffer. The control may instead change the pszText member
 	// of the structure to point to the new text rather than place it in the buffer."
-	char *field1 = lvs.lvi.pszText; // Save value of pszText in case it no longer points to lvs.buf1.
+	LPTSTR field1 = lvs.lvi.pszText; // Save value of pszText in case it no longer points to lvs.buf1.
 
 	// Fetch Item #2 (see comments in #1 above):
 	lvs.lvi.pszText = lvs.buf2; // lvi's other members were already set by the caller.
@@ -9332,13 +9337,13 @@ int CALLBACK LV_GeneralSort(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
 		if (lvs.col.case_sensitive == SCS_INSENSITIVE_LOGICAL) // v1.0.44.12: When this is true, caller has ensured that g_StrCmpLogicalW isn't NULL.
 			result = g_StrCmpLogicalW((LPCWSTR)field1, (LPCWSTR)lvs.lvi.pszText);
 		else
-			result = strcmp2(field1, lvs.lvi.pszText, lvs.col.case_sensitive); // Must not refer to buf1/buf2 directly, see above.
+			result = tcscmp2(field1, lvs.lvi.pszText, lvs.col.case_sensitive); // Must not refer to buf1/buf2 directly, see above.
 	}
 	else
 	{
 		// Unlike ACT_SORT, supporting hex for an explicit-floating point column seems far too rare to
-		// justify, hence atof() is used vs. ATOF().  v1.0.46.03: Fixed to sort properly (formerly, it just case the difference to an int, which isn't right).
-		double f1 = atof(field1), f2 = atof(lvs.lvi.pszText); // Must not refer to buf1/buf2 directly, see above.
+		// justify, hence _tstof() is used vs. ATOF().  v1.0.46.03: Fixed to sort properly (formerly, it just case the difference to an int, which isn't right).
+		double f1 = _tstof(field1), f2 = _tstof(lvs.lvi.pszText); // Must not refer to buf1/buf2 directly, see above.
 		result = (f1 > f2) ? 1 : (f1 == f2 ? 0 : -1);
 	}
 	return lvs.sort_ascending ? result : -result;
@@ -9355,7 +9360,7 @@ int CALLBACK LV_Int32Sort(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
 
 
 
-void GuiType::LV_Sort(GuiControlType &aControl, int aColumnIndex, bool aSortOnlyIfEnabled, char aForceDirection)
+void GuiType::LV_Sort(GuiControlType &aControl, int aColumnIndex, bool aSortOnlyIfEnabled, TCHAR aForceDirection)
 // aForceDirection should be 'A' to force ascending, 'D' to force ascending, or '\0' to use the column's
 // current default direction.
 {
@@ -9412,7 +9417,7 @@ void GuiType::LV_Sort(GuiControlType &aControl, int aColumnIndex, bool aSortOnly
 			if (!g_StrCmpLogicalW)
 			{
 				HINSTANCE hinstLib;
-				if (hinstLib = LoadLibrary("shlwapi")) // For code simplicity and performance-upon-reuse, once loaded it is never freed.
+				if (hinstLib = LoadLibrary(_T("shlwapi"))) // For code simplicity and performance-upon-reuse, once loaded it is never freed.
 					g_StrCmpLogicalW = (StrCmpLogicalW_type)GetProcAddress(hinstLib, "StrCmpLogicalW");
 			}
 			if (g_StrCmpLogicalW) // Generally, this happens only if OS is older than XP. But OS version isn't checked in case it's possible for older OSes/emultators to ever have StrCmpLogicalW().

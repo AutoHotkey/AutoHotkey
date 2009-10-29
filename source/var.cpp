@@ -957,7 +957,7 @@ void Var::AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 	{
 		var.Free(VAR_ALWAYS_FREE); // Release the variable's old memory. This also removes flags VAR_ATTRIB_OFTEN_REMOVED.
 		var.mHowAllocated = ALLOC_MALLOC; // Must always be this type to avoid complications and possible memory leaks.
-		var.mByteContents = aNewMem;
+		var.mByteContents = (char *) aNewMem;
 		var.mByteLength = aLength;
 		var.mByteCapacity = (VarSizeType)_msize(aNewMem); // Get actual capacity in case it's a lot bigger than aLength+1. _msize() is only about 36 bytes of code and probably a very fast call.
 		var.mAttrib &= ~VAR_ATTRIB_CACHE_DISABLED; // This isn't always done by Free() above, so do it here in case it wasn't (it seems too unlikely to have to check whether aNewMem==the_old_mem_address).  Reason: If the script previously took the address of this variable, that address is no longer valid; so there is no need to protect against the script directly accessing this variable.

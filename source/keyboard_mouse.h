@@ -324,7 +324,7 @@ LPTSTR VKtoKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize);
 sc_type TextToSC(LPTSTR aText);
 vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR = NULL, bool aExcludeThoseHandledByScanCode = false
 	, bool aAllowExplicitVK = true, HKL aKeybdLayout = GetKeyboardLayout(0));
-vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLayout);
+vk_type CharToVKAndModifiers(char aChar, modLR_type *pModifiersLR, HKL aKeybdLayout);
 vk_type TextToSpecial(LPTSTR aText, UINT aTextLength, KeyEventTypes &aEventTypem, modLR_type &aModifiersLR
 	, bool aUpdatePersistent);
 

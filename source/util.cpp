@@ -554,7 +554,7 @@ int tcslicmp(LPTSTR aBuf1, LPTSTR aBuf2, UINT aLength1, UINT aLength2)
 
 
 
-LPTSTR tcsrstr(LPTSTR aStr, LPTSTR aPattern, StringCaseSenseType aStringCaseSense, int aOccurrence)
+LPTSTR tcsrstr(LPTSTR aStr, LPCTSTR aPattern, StringCaseSenseType aStringCaseSense, int aOccurrence)
 // Returns NULL if not found, otherwise the address of the found string.
 // This could probably use a faster algorithm someday.  For now it seems adequate because
 // scripts rarely use it and when they do, it's usually on short haystack strings (such as
@@ -575,7 +575,7 @@ LPTSTR tcsrstr(LPTSTR aStr, LPTSTR aPattern, StringCaseSenseType aStringCaseSens
 		: _totlower(aPattern_last_char);
 
 	int occurrence = 0;
-	LPTSTR match_starting_pos = aStr + aStr_length - 1;
+	LPCTSTR match_starting_pos = aStr + aStr_length - 1;
 
 	// Keep finding matches from the right until the Nth occurrence (specified by the caller) is found.
 	for (;;)
@@ -583,7 +583,7 @@ LPTSTR tcsrstr(LPTSTR aStr, LPTSTR aPattern, StringCaseSenseType aStringCaseSens
 		if (match_starting_pos < aStr)
 			return NULL;  // No further matches are possible.
 		// Find (from the right) the first occurrence of aPattern's last char:
-		LPTSTR last_char_match;
+		LPCTSTR last_char_match;
 		for (last_char_match = match_starting_pos; last_char_match >= aStr; --last_char_match)
 		{
 			if (aStringCaseSense == SCS_INSENSITIVE) // The most common mode is listed first for performance.
@@ -608,7 +608,7 @@ LPTSTR tcsrstr(LPTSTR aStr, LPTSTR aPattern, StringCaseSenseType aStringCaseSens
 
 		// Now that aPattern's last character has been found in aStr, ensure the rest of aPattern
 		// exists in aStr to the left of last_char_match:
-		TCHAR *full_match, *cp;
+		LPCTSTR full_match, cp;
 		bool found;
 		for (found = false, cp = aPattern + aPattern_length - 2, full_match = last_char_match - 1;; --cp, --full_match)
 		{
@@ -616,7 +616,7 @@ LPTSTR tcsrstr(LPTSTR aStr, LPTSTR aPattern, StringCaseSenseType aStringCaseSens
 			{
 				++full_match; // Adjust for the prior iteration's decrement.
 				if (++occurrence == aOccurrence)
-					return full_match;
+					return (LPTSTR) full_match;
 				found = true;
 				break;
 			}

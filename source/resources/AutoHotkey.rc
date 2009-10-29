@@ -26,8 +26,9 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 //
 // RT_MANIFEST
 //
-
+#ifdef EMBED_MANIFEST // VS2005 and later doesn't require the next line.
 CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST             "AutoHotkey.exe.manifest"
+#endif
 
 #ifdef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////

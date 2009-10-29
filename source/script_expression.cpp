@@ -38,6 +38,7 @@ GNU General Public License for more details.
 //////////////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h" // pre-compiled headers
+#define UNICODE_CHECKED
 #include "script.h"
 #include "globaldata.h" // for a lot of things
 #include "qmath.h" // For ExpandExpression()
@@ -49,8 +50,8 @@ GNU General Public License for more details.
 //    DWORD stack
 //    _asm mov stack, esp
 //    MsgBox(stack);
-char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget, char *&aDerefBuf
-	, size_t &aDerefBufSize, char *aArgDeref[], size_t aExtraSize)
+LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, LPTSTR &aTarget, LPTSTR &aDerefBuf
+	, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize)
 // Caller should ignore aResult unless this function returns NULL.
 // Returns a pointer to this expression's result, which can be one of the following:
 // 1) NULL, in which case aResult will be either FAIL or EARLY_EXIT to indicate the means by which the current
@@ -65,14 +66,14 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 //
 // Thanks to Joost Mulders for providing the expression evaluation code upon which this function is based.
 {
-	char *target = aTarget; // "target" is used to track our usage (current position) within the aTarget buffer.
+	LPTSTR target = aTarget; // "target" is used to track our usage (current position) within the aTarget buffer.
 
 	// The following must be defined early so that mem_count is initialized and the array is guaranteed to be
 	// "in scope" in case of early "goto" (goto substantially boosts performance and reduces code size here).
 	#define MAX_EXPR_MEM_ITEMS 200 // v1.0.47.01: Raised from 100 because a line consisting entirely of concat operators can exceed it.  However, there's probably not much point to going much above MAX_TOKENS/2 because then it would reach the MAX_TOKENS limit first.
-	char *mem[MAX_EXPR_MEM_ITEMS]; // No init necessary.  In most cases, it will never be used.
+	LPTSTR mem[MAX_EXPR_MEM_ITEMS]; // No init necessary.  In most cases, it will never be used.
 	int mem_count = 0; // The actual number of items in use in the above array.
-	char *result_to_return = ""; // By contrast, NULL is used to tell the caller to abort the current thread.  That isn't done for normal syntax errors, just critical conditions such as out-of-memory.
+	LPTSTR result_to_return = _T(""); // By contrast, NULL is used to tell the caller to abort the current thread.  That isn't done for normal syntax errors, just critical conditions such as out-of-memory.
 	Var *output_var = (mActionType == ACT_ASSIGNEXPR) ? OUTPUT_VAR : NULL; // Resolve early because it's similar in usage/scope to the above.  Plus MUST be resolved prior to calling any script-functions since they could change the values in sArgVar[].
 
 	ExprTokenType *stack[MAX_TOKENS];
@@ -80,7 +81,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 	ExprTokenType *&postfix = mArg[aArgIndex].postfix;
 
 	DerefType *deref;
-	char *cp;
+	LPTSTR cp;
 
 	///////////////////////////////
 	// EVALUATE POSTFIX EXPRESSION
@@ -89,11 +90,11 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 	SymbolType right_is_number, left_is_number, result_symbol;
 	double right_double, left_double;
 	__int64 right_int64, left_int64;
-	char *right_string, *left_string;
+	LPTSTR right_string, left_string;
 	size_t right_length, left_length;
-	char left_buf[MAX_NUMBER_SIZE];  // BIF_OnMessage and SYM_DYNAMIC rely on this one being large enough to hold MAX_VAR_NAME_LENGTH.
-	char right_buf[MAX_NUMBER_SIZE]; // Only needed for holding numbers
-	char *result; // "result" is used for return values and also the final result.
+	TCHAR left_buf[MAX_NUMBER_SIZE];  // BIF_OnMessage and SYM_DYNAMIC rely on this one being large enough to hold MAX_VAR_NAME_LENGTH.
+	TCHAR right_buf[MAX_NUMBER_SIZE]; // Only needed for holding numbers
+	LPTSTR result; // "result" is used for return values and also the final result.
 	VarSizeType result_length;
 	size_t result_size, alloca_usage = 0; // v1.0.45: Track amount of alloca mem to avoid stress on stack from extreme expressions (mostly theoretical).
 	BOOL done, done_and_have_an_output_var, make_result_persistent, left_branch_is_true
@@ -211,7 +212,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 						}
 						else // It's a built-in variable that's blank.
 						{
-							this_token.marker = "";
+							this_token.marker = _T("");
 							this_token.symbol = SYM_STRING;
 						}
 						goto push_this_token;
@@ -229,13 +230,13 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					}
 					else if (result_size < EXPR_SMALL_MEM_LIMIT && alloca_usage < EXPR_ALLOCA_LIMIT) // See comments at EXPR_SMALL_MEM_LIMIT.
 					{
-						result = (char *)_alloca(result_size);
+						result = (LPTSTR)talloca(result_size);
 						alloca_usage += result_size; // This might put alloca_usage over the limit by as much as EXPR_SMALL_MEM_LIMIT, but that is fine because it's more of a guideline than a limit.
 					}
 					else // Need to create some new persistent memory for our temporary use.
 					{
 						if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
-							|| !(mem[mem_count] = (char *)malloc(result_size)))
+							|| !(mem[mem_count] = (LPTSTR)tmalloc(result_size)))
 						{
 							LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, this_token.var->mName);
 							goto abort;
@@ -256,7 +257,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					cp = this_token.buf; // Start at the begining of this arg's text.
 					int var_name_length = 0;
 
-					this_token.marker = "";         // Set default in case of early goto.  Must be done after above.
+					this_token.marker = _T("");         // Set default in case of early goto.  Must be done after above.
 					this_token.symbol = SYM_STRING; //
 
 					// Loadtime validation has ensured that none of these derefs are function-calls
@@ -413,7 +414,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					// In most cases, the string stored in circuit_token is the same address as this_token.marker
 					// (i.e. what is named "result" further below), because that's what the built-in functions
 					// are normally using the memory for.
-					if ((char *)this_token.circuit_token == this_token.marker) // circuit_token is checked in case caller alloc'd mem but didn't use it as its actual result.
+					if ((LPTSTR)this_token.circuit_token == this_token.marker) // circuit_token is checked in case caller alloc'd mem but didn't use it as its actual result.
 					{
 						// v1.0.45: If possible, take a shortcut for performance.  Doing it this way saves at least
 						// two memcpy's (one into deref buffer and then another back into the output_var by
@@ -428,7 +429,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 						{
 							// AcceptNewMem() will shrink the memory for us, via _expand(), if there's a lot of
 							// extra/unused space in it.
-							output_var->AcceptNewMem((char *)this_token.circuit_token, (VarSizeType)(size_t)this_token.buf); // "buf" is the length. See comment higher above.
+							output_var->AcceptNewMem((LPTSTR)this_token.circuit_token, (VarSizeType)(size_t)this_token.buf); // "buf" is the length. See comment higher above.
 							goto normal_end_skip_output_var;  // No need to restore circuit_token because the expression is finished.
 						}
 						if (this_postfix[1].symbol == SYM_ASSIGN // Next operation is ":=".
@@ -441,7 +442,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 							ExprTokenType &left = *STACK_POP; // Above has already confirmed that it's SYM_VAR and VAR_NORMAL.
 							// AcceptNewMem() will shrink the memory for us, via _expand(), if there's a lot of
 							// extra/unused space in it.
-							left.var->AcceptNewMem((char *)this_token.circuit_token, (VarSizeType)(size_t)this_token.buf);
+							left.var->AcceptNewMem((LPTSTR)this_token.circuit_token, (VarSizeType)(size_t)this_token.buf);
 							this_token.circuit_token = (++this_postfix)->circuit_token; // Must be done AFTER above. Old, somewhat obsolete comment: this_postfix.circuit_token should have been NULL prior to this because the final right-side result of an assignment shouldn't be the last item of an AND/OR/IFF's left branch. The assignment itself would be that.
 							this_token.var = left.var;   // Make the result a variable rather than a normal operand so that its
 							this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
@@ -456,7 +457,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 						LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, func.mName);
 						goto abort;
 					}
-					mem[mem_count++] = (char *)this_token.circuit_token;
+					mem[mem_count++] = (LPTSTR)this_token.circuit_token;
 				}
 				//else this_token.circuit_token==NULL, so the BIF just called didn't allocate memory to give to us.
 				this_token.circuit_token = circuit_token; // Restore it to its original value.
@@ -476,7 +477,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 				// Otherwise, there's no output_var or the expression isn't finished yet, so do normal processing.
 				if (!*this_token.marker) // Various make-persistent sections further below may rely on this check.
 				{
-					this_token.marker = ""; // Ensure it's a constant memory area, not a buf that might get overwritten soon.
+					this_token.marker = _T(""); // Ensure it's a constant memory area, not a buf that might get overwritten soon.
 					goto push_this_token; // For code simplicity, the optimization for numeric results is done at a later stage.
 				}
 				// Since above didn't goto, "result" is not SYM_INTEGER/FLOAT/VAR, and not "".  Therefore, it's
@@ -659,7 +660,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 						// the contents of that local variable can be salvaged if it's about to be destroyed
 						// anyway in conjunction with normal function-call cleanup. In other words, we can take
 						// that local variable's memory and directly hang it onto the output_var.
-						result_length = (VarSizeType)strlen(result);
+						result_length = (VarSizeType)_tcslen(result);
 						// 1.0.46.06: If the UDF has stored its result in its deref buffer, take possession
 						// of that buffer, which saves a memcpy of a potentially huge string.  The cost
 						// of this is that if there are any other UDF-calls pending after this one, the
@@ -693,7 +694,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					// at all.  Therefore, handle them fully now, which should improve performance (since it
 					// avoids all the other checking later on).  It also doesn't hurt code size because this
 					// check avoids having to check for empty string in other sections later on.
-					this_token.marker = ""; // Ensure it's a non-volatile address instead (read-only mem is okay for expression results).
+					this_token.marker = _T(""); // Ensure it's a non-volatile address instead (read-only mem is okay for expression results).
 					this_token.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
 					this_token.symbol = SYM_OPERAND; // SYM_OPERAND vs. SYM_STRING probably doesn't matter in the case of empty string, but it's used for consistency with what the other UDF handling further below does.
 					Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
@@ -721,7 +722,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					{
 						--stack_count; // This officially pops the lvalue off the stack (now that we know we will be handling this operation here).
 						// The following section is similar to one higher above, so maintain them together.
-						result_length = (VarSizeType)strlen(result);
+						result_length = (VarSizeType)_tcslen(result);
 						// 1.0.46.06: If the UDF has stored its result in its deref buffer, take possession
 						// of that buffer, which saves a memcpy of a potentially huge string.  The cost
 						// of this is that if there are any other UDF-calls pending after this one, the
@@ -788,17 +789,17 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 				// BELOW RELIES ON THE ABOVE ALWAYS HAVING VERFIED FULLY HANDLED RESULT BEING AN EMPTY STRING.
 				// So now we know result isn't an empty string, which in turn ensures that size > 1 and length > 0,
 				// which might be relied upon by things further below.
-				result_size = strlen(result) + 1; // No easy way to avoid strlen currently. Maybe some future revisions to architecture will provide a length.
+				result_size = _tcslen(result) + 1; // No easy way to avoid strlen currently. Maybe some future revisions to architecture will provide a length.
 				// Must cast to int to avoid loss of negative values:
 				if (result_size <= (int)(aDerefBufSize - (target - aDerefBuf))) // There is room at the end of our deref buf, so use it.
 				{
 					// Make the token's result the new, more persistent location:
-					this_token.marker = (char *)memcpy(target, result, result_size); // Benches slightly faster than strcpy().
+					this_token.marker = (LPTSTR)tmemcpy(target, result, result_size); // Benches slightly faster than strcpy().
 					target += result_size; // Point it to the location where the next string would be written.
 				}
 				else if (result_size < EXPR_SMALL_MEM_LIMIT && alloca_usage < EXPR_ALLOCA_LIMIT) // See comments at EXPR_SMALL_MEM_LIMIT.
 				{
-					this_token.marker = (char *)memcpy(_alloca(result_size), result, result_size); // Benches slightly faster than strcpy().
+					this_token.marker = (LPTSTR)tmemcpy((LPTSTR)talloca(result_size), result, result_size); // Benches slightly faster than strcpy().
 					alloca_usage += result_size; // This might put alloca_usage over the limit by as much as EXPR_SMALL_MEM_LIMIT, but that is fine because it's more of a guideline than a limit.
 				}
 				else // Need to create some new persistent memory for our temporary use.
@@ -812,13 +813,13 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					//   (unusual because the deref buf expands in block-increments, and also because
 					//   return values are usually small, such as numbers).
 					if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
-						|| !(mem[mem_count] = (char *)malloc(result_size)))
+						|| !(mem[mem_count] = (LPTSTR)tmalloc(result_size)))
 					{
 						LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, func.mName);
 						goto abort;
 					}
 					// Make the token's result the new, more persistent location:
-					this_token.marker = (char *)memcpy(mem[mem_count], result, result_size); // Benches slightly faster than strcpy().
+					this_token.marker = (LPTSTR)tmemcpy(mem[mem_count], result, result_size); // Benches slightly faster than strcpy().
 					++mem_count; // Must be done last.
 				}
 			}
@@ -949,7 +950,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 				// in most cases might be the same, since the empty string is a non-numeric result and thus
 				// will cause any operator it is involved with to treat its other operand as a string too.
 				// And the result of a math operation on two strings is typically an empty string.
-				this_token.marker = "";
+				this_token.marker = _T("");
 				this_token.symbol = SYM_STRING;
 				break;
 			}
@@ -1000,7 +1001,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					//else post_op against non-numeric target-var.  Fall through to below to yield blank result.
 				}
 				//else target isn't a var.  Fall through to below to yield blank result.
-				this_token.marker = "";          // Make the result blank to indicate invalid operation
+				this_token.marker = _T("");          // Make the result blank to indicate invalid operation
 				this_token.symbol = SYM_STRING;  // (assign to non-lvalue or increment/decrement a non-number).
 				break;
 			} // end of "invalid operation" block.
@@ -1059,7 +1060,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 			}
 			else // Invalid, so make it a localized blank value.
 			{
-				this_token.marker = "";
+				this_token.marker = _T("");
 				this_token.symbol = SYM_STRING;
 			}
 			break;
@@ -1068,7 +1069,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 		case SYM_BITNOT:  // The tilde (~) operator.
 			if (right_is_number == PURE_NOT_NUMERIC) // String.  Seems best to consider the application of '*' or '~' to a string, even a quoted string literal such as "15", to be a failure.
 			{
-				this_token.marker = "";
+				this_token.marker = _T("");
 				this_token.symbol = SYM_STRING;
 				break;
 			}
@@ -1122,7 +1123,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 			{
 				if (left.symbol != SYM_VAR)
 				{
-					this_token.marker = "";          // Make the result blank to indicate invalid operation
+					this_token.marker = _T("");          // Make the result blank to indicate invalid operation
 					this_token.symbol = SYM_STRING;  // (assign to non-lvalue).
 					break; // Equivalent to "goto push_this_token" in this case.
 				}
@@ -1179,15 +1180,15 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 				switch(this_token.symbol)
 				{
 				case SYM_EQUAL:     this_token.value_int64 = !((g->StringCaseSense == SCS_INSENSITIVE)
-										? stricmp(left_string, right_string)
+										? _tcsicmp(left_string, right_string)
 										: lstrcmpi(left_string, right_string)); break; // i.e. use the "more correct mode" except when explicitly told to use the fast mode (v1.0.43.03).
-				case SYM_EQUALCASE: this_token.value_int64 = !strcmp(left_string, right_string); break; // Case sensitive.
+				case SYM_EQUALCASE: this_token.value_int64 = !_tcscmp(left_string, right_string); break; // Case sensitive.
 				// The rest all obey g->StringCaseSense since they have no case sensitive counterparts:
-				case SYM_NOTEQUAL:  this_token.value_int64 = g_strcmp(left_string, right_string) ? 1 : 0; break;
-				case SYM_GT:        this_token.value_int64 = g_strcmp(left_string, right_string) > 0; break;
-				case SYM_LT:        this_token.value_int64 = g_strcmp(left_string, right_string) < 0; break;
-				case SYM_GTOE:      this_token.value_int64 = g_strcmp(left_string, right_string) > -1; break;
-				case SYM_LTOE:      this_token.value_int64 = g_strcmp(left_string, right_string) < 1; break;
+				case SYM_NOTEQUAL:  this_token.value_int64 = g_tcscmp(left_string, right_string) ? 1 : 0; break;
+				case SYM_GT:        this_token.value_int64 = g_tcscmp(left_string, right_string) > 0; break;
+				case SYM_LT:        this_token.value_int64 = g_tcscmp(left_string, right_string) < 0; break;
+				case SYM_GTOE:      this_token.value_int64 = g_tcscmp(left_string, right_string) > -1; break;
+				case SYM_LTOE:      this_token.value_int64 = g_tcscmp(left_string, right_string) < 1; break;
 
 				case SYM_CONCAT:
 					// Even if the left or right is "", must copy the result to temporary memory, at least
@@ -1195,7 +1196,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					// Binary clipboard is ignored because it's documented that except for certain features,
 					// binary clipboard variables are seen only up to the first binary zero (mostly to
 					// simplify the code).
-					right_length = (right.symbol == SYM_VAR) ? right.var->LengthIgnoreBinaryClip() : strlen(right_string);
+					right_length = (right.symbol == SYM_VAR) ? right.var->LengthIgnoreBinaryClip() : _tcslen(right_string);
 					if (sym_assign_var // Since "right" is being appended onto a variable ("left"), an optimization is possible.
 						&& sym_assign_var->AppendIfRoom(right_string, (VarSizeType)right_length)) // But only if the target variable has enough remaining capacity.
 					{
@@ -1207,7 +1208,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 						goto push_this_token; // Skip over all other sections such as subsequent checks of sym_assign_var because it was all taken care of here.
 					}
 					// Otherwise, fall back to the other concat methods:
-					left_length = (left.symbol == SYM_VAR) ? left.var->LengthIgnoreBinaryClip() : strlen(left_string);
+					left_length = (left.symbol == SYM_VAR) ? left.var->LengthIgnoreBinaryClip() : _tcslen(left_string);
 					result_size = right_length + left_length + 1;
 
 					if (sym_assign_var)  // Fix for v1.0.48: These 2 lines were added, and they must take
@@ -1263,8 +1264,8 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 								goto abort; // Above should have already reported the error.
 							result = temp_var->Contents(); // Call Contents() AGAIN because Assign() may have changed it.  No need to pass FALSE because the call to Assign() above already reset the contents.
 							if (left_length)
-								memcpy(result, left_string, left_length);  // Not +1 because don't need the zero terminator.
-							memcpy(result + left_length, right_string, right_length + 1); // +1 to include its zero terminator.
+								tmemcpy(result, left_string, left_length);  // Not +1 because don't need the zero terminator.
+							tmemcpy(result + left_length, right_string, right_length + 1); // +1 to include its zero terminator.
 							temp_var->Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 							if (done_and_have_an_output_var) // Fix for v1.0.48: Checking "temp_var == output_var" would not be enough for cases like v := (v := "a" . "b") . "c".
 								goto normal_end_skip_output_var; // Nothing more to do because it has even taken care of output_var already.
@@ -1301,14 +1302,14 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					}
 					else if (result_size < EXPR_SMALL_MEM_LIMIT && alloca_usage < EXPR_ALLOCA_LIMIT) // See comments at EXPR_SMALL_MEM_LIMIT.
 					{
-						this_token.marker = (char *)_alloca(result_size);
+						this_token.marker = (LPTSTR)talloca(result_size);
 						alloca_usage += result_size; // This might put alloca_usage over the limit by as much as EXPR_SMALL_MEM_LIMIT, but that is fine because it's more of a guideline than a limit.
 					}
 					else // Need to create some new persistent memory for our temporary use.
 					{
 						// See the nearly identical section higher above for comments:
 						if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
-							|| !(this_token.marker = mem[mem_count] = (char *)malloc(result_size)))
+							|| !(this_token.marker = mem[mem_count] = (LPTSTR)tmalloc(result_size)))
 						{
 							LineError(ERR_OUTOFMEM ERR_ABORT);
 							goto abort;
@@ -1316,8 +1317,8 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 						++mem_count;
 					}
 					if (left_length)
-						memcpy(this_token.marker, left_string, left_length);  // Not +1 because don't need the zero terminator.
-					memcpy(this_token.marker + left_length, right_string, right_length + 1); // +1 to include its zero terminator.
+						tmemcpy(this_token.marker, left_string, left_length);  // Not +1 because don't need the zero terminator.
+					tmemcpy(this_token.marker + left_length, right_string, right_length + 1); // +1 to include its zero terminator.
 
 					// For this new concat operator introduced in v1.0.31, it seems best to treat the
 					// result as a SYM_STRING if either operand is a SYM_STRING.  That way, when the
@@ -1335,7 +1336,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 
 				default:
 					// Other operators do not support string operands, so the result is an empty string.
-					this_token.marker = "";
+					this_token.marker = _T("");
 					result_symbol = SYM_STRING;
 				}
 				this_token.symbol = result_symbol; // Must be done only after the switch() above.
@@ -1378,7 +1379,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					// of the justification for a separate operator.
 					if (right_int64 == 0) // Divide by zero produces blank result (perhaps will produce exception if scripts ever support exception handlers).
 					{
-						this_token.marker = "";
+						this_token.marker = _T("");
 						result_symbol = SYM_STRING;
 					}
 					else
@@ -1391,7 +1392,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					if (!left_int64 && right_int64 < 0) // In essense, this is divide-by-zero.
 					{
 						// Return a consistent result rather than something that varies:
-						this_token.marker = "";
+						this_token.marker = _T("");
 						result_symbol = SYM_STRING;
 					}
 					else // We have a valid base and exponent and both are integers, so the calculation will always have a defined result.
@@ -1425,7 +1426,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 				case SYM_FLOORDIVIDE:
 					if (right_double == 0.0) // Divide by zero produces blank result (perhaps will produce exception if script's ever support exception handlers).
 					{
-						this_token.marker = "";
+						this_token.marker = _T("");
 						result_symbol = SYM_STRING;
 					}
 					else
@@ -1449,7 +1450,7 @@ char *Line::ExpandExpression(int aArgIndex, ResultType &aResult, char *&aTarget,
 					if (left_double == 0.0 && right_double < 0  // In essense, this is divide-by-zero.
 						|| left_was_negative && qmathFmod(right_double, 1.0) != 0.0) // Negative base, but exponent isn't close enough to being an integer: unsupported (to simplify code).
 					{
-						this_token.marker = "";
+						this_token.marker = _T("");
 						result_symbol = SYM_STRING;
 					}
 					else
@@ -1610,7 +1611,7 @@ non_null_circuit_token:
 			result_is_true = LegacyVarToBOOL(*result_token.var);
 			break;
 		}
-		result_to_return = result_is_true ? "1" : ""; // Return "" vs. "0" for FALSE for consistency with "goto abnormal_end" (which bypasses this section).
+		result_to_return = result_is_true ? _T("1") : _T(""); // Return "" vs. "0" for FALSE for consistency with "goto abnormal_end" (which bypasses this section).
 		goto normal_end_skip_output_var; // ACT_IFEXPR never has an output_var.
 	}
 
@@ -1622,13 +1623,13 @@ non_null_circuit_token:
 		// SYM_INTEGER and SYM_FLOAT will fit into our deref buffer because an earlier stage has already ensured
 		// that the buffer is large enough to hold at least one number.  But a string/generic might not fit if it's
 		// a concatenation and/or a large string returned from a called function.
-		aTarget += strlen(ITOA64(result_token.value_int64, aTarget)) + 1; // Store in hex or decimal format, as appropriate.
+		aTarget += _tcslen(ITOA64(result_token.value_int64, aTarget)) + 1; // Store in hex or decimal format, as appropriate.
 		// Above: +1 because that's what callers want; i.e. the position after the terminator.
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
 	case SYM_FLOAT:
 		// In case of float formats that are too long to be supported, use snprint() to restrict the length.
 		 // %f probably defaults to %0.6f.  %f can handle doubles in MSVC++.
-		aTarget += snprintf(aTarget, MAX_NUMBER_SIZE, g->FormatFloat, result_token.value_double) + 1; // +1 because that's what callers want; i.e. the position after the terminator.
+		aTarget += sntprintf(aTarget, MAX_NUMBER_SIZE, g->FormatFloat, result_token.value_double) + 1; // +1 because that's what callers want; i.e. the position after the terminator.
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
 	case SYM_STRING:
 	case SYM_OPERAND:
@@ -1649,7 +1650,7 @@ non_null_circuit_token:
 		else
 		{
 			result = result_token.marker;
-			result_size = strlen(result) + 1;
+			result_size = _tcslen(result) + 1;
 		}
 
 		// Notes about the macro below:
@@ -1685,8 +1686,8 @@ non_null_circuit_token:
 			// realloc()'s internal memcpy(entire contents) can be avoided because only part or
 			// none of the contents needs to be copied (realloc's ability to do an in-place resize might
 			// be unlikely for anything other than small blocks; see compiler's realloc.c):
-			char *new_buf;
-			if (   !(new_buf = (char *)malloc(new_buf_size))   )
+			LPTSTR new_buf;
+			if (   !(new_buf = (LPTSTR)tmalloc(new_buf_size))   )
 			{
 				LineError(ERR_OUTOFMEM ERR_ABORT);
 				goto abort;
@@ -1699,14 +1700,14 @@ non_null_circuit_token:
 			// in the old buffer, but that is handled after this):
 			size_t aTarget_offset = aTarget - aDerefBuf;
 			if (aTarget_offset) // aDerefBuf has contents that must be preserved.
-				memcpy(new_buf, aDerefBuf, aTarget_offset); // This will also copy the empty string if the buffer first and only character is that.
+				tmemcpy(new_buf, aDerefBuf, aTarget_offset); // This will also copy the empty string if the buffer first and only character is that.
 			aTarget = new_buf + aTarget_offset;
 			result_to_return = aTarget; // Update to reflect new value above.
 			// NOTE: result_token.marker might extend too far to the right in our deref buffer and thus be
 			// larger than capacity_of_our_buf_portion because other arg(s) exist in this line after ours
 			// that will be using a larger total portion of the buffer than ours.  Thus, the following must be
 			// done prior to free(), but memcpy() vs. memmove() is safe in any case:
-			memcpy(aTarget, result, result_size); // Copy from old location to the newly allocated one.
+			tmemcpy(aTarget, result, result_size); // Copy from old location to the newly allocated one.
 
 			free(aDerefBuf); // Free our original buffer since it's contents are no longer needed.
 			if (aDerefBufSize > LARGE_DEREF_BUF_SIZE)
@@ -1714,7 +1715,7 @@ non_null_circuit_token:
 
 			// Now that the buffer has been enlarged, need to adjust any other pointers that pointed into
 			// the old buffer:
-			char *aDerefBuf_end = aDerefBuf + aDerefBufSize; // Point it to the character after the end of the old buf.
+			LPTSTR aDerefBuf_end = aDerefBuf + aDerefBufSize; // Point it to the character after the end of the old buf.
 			for (i = 0; i < aArgIndex; ++i) // Adjust each item beneath ours (if any). Our own is not adjusted because we'll be returning the right address to our caller.
 				if (aArgDeref[i] >= aDerefBuf && aArgDeref[i] < aDerefBuf_end)
 					aArgDeref[i] = new_buf + (aArgDeref[i] - aDerefBuf); // Set for our caller.
@@ -1725,7 +1726,7 @@ non_null_circuit_token:
 		}
 		else // Deref buf is already large enough to fit the string.
 			if (aTarget != result) // Currently, might be always true.
-				memmove(aTarget, result, result_size); // memmove() vs. memcpy() in this case, since source and dest might overlap (i.e. "target" may have been used to put temporary things into aTarget, but those things are no longer needed and now safe to overwrite).
+				tmemmove(aTarget, result, result_size); // memmove() vs. memcpy() in this case, since source and dest might overlap (i.e. "target" may have been used to put temporary things into aTarget, but those things are no longer needed and now safe to overwrite).
 		aTarget += result_size;
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
 
@@ -1778,7 +1779,7 @@ ResultType Line::ExpandArgs(VarSizeType aSpaceNeeded, Var *aArgVar[])
 {
 	// The counterparts of sArgDeref and sArgVar kept on our stack to protect them from recursion caused by
 	// the calling of functions in the script:
-	char *arg_deref[MAX_ARGS];
+	LPTSTR arg_deref[MAX_ARGS];
 	Var *arg_var[MAX_ARGS];
 	int i;
 
@@ -1837,7 +1838,7 @@ ResultType Line::ExpandArgs(VarSizeType aSpaceNeeded, Var *aArgVar[])
 			if (sDerefBufSize > LARGE_DEREF_BUF_SIZE)
 				--sLargeDerefBufs;
 		}
-		if (   !(sDerefBuf = (char *)malloc(new_buf_size))   )
+		if (   !(sDerefBuf = (LPTSTR)tmalloc(new_buf_size))   )
 		{
 			// Error msg was formerly: "Ran out of memory while attempting to dereference this line's parameters."
 			sDerefBufSize = 0;  // Reset so that it can make another attempt, possibly smaller, next time.
@@ -1852,7 +1853,7 @@ ResultType Line::ExpandArgs(VarSizeType aSpaceNeeded, Var *aArgVar[])
 	// the fact that its prior contents become invalid once we're called.
 	// It's also necessary due to the fact that all the old memory is discarded by
 	// the above if more space was needed to accommodate this line.
-	char *our_buf_marker = sDerefBuf;  // Prior contents of buffer will be overwritten in any case.
+	LPTSTR our_buf_marker = sDerefBuf;  // Prior contents of buffer will be overwritten in any case.
 
 	// From this point forward, must not refer to sDerefBuf as our buffer since it might have been
 	// given a new memory area by an expression's function-call within this line.  In other words,
@@ -1931,7 +1932,7 @@ ResultType Line::ExpandArgs(VarSizeType aSpaceNeeded, Var *aArgVar[])
 				// In case its "dereferenced" contents are ever directly examined, set it to be
 				// the empty string.  This also allows the ARG to be passed a dummy param, which
 				// makes things more convenient and maintainable in other places:
-				arg_deref[i] = "";
+				arg_deref[i] = _T("");
 				continue;
 			}
 
@@ -1982,7 +1983,7 @@ ResultType Line::ExpandArgs(VarSizeType aSpaceNeeded, Var *aArgVar[])
 					|| (mActionType <= ACT_LAST_OPTIMIZED_IF && mActionType >= ACT_FIRST_OPTIMIZED_IF) // Ordered for short-circuit performance.
 					//|| mActionType == ACT_WHILE // Not necessary to check this one because loadtime leaves ACT_WHILE as an expression in all common cases. Also, there's no easy way to get ACT_WHILE into the range above due to the overlap of other ranges in enum_act.
 					) && the_only_var_of_this_arg->Type() == VAR_NORMAL // Otherwise, users of this optimization would have to reproduced more of the logic in ArgMustBeDereferenced().
-					? "" : the_only_var_of_this_arg->Contents(); // See "Update #2" comment above.
+					? _T("") : the_only_var_of_this_arg->Contents(); // See "Update #2" comment above.
 				break;
 			case CONDITION_TRUE:
 				// the_only_var_of_this_arg is either a reserved var or a normal var of that is also
@@ -2019,7 +2020,7 @@ ResultType Line::ExpandArgs(VarSizeType aSpaceNeeded, Var *aArgVar[])
 	// "if (mArgc < max_params)":
 	int max_params = g_act[mActionType].MaxParams; // Resolve once for performance.
 	for (i = mArgc; i < max_params; ++i) // START AT mArgc.  For performance, this only does the actual max args for THIS command, not MAX_ARGS.
-		sArgDeref[i] = "";
+		sArgDeref[i] = _T("");
 		// But sArgVar isn't done (since it's more rarely used) except sArgVar[0] = NULL higher above.
 		// Therefore, users of sArgVar must check mArgC if they have any doubt how many args are present in
 		// the script line (this is now enforced via macros).
@@ -2236,7 +2237,7 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 
 
 
-char *Line::ExpandArg(char *aBuf, int aArgIndex, Var *aArgVar) // 10/2/2006: Doesn't seem worth making it inline due to more complexity than expected.  It would also increase code size without being likely to help performance much.
+LPTSTR Line::ExpandArg(LPTSTR aBuf, int aArgIndex, Var *aArgVar) // 10/2/2006: Doesn't seem worth making it inline due to more complexity than expected.  It would also increase code size without being likely to help performance much.
 // Caller must ensure that aArgVar is the variable of the aArgIndex arg when it's of type ARG_TYPE_INPUT_VAR.
 // Caller must be sure not to call this for an arg that's marked as an expression, since
 // expressions are handled by a different function.  Similarly, it must ensure that none
@@ -2253,7 +2254,7 @@ char *Line::ExpandArg(char *aBuf, int aArgIndex, Var *aArgVar) // 10/2/2006: Doe
 	// This should never be called if the given arg is an output var, so flag that in DEBUG mode:
 	if (this_arg.type == ARG_TYPE_OUTPUT_VAR)
 	{
-		LineError("DEBUG: ExpandArg() was called to expand an arg that contains only an output variable.");
+		LineError(_T("DEBUG: ExpandArg() was called to expand an arg that contains only an output variable."));
 		return NULL;
 	}
 #endif
@@ -2262,7 +2263,7 @@ char *Line::ExpandArg(char *aBuf, int aArgIndex, Var *aArgVar) // 10/2/2006: Doe
 		// +1 so that we return the position after the terminator, as required.
 		return aBuf += aArgVar->Get(aBuf) + 1;
 
-	char *this_marker, *pText = this_arg.text;  // Start at the begining of this arg's text.
+	LPTSTR this_marker, pText = this_arg.text;  // Start at the begining of this arg's text.
 	if (this_arg.deref) // There's at least one deref.
 	{
 		for (DerefType *deref = this_arg.deref  // Start off by looking for the first deref.

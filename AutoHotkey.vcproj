@@ -21,7 +21,6 @@
 			OutputDirectory="Debug"
 			IntermediateDirectory="Debug"
 			ConfigurationType="1"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
 			CharacterSet="1"
 			>
 			<Tool
@@ -105,7 +104,6 @@
 			OutputDirectory="Release"
 			IntermediateDirectory="Release"
 			ConfigurationType="1"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
 			CharacterSet="1"
 			>
 			<Tool
@@ -200,7 +198,6 @@
 			OutputDirectory="$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="1"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
 			CharacterSet="1"
 			>
 			<Tool
@@ -293,7 +290,6 @@
 			OutputDirectory="$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="1"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
 			CharacterSet="1"
 			WholeProgramOptimization="1"
 			>
@@ -490,6 +486,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\source\StringConv.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\source\util.cpp"
 				>
 			</File>
@@ -544,6 +544,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\source\KuString.h"
+				>
+			</File>
+			<File
 				RelativePath=".\source\mt19937ar-cok.h"
 				>
 			</File>
@@ -573,6 +577,10 @@
 			</File>
 			<File
 				RelativePath=".\source\stdafx.h"
+				>
+			</File>
+			<File
+				RelativePath=".\source\StringConv.h"
 				>
 			</File>
 			<File
