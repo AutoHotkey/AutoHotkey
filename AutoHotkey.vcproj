@@ -137,7 +137,6 @@
 				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
-				WarnAsError="true"
 				DebugInformationFormat="0"
 			/>
 			<Tool
@@ -155,7 +154,7 @@
 				AdditionalDependencies="wsock32.lib winmm.lib version.lib comctl32.lib"
 				OutputFile="$(OutDir)/AutoHotkey.exe"
 				LinkIncremental="1"
-				IgnoreDefaultLibraryNames="LibCMT;MSVCrt"
+				IgnoreDefaultLibraryNames=""
 				GenerateDebugInformation="false"
 				SubSystem="2"
 				StackReserveSize="4194304"

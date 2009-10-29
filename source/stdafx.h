@@ -38,6 +38,8 @@ GNU General Public License for more details.
 #define _WIN32_IE 0x0501  // Added for v1.0.35 to have MCS_NOTODAY resolve as expected, and possibly solve other problems on newer systems.
 
 #ifdef _MSC_VER
+	#include <crtdbg.h>
+
 	// C RunTime Header Files
 	#include <stdio.h>
 	#include <stdlib.h>

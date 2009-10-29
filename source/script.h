@@ -392,8 +392,22 @@ typedef UCHAR ArgCountType;
 #define MAX_ARGS 20   // Maximum number of args used by any command.
 
 
-enum DllArgTypes {DLL_ARG_INVALID, DLL_ARG_STR, DLL_ARG_INT, DLL_ARG_SHORT, DLL_ARG_CHAR, DLL_ARG_INT64
-	, DLL_ARG_FLOAT, DLL_ARG_DOUBLE};  // Some sections might rely on DLL_ARG_INVALID being 0.
+enum DllArgTypes {
+	  DLL_ARG_INVALID
+	, DLL_ARG_ASTR
+	, DLL_ARG_INT
+	, DLL_ARG_SHORT
+	, DLL_ARG_CHAR
+	, DLL_ARG_INT64
+	, DLL_ARG_FLOAT
+	, DLL_ARG_DOUBLE
+	, DLL_ARG_WSTR
+#ifdef UNICODE
+	, DLL_ARG_STR = DLL_ARG_WSTR
+#else
+	, DLL_ARG_STR = DLL_ARG_ASTR
+#endif
+};  // Some sections might rely on DLL_ARG_INVALID being 0.
 
 
 // Note that currently this value must fit into a sc_type variable because that is how TextToKey()

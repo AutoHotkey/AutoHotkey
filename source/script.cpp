@@ -226,7 +226,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	// extension, the extension will be included.  This necessary because otherwise
 	// #SingleInstance wouldn't be able to detect duplicate versions in every case.
 	// It also provides more consistency.
-	GetModuleFileName(NULL, buf, SIZEOF(buf));
+	GetModuleFileName(NULL, buf, _countof(buf));
 #else
 	if (!aScriptFilename) // v1.0.46.08: Change in policy: store the default script in the My Documents directory rather than in Program Files.  It's more correct and solves issues that occur due to Vista's file-protection scheme.
 	{
@@ -1164,7 +1164,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 #ifndef AUTOHOTKEYSC
 	// Future: might be best to put a stat() or GetFileAttributes() in here for better handling.
-	FILE *fp = _tfopen(aFileSpec, _T("r"));
+	FILE *fp = _tfopen(aFileSpec, _T("r, ccs=UNICODE"));
 	if (!fp)
 	{
 		if (aIgnoreLoadFailure)
@@ -12119,7 +12119,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			// variable first doesn't work in cases when the variable is the clipboard.  This is because the
 			// clipboard's buffer is changeable (for the case conversion later below) only when using the following
 			// approach, not a simple "assign then modify its Contents()".
-			if (output_var->Assign(NULL, (VarSizeType)ArgLength(2)) != OK)
+			if (output_var->AssignString(NULL, ArgLength(2)) != OK) // The length is in characters, so AssignString(NULL, ...)
 				return FAIL;
 			contents = output_var->Contents(); // Do this only after the above might have changed the contents mem address.
 			// Copy the input variable's text directly into the output variable:
@@ -13299,7 +13299,7 @@ ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
 		{
 			// Set up aOutputVar, enlarging it if necessary.  If it is of type VAR_CLIPBOARD,
 			// this call will set up the clipboard for writing:
-			if (aOutputVar->Assign(NULL, expanded_length) != OK)
+			if (aOutputVar->AssignString(NULL, expanded_length) != OK)
 				return FAIL;
 			dest = aOutputVar->Contents();  // Init, and for performance.
 		}

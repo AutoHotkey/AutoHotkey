@@ -44,6 +44,7 @@ enum VarTypes
 #define VAR_IS_READONLY(var) ((var).Type() > VAR_LAST_WRITABLE)
 , VAR_CLIPBOARDALL // Must be read-only because it's not designed to be writable.
 , VAR_BUILTIN
+// , VAR_BLOB
 , VAR_LAST_TYPE = VAR_BUILTIN
 };
 
@@ -258,7 +259,27 @@ public:
 	ResultType Assign(ExprTokenType &aToken);
 	ResultType AssignClipboardAll();
 	ResultType AssignBinaryClip(Var &aSourceVar);
-	ResultType Assign(TCHAR *aBuf = NULL, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true);
+	// Assign(char *, ...) has been braek into four methods below.
+	// This should prevent some mistakes, as characters and bytes are not interchangeable in the Unicode build.
+	// Callers must make sure which one is the right method to call.
+	ResultType AssignString(TCHAR *aBuf = NULL, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true);
+	ResultType Assign(TCHAR *aBuf, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true)
+	{
+		_ASSERTE(aBuf); // aBuf shouldn't be NULL, use SetCapacity() or AssignString() instead.
+		return AssignString(aBuf, aLength, aExactSize, aObeyMaxMem);
+	}
+	ResultType Assign()
+	{
+		return AssignString();
+	}
+	ResultType SetCapacity(VarSizeType aByteLength, bool aExactSize = false, bool aObeyMaxMem = true)
+	{
+#ifdef UNICODE
+		return AssignString(NULL, (aByteLength >> 1) + (aByteLength & 1), aExactSize, aObeyMaxMem);
+#else
+		return AssignString(NULL, aByteLength, aExactSize, aObeyMaxMem);
+#endif
+	}
 
 	inline ResultType Assign(DWORD aValueToAssign) // For some reason, this function is actually faster when not __forceinline.
 	{
@@ -688,9 +709,8 @@ public:
 			mByteCapacity = 0; // This also initializes mBIV within the same union.
 		}
 	}
-	UNICODE_CHECK
+
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	UNICODE_CHECK
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}

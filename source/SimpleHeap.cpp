@@ -58,9 +58,9 @@ wchar_t *SimpleHeap::Malloc(wchar_t *aBuf, size_t aLength)
 	if (!aBuf || !*aBuf) // aBuf is checked for NULL because it's not worth avoiding it for such a low-level, frequently-called function.
 		return L""; // Return the constant empty string to the caller (not aBuf itself since that might be volatile).
 	if (aLength == -1) // Caller wanted us to calculate it.  Compare directly to -1 since aLength is unsigned.
-		aLength = wcslen(aBuf) * sizeof(wchar_t);
+		aLength = wcslen(aBuf);
 	wchar_t *new_buf;
-	if (   !(new_buf = (wchar_t *) SimpleHeap::Malloc(aLength + sizeof(wchar_t)))   ) // +2 for the zero terminator.
+	if (   !(new_buf = (wchar_t *) SimpleHeap::Malloc((aLength + 1) * sizeof(wchar_t)))   ) // +2 for the zero terminator.
 	{
 		g_script.ScriptError(ERR_OUTOFMEM
 #ifdef UNICODE
@@ -70,7 +70,7 @@ wchar_t *SimpleHeap::Malloc(wchar_t *aBuf, size_t aLength)
 		return NULL; // Callers may rely on NULL vs. "" being returned in the event of failure.
 	}
 	if (aLength)
-		memcpy(new_buf, aBuf, aLength); // memcpy() typically benchmarks slightly faster than strcpy().
+		wmemcpy(new_buf, aBuf, aLength); // memcpy() typically benchmarks slightly faster than strcpy().
 	//else only a terminator is needed.
 	new_buf[aLength] = '\0'; // Terminate here for when aLength==0 and for the memcpy above so that caller's aBuf doesn't have to be terminated.
 	return new_buf;

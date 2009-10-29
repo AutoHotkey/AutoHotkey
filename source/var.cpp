@@ -431,7 +431,7 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 
 
 
-ResultType Var::Assign(LPTSTR aBuf, VarSizeType aLength, bool aExactSize, bool aObeyMaxMem)
+ResultType Var::AssignString(LPTSTR aBuf, VarSizeType aLength, bool aExactSize, bool aObeyMaxMem)
 // Returns OK or FAIL.
 // If aBuf isn't NULL, caller must ensure that aLength is either VARSIZE_MAX (which tells us that the
 // entire strlen() of aBuf should be used) or an explicit length (can be zero) that the caller must

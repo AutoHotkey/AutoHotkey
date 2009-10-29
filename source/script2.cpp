@@ -977,7 +977,7 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 		if (!IsClipboardFormatAvailable(CF_UNICODETEXT) || !g_clip.Open()) // Relies on short-circuit boolean order.
 			return output_var.Assign(); // Make the (non-clipboard) output_var blank to indicate failure.
 		if (   !(g_clip.mClipMemNow = g_clip.GetClipboardDataTimeout(CF_UNICODETEXT)) // Relies on short-circuit boolean order.
-			|| !(g_clip.mClipMemNowLocked = (LPTSTR )GlobalLock(g_clip.mClipMemNow))
+			|| !(g_clip.mClipMemNowLocked = (LPTSTR)GlobalLock(g_clip.mClipMemNow))
 			|| !(char_count = WideCharToUTF8((LPCWSTR)g_clip.mClipMemNowLocked, NULL, 0))   ) // char_count includes terminator.
 		{
 			// Above finds out how large the contents will be when converted to UTF-8.
@@ -5972,7 +5972,7 @@ VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime)
 			VarSizeType space_needed = GetWindowTextLength(hControl) + 1;
 			// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 			// this call will set up the clipboard for writing:
-			if (INPUTBOX_VAR->Assign(NULL, space_needed - 1) == OK)
+			if (INPUTBOX_VAR->AssignString(NULL, space_needed - 1) == OK)
 			{
 				// Write to the variable:
 				INPUTBOX_VAR->SetCharLength((VarSizeType)GetWindowText(hControl
@@ -6656,7 +6656,7 @@ ResultType Line::PerformAssign()
 	// to target using the simple method, we know output_var isn't the clipboard because the
 	// logic at the top of this function ensures that.
 	if (!source_is_being_appended_to_target)
-		if (output_var.Assign(NULL, space_needed - 1) != OK)
+		if (output_var.AssignString(NULL, space_needed - 1) != OK)
 			return FAIL;
 	// Expand Arg2 directly into the var.  Note: If output_var is the clipboard,
 	// it's probably okay if the below actually writes less than the size of
@@ -7417,7 +7417,7 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 	// Copy the sorted pointers back into output_var, which might not already be sized correctly
 	// if it's the clipboard or it was an environment variable when it came in as the input.
 	// If output_var is the clipboard, this call will set up the clipboard for writing:
-	if (output_var.Assign(NULL, (VarSizeType)aContents_length) != OK) // Might fail due to clipboard problem.
+	if (output_var.AssignString(NULL, aContents_length) != OK) // Might fail due to clipboard problem.
 	{
 		result_to_return = FAIL;
 		goto end;
@@ -8644,8 +8644,6 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 // kind of unexpected and more serious error occurs, such as variable-out-of-memory,
 // that will cause FAIL to be returned.
 {
-#pragma message(MY_WARN(9999) "Unicode file IO.\n")
-
 	Var &output_var = *OUTPUT_VAR;
 	// Init output var to be blank as an additional indicator of failure (or empty file).
 	// Caller must check ErrorLevel to distinguish between an empty file and an error.
@@ -8751,12 +8749,12 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 
 	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
-	if (output_var.Assign(NULL, (VarSizeType)bytes_to_read, true, false) != OK) // Probably due to "out of memory".
+	if (output_var.SetCapacity(bytes_to_read, true, false) != OK) // Probably due to "out of memory".
 	{
 		CloseHandle(hfile);
 		return FAIL;  // It already displayed the error. ErrorLevel doesn't matter now because the current quasi-thread will be aborted.
 	}
-	LPTSTR output_buf = output_var.Contents();
+	LPBYTE output_buf = (LPBYTE) output_var.Contents();
 
 	DWORD bytes_actually_read;
 	BOOL result = ReadFile(hfile, output_buf, (DWORD)bytes_to_read, &bytes_actually_read, NULL);
@@ -8770,13 +8768,33 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	if (result)
 	{
 		output_buf[bytes_actually_read] = '\0';  // Ensure text is terminated where indicated.
+#ifdef UNICODE
+		output_buf[bytes_actually_read + 1] = '\0'; // wchar_t consumes two bytes
+		if (!is_binary_clipboard) // text mode, do UTF-8 and UTF-16LE BOM checking
+		{
+			if (bytes_actually_read >= 2 && output_buf[0] == 0xFF && output_buf[1] == 0xFE) // UTF-16LE
+			{
+				memmove(output_buf, output_buf + 2, bytes_actually_read); // also moves the '\0'
+			}
+			else if (bytes_actually_read >= 3 && output_buf[0] == 0xEF && output_buf[1] == 0xBB && output_buf[2] == 0xBF) // UTF-8
+			{
+				CStringWCharFromUTF8 str((LPCSTR) output_buf + 3);
+				output_var.Assign(str.GetBuffer());
+			}
+			else // otherwise, treat it as system default codepage
+			{
+				CStringWCharFromChar str((LPCSTR) output_buf);
+				output_var.Assign(str.GetBuffer());
+			}
+		}
+#endif
 		// Since a larger string is being replaced with a smaller, there's a good chance the 2 GB
 		// address limit will not be exceeded by StrReplace even if the file is close to the
 		// 1 GB limit as described above:
 		if (translate_crlf_to_lf)
-			StrReplace(output_buf, _T("\r\n"), _T("\n"), SCS_SENSITIVE); // Safe only because larger string is being replaced with smaller.
+			StrReplace((LPTSTR) output_buf, _T("\r\n"), _T("\n"), SCS_SENSITIVE); // Safe only because larger string is being replaced with smaller.
 		output_var.SetCharLength(is_binary_clipboard ? (bytes_actually_read - 1) // Length excludes the very last byte of the (UINT)0 terminator.
-			: (VarSizeType)_tcslen(output_buf)); // In case file contains binary zeroes, explicitly calculate the "usable" length so that it's accurate.
+			: (VarSizeType)_tcslen((LPCTSTR) output_buf)); // In case file contains binary zeroes, explicitly calculate the "usable" length so that it's accurate.
 	}
 	else
 	{
@@ -8809,7 +8827,7 @@ ResultType Line::FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber)
 	__int64 line_number = ATOI64(aLineNumber);
 	if (line_number < 1)
 		return OK;  // Return OK because g_ErrorLevel tells the story.
-	FILE *fp = _tfopen(aFilespec, _T("r"));
+	FILE *fp = _tfopen(aFilespec, _T("r, ccs=UNICODE"));
 	if (!fp)
 		return OK;  // Return OK because g_ErrorLevel tells the story.
 
@@ -11518,7 +11536,8 @@ struct DYNAPARM
 		float value_float;
 		__int64 value_int64;
 		double value_double;
-		LPTSTR str;
+		char *astr;
+		wchar_t *wstr;
     };
 	// Might help reduce struct size to keep other members last and adjacent to each other (due to
 	// 8-byte alignment caused by the presence of double and __int64 members in the union above).
@@ -11762,6 +11781,8 @@ void ConvertDllArgType(LPTSTR aBuf[], DYNAPARM &aDynaParam)
 		else if (!_tcsicmp(buf, _T("Int64")))   aDynaParam.type = DLL_ARG_INT64;
 		else if (!_tcsicmp(buf, _T("Float")))   aDynaParam.type = DLL_ARG_FLOAT;
 		else if (!_tcsicmp(buf, _T("Double")))  aDynaParam.type = DLL_ARG_DOUBLE;
+		else if (!_tcsicmp(buf, _T("WStr")))     aDynaParam.type = DLL_ARG_WSTR;
+		else if (!_tcsicmp(buf, _T("AStr")))     aDynaParam.type = DLL_ARG_ASTR;
 		// Unnecessary: else if (!stricmp(buf, "None"))    aDynaParam.type = DLL_ARG_NONE;
 		else // It's non-blank but an unknown type.
 		{
@@ -11908,6 +11929,12 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 
 	LPTSTR arg_type_string[2];
 	int i;
+// for charset conversion, this way reduce performance though
+#ifdef UNICODE
+	CStringA *pStr = ::new CStringA [arg_count];
+#else
+	CStringW *pStr = ::new CStringW [arg_count];
+#endif
 
 	// Above has already ensured that after the first parameter, there are either zero additional parameters
 	// or an even number of them.  In other words, each arg type will have an arg value to go with it.
@@ -11943,7 +11970,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		ConvertDllArgType(arg_type_string, this_dyna_param);
 		switch (this_dyna_param.type)
 		{
-		case DLL_ARG_STR:
+		case DLL_ARG_ASTR:
 			if (IS_NUMERIC(this_param.symbol))
 			{
 				// For now, string args must be real strings rather than floats or ints.  An alternative
@@ -11957,7 +11984,12 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 				return;
 			}
 			// Otherwise, it's a supported type of string.
-			this_dyna_param.str = TokenToString(this_param); // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+#ifdef UNICODE
+			StringWCharToChar(TokenToString(this_param), pStr[i]);
+			this_dyna_param.astr = pStr[i].GetBuffer();
+#else
+			this_dyna_param.astr = TokenToString(this_param); // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+#endif
 			// NOTES ABOUT THE ABOVE:
 			// UPDATE: The v1.0.44.14 item below doesn't work in release mode, only debug mode (turning off
 			// "string pooling" doesn't help either).  So it's commented out until a way is found
@@ -11984,7 +12016,20 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			//if (this_dyna_param.str == Var::sEmptyString) // To improve performance, compare directly to Var::sEmptyString rather than calling Capacity().
 			//	this_dyna_param.str = _T(""); // Make it read-only to force an exception.  See comments above.
 			break;
-
+		case DLL_ARG_WSTR:
+			if (IS_NUMERIC(this_param.symbol))
+			{
+				g_ErrorLevel->Assign(_T("-2"));
+				return;
+			}
+			// Otherwise, it's a supported type of string.
+#ifdef UNICODE
+			this_dyna_param.wstr = TokenToString(this_param);
+#else
+			StringCharToWChar(TokenToString(this_param), pStr[i]);
+			this_dyna_param.astr = pStr[i].GetBuffer();
+#endif
+			break;
 		case DLL_ARG_DOUBLE:
 		case DLL_ARG_FLOAT:
 			// This currently doesn't validate that this_dyna_param.is_unsigned==false, since it seems
@@ -12295,6 +12340,8 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 	}
 
 end:
+	if (pStr)
+		::delete [] pStr;
 	if (hmodule_to_free)
 		FreeLibrary(hmodule_to_free);
 }
@@ -13004,7 +13051,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				extra_offset = 0; // Set default. Indicate that there's no need to hop over an extra character.
 				if (char_after_dollar = src[1]) // This check avoids calling _totupper on '\0', which directly or indirectly causes an assertion error in CRT.
 				{
-					switch(char_after_dollar = _totupper(char_after_dollar))
+					switch(char_after_dollar = toupper(char_after_dollar))
 					{
 					case 'U':
 					case 'L':
@@ -13772,8 +13819,6 @@ void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 // 2: Requested capacity.
 // 3: Byte-value to fill the variable with (e.g. 0 to have the same effect as ZeroMemory).
 {
-#pragma message(MY_WARN(9999) "Need to reviewd.\n")
-
 	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
 	aResultToken.value_int64 = 0; // Set default. In spite of being ambiguous with the result of Free(), 0 seems a little better than -1 since it indicates "no capacity" and is also equal to "false" for easy use in expressions.
 	if (aParam[0]->symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
@@ -13781,6 +13826,7 @@ void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 		Var &var = *aParam[0]->var; // For performance and convenience. SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 		if (aParamCount > 1) // Second parameter is present.
 		{
+			// in bytes
 			VarSizeType new_capacity = (VarSizeType)TokenToInt64(*aParam[1]);
 			if (new_capacity == -1) // Adjust variable's internal length. Since new_capacity is unsigned, compare directly to -1 rather than doing <0.
 			{
@@ -13798,6 +13844,7 @@ void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 					new_capacity++;
 #endif
 				var.Assign(NULL, new_capacity / sizeof(TCHAR), true, false); // This also destroys the variables contents.
+				// in characters
 				VarSizeType capacity;
 				if (aParamCount > 2 && (capacity = var.Capacity()) > 1) // Third parameter is present and var has enough capacity to make FillMemory() meaningful.
 				{
