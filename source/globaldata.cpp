@@ -450,7 +450,7 @@ Action g_act[] =
 	, {_T("SoundBeep"), 0, 2, 2, {1, 2, 0}} // Frequency, Duration.
 	, {_T("SoundPlay"), 1, 2, 2, NULL} // Filename [, wait]
 
-	, {_T("FileAppend"), 0, 2, 2, NULL} // text, filename (which can be omitted in a read-file loop). Update: Text can be omitted too, to create an empty file or alter the timestamp of an existing file.
+	, {_T("FileAppend"), 0, 3, 3, NULL} // text, filename (which can be omitted in a read-file loop). Update: Text can be omitted too, to create an empty file or alter the timestamp of an existing file.
 	, {_T("FileRead"), 2, 2, 2 H, NULL} // Output variable, filename
 	, {_T("FileReadLine"), 3, 3, 3 H, {3, 0}} // Output variable, filename, line-number
 	, {_T("FileDelete"), 1, 1, 1, NULL} // filename or pattern

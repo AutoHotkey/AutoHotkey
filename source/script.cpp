@@ -10463,7 +10463,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, LPTSTR *apReturnValue, Line **ap
 				break;
 			case ATTR_LOOP_READ_FILE:
 				FILE *read_file;
-				if (*ARG2 && (read_file = _tfopen(ARG2, _T("r")))) // v1.0.47: Added check for "" to avoid debug-assertion failure while in debug mode (maybe it's bad to to open file "" in release mode too).
+				if (*ARG2 && (read_file = _tfopen(ARG2, _T("r, ccs=UNICODE")))) // v1.0.47: Added check for "" to avoid debug-assertion failure while in debug mode (maybe it's bad to to open file "" in release mode too).
 				{
 					result = line->PerformLoopReadFile(apReturnValue, continue_main_loop, jump_to_line, read_file, ARG3);
 					fclose(read_file);

@@ -298,7 +298,7 @@ ResultType Var::AssignClipboardAll()
 		return FAIL; // Above should have already reported the error.
 	}
 
-#pragma message(MY_WARN(9999) "The following codes must be checked it is Unicode-safe or not.\n")
+#pragma message(MY_WARN(9999) "The following codes must be checked it is Unicode-safe or not.")
 	// Retrieve and store all the clipboard formats.  Because failures of GetClipboardData() are now
 	// tolerated, it seems safest to recalculate the actual size (actual_space_needed) of the data
 	// in case it varies from that found in the estimation phase.  This is especially necessary in
@@ -381,7 +381,7 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 		return OK; // No need to call Close() in this case.
 	}
 
-#pragma message(MY_WARN(9999) "The following codes must be checked it is Unicode-safe or not.\n")
+#pragma message(MY_WARN(9999) "The following codes must be checked it is Unicode-safe or not.")
 	// SINCE ABOVE DIDN'T RETURN, A VARIABLE CONTAINING BINARY CLIPBOARD DATA IS BEING COPIED BACK ONTO THE CLIPBOARD.
 	if (!g_clip.Open())
 		return g_script.ScriptError(CANT_OPEN_CLIPBOARD_WRITE);
@@ -457,7 +457,7 @@ ResultType Var::AssignString(LPTSTR aBuf, VarSizeType aLength, bool aExactSize, 
 		//    Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
 		// If that were done, bugs would be easy to introduce in a long function like this one
 		// if your forget at use the implicit "this" by accident.  So instead, just call self.
-		return mAliasFor->Assign(aBuf, aLength, aExactSize);
+		return mAliasFor->AssignString(aBuf, aLength, aExactSize);
 
 	bool do_assign = true;        // Set defaults.
 	bool free_it_if_large = true; //
@@ -1171,3 +1171,19 @@ ResultType Var::ValidateName(LPCTSTR aName, bool aIsRuntime, int aDisplayError)
 	// Otherwise:
 	return OK;
 }
+
+#ifdef UNICODE
+ResultType Var::AssignStringCodePage(const char *aBuf, int aLength, UINT aCodePage, DWORD aFlags)
+{
+	int iLen = MultiByteToWideChar(aCodePage, aFlags, aBuf, aLength, NULL, 0);
+	if (iLen > 0) {
+		AssignString(NULL, iLen - 1, true, false);
+		LPWSTR aContents = Contents();
+		aContents[iLen] = 0;
+		return MultiByteToWideChar(aCodePage, aFlags, aBuf, aLength, (LPWSTR) aContents, iLen) == iLen ? OK : FAIL;
+	}
+	else
+		Assign();
+	return OK;
+}
+#endif

@@ -1791,9 +1791,7 @@ public:
 		, mAttribute(ATTR_NONE), mArgc(aArgc), mArg(aArg)
 		, mPrevLine(NULL), mNextLine(NULL), mRelatedLine(NULL), mParentLine(NULL)
 		{}
-	UNICODE_CHECK
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	UNICODE_CHECK
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}  // Intentionally does nothing because we're using SimpleHeap for everything.
 	void operator delete[](void *aPtr) {}
@@ -1944,9 +1942,7 @@ public:
 		, mDefaultVarType(VAR_DECLARE_NONE)
 		, mIsBuiltIn(aIsBuiltIn)
 	{}
-	UNICODE_CHECK
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	UNICODE_CHECK
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
@@ -1972,9 +1968,7 @@ public:
 		, mExistingThreads(0), mTimeLastRun(0)
 		, mEnabled(false), mRunOnlyOnce(false), mNextTimer(NULL)  // Note that mEnabled must default to false for the counts to be right.
 	{}
-	UNICODE_CHECK
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	UNICODE_CHECK
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}

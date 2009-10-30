@@ -473,7 +473,7 @@ struct Action
 	// is used by g_act to build static data into the code.  Testing shows that the compiler
 	// will generate a warning even when not in debug mode in the unlikely event that a constant
 	// larger than 127 is ever stored in one of these:
-	TCHAR MinParams, MaxParams, MaxParamsAu2WithHighBit;
+	char MinParams, MaxParams, MaxParamsAu2WithHighBit;
 	// Array indicating which args must be purely numeric.  The first arg is
 	// number 1, the second 2, etc (i.e. it doesn't start at zero).  The list
 	// is ended with a zero, much like a string.  The compiler will notify us
@@ -696,6 +696,7 @@ inline void global_init(global_struct &g)
 #define WINAPI_SUFFIX "A"
 #endif
 
+// Use #pragma message(MY_WARN(nnnn) "warning messages") to generate a warning like a compiler's warning
 #define __S(x) #x
 #define _S(x) __S(x)
 #define MY_WARN(n) __FILE__ "(" _S(__LINE__) ") : warning C" __S(n) ": "

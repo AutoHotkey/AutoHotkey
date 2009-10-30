@@ -8663,6 +8663,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	bool translate_crlf_to_lf = false;
 	bool is_binary_clipboard = false;
 	unsigned __int64 max_bytes_to_load = ULLONG_MAX;
+	UINT codepage = CP_ACP;
 
 	// It's done as asterisk+option letter to permit future expansion.  A plain asterisk such as used
 	// by the FileAppend command would create ambiguity if there was ever an effort to add other asterisk-
@@ -8682,6 +8683,13 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			max_bytes_to_load = ATOU64(cp + 1); // Relies upon the fact that it ceases conversion upon reaching a space or tab.
 			if (max_bytes_to_load > FILEREAD_MAX) // Force a failure to avoid breaking scripts if this limit is increased in the future.
 				return OK; // Let ErrorLevel tell the story.
+			// Skip over the digits of this option in case it's the last option.
+			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
+				return OK; // Let ErrorLevel tell the story.
+			--cp; // Standardize it to make it conform to the other options, for use below.
+			break;
+		case 'P':
+			codepage = _ttoi(cp + 1);
 			// Skip over the digits of this option in case it's the last option.
 			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
 				return OK; // Let ErrorLevel tell the story.
@@ -8749,12 +8757,20 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 
 	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
-	if (output_var.SetCapacity(bytes_to_read, true, false) != OK) // Probably due to "out of memory".
+	if (
+#ifdef UNICODE
+		is_binary_clipboard && // non-binary data use another buffer for charset conversion later
+#endif
+		output_var.SetCapacity(bytes_to_read, true, false) != OK) // Probably due to "out of memory".
 	{
 		CloseHandle(hfile);
 		return FAIL;  // It already displayed the error. ErrorLevel doesn't matter now because the current quasi-thread will be aborted.
 	}
-	LPBYTE output_buf = (LPBYTE) output_var.Contents();
+	LPBYTE output_buf =
+#ifdef UNICODE
+		!is_binary_clipboard ? (LPBYTE) malloc(bytes_to_read + sizeof(wchar_t)) :
+#endif
+		(LPBYTE) output_var.Contents();
 
 	DWORD bytes_actually_read;
 	BOOL result = ReadFile(hfile, output_buf, (DWORD)bytes_to_read, &bytes_actually_read, NULL);
@@ -8774,18 +8790,19 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 		{
 			if (bytes_actually_read >= 2 && output_buf[0] == 0xFF && output_buf[1] == 0xFE) // UTF-16LE
 			{
-				memmove(output_buf, output_buf + 2, bytes_actually_read); // also moves the '\0'
+				output_var.SetCapacity(bytes_actually_read, true, false);
+				memcpy(output_var.Contents(), output_buf + 2, bytes_actually_read); // also copies the '\0's
 			}
 			else if (bytes_actually_read >= 3 && output_buf[0] == 0xEF && output_buf[1] == 0xBB && output_buf[2] == 0xBF) // UTF-8
 			{
-				CStringWCharFromUTF8 str((LPCSTR) output_buf + 3);
-				output_var.Assign(str.GetBuffer());
+				output_var.AssignStringUTF8((LPCSTR) output_buf + 3, bytes_actually_read - 3);
 			}
-			else // otherwise, treat it as system default codepage
+			else
 			{
-				CStringWCharFromChar str((LPCSTR) output_buf);
-				output_var.Assign(str.GetBuffer());
+				output_var.AssignStringCodePage((LPCSTR) output_buf, bytes_actually_read, codepage);
 			}
+			free(output_buf);
+			output_buf = (LPBYTE) output_var.Contents();
 		}
 #endif
 		// Since a larger string is being replaced with a smaller, there's a good chance the 2 GB
@@ -8942,19 +8959,43 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	// 2) To avoid opening the file if the file-reading loop has zero iterations (i.e. it's
 	//    opened only upon first actual use to help performance and avoid changing the
 	//    file-modification time when no actual text will be appended).
+	CStringA sUTF8;
 	if (!file_was_already_open)
 	{
+		LPCTSTR aOpenMode;
+		// For backward compatibility, the first two arguments can not be changed.
+		if (mArgc > 2) {
+			if (!_tcsicmp(ARG3, _T("UTF-8")) || !_tcsicmp(ARG3, _T("UTF8"))) {
+				if (open_as_binary) // "ccs=" can not be combined with "b"
+					StrReplace(aBuf, _T("\r\n"), _T("\n"), SCS_SENSITIVE);
+				aOpenMode = _T("a, ccs=UTF-8");
+			}
+			else if (!_tcsicmp(ARG3, _T("UNICODE")) || !_tcsicmp(ARG3, _T("UTF-16")) || !_tcsicmp(ARG3, _T("UTF-16LE"))) {
+				if (open_as_binary) // "ccs=" can not be combined with "b"
+					StrReplace(aBuf, _T("\r\n"), _T("\n"), SCS_SENSITIVE);
+				aOpenMode = _T("a, ccs=UTF-16LE");
+			}
+			else if (!_tcsicmp(ARG3, _T("UTF-8-RAW"))) {
+				StringWCharToUTF8(aBuf, sUTF8);
+				aOpenMode = open_as_binary ? _T("ab") : _T("a");
+			}
+			else
+				aOpenMode = open_as_binary ? _T("ab") : _T("a");
+		}
+		else
+			aOpenMode = open_as_binary ? _T("ab") : _T("a");
+
 		// Open the output file (if one was specified).  Unlike the input file, this is not
 		// a critical error if it fails.  We want it to be non-critical so that FileAppend
 		// commands in the body of the loop will set ErrorLevel to indicate the problem:
-		if (   !(fp = _tfopen(aFilespec, open_as_binary ? _T("ab") : _T("a")))   )
+		if (   !(fp = _tfopen(aFilespec, aOpenMode))   )
 			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 		if (aCurrentReadFile)
 			aCurrentReadFile->mWriteFile = fp;
 	}
 
 	// Write to the file:
-	g_ErrorLevel->Assign(_fputts(aBuf, fp) ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE); // _fputts() returns 0 on success.
+	g_ErrorLevel->Assign((sUTF8.IsEmpty() ? _fputts(aBuf, fp) : fputs(sUTF8, fp)) ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE); // _fputts() returns 0 on success.
 
 	if (!aCurrentReadFile)
 		fclose(fp);
@@ -11815,7 +11856,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 // It has also ensured that the array has exactly aParamCount items in it.
 // Author: Marcus Sonntag (Ultra)
 {
-#pragma message(MY_WARN(9999) "changes for Unicode, please check.\n")
+#pragma message(MY_WARN(9999) "changes for Unicode, please check.")
 
 	// Set default result in case of early return; a blank value:
 	aResultToken.symbol = SYM_STRING;
@@ -13527,7 +13568,7 @@ void BIF_Asc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 	// Result will always be an integer (this simplifies scripts that work with binary zeros since an
 	// empy string yields zero).
 	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
-	aResultToken.value_int64 = (UCHAR)*TokenToString(*aParam[0], aResultToken.buf);
+	aResultToken.value_int64 = (TBYTE)*TokenToString(*aParam[0], aResultToken.buf);
 }
 
 
@@ -13556,13 +13597,13 @@ void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 	{
 		target = (size_t)target_token.var->Contents(); // Although Contents(TRUE) will force an update of mContents if necessary, it very unlikely to be necessary here because we're about to fetch a binary number from inside mContents, not a normal/text number.
-		right_side_bound = target + target_token.var->Capacity(); // This is first illegal address to the right of target.
+		right_side_bound = target + target_token.var->ByteCapacity(); // This is first illegal address to the right of target.
 	}
 	else
 		target = (size_t)TokenToInt64(target_token);
 
 	if (aParamCount > 1) // Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
-		target += (int)TokenToInt64(*aParam[1]); // Cast to int vs. size_t to support negative offsets.
+		target += (ptrdiff_t)TokenToInt64(*aParam[1]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
 
 	BOOL is_signed;
 	size_t size = 4; // Set default.
@@ -13658,13 +13699,13 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 	{
 		target = (size_t)target_token.var->Contents(FALSE); // Pass FALSE for performance because contents is about to be overwritten, followed by a call to Close(). If something goes wrong and we return early, Contents() won't have been changed, so nothing about it needs updating.
-		right_side_bound = target + target_token.var->Capacity(); // This is the first illegal address to the right of target.
+		right_side_bound = target + target_token.var->ByteCapacity(); // This is the first illegal address to the right of target.
 	}
 	else
 		target = (size_t)TokenToInt64(target_token);
 
 	if (aParamCount > 2) // Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
-		target += (int)TokenToInt64(*aParam[2]); // Cast to int vs. size_t to support negative offsets.
+		target += (ptrdiff_t)TokenToInt64(*aParam[2]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
 
 	size_t size = 4;          // Set defaults.
 	BOOL is_integer = TRUE;   //
@@ -13839,11 +13880,7 @@ void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 			// Since above didn't return:
 			if (new_capacity)
 			{
-#ifdef UNICODE
-				if (new_capacity & 1) // since sizeof(wchar_t) == 2
-					new_capacity++;
-#endif
-				var.Assign(NULL, new_capacity / sizeof(TCHAR), true, false); // This also destroys the variables contents.
+				var.SetCapacity(new_capacity, true, false); // This also destroys the variables contents.
 				// in characters
 				VarSizeType capacity;
 				if (aParamCount > 2 && (capacity = var.Capacity()) > 1) // Third parameter is present and var has enough capacity to make FillMemory() meaningful.

@@ -92,7 +92,11 @@ struct VarBkp // This should be kept in sync with any changes to the Var class. 
 // loss from doing this, perhaps because variables are currently stored in a linked list rather than an
 // array. (In an array, having the struct size be a multiple of 8 would prevent every other struct in the array
 // from having its 64-bit members span more than one 64-bit region in memory, which might reduce performance.)
+#ifdef _WIN64
+#pragma pack(push, 8)
+#else
 #pragma pack(push, 4) // 32-bit vs. 64-bit. See above.
+#endif
 typedef VarSizeType (* BuiltInVarType)(LPTSTR aBuf, LPTSTR aVarName);
 class Var
 {
@@ -265,7 +269,7 @@ public:
 	ResultType AssignString(TCHAR *aBuf = NULL, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true);
 	ResultType Assign(TCHAR *aBuf, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true)
 	{
-		_ASSERTE(aBuf); // aBuf shouldn't be NULL, use SetCapacity() or AssignString() instead.
+		_ASSERTE(aBuf); // aBuf shouldn't be NULL, use SetCapacity([length in bytes]) or AssignString(NULL, [length in characters]) instead.
 		return AssignString(aBuf, aLength, aExactSize, aObeyMaxMem);
 	}
 	ResultType Assign()
@@ -280,6 +284,14 @@ public:
 		return AssignString(NULL, aByteLength, aExactSize, aObeyMaxMem);
 #endif
 	}
+
+#ifdef UNICODE
+	ResultType AssignStringCodePage(const char *aBuf, int aLength = -1, UINT aCodePage = CP_ACP, DWORD aFlags = 0);
+	ResultType AssignStringUTF8(const char *aBuf, int aLength = -1)
+	{
+		return AssignStringCodePage(aBuf, aLength, CP_UTF8);
+	}
+#endif
 
 	inline ResultType Assign(DWORD aValueToAssign) // For some reason, this function is actually faster when not __forceinline.
 	{
@@ -576,6 +588,11 @@ public:
 			? var.Length() // Use Length() vs. mLength so that the length is updated if necessary.
 			: _tcslen(var.Contents()); // Use Contents() vs. mContents to support VAR_CLIPBOARD.
 	}
+
+	//BYTE *ByteContents(BOOL aAllowUpdate = TRUE)
+	//{
+	//	return (BYTE *) CharContents(aAllowUpdate);
+	//}
 
 	TCHAR *CharContents(BOOL aAllowUpdate = TRUE)
 	// Callers should almost always pass TRUE for aAllowUpdate because any caller who wants to READ from
