@@ -11791,29 +11791,7 @@ void ConvertDllArgType(LPTSTR aBuf[], DYNAPARM &aDynaParam)
 		else
 			aDynaParam.is_unsigned = false;
 
-		tcslcpy(buf, type_string, _countof(buf)); // Make a modifiable copy for easier parsing below.
-
-		// v1.0.30.02: The addition of 'P' allows the quotes to be omitted around a pointer type.
-		// However, the current detection below relies upon the fact that not of the types currently
-		// contain the letter P anywhere in them, so it would have to be altered if that ever changes.
-		LPTSTR cp = StrChrAny(buf, _T("*pP")); // Asterisk or the letter P.
-		if (cp)
-		{
-			aDynaParam.passed_by_address = true;
-			// Remove trailing options so that stricmp() can be used below.
-			// Allow optional space in front of asterisk (seems okay even for 'P').
-			if (cp > buf && IS_SPACE_OR_TAB(cp[-1]))
-			{
-				cp = omit_trailing_whitespace(buf, cp - 1);
-				cp[1] = '\0'; // Terminate at the leftmost whitespace to remove all whitespace and the suffix.
-			}
-			else
-				*cp = '\0'; // Terminate at the suffix to remove it.
-		}
-		else
-			aDynaParam.passed_by_address = false;
-
-		if (!*buf)
+		if (!*type_string)
 		{
 			// The following also serves to set the default in case this is the first iteration.
 			// Set default but perform second iteration in case the second type string isn't NULL.
@@ -11822,15 +11800,24 @@ void ConvertDllArgType(LPTSTR aBuf[], DYNAPARM &aDynaParam)
 			aDynaParam.type = DLL_ARG_INT;  // Assume int.  This is relied upon at least for having a return type such as a naked "CDecl".
 			continue; // OK to do this regardless of whether this is the first or second iteration.
 		}
-		else if (!_tcsicmp(buf, _T("Int")))     aDynaParam.type = DLL_ARG_INT; // The few most common types are kept up top for performance.
-		else if (!_tcsicmp(buf, _T("Str")))     aDynaParam.type = DLL_ARG_STR;
-		else if (!_tcsicmp(buf, _T("Short")))   aDynaParam.type = DLL_ARG_SHORT;
-		else if (!_tcsicmp(buf, _T("Char")))    aDynaParam.type = DLL_ARG_CHAR;
-		else if (!_tcsicmp(buf, _T("Int64")))   aDynaParam.type = DLL_ARG_INT64;
-		else if (!_tcsicmp(buf, _T("Float")))   aDynaParam.type = DLL_ARG_FLOAT;
-		else if (!_tcsicmp(buf, _T("Double")))  aDynaParam.type = DLL_ARG_DOUBLE;
-		else if (!_tcsicmp(buf, _T("WStr")))     aDynaParam.type = DLL_ARG_WSTR;
-		else if (!_tcsicmp(buf, _T("AStr")))     aDynaParam.type = DLL_ARG_ASTR;
+#define TEST_TYPE(t, n) else if (!_tcsnicmp(type_string, (t), _countof(t) - 1)) { aDynaParam.type = (n); type_string += _countof(t) - 1; }
+		// "IntPtr", "Int64" must be tested before "Int", or it always return "Int"
+		// "IntPtr" should be the same size with a pointer type, so it can safely write DllCall(..., "IntPtr", &var).
+#ifdef _WIN64
+		TEST_TYPE(_T("IntPtr"), DLL_ARG_INT64)
+#else
+		TEST_TYPE(_T("IntPtr"), DLL_ARG_INT)
+#endif
+		TEST_TYPE(_T("Int64"), DLL_ARG_INT64)
+		TEST_TYPE(_T("Int"), DLL_ARG_INT)
+		TEST_TYPE(_T("Str"), DLL_ARG_STR)
+		TEST_TYPE(_T("Short"), DLL_ARG_SHORT)
+		TEST_TYPE(_T("Char"), DLL_ARG_CHAR)
+		TEST_TYPE(_T("Float"), DLL_ARG_FLOAT)
+		TEST_TYPE(_T("Double"), DLL_ARG_DOUBLE)
+		TEST_TYPE(_T("WStr"), DLL_ARG_WSTR)
+		TEST_TYPE(_T("AStr"), DLL_ARG_ASTR)
+#undef TEST_TYPE
 		// Unnecessary: else if (!stricmp(buf, "None"))    aDynaParam.type = DLL_ARG_NONE;
 		else // It's non-blank but an unknown type.
 		{
@@ -11848,6 +11835,9 @@ void ConvertDllArgType(LPTSTR aBuf[], DYNAPARM &aDynaParam)
 				continue;
 			}
 		}
+
+		aDynaParam.passed_by_address = !!StrChrAny(type_string, _T("*pP"));
+
 		// Since above didn't "continue", the type is explicitly valid so "return" to ensure that
 		// the second iteration doesn't run (in case this is the first iteration):
 		return;
@@ -13632,7 +13622,11 @@ void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 		switch(_totupper(*type)) // Override "size" and aResultToken.symbol if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
 		{
 		case 'I':
+#ifdef _WIN64
+			if (StrChrAny(type, _T("6Pp"))) // Int64 and IntPtr
+#else
 			if (_tcschr(type, '6')) // Int64. It's checked this way for performance, and to avoid access violation if string is bogus and too short such as "i64".
+#endif
 				size = 8;
 			//else keep "size" at its default set earlier.
 			break;
@@ -13730,7 +13724,11 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 		switch(_totupper(*type)) // Override "size" and is_integer if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
 		{
 		case 'I':
+#ifdef _WIN64
+			if (StrChrAny(type, _T("6Pp"))) // Int64 and IntPtr
+#else
 			if (_tcschr(type, '6')) // Int64. It's checked this way for performance, and to avoid access violation if string is bogus and too short such as "i64".
+#endif
 				size = 8;
 			//else keep "size" at its default set earlier.
 			break;
