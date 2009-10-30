@@ -1238,6 +1238,13 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 
 	case TRANS_CMD_BITSHIFTRIGHT:  // Equivalent to dividing (integer) by 2^value2
 		return output_var.Assign(ATOI64(aValue1) >> ATOI(aValue2));
+
+#ifdef UNICODE
+	case TRANS_CMD_TOCODEPAGE:
+		return output_var.AssignStringToCodePage((LPCWSTR) aValue2, -1, ATOI(aValue1));
+	case TRANS_CMD_FROMCODEPAGE:
+		return output_var.AssignStringFromCodePage((LPCSTR) aValue2, -1, ATOI(aValue1));
+#endif
 	}
 
 	return FAIL;  // Never executed (increases maintainability and avoids compiler warning).
@@ -8795,11 +8802,11 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			}
 			else if (bytes_actually_read >= 3 && output_buf[0] == 0xEF && output_buf[1] == 0xBB && output_buf[2] == 0xBF) // UTF-8
 			{
-				output_var.AssignStringUTF8((LPCSTR) output_buf + 3, bytes_actually_read - 3);
+				output_var.AssignStringFromUTF8((LPCSTR) output_buf + 3, bytes_actually_read - 3);
 			}
 			else
 			{
-				output_var.AssignStringCodePage((LPCSTR) output_buf, bytes_actually_read, codepage);
+				output_var.AssignStringFromCodePage((LPCSTR) output_buf, bytes_actually_read, codepage);
 			}
 			free(output_buf);
 			output_buf = (LPBYTE) output_var.Contents();

@@ -1173,7 +1173,7 @@ ResultType Var::ValidateName(LPCTSTR aName, bool aIsRuntime, int aDisplayError)
 }
 
 #ifdef UNICODE
-ResultType Var::AssignStringCodePage(const char *aBuf, int aLength, UINT aCodePage, DWORD aFlags)
+ResultType Var::AssignStringFromCodePage(const char *aBuf, int aLength, UINT aCodePage, DWORD aFlags)
 {
 	int iLen = MultiByteToWideChar(aCodePage, aFlags, aBuf, aLength, NULL, 0);
 	if (iLen > 0) {
@@ -1181,6 +1181,27 @@ ResultType Var::AssignStringCodePage(const char *aBuf, int aLength, UINT aCodePa
 		LPWSTR aContents = Contents();
 		aContents[iLen] = 0;
 		return MultiByteToWideChar(aCodePage, aFlags, aBuf, aLength, (LPWSTR) aContents, iLen) == iLen ? OK : FAIL;
+	}
+	else
+		Assign();
+	return OK;
+}
+
+ResultType Var::AssignStringToCodePage(const wchar_t *aBuf, int aLength, UINT aCodePage, DWORD aFlags, char aDefChar)
+{
+	char *pDefChar;
+	if (aCodePage == CP_UTF8 || aCodePage == CP_UTF7) {
+		pDefChar = NULL;
+		aFlags = 0;
+	}
+	else
+		pDefChar = &aDefChar;
+	int iLen = WideCharToMultiByte(aCodePage, aFlags, aBuf, aLength, NULL, 0, pDefChar, NULL);
+	if (iLen > 0) {
+		SetCapacity(iLen - 1, true, false);
+		LPSTR aContents = (LPSTR) Contents();
+		aContents[iLen] = 0;
+		return WideCharToMultiByte(aCodePage, aFlags, aBuf, aLength, aContents, iLen, pDefChar, NULL) == iLen ? OK : FAIL;
 	}
 	else
 		Assign();

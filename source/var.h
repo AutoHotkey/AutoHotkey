@@ -44,7 +44,6 @@ enum VarTypes
 #define VAR_IS_READONLY(var) ((var).Type() > VAR_LAST_WRITABLE)
 , VAR_CLIPBOARDALL // Must be read-only because it's not designed to be writable.
 , VAR_BUILTIN
-// , VAR_BLOB
 , VAR_LAST_TYPE = VAR_BUILTIN
 };
 
@@ -286,11 +285,12 @@ public:
 	}
 
 #ifdef UNICODE
-	ResultType AssignStringCodePage(const char *aBuf, int aLength = -1, UINT aCodePage = CP_ACP, DWORD aFlags = 0);
-	ResultType AssignStringUTF8(const char *aBuf, int aLength = -1)
+	ResultType AssignStringFromCodePage(const char *aBuf, int aLength = -1, UINT aCodePage = CP_ACP, DWORD aFlags = 0);
+	ResultType AssignStringFromUTF8(const char *aBuf, int aLength = -1)
 	{
-		return AssignStringCodePage(aBuf, aLength, CP_UTF8);
+		return AssignStringFromCodePage(aBuf, aLength, CP_UTF8);
 	}
+	ResultType AssignStringToCodePage(const wchar_t *aBuf, int aLength = -1, UINT aCodePage = CP_ACP, DWORD aFlags = WC_NO_BEST_FIT_CHARS, char aDefChar = '?');
 #endif
 
 	inline ResultType Assign(DWORD aValueToAssign) // For some reason, this function is actually faster when not __forceinline.
