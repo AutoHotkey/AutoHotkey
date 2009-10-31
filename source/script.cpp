@@ -7123,6 +7123,11 @@ Func *Script::FindFunc(LPTSTR aFuncName, size_t aFuncNameLength)
 		bif = BIF_Asc;
 	else if (!_tcsicmp(func_name, _T("Chr")))
 		bif = BIF_Chr;
+	else if (!_tcsicmp(func_name, _T("PtrSize")))
+	{
+		bif = BIF_PtrSize;
+		min_params = 0;
+	}
 	else if (!_tcsicmp(func_name, _T("NumGet")))
 	{
 		bif = BIF_NumGet;

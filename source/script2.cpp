@@ -11766,7 +11766,7 @@ void ConvertDllArgType(LPTSTR aBuf[], DYNAPARM &aDynaParam)
 // Helper function for DllCall().  Updates aDynaParam's type and other attributes.
 // Caller has ensured that aBuf contains exactly two strings (though the second can be NULL).
 {
-	TCHAR buf[32], *type_string;
+	LPTSTR type_string;
 	int i;
 
 	// Up to two iterations are done to cover the following cases:
@@ -11853,8 +11853,6 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 // It has also ensured that the array has exactly aParamCount items in it.
 // Author: Marcus Sonntag (Ultra)
 {
-#pragma message(MY_WARN(9999) "changes for Unicode, please check.")
-
 	// Set default result in case of early return; a blank value:
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
@@ -11967,12 +11965,13 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 
 	LPTSTR arg_type_string[2];
 	int i;
-// for charset conversion, this way reduce performance though
 #ifdef UNICODE
-	CStringA *pStr = ::new CStringA [arg_count];
+	CStringA **pStr = (CStringA **)
 #else
-	CStringW *pStr = ::new CStringW [arg_count];
+	CStringW **pStr = (CStringW **)
 #endif
+		malloc(arg_count * sizeof(void *));
+	memset(pStr, 0, arg_count * sizeof(void *));
 
 	// Above has already ensured that after the first parameter, there are either zero additional parameters
 	// or an even number of them.  In other words, each arg type will have an arg value to go with it.
@@ -12023,8 +12022,8 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			}
 			// Otherwise, it's a supported type of string.
 #ifdef UNICODE
-			StringWCharToChar(TokenToString(this_param), pStr[i]);
-			this_dyna_param.astr = pStr[i].GetBuffer();
+			pStr[arg_count] = ::new CStringCharFromWChar(TokenToString(this_param));
+			this_dyna_param.astr = pStr[arg_count]->GetBuffer();
 #else
 			this_dyna_param.astr = TokenToString(this_param); // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 #endif
@@ -12064,8 +12063,8 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 #ifdef UNICODE
 			this_dyna_param.wstr = TokenToString(this_param);
 #else
-			StringCharToWChar(TokenToString(this_param), pStr[i]);
-			this_dyna_param.astr = pStr[i].GetBuffer();
+			pStr[arg_count] = ::new CStringWCharFromChar(TokenToString(this_param));
+			this_dyna_param.wstr = pStr[arg_count]->GetBuffer();
 #endif
 			break;
 		case DLL_ARG_DOUBLE:
@@ -12275,7 +12274,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			// function isn't on our stack (which is the case), there should be no way for what comes out to be
 			// on the stack either.
 			aResultToken.symbol = SYM_STRING;
-			aResultToken.marker = (LPTSTR )(return_value.Pointer ? return_value.Pointer : _T(""));
+			aResultToken.marker = (LPTSTR)(return_value.Pointer ? return_value.Pointer : _T(""));
 			// Above: Fix for v1.0.33.01: Don't allow marker to be set to NULL, which prevents crash
 			// with something like the following, which in this case probably happens because the inner
 			// call produces a non-numeric string, which "int" then sees as zero, which CharLower() then
@@ -12294,7 +12293,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			if (return_attrib.is_unsigned)
 				aResultToken.value_int64 = return_value.Int & 0x000000FF; // This also forces the value into the unsigned domain of a signed int.
 			else // Signed.
-				aResultToken.value_int64 = (TCHAR)(BYTE)return_value.Int; // These casts properly preserve negatives.
+				aResultToken.value_int64 = (char)(BYTE)return_value.Int; // These casts properly preserve negatives.
 			break;
 		case DLL_ARG_INT64:
 			// Even for unsigned 64-bit values, it seems best both for simplicity and consistency to write
@@ -12326,8 +12325,9 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			continue;
 		DYNAPARM &this_dyna_param = dyna_param[arg_count]; // Resolved for performance and convenience.
 		Var &output_var = *this_param.var;                 //
-		if (this_dyna_param.type == DLL_ARG_STR) // The function might have altered Contents(), so update Length().
+		if (this_dyna_param.type == DLL_ARG_WSTR) // The function might have altered Contents(), so update Length().
 		{
+#ifdef UNICODE
 			LPTSTR contents = output_var.Contents(); // Contents() shouldn't update mContents in this case because Contents() was already called for each "str" parameter prior to calling the Dll function.
 			VarSizeType capacity = output_var.Capacity();
 			// Since the performance cost is low, ensure the string is terminated at the limit of its
@@ -12336,7 +12336,32 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			// RtlMoveMemory()).
 			if (capacity)
 				contents[capacity - 1] = '\0';
-			output_var.SetCharLength((VarSizeType)_tcslen(contents));
+			output_var.SetCharLength((VarSizeType)wcslen(contents));
+			output_var.Close(); // Clear the attributes of the variable to reflect the fact that the contents may have changed.
+#else
+			::delete pStr[arg_count];
+#error ANSI build is not maintained
+#endif
+			continue;
+		}
+		if (this_dyna_param.type == DLL_ARG_ASTR)
+		{
+#ifdef UNICODE
+			// convert back to Unicode
+			pStr[arg_count]->ReleaseBuffer();
+			output_var.AssignStringFromCodePage(pStr[arg_count]->GetString());
+			::delete pStr[arg_count];
+#else
+			LPSTR contents = output_var.Contents(); // Contents() shouldn't update mContents in this case because Contents() was already called for each "str" parameter prior to calling the Dll function.
+			VarSizeType capacity = output_var.Capacity();
+			// Since the performance cost is low, ensure the string is terminated at the limit of its
+			// capacity (helps prevent crashes if DLL function didn't do its job and terminate the string,
+			// or when a function is called that deliberately doesn't terminate the string, such as
+			// RtlMoveMemory()).
+			if (capacity)
+				contents[capacity - 1] = '\0';
+			output_var.SetCharLength((VarSizeType)strlen(contents));
+#endif
 			output_var.Close(); // Clear the attributes of the variable to reflect the fact that the contents may have changed.
 			continue;
 		}
@@ -12365,7 +12390,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			if (this_dyna_param.is_unsigned) // Force omission of the high-order bits in case it is non-zero from a parameter that was originally and erroneously larger than a char.
 				output_var.Assign(this_dyna_param.value_int & 0x000000FF); // This also forces the value into the unsigned domain of a signed int.
 			else // Signed.
-				output_var.Assign((int)(TCHAR)(BYTE)this_dyna_param.value_int); // These casts properly preserve negatives.
+				output_var.Assign((int)(char)(BYTE)this_dyna_param.value_int); // These casts properly preserve negatives.
 			break;
 		case DLL_ARG_INT64: // Unsigned and signed are both written as signed for the reasons described elsewhere above.
 			output_var.Assign(this_dyna_param.value_int64);
@@ -12381,7 +12406,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 
 end:
 	if (pStr)
-		::delete [] pStr;
+		free(pStr);
 	if (hmodule_to_free)
 		FreeLibrary(hmodule_to_free);
 }
@@ -13785,6 +13810,16 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 		target_token.var->Close(); // This updates various attributes of the variable.
 	//else the target was an raw address.  If that address is inside some variable's contents, the above
 	// attributes would already have been removed at the time the & operator was used on the variable.
+}
+
+
+
+void BIF_PtrSize(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+// It seems the performance difference between implement this as a variable or function is not so much.
+// But since implement it as function can take a parameter so that we can do math multiply here,
+// which is much faster than do it in the script expression.
+{
+	aResultToken.value_int64 = sizeof(void *) * (aParamCount ? TokenToInt64(*aParam[0]) : 1);
 }
 
 
