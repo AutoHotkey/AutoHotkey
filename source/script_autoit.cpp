@@ -1368,9 +1368,13 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 		IPersistFile *ppf;
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile,(LPVOID *)&ppf)))
 		{
+#ifndef UNICODE
 			WCHAR wsz[MAX_PATH];
 			ToWideChar(aShortcutFile, wsz, MAX_PATH); // Dest. size is in wchars, not bytes.
 			if (SUCCEEDED(ppf->Save((LPCWSTR)wsz, TRUE)))
+#else
+			if (SUCCEEDED(ppf->Save(aShortcutFile, TRUE)))
+#endif
 				g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 			ppf->Release();
 		}

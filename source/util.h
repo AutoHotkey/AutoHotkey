@@ -551,11 +551,7 @@ inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 // (also, avoiding mbstowcs slightly reduces code size).  If there's ever a case where performance is
 // important, create a simple casting loop (see mbstowcs.c for an example) that converts source to dest,
 // and test if it performs significantly better than MultiByteToWideChar(CP_ACP...).
-#ifdef UNICODE
-#define ToWideChar(source, dest, dest_size_in_wchars) wcsncpy(dest, source, dest_size_in_wchars)
-#else
 #define ToWideChar(source, dest, dest_size_in_wchars) MultiByteToWideChar(CP_ACP, 0, source, -1, dest, dest_size_in_wchars)
-#endif
 //
 // #2: FROM UTF-8 TO UNICODE (UTF-16). dest_size_in_wchars includes the terminator.  MSDN: "For UTF-8, dwFlags must be set to either 0 or MB_ERR_INVALID_CHARS. Otherwise, the function fails with ERROR_INVALID_FLAGS."
 #define UTF8ToWideChar(source, dest, dest_size_in_wchars) MultiByteToWideChar(CP_UTF8, 0, source, -1, dest, dest_size_in_wchars)

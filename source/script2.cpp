@@ -12133,8 +12133,8 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		{
 			dll_name = NULL;
 #ifdef UNICODE
-			CStringCharFromWChar s(_tfunction_name);
-			function_name = s.GetBufferSetLength(s.GetLength() + 1);
+			char function_name[MAX_PATH];
+			WideCharToMultiByte(CP_ACP, 0, param1_buf, -1, function_name, _countof(function_name), NULL, NULL);
 #else
 			function_name = param1_buf;
 #endif
@@ -12161,8 +12161,8 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			*_tfunction_name = '\0';  // Terminate dll_name to split it off from function_name.
 			++_tfunction_name; // Set it to the character after the last backslash.
 #ifdef UNICODE
-			CStringCharFromWChar s(_tfunction_name);
-			function_name = s.GetBufferSetLength(s.GetLength() + 1);
+			char function_name[MAX_PATH];
+			WideCharToMultiByte(CP_ACP, 0, _tfunction_name, -1, function_name, _countof(function_name), NULL, NULL);
 #else
 			function_name = _tfunction_name;
 #endif
@@ -12180,13 +12180,15 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			if (   !(function = (void *)GetProcAddress(hmodule, function_name))   )
 			{
 				// v1.0.34: If it's one of the standard libraries, try the "A" suffix.
-				for (i = 0; i < sStdModule_count; ++i)
-					if (hmodule == sStdModule[i]) // Match found.
-					{
+				// jackieku: Try it anyway, there are many other DLLs use this nameing behavior, and it seems not so expensive.
+				// An user really cares this can always avoid it by editing his script.
+				//for (i = 0; i < sStdModule_count; ++i)
+				//	if (hmodule == sStdModule[i]) // Match found.
+				//	{
 						strcat(function_name, WINAPI_SUFFIX); // 1 byte of memory was already reserved above for the 'A'.
 						function = (void *)GetProcAddress(hmodule, function_name);
-						break;
-					}
+				//		break;
+				//	}
 			}
 		}
 
