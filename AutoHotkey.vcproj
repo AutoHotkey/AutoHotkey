@@ -47,7 +47,8 @@
 				RuntimeLibrary="1"
 				StructMemberAlignment="0"
 				BufferSecurityCheck="true"
-				UsePrecompiledHeader="0"
+				EnableFunctionLevelLinking="true"
+				UsePrecompiledHeader="2"
 				WarningLevel="3"
 				Detect64BitPortabilityProblems="true"
 				DebugInformationFormat="4"
@@ -74,7 +75,6 @@
 				TerminalServerAware="1"
 				OptimizeForWindows98="1"
 				RandomizedBaseAddress="1"
-				DataExecutionPrevention="0"
 				TargetMachine="1"
 			/>
 			<Tool
@@ -483,6 +483,14 @@
 			<File
 				RelativePath=".\source\stdafx.cpp"
 				>
+				<FileConfiguration
+					Name="Debug|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						UsePrecompiledHeader="1"
+					/>
+				</FileConfiguration>
 			</File>
 			<File
 				RelativePath=".\source\StringConv.cpp"
@@ -516,6 +524,10 @@
 			</File>
 			<File
 				RelativePath=".\source\clipboard.h"
+				>
+			</File>
+			<File
+				RelativePath=".\source\debug.h"
 				>
 			</File>
 			<File

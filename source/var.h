@@ -268,7 +268,7 @@ public:
 	ResultType AssignString(TCHAR *aBuf = NULL, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true);
 	ResultType Assign(TCHAR *aBuf, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true)
 	{
-		_ASSERTE(aBuf); // aBuf shouldn't be NULL, use SetCapacity([length in bytes]) or AssignString(NULL, [length in characters]) instead.
+		ASSERT(aBuf); // aBuf shouldn't be NULL, use SetCapacity([length in bytes]) or AssignString(NULL, [length in characters]) instead.
 		return AssignString(aBuf, aLength, aExactSize, aObeyMaxMem);
 	}
 	ResultType Assign()

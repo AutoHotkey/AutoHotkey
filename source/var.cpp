@@ -552,7 +552,7 @@ ResultType Var::AssignString(LPTSTR aBuf, VarSizeType aLength, bool aExactSize, 
 				// In the case of mHowAllocated==ALLOC_SIMPLE, the following will allocate another block
 				// from SimpleHeap even though the var already had one. This is by design because it can
 				// happen only a limited number of times per variable. See comments further above for details.
-				if (   !(new_mem = SimpleHeap::Malloc(new_size))   )
+				if (   !(new_mem = (char *) SimpleHeap::Malloc(new_size))   )
 					return FAIL; // It already displayed the error. Leave all var members unchanged so that they're consistent with each other. Don't bother making the var blank and its length zero for reasons described higher above.
 				mHowAllocated = ALLOC_SIMPLE;  // In case it was previously ALLOC_NONE. This step must be done only after the alloc succeeded.
 				break;

@@ -7206,6 +7206,8 @@ Func *Script::FindFunc(LPTSTR aFuncName, size_t aFuncNameLength)
 		bif = BIF_RegisterCallback;
 		max_params = 4; // Leave min_params at 1.
 	}
+	else if (!_tcsicmp(func_name, _T("StringGet")))
+		bif = BIF_StringGet;
 	else
 		return NULL; // Maint: There may be other lines above that also return NULL.
 

@@ -10536,27 +10536,29 @@ VarSizeType BIV_Now(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_OSType(LPTSTR aBuf, LPTSTR aVarName)
 {
-	LPTSTR type =
 #ifdef UNICODE
-		_T("WIN32_NT");
+	if (aBuf)
+		_tcscpy(aBuf, _T("WIN32_NT"));
+	return 8;
 #else
-		g_os.IsWinNT() ? _T("WIN32_NT") : _T("WIN32_WINDOWS");
-#endif
-		
+	LPTSTR type = g_os.IsWinNT() ? _T("WIN32_NT") : _T("WIN32_WINDOWS");
 	if (aBuf)
 		_tcscpy(aBuf, type);
 	return (VarSizeType)_tcslen(type); // Return length of type, not aBuf.
+#endif
 }
 
 VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName)
 {
-	LPTSTR version = _T("");  // Init in case OS is something later than Win2003.
+	LPCTSTR version = _T("");  // Init in case OS is something later than Win2003.
 #ifndef UNICODE
 	if (g_os.IsWinNT()) // "NT" includes all NT-kernal OSes: NT4/2000/XP/2003/Vista.
 	{
 #endif
 		if (g_os.IsWinXP())
 			version = _T("WIN_XP");
+		else if (g_os.IsWin7())
+			version = _T("WIN_7");
 		else if (g_os.IsWinVista())
 			version = _T("WIN_VISTA");
 		else if (g_os.IsWin2003())
@@ -11737,6 +11739,7 @@ DYNARESULT DynaCall(int aFlags, void *aFunction, DYNAPARM aParam[], int aParamCo
 	g->LastError = GetLastError();
 
 	TCHAR buf[32];
+
 	esp_delta = esp_start - esp_end; // Positive number means too many args were passed, negative means too few.
 	if (esp_delta && (aFlags & DC_CALL_STD))
 	{
@@ -11965,6 +11968,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 
 	LPTSTR arg_type_string[2];
 	int i;
+	// for Unicode <-> ANSI charset conversion
 #ifdef UNICODE
 	CStringA **pStr = (CStringA **)
 #else
@@ -12022,7 +12026,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			}
 			// Otherwise, it's a supported type of string.
 #ifdef UNICODE
-			pStr[arg_count] = ::new CStringCharFromWChar(TokenToString(this_param));
+			pStr[arg_count] = new CStringCharFromWChar(TokenToString(this_param));
 			this_dyna_param.astr = pStr[arg_count]->GetBuffer();
 #else
 			this_dyna_param.astr = TokenToString(this_param); // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
@@ -12322,7 +12326,11 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 	{
 		ExprTokenType &this_param = *aParam[i + 1];  // Resolved for performance and convenience.
 		if (this_param.symbol != SYM_VAR) // Output parameters are copied back only if its counterpart parameter is a naked variable.
+		{
+			if (pStr[arg_count]) // We don't need to copy it back, so delete it.
+				delete pStr[arg_count];
 			continue;
+		}
 		DYNAPARM &this_dyna_param = dyna_param[arg_count]; // Resolved for performance and convenience.
 		Var &output_var = *this_param.var;                 //
 		if (this_dyna_param.type == DLL_ARG_WSTR) // The function might have altered Contents(), so update Length().
@@ -12350,7 +12358,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			// convert back to Unicode
 			pStr[arg_count]->ReleaseBuffer();
 			output_var.AssignStringFromCodePage(pStr[arg_count]->GetString());
-			::delete pStr[arg_count];
+			delete pStr[arg_count];
 #else
 			LPSTR contents = output_var.Contents(); // Contents() shouldn't update mContents in this case because Contents() was already called for each "str" parameter prior to calling the Dll function.
 			VarSizeType capacity = output_var.Capacity();
@@ -12488,10 +12496,10 @@ void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 		// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
 		if (   !(aResultToken.circuit_token = (ExprTokenType *)malloc(extract_length + 1))   ) // Out of memory. Due to rarity, don't display an error dialog (there's currently no way for a built-in function to abort the current thread anyway?)
 			return; // Yield the empty string (a default set higher above).
-		aResultToken.marker = (LPTSTR )aResultToken.circuit_token; // Store the address of the result for the caller.
-		aResultToken.buf = (LPTSTR )(size_t)extract_length; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
+		aResultToken.marker = (LPTSTR)aResultToken.circuit_token; // Store the address of the result for the caller.
+		aResultToken.buf = (LPTSTR)(size_t)extract_length; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
 	}
-	memcpy(aResultToken.marker, result, extract_length);
+	tmemcpy(aResultToken.marker, result, extract_length);
 	aResultToken.marker[extract_length] = '\0'; // Must be done separately from the memcpy() because the memcpy() might just be taking a substring (i.e. long before result's terminator).
 }
 
@@ -13601,7 +13609,13 @@ void BIF_Chr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 {
 	int param1 = (int)TokenToInt64(*aParam[0]); // Convert to INT vs. UINT so that negatives can be detected.
 	LPTSTR cp = aResultToken.buf; // If necessary, it will be moved to a persistent memory location by our caller.
-	if (param1 < 0 || param1 > 255)
+	if (param1 < 0 || 
+#ifdef UNICODE
+		param1 > 0xFFFF
+#else
+		param1 > 255
+#endif
+		)
 		*cp = '\0'; // Empty string indicates both Chr(0) and an out-of-bounds param1.
 	else
 	{
@@ -13819,7 +13833,19 @@ void BIF_PtrSize(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 // But since implement it as function can take a parameter so that we can do math multiply here,
 // which is much faster than do it in the script expression.
 {
+	aResultToken.symbol = PURE_INTEGER;
 	aResultToken.value_int64 = sizeof(void *) * (aParamCount ? TokenToInt64(*aParam[0]) : 1);
+}
+
+
+
+void BIF_StringGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+#pragma message(MY_WARN(9998) "Is this safe to do?")
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = (LPTSTR) TokenToInt64(*aParam[0]);
+	if (!aResultToken.marker)
+		aResultToken.marker = _T("");
 }
 
 
