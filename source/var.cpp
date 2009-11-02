@@ -248,7 +248,7 @@ ResultType Var::AssignClipboardAll()
 	{
 		// No point in calling GetLastError() since it would never be executed because the loop's
 		// condition breaks on zero return value.
-		format_is_text = (format == CF_TEXT || format == CF_OEMTEXT || format == CF_UNICODETEXT);
+		format_is_text = (format == CF_NATIVETEXT || format == CF_OEMTEXT || format == CF_OTHERTEXT);
 		if ((format_is_text && text_format_to_include) // The first text format has already been found and included, so exclude all other text formats.
 			|| format == dib_format_to_omit) // ... or this format was marked excluded by a prior iteration.
 			continue;
@@ -312,7 +312,7 @@ ResultType Var::AssignClipboardAll()
 	{
 		// No point in calling GetLastError() since it would never be executed because the loop's
 		// condition breaks on zero return value.
-		if ((format == CF_TEXT || format == CF_OEMTEXT || format == CF_UNICODETEXT) && format != text_format_to_include
+		if ((format == CF_NATIVETEXT || format == CF_OEMTEXT || format == CF_OTHERTEXT) && format != text_format_to_include
 			|| format == dib_format_to_omit || format == meta_format_to_omit)
 			continue;
 		// Although the GlobalSize() documentation implies that a valid HGLOBAL should not be zero in

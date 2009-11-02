@@ -388,7 +388,7 @@ typedef UCHAR HookType;
 #define EXTERN_CLIPBOARD extern Clipboard g_clip
 #define EXTERN_SCRIPT extern Script g_script
 #define CLOSE_CLIPBOARD_IF_OPEN	if (g_clip.mIsOpen) g_clip.Close()
-#define CLIPBOARD_CONTAINS_ONLY_FILES (!IsClipboardFormatAvailable(CF_TEXT) && IsClipboardFormatAvailable(CF_HDROP))
+#define CLIPBOARD_CONTAINS_ONLY_FILES (!IsClipboardFormatAvailable(CF_NATIVETEXT) && IsClipboardFormatAvailable(CF_HDROP))
 
 
 // These macros used to keep app responsive during a long operation.  In v1.0.39, the

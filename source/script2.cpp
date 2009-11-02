@@ -950,7 +950,7 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 
 	case TRANS_CMD_UNICODE:
 #ifdef UNICODE
-#pragma message(MY_WARN(9999) "temporary disabled")
+	#pragma message(MY_WARN(9999) "I'd like to remove this.")
 #else
 		int char_count;
 		if (output_var.Type() == VAR_CLIPBOARD)
@@ -1873,7 +1873,7 @@ ResultType Line::PerformWait()
 					return OK;
 			}
 			else
-				if (IsClipboardFormatAvailable(CF_TEXT) || IsClipboardFormatAvailable(CF_HDROP))
+				if (IsClipboardFormatAvailable(CF_NATIVETEXT) || IsClipboardFormatAvailable(CF_HDROP))
 					return OK;
 			break;
 		case ACT_KEYWAIT:
@@ -9040,7 +9040,7 @@ ResultType Line::WriteClipboardToFile(LPTSTR aFilespec)
 
 	for (format = 0; format = EnumClipboardFormats(format);)
 	{
-		format_is_text = (format == CF_TEXT || format == CF_OEMTEXT || format == CF_UNICODETEXT);
+		format_is_text = (format == CF_NATIVETEXT || format == CF_OEMTEXT || format == CF_OTHERTEXT);
 		format_is_dib = (format == CF_DIB || format == CF_DIBV5);
 		format_is_meta = (format == CF_ENHMETAFILE || format == CF_METAFILEPICT);
 
@@ -13839,7 +13839,7 @@ void BIF_PtrSize(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 
 
 
-void BIF_StringGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+void BIF_StrGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 #pragma message(MY_WARN(9998) "Is this safe to do?")
 	aResultToken.symbol = SYM_STRING;

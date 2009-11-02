@@ -1248,7 +1248,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				break;
 
 			case AHK_CLIPBOARD_CHANGE:
-				g.EventInfo = CountClipboardFormats() ? (IsClipboardFormatAvailable(CF_TEXT) || IsClipboardFormatAvailable(CF_HDROP) ? 1 : 2) : 0;
+				g.EventInfo = CountClipboardFormats() ? (IsClipboardFormatAvailable(CF_NATIVETEXT) || IsClipboardFormatAvailable(CF_HDROP) ? 1 : 2) : 0;
 				g_ErrorLevel->Assign(g.EventInfo); // For backward compatibility.
 				// ACT_IS_ALWAYS_ALLOWED() was already checked above.
 				// The message poster has ensured that g_script.mOnClipboardChangeLabel is non-NULL and valid.

@@ -17,7 +17,10 @@ GNU General Public License for more details.
 // stdafx.h : include file for standard system include files,
 // or project specific include files that are used frequently, but
 // are changed infrequently
-//
+
+// jackieku: This file shouldn't be included in any other headers.
+// VC++ force us to include this file at the beginning of any source
+// files (".cpp"s) if we use the pre-compiled header feature.
 
 #pragma once
 

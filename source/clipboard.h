@@ -17,7 +17,6 @@ GNU General Public License for more details.
 #ifndef clipboard_h
 #define clipboard_h
 
-#include "stdafx.h" // pre-compiled headers
 #include "defines.h"
 
 
@@ -25,9 +24,12 @@ GNU General Public License for more details.
 #define CANT_OPEN_CLIPBOARD_WRITE _T("Can't open clipboard for writing.")
 
 #ifdef UNICODE
+// In unicode version, always try CF_UNICODETEXT first, then CF_TEXT.
 #define CF_NATIVETEXT	CF_UNICODETEXT
+#define CF_OTHERTEXT	CF_TEXT
 #else
 #define CF_NATIVETEXT	CF_TEXT
+#define CF_OTHERTEXT	CF_UNICODETEXT
 #endif
 
 class Clipboard
@@ -35,7 +37,7 @@ class Clipboard
 public:
 	HGLOBAL mClipMemNow, mClipMemNew;
 	LPTSTR mClipMemNowLocked, mClipMemNewLocked;
-	// Both mLength and mCapacity are count in characters (NOT in bytes).
+	// NOTE: Both mLength and mCapacity are count in characters (NOT in bytes).
 	size_t mLength;  // Last-known length of the clipboard contents (for internal use only because it's valid only during certain specific times).
 	UINT mCapacity;  // Capacity of mClipMemNewLocked.
 	BOOL mIsOpen;  // Whether the clipboard is physically open due to action by this class.  BOOL vs. bool improves some benchmarks slightly due to this item being frequently checked.
@@ -59,7 +61,7 @@ public:
 
 	ResultType Set(LPTSTR aBuf = NULL, UINT aLength = UINT_MAX); //, bool aTrimIt = false);
 	LPTSTR PrepareForWrite(size_t aAllocSize);
-	ResultType Commit(UINT aFormat = CF_TEXT);
+	ResultType Commit(UINT aFormat = CF_NATIVETEXT);
 	ResultType AbortWrite(LPTSTR aErrorMessage = _T(""));
 	ResultType Close(LPTSTR aErrorMessage = NULL);
 	LPTSTR Contents()

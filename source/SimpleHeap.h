@@ -17,8 +17,6 @@ GNU General Public License for more details.
 #ifndef SimpleHeap_h
 #define SimpleHeap_h
 
-#include "stdafx.h" // pre-compiled headers
-
 // In a large script (200 KB of text) of a typical nature, using SimpleHeap rather than malloc() saves
 // nearly 200 KB of memory as shown by Task Manager's "VM Size" column (2384 vs. 2580 KB).
 // This is because many callers allocate chunks of memory that are very small on average.  If each

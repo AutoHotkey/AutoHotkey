@@ -2694,7 +2694,7 @@ void BIF_Chr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_PtrSize(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_StringGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_StrGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_IsLabel(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_GetKeyState(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
