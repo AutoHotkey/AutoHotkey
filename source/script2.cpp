@@ -14426,7 +14426,7 @@ struct RCCallbackFunc // Used by BIF_RegisterCallback() and related.
 	ULONG data1;	//E8 00 00 00
 	ULONG data2;	//00 8D 44 24
 	ULONG data3;	//08 50 FF 15
-	UINT (__stdcall **callfuncptr)(UINT*,TCHAR*);
+	UINT (__stdcall **callfuncptr)(UINT*,char*);
 	ULONG data4;	//59 84 C4 nn
 	USHORT data5;	//FF E1
 	//code ends
@@ -14438,7 +14438,7 @@ struct RCCallbackFunc // Used by BIF_RegisterCallback() and related.
 
 
 
-UINT __stdcall RegisterCallbackCStub(UINT *params, LPTSTR address) // Used by BIF_RegisterCallback().
+UINT __stdcall RegisterCallbackCStub(UINT *params, char *address) // Used by BIF_RegisterCallback().
 // JGR: On Win32 parameters are always 4 bytes wide. The exceptions are functions which work on the FPU stack
 // (not many of those). Win32 is quite picky about the stack always being 4 byte-aligned, (I have seen only one
 // application which defied that and it was a patched ported DOS mixed mode application). The Win32 calling
@@ -14643,7 +14643,7 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 	//    call [ptr_xxx] ; is position independent
 	// Typically the latter is used when calling imported functions, etc., as only the pointers (import table),
 	// need to be adjusted, not the calls themselves...
-	static UINT (__stdcall *funcaddrptr)(UINT*,TCHAR*)=RegisterCallbackCStub; // Use fixed absolute address of pointer to function, instead of varying relative offset to function.
+	static UINT (__stdcall *funcaddrptr)(UINT*,char*)=RegisterCallbackCStub; // Use fixed absolute address of pointer to function, instead of varying relative offset to function.
 	cb.callfuncptr=&funcaddrptr; // xxxx: Address of C stub.
 
 	cb.data4=0xC48359 // pop ecx -- 59 ;return address... add esp, xx -- 83 C4 xx ;stack correct (add argument to add esp, nn for stack correction).
