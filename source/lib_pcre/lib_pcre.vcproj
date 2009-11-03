@@ -84,6 +84,7 @@
 			IntermediateDirectory="Release"
 			ConfigurationType="4"
 			CharacterSet="1"
+			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -104,7 +105,6 @@
 				Name="VCCLCompilerTool"
 				Optimization="1"
 				EnableIntrinsicFunctions="true"
-				FavorSizeOrSpeed="2"
 				OmitFramePointers="true"
 				PreprocessorDefinitions="WIN32;NDEBUG;_LIB;HAVE_CONFIG_H"
 				StringPooling="true"
@@ -130,7 +130,7 @@
 				Name="VCLibrarianTool"
 				OutputFile="$(OutDir)/lib_pcre.lib"
 				IgnoreAllDefaultLibraries="true"
-				IgnoreDefaultLibraryNames="LibCMT;MSVCrt"
+				IgnoreDefaultLibraryNames=""
 			/>
 			<Tool
 				Name="VCALinkTool"
@@ -207,10 +207,6 @@
 			</File>
 			<File
 				RelativePath=".\pcre\pcre_try_flipped.c"
-				>
-			</File>
-			<File
-				RelativePath=".\pcre\pcre_valid_utf8.c"
 				>
 			</File>
 			<File

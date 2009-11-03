@@ -13047,7 +13047,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 					new_result_length = result_length + haystack_portion_length;
 					if (new_result_length >= result_size)
 						REGEX_REALLOC(new_result_length + 1); // This will end the loop if an alloc error occurs.
-					memcpy(result + result_length, haystack_pos, haystack_portion_length*sizeof(TCHAR)); // memcpy() usually benches a little faster than _tcscpy().
+					tmemcpy(result + result_length, haystack_pos, haystack_portion_length); // memcpy() usually benches a little faster than _tcscpy().
 					result_length = new_result_length; // Remember that result_length is actually an output for our caller, so even if for no other reason, it must be kept accurate for that.
 				}
 				result[result_length] = '\0'; // result!=NULL when replacement_count!=0.  Also, must terminate it unconditionally because other sections usually don't do it.
@@ -13855,15 +13855,23 @@ void BIF_PtrSize(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 // But since implement it as function can take a parameter so that we can do math multiply here,
 // which is much faster than do it in the script expression.
 {
-	aResultToken.symbol = PURE_INTEGER;
 	aResultToken.value_int64 = sizeof(void *) * (aParamCount ? TokenToInt64(*aParam[0]) : 1);
 }
 
 
 
 void BIF_StrGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+// REVIEW THIS PLEASE
+// jackieku: Tested with the following sequence,
+// f() {
+//   mem := DllCall("ole32\CoTaskMemAlloc", "UInt", 4)
+//   NumPut(0x20, mem+0, 0, "UShort")
+//	 NumPut(0, mem+0, 2, "UShort")
+//   return StrGet(mem) . DllCall("ole32\CoTaskMemFree", "UIntPtr", mem)
+// }
+// f()
+// in this case the buffer will be copied in ExpandExpression() before it is freed by CoTaskMemFree.
 {
-#pragma message(MY_WARN(9998) "Is this safe to do?")
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = (LPTSTR) TokenToInt64(*aParam[0]);
 	if (!aResultToken.marker)
