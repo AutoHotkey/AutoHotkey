@@ -71,7 +71,7 @@ dwPlatformId
 Identifies the operating system platform. This member can be one of the following values. Value Platform
 VER_PLATFORM_WIN32s			Win32s on Windows 3.1.
 VER_PLATFORM_WIN32_WINDOWS	Windows 95, Windows 98, or Windows Me.
-VER_PLATFORM_WIN32_NT		Windows NT 3.51, Windows NT 4.0, Windows 2000, or Whistler.
+VER_PLATFORM_WIN32_NT		Windows NT 3.51, Windows NT 4.0, Windows 2000, Windows XP, Windows Vista or Windows 7.
 
 szCSDVersion
 Windows NT/2000, Whistler: Contains a null-terminated string, such as "Service Pack 3",

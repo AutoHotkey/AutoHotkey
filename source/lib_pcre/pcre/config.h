@@ -276,11 +276,13 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 #define STDC_HEADERS 1
 #endif
 
+#ifdef UNICODE
 /* Define to enable support for Unicode properties */
-/* #undef SUPPORT_UCP */
+/* #define SUPPORT_UCP */
 
 /* Define to enable support for the UTF-8 Unicode encoding. */
-/* #undef SUPPORT_UTF8 */
+#define SUPPORT_UTF8
+#endif
 
 /* Version number of package */
 #ifndef VERSION

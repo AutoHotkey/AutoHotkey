@@ -20,8 +20,7 @@
 			OutputDirectory="Debug"
 			IntermediateDirectory="Debug"
 			ConfigurationType="4"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
-			CharacterSet="2"
+			CharacterSet="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -84,8 +83,7 @@
 			OutputDirectory="Release"
 			IntermediateDirectory="Release"
 			ConfigurationType="4"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
-			CharacterSet="2"
+			CharacterSet="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -192,6 +190,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\pcre\pcre_ord2utf8.c"
+				>
+			</File>
+			<File
 				RelativePath=".\pcre\pcre_refcount.c"
 				>
 			</File>
@@ -208,7 +210,15 @@
 				>
 			</File>
 			<File
+				RelativePath=".\pcre\pcre_valid_utf8.c"
+				>
+			</File>
+			<File
 				RelativePath=".\pcre\pcre_version.c"
+				>
+			</File>
+			<File
+				RelativePath=".\pcre\pcre_xclass.c"
 				>
 			</File>
 		</Filter>

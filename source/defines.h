@@ -33,7 +33,7 @@ GNU General Public License for more details.
 #pragma warning(disable:4800)
 #endif
 
-#define NAME_P _T("AutoHotkey")
+#define NAME_P _T("AutoHotkeyU")
 #define NAME_VERSION _T("1.0.48.05")
 #define NAME_PV NAME_P _T(" v") NAME_VERSION
 

@@ -7128,6 +7128,8 @@ Func *Script::FindFunc(LPTSTR aFuncName, size_t aFuncNameLength)
 		bif = BIF_PtrSize;
 		min_params = 0;
 	}
+	else if (!_tcsicmp(func_name, _T("StrGet")))
+		bif = BIF_StrGet;
 	else if (!_tcsicmp(func_name, _T("NumGet")))
 	{
 		bif = BIF_NumGet;
@@ -7206,8 +7208,6 @@ Func *Script::FindFunc(LPTSTR aFuncName, size_t aFuncNameLength)
 		bif = BIF_RegisterCallback;
 		max_params = 4; // Leave min_params at 1.
 	}
-	else if (!_tcsicmp(func_name, _T("StrGet")))
-		bif = BIF_StrGet;
 	else
 		return NULL; // Maint: There may be other lines above that also return NULL.
 
@@ -8053,6 +8053,11 @@ void *Script::GetVarType(LPTSTR aVarName)
 // A_IsCompiled is left blank/undefined in uncompiled scripts.
 #ifdef AUTOHOTKEYSC
 	if (!_tcscmp(lower, _T("iscompiled"))) return BIV_IsCompiled;
+#endif
+
+// A_IsUnicode is left blank/undefined in the ANSI version.
+#ifdef UNICODE
+	if (!_tcscmp(lower, _T("isunicode"))) return BIV_IsUnicode;
 #endif
 
 	if (   !_tcscmp(lower, _T("batchlines"))

@@ -47,16 +47,41 @@ ResultType Line::IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR 
 	// whenever there's an error.
 }
 
+#ifdef UNICODE
+static BOOL FixUnicodeInis(LPTSTR aFilespec){
+	if(!DoesFilePatternExist(aFilespec)){
+		FILE* f;
 
+		// Create an Unicode file.
+		f = _tfopen(aFilespec, _T("wb"));
+		if(!f) return FALSE;
+
+		if(fwrite("\xFF\xFE", 2, 1, f) != 1){ fclose(f); return FALSE; }
+		if(fclose(f) != 0){ return FALSE; }
+	}
+	return TRUE;
+}
+#endif
 
 ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 {
 	TCHAR	szFileTemp[_MAX_PATH+1];
 	TCHAR	*szFilePart;
-	// Get the fullpathname (ini functions need a full path) 
+	BOOL	result;
+	// Get the fullpathname (INI functions need a full path) 
 	GetFullPathName(aFilespec, _MAX_PATH, szFileTemp, &szFilePart);
-	BOOL result = WritePrivateProfileString(aSection, aKey, aValue, szFileTemp);  // Returns zero on failure.
+#ifdef UNICODE
+	// WritePrivateProfileStringW() fails at creating new Unicode INIs.
+	// FixUnicodeInis() checks if the destination .ini exists, and if it
+	// doesn't then it creates an empty file containing the UTF-16LE BOM.
+	result = FixUnicodeInis(szFileTemp);
+	if(result){
+#endif
+		result = WritePrivateProfileString(aSection, aKey, aValue, szFileTemp);  // Returns zero on failure.
 	WritePrivateProfileString(NULL, NULL, NULL, szFileTemp);	// Flush
+#ifdef UNICODE
+	}
+#endif
 	return g_script.mIsAutoIt2 ? OK : g_ErrorLevel->Assign(result ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
 }
 

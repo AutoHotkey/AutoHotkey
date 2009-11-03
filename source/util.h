@@ -46,6 +46,14 @@ EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 #define IS_SPACE_OR_TAB_OR_NBSP(c) IS_SPACE_OR_TAB(c) // wchar_t is unsigned
 #endif
 
+#ifdef UNICODE
+#define TRANS_CHAR_TO_INT(a) ((int)(USHORT)(a)) // Cast to USHORT so that chars above Asc(16383) show as positive.
+#define TRANS_CHAR_MAX 65535
+#else
+#define TRANS_CHAR_TO_INT(a) ((int)(UCHAR)(a)) // Cast to UCHAR so that chars above Asc(127) show as positive.
+#define TRANS_CHAR_MAX 255
+#endif
+
 // v1.0.43.04: The following are macros to avoid crash bugs caused by improper casting, namely a failure to cast
 // a signed char to UCHAR before promoting it to LPSTR, which crashes since CharLower/Upper would interpret
 // such a high unsigned value as an address rather than a single char.
@@ -560,6 +568,37 @@ inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 #define WideCharToUTF8(source, dest, dest_size_in_bytes) WideCharToMultiByte(CP_UTF8, 0, source, -1, dest, dest_size_in_bytes, NULL, NULL)
 
 #define UTF8StrLen(str, cch) MultiByteToWideChar(CP_UTF8, 0, (str), (cch), NULL, 0)
+#define WideUTF8StrLen(str, cch) WideCharToMultiByte(CP_UTF8, 0, (str), (cch), NULL, 0, NULL, NULL)
+
+#ifdef UNICODE
+#define PosToUTF8Pos              WideUTF8StrLen
+#define LenToUTF8Len(str,pos,len) WideUTF8StrLen(LPCWSTR(str)+int(pos),len)
+#define UTF8PosToPos              UTF8StrLen
+#define UTF8LenToLen(str,pos,len) UTF8StrLen(LPCSTR(str)+int(pos),len)
+
+inline char* WideToUTF8(LPCWSTR str){
+	int buf_len = WideCharToMultiByte(CP_UTF8, 0, str, -1, NULL, 0, NULL, NULL);
+	char* buf = (char*) malloc(buf_len);
+	WideCharToMultiByte(CP_UTF8, 0, str, -1, buf, buf_len, NULL, NULL);
+	return buf;
+}
+#endif
+
+#ifdef UNICODE
+#define UorA(u,a)      (u)
+#define RegExToUTF8(a) CStringUTF8FromTChar(a)
+#define TPosToUTF8Pos  PosToUTF8Pos
+#define TLenToUTF8Len  LenToUTF8Len
+#define UTF8PosToTPos  UTF8PosToPos
+#define UTF8LenToTLen  UTF8LenToLen
+#else
+#define UorA(u,a)            (a)
+#define RegExToUTF8(a)       (a)
+#define TPosToUTF8Pos(a,b)   (b)
+#define TLenToUTF8Len(a,b,c) (c)
+#define UTF8PosToTPos(a,b)   (b)
+#define UTF8LenToTLen(a,b,c) (c)
+#endif
 
 // v1.0.44.03: Callers now use the following macro rather than the old approach.  However, this change
 // is meaningful only to people who use more than one keyboard layout.  In the case of hotstrings:

@@ -930,17 +930,17 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 	{
 	case TRANS_CMD_ASC:
 		if (*aValue1)
-			return output_var.Assign((int)(UCHAR)*aValue1); // Cast to UCHAR so that chars above Asc(128) show as positive.
+			return output_var.Assign(TRANS_CHAR_TO_INT(*aValue1));
 		else
 			return output_var.Assign();
 
 	case TRANS_CMD_CHR:
 		value32 = ATOI(aValue1);
-		if (value32 < 0 || value32 > 255)
+		if (value32 < 0 || value32 > TRANS_CHAR_MAX)
 			return output_var.Assign();
 		else
 		{
-			*buf = value32;  // Store ASCII value as a single-character string.
+			*buf = value32;  // Store value as a single-character string.
 			*(buf + 1) = '\0';
 			return output_var.Assign(buf);
 		}
@@ -8768,14 +8768,14 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 #ifdef UNICODE
 		is_binary_clipboard && // non-binary data use another buffer for charset conversion later
 #endif
-		output_var.SetCapacity(bytes_to_read, true, false) != OK) // Probably due to "out of memory".
+		output_var.SetCapacity(VarSizeType(bytes_to_read), true, false) != OK) // Probably due to "out of memory".
 	{
 		CloseHandle(hfile);
 		return FAIL;  // It already displayed the error. ErrorLevel doesn't matter now because the current quasi-thread will be aborted.
 	}
 	LPBYTE output_buf =
 #ifdef UNICODE
-		!is_binary_clipboard ? (LPBYTE) malloc(bytes_to_read + sizeof(wchar_t)) :
+		!is_binary_clipboard ? (LPBYTE) malloc(size_t(bytes_to_read + sizeof(wchar_t))) :
 #endif
 		(LPBYTE) output_var.Contents();
 
@@ -8970,7 +8970,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	if (!file_was_already_open)
 	{
 		LPCTSTR aOpenMode;
-		// For backward compatibility, the first two arguments can not be changed.
+		// For backwards compatibility, the first two arguments cannot be changed.
 		if (mArgc > 2) {
 			if (!_tcsicmp(ARG3, _T("UTF-8")) || !_tcsicmp(ARG3, _T("UTF8"))) {
 				if (open_as_binary) // "ccs=" can not be combined with "b"
@@ -8983,7 +8983,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 				aOpenMode = _T("a, ccs=UTF-16LE");
 			}
 			else if (!_tcsicmp(ARG3, _T("UTF-8-RAW"))) {
-				StringWCharToUTF8(aBuf, sUTF8);
+				StringTCharToUTF8(aBuf, sUTF8);
 				aOpenMode = open_as_binary ? _T("ab") : _T("a");
 			}
 			else
@@ -10375,6 +10375,18 @@ VarSizeType BIV_IsCompiled(LPTSTR aBuf, LPTSTR aVarName)
 }
 #endif
 
+#ifdef UNICODE  // A_IsUnicode is left blank/undefined in the ANSI version.
+VarSizeType BIV_IsUnicode(LPTSTR aBuf, LPTSTR aVarName)
+{
+	if (aBuf)
+	{
+		*aBuf++ = '1';
+		*aBuf = '\0';
+	}
+	return 1;
+}
+#endif
+
 VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_INTEGER_SIZE];
@@ -10552,7 +10564,7 @@ VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName)
 {
 	LPCTSTR version = _T("");  // Init in case OS is something later than Win2003.
 #ifndef UNICODE
-	if (g_os.IsWinNT()) // "NT" includes all NT-kernal OSes: NT4/2000/XP/2003/Vista.
+	if (g_os.IsWinNT()) // "NT" includes all NT-kernal OSes: NT4/2000/XP/2003/Vista/7.
 	{
 #endif
 		if (g_os.IsWinXP())
@@ -12122,7 +12134,9 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 	if (!function) // The function's address hasn't yet been determined.
 	{
 		TCHAR param1_buf[MAX_PATH*2], *_tfunction_name, *dll_name; // Must use MAX_PATH*2 because the function name is INSIDE the Dll file, and thus MAX_PATH can be exceeded.
+#ifndef UNICODE
 		char *function_name;
+#endif
 
 		// Define the standard libraries here. If they reside in %SYSTEMROOT%\system32 it is not
 		// necessary to specify the full path (it wouldn't make sense anyway).
@@ -12556,9 +12570,7 @@ void BIF_InStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	aResultToken.value_int64 = found_pos ? (found_pos - haystack + offset + 1) : 0;
 }
 
-
-
-pcre *get_compiled_regex(const char *aRegEx, bool &aGetPositionsNotSubstrings, pcre_extra *&aExtra
+pcre *get_compiled_regex(LPTSTR aRegEx, bool &aGetPositionsNotSubstrings, pcre_extra *&aExtra
 	, ExprTokenType *aResultToken)
 // Returns the compiled RegEx, or NULL on failure.
 // This function is called by things other than built-in functions so it should be kept general-purpose.
@@ -12581,6 +12593,14 @@ pcre *get_compiled_regex(const char *aRegEx, bool &aGetPositionsNotSubstrings, p
 	// so like performance, that's not a concern either.
 	EnterCriticalSection(&g_CriticalRegExCache); // Request ownership of the critical section. If another thread already owns it, this thread will block until the other thread finishes.
 
+#ifdef UNICODE
+	// UTF-8 version of aRegEx.
+	// Conversion not done here for performance reasons as
+	// it's only needed by the PCRE compiling engine.
+	char* aRegExUTF8 = NULL;
+	//CStringUTF8FromWChar aRegExUTF8(aRegEx);
+#endif
+
 	// SET UP THE CACHE.
 	// This is a very crude cache for linear search. Of course, hashing would be better in the sense that it
 	// would allow the cache to get much larger while still being fast (I believe PHP caches up to 4096 items).
@@ -12595,7 +12615,7 @@ pcre *get_compiled_regex(const char *aRegEx, bool &aGetPositionsNotSubstrings, p
 		// and aGetPositionsNotSubstrings don't alter the nature of the compiled RegEx.  However, the CPU time
 		// required to strip off some options prior to doing a cache search seems likely to offset much of the
 		// cache's benefit.  So for this reason, as well as rarity and code size issues, this policy seems best.
-		char *re_raw;      // The RegEx's literal string pattern such as "abc.*123".
+		LPTSTR re_raw;      // The RegEx's literal string pattern such as "abc.*123".
 		pcre *re_compiled; // The RegEx in compiled form.
 		pcre_extra *extra; // NULL unless a study() was done (and NULL even then if study() didn't find anything).
 		// int pcre_options; // Not currently needed in the cache since options are implicitly inside re_compiled.
@@ -12615,7 +12635,7 @@ pcre *get_compiled_regex(const char *aRegEx, bool &aGetPositionsNotSubstrings, p
 		// Search the cache to see if it contains the caller-specified RegEx in compiled form.
 		// First check if the last-found item is a match, since often it will be (such as cases
 		// where a script-loop executes only one RegEx, and also for SetTitleMatchMode RegEx).
-		if (!strcmp(aRegEx, sCache[sLastFound].re_raw)) // Match found (case sensitive).
+		if (!_tcscmp(aRegEx, sCache[sLastFound].re_raw)) // Match found (case sensitive).
 			goto match_found; // And no need to update sLastFound because it's already set right.
 
 		// Since above didn't find a match, search outward in both directions from the last-found match.
@@ -12643,7 +12663,7 @@ pcre *get_compiled_regex(const char *aRegEx, bool &aGetPositionsNotSubstrings, p
 				left = (left == 0) ? last_populated_item : left - 1; // Decrement or wrap around back to the right side.
 				item_to_check = left;
 			}
-			if (!strcmp(aRegEx, sCache[item_to_check].re_raw)) // Match found (case sensitive).
+			if (!_tcscmp(aRegEx, sCache[item_to_check].re_raw)) // Match found (case sensitive).
 			{
 				sLastFound = item_to_check;
 				goto match_found;
@@ -12673,13 +12693,23 @@ pcre *get_compiled_regex(const char *aRegEx, bool &aGetPositionsNotSubstrings, p
 	//      more common due to FTP programs automatically translating CRLF to LF when uploading to UNIX servers.
 	// 20%: Other sources such as GUI edit controls: It's fairly unusual to want to use RegEx on multiline data
 	//      from GUI controls, but in such case `n is much more common than `r`n.
+#ifdef UNICODE
+	#define AHK_PCRE_CHARSET_OPTIONS (PCRE_UTF8 | PCRE_NO_UTF8_CHECK)
+#else
+	#define AHK_PCRE_CHARSET_OPTIONS 0
+#endif
 	#define SET_DEFAULT_PCRE_OPTIONS \
 	{\
-		pcre_options = PCRE_NEWLINE_CRLF;\
+		pcre_options = PCRE_NEWLINE_CRLF | AHK_PCRE_CHARSET_OPTIONS;\
 		aGetPositionsNotSubstrings = false;\
 		do_study = false;\
 	}
 	#define PCRE_NEWLINE_BITS (PCRE_NEWLINE_CRLF | PCRE_NEWLINE_ANY) // Covers all bits that are used for newline options.
+
+#ifdef UNICODE
+	// Convert the RegEx string to UTF-8 for use with PCRE.
+	aRegExUTF8 = WideToUTF8(aRegEx);
+#endif
 
 	// SET DEFAULT OPTIONS:
 	int pcre_options;
@@ -12688,7 +12718,11 @@ pcre *get_compiled_regex(const char *aRegEx, bool &aGetPositionsNotSubstrings, p
 
 	// PARSE THE OPTIONS (if any).
 	const char *pat; // When options-parsing is done, pat will point to the start of the pattern itself.
+#ifdef UNICODE
+	for (pat = aRegExUTF8;; ++pat)
+#else
 	for (pat = aRegEx;; ++pat)
+#endif
 	{
 		switch(*pat)
 		{
@@ -12738,7 +12772,11 @@ pcre *get_compiled_regex(const char *aRegEx, bool &aGetPositionsNotSubstrings, p
 		//case '\\': In addition to backslash being an invalid option, it also covers "\)" as being invalid (i.e. so that it's never necessary to check for an escaped close-parenthesis).
 		//case all-other-chars: All others are invalid options; so like backslash above, ignore any letters that were accidentally recognized and treat entire string as the pattern.
 			SET_DEFAULT_PCRE_OPTIONS // Revert to original options in case any early letters happened to match valid options.
+#ifdef UNICODE
+			pat = aRegExUTF8; // Indicate that the entire string is the pattern (no options).
+#else
 			pat = aRegEx; // Indicate that the entire string is the pattern (no options).
+#endif
 			// To distinguish between a bad option and no options at all (for better error reporting), could check if
 			// within the next few chars there's an unmatched close-parenthesis (non-escaped).  If so, the user
 			// intended some options but one of them was invalid.  However, that would be somewhat difficult to do
@@ -12770,7 +12808,7 @@ break_both:
 			// include descriptive error text (debatable).
 			g_ErrorLevel->Assign(error_buf
 				, sntprintf(error_buf, _countof(error_buf), _T("Compile error %d at offset %d: %s")
-					, error_code, error_offset, (LPCTSTR)CStringTCharFromCharIfNeeded(error_msg)));
+					, error_code, UTF8PosToTPos(aRegExUTF8, error_offset), (LPCTSTR)CStringTCharFromCharIfNeeded(error_msg)));
 		}
 		goto error;
 	}
@@ -12814,7 +12852,7 @@ break_both:
 	}
 	//else the insert-position is an empty slot, which is usually the case because most scripts contain fewer than
 	// PCRE_CACHE_SIZE unique regex's.  Nothing extra needs to be done.
-	this_entry.re_raw = strdup(aRegEx); // _strdup() is very tiny and basically just calls _tcslen+malloc+_tcscpy.
+	this_entry.re_raw = _tcsdup(aRegEx); // _strdup() is very tiny and basically just calls _tcslen+malloc+_tcscpy.
 	this_entry.re_compiled = re_compiled;
 	this_entry.extra = aExtra;
 	this_entry.get_positions_not_substrings = aGetPositionsNotSubstrings;
@@ -12825,6 +12863,11 @@ break_both:
 	sLastFound = sLastInsert; // Relied upon in the case where sLastFound==-1. But it also sets things up to start the search at this item next time, because it's a bit more likely to be found here such as tight loops containing only one RegEx.
 	// Remember that although sLastFound==sLastInsert in this case, it isn't always so -- namely when a previous
 	// call found an existing match in the cache without having to compile and insert the item.
+
+#ifdef UNICODE
+	// Free the UTF-8 version of the RegEx string.
+	free(aRegExUTF8);
+#endif
 
 	LeaveCriticalSection(&g_CriticalRegExCache);
 	return re_compiled; // Indicate success.
@@ -12857,13 +12900,7 @@ LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx)
 	pcre *re;
 
 	// Compile the regex or get it from cache.
-	if (   !(re = get_compiled_regex(
-#ifdef UNICODE
-		CStringUTF8FromWChar(aNeedleRegEx)
-#else
-		aNeedleRegEx
-#endif
-		, get_positions_not_substrings, extra, NULL))   ) // Compiling problem.
+	if (   !(re = get_compiled_regex(aNeedleRegEx, get_positions_not_substrings, extra, NULL))   ) // Compiling problem.
 		return NULL; // Our callers just want there to be "no match" in this case.
 
 	// Set up the offset array, which consists of int-pairs containing the start/end offset of each match.
@@ -12880,7 +12917,7 @@ LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx)
 		return NULL;
 
 	// Otherwise, captured_pattern_count>=0 (it's 0 when offset[] was too small; but that's harmless in this case).
-	return aHaystack + UTF8StrLen(sHaystack, offset[0]); // Return the position of the entire-pattern match.
+	return aHaystack + UTF8PosToTPos(sHaystack, offset[0]); // Return the position of the entire-pattern match.
 #else
 	// Execute the regex.
 	int captured_pattern_count = pcre_exec(re, extra, aHaystack, (int)_tcslen(aHaystack), 0, 0, offset, RXM_INT_COUNT);
@@ -12892,11 +12929,15 @@ LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx)
 #endif
 }
 
-
-
+#ifdef UNICODE
+void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount
+	, pcre *aRE, pcre_extra *aExtra, LPTSTR aHaystack, int aHaystackLength, LPCSTR utf8Haystack, int utf8HaystackLength
+	, int aStartingOffset, int aOffset[], int aNumberOfIntsInOffset)
+#else
 void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount
 	, pcre *aRE, pcre_extra *aExtra, LPTSTR aHaystack, int aHaystackLength, int aStartingOffset
 	, int aOffset[], int aNumberOfIntsInOffset)
+#endif
 {
 	// Set default return value in case of early return.
 	aResultToken.symbol = SYM_STRING;
@@ -12912,41 +12953,31 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 
 	// Get the replacement text (if any) from the incoming parameters.  If it was omitted, treat it as "".
 	TCHAR repl_buf[MAX_NUMBER_SIZE];
-#ifdef UNICODE
-	CStringUTF8FromTChar replacement((aParamCount > 2) ? TokenToString(*aParam[2], repl_buf) : _T(""));
-#else
-	const char *replacement = (aParamCount > 2) ? TokenToString(*aParam[2], repl_buf) : _T("");
-#endif
+	LPTSTR replacement = (aParamCount > 2) ? TokenToString(*aParam[2], repl_buf) : _T("");
 
 	// In PCRE, lengths and such are confined to ints, so there's little reason for using unsigned for anything.
 	int captured_pattern_count, empty_string_is_not_a_match, match_length, ref_num
 		, result_size, new_result_length, haystack_portion_length, second_iteration, substring_name_length
 		, extra_offset, pcre_options;
-	const char *haystack_pos, *match_pos, *src, *src_orig, *closing_brace, *substring_name_pos;
-	char *dest, char_after_dollar
+	TCHAR *haystack_pos, *match_pos, *src, *src_orig, *closing_brace, *substring_name_pos;
+	TCHAR *dest, char_after_dollar
 		, substring_name[33] // In PCRE, "Names consist of up to 32 alphanumeric characters and underscores."
 		, transform;
-#ifdef UNICODE
-	CStringUTF8FromTChar strHaystack(aHaystack);
-	const char *sHaystack = strHaystack;
-#else
-	const char *sHaystack = aHaystack;
-#endif
 
 	// Caller has provided a NULL circuit_token as a means of passing back memory we allocate here.
 	// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
-	char *&result = (char *&)aResultToken.circuit_token; // Make an alias to type-cast and for convenience.
-	int &result_length = (int &)aResultToken.buf; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
+	LPTSTR &result = (LPTSTR&) aResultToken.circuit_token; // Make an alias to type-cast and for convenience.
+	int &result_length = (int&) aResultToken.buf; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
 	result_size = 0;   // And caller has already set "result" to be NULL.  The buffer is allocated only upon
 	result_length = 0; // first use to avoid a potentially massive allocation that might be wasted and cause swapping (not to mention that we'll have better ability to estimate the correct total size after the first replacement is discovered).
 
 	// Below uses a temp variable because realloc() returns NULL on failure but leaves original block allocated.
 	// Note that if it's given a NULL pointer, realloc() does a malloc() instead.
-	char *realloc_temp;
+	LPTSTR realloc_temp;
 	#define REGEX_REALLOC(size) \
 	{\
 		result_size = size;\
-		if (   !(realloc_temp = (char *)realloc(result, result_size))   )\
+		if (   !(realloc_temp = (LPTSTR)realloc(result, result_size*sizeof(TCHAR)))   )\
 			goto out_of_mem;\
 		result = realloc_temp;\
 	}
@@ -12958,12 +12989,12 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	// that it lies within aHaystackLength.  Also, if there are no replacements yet, haystack_pos ignores
 	// aStartingOffset because otherwise, when the first replacement occurs, any part of haystack that lies
 	// to the left of a caller-specified aStartingOffset wouldn't get copied into the result.
-	for (empty_string_is_not_a_match = 0, haystack_pos = sHaystack
-		;; haystack_pos = sHaystack + aStartingOffset) // See comment above.
+	for (empty_string_is_not_a_match = 0, haystack_pos = aHaystack
+		;; haystack_pos = aHaystack + aStartingOffset) // See comment above.
 	{
 		// Execute the expression to find the next match.
 		captured_pattern_count = (limit == 0) ? PCRE_ERROR_NOMATCH // Only when limit is exactly 0 are we done replacing.  All negative values are "replace all".
-			: pcre_exec(aRE, aExtra, sHaystack , (int)aHaystackLength, aStartingOffset
+			: pcre_exec(aRE, aExtra, UorA(utf8Haystack, aHaystack), UorA(utf8HaystackLength,aHaystackLength), TPosToUTF8Pos(aHaystack,aStartingOffset)
 				, empty_string_is_not_a_match, aOffset, aNumberOfIntsInOffset);
 
 		if (captured_pattern_count == PCRE_ERROR_NOMATCH)
@@ -13016,17 +13047,12 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 					new_result_length = result_length + haystack_portion_length;
 					if (new_result_length >= result_size)
 						REGEX_REALLOC(new_result_length + 1); // This will end the loop if an alloc error occurs.
-					memcpy(result + result_length, haystack_pos, haystack_portion_length); // memcpy() usually benches a little faster than _tcscpy().
+					memcpy(result + result_length, haystack_pos, haystack_portion_length*sizeof(TCHAR)); // memcpy() usually benches a little faster than _tcscpy().
 					result_length = new_result_length; // Remember that result_length is actually an output for our caller, so even if for no other reason, it must be kept accurate for that.
 				}
 				result[result_length] = '\0'; // result!=NULL when replacement_count!=0.  Also, must terminate it unconditionally because other sections usually don't do it.
 				// Set RegExMatch()'s return value to be "result":
-#ifdef UNICODE
-				aResultToken.marker = CStringWCharFromUTF8(result).DetachBuffer();
-				free(result);
-#else
 				aResultToken.marker = result;  // Caller will take care of freeing result's memory.
-#endif
 			}
 			// Section below is obsolete but is retained for its comments.
 			//else // No replacements were actually done, so just return the original string to avoid malloc+memcpy
@@ -13059,7 +13085,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		// when offset[] is too small, which it isn't).
 		++replacement_count;
 		--limit; // It's okay if it goes below -1 because all negatives are treated as "replace all".
-		match_pos = sHaystack + aOffset[0]; // This is the location in aHaystack of the entire-pattern match.
+		match_pos = aHaystack + UTF8PosToTPos(utf8Haystack,aOffset[0]); // This is the location in aHaystack of the entire-pattern match.
 		haystack_portion_length = (int)(match_pos - haystack_pos); // The length of the haystack section between the end of the previous match and the start of the current one.
 
 		// Handle this replacement by making two passes through the replacement-text: The first calculates the size
@@ -13079,8 +13105,8 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 					//    new_result_length - haystack_portion_length - (aOffset[1] - aOffset[0])
 					// Above is the length difference between the current replacement text and what it's
 					// replacing (it's negative when replacement is smaller than what it replaces).
-					REGEX_REALLOC(PredictReplacementSize((new_result_length - aOffset[1]) / replacement_count // See above.
-						, replacement_count, limit, aHaystackLength, new_result_length+2, aOffset[1])); // +2 in case of empty_string_is_not_a_match (which needs room for up to two extra characters).  The function will also do another +1 to convert length to size (for terminator).
+					REGEX_REALLOC(PredictReplacementSize((new_result_length - UTF8PosToTPos(utf8Haystack,aOffset[1])) / replacement_count // See above.
+						, replacement_count, limit, aHaystackLength, new_result_length+2, UTF8PosToTPos(utf8Haystack,aOffset[1]))); // +2 in case of empty_string_is_not_a_match (which needs room for up to two extra characters).  The function will also do another +1 to convert length to size (for terminator).
 					// The above will return if an alloc error occurs.
 				}
 				//else result_size is not only large enough, but also non-zero.  Other sections rely on it always
@@ -13090,7 +13116,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				// appears before the match.
 				if (haystack_portion_length)
 				{
-					memcpy(result + result_length, haystack_pos, haystack_portion_length);
+					memcpy(result + result_length, haystack_pos, haystack_portion_length*sizeof(TCHAR));
 					result_length += haystack_portion_length;
 				}
 				dest = result + result_length; // Init dest for use by the loops further below.
@@ -13124,7 +13150,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				extra_offset = 0; // Set default. Indicate that there's no need to hop over an extra character.
 				if (char_after_dollar = src[1]) // This check avoids calling _totupper on '\0', which directly or indirectly causes an assertion error in CRT.
 				{
-					switch(char_after_dollar = toupper(char_after_dollar))
+					switch(char_after_dollar = _totupper(char_after_dollar))
 					{
 					case 'U':
 					case 'L':
@@ -13143,23 +13169,17 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				{
 				case '{':  // Found a backreference: ${...
 					substring_name_pos = src + 2 + extra_offset;
-					if (closing_brace = strchr(substring_name_pos, '}'))
+					if (closing_brace = _tcschr(substring_name_pos, '}'))
 					{
 						if (substring_name_length = (int)(closing_brace - substring_name_pos))
 						{
 							if (substring_name_length < _countof(substring_name))
 							{
-								strlcpy(substring_name, substring_name_pos, substring_name_length + 1); // +1 to convert length to size, which truncates the new string at the desired position.
-								if (IsPureNumeric(
-#ifdef UNICODE
-									CStringTCharFromUTF8(substring_name) // TODO: this may reduce performance, should be rewritten later
-#else
-									substring_name
-#endif
-									, true, false, true)) // Seems best to allow floating point such as 1.0 because it will then get truncated to an integer.  It seems to rare that anyone would want to use floats as names.
-									ref_num = atoi(substring_name); // Uses atoi() vs. ATOI to avoid potential overlap with non-numeric names such as ${0x5}, which should probably be considered a name not a number?  In other words, seems best not to make some names that start with numbers "special" just because they happen to be hex numbers.
+								tcslcpy(substring_name, substring_name_pos, substring_name_length + 1); // +1 to convert length to size, which truncates the new string at the desired position.
+								if (IsPureNumeric(substring_name, true, false, true)) // Seems best to allow floating point such as 1.0 because it will then get truncated to an integer.  It seems to rare that anyone would want to use floats as names.
+									ref_num = _ttoi(substring_name); // Uses atoi() vs. ATOI to avoid potential overlap with non-numeric names such as ${0x5}, which should probably be considered a name not a number?  In other words, seems best not to make some names that start with numbers "special" just because they happen to be hex numbers.
 								else // For simplicity, no checking is done to ensure it consiss of the "32 alphanumeric characters and underscores".  Let pcre_get_stringnumber() figure that out for us.
-									ref_num = pcre_get_stringnumber(aRE, substring_name); // Returns a negative on failure, which when stored in ref_num is relied upon as an inticator.
+									ref_num = pcre_get_stringnumber(aRE, RegExToUTF8(substring_name)); // Returns a negative on failure, which when stored in ref_num is relied upon as an inticator.
 							}
 							//else it's too long, so it seems best (debatable) to treat it as a unmatched/unfound name, i.e. "".
 							src = closing_brace; // Set things up for the next iteration to resume at the char after "${..}"
@@ -13207,19 +13227,21 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 					// copied over literally.  So that would have to be checked for if this is changed.
 					if (ref_num >= 0 && ref_num < captured_pattern_count) // Treat ref_num==0 as reference to the entire-pattern's match.
 					{
-						if (match_length = aOffset[ref_num*2 + 1] - aOffset[ref_num*2])
+						int ref_num0 = UTF8PosToTPos(utf8Haystack, aOffset[ref_num*2]);
+						int ref_num1 = UTF8PosToTPos(utf8Haystack, aOffset[ref_num*2 + 1]);
+						if (match_length = ref_num1 - ref_num0)
 						{
 							if (second_iteration)
 							{
-								memcpy(dest, aHaystack + aOffset[ref_num*2], match_length);
+								memcpy(dest, aHaystack + ref_num0, match_length * sizeof(TCHAR));
 								if (transform)
 								{
 									dest[match_length] = '\0'; // Terminate for use below (shouldn't cause overflow because REALLOC reserved space for terminator; nor should there be any need to undo the termination afterward).
 									switch(transform)
 									{
-									case 'U': CharUpperA(dest); break;
-									case 'L': CharLowerA(dest); break;
-									case 'T': StrToTitleCaseA(dest); break;
+									case 'U': CharUpper(dest); break;
+									case 'L': CharLower(dest); break;
+									case 'T': StrToTitleCase(dest); break;
 									}
 								}
 								dest += match_length;
@@ -13229,7 +13251,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 								new_result_length += match_length;
 						}
 					}
-					//else subpattern doesn't exist (or its invalid such as ${-5}, so treat it as blank because:
+					//else subpattern doesn't exist (or it's invalid such as ${-5}, so treat it as blank because:
 					// 1) It's boosts script flexibility and convenience (at the cost of making it hard to detect
 					//    script bugs, which would be assisted by transcribing ${999} as literal text rather than "").
 					// 2) It simplifies the code.
@@ -13274,7 +13296,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		// in examples like:
 		//    RegExReplace("ABC", "Z*|A", "x")
 		empty_string_is_not_a_match = (aOffset[0] == aOffset[1]) ? PCRE_NOTEMPTY|PCRE_ANCHORED : 0;
-		aStartingOffset = aOffset[1]; // In either case, set starting offset to the candidate for the next search.
+		aStartingOffset = UTF8PosToTPos(utf8Haystack,aOffset[1]); // In either case, set starting offset to the candidate for the next search.
 	} // for()
 
 	// All paths above should return (or goto some other label), so execution should never reach here except
@@ -13309,19 +13331,18 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	pcre *re;
 
 	// COMPILE THE REGEX OR GET IT FROM CACHE.
-	if (   !(re = get_compiled_regex(
-#ifdef UNICODE
-		CStringUTF8FromWChar(needle)
-#else
-		needle
-#endif
-		, get_positions_not_substrings, extra, &aResultToken))   ) // Compiling problem.
+	if (   !(re = get_compiled_regex(needle, get_positions_not_substrings, extra, &aResultToken))   ) // Compiling problem.
 		return; // It already set ErrorLevel and aResultToken for us. If caller provided an output var/array, it is not changed under these conditions because there's no way of knowing how many subpatterns are in the RegEx, and thus no way of knowing how far to init the array.
 
 	// Since compiling succeeded, get info about other parameters.
 	TCHAR haystack_buf[MAX_NUMBER_SIZE];
 	LPTSTR haystack = TokenToString(*aParam[0], haystack_buf); // Load-time validation has already ensured that at least two actual parameters are present.
 	int haystack_length = (int)EXPR_TOKEN_LENGTH(aParam[0], haystack);
+
+#ifdef UNICODE
+	CStringUTF8FromWChar utf8Haystack(haystack);
+	int utf8haystack_length = utf8Haystack.GetLength();
+#endif
 
 	int param_index = mode_is_replace ? 5 : 3;
 	int starting_offset;
@@ -13354,8 +13375,11 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 
 	if (mode_is_replace) // Handle RegExReplace() completely then return.
 	{
-		RegExReplace(aResultToken, aParam, aParamCount
-			, re, extra, haystack, haystack_length, starting_offset, offset, number_of_ints_in_offset);
+		RegExReplace(aResultToken, aParam, aParamCount, re, extra, haystack, haystack_length
+#ifdef UNICODE
+			, utf8Haystack, utf8haystack_length
+#endif
+			, starting_offset, offset, number_of_ints_in_offset);
 		return;
 	}
 
@@ -13363,11 +13387,11 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	// EXECUTE THE REGEX.
 	int captured_pattern_count = pcre_exec(re, extra,
 #ifdef UNICODE
-		CStringUTF8FromWChar(haystack)
+		utf8Haystack, utf8haystack_length
 #else
-		haystack
+		haystack, haystack_length
 #endif
-		, haystack_length, starting_offset, 0, offset, number_of_ints_in_offset);
+		, TPosToUTF8Pos(haystack, starting_offset), 0, offset, number_of_ints_in_offset);
 
 	// SET THE RETURN VALUE AND ERRORLEVEL BASED ON THE RESULTS OF EXECUTING THE EXPRESSION.
 	if (captured_pattern_count == PCRE_ERROR_NOMATCH)
@@ -13386,7 +13410,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	else // Match found, and captured_pattern_count <= 0 (but should never be 0 in this case because that only happens when offset[] is too small, which it isn't).
 	{
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-		aResultToken.value_int64 = offset[0] + 1; // i.e. the position of the entire-pattern match is the function's return value.
+		aResultToken.value_int64 = UTF8PosToTPos(utf8Haystack, offset[0]) + 1; // i.e. the position of the entire-pattern match is the function's return value.
 	}
 
 	if (aParamCount < 3 || aParam[2]->symbol != SYM_VAR) // No output var, so nothing more to do.
@@ -13397,7 +13421,8 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	LPTSTR mem_to_free = NULL; // Set default.
 
 	if (get_positions_not_substrings) // In this mode, it's done this way to avoid creating an array if there are no subpatterns; i.e. the return value is the starting position and the array name will contain the length of what was found.
-		output_var.Assign(captured_pattern_count < 0 ? 0 : offset[1] - offset[0]); // Seems better to store length of zero rather than something non-length like -1 (after all, the return value is blank in this case, which should be used as the error indicator).
+		output_var.Assign(captured_pattern_count < 0 ? 0
+			: UTF8LenToTLen(utf8Haystack, offset[0], offset[1] - offset[0])); // Seems better to store length of zero rather than something non-length like -1 (after all, the return value is blank in this case, which should be used as the error indicator).
 	else
 	{
 		if (captured_pattern_count < 0) // Failed or no match.
@@ -13411,12 +13436,13 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 			// string.  Note that the following isn't done for the get_positions_not_substrings mode higher above
 			// because that mode never refers to haystack when populating its subpatterns.
 			if (pattern_count > 1 && haystack == output_var.Contents(FALSE)) // i.e. there are subpatterns to be output afterward, and haystack is the same variable as the output-var that's about to be overwritten below.
-				if (mem_to_free = _tcsdup(haystack)) // _strdup() is very tiny and basically just calls _tcslen+malloc+_tcscpy.
+				if (mem_to_free = _tcsdup(haystack)) // _tcsdup() is very tiny and basically just calls _tcslen+malloc+_tcscpy.
 					haystack = mem_to_free;
 				//else due to the extreme rarity of running out of memory AND SIMULTANEOUSLY having output-var match
 				// haystack, continue on so that at least partial success is achieved (the only thing that will
 				// be wrong in this case is the subpatterns, if any).
-			output_var.Assign(haystack + offset[0], offset[1] - offset[0]); // It shouldn't be possible for the full-pattern match's offset to be -1, since if where here, a match on the full pattern was always found.
+			output_var.Assign(haystack + UTF8PosToTPos(utf8Haystack, offset[0])
+				, UTF8LenToTLen(utf8Haystack, offset[0], offset[1] - offset[0])); // It shouldn't be possible for the full-pattern match's offset to be -1, since if where here, a match on the full pattern was always found.
 		}
 	}
 
@@ -13481,7 +13507,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 			}
 			else // NOTE: The formulas below work even for a capturing subpattern that wasn't actually matched, such as one of the following: (abc)|(123)
 			{
-				subpat_pos = this_offset[0] + 1; // One-based (i.e. position zero means "not found").
+				subpat_pos = this_offset[0];
 				subpat_len = this_offset[1] - this_offset[0]; // It seemed more convenient for scripts to store Length instead of an ending offset.
 			}
 
@@ -13491,10 +13517,10 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 				{
 					suffix_length = _stprintf(var_name_suffix, _T("Pos%s"), subpat_name[p]); // Append the subpattern to the array's base name.
 					if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length, always_use))
-						array_item->Assign(subpat_pos);
+						array_item->Assign(UTF8PosToTPos(utf8Haystack, subpat_pos) + 1); // One-based (i.e. position zero means "not found").
 					suffix_length = _stprintf(var_name_suffix, _T("Len%s"), subpat_name[p]); // Append the subpattern name to the array's base name.
 					if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length, always_use))
-						array_item->Assign(subpat_len);
+						array_item->Assign(UTF8LenToTLen(utf8Haystack, subpat_pos, subpat_len));
 					// Fix for v1.0.45.01: Section below added.  See similar section further below for comments.
 					if (!subpat_not_matched && allow_dupe_subpat_names) // Explicitly check subpat_not_matched not pos/len so that behavior is consistent with the default mode (non-position).
 						for (n = p + 1; n < pattern_count; ++n) // Search to the right of this subpat to find others with the same name.
@@ -13508,11 +13534,11 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 				// For comments about this section, see the similar for-loop later below.
 				suffix_length = _stprintf(var_name_suffix, _T("Pos%d"), p); // Append the element number to the array's base name.
 				if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length, always_use))
-					array_item->Assign(subpat_pos);
+					array_item->Assign(UTF8PosToTPos(utf8Haystack, subpat_pos) + 1); // One-based (i.e. position zero means "not found").
 				//else var couldn't be created: no error reporting currently, since it basically should never happen.
 				suffix_length = _stprintf(var_name_suffix, _T("Len%d"), p); // Append the element number to the array's base name.
 				if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length, always_use))
-					array_item->Assign(subpat_len);
+					array_item->Assign(UTF8LenToTLen(utf8Haystack, subpat_pos, subpat_len));
 			}
 		}
 		goto free_and_return;
@@ -13548,7 +13574,8 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 							&& haystack == array_item->Contents(FALSE)) // For more comments, see similar section higher above.
 							if (mem_to_free = _tcsdup(haystack))
 								haystack = mem_to_free;
-						array_item->Assign(haystack + this_offset[0], this_offset[1] - this_offset[0]);
+						array_item->Assign(haystack + UTF8PosToTPos(utf8Haystack, this_offset[0])
+							, UTF8LenToTLen(utf8Haystack, this_offset[0], this_offset[1] - this_offset[0]));
 						// Fix for v1.0.45.01: When the J option (allow duplicate named subpatterns) is in effect,
 						// PCRE returns entries for all the duplicates.  But we don't want an unmatched duplicate
 						// to overwrite a previously matched duplicate.  To prevent this, when we're here (i.e.
@@ -13581,7 +13608,8 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 						&& haystack == array_item->Contents(FALSE)) // For more comments, see similar section higher above.
 						if (mem_to_free = _tcsdup(haystack))
 							haystack = mem_to_free;
-					array_item->Assign(haystack + this_offset[0], this_offset[1] - this_offset[0]);
+					array_item->Assign(haystack + UTF8PosToTPos(utf8Haystack, this_offset[0])
+						, UTF8LenToTLen(utf8Haystack, this_offset[0], this_offset[1] - this_offset[0]));
 				}
 			}
 			//else var couldn't be created: no error reporting currently, since it basically should never happen.
@@ -13609,13 +13637,7 @@ void BIF_Chr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 {
 	int param1 = (int)TokenToInt64(*aParam[0]); // Convert to INT vs. UINT so that negatives can be detected.
 	LPTSTR cp = aResultToken.buf; // If necessary, it will be moved to a persistent memory location by our caller.
-	if (param1 < 0 || 
-#ifdef UNICODE
-		param1 > 0xFFFF
-#else
-		param1 > 255
-#endif
-		)
+	if (param1 < 0 || param1 > TRANS_CHAR_MAX)
 		*cp = '\0'; // Empty string indicates both Chr(0) and an out-of-bounds param1.
 	else
 	{
