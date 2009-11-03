@@ -15,8 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
-#include "defines.h" // UNICODE_CHECK
 #include "SimpleHeap.h"
 #include "globaldata.h" // for g_script, so that errors can be centrally reported here.
 

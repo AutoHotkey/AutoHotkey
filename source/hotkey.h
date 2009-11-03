@@ -346,7 +346,6 @@ public:
 
 	static void SuspendAll(bool aSuspend);
 	ResultType PerformInNewThreadMadeByCaller();
-	UNICODE_CHECK
 	void DoReplace(LPARAM alParam);
 	static ResultType AddHotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
 		, bool aHasContinuationSection);

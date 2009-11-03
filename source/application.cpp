@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include "application.h"
 #include "globaldata.h" // for access to g_clip, the "g" global struct, etc.
 #include "window.h" // for serveral MsgBox and window functions

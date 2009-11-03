@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include "var.h"
 #include "globaldata.h" // for g_script
 
@@ -285,7 +284,7 @@ ResultType Var::AssignClipboardAll()
 		//else omit this format from consideration.
 	}
 
-	if (space_needed == sizeof(format)) // This works because even a single empty format requires space beyond SIZEOF(format) for storing its format+size.
+	if (space_needed == sizeof(format)) // This works because even a single empty format requires space beyond sizeof(format) for storing its format+size.
 	{
 		g_clip.Close();
 		return Assign(); // Nothing on the clipboard, so just make the variable blank.

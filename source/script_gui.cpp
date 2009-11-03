@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include "script.h"
 #include "globaldata.h" // for a lot of things
 #include "application.h" // for MsgSleep()
@@ -2925,7 +2924,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 					// The following approach doesn't seem to give back useful info about the total height of a
 					// tile and the border beneath it, so it isn't used:
 					//LVTILEVIEWINFO tvi;
-					//tvi.cbSize = SIZEOF(LVTILEVIEWINFO);
+					//tvi.cbSize = sizeof(LVTILEVIEWINFO);
 					//tvi.dwMask = LVTVIM_TILESIZE | LVTVIM_LABELMARGIN;
 					//ListView_GetTileViewInfo(control.hwnd, &tvi);
 					// The following might not be perfect for integral scrolling purposes, but it does seem

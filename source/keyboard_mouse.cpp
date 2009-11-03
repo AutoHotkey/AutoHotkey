@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include "keyboard_mouse.h"
 #include "globaldata.h" // for g->KeyDelay
 #include "application.h" // for MsgSleep()
@@ -40,8 +39,8 @@ static HKL sTargetKeybdLayout;           // Set by SendKeys() for use by the fun
 static ResultType sTargetLayoutHasAltGr; //
 
 // v1.0.43: Support for SendInput() and journal-playback hook:
-#define MAX_INITIAL_EVENTS_SI 500UL  // SIZEOF(INPUT) == 28 as of 2006. Since Send is called so often, and since most Sends are short, reducing the load on the stack is also a deciding factor for these.
-#define MAX_INITIAL_EVENTS_PB 1500UL // SIZEOF(PlaybackEvent) == 8, so more events are justified before resorting to malloc().
+#define MAX_INITIAL_EVENTS_SI 500UL  // sizeof(INPUT) == 28 as of 2006. Since Send is called so often, and since most Sends are short, reducing the load on the stack is also a deciding factor for these.
+#define MAX_INITIAL_EVENTS_PB 1500UL // sizeof(PlaybackEvent) == 8, so more events are justified before resorting to malloc().
 static LPINPUT sEventSI;        // No init necessary.  An array that's allocated/deallocated by SendKeys().
 static PlaybackEvent *&sEventPB = (PlaybackEvent *&)sEventSI;
 static UINT sEventCount, sMaxEvents; // Number of items in the above arrays and the current array capacity.
@@ -1834,7 +1833,7 @@ void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEvent
 				aVK = temp_vk;
 			else
 			{
-				switch (toupper(*next_option))
+				switch (_totupper(*next_option))
 				{
 				case 'D': aEventType = KEYDOWN; break;
 				case 'U': aEventType = KEYUP; break;
@@ -1902,7 +1901,7 @@ ResultType PerformMouse(ActionTypeType aActionType, LPTSTR aButton, LPTSTR aX1, 
 		, *aY2 ? ATOI(aY2) : COORD_UNSPECIFIED  //
 		, repeat_count, event_type
 		, *aSpeed ? ATOI(aSpeed) : g->DefaultMouseSpeed
-		, toupper(*aOffsetMode) == 'R'); // aMoveOffset.
+		, _totupper(*aOffsetMode) == 'R'); // aMoveOffset.
 
 	return OK; // For caller convenience.
 }
@@ -3797,7 +3796,7 @@ vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandl
 	// Instead, for now, just check it as-is.  The only extra whitespace that should exist, due to trimming
 	// of text during load, is that on either side of the COMPOSITE_DELIMITER (e.g. " then ").
 
-	if (_tcslen(aText) == 1)
+	if (!aText[1]) // _tcslen(aText) == 1
 		return CharToVKAndModifiers(*aText, pModifiersLR, aKeybdLayout); // Making this a function simplifies things because it can do early return, etc.
 
 	if (aAllowExplicitVK && _totupper(aText[0]) == 'V' && _totupper(aText[1]) == 'K')
@@ -4034,7 +4033,7 @@ ResultType KeyHistoryToFile(LPTSTR aFilespec, char aType, bool aKeyUp, vk_type a
 		, (float)(curr_tickcount - last_tickcount) / (float)1000
 		, aType
 		, aKeyUp ? 'u' : 'd'
-		, GetKeyName(aVK, aSC, key_name, SIZEOF(key_name))
+		, GetKeyName(aVK, aSC, key_name, sizeof(key_name))
 		, log_changed_window ? _T("\t") : _T("")
 		, log_changed_window ? win_title : _T("")
 		);

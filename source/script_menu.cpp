@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include "script.h"
 #include "globaldata.h" // for a lot of things
 #include "application.h" // for MsgSleep()
@@ -733,7 +732,7 @@ ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, Label *aLabel, UserMenu
 
 void UserMenu::UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions)
 {
-	if (toupper(*aOptions) == 'P')
+	if (_totupper(*aOptions) == 'P')
 		aMenuItem->mPriority = _ttoi(aOptions + 1);
 }
 

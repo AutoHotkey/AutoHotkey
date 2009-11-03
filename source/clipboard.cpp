@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include "clipboard.h"
 #include "globaldata.h"  // for g_script.ScriptError() and g_ClipboardTimeout
 #include "application.h" // for MsgSleep()

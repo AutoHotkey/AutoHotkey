@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include <olectl.h> // for OleLoadPicture()
 #include <Gdiplus.h> // Used by LoadPicture().
 #include "util.h"

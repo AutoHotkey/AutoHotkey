@@ -24,7 +24,6 @@
 
 // Includes
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include "script.h"
 #include "util.h" // for strlcpy()
 #include "globaldata.h"
@@ -274,7 +273,7 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	#define SET_REG_BUF \
 		if (g_os.IsWin9x())\
 		{\
-			strlcpy(szRegBuffer, aValue, SIZEOF(szRegBuffer));\
+			strlcpy(szRegBuffer, aValue, sizeof(szRegBuffer));\
 			buf = szRegBuffer;\
 		}\
 		else\

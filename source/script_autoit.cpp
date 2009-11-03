@@ -19,7 +19,6 @@
 #include <winsock.h>  // for WSADATA.  This also requires wsock32.lib to be linked in.
 #include <tlhelp32.h> // For the ProcessExist routines.
 #include <wininet.h> // For URLDownloadToFile().
-#define UNICODE_CHECKED
 #include "script.h"
 #include "globaldata.h" // for g_ErrorLevel and probably other globals.
 #include "window.h" // For ControlExist().

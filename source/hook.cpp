@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include "hook.h"
 #include "globaldata.h"  // for access to several global vars
 #include "util.h" // for snprintfcat()

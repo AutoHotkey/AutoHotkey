@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include "script.h"
 #include "globaldata.h" // for a lot of things
 #include "util.h" // for strlcpy() etc.
@@ -522,10 +521,10 @@ void Script::CreateTrayIcon()
 // crashed, since the memory used by the tray icon was probably destroyed along with it.
 {
 	ZeroMemory(&mNIC, sizeof(mNIC));  // To be safe.
-	// Using NOTIFYICONDATA_V2_SIZE vs. SIZEOF(NOTIFYICONDATA) improves compatibility with Win9x maybe.
+	// Using NOTIFYICONDATA_V2_SIZE vs. sizeof(NOTIFYICONDATA) improves compatibility with Win9x maybe.
 	// MSDN: "Using [NOTIFYICONDATA_V2_SIZE] for cbSize will allow your application to use NOTIFYICONDATA
 	// with earlier Shell32.dll versions, although without the version 6.0 enhancements."
-	// Update: Using V2 gives an compile error so trying V1.  Update: Trying SIZEOF(NOTIFYICONDATA)
+	// Update: Using V2 gives an compile error so trying V1.  Update: Trying sizeof(NOTIFYICONDATA)
 	// for compatibility with VC++ 6.x.  This is also what AutoIt3 uses:
 	mNIC.cbSize = sizeof(NOTIFYICONDATA);  // NOTIFYICONDATA_V1_SIZE
 	mNIC.hWnd = g_hWnd;
@@ -1395,7 +1394,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						break;
 
 					is_continuation_line = false; // Set default.
-					switch(toupper(*next_buf)) // Above has ensured *next_buf != '\0' (toupper might have problems with '\0').
+					switch(_totupper(*next_buf)) // Above has ensured *next_buf != '\0' (toupper might have problems with '\0').
 					{
 					case 'A': // "AND".
 						// See comments in the default section further below.
@@ -1415,7 +1414,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						break;
 					case 'O': // "OR".
 						// See comments in the default section further below.
-						if (toupper(next_buf[1]) == 'R' && IS_SPACE_OR_TAB_OR_NBSP(next_buf[2])) // Relies on short-circuit boolean order.
+						if (_totupper(next_buf[1]) == 'R' && IS_SPACE_OR_TAB_OR_NBSP(next_buf[2])) // Relies on short-circuit boolean order.
 						{
 							cp = omit_leading_whitespace(next_buf + 2);
 							// v1.0.38.06: The following was fixed to use EXPR_CORE vs. EXPR_OPERAND_TERMINATORS
@@ -3626,7 +3625,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					break;
 				case 'i':  // "is" or "is not"
 				case 'I':
-					switch (toupper(operation[1]))
+					switch (_totupper(operation[1]))
 					{
 					case 's':  // "IS"
 					case 'S':
@@ -5144,7 +5143,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 								deref[deref_count].func = NULL;
 							else // It's a variable (or a scientific-notation literal) rather than a function.
 							{
-								if (toupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-') // Listed first for short-circuit performance with the below.
+								if (_totupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-') // Listed first for short-circuit performance with the below.
 									&& _tcschr(op_begin, '.')) // v1.0.46.11: This item appears to be a scientific-notation literal with the OPTIONAL +/- sign PRESENT on the exponent (e.g. 1.0e+001), so check that before checking if it's a variable name.
 								{
 									*op_end = orig_char; // Undo the temporary termination.
@@ -5548,7 +5547,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 			else
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		}
-		// Size must be less than SIZEOF() minus 2 because need room to prepend the '%' and append
+		// Size must be less than sizeof() minus 2 because need room to prepend the '%' and append
 		// the 'f' to make it a valid format specifier string:
 		break;
 
@@ -11962,7 +11961,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			FileTimeToLocalFileTime(&ftNowUTC, &ft);  // Convert UTC to local time.
 		}
 		// Convert to 10ths of a microsecond (the units of the FILETIME struct):
-		switch (toupper(*ARG3))
+		switch (_totupper(*ARG3))
 		{
 		case 'S': // Seconds
 			nUnits *= (double)10000000;
@@ -12007,7 +12006,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			, output_var->Contents(), failed);
 		if (failed) // Usually caused by an invalid component in the date-time string.
 			return output_var->Assign(_T(""));
-		switch (toupper(*ARG3))
+		switch (_totupper(*ARG3))
 		{
 		// Do nothing in the case of 'S' (seconds).  Otherwise:
 		case 'M': time_until /= 60; break; // Minutes
@@ -12084,7 +12083,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 				return output_var->Assign();  // Set it to be blank in this case.
 		}
 		start_char_num = ArgToInt(3);
-		if (toupper(*ARG5) == 'L')  // Chars to the left of start_char_num will be extracted.
+		if (_totupper(*ARG5) == 'L')  // Chars to the left of start_char_num will be extracted.
 		{
 			// TRANSLATE "L" MODE INTO THE EQUIVALENT NORMAL MODE:
 			if (start_char_num < 1) // Starting at a character number that is invalid for L mode.
@@ -12773,7 +12772,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	case ACT_FILECOPYDIR:
 		return g_ErrorLevel->Assign(Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
 	case ACT_FILEMOVEDIR:
-		if (toupper(*ARG3) == 'R')
+		if (_totupper(*ARG3) == 'R')
 		{
 			// Perform a simple rename instead, which prevents the operation from being only partially
 			// complete if the source directory is in use (due to being a working dir for a currently

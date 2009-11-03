@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include "WinGroup.h"
 #include "window.h" // for several lower level window functions
 #include "globaldata.h" // for DoWinDelay

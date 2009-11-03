@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include "window.h"
 #include "util.h" // for strlcpy()
 #include "application.h" // for MsgSleep()
@@ -1294,7 +1293,7 @@ HWND GetTopChild(HWND aParent)
 	//	//if (GetTopWindow(hwnd_top))
 	//	//	hwnd_top = GetTopWindow(hwnd_top);
 	//	char class_name[64];
-	//	GetClassName(next_top, class_name, SIZEOF(class_name));
+	//	GetClassName(next_top, class_name, sizeof(class_name));
 	//	MsgBox(class_name);
 	//}
 
@@ -1467,7 +1466,7 @@ int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf, int aBufSize, UINT aTimeout)
 		// 80 vs. 188
 		//char buf[32000];
 		//LRESULT length2;
-		//result = SendMessageTimeout(aWnd, WM_GETTEXT, (WPARAM)SIZEOF(buf), (LPARAM)buf
+		//result = SendMessageTimeout(aWnd, WM_GETTEXT, (WPARAM)sizeof(buf), (LPARAM)buf
 		//	, SMTO_ABORTIFHUNG, aTimeout, (LPDWORD)&length2);
 		//if (length2 != length)
 		//{

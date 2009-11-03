@@ -1849,9 +1849,7 @@ public:
 		, mJumpToLine(NULL)
 		, mPrevLabel(NULL), mNextLabel(NULL)
 	{}
-	UNICODE_CHECK
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	UNICODE_CHECK
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}

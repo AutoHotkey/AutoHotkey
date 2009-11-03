@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 // These includes should probably a superset of those in globaldata.h:
 #include "hook.h" // For KeyHistoryItem and probably other things.
 #include "clipboard.h"  // For the global clipboard object
@@ -704,8 +703,8 @@ modifier is specified along with it:
 , {_T("Launch_App2"), VK_LAUNCH_APP2}
 
 // Probably safest to terminate it this way, with a flag value.  (plus this makes it a little easier
-// to code some loops, maybe).  Can also calculate how many elements are in the array using SIZEOF(array)
-// divided by SIZEOF(element).  UPDATE: Decided not to do this in case ever decide to sort this array; don't
+// to code some loops, maybe).  Can also calculate how many elements are in the array using sizeof(array)
+// divided by sizeof(element).  UPDATE: Decided not to do this in case ever decide to sort this array; don't
 // want to rely on the fact that this will wind up in the right position after the sort (even though it
 // should):
 //, {_T(""), 0}

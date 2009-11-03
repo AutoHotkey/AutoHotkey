@@ -38,7 +38,6 @@ GNU General Public License for more details.
 //////////////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include "script.h"
 #include "globaldata.h" // for a lot of things
 #include "qmath.h" // For ExpandExpression()

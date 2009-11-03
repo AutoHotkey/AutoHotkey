@@ -17,7 +17,6 @@ GNU General Public License for more details.
 #include "stdafx.h" // pre-compiled headers
 #include <olectl.h> // for OleLoadPicture()
 #include <winioctl.h> // For PREVENT_MEDIA_REMOVAL and CD lock/unlock.
-#define UNICODE_CHECKED
 #include "qmath.h" // Used by Transform() [math.h incurs 2k larger code size just for ceil() & floor()]
 #include "mt19937ar-cok.h" // for sorting in random order
 #include "script.h"
@@ -962,7 +961,7 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 			if (   !(char_count = UTF8ToWideChar(aValue1, NULL, 0))   ) // Get required buffer size in WCHARs (includes terminator).
 				return output_var.Assign(); // Make output_var (the clipboard in this case) blank to indicate failure.
 			LPVOID clip_buf;
-			if (   !(clip_buf = g_clip.PrepareForWrite(char_count * SIZEOF(WCHAR)))   )
+			if (   !(clip_buf = g_clip.PrepareForWrite(char_count * sizeof(WCHAR)))   )
 				return output_var.Assign(); // Make output_var (the clipboard in this case) blank to indicate failure.
 			// Perform the conversion:
 			if (!UTF8ToWideChar(aValue1, (LPWSTR)clip_buf, char_count))
@@ -7763,7 +7762,7 @@ ResultType Line::DriveLock(TCHAR aDriveLetter, bool aLockIt)
 			return FAIL;
 		
 		// MS: Call VWIN32
-		result = DeviceIoControl(hdevice, VWIN32_DIOC_DOS_IOCTL, &regs, SIZEOF(regs), &regs, SIZEOF(regs), &unused, 0);
+		result = DeviceIoControl(hdevice, VWIN32_DIOC_DOS_IOCTL, &regs, sizeof(regs), &regs, sizeof(regs), &unused, 0);
 		if (result)
 			result = !(regs.reg_Flags & CARRY_FLAG);
 	}
@@ -8443,7 +8442,7 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 	OPENFILENAME ofn = {0};
 	// OPENFILENAME_SIZE_VERSION_400 must be used for 9x/NT otherwise the dialog will not appear!
 	// MSDN: "In an application that is compiled with WINVER and _WIN32_WINNT >= 0x0500, use
-	// OPENFILENAME_SIZE_VERSION_400 for this member.  Windows 2000/XP: Use SIZEOF(OPENFILENAME)
+	// OPENFILENAME_SIZE_VERSION_400 for this member.  Windows 2000/XP: Use sizeof(OPENFILENAME)
 	// for this parameter."
 	ofn.lStructSize = g_os.IsWin2000orLater() ? sizeof(OPENFILENAME) : OPENFILENAME_SIZE_VERSION_400;
 	ofn.hwndOwner = THREAD_DIALOG_OWNER; // Can be NULL, which is used instead of main window since no need to have main window forced into the background for this.
@@ -8560,7 +8559,7 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 					// to the selected folder before operating on each of the selected/naked filenames.
 					if (cp - file_buf == 2 && cp[-1] == ':') // e.g. "C:"
 					{
-						memmove(cp + 1, cp, _tcslen(cp) + 1); // Make room to insert backslash (since only one file was selcted, the buf is large enough).
+						tmemmove(cp + 1, cp, _tcslen(cp) + 1); // Make room to insert backslash (since only one file was selcted, the buf is large enough).
 						*cp = '\\';
 					}
 				}
@@ -11361,7 +11360,7 @@ VarSizeType BIV_TimeSinceThisHotkey(LPTSTR aBuf, LPTSTR aVarName)
 		// DWORD subtraction still gives the right answer as long as the number of days between
 		// isn't greater than about 49.  See MyGetTickCount() for explanation of %d vs. %u.
 		// Update: Using 64-bit ints now, so above is obsolete:
-		//sntprintf(str, SIZEOF(str), "%d", (DWORD)(GetTickCount() - g_script.mThisHotkeyStartTime));
+		//sntprintf(str, sizeof(str), "%d", (DWORD)(GetTickCount() - g_script.mThisHotkeyStartTime));
 		ITOA64((__int64)(GetTickCount() - g_script.mThisHotkeyStartTime), aBuf);
 	else
 		_tcscpy(aBuf, _T("-1"));
@@ -11374,7 +11373,7 @@ VarSizeType BIV_TimeSincePriorHotkey(LPTSTR aBuf, LPTSTR aVarName)
 		return MAX_INTEGER_LENGTH;
 	if (*g_script.mPriorHotkeyName)
 		// See MyGetTickCount() for explanation for explanation:
-		//sntprintf(str, SIZEOF(str), "%d", (DWORD)(GetTickCount() - g_script.mPriorHotkeyStartTime));
+		//sntprintf(str, sizeof(str), "%d", (DWORD)(GetTickCount() - g_script.mPriorHotkeyStartTime));
 		ITOA64((__int64)(GetTickCount() - g_script.mPriorHotkeyStartTime), aBuf);
 	else
 		_tcscpy(aBuf, _T("-1"));
@@ -11979,15 +11978,15 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 	// infinite recursion).
 
 	LPTSTR arg_type_string[2];
-	int i;
+	int i = arg_count * sizeof(void *);
 	// for Unicode <-> ANSI charset conversion
 #ifdef UNICODE
 	CStringA **pStr = (CStringA **)
 #else
 	CStringW **pStr = (CStringW **)
 #endif
-		malloc(arg_count * sizeof(void *));
-	memset(pStr, 0, arg_count * sizeof(void *));
+		malloc(i);
+	memset(pStr, 0, i);
 
 	// Above has already ensured that after the first parameter, there are either zero additional parameters
 	// or an even number of them.  In other words, each arg type will have an arg value to go with it.
@@ -12832,7 +12831,7 @@ break_both:
 		//{
 			//if (aResultToken) // Only when this is non-NULL does caller want ErrorLevel changed.
 			//{
-			//	sntprintf(error_buf, SIZEOF(error_buf), "Study error: %s", error_msg);
+			//	sntprintf(error_buf, sizeof(error_buf), "Study error: %s", error_msg);
 			//	g_ErrorLevel->Assign(error_buf);
 			//}
 			//goto error;

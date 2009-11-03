@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#define UNICODE_CHECKED
 #include "hotkey.h"
 #include "globaldata.h"  // For g_os and other global vars.
 #include "window.h" // For MsgBox()
@@ -1038,7 +1037,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	{
 		for (LPTSTR cp = aOptions; *cp; ++cp)
 		{
-			switch(toupper(*cp))
+			switch(_totupper(*cp))
 			{
 			case 'O': // v1.0.38.02.
 				if (_totupper(cp[1]) == 'N') // Full validation for maintainability.
@@ -1884,7 +1883,7 @@ scan code array).
 	if (!temp_vk && !is_mouse)  // sc must be non-zero or else it would have already returned above.
 		if (temp_vk = sc_to_vk(temp_sc))
 		{
-			snprintf(error_text, SIZEOF(error_text), "DEBUG: \"%s\" (scan code %X) was successfully mapped to virtual key %X", text, temp_sc, temp_vk);
+			snprintf(error_text, sizeof(error_text), "DEBUG: \"%s\" (scan code %X) was successfully mapped to virtual key %X", text, temp_sc, temp_vk);
 			MsgBox(error_text);
 			temp_sc = 0; // Maybe set this just for safety, even though a non-zero vk should always take precedence over it.
 		}
@@ -1965,7 +1964,7 @@ ResultType Hotkey::Register()
 	//	// UPDATE: For WinNT/2k/XP, this warning can be disabled because registered hotkeys can be
 	//	// overridden by the hook.  But something like this is probably needed for Win9x:
 	//	char error_text[MAX_EXEC_STRING];
-	//	snprintf(error_text, SIZEOF(error_text), "RegisterHotKey() of hotkey \"%s\" (id=%d, virtual key=%d, modifiers=%d) failed,"
+	//	snprintf(error_text, sizeof(error_text), "RegisterHotKey() of hotkey \"%s\" (id=%d, virtual key=%d, modifiers=%d) failed,"
 	//		" perhaps because another application (or Windows itself) is already using it."
 	//		"  You could try adding the line \"%s, On\" prior to its line in the script."
 	//		, text, id, vk, modifiers, g_cmd[CMD_FORCE_KEYBD_HOOK]);
@@ -2455,7 +2454,7 @@ void Hotstring::ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, Se
 	for (LPTSTR cp = aOptions; *cp && *cp != ':'; ++cp)
 	{
 		cp1 = cp + 1;
-		switch(toupper(*cp))
+		switch(_totupper(*cp))
 		{
 		case '*':
 			aEndCharRequired = (*cp1 == '0');
@@ -2500,7 +2499,7 @@ void Hotstring::ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, Se
 		case 'S':
 			if (*cp1)
 				++cp; // Skip over S's sub-letter (if any) to exclude it from  further consideration.
-			switch (toupper(*cp1))
+			switch (_totupper(*cp1))
 			{
 			// There is no means to choose SM_INPUT because it seems too rarely desired (since auto-replace
 			// hotstrings would then become interruptible, allowing the keystrokes of fast typists to get

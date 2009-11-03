@@ -594,7 +594,7 @@ public:
 	//	return (BYTE *) CharContents(aAllowUpdate);
 	//}
 
-	TCHAR *CharContents(BOOL aAllowUpdate = TRUE)
+	TCHAR *Contents(BOOL aAllowUpdate = TRUE)
 	// Callers should almost always pass TRUE for aAllowUpdate because any caller who wants to READ from
 	// mContents would almost always want it up-to-date.  Any caller who wants to WRITE to mContents would
 	// would almost always have called Assign(NULL, ...) prior to calling Contents(), which would have
@@ -612,12 +612,6 @@ public:
 			// a pointer to its contents returned to the caller:
 			return g_clip.Contents();
 		return sEmptyString; // For reserved vars (but this method should probably never be called for them).
-	}
-
-	UNICODE_CHECK
-	TCHAR *Contents(BOOL aAllowUpdate = TRUE)
-	{
-		return CharContents(aAllowUpdate);
 	}
 
 	void ConvertToStatic()
