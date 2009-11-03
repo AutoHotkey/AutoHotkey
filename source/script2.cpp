@@ -8851,7 +8851,7 @@ ResultType Line::FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber)
 	__int64 line_number = ATOI64(aLineNumber);
 	if (line_number < 1)
 		return OK;  // Return OK because g_ErrorLevel tells the story.
-	FILE *fp = _tfopen(aFilespec, _T("r, ccs=UNICODE"));
+	FILE *fp = _tfopen(aFilespec, _T("r") );
 	if (!fp)
 		return OK;  // Return OK because g_ErrorLevel tells the story.
 

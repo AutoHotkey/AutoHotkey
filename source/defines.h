@@ -692,8 +692,10 @@ inline void global_init(global_struct &g)
 
 #ifdef UNICODE
 #define WINAPI_SUFFIX "W"
+#define FOPEN_MODE _T(", ccs=UTF-8")
 #else
 #define WINAPI_SUFFIX "A"
+#define FOPEN_MODE
 #endif
 
 // Use #pragma message(MY_WARN(nnnn) "warning messages") to generate a warning like a compiler's warning

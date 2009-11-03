@@ -1164,7 +1164,9 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 #ifndef AUTOHOTKEYSC
 	// Future: might be best to put a stat() or GetFileAttributes() in here for better handling.
-	FILE *fp = _tfopen(aFileSpec, _T("r, ccs=UNICODE"));
+	// NOTES FOR UNICODE, ccs=UNICODE is broken. It doesn't handle system code page (at least for Chinese) properly.
+	// We may need to implement our own IO layer, though I think UTF-8 supports is enough.
+	FILE *fp = _tfopen(aFileSpec, _T("r") FOPEN_MODE);
 	if (!fp)
 	{
 		if (aIgnoreLoadFailure)
@@ -10482,7 +10484,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, LPTSTR *apReturnValue, Line **ap
 				break;
 			case ATTR_LOOP_READ_FILE:
 				FILE *read_file;
-				if (*ARG2 && (read_file = _tfopen(ARG2, _T("r, ccs=UNICODE")))) // v1.0.47: Added check for "" to avoid debug-assertion failure while in debug mode (maybe it's bad to to open file "" in release mode too).
+				if (*ARG2 && (read_file = _tfopen(ARG2, _T("r") FOPEN_MODE))) // v1.0.47: Added check for "" to avoid debug-assertion failure while in debug mode (maybe it's bad to to open file "" in release mode too).
 				{
 					result = line->PerformLoopReadFile(apReturnValue, continue_main_loop, jump_to_line, read_file, ARG3);
 					fclose(read_file);

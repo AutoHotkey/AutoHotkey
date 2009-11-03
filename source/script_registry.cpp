@@ -50,14 +50,15 @@ ResultType Line::IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR 
 #ifdef UNICODE
 static BOOL FixUnicodeInis(LPTSTR aFilespec){
 	if(!DoesFilePatternExist(aFilespec)){
-		FILE* f;
+		HANDLE hFile;
+		DWORD dwWritten;
 
-		// Create an Unicode file.
-		f = _tfopen(aFilespec, _T("wb"));
-		if(!f) return FALSE;
+		// Create an Unicode file. (UTF-16LE BOM)
+		hFile = CreateFile(aFilespec, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL);
+		if(hFile == INVALID_HANDLE_VALUE) return FALSE;
 
-		if(fwrite("\xFF\xFE", 2, 1, f) != 1){ fclose(f); return FALSE; }
-		if(fclose(f) != 0){ return FALSE; }
+		if(!WriteFile(hFile, "\xFF\xFE", 2, &dwWritten, NULL) || dwWritten != 2){ CloseHandle(hFile); return FALSE; }
+		if(!CloseHandle(hFile)){ return FALSE; }
 	}
 	return TRUE;
 }
