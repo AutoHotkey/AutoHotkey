@@ -10,6 +10,7 @@ EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
+		Release (minimum size)|Win32 = Release (minimum size)|Win32
 		Release|Win32 = Release|Win32
 		SC (minimum size)|Win32 = SC (minimum size)|Win32
 		SC (self-contained)|Win32 = SC (self-contained)|Win32
@@ -17,6 +18,8 @@ Global
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Debug|Win32.ActiveCfg = Debug|Win32
 		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Debug|Win32.Build.0 = Debug|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Release (minimum size)|Win32.ActiveCfg = Release (minimum size)|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Release (minimum size)|Win32.Build.0 = Release (minimum size)|Win32
 		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Release|Win32.ActiveCfg = Release|Win32
 		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Release|Win32.Build.0 = Release|Win32
 		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.SC (minimum size)|Win32.ActiveCfg = SC (minimum size)|Win32
@@ -25,6 +28,8 @@ Global
 		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.SC (self-contained)|Win32.Build.0 = SC (self-contained)|Win32
 		{39037993-9571-4DF2-8E39-CD2909043574}.Debug|Win32.ActiveCfg = Debug|Win32
 		{39037993-9571-4DF2-8E39-CD2909043574}.Debug|Win32.Build.0 = Debug|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Release (minimum size)|Win32.ActiveCfg = Release (minimum size)|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Release (minimum size)|Win32.Build.0 = Release (minimum size)|Win32
 		{39037993-9571-4DF2-8E39-CD2909043574}.Release|Win32.ActiveCfg = Release|Win32
 		{39037993-9571-4DF2-8E39-CD2909043574}.Release|Win32.Build.0 = Release|Win32
 		{39037993-9571-4DF2-8E39-CD2909043574}.SC (minimum size)|Win32.ActiveCfg = Release|Win32

@@ -3670,8 +3670,9 @@ ResultType Script::ParseAndAddLine(char *aLineText, ActionTypeType aActionType, 
 		action_args = omit_leading_whitespace(end_marker + 1);
 		// L34: Require that named commands and their args are delimited with a space, tab or comma.
 		// Detects errors such as "MsgBox< foo" or "If!foo" and allows things like "control[x]:=y".
+		// L36: Also allow '(' for if(expr) and while(expr).
 		char end_char = end_marker[1];
-		could_be_named_action = (end_char == g_delimiter || !end_char || IS_SPACE_OR_TAB(end_char));
+		could_be_named_action = (end_char == g_delimiter || !end_char || IS_SPACE_OR_TAB(end_char) || end_char == '(');
 	}
 	else
 	{
@@ -9303,20 +9304,28 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 				case '[': // L31
 					if (  !(infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))  )
 						return LineError("Unsupported use of \"[\"", FAIL, cp); // Reserve this for array construction; i.e. obj := [x,y,z]  (SYM_ASSIGN does not "yield an operand").
-					if (infix_count > MAX_TOKENS - 2)
-						return LineError(ERR_EXPR_TOO_LONG);
-					// TODO: Handle '[' in the '.' section to convert obj.x[y] to ObjGet(obj,"x",y) instead of ObjGet(ObjGet(obj,"x"),y) - to allow 'obj' to entirely handle 'obj.x[y]'.
+					if (infix_count && infix[infix_count - 1].symbol == SYM_GET)
+					{
+						// L36: This is something like obj.x[y] or obj.x[y]:=z, which should be treated
+						//		as a single operation such as ObjGet(obj,"x",y) or ObjSet(obj,"x",y,z).
+						--infix_count;
+						// Below will change the SYM_GET into SYM_OBRACKET, keeping the existing deref struct.
+					}
+					else
+					{
+						if (  !(deref_new = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  )
+							return LineError(ERR_OUTOFMEM);
+						deref_new->func = NULL; // This will be overridden later, but must be initialized.
+						deref_new->param_count = 1; // Initially one parameter: the object.
+						deref_new->marker = cp; // For error-reporting.
+						this_infix_item.deref = deref_new;
+					}
 					// This SYM_OBRACKET will be converted to SYM_FUNC or SYM_SET (then SYM_FUNC) after we determine
 					// what type of operation is being performed.  SYM_FUNC requires a deref structure to point to the
 					// appropriate function; we will also use it to count parameters as each SYM_COMMA is encountered.
 					// deref->func will be set at a later stage.  deref->is_function need not be set.
-					if (  !(deref_new = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  )
-						return LineError(ERR_OUTOFMEM);
-					deref_new->func = NULL; // This will be overridden later, but must be initialized.
-					deref_new->param_count = 1;//2; // At least two parameters: the object being operated on and id count (this_infix_item above).
-					deref_new->marker = cp; // For error-reporting.
+					// DO NOT USE this_infix_item in case above did --infix_count.
 					infix[infix_count].symbol = SYM_OBRACKET;
-					infix[infix_count].deref = deref_new;
 					break;
 				case ']': // L31
 					this_infix_item.symbol = SYM_CBRACKET;
@@ -9554,12 +9563,11 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							cp = omit_leading_whitespace(op_end);
 							
 							SymbolType new_symbol; // Type of token, SYM_FUNC or SYM_SET (which will become SYM_FUNC).
-							DerefType *new_deref; // Holds a reference to appropriate function, and parameter count.
+							DerefType *new_deref; // Holds a reference to the appropriate function, and parameter count.
 							if (   !(new_deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))   )
 								return LineError(ERR_OUTOFMEM);
 							new_deref->marker = cp - 1; // Not typically needed, set for error-reporting.
-							new_deref->param_count = 2;//id_count + 2; // + 2 for (obj, id_count) as in: obj.x.y -> (obj, 2, "x", "y")
-							//new_deref->is_function = false; // FOR DEBUG
+							new_deref->param_count = 2; // Initially two parameters: the object and identifier.
 							
 							if (*op_end == '(')
 							{
@@ -9575,7 +9583,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								
 								if (*op_end == ':' && op_end[1] == '=')
 								{
-									op_end += 2; // No need for further processing this ":=".
+									op_end += 2; // No need for further processing of this ":=".
 									new_symbol = SYM_SET;
 									new_deref->func = g_ObjSet;
 									new_deref->param_count++; // Account for R-value of ":=".
@@ -9981,11 +9989,25 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				++this_infix;  // Since this pair of parentheses is done, move on to the next token in the infix expression.
 
 				in_param_list = (DerefType *)stack[stack_count]->buf; // L31: Restore in_param_list to the value it had when SYM_OPAREN was pushed onto the stack.
+
+				ExprTokenType &stack_token = *stack[stack_count - 1];
 				
 				// There should be no danger of stack underflow in the following because SYM_BEGIN always
 				// exists at the bottom of the stack:
-				if (stack[stack_count - 1]->symbol == SYM_FUNC) // i.e. topmost item on stack is SYM_FUNC.
-					goto standard_pop_into_postfix; // Within the postfix list, a function-call should always immediately follow its params.
+				if (stack_token.symbol == SYM_FUNC) // i.e. topmost item on stack is SYM_FUNC.
+				{
+					// L36: Support obj.x(y):=v as equivalent to obj.x[y]:=v, primarily for users of COM_L.
+					if (stack_token.deref->func == g_ObjCall && this_infix->symbol == SYM_ASSIGN)
+					{
+						++this_infix; // Discard this SYM_ASSIGN.
+						stack_token.symbol = SYM_SET; // To support correct operator precedence.
+						stack_token.deref->func = g_ObjSet;
+						stack_token.deref->param_count++; // For final parameter: r-value of assignment.
+						// SYM_FUNC has become SYM_SET, which should remain on the stack until its r-value is complete.
+					}
+					else
+						goto standard_pop_into_postfix; // Within the postfix list, a function-call should always immediately follow its params.
+				}
 			}
 			else if (stack_symbol == SYM_BEGIN) // This can happen with bad expressions like "Var := 1 ? (:) :" even though theoretically it should mean that paren is closed without having been opened (currently impossible due to load-time balancing).
 				return LineError(ERR_MISSING_OPEN_PAREN); // Since this error string is used in other places, compiler string pooling should result in little extra memory needed for this line.

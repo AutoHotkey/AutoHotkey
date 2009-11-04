@@ -7015,7 +7015,7 @@ ResultType Line::SplitPath(char *aFileSpec)
 			// a blank drive for something like file://C:\My Folder\My File.txt, which seems too rarely
 			// to justify a special mode.
 			drive_end = "";
-			drive = ""; // This is necessary to allow Assign() to work correctly later below, since it interprets a length of zero as "use string's entire length".
+			drive = drive_end; // This is necessary to allow Assign() to work correctly later below, since it interprets a length of zero as "use string's entire length".
 		}
 
 		if (   !(name_delimiter = strrchr(aFileSpec, '\\'))   ) // No backslash.
