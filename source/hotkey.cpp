@@ -896,7 +896,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	}
 
 	// L4: Allow "Hotkey, If, exact-expression-text" to reference existing #if expressions.
-	if (!stricmp(aHotkeyName, "If"))
+	if (!_tcsicmp(aHotkeyName, _T("If")))
 	{
 		if (*aOptions)
 		{	// Let the script know of this error since it may indicate an unescaped comma in the expression text.
@@ -911,11 +911,11 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 			int i;
 			for (i = 0; i < g_HotExprLineCount; ++i)
 			{
-				if (!strcmp(aLabelName, g_HotExprLines[i]->mArg[0].text))
+				if (!_tcscmp(aLabelName, g_HotExprLines[i]->mArg[0].text))
 				{
 					g_HotCriterion = HOT_IF_EXPR;
 					g_HotWinTitle = g_HotExprLines[i]->mArg[0].text;
-					g_HotWinText = "";
+					g_HotWinText = _T("");
 					g_HotExprIndex = i;
 					break;
 				}
@@ -2473,7 +2473,7 @@ Hotstring::Hotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LP
 		// hotstrings can be disabled but never entirely deleted, it's not a memory leak in either case
 		// since memory allocated by either method will be freed when the program exits.
 		size_t size = _tcslen(aReplacement) + 1;
-		if (   !(mReplacement = (size > MAX_ALLOC_SIMPLE) ? (LPTSTR)tmalloc(size) : (LPTSTR)SimpleHeap::Malloc(size * sizeof(TCHAR)))   )
+		if (   !(mReplacement = (size > MAX_ALLOC_SIMPLE) ? tmalloc(size) : (LPTSTR)SimpleHeap::Malloc(size * sizeof(TCHAR)))   )
 		{
 			g_script.ScriptError(ERR_OUTOFMEM); // Short msg since very rare.
 			return;

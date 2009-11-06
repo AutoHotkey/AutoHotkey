@@ -2066,7 +2066,7 @@ public:
 	UINT GetItemPos(LPTSTR aMenuItemName);
 	bool ContainsMenu(UserMenu *aMenu);
 	// L17: Functions for menu icons.
-	ResultType SetItemIcon(UserMenuItem *aMenuItem, char *aFilename, int aIconNumber, int aWidth);
+	ResultType SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int aIconNumber, int aWidth);
 	ResultType ApplyItemIcon(UserMenuItem *aMenuItem);
 	ResultType RemoveItemIcon(UserMenuItem *aMenuItem);
 };

@@ -235,7 +235,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					else // Need to create some new persistent memory for our temporary use.
 					{
 						if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
-							|| !(mem[mem_count] = (LPTSTR)tmalloc(result_size)))
+							|| !(mem[mem_count] = tmalloc(result_size)))
 						{
 							LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, this_token.var->mName);
 							goto abort;
@@ -845,7 +845,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					//   (unusual because the deref buf expands in block-increments, and also because
 					//   return values are usually small, such as numbers).
 					if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
-						|| !(mem[mem_count] = (LPTSTR)tmalloc(result_size)))
+						|| !(mem[mem_count] = tmalloc(result_size)))
 					{
 						LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, func.mName);
 						goto abort;
@@ -1379,7 +1379,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					{
 						// See the nearly identical section higher above for comments:
 						if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
-							|| !(this_token.marker = mem[mem_count] = (LPTSTR)tmalloc(result_size)))
+							|| !(this_token.marker = mem[mem_count] = tmalloc(result_size)))
 						{
 							LineError(ERR_OUTOFMEM ERR_ABORT);
 							goto abort;
@@ -1709,14 +1709,14 @@ non_null_circuit_token:
 		{	// Return numeric or object result as-is.
 			aResultToken->symbol = result_token.symbol;
 			aResultToken->value_int64 = result_token.value_int64;
-			return ""; // Must not return NULL; any other value is OK (will be ignored).
+			return _T(""); // Must not return NULL; any other value is OK (will be ignored).
 		}
 		if (result_token.symbol == SYM_VAR && result_token.var->HasObject())
 		{	// L34: Allow returning of objects contained by variables; 'return var' was already supported since that is not treated as an expression.
 			aResultToken->symbol = SYM_OBJECT;
 			aResultToken->object = result_token.var->Object();
 			aResultToken->object->AddRef();
-			return "";
+			return _T("");
 		}
 	}
 	//else result is a string.  Since it may be contained by a temporary memory block which we will free before returning, just return it as per usual.
@@ -1793,7 +1793,7 @@ non_null_circuit_token:
 			// none of the contents needs to be copied (realloc's ability to do an in-place resize might
 			// be unlikely for anything other than small blocks; see compiler's realloc.c):
 			LPTSTR new_buf;
-			if (   !(new_buf = (LPTSTR)tmalloc(new_buf_size))   )
+			if (   !(new_buf = tmalloc(new_buf_size))   )
 			{
 				LineError(ERR_OUTOFMEM ERR_ABORT);
 				goto abort;
@@ -1837,7 +1837,7 @@ non_null_circuit_token:
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
 
 	case SYM_OBJECT: // L31: Objects are always treated as empty strings; except with ACT_RETURN, which was handled above, and any usage which expects a boolean result.
-		result_to_return = "";
+		result_to_return = _T("");
 		goto normal_end_skip_output_var;
 
 	default: // Result contains a non-operand symbol such as an operator.
@@ -1956,7 +1956,7 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 			if (sDerefBufSize > LARGE_DEREF_BUF_SIZE)
 				--sLargeDerefBufs;
 		}
-		if (   !(sDerefBuf = (LPTSTR)tmalloc(new_buf_size))   )
+		if (   !(sDerefBuf = tmalloc(new_buf_size))   )
 		{
 			// Error msg was formerly: "Ran out of memory while attempting to dereference this line's parameters."
 			sDerefBufSize = 0;  // Reset so that it can make another attempt, possibly smaller, next time.

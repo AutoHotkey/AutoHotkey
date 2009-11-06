@@ -1,3 +1,4 @@
+#pragma once
 
 #define IT_GET				0
 #define IT_SET				1
@@ -74,7 +75,7 @@ class Object : public ObjectBase
 protected:
 	union KeyType // Which of its members is used depends on the field's position in the mFields array.
 	{
-		char *s;
+		LPTSTR s;
 		int i;
 		IObject *p;
 	};
@@ -85,8 +86,8 @@ protected:
 			double n_double;	// for SYM_FLOAT
 			IObject *object;	// for SYM_OBJECT
 			struct {
-				char *marker;		// for SYM_OPERAND
-				size_t size;		// for SYM_OPERAND; allows reuse of allocated memory.
+				LPTSTR marker;		// for SYM_OPERAND
+				size_t size;		// for SYM_OPERAND; allows reuse of allocated memory. For UNICODE: count in characters
 			};
 		};
 		// key and symbol probably need to be adjacent to each other to conserve memory due to 8-byte alignment.
@@ -99,12 +100,12 @@ protected:
 			return val - key.i;
 		}
 
-		inline int CompareKey(char *val)
+		inline int CompareKey(LPTSTR val)
 		{
-			return stricmp(val, key.s);
+			return _tcsicmp(val, key.s);
 		}
 		
-		bool Assign(char *str, size_t len = -1, bool exact_size = false)
+		bool Assign(LPTSTR str, size_t len = -1, bool exact_size = false)
 		{
 			if (!str || !*str && len < 1) // If empty string or null pointer, free our contents.  Passing len >= 1 allows copying \0, so don't check *str in that case.  Ordered for short-circuit performance (len is usually -1).
 			{
@@ -115,7 +116,7 @@ protected:
 			}
 			
 			if (len == -1)
-				len = strlen(str);
+				len = _tcslen(str);
 
 			if (symbol != SYM_OPERAND || len >= size)
 			{
@@ -138,7 +139,7 @@ protected:
 					else  // 6400 KB or more: Cap the extra margin at some reasonable compromise of speed vs. mem usage: 64 KB
 						new_size += (64 * 1024);
 				}
-				if ( !(marker = (char *)malloc(new_size)) )
+				if ( !(marker = tmalloc(new_size)) )
 				{
 					marker = Var::sEmptyString;
 					size = 0;
@@ -148,7 +149,7 @@ protected:
 			}
 			// else we have a buffer with sufficient capacity already.
 
-			memcpy(marker, str, len + 1); // +1 for null-terminator.
+			tmemcpy(marker, str, len + 1); // +1 for null-terminator.
 			return true; // Success.
 		}
 
@@ -304,7 +305,7 @@ protected:
 			left = mKeyOffsetString;
 			right = mFieldCount - 1; // String keys are last in the mFields array.
 
-			return FindField<char *>(key.s, left, right, insert_pos);
+			return FindField<LPTSTR>(key.s, left, right, insert_pos);
 		}
 		else // key_type == SYM_INTEGER || key_type == SYM_OBJECT
 		{
@@ -361,7 +362,7 @@ protected:
 	// Caller must ensure 'at' is the correct offset for this key.
 	{
 		if (mFieldCount == mFieldCountMax && !Expand()  // Attempt to expand if at capacity.
-			|| key_type == SYM_STRING && !(key.s = _strdup(key.s)))  // Attempt to duplicate key-string.
+			|| key_type == SYM_STRING && !(key.s = _tcsdup(key.s)))  // Attempt to duplicate key-string.
 		{	// Out of memory.
 			return NULL;
 		}
@@ -387,7 +388,7 @@ protected:
 		}
 		++mFieldCount; // Only after memmove above.
 		
-		field.marker = ""; // Init for maintainability.
+		field.marker = _T(""); // Init for maintainability.
 		field.size = 0; // Init to ensure safe behaviour in Assign().
 		field.key = key; // Above has already copied string or called key.p->AddRef() as appropriate.
 		field.symbol = SYM_OPERAND;
@@ -443,13 +444,13 @@ public:
 	{
 		// Initialize array of meta-function "identifier" tokens for quick access.
 		g_MetaFuncId[IT_GET].symbol = SYM_STRING;
-		g_MetaFuncId[IT_GET].marker = "__Get";
+		g_MetaFuncId[IT_GET].marker = _T("__Get");
 		g_MetaFuncId[IT_SET].symbol = SYM_STRING;
-		g_MetaFuncId[IT_SET].marker = "__Set";
+		g_MetaFuncId[IT_SET].marker = _T("__Set");
 		g_MetaFuncId[IT_CALL].symbol = SYM_STRING;
-		g_MetaFuncId[IT_CALL].marker = "__Call";
+		g_MetaFuncId[IT_CALL].marker = _T("__Call");
 		g_MetaFuncId[3].symbol = SYM_STRING; // This one does not have a corresponding Invoke-type since it is only invoked indirectly via Release().
-		g_MetaFuncId[3].marker = "__Delete";
+		g_MetaFuncId[3].marker = _T("__Delete");
 	}
 
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);

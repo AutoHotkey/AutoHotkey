@@ -958,7 +958,7 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 
 	case TRANS_CMD_UNICODE:
 #ifdef UNICODE
-	#pragma message(MY_WARN(9999) "I'd like to remove this.")
+		// no-op, in case we no longer need this.
 #else
 		int char_count;
 		if (output_var.Type() == VAR_CLIPBOARD)
@@ -7406,7 +7406,7 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 		// When g_SortFunc!=NULL, the copy of the string is needed because an earlier stage has ensured that
 		// aContents is in the deref buffer, but that deref buffer is about to be overwritten by the
 		// execution of the script's UDF body.
-		if (   !(mem_to_free = (LPTSTR)tmalloc(aContents_length + 3))   ) // +1 for terminator and +2 in case of trailing_crlf_added_temporarily.
+		if (   !(mem_to_free = tmalloc(aContents_length + 3))   ) // +1 for terminator and +2 in case of trailing_crlf_added_temporarily.
 		{
 			result_to_return = LineError(ERR_OUTOFMEM);  // Short msg. since so rare.
 			goto end;
@@ -11998,9 +11998,10 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 		// GetModuleHandle() fails, fall back to LoadLibrary().
 		HMODULE hmodule;
 		if (   !(hmodule = GetModuleHandle(dll_name))    )
-			if (   !(hmodule = *hmodule_to_free = LoadLibrary(dll_name))   )
+			if (   !hmodule_to_free  ||  !(hmodule = *hmodule_to_free = LoadLibrary(dll_name))   )
 			{
-				g_ErrorLevel->Assign(_T("-3")); // Stage 3 error: DLL couldn't be loaded.
+				if (hmodule_to_free) // L31: BIF_DllCall wants us to set ErrorLevel.  ExpressionToPostfix passes NULL.
+					g_ErrorLevel->Assign(_T("-3")); // Stage 3 error: DLL couldn't be loaded.
 				return NULL;
 			}
 		if (   !(function = (void *)GetProcAddress(hmodule, function_name))   )
@@ -12838,7 +12839,12 @@ void *RegExResolveUserCallout(const char *aCalloutParam, int aCalloutParamLength
 	// If no Func is found, pcre will handle the case where aCalloutParam is a pure integer.
 	// In that case, the callout param becomes an integer between 0 and 255. No valid pointer
 	// could be in this range, but we must take care to check (ptr>255) rather than (ptr!=NULL).
-	Func *callout_func = g_script.FindFunc((LPTSTR) aCalloutParam, aCalloutParamLength);
+#ifdef UNICODE
+	CStringWCharFromUTF8 sFunc(aCalloutParam, aCalloutParamLength);
+	Func *callout_func = g_script.FindFunc((LPTSTR) sFunc.GetString(), sFunc.GetLength());
+#else
+	Func *callout_func = g_script.FindFunc(aCalloutParam, aCalloutParamLength);
+#endif
 	if (!callout_func || callout_func->mIsBuiltIn)
 		return NULL;
 	return (void *)callout_func;
@@ -12849,6 +12855,7 @@ struct RegExCalloutData // L14: Used by BIF_RegEx to pass necessary info to RegE
 	pcre *re;
 #ifdef UNICODE
 	LPTSTR haystack;
+	int haystack_length;
 #endif
 	LPTSTR re_text; // original NeedleRegEx
 	int options_length; // used to adjust cb->pattern_position
@@ -12902,8 +12909,15 @@ int RegExCallout(pcre_callout_block *cb)
 		if (!Var::BackupFunctionVars(func, var_backup, var_backup_count)) // Out of memory.
 			return 0;
 
+#ifdef UNICODE
+	#pragma message(MY_WARN(9999) "pcre_callout_block must be translated, but it is somewhat expansive.")
+#else
+	#ifdef _WIN64
+		#error ooch!, the pointer is now 64bits
+	#endif
 	DWORD EventInfo_saved = g->EventInfo;
 	g->EventInfo = (DWORD)cb;
+#endif
 
 	/*
 	callout_number:		should be available since callout number can be specified within (?C...).
@@ -12966,7 +12980,13 @@ int RegExCallout(pcre_callout_block *cb)
 				if (func.mParamCount > 3)
 				{
 					// Haystack
-					func.mParam[3].var->Assign((LPTSTR)cb->subject, cb->subject_length);
+					func.mParam[3].var->Assign(
+#ifdef UNICODE
+						cd.haystack, cd.haystack_length
+#else
+						cb->subject, cb->subject_length
+#endif
+					);
 				
 					if (func.mParamCount > 4)
 					{
@@ -12977,7 +12997,8 @@ int RegExCallout(pcre_callout_block *cb)
 			}
 		}
 	}
-		
+
+
 	// Make all string positions one-based. UPDATE: offset_vector cannot be modified, so for consistency don't do this:
 	//++cb->pattern_position;
 	//++cb->start_match;
@@ -12994,8 +13015,9 @@ int RegExCallout(pcre_callout_block *cb)
 
 	Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
 
+#ifndef UNICODE
 	g->EventInfo = EventInfo_saved;
-
+#endif
 
 	// Behaviour of return values is defined by PCRE.
 	return number_to_return;
@@ -13834,6 +13856,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	callout_data.re = re;
 #ifdef UNICODE
 	callout_data.haystack = haystack;
+	callout_data.haystack_length = haystack_length;
 #endif
 	callout_data.re_text = needle;
 	callout_data.options_length = options_length;

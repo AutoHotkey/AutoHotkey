@@ -1023,13 +1023,13 @@ _T("\n")
 
 	// L31: Resolve ObjGet/Set/Call early so we don't need to check for them in ExpressionToPostfix.
 	// This is the latest possible time it can be done: immediately before PreparseBlocks.
-	if (   !(g_ObjGet  = FindFunc("ObjGet"))
-		|| !(g_ObjSet  = FindFunc("ObjSet"))
-		|| !(g_ObjCall = FindFunc("ObjCall"))   )
+	if (   !(g_ObjGet  = FindFunc(_T("ObjGet")))
+		|| !(g_ObjSet  = FindFunc(_T("ObjSet")))
+		|| !(g_ObjCall = FindFunc(_T("ObjCall")))   )
 	{
 #ifdef _DEBUG
 		// Should never happen.
-		ScriptError("Missing internal function.", g_ObjGet ? g_ObjSet ? "ObjCall" : "ObjSet" : "ObjGet");
+		ScriptError(_T("Missing internal function."), g_ObjGet ? g_ObjSet ? _T("ObjCall") : _T("ObjSet") : _T("ObjGet"));
 #endif
 		return LOADING_FAILED;
 	}
@@ -2801,13 +2801,13 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	}
 
 	// L4: Handle #if (expression) directive.
-	if (IS_DIRECTIVE_MATCH("#If"))
+	if (IS_DIRECTIVE_MATCH(_T("#If")))
 	{
 		if (!parameter) // The omission of the parameter indicates that any existing criteria should be turned off.
 		{
 			g_HotCriterion = HOT_NO_CRITERION; // Indicate that no criteria are in effect for subsequent hotkeys.
-			g_HotWinTitle = ""; // Helps maintainability and some things might rely on it.
-			g_HotWinText = "";  //
+			g_HotWinTitle = _T(""); // Helps maintainability and some things might rely on it.
+			g_HotWinText = _T("");  //
 			g_HotExprIndex = -1;
 			return CONDITION_TRUE;
 		}
@@ -2859,7 +2859,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		g_HotCriterion = HOT_IF_EXPR;
 		// Use the expression text to identify hotkey variants.
 		g_HotWinTitle = hot_expr_line->mArg[0].text;
-		g_HotWinText = "";
+		g_HotWinText = _T("");
 
 		if (g_HotExprLineCount + 1 > g_HotExprLineCountMax)
 		{	// Allocate or reallocate g_HotExprLines.
@@ -2875,7 +2875,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		return CONDITION_TRUE;
 	}
 	// L4: Allow #if timeout to be adjusted.
-	if (IS_DIRECTIVE_MATCH("#IfTimeout"))
+	if (IS_DIRECTIVE_MATCH(_T("#IfTimeout")))
 	{
 		if (parameter)
 			g_HotExprTimeout = ATOU(parameter);
@@ -3992,11 +3992,11 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				}
 				else
 				{
-					char *id_begin = action_args + 1;
-					char *cp;
+					LPTSTR id_begin = action_args + 1;
+					LPTSTR cp;
 					for (;;) // L35: Loop to fix x.y.z() and similar.
 					{
-						for (cp = id_begin; isalnum(*cp) || *cp == '_'; ++cp); // Find end of identifier.
+						for (cp = id_begin; _istalnum(*cp) || *cp == '_'; ++cp); // Find end of identifier.
 						if (cp == id_begin)
 							// No valid identifier, doesn't look like a valid expression.
 							break;
@@ -5252,7 +5252,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 					{
 						if (*op_begin == '.') // L31: Check for something like "obj .property" - scientific-notation literals such as ".123e+1" may also be handled here.
 						{
-							if (strchr(op_begin, g_DerefChar))
+							if (_tcschr(op_begin, g_DerefChar))
 								return ScriptError(ERR_INVALID_DOT, op_begin);
 							// Skip over this scientific-notation literal or string of one or more member-access operations.
 							// This won't skip the signed exponent of a scientific-notation literal, but that should be OK
@@ -5260,7 +5260,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 							*op_end = orig_char;
 							continue;
 						}
-						if (cp = strchr(op_begin + 1, '.')) // L31: Check for scientific-notation literal (as in previous versions) or something like "obj.property". Above has already handled "obj .property" and similar.
+						if (cp = _tcschr(op_begin + 1, '.')) // L31: Check for scientific-notation literal (as in previous versions) or something like "obj.property". Above has already handled "obj .property" and similar.
 						{
 							if (toupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-')) // Listed first for short-circuit performance with the below.
 							{
@@ -5284,7 +5284,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 							}
 							// else this is NOT a scientific-notation literal with +/- sign present, so treat it as a member-access operation.
 							// Resolve the part preceding '.' as a variable reference. The rest is handled later, in ExpressionToPostfix.
-							if (strchr(cp, g_DerefChar))
+							if (_tcschr(cp, g_DerefChar))
 								return ScriptError(ERR_INVALID_DOT, cp);
 							operand_length = cp - op_begin;
 							is_function = false;
@@ -7125,7 +7125,7 @@ Func *Script::FindFunc(LPTSTR aFuncName, size_t aFuncNameLength, int *apInsertPo
 	for (left = 0, right = mFuncCount - 1; left <= right;)
 	{
 		mid = (left + right) / 2;
-		result = stricmp(func_name, mFunc[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+		result = _tcsicmp(func_name, mFunc[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 		if (result > 0)
 			left = mid + 1;
 		else if (result < 0)
@@ -7299,7 +7299,7 @@ Func *Script::FindFunc(LPTSTR aFuncName, size_t aFuncNameLength, int *apInsertPo
 		min_params = 2;
 		max_params = 3;
 	}
-	else if (!stricmp(func_name, "Trim") || !stricmp(func_name, "LTrim") || !stricmp(func_name, "RTrim")) // L31
+	else if (!_tcsicmp(func_name, _T("Trim")) || !_tcsicmp(func_name, _T("LTrim")) || !_tcsicmp(func_name, _T("RTrim"))) // L31
 	{
 		bif = BIF_Trim;
 		min_params = 1;
@@ -7417,23 +7417,23 @@ Func *Script::FindFunc(LPTSTR aFuncName, size_t aFuncNameLength, int *apInsertPo
 		bif = BIF_RegisterCallback;
 		max_params = 4; // Leave min_params at 1.
 	}
-	else if (!stricmp(func_name, "IsObject")) // L31
+	else if (!_tcsicmp(func_name, _T("IsObject"))) // L31
 	{
 		bif = BIF_IsObject;
 		max_params = 10000; // Leave min_params at 1.
 	}
-	else if (!strnicmp(func_name, "Obj", 3)) // L31: See script_object.cpp for details.
+	else if (!_tcsnicmp(func_name, _T("Obj"), 3)) // L31: See script_object.cpp for details.
 	{
 		suffix = func_name + 3;
 		max_params = -1;
 
-		if (!stricmp(suffix, "Get") || !stricmp(suffix, "Set") || !stricmp(suffix, "Call"))
+		if (!_tcsicmp(suffix, _T("Get")) || !_tcsicmp(suffix, _T("Set")) || !_tcsicmp(suffix, _T("Call")))
 		{
 			bif = BIF_ObjInvoke;
 			min_params = *suffix == 'S' ? 3 : 1;
 			max_params = 10000;
 		}
-		else if (!stricmp(suffix, "ect")) // i.e. "Object"
+		else if (!_tcsicmp(suffix, _T("ect"))) // i.e. "Object"
 		{
 			bif = BIF_ObjCreate;
 			min_params = 0;
@@ -7446,7 +7446,7 @@ Func *Script::FindFunc(LPTSTR aFuncName, size_t aFuncNameLength, int *apInsertPo
 		//	bif = NULL; // Init because it hasn't been, prior to this line.
 		//	for (int t = 0; t < g_ObjTypeCount; ++t)
 		//	{
-		//		if (!stricmp(suffix, g_ObjTypes[t].name))
+		//		if (!_tcsicmp(suffix, g_ObjTypes[t].name))
 		//		{
 		//			bif = BIF_ObjCreate;
 		//			min_params = g_ObjTypes[t].min_params;
@@ -9336,7 +9336,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 				case '[': // L31
 					if (  !(infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))  )
-						return LineError("Unsupported use of \"[\"", FAIL, cp); // Reserve this for array construction; i.e. obj := [x,y,z]  (SYM_ASSIGN does not "yield an operand").
+						return LineError(_T("Unsupported use of \"[\""), FAIL, cp); // Reserve this for array construction; i.e. obj := [x,y,z]  (SYM_ASSIGN does not "yield an operand").
 					if (infix_count && infix[infix_count - 1].symbol == SYM_GET)
 					{
 						// L36: This is something like obj.x[y] or obj.x[y]:=z, which should be treated
@@ -9470,7 +9470,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						++cp;
 						if (   !(this_infix_item.deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))   )
 							return LineError(ERR_OUTOFMEM);
-						this_infix_item.deref->func = g_script.FindFunc("RegExMatch");
+						this_infix_item.deref->func = g_script.FindFunc(_T("RegExMatch"));
 						this_infix_item.deref->param_count = 2;
 						this_infix_item.symbol = SYM_REGEXMATCH;
 					}
@@ -9577,8 +9577,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							//for (op_end = cp; !strchr(EXPR_OPERAND_TERMINATORS "\"", *op_end); ++op_end);
 							for (op_end = cp; isalnum(*op_end) || *op_end == '_'; ++op_end);
 
-							if (!strchr(EXPR_OPERAND_TERMINATORS, *op_end))
-								return LineError("Invalid character in dotted identifier.", FAIL, op_end);
+							if (!_tcschr(EXPR_OPERAND_TERMINATORS, *op_end))
+								return LineError(_T("Invalid character in dotted identifier."), FAIL, op_end);
 
 							// Rather than trying to predict how something like "obj.-1" will be handled, treat it as a syntax error.
 							// This also prevents "obj.(expression)" from acting like "obj[expression]", but that seems OK for now as
@@ -10061,7 +10061,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 // ABOVE CASE FALLS INTO BELOW.
 		case SYM_OPAREN:
 			// Open-parentheses always go on the stack to await their matching close-parentheses.
-			this_infix->buf = (char*)in_param_list; // L31: Save current value on the stack with this SYM_OPAREN.
+			this_infix->buf = (LPTSTR)in_param_list; // L31: Save current value on the stack with this SYM_OPAREN.
 			in_param_list = (infix_symbol == SYM_FUNC) // L31: If true, we fell through from 'case SYM_FUNC', i.e. this SYM_OPAREN is the beginning of a parameter list.
 				? this_infix[-1].deref	// Point at the deref of the SYM_FUNC to which this SYM_OPAREN belongs.
 				: NULL;					// Allow multi-statement commas at this level of parentheses.
@@ -10108,7 +10108,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 			break;
 
 		case SYM_OBRACKET: // L31
-			this_infix->buf = (char *)in_param_list; // Save current value on the stack with this SYM_OBRACKET.
+			this_infix->buf = (LPTSTR)in_param_list; // Save current value on the stack with this SYM_OBRACKET.
 			in_param_list = this_infix->deref; // This deref holds param_count and other info for the current parameter list.
 			STACK_PUSH(this_infix++); // Push this '[' onto the stack to await its ']'.
 			break;
@@ -10117,9 +10117,9 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 			if (stack_symbol == SYM_BEGIN) // An ELSE with no matching IF/THEN.
 				return LineError(_T("A \":\" is missing its \"?\"")); // Below relies on the above check having been done, to avoid underflow.
 			if (stack_symbol == SYM_OPAREN) // L34: Additional syntax validation.
-				return LineError("Missing \")\" before \":\"");
+				return LineError(_T("Missing \")\" before \":\""));
 			if (stack_symbol == SYM_OBRACKET)
-				return LineError("Missing \"]\" before \":\"");
+				return LineError(_T("Missing \"]\" before \":\""));
 			// Otherwise:
 			this_postfix = STACK_POP; // There should be no danger of stack underflow in the following because SYM_BEGIN always exists at the bottom of the stack.
 			if (stack_symbol == SYM_IFF_THEN) // See comments near the bottom of this case. The first found "THEN" on the stack must be the one that goes with this "ELSE".
@@ -12013,7 +12013,7 @@ ResultType Line::PerformLoopParse(ExprTokenType *aResultToken, bool &aContinueMa
 	}
 	else
 	{
-		if (   !(buf = (LPTSTR)tmalloc(space_needed))   )
+		if (   !(buf = tmalloc(space_needed))   )
 			// Probably best to consider this a critical error, since on the rare times it does happen, the user
 			// would probably want to know about it immediately.
 			return LineError(ERR_OUTOFMEM, FAIL, ARG2);
@@ -12120,7 +12120,7 @@ ResultType Line::PerformLoopParseCSV(ExprTokenType *aResultToken, bool &aContinu
 	}
 	else
 	{
-		if (   !(buf = (LPTSTR)tmalloc(space_needed))   )
+		if (   !(buf = tmalloc(space_needed))   )
 			return LineError(ERR_OUTOFMEM, FAIL, ARG2);
 		stack_buf = NULL; // For comparison purposes later below.
 	}
@@ -14487,7 +14487,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 	}
 	// Declare this buf here to ensure it's in scope for the entire function, since its
 	// contents may be referred to indirectly:
-	LPTSTR parse_buf = (LPTSTR)_alloca((aAction_length + 1) * sizeof(TCHAR)); // v1.0.44.14: _alloca() helps conserve stack space.
+	LPTSTR parse_buf = talloca(aAction_length + 1); // v1.0.44.14: _alloca() helps conserve stack space.
 
 	// Make sure this is set to NULL because CreateProcess() won't work if it's the empty string:
 	if (aWorkingDir && !*aWorkingDir)
@@ -14583,12 +14583,12 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		LPTSTR command_line; // Need a new buffer other than parse_buf because parse_buf's contents may still be pointed to directly or indirectly for use further below.
 		if (aParams && *aParams)
 		{
-			command_line = (LPTSTR)_alloca((aAction_length + _tcslen(aParams) + 10) * sizeof(TCHAR)); // +10 to allow room for space, terminator, and any extra chars that might get added in the future.
+			command_line = talloca(aAction_length + _tcslen(aParams) + 10); // +10 to allow room for space, terminator, and any extra chars that might get added in the future.
 			_stprintf(command_line, _T("%s %s"), aAction, aParams);
 		}
 		else // We're running the original action from caller.
 		{
-			command_line = (LPTSTR)_alloca((aAction_length + 1) * sizeof(TCHAR));
+			command_line = talloca(aAction_length + 1);
         	_tcscpy(command_line, aAction); // CreateProcessW() requires modifiable string.  Although non-W version is used now, it feels safer to make it modifiable anyway.
 		}
 

@@ -71,7 +71,7 @@ void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	else
 	{
 		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = "";
+		aResultToken.marker = _T("");
 	}
 }
 
@@ -102,7 +102,7 @@ void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 	// Set default return value; ONLY AFTER THE ABOVE.
 	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = "";
+	aResultToken.marker = _T("");
     
     obj_param = *aParam; // aParam[0].  Load-time validation has ensured at least one parameter was specified.
     
@@ -147,7 +147,7 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 	if (aParamCount < aFunc.mMinParams)
 	{
 		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = "";
+		aResultToken.marker = _T("");
 		return FAIL;
 	}
 	ResultType result = OK;
@@ -168,7 +168,7 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 
 		// L: Set a default here in case we return early/abort.
 		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = "";
+		aResultToken.marker = _T("");
 
 		count_of_actuals_that_have_formals = (aParamCount > aFunc.mParamCount)
 					? aFunc.mParamCount  // Omit any actuals that lack formals (this can happen when a dynamic call passes too many parameters).
@@ -238,17 +238,17 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 		{
 			if (aResultToken.symbol == SYM_STRING || aResultToken.symbol == SYM_OPERAND) // SYM_VAR is not currently possible.
 			{
-				char *buf;
+				LPTSTR buf;
 				size_t len;
 				// Make a persistent copy of the string in case it is the contents of one of the function's local variables.
-				if ( *aResultToken.marker && (buf = (char *)malloc(1 + (len = strlen(aResultToken.marker)))) )
+				if ( *aResultToken.marker && (buf = tmalloc(1 + (len = _tcslen(aResultToken.marker)))) )
 				{
-					aResultToken.marker = (char *)memcpy(buf, aResultToken.marker, len + 1);
+					aResultToken.marker = tmemcpy(buf, aResultToken.marker, len + 1);
 					aResultToken.circuit_token = (ExprTokenType *)buf;
-					aResultToken.buf = (char *)len; // L33: Bugfix - buf is the length of the string, not the size of the memory allocation.
+					aResultToken.buf = (LPTSTR)len; // L33: Bugfix - buf is the length of the string, not the size of the memory allocation.
 				}
 				else
-					aResultToken.marker = "";
+					aResultToken.marker = _T("");
 			}
 		}
 		Var::FreeAndRestoreFunctionVars(aFunc, var_backup, var_backup_count);
@@ -272,7 +272,7 @@ IObject *Object::Create(ExprTokenType *aParam[], int aParamCount)
 	if (obj && aParamCount)
 	{
 		ExprTokenType result_token, this_token;
-		char buf[MAX_NUMBER_SIZE];
+		TCHAR buf[MAX_NUMBER_SIZE];
 
 		this_token.symbol = SYM_OBJECT;
 		this_token.object = obj;
@@ -280,7 +280,7 @@ IObject *Object::Create(ExprTokenType *aParam[], int aParamCount)
 		for (int i = 0; i + 1 < aParamCount; i += 2)
 		{
 			result_token.symbol = SYM_STRING;
-			result_token.marker = "";
+			result_token.marker = _T("");
 			result_token.circuit_token = NULL;
 			result_token.buf = buf;
 
@@ -306,7 +306,7 @@ bool Object::Delete()
 	{
 		ExprTokenType result_token, this_token, *param;
 		
-		result_token.marker = "";
+		result_token.marker = _T("");
 		result_token.symbol = SYM_STRING;
 		result_token.circuit_token = NULL;
 
@@ -461,23 +461,23 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		else if (!IS_INVOKE_META && aParamCount < 4 && key_type == SYM_STRING && *key.s == '_')
 		// !IS_INVOKE_META: these methods must operate only on the real/direct object, not indirectly on a meta-object.
 		{
-			char *name = key.s + 1; // + 1 to exclude '_' from further consideration.
+			LPTSTR name = key.s + 1; // + 1 to exclude '_' from further consideration.
 			++aParam; --aParamCount; // Exclude the method identifier.  A prior check ensures there was at least one param in this case.
 			if (aParamCount) {
-				if (!stricmp(name, "Insert"))
+				if (!_tcsicmp(name, _T("Insert")))
 					return _Insert(aResultToken, aParam, aParamCount);
-				if (!stricmp(name, "Remove"))
+				if (!_tcsicmp(name, _T("Remove")))
 					return _Remove(aResultToken, aParam, aParamCount);
-				if (!stricmp(name, "SetCapacity"))
+				if (!_tcsicmp(name, _T("SetCapacity")))
 					return _SetCapacity(aResultToken, aParam, aParamCount);
-				//if (!stricmp(name, "GetAddress"))
+				//if (!_tcsicmp(name, _T("GetAddress")))
 				//	return _GetAddress(aResultToken, aParam, aParamCount);
 			} else { // aParamCount == 0
-				if (!stricmp(name, "MaxIndex"))
+				if (!_tcsicmp(name, _T("MaxIndex")))
 					return _MaxIndex(aResultToken);
-				if (!stricmp(name, "MinIndex"))
+				if (!_tcsicmp(name, _T("MinIndex")))
 					return _MinIndex(aResultToken);
-				if (!stricmp(name, "GetCapacity"))
+				if (!_tcsicmp(name, _T("GetCapacity")))
 					return _GetCapacity(aResultToken);
 			}
 		}
@@ -499,7 +499,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		}
 		else if (IS_INVOKE_SET)
 		{
-			if (key_type == SYM_STRING && !stricmp(key.s, "base"))
+			if (key_type == SYM_STRING && !_tcsicmp(key.s, _T("base")))
 			{
 				if (!mBase)
 					mBase = new Object();
@@ -548,7 +548,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		ExprTokenType &value_param = *aParam[1];
 
 		// Must be handled before inserting a new field:
-		if (!field && key_type == SYM_STRING && !stricmp(key.s, "base"))
+		if (!field && key_type == SYM_STRING && !_tcsicmp(key.s, _T("base")))
 		{
 			IObject *obj = TokenToObject(value_param);
 			if (obj)
@@ -599,18 +599,18 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	{
 		if (field->symbol == SYM_OPERAND)
 		{
-			char *buf;
+			LPTSTR buf;
 			size_t len;
 			// L33: Make a persistent copy; our copy might be freed indirectly by releasing this object.
 			//		Prior to L33, callers took care of this UNLESS this was the last op in an expression.
-			if (buf = (char *)malloc(1 + (len = strlen(field->marker))))
+			if (buf = tmalloc(1 + (len = _tcslen(field->marker))))
 			{
-				aResultToken.marker = (char *)memcpy(buf, field->marker, len + 1);
+				aResultToken.marker = tmemcpy(buf, field->marker, len + 1);
 				aResultToken.circuit_token = (ExprTokenType *)buf;
-				aResultToken.buf = (char *)len;
+				aResultToken.buf = (LPTSTR)len;
 			}
 			else
-				aResultToken.marker = "";
+				aResultToken.marker = _T("");
 
 			aResultToken.symbol = SYM_OPERAND;
 		}
@@ -619,7 +619,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 
 		return OK;
 	}
-	if (key_type == SYM_STRING && !stricmp(key.s, "base"))
+	if (key_type == SYM_STRING && !_tcsicmp(key.s, _T("base")))
 	{
 		// Above already returned if (!field && IS_INVOKE_META), so 'this' is the real object.
 		if (mBase)
@@ -695,7 +695,7 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		// Do not allow removing a range of object keys since there is probably no meaning to their order.
 		if (max_key_type != min_key_type || max_key_type == SYM_OBJECT || max_pos < min_pos
 			// min and max are different types, are objects, or max < min.
-			|| (max_pos == min_pos && (max_key_type == SYM_INTEGER ? max_key.i < min_key.i : stricmp(max_key.s, min_key.s) < 0)))
+			|| (max_pos == min_pos && (max_key_type == SYM_INTEGER ? max_key.i < min_key.i : _tcsicmp(max_key.s, min_key.s) < 0)))
 			// max < min, but no keys exist in that range so (max_pos < min_pos) check above didn't catch it.
 			return OK;
 		//else if (max_pos == min_pos): specified range is valid, but doesn't match any keys.
@@ -927,7 +927,7 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, Exp
 
 	if (r == INVOKE_NOT_HANDLED && IS_INVOKE_GET && aParamCount == 1 && aParam[0]->symbol == SYM_OPERAND) // aParam[0]->symbol *should* always be SYM_OPERAND, but check anyway.
 	{
-		if (!stricmp(aParam[0]->marker, "base"))
+		if (!_tcsicmp(aParam[0]->marker, _T("base")))
 		{
 			// In this case, script did something like ("".base); i.e. wants a reference to g_MetaObject itself.
 			aResultToken.symbol = SYM_OBJECT;

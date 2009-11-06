@@ -932,7 +932,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 		// have to be sized much larger than it would need to be:
 		if (   !SendMessageTimeout(control_window, WM_GETTEXTLENGTH, 0, 0, SMTO_ABORTIFHUNG, 2000, &length)
 			|| !length  // Since the above didn't return for start == end, this is an error because we have a selection of non-zero length, but no text to go with it!
-			|| !(dyn_buf = (LPTSTR)tmalloc(length + 1))   ) // Relies on short-circuit boolean order.
+			|| !(dyn_buf = tmalloc(length + 1))   ) // Relies on short-circuit boolean order.
 			return output_var.Assign();
 		if (   !SendMessageTimeout(control_window, WM_GETTEXT, (WPARAM)(length + 1), (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 2000, &length)
 			|| !length || end > length   )

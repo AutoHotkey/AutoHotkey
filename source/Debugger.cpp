@@ -12,6 +12,8 @@ including commercial applications, and to alter it and redistribute it
 freely, without restriction.
 */
 
+#include "stdafx.h"
+
 #ifdef SCRIPT_DEBUG
 
 #include "defines.h"

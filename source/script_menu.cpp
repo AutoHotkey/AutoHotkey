@@ -148,7 +148,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 					if ( !(new_icon = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, icon_number, false)) )
 						DestroyIcon(new_icon_small);
 				if ( !new_icon )
-					RETURN_MENU_ERROR("Can't load icon.", aParam3);
+					RETURN_MENU_ERROR(_T("Can't load icon."), aParam3);
 
 				GuiType::DestroyIconsIfUnused(mCustomIcon, mCustomIconSmall); // This destroys it if non-NULL and it's not used by an GUI windows.
 
@@ -158,16 +158,16 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 				// Allocate the full MAX_PATH in case the contents grow longer later.
 				// SimpleHeap improves avg. case mem load:
 				if (!mCustomIconFile)
-					mCustomIconFile = SimpleHeap::Malloc(MAX_PATH);
+					mCustomIconFile = SimpleHeap::Malloc(MAX_PATH * sizeof(TCHAR));
 				if (mCustomIconFile)
 				{
 					// Get the full path in case it's a relative path.  This is documented and it's done in case
 					// the script ever changes its working directory:
-					char full_path[MAX_PATH], *filename_marker;
-					if (GetFullPathName(aParam3, sizeof(full_path) - 1, full_path, &filename_marker))
-						strlcpy(mCustomIconFile, full_path, MAX_PATH);
+					TCHAR full_path[MAX_PATH], *filename_marker;
+					if (GetFullPathName(aParam3, _countof(full_path) - 1, full_path, &filename_marker))
+						tcslcpy(mCustomIconFile, full_path, MAX_PATH);
 					else
-						strlcpy(mCustomIconFile, aParam3, MAX_PATH);
+						tcslcpy(mCustomIconFile, aParam3, MAX_PATH);
 				}
 
 				if (!g_NoTrayIcon)
@@ -450,7 +450,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 	case MENU_CMD_ICON:
 		// aOptions2: Icon width if specified. Defaults to system small icon size; original icon size will be used if aOptions2 is "0".
 		if (!menu->SetItemIcon(menu_item, aParam4, ATOI(aOptions), !*aOptions2 ? GetSystemMetrics(SM_CXSMICON) : ATOI(aOptions2)))
-			RETURN_MENU_ERROR("Can't load icon.", aParam4);
+			RETURN_MENU_ERROR(_T("Can't load icon."), aParam4);
 		return OK;
 	case MENU_CMD_NOICON:
 		return menu->RemoveItemIcon(menu_item);
@@ -481,14 +481,14 @@ UserMenu *Script::AddMenu(LPTSTR aMenuName)
 	if (length > MAX_MENU_NAME_LENGTH)
 		return NULL;  // Caller should show error if desired.
 	// After mem is allocated, the object takes charge of its later deletion:
-	LPTSTR name_dynamic = new TCHAR [length + 1];  // +1 for terminator.
+	LPTSTR name_dynamic = tmalloc(length + 1);  // +1 for terminator.
 	if (!name_dynamic)
 		return NULL;  // Caller should show error if desired.
 	_tcscpy(name_dynamic, aMenuName);
 	UserMenu *menu = new UserMenu(name_dynamic);
 	if (!menu)
 	{
-		delete name_dynamic;
+		free(name_dynamic);
 		return NULL;  // Caller should show error if desired.
 	}
 	if (!mFirstMenu)
@@ -542,7 +542,7 @@ ResultType Script::ScriptDeleteMenu(UserMenu *aMenu)
 	aMenu->DeleteAllItems(); // This also calls Destroy() to free the menu's resources.
 	if (aMenu->mBrush) // Free the brush used for the menu's background color.
 		DeleteObject(aMenu->mBrush);
-	delete aMenu->mName; // Since it was separately allocated.
+	free(aMenu->mName); // Since it was separately allocated.
 	delete aMenu;
 	--mMenuCount;
 	return OK;
@@ -599,7 +599,7 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, Label *aLabel, UserMenu
 	LPTSTR name_dynamic;
 	if (length)
 	{
-		if (   !(name_dynamic = new TCHAR [length + 1])   )  // +1 for terminator.
+		if (   !(name_dynamic = tmalloc(length + 1))   )  // +1 for terminator.
 			return FAIL;  // Caller should show error if desired.
 		_tcscpy(name_dynamic, aName);
 	}
@@ -609,7 +609,7 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, Label *aLabel, UserMenu
 	if (!menu_item) // Should also be very rare.
 	{
 		if (name_dynamic != Var::sEmptyString)
-			delete name_dynamic;
+			free(name_dynamic);
 		return FAIL;  // Caller should show error if desired.
 	}
 	if (!mFirstMenuItem)
@@ -661,7 +661,7 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 		RemoveMenu(mMenu, aMenuItem_ID, aMenuItem_MF_BY); // v1.0.48: Lexikos: DeleteMenu() destroys any sub-menu handle associated with the item, so use RemoveMenu. Otherwise the submenu handle stored somewhere else in memory would suddenly become invalid.
 	RemoveItemIcon(aMenuItem); // L17: Free icon or bitmap.
 	if (aMenuItem->mName != Var::sEmptyString)
-		delete aMenuItem->mName; // Since it was separately allocated.
+		free(aMenuItem->mName); // Since it was separately allocated.
 	delete aMenuItem; // Do this last when its contents are no longer needed.
 	--mMenuItemCount;
 	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
@@ -834,12 +834,12 @@ ResultType UserMenu::UpdateName(UserMenuItem *aMenuItem, LPTSTR aNewName)
 		{
 			// Use a temp var. so that mName will never wind up being NULL (relied on by other things).
 			// This also retains the original menu name if the allocation fails:
-			LPTSTR temp = new TCHAR [new_length + 1];  // +1 for terminator.
+			LPTSTR temp = tmalloc(new_length + 1);  // +1 for terminator.
 			if (!temp)
 				return FAIL;
 			// Otherwise:
-			if (aMenuItem->mName != Var::sEmptyString) // Since it was previously new'd, delete it.
-				delete aMenuItem->mName;
+			if (aMenuItem->mName != Var::sEmptyString) // Since it was previously allocated, free it.
+				free(aMenuItem->mName);
 			aMenuItem->mName = temp;
 			aMenuItem->mNameCapacity = new_length + 1;
 		}
@@ -1433,7 +1433,7 @@ bool UserMenu::ContainsMenu(UserMenu *aMenu)
 
 // L17: Menu-item icon functions.
 
-ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, char *aFilename, int aIconNumber, int aWidth)
+ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int aIconNumber, int aWidth)
 {
 	if (!*aFilename || (*aFilename == '*' && !aFilename[1]))
 		return RemoveItemIcon(aMenuItem);

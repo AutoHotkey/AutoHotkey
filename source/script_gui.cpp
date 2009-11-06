@@ -7035,7 +7035,7 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 			break;
 
 		case 'Q': // L19: Allow control over font quality (anti-aliasing, etc.).
-			font.quality = atoi(cp + 1);
+			font.quality = _ttoi(cp + 1);
 			break;
 
 		// Otherwise: Ignore other characters, such as the digits that occur after the P/X/Y option letters.

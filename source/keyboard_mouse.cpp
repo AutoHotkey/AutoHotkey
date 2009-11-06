@@ -91,6 +91,34 @@ void DisguiseWinAltIfNeeded(vk_type aVK)
 
 
 
+// moved from SendKeys
+void SendUnicodeChar(wchar_t aChar, modLR_type aModifiersLRnew, modLR_type aModifiersLRnow)
+{
+	INPUT u_input[2];
+
+	// L25: Set modifier key-state in case it matters.
+	SetModifierLRState(aModifiersLRnew, aModifiersLRnow,  NULL, false, true, KEY_IGNORE);
+	
+	u_input[0].type = INPUT_KEYBOARD;
+	u_input[0].ki.wVk = 0;
+	u_input[0].ki.wScan = aChar;
+	u_input[0].ki.dwFlags = KEYEVENTF_UNICODE;
+	u_input[0].ki.time = 0;
+	// L25: Set dwExtraInfo to ensure AutoHotkey ignores the event; otherwise it may trigger a SCxxx hotkey (where xxx is u_code).
+	u_input[0].ki.dwExtraInfo = KEY_IGNORE;
+	
+	u_input[1].type = INPUT_KEYBOARD;
+	u_input[1].ki.wVk = 0;
+	u_input[1].ki.wScan = aChar;
+	u_input[1].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+	u_input[1].ki.time = 0;
+	u_input[1].ki.dwExtraInfo = KEY_IGNORE;
+
+	SendInput(2, u_input, sizeof(INPUT));
+}
+
+
+
 void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow)
 // The aKeys string must be modifiable (not constant), since for performance reasons,
 // it's allowed to be temporarily altered by this function.  mThisHotkeyModifiersLR, if non-zero,
@@ -632,36 +660,15 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 					DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
 				}
 
-				else if (key_text_length > 2 && !strnicmp(aKeys, "U+", 2) && !aTargetWindow)
+				else if (key_text_length > 2 && !_tcsnicmp(aKeys, _T("U+"), 2) && !aTargetWindow)
 				{
 					// L24: Send a unicode value as shown by Character Map.
 					// Use SendInput in unicode mode if available, otherwise fall back to SendASC.
-					WORD u_code = (WORD) strtol(aKeys + 2, NULL, 16);
+					wchar_t u_code = (wchar_t) _tcstol(aKeys + 2, NULL, 16);
 
 					if (g_os.IsWin2000orLater())
 					{
-						// L25: Set modifier key-state in case it matters.
-						SetModifierLRState(mods_for_next_key | persistent_modifiers_for_this_SendKeys
-							, sSendMode ? sEventModifiersLR : GetModifierLRState(), NULL, false, true, KEY_IGNORE);
-
-						INPUT u_input[2];
-						
-						u_input[0].type = INPUT_KEYBOARD;
-						u_input[0].ki.wVk = 0;
-						u_input[0].ki.wScan = u_code;
-						u_input[0].ki.dwFlags = KEYEVENTF_UNICODE;
-						u_input[0].ki.time = 0;
-						// L25: Set dwExtraInfo to ensure AutoHotkey ignores the event; otherwise it may trigger a SCxxx hotkey (where xxx is u_code).
-						u_input[0].ki.dwExtraInfo = KEY_IGNORE;
-						
-						u_input[1].type = INPUT_KEYBOARD;
-						u_input[1].ki.wVk = 0;
-						u_input[1].ki.wScan = u_code;
-						u_input[1].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
-						u_input[1].ki.time = 0;
-						u_input[1].ki.dwExtraInfo = KEY_IGNORE;
-
-						SendInput(2, u_input, sizeof(INPUT));
+						SendUnicodeChar(u_code, mods_for_next_key | persistent_modifiers_for_this_SendKeys, sSendMode ? sEventModifiersLR : GetModifierLRState());
 					}
 					else
 					{
@@ -689,21 +696,28 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 
 		else // Encountered a character other than ^+!#{} ... or we're in raw mode.
 		{
-			// Best to call this separately, rather than as first arg in SendKey, since it changes the
-			// value of modifiers and the updated value is *not* guaranteed to be passed.
-			// In other words, SendKey(TextToVK(...), modifiers, ...) would often send the old
-			// value for modifiers.
-			single_char_string[0] = *aKeys; // String was pre-terminated earlier.
-			if (vk = TextToVK(single_char_string, &mods_for_next_key, true, true, sTargetKeybdLayout))
-				// TextToVK() takes no measurable time compared to the amount of time SendKey takes.
-				SendKey(vk, 0, mods_for_next_key, persistent_modifiers_for_this_SendKeys, 1, KEYDOWNANDUP
-					, 0, aTargetWindow);
-			else // Try to send it by alternate means.
+#ifdef UNICODE
+			if (*aKeys > 0xFF)
+				SendUnicodeChar(*aKeys, mods_for_next_key | persistent_modifiers_for_this_SendKeys, sSendMode ? sEventModifiersLR : GetModifierLRState());
+			else
+#endif
 			{
-				// v1.0.40: SendKeySpecial sends only keybd_event keystrokes, not ControlSend style keystrokes:
-				if (!aTargetWindow) // In this mode, mods_for_next_key is ignored due to being unsupported.
-					SendKeySpecial((char) *aKeys, 1);
-				//else do nothing since there's no known way to send the keystokes.
+				// Best to call this separately, rather than as first arg in SendKey, since it changes the
+				// value of modifiers and the updated value is *not* guaranteed to be passed.
+				// In other words, SendKey(TextToVK(...), modifiers, ...) would often send the old
+				// value for modifiers.
+				single_char_string[0] = *aKeys; // String was pre-terminated earlier.
+				if (vk = TextToVK(single_char_string, &mods_for_next_key, true, true, sTargetKeybdLayout))
+					// TextToVK() takes no measurable time compared to the amount of time SendKey takes.
+					SendKey(vk, 0, mods_for_next_key, persistent_modifiers_for_this_SendKeys, 1, KEYDOWNANDUP
+						, 0, aTargetWindow);
+				else // Try to send it by alternate means.
+				{
+					// v1.0.40: SendKeySpecial sends only keybd_event keystrokes, not ControlSend style keystrokes:
+					if (!aTargetWindow) // In this mode, mods_for_next_key is ignored due to being unsupported.
+						SendKeySpecial((char) *aKeys, 1);
+					//else do nothing since there's no known way to send the keystokes.
+				}
 			}
 			mods_for_next_key = 0;  // Safest to reset this regardless of whether a key was sent.
 		}
@@ -3838,7 +3852,7 @@ vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandl
 	// of text during load, is that on either side of the COMPOSITE_DELIMITER (e.g. " then ").
 
 	if (!aText[1]) // _tcslen(aText) == 1
-		return CharToVKAndModifiers(*aText, pModifiersLR, aKeybdLayout); // Making this a function simplifies things because it can do early return, etc.
+		return CharToVKAndModifiers((char) *aText, pModifiersLR, aKeybdLayout); // Making this a function simplifies things because it can do early return, etc.
 
 	if (aAllowExplicitVK && _totupper(aText[0]) == 'V' && _totupper(aText[1]) == 'K')
 		return (vk_type)_tcstol(aText + 2, NULL, 16);  // Convert from hex.

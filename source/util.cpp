@@ -2229,7 +2229,7 @@ int ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex)
 }
 
 // L17: Extract icon of the appropriate size from an executable (or compatible) file.
-HICON ExtractIconFromExecutable(char *aFilespec, int aIconNumber, int aWidth, int aHeight)
+HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, int aHeight)
 {
 	HICON hicon = NULL;
 

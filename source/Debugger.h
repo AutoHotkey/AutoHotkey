@@ -12,6 +12,8 @@ including commercial applications, and to alter it and redistribute it
 freely, without restriction.
 */
 
+#pragma once
+
 #ifndef SCRIPT_DEBUG
 
 #define DEBUGGER_STACK_PUSH(a,b,c,d)

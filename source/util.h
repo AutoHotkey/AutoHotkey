@@ -26,17 +26,17 @@ EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 #define tmemmove		wmemmove
 #define tmemset			wmemset
 #define tmemcmp			wmemcmp
-#define tmalloc(c)		malloc((c) << 1)
-#define trealloc(p, c)	realloc((p), (c) << 1)
-#define talloca(c)		_alloca((c) << 1)
+#define tmalloc(c)		((LPTSTR) malloc((c) << 1))
+#define trealloc(p, c)	((LPTSTR) realloc((p), (c) << 1))
+#define talloca(c)		((LPTSTR) _alloca((c) << 1))
 #else
 #define tmemcpy			memcpy
 #define tmemmove		memmove
 #define tmemset			memset
 #define tmemcmp			memcmp
-#define tmalloc(c)		malloc(c)
-#define trealloc(p, c)	realloc((p), (c))
-#define talloca(c)		_alloca(c)
+#define tmalloc(c)		((LPTSTR) malloc(c))
+#define trealloc(p, c)	((LPTSTR) realloc((p), (c)))
+#define talloca(c)		((LPTSTR) _alloca(c))
 #endif
 
 #define IS_SPACE_OR_TAB(c) (c == ' ' || c == '\t')
@@ -681,6 +681,6 @@ int CALLBACK FontEnumProc(ENUMLOGFONTEX *lpelfe, NEWTEXTMETRICEX *lpntme, DWORD 
 bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch);
 
 int ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex); // L17: Find integer ID of resource from index. i.e. IconNumber -> resource ID.
-HICON ExtractIconFromExecutable(char *aFilespec, int aIconNumber, int aWidth, int aHeight); // L17: Extract icon of the appropriate size from an executable (or compatible) file.
+HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, int aHeight); // L17: Extract icon of the appropriate size from an executable (or compatible) file.
 
 #endif
