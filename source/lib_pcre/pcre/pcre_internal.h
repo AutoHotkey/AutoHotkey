@@ -45,6 +45,9 @@ functions whose names all begin with "_pcre_". */
 #ifndef PCRE_INTERNAL_H
 #define PCRE_INTERNAL_H
 
+#define SUPPORT_CALLOUT // Lexikos
+#include <windows.h> // for OutputDebugString
+
 /* Define DEBUG to get debugging output on stdout. */
 
 #if 0
@@ -861,7 +864,7 @@ in UTF-8 mode. The code that uses this table must know about such things. */
   0,                             /* XCLASS - variable length               */ \
   3,                             /* REF                                    */ \
   1+LINK_SIZE,                   /* RECURSE                                */ \
-  2+2*LINK_SIZE,                 /* CALLOUT                                */ \
+  6+2*LINK_SIZE,                 /* CALLOUT                                */ \
   1+LINK_SIZE,                   /* Alt                                    */ \
   1+LINK_SIZE,                   /* Ket                                    */ \
   1+LINK_SIZE,                   /* KetRmax                                */ \

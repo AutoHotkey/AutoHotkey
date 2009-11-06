@@ -21,7 +21,7 @@ GNU General Public License for more details.
 #include "window.h" // for SetForegroundWindowEx()
 
 
-ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions)
+ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2)
 {
 	if (mMenuUseErrorLevel)
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Set default, which is "none" for the Menu command.
@@ -66,103 +66,134 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 		return OK;
 
 	case MENU_CMD_ICON:
-	{
-		RETURN_IF_NOT_TRAY;
-		bool mIconFrozen_prev = mIconFrozen;
-		if (*aOptions) // i.e. if it's blank, don't change the current setting of mIconFrozen.
-			mIconFrozen = (ATOI(aOptions) == 1);
-		if (!*aParam3)
+		// L17: If is_tray and aParam3 is omitted or aParam4 is an integer, set the tray icon. Otherwise set a menu item icon.
+		if (is_tray)
 		{
-			g_NoTrayIcon = false;
-			if (!mNIC.hWnd) // The icon doesn't exist, so create it.
-			{
-				CreateTrayIcon();
-				UpdateTrayIcon(true);  // Force the icon into the correct pause/suspend state.
-			}
-			else if (!mIconFrozen && mIconFrozen_prev) // To cause "Menu Tray, Icon,,, 0" to update the icon while the script is suspended.
-				UpdateTrayIcon(true);
-			return OK;
-		}
+			bool mIconFrozen_prev = mIconFrozen;
+			// Lexikos: aOptions still ambiguous with menu item icon number at this point.
+			//if (*aOptions) // i.e. if it's blank, don't change the current setting of mIconFrozen.
+			//	mIconFrozen = (ATOI(aOptions) == 1);
 
-		// Otherwise, user has specified a custom icon:
-		if (*aParam3 == '*' && !*(aParam3 + 1)) // Restore the standard icon.
-		{
-			if (mCustomIcon)
+			if (!*aParam3)
 			{
-				GuiType::DestroyIconIfUnused(mCustomIcon); // v1.0.37.07: Solves reports of Gui windows losing their icons.
-				// If the above doesn't destroy the icon, the GUI window(s) still using it are responsible for
-				// destroying it later.
-				mCustomIcon = NULL;  // To indicate that there is no custom icon.
+				// Lexikos: MenuItemName omitted, therefore no conflict. mIconFrozen may now be set.
+				if (*aOptions) // i.e. if it's blank, don't change the current setting of mIconFrozen.
+					mIconFrozen = (ATOI(aOptions) == 1);
+
+				g_NoTrayIcon = false;
+				if (!mNIC.hWnd) // The icon doesn't exist, so create it.
+				{
+					CreateTrayIcon();
+					UpdateTrayIcon(true);  // Force the icon into the correct pause/suspend state.
+				}
+				else if (!mIconFrozen && mIconFrozen_prev) // To cause "Menu Tray, Icon,,, 0" to update the icon while the script is suspended.
+					UpdateTrayIcon(true);
+				return OK;
+			}
+
+			// Otherwise, user has specified a custom icon:
+			if (*aParam3 == '*' && !*(aParam3 + 1)) // Restore the standard icon.
+			{
+				// Lexikos: For compatibility with older scripts, "Menu, Tray, Icon, *" must reset tray to default icon, even if an item "*" exists. mIconFrozen may now be set.
+				if (*aOptions) // i.e. if it's blank, don't change the current setting of mIconFrozen.
+					mIconFrozen = (ATOI(aOptions) == 1);
+
+				if (mCustomIcon)
+				{
+					GuiType::DestroyIconsIfUnused(mCustomIcon, mCustomIconSmall); // v1.0.37.07: Solves reports of Gui windows losing their icons.
+					// If the above doesn't destroy the icon, the GUI window(s) still using it are responsible for
+					// destroying it later.
+					mCustomIcon = NULL;  // To indicate that there is no custom icon.
+					mCustomIconSmall = NULL;
+					if (mCustomIconFile)
+						*mCustomIconFile = '\0';
+					mCustomIconNumber = 0;
+					UpdateTrayIcon(true);  // Need to use true in this case too.
+				}
+				return OK;
+			}
+
+			if (IsPureNumeric(aParam4, true)) // pure integer or empty/whitespace
+			{
+				// Lexikos: We are unconditionally treating this as a request to set the tray icon, so mIconFrozen may now be set.
+				if (*aOptions) // i.e. if it's blank, don't change the current setting of mIconFrozen.
+					mIconFrozen = (ATOI(aOptions) == 1);
+
+				// v1.0.43.03: Load via LoadPicture() vs. ExtractIcon() because ExtractIcon harms the quality
+				// of 16x16 icons inside .ico files by first scaling them to 32x32 (which then has to be scaled
+				// back to 16x16 for the tray and for the SysMenu icon). I've visually confirmed that the
+				// distortion occurs at least when a 16x16 icon is loaded by ExtractIcon() then put into the
+				// tray.  It might not be the scaling itself that distorts the icon: the pixels are all in the
+				// right places, it's just that some are the wrong color/shade. This implies that some kind of
+				// unwanted interpolation or color tweaking is being done by ExtractIcon (and probably LoadIcon),
+				// but not by LoadImage.
+				// Also, load the icon at actual size so that when/if this icon is used for a GUI window, its
+				// appearance in the alt-tab menu won't be unexpectedly poor due to having been scaled from its
+				// native size down to 16x16.
+				int icon_number;
+				if (*aParam4)
+				{
+					icon_number = ATOI(aParam4);
+					if (icon_number == 0) // Must validate for use in two places below.
+						icon_number = 1; // Must be != 0 to tell LoadPicture that "icon must be loaded, never a bitmap".
+				}
+				else
+					icon_number = 1; // One vs. Zero tells LoadIcon: "must load icon, never a bitmap (e.g. no gif/jpg/png)".
+
+				int image_type;
+				// L17: For best results, load separate small and large icons.
+				HICON new_icon_small;
+				HICON new_icon = NULL; // Initialize to detect failure to load either icon.
+				if ( new_icon_small = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), image_type, icon_number, false) ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
+					if ( !(new_icon = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, icon_number, false)) )
+						DestroyIcon(new_icon_small);
+				if ( !new_icon )
+					RETURN_MENU_ERROR("Can't load icon.", aParam3);
+
+				GuiType::DestroyIconsIfUnused(mCustomIcon, mCustomIconSmall); // This destroys it if non-NULL and it's not used by an GUI windows.
+
+				mCustomIcon = new_icon;
+				mCustomIconSmall = new_icon_small;
+				mCustomIconNumber = icon_number;
+				// Allocate the full MAX_PATH in case the contents grow longer later.
+				// SimpleHeap improves avg. case mem load:
+				if (!mCustomIconFile)
+					mCustomIconFile = SimpleHeap::Malloc(MAX_PATH);
 				if (mCustomIconFile)
-					*mCustomIconFile = '\0';
-				mCustomIconNumber = 0;
-				UpdateTrayIcon(true);  // Need to use true in this case too.
+				{
+					// Get the full path in case it's a relative path.  This is documented and it's done in case
+					// the script ever changes its working directory:
+					char full_path[MAX_PATH], *filename_marker;
+					if (GetFullPathName(aParam3, sizeof(full_path) - 1, full_path, &filename_marker))
+						strlcpy(mCustomIconFile, full_path, MAX_PATH);
+					else
+						strlcpy(mCustomIconFile, aParam3, MAX_PATH);
+				}
+
+				if (!g_NoTrayIcon)
+					UpdateTrayIcon(true);  // Need to use true in this case too.
+				return OK;
 			}
-			return OK;
 		}
-
-		// v1.0.43.03: Load via LoadPicture() vs. ExtractIcon() because ExtractIcon harms the quality
-		// of 16x16 icons inside .ico files by first scaling them to 32x32 (which then has to be scaled
-		// back to 16x16 for the tray and for the SysMenu icon). I've visually confirmed that the
-		// distortion occurs at least when a 16x16 icon is loaded by ExtractIcon() then put into the
-		// tray.  It might not be the scaling itself that distorts the icon: the pixels are all in the
-		// right places, it's just that some are the wrong color/shade. This implies that some kind of
-		// unwanted interpolation or color tweaking is being done by ExtractIcon (and probably LoadIcon),
-		// but not by LoadImage.
-		// Also, load the icon at actual size so that when/if this icon is used for a GUI window, its
-		// appearance in the alt-tab menu won't be unexpectedly poor due to having been scaled from its
-		// native size down to 16x16.
-		int icon_number;
-		if (*aParam4)
-		{
-			icon_number = ATOI(aParam4);
-			if (icon_number < 1) // Must validate for use in two places below.
-				icon_number = 1; // Must be >0 to tell LoadPicture that "icon must be loaded, never a bitmap".
-		}
-		else
-			icon_number = 1; // One vs. Zero tells LoadIcon: "must load icon, never a bitmap (e.g. no gif/jpg/png)".
-
-		int image_type;
-		HICON new_icon;
-		if (   !(new_icon = (HICON)LoadPicture(aParam3, 0, 0, image_type, icon_number, false))   ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
-			RETURN_MENU_ERROR(_T("Can't load icon."), aParam3);
-		GuiType::DestroyIconIfUnused(mCustomIcon); // This destroys it if non-NULL and it's not used by an GUI windows.
-
-		mCustomIcon = new_icon;
-		mCustomIconNumber = icon_number;
-		// Allocate the full MAX_PATH in case the contents grow longer later.
-		// SimpleHeap improves avg. case mem load:
-		if (!mCustomIconFile)
-			mCustomIconFile = (LPTSTR) SimpleHeap::Malloc(MAX_PATH * sizeof(TCHAR));
-		if (mCustomIconFile)
-		{
-			// Get the full path in case it's a relative path.  This is documented and it's done in case
-			// the script ever changes its working directory:
-			TCHAR full_path[MAX_PATH], *filename_marker;
-			if (GetFullPathName(aParam3, _countof(full_path) - 1, full_path, &filename_marker))
-				tcslcpy(mCustomIconFile, full_path, MAX_PATH);
-			else
-				tcslcpy(mCustomIconFile, aParam3, MAX_PATH);
-		}
-
-		if (!g_NoTrayIcon)
-			UpdateTrayIcon(true);  // Need to use true in this case too.
-		return OK;
-	}
+		break;
 
 	case MENU_CMD_NOICON:
-		RETURN_IF_NOT_TRAY;
-		g_NoTrayIcon = true;
-		if (mNIC.hWnd) // Since it exists, destroy it.
+		if (is_tray && !*aParam3) // L17: "Menu, Tray, NoIcon, xxx" removes icon from tray menu item xxx.
 		{
-			Shell_NotifyIcon(NIM_DELETE, &mNIC); // Remove it.
-			mNIC.hWnd = NULL;  // Set this as an indicator that tray icon is not installed.
-			// but don't do DestroyMenu() on mTrayMenu->mMenu (if non-NULL) since it may have been
-			// changed by the user to have the custom items on top of the standard items,
-			// for example, and we don't want to lose that ordering in case the script turns
-			// the icon back on at some future time during this session.
+			g_NoTrayIcon = true;
+			if (mNIC.hWnd) // Since it exists, destroy it.
+			{
+				Shell_NotifyIcon(NIM_DELETE, &mNIC); // Remove it.
+				mNIC.hWnd = NULL;  // Set this as an indicator that tray icon is not installed.
+				// but don't do DestroyMenu() on mTrayMenu->mMenu (if non-NULL) since it may have been
+				// changed by the user to have the custom items on top of the standard items,
+				// for example, and we don't want to lose that ordering in case the script turns
+				// the icon back on at some future time during this session.
+			}
+			return OK;
 		}
-		return OK;
+		// else: this request to remove a menu item's icon will be processed below.
+		break;
 
 	case MENU_CMD_CLICK:
 		RETURN_IF_NOT_TRAY;
@@ -415,6 +446,14 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 		return menu->SetDefault(menu_item);
 	case MENU_CMD_DELETE:
 		return menu->DeleteItem(menu_item, menu_item_prev);
+	// L17: Set or remove a menu item's icon.
+	case MENU_CMD_ICON:
+		// aOptions2: Icon width if specified. Defaults to system small icon size; original icon size will be used if aOptions2 is "0".
+		if (!menu->SetItemIcon(menu_item, aParam4, ATOI(aOptions), !*aOptions2 ? GetSystemMetrics(SM_CXSMICON) : ATOI(aOptions2)))
+			RETURN_MENU_ERROR("Can't load icon.", aParam4);
+		return OK;
+	case MENU_CMD_NOICON:
+		return menu->RemoveItemIcon(menu_item);
 	} // switch()
 	return FAIL;  // Should never be reached, but avoids compiler warning and improves bug detection.
 }
@@ -594,6 +633,7 @@ UserMenuItem::UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, Lab
 	: mName(aName), mNameCapacity(aNameCapacity), mMenuID(aMenuID), mLabel(aLabel), mSubmenu(aSubmenu), mMenu(aMenu)
 	, mPriority(0) // default priority = 0
 	, mEnabled(true), mChecked(false), mNextMenuItem(NULL)
+	, mIcon(NULL) // L17: Initialize mIcon/mBitmap union.
 {
 	if (aMenu->mMenu)
 	{
@@ -619,6 +659,7 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 	CHANGE_DEFAULT_IF_NEEDED  // Should do this before freeing aMenuItem's memory.
 	if (mMenu) // Delete the item from the menu.
 		RemoveMenu(mMenu, aMenuItem_ID, aMenuItem_MF_BY); // v1.0.48: Lexikos: DeleteMenu() destroys any sub-menu handle associated with the item, so use RemoveMenu. Otherwise the submenu handle stored somewhere else in memory would suddenly become invalid.
+	RemoveItemIcon(aMenuItem); // L17: Free icon or bitmap.
 	if (aMenuItem->mName != Var::sEmptyString)
 		delete aMenuItem->mName; // Since it was separately allocated.
 	delete aMenuItem; // Do this last when its contents are no longer needed.
@@ -653,6 +694,7 @@ ResultType UserMenu::DeleteAllItems()
 	{
 		menu_item_to_delete = mi;
 		mi = mi->mNextMenuItem;
+		RemoveItemIcon(menu_item_to_delete); // L26: Free icon or bitmap!
 		if (menu_item_to_delete->mName != Var::sEmptyString)
 			delete menu_item_to_delete->mName; // Since it was separately allocated.
 		delete menu_item_to_delete;
@@ -1004,6 +1046,9 @@ ResultType UserMenu::Create(MenuTypeType aMenuType)
 				return FAIL;
 		}
 		AppendMenu(mMenu, flags, mi->mSubmenu ? (UINT_PTR)mi->mSubmenu->mMenu : mi->mMenuID, mi->mName);
+		
+		if (mi->mIcon) // L17: Check mIcon/mBitmap union, apply icon if necessary.
+			ApplyItemIcon(mi);
 	}
 	if (mDefault)
 		// This also automatically ensures that only one is default at a time:
@@ -1013,6 +1058,13 @@ ResultType UserMenu::Create(MenuTypeType aMenuType)
 	// they will be individually given their own background color when created via Create(),
 	// which is why false is passed:
 	ApplyColor(false);
+
+	// L17: Apply default style to merge checkmark/icon columns in menu.
+	MENUINFO menu_info;
+	menu_info.cbSize = sizeof(MENUINFO);
+	menu_info.fMask = MIM_STYLE;
+	menu_info.dwStyle = MNS_CHECKORBMP;
+	SetMenuInfo(mMenu, &menu_info);
 
 	return OK;
 }
@@ -1376,4 +1428,105 @@ bool UserMenu::ContainsMenu(UserMenu *aMenu)
 				return true;
 			//else keep searching
 	return false;
+}
+
+
+// L17: Menu-item icon functions.
+
+ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, char *aFilename, int aIconNumber, int aWidth)
+{
+	if (!*aFilename || (*aFilename == '*' && !aFilename[1]))
+		return RemoveItemIcon(aMenuItem);
+
+	// L29: The bitmap/icon returned by LoadPicture is converted to the appropriate format automatically,
+	// so the following is no longer necessary:
+	//if (aIconNumber == 0)
+	//	aIconNumber = 1; // Must be != 0 to tell LoadPicture that "icon must be loaded, never a bitmap".
+
+	int image_type;
+	HICON new_icon;
+	// Currently height is always -1 and cannot be overriden. -1 means maintain aspect ratio, usually 1:1 for icons.
+	if ( !(new_icon = (HICON)LoadPicture(aFilename, aWidth, -1, image_type, aIconNumber, false)) )
+		return FAIL;
+
+	HBITMAP new_copy;
+
+	if (g_os.IsWinVistaOrLater())
+	{
+		if (image_type == IMAGE_ICON) // Convert to 32-bit bitmap:
+		{
+			new_copy = IconToBitmap32(new_icon, true);
+			// Even if conversion failed, we have no further use for the icon:
+			DestroyIcon(new_icon);
+			if (!new_copy)
+				return FAIL;
+			new_icon = (HICON)new_copy;
+		}
+
+		if (aMenuItem->mBitmap) // Delete previous bitmap.
+			DeleteObject(aMenuItem->mBitmap);
+	}
+	else
+	{
+		if (image_type == IMAGE_BITMAP) // Convert to icon:
+		{
+			ICONINFO iconinfo;
+			iconinfo.fIcon = TRUE;
+			iconinfo.hbmMask = (HBITMAP)new_icon;
+			iconinfo.hbmColor = (HBITMAP)new_icon;
+			new_copy = (HBITMAP)CreateIconIndirect(&iconinfo);
+			// Even if conversion failed, we have no further use for the bitmap:
+			DeleteObject((HBITMAP)new_icon);
+			if (!new_copy)
+				return FAIL;
+			new_icon = (HICON)new_copy;
+		}
+
+		if (aMenuItem->mIcon) // Delete previous icon.
+			DestroyIcon(aMenuItem->mIcon);
+	}
+	// Also sets mBitmap via union:
+	aMenuItem->mIcon = new_icon;
+
+	if (mMenu)
+		ApplyItemIcon(aMenuItem);
+
+	return aMenuItem->mIcon ? OK : FAIL;
+}
+
+// Caller has ensured mMenu is non-NULL.
+ResultType UserMenu::ApplyItemIcon(UserMenuItem *aMenuItem)
+{
+	if (aMenuItem->mIcon) // Check mIcon/mBitmap union.
+	{
+		MENUITEMINFO item_info;
+		item_info.cbSize = sizeof(MENUITEMINFO);
+		item_info.fMask = MIIM_BITMAP;
+		// Set HBMMENU_CALLBACK or 32-bit bitmap as appropriate.
+		item_info.hbmpItem = g_os.IsWinVistaOrLater() ? aMenuItem->mBitmap : HBMMENU_CALLBACK;
+		SetMenuItemInfo(mMenu, aMenuItem_ID, aMenuItem_MF_BY, &item_info);
+	}
+	return OK;
+}
+
+ResultType UserMenu::RemoveItemIcon(UserMenuItem *aMenuItem)
+{
+	if (aMenuItem->mIcon) // Check mIcon/mBitmap union.
+	{
+		if (mMenu)
+		{
+			MENUITEMINFO item_info;
+			item_info.cbSize = sizeof(MENUITEMINFO);
+			item_info.fMask = MIIM_BITMAP;
+			item_info.hbmpItem = NULL;
+			// If g_os.IsWinVistaOrLater(), this removes the bitmap we set. Otherwise it removes HBMMENU_CALLBACK, therefore disabling owner-drawing.
+			SetMenuItemInfo(mMenu, aMenuItem_ID, aMenuItem_MF_BY, &item_info);
+		}
+		if (g_os.IsWinVistaOrLater()) // Free the appropriate union member.
+			DeleteObject(aMenuItem->mBitmap);
+		else
+			DestroyIcon(aMenuItem->mIcon);
+		aMenuItem->mIcon = NULL; // Clear mIcon/mBitmap union.
+	}
+	return OK;
 }

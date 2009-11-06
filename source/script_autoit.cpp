@@ -16,7 +16,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h" // pre-compiled headers
-#include <winsock.h>  // for WSADATA.  This also requires wsock32.lib to be linked in.
+//#include <winsock.h>  // for WSADATA.  This also requires wsock32.lib to be linked in.
+#include <WinSock2.h>
 #include <tlhelp32.h> // For the ProcessExist routines.
 #include <wininet.h> // For URLDownloadToFile().
 #include "script.h"

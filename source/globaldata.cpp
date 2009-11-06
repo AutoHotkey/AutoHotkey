@@ -21,6 +21,8 @@ GNU General Public License for more details.
 #include "script.h" // For the global script object and g_ErrorLevel
 #include "os_version.h" // For the global OS_Version object
 
+#include "Debugger.h"
+
 // Since at least some of some of these (e.g. g_modifiersLR_logical) should not
 // be kept in the struct since it's not correct to save and restore their
 // state, don't keep anything in the global_struct except those things
@@ -109,6 +111,13 @@ LPTSTR g_HotWinTitle = _T(""); // In spite of the above being the primary indica
 LPTSTR g_HotWinText = _T("");  // these are initialized for maintainability.
 HotkeyCriterion *g_FirstHotCriterion = NULL, *g_LastHotCriterion = NULL;
 
+// L4: Added global variables for #if (expression).
+int g_HotExprIndex = -1; // The index of the Line containing the expression defined by the most recent #if (expression) directive.
+Line **g_HotExprLines = NULL; // Array of pointers to expression lines, allocated when needed.
+int g_HotExprLineCount = 0; // Number of expression lines currently present.
+int g_HotExprLineCountMax = 0; // Current capacity of g_HotExprLines.
+UINT g_HotExprTimeout = 1000; // Timeout for #if (expression) evaluation, in milliseconds.
+
 MenuTypeType g_MenuIsVisible = MENU_TYPE_NONE;
 int g_nMessageBoxes = 0;
 int g_nInputBoxes = 0;
@@ -178,8 +187,8 @@ int g_IconTray = (g_os.IsWinXPorLater()
 #ifndef UNICODE
 	|| g_os.IsWinMeorLater()
 #endif
-	) ? IDI_MAIN : IDI_TRAY_WIN9X;
-int g_IconTraySuspend = (g_IconTray == IDI_MAIN) ? IDI_SUSPEND : IDI_TRAY_WIN9X_SUSPEND;
+	) ? IDI_TRAY : IDI_TRAY_WIN9X;
+int g_IconTraySuspend = (g_IconTray == IDI_TRAY) ? IDI_SUSPEND : IDI_TRAY_WIN9X_SUSPEND;
 
 DWORD g_OriginalTimeout;
 

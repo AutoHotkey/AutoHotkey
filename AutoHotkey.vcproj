@@ -398,6 +398,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\source\Debugger.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\source\globaldata.cpp"
 				>
 			</File>
@@ -471,6 +475,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\source\script_object.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\source\script_registry.cpp"
 				>
 			</File>
@@ -537,6 +545,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\source\Debugger.h"
+				>
+			</File>
+			<File
 				RelativePath=".\source\defines.h"
 				>
 			</File>
@@ -586,6 +598,10 @@
 			</File>
 			<File
 				RelativePath=".\source\script.h"
+				>
+			</File>
+			<File
+				RelativePath=".\source\script_object.h"
 				>
 			</File>
 			<File

@@ -912,6 +912,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 
 	case GUICONTROL_CMD_ENABLE:
 	case GUICONTROL_CMD_DISABLE:
+	{
 		// GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED is maintained for use with tab controls.  It allows controls
 		// on inactive tabs to be marked for later enabling.  It also allows explicitly disabled controls to
 		// stay disabled even when their tab/page becomes active. It is updated unconditionally for simplicity
@@ -937,13 +938,23 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 				// controls to be explicitly manipulated by GuiControl Enable/Disable and Hide/Show.
 				goto return_the_result;
 		}
+		
+		// L23: Restrict focus workaround to when the control is/was actually focused. Fixes a bug introduced by L13: enabling or disabling a control caused the active Edit control to reselect its text.
+		bool gui_control_was_focused = GetForegroundWindow() == gui.mHwnd && GetFocus() == control.hwnd;
+
 		// Since above didn't return, act upon the enabled/disable:
 		EnableWindow(control.hwnd, guicontrol_cmd == GUICONTROL_CMD_ENABLE);
+		
+		// L23: Only if EnableWindow removed the keyboard focus entirely, reset the focus.
+		if (gui_control_was_focused && !GetFocus())
+			SetFocus(gui.mHwnd);
+		
 		if (control.type == GUI_CONTROL_TAB) // This control is a tab control.
 			// Update the control so that its current tab's controls will all be enabled or disabled (now
 			// that the tab control itself has just been enabled or disabled):
 			gui.ControlUpdateCurrentTab(control, false);
 		goto return_the_result;
+	}
 
 	case GUICONTROL_CMD_SHOW:
 	case GUICONTROL_CMD_HIDE:
@@ -1447,12 +1458,13 @@ ResultType GuiType::Destroy(GuiIndexType aWindowIndex)
 	//gui.mHwnd = NULL;
 	//gui.mControlCount = 0; // All child windows (controls) are automatically destroyed with parent.
 	HICON icon_eligible_for_destruction = gui.mIconEligibleForDestruction;
+	HICON icon_eligible_for_destruction_small = gui.mIconEligibleForDestructionSmall;
 	free(gui.mControl); // Free the control array, which was previously malloc'd.
 	delete g_gui[aWindowIndex]; // After this, the var "gui" is invalid so should not be referenced, i.e. the next line.
 	g_gui[aWindowIndex] = NULL;
 	--sGuiCount; // This count is maintained to help performance in the main event loop and other places.
 	if (icon_eligible_for_destruction && icon_eligible_for_destruction != g_script.mCustomIcon) // v1.0.37.07.
-		DestroyIconIfUnused(icon_eligible_for_destruction); // Must be done only after "g_gui[aWindowIndex] = NULL".
+		DestroyIconsIfUnused(icon_eligible_for_destruction, icon_eligible_for_destruction_small); // Must be done only after "g_gui[aWindowIndex] = NULL".
 	// For simplicity and performance, any fonts used *solely* by a destroyed window are destroyed
 	// only when the program terminates.  Another reason for this is that sometimes a destroyed window
 	// is soon recreated to use the same fonts it did before.
@@ -1461,7 +1473,7 @@ ResultType GuiType::Destroy(GuiIndexType aWindowIndex)
 
 
 
-void GuiType::DestroyIconIfUnused(HICON ahIcon)
+void GuiType::DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall)
 // Caller has ensured that the GUI window previously using ahIcon has been destroyed prior to calling
 // this function.
 {
@@ -1481,6 +1493,8 @@ void GuiType::DestroyIconIfUnused(HICON ahIcon)
 	// Since above didn't return, this icon is not currently in use by a GUI window.  The caller has
 	// authorized us to destroy it.
 	DestroyIcon(ahIcon);
+	// L17: Small icon should always also be unused at this point.
+	DestroyIcon(ahIconSmall);
 }
 
 
@@ -1525,14 +1539,15 @@ ResultType GuiType::Create()
 		, mOwner, NULL, g_hInstance, NULL))   )
 		return FAIL;
 
-	HICON main_icon;
+	// L17: Use separate big/small icons for best results.
+	HICON big_icon, small_icon;
 	if (g_script.mCustomIcon)
 	{
-		main_icon = g_script.mCustomIcon;
-		mIconEligibleForDestruction = main_icon;
+		mIconEligibleForDestruction = big_icon = g_script.mCustomIcon;
+		mIconEligibleForDestructionSmall = small_icon = g_script.mCustomIconSmall; // Should always be non-NULL if mCustomIcon is non-NULL.
 	}
 	else
-		main_icon = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
+		big_icon = small_icon = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
 		// Unlike mCustomIcon, leave mIconEligibleForDestruction NULL because a shared HICON such as one
 		// loaded via LR_SHARED should never be destroyed.
 	// Setting the small icon puts it in the upper left corner of the dialog window.
@@ -1548,8 +1563,8 @@ ResultType GuiType::Create()
 	// 2) It's owned by another GUI window but it has the WS_EX_APPWINDOW style (might force a taskbar button):
 	//    Same effect as in #1.
 	// 3) Possibly other ways.
-	SendMessage(mHwnd, WM_SETICON, ICON_SMALL, (LPARAM)main_icon); // Testing shows that a zero is returned for both;
-	SendMessage(mHwnd, WM_SETICON, ICON_BIG, (LPARAM)main_icon);   // i.e. there is no previous icon to destroy in this case.
+	SendMessage(mHwnd, WM_SETICON, ICON_SMALL, (LPARAM)small_icon); // Testing shows that a zero is returned for both;
+	SendMessage(mHwnd, WM_SETICON, ICON_BIG, (LPARAM)big_icon);   // i.e. there is no previous icon to destroy in this case.
 
 	return OK;
 }
@@ -6934,6 +6949,9 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 		tcslcpy(font.name, aFontName, MAX_FONT_NAME_LENGTH+1);
 	COLORREF color = CLR_NONE; // Because we want to treat CLR_DEFAULT as a real color.
 
+	// L19: Set default quality to that of previous versions.
+	font.quality = PROOF_QUALITY;
+
 	// Temp vars:
 	TCHAR color_str[32], *space_pos;
 
@@ -7016,6 +7034,10 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 			font.weight = _ttoi(cp + 1); // _ttoi() vs. ATOI() because some option letters (above) are also hex letters, and _ttoi() stops converting upon reaching the first non-digit character.
 			break;
 
+		case 'Q': // L19: Allow control over font quality (anti-aliasing, etc.).
+			font.quality = atoi(cp + 1);
+			break;
+
 		// Otherwise: Ignore other characters, such as the digits that occur after the P/X/Y option letters.
 		} // switch()
 	} // for()
@@ -7053,7 +7075,7 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 	// closer to the size specified:
 	if (   !(font.hfont = CreateFont(-MulDiv(font.point_size, pixels_per_point_y, 72), 0, 0, 0
 		, font.weight, font.italic, font.underline, font.strikeout
-		, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, PROOF_QUALITY, FF_DONTCARE, font.name))   )
+		, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, font.quality, FF_DONTCARE, font.name))   )
 		// OUT_DEFAULT_PRECIS/OUT_TT_PRECIS ... DEFAULT_QUALITY/PROOF_QUALITY
 	{
 		g_script.ScriptError(_T("Can't create font.") ERR_ABORT);  // Short msg since so rare.
@@ -7074,7 +7096,8 @@ int GuiType::FindFont(FontType &aFont)
 			&& sFont[i].weight == aFont.weight
 			&& sFont[i].italic == aFont.italic
 			&& sFont[i].underline == aFont.underline
-			&& sFont[i].strikeout == aFont.strikeout) // Match found.
+			&& sFont[i].strikeout == aFont.strikeout
+			&& sFont[i].quality == aFont.quality) // Match found.
 			return i;
 	return -1;  // Indicate failure.
 }
@@ -8501,7 +8524,6 @@ LPTSTR GuiType::HotkeyToText(WORD aHotkey, LPTSTR aBuf)
 		}
 	}
 	// Since above didn't return, use a simple lookup on VK, since it gives preference to non-extended keys.
-
 	// KNOWN ISSUE: Someone pointed out that the following will typically produce ^A instead of ^a, which will
 	// produce an unwanted shift keystroke if for some reason the script uses the Send command to send the hotkey.
 	// However, for the following reasons, it seems best not to try to "fix" it:

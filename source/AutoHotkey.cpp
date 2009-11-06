@@ -111,6 +111,36 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 				return CRITICAL_ERROR;
 		}
 #endif
+#ifdef SCRIPT_DEBUG
+		// Allow a debug session to be initiated by command-line.
+		else if (!g_Debugger.IsConnected() && !strnicmp(param, "/Debug", 6) && (param[6] == '\0' || param[6] == '='))
+		{
+			if (param[6] == '=')
+			{
+				param += 7;
+
+				char *c = strrchr(param, ':');
+
+				if (c)
+				{
+					g_DebuggerHost = SimpleHeap::Malloc(param, c-param);
+					g_DebuggerHost[c-param] = '\0';
+					g_DebuggerPort = SimpleHeap::Malloc(c + 1);
+				}
+				else
+				{
+					g_DebuggerHost = SimpleHeap::Malloc(param);
+					g_DebuggerPort = "9000";
+				}
+			}
+			else
+			{
+				g_DebuggerHost = "localhost";
+				g_DebuggerPort = "9000";
+			}
+			// The actual debug session is initiated after the script is successfully parsed.
+		}
+#endif
 		else // since this is not a recognized switch, the end of the [Switches] section has been reached (by design).
 		{
 			switch_processing_is_complete = true;  // No more switches allowed after this point.
@@ -278,6 +308,14 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		else // InitCommonControlsEx not available, so must revert to non-Ex() to make controls work on Win95/NT4.
 			InitCommonControls();
 	}
+
+#ifdef SCRIPT_DEBUG
+	// Initiate debug session now if applicable.
+	if (g_DebuggerHost && g_Debugger.Connect(g_DebuggerHost, g_DebuggerPort) == DEBUGGER_E_OK)
+	{
+		g_Debugger.ProcessCommands();
+	}
+#endif
 
 	// Activate the hotkeys, hotstrings, and any hooks that are required prior to executing the
 	// top part (the auto-execute part) of the script so that they will be in effect even if the

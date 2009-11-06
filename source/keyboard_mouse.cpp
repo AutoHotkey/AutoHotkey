@@ -631,6 +631,47 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 					// Do this only once at the end of the sequence:
 					DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
 				}
+
+				else if (key_text_length > 2 && !strnicmp(aKeys, "U+", 2) && !aTargetWindow)
+				{
+					// L24: Send a unicode value as shown by Character Map.
+					// Use SendInput in unicode mode if available, otherwise fall back to SendASC.
+					WORD u_code = (WORD) strtol(aKeys + 2, NULL, 16);
+
+					if (g_os.IsWin2000orLater())
+					{
+						// L25: Set modifier key-state in case it matters.
+						SetModifierLRState(mods_for_next_key | persistent_modifiers_for_this_SendKeys
+							, sSendMode ? sEventModifiersLR : GetModifierLRState(), NULL, false, true, KEY_IGNORE);
+
+						INPUT u_input[2];
+						
+						u_input[0].type = INPUT_KEYBOARD;
+						u_input[0].ki.wVk = 0;
+						u_input[0].ki.wScan = u_code;
+						u_input[0].ki.dwFlags = KEYEVENTF_UNICODE;
+						u_input[0].ki.time = 0;
+						// L25: Set dwExtraInfo to ensure AutoHotkey ignores the event; otherwise it may trigger a SCxxx hotkey (where xxx is u_code).
+						u_input[0].ki.dwExtraInfo = KEY_IGNORE;
+						
+						u_input[1].type = INPUT_KEYBOARD;
+						u_input[1].ki.wVk = 0;
+						u_input[1].ki.wScan = u_code;
+						u_input[1].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+						u_input[1].ki.time = 0;
+						u_input[1].ki.dwExtraInfo = KEY_IGNORE;
+
+						SendInput(2, u_input, sizeof(INPUT));
+					}
+					else
+					{
+						char asc[6];
+						SendASC(_itoa(u_code, asc, 10));
+					}
+					
+					DoKeyDelay();
+				}
+
 				//else do nothing since it isn't recognized as any of the above "else if" cases (see below).
 
 				// If what's between {} is unrecognized, such as {Bogus}, it's safest not to send

@@ -1884,6 +1884,7 @@ auto_callout(uschar *code, const uschar *ptr, compile_data *cd)
 {
 *code++ = OP_CALLOUT;
 *code++ = 255;
+*((void **)code)++ = NULL;
 PUT(code, 0, ptr - cd->start_pattern);  /* Pattern offset */
 PUT(code, LINK_SIZE, 0);                /* Default length */
 return code + 2*LINK_SIZE;
@@ -1912,8 +1913,8 @@ Returns:             nothing
 static void
 complete_callout(uschar *previous_callout, const uschar *ptr, compile_data *cd)
 {
-int length = ptr - cd->start_pattern - GET(previous_callout, 2);
-PUT(previous_callout, 2 + LINK_SIZE, length);
+int length = ptr - cd->start_pattern - GET(previous_callout, 6);
+PUT(previous_callout, 6 + LINK_SIZE, length);
 }
 #endif /* AutoHotkey */
 
@@ -4412,20 +4413,40 @@ we set the flag only if there is a literal "\r" or "\n" in the class. */
         after_manual_callout = 1; /* Skip one item before completing */
         *code++ = OP_CALLOUT;
           {
-          int n = 0;
-          while ((digitab[*(++ptr)] & ctype_digit) != 0)
-            n = n * 10 + *ptr - '0';
-          if (*ptr != ')')
-            {
-            *errorcodeptr = ERR39;
-            goto FAILED;
-            }
-          if (n > 255)
-            {
-            *errorcodeptr = ERR38;
-            goto FAILED;
-            }
-          *code++ = n;
+		  int n = 0;
+		  void *user_callout = NULL;
+		  tempptr = ptr;
+		  while ((digitab[*(++ptr)] & ctype_digit) != 0)
+			n = n * 10 + *ptr - '0';
+		  if (*ptr != ')')
+			{
+			if (*ptr) /* Not end of string, so try to resolve it to a user-defined callout */
+			  {
+			  if (*ptr != ':') /* Treat (?C123Func) as 123Func() with callout_number == 0 */
+				{
+				n = 0;
+				ptr = tempptr; /* Reset to address saved above */
+				}
+			  /* ptr now points at the character immediately preceding the function name - i.e. 'C' or ':' */
+			  tempptr = ptr + 1;
+			  while (*(++ptr) && *ptr != ')');
+			  if (*ptr)
+			    user_callout = pcre_resolve_user_callout(tempptr, ptr - tempptr);
+			  /* else fall through to return ERR39 */
+			  }
+			if (user_callout == NULL) /* Unresolved user callout, or missing ')' */
+			  {
+			  *errorcodeptr = ERR39;
+			  goto FAILED;
+			  }
+			}
+		  if (n > 255)
+			{
+			*errorcodeptr = ERR38;
+			goto FAILED;
+			}
+		  *code++ = n;
+		  *((void **)code)++ = user_callout;
           PUT(code, 0, ptr - cd->start_pattern + 1);  /* Pattern offset */
           PUT(code, LINK_SIZE, 0);                    /* Default length */
           code += 2 * LINK_SIZE;

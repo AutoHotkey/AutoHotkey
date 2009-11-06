@@ -28,6 +28,7 @@ GNU General Public License for more details.
 #ifdef AUTOHOTKEYSC
 	#include "lib/exearc_read.h"
 #endif
+#include "Debugger.h"
 
 #include "os_version.h" // For the global OS_Version object
 EXTERN_OSVER; // For the access to the g_os version object without having to include globaldata.h
@@ -162,12 +163,17 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_MISSING_OUTPUT_VAR _T("Requires at least one of its output variables.")
 #define ERR_MISSING_OPEN_PAREN _T("Missing \"(\"")
 #define ERR_MISSING_OPEN_BRACE _T("Missing \"{\"")
+#define ERR_MISSING_OPEN_BRACKET _T("Missing \"[\"") // L31
 #define ERR_MISSING_CLOSE_PAREN _T("Missing \")\"")
 #define ERR_MISSING_CLOSE_BRACE _T("Missing \"}\"")
+#define ERR_MISSING_CLOSE_BRACKET _T("Missing \"]\"") // L31
+#define ERR_MISMATCHED_BRACKET_PAREN _T("Mismatched [] or ()") // L31
 #define ERR_MISSING_CLOSE_QUOTE _T("Missing close-quote") // No period after short phrases.
 #define ERR_MISSING_COMMA _T("Missing comma")             //
 #define ERR_BLANK_PARAM _T("Blank parameter")             //
 #define ERR_BYREF _T("Caller must pass a variable to this ByRef parameter.")
+#define ERR_TOO_MANY_PARAMS _T("Too many parameters passed to function.") // L31
+#define ERR_TOO_FEW_PARAMS _T("Too few parameters passed to function.") // L31
 #define ERR_ELSE_WITH_NO_IF _T("ELSE with no matching IF")
 #define ERR_OUTOFMEM _T("Out of memory.")  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
 #define ERR_EXPR_TOO_LONG _T("Expression too long")
@@ -191,6 +197,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_PERCENT _T("Must be between -100 and 100.")
 #define ERR_MOUSE_SPEED _T("Mouse speed must be between 0 and ") MAX_MOUSE_SPEED_STR _T(".")
 #define ERR_VAR_IS_READONLY _T("Not allowed as an output variable.")
+#define ERR_INVALID_DOT _T("Unsupported use of \".\"") // L31
 
 //----------------------------------------------------------------------------------
 
@@ -530,16 +537,16 @@ class Line
 {
 private:
 	ResultType EvaluateCondition();
-	ResultType Line::PerformLoop(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
+	ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine
 		, __int64 aIterationLimit, bool aIsInfinite);
-	ResultType Line::PerformLoopFilePattern(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
+	ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LPTSTR aFilePattern);
-	ResultType PerformLoopReg(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine
+	ResultType PerformLoopReg(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, HKEY aRootKeyType, HKEY aRootKey, LPTSTR aRegSubkey);
-	ResultType PerformLoopParse(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
-	ResultType Line::PerformLoopParseCSV(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine);
-	ResultType PerformLoopReadFile(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine, FILE *aReadFile, LPTSTR aWriteFileName);
-	ResultType PerformLoopWhile(LPTSTR *apReturnValue, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
+	ResultType PerformLoopParse(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine);
+	ResultType Line::PerformLoopParseCSV(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine);
+	ResultType PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, FILE *aReadFile, LPTSTR aWriteFileName);
+	ResultType PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
 	ResultType Perform();
 
 	ResultType MouseGetPos(DWORD aOptions);
@@ -720,6 +727,11 @@ public:
 	Line *mPrevLine, *mNextLine; // The prev & next lines adjacent to this one in the linked list; NULL if none.
 	Line *mRelatedLine;  // e.g. the "else" that belongs to this "if"
 	Line *mParentLine; // Indicates the parent (owner) of this line.
+
+#ifdef SCRIPT_DEBUG
+	Breakpoint *mBreakpoint;
+#endif
+
 	// Probably best to always use ARG1 even if other things have supposedly verfied
 	// that it exists, since it's count-check should make the dereference of a NULL
 	// pointer (or accessing non-existent array elements) virtually impossible.
@@ -833,23 +845,22 @@ public:
 
 	static void FreeDerefBufIfLarge();
 
-	ResultType ExecUntil(ExecUntilMode aMode, LPTSTR *apReturnValue = NULL, Line **apJumpToLine = NULL);
+	ResultType ExecUntil(ExecUntilMode aMode, ExprTokenType *apReturnValue = NULL, Line **apJumpToLine = NULL);
 
 	// The following are characters that can't legally occur after an AND or OR.  It excludes all unary operators
 	// "!~*&-+" as well as the parentheses chars "()":
 	#define EXPR_CORE _T("<>=/|^,:")
 	// The characters common to both EXPR_TELLTALES and EXPR_OPERAND_TERMINATORS:
-	#define EXPR_COMMON _T(" \t") EXPR_CORE _T("*&~!()")  // Space and Tab are included at the beginning for performance.
-	#define EXPR_COMMON_FORBIDDEN_BYREF _T("<>/|^,*&~!") // Omits space/tab because operators like := can have them. Omits colon because want to be able to pass a ternary byref. Omits = because colon is omitted (otherwise the logic is written in a way that wouldn't allow :=). Omits parentheses because a variable or assignment can be enclosed in them even though they're redundant.
+	#define EXPR_COMMON _T(" \t") EXPR_CORE _T("*&~!()[]")  // Space and Tab are included at the beginning for performance.  L31: Added [] for array-like syntax.
 	#define CONTINUATION_LINE_SYMBOLS EXPR_CORE _T(".+-*&!?~") // v1.0.46.
 	// Characters whose presence in a mandatory-numeric param make it an expression for certain.
 	// + and - are not included here because legacy numeric parameters can contain unary plus or minus,
 	// e.g. WinMove, -%x%, -%y%:
 	#define EXPR_TELLTALES EXPR_COMMON _T("\"")
 	// Characters that mark the end of an operand inside an expression.  Double-quote must not be included:
-	#define EXPR_OPERAND_TERMINATORS EXPR_COMMON _T("+-")
-	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS _T("\"") // Excludes '.' and '?' since they need special treatment due to the present/future allowance of them inside the names of variable and functions.
-	#define EXPR_FORBIDDEN_BYREF EXPR_COMMON_FORBIDDEN_BYREF _T(".+-\"") // Dot is also included.
+	#define EXPR_OPERAND_TERMINATORS_EX_DOT EXPR_COMMON _T("+-?") // L31: Used in a few places where '.' needs special treatment.
+	#define EXPR_OPERAND_TERMINATORS EXPR_OPERAND_TERMINATORS_EX_DOT _T(".") // L31: Used in expressions where '.' is always an operator.
+	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS _T("\"")
 	#define EXPR_ILLEGAL_CHARS _T("'\\;`{}") // Characters illegal in an expression.
 	// The following HOTSTRING option recognizer is kept somewhat forgiving/non-specific for backward compatibility
 	// (e.g. scripts may have some invalid hotstring options, which are simply ignored).  This definition is here
@@ -860,31 +871,9 @@ public:
 	#define IS_HOTSTRING_OPTION(chr) (_istalnum(chr) || _tcschr(_T("?*- \t"), chr))
 	// The characters below are ordered with most-often used ones first, for performance:
 	#define DEFINE_END_FLAGS \
-		TCHAR end_flags[] = {' ', g_delimiter, '(', '\t', '<', '>', ':', '=', '+', '-', '*', '/', '!', '~', '&', '|', '^', '\0'}; // '\0' must be last.
-		// '?' and '.' are omitted from the above because they require special handling due to being permitted
-		// in the curruent or future names of variables and functions.
-	static bool StartsWithAssignmentOp(LPTSTR aStr) // RELATED TO ABOVE, so kept adjacent to it.
-	// Returns true if aStr begins with an assignment operator such as :=, >>=, ++, etc.
-	// For simplicity, this doesn't check that what comes AFTER an operator is valid.  For example,
-	// :== isn't valid, yet is reported as valid here because it starts with :=.
-	// Caller is responsible for having omitted leading whitespace, if desired.
-	{
-		if (!(*aStr && aStr[1])) // Relies on short-circuit boolean order.
-			return false;
-		TCHAR cp0 = *aStr;
-		switch(aStr[1])
-		{
-		// '=' is listed first for performance, since it's the most common.
-		case '=': return _tcschr(_T(":+-*.|&^/"), cp0); // Covers :=, +=, -=, *=, .=, |=, &=, ^=, /= (9 operators).
-		case '+': // Fall through to below. Covers ++.
-		case '-': return cp0 == aStr[1]; // Covers --.
-		case '/': // Fall through to below. Covers //=.
-		case '>': // Fall through to below. covers >>=.
-		case '<': return cp0 == aStr[1] && aStr[2] == '='; // Covers <<=.
-		}
-		// Otherwise:
-		return false;
-	}
+		TCHAR end_flags[] = {' ', g_delimiter, '(', '\t', '<', '>', ':', '=', '+', '-', '*', '/', '!', '~', '&', '|', '^', '[', '.', '?', '\0'}; // '\0' must be last.
+		// L31: Added '[' for standalone ObjSet/Get to work as ACT_EXPRESSION.  "Get" is allowed for simplicity and for future use with functions-as-values (e.g. varContainingFunc[]).
+		// L34: Added '.' and changed dot handling to fix x.=y, improve support in other areas, catch more errors and give slightly better error messages.
 
 	#define ArgLength(aArgNum) ArgIndexLength((aArgNum)-1)
 	#define ArgToDouble(aArgNum) ArgIndexToDouble((aArgNum)-1)
@@ -896,12 +885,13 @@ public:
 	size_t ArgIndexLength(int aArgIndex);
 
 	Var *ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary = true);
-	ResultType ExpandArgs(VarSizeType aSpaceNeeded = VARSIZE_ERROR, Var *aArgVar[] = NULL);
+	ResultType ExpandArgs(ExprTokenType *aResultToken = NULL, VarSizeType aSpaceNeeded = VARSIZE_ERROR, Var *aArgVar[] = NULL);
 	VarSizeType GetExpandedArgSize(Var *aArgVar[]);
 	LPTSTR ExpandArg(LPTSTR aBuf, int aArgIndex, Var *aArgVar = NULL);
-	LPTSTR ExpandExpression(int aArgIndex, ResultType &aResult, LPTSTR &aTarget, LPTSTR &aDerefBuf
-		, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize);
+	LPTSTR ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType *aResultToken
+		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
+	ResultType EvaluateHotCriterionExpression(); // L4: Called by MainWindowProc to handle an AHK_HOT_IF_EXPR message.
 
 	ResultType Deref(Var *aOutputVar, LPTSTR aBuf);
 
@@ -1793,6 +1783,9 @@ public:
 		: mFileIndex(aFileIndex), mLineNumber(aFileLineNumber), mActionType(aActionType)
 		, mAttribute(ATTR_NONE), mArgc(aArgc), mArg(aArg)
 		, mPrevLine(NULL), mNextLine(NULL), mRelatedLine(NULL), mParentLine(NULL)
+#ifdef SCRIPT_DEBUG
+		, mBreakpoint(NULL)
+#endif
 		{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
@@ -1836,10 +1829,12 @@ public:
 	{
 		Label *prev_label =g->CurrentLabel; // This will be non-NULL when a subroutine is called from inside another subroutine.
 		g->CurrentLabel = this;
+			DEBUGGER_STACK_PUSH(SE_Sub, mJumpToLine, sub, this)
 		// I'm pretty sure it's not valid for the following call to ExecUntil() to tell us to jump
 		// somewhere, because the called function, or a layer even deeper, should handle the goto
 		// prior to returning to us?  So the last parameter is omitted:
 		ResultType result = mJumpToLine->ExecUntil(UNTIL_RETURN); // The script loader has ensured that Label::mJumpToLine can't be NULL.
+			DEBUGGER_STACK_POP()
 		g->CurrentLabel = prev_label;
 		return result;
 	}
@@ -1879,7 +1874,8 @@ public:
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
 	int mInstances; // How many instances currently exist on the call stack (due to recursion or thread interruption).  Future use: Might be used to limit how deep recursion can go to help prevent stack overflow.
-	Func *mNextFunc; // Next item in linked list.
+	Func *mNextFunc; // Next item in linked list. // L27: Replaced linked list with binary-searchable array Script::mFunc.
+	// L31: Re-enabled mNextFunc.  See AddFunc for comments.
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
 	UCHAR mDefaultVarType;
@@ -1893,9 +1889,14 @@ public:
 	// override in the script.  So mIsBuiltIn should always be used to determine whether the function
 	// is truly built-in, not its name.
 
-	ResultType Call(LPTSTR &aReturnValue) // Making this a function vs. inline doesn't measurably impact performance.
+	ResultType Call(ExprTokenType *aResultToken) // Making this a function vs. inline doesn't measurably impact performance.
 	{
-		aReturnValue = _T(""); // Init to default in case function doesn't return a value or it EXITs or fails.
+		if (aResultToken) // L31: Return value is returned via token rather than char** to support objects (and binary numbers as an added benefit).
+		{
+			// Init to default in case function doesn't return a value or it EXITs or fails.
+			aResultToken->symbol = SYM_STRING;
+			aResultToken->marker = _T("");
+		}
 		// Launch the function similar to Gosub (i.e. not as a new quasi-thread):
 		// The performance gain of conditionally passing NULL in place of result (when this is the
 		// outermost function call of a line consisting only of function calls, namely ACT_EXPRESSION)
@@ -1925,7 +1926,29 @@ public:
 		// for a command that references A_Index in two of its args such as the following:
 		// ToolTip, O, ((cos(A_Index) * 500) + 500), A_Index
 		++mInstances;
-		ResultType result = mJumpToLine->ExecUntil(UNTIL_BLOCK_END, &aReturnValue);
+
+		DEBUGGER_STACK_PUSH(SE_Func, mJumpToLine, func, this)
+
+		ResultType result = mJumpToLine->ExecUntil(UNTIL_BLOCK_END, aResultToken);
+
+#ifdef SCRIPT_DEBUG
+		if (g_Debugger.IsConnected())
+		{
+			if (result == EARLY_RETURN)
+			{
+				// Find the end of this function.
+				Line *line;
+				for (line = mJumpToLine; line && (line->mActionType != ACT_BLOCK_END || !line->mAttribute); line = line->mNextLine);
+				// Give user the opportunity to inspect variables before returning.
+				if (line)
+					g_Debugger.PreExecLine(line);
+			}
+			g_Debugger.StackPop();
+		}
+		// Not used because function calls require extra work to allow the user to inspect variables before returning:
+		//DEBUGGER_STACK_POP()
+#endif
+
 		--mInstances;
 		// Restore the original value in case this function is called from inside another function.
 		// Due to the synchronous nature of recursion and recursion-collapse, this should keep
@@ -1939,7 +1962,7 @@ public:
 		, mBIF(NULL)
 		, mParam(NULL), mParamCount(0), mMinParams(0)
 		, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
-		, mInstances(0), mNextFunc(NULL)
+		, mInstances(0) /*, mNextFunc(NULL)*/
 		, mDefaultVarType(VAR_DECLARE_NONE)
 		, mIsBuiltIn(aIsBuiltIn)
 	{}
@@ -2042,6 +2065,10 @@ public:
 	UINT GetSubmenuPos(HMENU ahMenu);
 	UINT GetItemPos(LPTSTR aMenuItemName);
 	bool ContainsMenu(UserMenu *aMenu);
+	// L17: Functions for menu icons.
+	ResultType SetItemIcon(UserMenuItem *aMenuItem, char *aFilename, int aIconNumber, int aWidth);
+	ResultType ApplyItemIcon(UserMenuItem *aMenuItem);
+	ResultType RemoveItemIcon(UserMenuItem *aMenuItem);
 };
 
 
@@ -2060,6 +2087,24 @@ public:
 	// due to byte-alignment:
 	bool mEnabled, mChecked;
 	UserMenuItem *mNextMenuItem;  // Next item in linked list
+	
+	union
+	{
+		// L17: Implementation of menu item icons is OS-dependent (g_os.IsWinVistaOrLater()).
+		
+		// Older versions of Windows do not support alpha channels in menu item bitmaps, so owner-drawing
+		// must be used for icons with transparent backgrounds to appear correctly. Owner-drawing also
+		// prevents the icon colours from inverting when the item is selected. DrawIcon() gives the best
+		// results, so we store the icon handle as is.
+		//
+		HICON mIcon;
+		
+		// Windows Vista and later support alpha channels via 32-bit bitmaps. Since owner-drawing prevents
+		// visual styles being applied to menus, we convert each icon to a 32-bit bitmap, calculating the
+		// alpha channel as necessary. This is done only once, when the icon is initially set.
+		//
+		HBITMAP mBitmap;
+	};
 
 	// Constructor:
 	UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, UserMenu *aMenu);
@@ -2081,6 +2126,7 @@ struct FontType
 	bool strikeout;
 	int point_size; // Decided to use int vs. float to simplify the code in many places. Fractional sizes seem rarely needed.
 	int weight;
+	DWORD quality; // L19: Allow control over font quality (anti-aliasing, etc.).
 	HFONT hfont;
 };
 
@@ -2220,7 +2266,8 @@ public:
 	COLORREF mBackgroundColorCtl; // Background color for controls.
 	HBRUSH mBackgroundBrushCtl;   // Brush corresponding to the above.
 	HDROP mHdrop;                 // Used for drag and drop operations.
-	HICON mIconEligibleForDestruction; // The window's SysMenu icon, which can be destroyed when the window is destroyed if nothing else is using it.
+	HICON mIconEligibleForDestruction; // The window's icon, which can be destroyed when the window is destroyed if nothing else is using it.
+	HICON mIconEligibleForDestructionSmall; // L17: A window may have two icons: ICON_SMALL and ICON_BIG.
 	int mMarginX, mMarginY, mPrevX, mPrevY, mPrevWidth, mPrevHeight, mMaxExtentRight, mMaxExtentDown
 		, mSectionX, mSectionY, mMaxExtentRightSection, mMaxExtentDownSection;
 	LONG mMinWidth, mMinHeight, mMaxWidth, mMaxHeight;
@@ -2260,7 +2307,7 @@ public:
 		, mCurrentColor(CLR_DEFAULT)
 		, mBackgroundColorWin(CLR_DEFAULT), mBackgroundBrushWin(NULL)
 		, mBackgroundColorCtl(CLR_DEFAULT), mBackgroundBrushCtl(NULL)
-		, mHdrop(NULL), mIconEligibleForDestruction(NULL)
+		, mHdrop(NULL), mIconEligibleForDestruction(NULL), mIconEligibleForDestructionSmall(NULL)
 		, mMarginX(COORD_UNSPECIFIED), mMarginY(COORD_UNSPECIFIED) // These will be set when the first control is added.
 		, mPrevX(0), mPrevY(0)
 		, mPrevWidth(0), mPrevHeight(0) // Needs to be zero for first control to start off at right offset.
@@ -2278,7 +2325,7 @@ public:
 	}
 
 	static ResultType Destroy(GuiIndexType aWindowIndex);
-	static void DestroyIconIfUnused(HICON ahIcon);
+	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
 	ResultType Create();
 	void SetLabels(LPTSTR aLabelPrefix);
 	static void UpdateMenuBars(HMENU aMenu);
@@ -2381,10 +2428,16 @@ class Script
 {
 private:
 	friend class Hotkey;
+#ifdef SCRIPT_DEBUG
+	friend class Debugger;
+#endif
+
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
 	UINT mLineCount;                  // The number of lines.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
 	Func *mFirstFunc, *mLastFunc;     // The first and last functions in the linked list.
+	Func **mFunc; // L27: Use a binary-searchable array to speed up function searches (especially beneficial for dynamic function calls).
+	int mFuncCount, mFuncCountMax;
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
@@ -2483,6 +2536,7 @@ public:
 	WCHAR *mRunAsUser, *mRunAsPass, *mRunAsDomain; // Memory is allocated at runtime, upon first use.
 
 	HICON mCustomIcon;  // NULL unless the script has loaded a custom icon during its runtime.
+	HICON mCustomIconSmall; // L17: Use separate big/small icons for best results.
 	LPTSTR mCustomIconFile; // Filename of icon.  Allocated on first use.
 	bool mIconFrozen; // If true, the icon does not change state when the state of pause or suspend changes.
 	LPTSTR mTrayIconTip;  // Custom tip text for tray icon.  Allocated on first use.
@@ -2499,7 +2553,7 @@ public:
 	ResultType Edit();
 	ResultType Reload(bool aDisplayErrors);
 	ResultType ExitApp(ExitReasons aExitReason, LPTSTR aBuf = NULL, int ExitCode = 0);
-	void TerminateApp(int aExitCode);
+	void TerminateApp(ExitReasons aExitReason, int aExitCode); // L31: Added aExitReason. See script.cpp.
 #ifdef AUTOHOTKEYSC
 	LineNumberType LoadFromFile();
 #else
@@ -2513,8 +2567,8 @@ public:
 #ifndef AUTOHOTKEYSC
 	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown);
 #endif
-	Func *FindFunc(LPTSTR aFuncName, size_t aFuncNameLength = 0);
-	Func *AddFunc(LPTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn);
+	Func *FindFunc(LPTSTR aFuncName, size_t aFuncNameLength = 0, int *apInsertPos = NULL); // L27: Added apInsertPos for binary-search.
+	Func *AddFunc(LPTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos); // L27: Added aInsertPos for binary-search.
 
 	#define ALWAYS_USE_DEFAULT  0
 	#define ALWAYS_USE_GLOBAL   1
@@ -2541,7 +2595,7 @@ public:
 	LPTSTR ListVars(LPTSTR aBuf, int aBufSize);
 	LPTSTR ListKeyHistory(LPTSTR aBuf, int aBufSize);
 
-	ResultType PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions);
+	ResultType PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2); // L17: Added aOptions2 for Icon sub-command (icon width). Arg was previously reserved/unused.
 	UserMenu *FindMenu(LPTSTR aMenuName);
 	UserMenu *AddMenu(LPTSTR aMenuName);
 	ResultType ScriptDeleteMenu(UserMenu *aMenu);
@@ -2551,6 +2605,15 @@ public:
 		for (UserMenu *m = mFirstMenu; m; m = m->mNextMenu)
 			for (mi = m->mFirstMenuItem; mi; mi = mi->mNextMenuItem)
 				if (mi->mMenuID == aID)
+					return mi;
+		return NULL;
+	}
+	UserMenuItem *FindMenuItemBySubmenu(HMENU aSubmenu) // L26: Used by WM_MEASUREITEM/WM_DRAWITEM to find the menu item with an associated submenu. Fixes icons on such items when owner-drawn menus are in use.
+	{
+		UserMenuItem *mi;
+		for (UserMenu *m = mFirstMenu; m; m = m->mNextMenu)
+			for (mi = m->mFirstMenuItem; mi; mi = mi->mNextMenuItem)
+				if (mi->mSubmenu && mi->mSubmenu->mMenu == aSubmenu)
 					return mi;
 		return NULL;
 	}
@@ -2685,6 +2748,7 @@ VarSizeType BIV_IsAdmin(LPTSTR aBuf, LPTSTR aVarName);
 	? token_raw->var->Length()\
 	: _tcslen(token_as_string)
 
+void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free = NULL); // L31: Contains code extracted from BIF_DllCall for reuse in ExpressionToPostfix.
 void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
@@ -2734,14 +2798,26 @@ void BIF_IL_Create(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 void BIF_IL_Destroy(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_IL_Add(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
+void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // L31: Also handles LTrim and RTrim.
+
+
+void BIF_IsObject(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // L31
+
+// L31: See script_object.cpp for comments.
+void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+
+
 BOOL LegacyResultToBOOL(LPTSTR aResult);
 BOOL LegacyVarToBOOL(Var &aVar);
 BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
+BOOL TokenIsEmptyString(ExprTokenType &aToken);
 __int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPureInteger = FALSE);
 double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE, BOOL aIsPureFloat = FALSE);
 LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL);
 ResultType TokenToDoubleOrInt64(ExprTokenType &aToken);
+IObject *TokenToObject(ExprTokenType &aToken); // L31
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
 void SetWorkingDir(LPTSTR aNewDir);

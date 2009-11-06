@@ -970,16 +970,17 @@ for (;;)
       cb.subject_length   = md->end_subject - md->start_subject;
       cb.start_match      = mstart - md->start_subject;
       cb.current_position = eptr - md->start_subject;
-      cb.pattern_position = GET(ecode, 2);
-      cb.next_item_length = GET(ecode, 2 + LINK_SIZE);
+      cb.pattern_position = GET(ecode, 6);
+      cb.next_item_length = GET(ecode, 6 + LINK_SIZE);
       cb.capture_top      = offset_top/2;
       cb.capture_last     = md->capture_last;
       cb.callout_data     = md->callout_data;
+      cb.user_callout     = *(void **)(ecode + 2); /* AutoHotkey */
       if ((rrc = (*pcre_callout)(&cb)) > 0) RRETURN(MATCH_NOMATCH);
       if (rrc < 0) RRETURN(rrc);
       }
 #endif /* AutoHotkey */
-    ecode += 2 + 2*LINK_SIZE;
+    ecode += 6 + 2*LINK_SIZE;
     break;
 
     /* Recursion either matches the current regex, or some subexpression. The

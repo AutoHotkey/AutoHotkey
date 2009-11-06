@@ -1772,8 +1772,9 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 
 	if (!*aFilespec) // Allow blank filename to yield NULL bitmap (and currently, some callers do call it this way).
 		return NULL;
-	if (aIconNumber < 0) // Allowed to be called this way by GUI and others (to avoid need for validation of user input there).
-		aIconNumber = 0; // Use the default behavior, which is "load icon or bitmap, whichever is most appropriate".
+	// Lexikos: Negative values now indicate an icon's integer resource ID.
+	//if (aIconNumber < 0) // Allowed to be called this way by GUI and others (to avoid need for validation of user input there).
+	//	aIconNumber = 0; // Use the default behavior, which is "load icon or bitmap, whichever is most appropriate".
 
 	LPTSTR file_ext = _tcsrchr(aFilespec, '.');
 	if (file_ext)
@@ -1794,7 +1795,8 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 	//    ICL files (v1.0.43.05): Apparently ICL files are an unofficial file format. Someone on the newsgroups
 	//    said that an ICL is an "ICon Library... a renamed 16-bit Windows .DLL (an NE format executable) which
 	//    typically contains nothing but a resource section. The ICL extension seems to be used by convention."
-	bool ExtractIcon_was_used = aIconNumber > 1 || (file_ext && (
+	// L17: Support negative numbers to mean resource IDs. These are supported by the resource extraction method directly, and by ExtractIcon if aIconNumber < -1.
+	bool ExtractIcon_was_used = aIconNumber > 1 || aIconNumber < 0 || (file_ext && (
 		   !_tcsicmp(file_ext, _T("exe"))
 		|| !_tcsicmp(file_ext, _T("dll"))
 		|| !_tcsicmp(file_ext, _T("icl")) // Icon library: Unofficial dll container, see notes above.
@@ -1816,16 +1818,59 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		//|| !_tcsicmp(file_ext, _T("wcx")) // Total/Windows Commander Plug-in
 		//|| !_tcsicmp(file_ext, _T("wdx")) // Total/Windows Commander Plug-in
 		));
+
 	if (ExtractIcon_was_used)
 	{
 		aImageType = IMAGE_ICON;
-		hbitmap = (HBITMAP)ExtractIcon(g_hInstance, aFilespec, aIconNumber > 0 ? aIconNumber - 1 : 0);
+
+		// L17: Manually extract the most appropriately sized icon resource for the best results.
+		hbitmap = (HBITMAP)ExtractIconFromExecutable(aFilespec, aIconNumber, aWidth, aHeight);
+
+		// At this time it seems unnecessary to fall back to any of the following methods:
+		/*
+		if (aWidth && aHeight) // Lexikos: Alternate methods that give better results than ExtractIcon.
+		{
+			int icon_index = aIconNumber > 0 ? aIconNumber - 1 : aIconNumber < -1 ? aIconNumber : 0;
+			// Testing shows ExtractIcon retrieves the first icon in the icon group and resizes it to
+			// the system large icon size. In case scripts expect this behaviour, and because it is
+			// debatable which size will actually look better when scaled, use ExtractIconEX only if
+			// a system size is exactly specified. Callers who specifically want the system small or
+			// large icon should call GetSystemMetrics() to get the correct aWidth and aHeight.
+			// For convenience and because the system icon sizes are probably always square,
+			// assume aWidth == -1 is equivalent to aWidth == aHeight (and vice versa).
+			if ((aWidth == GetSystemMetrics(SM_CXSMICON) || aWidth == -1) && (aHeight == GetSystemMetrics(SM_CYSMICON) || aHeight == -1))
+			{
+				// Retrieve icon via phiconSmall.
+				ExtractIconEx(aFilespec, icon_index, NULL, (HICON*)&hbitmap, 1);
+			}
+			else if ((aWidth == GetSystemMetrics(SM_CXICON) || aWidth == -1) && (aHeight == GetSystemMetrics(SM_CYICON) || aHeight == -1))
+			{
+				// Retrieve icon via phiconLarge.
+				ExtractIconEx(aFilespec, icon_index, (HICON*)&hbitmap, NULL, 1);
+			}
+			else
+			{
+				UINT icon_id;
+				// This is the simplest method of loading an icon of an arbitrary size.
+				// "However, this function is deprecated not intended for general use."
+				// It is also not documented to support resource IDs, unlike ExtractIcon and ExtractIconEx.
+				if (-1 == PrivateExtractIcons(aFilespec, icon_index, aWidth == -1 ? aHeight : aWidth, aHeight == -1 ? aWidth : aHeight, (HICON*)&hbitmap, &icon_id, 1, 0))
+					hbitmap = NULL;
+			}
+		}
+		// Lexikos: ExtractIcon supports resource IDs by specifying nIconIndex < -1, where Abs(nIconIndex)
+		// is the resource ID. nIconIndex MUST NOT BE -1, which is used to indicate the total number of
+		// icons should be returned. ExtractIconEx could be used to support ID -1, but it has different
+		// behaviour to ExtractIcon, and the method above should work in most instances.
+		if (!hbitmap) // The other methods failed or were not used.
+			hbitmap = (HBITMAP)ExtractIcon(g_hInstance, aFilespec, aIconNumber > 0 ? aIconNumber - 1 : aIconNumber < -1 ? aIconNumber : 0);
 		// Above: Although it isn't well documented at MSDN, apparently both ExtractIcon() and LoadIcon()
 		// scale the icon to the system's large-icon size (usually 32x32) regardless of the actual size of
 		// the icon inside the file.  For this reason, callers should call us in a way that allows us to
 		// give preference to LoadImage() over ExtractIcon() (unless the caller needs to retain backward
 		// compatibility with existing scripts that explicitly specify icon #1 to force the ExtractIcon
 		// method to be used).
+		*/
 		if (hbitmap < (HBITMAP)2) // i.e. it's NULL or 1. Return value of 1 means "incorrect file type".
 			return NULL; // v1.0.44: Fixed to return NULL vs. hbitmap, since 1 is an invalid handle (perhaps rare since no known bugs caused by it).
 		//else continue on below so that the icon can be resized to the caller's specified dimensions.
@@ -1918,7 +1963,11 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		{
 			// UPDATE for v1.0.44: Attempt ExtractIcon in case its some extension that's
 			// was recognized as an icon container (such as AutoHotkeySC.bin) and thus wasn't handled higher above.
-			hbitmap = (HBITMAP)ExtractIcon(g_hInstance, aFilespec, aIconNumber - 1);
+			//hbitmap = (HBITMAP)ExtractIcon(g_hInstance, aFilespec, aIconNumber - 1);
+
+			// L17: Manually extract the most appropriately sized icon resource for the best results.
+			hbitmap = (HBITMAP)ExtractIconFromExecutable(aFilespec, aIconNumber, aWidth, aHeight);
+
 			if (hbitmap < (HBITMAP)2) // i.e. it's NULL or 1. Return value of 1 means "incorrect file type".
 				return NULL;
 			ExtractIcon_was_used = true;
@@ -2147,6 +2196,89 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 }
 
 
+struct ResourceIndexToIdEnumData
+{
+	int find_index;
+	int index;
+	int result;
+};
+
+BOOL CALLBACK ResourceIndexToIdEnumProc(HMODULE hModule, LPCTSTR lpszType, LPTSTR lpszName, LONG_PTR lParam)
+{
+	ResourceIndexToIdEnumData &enum_data = *(ResourceIndexToIdEnumData*)lParam;
+	
+	if (++enum_data.index == enum_data.find_index)
+	{
+		enum_data.result = (int)lpszName;
+		return FALSE; // Stop
+	}
+	return TRUE; // Continue
+}
+
+// L17: Find integer ID of resource from one-based index. i.e. IconNumber -> resource ID.
+int ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex)
+{
+	ResourceIndexToIdEnumData enum_data;
+	enum_data.find_index = aIndex;
+	enum_data.index = 0;
+	enum_data.result = -1; // Return value of -1 indicates failure, since ID 0 may be valid.
+
+	EnumResourceNames(aModule, aType, &ResourceIndexToIdEnumProc, (LONG_PTR)&enum_data);
+
+	return enum_data.result;
+}
+
+// L17: Extract icon of the appropriate size from an executable (or compatible) file.
+HICON ExtractIconFromExecutable(char *aFilespec, int aIconNumber, int aWidth, int aHeight)
+{
+	HICON hicon = NULL;
+
+	// If the module is already loaded as an executable, LoadLibraryEx returns its handle.
+	// Otherwise each call will receive its own handle to a data file mapping.
+	HMODULE hdatafile = LoadLibraryEx(aFilespec, NULL, LOAD_LIBRARY_AS_DATAFILE);
+	if (hdatafile)
+	{
+		int group_icon_id = (aIconNumber < 0 ? -aIconNumber : ResourceIndexToId(hdatafile, (LPCTSTR)RT_GROUP_ICON, aIconNumber ? aIconNumber : 1));
+
+		HRSRC hres;
+		HGLOBAL hresdata;
+		LPVOID presdata;
+
+		// MSDN indicates resources are unloaded when the *process* exits, but also states
+		// that the pointer returned by LockResource is valid until the *module* containing
+		// the resource is unloaded. Testing seems to indicate that unloading a module indeed
+		// unloads or invalidates any resources it contains.
+		if ((hres = FindResource(hdatafile, MAKEINTRESOURCE(group_icon_id), RT_GROUP_ICON))
+			&& (hresdata = LoadResource(hdatafile, hres))
+			&& (presdata = LockResource(hresdata)))
+		{
+			// LookupIconIdFromDirectoryEx seems to use whichever is larger of aWidth or aHeight,
+			// so one or the other may safely be -1. However, since this behaviour is undocumented,
+			// treat -1 as "same as other dimension":
+			int icon_id = LookupIconIdFromDirectoryEx((PBYTE)presdata, TRUE, aWidth == -1 ? aHeight : aWidth, aHeight == -1 ? aWidth : aHeight, 0);
+			if (icon_id
+				&& (hres = FindResource(hdatafile, MAKEINTRESOURCE(icon_id), RT_ICON))
+				&& (hresdata = LoadResource(hdatafile, hres))
+				&& (presdata = LockResource(hresdata)))
+			{
+				hicon = CreateIconFromResourceEx((PBYTE)presdata, SizeofResource(hdatafile, hres), TRUE, 0x30000, 0, 0, 0);
+			}
+		}
+
+		// Decrements the executable module's reference count or frees the data file mapping.
+		FreeLibrary(hdatafile);
+	}
+
+	// L20: Fall back to ExtractIcon if the above method failed. This may work on some versions of Windows where
+	// ExtractIcon supports 16-bit "executables" (such as ICL files) that cannot be loaded by LoadLibraryEx.
+	// However, resource ID -1 is not supported, and if multiple icon sizes exist in the file, the first is used
+	// rather than the most appropriate.
+	if (!hicon)
+		hicon = ExtractIcon(0, aFilespec, aIconNumber > 0 ? aIconNumber - 1 : aIconNumber < -1 ? aIconNumber : 0);
+
+	return hicon;
+}
+
 
 HBITMAP IconToBitmap(HICON ahIcon, bool aDestroyIcon)
 // Converts HICON to an HBITMAP that has ahIcon's actual dimensions.
@@ -2207,6 +2339,114 @@ HBITMAP IconToBitmap(HICON ahIcon, bool aDestroyIcon)
 	return hbitmap;
 }
 
+
+// Lexikos: Used for menu icons on Windows Vista and later. Some similarities to IconToBitmap, maybe should be merged if IconToBitmap does not specifically need to create a device-dependent bitmap?
+HBITMAP IconToBitmap32(HICON ahIcon, bool aDestroyIcon)
+{
+	// Get the icon's internal colour and mask bitmaps.
+	// hbmColor is needed to measure the icon.
+	// hbmMask is needed to generate an alpha channel if the icon does not have one.
+	ICONINFO icon_info;
+	if (!GetIconInfo(ahIcon, &icon_info))
+		return NULL;
+
+	HBITMAP hbitmap = NULL; // Set default in case of failure.
+
+	// Get size of icon's internal bitmap.
+	BITMAP icon_bitmap;
+	if (GetObject(icon_info.hbmColor, sizeof(BITMAP), &icon_bitmap))
+	{
+		int width = icon_bitmap.bmWidth;
+		int height = icon_bitmap.bmHeight;
+
+		HDC hdc = CreateCompatibleDC(NULL);
+		if (hdc)
+		{
+			BITMAPINFO bitmap_info = {0};
+			// Set parameters for 32-bit bitmap. May also be used to retrieve bitmap data from the icon's mask bitmap.
+			BITMAPINFOHEADER &bitmap_header = bitmap_info.bmiHeader;
+			bitmap_header.biSize = sizeof(BITMAPINFOHEADER);
+			bitmap_header.biWidth = width;
+			bitmap_header.biHeight = height;
+			bitmap_header.biBitCount = 32;
+			bitmap_header.biPlanes = 1;
+
+			// Create device-independent bitmap.
+			UINT *bits;
+			if (hbitmap = CreateDIBSection(hdc, &bitmap_info, 0, (void**)&bits, NULL, 0))
+			{
+				HGDIOBJ old_object = SelectObject(hdc, hbitmap);
+				if (old_object) // Above succeeded.
+				{
+					// Draw icon onto bitmap. Use DrawIconEx because DrawIcon always draws a large (usually 32x32) icon!
+					DrawIconEx(hdc, 0, 0, ahIcon, 0, 0, 0, NULL, DI_NORMAL);
+
+					// May be necessary for bits to be in sync, according to documentation for CreateDIBSection:
+					GdiFlush();
+
+					// Calculate end of bitmap data.
+					UINT *bits_end = bits + width*height;
+					
+					UINT *this_pixel; // Used in a few loops below.
+
+					// Check for alpha data.
+					bool has_nonzero_alpha = false;
+					for (this_pixel = bits; this_pixel < bits_end; ++this_pixel)
+					{
+						if (*this_pixel >> 24)
+						{
+							has_nonzero_alpha = true;
+							break;
+						}
+					}
+
+					if (!has_nonzero_alpha)
+					{
+						// Get bitmap data from the icon's mask.
+						UINT *mask_bits = (UINT*)_alloca(height*width*4);
+						if (GetDIBits(hdc, icon_info.hbmMask, 0, height, (LPVOID)mask_bits, &bitmap_info, 0))
+						{
+							UINT *this_mask_pixel;
+							// Use the icon's mask to generate alpha data.
+							for (this_pixel = bits, this_mask_pixel = mask_bits; this_pixel < bits_end; ++this_pixel, ++this_mask_pixel)
+							{
+								if (*this_mask_pixel)
+									*this_pixel = 0;
+								else
+									*this_pixel |= 0xff000000;
+							}
+						}
+						else
+						{
+							// GetDIBits failed, simply make the bitmap opaque.
+							for (this_pixel = bits; this_pixel < bits_end; ++this_pixel)
+								*this_pixel |= 0xff000000;
+						}
+					}
+
+					SelectObject(hdc, old_object);
+				}
+				else
+				{
+					// Probably very rare, but be on the safe side.
+					DeleteObject(hbitmap);
+					hbitmap = NULL;
+				}
+			}
+			DWORD dwError = GetLastError();
+			DeleteDC(hdc);
+		}
+	}
+
+	// It's our reponsibility to delete these two when they're no longer needed:
+	DeleteObject(icon_info.hbmColor);
+	DeleteObject(icon_info.hbmMask);
+
+	if (aDestroyIcon)
+		DestroyIcon(ahIcon);
+
+	return hbitmap;
+}
 
 
 HRESULT MySetWindowTheme(HWND hwnd, LPCWSTR pszSubAppName, LPCWSTR pszSubIdList)

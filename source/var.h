@@ -121,6 +121,7 @@ private:
 		// performance if those variables are ever numeric).
 		__int64 mContentsInt64;
 		double mContentsDouble;
+		IObject *mObject; // L31
 	};
 	union
 	{
@@ -139,7 +140,7 @@ private:
 	};
 	AllocMethodType mHowAllocated; // Keep adjacent/contiguous with the below to save memory.
 	#define VAR_ATTRIB_BINARY_CLIP  0x01
-	#define VAR_ATTRIB_PARAM        0x02 // Currently unused.
+	#define VAR_ATTRIB_OBJECT		0x02 // L31: Marks mObject as valid.
 	#define VAR_ATTRIB_STATIC       0x04
 	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE 0x08
 	#define VAR_ATTRIB_HAS_VALID_INT64      0x10 // Cache type 1. Mutually exclusive of the other two.
@@ -166,6 +167,10 @@ private:
 	{
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+
+		if (var.IsObject()) // L31: mObject will be overwritten below via the union, so release it now.
+			var.ReleaseObject();
+
 		var.mContentsInt64 = aInt64;
 		var.mAttrib &= ~VAR_ATTRIB_CACHE; // But not VAR_ATTRIB_CONTENTS_OUT_OF_DATE because the caller specifies whether or not that gets added.
 		var.mAttrib |= aAttrib; // Must be done prior to below. Indicate the type of binary number and whether VAR_ATTRIB_CONTENTS_OUT_OF_DATE is present.
@@ -320,6 +325,46 @@ public:
 		return OK;
 	}
 
+	inline ResultType Assign(IObject *aValueToAssign) // L31
+	{
+		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
+		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+
+		aValueToAssign->AddRef(); // Must be done before Release() in case the only other reference to this object is already in var.  Such a case seems too rare to be worth optimizing by returning early.
+
+		var.Free(); // If var contains an object, this will Release() it.  It will also clear any string contents and free memory if appropriate.
+		
+		var.mObject = aValueToAssign;
+		
+		// Mark this variable to indicate it contains an object.
+		// Currently nothing should attempt to cache a number in a variable which contains an object, but it may become
+		// possible if a "default property" mechanism is introduced for implicitly converting an object to a string/number.
+		// There are at least two ways the caching mechanism could conflict with objects:
+		//  1) Caching a number would overwrite mObject.
+		//	2) Caching a number or flagging the variable as "non-numeric" would give incorrect results if the object's
+		//	   default property can implicitly change (and this change cannot be detected in order to invalidate the cache).
+		// Including VAR_ATTRIB_CACHE_DISABLED below should prevent caching from ever occurring for a variable containing an object.
+		// Including VAR_ATTRIB_NOT_NUMERIC below allows IsNonBlankIntegerOrFloat to return early if it is passed an object.
+		var.mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
+		var.mAttrib |= VAR_ATTRIB_OBJECT | VAR_ATTRIB_CACHE_DISABLED | VAR_ATTRIB_NOT_NUMERIC;
+
+		return OK;
+	}
+
+	inline IObject *&Object()
+	{
+		return (mType == VAR_ALIAS) ? mAliasFor->mObject : mObject;
+	}
+
+	inline void ReleaseObject() // L31
+	// Caller has ensured that IsObject() == true, not just HasObject().
+	{
+		// Remove the "this is an object" attribute and re-enable binary number caching.
+		mAttrib &= ~(VAR_ATTRIB_OBJECT | VAR_ATTRIB_CACHE_DISABLED | VAR_ATTRIB_NOT_NUMERIC);
+		// Release this variable's object.  MUST BE DONE AFTER THE ABOVE IN CASE IT TRIGGERS var.base.__Delete().
+		mObject->Release();
+	}
+
 	void DisableCache()
 	// Callers should be aware that the cache will be re-enabled (except for clipboard) whenever a the address
 	// of a variable's contents changes, such as when it needs to be expanded to hold more text.
@@ -426,6 +471,36 @@ public:
 		return OK; // Since above didn't return, indicate success.
 	}
 
+	void TokenToContents(ExprTokenType &aToken) // L31: Mostly for object support.
+	// See TokenToDoubleOrInt64 for comments.
+	{
+		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		// L33: For greater compatibility with the official release and L revisions prior to L31,
+		// this section was changed to avoid converting numeric strings to SYM_INTEGER/SYM_FLOAT.
+		switch(var.mAttrib & VAR_ATTRIB_CACHE)
+		{
+		case VAR_ATTRIB_HAS_VALID_INT64:
+			aToken.symbol = SYM_INTEGER;
+			aToken.value_int64 = var.mContentsInt64;
+			return;
+		case VAR_ATTRIB_HAS_VALID_DOUBLE:
+			aToken.symbol = SYM_FLOAT;
+			aToken.value_double = var.mContentsDouble;
+			return;
+		default:
+			if (var.IsObject())
+			{
+				aToken.symbol = SYM_OBJECT;
+				aToken.object = var.mObject;
+				aToken.object->AddRef();
+				return;
+			}
+			//else contains a regular string.
+			aToken.symbol = SYM_STRING;
+			aToken.marker = var.Contents();
+		}
+	}
+
 	// Not an enum so that it can be global more easily:
 	#define VAR_ALWAYS_FREE                    0 // This item and the next must be first and numerically adjacent to
 	#define VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC 1 // each other so that VAR_ALWAYS_FREE_LAST covers only them.
@@ -477,6 +552,18 @@ public:
 		return (mType == VAR_ALIAS) ? mAliasFor->mType : mType;
 	}
 
+#ifdef SCRIPT_DEBUG
+	__forceinline VarTypeType RealType()
+	{
+		return mType;
+	}
+#endif
+
+	__forceinline bool IsStatic()
+	{
+		return (mAttrib & VAR_ATTRIB_STATIC);
+	}
+
 	__forceinline bool IsLocal()
 	{
 		// Since callers want to know whether this variable is local, even if it's a local alias for a
@@ -499,6 +586,18 @@ public:
 	{
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 		return (mType == VAR_ALIAS ? mAliasFor->mAttrib : mAttrib) & VAR_ATTRIB_BINARY_CLIP;
+	}
+
+	__forceinline bool IsObject() // L31: Indicates this var contains an object reference which must be released if the var is emptied.
+	{
+		return (mAttrib & VAR_ATTRIB_OBJECT);
+	}
+
+	__forceinline bool HasObject() // L31: Indicates this var's effective value is an object reference.
+	{
+		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
+		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		return (var.mAttrib & VAR_ATTRIB_OBJECT);
 	}
 
 	VarSizeType ByteCapacity() // __forceinline() on Capacity, Length, and/or Contents bloats the code and reduces performance.
@@ -528,7 +627,7 @@ public:
 	{
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		return (var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE) ? TRUE : !!var.mByteLength; // i.e. the only time var.mLength isn't a valid indicator of an empty variable is when VAR_ATTRIB_CONTENTS_OUT_OF_DATE, in which case the variable is non-empty because there is a binary number in it.
+		return (var.mAttrib & (VAR_ATTRIB_CONTENTS_OUT_OF_DATE | VAR_ATTRIB_OBJECT)) ? TRUE : !!var.mByteLength; // i.e. the only time var.mLength isn't a valid indicator of an empty variable is when VAR_ATTRIB_CONTENTS_OUT_OF_DATE, in which case the variable is non-empty because there is a binary number in it.
 	}
 
 	BOOL HasUnflushedBinaryNumber()
@@ -684,7 +783,6 @@ public:
 		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
 		if (var.mType == VAR_CLIPBOARD && g_clip.IsReadyForWrite())
 			return g_clip.Commit(); // Writes the new clipboard contents to the clipboard and closes it.
-
 		// The binary-clip attribute is also reset here for cases where a caller uses a variable without
 		// having called Assign() to resize it first, which can happen if the variable's capacity is already
 		// sufficient to hold the desired contents.  VAR_ATTRIB_CONTENTS_OUT_OF_DATE is also removed below

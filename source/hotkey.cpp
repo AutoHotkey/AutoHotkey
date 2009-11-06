@@ -33,7 +33,8 @@ DWORD Hotkey::sJoyHotkeyCount = 0;
 
 
 
-HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, LPTSTR aWinText)
+// L4: Added aHotExprIndex for #if (expression).
+HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, LPTSTR aWinText, int aHotExprIndex)
 // This is a global function because it's used by both hotkeys and hotstrings.
 // In addition to being called by the hook thread, this can now be called by the main thread.
 // That happens when a WM_HOTKEY message arrives that is non-hook (such as for Win9x).
@@ -51,6 +52,11 @@ HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, 
 	case HOT_IF_NOT_EXIST:
 		found_hwnd = WinExist(g_default, aWinTitle, aWinText, _T(""), _T(""), false, false); // Thread-safe.
 		break;
+	// L4: Handling of #if (expression) hotkey variants.
+	case HOT_IF_EXPR:
+		// Expression evaluation must be done in the main thread. If the message times out, the hotkey/hotstring is not allowed to fire.
+		DWORD_PTR res;
+		return (SendMessageTimeout(g_hWnd, AHK_HOT_IF_EXPR, (WPARAM)aHotExprIndex, 0, SMTO_BLOCK | SMTO_ABORTIFHUNG, g_HotExprTimeout, &res) && res == CONDITION_TRUE) ? (HWND)1 : NULL;
 	default: // HOT_NO_CRITERION (listed last because most callers avoids calling here by checking this value first).
 		return (HWND)1; // Always allow hotkey to fire.
 	}
@@ -529,7 +535,8 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC)
 			if (   vp->mEnabled // This particular variant within its parent hotkey is enabled.
 				&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
 				&& (!vp->mHotCriterion || HotCriterionAllowsFiring(vp->mHotCriterion
-					, vp->mHotWinTitle, vp->mHotWinText))   ) // ... and its critieria allow it to fire.
+					// L4: Added vp->mHotExprIndex for #if (expression).
+					, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex))   ) // ... and its critieria allow it to fire.
 				return false; // At least one of this prefix's suffixes is eligible for firing.
 	}
 	// Since above didn't return, no hotkeys were found for this prefix that are capable of firing.
@@ -572,7 +579,8 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
 		if (   vp->mEnabled // This particular variant within its parent hotkey is enabled.
 			&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
 			&& (!vp->mHotCriterion || (found_hwnd = HotCriterionAllowsFiring(vp->mHotCriterion
-				, vp->mHotWinTitle, vp->mHotWinText)))   ) // ... and its critieria allow it to fire.
+				// L4: Added vp->mHotExprIndex for #if (expression).
+				, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex)))   ) // ... and its critieria allow it to fire.
 		{
 			if (vp->mHotCriterion) // Since this is the first criteria hotkey, it takes precedence.
 				return vp;
@@ -830,7 +838,9 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 	if (unregistered_during_thread) // Do it every time through the loop in case the hotkey is re-registered by its own subroutine.
 		Unregister(); // This takes care of other details for us.
 	++aVariant.mExistingThreads;  // This is the thread count for this particular hotkey only.
+		DEBUGGER_STACK_PUSH(SE_Thread, aVariant.mJumpToLabel->mJumpToLine, desc, g_script.mThisHotkeyName)
 	ResultType result = aVariant.mJumpToLabel->Execute();
+		DEBUGGER_STACK_POP()
 	--aVariant.mExistingThreads;
 	if (unregistered_during_thread)
 		Register();
@@ -883,6 +893,37 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		else
 			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	}
+
+	// L4: Allow "Hotkey, If, exact-expression-text" to reference existing #if expressions.
+	if (!stricmp(aHotkeyName, "If"))
+	{
+		if (*aOptions)
+		{	// Let the script know of this error since it may indicate an unescaped comma in the expression text.
+			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		}
+		if (!*aLabelName)
+		{
+			g_HotCriterion = HOT_NO_CRITERION;
+		}
+		else
+		{
+			int i;
+			for (i = 0; i < g_HotExprLineCount; ++i)
+			{
+				if (!strcmp(aLabelName, g_HotExprLines[i]->mArg[0].text))
+				{
+					g_HotCriterion = HOT_IF_EXPR;
+					g_HotWinTitle = g_HotExprLines[i]->mArg[0].text;
+					g_HotWinText = "";
+					g_HotExprIndex = i;
+					break;
+				}
+			}
+			if (i == g_HotExprLineCount)
+				return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		}
+		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	}
 
 	// For maintainability (and script readability), don't support "U" as a substitute for "UseErrorLevel",
@@ -1522,6 +1563,7 @@ HotkeyVariant *Hotkey::AddVariant(Label *aJumpToLabel, bool aSuffixHasTilde)
 	v.mHotCriterion = g_HotCriterion; // If this hotkey is an alt-tab one (mHookAction), this is stored but ignored until/unless the Hotkey command converts it into a non-alt-tab hotkey.
 	v.mHotWinTitle = g_HotWinTitle;
 	v.mHotWinText = g_HotWinText;  // The value of this and other globals used above can vary during load-time.
+	v.mHotExprIndex = g_HotExprIndex;	// L4: Added mHotExprIndex for #if (expression).
 	v.mEnabled = true;
 	if (aSuffixHasTilde)
 	{
@@ -2253,7 +2295,9 @@ ResultType Hotstring::PerformInNewThreadMadeByCaller()
 	// is still timely/accurate -- it seems best to set to "no modifiers":
 	g_script.mThisHotkeyModifiersLR = 0;
 	++mExistingThreads;  // This is the thread count for this particular hotstring only.
+		DEBUGGER_STACK_PUSH(SE_Thread, mJumpToLabel->mJumpToLine, desc, g_script.mThisHotkeyName)
 	ResultType result = mJumpToLabel->Execute();
+		DEBUGGER_STACK_POP()
 	--mExistingThreads;
 	return result ? OK : FAIL;	// Return OK on all non-failure results.
 }
@@ -2406,6 +2450,7 @@ Hotstring::Hotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LP
 	, mHotCriterion(g_HotCriterion)
 	, mHotWinTitle(g_HotWinTitle), mHotWinText(g_HotWinText)
 	, mConstructedOK(false)
+	, mHotExprIndex(g_HotExprIndex)	// L4: Added mHotExprIndex for #if (expression).
 {
 	// Insist on certain qualities so that they never need to be checked other than here:
 	if (!mJumpToLabel) // Caller has already ensured that aHotstring is not blank.

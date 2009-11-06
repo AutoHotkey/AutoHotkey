@@ -197,7 +197,7 @@ void OS_Version::Init(void)
 					m_bWin2000orLater = true;
 					m_bWinXPorLater = true;
 				}
-				break;
+  				break;
 
 		} // End Switch
 #ifndef UNICODE
