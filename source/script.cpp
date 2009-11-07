@@ -9296,7 +9296,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						++infix_count;
 					}
 					infix[infix_count].symbol = SYM_OPAREN; // MUST NOT REFER TO this_infix_item IN CASE ABOVE DID ++infix_count.
-					infix[infix_count].marker = cp; // L31: For error-reporting.
+					infix[infix_count].marker = cp; // L31: For error-reporting.  L37: Also used to implement the requirement that there be no space between ']' and '(' in this: obj[method_name](params).
 					break;
 				case ')':
 					this_infix_item.symbol = SYM_CPAREN;
@@ -9329,6 +9329,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 				case ']': // L31
 					this_infix_item.symbol = SYM_CBRACKET;
+					this_infix_item.marker = cp; // L37: Used to implement the requirement that there be no space between ']' and '(' in this: obj[method_name](params).
 					break;
 				case '=':
 					if (cp1 == '=')
@@ -10046,6 +10047,22 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 			{
 				ExprTokenType &this_obracket = *stack[stack_count - 1];
 				//--stack_count; // DON'T remove this SYM_OBRACKET from the stack.  It is left on the stack for reuse below.
+
+				// L37: Detect obj[method_name](params):
+				if (this_infix[1].symbol == SYM_CONCAT && this_infix[2].symbol == SYM_OPAREN && this_infix[2].marker == this_infix->marker + 1)
+				{	// The final check above ensures this is "](" and not "] (" or "] . (".
+					if (in_param_list->param_count != 2) // Require exactly one [parameter], excluding the target object.
+						return LineError("Exactly one [name_parameter] must precede the (parameter list).", FAIL, this_obracket.deref->marker);
+					this_infix += 2; // Skip the SYM_CONCAT and SYM_CBRACKET.
+					// Treat this as a continuation of the parameter list for this operation, which is now known to be ObjCall.
+					// in_param_list must remain pointing to the same deref, which we will continue to use to count parameters.
+					this_obracket.symbol = SYM_FUNC;
+					this_obracket.deref->func = g_ObjCall;
+					// Leave this_obracket on the stack, but also push an open-parenthesis over it:
+					this_infix->buf = this_obracket.buf; // Points to the underlying/outer parameter list, which will be restored into in_param_list when this open-parenthesis is popped off the stack.
+					STACK_PUSH(this_infix++);
+					break;
+				}
 				
 				in_param_list = (DerefType *)this_obracket.buf; // Restore in_param_list to the value it had when SYM_OBRACKET was pushed onto the stack.
 				
