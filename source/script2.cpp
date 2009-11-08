@@ -1038,8 +1038,8 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 		// Determine how long the result string will be so that the output variable can be expanded
 		// to handle it:
 		VarSizeType length;
-		UCHAR *ucp;
-		for (length = 0, ucp = (UCHAR *)aValue1; *ucp; ++ucp)
+		TBYTE *ucp;
+		for (length = 0, ucp = (TBYTE *)aValue1; *ucp; ++ucp)
 		{
 			switch(*ucp)
 			{
@@ -1064,12 +1064,12 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 
 		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 		// this call will set up the clipboard for writing:
-		if (output_var.Assign(NULL, length) != OK)
+		if (output_var.AssignString(NULL, length) != OK)
 			return FAIL;  // It already displayed the error.
 		LPTSTR contents = output_var.Contents();  // For performance and tracking.
 
 		// Translate the text to HTML:
-		for (ucp = (UCHAR *)aValue1; *ucp; ++ucp)
+		for (ucp = (TBYTE *)aValue1; *ucp; ++ucp)
 		{
 			switch(*ucp)
 			{
