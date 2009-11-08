@@ -273,7 +273,7 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	#define SET_REG_BUF \
 		if (g_os.IsWin9x())\
 		{\
-			strlcpy(szRegBuffer, aValue, sizeof(szRegBuffer));\
+			tcslcpy(szRegBuffer, aValue, sizeof(szRegBuffer));\
 			buf = szRegBuffer;\
 		}\
 		else\

@@ -971,6 +971,7 @@ void Var::AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 		var.mHowAllocated = ALLOC_MALLOC; // Must always be this type to avoid complications and possible memory leaks.
 		var.mByteContents = (char *) aNewMem;
 		var.mByteLength = aLength * sizeof(TCHAR);
+		ASSERT( var.mByteLength + sizeof(TCHAR) <= _msize(aNewMem) );
 		var.mByteCapacity = (VarSizeType)_msize(aNewMem); // Get actual capacity in case it's a lot bigger than aLength+1. _msize() is only about 36 bytes of code and probably a very fast call.
 		var.mAttrib &= ~VAR_ATTRIB_CACHE_DISABLED; // This isn't always done by Free() above, so do it here in case it wasn't (it seems too unlikely to have to check whether aNewMem==the_old_mem_address).  Reason: If the script previously took the address of this variable, that address is no longer valid; so there is no need to protect against the script directly accessing this variable.
 		// Already done by Free() above:
@@ -1191,7 +1192,7 @@ ResultType Var::AssignStringFromCodePage(const char *aBuf, int aLength, UINT aCo
 {
 	int iLen = MultiByteToWideChar(aCodePage, aFlags, aBuf, aLength, NULL, 0);
 	if (iLen > 0) {
-		AssignString(NULL, iLen - 1, true, false);
+		AssignString(NULL, iLen, true, false);
 		LPWSTR aContents = Contents();
 		aContents[iLen] = 0;
 		return MultiByteToWideChar(aCodePage, aFlags, aBuf, aLength, (LPWSTR) aContents, iLen) == iLen ? OK : FAIL;
@@ -1212,7 +1213,7 @@ ResultType Var::AssignStringToCodePage(const wchar_t *aBuf, int aLength, UINT aC
 		pDefChar = &aDefChar;
 	int iLen = WideCharToMultiByte(aCodePage, aFlags, aBuf, aLength, NULL, 0, pDefChar, NULL);
 	if (iLen > 0) {
-		SetCapacity(iLen - 1, true, false);
+		SetCapacity(iLen, true, false);
 		LPSTR aContents = (LPSTR) Contents();
 		aContents[iLen] = 0;
 		return WideCharToMultiByte(aCodePage, aFlags, aBuf, aLength, aContents, iLen, pDefChar, NULL) == iLen ? OK : FAIL;
