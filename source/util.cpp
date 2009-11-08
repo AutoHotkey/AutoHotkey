@@ -872,7 +872,7 @@ ret0:
 
 
 UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType aStringCaseSense
-	, UINT aLimit, size_t aSizeLimit, TCHAR **aDest, size_t *aHaystackLength)
+	, UINT aLimit, size_t aSizeLimit, LPTSTR *aDest, size_t *aHaystackLength)
 // Replaces all (or aLimit) occurrences of aOld with aNew in aHaystack.
 // On success, it returns the number of replacements done (0 if none).  On failure (out of memory), it returns 0
 // (and if aDest isn't NULL, it also sets *aDest to NULL on failure).
@@ -978,7 +978,7 @@ UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType 
 	#define STRREPLACE_REALLOC(size) \
 	{\
 		result_size = size;\
-		if (   !(realloc_temp = (LPTSTR)realloc(result, result_size * sizeof(TCHAR)))   )\
+		if (   !(realloc_temp = trealloc(result, result_size))   )\
 			goto out_of_mem;\
 		result = realloc_temp;\
 	}

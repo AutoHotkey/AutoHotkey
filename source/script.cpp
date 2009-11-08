@@ -3596,7 +3596,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						// those that do exist don't have any contents yet, so it would be pointless). So it
 						// seems best to wait until full/comprehesive support for expressions is
 						// studied/designed for both statics and parameter-default-values.
-						if (*right_side_of_operator == '_T("' && terminate_here[-1] == '")') // Quoted/literal string.
+						if (*right_side_of_operator == '"' && terminate_here[-1] == '"') // Quoted/literal string.
 						{
 							++right_side_of_operator; // Omit the opening-quote from further consideration.
 							terminate_here[-1] = '\0'; // Remove the close-quote from further consideration.
