@@ -434,7 +434,7 @@ Action g_act[] =
 	, {_T("SysGet"), 2, 4, 4 H, NULL} // Output-var/array, sub-cmd or sys-metrics-number, input-value1, future-use
 
 	, {_T("PostMessage"), 1, 8, 8, {1, 2, 3, 0}}  // msg, wParam, lParam, Control, WinTitle, WinText, ExcludeTitle, ExcludeText
-	, {_T("SendMessage"), 1, 8, 8, {1, 2, 3, 0}}  // msg, wParam, lParam, Control, WinTitle, WinText, ExcludeTitle, ExcludeText
+	, {_T("SendMessage"), 1, 9, 9, {1, 2, 3, 9, 0}}  // msg, wParam, lParam, Control, WinTitle, WinText, ExcludeTitle, ExcludeText, Timeout
 
 	, {_T("PixelGetColor"), 3, 4, 4 H, {2, 3, 0}} // OutputVar, X-coord, Y-coord [, RGB]
 	, {_T("PixelSearch"), 0, 9, 9 H, {3, 4, 5, 6, 7, 8, 0}} // OutputX, OutputY, left, top, right, bottom, Color, Variation [, RGB]

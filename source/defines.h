@@ -713,9 +713,11 @@ inline void global_init(global_struct &g)
 
 #ifdef UNICODE
 #define WINAPI_SUFFIX "W"
+#define PROCESS_API_SUFFIX "W" // used by Process32First and Process32Next
 #define FOPEN_MODE _T(", ccs=UTF-8")
 #else
 #define WINAPI_SUFFIX "A"
+#define PROCESS_API_SUFFIX
 #define FOPEN_MODE
 #endif
 

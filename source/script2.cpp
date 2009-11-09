@@ -1016,6 +1016,7 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 		// needed (by passing a mode setting for aValue2):
 		// €????????????????¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾?
 		// ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüý?
+#ifndef UNICODE
 		static const LPTSTR sHtml[128] = { // v1.0.40.02: Removed leading '&' and trailing ';' to reduce code size.
 			  _T("euro"), _T("#129"), _T("sbquo"), _T("fnof"), _T("bdquo"), _T("hellip"), _T("dagger"), _T("Dagger")
 			, _T("circ"), _T("permil"), _T("Scaron"), _T("lsaquo"), _T("OElig"), _T("#141"), _T("#381"), _T("#143")
@@ -1034,6 +1035,7 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 			, _T("eth"), _T("ntilde"), _T("ograve"), _T("oacute"), _T("ocirc"), _T("otilde"), _T("ouml"), _T("divide")
 			, _T("oslash"), _T("ugrave"), _T("uacute"), _T("ucirc"), _T("uuml"), _T("yacute"), _T("thorn"), _T("yuml")
 		};
+#endif
 
 		// Determine how long the result string will be so that the output variable can be expanded
 		// to handle it:
@@ -1055,9 +1057,11 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 				length += 4;
 				break; // v1.0.45: Added missing break.
 			default:
+#ifndef UNICODE
 				if (*ucp > 127)
 					length += (VarSizeType)_tcslen(sHtml[*ucp - 128]) + 2; // +2 for the leading '&' and the trailing ';'.
 				else
+#endif
 					++length;
 			}
 		}
@@ -1094,6 +1098,7 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 				contents += 4;
 				break;
 			default:
+#ifndef UNICODE
 				if (*ucp > 127)
 				{
 					*contents++ = '&'; // v1.0.40.02
@@ -1102,6 +1107,7 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 					*contents++ = ';'; // v1.0.40.02
 				}
 				else
+#endif
 					*contents++ = *ucp;
 			}
 		}
@@ -2807,6 +2813,7 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 // sArgDeref[5]: WinText
 // sArgDeref[6]: ExcludeTitle
 // sArgDeref[7]: ExcludeText
+// sArgDeref[8]: Timeout
 {
 	HWND target_window, control_window;
 	if (   !(target_window = DetermineTargetWindow(sArgDeref[4], sArgDeref[5], sArgDeref[6], sArgDeref[7]))
@@ -2824,6 +2831,9 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 	UINT msg = ArgToUInt(1);
 	WPARAM wparam = (mArgc > 1 && mArg[1].text[0] == '"') ? (WPARAM)sArgDeref[1] : ArgToUInt(2);
 	LPARAM lparam = (mArgc > 2 && mArg[2].text[0] == '"') ? (LPARAM)sArgDeref[2] : ArgToUInt(3);
+	// Timeout increased from 2000 to 5000 in v1.0.27:
+	// jackieku: specify timeout by the parameter.
+	UINT timeout = mArgc > 8 ? (mArg[8].text[0] == '"' ? (LPARAM)sArgDeref[8] : ArgToUInt(9)) : 5000;
 
 	// Fixed for v1.0.48.04: Make copies of the wParam and lParam variables (if eligible for updating) prior
 	// to sending the message in case the message triggers a callback or OnMessage function, which would be
@@ -2854,8 +2864,7 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 	if (aUseSend)
 	{
 		DWORD dwResult;
-		// Timeout increased from 2000 to 5000 in v1.0.27:
-		if (!SendMessageTimeout(control_window, msg, wparam, lparam, SMTO_ABORTIFHUNG, 5000, &dwResult))
+		if (!SendMessageTimeout(control_window, msg, wparam, lparam, SMTO_ABORTIFHUNG, timeout, &dwResult))
 			return g_ErrorLevel->Assign(_T("FAIL")); // Need a special value to distinguish this from numeric reply-values.
 		g_ErrorLevel->Assign(dwResult); // UINT seems best most of the time?
 	}
@@ -12448,7 +12457,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			output_var.SetCharLength((VarSizeType)wcslen(contents));
 			output_var.Close(); // Clear the attributes of the variable to reflect the fact that the contents may have changed.
 #else
-			::delete pStr[arg_count];
+			delete pStr[arg_count];
 #error ANSI build is not maintained
 #endif
 			continue;
@@ -12595,7 +12604,7 @@ void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 		// Otherwise, validation higher above has ensured: extract_length < remaining_length_available.
 		// Caller has provided a NULL circuit_token as a means of passing back memory we allocate here.
 		// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
-		if (   !(aResultToken.circuit_token = (ExprTokenType *)malloc(extract_length + 1))   ) // Out of memory. Due to rarity, don't display an error dialog (there's currently no way for a built-in function to abort the current thread anyway?)
+		if (   !(aResultToken.circuit_token = (ExprTokenType *)tmalloc(extract_length + 1))   ) // Out of memory. Due to rarity, don't display an error dialog (there's currently no way for a built-in function to abort the current thread anyway?)
 			return; // Yield the empty string (a default set higher above).
 		aResultToken.marker = (LPTSTR)aResultToken.circuit_token; // Store the address of the result for the caller.
 		aResultToken.buf = (LPTSTR)(size_t)extract_length; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.

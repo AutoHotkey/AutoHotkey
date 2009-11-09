@@ -945,7 +945,7 @@ public:
 				iPos = iStart;
 				CKuStringDataT *pNew = new CKuStringDataT;
 				pNew->Alloc(iNewLen);
-				pNew->m_iLength = iNewLen; // we are sure the new string length
+				pNew->m_iLength = iNewLen; // we have known the new string length
 
 				STRT str = pNew->m_sString;
 				if (iPos > 0)
