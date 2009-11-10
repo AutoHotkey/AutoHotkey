@@ -6161,7 +6161,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 			case TRANS_CMD_CHR:
 			case TRANS_CMD_DEREF:
 			case TRANS_CMD_UNICODE:
+#ifndef UNICODE
 			case TRANS_CMD_HTML:
+#endif
 			case TRANS_CMD_EXP:
 			case TRANS_CMD_SQRT:
 			case TRANS_CMD_LOG:
@@ -6194,6 +6196,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 				break;
 
 			case TRANS_CMD_ROUND:
+#ifdef UNICODE
+			case TRANS_CMD_HTML:
+#endif
 				if (*new_raw_arg4 && !line.ArgHasDeref(4) && !IsPureNumeric(new_raw_arg4, true, false))
 					return ScriptError(_T("Parameter #4 must be blank or an integer in this case."), new_raw_arg4);
 				break;

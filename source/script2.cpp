@@ -665,7 +665,7 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 			if (bar_color != CLR_DEFAULT)
 			{
 				// Remove visual styles so that specified color will be obeyed:
-				MySetWindowTheme(splash.hwnd_bar, L"_T(", L")");
+				MySetWindowTheme(splash.hwnd_bar, L"", L"");
 				SendMessage(splash.hwnd_bar, PBM_SETBARCOLOR, 0, bar_color); // Set color.
 			}
 			if (splash.color_bk != CLR_DEFAULT)
@@ -1016,13 +1016,15 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 		// needed (by passing a mode setting for aValue2):
 		// €????????????????¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾?
 		// ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüý?
+		static const LPTSTR sHtml[] = { // v1.0.40.02: Removed leading '&' and trailing ';' to reduce code size.
 #ifndef UNICODE
-		static const LPTSTR sHtml[128] = { // v1.0.40.02: Removed leading '&' and trailing ';' to reduce code size.
 			  _T("euro"), _T("#129"), _T("sbquo"), _T("fnof"), _T("bdquo"), _T("hellip"), _T("dagger"), _T("Dagger")
 			, _T("circ"), _T("permil"), _T("Scaron"), _T("lsaquo"), _T("OElig"), _T("#141"), _T("#381"), _T("#143")
 			, _T("#144"), _T("lsquo"), _T("rsquo"), _T("ldquo"), _T("rdquo"), _T("bull"), _T("ndash"), _T("mdash")
 			, _T("tilde"), _T("trade"), _T("scaron"), _T("rsaquo"), _T("oelig"), _T("#157"), _T("#382"), _T("Yuml")
-			, _T("nbsp"), _T("iexcl"), _T("cent"), _T("pound"), _T("curren"), _T("yen"), _T("brvbar"), _T("sect")
+			,
+#endif
+ 			  _T("nbsp"), _T("iexcl"), _T("cent"), _T("pound"), _T("curren"), _T("yen"), _T("brvbar"), _T("sect")
 			, _T("uml"), _T("copy"), _T("ordf"), _T("laquo"), _T("not"), _T("shy"), _T("reg"), _T("macr")
 			, _T("deg"), _T("plusmn"), _T("sup2"), _T("sup3"), _T("acute"), _T("micro"), _T("para"), _T("middot")
 			, _T("cedil"), _T("sup1"), _T("ordm"), _T("raquo"), _T("frac14"), _T("frac12"), _T("frac34"), _T("iquest")
@@ -1035,6 +1037,10 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 			, _T("eth"), _T("ntilde"), _T("ograve"), _T("oacute"), _T("ocirc"), _T("otilde"), _T("ouml"), _T("divide")
 			, _T("oslash"), _T("ugrave"), _T("uacute"), _T("ucirc"), _T("uuml"), _T("yacute"), _T("thorn"), _T("yuml")
 		};
+#ifdef UNICODE
+		#define TRANS_HTML_NAMED		0x00000001
+		#define TRANS_HTML_NUMBERED		0x00000002
+		DWORD aFlags = *aValue2 ? ATOI(aValue2) : TRANS_HTML_NAMED;
 #endif
 
 		// Determine how long the result string will be so that the output variable can be expanded
@@ -1057,11 +1063,61 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 				length += 4;
 				break; // v1.0.45: Added missing break.
 			default:
-#ifndef UNICODE
-				if (*ucp > 127)
-					length += (VarSizeType)_tcslen(sHtml[*ucp - 128]) + 2; // +2 for the leading '&' and the trailing ';'.
-				else
+#ifdef UNICODE
+				if (*ucp >= 0x80) {
+					if (aFlags & TRANS_HTML_NAMED) {
+						switch (*ucp) {
+							case 0x0178: // &Yuml;
+							case 0x0192: // &fnof;
+							case 0x02C6: // &circ;
+							case 0x2022: // &bull;
+							case 0x20AC: // &euro;
+								length += 6;
+								goto end_get_length;
+							case 0x0152: // &OElig;
+							case 0x0153: // &oelig;
+							case 0x02DC: // &tilde;
+							case 0x2013: // &ndash;
+							case 0x2014: // &mdash;
+							case 0x2018: // &lsquo;
+							case 0x2019: // &rsquo;
+							case 0x201C: // &ldquo;
+							case 0x201D: // &rdquo;
+							case 0x201E: // &bdquo;
+							case 0x2122: // &trade;
+								length += 7;
+								goto end_get_length;
+							case 0x0160: // &Scaron;
+							case 0x0161: // &scaron;
+							case 0x2020: // &dagger;
+							case 0x2021: // &Dagger;
+							case 0x2026: // &hellip;
+							case 0x2030: // &permil;
+							case 0x2039: // &lsaquo;
+							case 0x203A: // &rsaquo;
+								length += 8;
+								goto end_get_length;
+							default:
+								if (*ucp >= 0xA0 && *ucp <= 0xFF) {
+									length += (VarSizeType)_tcslen(sHtml[*ucp - 0xA0]) + 2; // +2 for the leading '&' and the trailing ';'.
+									goto end_get_length;
+								}
+								// else handles by the following
+								break;
+						}
+					}
+					if (aFlags & TRANS_HTML_NUMBERED)
+						length += ((int) qmathLog10(*ucp)) + 3; // &#NNN;
+					else
+						++length;
+end_get_length:
+					; // prevents complation error
+				}
+#else
+				if (*ucp >= 0x80)
+					length += (VarSizeType)_tcslen(sHtml[*ucp - 0x80]) + 2; // +2 for the leading '&' and the trailing ';'.
 #endif
+				else
 					++length;
 			}
 		}
@@ -1075,41 +1131,135 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 		// Translate the text to HTML:
 		for (ucp = (TBYTE *)aValue1; *ucp; ++ucp)
 		{
+			#define SET_HTML_ENTITY(s) { _tcscpy(contents, _T(s)); contents += (_countof(s) - 1); }
 			switch(*ucp)
 			{
 			case '"':  // &quot;
-				_tcscpy(contents, _T("&quot;"));
-				contents += 6;
+				SET_HTML_ENTITY("&quot;");
 				break;
 			case '&': // &amp;
-				_tcscpy(contents, _T("&amp;"));
-				contents += 5;
+				SET_HTML_ENTITY("&amp;");
 				break;
 			case '\n': // <br>\n
-				_tcscpy(contents, _T("<br>\n"));
-				contents += 5;
+				SET_HTML_ENTITY("<br>\n");
 				break;
 			case '<': // &lt;
-				_tcscpy(contents, _T("&lt;"));
-				contents += 4;
+				SET_HTML_ENTITY("&lt;");
 				break;
 			case '>': // &gt;
-				_tcscpy(contents, _T("&gt;"));
-				contents += 4;
+				SET_HTML_ENTITY("&gt;");
 				break;
 			default:
-#ifndef UNICODE
-				if (*ucp > 127)
+				if (*ucp >= 0x80)
 				{
+#ifdef UNICODE
+					if (aFlags & TRANS_HTML_NAMED) {
+						switch (*ucp) {
+							case 0x0152:
+								SET_HTML_ENTITY("&OElig;");
+								goto end_set_entity;
+							case 0x0153:
+								SET_HTML_ENTITY("&oelig;");
+								goto end_set_entity;
+							case 0x0160:
+								SET_HTML_ENTITY("&Scaron;");
+								goto end_set_entity;
+							case 0x0161:
+								SET_HTML_ENTITY("&scaron;");
+								goto end_set_entity;
+							case 0x0178:
+								SET_HTML_ENTITY("&Yuml;");
+								goto end_set_entity;
+							case 0x0192:
+								SET_HTML_ENTITY("&fnof;");
+								goto end_set_entity;
+							case 0x02C6:
+								SET_HTML_ENTITY("&circ;");
+								goto end_set_entity;
+							case 0x02DC:
+								SET_HTML_ENTITY("&tilde;");
+								goto end_set_entity;
+							case 0x2013:
+								SET_HTML_ENTITY("&ndash;");
+								goto end_set_entity;
+							case 0x2014:
+								SET_HTML_ENTITY("&mdash;");
+								goto end_set_entity;
+							case 0x2018:
+								SET_HTML_ENTITY("&lsquo;");
+								goto end_set_entity;
+							case 0x2019:
+								SET_HTML_ENTITY("&rsquo;");
+								goto end_set_entity;
+							case 0x201A:
+								SET_HTML_ENTITY("&sbquo;");
+								goto end_set_entity;
+							case 0x201C:
+								SET_HTML_ENTITY("&ldquo;");
+								goto end_set_entity;
+							case 0x201D:
+								SET_HTML_ENTITY("&rdquo;");
+								goto end_set_entity;
+							case 0x201E:
+								SET_HTML_ENTITY("&bdquo;");
+								goto end_set_entity;
+							case 0x2020:
+								SET_HTML_ENTITY("&dagger;");
+								goto end_set_entity;
+							case 0x2021:
+								SET_HTML_ENTITY("&Dagger;");
+								goto end_set_entity;
+							case 0x2022:
+								SET_HTML_ENTITY("&bull;");
+								goto end_set_entity;
+							case 0x2026:
+								SET_HTML_ENTITY("&hellip;");
+								goto end_set_entity;
+							case 0x2030:
+								SET_HTML_ENTITY("&permil;");
+								goto end_set_entity;
+							case 0x2039:
+								SET_HTML_ENTITY("&lsaquo;");
+								goto end_set_entity;
+							case 0x203A:
+								SET_HTML_ENTITY("&rsaquo;");
+								goto end_set_entity;
+							case 0x20AC:
+								SET_HTML_ENTITY("&euro;");
+								goto end_set_entity;
+							case 0x2122:
+								SET_HTML_ENTITY("&trade;");
+								goto end_set_entity;
+							default:
+								if (*ucp >= 0xA0 && *ucp <= 0xFF)
+								{
+									*contents++ = '&';
+									_tcscpy(contents, sHtml[*ucp - 0xA0]);
+									contents += _tcslen(contents);
+									*contents++ = ';';
+									goto end_set_entity;
+								}
+								// else handles by the following
+								break;
+						} // switch (*ucp)
+					} // if (aFlags & TRANS_HTML_NAMED)
+					if (aFlags & TRANS_HTML_NUMBERED)
+						contents += _stprintf(contents, _T("&#%d;"), (int) *ucp);
+					else
+						*contents++ = *ucp;
+end_set_entity:
+					; // prevents complation error
+#else
 					*contents++ = '&'; // v1.0.40.02
-					_tcscpy(contents, sHtml[*ucp - 128]);
+					_tcscpy(contents, sHtml[*ucp - 0x80]);
 					contents += _tcslen(contents); // Added as a fix in v1.0.41 (broken in v1.0.40.02).
 					*contents++ = ';'; // v1.0.40.02
+#endif
 				}
 				else
-#endif
 					*contents++ = *ucp;
 			}
+			#undef SET_HTML_ENTITY
 		}
 		*contents = '\0';  // Terminate the string.
 		return output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
