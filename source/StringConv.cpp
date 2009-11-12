@@ -11,8 +11,9 @@ LPCWSTR StringUTF8ToWChar(LPCSTR sUTF8, CStringW &sWChar, int iChars/* = -1*/)
 	sWChar.Empty();
 	int iLen = MultiByteToWideChar(CP_UTF8, 0, sUTF8, iChars, NULL, 0);
 	if (iLen > 0) {
-		iLen = MultiByteToWideChar(CP_UTF8, 0, sUTF8, iChars, sWChar.GetBufferSetLength(iLen - 1), iLen);
-		sWChar.ReleaseBufferSetLength(iLen - 1);
+		LPWSTR sBuf = sWChar.GetBufferSetLength(iLen);
+		iLen = MultiByteToWideChar(CP_UTF8, 0, sUTF8, iChars, sBuf, iLen);
+		sWChar.ReleaseBufferSetLength(sBuf[iLen - 1] ? iLen : iLen - 1);
 		return (iLen > 0) ? sWChar.GetString() : NULL;
 	}
 
@@ -27,8 +28,9 @@ LPCWSTR StringCharToWChar(LPCSTR sChar, CStringW &sWChar, int iChars/* = -1*/, U
 	sWChar.Empty();
 	int iLen = MultiByteToWideChar(codepage, 0, sChar, iChars, NULL, 0);
 	if (iLen > 0) {
-		iLen = MultiByteToWideChar(codepage, 0, sChar, iChars, sWChar.GetBufferSetLength(iLen - 1), iLen);
-		sWChar.ReleaseBufferSetLength(iLen - 1);
+		LPWSTR sBuf = sWChar.GetBufferSetLength(iLen);
+		MultiByteToWideChar(codepage, 0, sChar, iChars, sBuf, iLen);
+		sWChar.ReleaseBufferSetLength(sBuf[iLen - 1] ? iLen : iLen - 1);
 		return (iLen > 0) ? sWChar.GetString() : NULL;
 	}
 
@@ -43,8 +45,9 @@ LPCSTR StringWCharToUTF8(LPCWSTR sWChar, CStringA &sUTF8, int iChars/* = -1*/)
 	sUTF8.Empty();
 	int iLen = WideCharToMultiByte(CP_UTF8, 0, sWChar, iChars, NULL, 0, NULL, NULL);
 	if (iLen > 0) {
-		iLen = WideCharToMultiByte(CP_UTF8, 0, sWChar, iChars, sUTF8.GetBufferSetLength(iLen - 1), iLen, NULL, NULL);
-		sUTF8.ReleaseBufferSetLength(iLen - 1);
+		LPSTR sBuf = sUTF8.GetBufferSetLength(iLen);
+		WideCharToMultiByte(CP_UTF8, 0, sWChar, iChars, sBuf, iLen, NULL, NULL);
+		sUTF8.ReleaseBufferSetLength(sBuf[iLen - 1] ? iLen : iLen - 1);
 		return (iLen > 0) ? sUTF8.GetString() : NULL;
 	}
 
@@ -64,8 +67,9 @@ LPCSTR StringWCharToChar(LPCWSTR sWChar, CStringA &sChar, int iChars/* = -1*/, c
 	sChar.Empty();
 	int iLen = WideCharToMultiByte(codepage, WC_NO_BEST_FIT_CHARS, sWChar, iChars, NULL, 0, &chDef, NULL);
 	if (iLen > 0) {
-		iLen = WideCharToMultiByte(codepage, WC_NO_BEST_FIT_CHARS, sWChar, iChars, sChar.GetBufferSetLength(iLen - 1), iLen, &chDef, NULL);
-		sChar.ReleaseBufferSetLength(iLen - 1);
+		LPSTR sBuf = sChar.GetBufferSetLength(iLen);
+		WideCharToMultiByte(codepage, WC_NO_BEST_FIT_CHARS, sWChar, iChars, sBuf, iLen, &chDef, NULL);
+		sChar.ReleaseBufferSetLength(sBuf[iLen - 1] ? iLen : iLen - 1);
 		return (iLen > 0) ? sChar.GetString() : NULL;
 	}
 

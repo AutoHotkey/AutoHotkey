@@ -1195,7 +1195,10 @@ ResultType Var::AssignStringFromCodePage(const char *aBuf, int aLength, UINT aCo
 		AssignString(NULL, iLen, true, false);
 		LPWSTR aContents = Contents();
 		aContents[iLen] = 0;
-		return MultiByteToWideChar(aCodePage, aFlags, aBuf, aLength, (LPWSTR) aContents, iLen) == iLen ? OK : FAIL;
+		iLen = MultiByteToWideChar(aCodePage, aFlags, aBuf, aLength, (LPWSTR) aContents, iLen);
+		if (iLen <= 0)
+			return FAIL;
+		SetCharLength(aContents[iLen - 1] ? iLen : iLen - 1);
 	}
 	else
 		Assign();
@@ -1216,7 +1219,9 @@ ResultType Var::AssignStringToCodePage(const wchar_t *aBuf, int aLength, UINT aC
 		SetCapacity(iLen, true, false);
 		LPSTR aContents = (LPSTR) Contents();
 		aContents[iLen] = 0;
-		return WideCharToMultiByte(aCodePage, aFlags, aBuf, aLength, aContents, iLen, pDefChar, NULL) == iLen ? OK : FAIL;
+		iLen = WideCharToMultiByte(aCodePage, aFlags, aBuf, aLength, aContents, iLen, pDefChar, NULL);
+		if (iLen <= 0)
+			return FAIL;
 	}
 	else
 		Assign();
