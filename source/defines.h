@@ -34,12 +34,16 @@ GNU General Public License for more details.
 #endif
 
 #ifndef NAME_L_REVISION
-#define NAME_L_REVISION _T(".L36") // L14: Added .Ln for AutoHotkey_L revision n.
+#define NAME_L_REVISION ".L36" // L14: Added .Ln for AutoHotkey_L revision n.
 #endif
 
-#define NAME_P _T("AutoHotkeyU")
-#define NAME_VERSION _T("1.0.48.05") NAME_L_REVISION
-#define NAME_PV NAME_P _T(" v") NAME_VERSION
+#define NAME_P "AutoHotkeyU"
+#define NAME_PURE_VERSION "1.0.48.05"
+#define NAME_VERSION NAME_PURE_VERSION NAME_L_REVISION
+#define NAME_PV NAME_P " v" NAME_VERSION
+
+#define tNAME_VERSION _T(NAME_PURE_VERSION) _T(NAME_L_REVISION)
+#define tNAME_PV _T(NAME_P) _T(" v") tNAME_VERSION
 
 // Window class names: Changing these may result in new versions not being able to detect any old instances
 // that may be running (such as the use of FindWindow() in WinMain()).  It may also have other unwanted

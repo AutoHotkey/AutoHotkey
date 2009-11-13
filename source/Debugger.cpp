@@ -24,8 +24,8 @@ freely, without restriction.
 #include "globaldata.h" // for access to many global vars
 
 Debugger g_Debugger;
-char *g_DebuggerHost = NULL;
-char *g_DebuggerPort = NULL;
+CStringA g_DebuggerHost;
+CStringA g_DebuggerPort;
 
 // The first breakpoint uses sMaxId + 1. Don't change this without also changing breakpoint_remove.
 int Breakpoint::sMaxId = 0;
@@ -511,7 +511,7 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 
 		// Find the specified source file.
 		for (file_index = 0; file_index < Line::sSourceFileCount; ++file_index)
-			if (!lstrcmpi(filename, Line::sSourceFile[file_index]))
+			if (!stricmp(filename, CStringUTF8FromTChar(Line::sSourceFile[file_index])))
 				break;
 
 		if (file_index >= Line::sSourceFileCount)
@@ -552,7 +552,7 @@ int Debugger::WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine)
 {
 	return mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"line\" state=\"%s\" filename=\""
 								, aBreakpoint->id, aBreakpoint->state ? "enabled" : "disabled")
-		|| mResponseBuf.WriteFileURI(Line::sSourceFile[aLine->mFileIndex])
+		|| mResponseBuf.WriteFileURI(CStringUTF8FromTChar(Line::sSourceFile[aLine->mFileIndex]))
 		|| mResponseBuf.WriteF("\" lineno=\"%u\"/>", aLine->mLineNumber);
 }
 
@@ -803,7 +803,7 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 		if (depth == -1 || depth == level)
 		{
 			mResponseBuf.WriteF("<stack level=\"%i\" type=\"file\" filename=\"", level);
-			mResponseBuf.WriteFileURI(Line::sSourceFile[se->line->mFileIndex]);
+			mResponseBuf.WriteFileURI(CStringUTF8FromTChar(Line::sSourceFile[se->line->mFileIndex]));
 			mResponseBuf.WriteF("\" lineno=\"%u\" where=\"", se->line->mLineNumber);
 			switch (se->type)
 			{
@@ -941,7 +941,9 @@ int Debugger::WritePropertyXml(Var *aVar, VarSizeType aMaxData)
 int Debugger::WriteVarSizeAndData(Var *aVar, VarSizeType aMaxData)
 {
 	VarSizeType length, min_space_needed = 0;
+	const char *contents;
 
+#ifndef UNICODE
 	if (aVar->Type() == VAR_NORMAL)
 	{
 		// Use Capacity() instead of Length() in case the script stores binary
@@ -967,8 +969,6 @@ int Debugger::WriteVarSizeAndData(Var *aVar, VarSizeType aMaxData)
 	DEBUGGER_EXPAND_RESPONSEBUF_IF_NECESSARY(space_needed);
 	// Above may return on failure.
 
-	char *contents;
-
 	if (aVar->Type() == VAR_NORMAL)
 	{
 		// Copy and base64-encode directly from the variable.
@@ -982,6 +982,43 @@ int Debugger::WriteVarSizeAndData(Var *aVar, VarSizeType aMaxData)
 		// Up to this point, length may be inaccurate.
 		length = aVar->Get(contents);
 	}
+#else
+	CStringA utf8_buf;
+	if (aVar->Type() == VAR_NORMAL)
+	{
+		// This is broken to display binary data, although most data are strings.
+		StringWCharToUTF8(aVar->Contents(), utf8_buf);
+		length = utf8_buf.GetLength();
+	}
+	else
+	{
+		// Get() returns the maximum length, not always the actual length of the value.
+		// We need at least this much buffer space to retrieve the variable data.
+		min_space_needed = (length = (aVar->Get() * sizeof(TCHAR))) + sizeof(TCHAR);
+	}
+
+	// Calculate maximum length of base64-encoded variable data.
+	DWORD length_base64 = length ? DEBUGGER_BASE64_ENCODED_SIZE(min(length,aMaxData)) : 0;
+	
+	// Reserve at least enough space to write the var length"> and data.
+	DWORD space_needed = max(length_base64, min_space_needed) + 12; // 12 = max VarSizeType length + ">
+	int err;
+	DEBUGGER_EXPAND_RESPONSEBUF_IF_NECESSARY(space_needed);
+	// Above may return on failure.
+
+	if (aVar->Type() == VAR_NORMAL)
+	{
+		contents = utf8_buf.GetString();
+	}
+	else
+	{
+		// Copy the variable data to the *end* of the buffer so that we can
+		// base64-encode it without allocating more memory to hold the input data.
+		contents = mResponseBuf.mData + mResponseBuf.mDataSize - min_space_needed;
+		// Up to this point, length may be inaccurate.
+		length = aVar->Get((LPTSTR) contents) * sizeof(TCHAR);
+	}
+#endif
 
 	// Now that we know the actual length, write the end of the size attribute.
 	mResponseBuf.WriteF("%u\">", length);
@@ -1057,7 +1094,7 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 		return DEBUGGER_E_INVALID_CONTEXT;
 	}
 
-	Var *var = g_script.FindVar(name, 0, NULL, always_use);
+	Var *var = g_script.FindVar((LPTSTR) CStringTCharFromUTF8(name).GetString(), 0, NULL, always_use);
 
 	if (!var) // Var not found.
 	{
@@ -1077,7 +1114,7 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 		
 		// If the debugger client includes XML-reserved characters in the property name,
 		// the response XML will be badly formatted. Temporary workaround follows:
-		if (strlen(name) > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name, true, DISPLAY_NO_ERROR))
+		if (strlen(name) > MAX_VAR_NAME_LENGTH || !Var::ValidateName(CStringTCharFromUTF8(name), true, DISPLAY_NO_ERROR))
 			name = "(invalid)";
 
 		mResponseBuf.WriteF("<response command=\"property_get\" transaction_id=\"%e\"><property name=\"%e\" fullname=\"%e\" type=\"undefined\" facet=\"\" size=\"0\" children=\"0\"/></response>"
@@ -1156,9 +1193,11 @@ DEBUGGER_COMMAND(Debugger::property_set)
 		return DEBUGGER_E_INVALID_CONTEXT;
 	}
 
-	Var *var = g_script.FindOrAddVar(name, strlen(name), always_use);
+	CStringTCharFromUTF8 var_name(name);
+	Var *var = g_script.FindOrAddVar((LPTSTR) var_name.GetString(), var_name.GetLength(), always_use);
 
-	bool success = var && var->Assign(new_value, Base64Decode(new_value, new_value));
+	CStringTCharFromUTF8 _value(new_value, Base64Decode(new_value, new_value));
+	bool success = var && var->Assign((LPTSTR) _value.GetString(), _value.GetLength());
 
 	mResponseBuf.WriteF("<response command=\"property_set\" success=\"%i\" transaction_id=\"%e\"/>"
 						, (int)success, transaction_id);
@@ -1204,7 +1243,7 @@ DEBUGGER_COMMAND(Debugger::source)
 	// Ensure the file is actually a source file - i.e. don't let the debugger client retrieve any arbitrary file.
 	for (file_index = 0; file_index < Line::sSourceFileCount; ++file_index)
 	{
-		if (!lstrcmpi(filename, Line::sSourceFile[file_index]))
+		if (!stricmp(filename, CStringUTF8FromTChar(Line::sSourceFile[file_index])))
 		{
 			if (!(source_file = fopen(filename, "rb")))
 				return DEBUGGER_E_CAN_NOT_OPEN_FILE;
@@ -1473,7 +1512,7 @@ int Debugger::SendResponse()
 //
 // Connect to a debugger UI. Returns a Winsock error code on failure, otherwise 0.
 //
-int Debugger::Connect(char *aAddress, char *aPort)
+int Debugger::Connect(const char *aAddress, const char *aPort)
 {
 	int err;
 	WSADATA wsadata;
@@ -1505,24 +1544,13 @@ int Debugger::Connect(char *aAddress, char *aPort)
 			{
 				mSocket = s;
 
-				char *ide_key = "", *session = "";
-				int size;
-
-				if (size = GetEnvironmentVariable("DBGP_IDEKEY", NULL, 0))
-				{
-					ide_key = (char*)_alloca(size);
-					GetEnvironmentVariable("DBGP_IDEKEY", ide_key, size);
-				}
-				if (size = GetEnvironmentVariable("DBGP_COOKIE", NULL, 0))
-				{
-					session = (char*)_alloca(size);
-					GetEnvironmentVariable("DBGP_COOKIE", session, size);
-				}
+				CStringUTF8FromTChar ide_key(CString().GetEnvironmentVariable(_T("DBGP_IDEKEY")));
+				CStringUTF8FromTChar session(CString().GetEnvironmentVariable(_T("DBGP_COOKIE")));
 
 				// Write init message.
 				mResponseBuf.WriteF("<init appid=\"" NAME_P "\" ide_key=\"%e\" session=\"%e\" thread=\"%u\" parent=\"\" language=\"" NAME_P "\" protocol_version=\"1.0\" fileuri=\""
-					, ide_key, session, GetCurrentThreadId());
-				mResponseBuf.WriteFileURI(g_script.mFileSpec);
+					, ide_key.GetString(), session.GetString(), GetCurrentThreadId());
+				mResponseBuf.WriteFileURI(CStringUTF8FromTChar(g_script.mFileSpec));
 				mResponseBuf.Write("\"/>");
 
 				if (SendResponse() == DEBUGGER_E_OK)
@@ -1659,10 +1687,10 @@ int Debugger::FatalError(int aErrorCode, char *aMessage)
 	if (!aMessage)
 		aMessage = DEBUGGER_ERR_INTERNAL DEBUGGER_ERR_DISCONNECT_PROMPT;
 	
-	if (IDNO == MessageBox(g_hWnd, aMessage, g_script.mFileSpec, MB_YESNO | MB_ICONSTOP | MB_SETFOREGROUND | MB_APPLMODAL))
+	if (IDNO == MessageBox(g_hWnd, CStringTCharFromUTF8(aMessage), g_script.mFileSpec, MB_YESNO | MB_ICONSTOP | MB_SETFOREGROUND | MB_APPLMODAL))
 	{
 		// The following will exit even if the OnExit subroutine does not use ExitApp:
-		g_script.ExitApp(EXIT_ERROR, "");
+		g_script.ExitApp(EXIT_ERROR, _T(""));
 	}
 	return aErrorCode;
 }
@@ -1670,7 +1698,7 @@ int Debugger::FatalError(int aErrorCode, char *aMessage)
 char *Debugger::sBase64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 // Encode base 64 data.
-int Debugger::Base64Encode(char *aBuf, char *aInput, int aInputSize)
+int Debugger::Base64Encode(char *aBuf, const char *aInput, int aInputSize)
 {
 	int buffer, i, len = 0;
 
@@ -1705,7 +1733,7 @@ int Debugger::Base64Encode(char *aBuf, char *aInput, int aInputSize)
 }
 
 // Decode base 64 data. aBuf and aInput may point to the same buffer.
-int Debugger::Base64Decode(char *aBuf, char *aInput, int aInputSize)
+int Debugger::Base64Decode(char *aBuf, const char *aInput, int aInputSize)
 {
 	int buffer, i, len = 0;
 	
@@ -1771,11 +1799,12 @@ int Debugger::Buffer::Write(char *aData, DWORD aDataSize)
 }
 
 // Write formatted data into the buffer. Supports %s (char*), %e (char*, "&'<> escaped), %i (int), %u (unsigned int).
-int Debugger::Buffer::WriteF(char *aFormat, ...)
+int Debugger::Buffer::WriteF(const char *aFormat, ...)
 {
 	int i, err;
 	DWORD len;
-	char c, *format_ptr, *s, *param_ptr, *entity;
+	char c;
+	const char *format_ptr, *s, *param_ptr, *entity;
 	char number_buf[MAX_NUMBER_SIZE];
 	va_list vl;
 	
@@ -1875,12 +1904,12 @@ int Debugger::Buffer::WriteF(char *aFormat, ...)
 }
 
 // Convert a file path to a URI and write it to the buffer.
-int Debugger::Buffer::WriteFileURI(char *aPath)
+int Debugger::Buffer::WriteFileURI(const char *aPath)
 {
 	int err, c, len = 9; // 8 for "file:///", 1 for '\0' (written by sprintf()).
 
 	// Calculate required buffer size for path after encoding.
-	for (char *ptr = aPath; c = *ptr; ++ptr)
+	for (const char *ptr = aPath; c = *ptr; ++ptr)
 	{
 		if (isalnum(c) || strchr("-_.!~*'()/\\", c))
 			++len;
@@ -1895,7 +1924,7 @@ int Debugger::Buffer::WriteFileURI(char *aPath)
 	Write("file:///", 8);
 
 	// Write to the buffer, encoding as we go.
-	for (char *ptr = aPath; c = *ptr; ++ptr)
+	for (const char *ptr = aPath; c = *ptr; ++ptr)
 	{
 		if (isalnum(c) || strchr("-_.!~*()/", c))
 		{

@@ -237,7 +237,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		// Since no script-file was specified on the command line, use the default name.
 		// For backward compatibility, FIRST check if there's an AutoHotkey.ini file in the current
 		// directory.  If there is, that needs to be used to retain compatibility.
-		aScriptFilename = NAME_P _T(".ini");
+		aScriptFilename = _T(NAME_P) _T(".ini");
 		if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF) // File doesn't exist, so fall back to new method.
 		{
 			aScriptFilename = buf;
@@ -650,7 +650,7 @@ ResultType Script::AutoExecSection()
 		mLastScriptRest = mLastPeekTime = GetTickCount();
 
 		++g_nThreads;
-			DEBUGGER_STACK_PUSH(SE_Thread, mFirstLine, desc, "auto-execute")
+			DEBUGGER_STACK_PUSH(SE_Thread, mFirstLine, desc, _T("auto-execute"))
 		ExecUntil_result = mFirstLine->ExecUntil(UNTIL_RETURN); // Might never return (e.g. infinite loop or ExitApp).
 			DEBUGGER_STACK_POP()
 		--g_nThreads;
@@ -11483,7 +11483,7 @@ ResultType Line::EvaluateHotCriterionExpression()
 	tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
 	// Critical seems to improve reliability, either because the thread completes faster (i.e. before the timeout) or because we check for messages less often.
 	InitNewThread(0, false, true, ACT_CRITICAL);
-	DEBUGGER_STACK_PUSH(SE_Thread, this, desc, "#If")
+	DEBUGGER_STACK_PUSH(SE_Thread, this, desc, _T("#If"))
 
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
 

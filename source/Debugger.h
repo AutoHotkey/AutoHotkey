@@ -65,8 +65,9 @@ freely, without restriction.
 class Debugger;
 
 extern Debugger g_Debugger;
-extern char *g_DebuggerHost;
-extern char *g_DebuggerPort;
+// jackieku: modified to hold the buffer.
+extern CStringA g_DebuggerHost;
+extern CStringA g_DebuggerPort;
 
 
 enum BreakpointTypeType {BT_Line, BT_Call, BT_Return, BT_Exception, BT_Conditional, BT_Watch};
@@ -104,7 +105,7 @@ struct StackEntry
 	StackEntryTypeType type;
 	Line *line;
 	union {
-		char *desc; // SE_Thread: "auto-exec", hotkey/hotstring name, "timer", etc.
+		TCHAR *desc; // SE_Thread: "auto-exec", hotkey/hotstring name, "timer", etc.
 		Label *sub;
 		Func *func;
 	};
@@ -133,7 +134,7 @@ enum PropertyContextType {PC_Local=0, PC_Global};
 class Debugger
 {
 public:
-	int Connect(char *aAddress, char *aPort);
+	int Connect(const char *aAddress, const char *aPort);
 	int Disconnect();
 	void Exit(ExitReasons aExitReason); // Called when exiting AutoHotkey.
 	inline bool IsConnected() { return mSocket != INVALID_SOCKET; }
@@ -208,8 +209,8 @@ private:
 	{
 	public:
 		int Write(char *aData, DWORD aDataSize=MAXDWORD);
-		int WriteF(char *aFormat, ...);
-		int WriteFileURI(char *aPath);
+		int WriteF(const char *aFormat, ...);
+		int WriteFileURI(const char *aPath);
 		int Expand();
 		int Expand(DWORD aRequiredSize);
 		void Remove(DWORD aDataSize);
@@ -265,8 +266,8 @@ private:
 	void DecodeURI(char *aUri);
 	
 	static char *sBase64Chars;
-	int Base64Encode(char *aBuf, char *aInput, int aInputSize=-1);
-	int Base64Decode(char *aBuf, char *aInput, int aInputSize=-1);
+	int Base64Encode(char *aBuf, const char *aInput, int aInputSize=-1);
+	int Base64Decode(char *aBuf, const char *aInput, int aInputSize=-1);
 
 	// Debugger::GetNextArg
 	//

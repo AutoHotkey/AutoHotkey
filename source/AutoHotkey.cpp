@@ -125,13 +125,12 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 				if (c)
 				{
-					g_DebuggerHost = SimpleHeap::Malloc(param, c-param);
-					g_DebuggerHost[c-param] = '\0';
-					g_DebuggerPort = SimpleHeap::Malloc(c + 1);
+					StringTCharToChar(param, g_DebuggerHost, c-param);
+					StringTCharToChar(c + 1, g_DebuggerPort);
 				}
 				else
 				{
-					g_DebuggerHost = SimpleHeap::Malloc(param);
+					StringTCharToChar(param, g_DebuggerHost);
 					g_DebuggerPort = "9000";
 				}
 			}
