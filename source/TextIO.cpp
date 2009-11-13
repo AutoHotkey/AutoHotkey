@@ -32,7 +32,7 @@ bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 			}
 		}
 	}
-	if (mode == TextStream::WRITE || mode == TextStream::APPEND && _Length() == 0) {
+	if (mode == TextStream::WRITE || (mode == TextStream::APPEND || mode == TextStream::UPDATE) && _Length() == 0) {
 		if (aFlags & BOM_UTF8)
 			_Write("\xEF\xBB\xBF", 3);
 		else if (aFlags & BOM_UTF16)
@@ -162,6 +162,7 @@ bool TextFile::_Open(LPCTSTR aFileSpec, DWORD aFlags)
 			dwCreationDisposition = CREATE_ALWAYS;
 			break;
 		case TextStream::APPEND:
+		case TextStream::UPDATE:
 			dwDesiredAccess = GENERIC_WRITE | GENERIC_READ;
 			dwShareMode = 0;
 			dwCreationDisposition = OPEN_ALWAYS;

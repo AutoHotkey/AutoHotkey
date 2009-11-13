@@ -352,6 +352,12 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 			LPTSTR last_backslash = _tcsrchr(buf, '\\');
 			if (!last_backslash) // probably can't happen due to the nature of GetModuleFileName().
 				mOurEXEDir = _T("");
+#ifdef UNICODE
+			// For the script files without any BOM, they are encoded in system code page or UTF-8 most likely.
+			// So the default is now determined in this way, since it is fast and self-contained.
+			if (!_tcsnicmp(last_backslash + 1, _T(NAME_P), _countof(NAME_P) - 1))
+				g_DefaultUTF8 = true;
+#endif
 			last_backslash[1] = '\0'; // i.e. keep the trailing backslash for convenience.
 			if (   !(mOurEXEDir = SimpleHeap::Malloc(buf + 1))   ) // +1 to omit the leading double-quote.
 				return FAIL;  // It already displayed the error for us.
@@ -1240,7 +1246,11 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 #ifndef AUTOHOTKEYSC
 	TextFile tfile, *fp = &tfile;
-	if (!tfile.Open(aFileSpec, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR))
+	if (!tfile.Open(aFileSpec, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR
+#ifdef UNICODE
+		, g_DefaultUTF8 ? CP_UTF8 : CP_ACP
+#endif
+	))
 	{
 		if (aIgnoreLoadFailure)
 			return OK;

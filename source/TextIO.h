@@ -25,6 +25,7 @@ public:
 		  READ
 		, WRITE
 		, APPEND
+		, UPDATE
 
 		// EOL translations
 		, EOL_CRLF = 0x00000004 // read: CRLF to LF. write: LF to CRLF.
