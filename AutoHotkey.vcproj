@@ -511,6 +511,34 @@
 				>
 			</File>
 			<File
+				RelativePath=".\source\TextIO.cpp"
+				>
+				<FileConfiguration
+					Name="Release|Win32"
+					ExcludedFromBuild="true"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="SC (self-contained)|Win32"
+					ExcludedFromBuild="true"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="SC (minimum size)|Win32"
+					ExcludedFromBuild="true"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+					/>
+				</FileConfiguration>
+			</File>
+			<File
 				RelativePath=".\source\util.cpp"
 				>
 			</File>
@@ -614,6 +642,10 @@
 			</File>
 			<File
 				RelativePath=".\source\StringConv.h"
+				>
+			</File>
+			<File
+				RelativePath=".\source\TextIO.h"
 				>
 			</File>
 			<File

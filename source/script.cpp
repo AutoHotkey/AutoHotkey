@@ -21,6 +21,7 @@ GNU General Public License for more details.
 #include "mt19937ar-cok.h" // for random number generator
 #include "window.h" // for a lot of things
 #include "application.h" // for MsgSleep()
+#include "TextIO.h"
 
 // Globals that are for only this module:
 #define MAX_COMMENT_FLAG_LENGTH 15
@@ -1059,7 +1060,7 @@ _T("\n")
 #ifndef AUTOHOTKEYSC
 	if (mIncludeLibraryFunctionsThenExit)
 	{
-		fclose(mIncludeLibraryFunctionsThenExit);
+		delete mIncludeLibraryFunctionsThenExit;
 		return 0; // Tell our caller to do a normal exit.
 	}
 #endif
@@ -1241,11 +1242,8 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	bool pending_function_has_brace;
 
 #ifndef AUTOHOTKEYSC
-	// Future: might be best to put a stat() or GetFileAttributes() in here for better handling.
-	// NOTES FOR UNICODE, ccs=UNICODE is broken. It doesn't handle system code page (at least for Chinese) properly.
-	// We may need to implement our own IO layer, though I think UTF-8 supports is enough.
-	FILE *fp = _tfopen(aFileSpec, _T("r") FOPEN_MODE);
-	if (!fp)
+	TextFile tfile, *fp = &tfile;
+	if (!tfile.Open(aFileSpec, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR))
 	{
 		if (aIgnoreLoadFailure)
 			return OK;
@@ -1254,26 +1252,6 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		MsgBox(msg_text);
 		return FAIL;
 	}
-	// v1.0.40.11: Otherwise, check if the first three bytes of the file are the UTF-8 BOM marker (and if
-	// so omit them from further consideration).  Apps such as Notepad, WordPad, and Word all insert this
-	// marker if the file is saved in UTF-8 format.  This omits such markers from both the main script and
-	// any files it includes via #Include.
-	// NOTE: To save code size, any UTF-8 BOM bytes at the beginning of a compiled script have already been
-	// stripped out by the script compiler.  Thus, there is no need to check for them in the AUTOHOTKEYSC
-	// section further below.
-
-	// MSDN: C Runtime can detects BOM since VS2005
-	// http://msdn.microsoft.com/en-us/library/yeby3zcb.aspx
-#if _MSC_VER < 1400
-	TCHAR bom_buf[3];
-	if (fread(bom_buf, 1, 3, fp) == 3) // Success (the fourth character is the terminator).
-	{
-		if (bom_buf[0] != 0xEF || bom_buf[1] != 0xBB || bom_buf[2] != 0xBF)  // UTF-8 BOM marker is NOT present.
-			rewind(fp);  // Go back to the beginning so that the first three bytes aren't omitted during loading.
-			// The code size of rewind() has been checked and it seems very tiny.
-	}
-	//else file read error or EOF, let a later section handle it.
-#endif
 
 	// This is done only after the file has been successfully opened in case aIgnoreLoadFailure==true:
 	if (source_file_index > 0)
@@ -2463,7 +2441,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 	free(script_buf); // AutoIt3: Close the archive and free the file in memory.
 	oRead.Close();    //
 #else
-	fclose(fp);
+	tfile.Close();
 #endif
 	return OK;
 }
@@ -2479,9 +2457,9 @@ inline ResultType Script::CloseAndReturnFailFunc(HS_EXEArc_Read *fp, UCHAR *aBuf
 	return FAIL;
 }
 #else
-inline ResultType Script::CloseAndReturnFailFunc(FILE *fp)
+inline ResultType Script::CloseAndReturnFailFunc(TextStream *ts)
 {
-	fclose(fp);
+	ts->Close();
 	return FAIL;
 }
 #endif
@@ -2491,7 +2469,7 @@ inline ResultType Script::CloseAndReturnFailFunc(FILE *fp)
 #ifdef AUTOHOTKEYSC
 size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, UCHAR *&aMemFile) // last param = reference to pointer
 #else
-size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, FILE *fp)
+size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, TextStream *ts)
 #endif
 {
 	size_t aBuf_length = 0;
@@ -2525,10 +2503,10 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 	// via its value of aMaxCharsToRead):
 	aBuf[aBuf_length] = '\0';
 #else
-	if (!aBuf || !fp) return -1;
+	if (!aBuf || !ts) return -1;
 	if (aMaxCharsToRead < 1) return 0;
-	if (feof(fp)) return -1; // Previous call to this function probably already read the last line.
-	if (_fgetts(aBuf, aMaxCharsToRead, fp) == NULL) // end-of-file or error
+	if (ts->AtEOF()) return -1; // Previous call to this function probably already read the last line.
+	if (ts->ReadLine(aBuf, aMaxCharsToRead) == 0) // end-of-file or error
 	{
 		*aBuf = '\0';  // Reset since on error, contents added by fgets() are indeterminate.
 		return -1;
@@ -7063,7 +7041,7 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 				//    and deposited separately/synchronously into the temp-include file by some new logic at the
 				//    AutoHotkey.exe's code for the #Include directive.
 				// 3) ahk2exe prefers to omit comments from included files to minimize size of compiled scripts.
-				_ftprintf(mIncludeLibraryFunctionsThenExit, _T("#Include %-0.*s\n#IncludeAgain %s\n")
+				mIncludeLibraryFunctionsThenExit->Format(_T("#Include %-0.*s\n#IncludeAgain %s\n")
 					, sLib[i].length, sLib[i].path, sLib[i].path);
 				// Now continue on normally so that our caller can continue looking for syntax errors.
 			}
@@ -10937,18 +10915,20 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					result = line->PerformLoopParseCSV(aResultToken, continue_main_loop, jump_to_line);
 				break;
 			case ATTR_LOOP_READ_FILE:
-				FILE *read_file;
-				if (*ARG2 && (read_file = _tfopen(ARG2, _T("r") FOPEN_MODE))) // v1.0.47: Added check for "" to avoid debug-assertion failure while in debug mode (maybe it's bad to to open file "" in release mode too).
 				{
-					result = line->PerformLoopReadFile(aResultToken, continue_main_loop, jump_to_line, read_file, ARG3);
-					fclose(read_file);
+					TextFile tfile;
+					if (*ARG2 && tfile.Open(ARG2, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR)) // v1.0.47: Added check for "" to avoid debug-assertion failure while in debug mode (maybe it's bad to to open file "" in release mode too).
+					{
+						result = line->PerformLoopReadFile(aResultToken, continue_main_loop, jump_to_line, &tfile, ARG3);
+						tfile.Close();
+					}
+					else
+						// The open of a the input file failed.  So just set result to OK since setting the
+						// ErrorLevel isn't supported with loops (since that seems like it would be an overuse
+						// of ErrorLevel, perhaps changing its value too often when the user would want
+						// it saved -- in any case, changing that now might break existing scripts).
+						result = OK;
 				}
-				else
-					// The open of a the input file failed.  So just set result to OK since setting the
-					// ErrorLevel isn't supported with loops (since that seems like it would be an overuse
-					// of ErrorLevel, perhaps changing its value too often when the user would want
-					// it saved -- in any case, changing that now might break existing scripts).
-					result = OK;
 				break;
 			case ATTR_LOOP_FILEPATTERN:
 				result = line->PerformLoopFilePattern(aResultToken, continue_main_loop, jump_to_line, file_loop_mode
@@ -12244,7 +12224,7 @@ ResultType Line::PerformLoopParseCSV(ExprTokenType *aResultToken, bool &aContinu
 
 
 
-ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, FILE *aReadFile, LPTSTR aWriteFileName)
+ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, TextStream *aReadFile, LPTSTR aWriteFileName)
 {
 	LoopReadFileStruct loop_info(aReadFile, aWriteFileName);
 	size_t line_length;
@@ -12252,7 +12232,7 @@ ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinu
 	Line *jump_to_line;
 	global_struct &g = *::g; // Primarily for performance in this case.
 
-	for (; _fgetts(loop_info.mCurrentLine, _countof(loop_info.mCurrentLine), loop_info.mReadFile);)
+	for (; loop_info.mReadFile->ReadLine(loop_info.mCurrentLine, _countof(loop_info.mCurrentLine)) ;)
 	{ 
 		line_length = _tcslen(loop_info.mCurrentLine);
 		if (line_length && loop_info.mCurrentLine[line_length - 1] == '\n') // Remove newlines like FileReadLine does.
@@ -12268,7 +12248,7 @@ ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinu
 		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
 		{
 			if (loop_info.mWriteFile)
-				fclose(loop_info.mWriteFile);
+				delete loop_info.mWriteFile;
 			return result;
 		}
 		if (jump_to_line) // See comments in PerformLoop() about this section.
@@ -12282,7 +12262,7 @@ ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinu
 	}
 
 	if (loop_info.mWriteFile)
-		fclose(loop_info.mWriteFile);
+		delete loop_info.mWriteFile;
 
 	// Don't return result because we want to always return OK unless it was one of the values
 	// already explicitly checked and returned above.  In other words, there might be values other

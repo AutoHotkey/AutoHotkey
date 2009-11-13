@@ -18,6 +18,7 @@ GNU General Public License for more details.
 #include "globaldata.h" // for access to many global vars
 #include "application.h" // for MsgSleep()
 #include "window.h" // For MsgBox() & SetForegroundLockTimeout()
+#include "TextIO.h"
 
 // General note:
 // The use of Sleep() should be avoided *anywhere* in the code.  Instead, call MsgSleep().
@@ -107,19 +108,20 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			if (i >= __argc) // Missing the expected filename parameter.
 				return CRITICAL_ERROR;
 			// For performance and simplicity, open/crease the file unconditionally and keep it open until exit.
-			if (   !(g_script.mIncludeLibraryFunctionsThenExit = _tfopen(__targv[i], _T("w")))   ) // Can't open the temp file.
+			g_script.mIncludeLibraryFunctionsThenExit = new TextFile;
+			if (!g_script.mIncludeLibraryFunctionsThenExit->Open(__targv[i], TextStream::WRITE | TextStream::EOL_CRLF | TextStream::BOM_UTF8, CP_UTF8)) // Can't open the temp file.
 				return CRITICAL_ERROR;
 		}
 #endif
 #ifdef SCRIPT_DEBUG
 		// Allow a debug session to be initiated by command-line.
-		else if (!g_Debugger.IsConnected() && !strnicmp(param, "/Debug", 6) && (param[6] == '\0' || param[6] == '='))
+		else if (!g_Debugger.IsConnected() && !_tcsnicmp(param, _("/Debug"), 6) && (param[6] == '\0' || param[6] == '='))
 		{
 			if (param[6] == '=')
 			{
 				param += 7;
 
-				char *c = strrchr(param, ':');
+				LPTSTR c = _tcsrchr(param, ':');
 
 				if (c)
 				{

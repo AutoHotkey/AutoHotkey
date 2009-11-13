@@ -23,6 +23,7 @@ GNU General Public License for more details.
 #include "window.h" // for IF_USE_FOREGROUND_WINDOW
 #include "application.h" // for MsgSleep()
 #include "resources/resource.h"  // For InputBox.
+#include "TextIO.h"
 
 #define PCRE_STATIC             // For RegEx. PCRE_STATIC tells PCRE to declare its functions for normal, static
 #include "lib_pcre/pcre/pcre.h" // linkage rather than as functions inside an external DLL.
@@ -9088,8 +9089,8 @@ ResultType Line::FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber)
 	__int64 line_number = ATOI64(aLineNumber);
 	if (line_number < 1)
 		return OK;  // Return OK because g_ErrorLevel tells the story.
-	FILE *fp = _tfopen(aFilespec, _T("r") );
-	if (!fp)
+	TextFile tfile;
+	if (!tfile.Open(aFilespec, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR))
 		return OK;  // Return OK because g_ErrorLevel tells the story.
 
 	// Remember that once the first call to MsgSleep() is done, a new hotkey subroutine
@@ -9103,14 +9104,14 @@ ResultType Line::FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber)
 	TCHAR buf[READ_FILE_LINE_SIZE];
 	for (__int64 i = 0; i < line_number; ++i)
 	{
-		if (_fgetts(buf, _countof(buf) - 1, fp) == NULL) // end-of-file or error
+		if (!tfile.ReadLine(buf, _countof(buf) - 1)) // end-of-file or error
 		{
-			fclose(fp);
+			tfile.Close();
 			return OK;  // Return OK because g_ErrorLevel tells the story.
 		}
 		LONG_OPERATION_UPDATE
 	}
-	fclose(fp);
+	tfile.Close();
 
 	size_t buf_length = _tcslen(buf);
 	if (buf_length && buf[buf_length - 1] == '\n') // Remove any trailing newline for the user.
@@ -9140,8 +9141,8 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	if (!*aFilespec) // Nothing to write to (caller relies on this check).
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 
-	FILE *fp = aCurrentReadFile ? aCurrentReadFile->mWriteFile : NULL;
-	bool file_was_already_open = fp;
+	TextStream *ts = aCurrentReadFile ? aCurrentReadFile->mWriteFile : NULL;
+	bool file_was_already_open = ts;
 
 	bool open_as_binary = (*aFilespec == '*');
 	if (open_as_binary)
@@ -9176,11 +9177,13 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 				// 1) Duplicate clipboard formats not making sense (i.e. two CF_TEXT formats would cause the
 				//    first to be overwritten by the second when restoring to clipboard).
 				// 2) There is a 4-byte zero terminator at the end of the file.
-				if (   !(fp = _tfopen(aFilespec, _T("wb")))   ) // Overwrite.
+				HANDLE hFile;
+				DWORD dwWritten;
+				if (   (hFile = CreateFile(aFilespec, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL)) == INVALID_HANDLE_VALUE   ) // Overwrite.
 					return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-				g_ErrorLevel->Assign(fwrite(ARGVAR1->Contents(), ARGVAR1->ByteLength() + sizeof(TCHAR), 1, fp)
-					? ERRORLEVEL_NONE : ERRORLEVEL_ERROR); // In this case, fwrite() will return 1 on success, 0 on failure.
-				fclose(fp);
+				g_ErrorLevel->Assign(WriteFile(hFile, ARGVAR1->Contents(), ARGVAR1->ByteLength() + sizeof(TCHAR), &dwWritten, NULL)
+					? ERRORLEVEL_NONE : ERRORLEVEL_ERROR); // In this case, WriteFile() will return non-zero on success, 0 on failure.
+				CloseHandle(hFile);
 				return OK;
 			}
 		}
@@ -9203,46 +9206,42 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	// 2) To avoid opening the file if the file-reading loop has zero iterations (i.e. it's
 	//    opened only upon first actual use to help performance and avoid changing the
 	//    file-modification time when no actual text will be appended).
-	CStringA sUTF8;
 	if (!file_was_already_open)
 	{
-		LPCTSTR aOpenMode;
+		DWORD flags = TextStream::APPEND | (open_as_binary ? 0 : TextStream::EOL_CRLF);
+		UINT codepage = CP_ACP;
 		// For backwards compatibility, the first two arguments cannot be changed.
 		if (mArgc > 2) {
 			if (!_tcsicmp(ARG3, _T("UTF-8")) || !_tcsicmp(ARG3, _T("UTF8"))) {
-				if (open_as_binary) // "ccs=" can not be combined with "b"
-					StrReplace(aBuf, _T("\r\n"), _T("\n"), SCS_SENSITIVE);
-				aOpenMode = _T("a, ccs=UTF-8");
+				flags |= TextStream::BOM_UTF8;
+				codepage = CP_UTF8;
 			}
 			else if (!_tcsicmp(ARG3, _T("UNICODE")) || !_tcsicmp(ARG3, _T("UTF-16")) || !_tcsicmp(ARG3, _T("UTF-16LE"))) {
-				if (open_as_binary) // "ccs=" can not be combined with "b"
-					StrReplace(aBuf, _T("\r\n"), _T("\n"), SCS_SENSITIVE);
-				aOpenMode = _T("a, ccs=UTF-16LE");
+				flags |= TextStream::BOM_UTF16;
+				codepage = CP_UTF16;
 			}
 			else if (!_tcsicmp(ARG3, _T("UTF-8-RAW"))) {
-				StringTCharToUTF8(aBuf, sUTF8);
-				aOpenMode = open_as_binary ? _T("ab") : _T("a");
+				codepage = CP_UTF8;
 			}
-			else
-				aOpenMode = open_as_binary ? _T("ab") : _T("a");
 		}
-		else
-			aOpenMode = open_as_binary ? _T("ab") : _T("a");
 
 		// Open the output file (if one was specified).  Unlike the input file, this is not
 		// a critical error if it fails.  We want it to be non-critical so that FileAppend
 		// commands in the body of the loop will set ErrorLevel to indicate the problem:
-		if (   !(fp = _tfopen(aFilespec, aOpenMode))   )
+		if (!ts)
+			ts = new TextFile;
+		if (   !ts->Open(aFilespec, flags, codepage)    )
 			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 		if (aCurrentReadFile)
-			aCurrentReadFile->mWriteFile = fp;
+			aCurrentReadFile->mWriteFile = ts;
 	}
 
 	// Write to the file:
-	g_ErrorLevel->Assign((sUTF8.IsEmpty() ? _fputts(aBuf, fp) : fputs(sUTF8, fp)) ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE); // _fputts() returns 0 on success.
+	g_ErrorLevel->Assign(ts->Write(aBuf, _tcslen(aBuf)) == 0 ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
 
-	if (!aCurrentReadFile)
-		fclose(fp);
+	if (!aCurrentReadFile) {
+		delete ts;
+	}
 	// else it's the caller's responsibility, or it's caller's, to close it.
 
 	return OK;

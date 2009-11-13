@@ -379,13 +379,14 @@ struct RegItemStruct
 	}
 };
 
+class TextStream; // TextIO
 struct LoopReadFileStruct
 {
-	FILE *mReadFile, *mWriteFile;
+	TextStream *mReadFile, *mWriteFile;
 	TCHAR mWriteFileName[MAX_PATH];
 	#define READ_FILE_LINE_SIZE (64 * 1024)  // This is also used by FileReadLine().
 	TCHAR mCurrentLine[READ_FILE_LINE_SIZE];
-	LoopReadFileStruct(FILE *aReadFile, LPTSTR aWriteFileName)
+	LoopReadFileStruct(TextStream *aReadFile, LPTSTR aWriteFileName)
 		: mReadFile(aReadFile), mWriteFile(NULL) // mWriteFile is opened by FileAppend() only upon first use.
 	{
 		// Use our own buffer because caller's is volatile due to possibly being in the deref buffer:
@@ -532,6 +533,7 @@ enum WinSetAttributes {WINSET_INVALID, WINSET_TRANSPARENT, WINSET_TRANSCOLOR, WI
 	, WINSET_REGION};
 
 
+
 class Label; // Forward declaration so that each can use the other.
 class Line
 {
@@ -545,7 +547,7 @@ private:
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, HKEY aRootKeyType, HKEY aRootKey, LPTSTR aRegSubkey);
 	ResultType PerformLoopParse(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine);
 	ResultType Line::PerformLoopParseCSV(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine);
-	ResultType PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, FILE *aReadFile, LPTSTR aWriteFileName);
+	ResultType PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, TextStream *aReadFile, LPTSTR aWriteFileName);
 	ResultType PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
 	ResultType Perform();
 
@@ -2466,8 +2468,8 @@ private:
 	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, UCHAR *&aMemFile);
 #else
 	#define CloseAndReturnFail(fp, aBuf) CloseAndReturnFailFunc(fp)
-	ResultType CloseAndReturnFailFunc(FILE *fp);
-	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, FILE *fp);
+	ResultType CloseAndReturnFailFunc(TextStream *ts);
+	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, TextStream *ts);
 #endif
 	ResultType IsDirective(LPTSTR aBuf);
 
@@ -2524,7 +2526,7 @@ public:
 #ifdef AUTOHOTKEYSC
 	bool mCompiledHasCustomIcon; // Whether the compiled script uses a custom icon.
 #else
-	FILE *mIncludeLibraryFunctionsThenExit;
+	TextStream *mIncludeLibraryFunctionsThenExit;
 #endif
 	__int64 mLinesExecutedThisCycle; // Use 64-bit to match the type of g->LinesPerCycle
 	int mUninterruptedLineCountMax; // 32-bit for performance (since huge values seem unnecessary here).
