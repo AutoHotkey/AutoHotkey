@@ -1232,9 +1232,6 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	}
 #endif
 
-	UCHAR *script_buf = NULL;  // Init for the case when the buffer isn't used (non-standalone mode).
-	ULONG nDataSize = 0;
-
 	// <buf> should be no larger than LINE_SIZE because some later functions rely upon that:
 	TCHAR msg_text[MAX_PATH + 256], buf1[LINE_SIZE], buf2[LINE_SIZE], suffix[16], pending_function[LINE_SIZE] = _T("");
 	LPTSTR buf = buf1, next_buf = buf2; // Oscillate between bufs to improve performance (avoids memcpy from buf2 to buf1).
@@ -1260,20 +1257,22 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 #else // Stand-alone mode (there are no include files in this mode since all of them were merged into the main script at the time of compiling).
 	HS_EXEArc_Read oRead;
+	TextMem::Buffer textbuf;
+
 	// AutoIt3: Open the archive in this compiled exe.
 	// Jon gave me some details about why a password isn't needed: "The code in those libararies will
 	// only allow files to be extracted from the exe is is bound to (i.e the script that it was
 	// compiled with).  There are various checks and CRCs to make sure that it can't be used to read
 	// the files from any other exe that is passed."
-	if (oRead.Open(aFileSpec, _T("")) != HS_EXEARC_E_OK)
+	if (oRead.Open(CStringCharFromTCharIfNeeded(aFileSpec), "") != HS_EXEARC_E_OK)
 	{
 		MsgBox(ERR_EXE_CORRUPTED, 0, aFileSpec); // Usually caused by virus corruption.
 		return FAIL;
 	}
 	// AutoIt3: Read the script (the func allocates the memory for the buffer :) )
-	if (oRead.FileExtractToMem(_T(">AUTOHOTKEY SCRIPT<"), &script_buf, &nDataSize) == HS_EXEARC_E_OK)
+	if (oRead.FileExtractToMem(">AUTOHOTKEY SCRIPT<", (UCHAR **) &textbuf.mBuffer, &textbuf.mLength) == HS_EXEARC_E_OK)
 		mCompiledHasCustomIcon = false;
-	else if (oRead.FileExtractToMem(_T(">AHK WITH ICON<"), &script_buf, &nDataSize) == HS_EXEARC_E_OK)
+	else if (oRead.FileExtractToMem(">AHK WITH ICON<", (UCHAR **) &textbuf.mBuffer, &textbuf.mLength) == HS_EXEARC_E_OK)
 		mCompiledHasCustomIcon = true;
 	else
 	{
@@ -1281,16 +1280,23 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		MsgBox(_T("Could not extract script from EXE."), 0, aFileSpec);
 		return FAIL;
 	}
-	UCHAR *script_buf_marker = script_buf;  // "marker" will track where we are in the mem. file as we read from it.
-
-	// Must cast to int to avoid loss of negative values:
-	#define SCRIPT_BUF_SPACE_REMAINING ((int)(nDataSize - (script_buf_marker - script_buf)))
-	int script_buf_space_remaining, max_chars_to_read; // script_buf_space_remaining must be an int to detect negatives.
 
 	// AutoIt3: We have the data in RAW BINARY FORM, the script is a text file, so
 	// this means that instead of a newline character, there may also be carridge
 	// returns 0x0d 0x0a (\r\n)
-	HS_EXEArc_Read *fp = &oRead;  // To help consolidate the code below.
+	oRead.Close(); // no longer used
+	TextMem tmem, *fp = &tmem;
+#ifdef _DEBUG
+	{
+		HANDLE hFile;
+		DWORD dwWritten;
+		hFile = CreateFile(_T("script_dump.ahk"), GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL);
+		WriteFile(hFile, textbuf.mBuffer, textbuf.mLength, &dwWritten, NULL);
+		CloseHandle(hFile);
+	}
+#endif
+	// NOTE: Ahk2Exe strips off the UTF-8 BOM.
+	tmem.Open(textbuf, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR, CP_UTF8);
 #endif
 
 	++Line::sSourceFileCount;
@@ -1333,16 +1339,10 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	// -1 (MAX_UINT in this case) to compensate for the fact that there is a comment containing
 	// the version number added to the top of each compiled script:
 	LineNumberType phys_line_number = -1;
-	// For compiled scripts, limit the number of characters to read to however many remain in the memory
-	// file or the size of the buffer, whichever is less.
-	script_buf_space_remaining = SCRIPT_BUF_SPACE_REMAINING;  // Resolve macro only once, for performance.
-	max_chars_to_read = (LINE_SIZE - 1 < script_buf_space_remaining) ? LINE_SIZE - 1
-		: script_buf_space_remaining;
-	buf_length = GetLine(buf, max_chars_to_read, 0, script_buf_marker);
 #else
 	LineNumberType phys_line_number = 0;
-	buf_length = GetLine(buf, LINE_SIZE - 1, 0, fp);
 #endif
+	buf_length = GetLine(buf, LINE_SIZE - 1, 0, fp);
 
 	if (in_comment_section = !_tcsncmp(buf, _T("/*"), 2))
 	{
@@ -1372,7 +1372,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		// tested).
 		if (!_tcsnicmp(buf, _T("#CommentFlag"), 12)) // Have IsDirective() process this now (it will also process it again later, which is harmless).
 			if (IsDirective(buf) == FAIL) // IsDirective() already displayed the error.
-				return CloseAndReturnFail(fp, script_buf);
+				return CloseAndReturnFail(fp);
 
 		// Read in the next line (if that next line is the start of a continuation secttion, append
 		// it to the line currently being processed:
@@ -1380,15 +1380,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		{
 			// This increment relies on the fact that this loop always has at least one iteration:
 			++phys_line_number; // Tracks phys. line number in *this* file (independent of any recursion caused by #Include).
-#ifdef AUTOHOTKEYSC
-			// See similar section above for comments about the following:
-			script_buf_space_remaining = SCRIPT_BUF_SPACE_REMAINING;  // Resolve macro only once, for performance.
-			max_chars_to_read = (LINE_SIZE - 1 < script_buf_space_remaining) ? LINE_SIZE - 1
-				: script_buf_space_remaining;
-			next_buf_length = GetLine(next_buf, max_chars_to_read, in_continuation_section, script_buf_marker);
-#else
 			next_buf_length = GetLine(next_buf, LINE_SIZE - 1, in_continuation_section, fp);
-#endif
 			if (next_buf_length && next_buf_length != -1) // Prevents infinite loop when file ends with an unclosed "/*" section.  Compare directly to -1 since length is unsigned.
 			{
 				if (in_comment_section) // Look for the uncomment-flag.
@@ -1585,7 +1577,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						if (buf_length + next_buf_length >= LINE_SIZE - 1) // -1 to account for the extra space added below.
 						{
 							ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, next_buf);
-							return CloseAndReturnFail(fp, script_buf);
+							return CloseAndReturnFail(fp);
 						}
 						if (*next_buf != ',') // Insert space before expression operators so that built/combined expression works correctly (some operators like 'and', 'or', '.', and '?' currently require spaces on either side) and also for readability of ListLines.
 							buf[buf_length++] = ' ';
@@ -1697,7 +1689,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 			if (next_buf_length == -1) // Compare directly to -1 since length is unsigned.
 			{
 				ScriptError(ERR_MISSING_CLOSE_PAREN, buf);
-				return CloseAndReturnFail(fp, script_buf);
+				return CloseAndReturnFail(fp);
 			}
 			if (next_buf_length == -2) // v1.0.45.03: Special flag that means "this is a commented-out line to be
 				continue;              // entirely omitted from the continuation section." Compare directly to -2 since length is unsigned.
@@ -1764,7 +1756,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 			if (buf_length + next_buf_length + suffix_length >= LINE_SIZE)
 			{
 				ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, cp);
-				return CloseAndReturnFail(fp, script_buf);
+				return CloseAndReturnFail(fp);
 			}
 
 			++continuation_line_count;
@@ -1830,21 +1822,21 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 					// script readability and maintainability -- it's currently not allowed because of
 					// the practice of maintaining the func_exception_var list on our stack:
 					ScriptError(_T("Functions cannot contain functions."), pending_function);
-					return CloseAndReturnFail(fp, script_buf);
+					return CloseAndReturnFail(fp);
 				}
 				if (!DefineFunc(pending_function, func_exception_var))
-					return CloseAndReturnFail(fp, script_buf);
+					return CloseAndReturnFail(fp);
 				if (pending_function_has_brace) // v1.0.41: Support one-true-brace for function def, e.g. fn() {
 				{
 					if (!AddLine(ACT_BLOCK_BEGIN))
-						return CloseAndReturnFail(fp, script_buf);
+						return CloseAndReturnFail(fp);
 					mCurrLine = NULL; // L30: Prevents showing misleading vicinity lines if the line after a OTB function def is a syntax error.
 				}
 			}
 			else // It's a function call on a line by itself, such as fn(x). It can't be if(..) because another section checked that.
 			{
 				if (!ParseAndAddLine(pending_function, ACT_EXPRESSION))
-					return CloseAndReturnFail(fp, script_buf);
+					return CloseAndReturnFail(fp);
 				mCurrLine = NULL; // Prevents showing misleading vicinity lines if the line after a function call is a syntax error.
 			}
 			mCombinedLineNumber = saved_line_number;
@@ -1994,13 +1986,13 @@ examine_line:
 				// safely exist inside a function body and since the body is a block, other validation
 				// ensures that a Gosub or Goto can't jump to it from outside the function.
 				ScriptError(_T("Hotkeys/hotstrings are not allowed inside functions."), buf);
-				return CloseAndReturnFail(fp, script_buf);
+				return CloseAndReturnFail(fp);
 			}
 			if (mLastLine && mLastLine->mActionType == ACT_IFWINACTIVE)
 			{
 				mCurrLine = mLastLine; // To show vicinity lines.
 				ScriptError(_T("IfWin should be #IfWin."), buf);
-				return CloseAndReturnFail(fp, script_buf);
+				return CloseAndReturnFail(fp);
 			}
 			*hotkey_flag = '\0'; // Terminate so that buf is now the label itself.
 			hotkey_flag += HOTKEY_FLAG_LENGTH;  // Now hotkey_flag is the hotkey's action, if any.
@@ -2104,7 +2096,7 @@ examine_line:
 			{\
 				mNoHotkeyLabels = false;\
 				if (!AddLine(ACT_RETURN, NULL, UCHAR_MAX))\
-					return CloseAndReturnFail(fp, script_buf);\
+					return CloseAndReturnFail(fp);\
 				mCurrLine = NULL;\
 			}
 			CHECK_mNoHotkeyLabels
@@ -2114,7 +2106,7 @@ examine_line:
 			// ::abc::
 			// :c:abc::
 			if (!AddLabel(buf, true)) // Always add a label before adding the first line of its section.
-				return CloseAndReturnFail(fp, script_buf);
+				return CloseAndReturnFail(fp);
 			hook_action = 0; // Set default.
 			if (*hotkey_flag) // This hotkey's action is on the same line as its label.
 			{
@@ -2124,12 +2116,12 @@ examine_line:
 					// via Goto/Gosub:
 					if (   !(hook_action = Hotkey::ConvertAltTab(hotkey_flag, false))   )
 						if (!ParseAndAddLine(hotkey_flag, IsFunction(hotkey_flag) ? ACT_EXPRESSION : ACT_INVALID)) // It can't be a function definition vs. call since it's a single-line hotkey.
-							return CloseAndReturnFail(fp, script_buf);
+							return CloseAndReturnFail(fp);
 				// Also add a Return that's implicit for a single-line hotkey.  This is also
 				// done for auto-replace hotstrings in case gosub/goto is ever used to jump
 				// to their labels:
 				if (!AddLine(ACT_RETURN))
-					return CloseAndReturnFail(fp, script_buf);
+					return CloseAndReturnFail(fp);
 			}
 
 			if (hotstring_start)
@@ -2141,7 +2133,7 @@ examine_line:
 					// best to report it this way in case the hotstring is inside a #Include file,
 					// so that the correct file name and approximate line number are shown:
 					ScriptError(_T("This hotstring is missing its abbreviation."), buf); // Display buf vs. hotkey_flag in case the line is simply "::::".
-					return CloseAndReturnFail(fp, script_buf);
+					return CloseAndReturnFail(fp);
 				}
 				// In the case of hotstrings, hotstring_start is the beginning of the hotstring itself,
 				// i.e. the character after the second colon.  hotstring_options is NULL if no options,
@@ -2154,7 +2146,7 @@ examine_line:
 				// hotstrings) because of all the hotstring options.
 				if (!Hotstring::AddHotstring(mLastLabel, hotstring_options ? hotstring_options : _T("")
 					, hotstring_start, hotkey_flag, has_continuation_section))
-					return CloseAndReturnFail(fp, script_buf);
+					return CloseAndReturnFail(fp);
 			}
 			else // It's a hotkey vs. hotstring.
 			{
@@ -2176,18 +2168,18 @@ examine_line:
 						{
 							mCurrLine = NULL;  // Prevents showing unhelpful vicinity lines.
 							ScriptError(_T("Duplicate hotkey."), buf);
-							return CloseAndReturnFail(fp, script_buf);
+							return CloseAndReturnFail(fp);
 						}
 						if (!hk->AddVariant(mLastLabel, suffix_has_tilde))
 						{
 							ScriptError(ERR_OUTOFMEM, buf);
-							return CloseAndReturnFail(fp, script_buf);
+							return CloseAndReturnFail(fp);
 						}
 					}
 				}
 				else // No parent hotkey yet, so create it.
 					if (   !(hk = Hotkey::AddHotkey(mLastLabel, hook_action, NULL, suffix_has_tilde, false))   )
-						return CloseAndReturnFail(fp, script_buf); // It already displayed the error.
+						return CloseAndReturnFail(fp); // It already displayed the error.
 			}
 			goto continue_main_loop; // In lieu of "continue", for performance.
 		} // if (is_label = ...)
@@ -2198,7 +2190,7 @@ examine_line:
 			if (buf_length == 1) // v1.0.41.01: Properly handle the fact that this line consists of only a colon.
 			{
 				ScriptError(ERR_UNRECOGNIZED_ACTION, buf);
-				return CloseAndReturnFail(fp, script_buf);
+				return CloseAndReturnFail(fp);
 			}
 			// Labels (except hotkeys) must contain no whitespace, delimiters, or escape-chars.
 			// This is to avoid problems where a legitimate action-line ends in a colon,
@@ -2231,7 +2223,7 @@ examine_line:
 				buf[--buf_length] = '\0';  // Remove the trailing colon.
 				rtrim(buf, buf_length); // Has already been ltrimmed.
 				if (!AddLabel(buf, false))
-					return CloseAndReturnFail(fp, script_buf);
+					return CloseAndReturnFail(fp);
 				goto continue_main_loop; // In lieu of "continue", for performance.
 			}
 		}
@@ -2250,7 +2242,7 @@ examine_line:
 				mCombinedLineNumber = saved_line_number;
 				goto continue_main_loop; // In lieu of "continue", for performance.
 			case FAIL: // IsDirective() already displayed the error.
-				return CloseAndReturnFail(fp, script_buf);
+				return CloseAndReturnFail(fp);
 			//case CONDITION_FALSE: Do nothing; let processing below handle it.
 			}
 		}
@@ -2263,7 +2255,7 @@ examine_line:
 		if (*buf == '}')
 		{
 			if (!AddLine(ACT_BLOCK_END))
-				return CloseAndReturnFail(fp, script_buf);
+				return CloseAndReturnFail(fp);
 			// The following allows the next stage to see "else" or "else {" if it's present:
 			if (   !*(buf = omit_leading_whitespace(buf + 1))   )
 				goto continue_main_loop; // It's just a naked "}", so no more processing needed for this line.
@@ -2291,19 +2283,19 @@ examine_line:
 			if (*buf == '{')
 			{
 				if (!AddLine(ACT_BLOCK_BEGIN))
-					return CloseAndReturnFail(fp, script_buf);
+					return CloseAndReturnFail(fp);
 				if (   *(action_end = omit_leading_whitespace(buf + 1))   )  // There is an action to the right of the '{'.
 				{
 					mCurrLine = NULL;  // To signify that we're in transition, trying to load a new one.
 					if (!ParseAndAddLine(action_end, IsFunction(action_end) ? ACT_EXPRESSION : ACT_INVALID)) // If it's a function, it must be a call vs. a definition because a function can't be defined on the same line as an open-brace.
-						return CloseAndReturnFail(fp, script_buf);
+						return CloseAndReturnFail(fp);
 				}
 				// Otherwise, there was either no same-line action or the same-line action was successfully added,
 				// so do nothing.
 			}
 			else
 				if (!ParseAndAddLine(buf))
-					return CloseAndReturnFail(fp, script_buf);
+					return CloseAndReturnFail(fp);
 		}
 		else // This line is an ELSE, possibly with another command immediately after it (on the same line).
 		{
@@ -2312,13 +2304,13 @@ examine_line:
 			// don't want because we wouldn't have access to the corresponding literal-map to
 			// figure out the proper use of escaped characters:
 			if (!AddLine(ACT_ELSE))
-				return CloseAndReturnFail(fp, script_buf);
+				return CloseAndReturnFail(fp);
 			mCurrLine = NULL;  // To signify that we're in transition, trying to load a new one.
 			action_end = omit_leading_whitespace(action_end); // Now action_end is the word after the ELSE.
 			if (*action_end == g_delimiter) // Allow "else, action"
 				action_end = omit_leading_whitespace(action_end + 1);
 			if (*action_end && !ParseAndAddLine(action_end, IsFunction(action_end) ? ACT_EXPRESSION : ACT_INVALID)) // If it's a function, it must be a call vs. a definition because a function can't be defined on the same line as an Else.
-				return CloseAndReturnFail(fp, script_buf);
+				return CloseAndReturnFail(fp);
 			// Otherwise, there was either no same-line action or the same-line action was successfully added,
 			// so do nothing.
 		}
@@ -2402,7 +2394,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 				mCurrLine = NULL; // v1.0.40.04: Prevents showing misleading vicinity lines for a syntax-error such as %::%
 				_stprintf(buf, _T("{Blind}%s%s{%s DownTemp}"), extra_event, remap_dest_modifiers, remap_dest); // v1.0.44.05: DownTemp vs. Down. See Send's DownTemp handler for details.
 				if (!AddLine(ACT_SEND, &buf, 1, NULL)) // v1.0.40.04: Check for failure due to bad remaps such as %::%.
-					return CloseAndReturnFail(fp, script_buf);
+					return CloseAndReturnFail(fp);
 				AddLine(ACT_RETURN);
 				// Add key-up hotkey label, e.g. *LButton up::
 				buf_length = _stprintf(buf, _T("*%s up::"), remap_source); // Should be no risk of buffer overflow due to prior validation.
@@ -2433,76 +2425,28 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		saved_line_number = mCombinedLineNumber;
 		mCombinedLineNumber = pending_function_line_number; // Done so that any syntax errors that occur during the calls below will report the correct line number.
 		if (!ParseAndAddLine(pending_function, ACT_EXPRESSION)) // Must be function call vs. definition since otherwise the above would have detected the opening brace beneath it and already cleared pending_function.
-			return CloseAndReturnFail(fp, script_buf);
+			return CloseAndReturnFail(fp);
 		mCombinedLineNumber = saved_line_number;
 	}
 
-#ifdef AUTOHOTKEYSC
-	free(script_buf); // AutoIt3: Close the archive and free the file in memory.
-	oRead.Close();    //
-#else
-	tfile.Close();
-#endif
+	fp->Close();
 	return OK;
 }
 
 
 
-// Small inline to make LoadIncludedFile() code cleaner.
-#ifdef AUTOHOTKEYSC
-inline ResultType Script::CloseAndReturnFailFunc(HS_EXEArc_Read *fp, UCHAR *aBuf)
-{
-	free(aBuf);
-	fp->Close();
-	return FAIL;
-}
-#else
-inline ResultType Script::CloseAndReturnFailFunc(TextStream *ts)
+inline ResultType Script::CloseAndReturnFail(TextStream *ts)
 {
 	ts->Close();
 	return FAIL;
 }
-#endif
 
 
 
-#ifdef AUTOHOTKEYSC
-size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, UCHAR *&aMemFile) // last param = reference to pointer
-#else
 size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, TextStream *ts)
-#endif
 {
 	size_t aBuf_length = 0;
-#ifdef AUTOHOTKEYSC
-	if (!aBuf || !aMemFile) return -1;
-	if (aMaxCharsToRead < 1) return -1; // We're signaling to caller that the end of the memory file has been reached.
-	// Otherwise, continue reading characters from the memory file until either a newline is
-	// reached or aMaxCharsToRead have been read:
-	// Track "i" separately from aBuf_length because we want to read beyond the bounds of the memory file.
-	int i;
-	for (i = 0; i < aMaxCharsToRead; ++i)
-	{
-		if (aMemFile[i] == '\n')
-		{
-			// The end of this line has been reached.  Don't copy this char into the target buffer.
-			// In addition, if the previous char was '\r', remove it from the target buffer:
-			if (aBuf_length > 0 && aBuf[aBuf_length - 1] == '\r')
-				aBuf[--aBuf_length] = '\0';
-			++i; // i.e. so that aMemFile will be adjusted to omit this newline char.
-			break;
-		}
-		else
-			aBuf[aBuf_length++] = aMemFile[i];
-	}
-	// We either read aMaxCharsToRead or reached the end of the line (as indicated by the newline char).
-	// In the former case, aMemFile might now be changed to be a position outside the bounds of the
-	// memory area, which the caller will reflect back to us during the next call as a 0 value for
-	// aMaxCharsToRead, which we then signal to the caller (above) as the end of the file):
-	aMemFile += i; // Update this value for use by the caller.
-	// Terminate the buffer (the caller has already ensured that there's room for the terminator
-	// via its value of aMaxCharsToRead):
-	aBuf[aBuf_length] = '\0';
-#else
+
 	if (!aBuf || !ts) return -1;
 	if (aMaxCharsToRead < 1) return 0;
 	if (ts->AtEOF()) return -1; // Previous call to this function probably already read the last line.
@@ -2518,7 +2462,6 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 		aBuf[--aBuf_length] = '\0';
 	if (aBuf[aBuf_length-1] == '\r')  // In case there are any, e.g. a Macintosh or Unix file?
 		aBuf[--aBuf_length] = '\0';
-#endif
 
 	if (aInContinuationSection)
 	{

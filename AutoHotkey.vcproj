@@ -196,6 +196,7 @@
 			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="1"
 			CharacterSet="1"
+			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -227,7 +228,6 @@
 				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
-				WarnAsError="true"
 				DebugInformationFormat="0"
 			/>
 			<Tool
@@ -246,7 +246,7 @@
 				ShowProgress="0"
 				OutputFile="$(OutDir)/AutoHotkeySC.bin"
 				LinkIncremental="1"
-				IgnoreDefaultLibraryNames="LibCMT;MSVCrt"
+				IgnoreDefaultLibraryNames=""
 				GenerateDebugInformation="false"
 				SubSystem="2"
 				StackReserveSize="4194304"
@@ -254,8 +254,7 @@
 				TerminalServerAware="1"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
-				OptimizeForWindows98="1"
-				FunctionOrder="@source/misc/function_order_for_linker_optimization.txt"
+				FunctionOrder=""
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
 				TargetMachine="1"
@@ -321,7 +320,6 @@
 				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
-				WarnAsError="true"
 				DebugInformationFormat="0"
 			/>
 			<Tool
@@ -340,7 +338,7 @@
 				ShowProgress="0"
 				OutputFile="$(OutDir)/AutoHotkeySC.bin"
 				LinkIncremental="1"
-				IgnoreDefaultLibraryNames="libc;libcmt"
+				IgnoreDefaultLibraryNames=""
 				GenerateDebugInformation="false"
 				SubSystem="2"
 				StackReserveSize="4194304"
@@ -348,8 +346,6 @@
 				TerminalServerAware="1"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
-				OptimizeForWindows98="1"
-				FunctionOrder="@source/misc/function_order_for_linker_optimization.txt"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
 				TargetMachine="1"
@@ -513,29 +509,6 @@
 			<File
 				RelativePath=".\source\TextIO.cpp"
 				>
-				<FileConfiguration
-					Name="Release|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="SC (self-contained)|Win32"
-					ExcludedFromBuild="true"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="SC (minimum size)|Win32"
-					ExcludedFromBuild="true"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-					/>
-				</FileConfiguration>
 			</File>
 			<File
 				RelativePath=".\source\util.cpp"

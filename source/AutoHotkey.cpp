@@ -115,7 +115,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 #endif
 #ifdef SCRIPT_DEBUG
 		// Allow a debug session to be initiated by command-line.
-		else if (!g_Debugger.IsConnected() && !_tcsnicmp(param, _("/Debug"), 6) && (param[6] == '\0' || param[6] == '='))
+		else if (!g_Debugger.IsConnected() && !_tcsnicmp(param, _T("/Debug"), 6) && (param[6] == '\0' || param[6] == '='))
 		{
 			if (param[6] == '=')
 			{
@@ -177,7 +177,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 // Set up the basics of the script:
 #ifdef AUTOHOTKEYSC
-	if (g_script.Init(*g, "", restart_mode) != OK) 
+	if (g_script.Init(*g, _T(""), restart_mode) != OK) 
 #else
 	if (g_script.Init(*g, script_filespec, restart_mode) != OK)  // Set up the basics of the script, using the above.
 #endif

@@ -2462,17 +2462,9 @@ private:
 		: (mFileName ? mFileName : NAME_P), _countof(mNIC.szTip));
 	NOTIFYICONDATA mNIC; // For ease of adding and deleting our tray icon.
 
-#ifdef AUTOHOTKEYSC
-	#define CloseAndReturnFail(fp, aBuf) CloseAndReturnFailFunc(fp, aBuf)
-	ResultType CloseAndReturnFailFunc(HS_EXEArc_Read *fp, UCHAR *aBuf);
-	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, UCHAR *&aMemFile);
-#else
-	#define CloseAndReturnFail(fp, aBuf) CloseAndReturnFailFunc(fp)
-	ResultType CloseAndReturnFailFunc(TextStream *ts);
+	ResultType CloseAndReturnFail(TextStream *ts);
 	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, TextStream *ts);
-#endif
 	ResultType IsDirective(LPTSTR aBuf);
-
 	ResultType ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType = ACT_INVALID
 		, ActionTypeType aOldActionType = OLD_INVALID, LPTSTR aActionName = NULL
 		, LPTSTR aEndMarker = NULL, LPTSTR aLiteralMap = NULL, size_t aLiteralMapLength = 0);

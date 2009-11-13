@@ -9501,14 +9501,14 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	// only allow files to be extracted from the exe is is bound to (i.e the script that it was
 	// compiled with).  There are various checks and CRCs to make sure that it can't be used to read
 	// the files from any other exe that is passed."
-	if (oRead.Open(g_script.mFileSpec, _T("")) != HS_EXEARC_E_OK)
+	if (oRead.Open(CStringCharFromTCharIfNeeded(g_script.mFileSpec), "") != HS_EXEARC_E_OK)
 	{
 		MsgBox(ERR_EXE_CORRUPTED, 0, g_script.mFileSpec); // Usually caused by virus corruption. Probably impossible since it was previously opened successfully to run the main script.
 		return OK; // Let ErrorLevel tell the story.
 	}
 	// aSource should be the same as the "file id" used to originally compress the file
 	// when it was compiled into an EXE.  So this should seek for the right file:
-	int result = oRead.FileExtract(aSource, aDest);
+	int result = oRead.FileExtract(CStringCharFromTCharIfNeeded(aSource), CStringCharFromTCharIfNeeded(aDest));
 	oRead.Close();
 
 	// v1.0.46.15: The following is a fix for the fact that a compiled script (but not an uncompiled one)

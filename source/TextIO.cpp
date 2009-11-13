@@ -1,12 +1,15 @@
 #include "stdafx.h"
 #include "TextIO.h"
 
+//
+// TextStream
+//
 bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 {
 	mLength = 0; // Set the default value here so _Open() can change it.
 	if (!_Open(aFileSpec, aFlags))
 		return false;
-	mCodePage = aCodePage == CP_ACP ? GetACP() : aCodePage;
+	SetCodePage(aCodePage == CP_ACP ? GetACP() : aCodePage);
 	mFlags = aFlags;
 	mEOF = false;
 	memset(mCache, 0, sizeof(mCache));
@@ -18,12 +21,12 @@ bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 			Read(3);
 		if (mLength >= 2) {
 			if (mBuffer[0] == 0xFF && mBuffer[1] == 0xFE) {
-				mCodePage = CP_UTF16;
+				SetCodePage(CP_UTF16);
 				mPosW = mBufferW + 1;
 			}
 			else if (mBuffer[0] == 0xEF && mBuffer[1] == 0xBB) {
 				if (mLength >= 3 && mBuffer[2] == 0xBF) {
-					mCodePage = CP_UTF8;
+					SetCodePage(CP_UTF8);
 					mPosA = mBufferA + 3;
 				}
 			}
@@ -65,25 +68,24 @@ WCHAR TextStream::ReadCharW()
 		int iBytes;
 		if (mCodePage == CP_UTF8)
 		{
-			if (!(*mPosA & 0x80)) {
+			if (*mPos < 0x80)
 				// single byte UTF-8 character
 				return (wchar_t) *mPosA++;
-			}
-			else if ((*mPosA & 0xE0) == 0xC0)
+			// The size in bytes of UTF-8 characters.
+			if ((*mPos & 0xE0) == 0xC0)
 				iBytes = 2;
-			else if ((*mPosA & 0xF0) == 0xE0)
+			else if ((*mPos & 0xF0) == 0xE0)
 				iBytes = 3;
-			else if ((*mPosA & 0xF8) == 0xF0)
+			else if ((*mPos & 0xF8) == 0xF0)
 				iBytes = 4;
 			else {
-				// invalid UTF-8
+				// Invalid in current UTF-8 stardard.
 				mPosA++;
 				return '?';
 			}
 		}
-		// DBCS code pages, MSDN: IsDBCSLeadByteEx
-		else if (mCodePage == 932 || mCodePage == 936 || mCodePage == 949 || mCodePage == 950 || mCodePage == 1361)
-			iBytes = IsDBCSLeadByteEx(mCodePage, *mPosA) ? 2 : 1;
+		else if (mCodePageIsDBCS)
+			iBytes = IsDBCSLeadByteEx(mCodePage, *mPos) ? 2 : 1;
 		else
 			iBytes = 1;
 
@@ -141,7 +143,9 @@ DWORD TextStream::Write(LPCWSTR aBuf, DWORD aBufLen)
 }
 
 
-
+//
+// TextFile
+//
 bool TextFile::_Open(LPCTSTR aFileSpec, DWORD aFlags)
 {
 	_Close();
@@ -170,8 +174,6 @@ bool TextFile::_Open(LPCTSTR aFileSpec, DWORD aFlags)
 	return true;
 }
 
-
-
 void TextFile::_Close()
 {
 	if (mFile != INVALID_HANDLE_VALUE) {
@@ -180,16 +182,12 @@ void TextFile::_Close()
 	}
 }
 
-
-
 DWORD TextFile::_Read(LPVOID aBuffer, DWORD aBufSize)
 {
 	DWORD dwRead = 0;
 	ReadFile(mFile, aBuffer, aBufSize, &dwRead, NULL);
 	return dwRead;
 }
-
-
 
 DWORD TextFile::_Write(LPCVOID aBuffer, DWORD aBufSize)
 {
@@ -198,18 +196,60 @@ DWORD TextFile::_Write(LPCVOID aBuffer, DWORD aBufSize)
 	return dwWritten;
 }
 
-
-
 bool TextFile::_Seek(long aDistance, int aOrigin)
 {
 	return SetFilePointer(mFile, aDistance, NULL, aOrigin) != INVALID_SET_FILE_POINTER;
 }
-
-
 
 __int64 TextFile::_Length()
 {
 	LARGE_INTEGER size;
 	GetFileSizeEx(mFile, &size);
 	return size.QuadPart;
+}
+
+
+//
+// TextMem
+//
+bool TextMem::_Open(LPCTSTR aFileSpec, DWORD aFlags)
+{
+	ASSERT( (aFlags & 3) == TextStream::READ ); // Only read mode is supported.
+
+	Buffer *buf = (Buffer *) aFileSpec;
+	if (mOwned && mBuffer)
+		free(mBuffer);
+	mPosA = mBufferA = (LPSTR) buf->mBuffer;
+	mLength = mCapacity = buf->mLength;
+	mOwned = buf->mOwned;
+	return true;
+}
+
+void TextMem::_Close()
+{
+	if (mBuffer) {
+		if (mOwned)
+			free(mBuffer);
+		mBuffer = NULL;
+	}
+}
+
+DWORD TextMem::_Read(LPVOID aBuffer, DWORD aBufSize)
+{
+	return 0;
+}
+
+DWORD TextMem::_Write(LPCVOID aBuffer, DWORD aBufSize)
+{
+	return 0;
+}
+
+bool TextMem::_Seek(long aDistance, int aOrigin)
+{
+	return false;
+}
+
+__int64 TextMem::_Length()
+{
+	return mLength;
 }
