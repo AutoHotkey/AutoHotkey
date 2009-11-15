@@ -19,7 +19,8 @@
 #define INVOKE_NOT_HANDLED	CONDITION_FALSE
 
 
-ExprTokenType g_MetaFuncId[4];	// Initialized by MetaObject constructor.
+// jackieku: Added extern linkage so this header file can be reused
+extern ExprTokenType g_MetaFuncId[4];	// Initialized by MetaObject constructor.
 
 
 //
@@ -456,5 +457,5 @@ public:
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
-MetaObject g_MetaObject;		// Defines "object" behaviour for non-object values.
+extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object values.
 

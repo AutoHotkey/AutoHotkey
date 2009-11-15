@@ -1,21 +1,27 @@
 #NoEnv
-SetWorkingDir %A_ScriptDir%\SC (self-contained)
-FileRead, bin, *C AutoHotkeySC.bin
+; This file clear the checksum of AutoHotkeySC.bin.
+; It also a demo of the new, object oriented, advanced file IO.
 
-; Clear CheckSum of NT header, since Ahk2Exe does not support non-zero values.
-NumPut(0, bin, NumGet(bin, 60, "int") + 88, "int")
+; object := FileOpen(filename, flags, codepage)
+file := FileOpen(A_ScriptDir . "\SC (self-contained)\AutoHotkeySC.bin", 3) ; UPDATE = 3
 
-file := DllCall("CreateFile", "str", "AutoHotkeySC.bin", "uint", 0x40000000, "uint", 0, "uintptr", 0, "uint", 3, "uint", 0, "uintptr", 0, "uintptr")
-if file = -1
-{
-    MsgBox, 16, Error, Failed to open AutoHotkeySC.bin to correct CheckSum.
-    ExitApp % A_LastError
-}
+; object.Seek(distance, origin)
+; origin: SEEK_SET = 0, SEEK_CUR = 1, SEEK_END = 2
+file.Seek(60, 0) ; SEEK_SET = 0
 
-if !DllCall("WriteFile", "uintptr", file, "uintptr", &bin, "uint", VarSetCapacity(bin), "uint*", 0, "uintptr", 0)
-{
-    MsgBox, 16, Error, Failed to write to AutoHotkeySC.bin to correct CheckSum.
-    ExitApp % A_LastError
-}
+VarSetCapacity(offset, 4) ; This is not required actually.
 
-DllCall("CloseHandle", "uintptr", file)
+; object.RawRead(VarOrAddress, bytes). Read raw binary data.
+file.RawRead(offset, 4)
+
+offset := NumGet(offset, 0, "int") + 88
+
+file.Seek(offset, 0)
+
+VarSetCapacity(csum, 4, 0)
+
+; object.RawWrite(VarOrAddress, bytes). Write raw binary data.
+file.RawWrite(csum, 4)
+
+; object.Close(). Close the file, it should be closed with the object is freed, too.
+file.Close()

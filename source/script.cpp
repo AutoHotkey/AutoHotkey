@@ -2439,7 +2439,8 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		mCombinedLineNumber = saved_line_number;
 	}
 
-	fp->Close();
+	// This is not required, it is called by the destructor.
+	// fp->Close();
 	return OK;
 }
 
@@ -7393,6 +7394,12 @@ Func *Script::FindFunc(LPTSTR aFuncName, size_t aFuncNameLength, int *apInsertPo
 		//	if (!bif)
 		//		return NULL;
 		//}
+	}
+	else if (!_tcsicmp(func_name, _T("FileOpen")))
+	{
+		bif = BIF_FileOpen;
+		min_params = 2;
+		max_params = 3;
 	}
 	else
 		return NULL; // Maint: There may be other lines above that also return NULL.

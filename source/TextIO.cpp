@@ -1,5 +1,7 @@
 #include "stdafx.h"
 #include "TextIO.h"
+#include "script.h"
+#include "script_object.h"
 
 //
 // TextStream
@@ -105,6 +107,8 @@ WCHAR TextStream::ReadCharW()
 
 DWORD TextStream::Write(LPCWSTR aBuf, DWORD aBufLen)
 {
+	if (aBufLen == 0)
+		aBufLen = wcslen(aBuf);
 	if (mCodePage == CP_UTF16) {
 		if (mFlags & EOL_CRLF) {
 			DWORD dwWritten = 0;
@@ -197,16 +201,189 @@ DWORD TextFile::_Write(LPCVOID aBuffer, DWORD aBufSize)
 	return dwWritten;
 }
 
-bool TextFile::_Seek(long aDistance, int aOrigin)
+bool TextFile::_Seek(__int64 aDistance, int aOrigin)
 {
-	return SetFilePointer(mFile, aDistance, NULL, aOrigin) != INVALID_SET_FILE_POINTER;
+	return !!SetFilePointerEx(mFile, *((PLARGE_INTEGER) &aDistance), NULL, aOrigin);
 }
 
-__int64 TextFile::_Length()
+__int64 TextFile::_Tell() const
+{
+	LARGE_INTEGER in = {0}, out;
+	SetFilePointerEx(mFile, in, &out, FILE_CURRENT);
+	return out.QuadPart;
+}
+
+__int64 TextFile::_Length() const
 {
 	LARGE_INTEGER size;
 	GetFileSizeEx(mFile, &size);
 	return size.QuadPart;
+}
+
+class FileObject : public Object
+{
+public:
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+	// Reference: MetaObject::Invoke
+	{
+		// Allow script-defined behaviour to take precedence:
+		ResultType r = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
+
+		if (r == INVOKE_NOT_HANDLED && IS_INVOKE_CALL && aParam[0]->symbol == SYM_OPERAND)
+		{
+			aResultToken.symbol = SYM_INTEGER; // Set default return type.
+
+			LPTSTR field = TokenToString(*aParam[0], NULL);
+			if (!_tcsnicmp(field, _T("Read"), 4))
+			{
+				if (!field[4]) // Read
+				{
+					if (aParamCount == 2)
+					{
+						DWORD length = (DWORD) TokenToInt64(*aParam[1]);
+						if (length <= MAX_NUMBER_LENGTH)
+						{
+							aResultToken.symbol = SYM_STRING;
+							aResultToken.marker = aResultToken.buf;
+							mFile.Read(aResultToken.marker, length);
+							aResultToken.marker[length] = '\0';
+						}
+						else
+						{
+							if (!(aResultToken.circuit_token = (ExprTokenType *)tmalloc(length + 1))) // Out of memory.
+								return r;
+							aResultToken.symbol = SYM_STRING;
+							aResultToken.marker = (LPTSTR) aResultToken.circuit_token; // Store the address of the result for the caller.
+							length = mFile.Read(aResultToken.marker, length);
+							aResultToken.marker[length] = '\0';
+							aResultToken.buf = (LPTSTR)(size_t) length; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
+						}
+						return OK;
+					}
+				}
+				else if (!_tcsicmp(field + 4, _T("Line"))) // ReadLine
+				{
+					if (aParamCount == 1)
+					{
+						if (!(aResultToken.circuit_token = (ExprTokenType *)tmalloc(READ_FILE_LINE_SIZE)))
+							return r;
+						aResultToken.symbol = SYM_STRING;
+						aResultToken.marker = (LPTSTR) aResultToken.circuit_token; // Store the address of the result for the caller.
+						aResultToken.buf = (LPTSTR)(size_t) mFile.ReadLine(aResultToken.marker, READ_FILE_LINE_SIZE - 1); // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
+						return OK;
+					}
+				}
+			}
+			else if (!_tcsicmp(field, _T("Write"))) // Write
+			{
+				if (aParamCount == 2)
+				{
+					aResultToken.value_int64 = mFile.Write(TokenToString(*aParam[1], aResultToken.buf));
+					return OK;
+				}
+			}
+			else if (!_tcsnicmp(field, _T("Raw"), 3)) // raw mode: binary IO
+			{
+				if (aParamCount == 3)
+				{
+					int iReadWrite = 0;
+					
+					if (!_tcsicmp(field + 3, _T("Read"))) // RawRead
+						iReadWrite = 1;
+					else if (!_tcsicmp(field + 3, _T("Write"))) // ReadWrite
+						iReadWrite = 2;
+					if (iReadWrite)
+					// Reference: BIF_NumGet
+					{
+						size_t right_side_bound, target; // Don't make target a pointer-type because the integer offset might not be a multiple of 4 (i.e. the below increments "target" directly by "offset" and we don't want that to use pointer math).
+						ExprTokenType &target_token = *aParam[1];
+						if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+						{
+							target = (size_t)target_token.var->Contents(); // Although Contents(TRUE) will force an update of mContents if necessary, it very unlikely to be necessary here because we're about to fetch a binary number from inside mContents, not a normal/text number.
+							right_side_bound = target + target_token.var->ByteCapacity(); // This is first illegal address to the right of target.
+						}
+						else
+							target = (size_t)TokenToInt64(target_token);
+
+						size_t size = TokenToInt64(*aParam[2]);
+
+						if (target < 1024 // Basic sanity check to catch incoming raw addresses that are zero or blank.
+							|| target_token.symbol == SYM_VAR && target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+						{
+							aResultToken.value_int64 = 0;
+							return OK;
+						}
+
+						aResultToken.value_int64 = (iReadWrite == 1) ? mFile.Read((LPVOID) target, size) : mFile.Write((LPCVOID) target, size);
+						return OK;
+					}
+				}
+			}
+			else if (!_tcsicmp(field, _T("Seek"))) // Seek
+			{
+				if (aParamCount == 3)
+				{
+					aResultToken.value_int64 = mFile.Seek(TokenToInt64(*aParam[1]), TokenToInt64(*aParam[2])) ? 1 : 0;
+					return OK;
+				}
+			}
+			else if (!_tcsicmp(field, _T("Tell"))) // Tell
+			{
+				if (aParamCount == 1)
+				{
+					aResultToken.value_int64 = mFile.Tell();
+					return OK;
+				}
+			}
+			else if (!_tcsicmp(field, _T("Length"))) // Length
+			{
+				if (aParamCount == 1)
+				{
+					aResultToken.value_int64 = mFile.Length();
+					return OK;
+				}
+			}
+			else if (!_tcsicmp(field, _T("AtEOF"))) // AtEOF
+			{
+				if (aParamCount == 1)
+				{
+					aResultToken.value_int64 = mFile.AtEOF() ? 1 : 0;
+					return OK;
+				}
+			}
+			else if (!_tcsicmp(field, _T("Close"))) // Close
+			{
+				if (aParamCount == 1)
+				{
+					mFile.Close();
+					return OK;
+				}
+			}
+		}
+
+		return r;
+	}
+
+	TextFile mFile;
+};
+
+void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	LPTSTR aFileName = TokenToString(*aParam[0], aResultToken.buf);
+	DWORD aFlags = (DWORD) TokenToInt64(*aParam[1]);
+	UINT aCodePage = aParamCount > 2 ? (UINT) TokenToInt64(*aParam[2]) : CP_ACP;
+
+	FileObject *fileObj = new FileObject();
+	if (fileObj->mFile.Open(aFileName, aFlags, aCodePage))
+	{
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = fileObj;
+	}
+	else
+	{
+		fileObj->Release();
+		aResultToken.value_int64 = 0;
+	}
 }
 
 
@@ -245,12 +422,17 @@ DWORD TextMem::_Write(LPCVOID aBuffer, DWORD aBufSize)
 	return 0;
 }
 
-bool TextMem::_Seek(long aDistance, int aOrigin)
+bool TextMem::_Seek(__int64 aDistance, int aOrigin)
 {
 	return false;
 }
 
-__int64 TextMem::_Length()
+__int64 TextMem::_Tell() const
+{
+	return 0;
+}
+
+__int64 TextMem::_Length() const
 {
 	return mLength;
 }

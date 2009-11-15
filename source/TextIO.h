@@ -98,8 +98,8 @@ public:
 	//CHAR GetCharA();
 	TCHAR GetChar() { return W_OR_A(GetChar)(); }
 
-	DWORD Write(LPCWSTR aBuf, DWORD aBufLen);
-	//DWORD Write(LPCSTR aBuf, DWORD aBufLen);
+	DWORD Write(LPCWSTR aBuf, DWORD aBufLen = 0);
+	//DWORD Write(LPCSTR aBuf, DWORD aBufLen = 0);
 	int FormatV(LPCWSTR fmt, va_list ap)
 	{
 		CStringW str;
@@ -115,7 +115,12 @@ public:
 	//int FormatV(LPCSTR fmt, va_list ap);
 	//int Format(LPCSTR fmt, ...);
 
-	bool AtEOF() const { return mEOF; }
+	bool AtEOF()
+	{
+		if (mEOF)
+			return true;
+		return mEOF = (mPosA >= mBufferA + mLength && _Tell() == _Length());
+	}
 	void SetCodePage(UINT aCodePage)
 	{
 		mCodePage = aCodePage;
@@ -129,8 +134,9 @@ protected:
 	virtual void    _Close() = 0;
 	virtual DWORD   _Read(LPVOID aBuffer, DWORD aBufSize) = 0;
 	virtual DWORD   _Write(LPCVOID aBuffer, DWORD aBufSize) = 0;
-	virtual bool    _Seek(long aDistance, int aOrigin) = 0;
-	virtual __int64 _Length() = 0;
+	virtual bool    _Seek(__int64 aDistance, int aOrigin) = 0;
+	virtual __int64	_Tell() const = 0;
+	virtual __int64 _Length() const = 0;
 
 	WCHAR ReadCharW();
 	//CHAR ReadCharA();
@@ -206,14 +212,30 @@ public:
 	TextFile() : mFile(INVALID_HANDLE_VALUE) {}
 	virtual ~TextFile() { _Close(); }
 
-	// These method are placed here to provide binary IO interfaces for public access.
-	virtual DWORD   _Read(LPVOID aBuffer, DWORD aBufSize);
-	virtual DWORD   _Write(LPCVOID aBuffer, DWORD aBufSize);
-	virtual bool    _Seek(long aDistance, int aOrigin);
-	virtual __int64 _Length();
+	// Text IO methods from TextStream.
+	using TextStream::Read;
+	using TextStream::Write;
+
+	// These methods are exported to provide binary file IO.
+	DWORD   Read(LPVOID aBuffer, DWORD aBufSize)
+	{
+		memset(mCache, 0, sizeof(mCache)); // cache is cleared to prevent unexpected results.
+		DWORD dwRead = _Read(aBuffer, aBufSize);
+		mEOF = _Tell() == _Length(); // binary IO is not buffered.
+		return dwRead;
+	}
+	DWORD   Write(LPCVOID aBuffer, DWORD aBufSize) { return _Write(aBuffer, aBufSize); }
+	bool    Seek(long aDistance, int aOrigin) { return _Seek(aDistance, aOrigin); }
+	__int64	Tell() const { return _Tell(); }
+	__int64 Length() { return _Length(); }
 protected:
 	virtual bool    _Open(LPCTSTR aFileSpec, DWORD aFlags);
 	virtual void    _Close();
+	virtual DWORD   _Read(LPVOID aBuffer, DWORD aBufSize);
+	virtual DWORD   _Write(LPCVOID aBuffer, DWORD aBufSize);
+	virtual bool    _Seek(__int64 aDistance, int aOrigin);
+	virtual __int64	_Tell() const;
+	virtual __int64 _Length() const;
 private:
 	HANDLE mFile;
 };
@@ -246,8 +268,9 @@ protected:
 	virtual void    _Close();
 	virtual DWORD   _Read(LPVOID aBuffer, DWORD aBufSize);
 	virtual DWORD   _Write(LPCVOID aBuffer, DWORD aBufSize);
-	virtual bool    _Seek(long aDistance, int aOrigin);
-	virtual __int64 _Length();
+	virtual bool    _Seek(__int64 aDistance, int aOrigin);
+	virtual __int64	_Tell() const;
+	virtual __int64 _Length() const;
 private:
 	bool mOwned;
 };

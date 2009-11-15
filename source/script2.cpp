@@ -14372,7 +14372,7 @@ void BIF_StrGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 {
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = (LPTSTR) TokenToInt64(*aParam[0]);
-	if (!aResultToken.marker)
+	if (aResultToken.marker < (LPTSTR) 1024) // sanity check
 		aResultToken.marker = _T("");
 }
 

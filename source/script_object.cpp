@@ -6,6 +6,9 @@
 #include "script_object.h"
 
 
+ExprTokenType g_MetaFuncId[4];
+MetaObject g_MetaObject;
+
 /*
 MISC IMPLEMENTATION IDEAS
 
