@@ -39,7 +39,7 @@ public:
 	};
 
 	TextStream()
-		: mFlags(0), mCodePage(CP_ACP), mCodePageIsDBCS(false), mLength(0), mCapacity(0), mBuffer(NULL), mPosA(NULL), mEOF(true)
+		: mFlags(0), mCodePage(CP_ACP), mCodePageIsDBCS(false), mLength(0), mCapacity(0), mBuffer(NULL), mPos(NULL), mEOF(true)
 	{
 	}
 	virtual ~TextStream()
@@ -119,7 +119,12 @@ public:
 	{
 		if (mEOF)
 			return true;
-		return mEOF = (mPosA >= mBufferA + mLength && _Tell() == _Length());
+		if (!mCacheW[1] && (!mPosA || mPosA >= mBufferA + mLength)) {
+			__int64 pos = _Tell();
+			if (pos < 0 || pos >= _Length())
+				mEOF = true;
+		}
+		return mEOF;
 	}
 	void SetCodePage(UINT aCodePage)
 	{
@@ -184,19 +189,20 @@ protected:
 	DWORD mLength;		// The length of available data in the buffer, in bytes.
 	DWORD mCapacity;	// The capacity of the buffer, in bytes.
 	bool  mEOF;
-	union
+	__declspec(align(1)) union
 	{
 		CHAR  mCacheA[4];
 		WCHAR mCacheW[2];
 		TCHAR mCache[4 / sizeof(TCHAR)];
+		DWORD mCacheInt;
 	};
-	union
+	union // pointer to the next character to read in mBuffer
 	{
 		LPBYTE  mPos;
 		LPSTR   mPosA;
 		LPWSTR  mPosW;
 	};
-	union
+	union // used by buffered/translated IO. 
 	{
 		LPBYTE  mBuffer;
 		LPSTR   mBufferA;
@@ -219,13 +225,22 @@ public:
 	// These methods are exported to provide binary file IO.
 	DWORD   Read(LPVOID aBuffer, DWORD aBufSize)
 	{
-		memset(mCache, 0, sizeof(mCache)); // cache is cleared to prevent unexpected results.
+		if (mPosA) // Text reading was used
+		{
+			mCacheInt = 0; // cache is cleared to prevent unexpected results.
+
+			// Discards the buffer and rollback the file pointer.
+			ptrdiff_t offset = (mPosA - mBufferA) - mLength; // should be a value <= 0
+			_Seek(offset, SEEK_CUR);
+			mPosA = NULL;
+			mLength = 0;
+		}
 		DWORD dwRead = _Read(aBuffer, aBufSize);
 		mEOF = _Tell() == _Length(); // binary IO is not buffered.
 		return dwRead;
 	}
 	DWORD   Write(LPCVOID aBuffer, DWORD aBufSize) { return _Write(aBuffer, aBufSize); }
-	bool    Seek(long aDistance, int aOrigin) { return _Seek(aDistance, aOrigin); }
+	bool    Seek(__int64 aDistance, int aOrigin) { return _Seek(aDistance, aOrigin); }
 	__int64	Tell() const { return _Tell(); }
 	__int64 Length() { return _Length(); }
 protected:

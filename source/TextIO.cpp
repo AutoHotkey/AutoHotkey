@@ -14,7 +14,7 @@ bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 	SetCodePage(aCodePage == CP_ACP ? GetACP() : aCodePage);
 	mFlags = aFlags;
 	mEOF = false;
-	memset(mCache, 0, sizeof(mCache));
+	mCacheInt = 0;
 
 	int mode = aFlags & 3;
 	if (mode != TextStream::WRITE) {
@@ -172,8 +172,9 @@ bool TextFile::_Open(LPCTSTR aFileSpec, DWORD aFlags)
 			dwCreationDisposition = OPEN_ALWAYS;
 			break;
 	}
-	// FILE_FLAG_SEQUENTIAL_SCAN is set, sequential accesses are quite common for text files handling.
-	mFile = CreateFile(aFileSpec, dwDesiredAccess, dwShareMode, NULL, dwCreationDisposition, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+	// FILE_FLAG_SEQUENTIAL_SCAN is set, as sequential accesses are quite common for text files handling.
+	mFile = CreateFile(aFileSpec, dwDesiredAccess, dwShareMode, NULL, dwCreationDisposition,
+		(aFlags & (EOL_CRLF | EOL_ORPHAN_CR)) ? FILE_FLAG_SEQUENTIAL_SCAN : 0, NULL);
 	if (mFile == INVALID_HANDLE_VALUE)
 		return false;
 	return true;
@@ -203,6 +204,9 @@ DWORD TextFile::_Write(LPCVOID aBuffer, DWORD aBufSize)
 
 bool TextFile::_Seek(__int64 aDistance, int aOrigin)
 {
+	// see AtEOF()
+	if (aOrigin != SEEK_END || aDistance != 0)
+		mEOF = false;
 	return !!SetFilePointerEx(mFile, *((PLARGE_INTEGER) &aDistance), NULL, aOrigin);
 }
 
@@ -429,7 +433,7 @@ bool TextMem::_Seek(__int64 aDistance, int aOrigin)
 
 __int64 TextMem::_Tell() const
 {
-	return 0;
+	return -1; // negative values means it is not supported
 }
 
 __int64 TextMem::_Length() const
