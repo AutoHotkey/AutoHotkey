@@ -41,7 +41,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;SCRIPT_DEBUG;UNICODE_CHECKED"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
@@ -126,7 +126,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				OmitFramePointers="true"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;UNICODE_CHECKED"
 				StringPooling="true"
 				ExceptionHandling="0"
 				BasicRuntimeChecks="0"
@@ -219,7 +219,7 @@
 				EnableIntrinsicFunctions="true"
 				FavorSizeOrSpeed="2"
 				OmitFramePointers="true"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;AUTOHOTKEYSC"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;AUTOHOTKEYSC;UNICODE_CHECKED"
 				StringPooling="true"
 				ExceptionHandling="0"
 				RuntimeLibrary="0"
@@ -279,6 +279,7 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
+				CommandLine="if not exist &quot;$(SolutionDir)Release\AutoHotkey.exe&quot; goto TryDebugBuild&#x0D;&#x0A;&quot;$(SolutionDir)Release\AutoHotkey.exe&quot; &quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;goto End&#x0D;&#x0A;:TryDebugBuild&#x0D;&#x0A;if not exist &quot;$(SolutionDir)Debug\AutoHotkey.exe&quot; goto TryLaunchDirectly&#x0D;&#x0A;&quot;$(SolutionDir)Debug\AutoHotkey.exe&quot; &quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;goto End&#x0D;&#x0A;:TryLaunchDirectly&#x0D;&#x0A;&quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;:End&#x0D;&#x0A;"
 			/>
 		</Configuration>
 		<Configuration
@@ -311,7 +312,7 @@
 				EnableIntrinsicFunctions="true"
 				FavorSizeOrSpeed="2"
 				OmitFramePointers="true"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;AUTOHOTKEYSC"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;AUTOHOTKEYSC;UNICODE_CHECKED"
 				StringPooling="true"
 				ExceptionHandling="0"
 				RuntimeLibrary="2"

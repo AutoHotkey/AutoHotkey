@@ -49,6 +49,11 @@ bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 
 
 WCHAR TextStream::ReadCharW()
+// Fetch exact one Unicode character from the stream, this may slow down the reading, though.
+// But there are some reasons to do this:
+//   1. If some invalid bytes are encountered while reading, we can detect the problem and drop those bytes and then continue to read.
+//   2. It allows partial bytes of a multi-byte character at the end of the input buffer, so we don't need to load the whole file into memory.
+//   3. We can also apply EOL (CR, LF, CR/LF) handling. (see GetCharW())
 {
 	if (mCacheW[1]) { // surrogate pair or standalone CR
 		WCHAR ret = mCacheW[1];
@@ -106,6 +111,11 @@ WCHAR TextStream::ReadCharW()
 
 
 DWORD TextStream::Write(LPCWSTR aBuf, DWORD aBufLen)
+// NOTE: This method doesn't returns the number of characters are written,
+// instead, it return the number of bytes. Because this should be faster and the write operations
+// should never fail unless it encounters a critical error (low disk space, etc.).
+// Therefore, the amount of characters are the same with aBufLen or wcslen(aBuf) most likely.
+// The callers have knew that already.
 {
 	if (aBufLen == 0)
 		aBufLen = wcslen(aBuf);
@@ -172,12 +182,12 @@ bool TextFile::_Open(LPCTSTR aFileSpec, DWORD aFlags)
 			dwCreationDisposition = OPEN_ALWAYS;
 			break;
 	}
+
 	// FILE_FLAG_SEQUENTIAL_SCAN is set, as sequential accesses are quite common for text files handling.
 	mFile = CreateFile(aFileSpec, dwDesiredAccess, dwShareMode, NULL, dwCreationDisposition,
 		(aFlags & (EOL_CRLF | EOL_ORPHAN_CR)) ? FILE_FLAG_SEQUENTIAL_SCAN : 0, NULL);
-	if (mFile == INVALID_HANDLE_VALUE)
-		return false;
-	return true;
+
+	return mFile != INVALID_HANDLE_VALUE;
 }
 
 void TextFile::_Close()
@@ -224,6 +234,7 @@ __int64 TextFile::_Length() const
 	return size.QuadPart;
 }
 
+// FileObject: exports TextFile interfaces to the scripts.
 class FileObject : public Object
 {
 public:

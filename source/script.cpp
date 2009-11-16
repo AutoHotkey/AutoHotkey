@@ -3616,7 +3616,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		// L34: Require that named commands and their args are delimited with a space, tab or comma.
 		// Detects errors such as "MsgBox< foo" or "If!foo" and allows things like "control[x]:=y".
 		// L36: Also allow '(' for if(expr) and while(expr).
-		char end_char = end_marker[1];
+		TCHAR end_char = end_marker[1];
 		could_be_named_action = (end_char == g_delimiter || !end_char || IS_SPACE_OR_TAB(end_char) || end_char == '(');
 	}
 	else

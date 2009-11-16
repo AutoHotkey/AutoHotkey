@@ -12399,7 +12399,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 #ifdef UNICODE
 			this_dyna_param.wstr = TokenToString(this_param);
 #else
-			pStr[arg_count] = ::new CStringWCharFromChar(TokenToString(this_param));
+			pStr[arg_count] = new CStringWCharFromChar(TokenToString(this_param));
 			this_dyna_param.wstr = pStr[arg_count]->GetBuffer();
 #endif
 			break;

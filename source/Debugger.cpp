@@ -16,6 +16,9 @@ freely, without restriction.
 
 #ifdef SCRIPT_DEBUG
 
+// helper macro for WriteF()
+#define U4T(s) CStringUTF8FromTChar(s).GetString()
+
 #include "defines.h"
 #include <Ws2tcpip.h>
 #include <Wspiapi.h> // for getaddrinfo() on versions of Windows earlier than XP.
@@ -327,7 +330,7 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 		else if (supported = !strcmp(feature_name + 9, "version"))
 			setting = NAME_VERSION;
 	} else if (supported = !strcmp(feature_name, "encoding"))
-		setting = "windows-1252";
+		setting = "UTF-8";
 	else if (supported = !strcmp(feature_name, "protocol_version"))
 		setting = "1";
 	else if (supported = !strcmp(feature_name, "supports_async"))
@@ -803,18 +806,18 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 		if (depth == -1 || depth == level)
 		{
 			mResponseBuf.WriteF("<stack level=\"%i\" type=\"file\" filename=\"", level);
-			mResponseBuf.WriteFileURI(CStringUTF8FromTChar(Line::sSourceFile[se->line->mFileIndex]));
+			mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[se->line->mFileIndex]));
 			mResponseBuf.WriteF("\" lineno=\"%u\" where=\"", se->line->mLineNumber);
 			switch (se->type)
 			{
 			case SE_Thread:
-				mResponseBuf.WriteF("%e (thread)", se->desc); // %e to escape characters which desc may contain (e.g. "a & b" in hotkey name).
+				mResponseBuf.WriteF("%e (thread)", U4T(se->desc)); // %e to escape characters which desc may contain (e.g. "a & b" in hotkey name).
 				break;
 			case SE_Func:
-				mResponseBuf.WriteF("%s()", se->func->mName); // %s because function names should never contain characters which need escaping.
+				mResponseBuf.WriteF("%s()", U4T(se->func->mName)); // %s because function names should never contain characters which need escaping.
 				break;
 			case SE_Sub:
-				mResponseBuf.WriteF("%e:", se->sub->mName); // %e because label/hotkey names may contain almost anything.
+				mResponseBuf.WriteF("%e:", U4T(se->sub->mName)); // %e because label/hotkey names may contain almost anything.
 				break;
 			}
 			mResponseBuf.Write("\"/>");
@@ -929,7 +932,7 @@ int Debugger::WritePropertyXml(Var *aVar, VarSizeType aMaxData)
 	// Write as much as possible now to simplify calculation of required buffer space.
 	// We can't write the var length yet as it may not be accurate.
 	mResponseBuf.WriteF("<property name=\"%s\" fullname=\"%s\" type=\"string\" facet=\"%s\" children=\"0\" encoding=\"base64\" size=\""
-						, aVar->mName, aVar->mName, facet);
+						, U4T(aVar->mName), U4T(aVar->mName), facet);
 
 	WriteVarSizeAndData(aVar, aMaxData);
 
@@ -1094,7 +1097,8 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 		return DEBUGGER_E_INVALID_CONTEXT;
 	}
 
-	Var *var = g_script.FindVar((LPTSTR) CStringTCharFromUTF8(name).GetString(), 0, NULL, always_use);
+	CStringTCharFromUTF8 tname(name);
+	Var *var = g_script.FindVar((LPTSTR) tname.GetString(), 0, NULL, always_use);
 
 	if (!var) // Var not found.
 	{
@@ -1114,7 +1118,7 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 		
 		// If the debugger client includes XML-reserved characters in the property name,
 		// the response XML will be badly formatted. Temporary workaround follows:
-		if (strlen(name) > MAX_VAR_NAME_LENGTH || !Var::ValidateName(CStringTCharFromUTF8(name), true, DISPLAY_NO_ERROR))
+		if (strlen(name) > MAX_VAR_NAME_LENGTH || !Var::ValidateName(tname, true, DISPLAY_NO_ERROR))
 			name = "(invalid)";
 
 		mResponseBuf.WriteF("<response command=\"property_get\" transaction_id=\"%e\"><property name=\"%e\" fullname=\"%e\" type=\"undefined\" facet=\"\" size=\"0\" children=\"0\"/></response>"

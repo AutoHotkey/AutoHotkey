@@ -29,7 +29,7 @@ public:
 
 		// EOL translations
 		, EOL_CRLF = 0x00000004 // read: CRLF to LF. write: LF to CRLF.
-		, EOL_ORPHAN_CR = 0x00000008 // read: CR to LF (when the next character is NOT LF)
+		, EOL_ORPHAN_CR = 0x00000008 // read: CR to LF (when the next character isn't LF)
 
 		// write byte order mark when open for write
 		, BOM_UTF8 = 0x00000010
@@ -225,6 +225,26 @@ public:
 	// These methods are exported to provide binary file IO.
 	DWORD   Read(LPVOID aBuffer, DWORD aBufSize)
 	{
+		RollbackFilePointer();
+		DWORD dwRead = _Read(aBuffer, aBufSize);
+		mEOF = _Tell() == _Length(); // binary IO is not buffered.
+		return dwRead;
+	}
+	DWORD   Write(LPCVOID aBuffer, DWORD aBufSize) { RollbackFilePointer(); return _Write(aBuffer, aBufSize); }
+	bool    Seek(__int64 aDistance, int aOrigin) { RollbackFilePointer(); return _Seek(aDistance, aOrigin); }
+	__int64	Tell() { RollbackFilePointer(); return _Tell(); }
+	__int64 Length() { return _Length(); }
+protected:
+	virtual bool    _Open(LPCTSTR aFileSpec, DWORD aFlags);
+	virtual void    _Close();
+	virtual DWORD   _Read(LPVOID aBuffer, DWORD aBufSize);
+	virtual DWORD   _Write(LPCVOID aBuffer, DWORD aBufSize);
+	virtual bool    _Seek(__int64 aDistance, int aOrigin);
+	virtual __int64	_Tell() const;
+	virtual __int64 _Length() const;
+
+	void RollbackFilePointer()
+	{
 		if (mPosA) // Text reading was used
 		{
 			mCacheInt = 0; // cache is cleared to prevent unexpected results.
@@ -235,22 +255,7 @@ public:
 			mPosA = NULL;
 			mLength = 0;
 		}
-		DWORD dwRead = _Read(aBuffer, aBufSize);
-		mEOF = _Tell() == _Length(); // binary IO is not buffered.
-		return dwRead;
 	}
-	DWORD   Write(LPCVOID aBuffer, DWORD aBufSize) { return _Write(aBuffer, aBufSize); }
-	bool    Seek(__int64 aDistance, int aOrigin) { return _Seek(aDistance, aOrigin); }
-	__int64	Tell() const { return _Tell(); }
-	__int64 Length() { return _Length(); }
-protected:
-	virtual bool    _Open(LPCTSTR aFileSpec, DWORD aFlags);
-	virtual void    _Close();
-	virtual DWORD   _Read(LPVOID aBuffer, DWORD aBufSize);
-	virtual DWORD   _Write(LPCVOID aBuffer, DWORD aBufSize);
-	virtual bool    _Seek(__int64 aDistance, int aOrigin);
-	virtual __int64	_Tell() const;
-	virtual __int64 _Length() const;
 private:
 	HANDLE mFile;
 };
