@@ -12825,9 +12825,9 @@ void RegExSetSubpatternVars(LPTSTR haystack, pcre *re, pcre_extra *extra, bool g
 {
 	// OTHERWISE, CONTINUE ON TO STORE THE SUBSTRINGS THAT MATCHED THE SUBPATTERNS (EVEN IF PCRE_ERROR_NOMATCH).
 	// For lookup performance, create a table of subpattern names indexed by subpattern number.
-	LPTSTR *subpat_name = NULL; // Set default as "no subpattern names present or available".
+	char **subpat_name = NULL; // Set default as "no subpattern names present or available".
 	bool allow_dupe_subpat_names = false; // Set default.
-	LPTSTR name_table;
+	char *name_table;
 	int name_count, name_entry_size;
 	if (   !pcre_fullinfo(re, extra, PCRE_INFO_NAMECOUNT, &name_count) // Success. Fix for v1.0.45.01: Don't check captured_pattern_count>=0 because PCRE_ERROR_NOMATCH can still have named patterns!
 		&& name_count // There's at least one named subpattern.  Relies on short-circuit boolean order.
@@ -12840,8 +12840,8 @@ void RegExSetSubpatternVars(LPTSTR haystack, pcre *re, pcre_extra *extra, bool g
 		// For indexing simplicity, also include an entry for the main/entire pattern at index 0 even though
 		// it's never used because the entire pattern can't have a name without enclosing it in parentheses
 		// (in which case it's not the entire pattern anymore, but in fact subpattern #1).
-		size_t subpat_array_size = pattern_count * sizeof(LPTSTR);
-		subpat_name = (LPTSTR *)_alloca(subpat_array_size); // See other use of _alloca() above for reasons why it's used.
+		size_t subpat_array_size = pattern_count * sizeof(char *);
+		subpat_name = (char **)_alloca(subpat_array_size); // See other use of _alloca() above for reasons why it's used.
 		ZeroMemory(subpat_name, subpat_array_size); // Set default for each index to be "no name corresponds to this subpattern number".
 		for (int i = 0; i < name_count; ++i, name_table += name_entry_size)
 		{
@@ -12898,8 +12898,8 @@ void RegExSetSubpatternVars(LPTSTR haystack, pcre *re, pcre_extra *extra, bool g
 					// Fix for v1.0.45.01: Section below added.  See similar section further below for comments.
 					if (!subpat_not_matched && allow_dupe_subpat_names) // Explicitly check subpat_not_matched not pos/len so that behavior is consistent with the default mode (non-position).
 						for (n = p + 1; n < pattern_count; ++n) // Search to the right of this subpat to find others with the same name.
-							if (subpat_name[n] && !_tcsicmp(subpat_name[n], subpat_name[p])) // Case-insensitive because unlike PCRE, named subpatterns conform to AHK convention of insensitive variable names.
-								subpat_name[n] = _T(""); // Empty string signals subsequent iterations to skip it entirely.
+							if (subpat_name[n] && !stricmp(subpat_name[n], subpat_name[p])) // Case-insensitive because unlike PCRE, named subpatterns conform to AHK convention of insensitive variable names.
+								subpat_name[n] = ""; // Empty string signals subsequent iterations to skip it entirely.
 				}
 				//else an empty subpat name caused by "allow duplicate names".  Do nothing (see comments above).
 			}
@@ -12938,7 +12938,13 @@ void RegExSetSubpatternVars(LPTSTR haystack, pcre *re, pcre_extra *extra, bool g
 			if (*subpat_name[p]) // This check supports allow_dupe_subpat_names. See comments below.
 			{
 				// This section is similar to the one in the "else" below, so see it for more comments.
-				_tcscpy(var_name_suffix, subpat_name[p]); // Append the subpat name to the array's base name.  _tcscpy() seems safe because PCRE almost certainly enforces the 32-char limit on subpattern names.
+				_tcscpy(var_name_suffix,
+#ifdef UNICODE
+					CStringTCharFromUTF8(subpat_name[p])
+#else
+					subpat_name[p]
+#endif
+				); // Append the subpat name to the array's base name.  _tcscpy() seems safe because PCRE almost certainly enforces the 32-char limit on subpattern names.
 				if (array_item = g_script.FindOrAddVar(var_name, 0, always_use))
 				{
 					if (subpat_not_matched)
@@ -12958,8 +12964,8 @@ void RegExSetSubpatternVars(LPTSTR haystack, pcre *re, pcre_extra *extra, bool g
 						// to the right of this item to indicate that they should be skipped by subsequent iterations.
 						if (allow_dupe_subpat_names)
 							for (n = p + 1; n < pattern_count; ++n) // Search to the right of this subpat to find others with the same name.
-								if (subpat_name[n] && !_tcsicmp(subpat_name[n], subpat_name[p])) // Case-insensitive because unlike PCRE, named subpatterns conform to AHK convention of insensitive variable names.
-									subpat_name[n] = _T(""); // Empty string signals subsequent iterations to skip it entirely.
+								if (subpat_name[n] && !stricmp(subpat_name[n], subpat_name[p])) // Case-insensitive because unlike PCRE, named subpatterns conform to AHK convention of insensitive variable names.
+									subpat_name[n] = ""; // Empty string signals subsequent iterations to skip it entirely.
 					}
 				}
 				//else var couldn't be created: no error reporting currently, since it basically should never happen.
