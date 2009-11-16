@@ -10028,7 +10028,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				if (this_infix[1].symbol == SYM_CONCAT && this_infix[2].symbol == SYM_OPAREN && this_infix[2].marker == this_infix->marker + 1)
 				{	// The final check above ensures this is "](" and not "] (" or "] . (".
 					if (in_param_list->param_count != 2) // Require exactly one [parameter], excluding the target object.
-						return LineError("Exactly one [name_parameter] must precede the (parameter list).", FAIL, this_obracket.deref->marker);
+						return LineError(_T("Exactly one [name_parameter] must precede the (parameter list)."), FAIL, this_obracket.deref->marker);
 					this_infix += 2; // Skip the SYM_CONCAT and SYM_CBRACKET.
 					// Treat this as a continuation of the parameter list for this operation, which is now known to be ObjCall.
 					// in_param_list must remain pointing to the same deref, which we will continue to use to count parameters.
