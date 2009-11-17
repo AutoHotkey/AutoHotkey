@@ -1330,7 +1330,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 							// the concat, which would corrupt the result.
 							// Optimize by copying directly into the target variable rather than the intermediate
 							// step of putting into temporary memory.
-							if (!temp_var->Assign(NULL, (VarSizeType)result_size - 1)) // Resize the destination, if necessary.
+							if (!temp_var->AssignString(NULL, (VarSizeType)result_size - 1)) // Resize the destination, if necessary.
 								goto abort; // Above should have already reported the error.
 							result = temp_var->Contents(); // Call Contents() AGAIN because Assign() may have changed it.  No need to pass FALSE because the call to Assign() above already reset the contents.
 							if (left_length)

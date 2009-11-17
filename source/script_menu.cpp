@@ -158,7 +158,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 				// Allocate the full MAX_PATH in case the contents grow longer later.
 				// SimpleHeap improves avg. case mem load:
 				if (!mCustomIconFile)
-					mCustomIconFile = SimpleHeap::Malloc(MAX_PATH * sizeof(TCHAR));
+					mCustomIconFile = (LPTSTR) SimpleHeap::Malloc(MAX_PATH * sizeof(TCHAR));
 				if (mCustomIconFile)
 				{
 					// Get the full path in case it's a relative path.  This is documented and it's done in case

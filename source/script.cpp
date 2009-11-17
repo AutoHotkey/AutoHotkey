@@ -223,7 +223,10 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 // Otherwise, aScriptFilename can be NULL if caller hasn't determined the filename of the script yet.
 {
 	mIsRestart = aIsRestart;
-	TCHAR buf[2048]; // Just to make sure we have plenty of room to do things with.
+	TCHAR buf[4096]; // Just to make sure we have plenty of room to do things with.
+#ifndef AUTOHOTKEYSC
+	TCHAR ahkinibuf[MAX_PATH+1];
+#endif
 #ifdef AUTOHOTKEYSC
 	// Fix for v1.0.29: Override the caller's use of __argv[0] by using GetModuleFileName(),
 	// so that when the script is started from the command line but the user didn't type the
@@ -237,10 +240,10 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		// Since no script-file was specified on the command line, use the default name.
 		// For backward compatibility, FIRST check if there's an AutoHotkey.ini file in the current
 		// directory.  If there is, that needs to be used to retain compatibility.
-		aScriptFilename = _T(NAME_P) _T(".ini");
+		aScriptFilename = _T("AutoHotkey.ini");
 		if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF) // File doesn't exist, so fall back to new method.
 		{
-			aScriptFilename = buf;
+			aScriptFilename = ahkinibuf;
 			VarSizeType filespec_length = BIV_MyDocuments(aScriptFilename, _T("")); // e.g. C:\Documents and Settings\Home\My Documents
 			if (filespec_length	> _countof(buf)-16) // Need room for 16 characters ('\\' + "AutoHotkey.ahk" + terminator).
 				return FAIL; // Very rare, so for simplicity just abort.
@@ -251,8 +254,8 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		//else since the legacy .ini file exists, everything is now set up right. (The file might be a directory, but that isn't checked due to rarity.)
 	}
 	// In case the script is a relative filespec (relative to current working dir):
-	LPTSTR unused;
-	if (!GetFullPathName(aScriptFilename, _countof(buf), buf, &unused)) // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
+	//LPTSTR unused;
+	if (!GetFullPathName(aScriptFilename, _countof(buf), buf, NULL)) // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
 		return FAIL; // Due to rarity, no error msg, just abort.
 #endif
 	// Using the correct case not only makes it look better in title bar & tray tool tip,
@@ -329,7 +332,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	// with the program:
 	sntprintf(buf, _countof(buf), _T("%s\\%s"), mFileDir, mFileName);
 #else
-	sntprintf(buf, _countof(buf), _T("%s\\%s - %s"), mFileDir, mFileName, NAME_PV);
+	sntprintf(buf, _countof(buf), _T("%s\\%s - %s"), mFileDir, mFileName, tNAME_PV);
 #endif
 	if (   !(mMainWindowTitle = SimpleHeap::Malloc(buf))   )
 		return FAIL;  // It already displayed the error for us.
@@ -355,7 +358,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 #ifdef UNICODE
 			// For the script files without any BOM, they are encoded in system code page or UTF-8 most likely.
 			// So the default is now determined in this way, since it is fast and self-contained.
-			if (!_tcsnicmp(last_backslash + 1, _T(NAME_P), _countof(NAME_P) - 1))
+			if (!_tcsnicmp(last_backslash + 1, tNAME_P, _countof(NAME_P) - 1))
 				g_DefaultUTF8 = true;
 #endif
 			last_backslash[1] = '\0'; // i.e. keep the trailing backslash for convenience.
@@ -970,7 +973,7 @@ _T("; launched when you run the program directly.  Also, any text file whose\n")
 _T("; name ends in .ahk is associated with the program, which means that it\n")
 _T("; can be launched simply by double-clicking it.  You can have as many .ahk\n")
 _T("; files as you want, located in any folder.  You can also run more than\n")
-_T("; one ahk file simultaneously and each will get its own tray icon.\n")
+_T("; one .ahk file simultaneously and each will get its own tray icon.\n")
 _T("\n")
 _T("; SAMPLE HOTKEYS: Below are two sample hotkeys.  The first is Win+Z and it\n")
 _T("; launches a web site in the default browser.  The second is Control+Alt+N\n")
@@ -993,7 +996,6 @@ _T("\n")
 _T("; Please read the QUICK-START TUTORIAL near the top of the help file.\n")
 _T("; It explains how to perform common automation tasks such as sending\n")
 _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
-_T("\n")
 , fp2);
 		fclose(fp2);
 		// One or both of the below would probably fail -- at least on Win95 -- if mFileSpec ever
@@ -2704,6 +2706,49 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		}
 		return CONDITION_TRUE;
 	}
+	// Just leave this here, perhaps it will be used someday
+	/*
+	if (IS_DIRECTIVE_MATCH(_T("#DefaultEncoding")))
+	{
+		LPTSTR encString = parameter;
+		if (!encString)
+			return ScriptError(_T("Must specify an encoding or codepage."));
+
+#ifdef UNICODE
+		if (*encString == 'U' || *encString == 'u')
+		{
+			// UTF-8[-RAW] or UTF-16
+			if (!_tcsnicmp(encString, _T("UTF-8"), 5))
+			{
+				g_DefaultCodepage = CP_UTF8;
+				encString += 5;
+				if (*encString)
+				{
+					if (!_tcsicmp(encString, _T("-RAW")))
+						g_DefaultCodepage |= CP_AHKNOBOM;
+					else
+						return ScriptError(_T("Invalid suffix"), encString);
+				}
+			}else if (!_tcsicmp(encString, _T("UTF-16")))
+				g_DefaultCodepage = CP_UTF16;
+			else
+				return ScriptError(_T("Invalid encoding"), encString);
+		}else if ((*encString == 'C' || *encString == 'c') && (encString[1] == 'P' || encString[1] == 'p'))
+		{
+			// CP[nnn]
+			encString += 2;
+			if (!*encString)
+				// The following shouldn't be done because the user
+				// may want to force the current codepage:
+				//   return ScriptError("Must specify a codepage");
+				g_DefaultCodepage = CP_ACP;
+			else
+				g_DefaultCodepage = ATOU(encString);
+		}
+#endif
+		return CONDITION_TRUE;
+	}
+	*/
 	if (IS_DIRECTIVE_MATCH(_T("#InstallKeybdHook")))
 	{
 		// It seems best not to report this warning because a user may want to use partial functionality
@@ -5194,7 +5239,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 						}
 						if (cp = _tcschr(op_begin + 1, '.')) // L31: Check for scientific-notation literal (as in previous versions) or something like "obj.property". Above has already handled "obj .property" and similar.
 						{
-							if (toupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-')) // Listed first for short-circuit performance with the below.
+							if (_totupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-')) // Listed first for short-circuit performance with the below.
 							{
 								 // v1.0.46.11: This item appears to be a scientific-notation literal with the OPTIONAL +/- sign PRESENT on the exponent (e.g. 1.0e+001), so check that before checking if it's a variable name.
 								*op_end = orig_char; // Undo the temporary termination.
@@ -9199,7 +9244,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 				case ',':
 					this_infix_item.symbol = SYM_COMMA; // Used to separate sub-statements and function parameters.
-					this_infix_item.marker = cp; // L31: For error-reporting.
+					this_infix_item.marker = cp; // L31: For error-reporting.  L37: Also used to implement the requirement that there be no space between ']' and '(' in this: obj[method_name](params).
 					break;
 				case '/':
 					if (cp1 == '=')
@@ -10894,7 +10939,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			case ATTR_LOOP_READ_FILE:
 				{
 					TextFile tfile;
-					if (*ARG2 && tfile.Open(ARG2, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR)) // v1.0.47: Added check for "" to avoid debug-assertion failure while in debug mode (maybe it's bad to to open file "" in release mode too).
+					if (*ARG2 && tfile.Open(ARG2, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR, g.Encoding & CP_AHKCP)) // v1.0.47: Added check for "" to avoid debug-assertion failure while in debug mode (maybe it's bad to to open file "" in release mode too).
 					{
 						result = line->PerformLoopReadFile(aResultToken, continue_main_loop, jump_to_line, &tfile, ARG3);
 						tfile.Close();
@@ -13730,6 +13775,48 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_SHUTDOWN:
 		return Util_Shutdown(ArgToInt(1)) ? OK : FAIL; // Range of ARG1 is not validated in case other values are supported in the future.
+
+	case ACT_FILEENCODING:
+		LPTSTR encString = ARG1;
+		if (!*encString)
+			g.Encoding = CP_ACP;
+		else if (*encString == 'U' || *encString == 'u')
+		{
+			// UTF-8 or UTF-16
+			if (!_tcsnicmp(encString, _T("UTF-8"), 5))
+			{
+				g.Encoding = CP_UTF8;
+				encString += 5;
+			}
+			else if (!_tcsnicmp(encString, _T("UTF-16"), 6))
+			{
+				g.Encoding = CP_UTF16;
+				encString += 6;
+			}
+			else
+				return LineError(_T("Invalid encoding."), FAIL, encString);
+
+			// Check for suffixes
+			if (*encString)
+			{
+				if (!_tcsicmp(encString, _T("-RAW")))
+					g.Encoding |= CP_AHKNOBOM;
+				else
+					return LineError(_T("Invalid suffix."), FAIL, encString);
+			}
+		}
+		else if ((*encString == 'C' || *encString == 'c') && (encString[1] == 'P' || encString[1] == 'p'))
+		{
+			// CPnnn
+			encString += 2;
+			if (!*encString || !_istdigit(*encString))
+				return LineError(_T("Must specify a (valid) codepage."), FAIL, encString-2);
+			else
+				g.Encoding = ATOU(encString);
+		}
+		else
+			return LineError(_T("Invalid parameter."), FAIL, encString);
+		return OK;
 	} // switch()
 
 	// Since above didn't return, this line's mActionType isn't handled here,

@@ -782,7 +782,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 		// other precedents where a variable is sized to something larger than it winds up carrying.
 		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 		// this call will set up the clipboard for writing:
-		if (output_var.Assign(NULL, (VarSizeType)length) != OK) // It already displayed the error.
+		if (output_var.AssignString(NULL, (VarSizeType)length) != OK) // It already displayed the error.
 			return FAIL;
 		if (!SendMessageTimeout(control_window, y_msg, (WPARAM)index, (LPARAM)output_var.Contents()
 			, SMTO_ABORTIFHUNG, 2000, &length)
@@ -838,7 +838,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 		// other precedents where a variable is sized to something larger than it winds up carrying.
 		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 		// this call will set up the clipboard for writing:
-		if (output_var.Assign(NULL, (VarSizeType)length, true, true) != OK)
+		if (output_var.AssignString(NULL, (VarSizeType)length, true, true) != OK)
 			return FAIL;  // It already displayed the error.
 		for (cp = output_var.Contents(), length = item_count - 1, u = 0; u < item_count; ++u)
 		{

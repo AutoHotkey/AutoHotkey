@@ -316,6 +316,12 @@ public:
 		return OK;
 	}
 
+	inline ResultType Assign(VarSizeType aValueToAssign) // For some reason, this function is actually faster when not __forceinline.
+	{
+		UpdateBinaryInt64(aValueToAssign, VAR_ATTRIB_CONTENTS_OUT_OF_DATE|VAR_ATTRIB_HAS_VALID_INT64);
+		return OK;
+	}
+
 	inline ResultType Assign(double aValueToAssign)
 	// It's best to call this method -- rather than manually converting to double -- so that the
 	// digits/formatting/precision is consistent throughout the program.

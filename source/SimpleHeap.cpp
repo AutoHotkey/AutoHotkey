@@ -34,7 +34,7 @@ LPTSTR SimpleHeap::Malloc(LPTSTR aBuf, size_t aLength)
 	if (aLength == -1) // Caller wanted us to calculate it.  Compare directly to -1 since aLength is unsigned.
 		aLength = _tcslen(aBuf);
 	LPTSTR new_buf;
-	if (   !(new_buf = SimpleHeap::Malloc((aLength + 1) * sizeof(TCHAR)))   ) // +1 for the zero terminator.
+	if (   !(new_buf = (LPTSTR)SimpleHeap::Malloc((aLength + 1) * sizeof(TCHAR)))   ) // +1 for the zero terminator.
 	{
 		g_script.ScriptError(ERR_OUTOFMEM, aBuf);
 		return NULL; // Callers may rely on NULL vs. "" being returned in the event of failure.
@@ -46,8 +46,7 @@ LPTSTR SimpleHeap::Malloc(LPTSTR aBuf, size_t aLength)
 	return new_buf;
 }
 
-LPTSTR SimpleHeap::Malloc(size_t aSize)
-// Seems okay to return char* for convenience, since that's the type most often used.
+void* SimpleHeap::Malloc(size_t aSize)
 // This could be made more memory efficient by searching old blocks for sufficient
 // free space to handle <size> prior to creating a new block.  But the whole point
 // of this class is that it's only called to allocate relatively small objects,
@@ -82,7 +81,7 @@ LPTSTR SimpleHeap::Malloc(size_t aSize)
 	//	size_consumed = sLast->mSpaceAvailable; // mSpaceAvailable to go negative (which it can't due to be unsigned).
 	sLast->mFreeMarker += size_consumed;
 	sLast->mSpaceAvailable -= size_consumed;
-	return (LPTSTR) sMostRecentlyAllocated;
+	return (void*) sMostRecentlyAllocated;
 }
 
 

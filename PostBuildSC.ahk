@@ -1,27 +1,41 @@
 #NoEnv
-; This file clear the checksum of AutoHotkeySC.bin.
+; This file clears the checksum of the AutoHotkeySC.bin files.
 ; It also a demo of the new, object oriented, advanced file IO.
 
-; object := FileOpen(filename, flags, codepage)
-file := FileOpen(A_ScriptDir . "\SC (self-contained)\AutoHotkeySC.bin", 3) ; UPDATE = 3
+FixSC("SC (self-contained)")
+FixSC("SC (minimum size)")
 
-; object.Seek(distance, origin)
-; origin: SEEK_SET = 0, SEEK_CUR = 1, SEEK_END = 2
-file.Seek(60, 0) ; SEEK_SET = 0
+FixSC(folder){
+	scbin := A_ScriptDir . folder . "\AutoHotkeySC.bin"
+	IfNotExist %scbin%
+		return
+	; Open a file
+	; object := FileOpen(filename, flags[, codepage])
+	file := FileOpen(scbin, 3) ; UPDATE = 3
+	if (!IsObject(file))
+		return ; Can not open the file
 
-VarSetCapacity(offset, 4) ; This is not required actually.
+	; object.Seek(distance[, origin=0])
+	; origin: SEEK_SET = 0, SEEK_CUR = 1, SEEK_END = 2
+	file.Seek(60)
 
-; object.RawRead(VarOrAddress, bytes). Read raw binary data.
-file.RawRead(offset, 4)
+	; Reserve memory to read the integer
+	VarSetCapacity(offset, 4)
 
-offset := NumGet(offset, 0, "int") + 88
+	; Read raw binary data:
+	; object.RawRead(VarOrAddress, bytes)
+	file.RawRead(offset, 4)
 
-file.Seek(offset, 0)
+	offset := NumGet(offset, 0, "int") + 88
 
-VarSetCapacity(csum, 4, 0)
+	file.Seek(offset)
 
-; object.RawWrite(VarOrAddress, bytes). Write raw binary data.
-file.RawWrite(csum, 4)
-
-; object.Close(). Close the file, it should be closed with the object is freed, too.
-file.Close()
+	VarSetCapacity(csum, 4, 0)
+	
+	; object.RawWrite(VarOrAddress, bytes). Write raw binary data.
+	file.RawWrite(csum, 4)
+	
+	; Close the file. It is also closed when the object is freed.
+	; object.Close()
+	file.Close()
+}

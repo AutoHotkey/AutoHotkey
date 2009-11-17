@@ -51,7 +51,7 @@ bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 WCHAR TextStream::ReadCharW()
 // Fetch exact one Unicode character from the stream, this may slow down the reading, though.
 // But there are some reasons to do this:
-//   1. If some invalid bytes are encountered while reading, we can detect the problem and drop those bytes and then continue to read.
+//   1. If some invalid bytes are encountered while reading, we can detect the problem, drop those bytes and then continue to read.
 //   2. It allows partial bytes of a multi-byte character at the end of the input buffer, so we don't need to load the whole file into memory.
 //   3. We can also apply EOL (CR, LF, CR/LF) handling. (see GetCharW())
 {
@@ -122,8 +122,8 @@ DWORD TextStream::Write(LPCWSTR aBuf, DWORD aBufLen)
 	if (mCodePage == CP_UTF16) {
 		if (mFlags & EOL_CRLF) {
 			DWORD dwWritten = 0;
-			int i;
-			for (i = 0;i < aBufLen;i++) {
+			DWORD i;
+			for (i = 0; i < aBufLen; i++) {
 				if (aBuf[i] == '\n' && mCacheW[0] != '\r')
 					dwWritten += _Write(L"\r\n", 4);
 				else
@@ -266,7 +266,7 @@ public:
 						else
 						{
 							if (!(aResultToken.circuit_token = (ExprTokenType *)tmalloc(length + 1))) // Out of memory.
-								return r;
+								return FAIL;
 							aResultToken.symbol = SYM_STRING;
 							aResultToken.marker = (LPTSTR) aResultToken.circuit_token; // Store the address of the result for the caller.
 							length = mFile.Read(aResultToken.marker, length);
@@ -281,7 +281,7 @@ public:
 					if (aParamCount == 1)
 					{
 						if (!(aResultToken.circuit_token = (ExprTokenType *)tmalloc(READ_FILE_LINE_SIZE)))
-							return r;
+							return FAIL;
 						aResultToken.symbol = SYM_STRING;
 						aResultToken.marker = (LPTSTR) aResultToken.circuit_token; // Store the address of the result for the caller.
 						aResultToken.buf = (LPTSTR)(size_t) mFile.ReadLine(aResultToken.marker, READ_FILE_LINE_SIZE - 1); // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
@@ -320,7 +320,7 @@ public:
 						else
 							target = (size_t)TokenToInt64(target_token);
 
-						size_t size = TokenToInt64(*aParam[2]);
+						size_t size = (size_t) TokenToInt64(*aParam[2]);
 
 						if (target < 1024 // Basic sanity check to catch incoming raw addresses that are zero or blank.
 							|| target_token.symbol == SYM_VAR && target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
@@ -338,7 +338,12 @@ public:
 			{
 				if (aParamCount == 3)
 				{
-					aResultToken.value_int64 = mFile.Seek(TokenToInt64(*aParam[1]), TokenToInt64(*aParam[2])) ? 1 : 0;
+					aResultToken.value_int64 = mFile.Seek(TokenToInt64(*aParam[1]), (int) TokenToInt64(*aParam[2])) ? 1 : 0;
+					return OK;
+				}
+				else if (aParamCount == 2)
+				{
+					aResultToken.value_int64 = mFile.Seek(TokenToInt64(*aParam[1]), SEEK_SET) ? 1 : 0;
 					return OK;
 				}
 			}
@@ -376,7 +381,7 @@ public:
 			}
 		}
 
-		return r;
+		return r; // Should be INVOKE_NOT_HANDLED if the above didn't return
 	}
 
 	TextFile mFile;
@@ -386,7 +391,21 @@ void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 {
 	LPTSTR aFileName = TokenToString(*aParam[0], aResultToken.buf);
 	DWORD aFlags = (DWORD) TokenToInt64(*aParam[1]);
-	UINT aCodePage = aParamCount > 2 ? (UINT) TokenToInt64(*aParam[2]) : CP_ACP;
+	UINT aCodePage;
+
+	if (aParamCount > 2)
+		aCodePage = (UINT) TokenToInt64(*aParam[2]);
+	else
+	{
+		aCodePage = (g->Encoding & CP_AHKCP);
+		if (!(g->Encoding & CP_AHKNOBOM))
+		{
+			if (aCodePage == CP_UTF8)
+				aFlags |= TextStream::BOM_UTF8;
+			else if (aCodePage == CP_UTF16)
+				aFlags |= TextStream::BOM_UTF16;
+		}
+	}
 
 	FileObject *fileObj = new FileObject();
 	if (fileObj->mFile.Open(aFileName, aFlags, aCodePage))

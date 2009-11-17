@@ -491,20 +491,20 @@ inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 		return _ultot(value, buf, 10);
 }
 
+#ifdef WIN64
 // Not currently used:
-//inline LPTSTR UTOA64(unsigned __int64 value, LPTSTR buf) 
-//{
-//	if (g->FormatIntAsHex)
-//	{
-//		*buf = '0';
-//		*(buf + 1) = 'x';
-//		return _ui64tot(value, buf + 2, 16);
-//	}
-//	else
-//		return _ui64tot(value, buf, 10);
-//}
-
-
+inline LPTSTR UTOA64(unsigned __int64 value, LPTSTR buf) 
+{
+	if (g->FormatIntAsHex)
+	{
+		*buf = '0';
+		*(buf + 1) = 'x';
+		return _ui64tot(value, buf + 2, 16);
+	}
+	else
+		return _ui64tot(value, buf, 10);
+}
+#endif
 
 //inline LPTSTR tcscatmove(LPTSTR aDst, LPCTSTR aSrc)
 //// Same as strcat() but allows aSrc and aDst to overlap.
@@ -578,7 +578,7 @@ inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 
 inline char* WideToUTF8(LPCWSTR str){
 	int buf_len = WideCharToMultiByte(CP_UTF8, 0, str, -1, NULL, 0, NULL, NULL);
-	char* buf = (char*) malloc(buf_len);
+	LPSTR buf = (LPSTR) malloc(buf_len);
 	WideCharToMultiByte(CP_UTF8, 0, str, -1, buf, buf_len, NULL, NULL);
 	return buf;
 }
@@ -591,6 +591,8 @@ inline char* WideToUTF8(LPCWSTR str){
 #define TLenToUTF8Len  LenToUTF8Len
 #define UTF8PosToTPos  UTF8PosToPos
 #define UTF8LenToTLen  UTF8LenToLen
+#define vAssignUTF8IfNeeded(v) v.AssignStringFromUTF8
+#define vpAssignUTF8IfNeeded(v) v->AssignStringFromUTF8
 #else
 #define UorA(u,a)            (a)
 #define RegExToUTF8(a)       (a)
@@ -598,6 +600,8 @@ inline char* WideToUTF8(LPCWSTR str){
 #define TLenToUTF8Len(a,b,c) (c)
 #define UTF8PosToTPos(a,b)   (b)
 #define UTF8LenToTLen(a,b,c) (c)
+#define vAssignUTF8IfNeeded(v) v.Assign
+#define vpAssignUTF8IfNeeded(v) v->Assign
 #endif
 
 // v1.0.44.03: Callers now use the following macro rather than the old approach.  However, this change

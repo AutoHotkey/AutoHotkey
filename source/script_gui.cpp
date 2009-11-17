@@ -6573,7 +6573,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 			// other precedents where a variable is sized to something larger than it winds up carrying.
 			// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 			// this call will set up the clipboard for writing:
-			if (aOutputVar.Assign(NULL, (VarSizeType)length) != OK)
+			if (aOutputVar.AssignString(NULL, (VarSizeType)length) != OK)
 				return FAIL;  // It already displayed the error.
 			length = SendMessage(aControl.hwnd, CB_GETLBTEXT, (WPARAM)index, (LPARAM)aOutputVar.Contents());
 			if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
@@ -6630,7 +6630,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 				// other precedents where a variable is sized to something larger than it winds up carrying.
 				// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 				// this call will set up the clipboard for writing:
-				if (aOutputVar.Assign(NULL, (VarSizeType)length) != OK)
+				if (aOutputVar.AssignString(NULL, (VarSizeType)length) != OK)
 					return FAIL;  // It already displayed the error.
 				cp = aOutputVar.Contents(); // Init for both of the loops below.
 				if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the positions, not the text retrieved.
@@ -6686,7 +6686,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 				// other precedents where a variable is sized to something larger than it winds up carrying.
 				// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 				// this call will set up the clipboard for writing:
-				if (aOutputVar.Assign(NULL, (VarSizeType)length) != OK)
+				if (aOutputVar.AssignString(NULL, (VarSizeType)length) != OK)
 					return FAIL;  // It already displayed the error.
 				length = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)index, (LPARAM)aOutputVar.Contents());
 				if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
@@ -6743,7 +6743,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
 	int length = GetWindowTextLength(aControl.hwnd); // Might be zero, which is properly handled below.
-	if (aOutputVar.Assign(NULL, (VarSizeType)length) != OK)
+	if (aOutputVar.AssignString(NULL, (VarSizeType)length) != OK)
 		return FAIL;  // It already displayed the error.
 	// Update length using the actual length, rather than the estimate provided by GetWindowTextLength():
 	if (   !(aOutputVar.SetCharLength(GetWindowText(aControl.hwnd, aOutputVar.Contents(), (int)(length + 1))))   )

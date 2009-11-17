@@ -177,12 +177,12 @@ BEGIN
             VALUE "ProductName", ""
             VALUE "ProductVersion", "1, 0, 48, 05"
 #else
-            VALUE "FileDescription", "AutoHotkey_L"
+            VALUE "FileDescription", "AutoHotkey_L (Unicode)"
             VALUE "FileVersion", "1, 0, 48, 05"
-            VALUE "InternalName", "AutoHotkey_L"
+            VALUE "InternalName", "AutoHotkeyU_L"
             VALUE "LegalCopyright", "Copyright (C) 2009"
             VALUE "OriginalFilename", "AutoHotkey.rc"
-            VALUE "ProductName", "AutoHotkey_L"
+            VALUE "ProductName", "AutoHotkeyU_L"
             VALUE "ProductVersion", "1, 0, 48, 05"
 #endif
         END

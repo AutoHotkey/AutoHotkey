@@ -995,7 +995,7 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 			return output_var.Assign(); // Make the (non-clipboard) output_var blank to indicate failure.
 		}
 		// Othewise, it found the count.  Set up the output variable, enlarging it if needed:
-		if (output_var.Assign(NULL, char_count - 1) != OK) // Don't combine this with the above or below it can return FAIL.
+		if (output_var.AssignString(NULL, char_count - 1) != OK) // Don't combine this with the above or below it can return FAIL.
 		{
 			g_clip.Close();
 			return FAIL;  // It already displayed the error.
@@ -2647,7 +2647,7 @@ ResultType Line::ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 
 	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
-	if (output_var.Assign(NULL, space_needed - 1) != OK)
+	if (output_var.AssignString(NULL, space_needed - 1) != OK)
 		return FAIL;  // It already displayed the error.
 	// Fetch the text directly into the var.  Also set the length explicitly
 	// in case actual size written was off from the esimated size (since
@@ -2828,7 +2828,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 
 	// SET UP THE OUTPUT VARIABLE, ENLARGING IT IF NECESSARY
 	// If the aOutputVar is of type VAR_CLIPBOARD, this call will set up the clipboard for writing:
-	aOutputVar.Assign(NULL, (VarSizeType)total_length, true, false); // Since failure is extremely rare, continue onward using the available capacity.
+	aOutputVar.AssignString(NULL, (VarSizeType)total_length, true, false); // Since failure is extremely rare, continue onward using the available capacity.
 	LPTSTR contents = aOutputVar.Contents();
 	LRESULT capacity = (int)aOutputVar.Capacity(); // LRESULT avoids signed vs. unsigned compiler warnings.
 	if (capacity > 0) // For maintainability, avoid going negative.
@@ -3547,7 +3547,7 @@ ResultType Line::WinGetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, 
 
 	// Handle the output parameter.  See the comments in ACT_CONTROLGETTEXT for details.
 	VarSizeType space_needed = target_window ? GetWindowTextLength(target_window) + 1 : 1; // 1 for terminator.
-	if (output_var.Assign(NULL, space_needed - 1) != OK)
+	if (output_var.AssignString(NULL, space_needed - 1) != OK)
 		return FAIL;  // It already displayed the error.
 	if (target_window)
 	{
@@ -3783,7 +3783,7 @@ ResultType Line::WinGetControlList(Var &aOutputVar, HWND aTargetWindow, bool aFe
 		cl.total_length = g_MaxVarCapacity - 1;
 	// Set up the var, enlarging it if necessary.  If the aOutputVar is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
-	if (aOutputVar.Assign(NULL, (VarSizeType)cl.total_length) != OK)
+	if (aOutputVar.AssignString(NULL, (VarSizeType)cl.total_length) != OK)
 		return FAIL;  // It already displayed the error.
 	// Fetch the text directly into the var.  Also set the length explicitly
 	// in case actual size written was off from the esimated size (in case the list of
@@ -3912,7 +3912,7 @@ ResultType Line::WinGetText(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, L
 
 	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
-	if (output_var.Assign(NULL, (VarSizeType)sab.total_length) != OK)
+	if (output_var.AssignString(NULL, (VarSizeType)sab.total_length) != OK)
 		return FAIL;  // It already displayed the error.
 
 	// Fetch the text directly into the var.  Also set the length explicitly
@@ -6135,7 +6135,7 @@ BOOL CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
 				VarSizeType space_needed = SET_OUTPUT_VAR_TO_BLANK ? 1 : GetWindowTextLength(hControl) + 1;
 				// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 				// this call will set up the clipboard for writing:
-				if (INPUTBOX_VAR->Assign(NULL, space_needed - 1) != OK)
+				if (INPUTBOX_VAR->AssignString(NULL, space_needed - 1) != OK)
 					// It will have already displayed the error.  Displaying errors in a callback
 					// function like this one isn't that good, since the callback won't return
 					// to its caller in a timely fashion.  However, these type of errors are so
@@ -7757,7 +7757,7 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 		}
 	}
 	//else it is not necessary to set output_var.Length() here because its length hasn't changed
-	// since it was originally set by the above call "output_var.Assign(NULL..."
+	// since it was originally set by the above call "output_var.AssignString(NULL..."
 
 	result_to_return = output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 
@@ -8908,7 +8908,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	bool translate_crlf_to_lf = false;
 	bool is_binary_clipboard = false;
 	unsigned __int64 max_bytes_to_load = ULLONG_MAX;
-	UINT codepage = CP_ACP;
+	UINT codepage = g->Encoding & CP_AHKCP;
 
 	// It's done as asterisk+option letter to permit future expansion.  A plain asterisk such as used
 	// by the FileAppend command would create ambiguity if there was ever an effort to add other asterisk-
@@ -9090,7 +9090,7 @@ ResultType Line::FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber)
 	if (line_number < 1)
 		return OK;  // Return OK because g_ErrorLevel tells the story.
 	TextFile tfile;
-	if (!tfile.Open(aFilespec, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR))
+	if (!tfile.Open(aFilespec, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR, g->Encoding & CP_AHKCP))
 		return OK;  // Return OK because g_ErrorLevel tells the story.
 
 	// Remember that once the first call to MsgSleep() is done, a new hotkey subroutine
@@ -9209,7 +9209,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	if (!file_was_already_open)
 	{
 		DWORD flags = TextStream::APPEND | (open_as_binary ? 0 : TextStream::EOL_CRLF);
-		UINT codepage = CP_ACP;
+		UINT codepage = g->Encoding & CP_AHKCP;
 		// For backwards compatibility, the first two arguments cannot be changed.
 		if (mArgc > 2) {
 			if (!_tcsicmp(ARG3, _T("UTF-8")) || !_tcsicmp(ARG3, _T("UTF8"))) {
@@ -9223,6 +9223,13 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 			else if (!_tcsicmp(ARG3, _T("UTF-8-RAW"))) {
 				codepage = CP_UTF8;
 			}
+		}
+		else if (!(g->Encoding & CP_AHKNOBOM))
+		{
+			if (codepage == CP_UTF8)
+				flags |= TextStream::BOM_UTF8;
+			else if (codepage == CP_UTF16)
+				flags |= TextStream::BOM_UTF16;
 		}
 
 		// Open the output file (if one was specified).  Unlike the input file, this is not
@@ -11755,7 +11762,11 @@ VarSizeType BIV_EventInfo(LPTSTR aBuf, LPTSTR aVarName)
 // We're returning the length of the var's contents, not the size.
 {
 	return aBuf
+#ifdef WIN64
+		? (VarSizeType)_tcslen(UTOA64(g->EventInfo, aBuf)) // Must return exact length when aBuf isn't NULL.
+#else
 		? (VarSizeType)_tcslen(UTOA(g->EventInfo, aBuf)) // Must return exact length when aBuf isn't NULL.
+#endif
 		: MAX_INTEGER_LENGTH;
 }
 
@@ -12825,9 +12836,9 @@ void RegExSetSubpatternVars(LPTSTR haystack, pcre *re, pcre_extra *extra, bool g
 {
 	// OTHERWISE, CONTINUE ON TO STORE THE SUBSTRINGS THAT MATCHED THE SUBPATTERNS (EVEN IF PCRE_ERROR_NOMATCH).
 	// For lookup performance, create a table of subpattern names indexed by subpattern number.
-	char **subpat_name = NULL; // Set default as "no subpattern names present or available".
+	LPCSTR *subpat_name = NULL; // Set default as "no subpattern names present or available".
 	bool allow_dupe_subpat_names = false; // Set default.
-	char *name_table;
+	LPCSTR name_table;
 	int name_count, name_entry_size;
 	if (   !pcre_fullinfo(re, extra, PCRE_INFO_NAMECOUNT, &name_count) // Success. Fix for v1.0.45.01: Don't check captured_pattern_count>=0 because PCRE_ERROR_NOMATCH can still have named patterns!
 		&& name_count // There's at least one named subpattern.  Relies on short-circuit boolean order.
@@ -12840,8 +12851,8 @@ void RegExSetSubpatternVars(LPTSTR haystack, pcre *re, pcre_extra *extra, bool g
 		// For indexing simplicity, also include an entry for the main/entire pattern at index 0 even though
 		// it's never used because the entire pattern can't have a name without enclosing it in parentheses
 		// (in which case it's not the entire pattern anymore, but in fact subpattern #1).
-		size_t subpat_array_size = pattern_count * sizeof(char *);
-		subpat_name = (char **)_alloca(subpat_array_size); // See other use of _alloca() above for reasons why it's used.
+		size_t subpat_array_size = pattern_count * sizeof(LPCSTR);
+		subpat_name = (LPCSTR *)_alloca(subpat_array_size); // See other use of _alloca() above for reasons why it's used.
 		ZeroMemory(subpat_name, subpat_array_size); // Set default for each index to be "no name corresponds to this subpattern number".
 		for (int i = 0; i < name_count; ++i, name_table += name_entry_size)
 		{
@@ -12889,10 +12900,16 @@ void RegExSetSubpatternVars(LPTSTR haystack, pcre *re, pcre_extra *extra, bool g
 			{
 				if (*subpat_name[p]) // This check supports allow_dupe_subpat_names. See comments below.
 				{
-					suffix_length = _stprintf(var_name_suffix, _T("Pos%s"), subpat_name[p]); // Append the subpattern to the array's base name.
+#ifdef UNICODE
+					CStringTCharFromUTF8 subpat_name_wide(subpat_name[p]);
+					const LPCTSTR &the_subpat_name = subpat_name_wide.GetString();
+#else
+					const LPCTSTR &the_subpat_name = subpat_name[p];
+#endif
+					suffix_length = _stprintf(var_name_suffix, _T("Pos%s"), the_subpat_name); // Append the subpattern to the array's base name.
 					if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length, always_use))
 						array_item->Assign(UTF8PosToTPos(utf8Haystack, subpat_pos) + 1); // One-based (i.e. position zero means "not found").
-					suffix_length = _stprintf(var_name_suffix, _T("Len%s"), subpat_name[p]); // Append the subpattern name to the array's base name.
+					suffix_length = _stprintf(var_name_suffix, _T("Len%s"), the_subpat_name); // Append the subpattern name to the array's base name.
 					if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length, always_use))
 						array_item->Assign(UTF8LenToTLen(utf8Haystack, subpat_pos, subpat_len));
 					// Fix for v1.0.45.01: Section below added.  See similar section further below for comments.
@@ -13063,7 +13080,7 @@ int RegExCallout(pcre_callout_block *cb)
 	RegExCalloutData cd = *(RegExCalloutData *)cb->callout_data;
 
 	// Adjust offset to account for options, which are excluded from the regex passed to PCRE.
-	cb->pattern_position += cd.options_length;
+	cb->pattern_position += TPosToUTF8Pos(cd.haystack, cd.options_length);
 	
 
 	// See ExpandExpression() for detailed comments about the following section.
@@ -13073,14 +13090,13 @@ int RegExCallout(pcre_callout_block *cb)
 		if (!Var::BackupFunctionVars(func, var_backup, var_backup_count)) // Out of memory.
 			return 0;
 
+	EventInfoType EventInfo_saved = g->EventInfo;
+
 #ifdef UNICODE
 	#pragma message(MY_WARN(9999) "pcre_callout_block must be translated, but it is somewhat expansive.")
+	g->EventInfo = (EventInfoType) cb;
 #else
-	#ifdef _WIN64
-		#error ooch!, the pointer is now 64bits
-	#endif
-	DWORD EventInfo_saved = g->EventInfo;
-	g->EventInfo = (DWORD)cb;
+	g->EventInfo = (EventInfoType) cb;
 #endif
 
 	/*
@@ -13112,9 +13128,9 @@ int RegExCallout(pcre_callout_block *cb)
 
 		// Overall match or its length.
 		if (cd.get_positions_not_substrings)
-			output_var.Assign(cb->current_position - cb->start_match);
+			output_var.Assign(UTF8PosToTPos(cb->subject, cb->current_position - cb->start_match));
 		else
-			output_var.Assign((LPTSTR)cb->subject + cb->start_match, cb->current_position - cb->start_match);
+			vAssignUTF8IfNeeded(output_var)(cb->subject + cb->start_match, cb->current_position - cb->start_match);
 
 		LPTSTR mem_to_free = NULL;
 		
@@ -13139,18 +13155,12 @@ int RegExCallout(pcre_callout_block *cb)
 			if (func.mParamCount > 2)
 			{
 				// FoundPos
-				func.mParam[2].var->Assign(cb->start_match + 1);
+				func.mParam[2].var->Assign(UTF8PosToTPos(cb->subject, cb->start_match + 1));
 
 				if (func.mParamCount > 3)
 				{
 					// Haystack
-					func.mParam[3].var->Assign(
-#ifdef UNICODE
-						cd.haystack, cd.haystack_length
-#else
-						cb->subject, cb->subject_length
-#endif
-					);
+					func.mParam[3].var->AssignString(cd.haystack, cd.haystack_length);
 				
 					if (func.mParamCount > 4)
 					{
@@ -13179,9 +13189,7 @@ int RegExCallout(pcre_callout_block *cb)
 
 	Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
 
-#ifndef UNICODE
 	g->EventInfo = EventInfo_saved;
-#endif
 
 	// Behaviour of return values is defined by PCRE.
 	return number_to_return;
@@ -13486,13 +13494,7 @@ break_both:
 	// because the RE's options are implicitly stored inside re_compiled.
 
 	// Lexikos: See aOptionsLength comment at beginning of this function.
-	this_entry.options_length = pat - 
-#ifdef UNICODE
-		aRegExUTF8
-#else
-		aRegEx
-#endif
-		;
+	this_entry.options_length = UTF8PosToTPos(pat, pat - UorA(aRegExUTF8, aRegEx));
 
 	if (aOptionsLength) 
 		*aOptionsLength = this_entry.options_length;
@@ -13617,7 +13619,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	#define REGEX_REALLOC(size) \
 	{\
 		result_size = size;\
-		if (   !(realloc_temp = (LPTSTR)realloc(result, result_size*sizeof(TCHAR)))   )\
+		if (   !(realloc_temp = trealloc(result, result_size))   )\
 			goto out_of_mem;\
 		result = realloc_temp;\
 	}
@@ -13756,7 +13758,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				// appears before the match.
 				if (haystack_portion_length)
 				{
-					memcpy(result + result_length, haystack_pos, haystack_portion_length*sizeof(TCHAR));
+					tmemcpy(result + result_length, haystack_pos, haystack_portion_length);
 					result_length += haystack_portion_length;
 				}
 				dest = result + result_length; // Init dest for use by the loops further below.
@@ -13873,7 +13875,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 						{
 							if (second_iteration)
 							{
-								memcpy(dest, aHaystack + ref_num0, match_length * sizeof(TCHAR));
+								tmemcpy(dest, aHaystack + ref_num0, match_length);
 								if (transform)
 								{
 									dest[match_length] = '\0'; // Terminate for use below (shouldn't cause overflow because REALLOC reserved space for terminator; nor should there be any need to undo the termination afterward).
@@ -14984,7 +14986,7 @@ UINT __stdcall RegisterCallbackCStub(UINT *params, char *address) // Used by BIF
 	Func &func = *cb.func; // For performance and convenience.
 
 	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
-	DWORD EventInfo_saved;
+	EventInfoType EventInfo_saved;
 	BOOL pause_after_execute;
 
 	// NOTES ABOUT INTERRUPTIONS / CRITICAL:

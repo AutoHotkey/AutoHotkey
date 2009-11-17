@@ -42,8 +42,9 @@ GNU General Public License for more details.
 #define NAME_VERSION NAME_PURE_VERSION NAME_L_REVISION
 #define NAME_PV NAME_P " v" NAME_VERSION
 
+#define tNAME_P _T(NAME_P)
 #define tNAME_VERSION _T(NAME_PURE_VERSION) _T(NAME_L_REVISION)
-#define tNAME_PV _T(NAME_P) _T(" v") tNAME_VERSION
+#define tNAME_PV tNAME_P _T(" v") tNAME_VERSION
 
 // Window class names: Changing these may result in new versions not being able to detect any old instances
 // that may be running (such as the use of FindWindow() in WinMain()).  It may also have other unwanted
@@ -317,6 +318,7 @@ enum enum_act {
 , ACT_EDIT, ACT_RELOAD, ACT_MENU, ACT_GUI, ACT_GUICONTROL, ACT_GUICONTROLGET
 , ACT_EXITAPP
 , ACT_SHUTDOWN
+, ACT_FILEENCODING
 // Make these the last ones before the count so they will be less often processed.  This helps
 // performance because this one doesn't actually have a keyword so will never result
 // in a match anyway.  UPDATE: No longer used because Run/RunWait is now required, which greatly
@@ -537,6 +539,8 @@ typedef UCHAR CoordModeAttribType;
 #define COORD_UNSPECIFIED INT_MIN
 #define COORD_UNSPECIFIED_SHORT SHRT_MIN  // This essentially makes coord -32768 "reserved", but it seems acceptable given usefulness and the rarity of a real coord like that.
 
+typedef UINT_PTR EventInfoType;
+
 // Same reason as above struct.  It's best to keep this struct as small as possible
 // because it's used as a local (stack) var by at least one recursive function:
 // Each instance of this struct generally corresponds to a quasi-thread.  The function that creates
@@ -564,7 +568,7 @@ struct global_struct
 	int Priority;  // This thread's priority relative to others.
 	DWORD LastError; // The result of GetLastError() after the most recent DllCall or Run.
 	GuiEventType GuiEvent; // This thread's triggering event, e.g. DblClk vs. normal click.
-	DWORD EventInfo; // Not named "GuiEventInfo" because it applies to non-GUI events such as clipboard.
+	EventInfoType EventInfo; // Not named "GuiEventInfo" because it applies to non-GUI events such as clipboard.
 	POINT GuiPoint; // The position of GuiEvent. Stored as a thread vs. window attribute so that underlying threads see their original values when resumed.
 	GuiIndexType GuiWindowIndex, GuiControlIndex; // The GUI window index and control index that launched this thread.
 	GuiIndexType GuiDefaultWindowIndex; // This thread's default GUI window, used except when specified "Gui, 2:Add, ..."
@@ -610,6 +614,7 @@ struct global_struct
 	bool MsgBoxTimedOut; // Doesn't require initialization.
 	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
 	bool ListLinesIsEnabled;
+	UINT Encoding;
 };
 
 inline void global_maximize_interruptibility(global_struct &g)
@@ -702,6 +707,7 @@ inline void global_init(global_struct &g)
 	_tcscpy(g.FormatFloat, _T("%0.6f"));
 	g.FormatIntAsHex = false;
 	g.ListLinesIsEnabled = true;
+	g.Encoding = CP_ACP;
 	// For FormatFloat:
 	// I considered storing more than 6 digits to the right of the decimal point (which is the default
 	// for most Unices and MSVC++ it seems).  But going beyond that makes things a little weird for many
@@ -722,6 +728,10 @@ inline void global_init(global_struct &g)
 #define WINAPI_SUFFIX "A"
 #define PROCESS_API_SUFFIX
 #endif
+
+#define _TSIZE(a) ((a)*sizeof(TCHAR))
+#define CP_AHKNOBOM 0x80000000
+#define CP_AHKCP    (~CP_AHKNOBOM)
 
 // Use #pragma message(MY_WARN(nnnn) "warning messages") to generate a warning like a compiler's warning
 #define __S(x) #x

@@ -537,6 +537,8 @@ Action g_act[] =
 
 	, {_T("ExitApp"), 0, 1, 1, {1, 0}}  // Optional exit-code. v1.0.48.01: Allow an expression like ACT_EXIT does.
 	, {_T("Shutdown"), 1, 1, 1, {1, 0}} // Seems best to make the first param (the flag/code) mandatory.
+
+	, {_T("FileEncoding"), 0, 1, 1, NULL}
 };
 // Below is the most maintainable way to determine the actual count?
 // Due to C++ lang. restrictions, can't easily make this a const because constants

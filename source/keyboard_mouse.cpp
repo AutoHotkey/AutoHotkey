@@ -698,7 +698,10 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 		{
 #ifdef UNICODE
 			if (*aKeys > 0xFF)
+			{
 				SendUnicodeChar(*aKeys, mods_for_next_key | persistent_modifiers_for_this_SendKeys, sSendMode ? sEventModifiersLR : GetModifierLRState());
+				DoKeyDelay();
+			}
 			else
 #endif
 			{

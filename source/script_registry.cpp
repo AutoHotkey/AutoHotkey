@@ -160,7 +160,7 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 			// which leaves room for the final newline character to be inserted after
 			// the last item.  But add 2 to the requested capacity in case the data isn't
 			// terminated in the registry, which allows double-NULL to be put in for REG_MULTI_SZ later.
-			if (output_var.Assign(NULL, (VarSizeType)(dwCharLen + 2)) != OK)
+			if (output_var.AssignString(NULL, (VarSizeType)(dwCharLen + 2)) != OK)
 			{
 				RegCloseKey(hRegKey);
 				return FAIL; // FAIL is only returned when the error is a critical one such as this one.
@@ -231,7 +231,7 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 
 			// Set up the variable to receive the contents, enlarging it if necessary.
 			// AutoIt3: Each byte will turned into 2 digits, plus a final null:
-			if (output_var.Assign(NULL, (VarSizeType)(dwRes * 2)) != OK)
+			if (output_var.AssignString(NULL, (VarSizeType)(dwRes * 2)) != OK)
 				return FAIL;
 			contents = output_var.Contents();
 			*contents = '\0';

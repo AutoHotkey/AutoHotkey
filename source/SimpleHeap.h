@@ -33,7 +33,9 @@ GNU General Public License for more details.
 // (the maximum line length that can be loaded -- currently 16K), otherwise,
 // memory for that line might be impossible to allocate.
 // Update: reduced it from 64K to 32K since many scripts tend to be small.
-#define BLOCK_SIZE (32 * 1024) // Relied upon by Malloc() to be a multiple of 4.
+// Update 2 (fincs): Use twice as big blocks when compiling for Unicode because
+// Unicode strings are twice as large.
+#define BLOCK_SIZE (32 * 1024 * sizeof(TCHAR)) // Relied upon by Malloc() to be a multiple of 4.
 
 class SimpleHeap
 {
@@ -52,7 +54,7 @@ private:
 public:
 //	static UINT GetBlockCount() {return sBlockCount;}
 	static LPTSTR Malloc(LPTSTR aBuf, size_t aLength = -1); // Return a block of memory to the caller and copy aBuf into it.
-	static LPTSTR Malloc(size_t aSize); // Return a block of memory to the caller.
+	static void* Malloc(size_t aSize); // Return a block of memory to the caller.
 	static void Delete(void *aPtr);
 	//static void DeleteAll();
 };

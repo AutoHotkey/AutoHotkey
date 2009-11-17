@@ -301,7 +301,7 @@ ResultType Var::AssignClipboardAll()
 		return FAIL; // Above should have already reported the error.
 	}
 
-#pragma message(MY_WARN(9999) "The following codes must be checked it is Unicode-safe or not.")
+#pragma message(MY_WARN(9999) "The following code must be checked for Unicode safety.")
 	// Retrieve and store all the clipboard formats.  Because failures of GetClipboardData() are now
 	// tolerated, it seems safest to recalculate the actual size (actual_space_needed) of the data
 	// in case it varies from that found in the estimation phase.  This is especially necessary in
@@ -384,7 +384,7 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 		return OK; // No need to call Close() in this case.
 	}
 
-#pragma message(MY_WARN(9999) "The following codes must be checked it is Unicode-safe or not.")
+#pragma message(MY_WARN(9999) "The following code must be checked for Unicode safety.")
 	// SINCE ABOVE DIDN'T RETURN, A VARIABLE CONTAINING BINARY CLIPBOARD DATA IS BEING COPIED BACK ONTO THE CLIPBOARD.
 	if (!g_clip.Open())
 		return g_script.ScriptError(CANT_OPEN_CLIPBOARD_WRITE);
@@ -535,7 +535,7 @@ ResultType Var::AssignString(LPTSTR aBuf, VarSizeType aLength, bool aExactSize, 
 		{
 		case ALLOC_NONE:
 		case ALLOC_SIMPLE:
-			if (space_needed_in_bytes <= MAX_ALLOC_SIMPLE)
+			if (space_needed_in_bytes <= _TSIZE(MAX_ALLOC_SIMPLE))
 			{
 				// v1.0.31: Conserve memory within large arrays by allowing elements of length 3 or 7, for such
 				// things as the storage of boolean values, or the storage of short numbers (it's best to use
@@ -553,7 +553,7 @@ ResultType Var::AssignString(LPTSTR aBuf, VarSizeType aLength, bool aExactSize, 
 					if (space_needed_in_bytes < 9)
 						new_size = 8; // v1.0.45: Increased from 7 to 8 to exploit 32-bit alignment in SimpleHeap.
 					else // space_needed <= MAX_ALLOC_SIMPLE
-						new_size = MAX_ALLOC_SIMPLE;
+						new_size = _TSIZE(MAX_ALLOC_SIMPLE);
 				}
 				// In the case of mHowAllocated==ALLOC_SIMPLE, the following will allocate another block
 				// from SimpleHeap even though the var already had one. This is by design because it can
@@ -569,24 +569,24 @@ ResultType Var::AssignString(LPTSTR aBuf, VarSizeType aLength, bool aExactSize, 
 			// This case can happen even if space_needed is less than MAX_ALLOC_SIMPLE
 			// because once a var becomes ALLOC_MALLOC, it should never change to
 			// one of the other alloc modes.  See comments higher above for explanation.
-			new_size = space_needed; // Below relies on this being initialized unconditionally.
+			////new_size = space_needed; // Below relies on this being initialized unconditionally.
 			new_size = space_needed_in_bytes; // Below relies on this being initialized unconditionally.
 			if (!aExactSize)
 			{
 				// Allow a little room for future expansion to cut down on the number of
 				// free's and malloc's we expect to have to do in the future for this var:
-				if (new_size < 16) // v1.0.45.03: Added this new size to prevent all local variables in a recursive
-					new_size = 16; // function from having a minimum size of MAX_PATH.  16 seems like a good size because it holds nearly any number.  It seems counterproductive to go too small because each malloc, no matter how small, could have around 40 bytes of overhead.
-				else if (new_size < MAX_PATH)
-					new_size = MAX_PATH;  // An amount that will fit all standard filenames seems good.
-				else if (new_size < (160 * 1024)) // MAX_PATH to 160 KB or less -> 10% extra.
+				if (new_size < _TSIZE(16)) // v1.0.45.03: Added this new size to prevent all local variables in a recursive
+					new_size = _TSIZE(16); // function from having a minimum size of MAX_PATH.  16 seems like a good size because it holds nearly any number.  It seems counterproductive to go too small because each malloc, no matter how small, could have around 40 bytes of overhead.
+				else if (new_size < _TSIZE(MAX_PATH))
+					new_size = _TSIZE(MAX_PATH);  // An amount that will fit all standard filenames seems good.
+				else if (new_size < _TSIZE(160 * 1024)) // MAX_PATH to 160 KB or less -> 10% extra.
 					new_size = (size_t)(new_size * 1.1);
-				else if (new_size < (1600 * 1024))  // 160 to 1600 KB -> 16 KB extra
-					new_size += (16 * 1024);
-				else if (new_size < (6400 * 1024)) // 1600 to 6400 KB -> 1% extra
+				else if (new_size < _TSIZE(1600 * 1024))  // 160 to 1600 KB -> 16 KB extra
+					new_size += _TSIZE(16 * 1024);
+				else if (new_size < _TSIZE(6400 * 1024)) // 1600 to 6400 KB -> 1% extra
 					new_size = (size_t)(new_size * 1.01);
 				else  // 6400 KB or more: Cap the extra margin at some reasonable compromise of speed vs. mem usage: 64 KB
-					new_size += (64 * 1024);
+					new_size += _TSIZE(64 * 1024);
 				if (new_size > g_MaxVarCapacity && aObeyMaxMem) // v1.0.43.03: aObeyMaxMem was added since some callers aren't supposed to obey it.
 					new_size = g_MaxVarCapacity;  // which has already been verified to be enough.
 			}

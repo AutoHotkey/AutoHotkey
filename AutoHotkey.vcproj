@@ -2,7 +2,7 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9.00"
-	Name="AutoHotkey"
+	Name="AutoHotkeyU"
 	ProjectGUID="{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}"
 	RootNamespace="AutoHotkey"
 	Keyword="Win32Proj"
@@ -50,7 +50,7 @@
 				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="2"
 				WarningLevel="3"
-				Detect64BitPortabilityProblems="true"
+				Detect64BitPortabilityProblems="false"
 				DebugInformationFormat="4"
 			/>
 			<Tool
@@ -65,7 +65,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="wsock32.lib winmm.lib version.lib comctl32.lib"
-				OutputFile="$(OutDir)/AutoHotkey.exe"
+				OutputFile="$(OutDir)/AutoHotkeyU.exe"
 				LinkIncremental="2"
 				GenerateDebugInformation="true"
 				ProgramDatabaseFile="$(OutDir)/AutoHotkey.pdb"
@@ -73,7 +73,7 @@
 				StackReserveSize="4194304"
 				StackCommitSize="0"
 				TerminalServerAware="1"
-				OptimizeForWindows98="1"
+				OptimizeForWindows98="0"
 				RandomizedBaseAddress="1"
 				TargetMachine="1"
 			/>
@@ -151,7 +151,7 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/SAFESEH:NO /Verbose"
 				AdditionalDependencies="wsock32.lib winmm.lib version.lib comctl32.lib"
-				OutputFile="$(OutDir)/AutoHotkey.exe"
+				OutputFile="$(OutDir)/AutoHotkeyU.exe"
 				LinkIncremental="1"
 				IgnoreDefaultLibraryNames=""
 				GenerateDebugInformation="false"
@@ -187,7 +187,7 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
-				CommandLine="upx --best --no-lzma --filter=73 --compress-icons=0 release\AutoHotkey.exe"
+				CommandLine="upx --best --no-lzma --filter=73 --compress-icons=0 release\AutoHotkeyU.exe"
 			/>
 		</Configuration>
 		<Configuration
@@ -339,7 +339,8 @@
 				ShowProgress="0"
 				OutputFile="$(OutDir)/AutoHotkeySC.bin"
 				LinkIncremental="1"
-				IgnoreDefaultLibraryNames=""
+				IgnoreAllDefaultLibraries="false"
+				IgnoreDefaultLibraryNames="libcmt.lib"
 				GenerateDebugInformation="false"
 				SubSystem="2"
 				StackReserveSize="4194304"
@@ -371,6 +372,7 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
+				CommandLine="if not exist &quot;$(SolutionDir)Release\AutoHotkey.exe&quot; goto TryDebugBuild&#x0D;&#x0A;&quot;$(SolutionDir)Release\AutoHotkey.exe&quot; &quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;goto End&#x0D;&#x0A;:TryDebugBuild&#x0D;&#x0A;if not exist &quot;$(SolutionDir)Debug\AutoHotkey.exe&quot; goto TryLaunchDirectly&#x0D;&#x0A;&quot;$(SolutionDir)Debug\AutoHotkey.exe&quot; &quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;goto End&#x0D;&#x0A;:TryLaunchDirectly&#x0D;&#x0A;&quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;:End&#x0D;&#x0A;"
 			/>
 		</Configuration>
 	</Configurations>
