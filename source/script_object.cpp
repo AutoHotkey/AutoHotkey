@@ -514,11 +514,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 					{	// Don't do field->Assign() since it would do AddRef() and we would need to counter with Release().
 						field->symbol = SYM_OBJECT;
 						field->object = obj = new_obj;
-						if (mBase)
-						{
-							mBase->AddRef();
-							new_obj->mBase = mBase;
-						}
 					}
 					else
 					{	// Create() succeeded but Insert() failed, so free the newly created obj.

@@ -87,7 +87,7 @@ void DisguiseWinAltIfNeeded(vk_type aVK)
 		// unwanted effects in certain games):
 		&& ((aVK == VK_LWIN || aVK == VK_RWIN) && (sPrevVK == VK_LWIN || sPrevVK == VK_RWIN) && sSendMode != SM_PLAY
 			|| (aVK == VK_LMENU || (aVK == VK_RMENU && sTargetLayoutHasAltGr != CONDITION_TRUE)) && (sPrevVK == VK_LMENU || sPrevVK == VK_RMENU)))
-		KeyEvent(KEYDOWNANDUP, VK_CONTROL); // Disguise it to suppress Start Menu or prevent activation of active window's menu bar.
+		KeyEvent(KEYDOWNANDUP, g_MenuMaskKey); // Disguise it to suppress Start Menu or prevent activation of active window's menu bar.
 }
 
 
