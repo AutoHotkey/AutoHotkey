@@ -739,7 +739,7 @@ inline void global_init(global_struct &g)
 #define MY_WARN(n) __FILE__ "(" _S(__LINE__) ") : warning C" __S(n) ": "
 
 // These will be removed when things are done.
-#ifndef UNICODE_CHECKED
+#ifdef CONFIG_UNICODE_CHECK
 #define UNICODE_CHECK __declspec(deprecated(_T("Please check what you want are bytes or characters.")))
 UNICODE_CHECK inline size_t CHECK_SIZEOF(size_t n) { return n; }
 #define SIZEOF(c) CHECK_SIZEOF(sizeof(c))

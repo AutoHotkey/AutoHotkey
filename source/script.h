@@ -730,7 +730,7 @@ public:
 	Line *mRelatedLine;  // e.g. the "else" that belongs to this "if"
 	Line *mParentLine; // Indicates the parent (owner) of this line.
 
-#ifdef SCRIPT_DEBUG
+#ifdef CONFIG_DEBUGGER
 	Breakpoint *mBreakpoint;
 #endif
 
@@ -1785,7 +1785,7 @@ public:
 		: mFileIndex(aFileIndex), mLineNumber(aFileLineNumber), mActionType(aActionType)
 		, mAttribute(ATTR_NONE), mArgc(aArgc), mArg(aArg)
 		, mPrevLine(NULL), mNextLine(NULL), mRelatedLine(NULL), mParentLine(NULL)
-#ifdef SCRIPT_DEBUG
+#ifdef CONFIG_DEBUGGER
 		, mBreakpoint(NULL)
 #endif
 		{}
@@ -1933,7 +1933,7 @@ public:
 
 		ResultType result = mJumpToLine->ExecUntil(UNTIL_BLOCK_END, aResultToken);
 
-#ifdef SCRIPT_DEBUG
+#ifdef CONFIG_DEBUGGER
 		if (g_Debugger.IsConnected())
 		{
 			if (result == EARLY_RETURN)
@@ -2430,7 +2430,7 @@ class Script
 {
 private:
 	friend class Hotkey;
-#ifdef SCRIPT_DEBUG
+#ifdef CONFIG_DEBUGGER
 	friend class Debugger;
 #endif
 

@@ -14,7 +14,7 @@ freely, without restriction.
 
 #pragma once
 
-#ifndef SCRIPT_DEBUG
+#ifndef CONFIG_DEBUGGER
 
 #define DEBUGGER_STACK_PUSH(a,b,c,d)
 #define DEBUGGER_STACK_POP()

@@ -910,7 +910,7 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 					f.mLazyVar[v]->ReleaseObject();
 		}
 	}
-#ifdef SCRIPT_DEBUG // L34: Exit debugger *after* the above to allow debugging of any invoked __Delete handlers.
+#ifdef CONFIG_DEBUGGER // L34: Exit debugger *after* the above to allow debugging of any invoked __Delete handlers.
 	g_Debugger.Exit(aExitReason);
 #endif
 
@@ -10494,7 +10494,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				sLogNext = 0;
 		}
 
-#ifdef SCRIPT_DEBUG
+#ifdef CONFIG_DEBUGGER
 		if (g_Debugger.IsConnected() && line->mActionType != ACT_WHILE) // L31: PreExecLine of ACT_WHILE is now handled in PerformLoopWhile() where inspecting A_Index will yield the correct result.
 			g_Debugger.PreExecLine(line);
 #endif
@@ -11661,7 +11661,7 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 
 	for (;; ++g.mLoopIteration)
 	{
-#ifdef SCRIPT_DEBUG
+#ifdef CONFIG_DEBUGGER
 		// L31: Let the debugger break at the 'While' line each iteration. Before this change,
 		// a While loop with empty body such as While FuncWithSideEffect() {} would be "hit"
 		// (via breakpoint or step) only once even if the loop had multiple iterations.

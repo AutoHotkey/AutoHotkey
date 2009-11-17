@@ -41,7 +41,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;SCRIPT_DEBUG;UNICODE_CHECKED"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;SCRIPT_DEBUG"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
@@ -126,7 +126,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				OmitFramePointers="true"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;UNICODE_CHECKED"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS"
 				StringPooling="true"
 				ExceptionHandling="0"
 				BasicRuntimeChecks="0"
@@ -219,7 +219,7 @@
 				EnableIntrinsicFunctions="true"
 				FavorSizeOrSpeed="2"
 				OmitFramePointers="true"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;AUTOHOTKEYSC;UNICODE_CHECKED"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;AUTOHOTKEYSC"
 				StringPooling="true"
 				ExceptionHandling="0"
 				RuntimeLibrary="0"
@@ -312,7 +312,7 @@
 				EnableIntrinsicFunctions="true"
 				FavorSizeOrSpeed="2"
 				OmitFramePointers="true"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;AUTOHOTKEYSC;UNICODE_CHECKED"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;AUTOHOTKEYSC"
 				StringPooling="true"
 				ExceptionHandling="0"
 				RuntimeLibrary="2"
@@ -541,6 +541,10 @@
 			</File>
 			<File
 				RelativePath=".\source\clipboard.h"
+				>
+			</File>
+			<File
+				RelativePath=".\source\config.h"
 				>
 			</File>
 			<File

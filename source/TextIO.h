@@ -116,6 +116,8 @@ public:
 	//int Format(LPCSTR fmt, ...);
 
 	bool AtEOF()
+	// The behavior isn't the same with feof().
+	// It checks the position of the file pointer, too.
 	{
 		if (mEOF)
 			return true;

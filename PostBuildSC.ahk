@@ -1,11 +1,12 @@
 #NoEnv
 ; This file clears the checksum of the AutoHotkeySC.bin files.
-; It also a demo of the new, object oriented, advanced file IO.
+; It's also a demo of the new, object oriented, and advanced file IO.
 
 FixSC("SC (self-contained)")
 FixSC("SC (minimum size)")
 
-FixSC(folder){
+FixSC(folder)
+{
 	scbin := A_ScriptDir . folder . "\AutoHotkeySC.bin"
 	IfNotExist %scbin%
 		return

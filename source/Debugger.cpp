@@ -14,14 +14,14 @@ freely, without restriction.
 
 #include "stdafx.h"
 
-#ifdef SCRIPT_DEBUG
+#ifdef CONFIG_DEBUGGER
 
 // helper macro for WriteF()
 #define U4T(s) CStringUTF8FromTChar(s).GetString()
 
 #include "defines.h"
-#include <Ws2tcpip.h>
-#include <Wspiapi.h> // for getaddrinfo() on versions of Windows earlier than XP.
+#include <ws2tcpip.h>
+#include <wspiapi.h> // for getaddrinfo() on versions of Windows earlier than XP.
 #include <stdarg.h>
 //#include "Debugger.h" // included by globaldata.h
 #include "globaldata.h" // for access to many global vars

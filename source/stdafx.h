@@ -82,3 +82,5 @@ GNU General Public License for more details.
 #define WM_MOUSEHWHEEL      0x020E
 #define MOUSEEVENTF_HWHEEL  0x01000 /* hwheel button rolled */
 #endif
+
+#include "config.h" // compile-time configrations

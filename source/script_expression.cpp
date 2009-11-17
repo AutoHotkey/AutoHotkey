@@ -637,7 +637,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 
 				aResult = func.Call(&this_token); // Call the UDF.
 
-#ifdef SCRIPT_DEBUG
+#ifdef CONFIG_DEBUGGER
 				// L31: Break at this line (from which the function was called).  This makes it easier to follow
 				// program flow while stepping, especially when a single line contains multiple UDF-calls.
 				if (g_Debugger.ShouldBreakAfterFunctionCall())

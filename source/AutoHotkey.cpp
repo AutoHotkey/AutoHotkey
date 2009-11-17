@@ -113,7 +113,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 				return CRITICAL_ERROR;
 		}
 #endif
-#ifdef SCRIPT_DEBUG
+#ifdef CONFIG_DEBUGGER
 		// Allow a debug session to be initiated by command-line.
 		else if (!g_Debugger.IsConnected() && !_tcsnicmp(param, _T("/Debug"), 6) && (param[6] == '\0' || param[6] == '='))
 		{
@@ -310,7 +310,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			InitCommonControls();
 	}
 
-#ifdef SCRIPT_DEBUG
+#ifdef CONFIG_DEBUGGER
 	// Initiate debug session now if applicable.
 	if (!g_DebuggerHost.IsEmpty() && g_Debugger.Connect(g_DebuggerHost, g_DebuggerPort) == DEBUGGER_E_OK)
 	{

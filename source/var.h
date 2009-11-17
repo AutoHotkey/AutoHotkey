@@ -558,7 +558,7 @@ public:
 		return (mType == VAR_ALIAS) ? mAliasFor->mType : mType;
 	}
 
-#ifdef SCRIPT_DEBUG
+#ifdef CONFIG_DEBUGGER
 	__forceinline VarTypeType RealType()
 	{
 		return mType;

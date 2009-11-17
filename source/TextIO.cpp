@@ -176,10 +176,14 @@ bool TextFile::_Open(LPCTSTR aFileSpec, DWORD aFlags)
 			dwCreationDisposition = CREATE_ALWAYS;
 			break;
 		case TextStream::APPEND:
-		case TextStream::UPDATE:
 			dwDesiredAccess = GENERIC_WRITE | GENERIC_READ;
 			dwShareMode = 0;
 			dwCreationDisposition = OPEN_ALWAYS;
+			break;
+		case TextStream::UPDATE:
+			dwDesiredAccess = GENERIC_WRITE | GENERIC_READ;
+			dwShareMode = 0;
+			dwCreationDisposition = OPEN_EXISTING;
 			break;
 	}
 
@@ -305,7 +309,7 @@ public:
 					
 					if (!_tcsicmp(field + 3, _T("Read"))) // RawRead
 						iReadWrite = 1;
-					else if (!_tcsicmp(field + 3, _T("Write"))) // ReadWrite
+					else if (!_tcsicmp(field + 3, _T("Write"))) // RawWrite
 						iReadWrite = 2;
 					if (iReadWrite)
 					// Reference: BIF_NumGet
