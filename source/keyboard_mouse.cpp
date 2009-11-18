@@ -697,7 +697,7 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 		else // Encountered a character other than ^+!#{} ... or we're in raw mode.
 		{
 #ifdef UNICODE
-			if (*aKeys > 0xFF)
+			if (*aKeys > VK_MAX)
 			{
 				SendUnicodeChar(*aKeys, mods_for_next_key | persistent_modifiers_for_this_SendKeys, sSendMode ? sEventModifiersLR : GetModifierLRState());
 				DoKeyDelay();
@@ -3855,7 +3855,7 @@ vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandl
 	// of text during load, is that on either side of the COMPOSITE_DELIMITER (e.g. " then ").
 
 	if (!aText[1]) // _tcslen(aText) == 1
-		return CharToVKAndModifiers((char) *aText, pModifiersLR, aKeybdLayout); // Making this a function simplifies things because it can do early return, etc.
+		return CharToVKAndModifiers(*aText, pModifiersLR, aKeybdLayout); // Making this a function simplifies things because it can do early return, etc.
 
 	if (aAllowExplicitVK && _totupper(aText[0]) == 'V' && _totupper(aText[1]) == 'K')
 		return (vk_type)_tcstol(aText + 2, NULL, 16);  // Convert from hex.
@@ -3875,7 +3875,7 @@ vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandl
 
 
 
-vk_type CharToVKAndModifiers(char aChar, modLR_type *pModifiersLR, HKL aKeybdLayout)
+vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLayout)
 // If non-NULL, pModifiersLR contains the initial set of modifiers provided by the caller, to which
 // we add any extra modifiers required to realize aChar.
 {
