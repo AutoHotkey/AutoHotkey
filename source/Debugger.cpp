@@ -1915,7 +1915,7 @@ int Debugger::Buffer::WriteFileURI(const char *aPath)
 	// Calculate required buffer size for path after encoding.
 	for (const char *ptr = aPath; c = *ptr; ++ptr)
 	{
-		if (isalnum(c) || strchr("-_.!~*'()/\\", c))
+		if (c_isalnum(c) || strchr("-_.!~*'()/\\", c))
 			++len;
 		else
 			len += 3;
@@ -1930,7 +1930,7 @@ int Debugger::Buffer::WriteFileURI(const char *aPath)
 	// Write to the buffer, encoding as we go.
 	for (const char *ptr = aPath; c = *ptr; ++ptr)
 	{
-		if (isalnum(c) || strchr("-_.!~*()/", c))
+		if (c_isalnum(c) || strchr("-_.!~*()/", c))
 		{
 			mData[mDataUsed++] = (char)c;
 		}

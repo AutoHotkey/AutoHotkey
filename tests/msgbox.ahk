@@ -1,2 +1,2 @@
-﻿MsgBox こにちは
+MsgBox こにちは
 MsgBox 中文

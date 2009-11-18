@@ -870,7 +870,7 @@ public:
 	// it might introduce ambiguity in the differentiation of things like:
 	//    : & x::hotkey action
 	//    : & *::abbrev with leading colon::
-	#define IS_HOTSTRING_OPTION(chr) (_istalnum(chr) || _tcschr(_T("?*- \t"), chr))
+	#define IS_HOTSTRING_OPTION(chr) (c_isalnum(chr) || _tcschr(_T("?*- \t"), chr))
 	// The characters below are ordered with most-often used ones first, for performance:
 	#define DEFINE_END_FLAGS \
 		TCHAR end_flags[] = {' ', g_delimiter, '(', '\t', '<', '>', ':', '=', '+', '-', '*', '/', '!', '~', '&', '|', '^', '[', '.', '?', '\0'}; // '\0' must be last.

@@ -16,7 +16,7 @@ GNU General Public License for more details.
 
 #include "stdafx.h" // pre-compiled headers
 #include <olectl.h> // for OleLoadPicture()
-#include <Gdiplus.h> // Used by LoadPicture().
+#include <gdiplus.h> // Used by LoadPicture().
 #include "util.h"
 #include "globaldata.h"
 
@@ -541,7 +541,7 @@ int tcslicmp(LPTSTR aBuf1, LPTSTR aBuf2, UINT aLength1, UINT aLength2)
 #ifndef UNICODE
 		if (   diff = (int)((UCHAR)toupper(aBuf1[i]) - (UCHAR)toupper(aBuf2[i]))   )
 #else
-		if (   diff = (int)(towupper(aBuf1[i]) - towupper(aBuf2[i]))   )
+		if (   diff = (int)(c_toupper(aBuf1[i]) - c_toupper(aBuf2[i]))   )
 #endif
 			return diff;
 	// Since the above didn't return, the strings are equal if they're the same length.
@@ -571,7 +571,7 @@ LPTSTR tcsrstr(LPTSTR aStr, LPCTSTR aPattern, StringCaseSenseType aStringCaseSen
 	TCHAR aPattern_last_char = aPattern[aPattern_length - 1];
 	TCHAR aPattern_last_char_lower = (aStringCaseSense == SCS_INSENSITIVE_LOCALE)
 		? (TCHAR)ltolower(aPattern_last_char)
-		: _totlower(aPattern_last_char);
+		: c_tolower(aPattern_last_char);
 
 	int occurrence = 0;
 	LPCTSTR match_starting_pos = aStr + aStr_length - 1;
@@ -587,12 +587,12 @@ LPTSTR tcsrstr(LPTSTR aStr, LPCTSTR aPattern, StringCaseSenseType aStringCaseSen
 		{
 			if (aStringCaseSense == SCS_INSENSITIVE) // The most common mode is listed first for performance.
 			{
-				if (_totlower(*last_char_match) == aPattern_last_char_lower)
+				if (c_tolower(*last_char_match) == aPattern_last_char_lower)
 					break;
 			}
 			else if (aStringCaseSense == SCS_INSENSITIVE_LOCALE)
 			{
-				if ((TCHAR)ltolower(*last_char_match) == aPattern_last_char_lower)
+				if (ltolower(*last_char_match) == aPattern_last_char_lower)
 					break;
 			}
 			else // Case sensitive.
@@ -624,7 +624,7 @@ LPTSTR tcsrstr(LPTSTR aStr, LPCTSTR aPattern, StringCaseSenseType aStringCaseSen
 
 			if (aStringCaseSense == SCS_INSENSITIVE) // The most common mode is listed first for performance.
 			{
-				if (_totlower(*full_match) != _totlower(*cp))
+				if (c_tolower(*full_match) != c_tolower(*cp))
 					break;
 			}
 			else if (aStringCaseSense == SCS_INSENSITIVE_LOCALE)
@@ -788,7 +788,7 @@ LPTSTR lstrcasestr(LPCTSTR phaystack, LPCTSTR pneedle)
 	haystack = (const TBYTE *) phaystack;
 	needle = (const TBYTE *) pneedle;
 
-	bl = (UINT)(size_t)ltolower(*needle); // Double cast avoids compiler warning without increasing code size.
+	bl = (UINT)ltolower(*needle);
 	if (bl != 0)
 	{
 		// Scan haystack until the first character of needle is found:
@@ -803,10 +803,10 @@ LPTSTR lstrcasestr(LPCTSTR phaystack, LPCTSTR pneedle)
 		while ((cl != bl) && (cl != bu));
 
 		// See if the rest of needle is a one-for-one match with this part of haystack:
-		cl = (UINT)(size_t)ltolower(*++needle);
+		cl = (UINT)ltolower(*++needle);
 		if (cl == '\0')  // Since needle consists of only one character, it is already a match as found above.
 			goto foundneedle;
-		cu = (UINT)(size_t)ltoupper(cl);
+		cu = (UINT)ltoupper(cl);
 		++needle;
 		goto jin;
 		
@@ -839,23 +839,23 @@ jin:
 			
 			rhaystack = haystack-- + 1;
 			rneedle = needle;
-			a = (UINT)(size_t)ltolower(*rneedle);
+			a = (UINT)ltolower(*rneedle);
 			
-			if ((UINT)(size_t)ltolower(*rhaystack) == (int) a)
+			if ((UINT)ltolower(*rhaystack) == a)
 			do
 			{
 				if (a == '\0')
 					goto foundneedle;
 				++rhaystack;
-				a = (UINT)(size_t)ltolower(*++needle);
-				if ((UINT)(size_t)ltolower(*rhaystack) != (int) a)
+				a = (UINT)ltolower(*++needle);
+				if ((UINT)ltolower(*rhaystack) != a)
 					break;
 				if (a == '\0')
 					goto foundneedle;
 				++rhaystack;
-				a = (UINT)(size_t)ltolower(*++needle);
+				a = (UINT)ltolower(*++needle);
 			}
-			while ((UINT)(size_t)ltolower(*rhaystack) == (int) a);
+			while ((UINT)ltolower(*rhaystack) == a);
 			
 			needle = rneedle;		/* took the register-poor approach */
 			

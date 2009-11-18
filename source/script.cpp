@@ -1455,7 +1455,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						break;
 
 					is_continuation_line = false; // Set default.
-					switch(_totupper(*next_buf)) // Above has ensured *next_buf != '\0' (toupper might have problems with '\0').
+					switch(c_toupper(*next_buf)) // Above has ensured *next_buf != '\0' (toupper might have problems with '\0').
 					{
 					case 'A': // "AND".
 						// See comments in the default section further below.
@@ -3973,7 +3973,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					LPTSTR cp;
 					for (;;) // L35: Loop to fix x.y.z() and similar.
 					{
-						for (cp = id_begin; _istalnum(*cp) || *cp == '_'; ++cp); // Find end of identifier.
+						for (cp = id_begin; c_isalnum(*cp) || *cp == '_'; ++cp); // Find end of identifier.
 						if (cp == id_begin)
 							// No valid identifier, doesn't look like a valid expression.
 							break;
@@ -9564,7 +9564,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 
 							// Find the end of the operand (".operand"):
 							//for (op_end = cp; !strchr(EXPR_OPERAND_TERMINATORS "\"", *op_end); ++op_end);
-							for (op_end = cp; isalnum(*op_end) || *op_end == '_'; ++op_end);
+							for (op_end = cp; c_isalnum(*op_end) || *op_end == '_'; ++op_end);
 
 							if (!_tcschr(EXPR_OPERAND_TERMINATORS, *op_end))
 								return LineError(_T("Invalid character in dotted identifier."), FAIL, op_end);
@@ -11452,7 +11452,8 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 			// Like AutoIt3, the empty string is considered to be alphabetic, which is only slightly debatable.
 			if_condition = true;
 			for (cp = ARG1; *cp; ++cp)
-				if (!IsCharAlphaNumeric(*cp)) // Use this to better support chars from non-English languages.
+				//if (!IsCharAlphaNumeric(*cp)) // Use this to better support chars from non-English languages.
+				if (!a_isalnum(*cp)) // But some users don't like it, Chinese users for example.
 				{
 					if_condition = false;
 					break;
@@ -11462,7 +11463,8 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 			// Like AutoIt3, the empty string is considered to be alphabetic, which is only slightly debatable.
 			if_condition = true;
 			for (cp = ARG1; *cp; ++cp)
-				if (!IsCharAlpha(*cp)) // Use this to better support chars from non-English languages.
+				//if (!IsCharAlpha(*cp)) // Use this to better support chars from non-English languages.
+				if (!a_isalpha(*cp)) // But some users don't like it, Chinese users for example.
 				{
 					if_condition = false;
 					break;
@@ -11471,7 +11473,8 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 		case VAR_TYPE_UPPER:
 			if_condition = true;
 			for (cp = ARG1; *cp; ++cp)
-				if (!IsCharUpper(*cp)) // Use this to better support chars from non-English languages.
+				//if (!IsCharUpper(*cp)) // Use this to better support chars from non-English languages.
+				if (!a_isupper(*cp)) // But some users don't like it, Chinese users for example.
 				{
 					if_condition = false;
 					break;
@@ -11480,7 +11483,8 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 		case VAR_TYPE_LOWER:
 			if_condition = true;
 			for (cp = ARG1; *cp; ++cp)
-				if (!IsCharLower(*cp)) // Use this to better support chars from non-English languages.
+				//if (!IsCharLower(*cp)) // Use this to better support chars from non-English languages.
+				if (!a_islower(*cp)) // But some users don't like it, Chinese users for example.
 				{
 					if_condition = false;
 					break;

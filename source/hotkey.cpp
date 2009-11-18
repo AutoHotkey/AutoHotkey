@@ -2338,7 +2338,7 @@ void Hotstring::DoReplace(LPARAM alParam)
 		if (case_conform_mode == CASE_CONFORM_ALL_CAPS)
 			CharUpper(start_of_replacement);
 		else if (case_conform_mode == CASE_CONFORM_FIRST_CAP)
-			*start_of_replacement = (TCHAR)ltoupper(*start_of_replacement);
+			*start_of_replacement = ltoupper(*start_of_replacement);
 		if (!mOmitEndChar) // The ending character (if present) needs to be sent too.
 		{
 			// Send the final character in raw mode so that chars such as !{} are sent properly.

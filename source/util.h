@@ -57,8 +57,45 @@ EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 // v1.0.43.04: The following are macros to avoid crash bugs caused by improper casting, namely a failure to cast
 // a signed char to UCHAR before promoting it to LPSTR, which crashes since CharLower/Upper would interpret
 // such a high unsigned value as an address rather than a single char.
-#define ltolower(ch) CharLower((LPTSTR)(TBYTE)(ch))  // "L" prefix stands for "locale", like lstrcpy.
-#define ltoupper(ch) CharUpper((LPTSTR)(TBYTE)(ch))  // For performance, some callers don't want return value cast to char.
+#ifdef UNICODE
+#define ltolower(ch) (TBYTE)CharLower((LPTSTR)(TBYTE)(ch))  // "L" prefix stands for "locale", like lstrcpy.
+#define ltoupper(ch) (TBYTE)CharUpper((LPTSTR)(TBYTE)(ch))  // For performance, some callers don't want return value cast to char.
+#endif
+
+
+// Locale independent ctype (applied to the ASCII characters only)
+// isctype/iswctype affacts the some non-ASCII characters.
+inline int c_isctype(int c, int type)
+{
+	return (c & (~0x7F)) ? 0 : _isctype(c, type);
+}
+
+#define c_isalpha(c)	c_isctype(c, _ALPHA)
+#define c_isalnum(c)	c_isctype(c, _ALPHA | _DIGIT)
+#define c_isdigit(c)	c_isctype(c, _DIGIT)
+#define c_isxdigit(c)	c_isctype(c, _HEX)
+#define c_isupper(c)	c_isctype(c, _UPPER)
+#define c_islower(c)	c_isctype(c, _LOWER)
+#define c_isprint(c)	c_isctype(c, _ALPHA | _BLANK | _DIGIT | _PUNCT)
+#define c_isspace(c)	c_isctype(c, _SPACE)
+
+inline int c_toupper(int c)
+{
+	return c_islower(c) ? toupper(c) : c;
+}
+inline int c_tolower(int c)
+{
+	return c_isupper(c) ? tolower(c) : c;
+}
+
+// Runtime setting dependent. "a" prefix stand for AutoHotkey.
+#define a_isalpha(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharAlpha(c) : c_isalpha(c)))
+#define a_isalnum(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharAlphaNumeric(c) : c_isalnum(c)))
+#define a_isupper(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharUpper(c) : c_isupper(c)))
+#define a_islower(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharLower(c) : c_islower(c)))
+
+#define a_toupper(c)	((TCHAR)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? ltoupper(c) : c_toupper(c)))
+#define a_tolower(c)	((TCHAR)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? ltolower(c) : c_tolower(c)))
 
 // NOTE: MOVING THINGS OUT OF THIS FILE AND INTO util.cpp can hurt benchmarks by 10% or more, so be careful
 // when doing so (even when the change seems inconsequential, it can impact benchmarks due to quirks of code
