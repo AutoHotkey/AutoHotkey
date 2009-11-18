@@ -541,7 +541,7 @@ int tcslicmp(LPTSTR aBuf1, LPTSTR aBuf2, UINT aLength1, UINT aLength2)
 #ifndef UNICODE
 		if (   diff = (int)((UCHAR)toupper(aBuf1[i]) - (UCHAR)toupper(aBuf2[i]))   )
 #else
-		if (   diff = (int)(c_toupper(aBuf1[i]) - c_toupper(aBuf2[i]))   )
+		if (   diff = (int)(ctoupper(aBuf1[i]) - ctoupper(aBuf2[i]))   )
 #endif
 			return diff;
 	// Since the above didn't return, the strings are equal if they're the same length.
@@ -571,7 +571,7 @@ LPTSTR tcsrstr(LPTSTR aStr, LPCTSTR aPattern, StringCaseSenseType aStringCaseSen
 	TCHAR aPattern_last_char = aPattern[aPattern_length - 1];
 	TCHAR aPattern_last_char_lower = (aStringCaseSense == SCS_INSENSITIVE_LOCALE)
 		? (TCHAR)ltolower(aPattern_last_char)
-		: c_tolower(aPattern_last_char);
+		: ctolower(aPattern_last_char);
 
 	int occurrence = 0;
 	LPCTSTR match_starting_pos = aStr + aStr_length - 1;
@@ -587,7 +587,7 @@ LPTSTR tcsrstr(LPTSTR aStr, LPCTSTR aPattern, StringCaseSenseType aStringCaseSen
 		{
 			if (aStringCaseSense == SCS_INSENSITIVE) // The most common mode is listed first for performance.
 			{
-				if (c_tolower(*last_char_match) == aPattern_last_char_lower)
+				if (ctolower(*last_char_match) == aPattern_last_char_lower)
 					break;
 			}
 			else if (aStringCaseSense == SCS_INSENSITIVE_LOCALE)
@@ -624,7 +624,7 @@ LPTSTR tcsrstr(LPTSTR aStr, LPCTSTR aPattern, StringCaseSenseType aStringCaseSen
 
 			if (aStringCaseSense == SCS_INSENSITIVE) // The most common mode is listed first for performance.
 			{
-				if (c_tolower(*full_match) != c_tolower(*cp))
+				if (ctolower(*full_match) != ctolower(*cp))
 					break;
 			}
 			else if (aStringCaseSense == SCS_INSENSITIVE_LOCALE)

@@ -65,37 +65,37 @@ EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 
 // Locale independent ctype (applied to the ASCII characters only)
 // isctype/iswctype affacts the some non-ASCII characters.
-inline int c_isctype(int c, int type)
+inline int cisctype(int c, int type)
 {
 	return (c & (~0x7F)) ? 0 : _isctype(c, type);
 }
 
-#define c_isalpha(c)	c_isctype(c, _ALPHA)
-#define c_isalnum(c)	c_isctype(c, _ALPHA | _DIGIT)
-#define c_isdigit(c)	c_isctype(c, _DIGIT)
-#define c_isxdigit(c)	c_isctype(c, _HEX)
-#define c_isupper(c)	c_isctype(c, _UPPER)
-#define c_islower(c)	c_isctype(c, _LOWER)
-#define c_isprint(c)	c_isctype(c, _ALPHA | _BLANK | _DIGIT | _PUNCT)
-#define c_isspace(c)	c_isctype(c, _SPACE)
+#define cisalpha(c)		cisctype(c, _ALPHA)
+#define cisalnum(c)		cisctype(c, _ALPHA | _DIGIT)
+#define cisdigit(c)		cisctype(c, _DIGIT)
+#define cisxdigit(c)	cisctype(c, _HEX)
+#define cisupper(c)		cisctype(c, _UPPER)
+#define cislower(c)		cisctype(c, _LOWER)
+#define cisprint(c)		cisctype(c, _ALPHA | _BLANK | _DIGIT | _PUNCT)
+#define cisspace(c)		cisctype(c, _SPACE)
 
-inline int c_toupper(int c)
+inline int ctoupper(int c)
 {
-	return c_islower(c) ? toupper(c) : c;
+	return cislower(c) ? toupper(c) : c;
 }
-inline int c_tolower(int c)
+inline int ctolower(int c)
 {
-	return c_isupper(c) ? tolower(c) : c;
+	return cisupper(c) ? tolower(c) : c;
 }
 
 // Runtime setting dependent. "a" prefix stand for AutoHotkey.
-#define a_isalpha(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharAlpha(c) : c_isalpha(c)))
-#define a_isalnum(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharAlphaNumeric(c) : c_isalnum(c)))
-#define a_isupper(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharUpper(c) : c_isupper(c)))
-#define a_islower(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharLower(c) : c_islower(c)))
+#define aisalpha(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharAlpha(c) : cisalpha(c)))
+#define aisalnum(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharAlphaNumeric(c) : cisalnum(c)))
+#define aisupper(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharUpper(c) : cisupper(c)))
+#define aislower(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharLower(c) : cislower(c)))
 
-#define a_toupper(c)	((TCHAR)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? ltoupper(c) : c_toupper(c)))
-#define a_tolower(c)	((TCHAR)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? ltolower(c) : c_tolower(c)))
+#define atoupper(c)	((TCHAR)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? ltoupper(c) : ctoupper(c)))
+#define atolower(c)	((TCHAR)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? ltolower(c) : ctolower(c)))
 
 // NOTE: MOVING THINGS OUT OF THIS FILE AND INTO util.cpp can hurt benchmarks by 10% or more, so be careful
 // when doing so (even when the change seems inconsequential, it can impact benchmarks due to quirks of code
