@@ -610,7 +610,7 @@ struct global_struct
 	UCHAR StringCaseSense; // On/Off/Locale
 	bool StoreCapslockMode;
 	bool AutoTrim;
-	bool FormatIntAsHex;
+	char FormatInt;
 	bool MsgBoxTimedOut; // Doesn't require initialization.
 	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
 	bool ListLinesIsEnabled;
@@ -705,7 +705,7 @@ inline void global_init(global_struct &g)
 	g.StoreCapslockMode = true;  // AutoIt2 (and probably 3's) default, and it makes a lot of sense.
 	g.AutoTrim = true;  // AutoIt2's default, and overall the best default in most cases.
 	_tcscpy(g.FormatFloat, _T("%0.6f"));
-	g.FormatIntAsHex = false;
+	g.FormatInt = 'd';
 	g.ListLinesIsEnabled = true;
 	g.Encoding = CP_ACP;
 	// For FormatFloat:

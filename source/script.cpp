@@ -13570,11 +13570,11 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			{
 			case 'd':
 			case 'D':
-				g.FormatIntAsHex = false;
+				g.FormatInt = 'D';
 				break;
 			case 'h':
 			case 'H':
-				g.FormatIntAsHex = true;
+				g.FormatInt = (char) *ARG2;
 				break;
 			// Otherwise, since the first letter isn't recongized, do nothing since 99% of the time such a
 			// probably would be caught at load-time.

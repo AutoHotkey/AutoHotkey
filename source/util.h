@@ -479,7 +479,7 @@ inline double ATOF(LPCTSTR buf)
 
 inline LPTSTR ITOA(int value, LPTSTR buf)
 {
-	if (g->FormatIntAsHex)
+	if (g->FormatInt == 'h')
 	{
 		LPTSTR our_buf_temp = buf;
 		// Negative hex numbers need special handling, otherwise something like zero minus one would create
@@ -493,13 +493,19 @@ inline LPTSTR ITOA(int value, LPTSTR buf)
 		// Must not return the result of the above because it's our_buf_temp and we want buf.
 		return buf;
 	}
+	else if (g->FormatInt == 'H') // uppercase
+	{
+		// This might slower than the above, but it should still faster than doing StringUpper in the script level
+		_stprintf(buf, _T("0x%X"), value);
+		return buf;
+	}
 	else
 		return _itot(value, buf, 10);
 }
 
 inline LPTSTR ITOA64(__int64 value, LPTSTR buf)
 {
-	if (g->FormatIntAsHex)
+	if (g->FormatInt == 'h')
 	{
 		LPTSTR our_buf_temp = buf;
 		if (value < 0)
@@ -510,18 +516,28 @@ inline LPTSTR ITOA64(__int64 value, LPTSTR buf)
 		// Must not return the result of the above because it's our_buf_temp and we want buf.
 		return buf;
 	}
+	else if (g->FormatInt == 'H') // uppercase
+	{
+		_stprintf(buf, _T("0x%I64X"), value);
+		return buf;
+	}
 	else
 		return _i64tot(value, buf, 10);
 }
 
 inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 {
-	if (g->FormatIntAsHex)
+	if (g->FormatInt = 'h')
 	{
 		*buf = '0';
 		*(buf + 1) = 'x';
 		_ultot(value, buf + 2, 16);
 		// Must not return the result of the above because it's buf + 2 and we want buf.
+		return buf;
+	}
+	else if (g->FormatInt == 'H') // uppercase
+	{
+		_stprintf(buf, _T("0x%X"), value);
 		return buf;
 	}
 	else
@@ -532,11 +548,16 @@ inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 // Not currently used:
 inline LPTSTR UTOA64(unsigned __int64 value, LPTSTR buf) 
 {
-	if (g->FormatIntAsHex)
+	if (g->FormatInt == 'h')
 	{
 		*buf = '0';
 		*(buf + 1) = 'x';
 		return _ui64tot(value, buf + 2, 16);
+	}
+	else if (g->FormatInt == 'H') // uppercase
+	{
+		_stprintf(buf, _T("0x%I64X"), value);
+		return buf;
 	}
 	else
 		return _ui64tot(value, buf, 10);

@@ -10500,8 +10500,7 @@ VarSizeType BIV_FormatInteger(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (aBuf)
 	{
-		// For backward compatibility (due to StringCaseSense), never change the case used here:
-		*aBuf++ = g->FormatIntAsHex ? 'H' : 'D';
+		*aBuf++ = g->FormatInt;
 		*aBuf = '\0';
 	}
 	return 1;
