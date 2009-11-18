@@ -65,7 +65,7 @@ EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 
 // Locale independent ctype (applied to the ASCII characters only)
 // isctype/iswctype affacts the some non-ASCII characters.
-inline int cisctype(int c, int type)
+inline int cisctype(TBYTE c, int type)
 {
 	return (c & (~0x7F)) ? 0 : _isctype(c, type);
 }
@@ -79,11 +79,11 @@ inline int cisctype(int c, int type)
 #define cisprint(c)		cisctype(c, _ALPHA | _BLANK | _DIGIT | _PUNCT)
 #define cisspace(c)		cisctype(c, _SPACE)
 
-inline int ctoupper(int c)
+inline TCHAR ctoupper(TBYTE c)
 {
 	return cislower(c) ? toupper(c) : c;
 }
-inline int ctolower(int c)
+inline TCHAR ctolower(TBYTE c)
 {
 	return cisupper(c) ? tolower(c) : c;
 }
@@ -94,8 +94,8 @@ inline int ctolower(int c)
 #define aisupper(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharUpper(c) : cisupper(c)))
 #define aislower(c)	((int)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? IsCharLower(c) : cislower(c)))
 
-#define atoupper(c)	((TCHAR)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? ltoupper(c) : ctoupper(c)))
-#define atolower(c)	((TCHAR)((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? ltolower(c) : ctolower(c)))
+#define atoupper(c)	((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? ltoupper(c) : ctoupper(c))
+#define atolower(c)	((::g->StringCaseSense == SCS_INSENSITIVE_LOCALE) ? ltolower(c) : ctolower(c))
 
 // NOTE: MOVING THINGS OUT OF THIS FILE AND INTO util.cpp can hurt benchmarks by 10% or more, so be careful
 // when doing so (even when the change seems inconsequential, it can impact benchmarks due to quirks of code
