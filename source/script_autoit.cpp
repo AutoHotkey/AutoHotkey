@@ -904,8 +904,9 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 		control_index = ATOI(aValue) - 1;
 		if (control_index < 0)
 			return output_var.Assign();  // Let ErrorLevel tell the story.
-		dyn_buf = (LPTSTR)talloca(32768); // 32768 is the size Au3 uses for GETLINE and such.
-		*(LPINT)dyn_buf = 32768; // EM_GETLINE requires first word of string to be set to its size.
+		// jackieku: 32768 * sizeof(wchar_t) = 65536, which can not be stored in a unsigned 16bit integer.
+		dyn_buf = (LPTSTR)talloca(32767); // 32768 is the size Au3 uses for GETLINE and such.
+		*(LPWORD)dyn_buf = 32767; // EM_GETLINE requires first word of string to be set to its size.
 		if (   !SendMessageTimeout(control_window, EM_GETLINE, (WPARAM)control_index, (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 2000, &dwResult)
 			|| !dwResult   ) // due to the specified line number being greater than the number of lines in the edit control.
 			return output_var.Assign();
