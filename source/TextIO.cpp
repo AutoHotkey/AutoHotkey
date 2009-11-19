@@ -238,6 +238,7 @@ __int64 TextFile::_Length() const
 	return size.QuadPart;
 }
 
+#ifdef CONFIG_EXPERIMENTAL
 // FileObject: exports TextFile interfaces to the scripts.
 class FileObject : public Object
 {
@@ -423,7 +424,7 @@ void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		aResultToken.value_int64 = 0;
 	}
 }
-
+#endif
 
 //
 // TextMem

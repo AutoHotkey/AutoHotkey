@@ -13,5 +13,8 @@
 // A *lite* version of AutoHotkeyU perhaps.
 //#define CONFIG_AUTOHOTKEY_LITE
 
+// Includes experimental features
+#define CONFIG_EXPERIMENTAL
+
 // If you do not have ATL (Express version of VC++), undef this.
 #define HAVE_ATL

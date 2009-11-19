@@ -14417,6 +14417,7 @@ void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 }
 
 
+
 void BIF_GetKeyState(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	TCHAR key_name_buf[MAX_NUMBER_SIZE]; // Because aResultToken.buf is used for something else below.

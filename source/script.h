@@ -2802,8 +2802,10 @@ void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 
+#ifdef CONFIG_EXPERIMENTAL
 // Advanced file IO interfaces
 void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+#endif
 
 
 BOOL LegacyResultToBOOL(LPTSTR aResult);
