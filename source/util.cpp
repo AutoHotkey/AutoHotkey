@@ -384,7 +384,7 @@ SymbolType IsPureNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhites
 					// As written below, this actually tolerates malformed scientific notation such as numbers
 					// containing two or more E's (e.g. 1.0e4e+5e-6,).  But for performance and due to rarity,
 					// it seems best not to check for them.
-					if (_totupper(c) != 'E' // v1.0.46.11: Support scientific notation in floating point numbers.
+					if (ctoupper(c) != 'E' // v1.0.46.11: Support scientific notation in floating point numbers.
 						|| !(has_decimal_point && has_at_least_one_digit)) // But it must have a decimal point and at least one digit to the left of the 'E'. This avoids variable names like "1e4" from being seen as sci-notation literals (for backward compatibility). Some callers rely on this check.
 						return PURE_NOT_NUMERIC;
 					if (aBuf[1] == '-' || aBuf[1] == '+') // The optional sign is present on the exponent.
@@ -538,11 +538,7 @@ int tcslicmp(LPTSTR aBuf1, LPTSTR aBuf2, UINT aLength1, UINT aLength2)
 	UINT least_length = aLength1 < aLength2 ? aLength1 : aLength2;
 	int diff;
 	for (UINT i = 0; i < least_length; ++i)
-#ifndef UNICODE
-		if (   diff = (int)((UCHAR)toupper(aBuf1[i]) - (UCHAR)toupper(aBuf2[i]))   )
-#else
 		if (   diff = (int)(ctoupper(aBuf1[i]) - ctoupper(aBuf2[i]))   )
-#endif
 			return diff;
 	// Since the above didn't return, the strings are equal if they're the same length.
 	// Otherwise, the longer one is considered greater than the shorter one since the
@@ -690,11 +686,11 @@ LPTSTR tcscasestr(LPCTSTR phaystack, LPCTSTR pneedle)
 	haystack = (const TBYTE *) phaystack;
 	needle = (const TBYTE *) pneedle;
 
-	bl = _totlower(*needle);
+	bl = ctolower(*needle);
 	if (bl != '\0')
 	{
 		// Scan haystack until the first character of needle is found:
-		bu = _totupper(bl);
+		bu = ctoupper(bl);
 		haystack--;				/* possible ANSI violation */
 		do
 		{
@@ -705,10 +701,10 @@ LPTSTR tcscasestr(LPCTSTR phaystack, LPCTSTR pneedle)
 		while ((cl != bl) && (cl != bu));
 
 		// See if the rest of needle is a one-for-one match with this part of haystack:
-		cl = _totlower(*++needle);
+		cl = ctolower(*++needle);
 		if (cl == '\0')  // Since needle consists of only one character, it is already a match as found above.
 			goto foundneedle;
-		cu = _totupper(cl);
+		cu = ctoupper(cl);
 		++needle;
 		goto jin;
 		
@@ -741,23 +737,23 @@ jin:
 			
 			rhaystack = haystack-- + 1;
 			rneedle = needle;
-			a = _totlower(*rneedle);
+			a = ctolower(*rneedle);
 			
-			if (_totlower(*rhaystack) == (int) a)
+			if (ctolower(*rhaystack) == (int) a)
 			do
 			{
 				if (a == '\0')
 					goto foundneedle;
 				++rhaystack;
-				a = _totlower(*++needle);
-				if (_totlower(*rhaystack) != (int) a)
+				a = ctolower(*++needle);
+				if (ctolower(*rhaystack) != (int) a)
 					break;
 				if (a == '\0')
 					goto foundneedle;
 				++rhaystack;
-				a = _totlower(*++needle);
+				a = ctolower(*++needle);
 			}
-			while (_totlower(*rhaystack) == (int) a);
+			while (ctolower(*rhaystack) == (int) a);
 			
 			needle = rneedle;		/* took the register-poor approach */
 			
@@ -1327,7 +1323,7 @@ LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFullFileSpec)
 	if (length < 2 || length >= MAX_PATH) return aFullFileSpec;
 	// Start with something easy, the drive letter:
 	if (aFullFileSpec[1] == ':')
-		aFullFileSpec[0] = _totupper(aFullFileSpec[0]);
+		aFullFileSpec[0] = ctoupper(aFullFileSpec[0]);
 	// else it might be a UNC that has no drive letter.
 	TCHAR built_filespec[MAX_PATH], *dir_start, *dir_end;
 	if (dir_start = _tcschr(aFullFileSpec, ':'))

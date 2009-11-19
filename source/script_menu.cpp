@@ -774,7 +774,7 @@ ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, Label *aLabel, UserMenu
 
 void UserMenu::UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions)
 {
-	if (_totupper(*aOptions) == 'P')
+	if (ctoupper(*aOptions) == 'P')
 		aMenuItem->mPriority = _ttoi(aOptions + 1);
 }
 

@@ -1078,10 +1078,10 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	{
 		for (LPTSTR cp = aOptions; *cp; ++cp)
 		{
-			switch(_totupper(*cp))
+			switch(ctoupper(*cp))
 			{
 			case 'O': // v1.0.38.02.
-				if (_totupper(cp[1]) == 'N') // Full validation for maintainability.
+				if (ctoupper(cp[1]) == 'N') // Full validation for maintainability.
 				{
 					++cp; // Omit the 'N' from further consideration in case it ever becomes a valid option letter.
 					if (hk->mHookAction ? hk->EnableParent() : hk->Enable(*variant)) // Under these conditions, earlier logic has ensured variant is non-NULL.
@@ -2499,7 +2499,7 @@ void Hotstring::ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, Se
 	for (LPTSTR cp = aOptions; *cp && *cp != ':'; ++cp)
 	{
 		cp1 = cp + 1;
-		switch(_totupper(*cp))
+		switch(ctoupper(*cp))
 		{
 		case '*':
 			aEndCharRequired = (*cp1 == '0');
@@ -2544,7 +2544,7 @@ void Hotstring::ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, Se
 		case 'S':
 			if (*cp1)
 				++cp; // Skip over S's sub-letter (if any) to exclude it from  further consideration.
-			switch (_totupper(*cp1))
+			switch (ctoupper(*cp1))
 			{
 			// There is no means to choose SM_INPUT because it seems too rarely desired (since auto-replace
 			// hotstrings would then become interruptible, allowing the keystrokes of fast typists to get

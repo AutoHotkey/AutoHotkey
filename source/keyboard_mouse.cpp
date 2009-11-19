@@ -545,10 +545,10 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 
 				vk = TextToVK(aKeys, &mods_for_next_key, true, false, sTargetKeybdLayout); // false must be passed due to below.
 				sc = vk ? 0 : TextToSC(aKeys);  // If sc is 0, it will be resolved by KeyEvent() later.
-				if (!vk && !sc && _totupper(aKeys[0]) == 'V' && _totupper(aKeys[1]) == 'K')
+				if (!vk && !sc && ctoupper(aKeys[0]) == 'V' && ctoupper(aKeys[1]) == 'K')
 				{
 					LPTSTR sc_string = StrChrAny(aKeys + 2, _T("Ss")); // Look for the "SC" that demarks the scan code.
-					if (sc_string && _totupper(sc_string[1]) == 'C')
+					if (sc_string && ctoupper(sc_string[1]) == 'C')
 						sc = (sc_type)_tcstol(sc_string + 2, NULL, 16);  // Convert from hex.
 					// else leave sc set to zero and just get the specified VK.  This supports Send {VKnn}.
 					vk = (vk_type)_tcstol(aKeys + 2, NULL, 16);  // Convert from hex.
@@ -1891,7 +1891,7 @@ void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEvent
 				aVK = temp_vk;
 			else
 			{
-				switch (_totupper(*next_option))
+				switch (ctoupper(*next_option))
 				{
 				case 'D': aEventType = KEYDOWN; break;
 				case 'U': aEventType = KEYUP; break;
@@ -1959,7 +1959,7 @@ ResultType PerformMouse(ActionTypeType aActionType, LPTSTR aButton, LPTSTR aX1, 
 		, *aY2 ? ATOI(aY2) : COORD_UNSPECIFIED  //
 		, repeat_count, event_type
 		, *aSpeed ? ATOI(aSpeed) : g->DefaultMouseSpeed
-		, _totupper(*aOffsetMode) == 'R'); // aMoveOffset.
+		, ctoupper(*aOffsetMode) == 'R'); // aMoveOffset.
 
 	return OK; // For caller convenience.
 }
@@ -3834,7 +3834,7 @@ sc_type TextToSC(LPTSTR aText)
 		if (!_tcsicmp(g_key_to_sc[i].key_name, aText))
 			return g_key_to_sc[i].sc;
 	// Do this only after the above, in case any valid key names ever start with SC:
-	if (_totupper(*aText) == 'S' && _totupper(*(aText + 1)) == 'C')
+	if (ctoupper(*aText) == 'S' && ctoupper(*(aText + 1)) == 'C')
 		return (sc_type)_tcstol(aText + 2, NULL, 16);  // Convert from hex.
 	return 0; // Indicate "not found".
 }
@@ -3857,7 +3857,7 @@ vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandl
 	if (!aText[1]) // _tcslen(aText) == 1
 		return CharToVKAndModifiers(*aText, pModifiersLR, aKeybdLayout); // Making this a function simplifies things because it can do early return, etc.
 
-	if (aAllowExplicitVK && _totupper(aText[0]) == 'V' && _totupper(aText[1]) == 'K')
+	if (aAllowExplicitVK && ctoupper(aText[0]) == 'V' && ctoupper(aText[1]) == 'K')
 		return (vk_type)_tcstol(aText + 2, NULL, 16);  // Convert from hex.
 
 	for (int i = 0; i < g_key_to_vk_count; ++i)

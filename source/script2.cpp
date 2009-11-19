@@ -213,7 +213,7 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 
 	for (LPTSTR cp2, cp = options; *cp; ++cp)
 	{
-		switch(_totupper(*cp))
+		switch(ctoupper(*cp))
 		{
 		case 'A':  // Non-Always-on-top.  Synonymous with A0 in early versions.
 			// Decided against this enforcement.  In the enhancement mentioned below is ever done (unlikely),
@@ -232,7 +232,7 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 			if (!cp[1]) // Avoids out-of-bounds when the loop's own ++cp is done.
 				break;
 			++cp; // Always increment to omit the next char from consideration by the next loop iteration.
-			switch(_totupper(*cp))
+			switch(ctoupper(*cp))
 			{
 			case 'B': // Bar color.
 			case 'T': // Text color.
@@ -253,7 +253,7 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 					// if color_str does not contain something hex-numeric, black (0x00) will be assumed,
 					// which seems okay given how rare such a problem would be.
 				}
-				switch (_totupper(*cp))
+				switch (ctoupper(*cp))
 				{
 				case 'B':
 					bar_color = color;
@@ -278,7 +278,7 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 			if (!cp[1]) // Avoids out-of-bounds when the loop's own ++cp is done.
 				break;
 			++cp; // Always increment to omit the next char from consideration by the next loop iteration.
-			switch(_totupper(*cp))
+			switch(ctoupper(*cp))
 			{
 			case 'M':
 				if ((font_size1 = _ttoi(cp + 1)) < 0)
@@ -323,7 +323,7 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 			if (!cp[1]) // Avoids out-of-bounds when the loop's own ++cp is done.
 				break;
 			++cp; // Always increment to omit the next char from consideration by the next loop iteration.
-			switch(_totupper(*cp))
+			switch(ctoupper(*cp))
 			{
 			case 'M':
 				if ((font_weight1 = _ttoi(cp + 1)) < 0)
@@ -356,7 +356,7 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 			if (!cp[1]) // Avoids out-of-bounds when the loop's own ++cp is done.
 				break;
 			++cp; // Always increment to omit the next char from consideration by the next loop iteration.
-			switch(_totupper(*cp))
+			switch(ctoupper(*cp))
 			{
 			case 'B':  // for backward compatibility with interim releases of v1.0.14
 			case 'H':
@@ -1569,7 +1569,7 @@ ResultType Line::Input()
 			g_input.MatchBufSize = (UINT)(space_needed > 4096 ? space_needed : 4096);
 			if (g_input.MatchBuf) // free the old one since it's too small.
 				free(g_input.MatchBuf);
-			if (   !(g_input.MatchBuf = (LPTSTR)malloc(g_input.MatchBufSize))   )
+			if (   !(g_input.MatchBuf = tmalloc(g_input.MatchBufSize))   )
 			{
 				g_input.MatchBufSize = 0;
 				return LineError(ERR_OUTOFMEM);  // Short msg. since so rare.
@@ -1671,7 +1671,7 @@ ResultType Line::Input()
 
 	for (LPTSTR cp = aOptions; *cp; ++cp)
 	{
-		switch(_totupper(*cp))
+		switch(ctoupper(*cp))
 		{
 		case 'B':
 			g_input.BackspaceIsUndo = false;
@@ -1930,7 +1930,7 @@ ResultType Line::PerformWait()
 		sleep_duration = 0;
 		for (LPTSTR cp = ARG2; *cp; ++cp)
 		{
-			switch(_totupper(*cp))
+			switch(ctoupper(*cp))
 			{
 			case 'D':
 				wait_for_keydown = true;
@@ -2170,7 +2170,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 
 	for (LPTSTR cp = aOptions; *cp; ++cp)
 	{
-		switch(_totupper(*cp))
+		switch(ctoupper(*cp))
 		{
 		case 'D':
 			event_type = KEYDOWN;
@@ -2190,7 +2190,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 			// ALSO, SetControlDelay -1 seems to fix the unreliability issue as well (independently of NA),
 			// though it might not work with some types of windows/controls (thus, for backward
 			// compatibility, ControlClick still obeys SetControlDelay).
-			if (_totupper(cp[1]) == 'A')
+			if (ctoupper(cp[1]) == 'A')
 			{
 				cp += 1;  // Add 1 vs. 2 to skip over the rest of the letters in this option word.
 				do_activate = false;
@@ -2229,7 +2229,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 		// Parse the X an Y coordinates in a strict way to reduce ambiguity with control names and also
 		// to keep the code simple.
 		LPTSTR cp = omit_leading_whitespace(aControl);
-		if (_totupper(*cp) != 'X')
+		if (ctoupper(*cp) != 'X')
 			return OK; // Let ErrorLevel tell the story.
 		++cp;
 		if (!*cp)
@@ -7414,7 +7414,7 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 		switch(_totupper(*cp))
 		{
 		case 'C':
-			if (_totupper(cp[1]) == 'L') // v1.0.43.03: Locale-insensitive mode, which probably performs considerably worse.
+			if (ctoupper(cp[1]) == 'L') // v1.0.43.03: Locale-insensitive mode, which probably performs considerably worse.
 			{
 				++cp;
 				g_SortCaseSensitive = SCS_INSENSITIVE_LOCALE;
@@ -7798,7 +7798,7 @@ ResultType Line::GetKeyJoyState(LPTSTR aKeyName, LPTSTR aOption)
 	}
 	// Otherwise: There is a virtual key (not a joystick control).
 	KeyStateTypes key_state_type;
-	switch (_totupper(*aOption))
+	switch (ctoupper(*aOption))
 	{
 	case 'T': key_state_type = KEYSTATE_TOGGLE; break; // Whether a toggleable key such as CapsLock is currently turned on.
 	case 'P': key_state_type = KEYSTATE_PHYSICAL; break; // Physical state of key.
@@ -7991,7 +7991,7 @@ ResultType Line::DriveLock(TCHAR aDriveLetter, bool aLockIt)
 		
 		DIOC_REGISTERS regs = {0};
 		regs.reg_EAX = 0x440D;
-		regs.reg_EBX = _totupper(aDriveLetter) - 'A' + 1; // Convert to drive index. 0 = default, 1 = A, 2 = B, 3 = C
+		regs.reg_EBX = ctoupper(aDriveLetter) - 'A' + 1; // Convert to drive index. 0 = default, 1 = A, 2 = B, 3 = C
 		regs.reg_ECX = 0x0848; // MS: Lock/unlock media
 		regs.reg_EDX = (DWORD)(size_t)&pb;
 		
@@ -8708,7 +8708,7 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 	//    parsing loop as shown in example in the help file.
 	bool always_use_save_dialog = false; // Set default.
 	bool new_multi_select_method = false; // Set default.
-	switch (_totupper(*aOptions))
+	switch (ctoupper(*aOptions))
 	{
 	case 'M':  // Multi-select.
 		++aOptions;
@@ -8919,7 +8919,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 		cp = omit_leading_whitespace(aFilespec); // omit leading whitespace only temporarily in case aFilespec contains literal whitespace we want to retain.
 		if (*cp != '*') // No more options.
 			break; // Make no further changes to aFilespec.
-		switch (_totupper(*++cp)) // This could move cp to the terminator if string ends in an asterisk.
+		switch (ctoupper(*++cp)) // This could move cp to the terminator if string ends in an asterisk.
 		{
 		case 'C': // Clipboard (binary).
 			is_binary_clipboard = true; // When this option is present, any others are parsed (to skip over them) but ignored as documented.
@@ -9671,7 +9671,7 @@ int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeTyp
 
 			for (cp = attributes; *cp; ++cp)
 			{
-				switch (_totupper(*cp))
+				switch (ctoupper(*cp))
 				{
 				case '+': mode = ATTRIB_MODE_ADD; break;
 				case '-': mode = ATTRIB_MODE_REMOVE; break;
@@ -9805,7 +9805,7 @@ ResultType Line::FileGetTime(LPTSTR aFilespec, TCHAR aWhichTime)
 	FindClose(file_search);
 
 	FILETIME local_file_time;
-	switch (_totupper(aWhichTime))
+	switch (ctoupper(aWhichTime))
 	{
 	case 'C': // File's creation time.
 		FileTimeToLocalFileTime(&found_file.ftCreationTime, &local_file_time);
@@ -9951,7 +9951,7 @@ int Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
 				continue;
 			}
 
-			switch (_totupper(aWhichTime))
+			switch (ctoupper(aWhichTime))
 			{
 			case 'C': // File's creation time.
 				if (!SetFileTime(hFile, &ftUTC, NULL, NULL))
@@ -10030,7 +10030,7 @@ ResultType Line::FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity)
 
 	unsigned __int64 size = (found_file.nFileSizeHigh * (unsigned __int64)MAXDWORD) + found_file.nFileSizeLow;
 
-	switch(_totupper(*aGranularity))
+	switch(ctoupper(*aGranularity))
 	{
 	case 'K': // KB
 		size /= 1024;
@@ -10356,7 +10356,7 @@ VarSizeType BIV_True_False(LPTSTR aBuf, LPTSTR aVarName)
 VarSizeType BIV_MMM_DDD(LPTSTR aBuf, LPTSTR aVarName)
 {
 	LPTSTR format_str;
-	switch(_totupper(aVarName[2]))
+	switch(ctoupper(aVarName[2]))
 	{
 	// Use the case-sensitive formats required by GetDateFormat():
 	case 'M': format_str = (aVarName[5] ? _T("MMMM") : _T("MMM")); break;
@@ -10391,8 +10391,8 @@ VarSizeType BIV_DateTime(LPTSTR aBuf, LPTSTR aVarName)
 	if (is_msec)
 		return _stprintf(aBuf, _T("%03d"), sST.wMilliseconds);
 
-	TCHAR second_letter = _totupper(aVarName[1]);
-	switch(_totupper(aVarName[0]))
+	TCHAR second_letter = ctoupper(aVarName[1]);
+	switch(ctoupper(aVarName[0]))
 	{
 	case 'Y':
 		switch(second_letter)
@@ -11096,7 +11096,7 @@ VarSizeType BIV_Caret(LPTSTR aBuf, LPTSTR aVarName)
 		}
 	}
 	// Now the above has ensured that sPoint contains valid coordinates that are up-to-date enough to be used.
-	_itot(_totupper(aVarName[7]) == 'X' ? sPoint.x : sPoint.y, aBuf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
+	_itot(ctoupper(aVarName[7]) == 'X' ? sPoint.x : sPoint.y, aBuf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
 	return (VarSizeType)_tcslen(aBuf);
 }
 
@@ -11377,7 +11377,7 @@ VarSizeType BIV_LoopFileTime(LPTSTR aBuf, LPTSTR aVarName)
 	if (g->mLoopFile)
 	{
 		FILETIME ft;
-		switch(_totupper(aVarName[14])) // A_LoopFileTime[A]ccessed
+		switch(ctoupper(aVarName[14])) // A_LoopFileTime[A]ccessed
 		{
 		case 'M': ft = g->mLoopFile->ftLastWriteTime; break;
 		case 'C': ft = g->mLoopFile->ftCreationTime; break;
@@ -11419,7 +11419,7 @@ VarSizeType BIV_LoopFileSize(LPTSTR aBuf, LPTSTR aVarName)
 		ul.HighPart = g->mLoopFile->nFileSizeHigh;
 		ul.LowPart = g->mLoopFile->nFileSizeLow;
 		int divider;
-		switch (_totupper(aVarName[14])) // A_LoopFileSize[K/M]B
+		switch (ctoupper(aVarName[14])) // A_LoopFileSize[K/M]B
 		{
 		case 'K': divider = 1024; break;
 		case 'M': divider = 1024*1024; break;
@@ -11646,7 +11646,7 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 		return 0;
 	}
 
-	switch (_totupper(aVarName[5]))
+	switch (ctoupper(aVarName[5]))
 	{
 	case 'W':
 		// g->GuiPoint.x was overloaded to contain the size, since there are currently never any cases when
@@ -12043,7 +12043,7 @@ void ConvertDllArgType(LPTSTR aBuf[], DYNAPARM &aDynaParam)
 
 	for (i = 0, type_string = aBuf[0]; i < 2 && type_string; type_string = aBuf[++i])
 	{
-		if (_totupper(*type_string) == 'U') // Unsigned
+		if (ctoupper(*type_string) == 'U') // Unsigned
 		{
 			aDynaParam.is_unsigned = true;
 			++type_string; // Omit the 'U' prefix from further consideration.
@@ -13789,9 +13789,9 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				// But first process any special flags that are present.
 				transform = '\0'; // Set default. Indicate "no transformation".
 				extra_offset = 0; // Set default. Indicate that there's no need to hop over an extra character.
-				if (char_after_dollar = src[1]) // This check avoids calling _totupper on '\0', which directly or indirectly causes an assertion error in CRT.
+				if (char_after_dollar = src[1]) // This check avoids calling ctoupper on '\0', which directly or indirectly causes an assertion error in CRT.
 				{
-					switch(char_after_dollar = _totupper(char_after_dollar))
+					switch(char_after_dollar = ctoupper(char_after_dollar))
 					{
 					case 'U':
 					case 'L':
@@ -13964,7 +13964,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 // This function is the initial entry point for both RegExMatch() and RegExReplace().
 // Caller has set aResultToken.symbol to a default of SYM_INTEGER.
 {
-	bool mode_is_replace = _totupper(aResultToken.marker[5]) == 'R'; // Union's marker initially contains the function name; e.g. RegEx[R]eplace.
+	bool mode_is_replace = ctoupper(aResultToken.marker[5]) == 'R'; // Union's marker initially contains the function name; e.g. RegEx[R]eplace.
 	LPTSTR needle = TokenToString(*aParam[1], aResultToken.buf); // Load-time validation has already ensured that at least two actual parameters are present.
 
 	bool get_positions_not_substrings;
@@ -14179,7 +14179,7 @@ void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	else // An explicit "type" is present.
 	{
 		LPTSTR type = TokenToString(*aParam[2], aResultToken.buf);
-		if (_totupper(*type) == 'U') // Unsigned.
+		if (ctoupper(*type) == 'U') // Unsigned.
 		{
 			++type; // Remove the first character from further consideration.
 			is_signed = FALSE;
@@ -14187,7 +14187,7 @@ void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 		else
 			is_signed = TRUE;
 
-		switch(_totupper(*type)) // Override "size" and aResultToken.symbol if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
+		switch(ctoupper(*type)) // Override "size" and aResultToken.symbol if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
 		{
 		case 'I':
 #ifdef _WIN64
@@ -14283,13 +14283,13 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	if (aParamCount > 3) // The "type" parameter is present (which is somewhat unusual).
 	{
 		LPTSTR type = TokenToString(*aParam[3], aResultToken.buf);
-		if (_totupper(*type) == 'U') // Unsigned; but in the case of NumPut, it doesn't matter so ignore it.
+		if (ctoupper(*type) == 'U') // Unsigned; but in the case of NumPut, it doesn't matter so ignore it.
 		{
 			is_unsigned = TRUE;
 			++type; // Remove the first character from further consideration.
 		}
 
-		switch(_totupper(*type)) // Override "size" and is_integer if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
+		switch(ctoupper(*type)) // Override "size" and is_integer if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
 		{
 		case 'I':
 #ifdef _WIN64
@@ -14443,7 +14443,7 @@ void BIF_GetKeyState(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 	TCHAR mode_buf[MAX_NUMBER_SIZE];
 	LPTSTR mode = (aParamCount > 1) ? TokenToString(*aParam[1], mode_buf) : _T("");
 	KeyStateTypes key_state_type;
-	switch (_totupper(*mode)) // Second parameter.
+	switch (ctoupper(*mode)) // Second parameter.
 	{
 	case 'T': key_state_type = KEYSTATE_TOGGLE; break; // Whether a toggleable key such as CapsLock is currently turned on.
 	case 'P': key_state_type = KEYSTATE_PHYSICAL; break; // Physical state of key.
@@ -14565,7 +14565,7 @@ void BIF_WinExistActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 		// onto the stack by a previous iteration.
 
 	// Should be called the same was as ACT_IFWINEXIST and ACT_IFWINACTIVE:
-	HWND found_hwnd = (_totupper(bif_name[3]) == 'E') // Win[E]xist.
+	HWND found_hwnd = (ctoupper(bif_name[3]) == 'E') // Win[E]xist.
 		? WinExist(*g, param[0], param[1], param[2], param[3], false, true)
 		: WinActive(*g, param[0], param[1], param[2], param[3], true);
 	aResultToken.marker = aResultToken.buf; // If necessary, this result will be moved to a persistent memory location by our caller.
@@ -14665,7 +14665,7 @@ void BIF_FloorCeil(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	// 2) Whether or not the input is already an integer.
 	// Therefore, do not change this without conduction a thorough test.
 	double x = TokenToDouble(*aParam[0]);
-	x = (_totupper(aResultToken.marker[0]) == 'F') ? qmathFloor(x) : qmathCeil(x);
+	x = (ctoupper(aResultToken.marker[0]) == 'F') ? qmathFloor(x) : qmathCeil(x);
 	// Fix for v1.0.40.05: For some inputs, qmathCeil/Floor yield a number slightly to the left of the target
 	// integer, while for others they yield one slightly to the right.  For example, Ceil(62/61) and Floor(-4/3)
 	// yield a double that would give an incorrect answer if it were simply truncated to an integer via
@@ -14792,7 +14792,7 @@ void BIF_ASinACos(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		// the input is non-numeric or an empty string).
 		aResultToken.symbol = SYM_FLOAT;
 		// Below: marker contains either "ASin" or "ACos"
-		aResultToken.value_double = (_totupper(aResultToken.marker[1]) == 'S') ? qmathAsin(value) : qmathAcos(value);
+		aResultToken.value_double = (ctoupper(aResultToken.marker[1]) == 'S') ? qmathAsin(value) : qmathAcos(value);
 	}
 }
 
@@ -14831,7 +14831,7 @@ void BIF_SqrtLogLn(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 		// For simplicity and backward compatibility, a numeric result is always returned in this case (even if
 		// the input is non-numeric or an empty string).
 		aResultToken.symbol = SYM_FLOAT;
-		switch (_totupper(aResultToken.marker[1]))
+		switch (ctoupper(aResultToken.marker[1]))
 		{
 		case 'Q': // S[q]rt
 			aResultToken.value_double = qmathSqrt(value);
@@ -15205,7 +15205,7 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 
 void BIF_StatusBar(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	TCHAR mode = _totupper(aResultToken.marker[6]); // Union's marker initially contains the function name. SB_Set[T]ext.
+	TCHAR mode = ctoupper(aResultToken.marker[6]); // Union's marker initially contains the function name. SB_Set[T]ext.
 	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
 	aResultToken.value_int64 = 0; // Set default return value. Must be done only after consulting marker above.
 	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
@@ -15304,7 +15304,7 @@ void BIF_LV_GetNextOrCount(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 // 2: Options string.
 // 3: (FUTURE): Possible for use with LV_FindItem (though I think it can only search item text, not subitem text).
 {
-	bool mode_is_count = _totupper(aResultToken.marker[6]) == 'C'; // Union's marker initially contains the function name. LV_Get[C]ount.  Bug-fixed for v1.0.43.09.
+	bool mode_is_count = ctoupper(aResultToken.marker[6]) == 'C'; // Union's marker initially contains the function name. LV_Get[C]ount.  Bug-fixed for v1.0.43.09.
 	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
 	aResultToken.value_int64 = 0; // Set default return value. Must be done only after consulting marker above.
 	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
@@ -15326,7 +15326,7 @@ void BIF_LV_GetNextOrCount(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		options = (aParamCount > 0) ? omit_leading_whitespace(TokenToString(*aParam[0], buf)) : _T("");
 		if (*options)
 		{
-			if (_totupper(*options) == 'S')
+			if (ctoupper(*options) == 'S')
 				aResultToken.value_int64 = SendMessage(control_hwnd, LVM_GETSELECTEDCOUNT, 0, 0);
 			else if (!_tcsnicmp(options, _T("Col"), 3)) // "Col" or "Column". Don't allow "C" by itself, so that "Checked" can be added in the future.
 				aResultToken.value_int64 = gui.mCurrentListView->union_lv_attrib->col_count;
@@ -15351,7 +15351,7 @@ void BIF_LV_GetNextOrCount(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	// bit for each call, which would slow down this heavily-called function.
 
 	options = (aParamCount > 1) ? TokenToString(*aParam[1], buf) : _T("");
-	TCHAR first_char = _totupper(*omit_leading_whitespace(options));
+	TCHAR first_char = ctoupper(*omit_leading_whitespace(options));
 	// To retain compatibility in the future, also allow "Check(ed)" and "Focus(ed)" since any word that
 	// starts with C or F is already supported.
 
@@ -15455,7 +15455,7 @@ void BIF_LV_AddInsertModify(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 // 3 and beyond: Additional field text.
 // In Add/Insert mode, if there are no text fields present, a blank for is appended/inserted.
 {
-	TCHAR mode = _totupper(aResultToken.marker[3]); // Union's marker initially contains the function name. e.g. LV_[I]nsert.
+	TCHAR mode = ctoupper(aResultToken.marker[3]); // Union's marker initially contains the function name. e.g. LV_[I]nsert.
 	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
 	aResultToken.value_int64 = 0; // Set default return value. Must be done only after consulting marker above.
 	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
@@ -15746,7 +15746,7 @@ void BIF_LV_InsertModifyDeleteCol(ExprTokenType &aResultToken, ExprTokenType *aP
 // 3: New text of column
 // There are also some special modes when only zero or one parameter is present, see below.
 {
-	TCHAR mode = _totupper(aResultToken.marker[3]); // Union's marker initially contains the function name. LV_[I]nsertCol.
+	TCHAR mode = ctoupper(aResultToken.marker[3]); // Union's marker initially contains the function name. LV_[I]nsertCol.
 	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
 	aResultToken.value_int64 = 0; // Set default return value. Must be done only after consulting marker above.
 	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
@@ -16098,7 +16098,7 @@ void BIF_TV_AddModifyDelete(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 // Parameters for TV_Delete():
 //    1: ID of item to delete (if omitted, all items are deleted).
 {
-	TCHAR mode = _totupper(aResultToken.marker[3]); // Union's marker initially contains the function name. e.g. TV_[A]dd.
+	TCHAR mode = ctoupper(aResultToken.marker[3]); // Union's marker initially contains the function name. e.g. TV_[A]dd.
 	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
 	aResultToken.value_int64 = 0; // Set default return value. Must be done only after consulting marker above.
 	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
@@ -16415,8 +16415,8 @@ void BIF_TV_GetRelatedItem(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	if (aParamCount < 2)
 	{
 		WPARAM flag;
-		TCHAR char7 = _totupper(fn_name[7]);
-		switch(_totupper(fn_name[6]))
+		TCHAR char7 = ctoupper(fn_name[7]);
+		switch(ctoupper(fn_name[6]))
 		{
 		case 'S': flag = TVGN_CARET; break; // TV_GetSelection(). TVGN_CARET is focused item.
 		case 'P': flag = (char7 == 'A') ? TVGN_PARENT : TVGN_PREVIOUS; break; // TV_GetParent/Prev.
@@ -16452,7 +16452,7 @@ void BIF_TV_GetRelatedItem(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	// Since above didn't return, this TV_GetNext's 2-parameter mode, which has an expanded scope that includes
 	// not just siblings, but also children and parents.  This allows a tree to be traversed from top to bottom
 	// without the script having to do something fancy.
-	TCHAR first_char_upper = _totupper(*omit_leading_whitespace(TokenToString(*aParam[1], buf))); // Resolve parameter #2.
+	TCHAR first_char_upper = ctoupper(*omit_leading_whitespace(TokenToString(*aParam[1], buf))); // Resolve parameter #2.
 	bool search_checkmark;
 	if (first_char_upper == 'C')
 		search_checkmark = true;
@@ -16499,7 +16499,7 @@ void BIF_TV_Get(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 //       simplifies the code since there is currently no easy means of passing back large strings to our caller).
 //    2: HTREEITEM.
 {
-	bool get_text = (_totupper(aResultToken.marker[6]) == 'T'); // Union's marker initially contains the function name. e.g. TV_Get[T]ext.
+	bool get_text = (ctoupper(aResultToken.marker[6]) == 'T'); // Union's marker initially contains the function name. e.g. TV_Get[T]ext.
 	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
 	aResultToken.value_int64 = 0; // Set default return value. Must be done only after consulting marker above.
 	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
@@ -16521,7 +16521,7 @@ void BIF_TV_Get(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 		// Loadtime validation has ensured that param #1 and #2 are present for all these cases.
 		HTREEITEM hitem = (HTREEITEM)TokenToInt64(*aParam[0]);
 		UINT state_mask;
-		switch (_totupper(*omit_leading_whitespace(TokenToString(*aParam[1], buf))))
+		switch (ctoupper(*omit_leading_whitespace(TokenToString(*aParam[1], buf))))
 		{
 		case 'E': state_mask = TVIS_EXPANDED; break; // Expanded
 		case 'C': state_mask = TVIS_STATEIMAGEMASK; break; // Checked
@@ -16670,7 +16670,7 @@ void BIF_IL_Add(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount) // L31
 {
-	TCHAR trim_type = _totupper(*aResultToken.marker); // aResultToken.marker points to the name of the Func which was called.
+	TCHAR trim_type = ctoupper(*aResultToken.marker); // aResultToken.marker points to the name of the Func which was called.
 
 	// All return values are SYM_STRING, so set that now:
 	aResultToken.symbol = SYM_STRING;

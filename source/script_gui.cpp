@@ -478,7 +478,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 						icon_number = ATOI(next_option + 4); // LoadPicture() correctly handles any negative value.
 					else
 					{
-						switch (_totupper(*next_option))
+						switch (ctoupper(*next_option))
 						{
 						case 'W':
 							width = ATOI(next_option + 1);
@@ -833,7 +833,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 
 		for (LPTSTR cp = aParam3; *cp; ++cp)
 		{
-			switch(_totupper(*cp))
+			switch(ctoupper(*cp))
 			{
 			// For options such as W, H, X and Y:
 			// Use _ttoi() vs. ATOI() to avoid interpreting something like 0x01B as hex when in fact
@@ -3874,7 +3874,7 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 
 		// This one should be near the bottom since "E" is fairly vague and might be contained at the start
 		// of future option words such as Edge, Exit, etc.
-		else if (_totupper(*next_option) == 'E') // Extended style
+		else if (ctoupper(*next_option) == 'E') // Extended style
 		{
 			++next_option; // Skip over the E itself.
 			if (IsPureNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "E".
@@ -4535,7 +4535,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					aOpt.line_size = ATOI(next_option);
 				//else removal not supported.
 			}
-			else if (aControl.type == GUI_CONTROL_TREEVIEW && _totupper(*next_option) == 'S')
+			else if (aControl.type == GUI_CONTROL_TREEVIEW && ctoupper(*next_option) == 'S')
 				// Seems best to consider TVS_HASLINES|TVS_LINESATROOT to be an inseparable group since
 				// one without the other is rare (script can always be overridden by specifying numeric styles):
 				if (adding) aOpt.style_add |= TVS_HASLINES|TVS_LINESATROOT; else aOpt.style_remove |= TVS_HASLINES|TVS_LINESATROOT;
@@ -4572,7 +4572,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				if (adding)
 				{
 					aOpt.tip_side = -1;  // Set default.
-					switch(_totupper(*next_option))
+					switch(ctoupper(*next_option))
 					{
 					case 'T': aOpt.tip_side = TBTS_TOP; break;
 					case 'L': aOpt.tip_side = TBTS_LEFT; break;
@@ -4987,7 +4987,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				// The option word consists of only one character, so ignore allow except the below
 				// since mandatory arg should immediately follow it.  Example: An isolated letter H
 				// should do nothing rather than cause the height to be set to zero.
-				switch (_totupper(next_option[-1]))
+				switch (ctoupper(next_option[-1]))
 				{
 				case 'C':
 					if (!adding && aControl.type != GUI_CONTROL_PIC && color_main != CLR_DEFAULT)
@@ -5008,7 +5008,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			}
 
 			// Since above didn't "continue", there is text after the option letter, so take action accordingly.
-			switch (_totupper(next_option[-1]))
+			switch (ctoupper(next_option[-1]))
 			{
 			case 'G': // "Gosub" a label when this control is clicked or changed.
 				// For reasons of potential future use and compatibility, don't allow subroutines to be
@@ -5129,14 +5129,14 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				break;
 
 			case 'W':
-				if (_totupper(*next_option) == 'P') // Use the previous control's value.
+				if (ctoupper(*next_option) == 'P') // Use the previous control's value.
 					aOpt.width = mPrevWidth + ATOI(next_option + 1);
 				else
 					aOpt.width = ATOI(next_option);
 				break;
 
 			case 'H':
-				if (_totupper(*next_option) == 'P') // Use the previous control's value.
+				if (ctoupper(*next_option) == 'P') // Use the previous control's value.
 					aOpt.height = mPrevHeight + ATOI(next_option + 1);
 				else
 					aOpt.height = ATOI(next_option);
@@ -5168,19 +5168,19 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				// For the M and P sub-options, not that the +/- prefix is optional.  The number is simply
 				// read in as-is (though the use of + is more self-documenting in this case than omitting
 				// the sign entirely).
-				else if (_totupper(*next_option) == 'M') // Use the X margin
+				else if (ctoupper(*next_option) == 'M') // Use the X margin
 				{
 					aOpt.x = mMarginX + ATOI(next_option + 1);
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = mMaxExtentDown + mMarginY;
 				}
-				else if (_totupper(*next_option) == 'P') // Use the previous control's X position.
+				else if (ctoupper(*next_option) == 'P') // Use the previous control's X position.
 				{
 					aOpt.x = mPrevX + ATOI(next_option + 1);
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = mPrevY;  // Since moving in the X direction, retain the same Y as previous control.
 				}
-				else if (_totupper(*next_option) == 'S') // Use the saved X position
+				else if (ctoupper(*next_option) == 'S') // Use the saved X position
 				{
 					aOpt.x = mSectionX + ATOI(next_option + 1);
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
@@ -5220,19 +5220,19 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				// For the M and P sub-options, not that the +/- prefix is optional.  The number is simply
 				// read in as-is (though the use of + is more self-documenting in this case than omitting
 				// the sign entirely).
-				else if (_totupper(*next_option) == 'M') // Use the Y margin
+				else if (ctoupper(*next_option) == 'M') // Use the Y margin
 				{
 					aOpt.y = mMarginY + ATOI(next_option + 1);
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.x = mMaxExtentRight + mMarginX;
 				}
-				else if (_totupper(*next_option) == 'P') // Use the previous control's Y position.
+				else if (ctoupper(*next_option) == 'P') // Use the previous control's Y position.
 				{
 					aOpt.y = mPrevY + ATOI(next_option + 1);
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.x = mPrevX;  // Since moving in the Y direction, retain the same X as previous control.
 				}
-				else if (_totupper(*next_option) == 'S') // Use the saved Y position
+				else if (ctoupper(*next_option) == 'S') // Use the saved Y position
 				{
 					aOpt.y = mSectionY + ATOI(next_option + 1);
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
@@ -5819,7 +5819,7 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 
 	for (LPTSTR cp = aOptions; *cp; ++cp)
 	{
-		switch(_totupper(*cp))
+		switch(ctoupper(*cp))
 		{
 		// For options such as W, H, X and Y: Use _ttoi() vs. ATOI() to avoid interpreting something like 0x01B
 		// as hex when in fact the B was meant to be an option letter.
@@ -6957,7 +6957,7 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 
 	for (LPTSTR cp = aOptions; *cp; ++cp)
 	{
-		switch(_totupper(*cp))
+		switch(ctoupper(*cp))
 		{
 		case 'B':
 			if (!_tcsnicmp(cp, _T("bold"), 4))

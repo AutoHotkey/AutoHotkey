@@ -112,8 +112,8 @@ WCHAR TextStream::ReadCharW()
 
 DWORD TextStream::Write(LPCWSTR aBuf, DWORD aBufLen)
 // NOTE: This method doesn't returns the number of characters are written,
-// instead, it return the number of bytes. Because this should be faster and the write operations
-// should never fail unless it encounters a critical error (low disk space, etc.).
+// instead, it returns the number of bytes. Because this should be faster and the write operations
+// should never fail unless it encounters a critical error (e.g. low disk space.).
 // Therefore, the amount of characters are the same with aBufLen or wcslen(aBuf) most likely.
 // The callers have knew that already.
 {

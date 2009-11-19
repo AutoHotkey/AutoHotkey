@@ -1475,7 +1475,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						break;
 					case 'O': // "OR".
 						// See comments in the default section further below.
-						if (_totupper(next_buf[1]) == 'R' && IS_SPACE_OR_TAB_OR_NBSP(next_buf[2])) // Relies on short-circuit boolean order.
+						if (ctoupper(next_buf[1]) == 'R' && IS_SPACE_OR_TAB_OR_NBSP(next_buf[2])) // Relies on short-circuit boolean order.
 						{
 							cp = omit_leading_whitespace(next_buf + 2);
 							// v1.0.38.06: The following was fixed to use EXPR_CORE vs. EXPR_OPERAND_TERMINATORS
@@ -2637,7 +2637,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		if (!parameter)
 			return ScriptError(ERR_PARAM1_REQUIRED, aBuf);
 		// v1.0.32:
-		bool ignore_load_failure = (parameter[0] == '*' && _totupper(parameter[1]) == 'I'); // Relies on short-circuit boolean order.
+		bool ignore_load_failure = (parameter[0] == '*' && ctoupper(parameter[1]) == 'I'); // Relies on short-circuit boolean order.
 		if (ignore_load_failure)
 		{
 			parameter += 2;
@@ -3785,7 +3785,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					break;
 				case 'i':  // "is" or "is not"
 				case 'I':
-					switch (_totupper(operation[1]))
+					switch (ctoupper(operation[1]))
 					{
 					case 's':  // "IS"
 					case 'S':
@@ -5239,7 +5239,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 						}
 						if (cp = _tcschr(op_begin + 1, '.')) // L31: Check for scientific-notation literal (as in previous versions) or something like "obj.property". Above has already handled "obj .property" and similar.
 						{
-							if (_totupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-')) // Listed first for short-circuit performance with the below.
+							if (ctoupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-')) // Listed first for short-circuit performance with the below.
 							{
 								 // v1.0.46.11: This item appears to be a scientific-notation literal with the OPTIONAL +/- sign PRESENT on the exponent (e.g. 1.0e+001), so check that before checking if it's a variable name.
 								*op_end = orig_char; // Undo the temporary termination.
@@ -5471,7 +5471,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 		if (aArgc > 2) // Then this is ACT_ADD OR ACT_SUB with a 3rd parameter (TimeUnits)
 		{
 			if (*new_raw_arg3 && !line.ArgHasDeref(3))
-				if (!_tcschr(_T("SMHD"), _totupper(*new_raw_arg3)))  // (S)econds, (M)inutes, (H)ours, or (D)ays
+				if (!_tcschr(_T("SMHD"), ctoupper(*new_raw_arg3)))  // (S)econds, (M)inutes, (H)ours, or (D)ays
 					return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 			if (aActionType == ACT_SUB && *new_raw_arg2 && !line.ArgHasDeref(2))
 				if (!YYYYMMDDToSystemTime(new_raw_arg2, st, true))
@@ -5660,12 +5660,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 		if (aActionType == ACT_GROUPACTIVATE || aActionType == ACT_GROUPDEACTIVATE)
 		{
 			if (*new_raw_arg2 && !line.ArgHasDeref(2))
-				if (_tcslen(new_raw_arg2) > 1 || _totupper(*new_raw_arg2) != 'R')
+				if (_tcslen(new_raw_arg2) > 1 || ctoupper(*new_raw_arg2) != 'R')
 					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		}
 		else if (aActionType == ACT_GROUPCLOSE)
 			if (*new_raw_arg2 && !line.ArgHasDeref(2))
-				if (_tcslen(new_raw_arg2) > 1 || !_tcschr(_T("RA"), _totupper(*new_raw_arg2)))
+				if (_tcslen(new_raw_arg2) > 1 || !_tcschr(_T("RA"), ctoupper(*new_raw_arg2)))
 					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
@@ -5698,7 +5698,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 			{
 				if (_tcsicmp(new_raw_arg1 + 7, _T("Fast"))) // Cache is left enabled when the new FloatFast/IntegerFast mode is present.
 					g_WriteCacheDisabledInt64 = TRUE;
-				if (aArgc > 1 && !line.ArgHasDeref(2) && _totupper(*new_raw_arg2) != 'H' && _totupper(*new_raw_arg2) != 'D')
+				if (aArgc > 1 && !line.ArgHasDeref(2) && ctoupper(*new_raw_arg2) != 'H' && ctoupper(*new_raw_arg2) != 'D')
 					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 			}
 			else
@@ -5785,7 +5785,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 		break;
 
 	case ACT_STRINGGETPOS:
-		if (*new_raw_arg4 && !line.ArgHasDeref(4) && !_tcschr(_T("LR1"), _totupper(*new_raw_arg4)))
+		if (*new_raw_arg4 && !line.ArgHasDeref(4) && !_tcschr(_T("LR1"), ctoupper(*new_raw_arg4)))
 			return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
 		break;
 
@@ -5896,7 +5896,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 			if (value < 0 || value > MAX_MOUSE_SPEED)
 				return ScriptError(ERR_MOUSE_SPEED, new_raw_arg3);
 		}
-		if (*new_raw_arg4 && !line.ArgHasDeref(4) && _totupper(*new_raw_arg4) != 'R')
+		if (*new_raw_arg4 && !line.ArgHasDeref(4) && ctoupper(*new_raw_arg4) != 'R')
 			return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
 		if (!line.ValidateMouseCoords(new_raw_arg1, new_raw_arg2))
 			return ScriptError(ERR_MOUSE_COORD, new_raw_arg1);
@@ -5912,9 +5912,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 				return ScriptError(ERR_MOUSE_SPEED, NEW_RAW_ARG5);
 		}
 		if (*NEW_RAW_ARG6 && !line.ArgHasDeref(6))
-			if (_tcslen(NEW_RAW_ARG6) > 1 || !_tcschr(_T("UD"), _totupper(*NEW_RAW_ARG6)))  // Up / Down
+			if (_tcslen(NEW_RAW_ARG6) > 1 || !_tcschr(_T("UD"), ctoupper(*NEW_RAW_ARG6)))  // Up / Down
 				return ScriptError(ERR_PARAM6_INVALID, NEW_RAW_ARG6);
-		if (*NEW_RAW_ARG7 && !line.ArgHasDeref(7) && _totupper(*NEW_RAW_ARG7) != 'R')
+		if (*NEW_RAW_ARG7 && !line.ArgHasDeref(7) && ctoupper(*NEW_RAW_ARG7) != 'R')
 			return ScriptError(ERR_PARAM7_INVALID, NEW_RAW_ARG7);
 		// Check that the button is valid (e.g. left/right/middle):
 		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.ConvertMouseButton(new_raw_arg1)) // Treats blank as "Left".
@@ -5936,7 +5936,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 			if (value < 0 || value > MAX_MOUSE_SPEED)
 				return ScriptError(ERR_MOUSE_SPEED, NEW_RAW_ARG6);
 		}
-		if (*NEW_RAW_ARG7 && !line.ArgHasDeref(7) && _totupper(*NEW_RAW_ARG7) != 'R')
+		if (*NEW_RAW_ARG7 && !line.ArgHasDeref(7) && ctoupper(*NEW_RAW_ARG7) != 'R')
 			return ScriptError(ERR_PARAM7_INVALID, NEW_RAW_ARG7);
 		if (!line.ArgHasDeref(1))
 			if (!line.ConvertMouseButton(new_raw_arg1, false))
@@ -5976,7 +5976,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 			bool is_pure_numeric = IsPureNumeric(new_raw_arg3, false, true); // Consider negatives to be non-numeric.
 			if (aActionType == ACT_FILEMOVEDIR)
 			{
-				if (!is_pure_numeric && _totupper(*new_raw_arg3) != 'R'
+				if (!is_pure_numeric && ctoupper(*new_raw_arg3) != 'R'
 					|| is_pure_numeric && value > 2) // IsPureNumeric() already checked if value < 0. 
 					return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 			}
@@ -6008,7 +6008,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 		if (*new_raw_arg1 && !line.ArgHasDeref(1))
 		{
 			for (LPTSTR cp = new_raw_arg1; *cp; ++cp)
-				if (!_tcschr(_T("+-^RASHNOT"), _totupper(*cp)))
+				if (!_tcschr(_T("+-^RASHNOT"), ctoupper(*cp)))
 					return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		}
 		// For the next two checks:
@@ -6023,7 +6023,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 
 	case ACT_FILEGETTIME:
 		if (*new_raw_arg3 && !line.ArgHasDeref(3))
-			if (_tcslen(new_raw_arg3) > 1 || !_tcschr(_T("MCA"), _totupper(*new_raw_arg3)))
+			if (_tcslen(new_raw_arg3) > 1 || !_tcschr(_T("MCA"), ctoupper(*new_raw_arg3)))
 				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 		break;
 
@@ -6032,7 +6032,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 			if (!YYYYMMDDToSystemTime(new_raw_arg1, st, true))
 				return ScriptError(ERR_INVALID_DATETIME, new_raw_arg1);
 		if (*new_raw_arg3 && !line.ArgHasDeref(3))
-			if (_tcslen(new_raw_arg3) > 1 || !_tcschr(_T("MCA"), _totupper(*new_raw_arg3)))
+			if (_tcslen(new_raw_arg3) > 1 || !_tcschr(_T("MCA"), ctoupper(*new_raw_arg3)))
 				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 		// For the next two checks:
 		// The value of catching syntax errors at load-time seems to outweigh the fact that this check
@@ -6046,7 +6046,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 
 	case ACT_FILEGETSIZE:
 		if (*new_raw_arg3 && !line.ArgHasDeref(3))
-			if (_tcslen(new_raw_arg3) > 1 || !_tcschr(_T("BKM"), _totupper(*new_raw_arg3))) // Allow B=Bytes as undocumented.
+			if (_tcslen(new_raw_arg3) > 1 || !_tcschr(_T("BKM"), ctoupper(*new_raw_arg3))) // Allow B=Bytes as undocumented.
 				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 		break;
 
@@ -6444,7 +6444,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 					return ScriptError(ERR_PARAM3_MUST_BE_BLANK, new_raw_arg3);
 				break;
 			case PROCESS_CMD_PRIORITY:
-				if (!*new_raw_arg3 || (!line.ArgHasDeref(3) && !_tcschr(PROCESS_PRIORITY_LETTERS, _totupper(*new_raw_arg3))))
+				if (!*new_raw_arg3 || (!line.ArgHasDeref(3) && !_tcschr(PROCESS_PRIORITY_LETTERS, ctoupper(*new_raw_arg3))))
 					return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 				break;
 			case PROCESS_CMD_WAIT:
@@ -9658,9 +9658,9 @@ numeric_literal:
 					// because load-time validation would have caught them.  And any kind of unquoted alphanumeric
 					// characters (other than "NOT", which was detected above) wouldn't have reached this point
 					// because load-time pre-parsing would have marked it as a deref/var, not raw/literal text.
-					if (   _totupper(op_end[-1]) == 'E' // v1.0.46.11: It looks like scientific notation...
-						&& !(cp[0] == '0' && _totupper(cp[1]) == 'X') // ...and it's not a hex number (this check avoids falsely detecting hex numbers that end in 'E' as exponents). This line fixed in v1.0.46.12.
-						&& !(cp[0] == '-' && cp[1] == '0' && _totupper(cp[2]) == 'X') // ...and it's not a negative hex number (this check avoids falsely detecting hex numbers that end in 'E' as exponents). This line added as a fix in v1.0.47.03.
+					if (   ctoupper(op_end[-1]) == 'E' // v1.0.46.11: It looks like scientific notation...
+						&& !(cp[0] == '0' && ctoupper(cp[1]) == 'X') // ...and it's not a hex number (this check avoids falsely detecting hex numbers that end in 'E' as exponents). This line fixed in v1.0.46.12.
+						&& !(cp[0] == '-' && cp[1] == '0' && ctoupper(cp[2]) == 'X') // ...and it's not a negative hex number (this check avoids falsely detecting hex numbers that end in 'E' as exponents). This line added as a fix in v1.0.47.03.
 						)
 					{
 						// Since op_end[-1] is the 'E' or an exponent, the only valid things for op_end[0] to be
@@ -12435,7 +12435,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 		DETERMINE_NUMERIC_TYPES
 
-		if (!*ARG3 || !_tcschr(_T("SMHD"), _totupper(*ARG3))) // ARG3 is absent or invalid, so do normal math (not date-time).
+		if (!*ARG3 || !_tcschr(_T("SMHD"), ctoupper(*ARG3))) // ARG3 is absent or invalid, so do normal math (not date-time).
 		{
 			IF_EITHER_IS_FLOAT
 				return output_var->Assign(output_var->ToDouble(FALSE) + ARG2_AS_DOUBLE);
@@ -12462,7 +12462,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			FileTimeToLocalFileTime(&ftNowUTC, &ft);  // Convert UTC to local time.
 		}
 		// Convert to 10ths of a microsecond (the units of the FILETIME struct):
-		switch (_totupper(*ARG3))
+		switch (ctoupper(*ARG3))
 		{
 		case 'S': // Seconds
 			nUnits *= (double)10000000;
@@ -12489,7 +12489,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return output_var->Assign(FileTimeToYYYYMMDD(buf_temp, ft, false));
 
 	case ACT_SUB:
-		if (!*ARG3 || !_tcschr(_T("SMHD"), _totupper(*ARG3))) // ARG3 is absent or invalid, so do normal math (not date-time).
+		if (!*ARG3 || !_tcschr(_T("SMHD"), ctoupper(*ARG3))) // ARG3 is absent or invalid, so do normal math (not date-time).
 		{
 			DETERMINE_NUMERIC_TYPES
 			IF_EITHER_IS_FLOAT
@@ -12507,7 +12507,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			, output_var->Contents(), failed);
 		if (failed) // Usually caused by an invalid component in the date-time string.
 			return output_var->Assign(_T(""));
-		switch (_totupper(*ARG3))
+		switch (ctoupper(*ARG3))
 		{
 		// Do nothing in the case of 'S' (seconds).  Otherwise:
 		case 'M': time_until /= 60; break; // Minutes
@@ -12584,7 +12584,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 				return output_var->Assign();  // Set it to be blank in this case.
 		}
 		start_char_num = ArgToInt(3);
-		if (_totupper(*ARG5) == 'L')  // Chars to the left of start_char_num will be extracted.
+		if (ctoupper(*ARG5) == 'L')  // Chars to the left of start_char_num will be extracted.
 		{
 			// TRANSLATE "L" MODE INTO THE EQUIVALENT NORMAL MODE:
 			if (start_char_num < 1) // Starting at a character number that is invalid for L mode.
@@ -12648,7 +12648,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		}
 		//else input and output are the same, normal variable; so nothing needs to be copied over.  Just leave
 		// contents at the default set earlier, then convert its case.
-		if (*ARG3 && _totupper(*ARG3) == 'T' && !*(ARG3 + 1)) // Convert to title case.
+		if (*ARG3 && ctoupper(*ARG3) == 'T' && !*(ARG3 + 1)) // Convert to title case.
 			StrToTitleCase(contents);
 		else if (mActionType == ACT_STRINGLOWER)
 			CharLower(contents);
@@ -12667,7 +12667,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		LPTSTR arg4 = ARG4;
 		int pos = -1; // Set default.
 		int occurrence_number;
-		if (*arg4 && _tcschr(_T("LR"), _totupper(*arg4)))
+		if (*arg4 && _tcschr(_T("LR"), ctoupper(*arg4)))
 			occurrence_number = *(arg4 + 1) ? ATOI(arg4 + 1) : 1;
 		else
 			occurrence_number = 1;
@@ -12688,7 +12688,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 				size_t haystack_length = offset ? ArgLength(2) : 1; // Avoids calling ArgLength() if no offset, in which case length isn't needed here.
 				if (offset < (int)haystack_length)
 				{
-					if (*arg4 == '1' || _totupper(*arg4) == 'R') // Conduct the search starting at the right side, moving leftward.
+					if (*arg4 == '1' || ctoupper(*arg4) == 'R') // Conduct the search starting at the right side, moving leftward.
 					{
 						TCHAR prev_char, *terminate_here;
 						if (offset)
@@ -13273,7 +13273,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	case ACT_FILECOPYDIR:
 		return g_ErrorLevel->Assign(Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
 	case ACT_FILEMOVEDIR:
-		if (_totupper(*ARG3) == 'R')
+		if (ctoupper(*ARG3) == 'R')
 		{
 			// Perform a simple rename instead, which prevents the operation from being only partially
 			// complete if the source directory is in use (due to being a working dir for a currently
@@ -13412,7 +13412,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	}
 
 	case ACT_INPUTBOX:
-		return InputBox(output_var, ARG2, ARG3, _totupper(*ARG4) == 'H' // 4th is whether to hide input.
+		return InputBox(output_var, ARG2, ARG3, ctoupper(*ARG4) == 'H' // 4th is whether to hide input.
 			, *ARG5 ? ArgToInt(5) : INPUTBOX_DEFAULT  // Width
 			, *ARG6 ? ArgToInt(6) : INPUTBOX_DEFAULT  // Height
 			, *ARG7 ? ArgToInt(7) : INPUTBOX_DEFAULT  // Xpos

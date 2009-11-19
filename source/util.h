@@ -79,13 +79,16 @@ inline int cisctype(TBYTE c, int type)
 #define cisprint(c)		cisctype(c, _ALPHA | _BLANK | _DIGIT | _PUNCT)
 #define cisspace(c)		cisctype(c, _SPACE)
 
+// The results of toupper/tolower are implementations dependent (see below), though the test results are OK in VS2008's CRT.
+// MDSN: In order for toupper to give the expected results, __isascii and islower must both return nonzero.
+// Linux (man page): The value returned is that of the converted letter, or c if the conversion was not possible. (CONFORMING TO C89, C99, 4.3BSD.)
 inline TCHAR ctoupper(TBYTE c)
 {
-	return cislower(c) ? toupper(c) : c;
+	return cislower(c) ? (c & ~0x20) : c;
 }
 inline TCHAR ctolower(TBYTE c)
 {
-	return cisupper(c) ? tolower(c) : c;
+	return cisupper(c) ? (c | 0x20) : c;
 }
 
 // Runtime setting dependent. "a" prefix stand for AutoHotkey.
