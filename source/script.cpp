@@ -4495,13 +4495,19 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						switch(Line::ConvertTransformCmd(arg[1])) // arg[1] is the second arg.
 						{
 						// See comment above for why TRANS_CMD_INVALID isn't yet reported as an error:
+#ifdef UNICODE
+						#define TRANS_CMD_UNICODE_CASE
+#else
+						#define TRANS_CMD_UNICODE_CASE case TRANS_CMD_UNICODE:
+#endif
 						#define TRANSFORM_NON_EXPRESSION_CASES \
 						case TRANS_CMD_INVALID:\
 						case TRANS_CMD_ASC:\
-						case TRANS_CMD_UNICODE:\
+						TRANS_CMD_UNICODE_CASE\
 						case TRANS_CMD_DEREF:\
 						case TRANS_CMD_HTML:\
 							break; // Do nothing.  Leave this_new_arg.is_expression set to its default of false.
+
 						TRANSFORM_NON_EXPRESSION_CASES
 						default:
 							// For all other sub-commands, Arg #3 and #4 are expression-capable.  It doesn't
@@ -6063,6 +6069,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 			// ArgHasDeref() [above].
 			if (trans_cmd == TRANS_CMD_INVALID)
 				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
+#ifndef UNICODE
 			if (trans_cmd == TRANS_CMD_UNICODE && !*line.mArg[0].text) // blank text means output-var is not a dynamically built one.
 			{
 				// If the output var isn't the clipboard, the mode is "retrieve clipboard text as UTF-8".
@@ -6080,6 +6087,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 						return ScriptError(ERR_PARAM3_MUST_BE_BLANK, new_raw_arg3);
 				break; // This type has been fully checked above.
 			}
+#endif
 
 			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
 			// sees a valid no-deref expression such as 1+2 as invalid.
@@ -6137,8 +6145,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 			case TRANS_CMD_ASC:
 			case TRANS_CMD_CHR:
 			case TRANS_CMD_DEREF:
-			case TRANS_CMD_UNICODE:
 #ifndef UNICODE
+			case TRANS_CMD_UNICODE:
 			case TRANS_CMD_HTML:
 #endif
 			case TRANS_CMD_EXP:

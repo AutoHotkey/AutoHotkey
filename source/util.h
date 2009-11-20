@@ -654,6 +654,8 @@ inline char* WideToUTF8(LPCWSTR str){
 #define UTF8LenToTLen  UTF8LenToLen
 #define vAssignUTF8IfNeeded(v) v.AssignStringFromUTF8
 #define vpAssignUTF8IfNeeded(v) v->AssignStringFromUTF8
+#define ToUnicodeOrAsciiEx(wVirtKey, wScanCode, lpKeyState, pszBuff, wFlags, dwhkl) \
+	ToUnicodeEx((wVirtKey), (wScanCode), (lpKeyState), (LPWSTR)(pszBuff), 2, (wFlags), (dwhkl))
 #else
 #define UorA(u,a)            (a)
 #define RegExToUTF8(a)       (a)
@@ -663,6 +665,8 @@ inline char* WideToUTF8(LPCWSTR str){
 #define UTF8LenToTLen(a,b,c) (c)
 #define vAssignUTF8IfNeeded(v) v.Assign
 #define vpAssignUTF8IfNeeded(v) v->Assign
+#define ToUnicodeOrAsciiEx(wVirtKey, wScanCode, lpKeyState, pszBuff, wFlags, dwhkl) \
+	ToAsciiEx((wVirtKey), (wScanCode), (lpKeyState), (LPWORD)(pwszBuff), (wFlags), (dwhkl))
 #endif
 
 // v1.0.44.03: Callers now use the following macro rather than the old approach.  However, this change

@@ -1272,7 +1272,9 @@ public:
 		if (!_tcsicmp(aBuf, _T("Asc"))) return TRANS_CMD_ASC;
 		if (!_tcsicmp(aBuf, _T("Chr"))) return TRANS_CMD_CHR;
 		if (!_tcsicmp(aBuf, _T("Deref"))) return TRANS_CMD_DEREF;
+#ifndef UNICODE
 		if (!_tcsicmp(aBuf, _T("Unicode"))) return TRANS_CMD_UNICODE;
+#endif
 		if (!_tcsicmp(aBuf, _T("HTML"))) return TRANS_CMD_HTML;
 		if (!_tcsicmp(aBuf, _T("Mod"))) return TRANS_CMD_MOD;
 		if (!_tcsicmp(aBuf, _T("Pow"))) return TRANS_CMD_POW;

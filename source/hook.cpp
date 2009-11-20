@@ -2585,7 +2585,8 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	}
 
 
-	BYTE ch[3], key_state[256];
+	TBYTE ch[3];
+	BYTE key_state[256];
 	memcpy(key_state, g_PhysicalKeyState, 256);
 	// As of v1.0.25.10, the below fixes the Input command so that when it is capturing artificial input,
 	// such as from the Send command or a hotstring's replacement text, the captured input will reflect
@@ -2601,9 +2602,9 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// with more keyboard layouts under 2k/XP than ToAscii() does (though if true, there is no MSDN explanation). 
 	// UPDATE: In v1.0.44.03, need to use ToAsciiEx() anyway because of the adapt-to-active-window-layout feature.
 	Get_active_window_keybd_layout // Defines the variables active_window and active_window_keybd_layout for use below.
-	int byte_count = ToAsciiEx(aVK, aEvent.scanCode  // Uses the original scan code, not the adjusted "sc" one.
-		, key_state, (LPWORD)ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
-	if (!byte_count) // No translation for this key.
+	int char_count = ToUnicodeOrAsciiEx(aVK, aEvent.scanCode  // Uses the original scan code, not the adjusted "sc" one.
+		, key_state, ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
+	if (!char_count) // No translation for this key.
 		return treat_as_visible;
 
 	// More notes about dead keys: The dead key behavior of Enter/Space/Backspace is already properly
@@ -2648,7 +2649,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// being capturable by the Input command and recognizable by any defined hotstrings whose
 	// abbreviations use diacritical letters:
 	bool dead_key_sequence_complete = sPendingDeadKeyVK && aVK != VK_TAB && aVK != VK_ESCAPE;
-	if (byte_count < 0 && !dead_key_sequence_complete) // It's a dead key and it doesn't complete a sequence (i.e. there is no pending dead key before it).
+	if (char_count < 0 && !dead_key_sequence_complete) // It's a dead key and it doesn't complete a sequence (i.e. there is no pending dead key before it).
 	{
 		if (treat_as_visible)
 		{
@@ -2699,7 +2700,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		}
 
 		g_HSBuf[g_HSBufLength++] = ch[0];
-		if (byte_count > 1)
+		if (char_count > 1)
 			// MSDN: "This usually happens when a dead-key character (accent or diacritic) stored in the
 			// keyboard layout cannot be composed with the specified virtual key to form a single character."
 			g_HSBuf[g_HSBufLength++] = ch[1];
@@ -3026,7 +3027,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 			g_input.buffer[g_input.BufferLength] = '\0';\
 		}
 	ADD_INPUT_CHAR(ch[0])
-	if (byte_count > 1)
+	if (char_count > 1)
 		// MSDN: "This usually happens when a dead-key character (accent or diacritic) stored in the
 		// keyboard layout cannot be composed with the specified virtual key to form a single character."
 		ADD_INPUT_CHAR(ch[1])

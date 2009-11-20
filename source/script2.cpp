@@ -957,10 +957,8 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 	case TRANS_CMD_DEREF:
 		return Deref(&output_var, aValue1);
 
+#ifndef UNICODE
 	case TRANS_CMD_UNICODE:
-#ifdef UNICODE
-		// no-op, in case we no longer need this.
-#else
 		int char_count;
 		if (output_var.Type() == VAR_CLIPBOARD)
 		{
@@ -1765,8 +1763,8 @@ ResultType Line::Input()
 			BYTE state[256] = {0};
 			state[VK_SHIFT] |= 0x80; // Indicate that the neutral shift key is down for conversion purposes.
 			Get_active_window_keybd_layout // Defines the variable active_window_keybd_layout for use below.
-			int count = ToAsciiEx(g_input.EndingVK, vk_to_sc(g_input.EndingVK), (PBYTE)&state // Nothing is done about ToAsciiEx's dead key side-effects here because it seems to rare to be worth it (assuming its even a problem).
-				, (LPWORD)(key_name + 7), g_MenuIsVisible ? 1 : 0, active_window_keybd_layout); // v1.0.44.03: Changed to call ToAsciiEx() so that active window's layout can be specified (see hook.cpp for details).
+			int count = ToUnicodeOrAsciiEx(g_input.EndingVK, vk_to_sc(g_input.EndingVK), (PBYTE)&state // Nothing is done about ToAsciiEx's dead key side-effects here because it seems to rare to be worth it (assuming its even a problem).
+				, key_name + 7, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout); // v1.0.44.03: Changed to call ToAsciiEx() so that active window's layout can be specified (see hook.cpp for details).
 			*(key_name + 7 + count) = '\0';  // Terminate the string.
 		}
 		else
