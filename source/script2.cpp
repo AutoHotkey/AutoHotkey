@@ -14478,6 +14478,19 @@ void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 				var.Close(); // v1.0.44.14: Removes attributes like VAR_ATTRIB_BINARY_CLIP (if present) because it seems more flexible to convert binary-to-normal rather than checking IsBinaryClip() then doing nothing if it binary.
 				return;
 			}
+#ifdef UNICODE
+			// In case the content is an ANSI string.
+			if (new_capacity == -2) // Adjust variable's internal length. Since new_capacity is unsigned, compare directly to -2 rather than doing <0.
+			{
+				// Seems more useful to report length vs. capacity in this special case. Scripts might be able
+				// to use this to boost performance.
+				new_capacity = (VarSizeType) strlen((const char *) var.Contents()); // Performance: Length() and Contents() will update mContents if necessary, it's unlikely to be necessary under the circumstances of this call.  In any case, it seems appropriate to do it this way.
+				new_capacity += new_capacity & 1; // sizeof(wchar_t) == 2
+				aResultToken.value_int64 = var.ByteLength() = new_capacity;
+				var.Close(); // v1.0.44.14: Removes attributes like VAR_ATTRIB_BINARY_CLIP (if present) because it seems more flexible to convert binary-to-normal rather than checking IsBinaryClip() then doing nothing if it binary.
+				return;
+			}
+#endif
 			// Since above didn't return:
 			if (new_capacity)
 			{
