@@ -264,7 +264,7 @@ private:
 
 
 
-// TextMem is intent to attach a memory block, which provides code pages and end-of-line conversions (CRLF <-> LF).
+// TextMem is intended to attach a memory block, which provides code pages and end-of-line conversions (CRLF <-> LF).
 // It is used for reading the script data in compiled script.
 // Note that TextMem dosen't have any ability to write and seek.
 class TextMem : public TextStream

@@ -47,7 +47,7 @@ EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 #endif
 
 #ifdef UNICODE
-#define TRANS_CHAR_TO_INT(a) ((int)(USHORT)(a)) // Cast to USHORT so that chars above Asc(16383) show as positive.
+#define TRANS_CHAR_TO_INT(a) ((int)(USHORT)(a)) // Cast to USHORT so that chars above Asc(32767) show as positive.
 #define TRANS_CHAR_MAX 65535
 #else
 #define TRANS_CHAR_TO_INT(a) ((int)(UCHAR)(a)) // Cast to UCHAR so that chars above Asc(127) show as positive.

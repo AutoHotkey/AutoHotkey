@@ -1101,7 +1101,7 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 									length += (VarSizeType)_tcslen(sHtml[*ucp - 0xA0]) + 2; // +2 for the leading '&' and the trailing ';'.
 									goto end_get_length;
 								}
-								// else handles by the following
+								// else handled by the following
 								break;
 						}
 					}
@@ -1238,7 +1238,7 @@ end_get_length:
 									*contents++ = ';';
 									goto end_set_entity;
 								}
-								// else handles by the following
+								// else handled by the following
 								break;
 						} // switch (*ucp)
 					} // if (aFlags & TRANS_HTML_NAMED)
