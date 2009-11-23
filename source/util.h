@@ -498,7 +498,7 @@ inline LPTSTR ITOA(int value, LPTSTR buf)
 	}
 	else if (g->FormatInt == 'H') // uppercase
 	{
-		// This might slower than the above, but it should still faster than doing StringUpper in the script level
+		// This might slower than the above, but it should be faster than doing StringUpper in the script level.
 		_stprintf(buf, _T("0x%X"), value);
 		return buf;
 	}
@@ -530,7 +530,7 @@ inline LPTSTR ITOA64(__int64 value, LPTSTR buf)
 
 inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 {
-	if (g->FormatInt = 'h')
+	if (g->FormatInt == 'h')
 	{
 		*buf = '0';
 		*(buf + 1) = 'x';

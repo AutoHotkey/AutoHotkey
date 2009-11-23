@@ -4496,14 +4496,16 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						{
 						// See comment above for why TRANS_CMD_INVALID isn't yet reported as an error:
 #ifdef UNICODE
-						#define TRANS_CMD_UNICODE_CASE
+						#define TRANS_CMD_UNICODE_CASES \
+						case TRANS_CMD_TOCODEPAGE:
 #else
-						#define TRANS_CMD_UNICODE_CASE case TRANS_CMD_UNICODE:
+						#define TRANS_CMD_UNICODE_CASES \
+						case TRANS_CMD_UNICODE:
 #endif
 						#define TRANSFORM_NON_EXPRESSION_CASES \
 						case TRANS_CMD_INVALID:\
 						case TRANS_CMD_ASC:\
-						TRANS_CMD_UNICODE_CASE\
+						TRANS_CMD_UNICODE_CASES\
 						case TRANS_CMD_DEREF:\
 						case TRANS_CMD_HTML:\
 							break; // Do nothing.  Leave this_new_arg.is_expression set to its default of false.

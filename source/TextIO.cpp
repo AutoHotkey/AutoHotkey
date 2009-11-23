@@ -290,6 +290,7 @@ public:
 						aResultToken.symbol = SYM_STRING;
 						aResultToken.marker = (LPTSTR) aResultToken.circuit_token; // Store the address of the result for the caller.
 						aResultToken.buf = (LPTSTR)(size_t) mFile.ReadLine(aResultToken.marker, READ_FILE_LINE_SIZE - 1); // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
+						aResultToken.marker[READ_FILE_LINE_SIZE - 1] = '\0'; // Prevent buffer overrun for very long lines.
 						return OK;
 					}
 				}

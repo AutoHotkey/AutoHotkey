@@ -92,13 +92,10 @@ void DisguiseWinAltIfNeeded(vk_type aVK)
 
 
 // moved from SendKeys
-void SendUnicodeChar(wchar_t aChar, modLR_type aModifiersLRnew, modLR_type aModifiersLRnow)
+inline void SendUnicodeChar(wchar_t aChar)
 {
 	INPUT u_input[2];
 
-	// L25: Set modifier key-state in case it matters.
-	SetModifierLRState(aModifiersLRnew, aModifiersLRnow,  NULL, false, true, KEY_IGNORE);
-	
 	u_input[0].type = INPUT_KEYBOARD;
 	u_input[0].ki.wVk = 0;
 	u_input[0].ki.wScan = aChar;
@@ -617,7 +614,18 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 					// do nothing if the curr. keyboard layout lacks such a key.  This is relied upon by remappings
 					// such as F1::?(i.e. a destination key that doesn't have a VK, at least in English).
 					if (!aTargetWindow && event_type != KEYUP) // In this mode, mods_for_next_key and event_type are ignored due to being unsupported.
-						SendKeySpecial((char) aKeys[0], repeat_count);
+					{
+#ifdef UNICODE
+						if (aKeys[0] > VK_MAX)
+						{
+							SetModifierLRState(mods_for_next_key | persistent_modifiers_for_this_SendKeys, sSendMode ? sEventModifiersLR : GetModifierLRState(),
+								NULL, false, true, KEY_IGNORE);
+							SendUnicodeChar(aKeys[0], repeat_count);
+						}
+						else
+#endif
+						SendKeySpecial(aKeys[0], repeat_count);
+					}
 					//else do nothing since it's there's no known way to send the keystokes.
 				}
 
@@ -668,7 +676,10 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 
 					if (g_os.IsWin2000orLater())
 					{
-						SendUnicodeChar(u_code, mods_for_next_key | persistent_modifiers_for_this_SendKeys, sSendMode ? sEventModifiersLR : GetModifierLRState());
+						// L25: Set modifier key-state in case it matters.
+						SetModifierLRState(mods_for_next_key | persistent_modifiers_for_this_SendKeys, sSendMode ? sEventModifiersLR : GetModifierLRState(),
+							NULL, false, true, KEY_IGNORE);
+						SendUnicodeChar(u_code);
 					}
 					else
 					{
@@ -699,7 +710,9 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 #ifdef UNICODE
 			if (*aKeys > VK_MAX)
 			{
-				SendUnicodeChar(*aKeys, mods_for_next_key | persistent_modifiers_for_this_SendKeys, sSendMode ? sEventModifiersLR : GetModifierLRState());
+				SetModifierLRState(mods_for_next_key | persistent_modifiers_for_this_SendKeys, sSendMode ? sEventModifiersLR : GetModifierLRState(),
+					NULL, false, true, KEY_IGNORE);
+				SendUnicodeChar(*aKeys);
 				DoKeyDelay();
 			}
 			else
@@ -718,7 +731,7 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 				{
 					// v1.0.40: SendKeySpecial sends only keybd_event keystrokes, not ControlSend style keystrokes:
 					if (!aTargetWindow) // In this mode, mods_for_next_key is ignored due to being unsupported.
-						SendKeySpecial((char) *aKeys, 1);
+						SendKeySpecial(*aKeys, 1);
 					//else do nothing since there's no known way to send the keystokes.
 				}
 			}
@@ -1076,7 +1089,7 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 
 
 
-void SendKeySpecial(char aChar, int aRepeatCount)
+void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 // Caller must be aware that keystrokes are sent directly (i.e. never to a target window via ControlSend mode).
 // It must also be aware that the event type KEYDOWNANDUP is always what's used since there's no way
 // to support anything else.  Furthermore, there's no way to support "modifiersLR_for_next_key" such as ^€
@@ -1137,6 +1150,7 @@ void SendKeySpecial(char aChar, int aRepeatCount)
 		SendASC(asc_string);
 		DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
 	}
+
 	// It is not necessary to do SetModifierLRState() to put a caller-specified set of persistent modifier
 	// keys back into effect because:
 	// 1) Our call to SendASC above (if any) at most would have released some of the modifiers (though never
@@ -1145,6 +1159,21 @@ void SendKeySpecial(char aChar, int aRepeatCount)
 	// 2) Our callers, if they need to push ALT back down because we didn't do it, will either disguise it
 	//    or avoid doing so because they're about to send a keystroke (just about anything) that ALT will
 	//    modify and thus not need to be disguised.
+}
+
+
+
+void SendUnicodeChar(wchar_t aChar, int aRepeatCount)
+// The same with SendKeySpecial, but it sends Unicode characters.
+{
+	LONG_OPERATION_INIT
+	for (int i = 0; i < aRepeatCount; ++i)
+	{
+		if (!sSendMode)
+			LONG_OPERATION_UPDATE_FOR_SENDKEYS
+		SendUnicodeChar(aChar);
+		DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
+	}
 }
 
 
