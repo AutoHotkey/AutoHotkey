@@ -125,14 +125,14 @@ DWORD TextStream::Write(LPCWSTR aBuf, DWORD aBufLen)
 			DWORD i;
 			for (i = 0; i < aBufLen; i++) {
 				if (aBuf[i] == '\n' && mCacheW[0] != '\r')
-					dwWritten += _Write(L"\r\n", 4);
+					dwWritten += _Write(L"\r\n", sizeof(WCHAR) * 2);
 				else
-					dwWritten += _Write(&aBuf[i], 1);
+					dwWritten += _Write(&aBuf[i], sizeof(WCHAR));
 				mCacheW[0] = aBuf[i];
 			}
 			return dwWritten;
 		}
-		return _Write(aBuf, aBufLen * sizeof(wchar_t));
+		return _Write(aBuf, aBufLen * sizeof(WCHAR));
 	}
 	else {
 		CStringA sBuf;
@@ -145,14 +145,14 @@ DWORD TextStream::Write(LPCWSTR aBuf, DWORD aBufLen)
 			int i;
 			for (i = 0;i < sBuf.GetLength();i++) {
 				if (sBuf[i] == '\n' && mCacheA[0] != '\r')
-					dwWritten += _Write("\r\n", 2);
+					dwWritten += _Write("\r\n", sizeof(CHAR) * 2);
 				else
-					dwWritten += _Write(&sBuf[i], 1);
+					dwWritten += _Write(&sBuf[i], sizeof(CHAR) * 1);
 				mCacheA[0] = sBuf[i];
 			}
 			return dwWritten;
 		}
-		return _Write(sBuf, sBuf.GetLength());
+		return _Write(sBuf, sizeof(CHAR) * sBuf.GetLength());
 	}
 }
 
