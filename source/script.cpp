@@ -3148,6 +3148,15 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		return CONDITION_TRUE;
 	}
 
+	if (IS_DIRECTIVE_MATCH("#MenuMaskKey"))
+	{
+		// L38: Allow scripts to specify an alternate "masking" key in place of VK_CONTROL.
+		if (parameter && (g_MenuMaskKey = (BYTE)TextToVK(parameter, NULL, true, true)))
+			return CONDITION_TRUE;
+		else
+			return ScriptError(parameter ? ERR_PARAM1_INVALID : ERR_PARAM1_REQUIRED, aBuf);
+	}
+
 	// Otherwise, report that this line isn't a directive:
 	return CONDITION_FALSE;
 }

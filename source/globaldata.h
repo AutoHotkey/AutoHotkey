@@ -60,6 +60,8 @@ extern DWORD g_HookReceiptOfLControlMeansAltGr;
 extern DWORD g_IgnoreNextLControlDown;
 extern DWORD g_IgnoreNextLControlUp;
 
+extern BYTE g_MenuMaskKey; // L38: See #MenuMaskKey.
+
 // If a SendKeys() operation takes longer than this, hotkey's modifiers won't be pressed back down:
 extern int g_HotkeyModifierTimeout;
 extern int g_ClipboardTimeout;
