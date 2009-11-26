@@ -1699,15 +1699,15 @@ int Debugger::FatalError(int aErrorCode, char *aMessage)
 	return aErrorCode;
 }
 
-char *Debugger::sBase64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const char *Debugger::sBase64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 // Encode base 64 data.
-int Debugger::Base64Encode(char *aBuf, const char *aInput, int aInputSize)
+int Debugger::Base64Encode(BYTE *aBuf, const BYTE *aInput, int aInputSize)
 {
 	int buffer, i, len = 0;
 
 	if (aInputSize == -1)
-		aInputSize = strlen(aInput);
+		aInputSize = strlen((const char *) aInput);
 
 	for (i = aInputSize; i > 2; i -= 3)
 	{
@@ -1737,12 +1737,12 @@ int Debugger::Base64Encode(char *aBuf, const char *aInput, int aInputSize)
 }
 
 // Decode base 64 data. aBuf and aInput may point to the same buffer.
-int Debugger::Base64Decode(char *aBuf, const char *aInput, int aInputSize)
+int Debugger::Base64Decode(BYTE *aBuf, const BYTE *aInput, int aInputSize)
 {
 	int buffer, i, len = 0;
 	
 	if (aInputSize == -1)
-		aInputSize = strlen(aInput);
+		aInputSize = strlen((const char *) aInput);
 
 	while (aInputSize > 0 && aInput[aInputSize-1] == '=')
 		--aInputSize;

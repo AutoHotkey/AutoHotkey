@@ -24,7 +24,7 @@ freely, without restriction.
 #ifndef Debugger_h
 #define Debugger_h
 
-#include <WinSock2.h>
+#include <winsock2.h>
 
 
 #define DEBUGGER_INITIAL_BUFFER_SIZE 2048
@@ -265,9 +265,20 @@ private:
 	// Decode a file URI in-place.
 	void DecodeURI(char *aUri);
 	
-	static char *sBase64Chars;
-	int Base64Encode(char *aBuf, const char *aInput, int aInputSize=-1);
-	int Base64Decode(char *aBuf, const char *aInput, int aInputSize=-1);
+	static const char *sBase64Chars;
+
+	static int Base64Encode(char *aBuf, const char *aInput, int aInputSize=-1)
+	{
+		// Base64 encoding should be computed with unsigned values (0..255).
+		return Base64Encode((BYTE *) aBuf, (const BYTE *) aInput, aInputSize);
+	}
+	static int Base64Encode(BYTE *aBuf, const BYTE *aInput, int aInputSize=-1);
+	static int Base64Decode(char *aBuf, const char *aInput, int aInputSize=-1)
+	{
+		// Base64 encoding should be computed with unsigned values (0..255).
+		return Base64Decode((BYTE *) aBuf, (const BYTE *) aInput, aInputSize);
+	}
+	static int Base64Decode(BYTE *aBuf, const BYTE *aInput, int aInputSize=-1);
 
 	// Debugger::GetNextArg
 	//
