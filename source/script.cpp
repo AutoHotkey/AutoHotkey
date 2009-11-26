@@ -6946,13 +6946,15 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 	DWORD attr;
 
 	#define FUNC_LIB_EXT _T(".ahk")
-	#define FUNC_LIB_EXT_LENGTH 4
+	#define FUNC_LIB_EXT_LENGTH (_countof(FUNC_LIB_EXT) - 1)
+	#define FUNC_LOCAL_LIB _T("\\Lib\\") // // Needs leading and trailing backslash.
+	#define FUNC_LOCAL_LIB_LENGTH (_countof(FUNC_LOCAL_LIB) - 1)
 	#define FUNC_USER_LIB _T("\\AutoHotkey\\Lib\\") // Needs leading and trailing backslash.
-	#define FUNC_USER_LIB_LENGTH 16
+	#define FUNC_USER_LIB_LENGTH (_countof(FUNC_USER_LIB) - 1)
 	#define FUNC_STD_LIB _T("Lib\\") // Needs trailing but not leading backslash.
-	#define FUNC_STD_LIB_LENGTH 4
+	#define FUNC_STD_LIB_LENGTH (_countof(FUNC_STD_LIB) - 1)
 
-	#define FUNC_LIB_COUNT 2
+	#define FUNC_LIB_COUNT 3
 	static FuncLibrary sLib[FUNC_LIB_COUNT] = {0};
 
 	if (!sLib[0].path) // Allocate & discover paths only upon first use because many scripts won't use anything from the library. This saves a bit of memory and performance.
@@ -6961,8 +6963,24 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			if (   !(sLib[i].path = (LPTSTR) SimpleHeap::Malloc(MAX_PATH * sizeof(TCHAR)))   ) // Need MAX_PATH for to allow room for appending each candidate file/function name.
 				return NULL; // Due to rarity, simply pass the failure back to caller.
 
+		FuncLibrary *this_lib;
+
+		// DETERMINE PATH TO "LOCAL" LIBRARY:
+		this_lib = sLib; // For convenience and maintainability.
+		this_lib->length = BIV_ScriptDir(this_lib->path, _T(""));
+		if (this_lib->length < MAX_PATH-FUNC_LOCAL_LIB_LENGTH)
+		{
+			_tcscpy(this_lib->path + this_lib->length, FUNC_LOCAL_LIB);
+			this_lib->length += FUNC_LOCAL_LIB_LENGTH;
+		}
+		else // Insufficient room to build the path name.
+		{
+			*this_lib->path = '\0'; // Mark this library as disabled.
+			this_lib->length = 0;   //
+		}
+
 		// DETERMINE PATH TO "USER" LIBRARY:
-		FuncLibrary *this_lib = sLib; // For convenience and maintainability.
+		this_lib++; // For convenience and maintainability.
 		this_lib->length = BIV_MyDocuments(this_lib->path, _T(""));
 		if (this_lib->length < MAX_PATH-FUNC_USER_LIB_LENGTH)
 		{
@@ -6976,7 +6994,7 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 		}
 
 		// DETERMINE PATH TO "STANDARD" LIBRARY:
-		this_lib = sLib + 1; // For convenience and maintainability.
+		this_lib++; // For convenience and maintainability.
 		GetModuleFileName(NULL, this_lib->path, MAX_PATH); // The full path to the currently-running AutoHotkey.exe.
 		char_after_last_backslash = 1 + _tcsrchr(this_lib->path, '\\'); // Should always be found, so failure isn't checked.
 		this_lib->length = (DWORD)(char_after_last_backslash - this_lib->path); // The length up to and including the last backslash.

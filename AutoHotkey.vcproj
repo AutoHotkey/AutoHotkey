@@ -440,15 +440,6 @@
 				RelativePath=".\source\script_expression.cpp"
 				>
 				<FileConfiguration
-					Name="Release|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						Optimization="2"
-						FavorSizeOrSpeed="1"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
 					Name="SC (self-contained)|Win32"
 					>
 					<Tool
