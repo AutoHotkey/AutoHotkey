@@ -236,6 +236,16 @@ public:
 	bool    Seek(__int64 aDistance, int aOrigin) { RollbackFilePointer(); return _Seek(aDistance, aOrigin); }
 	__int64	Tell() { RollbackFilePointer(); return _Tell(); }
 	__int64 Length() { return _Length(); }
+	__int64 Length(__int64 aLength)
+	{
+		__int64 pos = Tell();
+		if (!_Seek(aLength, SEEK_SET) || !SetEndOfFile(mFile))
+			return -1;
+		// Make sure we do not extend the file again.
+		_Seek(min(aLength, pos), SEEK_SET);
+		return _Length();
+	}
+	HANDLE  Handle() { RollbackFilePointer(); return mFile; }
 protected:
 	virtual bool    _Open(LPCTSTR aFileSpec, DWORD aFlags);
 	virtual void    _Close();

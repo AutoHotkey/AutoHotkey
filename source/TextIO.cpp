@@ -368,6 +368,12 @@ public:
 					aResultToken.value_int64 = mFile.Length();
 					return OK;
 				}
+				else if (aParamCount == 2)
+				{
+					__int64 len = TokenToInt64(*aParam[1]);
+					aResultToken.value_int64 = (len >= 0) ? mFile.Length(len) : -1;
+					return OK;
+				}
 			}
 			else if (!_tcsicmp(field, _T("AtEOF"))) // AtEOF
 			{
@@ -382,6 +388,14 @@ public:
 				if (aParamCount == 1)
 				{
 					mFile.Close();
+					return OK;
+				}
+			}
+			else if (!_tcsicmp(field, _T("__Handle"))) // __Handle, prefix with underscores because it is designed for the advanced users.
+			{
+				if (aParamCount == 1)
+				{
+					aResultToken.value_int64 = (UINT_PTR) mFile.Handle();
 					return OK;
 				}
 			}
