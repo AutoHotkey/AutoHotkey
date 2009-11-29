@@ -279,7 +279,7 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
-				CommandLine="if not exist &quot;$(SolutionDir)Release\AutoHotkey.exe&quot; goto TryDebugBuild&#x0D;&#x0A;&quot;$(SolutionDir)Release\AutoHotkey.exe&quot; &quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;goto End&#x0D;&#x0A;:TryDebugBuild&#x0D;&#x0A;if not exist &quot;$(SolutionDir)Debug\AutoHotkey.exe&quot; goto TryLaunchDirectly&#x0D;&#x0A;&quot;$(SolutionDir)Debug\AutoHotkey.exe&quot; &quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;goto End&#x0D;&#x0A;:TryLaunchDirectly&#x0D;&#x0A;&quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;:End&#x0D;&#x0A;"
+				CommandLine="if not exist &quot;$(SolutionDir)Release\AutoHotkeyU.exe&quot; goto TryDebugBuild&#x0D;&#x0A;&quot;$(SolutionDir)Release\AutoHotkeyU.exe&quot; &quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;goto End&#x0D;&#x0A;:TryDebugBuild&#x0D;&#x0A;if not exist &quot;$(SolutionDir)Debug\AutoHotkeyU.exe&quot; goto TryLaunchDirectly&#x0D;&#x0A;&quot;$(SolutionDir)Debug\AutoHotkeyU.exe&quot; &quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;goto End&#x0D;&#x0A;:TryLaunchDirectly&#x0D;&#x0A;&quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;:End&#x0D;&#x0A;"
 			/>
 		</Configuration>
 		<Configuration
@@ -372,7 +372,7 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
-				CommandLine="if not exist &quot;$(SolutionDir)Release\AutoHotkey.exe&quot; goto TryDebugBuild&#x0D;&#x0A;&quot;$(SolutionDir)Release\AutoHotkey.exe&quot; &quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;goto End&#x0D;&#x0A;:TryDebugBuild&#x0D;&#x0A;if not exist &quot;$(SolutionDir)Debug\AutoHotkey.exe&quot; goto TryLaunchDirectly&#x0D;&#x0A;&quot;$(SolutionDir)Debug\AutoHotkey.exe&quot; &quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;goto End&#x0D;&#x0A;:TryLaunchDirectly&#x0D;&#x0A;&quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;:End&#x0D;&#x0A;"
+				CommandLine="if not exist &quot;$(SolutionDir)Release\AutoHotkeyU.exe&quot; goto TryDebugBuild&#x0D;&#x0A;&quot;$(SolutionDir)Release\AutoHotkeyU.exe&quot; &quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;goto End&#x0D;&#x0A;:TryDebugBuild&#x0D;&#x0A;if not exist &quot;$(SolutionDir)Debug\AutoHotkeyU.exe&quot; goto TryLaunchDirectly&#x0D;&#x0A;&quot;$(SolutionDir)Debug\AutoHotkeyU.exe&quot; &quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;goto End&#x0D;&#x0A;:TryLaunchDirectly&#x0D;&#x0A;&quot;$(SolutionDir)PostBuildSC.ahk&quot;&#x0D;&#x0A;:End&#x0D;&#x0A;"
 			/>
 		</Configuration>
 	</Configurations>

@@ -7,7 +7,7 @@ FixSC("SC (minimum size)")
 
 FixSC(folder)
 {
-	scbin := A_ScriptDir . folder . "\AutoHotkeySC.bin"
+	scbin := A_ScriptDir . "\" . folder . "\AutoHotkeySC.bin"
 	IfNotExist %scbin%
 		return
 	; Open a file
