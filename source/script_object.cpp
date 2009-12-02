@@ -560,20 +560,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			return OK;
 		}
 
-		//if ( TokenIsEmptyString(value_param)
-		//	|| !(field || (field = Insert(key_type, key, insert_pos)))
-		//	|| !field->Assign(value_param) ) // THIS LINE MAY HANDLE THE ASSIGNMENT
-		//{
-		//	// A string assignment failed due to low memory. Remove this field;
-		//	// attempting to retrieve it later will return "" unless overridden by meta-object.
-		//	if (field)
-		//		Remove(field, key_type);
-
-		//	// Ensure an empty string is returned (this may not be necessary if caller set a default).
-		//	aResultToken.symbol = SYM_STRING;
-		//	aResultToken.marker = "";
-		//}
-		//else
 		// L34: Assigning an empty string no longer removes the field.
 		if ( (field || (field = Insert(key_type, key, insert_pos))) && field->Assign(value_param) )
 		{
@@ -766,21 +752,8 @@ ResultType Object::_MaxIndex(ExprTokenType &aResultToken)
 
 ResultType Object::_GetCapacity(ExprTokenType &aResultToken)//, ExprTokenType *aParam[], int aParamCount)
 {
-	//if (aParamCount == 1)
-	//{
-	//	FieldType *field = FindField(*aParam[0]);
-	//	if (field && field->symbol == SYM_OPERAND)
-	//	{
-	//		aResultToken.symbol = SYM_INTEGER;
-	//		aResultToken.value_int64 = field->size - 1; // -1 for reserved null-terminator byte.
-	//	}
-	//	// else wrong type of field; leave aResultToken at default, empty string.
-	//}
-	//else if (aParamCount == 0)
-	//{
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = mFieldCountMax;
-	//}
+	aResultToken.symbol = SYM_INTEGER;
+	aResultToken.value_int64 = mFieldCountMax;
 	return OK;
 }
 
@@ -791,101 +764,17 @@ ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 		// Invalid param(s); return default empty string.
 		return OK;
 	size_t desired_size = (size_t)TokenToInt64(*aParam[aParamCount - 1], TRUE);
-	//if (desired_size < 0) // Sanity check.
-	//	return OK;
-
-	//if (aParamCount > 1)
-	//{
-	//	SymbolType key_type;
-	//	KeyType key;
-	//	int insert_pos;
-	//	FieldType *field;
-	//	char *buf;
-
-	//	if (field = FindField(*aParam[0], key_type, key, insert_pos))
-	//	{
-	//		if (field->symbol != SYM_OPERAND)
-	//			// Wrong type of field.
-	//			return OK;
-	//		if ( !(desired_size || (desired_size = strlen(field->marker))) )
-	//		{
-	//			field->Free();
-	//			Remove(field, key_type);
-	//			aResultToken.symbol = SYM_INTEGER;
-	//			aResultToken.value_int64 = 0;
-	//			return OK;
-	//		}
-	//		++desired_size; // Like VarSetCapacity, always reserve one byte for null-terminator.
-	//		// Unlike VarSetCapacity, allow fields to shrink; preserve existing data up to the lesser of the new size and old size.
-	//		if (buf = (char *)realloc(field->marker, desired_size))
-	//		{
-	//			// Ensure the data is null-terminated.
-	//			if (field->size < desired_size)
-	//				buf[field->size] = '\0'; // Terminate at end of existing data, in case it is a string.
-	//			else
-	//				buf[desired_size - 1] = '\0'; // Terminate at end of new data; data was truncated.
-
-	//			field->marker = buf;
-	//			field->size = desired_size;
-	//			// Return new size, minus one byte reserved for null-terminator.
-	//			aResultToken.symbol = SYM_INTEGER;
-	//			aResultToken.value_int64 = desired_size - 1;
-	//		}
-	//		//else out of memory.
-	//		return OK;
-	//	}
-	//	else if (desired_size)
-	//	{
-	//		++desired_size; // Always reserve one byte for null-terminator.
-	//		if (buf = (char *)malloc(desired_size))
-	//		{
-	//			if (field = Insert(key_type, key, insert_pos))
-	//			{
-	//				field->symbol = SYM_OPERAND;
-	//				field->marker = buf;
-	//				field->size = desired_size;
-	//				*buf = '\0';
-	//				// Return new size, minus one byte reserved for null-terminator.
-	//				aResultToken.symbol = SYM_INTEGER;
-	//				aResultToken.value_int64 = desired_size - 1;
-	//			}
-	//			else // Insertion failed.
-	//				free(buf);
-	//		}
-	//		return OK;
-	//	}
-	//	// else desired_size == 0 but field doesn't exist, so nothing to do.
-	//}
-	//else // aParamCount == 0
-	//{
-		if (desired_size < (size_t)mFieldCount)
-		{	// It doesn't seem intuitive to allow _SetCapacity to truncate the fields array.
-			desired_size = (size_t)mFieldCount;
-		}
-		if (desired_size == mFieldCountMax || SetInternalCapacity((int)desired_size))
-		{
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = mFieldCountMax;
-		}
-	//}
+	if (desired_size < (size_t)mFieldCount)
+	{	// It doesn't seem intuitive to allow _SetCapacity to truncate the fields array.
+		desired_size = (size_t)mFieldCount;
+	}
+	if (desired_size == mFieldCountMax || SetInternalCapacity((int)desired_size))
+	{
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = mFieldCountMax;
+	}
 	return OK;
 }
-
-//ResultType Object::_GetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
-//// _GetAddress( key )
-//{
-//	if (aParamCount == 1)
-//	{
-//		FieldType *field = FindField(*aParam[0]);
-//		if (field && field->symbol == SYM_OPERAND)
-//		{
-//			aResultToken.symbol = SYM_INTEGER;
-//			aResultToken.value_int64 = (__int64)field->marker;
-//		}
-//		// else wrong type of field; leave aResultToken at default, empty string.
-//	}
-//	return OK;
-//}
 	
 
 // TODO: Enumeration/direct indexing/field-counting methods.
@@ -900,25 +789,6 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, Exp
 {
 	// Allow script-defined behaviour to take precedence:
 	ResultType r = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
-
-	// If not already handled, check if user is attempting to set a field (or field of a field etc.) of an empty var.
-	/*if (r == INVOKE_NOT_HANDLED && IS_INVOKE_SET && aThisToken.symbol == SYM_VAR && !aThisToken.var->HasContents()) // HasContents() vs HasObject() because it doesn't seem wise to automatically overwrite a non-empty value.
-	{
-		IObject *obj;
-		// Create a new empty object and assign it to the var, then invoke the object.
-		if (obj = Object::Create(NULL, 0))
-		{
-			aThisToken.var->Assign(obj);
-			r = obj->Invoke(aResultToken, aThisToken, aFlags & ~IF_META, aIdCount, aParam, aParamCount);
-			// Above a) completely handled the assignment, b) performed some action defined by g_MetaObject (this)
-			// recursively or c) created a new field and object and returned it to our caller for further processing.
-			// For instance, in an expression "emptyvar.x.y:=z", we have created obj and put it into "emptyvar" -
-			// obj may have created a field "x" containing an object and returned it for our caller to process ".y:=z".
-			obj->Release();
-		}
-		// Out of memory.  Probably best to abort.
-		else return OK;
-	}*/
 
 	if (r == INVOKE_NOT_HANDLED && IS_INVOKE_GET && aParamCount == 1 && aParam[0]->symbol == SYM_OPERAND) // aParam[0]->symbol *should* always be SYM_OPERAND, but check anyway.
 	{

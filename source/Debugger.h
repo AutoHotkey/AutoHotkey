@@ -263,8 +263,9 @@ private:
 	void DecodeURI(char *aUri);
 	
 	static char *sBase64Chars;
-	int Base64Encode(char *aBuf, char *aInput, int aInputSize=-1);
-	int Base64Decode(char *aBuf, char *aInput, int aInputSize=-1);
+	int Base64Encode(char *aBuf, const char *aInput, int aInputSize=-1);
+	int Base64Decode(char *aBuf, const char *aInput, int aInputSize=-1);
+
 
 	// Debugger::GetNextArg
 	//

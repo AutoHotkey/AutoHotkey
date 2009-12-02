@@ -1667,8 +1667,11 @@ int Debugger::FatalError(int aErrorCode, char *aMessage)
 
 char *Debugger::sBase64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
+#define BINARY_TO_BASE64_CHAR(b) (sBase64Chars[(b) & 63])
+#define BASE64_CHAR_TO_BINARY(q) (strchr(sBase64Chars, q)-sBase64Chars)
+
 // Encode base 64 data.
-int Debugger::Base64Encode(char *aBuf, char *aInput, int aInputSize)
+int Debugger::Base64Encode(char *aBuf, const char *aInput, int aInputSize)
 {
 	int buffer, i, len = 0;
 
@@ -1677,71 +1680,70 @@ int Debugger::Base64Encode(char *aBuf, char *aInput, int aInputSize)
 
 	for (i = aInputSize; i > 2; i -= 3)
 	{
-		buffer = aInput[0] << 16 | aInput[1] << 8 | aInput[2] & 0xff;
+		buffer = (UCHAR)aInput[0] << 16 | (UCHAR)aInput[1] << 8 | (UCHAR)aInput[2]; // L39: Fixed for chars outside the range 0..127. [thanks jackieku]
 		aInput += 3;
 
-		*aBuf++ = sBase64Chars[(buffer>>18) & 63];
-		*aBuf++ = sBase64Chars[(buffer>>12) & 63];
-		*aBuf++ = sBase64Chars[(buffer>> 6) & 63];
-		*aBuf++ = sBase64Chars[ buffer      & 63];
+		aBuf[len + 0] = BINARY_TO_BASE64_CHAR(buffer >> 18);
+		aBuf[len + 1] = BINARY_TO_BASE64_CHAR(buffer >> 12);
+		aBuf[len + 2] = BINARY_TO_BASE64_CHAR(buffer >> 6);
+		aBuf[len + 3] = BINARY_TO_BASE64_CHAR(buffer);
 		len += 4;
 	}
 	if (i > 0)
 	{
-		buffer = (*(aInput++)) << 16;
+		buffer = (UCHAR)aInput[0] << 16;
 		if (i > 1)
-			buffer |= (*(aInput++)) << 8;
+			buffer |= (UCHAR)aInput[1] << 8;
+		// aInput not incremented as it is not used below.
 
-		*aBuf++ = sBase64Chars[(buffer>>18) & 63];
-		*aBuf++ = sBase64Chars[(buffer>>12) & 63];
-		*aBuf++ = (i > 1) ? sBase64Chars[(buffer>> 6) & 63] : '=';
-		*aBuf++ = '=';
+		aBuf[len + 0] = BINARY_TO_BASE64_CHAR(buffer >> 18);
+		aBuf[len + 1] = BINARY_TO_BASE64_CHAR(buffer >> 12);
+		aBuf[len + 2] = (i > 1) ? BINARY_TO_BASE64_CHAR(buffer >> 6) : '=';
+		aBuf[len + 3] = '=';
 		len += 4;
 	}
-	*aBuf = '\0';
+	aBuf[len] = '\0';
 	return len;
 }
 
 // Decode base 64 data. aBuf and aInput may point to the same buffer.
-int Debugger::Base64Decode(char *aBuf, char *aInput, int aInputSize)
+int Debugger::Base64Decode(char *aBuf, const char *aInput, int aInputSize)
 {
 	int buffer, i, len = 0;
-	
+
 	if (aInputSize == -1)
 		aInputSize = strlen(aInput);
 
 	while (aInputSize > 0 && aInput[aInputSize-1] == '=')
 		--aInputSize;
-	
+
 	for (i = aInputSize; i > 3; i -= 4)
 	{
-		buffer =  (strchr(sBase64Chars, *aInput++)-sBase64Chars) << 18
-				| (strchr(sBase64Chars, *aInput++)-sBase64Chars) << 12
-				| (strchr(sBase64Chars, *aInput++)-sBase64Chars) <<  6
-				|  strchr(sBase64Chars, *aInput++)-sBase64Chars;
+		buffer	= BASE64_CHAR_TO_BINARY(aInput[0]) << 18 // L39: Fixed bad reliance on order of *side-effects++. [thanks fincs]
+				| BASE64_CHAR_TO_BINARY(aInput[1]) << 12
+				| BASE64_CHAR_TO_BINARY(aInput[2]) << 6
+				| BASE64_CHAR_TO_BINARY(aInput[3]);
+		aInput += 4;
 
-		*aBuf++ = buffer>>16;
-		*aBuf++ = buffer>>8 & 255;
-		*aBuf++ = buffer	& 255;
+		aBuf[len + 0] = buffer >> 16;
+		aBuf[len + 1] = buffer >> 8;
+		aBuf[len + 2] = buffer;
 		len += 3;
 	}
 
 	if (i > 1)
 	{
-		buffer =  (strchr(sBase64Chars, *aInput++)-sBase64Chars) << 18
-				| (strchr(sBase64Chars, *aInput++)-sBase64Chars) << 12;
+		buffer  = BASE64_CHAR_TO_BINARY(aInput[0]) << 18
+				| BASE64_CHAR_TO_BINARY(aInput[1]) << 12;
 		if (i > 2)
-			buffer |= (strchr(sBase64Chars, *aInput++)-sBase64Chars) <<  6;
+			buffer |= BASE64_CHAR_TO_BINARY(aInput[2]) << 6;
+		// aInput not incremented as it is not used below.
 
-		*aBuf++ = buffer>>16;
-		++len;
+		aBuf[len++] = buffer >> 16;
 		if (i > 2)
-		{
-			*aBuf++ = buffer>>8 & 255;
-			++len;
-		}
+			aBuf[len++] = buffer >> 8;
 	}
-	*aBuf = '\0';
+	aBuf[len] = '\0';
 	return len;
 }
 
