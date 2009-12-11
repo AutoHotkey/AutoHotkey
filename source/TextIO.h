@@ -191,13 +191,17 @@ protected:
 	DWORD mLength;		// The length of available data in the buffer, in bytes.
 	DWORD mCapacity;	// The capacity of the buffer, in bytes.
 	bool  mEOF;
-	__declspec(align(1)) union
+
+	#pragma pack(push, 1)
+	union
 	{
 		CHAR  mCacheA[4];
 		WCHAR mCacheW[2];
 		TCHAR mCache[4 / sizeof(TCHAR)];
 		DWORD mCacheInt;
 	};
+	#pragma pack(pop)
+
 	union // pointer to the next character to read in mBuffer
 	{
 		LPBYTE  mPos;
