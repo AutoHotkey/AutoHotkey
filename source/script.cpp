@@ -2450,6 +2450,8 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		mCombinedLineNumber = saved_line_number;
 	}
 
+	++mCombinedLineNumber; // L40: Put the implicit ACT_EXIT on the line after the last physical line (for the debugger).
+
 #ifdef AUTOHOTKEYSC
 	free(script_buf); // AutoIt3: Close the archive and free the file in memory.
 	oRead.Close();    //

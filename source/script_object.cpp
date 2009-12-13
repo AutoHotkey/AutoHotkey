@@ -6,137 +6,9 @@
 #include "script_object.h"
 
 
-/*
-MISC IMPLEMENTATION IDEAS
-
-Member Function Declarations:
-
-	ProtoType.func() {
-		...
-	}
-
-	This would be a convenient way to declare an anonymous function and assign it to a meta-object.
-	There are a few possibilities for how this assignment takes place:
-
-		1)	At load-time.  This would be consistent with regular function definitions, but would require 'ProtoType'
-			to be a global/static variable (not an issue until function-in-function support is added).  If script does
-			ProtoType := Object(), the function is lost.
-
-		2)	At run-time.  It would resolve to something like:  ProtoType.func := <token containing anonymous Func>.
-			Method definitions would need to be in the auto-execute section or an initialization function (which would
-			require function-in-function support); this is somewhat inconsistent with regular function definitions.
-
-		3)	Both.  Since the actual anonymous function would be created at load-time, it could be both assigned to
-			the (automatically created) ProtoType object at load-time and at run-time (in case the ProtoType reference
-			is overwritten.)
-*/
-
-
 //
-//	DIRECT BUILT-IN FUNCTIONS
+//	Internal: CallFunc - Call a script function with given params.
 //
-
-
-void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
-{
-	IObject *obj = NULL;
-
-	if (aParamCount == 1) // L33: POTENTIALLY UNSAFE - Cast IObject address to object reference.
-	{
-		obj = (IObject *)TokenToInt64(*aParam[0]);
-		if (obj < (IObject *)1024) // Prevent some obvious errors.
-			obj = NULL;
-		else
-			obj->AddRef();
-	}
-	else
-	{
-		//char *type_name = aResultToken.marker + 3; // Omit "Obj" prefix
-		//for (int t = 0; t < g_ObjTypeCount; ++t)
-		//{
-		//	if (!stricmp(type_name, g_ObjTypes[t].name))
-		//	{
-				//obj = g_ObjTypes[t].ctor(aParam, aParamCount);
-				obj = Object::Create(aParam, aParamCount);
-		//	}
-		//}
-	}
-
-	if (obj)
-	{
-		aResultToken.symbol = SYM_OBJECT;
-		aResultToken.object = obj;
-		// DO NOT ADDREF: after we return, the only reference will be in aResultToken.
-	}
-	else
-	{
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = "";
-	}
-}
-
-
-void BIF_IsObject(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
-// IsObject(obj) is currently equivalent to (obj && obj=""), but much more intuitive.
-{
-	int i;
-	for (i = 0; i < aParamCount && TokenToObject(*aParam[i]); ++i);
-	aResultToken.value_int64 = (__int64)(i == aParamCount); // TRUE if all are objects.
-}
-
-
-void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
-{
-    int invoke_type;
-    IObject *obj;
-    ExprTokenType *obj_param;
-
-	// Since ObjGet/ObjSet/ObjCall are "pre-loaded" before the script begins executing,
-	// marker always contains the correct case (vs. whatever the first call in script used).
-	switch (aResultToken.marker[3])
-	{
-	case 'G': invoke_type = IT_GET; break;
-	case 'S': invoke_type = IT_SET; break;
-	default: invoke_type = IT_CALL;
-	}
-
-	// Set default return value; ONLY AFTER THE ABOVE.
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = "";
-    
-    obj_param = *aParam; // aParam[0].  Load-time validation has ensured at least one parameter was specified.
-    
-    if ( obj = TokenToObject(*obj_param) )
-	{
-		bool param_is_var = obj_param->symbol == SYM_VAR;
-		if (param_is_var)
-			// Since the variable may be cleared as a side-effect of the invocation, call AddRef to ensure the object does not expire prematurely.
-			// This is not necessary for SYM_OBJECT since that reference is already counted and cannot be released before we return.  Each object
-			// could take care not to delete itself prematurely, but it seems more proper, more reliable and more maintainable to handle it here.
-			obj->AddRef();
-        obj->Invoke(aResultToken, *obj_param, invoke_type, aParam + 1, aParamCount - 1);
-		if (param_is_var)
-			obj->Release();
-	}
-	else
-	{
-		if ( g_MetaObject.Invoke(aResultToken, *obj_param, invoke_type | IF_META, aParam + 1, aParamCount - 1) == INVOKE_NOT_HANDLED )
-		{
-			// Temporarily insert "__Get" or "__Set" or "__Call" into aParam to invoke the meta-function.
-			// Note that *aParam (aParam[0]) points to the object-value, which is passed as a separate param.
-			*aParam = &g_MetaFuncId[invoke_type];
-			g_MetaObject.Invoke(aResultToken, *obj_param, IT_CALL_METAFUNC, aParam, aParamCount);
-			*aParam = obj_param;
-		}
-	}
-}
-
-
-
-//
-//	INTERNAL HELPER FUNCTIONS
-//
-
 
 ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 // Caller should pass an aResultToken with the usual setup:
@@ -257,11 +129,9 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 }
 	
 
-
 //
-// Object
+// Object::Create - Called by BIF_Object to create a new object, optionally passing key/value pairs to set.
 //
-
 
 IObject *Object::Create(ExprTokenType *aParam[], int aParamCount)
 {
@@ -299,12 +169,16 @@ IObject *Object::Create(ExprTokenType *aParam[], int aParamCount)
 }
 
 
+//
+// Object::Delete - Called immediately before the object is deleted.
+//					Returns false if object should not be deleted yet.
+//
+
 bool Object::Delete()
-// Called immediately before the object is deleted.  Allows deletion to be prevented if appropriate (see below).
 {
 	if (mBase)
 	{
-		ExprTokenType result_token, this_token, *param;
+		ExprTokenType result_token, this_token, param_token, *param;
 		
 		result_token.marker = "";
 		result_token.symbol = SYM_STRING;
@@ -313,7 +187,9 @@ bool Object::Delete()
 		this_token.symbol = SYM_OBJECT;
 		this_token.object = this;
 
-		param = &g_MetaFuncId[3]; // "__Delete"
+		param_token.symbol = SYM_STRING;
+		param_token.marker = sMetaFuncName[3]; // "__Delete"
+		param = &param_token;
 
 		// L33: Privatize the last recursion layer's deref buffer in case it is in use by our caller.
 		// It's done here rather than in Var::FreeAndRestoreFunctionVars or CallFunc (even though the
@@ -321,7 +197,7 @@ bool Object::Delete()
 		// executed much less often in most cases.
 		PRIVATIZE_S_DEREF_BUF;
 
-		mBase->Invoke(result_token, this_token, IT_CALL_METAFUNC, &param, 1);
+		mBase->Invoke(result_token, this_token, IT_CALL | IF_METAOBJ, &param, 1);
 
 		DEPRIVATIZE_S_DEREF_BUF; // L33: See above.
 
@@ -342,6 +218,32 @@ bool Object::Delete()
 }
 
 
+Object::~Object()
+{
+	if (mBase)
+		mBase->Release();
+
+	if (mFields)
+	{
+		int i = mFieldCount - 1;
+		// Free keys: first strings, then objects (objects have a lower index in the mFields array).
+		for ( ; i >= mKeyOffsetString; --i)
+			free(mFields[i].key.s);
+		for ( ; i >= mKeyOffsetObject; --i)
+			mFields[i].key.p->Release();
+		// Free values.
+		while (mFieldCount) 
+			mFields[--mFieldCount].Free();
+		// Free fields array.
+		free(mFields);
+	}
+}
+
+
+//
+// Object::Invoke - Called by BIF_ObjInvoke when script explicitly interacts with an object.
+//
+
 ResultType STDMETHODCALLTYPE Object::Invoke(
                                             ExprTokenType &aResultToken,
                                             ExprTokenType &aThisToken,
@@ -349,147 +251,173 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
                                             ExprTokenType *aParam[],
                                             int aParamCount
                                             )
+// L40: Revised base mechanism for flexibility and to simplify some aspects.
+//		obj[] -> obj.base.__Get -> obj.base[] -> obj.base.__Get etc.
 {
 	SymbolType key_type;
 	KeyType key;
     FieldType *field;
 	int insert_pos;
+
+	// If this is some object's base and is being invoked in that capacity, call
+	//	__Get/__Set/__Call as defined in this base object before searching further.
+	if (SHOULD_INVOKE_METAFUNC)
+	{
+		key.s = sMetaFuncName[INVOKE_TYPE];
+		// Look for a meta-function definition directly in this base object.
+		if (field = FindField(SYM_STRING, key, /*out*/ insert_pos))
+		{
+			// Seems more maintainable to copy params rather than assume aParam[-1] is always valid.
+			ExprTokenType **meta_params = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
+			// Shallow copy; points to the same tokens.  Leave a space for param[0], which must be the param which
+			// identified the field (or in this case an empty space) to replace with aThisToken when appropriate.
+			memcpy(meta_params + 1, aParam, aParamCount * sizeof(ExprTokenType*));
+
+			ResultType r = CallField(field, aResultToken, aThisToken, aFlags, meta_params, aParamCount + 1);
+			if (r == EARLY_RETURN)
+				return OK; // TODO: Detection of 'return' vs 'return empty_value'.
+		}
+	}
 	
 	int param_count_excluding_rvalue = aParamCount;
-	if (IS_INVOKE_SET)
-		--param_count_excluding_rvalue; // Prior ObjSet validation ensures the result won't be negative.
 
+	if (IS_INVOKE_SET)
+	{
+		// Prior validation of ObjSet() param count ensures the result won't be negative:
+		--param_count_excluding_rvalue;
+		
+		if (IS_INVOKE_META)
+		{
+			if (param_count_excluding_rvalue == 1)
+				// Prevent below from searching for or setting a field, since this is a base object of aThisToken.
+				// Relies on mBase->Invoke recursion using aParamCount and not param_count_excluding_rvalue.
+				param_count_excluding_rvalue = 0;
+			//else: Allow SET to operate on a field of an object stored in the target's base.
+			//		For instance, x[y,z]:=w may operate on x[y][z], x.base[y][z], x[y].base[z], etc.
+		}
+	}
+	
 	if (param_count_excluding_rvalue)
 	{
-		key_type = TokenToKey(*aParam[0], /*out*/ key);
-		field = FindField(key_type, key, /*out*/ insert_pos);
+		field = FindField(*aParam[0], /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
 	}
 	else
 	{
 		key_type = SYM_INVALID; // Allow key_type checks below without requiring that param_count_excluding_rvalue also be checked.
 		field = NULL;
 	}
-    
+	
 	if (!field)
 	{
+		// This field doesn't exist, so let our base object define what happens:
+		//		1) __Get, __Set or __Call.  If these don't return a value, processing continues.
+		//		2) For GET and CALL only, check the base object's own fields.
+		//		3) Repeat 1 through 3 for the base object's own base.
 		if (mBase)
 		{
-			ResultType r;
-			if (!IS_INVOKE_SET)
-			{
-				r = mBase->Invoke(aResultToken, aThisToken, aFlags | IF_META, aParam, aParamCount);
-				if (r != INVOKE_NOT_HANDLED)
-					return r;
-			}
-			//else: IS_INVOKE_SET.  Probably not useful to pass it to mBase, except via __Set below.
-			// Also seems best to avoid doing anything that could indirectly invalidate insert_pos.
+			ResultType r = mBase->Invoke(aResultToken, aThisToken, aFlags | IF_META, aParam, aParamCount);
+			if (r != INVOKE_NOT_HANDLED)
+				return r;
 
-			if (!IS_INVOKE_META) // This is the real, top-level object.  Since no mBase contains this field, let it be handled via __Get/__Set/__Call.
-			{
-				ExprTokenType *tmp = aParam[-1];
-				// Relies on the fact that aParam always points at a location in (not at the beginning of) caller's aParam:
-				aParam[-1] = &g_MetaFuncId[INVOKE_TYPE];
-				r = mBase->Invoke(aResultToken, aThisToken, IT_CALL_METAFUNC, aParam - 1, aParamCount + 1);
-				aParam[-1] = tmp;
-				
-				if (r == EARLY_RETURN)
-					return OK; // TODO: Detection of 'return' vs 'return empty_value'.
-
-				if (!param_count_excluding_rvalue)
-					// This might result in slightly smaller code than letting it fall through and return below:
-					return INVOKE_NOT_HANDLED;
-
-				// Since the above may have inserted or removed fields (including the specified one),
-				// insert_pos may no longer be correct or safe (and field=NULL may also be incorrect).
+			// Since the above may have inserted or removed fields (including the specified one),
+			// insert_pos may no longer be correct or safe.  Updating field also allows a meta-function
+			// to initialize a field and allow processing to continue as if it already existed.
+			if (param_count_excluding_rvalue)
 				field = FindField(key_type, key, /*out*/ insert_pos);
-			}
 		}
-		if (IS_INVOKE_META // Since there's no field to get or call and a meta-invoke should not directly create a field, go no further.
-			// OTHER SECTIONS BELOW RELY ON THIS RETURNING AS field IS UNINITIALIZED:
-			|| !param_count_excluding_rvalue) // Something like obj[] or obj[]:=v which we only support through __Get/__Set/__Call above, go no further.
-			return INVOKE_NOT_HANDLED;
-	}
 
+		// Since the base object didn't handle this op, check for built-in properties/methods.
+		// This must apply only to the original target object (aThisToken), not one of its bases.
+		if (!IS_INVOKE_META && key_type == SYM_STRING)
+		{
+			//
+			// BUILT-IN METHODS
+			//
+			if (IS_INVOKE_CALL)
+			{
+				// Since above has not handled this call and no field exists, check for built-in methods.
+				// TODO: Move these predefined methods to built-in functions (which can be reimplemented as methods via a base object).
+				if (aParamCount < 4 && *key.s == '_')
+				{
+					char *name = key.s + 1; // + 1 to exclude '_' from further consideration.
+					++aParam; --aParamCount; // Exclude the method identifier.  A prior check ensures there was at least one param in this case.
+					if (aParamCount) {
+						if (!stricmp(name, "Insert"))
+							return _Insert(aResultToken, aParam, aParamCount);
+						if (!stricmp(name, "Remove"))
+							return _Remove(aResultToken, aParam, aParamCount);
+						if (!stricmp(name, "SetCapacity"))
+							return _SetCapacity(aResultToken, aParam, aParamCount);
+					} else { // aParamCount == 0
+						if (!stricmp(name, "MaxIndex"))
+							return _MaxIndex(aResultToken);
+						if (!stricmp(name, "MinIndex"))
+							return _MinIndex(aResultToken);
+						if (!stricmp(name, "GetCapacity"))
+							return _GetCapacity(aResultToken);
+					}
+					// For maintability: explicitly return since above has done ++aParam, --aParamCount.
+					return INVOKE_NOT_HANDLED;
+				}
+				// Fall through and return INVOKE_NOT_HANDLED.
+			}
+			//
+			// BUILT-IN "BASE" PROPERTY
+			//
+			else if (param_count_excluding_rvalue == 1 && !stricmp(key.s, "base"))
+			{
+				if (IS_INVOKE_SET)
+				// "base" must be handled before inserting a new field.
+				{
+					IObject *obj = TokenToObject(*aParam[1]);
+					if (obj)
+					{
+						obj->AddRef(); // for mBase
+						obj->AddRef(); // for aResultToken
+						aResultToken.symbol = SYM_OBJECT;
+						aResultToken.object = obj;
+					}
+					// else leave as empty string.
+					if (mBase)
+						mBase->Release();
+					mBase = obj; // May be NULL.
+					return OK;
+				}
+				else // GET
+				{
+					if (mBase)
+					{
+						aResultToken.symbol = SYM_OBJECT;
+						aResultToken.object = mBase;
+						mBase->AddRef();
+					}
+					// else leave as empty string.
+					return OK;
+				}
+			}
+		} // if (!IS_INVOKE_META && key_type == SYM_STRING)
+	} // if (!field)
+
+	//
+	// OPERATE ON A FIELD WITHIN THIS OBJECT
+	//
+
+	// CALL
 	if (IS_INVOKE_CALL)
 	{
 		if (field)
-		{
-			if (field->symbol == SYM_OBJECT)
-			{
-				ExprTokenType field_token;
-				field_token.symbol = SYM_OBJECT;
-				field_token.object = field->object;
-				ExprTokenType *tmp = aParam[0];
-				// Something must be inserted into the parameter list to remove any ambiguity between an intentionally
-				// and directly called function of 'that' object and one of our parameters matching an existing name.
-				// Rather than inserting something like an empty string, it seems more useful to insert 'this' object,
-				// allowing 'that' to change (via __Call) the behaviour of a "function-call" which operates on 'this'.
-				// Consequently, if 'that[this]' contains a value, it is invoked; seems obscure but rare, and could
-				// also be of use (for instance, as a means to remove the 'this' parameter or replace it with 'that').
-				aParam[0] = &aThisToken;
-				ResultType r = field->object->Invoke(aResultToken, field_token, IT_CALL, aParam, aParamCount);
-				aParam[0] = tmp;
-				return r;
-			}
-			else if (field->symbol == SYM_OPERAND)
-			{
-				Func *func = g_script.FindFunc(field->marker);
-				if (func)
-				{
-					// At this point, aIdCount == 1 and aParamCount includes only the explicit parameters for the call.
-					if (IS_INVOKE_META)
-					{
-						ExprTokenType *tmp = aParam[0];
-						// Called indirectly by means of the meta-object mechanism (mBase); treat it as a "method call".
-						// For this type of call, "this" object is included as the first parameter.  To do this, aParam[0] is
-						// temporarily overwritten with a pointer to aThisToken.  Note that aThisToken contains the original
-						// object specified in script, not the real "this" which is actually a meta-object/base of that object.
-						aParam[0] = &aThisToken;
-						ResultType r = CallFunc(*func, aResultToken, aParam, aParamCount);
-						aParam[0] = tmp;
-						return r;
-					}
-					else
-						// This object directly contains a function name.  Assume this object is intended
-						// as a simple array of functions; do not pass aThisToken as is done above.
-						// aParam + 1 vs aParam because aParam[0] is the key which was used to find this field, not a parameter of the call.
-						return CallFunc(*func, aResultToken, aParam + 1, aParamCount - 1);
-				}
-			}
-		}
-		// Since above has not handled this call, check for built-in methods.
-		else if (!IS_INVOKE_META && aParamCount < 4 && key_type == SYM_STRING && *key.s == '_')
-		// !IS_INVOKE_META: these methods must operate only on the real/direct object, not indirectly on a meta-object.
-		{
-			char *name = key.s + 1; // + 1 to exclude '_' from further consideration.
-			++aParam; --aParamCount; // Exclude the method identifier.  A prior check ensures there was at least one param in this case.
-			if (aParamCount) {
-				if (!stricmp(name, "Insert"))
-					return _Insert(aResultToken, aParam, aParamCount);
-				if (!stricmp(name, "Remove"))
-					return _Remove(aResultToken, aParam, aParamCount);
-				if (!stricmp(name, "SetCapacity"))
-					return _SetCapacity(aResultToken, aParam, aParamCount);
-				//if (!stricmp(name, "GetAddress"))
-				//	return _GetAddress(aResultToken, aParam, aParamCount);
-			} else { // aParamCount == 0
-				if (!stricmp(name, "MaxIndex"))
-					return _MaxIndex(aResultToken);
-				if (!stricmp(name, "MinIndex"))
-					return _MinIndex(aResultToken);
-				if (!stricmp(name, "GetCapacity"))
-					return _GetCapacity(aResultToken);
-			}
-		}
-		return INVOKE_NOT_HANDLED;
+			return CallField(field, aResultToken, aThisToken, aFlags, aParam, aParamCount);
 	}
+
+	// MULTIPARAM[x,y] -- may be SET[x,y]:=z or GET[x,y], but always treated like GET[x].
 	else if (param_count_excluding_rvalue > 1)
 	{
 		// This is something like this[x,y] or this[x,y]:=z.  Since it wasn't handled by a meta-mechanism above,
 		// handle only the "x" part (automatically creating and storing an object if this[x] didn't already exist
 		// and an assignment is being made) and recursively invoke.  This has at least two benefits:
 		//	1) Objects natively function as multi-dimensional arrays.
-		//	2) Automatic initialization of object-fields.  For instance, this["base","__Get"]:="MyObjGet" does not require a prior this.base:=Object().
+		//	2) Automatic initialization of object-fields.
+		//		For instance, this["base","__Get"]:="MyObjGet" does not require a prior this.base:=Object().
 		IObject *obj = NULL;
 		if (field)
 		{
@@ -497,15 +425,18 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				// AddRef not used.  See below.
 				obj = field->object;
 		}
-		else if (IS_INVOKE_SET)
+		else if (!IS_INVOKE_META)
 		{
+			// This section applies only to the target object (aThisToken) and not any of its base objects.
+			// Allow obj["base",x] to access a field of obj.base; L40: This also fixes obj.base[x] which was broken by L36.
 			if (key_type == SYM_STRING && !stricmp(key.s, "base"))
 			{
-				if (!mBase)
+				if (!mBase && IS_INVOKE_SET)
 					mBase = new Object();
 				obj = mBase; // If NULL, above failed and below will detect it.
 			}
-			else
+			// Automatically create a new object for the x part of obj[x,y]:=z.
+			else if (IS_INVOKE_SET)
 			{
 				Object *new_obj = new Object();
 				if (new_obj)
@@ -522,61 +453,45 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				}
 			}
 		}
-		if (!obj) // Object was not successfully found or created.
-			return OK;
-		// obj now contains a pointer to the object contained by this field, possibly newly created above.
-		ExprTokenType obj_token;
-		obj_token.symbol = SYM_OBJECT;
-		obj_token.object = obj;
-		// References in obj_token and obj weren't counted (AddRef wasn't called), so Release() does not
-		// need to be called before returning, and accessing obj after calling Invoke() would not be safe
-		// since it could Release() the object (by overwriting our field via script) as a side-effect.
-		return obj->Invoke(aResultToken, obj_token, aFlags & ~IF_META, aParam + 1, aParamCount - 1); // L34: Remove IF_META to allow the object to invoke its own meta-functions.
-		// Above may return INVOKE_NOT_HANDLED in cases such as obj[a,b] where obj[a] exists but obj[a][b] does not.
-		// NEEDS CONFIRMATION: This means that if obj.base[a] exists, [b] may exist in either obj.base[a] or obj[a].
-	}
+		if (obj) // Object was successfully found or created.
+		{
+			// obj now contains a pointer to the object contained by this field, possibly newly created above.
+			ExprTokenType obj_token;
+			obj_token.symbol = SYM_OBJECT;
+			obj_token.object = obj;
+			// References in obj_token and obj weren't counted (AddRef wasn't called), so Release() does not
+			// need to be called before returning, and accessing obj after calling Invoke() would not be safe
+			// since it could Release() the object (by overwriting our field via script) as a side-effect.
+			// Recursively invoke obj, passing remaining parameters; remove IF_META to correctly treat obj as target:
+			return obj->Invoke(aResultToken, obj_token, aFlags & ~IF_META, aParam + 1, aParamCount - 1);
+			// Above may return INVOKE_NOT_HANDLED in cases such as obj[a,b] where obj[a] exists but obj[a][b] does not.
+		}
+	} // MULTIPARAM[x,y]
+
+	// SET
 	else if (IS_INVOKE_SET)
 	{
-		if (IS_INVOKE_META) // For now it does not seem intuitive to allow obj.n:=v to alter obj's meta-object's fields.
-			return INVOKE_NOT_HANDLED; // Note this doesn't apply to obj.base.base:=foo since that is not via the meta-mechanism.
-
-		ExprTokenType &value_param = *aParam[1];
-
-		// Must be handled before inserting a new field:
-		if (!field && key_type == SYM_STRING && !stricmp(key.s, "base"))
+		if (!IS_INVOKE_META)
 		{
-			IObject *obj = TokenToObject(value_param);
-			if (obj)
+			ExprTokenType &value_param = *aParam[1];
+			// L34: Assigning an empty string no longer removes the field.
+			if ( (field || (field = Insert(key_type, key, insert_pos))) && field->Assign(value_param) )
 			{
-				obj->AddRef(); // for mBase
-				obj->AddRef(); // for aResultToken
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = obj;
+				if (value_param.symbol == SYM_OPERAND || value_param.symbol == SYM_STRING)
+				{
+					// L33: Use value_param since our copy may be freed prematurely in some (possibly rare) cases:
+					aResultToken.symbol = value_param.symbol;
+					aResultToken.marker = value_param.marker;
+				}
+				else
+					field->Get(aResultToken); // L34: Corrected this to be aResultToken instead of value_param (broken by L33).
 			}
-			// else leave as empty string.
-			if (mBase)
-				mBase->Release();
-			mBase = obj; // May be NULL.
 			return OK;
 		}
-
-		// L34: Assigning an empty string no longer removes the field.
-		if ( (field || (field = Insert(key_type, key, insert_pos))) && field->Assign(value_param) )
-		{
-			if (value_param.symbol == SYM_OPERAND || value_param.symbol == SYM_STRING)
-			{
-				// L33: Use value_param since our copy may be freed prematurely in some (possibly rare) cases:
-				aResultToken.symbol = value_param.symbol;
-				aResultToken.marker = value_param.marker;
-			}
-			else
-				field->Get(aResultToken); // L34: Corrected this to be aResultToken instead of value_param (broken by L33).
-		}
-		
-		return OK;
 	}
-	//else: IS_INVOKE_GET
-	if (field)
+
+	// GET
+	else if (field)
 	{
 		if (field->symbol == SYM_OPERAND)
 		{
@@ -600,21 +515,66 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 
 		return OK;
 	}
-	if (key_type == SYM_STRING && !stricmp(key.s, "base"))
-	{
-		// Above already returned if (!field && IS_INVOKE_META), so 'this' is the real object.
-		if (mBase)
-		{
-			aResultToken.symbol = SYM_OBJECT;
-			aResultToken.object = mBase;
-			mBase->AddRef();
-		}
-		// else leave as empty string.
-		return OK;
-	}
+
 	return INVOKE_NOT_HANDLED;
 }
 
+//
+// Internal: Object::CallField - Used by Object::Invoke to call a function/method stored in this object.
+//
+
+ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+// aParam[0] contains the identifier of this field or an empty space (for __Get etc.).
+{
+	if (aField->symbol == SYM_OBJECT)
+	{
+		ExprTokenType field_token;
+		field_token.symbol = SYM_OBJECT;
+		field_token.object = aField->object;
+		ExprTokenType *tmp = aParam[0];
+		// Something must be inserted into the parameter list to remove any ambiguity between an intentionally
+		// and directly called function of 'that' object and one of our parameters matching an existing name.
+		// Rather than inserting something like an empty string, it seems more useful to insert 'this' object,
+		// allowing 'that' to change (via __Call) the behaviour of a "function-call" which operates on 'this'.
+		// Consequently, if 'that[this]' contains a value, it is invoked; seems obscure but rare, and could
+		// also be of use (for instance, as a means to remove the 'this' parameter or replace it with 'that').
+		aParam[0] = &aThisToken;
+		ResultType r = aField->object->Invoke(aResultToken, field_token, IT_CALL, aParam, aParamCount);
+		aParam[0] = tmp;
+		return r;
+	}
+	else if (aField->symbol == SYM_OPERAND)
+	{
+		Func *func = g_script.FindFunc(aField->marker);
+		if (func)
+		{
+			// At this point, aIdCount == 1 and aParamCount includes only the explicit parameters for the call.
+			if (IS_INVOKE_META)
+			{
+				ExprTokenType *tmp = aParam[0];
+				// Called indirectly by means of the meta-object mechanism (mBase); treat it as a "method call".
+				// For this type of call, "this" object is included as the first parameter.  To do this, aParam[0] is
+				// temporarily overwritten with a pointer to aThisToken.  Note that aThisToken contains the original
+				// object specified in script, not the real "this" which is actually a meta-object/base of that object.
+				aParam[0] = &aThisToken;
+				ResultType r = CallFunc(*func, aResultToken, aParam, aParamCount);
+				aParam[0] = tmp;
+				return r;
+			}
+			else
+				// This object directly contains a function name.  Assume this object is intended
+				// as a simple array of functions; do not pass aThisToken as is done above.
+				// aParam + 1 vs aParam because aParam[0] is the key which was used to find this field, not a parameter of the call.
+				return CallFunc(*func, aResultToken, aParam + 1, aParamCount - 1);
+		}
+	}
+	return INVOKE_NOT_HANDLED;
+}
+	
+
+//
+// Object:: Built-in Methods
+//
 
 ResultType Object::_Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 // _Insert( key, value )
@@ -750,7 +710,7 @@ ResultType Object::_MaxIndex(ExprTokenType &aResultToken)
 	return OK;
 }
 
-ResultType Object::_GetCapacity(ExprTokenType &aResultToken)//, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::_GetCapacity(ExprTokenType &aResultToken)
 {
 	aResultToken.symbol = SYM_INTEGER;
 	aResultToken.value_int64 = mFieldCountMax;
@@ -780,27 +740,267 @@ ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 // TODO: Enumeration/direct indexing/field-counting methods.
 
 
-
 //
-// MetaObject: Defines behaviour of ObjGet/ObjSet/ObjCall when used with a non-object value.
+// Object::FieldType
 //
 
-ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+bool Object::FieldType::Assign(char *str, size_t len, bool exact_size)
 {
-	// Allow script-defined behaviour to take precedence:
-	ResultType r = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
-
-	if (r == INVOKE_NOT_HANDLED && IS_INVOKE_GET && aParamCount == 1 && aParam[0]->symbol == SYM_OPERAND) // aParam[0]->symbol *should* always be SYM_OPERAND, but check anyway.
+	if (!str || !*str && len < 1) // If empty string or null pointer, free our contents.  Passing len >= 1 allows copying \0, so don't check *str in that case.  Ordered for short-circuit performance (len is usually -1).
 	{
-		if (!stricmp(aParam[0]->marker, "base"))
+		Free();
+		marker = Var::sEmptyString;
+		size = 0;
+		return false;
+	}
+	
+	if (len == -1)
+		len = strlen(str);
+
+	if (symbol != SYM_OPERAND || len >= size)
+	{
+		Free(); // Free object or previous buffer (which was too small).
+		symbol = SYM_OPERAND;
+		int new_size = len + 1;
+		if (!exact_size)
 		{
-			// In this case, script did something like ("".base); i.e. wants a reference to g_MetaObject itself.
-			aResultToken.symbol = SYM_OBJECT;
-			aResultToken.object = this;
-			// No need to AddRef in this case since neither AddRef nor Release do anything.
-			return OK;
+			// Use size calculations equivalent to Var:
+			if (new_size < 16) // v1.0.45.03: Added this new size to prevent all local variables in a recursive
+				new_size = 16; // function from having a minimum size of MAX_PATH.  16 seems like a good size because it holds nearly any number.  It seems counterproductive to go too small because each malloc, no matter how small, could have around 40 bytes of overhead.
+			else if (new_size < MAX_PATH)
+				new_size = MAX_PATH;  // An amount that will fit all standard filenames seems good.
+			else if (new_size < (160 * 1024)) // MAX_PATH to 160 KB or less -> 10% extra.
+				new_size = (size_t)(new_size * 1.1);
+			else if (new_size < (1600 * 1024))  // 160 to 1600 KB -> 16 KB extra
+				new_size += (16 * 1024);
+			else if (new_size < (6400 * 1024)) // 1600 to 6400 KB -> 1% extra
+				new_size = (size_t)(new_size * 1.01);
+			else  // 6400 KB or more: Cap the extra margin at some reasonable compromise of speed vs. mem usage: 64 KB
+				new_size += (64 * 1024);
+		}
+		if ( !(marker = (char *)malloc(new_size)) )
+		{
+			marker = Var::sEmptyString;
+			size = 0;
+			return false; // See "Sanity check" above.
+		}
+		size = new_size;
+	}
+	// else we have a buffer with sufficient capacity already.
+
+	memcpy(marker, str, len + 1); // +1 for null-terminator.
+	return true; // Success.
+}
+
+bool Object::FieldType::Assign(ExprTokenType &val)
+{
+	// Currently only SYM_INTEGER/SYM_FLOAT inputs are stored as binary numbers
+	// since it seems best to preserve formatting of SYM_OPERAND/SYM_VAR (in case
+	// it is important), at the cost of performance in *some* cases.
+	if (IS_NUMERIC(val.symbol))
+	{
+		Free(); // Free string or object, if applicable.
+		symbol = val.symbol; // Either SYM_INTEGER or SYM_FLOAT.  Set symbol *after* calling Free().
+		n_int64 = val.value_int64; // Also handles value_double via union.
+	}
+	else
+	{
+		// String, object or var (can be a numeric string or var with cached binary number; see above).
+		IObject *val_as_obj;
+		if (val_as_obj = TokenToObject(val)) // SYM_OBJECT or SYM_VAR with var containing object.
+		{
+			Free(); // Free string or object, if applicable.
+			val_as_obj->AddRef();
+			symbol = SYM_OBJECT; // Set symbol *after* calling Free().
+			object = val_as_obj;
+		}
+		else
+		{
+			// Handles setting symbol and allocating or resizing buffer as appropriate:
+			return Assign(TokenToString(val));
 		}
 	}
-
-	return r;
+	return true;
 }
+
+void Object::FieldType::Get(ExprTokenType &result)
+{
+	result.symbol = symbol;
+	result.value_int64 = n_int64; // Union copy.
+	if (symbol == SYM_OBJECT)
+		object->AddRef();
+}
+
+void Object::FieldType::Free()
+// Only the value is freed, since keys only need to be freed when a field is removed
+// entirely or the Object is being deleted.  See Object::Delete.
+// CONTAINED VALUE WILL NOT BE VALID AFTER THIS FUNCTION RETURNS.
+{
+	if (symbol == SYM_OPERAND) {
+		if (size)
+			free(marker);
+	} else if (symbol == SYM_OBJECT)
+		object->Release();
+}
+	
+
+//
+// Object:: Internal Methods
+//
+
+template<typename T>
+Object::FieldType *Object::FindField(T val, int left, int right, int &insert_pos)
+// Template used below.  left and right must be set by caller to the appropriate bounds within mFields.
+{
+	int mid, result;
+	while (left <= right)
+	{
+		mid = (left + right) / 2;
+		
+		FieldType &field = mFields[mid];
+		
+		result = field.CompareKey(val);
+		
+		if (result < 0)
+			right = mid - 1;
+		else if (result > 0)
+			left = mid + 1;
+		else
+			return &field;
+	}
+	insert_pos = left;
+	return NULL;
+}
+
+Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, int &insert_pos)
+// Searches for a field with the given key.  If found, a pointer to the field is returned.  Otherwise
+// NULL is returned and insert_pos is set to the index a newly created field should be inserted at.
+// key_type and key are output for creating a new field or removing an existing one correctly.
+// left and right must indicate the appropriate section of mFields to search, based on key type.
+{
+	int left, right;
+
+	if (key_type == SYM_STRING)
+	{
+		left = mKeyOffsetString;
+		right = mFieldCount - 1; // String keys are last in the mFields array.
+
+		return FindField<char *>(key.s, left, right, insert_pos);
+	}
+	else // key_type == SYM_INTEGER || key_type == SYM_OBJECT
+	{
+		if (key_type == SYM_INTEGER)
+		{
+			left = mKeyOffsetInt;
+			right = mKeyOffsetObject - 1; // Int keys end where Object keys begin.
+		}
+		else
+		{
+			left = mKeyOffsetObject;
+			right = mKeyOffsetString - 1; // Object keys end where String keys begin.
+		}
+		// Both may be treated as integer since left/right exclude keys of an incorrect type:
+		return FindField<int>(key.i, left, right, insert_pos);
+	}
+}
+
+Object::FieldType *Object::FindField(ExprTokenType &key_token, SymbolType &key_type, KeyType &key, int &insert_pos)
+// Searches for a field with the given key, where the key is a token passed from script.
+{
+	if (TokenIsPureNumeric(key_token) == PURE_INTEGER)
+	{	// Treat all integer keys (even numeric strings) as pure integers for consistency and performance.
+		key.i = (int)TokenToInt64(key_token, TRUE);
+		key_type = SYM_INTEGER;
+	}
+	else if (key.p = TokenToObject(key_token))
+	{	// SYM_OBJECT or SYM_VAR containing object.
+		key_type = SYM_OBJECT;
+	}
+	else // TODO: Fix floating-point numeric keys; below returns "" as no buffer is specified.
+	{	// SYM_STRING, SYM_OPERAND or SYM_VAR (all confirmed not to be an integer at this point).
+		key.s = TokenToString(key_token);
+		key_type = SYM_STRING;
+	}
+	return FindField(key_type, key, insert_pos);
+}
+	
+bool Object::SetInternalCapacity(int new_capacity)
+// Expands mFields to the specified number if fields.
+// Caller *must* ensure new_capacity >= 1 && new_capacity >= mFieldCount.
+{
+	FieldType *new_fields = (FieldType *)realloc(mFields, new_capacity * sizeof(FieldType));
+	if (!new_fields)
+		return false;
+	mFields = new_fields;
+	mFieldCountMax = new_capacity;
+	return true;
+}
+	
+Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, int at)
+// Inserts a single field with the given key at the given offset.
+// Caller must ensure 'at' is the correct offset for this key.
+{
+	if (mFieldCount == mFieldCountMax && !Expand()  // Attempt to expand if at capacity.
+		|| key_type == SYM_STRING && !(key.s = _strdup(key.s)))  // Attempt to duplicate key-string.
+	{	// Out of memory.
+		return NULL;
+	}
+	// There is now definitely room in mFields for a new field.
+
+	if (key_type == SYM_OBJECT)
+		// Keep key object alive:
+		key.p->AddRef();
+
+	FieldType &field = mFields[at];
+	if (at < mFieldCount)
+		// Move existing fields to make room.
+		memmove(&field + 1, &field, (mFieldCount - at) * sizeof(FieldType));
+	
+	// Since we just inserted a field, we must update the key type offsets:
+	if (key_type != SYM_STRING)
+	{
+		// Must be either SYM_INTEGER or SYM_OBJECT, which both precede SYM_STRING.
+		++mKeyOffsetString;
+		if (key_type != SYM_OBJECT)
+			// Must be SYM_INTEGER, which precedes SYM_OBJECT.
+			++mKeyOffsetObject;
+	}
+	++mFieldCount; // Only after memmove above.
+	
+	field.marker = ""; // Init for maintainability.
+	field.size = 0; // Init to ensure safe behaviour in Assign().
+	field.key = key; // Above has already copied string or called key.p->AddRef() as appropriate.
+	field.symbol = SYM_OPERAND;
+
+	return &field;
+}
+	
+
+//
+// MetaObject::Invoke - Defines behaviour of object syntax when used on a non-object value.
+//
+
+//ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+//{
+//	// Allow script-defined behaviour to take precedence:
+//	ResultType r = Object::Invoke(aResultToken, aThisToken, aFlags | IF_META, aParam, aParamCount);
+//
+//	// TODO: Fix behaviour of "".base[x], ""["base",x] etc. or replace with built-in function to get g_MetaObject.
+//	if (r == INVOKE_NOT_HANDLED && !IS_INVOKE_META && IS_INVOKE_GET && aParamCount == 1)
+//	{
+//		if (!stricmp(TokenToString(*aParam[0]), "base")) // L40: Allow any string value for consistency (previously only SYM_OPERAND was accepted).
+//		{
+//			// In this case, script did something like ("".base); i.e. wants a reference to g_MetaObject itself.
+//			aResultToken.symbol = SYM_OBJECT;
+//			aResultToken.object = this;
+//			// No need to AddRef in this case since neither AddRef nor Release do anything.
+//			return OK;
+//		}
+//	}
+//
+//	return r;
+//}
+
+MetaObject g_MetaObject;
+
+char* Object::sMetaFuncName[] = { "__Get", "__Set", "__Call", "__Delete" };

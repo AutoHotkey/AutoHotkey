@@ -49,7 +49,8 @@ int Debugger::PreExecLine(Line *aLine)
 			|| mInternalState == DIS_StepOut && mStackDepth < mContinuationDepth
 			|| mInternalState == DIS_StepOver && mStackDepth <= mContinuationDepth)
 			// L31: The following check is no longer done because a) ACT_BLOCK_BEGIN belonging to an IF/ELSE/LOOP is now skipped; and b) allowing step to break at ACT_BLOCK_END makes program flow a little easier to follow in some cases.
-			//&& aLine->mActionType != ACT_BLOCK_BEGIN && (aLine->mActionType != ACT_BLOCK_END || aLine->mAttribute) // For now, ignore { and }, except for function-end.
+			// L40: Stepping on braces seems more bothersome than helpful. Although IF/ELSE/LOOP skips its block-begin, standalone/function-body block-begin still gets here.
+			&& aLine->mActionType != ACT_BLOCK_BEGIN && (aLine->mActionType != ACT_BLOCK_END || aLine->mAttribute) // For now, ignore { and }, except for function-end.
 			&& aLine->mLineNumber) // Some scripts (i.e. LowLevel/code.ahk) use mLineNumber==0 to indicate the Line has been generated and injected by the script.
 	{
 		return ProcessCommands();
