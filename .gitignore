@@ -9,3 +9,5 @@ Debug*/
 Release*/
 SC (*)/
 tests/
+
+__dist.cmd
