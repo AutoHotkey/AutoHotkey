@@ -3,7 +3,10 @@
 // (Like many projects on *nix that using autotools.)
 
 #ifndef AUTOHOTKEYSC
+// DBGp
 #define CONFIG_DEBUGGER
+// Send vars as UTF-16
+//#define CONFIG_DBG_UTF16_SPEED_HACKS
 #endif
 
 // Generates warnings to help we check whether the codes are ready to handle Unicode or not.

@@ -261,8 +261,15 @@ ResultType Line::SplashTextOn(int aWidth, int aHeight, LPTSTR aTitle, LPTSTR aTe
 		TCHAR default_font_name[65];
 		int CyPixels, nSize = 12, nWeight = FW_NORMAL;
 		HDC hdc = CreateDC(_T("DISPLAY"), NULL, NULL, NULL);
+		if(!g_os.IsWinVistaOrLater())
+		{
 		SelectObject(hdc, (HFONT)GetStockObject(DEFAULT_GUI_FONT));		// Get Default Font Name
 		GetTextFace(hdc, _countof(default_font_name) - 1, default_font_name); // -1 just in case, like AutoIt3.
+		}else // Use a more appealing font under Windows Vista or later (Segoe UI).
+		{
+			nSize = 11;
+			_tcscpy(default_font_name, _T("Segoe UI"));
+		}
 		CyPixels = GetDeviceCaps(hdc, LOGPIXELSY);			// For Some Font Size Math
 		DeleteDC(hdc);
 		//strcpy(default_font_name,vParams[7].szValue());	// Font Name

@@ -456,7 +456,23 @@ ResultType Script::CreateWindows()
 	// FONTS: The font used by default, at least on XP, is GetStockObject(SYSTEM_FONT).
 	// It seems preferable to smaller fonts such DEFAULT_GUI_FONT(DEFAULT_GUI_FONT).
 	// For more info on pre-loaded fonts (not too many choices), see MSDN's GetStockObject().
-	//SendMessage(g_hWndEdit, WM_SETFONT, (WPARAM)GetStockObject(SYSTEM_FONT), 0);
+#ifndef UNICODE
+	if(g_os.IsWinNT())
+	{
+#endif
+		// Use a more appealing font on NT versions of Windows.
+
+		// Windows NT to Windows XP -> Lucida Console
+		if(!g_os.IsWinVistaOrLater())
+			g_hFontEdit = CreateFont(FONT_POINT(g_hWndEdit, 10), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+				, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, _T("Lucida Console"));
+		else // Windows Vista and later -> Consolas
+			g_hFontEdit = CreateFont(FONT_POINT(g_hWndEdit, 10), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+				, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, _T("Consolas"));
+		SendMessage(g_hWndEdit, WM_SETFONT, (WPARAM)g_hFontEdit, 0);
+#ifndef UNICODE
+	}
+#endif
 
 	// v1.0.30.05: Specifying a limit of zero opens the control to its maximum text capacity,
 	// which removes the 32K size restriction.  Testing shows that this does not increase the actual
@@ -7357,7 +7373,10 @@ Func *Script::FindFunc(LPTSTR aFuncName, size_t aFuncNameLength, int *apInsertPo
 		min_params = 0;
 	}
 	else if (!_tcsicmp(func_name, _T("StrGet")))
+	{
 		bif = BIF_StrGet;
+		max_params = 2;
+	}
 	else if (!_tcsicmp(func_name, _T("NumGet")))
 	{
 		bif = BIF_NumGet;
@@ -13813,7 +13832,11 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return result;
 
 	case ACT_OUTPUTDEBUG:
+#ifndef CONFIG_DEBUGGER
 		OutputDebugString(ARG1); // It does not return a value for the purpose of setting ErrorLevel.
+#else
+		g_Debugger.OutputDebug(ARG1);
+#endif
 		return OK;
 
 	case ACT_SHUTDOWN:
@@ -14320,7 +14343,7 @@ Line *Line::PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo)
 	return NULL; // Always return NULL because the callers use it as their return value.
 }
 
-
+#define ERR_PRINT(fmt, ...) _ftprintf(stderr, fmt, __VA_ARGS__)
 
 ResultType Line::LineError(LPTSTR aErrorText, ResultType aErrorType, LPTSTR aExtraInfo)
 {
@@ -14343,9 +14366,9 @@ ResultType Line::LineError(LPTSTR aErrorText, ResultType aErrorType, LPTSTR aExt
 		// change the error lexer of Scite recognizes this line as a Microsoft error message and it can be
 		// used to jump to that line."
 		#define STD_ERROR_FORMAT _T("%s (%d) : ==> %s\n")
-		_tprintf(STD_ERROR_FORMAT, sSourceFile[mFileIndex], mLineNumber, aErrorText); // printf() does not signifantly increase the size of the EXE, probably because it shares most of the same code with sprintf(), etc.
+		ERR_PRINT(STD_ERROR_FORMAT, sSourceFile[mFileIndex], mLineNumber, aErrorText); // printf() does not signifantly increase the size of the EXE, probably because it shares most of the same code with sprintf(), etc.
 		if (*aExtraInfo)
-			_tprintf(_T("     Specifically: %s\n"), aExtraInfo);
+			ERR_PRINT(_T("     Specifically: %s\n"), aExtraInfo);
 	}
 	else
 	{
@@ -14370,7 +14393,14 @@ ResultType Line::LineError(LPTSTR aErrorText, ResultType aErrorType, LPTSTR aExt
 				, (int)(_countof(buf) - (buf_marker - buf))); // Cast to int to avoid loss of negative values.
 		g_script.mCurrLine = this;  // This needs to be set in some cases where the caller didn't.
 		//g_script.ShowInEditor();
+#ifndef CONFIG_DEBUGGER
 		MsgBox(buf);
+#else
+		if(!g_Debugger.HasStdErrHook())
+		MsgBox(buf);
+		else
+			g_Debugger.OutputDebug(buf);
+#endif
 	}
 
 	if (aErrorType == CRITICAL_ERROR && g_script.mIsReadyToExecute)
@@ -14416,9 +14446,9 @@ ResultType Script::ScriptError(LPTSTR aErrorText, LPTSTR aExtraInfo) //, ResultT
 	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute) // i.e. runtime errors are always displayed via dialog.
 	{
 		// See LineError() for details.
-		_tprintf(STD_ERROR_FORMAT, Line::sSourceFile[mCurrFileIndex], mCombinedLineNumber, aErrorText);
+		ERR_PRINT(STD_ERROR_FORMAT, Line::sSourceFile[mCurrFileIndex], mCombinedLineNumber, aErrorText);
 		if (*aExtraInfo)
-			_tprintf(_T("     Specifically: %s\n"), aExtraInfo);
+			ERR_PRINT(_T("     Specifically: %s\n"), aExtraInfo);
 	}
 	else
 	{
@@ -14448,7 +14478,14 @@ ResultType Script::ScriptError(LPTSTR aErrorText, LPTSTR aExtraInfo) //, ResultT
 		sntprintf(cp, buf_space_remaining, _T("%s\n\n%s"), aErrorText, mIsRestart ? OLD_STILL_IN_EFFECT : WILL_EXIT);
 
 		//ShowInEditor();
+#ifndef CONFIG_DEBUGGER
 		MsgBox(buf);
+#else
+		if(!g_Debugger.HasStdErrHook())
+		MsgBox(buf);
+		else
+			g_Debugger.OutputDebug(buf);
+#endif
 	}
 	return FAIL; // See above for why it's better to return FAIL than CRITICAL_ERROR.
 }

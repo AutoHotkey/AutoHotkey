@@ -37,6 +37,7 @@ GNU General Public License for more details.
 #define NAME_L_REVISION ".L39" // L14: Added .Ln for AutoHotkey_L revision n.
 #endif
 
+#define LANG_D "AutoHotkey"
 #define NAME_P "AutoHotkeyU"
 #define NAME_PURE_VERSION "1.0.48.05"
 #define NAME_VERSION NAME_PURE_VERSION NAME_L_REVISION

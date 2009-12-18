@@ -179,10 +179,10 @@ BEGIN
 #else
             VALUE "FileDescription", "AutoHotkey_L (Unicode)"
             VALUE "FileVersion", "1, 0, 48, 05"
-            VALUE "InternalName", "AutoHotkeyU_L"
+            VALUE "InternalName", "AutoHotkeyU"
             VALUE "LegalCopyright", "Copyright (C) 2009"
-            VALUE "OriginalFilename", "AutoHotkey.rc"
-            VALUE "ProductName", "AutoHotkeyU_L"
+            VALUE "OriginalFilename", "AutoHotkey.exe"
+            VALUE "ProductName", "AutoHotkeyU"
             VALUE "ProductVersion", "1, 0, 48, 05"
 #endif
         END

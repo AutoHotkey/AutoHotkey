@@ -18,7 +18,7 @@ bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 
 	int mode = aFlags & 3;
 	if (mode != TextStream::WRITE) {
-		// Detects the BOM of UTF-8 and UTF-16LE
+		// Detect UTF-8 and UTF-16LE BOMs
 		if (mLength < 3)
 			Read(3);
 		if (mLength >= 2) {
@@ -88,7 +88,7 @@ WCHAR TextStream::ReadCharW()
 			else {
 				// Invalid in current UTF-8 stardard.
 				mPosA++;
-				return '?';
+				return L'?';
 			}
 		}
 		else if (mCodePageIsDBCS)
@@ -105,7 +105,7 @@ WCHAR TextStream::ReadCharW()
 		else
 			mPosA++; // ignore invalid byte
 	}
-	return '?'; // invalid character
+	return L'?'; // invalid character
 }
 
 
@@ -316,23 +316,41 @@ public:
 					if (iReadWrite)
 					// Reference: BIF_NumGet
 					{
-						size_t right_side_bound, target; // Don't make target a pointer-type because the integer offset might not be a multiple of 4 (i.e. the below increments "target" directly by "offset" and we don't want that to use pointer math).
+						size_t target; // Don't make target a pointer-type because the integer offset might not be a multiple of 4 (i.e. the below increments "target" directly by "offset" and we don't want that to use pointer math).
 						ExprTokenType &target_token = *aParam[1];
 						if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 						{
 							target = (size_t)target_token.var->Contents(); // Although Contents(TRUE) will force an update of mContents if necessary, it very unlikely to be necessary here because we're about to fetch a binary number from inside mContents, not a normal/text number.
-							right_side_bound = target + target_token.var->ByteCapacity(); // This is first illegal address to the right of target.
 						}
 						else
 							target = (size_t)TokenToInt64(target_token);
 
-						size_t size = (size_t) TokenToInt64(*aParam[2]);
-
-						if (target < 1024 // Basic sanity check to catch incoming raw addresses that are zero or blank.
-							|| target_token.symbol == SYM_VAR && target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+						if (target < 1024) // Basic sanity check to catch incoming raw addresses that are zero or blank.
 						{
 							aResultToken.value_int64 = 0;
 							return OK;
+						}
+
+						size_t size = (size_t) TokenToInt64(*aParam[2]);
+
+						// The user request a size larger than the variable.
+						if (target_token.symbol == SYM_VAR && size > target_token.var->ByteCapacity())
+						{
+							// When reading expand the target variable if needed.
+							if(iReadWrite == 1)
+							{
+								if(!target_token.var->SetCapacity(size, false, false))
+								{
+									aResultToken.value_int64 = 0;
+									return OK;
+								}
+								target = (size_t)target_token.var->Contents(); // See comment above.
+							}
+							else
+							{
+								aResultToken.value_int64 = 0;
+								return OK;
+							}
 						}
 
 						aResultToken.value_int64 = (iReadWrite == 1) ? mFile.Read((LPVOID) target, size) : mFile.Write((LPCVOID) target, size);

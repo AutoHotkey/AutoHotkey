@@ -234,6 +234,7 @@ struct InputBoxType
 	LPTSTR default_string;
 	DWORD timeout;
 	HWND hwnd;
+	HFONT font;
 };
 
 struct SplashType

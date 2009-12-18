@@ -498,7 +498,7 @@ inline LPTSTR ITOA(int value, LPTSTR buf)
 	}
 	else if (g->FormatInt == 'H') // uppercase
 	{
-		// This might slower than the above, but it should be faster than doing StringUpper in the script level.
+		// This might be slower than the above, but it should be faster than doing StringUpper in the script level.
 		_stprintf(buf, _T("0x%X"), value);
 		return buf;
 	}
@@ -640,7 +640,13 @@ inline LPTSTR UTOA64(unsigned __int64 value, LPTSTR buf)
 inline char* WideToUTF8(LPCWSTR str){
 	int buf_len = WideCharToMultiByte(CP_UTF8, 0, str, -1, NULL, 0, NULL, NULL);
 	LPSTR buf = (LPSTR) malloc(buf_len);
-	WideCharToMultiByte(CP_UTF8, 0, str, -1, buf, buf_len, NULL, NULL);
+	if(buf) WideCharToMultiByte(CP_UTF8, 0, str, -1, buf, buf_len, NULL, NULL);
+	return buf;
+}
+inline LPTSTR UTF8ToWide(LPCSTR str){
+	int buf_len = MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
+	LPTSTR buf = (LPTSTR) tmalloc(buf_len);
+	if(buf) MultiByteToWideChar(CP_UTF8, 0, str, -1, buf, buf_len);
 	return buf;
 }
 #endif
@@ -682,6 +688,7 @@ inline char* WideToUTF8(LPCWSTR str){
 	HKL active_window_keybd_layout = GetKeyboardLayout((active_window = GetForegroundWindow())\
 		? GetWindowThreadProcessId(active_window, NULL) : 0); // When no foreground window, the script's own layout seems like the safest default.
 
+#define FONT_POINT(hwnd, p) (-MulDiv(p, GetDeviceCaps(GetDC(hwnd), LOGPIXELSY), 72))
 #define DATE_FORMAT_LENGTH 14 // "YYYYMMDDHHMISS"
 #define IS_LEAP_YEAR(year) ((year) % 4 == 0 && ((year) % 100 != 0 || (year) % 400 == 0))
 

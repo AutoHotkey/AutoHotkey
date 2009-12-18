@@ -301,7 +301,6 @@ ResultType Var::AssignClipboardAll()
 		return FAIL; // Above should have already reported the error.
 	}
 
-#pragma message(MY_WARN(9999) "The following code must be checked for Unicode safety.")
 	// Retrieve and store all the clipboard formats.  Because failures of GetClipboardData() are now
 	// tolerated, it seems safest to recalculate the actual size (actual_space_needed) of the data
 	// in case it varies from that found in the estimation phase.  This is especially necessary in
@@ -384,7 +383,6 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 		return OK; // No need to call Close() in this case.
 	}
 
-#pragma message(MY_WARN(9999) "The following code must be checked for Unicode safety.")
 	// SINCE ABOVE DIDN'T RETURN, A VARIABLE CONTAINING BINARY CLIPBOARD DATA IS BEING COPIED BACK ONTO THE CLIPBOARD.
 	if (!g_clip.Open())
 		return g_script.ScriptError(CANT_OPEN_CLIPBOARD_WRITE);
@@ -1166,8 +1164,8 @@ ResultType Var::ValidateName(LPCTSTR aName, bool aIsRuntime, int aDisplayError)
 		// alert/bell inside variable names.  Ordered to maximize short-circuit performance for the most-often
 		// used characters in variables names:
 		c = *cp;  // For performance.
-		if ((c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') // It's not a core/legacy alphanumberic.
-			&& c >= 0 // It's not an extended ASCII character such as €/??(for simplicity and backward compatibility, these are always allowed).
+		if (!cisalnum(c) // It's not a core/legacy alphanumberic.
+			&& !(c & ~0x7F) // It's not an extended ASCII character such as €/??(for simplicity and backward compatibility, these are always allowed).
 			&& !_tcschr(_T("_$#@"), c)) // It's not a permitted punctunation mark.  L31: Removed [], now reserved for array/object indexing. Also removed ? while I was at it.
 		{
 			if (aDisplayError)

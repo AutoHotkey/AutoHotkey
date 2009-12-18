@@ -47,7 +47,7 @@ ResultType Line::IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR 
 }
 
 #ifdef UNICODE
-static BOOL FixUnicodeInis(LPTSTR aFilespec){
+static BOOL IniEncodingFix(LPTSTR aFilespec){
 	if(!DoesFilePatternExist(aFilespec)){
 		HANDLE hFile;
 		DWORD dwWritten;
@@ -71,10 +71,10 @@ ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTS
 	// Get the fullpathname (INI functions need a full path) 
 	GetFullPathName(aFilespec, _MAX_PATH, szFileTemp, &szFilePart);
 #ifdef UNICODE
-	// WritePrivateProfileStringW() fails at creating new Unicode INIs.
-	// FixUnicodeInis() checks if the destination .ini exists, and if it
-	// doesn't then it creates an empty file containing the UTF-16LE BOM.
-	result = FixUnicodeInis(szFileTemp);
+	// WritePrivateProfileStringW() always creates INIs using the system codepage.
+	// IniEncodingFix() checks if the file exists and if it doesn't then it creates
+	// an empty file with a UTF-16LE BOM.
+	result = IniEncodingFix(szFileTemp);
 	if(result){
 #endif
 		result = WritePrivateProfileString(aSection, aKey, aValue, szFileTemp);  // Returns zero on failure.

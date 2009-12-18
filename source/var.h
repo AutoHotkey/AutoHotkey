@@ -540,9 +540,12 @@ public:
 		// (it seems more useful and intuitive).
 		var.UpdateContents(); // Update mContents and mLength for use below.
 		LPTSTR aBuf_orig = aBuf;
+		if(!var.HasObject())
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[%u of %u]: %-1.60s%s"), mName // mName not var.mName (see comment above).
 			, var._CharLength(), var._CharCapacity() ? (var._CharCapacity() - 1) : 0  // Use -1 since it makes more sense to exclude the terminator.
 			, var.mCharContents, var._CharLength() > 60 ? _T("...") : _T(""));
+		else
+			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[Object]: 0x%08X"), mName, (DWORD) var.Object());
 		if (aAppendNewline && BUF_SPACE_REMAINING >= 2)
 		{
 			*aBuf++ = '\r';

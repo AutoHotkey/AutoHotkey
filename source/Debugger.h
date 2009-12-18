@@ -139,6 +139,8 @@ public:
 	void Exit(ExitReasons aExitReason); // Called when exiting AutoHotkey.
 	inline bool IsConnected() { return mSocket != INVALID_SOCKET; }
 	inline bool IsStepping() { return mInternalState >= DIS_StepInto; }
+	inline bool HasStdErrHook() { return bHookStderr; }
+	inline bool HasStdOutHook() { return bHookStdout; }
 	inline bool ShouldBreakAfterFunctionCall()
 	{
 		return mInternalState == DIS_StepInto
@@ -155,6 +157,10 @@ public:
 
 	// Receive and process commands. Returns when a continuation command is received.
 	int ProcessCommands();
+
+	// Streams
+	void OutputDebug(LPCTSTR aText);
+	bool FileAppend(LPCTSTR aText);
 
 	#define DEBUGGER_COMMAND(cmd)	int cmd(char *aArgs)
 	
@@ -195,7 +201,7 @@ public:
 
 
 	Debugger() : mSocket(INVALID_SOCKET), mInternalState(DIS_Starting), mStackDepth(0)
-		, mMaxPropertyData(1024), mContinuationTransactionId("")
+		, mMaxPropertyData(1024), mContinuationTransactionId(""), bHookStderr(false), bHookStdout(false)
 	{
 		// Create root entry for simplicity.
 		mStackTop = mStack = new StackEntry();
@@ -204,6 +210,7 @@ public:
 
 private:
 	SOCKET mSocket;
+	bool bHookStderr, bHookStdout;
 
 	class Buffer
 	{

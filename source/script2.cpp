@@ -5995,6 +5995,20 @@ BOOL CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
 		SendMessage(hWndDlg, WM_SETICON, ICON_SMALL, small_icon);
 		SendMessage(hWndDlg, WM_SETICON, ICON_BIG, big_icon);
 
+		if(g_os.IsWinVistaOrLater())
+		{
+			// Use a more appealing font on Windows Vista and later (Segoe UI).
+			CURR_INPUTBOX.font = CreateFont(FONT_POINT(hWndDlg, 10), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+					, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, _T("Segoe UI"));
+
+			// Set the font.
+			SendMessage(hControl, WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
+			SendMessage(GetDlgItem(hWndDlg, IDC_INPUTEDIT), WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
+			SendMessage(GetDlgItem(hWndDlg, IDOK), WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
+			SendMessage(GetDlgItem(hWndDlg, IDCANCEL), WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
+		}else
+			CURR_INPUTBOX.font = NULL;
+
 		// For the timeout, use a timer ID that doesn't conflict with MsgBox's IDs (which are the
 		// integers 1 through the max allowed number of msgboxes).  Use +3 vs. +1 for a margin of safety
 		// (e.g. in case a few extra MsgBoxes can be created directly by the program and not by
@@ -6006,9 +6020,17 @@ BOOL CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
 		return TRUE; // i.e. let the system set the keyboard focus to the first visible control.
 	}
 
+	case WM_DESTROY:
+	{
+		if(CURR_INPUTBOX.font)
+			DeleteObject(CURR_INPUTBOX.font);
+
+		return TRUE;
+	}
+
 	case WM_SIZE:
 	{
-		// Adapted from D.Nuttall's InputBox in the AutotIt3 source.
+		// Adapted from D.Nuttall's InputBox in the AutoIt3 source.
 
 		// don't try moving controls if minimized
 		if (wParam == SIZE_MINIMIZED)
@@ -9151,9 +9173,13 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 		// Instead just do this:
 		++aFilespec;
 		if (!*aFilespec) // Naked "*" means write to stdout.
+#ifndef CONFIG_DEBUGGER
 			// Avoid puts() in case it bloats the code in some compilers. i.e. _fputts() is already used,
 			// so using it again here shouldn't bloat it:
 			return g_ErrorLevel->Assign(_fputts(aBuf, stdout) ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE); // _fputts() returns 0 on success.
+#else
+			return g_ErrorLevel->Assign(g_Debugger.FileAppend(aBuf) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
+#endif
 	}
 	else if (!file_was_already_open) // As of 1.0.25, auto-detect binary if that mode wasn't explicitly specified.
 	{
@@ -13090,7 +13116,7 @@ int RegExCallout(pcre_callout_block *cb)
 	EventInfoType EventInfo_saved = g->EventInfo;
 
 #ifdef UNICODE
-	#pragma message(MY_WARN(9999) "pcre_callout_block must be translated, but it is somewhat expansive.")
+	#pragma message(MY_WARN(9999) "pcre_callout_block must be translated, but it is somewhat expensive.")
 	g->EventInfo = (EventInfoType) cb;
 #else
 	g->EventInfo = (EventInfoType) cb;
@@ -14376,8 +14402,20 @@ void BIF_StrGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 // in this case the buffer will be copied in ExpandExpression() before it is freed by CoTaskMemFree.
 {
 	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = (LPTSTR) TokenToInt64(*aParam[0]);
-	if (aResultToken.marker < (LPTSTR) 1024) // sanity check
+	aResultToken.marker = _T("");
+
+	DWORD iMode;
+	void* pAddress = (void*) TokenToInt64(*aParam[0]);
+
+	if(pAddress < (void*) 1024) // sanity check
+		return;
+
+	if((aParamCount < 2) || (iMode = (DWORD) TokenToInt64(*aParam[1])) == 0)
+		aResultToken.marker = (LPTSTR) pAddress;
+	else if(iMode == 1) // UTF-8
+		aResultToken.marker = UTF8ToWide((LPCSTR) pAddress);
+
+	if(!aResultToken.marker)
 		aResultToken.marker = _T("");
 }
 
@@ -16749,7 +16787,7 @@ BOOL LegacyResultToBOOL(LPTSTR aResult)
 // rather than TokenToBOOL() so that expressions internally treat numerically-zero strings as zero just like
 // they do for variables (which will probably remain true as long as variables stay generic/untyped).
 {
-	UINT c1 = (UCHAR)*aResult; // UINT vs. UCHAR might squeenze a little more performance out of it.
+	UINT c1 = (UINT)*aResult; // UINT vs. UCHAR might squeenze a little more performance out of it.
 	if (c1 > 48)     // Any UCHAR greater than '0' can't be a space(32), tab(9), '+'(43), or '-'(45), or '.'(46)...
 		return TRUE; // ...so any string starting with c1>48 can't be anything that's false (e.g. " 0", "+0", "-0", ".0", "0").
 	if (!c1 // Besides performance, must be checked anyway because otherwise IsPureNumeric() would consider "" to be non-numeric and thus TRUE.

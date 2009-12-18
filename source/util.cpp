@@ -1237,7 +1237,7 @@ LPTSTR TranslateLFtoCRLF(LPTSTR aString)
 		return aString;  // The original string is returned, which the caller must check for (vs. new string).
 
 	// Allocate the new memory that will become the caller's responsibility:
-	LPTSTR buf = (LPTSTR)malloc(length + naked_LF_count + 1);  // +1 for zero terminator.
+	LPTSTR buf = (LPTSTR)tmalloc(length + naked_LF_count + 1);  // +1 for zero terminator.
 	if (!buf)
 		return NULL;
 
