@@ -469,6 +469,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\source\script_object_bif.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\source\script_registry.cpp"
 				>
 			</File>

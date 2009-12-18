@@ -2457,6 +2457,8 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		mCombinedLineNumber = saved_line_number;
 	}
 
+	++mCombinedLineNumber; // L40: Put the implicit ACT_EXIT on the line after the last physical line (for the debugger).
+
 	// This is not required, it is called by the destructor.
 	// fp->Close();
 	return OK;
