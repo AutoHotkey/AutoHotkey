@@ -1,0 +1,6 @@
+temp/
+bin/
+*.suo
+*.user
+*.ncb
+*.aps

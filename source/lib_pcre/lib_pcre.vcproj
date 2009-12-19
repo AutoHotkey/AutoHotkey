@@ -4,6 +4,7 @@
 	Version="9.00"
 	Name="lib_pcre"
 	ProjectGUID="{39037993-9571-4DF2-8E39-CD2909043574}"
+	RootNamespace="lib_pcre"
 	Keyword="Win32Proj"
 	TargetFrameworkVersion="131072"
 	>
@@ -17,8 +18,8 @@
 	<Configurations>
 		<Configuration
 			Name="Debug|Win32"
-			OutputDirectory="Debug"
-			IntermediateDirectory="Debug"
+			OutputDirectory="$(SolutionDir)temp\$(ConfigurationName)"
+			IntermediateDirectory="$(OutDir)\lib_pcre"
 			ConfigurationType="4"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
 			CharacterSet="2"
@@ -81,8 +82,8 @@
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
-			OutputDirectory="Release"
-			IntermediateDirectory="Release"
+			OutputDirectory="$(SolutionDir)temp\$(ConfigurationName)"
+			IntermediateDirectory="$(OutDir)\lib_pcre"
 			ConfigurationType="4"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
 			CharacterSet="2"
@@ -152,8 +153,8 @@
 		</Configuration>
 		<Configuration
 			Name="Release (minimum size)|Win32"
-			OutputDirectory="$(ConfigurationName)"
-			IntermediateDirectory="$(ConfigurationName)"
+			OutputDirectory="$(SolutionDir)temp\$(ConfigurationName)"
+			IntermediateDirectory="$(OutDir)\lib_pcre"
 			ConfigurationType="4"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
 			CharacterSet="2"

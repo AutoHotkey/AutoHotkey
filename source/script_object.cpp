@@ -299,7 +299,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	
 	if (param_count_excluding_rvalue)
 	{
-		field = FindField(*aParam[0], /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
+		field = FindField(*aParam[0], aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
 	}
 	else
 	{
@@ -587,7 +587,7 @@ ResultType Object::_Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	int insert_pos, pos;
 	FieldType *field;
 
-	if ( (field = FindField(*aParam[0], key_type, key, insert_pos)) && key_type == SYM_INTEGER )
+	if ( (field = FindField(*aParam[0], aResultToken.buf, key_type, key, insert_pos)) && key_type == SYM_INTEGER )
 	{
 		// Since we were given a numeric key, we want to insert a new field here and increment this and any subsequent keys.
 		insert_pos = field - mFields;
@@ -624,13 +624,13 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	KeyType min_key, max_key;
 
 	// Find the position of "min".
-	if (min_field = FindField(*aParam[0], min_key_type, min_key, min_pos))
+	if (min_field = FindField(*aParam[0], aResultToken.buf, min_key_type, min_key, min_pos))
 		min_pos = min_field - mFields;
 	
 	if (aParamCount > 1)
 	{
 		// Find the position following "max".
-		if (max_field = FindField(*aParam[1], max_key_type, max_key, max_pos))
+		if (max_field = FindField(*aParam[1], aResultToken.buf, max_key_type, max_key, max_pos))
 			max_pos = max_field - mFields + 1;
 		// Since the order of key-types in mFields is of no logical consequence, require that both keys be the same type.
 		// Do not allow removing a range of object keys since there is probably no meaning to their order.
@@ -904,7 +904,7 @@ Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, int &inse
 	}
 }
 
-Object::FieldType *Object::FindField(ExprTokenType &key_token, SymbolType &key_type, KeyType &key, int &insert_pos)
+Object::FieldType *Object::FindField(ExprTokenType &key_token, char *aBuf, SymbolType &key_type, KeyType &key, int &insert_pos)
 // Searches for a field with the given key, where the key is a token passed from script.
 {
 	if (TokenIsPureNumeric(key_token) == PURE_INTEGER)
@@ -916,9 +916,9 @@ Object::FieldType *Object::FindField(ExprTokenType &key_token, SymbolType &key_t
 	{	// SYM_OBJECT or SYM_VAR containing object.
 		key_type = SYM_OBJECT;
 	}
-	else // TODO: Fix floating-point numeric keys; below returns "" as no buffer is specified.
-	{	// SYM_STRING, SYM_OPERAND or SYM_VAR (all confirmed not to be an integer at this point).
-		key.s = TokenToString(key_token);
+	else
+	{	// SYM_STRING, SYM_FLOAT, SYM_OPERAND or SYM_VAR (all confirmed not to be an integer at this point).
+		key.s = TokenToString(key_token, aBuf); // L41: Pass aBuf to allow float->string conversion as documented (but not previously working).
 		key_type = SYM_STRING;
 	}
 	return FindField(key_type, key, insert_pos);

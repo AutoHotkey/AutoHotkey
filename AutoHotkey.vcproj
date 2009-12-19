@@ -18,7 +18,7 @@
 	<Configurations>
 		<Configuration
 			Name="Debug|Win32"
-			OutputDirectory="$(ConfigurationName)"
+			OutputDirectory="bin\Debug"
 			IntermediateDirectory="temp\$(ConfigurationName)"
 			ConfigurationType="1"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
@@ -104,7 +104,7 @@
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
-			OutputDirectory="$(ConfigurationName)"
+			OutputDirectory="bin\Release"
 			IntermediateDirectory="temp\$(ConfigurationName)"
 			ConfigurationType="1"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
@@ -201,7 +201,7 @@
 		</Configuration>
 		<Configuration
 			Name="SC (self-contained)|Win32"
-			OutputDirectory="$(ConfigurationName)"
+			OutputDirectory="bin\Release"
 			IntermediateDirectory="temp\$(ConfigurationName)"
 			ConfigurationType="1"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
@@ -293,12 +293,13 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
-				CommandLine="&quot;$(ProjectDir)PostBuildSC.ahk&quot;"
+				Description="Removing CheckSum from $(TargetFileName) so Ahk2Exe doesn&apos;t complain"
+				CommandLine="&quot;$(ProjectDir)PostBuildSC.ahk&quot; &quot;$(TargetPath)&quot;"
 			/>
 		</Configuration>
 		<Configuration
 			Name="SC (minimum size)|Win32"
-			OutputDirectory="$(ConfigurationName)"
+			OutputDirectory="bin\Minimal"
 			IntermediateDirectory="temp\$(ConfigurationName)"
 			ConfigurationType="1"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
@@ -391,13 +392,14 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
-				CommandLine="&quot;$(ProjectDir)PostBuildSC.ahk&quot;"
+				Description="Removing CheckSum from $(TargetFileName) so Ahk2Exe doesn&apos;t complain"
+				CommandLine="&quot;$(ProjectDir)PostBuildSC.ahk&quot; &quot;$(TargetPath)&quot;"
 			/>
 		</Configuration>
 		<Configuration
 			Name="Release (minimum size)|Win32"
-			OutputDirectory="$(ConfigurationName)"
-			IntermediateDirectory="$(ConfigurationName)"
+			OutputDirectory="bin\Minimal"
+			IntermediateDirectory="temp\$(ConfigurationName)"
 			ConfigurationType="1"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
 			CharacterSet="2"

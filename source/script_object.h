@@ -128,15 +128,7 @@ protected:
 	template<typename T>
 	FieldType *FindField(T val, int left, int right, int &insert_pos);
 	FieldType *FindField(SymbolType key_type, KeyType key, int &insert_pos);	
-	FieldType *FindField(ExprTokenType &key_token, SymbolType &key_type, KeyType &key, int &insert_pos);
-	FieldType *FindField(ExprTokenType &key_token)
-	// Overload for callers who will not need to later insert a field.
-	{
-		SymbolType key_type;
-		KeyType key;
-		int insert_pos;
-		return FindField(key_token, key_type, key, insert_pos);
-	}
+	FieldType *FindField(ExprTokenType &key_token, char *aBuf, SymbolType &key_type, KeyType &key, int &insert_pos);
 	
 	FieldType *Insert(SymbolType key_type, KeyType key, int at);
 
