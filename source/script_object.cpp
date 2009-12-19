@@ -788,7 +788,7 @@ bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
 	}
 	// else we have a buffer with sufficient capacity already.
 
-	memcpy(marker, str, len + 1); // +1 for null-terminator.
+	tmemcpy(marker, str, len + 1); // +1 for null-terminator.
 	return true; // Success.
 }
 

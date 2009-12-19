@@ -86,9 +86,9 @@ WCHAR TextStream::ReadCharW()
 			else if ((*mPos & 0xF8) == 0xF0)
 				iBytes = 4;
 			else {
-				// Invalid in current UTF-8 stardard.
+				// Invalid in current UTF-8 standard.
 				mPosA++;
-				return L'?';
+				return 0xFFFD;
 			}
 		}
 		else if (mCodePageIsDBCS)
@@ -105,7 +105,7 @@ WCHAR TextStream::ReadCharW()
 		else
 			mPosA++; // ignore invalid byte
 	}
-	return L'?'; // invalid character
+	return 0xFFFD; // invalid character
 }
 
 

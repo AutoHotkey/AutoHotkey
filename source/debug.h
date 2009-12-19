@@ -3,9 +3,8 @@
 
 #ifndef TRACE
 	#ifdef _DEBUG
-		#if defined(HAVE_ATL) || defined(ATLTRACE)
-			#include <atlbase.h>
-			#define TRACE(...) ATLTRACE(atlTraceGeneral, 0, __VA_ARGS__)
+		#ifdef _MSC_VER
+			#define TRACE OutputDebugStringFormat
 		#else
 			#define TRACE(...) _ftprintf(stderr, __VA_ARGS__)
 		#endif

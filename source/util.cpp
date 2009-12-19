@@ -2580,3 +2580,15 @@ bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch)
 
 	return false;  // No match found.
 }
+
+#ifdef _MSC_VER
+void OutputDebugStringFormat(LPCTSTR fmt, ...)
+{
+	CString sMsg;
+	va_list ap;
+
+	va_start(ap, fmt);
+	sMsg.FormatV(fmt, ap);
+	OutputDebugString(sMsg);
+}
+#endif
