@@ -1,9 +1,9 @@
-*.[oO][bB][jJ]
-*.[eE][xX][eE]
-
-*.ncb
-*.user
+temp/
+bin/
 *.suo
+*.user
+*.ncb
+*.aps
 
 Debug*/
 Release*/
