@@ -29,16 +29,16 @@
 #include "globaldata.h"
 
 
-ResultType Line::IniRead(char *aFilespec, char *aSection, char *aKey, char *aDefault)
+ResultType Line::IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR aDefault)
 {
 	if (!aDefault || !*aDefault)
-		aDefault = "ERROR";  // This mirrors what AutoIt2 does for its default value.
-	char	szFileTemp[_MAX_PATH+1];
-	char	*szFilePart;
-	char	szBuffer[65535] = "";					// Max ini file size is 65535 under 95
+		aDefault = _T("ERROR");  // This mirrors what AutoIt2 does for its default value.
+	TCHAR	szFileTemp[_MAX_PATH+1];
+	TCHAR	*szFilePart;
+	TCHAR	szBuffer[65535] = _T("");					// Max ini file size is 65535 under 95
 	// Get the fullpathname (ini functions need a full path):
 	GetFullPathName(aFilespec, _MAX_PATH, szFileTemp, &szFilePart);
-	GetPrivateProfileString(aSection, aKey, aDefault, szBuffer, sizeof(szBuffer), szFileTemp);
+	GetPrivateProfileString(aSection, aKey, aDefault, szBuffer, _countof(szBuffer), szFileTemp);
 	// The above function is supposed to set szBuffer to be aDefault if it can't find the
 	// file, section, or key.  In other words, it always changes the contents of szBuffer.
 	return OUTPUT_VAR->Assign(szBuffer); // Avoid using the length the API reported because it might be inaccurate if the data contains any binary zeroes, or if the data is double-terminated, etc.
@@ -46,26 +46,52 @@ ResultType Line::IniRead(char *aFilespec, char *aSection, char *aKey, char *aDef
 	// whenever there's an error.
 }
 
+#ifdef UNICODE
+static BOOL IniEncodingFix(LPTSTR aFilespec){
+	if(!DoesFilePatternExist(aFilespec)){
+		HANDLE hFile;
+		DWORD dwWritten;
 
+		// Create an Unicode file. (UTF-16LE BOM)
+		hFile = CreateFile(aFilespec, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL);
+		if(hFile == INVALID_HANDLE_VALUE) return FALSE;
 
-ResultType Line::IniWrite(char *aValue, char *aFilespec, char *aSection, char *aKey)
+		if(!WriteFile(hFile, "\xFF\xFE", 2, &dwWritten, NULL) || dwWritten != 2){ CloseHandle(hFile); return FALSE; }
+		if(!CloseHandle(hFile)){ return FALSE; }
+	}
+	return TRUE;
+}
+#endif
+
+ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 {
-	char	szFileTemp[_MAX_PATH+1];
-	char	*szFilePart;
-	// Get the fullpathname (ini functions need a full path) 
+	TCHAR	szFileTemp[_MAX_PATH+1];
+	TCHAR	*szFilePart;
+	BOOL	result;
+	// Get the fullpathname (INI functions need a full path) 
 	GetFullPathName(aFilespec, _MAX_PATH, szFileTemp, &szFilePart);
-	BOOL result = WritePrivateProfileString(aSection, aKey, aValue, szFileTemp);  // Returns zero on failure.
-	WritePrivateProfileString(NULL, NULL, NULL, szFileTemp);	// Flush
+#ifdef UNICODE
+	// WritePrivateProfileStringW() always creates INIs using the system codepage.
+	// IniEncodingFix() checks if the file exists and if it doesn't then it creates
+	// an empty file with a UTF-16LE BOM.
+	result = IniEncodingFix(szFileTemp);
+	if(result){
+#endif
+		result = WritePrivateProfileString(aSection, aKey, aValue, szFileTemp);  // Returns zero on failure.
+		WritePrivateProfileString(NULL, NULL, NULL, szFileTemp);	// Flush
+#ifdef UNICODE
+	}
+#endif
 	return g_script.mIsAutoIt2 ? OK : g_ErrorLevel->Assign(result ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
 }
 
 
 
-ResultType Line::IniDelete(char *aFilespec, char *aSection, char *aKey)
+ResultType Line::IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 // Note that aKey can be NULL, in which case the entire section will be deleted.
 {
-	char	szFileTemp[_MAX_PATH+1];
-	char	*szFilePart;
+	TCHAR	szFileTemp[_MAX_PATH+1];
+	TCHAR	*szFilePart;
 	// Get the fullpathname (ini functions need a full path) 
 	GetFullPathName(aFilespec, _MAX_PATH, szFileTemp, &szFilePart);
 	BOOL result = WritePrivateProfileString(aSection, aKey, NULL, szFileTemp);  // Returns zero on failure.
@@ -75,7 +101,7 @@ ResultType Line::IniDelete(char *aFilespec, char *aSection, char *aKey)
 
 
 
-ResultType Line::RegRead(HKEY aRootKey, char *aRegSubkey, char *aValueName)
+ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 {
 	Var &output_var = *OUTPUT_VAR;
 	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
@@ -85,7 +111,7 @@ ResultType Line::RegRead(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 	DWORD	dwRes, dwBuf, dwType;
 	LONG    result;
 	// My: Seems safest to keep the limit just below 64K in case Win95 has problems with larger values.
-	char	szRegBuffer[65535]; // Only allow reading of 64Kb from a key
+	TCHAR	szRegBuffer[65535]; // Only allow reading of 64Kb from a key
 
 	if (!aRootKey)
 		return OK;  // Let ErrorLevel tell the story.
@@ -101,7 +127,7 @@ ResultType Line::RegRead(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 		return OK;  // Let ErrorLevel tell the story.
 	}
 
-	char *contents, *cp;
+	LPTSTR contents, cp;
 
 	// The way we read is different depending on the type of the key
 	switch (dwType)
@@ -117,6 +143,7 @@ ResultType Line::RegRead(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 		case REG_SZ:
 		case REG_EXPAND_SZ:
 		case REG_MULTI_SZ:
+		{
 			dwRes = 0; // Retained for backward compatibility because values >64K may cause it to fail on Win95 (unverified, and MSDN implies its value should be ignored for the following call).
 			// MSDN: If lpData is NULL, and lpcbData is non-NULL, the function returns ERROR_SUCCESS and stores
 			// the size of the data, in bytes, in the variable pointed to by lpcbData.
@@ -126,13 +153,14 @@ ResultType Line::RegRead(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 				RegCloseKey(hRegKey);
 				return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // For backward compatibility, indicate success (these conditions should be very rare anyway).
 			}
+			DWORD dwCharLen = dwRes / sizeof(TCHAR);
 			// Set up the variable to receive the contents, enlarging it if necessary:
 			// Since dwRes includes the space for the zero terminator (if the MSDN docs
 			// are accurate), this will enlarge it to be 1 byte larger than we need,
 			// which leaves room for the final newline character to be inserted after
 			// the last item.  But add 2 to the requested capacity in case the data isn't
 			// terminated in the registry, which allows double-NULL to be put in for REG_MULTI_SZ later.
-			if (output_var.Assign(NULL, (VarSizeType)(dwRes + 2)) != OK)
+			if (output_var.AssignString(NULL, (VarSizeType)(dwCharLen + 2)) != OK)
 			{
 				RegCloseKey(hRegKey);
 				return FAIL; // FAIL is only returned when the error is a critical one such as this one.
@@ -149,6 +177,7 @@ ResultType Line::RegRead(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 				// consider it a success.
 			else
 			{
+				dwCharLen = dwRes / sizeof(TCHAR);
 				// See ReadRegString() for more comments about the following:
 				// The MSDN docs state that we should ensure that the buffer is NULL-terminated ourselves:
 				// "If the data has the REG_SZ, REG_MULTI_SZ or REG_EXPAND_SZ type, then lpcbData will also
@@ -164,7 +193,7 @@ ResultType Line::RegRead(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 				// stored in the registry incorrectly (i.e. without a terminator).  In either case, do
 				// not change the first character, just leave it as is and add a NULL at the 2nd and
 				// 3rd character positions to ensure that it is double terminated in every case:
-				contents[dwRes] = contents[dwRes + 1] = '\0';
+				contents[dwCharLen] = contents[dwCharLen + 1] = '\0';
 
 				if (dwType == REG_MULTI_SZ) // Convert NULL-delimiters into newline delimiters.
 				{
@@ -185,13 +214,14 @@ ResultType Line::RegRead(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 				}
 			}
 			g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-			output_var.Length() = (VarSizeType)strlen(contents); // Due to conservative buffer sizes above, length is probably too large by 3. So update to reflect the true length.
+			output_var.SetCharLength((VarSizeType)_tcslen(contents)); // Due to conservative buffer sizes above, length is probably too large by 3. So update to reflect the true length.
 			return output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-
+		}
 		case REG_BINARY:
 		{
+			LPBYTE pRegBuffer = (LPBYTE) szRegBuffer;
 			dwRes = sizeof(szRegBuffer);
-			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, (LPBYTE)szRegBuffer, &dwRes);
+			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, pRegBuffer, &dwRes);
 			RegCloseKey(hRegKey);
 
 			if (result == ERROR_MORE_DATA)
@@ -201,17 +231,17 @@ ResultType Line::RegRead(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 
 			// Set up the variable to receive the contents, enlarging it if necessary.
 			// AutoIt3: Each byte will turned into 2 digits, plus a final null:
-			if (output_var.Assign(NULL, (VarSizeType)(dwRes * 2)) != OK)
+			if (output_var.AssignString(NULL, (VarSizeType)(dwRes * 2)) != OK)
 				return FAIL;
 			contents = output_var.Contents();
 			*contents = '\0';
 
 			int j = 0;
 			DWORD i, n; // i and n must be unsigned to work
-			char szHexData[] = "0123456789ABCDEF";  // Access to local vars might be faster than static ones.
+			TCHAR szHexData[] = _T("0123456789ABCDEF");  // Access to local vars might be faster than static ones.
 			for (i = 0; i < dwRes; ++i)
 			{
-				n = szRegBuffer[i];				// Get the value and convert to 2 digit hex
+				n = pRegBuffer[i];				// Get the value and convert to 2 digit hex
 				contents[j + 1] = szHexData[n % 16];
 				n /= 16;
 				contents[j] = szHexData[n % 16];
@@ -229,7 +259,7 @@ ResultType Line::RegRead(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 
 
 
-ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, char *aRegSubkey, char *aValueName, char *aValue)
+ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName, LPTSTR aValue)
 // If aValueName is the empty string, the key's default value is used.
 {
 	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
@@ -238,11 +268,11 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, char *aRegSubkey, cha
 	DWORD	dwRes, dwBuf;
 
 	// My: Seems safest to keep the limit just below 64K in case Win95 has problems with larger values.
-	char szRegBuffer[65535], *buf; // Only allow writing of 64Kb to a key for Win9x, which is all it supports.
+	TCHAR szRegBuffer[65535], *buf; // Only allow writing of 64Kb to a key for Win9x, which is all it supports.
 	#define SET_REG_BUF \
 		if (g_os.IsWin9x())\
 		{\
-			strlcpy(szRegBuffer, aValue, sizeof(szRegBuffer));\
+			tcslcpy(szRegBuffer, aValue, sizeof(szRegBuffer));\
 			buf = szRegBuffer;\
 		}\
 		else\
@@ -256,7 +286,7 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, char *aRegSubkey, cha
 	// HKCU's root level, perhaps because it's an alias for a subkey inside HKEY_USERS.  Even when RegOpenKeyEx()
 	// is used on HKCU (which is probably redundant since it's a pre-opened key?), the API can't create values
 	// there even though RegEdit can.
-	if (RegCreateKeyEx(aRootKey, aRegSubkey, 0, "", REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hRegKey, &dwRes)
+	if (RegCreateKeyEx(aRootKey, aRegSubkey, 0, _T(""), REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hRegKey, &dwRes)
 		!= ERROR_SUCCESS)
 		return OK;  // Let ErrorLevel tell the story.
 
@@ -265,14 +295,14 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, char *aRegSubkey, cha
 	{
 	case REG_SZ:
 		SET_REG_BUF
-		if (RegSetValueEx(hRegKey, aValueName, 0, REG_SZ, (CONST BYTE *)buf, (DWORD)strlen(buf)+1) == ERROR_SUCCESS)
+		if (RegSetValueEx(hRegKey, aValueName, 0, REG_SZ, (CONST BYTE *)buf, (DWORD)(_tcslen(buf)+1) * sizeof(TCHAR)) == ERROR_SUCCESS)
 			g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 		RegCloseKey(hRegKey);
 		return OK;
 
 	case REG_EXPAND_SZ:
 		SET_REG_BUF
-		if (RegSetValueEx(hRegKey, aValueName, 0, REG_EXPAND_SZ, (CONST BYTE *)buf, (DWORD)strlen(buf)+1) == ERROR_SUCCESS)
+		if (RegSetValueEx(hRegKey, aValueName, 0, REG_EXPAND_SZ, (CONST BYTE *)buf, (DWORD)(_tcslen(buf)+1) * sizeof(TCHAR)) == ERROR_SUCCESS)
 			g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 		RegCloseKey(hRegKey);
 		return OK;
@@ -284,9 +314,9 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, char *aRegSubkey, cha
 		// into zero-delimiters.  Even if we were to require callers to give us a modifiable string,
 		// its capacity be 1 byte too small to handle the double termination that's needed
 		// (i.e. if the last item in the list happens to not end in a newline):
-		strlcpy(szRegBuffer, aValue, sizeof(szRegBuffer) - 1);  // -1 to leave space for a 2nd terminator.
+		tcslcpy(szRegBuffer, aValue, _countof(szRegBuffer) - 1);  // -1 to leave space for a 2nd terminator.
 		// Double-terminate:
-		size_t length = strlen(szRegBuffer);
+		size_t length = _tcslen(szRegBuffer);
 		szRegBuffer[length + 1] = '\0';
 
 		// Remove any final newline the user may have provided since we don't want the length
@@ -295,12 +325,12 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, char *aRegSubkey, cha
 			szRegBuffer[--length] = '\0';
 
 		// Replace the script's delimiter char with the zero-delimiter needed by RegSetValueEx():
-		for (char *cp = szRegBuffer; *cp; ++cp)
+		for (LPTSTR cp = szRegBuffer; *cp; ++cp)
 			if (*cp == '\n')
 				*cp = '\0';
 
 		if (RegSetValueEx(hRegKey, aValueName, 0, REG_MULTI_SZ, (CONST BYTE *)szRegBuffer
-			, (DWORD)(length ? length + 2 : 0)) == ERROR_SUCCESS)
+			, (DWORD)(length ? length + 2 : 0) * sizeof(TCHAR)) == ERROR_SUCCESS)
 			g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 		RegCloseKey(hRegKey);
 		return OK;
@@ -318,7 +348,7 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, char *aRegSubkey, cha
 
 	case REG_BINARY:
 	{
-		int nLen = (int)strlen(aValue);
+		int nLen = (int)_tcslen(aValue);
 
 		// Stringlength must be a multiple of 2 
 		if (nLen % 2)
@@ -329,6 +359,7 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, char *aRegSubkey, cha
 
 		// Really crappy hex conversion
 		int j = 0, i = 0, nVal, nMult;
+		LPBYTE pRegBuffer = (LPBYTE) szRegBuffer;
 		while (i < nLen && j < sizeof(szRegBuffer))
 		{
 			nVal = 0;
@@ -347,10 +378,10 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, char *aRegSubkey, cha
 				}
 				++i;
 			}
-			szRegBuffer[j++] = (char)nVal;
+			pRegBuffer[j++] = (char)nVal;
 		}
 
-		if (RegSetValueEx(hRegKey, aValueName, 0, REG_BINARY, (CONST BYTE *)szRegBuffer, (DWORD)j) == ERROR_SUCCESS)
+		if (RegSetValueEx(hRegKey, aValueName, 0, REG_BINARY, pRegBuffer, (DWORD)j) == ERROR_SUCCESS)
 			g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 		// else keep the default failure value for ErrorLevel
 	
@@ -370,7 +401,7 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, char *aRegSubkey, cha
 bool Line::RegRemoveSubkeys(HKEY hRegKey)
 {
 	// Removes all subkeys to the given key.  Will not touch the given key.
-	CHAR Name[256];
+	TCHAR Name[256];
 	DWORD dwNameSize;
 	FILETIME ftLastWrite;
 	HKEY hSubKey;
@@ -396,7 +427,7 @@ bool Line::RegRemoveSubkeys(HKEY hRegKey)
 
 
 
-ResultType Line::RegDelete(HKEY aRootKey, char *aRegSubkey, char *aValueName)
+ResultType Line::RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 {
 	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
 
@@ -428,7 +459,7 @@ ResultType Line::RegDelete(HKEY aRootKey, char *aRegSubkey, char *aValueName)
 		// Remove Value.  The special phrase "ahk_default" indicates that the key's default
 		// value (displayed as "(Default)" by RegEdit) should be deleted.  This is done to
 		// distinguish a blank (which deletes the entire subkey) from the default item.
-		LONG lRes = RegDeleteValue(hRegKey, stricmp(aValueName, "ahk_default") ? aValueName : "");
+		LONG lRes = RegDeleteValue(hRegKey, _tcsicmp(aValueName, _T("ahk_default")) ? aValueName : _T(""));
 		RegCloseKey(hRegKey);
 		if (lRes != ERROR_SUCCESS)
 			return OK;  // Let ErrorLevel tell the story.

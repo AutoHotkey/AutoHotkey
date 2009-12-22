@@ -34,7 +34,7 @@ void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	else
 	{
 		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = "";
+		aResultToken.marker = _T("");
 	}
 }
 	
@@ -73,7 +73,7 @@ void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 	// Set default return value; ONLY AFTER THE ABOVE.
 	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = "";
+	aResultToken.marker = _T("");
     
     obj_param = *aParam; // aParam[0].  Load-time validation has ensured at least one parameter was specified.
 	++aParam;
@@ -96,7 +96,7 @@ void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 		// If above did not handle it, check for attempts to access .base of non-object value (g_MetaObject itself).
 		// CALL is unsupported (for simplicity); SET is supported only in "multi-dimensional" mode: "".base[x]:=y
 		&& invoke_type != IT_CALL && (invoke_type == IT_SET ? aParamCount > 2 : aParamCount)
-		&& !stricmp(TokenToString(*aParam[0]), "base"))
+		&& !_tcsicmp(TokenToString(*aParam[0]), _T("base")))
 	{
 		if (aParamCount > 1)	// "".base[x] or similar
 		{

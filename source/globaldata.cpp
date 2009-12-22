@@ -33,10 +33,15 @@ DWORD g_MainThreadID = GetCurrentThreadId();
 DWORD g_HookThreadID; // Not initialized by design because 0 itself might be a valid thread ID.
 CRITICAL_SECTION g_CriticalRegExCache;
 
+#ifdef UNICODE
+bool g_DefaultUTF8 = false;
+#endif
+
 bool g_DestroyWindowCalled = false;
 HWND g_hWnd = NULL;
 HWND g_hWndEdit = NULL;
 HWND g_hWndSplash = NULL;
+HFONT g_hFontEdit = NULL;
 HFONT g_hFontSplash = NULL;  // So that font can be deleted on program close.
 HACCEL g_hAccelTable = NULL;
 
@@ -109,8 +114,8 @@ int g_MaxHotkeysPerInterval = 70; // Increased to 70 because 60 was still causin
 int g_HotkeyThrottleInterval = 2000; // Milliseconds.
 bool g_MaxThreadsBuffer = false;  // This feature usually does more harm than good, so it defaults to OFF.
 HotCriterionType g_HotCriterion = HOT_NO_CRITERION;
-char *g_HotWinTitle = ""; // In spite of the above being the primary indicator,
-char *g_HotWinText = "";  // these are initialized for maintainability.
+LPTSTR g_HotWinTitle = _T(""); // In spite of the above being the primary indicator,
+LPTSTR g_HotWinText = _T("");  // these are initialized for maintainability.
 HotkeyCriterion *g_FirstHotCriterion = NULL, *g_LastHotCriterion = NULL;
 
 // L4: Added global variables for #if (expression).
@@ -140,12 +145,12 @@ bool g_SortReverse;
 int g_SortColumnOffset;
 Func *g_SortFunc;
 
-char g_delimiter = ',';
-char g_DerefChar = '%';
-char g_EscapeChar = '`';
+TCHAR g_delimiter = ',';
+TCHAR g_DerefChar = '%';
+TCHAR g_EscapeChar = '`';
 
 // Hot-string vars (initialized when ResetHook() is first called):
-char g_HSBuf[HS_BUF_SIZE];
+TCHAR g_HSBuf[HS_BUF_SIZE];
 int g_HSBufLength;
 HWND g_HShwnd;
 
@@ -162,7 +167,7 @@ bool g_HSEndCharRequired = true;
 bool g_HSDetectWhenInsideWord = false;
 bool g_HSDoReset = false;
 bool g_HSResetUponMouseClick = true;
-char g_EndChars[HS_MAX_END_CHARS + 1] = "-()[]{}:;'\"/\\,.?!\n \t";  // Hotstring default end chars, including a space.
+TCHAR g_EndChars[HS_MAX_END_CHARS + 1] = _T("-()[]{}:;'\"/\\,.?!\n \t");  // Hotstring default end chars, including a space.
 // The following were considered but seemed too rare and/or too likely to result in undesirable replacements
 // (such as while programming or scripting, or in usernames or passwords): <>*+=_%^&|@#$|
 // Although dash/hyphen is used for multiple purposes, it seems to me that it is best (on average) to include it.
@@ -198,8 +203,8 @@ global_struct *g = &g_startup; // g_startup provides a non-NULL placeholder duri
 // when the script has many high-frequency timers), and possibly changing the working directory
 // whenever a new thread is launched, doesn't seem worth it.  This is because the need to change
 // the working directory is comparatively rare:
-char g_WorkingDir[MAX_PATH] = "";
-char *g_WorkingDirOrig = NULL;  // Assigned a value in WinMain().
+TCHAR g_WorkingDir[MAX_PATH] = _T("");
+TCHAR *g_WorkingDirOrig = NULL;  // Assigned a value in WinMain().
 
 bool g_ContinuationLTrim = false;
 bool g_ForceKeybdHook = false;
@@ -254,23 +259,23 @@ bool g_BlockMouseMove = false;
 
 Action g_act[] =
 {
-	{"", 0, 0, 0, NULL}  // ACT_INVALID.
+	{_T(""), 0, 0, 0, NULL}  // ACT_INVALID.
 
 	// ACT_ASSIGN, ACT_ADD/SUB/MULT/DIV: Give them names for display purposes.
 	// Note: Line::ToText() relies on the below names being the correct symbols for the operation:
 	// 1st param is the target, 2nd (optional) is the value:
-	, {"=", 1, 2, 2 H, NULL}  // Omitting the second param sets the var to be empty. "H" (high-bit) is probably needed for those cases when PerformAssign() must call ExpandArgs() or similar.
-	, {":=", 1, 2, 2, {2, 0}} // Same, though param #2 is flagged as numeric so that expression detection is automatic.  "H" (high-bit) doesn't appear to be needed even when ACT_ASSIGNEXPR calls AssignBinaryClip() because that AssignBinaryClip() checks for source==dest.
+	, {_T("="), 1, 2, 2 H, NULL}  // Omitting the second param sets the var to be empty. "H" (high-bit) is probably needed for those cases when PerformAssign() must call ExpandArgs() or similar.
+	, {_T(":="), 1, 2, 2, {2, 0}} // Same, though param #2 is flagged as numeric so that expression detection is automatic.  "H" (high-bit) doesn't appear to be needed even when ACT_ASSIGNEXPR calls AssignBinaryClip() because that AssignBinaryClip() checks for source==dest.
 
 	// ACT_EXPRESSION, which is a stand-alone expression outside of any IF or assignment-command;
 	// e.g. fn1(123, fn2(y)) or x&=3
 	// Its name should be "" so that Line::ToText() will properly display it.
-	, {"", 1, 1, 1, {1, 0}}
+	, {_T(""), 1, 1, 1, {1, 0}}
 
-	, {"+=", 2, 3, 3, {2, 0}}
-	, {"-=", 1, 3, 3, {2, 0}} // Subtraction (but not addition) allows 2nd to be blank due to 3rd param.
-	, {"*=", 2, 2, 2, {2, 0}}
-	, {"/=", 2, 2, 2, {2, 0}}
+	, {_T("+="), 2, 3, 3, {2, 0}}
+	, {_T("-="), 1, 3, 3, {2, 0}} // Subtraction (but not addition) allows 2nd to be blank due to 3rd param.
+	, {_T("*="), 2, 2, 2, {2, 0}}
+	, {_T("/="), 2, 2, 2, {2, 0}}
 
 	// This command is never directly parsed, but we need to have it here as a translation
 	// target for the old "repeat" command.  This is because that command treats a zero
@@ -278,315 +283,317 @@ Action g_act[] =
 	// there's no way to reliably translate each REPEAT command into a LOOP command at
 	// load-time.  Thus, we support both types of loops as actual commands that are
 	// handled separately at runtime.
-	, {"Repeat", 0, 1, 1, {1, 0}}  // Iteration Count: was mandatory in AutoIt2 but doesn't seem necessary here.
-	, {"Else", 0, 0, 0, NULL}
+	, {_T("Repeat"), 0, 1, 1, {1, 0}}  // Iteration Count: was mandatory in AutoIt2 but doesn't seem necessary here.
+	, {_T("Else"), 0, 0, 0, NULL}
 
-	, {"in", 2, 2, 2, NULL}, {"not in", 2, 2, 2, NULL}
-	, {"contains", 2, 2, 2, NULL}, {"not contains", 2, 2, 2, NULL}  // Very similar to "in" and "not in"
-	, {"is", 2, 2, 2, NULL}, {"is not", 2, 2, 2, NULL}
-	, {"between", 1, 3, 3, NULL}, {"not between", 1, 3, 3, NULL}  // Min 1 to allow #2 and #3 to be the empty string.
-	, {"", 1, 1, 1, {1, 0}} // ACT_IFEXPR's name should be "" so that Line::ToText() will properly display it.
+	, {_T("in"), 2, 2, 2, NULL}, {_T("not in"), 2, 2, 2, NULL}
+	, {_T("contains"), 2, 2, 2, NULL}, {_T("not contains"), 2, 2, 2, NULL}  // Very similar to "in" and "not in"
+	, {_T("is"), 2, 2, 2, NULL}, {_T("is not"), 2, 2, 2, NULL}
+	, {_T("between"), 1, 3, 3, NULL}, {_T("not between"), 1, 3, 3, NULL}  // Min 1 to allow #2 and #3 to be the empty string.
+	, {_T(""), 1, 1, 1, {1, 0}} // ACT_IFEXPR's name should be "" so that Line::ToText() will properly display it.
 
 	// Comparison operators take 1 param (if they're being compared to blank) or 2.
 	// For example, it's okay (though probably useless) to compare a string to the empty
 	// string this way: "If var1 >=".  Note: Line::ToText() relies on the below names:
-	, {"=", 1, 2, 2, NULL}, {"<>", 1, 2, 2, NULL}, {">", 1, 2, 2, NULL}
-	, {">=", 1, 2, 2, NULL}, {"<", 1, 2, 2, NULL}, {"<=", 1, 2, 2, NULL}
+	, {_T("="), 1, 2, 2, NULL}, {_T("<>"), 1, 2, 2, NULL}, {_T(">"), 1, 2, 2, NULL}
+	, {_T(">="), 1, 2, 2, NULL}, {_T("<"), 1, 2, 2, NULL}, {_T("<="), 1, 2, 2, NULL}
 
 	// For these, allow a minimum of zero, otherwise, the first param (WinTitle) would
 	// be considered mandatory-non-blank by default.  It's easier to make all the params
 	// optional and validate elsewhere that at least one of the four isn't blank.
 	// Also, All the IFs must be physically adjacent to each other in this array
 	// so that ACT_FIRST_IF and ACT_LAST_IF can be used to detect if a command is an IF:
-	, {"IfWinExist", 0, 4, 4, NULL}, {"IfWinNotExist", 0, 4, 4, NULL}  // Title, text, exclude-title, exclude-text
+	, {_T("IfWinExist"), 0, 4, 4, NULL}, {_T("IfWinNotExist"), 0, 4, 4, NULL}  // Title, text, exclude-title, exclude-text
 	// Passing zero params results in activating the LastUsed window:
-	, {"IfWinActive", 0, 4, 4, NULL}, {"IfWinNotActive", 0, 4, 4, NULL} // same
-	, {"IfInString", 2, 2, 2, NULL} // String var, search string
-	, {"IfNotInString", 2, 2, 2, NULL} // String var, search string
-	, {"IfExist", 1, 1, 1, NULL} // File or directory.
-	, {"IfNotExist", 1, 1, 1, NULL} // File or directory.
+	, {_T("IfWinActive"), 0, 4, 4, NULL}, {_T("IfWinNotActive"), 0, 4, 4, NULL} // same
+	, {_T("IfInString"), 2, 2, 2, NULL} // String var, search string
+	, {_T("IfNotInString"), 2, 2, 2, NULL} // String var, search string
+	, {_T("IfExist"), 1, 1, 1, NULL} // File or directory.
+	, {_T("IfNotExist"), 1, 1, 1, NULL} // File or directory.
 	// IfMsgBox must be physically adjacent to the other IFs in this array:
-	, {"IfMsgBox", 1, 1, 1, NULL} // MsgBox result (e.g. OK, YES, NO)
-	, {"MsgBox", 0, 4, 3, {4, 0}} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
-	, {"InputBox", 1, 11, 11 H, {5, 6, 7, 8, 10, 0}} // Output var, title, prompt, hide-text (e.g. passwords), width, height, X, Y, Font (e.g. courier:8 maybe), Timeout, Default
-	, {"SplashTextOn", 0, 4, 4, {1, 2, 0}} // Width, height, title, text
-	, {"SplashTextOff", 0, 0, 0, NULL}
-	, {"Progress", 0, 6, 6, NULL}  // Off|Percent|Options, SubText, MainText, Title, Font, FutureUse
-	, {"SplashImage", 0, 7, 7, NULL}  // Off|ImageFile, |Options, SubText, MainText, Title, Font, FutureUse
-	, {"ToolTip", 0, 4, 4, {2, 3, 4, 0}}  // Text, X, Y, ID.  If Text is omitted, the Tooltip is turned off.
-	, {"TrayTip", 0, 4, 4, {3, 4, 0}}  // Title, Text, Timeout, Options
+	, {_T("IfMsgBox"), 1, 1, 1, NULL} // MsgBox result (e.g. OK, YES, NO)
+	, {_T("MsgBox"), 0, 4, 3, {4, 0}} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
+	, {_T("InputBox"), 1, 11, 11 H, {5, 6, 7, 8, 10, 0}} // Output var, title, prompt, hide-text (e.g. passwords), width, height, X, Y, Font (e.g. courier:8 maybe), Timeout, Default
+	, {_T("SplashTextOn"), 0, 4, 4, {1, 2, 0}} // Width, height, title, text
+	, {_T("SplashTextOff"), 0, 0, 0, NULL}
+	, {_T("Progress"), 0, 6, 6, NULL}  // Off|Percent|Options, SubText, MainText, Title, Font, FutureUse
+	, {_T("SplashImage"), 0, 7, 7, NULL}  // Off|ImageFile, |Options, SubText, MainText, Title, Font, FutureUse
+	, {_T("ToolTip"), 0, 4, 4, {2, 3, 4, 0}}  // Text, X, Y, ID.  If Text is omitted, the Tooltip is turned off.
+	, {_T("TrayTip"), 0, 4, 4, {3, 4, 0}}  // Title, Text, Timeout, Options
 
-	, {"Input", 0, 4, 4 H, NULL}  // OutputVar, Options, EndKeys, MatchList.
+	, {_T("Input"), 0, 4, 4 H, NULL}  // OutputVar, Options, EndKeys, MatchList.
 
-	, {"Transform", 2, 4, 4 H, NULL}  // output var, operation, value1, value2
+	, {_T("Transform"), 2, 4, 4 H, NULL}  // output var, operation, value1, value2
 
-	, {"StringLeft", 3, 3, 3, {3, 0}}  // output var, input var, number of chars to extract
-	, {"StringRight", 3, 3, 3, {3, 0}} // same
-	, {"StringMid", 3, 5, 5, {3, 4, 0}} // Output Variable, Input Variable, Start char, Number of chars to extract, L
-	, {"StringTrimLeft", 3, 3, 3, {3, 0}}  // output var, input var, number of chars to trim
-	, {"StringTrimRight", 3, 3, 3, {3, 0}} // same
-	, {"StringLower", 2, 3, 3, NULL} // output var, input var, T = Title Case
-	, {"StringUpper", 2, 3, 3, NULL} // output var, input var, T = Title Case
-	, {"StringLen", 2, 2, 2, NULL} // output var, input var
-	, {"StringGetPos", 3, 5, 3, {5, 0}}  // Output Variable, Input Variable, Search Text, R or Right (from right), Offset
-	, {"StringReplace", 3, 5, 4, NULL} // Output Variable, Input Variable, Search String, Replace String, do-all.
-	, {"StringSplit", 2, 5, 5, NULL} // Output Array, Input Variable, Delimiter List (optional), Omit List, Future Use
-	, {"SplitPath", 1, 6, 6 H, NULL} // InputFilespec, OutName, OutDir, OutExt, OutNameNoExt, OutDrive
-	, {"Sort", 1, 2, 2, NULL} // OutputVar (it's also the input var), Options
+	, {_T("StringLeft"), 3, 3, 3, {3, 0}}  // output var, input var, number of chars to extract
+	, {_T("StringRight"), 3, 3, 3, {3, 0}} // same
+	, {_T("StringMid"), 3, 5, 5, {3, 4, 0}} // Output Variable, Input Variable, Start char, Number of chars to extract, L
+	, {_T("StringTrimLeft"), 3, 3, 3, {3, 0}}  // output var, input var, number of chars to trim
+	, {_T("StringTrimRight"), 3, 3, 3, {3, 0}} // same
+	, {_T("StringLower"), 2, 3, 3, NULL} // output var, input var, T = Title Case
+	, {_T("StringUpper"), 2, 3, 3, NULL} // output var, input var, T = Title Case
+	, {_T("StringLen"), 2, 2, 2, NULL} // output var, input var
+	, {_T("StringGetPos"), 3, 5, 3, {5, 0}}  // Output Variable, Input Variable, Search Text, R or Right (from right), Offset
+	, {_T("StringReplace"), 3, 5, 4, NULL} // Output Variable, Input Variable, Search String, Replace String, do-all.
+	, {_T("StringSplit"), 2, 5, 5, NULL} // Output Array, Input Variable, Delimiter List (optional), Omit List, Future Use
+	, {_T("SplitPath"), 1, 6, 6 H, NULL} // InputFilespec, OutName, OutDir, OutExt, OutNameNoExt, OutDrive
+	, {_T("Sort"), 1, 2, 2, NULL} // OutputVar (it's also the input var), Options
 
-	, {"EnvGet", 2, 2, 2 H, NULL} // OutputVar, EnvVar
-	, {"EnvSet", 1, 2, 2, NULL} // EnvVar, Value
-	, {"EnvUpdate", 0, 0, 0, NULL}
+	, {_T("EnvGet"), 2, 2, 2 H, NULL} // OutputVar, EnvVar
+	, {_T("EnvSet"), 1, 2, 2, NULL} // EnvVar, Value
+	, {_T("EnvUpdate"), 0, 0, 0, NULL}
 
-	, {"RunAs", 0, 3, 3, NULL} // user, pass, domain (0 params can be passed to disable the feature)
-	, {"Run", 1, 4, 4 H, NULL}      // TargetFile, Working Dir, WinShow-Mode/UseErrorLevel, OutputVarPID
-	, {"RunWait", 1, 4, 4 H, NULL}  // TargetFile, Working Dir, WinShow-Mode/UseErrorLevel, OutputVarPID
-	, {"URLDownloadToFile", 2, 2, 2, NULL} // URL, save-as-filename
+	, {_T("RunAs"), 0, 3, 3, NULL} // user, pass, domain (0 params can be passed to disable the feature)
+	, {_T("Run"), 1, 4, 4 H, NULL}      // TargetFile, Working Dir, WinShow-Mode/UseErrorLevel, OutputVarPID
+	, {_T("RunWait"), 1, 4, 4 H, NULL}  // TargetFile, Working Dir, WinShow-Mode/UseErrorLevel, OutputVarPID
+	, {_T("URLDownloadToFile"), 2, 2, 2, NULL} // URL, save-as-filename
 
-	, {"GetKeyState", 2, 3, 3 H, NULL} // OutputVar, key name, mode (optional) P = Physical, T = Toggle
-	, {"Send", 1, 1, 1, NULL}         // But that first param can validly be a deref that resolves to a blank param.
-	, {"SendRaw", 1, 1, 1, NULL}      //
-	, {"SendInput", 1, 1, 1, NULL}    //
-	, {"SendPlay", 1, 1, 1, NULL}     //
-	, {"SendEvent", 1, 1, 1, NULL}    // (due to rarity, there is no raw counterpart for this one)
+	, {_T("GetKeyState"), 2, 3, 3 H, NULL} // OutputVar, key name, mode (optional) P = Physical, T = Toggle
+	, {_T("Send"), 1, 1, 1, NULL}         // But that first param can validly be a deref that resolves to a blank param.
+	, {_T("SendRaw"), 1, 1, 1, NULL}      //
+	, {_T("SendInput"), 1, 1, 1, NULL}    //
+	, {_T("SendPlay"), 1, 1, 1, NULL}     //
+	, {_T("SendEvent"), 1, 1, 1, NULL}    // (due to rarity, there is no raw counterpart for this one)
 
 	// For these, the "control" param can be blank.  The window's first visible control will
 	// be used.  For this first one, allow a minimum of zero, otherwise, the first param (control)
 	// would be considered mandatory-non-blank by default.  It's easier to make all the params
 	// optional and validate elsewhere that the 2nd one specifically isn't blank:
-	, {"ControlSend", 0, 6, 6, NULL} // Control, Chars-to-Send, std. 4 window params.
-	, {"ControlSendRaw", 0, 6, 6, NULL} // Control, Chars-to-Send, std. 4 window params.
-	, {"ControlClick", 0, 8, 8, {5, 0}} // Control, WinTitle, WinText, WhichButton, ClickCount, Hold/Release, ExcludeTitle, ExcludeText
-	, {"ControlMove", 0, 9, 9, {2, 3, 4, 5, 0}} // Control, x, y, w, h, WinTitle, WinText, ExcludeTitle, ExcludeText
-	, {"ControlGetPos", 0, 9, 9 H, NULL} // Four optional output vars: xpos, ypos, width, height, control, std. 4 window params.
-	, {"ControlFocus", 0, 5, 5, NULL}     // Control, std. 4 window params
-	, {"ControlGetFocus", 1, 5, 5 H, NULL}  // OutputVar, std. 4 window params
-	, {"ControlSetText", 0, 6, 6, NULL}   // Control, new text, std. 4 window params
-	, {"ControlGetText", 1, 6, 6 H, NULL}   // Output-var, Control, std. 4 window params
-	, {"Control", 1, 7, 7, NULL}   // Command, Value, Control, std. 4 window params
-	, {"ControlGet", 2, 8, 8 H, NULL}   // Output-var, Command, Value, Control, std. 4 window params
+	, {_T("ControlSend"), 0, 6, 6, NULL} // Control, Chars-to-Send, std. 4 window params.
+	, {_T("ControlSendRaw"), 0, 6, 6, NULL} // Control, Chars-to-Send, std. 4 window params.
+	, {_T("ControlClick"), 0, 8, 8, {5, 0}} // Control, WinTitle, WinText, WhichButton, ClickCount, Hold/Release, ExcludeTitle, ExcludeText
+	, {_T("ControlMove"), 0, 9, 9, {2, 3, 4, 5, 0}} // Control, x, y, w, h, WinTitle, WinText, ExcludeTitle, ExcludeText
+	, {_T("ControlGetPos"), 0, 9, 9 H, NULL} // Four optional output vars: xpos, ypos, width, height, control, std. 4 window params.
+	, {_T("ControlFocus"), 0, 5, 5, NULL}     // Control, std. 4 window params
+	, {_T("ControlGetFocus"), 1, 5, 5 H, NULL}  // OutputVar, std. 4 window params
+	, {_T("ControlSetText"), 0, 6, 6, NULL}   // Control, new text, std. 4 window params
+	, {_T("ControlGetText"), 1, 6, 6 H, NULL}   // Output-var, Control, std. 4 window params
+	, {_T("Control"), 1, 7, 7, NULL}   // Command, Value, Control, std. 4 window params
+	, {_T("ControlGet"), 2, 8, 8 H, NULL}   // Output-var, Command, Value, Control, std. 4 window params
 
-	, {"SendMode", 1, 1, 1, NULL}
-	, {"CoordMode", 1, 2, 2, NULL} // Attribute, screen|relative
-	, {"SetDefaultMouseSpeed", 1, 1, 1, {1, 0}} // speed (numeric)
-	, {"Click", 0, 1, 1, NULL} // Flex-list of options.
-	, {"MouseMove", 2, 4, 4, {1, 2, 3, 0}} // x, y, speed, option
-	, {"MouseClick", 0, 7, 7, {2, 3, 4, 5, 0}} // which-button, x, y, ClickCount, speed, d=hold-down/u=release, Relative
-	, {"MouseClickDrag", 1, 7, 7, {2, 3, 4, 5, 6, 0}} // which-button, x1, y1, x2, y2, speed, Relative
-	, {"MouseGetPos", 0, 5, 5 H, {5, 0}} // 4 optional output vars: xpos, ypos, WindowID, ControlName. Finally: Mode. MinParams must be 0.
+	, {_T("SendMode"), 1, 1, 1, NULL}
+	, {_T("CoordMode"), 1, 2, 2, NULL} // Attribute, screen|relative
+	, {_T("SetDefaultMouseSpeed"), 1, 1, 1, {1, 0}} // speed (numeric)
+	, {_T("Click"), 0, 1, 1, NULL} // Flex-list of options.
+	, {_T("MouseMove"), 2, 4, 4, {1, 2, 3, 0}} // x, y, speed, option
+	, {_T("MouseClick"), 0, 7, 7, {2, 3, 4, 5, 0}} // which-button, x, y, ClickCount, speed, d=hold-down/u=release, Relative
+	, {_T("MouseClickDrag"), 1, 7, 7, {2, 3, 4, 5, 6, 0}} // which-button, x1, y1, x2, y2, speed, Relative
+	, {_T("MouseGetPos"), 0, 5, 5 H, {5, 0}} // 4 optional output vars: xpos, ypos, WindowID, ControlName. Finally: Mode. MinParams must be 0.
 
-	, {"StatusBarGetText", 1, 6, 6 H, {2, 0}} // Output-var, part# (numeric), std. 4 window params
-	, {"StatusBarWait", 0, 8, 8, {2, 3, 6, 0}} // Wait-text(blank ok),seconds,part#,title,text,interval,exclude-title,exclude-text
-	, {"ClipWait", 0, 2, 2, {1, 2, 0}} // Seconds-to-wait (0 = 500ms), 1|0: Wait for any format, not just text/files
-	, {"KeyWait", 1, 2, 2, NULL} // KeyName, Options
+	, {_T("StatusBarGetText"), 1, 6, 6 H, {2, 0}} // Output-var, part# (numeric), std. 4 window params
+	, {_T("StatusBarWait"), 0, 8, 8, {2, 3, 6, 0}} // Wait-text(blank ok),seconds,part#,title,text,interval,exclude-title,exclude-text
+	, {_T("ClipWait"), 0, 2, 2, {1, 2, 0}} // Seconds-to-wait (0 = 500ms), 1|0: Wait for any format, not just text/files
+	, {_T("KeyWait"), 1, 2, 2, NULL} // KeyName, Options
 
-	, {"Sleep", 1, 1, 1, {1, 0}} // Sleep time in ms (numeric)
-	, {"Random", 0, 3, 3, {2, 3, 0}} // Output var, Min, Max (Note: MinParams is 1 so that param2 can be blank).
+	, {_T("Sleep"), 1, 1, 1, {1, 0}} // Sleep time in ms (numeric)
+	, {_T("Random"), 0, 3, 3, {2, 3, 0}} // Output var, Min, Max (Note: MinParams is 1 so that param2 can be blank).
 
-	, {"Goto", 1, 1, 1, NULL}
-	, {"Gosub", 1, 1, 1, NULL}   // Label (or dereference that resolves to a label).
-	, {"OnExit", 0, 2, 2, NULL}  // Optional label, future use (since labels are allowed to contain commas)
-	, {"Hotkey", 1, 3, 3, NULL}  // Mod+Keys, Label/Action (blank to avoid changing curr. label), Options
-	, {"SetTimer", 1, 3, 3, {3, 0}}  // Label (or dereference that resolves to a label), period (or ON/OFF), Priority
-	, {"Critical", 0, 1, 1, NULL}  // On|Off
-	, {"Thread", 1, 3, 3, {2, 3, 0}}  // Command, value1 (can be blank for interrupt), value2
-	, {"Return", 0, 1, 1, {1, 0}}
-	, {"Exit", 0, 1, 1, {1, 0}} // ExitCode
-	, {"Loop", 0, 4, 4, NULL} // Iteration Count or FilePattern or root key name [,subkey name], FileLoopMode, Recurse? (custom validation for these last two)
-	, {"While", 1, 1, 1, {1, 0}} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
-	, {"Break", 0, 0, 0, NULL}, {"Continue", 0, 0, 0, NULL}
-	, {"{", 0, 0, 0, NULL}, {"}", 0, 0, 0, NULL}
+	, {_T("Goto"), 1, 1, 1, NULL}
+	, {_T("Gosub"), 1, 1, 1, NULL}   // Label (or dereference that resolves to a label).
+	, {_T("OnExit"), 0, 2, 2, NULL}  // Optional label, future use (since labels are allowed to contain commas)
+	, {_T("Hotkey"), 1, 3, 3, NULL}  // Mod+Keys, Label/Action (blank to avoid changing curr. label), Options
+	, {_T("SetTimer"), 1, 3, 3, {3, 0}}  // Label (or dereference that resolves to a label), period (or ON/OFF), Priority
+	, {_T("Critical"), 0, 1, 1, NULL}  // On|Off
+	, {_T("Thread"), 1, 3, 3, {2, 3, 0}}  // Command, value1 (can be blank for interrupt), value2
+	, {_T("Return"), 0, 1, 1, {1, 0}}
+	, {_T("Exit"), 0, 1, 1, {1, 0}} // ExitCode
+	, {_T("Loop"), 0, 4, 4, NULL} // Iteration Count or FilePattern or root key name [,subkey name], FileLoopMode, Recurse? (custom validation for these last two)
+	, {_T("While"), 1, 1, 1, {1, 0}} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
+	, {_T("Break"), 0, 0, 0, NULL}, {_T("Continue"), 0, 0, 0, NULL}
+	, {_T("{"), 0, 0, 0, NULL}, {_T("}"), 0, 0, 0, NULL}
 
-	, {"WinActivate", 0, 4, 2, NULL} // Passing zero params results in activating the LastUsed window.
-	, {"WinActivateBottom", 0, 4, 4, NULL} // Min. 0 so that 1st params can be blank and later ones not blank.
+	, {_T("WinActivate"), 0, 4, 2, NULL} // Passing zero params results in activating the LastUsed window.
+	, {_T("WinActivateBottom"), 0, 4, 4, NULL} // Min. 0 so that 1st params can be blank and later ones not blank.
 
 	// These all use Title, Text, Timeout (in seconds not ms), Exclude-title, Exclude-text.
 	// See above for why zero is the minimum number of params for each:
-	, {"WinWait", 0, 5, 5, {3, 0}}, {"WinWaitClose", 0, 5, 5, {3, 0}}
-	, {"WinWaitActive", 0, 5, 5, {3, 0}}, {"WinWaitNotActive", 0, 5, 5, {3, 0}}
+	, {_T("WinWait"), 0, 5, 5, {3, 0}}, {_T("WinWaitClose"), 0, 5, 5, {3, 0}}
+	, {_T("WinWaitActive"), 0, 5, 5, {3, 0}}, {_T("WinWaitNotActive"), 0, 5, 5, {3, 0}}
 
-	, {"WinMinimize", 0, 4, 2, NULL}, {"WinMaximize", 0, 4, 2, NULL}, {"WinRestore", 0, 4, 2, NULL} // std. 4 params
-	, {"WinHide", 0, 4, 2, NULL}, {"WinShow", 0, 4, 2, NULL} // std. 4 params
-	, {"WinMinimizeAll", 0, 0, 0, NULL}, {"WinMinimizeAllUndo", 0, 0, 0, NULL}
-	, {"WinClose", 0, 5, 2, {3, 0}} // title, text, time-to-wait-for-close (0 = 500ms), exclude title/text
-	, {"WinKill", 0, 5, 2, {3, 0}} // same as WinClose.
-	, {"WinMove", 0, 8, 8, {1, 2, 3, 4, 5, 6, 0}} // title, text, xpos, ypos, width, height, exclude-title, exclude_text
+	, {_T("WinMinimize"), 0, 4, 2, NULL}, {_T("WinMaximize"), 0, 4, 2, NULL}, {_T("WinRestore"), 0, 4, 2, NULL} // std. 4 params
+	, {_T("WinHide"), 0, 4, 2, NULL}, {_T("WinShow"), 0, 4, 2, NULL} // std. 4 params
+	, {_T("WinMinimizeAll"), 0, 0, 0, NULL}, {_T("WinMinimizeAllUndo"), 0, 0, 0, NULL}
+	, {_T("WinClose"), 0, 5, 2, {3, 0}} // title, text, time-to-wait-for-close (0 = 500ms), exclude title/text
+	, {_T("WinKill"), 0, 5, 2, {3, 0}} // same as WinClose.
+	, {_T("WinMove"), 0, 8, 8, {1, 2, 3, 4, 5, 6, 0}} // title, text, xpos, ypos, width, height, exclude-title, exclude_text
 	// Note for WinMove: title/text are marked as numeric because in two-param mode, they are the X/Y params.
 	// This helps speed up loading expression-detection.  Also, xpos/ypos/width/height can be the string "default",
 	// but that is explicitly checked for, even though it is required it to be numeric in the definition here.
-	, {"WinMenuSelectItem", 0, 11, 11, NULL} // WinTitle, WinText, Menu name, 6 optional sub-menu names, ExcludeTitle/Text
+	, {_T("WinMenuSelectItem"), 0, 11, 11, NULL} // WinTitle, WinText, Menu name, 6 optional sub-menu names, ExcludeTitle/Text
 
-	, {"Process", 1, 3, 3, NULL}  // Sub-cmd, PID/name, Param3 (use minimum of 1 param so that 2nd can be blank)
+	, {_T("Process"), 1, 3, 3, NULL}  // Sub-cmd, PID/name, Param3 (use minimum of 1 param so that 2nd can be blank)
 
-	, {"WinSet", 1, 6, 6, NULL} // attribute, setting, title, text, exclude-title, exclude-text
+	, {_T("WinSet"), 1, 6, 6, NULL} // attribute, setting, title, text, exclude-title, exclude-text
 	// WinSetTitle: Allow a minimum of zero params so that title isn't forced to be non-blank.
 	// Also, if the user passes only one param, the title of the "last used" window will be
 	// set to the string in the first param:
-	, {"WinSetTitle", 0, 5, 3, NULL} // title, text, newtitle, exclude-title, exclude-text
-	, {"WinGetTitle", 1, 5, 3 H, NULL} // Output-var, std. 4 window params
-	, {"WinGetClass", 1, 5, 5 H, NULL} // Output-var, std. 4 window params
-	, {"WinGet", 1, 6, 6 H, NULL} // Output-var/array, cmd (if omitted, defaults to ID), std. 4 window params
-	, {"WinGetPos", 0, 8, 8 H, NULL} // Four optional output vars: xpos, ypos, width, height.  Std. 4 window params.
-	, {"WinGetText", 1, 5, 5 H, NULL} // Output var, std 4 window params.
+	, {_T("WinSetTitle"), 0, 5, 3, NULL} // title, text, newtitle, exclude-title, exclude-text
+	, {_T("WinGetTitle"), 1, 5, 3 H, NULL} // Output-var, std. 4 window params
+	, {_T("WinGetClass"), 1, 5, 5 H, NULL} // Output-var, std. 4 window params
+	, {_T("WinGet"), 1, 6, 6 H, NULL} // Output-var/array, cmd (if omitted, defaults to ID), std. 4 window params
+	, {_T("WinGetPos"), 0, 8, 8 H, NULL} // Four optional output vars: xpos, ypos, width, height.  Std. 4 window params.
+	, {_T("WinGetText"), 1, 5, 5 H, NULL} // Output var, std 4 window params.
 
-	, {"SysGet", 2, 4, 4 H, NULL} // Output-var/array, sub-cmd or sys-metrics-number, input-value1, future-use
+	, {_T("SysGet"), 2, 4, 4 H, NULL} // Output-var/array, sub-cmd or sys-metrics-number, input-value1, future-use
 
-	, {"PostMessage", 1, 8, 8, {1, 2, 3, 0}}  // msg, wParam, lParam, Control, WinTitle, WinText, ExcludeTitle, ExcludeText
-	, {"SendMessage", 1, 8, 8, {1, 2, 3, 0}}  // msg, wParam, lParam, Control, WinTitle, WinText, ExcludeTitle, ExcludeText
+	, {_T("PostMessage"), 1, 8, 8, {1, 2, 3, 0}}  // msg, wParam, lParam, Control, WinTitle, WinText, ExcludeTitle, ExcludeText
+	, {_T("SendMessage"), 1, 9, 9, {1, 2, 3, 9, 0}}  // msg, wParam, lParam, Control, WinTitle, WinText, ExcludeTitle, ExcludeText, Timeout
 
-	, {"PixelGetColor", 3, 4, 4 H, {2, 3, 0}} // OutputVar, X-coord, Y-coord [, RGB]
-	, {"PixelSearch", 0, 9, 9 H, {3, 4, 5, 6, 7, 8, 0}} // OutputX, OutputY, left, top, right, bottom, Color, Variation [, RGB]
-	, {"ImageSearch", 0, 7, 7 H, {3, 4, 5, 6, 0}} // OutputX, OutputY, left, top, right, bottom, ImageFile
+	, {_T("PixelGetColor"), 3, 4, 4 H, {2, 3, 0}} // OutputVar, X-coord, Y-coord [, RGB]
+	, {_T("PixelSearch"), 0, 9, 9 H, {3, 4, 5, 6, 7, 8, 0}} // OutputX, OutputY, left, top, right, bottom, Color, Variation [, RGB]
+	, {_T("ImageSearch"), 0, 7, 7 H, {3, 4, 5, 6, 0}} // OutputX, OutputY, left, top, right, bottom, ImageFile
 	// NOTE FOR THE ABOVE: 0 min args so that the output vars can be optional.
 
 	// See above for why minimum is 1 vs. 2:
-	, {"GroupAdd", 1, 6, 6, NULL} // Group name, WinTitle, WinText, Label, exclude-title/text
-	, {"GroupActivate", 1, 2, 2, NULL}
-	, {"GroupDeactivate", 1, 2, 2, NULL}
-	, {"GroupClose", 1, 2, 2, NULL}
+	, {_T("GroupAdd"), 1, 6, 6, NULL} // Group name, WinTitle, WinText, Label, exclude-title/text
+	, {_T("GroupActivate"), 1, 2, 2, NULL}
+	, {_T("GroupDeactivate"), 1, 2, 2, NULL}
+	, {_T("GroupClose"), 1, 2, 2, NULL}
 
-	, {"DriveSpaceFree", 2, 2, 2 H, NULL} // Output-var, path (e.g. c:\)
-	, {"Drive", 1, 3, 3, NULL} // Sub-command, Value1 (can be blank for Eject), Value2
-	, {"DriveGet", 0, 3, 3 H, NULL} // Output-var (optional in at least one case), Command, Value
+	, {_T("DriveSpaceFree"), 2, 2, 2 H, NULL} // Output-var, path (e.g. c:\)
+	, {_T("Drive"), 1, 3, 3, NULL} // Sub-command, Value1 (can be blank for Eject), Value2
+	, {_T("DriveGet"), 0, 3, 3 H, NULL} // Output-var (optional in at least one case), Command, Value
 
-	, {"SoundGet", 1, 4, 4 H, {4, 0}} // OutputVar, ComponentType (default=master), ControlType (default=vol), Mixer/Device Number
-	, {"SoundSet", 1, 4, 4, {1, 4, 0}} // Volume percent-level (0-100), ComponentType, ControlType (default=vol), Mixer/Device Number
-	, {"SoundGetWaveVolume", 1, 2, 2 H, {2, 0}} // OutputVar, Mixer/Device Number
-	, {"SoundSetWaveVolume", 1, 2, 2, {1, 2, 0}} // Volume percent-level (0-100), Device Number (1 is the first)
-	, {"SoundBeep", 0, 2, 2, {1, 2, 0}} // Frequency, Duration.
-	, {"SoundPlay", 1, 2, 2, NULL} // Filename [, wait]
+	, {_T("SoundGet"), 1, 4, 4 H, {4, 0}} // OutputVar, ComponentType (default=master), ControlType (default=vol), Mixer/Device Number
+	, {_T("SoundSet"), 1, 4, 4, {1, 4, 0}} // Volume percent-level (0-100), ComponentType, ControlType (default=vol), Mixer/Device Number
+	, {_T("SoundGetWaveVolume"), 1, 2, 2 H, {2, 0}} // OutputVar, Mixer/Device Number
+	, {_T("SoundSetWaveVolume"), 1, 2, 2, {1, 2, 0}} // Volume percent-level (0-100), Device Number (1 is the first)
+	, {_T("SoundBeep"), 0, 2, 2, {1, 2, 0}} // Frequency, Duration.
+	, {_T("SoundPlay"), 1, 2, 2, NULL} // Filename [, wait]
 
-	, {"FileAppend", 0, 2, 2, NULL} // text, filename (which can be omitted in a read-file loop). Update: Text can be omitted too, to create an empty file or alter the timestamp of an existing file.
-	, {"FileRead", 2, 2, 2 H, NULL} // Output variable, filename
-	, {"FileReadLine", 3, 3, 3 H, {3, 0}} // Output variable, filename, line-number
-	, {"FileDelete", 1, 1, 1, NULL} // filename or pattern
-	, {"FileRecycle", 1, 1, 1, NULL} // filename or pattern
-	, {"FileRecycleEmpty", 0, 1, 1, NULL} // optional drive letter (all bins will be emptied if absent.
-	, {"FileInstall", 2, 3, 3, {3, 0}} // source, dest, flag (1/0, where 1=overwrite)
-	, {"FileCopy", 2, 3, 3, {3, 0}} // source, dest, flag
-	, {"FileMove", 2, 3, 3, {3, 0}} // source, dest, flag
-	, {"FileCopyDir", 2, 3, 3, {3, 0}} // source, dest, flag
-	, {"FileMoveDir", 2, 3, 3, NULL} // source, dest, flag (which can be non-numeric in this case)
-	, {"FileCreateDir", 1, 1, 1, NULL} // dir name
-	, {"FileRemoveDir", 1, 2, 1, {2, 0}} // dir name, flag
+	, {_T("FileAppend"), 0, 3, 3, NULL} // text, filename (which can be omitted in a read-file loop). Update: Text can be omitted too, to create an empty file or alter the timestamp of an existing file.
+	, {_T("FileRead"), 2, 2, 2 H, NULL} // Output variable, filename
+	, {_T("FileReadLine"), 3, 3, 3 H, {3, 0}} // Output variable, filename, line-number
+	, {_T("FileDelete"), 1, 1, 1, NULL} // filename or pattern
+	, {_T("FileRecycle"), 1, 1, 1, NULL} // filename or pattern
+	, {_T("FileRecycleEmpty"), 0, 1, 1, NULL} // optional drive letter (all bins will be emptied if absent.
+	, {_T("FileInstall"), 2, 3, 3, {3, 0}} // source, dest, flag (1/0, where 1=overwrite)
+	, {_T("FileCopy"), 2, 3, 3, {3, 0}} // source, dest, flag
+	, {_T("FileMove"), 2, 3, 3, {3, 0}} // source, dest, flag
+	, {_T("FileCopyDir"), 2, 3, 3, {3, 0}} // source, dest, flag
+	, {_T("FileMoveDir"), 2, 3, 3, NULL} // source, dest, flag (which can be non-numeric in this case)
+	, {_T("FileCreateDir"), 1, 1, 1, NULL} // dir name
+	, {_T("FileRemoveDir"), 1, 2, 1, {2, 0}} // dir name, flag
 
-	, {"FileGetAttrib", 1, 2, 2 H, NULL} // OutputVar, Filespec (if blank, uses loop's current file)
-	, {"FileSetAttrib", 1, 4, 4, {3, 4, 0}} // Attribute(s), FilePattern, OperateOnFolders?, Recurse? (custom validation for these last two)
-	, {"FileGetTime", 1, 3, 3 H, NULL} // OutputVar, Filespec, WhichTime (modified/created/accessed)
-	, {"FileSetTime", 0, 5, 5, {1, 4, 5, 0}} // datetime (YYYYMMDDHH24MISS), FilePattern, WhichTime, OperateOnFolders?, Recurse?
-	, {"FileGetSize", 1, 3, 3 H, NULL} // OutputVar, Filespec, B|K|M (bytes, kb, or mb)
-	, {"FileGetVersion", 1, 2, 2 H, NULL} // OutputVar, Filespec
+	, {_T("FileGetAttrib"), 1, 2, 2 H, NULL} // OutputVar, Filespec (if blank, uses loop's current file)
+	, {_T("FileSetAttrib"), 1, 4, 4, {3, 4, 0}} // Attribute(s), FilePattern, OperateOnFolders?, Recurse? (custom validation for these last two)
+	, {_T("FileGetTime"), 1, 3, 3 H, NULL} // OutputVar, Filespec, WhichTime (modified/created/accessed)
+	, {_T("FileSetTime"), 0, 5, 5, {1, 4, 5, 0}} // datetime (YYYYMMDDHH24MISS), FilePattern, WhichTime, OperateOnFolders?, Recurse?
+	, {_T("FileGetSize"), 1, 3, 3 H, NULL} // OutputVar, Filespec, B|K|M (bytes, kb, or mb)
+	, {_T("FileGetVersion"), 1, 2, 2 H, NULL} // OutputVar, Filespec
 
-	, {"SetWorkingDir", 1, 1, 1, NULL} // New path
-	, {"FileSelectFile", 1, 5, 3 H, NULL} // output var, options, working dir, greeting, filter
-	, {"FileSelectFolder", 1, 4, 4 H, {3, 0}} // output var, root directory, options, greeting
+	, {_T("SetWorkingDir"), 1, 1, 1, NULL} // New path
+	, {_T("FileSelectFile"), 1, 5, 3 H, NULL} // output var, options, working dir, greeting, filter
+	, {_T("FileSelectFolder"), 1, 4, 4 H, {3, 0}} // output var, root directory, options, greeting
 
-	, {"FileGetShortcut", 1, 8, 8 H, NULL} // Filespec, OutTarget, OutDir, OutArg, OutDescrip, OutIcon, OutIconIndex, OutShowState.
-	, {"FileCreateShortcut", 2, 9, 9, {8, 9, 0}} // file, lnk [, workdir, args, desc, icon, hotkey, icon_number, run_state]
+	, {_T("FileGetShortcut"), 1, 8, 8 H, NULL} // Filespec, OutTarget, OutDir, OutArg, OutDescrip, OutIcon, OutIconIndex, OutShowState.
+	, {_T("FileCreateShortcut"), 2, 9, 9, {8, 9, 0}} // file, lnk [, workdir, args, desc, icon, hotkey, icon_number, run_state]
 
-	, {"IniRead", 4, 5, 4 H, NULL}   // OutputVar, Filespec, Section, Key, Default (value to return if key not found)
-	, {"IniWrite", 4, 4, 4, NULL}  // Value, Filespec, Section, Key
-	, {"IniDelete", 2, 3, 3, NULL} // Filespec, Section, Key
+	, {_T("IniRead"), 4, 5, 4 H, NULL}   // OutputVar, Filespec, Section, Key, Default (value to return if key not found)
+	, {_T("IniWrite"), 4, 4, 4, NULL}  // Value, Filespec, Section, Key
+	, {_T("IniDelete"), 2, 3, 3, NULL} // Filespec, Section, Key
 
 	// These require so few parameters due to registry loops, which provide the missing parameter values
 	// automatically.  In addition, RegRead can't require more than 1 param since the 2nd param is
 	// an option/obsolete parameter:
-	, {"RegRead", 1, 5, 5 H, NULL} // output var, (ValueType [optional]), RegKey, RegSubkey, ValueName
-	, {"RegWrite", 0, 5, 5, NULL} // ValueType, RegKey, RegSubKey, ValueName, Value (set to blank if omitted?)
-	, {"RegDelete", 0, 3, 3, NULL} // RegKey, RegSubKey, ValueName
+	, {_T("RegRead"), 1, 5, 5 H, NULL} // output var, (ValueType [optional]), RegKey, RegSubkey, ValueName
+	, {_T("RegWrite"), 0, 5, 5, NULL} // ValueType, RegKey, RegSubKey, ValueName, Value (set to blank if omitted?)
+	, {_T("RegDelete"), 0, 3, 3, NULL} // RegKey, RegSubKey, ValueName
 
-	, {"OutputDebug", 1, 1, 1, NULL}
+	, {_T("OutputDebug"), 1, 1, 1, NULL}
 
-	, {"SetKeyDelay", 0, 3, 3, {1, 2, 0}} // Delay in ms (numeric, negative allowed), PressDuration [, Play]
-	, {"SetMouseDelay", 1, 2, 2, {1, 0}} // Delay in ms (numeric, negative allowed) [, Play]
-	, {"SetWinDelay", 1, 1, 1, {1, 0}} // Delay in ms (numeric, negative allowed)
-	, {"SetControlDelay", 1, 1, 1, {1, 0}} // Delay in ms (numeric, negative allowed)
-	, {"SetBatchLines", 1, 1, 1, NULL} // Can be non-numeric, such as 15ms, or a number (to indicate line count).
-	, {"SetTitleMatchMode", 1, 1, 1, NULL} // Allowed values: 1, 2, slow, fast
-	, {"SetFormat", 2, 2, 2, NULL} // Float|Integer, FormatString (for float) or H|D (for int)
-	, {"FormatTime", 1, 3, 3 H, NULL} // OutputVar, YYYYMMDDHH24MISS, Format (format is last to avoid having to escape commas in it).
+	, {_T("SetKeyDelay"), 0, 3, 3, {1, 2, 0}} // Delay in ms (numeric, negative allowed), PressDuration [, Play]
+	, {_T("SetMouseDelay"), 1, 2, 2, {1, 0}} // Delay in ms (numeric, negative allowed) [, Play]
+	, {_T("SetWinDelay"), 1, 1, 1, {1, 0}} // Delay in ms (numeric, negative allowed)
+	, {_T("SetControlDelay"), 1, 1, 1, {1, 0}} // Delay in ms (numeric, negative allowed)
+	, {_T("SetBatchLines"), 1, 1, 1, NULL} // Can be non-numeric, such as 15ms, or a number (to indicate line count).
+	, {_T("SetTitleMatchMode"), 1, 1, 1, NULL} // Allowed values: 1, 2, slow, fast
+	, {_T("SetFormat"), 2, 2, 2, NULL} // Float|Integer, FormatString (for float) or H|D (for int)
+	, {_T("FormatTime"), 1, 3, 3 H, NULL} // OutputVar, YYYYMMDDHH24MISS, Format (format is last to avoid having to escape commas in it).
 
-	, {"Suspend", 0, 1, 1, NULL} // On/Off/Toggle/Permit/Blank (blank is the same as toggle)
-	, {"Pause", 0, 2, 2, NULL} // On/Off/Toggle/Blank (blank is the same as toggle), AlwaysAffectUnderlying
-	, {"AutoTrim", 1, 1, 1, NULL} // On/Off
-	, {"StringCaseSense", 1, 1, 1, NULL} // On/Off/Locale
-	, {"DetectHiddenWindows", 1, 1, 1, NULL} // On/Off
-	, {"DetectHiddenText", 1, 1, 1, NULL} // On/Off
-	, {"BlockInput", 1, 1, 1, NULL} // On/Off
+	, {_T("Suspend"), 0, 1, 1, NULL} // On/Off/Toggle/Permit/Blank (blank is the same as toggle)
+	, {_T("Pause"), 0, 2, 2, NULL} // On/Off/Toggle/Blank (blank is the same as toggle), AlwaysAffectUnderlying
+	, {_T("AutoTrim"), 1, 1, 1, NULL} // On/Off
+	, {_T("StringCaseSense"), 1, 1, 1, NULL} // On/Off/Locale
+	, {_T("DetectHiddenWindows"), 1, 1, 1, NULL} // On/Off
+	, {_T("DetectHiddenText"), 1, 1, 1, NULL} // On/Off
+	, {_T("BlockInput"), 1, 1, 1, NULL} // On/Off
 
-	, {"SetNumlockState", 0, 1, 1, NULL} // On/Off/AlwaysOn/AlwaysOff or blank (unspecified) to return to normal.
-	, {"SetScrollLockState", 0, 1, 1, NULL} // same
-	, {"SetCapslockState", 0, 1, 1, NULL} // same
-	, {"SetStoreCapslockMode", 1, 1, 1, NULL} // On/Off
+	, {_T("SetNumlockState"), 0, 1, 1, NULL} // On/Off/AlwaysOn/AlwaysOff or blank (unspecified) to return to normal.
+	, {_T("SetScrollLockState"), 0, 1, 1, NULL} // same
+	, {_T("SetCapslockState"), 0, 1, 1, NULL} // same
+	, {_T("SetStoreCapslockMode"), 1, 1, 1, NULL} // On/Off
 
-	, {"KeyHistory", 0, 2, 2, NULL}, {"ListLines", 0, 1, 1, NULL}
-	, {"ListVars", 0, 0, 0, NULL}, {"ListHotkeys", 0, 0, 0, NULL}
+	, {_T("KeyHistory"), 0, 2, 2, NULL}, {_T("ListLines"), 0, 1, 1, NULL}
+	, {_T("ListVars"), 0, 0, 0, NULL}, {_T("ListHotkeys"), 0, 0, 0, NULL}
 
-	, {"Edit", 0, 0, 0, NULL}
-	, {"Reload", 0, 0, 0, NULL}
-	, {"Menu", 2, 6, 6, NULL}  // tray, add, name, label, options, future use
-	, {"Gui", 1, 4, 4, NULL}  // Cmd/Add, ControlType, Options, Text
-	, {"GuiControl", 0, 3, 3 H, NULL} // Sub-cmd (defaults to "contents"), ControlName/ID, Text
-	, {"GuiControlGet", 1, 4, 4, NULL} // OutputVar, Sub-cmd (defaults to "contents"), ControlName/ID (defaults to control assoc. with OutputVar), Text/FutureUse
+	, {_T("Edit"), 0, 0, 0, NULL}
+	, {_T("Reload"), 0, 0, 0, NULL}
+	, {_T("Menu"), 2, 6, 6, NULL}  // tray, add, name, label, options, future use
+	, {_T("Gui"), 1, 4, 4, NULL}  // Cmd/Add, ControlType, Options, Text
+	, {_T("GuiControl"), 0, 3, 3 H, NULL} // Sub-cmd (defaults to "contents"), ControlName/ID, Text
+	, {_T("GuiControlGet"), 1, 4, 4, NULL} // OutputVar, Sub-cmd (defaults to "contents"), ControlName/ID (defaults to control assoc. with OutputVar), Text/FutureUse
 
-	, {"ExitApp", 0, 1, 1, {1, 0}}  // Optional exit-code. v1.0.48.01: Allow an expression like ACT_EXIT does.
-	, {"Shutdown", 1, 1, 1, {1, 0}} // Seems best to make the first param (the flag/code) mandatory.
+	, {_T("ExitApp"), 0, 1, 1, {1, 0}}  // Optional exit-code. v1.0.48.01: Allow an expression like ACT_EXIT does.
+	, {_T("Shutdown"), 1, 1, 1, {1, 0}} // Seems best to make the first param (the flag/code) mandatory.
+
+	, {_T("FileEncoding"), 0, 1, 1, NULL}
 };
 // Below is the most maintainable way to determine the actual count?
 // Due to C++ lang. restrictions, can't easily make this a const because constants
 // automatically get static (internal) linkage, thus such a var could never be
 // used outside this module:
-int g_ActionCount = sizeof(g_act) / sizeof(Action);
+int g_ActionCount = _countof(g_act);
 
 
 
 Action g_old_act[] =
 {
-	{"", 0, 0, 0, NULL}  // OLD_INVALID.
-	, {"SetEnv", 1, 2, 2, NULL}
-	, {"EnvAdd", 2, 3, 3, {2, 0}}, {"EnvSub", 1, 3, 3, {2, 0}} // EnvSub (but not Add) allow 2nd to be blank due to 3rd param.
-	, {"EnvMult", 2, 2, 2, {2, 0}}, {"EnvDiv", 2, 2, 2, {2, 0}}
-	, {"IfEqual", 1, 2, 2, NULL}, {"IfNotEqual", 1, 2, 2, NULL}
-	, {"IfGreater", 1, 2, 2, NULL}, {"IfGreaterOrEqual", 1, 2, 2, NULL}
-	, {"IfLess", 1, 2, 2, NULL}, {"IfLessOrEqual", 1, 2, 2, NULL}
-	, {"LeftClick", 2, 2, 2, {1, 2, 0}}, {"RightClick", 2, 2, 2, {1, 2, 0}}
-	, {"LeftClickDrag", 4, 4, 4, {1, 2, 3, 4, 0}}, {"RightClickDrag", 4, 4, 4, {1, 2, 3, 4, 0}}
-	, {"HideAutoItWin", 1, 1, 1, NULL}
+	{_T(""), 0, 0, 0, NULL}  // OLD_INVALID.
+	, {_T("SetEnv"), 1, 2, 2, NULL}
+	, {_T("EnvAdd"), 2, 3, 3, {2, 0}}, {_T("EnvSub"), 1, 3, 3, {2, 0}} // EnvSub (but not Add) allow 2nd to be blank due to 3rd param.
+	, {_T("EnvMult"), 2, 2, 2, {2, 0}}, {_T("EnvDiv"), 2, 2, 2, {2, 0}}
+	, {_T("IfEqual"), 1, 2, 2, NULL}, {_T("IfNotEqual"), 1, 2, 2, NULL}
+	, {_T("IfGreater"), 1, 2, 2, NULL}, {_T("IfGreaterOrEqual"), 1, 2, 2, NULL}
+	, {_T("IfLess"), 1, 2, 2, NULL}, {_T("IfLessOrEqual"), 1, 2, 2, NULL}
+	, {_T("LeftClick"), 2, 2, 2, {1, 2, 0}}, {_T("RightClick"), 2, 2, 2, {1, 2, 0}}
+	, {_T("LeftClickDrag"), 4, 4, 4, {1, 2, 3, 4, 0}}, {_T("RightClickDrag"), 4, 4, 4, {1, 2, 3, 4, 0}}
+	, {_T("HideAutoItWin"), 1, 1, 1, NULL}
 	  // Allow zero params, unlike AutoIt.  These params should match those for REPEAT in the above array:
-	, {"Repeat", 0, 1, 1, {1, 0}}, {"EndRepeat", 0, 0, 0, NULL}
-	, {"WinGetActiveTitle", 1, 1, 1, NULL} // <Title Var>
-	, {"WinGetActiveStats", 5, 5, 5, NULL} // <Title Var>, <Width Var>, <Height Var>, <Xpos Var>, <Ypos Var>
+	, {_T("Repeat"), 0, 1, 1, {1, 0}}, {_T("EndRepeat"), 0, 0, 0, NULL}
+	, {_T("WinGetActiveTitle"), 1, 1, 1, NULL} // <Title Var>
+	, {_T("WinGetActiveStats"), 5, 5, 5, NULL} // <Title Var>, <Width Var>, <Height Var>, <Xpos Var>, <Ypos Var>
 };
-int g_OldActionCount = sizeof(g_old_act) / sizeof(Action);
+int g_OldActionCount = _countof(g_old_act);
 
 
 key_to_vk_type g_key_to_vk[] =
-{ {"Numpad0", VK_NUMPAD0}
-, {"Numpad1", VK_NUMPAD1}
-, {"Numpad2", VK_NUMPAD2}
-, {"Numpad3", VK_NUMPAD3}
-, {"Numpad4", VK_NUMPAD4}
-, {"Numpad5", VK_NUMPAD5}
-, {"Numpad6", VK_NUMPAD6}
-, {"Numpad7", VK_NUMPAD7}
-, {"Numpad8", VK_NUMPAD8}
-, {"Numpad9", VK_NUMPAD9}
-, {"NumpadMult", VK_MULTIPLY}
-, {"NumpadDiv", VK_DIVIDE}
-, {"NumpadAdd", VK_ADD}
-, {"NumpadSub", VK_SUBTRACT}
-// , {"NumpadEnter", VK_RETURN}  // Must do this one via scan code, see below for explanation.
-, {"NumpadDot", VK_DECIMAL}
-, {"Numlock", VK_NUMLOCK}
-, {"ScrollLock", VK_SCROLL}
-, {"CapsLock", VK_CAPITAL}
+{ {_T("Numpad0"), VK_NUMPAD0}
+, {_T("Numpad1"), VK_NUMPAD1}
+, {_T("Numpad2"), VK_NUMPAD2}
+, {_T("Numpad3"), VK_NUMPAD3}
+, {_T("Numpad4"), VK_NUMPAD4}
+, {_T("Numpad5"), VK_NUMPAD5}
+, {_T("Numpad6"), VK_NUMPAD6}
+, {_T("Numpad7"), VK_NUMPAD7}
+, {_T("Numpad8"), VK_NUMPAD8}
+, {_T("Numpad9"), VK_NUMPAD9}
+, {_T("NumpadMult"), VK_MULTIPLY}
+, {_T("NumpadDiv"), VK_DIVIDE}
+, {_T("NumpadAdd"), VK_ADD}
+, {_T("NumpadSub"), VK_SUBTRACT}
+// , {_T("NumpadEnter"), VK_RETURN}  // Must do this one via scan code, see below for explanation.
+, {_T("NumpadDot"), VK_DECIMAL}
+, {_T("Numlock"), VK_NUMLOCK}
+, {_T("ScrollLock"), VK_SCROLL}
+, {_T("CapsLock"), VK_CAPITAL}
 
-, {"Escape", VK_ESCAPE}  // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
-, {"Esc", VK_ESCAPE}
-, {"Tab", VK_TAB}
-, {"Space", VK_SPACE}
-, {"Backspace", VK_BACK} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
-, {"BS", VK_BACK}
+, {_T("Escape"), VK_ESCAPE}  // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
+, {_T("Esc"), VK_ESCAPE}
+, {_T("Tab"), VK_TAB}
+, {_T("Space"), VK_SPACE}
+, {_T("Backspace"), VK_BACK} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
+, {_T("BS"), VK_BACK}
 
 // These keys each have a counterpart on the number pad with the same VK.  Use the VK for these,
 // since they are probably more likely to be assigned to hotkeys (thus minimizing the use of the
@@ -601,120 +608,120 @@ key_to_vk_type g_key_to_vk[] =
 // Even though ENTER is probably less likely to be assigned than NumpadEnter, must have ENTER as
 // the primary vk because otherwise, if the user configures only naked-NumPadEnter to do something,
 // RegisterHotkey() would register that vk and ENTER would also be configured to do the same thing.
-, {"Enter", VK_RETURN}  // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
-, {"Return", VK_RETURN}
+, {_T("Enter"), VK_RETURN}  // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
+, {_T("Return"), VK_RETURN}
 
-, {"NumpadDel", VK_DELETE}
-, {"NumpadIns", VK_INSERT}
-, {"NumpadClear", VK_CLEAR}  // same physical key as Numpad5 on most keyboards?
-, {"NumpadUp", VK_UP}
-, {"NumpadDown", VK_DOWN}
-, {"NumpadLeft", VK_LEFT}
-, {"NumpadRight", VK_RIGHT}
-, {"NumpadHome", VK_HOME}
-, {"NumpadEnd", VK_END}
-, {"NumpadPgUp", VK_PRIOR}
-, {"NumpadPgDn", VK_NEXT}
+, {_T("NumpadDel"), VK_DELETE}
+, {_T("NumpadIns"), VK_INSERT}
+, {_T("NumpadClear"), VK_CLEAR}  // same physical key as Numpad5 on most keyboards?
+, {_T("NumpadUp"), VK_UP}
+, {_T("NumpadDown"), VK_DOWN}
+, {_T("NumpadLeft"), VK_LEFT}
+, {_T("NumpadRight"), VK_RIGHT}
+, {_T("NumpadHome"), VK_HOME}
+, {_T("NumpadEnd"), VK_END}
+, {_T("NumpadPgUp"), VK_PRIOR}
+, {_T("NumpadPgDn"), VK_NEXT}
 
-, {"PrintScreen", VK_SNAPSHOT}
-, {"CtrlBreak", VK_CANCEL}  // Might want to verify this, and whether it has any peculiarities.
-, {"Pause", VK_PAUSE} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
-, {"Break", VK_PAUSE} // Not really meaningful, but kept for as a synonym of Pause for backward compatibility.  See CtrlBreak.
-, {"Help", VK_HELP}  // VK_HELP is probably not the extended HELP key.  Not sure what this one is.
-, {"Sleep", VK_SLEEP}
+, {_T("PrintScreen"), VK_SNAPSHOT}
+, {_T("CtrlBreak"), VK_CANCEL}  // Might want to verify this, and whether it has any peculiarities.
+, {_T("Pause"), VK_PAUSE} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
+, {_T("Break"), VK_PAUSE} // Not really meaningful, but kept for as a synonym of Pause for backward compatibility.  See CtrlBreak.
+, {_T("Help"), VK_HELP}  // VK_HELP is probably not the extended HELP key.  Not sure what this one is.
+, {_T("Sleep"), VK_SLEEP}
 
-, {"AppsKey", VK_APPS}
+, {_T("AppsKey"), VK_APPS}
 
 // UPDATE: For the NT/2k/XP version, now doing these by VK since it's likely to be
 // more compatible with non-standard or non-English keyboards:
-, {"LControl", VK_LCONTROL} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
-, {"RControl", VK_RCONTROL} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
-, {"LCtrl", VK_LCONTROL} // Abbreviated versions of the above.
-, {"RCtrl", VK_RCONTROL} //
-, {"LShift", VK_LSHIFT}
-, {"RShift", VK_RSHIFT}
-, {"LAlt", VK_LMENU}
-, {"RAlt", VK_RMENU}
+, {_T("LControl"), VK_LCONTROL} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
+, {_T("RControl"), VK_RCONTROL} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
+, {_T("LCtrl"), VK_LCONTROL} // Abbreviated versions of the above.
+, {_T("RCtrl"), VK_RCONTROL} //
+, {_T("LShift"), VK_LSHIFT}
+, {_T("RShift"), VK_RSHIFT}
+, {_T("LAlt"), VK_LMENU}
+, {_T("RAlt"), VK_RMENU}
 // These two are always left/right centric and I think their vk's are always supported by the various
 // Windows API calls, unlike VK_RSHIFT, etc. (which are seldom supported):
-, {"LWin", VK_LWIN}
-, {"RWin", VK_RWIN}
+, {_T("LWin"), VK_LWIN}
+, {_T("RWin"), VK_RWIN}
 
 // The left/right versions of these are handled elsewhere since their virtual keys aren't fully API-supported:
-, {"Control", VK_CONTROL} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
-, {"Ctrl", VK_CONTROL}  // An alternate for convenience.
-, {"Alt", VK_MENU}
-, {"Shift", VK_SHIFT}
+, {_T("Control"), VK_CONTROL} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
+, {_T("Ctrl"), VK_CONTROL}  // An alternate for convenience.
+, {_T("Alt"), VK_MENU}
+, {_T("Shift"), VK_SHIFT}
 /*
 These were used to confirm the fact that you can't use RegisterHotkey() on VK_LSHIFT, even if the shift
 modifier is specified along with it:
-, {"LShift", VK_LSHIFT}
-, {"RShift", VK_RSHIFT}
+, {_T("LShift"), VK_LSHIFT}
+, {_T("RShift"), VK_RSHIFT}
 */
-, {"F1", VK_F1}
-, {"F2", VK_F2}
-, {"F3", VK_F3}
-, {"F4", VK_F4}
-, {"F5", VK_F5}
-, {"F6", VK_F6}
-, {"F7", VK_F7}
-, {"F8", VK_F8}
-, {"F9", VK_F9}
-, {"F10", VK_F10}
-, {"F11", VK_F11}
-, {"F12", VK_F12}
-, {"F13", VK_F13}
-, {"F14", VK_F14}
-, {"F15", VK_F15}
-, {"F16", VK_F16}
-, {"F17", VK_F17}
-, {"F18", VK_F18}
-, {"F19", VK_F19}
-, {"F20", VK_F20}
-, {"F21", VK_F21}
-, {"F22", VK_F22}
-, {"F23", VK_F23}
-, {"F24", VK_F24}
+, {_T("F1"), VK_F1}
+, {_T("F2"), VK_F2}
+, {_T("F3"), VK_F3}
+, {_T("F4"), VK_F4}
+, {_T("F5"), VK_F5}
+, {_T("F6"), VK_F6}
+, {_T("F7"), VK_F7}
+, {_T("F8"), VK_F8}
+, {_T("F9"), VK_F9}
+, {_T("F10"), VK_F10}
+, {_T("F11"), VK_F11}
+, {_T("F12"), VK_F12}
+, {_T("F13"), VK_F13}
+, {_T("F14"), VK_F14}
+, {_T("F15"), VK_F15}
+, {_T("F16"), VK_F16}
+, {_T("F17"), VK_F17}
+, {_T("F18"), VK_F18}
+, {_T("F19"), VK_F19}
+, {_T("F20"), VK_F20}
+, {_T("F21"), VK_F21}
+, {_T("F22"), VK_F22}
+, {_T("F23"), VK_F23}
+, {_T("F24"), VK_F24}
 
 // Mouse buttons:
-, {"LButton", VK_LBUTTON}
-, {"RButton", VK_RBUTTON}
-, {"MButton", VK_MBUTTON}
+, {_T("LButton"), VK_LBUTTON}
+, {_T("RButton"), VK_RBUTTON}
+, {_T("MButton"), VK_MBUTTON}
 // Supported in only in Win2k and beyond:
-, {"XButton1", VK_XBUTTON1}
-, {"XButton2", VK_XBUTTON2}
+, {_T("XButton1"), VK_XBUTTON1}
+, {_T("XButton2"), VK_XBUTTON2}
 // Custom/fake VKs for use by the mouse hook (supported only in WinNT SP3 and beyond?):
-, {"WheelDown", VK_WHEEL_DOWN}
-, {"WheelUp", VK_WHEEL_UP}
+, {_T("WheelDown"), VK_WHEEL_DOWN}
+, {_T("WheelUp"), VK_WHEEL_UP}
 // Lexikos: Added fake VKs for support for horizontal scrolling in Windows Vista and later.
-, {"WheelLeft", VK_WHEEL_LEFT}
-, {"WheelRight", VK_WHEEL_RIGHT}
+, {_T("WheelLeft"), VK_WHEEL_LEFT}
+, {_T("WheelRight"), VK_WHEEL_RIGHT}
 
-, {"Browser_Back", VK_BROWSER_BACK}
-, {"Browser_Forward", VK_BROWSER_FORWARD}
-, {"Browser_Refresh", VK_BROWSER_REFRESH}
-, {"Browser_Stop", VK_BROWSER_STOP}
-, {"Browser_Search", VK_BROWSER_SEARCH}
-, {"Browser_Favorites", VK_BROWSER_FAVORITES}
-, {"Browser_Home", VK_BROWSER_HOME}
-, {"Volume_Mute", VK_VOLUME_MUTE}
-, {"Volume_Down", VK_VOLUME_DOWN}
-, {"Volume_Up", VK_VOLUME_UP}
-, {"Media_Next", VK_MEDIA_NEXT_TRACK}
-, {"Media_Prev", VK_MEDIA_PREV_TRACK}
-, {"Media_Stop", VK_MEDIA_STOP}
-, {"Media_Play_Pause", VK_MEDIA_PLAY_PAUSE}
-, {"Launch_Mail", VK_LAUNCH_MAIL}
-, {"Launch_Media", VK_LAUNCH_MEDIA_SELECT}
-, {"Launch_App1", VK_LAUNCH_APP1}
-, {"Launch_App2", VK_LAUNCH_APP2}
+, {_T("Browser_Back"), VK_BROWSER_BACK}
+, {_T("Browser_Forward"), VK_BROWSER_FORWARD}
+, {_T("Browser_Refresh"), VK_BROWSER_REFRESH}
+, {_T("Browser_Stop"), VK_BROWSER_STOP}
+, {_T("Browser_Search"), VK_BROWSER_SEARCH}
+, {_T("Browser_Favorites"), VK_BROWSER_FAVORITES}
+, {_T("Browser_Home"), VK_BROWSER_HOME}
+, {_T("Volume_Mute"), VK_VOLUME_MUTE}
+, {_T("Volume_Down"), VK_VOLUME_DOWN}
+, {_T("Volume_Up"), VK_VOLUME_UP}
+, {_T("Media_Next"), VK_MEDIA_NEXT_TRACK}
+, {_T("Media_Prev"), VK_MEDIA_PREV_TRACK}
+, {_T("Media_Stop"), VK_MEDIA_STOP}
+, {_T("Media_Play_Pause"), VK_MEDIA_PLAY_PAUSE}
+, {_T("Launch_Mail"), VK_LAUNCH_MAIL}
+, {_T("Launch_Media"), VK_LAUNCH_MEDIA_SELECT}
+, {_T("Launch_App1"), VK_LAUNCH_APP1}
+, {_T("Launch_App2"), VK_LAUNCH_APP2}
 
 // Probably safest to terminate it this way, with a flag value.  (plus this makes it a little easier
 // to code some loops, maybe).  Can also calculate how many elements are in the array using sizeof(array)
 // divided by sizeof(element).  UPDATE: Decided not to do this in case ever decide to sort this array; don't
 // want to rely on the fact that this will wind up in the right position after the sort (even though it
 // should):
-//, {"", 0}
+//, {_T(""), 0}
 };
 
 
@@ -723,21 +730,21 @@ key_to_sc_type g_key_to_sc[] =
 // Even though ENTER is probably less likely to be assigned than NumpadEnter, must have ENTER as
 // the primary vk because otherwise, if the user configures only naked-NumPadEnter to do something,
 // RegisterHotkey() would register that vk and ENTER would also be configured to do the same thing.
-{ {"NumpadEnter", SC_NUMPADENTER}
+{ {_T("NumpadEnter"), SC_NUMPADENTER}
 
-, {"Delete", SC_DELETE}
-, {"Del", SC_DELETE}
-, {"Insert", SC_INSERT}
-, {"Ins", SC_INSERT}
-// , {"Clear", SC_CLEAR}  // Seems unnecessary because there is no counterpart to the Numpad5 clear key?
-, {"Up", SC_UP}
-, {"Down", SC_DOWN}
-, {"Left", SC_LEFT}
-, {"Right", SC_RIGHT}
-, {"Home", SC_HOME}
-, {"End", SC_END}
-, {"PgUp", SC_PGUP}
-, {"PgDn", SC_PGDN}
+, {_T("Delete"), SC_DELETE}
+, {_T("Del"), SC_DELETE}
+, {_T("Insert"), SC_INSERT}
+, {_T("Ins"), SC_INSERT}
+// , {_T("Clear"), SC_CLEAR}  // Seems unnecessary because there is no counterpart to the Numpad5 clear key?
+, {_T("Up"), SC_UP}
+, {_T("Down"), SC_DOWN}
+, {_T("Left"), SC_LEFT}
+, {_T("Right"), SC_RIGHT}
+, {_T("Home"), SC_HOME}
+, {_T("End"), SC_END}
+, {_T("PgUp"), SC_PGUP}
+, {_T("PgDn"), SC_PGDN}
 
 // If user specified left or right, must use scan code to distinguish *both* halves of the pair since
 // each half has same vk *and* since their generic counterparts (e.g. CONTROL vs. L/RCONTROL) are
@@ -746,19 +753,19 @@ key_to_sc_type g_key_to_sc[] =
 // UPDATE: For the NT/2k/XP version, now doing these by VK since it's likely to be
 // more compatible with non-standard or non-English keyboards:
 /*
-, {"LControl", SC_LCONTROL}
-, {"RControl", SC_RCONTROL}
-, {"LShift", SC_LSHIFT}
-, {"RShift", SC_RSHIFT}
-, {"LAlt", SC_LALT}
-, {"RAlt", SC_RALT}
+, {_T("LControl"), SC_LCONTROL}
+, {_T("RControl"), SC_RCONTROL}
+, {_T("LShift"), SC_LSHIFT}
+, {_T("RShift"), SC_RSHIFT}
+, {_T("LAlt"), SC_LALT}
+, {_T("RAlt"), SC_RALT}
 */
 };
 
 
 // Can calc the counts only after the arrays are initialized above:
-int g_key_to_vk_count = sizeof(g_key_to_vk) / sizeof(key_to_vk_type);
-int g_key_to_sc_count = sizeof(g_key_to_sc) / sizeof(key_to_sc_type);
+int g_key_to_vk_count = _countof(g_key_to_vk);
+int g_key_to_sc_count = _countof(g_key_to_sc);
 
 KeyHistoryItem *g_KeyHistory = NULL; // Array is allocated during startup.
 int g_KeyHistoryNext = 0;

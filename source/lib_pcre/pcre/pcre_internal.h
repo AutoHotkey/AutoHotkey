@@ -1142,7 +1142,8 @@ extern real_pcre   *_pcre_try_flipped(const real_pcre *, real_pcre *,
                       const pcre_study_data *, pcre_study_data *);
 extern int          _pcre_ucp_findprop(const unsigned int, int *, int *);
 extern unsigned int _pcre_ucp_othercase(const unsigned int);
-extern int          _pcre_valid_utf8(const uschar *, int);
+//extern int          _pcre_valid_utf8(const uschar *, int);
+#define _pcre_valid_utf8(s, n) ((int) -1) // jackieku: We always give PCRE valid UTF-8 strings.
 extern BOOL         _pcre_was_newline(const uschar *, int, const uschar *,
                       int *, BOOL);
 extern BOOL         _pcre_xclass(int, const uschar *);

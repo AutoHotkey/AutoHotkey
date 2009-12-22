@@ -12,18 +12,24 @@ including commercial applications, and to alter it and redistribute it
 freely, without restriction.
 */
 
-#ifdef SCRIPT_DEBUG
+#include "stdafx.h"
+
+#ifdef CONFIG_DEBUGGER
+
+// helper macro for WriteF()
+#define U4T(s) CStringUTF8FromTChar(s).GetString()
 
 #include "defines.h"
-#include <Ws2tcpip.h>
-#include <Wspiapi.h> // for getaddrinfo() on versions of Windows earlier than XP.
+#include <ws2tcpip.h>
+#include <wspiapi.h> // for getaddrinfo() on versions of Windows earlier than XP.
 #include <stdarg.h>
 //#include "Debugger.h" // included by globaldata.h
 #include "globaldata.h" // for access to many global vars
+#include "TextIO.h"
 
 Debugger g_Debugger;
-char *g_DebuggerHost = NULL;
-char *g_DebuggerPort = NULL;
+CStringA g_DebuggerHost;
+CStringA g_DebuggerPort;
 
 // The first breakpoint uses sMaxId + 1. Don't change this without also changing breakpoint_remove.
 int Breakpoint::sMaxId = 0;
@@ -263,13 +269,7 @@ ProcessCommands_err_return:
 		return DEBUGGER_E_INVALID_OPTIONS; \
 	char *transaction_id = aArgs + 3
 
-// For use by numerous commands:
-#define DEBUGGER_EXPAND_RESPONSEBUF_IF_NECESSARY(space_needed) \
-	if (mResponseBuf.mDataUsed + space_needed > mResponseBuf.mDataSize && (err = mResponseBuf.Expand(mResponseBuf.mDataUsed + space_needed))) \
-		return err
-		// If an error occurs, FatalError() calls Disconnect(), which clears mResponseBuf.
-
-// Calculate base64-encoded size of data, including NULL terminator. org_size must be > 0.
+// Calculate base64-encoded size of data, including NULL terminator. org_size must be > 0 if unsigned.
 #define DEBUGGER_BASE64_ENCODED_SIZE(org_size) ((((DWORD)(org_size)-1)/3+1)*4 +1)
 
 DEBUGGER_COMMAND(Debugger::status)
@@ -322,11 +322,19 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 		if (supported = !strcmp(feature_name + 9, "supports_threads"))
 			setting = "0";
 		else if (supported = !strcmp(feature_name + 9, "name"))
-			setting = NAME_P;
+			setting = LANG_D;
 		else if (supported = !strcmp(feature_name + 9, "version"))
+#ifdef UNICODE
+			setting = NAME_VERSION " (Unicode)";
+#else
 			setting = NAME_VERSION;
+#endif
 	} else if (supported = !strcmp(feature_name, "encoding"))
-		setting = "windows-1252";
+#ifndef CONFIG_DBG_UTF16_SPEED_HACKS
+		setting = "UTF-8";
+#else
+		setting = "UTF-8 with UTF-16 variables";
+#endif
 	else if (supported = !strcmp(feature_name, "protocol_version"))
 		setting = "1";
 	else if (supported = !strcmp(feature_name, "supports_async"))
@@ -337,7 +345,7 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 		setting = "line";
 	else if (supported = !strcmp(feature_name, "multiple_sessions"))
 		setting = "0";
-	// Not supported: max_children, max_depth - not applicable until we have arrays/objects.
+	// Not supported: max_children, max_depth - debugger must support objects first.
 	else if (!strcmp(feature_name, "max_data"))
 		setting = _ultoa(mMaxPropertyData, (char*)_alloca(MAX_NUMBER_SIZE), 10);
 	// TODO: STOPPING state for retrieving variable values, etc. after the script finishes, then implement supports_postmortem feature name. Requires debugger client support.
@@ -507,10 +515,11 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 	{
 		// Decode filename URI -> path, in-place.
 		DecodeURI(filename);
+		CStringTCharFromUTF8 filename_t(filename);
 
 		// Find the specified source file.
 		for (file_index = 0; file_index < Line::sSourceFileCount; ++file_index)
-			if (!lstrcmpi(filename, Line::sSourceFile[file_index]))
+			if (!_tcsicmp(filename_t, Line::sSourceFile[file_index]))
 				break;
 
 		if (file_index >= Line::sSourceFileCount)
@@ -551,7 +560,7 @@ int Debugger::WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine)
 {
 	return mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"line\" state=\"%s\" filename=\""
 								, aBreakpoint->id, aBreakpoint->state ? "enabled" : "disabled")
-		|| mResponseBuf.WriteFileURI(Line::sSourceFile[aLine->mFileIndex])
+								|| mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[aLine->mFileIndex]))
 		|| mResponseBuf.WriteF("\" lineno=\"%u\"/>", aLine->mLineNumber);
 }
 
@@ -802,18 +811,18 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 		if (depth == -1 || depth == level)
 		{
 			mResponseBuf.WriteF("<stack level=\"%i\" type=\"file\" filename=\"", level);
-			mResponseBuf.WriteFileURI(Line::sSourceFile[se->line->mFileIndex]);
+			mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[se->line->mFileIndex]));
 			mResponseBuf.WriteF("\" lineno=\"%u\" where=\"", se->line->mLineNumber);
 			switch (se->type)
 			{
 			case SE_Thread:
-				mResponseBuf.WriteF("%e (thread)", se->desc); // %e to escape characters which desc may contain (e.g. "a & b" in hotkey name).
+				mResponseBuf.WriteF("%e (thread)", U4T(se->desc)); // %e to escape characters which desc may contain (e.g. "a & b" in hotkey name).
 				break;
 			case SE_Func:
-				mResponseBuf.WriteF("%s()", se->func->mName); // %s because function names should never contain characters which need escaping.
+				mResponseBuf.WriteF("%s()", U4T(se->func->mName)); // %s because function names should never contain characters which need escaping.
 				break;
 			case SE_Sub:
-				mResponseBuf.WriteF("%e:", se->sub->mName); // %e because label/hotkey names may contain almost anything.
+				mResponseBuf.WriteF("%e:", U4T(se->sub->mName)); // %e because label/hotkey names may contain almost anything.
 				break;
 			}
 			mResponseBuf.Write("\"/>");
@@ -928,7 +937,7 @@ int Debugger::WritePropertyXml(Var *aVar, VarSizeType aMaxData)
 	// Write as much as possible now to simplify calculation of required buffer space.
 	// We can't write the var length yet as it may not be accurate.
 	mResponseBuf.WriteF("<property name=\"%s\" fullname=\"%s\" type=\"string\" facet=\"%s\" children=\"0\" encoding=\"base64\" size=\""
-						, aVar->mName, aVar->mName, facet);
+						, U4T(aVar->mName), U4T(aVar->mName), facet);
 
 	WriteVarSizeAndData(aVar, aMaxData);
 
@@ -937,63 +946,108 @@ int Debugger::WritePropertyXml(Var *aVar, VarSizeType aMaxData)
 	return DEBUGGER_E_OK;
 }
 
+#if !defined(UNICODE) || defined(CONFIG_DBG_UTF16_SPEED_HACKS)
+#define DEBUGGER_TRANSFER_AS_IS
+#endif
 int Debugger::WriteVarSizeAndData(Var *aVar, VarSizeType aMaxData)
 {
-	VarSizeType length, min_space_needed = 0;
+	VarSizeType value_size, space_needed;
+	char *value;
+	int err;
 
+	// Variable data must be encoded in base64, but may also need to be converted to UTF-8 first.
+	// Avoid unnecessarily allocating or copying memory wherever possible, by using mResponseBuf.
+
+	// Stage 1: Determine maximum size of raw data to be base64-encoded.
+#ifdef DEBUGGER_TRANSFER_AS_IS
+	// ANSI (or UNICODE with UTF-8 translation disabled): Use the var's byte length or estimate returned by Get().
 	if (aVar->Type() == VAR_NORMAL)
 	{
-		// Use Capacity() instead of Length() in case the script stores binary
-		// data in the variable and the IDE has some way to display it.
-		// UPDATE: Because we say this property is a "string", the IDE is likely to
-		// display it as such, and may display the "garbage" after the null-terminator.
-		//length = aVar->Capacity();
-		length = aVar->Length();
+		// Only the effective string content of the variable is shown.
+		value_size = aVar->ByteLength();
 	}
 	else
 	{
-		// Get() returns the maximum length, not always the actual length of the value.
-		// We need at least this much buffer space to retrieve the variable data.
-		min_space_needed = (length = aVar->Get()) + 1;
+		// Get estimate of required buffer size by calling Get() with no target.
+		value_size = aVar->Get() * sizeof(TCHAR);
 	}
+#else
+	// UNICODE: Properly calculate the required buffer size for UTF-8 conversion.
+	CStringW wide_buf; // For simplified memory-management (in case we return early).
+	LPWSTR wide_value;
+	if (aVar->Type() == VAR_NORMAL)
+	{
+		wide_value = aVar->Contents();
+	}
+	else
+	{
+		// In this case, allocating some memory to temporarily hold the var's value is unavoidable.
+		if (wide_value = wide_buf.GetBufferSetLength(aVar->Get()))
+			aVar->Get(wide_value);
+		else
+			return DEBUGGER_E_INTERNAL_ERROR;
+		CLOSE_CLIPBOARD_IF_OPEN; // Above may leave the clipboard open if aVar is Clipboard.
+	}
+	// Calculate the required buffer size to convert the value to UTF-8, excluding the null-terminator.
+	// Actual conversion is not done until we've reserved some (shared) space in mResponseBuf for it.
+	value_size = WideCharToUTF8(wide_value, NULL, 0) - 1;
+#endif
 
-	// Calculate maximum length of base64-encoded variable data.
-	DWORD length_base64 = length ? DEBUGGER_BASE64_ENCODED_SIZE(min(length,aMaxData)) : 0;
+	// Calculate maximum length of base64-encoded data.
+	if (value_size)
+	{
+		if (value_size > aMaxData) // Limit length of source data; see below.
+			value_size = aMaxData;
+		// This should also ensure there is enough space to temporarily hold the raw value (aVar->Get()).
+		space_needed = DEBUGGER_BASE64_ENCODED_SIZE(value_size);
+	}
+	else
+	{	// Ensure there is space for a null-terminator.
+		space_needed = sizeof(TCHAR);
+	}
+	ASSERT(space_needed >= value_size + 1);
 	
-	// Reserve at least enough space to write the var length"> and data.
-	DWORD space_needed = max(length_base64, min_space_needed) + 12; // 12 = max VarSizeType length + ">
-	int err;
-	DEBUGGER_EXPAND_RESPONSEBUF_IF_NECESSARY(space_needed);
-	// Above may return on failure.
+	// Reserve enough space for the var's length, "> and encoded var data.  Although VarSizeType is currently
+	// always 32-bit and will therefore fit in 10 bytes or less, using MAX_INTEGER_LENGTH seems more future-proof. 
+	space_needed += MAX_INTEGER_LENGTH + 2;
+	if (err = mResponseBuf.ExpandIfNecessary(mResponseBuf.mDataUsed + space_needed))
+		return err;
 
-	char *contents;
-
+#ifdef DEBUGGER_TRANSFER_AS_IS
 	if (aVar->Type() == VAR_NORMAL)
 	{
 		// Copy and base64-encode directly from the variable.
-		contents = aVar->Contents();
+		value = (char*) aVar->Contents();
 	}
 	else
 	{
 		// Copy the variable data to the *end* of the buffer so that we can
 		// base64-encode it without allocating more memory to hold the input data.
-		contents = mResponseBuf.mData + mResponseBuf.mDataSize - min_space_needed;
-		// Up to this point, length may be inaccurate.
-		length = aVar->Get(contents);
+		// Usually this will point to the last two-thirds of the space reserved
+		// for the final base64-encoded data.
+		value = mResponseBuf.mData + mResponseBuf.mDataSize - space_needed;
+		// Retrieve value and update value_size as it might differ from the estimate
+		// given by the previous call to Get().
+		value_size = aVar->Get((LPTSTR)value) * sizeof(TCHAR);
+		CLOSE_CLIPBOARD_IF_OPEN; // Above may leave the clipboard open if aVar is Clipboard.
 	}
+#else
+	// Convert to UTF-8, using mResponseBuf temporarily.
+	value = mResponseBuf.mData + mResponseBuf.mDataSize - space_needed;
+	value_size = WideCharToUTF8(wide_value, value, space_needed) - 1;
+#endif
 
-	// Now that we know the actual length, write the end of the size attribute.
-	mResponseBuf.WriteF("%u\">", length);
+	// Now that we know the actual length for sure, write the end of the size attribute.
+	mResponseBuf.WriteF("%u\">", value_size);
 
-	// Limit length of data returned based on -m arg, max_data, defaulted value, etc.
-	if (length > aMaxData)
-		length = aMaxData;
+	// Limit length of value returned based on -m arg, client-requested max_data, defaulted value, etc.
+	if (value_size > aMaxData)
+		value_size = aMaxData;
 
 	// Base64-encode and write the var data.
-	mResponseBuf.mDataUsed += Base64Encode(mResponseBuf.mData + mResponseBuf.mDataUsed, contents, length);
-	
-	return DEBUGGER_E_OK;
+	return mResponseBuf.WriteEncodeBase64(value, value_size, true);
 }
+#undef DEBUGGER_TRANSFER_AS_IS
 
 DEBUGGER_COMMAND(Debugger::property_get)
 {
@@ -1056,7 +1110,28 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 		return DEBUGGER_E_INVALID_CONTEXT;
 	}
 
-	Var *var = g_script.FindVar(name, 0, NULL, always_use);
+	CStringTCharFromUTF8 name_t(name);
+	Var *var = NULL;
+
+	// Validate name for more accurate error-reporting.
+	if (name_t.GetLength() > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name_t, false, DISPLAY_NO_ERROR))
+	{
+		if (!aIsPropertyGet)
+			return DEBUGGER_E_INVALID_OPTIONS;
+		//else see Notepad++ compatibility note below.
+		// Something like this was once used to avoid corrupting the response XML,
+		// but is no longer necessary as those characters are now automatically escaped:
+		//name = "(invalid)";
+	}
+	else
+	{
+		// Find existing variable.
+		var = g_script.FindVar((LPTSTR)name_t.GetString(), name_t.GetLength(), NULL, always_use);
+		// If above failed, maybe it's a built-in variable which hasn't been referenced in script.
+		if (!var && g_script.GetVarType((LPTSTR)name_t.GetString()) > (void*)VAR_LAST_TYPE)
+			// Use FindOrAddVar vs FindVar to add a "newly referenced" built-in variable.
+			var = g_script.FindOrAddVar((LPTSTR)name_t.GetString(), name_t.GetLength(), always_use);
+	}
 
 	if (!var) // Var not found.
 	{
@@ -1074,11 +1149,6 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 		// As a work-around (until this is resolved by the plugin's author),
 		// we return a property with an empty value and the 'undefined' type.
 		
-		// If the debugger client includes XML-reserved characters in the property name,
-		// the response XML will be badly formatted. Temporary workaround follows:
-		if (strlen(name) > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name, true, DISPLAY_NO_ERROR))
-			name = "(invalid)";
-
 		mResponseBuf.WriteF("<response command=\"property_get\" transaction_id=\"%e\"><property name=\"%e\" fullname=\"%e\" type=\"undefined\" facet=\"\" size=\"0\" children=\"0\"/></response>"
 							, transaction_id, name, name);
 
@@ -1155,9 +1225,26 @@ DEBUGGER_COMMAND(Debugger::property_set)
 		return DEBUGGER_E_INVALID_CONTEXT;
 	}
 
-	Var *var = g_script.FindOrAddVar(name, strlen(name), always_use);
+	CStringTCharFromUTF8 name_t(name);
+	
+	// Validate name to avoid a misleading error dialog.
+	if (name_t.GetLength() > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name_t, false, DISPLAY_NO_ERROR))
+		return DEBUGGER_E_INVALID_OPTIONS;
+	
+	Var *var = g_script.FindOrAddVar((LPTSTR) name_t.GetString(), name_t.GetLength(), always_use);
 
-	bool success = var && var->Assign(new_value, Base64Decode(new_value, new_value));
+	bool success = var && !VAR_IS_READONLY(*var);
+	if (success)
+	{
+#ifndef CONFIG_DBG_UTF16_SPEED_HACKS
+		CStringTCharFromUTF8 new_value_t(new_value, Base64Decode(new_value, new_value));
+		success = var->Assign((LPTSTR) new_value_t.GetString(), new_value_t.GetLength());
+#else
+		int new_size = Base64Decode(new_value, new_value) / sizeof(TCHAR);
+		success = var->Assign((LPTSTR) new_value, new_size);
+#endif
+	}
+	//else var not found or is read-only/built-in.
 
 	mResponseBuf.WriteF("<response command=\"property_set\" success=\"%i\" transaction_id=\"%e\"/>"
 						, (int)success, transaction_id);
@@ -1195,17 +1282,20 @@ DEBUGGER_COMMAND(Debugger::source)
 
 	int file_index;
 	FILE *source_file = NULL;
-	DWORD space_needed;
 
 	// Decode filename URI -> path, in-place.
 	DecodeURI(filename);
 
+	CStringTCharFromUTF8 filename_t(filename);
+
 	// Ensure the file is actually a source file - i.e. don't let the debugger client retrieve any arbitrary file.
 	for (file_index = 0; file_index < Line::sSourceFileCount; ++file_index)
 	{
-		if (!lstrcmpi(filename, Line::sSourceFile[file_index]))
+		if (!_tcsicmp(filename_t, Line::sSourceFile[file_index]))
 		{
-			if (!(source_file = fopen(filename, "rb")))
+			// TODO: Change this section to support different file encodings, perhaps via TextFile class.
+
+			if (!(source_file = _tfopen(filename_t, _T("rb"))))
 				return DEBUGGER_E_CAN_NOT_OPEN_FILE;
 			
 			mResponseBuf.WriteF("<response command=\"source\" success=\"1\" transaction_id=\"%e\" encoding=\"base64\">"
@@ -1222,11 +1312,9 @@ DEBUGGER_COMMAND(Debugger::source)
 					|| fseek(source_file, 0, SEEK_SET))
 					break; // fail.
 
-				// Calculate base64-encoded length. Relies on above ensuring file_size > 0, since below does file_size-1 and file_size is unsigned.
-				space_needed = DEBUGGER_BASE64_ENCODED_SIZE(file_size);
-
-				DEBUGGER_EXPAND_RESPONSEBUF_IF_NECESSARY(space_needed);
-				// Above may return on failure.
+				// Reserve some space in advance to read the raw file data into.
+				if (err = mResponseBuf.WriteEncodeBase64(NULL, file_size))
+					return err;
 
 				// Read into the end of the response buffer.
 				char *buf = mResponseBuf.mData + mResponseBuf.mDataSize - (file_size + 1);
@@ -1235,7 +1323,8 @@ DEBUGGER_COMMAND(Debugger::source)
 					break; // fail.
 
 				// Base64-encode and write the file data into the response buffer.
-				mResponseBuf.mDataUsed += Base64Encode(mResponseBuf.mData + mResponseBuf.mDataUsed, buf, file_size);
+				if (err = mResponseBuf.WriteEncodeBase64(buf, file_size))
+					return err;
 			}
 			else
 			{	// RETURN SPECIFIC LINES:
@@ -1258,15 +1347,15 @@ DEBUGGER_COMMAND(Debugger::source)
 							line_remainder = line_length % 3;
 							line_length -= line_remainder;
 
-							space_needed = DEBUGGER_BASE64_ENCODED_SIZE(line_length) + 1;
+							if (line_length)
+							{
+								// Base64-encode and write this line and its trailing newline character into the response buffer.
+								if (err = mResponseBuf.WriteEncodeBase64(line_buf, line_length))
+									return err;
+							}
+							//else not enough data to encode in this iteration.
 
-							DEBUGGER_EXPAND_RESPONSEBUF_IF_NECESSARY(space_needed);
-							// Above may return on failure.
-
-							// Base64-encode and write this line and its trailing newline character into the response buffer.
-							mResponseBuf.mDataUsed += Base64Encode(mResponseBuf.mData + mResponseBuf.mDataUsed, line_buf, line_length);
-
-							if (line_remainder) // 1 or 2.
+							if (line_remainder) // 0, 1 or 2.
 							{
 								line_buf[0] = line_buf[line_length];
 								if (line_remainder > 1)
@@ -1276,8 +1365,9 @@ DEBUGGER_COMMAND(Debugger::source)
 					}
 				}
 
-				if (line_remainder)
-					mResponseBuf.mDataUsed += Base64Encode(mResponseBuf.mData + mResponseBuf.mDataUsed, line_buf, line_remainder);
+				// Write any left-over characters (if line_remainder is 0, this does nothing).
+				if (err = mResponseBuf.WriteEncodeBase64(line_buf, line_remainder))
+					return err;
 
 				if (!current_line || current_line < begin_line)
 					break; // fail.
@@ -1307,7 +1397,8 @@ int Debugger::redirect_std(char *aArgs, char *aCommandName)
 	int err;
 	char arg, *value;
 
-	char *transaction_id = NULL, *new_mode = NULL;
+	char *transaction_id = NULL;
+	int new_mode = -1;
 
 	for(;;)
 	{
@@ -1318,19 +1409,22 @@ int Debugger::redirect_std(char *aArgs, char *aCommandName)
 		switch (arg)
 		{
 		case 'i': transaction_id = value; break;
-		case 'c': new_mode = value; break;
+		case 'c': new_mode = atoi(value); break;
 		default:
 			return DEBUGGER_E_INVALID_OPTIONS;
 		}
 	}
 
-	if (!transaction_id || !new_mode)
+	if (!transaction_id || new_mode < SR_Disabled || new_mode > SR_Redirect)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
-	// TODO: Support redirecting of stdout, or at least the * (stdout) mode of FileAppend.
-	// TODO: Support reporting of non-critical errors through "stderr" redirection. Alternately redirect OutputDebug.
-	mResponseBuf.WriteF("<response command=\"%s\" success=\"%s\" transaction_id=\"%e\"/>"
-						, aCommandName, *new_mode=='0' ? "1" : "0", transaction_id);
+	if (!stricmp(aCommandName, "stdout"))
+		mStdOutMode = (StreamRedirectType)new_mode;
+	else
+		mStdErrMode = (StreamRedirectType)new_mode;
+
+	mResponseBuf.WriteF("<response command=\"%s\" success=\"1\" transaction_id=\"%e\"/>"
+						, aCommandName, transaction_id);
 
 	return SendResponse();
 }
@@ -1348,6 +1442,35 @@ DEBUGGER_COMMAND(Debugger::redirect_stderr)
 //
 // END DBGP COMMANDS
 //
+
+//
+// DBGP STREAMS
+//
+
+int Debugger::WriteStreamPacket(LPCTSTR aText, LPCSTR aType)
+{
+	mResponseBuf.WriteF("<stream type=\"%s\">", aType);
+	mResponseBuf.WriteEncodeBase64((char*)aText, (_tcslen(aText) + 1) * sizeof(TCHAR)); // Includes the null-terminator.
+	mResponseBuf.Write("</stream>");
+	return SendResponse();
+}
+
+void Debugger::OutputDebug(LPCTSTR aText)
+{
+	if (mStdErrMode != SR_Disabled) // i.e. SR_Copy or SR_Redirect
+		WriteStreamPacket(aText, "stderr");
+	if (mStdErrMode != SR_Redirect) // i.e. SR_Disabled or SR_Copy
+		OutputDebugString(aText);
+}
+
+bool Debugger::FileAppendStdOut(LPCTSTR aText)
+{
+	if (mStdOutMode != SR_Disabled) // i.e. SR_Copy or SR_Redirect
+		WriteStreamPacket(aText, "stdout");
+	if (mStdOutMode != SR_Redirect) // i.e. SR_Disabled or SR_Copy
+		return _fputts(aText, stdout) >= 0;
+	return true;
+}
 
 int Debugger::SendErrorResponse(char *aCommandName, char *aTransactionId, int aError, char *aExtraAttributes)
 {
@@ -1472,7 +1595,7 @@ int Debugger::SendResponse()
 //
 // Connect to a debugger UI. Returns a Winsock error code on failure, otherwise 0.
 //
-int Debugger::Connect(char *aAddress, char *aPort)
+int Debugger::Connect(const char *aAddress, const char *aPort)
 {
 	int err;
 	WSADATA wsadata;
@@ -1504,24 +1627,13 @@ int Debugger::Connect(char *aAddress, char *aPort)
 			{
 				mSocket = s;
 
-				char *ide_key = "", *session = "";
-				int size;
-
-				if (size = GetEnvironmentVariable("DBGP_IDEKEY", NULL, 0))
-				{
-					ide_key = (char*)_alloca(size);
-					GetEnvironmentVariable("DBGP_IDEKEY", ide_key, size);
-				}
-				if (size = GetEnvironmentVariable("DBGP_COOKIE", NULL, 0))
-				{
-					session = (char*)_alloca(size);
-					GetEnvironmentVariable("DBGP_COOKIE", session, size);
-				}
+				CStringUTF8FromTChar ide_key(CString().GetEnvironmentVariable(_T("DBGP_IDEKEY")));
+				CStringUTF8FromTChar session(CString().GetEnvironmentVariable(_T("DBGP_COOKIE")));
 
 				// Write init message.
-				mResponseBuf.WriteF("<init appid=\"" NAME_P "\" ide_key=\"%e\" session=\"%e\" thread=\"%u\" parent=\"\" language=\"" NAME_P "\" protocol_version=\"1.0\" fileuri=\""
-					, ide_key, session, GetCurrentThreadId());
-				mResponseBuf.WriteFileURI(g_script.mFileSpec);
+				mResponseBuf.WriteF("<init appid=\"" NAME_P "\" ide_key=\"%e\" session=\"%e\" thread=\"%u\" parent=\"\" language=\"" LANG_D "\" protocol_version=\"1.0\" fileuri=\""
+					, ide_key.GetString(), session.GetString(), GetCurrentThreadId());
+				mResponseBuf.WriteFileURI(U4T(g_script.mFileSpec));
 				mResponseBuf.Write("\"/>");
 
 				if (SendResponse() == DEBUGGER_E_OK)
@@ -1535,7 +1647,7 @@ int Debugger::Connect(char *aAddress, char *aPort)
 	}
 
 	WSACleanup();
-	return FatalError(DEBUGGER_E_INTERNAL_ERROR);
+	return FatalError(DEBUGGER_E_INTERNAL_ERROR, DEBUGGER_ERR_FAILEDTOCONNECT DEBUGGER_ERR_DISCONNECT_PROMPT);
 }
 
 // Debugger::Disconnect
@@ -1651,32 +1763,29 @@ int Debugger::GetNextArg(char *&aArgs, char &aArg, char *&aValue)
 	return DEBUGGER_E_OK;
 }
 
-int Debugger::FatalError(int aErrorCode, char *aMessage)
+int Debugger::FatalError(int aErrorCode, LPCTSTR aMessage)
 {
 	g_Debugger.Disconnect();
 
-	if (!aMessage)
-		aMessage = DEBUGGER_ERR_INTERNAL DEBUGGER_ERR_DISCONNECT_PROMPT;
-	
 	if (IDNO == MessageBox(g_hWnd, aMessage, g_script.mFileSpec, MB_YESNO | MB_ICONSTOP | MB_SETFOREGROUND | MB_APPLMODAL))
 	{
 		// The following will exit even if the OnExit subroutine does not use ExitApp:
-		g_script.ExitApp(EXIT_ERROR, "");
+		g_script.ExitApp(EXIT_ERROR, _T(""));
 	}
 	return aErrorCode;
 }
 
-char *Debugger::sBase64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const char *Debugger::sBase64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 #define BINARY_TO_BASE64_CHAR(b) (sBase64Chars[(b) & 63])
 #define BASE64_CHAR_TO_BINARY(q) (strchr(sBase64Chars, q)-sBase64Chars)
 
 // Encode base 64 data.
-int Debugger::Base64Encode(char *aBuf, const char *aInput, int aInputSize)
+int Debugger::Base64Encode(char *aBuf, const char *aInput, size_t aInputSize/* = -1*/)
 {
 	int buffer, i, len = 0;
 
-	if (aInputSize == -1)
+	if (aInputSize == -1) // Direct comparison since aInputSize is unsigned.
 		aInputSize = strlen(aInput);
 
 	for (i = aInputSize; i > 2; i -= 3)
@@ -1708,11 +1817,11 @@ int Debugger::Base64Encode(char *aBuf, const char *aInput, int aInputSize)
 }
 
 // Decode base 64 data. aBuf and aInput may point to the same buffer.
-int Debugger::Base64Decode(char *aBuf, const char *aInput, int aInputSize)
+int Debugger::Base64Decode(char *aBuf, const char *aInput, size_t aInputSize/* = -1*/)
 {
 	int buffer, i, len = 0;
 
-	if (aInputSize == -1)
+	if (aInputSize == -1) // Direct comparison since aInputSize is unsigned.
 		aInputSize = strlen(aInput);
 
 	while (aInputSize > 0 && aInput[aInputSize-1] == '=')
@@ -1763,7 +1872,7 @@ int Debugger::Buffer::Write(char *aData, DWORD aDataSize)
 	if (aDataSize == 0)
 		return DEBUGGER_E_OK;
 
-	if (mDataUsed + aDataSize > mDataSize && (err = Expand(mDataUsed + aDataSize)))
+	if (err = ExpandIfNecessary(mDataUsed + aDataSize))
 		return err;
 
 	memcpy(mData + mDataUsed, aData, aDataSize);
@@ -1772,11 +1881,12 @@ int Debugger::Buffer::Write(char *aData, DWORD aDataSize)
 }
 
 // Write formatted data into the buffer. Supports %s (char*), %e (char*, "&'<> escaped), %i (int), %u (unsigned int).
-int Debugger::Buffer::WriteF(char *aFormat, ...)
+int Debugger::Buffer::WriteF(const char *aFormat, ...)
 {
 	int i, err;
 	DWORD len;
-	char c, *format_ptr, *s, *param_ptr, *entity;
+	char c;
+	const char *format_ptr, *s, *param_ptr, *entity;
 	char number_buf[MAX_NUMBER_SIZE];
 	va_list vl;
 	
@@ -1866,39 +1976,37 @@ int Debugger::Buffer::WriteF(char *aFormat, ...)
 		va_end(vl);
 
 		if (i == 0)
-		{	// Expand the buffer as necessary.
-			if (mDataUsed + len > mDataSize && (err = Expand(mDataUsed + len)))
+			if (err = ExpandIfNecessary(mDataUsed + len))
 				return err;
-		}
 	} // for (len = 0, i = 0; i < 2; ++i)
 
 	return DEBUGGER_E_OK;
 }
 
 // Convert a file path to a URI and write it to the buffer.
-int Debugger::Buffer::WriteFileURI(char *aPath)
+int Debugger::Buffer::WriteFileURI(const char *aPath)
 {
 	int err, c, len = 9; // 8 for "file:///", 1 for '\0' (written by sprintf()).
 
 	// Calculate required buffer size for path after encoding.
-	for (char *ptr = aPath; c = *ptr; ++ptr)
+	for (const char *ptr = aPath; c = *ptr; ++ptr)
 	{
-		if (isalnum(c) || strchr("-_.!~*'()/\\", c))
+		if (cisalnum(c) || strchr("-_.!~*'()/\\", c))
 			++len;
 		else
 			len += 3;
 	}
 
 	// Ensure the buffer contains enough space.
-	if (mDataUsed + len > mDataSize && (err = Expand(mDataUsed + len)))
+	if (err = ExpandIfNecessary(mDataUsed + len))
 		return err;
 
 	Write("file:///", 8);
 
 	// Write to the buffer, encoding as we go.
-	for (char *ptr = aPath; c = *ptr; ++ptr)
+	for (const char *ptr = aPath; c = *ptr; ++ptr)
 	{
-		if (isalnum(c) || strchr("-_.!~*()/", c))
+		if (cisalnum(c) || strchr("-_.!~*()/", c))
 		{
 			mData[mDataUsed++] = (char)c;
 		}
@@ -1915,6 +2023,28 @@ int Debugger::Buffer::WriteFileURI(char *aPath)
 		}
 	}
 
+	return DEBUGGER_E_OK;
+}
+
+int Debugger::Buffer::WriteEncodeBase64(const char *aInput, size_t aInputSize, bool aSkipBufferSizeCheck/* = false*/)
+{
+	int err;
+	if (aInputSize)
+	{
+		if (!aSkipBufferSizeCheck)
+		{
+			// Ensure required buffer space is available.
+			if (err = ExpandIfNecessary(mDataUsed + DEBUGGER_BASE64_ENCODED_SIZE(aInputSize)))
+				return err;
+		}
+		//else caller has already ensured there is enough space and wants to be absolutely sure mData isn't reallocated.
+		ASSERT(mDataUsed + aInputSize < mDataSize);
+		
+		if (aInput)
+			mDataUsed += Debugger::Base64Encode(mData + mDataUsed, aInput, aInputSize);
+		//else caller wanted to reserve some buffer space, probably to read the raw data into.
+	}
+	//else there's nothing to write, just return OK.  Calculations above can't handle (size_t)0
 	return DEBUGGER_E_OK;
 }
 
@@ -1959,11 +2089,11 @@ void Debugger::DecodeURI(char *aUri)
 // Initialize or expand the buffer, don't care how much.
 int Debugger::Buffer::Expand()
 {
-	return Expand(mDataSize ? mDataSize * 2 : DEBUGGER_INITIAL_BUFFER_SIZE);
+	return ExpandIfNecessary(mDataSize ? mDataSize * 2 : DEBUGGER_INITIAL_BUFFER_SIZE);
 }
 
-// Expand, if necessary, to meet a minimum required size.
-int Debugger::Buffer::Expand(DWORD aRequiredSize)
+// Expand as necessary to meet a minimum required size.
+int Debugger::Buffer::ExpandIfNecessary(DWORD aRequiredSize)
 {
 	DWORD new_size;
 	for (new_size = mDataSize ? mDataSize : DEBUGGER_INITIAL_BUFFER_SIZE
@@ -1972,9 +2102,11 @@ int Debugger::Buffer::Expand(DWORD aRequiredSize)
 
 	if (new_size > mDataSize)
 	{
+		// For simplicity, this preserves all of mData not just the first mDataUsed bytes.  Some sections may rely on this.
 		char *new_data = (char*)realloc(mData, new_size);
 
 		if (new_data == NULL)
+			// Note: FatalError() calls Disconnect(), which "clears" mResponseBuf.
 			return FatalError(DEBUGGER_E_INTERNAL_ERROR);
 
 		mData = new_data;

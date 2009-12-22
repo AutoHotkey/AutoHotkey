@@ -57,7 +57,7 @@ static DWORD sThisEventTime;         //
 
 // Dyamically resolve SendInput() because otherwise the app won't launch at all on Windows 95/NT-pre-SP3:
 typedef UINT (WINAPI *MySendInputType)(UINT, LPINPUT, int);
-static MySendInputType sMySendInput = (MySendInputType)GetProcAddress(GetModuleHandle("user32"), "SendInput");
+static MySendInputType sMySendInput = (MySendInputType)GetProcAddress(GetModuleHandle(_T("user32")), "SendInput");
 // Above will be NULL for Win95/NT-pre-SP3.
 
 
@@ -92,7 +92,32 @@ void DisguiseWinAltIfNeeded(vk_type aVK)
 
 
 
-void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow)
+// moved from SendKeys
+inline void SendUnicodeChar(wchar_t aChar)
+{
+	INPUT u_input[2];
+
+	u_input[0].type = INPUT_KEYBOARD;
+	u_input[0].ki.wVk = 0;
+	u_input[0].ki.wScan = aChar;
+	u_input[0].ki.dwFlags = KEYEVENTF_UNICODE;
+	u_input[0].ki.time = 0;
+	// L25: Set dwExtraInfo to ensure AutoHotkey ignores the event; otherwise it may trigger a SCxxx hotkey (where xxx is u_code).
+	u_input[0].ki.dwExtraInfo = KEY_IGNORE;
+	
+	u_input[1].type = INPUT_KEYBOARD;
+	u_input[1].ki.wVk = 0;
+	u_input[1].ki.wScan = aChar;
+	u_input[1].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+	u_input[1].ki.time = 0;
+	u_input[1].ki.dwExtraInfo = KEY_IGNORE;
+
+	SendInput(2, u_input, sizeof(INPUT));
+}
+
+
+
+void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow)
 // The aKeys string must be modifiable (not constant), since for performance reasons,
 // it's allowed to be temporarily altered by this function.  mThisHotkeyModifiersLR, if non-zero,
 // should be the set of modifiers used to trigger the hotkey that called the subroutine
@@ -106,7 +131,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 
 	// For performance and also to reserve future flexibility, recognize {Blind} only when it's the first item
 	// in the string.
-	if (sInBlindMode = !aSendRaw && !strnicmp(aKeys, "{Blind}", 7)) // Don't allow {Blind} while in raw mode due to slight chance {Blind} is intended to be sent as a literal string.
+	if (sInBlindMode = !aSendRaw && !_tcsnicmp(aKeys, _T("{Blind}"), 7)) // Don't allow {Blind} while in raw mode due to slight chance {Blind} is intended to be sent as a literal string.
 		// Blind Mode (since this seems too obscure to document, it's mentioned here):  Blind Mode relies
 		// on modifiers already down for something like ^c because ^c is saying "manifest a ^c", which will
 		// happen if ctrl is already down.  By contrast, Blind does not release shift to produce lowercase
@@ -127,7 +152,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 		// heavy load.
 		if (   !sMySendInput // Win95/NT-pre-SP3 don't support SendInput, so fall back to the specified mode.
 			|| SystemHasAnotherKeybdHook() // This function has been benchmarked to ensure it doesn't yield our timeslice, etc.  200 calls take 0ms according to tick-count, even when CPU is maxed.
-			|| !aSendRaw && SystemHasAnotherMouseHook() && strcasestr(aKeys, "{Click")   ) // Ordered for short-circuit boolean performance.  v1.0.43.09: Fixed to be strcasestr vs. !strcasestr
+			|| !aSendRaw && SystemHasAnotherMouseHook() && tcscasestr(aKeys, _T("{Click"))   ) // Ordered for short-circuit boolean performance.  v1.0.43.09: Fixed to be strcasestr vs. !strcasestr
 		{
 			// Need to detect in advance what type of array to build (for performance and code size).  That's why
 			// it done this way, and here are the comments about it:
@@ -196,7 +221,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 		{
 			bool wait_for_win_key_release;
 			if (aSendRaw)
-				wait_for_win_key_release = StrChrAny(aKeys, "Ll") != NULL;
+				wait_for_win_key_release = StrChrAny(aKeys, _T("Ll")) != NULL;
 			else
 			{
 				// It seems worthwhile to scan for any "L" characters to avoid waiting for the release
@@ -204,15 +229,15 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 				// below isn't comprehensive (e.g. it fails to consider things like {L} and #L).
 				// Although RegExMatch() could be used instead of the below, that would use up one of
 				// the RegEx cache entries, plus it would probably perform worse.  So scan manually.
-				char *L_pos, *brace_pos;
-				for (wait_for_win_key_release = false, brace_pos = aKeys; L_pos = StrChrAny(brace_pos, "Ll");)
+				LPTSTR L_pos, brace_pos;
+				for (wait_for_win_key_release = false, brace_pos = aKeys; L_pos = StrChrAny(brace_pos, _T("Ll"));)
 				{
 					// Encountering a #L seems too rare, and the consequences too mild (or nonexistent), to
 					// justify the following commented-out section:
 					//if (L_pos > aKeys && L_pos[-1] == '#') // A simple check; it won't detect things like #+L.
 					//	brace_pos = L_pos + 1;
 					//else
-					if (!(brace_pos = StrChrAny(L_pos + 1, "{}")) || *brace_pos == '{') // See comment below.
+					if (!(brace_pos = StrChrAny(L_pos + 1, _T("{}"))) || *brace_pos == '{') // See comment below.
 					{
 						wait_for_win_key_release = true;
 						break;
@@ -381,7 +406,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 	// which ALT key is held down to produce the character.
 	vk_type this_event_modifier_down;
 	size_t key_text_length, key_name_length;
-	char *end_pos, *space_pos, *next_word, old_char, single_char_string[2];
+	TCHAR *end_pos, *space_pos, *next_word, old_char, single_char_string[2];
 	KeyEventTypes event_type;
 	int repeat_count, click_x, click_y;
 	bool move_offset, key_down_is_persistent;
@@ -396,7 +421,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 		if (!sSendMode)
 			LONG_OPERATION_UPDATE_FOR_SENDKEYS // This does not measurably affect the performance of SendPlay/Event.
 
-		if (!aSendRaw && strchr("^+!#{}", *aKeys))
+		if (!aSendRaw && _tcschr(_T("^+!#{}"), *aKeys))
 		{
 			switch (*aKeys)
 			{
@@ -425,7 +450,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 			case '}': continue;  // Important that these be ignored.  Be very careful about changing this, see below.
 			case '{':
 			{
-				if (   !(end_pos = strchr(aKeys + 1, '}'))   ) // Ignore it and due to rarity, don't reset mods_for_next_key.
+				if (   !(end_pos = _tcschr(aKeys + 1, '}'))   ) // Ignore it and due to rarity, don't reset mods_for_next_key.
 					continue; // This check is relied upon by some things below that assume a '}' is present prior to the terminator.
 				aKeys = omit_leading_whitespace(aKeys + 1); // v1.0.43: Skip leading whitespace inside the braces to be more flexible.
 				if (   !(key_text_length = end_pos - aKeys)   )
@@ -439,10 +464,10 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 					else if (IS_SPACE_OR_TAB(end_pos[1])) // v1.0.48: Support "{} down}", "{} downtemp}" and "{} up}".
 					{
 						next_word = omit_leading_whitespace(end_pos + 1);
-						if (   !strnicmp(next_word, "Down", 4) // "Down" or "DownTemp" (or likely enough).
-							|| !strnicmp(next_word, "Up", 2)   )
+						if (   !_tcsnicmp(next_word, _T("Down"), 4) // "Down" or "DownTemp" (or likely enough).
+							|| !_tcsnicmp(next_word, _T("Up"), 2)   )
 						{
-							if (   !(end_pos = strchr(next_word, '}'))   ) // See comments at similar section above.
+							if (   !(end_pos = _tcschr(next_word, '}'))   ) // See comments at similar section above.
 								continue;
 							key_text_length = end_pos - aKeys; // This result must be non-zero due to the checks above.
 						}
@@ -453,7 +478,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 						goto brace_case_end;  // The loop's ++aKeys will now skip over the '}', ignoring it.
 				}
 
-				if (!strnicmp(aKeys, "Click", 5))
+				if (!_tcsnicmp(aKeys, _T("Click"), 5))
 				{
 					*end_pos = '\0';  // Temporarily terminate the string here to omit the closing brace from consideration below.
 					ParseClickOptions(omit_leading_whitespace(aKeys + 5), click_x, click_y, vk
@@ -466,7 +491,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 							, repeat_count, event_type, 0, aTargetWindow, click_x, click_y, move_offset);
 					goto brace_case_end; // This {} item completely handled, so move on to next.
 				}
-				else if (!strnicmp(aKeys, "Raw", 3)) // This is used by auto-replace hotstrings too.
+				else if (!_tcsnicmp(aKeys, _T("Raw"), 3)) // This is used by auto-replace hotstrings too.
 				{
 					// As documented, there's no way to switch back to non-raw mode afterward since there's no
 					// correct way to support special (non-literal) strings such as {Raw Off} while in raw mode.
@@ -480,7 +505,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 				key_name_length = key_text_length; //
 				*end_pos = '\0';  // Temporarily terminate the string here to omit the closing brace from consideration below.
 
-				if (space_pos = StrChrAny(aKeys, " \t")) // Assign. Also, it relies on the fact that {} key names contain no spaces.
+				if (space_pos = StrChrAny(aKeys, _T(" \t"))) // Assign. Also, it relies on the fact that {} key names contain no spaces.
 				{
 					old_char = *space_pos;
 					*space_pos = '\0';  // Temporarily terminate here so that TextToVK() can properly resolve a single char.
@@ -489,7 +514,7 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 					UINT next_word_length = (UINT)(end_pos - next_word);
 					if (next_word_length > 0)
 					{
-						if (!strnicmp(next_word, "Down", 4))
+						if (!_tcsnicmp(next_word, _T("Down"), 4))
 						{
 							event_type = KEYDOWN;
 							// v1.0.44.05: Added key_down_is_persistent (which is not initialized except here because
@@ -500,9 +525,9 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 							// down by the script itself (such as Control) are intended to stay down during all
 							// keystrokes generated by that script. To work around this, something like KeyWait F1
 							// would otherwise be needed. within any hotkey triggered by the F1 key.
-							key_down_is_persistent = strnicmp(next_word + 4, "Temp", 4); // "DownTemp" means non-persistent.
+							key_down_is_persistent = _tcsnicmp(next_word + 4, _T("Temp"), 4); // "DownTemp" means non-persistent.
 						}
-						else if (!stricmp(next_word, "Up"))
+						else if (!_tcsicmp(next_word, _T("Up")))
 							event_type = KEYUP;
 						else
 							repeat_count = ATOI(next_word);
@@ -514,13 +539,13 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 
 				vk = TextToVK(aKeys, &mods_for_next_key, true, false, sTargetKeybdLayout); // false must be passed due to below.
 				sc = vk ? 0 : TextToSC(aKeys);  // If sc is 0, it will be resolved by KeyEvent() later.
-				if (!vk && !sc && toupper(aKeys[0]) == 'V' && toupper(aKeys[1]) == 'K')
+				if (!vk && !sc && ctoupper(aKeys[0]) == 'V' && ctoupper(aKeys[1]) == 'K')
 				{
-					char *sc_string = StrChrAny(aKeys + 2, "Ss"); // Look for the "SC" that demarks the scan code.
-					if (sc_string && toupper(sc_string[1]) == 'C')
-						sc = (sc_type)strtol(sc_string + 2, NULL, 16);  // Convert from hex.
+					LPTSTR sc_string = StrChrAny(aKeys + 2, _T("Ss")); // Look for the "SC" that demarks the scan code.
+					if (sc_string && ctoupper(sc_string[1]) == 'C')
+						sc = (sc_type)_tcstol(sc_string + 2, NULL, 16);  // Convert from hex.
 					// else leave sc set to zero and just get the specified VK.  This supports Send {VKnn}.
-					vk = (vk_type)strtol(aKeys + 2, NULL, 16);  // Convert from hex.
+					vk = (vk_type)_tcstol(aKeys + 2, NULL, 16);  // Convert from hex.
 				}
 
 				if (space_pos)  // undo the temporary termination
@@ -586,7 +611,9 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 					// do nothing if the curr. keyboard layout lacks such a key.  This is relied upon by remappings
 					// such as F1::ð (i.e. a destination key that doesn't have a VK, at least in English).
 					if (!aTargetWindow && event_type != KEYUP) // In this mode, mods_for_next_key and event_type are ignored due to being unsupported.
+					{
 						SendKeySpecial(aKeys[0], repeat_count);
+					}
 					//else do nothing since it's there's no known way to send the keystokes.
 				}
 
@@ -620,48 +647,31 @@ void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetW
 					}
 				}
 
-				else if (key_text_length > 4 && !strnicmp(aKeys, "ASC ", 4) && !aTargetWindow) // {ASC nnnnn}
+				else if (key_text_length > 4 && !_tcsnicmp(aKeys, _T("ASC "), 4) && !aTargetWindow) // {ASC nnnnn}
 				{
 					// Include the trailing space in "ASC " to increase uniqueness (selectivity).
 					// Also, sending the ASC sequence to window doesn't work, so don't even try:
-					SendASC(omit_leading_whitespace(aKeys + 3));
+					SendASC(CStringCharFromTCharIfNeeded(omit_leading_whitespace(aKeys + 3)));
 					// Do this only once at the end of the sequence:
 					DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
 				}
 
-				else if (key_text_length > 2 && !strnicmp(aKeys, "U+", 2) && !aTargetWindow)
+				else if (key_text_length > 2 && !_tcsnicmp(aKeys, _T("U+"), 2) && !aTargetWindow)
 				{
 					// L24: Send a unicode value as shown by Character Map.
 					// Use SendInput in unicode mode if available, otherwise fall back to SendASC.
-					WORD u_code = (WORD) strtol(aKeys + 2, NULL, 16);
+					wchar_t u_code = (wchar_t) _tcstol(aKeys + 2, NULL, 16);
 
 					if (g_os.IsWin2000orLater())
 					{
 						// L25: Set modifier key-state in case it matters.
 						SetModifierLRState(mods_for_next_key | persistent_modifiers_for_this_SendKeys
 							, sSendMode ? sEventModifiersLR : GetModifierLRState(), NULL, false, true, KEY_IGNORE);
-
-						INPUT u_input[2];
-						
-						u_input[0].type = INPUT_KEYBOARD;
-						u_input[0].ki.wVk = 0;
-						u_input[0].ki.wScan = u_code;
-						u_input[0].ki.dwFlags = KEYEVENTF_UNICODE;
-						u_input[0].ki.time = 0;
-						// L25: Set dwExtraInfo to ensure AutoHotkey ignores the event; otherwise it may trigger a SCxxx hotkey (where xxx is u_code).
-						u_input[0].ki.dwExtraInfo = KEY_IGNORE;
-						
-						u_input[1].type = INPUT_KEYBOARD;
-						u_input[1].ki.wVk = 0;
-						u_input[1].ki.wScan = u_code;
-						u_input[1].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
-						u_input[1].ki.time = 0;
-						u_input[1].ki.dwExtraInfo = KEY_IGNORE;
-
-						SendInput(2, u_input, sizeof(INPUT));
+						SendUnicodeChar(u_code);
 					}
-					else
-					{
+					else // Note that this method effectively truncates the character code to 8-bit, but
+					{	 // it is probably never executed since we currently don't support Win9x/NT4.
+						 // Otherwise it should probably be changed to prepend '0' if u_code > 0x7F.
 						char asc[6];
 						SendASC(_itoa(u_code, asc, 10));
 					}
@@ -1056,7 +1066,7 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 
 
 
-void SendKeySpecial(char aChar, int aRepeatCount)
+void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 // Caller must be aware that keystrokes are sent directly (i.e. never to a target window via ControlSend mode).
 // It must also be aware that the event type KEYDOWNANDUP is always what's used since there's no way
 // to support anything else.  Furthermore, there's no way to support "modifiersLR_for_next_key" such as ^€
@@ -1095,6 +1105,7 @@ void SendKeySpecial(char aChar, int aRepeatCount)
 	// Production of ANSI characters above 127 has been tested on both Windows XP and 98se (but not the
 	// Win98 command prompt).
 
+#ifndef UNICODE
 	char asc_string[16], *cp = asc_string;
 
 	// The following range isn't checked because this function appears never to be called for such
@@ -1108,19 +1119,25 @@ void SendKeySpecial(char aChar, int aRepeatCount)
 	// a few others to be produced in Russian and perhaps other layouts, which was impossible in versions
 	// prior to 1.0.40.
 	_itoa((int)(UCHAR)aChar, cp, 10); // Convert to UCHAR in case aChar < 0.
+#endif
 
 	LONG_OPERATION_INIT
 	for (int i = 0; i < aRepeatCount; ++i)
 	{
 		if (!sSendMode)
 			LONG_OPERATION_UPDATE_FOR_SENDKEYS
+#ifdef UNICODE
+		SendUnicodeChar(aChar);
+#else
 		SendASC(asc_string);
+#endif
 		DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
 	}
+
 	// It is not necessary to do SetModifierLRState() to put a caller-specified set of persistent modifier
 	// keys back into effect because:
 	// 1) Our call to SendASC above (if any) at most would have released some of the modifiers (though never
-	//    WIN because it isn't necessary); but never pusheed any new modifiers down (it even releases ALT
+	//    WIN because it isn't necessary); but never pushed any new modifiers down (it even releases ALT
 	//    prior to returning).
 	// 2) Our callers, if they need to push ALT back down because we didn't do it, will either disguise it
 	//    or avoid doing so because they're about to send a keystroke (just about anything) that ALT will
@@ -1129,7 +1146,7 @@ void SendKeySpecial(char aChar, int aRepeatCount)
 
 
 
-void SendASC(char *aAscii)
+void SendASC(const char *aAscii)
 // Caller must be aware that keystrokes are sent directly (i.e. never to a target window via ControlSend mode).
 // aAscii is a string to support explicit leading zeros because sending 216, for example, is not the same as
 // sending 0216.  The caller is also responsible for restoring any desired modifier keys to the down position
@@ -1181,7 +1198,7 @@ void SendASC(char *aAscii)
 	// WinXP.  I already tried adding delays between the keystrokes and it didn't help.
 
 	// Caller relies upon us to stop upon reaching the first non-digit character:
-	for (char *cp = aAscii; *cp >= '0' && *cp <= '9'; ++cp)
+	for (const char *cp = aAscii; *cp >= '0' && *cp <= '9'; ++cp)
 		// A comment from AutoIt3: ASCII 0 is 48, NUMPAD0 is 96, add on 48 to the ASCII.
 		// Also, don't do WinDelay after each keypress in this case because it would make
 		// such keys take up to 3 or 4 times as long to send (AutoIt3 avoids doing the
@@ -1746,8 +1763,10 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 				}
 			}
 
+#ifdef CONFIG_WIN9X
 			if (aVK == VK_NUMLOCK && g_os.IsWin9x()) // Under Win9x, Numlock needs special treatment.
 				ToggleNumlockWin9x();
+#endif
 
 			if (do_key_history)
 				UpdateKeyEventHistory(false, aVK, aSC); // Should be thread-safe since if no hook means only one thread ever sends keystrokes (with possible exception of mouse hook, but that seems too rare).
@@ -1797,7 +1816,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 // Mouse related //
 ///////////////////
 
-ResultType PerformClick(char *aOptions)
+ResultType PerformClick(LPTSTR aOptions)
 {
 	int x, y;
 	vk_type vk;
@@ -1814,7 +1833,7 @@ ResultType PerformClick(char *aOptions)
 
 
 
-void ParseClickOptions(char *aOptions, int &aX, int &aY, vk_type &aVK, KeyEventTypes &aEventType
+void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEventTypes &aEventType
 	, int &aRepeatCount, bool &aMoveOffset)
 // Caller has trimmed leading whitespace from aOptions, but not necessarily the trailing whitespace.
 // aOptions must be a modifiable string because this function temporarily alters it.
@@ -1827,7 +1846,7 @@ void ParseClickOptions(char *aOptions, int &aX, int &aY, vk_type &aVK, KeyEventT
 	aRepeatCount = 1;
 	aMoveOffset = false;
 
-	char *next_option, *option_end, orig_char;
+	TCHAR *next_option, *option_end, orig_char;
 	vk_type temp_vk;
 
 	for (next_option = aOptions; *next_option; next_option = omit_leading_whitespace(option_end))
@@ -1838,8 +1857,8 @@ void ParseClickOptions(char *aOptions, int &aX, int &aY, vk_type &aVK, KeyEventT
 			if (!*(next_option = omit_leading_whitespace(next_option + 1)))
 				goto break_both; // Entire option string ends in a comma.
 		// Find the end of this option item:
-		if (   !(option_end = StrChrAny(next_option, " \t,"))   )  // Space, tab, comma.
-			option_end = next_option + strlen(next_option); // Set to position of zero terminator instead.
+		if (   !(option_end = StrChrAny(next_option, _T(" \t,")))   )  // Space, tab, comma.
+			option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
 
 		// Temp termination for IsPureNumeric(), ConvertMouseButton(), and peace-of-mind.
 		orig_char = *option_end;
@@ -1865,7 +1884,7 @@ void ParseClickOptions(char *aOptions, int &aX, int &aY, vk_type &aVK, KeyEventT
 				aVK = temp_vk;
 			else
 			{
-				switch (toupper(*next_option))
+				switch (ctoupper(*next_option))
 				{
 				case 'D': aEventType = KEYDOWN; break;
 				case 'U': aEventType = KEYUP; break;
@@ -1891,8 +1910,8 @@ break_both:
 
 
 
-ResultType PerformMouse(ActionTypeType aActionType, char *aButton, char *aX1, char *aY1, char *aX2, char *aY2
-	, char *aSpeed, char *aOffsetMode, char *aRepeatCount, char *aDownUp)
+ResultType PerformMouse(ActionTypeType aActionType, LPTSTR aButton, LPTSTR aX1, LPTSTR aY1, LPTSTR aX2, LPTSTR aY2
+	, LPTSTR aSpeed, LPTSTR aOffsetMode, LPTSTR aRepeatCount, LPTSTR aDownUp)
 {
 	vk_type vk;
 	if (aActionType == ACT_MOUSEMOVE)
@@ -1933,7 +1952,7 @@ ResultType PerformMouse(ActionTypeType aActionType, char *aButton, char *aX1, ch
 		, *aY2 ? ATOI(aY2) : COORD_UNSPECIFIED  //
 		, repeat_count, event_type
 		, *aSpeed ? ATOI(aSpeed) : g->DefaultMouseSpeed
-		, toupper(*aOffsetMode) == 'R'); // aMoveOffset.
+		, ctoupper(*aOffsetMode) == 'R'); // aMoveOffset.
 
 	return OK; // For caller convenience.
 }
@@ -2918,12 +2937,12 @@ void UpdateKeyEventHistory(bool aKeyUp, vk_type aVK, sc_type aSC)
 	if (fore_win)
 	{
 		if (fore_win != g_HistoryHwndPrev)
-			GetWindowText(fore_win, g_KeyHistory[g_KeyHistoryNext].target_window, sizeof(g_KeyHistory[g_KeyHistoryNext].target_window));
+			GetWindowText(fore_win, g_KeyHistory[g_KeyHistoryNext].target_window, _countof(g_KeyHistory[g_KeyHistoryNext].target_window));
 		else // i.e. avoid the call to GetWindowText() if possible.
 			*g_KeyHistory[g_KeyHistoryNext].target_window = '\0';
 	}
 	else
-		strcpy(g_KeyHistory[g_KeyHistoryNext].target_window, "N/A");
+		_tcscpy(g_KeyHistory[g_KeyHistoryNext].target_window, _T("N/A"));
 	g_HistoryHwndPrev = fore_win; // Update unconditionally in case it's NULL.
 	if (++g_KeyHistoryNext >= g_MaxHistoryKeys)
 		g_KeyHistoryNext = 0;
@@ -2944,6 +2963,7 @@ ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue)
 		return starting_state;
 	if (aVK == VK_NUMLOCK)
 	{
+#ifdef CONFIG_WIN9X
 		if (g_os.IsWin9x())
 		{
 			// For Win9x, we want to set the state unconditionally to be sure it's right.  This is because
@@ -2954,6 +2974,7 @@ ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue)
 			ToggleNumlockWin9x();
 			return starting_state;  // Best guess, but might be wrong.
 		}
+#endif
 		// Otherwise, NT/2k/XP:
 		// Sending an extra up-event first seems to prevent the problem where the Numlock
 		// key's indicator light doesn't change to reflect its true state (and maybe its
@@ -2984,6 +3005,7 @@ ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue)
 }
 
 
+#ifdef CONFIG_WIN9X
 
 void ToggleNumlockWin9x()
 // Numlock requires a special method to toggle the state and its indicator light under Win9x.
@@ -2995,8 +3017,6 @@ void ToggleNumlockWin9x()
 	SetKeyboardState((PBYTE)&state);
 }
 
-
-
 //void CapslockOffWin9x()
 //{
 //	BYTE state[256];
@@ -3005,6 +3025,7 @@ void ToggleNumlockWin9x()
 //	SetKeyboardState((PBYTE)&state);
 //}
 
+#endif
 
 
 /*
@@ -3668,18 +3689,18 @@ mod_type ConvertModifiersLR(modLR_type aModifiersLR)
 
 
 
-char *ModifiersLRToText(modLR_type aModifiersLR, char *aBuf)
+LPTSTR ModifiersLRToText(modLR_type aModifiersLR, LPTSTR aBuf)
 // Caller has ensured that aBuf is not NULL.
 {
 	*aBuf = '\0';
-	if (aModifiersLR & MOD_LWIN) strcat(aBuf, "LWin ");
-	if (aModifiersLR & MOD_RWIN) strcat(aBuf, "RWin ");
-	if (aModifiersLR & MOD_LSHIFT) strcat(aBuf, "LShift ");
-	if (aModifiersLR & MOD_RSHIFT) strcat(aBuf, "RShift ");
-	if (aModifiersLR & MOD_LCONTROL) strcat(aBuf, "LCtrl ");
-	if (aModifiersLR & MOD_RCONTROL) strcat(aBuf, "RCtrl ");
-	if (aModifiersLR & MOD_LALT) strcat(aBuf, "LAlt ");
-	if (aModifiersLR & MOD_RALT) strcat(aBuf, "RAlt ");
+	if (aModifiersLR & MOD_LWIN) _tcscat(aBuf, _T("LWin "));
+	if (aModifiersLR & MOD_RWIN) _tcscat(aBuf, _T("RWin "));
+	if (aModifiersLR & MOD_LSHIFT) _tcscat(aBuf, _T("LShift "));
+	if (aModifiersLR & MOD_RSHIFT) _tcscat(aBuf, _T("RShift "));
+	if (aModifiersLR & MOD_LCONTROL) _tcscat(aBuf, _T("LCtrl "));
+	if (aModifiersLR & MOD_RCONTROL) _tcscat(aBuf, _T("RCtrl "));
+	if (aModifiersLR & MOD_LALT) _tcscat(aBuf, _T("LAlt "));
+	if (aModifiersLR & MOD_RALT) _tcscat(aBuf, _T("RAlt "));
 	return aBuf;
 }
 
@@ -3751,7 +3772,7 @@ ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr)
 
 
 
-char *SCtoKeyName(sc_type aSC, char *aBuf, int aBufSize)
+LPTSTR SCtoKeyName(sc_type aSC, LPTSTR aBuf, int aBufSize)
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // Always produces a non-empty string.
 {
@@ -3759,18 +3780,18 @@ char *SCtoKeyName(sc_type aSC, char *aBuf, int aBufSize)
 	{
 		if (g_key_to_sc[i].sc == aSC)
 		{
-			strlcpy(aBuf, g_key_to_sc[i].key_name, aBufSize);
+			tcslcpy(aBuf, g_key_to_sc[i].key_name, aBufSize);
 			return aBuf;
 		}
 	}
 	// Since above didn't return, no match was found.  Use the default format for an unknown scan code:
-	snprintf(aBuf, aBufSize, "SC%03x", aSC);
+	sntprintf(aBuf, aBufSize, _T("SC%03x"), aSC);
 	return aBuf;
 }
 
 
 
-char *VKtoKeyName(vk_type aVK, sc_type aSC, char *aBuf, int aBufSize)
+LPTSTR VKtoKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize)
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // Caller may omit aSC and it will be derived if needed.
 {
@@ -3778,7 +3799,7 @@ char *VKtoKeyName(vk_type aVK, sc_type aSC, char *aBuf, int aBufSize)
 	{
 		if (g_key_to_vk[i].vk == aVK)
 		{
-			strlcpy(aBuf, g_key_to_vk[i].key_name, aBufSize);
+			tcslcpy(aBuf, g_key_to_vk[i].key_name, aBufSize);
 			return aBuf;
 		}
 	}
@@ -3789,21 +3810,21 @@ char *VKtoKeyName(vk_type aVK, sc_type aSC, char *aBuf, int aBufSize)
 
 
 
-sc_type TextToSC(char *aText)
+sc_type TextToSC(LPTSTR aText)
 {
 	if (!*aText) return 0;
 	for (int i = 0; i < g_key_to_sc_count; ++i)
-		if (!stricmp(g_key_to_sc[i].key_name, aText))
+		if (!_tcsicmp(g_key_to_sc[i].key_name, aText))
 			return g_key_to_sc[i].sc;
 	// Do this only after the above, in case any valid key names ever start with SC:
-	if (toupper(*aText) == 'S' && toupper(*(aText + 1)) == 'C')
-		return (sc_type)strtol(aText + 2, NULL, 16);  // Convert from hex.
+	if (ctoupper(*aText) == 'S' && ctoupper(*(aText + 1)) == 'C')
+		return (sc_type)_tcstol(aText + 2, NULL, 16);  // Convert from hex.
 	return 0; // Indicate "not found".
 }
 
 
 
-vk_type TextToVK(char *aText, modLR_type *pModifiersLR, bool aExcludeThoseHandledByScanCode, bool aAllowExplicitVK
+vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandledByScanCode, bool aAllowExplicitVK
 	, HKL aKeybdLayout)
 // If modifiers_p is non-NULL, place the modifiers that are needed to realize the key in there.
 // e.g. M is really +m (shift-m), # is really shift-3.
@@ -3816,14 +3837,14 @@ vk_type TextToVK(char *aText, modLR_type *pModifiersLR, bool aExcludeThoseHandle
 	// Instead, for now, just check it as-is.  The only extra whitespace that should exist, due to trimming
 	// of text during load, is that on either side of the COMPOSITE_DELIMITER (e.g. " then ").
 
-	if (strlen(aText) == 1)
+	if (!aText[1]) // _tcslen(aText) == 1
 		return CharToVKAndModifiers(*aText, pModifiersLR, aKeybdLayout); // Making this a function simplifies things because it can do early return, etc.
 
-	if (aAllowExplicitVK && toupper(aText[0]) == 'V' && toupper(aText[1]) == 'K')
-		return (vk_type)strtol(aText + 2, NULL, 16);  // Convert from hex.
+	if (aAllowExplicitVK && ctoupper(aText[0]) == 'V' && ctoupper(aText[1]) == 'K')
+		return (vk_type)_tcstol(aText + 2, NULL, 16);  // Convert from hex.
 
 	for (int i = 0; i < g_key_to_vk_count; ++i)
-		if (!stricmp(g_key_to_vk[i].key_name, aText))
+		if (!_tcsicmp(g_key_to_vk[i].key_name, aText))
 			return g_key_to_vk[i].vk;
 
 	if (aExcludeThoseHandledByScanCode)
@@ -3837,7 +3858,7 @@ vk_type TextToVK(char *aText, modLR_type *pModifiersLR, bool aExcludeThoseHandle
 
 
 
-vk_type CharToVKAndModifiers(char aChar, modLR_type *pModifiersLR, HKL aKeybdLayout)
+vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLayout)
 // If non-NULL, pModifiersLR contains the initial set of modifiers provided by the caller, to which
 // we add any extra modifiers required to realize aChar.
 {
@@ -3903,7 +3924,7 @@ vk_type CharToVKAndModifiers(char aChar, modLR_type *pModifiersLR, HKL aKeybdLay
 
 
 
-vk_type TextToSpecial(char *aText, UINT aTextLength, KeyEventTypes &aEventType, modLR_type &aModifiersLR
+vk_type TextToSpecial(LPTSTR aText, UINT aTextLength, KeyEventTypes &aEventType, modLR_type &aModifiersLR
 	, bool aUpdatePersistent)
 // Returns vk for key-down, negative vk for key-up, or zero if no translation.
 // We also update whatever's in *pModifiers and *pModifiersLR to reflect the type of key-action
@@ -3911,7 +3932,7 @@ vk_type TextToSpecial(char *aText, UINT aTextLength, KeyEventTypes &aEventType, 
 // Note that things like LShiftDown are not supported because: 1) they are rarely needed; and 2)
 // they can be down via "lshift down".
 {
-	if (!strlicmp(aText, "ALTDOWN", aTextLength))
+	if (!tcslicmp(aText, _T("ALTDOWN"), aTextLength))
 	{
 		if (aUpdatePersistent)
 			if (!(aModifiersLR & (MOD_LALT | MOD_RALT))) // i.e. do nothing if either left or right is already present.
@@ -3919,7 +3940,7 @@ vk_type TextToSpecial(char *aText, UINT aTextLength, KeyEventTypes &aEventType, 
 		aEventType = KEYDOWN;
 		return VK_MENU;
 	}
-	if (!strlicmp(aText, "ALTUP", aTextLength))
+	if (!tcslicmp(aText, _T("ALTUP"), aTextLength))
 	{
 		// Unlike for Lwin/Rwin, it seems best to have these neutral keys (e.g. ALT vs. LALT or RALT)
 		// restore either or both of the ALT keys into the up position.  The user can use {LAlt Up}
@@ -3929,7 +3950,7 @@ vk_type TextToSpecial(char *aText, UINT aTextLength, KeyEventTypes &aEventType, 
 		aEventType = KEYUP;
 		return VK_MENU;
 	}
-	if (!strlicmp(aText, "SHIFTDOWN", aTextLength))
+	if (!tcslicmp(aText, _T("SHIFTDOWN"), aTextLength))
 	{
 		if (aUpdatePersistent)
 			if (!(aModifiersLR & (MOD_LSHIFT | MOD_RSHIFT))) // i.e. do nothing if either left or right is already present.
@@ -3937,14 +3958,14 @@ vk_type TextToSpecial(char *aText, UINT aTextLength, KeyEventTypes &aEventType, 
 		aEventType = KEYDOWN;
 		return VK_SHIFT;
 	}
-	if (!strlicmp(aText, "SHIFTUP", aTextLength))
+	if (!tcslicmp(aText, _T("SHIFTUP"), aTextLength))
 	{
 		if (aUpdatePersistent)
 			aModifiersLR &= ~(MOD_LSHIFT | MOD_RSHIFT); // See "ALTUP" for explanation.
 		aEventType = KEYUP;
 		return VK_SHIFT;
 	}
-	if (!strlicmp(aText, "CTRLDOWN", aTextLength) || !strlicmp(aText, "CONTROLDOWN", aTextLength))
+	if (!tcslicmp(aText, _T("CTRLDOWN"), aTextLength) || !tcslicmp(aText, _T("CONTROLDOWN"), aTextLength))
 	{
 		if (aUpdatePersistent)
 			if (!(aModifiersLR & (MOD_LCONTROL | MOD_RCONTROL))) // i.e. do nothing if either left or right is already present.
@@ -3952,35 +3973,35 @@ vk_type TextToSpecial(char *aText, UINT aTextLength, KeyEventTypes &aEventType, 
 		aEventType = KEYDOWN;
 		return VK_CONTROL;
 	}
-	if (!strlicmp(aText, "CTRLUP", aTextLength) || !strlicmp(aText, "CONTROLUP", aTextLength))
+	if (!tcslicmp(aText, _T("CTRLUP"), aTextLength) || !tcslicmp(aText, _T("CONTROLUP"), aTextLength))
 	{
 		if (aUpdatePersistent)
 			aModifiersLR &= ~(MOD_LCONTROL | MOD_RCONTROL); // See "ALTUP" for explanation.
 		aEventType = KEYUP;
 		return VK_CONTROL;
 	}
-	if (!strlicmp(aText, "LWINDOWN", aTextLength))
+	if (!tcslicmp(aText, _T("LWINDOWN"), aTextLength))
 	{
 		if (aUpdatePersistent)
 			aModifiersLR |= MOD_LWIN;
 		aEventType = KEYDOWN;
 		return VK_LWIN;
 	}
-	if (!strlicmp(aText, "LWINUP", aTextLength))
+	if (!tcslicmp(aText, _T("LWINUP"), aTextLength))
 	{
 		if (aUpdatePersistent)
 			aModifiersLR &= ~MOD_LWIN;
 		aEventType = KEYUP;
 		return VK_LWIN;
 	}
-	if (!strlicmp(aText, "RWINDOWN", aTextLength))
+	if (!tcslicmp(aText, _T("RWINDOWN"), aTextLength))
 	{
 		if (aUpdatePersistent)
 			aModifiersLR |= MOD_RWIN;
 		aEventType = KEYDOWN;
 		return VK_RWIN;
 	}
-	if (!strlicmp(aText, "RWINUP", aTextLength))
+	if (!tcslicmp(aText, _T("RWINUP"), aTextLength))
 	{
 		if (aUpdatePersistent)
 			aModifiersLR &= ~MOD_RWIN;
@@ -3994,9 +4015,9 @@ vk_type TextToSpecial(char *aText, UINT aTextLength, KeyEventTypes &aEventType, 
 
 
 #ifdef ENABLE_KEY_HISTORY_FILE
-ResultType KeyHistoryToFile(char *aFilespec, char aType, bool aKeyUp, vk_type aVK, sc_type aSC)
+ResultType KeyHistoryToFile(LPTSTR aFilespec, char aType, bool aKeyUp, vk_type aVK, sc_type aSC)
 {
-	static char sTargetFilespec[MAX_PATH] = "";
+	static TCHAR sTargetFilespec[MAX_PATH] = _T("");
 	static FILE *fp = NULL;
 	static HWND last_foreground_window = NULL;
 	static DWORD last_tickcount = GetTickCount();
@@ -4021,7 +4042,7 @@ ResultType KeyHistoryToFile(char *aFilespec, char aType, bool aKeyUp, vk_type aV
 			fclose(fp);
 			fp = NULL;  // To indicate to future calls to this function that it's closed.
 		}
-		strlcpy(sTargetFilespec, aFilespec, sizeof(sTargetFilespec));
+		tcslcpy(sTargetFilespec, aFilespec, _countof(sTargetFilespec));
 	}
 
 	if (!aVK && !aSC) // Caller didn't want us to log anything this time.
@@ -4035,40 +4056,40 @@ ResultType KeyHistoryToFile(char *aFilespec, char aType, bool aKeyUp, vk_type aV
 		if (!aSC)
 			aSC = vk_to_sc(aVK);
 
-	char buf[2048] = "", win_title[1024] = "<Init>", key_name[128] = "";
+	TCHAR buf[2048] = _T(""), win_title[1024] = _T("<Init>"), key_name[128] = _T("");
 	HWND curr_foreground_window = GetForegroundWindow();
 	DWORD curr_tickcount = GetTickCount();
 	bool log_changed_window = (curr_foreground_window != last_foreground_window);
 	if (log_changed_window)
 	{
 		if (curr_foreground_window)
-			GetWindowText(curr_foreground_window, win_title, sizeof(win_title));
+			GetWindowText(curr_foreground_window, win_title, _countof(win_title));
 		else
-			strlcpy(win_title, "<None>", sizeof(win_title));
+			tcslcpy(win_title, _T("<None>"), _countof(win_title));
 		last_foreground_window = curr_foreground_window;
 	}
 
-	snprintf(buf, sizeof(buf), "%02X" "\t%03X" "\t%0.2f" "\t%c" "\t%c" "\t%s" "%s%s\n"
+	sntprintf(buf, _countof(buf), _T("%02X") _T("\t%03X") _T("\t%0.2f") _T("\t%c") _T("\t%c") _T("\t%s") _T("%s%s\n")
 		, aVK, aSC
 		, (float)(curr_tickcount - last_tickcount) / (float)1000
 		, aType
 		, aKeyUp ? 'u' : 'd'
 		, GetKeyName(aVK, aSC, key_name, sizeof(key_name))
-		, log_changed_window ? "\t" : ""
-		, log_changed_window ? win_title : ""
+		, log_changed_window ? _T("\t") : _T("")
+		, log_changed_window ? win_title : _T("")
 		);
 	last_tickcount = curr_tickcount;
 	if (!fp)
-		if (   !(fp = fopen(sTargetFilespec, "a"))   )
+		if (   !(fp = _tfopen(sTargetFilespec, _T("a")))   )
 			return OK;
-	fputs(buf, fp);
+	_fputts(buf, fp);
 	return OK;
 }
 #endif
 
 
 
-char *GetKeyName(vk_type aVK, sc_type aSC, char *aBuf, int aBufSize)
+LPTSTR GetKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize)
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // Caller has ensured that aBuf isn't NULL.
 {
@@ -4096,16 +4117,16 @@ char *GetKeyName(vk_type aVK, sc_type aSC, char *aBuf, int aBufSize)
 			if (g_key_to_vk[j].vk == aVK)
 				break;
 		if (j < g_key_to_vk_count) // Match found.
-			strlcpy(aBuf, g_key_to_vk[j].key_name, aBufSize);
+			tcslcpy(aBuf, g_key_to_vk[j].key_name, aBufSize);
 		else
 		{
-			if (isprint(aVK))
+			if (_istprint(aVK))
 			{
 				aBuf[0] = aVK;
 				aBuf[1] = '\0';
 			}
 			else
-				strlcpy(aBuf, "not found", aBufSize);
+				tcslcpy(aBuf, _T("not found"), aBufSize);
 		}
 	}
 	return aBuf;

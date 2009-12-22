@@ -1,3 +1,4 @@
+#pragma once
 
 #define IT_GET				0
 #define IT_SET				1
@@ -74,7 +75,7 @@ class Object : public ObjectBase
 protected:
 	union KeyType // Which of its members is used depends on the field's position in the mFields array.
 	{
-		char *s;
+		LPTSTR s;
 		int i;
 		IObject *p;
 	};
@@ -85,8 +86,8 @@ protected:
 			double n_double;	// for SYM_FLOAT
 			IObject *object;	// for SYM_OBJECT
 			struct {
-				char *marker;		// for SYM_OPERAND
-				size_t size;		// for SYM_OPERAND; allows reuse of allocated memory.
+				LPTSTR marker;		// for SYM_OPERAND
+				size_t size;		// for SYM_OPERAND; allows reuse of allocated memory. For UNICODE: count in characters
 			};
 		};
 		// key and symbol probably need to be adjacent to each other to conserve memory due to 8-byte alignment.
@@ -94,9 +95,9 @@ protected:
 		SymbolType symbol;
 		
 		inline int CompareKey(int val) { return val - key.i; }  // Used by both int and object since they are stored separately.  Will needs review for 64-bit compatibility.
-		inline int CompareKey(char *val) { return stricmp(val, key.s); }
+		inline int CompareKey(LPTSTR val) { return _tcsicmp(val, key.s); }
 		
-		bool Assign(char *str, size_t len = -1, bool exact_size = false);
+		bool Assign(LPTSTR str, size_t len = -1, bool exact_size = false);
 		bool Assign(ExprTokenType &val);
 		void Get(ExprTokenType &result);
 		void Free();
@@ -107,7 +108,7 @@ protected:
 	int mFieldCount, mFieldCountMax; // Current/max number of fields.
 
 	// Holds the index of first key of a given type within mFields.  Must be in the order: int, object, string.
-	// Compared to an approach using true key-value pairs, this approach saves 8 bytes per key (excluding
+	// Compared to storing the key-type with each key-value pair, this approach saves 4 bytes per key (excluding
 	// the 8 bytes taken by the two fields below) and speeds up lookups since only the section within mFields
 	// with the appropriate type of key needs to be searched (and no need to check the type of each key).
 	// mKeyOffsetObject should be set to mKeyOffsetInt + the number of int keys.
@@ -128,7 +129,7 @@ protected:
 	template<typename T>
 	FieldType *FindField(T val, int left, int right, int &insert_pos);
 	FieldType *FindField(SymbolType key_type, KeyType key, int &insert_pos);	
-	FieldType *FindField(ExprTokenType &key_token, char *aBuf, SymbolType &key_type, KeyType &key, int &insert_pos);
+	FieldType *FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, int &insert_pos);
 	
 	FieldType *Insert(SymbolType key_type, KeyType key, int at);
 
@@ -152,7 +153,7 @@ public:
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	static IObject *Create(ExprTokenType *aParam[], int aParamCount);
 
-	static char *sMetaFuncName[];
+	static LPTSTR sMetaFuncName[];
 };
 
 

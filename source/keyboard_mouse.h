@@ -179,25 +179,25 @@ struct CachedLayoutType
 
 struct key_to_vk_type // Map key names to virtual keys.
 {
-	char *key_name;
+	LPTSTR key_name;
 	vk_type vk;
 };
 
 struct key_to_sc_type // Map key names to scan codes.
 {
-	char *key_name;
+	LPTSTR key_name;
 	sc_type sc;
 };
 
 enum KeyStateTypes {KEYSTATE_LOGICAL, KEYSTATE_PHYSICAL, KEYSTATE_TOGGLE}; // For use with GetKeyJoyState(), etc.
 enum KeyEventTypes {KEYDOWN, KEYUP, KEYDOWNANDUP};
 
-void SendKeys(char *aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow = NULL);
+void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow = NULL);
 void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModifiersLRPersistent
 	, int aRepeatCount, KeyEventTypes aEventType, modLR_type aKeyAsModifiersLR, HWND aTargetWindow
 	, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED, bool aMoveOffset = false);
-void SendKeySpecial(char aChar, int aRepeatCount);
-void SendASC(char *aAscii);
+void SendKeySpecial(TCHAR aChar, int aRepeatCount);
+void SendASC(const char *aAscii);
 
 struct PlaybackEvent
 {
@@ -254,11 +254,11 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam);
 void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC = 0, HWND aTargetWindow = NULL
 	, bool aDoKeyDelay = false, DWORD aExtraInfo = KEY_IGNORE_ALL_EXCEPT_MODIFIER);
 
-ResultType PerformClick(char *aOptions);
-void ParseClickOptions(char *aOptions, int &aX, int &aY, vk_type &aVK, KeyEventTypes &aEventType
+ResultType PerformClick(LPTSTR aOptions);
+void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEventTypes &aEventType
 	, int &aRepeatCount, bool &aMoveOffset);
-ResultType PerformMouse(ActionTypeType aActionType, char *aButton, char *aX1, char *aY1, char *aX2, char *aY2
-	, char *aSpeed, char *aOffsetMode, char *aRepeatCount = "", char *aDownUp = "");
+ResultType PerformMouse(ActionTypeType aActionType, LPTSTR aButton, LPTSTR aX1, LPTSTR aY1, LPTSTR aX2, LPTSTR aY2
+	, LPTSTR aSpeed, LPTSTR aOffsetMode, LPTSTR aRepeatCount = _T(""), LPTSTR aDownUp = _T(""));
 void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY1, int aX2, int aY2
 	, int aRepeatCount, KeyEventTypes aEventType, int aSpeed, bool aMoveOffset);
 
@@ -285,8 +285,10 @@ void UpdateKeyEventHistory(bool aKeyUp, vk_type aVK, sc_type aSC);
 #define KEYEVENT_PHYS(event_type, vk, sc) KeyEvent(event_type, vk, sc, NULL, false, KEY_PHYS_IGNORE)
 
 ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue);
+#ifdef CONFIG_WIN9X
 void ToggleNumlockWin9x();
 //void CapslockOffWin9x();
+#endif
 
 #define STD_MODS_TO_DISGUISE (MOD_LALT|MOD_RALT|MOD_LWIN|MOD_RWIN)
 void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, HWND aTargetWindow
@@ -309,7 +311,7 @@ void AdjustKeyState(BYTE aKeyState[], modLR_type aModifiersLR);
 modLR_type KeyToModifiersLR(vk_type aVK, sc_type aSC = 0, bool *pIsNeutral = NULL);
 modLR_type ConvertModifiers(mod_type aModifiers);
 mod_type ConvertModifiersLR(modLR_type aModifiersLR);
-char *ModifiersLRToText(modLR_type aModifiersLR, char *aBuf);
+LPTSTR ModifiersLRToText(modLR_type aModifiersLR, LPTSTR aBuf);
 
 #define LAYOUT_UNDETERMINED FAIL
 bool ActiveWindowLayoutHasAltGr();
@@ -317,21 +319,21 @@ ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr = LAYOUT_UNDETERMINE
 
 //---------------------------------------------------------------------
 
-char *SCtoKeyName(sc_type aSC, char *aBuf, int aBufSize);
-char *VKtoKeyName(vk_type aVK, sc_type aSC, char *aBuf, int aBufSize);
-sc_type TextToSC(char *aText);
-vk_type TextToVK(char *aText, modLR_type *pModifiersLR = NULL, bool aExcludeThoseHandledByScanCode = false
+LPTSTR SCtoKeyName(sc_type aSC, LPTSTR aBuf, int aBufSize);
+LPTSTR VKtoKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize);
+sc_type TextToSC(LPTSTR aText);
+vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR = NULL, bool aExcludeThoseHandledByScanCode = false
 	, bool aAllowExplicitVK = true, HKL aKeybdLayout = GetKeyboardLayout(0));
-vk_type CharToVKAndModifiers(char aChar, modLR_type *pModifiersLR, HKL aKeybdLayout);
-vk_type TextToSpecial(char *aText, UINT aTextLength, KeyEventTypes &aEventTypem, modLR_type &aModifiersLR
+vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLayout);
+vk_type TextToSpecial(LPTSTR aText, UINT aTextLength, KeyEventTypes &aEventTypem, modLR_type &aModifiersLR
 	, bool aUpdatePersistent);
 
 #ifdef ENABLE_KEY_HISTORY_FILE
-ResultType KeyHistoryToFile(char *aFilespec = NULL, char aType = '\0', bool aKeyUp = false
+ResultType KeyHistoryToFile(LPTSTR aFilespec = NULL, TCHAR aType = '\0', bool aKeyUp = false
 	, vk_type aVK = 0, sc_type aSC = 0);
 #endif
 
-char *GetKeyName(vk_type aVK, sc_type aSC, char *aBuf, int aBufSize);
+LPTSTR GetKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize);
 sc_type vk_to_sc(vk_type aVK, bool aReturnSecondary = false);
 vk_type sc_to_vk(sc_type aSC);
 

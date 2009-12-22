@@ -19,7 +19,7 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 	if (aParamCount < aFunc.mMinParams)
 	{
 		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = "";
+		aResultToken.marker = _T("");
 		return FAIL;
 	}
 	ResultType result = OK;
@@ -40,7 +40,7 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 
 		// L: Set a default here in case we return early/abort.
 		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = "";
+		aResultToken.marker = _T("");
 
 		count_of_actuals_that_have_formals = (aParamCount > aFunc.mParamCount)
 					? aFunc.mParamCount  // Omit any actuals that lack formals (this can happen when a dynamic call passes too many parameters).
@@ -110,17 +110,17 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 		{
 			if (aResultToken.symbol == SYM_STRING || aResultToken.symbol == SYM_OPERAND) // SYM_VAR is not currently possible.
 			{
-				char *buf;
+				LPTSTR buf;
 				size_t len;
 				// Make a persistent copy of the string in case it is the contents of one of the function's local variables.
-				if ( *aResultToken.marker && (buf = (char *)malloc(1 + (len = strlen(aResultToken.marker)))) )
+				if ( *aResultToken.marker && (buf = tmalloc(1 + (len = _tcslen(aResultToken.marker)))) )
 				{
-					aResultToken.marker = (char *)memcpy(buf, aResultToken.marker, len + 1);
+					aResultToken.marker = tmemcpy(buf, aResultToken.marker, len + 1);
 					aResultToken.circuit_token = (ExprTokenType *)buf;
-					aResultToken.buf = (char *)len; // L33: Bugfix - buf is the length of the string, not the size of the memory allocation.
+					aResultToken.buf = (LPTSTR)len; // L33: Bugfix - buf is the length of the string, not the size of the memory allocation.
 				}
 				else
-					aResultToken.marker = "";
+					aResultToken.marker = _T("");
 			}
 		}
 		Var::FreeAndRestoreFunctionVars(aFunc, var_backup, var_backup_count);
@@ -142,7 +142,7 @@ IObject *Object::Create(ExprTokenType *aParam[], int aParamCount)
 	if (obj && aParamCount)
 	{
 		ExprTokenType result_token, this_token;
-		char buf[MAX_NUMBER_SIZE];
+		TCHAR buf[MAX_NUMBER_SIZE];
 
 		this_token.symbol = SYM_OBJECT;
 		this_token.object = obj;
@@ -150,7 +150,7 @@ IObject *Object::Create(ExprTokenType *aParam[], int aParamCount)
 		for (int i = 0; i + 1 < aParamCount; i += 2)
 		{
 			result_token.symbol = SYM_STRING;
-			result_token.marker = "";
+			result_token.marker = _T("");
 			result_token.circuit_token = NULL;
 			result_token.buf = buf;
 
@@ -180,7 +180,7 @@ bool Object::Delete()
 	{
 		ExprTokenType result_token, this_token, param_token, *param;
 		
-		result_token.marker = "";
+		result_token.marker = _T("");
 		result_token.symbol = SYM_STRING;
 		result_token.circuit_token = NULL;
 
@@ -339,21 +339,21 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				// TODO: Move these predefined methods to built-in functions (which can be reimplemented as methods via a base object).
 				if (aParamCount < 4 && *key.s == '_')
 				{
-					char *name = key.s + 1; // + 1 to exclude '_' from further consideration.
+					LPTSTR name = key.s + 1; // + 1 to exclude '_' from further consideration.
 					++aParam; --aParamCount; // Exclude the method identifier.  A prior check ensures there was at least one param in this case.
 					if (aParamCount) {
-						if (!stricmp(name, "Insert"))
+						if (!_tcsicmp(name, _T("Insert")))
 							return _Insert(aResultToken, aParam, aParamCount);
-						if (!stricmp(name, "Remove"))
+						if (!_tcsicmp(name, _T("Remove")))
 							return _Remove(aResultToken, aParam, aParamCount);
-						if (!stricmp(name, "SetCapacity"))
+						if (!_tcsicmp(name, _T("SetCapacity")))
 							return _SetCapacity(aResultToken, aParam, aParamCount);
 					} else { // aParamCount == 0
-						if (!stricmp(name, "MaxIndex"))
+						if (!_tcsicmp(name, _T("MaxIndex")))
 							return _MaxIndex(aResultToken);
-						if (!stricmp(name, "MinIndex"))
+						if (!_tcsicmp(name, _T("MinIndex")))
 							return _MinIndex(aResultToken);
-						if (!stricmp(name, "GetCapacity"))
+						if (!_tcsicmp(name, _T("GetCapacity")))
 							return _GetCapacity(aResultToken);
 					}
 					// For maintability: explicitly return since above has done ++aParam, --aParamCount.
@@ -364,7 +364,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			//
 			// BUILT-IN "BASE" PROPERTY
 			//
-			else if (param_count_excluding_rvalue == 1 && !stricmp(key.s, "base"))
+			else if (param_count_excluding_rvalue == 1 && !_tcsicmp(key.s, _T("base")))
 			{
 				if (IS_INVOKE_SET)
 				// "base" must be handled before inserting a new field.
@@ -429,7 +429,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		{
 			// This section applies only to the target object (aThisToken) and not any of its base objects.
 			// Allow obj["base",x] to access a field of obj.base; L40: This also fixes obj.base[x] which was broken by L36.
-			if (key_type == SYM_STRING && !stricmp(key.s, "base"))
+			if (key_type == SYM_STRING && !_tcsicmp(key.s, _T("base")))
 			{
 				if (!mBase && IS_INVOKE_SET)
 					mBase = new Object();
@@ -495,18 +495,18 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	{
 		if (field->symbol == SYM_OPERAND)
 		{
-			char *buf;
+			LPTSTR buf;
 			size_t len;
 			// L33: Make a persistent copy; our copy might be freed indirectly by releasing this object.
 			//		Prior to L33, callers took care of this UNLESS this was the last op in an expression.
-			if (buf = (char *)malloc(1 + (len = strlen(field->marker))))
+			if (buf = tmalloc(1 + (len = _tcslen(field->marker))))
 			{
-				aResultToken.marker = (char *)memcpy(buf, field->marker, len + 1);
+				aResultToken.marker = tmemcpy(buf, field->marker, len + 1);
 				aResultToken.circuit_token = (ExprTokenType *)buf;
-				aResultToken.buf = (char *)len;
+				aResultToken.buf = (LPTSTR)len;
 			}
 			else
-				aResultToken.marker = "";
+				aResultToken.marker = _T("");
 
 			aResultToken.symbol = SYM_OPERAND;
 		}
@@ -636,7 +636,7 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		// Do not allow removing a range of object keys since there is probably no meaning to their order.
 		if (max_key_type != min_key_type || max_key_type == SYM_OBJECT || max_pos < min_pos
 			// min and max are different types, are objects, or max < min.
-			|| (max_pos == min_pos && (max_key_type == SYM_INTEGER ? max_key.i < min_key.i : stricmp(max_key.s, min_key.s) < 0)))
+			|| (max_pos == min_pos && (max_key_type == SYM_INTEGER ? max_key.i < min_key.i : _tcsicmp(max_key.s, min_key.s) < 0)))
 			// max < min, but no keys exist in that range so (max_pos < min_pos) check above didn't catch it.
 			return OK;
 		//else if (max_pos == min_pos): specified range is valid, but doesn't match any keys.
@@ -744,7 +744,7 @@ ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 // Object::FieldType
 //
 
-bool Object::FieldType::Assign(char *str, size_t len, bool exact_size)
+bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
 {
 	if (!str || !*str && len < 1) // If empty string or null pointer, free our contents.  Passing len >= 1 allows copying \0, so don't check *str in that case.  Ordered for short-circuit performance (len is usually -1).
 	{
@@ -755,7 +755,7 @@ bool Object::FieldType::Assign(char *str, size_t len, bool exact_size)
 	}
 	
 	if (len == -1)
-		len = strlen(str);
+		len = _tcslen(str);
 
 	if (symbol != SYM_OPERAND || len >= size)
 	{
@@ -778,7 +778,7 @@ bool Object::FieldType::Assign(char *str, size_t len, bool exact_size)
 			else  // 6400 KB or more: Cap the extra margin at some reasonable compromise of speed vs. mem usage: 64 KB
 				new_size += (64 * 1024);
 		}
-		if ( !(marker = (char *)malloc(new_size)) )
+		if ( !(marker = tmalloc(new_size)) )
 		{
 			marker = Var::sEmptyString;
 			size = 0;
@@ -788,7 +788,7 @@ bool Object::FieldType::Assign(char *str, size_t len, bool exact_size)
 	}
 	// else we have a buffer with sufficient capacity already.
 
-	memcpy(marker, str, len + 1); // +1 for null-terminator.
+	tmemcpy(marker, str, len + 1); // +1 for null-terminator.
 	return true; // Success.
 }
 
@@ -885,7 +885,7 @@ Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, int &inse
 		left = mKeyOffsetString;
 		right = mFieldCount - 1; // String keys are last in the mFields array.
 
-		return FindField<char *>(key.s, left, right, insert_pos);
+		return FindField<LPTSTR>(key.s, left, right, insert_pos);
 	}
 	else // key_type == SYM_INTEGER || key_type == SYM_OBJECT
 	{
@@ -904,7 +904,7 @@ Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, int &inse
 	}
 }
 
-Object::FieldType *Object::FindField(ExprTokenType &key_token, char *aBuf, SymbolType &key_type, KeyType &key, int &insert_pos)
+Object::FieldType *Object::FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, int &insert_pos)
 // Searches for a field with the given key, where the key is a token passed from script.
 {
 	if (TokenIsPureNumeric(key_token) == PURE_INTEGER)
@@ -941,7 +941,7 @@ Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, int at)
 // Caller must ensure 'at' is the correct offset for this key.
 {
 	if (mFieldCount == mFieldCountMax && !Expand()  // Attempt to expand if at capacity.
-		|| key_type == SYM_STRING && !(key.s = _strdup(key.s)))  // Attempt to duplicate key-string.
+		|| key_type == SYM_STRING && !(key.s = _tcsdup(key.s)))  // Attempt to duplicate key-string.
 	{	// Out of memory.
 		return NULL;
 	}
@@ -967,7 +967,7 @@ Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, int at)
 	}
 	++mFieldCount; // Only after memmove above.
 	
-	field.marker = ""; // Init for maintainability.
+	field.marker = _T(""); // Init for maintainability.
 	field.size = 0; // Init to ensure safe behaviour in Assign().
 	field.key = key; // Above has already copied string or called key.p->AddRef() as appropriate.
 	field.symbol = SYM_OPERAND;
@@ -977,30 +977,9 @@ Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, int at)
 	
 
 //
-// MetaObject::Invoke - Defines behaviour of object syntax when used on a non-object value.
+// MetaObject - Defines behaviour of object syntax when used on a non-object value.
 //
-
-//ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
-//{
-//	// Allow script-defined behaviour to take precedence:
-//	ResultType r = Object::Invoke(aResultToken, aThisToken, aFlags | IF_META, aParam, aParamCount);
-//
-//	// TODO: Fix behaviour of "".base[x], ""["base",x] etc. or replace with built-in function to get g_MetaObject.
-//	if (r == INVOKE_NOT_HANDLED && !IS_INVOKE_META && IS_INVOKE_GET && aParamCount == 1)
-//	{
-//		if (!stricmp(TokenToString(*aParam[0]), "base")) // L40: Allow any string value for consistency (previously only SYM_OPERAND was accepted).
-//		{
-//			// In this case, script did something like ("".base); i.e. wants a reference to g_MetaObject itself.
-//			aResultToken.symbol = SYM_OBJECT;
-//			aResultToken.object = this;
-//			// No need to AddRef in this case since neither AddRef nor Release do anything.
-//			return OK;
-//		}
-//	}
-//
-//	return r;
-//}
 
 MetaObject g_MetaObject;
 
-char* Object::sMetaFuncName[] = { "__Get", "__Set", "__Call", "__Delete" };
+LPTSTR Object::sMetaFuncName[] = { _T("__Get"), _T("__Set"), _T("__Call"), _T("__Delete") };

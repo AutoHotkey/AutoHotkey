@@ -17,7 +17,7 @@
 
 #include "stdafx.h" // pre-compiled headers
 //#include <winsock.h>  // for WSADATA.  This also requires wsock32.lib to be linked in.
-#include <WinSock2.h>
+#include <winsock2.h>
 #include <tlhelp32.h> // For the ProcessExist routines.
 #include <wininet.h> // For URLDownloadToFile().
 #include "script.h"
@@ -26,9 +26,9 @@
 #include "application.h" // For SLEEP_WITHOUT_INTERRUPTION and MsgSleep().
 
 
-ResultType Script::DoRunAs(char *aCommandLine, char *aWorkingDir, bool aDisplayErrors, bool aUpdateLastError, WORD aShowWindow
+ResultType Script::DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, bool aUpdateLastError, WORD aShowWindow
 	, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess // Output parameters we set for caller, but caller must have initialized aSuccess to false.
-	, HANDLE &aNewProcess, char *aSystemErrorText)              // Same.  Caller must ensure aSystemErrorText is at least 512 in size.
+	, HANDLE &aNewProcess, LPTSTR aSystemErrorText)              // Same.  Caller must ensure aSystemErrorText is at least 512 in size.
 {
 	typedef BOOL (WINAPI *MyCreateProcessWithLogonW)(
 		LPCWSTR lpUsername,                 // user's name
@@ -44,11 +44,11 @@ ResultType Script::DoRunAs(char *aCommandLine, char *aWorkingDir, bool aDisplayE
 		LPPROCESS_INFORMATION lpProcessInfo // process information
 		);
 	// Get a handle to the DLL module that contains CreateProcessWithLogonW
-	HINSTANCE hinstLib = LoadLibrary("advapi32");
+	HINSTANCE hinstLib = LoadLibrary(_T("advapi32"));
 	if (!hinstLib)
 	{
 		if (aDisplayErrors)
-			ScriptError("RunAs: Missing advapi32.dll." ERR_ABORT);
+			ScriptError(_T("RunAs: Missing advapi32.dll.") ERR_ABORT);
 		return FAIL;
 	}
 	MyCreateProcessWithLogonW lpfnDLLProc = (MyCreateProcessWithLogonW)GetProcAddress(hinstLib, "CreateProcessWithLogonW");
@@ -56,7 +56,7 @@ ResultType Script::DoRunAs(char *aCommandLine, char *aWorkingDir, bool aDisplayE
 	{
 		FreeLibrary(hinstLib);
 		if (aDisplayErrors)
-			ScriptError("CreateProcessWithLogonW." ERR_ABORT); // Short msg since it probably never happens.
+			ScriptError(_T("CreateProcessWithLogonW.") ERR_ABORT); // Short msg since it probably never happens.
 		return FAIL;
 	}
 	// Set up wide char version that we need for CreateProcessWithLogon
@@ -72,6 +72,7 @@ ResultType Script::DoRunAs(char *aCommandLine, char *aWorkingDir, bool aDisplayE
 	//wsi.cbReserved2 = 0;
 	//wsi.lpReserved2 = NULL;
 
+#ifndef UNICODE
 	// Convert to wide character format:
 	WCHAR command_line_wide[LINE_SIZE], working_dir_wide[MAX_PATH];
 	ToWideChar(aCommandLine, command_line_wide, LINE_SIZE); // Dest. size is in wchars, not bytes.
@@ -82,6 +83,10 @@ ResultType Script::DoRunAs(char *aCommandLine, char *aWorkingDir, bool aDisplayE
 
 	if (lpfnDLLProc(mRunAsUser, mRunAsDomain, mRunAsPass, LOGON_WITH_PROFILE, 0
 		, command_line_wide, 0, 0, *working_dir_wide ? working_dir_wide : NULL, &wsi, &aPI))
+#else
+	if (lpfnDLLProc(mRunAsUser, mRunAsDomain, mRunAsPass, LOGON_WITH_PROFILE, 0
+		, aCommandLine, 0, 0, aWorkingDir && *aWorkingDir ? aWorkingDir : NULL, &wsi, &aPI))
+#endif
 	{
 		aSuccess = true;
 		if (aPI.hThread)
@@ -98,7 +103,7 @@ ResultType Script::DoRunAs(char *aCommandLine, char *aWorkingDir, bool aDisplayE
 
 
 
-VarSizeType BIV_IPAddress(char *aBuf, char *aVarName)
+VarSizeType BIV_IPAddress(LPTSTR aBuf, LPTSTR aVarName)
 {
 	// aaa.bbb.ccc.ddd = 15, but allow room for larger IP's in the future.
 	#define IP_ADDRESS_SIZE 32 // The maximum size of any of the strings we return, including terminator.
@@ -113,7 +118,7 @@ VarSizeType BIV_IPAddress(char *aBuf, char *aVarName)
 	}
 
 	char host_name[256];
-	gethostname(host_name, sizeof(host_name));
+	gethostname(host_name, _countof(host_name));
 	HOSTENT *lpHost = gethostbyname(host_name);
 
 	// au3: How many adapters have we?
@@ -123,25 +128,25 @@ VarSizeType BIV_IPAddress(char *aBuf, char *aVarName)
 
 	int adapter_index = aVarName[11] - '1'; // A_IPAddress[1-4]
 	if (adapter_index >= adapter_count)
-		strcpy(aBuf, "0.0.0.0");
+		_tcscpy(aBuf, _T("0.0.0.0"));
 	else
 	{
 		IN_ADDR inaddr;
 		memcpy(&inaddr, lpHost->h_addr_list[adapter_index], 4);
-		strlcpy(aBuf, (char *)inet_ntoa(inaddr), IP_ADDRESS_SIZE);
+		tcslcpy(aBuf, CStringTCharFromCharIfNeeded(inet_ntoa(inaddr)), IP_ADDRESS_SIZE);
 	}
 
 	WSACleanup();
-	return (VarSizeType)strlen(aBuf);
+	return (VarSizeType)_tcslen(aBuf);
 }
 
 
 
-VarSizeType BIV_IsAdmin(char *aBuf, char *aVarName)
+VarSizeType BIV_IsAdmin(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (!aBuf)
 		return 1;  // The length of the string "1" or "0".
-	char result = '0';  // Default.
+	TCHAR result = '0';  // Default.
 	if (g_os.IsWin9x())
 		result = '1';
 	else
@@ -171,9 +176,9 @@ VarSizeType BIV_IsAdmin(char *aBuf, char *aVarName)
 
 
 
-ResultType Line::PixelGetColor(int aX, int aY, char *aOptions)
+ResultType Line::PixelGetColor(int aX, int aY, LPTSTR aOptions)
 {
-	if (strcasestr(aOptions, "Slow")) // New mode for v1.0.43.10.  Takes precedence over Alt mode.
+	if (tcscasestr(aOptions, _T("Slow"))) // New mode for v1.0.43.10.  Takes precedence over Alt mode.
 		return PixelSearch(aX, aY, aX, aY, 0, 0, aOptions, true); // It takes care of setting ErrorLevel and the output-var.
 	Var &output_var = *OUTPUT_VAR;
 	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
@@ -189,8 +194,8 @@ ResultType Line::PixelGetColor(int aX, int aY, char *aOptions)
 		aY += rect.top;
 	}
 
-	bool use_alt_mode = strcasestr(aOptions, "Alt") != NULL; // New mode for v1.0.43.10: Two users reported that CreateDC works better in certain windows such as SciTE, at least one some systems.
-	HDC hdc = use_alt_mode ? CreateDC("DISPLAY", NULL, NULL, NULL) : GetDC(NULL);
+	bool use_alt_mode = tcscasestr(aOptions, _T("Alt")) != NULL; // New mode for v1.0.43.10: Two users reported that CreateDC works better in certain windows such as SciTE, at least one some systems.
+	HDC hdc = use_alt_mode ? CreateDC(_T("DISPLAY"), NULL, NULL, NULL) : GetDC(NULL);
 	if (!hdc)
 		return OK;  // Let ErrorLevel tell the story.
 
@@ -205,15 +210,15 @@ ResultType Line::PixelGetColor(int aX, int aY, char *aOptions)
 	else
 		ReleaseDC(NULL, hdc);
 
-	char buf[32];
-	sprintf(buf, "0x%06X", strcasestr(aOptions, "RGB") ? bgr_to_rgb(color) : color);
+	TCHAR buf[32];
+	_stprintf(buf, _T("0x%06X"), tcscasestr(aOptions, _T("RGB")) ? bgr_to_rgb(color) : color);
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 	return output_var.Assign(buf);
 }
 
 
 
-ResultType Line::SplashTextOn(int aWidth, int aHeight, char *aTitle, char *aText)
+ResultType Line::SplashTextOn(int aWidth, int aHeight, LPTSTR aTitle, LPTSTR aText)
 {
 	// Add some caption and frame size to window:
 	aWidth += GetSystemMetrics(SM_CXFIXEDFRAME) * 2;
@@ -246,16 +251,24 @@ ResultType Line::SplashTextOn(int aWidth, int aHeight, char *aTitle, char *aText
 	GetClientRect(g_hWndSplash, &rect);	// get the client size
 
 	// CREATE static label full size of client area.
-	HWND static_win = CreateWindowEx(0, "static", aText, WS_CHILD|WS_VISIBLE|SS_CENTER
+	HWND static_win = CreateWindowEx(0, _T("static"), aText, WS_CHILD|WS_VISIBLE|SS_CENTER
 		, 0, 0, rect.right - rect.left, rect.bottom - rect.top, g_hWndSplash, (HMENU)NULL, g_hInstance, NULL);
 
 	if (!g_hFontSplash)
 	{
-		char default_font_name[65];
+		TCHAR default_font_name[65];
 		int CyPixels, nSize = 12, nWeight = FW_NORMAL;
-		HDC hdc = CreateDC("DISPLAY", NULL, NULL, NULL);
-		SelectObject(hdc, (HFONT)GetStockObject(DEFAULT_GUI_FONT));		// Get Default Font Name
-		GetTextFace(hdc, sizeof(default_font_name) - 1, default_font_name); // -1 just in case, like AutoIt3.
+		HDC hdc = CreateDC(_T("DISPLAY"), NULL, NULL, NULL);
+		if (FontExist(hdc, _T("Segoe UI"))) // Use a more appealing font under Windows Vista or later (Segoe UI).
+		{
+			nSize = 11;
+			_tcscpy(default_font_name, _T("Segoe UI"));
+		}
+		else
+		{
+			SelectObject(hdc, (HFONT)GetStockObject(DEFAULT_GUI_FONT));		// Get Default Font Name
+			GetTextFace(hdc, _countof(default_font_name) - 1, default_font_name); // -1 just in case, like AutoIt3.
+		}
 		CyPixels = GetDeviceCaps(hdc, LOGPIXELSY);			// For Some Font Size Math
 		DeleteDC(hdc);
 		//strcpy(default_font_name,vParams[7].szValue());	// Font Name
@@ -286,13 +299,13 @@ ResultType Line::SplashTextOn(int aWidth, int aHeight, char *aTitle, char *aText
 
 
 
-ResultType Line::WinMenuSelectItem(char *aTitle, char *aText, char *aMenu1, char *aMenu2
-	, char *aMenu3, char *aMenu4, char *aMenu5, char *aMenu6, char *aMenu7
-	, char *aExcludeTitle, char *aExcludeText)
+ResultType Line::WinMenuSelectItem(LPTSTR aTitle, LPTSTR aText, LPTSTR aMenu1, LPTSTR aMenu2
+	, LPTSTR aMenu3, LPTSTR aMenu4, LPTSTR aMenu5, LPTSTR aMenu6, LPTSTR aMenu7
+	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 {
 	// Set up a temporary array make it easier to traverse nested menus & submenus
 	// in a loop.  Also add a NULL at the end to simplify the loop a little:
-	char *menu_param[] = {aMenu1, aMenu2, aMenu3, aMenu4, aMenu5, aMenu6, aMenu7, NULL};
+	LPTSTR menu_param[] = {aMenu1, aMenu2, aMenu3, aMenu4, aMenu5, aMenu6, aMenu7, NULL};
 
 	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
 	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
@@ -319,11 +332,11 @@ else\
 }
 
 	UINT menu_id = MENU_ITEM_IS_SUBMENU;
-	char menu_text[1024];
+	TCHAR menu_text[1024];
 	bool match_found;
 	size_t this_menu_param_length, menu_text_length;
 	int pos, target_menu_pos;
-	char *this_menu_param;
+	LPTSTR this_menu_param;
 
 	for (int i = 0; ; ++i)
 	{
@@ -333,7 +346,7 @@ else\
 		if (!hMenu)  // The nesting of submenus ended prior to the end of the list of menu search terms.
 			return OK;  // Let ErrorLevel tell the story.
 
-		this_menu_param_length = strlen(this_menu_param);
+		this_menu_param_length = _tcslen(this_menu_param);
 		target_menu_pos = (this_menu_param[this_menu_param_length - 1] == '&') ? ATOI(this_menu_param) - 1 : -1;
 		if (target_menu_pos > -1)
 		{
@@ -345,7 +358,7 @@ else\
 		{
 			for (match_found = false, pos = 0; pos < menu_item_count; ++pos)
 			{
-				menu_text_length = GetMenuString(hMenu, pos, menu_text, sizeof(menu_text) - 1, MF_BYPOSITION);
+				menu_text_length = GetMenuString(hMenu, pos, menu_text, _countof(menu_text) - 1, MF_BYPOSITION);
 				// v1.0.43.03: It's debatable, but it seems best to support locale's case insensitivity for
 				// menu items, since menu names tend to adapt to the user's locale.  By contrast, things
 				// like process names (in the Process command) do not tend to change, so it seems best to
@@ -359,8 +372,8 @@ else\
 				{
 					// Try again to find a match, this time without the ampersands used to indicate
 					// a menu item's shortcut key:
-					StrReplace(menu_text, "&", "", SCS_SENSITIVE);
-					menu_text_length = strlen(menu_text);
+					StrReplace(menu_text, _T("&"), _T(""), SCS_SENSITIVE);
+					menu_text_length = _tcslen(menu_text);
 					match_found = !lstrcmpni(menu_text  // This call is basically a strnicmp() that obeys locale.
 						, menu_text_length > this_menu_param_length ? this_menu_param_length : menu_text_length
 						, this_menu_param, this_menu_param_length);
@@ -390,8 +403,8 @@ else\
 
 
 
-ResultType Line::Control(char *aCmd, char *aValue, char *aControl, char *aTitle, char *aText
-	, char *aExcludeTitle, char *aExcludeText)
+ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
+	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 // ATTACH_THREAD_INPUT has been tested to see if they help any of these work with controls
 // in MSIE (whose Internet Explorer_TridentCmboBx2 does not respond to "Control Choose" but
 // does respond to "Control Focus").  But it didn't help.
@@ -419,7 +432,7 @@ ResultType Line::Control(char *aCmd, char *aValue, char *aControl, char *aTitle,
 	LPARAM lparam;
 	vk_type vk;
 	int key_count;
-	char temp_buf[32];
+	TCHAR temp_buf[32];
 
 	switch(control_cmd)
 	{
@@ -470,7 +483,7 @@ ResultType Line::Control(char *aCmd, char *aValue, char *aControl, char *aTitle,
 		int style_index = (control_cmd == CONTROL_CMD_STYLE) ? GWL_STYLE : GWL_EXSTYLE;
 		DWORD new_style, orig_style = GetWindowLong(control_window, style_index);
 		// +/-/^ are used instead of |&^ because the latter is confusing, namely that & really means &=~style, etc.
-		if (!strchr("+-^", *aValue))  // | and & are used instead of +/- to allow +/- to have their native function.
+		if (!_tcschr(_T("+-^"), *aValue))  // | and & are used instead of +/- to allow +/- to have their native function.
 			new_style = ATOU(aValue); // No prefix, so this new style will entirely replace the current style.
 		else
 		{
@@ -529,12 +542,12 @@ ResultType Line::Control(char *aCmd, char *aValue, char *aControl, char *aTitle,
 	case CONTROL_CMD_ADD:
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
-			GetClassName(control_window, temp_buf, sizeof(temp_buf));
+			GetClassName(control_window, temp_buf, _countof(temp_buf));
 			aControl = temp_buf;
 		}
-		if (strcasestr(aControl, "Combo")) // v1.0.42: Changed to strcasestr vs. !strnicmp for TListBox/TComboBox.
+		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. !strnicmp for TListBox/TComboBox.
 			msg = CB_ADDSTRING;
-		else if (strcasestr(aControl, "List"))
+		else if (tcscasestr(aControl, _T("List")))
 			msg = LB_ADDSTRING;
 		else
 			return OK;  // Must be ComboBox or ListBox.  Let ErrorLevel tell the story.
@@ -553,12 +566,12 @@ ResultType Line::Control(char *aCmd, char *aValue, char *aControl, char *aTitle,
 			return OK;
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
-			GetClassName(control_window, temp_buf, sizeof(temp_buf));
+			GetClassName(control_window, temp_buf, _countof(temp_buf));
 			aControl = temp_buf;
 		}
-		if (strcasestr(aControl, "Combo")) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
+		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 			msg = CB_DELETESTRING;
-		else if (strcasestr(aControl, "List"))
+		else if (tcscasestr(aControl, _T("List")))
 			msg = LB_DELETESTRING;
 		else
 			return OK;  // Must be ComboBox or ListBox.  Let ErrorLevel tell the story.
@@ -576,16 +589,16 @@ ResultType Line::Control(char *aCmd, char *aValue, char *aControl, char *aTitle,
 			return OK;  // Let ErrorLevel tell the story.
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
-			GetClassName(control_window, temp_buf, sizeof(temp_buf));
+			GetClassName(control_window, temp_buf, _countof(temp_buf));
 			aControl = temp_buf;
 		}
-		if (strcasestr(aControl, "Combo")) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
+		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 		{
 			msg = CB_SETCURSEL;
 			x_msg = CBN_SELCHANGE;
 			y_msg = CBN_SELENDOK;
 		}
-		else if (strcasestr(aControl, "List"))
+		else if (tcscasestr(aControl, _T("List")))
 		{
 			if (GetWindowLong(control_window, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
 				msg = LB_SETSEL;
@@ -622,16 +635,16 @@ ResultType Line::Control(char *aCmd, char *aValue, char *aControl, char *aTitle,
 	case CONTROL_CMD_CHOOSESTRING:
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
-			GetClassName(control_window, temp_buf, sizeof(temp_buf));
+			GetClassName(control_window, temp_buf, _countof(temp_buf));
 			aControl = temp_buf;
 		}
-		if (strcasestr(aControl, "Combo")) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
+		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 		{
 			msg = CB_SELECTSTRING;
 			x_msg = CBN_SELCHANGE;
 			y_msg = CBN_SELENDOK;
 		}
-		else if (strcasestr(aControl, "List"))
+		else if (tcscasestr(aControl, _T("List")))
 		{
 			if (GetWindowLong(control_window, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
 				msg = LB_FINDSTRING;
@@ -681,8 +694,8 @@ ResultType Line::Control(char *aCmd, char *aValue, char *aControl, char *aTitle,
 
 
 
-ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTitle, char *aText
-	, char *aExcludeTitle, char *aExcludeText)
+ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
+	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 {
 	Var &output_var = *OUTPUT_VAR;
 	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);  // Set default since there are many points of return.
@@ -703,22 +716,22 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 	DWORD dwResult, index, length, item_length, start, end, u, item_count;
 	UINT msg, x_msg, y_msg;
 	int control_index;
-	char *cp, *dyn_buf, temp_buf[32];
+	TCHAR *cp, *dyn_buf, temp_buf[32];
 
 	switch(control_cmd)
 	{
 	case CONTROLGET_CMD_CHECKED: //Must be a Button
 		if (!SendMessageTimeout(control_window, BM_GETCHECK, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			return output_var.Assign();
-		output_var.Assign(dwResult == BST_CHECKED ? "1" : "0");
+		output_var.Assign(dwResult == BST_CHECKED ? _T("1") : _T("0"));
 		break;
 
 	case CONTROLGET_CMD_ENABLED:
-		output_var.Assign(IsWindowEnabled(control_window) ? "1" : "0");
+		output_var.Assign(IsWindowEnabled(control_window) ? _T("1") : _T("0"));
 		break;
 
 	case CONTROLGET_CMD_VISIBLE:
-		output_var.Assign(IsWindowVisible(control_window) ? "1" : "0");
+		output_var.Assign(IsWindowVisible(control_window) ? _T("1") : _T("0"));
 		break;
 
 	case CONTROLGET_CMD_TAB: // must be a Tab Control
@@ -730,12 +743,12 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 	case CONTROLGET_CMD_FINDSTRING:
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
-			GetClassName(control_window, temp_buf, sizeof(temp_buf));
+			GetClassName(control_window, temp_buf, _countof(temp_buf));
 			aControl = temp_buf;
 		}
-		if (strcasestr(aControl, "Combo")) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
+		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 			msg = CB_FINDSTRINGEXACT;
-		else if (strcasestr(aControl, "List"))
+		else if (tcscasestr(aControl, _T("List")))
 			msg = LB_FINDSTRINGEXACT;
 		else // Must be ComboBox or ListBox
 			return output_var.Assign();  // Let ErrorLevel tell the story.
@@ -748,16 +761,16 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 	case CONTROLGET_CMD_CHOICE:
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
-			GetClassName(control_window, temp_buf, sizeof(temp_buf));
+			GetClassName(control_window, temp_buf, _countof(temp_buf));
 			aControl = temp_buf;
 		}
-		if (strcasestr(aControl, "Combo")) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
+		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 		{
 			msg = CB_GETCURSEL;
 			x_msg = CB_GETLBTEXTLEN;
 			y_msg = CB_GETLBTEXT;
 		}
-		else if (strcasestr(aControl, "List"))
+		else if (tcscasestr(aControl, _T("List")))
 		{
 			msg = LB_GETCURSEL;
 			x_msg = LB_GETTEXTLEN;
@@ -775,7 +788,7 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 		// other precedents where a variable is sized to something larger than it winds up carrying.
 		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 		// this call will set up the clipboard for writing:
-		if (output_var.Assign(NULL, (VarSizeType)length) != OK) // It already displayed the error.
+		if (output_var.AssignString(NULL, (VarSizeType)length) != OK) // It already displayed the error.
 			return FAIL;
 		if (!SendMessageTimeout(control_window, y_msg, (WPARAM)index, (LPARAM)output_var.Contents()
 			, SMTO_ABORTIFHUNG, 2000, &length)
@@ -785,28 +798,29 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 			return output_var.Assign(); // Let ErrorLevel tell the story.
 		}
 		output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-		output_var.Length() = length;  // Update to actual vs. estimated length.
+		output_var.SetCharLength(length);  // Update to actual vs. estimated length.
 		break;
 
 	case CONTROLGET_CMD_LIST:
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
-			GetClassName(control_window, temp_buf, sizeof(temp_buf));
+			GetClassName(control_window, temp_buf, _countof(temp_buf));
 			aControl = temp_buf;
 		}
-		if (!strnicmp(aControl, "SysListView32", 13)) // Tried strcasestr(aControl, "ListView") to get it to work with IZArc's Delphi TListView1, but none of the modes or options worked.
+		//if (!_tcsnicmp(aControl, _T("SysListView32"), 13)) // Tried strcasestr(aControl, "ListView") to get it to work with IZArc's Delphi TListView1, but none of the modes or options worked.
+		if (tcscasestr(aControl, _T("SysListView32"))) // Some users said this works with "WindowsForms10.SysListView32"
 			return ControlGetListView(output_var, control_window, aValue); // It will also set ErrorLevel to "success" if successful.
 		// This is done here as the special LIST sub-command rather than just being built into
 		// ControlGetText because ControlGetText already has a function for ComboBoxes: it fetches
 		// the current selection.  Although ListBox does not have such a function, it seem best
 		// to consolidate both methods here.
-		if (strcasestr(aControl, "Combo")) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
+		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 		{
 			msg = CB_GETCOUNT;
 			x_msg = CB_GETLBTEXTLEN;
 			y_msg = CB_GETLBTEXT;
 		}
-		else if (strcasestr(aControl, "List"))
+		else if (tcscasestr(aControl, _T("List")))
 		{
 			msg = LB_GETCOUNT;
 			x_msg = LB_GETTEXTLEN;
@@ -831,7 +845,7 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 		// other precedents where a variable is sized to something larger than it winds up carrying.
 		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 		// this call will set up the clipboard for writing:
-		if (output_var.Assign(NULL, (VarSizeType)length, true, true) != OK)
+		if (output_var.AssignString(NULL, (VarSizeType)length, true, true) != OK)
 			return FAIL;  // It already displayed the error.
 		for (cp = output_var.Contents(), length = item_count - 1, u = 0; u < item_count; ++u)
 		{
@@ -848,7 +862,7 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 			// the listbox/combobox contains any real pipes.
 		}
 		output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-		output_var.Length() = (VarSizeType)length;  // Update it to the actual length, which can vary from the estimate.
+		output_var.SetCharLength(length);  // Update it to the actual length, which can vary from the estimate.
 		break;
 
 	case CONTROLGET_CMD_LINECOUNT:  //Must be an Edit
@@ -897,8 +911,9 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 		control_index = ATOI(aValue) - 1;
 		if (control_index < 0)
 			return output_var.Assign();  // Let ErrorLevel tell the story.
-		dyn_buf = (char *)_alloca(32768); // 32768 is the size Au3 uses for GETLINE and such.
-		*(LPINT)dyn_buf = 32768; // EM_GETLINE requires first word of string to be set to its size.
+		// jackieku: 32768 * sizeof(wchar_t) = 65536, which can not be stored in a unsigned 16bit integer.
+		dyn_buf = (LPTSTR)talloca(32767); // 32768 is the size Au3 uses for GETLINE and such.
+		*(LPWORD)dyn_buf = 32767; // EM_GETLINE requires first word of string to be set to its size.
 		if (   !SendMessageTimeout(control_window, EM_GETLINE, (WPARAM)control_index, (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 2000, &dwResult)
 			|| !dwResult   ) // due to the specified line number being greater than the number of lines in the edit control.
 			return output_var.Assign();
@@ -925,7 +940,7 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 		// have to be sized much larger than it would need to be:
 		if (   !SendMessageTimeout(control_window, WM_GETTEXTLENGTH, 0, 0, SMTO_ABORTIFHUNG, 2000, &length)
 			|| !length  // Since the above didn't return for start == end, this is an error because we have a selection of non-zero length, but no text to go with it!
-			|| !(dyn_buf = (char *)malloc(length + 1))   ) // Relies on short-circuit boolean order.
+			|| !(dyn_buf = tmalloc(length + 1))   ) // Relies on short-circuit boolean order.
 			return output_var.Assign();
 		if (   !SendMessageTimeout(control_window, WM_GETTEXT, (WPARAM)(length + 1), (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 2000, &length)
 			|| !length || end > length   )
@@ -944,13 +959,13 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 
 	case CONTROLGET_CMD_STYLE:
 		// Seems best to always format as hex, since it has more human-readable meaning then:
-		sprintf(temp_buf, "0x%08X", GetWindowLong(control_window, GWL_STYLE));
+		_stprintf(temp_buf, _T("0x%08X"), GetWindowLong(control_window, GWL_STYLE));
 		output_var.Assign(temp_buf);
 		break;
 
 	case CONTROLGET_CMD_EXSTYLE:
 		// Seems best to always format as hex, since it has more human-readable meaning then:
-		sprintf(temp_buf, "0x%08X", GetWindowLong(control_window, GWL_EXSTYLE));
+		_stprintf(temp_buf, _T("0x%08X"), GetWindowLong(control_window, GWL_EXSTYLE));
 		output_var.Assign(temp_buf);
 		break;
 
@@ -968,10 +983,10 @@ ResultType Line::ControlGet(char *aCmd, char *aValue, char *aControl, char *aTit
 
 
 
-ResultType Line::URLDownloadToFile(char *aURL, char *aFilespec)
+ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 {
 	// Check that we have IE3 and access to wininet.dll
-	HINSTANCE hinstLib = LoadLibrary("wininet");
+	HINSTANCE hinstLib = LoadLibrary(_T("wininet"));
 	if (!hinstLib)
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 
@@ -987,10 +1002,10 @@ ResultType Line::URLDownloadToFile(char *aURL, char *aFilespec)
 
 	// Get the address of all the functions we require.  It's done this way in case the system
 	// lacks MSIE v3.0+, in which case the app would probably refuse to launch at all:
- 	MyInternetOpen lpfnInternetOpen = (MyInternetOpen)GetProcAddress(hinstLib, "InternetOpenA");
-	MyInternetOpenUrl lpfnInternetOpenUrl = (MyInternetOpenUrl)GetProcAddress(hinstLib, "InternetOpenUrlA");
+ 	MyInternetOpen lpfnInternetOpen = (MyInternetOpen)GetProcAddress(hinstLib, "InternetOpen" WINAPI_SUFFIX);
+	MyInternetOpenUrl lpfnInternetOpenUrl = (MyInternetOpenUrl)GetProcAddress(hinstLib, "InternetOpenUrl" WINAPI_SUFFIX);
 	MyInternetCloseHandle lpfnInternetCloseHandle = (MyInternetCloseHandle)GetProcAddress(hinstLib, "InternetCloseHandle");
-	MyInternetReadFileEx lpfnInternetReadFileEx = (MyInternetReadFileEx)GetProcAddress(hinstLib, "InternetReadFileExA");
+	MyInternetReadFileEx lpfnInternetReadFileEx = (MyInternetReadFileEx)GetProcAddress(hinstLib, "InternetReadFileEx" WINAPI_SUFFIX);
 	MyInternetReadFile lpfnInternetReadFile = (MyInternetReadFile)GetProcAddress(hinstLib, "InternetReadFile"); // Called unconditionally to reduce code size and because the time required is likely insignificant compared to network latency.
 	if (!(lpfnInternetOpen && lpfnInternetOpenUrl && lpfnInternetCloseHandle && lpfnInternetReadFileEx && lpfnInternetReadFile))
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
@@ -1009,8 +1024,8 @@ ResultType Line::URLDownloadToFile(char *aURL, char *aFilespec)
 	if (*aURL == '*') // v1.0.44.07: Provide an option to override flags_for_open_url.
 	{
 		flags_for_open_url = ATOU(++aURL);
-		char *cp;
-		if (cp = StrChrAny(aURL, " \t")) // Find first space or tab.
+		LPTSTR cp;
+		if (cp = StrChrAny(aURL, _T(" \t"))) // Find first space or tab.
 			aURL = omit_leading_whitespace(cp);
 	}
 
@@ -1018,7 +1033,7 @@ ResultType Line::URLDownloadToFile(char *aURL, char *aFilespec)
 	// requests that lack a user-agent.  Furthermore, it's more professional to have one, in which case it
 	// should probably be kept as simple and unchanging as possible.  Using something like the script's name
 	// as the user agent (even if documented) seems like a bad idea because it might contain personal/sensitive info.
-	HINTERNET hInet = lpfnInternetOpen("AutoHotkey", INTERNET_OPEN_TYPE_PRECONFIG_WITH_NO_AUTOPROXY, NULL, NULL, 0);
+	HINTERNET hInet = lpfnInternetOpen(_T("AutoHotkey"), INTERNET_OPEN_TYPE_PRECONFIG_WITH_NO_AUTOPROXY, NULL, NULL, 0);
 	if (!hInet)
 	{
 		FreeLibrary(hinstLib);
@@ -1035,7 +1050,7 @@ ResultType Line::URLDownloadToFile(char *aURL, char *aFilespec)
 	}
 
 	// Open our output file
-	FILE *fptr = fopen(aFilespec, "wb");	// Open in binary write/destroy mode
+	FILE *fptr = _tfopen(aFilespec, _T("wb"));	// Open in binary write/destroy mode
 	if (!fptr)
 	{
 		lpfnInternetCloseHandle(hFile);
@@ -1113,7 +1128,7 @@ int CALLBACK FileSelectFolderCallback(HWND hwnd, UINT uMsg, LPARAM lParam, LPARA
 
 
 
-ResultType Line::FileSelectFolder(char *aRootDir, char *aOptions, char *aGreeting)
+ResultType Line::FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGreeting)
 // Since other script threads can interrupt this command while it's running, it's important that
 // the command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
 // This is because an interrupting thread usually changes the values to something inappropriate for this thread.
@@ -1126,7 +1141,7 @@ ResultType Line::FileSelectFolder(char *aRootDir, char *aOptions, char *aGreetin
 	if (g_nFolderDialogs >= MAX_FOLDERDIALOGS)
 	{
 		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
-		MsgBox("The maximum number of Folder Dialogs has been reached." ERR_ABORT);
+		MsgBox(_T("The maximum number of Folder Dialogs has been reached.") ERR_ABORT);
 		return FAIL;
 	}
 
@@ -1136,10 +1151,10 @@ ResultType Line::FileSelectFolder(char *aRootDir, char *aOptions, char *aGreetin
 
 	// v1.0.36.03: Support initial folder, which is different than the root folder because the root only
 	// controls the origin point (above which the control cannot navigate).
-	char *initial_folder;
-	char root_dir[MAX_PATH*2 + 5];  // Up to two paths might be present inside, including an asterisk and spaces between them.
-	strlcpy(root_dir, aRootDir, sizeof(root_dir)); // Make a modifiable copy.
-	if (initial_folder = strchr(root_dir, '*'))
+	LPTSTR initial_folder;
+	TCHAR root_dir[MAX_PATH*2 + 5];  // Up to two paths might be present inside, including an asterisk and spaces between them.
+	tcslcpy(root_dir, aRootDir, _countof(root_dir)); // Make a modifiable copy.
+	if (initial_folder = _tcschr(root_dir, '*'))
 	{
 		*initial_folder = '\0'; // Terminate so that root_dir becomes an isolated string.
 		// Must eliminate the trailing whitespace or it won't work.  However, only up to one space or tab
@@ -1172,9 +1187,13 @@ ResultType Line::FileSelectFolder(char *aRootDir, char *aOptions, char *aGreetin
 			LPITEMIDLIST pIdl = NULL;
 			ULONG        chEaten;
 			ULONG        dwAttributes;
+#ifdef UNICODE
+			pDF->ParseDisplayName(NULL, NULL, root_dir, &chEaten, &pIdl, &dwAttributes);
+#else
 			OLECHAR olePath[MAX_PATH];			// wide-char version of path name
 			ToWideChar(root_dir, olePath, MAX_PATH); // Dest. size is in wchars, not bytes.
 			pDF->ParseDisplayName(NULL, NULL, olePath, &chEaten, &pIdl, &dwAttributes);
+#endif
 			pDF->Release();
 			bi.pidlRoot = pIdl;
 		}
@@ -1185,11 +1204,11 @@ ResultType Line::FileSelectFolder(char *aRootDir, char *aOptions, char *aGreetin
 	int iImage = 0;
 	bi.iImage = iImage;
 	bi.hwndOwner = THREAD_DIALOG_OWNER; // Can be NULL, which is used rather than main window since no need to have main window forced into the background by this.
-	char greeting[1024];
+	TCHAR greeting[1024];
 	if (aGreeting && *aGreeting)
-		strlcpy(greeting, aGreeting, sizeof(greeting));
+		tcslcpy(greeting, aGreeting, _countof(greeting));
 	else
-		snprintf(greeting, sizeof(greeting), "Select Folder - %s", g_script.mFileName);
+		sntprintf(greeting, _countof(greeting), _T("Select Folder - %s"), g_script.mFileName);
 	bi.lpszTitle = greeting;
 
 	DWORD options = *aOptions ? ATOI(aOptions) : FSF_ALLOW_CREATE;
@@ -1198,7 +1217,7 @@ ResultType Line::FileSelectFolder(char *aRootDir, char *aOptions, char *aGreetin
 		| ((options & FSF_ALLOW_CREATE)   ? 0           : BIF_NONEWFOLDERBUTTON)
 		| ((options & FSF_EDITBOX)        ? BIF_EDITBOX : 0);
 
-	char Result[2048];
+	TCHAR Result[2048];
 	bi.pszDisplayName = Result;  // This will hold the user's choice.
 
 	// At this point, we know a dialog will be displayed.  See macro's comments for details:
@@ -1224,7 +1243,7 @@ ResultType Line::FileSelectFolder(char *aRootDir, char *aOptions, char *aGreetin
 
 
 
-ResultType Line::FileGetShortcut(char *aShortcutFile) // Credited to Holger <Holger.Kotsch at GMX de>.
+ResultType Line::FileGetShortcut(LPTSTR aShortcutFile) // Credited to Holger <Holger.Kotsch at GMX de>.
 {
 	Var *output_var_target = ARGVAR2; // These might be omitted in the parameter list, so it's okay if 
 	Var *output_var_dir = ARGVAR3;    // they resolve to NULL.  Also, load-time validation has ensured
@@ -1257,11 +1276,15 @@ ResultType Line::FileGetShortcut(char *aShortcutFile) // Credited to Holger <Hol
 		IPersistFile *ppf;
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (LPVOID *)&ppf)))
 		{
+#ifdef UNICODE
+			if (SUCCEEDED(ppf->Load(aShortcutFile, 0)))
+#else
 			WCHAR wsz[MAX_PATH+1]; // +1 hasn't been explained, but is retained in case it's needed.
 			ToWideChar(aShortcutFile, wsz, MAX_PATH+1); // Dest. size is in wchars, not bytes.
 			if (SUCCEEDED(ppf->Load((const WCHAR*)wsz, 0)))
+#endif
 			{
-				char buf[MAX_PATH+1];
+				TCHAR buf[MAX_PATH+1];
 				int icon_index, show_cmd;
 
 				if (output_var_target)
@@ -1319,8 +1342,8 @@ ResultType Line::FileGetShortcut(char *aShortcutFile) // Credited to Holger <Hol
 
 
 
-ResultType Line::FileCreateShortcut(char *aTargetFile, char *aShortcutFile, char *aWorkingDir, char *aArgs
-	, char *aDescription, char *aIconFile, char *aHotkey, char *aIconNumber, char *aRunState)
+ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
+	, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState)
 {
 	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
 	CoInitialize(NULL);
@@ -1353,9 +1376,13 @@ ResultType Line::FileCreateShortcut(char *aTargetFile, char *aShortcutFile, char
 		IPersistFile *ppf;
 		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile,(LPVOID *)&ppf)))
 		{
+#ifndef UNICODE
 			WCHAR wsz[MAX_PATH];
 			ToWideChar(aShortcutFile, wsz, MAX_PATH); // Dest. size is in wchars, not bytes.
 			if (SUCCEEDED(ppf->Save((LPCWSTR)wsz, TRUE)))
+#else
+			if (SUCCEEDED(ppf->Save(aShortcutFile, TRUE)))
+#endif
 				g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 			ppf->Release();
 		}
@@ -1368,19 +1395,19 @@ ResultType Line::FileCreateShortcut(char *aTargetFile, char *aShortcutFile, char
 
 
 
-ResultType Line::FileRecycle(char *aFilePattern)
+ResultType Line::FileRecycle(LPTSTR aFilePattern)
 {
 	if (!aFilePattern || !*aFilePattern)
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);  // Since this is probably not what the user intended.
 
 	SHFILEOPSTRUCT FileOp;
-	char szFileTemp[_MAX_PATH+2];
+	TCHAR szFileTemp[_MAX_PATH+2];
 
 	// au3: Get the fullpathname - required for UNDO to work
 	Util_GetFullPathName(aFilePattern, szFileTemp);
 
 	// au3: We must also make it a double nulled string *sigh*
-	szFileTemp[strlen(szFileTemp)+1] = '\0';	
+	szFileTemp[_tcslen(szFileTemp)+1] = '\0';
 
 	// au3: set to known values - Corrects crash
 	FileOp.hNameMappings = NULL;
@@ -1399,22 +1426,22 @@ ResultType Line::FileRecycle(char *aFilePattern)
 
 
 
-ResultType Line::FileRecycleEmpty(char *aDriveLetter)
+ResultType Line::FileRecycleEmpty(LPTSTR aDriveLetter)
 {
 	// Not using GetModuleHandle() because there is doubt that SHELL32 (unlike USER32/KERNEL32), is
 	// always automatically present in every process (e.g. if shell is something other than Explorer):
-	HINSTANCE hinstLib = LoadLibrary("shell32");
+	HINSTANCE hinstLib = LoadLibrary(_T("shell32"));
 	if (!hinstLib)
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 	// au3: Get the address of all the functions we require
 	typedef HRESULT (WINAPI *MySHEmptyRecycleBin)(HWND, LPCTSTR, DWORD);
- 	MySHEmptyRecycleBin lpfnEmpty = (MySHEmptyRecycleBin)GetProcAddress(hinstLib, "SHEmptyRecycleBinA");
+ 	MySHEmptyRecycleBin lpfnEmpty = (MySHEmptyRecycleBin)GetProcAddress(hinstLib, "SHEmptyRecycleBin" WINAPI_SUFFIX);
 	if (!lpfnEmpty)
 	{
 		FreeLibrary(hinstLib);
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 	}
-	const char *szPath = *aDriveLetter ? aDriveLetter : NULL;
+	LPCTSTR szPath = *aDriveLetter ? aDriveLetter : NULL;
 	if (lpfnEmpty(NULL, szPath, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND) != S_OK)
 	{
 		FreeLibrary(hinstLib);
@@ -1426,7 +1453,7 @@ ResultType Line::FileRecycleEmpty(char *aDriveLetter)
 
 
 
-ResultType Line::FileGetVersion(char *aFilespec)
+ResultType Line::FileGetVersion(LPTSTR aFilespec)
 {
 	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default
 	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.
@@ -1441,12 +1468,12 @@ ResultType Line::FileGetVersion(char *aFilespec)
 	BYTE *pInfo = (BYTE*)malloc(dwSize);  // Allocate the size retrieved by the above.
 
 	// Read the version resource
-	GetFileVersionInfo((LPSTR)aFilespec, 0, dwSize, (LPVOID)pInfo);
+	GetFileVersionInfo(aFilespec, 0, dwSize, (LPVOID)pInfo);
 
 	// Locate the fixed information
 	VS_FIXEDFILEINFO *pFFI;
 	UINT uSize;
-	if (!VerQueryValue(pInfo, "\\", (LPVOID *)&pFFI, &uSize))
+	if (!VerQueryValue(pInfo, _T("\\"), (LPVOID *)&pFFI, &uSize))
 	{
 		free(pInfo);
 		return OK;  // Let ErrorLevel tell the story.
@@ -1455,8 +1482,8 @@ ResultType Line::FileGetVersion(char *aFilespec)
 	// extract the fields you want from pFFI
 	UINT iFileMS = (UINT)pFFI->dwFileVersionMS;
 	UINT iFileLS = (UINT)pFFI->dwFileVersionLS;
-	char version_string[128];  // AutoIt3: 43+1 is the maximum size, but leave a little room to increase confidence.
-	snprintf(version_string, sizeof(version_string), "%u.%u.%u.%u"
+	TCHAR version_string[128];  // AutoIt3: 43+1 is the maximum size, but leave a little room to increase confidence.
+	sntprintf(version_string, _countof(version_string), _T("%u.%u.%u.%u")
 		, (iFileMS >> 16), (iFileMS & 0xFFFF), (iFileLS >> 16), (iFileLS & 0xFFFF));
 
 	free(pInfo);
@@ -1467,11 +1494,11 @@ ResultType Line::FileGetVersion(char *aFilespec)
 
 
 
-bool Line::Util_CopyDir(const char *szInputSource, const char *szInputDest, bool bOverwrite)
+bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite)
 {
 	// Get the fullpathnames and strip trailing \s
-	char szSource[_MAX_PATH+2];
-	char szDest[_MAX_PATH+2];
+	TCHAR szSource[_MAX_PATH+2];
+	TCHAR szDest[_MAX_PATH+2];
 	Util_GetFullPathName(szInputSource, szSource);
 	Util_GetFullPathName(szInputDest, szDest);
 
@@ -1494,11 +1521,11 @@ bool Line::Util_CopyDir(const char *szInputSource, const char *szInputDest, bool
 
 	// To work under old versions AND new version of shell32.dll the source must be specifed
 	// as "dir\*.*" and the destination directory must already exist... Godamn Microsoft and their APIs...
-	strcat(szSource, "\\*.*");
+	_tcscat(szSource, _T("\\*.*"));
 
 	// We must also make source\dest double nulled strings for the SHFileOp API
-	szSource[strlen(szSource)+1] = '\0';	
-	szDest[strlen(szDest)+1] = '\0';	
+	szSource[_tcslen(szSource)+1] = '\0';	
+	szDest[_tcslen(szDest)+1] = '\0';	
 
 	// Setup the struct
 	SHFILEOPSTRUCT FileOp = {0};
@@ -1527,11 +1554,11 @@ bool Line::Util_CopyDir(const char *szInputSource, const char *szInputDest, bool
 
 
 
-bool Line::Util_MoveDir(const char *szInputSource, const char *szInputDest, int OverwriteMode)
+bool Line::Util_MoveDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int OverwriteMode)
 {
 	// Get the fullpathnames and strip trailing \s
-	char szSource[_MAX_PATH+2];
-	char szDest[_MAX_PATH+2];
+	TCHAR szSource[_MAX_PATH+2];
+	TCHAR szDest[_MAX_PATH+2];
 	Util_GetFullPathName(szInputSource, szSource);
 	Util_GetFullPathName(szInputDest, szDest);
 
@@ -1563,8 +1590,8 @@ bool Line::Util_MoveDir(const char *szInputSource, const char *szInputDest, int 
 
 	// Since above didn't return, source and dest are on same volume.
 	// We must also make source\dest double nulled strings for the SHFileOp API
-	szSource[strlen(szSource)+1] = '\0';
-	szDest[strlen(szDest)+1] = '\0';
+	szSource[_tcslen(szSource)+1] = '\0';
+	szDest[_tcslen(szDest)+1] = '\0';
 
 	// Setup the struct
 	SHFILEOPSTRUCT FileOp = {0};
@@ -1585,10 +1612,10 @@ bool Line::Util_MoveDir(const char *szInputSource, const char *szInputDest, int 
 
 
 
-bool Line::Util_RemoveDir(const char *szInputSource, bool bRecurse)
+bool Line::Util_RemoveDir(LPCTSTR szInputSource, bool bRecurse)
 {
 	SHFILEOPSTRUCT	FileOp;
-	char			szSource[_MAX_PATH+2];
+	TCHAR			szSource[_MAX_PATH+2];
 
 	// Get the fullpathnames and strip trailing \s
 	Util_GetFullPathName(szInputSource, szSource);
@@ -1608,7 +1635,7 @@ bool Line::Util_RemoveDir(const char *szInputSource, bool bRecurse)
 	}
 
 	// We must also make double nulled strings for the SHFileOp API
-	szSource[strlen(szSource)+1] = '\0';
+	szSource[_tcslen(szSource)+1] = '\0';
 
 	// Setup the struct
 	FileOp.pFrom					= szSource;
@@ -1631,16 +1658,16 @@ bool Line::Util_RemoveDir(const char *szInputSource, bool bRecurse)
 // (moves files too)
 // Returns the number of files that could not be copied or moved due to error.
 ///////////////////////////////////////////////////////////////////////////////
-int Line::Util_CopyFile(const char *szInputSource, const char *szInputDest, bool bOverwrite, bool bMove)
+int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite, bool bMove)
 {
-	char			szSource[_MAX_PATH+1];
-	char			szDest[_MAX_PATH+1];
-	char			szExpandedDest[MAX_PATH+1];
-	char			szTempPath[_MAX_PATH+1];
-	char			szDrive[_MAX_PATH+1];
-	char			szDir[_MAX_PATH+1];
-	char			szFile[_MAX_PATH+1];
-	char			szExt[_MAX_PATH+1];
+	TCHAR			szSource[_MAX_PATH+1];
+	TCHAR			szDest[_MAX_PATH+1];
+	TCHAR			szExpandedDest[MAX_PATH+1];
+	TCHAR			szTempPath[_MAX_PATH+1];
+	TCHAR			szDrive[_MAX_PATH+1];
+	TCHAR			szDir[_MAX_PATH+1];
+	TCHAR			szFile[_MAX_PATH+1];
+	TCHAR			szExt[_MAX_PATH+1];
 
 	// Get local version of our source/dest with full path names, strip trailing \s
 	Util_GetFullPathName(szInputSource, szSource);
@@ -1648,9 +1675,9 @@ int Line::Util_CopyFile(const char *szInputSource, const char *szInputDest, bool
 
 	// If the source or dest is a directory then add *.* to the end
 	if (Util_IsDir(szSource))
-		strcat(szSource, "\\*.*");
+		_tcscat(szSource, _T("\\*.*"));
 	if (Util_IsDir(szDest))
-		strcat(szDest, "\\*.*");
+		_tcscat(szDest, _T("\\*.*"));
 
 	WIN32_FIND_DATA	findData;
 	HANDLE hSearch = FindFirstFile(szSource, &findData);
@@ -1659,11 +1686,11 @@ int Line::Util_CopyFile(const char *szInputSource, const char *szInputDest, bool
 
 	// Otherwise, loop through all the matching files.
 	// Split source into file and extension (we need this info in the loop below to recontstruct the path)
-	_splitpath(szSource, szDrive, szDir, szFile, szExt);
+	_tsplitpath(szSource, szDrive, szDir, szFile, szExt);
 	// Note we now rely on the SOURCE being the contents of szDrive, szDir, szFile, etc.
-	size_t szTempPath_length = snprintf(szTempPath, sizeof(szTempPath), "%s%s", szDrive, szDir);
-	char *append_pos = szTempPath + szTempPath_length;
-	size_t space_remaining = sizeof(szTempPath) - szTempPath_length - 1;
+	size_t szTempPath_length = sntprintf(szTempPath, _countof(szTempPath), _T("%s%s"), szDrive, szDir);
+	LPTSTR append_pos = szTempPath + szTempPath_length;
+	size_t space_remaining = _countof(szTempPath) - szTempPath_length - 1;
 
 	int failure_count = 0;
 	LONG_OPERATION_INIT
@@ -1681,12 +1708,12 @@ int Line::Util_CopyFile(const char *szInputSource, const char *szInputDest, bool
 		if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) // dwFileAttributes should never be invalid (0xFFFFFFFF) in this case.
 			continue;
 
-		if (strlen(findData.cFileName) > space_remaining) // v1.0.45.03: Basic check in case of files whose full spec is over 260 characters long.
+		if (_tcslen(findData.cFileName) > space_remaining) // v1.0.45.03: Basic check in case of files whose full spec is over 260 characters long.
 		{
 			++failure_count;
 			continue;
 		}
-		strcpy(append_pos, findData.cFileName); // Indirectly populate szTempPath. Above has ensured this won't overflow.
+		_tcscpy(append_pos, findData.cFileName); // Indirectly populate szTempPath. Above has ensured this won't overflow.
 
 		// Expand the destination based on this found file
 		Util_ExpandFilenameWildcard(findData.cFileName, szDest, szExpandedDest);
@@ -1736,44 +1763,44 @@ int Line::Util_CopyFile(const char *szInputSource, const char *szInputDest, bool
 
 
 
-void Line::Util_ExpandFilenameWildcard(const char *szSource, const char *szDest, char *szExpandedDest)
+void Line::Util_ExpandFilenameWildcard(LPCTSTR szSource, LPCTSTR szDest, LPTSTR szExpandedDest)
 {
 	// copy one.two.three  *.txt     = one.two   .txt
 	// copy one.two.three  *.*.txt   = one.two   .three  .txt
 	// copy one.two.three  *.*.*.txt = one.two   .three  ..txt
 	// copy one.two		   test      = test
 
-	char	szFileTemp[_MAX_PATH+1];
-	char	szExtTemp[_MAX_PATH+1];
+	TCHAR	szFileTemp[_MAX_PATH+1];
+	TCHAR	szExtTemp[_MAX_PATH+1];
 
-	char	szSrcFile[_MAX_PATH+1];
-	char	szSrcExt[_MAX_PATH+1];
+	TCHAR	szSrcFile[_MAX_PATH+1];
+	TCHAR	szSrcExt[_MAX_PATH+1];
 
-	char	szDestDrive[_MAX_PATH+1];
-	char	szDestDir[_MAX_PATH+1];
-	char	szDestFile[_MAX_PATH+1];
-	char	szDestExt[_MAX_PATH+1];
+	TCHAR	szDestDrive[_MAX_PATH+1];
+	TCHAR	szDestDir[_MAX_PATH+1];
+	TCHAR	szDestFile[_MAX_PATH+1];
+	TCHAR	szDestExt[_MAX_PATH+1];
 
 	// If the destination doesn't include a wildcard, send it back vertabim
-	if (strchr(szDest, '*') == NULL)
+	if (_tcschr(szDest, '*') == NULL)
 	{
-		strcpy(szExpandedDest, szDest);
+		_tcscpy(szExpandedDest, szDest);
 		return;
 	}
 
 	// Split source and dest into file and extension
-	_splitpath( szSource, szDestDrive, szDestDir, szSrcFile, szSrcExt );
-	_splitpath( szDest, szDestDrive, szDestDir, szDestFile, szDestExt );
+	_tsplitpath( szSource, szDestDrive, szDestDir, szSrcFile, szSrcExt );
+	_tsplitpath( szDest, szDestDrive, szDestDir, szDestFile, szDestExt );
 
 	// Source and Dest ext will either be ".nnnn" or "" or ".*", remove the period
 	if (szSrcExt[0] == '.')
-		strcpy(szSrcExt, &szSrcExt[1]);
+		_tcscpy(szSrcExt, &szSrcExt[1]);
 	if (szDestExt[0] == '.')
-		strcpy(szDestExt, &szDestExt[1]);
+		_tcscpy(szDestExt, &szDestExt[1]);
 
 	// Start of the destination with the drive and dir
-	strcpy(szExpandedDest, szDestDrive);
-	strcat(szExpandedDest, szDestDir);
+	_tcscpy(szExpandedDest, szDestDrive);
+	_tcscat(szExpandedDest, szDestDir);
 
 	// Replace first * in the destext with the srcext, remove any other *
 	Util_ExpandFilenameWildcardPart(szSrcExt, szDestExt, szExtTemp);
@@ -1784,34 +1811,34 @@ void Line::Util_ExpandFilenameWildcard(const char *szSource, const char *szDest,
 	// Concat the filename and extension if req
 	if (szExtTemp[0] != '\0')
 	{
-		strcat(szFileTemp, ".");
-		strcat(szFileTemp, szExtTemp);	
+		_tcscat(szFileTemp, _T("."));
+		_tcscat(szFileTemp, szExtTemp);	
 	}
 	else
 	{
 		// Dest extension was blank SOURCE MIGHT NOT HAVE BEEN!
 		if (szSrcExt[0] != '\0')
 		{
-			strcat(szFileTemp, ".");
-			strcat(szFileTemp, szSrcExt);	
+			_tcscat(szFileTemp, _T("."));
+			_tcscat(szFileTemp, szSrcExt);	
 		}
 	}
 
 	// Now add the drive and directory bit back onto the dest
-	strcat(szExpandedDest, szFileTemp);
+	_tcscat(szExpandedDest, szFileTemp);
 
 }
 
 
 
-void Line::Util_ExpandFilenameWildcardPart(const char *szSource, const char *szDest, char *szExpandedDest)
+void Line::Util_ExpandFilenameWildcardPart(LPCTSTR szSource, LPCTSTR szDest, LPTSTR szExpandedDest)
 {
-	char	*lpTemp;
-	int		i, j, k;
+	LPTSTR lpTemp;
+	int i, j, k;
 
 	// Replace first * in the dest with the src, remove any other *
 	i = 0; j = 0; k = 0;
-	lpTemp = (char *)strchr(szDest, '*');
+	lpTemp = (LPTSTR)_tcschr(szDest, '*');
 	if (lpTemp != NULL)
 	{
 		// Contains at least one *, copy up to this point
@@ -1834,17 +1861,17 @@ void Line::Util_ExpandFilenameWildcardPart(const char *szSource, const char *szD
 	else
 	{
 		// No wildcard, straight copy of destext
-		strcpy(szExpandedDest, szDest);
+		_tcscpy(szExpandedDest, szDest);
 	}
 }
 
 
 
-bool Line::Util_CreateDir(const char *szDirName) // Recursive directory creation function.
+bool Line::Util_CreateDir(LPCTSTR szDirName) // Recursive directory creation function.
 {
 	DWORD	dwTemp;
-	char	*szTemp = NULL;
-	char	*psz_Loc = NULL;
+	LPTSTR	szTemp = NULL;
+	LPTSTR	psz_Loc = NULL;
 	size_t  length;
 
 	dwTemp = GetFileAttributes(szDirName);
@@ -1855,12 +1882,12 @@ bool Line::Util_CreateDir(const char *szDirName) // Recursive directory creation
 		{
 		case ERROR_PATH_NOT_FOUND:
 			// Create path
-			length = strlen(szDirName);
+			length = _tcslen(szDirName);
 			if (length > MAX_PATH) // Sanity check to reduce chance of stack overflow (since this function recursively calls self).
 				return false;
-			szTemp = (char *)_alloca(length+1); // Faster, and also avoids need to delete it afterward.
-			strcpy(szTemp, szDirName);
-			psz_Loc = strrchr(szTemp, '\\');	/* find last \ */
+			szTemp = (LPTSTR)talloca(length+1); // Faster, and also avoids need to delete it afterward.
+			_tcscpy(szTemp, szDirName);
+			psz_Loc = _tcsrchr(szTemp, '\\');	/* find last \ */
 			if (psz_Loc == NULL)				// not found
 				return false;
 			else 
@@ -1888,9 +1915,9 @@ bool Line::Util_CreateDir(const char *szDirName) // Recursive directory creation
 
 
 
-bool Line::Util_DoesFileExist(const char *szFilename)  // Returns true if file or directory exists.
+bool Line::Util_DoesFileExist(LPCTSTR szFilename)  // Returns true if file or directory exists.
 {
-	if ( strchr(szFilename,'*')||strchr(szFilename,'?') )
+	if ( _tcschr(szFilename,'*')||_tcschr(szFilename,'?') )
 	{
 		WIN32_FIND_DATA	wfd;
 		HANDLE			hFile;
@@ -1917,7 +1944,7 @@ bool Line::Util_DoesFileExist(const char *szFilename)  // Returns true if file o
 
 
 
-bool Line::Util_IsDir(const char *szPath) // Returns true if the path is a directory
+bool Line::Util_IsDir(LPCTSTR szPath) // Returns true if the path is a directory
 {
 	DWORD dwTemp = GetFileAttributes(szPath);
 	return dwTemp != 0xffffffff && (dwTemp & FILE_ATTRIBUTE_DIRECTORY);
@@ -1925,42 +1952,42 @@ bool Line::Util_IsDir(const char *szPath) // Returns true if the path is a direc
 
 
 
-void Line::Util_GetFullPathName(const char *szIn, char *szOut)
+void Line::Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut)
 // Returns the full pathname and strips any trailing \s.  Assumes output is _MAX_PATH in size.
 {
-	char	*szFilePart;
+	LPTSTR szFilePart;
 	GetFullPathName(szIn, _MAX_PATH, szOut, &szFilePart);
 	strip_trailing_backslash(szOut);
 }
 
 
 
-bool Line::Util_IsDifferentVolumes(const char *szPath1, const char *szPath2)
+bool Line::Util_IsDifferentVolumes(LPCTSTR szPath1, LPCTSTR szPath2)
 // Checks two paths to see if they are on the same volume.
 {
-	char			szP1Drive[_MAX_DRIVE+1];
-	char			szP2Drive[_MAX_DRIVE+1];
+	TCHAR			szP1Drive[_MAX_DRIVE+1];
+	TCHAR			szP2Drive[_MAX_DRIVE+1];
 
-	char			szDir[_MAX_DIR+1];
-	char			szFile[_MAX_FNAME+1];
-	char			szExt[_MAX_EXT+1];
+	TCHAR			szDir[_MAX_DIR+1];
+	TCHAR			szFile[_MAX_FNAME+1];
+	TCHAR			szExt[_MAX_EXT+1];
 	
-	char			szP1[_MAX_PATH+1];	
-	char			szP2[_MAX_PATH+1];
+	TCHAR			szP1[_MAX_PATH+1];	
+	TCHAR			szP2[_MAX_PATH+1];
 
 	// Get full pathnames
 	Util_GetFullPathName(szPath1, szP1);
 	Util_GetFullPathName(szPath2, szP2);
 
 	// Split the target into bits
-	_splitpath( szP1, szP1Drive, szDir, szFile, szExt );
-	_splitpath( szP2, szP2Drive, szDir, szFile, szExt );
+	_tsplitpath( szP1, szP1Drive, szDir, szFile, szExt );
+	_tsplitpath( szP2, szP2Drive, szDir, szFile, szExt );
 
 	if (szP1Drive[0] == '\0' || szP2Drive[0] == '\0')
 		// One or both paths is a UNC - assume different volumes
 		return true;
 	else
-		return stricmp(szP1Drive, szP2Drive);
+		return _tcsicmp(szP1Drive, szP2Drive);
 }
 
 
@@ -2119,7 +2146,7 @@ void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed)
 // PROCESS ROUTINES
 ////////////////////
 
-DWORD ProcessExist9x2000(char *aProcess, char *aProcessName)
+DWORD ProcessExist9x2000(LPTSTR aProcess, LPTSTR aProcessName)
 {
 	if (aProcessName) // Init this output variable in case of early return.
 		*aProcessName = '\0';
@@ -2128,9 +2155,9 @@ DWORD ProcessExist9x2000(char *aProcess, char *aProcessName)
 	typedef BOOL (WINAPI *PROCESSWALK)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
 	typedef HANDLE (WINAPI *CREATESNAPSHOT)(DWORD dwFlags, DWORD th32ProcessID);
 
-	static CREATESNAPSHOT lpfnCreateToolhelp32Snapshot = (CREATESNAPSHOT)GetProcAddress(GetModuleHandle("kernel32"), "CreateToolhelp32Snapshot");
-    static PROCESSWALK lpfnProcess32First = (PROCESSWALK)GetProcAddress(GetModuleHandle("kernel32"), "Process32First");
-    static PROCESSWALK lpfnProcess32Next = (PROCESSWALK)GetProcAddress(GetModuleHandle("kernel32"), "Process32Next");
+	static CREATESNAPSHOT lpfnCreateToolhelp32Snapshot = (CREATESNAPSHOT)GetProcAddress(GetModuleHandle(_T("kernel32")), "CreateToolhelp32Snapshot");
+    static PROCESSWALK lpfnProcess32First = (PROCESSWALK)GetProcAddress(GetModuleHandle(_T("kernel32")), "Process32First" PROCESS_API_SUFFIX);
+    static PROCESSWALK lpfnProcess32Next = (PROCESSWALK)GetProcAddress(GetModuleHandle(_T("kernel32")), "Process32Next" PROCESS_API_SUFFIX);
 
 	if (!lpfnCreateToolhelp32Snapshot || !lpfnProcess32First || !lpfnProcess32Next)
 		return 0;
@@ -2143,7 +2170,7 @@ DWORD ProcessExist9x2000(char *aProcess, char *aProcessName)
 	// Determine the PID if aProcess is a pure, non-negative integer (any negative number
 	// is more likely to be the name of a process [with a leading dash], rather than the PID).
 	DWORD specified_pid = IsPureNumeric(aProcess) ? ATOU(aProcess) : 0;
-	char szDrive[_MAX_PATH+1], szDir[_MAX_PATH+1], szFile[_MAX_PATH+1], szExt[_MAX_PATH+1];
+	TCHAR szDrive[_MAX_PATH+1], szDir[_MAX_PATH+1], szFile[_MAX_PATH+1], szExt[_MAX_PATH+1];
 
 	while (lpfnProcess32Next(snapshot, &proc))
 	{
@@ -2153,8 +2180,8 @@ DWORD ProcessExist9x2000(char *aProcess, char *aProcessName)
 			{
 				// For consistency in results, use _splitpath() both here and below rather than
 				// something that just checks for a rightmost backslash.
-				_splitpath(proc.szExeFile, szDrive, szDir, aProcessName, szExt);
-				strcat(aProcessName, szExt);
+				_tsplitpath(proc.szExeFile, szDrive, szDir, aProcessName, szExt);
+				_tcscat(aProcessName, szExt);
 			}
 			CloseHandle(snapshot);
 			return specified_pid;
@@ -2163,12 +2190,12 @@ DWORD ProcessExist9x2000(char *aProcess, char *aProcessName)
 		// also be a valid name?):
 		// It seems that proc.szExeFile never contains a path, just the executable name.
 		// But in case it ever does, ensure consistency by removing the path:
-		_splitpath(proc.szExeFile, szDrive, szDir, szFile, szExt);
-		strcat(szFile, szExt);
-		if (!stricmp(szFile, aProcess)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+		_tsplitpath(proc.szExeFile, szDrive, szDir, szFile, szExt);
+		_tcscat(szFile, szExt);
+		if (!_tcsicmp(szFile, aProcess)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 		{
 			if (aProcessName) // Caller wanted process name also.
-				strcpy(aProcessName, szFile);
+				_tcscpy(aProcessName, szFile);
 			CloseHandle(snapshot);
 			return proc.th32ProcessID;
 		}
@@ -2179,7 +2206,8 @@ DWORD ProcessExist9x2000(char *aProcess, char *aProcessName)
 
 
 
-DWORD ProcessExistNT4(char *aProcess, char *aProcessName)
+#ifdef CONFIG_WINNT4
+DWORD ProcessExistNT4(LPTSTR aProcess, LPTSTR aProcessName)
 {
 	if (aProcessName) // Init this output variable in case of early return.
 		*aProcessName = '\0';
@@ -2208,14 +2236,14 @@ DWORD ProcessExistNT4(char *aProcess, char *aProcessName)
 
 	// We must dynamically load the function or program will probably not launch at all on Win95.
     // Get a handle to the DLL module that contains EnumProcesses
-	HINSTANCE hinstLib = LoadLibrary("psapi");
+	HINSTANCE hinstLib = LoadLibrary(_T("psapi"));
 	if (!hinstLib)
 		return 0;
 
 	// Not static in this case, since address can change with each new load of the library:
   	MyEnumProcesses lpfnEnumProcesses = (MyEnumProcesses)GetProcAddress(hinstLib, "EnumProcesses");
 	MyEnumProcessModules lpfnEnumProcessModules = (MyEnumProcessModules)GetProcAddress(hinstLib, "EnumProcessModules");
-	MyGetModuleBaseName lpfnGetModuleBaseName = (MyGetModuleBaseName)GetProcAddress(hinstLib, "GetModuleBaseNameA");
+	MyGetModuleBaseName lpfnGetModuleBaseName = (MyGetModuleBaseName)GetProcAddress(hinstLib, "GetModuleBaseName" WINAPI_SUFFIX);
 
 	DWORD idProcessArray[512];		// 512 processes max
 	DWORD cbNeeded;					// Bytes returned
@@ -2231,8 +2259,8 @@ DWORD ProcessExistNT4(char *aProcess, char *aProcessName)
 	// Determine the PID if aProcess is a pure, non-negative integer (any negative number
 	// is more likely to be the name of a process [with a leading dash], rather than the PID).
 	DWORD specified_pid = IsPureNumeric(aProcess) ? ATOU(aProcess) : 0;
-	char szDrive[_MAX_PATH+1], szDir[_MAX_PATH+1], szFile[_MAX_PATH+1], szExt[_MAX_PATH+1];
-	char szProcessName[_MAX_PATH+1];
+	TCHAR szDrive[_MAX_PATH+1], szDir[_MAX_PATH+1], szFile[_MAX_PATH+1], szExt[_MAX_PATH+1];
+	TCHAR szProcessName[_MAX_PATH+1];
 	HMODULE hMod;
 	HANDLE hProcess;
 
@@ -2249,8 +2277,8 @@ DWORD ProcessExistNT4(char *aProcess, char *aProcessName)
 					{
 						// For consistency in results, use _splitpath() both here and below rather than
 						// something that just checks for a rightmost backslash.
-						_splitpath(szProcessName, szDrive, szDir, aProcessName, szExt);
-						strcat(aProcessName, szExt);
+						_tsplitpath(szProcessName, szDrive, szDir, aProcessName, szExt);
+						_tcscat(aProcessName, szExt);
 					}
 					CloseHandle(hProcess);
 				}
@@ -2265,12 +2293,12 @@ DWORD ProcessExistNT4(char *aProcess, char *aProcessName)
 			lpfnEnumProcessModules(hProcess, &hMod, sizeof(hMod), &cbNeeded);
 			if (lpfnGetModuleBaseName(hProcess, hMod, szProcessName, _MAX_PATH))
 			{
-				_splitpath(szProcessName, szDrive, szDir, szFile, szExt);
-				strcat(szFile, szExt);
-				if (!stricmp(szFile, aProcess)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+				_tsplitpath(szProcessName, szDrive, szDir, szFile, szExt);
+				_tcscat(szFile, szExt);
+				if (!_tcsicmp(szFile, aProcess)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 				{
 					if (aProcessName) // Caller wanted process name also.
-						strcpy(aProcessName, szProcessName);
+						_tcscpy(aProcessName, szProcessName);
 					CloseHandle(hProcess);
 					FreeLibrary(hinstLib);
 					return idProcessArray[i];  // The PID.
@@ -2282,3 +2310,4 @@ DWORD ProcessExistNT4(char *aProcess, char *aProcessName)
 	FreeLibrary(hinstLib);
 	return 0;  // Not found.
 }
+#endif

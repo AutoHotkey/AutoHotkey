@@ -26,7 +26,7 @@ HWND *WinGroup::sAlreadyVisited = NULL;
 int WinGroup::sAlreadyVisitedCount = 0;
 
 
-ResultType WinGroup::AddWindow(char *aTitle, char *aText, Label *aJumpToLabel, char *aExcludeTitle, char *aExcludeText)
+ResultType WinGroup::AddWindow(LPTSTR aTitle, LPTSTR aText, Label *aJumpToLabel, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 // Caller should ensure that at least one param isn't NULL/blank.
 // GroupActivate will tell its caller to jump to aJumpToLabel if a WindowSpec isn't found.
 // This function is not thread-safe because it adds an entry to the list of window specs.
@@ -40,7 +40,7 @@ ResultType WinGroup::AddWindow(char *aTitle, char *aText, Label *aJumpToLabel, c
 	// "last found window".  99.99% of the time, it is undesirable to have Program Manager
 	// in a window group of any kind, so that is used as the placeholder:
 	if (!(*aTitle || *aText || *aExcludeTitle || *aExcludeText))
-		aExcludeTitle = "Program Manager";
+		aExcludeTitle = _T("Program Manager");
 
 	// Though the documentation is clear on this, some users will still probably execute
 	// each GroupAdd statement more than once.  Thus, to prevent more and more memory
@@ -49,13 +49,13 @@ ResultType WinGroup::AddWindow(char *aTitle, char *aText, Label *aJumpToLabel, c
 	if (mFirstWindow) // Traverse the circular linked-list to look for a match.
 		for (WindowSpec *win = mFirstWindow
 			; win != NULL; win = (win->mNextWindow == mFirstWindow) ? NULL : win->mNextWindow)
-			if (!strcmp(win->mTitle, aTitle) && !strcmp(win->mText, aText) // All are case sensitive.
-				&& !strcmp(win->mExcludeTitle, aExcludeTitle) && !strcmp(win->mExcludeText, aExcludeText))
+			if (!_tcscmp(win->mTitle, aTitle) && !_tcscmp(win->mText, aText) // All are case sensitive.
+				&& !_tcscmp(win->mExcludeTitle, aExcludeTitle) && !_tcscmp(win->mExcludeText, aExcludeText))
 				return OK;
 
 	// SimpleHeap::Malloc() will set these new vars to the constant empty string if their
 	// corresponding params are blank:
-	char *new_title, *new_text, *new_exclude_title, *new_exclude_text;
+	LPTSTR new_title, new_text, new_exclude_title, new_exclude_text;
 	if (!(new_title = SimpleHeap::Malloc(aTitle))) return FAIL; // It already displayed the error for us.
 	if (!(new_text = SimpleHeap::Malloc(aText)))return FAIL;
 	if (!(new_exclude_title = SimpleHeap::Malloc(aExcludeTitle))) return FAIL;
@@ -438,8 +438,8 @@ BOOL CALLBACK EnumParentFindAnyExcept(HWND aWnd, LPARAM lParam)
 	// the same HWND that GetShellWindow() returns, but GetShellWindow() isn't supported on
 	// Win9x or WinNT, so don't bother using it.  And GetDeskTopWindow() apparently doesn't
 	// return "Program Manager" (something with a blank title I think):
-	char win_title[20]; // Just need enough size to check for Program Manager
-	if (GetWindowText(aWnd, win_title, sizeof(win_title)) && !stricmp(win_title, "Program Manager"))
+	TCHAR win_title[20]; // Just need enough size to check for Program Manager
+	if (GetWindowText(aWnd, win_title, _countof(win_title)) && !_tcsicmp(win_title, _T("Program Manager")))
 		return TRUE;
 
 	WindowSearch &ws = *(WindowSearch *)lParam;  // For performance and convenience.

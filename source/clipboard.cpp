@@ -20,7 +20,7 @@ GNU General Public License for more details.
 #include "application.h" // for MsgSleep()
 #include "util.h" // for strlcpy()
 
-size_t Clipboard::Get(char *aBuf)
+size_t Clipboard::Get(LPTSTR aBuf)
 // If aBuf is NULL, it returns the length of the text on the clipboard and leaves the
 // clipboard open.  Otherwise, it copies the clipboard text into aBuf and closes
 // the clipboard (UPDATE: But only if the clipboard is still open from a prior call
@@ -41,7 +41,7 @@ size_t Clipboard::Get(char *aBuf)
 		*aBuf = '\0';
 
 	UINT i, file_count = 0;
-	BOOL clipboard_contains_text = IsClipboardFormatAvailable(CF_TEXT);
+	BOOL clipboard_contains_text = IsClipboardFormatAvailable(CF_NATIVETEXT);
 	BOOL clipboard_contains_files = IsClipboardFormatAvailable(CF_HDROP);
 	if (!(clipboard_contains_text || clipboard_contains_files))
 		return 0;
@@ -70,7 +70,7 @@ size_t Clipboard::Get(char *aBuf)
 			Close(CANT_OPEN_CLIPBOARD_READ);
 			return CLIPBOARD_FAILURE;
 		}
-		if (   !(mClipMemNow = g_clip.GetClipboardDataTimeout(clipboard_contains_files ? CF_HDROP : CF_TEXT))   )
+		if (   !(mClipMemNow = g_clip.GetClipboardDataTimeout(clipboard_contains_files ? CF_HDROP : CF_NATIVETEXT))   )
 		{
 			// v1.0.47.04: Commented out the following that had been in effect when clipboard_contains_files==false:
 			//    Close("GetClipboardData"); // Short error message since so rare.
@@ -101,9 +101,9 @@ size_t Clipboard::Get(char *aBuf)
 		// Although GlobalSize(mClipMemNow) can yield zero in some cases -- in which case GlobalLock() should
 		// not be attempted -- it probably can't yield zero for CF_HDROP and CF_TEXT because such a thing has
 		// never been reported by anyone.  Therefore, GlobalSize() is currently not called.
-		if (   !(mClipMemNowLocked = (char *)GlobalLock(mClipMemNow))   )
+		if (   !(mClipMemNowLocked = (LPTSTR)GlobalLock(mClipMemNow))   )
 		{
-			Close("GlobalLock");  // Short error message since so rare.
+			Close(_T("GlobalLock"));  // Short error message since so rare.
 			return CLIPBOARD_FAILURE;
 		}
 		// Otherwise: Update length after every successful new open&lock:
@@ -111,7 +111,7 @@ size_t Clipboard::Get(char *aBuf)
 		// needed to hold what's on the clipboard:
 		if (clipboard_contains_files)
 		{
-			if (file_count = DragQueryFile((HDROP)mClipMemNowLocked, 0xFFFFFFFF, "", 0))
+			if (file_count = DragQueryFile((HDROP)mClipMemNowLocked, 0xFFFFFFFF, _T(""), 0))
 			{
 				mLength = (file_count - 1) * 2;  // Init; -1 if don't want a newline after last file.
 				for (i = 0; i < file_count; ++i)
@@ -121,7 +121,7 @@ size_t Clipboard::Get(char *aBuf)
 				mLength = 0;
 		}
 		else // clipboard_contains_text
-			mLength = strlen(mClipMemNowLocked);
+			mLength = _tcslen(mClipMemNowLocked);
 		if (mLength >= CLIPBOARD_FAILURE) // Can't realistically happen, so just indicate silent failure.
 			return CLIPBOARD_FAILURE;
 	}
@@ -138,7 +138,7 @@ size_t Clipboard::Get(char *aBuf)
 	// Otherwise:
 	if (clipboard_contains_files)
 	{
-		if (file_count = DragQueryFile((HDROP)mClipMemNowLocked, 0xFFFFFFFF, "", 0))
+		if (file_count = DragQueryFile((HDROP)mClipMemNowLocked, 0xFFFFFFFF, _T(""), 0))
 			for (i = 0; i < file_count; ++i)
 			{
 				// Caller has already ensured aBuf is large enough to hold them all:
@@ -153,7 +153,7 @@ size_t Clipboard::Get(char *aBuf)
 		// else aBuf has already been terminated upon entrance to this function.
 	}
 	else
-		strcpy(aBuf, mClipMemNowLocked);  // Caller has already ensured that aBuf is large enough.
+		_tcscpy(aBuf, mClipMemNowLocked);  // Caller has already ensured that aBuf is large enough.
 	// Fix for v1.0.37: Close() is no longer called here because it prevents the clipboard variable
 	// from being referred to more than once in a line.  For example:
 	// Msgbox %Clipboard%%Clipboard%
@@ -169,7 +169,7 @@ size_t Clipboard::Get(char *aBuf)
 
 
 
-ResultType Clipboard::Set(char *aBuf, UINT aLength) //, bool aTrimIt)
+ResultType Clipboard::Set(LPCTSTR aBuf, UINT aLength) //, bool aTrimIt)
 // Returns OK or FAIL.
 {
 	// It was already open for writing from a prior call.  Return failure because callers that do this
@@ -178,18 +178,18 @@ ResultType Clipboard::Set(char *aBuf, UINT aLength) //, bool aTrimIt)
 
 	if (!aBuf)
 	{
-		aBuf = "";
+		aBuf = _T("");
 		aLength = 0;
 	}
 	else
 		if (aLength == UINT_MAX) // Caller wants us to determine the length.
-			aLength = (UINT)strlen(aBuf);
+			aLength = (UINT)_tcslen(aBuf);
 
 	if (aLength)
 	{
 		if (!PrepareForWrite(aLength + 1))
 			return FAIL;  // It already displayed the error.
-		strlcpy(mClipMemNewLocked, aBuf, aLength + 1);  // Copy only a substring, if aLength specifies such.
+		tcslcpy(mClipMemNewLocked, aBuf, aLength + 1);  // Copy only a substring, if aLength specifies such.
 		// Only trim when the caller told us to, rather than always if g_script.mIsAutoIt2
 		// is true, since AutoIt2 doesn't always trim things (e.g. FileReadLine probably
 		// does not trim the line that was read into its output var).  UPDATE: This is
@@ -206,7 +206,7 @@ ResultType Clipboard::Set(char *aBuf, UINT aLength) //, bool aTrimIt)
 
 
 
-char *Clipboard::PrepareForWrite(size_t aAllocSize)
+LPTSTR Clipboard::PrepareForWrite(size_t aAllocSize)
 {
 	if (!aAllocSize) return NULL; // Caller should ensure that size is at least 1, i.e. room for the zero terminator.
 	if (IsReadyForWrite())
@@ -216,15 +216,15 @@ char *Clipboard::PrepareForWrite(size_t aAllocSize)
 	// Note: I think GMEM_DDESHARE is recommended in addition to the usual GMEM_MOVEABLE:
 	// UPDATE: MSDN: "The following values are obsolete, but are provided for compatibility
 	// with 16-bit Windows. They are ignored.": GMEM_DDESHARE
-	if (   !(mClipMemNew = GlobalAlloc(GMEM_MOVEABLE, aAllocSize))   )
+	if (   !(mClipMemNew = GlobalAlloc(GMEM_MOVEABLE, aAllocSize * sizeof(TCHAR)))   )
 	{
-		g_script.ScriptError("GlobalAlloc");  // Short error message since so rare.
+		g_script.ScriptError(_T("GlobalAlloc"));  // Short error message since so rare.
 		return NULL;
 	}
-	if (   !(mClipMemNewLocked = (char *)GlobalLock(mClipMemNew))   )
+	if (   !(mClipMemNewLocked = (LPTSTR)GlobalLock(mClipMemNew))   )
 	{
 		mClipMemNew = GlobalFree(mClipMemNew);  // This keeps mClipMemNew in sync with its state.
-		g_script.ScriptError("GlobalLock"); // Short error message since so rare.
+		g_script.ScriptError(_T("GlobalLock")); // Short error message since so rare.
 		return NULL;
 	}
 	mCapacity = (UINT)aAllocSize; // Keep mCapacity in sync with the state of mClipMemNewLocked.
@@ -247,7 +247,7 @@ ResultType Clipboard::Commit(UINT aFormat)
 	if (!EmptyClipboard())
 	{
 		Close();
-		return AbortWrite("EmptyClipboard"); // Short error message since so rare.
+		return AbortWrite(_T("EmptyClipboard")); // Short error message since so rare.
 	}
 	if (mClipMemNew)
 	{
@@ -258,7 +258,7 @@ ResultType Clipboard::Commit(UINT aFormat)
 			// Best to access the memory while it's still locked, which is why this temp var is used:
 			// v1.0.40.02: The following was fixed to properly recognize 0x0000 as the Unicode string terminator,
 			// which fixes problems with Transform Unicode.
-			new_is_empty = !mClipMemNewLocked[0] && (aFormat != CF_UNICODETEXT || !mClipMemNewLocked[1]);
+			new_is_empty = aFormat == CF_UNICODETEXT ? !*(LPWSTR)mClipMemNewLocked : !*(LPSTR)mClipMemNewLocked;
 			GlobalUnlock(mClipMemNew); // mClipMemNew not mClipMemNewLocked.
 			mClipMemNewLocked = NULL;  // Keep this in sync with the above action.
 			mCapacity = 0; // Keep mCapacity in sync with the state of mClipMemNewLocked.
@@ -279,7 +279,7 @@ ResultType Clipboard::Commit(UINT aFormat)
 			else
 			{
 				Close();
-				return AbortWrite("SetClipboardData"); // Short error message since so rare.
+				return AbortWrite(_T("SetClipboardData")); // Short error message since so rare.
 			}
 	}
 	// else we will close it after having done only the EmptyClipboard(), above.
@@ -292,7 +292,7 @@ ResultType Clipboard::Commit(UINT aFormat)
 
 
 
-ResultType Clipboard::AbortWrite(char *aErrorMessage)
+ResultType Clipboard::AbortWrite(LPTSTR aErrorMessage)
 // Always returns FAIL.
 {
 	// Since we were called in conjunction with an aborted attempt to Commit(), always
@@ -314,7 +314,7 @@ ResultType Clipboard::AbortWrite(char *aErrorMessage)
 
 
 
-ResultType Clipboard::Close(char *aErrorMessage)
+ResultType Clipboard::Close(LPTSTR aErrorMessage)
 // Returns OK or FAIL (but it only returns FAIL if caller gave us a non-NULL aErrorMessage).
 {
 	// Always close it ASAP so that it is free for other apps to use:
@@ -370,7 +370,7 @@ HANDLE Clipboard::GetClipboardDataTimeout(UINT uFormat)
 	static FILE *fp = fopen("c:\\debug_clipboard_formats.txt", "w");
 #endif
 
-	char format_name[MAX_PATH + 1]; // MSDN's RegisterClipboardFormat() doesn't document any max length, but the ones we're interested in certainly don't exceed MAX_PATH.
+	TCHAR format_name[MAX_PATH + 1]; // MSDN's RegisterClipboardFormat() doesn't document any max length, but the ones we're interested in certainly don't exceed MAX_PATH.
 	if (uFormat < 0xC000 || uFormat > 0xFFFF) // It's a registered format (you're supposted to verify in-range before calling GetClipboardFormatName()).  Also helps performance.
 		*format_name = '\0'; // Don't need the name if it's a standard/CF_* format.
 	else
@@ -397,19 +397,19 @@ HANDLE Clipboard::GetClipboardDataTimeout(UINT uFormat)
 		// 0xC00D Link Source  >>> Causes WORD bookmarking problem.
 		// 0xC00F Link Source Descriptor  >>> Doesn't directly cause bookmarking, but probably goes with above.
 		// 0xC0DC Hyperlink
-		if (   !strnicmp(format_name, "Link Source", 11) || !stricmp(format_name, "ObjectLink")
-			|| !stricmp(format_name, "OwnerLink")
+		if (   !_tcsnicmp(format_name, _T("Link Source"), 11) || !_tcsicmp(format_name, _T("ObjectLink"))
+			|| !_tcsicmp(format_name, _T("OwnerLink"))
 			// v1.0.44.07: The following were added to solve interference with MS Outlook's MS Word editor.
 			// If a hotkey like ^F1::ClipboardSave:=ClipboardAll is pressed after pressing Ctrl-C in that
 			// editor (perhaps only when copying HTML), two of the following error dialogs would otherwise
 			// be displayed (this occurs in Outlook 2002 and probably later versions):
 			// "An outgoing call cannot be made since the application is dispatching an input-synchronous call."
-			|| !stricmp(format_name, "Native") || !stricmp(format_name, "Embed Source")   )
+			|| !_tcsicmp(format_name, _T("Native")) || !_tcsicmp(format_name, _T("Embed Source"))   )
 			return NULL;
 	}
 
 #ifdef DEBUG_BY_LOGGING_CLIPBOARD_FORMATS
-	fprintf(fp, "%04X\t%s\n", uFormat, format_name);  // Since fclose() is never called, the program has to exit to close/release the file.
+	_ftprintf(fp, _T("%04X\t%s\n"), uFormat, format_name);  // Since fclose() is never called, the program has to exit to close/release the file.
 #endif
 
 	HANDLE h;
@@ -429,7 +429,7 @@ HANDLE Clipboard::GetClipboardDataTimeout(UINT uFormat)
 		// v1.0.42.04: More importantly, retrying them appears to cause problems with saving a Word/Excel
 		// clipboard via ClipboardAll.
 		if (uFormat == CF_HDROP // This format can fail "normally" for the reasons described at "clipboard_contains_files".
-			|| !stricmp(format_name, "OwnerLink")) // Known to validly yield NULL from a call to GetClipboardData(), so don't retry it to avoid having to wait the full timeout period.
+			|| !_tcsicmp(format_name, _T("OwnerLink"))) // Known to validly yield NULL from a call to GetClipboardData(), so don't retry it to avoid having to wait the full timeout period.
 			return NULL;
 
 		if (g_ClipboardTimeout != -1) // We were not told to wait indefinitely and...

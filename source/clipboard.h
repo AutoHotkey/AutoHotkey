@@ -17,19 +17,28 @@ GNU General Public License for more details.
 #ifndef clipboard_h
 #define clipboard_h
 
-#include "stdafx.h" // pre-compiled headers
 #include "defines.h"
 
 
-#define CANT_OPEN_CLIPBOARD_READ "Can't open clipboard for reading."
-#define CANT_OPEN_CLIPBOARD_WRITE "Can't open clipboard for writing."
+#define CANT_OPEN_CLIPBOARD_READ _T("Can't open clipboard for reading.")
+#define CANT_OPEN_CLIPBOARD_WRITE _T("Can't open clipboard for writing.")
+
+#ifdef UNICODE
+// In unicode version, always try CF_UNICODETEXT first, then CF_TEXT.
+#define CF_NATIVETEXT	CF_UNICODETEXT
+#define CF_OTHERTEXT	CF_TEXT
+#else
+#define CF_NATIVETEXT	CF_TEXT
+#define CF_OTHERTEXT	CF_UNICODETEXT
+#endif
 
 
 class Clipboard
 {
 public:
 	HGLOBAL mClipMemNow, mClipMemNew;
-	char *mClipMemNowLocked, *mClipMemNewLocked;
+	LPTSTR mClipMemNowLocked, mClipMemNewLocked;
+	// NOTE: Both mLength and mCapacity are count in characters (NOT in bytes).
 	size_t mLength;  // Last-known length of the clipboard contents (for internal use only because it's valid only during certain specific times).
 	UINT mCapacity;  // Capacity of mClipMemNewLocked.
 	BOOL mIsOpen;  // Whether the clipboard is physically open due to action by this class.  BOOL vs. bool improves some benchmarks slightly due to this item being frequently checked.
@@ -49,29 +58,29 @@ public:
 	bool IsReadyForWrite() {return mClipMemNewLocked != NULL;}
 
 	#define CLIPBOARD_FAILURE UINT_MAX
-	size_t Get(char *aBuf = NULL);
+	size_t Get(LPTSTR aBuf = NULL);
 
-	ResultType Set(char *aBuf = NULL, UINT aLength = UINT_MAX); //, bool aTrimIt = false);
-	char *PrepareForWrite(size_t aAllocSize);
-	ResultType Commit(UINT aFormat = CF_TEXT);
-	ResultType AbortWrite(char *aErrorMessage = "");
-	ResultType Close(char *aErrorMessage = NULL);
-	char *Contents()
+	ResultType Set(LPCTSTR aBuf = NULL, UINT aLength = UINT_MAX); //, bool aTrimIt = false);
+	LPTSTR PrepareForWrite(size_t aAllocSize);
+	ResultType Commit(UINT aFormat = CF_NATIVETEXT);
+	ResultType AbortWrite(LPTSTR aErrorMessage = _T(""));
+	ResultType Close(LPTSTR aErrorMessage = NULL);
+	LPTSTR Contents()
 	{
 		if (mClipMemNewLocked)
 			// Its set up for being written to, which takes precedence over the fact
 			// that it may be open for read also, so return the write-buffer:
 			return mClipMemNewLocked;
-		if (!IsClipboardFormatAvailable(CF_TEXT))
+		if (!IsClipboardFormatAvailable(CF_NATIVETEXT))
 			// We check for both CF_TEXT and CF_HDROP in case it's possible for
 			// the clipboard to contain both formats simultaneously.  In this case,
 			// just do this for now, to remind the caller that in these cases, it should
 			// call Get(buf), providing the target buf so that we have some memory to
 			// transcribe the (potentially huge) list of files into:
-			return IsClipboardFormatAvailable(CF_HDROP) ? "<<>>" : "";
+			return IsClipboardFormatAvailable(CF_HDROP) ? _T("<<>>") : _T("");
 		else
 			// Some callers may rely upon receiving empty string rather than NULL on failure:
-			return (Get() == CLIPBOARD_FAILURE) ? "" : mClipMemNowLocked;
+			return (Get() == CLIPBOARD_FAILURE) ? _T("") : mClipMemNowLocked;
 	}
 
 	Clipboard() // Constructor

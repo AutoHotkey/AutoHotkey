@@ -1,6 +1,7 @@
 /* config.h.  Generated from config.h.in by configure.  */
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
+#include "../../config.h" // Allow AutoHotkey config.h to define charset (_MBCS or UNICODE).
 
 /* On Unix-like systems config.h.in is converted by "configure" into config.h.
 Some other environments also support the use of "configure". PCRE is written in
@@ -276,11 +277,13 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 #define STDC_HEADERS 1
 #endif
 
+#ifdef UNICODE
 /* Define to enable support for Unicode properties */
-/* #undef SUPPORT_UCP */
+/* #define SUPPORT_UCP */
 
 /* Define to enable support for the UTF-8 Unicode encoding. */
-/* #undef SUPPORT_UTF8 */
+#define SUPPORT_UTF8
+#endif
 
 /* Version number of package */
 #ifndef VERSION

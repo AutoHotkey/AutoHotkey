@@ -22,6 +22,7 @@ GNU General Public License for more details.
 #pragma once
 
 #define _CRT_SECURE_NO_DEPRECATE // Avoid compiler warnings in VC++ 8.x/2005 that urge the use of lower-performing C library functions that protect against buffer overruns.
+#define _CRT_NON_CONFORMING_SWPRINTFS // We don't want ISO version of swprintf, which has similar interface with snwprintf (different from sprintf)
 #define WIN32_LEAN_AND_MEAN		 // Exclude rarely-used stuff from Windows headers
 
 // Windows Header Files:
@@ -37,6 +38,9 @@ GNU General Public License for more details.
 #define _WIN32_IE 0x0501  // Added for v1.0.35 to have MCS_NOTODAY resolve as expected, and possibly solve other problems on newer systems.
 
 #ifdef _MSC_VER
+	#include "config.h" // compile-time configrations
+	#include "debug.h"
+
 	// C RunTime Header Files
 	#include <stdio.h>
 	#include <stdlib.h>
@@ -44,14 +48,18 @@ GNU General Public License for more details.
 	#include <limits.h> // for UINT_MAX, UCHAR_MAX, etc.
 	#include <malloc.h> // For _alloca()
 	//#include <memory.h>
-	//#include <tchar.h>
 
 	#include <windows.h>
+	#include <tchar.h>
 	#include <commctrl.h> // for status bar functions. Must be included after <windows.h>.
 	#include <shellapi.h>  // for ShellExecute()
 	#include <shlobj.h>  // for SHGetMalloc()
 	#include <mmsystem.h> // for mciSendString() and waveOutSetVolume()
 	#include <commdlg.h> // for OPENFILENAME
+
+	// ATL alternatives
+	#include "KuString.h"
+	#include "StringConv.h"
 
 	// It's probably best not to do these, because I think they would then be included
 	// for everything, even modules that don't need it, which might result in undesired

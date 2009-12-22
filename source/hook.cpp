@@ -24,8 +24,8 @@ GNU General Public License for more details.
 // Declare static variables (global to only this file/module, i.e. no external linkage):
 static HANDLE sKeybdMutex = NULL;
 static HANDLE sMouseMutex = NULL;
-#define KEYBD_MUTEX_NAME "AHK Keybd"
-#define MOUSE_MUTEX_NAME "AHK Mouse"
+#define KEYBD_MUTEX_NAME _T("AHK Keybd")
+#define MOUSE_MUTEX_NAME _T("AHK Mouse")
 
 // Whether to disguise the next up-event for lwin/rwin to suppress Start Menu.
 // These are made global, rather than static inside the hook function, so that
@@ -450,7 +450,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				*pKeyHistoryCurr->target_window = '\0';
 		}
 		else
-			strcpy(pKeyHistoryCurr->target_window, "N/A"); // Due to AHK_GETWINDOWTEXT, this could collide with main thread's writing to same string; but in addition to being extremely rare, it would likely be inconsequential.
+			_tcscpy(pKeyHistoryCurr->target_window, _T("N/A")); // Due to AHK_GETWINDOWTEXT, this could collide with main thread's writing to same string; but in addition to being extremely rare, it would likely be inconsequential.
 		g_HistoryHwndPrev = fore_win;  // Updated unconditionally in case fore_win is NULL.
 	}
 	// Keep the following flush with the above to indicate that they're related.
@@ -555,7 +555,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		//    any alt-tab menu, even one invoked by physical keystrokes; but the converse isn't true).
 		// 3) Lesser reason: Reduces code size and complexity.
 		HWND alt_tab_window;
-		if ((alt_tab_window = FindWindow("#32771", NULL)) // There is an alt-tab window...
+		if ((alt_tab_window = FindWindow(_T("#32771"), NULL)) // There is an alt-tab window...
 			&& GetWindowThreadProcessId(alt_tab_window, NULL) == GetCurrentThreadId()) // ...and it's owned by the hook thread (not the main thread).
 		{
 			KeyEvent(KEYDOWN, VK_ESCAPE);
@@ -691,7 +691,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		//    on where the click occurs) if user clicks outside of our thread's existing context menu.
 		HWND menu_hwnd;
 		if (   (aVK == VK_LBUTTON || aVK == VK_RBUTTON) && (g_MenuIsVisible // Ordered for short-circuit performance.
-				|| ((menu_hwnd = FindWindow("#32768", NULL))
+				|| ((menu_hwnd = FindWindow(_T("#32768"), NULL))
 					&& GetWindowThreadProcessId(menu_hwnd, NULL) == g_MainThreadID))   ) // Don't call GetCurrentThreadId() because our thread is different than main's.
 		{
 			// Bug-fix for v1.0.22: If "LControl & LButton::" (and perhaps similar combinations)
@@ -926,7 +926,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			if (has_no_enabled_suffixes)
 			{
 				this_key.no_suppress |= NO_SUPPRESS_NEXT_UP_EVENT; // Since the "down" is non-suppressed, so should the "up".
-				pKeyHistoryCurr->event_type = '#'; // '#' to indicate this prefix key is disabled due to #IfWin criterion.
+				pKeyHistoryCurr->event_type = _T('#'); // '#' to indicate this prefix key is disabled due to #IfWin criterion.
 			}
 			// In this case, a key-down event can't trigger a suffix, so return immediately.
 			// If our caller is the mouse hook, both of the following will always be false:
@@ -2320,7 +2320,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 		// which is why g_modifiersLR_physical is used vs. g_modifiersLR_logical (which is used above since
 		// it's different).  Also, this is now done for XP -- in addition to NT4 & Win2k -- in case XP is
 		// configured to display the NT/2k style security window instead of the task manager.  This is
-		// probably very common because whenever the welcome screen is diabled, that's the default behavior?:
+		// probably very common because whenever the welcome screen is disabled, that's the default behavior?:
 		// Control Panel > User Accounts > Use the welcome screen for fast and easy logon
 		if (   (aVK == VK_DELETE || aVK == VK_DECIMAL) && !aKeyUp         // Both of these qualify, see notes.
 			&& (g_modifiersLR_physical & (MOD_LCONTROL | MOD_RCONTROL)) // At least one CTRL key is physically down.
@@ -2585,7 +2585,8 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	}
 
 
-	BYTE ch[3], key_state[256];
+	TBYTE ch[3];
+	BYTE key_state[256];
 	memcpy(key_state, g_PhysicalKeyState, 256);
 	// As of v1.0.25.10, the below fixes the Input command so that when it is capturing artificial input,
 	// such as from the Send command or a hotstring's replacement text, the captured input will reflect
@@ -2601,9 +2602,9 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// with more keyboard layouts under 2k/XP than ToAscii() does (though if true, there is no MSDN explanation). 
 	// UPDATE: In v1.0.44.03, need to use ToAsciiEx() anyway because of the adapt-to-active-window-layout feature.
 	Get_active_window_keybd_layout // Defines the variables active_window and active_window_keybd_layout for use below.
-	int byte_count = ToAsciiEx(aVK, aEvent.scanCode  // Uses the original scan code, not the adjusted "sc" one.
-		, key_state, (LPWORD)ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
-	if (!byte_count) // No translation for this key.
+	int char_count = ToUnicodeOrAsciiEx(aVK, aEvent.scanCode  // Uses the original scan code, not the adjusted "sc" one.
+		, key_state, ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
+	if (!char_count) // No translation for this key.
 		return treat_as_visible;
 
 	// More notes about dead keys: The dead key behavior of Enter/Space/Backspace is already properly
@@ -2648,7 +2649,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// being capturable by the Input command and recognizable by any defined hotstrings whose
 	// abbreviations use diacritical letters:
 	bool dead_key_sequence_complete = sPendingDeadKeyVK && aVK != VK_TAB && aVK != VK_ESCAPE;
-	if (byte_count < 0 && !dead_key_sequence_complete) // It's a dead key and it doesn't complete a sequence (i.e. there is no pending dead key before it).
+	if (char_count < 0 && !dead_key_sequence_complete) // It's a dead key and it doesn't complete a sequence (i.e. there is no pending dead key before it).
 	{
 		if (treat_as_visible)
 		{
@@ -2694,12 +2695,12 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		{
 			// Make room in buffer by removing chars from the front that are no longer needed for HS detection:
 			// Bug-fixed the below for v1.0.21:
-			g_HSBufLength = (int)strlen(g_HSBuf + HS_BUF_DELETE_COUNT);  // The new length.
-			memmove(g_HSBuf, g_HSBuf + HS_BUF_DELETE_COUNT, g_HSBufLength + 1); // +1 to include the zero terminator.
+			g_HSBufLength = (int)_tcslen(g_HSBuf + HS_BUF_DELETE_COUNT);  // The new length.
+			tmemmove(g_HSBuf, g_HSBuf + HS_BUF_DELETE_COUNT, g_HSBufLength + 1); // +1 to include the zero terminator.
 		}
 
 		g_HSBuf[g_HSBufLength++] = ch[0];
-		if (byte_count > 1)
+		if (char_count > 1)
 			// MSDN: "This usually happens when a dead-key character (accent or diacritic) stored in the
 			// keyboard layout cannot be composed with the specified virtual key to form a single character."
 			g_HSBuf[g_HSBufLength++] = ch[1];
@@ -2707,7 +2708,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 
 		if (g_HSBufLength)
 		{
-			char *cphs, *cpbuf, *cpcase_start, *cpcase_end;
+			TCHAR *cphs, *cpbuf, *cpcase_start, *cpcase_end;
 			int case_capable_characters;
 			bool first_char_with_case_is_upper, first_char_with_case_has_gone_by;
 			CaseConformModes case_conform_mode;
@@ -2724,7 +2725,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				{
 					if (g_HSBufLength <= hs.mStringLength) // Ensure the string is long enough for loop below.
 						continue;
-					if (!strchr(g_EndChars, g_HSBuf[g_HSBufLength - 1])) // It's not an end-char, so no match.
+					if (!_tcschr(g_EndChars, g_HSBuf[g_HSBufLength - 1])) // It's not an end-char, so no match.
 						continue;
 					cpbuf = g_HSBuf + g_HSBufLength - 2; // Init once for both loops. -2 to omit end-char.
 				}
@@ -3026,7 +3027,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 			g_input.buffer[g_input.BufferLength] = '\0';\
 		}
 	ADD_INPUT_CHAR(ch[0])
-	if (byte_count > 1)
+	if (char_count > 1)
 		// MSDN: "This usually happens when a dead-key character (accent or diacritic) stored in the
 		// keyboard layout cannot be composed with the specified virtual key to form a single character."
 		ADD_INPUT_CHAR(ch[1])
@@ -3046,7 +3047,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		{
 			for (UINT i = 0; i < g_input.MatchCount; ++i)
 			{
-				if (strstr(g_input.buffer, g_input.match[i]))
+				if (_tcsstr(g_input.buffer, g_input.match[i]))
 				{
 					g_input.status = INPUT_TERMINATED_BY_MATCH;
 					return treat_as_visible;
@@ -3075,7 +3076,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		{
 			for (UINT i = 0; i < g_input.MatchCount; ++i)
 			{
-				if (!strcmp(g_input.buffer, g_input.match[i]))
+				if (!_tcscmp(g_input.buffer, g_input.match[i]))
 				{
 					g_input.status = INPUT_TERMINATED_BY_MATCH;
 					return treat_as_visible;
@@ -4229,8 +4230,8 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 		g_AllowInterruption = FALSE; 
 		// Below is a generic message to reduce code size.  Failure is rare, but has been known to happen when
 		// certain types of games are running).
-		MsgBox("Warning: The keyboard and/or mouse hook could not be activated; "
-			"some parts of the script will not function.");
+		MsgBox(_T("Warning: The keyboard and/or mouse hook could not be activated; ")
+			_T("some parts of the script will not function."));
 		g_AllowInterruption = TRUE;
 	}
 }
@@ -4414,7 +4415,7 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 		sDisguiseNextRWinUp = false;
 		sDisguiseNextLAltUp = false;
 		sDisguiseNextRAltUp = false;
-		sAltTabMenuIsVisible = (FindWindow("#32771", NULL) != NULL); // I've seen indications that MS wants this to work on all operating systems.
+		sAltTabMenuIsVisible = (FindWindow(_T("#32771"), NULL) != NULL); // I've seen indications that MS wants this to work on all operating systems.
 		sVKtoIgnoreNextTimeDown = 0;
 
 		ZeroMemory(sPadState, sizeof(sPadState));
@@ -4512,40 +4513,40 @@ void ResetKeyTypeState(key_type &key)
 
 
 
-void GetHookStatus(char *aBuf, int aBufSize)
+void GetHookStatus(LPTSTR aBuf, int aBufSize)
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 {
-	char LRhText[128], LRpText[128];
-	snprintfcat(aBuf, aBufSize,
-		"Modifiers (Hook's Logical) = %s\r\n"
-		"Modifiers (Hook's Physical) = %s\r\n" // Font isn't fixed-width, so don't bother trying to line them up.
-		"Prefix key is down: %s\r\n"
+	TCHAR LRhText[128], LRpText[128];
+	sntprintfcat(aBuf, aBufSize,
+		_T("Modifiers (Hook's Logical) = %s\r\n")
+		_T("Modifiers (Hook's Physical) = %s\r\n") // Font isn't fixed-width, so don't bother trying to line them up.
+		_T("Prefix key is down: %s\r\n")
 		, ModifiersLRToText(g_modifiersLR_logical, LRhText)
 		, ModifiersLRToText(g_modifiersLR_physical, LRpText)
-		, pPrefixKey ? "yes" : "no");
+		, pPrefixKey ? _T("yes") : _T("no"));
 
 	if (!g_KeybdHook)
-		snprintfcat(aBuf, aBufSize, "\r\n"
-			"NOTE: Only the script's own keyboard events are shown\r\n"
-			"(not the user's), because the keyboard hook isn't installed.\r\n");
+		sntprintfcat(aBuf, aBufSize, _T("\r\n")
+			_T("NOTE: Only the script's own keyboard events are shown\r\n")
+			_T("(not the user's), because the keyboard hook isn't installed.\r\n"));
 
 	// Add the below even if key history is already disabled so that the column headings can be seen.
-	snprintfcat(aBuf, aBufSize, 
-		"\r\nNOTE: To disable the key history shown below, add the line \"#KeyHistory 0\" "
-		"anywhere in the script.  The same method can be used to change the size "
-		"of the history buffer.  For example: #KeyHistory 100  (Default is 40, Max is 500)"
-		"\r\n\r\nThe oldest are listed first.  VK=Virtual Key, SC=Scan Code, Elapsed=Seconds since the previous event"
-		".  Types: h=Hook Hotkey, s=Suppressed (blocked), i=Ignored because it was generated by an AHK script"
-		", a=Artificial, #=Disabled via #IfWinActive/Exist.\r\n\r\n"
-		"VK  SC\tType\tUp/Dn\tElapsed\tKey\t\tWindow\r\n"
-		"-------------------------------------------------------------------------------------------------------------");
+	sntprintfcat(aBuf, aBufSize, 
+		_T("\r\nNOTE: To disable the key history shown below, add the line \"#KeyHistory 0\" ")
+		_T("anywhere in the script.  The same method can be used to change the size ")
+		_T("of the history buffer.  For example: #KeyHistory 100  (Default is 40, Max is 500)")
+		_T("\r\n\r\nThe oldest are listed first.  VK=Virtual Key, SC=Scan Code, Elapsed=Seconds since the previous event")
+		_T(".  Types: h=Hook Hotkey, s=Suppressed (blocked), i=Ignored because it was generated by an AHK script")
+		_T(", a=Artificial, #=Disabled via #IfWinActive/Exist.\r\n\r\n")
+		_T("VK  SC\tType\tUp/Dn\tElapsed\tKey\t\tWindow\r\n")
+		_T("-------------------------------------------------------------------------------------------------------------"));
 
 	if (g_KeyHistory)
 	{
 		// Start at the oldest key, which is KeyHistoryNext:
-		char KeyName[128];
+		TCHAR KeyName[128];
 		int item, i;
-		char *title_curr = "", *title_prev = "";
+		LPTSTR title_curr = _T(""), title_prev = _T("");
 		for (item = g_KeyHistoryNext, i = 0; i < g_MaxHistoryKeys; ++i, ++item)
 		{
 			if (item >= g_MaxHistoryKeys)
@@ -4553,14 +4554,14 @@ void GetHookStatus(char *aBuf, int aBufSize)
 			title_prev = title_curr;
 			title_curr = g_KeyHistory[item].target_window;
 			if (g_KeyHistory[item].vk || g_KeyHistory[item].sc)
-				snprintfcat(aBuf, aBufSize, "\r\n%02X  %03X\t%c\t%c\t%0.2f\t%-15s\t%s"
+				sntprintfcat(aBuf, aBufSize, _T("\r\n%02X  %03X\t%c\t%c\t%0.2f\t%-15s\t%s")
 					, g_KeyHistory[item].vk, g_KeyHistory[item].sc
 					// It can't be both ignored and suppressed, so display only one:
 					, g_KeyHistory[item].event_type
-					, g_KeyHistory[item].key_up ? 'u' : 'd'
+					, g_KeyHistory[item].key_up ? _T('u') : _T('d')
 					, g_KeyHistory[item].elapsed_time
-					, GetKeyName(g_KeyHistory[item].vk, g_KeyHistory[item].sc, KeyName, sizeof(KeyName))
-					, strcmp(title_curr, title_prev) ? title_curr : "" // Display title only when it changes.
+					, GetKeyName(g_KeyHistory[item].vk, g_KeyHistory[item].sc, KeyName, _countof(KeyName))
+					, _tcscmp(title_curr, title_prev) ? title_curr : _T("") // Display title only when it changes.
 					);
 		}
 	}

@@ -27,7 +27,9 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 // RT_MANIFEST
 //
 
-//CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST             "AutoHotkey.exe.manifest"
+#ifdef EMBED_MANIFEST // VC++ 2005 and later don't require the next line.
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST             "AutoHotkey.exe.manifest"
+#endif
 
 #ifdef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////
@@ -179,7 +181,7 @@ BEGIN
             VALUE "FileVersion", "1, 0, 48, 05"
             VALUE "InternalName", "AutoHotkey_L"
             VALUE "LegalCopyright", "Copyright (C) 2009"
-            VALUE "OriginalFilename", "AutoHotkey.rc"
+            VALUE "OriginalFilename", "AutoHotkey.exe"
             VALUE "ProductName", "AutoHotkey_L"
             VALUE "ProductVersion", "1, 0, 48, 05"
 #endif

@@ -87,6 +87,8 @@ const uschar _pcre_utf8_table4[] = {
   2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
   3,3,3,3,3,3,3,3,4,4,4,4,5,5,5,5 };
 
+#ifdef SUPPORT_UCP
+
 /* The pcre_utt[] table below translates Unicode property names into type and
 code values. It is searched by binary chop, so must be in collating sequence of
 name. Originally, the table contained pointers to the name strings in the first
@@ -312,6 +314,8 @@ const ucp_type_table _pcre_utt[] = {
 };
 
 const int _pcre_utt_size = sizeof(_pcre_utt)/sizeof(ucp_type_table);
+
+#endif
 
 #endif  /* SUPPORT_UTF8 */
 

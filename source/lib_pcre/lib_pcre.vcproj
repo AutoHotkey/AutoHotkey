@@ -4,7 +4,6 @@
 	Version="9.00"
 	Name="lib_pcre"
 	ProjectGUID="{39037993-9571-4DF2-8E39-CD2909043574}"
-	RootNamespace="lib_pcre"
 	Keyword="Win32Proj"
 	TargetFrameworkVersion="131072"
 	>
@@ -21,8 +20,7 @@
 			OutputDirectory="$(SolutionDir)temp\$(ConfigurationName)"
 			IntermediateDirectory="$(OutDir)\lib_pcre"
 			ConfigurationType="4"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
-			CharacterSet="2"
+			CharacterSet="0"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -47,7 +45,6 @@
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
 				WarningLevel="3"
-				Detect64BitPortabilityProblems="false"
 				DebugInformationFormat="4"
 				CompileAs="1"
 			/>
@@ -85,8 +82,8 @@
 			OutputDirectory="$(SolutionDir)temp\$(ConfigurationName)"
 			IntermediateDirectory="$(OutDir)\lib_pcre"
 			ConfigurationType="4"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
-			CharacterSet="2"
+			CharacterSet="0"
+			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -109,14 +106,13 @@
 				EnableIntrinsicFunctions="true"
 				FavorSizeOrSpeed="2"
 				OmitFramePointers="true"
-				PreprocessorDefinitions="WIN32;NDEBUG;_LIB;HAVE_CONFIG_H;_CRT_SECURE_NO_WARNINGS"
+				PreprocessorDefinitions="WIN32;NDEBUG;_LIB;HAVE_CONFIG_H"
 				StringPooling="true"
 				ExceptionHandling="0"
 				RuntimeLibrary="0"
 				BufferSecurityCheck="false"
 				EnableFunctionLevelLinking="true"
 				WarningLevel="3"
-				Detect64BitPortabilityProblems="false"
 				DebugInformationFormat="0"
 				CompileAs="1"
 			/>
@@ -156,8 +152,8 @@
 			OutputDirectory="$(SolutionDir)temp\$(ConfigurationName)"
 			IntermediateDirectory="$(OutDir)\lib_pcre"
 			ConfigurationType="4"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
-			CharacterSet="2"
+			CharacterSet="0"
+			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -187,7 +183,6 @@
 				BufferSecurityCheck="false"
 				EnableFunctionLevelLinking="true"
 				WarningLevel="3"
-				Detect64BitPortabilityProblems="false"
 				DebugInformationFormat="0"
 				CompileAs="1"
 			/>
@@ -264,6 +259,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\pcre\pcre_ord2utf8.c"
+				>
+			</File>
+			<File
 				RelativePath=".\pcre\pcre_refcount.c"
 				>
 			</File>
@@ -281,6 +280,10 @@
 			</File>
 			<File
 				RelativePath=".\pcre\pcre_version.c"
+				>
+			</File>
+			<File
+				RelativePath=".\pcre\pcre_xclass.c"
 				>
 			</File>
 		</Filter>

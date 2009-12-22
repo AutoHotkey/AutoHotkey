@@ -24,32 +24,29 @@ SimpleHeap *SimpleHeap::sLast  = NULL;
 char *SimpleHeap::sMostRecentlyAllocated = NULL;
 UINT SimpleHeap::sBlockCount = 0;
 
-char *SimpleHeap::Malloc(char *aBuf, size_t aLength)
+LPTSTR SimpleHeap::Malloc(LPTSTR aBuf, size_t aLength)
 // v1.0.44.14: Added aLength to improve performance in cases where callers already know the length.
 // If aLength is at its default of -1, the length will be calculated here.
 // Caller must ensture that aBuf isn't NULL.
 {
 	if (!aBuf || !*aBuf) // aBuf is checked for NULL because it's not worth avoiding it for such a low-level, frequently-called function.
-		return ""; // Return the constant empty string to the caller (not aBuf itself since that might be volatile).
+		return _T(""); // Return the constant empty string to the caller (not aBuf itself since that might be volatile).
 	if (aLength == -1) // Caller wanted us to calculate it.  Compare directly to -1 since aLength is unsigned.
-		aLength = strlen(aBuf);
-	char *new_buf;
-	if (   !(new_buf = SimpleHeap::Malloc(aLength + 1))   ) // +1 for the zero terminator.
+		aLength = _tcslen(aBuf);
+	LPTSTR new_buf;
+	if (   !(new_buf = (LPTSTR)SimpleHeap::Malloc((aLength + 1) * sizeof(TCHAR)))   ) // +1 for the zero terminator.
 	{
 		g_script.ScriptError(ERR_OUTOFMEM, aBuf);
 		return NULL; // Callers may rely on NULL vs. "" being returned in the event of failure.
 	}
 	if (aLength)
-		memcpy(new_buf, aBuf, aLength); // memcpy() typically benchmarks slightly faster than strcpy().
+		tmemcpy(new_buf, aBuf, aLength); // memcpy() typically benchmarks slightly faster than strcpy().
 	//else only a terminator is needed.
 	new_buf[aLength] = '\0'; // Terminate here for when aLength==0 and for the memcpy above so that caller's aBuf doesn't have to be terminated.
 	return new_buf;
 }
 
-
-
-char *SimpleHeap::Malloc(size_t aSize)
-// Seems okay to return char* for convenience, since that's the type most often used.
+void* SimpleHeap::Malloc(size_t aSize)
 // This could be made more memory efficient by searching old blocks for sufficient
 // free space to handle <size> prior to creating a new block.  But the whole point
 // of this class is that it's only called to allocate relatively small objects,
@@ -84,7 +81,7 @@ char *SimpleHeap::Malloc(size_t aSize)
 	//	size_consumed = sLast->mSpaceAvailable; // mSpaceAvailable to go negative (which it can't due to be unsigned).
 	sLast->mFreeMarker += size_consumed;
 	sLast->mSpaceAvailable -= size_consumed;
-	return sMostRecentlyAllocated;
+	return (void *)sMostRecentlyAllocated;
 }
 
 

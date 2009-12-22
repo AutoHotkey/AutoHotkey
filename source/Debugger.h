@@ -12,7 +12,9 @@ including commercial applications, and to alter it and redistribute it
 freely, without restriction.
 */
 
-#ifndef SCRIPT_DEBUG
+#pragma once
+
+#ifndef CONFIG_DEBUGGER
 
 #define DEBUGGER_STACK_PUSH(a,b,c,d)
 #define DEBUGGER_STACK_POP()
@@ -22,7 +24,7 @@ freely, without restriction.
 #ifndef Debugger_h
 #define Debugger_h
 
-#include <WinSock2.h>
+#include <winsock2.h>
 
 
 #define DEBUGGER_INITIAL_BUFFER_SIZE 2048
@@ -50,10 +52,10 @@ freely, without restriction.
 
 #define DEBUGGER_E_INTERNAL_ERROR		998 // Unrecoverable internal error, usually the result of a Winsock error.
 
-// Error Messages
-#define DEBUGGER_ERR_FAILEDTOCONNECT "Failed to connect to debugger UI."
-#define DEBUGGER_ERR_INTERNAL "An internal error has occurred in the debugger engine."
-#define DEBUGGER_ERR_DISCONNECT_PROMPT " Continue running the script without the debugger?"
+// Error messages: these are shown directly to the user, so are in the native string format.
+#define DEBUGGER_ERR_INTERNAL			_T("An internal error has occurred in the debugger engine.")
+#define DEBUGGER_ERR_DISCONNECT_PROMPT	_T("\nContinue running the script without the debugger?")
+#define DEBUGGER_ERR_FAILEDTOCONNECT	_T("Failed to connect to an active debugger client.")
 
 // Buffer size required for a given XML message size, plus protocol overhead.
 // Format: data_length NULL xml_tag data NULL
@@ -63,8 +65,9 @@ freely, without restriction.
 class Debugger;
 
 extern Debugger g_Debugger;
-extern char *g_DebuggerHost;
-extern char *g_DebuggerPort;
+// jackieku: modified to hold the buffer.
+extern CStringA g_DebuggerHost;
+extern CStringA g_DebuggerPort;
 
 
 enum BreakpointTypeType {BT_Line, BT_Call, BT_Return, BT_Exception, BT_Conditional, BT_Watch};
@@ -102,7 +105,7 @@ struct StackEntry
 	StackEntryTypeType type;
 	Line *line;
 	union {
-		char *desc; // SE_Thread: "auto-exec", hotkey/hotstring name, "timer", etc.
+		TCHAR *desc; // SE_Thread: "auto-exec", hotkey/hotstring name, "timer", etc.
 		Label *sub;
 		Func *func;
 	};
@@ -131,11 +134,13 @@ enum PropertyContextType {PC_Local=0, PC_Global};
 class Debugger
 {
 public:
-	int Connect(char *aAddress, char *aPort);
+	int Connect(const char *aAddress, const char *aPort);
 	int Disconnect();
 	void Exit(ExitReasons aExitReason); // Called when exiting AutoHotkey.
 	inline bool IsConnected() { return mSocket != INVALID_SOCKET; }
 	inline bool IsStepping() { return mInternalState >= DIS_StepInto; }
+	inline bool HasStdErrHook() { return mStdErrMode != SR_Disabled; }
+	inline bool HasStdOutHook() { return mStdOutMode != SR_Disabled; }
 	inline bool ShouldBreakAfterFunctionCall()
 	{
 		return mInternalState == DIS_StepInto
@@ -152,6 +157,11 @@ public:
 
 	// Receive and process commands. Returns when a continuation command is received.
 	int ProcessCommands();
+
+	// Streams
+	int WriteStreamPacket(LPCTSTR aText, LPCSTR aType);
+	void OutputDebug(LPCTSTR aText);
+	bool FileAppendStdOut(LPCTSTR aText);
 
 	#define DEBUGGER_COMMAND(cmd)	int cmd(char *aArgs)
 	
@@ -192,7 +202,7 @@ public:
 
 
 	Debugger() : mSocket(INVALID_SOCKET), mInternalState(DIS_Starting), mStackDepth(0)
-		, mMaxPropertyData(1024), mContinuationTransactionId("")
+		, mMaxPropertyData(1024), mContinuationTransactionId(""), mStdErrMode(SR_Disabled), mStdOutMode(SR_Disabled)
 	{
 		// Create root entry for simplicity.
 		mStackTop = mStack = new StackEntry();
@@ -206,17 +216,18 @@ private:
 	{
 	public:
 		int Write(char *aData, DWORD aDataSize=MAXDWORD);
-		int WriteF(char *aFormat, ...);
-		int WriteFileURI(char *aPath);
+		int WriteF(const char *aFormat, ...);
+		int WriteFileURI(const char *aPath);
+		int WriteEncodeBase64(const char *aData, size_t aDataSize, bool aSkipBufferSizeCheck = false);
 		int Expand();
-		int Expand(DWORD aRequiredSize);
+		int ExpandIfNecessary(DWORD aRequiredSize);
 		void Remove(DWORD aDataSize);
 
 		Buffer() : mData(NULL), mDataSize(0), mDataUsed(0) {}
 	
 		char *mData;
-		DWORD mDataSize;
-		DWORD mDataUsed;
+		size_t mDataSize;
+		size_t mDataUsed;
 
 		~Buffer() {
 			if (mData)
@@ -232,6 +243,12 @@ private:
 		DIS_StepOver,
 		DIS_StepOut
 	} mInternalState;
+
+	enum StreamRedirectType {
+		SR_Disabled = 0,
+		SR_Copy = 1,
+		SR_Redirect = 2
+	} mStdErrMode, mStdOutMode;
 
 	// Stack - keeps track of threads, function calls and gosubs.
 	StackEntry *mStack, *mStackTop;
@@ -262,9 +279,9 @@ private:
 	// Decode a file URI in-place.
 	void DecodeURI(char *aUri);
 	
-	static char *sBase64Chars;
-	int Base64Encode(char *aBuf, const char *aInput, int aInputSize=-1);
-	int Base64Decode(char *aBuf, const char *aInput, int aInputSize=-1);
+	static const char *sBase64Chars;
+	static int Base64Encode(char *aBuf, const char *aInput, size_t aInputSize = -1);
+	static int Base64Decode(char *aBuf, const char *aInput, size_t aInputSize = -1);
 
 
 	// Debugger::GetNextArg
@@ -282,7 +299,7 @@ private:
 	int GetNextArg(char *&aArgs, char &aArg, char *&aValue);
 
 	// Fatal debugger error. Prompt user to terminate script or only disconnect debugger.
-	static int FatalError(int aErrorCode, char *aMessage=NULL);
+	static int FatalError(int aErrorCode, LPCTSTR aMessage = DEBUGGER_ERR_INTERNAL DEBUGGER_ERR_DISCONNECT_PROMPT);
 };
 
 #endif

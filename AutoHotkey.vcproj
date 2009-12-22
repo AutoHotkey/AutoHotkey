@@ -21,9 +21,7 @@
 			OutputDirectory="bin\Debug"
 			IntermediateDirectory="temp\$(ConfigurationName)"
 			ConfigurationType="1"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
-			CharacterSet="2"
-			DeleteExtensionsOnClean="*.obj;*.ilk;*.tlb;*.tli;*.tlh;*.tmp;*.rsp;*.pgc;*.pgd;*.meta"
+			CharacterSet="0"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -43,15 +41,15 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;SCRIPT_DEBUG"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
 				StructMemberAlignment="0"
 				BufferSecurityCheck="true"
-				UsePrecompiledHeader="0"
+				EnableFunctionLevelLinking="true"
+				UsePrecompiledHeader="2"
 				WarningLevel="3"
-				Detect64BitPortabilityProblems="false"
 				DebugInformationFormat="4"
 			/>
 			<Tool
@@ -74,7 +72,6 @@
 				StackReserveSize="4194304"
 				StackCommitSize="0"
 				TerminalServerAware="1"
-				OptimizeForWindows98="0"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
 				TargetMachine="1"
@@ -107,9 +104,8 @@
 			OutputDirectory="bin\Release"
 			IntermediateDirectory="temp\$(ConfigurationName)"
 			ConfigurationType="1"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
-			CharacterSet="2"
-			DeleteExtensionsOnClean="*.obj;*.ilk;*.tlb;*.tli;*.tlh;*.tmp;*.rsp;*.pgc;*.pgd;*.meta"
+			CharacterSet="0"
+			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -129,10 +125,9 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="2"
-				EnableIntrinsicFunctions="true"
 				FavorSizeOrSpeed="1"
 				OmitFramePointers="true"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;SCRIPT_DEBUG"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS"
 				StringPooling="true"
 				ExceptionHandling="0"
 				BasicRuntimeChecks="0"
@@ -140,9 +135,8 @@
 				StructMemberAlignment="0"
 				BufferSecurityCheck="false"
 				EnableFunctionLevelLinking="true"
-				UsePrecompiledHeader="0"
+				UsePrecompiledHeader="2"
 				WarningLevel="3"
-				WarnAsError="false"
 				DebugInformationFormat="0"
 			/>
 			<Tool
@@ -156,11 +150,10 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalOptions="/SAFESEH:NO /IGNORE:4037"
+				AdditionalOptions="/SAFESEH:NO"
 				AdditionalDependencies="wsock32.lib winmm.lib version.lib comctl32.lib"
 				OutputFile="$(OutDir)/AutoHotkey.exe"
 				LinkIncremental="1"
-				IgnoreDefaultLibraryNames="MSVCrt"
 				GenerateDebugInformation="false"
 				SubSystem="2"
 				StackReserveSize="4194304"
@@ -169,8 +162,6 @@
 				TerminalServerAware="1"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
-				OptimizeForWindows98="0"
-				FunctionOrder="@source/misc/function_order_for_linker_optimization.txt"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
 				TargetMachine="1"
@@ -196,7 +187,7 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
-				CommandLine=""
+				CommandLine="if exist upx.exe (&#x0D;&#x0A;set upx_path=upx.exe&#x0D;&#x0A;) else (&#x0D;&#x0A;if exist ..\upx.exe (&#x0D;&#x0A;set upx_path=..\upx.exe&#x0D;&#x0A;) else goto giveup&#x0D;&#x0A;)&#x0D;&#x0A;%upx_path% --best --no-lzma --filter=73 --compress-icons=0 &quot;$(TargetPath)&quot;&#x0D;&#x0A;:giveup&#x0D;&#x0A;"
 			/>
 		</Configuration>
 		<Configuration
@@ -204,9 +195,8 @@
 			OutputDirectory="bin\Release"
 			IntermediateDirectory="temp\$(ConfigurationName)"
 			ConfigurationType="1"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
-			CharacterSet="2"
-			DeleteExtensionsOnClean="*.obj;*.ilk;*.tlb;*.tli;*.tlh;*.tmp;*.rsp;*.pgc;*.pgd;*.meta"
+			CharacterSet="0"
+			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -226,7 +216,6 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="1"
-				EnableIntrinsicFunctions="true"
 				FavorSizeOrSpeed="2"
 				OmitFramePointers="true"
 				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;AUTOHOTKEYSC"
@@ -238,7 +227,6 @@
 				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
-				WarnAsError="true"
 				DebugInformationFormat="0"
 			/>
 			<Tool
@@ -257,7 +245,6 @@
 				ShowProgress="0"
 				OutputFile="$(OutDir)/AutoHotkeySC.bin"
 				LinkIncremental="1"
-				IgnoreDefaultLibraryNames="MSVCrt"
 				GenerateDebugInformation="false"
 				SubSystem="2"
 				StackReserveSize="4194304"
@@ -265,9 +252,6 @@
 				TerminalServerAware="1"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
-				OptimizeForWindows98="0"
-				FunctionOrder="@source/misc/function_order_for_linker_optimization.txt"
-				SetChecksum="false"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
 				TargetMachine="1"
@@ -302,9 +286,7 @@
 			OutputDirectory="bin\Minimal"
 			IntermediateDirectory="temp\$(ConfigurationName)"
 			ConfigurationType="1"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
-			CharacterSet="2"
-			DeleteExtensionsOnClean="*.obj;*.ilk;*.tlb;*.tli;*.tlh;*.tmp;*.rsp;*.pgc;*.pgd;*.meta"
+			CharacterSet="0"
 			WholeProgramOptimization="1"
 			>
 			<Tool
@@ -326,7 +308,6 @@
 				Name="VCCLCompilerTool"
 				Optimization="1"
 				InlineFunctionExpansion="1"
-				EnableIntrinsicFunctions="true"
 				FavorSizeOrSpeed="2"
 				OmitFramePointers="true"
 				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;AUTOHOTKEYSC"
@@ -338,7 +319,6 @@
 				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
-				WarnAsError="true"
 				DebugInformationFormat="0"
 			/>
 			<Tool
@@ -357,7 +337,7 @@
 				ShowProgress="0"
 				OutputFile="$(OutDir)/AutoHotkeySC.bin"
 				LinkIncremental="1"
-				IgnoreDefaultLibraryNames="libc;libcmt"
+				IgnoreDefaultLibraryNames="libcmt"
 				GenerateDebugInformation="false"
 				SubSystem="2"
 				StackReserveSize="4194304"
@@ -365,8 +345,6 @@
 				TerminalServerAware="1"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
-				OptimizeForWindows98="0"
-				FunctionOrder="@source/misc/function_order_for_linker_optimization.txt"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
 				TargetMachine="1"
@@ -401,9 +379,7 @@
 			OutputDirectory="bin\Minimal"
 			IntermediateDirectory="temp\$(ConfigurationName)"
 			ConfigurationType="1"
-			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
-			CharacterSet="2"
-			DeleteExtensionsOnClean="*.obj;*.ilk;*.tlb;*.tli;*.tlh;*.tmp;*.rsp;*.pgc;*.pgd;*.meta"
+			CharacterSet="0"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -423,10 +399,9 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="2"
-				EnableIntrinsicFunctions="true"
 				FavorSizeOrSpeed="1"
 				OmitFramePointers="true"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;SCRIPT_DEBUG"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS"
 				StringPooling="true"
 				ExceptionHandling="0"
 				BasicRuntimeChecks="0"
@@ -436,7 +411,6 @@
 				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
-				WarnAsError="false"
 				DebugInformationFormat="0"
 			/>
 			<Tool
@@ -450,11 +424,11 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalOptions="/SAFESEH:NO /IGNORE:4037"
+				AdditionalOptions="/SAFESEH:NO"
 				AdditionalDependencies="wsock32.lib winmm.lib version.lib comctl32.lib"
 				OutputFile="$(OutDir)/AutoHotkey.exe"
 				LinkIncremental="1"
-				IgnoreDefaultLibraryNames="libc;libcmt"
+				IgnoreDefaultLibraryNames="libcmt"
 				GenerateDebugInformation="false"
 				SubSystem="2"
 				StackReserveSize="4194304"
@@ -463,10 +437,7 @@
 				TerminalServerAware="1"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
-				OptimizeForWindows98="0"
-				FunctionOrder="@source/misc/function_order_for_linker_optimization.txt"
 				RandomizedBaseAddress="1"
-				DataExecutionPrevention="0"
 				TargetMachine="1"
 			/>
 			<Tool
@@ -490,7 +461,7 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
-				CommandLine=""
+				CommandLine="if exist upx.exe (&#x0D;&#x0A;set upx_path=upx.exe&#x0D;&#x0A;) else (&#x0D;&#x0A;if exist ..\upx.exe (&#x0D;&#x0A;set upx_path=..\upx.exe&#x0D;&#x0A;) else goto giveup&#x0D;&#x0A;)&#x0D;&#x0A;%upx_path% --best --no-lzma --filter=73 --compress-icons=0 &quot;$(TargetPath)&quot;&#x0D;&#x0A;:giveup&#x0D;&#x0A;"
 			/>
 		</Configuration>
 	</Configurations>
@@ -619,6 +590,30 @@
 			<File
 				RelativePath=".\source\stdafx.cpp"
 				>
+				<FileConfiguration
+					Name="Debug|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						UsePrecompiledHeader="1"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						UsePrecompiledHeader="1"
+					/>
+				</FileConfiguration>
+			</File>
+			<File
+				RelativePath=".\source\StringConv.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\source\TextIO.cpp"
+				>
 			</File>
 			<File
 				RelativePath=".\source\util.cpp"
@@ -651,6 +646,14 @@
 				>
 			</File>
 			<File
+				RelativePath=".\source\config.h"
+				>
+			</File>
+			<File
+				RelativePath=".\source\debug.h"
+				>
+			</File>
+			<File
 				RelativePath=".\source\Debugger.h"
 				>
 			</File>
@@ -676,6 +679,10 @@
 			</File>
 			<File
 				RelativePath=".\source\keyboard_mouse.h"
+				>
+			</File>
+			<File
+				RelativePath=".\source\KuString.h"
 				>
 			</File>
 			<File
@@ -715,6 +722,14 @@
 				>
 			</File>
 			<File
+				RelativePath=".\source\StringConv.h"
+				>
+			</File>
+			<File
+				RelativePath=".\source\TextIO.h"
+				>
+			</File>
+			<File
 				RelativePath=".\source\util.h"
 				>
 			</File>
@@ -736,6 +751,10 @@
 			Filter="rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx"
 			UniqueIdentifier="{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}"
 			>
+			<File
+				RelativePath=".\source\resources\AutoHotkey.exe.manifest"
+				>
+			</File>
 			<File
 				RelativePath=".\source\resources\AutoHotkey.rc"
 				>
@@ -769,10 +788,6 @@
 				>
 			</File>
 		</Filter>
-		<File
-			RelativePath=".\source\misc\function_order_for_linker_optimization.txt"
-			>
-		</File>
 	</Files>
 	<Globals>
 	</Globals>
