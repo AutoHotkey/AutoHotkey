@@ -615,15 +615,6 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 					// such as F1::?(i.e. a destination key that doesn't have a VK, at least in English).
 					if (!aTargetWindow && event_type != KEYUP) // In this mode, mods_for_next_key and event_type are ignored due to being unsupported.
 					{
-#ifdef UNICODE
-						if (aKeys[0] > VK_MAX)
-						{
-							SetModifierLRState(mods_for_next_key | persistent_modifiers_for_this_SendKeys, sSendMode ? sEventModifiersLR : GetModifierLRState(),
-								NULL, false, true, KEY_IGNORE);
-							SendUnicodeChar(aKeys[0], repeat_count);
-						}
-						else
-#endif
 						SendKeySpecial(aKeys[0], repeat_count);
 					}
 					//else do nothing since it's there's no known way to send the keystokes.
@@ -707,33 +698,21 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 
 		else // Encountered a character other than ^+!#{} ... or we're in raw mode.
 		{
-#ifdef UNICODE
-			if (*aKeys > VK_MAX)
+			// Best to call this separately, rather than as first arg in SendKey, since it changes the
+			// value of modifiers and the updated value is *not* guaranteed to be passed.
+			// In other words, SendKey(TextToVK(...), modifiers, ...) would often send the old
+			// value for modifiers.
+			single_char_string[0] = *aKeys; // String was pre-terminated earlier.
+			if (vk = TextToVK(single_char_string, &mods_for_next_key, true, true, sTargetKeybdLayout))
+				// TextToVK() takes no measurable time compared to the amount of time SendKey takes.
+				SendKey(vk, 0, mods_for_next_key, persistent_modifiers_for_this_SendKeys, 1, KEYDOWNANDUP
+					, 0, aTargetWindow);
+			else // Try to send it by alternate means.
 			{
-				SetModifierLRState(mods_for_next_key | persistent_modifiers_for_this_SendKeys, sSendMode ? sEventModifiersLR : GetModifierLRState(),
-					NULL, false, true, KEY_IGNORE);
-				SendUnicodeChar(*aKeys);
-				DoKeyDelay();
-			}
-			else
-#endif
-			{
-				// Best to call this separately, rather than as first arg in SendKey, since it changes the
-				// value of modifiers and the updated value is *not* guaranteed to be passed.
-				// In other words, SendKey(TextToVK(...), modifiers, ...) would often send the old
-				// value for modifiers.
-				single_char_string[0] = *aKeys; // String was pre-terminated earlier.
-				if (vk = TextToVK(single_char_string, &mods_for_next_key, true, true, sTargetKeybdLayout))
-					// TextToVK() takes no measurable time compared to the amount of time SendKey takes.
-					SendKey(vk, 0, mods_for_next_key, persistent_modifiers_for_this_SendKeys, 1, KEYDOWNANDUP
-						, 0, aTargetWindow);
-				else // Try to send it by alternate means.
-				{
-					// v1.0.40: SendKeySpecial sends only keybd_event keystrokes, not ControlSend style keystrokes:
-					if (!aTargetWindow) // In this mode, mods_for_next_key is ignored due to being unsupported.
-						SendKeySpecial(*aKeys, 1);
-					//else do nothing since there's no known way to send the keystokes.
-				}
+				// v1.0.40: SendKeySpecial sends only keybd_event keystrokes, not ControlSend style keystrokes:
+				if (!aTargetWindow) // In this mode, mods_for_next_key is ignored due to being unsupported.
+					SendKeySpecial(*aKeys, 1);
+				//else do nothing since there's no known way to send the keystokes.
 			}
 			mods_for_next_key = 0;  // Safest to reset this regardless of whether a key was sent.
 		}
@@ -1128,6 +1107,7 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 	// Production of ANSI characters above 127 has been tested on both Windows XP and 98se (but not the
 	// Win98 command prompt).
 
+#ifndef UNICODE
 	char asc_string[16], *cp = asc_string;
 
 	// The following range isn't checked because this function appears never to be called for such
@@ -1141,13 +1121,18 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 	// a few others to be produced in Russian and perhaps other layouts, which was impossible in versions
 	// prior to 1.0.40.
 	_itoa((int)(UCHAR)aChar, cp, 10); // Convert to UCHAR in case aChar < 0.
+#endif
 
 	LONG_OPERATION_INIT
 	for (int i = 0; i < aRepeatCount; ++i)
 	{
 		if (!sSendMode)
 			LONG_OPERATION_UPDATE_FOR_SENDKEYS
+#ifdef UNICODE
+		SendUnicodeChar(aChar);
+#else
 		SendASC(asc_string);
+#endif
 		DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
 	}
 
@@ -1159,21 +1144,6 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 	// 2) Our callers, if they need to push ALT back down because we didn't do it, will either disguise it
 	//    or avoid doing so because they're about to send a keystroke (just about anything) that ALT will
 	//    modify and thus not need to be disguised.
-}
-
-
-
-void SendUnicodeChar(wchar_t aChar, int aRepeatCount)
-// The same with SendKeySpecial, but it sends Unicode characters.
-{
-	LONG_OPERATION_INIT
-	for (int i = 0; i < aRepeatCount; ++i)
-	{
-		if (!sSendMode)
-			LONG_OPERATION_UPDATE_FOR_SENDKEYS
-		SendUnicodeChar(aChar);
-		DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
-	}
 }
 
 

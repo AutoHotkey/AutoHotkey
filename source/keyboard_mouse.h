@@ -198,7 +198,6 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 	, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED, bool aMoveOffset = false);
 void SendKeySpecial(TCHAR aChar, int aRepeatCount);
 void SendASC(const char *aAscii);
-void SendUnicodeChar(wchar_t aChar, int aRepeatCount);
 
 struct PlaybackEvent
 {
