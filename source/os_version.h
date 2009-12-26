@@ -41,13 +41,17 @@ public:
 	bool	IsWin9x(void) {return m_bWin9x;}					// Returns true if 9x
 #endif
 
+#ifndef UNICODE
 	bool	IsWinNT4(void) {return m_bWinNT4;}					// Returns true if WinNT 4
+#endif
 	bool	IsWin2000(void) {return m_bWin2000;}				// Returns true if Win2000
 	bool	IsWinXP(void) {return m_bWinXP;}					// Returns true if WinXP
 	bool	IsWin2003(void) {return m_bWin2003;}				// Returns true if Win2003
 	bool	IsWinVista(void) {return m_bWinVista;}				// Returns true if WinVista (v1.0.44.13)
 	bool	IsWin7(void) {return m_bWin7; }						// Returns true if Win7
+#ifndef UNICODE
 	bool	IsWinNT4orLater(void) {return m_bWinNT4orLater;}	// Returns true if WinNT 4+
+#endif
 	bool	IsWin2000orLater(void) {return m_bWin2000orLater;}	// Returns true if Win2000+
 	bool	IsWinXPorLater(void) {return m_bWinXPorLater;}		// Returns true if WinXP+
 	bool	IsWinVistaOrLater(void) {return m_bWinVistaOrLater;}// Returns true if WinVista or later (v1.0.48.01)
@@ -86,8 +90,10 @@ private:
 	bool			m_bWin9x;
 #endif
 
+#ifndef UNICODE
 	bool			m_bWinNT4;
 	bool			m_bWinNT4orLater;
+#endif
 	bool			m_bWinXP;
 	bool			m_bWin2003;
 	bool			m_bWinVista;

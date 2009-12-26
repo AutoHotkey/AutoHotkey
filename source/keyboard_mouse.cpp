@@ -396,7 +396,11 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 
 	bool blockinput_prev = g_BlockInput;
 	bool do_selective_blockinput = (g_BlockInputMode == TOGGLE_SEND || g_BlockInputMode == TOGGLE_SENDANDMOUSE)
-		&& !sSendMode && !aTargetWindow && g_os.IsWinNT4orLater();
+		&& !sSendMode && !aTargetWindow
+#ifndef UNICODE
+		&& g_os.IsWinNT4orLater()
+#endif
+		;
 	if (do_selective_blockinput)
 		Line::ScriptBlockInput(true); // Turn it on unconditionally even if it was on, since Ctrl-Alt-Del might have disabled it.
 
@@ -1115,7 +1119,7 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 	// manifest them via Control+VK combinations:
 	//if (aChar > -1 && aChar < 32)
 	//	return;
-	if (aChar < 0)    // Try using ANSI.
+	if (aChar & 0x7F)    // Try using ANSI.
 		*cp++ = '0';  // ANSI mode is achieved via leading zero in the Alt+Numpad keystrokes.
 	//else use Alt+Numpad without the leading zero, which allows the characters a-z, A-Z, and quite
 	// a few others to be produced in Russian and perhaps other layouts, which was impossible in versions
@@ -1139,7 +1143,7 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 	// It is not necessary to do SetModifierLRState() to put a caller-specified set of persistent modifier
 	// keys back into effect because:
 	// 1) Our call to SendASC above (if any) at most would have released some of the modifiers (though never
-	//    WIN because it isn't necessary); but never pusheed any new modifiers down (it even releases ALT
+	//    WIN because it isn't necessary); but never pushed any new modifiers down (it even releases ALT
 	//    prior to returning).
 	// 2) Our callers, if they need to push ALT back down because we didn't do it, will either disguise it
 	//    or avoid doing so because they're about to send a keystroke (just about anything) that ALT will
@@ -1670,7 +1674,11 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 		// any chance that block-input will get stuck on due to two threads simultaneously reading+changing
 		// g_BlockInput (changes occur via calls to ScriptBlockInput).
 		bool we_turned_blockinput_off = g_BlockInput && (aVK == VK_MENU || aVK == VK_LMENU || aVK == VK_RMENU)
-			&& !caller_is_keybd_hook && g_os.IsWinNT4orLater(); // Ordered for short-circuit performance.
+			&& !caller_is_keybd_hook
+#ifndef UNICODE
+			&& g_os.IsWinNT4orLater()
+#endif
+			; // Ordered for short-circuit performance.
 		if (we_turned_blockinput_off)
 			Line::ScriptBlockInput(false);
 
@@ -1991,7 +1999,11 @@ void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY
 	// Turn it back off only if it wasn't ON before we started.
 	bool blockinput_prev = g_BlockInput;
 	bool do_selective_blockinput = (g_BlockInputMode == TOGGLE_MOUSE || g_BlockInputMode == TOGGLE_SENDANDMOUSE)
-		&& !sSendMode && g_os.IsWinNT4orLater();
+		&& !sSendMode
+#ifndef UNICODE
+		&& g_os.IsWinNT4orLater()
+#endif
+		;
 	if (do_selective_blockinput) // It seems best NOT to use g_BlockMouseMove for this, since often times the user would want keyboard input to be disabled too, until after the mouse event is done.
 		Line::ScriptBlockInput(true); // Turn it on unconditionally even if it was on, since Ctrl-Alt-Del might have disabled it.
 
@@ -3509,11 +3521,8 @@ modLR_type GetModifierLRState(bool aExplicitlyGet)
 	// in its place, yields the correct info.  Very strange.
 
 	modLR_type modifiersLR = 0;  // Allows all to default to up/off to simplify the below.
-	if (
 #ifndef UNICODE
-		g_os.IsWin9x() || 
-#endif
-		g_os.IsWinNT4())
+	if (g_os.IsWin9x() || g_os.IsWinNT4())
 	{
 		// Assume it's the left key since there's no way to tell which of the pair it
 		// is? (unless the hook is installed, in which case it's value would have already
@@ -3525,6 +3534,7 @@ modLR_type GetModifierLRState(bool aExplicitlyGet)
 		if (IsKeyDown9xNT(VK_RWIN))    modifiersLR |= MOD_RWIN;
 	}
 	else
+#endif
 	{
 		if (IsKeyDownAsync(VK_LSHIFT))   modifiersLR |= MOD_LSHIFT;
 		if (IsKeyDownAsync(VK_RSHIFT))   modifiersLR |= MOD_RSHIFT;

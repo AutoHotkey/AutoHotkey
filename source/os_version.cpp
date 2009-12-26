@@ -131,9 +131,9 @@ void OS_Version::Init(void)
 #ifndef UNICODE
 	m_bWinNT	= false;
 	m_bWin9x	= false;
-#endif
 
 	m_bWinNT4	= false;	m_bWinNT4orLater	= false;
+#endif
 	m_bWin2000	= false;	m_bWin2000orLater	= false;
 	m_bWinXP	= false;	m_bWinXPorLater		= false;
 	m_bWin2003  = false;
@@ -156,13 +156,16 @@ void OS_Version::Init(void)
 
 		switch (m_dwMajorVersion)
 		{
+#ifndef UNICODE
 			case 4:								// NT 4
 				m_bWinNT4 = true;
 				m_bWinNT4orLater = true;
 				break;
-
+#endif
 			case 5:								// Win2000 / XP
+#ifndef UNICODE
 				m_bWinNT4orLater = true;
+#endif
 				m_bWin2000orLater = true;
 				if ( m_dwMinorVersion == 0 )	// Win2000
 					m_bWin2000 = true;
@@ -184,7 +187,9 @@ void OS_Version::Init(void)
 					m_bWin7OrLater = true;
 				}
 				m_bWinVistaOrLater = true;
+#ifndef UNICODE
 				m_bWinNT4orLater = true;
+#endif
 				m_bWin2000orLater = true;
 				m_bWinXPorLater = true;
 				break;
@@ -193,7 +198,9 @@ void OS_Version::Init(void)
 				{
 					m_bWin7OrLater = true;
 					m_bWinVistaOrLater = true;
+#ifndef UNICODE
 					m_bWinNT4orLater = true;
+#endif
 					m_bWin2000orLater = true;
 					m_bWinXPorLater = true;
 				}

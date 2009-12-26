@@ -2320,13 +2320,16 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 		// which is why g_modifiersLR_physical is used vs. g_modifiersLR_logical (which is used above since
 		// it's different).  Also, this is now done for XP -- in addition to NT4 & Win2k -- in case XP is
 		// configured to display the NT/2k style security window instead of the task manager.  This is
-		// probably very common because whenever the welcome screen is diabled, that's the default behavior?:
+		// probably very common because whenever the welcome screen is disabled, that's the default behavior?:
 		// Control Panel > User Accounts > Use the welcome screen for fast and easy logon
 		if (   (aVK == VK_DELETE || aVK == VK_DECIMAL) && !aKeyUp         // Both of these qualify, see notes.
 			&& (g_modifiersLR_physical & (MOD_LCONTROL | MOD_RCONTROL)) // At least one CTRL key is physically down.
 			&& (g_modifiersLR_physical & (MOD_LALT | MOD_RALT))         // At least one ALT key is physically down.
 			&& !(g_modifiersLR_physical & (MOD_LSHIFT | MOD_RSHIFT))    // Neither shift key is phys. down (WIN is ok).
-			&& g_os.IsWinNT4orLater()   )
+#ifndef UNICODE
+			&& g_os.IsWinNT4orLater()
+#endif
+			)
 		{
 			// Similar to the above case except for Windows 2000.  I suspect it also applies to NT,
 			// but I'm not sure.  It seems safer to apply it to NT until confirmed otherwise.

@@ -17133,13 +17133,11 @@ bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType)
 	} // switch()
 
 	// Otherwise, use the default state-type: KEYSTATE_LOGICAL
-	if (
 #ifndef UNICODE
-		g_os.IsWin9x() ||
-#endif
-		g_os.IsWinNT4())
+	if (g_os.IsWin9x() || g_os.IsWinNT4())
 		return IsKeyDown9xNT(aVK); // See its comments for why it's more reliable on these OSes.
 	else
+#endif
 		// On XP/2K at least, a key can be physically down even if it isn't logically down,
 		// which is why the below specifically calls IsKeyDown2kXP() rather than some more
 		// comprehensive method such as consulting the physical key state as tracked by the hook:
