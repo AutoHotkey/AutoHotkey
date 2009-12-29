@@ -1119,7 +1119,7 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 	// manifest them via Control+VK combinations:
 	//if (aChar > -1 && aChar < 32)
 	//	return;
-	if (aChar & 0x7F)    // Try using ANSI.
+	if (aChar & ~0x7F)    // Try using ANSI.
 		*cp++ = '0';  // ANSI mode is achieved via leading zero in the Alt+Numpad keystrokes.
 	//else use Alt+Numpad without the leading zero, which allows the characters a-z, A-Z, and quite
 	// a few others to be produced in Russian and perhaps other layouts, which was impossible in versions
