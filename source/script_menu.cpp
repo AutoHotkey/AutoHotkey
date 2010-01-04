@@ -1075,10 +1075,8 @@ void UserMenu::SetColor(LPTSTR aColorName, bool aApplyToSubmenus)
 {
 	// Avoid the overhead of creating HBRUSH's on OSes that don't support SetMenuInfo().
 	// Perhaps there is some other way to change menu background color on Win95/NT?
-#ifndef UNICODE
 	if (g_os.IsWin95() || g_os.IsWinNT4())
 		return;
-#endif
 	AssignColor(aColorName, mColor, mBrush);  // Takes care of deleting old brush, etc.
 	// To avoid complications, such as a submenu being detached from its parent and then its parent
 	// later being being deleted (which causes the HBRUSH to get deleted too), give each submenu it's

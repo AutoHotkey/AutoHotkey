@@ -1426,10 +1426,8 @@ ResultType Line::Input()
 // This signals the quasi-threads beneath, when they finally return, that their input
 // was terminated due to a new input that took precedence.
 {
-#ifndef UNICODE
 	if (g_os.IsWin9x()) // v1.0.44.14: For simplicity, do nothing on Win9x rather than try to see if it actually supports the hook (such as if its some kind of emultated/hybrid OS).
 		return OK; // Could also set ErrorLevel to "Timeout" and output_var to be blank, but the benefits to backward compatibility seemed too dubious.
-#endif
 
 	// Since other script threads can interrupt this command while it's running, it's important that
 	// this command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
@@ -2762,11 +2760,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 	LPVOID p_remote_lvi; // Not of type LPLVITEM to help catch bugs where p_remote_lvi->member is wrongly accessed here in our process.
 	if (   !(p_remote_lvi = AllocInterProcMem(handle, LV_REMOTE_BUF_SIZE + sizeof(LVITEM), aHwnd))   ) // Allocate the right type of memory (depending on OS type). Allocate both the LVITEM struct and its internal string buffer in one go because MyVirtualAllocEx() is probably a high overhead call.
 		return OK;  // Let ErrorLevel tell the story.
-#ifndef UNICODE
 	bool is_win9x = g_os.IsWin9x(); // Resolve once for possible slight perf./code size benefit.
-#else
-	const bool is_win9x = false; // compiler should know what to do
-#endif
 
 	// PREPARE LVI STRUCT MEMBERS FOR TEXT RETRIEVAL
 	LVITEM lvi_for_nt; // Only used for NT/2k/XP method.
@@ -7968,7 +7962,6 @@ ResultType Line::DriveLock(TCHAR aDriveLetter, bool aLockIt)
 	DWORD unused;
 	BOOL result;
 
-#ifndef UNICODE
 	if (g_os.IsWin9x())
 	{
 		// blisteringhot@hotmail.com has confirmed that the code below works on Win98 with an IDE CD Drive:
@@ -8026,7 +8019,6 @@ ResultType Line::DriveLock(TCHAR aDriveLetter, bool aLockIt)
 			result = !(regs.reg_Flags & CARRY_FLAG);
 	}
 	else // NT4/2k/XP or later
-#endif
 	{
 		// The calls below cannot work on Win9x (as documented by MSDN's PREVENT_MEDIA_REMOVAL).
 		// Don't even attempt them on Win9x because they might blow up.
@@ -10828,10 +10820,8 @@ VarSizeType BIV_OSType(LPTSTR aBuf, LPTSTR aVarName)
 VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName)
 {
 	LPCTSTR version = _T("");  // Init in case OS is something later than Win2003.
-#ifndef UNICODE
 	if (g_os.IsWinNT()) // "NT" includes all NT-kernal OSes: NT4/2000/XP/2003/Vista/7.
 	{
-#endif
 		if (g_os.IsWinXP())
 			version = _T("WIN_XP");
 		else if (g_os.IsWin7())
@@ -10847,7 +10837,6 @@ VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName)
 			else
 				version = _T("WIN_NT4");
 		}
-#ifndef UNICODE
 	}
 	else
 	{
@@ -10861,7 +10850,6 @@ VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName)
 				version = _T("WIN_ME");
 		}
 	}
-#endif
 	if (aBuf)
 		_tcscpy(aBuf, version);
 	return (VarSizeType)_tcslen(version); // Always return the length of version, not aBuf.
@@ -10872,13 +10860,10 @@ VarSizeType BIV_Language(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_PATH];
 	VarSizeType length;
-#ifndef UNICODE
 	if (g_os.IsWinNT())  // NT/2k/XP+
-#endif
 		length = g_os.IsWin2000orLater()
 			? ReadRegString(HKEY_LOCAL_MACHINE, _T("SYSTEM\\CurrentControlSet\\Control\\Nls\\Language"), _T("InstallLanguage"), buf, MAX_PATH)
 			: ReadRegString(HKEY_LOCAL_MACHINE, _T("SYSTEM\\CurrentControlSet\\Control\\Nls\\Language"), _T("Default"), buf, MAX_PATH); // NT4
-#ifndef UNICODE
 	else // Win9x
 	{
 		length = ReadRegString(HKEY_USERS, _T(".DEFAULT\\Control Panel\\Desktop\\ResourceLocale"), _T(""), buf, MAX_PATH);
@@ -10888,7 +10873,6 @@ VarSizeType BIV_Language(LPTSTR aBuf, LPTSTR aVarName)
 			memmove(buf, buf + 4, length + 1); // +1 to include the zero terminator.
 		}
 	}
-#endif
 	if (aBuf)
 		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string).
 	return length;
@@ -11499,11 +11483,7 @@ VarSizeType BIV_LoopRegTimeModified(LPTSTR aBuf, LPTSTR aVarName)
 	*target_buf = '\0'; // Set default.
 	// Only subkeys (not values) have a time.  In addition, Win9x doesn't support retrieval
 	// of the time (nor does it store it), so make the var blank in that case:
-	if (g->mLoopRegItem && g->mLoopRegItem->type == REG_SUBKEY
-#ifndef UNICODE
-		&& !g_os.IsWin9x()
-#endif
-		)
+	if (g->mLoopRegItem && g->mLoopRegItem->type == REG_SUBKEY && !g_os.IsWin9x())
 		FileTimeToYYYYMMDD(target_buf, g->mLoopRegItem->ftLastWriteTime, true);
 	return (VarSizeType)_tcslen(target_buf);
 }
@@ -17133,11 +17113,9 @@ bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType)
 	} // switch()
 
 	// Otherwise, use the default state-type: KEYSTATE_LOGICAL
-#ifndef UNICODE
 	if (g_os.IsWin9x() || g_os.IsWinNT4())
 		return IsKeyDown9xNT(aVK); // See its comments for why it's more reliable on these OSes.
 	else
-#endif
 		// On XP/2K at least, a key can be physically down even if it isn't logically down,
 		// which is why the below specifically calls IsKeyDown2kXP() rather than some more
 		// comprehensive method such as consulting the physical key state as tracked by the hook:

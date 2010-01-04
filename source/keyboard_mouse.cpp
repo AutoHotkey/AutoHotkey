@@ -348,17 +348,14 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 	// The default behavior is to turn the capslock key off prior to sending any keys
 	// because otherwise lowercase letters would come through as uppercase and vice versa.
 	ToggleValueType prior_capslock_state;
-#ifndef UNICODE
 	if (threads_are_attached || !g_os.IsWin9x())
 	{
-#endif
 		// Only under either of the above conditions can the state of Capslock be reliably
 		// retrieved and changed.  Remember that apps like MS Word have an auto-correct feature that
 		// might make it wrongly seem that the turning off of Capslock below needs a Sleep(0) to take effect.
 		prior_capslock_state = g.StoreCapslockMode && !sInBlindMode
 			? ToggleKeyState(VK_CAPITAL, TOGGLED_OFF)
 			: TOGGLE_INVALID; // In blind mode, don't do store capslock (helps remapping and also adds flexibility).
-#ifndef UNICODE
 	}
 	else // OS is Win9x and threads are not attached.
 	{
@@ -368,7 +365,6 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 		//CapslockOffWin9x();
 		prior_capslock_state = TOGGLE_INVALID;
 	}
-#endif
 
 	// sSendMode must be set only after setting Capslock state above, because the hook method
 	// is incapable of changing the on/off state of toggleable keys like Capslock.
@@ -397,9 +393,7 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 	bool blockinput_prev = g_BlockInput;
 	bool do_selective_blockinput = (g_BlockInputMode == TOGGLE_SEND || g_BlockInputMode == TOGGLE_SENDANDMOUSE)
 		&& !sSendMode && !aTargetWindow
-#ifndef UNICODE
 		&& g_os.IsWinNT4orLater()
-#endif
 		;
 	if (do_selective_blockinput)
 		Line::ScriptBlockInput(true); // Turn it on unconditionally even if it was on, since Ctrl-Alt-Del might have disabled it.
@@ -1554,11 +1548,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 	// looked up above should still be correct for left-right centric keys even under Win9x.
 	// v1.0.43: Apparently, the journal playback hook also requires neutral modifier keystrokes
 	// rather than left/right ones.  Otherwise, the Shift key can't capitalize letters, etc.
-	if (sSendMode == SM_PLAY
-#ifndef UNICODE
-		|| g_os.IsWin9x()
-#endif
-	)
+	if (sSendMode == SM_PLAY || g_os.IsWin9x())
 	{
 		// Convert any non-neutral VK's to neutral for these OSes, since apps and the OS itself
 		// can't be expected to support left/right specific VKs while running under Win9x:
@@ -1675,9 +1665,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 		// g_BlockInput (changes occur via calls to ScriptBlockInput).
 		bool we_turned_blockinput_off = g_BlockInput && (aVK == VK_MENU || aVK == VK_LMENU || aVK == VK_RMENU)
 			&& !caller_is_keybd_hook
-#ifndef UNICODE
 			&& g_os.IsWinNT4orLater()
-#endif
 			; // Ordered for short-circuit performance.
 		if (we_turned_blockinput_off)
 			Line::ScriptBlockInput(false);
@@ -1777,10 +1765,8 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 				}
 			}
 
-#ifndef UNICODE
 			if (aVK == VK_NUMLOCK && g_os.IsWin9x()) // Under Win9x, Numlock needs special treatment.
 				ToggleNumlockWin9x();
-#endif
 
 			if (do_key_history)
 				UpdateKeyEventHistory(false, aVK, aSC); // Should be thread-safe since if no hook means only one thread ever sends keystrokes (with possible exception of mouse hook, but that seems too rare).
@@ -2000,9 +1986,7 @@ void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY
 	bool blockinput_prev = g_BlockInput;
 	bool do_selective_blockinput = (g_BlockInputMode == TOGGLE_MOUSE || g_BlockInputMode == TOGGLE_SENDANDMOUSE)
 		&& !sSendMode
-#ifndef UNICODE
 		&& g_os.IsWinNT4orLater()
-#endif
 		;
 	if (do_selective_blockinput) // It seems best NOT to use g_BlockMouseMove for this, since often times the user would want keyboard input to be disabled too, until after the mouse event is done.
 		Line::ScriptBlockInput(true); // Turn it on unconditionally even if it was on, since Ctrl-Alt-Del might have disabled it.
@@ -2890,7 +2874,6 @@ void DoKeyDelay(int aDelay)
 		//else for other types of arrays, never insert a delay or do one now.
 		return;
 	}
-#ifndef UNICODE
 	if (g_os.IsWin9x())
 	{
 		// Do a true sleep on Win9x because the MsgSleep() method is very inaccurate on Win9x
@@ -2898,7 +2881,6 @@ void DoKeyDelay(int aDelay)
 		Sleep(aDelay);
 		return;
 	}
-#endif
 	SLEEP_WITHOUT_INTERRUPTION(aDelay);
 }
 
@@ -2935,9 +2917,7 @@ void DoMouseDelay() // Helper function for the mouse functions below.
 	// the user would not be able to correctly open the script's own tray menu via
 	// right-click (note that this issue affected only the one script itself, not others).
 	if (mouse_delay < 11
-#ifndef UNICODE
 		|| (mouse_delay < 25 && g_os.IsWin9x())
-#endif
 	)
 		Sleep(mouse_delay);
 	else
@@ -2987,7 +2967,6 @@ ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue)
 		return starting_state;
 	if (aVK == VK_NUMLOCK)
 	{
-#ifndef UNICODE
 		if (g_os.IsWin9x())
 		{
 			// For Win9x, we want to set the state unconditionally to be sure it's right.  This is because
@@ -2998,7 +2977,6 @@ ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue)
 			ToggleNumlockWin9x();
 			return starting_state;  // Best guess, but might be wrong.
 		}
-#endif
 		// Otherwise, NT/2k/XP:
 		// Sending an extra up-event first seems to prevent the problem where the Numlock
 		// key's indicator light doesn't change to reflect its true state (and maybe its
@@ -3029,7 +3007,6 @@ ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue)
 }
 
 
-#ifndef UNICODE
 void ToggleNumlockWin9x()
 // Numlock requires a special method to toggle the state and its indicator light under Win9x.
 // Capslock and Scrolllock do not need this method, since keybd_event() works for them.
@@ -3049,7 +3026,6 @@ void ToggleNumlockWin9x()
 //	state[VK_CAPITAL] &= ~0x01;
 //	SetKeyboardState((PBYTE)&state);
 //}
-#endif
 
 
 /*
@@ -3521,7 +3497,6 @@ modLR_type GetModifierLRState(bool aExplicitlyGet)
 	// in its place, yields the correct info.  Very strange.
 
 	modLR_type modifiersLR = 0;  // Allows all to default to up/off to simplify the below.
-#ifndef UNICODE
 	if (g_os.IsWin9x() || g_os.IsWinNT4())
 	{
 		// Assume it's the left key since there's no way to tell which of the pair it
@@ -3534,7 +3509,6 @@ modLR_type GetModifierLRState(bool aExplicitlyGet)
 		if (IsKeyDown9xNT(VK_RWIN))    modifiersLR |= MOD_RWIN;
 	}
 	else
-#endif
 	{
 		if (IsKeyDownAsync(VK_LSHIFT))   modifiersLR |= MOD_LSHIFT;
 		if (IsKeyDownAsync(VK_RSHIFT))   modifiersLR |= MOD_RSHIFT;

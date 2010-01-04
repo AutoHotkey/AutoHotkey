@@ -1691,7 +1691,7 @@ LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd)
 {
 	// ALLOCATE APPROPRIATE TYPE OF MEMORY (depending on OS type)
 	LPVOID mem;
-#ifndef UNICODE
+
 	if (g_os.IsWin9x()) // Use file-mapping method.
 	{
 		if (   !(aHandle = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, aSize, NULL))   )
@@ -1699,7 +1699,6 @@ LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd)
 		mem = MapViewOfFile(aHandle, FILE_MAP_ALL_ACCESS, 0, 0, 0);
 	}
 	else // NT/2k/XP/2003 or later.  Use the VirtualAllocEx() so that caller can use Read/WriteProcessMemory().
-#endif
 	{
 		DWORD pid;
 		GetWindowThreadProcessId(aHwnd, &pid);
@@ -1727,11 +1726,9 @@ void FreeInterProcMem(HANDLE aHandle, LPVOID aMem)
 // Caller has ensured that aMem is a file-mapping for Win9x and a VirtualAllocEx block for NT/2k/XP+.
 // Similarly, it has ensured that aHandle is a file-mapping handle for Win9x and a process handle for NT/2k/XP+.
 {
-#ifndef UNICODE
 	if (g_os.IsWin9x())
 		UnmapViewOfFile(aMem);
 	else
-#endif
 	{
 		// Load function dynamically to allow program to launch on win9x:
 		typedef BOOL (WINAPI *MyVirtualFreeExType)(HANDLE, LPVOID, SIZE_T, DWORD);

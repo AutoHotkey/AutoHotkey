@@ -456,10 +456,8 @@ ResultType Script::CreateWindows()
 	// FONTS: The font used by default, at least on XP, is GetStockObject(SYSTEM_FONT).
 	// It seems preferable to smaller fonts such DEFAULT_GUI_FONT(DEFAULT_GUI_FONT).
 	// For more info on pre-loaded fonts (not too many choices), see MSDN's GetStockObject().
-#ifndef UNICODE
 	if(g_os.IsWinNT())
 	{
-#endif
 		// Use a more appealing font on NT versions of Windows.
 
 		// Windows NT to Windows XP -> Lucida Console
@@ -470,9 +468,7 @@ ResultType Script::CreateWindows()
 			g_hFontEdit = CreateFont(FONT_POINT(g_hWndEdit, 10), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 				, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, _T("Consolas"));
 		SendMessage(g_hWndEdit, WM_SETFONT, (WPARAM)g_hFontEdit, 0);
-#ifndef UNICODE
 	}
-#endif
 
 	// v1.0.30.05: Specifying a limit of zero opens the control to its maximum text capacity,
 	// which removes the 32K size restriction.  Testing shows that this does not increase the actual
@@ -2772,9 +2768,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// It seems best not to report this warning because a user may want to use partial functionality
 		// of a script on Win9x:
 		//MsgBox("#InstallKeybdHook is not supported on Windows 95/98/Me.  This line will be ignored.");
-#ifndef UNICODE
 		if (!g_os.IsWin9x())
-#endif
 			Hotkey::RequireHook(HOOK_KEYBD);
 		return CONDITION_TRUE;
 	}
@@ -2783,9 +2777,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// It seems best not to report this warning because a user may want to use partial functionality
 		// of a script on Win9x:
 		//MsgBox("#InstallMouseHook is not supported on Windows 95/98/Me.  This line will be ignored.");
-#ifndef UNICODE
 		if (!g_os.IsWin9x())
-#endif
 			Hotkey::RequireHook(HOOK_MOUSE);
 		return CONDITION_TRUE;
 	}
@@ -13767,11 +13759,9 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// But only do so for short sleeps, for which the user has a greater expectation of
 		// accuracy.  UPDATE: Do not change the 25 below without also changing it in Critical's
 		// documentation.
-#ifndef UNICODE
 		if (sleep_time < 25 && sleep_time > 0 && g_os.IsWin9x()) // Ordered for short-circuit performance. v1.0.38.05: Added "sleep_time > 0" so that Sleep -1/0 will work the same on Win9x as it does on other OSes.
 			Sleep(sleep_time);
 		else
-#endif
 			MsgSleep(sleep_time);
 		return OK;
 	}

@@ -128,10 +128,12 @@ void OS_Version::Init(void)
 
 
 	// Set all options to false by default
-#ifndef UNICODE
+#ifdef CONFIG_WIN9X
 	m_bWinNT	= false;
 	m_bWin9x	= false;
+#endif
 
+#ifdef CONFIG_WINNT4
 	m_bWinNT4	= false;	m_bWinNT4orLater	= false;
 #endif
 	m_bWin2000	= false;	m_bWin2000orLater	= false;
@@ -140,14 +142,14 @@ void OS_Version::Init(void)
 	m_bWinVista = false;	m_bWinVistaOrLater	= false;
 	m_bWin7		= false;	m_bWin7OrLater		= false;
 
-#ifndef UNICODE
+#ifdef CONFIG_WIN9X
 	m_bWin98	= false;	m_bWin98orLater		= false;
 	m_bWin95	= false;	m_bWin95orLater		= false;
 	m_bWinMe	= false;	m_bWinMeorLater		= false;
 #endif
 
 	// Work out if NT or 9x
-#ifndef UNICODE
+#ifdef CONFIG_WIN9X
 	if (m_OSvi.dwPlatformId == VER_PLATFORM_WIN32_NT)
 	{
 		// Windows NT
@@ -156,14 +158,14 @@ void OS_Version::Init(void)
 
 		switch (m_dwMajorVersion)
 		{
-#ifndef UNICODE
+#ifdef CONFIG_WINNT4
 			case 4:								// NT 4
 				m_bWinNT4 = true;
 				m_bWinNT4orLater = true;
 				break;
 #endif
 			case 5:								// Win2000 / XP
-#ifndef UNICODE
+#ifdef CONFIG_WINNT4
 				m_bWinNT4orLater = true;
 #endif
 				m_bWin2000orLater = true;
@@ -187,7 +189,7 @@ void OS_Version::Init(void)
 					m_bWin7OrLater = true;
 				}
 				m_bWinVistaOrLater = true;
-#ifndef UNICODE
+#ifdef CONFIG_WINNT4
 				m_bWinNT4orLater = true;
 #endif
 				m_bWin2000orLater = true;
@@ -198,7 +200,7 @@ void OS_Version::Init(void)
 				{
 					m_bWin7OrLater = true;
 					m_bWinVistaOrLater = true;
-#ifndef UNICODE
+#ifdef CONFIG_WINNT4
 					m_bWinNT4orLater = true;
 #endif
 					m_bWin2000orLater = true;
@@ -207,7 +209,7 @@ void OS_Version::Init(void)
   				break;
 
 		} // End Switch
-#ifndef UNICODE
+#ifdef CONFIG_WIN9X
 	}
 	else
 	{

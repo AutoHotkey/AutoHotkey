@@ -155,9 +155,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// Doing these types of things in the first pass resolves such situations.
 	bool vk_is_prefix[VK_ARRAY_COUNT] = {false};
 	bool hk_is_inactive[MAX_HOTKEYS]; // No init needed.
-#ifndef UNICODE
 	bool is_win9x = g_os.IsWin9x(); // Might help performance a little by avoiding calls in loops.
-#endif
 	HotkeyVariant *vp;
 	int i, j;
 
@@ -1139,10 +1137,8 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Set default, possibly to be overridden below.
 		if (HK_TYPE_IS_HOOK(hk->mType))
 		{
-#ifndef UNICODE
 			if (g_os.IsWin9x())
 				g_ErrorLevel->Assign(HOTKEY_EL_WIN9X); // Reported even if the hotkey is disabled or suspended.
-#endif
 		}
 		else // HK_NORMAL (registered hotkey).  v1.0.44.07
 			if (hk->mType != HK_JOYSTICK && !hk->mIsRegistered && (!g_IsSuspended || hk->IsExemptFromSuspend()) && !hk->IsCompletelyDisabled())
@@ -1323,7 +1319,6 @@ Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction
 			//	modifiers |= MOD_ALT;
 		}
 
-#ifndef UNICODE
 		if (g_os.IsWin9x())
 		{
 			// Fix for v1.0.25: If no VK could be found, try to find one so that the attempt
@@ -1352,7 +1347,6 @@ Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction
 			}
 		}
 		else // Not Win9x.
-#endif
 		{
 			if (HK_TYPE_CAN_BECOME_KEYBD_HOOK(mType)) // Added in v1.0.39 to make a hotkey such as "LButton & LCtrl" install the mouse hook.
 			{
@@ -1473,11 +1467,7 @@ Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction
 		// effect is with a hotkey that has a ModifierVK/SC.
 		if (HK_TYPE_CAN_BECOME_KEYBD_HOOK(mType))
 			if (   (mModifiersLR || aHookAction || mKeyUp || mModifierVK || mModifierSC) // mSC is handled higher above.
-				|| 
-#ifndef UNICODE
-				!g_os.IsWin9x() && 
-#endif
-				(g_ForceKeybdHook || mAllowExtraModifiers // mNoSuppress&NO_SUPPRESS_PREFIX has already been handled elsewhere. Other bits in mNoSuppress must be checked later because they can change by any variants added after *this* one.
+				|| !g_os.IsWin9x() && (g_ForceKeybdHook || mAllowExtraModifiers // mNoSuppress&NO_SUPPRESS_PREFIX has already been handled elsewhere. Other bits in mNoSuppress must be checked later because they can change by any variants added after *this* one.
 					|| (mVK && !mVK_WasSpecifiedByNumber && vk_to_sc(mVK, true)))   ) // Its mVK corresponds to two scan codes (such as "ENTER").
 				mKeybdHookMandatory = true;
 			// v1.0.38.02: The check of mVK_WasSpecifiedByNumber above was added so that an explicit VK hotkey such
@@ -1691,14 +1681,12 @@ LPTSTR Hotkey::TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperti
 				aProperties->suffix_has_tilde = true; // If this is the prefix's tilde rather than the suffix, it will be overridden later below.
 			break;
 		case '$':
-#ifndef UNICODE
 			if (g_os.IsWin9x())
 			{
 				if (aThisHotkey)
 					aThisHotkey->mUnregisterDuringThread = true;
 			}
 			else
-#endif
 				if (aThisHotkey)
 					aThisHotkey->mKeybdHookMandatory = true; // This flag will be ignored if TextToKey() decides this is a JOYSTICK or MOUSE hotkey.
 				// else ignore the flag and try to register normally, which in most cases seems better

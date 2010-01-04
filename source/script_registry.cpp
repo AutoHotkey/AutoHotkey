@@ -269,7 +269,6 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 
 	// My: Seems safest to keep the limit just below 64K in case Win95 has problems with larger values.
 	TCHAR szRegBuffer[65535], *buf; // Only allow writing of 64Kb to a key for Win9x, which is all it supports.
-#ifndef UNICODE
 	#define SET_REG_BUF \
 		if (g_os.IsWin9x())\
 		{\
@@ -278,10 +277,6 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 		}\
 		else\
 			buf = aValue;
-#else
-	#define SET_REG_BUF \
-		buf = aValue;
-#endif
 
 	if (!aRootKey || aValueType == REG_NONE || aValueType == REG_SUBKEY) // Can't write to these.
 		return OK;  // Let ErrorLevel tell the story.

@@ -208,9 +208,7 @@ DWORD ProcessExistNT4(LPTSTR aProcess, LPTSTR aProcessName);
 inline DWORD ProcessExist(LPTSTR aProcess, LPTSTR aProcessName = NULL)
 {
 	return
-#ifndef UNICODE
 		g_os.IsWinNT4() ? ProcessExistNT4(aProcess, aProcessName) :
-#endif
 		ProcessExist9x2000(aProcess, aProcessName);
 }
 

@@ -18,5 +18,13 @@
 // Includes experimental features
 #define CONFIG_EXPERIMENTAL
 
+#ifndef UNICODE
+#define CONFIG_WIN9X
+#endif
+
+#if !defined(UNICODE) && (!defined(_MSC_VER) || _MSC_VER < 1500)
+#define CONFIG_WINNT4
+#endif
+
 // If you do not have ATL (Express version of VC++), undef this.
 #define HAVE_ATL

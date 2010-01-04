@@ -781,12 +781,8 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR
 		return OK; // Let ErrorLevel tell the story.
 
 	TCHAR buf_for_nt[WINDOW_TEXT_SIZE + 1]; // Needed only for NT/2k/XP: the local counterpart to the buf allocated remotely above.
-#ifndef UNICODE
 	bool is_win9x = g_os.IsWin9x();
 	LPTSTR local_buf = is_win9x ? (LPTSTR )remote_buf : buf_for_nt; // Local is the same as remote for Win9x.
-#else
-	LPTSTR local_buf = buf_for_nt;
-#endif
 
 	DWORD result, start_time;
 	--aPartNumber; // Convert to zero-based for use below.
@@ -1346,7 +1342,6 @@ bool IsWindowHung(HWND aWnd)
 	// thread and calls the appropriate window procedure.  Messages sent between threads are
 	// processed only when the receiving thread executes message retrieval code. The sending
 	// thread is blocked until the receiving thread processes the message."
-#ifndef UNICODE
 	if (g_os.IsWin9x())
 	{
 		typedef BOOL (WINAPI *MyIsHungThread)(DWORD);
@@ -1355,7 +1350,6 @@ bool IsWindowHung(HWND aWnd)
 		// When function not available, fall back to the old method:
 		return IsHungThread ? IsHungThread(GetWindowThreadProcessId(aWnd, NULL)) : Slow_IsWindowHung;
 	}
-#endif
 
 	// Otherwise: NT/2k/XP/2003 or later, so try to use the newer method.
 	// The use of IsHungAppWindow() (supported under Win2k+) is discouraged by MS,
@@ -1393,11 +1387,9 @@ int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf, int aBufSize, UINT aTimeout)
 	if (!aWnd || (aBuf && aBufSize < 1)) // No HWND or no room left in buffer (some callers rely on this check).
 		return 0; // v1.0.40.04: Fixed to return 0 rather than setting aBuf to NULL and continuing (callers don't want that).
 
-#ifndef UNICODE
 	// Override for Win95 because AutoIt3 author says it might crash otherwise:
 	if (aBufSize > WINDOW_TEXT_SIZE && g_os.IsWin95())
 		aBufSize = WINDOW_TEXT_SIZE;
-#endif
 
 	LRESULT result, length;
 	if (aBuf)
@@ -1816,11 +1808,7 @@ void SetForegroundLockTimeout()
 {
 	// Even though they may not help in all OSs and situations, this lends peace-of-mind.
 	// (it doesn't appear to help on my XP?)
-	if (
-#ifndef UNICODE
-		g_os.IsWin98orLater() ||
-#endif
-		g_os.IsWin2000orLater())
+	if (g_os.IsWin98orLater() || g_os.IsWin2000orLater())
 	{
 		// Don't check for failure since this operation isn't critical, and don't want
 		// users continually haunted by startup error if for some reason this doesn't

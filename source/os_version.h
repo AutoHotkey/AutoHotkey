@@ -33,15 +33,17 @@ public:
 	OS_Version() { Init(); }									// Constructor
 	void	Init(void);											// Call first before use
 
-#ifdef UNICODE
-//	bool	IsWinNT(void) {return true;}
-//	bool	IsWin9x(void) {return false;}
+#ifndef CONFIG_WIN9X
+	bool	IsWinNT(void) {return true;}
+	bool	IsWin9x(void) {return false;}
 #else
 	bool	IsWinNT(void) {return m_bWinNT;}					// Returns true if NT/2k/XP and family.
 	bool	IsWin9x(void) {return m_bWin9x;}					// Returns true if 9x
 #endif
 
-#ifndef UNICODE
+#ifndef CONFIG_WINNT4
+	bool	IsWinNT4(void) {return false;}
+#else
 	bool	IsWinNT4(void) {return m_bWinNT4;}					// Returns true if WinNT 4
 #endif
 	bool	IsWin2000(void) {return m_bWin2000;}				// Returns true if Win2000
@@ -49,7 +51,9 @@ public:
 	bool	IsWin2003(void) {return m_bWin2003;}				// Returns true if Win2003
 	bool	IsWinVista(void) {return m_bWinVista;}				// Returns true if WinVista (v1.0.44.13)
 	bool	IsWin7(void) {return m_bWin7; }						// Returns true if Win7
-#ifndef UNICODE
+#ifndef CONFIG_WINNT4
+	bool	IsWinNT4orLater(void) {return true;}
+#else
 	bool	IsWinNT4orLater(void) {return m_bWinNT4orLater;}	// Returns true if WinNT 4+
 #endif
 	bool	IsWin2000orLater(void) {return m_bWin2000orLater;}	// Returns true if Win2000+
@@ -57,13 +61,13 @@ public:
 	bool	IsWinVistaOrLater(void) {return m_bWinVistaOrLater;}// Returns true if WinVista or later (v1.0.48.01)
 	bool	IsWin7OrLater(void) {return m_bWin7OrLater; }		// Returns true if Win7+
 
-#ifdef UNICODE
-	//bool	IsWin95(void) {return false;}
-	//bool	IsWin98(void) {return false;}
-	//bool	IsWinMe(void) {return false;}
-	//bool	IsWin95orLater(void) {return false;}
-	//bool	IsWin98orLater(void) {return false;}
-	//bool	IsWinMeorLater(void) {return false;}
+#ifndef CONFIG_WIN9X
+	bool	IsWin95(void) {return false;}
+	bool	IsWin98(void) {return false;}
+	bool	IsWinMe(void) {return false;}
+	bool	IsWin95orLater(void) {return false;}
+	bool	IsWin98orLater(void) {return false;}
+	bool	IsWinMeorLater(void) {return false;}
 #else
 	bool	IsWin95(void) {return m_bWin95;}					// Returns true if 95
 	bool	IsWin98(void) {return m_bWin98;}					// Returns true if 98
@@ -85,12 +89,12 @@ private:
 	DWORD			m_dwBuildNumber;			// Build number
 	TCHAR			m_szCSDVersion [256];
 
-#ifndef UNICODE
+#ifdef CONFIG_WIN9X
 	bool			m_bWinNT;
 	bool			m_bWin9x;
 #endif
 
-#ifndef UNICODE
+#ifdef CONFIG_WINNT4
 	bool			m_bWinNT4;
 	bool			m_bWinNT4orLater;
 #endif
@@ -103,7 +107,7 @@ private:
 	bool			m_bWin2000orLater;
 	bool			m_bWinVistaOrLater;
 	bool			m_bWin7OrLater;
-#ifndef UNICODE
+#ifdef CONFIG_WIN9X
 	bool			m_bWin98;
 	bool			m_bWin98orLater;
 	bool			m_bWin95;

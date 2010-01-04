@@ -147,11 +147,9 @@ VarSizeType BIV_IsAdmin(LPTSTR aBuf, LPTSTR aVarName)
 	if (!aBuf)
 		return 1;  // The length of the string "1" or "0".
 	TCHAR result = '0';  // Default.
-#ifndef UNICODE
 	if (g_os.IsWin9x())
 		result = '1';
 	else
-#endif
 	{
 		SC_HANDLE h = OpenSCManager(NULL, NULL, SC_MANAGER_LOCK);
 		if (h)
@@ -2009,9 +2007,7 @@ flags can be a combination of:
 	TOKEN_PRIVILEGES	tkp; 
 
 	// If we are running NT/2k/XP, make sure we have rights to shutdown
-#ifndef UNICODE
 	if (g_os.IsWinNT()) // NT/2k/XP/2003 and family
-#endif
 	{
 		// Get a token for this process.
  		if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) 
@@ -2032,13 +2028,11 @@ flags can be a combination of:
 	}
 
 	// if we are forcing the issue, AND this is 95/98 terminate all windows first
-#ifndef UNICODE
 	if ( g_os.IsWin9x() && (nFlag & EWX_FORCE) ) 
 	{
 		nFlag ^= EWX_FORCE;	// remove this flag - not valid in 95
 		EnumWindows((WNDENUMPROC) Util_ShutdownHandler, 0);
 	}
-#endif
 	// ExitWindows
 	if (ExitWindowsEx(nFlag, 0))
 		return true;

@@ -2326,10 +2326,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 			&& (g_modifiersLR_physical & (MOD_LCONTROL | MOD_RCONTROL)) // At least one CTRL key is physically down.
 			&& (g_modifiersLR_physical & (MOD_LALT | MOD_RALT))         // At least one ALT key is physically down.
 			&& !(g_modifiersLR_physical & (MOD_LSHIFT | MOD_RSHIFT))    // Neither shift key is phys. down (WIN is ok).
-#ifndef UNICODE
-			&& g_os.IsWinNT4orLater()
-#endif
-			)
+			&& g_os.IsWinNT4orLater())
 		{
 			// Similar to the above case except for Windows 2000.  I suspect it also applies to NT,
 			// but I'm not sure.  It seems safer to apply it to NT until confirmed otherwise.
@@ -3553,10 +3550,8 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 	// NOTE: Some sections rely on the fact that no warning dialogs are displayed if the hook is
 	// called for but the OS doesn't support it.  For example, ManifestAllHotkeysHotstringsHooks()
 	// doesn't check the OS version in many cases when marking hotkeys as hook hotkeys.
-#ifndef UNICODE
 	if (g_os.IsWin9x())
 		return;
-#endif
 
 	// Determine the set of hooks that should be activated or deactivated.
 	HookType hooks_to_be_active = aWhichHook | aWhichHookAlways; // Bitwise union.
