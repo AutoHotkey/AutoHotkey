@@ -242,7 +242,9 @@ __int64 TextFile::_Length() const
 // FileObject: exports TextFile interfaces to the scripts.
 class FileObject : public Object
 {
-public:
+	FileObject() {}
+	~FileObject() {}
+
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 	// Reference: MetaObject::Invoke
 	{
@@ -423,6 +425,7 @@ public:
 	}
 
 	TextFile mFile;
+	friend void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 };
 
 void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)

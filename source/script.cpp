@@ -12923,16 +12923,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	case ACT_RUNAS:
 		if (!g_os.IsWin2000orLater()) // Do nothing if the OS doesn't support it.
 			return OK;
-#ifdef UNICODE
-		// It seems g_script.mRunAsUser never be freed, so this should be safe.
-		if (mArgc < 1) {
-			g_script.mRunAsUser = g_script.mRunAsPass = g_script.mRunAsDomain = NULL;
-			return OK;
-		}
-		g_script.mRunAsUser = ARG1;
-		g_script.mRunAsPass = ARG2;
-		g_script.mRunAsDomain = ARG3;
-#else
 		if (mArgc < 1)
 		{
 			if (!g_script.mRunAsUser) // memory not yet allocated so nothing needs to be done.
@@ -12950,6 +12940,11 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			g_script.mRunAsPass = g_script.mRunAsUser + RUNAS_SIZE_IN_WCHARS;   // Fixed for v1.0.47.01 to use RUNAS_SIZE_IN_WCHARS vs. RUNAS_SIZE_IN_BYTES (since pointer math adds 2 bytes not 1 due to the type of pointer).
 			g_script.mRunAsDomain = g_script.mRunAsPass + RUNAS_SIZE_IN_WCHARS; // 
 		}
+#ifdef UNICODE
+		_tcsncpy(g_script.mRunAsUser, ARG1, RUNAS_SIZE_IN_WCHARS);
+		_tcsncpy(g_script.mRunAsPass, ARG2, RUNAS_SIZE_IN_WCHARS);
+		_tcsncpy(g_script.mRunAsDomain, ARG3, RUNAS_SIZE_IN_WCHARS);
+#else
 		ToWideChar(ARG1, g_script.mRunAsUser, RUNAS_SIZE_IN_WCHARS);    // Dest. size is in wchars, not bytes.
 		ToWideChar(ARG2, g_script.mRunAsPass, RUNAS_SIZE_IN_WCHARS);    //
 		ToWideChar(ARG3, g_script.mRunAsDomain, RUNAS_SIZE_IN_WCHARS);  //

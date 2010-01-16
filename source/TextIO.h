@@ -16,7 +16,7 @@
 // For example, it can't read the files encoded in "system codepage" by using
 // wide-char version of the functions such as fgetws(). The characters were not translated to
 // UTF-16 properly. Although we can create some workarounds for it, but that will make
-// the codes even hard to maintained.
+// the codes even hard to maintain.
 class TextStream
 {
 public:
@@ -280,7 +280,7 @@ private:
 
 // TextMem is intended to attach a memory block, which provides code pages and end-of-line conversions (CRLF <-> LF).
 // It is used for reading the script data in compiled script.
-// Note that TextMem dosen't have any ability to write and seek.
+// Note that TextMem doesn't have any ability to write and seek.
 class TextMem : public TextStream
 {
 public:

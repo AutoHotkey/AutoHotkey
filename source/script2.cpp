@@ -9067,8 +9067,8 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 		// 1 GB limit as described above:
 		if (translate_crlf_to_lf)
 			StrReplace((LPTSTR) output_buf, _T("\r\n"), _T("\n"), SCS_SENSITIVE); // Safe only because larger string is being replaced with smaller.
-		output_var.SetCharLength(is_binary_clipboard ? (bytes_actually_read - 1) // Length excludes the very last byte of the (UINT)0 terminator.
-			: (VarSizeType)_tcslen((LPCTSTR) output_buf)); // In case file contains binary zeroes, explicitly calculate the "usable" length so that it's accurate.
+		output_var.ByteLength() = is_binary_clipboard ? bytes_actually_read
+			: (VarSizeType)_tcslen((LPCTSTR) output_buf) * sizeof(TCHAR); // In case file contains binary zeros, explicitly calculate the "usable" length so that it's accurate.
 	}
 	else
 	{
@@ -13232,8 +13232,7 @@ pcre *get_compiled_regex(LPTSTR aRegEx, bool &aGetPositionsNotSubstrings, pcre_e
 	// UTF-8 version of aRegEx.
 	// Conversion not done here for performance reasons as
 	// it's only needed by the PCRE compiling engine.
-	char* aRegExUTF8 = NULL;
-	//CStringUTF8FromWChar aRegExUTF8(aRegEx);
+	CStringA aRegExUTF8;
 #endif
 
 	// SET UP THE CACHE.
@@ -13344,7 +13343,7 @@ pcre *get_compiled_regex(LPTSTR aRegEx, bool &aGetPositionsNotSubstrings, pcre_e
 
 #ifdef UNICODE
 	// Convert the RegEx string to UTF-8 for use with PCRE.
-	aRegExUTF8 = WideToUTF8(aRegEx);
+	StringWCharToUTF8(aRegEx, aRegExUTF8);
 #endif
 
 	// SET DEFAULT OPTIONS:
@@ -13461,7 +13460,7 @@ break_both:
 		// The following isn't done because:
 		// 1) It seems best not to abort the caller's RegEx operation just due to a study error, since the only
 		//    error likely to happen (from looking at PCRE's source code) is out-of-memory.
-		// 2) ErrorLevel is traditioally used for error/abort conditions only, not warnings.  So it seems best
+		// 2) ErrorLevel is traditionally used for error/abort conditions only, not warnings.  So it seems best
 		//    not to pollute it with a warning message that indicates, "yes it worked, but here's a warning".
 		//    ErrorLevel 0 (success) seems better and more desirable.
 		// 3) Reduced code size.
@@ -13506,11 +13505,6 @@ break_both:
 	sLastFound = sLastInsert; // Relied upon in the case where sLastFound==-1. But it also sets things up to start the search at this item next time, because it's a bit more likely to be found here such as tight loops containing only one RegEx.
 	// Remember that although sLastFound==sLastInsert in this case, it isn't always so -- namely when a previous
 	// call found an existing match in the cache without having to compile and insert the item.
-
-#ifdef UNICODE
-	// Free the UTF-8 version of the RegEx string.
-	free(aRegExUTF8);
-#endif
 
 	LeaveCriticalSection(&g_CriticalRegExCache);
 	return re_compiled; // Indicate success.
