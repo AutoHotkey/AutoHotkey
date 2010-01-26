@@ -45,7 +45,7 @@ _ui64toa  ; As of 2/17/2009, this one isn't called directly anymore, so not sure
 ?UTOA@@YAPADKPAD@Z  ; Rarely called, so keep them outermost from the others.
 _ultoa
 
-?ATOU64@@YA_KPAD@Z  ; Rarely called, so keep them outermost from the others.
+?ATOU64@@YA_KPBD@Z  ; Rarely called, so keep them outermost from the others.
 _strtoui64          ;
 
 _strtoi64  ; Used only for hex conversion, which is somewhat rare, so keep it fairly outer/away.
@@ -57,7 +57,7 @@ _fltin           ;
 ;__mb_cur_max    ;
 ;strlen          ;
 atof             ;
-?ATOF@@YANPAD@Z  ; ATOF is called far less often than ATOI64 (though perhaps about the same as ATOI().
+?ATOF@@YANPBD@Z  ; ATOF is called far less often than ATOI64 (though perhaps about the same as ATOI().
 
 ; Some below also used by ExpandExpression to write results back out to the deref buffer, and for conversion of numbers to strings:
 _itoa
@@ -66,15 +66,15 @@ _itoa
 _i64toa
 
 atoi             ; Used for 32-bit integers, which are less frequently called/converted than 64-bit.
-?ATOI@@YAHPAD@Z  ;
+?ATOI@@YAHPBD@Z  ;
 
 ?PerformAssign@Line@@AAE?AW4ResultType@@XZ  ; Not called that often by modern scripts, so kept a bit farther out.
 
 ; A tight group of *small* things that are called very frequently:
-?PerformLoopWhile@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@@Z
-?PerformLoop@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@_J_N@Z  ; Performs best here (higher up) at the moment.
+?PerformLoopWhile@Line@@AAE?AW4ResultType@@PAUExprTokenType@@AA_NAAPAV1@@Z
+?PerformLoop@Line@@AAE?AW4ResultType@@PAUExprTokenType@@AA_NAAPAV1@_J_N@Z  ; Performs best here (higher up) at the moment.
 ?Free@Var@@QAEXH_N@Z  ; Called fairly often by the main Var::Assign().
-?Assign@Var@@QAE?AW4ResultType@@PADK_N1@Z  ; Assign MAIN
+?AssignString@Var@@QAE?AW4ResultType@@PBDI_N1@Z  ; Assign MAIN
 ?Assign@Var@@QAE?AW4ResultType@@AAV1@@Z  ; Assign var-to-var.
 ?Assign@Var@@QAE?AW4ResultType@@AAUExprTokenType@@@Z  ; Assign a Token.
 ?UpdateBinaryInt64@Var@@AAEX_JE@Z  ; application.obj
@@ -85,8 +85,8 @@ atoi             ; Used for 32-bit integers, which are less frequently called/co
 ?Assign@Var@@QAE?AW4ResultType@@H@Z   ; Assign an Int
 ?Assign@Var@@QAE?AW4ResultType@@K@Z   ; Assign an unsigned long (DWORD)
 
-?LengthIgnoreBinaryClip@Var@@QAEKXZ
-?Length@Var@@QAEAAKXZ
+?LengthIgnoreBinaryClip@Var@@QAEIXZ
+?Length@Var@@QAEIXZ
 ?Type@Var@@QAEEXZ
 ?UpdateContents@Var@@AAEXXZ  ; application.obj
 ?Contents@Var@@QAEPADH@Z  ; application.obj
@@ -95,12 +95,12 @@ atoi             ; Used for 32-bit integers, which are less frequently called/co
 ; each direction). IsHex() calls omit_leading_whitespace(), so put that here too.  The order of
 ; importance is probably ATOI64, ATOF, then ATOI based on expected calling frequency.
 ?omit_leading_whitespace@@YAPADPAD@Z  ; Called by IsHex(). Formerly was faster when moved further below than this.
-?IsHex@@YA_NPAD@Z
+?IsHex@@YA_NPBD@Z
 
-?ATOI64@@YA_JPAD@Z
+?ATOI64@@YA_JPBD@Z
 _atoi64
 ?HasContents@Var@@QAEHXZ  ; Small and called from a lot of places.
-?IsPureNumeric@@YA?AW4SymbolType@@PADHHHH@Z  ; util.obj
+?IsPureNumeric@@YA?AW4SymbolType@@PBDHHHH@Z  ; util.obj
 ?IsNonBlankIntegerOrFloat@Var@@QAE?AW4SymbolType@@H@Z  ; script.obj
 
 ?TokenToBOOL@@YAHAAUExprTokenType@@W4SymbolType@@@Z  ; script2.obj
@@ -118,29 +118,29 @@ _atoi64
 ?BIF_SubStr@@YAXAAUExprTokenType@@QAPAU1@H@Z ;
 ?BIF_StrLen@@YAXAAUExprTokenType@@QAPAU1@H@Z ;
 
-?Get@Var@@QAEKPAD@Z
-?GetExpandedArgSize@Line@@QAEKQAPAVVar@@@Z  ; script_expression.obj
+?Get@Var@@QAEIPAD@Z
+?GetExpandedArgSize@Line@@QAEIQAPAVVar@@@Z  ; script_expression.obj
 ?ExpandArg@Line@@QAEPADPADHPAVVar@@@Z
-?ExpandArgs@Line@@QAE?AW4ResultType@@KQAPAVVar@@@Z
+?ExpandArgs@Line@@QAE?AW4ResultType@@PAUExprTokenType@@IQAPAVVar@@@Z
 
 ; Exploit (build from) both sides of this function, above and below.
-?ExecUntil@Line@@QAE?AW4ResultType@@W4ExecUntilMode@@PAPADPAPAV1@@Z
+?ExecUntil@Line@@QAE?AW4ResultType@@W4ExecUntilMode@@PAUExprTokenType@@PAPAV1@@Z
 ?Execute@Label@@QAE?AW4ResultType@@XZ  ; application.obj
 
 ?EvaluateCondition@Line@@AAE?AW4ResultType@@XZ
 ?Perform@Line@@AAE?AW4ResultType@@XZ
 
 ; CENTRAL/PIVOT, but sometimes performs better below most of the primaries rather than in the middle of functions it calls (perhaps because it's so large).
-?ExpandExpression@Line@@QAEPADHAAW4ResultType@@AAPAD1AAIQAPADI@Z
-?Call@Func@@QAE?AW4ResultType@@AAPAD@Z
+?ExpandExpression@Line@@QAEPADHAAW4ResultType@@PAUExprTokenType@@AAPAD2AAIQAPADI@Z
+?Call@Func@@QAE?AW4ResultType@@PAUExprTokenType@@@Z
 ?FreeAndRestoreFunctionVars@Var@@SAXAAVFunc@@AAPAUVarBkp@@AAH@Z  ; Frequently-called, even for non-recursive functions.
 ?ConvertToNonAliasIfNecessary@Var@@QAEXXZ  ; Called only when a function has ByRef paramters.
 ?UpdateAlias@Var@@QAEXPAV1@@Z              ; Called only when a function has ByRef paramters.
 
 ; Frequently-called things from different categories combined into one area:
-?BIV_LoopField@@YAKPAD0@Z   ; Performance-sensitive ones kept adjacent.
-?BIV_LoopIndex@@YAKPAD0@Z   ;
-?BIV_True_False@@YAKPAD0@Z  ;
+?BIV_LoopField@@YAIPAD0@Z   ; Performance-sensitive ones kept adjacent.
+?BIV_LoopIndex@@YAIPAD0@Z   ;
+?BIV_True_False@@YAIPAD0@Z  ;
 
 
 ;;;;;;;;;;;;;;;;;;
@@ -152,7 +152,7 @@ _atoi64
 ?ArgIndexToDouble@Line@@QAENH@Z  ; script.obj
 
 ?ConvertDllArgType@@YAXQAPADAAUDYNAPARM@@@Z
-?GetDllProcAddress@@YAPAXPADPAPAUHINSTANCE__@@@Z
+?GetDllProcAddress@@YAPAXPBDPAPAUHINSTANCE__@@@Z
 ?BIF_DllCall@@YAXAAUExprTokenType@@QAPAU1@H@Z   ; Sandwich technique (i.e. this function between two it calls)
 ?DynaCall@@YA?ATDYNARESULT@@HPAXQAUDYNAPARM@@HAAK0H@Z
 ?BIF_NumGet@@YAXAAUExprTokenType@@QAPAU1@H@Z
@@ -167,9 +167,9 @@ _atoi64
 ?DisableCache@Var@@QAEXXZ  ; script_expression.obj
 
 ; These seem too unimportant to justify imposing them between ExecUntil and EvalCondtion/Perform:
-?PerformLoopParse@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@@Z
-?PerformLoopParseCSV@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@@Z
-?PerformLoopFilePattern@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@W4FileLoopModeType@@_NPAD@Z  ; script.obj
+?PerformLoopParse@Line@@AAE?AW4ResultType@@PAUExprTokenType@@AA_NAAPAV1@@Z
+?PerformLoopParseCSV@Line@@AAE?AW4ResultType@@PAUExprTokenType@@AA_NAAPAV1@@Z
+?PerformLoopFilePattern@Line@@AAE?AW4ResultType@@PAUExprTokenType@@AA_NAAPAV1@W4FileLoopModeType@@_NPAD@Z  ; script.obj
 
 ; No point because strncpy "cannot be ordered" (probably intrinsic):
 ;strncpy
@@ -179,9 +179,9 @@ _atoi64
 ?rtrim@@YAIPADI@Z
 ?trim@@YAIPADI@Z
 
-?snprintf@@YAHPADHPBDZZ
+?sntprintf@@YAHPADHPBDZZ
 _vsnprintf  ; Sandwiching this function between the other two seems likely to yield best results.
-?snprintfcat@@YAHPADHPBDZZ
+?sntprintfcat@@YAHPADHPBDZZ
 _scprintf
 sprintf
 fprintf
@@ -202,7 +202,7 @@ printf
 
 ?SetLengthFromContents@Var@@QAEXXZ
 ?BIF_VarSetCapacity@@YAXAAUExprTokenType@@QAPAU1@H@Z
-?Capacity@Var@@QAEKXZ
+?Capacity@Var@@QAEIXZ
 ?Close@Var@@QAE?AW4ResultType@@_N@Z
 ?ArgIndexLength@Line@@QAEIH@Z  ; script.obj
 ?IsBinaryClip@Var@@QAE_NXZ
@@ -213,8 +213,8 @@ printf
 ?BackupFunctionVars@Var@@SA?AW4ResultType@@AAVFunc@@AAPAUVarBkp@@AAH@Z
 ?Backup@Var@@QAEXAAUVarBkp@@@Z
 
-?AcceptNewMem@Var@@QAEXPADK@Z
-?AppendIfRoom@Var@@QAE?AW4ResultType@@PADK@Z
+?AcceptNewMem@Var@@QAEXPADI@Z
+?AppendIfRoom@Var@@QAE?AW4ResultType@@PADI@Z
 ?UpdateBinaryDouble@Var@@AAEXNE@Z  ; script.obj
 ?Assign@Var@@QAE?AW4ResultType@@N@Z  ; Kept away from central section because most scripts don't use doubles.  Assign a Double (calls snprintf).
 ?AssignHWND@Var@@QAE?AW4ResultType@@PAUHWND__@@@Z  ; Assign an HWND.
@@ -344,7 +344,7 @@ printf
 ?vk_to_sc@@YAGE_N@Z
 ?SCtoKeyName@@YAPADGPADH@Z
 
-?SendASC@@YAXPAD@Z
+?SendASC@@YAXPBD@Z
 ?SendEventArray@@YAXAAHE@Z
 ?SendKey@@YAXEGEEHW4KeyEventTypes@@EPAUHWND__@@HH_N@Z
 ?SendKeys@@YAXPAD_NW4SendModes@@PAUHWND__@@@Z
@@ -413,99 +413,99 @@ printf
 ;;;;;;;;;;;;;;;;;;;;
 ; BUILT-IN VARIABLES
 ;;;;;;;;;;;;;;;;;;;;
-?BIV_AhkPath@@YAKPAD0@Z
-?BIV_AhkVersion@@YAKPAD0@Z
-?BIV_AppData@@YAKPAD0@Z
-?BIV_AutoTrim@@YAKPAD0@Z
-?BIV_BatchLines@@YAKPAD0@Z
-?BIV_Caret@@YAKPAD0@Z
-?BIV_ComSpec@@YAKPAD0@Z
-?BIV_ControlDelay@@YAKPAD0@Z
-?BIV_Cursor@@YAKPAD0@Z
-?BIV_DateTime@@YAKPAD0@Z
-?BIV_DefaultMouseSpeed@@YAKPAD0@Z
-?BIV_Desktop@@YAKPAD0@Z
-?BIV_DetectHiddenText@@YAKPAD0@Z
-?BIV_DetectHiddenWindows@@YAKPAD0@Z
-?BIV_EndChar@@YAKPAD0@Z
-?BIV_EventInfo@@YAKPAD0@Z
-?BIV_ExitReason@@YAKPAD0@Z
-?BIV_FormatFloat@@YAKPAD0@Z
-?BIV_FormatInteger@@YAKPAD0@Z
-?BIV_Gui@@YAKPAD0@Z
-?BIV_GuiControl@@YAKPAD0@Z
-	?ControlGetName@GuiType@@SAKIIPAD@Z  ; Called by above.
-?BIV_GuiEvent@@YAKPAD0@Z
-?BIV_IconFile@@YAKPAD0@Z
-?BIV_IconHidden@@YAKPAD0@Z
-?BIV_IconNumber@@YAKPAD0@Z
-?BIV_IconTip@@YAKPAD0@Z
-?BIV_IPAddress@@YAKPAD0@Z  ; script_autoit.obj
-?BIV_IsAdmin@@YAKPAD0@Z  ; script_autoit.obj
-?BIV_IsPaused@@YAKPAD0@Z
-?BIV_IsCritical@@YAKPAD0@Z
-?BIV_IsSuspended@@YAKPAD0@Z
-?BIV_KeyDelay@@YAKPAD0@Z
-?BIV_Language@@YAKPAD0@Z
-?BIV_LastError@@YAKPAD0@Z
-?BIV_LineFile@@YAKPAD0@Z
-?BIV_LineNumber@@YAKPAD0@Z
-?BIV_LoopFileAttrib@@YAKPAD0@Z
-?BIV_LoopFileDir@@YAKPAD0@Z
-?BIV_LoopFileExt@@YAKPAD0@Z
-?BIV_LoopFileFullPath@@YAKPAD0@Z
-?BIV_LoopFileLongPath@@YAKPAD0@Z
-?BIV_LoopFileName@@YAKPAD0@Z
-?BIV_LoopFileShortName@@YAKPAD0@Z
-?BIV_LoopFileShortPath@@YAKPAD0@Z
-?BIV_LoopFileSize@@YAKPAD0@Z
-?BIV_LoopFileTime@@YAKPAD0@Z
-?BIV_MMM_DDD@@YAKPAD0@Z
-?BIV_MouseDelay@@YAKPAD0@Z
-?BIV_MyDocuments@@YAKPAD0@Z
-?BIV_Now@@YAKPAD0@Z
-?BIV_OSType@@YAKPAD0@Z
-?BIV_OSVersion@@YAKPAD0@Z
-?BIV_PriorHotkey@@YAKPAD0@Z
-?BIV_ProgramFiles@@YAKPAD0@Z
-?BIV_Programs@@YAKPAD0@Z
-?BIV_ScreenWidth_Height@@YAKPAD0@Z
-?BIV_ScriptDir@@YAKPAD0@Z
-?BIV_ScriptFullPath@@YAKPAD0@Z
-?BIV_ScriptName@@YAKPAD0@Z
-?BIV_Space_Tab@@YAKPAD0@Z
-?BIV_StartMenu@@YAKPAD0@Z
-?BIV_Startup@@YAKPAD0@Z
-?BIV_StringCaseSense@@YAKPAD0@Z
-?BIV_Temp@@YAKPAD0@Z
-?BIV_ThisFunc@@YAKPAD0@Z
-?BIV_ThisHotkey@@YAKPAD0@Z
-?BIV_ThisLabel@@YAKPAD0@Z
-?BIV_ThisMenu@@YAKPAD0@Z
-?BIV_ThisMenuItem@@YAKPAD0@Z
-?BIV_ThisMenuItemPos@@YAKPAD0@Z
-?BIV_TickCount@@YAKPAD0@Z
-?BIV_TimeIdle@@YAKPAD0@Z
-?BIV_TimeIdlePhysical@@YAKPAD0@Z
-?BIV_TimeSincePriorHotkey@@YAKPAD0@Z
-?BIV_TimeSinceThisHotkey@@YAKPAD0@Z
-?BIV_TitleMatchMode@@YAKPAD0@Z
-?BIV_TitleMatchModeSpeed@@YAKPAD0@Z
-?BIV_UserName_ComputerName@@YAKPAD0@Z
-?BIV_WinDelay@@YAKPAD0@Z
-?BIV_WinDir@@YAKPAD0@Z
-?BIV_WorkingDir@@YAKPAD0@Z
+?BIV_AhkPath@@YAIPAD0@Z
+?BIV_AhkVersion@@YAIPAD0@Z
+?BIV_AppData@@YAIPAD0@Z
+?BIV_AutoTrim@@YAIPAD0@Z
+?BIV_BatchLines@@YAIPAD0@Z
+?BIV_Caret@@YAIPAD0@Z
+?BIV_ComSpec@@YAIPAD0@Z
+?BIV_ControlDelay@@YAIPAD0@Z
+?BIV_Cursor@@YAIPAD0@Z
+?BIV_DateTime@@YAIPAD0@Z
+?BIV_DefaultMouseSpeed@@YAIPAD0@Z
+?BIV_Desktop@@YAIPAD0@Z
+?BIV_DetectHiddenText@@YAIPAD0@Z
+?BIV_DetectHiddenWindows@@YAIPAD0@Z
+?BIV_EndChar@@YAIPAD0@Z
+?BIV_EventInfo@@YAIPAD0@Z
+?BIV_ExitReason@@YAIPAD0@Z
+?BIV_FormatFloat@@YAIPAD0@Z
+?BIV_FormatInteger@@YAIPAD0@Z
+?BIV_Gui@@YAIPAD0@Z
+?BIV_GuiControl@@YAIPAD0@Z
+?ControlGetName@GuiType@@SAIIIPAD@Z  ; Called by above.
+?BIV_GuiEvent@@YAIPAD0@Z
+?BIV_IconFile@@YAIPAD0@Z
+?BIV_IconHidden@@YAIPAD0@Z
+?BIV_IconNumber@@YAIPAD0@Z
+?BIV_IconTip@@YAIPAD0@Z
+?BIV_IPAddress@@YAIPAD0@Z  ; script_autoit.obj
+?BIV_IsAdmin@@YAIPAD0@Z  ; script_autoit.obj
+?BIV_IsPaused@@YAIPAD0@Z
+?BIV_IsCritical@@YAIPAD0@Z
+?BIV_IsSuspended@@YAIPAD0@Z
+?BIV_KeyDelay@@YAIPAD0@Z
+?BIV_Language@@YAIPAD0@Z
+?BIV_LastError@@YAIPAD0@Z
+?BIV_LineFile@@YAIPAD0@Z
+?BIV_LineNumber@@YAIPAD0@Z
+?BIV_LoopFileAttrib@@YAIPAD0@Z
+?BIV_LoopFileDir@@YAIPAD0@Z
+?BIV_LoopFileExt@@YAIPAD0@Z
+?BIV_LoopFileFullPath@@YAIPAD0@Z
+?BIV_LoopFileLongPath@@YAIPAD0@Z
+?BIV_LoopFileName@@YAIPAD0@Z
+?BIV_LoopFileShortName@@YAIPAD0@Z
+?BIV_LoopFileShortPath@@YAIPAD0@Z
+?BIV_LoopFileSize@@YAIPAD0@Z
+?BIV_LoopFileTime@@YAIPAD0@Z
+?BIV_MMM_DDD@@YAIPAD0@Z
+?BIV_MouseDelay@@YAIPAD0@Z
+?BIV_MyDocuments@@YAIPAD0@Z
+?BIV_Now@@YAIPAD0@Z
+?BIV_OSType@@YAIPAD0@Z
+?BIV_OSVersion@@YAIPAD0@Z
+?BIV_PriorHotkey@@YAIPAD0@Z
+?BIV_ProgramFiles@@YAIPAD0@Z
+?BIV_Programs@@YAIPAD0@Z
+?BIV_ScreenWidth_Height@@YAIPAD0@Z
+?BIV_ScriptDir@@YAIPAD0@Z
+?BIV_ScriptFullPath@@YAIPAD0@Z
+?BIV_ScriptName@@YAIPAD0@Z
+?BIV_Space_Tab@@YAIPAD0@Z
+?BIV_StartMenu@@YAIPAD0@Z
+?BIV_Startup@@YAIPAD0@Z
+?BIV_StringCaseSense@@YAIPAD0@Z
+?BIV_Temp@@YAIPAD0@Z
+?BIV_ThisFunc@@YAIPAD0@Z
+?BIV_ThisHotkey@@YAIPAD0@Z
+?BIV_ThisLabel@@YAIPAD0@Z
+?BIV_ThisMenu@@YAIPAD0@Z
+?BIV_ThisMenuItem@@YAIPAD0@Z
+?BIV_ThisMenuItemPos@@YAIPAD0@Z
+?BIV_TickCount@@YAIPAD0@Z
+?BIV_TimeIdle@@YAIPAD0@Z
+?BIV_TimeIdlePhysical@@YAIPAD0@Z
+?BIV_TimeSincePriorHotkey@@YAIPAD0@Z
+?BIV_TimeSinceThisHotkey@@YAIPAD0@Z
+?BIV_TitleMatchMode@@YAIPAD0@Z
+?BIV_TitleMatchModeSpeed@@YAIPAD0@Z
+?BIV_UserName_ComputerName@@YAIPAD0@Z
+?BIV_WinDelay@@YAIPAD0@Z
+?BIV_WinDir@@YAIPAD0@Z
+?BIV_WorkingDir@@YAIPAD0@Z
 
-??0LoopReadFileStruct@@QAE@PAU_iobuf@@PAD@Z  ; Constructor.
-?PerformLoopReadFile@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@PAU_iobuf@@PAD@Z
-?BIV_LoopReadLine@@YAKPAD0@Z  ; script2.obj
+??0LoopReadFileStruct@@QAE@PAVTextStream@@PAD@Z  ; Constructor.
+?PerformLoopReadFile@Line@@AAE?AW4ResultType@@PAUExprTokenType@@AA_NAAPAV1@PAVTextStream@@PAD@Z
+?BIV_LoopReadLine@@YAIPAD0@Z  ; script2.obj
 
-?BIV_LoopRegKey@@YAKPAD0@Z  ; script2.obj
-?BIV_LoopRegName@@YAKPAD0@Z  ; script2.obj
-?BIV_LoopRegSubKey@@YAKPAD0@Z  ; script2.obj
-?BIV_LoopRegTimeModified@@YAKPAD0@Z  ; script2.obj
-?BIV_LoopRegType@@YAKPAD0@Z  ; script2.obj
-?PerformLoopReg@Line@@AAE?AW4ResultType@@PAPADAA_NAAPAV1@W4FileLoopModeType@@_NPAUHKEY__@@5PAD@Z
+?BIV_LoopRegKey@@YAIPAD0@Z  ; script2.obj
+?BIV_LoopRegName@@YAIPAD0@Z  ; script2.obj
+?BIV_LoopRegSubKey@@YAIPAD0@Z  ; script2.obj
+?BIV_LoopRegTimeModified@@YAIPAD0@Z  ; script2.obj
+?BIV_LoopRegType@@YAIPAD0@Z  ; script2.obj
+?PerformLoopReg@Line@@AAE?AW4ResultType@@PAUExprTokenType@@AA_NAAPAV1@W4FileLoopModeType@@_NPAUHKEY__@@5PAD@Z
 ??0RegItemStruct@@QAE@PAUHKEY__@@0PAD@Z
 ?InitForSubkeys@RegItemStruct@@QAEXXZ
 ?InitForValues@RegItemStruct@@QAEXXZ
@@ -700,7 +700,7 @@ qmathTan@8
 ?PerformWait@Line@@AAE?AW4ResultType@@XZ  ; script2.obj
 
 ?ProcessExist9x2000@@YAKPAD0@Z
-?ProcessExistNT4@@YAKPAD0@Z
+?ProcessExistNT4@@YAIPAD0@Z
 ?ProcessExist@@YAKPAD0@Z
 ?ScriptProcess@Line@@AAE?AW4ResultType@@PAD00@Z
 
@@ -792,7 +792,7 @@ qmathTan@8
 ?FindFont@GuiType@@SAHAAUFontType@@@Z
 ?FindOrCreateFont@GuiType@@SAHPAD0PAUFontType@@PAK@Z
 ?FontEnumProc@@YGHPAUtagENUMLOGFONTEXA@@PAUtagNEWTEXTMETRICEXA@@KJ@Z
-?FontExist@@YA_NPAUHDC__@@PAD@Z
+?FontExist@@YA_NPAUHDC__@@PBD@Z
 
 ?FindGroup@GuiType@@QAEHIAAI0@Z
 ?FindTabControl@GuiType@@QAEPAUGuiControlType@@E@Z
@@ -878,14 +878,14 @@ qmathTan@8
 
 ?MySetWindowTheme@@YAJPAUHWND__@@PB_W1@Z
 ?ReadRegString@@YAKPAUHKEY__@@PAD11I@Z  ; util.obj
-?GetEnvVarReliable@@YAKPAD0@Z
+?GetEnvVarReliable@@YAKPBDPAD@Z
 ?ScreenToWindow@@YAXAAUtagPOINT@@PAUHWND__@@@Z
 
 ?lstrcasestr@@YAPADPBD0@Z
-?strcasestr@@YAPADPBD0@Z
+?tcscasestr@@YAPADPBD0@Z
 ?strlcpy@@YAXPADPBDI@Z
-?strlicmp@@YAHPAD0II@Z
-?strrstr@@YAPADPAD0W4StringCaseSenseType@@H@Z
+?tcslicmp@@YAHPAD0II@Z
+?tcsrstr@@YAPADPADPBDW4StringCaseSenseType@@H@Z
 ?omit_trailing_whitespace@@YAPADPAD0@Z
 ?omit_leading_any@@YAPADPAD0I@Z
 ?omit_trailing_any@@YAIPAD00@Z
@@ -1344,10 +1344,6 @@ __ld12mul
 __multtenpow12
 _ms_p5_mp_test_fdiv
 _ms_p5_test_fdiv
-_tolower
-tolower
-_toupper
-toupper
 wctomb
 _wincmdln
 _amsg_exit
@@ -1570,7 +1566,7 @@ WSAStartup@8
 ?IsReadyForWrite@Clipboard@@QAE_NXZ
 ?Open@Clipboard@@QAE?AW4ResultType@@XZ
 ?PrepareForWrite@Clipboard@@QAEPADI@Z
-?Set@Clipboard@@QAE?AW4ResultType@@PADI@Z
+?Set@Clipboard@@QAE?AW4ResultType@@PBDI@Z
 ?Contents@Clipboard@@QAEPADXZ
 ?AssignClipboardAll@Var@@QAE?AW4ResultType@@XZ  ; var.obj
 ?AssignBinaryClip@Var@@QAE?AW4ResultType@@AAV1@@Z  ; var.obj
@@ -1640,16 +1636,16 @@ WinMain@16
 ?SetWorkingDir@@YAXPAD@Z
 ?LoadFromFile@Script@@QAEI_N@Z  ; script.obj
 ?LoadIncludedFile@Script@@QAE?AW4ResultType@@PAD_N1@Z
-?GetLine@Script@@AAEIPADHHPAU_iobuf@@@Z
+?GetLine@Script@@AAEIPADHHPAVTextStream@@@Z
 ?IsFunction@@YA_NPADPA_N@Z
 ?IsDirective@Script@@AAE?AW4ResultType@@PAD@Z
 
 ?ParseAndAddLine@Script@@AAE?AW4ResultType@@PADEE000I@Z
 ?AddLine@Script@@AAE?AW4ResultType@@EQAPADE0@Z
-?CloseAndReturnFailFunc@Script@@AAE?AW4ResultType@@PAU_iobuf@@@Z
+?CloseAndReturnFail@Script@@AAE?AW4ResultType@@PAVTextStream@@@Z
 
-?LineError@Line@@QAE?AW4ResultType@@PADW42@0@Z
-?ScriptError@Script@@QAE?AW4ResultType@@PAD0@Z
+?LineError@Line@@QAE?AW4ResultType@@PBDW42@0@Z
+?ScriptError@Script@@QAE?AW4ResultType@@PBD0@Z
 
 ?ToText@Var@@QAEPADPADH_N@Z
 ?ListVars@Script@@QAEPADPADH@Z
@@ -1675,13 +1671,13 @@ WinMain@16
 ??0SimpleHeap@@AAE@XZ
 ??1SimpleHeap@@AAE@XZ
 ?CreateBlock@SimpleHeap@@CAPAV1@XZ
-?Malloc@SimpleHeap@@SAPADI@Z
+?Malloc@SimpleHeap@@SAPAXI@Z
 ?Malloc@SimpleHeap@@SAPADPADI@Z
 ?Delete@SimpleHeap@@SAXPAX@Z
 
 ?FindFuncInLibrary@Script@@QAEPAVFunc@@PADIAA_N@Z  ; script.obj
-?FindFunc@Script@@QAEPAVFunc@@PADI@Z
-?AddFunc@Script@@QAEPAVFunc@@PADI_N@Z
+?FindFunc@Script@@QAEPAVFunc@@PBDIPAH@Z
+?AddFunc@Script@@QAEPAVFunc@@PBDI_NH@Z
 ?DefineFunc@Script@@QAE?AW4ResultType@@PADQAPAVVar@@@Z
 ??2Func@@SAPAXI@Z
 ??0Func@@QAE@PAD_N@Z
@@ -1715,4 +1711,4 @@ WinMain@16
 ?MarkAsVisited@WinGroup@@CAXPAUHWND__@@@Z
 ?Update@WinGroup@@AAE?AW4ResultType@@_N@Z
 
-?ValidateName@Var@@SA?AW4ResultType@@PAD_NH@Z
+?ValidateName@Var@@SA?AW4ResultType@@PBD_NH@Z

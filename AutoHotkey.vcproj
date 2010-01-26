@@ -150,7 +150,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalOptions="/SAFESEH:NO"
+				AdditionalOptions="/SAFESEH:NO /IGNORE:4037"
 				AdditionalDependencies="wsock32.lib winmm.lib version.lib comctl32.lib"
 				OutputFile="$(OutDir)/AutoHotkey.exe"
 				LinkIncremental="1"
@@ -162,6 +162,7 @@
 				TerminalServerAware="1"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
+				FunctionOrder="@source\misc\function_order_for_linker_optimization.txt"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
 				TargetMachine="1"
@@ -804,6 +805,10 @@
 				>
 			</File>
 		</Filter>
+		<File
+			RelativePath=".\source\misc\function_order_for_linker_optimization.txt"
+			>
+		</File>
 	</Files>
 	<Globals>
 	</Globals>
