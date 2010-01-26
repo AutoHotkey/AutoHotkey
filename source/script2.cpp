@@ -12377,7 +12377,7 @@ has_valid_return_type:
 #else
 	CStringW **pStr = (CStringW **)
 #endif
-		malloc(i);
+		_alloca(i); // _alloca vs malloc can make a significant difference to performance in some cases.
 	memset(pStr, 0, i);
 
 	// Above has already ensured that after the first parameter, there are either zero additional parameters
@@ -12755,8 +12755,6 @@ has_valid_return_type:
 	}
 
 end:
-	if (pStr)
-		free(pStr);
 	if (hmodule_to_free)
 		FreeLibrary(hmodule_to_free);
 }
