@@ -166,6 +166,7 @@ ResultType Var::Assign(ExprTokenType &aToken)
 			// Below must be done AFTER the above because above's Assign() invalidates the cache, but the
 			// cache should be left valid.
 			UpdateBinaryInt64(*(__int64 *)aToken.buf); // Except when passing VAR_ATTRIB_CONTENTS_OUT_OF_DATE, all callers of UpdateBinaryInt64() must ensure that mContents is a pure number (e.g. NOT 123abc).
+			return OK;
 		}
 		//else there is no binary integer; so don't return, continue on to the bottom.
 		break;

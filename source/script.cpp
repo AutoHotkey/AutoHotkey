@@ -10773,7 +10773,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				{
 					aResultToken->symbol = SYM_OPERAND;
 					aResultToken->marker = ARG1; // This sets it to blank if this return lacks an arg.
-					aResultToken->buf = NULL;
 				}
 			}
 			//else the return value, if any, is discarded.

@@ -116,6 +116,7 @@ _atoi64
 ; >>> Frequently-called and perf-sensitive, so keep the following near TokenToString() above <<<
 ?BIF_InStr@@YAXAAUExprTokenType@@QAPAU1@H@Z  ; Often called close together in scripts.
 ?BIF_SubStr@@YAXAAUExprTokenType@@QAPAU1@H@Z ;
+; ?TokenSetResult@@YA?AW4ResultType@@AAUExprTokenType@@PBDI@Z  ; Currently seems to do more harm than good.
 ?BIF_StrLen@@YAXAAUExprTokenType@@QAPAU1@H@Z ;
 
 ?Get@Var@@QAEIPAD@Z

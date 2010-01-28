@@ -110,16 +110,8 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 		{
 			if (aResultToken.symbol == SYM_STRING || aResultToken.symbol == SYM_OPERAND) // SYM_VAR is not currently possible.
 			{
-				LPTSTR buf;
-				size_t len;
 				// Make a persistent copy of the string in case it is the contents of one of the function's local variables.
-				if ( *aResultToken.marker && (buf = tmalloc(1 + (len = _tcslen(aResultToken.marker)))) )
-				{
-					aResultToken.marker = tmemcpy(buf, aResultToken.marker, len + 1);
-					aResultToken.circuit_token = (ExprTokenType *)buf;
-					aResultToken.buf = (LPTSTR)len; // L33: Bugfix - buf is the length of the string, not the size of the memory allocation.
-				}
-				else
+				if ( !*aResultToken.marker || !TokenSetResult(aResultToken, aResultToken.marker) )
 					aResultToken.marker = _T("");
 			}
 		}
@@ -275,7 +267,9 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 
 			ResultType r = CallField(field, aResultToken, aThisToken, aFlags, meta_params, aParamCount + 1);
 			if (r == EARLY_RETURN)
-				return OK; // TODO: Detection of 'return' vs 'return empty_value'.
+				// Propogate EARLY_RETURN in case this was the __Call meta-function of a
+				// "function object" which is used as a meta-function of some other object.
+				return EARLY_RETURN; // TODO: Detection of 'return' vs 'return empty_value'.
 		}
 	}
 	
@@ -495,20 +489,11 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	{
 		if (field->symbol == SYM_OPERAND)
 		{
-			LPTSTR buf;
-			size_t len;
+			aResultToken.symbol = SYM_OPERAND;
 			// L33: Make a persistent copy; our copy might be freed indirectly by releasing this object.
 			//		Prior to L33, callers took care of this UNLESS this was the last op in an expression.
-			if (buf = tmalloc(1 + (len = _tcslen(field->marker))))
-			{
-				aResultToken.marker = tmemcpy(buf, field->marker, len + 1);
-				aResultToken.circuit_token = (ExprTokenType *)buf;
-				aResultToken.buf = (LPTSTR)len;
-			}
-			else
+			if (!TokenSetResult(aResultToken, field->marker))
 				aResultToken.marker = _T("");
-
-			aResultToken.symbol = SYM_OPERAND;
 		}
 		else
 			field->Get(aResultToken);
@@ -727,6 +712,17 @@ ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 	if (desired_size < (size_t)mFieldCount)
 	{	// It doesn't seem intuitive to allow _SetCapacity to truncate the fields array.
 		desired_size = (size_t)mFieldCount;
+	}
+	if (!desired_size)
+	{	// Caller wants to shrink object to current contents but there aren't any, so free mFields.
+		if (mFields)
+		{
+			free(mFields);
+			mFields = NULL;
+			mFieldCountMax = 0;
+		}
+		//else mFieldCountMax should already be 0.
+		// Since mFieldCountMax and desired_size are both 0, below will return 0 and won't call SetInternalCapacity.
 	}
 	if (desired_size == mFieldCountMax || SetInternalCapacity((int)desired_size))
 	{

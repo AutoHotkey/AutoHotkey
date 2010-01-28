@@ -12826,21 +12826,11 @@ void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 		return;                       // Caller and Var:Assign() know that overlap is possible, so this seems safe.
 	}
 	
-	// Otherwise, at least one character is being omitted from the end of haystack.  So need a more complex method.
-	if (extract_length <= MAX_NUMBER_LENGTH) // v1.0.46.01: Avoid malloc() for small strings.  However, this improves speed by only 10% in a test where random 25-byte strings were extracted from a 700 KB string (probably because VC++'s malloc()/free() are very fast for small allocations).
-		aResultToken.marker = aResultToken.buf; // Store the address of the result for the caller.
-	else
+	// Otherwise, at least one character is being omitted from the end of haystack.
+	if (!TokenSetResult(aResultToken, result, extract_length))
 	{
-		// Otherwise, validation higher above has ensured: extract_length < remaining_length_available.
-		// Caller has provided a NULL circuit_token as a means of passing back memory we allocate here.
-		// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
-		if (   !(aResultToken.circuit_token = (ExprTokenType *)tmalloc(extract_length + 1))   ) // Out of memory. Due to rarity, don't display an error dialog (there's currently no way for a built-in function to abort the current thread anyway?)
-			return; // Yield the empty string (a default set higher above).
-		aResultToken.marker = (LPTSTR)aResultToken.circuit_token; // Store the address of the result for the caller.
-		aResultToken.buf = (LPTSTR)(size_t)extract_length; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
+		// Yield the empty string (a default set higher above).
 	}
-	tmemcpy(aResultToken.marker, result, extract_length);
-	aResultToken.marker[extract_length] = '\0'; // Must be done separately from the memcpy() because the memcpy() might just be taking a substring (i.e. long before result's terminator).
 }
 
 
@@ -16753,26 +16743,9 @@ void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 	if (extract_length && trim_type != 'L') // i.e. it's Trim() or RTrim();  THE LINE BELOW REQUIRES extract_length >= 1.
 		extract_length = omit_trailing_any(result, omit_list, result + extract_length - 1);
 
-	if (extract_length < MAX_NUMBER_LENGTH)
-	{
-		// Small enough to fit in caller's buf:
-		aResultToken.marker = aResultToken.buf;
-	}
-	else
-	{
-		// Caller has provided a NULL circuit_token as a means of passing back memory we allocate here.
-		// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
-		if ( !(aResultToken.circuit_token = (ExprTokenType *)tmalloc(extract_length + 1)) )
-		{
-			// Out of memory.
-			aResultToken.marker = _T("");
-			return;
-		}
-		aResultToken.marker = (LPTSTR)aResultToken.circuit_token; // Store the address of the result for the caller.
-		aResultToken.buf = (LPTSTR)(size_t)extract_length; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
-	}
-	tmemcpy(aResultToken.marker, result, extract_length);
-	aResultToken.marker[extract_length] = '\0'; // Must be done separately from the memcpy() because the memcpy() might just be taking a substring (i.e. long before result's terminator).
+	if (!TokenSetResult(aResultToken, result, extract_length))
+		// Out of memory.
+		aResultToken.marker = _T("");
 }
 
 
@@ -17028,6 +17001,30 @@ IObject *TokenToObject(ExprTokenType &aToken)
 	if (aToken.symbol == SYM_VAR && aToken.var->HasObject())
 		return aToken.var->Object();
 	return NULL;
+}
+
+
+
+ResultType TokenSetResult(ExprTokenType &aResultToken, LPCTSTR aResult, size_t aResultLength)
+// Utility function for handling memory allocation and return to callers of built-in functions; based on BIF_SubStr.
+// Returns FAIL if malloc failed, in which case our caller is responsible for returning a sensible default value.
+{
+	if (aResultLength == -1)
+		aResultLength = _tcslen(aResult);
+	if (aResultLength <= MAX_NUMBER_LENGTH) // v1.0.46.01: Avoid malloc() for small strings.  However, this improves speed by only 10% in a test where random 25-byte strings were extracted from a 700 KB string (probably because VC++'s malloc()/free() are very fast for small allocations).
+		aResultToken.marker = aResultToken.buf; // Store the address of the result for the caller.
+	else
+	{
+		// Caller has provided a NULL circuit_token as a means of passing back memory we allocate here.
+		// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
+		if (   !(aResultToken.circuit_token = (ExprTokenType *)tmalloc(aResultLength + 1))   ) // Out of memory. Due to rarity, don't display an error dialog (there's currently no way for a built-in function to abort the current thread anyway?)
+			return FAIL;
+		aResultToken.marker = (LPTSTR)aResultToken.circuit_token; // Store the address of the result for the caller.
+		aResultToken.buf = (LPTSTR)(size_t)aResultLength; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
+	}
+	tmemcpy(aResultToken.marker, aResult, aResultLength);
+	aResultToken.marker[aResultLength] = '\0'; // Must be done separately from the memcpy() because the memcpy() might just be taking a substring (i.e. long before result's terminator).
+	return OK;
 }
 
 
