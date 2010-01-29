@@ -5,7 +5,7 @@
 #if !defined(_MBCS) && !defined(_UNICODE) && !defined(UNICODE) // If not set in project settings...
 
 // L: Comment out the next line to enable UNICODE:
-#define _MBCS
+//#define _MBCS
 
 #ifndef _MBCS
 #define _UNICODE
