@@ -108,7 +108,7 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 
 		if ( !(result == EARLY_EXIT || result == FAIL) )
 		{
-			if (aResultToken.symbol == SYM_STRING || aResultToken.symbol == SYM_OPERAND) // SYM_VAR is not currently possible.
+			if (aResultToken.symbol == SYM_STRING) // SYM_VAR is not currently possible; SYM_OPERAND should not be possible.
 			{
 				// Make a persistent copy of the string in case it is the contents of one of the function's local variables.
 				if ( !*aResultToken.marker || !TokenSetResult(aResultToken, aResultToken.marker) )
@@ -474,8 +474,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				if (value_param.symbol == SYM_OPERAND || value_param.symbol == SYM_STRING)
 				{
 					// L33: Use value_param since our copy may be freed prematurely in some (possibly rare) cases:
-					aResultToken.symbol = value_param.symbol;
-					aResultToken.marker = value_param.marker;
+					aResultToken.symbol		 = value_param.symbol;
+					aResultToken.value_int64 = value_param.value_int64; // Copy marker and buf (via union) in case it is SYM_OPERAND with a cached integer.
 				}
 				else
 					field->Get(aResultToken); // L34: Corrected this to be aResultToken instead of value_param (broken by L33).
@@ -489,7 +489,9 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	{
 		if (field->symbol == SYM_OPERAND)
 		{
-			aResultToken.symbol = SYM_OPERAND;
+			// Use SYM_STRING and not SYM_OPERAND, since SYM_OPERAND's use of aResultToken.buf
+			// would conflict with the use of circuit_token/buf to return a memory allocation.
+			aResultToken.symbol = SYM_STRING;
 			// L33: Make a persistent copy; our copy might be freed indirectly by releasing this object.
 			//		Prior to L33, callers took care of this UNLESS this was the last op in an expression.
 			if (!TokenSetResult(aResultToken, field->marker))

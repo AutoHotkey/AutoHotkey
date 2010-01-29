@@ -663,7 +663,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count); // L33: Added this line - it was overlooked in L31.
 					goto push_this_token; // For code simplicity, the optimization for numeric results is done at a later stage.
 				}
-				//else this_token is SYM_STRING or SYM_OPERAND.
+				ASSERT(this_token.symbol == SYM_STRING);
 				result = this_token.marker;
 
 				// Since above didn't goto, this isn't an early return, so proceed normally.
