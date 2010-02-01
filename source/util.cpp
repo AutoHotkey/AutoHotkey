@@ -687,11 +687,13 @@ LPTSTR tcscasestr(LPCTSTR phaystack, LPCTSTR pneedle)
 	haystack = (const TBYTE *) phaystack;
 	needle = (const TBYTE *) pneedle;
 
-	bl = ctolower(*needle);
+	// Since ctolower returns TCHAR (which is signed in ANSI builds), typecast to
+	// TBYTE first to promote characters \x80-\xFF to unsigned 32-bit correctly:
+	bl = (TBYTE)ctolower(*needle);
 	if (bl != '\0')
 	{
 		// Scan haystack until the first character of needle is found:
-		bu = ctoupper(bl);
+		bu = (TBYTE)ctoupper(bl);
 		haystack--;				/* possible ANSI violation */
 		do
 		{
@@ -702,10 +704,10 @@ LPTSTR tcscasestr(LPCTSTR phaystack, LPCTSTR pneedle)
 		while ((cl != bl) && (cl != bu));
 
 		// See if the rest of needle is a one-for-one match with this part of haystack:
-		cl = ctolower(*++needle);
+		cl = (TBYTE)ctolower(*++needle);
 		if (cl == '\0')  // Since needle consists of only one character, it is already a match as found above.
 			goto foundneedle;
-		cu = ctoupper(cl);
+		cu = (TBYTE)ctoupper(cl);
 		++needle;
 		goto jin;
 		
@@ -738,23 +740,23 @@ jin:
 			
 			rhaystack = haystack-- + 1;
 			rneedle = needle;
-			a = ctolower(*rneedle);
+			a = (TBYTE)ctolower(*rneedle);
 			
-			if (ctolower(*rhaystack) == (int) a)
+			if ((TBYTE)ctolower(*rhaystack) == (int) a)
 			do
 			{
 				if (a == '\0')
 					goto foundneedle;
 				++rhaystack;
-				a = ctolower(*++needle);
-				if (ctolower(*rhaystack) != (int) a)
+				a = (TBYTE)ctolower(*++needle);
+				if ((TBYTE)ctolower(*rhaystack) != (int) a)
 					break;
 				if (a == '\0')
 					goto foundneedle;
 				++rhaystack;
-				a = ctolower(*++needle);
+				a = (TBYTE)ctolower(*++needle);
 			}
-			while (ctolower(*rhaystack) == (int) a);
+			while ((TBYTE)ctolower(*rhaystack) == (int) a);
 			
 			needle = rneedle;		/* took the register-poor approach */
 			
