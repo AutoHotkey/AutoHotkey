@@ -1650,7 +1650,7 @@ DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBu
 		*aBuf = '\0';
 		return 0;
 	}
-	DWORD buf_size = (DWORD)aBufSize; // Caller's value might be a constant memory area, so need a modifiable copy.
+	DWORD buf_size = (DWORD)aBufSize * sizeof(TCHAR); // Caller's value might be a constant memory area, so need a modifiable copy.
 	LONG result = RegQueryValueEx(hkey, aValueName, NULL, NULL, (LPBYTE)aBuf, &buf_size);
 	RegCloseKey(hkey);
 	if (result != ERROR_SUCCESS || !buf_size) // Relies on short-circuit boolean order.
@@ -1658,6 +1658,7 @@ DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBu
 		*aBuf = '\0'; // MSDN says the contents of the buffer is undefined after the call in some cases, so reset it.
 		return 0;
 	}
+	buf_size /= sizeof(TCHAR); // RegQueryValueEx returns size in bytes.
 	// Otherwise success and non-empty result.  This also means that buf_size is accurate and <= to what we sent in.
 	// Fix for v1.0.47: ENSURE PROPER STRING TERMINATION. This is suspected to be a source of crashing.
 	// MSDN: "If the data has the REG_SZ, REG_MULTI_SZ or REG_EXPAND_SZ type, the string may not have been
