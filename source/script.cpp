@@ -7407,7 +7407,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		if (!_tcsicmp(suffix, _T("Get")) || !_tcsicmp(suffix, _T("Set")) || !_tcsicmp(suffix, _T("Call")))
 		{
 			bif = BIF_ObjInvoke;
-			min_params = *suffix == 'S' ? 3 : 1;
+			min_params = *suffix == 'S' ? 2 : 1; // ObjSet: name may be omitted but not value.  Note the limit set here isn't applied to bracket[] syntax.
 			max_params = 10000;
 		}
 		else if (!_tcsicmp(suffix, _T("ect"))) // i.e. "Object"

@@ -122,7 +122,7 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 	
 
 //
-// Object::Create - Called by BIF_Object to create a new object, optionally passing key/value pairs to set.
+// Object::Create - Called by BIF_ObjCreate to create a new object, optionally passing key/value pairs to set.
 //
 
 IObject *Object::Create(ExprTokenType *aParam[], int aParamCount)
@@ -465,7 +465,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	// SET
 	else if (IS_INVOKE_SET)
 	{
-		if (!IS_INVOKE_META)
+		if (!IS_INVOKE_META && param_count_excluding_rvalue)
 		{
 			ExprTokenType &value_param = *aParam[1];
 			// L34: Assigning an empty string no longer removes the field.
