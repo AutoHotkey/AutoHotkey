@@ -1004,8 +1004,8 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 		output_var.Close(); // Length() was already set properly by Assign() above. Currently it can't be VAR_CLIPBOARD since that would auto-detect as the reverse direction.
 		if (!char_count)
 			return output_var.Assign(); // Make non-clipboard output_var blank to indicate failure.
-#endif
 		return OK;
+#endif
 
 	case TRANS_CMD_HTML:
 	{

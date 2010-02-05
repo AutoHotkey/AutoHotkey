@@ -1274,7 +1274,10 @@ public:
 		if (!_tcsicmp(aBuf, _T("Asc"))) return TRANS_CMD_ASC;
 		if (!_tcsicmp(aBuf, _T("Chr"))) return TRANS_CMD_CHR;
 		if (!_tcsicmp(aBuf, _T("Deref"))) return TRANS_CMD_DEREF;
-#ifndef UNICODE
+#ifdef UNICODE
+		if (!_tcsicmp(aBuf, _T("ToCodePage"))) return TRANS_CMD_TOCODEPAGE;
+		if (!_tcsicmp(aBuf, _T("FromCodePage"))) return TRANS_CMD_FROMCODEPAGE;
+#else
 		if (!_tcsicmp(aBuf, _T("Unicode"))) return TRANS_CMD_UNICODE;
 #endif
 		if (!_tcsicmp(aBuf, _T("HTML"))) return TRANS_CMD_HTML;
@@ -1300,8 +1303,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("BitNot"))) return TRANS_CMD_BITNOT;
 		if (!_tcsicmp(aBuf, _T("BitShiftLeft"))) return TRANS_CMD_BITSHIFTLEFT;
 		if (!_tcsicmp(aBuf, _T("BitShiftRight"))) return TRANS_CMD_BITSHIFTRIGHT;
-		if (!_tcsicmp(aBuf, _T("ToCodePage"))) return TRANS_CMD_TOCODEPAGE;
-		if (!_tcsicmp(aBuf, _T("FromCodePage"))) return TRANS_CMD_FROMCODEPAGE;
 		return TRANS_CMD_INVALID;
 	}
 
