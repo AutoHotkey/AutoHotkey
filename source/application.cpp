@@ -219,10 +219,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	GuiIndexType gui_control_index, gui_index; // gui_index is needed to avoid using pgui in cases where that pointer becomes invalid (e.g. if ExecUntil() executes "Gui Destroy").
 	GuiEventType gui_action;
 	DWORD gui_event_info, gui_size;
-	bool *pgui_label_is_running, event_is_control_generated, peek_was_done, do_special_msg_filter;
+	bool *pgui_label_is_running, event_is_control_generated;
 	Label *gui_label;
 	HDROP hdrop_to_free;
-	DWORD tick_before, tick_after, peek1_time;
+	DWORD tick_before, tick_after;
 	LRESULT msg_reply;
 	BOOL peek_result;
 	MSG msg;
@@ -257,7 +257,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		}
 		else // aSleepDuration < 1 || empty_the_queue_via_peek || g_DeferMessagesForUnderlyingPump
 		{
-			peek_was_done = false; // Set default.
+#if defined(CONFIG_WIN9X) || defined(CONFIG_WINNT4)
+#pragma message("MsgSleep should be modified to use PM_QS_SENDMESSAGE|PM_QS_POSTMESSAGE where available.")
+			bool do_special_msg_filter, peek_was_done = false; // Set default.
 			// Check the active window in each iteration in case a signficant amount of time has passed since
 			// the previous iteration (due to launching threads, etc.)
 			if (g_DeferMessagesForUnderlyingPump && (fore_window = GetForegroundWindow()) != NULL  // There is a foreground window.
@@ -311,7 +313,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						peek_result = PEEK2(PM_REMOVE);
 					else // Peek1 has a message.  So if Peek2 does too, compare their timestamps.
 					{
-						peek1_time = msg.time; // Save it due to overwrite in next line.
+						DWORD peek1_time = msg.time; // Save it due to overwrite in next line.
 						if (!PEEK2(PM_NOREMOVE)) // Since no message in Peek2, use Peek1's.
 							peek_result = PEEK1(PM_REMOVE);
 						else // Both Peek2 and Peek1 have a message waiting, so to break the tie, retrieve the oldest one.
@@ -326,6 +328,12 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			}
 			if (!peek_was_done) // Since above didn't Peek(), fall back to doing the Peek with the standard filter.
 				peek_result = PeekMessage(&msg, NULL, 0, MSG_FILTER_MAX, PM_REMOVE);
+#else
+			// Since Win95/NT4 aren't supported, use the PM_QS_* flags to exclude INPUT and PAINT messages.
+			// This solves an infinite WM_PAINT loop issue which often crops up when script subclasses a window,
+			// and removes the need for do_special_msg_filter in the section above.
+			peek_result = PeekMessage(&msg, NULL, 0, MSG_FILTER_MAX, PM_REMOVE | PM_QS_SENDMESSAGE | PM_QS_POSTMESSAGE);
+#endif
 			if (!peek_result) // No more messages
 			{
 				// Since the Peek() didn't find any messages, our timeslice may have just been
