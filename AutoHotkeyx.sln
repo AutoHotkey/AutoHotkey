@@ -1,0 +1,55 @@
+﻿Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual C++ Express 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AutoHotkeyx", "AutoHotkeyx.vcxproj", "{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "lib_pcre", "source\lib_pcre\lib_pcre.vcxproj", "{39037993-9571-4DF2-8E39-CD2909043574}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug(mbcs)|Win32 = Debug(mbcs)|Win32
+		Debug|Win32 = Debug|Win32
+		Release(mbcs)|Win32 = Release(mbcs)|Win32
+		Release(minimal)|Win32 = Release(minimal)|Win32
+		Release|Win32 = Release|Win32
+		Self-contained(mbcs)|Win32 = Self-contained(mbcs)|Win32
+		Self-contained(minimal)|Win32 = Self-contained(minimal)|Win32
+		Self-contained|Win32 = Self-contained|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Debug(mbcs)|Win32.ActiveCfg = Debug(mbcs)|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Debug(mbcs)|Win32.Build.0 = Debug(mbcs)|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Debug|Win32.ActiveCfg = Debug|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Debug|Win32.Build.0 = Debug|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Release(mbcs)|Win32.ActiveCfg = Release(mbcs)|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Release(mbcs)|Win32.Build.0 = Release(mbcs)|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Release(minimal)|Win32.ActiveCfg = Release(minimal)|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Release(minimal)|Win32.Build.0 = Release(minimal)|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Release|Win32.ActiveCfg = Release|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Release|Win32.Build.0 = Release|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Self-contained(mbcs)|Win32.ActiveCfg = Self-contained(mbcs)|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Self-contained(mbcs)|Win32.Build.0 = Self-contained(mbcs)|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Self-contained(minimal)|Win32.ActiveCfg = Self-contained(minimal)|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Self-contained(minimal)|Win32.Build.0 = Self-contained(minimal)|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Self-contained|Win32.ActiveCfg = Self-contained|Win32
+		{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}.Self-contained|Win32.Build.0 = Self-contained|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Debug(mbcs)|Win32.ActiveCfg = Debug(mbcs)|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Debug(mbcs)|Win32.Build.0 = Debug(mbcs)|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Debug|Win32.ActiveCfg = Debug|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Debug|Win32.Build.0 = Debug|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Release(mbcs)|Win32.ActiveCfg = Release(mbcs)|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Release(mbcs)|Win32.Build.0 = Release(mbcs)|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Release(minimal)|Win32.ActiveCfg = Release(minimal)|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Release(minimal)|Win32.Build.0 = Release(minimal)|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Release|Win32.ActiveCfg = Release|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Release|Win32.Build.0 = Release|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Self-contained(mbcs)|Win32.ActiveCfg = Release(mbcs)|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Self-contained(mbcs)|Win32.Build.0 = Release(mbcs)|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Self-contained(minimal)|Win32.ActiveCfg = Release(minimal)|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Self-contained(minimal)|Win32.Build.0 = Release(minimal)|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Self-contained|Win32.ActiveCfg = Release|Win32
+		{39037993-9571-4DF2-8E39-CD2909043574}.Self-contained|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

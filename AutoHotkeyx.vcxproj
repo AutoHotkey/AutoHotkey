@@ -1,0 +1,213 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ProjectGuid>{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+  </PropertyGroup>
+  <PropertyGroup>
+    <TargetName>AutoHotkey</TargetName>
+    <ConfigurationType>Application</ConfigurationType>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug(mbcs)|Win32">
+      <Configuration>Debug(mbcs)</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release(mbcs)|Win32">
+      <Configuration>Release(mbcs)</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release(minimal)|Win32">
+      <Configuration>Release(minimal)</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Self-contained|Win32">
+      <Configuration>Self-contained</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Self-contained(mbcs)|Win32">
+      <Configuration>Self-contained(mbcs)</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Self-contained(minimal)|Win32">
+      <Configuration>Self-contained(minimal)</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <!-- import common config -->
+  <Import Project="Config.vcxproj" />
+  <!-- platform: win32 -->
+  <ItemDefinitionGroup Condition="'$(Platform)'=='Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <TerminalServerAware>false</TerminalServerAware>
+      <DataExecutionPrevention>false</DataExecutionPrevention>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- paths and basic settings -->
+  <PropertyGroup>
+    <IntDir>temp\$(Configuration)\</IntDir>
+    <OutDir>bin\Release\</OutDir>
+    <OutDir Condition="$(ConfigDebug)">bin\Debug\</OutDir>
+    <OutDir Condition="$(ConfigMinSize)">bin\Minimal\</OutDir>
+    <OutDir Condition="'$(CharacterSet)'=='Unicode' OR '$(CharacterSet)'=='MultiByte'">$(OutDir)$(CharacterSet)\</OutDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PrecompiledHeader Condition="!$(ConfigDebug)">Use</PrecompiledHeader>
+    </ClCompile>
+    <Link>
+      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
+      <TargetMachine>MachineX86</TargetMachine>
+      <StackReserveSize>4194304</StackReserveSize>
+      <AdditionalDependencies>wsock32.lib;winmm.lib;version.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <Manifest>
+      <AdditionalManifestFiles>source\resources\AutoHotkey.exe.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <!-- self-contained: required settings -->
+  <PropertyGroup Condition="$(ConfigSC)">
+    <TargetName>AutoHotkeySC</TargetName>
+    <TargetExt>.bin</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="$(ConfigSC)">
+    <ClCompile>
+      <PreprocessorDefinitions>AUTOHOTKEYSC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>AUTOHOTKEYSC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+    <Link>
+      <AdditionalDependencies>$(ProjectDir)source\lib\exearc_read_mt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <PostBuildEvent>
+      <Message>Removing CheckSum from $(TargetFileName) so Ahk2Exe doesn't complain</Message>
+      <Command>"$(ProjectDir)PostBuildSC.ahk" "$(TargetPath)"</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <!-- upx compression: Release -->
+  <PropertyGroup>
+    <UpxPath Condition="'$(UpxPath)'=='' AND exists('upx.exe')">upx.exe</UpxPath>
+    <UpxPath Condition="'$(UpxPath)'=='' AND exists('..\upx.exe')">..\upx.exe</UpxPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="$(ConfigRelease)">
+    <PostBuildEvent>
+      <Command>echo upx.exe disabled or not found, skipping compression</Command>
+      <Command Condition="exists('$(UpxPath)')">$(UpxPath) --best --no-lzma --filter=73 --compress-icons=0 "$(TargetPath)" &amp; exit 0</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <!-- Visual C++ 2010 should place any newly created properties in these groups -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release(minimal)|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(minimal)|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(minimal)|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(minimal)|Win32'" />
+  <!-- FILES -->
+  <ItemGroup>
+    <ClCompile Include="source\application.cpp" />
+    <ClCompile Include="source\AutoHotkey.cpp" />
+    <ClCompile Include="source\clipboard.cpp" />
+    <ClCompile Include="source\Debugger.cpp" />
+    <ClCompile Include="source\globaldata.cpp" />
+    <ClCompile Include="source\hook.cpp" />
+    <ClCompile Include="source\hotkey.cpp" />
+    <ClCompile Include="source\keyboard_mouse.cpp" />
+    <ClCompile Include="source\mt19937ar-cok.cpp" />
+    <ClCompile Include="source\os_version.cpp" />
+    <ClCompile Include="source\script.cpp" />
+    <ClCompile Include="source\script2.cpp" />
+    <ClCompile Include="source\script_autoit.cpp" />
+    <ClCompile Include="source\script_expression.cpp" />
+    <ClCompile Include="source\script_gui.cpp" />
+    <ClCompile Include="source\script_menu.cpp" />
+    <ClCompile Include="source\script_object.cpp" />
+    <ClCompile Include="source\script_object_bif.cpp" />
+    <ClCompile Include="source\script_registry.cpp" />
+    <ClCompile Include="source\SimpleHeap.cpp" />
+    <ClCompile Include="source\stdafx.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="source\StringConv.cpp" />
+    <ClCompile Include="source\TextIO.cpp" />
+    <ClCompile Include="source\util.cpp" />
+    <ClCompile Include="source\var.cpp" />
+    <ClCompile Include="source\window.cpp" />
+    <ClCompile Include="source\WinGroup.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="source\application.h" />
+    <ClInclude Include="source\clipboard.h" />
+    <ClInclude Include="source\config.h" />
+    <ClInclude Include="source\debug.h" />
+    <ClInclude Include="source\Debugger.h" />
+    <ClInclude Include="source\defines.h" />
+    <ClInclude Include="source\lib\exearc_read.h" />
+    <ClInclude Include="source\globaldata.h" />
+    <ClInclude Include="source\hook.h" />
+    <ClInclude Include="source\hotkey.h" />
+    <ClInclude Include="source\keyboard_mouse.h" />
+    <ClInclude Include="source\KuString.h" />
+    <ClInclude Include="source\mt19937ar-cok.h" />
+    <ClInclude Include="source\os_version.h" />
+    <ClInclude Include="source\lib_pcre\pcre\pcre.h" />
+    <ClInclude Include="source\qmath.h" />
+    <ClInclude Include="source\resources\resource.h" />
+    <ClInclude Include="source\script.h" />
+    <ClInclude Include="source\script_object.h" />
+    <ClInclude Include="source\SimpleHeap.h" />
+    <ClInclude Include="source\stdafx.h" />
+    <ClInclude Include="source\StringConv.h" />
+    <ClInclude Include="source\TextIO.h" />
+    <ClInclude Include="source\util.h" />
+    <ClInclude Include="source\var.h" />
+    <ClInclude Include="source\window.h" />
+    <ClInclude Include="source\WinGroup.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="source\resources\AutoHotkey.exe.manifest" />
+    <None Include="source\resources\icon_filetype.ico" />
+    <None Include="source\resources\icon_main.ico" />
+    <None Include="source\resources\icon_pause.ico" />
+    <None Include="source\resources\icon_pause_suspend.ico" />
+    <None Include="source\resources\icon_suspend.ico" />
+    <None Include="source\resources\icon_tray_win9x.ico" />
+    <None Include="source\resources\icon_tray_win9x_suspend.ico" />
+    <None Include="source\misc\function_order_for_linker_optimization.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="source\resources\AutoHotkey.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="source\lib_pcre\lib_pcre.vcxproj">
+      <Project>{39037993-9571-4DF2-8E39-CD2909043574}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <Private>false</Private>
+      <CopyLocalSatelliteAssemblies>false</CopyLocalSatelliteAssemblies>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+      <UseLibraryDependencyInputs>false</UseLibraryDependencyInputs>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

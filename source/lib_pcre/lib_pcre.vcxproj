@@ -1,0 +1,97 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ProjectGuid>{39037993-9571-4DF2-8E39-CD2909043574}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug(mbcs)|Win32">
+      <Configuration>Debug(mbcs)</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release(mbcs)|Win32">
+      <Configuration>Release(mbcs)</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release(minimal)|Win32">
+      <Configuration>Release(minimal)</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <!-- import common config -->
+  <Import Project="..\..\Config.vcxproj" />
+  <!-- platform: win32 -->
+  <ItemDefinitionGroup Condition="'$(Platform)'=='Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <!-- paths and basic settings -->
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)temp\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)temp\$(Configuration)\lib_pcre\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <CompileAs>CompileAsC</CompileAs>
+      <PreprocessorDefinitions>HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Lib>
+      <OutputFile>$(OutDir)lib_pcre.lib</OutputFile>
+    </Lib>
+  </ItemDefinitionGroup>
+  <!-- Release -->
+  <ItemDefinitionGroup Condition="!$(ConfigDebug)">
+    <ClCompile>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+    </ClCompile>
+    <Lib>
+      <!-- WHY IS THIS EXCLUDED IN DEBUG CONFIG? -->
+      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <!--<IgnoreSpecificDefaultLibraries>LibCMT;MSVCrt;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>-->
+    </Lib>
+  </ItemDefinitionGroup>
+  <!-- Visual C++ 2010 should place any newly created properties in these groups -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release(minimal)|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(minimal)|Win32'" />
+  <!-- FILES -->
+  <ItemGroup>
+    <ClCompile Include="pcre\pcre_chartables.c" />
+    <ClCompile Include="pcre\pcre_compile.c" />
+    <ClCompile Include="pcre\pcre_config.c" />
+    <ClCompile Include="pcre\pcre_exec.c" />
+    <ClCompile Include="pcre\pcre_fullinfo.c" />
+    <ClCompile Include="pcre\pcre_get.c" />
+    <ClCompile Include="pcre\pcre_globals.c" />
+    <ClCompile Include="pcre\pcre_newline.c" />
+    <ClCompile Include="pcre\pcre_ord2utf8.c" />
+    <ClCompile Include="pcre\pcre_refcount.c" />
+    <ClCompile Include="pcre\pcre_study.c" />
+    <ClCompile Include="pcre\pcre_tables.c" />
+    <ClCompile Include="pcre\pcre_try_flipped.c" />
+    <ClCompile Include="pcre\pcre_version.c" />
+    <ClCompile Include="pcre\pcre_xclass.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pcre\config.h" />
+    <ClInclude Include="pcre\pcre_internal.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

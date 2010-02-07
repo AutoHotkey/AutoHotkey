@@ -1,0 +1,100 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  
+  <PropertyGroup>
+  
+    <!-- flags to make things easier -->
+    <ConfigRelease>false</ConfigRelease>
+    <ConfigDebug>false</ConfigDebug>
+    <ConfigSC>false</ConfigSC>
+    <ConfigMinSize>false</ConfigMinSize>
+    <ConfigRelease Condition="'$(Configuration)'=='Release' OR '$(Configuration)'=='Release(mbcs)' OR '$(Configuration)'=='Release(minimal)'">true</ConfigRelease>
+    <ConfigDebug Condition="'$(Configuration)'=='Debug' OR '$(Configuration)'=='Debug(mbcs)'">true</ConfigDebug>
+    <ConfigSC Condition="'$(Configuration)'=='Self-contained' OR '$(Configuration)'=='Self-contained(mbcs)' OR '$(Configuration)'=='Self-contained(minimal)'">true</ConfigSC>
+    <ConfigMinSize Condition="'$(Configuration)'=='Release(minimal)' OR '$(Configuration)'=='Self-contained(minimal)'">true</ConfigMinSize>
+    
+    <!-- CharacterSet may be set on command-line:
+      MSBuild AutoHotkeyx.sln /p:Configuration=Release;CharacterSet=MultiByte -->
+    <CharacterSet>Unicode</CharacterSet>
+    <!-- For '(minimal)' configurations, use setting in config.h -->
+    <CharacterSet Condition="$(ConfigMinSize)">NotSet</CharacterSet>
+    <!-- Set default for '(mbcs)' configurations. Can also be overridden on command-line, but that wouldn't make sense. -->
+    <CharacterSet Condition="'$(Configuration)'=='Debug(mbcs)' OR '$(Configuration)'=='Release(mbcs)' OR '$(Configuration)'=='Self-contained(mbcs)'">MultiByte</CharacterSet>
+    
+    <!-- global setting -->
+    <WholeProgramOptimization Condition="!$(ConfigDebug)">true</WholeProgramOptimization>
+    
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+    
+      <!-- pre-processor definition: NDEBUG/_DEBUG -->
+      <PreprocessorDefinitions Condition="!$(ConfigDebug)">NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition=" $(ConfigDebug)">_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      
+      <!-- global setting -->
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <WarningLevel>Level3</WarningLevel>
+      
+    </ClCompile>
+  </ItemDefinitionGroup>
+  
+  <!-- misc optimizations -->
+  <ItemDefinitionGroup Condition="!$(ConfigDebug)">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <OmitFramePointers>true</OmitFramePointers>
+      <StringPooling>true</StringPooling>
+      <ExceptionHandling></ExceptionHandling>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+    </ClCompile>
+    <Link> <!-- note linker settings don't apply to lib_pcre -->
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <ProgramDatabaseFile></ProgramDatabaseFile>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <!-- Disable this for now since numerous function signatures differ in Unicode vs ANSI builds.
+        <FunctionOrder>source\misc\function_order_for_linker_optimization.txt</FunctionOrder>
+        below: /IGNORE:4037
+      -->
+      <AdditionalOptions>/SAFESEH:NO %(AdditionalOptions)</AdditionalOptions>
+    </Link>
+  </ItemDefinitionGroup>
+  <PropertyGroup>
+    <LinkIncremental>false</LinkIncremental>
+	<LinkIncremental Condition="$(ConfigDebug)">true</LinkIncremental>
+  </PropertyGroup>
+  
+  <!-- minimum size: dynamically-linked crt, favor size over speed -->
+  <ItemDefinitionGroup Condition="$(ConfigMinSize)">
+    <ClCompile>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <Optimization>MinSpace</Optimization>
+      <FavorSizeOrSpeed>Size</FavorSizeOrSpeed>
+    </ClCompile>
+    <Link>
+      <IgnoreSpecificDefaultLibraries>libcmt;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+    </Link>
+  </ItemDefinitionGroup>
+  
+  <!-- debug settings, defined last to override things set above -->
+  <ItemDefinitionGroup Condition="$(ConfigDebug)">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <MinimalRebuild>true</MinimalRebuild>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+    </ClCompile>
+    <Link> <!-- note linker settings don't apply to lib_pcre -->
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  
+  <!-- import compiler and platform defaults -->
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" />
+
+</Project>
