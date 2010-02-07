@@ -340,6 +340,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 							return _Insert(aResultToken, aParam, aParamCount);
 						if (!_tcsicmp(name, _T("Remove")))
 							return _Remove(aResultToken, aParam, aParamCount);
+						if (!_tcsicmp(name, _T("GetAddress")))
+							return _GetAddress(aResultToken, aParam, aParamCount);
 						if (!_tcsicmp(name, _T("SetCapacity")))
 							return _SetCapacity(aResultToken, aParam, aParamCount);
 					} else { // aParamCount == 0
@@ -347,9 +349,9 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 							return _MaxIndex(aResultToken);
 						if (!_tcsicmp(name, _T("MinIndex")))
 							return _MinIndex(aResultToken);
-						if (!_tcsicmp(name, _T("GetCapacity")))
-							return _GetCapacity(aResultToken);
-					}
+					} // aParamCount may be 0 or 1:
+					if (!_tcsicmp(name, _T("GetCapacity")))
+						return _GetCapacity(aResultToken, aParam, aParamCount);
 					// For maintability: explicitly return since above has done ++aParam, --aParamCount.
 					return INVOKE_NOT_HANDLED;
 				}
@@ -697,20 +699,87 @@ ResultType Object::_MaxIndex(ExprTokenType &aResultToken)
 	return OK;
 }
 
-ResultType Object::_GetCapacity(ExprTokenType &aResultToken)
+ResultType Object::_GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	aResultToken.symbol = SYM_INTEGER;
-	aResultToken.value_int64 = mFieldCountMax;
+	if (aParamCount == 1)
+	{
+		SymbolType key_type;
+		KeyType key;
+		int insert_pos;
+		FieldType *field;
+
+		if ( (field = FindField(*aParam[0], aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
+			&& field->symbol == SYM_OPERAND )
+		{
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = field->size ? _TSIZE(field->size - 1) : 0; // -1 to exclude null-terminator.
+		}
+		// else wrong type of field; leave aResultToken at default, empty string.
+	}
+	else if (aParamCount == 0)
+	{
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = mFieldCountMax;
+	}
 	return OK;
 }
 
 ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
-// _SetCapacity( new_capacity )
+// _SetCapacity( [field_name,] new_capacity )
 {
-	if (aParamCount != 1 || !TokenIsPureNumeric(*aParam[aParamCount - 1]))
-		// Invalid param(s); return default empty string.
+	if ((aParamCount != 1 && aParamCount != 2) || !TokenIsPureNumeric(*aParam[aParamCount - 1]))
+		// Invalid or missing param(s); return default empty string.
 		return OK;
 	size_t desired_size = (size_t)TokenToInt64(*aParam[aParamCount - 1], TRUE);
+	if (aParamCount == 2) // Field name was specified.
+	{
+		if (desired_size < 0)
+			// Bad param.
+			return OK;
+
+		SymbolType key_type;
+		KeyType key;
+		int insert_pos;
+		FieldType *field;
+		LPTSTR buf;
+
+		if ( (field = FindField(*aParam[0], aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
+			|| (field = Insert(key_type, key, insert_pos)) )
+		{	
+			// Field was successfully found or inserted.
+			if (field->symbol != SYM_OPERAND)
+				// Wrong type of field.
+				return OK;
+			if (!desired_size)
+			{	// Caller specified zero - empty the field but do not remove it.
+				field->Assign(NULL);
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = 0;
+				return OK;
+			}
+#ifdef UNICODE
+			// Convert size in bytes to size in chars.
+			desired_size = (desired_size >> 1) + (desired_size & 1);
+#endif
+			// Like VarSetCapacity, always reserve one char for the null-terminator.
+			++desired_size;
+			// Unlike VarSetCapacity, allow fields to shrink; preserve existing data up to min(new size, old size).
+			// size is checked because if it is 0, marker is Var::sEmptyString which we can't pass to realloc.
+			if (buf = trealloc(field->size ? field->marker : NULL, desired_size))
+			{
+				if (desired_size < field->size)
+					buf[desired_size - 1] = '\0'; // Terminate at the end of the newly truncated data.
+				field->marker = buf;
+				field->size = desired_size;
+				// Return new size, minus one char reserved for null-terminator.
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = _TSIZE(desired_size - 1);
+			}
+			//else out of memory.
+		}
+		return OK;
+	}
+	// else aParamCount == 1: set the capacity of this object.
 	if (desired_size < (size_t)mFieldCount)
 	{	// It doesn't seem intuitive to allow _SetCapacity to truncate the fields array.
 		desired_size = (size_t)mFieldCount;
@@ -733,6 +802,27 @@ ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 	}
 	return OK;
 }
+
+ResultType Object::_GetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+// _GetAddress( key )
+{
+	if (aParamCount == 1)
+	{
+		SymbolType key_type;
+		KeyType key;
+		int insert_pos;
+		FieldType *field;
+
+		if ( (field = FindField(*aParam[0], aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
+			&& field->symbol == SYM_OPERAND && field->size )
+		{
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = (__int64)field->marker;
+		}
+		// else field has no memory allocated; leave aResultToken at default, empty string.
+	}
+	return OK;
+}
 	
 
 // TODO: Enumeration/direct indexing/field-counting methods.
@@ -747,6 +837,7 @@ bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
 	if (!str || !*str && len < 1) // If empty string or null pointer, free our contents.  Passing len >= 1 allows copying \0, so don't check *str in that case.  Ordered for short-circuit performance (len is usually -1).
 	{
 		Free();
+		symbol = SYM_OPERAND;
 		marker = Var::sEmptyString;
 		size = 0;
 		return false;

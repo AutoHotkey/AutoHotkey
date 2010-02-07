@@ -142,8 +142,9 @@ protected:
 	
 	inline ResultType _Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	inline ResultType _Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	inline ResultType _GetCapacity(ExprTokenType &aResultToken);
+	inline ResultType _GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	inline ResultType _SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	inline ResultType _GetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	inline ResultType _MaxIndex(ExprTokenType &aResultToken);
 	inline ResultType _MinIndex(ExprTokenType &aResultToken);
 
