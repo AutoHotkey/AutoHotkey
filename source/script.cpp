@@ -9553,9 +9553,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								return LineError(_T("Invalid character in dotted identifier."), FAIL, op_end);
 
 							// Rather than trying to predict how something like "obj.-1" will be handled, treat it as a syntax error.
-							// This also prevents "obj.(expression)" from acting like "obj[expression]", but that seems OK for now as
-							// it may conflict with method-call syntax; it may be used in future for calling obj's default method.
-							if (op_end == cp)
+							// "obj.()" is allowed; it should mean "call the default method of obj" or "call the function object obj".
+							if (op_end == cp && *op_end != '(')
 								// Error message is intentionally vague since user may have intended the dot to be concatenation rather than member-access.
 								return LineError(ERR_INVALID_DOT, FAIL, cp-1);
 
