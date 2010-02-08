@@ -8323,6 +8323,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (!_tcscmp(lower, _T("ispaused"))) return BIV_IsPaused;
 	if (!_tcscmp(lower, _T("iscritical"))) return BIV_IsCritical;
 	if (!_tcscmp(lower, _T("issuspended"))) return BIV_IsSuspended;
+	if (!_tcscmp(lower, _T("fileencoding"))) return BIV_FileEncoding;
 
 	if (!_tcscmp(lower, _T("iconhidden"))) return BIV_IconHidden;
 	if (!_tcscmp(lower, _T("icontip"))) return BIV_IconTip;

@@ -10659,6 +10659,39 @@ VarSizeType BIV_IsUnicode(LPTSTR aBuf, LPTSTR aVarName)
 
 
 
+VarSizeType BIV_FileEncoding(LPTSTR aBuf, LPTSTR aVarName)
+{
+	switch (g->Encoding)
+	{
+	case CP_ACP:
+		if (aBuf)
+			*aBuf = '\0';
+		return 0;
+#define FILEENCODING_CASE(n, s) \
+	case n: \
+		if (aBuf) \
+			_tcscpy(aBuf, _T(s)); \
+		return _countof(_T(s)) - 1;
+	// Returning readable strings for these seems more useful than returning their numeric values, especially with CP_AHKNOBOM:
+	FILEENCODING_CASE(CP_UTF8, "UTF-8")
+	FILEENCODING_CASE(CP_UTF8 | CP_AHKNOBOM, "UTF-8-RAW")
+	FILEENCODING_CASE(CP_UTF16, "UTF-16")
+	FILEENCODING_CASE(CP_UTF16 | CP_AHKNOBOM, "UTF-16-RAW")
+#undef FILEENCODING_CASE
+	default:
+	  {
+		TCHAR buf[MAX_INTEGER_SIZE + 2]; // + 2 for "CP"
+		LPTSTR target_buf = aBuf ? aBuf : buf;
+		target_buf[0] = _T('C');
+		target_buf[1] = _T('P');
+		_itot(g->Encoding, target_buf + 2, 10);  // Always output as decimal since we aren't exactly returning a number.
+		return (VarSizeType)_tcslen(target_buf);
+	  }
+	}
+}
+
+
+
 VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_INTEGER_SIZE];
