@@ -1,6 +1,6 @@
 #NoEnv
 Path = %1%
-FileRead, bin, %Path%
+FileRead, bin, *c %Path%
 
 ; Clear CheckSum of NT header, since Ahk2Exe does not support non-zero values.
 NumPut(0, bin, NumGet(bin, 60, "int") + 88, "int")
