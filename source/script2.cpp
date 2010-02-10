@@ -14534,17 +14534,22 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 		if (encoding == UorA(CP_UTF16, CP_ACP))
 		{
 			// No conversion required: target encoding is the same as the native encoding of this build.
-			char_count = source_length + 1;
+			char_count = source_length + 1; // + 1 because generally a null-terminator is wanted.
 			if (length)
 			{
-				// For consistency with the section below, abort if there isn't enough space:
-				if (char_count > length && length != -1)
+				// Check for sufficient buffer space.  Cast to size_t and compare unsigned values: if length is
+				// -1 it should be interpreted as a very large unsigned value, in effect bypassing this check.
+				if (source_length <= (size_t)length)
 				{
-					aResultToken.value_int64 = 0;
-					return;
+					if (source_length == length)
+						// Exceptional case: caller doesn't want a null-terminator (or passed this length in error).
+						--char_count;
+					// Copy the string, including null-terminator if requested.
+					tmemcpy((LPTSTR)address, (LPCTSTR)source_string, char_count);
 				}
-				// Also copies the null-terminator if the line above didn't exclude it (i.e. there's room):
-				tmemcpy((LPTSTR)address, (LPCTSTR)source_string, char_count);
+				else
+					// For consistency with the sections below, don't truncate the string.
+					char_count = 0;
 			}
 			//else: Caller just wants the the required buffer size (char_count), which will be returned below.
 			//	Note that although this seems equivalent to StrLen(), the caller might have explicitly
