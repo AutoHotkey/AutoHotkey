@@ -14565,10 +14565,10 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 				// See similar section below for comments.
 				if (length <= 0)
 				{
-					char_count = MultiByteToWideChar(CP_ACP, 0, (LPCSTR)source_string, source_length, NULL, 0);
+					char_count = MultiByteToWideChar(CP_ACP, 0, (LPCSTR)source_string, source_length, NULL, 0) + 1;
 					if (length == 0)
 					{
-						aResultToken.value_int64 = char_count + 1;
+						aResultToken.value_int64 = char_count;
 						return;
 					}
 					length = char_count;
@@ -14588,11 +14588,11 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 				if (length <= 0) // -1 or 0
 				{
 					// Determine required buffer size.
-					char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, source_length, NULL, 0, NULL, NULL);
+					char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, source_length, NULL, 0, NULL, NULL) + 1; // + 1 for null-terminator (source_length causes it to be excluded from char_count).
 					if (length == 0) // Caller just wants the required buffer size.
 					{
 						aResultToken.symbol = SYM_INTEGER;
-						aResultToken.value_int64 = char_count + 1; // + 1 for null-terminator (source_length causes it to be excluded from char_count).
+						aResultToken.value_int64 = char_count;
 						return;
 					}
 					// Assume there is sufficient buffer space and hope for the best:
