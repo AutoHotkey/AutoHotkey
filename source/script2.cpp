@@ -14641,7 +14641,7 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 				return; // Out of memory.
 			conv_length = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (LPCWSTR)address, length, aResultToken.marker, conv_length, NULL, NULL);
 #endif
-			if (!aResultToken.marker[conv_length - 1])
+			if (conv_length && !aResultToken.marker[conv_length - 1])
 				--conv_length; // Exclude null-terminator.
 			else
 				aResultToken.marker[conv_length] = '\0';
