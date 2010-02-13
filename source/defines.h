@@ -32,7 +32,7 @@ GNU General Public License for more details.
 #endif
 
 #ifndef NAME_L_REVISION
-#define NAME_L_REVISION ".L46"
+#define NAME_L_REVISION ".L47"
 #endif
 
 #define LANG_D "AutoHotkey"

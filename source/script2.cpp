@@ -2822,7 +2822,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 	// If the aOutputVar is of type VAR_CLIPBOARD, this call will set up the clipboard for writing:
 	aOutputVar.AssignString(NULL, (VarSizeType)total_length, true, false); // Since failure is extremely rare, continue onward using the available capacity.
 	LPTSTR contents = aOutputVar.Contents();
-	LRESULT capacity = (int)aOutputVar.Capacity(); // LRESULT avoids signed vs. unsigned compiler warnings.
+	LRESULT capacity = (int)aOutputVar.CharCapacity(); // LRESULT avoids signed vs. unsigned compiler warnings.
 	if (capacity > 0) // For maintainability, avoid going negative.
 		--capacity; // Adjust to exclude the zero terminator, which simplifies things below.
 
@@ -2885,7 +2885,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 				}
 				else
 				{
-					if (ReadProcessMemory(handle, local_lvi.pszText, contents, length, NULL)) // local_lvi.pszText == p_remote_lvi->pszText
+					if (ReadProcessMemory(handle, local_lvi.pszText, contents, length * sizeof(TCHAR), NULL)) // local_lvi.pszText == p_remote_lvi->pszText
 					{
 						contents += length; // Point it to the position where the next char will be written.
 						total_length += length; // Recalculate length in case its different than the estimate (for any reason).
