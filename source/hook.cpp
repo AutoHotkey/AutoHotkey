@@ -181,6 +181,7 @@ LRESULT CALLBACK LowLevelKeybdProc(int aCode, WPARAM wParam, LPARAM lParam)
 	bool key_up = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
 	vk_type vk = (vk_type)event.vkCode;
 	sc_type sc = (sc_type)event.scanCode;
+	if (vk != VK_PACKET) { // Win2k/XP: VK_PACKET is used to send Unicode characters as if they were keystrokes.  sc is a 16-bit character code in that case.
 	if (vk && !sc) // Might happen if another app calls keybd_event with a zero scan code.
 		sc = vk_to_sc(vk);
 	// MapVirtualKey() does *not* include 0xE0 in HIBYTE if key is extended.  In case it ever
@@ -197,6 +198,7 @@ LRESULT CALLBACK LowLevelKeybdProc(int aCode, WPARAM wParam, LPARAM lParam)
 	// scan code is sent with VK_RSHIFT key-up event:
 	if ((event.flags & LLKHF_EXTENDED)) // && vk != VK_RSHIFT)
 		sc |= 0x100;
+	}
 
 	// The below must be done prior to any returns that indirectly call UpdateKeybdState() to update
 	// modifier state.
@@ -4553,7 +4555,22 @@ void GetHookStatus(LPTSTR aBuf, int aBufSize)
 				item = 0;
 			title_prev = title_curr;
 			title_curr = g_KeyHistory[item].target_window;
-			if (g_KeyHistory[item].vk || g_KeyHistory[item].sc)
+			if (g_KeyHistory[item].vk == VK_PACKET) // Unicode character probably sent via SendInput.
+			{
+				sntprintfcat(aBuf, aBufSize, _T("\r\nE7 %04X\t%c\t%c\t%0.2f\t%c              \t%s")
+					, g_KeyHistory[item].sc
+					, g_KeyHistory[item].event_type
+					, g_KeyHistory[item].key_up ? _T('u') : _T('d')
+					, g_KeyHistory[item].elapsed_time
+#ifdef UNICODE
+					, (wchar_t)g_KeyHistory[item].sc
+#else
+					, g_KeyHistory[item].sc & ~0x7f ? ' ' : (char)g_KeyHistory[item].sc
+#endif
+					, _tcscmp(title_curr, title_prev) ? title_curr : _T("") // Display title only when it changes.
+					);
+			}
+			else if (g_KeyHistory[item].vk || g_KeyHistory[item].sc)
 				sntprintfcat(aBuf, aBufSize, _T("\r\n%02X  %03X\t%c\t%c\t%0.2f\t%-15s\t%s")
 					, g_KeyHistory[item].vk, g_KeyHistory[item].sc
 					// It can't be both ignored and suppressed, so display only one:
