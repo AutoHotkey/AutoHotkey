@@ -3933,14 +3933,14 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					for (;;) // L35: Loop to fix x.y.z() and similar.
 					{
 						for (cp = id_begin; cisalnum(*cp) || *cp == '_'; ++cp); // Find end of identifier.
-						if (cp == id_begin)
-							// No valid identifier, doesn't look like a valid expression.
-							break;
 						if (*cp == '(')
 						{	// Allow function/method Call as standalone expression.
 							aActionType = ACT_EXPRESSION;
 							break;
 						}
+						if (cp == id_begin)
+							// No valid identifier, doesn't look like a valid expression.
+							break;
 						cp = omit_leading_whitespace(cp);
 						if (*cp == '[' || *cp == ':' && cp[1] == '=')
 						{	// Allow Set and bracketed Get as standalone expression.
