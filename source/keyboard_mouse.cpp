@@ -610,11 +610,15 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 					// v1.0.43.07: Added check of event_type!=KEYUP, which causes something like Send {ð up} to
 					// do nothing if the curr. keyboard layout lacks such a key.  This is relied upon by remappings
 					// such as F1::ð (i.e. a destination key that doesn't have a VK, at least in English).
-					if (!aTargetWindow && event_type != KEYUP) // In this mode, mods_for_next_key and event_type are ignored due to being unsupported.
+					if (event_type != KEYUP) // In this mode, mods_for_next_key and event_type are ignored due to being unsupported.
 					{
-						SendKeySpecial(aKeys[0], repeat_count);
+						if (aTargetWindow)
+							// Although MSDN says WM_CHAR uses UTF-16, it seems to really do automatic
+							// translation between ANSI and UTF-16; we rely on this for correct results:
+							PostMessage(aTargetWindow, WM_CHAR, aKeys[0], 0);
+						else
+							SendKeySpecial(aKeys[0], repeat_count);
 					}
-					//else do nothing since it's there's no known way to send the keystokes.
 				}
 
 				// See comment "else must never change sModifiersLR_persistent" above about why
@@ -651,31 +655,41 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 				{
 					// Include the trailing space in "ASC " to increase uniqueness (selectivity).
 					// Also, sending the ASC sequence to window doesn't work, so don't even try:
-					SendASC(CStringCharFromTCharIfNeeded(omit_leading_whitespace(aKeys + 3)));
+					SendASC(omit_leading_whitespace(aKeys + 3));
 					// Do this only once at the end of the sequence:
 					DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
 				}
 
-				else if (key_text_length > 2 && !_tcsnicmp(aKeys, _T("U+"), 2) && !aTargetWindow)
+				else if (key_text_length > 2 && !_tcsnicmp(aKeys, _T("U+"), 2))
 				{
 					// L24: Send a unicode value as shown by Character Map.
-					// Use SendInput in unicode mode if available, otherwise fall back to SendASC.
 					wchar_t u_code = (wchar_t) _tcstol(aKeys + 2, NULL, 16);
 
-					if (g_os.IsWin2000orLater())
+					if (aTargetWindow)
 					{
-						// L25: Set modifier key-state in case it matters.
-						SetModifierLRState(mods_for_next_key | persistent_modifiers_for_this_SendKeys
-							, sSendMode ? sEventModifiersLR : GetModifierLRState(), NULL, false, true, KEY_IGNORE);
-						SendUnicodeChar(u_code);
+						// Although MSDN says WM_CHAR uses UTF-16, PostMessageA appears to truncate it to 8-bit.
+						// This probably means it does automatic translation between ANSI and UTF-16.  Since we
+						// specifically want to send a Unicode character value, use PostMessageW:
+						PostMessageW(aTargetWindow, WM_CHAR, u_code, 0);
 					}
-					else // Note that this method effectively truncates the character code to 8-bit, but
-					{	 // it is probably never executed since we currently don't support Win9x/NT4.
-						 // Otherwise it should probably be changed to prepend '0' if u_code > 0x7F.
-						char asc[6];
-						SendASC(_itoa(u_code, asc, 10));
+					else
+					{
+						// Use SendInput in unicode mode if available, otherwise fall back to SendASC.
+						if (g_os.IsWin2000orLater())
+						{
+							// L25: Set modifier key-state in case it matters.
+							SetModifierLRState(mods_for_next_key | persistent_modifiers_for_this_SendKeys
+								, sSendMode ? sEventModifiersLR : GetModifierLRState(), NULL, false, true, KEY_IGNORE);
+							SendUnicodeChar(u_code);
+						}
+						else // Note that this method generally won't work with Unicode characters except
+						{	 // with specific controls which support it, such as RichEdit (tested on WordPad).
+							TCHAR asc[8];
+							*asc = '0';
+							_itot(u_code, asc + 1, 10);
+							SendASC(asc);
+						}
 					}
-					
 					DoKeyDelay();
 				}
 
@@ -707,10 +721,13 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 					, 0, aTargetWindow);
 			else // Try to send it by alternate means.
 			{
-				// v1.0.40: SendKeySpecial sends only keybd_event keystrokes, not ControlSend style keystrokes:
-				if (!aTargetWindow) // In this mode, mods_for_next_key is ignored due to being unsupported.
+				// In this mode, mods_for_next_key is ignored due to being unsupported.
+				if (aTargetWindow) 
+					// Although MSDN says WM_CHAR uses UTF-16, it seems to really do automatic
+					// translation between ANSI and UTF-16; we rely on this for correct results:
+					PostMessage(aTargetWindow, WM_CHAR, *aKeys, 0);
+				else
 					SendKeySpecial(*aKeys, 1);
-				//else do nothing since there's no known way to send the keystokes.
 			}
 			mods_for_next_key = 0;  // Safest to reset this regardless of whether a key was sent.
 		}
@@ -1146,7 +1163,7 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 
 
 
-void SendASC(const char *aAscii)
+void SendASC(LPCTSTR aAscii)
 // Caller must be aware that keystrokes are sent directly (i.e. never to a target window via ControlSend mode).
 // aAscii is a string to support explicit leading zeros because sending 216, for example, is not the same as
 // sending 0216.  The caller is also responsible for restoring any desired modifier keys to the down position
@@ -1198,7 +1215,7 @@ void SendASC(const char *aAscii)
 	// WinXP.  I already tried adding delays between the keystrokes and it didn't help.
 
 	// Caller relies upon us to stop upon reaching the first non-digit character:
-	for (const char *cp = aAscii; *cp >= '0' && *cp <= '9'; ++cp)
+	for (LPCTSTR cp = aAscii; *cp >= '0' && *cp <= '9'; ++cp)
 		// A comment from AutoIt3: ASCII 0 is 48, NUMPAD0 is 96, add on 48 to the ASCII.
 		// Also, don't do WinDelay after each keypress in this case because it would make
 		// such keys take up to 3 or 4 times as long to send (AutoIt3 avoids doing the
