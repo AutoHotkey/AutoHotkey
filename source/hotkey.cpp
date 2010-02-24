@@ -1826,7 +1826,7 @@ ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier,
 	{
 		if (aIsModifier)
 		{
-			if (IS_WHEEL_VK(temp_vk)) // Lexikos: Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
+			if (IS_WHEEL_VK(temp_vk))
 			{
 				if (aUseErrorLevel)
 					g_ErrorLevel->Assign(HOTKEY_EL_UNSUPPORTED_PREFIX);

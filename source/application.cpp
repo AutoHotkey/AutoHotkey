@@ -1274,7 +1274,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				break;
 
 			default: // hotkey
-				// Lexikos: Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
 				if (IS_WHEEL_VK(hk->mVK)) // If this is true then also: msg.message==AHK_HOOK_HOTKEY
 					g.EventInfo = (DWORD)msg.lParam; // v1.0.43.03: Override the thread default of 0 with the number of notches by which the wheel was turned.
 					// Above also works for RunAgainAfterFinished since that feature reuses the same thread attributes set above.

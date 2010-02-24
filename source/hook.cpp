@@ -181,7 +181,6 @@ LRESULT CALLBACK LowLevelKeybdProc(int aCode, WPARAM wParam, LPARAM lParam)
 	bool key_up = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
 	vk_type vk = (vk_type)event.vkCode;
 	sc_type sc = (sc_type)event.scanCode;
-	if (vk != VK_PACKET) { // Win2k/XP: VK_PACKET is used to send Unicode characters as if they were keystrokes.  sc is a 16-bit character code in that case.
 	if (vk && !sc) // Might happen if another app calls keybd_event with a zero scan code.
 		sc = vk_to_sc(vk);
 	// MapVirtualKey() does *not* include 0xE0 in HIBYTE if key is extended.  In case it ever
@@ -198,7 +197,6 @@ LRESULT CALLBACK LowLevelKeybdProc(int aCode, WPARAM wParam, LPARAM lParam)
 	// scan code is sent with VK_RSHIFT key-up event:
 	if ((event.flags & LLKHF_EXTENDED)) // && vk != VK_RSHIFT)
 		sc |= 0x100;
-	}
 
 	// The below must be done prior to any returns that indirectly call UpdateKeybdState() to update
 	// modifier state.
@@ -458,9 +456,12 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	// Keep the following flush with the above to indicate that they're related.
 	// The following is done even if key history is disabled because firing a wheel hotkey via PostMessage gets
 	// the notch count from pKeyHistoryCurr->sc.
-	pKeyHistoryCurr->sc = aSC; // Will be zero if our caller is the mouse hook (except for wheel notch count).
+	if (aVK == VK_PACKET) // Win2k/XP: VK_PACKET is used to send Unicode characters as if they were keystrokes.  sc is a 16-bit character code in that case.
+		pKeyHistoryCurr->sc = (sc_type)((PKBDLLHOOKSTRUCT)lParam)->scanCode;
+	else // Use usual modified value.
+		pKeyHistoryCurr->sc = aSC; // Will be zero if our caller is the mouse hook (except for wheel notch count).
 	// After logging the wheel notch count (above), purify aSC for readability and maintainability.
-	if (IS_WHEEL_VK(aVK)) // Lexikos: Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
+	if (IS_WHEEL_VK(aVK))
 		aSC = 0; // Also relied upon by by sc_takes_precedence below.
 
 	bool is_artificial;

@@ -4126,7 +4126,6 @@ LPTSTR GetKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize)
 	// Use 0x02000000 to tell it that we want it to give left/right specific info, lctrl/rctrl etc.
 	// Relies on short-circuit boolean order.  v1.0.43: WheelDown/Up store the notch/turn count in SC,
 	// so don't consider that to be a valid SC:
-	// Lexikos: Added checks for VK_WHEEL_LEFT and VK_WHEEL_RIGHT to support horizontal scrolling on Vista.
 	if (!aSC || IS_WHEEL_VK(aVK) || !GetKeyNameText((long)(aSC) << 16, aBuf, (int)(aBufSize/sizeof(TCHAR))))
 	{
 		int j;
