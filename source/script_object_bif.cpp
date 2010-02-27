@@ -62,14 +62,9 @@ void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
     IObject *obj;
     ExprTokenType *obj_param;
 
-	// Since ObjGet/ObjSet/ObjCall are "pre-loaded" before the script begins executing,
-	// marker always contains the correct case (vs. whatever the first call in script used).
-	switch (aResultToken.marker[3])
-	{
-	case 'G': invoke_type = IT_GET; break;
-	case 'S': invoke_type = IT_SET; break;
-	default: invoke_type = IT_CALL;
-	}
+	// Since ObjGet/ObjSet/ObjCall are not publicly accessible as functions, Func::mName
+	// (passed via aResultToken.marker) contains the actual flag rather than a name.
+	invoke_type = (int)(INT_PTR)aResultToken.marker;
 
 	// Set default return value; ONLY AFTER THE ABOVE.
 	aResultToken.symbol = SYM_STRING;

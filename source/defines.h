@@ -198,7 +198,17 @@ struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 	// Simple reference-counting mechanism.  Usage should be similar to IUnknown (COM).
 	virtual ULONG STDMETHODCALLTYPE AddRef(void) = 0;
     virtual ULONG STDMETHODCALLTYPE Release(void) = 0;
-};//~L31
+};
+
+// Flags used when calling Invoke; also used by g_ObjGet etc.:
+#define IT_GET				0
+#define IT_SET				1
+#define IT_CALL				2 // L40: MetaObject::Invoke relies on these being mutually-exclusive bits.
+#define IT_BITMASK			3 // bit-mask for the above.
+
+#define IF_METAOBJ			0x10000 // Indicates 'this' is a meta-object/base of aThisToken. Restricts some functionality and causes aThisToken to be inserted into the param list of called functions.
+#define IF_METAFUNC			0x20000 // Indicates Invoke should call a meta-function before checking the object's fields.
+#define IF_META				(IF_METAOBJ | IF_METAFUNC)	// Flags for regular recursion into base object.
 
 
 struct DerefType; // Forward declarations for use below.

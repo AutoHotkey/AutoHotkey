@@ -1996,6 +1996,21 @@ public:
 };
 
 
+class ExprOpFunc : public Func
+{	// ExprOpFunc: Used in combination with SYM_FUNC to implement certain operations in expressions.
+	// These are not inserted into the script's function list, so mName is used only to pass a simple
+	// identifier to mBIF (currently only BIF_ObjInvoke).
+public:
+	ExprOpFunc(BuiltInFunctionType aBIF, INT_PTR aID, int aMinParams = 1, int aParamCount = 1000)
+		: Func((LPTSTR)aID, true)
+	{
+		mBIF = aBIF;
+		mMinParams = aMinParams;	// These are only enforced in some cases.
+		mParamCount = aParamCount;	//
+	}
+};
+
+
 
 class ScriptTimer
 {
