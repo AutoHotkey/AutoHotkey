@@ -346,9 +346,11 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 							return _SetCapacity(aResultToken, aParam, aParamCount);
 					} else { // aParamCount == 0
 						if (!_tcsicmp(name, _T("MaxIndex")))
-							return _MaxIndex(aResultToken);
+							return _MaxIndex(aResultToken, aParam, aParamCount);
 						if (!_tcsicmp(name, _T("MinIndex")))
-							return _MinIndex(aResultToken);
+							return _MinIndex(aResultToken, aParam, aParamCount);
+						if (!_tcsicmp(name, _T("NewEnum")))
+							return _NewEnum(aResultToken, aParam, aParamCount);
 					} // aParamCount may be 0 or 1:
 					if (!_tcsicmp(name, _T("GetCapacity")))
 						return _GetCapacity(aResultToken, aParam, aParamCount);
@@ -677,8 +679,11 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	return OK;
 }
 
-ResultType Object::_MinIndex(ExprTokenType &aResultToken)
+ResultType Object::_MinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
+	if (aParamCount)
+		return OK;
+
 	if (mKeyOffsetObject) // i.e. there are fields with integer keys
 	{
 		aResultToken.symbol = SYM_INTEGER;
@@ -688,8 +693,11 @@ ResultType Object::_MinIndex(ExprTokenType &aResultToken)
 	return OK;
 }
 
-ResultType Object::_MaxIndex(ExprTokenType &aResultToken)
+ResultType Object::_MaxIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
+	if (aParamCount)
+		return OK;
+
 	if (mKeyOffsetObject) // i.e. there are fields with integer keys
 	{
 		aResultToken.symbol = SYM_INTEGER;
@@ -823,9 +831,20 @@ ResultType Object::_GetAddress(ExprTokenType &aResultToken, ExprTokenType *aPara
 	}
 	return OK;
 }
-	
 
-// TODO: Enumeration/direct indexing/field-counting methods.
+ResultType Object::_NewEnum(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	if (aParamCount == 0)
+	{
+		IObject *newenum;
+		if (newenum = new Enumerator(this))
+		{
+			aResultToken.symbol = SYM_OBJECT;
+			aResultToken.object = newenum;
+		}
+	}
+	return OK;
+}
 
 
 //
@@ -931,6 +950,70 @@ void Object::FieldType::Free()
 	} else if (symbol == SYM_OBJECT)
 		object->Release();
 }
+
+
+//
+// Object::Enumerator
+//
+
+ResultType STDMETHODCALLTYPE Object::Enumerator::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (IS_INVOKE_SET)
+		return INVOKE_NOT_HANDLED;
+	if (aParamCount)
+	{
+		// Allow enum[var] or enum.next(var):
+		if (aParam[0]->symbol != SYM_VAR && !_tcsicmp(TokenToString(*aParam[0]), _T("Next")))
+		{
+			++aParam; --aParamCount;
+			if (!aParamCount)
+				return INVOKE_NOT_HANDLED; // ""
+		}
+		// Validate params:
+		if (aParamCount > 2 || aParam[0]->symbol != SYM_VAR || aParamCount > 1 && aParam[1]->symbol != SYM_VAR)
+			return OK; // ""
+		
+		aResultToken.symbol = SYM_INTEGER;
+
+		// Increment field offset.
+		++mOffset;
+
+		if (mOffset < mObject->mFieldCount)
+		{
+			FieldType &field = mObject->mFields[mOffset];
+			
+			// Assign key first:
+			Var &vark = *aParam[0]->var;
+			if (mOffset < mObject->mKeyOffsetObject) // mKeyOffsetInt < mKeyOffsetObject
+				vark.Assign(field.key.i);
+			else if (mOffset < mObject->mKeyOffsetString) // mKeyOffsetObject < mKeyOffsetString
+				vark.Assign(field.key.p);
+			else // mKeyOffsetString < mFieldCount
+				vark.Assign(field.key.s);
+
+			// Assign value if a second var was given:
+			if (aParamCount > 1)
+			{
+				Var &varv = *aParam[1]->var; // Above ensured it is SYM_VAR.
+				switch (field.symbol)
+				{
+				case SYM_OPERAND:	varv.AssignString(field.marker);	break;
+				case SYM_INTEGER:	varv.Assign(field.n_int64);			break;
+				case SYM_FLOAT:		varv.Assign(field.n_double);		break;
+				case SYM_OBJECT:	varv.Assign(field.object);			break;
+				}
+			}
+
+			// Return non-zero.
+			aResultToken.value_int64 = 1;
+		}
+		else
+			// No fields remaining.
+			aResultToken.value_int64 = 0;
+	}
+	return OK; // "" if no params.
+}
+
 	
 
 //
@@ -989,7 +1072,7 @@ Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, int &inse
 			right = mKeyOffsetString - 1; // Object keys end where String keys begin.
 		}
 		// Both may be treated as integer since left/right exclude keys of an incorrect type:
-		return FindField<int>(key.i, left, right, insert_pos);
+		return FindField<IntKeyType>(key.i, left, right, insert_pos);
 	}
 }
 
@@ -998,7 +1081,7 @@ Object::FieldType *Object::FindField(ExprTokenType &key_token, LPTSTR aBuf, Symb
 {
 	if (TokenIsPureNumeric(key_token) == PURE_INTEGER)
 	{	// Treat all integer keys (even numeric strings) as pure integers for consistency and performance.
-		key.i = (int)TokenToInt64(key_token, TRUE);
+		key.i = (IntKeyType)TokenToInt64(key_token, TRUE);
 		key_type = SYM_INTEGER;
 	}
 	else if (key.p = TokenToObject(key_token))

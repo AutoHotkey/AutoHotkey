@@ -109,3 +109,28 @@ void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 		}
 	}
 }
+
+
+//
+// Functions for accessing built-in methods (even if obscured by a user-defined method).
+//
+
+#define BIF_METHOD(name) \
+void BIF_Obj##name(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount) \
+{ \
+	aResultToken.symbol = SYM_STRING; \
+	aResultToken.marker = _T(""); \
+	\
+	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0])); \
+	if (obj) \
+		obj->_##name(aResultToken, aParam + 1, aParamCount - 1); \
+}
+
+BIF_METHOD(Insert)
+BIF_METHOD(Remove)
+BIF_METHOD(GetCapacity)
+BIF_METHOD(SetCapacity)
+BIF_METHOD(GetAddress)
+BIF_METHOD(MaxIndex)
+BIF_METHOD(MinIndex)
+BIF_METHOD(NewEnum)

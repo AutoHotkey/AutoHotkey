@@ -64,10 +64,11 @@ public:
 class Object : public ObjectBase
 {
 protected:
+	typedef INT_PTR IntKeyType;
 	union KeyType // Which of its members is used depends on the field's position in the mFields array.
 	{
 		LPTSTR s;
-		int i;
+		IntKeyType i;
 		IObject *p;
 	};
 	struct FieldType
@@ -85,13 +86,23 @@ protected:
 		KeyType key;
 		SymbolType symbol;
 		
-		inline int CompareKey(int val) { return val - key.i; }  // Used by both int and object since they are stored separately.  Will needs review for 64-bit compatibility.
+		inline int CompareKey(IntKeyType val) { return val - key.i; }  // Used by both int and object since they are stored separately.
 		inline int CompareKey(LPTSTR val) { return _tcsicmp(val, key.s); }
 		
 		bool Assign(LPTSTR str, size_t len = -1, bool exact_size = false);
 		bool Assign(ExprTokenType &val);
 		void Get(ExprTokenType &result);
 		void Free();
+	};
+
+	class Enumerator : public ObjectBase
+	{
+		Object *mObject;
+		int mOffset;
+	public:
+		Enumerator(Object *aObject) : mObject(aObject), mOffset(-1) { mObject->AddRef(); }
+		~Enumerator() { mObject->Release(); }
+		ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	};
 	
 	IObject *mBase;
@@ -131,19 +142,21 @@ protected:
 		return SetInternalCapacity(mFieldCountMax ? mFieldCountMax * 2 : 4);
 	}
 	
-	inline ResultType _Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	inline ResultType _Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	inline ResultType _GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	inline ResultType _SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	inline ResultType _GetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	inline ResultType _MaxIndex(ExprTokenType &aResultToken);
-	inline ResultType _MinIndex(ExprTokenType &aResultToken);
-
 	ResultType CallField(FieldType *aField, ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	
 public:
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	static IObject *Create(ExprTokenType *aParam[], int aParamCount);
+
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	
+	ResultType _Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _GetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _MaxIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _MinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _NewEnum(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	static LPTSTR sMetaFuncName[];
 };

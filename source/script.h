@@ -2831,10 +2831,17 @@ void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 
 void BIF_IsObject(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // L31
-
-// L31: See script_object.cpp for comments.
-void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // See script_object.cpp for comments.
+// Built-ins also available as methods -- these are available as functions for use primarily by overridden methods (i.e. where using the built-in methods isn't possible as they're no longer accessible).
+void BIF_ObjInsert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjRemove(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjGetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjGetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjMaxIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjMinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjNewEnum(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 
 #ifdef CONFIG_EXPERIMENTAL

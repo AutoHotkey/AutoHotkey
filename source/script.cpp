@@ -7396,16 +7396,31 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		suffix = func_name + 3;
 		max_params = -1;
 
-		// Although a simpler method of checking the name could be used, this method will
-		// be necessary in future as additional functions beginning with "Obj" are planned.
 		if (!_tcsicmp(suffix, _T("ect"))) // i.e. "Object"
 		{
 			bif = BIF_ObjCreate;
 			min_params = 0;
 			max_params = 10000;
 		}
-		else
-			return NULL;
+#define BIF_OBJ_CASE(aCaseSuffix, aMinParams, aMaxParams) \
+		else if (!_tcsicmp(suffix, _T(#aCaseSuffix))) \
+		{ \
+			bif = BIF_Obj##aCaseSuffix; \
+			min_params = (1 + aMinParams); \
+			max_params = (1 + aMaxParams); \
+		}
+		// All of these functions require the "object" parameter,
+		// but it is excluded from the counts below for clarity:
+		BIF_OBJ_CASE(Insert, 		2, 2) // key, value
+		BIF_OBJ_CASE(Remove, 		1, 2) // min_key [, max_key]
+		BIF_OBJ_CASE(MinIndex, 		0, 0)
+		BIF_OBJ_CASE(MaxIndex, 		0, 0)
+		BIF_OBJ_CASE(GetCapacity,	0, 1) // [key]
+		BIF_OBJ_CASE(SetCapacity,	1, 2) // [key,] new_capacity
+		BIF_OBJ_CASE(GetAddress,	1, 1) // key
+		BIF_OBJ_CASE(NewEnum,		0, 0)
+#undef BIF_OBJ_CASE
+		else return NULL;
 	}
 #ifdef CONFIG_EXPERIMENTAL
 	else if (!_tcsicmp(func_name, _T("FileOpen")))
