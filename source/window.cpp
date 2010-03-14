@@ -688,35 +688,40 @@ BOOL CALLBACK EnumChildFind(HWND aWnd, LPARAM lParam)
 		if (ws.mSettings->TitleMatchMode == FIND_REGEX)
 		{
 			if (RegExMatch(win_text, ws.mCriterionExcludeText))
+			{
+				ws.mFoundChild = NULL; // In case a previous child window matched.
 				return FALSE; // Parent can't be a match, so stop searching its children.
+			}
 		}
 		else // For backward compatibility, all modes other than RegEx behave as follows.
 			if (_tcsstr(win_text, ws.mCriterionExcludeText))
+			{
 				// Since this child window contains the specified ExcludeText anywhere inside its text,
 				// the parent window is always a non-match.
+				ws.mFoundChild = NULL; // In case a previous child window matched.
 				return FALSE; // Parent can't be a match, so stop searching its children.
+			}
 	}
 
-	// WIN-TEXT:
-	if (!*ws.mCriterionText) // Match always found in this case. This check is for performance: it avoids doing the checks below when not needed, especially RegEx. Note: It's possible for mCriterionText to be blank, at least when mCriterionExcludeText isn't blank.
+	if (!ws.mFoundChild) // No matching child window found yet.
 	{
-		ws.mFoundChild = aWnd;
-		return FALSE; // Match found, so stop searching.
-	}
-	if (ws.mSettings->TitleMatchMode == FIND_REGEX)
-	{
-		if (RegExMatch(win_text, ws.mCriterionText)) // Match found.
+		// WIN-TEXT:
+		if (!*ws.mCriterionText) // Match always found in this case. This check is for performance: it avoids doing the checks below when not needed, especially RegEx. Note: It's possible for mCriterionText to be blank, at least when mCriterionExcludeText isn't blank.
 		{
 			ws.mFoundChild = aWnd;
-			return FALSE; // Match found, so stop searching.
+			// Don't do the following since it makes ExcludeText ineffective for any control after the
+			// first matching control (which might simply be the first control if WinText is blank):
+			//return FALSE; // Match found, so stop searching.
 		}
-	}
-	else // For backward compatibility, all modes other than RegEx behave as follows.
-		if (_tcsstr(win_text, ws.mCriterionText)) // Match found.
+		else if (ws.mSettings->TitleMatchMode == FIND_REGEX)
 		{
-			ws.mFoundChild = aWnd;
-			return FALSE; // Match found, so stop searching.
+			if (RegExMatch(win_text, ws.mCriterionText)) // Match found.
+				ws.mFoundChild = aWnd;
 		}
+		else // For backward compatibility, all modes other than RegEx behave as follows.
+			if (_tcsstr(win_text, ws.mCriterionText)) // Match found.
+				ws.mFoundChild = aWnd;
+	}
 
 	// UPDATE to the below: The MSDN docs state that EnumChildWindows() already handles the
 	// recursion for us: "If a child window has created child windows of its own,
