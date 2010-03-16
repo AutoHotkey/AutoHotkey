@@ -228,25 +228,24 @@ bool TextFile::_Open(LPCTSTR aFileSpec, DWORD aFlags)
 	switch (aFlags & 3) {
 		case TextStream::READ:
 			dwDesiredAccess = GENERIC_READ;
-			dwShareMode = FILE_SHARE_READ;
 			dwCreationDisposition = OPEN_EXISTING;
 			break;
 		case TextStream::WRITE:
 			dwDesiredAccess = GENERIC_WRITE;
-			dwShareMode = 0;
 			dwCreationDisposition = CREATE_ALWAYS;
 			break;
 		case TextStream::APPEND:
 			dwDesiredAccess = GENERIC_WRITE | GENERIC_READ;
-			dwShareMode = 0;
 			dwCreationDisposition = OPEN_ALWAYS;
 			break;
 		case TextStream::UPDATE:
 			dwDesiredAccess = GENERIC_WRITE | GENERIC_READ;
-			dwShareMode = 0;
 			dwCreationDisposition = OPEN_EXISTING;
 			break;
 	}
+	dwShareMode = ((aFlags & SHARE_READ) ? FILE_SHARE_READ : 0) |
+		((aFlags & SHARE_WRITE) ? FILE_SHARE_WRITE : 0) |
+		((aFlags & SHARE_DELETE) ? FILE_SHARE_DELETE : 0);
 
 	// FILE_FLAG_SEQUENTIAL_SCAN is set, as sequential accesses are quite common for text files handling.
 	mFile = CreateFile(aFileSpec, dwDesiredAccess, dwShareMode, NULL, dwCreationDisposition,

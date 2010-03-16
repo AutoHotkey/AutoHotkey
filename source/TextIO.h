@@ -37,7 +37,10 @@ public:
 		, BOM_UTF8 = 0x00000010
 		, BOM_UTF16 = 0x00000020
 
-		//, OVERWRITE = 0x00000040
+		// shared accesses
+		, SHARE_READ = 0x00000100
+		, SHARE_WRITE = 0x00000200
+		, SHARE_DELETE = 0x00000400
 	};
 
 	TextStream()
