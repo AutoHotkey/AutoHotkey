@@ -243,9 +243,7 @@ bool TextFile::_Open(LPCTSTR aFileSpec, DWORD aFlags)
 			dwCreationDisposition = OPEN_EXISTING;
 			break;
 	}
-	dwShareMode = ((aFlags & SHARE_READ) ? FILE_SHARE_READ : 0) |
-		((aFlags & SHARE_WRITE) ? FILE_SHARE_WRITE : 0) |
-		((aFlags & SHARE_DELETE) ? FILE_SHARE_DELETE : 0);
+	dwShareMode = ((aFlags >> 8) & (FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE));
 
 	// FILE_FLAG_SEQUENTIAL_SCAN is set, as sequential accesses are quite common for text files handling.
 	mFile = CreateFile(aFileSpec, dwDesiredAccess, dwShareMode, NULL, dwCreationDisposition,
