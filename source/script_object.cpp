@@ -330,8 +330,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			if (IS_INVOKE_CALL)
 			{
 				// Since above has not handled this call and no field exists, check for built-in methods.
-				// TODO: Move these predefined methods to built-in functions (which can be reimplemented as methods via a base object).
-				if (aParamCount < 4 && *key.s == '_')
+				if (*key.s == '_')
 				{
 					LPTSTR name = key.s + 1; // + 1 to exclude '_' from further consideration.
 					++aParam; --aParamCount; // Exclude the method identifier.  A prior check ensures there was at least one param in this case.
@@ -570,27 +569,77 @@ ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, Exp
 ResultType Object::_Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 // _Insert( key, value )
 {
-	if (aParamCount != 2)
-		return OK;
+	if (!aParamCount)
+		return OK; // Error.
 
 	SymbolType key_type;
 	KeyType key;
 	int insert_pos, pos;
-	FieldType *field;
+	FieldType *field = NULL;
 
-	if ( (field = FindField(*aParam[0], aResultToken.buf, key_type, key, insert_pos)) && key_type == SYM_INTEGER )
+	if (aParamCount == 1)
 	{
-		// Since we were given a numeric key, we want to insert a new field here and increment this and any subsequent keys.
-		insert_pos = field - mFields;
-		// Signal below to insert a new field:
-		field = NULL;
+		// Insert at the end when no key is supplied, since that is typically most useful
+		// and is also most efficient (because no int-keyed fields are moved or adjusted).
+		insert_pos = mKeyOffsetObject; // int keys end here.
+		key.i = insert_pos ? mFields[insert_pos - 1].key.i + 1 : 1;
+		key_type = SYM_INTEGER;
 	}
-	//else: specified field doesn't exist or has a non-numeric key; in the latter case we will simply overwrite it.
+	else
+	{
+		field = FindField(**aParam, aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
+		if (key_type == SYM_INTEGER)
+		{
+			if (field)
+			{	// Don't overwrite this key's value; instead insert a new field.
+				insert_pos = field - mFields; // insert_pos wasn't set in this case.
+				field = NULL;
+			}
 
+			if (aParamCount > 2) // Multiple value params.  Could also handle aParamCount == 2, but the simpler method is faster.
+			{
+				int value_count = aParamCount - 1;
+				int need_capacity = mFieldCount + value_count;
+				if (need_capacity <= mFieldCountMax || SetInternalCapacity(need_capacity))
+				{
+					field = mFields + insert_pos;
+					if (insert_pos < mFieldCount)
+						memmove(field + value_count, field, (mFieldCount - insert_pos) * sizeof(FieldType));
+					mFieldCount += value_count;
+					mKeyOffsetObject += value_count; // ints before objects
+					mKeyOffsetString += value_count; // and strings
+					FieldType *field_end;
+					// Set keys and copy value params into the fields.
+					for (field_end = field + value_count; field < field_end; ++field)
+					{
+						field->key.i = key.i++;
+						field->symbol = SYM_INTEGER; // Must be init'd for Assign().
+						field->Assign(**(++aParam));
+					}
+					// Adjust keys of fields which have been moved.
+					for (field_end = mFields + mKeyOffsetObject; field < field_end; ++field)
+					{
+						field->key.i += value_count; // NOT =++key.i since keys might not be contiguous.
+					}
+					aResultToken.symbol = SYM_INTEGER;
+					aResultToken.value_int64 = 1;
+				}
+				return OK;
+			}
+		}
+		else
+			if (aParamCount > 2)
+				// Error: multiple values but not an integer key.
+				return OK;
+		++aParam; // See below.
+	}
+	// If we were passed only one parameter, aParam points to it.  Otherwise it
+	// was interpreted as the key and aParam now points to the next parameter.
+	
 	if ( field || (field = Insert(key_type, key, insert_pos)) )
 	{
 		// Assign this field its new value:
-		field->Assign(*aParam[1]);
+		field->Assign(**aParam);
 		// Increment any numeric keys following this one.  At this point, insert_pos always indicates the position of a field just inserted.
 		if (key_type == SYM_INTEGER)
 			for (pos = insert_pos + 1; pos < mKeyOffsetObject; ++pos)
@@ -1119,25 +1168,24 @@ Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, int at)
 	}
 	// There is now definitely room in mFields for a new field.
 
-	if (key_type == SYM_OBJECT)
-		// Keep key object alive:
-		key.p->AddRef();
-
 	FieldType &field = mFields[at];
 	if (at < mFieldCount)
 		// Move existing fields to make room.
 		memmove(&field + 1, &field, (mFieldCount - at) * sizeof(FieldType));
+	++mFieldCount; // Only after memmove above.
 	
-	// Since we just inserted a field, we must update the key type offsets:
+	// Update key-type offsets based on where and what was inserted; also update this key's ref count:
 	if (key_type != SYM_STRING)
 	{
 		// Must be either SYM_INTEGER or SYM_OBJECT, which both precede SYM_STRING.
 		++mKeyOffsetString;
+
 		if (key_type != SYM_OBJECT)
 			// Must be SYM_INTEGER, which precedes SYM_OBJECT.
 			++mKeyOffsetObject;
+		else
+			key.p->AddRef();
 	}
-	++mFieldCount; // Only after memmove above.
 	
 	field.marker = _T(""); // Init for maintainability.
 	field.size = 0; // Init to ensure safe behaviour in Assign().
