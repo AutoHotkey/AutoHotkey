@@ -334,25 +334,22 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				{
 					LPTSTR name = key.s + 1; // + 1 to exclude '_' from further consideration.
 					++aParam; --aParamCount; // Exclude the method identifier.  A prior check ensures there was at least one param in this case.
-					if (aParamCount) {
-						if (!_tcsicmp(name, _T("Insert")))
-							return _Insert(aResultToken, aParam, aParamCount);
-						if (!_tcsicmp(name, _T("Remove")))
-							return _Remove(aResultToken, aParam, aParamCount);
-						if (!_tcsicmp(name, _T("GetAddress")))
-							return _GetAddress(aResultToken, aParam, aParamCount);
-						if (!_tcsicmp(name, _T("SetCapacity")))
-							return _SetCapacity(aResultToken, aParam, aParamCount);
-					} else { // aParamCount == 0
-						if (!_tcsicmp(name, _T("MaxIndex")))
-							return _MaxIndex(aResultToken, aParam, aParamCount);
-						if (!_tcsicmp(name, _T("MinIndex")))
-							return _MinIndex(aResultToken, aParam, aParamCount);
-						if (!_tcsicmp(name, _T("NewEnum")))
-							return _NewEnum(aResultToken, aParam, aParamCount);
-					} // aParamCount may be 0 or 1:
+					if (!_tcsicmp(name, _T("Insert")))
+						return _Insert(aResultToken, aParam, aParamCount);
+					if (!_tcsicmp(name, _T("Remove")))
+						return _Remove(aResultToken, aParam, aParamCount);
+					if (!_tcsicmp(name, _T("MaxIndex")))
+						return _MaxIndex(aResultToken, aParam, aParamCount);
+					if (!_tcsicmp(name, _T("NewEnum")))
+						return _NewEnum(aResultToken, aParam, aParamCount);
+					if (!_tcsicmp(name, _T("GetAddress")))
+						return _GetAddress(aResultToken, aParam, aParamCount);
+					if (!_tcsicmp(name, _T("SetCapacity")))
+						return _SetCapacity(aResultToken, aParam, aParamCount);
 					if (!_tcsicmp(name, _T("GetCapacity")))
 						return _GetCapacity(aResultToken, aParam, aParamCount);
+					if (!_tcsicmp(name, _T("MinIndex")))
+						return _MinIndex(aResultToken, aParam, aParamCount);
 					// For maintability: explicitly return since above has done ++aParam, --aParamCount.
 					return INVOKE_NOT_HANDLED;
 				}
@@ -653,9 +650,9 @@ ResultType Object::_Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 }
 
 ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
-// _Remove( min_key [, max_key ] )
+// _Remove( [ min_key, max_key ] )
 {
-	if (aParamCount < 1 || aParamCount > 2)
+	if (aParamCount > 2)
 		return OK;
 
 	FieldType *min_field, *max_field;
@@ -664,8 +661,20 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	KeyType min_key, max_key;
 
 	// Find the position of "min".
-	if (min_field = FindField(*aParam[0], aResultToken.buf, min_key_type, min_key, min_pos))
-		min_pos = min_field - mFields;
+	if (!aParamCount)
+	{
+		if (mKeyOffsetObject) // i.e. at least one int field; use _MaxIndex()
+		{
+			min_field = &mFields[min_pos = mKeyOffsetObject - 1];
+			min_key = min_field->key;
+			min_key_type = SYM_INTEGER;
+		}
+		else // No appropriate field to remove, just return "".
+			return OK;
+	}
+	else
+		if (min_field = FindField(*aParam[0], aResultToken.buf, min_key_type, min_key, min_pos))
+			min_pos = min_field - mFields; // else min_pos was already set by FindField.
 	
 	if (aParamCount > 1)
 	{
@@ -692,8 +701,30 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 			aResultToken.value_int64 = 0;
 			return OK;
 		}
+		// Since only one field (at maximum) can be removed in this mode, it
+		// seems more useful to return the field being removed than a count.
+		switch (aResultToken.symbol = min_field->symbol)
+		{
+		case SYM_OPERAND:
+			if (min_field->size)
+			{
+				// Detach the memory allocated for this field's string and pass it back to caller.
+				aResultToken.circuit_token = (ExprTokenType *)(aResultToken.marker = min_field->marker);
+				aResultToken.buf = (LPTSTR)_tcslen(aResultToken.marker); // NOT min_field->size, which is the allocation size.
+				min_field->size = 0; // Prevent Free() from freeing min_field->marker.
+			}
+			//else aResultToken already contains an empty string.
+			break;
+		case SYM_OBJECT:
+			aResultToken.object = min_field->object;
+			min_field->symbol = SYM_INTEGER; // Prevent Free() from calling object->Release(), instead of calling AddRef().
+			break;
+		default:
+			aResultToken.value_int64 = min_field->n_int64; // Effectively also value_double = n_double.
+		}
+		// Set these up as if caller did _Remove(min_key, min_key):
 		max_pos = min_pos + 1;
-		max_key.i = min_key.i; // Used only if min_key_type == SYM_INTEGER; safe even in other cases.
+		max_key.i = min_key.i; // Used only if min_key_type == SYM_INTEGER; has no effect in other cases.
 	}
 
 	for (pos = min_pos; pos < max_pos; ++pos)
@@ -722,9 +753,13 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 					mFields[pos].key.i -= logical_count_removed;
 		}
 	}
-	// Return actual number of fields removed:
-	aResultToken.symbol = SYM_INTEGER;
-	aResultToken.value_int64 = actual_count_removed;
+	if (aParamCount > 1)
+	{
+		// Return actual number of fields removed:
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = actual_count_removed;
+	}
+	//else result was set above.
 	return OK;
 }
 
