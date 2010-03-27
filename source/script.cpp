@@ -818,6 +818,8 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 		// MUST NOT create a new thread when sExitLabelIsRunning because g_array allows only one
 		// extra thread for ExitApp() (which allows it to run even when MAX_THREADS_EMERGENCY has
 		// been reached).  See TOTAL_ADDITIONAL_THREADS.
+		g_AllowInterruption = FALSE; // In case TerminateApp releases objects and indirectly causes
+		g->IsPaused = false;		 // more script to be executed.
 		TerminateApp(aExitReason, aExitCode);
 	}
 
