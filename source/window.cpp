@@ -782,7 +782,7 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR
 	if (!aBarHwnd  // These conditions rely heavily on short-circuit boolean order.
 		|| !SendMessageTimeout(aBarHwnd, SB_GETPARTS, 0, 0, SMTO_ABORTIFHUNG, SB_TIMEOUT, (PDWORD_PTR)&part_count) // It failed or timed out.
 		|| aPartNumber > part_count
-		|| !(remote_buf = AllocInterProcMem(handle, WINDOW_TEXT_SIZE + 1, aBarHwnd))) // Alloc mem last.
+		|| !(remote_buf = AllocInterProcMem(handle, _TSIZE(WINDOW_TEXT_SIZE + 1), aBarHwnd))) // Alloc mem last.
 		return OK; // Let ErrorLevel tell the story.
 
 	TCHAR buf_for_nt[WINDOW_TEXT_SIZE + 1]; // Needed only for NT/2k/XP: the local counterpart to the buf allocated remotely above.
@@ -808,7 +808,7 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR
 			{
 				if (!is_win9x)
 				{
-					if (!ReadProcessMemory(handle, remote_buf, local_buf, LOWORD(result) + 1, NULL)) // +1 to include the terminator (verified: length doesn't include zero terminator).
+					if (!ReadProcessMemory(handle, remote_buf, local_buf, _TSIZE(LOWORD(result) + 1), NULL)) // +1 to include the terminator (verified: length doesn't include zero terminator).
 					{
 						// Fairly critical error (though rare) so seems best to abort.
 						*local_buf = '\0';  // In case it changed the buf before failing.
