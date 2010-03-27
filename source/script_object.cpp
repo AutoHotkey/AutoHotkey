@@ -859,8 +859,7 @@ ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 			// size is checked because if it is 0, marker is Var::sEmptyString which we can't pass to realloc.
 			if (buf = trealloc(field->size ? field->marker : NULL, desired_size))
 			{
-				if (desired_size < field->size)
-					buf[desired_size - 1] = '\0'; // Terminate at the end of the newly truncated data.
+				buf[desired_size - 1] = '\0'; // Terminate at the new end of data.
 				field->marker = buf;
 				field->size = desired_size;
 				// Return new size, minus one char reserved for null-terminator.
