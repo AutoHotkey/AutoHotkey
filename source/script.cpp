@@ -1251,11 +1251,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 #ifndef AUTOHOTKEYSC
 	TextFile tfile, *fp = &tfile;
-	if (!tfile.Open(aFileSpec, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR
-#ifdef UNICODE
-		, g_DefaultUTF8 ? CP_UTF8 : CP_ACP
-#endif
-	))
+	if (!tfile.Open(aFileSpec, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR, g_DefaultScriptCodepage))
 	{
 		if (aIgnoreLoadFailure)
 			return OK;

@@ -29,9 +29,7 @@ extern DWORD g_MainThreadID;
 extern DWORD g_HookThreadID;
 extern CRITICAL_SECTION g_CriticalRegExCache;
 
-#ifdef UNICODE
-extern bool g_DefaultUTF8;
-#endif
+extern UINT g_DefaultScriptCodepage;
 
 extern bool g_DestroyWindowCalled;
 extern HWND g_hWnd;  // The main window
