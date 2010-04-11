@@ -231,20 +231,30 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	// It also provides more consistency.
 	GetModuleFileName(NULL, buf, _countof(buf));
 #else
-	TCHAR def_buf[MAX_PATH + 1];
+	TCHAR def_buf[MAX_PATH + 1], exe_buf[MAX_PATH + 1];
 	if (!aScriptFilename) // v1.0.46.08: Change in policy: store the default script in the My Documents directory rather than in Program Files.  It's more correct and solves issues that occur due to Vista's file-protection scheme.
 	{
 		// Since no script-file was specified on the command line, use the default name.
-		// For backward compatibility, FIRST check if there's an AutoHotkey.ini file in the current
-		// directory.  If there is, that needs to be used to retain compatibility.
-		aScriptFilename = _T("AutoHotkey.ini");
+		// For portability, first check if there's an <EXENAME>.ahk file in the current directory.
+		LPTSTR suffix, dot;
+		GetModuleFileName(NULL, exe_buf, _countof(buf));
+		if (  (suffix = _tcsrchr(exe_buf, '\\')) // Find name part of path.
+			&& (dot = _tcsrchr(suffix, '.')) // Find extension part of name.
+			&& dot - exe_buf + 5 < _countof(exe_buf)  ) // Enough space in buffer?
+		{
+			_tcscpy(dot, _T(".ahk"));
+		}
+		else // Very unlikely.
+			return FAIL;
+
+		aScriptFilename = suffix + 1;
 		if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF) // File doesn't exist, so fall back to new method.
 		{
 			aScriptFilename = def_buf;
 			VarSizeType filespec_length = BIV_MyDocuments(aScriptFilename, _T("")); // e.g. C:\Documents and Settings\Home\My Documents
-			if (filespec_length	> _countof(def_buf)-16) // Need room for 16 characters ('\\' + "AutoHotkey.ahk" + terminator).
+			if (filespec_length + _tcslen(suffix) + 1 > _countof(def_buf))
 				return FAIL; // Very rare, so for simplicity just abort.
-			_tcscpy(aScriptFilename + filespec_length, _T("\\AutoHotkey.ahk")); // Append the filename: .ahk vs. .ini seems slightly better in terms of clarity and usefulness (e.g. the ability to double click the default script to launch it).
+			_tcscpy(aScriptFilename + filespec_length, suffix); // Append the filename: .ahk vs. .ini seems slightly better in terms of clarity and usefulness (e.g. the ability to double click the default script to launch it).
 			// Now everything is set up right because even if aScriptFilename is a nonexistent file, the
 			// user will be prompted to create it by a stage further below.
 		}
