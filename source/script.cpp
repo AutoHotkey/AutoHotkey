@@ -7420,7 +7420,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		// All of these functions require the "object" parameter,
 		// but it is excluded from the counts below for clarity:
 		BIF_OBJ_CASE(Insert, 		1, 10000) // [key,] value [, value2, ...]
-		BIF_OBJ_CASE(Remove, 		1, 2) // min_key [, max_key]
+		BIF_OBJ_CASE(Remove, 		0, 2) // [min_key, max_key]
 		BIF_OBJ_CASE(MinIndex, 		0, 0)
 		BIF_OBJ_CASE(MaxIndex, 		0, 0)
 		BIF_OBJ_CASE(GetCapacity,	0, 1) // [key]
