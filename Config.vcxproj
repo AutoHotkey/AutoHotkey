@@ -36,6 +36,9 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <WarningLevel>Level3</WarningLevel>
       
+      <!-- default -->
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      
     </ClCompile>
   </ItemDefinitionGroup>
   
