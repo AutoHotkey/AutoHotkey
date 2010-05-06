@@ -9125,7 +9125,7 @@ ResultType Line::FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber)
 	if (line_number < 1)
 		return OK;  // Return OK because g_ErrorLevel tells the story.
 	TextFile tfile;
-	if (!tfile.Open(aFilespec, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR, g->Encoding & CP_AHKCP))
+	if (!tfile.Open(aFilespec, DEFAULT_READ_FLAGS, g->Encoding & CP_AHKCP))
 		return OK;  // Return OK because g_ErrorLevel tells the story.
 
 	// Remember that once the first call to MsgSleep() is done, a new hotkey subroutine

@@ -401,6 +401,10 @@ struct LoopReadFileStruct
 	}
 };
 
+// TextStream flags for LoadIncludedFile (script files), file-reading loops and FileReadLine.
+// Do not lock read/write: older versions used fopen(), which is implicitly permissive.
+#define DEFAULT_READ_FLAGS (TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR | TextStream::SHARE_READ | TextStream::SHARE_WRITE)
+
 
 typedef UCHAR ArgCountType;
 #define MAX_ARGS 20   // Maximum number of args used by any command.

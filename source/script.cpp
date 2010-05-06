@@ -1251,7 +1251,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 #ifndef AUTOHOTKEYSC
 	TextFile tfile, *fp = &tfile;
-	if (!tfile.Open(aFileSpec, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR, g_DefaultScriptCodepage))
+	if (!tfile.Open(aFileSpec, DEFAULT_READ_FLAGS, g_DefaultScriptCodepage))
 	{
 		if (aIgnoreLoadFailure)
 			return OK;
@@ -10932,7 +10932,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			case ATTR_LOOP_READ_FILE:
 				{
 					TextFile tfile;
-					if (*ARG2 && tfile.Open(ARG2, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR, g.Encoding & CP_AHKCP)) // v1.0.47: Added check for "" to avoid debug-assertion failure while in debug mode (maybe it's bad to to open file "" in release mode too).
+					if (*ARG2 && tfile.Open(ARG2, DEFAULT_READ_FLAGS, g.Encoding & CP_AHKCP)) // v1.0.47: Added check for "" to avoid debug-assertion failure while in debug mode (maybe it's bad to to open file "" in release mode too).
 					{
 						result = line->PerformLoopReadFile(aResultToken, continue_main_loop, jump_to_line, &tfile, ARG3);
 						tfile.Close();
