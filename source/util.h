@@ -447,88 +447,83 @@ inline double ATOF(LPCTSTR buf)
 
 inline LPTSTR ITOA(int value, LPTSTR buf)
 {
-	if (g->FormatInt == 'h')
+	if (g->FormatInt == 'D')
 	{
-		LPTSTR our_buf_temp = buf;
-		// Negative hex numbers need special handling, otherwise something like zero minus one would create
-		// a huge 0xffffffffffffffff value, which would subsequently not be read back in correctly as
-		// a negative number (but UTOA() doesn't need this since there can't be negatives in that case).
-		if (value < 0)
-			*our_buf_temp++ = '-';
-		*our_buf_temp++ = '0';
-		*our_buf_temp++ = 'x';
-		_itot(value < 0 ? -(int)value : value, our_buf_temp, 16);
-		// Must not return the result of the above because it's our_buf_temp and we want buf.
-		return buf;
-	}
-	else if (g->FormatInt == 'H') // uppercase
-	{
-		// This might be slower than the above, but it should be faster than doing StringUpper in the script level.
-		_stprintf(buf, _T("0x%X"), value);
-		return buf;
-	}
-	else
 		return _itot(value, buf, 10);
+	}
+	// g->FormatInt == 'h' or 'H'
+	LPTSTR our_buf_temp = buf;
+	// Negative hex numbers need special handling, otherwise something like zero minus one would create
+	// a huge 0xffffffffffffffff value, which would subsequently not be read back in correctly as
+	// a negative number (but UTOA() doesn't need this since there can't be negatives in that case).
+	if (value < 0)
+	{
+		*our_buf_temp++ = '-';
+		value = -value;
+	}
+	*our_buf_temp++ = '0';
+	*our_buf_temp++ = 'x';
+	_itot(value, our_buf_temp, 16);
+	// Must not return the result of the above because it's our_buf_temp and we want buf.
+	if (g->FormatInt == 'H') // uppercase
+		CharUpper(our_buf_temp);
+	return buf;
 }
 
 inline LPTSTR ITOA64(__int64 value, LPTSTR buf)
 {
-	if (g->FormatInt == 'h')
+	if (g->FormatInt == 'D')
 	{
-		LPTSTR our_buf_temp = buf;
-		if (value < 0)
-			*our_buf_temp++ = '-';
-		*our_buf_temp++ = '0';
-		*our_buf_temp++ = 'x';
-		_i64tot(value < 0 ? -(__int64)value : value, our_buf_temp, 16);
-		// Must not return the result of the above because it's our_buf_temp and we want buf.
-		return buf;
-	}
-	else if (g->FormatInt == 'H') // uppercase
-	{
-		_stprintf(buf, _T("0x%I64X"), value);
-		return buf;
-	}
-	else
 		return _i64tot(value, buf, 10);
+	}
+	// g->FormatInt == 'h' or 'H'
+	LPTSTR our_buf_temp = buf;
+	if (value < 0)
+	{
+		*our_buf_temp++ = '-';
+		value = -value;
+	}
+	*our_buf_temp++ = '0';
+	*our_buf_temp++ = 'x';
+	_i64tot(value, our_buf_temp, 16);
+	// Must not return the result of the above because it's our_buf_temp and we want buf.
+	if (g->FormatInt == 'H') // uppercase
+		CharUpper(our_buf_temp);
+	return buf;
 }
 
 inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 {
-	if (g->FormatInt == 'h')
+	if (g->FormatInt == 'D')
 	{
-		*buf = '0';
-		*(buf + 1) = 'x';
-		_ultot(value, buf + 2, 16);
-		// Must not return the result of the above because it's buf + 2 and we want buf.
-		return buf;
-	}
-	else if (g->FormatInt == 'H') // uppercase
-	{
-		_stprintf(buf, _T("0x%X"), value);
-		return buf;
-	}
-	else
 		return _ultot(value, buf, 10);
+	}
+	// g->FormatInt == 'h' or 'H'
+	*buf = '0';
+	*(buf + 1) = 'x';
+	_ultot(value, buf + 2, 16);
+	// Must not return the result of the above because it's buf + 2 and we want buf.
+	if (g->FormatInt == 'H') // uppercase
+		CharUpper(buf + 2);
+	return buf;
 }
 
 #ifdef _WIN64
 // Not currently used:
 inline LPTSTR UTOA64(unsigned __int64 value, LPTSTR buf) 
 {
-	if (g->FormatInt == 'h')
+	if (g->FormatInt == 'D')
 	{
-		*buf = '0';
-		*(buf + 1) = 'x';
-		return _ui64tot(value, buf + 2, 16);
+		return _ultot(value, buf, 10);
 	}
-	else if (g->FormatInt == 'H') // uppercase
-	{
-		_stprintf(buf, _T("0x%I64X"), value);
-		return buf;
-	}
-	else
-		return _ui64tot(value, buf, 10);
+	// g->FormatInt == 'h' or 'H'
+	*buf = '0';
+	*(buf + 1) = 'x';
+	_ui64tot(value, buf + 2, 16);
+	// Must not return the result of the above because it's buf + 2 and we want buf.
+	if (g->FormatInt == 'H') // uppercase
+		CharUpper(buf + 2);
+	return buf;
 }
 #endif
 

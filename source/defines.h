@@ -714,7 +714,7 @@ inline void global_init(global_struct &g)
 	g.StoreCapslockMode = true;  // AutoIt2 (and probably 3's) default, and it makes a lot of sense.
 	g.AutoTrim = true;  // AutoIt2's default, and overall the best default in most cases.
 	_tcscpy(g.FormatFloat, _T("%0.6f"));
-	g.FormatInt = 'd';
+	g.FormatInt = 'D';
 	g.ListLinesIsEnabled = true;
 	g.Encoding = CP_ACP;
 	// For FormatFloat:
