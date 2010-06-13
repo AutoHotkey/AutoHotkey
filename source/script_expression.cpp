@@ -136,120 +136,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 		{
 			if (this_token.symbol == SYM_DYNAMIC) // CONVERTED HERE/EARLY TO SOMETHING *OTHER* THAN SYM_DYNAMIC so that no later stages need any handling for them as operands. SYM_DYNAMIC is quite similar to SYM_FUNC/BIF in this respect.
 			{
-				if (!SYM_DYNAMIC_IS_DOUBLE_DEREF(this_token)) // It's a built-in variable or potential environment variable.
-				{
-					// Check if it's a normal variable rather than a built-in or environment variable.
-					// This happens when g_NoEnv==FALSE.
-					switch (this_token.var->Type())
-  					{
-					case VAR_NORMAL:
-						if (this_token.var->HasContents()) // v1.0.46.07: It's not an environment variable.
-						{
-							this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with one limited exception) is relied upon in several places such as built-in functions.
-							goto push_this_token;
-						}
-						break;
-					case VAR_BUILTIN: // v1.0.48.02: Ensure it's VAR_BUILTIN prior to below because mBIV is a union with mCapacity.
-						if (this_token.var->mBIV == BIV_LoopIndex) // v1.0.48.01: Improve performance of A_Index by treating it as an integer rather than a string in expressions (avoids conversions to/from strings).
-						{
-							this_token.value_int64 = g->mLoopIteration;
-							this_token.symbol = SYM_INTEGER;
-							goto push_this_token;
-						}
-						if (this_token.var->mBIV == BIV_True_False) // v1.0.48.02: True/False often used with function calls, so seems worthwhile for performance.
-						{
-							this_token.value_int64 = (this_token.var->mName[4] == '\0'); // True's 5th character is the string terminator, unlike Fals[e].
-							this_token.symbol = SYM_INTEGER;
-							goto push_this_token;
-						}
-						if (this_token.var->mBIV == BIV_EventInfo) // v1.0.48.02: A_EventInfo is used often enough in performance-sensitive numeric contexts to seem worth special treatment like A_Index; e.g. LV_GetText(RowText, A_EventInfo) or RegisterCallback()'s A_EventInfo.
-						{
-							this_token.value_int64 = g->EventInfo;
-							this_token.symbol = SYM_INTEGER;
-							goto push_this_token;
-						}
-						// ABOVE: Goto's and simple assignments (like the SYM_INTEGER ones above) are only a few
-						// bytes in code size, so it would probably cost more than it's worth in performance
-						// and code size to merge them into a code section shared by all of the above.  Although
-						// each comparison "this_token.var->mBIV == BIV_xxx" is surprisingly large in OBJ size,
-						// the resulting EXE does not reflect this: even 27 such comparisons and sections (all
-						// to a different BIV) don't increase the uncompressed EXE size.
-						//
-						// OTHER CANDIDATES FOR THE ABOVE:
-						// A_TickCount: Usually not performance-critical.
-						// A_GuiWidth/Height: Maybe not used in expressions often enough.
-						// A_GuiX/Y: Not performance-critical and/or too rare: Popup menu, DropFiles, PostMessage's coords.
-						// A_Gui: Hard to say.
-						// A_LastError: Seems too rare to justify the code size and loss of performance here.
-						// A_Msec: Would help but it's probably rarely used; probably has poor granularity, not likely to be better than A_TickCount.
-						// A_TimeIdle/Physical: These are seldom performance-critical.
-						break; // case VAR_BUILTIN
-  					}
-					// Otherwise, it's an environment variable, built-in variable, or normal variable of zero-length
-					// (and it is also known now that g_NoEnv==FALSE because otherwise the loadtime
-					// ExpressionToPostfix() would never have made this item into SYM_DYNAMIC under these conditions).
-					result_size = this_token.var->Get() + 1; // Get() is used even for environment vars because it has a cache that improves their performance.
-					if (result_size == 1)
-					{
-						if (this_token.var->Type() == VAR_NORMAL) // It's an empty variable, so treated as a non-environment (normal) var.
-						{
-							// The following is done here rather than during infix creation/tokenizing because
-							// 1) It's more correct because it's conceivable that some part of the expression
-							//    that has already been evaluated before this_token has newly made an environment
-							//    variable blank or non-blank, which should be detected here (i.e. only at the
-							//    last possible moment).  For example, a function might have the side-effect of
-							//    altering an environment variable.
-							// 2) It performs better because Get()'s environment variable cache is most effective
-							//    when each size-Get() is followed immediately by a contents-Get() for the same
-							//    variable.
-							// Must make empty variables that aren't environment variables into SYM_VAR so that
-							// they can be passed by reference into functions, their address can be taken with
-							// the '&' operator, and so that they can be the lvalue for an assignment.
-							// Environment variables aren't supported for any of that because it would be silly
-							// in most cases, and would probably complicate the code far more than its worth.
-							this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with one limited exception) is relied upon in several places such as built-in functions.
-						}
-						else // It's a built-in variable that's blank.
-						{
-							this_token.marker = _T("");
-							this_token.symbol = SYM_STRING;
-						}
-						goto push_this_token;
-					}
-					// Otherwise, it's neither an empty string nor a normal variable.
-					// It must be an environment variable or built-in variable. Need some memory to store it.
-					// The following section is similar to that in the make_result_persistent section further
-					// below.  So maintain them together and see it for more comments.
-					// Must cast to int to avoid loss of negative values:
-					if (result_size <= (int)(aDerefBufSize - (target - aDerefBuf))) // There is room at the end of our deref buf, so use it.
-					{
-						// Point result to its new, more persistent location:
-						result = target;
-						target += result_size; // Point it to the location where the next string would be written.
-					}
-					else if (result_size < EXPR_SMALL_MEM_LIMIT && alloca_usage < EXPR_ALLOCA_LIMIT) // See comments at EXPR_SMALL_MEM_LIMIT.
-					{
-						result = (LPTSTR)talloca(result_size);
-						alloca_usage += result_size; // This might put alloca_usage over the limit by as much as EXPR_SMALL_MEM_LIMIT, but that is fine because it's more of a guideline than a limit.
-					}
-					else // Need to create some new persistent memory for our temporary use.
-					{
-						if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
-							|| !(mem[mem_count] = tmalloc(result_size)))
-						{
-							LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, this_token.var->mName);
-							goto abort;
-						}
-						// Point result to its new, more persistent location:
-						result = mem[mem_count];
-						++mem_count; // Must be done last.
-					}
-					this_token.var->Get(result); // MUST USE "result" TO AVOID OVERWRITING MARKER/VAR UNION.
-					this_token.marker = result;  // Must be done after above because marker and var overlap in union.
-					this_token.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
-					this_token.symbol = SYM_OPERAND; // Generic operand so that it can later be interpreted as a number (if it's numeric).
-				}
-				else // Double-deref such as Array%i%.
+				if (SYM_DYNAMIC_IS_DOUBLE_DEREF(this_token)) // Double-deref such as Array%i%.
 				{
 					// Start off by looking for the first deref.
 					deref = (DerefType *)this_token.var; // MUST BE DONE PRIOR TO OVERWRITING MARKER/UNION BELOW.
@@ -344,31 +231,118 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 						goto abort;
 					}
 					// Otherwise, var was found or created.
-					if (temp_var->Type() != VAR_NORMAL)
-					{
-						// Non-normal variables such as Clipboard and A_ScriptFullPath are not allowed to be
-						// generated from a double-deref such as A_Script%VarContainingFullPath% because:
-						// Update: The only good reason now is code simplicity.  Reason #1 below could probably
-						// be solved via SYM_DYNAMIC.
-						// 1) Anything that needed their contents would have to find memory in which to store
-						//    the result of Var::Get(), which would complicate the code since such handling would have
-						//    to be added.
-						// 2) It doesn't appear to have much use, not even for passing them as a ByRef parameter to
-						//    a function (since they're read-only [except Clipboard, but temporary memory would be
-						//    needed somewhere if the clipboard contains files that need to be expanded to text] and
-						//    essentially global by their very nature), and the value of catching unintended usages
-						//    seems more important than any flexibilty that might add.
-						goto push_this_token; // For simplicity and in keeping with the tradition that expressions generally don't display runtime errors, just treat it as a blank.
-					}
-					// Otherwise:
-					// Even if it's an environment variable, it gets added as SYM_VAR.  However, unlike other
-					// aspects of the program, double-derefs that resolve to environment variables will be seen
-					// as always-blank due to the use of Var::Contents() vs. Var::Get() in various places.
-					// This seems okay due to the extreme rarity of anyone intentionally wanting a double
-					// reference such as Array%i% to resolve to the name of an environment variable.
 					this_token.var = temp_var;
-					this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with one limited exception) is relied upon in several places such as built-in functions.
 				} // Double-deref.
+				//else: It's a built-in variable or potential environment variable.
+
+				// Check if it's a normal variable rather than a built-in or environment variable.
+				// This happens when g_NoEnv==FALSE.
+				switch (this_token.var->Type())
+  				{
+				case VAR_NORMAL:
+					if (g_NoEnv || this_token.var->HasContents()) // v1.0.46.07: It's not an environment variable.
+					{
+						this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with one limited exception) is relied upon in several places such as built-in functions.
+						goto push_this_token;
+					}
+					break;
+				case VAR_BUILTIN: // v1.0.48.02: Ensure it's VAR_BUILTIN prior to below because mBIV is a union with mCapacity.
+					if (this_token.var->mBIV == BIV_LoopIndex) // v1.0.48.01: Improve performance of A_Index by treating it as an integer rather than a string in expressions (avoids conversions to/from strings).
+					{
+						this_token.value_int64 = g->mLoopIteration;
+						this_token.symbol = SYM_INTEGER;
+						goto push_this_token;
+					}
+					if (this_token.var->mBIV == BIV_True_False) // v1.0.48.02: True/False often used with function calls, so seems worthwhile for performance.
+					{
+						this_token.value_int64 = (this_token.var->mName[4] == '\0'); // True's 5th character is the string terminator, unlike Fals[e].
+						this_token.symbol = SYM_INTEGER;
+						goto push_this_token;
+					}
+					if (this_token.var->mBIV == BIV_EventInfo) // v1.0.48.02: A_EventInfo is used often enough in performance-sensitive numeric contexts to seem worth special treatment like A_Index; e.g. LV_GetText(RowText, A_EventInfo) or RegisterCallback()'s A_EventInfo.
+					{
+						this_token.value_int64 = g->EventInfo;
+						this_token.symbol = SYM_INTEGER;
+						goto push_this_token;
+					}
+					// ABOVE: Goto's and simple assignments (like the SYM_INTEGER ones above) are only a few
+					// bytes in code size, so it would probably cost more than it's worth in performance
+					// and code size to merge them into a code section shared by all of the above.  Although
+					// each comparison "this_token.var->mBIV == BIV_xxx" is surprisingly large in OBJ size,
+					// the resulting EXE does not reflect this: even 27 such comparisons and sections (all
+					// to a different BIV) don't increase the uncompressed EXE size.
+					//
+					// OTHER CANDIDATES FOR THE ABOVE:
+					// A_TickCount: Usually not performance-critical.
+					// A_GuiWidth/Height: Maybe not used in expressions often enough.
+					// A_GuiX/Y: Not performance-critical and/or too rare: Popup menu, DropFiles, PostMessage's coords.
+					// A_Gui: Hard to say.
+					// A_LastError: Seems too rare to justify the code size and loss of performance here.
+					// A_Msec: Would help but it's probably rarely used; probably has poor granularity, not likely to be better than A_TickCount.
+					// A_TimeIdle/Physical: These are seldom performance-critical.
+					break; // case VAR_BUILTIN
+  				}
+				// Otherwise, it's an environment variable, built-in variable, or normal variable of zero-length
+				result_size = this_token.var->Get() + 1; // Get() is used even for environment vars because it has a cache that improves their performance.
+				if (result_size == 1)
+				{
+					if (this_token.var->Type() == VAR_NORMAL) // It's an empty variable, so treated as a non-environment (normal) var.
+					{
+						// The following is done here rather than during infix creation/tokenizing because
+						// 1) It's more correct because it's conceivable that some part of the expression
+						//    that has already been evaluated before this_token has newly made an environment
+						//    variable blank or non-blank, which should be detected here (i.e. only at the
+						//    last possible moment).  For example, a function might have the side-effect of
+						//    altering an environment variable.
+						// 2) It performs better because Get()'s environment variable cache is most effective
+						//    when each size-Get() is followed immediately by a contents-Get() for the same
+						//    variable.
+						// Must make empty variables that aren't environment variables into SYM_VAR so that
+						// they can be passed by reference into functions, their address can be taken with
+						// the '&' operator, and so that they can be the lvalue for an assignment.
+						// Environment variables aren't supported for any of that because it would be silly
+						// in most cases, and would probably complicate the code far more than its worth.
+						this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with one limited exception) is relied upon in several places such as built-in functions.
+					}
+					else // It's a built-in variable that's blank.
+					{
+						this_token.marker = _T("");
+						this_token.symbol = SYM_STRING;
+					}
+					goto push_this_token;
+				}
+				// Otherwise, it's neither an empty string nor a normal variable.
+				// It must be an environment variable or built-in variable. Need some memory to store it.
+				// The following section is similar to that in the make_result_persistent section further
+				// below.  So maintain them together and see it for more comments.
+				// Must cast to int to avoid loss of negative values:
+				if (result_size <= (int)(aDerefBufSize - (target - aDerefBuf))) // There is room at the end of our deref buf, so use it.
+				{
+					// Point result to its new, more persistent location:
+					result = target;
+					target += result_size; // Point it to the location where the next string would be written.
+				}
+				else if (result_size < EXPR_SMALL_MEM_LIMIT && alloca_usage < EXPR_ALLOCA_LIMIT) // See comments at EXPR_SMALL_MEM_LIMIT.
+				{
+					result = (LPTSTR)talloca(result_size);
+					alloca_usage += result_size; // This might put alloca_usage over the limit by as much as EXPR_SMALL_MEM_LIMIT, but that is fine because it's more of a guideline than a limit.
+				}
+				else // Need to create some new persistent memory for our temporary use.
+				{
+					if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
+						|| !(mem[mem_count] = tmalloc(result_size)))
+					{
+						LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, this_token.var->mName);
+						goto abort;
+					}
+					// Point result to its new, more persistent location:
+					result = mem[mem_count];
+					++mem_count; // Must be done last.
+				}
+				this_token.var->Get(result); // MUST USE "result" TO AVOID OVERWRITING MARKER/VAR UNION.
+				this_token.marker = result;  // Must be done after above because marker and var overlap in union.
+				this_token.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
+				this_token.symbol = SYM_OPERAND; // Generic operand so that it can later be interpreted as a number (if it's numeric).
 			} // if (this_token.symbol == SYM_DYNAMIC)
 			goto push_this_token;
 		} // if (IS_OPERAND(this_token.symbol))
