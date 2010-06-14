@@ -14523,7 +14523,7 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	if (source_string) // StrPut
 	{
 		int char_count; // Either bytes or characters, depending on the target encoding.
-		aResultToken.symbol = SYM_INTEGER; // All paths below return an integer.
+		aResultToken.symbol = SYM_INTEGER; // Most paths below return an integer. Some may rely on marker remaining == "".
 
 		if (!source_length)
 		{	// Take a shortcut when source_string is empty, since some paths below might not handle it correctly.
@@ -14588,14 +14588,31 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 				source_string = wide_buf.GetString();
 				source_length = wide_buf.GetLength();
 #endif
+				// UTF-8 does not support this flag.  Although the check further below would probably
+				// compensate for this, UTF-8 is probably common enough to leave this exception here.
 				DWORD flags = (encoding == CP_UTF8) ? 0 : WC_NO_BEST_FIT_CHARS;
 				if (length <= 0) // -1 or 0
 				{
 					// Determine required buffer size.
-					char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, source_length, NULL, 0, NULL, NULL) + 1; // + 1 for null-terminator (source_length causes it to be excluded from char_count).
+					char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, source_length, NULL, 0, NULL, NULL);
+					if (!char_count) // Above has ensured source is not empty, so this must be an error.
+					{
+						if (GetLastError() == ERROR_INVALID_FLAGS)
+						{
+							// Try again without flags.  MSDN lists a number of code pages for which flags must be 0, including UTF-7 and UTF-8 (but UTF-8 is handled above).
+							flags = 0; // Must be set for this call and the call further below.
+							char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, source_length, NULL, 0, NULL, NULL);
+						}
+						if (!char_count)
+						{
+							aResultToken.symbol = SYM_STRING;
+							// aResultToken.marker is already set to "".
+							return;
+						}
+					}
+					++char_count; // + 1 for null-terminator (source_length causes it to be excluded from char_count).
 					if (length == 0) // Caller just wants the required buffer size.
 					{
-						aResultToken.symbol = SYM_INTEGER;
 						aResultToken.value_int64 = char_count;
 						return;
 					}
