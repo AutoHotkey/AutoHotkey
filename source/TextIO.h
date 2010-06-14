@@ -14,6 +14,8 @@
 
 #define TEOF ((TCHAR)EOF)
 
+#include <locale.h> // For _locale_t, _create_locale and _free_locale.
+
 // VS2005 and later come with Unicode stream IO in the C runtime library, but it doesn't work very well.
 // For example, it can't read the files encoded in "system codepage" by using
 // wide-char version of the functions such as fgetws(). The characters were not translated to
@@ -44,13 +46,15 @@ public:
 	};
 
 	TextStream()
-		: mFlags(0), mCodePage(CP_ACP), mCodePageIsDBCS(false), mLength(0), mCapacity(0), mBuffer(NULL), mPos(NULL), mEOF(true)
+		: mFlags(0), mCodePage(CP_ACP), mLength(0), mCapacity(0), mBuffer(NULL), mPos(NULL), mEOF(true)
 	{
+		mLocale = _create_locale(LC_ALL, ".0");
 	}
 	virtual ~TextStream()
 	{
 		if (mBuffer)
 			free(mBuffer);
+		_free_locale(mLocale);
 		// Close() isn't called here, it will rise a "pure virtual function call" exception.
 	}
 
@@ -130,9 +134,17 @@ public:
 	}
 	void SetCodePage(UINT aCodePage)
 	{
-		mCodePage = aCodePage;
-		// DBCS code pages, MSDN: IsDBCSLeadByteEx
-		mCodePageIsDBCS = mCodePage == 932 || mCodePage == 936 || mCodePage == 949 || mCodePage == 950 || mCodePage == 1361;
+		if (mCodePage != aCodePage)
+		{
+			mCodePage = aCodePage;
+
+			// Recreate _locale_t for use with _ismbblead_l.
+			_free_locale(mLocale);
+			char name_buf[16];
+			*name_buf = '.';
+			_ultoa(aCodePage, name_buf + 1, 10);
+			mLocale = _create_locale(LC_ALL, name_buf);
+		}
 	}
 	//UINT GetCodePage() { return mCodePage; }
 protected:
@@ -188,9 +200,9 @@ protected:
 	DWORD mLength;		// The length of available data in the buffer, in bytes.
 	DWORD mCapacity;	// The capacity of the buffer, in bytes.
 	UINT  mCodePage;
+	_locale_t mLocale;
 	
 	// Placing these fields together should reduce space wasted due to alignment:
-	bool  mCodePageIsDBCS;
 	bool  mEOF;
 	union
 	{

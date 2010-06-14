@@ -2,6 +2,7 @@
 #include "TextIO.h"
 #include "script.h"
 #include "script_object.h"
+#include <mbctype.h> // For _ismbblead_l.
 
 UINT g_ACP = GetACP(); // Requires a reboot to change.
 #define INVALID_CHAR UorA(0xFFFD, '?')
@@ -107,8 +108,8 @@ TCHAR TextStream::ReadChar()
 				return INVALID_CHAR;
 			}
 		}
-		else if (mCodePageIsDBCS)
-			iBytes = IsDBCSLeadByteEx(mCodePage, *mPos) ? 2 : 1;
+		else if (_ismbblead_l(*mPos, mLocale))
+			iBytes = 2;
 		else
 			iBytes = 1;
 
