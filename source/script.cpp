@@ -9623,16 +9623,23 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 
 					// Find the end of this operand or keyword, even if that end extended into the next deref.
 					// StrChrAny() is not used because if *op_end is '\0', the strchr() below will find it too:
-					for (op_end = cp + 1; !_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT, *op_end); ++op_end);
+					for (op_end = cp + 1; !_tcschr(EXPR_OPERAND_TERMINATORS, *op_end); ++op_end);
 					// Now op_end marks the end of this operand or keyword.  That end might be the zero terminator
 					// or the next operator in the expression, or just a whitespace.
 					if (this_deref && op_end >= this_deref->marker)
 						goto double_deref; // This also serves to break out of the inner for(), equivalent to a break.
+					if (*op_end == '.')
+					{
+						// Since this isn't a double deref, it can probably only be a numeric literal with decimal portion.
+						// Update op_end to include the decimal portion of the operand:
+						for (++op_end; !_tcschr(EXPR_OPERAND_TERMINATORS, *op_end); ++op_end);
+					}
+
 					// Otherwise, this operand is a normal raw numeric-literal or a word-operator (and/or/not).
 					// The section below is very similar to the one used at load-time to recognize and/or/not,
 					// so it should be maintained with that section.  UPDATE for v1.0.45: The load-time parser
 					// now resolves "OR" to || and "AND" to && to improve runtime performance and reduce code size here.
-					// However, "NOT" but still be parsed here at runtime because it's not quite the same as the "!"
+					// However, "NOT" must still be parsed here at runtime because it's not quite the same as the "!"
 					// operator (different precedence), and it seemed too much trouble to invent some special
 					// operator symbol for load-time to insert as a placeholder/substitute (especially since that
 					// symbol would appear in ListLines).
