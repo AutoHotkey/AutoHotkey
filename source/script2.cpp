@@ -14527,10 +14527,12 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 		if (!source_length)
 		{	// Take a shortcut when source_string is empty, since some paths below might not handle it correctly.
-			if (encoding == CP_UTF16)
-				*(LPWSTR)address = '\0';
-			else
-				*(LPSTR)address = '\0';
+			if (length) {
+				if (encoding == CP_UTF16)
+					*(LPWSTR)address = '\0';
+				else
+					*(LPSTR)address = '\0';
+			}
 			aResultToken.value_int64 = 1;
 			return;
 		}
