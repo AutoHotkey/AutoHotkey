@@ -141,7 +141,7 @@ DWORD TextStream::Write(LPCTSTR aBuf, DWORD aBufLen)
 // The callers have knew that already.
 {
 	if (aBufLen == 0)
-		aBufLen = _tcslen(aBuf);
+		aBufLen = (DWORD)_tcslen(aBuf);
 	if (mCodePage == CP_UTF16)
 	{
 #ifdef UNICODE
@@ -171,14 +171,14 @@ DWORD TextStream::Write(LPCTSTR aBuf, DWORD aBufLen)
 	else
 	{
 		LPCSTR str;
-		int len;
+		DWORD len;
 		CStringA buf_a;
 #ifndef UNICODE
 		// Since it's probably the most common case, optimize for the active codepage:
 		if (g_ACP == mCodePage)
 		{
 			str = aBuf;
-			len = (int)aBufLen;
+			len = aBufLen;
 		}
 		else
 #endif
@@ -196,13 +196,13 @@ DWORD TextStream::Write(LPCTSTR aBuf, DWORD aBufLen)
 #endif
 			}
 			str = buf_a.GetString();
-			len = buf_a.GetLength();
+			len = (DWORD)buf_a.GetLength();
 		}
 		
 		if (mFlags & EOL_CRLF)
 		{
 			DWORD dwWritten = 0;
-			int i;
+			DWORD i;
 			for (i = 0; i < len; i++)
 			{
 				if (str[i] == '\n' && mWriteCharA != '\r')
@@ -299,7 +299,7 @@ __int64 TextFile::_Length() const
 
 #ifdef CONFIG_EXPERIMENTAL
 // FileObject: exports TextFile interfaces to the scripts.
-class FileObject : public Object
+class FileObject : public ObjectBase // fincs: No longer allowing the script to manipulate File objects
 {
 	FileObject() {}
 	~FileObject() {}
@@ -307,10 +307,7 @@ class FileObject : public Object
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 	// Reference: MetaObject::Invoke
 	{
-		// Allow script-defined behaviour to take precedence:
-		ResultType r = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
-
-		if (r == INVOKE_NOT_HANDLED && IS_INVOKE_CALL && aParam[0]->symbol == SYM_OPERAND)
+		if (IS_INVOKE_CALL && aParam[0]->symbol == SYM_OPERAND)
 		{
 			aResultToken.symbol = SYM_INTEGER; // Set default return type.
 
@@ -377,24 +374,24 @@ class FileObject : public Object
 					if (iReadWrite)
 					// Reference: BIF_NumGet
 					{
-						size_t target; // Don't make target a pointer-type because the integer offset might not be a multiple of 4 (i.e. the below increments "target" directly by "offset" and we don't want that to use pointer math).
+						LPVOID target;
 						ExprTokenType &target_token = *aParam[1];
 						if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 						{
-							target = (size_t)target_token.var->Contents(); // Although Contents(TRUE) will force an update of mContents if necessary, it very unlikely to be necessary here because we're about to fetch a binary number from inside mContents, not a normal/text number.
+							target = target_token.var->Contents(); // Although Contents(TRUE) will force an update of mContents if necessary, it very unlikely to be necessary here because we're about to fetch a binary number from inside mContents, not a normal/text number.
 						}
 						else
-							target = (size_t)TokenToInt64(target_token);
+							target = (LPVOID)TokenToInt64(target_token);
 
-						if (target < 1024) // Basic sanity check to catch incoming raw addresses that are zero or blank.
+						if (target < (LPVOID)1024) // Basic sanity check to catch incoming raw addresses that are zero or blank.
 						{
 							aResultToken.value_int64 = 0;
 							return OK;
 						}
 
-						size_t size = (size_t) TokenToInt64(*aParam[2]);
+						VarSizeType size = (VarSizeType)TokenToInt64(*aParam[2]);
 
-						// The user request a size larger than the variable.
+						// Check if the user requested a size larger than the variable.
 						if (target_token.symbol == SYM_VAR && size > target_token.var->ByteCapacity())
 						{
 							// When reading expand the target variable if needed.
@@ -405,7 +402,7 @@ class FileObject : public Object
 									aResultToken.value_int64 = 0;
 									return OK;
 								}
-								target = (size_t)target_token.var->Contents(); // See comment above.
+								target = target_token.var->Contents(); // See comment above.
 							}
 							else
 							{
@@ -414,7 +411,7 @@ class FileObject : public Object
 							}
 						}
 
-						aResultToken.value_int64 = (iReadWrite == 1) ? mFile.Read((LPVOID) target, size) : mFile.Write((LPCVOID) target, size);
+						aResultToken.value_int64 = (iReadWrite == 1) ? mFile.Read(target, (DWORD)size) : mFile.Write(target, (DWORD)size);
 						return OK;
 					}
 				}
@@ -480,7 +477,7 @@ class FileObject : public Object
 			}
 		}
 
-		return r; // Should be INVOKE_NOT_HANDLED if the above didn't return
+		return INVOKE_NOT_HANDLED;
 	}
 
 	TextFile mFile;

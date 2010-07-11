@@ -519,7 +519,7 @@ int sntprintfcat(LPTSTR aBuf, int aBufSize, LPCTSTR aFormat, ...)
 
 
 
-int tcslicmp(LPTSTR aBuf1, LPTSTR aBuf2, UINT aLength1, UINT aLength2)
+int tcslicmp(LPTSTR aBuf1, LPTSTR aBuf2, size_t aLength1, size_t aLength2)
 // Similar to strnicmp but considers each aBuf to be a string of length aLength if aLength was
 // specified.  In other words, unlike strnicmp() which would consider strnicmp("ab", "abc", 2)
 // [example verified correct] to be a match, this function would consider them to be
@@ -534,11 +534,11 @@ int tcslicmp(LPTSTR aBuf1, LPTSTR aBuf2, UINT aLength1, UINT aLength2)
 // length of the respective aBuf will be used.
 {
 	if (!aBuf1 || !aBuf2) return 0;
-	if (aLength1 == UINT_MAX) aLength1 = (UINT)_tcslen(aBuf1);
-	if (aLength2 == UINT_MAX) aLength2 = (UINT)_tcslen(aBuf2);
-	UINT least_length = aLength1 < aLength2 ? aLength1 : aLength2;
+	if (aLength1 == -1) aLength1 = _tcslen(aBuf1);
+	if (aLength2 == -1) aLength2 = _tcslen(aBuf2);
+	size_t least_length = aLength1 < aLength2 ? aLength1 : aLength2;
 	int diff;
-	for (UINT i = 0; i < least_length; ++i)
+	for (size_t i = 0; i < least_length; ++i)
 		if (   diff = (int)(ctoupper(aBuf1[i]) - ctoupper(aBuf2[i]))   )
 			return diff;
 	// Since the above didn't return, the strings are equal if they're the same length.
@@ -1101,8 +1101,8 @@ in_place_method:
 
 
 
-int PredictReplacementSize(int aLengthDelta, int aReplacementCount, int aLimit, int aHaystackLength
-	, int aCurrentLength, int aEndOffsetOfCurrMatch)
+size_t PredictReplacementSize(ptrdiff_t aLengthDelta, int aReplacementCount, int aLimit, size_t aHaystackLength
+	, size_t aCurrentLength, size_t aEndOffsetOfCurrMatch)
 // Predict how much size the remainder of a replacement operation will consume, including its actual replacements
 // and the parts of haystack that won't need replacement.
 // PARAMETERS:
@@ -1125,7 +1125,7 @@ int PredictReplacementSize(int aLengthDelta, int aReplacementCount, int aLimit, 
 	// 3) For code simplicity, the number of upcoming replacements isn't yet known; thus a guess
 	//    is made based on how many there have been so far compared to percentage complete.
 
-	int total_delta; // The total increase/decrease in length from the number of predicted additional replacements.
+	INT_PTR total_delta; // The total increase/decrease in length from the number of predicted additional replacements.
 	int repl_multiplier = aLengthDelta < 0 ? -1 : 1; // Negative is used to keep additional_replacements_expected conservative even when delta is negative.
 
 	if (aLengthDelta == 0) // Avoid all the calculations because it will wind up being zero anyway.
@@ -1181,7 +1181,7 @@ int PredictReplacementSize(int aLengthDelta, int aReplacementCount, int aLimit, 
 				(double)additional_replacements_expected / (aReplacementCount + additional_replacements_expected)
 				));
 			// It seems best to use whichever of the following is greater in the calculation further below:
-			int haystack_or_new_length = (aCurrentLength > aHaystackLength) ? aCurrentLength : aHaystackLength;
+			INT_PTR haystack_or_new_length = (aCurrentLength > aHaystackLength) ? aCurrentLength : aHaystackLength;
 			// The following is a crude sanity limit to avoid going overboard with memory
 			// utilization in extreme cases such as when a big string has many replacements
 			// in its first half, but hardly any in its second.  It does the following:
@@ -1193,7 +1193,7 @@ int PredictReplacementSize(int aLengthDelta, int aReplacementCount, int aLimit, 
 			//    AVOID WASTING MEMORY, the caller should probably call _expand() to shrink the result
 			//    when it detects that far fewer replacements were needed than predicted (this is currently
 			//    done by Var::AcceptNewMem()).
-			int total_delta_limit = (int)(haystack_or_new_length < 10*1024*1024 ? quality*10*1024*1024
+			INT_PTR total_delta_limit = (INT_PTR)(haystack_or_new_length < 10*1024*1024 ? quality*10*1024*1024
 				: quality*haystack_or_new_length); // See comment above.
 			total_delta = additional_replacements_expected
 				* (aLengthDelta < 0 ? -aLengthDelta : aLengthDelta); // So actually, total_delta will be the absolute value.
@@ -1204,7 +1204,7 @@ int PredictReplacementSize(int aLengthDelta, int aReplacementCount, int aLimit, 
 	} // aLengthDelta!=0
 
 	// Above is responsible for having set total_delta properly.
-	int subsequent_length = aHaystackLength - aEndOffsetOfCurrMatch // This is the length of the remaining portion of haystack that might wind up going into the result exactly as-is (adjusted by the below).
+	INT_PTR subsequent_length = aHaystackLength - aEndOffsetOfCurrMatch // This is the length of the remaining portion of haystack that might wind up going into the result exactly as-is (adjusted by the below).
 		+ total_delta; // This is additional_replacements_expected times the expected delta (the length of each replacement minus what it replaces) [can be negative].
 	if (subsequent_length < 0) // Must not go below zero because that would cause the next line to
 		subsequent_length = 0; // create an increase that's too small to handle the current replacement.
@@ -1636,7 +1636,7 @@ DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf)
 
 
 
-DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, size_t aBufSize)
+DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, DWORD aBufSize)
 // Returns the length of the string (0 if empty).
 // Caller must ensure that size of aBuf is REALLY aBufSize (even when it knows aBufSize is more than
 // it needs) because the API apparently reads/writes parts of the buffer beyond the string it writes!
@@ -1650,7 +1650,7 @@ DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBu
 		*aBuf = '\0';
 		return 0;
 	}
-	DWORD buf_size = (DWORD)aBufSize * sizeof(TCHAR); // Caller's value might be a constant memory area, so need a modifiable copy.
+	DWORD buf_size = aBufSize * sizeof(TCHAR); // Caller's value might be a constant memory area, so need a modifiable copy.
 	LONG result = RegQueryValueEx(hkey, aValueName, NULL, NULL, (LPBYTE)aBuf, &buf_size);
 	RegCloseKey(hkey);
 	if (result != ERROR_SUCCESS || !buf_size) // Relies on short-circuit boolean order.

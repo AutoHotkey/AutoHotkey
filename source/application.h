@@ -92,10 +92,10 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 void ResumeUnderlyingThread(LPTSTR aSavedErrorLevel);
 BOOL IsInterruptible();
 
-VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
-VOID CALLBACK AutoExecSectionTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
-VOID CALLBACK UninterruptibleTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
-VOID CALLBACK InputTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
-VOID CALLBACK RefreshInterruptibility(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
+VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
+VOID CALLBACK AutoExecSectionTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
+VOID CALLBACK UninterruptibleTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
+VOID CALLBACK InputTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
+VOID CALLBACK RefreshInterruptibility(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 
 #endif

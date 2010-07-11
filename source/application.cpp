@@ -2089,7 +2089,7 @@ BOOL IsInterruptible()
 
 
 
-VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime)
+VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 {
 	// Unfortunately, it appears that MessageBox() will return zero rather
 	// than AHK_TIMEOUT, specified below -- at least under WinXP.  This
@@ -2121,7 +2121,7 @@ VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime)
 
 
 
-VOID CALLBACK AutoExecSectionTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime)
+VOID CALLBACK AutoExecSectionTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 // See the comments in AutoHotkey.cpp for an explanation of this function.
 {
 	// Since this was called, it means the AutoExec section hasn't yet finished (otherwise
@@ -2159,7 +2159,7 @@ VOID CALLBACK AutoExecSectionTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD d
 
 
 
-VOID CALLBACK InputTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime)
+VOID CALLBACK InputTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 {
 	KILL_INPUT_TIMER
 	g_input.status = INPUT_TIMED_OUT;
@@ -2167,7 +2167,7 @@ VOID CALLBACK InputTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime)
 
 
 
-VOID CALLBACK RefreshInterruptibility(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime)
+VOID CALLBACK RefreshInterruptibility(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 {
 	IsInterruptible(); // Search on RefreshInterruptibility for comments.
 }

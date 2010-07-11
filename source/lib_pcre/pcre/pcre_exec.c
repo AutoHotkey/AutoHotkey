@@ -685,7 +685,7 @@ for (;;)
       save_capture_last = md->capture_last;
 
       DPRINTF(("saving %d %d %d\n", save_offset1, save_offset2, save_offset3));
-      md->offset_vector[md->offset_end - number] = eptr - md->start_subject;
+      md->offset_vector[md->offset_end - number] = (int)(eptr - md->start_subject);
 
       flags = (op == OP_SCBRA)? match_cbegroup : 0;
       do
@@ -967,11 +967,11 @@ for (;;)
       cb.callout_number   = ecode[1];
       cb.offset_vector    = md->offset_vector;
       cb.subject          = (PCRE_SPTR)md->start_subject;
-      cb.subject_length   = md->end_subject - md->start_subject;
-      cb.start_match      = mstart - md->start_subject;
-      cb.current_position = eptr - md->start_subject;
-      cb.pattern_position = GET(ecode, 6);
-      cb.next_item_length = GET(ecode, 6 + LINK_SIZE);
+      cb.subject_length   = (int)(md->end_subject - md->start_subject);
+      cb.start_match      = (int)(mstart - md->start_subject);
+      cb.current_position = (int)(eptr - md->start_subject);
+      cb.pattern_position = GET(ecode, 2 + sizeof(void **));
+      cb.next_item_length = GET(ecode, 2 + sizeof(void **) + LINK_SIZE);
       cb.capture_top      = offset_top/2;
       cb.capture_last     = md->capture_last;
       cb.callout_data     = md->callout_data;
@@ -980,7 +980,7 @@ for (;;)
       if (rrc < 0) RRETURN(rrc);
       }
 #endif /* AutoHotkey */
-    ecode += 6 + 2*LINK_SIZE;
+    ecode += 2 + sizeof(void **) + 2*LINK_SIZE;
     break;
 
     /* Recursion either matches the current regex, or some subexpression. The
@@ -1232,7 +1232,7 @@ for (;;)
         {
         md->offset_vector[offset] =
           md->offset_vector[md->offset_end - number];
-        md->offset_vector[offset+1] = eptr - md->start_subject;
+        md->offset_vector[offset+1] = (int)(eptr - md->start_subject);
         if (offset_top <= offset) offset_top = offset + 2;
         }
 
@@ -1739,7 +1739,7 @@ for (;;)
       minima. */
 
       length = (offset >= offset_top || md->offset_vector[offset] < 0)?
-        md->end_subject - eptr + 1 :
+        (int)(md->end_subject - eptr) + 1 :
         md->offset_vector[offset+1] - md->offset_vector[offset];
 
       /* Set up for repetition, or handle the non-repeated case */
@@ -3892,7 +3892,7 @@ for (;;)
           case OP_ANYBYTE:
           c = max - min;
           if (c > (unsigned int)(md->end_subject - eptr))
-            c = md->end_subject - eptr;
+            c = (unsigned int)(md->end_subject - eptr);
           eptr += c;
           break;
 
@@ -4086,7 +4086,7 @@ for (;;)
           case OP_ANYBYTE:
           c = max - min;
           if (c > (unsigned int)(md->end_subject - eptr))
-            c = md->end_subject - eptr;
+            c = (int)(md->end_subject - eptr);
           eptr += c;
           break;
 
@@ -4913,8 +4913,8 @@ if (rc == MATCH_MATCH)
 
   if (offsetcount < 2) rc = 0; else
     {
-    offsets[0] = md->start_match_ptr - md->start_subject;
-    offsets[1] = md->end_match_ptr - md->start_subject;
+    offsets[0] = (int)(md->start_match_ptr - md->start_subject);
+    offsets[1] = (int)(md->end_match_ptr - md->start_subject);
     }
 
   DPRINTF((">>>> returning %d\n", rc));

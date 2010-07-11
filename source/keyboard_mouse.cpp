@@ -623,7 +623,7 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 
 				// See comment "else must never change sModifiersLR_persistent" above about why
 				// !aTargetWindow is used below:
-				else if (vk = TextToSpecial(aKeys, (UINT)key_text_length, event_type
+				else if (vk = TextToSpecial(aKeys, key_text_length, event_type
 					, persistent_modifiers_for_this_SendKeys, !aTargetWindow)) // Assign.
 				{
 					if (!aTargetWindow)
@@ -3941,7 +3941,7 @@ vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLa
 
 
 
-vk_type TextToSpecial(LPTSTR aText, UINT aTextLength, KeyEventTypes &aEventType, modLR_type &aModifiersLR
+vk_type TextToSpecial(LPTSTR aText, size_t aTextLength, KeyEventTypes &aEventType, modLR_type &aModifiersLR
 	, bool aUpdatePersistent)
 // Returns vk for key-down, negative vk for key-up, or zero if no translation.
 // We also update whatever's in *pModifiers and *pModifiersLR to reflect the type of key-action

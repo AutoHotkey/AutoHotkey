@@ -169,7 +169,7 @@ size_t Clipboard::Get(LPTSTR aBuf)
 
 
 
-ResultType Clipboard::Set(LPCTSTR aBuf, UINT aLength) //, bool aTrimIt)
+ResultType Clipboard::Set(LPCTSTR aBuf, UINT_PTR aLength) //, bool aTrimIt)
 // Returns OK or FAIL.
 {
 	// It was already open for writing from a prior call.  Return failure because callers that do this

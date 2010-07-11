@@ -117,7 +117,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 				if (c)
 				{
-					StringTCharToChar(param, g_DebuggerHost, c-param);
+					StringTCharToChar(param, g_DebuggerHost, (int)(c-param));
 					StringTCharToChar(c + 1, g_DebuggerPort);
 				}
 				else

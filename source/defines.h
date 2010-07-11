@@ -583,7 +583,7 @@ struct global_struct
 	GuiIndexType GuiDefaultWindowIndex; // This thread's default GUI window, used except when specified "Gui, 2:Add, ..."
 	GuiIndexType DialogOwnerIndex; // This thread's GUI owner, if any. Stored as Index vs. HWND to insulate against the case where a GUI window has been destroyed and recreated with a new HWND.
 	#define THREAD_DIALOG_OWNER ((::g->DialogOwnerIndex < MAX_GUI_WINDOWS && g_gui[::g->DialogOwnerIndex]) \
-	? g_gui[::g->DialogOwnerIndex]->mHwnd : NULL) // Above line relies on short-circuit eval. oder.
+	? g_gui[::g->DialogOwnerIndex]->mHwnd : NULL) // Above line relies on short-circuit eval. order.
 	int WinDelay;  // negative values may be used as special flags.
 	int ControlDelay; // negative values may be used as special flags.
 	int KeyDelay;     //

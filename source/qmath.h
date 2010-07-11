@@ -68,6 +68,11 @@
 extern "C" {
 #endif
 
+#if defined(WIN32) && defined(_MSC_VER) && !defined(_WIN64)
+#define USE_INLINE_ASM
+#endif
+
+
 // Commented out in AutoHotkey v1.0.40.02 to help reduce code size:
 //static char quickmath_id[] = "$Id: qmath.h,v 1.1 2004/01/15 19:50:35 jonbennett Exp $";
 
@@ -443,6 +448,9 @@ _QMATH_INLINE long qmathFist3101(float inval)
 #define M_2_SQRTPI (1.12837916709551257390)
 #define M_SQRT2    (1.41421356237309504880)
 #define M_SQRT_2   (0.707106781186547524401)
+
+
+#ifdef USE_INLINE_ASM
 
 
 _QMATH_NAKED _QMATH_INLINE
@@ -907,6 +915,42 @@ double _QMATH_LINK qmathTanh(double __x)
 	__asm pop		eax
 	__asm ret		8
 }
+
+
+#else // USE_INLINE_ASM not defined
+
+#include <math.h>
+
+// Inline assembly isn't available, so qmath is essentially disabled.
+// Define a bunch of macros instead, for convenience:
+#define qmathSin	sin
+#define qmathAsin	asin
+#define qmathCos	cos
+#define qmathAcos	acos
+#define qmathTan	tan
+#define qmathAtan	atan
+#define qmathAtan2	atan2
+#define qmathExp	exp
+#define qmathExp2	exp2
+#define qmathExp10(a) pow(10, a)
+#define qmathLog	log
+#define qmathLog2	log
+#define qmathLog10(a) log10(double(a))
+#define qmathFabs	fabs
+#define qmathPow(a,b) pow(double(a),double(b))
+#define qmathCeil	ceil
+#define qmathFloor	floor
+#define qmathFmod	fmod
+#define qmathSqrt	sqrt
+#define qmathHypot(a,b) sqrt(pow(double(a), 2.0) + pow(double(b), 2.0));
+#define qmathAcosh	acosh
+#define qmathAsinh	asinh
+#define qmathAtanh	atanh
+#define qmathCosh	cosh
+#define qmathSinh	sinh
+#define qmathTanh	tanh
+
+#endif
 
 
 #ifdef __cplusplus

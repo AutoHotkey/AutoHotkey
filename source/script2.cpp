@@ -2614,7 +2614,7 @@ ResultType Line::ControlSetText(LPTSTR aControl, LPTSTR aNewText, LPTSTR aTitle,
 	// SendMessage must be used, not PostMessage(), at least for some (probably most) apps.
 	// Also: No need to call IsWindowHung() because SendMessageTimeout() should return
 	// immediately if the OS already "knows" the window is hung:
-	DWORD result;
+	DWORD_PTR result;
 	SendMessageTimeout(control_window, WM_SETTEXT, (WPARAM)0, (LPARAM)aNewText
 		, SMTO_ABORTIFHUNG, 5000, &result);
 	DoControlDelay;
@@ -3006,7 +3006,7 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 
 	if (aUseSend)
 	{
-		DWORD dwResult;
+		DWORD_PTR dwResult;
 		if (!SendMessageTimeout(control_window, msg, wparam, lparam, SMTO_ABORTIFHUNG, timeout, &dwResult))
 			return g_ErrorLevel->Assign(_T("FAIL")); // Need a special value to distinguish this from numeric reply-values.
 		g_ErrorLevel->Assign(dwResult); // UINT seems best most of the time?
@@ -3538,7 +3538,7 @@ ResultType Line::WinGetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, 
 	// rather than leaving whatever was in there before.
 
 	// Handle the output parameter.  See the comments in ACT_CONTROLGETTEXT for details.
-	VarSizeType space_needed = target_window ? GetWindowTextLength(target_window) + 1 : 1; // 1 for terminator.
+	int space_needed = target_window ? GetWindowTextLength(target_window) + 1 : 1; // 1 for terminator.
 	if (output_var.AssignString(NULL, space_needed - 1) != OK)
 		return FAIL;  // It already displayed the error.
 	if (target_window)
@@ -5006,7 +5006,7 @@ end:
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 {
 	int i;
-	DWORD dwTemp;
+	DWORD_PTR dwTemp;
 
 	// Detect Explorer crashes so that tray icon can be recreated.  I think this only works on Win98
 	// and beyond, since the feature was never properly implemented in Win95:
@@ -5787,7 +5787,7 @@ DWORD GetAHKInstallDir(LPTSTR aBuf)
 // Returns the length of the string (0 if empty).
 {
 	TCHAR buf[MAX_PATH];
-	VarSizeType length = ReadRegString(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\AutoHotkey"), _T("InstallDir"), buf, MAX_PATH);
+	DWORD length = ReadRegString(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\AutoHotkey"), _T("InstallDir"), buf, MAX_PATH);
 	if (aBuf)
 		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string).
 	return length;
@@ -5852,7 +5852,7 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInpu
 	// Specify NULL as the owner window since we want to be able to have the main window in the foreground even
 	// if there are InputBox windows.  Update: A GUI window can now be the parent if thread has that setting.
 	++g_nInputBoxes;
-	int result = (int)DialogBox(g_hInstance, MAKEINTRESOURCE(IDD_INPUTBOX), THREAD_DIALOG_OWNER, InputBoxProc);
+	INT_PTR result = DialogBox(g_hInstance, MAKEINTRESOURCE(IDD_INPUTBOX), THREAD_DIALOG_OWNER, InputBoxProc);
 	--g_nInputBoxes;
 
 	DIALOG_END
@@ -5892,7 +5892,7 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInpu
 
 
 
-BOOL CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 // MSDN:
 // Typically, the dialog box procedure should return TRUE if it processed the message,
 // and FALSE if it did not. If the dialog box procedure returns FALSE, the dialog
@@ -6149,7 +6149,7 @@ BOOL CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
 				#define SET_OUTPUT_VAR_TO_BLANK (LOWORD(wParam) == IDCANCEL && g_script.mIsAutoIt2)
 				#undef INPUTBOX_VAR
 				#define INPUTBOX_VAR (CURR_INPUTBOX.output_var)
-				VarSizeType space_needed = SET_OUTPUT_VAR_TO_BLANK ? 1 : GetWindowTextLength(hControl) + 1;
+				int space_needed = SET_OUTPUT_VAR_TO_BLANK ? 1 : GetWindowTextLength(hControl) + 1;
 				// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 				// this call will set up the clipboard for writing:
 				if (INPUTBOX_VAR->AssignString(NULL, space_needed - 1) != OK)
@@ -6198,7 +6198,7 @@ BOOL CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
 
 
 
-VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime)
+VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 {
 	// First check if the window has already been destroyed.  There are quite a few ways this can
 	// happen, and in all of them we want to make sure not to do things such as calling EndDialog()
@@ -6217,7 +6217,7 @@ VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime)
 	{
 		// This is the element in the array that corresponds to the InputBox for which
 		// this function has just been called.
-		int target_index = idEvent - INPUTBOX_TIMER_ID_OFFSET;
+		INT_PTR target_index = idEvent - INPUTBOX_TIMER_ID_OFFSET;
 		// Even though the dialog has timed out, we still want to write anything the user
 		// had a chance to enter into the output var.  This is because it's conceivable that
 		// someone might want a short timeout just to enter something quick and let the
@@ -6228,7 +6228,7 @@ VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime)
 		{
 			#undef INPUTBOX_VAR
 			#define INPUTBOX_VAR (g_InputBox[target_index].output_var)
-			VarSizeType space_needed = GetWindowTextLength(hControl) + 1;
+			int space_needed = GetWindowTextLength(hControl) + 1;
 			// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 			// this call will set up the clipboard for writing:
 			if (INPUTBOX_VAR->AssignString(NULL, space_needed - 1) == OK)
@@ -6249,7 +6249,7 @@ VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime)
 
 
 
-VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime)
+VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 {
 	Line::FreeDerefBufIfLarge(); // It will also kill the timer, if appropriate.
 }
@@ -7325,7 +7325,7 @@ struct sort_rand_type
 	union
 	{
 		// This must be the same size in bytes as the above, which is why it's maintained as a union with
-		// a char* rather than a plain int (though currently they would be the same size anyway).
+		// a char* rather than a plain int.
 		LPTSTR unused;
 		int rand;
 	};
@@ -9055,14 +9055,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 					text_start ++; // Skip BOM.
 					text_size -= 2; // Exclude BOM from calculations below for consistency; include only the actual data.
 				}
-#ifdef UNICODE
-				// Note: An alternate method using AcceptNewMem benchmarked slightly slower than this method,
-				// probably because memmove must be used to remove the BOM. Files without BOM might be very rare.
-				output_var.SetCapacity(text_size, true, false);
-				memcpy(output_var.Contents(), text_start, text_size + 2); // also copies the '\0's
-#else
-				output_var.AssignStringToCodePage(text_start, text_size / sizeof(wchar_t)); // text_size excludes our '\0' as this method explicitly null-terminates.
-#endif
+				output_var.AssignStringW(text_start, text_size / sizeof(wchar_t));
 			}
 			else
 			{
@@ -9220,7 +9213,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 				DWORD dwWritten;
 				if (   (hFile = CreateFile(aFilespec, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL)) == INVALID_HANDLE_VALUE   ) // Overwrite.
 					return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-				g_ErrorLevel->Assign(WriteFile(hFile, ARGVAR1->Contents(), ARGVAR1->ByteLength(), &dwWritten, NULL)
+				g_ErrorLevel->Assign(WriteFile(hFile, ARGVAR1->Contents(), (DWORD)ARGVAR1->ByteLength(), &dwWritten, NULL)
 					? ERRORLEVEL_NONE : ERRORLEVEL_ERROR); // In this case, WriteFile() will return non-zero on success, 0 on failure.
 				CloseHandle(hFile);
 				return OK;
@@ -9272,7 +9265,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	}
 
 	// Write to the file:
-	g_ErrorLevel->Assign(ts->Write(aBuf, _tcslen(aBuf)) == 0 ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
+	g_ErrorLevel->Assign(ts->Write(aBuf, (DWORD)_tcslen(aBuf)) == 0 ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
 
 	if (!aCurrentReadFile)
 		delete ts;
@@ -10703,12 +10696,6 @@ VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName)
 
 
 VarSizeType BIV_PtrSize(LPTSTR aBuf, LPTSTR aVarName)
-// Benchmarks indicate 10*A_PtrSize takes about 100% longer than PtrSize(10), where the latter is
-// implemented as a built-in function equivalent to this.  However, since it is still extremely quick
-// and A_PtrSize seems more intuitive, this is probably the best option.  If BIV_PtrSize is added as a
-// special case in ExpandExpression like BIV_LoopIndex, PtrSize() has only marginal performance benefit.
-// Since such special cases theoretically affect performance of other built-in variables, it seems best
-// not to do this until it is known how commonly A_PtrSize is used in performance-intensive situations.
 {
 	if (aBuf)
 	{
@@ -11826,11 +11813,7 @@ VarSizeType BIV_EventInfo(LPTSTR aBuf, LPTSTR aVarName)
 // We're returning the length of the var's contents, not the size.
 {
 	return aBuf
-#ifdef _WIN64
-		? (VarSizeType)_tcslen(UTOA64(g->EventInfo, aBuf)) // Must return exact length when aBuf isn't NULL.
-#else
-		? (VarSizeType)_tcslen(UTOA(g->EventInfo, aBuf)) // Must return exact length when aBuf isn't NULL.
-#endif
+		? (VarSizeType)_tcslen(Exp32or64(UTOA,UTOA64)(g->EventInfo, aBuf)) // Must return exact length when aBuf isn't NULL.
 		: MAX_INTEGER_LENGTH;
 }
 
@@ -11878,6 +11861,9 @@ VarSizeType BIV_TimeIdlePhysical(LPTSTR aBuf, LPTSTR aVarName)
 // BUILT-IN FUNCTIONS //
 ////////////////////////
 
+#ifdef ENABLE_DLLCALL
+
+#ifdef WIN32_PLATFORM
 // Interface for DynaCall():
 #define  DC_MICROSOFT           0x0000      // Default
 #define  DC_BORLAND             0x0001      // Borland compat
@@ -11889,6 +11875,7 @@ VarSizeType BIV_TimeIdlePhysical(LPTSTR aBuf, LPTSTR aVarName)
 #define  DC_CALL_STD_BO         (DC_CALL_STD | DC_BORLAND)
 #define  DC_CALL_STD_MS         (DC_CALL_STD | DC_MICROSOFT)
 #define  DC_CALL_STD_M8         (DC_CALL_STD | DC_RETVAL_MATH8)
+#endif
 
 union DYNARESULT                // Various result types
 {      
@@ -11898,6 +11885,7 @@ union DYNARESULT                // Various result types
     float   Float;              // Four byte real
     double  Double;             // 8-byte real
     __int64 Int64;              // big int (64-bit)
+	UINT_PTR UIntPtr;
 };
 
 struct DYNAPARM
@@ -11907,6 +11895,7 @@ struct DYNAPARM
 		int value_int; // Args whose width is less than 32-bit are also put in here because they are right justified within a 32-bit block on the stack.
 		float value_float;
 		__int64 value_int64;
+		UINT_PTR value_uintptr;
 		double value_double;
 		char *astr;
 		wchar_t *wstr;
@@ -11918,10 +11907,33 @@ struct DYNAPARM
 	bool is_unsigned; // Allows return value and output parameters to be interpreted as unsigned vs. signed.
 };
 
+#ifdef _WIN64
+// This function was borrowed from http://dyncall.org/
+extern "C" UINT_PTR PerformDynaCall(size_t stackArgsSize, DWORD_PTR* stackArgs, DWORD_PTR* regArgs, void* aFunction);
 
+// Retrieve a float or double return value.  These don't actually do anything, since the value we
+// want is already in the xmm0 register which is used to return float or double values.
+// Many thanks to http://locklessinc.com/articles/c_abi_hacks/ for the original idea.
+extern "C" float read_xmm0_float();
+extern "C" double read_xmm0_double();
 
+static inline UINT_PTR DynaParamToElement(DYNAPARM& parm)
+{
+	if(parm.passed_by_address)
+		return (UINT_PTR) &parm.value_uintptr;
+	else
+		return parm.value_uintptr;
+}
+#endif
+
+#ifdef WIN32_PLATFORM
 DYNARESULT DynaCall(int aFlags, void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aException
 	, void *aRet, int aRetSize)
+#elif defined(_WIN64)
+DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aException)
+#else
+#error DllCall not supported on this platform
+#endif
 // Based on the code by Ton Plooy <tonp@xs4all.nl>.
 // Call the specified function with the given parameters. Build a proper stack and take care of correct
 // return value processing.
@@ -11929,12 +11941,15 @@ DYNARESULT DynaCall(int aFlags, void *aFunction, DYNAPARM aParam[], int aParamCo
 	aException = 0;  // Set default output parameter for caller.
 	SetLastError(g->LastError); // v1.0.46.07: In case the function about to be called doesn't change last-error, this line serves to retain the script's previous last-error rather than some arbitrary one produced by AutoHotkey's own internal API calls.  This line has no measurable impact on performance.
 
+    DYNARESULT Res = {0}; // This struct is to be returned to caller by value.
+
+#ifdef WIN32_PLATFORM
+
 	// Declaring all variables early should help minimize stack interference of C code with asm.
 	DWORD *our_stack;
     int param_size;
 	DWORD stack_dword, our_stack_size = 0; // Both might have to be DWORD for _asm.
 	BYTE *cp;
-    DYNARESULT Res = {0}; // This struct is to be returned to caller by value.
     DWORD esp_start, esp_end, dwEAX, dwEDX;
 	int i, esp_delta; // Declare this here rather than later to prevent C code from interfering with esp.
 
@@ -12052,6 +12067,40 @@ DYNARESULT DynaCall(int aFlags, void *aFunction, DYNAPARM aParam[], int aParamCo
 		}
 	}
 
+#endif // WIN32_PLATFORM
+#ifdef _WIN64
+
+	int params_left = aParamCount;
+	DWORD_PTR regArgs[4];
+	DWORD_PTR* stackArgs = NULL;
+	size_t stackArgsSize = 0;
+
+	// The first four parameters are passed in x64 through registers... like ARM :D
+	for(int i = 0; (i < 4) && params_left; i++, params_left--)
+		regArgs[i] = DynaParamToElement(aParam[i]);
+
+	// Copy the remaining parameters
+	if(params_left)
+	{
+		stackArgsSize = params_left * 8;
+		stackArgs = (DWORD_PTR*) _alloca(stackArgsSize);
+
+		for(int i = 0; i < params_left; i ++)
+			stackArgs[i] = DynaParamToElement(aParam[i+4]);
+	}
+
+	// Call the function.
+	__try
+	{
+		Res.UIntPtr = PerformDynaCall(stackArgsSize, stackArgs, regArgs, aFunction);
+	}
+	__except(EXCEPTION_EXECUTE_HANDLER)
+	{
+		aException = GetExceptionCode(); // aException is an output parameter for our caller.
+	}
+
+#endif
+
 	// v1.0.42.03: The following supports A_LastError. It's called even if an exception occurred because it
 	// might add value in some such cases.  Benchmarks show that this has no measurable impact on performance.
 	// A_LastError was implemented rather than trying to change things so that a script could use DllCall to
@@ -12062,6 +12111,7 @@ DYNARESULT DynaCall(int aFlags, void *aFunction, DYNAPARM aParam[], int aParamCo
 
 	TCHAR buf[32];
 
+#ifdef WIN32_PLATFORM
 	esp_delta = esp_start - esp_end; // Positive number means too many args were passed, negative means too few.
 	if (esp_delta && (aFlags & DC_CALL_STD))
 	{
@@ -12069,9 +12119,11 @@ DYNARESULT DynaCall(int aFlags, void *aFunction, DYNAPARM aParam[], int aParamCo
 		_itot(esp_delta, buf + 1, 10);
 		g_ErrorLevel->Assign(buf); // Assign buf not _itoa()'s return value, which is the wrong location.
 	}
+	else
+#endif
 	// Too many or too few args takes precedence over reporting the exception because it's more informative.
 	// In other words, any exception was likely caused by the fact that there were too many or too few.
-	else if (aException)
+	if (aException)
 	{
 		// It's a little easier to recongize the common error codes when they're in hex format.
 		buf[0] = '0';
@@ -12260,8 +12312,8 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 		if (   !(function = (void *)GetProcAddress(hmodule, function_name))   )
 		{
 			// v1.0.34: If it's one of the standard libraries, try the "A" suffix.
-			// jackieku: Try it anyway, there are many other DLLs use this nameing behavior, and it seems not so expensive.
-			// An user really cares this can always avoid it by editing his script.
+			// jackieku: Try it anyway, there are many other DLLs that use this naming scheme, and it doesn't seem expensive.
+			// If an user really cares he or she can always work around it by editing the script.
 			//for (i = 0; i < sStdModule_count; ++i)
 			//	if (hmodule == sStdModule[i]) // Match found.
 			//	{
@@ -12328,7 +12380,9 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 
 	// Determine the type of return value.
 	DYNAPARM return_attrib = {0}; // Init all to default in case ConvertDllArgType() isn't called below. This struct holds the type and other attributes of the function's return value.
+#ifdef WIN32_PLATFORM
 	int dll_call_mode = DC_CALL_STD; // Set default.  Can be overridden to DC_CALL_CDECL and flags can be OR'd into it.
+#endif
 	if (aParamCount % 2) // Odd number of parameters indicates the return type has been omitted, so assume BOOL/INT.
 		return_attrib.type = DLL_ARG_INT;
 	else
@@ -12352,9 +12406,13 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			return_type_string[1] = NULL; // Added in 1.0.48.
 		}
 
+		// 64-bit note: The calling convention detection code is preserved here for script compatibility.
+
 		if (!_tcsnicmp(return_type_string[0], _T("CDecl"), 5)) // Alternate calling convention.
 		{
+#ifdef WIN32_PLATFORM
 			dll_call_mode = DC_CALL_CDECL;
+#endif
 			return_type_string[0] = omit_leading_whitespace(return_type_string[0] + 5);
 			if (!*return_type_string[0])
 			{	// Take a shortcut since we know this empty string will be used as "Int":
@@ -12368,7 +12426,9 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		// rarity of such a thing happening.
 		else if (return_type_string[1] && !_tcsnicmp(return_type_string[1], _T("CDecl"), 5)) // Alternate calling convention.
 		{
+#ifdef WIN32_PLATFORM
 			dll_call_mode = DC_CALL_CDECL;
+#endif
 			return_type_string[1] += 5; // Support return type immediately following CDecl (this was previously supported _with_ quotes, though not documented).  OBSOLETE COMMENT: Must be NULL since return_type_string[1] is the variable's name, by definition, so it can't have any spaces in it, and thus no space delimited items after "Cdecl".
 			if (!*return_type_string[1])
 				// Pass default return type.  Don't take shortcut approach used above as return_type_string[0] should take precedence if valid.
@@ -12383,6 +12443,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		}
 has_valid_return_type:
 		--aParamCount;  // Remove the last parameter from further consideration.
+#ifdef WIN32_PLATFORM
 		if (!return_attrib.passed_by_address) // i.e. the special return flags below are not needed when an address is being returned.
 		{
 			if (return_attrib.type == DLL_ARG_DOUBLE)
@@ -12390,6 +12451,7 @@ has_valid_return_type:
 			else if (return_attrib.type == DLL_ARG_FLOAT)
 				dll_call_mode |= DC_RETVAL_MATH4;
 		}
+#endif
 	}
 
 	// Using stack memory, create an array of dll args large enough to hold the actual number of args present.
@@ -12571,7 +12633,12 @@ has_valid_return_type:
 	////////////////////////
 	DWORD exception_occurred; // Must not be named "exception_code" to avoid interfering with MSVC macros.
 	DYNARESULT return_value;  // Doing assignment (below) as separate step avoids compiler warning about "goto end" skipping it.
+#ifdef WIN32_PLATFORM
 	return_value = DynaCall(dll_call_mode, function, dyna_param, arg_count, exception_occurred, NULL, 0);
+#endif
+#ifdef _WIN64
+	return_value = DynaCall(function, dyna_param, arg_count, exception_occurred);
+#endif
 	// The above has also set g_ErrorLevel appropriately.
 
 	if (*Var::sEmptyString)
@@ -12626,6 +12693,21 @@ has_valid_return_type:
 				return_value.Int = *(int *)return_value.Pointer;
 			}
 		}
+#ifdef _WIN64
+		else
+		{
+			switch(return_attrib.type)
+			{
+			// Floating-point values are returned via the xmm0 register. Copy it for use in the next section:
+			case DLL_ARG_FLOAT:
+				return_value.Float = read_xmm0_float();
+				break;
+			case DLL_ARG_DOUBLE:
+				return_value.Double = read_xmm0_double();
+				break;
+			}
+		}
+#endif
 
 		switch(return_attrib.type)
 		{
@@ -12792,6 +12874,7 @@ end:
 		FreeLibrary(hmodule_to_free);
 }
 
+#endif
 
 
 void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
@@ -12818,10 +12901,10 @@ void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	// Get the first arg, which is the string used as the source of the extraction. Call it "haystack" for clarity.
 	TCHAR haystack_buf[MAX_NUMBER_SIZE]; // A separate buf because aResultToken.buf is sometimes used to store the result.
 	LPTSTR haystack = TokenToString(*aParam[0], haystack_buf); // Remember that aResultToken.buf is part of a union, though in this case there's no danger of overwriting it since our result will always be of STRING type (not int or float).
-	int haystack_length = (int)EXPR_TOKEN_LENGTH(aParam[0], haystack);
+	INT_PTR haystack_length = (INT_PTR)EXPR_TOKEN_LENGTH(aParam[0], haystack);
 
 	// Load-time validation has ensured that at least the first two parameters are present:
-	int starting_offset = (int)TokenToInt64(*aParam[1]) - 1; // The one-based starting position in haystack (if any).  Convert it to zero-based.
+	INT_PTR starting_offset = (INT_PTR)TokenToInt64(*aParam[1]) - 1; // The one-based starting position in haystack (if any).  Convert it to zero-based.
 	if (starting_offset > haystack_length)
 		return; // Yield the empty string (a default set higher above).
 	if (starting_offset < 0) // Same convention as RegExMatch/Replace(): Treat a StartingPos of 0 (offset -1) as "start at the string's last char".  Similarly, treat negatives as starting further to the left of the end of the string.
@@ -12831,13 +12914,13 @@ void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 			starting_offset = 0;
 	}
 
-	int remaining_length_available = haystack_length - starting_offset;
-	int extract_length;
+	INT_PTR remaining_length_available = haystack_length - starting_offset;
+	INT_PTR extract_length;
 	if (aParamCount < 3) // No length specified, so extract all the remaining length.
 		extract_length = remaining_length_available;
 	else
 	{
-		if (   !(extract_length = (int)TokenToInt64(*aParam[2]))   )  // It has asked to extract zero characters.
+		if (   !(extract_length = (INT_PTR)TokenToInt64(*aParam[2]))   )  // It has asked to extract zero characters.
 			return; // Yield the empty string (a default set higher above).
 		if (extract_length < 0)
 		{
@@ -12906,7 +12989,7 @@ void BIF_InStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 		// Since InStr("", "") yields 1, it seems consistent for InStr("Red", "", 4) to yield
 		// 4 rather than 0.  The below takes this into account:
 		if (offset < 0 || offset > // ...greater-than the length of haystack calculated below.
-			(aParam[0]->symbol == SYM_VAR  // LengthIgnoreBinaryClip() is used because InStr() doesn't recognize/support binary-clip, so treat it as a normal string (i.e. find first binary zero via _tcslen()).
+			INT_PTR(aParam[0]->symbol == SYM_VAR  // LengthIgnoreBinaryClip() is used because InStr() doesn't recognize/support binary-clip, so treat it as a normal string (i.e. find first binary zero via _tcslen()).
 				? aParam[0]->var->LengthIgnoreBinaryClip() : _tcslen(haystack)))
 		{
 			aResultToken.value_int64 = 0; // Match never found when offset is beyond length of string.
@@ -13061,6 +13144,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 						&& haystack == array_item->Contents(FALSE)) // For more comments, see similar section in BIF_RegEx.
 						if (mem_to_free = _tcsdup(haystack))
 							haystack = mem_to_free;
+
 					if (subpat_not_matched)
 						array_item->Assign(); // Omit all parameters to make the var empty without freeing its memory (for performance, in case this RegEx is being used many times in a loop).
 					else
@@ -13125,14 +13209,14 @@ void *RegExResolveUserCallout(LPCSTR aCalloutParam, int aCalloutParamLength)
 struct RegExCalloutData // L14: Used by BIF_RegEx to pass necessary info to RegExCallout.
 {
 	pcre *re;
-#ifdef UNICODE
-	LPTSTR haystack;
-	int haystack_length;
-#endif
 	LPTSTR re_text; // original NeedleRegEx
 	int options_length; // used to adjust cb->pattern_position
 	int pattern_count; // to save calling pcre_fullinfo unnecessarily for each callout
 	pcre_extra *extra;
+#ifdef UNICODE
+	LPTSTR haystack;
+	int haystack_length;
+#endif
 	bool get_positions_not_substrings;
 };
 
@@ -13171,7 +13255,7 @@ int RegExCallout(pcre_callout_block *cb)
 	RegExCalloutData cd = *(RegExCalloutData *)cb->callout_data;
 
 	// Adjust offset to account for options, which are excluded from the regex passed to PCRE.
-	cb->pattern_position += TPosToUTF8Pos(cd.haystack, cd.options_length);
+	cb->pattern_position += TPosToUTF8Pos(cd.re_text, cd.options_length);
 	
 
 	// See ExpandExpression() for detailed comments about the following section.
@@ -13571,7 +13655,7 @@ break_both:
 	// because the RE's options are implicitly stored inside re_compiled.
 
 	// Lexikos: See aOptionsLength comment at beginning of this function.
-	this_entry.options_length = UTF8PosToTPos(pat, pat - UorA(regex_utf8, aRegEx));
+	this_entry.options_length = UTF8PosToTPos(pat, (int)(pat - UorA(regex_utf8, aRegEx)));
 
 	if (aOptionsLength) 
 		*aOptionsLength = this_entry.options_length;
@@ -13626,7 +13710,7 @@ LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx)
 #ifdef UNICODE
 	CStringUTF8FromWChar sHaystack(aHaystack);
 	// Execute the regex.
-	int captured_pattern_count = pcre_exec(re, extra, sHaystack, sHaystack.GetLength(), 0, 0, offset, RXM_INT_COUNT);
+	int captured_pattern_count = pcre_exec(re, extra, sHaystack, (int)sHaystack.GetLength(), 0, 0, offset, RXM_INT_COUNT);
 	if (captured_pattern_count < 0) // PCRE_ERROR_NOMATCH or some kind of error.
 		return NULL;
 
@@ -13678,7 +13762,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	// Caller has provided a NULL circuit_token as a means of passing back memory we allocate here.
 	// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
 	LPTSTR &result = (LPTSTR &)aResultToken.circuit_token; // Make an alias to type-cast and for convenience.
-	int &result_length = (int &)aResultToken.buf; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
+	size_t &result_length = (size_t &)aResultToken.buf; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
 	result_size = 0;   // And caller has already set "result" to be NULL.  The buffer is allocated only upon
 	result_length = 0; // first use to avoid a potentially massive allocation that might be wasted and cause swapping (not to mention that we'll have better ability to estimate the correct total size after the first replacement is discovered).
 
@@ -13755,7 +13839,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 			{
 				if (haystack_portion_length = aHaystackLength - aStartingOffset) // This is the remaining part of haystack that needs to be copied over as-is.
 				{
-					new_result_length = result_length + haystack_portion_length;
+					new_result_length = (int)result_length + haystack_portion_length;
 					if (new_result_length >= result_size)
 						REGEX_REALLOC(new_result_length + 1); // This will end the loop if an alloc error occurs.
 					tmemcpy(result + result_length, haystack_pos, haystack_portion_length); // memcpy() usually benches a little faster than _tcscpy().
@@ -13816,7 +13900,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 					//    new_result_length - haystack_portion_length - (aOffset[1] - aOffset[0])
 					// Above is the length difference between the current replacement text and what it's
 					// replacing (it's negative when replacement is smaller than what it replaces).
-					REGEX_REALLOC(PredictReplacementSize((new_result_length - UTF8PosToTPos(utf8Haystack,aOffset[1])) / replacement_count // See above.
+					REGEX_REALLOC((int)PredictReplacementSize((new_result_length - UTF8PosToTPos(utf8Haystack,aOffset[1])) / replacement_count // See above.
 						, replacement_count, limit, aHaystackLength, new_result_length+2, UTF8PosToTPos(utf8Haystack,aOffset[1]))); // +2 in case of empty_string_is_not_a_match (which needs room for up to two extra characters).  The function will also do another +1 to convert length to size (for terminator).
 					// The above will return if an alloc error occurs.
 				}
@@ -13833,7 +13917,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				dest = result + result_length; // Init dest for use by the loops further below.
 			}
 			else // i.e. it's the first iteration, so begin calculating the size required.
-				new_result_length = result_length + haystack_portion_length; // Init length to the part of haystack before the match (it must be copied over as literal text).
+				new_result_length = (int)result_length + haystack_portion_length; // Init length to the part of haystack before the match (it must be copied over as literal text).
 
 			// DOLLAR SIGN ($) is the only method supported because it simplifies the code, improves performance,
 			// and avoids the need to escape anything other than $ (which simplifies the syntax).
@@ -14053,7 +14137,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 
 #ifdef UNICODE
 	CStringUTF8FromWChar utf8Haystack(haystack);
-	int utf8haystack_length = utf8Haystack.GetLength();
+	int utf8haystack_length = (int)utf8Haystack.GetLength();
 #endif
 
 	int param_index = mode_is_replace ? 5 : 3;
@@ -14241,11 +14325,15 @@ void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 		target += (ptrdiff_t)TokenToInt64(*aParam[1]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
 
 	BOOL is_signed;
-	size_t size = 4; // Set default.
+	size_t size = sizeof(DWORD_PTR); // Set default.
 
 	if (aParamCount < 3) // The "type" parameter is absent (which is most often the case), so use defaults.
+	{
+#ifndef _WIN64 // is_signed is ignored on 64-bit builds due to lack of support for UInt64.  Explicitly disable this for maintainability.
 		is_signed = FALSE;
+#endif
 		// And keep "size" at its default set earlier.
+	}
 	else // An explicit "type" is present.
 	{
 		LPTSTR type = TokenToString(*aParam[2], aResultToken.buf);
@@ -14259,26 +14347,19 @@ void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 		switch(ctoupper(*type)) // Override "size" and aResultToken.symbol if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
 		{
+		//case 'P': // Nothing extra needed in this case.
 		case 'I':
-#ifdef _WIN64
-			if (StrChrAny(type, _T("6Pp"))) // Int64 and IntPtr (both IntPtr and Ptr are supported, since it is simple)
-#else
 			if (_tcschr(type, '6')) // Int64. It's checked this way for performance, and to avoid access violation if string is bogus and too short such as "i64".
-#endif
 				size = 8;
-			//else keep "size" at its default set earlier.
+			else
+				size = 4;
 			break;
 		case 'S': size = 2; break; // Short.
 		case 'C': size = 1; break; // Char.
 
-		case 'D': size = 8; // Double.  NO "BREAK": fall through to below.
-		case 'F': // OR FELL THROUGH FROM ABOVE.
-			aResultToken.symbol = SYM_FLOAT; // Override the default of SYM_INTEGER set by our caller.
-			// In the case of 'F', leave "size" at its default set earlier.
-			break;
-#ifdef _WIN64
-		case 'P': size = 8; break; // Ptr or UPtr
-#endif
+		case 'D': size = 8; aResultToken.symbol = SYM_FLOAT; break; // Double.
+		case 'F': size = 4; aResultToken.symbol = SYM_FLOAT; break; // Float.
+
 		// default: For any unrecognized values, keep "size" and aResultToken.symbol at their defaults set earlier
 		// (for simplicity).
 		}
@@ -14349,14 +14430,14 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	if (aParamCount > 2) // Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
 		target += (ptrdiff_t)TokenToInt64(*aParam[2]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
 
-	size_t size = 4;          // Set defaults.
+	size_t size = sizeof(DWORD_PTR); // Set defaults.
 	BOOL is_integer = TRUE;   //
-	BOOL is_unsigned = FALSE; // This one was added v1.0.48 to support unsigned __int64 the way DllCall does.
+	BOOL is_unsigned = (aParamCount > 3) ? FALSE : TRUE; // This one was added v1.0.48 to support unsigned __int64 the way DllCall does.
 
 	if (aParamCount > 3) // The "type" parameter is present (which is somewhat unusual).
 	{
 		LPTSTR type = TokenToString(*aParam[3], aResultToken.buf);
-		if (ctoupper(*type) == 'U') // Unsigned; but in the case of NumPut, it doesn't matter so ignore it.
+		if (ctoupper(*type) == 'U') // Unsigned; but in the case of NumPut, it matters only for UInt64.
 		{
 			is_unsigned = TRUE;
 			++type; // Remove the first character from further consideration.
@@ -14364,26 +14445,20 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 		switch(ctoupper(*type)) // Override "size" and is_integer if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
 		{
+		case 'P': is_unsigned = TRUE; break; // Ptr.
 		case 'I':
-#ifdef _WIN64
-			if (StrChrAny(type, _T("6Pp"))) // Int64 and IntPtr (both IntPtr and Ptr are supported, since it is simple)
-#else
 			if (_tcschr(type, '6')) // Int64. It's checked this way for performance, and to avoid access violation if string is bogus and too short such as "i64".
-#endif
 				size = 8;
+			else
+				size = 4;
 			//else keep "size" at its default set earlier.
 			break;
 		case 'S': size = 2; break; // Short.
 		case 'C': size = 1; break; // Char.
 
-		case 'D': size = 8; // Double.  NO "BREAK": fall through to below.
-		case 'F': // OR FELL THROUGH FROM ABOVE.
-			is_integer = FALSE; // Override the default set earlier.
-			// In the case of 'F', leave "size" at its default set earlier.
-			break;
-#ifdef _WIN64
-		case 'P': size = 8; break;
-#endif
+		case 'D': size = 8; is_integer = FALSE; break; // Double.
+		case 'F': size = 4; is_integer = FALSE; break; // Float.
+
 		// default: For any unrecognized values, keep "size" and is_integer at their defaults set earlier
 		// (for simplicity).
 		}
@@ -14393,7 +14468,7 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 	// See comments in NumGet about the following section:
 	if (target < 1024 // Basic sanity check to catch incoming raw addresses that are zero or blank.
-		|| target_token.symbol == SYM_VAR && aResultToken.value_int64 > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+		|| target_token.symbol == SYM_VAR && aResultToken.value_int64 > (INT_PTR)right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
@@ -14437,13 +14512,13 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	ExprTokenType **aParam_end = aParam + aParamCount;
 
 	LPCVOID source_string; // This may hold an intermediate UTF-16 string in ANSI builds.
-	size_t source_length;
+	int source_length;
 	if (ctoupper(aResultToken.marker[3]) == 'P')
 	{
 		// StrPut(String, Address[, Length][, Encoding])
 		ExprTokenType &source_token = *aParam[0];
 		source_string = (LPCVOID)TokenToString(source_token, aResultToken.buf); // Safe to use aResultToken.buf since StrPut won't use TokenSetResult.
-		source_length = (source_token.symbol == SYM_VAR) ? (size_t)source_token.var->CharLength() : _tcslen((LPCTSTR)source_string);
+		source_length = (int)((source_token.symbol == SYM_VAR) ? source_token.var->CharLength() : _tcslen((LPCTSTR)source_string));
 		++aParam; // Remove the String param from further consideration.
 	}
 	else
@@ -14523,7 +14598,7 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	if (source_string) // StrPut
 	{
 		int char_count; // Either bytes or characters, depending on the target encoding.
-		aResultToken.symbol = SYM_INTEGER; // Most paths below return an integer. Some may rely on marker remaining == "".
+		aResultToken.symbol = SYM_INTEGER; // All paths below return an integer.
 
 		if (!source_length)
 		{	// Take a shortcut when source_string is empty, since some paths below might not handle it correctly.
@@ -14545,7 +14620,7 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 			{
 				// Check for sufficient buffer space.  Cast to size_t and compare unsigned values: if length is
 				// -1 it should be interpreted as a very large unsigned value, in effect bypassing this check.
-				if (source_length <= (size_t)length)
+				if (source_length <= length)
 				{
 					if (source_length == length)
 						// Exceptional case: caller doesn't want a null-terminator (or passed this length in error).
@@ -15271,25 +15346,36 @@ void BIF_OnMessage(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 }
 
 
-
+#ifdef ENABLE_REGISTERCALLBACK
 struct RCCallbackFunc // Used by BIF_RegisterCallback() and related.
 {
+#ifdef WIN32_PLATFORM
 	ULONG data1;	//E8 00 00 00
 	ULONG data2;	//00 8D 44 24
 	ULONG data3;	//08 50 FF 15
-	UINT (__stdcall **callfuncptr)(UINT*,char*);
+	UINT_PTR (CALLBACK **callfuncptr)(UINT_PTR*, char*);
 	ULONG data4;	//59 84 C4 nn
 	USHORT data5;	//FF E1
+#endif
+#ifdef _WIN64
+	UINT64 data1; // 0xfffffffff9058d48
+	UINT64 data2; // 0x9090900000000325
+	void (*stub)();
+	UINT_PTR (CALLBACK *callfuncptr)(UINT_PTR*, char*);
+#endif
 	//code ends
 	UCHAR actual_param_count; // This is the actual (not formal) number of parameters passed from the caller to the callback. Kept adjacent to the USHORT above to conserve memory due to 4-byte struct alignment.
 	bool create_new_thread; // Kept adjacent to above to conserve memory due to 4-byte struct alignment.
-	DWORD event_info; // A_EventInfo
+	EventInfoType event_info; // A_EventInfo
 	Func *func; // The UDF to be called whenever the callback's caller calls callfuncptr.
 };
 
+#ifdef _WIN64
+extern "C" void RegisterCallbackAsmStub();
+#endif
 
 
-UINT __stdcall RegisterCallbackCStub(UINT *params, char *address) // Used by BIF_RegisterCallback().
+UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used by BIF_RegisterCallback().
 // JGR: On Win32 parameters are always 4 bytes wide. The exceptions are functions which work on the FPU stack
 // (not many of those). Win32 is quite picky about the stack always being 4 byte-aligned, (I have seen only one
 // application which defied that and it was a patched ported DOS mixed mode application). The Win32 calling
@@ -15298,7 +15384,11 @@ UINT __stdcall RegisterCallbackCStub(UINT *params, char *address) // Used by BIF
 {
 	#define DEFAULT_CB_RETURN_VALUE 0  // The value returned to the callback's caller if script doesn't provide one.
 
+#ifdef WIN32_PLATFORM
 	RCCallbackFunc &cb = *((RCCallbackFunc*)(address-5)); //second instruction is 5 bytes after start (return address pushed by call)
+#else
+	RCCallbackFunc &cb = *((RCCallbackFunc*) address);
+#endif
 	Func &func = *cb.func; // For performance and convenience.
 
 	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
@@ -15374,7 +15464,7 @@ UINT __stdcall RegisterCallbackCStub(UINT *params, char *address) // Used by BIF
 	// The following section is similar to the one in ExpandExpression().  See it for detailed comments.
 	int i;
 	for (i = 0; i < cb.actual_param_count; ++i)  // For each formal parameter that has a matching actual (an earlier stage already verified that there are enough formals to cover the actuals).
-		func.mParam[i].var->Assign((DWORD)params[i]); // All parameters are passed "by value" because an earlier stage ensured there are no ByRef parameters.
+		func.mParam[i].var->Assign((UINT_PTR)params[i]); // All parameters are passed "by value" because an earlier stage ensured there are no ByRef parameters.
 	for (; i < func.mParamCount; ++i) // For each remaining formal (i.e. those that lack actuals), apply a default value (an earlier stage verified that all such parameters have a default-value available).
 	{
 		FuncParam &this_formal_param = func.mParam[i]; // For performance and convenience.
@@ -15396,7 +15486,7 @@ UINT __stdcall RegisterCallbackCStub(UINT *params, char *address) // Used by BIF
 	ExprTokenType result_token; // L31
 	func.Call(&result_token); // Call the UDF.  Call()'s own return value (e.g. EARLY_EXIT or FAIL) is ignored because it wouldn't affect the handling below.
 
-	UINT number_to_return = (UINT)TokenToInt64(result_token); // L31: For simplicity, DEFAULT_CB_RETURN_VALUE is not used - DEFAULT_CB_RETURN_VALUE is 0, which TokenToInt64 will return if the token is empty.
+	UINT_PTR number_to_return = (UINT_PTR)TokenToInt64(result_token); // L31: For simplicity, DEFAULT_CB_RETURN_VALUE is not used - DEFAULT_CB_RETURN_VALUE is 0, which TokenToInt64 will return if the token is empty.
 	if (result_token.symbol == SYM_OBJECT) // L31
 		result_token.object->Release();
 
@@ -15466,8 +15556,10 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 	else // Default to the number of mandatory formal parameters in the function's definition.
 		actual_param_count = func->mMinParams;
 
+#ifdef WIN32_PLATFORM
 	if (actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).
 		return; // Indicate failure by yielding the default result set earlier.
+#endif
 
 	// To improve callback performance, ensure there are no ByRef parameters (for simplicity: not even ones that
 	// have default values).  This avoids the need to ensure formal parameters are non-aliases each time the
@@ -15487,6 +15579,7 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 	if(!callbackfunc) return;
 	RCCallbackFunc &cb = *callbackfunc; // For convenience and possible code-size reduction.
 
+#ifdef WIN32_PLATFORM
 	cb.data1=0xE8;       // call +0 -- E8 00 00 00 00 ;get eip, stays on stack as parameter 2 for C function (char *address).
 	cb.data2=0x24448D00; // lea eax, [esp+8] -- 8D 44 24 08 ;eax points to params
 	cb.data3=0x15FF5008; // push eax -- 50 ;eax pushed on stack as parameter 1 for C stub (UINT *params)
@@ -15501,24 +15594,46 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 	//    call [ptr_xxx] ; is position independent
 	// Typically the latter is used when calling imported functions, etc., as only the pointers (import table),
 	// need to be adjusted, not the calls themselves...
-	static UINT (__stdcall *funcaddrptr)(UINT*,char*)=RegisterCallbackCStub; // Use fixed absolute address of pointer to function, instead of varying relative offset to function.
-	cb.callfuncptr=&funcaddrptr; // xxxx: Address of C stub.
+
+	static UINT_PTR (CALLBACK *funcaddrptr)(UINT_PTR*, char*) = RegisterCallbackCStub; // Use fixed absolute address of pointer to function, instead of varying relative offset to function.
+	cb.callfuncptr = &funcaddrptr; // xxxx: Address of C stub.
 
 	cb.data4=0xC48359 // pop ecx -- 59 ;return address... add esp, xx -- 83 C4 xx ;stack correct (add argument to add esp, nn for stack correction).
 		+ (StrChrAny(options, _T("Cc")) ? 0 : actual_param_count<<26);  // Recognize "C" as the "CDecl" option.
 
 	cb.data5=0xE1FF; // jmp ecx -- FF E1 ;return
+#endif
 
-	cb.event_info = (aParamCount < 4) ? (DWORD)(size_t)callbackfunc : (DWORD)TokenToInt64(*aParam[3]);
+#ifdef _WIN64
+	/* Adapted from http://www.dyncall.org/
+		lea rax, (rip)  # copy RIP (=p?) to RAX and use address in
+		jmp [rax+16]    # 'entry' (stored at RIP+16) for jump
+		nop
+		nop
+		nop
+	*/
+	cb.data1 = 0xfffffffff9058d48ULL;
+	cb.data2 = 0x9090900000000325ULL;
+	cb.stub = RegisterCallbackAsmStub;
+	cb.callfuncptr = RegisterCallbackCStub;
+#endif
+
+	cb.event_info = (aParamCount < 4) ? (EventInfoType)(size_t)callbackfunc : (EventInfoType)TokenToInt64(*aParam[3]);
 	cb.func = func;
 	cb.actual_param_count = actual_param_count;
 	cb.create_new_thread = !StrChrAny(options, _T("Ff")); // Recognize "F" as the "fast" mode that avoids creating a new thread.
+
+#ifdef _WIN64
+	// We must set execute permissions for the callback stub function.
+	DWORD dwOldProtect;
+	VirtualProtect(callbackfunc, sizeof(RCCallbackFunc), PAGE_EXECUTE_READWRITE, &dwOldProtect);
+#endif
 
 	aResultToken.symbol = SYM_INTEGER; // Override the default set earlier.
 	aResultToken.value_int64 = (__int64)callbackfunc; // Yield the callable address as the result.
 }
 
-
+#endif
 
 void BIF_StatusBar(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
@@ -17001,7 +17116,7 @@ void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 	LPTSTR str = TokenToString(*aParam[0]);
 	LPTSTR result = str; // Prior validation has ensured at least 1 param.
-	int extract_length = EXPR_TOKEN_LENGTH(aParam[0], str);
+	INT_PTR extract_length = EXPR_TOKEN_LENGTH(aParam[0], str);
 
 	TCHAR omit_list_buf[MAX_NUMBER_SIZE]; // Support SYM_INTEGER/SYM_FLOAT even though it doesn't seem likely to happen.
 	LPTSTR omit_list;
@@ -17269,7 +17384,7 @@ ResultType TokenToDoubleOrInt64(ExprTokenType &aToken)
 
 IObject *TokenToObject(ExprTokenType &aToken)
 // L31: Returns IObject* from SYM_OBJECT or SYM_VAR (where var->HasObject()), NULL for other tokens.
-// Caller if responsible for calling AddRef() if that is appropriate.
+// Caller is responsible for calling AddRef() if that is appropriate.
 {
 	if (aToken.symbol == SYM_OBJECT)
 		return aToken.object;

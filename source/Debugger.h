@@ -30,7 +30,7 @@ freely, without restriction.
 #define DEBUGGER_INITIAL_BUFFER_SIZE 2048
 
 #define DEBUGGER_XML_TAG "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-#define DEBUGGER_XML_TAG_SIZE 38
+#define DEBUGGER_XML_TAG_SIZE (_countof(DEBUGGER_XML_TAG)-1)
 
 // DBGp Error Codes
 #define DEBUGGER_E_OK					0
@@ -215,13 +215,13 @@ private:
 	class Buffer
 	{
 	public:
-		int Write(char *aData, DWORD aDataSize=MAXDWORD);
+		int Write(char *aData, size_t aDataSize=-1);
 		int WriteF(const char *aFormat, ...);
 		int WriteFileURI(const char *aPath);
 		int WriteEncodeBase64(const char *aData, size_t aDataSize, bool aSkipBufferSizeCheck = false);
 		int Expand();
-		int ExpandIfNecessary(DWORD aRequiredSize);
-		void Remove(DWORD aDataSize);
+		int ExpandIfNecessary(size_t aRequiredSize);
+		void Remove(size_t aDataSize);
 
 		Buffer() : mData(NULL), mDataSize(0), mDataUsed(0) {}
 	
@@ -280,8 +280,8 @@ private:
 	void DecodeURI(char *aUri);
 	
 	static const char *sBase64Chars;
-	static int Base64Encode(char *aBuf, const char *aInput, size_t aInputSize = -1);
-	static int Base64Decode(char *aBuf, const char *aInput, size_t aInputSize = -1);
+	static size_t Base64Encode(char *aBuf, const char *aInput, size_t aInputSize = -1);
+	static size_t Base64Decode(char *aBuf, const char *aInput, size_t aInputSize = -1);
 
 
 	// Debugger::GetNextArg

@@ -106,13 +106,13 @@ public:
 
 	DWORD Write(LPCTSTR aBuf, DWORD aBufLen = 0);
 
-	int FormatV(LPCTSTR fmt, va_list ap)
+	INT_PTR FormatV(LPCTSTR fmt, va_list ap)
 	{
 		CString str;
 		str.FormatV(fmt, ap);
-		return Write(str, str.GetLength()) / sizeof(TCHAR);
+		return Write(str, (DWORD)str.GetLength()) / sizeof(TCHAR);
 	}
-	int Format(LPCTSTR fmt, ...)
+	INT_PTR Format(LPCTSTR fmt, ...)
 	{
 		va_list ap;
 		va_start(ap, fmt);
@@ -170,7 +170,7 @@ protected:
 		}
 		if (mLength + aReadSize > TEXT_IO_BLOCK)
 			aReadSize = TEXT_IO_BLOCK - mLength;
-		DWORD dwRead = _Read(mBuffer + mLength, aReadSize);
+		DWORD dwRead = _Read(mBuffer + mLength, (DWORD)aReadSize);
 		if (dwRead) {
 			mLength += dwRead;
 			mPos = mBuffer;
@@ -202,7 +202,6 @@ protected:
 	UINT  mCodePage;
 	_locale_t mLocale;
 	
-	// Placing these fields together should reduce space wasted due to alignment:
 	bool  mEOF;
 	union
 	{

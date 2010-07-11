@@ -15,7 +15,7 @@ LPCSTR StringUTF8ToChar(LPCSTR sUTF8, CStringA &sChar, int iChars = -1, char chD
 LPCWSTR _StringDummyConvW(LPCWSTR sSrc, CStringW &sDest, int iChars = -1);
 LPCSTR _StringDummyConvA(LPCSTR sSrc, CStringA &sDest, int iChars = -1);
 
-#ifdef _UNICODE
+#ifdef UNICODE
 
 #define StringTCharToWChar	_StringDummyConvW
 #define StringTCharToUTF8	StringWCharToUTF8
@@ -79,7 +79,7 @@ public:
 	{ StringUTF8ToChar(sUTF8, *this, iChars, chDef, codepage); }
 };
 
-#ifdef _UNICODE
+#ifdef UNICODE
 #define CStringTCharFromWCharIfNeeded(s, ...) (s)
 #define CStringWCharFromTCharIfNeeded(s, ...) (s)
 #define CStringTCharFromCharIfNeeded(s, ...) CStringTCharFromChar((s), __VA_ARGS__)
@@ -137,9 +137,9 @@ void CharConvEndian(CHAR_T *pChar)
 
 // uChars = 0 ==> treat 'sSrc' as NULL-terminal
 template <typename CHAR_T>
-unsigned long StringConvEndian(CHAR_T *sSrc, unsigned long uChars = 0)
+unsigned long StringConvEndian(CHAR_T *sSrc, ULONG_PTR uChars = 0)
 {
-	unsigned long i;
+	ULONG_PTR i;
 	for (i = 0;sSrc[i] && (uChars == 0 || i < uChars);i++)
 		CharConvEndian(sSrc + i);
 	return i;

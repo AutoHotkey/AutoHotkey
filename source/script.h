@@ -284,9 +284,9 @@ inline void swap(T &v1, T &v2) {
 #define INPUTBOX_DEFAULT INT_MIN
 ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInput
 	, int aWidth, int aHeight, int aX, int aY, double aTimeout, LPTSTR aDefault);
-BOOL CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
-VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT idEvent, DWORD dwTime);
+INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
+VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 BOOL CALLBACK EnumChildFindSeqNum(HWND aWnd, LPARAM lParam);
 BOOL CALLBACK EnumChildFindPoint(HWND aWnd, LPARAM lParam);
 BOOL CALLBACK EnumChildGetControlList(HWND aWnd, LPARAM lParam);
@@ -728,9 +728,9 @@ public:
 	ActionTypeType mActionType; // What type of line this is.
 	ArgCountType mArgc; // How many arguments exist in mArg[].
 	FileIndexType mFileIndex; // Which file the line came from.  0 is the first, and it's the main script file.
+	LineNumberType mLineNumber;  // The line number in the file from which the script was loaded, for debugging.
 
 	ArgStruct *mArg; // Will be used to hold a dynamic array of dynamic Args.
-	LineNumberType mLineNumber;  // The line number in the file from which the script was loaded, for debugging.
 	AttributeType mAttribute;
 	Line *mPrevLine, *mNextLine; // The prev & next lines adjacent to this one in the linked list; NULL if none.
 	Line *mRelatedLine;  // e.g. the "else" that belongs to this "if"
@@ -1191,7 +1191,7 @@ public:
 	static DWORD SoundConvertComponentType(LPTSTR aBuf, int *aInstanceNumber = NULL)
 	{
 		LPTSTR colon_pos = _tcschr(aBuf, ':');
-		UINT length_to_check = (UINT)(colon_pos ? colon_pos - aBuf : _tcslen(aBuf));
+		size_t length_to_check = colon_pos ? colon_pos - aBuf : _tcslen(aBuf);
 		if (aInstanceNumber) // Caller wanted the below put into the output parameter.
 		{
 			if (colon_pos)
@@ -2044,8 +2044,8 @@ public:
 
 struct MsgMonitorStruct
 {
-	UINT msg;
 	Func *func;
+	UINT msg;
 	// Keep any members smaller than 4 bytes adjacent to save memory:
 	short instance_count;  // Distinct from func.mInstances because the script might have called the function explicitly.
 	short max_instances; // v1.0.47: Support more than one thread.
@@ -2778,12 +2778,14 @@ VarSizeType BIV_PtrSize(LPTSTR aBuf, LPTSTR aVarName);
 // Caller has ensured that SYM_VAR's Type() is VAR_NORMAL and that it's either not an environment
 // variable or the caller wants environment varibles treated as having zero length.
 #define EXPR_TOKEN_LENGTH(token_raw, token_as_string) \
-(token_raw->symbol == SYM_VAR && !token_raw->var->IsBinaryClip()) \
+( (token_raw->symbol == SYM_VAR && !token_raw->var->IsBinaryClip()) \
 	? token_raw->var->Length()\
-	: _tcslen(token_as_string)
+	: _tcslen(token_as_string) )
 
+#ifdef ENABLE_DLLCALL
 void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free = NULL); // L31: Contains code extracted from BIF_DllCall for reuse in ExpressionToPostfix.
 void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+#endif
 void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_InStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
@@ -2812,7 +2814,9 @@ void BIF_Exp(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 void BIF_SqrtLogLn(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 void BIF_OnMessage(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+#ifdef ENABLE_REGISTERCALLBACK
 void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+#endif
 
 void BIF_StatusBar(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
@@ -2851,6 +2855,10 @@ void BIF_ObjNewEnum(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aP
 #ifdef CONFIG_EXPERIMENTAL
 // Advanced file IO interfaces
 void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ComObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ComObjGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ComObjConnect(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 #endif
 
 

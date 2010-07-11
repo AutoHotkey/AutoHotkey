@@ -141,7 +141,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					// Start off by looking for the first deref.
 					deref = (DerefType *)this_token.var; // MUST BE DONE PRIOR TO OVERWRITING MARKER/UNION BELOW.
 					cp = this_token.buf; // Start at the begining of this arg's text.
-					int var_name_length = 0;
+					size_t var_name_length = 0;
 
 					this_token.marker = _T("");         // Set default in case of early goto.  Must be done after above.
 					this_token.symbol = SYM_STRING; //
@@ -256,6 +256,20 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					if (this_token.var->mBIV == BIV_True_False) // v1.0.48.02: True/False often used with function calls, so seems worthwhile for performance.
 					{
 						this_token.value_int64 = (this_token.var->mName[4] == '\0'); // True's 5th character is the string terminator, unlike Fals[e].
+						this_token.symbol = SYM_INTEGER;
+						goto push_this_token;
+					}
+#ifdef UNICODE
+					if (this_token.var->mBIV == BIV_IsUnicode) // fincs: A_IsUnicode was added to speed up ANSI/Unicode compatible code.
+					{
+						this_token.value_int64 = 1;
+						this_token.symbol = SYM_INTEGER;
+						goto push_this_token;
+					}
+#endif
+					if (this_token.var->mBIV == BIV_PtrSize) // fincs: A_PtrSize was added to speed up 32bit/64bit compatible code.
+					{
+						this_token.value_int64 = sizeof(void*);
 						this_token.symbol = SYM_INTEGER;
 						goto push_this_token;
 					}

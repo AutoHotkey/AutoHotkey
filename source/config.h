@@ -2,6 +2,17 @@
 // This file defines some macros for compile-time configrations.
 // (Like many projects on *nix that using autotools.)
 
+#if defined(WIN32) && !defined(_WIN64)
+#define WIN32_PLATFORM
+#endif
+
+#ifdef _MSC_VER
+	#if defined(WIN32_PLATFORM) || defined(_WIN64)
+	#define ENABLE_DLLCALL
+	#define ENABLE_REGISTERCALLBACK
+	#endif
+#endif
+
 #if !defined(_MBCS) && !defined(_UNICODE) && !defined(UNICODE) // If not set in project settings...
 
 // L: Comment out the next line to enable UNICODE:

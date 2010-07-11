@@ -13,56 +13,112 @@
       <Configuration>Debug</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug(mbcs)|Win32">
       <Configuration>Debug(mbcs)</Configuration>
       <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug(mbcs)|x64">
+      <Configuration>Debug(mbcs)</Configuration>
+      <Platform>x64</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="Release|Win32">
       <Configuration>Release</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Release(mbcs)|Win32">
       <Configuration>Release(mbcs)</Configuration>
       <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release(mbcs)|x64">
+      <Configuration>Release(mbcs)</Configuration>
+      <Platform>x64</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="Release(minimal)|Win32">
       <Configuration>Release(minimal)</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Release(minimal)|x64">
+      <Configuration>Release(minimal)</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Self-contained|Win32">
       <Configuration>Self-contained</Configuration>
       <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Self-contained|x64">
+      <Configuration>Self-contained</Configuration>
+      <Platform>x64</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="Self-contained(mbcs)|Win32">
       <Configuration>Self-contained(mbcs)</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Self-contained(mbcs)|x64">
+      <Configuration>Self-contained(mbcs)</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Self-contained(minimal)|Win32">
       <Configuration>Self-contained(minimal)</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Self-contained(minimal)|x64">
+      <Configuration>Self-contained(minimal)</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
   </ItemGroup>
+  <!-- x64 toolset: must precede the import below -->
+  <PropertyGroup Label="Configuration" Condition="'$(Platform)'=='x64'">
+    <PlatformToolset>Windows7.1SDK</PlatformToolset>
+  </PropertyGroup>
   <!-- import common config -->
   <Import Project="Config.vcxproj" />
-  <!-- platform: win32 -->
-  <ItemDefinitionGroup Condition="'$(Platform)'=='Win32'">
+  <!-- platform: win32 & x64 (common) -->
+  <ItemDefinitionGroup Condition="'$(Platform)'=='Win32' OR '$(Platform)'=='x64'">
     <ClCompile>
       <PreprocessorDefinitions>WIN32;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>wsock32.lib;winmm.lib;version.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <StackReserveSize>4194304</StackReserveSize>
       <TerminalServerAware>false</TerminalServerAware>
       <DataExecutionPrevention>false</DataExecutionPrevention>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
     </Link>
   </ItemDefinitionGroup>
+  <!-- platform: win32 -->
+  <ItemDefinitionGroup Condition="'$(Platform)'=='Win32'">
+    <Link>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- platform: x64 -->
+  <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>_WIN64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <TargetMachine>MachineX64</TargetMachine>
+      <AdditionalDependencies>$(ProjectDir)\source\libx64call\x64call.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
   <!-- paths and basic settings -->
   <PropertyGroup>
-    <IntDir>temp\$(Configuration)\</IntDir>
-    <OutDir>bin\Release\</OutDir>
-    <OutDir Condition="$(ConfigDebug)">bin\Debug\</OutDir>
-    <OutDir Condition="$(ConfigMinSize)">bin\Minimal\</OutDir>
-    <OutDir Condition="'$(CharacterSet)'=='Unicode' OR '$(CharacterSet)'=='MultiByte'">$(OutDir)$(CharacterSet)\</OutDir>
+    <IntDir>temp\$(Platform)\$(Configuration)\</IntDir>
+    <BinDir>bin\$(Platform)</BinDir>
+    <BinDir Condition="'$(CharacterSet)'=='Unicode'">$(BinDir)w</BinDir>
+    <BinDir Condition="'$(CharacterSet)'=='MultiByte'">$(BinDir)a</BinDir>
+    <OutDir>$(BinDir)\</OutDir>
+    <OutDir Condition="$(ConfigDebug)">$(BinDir)_debug\</OutDir>
+    <OutDir Condition="$(ConfigMinSize)">$(BinDir)_minimal\</OutDir>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -70,9 +126,6 @@
     </ClCompile>
     <Link>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
-      <TargetMachine>MachineX86</TargetMachine>
-      <StackReserveSize>4194304</StackReserveSize>
-      <AdditionalDependencies>wsock32.lib;winmm.lib;version.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <AdditionalManifestFiles>source\resources\AutoHotkey.exe.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
@@ -100,30 +153,48 @@
   </ItemDefinitionGroup>
   <!-- upx compression: Release -->
   <PropertyGroup>
-    <UpxPath Condition="'$(UpxPath)'=='' AND exists('upx.exe')">upx.exe</UpxPath>
-    <UpxPath Condition="'$(UpxPath)'=='' AND exists('..\upx.exe')">..\upx.exe</UpxPath>
+    <PackerName>upx</PackerName>
+    <PackerName Condition="'$(Platform)'=='x64'">mpress</PackerName>
+    <PackerPath Condition="'$(PackerPath)'=='' AND exists('$(PackerName).exe')">$(PackerName).exe</PackerPath>
+    <PackerPath Condition="'$(PackerPath)'=='' AND exists('..\$(PackerName).exe')">..\$(PackerName).exe</PackerPath>
+    <PackerArgs Condition="'$(PackerArgs)'=='' AND '$(PackerName)'=='upx'"> --best --no-lzma --filter=73 --compress-icons=0</PackerArgs>
+    <PackerArgs Condition="'$(PackerArgs)'=='' AND '$(PackerName)'=='mpress'"> -x</PackerArgs>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="$(ConfigRelease)">
     <PostBuildEvent>
-      <Command>echo upx.exe disabled or not found, skipping compression</Command>
-      <Command Condition="exists('$(UpxPath)')">$(UpxPath) --best --no-lzma --filter=73 --compress-icons=0 "$(TargetPath)" &amp; exit 0</Command>
+      <Command>echo $(PackerName).exe disabled or not found, skipping compression</Command>
+      <Command Condition="exists('$(PackerPath)')">$(PackerPath)$(PackerArgs) "$(TargetPath)" &amp; exit 0</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <!-- Visual C++ 2010 should place any newly created properties in these groups -->
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|x64'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release(minimal)|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release(minimal)|x64'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|x64'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|x64'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(minimal)|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(minimal)|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(minimal)|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(minimal)|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(minimal)|Win32'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(minimal)|x64'" />
   <!-- FILES -->
   <ItemGroup>
     <ClCompile Include="source\application.cpp" />
@@ -139,6 +210,7 @@
     <ClCompile Include="source\script.cpp" />
     <ClCompile Include="source\script2.cpp" />
     <ClCompile Include="source\script_autoit.cpp" />
+    <ClCompile Include="source\script_com.cpp" />
     <ClCompile Include="source\script_expression.cpp" />
     <ClCompile Include="source\script_gui.cpp" />
     <ClCompile Include="source\script_menu.cpp" />
@@ -175,6 +247,7 @@
     <ClInclude Include="source\qmath.h" />
     <ClInclude Include="source\resources\resource.h" />
     <ClInclude Include="source\script.h" />
+    <ClInclude Include="source\script_com.h" />
     <ClInclude Include="source\script_object.h" />
     <ClInclude Include="source\SimpleHeap.h" />
     <ClInclude Include="source\stdafx.h" />
@@ -186,6 +259,18 @@
     <ClInclude Include="source\WinGroup.h" />
   </ItemGroup>
   <ItemGroup>
+    <CustomBuild Include="source\libx64call\x64call.asm">
+      <ExcludedFromBuild Condition="'$(Platform)'=='Win32'">true</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <Command>cd %(RootDir)%(Directory)
+ml64 /c x64call.asm x64stub.asm &amp;&amp; lib /out:x64call.lib x64call.obj x64stub.obj</Command>
+      <Message>Assembling x64 DllCall/RegisterCallback helpers</Message>
+      <Outputs>%(RootDir)%(Directory)x64call.lib</Outputs>
+      <AdditionalInputs>%(RootDir)%(Directory)x64stub.asm;%(AdditionalInputs)</AdditionalInputs>
+    </CustomBuild>
+    <None Include="source\libx64call\x64stub.asm">
+      <ExcludedFromBuild Condition="'$(Platform)'=='Win32'">true</ExcludedFromBuild>
+    </None>
     <None Include="source\resources\AutoHotkey.exe.manifest" />
     <None Include="source\resources\icon_filetype.ico" />
     <None Include="source\resources\icon_main.ico" />
@@ -194,7 +279,6 @@
     <None Include="source\resources\icon_suspend.ico" />
     <None Include="source\resources\icon_tray_win9x.ico" />
     <None Include="source\resources\icon_tray_win9x_suspend.ico" />
-    <None Include="source\misc\function_order_for_linker_optimization.txt" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="source\resources\AutoHotkey.rc" />

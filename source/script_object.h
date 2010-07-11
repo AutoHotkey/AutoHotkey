@@ -55,6 +55,18 @@ public:
 	// Delete(), especially with a chain of derived types.
 	virtual ~ObjectBase() {}
 };	
+
+
+//
+// EnumBase - Base class for enumerator objects following standard syntax.
+//
+
+class EnumBase : public ObjectBase
+{
+public:
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	virtual int Next(Var *aOutputVar1, Var *aOutputVar2) = 0;
+};
 	
 
 //
@@ -64,7 +76,8 @@ public:
 class Object : public ObjectBase
 {
 protected:
-	typedef INT_PTR IntKeyType;
+	typedef INT_PTR IntKeyType; // Same size as the other union members.
+	typedef INT_PTR IndexType; // Type of index for the internal array.  Must be signed for FindKey to work correctly.
 	union KeyType // Which of its members is used depends on the field's position in the mFields array.
 	{
 		LPTSTR s;
@@ -86,7 +99,7 @@ protected:
 		KeyType key;
 		SymbolType symbol;
 		
-		inline int CompareKey(IntKeyType val) { return val - key.i; }  // Used by both int and object since they are stored separately.
+		inline IntKeyType CompareKey(IntKeyType val) { return val - key.i; }  // Used by both int and object since they are stored separately.
 		inline int CompareKey(LPTSTR val) { return _tcsicmp(val, key.s); }
 		
 		bool Assign(LPTSTR str, size_t len = -1, bool exact_size = false);
@@ -95,19 +108,19 @@ protected:
 		void Free();
 	};
 
-	class Enumerator : public ObjectBase
+	class Enumerator : public EnumBase
 	{
 		Object *mObject;
-		int mOffset;
+		IndexType mOffset;
 	public:
 		Enumerator(Object *aObject) : mObject(aObject), mOffset(-1) { mObject->AddRef(); }
 		~Enumerator() { mObject->Release(); }
-		ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+		int Next(Var *aKey, Var *aVal);
 	};
 	
 	IObject *mBase;
 	FieldType *mFields;
-	int mFieldCount, mFieldCountMax; // Current/max number of fields.
+	IndexType mFieldCount, mFieldCountMax; // Current/max number of fields.
 
 	// Holds the index of first key of a given type within mFields.  Must be in the order: int, object, string.
 	// Compared to storing the key-type with each key-value pair, this approach saves 4 bytes per key (excluding
@@ -116,8 +129,8 @@ protected:
 	// mKeyOffsetObject should be set to mKeyOffsetInt + the number of int keys.
 	// mKeyOffsetString should be set to mKeyOffsetObject + the number of object keys.
 	// mKeyOffsetObject-1, mKeyOffsetString-1 and mFieldCount-1 indicate the last index of each prior type.
-	static const int mKeyOffsetInt = 0;
-	int mKeyOffsetObject, mKeyOffsetString;
+	static const IndexType mKeyOffsetInt = 0;
+	IndexType mKeyOffsetObject, mKeyOffsetString;
 
 	Object()
 		: mBase(NULL)
@@ -129,13 +142,13 @@ protected:
 	~Object();
 
 	template<typename T>
-	FieldType *FindField(T val, int left, int right, int &insert_pos);
-	FieldType *FindField(SymbolType key_type, KeyType key, int &insert_pos);	
-	FieldType *FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, int &insert_pos);
+	FieldType *FindField(T val, IndexType left, IndexType right, IndexType &insert_pos);
+	FieldType *FindField(SymbolType key_type, KeyType key, IndexType &insert_pos);	
+	FieldType *FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos);
 	
-	FieldType *Insert(SymbolType key_type, KeyType key, int at);
+	FieldType *Insert(SymbolType key_type, KeyType key, IndexType at);
 
-	bool SetInternalCapacity(int new_capacity);
+	bool SetInternalCapacity(IndexType new_capacity);
 	bool Expand()
 	// Expands mFields by at least one field.
 	{

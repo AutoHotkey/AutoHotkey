@@ -273,7 +273,7 @@ bool IsWindowHung(HWND aWnd);
 // may sometimes (randomly) take a long time to respond to the WM_GETTEXT message.
 // 5000 seems about the largest value that should ever be needed since this is what
 // Windows uses as the cutoff for determining if a window has become "unresponsive":
-int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf = NULL, int aBufSize = 0, UINT aTimeout = 5000);
+int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf = NULL, INT_PTR aBufSize = 0, UINT aTimeout = 5000);
 void SetForegroundLockTimeout();
 
 

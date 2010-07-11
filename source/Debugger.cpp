@@ -347,7 +347,7 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 		setting = "0";
 	// Not supported: max_children, max_depth - debugger must support objects first.
 	else if (!strcmp(feature_name, "max_data"))
-		setting = _ultoa(mMaxPropertyData, (char*)_alloca(MAX_NUMBER_SIZE), 10);
+		setting = Exp32or64(_ultoa,_ui64toa)(mMaxPropertyData, (char*)_alloca(MAX_NUMBER_SIZE), 10);
 	// TODO: STOPPING state for retrieving variable values, etc. after the script finishes, then implement supports_postmortem feature name. Requires debugger client support.
 	else
 	{
@@ -1034,7 +1034,7 @@ int Debugger::WriteVarSizeAndData(Var *aVar, VarSizeType aMaxData)
 #else
 	// Convert to UTF-8, using mResponseBuf temporarily.
 	value = mResponseBuf.mData + mResponseBuf.mDataSize - space_needed;
-	value_size = WideCharToUTF8(wide_value, value, space_needed) - 1;
+	value_size = WideCharToUTF8(wide_value, value, (int)space_needed) - 1;
 #endif
 
 	// Now that we know the actual length for sure, write the end of the size attribute.
@@ -1237,7 +1237,7 @@ DEBUGGER_COMMAND(Debugger::property_set)
 	if (success)
 	{
 #ifndef CONFIG_DBG_UTF16_SPEED_HACKS
-		CStringTCharFromUTF8 new_value_t(new_value, Base64Decode(new_value, new_value));
+		CStringTCharFromUTF8 new_value_t(new_value, (int)Base64Decode(new_value, new_value));
 		success = var->Assign((LPTSTR) new_value_t.GetString(), new_value_t.GetLength());
 #else
 		int new_size = Base64Decode(new_value, new_value) / sizeof(TCHAR);
@@ -1546,7 +1546,7 @@ int Debugger::ReceiveCommand(int *aCommandLength)
 			return err;
 
 		// Receive and append data.
-		int bytes_received = recv(mSocket, mCommandBuf.mData + mCommandBuf.mDataUsed, mCommandBuf.mDataSize - mCommandBuf.mDataUsed, 0);
+		int bytes_received = recv(mSocket, mCommandBuf.mData + mCommandBuf.mDataUsed, (int)(mCommandBuf.mDataSize - mCommandBuf.mDataUsed), 0);
 
 		if (bytes_received == SOCKET_ERROR)
 			return FatalError(DEBUGGER_E_INTERNAL_ERROR);
@@ -1565,7 +1565,7 @@ int Debugger::SendResponse()
 	char response_header[DEBUGGER_RESPONSE_OVERHEAD];
 	
 	// Each message is prepended with a stringified integer representing the length of the XML data packet.
-	_itoa(mResponseBuf.mDataUsed + DEBUGGER_XML_TAG_SIZE, response_header, 10);
+	Exp32or64(_itoa,_i64toa)(mResponseBuf.mDataUsed + DEBUGGER_XML_TAG_SIZE, response_header, 10);
 
 	// The length and XML data are separated by a NULL byte.
 	char *buf = strchr(response_header, '\0') + 1;
@@ -1574,7 +1574,7 @@ int Debugger::SendResponse()
 	buf += sprintf(buf, "%s", DEBUGGER_XML_TAG);
 
 	// Send the response header.
-	if (SOCKET_ERROR == send(mSocket, response_header, buf - response_header, 0))
+	if (SOCKET_ERROR == send(mSocket, response_header, (int)(buf - response_header), 0))
 		return FatalError(DEBUGGER_E_INTERNAL_ERROR);
 
 	// The messages sent by the debugger engine must always be NULL terminated.
@@ -1584,7 +1584,7 @@ int Debugger::SendResponse()
 	}
 
 	// Send the message body.
-	if (SOCKET_ERROR == send(mSocket, mResponseBuf.mData, mResponseBuf.mDataUsed, 0))
+	if (SOCKET_ERROR == send(mSocket, mResponseBuf.mData, (int)mResponseBuf.mDataUsed, 0))
 		return FatalError(DEBUGGER_E_INTERNAL_ERROR);
 
 	mResponseBuf.mDataUsed = 0;
@@ -1619,7 +1619,7 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 		
 		if (err == 0)
 		{
-			err = connect(s, res->ai_addr, res->ai_addrlen);
+			err = connect(s, res->ai_addr, (int)res->ai_addrlen);
 			
 			freeaddrinfo(res);
 			
@@ -1781,9 +1781,10 @@ const char *Debugger::sBase64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop
 #define BASE64_CHAR_TO_BINARY(q) (strchr(sBase64Chars, q)-sBase64Chars)
 
 // Encode base 64 data.
-int Debugger::Base64Encode(char *aBuf, const char *aInput, size_t aInputSize/* = -1*/)
+size_t Debugger::Base64Encode(char *aBuf, const char *aInput, size_t aInputSize/* = -1*/)
 {
-	int buffer, i, len = 0;
+	UINT_PTR buffer;
+	size_t i, len = 0;
 
 	if (aInputSize == -1) // Direct comparison since aInputSize is unsigned.
 		aInputSize = strlen(aInput);
@@ -1817,9 +1818,10 @@ int Debugger::Base64Encode(char *aBuf, const char *aInput, size_t aInputSize/* =
 }
 
 // Decode base 64 data. aBuf and aInput may point to the same buffer.
-int Debugger::Base64Decode(char *aBuf, const char *aInput, size_t aInputSize/* = -1*/)
+size_t Debugger::Base64Decode(char *aBuf, const char *aInput, size_t aInputSize/* = -1*/)
 {
-	int buffer, i, len = 0;
+	UINT_PTR buffer;
+	size_t i, len = 0;
 
 	if (aInputSize == -1) // Direct comparison since aInputSize is unsigned.
 		aInputSize = strlen(aInput);
@@ -1835,9 +1837,9 @@ int Debugger::Base64Decode(char *aBuf, const char *aInput, size_t aInputSize/* =
 				| BASE64_CHAR_TO_BINARY(aInput[3]);
 		aInput += 4;
 
-		aBuf[len + 0] = buffer >> 16;
-		aBuf[len + 1] = buffer >> 8;
-		aBuf[len + 2] = buffer;
+		aBuf[len + 0] = (buffer >> 16) & 255;
+		aBuf[len + 1] = (buffer >> 8) & 255;
+		aBuf[len + 2] = buffer & 255;
 		len += 3;
 	}
 
@@ -1849,9 +1851,9 @@ int Debugger::Base64Decode(char *aBuf, const char *aInput, size_t aInputSize/* =
 			buffer |= BASE64_CHAR_TO_BINARY(aInput[2]) << 6;
 		// aInput not incremented as it is not used below.
 
-		aBuf[len++] = buffer >> 16;
+		aBuf[len++] = (buffer >> 16) & 255;
 		if (i > 2)
-			aBuf[len++] = buffer >> 8;
+			aBuf[len++] = (buffer >> 8) & 255;
 	}
 	aBuf[len] = '\0';
 	return len;
@@ -1862,11 +1864,11 @@ int Debugger::Base64Decode(char *aBuf, const char *aInput, size_t aInputSize/* =
 //
 
 // Write data into the buffer, expanding it as necessary.
-int Debugger::Buffer::Write(char *aData, DWORD aDataSize)
+int Debugger::Buffer::Write(char *aData, size_t aDataSize)
 {
 	int err;
 
-	if (aDataSize == MAXDWORD)
+	if (aDataSize == -1)
 		aDataSize = strlen(aData);
 
 	if (aDataSize == 0)
@@ -1884,7 +1886,7 @@ int Debugger::Buffer::Write(char *aData, DWORD aDataSize)
 int Debugger::Buffer::WriteF(const char *aFormat, ...)
 {
 	int i, err;
-	DWORD len;
+	size_t len;
 	char c;
 	const char *format_ptr, *s, *param_ptr, *entity;
 	char number_buf[MAX_NUMBER_SIZE];
@@ -2093,9 +2095,9 @@ int Debugger::Buffer::Expand()
 }
 
 // Expand as necessary to meet a minimum required size.
-int Debugger::Buffer::ExpandIfNecessary(DWORD aRequiredSize)
+int Debugger::Buffer::ExpandIfNecessary(size_t aRequiredSize)
 {
-	DWORD new_size;
+	size_t new_size;
 	for (new_size = mDataSize ? mDataSize : DEBUGGER_INITIAL_BUFFER_SIZE
 		; new_size < aRequiredSize
 		; new_size *= 2);
@@ -2116,7 +2118,7 @@ int Debugger::Buffer::ExpandIfNecessary(DWORD aRequiredSize)
 }
 
 // Remove data from the front of the buffer (i.e. after it is processed).
-void Debugger::Buffer::Remove(DWORD aDataSize)
+void Debugger::Buffer::Remove(size_t aDataSize)
 {
 	// Move remaining data to the front of the buffer.
 	if (aDataSize < mDataUsed)

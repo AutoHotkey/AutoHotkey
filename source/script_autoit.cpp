@@ -426,7 +426,7 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 
 	HWND immediate_parent;  // Possibly not the same as target_window since controls can themselves have children.
 	int control_id, control_index;
-	DWORD dwResult, new_button_state;
+	DWORD_PTR dwResult, new_button_state;
 	UINT msg, x_msg, y_msg;
 	RECT rect;
 	LPARAM lparam;
@@ -657,7 +657,7 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 			return OK;  // Must be ComboBox or ListBox.  Let ErrorLevel tell the story.
 		if (msg == LB_FINDSTRING) // Multi-select ListBox (LB_SELECTSTRING is not supported by these).
 		{
-			DWORD item_index;
+			DWORD_PTR item_index;
 			if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &item_index)
 				|| item_index == LB_ERR
 				|| !SendMessageTimeout(control_window, LB_SETSEL, TRUE, item_index, SMTO_ABORTIFHUNG, 2000, &dwResult)
@@ -713,7 +713,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 	if (!control_window)
 		return output_var.Assign();  // Let ErrorLevel tell the story.
 
-	DWORD dwResult, index, length, item_length, start, end, u, item_count;
+	DWORD_PTR dwResult, index, length, item_length, start, end, u, item_count;
 	UINT msg, x_msg, y_msg;
 	int control_index;
 	TCHAR *cp, *dyn_buf, temp_buf[32];
@@ -880,7 +880,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 
 	case CONTROLGET_CMD_CURRENTCOL:
 	{
-		DWORD line_number;
+		DWORD_PTR line_number;
 		// The dwResult from the first msg below is not useful and is not checked.
 		if (   !SendMessageTimeout(control_window, EM_GETSEL, (WPARAM)&start, (LPARAM)&end, SMTO_ABORTIFHUNG, 2000, &dwResult)
 			|| !SendMessageTimeout(control_window, EM_LINEFROMCHAR, (WPARAM)start, 0, SMTO_ABORTIFHUNG, 2000, &line_number)   )
@@ -892,7 +892,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 		}
 		// Au3: Decrement the character index until the row changes.  Difference between this
 		// char index and original is the column:
-		DWORD start_orig = start;  // Au3: the character index
+		DWORD_PTR start_orig = start;  // Au3: the character index
 		for (;;)
 		{
 			if (!SendMessageTimeout(control_window, EM_LINEFROMCHAR, (WPARAM)start, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
@@ -2060,7 +2060,7 @@ BOOL Util_ShutdownHandler(HWND hwnd, DWORD lParam)
 
 void Util_WinKill(HWND hWnd)
 {
-	DWORD dwResult;
+	DWORD_PTR dwResult;
 	// Use WM_CLOSE vs. SC_CLOSE in this case, since the target window is slightly more likely to
 	// respond to that:
 	if (!SendMessageTimeout(hWnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG, 500, &dwResult)) // Wait up to 500ms.

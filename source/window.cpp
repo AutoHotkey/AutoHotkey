@@ -789,7 +789,7 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR
 	bool is_win9x = g_os.IsWin9x();
 	LPTSTR local_buf = is_win9x ? (LPTSTR)remote_buf : buf_for_nt; // Local is the same as remote for Win9x.
 
-	DWORD result, start_time;
+	DWORD_PTR result, start_time;
 	--aPartNumber; // Convert to zero-based for use below.
 
 	// Always do the first iteration so that at least one check is done.  Also,  start_time is initialized
@@ -1323,7 +1323,7 @@ bool IsWindowHung(HWND aWnd)
 	// heavy operations.  Since this method is only used as a fallback method now,
 	// it seems best to give them the full 5000ms default, which is what (all?) Windows
 	// OSes use as a cutoff to determine whether a window is "not responding":
-	DWORD dwResult;
+	DWORD_PTR dwResult;
 	#define Slow_IsWindowHung !SendMessageTimeout(aWnd, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 5000, &dwResult)
 
 	// NEW, FASTER METHOD:
@@ -1368,7 +1368,7 @@ bool IsWindowHung(HWND aWnd)
 
 
 
-int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf, int aBufSize, UINT aTimeout)
+int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf, INT_PTR aBufSize, UINT aTimeout)
 // This function must be kept thread-safe because it may be called (indirectly) by hook thread too.
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // Returns the length of what would be copied (not including the zero terminator).
@@ -1414,7 +1414,7 @@ int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf, int aBufSize, UINT aTimeout)
 		// be unresponsive for 5 seconds or so (i.e. it keeps track of such things
 		// on an ongoing basis, at least XP seems to).
 		result = SendMessageTimeout(aWnd, WM_GETTEXT, (WPARAM)aBufSize, (LPARAM)aBuf
-			, SMTO_ABORTIFHUNG, aTimeout, (LPDWORD)&length);
+			, SMTO_ABORTIFHUNG, aTimeout, (PDWORD_PTR) &length);
 		if (length >= aBufSize) // Happens sometimes (at least ==aBufSize) for apps that wrongly include the terminator in the reported length.
 			length = aBufSize - 1; // Override.
 
@@ -1448,7 +1448,7 @@ int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf, int aBufSize, UINT aTimeout)
 	}
 	else
 	{
-		result = SendMessageTimeout(aWnd, WM_GETTEXTLENGTH, 0, 0, SMTO_ABORTIFHUNG, aTimeout, (LPDWORD)&length);
+		result = SendMessageTimeout(aWnd, WM_GETTEXTLENGTH, 0, 0, SMTO_ABORTIFHUNG, aTimeout, (PDWORD_PTR)&length);
 		// The following can be temporarily uncommented out to demonstrate how some apps such as AIM's
 		// write-an-instant-message window have some controls that respond to WM_GETTEXTLENGTH with a
 		// length that's completely different than the length with which they respond to WM_GETTEXT.

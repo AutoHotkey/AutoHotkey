@@ -327,7 +327,7 @@ is automated on Unix systems via the "configure" command. */
 #if LINK_SIZE == 2
 
 #define PUT(a,n,d)   \
-  (a[n] = (d) >> 8), \
+  (a[n] = ((d) >> 8) & 255), \
   (a[(n)+1] = (d) & 255)
 
 #define GET(a,n) \
@@ -990,11 +990,11 @@ call within the pattern. */
 
 typedef struct recursion_info {
   struct recursion_info *prevrec; /* Previous recursion record (or NULL) */
-  int group_num;                /* Number of group that was called */
   const uschar *after_call;     /* "Return value": points after the call in the expr */
   USPTR save_start;             /* Old value of mstart */
   int *offset_save;             /* Pointer to start of saved offsets */
   int saved_max;                /* Number of saved offsets */
+  int group_num;                /* Number of group that was called */
 } recursion_info;
 
 /* Structure for building a chain of data for holding the values of the subject

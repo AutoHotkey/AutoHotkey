@@ -13,6 +13,10 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
+    <Filter Include="Assembly Files">
+      <UniqueIdentifier>{ecb1e7be-5c45-4dfc-9f18-09b5a4ea18e1}</UniqueIdentifier>
+      <Extensions>asm</Extensions>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="source\application.cpp">
@@ -94,6 +98,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="source\WinGroup.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\script_com.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -179,9 +186,11 @@
     <ClInclude Include="source\WinGroup.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="source\script_com.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="source\misc\function_order_for_linker_optimization.txt" />
     <None Include="source\resources\AutoHotkey.exe.manifest">
       <Filter>Resource Files</Filter>
     </None>
@@ -206,10 +215,18 @@
     <None Include="source\resources\icon_tray_win9x_suspend.ico">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="source\libx64call\x64stub.asm">
+      <Filter>Assembly Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="source\resources\AutoHotkey.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="source\libx64call\x64call.asm">
+      <Filter>Assembly Files</Filter>
+    </CustomBuild>
   </ItemGroup>
 </Project>

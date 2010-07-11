@@ -134,7 +134,7 @@ public:
 	{ return IsUpper(c) ? (char) tolower((unsigned char) c) : c; }
 	inline static char ToUpper(char c)
 	{ return IsLower(c) ? (char) toupper((unsigned char) c) : c; }
-	inline static unsigned long GetEnvironmentVariable(const char *lpName, char *lpBuffer, unsigned long nSize)
+	inline static DWORD GetEnvironmentVariable(const char *lpName, char *lpBuffer, DWORD nSize)
 #ifdef _WIN32
 	{ return ::GetEnvironmentVariableA(lpName, lpBuffer, nSize); }
 #else
@@ -180,7 +180,7 @@ public:
 	{ return IsUpper(c) ? (wchar_t) towlower((wint_t) c) : c; }
 	inline static wchar_t ToUpper(wchar_t c)
 	{ return IsLower(c) ? (wchar_t) towupper((wint_t) c) : c; }
-	inline static unsigned long GetEnvironmentVariable(const wchar_t *lpName, wchar_t *lpBuffer, unsigned long nSize)
+	inline static DWORD GetEnvironmentVariable(const wchar_t *lpName, wchar_t *lpBuffer, DWORD nSize)
 #ifdef _WIN32
 	{ return ::GetEnvironmentVariableW(lpName, lpBuffer, nSize); }
 #else
@@ -210,7 +210,7 @@ class CKuStringT
 {
 	typedef T * STRT;
 	typedef const T * CSTRT;
-	typedef int SIZET;
+	typedef INT_PTR SIZET;
 public:
 	inline static SIZET StringLength(CSTRT str)
 	{
@@ -749,7 +749,7 @@ public:
 	CKuStringT& GetEnvironmentVariable(CSTRT sName)
 	{
 		ASSERT(sName);
-		SIZET len = U::GetEnvironmentVariable(sName, NULL, 0);
+		DWORD len = U::GetEnvironmentVariable(sName, NULL, 0);
 		if (len == 0)
 			Empty();
 		else {

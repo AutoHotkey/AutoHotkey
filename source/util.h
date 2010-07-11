@@ -509,12 +509,11 @@ inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
 }
 
 #ifdef _WIN64
-// Not currently used:
 inline LPTSTR UTOA64(unsigned __int64 value, LPTSTR buf) 
 {
 	if (g->FormatInt == 'D')
 	{
-		return _ultot(value, buf, 10);
+		return _ui64tot(value, buf, 10);
 	}
 	// g->FormatInt == 'h' or 'H'
 	*buf = '0';
@@ -560,6 +559,12 @@ inline LPTSTR UTOA64(unsigned __int64 value, LPTSTR buf)
 // returns 0 on failure, but failure occurs only when parameter/flag is invalid, which should never happen in
 // this case.
 #define lstrcmpni(str1, len1, str2, len2) (CompareString(LOCALE_USER_DEFAULT, NORM_IGNORECASE, str1, (int)(len1), str2, (int)(len2)) - 2) // -2 for maintainability
+
+#ifndef _WIN64
+#define Exp32or64(a,b) (a)
+#else
+#define Exp32or64(a,b) (b)
+#endif
 
 // The following macros simplify and make consistent the calls to MultiByteToWideChar().
 // MSDN implies that passing -1 for cbMultiByte is the most typical and secure usage because it ensures
@@ -676,14 +681,14 @@ int sntprintf(LPTSTR aBuf, int aBufSize, LPCTSTR aFormat, ...);
 int sntprintfcat(LPTSTR aBuf, int aBufSize, LPCTSTR aFormat, ...);
 // Not currently used by anything, so commented out to possibly reduce code size:
 //int tcslcmp (LPTSTR aBuf1, LPTSTR aBuf2, UINT aLength1 = UINT_MAX, UINT aLength2 = UINT_MAX);
-int tcslicmp(LPTSTR aBuf1, LPTSTR aBuf2, UINT aLength1 = UINT_MAX, UINT aLength2 = UINT_MAX);
+int tcslicmp(LPTSTR aBuf1, LPTSTR aBuf2, size_t aLength1 = -1, size_t aLength2 = -1);
 LPTSTR tcsrstr(LPTSTR aStr, LPCTSTR aPattern, StringCaseSenseType aStringCaseSense, int aOccurrence = 1);
 LPTSTR lstrcasestr(LPCTSTR phaystack, LPCTSTR pneedle);
 LPTSTR tcscasestr (LPCTSTR phaystack, LPCTSTR pneedle);
 UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType aStringCaseSense
 	, UINT aLimit = UINT_MAX, size_t aSizeLimit = -1, LPTSTR *aDest = NULL, size_t *aHaystackLength = NULL);
-int PredictReplacementSize(int aLengthDelta, int aReplacementCount, int aLimit, int aHaystackLength
-	, int aCurrentLength, int aEndOffsetOfCurrMatch);
+size_t PredictReplacementSize(ptrdiff_t aLengthDelta, int aReplacementCount, int aLimit, size_t aHaystackLength
+	, size_t aCurrentLength, size_t aEndOffsetOfCurrMatch);
 LPTSTR TranslateLFtoCRLF(LPTSTR aString);
 bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr = NULL);
 #ifdef _DEBUG
@@ -707,7 +712,7 @@ LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd);
 void FreeInterProcMem(HANDLE aHandle, LPVOID aMem);
 
 DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf);
-DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, size_t aBufSize);
+DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, DWORD aBufSize);
 
 HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
 	, bool aUseGDIPlusIfAvailable);

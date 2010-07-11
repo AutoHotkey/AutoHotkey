@@ -217,15 +217,18 @@ Object::~Object()
 
 	if (mFields)
 	{
-		int i = mFieldCount - 1;
-		// Free keys: first strings, then objects (objects have a lower index in the mFields array).
-		for ( ; i >= mKeyOffsetString; --i)
-			free(mFields[i].key.s);
-		for ( ; i >= mKeyOffsetObject; --i)
-			mFields[i].key.p->Release();
-		// Free values.
-		while (mFieldCount) 
-			mFields[--mFieldCount].Free();
+		if (mFieldCount)
+		{
+			IndexType i = mFieldCount - 1;
+			// Free keys: first strings, then objects (objects have a lower index in the mFields array).
+			for ( ; i >= mKeyOffsetString; --i)
+				free(mFields[i].key.s);
+			for ( ; i >= mKeyOffsetObject; --i)
+				mFields[i].key.p->Release();
+			// Free values.
+			while (mFieldCount) 
+				mFields[--mFieldCount].Free();
+		}
 		// Free fields array.
 		free(mFields);
 	}
@@ -249,7 +252,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	SymbolType key_type;
 	KeyType key;
     FieldType *field;
-	int insert_pos;
+	IndexType insert_pos;
 
 	// If this is some object's base and is being invoked in that capacity, call
 	//	__Get/__Set/__Call as defined in this base object before searching further.
@@ -571,7 +574,7 @@ ResultType Object::_Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 
 	SymbolType key_type;
 	KeyType key;
-	int insert_pos, pos;
+	IndexType insert_pos, pos;
 	FieldType *field = NULL;
 
 	if (aParamCount == 1)
@@ -595,8 +598,8 @@ ResultType Object::_Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 
 			if (aParamCount > 2) // Multiple value params.  Could also handle aParamCount == 2, but the simpler method is faster.
 			{
-				int value_count = aParamCount - 1;
-				int need_capacity = mFieldCount + value_count;
+				IndexType value_count = aParamCount - 1;
+				IndexType need_capacity = mFieldCount + value_count;
 				if (need_capacity <= mFieldCountMax || SetInternalCapacity(need_capacity))
 				{
 					field = mFields + insert_pos;
@@ -656,7 +659,7 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		return OK;
 
 	FieldType *min_field, *max_field;
-	int min_pos, max_pos, pos;
+	IndexType min_pos, max_pos, pos;
 	SymbolType min_key_type, max_key_type;
 	KeyType min_key, max_key;
 
@@ -731,12 +734,12 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		// Free each field in the range being removed.
 		mFields[pos].Free();
 
-	int remaining_fields = mFieldCount - max_pos;
+	IndexType remaining_fields = mFieldCount - max_pos;
 	if (remaining_fields)
 		// Move remaining fields left to fill the gap left by the removed range.
 		memmove(mFields + min_pos, mFields + max_pos, remaining_fields * sizeof(FieldType));
 	// Adjust count by the actual number of fields in the removed range.
-	int actual_count_removed = max_pos - min_pos;
+	IndexType actual_count_removed = max_pos - min_pos;
 	mFieldCount -= actual_count_removed;
 	// Adjust key offsets and numeric keys as necessary.
 	if (min_key_type != SYM_STRING)
@@ -747,7 +750,7 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 			mKeyOffsetObject -= actual_count_removed;
 			// Regardless of whether any fields were removed, min_pos contains the position of the field which
 			// immediately followed the specified range.  Decrement each numeric key from this position onward.
-			int logical_count_removed = max_key.i - min_key.i + 1;
+			IntKeyType logical_count_removed = max_key.i - min_key.i + 1;
 			if (logical_count_removed > 0)
 				for (pos = min_pos; pos < mKeyOffsetObject; ++pos)
 					mFields[pos].key.i -= logical_count_removed;
@@ -797,7 +800,7 @@ ResultType Object::_GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 	{
 		SymbolType key_type;
 		KeyType key;
-		int insert_pos;
+		IndexType insert_pos;
 		FieldType *field;
 
 		if ( (field = FindField(*aParam[0], aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
@@ -822,16 +825,17 @@ ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 	if ((aParamCount != 1 && aParamCount != 2) || !TokenIsPureNumeric(*aParam[aParamCount - 1]))
 		// Invalid or missing param(s); return default empty string.
 		return OK;
-	size_t desired_size = (size_t)TokenToInt64(*aParam[aParamCount - 1], TRUE);
+	__int64 desired_capacity = TokenToInt64(*aParam[aParamCount - 1], TRUE);
 	if (aParamCount == 2) // Field name was specified.
 	{
-		if (desired_size < 0)
+		if (desired_capacity < 0) // Check before sign is dropped.
 			// Bad param.
 			return OK;
+		size_t desired_size = (size_t)desired_capacity;
 
 		SymbolType key_type;
 		KeyType key;
-		int insert_pos;
+		IndexType insert_pos;
 		FieldType *field;
 		LPTSTR buf;
 
@@ -870,12 +874,13 @@ ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 		}
 		return OK;
 	}
+	IndexType desired_count = (IndexType)desired_capacity;
 	// else aParamCount == 1: set the capacity of this object.
-	if (desired_size < (size_t)mFieldCount)
+	if (desired_count < mFieldCount)
 	{	// It doesn't seem intuitive to allow _SetCapacity to truncate the fields array.
-		desired_size = (size_t)mFieldCount;
+		desired_count = mFieldCount;
 	}
-	if (!desired_size)
+	if (!desired_count)
 	{	// Caller wants to shrink object to current contents but there aren't any, so free mFields.
 		if (mFields)
 		{
@@ -886,7 +891,7 @@ ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 		//else mFieldCountMax should already be 0.
 		// Since mFieldCountMax and desired_size are both 0, below will return 0 and won't call SetInternalCapacity.
 	}
-	if (desired_size == mFieldCountMax || SetInternalCapacity((int)desired_size))
+	if (desired_count == mFieldCountMax || SetInternalCapacity(desired_count))
 	{
 		aResultToken.symbol = SYM_INTEGER;
 		aResultToken.value_int64 = mFieldCountMax;
@@ -901,7 +906,7 @@ ResultType Object::_GetAddress(ExprTokenType &aResultToken, ExprTokenType *aPara
 	{
 		SymbolType key_type;
 		KeyType key;
-		int insert_pos;
+		IndexType insert_pos;
 		FieldType *field;
 
 		if ( (field = FindField(*aParam[0], aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
@@ -952,7 +957,7 @@ bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
 	{
 		Free(); // Free object or previous buffer (which was too small).
 		symbol = SYM_OPERAND;
-		int new_size = len + 1;
+		size_t new_size = len + 1;
 		if (!exact_size)
 		{
 			// Use size calculations equivalent to Var:
@@ -1036,65 +1041,68 @@ void Object::FieldType::Free()
 
 
 //
-// Object::Enumerator
+// Enumerator
 //
 
-ResultType STDMETHODCALLTYPE Object::Enumerator::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType STDMETHODCALLTYPE EnumBase::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (IS_INVOKE_SET)
 		return INVOKE_NOT_HANDLED;
-	if (aParamCount)
+
+	if (IS_INVOKE_CALL)
 	{
-		// Allow enum[var] or enum.next(var):
-		if (aParam[0]->symbol != SYM_VAR && !_tcsicmp(TokenToString(*aParam[0]), _T("Next")))
-		{
+		if (aParamCount && !_tcsicmp(TokenToString(*aParam[0]), _T("Next")))
+		{	// This is something like enum.Next(var); exclude "Next" so it is treated below as enum[var].
 			++aParam; --aParamCount;
-			if (!aParamCount)
-				return INVOKE_NOT_HANDLED; // ""
-		}
-		// Validate params:
-		if (aParamCount > 2 || aParam[0]->symbol != SYM_VAR || aParamCount > 1 && aParam[1]->symbol != SYM_VAR)
-			return OK; // ""
-		
-		aResultToken.symbol = SYM_INTEGER;
-
-		// Increment field offset.
-		++mOffset;
-
-		if (mOffset < mObject->mFieldCount)
-		{
-			FieldType &field = mObject->mFields[mOffset];
-			
-			// Assign key first:
-			Var &vark = *aParam[0]->var;
-			if (mOffset < mObject->mKeyOffsetObject) // mKeyOffsetInt < mKeyOffsetObject
-				vark.Assign(field.key.i);
-			else if (mOffset < mObject->mKeyOffsetString) // mKeyOffsetObject < mKeyOffsetString
-				vark.Assign(field.key.p);
-			else // mKeyOffsetString < mFieldCount
-				vark.Assign(field.key.s);
-
-			// Assign value if a second var was given:
-			if (aParamCount > 1)
-			{
-				Var &varv = *aParam[1]->var; // Above ensured it is SYM_VAR.
-				switch (field.symbol)
-				{
-				case SYM_OPERAND:	varv.AssignString(field.marker);	break;
-				case SYM_INTEGER:	varv.Assign(field.n_int64);			break;
-				case SYM_FLOAT:		varv.Assign(field.n_double);		break;
-				case SYM_OBJECT:	varv.Assign(field.object);			break;
-				}
-			}
-
-			// Return non-zero.
-			aResultToken.value_int64 = 1;
 		}
 		else
-			// No fields remaining.
-			aResultToken.value_int64 = 0;
+			return INVOKE_NOT_HANDLED;
 	}
-	return OK; // "" if no params.
+	Var *var0 = NULL, *var1 = NULL;
+	if (aParamCount)
+	{
+		if (aParam[0]->symbol != SYM_VAR)
+			return OK;
+		if (aParamCount > 1)
+		{
+			if (aParam[1]->symbol != SYM_VAR)
+				return OK;
+			var1 = aParam[1]->var;
+		}
+		var0 = aParam[0]->var;
+	}
+	aResultToken.symbol = SYM_INTEGER;
+	aResultToken.value_int64 = Next(var0, var1);
+	return OK;
+}
+
+int Object::Enumerator::Next(Var *aKey, Var *aVal)
+{
+	if (++mOffset < mObject->mFieldCount)
+	{
+		FieldType &field = mObject->mFields[mOffset];
+		if (aKey)
+		{
+			if (mOffset < mObject->mKeyOffsetObject) // mKeyOffsetInt < mKeyOffsetObject
+				aKey->Assign(field.key.i);
+			else if (mOffset < mObject->mKeyOffsetString) // mKeyOffsetObject < mKeyOffsetString
+				aKey->Assign(field.key.p);
+			else // mKeyOffsetString < mFieldCount
+				aKey->Assign(field.key.s);
+		}
+		if (aVal)
+		{
+			switch (field.symbol)
+			{
+			case SYM_OPERAND:	aVal->AssignString(field.marker);	break;
+			case SYM_INTEGER:	aVal->Assign(field.n_int64);			break;
+			case SYM_FLOAT:		aVal->Assign(field.n_double);		break;
+			case SYM_OBJECT:	aVal->Assign(field.object);			break;
+			}
+		}
+		return true;
+	}
+	return false;
 }
 
 	
@@ -1104,10 +1112,10 @@ ResultType STDMETHODCALLTYPE Object::Enumerator::Invoke(ExprTokenType &aResultTo
 //
 
 template<typename T>
-Object::FieldType *Object::FindField(T val, int left, int right, int &insert_pos)
+Object::FieldType *Object::FindField(T val, INT_PTR left, INT_PTR right, INT_PTR &insert_pos)
 // Template used below.  left and right must be set by caller to the appropriate bounds within mFields.
 {
-	int mid, result;
+	INT_PTR mid, result;
 	while (left <= right)
 	{
 		mid = (left + right) / 2;
@@ -1127,13 +1135,13 @@ Object::FieldType *Object::FindField(T val, int left, int right, int &insert_pos
 	return NULL;
 }
 
-Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, int &insert_pos)
+Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, IndexType &insert_pos)
 // Searches for a field with the given key.  If found, a pointer to the field is returned.  Otherwise
 // NULL is returned and insert_pos is set to the index a newly created field should be inserted at.
 // key_type and key are output for creating a new field or removing an existing one correctly.
 // left and right must indicate the appropriate section of mFields to search, based on key type.
 {
-	int left, right;
+	IndexType left, right;
 
 	if (key_type == SYM_STRING)
 	{
@@ -1159,7 +1167,7 @@ Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, int &inse
 	}
 }
 
-Object::FieldType *Object::FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, int &insert_pos)
+Object::FieldType *Object::FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos)
 // Searches for a field with the given key, where the key is a token passed from script.
 {
 	if (TokenIsPureNumeric(key_token) == PURE_INTEGER)
@@ -1179,7 +1187,7 @@ Object::FieldType *Object::FindField(ExprTokenType &key_token, LPTSTR aBuf, Symb
 	return FindField(key_type, key, insert_pos);
 }
 	
-bool Object::SetInternalCapacity(int new_capacity)
+bool Object::SetInternalCapacity(IndexType new_capacity)
 // Expands mFields to the specified number if fields.
 // Caller *must* ensure new_capacity >= 1 && new_capacity >= mFieldCount.
 {
@@ -1191,7 +1199,7 @@ bool Object::SetInternalCapacity(int new_capacity)
 	return true;
 }
 	
-Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, int at)
+Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, IndexType at)
 // Inserts a single field with the given key at the given offset.
 // Caller must ensure 'at' is the correct offset for this key.
 {

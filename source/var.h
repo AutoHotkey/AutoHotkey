@@ -267,12 +267,12 @@ public:
 	// This should prevent some mistakes, as characters and bytes are not interchangeable in the Unicode build.
 	// Callers must make sure which one is the right method to call.
 	ResultType AssignString(LPCTSTR aBuf = NULL, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true);
-	ResultType Assign(LPCTSTR aBuf, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true)
+	inline ResultType Assign(LPCTSTR aBuf, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true)
 	{
 		ASSERT(aBuf); // aBuf shouldn't be NULL, use SetCapacity([length in bytes]) or AssignString(NULL, [length in characters]) instead.
 		return AssignString(aBuf, aLength, aExactSize, aObeyMaxMem);
 	}
-	ResultType Assign()
+	inline ResultType Assign()
 	{
 		return AssignString();
 	}
@@ -291,6 +291,10 @@ public:
 		return AssignStringFromCodePage(aBuf, aLength, CP_UTF8);
 	}
 	ResultType AssignStringToCodePage(LPCWSTR aBuf, int aLength = -1, UINT aCodePage = CP_ACP, DWORD aFlags = WC_NO_BEST_FIT_CHARS, char aDefChar = '?');
+	inline ResultType AssignStringW(LPCWSTR aBuf, int aLength = -1)
+	{
+		return UorA(AssignString,AssignStringToCodePage)(aBuf, aLength);
+	}
 
 	inline ResultType Assign(DWORD aValueToAssign) // For some reason, this function is actually faster when not __forceinline.
 	{
@@ -325,12 +329,10 @@ public:
 		return OK;
 	}
 
-	inline ResultType Assign(IObject *aValueToAssign) // L31
+	ResultType AssignSkipAddRef(IObject *aValueToAssign)
 	{
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-
-		aValueToAssign->AddRef(); // Must be done before Release() in case the only other reference to this object is already in var.  Such a case seems too rare to be worth optimizing by returning early.
 
 		var.Free(); // If var contains an object, this will Release() it.  It will also clear any string contents and free memory if appropriate.
 		
@@ -349,6 +351,12 @@ public:
 		var.mAttrib |= VAR_ATTRIB_OBJECT | VAR_ATTRIB_CACHE_DISABLED | VAR_ATTRIB_NOT_NUMERIC;
 
 		return OK;
+	}
+
+	inline ResultType Assign(IObject *aValueToAssign)
+	{
+		aValueToAssign->AddRef(); // Must be done before Release() in case the only other reference to this object is already in var.  Such a case seems too rare to be worth optimizing by returning early.
+		return AssignSkipAddRef(aValueToAssign);
 	}
 
 	inline IObject *&Object()
@@ -535,11 +543,11 @@ public:
 		var.UpdateContents(); // Update mContents and mLength for use below.
 		LPTSTR aBuf_orig = aBuf;
 		if(!var.HasObject())
-		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[%u of %u]: %-1.60s%s"), mName // mName not var.mName (see comment above).
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[%Iu of %Iu]: %-1.60s%s"), mName // mName not var.mName (see comment above).
 			, var._CharLength(), var._CharCapacity() ? (var._CharCapacity() - 1) : 0  // Use -1 since it makes more sense to exclude the terminator.
 			, var.mCharContents, var._CharLength() > 60 ? _T("...") : _T(""));
 		else
-			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[Object]: 0x%08X"), mName, (DWORD) var.Object());
+			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[Object]: 0x%p"), mName, var.Object());
 		if (aAppendNewline && BUF_SPACE_REMAINING >= 2)
 		{
 			*aBuf++ = '\r';

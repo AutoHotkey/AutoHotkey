@@ -111,6 +111,7 @@ Script::Script()
 		ScriptError(_T("DEBUG: Since there are now more than 256 Action Types, the ActionTypeType")
 			_T(" typedef must be changed."));
 #endif
+	OleInitialize(NULL);
 }
 
 
@@ -212,6 +213,7 @@ Script::~Script() // Destructor.
 #endif
 
 	DeleteCriticalSection(&g_CriticalRegExCache); // g_CriticalRegExCache is used elsewhere for thread-safety.
+	OleUninitialize();
 }
 
 
@@ -2276,7 +2278,7 @@ examine_line:
 			action_end = buf + buf_length; // It's done this way so that ELSE can be fully handled here; i.e. that ELSE does not have to be in the list of commands recognizable by ParseAndAddLine().
 		// The following method ensures that words or variables that start with "Else", e.g. ElseAction, are not
 		// incorrectly detected as an Else command:
-		if (tcslicmp(buf, _T("Else"), (UINT)(action_end - buf))) // It's not an ELSE. ("Else" is used vs. g_act[ACT_ELSE].Name for performance).
+		if (tcslicmp(buf, _T("Else"), action_end - buf)) // It's not an ELSE. ("Else" is used vs. g_act[ACT_ELSE].Name for performance).
 		{
 			// It's not an ELSE.  Also, at this stage it can't be ACT_EXPRESSION (such as an isolated function call)
 			// because it would have been already handled higher above.
@@ -2609,7 +2611,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	// UPDATE: Using strlicmp() now so that overlapping names, such as #MaxThreads and #MaxThreadsPerHotkey,
 	// won't get mixed up:
 	#define IS_DIRECTIVE_MATCH(directive) (!tcslicmp(aBuf, directive, directive_name_length))
-	UINT directive_name_length = (UINT)(directive_end - aBuf); // To avoid calculating it every time in the macro above.
+	size_t directive_name_length = directive_end - aBuf; // To avoid calculating it every time in the macro above.
 
 	bool is_include_again = false; // Set default in case of short-circuit boolean.
 	if (IS_DIRECTIVE_MATCH(_T("#Include")) || (is_include_again = IS_DIRECTIVE_MATCH(_T("#IncludeAgain"))))
@@ -3392,7 +3394,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			// it is only an "exception" if the function is assume-global.
 			bool is_exception = ((declare_type == VAR_DECLARE_GLOBAL) != (g->CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL));
 			bool open_brace_was_added, belongs_to_if_or_else_or_loop;
-			VarSizeType var_name_length;
+			size_t var_name_length;
 			LPTSTR item;
 
 			for (belongs_to_if_or_else_or_loop = ACT_IS_IF_OR_ELSE_OR_LOOP(mLastLine->mActionType)
@@ -3937,13 +3939,13 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 							// No valid identifier, doesn't look like a valid expression.
 							break;
 						cp = omit_leading_whitespace(cp);
-						if (*cp == '[' || *cp == ':' && cp[1] == '=')
+						if (*cp == '[' || *cp == ':' && cp[1] == '=' || !*cp)
 						{	// Allow Set and bracketed Get as standalone expression.
 							aActionType = ACT_EXPRESSION;
 							break;
 						}
 						if (*cp != '.')
-							// Get without brackets, or something else not allowed as standalone expression.
+							// Must be something which is not allowed as a standalone expression.
 							break;
 						id_begin = cp + 1;
 					}
@@ -6742,7 +6744,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 
 		// To enhance syntax error catching, consider ByRef to be a keyword; i.e. that can never be the name
 		// of a formal parameter:
-		if (this_param.is_byref = !tcslicmp(param_start, _T("ByRef"), (UINT)(param_end - param_start))) // ByRef.
+		if (this_param.is_byref = !tcslicmp(param_start, _T("ByRef"), param_end - param_start)) // ByRef.
 		{
 			// Omit the ByRef keyword from further consideration:
 			param_start = omit_leading_whitespace(param_end);
@@ -6886,7 +6888,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 struct FuncLibrary
 {
 	LPTSTR path;
-	DWORD length;
+	DWORD_PTR length;
 };
 
 Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown)
@@ -7331,11 +7333,13 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		bif = BIF_IsLabel;
 	else if (!_tcsicmp(func_name, _T("IsFunc")))
 		bif = BIF_IsFunc;
+#ifdef ENABLE_DLLCALL
 	else if (!_tcsicmp(func_name, _T("DllCall")))
 	{
 		bif = BIF_DllCall;
 		max_params = 10000; // An arbitrarily high limit that will never realistically be reached.
 	}
+#endif
 	else if (!_tcsicmp(func_name, _T("VarSetCapacity")))
 	{
 		bif = BIF_VarSetCapacity;
@@ -7389,11 +7393,13 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		// override the default set here.
 		g_persistent = true;
 	}
+#ifdef ENABLE_REGISTERCALLBACK
 	else if (!_tcsicmp(func_name, _T("RegisterCallback")))
 	{
 		bif = BIF_RegisterCallback;
 		max_params = 4; // Leave min_params at 1.
 	}
+#endif
 	else if (!_tcsicmp(func_name, _T("IsObject"))) // L31
 	{
 		bif = BIF_IsObject;
@@ -7436,6 +7442,24 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		bif = BIF_FileOpen;
 		min_params = 2;
 		max_params = 3;
+	}
+	else if (!_tcsnicmp(func_name, _T("ComObj"), 6))
+	{
+		suffix = func_name + 6;
+		if	(!_tcsicmp(suffix, _T("Create")))
+			bif = BIF_ComObjCreate;
+		else if	(!_tcsicmp(suffix, _T("Get")))
+			bif = BIF_ComObjGet;
+		else if	(!_tcsicmp(suffix, _T("Connect")) || !_tcsicmp(suffix, _T("Error")))
+		{
+			bif = BIF_ComObjConnect;
+			max_params = 2;
+		}
+		else
+		{
+			bif = BIF_ComObjActive;
+			max_params = 2;
+		}
 	}
 #endif
 	else
@@ -7703,7 +7727,7 @@ Var *Line::ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary)
 	// At this point, we know the requested arg is a variable that must be dynamically resolved.
 	// This section is similar to that in ExpandArg(), so they should be maintained together:
 	LPTSTR pText = this_arg.text; // Start at the begining of this arg's text.
-	int var_name_length = 0;
+	size_t var_name_length = 0;
 
 	if (this_arg.deref) // There's at least one deref.
 	{
@@ -9931,6 +9955,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				{
 					if ( func->mIsBuiltIn )
 					{
+#ifdef ENABLE_DLLCALL
 						if ( func->mBIF == &BIF_DllCall && in_param_list->param_count == 0 )
 						{
 							// Optimise DllCall by resolving function addresses at load-time where possible.
@@ -9960,6 +9985,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 								}
 							}
 						}
+#endif
 					}
 					// Below relies on the above param_count check to prevent access violation.
 					else if ( func->mParam[in_param_list->param_count].is_byref )
@@ -12858,7 +12884,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// From the AutoIt3 source:
 		// AutoIt3 uses SMTO_BLOCK (which prevents our thread from doing anything during the call)
 		// vs. SMTO_NORMAL.  Since I'm not sure why, I'm leaving it that way for now:
-		ULONG nResult;
+		ULONG_PTR nResult;
 		if (SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)_T("Environment"), SMTO_BLOCK, 15000, &nResult))
 			return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 		else
@@ -14256,9 +14282,9 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 			*source_file = '\0'; // Don't bother cluttering the display if it's the main script file.
 
 		TCHAR buf[MSGBOX_TEXT_SIZE];
-		LPTSTR buf_marker = buf + sntprintf(buf, _countof(buf), _T("%s%s: %-1.500s\n\n")  // Keep it to a sane size in case it's huge.
+		LPTSTR buf_marker = buf + sntprintf(buf, _countof(buf), _T("%s%s:%s %-1.500s\n\n")  // Keep it to a sane size in case it's huge.
 			, aErrorType == WARN ? _T("Warning") : (aErrorType == CRITICAL_ERROR ? _T("Critical Error") : _T("Error"))
-			, source_file, aErrorText);
+			, source_file, *source_file ? _T("\n    ") : _T(" "), aErrorText);
 		if (*aExtraInfo)
 			// Use format specifier to make sure really huge strings that get passed our
 			// way, such as a var containing clipboard text, are kept to a reasonable size:
@@ -14267,15 +14293,19 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		buf_marker = VicinityToText(buf_marker, (int)(_countof(buf) - (buf_marker - buf))); // Cast to int to avoid loss of negative values.
 		if (aErrorType == CRITICAL_ERROR || (aErrorType == FAIL && !g_script.mIsReadyToExecute))
 			tcslcpy(buf_marker, g_script.mIsRestart ? (_T("\n") OLD_STILL_IN_EFFECT) : (_T("\n") WILL_EXIT)
-				, (int)(_countof(buf) - (buf_marker - buf))); // Cast to int to avoid loss of negative values.
+				, _countof(buf) - (buf_marker - buf)); // Cast to int to avoid loss of negative values.
 		g_script.mCurrLine = this;  // This needs to be set in some cases where the caller didn't.
+
+		if (aErrorType == EARLY_EXIT)
+			_tcsncat(buf_marker, _T("\nContinue running the script?"), _countof(buf) - (buf_marker - buf));
 		
 #ifdef CONFIG_DEBUGGER
 		if (g_Debugger.HasStdErrHook())
 			g_Debugger.OutputDebug(buf);
 		else
 #endif
-		MsgBox(buf);
+		if (MsgBox(buf, aErrorType == EARLY_EXIT ? MB_YESNO : 0) == IDNO)
+			aErrorType = CRITICAL_ERROR;
 	}
 
 	if (aErrorType == CRITICAL_ERROR && g_script.mIsReadyToExecute)
