@@ -11899,6 +11899,7 @@ struct DYNAPARM
 		double value_double;
 		char *astr;
 		wchar_t *wstr;
+		void *ptr;
     };
 	// Might help reduce struct size to keep other members last and adjacent to each other (due to
 	// 8-byte alignment caused by the presence of double and __int64 members in the union above).
@@ -12509,7 +12510,7 @@ has_valid_return_type:
 		ConvertDllArgType(arg_type_string, this_dyna_param);
 		switch (this_dyna_param.type)
 		{
-		case DLL_ARG_ASTR:
+		case DLL_ARG_STR:
 			if (IS_NUMERIC(this_param.symbol))
 			{
 				// For now, string args must be real strings rather than floats or ints.  An alternative
@@ -12523,12 +12524,7 @@ has_valid_return_type:
 				return;
 			}
 			// Otherwise, it's a supported type of string.
-#ifdef UNICODE
-			pStr[arg_count] = new CStringCharFromWChar(TokenToString(this_param));
-			this_dyna_param.astr = pStr[arg_count]->GetBuffer();
-#else
-			this_dyna_param.astr = TokenToString(this_param); // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-#endif
+			this_dyna_param.ptr = TokenToString(this_param); // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 			// NOTES ABOUT THE ABOVE:
 			// UPDATE: The v1.0.44.14 item below doesn't work in release mode, only debug mode (turning off
 			// "string pooling" doesn't help either).  So it's commented out until a way is found
@@ -12555,19 +12551,16 @@ has_valid_return_type:
 			//if (this_dyna_param.str == Var::sEmptyString) // To improve performance, compare directly to Var::sEmptyString rather than calling Capacity().
 			//	this_dyna_param.str = _T(""); // Make it read-only to force an exception.  See comments above.
 			break;
-		case DLL_ARG_WSTR:
+		case DLL_ARG_xSTR:
+			// See the section above for comments.
 			if (IS_NUMERIC(this_param.symbol))
 			{
 				g_ErrorLevel->Assign(_T("-2"));
 				return;
 			}
-			// Otherwise, it's a supported type of string.
-#ifdef UNICODE
-			this_dyna_param.wstr = TokenToString(this_param);
-#else
-			pStr[arg_count] = new CStringWCharFromChar(TokenToString(this_param));
-			this_dyna_param.wstr = pStr[arg_count]->GetBuffer();
-#endif
+			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
+			pStr[arg_count] = new UorA(CStringCharFromWChar,CStringWCharFromChar)(TokenToString(this_param));
+			this_dyna_param.ptr = pStr[arg_count]->GetBuffer();
 			break;
 
 		case DLL_ARG_DOUBLE:
