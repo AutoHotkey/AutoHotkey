@@ -196,6 +196,7 @@ struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 	virtual ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount) = 0;
 	
 	// Simple reference-counting mechanism.  Usage should be similar to IUnknown (COM).
+	// Some scripts may rely on these being at the same offset as IUnknown::AddRef/Release.
 	virtual ULONG STDMETHODCALLTYPE AddRef(void) = 0;
     virtual ULONG STDMETHODCALLTYPE Release(void) = 0;
 };
