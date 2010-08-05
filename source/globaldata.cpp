@@ -33,7 +33,7 @@ DWORD g_MainThreadID = GetCurrentThreadId();
 DWORD g_HookThreadID; // Not initialized by design because 0 itself might be a valid thread ID.
 CRITICAL_SECTION g_CriticalRegExCache;
 
-UINT g_DefaultScriptCodepage = CP_UTF8;
+UINT g_DefaultScriptCodepage = UorA(CP_UTF8, CP_ACP);
 
 bool g_DestroyWindowCalled = false;
 HWND g_hWnd = NULL;
