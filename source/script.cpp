@@ -9345,7 +9345,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 				case '[': // L31
 					if (  !(infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))  )
 						return LineError(_T("Unsupported use of \"[\""), FAIL, cp); // Reserve this for array construction; i.e. obj := [x,y,z]  (SYM_ASSIGN does not "yield an operand").
-					if (infix_count && infix[infix_count - 1].symbol == SYM_GET)
+					if (infix_count && infix[infix_count - 1].symbol == SYM_GET // obj.x[ ...
+						&& *omit_leading_whitespace(cp + 1) != ']') // not obj.x[]
 					{
 						// L36: This is something like obj.x[y] or obj.x[y]:=z, which should be treated
 						//		as a single operation such as ObjGet(obj,"x",y) or ObjSet(obj,"x",y,z).
