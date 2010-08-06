@@ -11578,7 +11578,7 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 
 // L4: Evaluate an expression used to define #if hotkey variant criterion.
 //	This is called by MainWindowProc when it receives an AHK_HOT_IF_EXPR message.
-ResultType Line::EvaluateHotCriterionExpression()
+ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 {
 	// Initialize a new quasi-thread to evaluate the expression. This may not be necessary for simple
 	// expressions, but expressions which call user-defined functions may otherwise interfere with
@@ -11596,12 +11596,21 @@ ResultType Line::EvaluateHotCriterionExpression()
 	InitNewThread(0, false, true, ACT_CRITICAL);
 	DEBUGGER_STACK_PUSH(SE_Thread, this, desc, _T("#If"))
 
+	// Update A_ThisHotkey, useful if #If calls a function to do its dirty work.
+	LPTSTR prior_hotkey_name = g_script.mThisHotkeyName;
+	DWORD prior_hotkey_time = g_script.mThisHotkeyStartTime;
+	g_script.mThisHotkeyName = aHotkeyName;
+	g_script.mThisHotkeyStartTime = // Updated for consistency.
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
 
 	// EVALUATE THE EXPRESSION
 	ResultType result = ExpandArgs();
 	if (result == OK)
 		result = EvaluateCondition();
+
+	// A_ThisHotkey must be restored else A_PriorHotkey will get an incorrect value later.
+	g_script.mThisHotkeyName = prior_hotkey_name;
+	g_script.mThisHotkeyStartTime = prior_hotkey_time;
 
 	DEBUGGER_STACK_POP()
 	ResumeUnderlyingThread(ErrorLevel_saved);

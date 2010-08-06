@@ -34,7 +34,7 @@ DWORD Hotkey::sJoyHotkeyCount = 0;
 
 
 // L4: Added aHotExprIndex for #if (expression).
-HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, LPTSTR aWinText, int aHotExprIndex)
+HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, LPTSTR aWinText, int aHotExprIndex, LPTSTR aHotkeyName)
 // This is a global function because it's used by both hotkeys and hotstrings.
 // In addition to being called by the hook thread, this can now be called by the main thread.
 // That happens when a WM_HOTKEY message arrives that is non-hook (such as for Win9x).
@@ -56,7 +56,7 @@ HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, 
 	case HOT_IF_EXPR:
 		// Expression evaluation must be done in the main thread. If the message times out, the hotkey/hotstring is not allowed to fire.
 		DWORD_PTR res;
-		return (SendMessageTimeout(g_hWnd, AHK_HOT_IF_EXPR, (WPARAM)aHotExprIndex, 0, SMTO_BLOCK | SMTO_ABORTIFHUNG, g_HotExprTimeout, &res) && res == CONDITION_TRUE) ? (HWND)1 : NULL;
+		return (SendMessageTimeout(g_hWnd, AHK_HOT_IF_EXPR, (WPARAM)aHotExprIndex, (LPARAM)aHotkeyName, SMTO_BLOCK | SMTO_ABORTIFHUNG, g_HotExprTimeout, &res) && res == CONDITION_TRUE) ? (HWND)1 : NULL;
 	default: // HOT_NO_CRITERION (listed last because most callers avoids calling here by checking this value first).
 		return (HWND)1; // Always allow hotkey to fire.
 	}
@@ -524,7 +524,7 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC)
 				&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
 				&& (!vp->mHotCriterion || HotCriterionAllowsFiring(vp->mHotCriterion
 					// L4: Added vp->mHotExprIndex for #if (expression).
-					, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex))   ) // ... and its critieria allow it to fire.
+					, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex, hk.mName))   ) // ... and its critieria allow it to fire.
 				return false; // At least one of this prefix's suffixes is eligible for firing.
 	}
 	// Since above didn't return, no hotkeys were found for this prefix that are capable of firing.
@@ -568,7 +568,7 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
 			&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
 			&& (!vp->mHotCriterion || (found_hwnd = HotCriterionAllowsFiring(vp->mHotCriterion
 				// L4: Added vp->mHotExprIndex for #if (expression).
-				, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex)))   ) // ... and its critieria allow it to fire.
+				, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex, mName)))   ) // ... and its critieria allow it to fire.
 		{
 			if (vp->mHotCriterion) // Since this is the first criteria hotkey, it takes precedence.
 				return vp;

@@ -899,7 +899,7 @@ public:
 	LPTSTR ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType *aResultToken
 		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
-	ResultType EvaluateHotCriterionExpression(); // L4: Called by MainWindowProc to handle an AHK_HOT_IF_EXPR message.
+	ResultType EvaluateHotCriterionExpression(LPTSTR aHotkeyName); // L4: Called by MainWindowProc to handle an AHK_HOT_IF_EXPR message.
 
 	ResultType Deref(Var *aOutputVar, LPTSTR aBuf);
 

@@ -765,7 +765,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				{
 					// For details, see comments in the hotkey section of this switch().
 					// L4: Added hs->mHotExprIndex for #if (expression).
-					if (   !(criterion_found_hwnd = HotCriterionAllowsFiring(hs->mHotCriterion, hs->mHotWinTitle, hs->mHotWinText, hs->mHotExprIndex))   )
+					if (   !(criterion_found_hwnd = HotCriterionAllowsFiring(hs->mHotCriterion, hs->mHotWinTitle, hs->mHotWinText, hs->mHotExprIndex, hs->mJumpToLabel ? hs->mJumpToLabel->mName : _T("")))   )
 						// Hotstring is no longer eligible to fire even though it was when the hook sent us
 						// the message.  Abort the firing even though the hook may have already started
 						// executing the hotstring by suppressing the final end-character or other actions.

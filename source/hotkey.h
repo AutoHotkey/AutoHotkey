@@ -60,7 +60,7 @@ enum HotkeyTypeEnum {HK_NORMAL, HK_KEYBD_HOOK, HK_MOUSE_HOOK, HK_BOTH_HOOKS, HK_
 typedef UCHAR HotCriterionType;
 // L4: Added HOT_IF_EXPR and aHotExprIndex for #if (expression).
 enum HotCriterionEnum {HOT_NO_CRITERION, HOT_IF_ACTIVE, HOT_IF_NOT_ACTIVE, HOT_IF_EXIST, HOT_IF_NOT_EXIST, HOT_IF_EXPR}; // HOT_NO_CRITERION must be zero.
-HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, LPTSTR aWinText, int aHotExprIndex); // Used by hotkeys and hotstrings.
+HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, LPTSTR aWinText, int aHotExprIndex, LPTSTR aHotkeyName); // Used by hotkeys and hotstrings.
 ResultType SetGlobalHotTitleText(LPTSTR aWinTitle, LPTSTR aWinText);
 
 
