@@ -2851,6 +2851,7 @@ void BIF_ObjGetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int
 void BIF_ObjMaxIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ObjMinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ObjNewEnum(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjHasKey(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 
 #ifdef CONFIG_EXPERIMENTAL

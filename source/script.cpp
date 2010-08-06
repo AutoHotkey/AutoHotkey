@@ -7428,6 +7428,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		BIF_OBJ_CASE(Remove, 		0, 2) // [min_key, max_key]
 		BIF_OBJ_CASE(MinIndex, 		0, 0)
 		BIF_OBJ_CASE(MaxIndex, 		0, 0)
+		BIF_OBJ_CASE(HasKey,		1, 1) // key
 		BIF_OBJ_CASE(GetCapacity,	0, 1) // [key]
 		BIF_OBJ_CASE(SetCapacity,	1, 2) // [key,] new_capacity
 		BIF_OBJ_CASE(GetAddress,	1, 1) // key

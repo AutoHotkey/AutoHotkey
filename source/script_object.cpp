@@ -341,6 +341,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 						return _Insert(aResultToken, aParam, aParamCount);
 					if (!_tcsicmp(name, _T("Remove")))
 						return _Remove(aResultToken, aParam, aParamCount);
+					if (!_tcsicmp(name, _T("HasKey")))
+						return _HasKey(aResultToken, aParam, aParamCount);
 					if (!_tcsicmp(name, _T("MaxIndex")))
 						return _MaxIndex(aResultToken, aParam, aParamCount);
 					if (!_tcsicmp(name, _T("NewEnum")))
@@ -930,6 +932,20 @@ ResultType Object::_NewEnum(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 			aResultToken.symbol = SYM_OBJECT;
 			aResultToken.object = newenum;
 		}
+	}
+	return OK;
+}
+
+ResultType Object::_HasKey(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	if (aParamCount == 1)
+	{
+		SymbolType key_type;
+		KeyType key;
+		INT_PTR insert_pos;
+		FieldType *field = FindField(**aParam, aResultToken.buf, key_type, key, insert_pos);
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = (field != NULL);
 	}
 	return OK;
 }
