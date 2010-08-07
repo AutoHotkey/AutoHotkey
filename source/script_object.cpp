@@ -333,32 +333,30 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			if (IS_INVOKE_CALL)
 			{
 				// Since above has not handled this call and no field exists, check for built-in methods.
-				if (*key.s == '_')
-				{
-					LPTSTR name = key.s + 1; // + 1 to exclude '_' from further consideration.
-					++aParam; --aParamCount; // Exclude the method identifier.  A prior check ensures there was at least one param in this case.
-					if (!_tcsicmp(name, _T("Insert")))
-						return _Insert(aResultToken, aParam, aParamCount);
-					if (!_tcsicmp(name, _T("Remove")))
-						return _Remove(aResultToken, aParam, aParamCount);
-					if (!_tcsicmp(name, _T("HasKey")))
-						return _HasKey(aResultToken, aParam, aParamCount);
-					if (!_tcsicmp(name, _T("MaxIndex")))
-						return _MaxIndex(aResultToken, aParam, aParamCount);
-					if (!_tcsicmp(name, _T("NewEnum")))
-						return _NewEnum(aResultToken, aParam, aParamCount);
-					if (!_tcsicmp(name, _T("GetAddress")))
-						return _GetAddress(aResultToken, aParam, aParamCount);
-					if (!_tcsicmp(name, _T("SetCapacity")))
-						return _SetCapacity(aResultToken, aParam, aParamCount);
-					if (!_tcsicmp(name, _T("GetCapacity")))
-						return _GetCapacity(aResultToken, aParam, aParamCount);
-					if (!_tcsicmp(name, _T("MinIndex")))
-						return _MinIndex(aResultToken, aParam, aParamCount);
-					// For maintability: explicitly return since above has done ++aParam, --aParamCount.
-					return INVOKE_NOT_HANDLED;
-				}
-				// Fall through and return INVOKE_NOT_HANDLED.
+				LPTSTR name = key.s;
+				if (*name == '_')
+					++name; // ++ to exclude '_' from further consideration.
+				++aParam; --aParamCount; // Exclude the method identifier.  A prior check ensures there was at least one param in this case.
+				if (!_tcsicmp(name, _T("Insert")))
+					return _Insert(aResultToken, aParam, aParamCount);
+				if (!_tcsicmp(name, _T("Remove")))
+					return _Remove(aResultToken, aParam, aParamCount);
+				if (!_tcsicmp(name, _T("HasKey")))
+					return _HasKey(aResultToken, aParam, aParamCount);
+				if (!_tcsicmp(name, _T("MaxIndex")))
+					return _MaxIndex(aResultToken, aParam, aParamCount);
+				if (!_tcsicmp(name, _T("NewEnum")))
+					return _NewEnum(aResultToken, aParam, aParamCount);
+				if (!_tcsicmp(name, _T("GetAddress")))
+					return _GetAddress(aResultToken, aParam, aParamCount);
+				if (!_tcsicmp(name, _T("SetCapacity")))
+					return _SetCapacity(aResultToken, aParam, aParamCount);
+				if (!_tcsicmp(name, _T("GetCapacity")))
+					return _GetCapacity(aResultToken, aParam, aParamCount);
+				if (!_tcsicmp(name, _T("MinIndex")))
+					return _MinIndex(aResultToken, aParam, aParamCount);
+				// For maintability: explicitly return since above has done ++aParam, --aParamCount.
+				return INVOKE_NOT_HANDLED;
 			}
 			//
 			// BUILT-IN "BASE" PROPERTY
