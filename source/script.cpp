@@ -4452,8 +4452,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						{
 						// See comment above for why TRANS_CMD_INVALID isn't yet reported as an error:
 #ifdef UNICODE
-						#define TRANS_CMD_UNICODE_CASES \
-						case TRANS_CMD_TOCODEPAGE:
+						#define TRANS_CMD_UNICODE_CASES
 #else
 						#define TRANS_CMD_UNICODE_CASES \
 						case TRANS_CMD_UNICODE:
@@ -6084,8 +6083,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 				case TRANS_CMD_SQRT:
 				case TRANS_CMD_LOG:
 				case TRANS_CMD_LN:
-				case TRANS_CMD_TOCODEPAGE:
-				case TRANS_CMD_FROMCODEPAGE:
 					if (!IsPureNumeric(new_raw_arg3, false, false, true))
 						return ScriptError(_T("Parameter #3 must be a positive integer in this case."), new_raw_arg3);
 					break;
@@ -6151,11 +6148,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 				if (!line.ArgHasDeref(4) && !IsPureNumeric(new_raw_arg4, true, false, true))
 					return ScriptError(_T("Parameter #4 must be a number in this case."), new_raw_arg4);
 				break;
-			case TRANS_CMD_TOCODEPAGE:
-			case TRANS_CMD_FROMCODEPAGE:
-				if (!*new_raw_arg4)
-					return ScriptError(_T("Parameter #4 must be a string in this case."));
-				break;
+
 #ifdef _DEBUG
 			default:
 				return ScriptError(_T("DEBUG: Unhandled"), new_raw_arg2);  // To improve maintainability.

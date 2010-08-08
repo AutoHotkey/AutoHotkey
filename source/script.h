@@ -457,7 +457,6 @@ enum TransformCmds {TRANS_CMD_INVALID, TRANS_CMD_ASC, TRANS_CMD_CHR, TRANS_CMD_D
 	, TRANS_CMD_SIN, TRANS_CMD_COS, TRANS_CMD_TAN, TRANS_CMD_ASIN, TRANS_CMD_ACOS, TRANS_CMD_ATAN
 	, TRANS_CMD_BITAND, TRANS_CMD_BITOR, TRANS_CMD_BITXOR, TRANS_CMD_BITNOT
 	, TRANS_CMD_BITSHIFTLEFT, TRANS_CMD_BITSHIFTRIGHT
-	, TRANS_CMD_TOCODEPAGE, TRANS_CMD_FROMCODEPAGE
 };
 
 enum MenuCommands {MENU_CMD_INVALID, MENU_CMD_SHOW, MENU_CMD_USEERRORLEVEL
@@ -1278,10 +1277,7 @@ public:
 		if (!_tcsicmp(aBuf, _T("Asc"))) return TRANS_CMD_ASC;
 		if (!_tcsicmp(aBuf, _T("Chr"))) return TRANS_CMD_CHR;
 		if (!_tcsicmp(aBuf, _T("Deref"))) return TRANS_CMD_DEREF;
-#ifdef UNICODE
-		if (!_tcsicmp(aBuf, _T("ToCodePage"))) return TRANS_CMD_TOCODEPAGE;
-		if (!_tcsicmp(aBuf, _T("FromCodePage"))) return TRANS_CMD_FROMCODEPAGE;
-#else
+#ifndef UNICODE
 		if (!_tcsicmp(aBuf, _T("Unicode"))) return TRANS_CMD_UNICODE;
 #endif
 		if (!_tcsicmp(aBuf, _T("HTML"))) return TRANS_CMD_HTML;

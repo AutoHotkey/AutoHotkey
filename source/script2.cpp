@@ -1401,13 +1401,6 @@ end_set_entity:
 
 	case TRANS_CMD_BITSHIFTRIGHT:  // Equivalent to dividing (integer) by 2^value2
 		return output_var.Assign(ATOI64(aValue1) >> ATOI(aValue2));
-
-#ifdef UNICODE
-	case TRANS_CMD_TOCODEPAGE:
-		return output_var.AssignStringToCodePage((LPCWSTR) aValue2, -1, ATOI(aValue1));
-	case TRANS_CMD_FROMCODEPAGE:
-		return output_var.AssignStringFromCodePage((LPCSTR) aValue2, -1, ATOI(aValue1));
-#endif
 	}
 
 	return FAIL;  // Never executed (increases maintainability and avoids compiler warning).
