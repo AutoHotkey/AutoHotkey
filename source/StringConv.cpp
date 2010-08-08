@@ -84,7 +84,7 @@ LPCSTR StringUTF8ToChar(LPCSTR sUTF8, CStringA &sChar, int iChars/* = -1*/, char
 #endif
 
 template <typename SRC_T, typename DEST_T>
-SRC_T _StringDummyConv(SRC_T sSrc, DEST_T sDest, int iChars = -1)
+SRC_T _StringDummyConv(SRC_T sSrc, DEST_T &sDest, int iChars = -1)
 {
 	if (!sSrc)
 		return NULL;
