@@ -257,8 +257,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		}
 		else // aSleepDuration < 1 || empty_the_queue_via_peek || g_DeferMessagesForUnderlyingPump
 		{
-#if defined(CONFIG_WIN9X) || defined(CONFIG_WINNT4)
-#pragma message("MsgSleep should be modified to use PM_QS_SENDMESSAGE|PM_QS_POSTMESSAGE where available.")
 			bool do_special_msg_filter, peek_was_done = false; // Set default.
 			// Check the active window in each iteration in case a signficant amount of time has passed since
 			// the previous iteration (due to launching threads, etc.)
@@ -328,12 +326,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			}
 			if (!peek_was_done) // Since above didn't Peek(), fall back to doing the Peek with the standard filter.
 				peek_result = PeekMessage(&msg, NULL, 0, MSG_FILTER_MAX, PM_REMOVE);
-#else
-			// Since Win95/NT4 aren't supported, use the PM_QS_* flags to exclude INPUT and PAINT messages.
-			// This solves an infinite WM_PAINT loop issue which often crops up when script subclasses a window,
-			// and removes the need for do_special_msg_filter in the section above.
-			peek_result = PeekMessage(&msg, NULL, 0, MSG_FILTER_MAX, PM_REMOVE | PM_QS_SENDMESSAGE | PM_QS_POSTMESSAGE);
-#endif
 			if (!peek_result) // No more messages
 			{
 				// Since the Peek() didn't find any messages, our timeslice may have just been
