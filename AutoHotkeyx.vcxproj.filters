@@ -11,11 +11,11 @@
     </Filter>
     <Filter Include="Source Files">
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+      <Extensions>cpp;c;cxx;def;odl;idl;hpj;bat</Extensions>
     </Filter>
     <Filter Include="Assembly Files">
       <UniqueIdentifier>{ecb1e7be-5c45-4dfc-9f18-09b5a4ea18e1}</UniqueIdentifier>
-      <Extensions>asm</Extensions>
+      <Extensions>asm;asmx</Extensions>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -187,7 +187,7 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="source\script_com.h">
-      <Filter>Source Files</Filter>
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -215,9 +215,6 @@
     <None Include="source\resources\icon_tray_win9x_suspend.ico">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="source\libx64call\x64stub.asm">
-      <Filter>Assembly Files</Filter>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="source\resources\AutoHotkey.rc">
@@ -226,6 +223,12 @@
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="source\libx64call\x64call.asm">
+      <Filter>Assembly Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="source\lib\win2kcompat.asm">
+      <Filter>Assembly Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="source\libx64call\x64stub.asm">
       <Filter>Assembly Files</Filter>
     </CustomBuild>
   </ItemGroup>

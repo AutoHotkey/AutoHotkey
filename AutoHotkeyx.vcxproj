@@ -98,6 +98,7 @@
   <ItemDefinitionGroup Condition="'$(Platform)'=='Win32'">
     <Link>
       <TargetMachine>MachineX86</TargetMachine>
+      <MinimumRequiredVersion>5</MinimumRequiredVersion>
     </Link>
   </ItemDefinitionGroup>
   <!-- platform: x64 -->
@@ -107,7 +108,6 @@
     </ClCompile>
     <Link>
       <TargetMachine>MachineX64</TargetMachine>
-      <AdditionalDependencies>$(ProjectDir)\source\libx64call\x64call.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <!-- paths and basic settings -->
@@ -258,19 +258,29 @@
     <ClInclude Include="source\window.h" />
     <ClInclude Include="source\WinGroup.h" />
   </ItemGroup>
-  <ItemGroup>
-    <CustomBuild Include="source\libx64call\x64call.asm">
-      <ExcludedFromBuild Condition="'$(Platform)'=='Win32'">true</ExcludedFromBuild>
-      <FileType>Document</FileType>
-      <Command>cd %(RootDir)%(Directory)
-ml64 /c x64call.asm x64stub.asm &amp;&amp; lib /out:x64call.lib x64call.obj x64stub.obj</Command>
-      <Message>Assembling x64 DllCall/RegisterCallback helpers</Message>
-      <Outputs>%(RootDir)%(Directory)x64call.lib</Outputs>
-      <AdditionalInputs>%(RootDir)%(Directory)x64stub.asm;%(AdditionalInputs)</AdditionalInputs>
+  <PropertyGroup>
+    <Masm>ml</Masm>
+    <Masm Condition="'$(Platform)'=='x64'">ml64</Masm>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <CustomBuild>
+      <Command>$(Masm) /Cx /Fo"$(SolutionDir)temp\$(Platform)\%(Filename).obj" /c "%(FullPath)"</Command>
+      <Message></Message>
+      <Outputs>$(SolutionDir)temp\$(Platform)\%(Filename).obj</Outputs>
     </CustomBuild>
-    <None Include="source\libx64call\x64stub.asm">
-      <ExcludedFromBuild Condition="'$(Platform)'=='Win32'">true</ExcludedFromBuild>
-    </None>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="source\lib\win2kcompat.asm">
+      <ExcludedFromBuild Condition="'$(Platform)'!='Win32'">true</ExcludedFromBuild>
+    </CustomBuild>
+    <CustomBuild Include="source\libx64call\x64call.asm">
+      <ExcludedFromBuild Condition="'$(Platform)'!='x64'">true</ExcludedFromBuild>
+    </CustomBuild>
+    <CustomBuild Include="source\libx64call\x64stub.asm">
+      <ExcludedFromBuild Condition="'$(Platform)'!='x64'">true</ExcludedFromBuild>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
     <None Include="source\resources\AutoHotkey.exe.manifest" />
     <None Include="source\resources\icon_filetype.ico" />
     <None Include="source\resources\icon_main.ico" />
