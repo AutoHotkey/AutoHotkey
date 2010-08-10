@@ -307,53 +307,48 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 	// Reference: MetaObject::Invoke
 	{
-		if (IS_INVOKE_CALL && aParam[0]->symbol == SYM_OPERAND)
-		{
-			aResultToken.symbol = SYM_INTEGER; // Set default return type.
+		if (!aParamCount) // file[]
+			return INVOKE_NOT_HANDLED;
+		
+		LPTSTR name = TokenToString(*aParam[0]); // Name of method or property.
+		aResultToken.symbol = SYM_INTEGER; // Set default return type -- the most common cases return integer.
 
-			LPTSTR field = TokenToString(*aParam[0], NULL);
-			if (!_tcsnicmp(field, _T("Read"), 4))
+		if (IS_INVOKE_CALL) // The following--which prevents file[methodName]() from working--is not required: && aParam[0]->symbol == SYM_OPERAND
+		{
+			if (!_tcsnicmp(name, _T("Read"), 4))
 			{
-				if (!field[4]) // Read
+				if (!name[4]) // Read
 				{
 					if (aParamCount == 2)
 					{
+						aResultToken.symbol = SYM_STRING; // Set for both paths below.
 						DWORD length = (DWORD) TokenToInt64(*aParam[1]);
-						if (length <= MAX_NUMBER_LENGTH)
+						if (length == -1 || !TokenSetResult(aResultToken, NULL, length)) // Relies on short-circuit order. TokenSetResult requires non-NULL aResult if aResultLength == -1.
 						{
-							aResultToken.symbol = SYM_STRING;
-							aResultToken.marker = aResultToken.buf;
-							mFile.Read(aResultToken.marker, length);
-							aResultToken.marker[length] = '\0';
+							// Our caller set marker to a default result of "", which should still be in place.
+							return OK; // FAIL vs OK currently has no real effect here, but in Line::ExecUntil it is used to exit the current thread when a critical error occurs.  Since that behaviour might be implemented for objects someday and in this particular case a bad parameter is more likely than critically low memory, FAIL seems inappropriate.
 						}
-						else
-						{
-							if (!(aResultToken.circuit_token = (ExprTokenType *)tmalloc(length + 1))) // Out of memory.
-								return FAIL;
-							aResultToken.symbol = SYM_STRING;
-							aResultToken.marker = (LPTSTR) aResultToken.circuit_token; // Store the address of the result for the caller.
-							length = mFile.Read(aResultToken.marker, length);
-							aResultToken.marker[length] = '\0';
-							aResultToken.buf = (LPTSTR)(size_t) length; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
-						}
+						length = mFile.Read(aResultToken.marker, length);
+						aResultToken.marker[length] = '\0';
+						aResultToken.buf = (LPTSTR)(size_t) length; // Update buf to the actual number of characters read. Only strictly necessary in some cases; see TokenSetResult.
 						return OK;
 					}
 				}
-				else if (!_tcsicmp(field + 4, _T("Line"))) // ReadLine
+				else if (!_tcsicmp(name + 4, _T("Line"))) // ReadLine
 				{
 					if (aParamCount == 1)
-					{
-						if (!(aResultToken.circuit_token = (ExprTokenType *)tmalloc(READ_FILE_LINE_SIZE)))
-							return FAIL;
+					{	// See above for comments.
 						aResultToken.symbol = SYM_STRING;
-						aResultToken.marker = (LPTSTR) aResultToken.circuit_token; // Store the address of the result for the caller.
-						aResultToken.buf = (LPTSTR)(size_t) mFile.ReadLine(aResultToken.marker, READ_FILE_LINE_SIZE - 1); // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
-						aResultToken.marker[READ_FILE_LINE_SIZE - 1] = '\0'; // Prevent buffer overrun for very long lines.
+						if (!TokenSetResult(aResultToken, NULL, READ_FILE_LINE_SIZE))
+							return OK; 
+						DWORD length = mFile.ReadLine(aResultToken.marker, READ_FILE_LINE_SIZE - 1);
+						aResultToken.marker[length] = '\0';
+						aResultToken.buf = (LPTSTR)(size_t) length;
 						return OK;
 					}
 				}
 			}
-			else if (!_tcsicmp(field, _T("Write"))) // Write
+			else if (!_tcsicmp(name, _T("Write"))) // Write
 			{
 				if (aParamCount == 2)
 				{
@@ -361,115 +356,83 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 					return OK;
 				}
 			}
-			else if (!_tcsnicmp(field, _T("Raw"), 3)) // raw mode: binary IO
+			else if (!_tcsnicmp(name, _T("Raw"), 3)) // raw mode: binary IO
 			{
 				if (aParamCount == 3)
 				{
-					int iReadWrite = 0;
-					
-					if (!_tcsicmp(field + 3, _T("Read"))) // RawRead
-						iReadWrite = 1;
-					else if (!_tcsicmp(field + 3, _T("Write"))) // RawWrite
-						iReadWrite = 2;
-					if (iReadWrite)
+					bool reading;					
+					if ( (reading = !_tcsicmp(name + 3, _T("Read"))) // RawRead
+						|| !_tcsicmp(name + 3, _T("Write"))) // RawWrite
 					// Reference: BIF_NumGet
 					{
 						LPVOID target;
 						ExprTokenType &target_token = *aParam[1];
-						if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-						{
-							target = target_token.var->Contents(); // Although Contents(TRUE) will force an update of mContents if necessary, it very unlikely to be necessary here because we're about to fetch a binary number from inside mContents, not a normal/text number.
-						}
-						else
-							target = (LPVOID)TokenToInt64(target_token);
-
-						if (target < (LPVOID)1024) // Basic sanity check to catch incoming raw addresses that are zero or blank.
-						{
-							aResultToken.value_int64 = 0;
-							return OK;
-						}
-
 						VarSizeType size = (VarSizeType)TokenToInt64(*aParam[2]);
 
-						// Check if the user requested a size larger than the variable.
-						if (target_token.symbol == SYM_VAR && size > target_token.var->ByteCapacity())
+						if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 						{
-							// When reading expand the target variable if needed.
-							if(iReadWrite == 1)
-							{
-								if(!target_token.var->SetCapacity(size, false, false))
-								{
-									aResultToken.value_int64 = 0;
-									return OK;
-								}
-								target = target_token.var->Contents(); // See comment above.
-							}
-							else
+							// Check if the user requested a size larger than the variable.
+							if ( size > target_token.var->ByteCapacity()
+								// Too small: expand the target variable if reading; abort otherwise.
+								&& (!reading || !target_token.var->SetCapacity(size, false, false)) ) // Relies on short-circuit order.
 							{
 								aResultToken.value_int64 = 0;
 								return OK;
 							}
+							target = target_token.var->Contents();
 						}
+						else
+							target = (LPVOID)TokenToInt64(target_token);
 
-						aResultToken.value_int64 = (iReadWrite == 1) ? mFile.Read(target, (DWORD)size) : mFile.Write(target, (DWORD)size);
+						DWORD result;
+						if (target < (LPVOID)1024) // Basic sanity check to catch incoming raw addresses that are zero or blank.
+							result = 0;
+						else if (reading)
+							result = mFile.Read(target, (DWORD)size);
+						else
+							result = mFile.Write(target, (DWORD)size);
+						aResultToken.value_int64 = result;
 						return OK;
 					}
 				}
 			}
-			else if (!_tcsicmp(field, _T("Seek"))) // Seek
+			else if (!_tcsicmp(name, _T("Seek"))) // Seek
 			{
-				if (aParamCount == 3)
+				if (aParamCount == 2 || aParamCount == 3)
 				{
-					aResultToken.value_int64 = mFile.Seek(TokenToInt64(*aParam[1]), (int) TokenToInt64(*aParam[2])) ? 1 : 0;
-					return OK;
-				}
-				else if (aParamCount == 2)
-				{
-					aResultToken.value_int64 = mFile.Seek(TokenToInt64(*aParam[1]), SEEK_SET) ? 1 : 0;
+					__int64 distance = TokenToInt64(*aParam[1]);
+					int origin;
+					if (aParamCount == 3)
+						origin = (int)TokenToInt64(*aParam[2]);
+					else // Defaulting to SEEK_END when distance is negative seems more useful than allowing it to be interpreted as an unsigned value (> 9.e18 bytes).
+						origin = (distance < 0) ? SEEK_END : SEEK_SET;
+
+					aResultToken.value_int64 = mFile.Seek(distance, origin);
 					return OK;
 				}
 			}
-			else if (!_tcsicmp(field, _T("Tell"))) // Tell
+		}
+
+		if (aParamCount == 1) // Parameterless method or read-only property.
+		{
+			if (!IS_INVOKE_SET) // Not something invalid like file[]:="Tell".
 			{
-				if (aParamCount == 1)
+				if (!_tcsnicmp(name, _T("Pos"), 3) || !_tcsicmp(name, _T("Tell"))) // Tell, Pos or Pos-something
 				{
 					aResultToken.value_int64 = mFile.Tell();
 					return OK;
 				}
-			}
-			else if (!_tcsicmp(field, _T("Length"))) // Length
-			{
-				if (aParamCount == 1)
+				else if (!_tcsicmp(name, _T("AtEOF")))
 				{
-					aResultToken.value_int64 = mFile.Length();
+					aResultToken.value_int64 = mFile.AtEOF();
 					return OK;
 				}
-				else if (aParamCount == 2)
-				{
-					__int64 len = TokenToInt64(*aParam[1]);
-					aResultToken.value_int64 = (len >= 0) ? mFile.Length(len) : -1;
-					return OK;
-				}
-			}
-			else if (!_tcsicmp(field, _T("AtEOF"))) // AtEOF
-			{
-				if (aParamCount == 1)
-				{
-					aResultToken.value_int64 = mFile.AtEOF() ? 1 : 0;
-					return OK;
-				}
-			}
-			else if (!_tcsicmp(field, _T("Close"))) // Close
-			{
-				if (aParamCount == 1)
+				else if (!_tcsicmp(name, _T("Close"))) // Close
 				{
 					mFile.Close();
 					return OK;
 				}
-			}
-			else if (!_tcsicmp(field, _T("__Handle"))) // __Handle, prefix with underscores because it is designed for the advanced users.
-			{
-				if (aParamCount == 1)
+				else if (!_tcsicmp(name, _T("__Handle"))) // Prefix with underscores because it is designed for the advanced users.
 				{
 					aResultToken.value_int64 = (UINT_PTR) mFile.Handle();
 					return OK;
@@ -477,11 +440,39 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			}
 		}
 
+		if (!_tcsicmp(name, _T("Length")))
+		{
+			if (aParamCount == 1)
+			{
+				aResultToken.value_int64 = mFile.Length();
+				return OK;
+			}
+			else if (aParamCount == 2)
+			{
+				if (-1 != (aResultToken.value_int64 = mFile.Length(TokenToInt64(*aParam[1]))))
+					return OK;
+				else // Empty string seems like a more suitable failure indicator than -1.
+					aResultToken.marker = _T("");
+					// Let below set symbol back to SYM_STRING.
+			}
+		}
+
+		aResultToken.symbol = SYM_STRING;
+		// Our caller set marker to "".
 		return INVOKE_NOT_HANDLED;
 	}
 
 	TextFile mFile;
-	friend void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	
+public:
+	static inline FileObject *Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
+	{
+		FileObject *fileObj = new FileObject();
+		if (fileObj && fileObj->mFile.Open(aFileSpec, aFlags, aCodePage))
+			return fileObj;
+		fileObj->Release();
+		return NULL;
+	}
 };
 
 void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
@@ -512,17 +503,12 @@ void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	else if (aEncoding == CP_UTF16)
 		aFlags |= TextStream::BOM_UTF16;
 	
-	FileObject *fileObj = new FileObject();
-	if (fileObj->mFile.Open(aFileName, aFlags, aEncoding & CP_AHKCP))
-	{
+	if (aResultToken.object = FileObject::Open(aFileName, aFlags, aEncoding & CP_AHKCP))
 		aResultToken.symbol = SYM_OBJECT;
-		aResultToken.object = fileObj;
-	}
 	else
-	{
-		fileObj->Release();
-		aResultToken.value_int64 = 0;
-	}
+		aResultToken.value_int64 = 0; // and symbol is already SYM_INTEGER.
+
+	g->LastError = GetLastError();
 }
 #endif
 

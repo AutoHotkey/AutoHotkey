@@ -232,7 +232,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				Var *var;         // for SYM_VAR
 				LPTSTR marker;     // for SYM_STRING and SYM_OPERAND.
 			};
-			LPTSTR buf; // Due to the outermost union, this doesn't increase the total size of the struct. It's used by SYM_FUNC (helps built-in functions), SYM_DYNAMIC, SYM_OPERAND, and perhaps other misc. purposes.
+			LPTSTR buf; // Due to the outermost union, this doesn't increase the total size of the struct (except on x64). It's used by SYM_FUNC (helps built-in functions), SYM_DYNAMIC, SYM_OPERAND, and perhaps other misc. purposes.
 		};  
 	};
 	// Note that marker's str-length should not be stored in this struct, even though it might be readily
