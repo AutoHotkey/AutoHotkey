@@ -108,7 +108,7 @@ TCHAR TextStream::ReadChar()
 				return INVALID_CHAR;
 			}
 		}
-		else if (_ismbblead_l(*mPos, mLocale))
+		else if (mLocale && _ismbblead_l(*mPos, mLocale))
 			iBytes = 2;
 		else
 			iBytes = 1;

@@ -16,6 +16,8 @@
 
 #include <locale.h> // For _locale_t, _create_locale and _free_locale.
 
+extern UINT g_ACP;
+
 // VS2005 and later come with Unicode stream IO in the C runtime library, but it doesn't work very well.
 // For example, it can't read the files encoded in "system codepage" by using
 // wide-char version of the functions such as fgetws(). The characters were not translated to
@@ -46,15 +48,16 @@ public:
 	};
 
 	TextStream()
-		: mFlags(0), mCodePage(CP_ACP), mLength(0), mCapacity(0), mBuffer(NULL), mPos(NULL), mEOF(true)
+		: mFlags(0), mCodePage(-1), mLocale(NULL), mLength(0), mCapacity(0), mBuffer(NULL), mPos(NULL), mEOF(true)
 	{
-		mLocale = _create_locale(LC_ALL, ".0");
+		SetCodePage(CP_ACP);
 	}
 	virtual ~TextStream()
 	{
 		if (mBuffer)
 			free(mBuffer);
-		_free_locale(mLocale);
+		if (mLocale)
+			_free_locale(mLocale);
 		// Close() isn't called here, it will rise a "pure virtual function call" exception.
 	}
 
@@ -134,16 +137,30 @@ public:
 	}
 	void SetCodePage(UINT aCodePage)
 	{
+		if (aCodePage == CP_ACP)
+			aCodePage = g_ACP; // Required by _create_locale.
+		if (!IsValidCodePage(aCodePage))
+			return;
+
 		if (mCodePage != aCodePage)
 		{
 			mCodePage = aCodePage;
 
-			// Recreate _locale_t for use with _ismbblead_l.
-			_free_locale(mLocale);
-			char name_buf[16];
-			*name_buf = '.';
-			_ultoa(aCodePage, name_buf + 1, 10);
-			mLocale = _create_locale(LC_ALL, name_buf);
+			// mLocale is no longer relevant, so free it.
+			if (mLocale)
+				_free_locale(mLocale);
+
+			if (aCodePage != CP_UTF8 && aCodePage != CP_UTF16 && aCodePage != CP_UTF7)
+			{
+				// Recreate locale for use with _ismbblead_l.
+				char name_buf[16];
+				*name_buf = '.';
+				_ultoa(aCodePage, name_buf + 1, 10);
+				mLocale = _create_locale(LC_ALL, name_buf);
+			}
+			else
+				// _create_locale doesn't support Unicode; mLocale isn't needed for CP_UTF8 or CP_UTF16 anyway.
+				mLocale = NULL;
 		}
 	}
 	//UINT GetCodePage() { return mCodePage; }
