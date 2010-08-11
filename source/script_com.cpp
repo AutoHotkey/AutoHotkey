@@ -539,7 +539,7 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 	VARIANT varResult = {0};
 	DISPID dispid;
 
-	LPTSTR aName = TokenToString(*aParam[0]);
+	LPTSTR aName = TokenToString(*aParam[0], aResultToken.buf);
 
 	if (--aParamCount)
 	{
