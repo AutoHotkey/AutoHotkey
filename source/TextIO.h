@@ -139,8 +139,8 @@ public:
 	{
 		if (aCodePage == CP_ACP)
 			aCodePage = g_ACP; // Required by _create_locale.
-		if (!IsValidCodePage(aCodePage))
-			return;
+		//if (!IsValidCodePage(aCodePage)) // Returns FALSE for UTF-16 and possibly other valid code pages, so leave it up to the user to pass a valid codepage.
+			//return;
 
 		if (mCodePage != aCodePage)
 		{
