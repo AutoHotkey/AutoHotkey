@@ -32,6 +32,8 @@ public:
 		, WRITE
 		, APPEND
 		, UPDATE
+		, USEHANDLE = 0x10000000 // Used by BIF_FileOpen/FileObject. High value avoids conflict with the flags below, which can't change because it would break scripts.
+		, ACCESS_MODE_MASK = READ|WRITE|APPEND|UPDATE|USEHANDLE
 
 		// EOL translations
 		, EOL_CRLF = 0x00000004 // read: CRLF to LF. write: LF to CRLF.
@@ -45,6 +47,7 @@ public:
 		, SHARE_READ = 0x00000100
 		, SHARE_WRITE = 0x00000200
 		, SHARE_DELETE = 0x00000400
+		, SHARE_ALL = SHARE_READ|SHARE_WRITE|SHARE_DELETE
 	};
 
 	TextStream()
@@ -163,7 +166,8 @@ public:
 				mLocale = NULL;
 		}
 	}
-	//UINT GetCodePage() { return mCodePage; }
+	UINT GetCodePage() { return mCodePage; }
+	DWORD GetFlags() { return mFlags; }
 protected:
 	// IO abstraction
 	virtual bool    _Open(LPCTSTR aFileSpec, DWORD aFlags) = 0;
