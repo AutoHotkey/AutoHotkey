@@ -1387,21 +1387,19 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 			next_buf_length = GetLine(next_buf, LINE_SIZE - 1, in_continuation_section, fp);
 			if (next_buf_length && next_buf_length != -1) // Prevents infinite loop when file ends with an unclosed "/*" section.  Compare directly to -1 since length is unsigned.
 			{
-				if (in_comment_section) // Look for the uncomment-flag.
+				if (!_tcsncmp(next_buf, _T("*/"), 2)) // Check this even if !in_comment_section so it can be ignored (for convenience) and not treated as a line-continuation operator.
 				{
-					if (!_tcsncmp(next_buf, _T("*/"), 2))
-					{
-						in_comment_section = false;
-						next_buf_length -= 2; // Adjust for removal of /* from the beginning of the string.
-						tmemmove(next_buf, next_buf + 2, next_buf_length + 1);  // +1 to include the string terminator.
-						next_buf_length = ltrim(next_buf, next_buf_length); // Get rid of any whitespace that was between the comment-end and remaining text.
-						if (!*next_buf) // The rest of the line is empty, so it was just a naked comment-end.
-							continue;
-					}
-					else
+					in_comment_section = false;
+					next_buf_length -= 2; // Adjust for removal of /* from the beginning of the string.
+					tmemmove(next_buf, next_buf + 2, next_buf_length + 1);  // +1 to include the string terminator.
+					next_buf_length = ltrim(next_buf, next_buf_length); // Get rid of any whitespace that was between the comment-end and remaining text.
+					if (!*next_buf) // The rest of the line is empty, so it was just a naked comment-end.
 						continue;
 				}
-				else if (!in_continuation_section && !_tcsncmp(next_buf, _T("/*"), 2))
+				else if (in_comment_section)
+					continue;
+
+				if (!in_continuation_section && !_tcsncmp(next_buf, _T("/*"), 2))
 				{
 					in_comment_section = true;
 					continue; // It's now commented out, so the rest of this line is ignored.
