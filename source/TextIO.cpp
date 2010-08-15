@@ -398,7 +398,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				// Based on BIF_NumGet:
 
 				BOOL is_signed, is_float = FALSE;
-				size_t size = 0;
+				DWORD size = 0;
 
 				if (ctoupper(*type) == 'U') // Unsigned.
 				{
