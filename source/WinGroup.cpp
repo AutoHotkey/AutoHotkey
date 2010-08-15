@@ -275,7 +275,7 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec, L
 				// Caller asked us to return in this case, so that it can
 				// use this value to execute a user-specified Gosub:
 				*aJumpToLabel = mJumpToLabel;  // Set output param for the caller.
-				return OK;
+				return FAIL; // Let GroupActivate set ErrorLevel to indicate what happened.
 			}
 			else
 				break;

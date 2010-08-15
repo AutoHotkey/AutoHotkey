@@ -10763,10 +10763,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			if (   !(group = (WinGroup *)mAttribute)   )
 				group = g_script.FindGroup(ARG1);
 			result = OK; // Set default.
+			ResultType activate_result = FAIL;
 			if (group)
 			{
 				// Note: This will take care of DoWinDelay if needed:
-				group->Activate(*ARG2 && !_tcsicmp(ARG2, _T("R")), NULL, &jump_to_label);
+				activate_result = group->Activate(*ARG2 && !_tcsicmp(ARG2, _T("R")), NULL, &jump_to_label);
 				if (jump_to_label)
 				{
 					if (!line->IsJumpValid(*jump_to_label)) // Should be checked here rather than at the time that GroupAdd specified the label because it's from HERE that the jump will actually be done.
@@ -10790,6 +10791,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				}
 			}
 			//else no such group, so just proceed.
+			g_ErrorLevel->Assign(activate_result ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
 			if (aMode == ONLY_ONE_LINE)  // v1.0.45: These two lines were moved here from above to provide proper handling for GroupActivate that lacks a jump/gosub and that lies directly beneath an IF or ELSE.
 				return (result == EARLY_RETURN) ? OK : result;
 			line = line->mNextLine;
