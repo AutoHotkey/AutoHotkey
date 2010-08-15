@@ -26,7 +26,7 @@ HWND *WinGroup::sAlreadyVisited = NULL;
 int WinGroup::sAlreadyVisitedCount = 0;
 
 
-ResultType WinGroup::AddWindow(LPTSTR aTitle, LPTSTR aText, Label *aJumpToLabel, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+ResultType WinGroup::AddWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 // Caller should ensure that at least one param isn't NULL/blank.
 // GroupActivate will tell its caller to jump to aJumpToLabel if a WindowSpec isn't found.
 // This function is not thread-safe because it adds an entry to the list of window specs.
@@ -64,7 +64,7 @@ ResultType WinGroup::AddWindow(LPTSTR aTitle, LPTSTR aText, Label *aJumpToLabel,
 	// The precise method by which the follows steps are done should be thread-safe even if
 	// some other thread calls IsMember() in the middle of the operation.  But any changes
 	// must be carefully reviewed:
-	WindowSpec *the_new_win = new WindowSpec(new_title, new_text, aJumpToLabel, new_exclude_title, new_exclude_text);
+	WindowSpec *the_new_win = new WindowSpec(new_title, new_text, new_exclude_title, new_exclude_text);
 	if (the_new_win == NULL)
 		return g_script.ScriptError(ERR_OUTOFMEM);
 	if (mFirstWindow == NULL)
@@ -234,13 +234,6 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec, L
 			break;
 		}
 		// Otherwise, no window was found to activate.
-		if (aJumpToLabel && win->mJumpToLabel && !sAlreadyVisitedCount)
-		{
-			// Caller asked us to return in this case, so that it can
-			// use this value to execute a user-specified Gosub:
-			*aJumpToLabel = win->mJumpToLabel;  // Set output param for the caller.
-			return OK;
-		}
 		if (retry_is_in_effect)
 			// This was the final attempt because we've already gone all the
 			// way around the circular linked list of WindowSpecs.  This check
@@ -276,6 +269,13 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec, L
 				// Now continue with the next iteration of the loop so that it
 				// will activate a different instance of this WindowSpec rather
 				// than getting stuck on this one.
+			}
+			else if (aJumpToLabel && mJumpToLabel)
+			{
+				// Caller asked us to return in this case, so that it can
+				// use this value to execute a user-specified Gosub:
+				*aJumpToLabel = mJumpToLabel;  // Set output param for the caller.
+				return OK;
 			}
 			else
 				break;

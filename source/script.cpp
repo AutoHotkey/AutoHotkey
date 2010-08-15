@@ -13127,8 +13127,9 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			// GroupAdd, so it will be checked by the GroupActivate or not at all (since it's
 			// not that important in the case of a Gosub -- it's mostly for Goto's):
 			//return IsJumpValid(label->mJumpToLine);
+			group->mJumpToLabel = target_label;
 		}
-		return group->AddWindow(ARG2, ARG3, target_label, ARG5, ARG6);
+		return group->AddWindow(ARG2, ARG3, ARG5, ARG6);
 	}
 
 	// Note ACT_GROUPACTIVATE is handled by ExecUntil(), since it's better suited to do the Gosub.

@@ -32,14 +32,13 @@ class WindowSpec
 {
 public:
 	LPTSTR mTitle, mText, mExcludeTitle, mExcludeText;
-	Label *mJumpToLabel;
 	WindowSpec *mNextWindow;  // Next item in linked list.
-	WindowSpec(LPTSTR aTitle = _T(""), LPTSTR aText = _T(""), Label *aJumpToLabel = NULL
+	WindowSpec(LPTSTR aTitle = _T(""), LPTSTR aText = _T("")
 		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""))
 		// Caller should have allocated some dynamic memory for the given args if they're not
 		// the empty string.  We just set our member variables to be equal to the given pointers.
 		: mTitle(aTitle), mText(aText), mExcludeTitle(aExcludeTitle), mExcludeText(aExcludeText)
-		, mJumpToLabel(aJumpToLabel), mNextWindow(NULL) // mNextWindow(NULL) is also required for thread-safety.
+		, mNextWindow(NULL) // mNextWindow(NULL) is also required for thread-safety.
 	{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
@@ -78,10 +77,11 @@ private:
 public:
 	LPTSTR mName;    // The name of the group.
 	WindowSpec *mFirstWindow, *mLastWindow;
+	Label *mJumpToLabel;
 	WinGroup *mNextGroup;  // Next item in linked list.
 	UINT mWindowCount;
 
-	ResultType AddWindow(LPTSTR aTitle, LPTSTR aText, Label *aJumpToLabel, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType AddWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ActUponAll(ActionTypeType aActionType, int aTimeToWaitForClose);
 	ResultType CloseAndGoToNext(bool aStartWithMostRecent);
 	ResultType Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec = NULL, Label **aJumpToLabel = NULL);
@@ -95,6 +95,7 @@ public:
 		, mWindowCount(0)
 		, mNextGroup(NULL) // v1.0.41: Required for thread-safety, but also for maintainability.
 		, mIsModeActivate(true) // arbitrary default.
+		, mJumpToLabel(NULL)
 	{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
