@@ -14604,9 +14604,9 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 			char_count = source_length + 1; // + 1 because generally a null-terminator is wanted.
 			if (length)
 			{
-				// Check for sufficient buffer space.  Cast to size_t and compare unsigned values: if length is
+				// Check for sufficient buffer space.  Cast to UINT and compare unsigned values: if length is
 				// -1 it should be interpreted as a very large unsigned value, in effect bypassing this check.
-				if (source_length <= length)
+				if ((UINT)source_length <= (UINT)length)
 				{
 					if (source_length == length)
 						// Exceptional case: caller doesn't want a null-terminator (or passed this length in error).
