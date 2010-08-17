@@ -74,8 +74,8 @@ void* SimpleHeap::Malloc(size_t aSize)
 	// 2) May solve other obscure issues (past and future), which improves sanity due to not chasing bugs
 	//    for hours on end that were caused solely by non-alignment.
 	// 3) May slightly improve performance since aligned data is easier for the CPU to access and cache.
-	size_t remainder = aSize % 4;
-	size_t size_consumed = remainder ? aSize + (4 - remainder) : aSize;
+	size_t remainder = aSize % sizeof(void *);
+	size_t size_consumed = remainder ? aSize + (sizeof(void *) - remainder) : aSize;
 	// v1.0.45: The following can't happen when BLOCK_SIZE is a multiple of 4, so it's commented out:
 	//if (size_consumed > sLast->mSpaceAvailable) // For maintainability, don't allow mFreeMarker to go out of bounds or
 	//	size_consumed = sLast->mSpaceAvailable; // mSpaceAvailable to go negative (which it can't due to be unsigned).
