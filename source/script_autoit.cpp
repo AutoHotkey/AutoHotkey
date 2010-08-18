@@ -1459,22 +1459,28 @@ ResultType Line::FileGetVersion(LPTSTR aFilespec)
 	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.
 
 	if (!aFilespec || !*aFilespec)
+	{
+		g->LastError = ERROR_INVALID_PARAMETER;
 		return OK;  // Let ErrorLevel indicate an error, since this is probably not what the user intended.
+	}
 
 	DWORD dwUnused, dwSize;
 	if (   !(dwSize = GetFileVersionInfoSize(aFilespec, &dwUnused))   )  // No documented limit on how large it can be, so don't use _alloca().
+	{
+		g->LastError = GetLastError();
 		return OK;  // Let ErrorLevel tell the story.
+	}
 
 	BYTE *pInfo = (BYTE*)malloc(dwSize);  // Allocate the size retrieved by the above.
-
-	// Read the version resource
-	GetFileVersionInfo(aFilespec, 0, dwSize, (LPVOID)pInfo);
-
-	// Locate the fixed information
 	VS_FIXEDFILEINFO *pFFI;
 	UINT uSize;
-	if (!VerQueryValue(pInfo, _T("\\"), (LPVOID *)&pFFI, &uSize))
+
+	// Read the version resource
+	if (!GetFileVersionInfo(aFilespec, 0, dwSize, (LPVOID)pInfo)
+	// Locate the fixed information
+		|| !VerQueryValue(pInfo, _T("\\"), (LPVOID *)&pFFI, &uSize))
 	{
+		g->LastError = GetLastError();
 		free(pInfo);
 		return OK;  // Let ErrorLevel tell the story.
 	}
@@ -1488,6 +1494,7 @@ ResultType Line::FileGetVersion(LPTSTR aFilespec)
 
 	free(pInfo);
 
+	g->LastError = 0;
     g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Indicate success.
 	return OUTPUT_VAR->Assign(version_string);
 }
@@ -1658,7 +1665,7 @@ bool Line::Util_RemoveDir(LPCTSTR szInputSource, bool bRecurse)
 // (moves files too)
 // Returns the number of files that could not be copied or moved due to error.
 ///////////////////////////////////////////////////////////////////////////////
-int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite, bool bMove)
+int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite, bool bMove, DWORD &aLastError)
 {
 	TCHAR			szSource[_MAX_PATH+1];
 	TCHAR			szDest[_MAX_PATH+1];
@@ -1682,7 +1689,11 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 	WIN32_FIND_DATA	findData;
 	HANDLE hSearch = FindFirstFile(szSource, &findData);
 	if (hSearch == INVALID_HANDLE_VALUE)
+	{
+		aLastError = GetLastError(); // Set even in this case since FindFirstFile can fail due to actual errors, such as an invalid path.
 		return 0; // Indicate no failures.
+	}
+	aLastError = 0; // Set default. Overridden only when a failure occurs.
 
 	// Otherwise, loop through all the matching files.
 	// Split source into file and extension (we need this info in the loop below to recontstruct the path)
@@ -1710,6 +1721,7 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 
 		if (_tcslen(findData.cFileName) > space_remaining) // v1.0.45.03: Basic check in case of files whose full spec is over 260 characters long.
 		{
+			aLastError = ERROR_BUFFER_OVERFLOW; // MSDN: "The file name is too long."
 			++failure_count;
 			continue;
 		}
@@ -1747,14 +1759,20 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 				// But by design, continue the operation.  The following relies heavily on
 				// short-circuit boolean evaluation order:
 				if (   !(bOverwrite && DeleteFile(szExpandedDest) && MoveFile(szTempPath, szExpandedDest))   )
+				{
+					aLastError = GetLastError();
 					++failure_count; // At this stage, any of the above 3 being false is cause for failure.
+				}
 				//else everything succeeded, so nothing extra needs to be done.  In either case,
 				// continue on to the next file.
 			}
 		}
 		else // The mode is "Copy" vs. "Move"
 			if (!CopyFile(szTempPath, szExpandedDest, !bOverwrite)) // Force it to fail if bOverwrite==false.
+			{
+				aLastError = GetLastError();
 				++failure_count;
+			}
 	} while (FindNextFile(hSearch, &findData));
 
 	FindClose(hSearch);
