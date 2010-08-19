@@ -232,7 +232,11 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				Var *var;         // for SYM_VAR
 				LPTSTR marker;     // for SYM_STRING and SYM_OPERAND.
 			};
-			LPTSTR buf; // Due to the outermost union, this doesn't increase the total size of the struct (except on x64). It's used by SYM_FUNC (helps built-in functions), SYM_DYNAMIC, SYM_OPERAND, and perhaps other misc. purposes.
+			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64). It's used by SYM_FUNC (helps built-in functions), SYM_DYNAMIC, SYM_OPERAND, and perhaps other misc. purposes.
+			{
+				LPTSTR buf;
+				size_t marker_length; // Used only with aResultToken. TODO: Move into separate ResultTokenType struct.
+			};
 		};  
 	};
 	// Note that marker's str-length should not be stored in this struct, even though it might be readily
@@ -240,7 +244,11 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	// or SYM_VAR's var pointed to a location that was changed as a side effect of an expression's
 	// call to a script function, the length would then be invalid.
 	SymbolType symbol; // Short-circuit benchmark is currently much faster with this and the next beneath the union, perhaps due to CPU optimizations for 8-byte alignment.
-	ExprTokenType *circuit_token; // Facilitates short-circuit boolean evaluation.
+	union
+	{
+		ExprTokenType *circuit_token; // Facilitates short-circuit boolean evaluation.
+		LPTSTR mem_to_free; // Used only with aResultToken. TODO: Move into separate ResultTokenType struct.
+	};
 	// The above two probably need to be adjacent to each other to conserve memory due to 8-byte alignment,
 	// which is the default alignment (for performance reasons) in any struct that contains 8-byte members
 	// such as double and __int64.

@@ -13,7 +13,7 @@
 ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 // Caller should pass an aResultToken with the usual setup:
 //	buf points to a buffer the called function may use: char[MAX_NUMBER_SIZE]
-//	circuit_token is NULL; if it is non-NULL on return, caller (or caller's caller) is responsible for it.
+//	mem_to_free is NULL; if it is non-NULL on return, caller (or caller's caller) is responsible for it.
 // Caller is responsible for making a persistent copy of the result, if appropriate.
 {
 	if (aParamCount < aFunc.mMinParams)
@@ -143,7 +143,7 @@ IObject *Object::Create(ExprTokenType *aParam[], int aParamCount)
 		{
 			result_token.symbol = SYM_STRING;
 			result_token.marker = _T("");
-			result_token.circuit_token = NULL;
+			result_token.mem_to_free = NULL;
 			result_token.buf = buf;
 
 			// This is used rather than a more direct approach to ensure it is equivalent to assignment.
@@ -153,8 +153,8 @@ IObject *Object::Create(ExprTokenType *aParam[], int aParamCount)
 
 			if (result_token.symbol == SYM_OBJECT) // L33: Bugfix.  Invoke must assume the result will be used and as a result we must account for this object reference:
 				result_token.object->Release();
-			if (result_token.circuit_token) // Currently should never happen, but may happen in future.
-				free(result_token.circuit_token);
+			if (result_token.mem_to_free) // Comment may be obsolete: Currently should never happen, but may happen in future.
+				free(result_token.mem_to_free);
 		}
 	}
 	return obj;
@@ -174,7 +174,7 @@ bool Object::Delete()
 		
 		result_token.marker = _T("");
 		result_token.symbol = SYM_STRING;
-		result_token.circuit_token = NULL;
+		result_token.mem_to_free = NULL;
 
 		this_token.symbol = SYM_OBJECT;
 		this_token.object = this;
@@ -194,8 +194,8 @@ bool Object::Delete()
 		DEPRIVATIZE_S_DEREF_BUF; // L33: See above.
 
 		// L33: Release result if given, although typically there should not be one:
-		if (result_token.circuit_token)
-			free(result_token.circuit_token);
+		if (result_token.mem_to_free)
+			free(result_token.mem_to_free);
 		if (result_token.symbol == SYM_OBJECT)
 			result_token.object->Release();
 
@@ -493,7 +493,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		if (field->symbol == SYM_OPERAND)
 		{
 			// Use SYM_STRING and not SYM_OPERAND, since SYM_OPERAND's use of aResultToken.buf
-			// would conflict with the use of circuit_token/buf to return a memory allocation.
+			// would conflict with the use of mem_to_free/buf to return a memory allocation.
 			aResultToken.symbol = SYM_STRING;
 			// L33: Make a persistent copy; our copy might be freed indirectly by releasing this object.
 			//		Prior to L33, callers took care of this UNLESS this was the last op in an expression.
@@ -712,8 +712,8 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 			if (min_field->size)
 			{
 				// Detach the memory allocated for this field's string and pass it back to caller.
-				aResultToken.circuit_token = (ExprTokenType *)(aResultToken.marker = min_field->marker);
-				aResultToken.buf = (LPTSTR)_tcslen(aResultToken.marker); // NOT min_field->size, which is the allocation size.
+				aResultToken.mem_to_free = aResultToken.marker = min_field->marker;
+				aResultToken.marker_length = _tcslen(aResultToken.marker); // NOT min_field->size, which is the allocation size.
 				min_field->size = 0; // Prevent Free() from freeing min_field->marker.
 			}
 			//else aResultToken already contains an empty string.

@@ -377,10 +377,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				this_token.buf = left_buf;       // mBIF() can use this to store a string result, and for other purposes.
 
 				// BACK UP THE CIRCUIT TOKEN (it's saved because it can be non-NULL at this point; verified
-				// through code review).
+				// through code review).  Currently refers to the same memory as mem_to_free via union.
 				circuit_token = this_token.circuit_token;
-				this_token.circuit_token = NULL; // Init to detect whether the called function allocates it (i.e. we're overloading it with a new purpose).  It's no longer necessary to back up & restore the previous value in circuit_token because circuit_token is used only when a result is about to get pushed onto the stack.
-				// RESIST TEMPTATIONS TO OPTIMIZE CIRCUIT_TOKEN by passing output_var as circuit_token
+				this_token.mem_to_free = NULL; // Init to detect whether the called function allocates it (i.e. we're overloading it with a new purpose).  It's no longer necessary to back up & restore the previous value in circuit_token because circuit_token is used only when a result is about to get pushed onto the stack.
+				// RESIST TEMPTATIONS TO OPTIMIZE CIRCUIT_TOKEN by passing output_var as circuit_token/mem_to_free
 				// when done==true (i.e. the built-in function could then assign directly to output_var).
 				// It doesn't help performance at all except for a mere 10% or less in certain fairly rare cases.
 				// More importantly, it hurts maintainability because it makes RegExReplace() more complicated
@@ -388,9 +388,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				// with its input/source strings because if it does, the function must not initialize a default
 				// in output_var before starting (and avoiding this would further complicate the code).
 				// Here is the crux of the abandoned approach: Any function that wishes to pass memory back to
-				// us via circuit_token: When circuit_token!=NULL, that function MUST INSTEAD: 1) Turn that
-				// memory over to output_var via AcceptNewMem(); 2) Set circuit_token to NULL to indicate to
-				// us that it is a user of circuit_token.
+				// us via mem_to_free: When mem_to_free!=NULL, that function MUST INSTEAD: 1) Turn that
+				// memory over to output_var via AcceptNewMem(); 2) Set mem_to_free to NULL to indicate to
+				// us that it is a user of mem_to_free.
 
 				// CALL THE BUILT-IN FUNCTION:
 				func.mBIF(this_token, stack + stack_count, actual_param_count);
@@ -400,12 +400,12 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				done = EXPR_IS_DONE;
 				done_and_have_an_output_var = done && output_var; // i.e. this is ACT_ASSIGNEXPR and we've now produced the final result.
 				make_result_persistent = true; // Set default.
-				if (this_token.circuit_token) // The called function allocated some memory here (to facilitate returning long strings) and turned it over to us.
+				if (this_token.mem_to_free) // The called function allocated some memory here (to facilitate returning long strings) and turned it over to us.
 				{
-					// In most cases, the string stored in circuit_token is the same address as this_token.marker
+					// In most cases, the string stored in mem_to_free is the same address as this_token.marker
 					// (i.e. what is named "result" further below), because that's what the built-in functions
 					// are normally using the memory for.
-					if ((LPTSTR)this_token.circuit_token == this_token.marker) // circuit_token is checked in case caller alloc'd mem but didn't use it as its actual result.
+					if (this_token.mem_to_free == this_token.marker) // mem_to_free is checked in case caller alloc'd mem but didn't use it as its actual result.
 					{
 						// v1.0.45: If possible, take a shortcut for performance.  Doing it this way saves at least
 						// two memcpy's (one into deref buffer and then another back into the output_var by
@@ -420,7 +420,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 						{
 							// AcceptNewMem() will shrink the memory for us, via _expand(), if there's a lot of
 							// extra/unused space in it.
-							output_var->AcceptNewMem((LPTSTR)this_token.circuit_token, (VarSizeType)(size_t)this_token.buf); // "buf" is the length. See comment higher above.
+							output_var->AcceptNewMem(this_token.mem_to_free, this_token.marker_length);
 							goto normal_end_skip_output_var;  // No need to restore circuit_token because the expression is finished.
 						}
 						if (this_postfix[1].symbol == SYM_ASSIGN // Next operation is ":=".
@@ -433,14 +433,14 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 							ExprTokenType &left = *STACK_POP; // Above has already confirmed that it's SYM_VAR and VAR_NORMAL.
 							// AcceptNewMem() will shrink the memory for us, via _expand(), if there's a lot of
 							// extra/unused space in it.
-							left.var->AcceptNewMem((LPTSTR)this_token.circuit_token, (VarSizeType)(size_t)this_token.buf);
+							left.var->AcceptNewMem(this_token.mem_to_free, this_token.marker_length);
 							this_token.circuit_token = (++this_postfix)->circuit_token; // Must be done AFTER above. Old, somewhat obsolete comment: this_postfix.circuit_token should have been NULL prior to this because the final right-side result of an assignment shouldn't be the last item of an AND/OR/IFF's left branch. The assignment itself would be that.
 							this_token.var = left.var;   // Make the result a variable rather than a normal operand so that its
 							this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
 							goto push_this_token;
 						}
 						make_result_persistent = false; // Override the default set higher above.
-					} // if (this_token.circuit_token == this_token.marker)
+					} // if (this_token.mem_to_free == this_token.marker)
 					// Since above didn't goto, we're not done yet; so handle this memory the normal way: Mark it
 					// to be freed at the time we return.
 					if (mem_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
@@ -448,9 +448,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 						LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, func.mName);
 						goto abort;
 					}
-					mem[mem_count++] = (LPTSTR)this_token.circuit_token;
+					mem[mem_count++] = this_token.mem_to_free;
 				}
-				//else this_token.circuit_token==NULL, so the BIF just called didn't allocate memory to give to us.
+				//else this_token.mem_to_free==NULL, so the BIF just called didn't allocate memory to give to us.
 				this_token.circuit_token = circuit_token; // Restore it to its original value.
 
 				// HANDLE THE RESULT (unless it was already handled above due to an optimization):

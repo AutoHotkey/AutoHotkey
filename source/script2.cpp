@@ -12837,11 +12837,11 @@ has_valid_return_type:
 					CStringCharFromWChar result_buf(result);
 #endif
 					// Store the length of the translated string first since DetachBuffer() clears it.
-					aResultToken.buf = (LPTSTR)(size_t)result_buf.GetLength();
+					aResultToken.marker_length = result_buf.GetLength();
 					// Now attempt to take ownership of the malloc'd memory, to return to our caller.
-					if (aResultToken.circuit_token = (ExprTokenType *)result_buf.DetachBuffer())
-						aResultToken.marker = (LPTSTR)aResultToken.circuit_token;
-					//else circuit_token is NULL, so buf should be ignored.  See next comment below.
+					if (aResultToken.mem_to_free = result_buf.DetachBuffer())
+						aResultToken.marker = aResultToken.mem_to_free;
+					//else mem_to_free is NULL, so marker_length should be ignored.  See next comment below.
 				}
 				//else leave aResultToken as it was set at the top of this function: an empty string.
 			}
@@ -13850,10 +13850,10 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		, substring_name[33] // In PCRE, "Names consist of up to 32 alphanumeric characters and underscores."
 		, transform;
 
-	// Caller has provided a NULL circuit_token as a means of passing back memory we allocate here.
+	// Caller has provided mem_to_free (initially NULL) as a means of passing back memory we allocate here.
 	// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
-	LPTSTR &result = (LPTSTR &)aResultToken.circuit_token; // Make an alias to type-cast and for convenience.
-	size_t &result_length = (size_t &)aResultToken.buf; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
+	LPTSTR &result = aResultToken.mem_to_free; // Make an alias for convenience.
+	size_t &result_length = aResultToken.marker_length; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: set marker_length to the length of the string in marker.
 	result_size = 0;   // And caller has already set "result" to be NULL.  The buffer is allocated only upon
 	result_length = 0; // first use to avoid a potentially massive allocation that might be wasted and cause swapping (not to mention that we'll have better ability to estimate the correct total size after the first replacement is discovered).
 
@@ -13947,7 +13947,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				// Already set as a default earlier, so commented out:
 				//aResultToken.marker = aHaystack;
 				// Not necessary to set output-var (length) for caller except when we allocated memory for the caller:
-				//result_length = aHaystackLength; // result_length is an alias for an output parameter, so update for maintainability even though currently callers don't use it when no alloc of circuit_token.
+				//result_length = aHaystackLength; // result_length is an alias for an output parameter, so update for maintainability even though currently callers don't use it when no alloc of mem_to_free.
 				//
 				// There's no need to do the following because it should already be that way when replacement_count==0.
 				//if (result)
@@ -14834,7 +14834,7 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 				--conv_length; // Exclude null-terminator.
 			else
 				aResultToken.marker[conv_length] = '\0';
-			aResultToken.buf = (LPTSTR)(size_t)conv_length; // Update this in case TokenSetResult used circuit_token.
+			aResultToken.marker_length = conv_length; // Update this in case TokenSetResult used mem_to_free.
 			return;
 		}
 		else if (length > -1)
@@ -17496,12 +17496,12 @@ ResultType TokenSetResult(ExprTokenType &aResultToken, LPCTSTR aResult, size_t a
 		aResultToken.marker = aResultToken.buf; // Store the address of the result for the caller.
 	else
 	{
-		// Caller has provided a NULL circuit_token as a means of passing back memory we allocate here.
+		// Caller has provided a mem_to_free (initially NULL) as a means of passing back memory we allocate here.
 		// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
-		if (   !(aResultToken.circuit_token = (ExprTokenType *)tmalloc(aResultLength + 1))   ) // Out of memory. Due to rarity, don't display an error dialog (there's currently no way for a built-in function to abort the current thread anyway?)
+		if (   !(aResultToken.mem_to_free = tmalloc(aResultLength + 1))   ) // Out of memory. Due to rarity, don't display an error dialog (there's currently no way for a built-in function to abort the current thread anyway?)
 			return FAIL;
-		aResultToken.marker = (LPTSTR)aResultToken.circuit_token; // Store the address of the result for the caller.
-		aResultToken.buf = (LPTSTR)aResultLength; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: "buf" is being overloaded to store the length for our caller.
+		aResultToken.marker = aResultToken.mem_to_free; // Store the address of the result for the caller.
+		aResultToken.marker_length = aResultLength; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: set marker_length to the length of the string in marker.
 	}
 	if (aResult) // Caller may pass NULL to retrieve a buffer of sufficient size.
 		tmemcpy(aResultToken.marker, aResult, aResultLength);
