@@ -1139,7 +1139,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				// a NULL address, the >255 check also rules out common-bug addresses (I don't think addresses
 				// this low can realistically ever be legitimate, but it would be nice to get confirmation).
 				// For simplicity and due to rarity, a zero is yielded in such cases rather than an empty string.
-				this_token.value_int64 = (right_int64 < 256 || right_int64 > 0xFFFFFFFF)
+				this_token.value_int64 = ((size_t)right_int64 < 4096)
 					? 0 : *(UCHAR *)right_int64; // Dereference to extract one unsigned character, just like Asc().
 			}
 			this_token.symbol = SYM_INTEGER; // Must be done only after its old value was used above. v1.0.36.07: Fixed to be SYM_INTEGER vs. right_is_number for SYM_BITNOT.
