@@ -9256,7 +9256,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 				case ',':
 					this_infix_item.symbol = SYM_COMMA; // Used to separate sub-statements and function parameters.
-					this_infix_item.marker = cp; // L31: For error-reporting.
 					break;
 				case '/':
 					if (cp1 == '=')
@@ -9329,7 +9328,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						++infix_count;
 					}
 					infix[infix_count].symbol = SYM_OPAREN; // MUST NOT REFER TO this_infix_item IN CASE ABOVE DID ++infix_count.
-					infix[infix_count].marker = cp; // L31: For error-reporting.  L37: Also used to implement the requirement that there be no space between ']' and '(' in this: obj[method_name](params).
+					infix[infix_count].buf = cp; // Used to differentiate "obj[method_name](param)" from "obj[name] (string_to_concat)".
 					break;
 				case ')':
 					this_infix_item.symbol = SYM_CPAREN;
@@ -9363,7 +9362,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 				case ']': // L31
 					this_infix_item.symbol = SYM_CBRACKET;
-					this_infix_item.marker = cp; // L37: Used to implement the requirement that there be no space between ']' and '(' in this: obj[method_name](params).
+					this_infix_item.buf = cp; // Used to differentiate "obj[method_name](param)" from "obj[name] (string_to_concat)".
 					break;
 				case '=':
 					if (cp1 == '=')
@@ -9986,8 +9985,8 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 					{
 						// Ensure the last postfix token is a var or something which can yield a var.
 						// This method should be very accurate unless a multi-statement is used; for example,
-						// the following is treated as an error since '+' can't yield a var: Func((var,not+var))
-						// Since multi-statements weren't previously allowed in parameter lists, this is acceptable.
+						// Func((var,not+var)) is difficult to validate since we don't know where the end of the
+						// first statement is; currently this use of multi-statement bypasses ByRef validation.
 						bool is_byref_compatible = false;
 						if (postfix_count)
 						{
@@ -9997,6 +9996,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 							{
 							case SYM_VAR:
 							case SYM_DYNAMIC:		// Cannot be the SYM_DYNAMIC of a dynamic function call since there would be a SYM_FUNC following it.  Must be allowed for ByRef to work with %double_derefs% OR without #NoEnv.
+								// TODO: Determine if built-in vars can be excluded here (show an error message).
 							case SYM_PRE_INCREMENT:
 							case SYM_PRE_DECREMENT:
 							case SYM_IFF_ELSE:		// Difficult to validate, maybe OK.
@@ -10091,10 +10091,10 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				//--stack_count; // DON'T remove this SYM_OBRACKET from the stack.  It is left on the stack for reuse below.
 
 				// L37: Detect obj[method_name](params):
-				if (this_infix[1].symbol == SYM_CONCAT && this_infix[2].symbol == SYM_OPAREN && this_infix[2].marker == this_infix->marker + 1)
+				if (this_infix[1].symbol == SYM_CONCAT && this_infix[2].symbol == SYM_OPAREN && this_infix[2].buf == this_infix->buf + 1)
 				{	// The final check above ensures this is "](" and not "] (" or "] . (".
 					if (in_param_list->param_count != 2) // Require exactly one [parameter], excluding the target object.
-						return LineError(_T("Exactly one [name_parameter] must precede the (parameter list)."), FAIL, this_obracket.deref->marker);
+						return LineError(_T("Exactly one [ parameter ] required in this case"), FAIL, this_obracket.deref->marker);
 					this_infix += 2; // Skip the SYM_CONCAT and SYM_CBRACKET.
 					// Treat this as a continuation of the parameter list for this operation, which is now known to be ObjCall.
 					// in_param_list must remain pointing to the same deref, which we will continue to use to count parameters.
@@ -10307,10 +10307,13 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 		this_postfix = STACK_POP;
 		this_postfix->circuit_token = NULL; // Set default. It's only ever overridden after it's in the postfix array.
-		if (this_postfix->symbol == SYM_SET) // L31: Convert SYM_SET to SYM_FUNC so SYM_SET doesn't need to be handled at run-time.  SYM_SET is required at load-time for precedence rules to apply correctly to ObjSet (obj["name"]:=value or obj.name:=value).
+		switch (this_postfix->symbol)
+		{
+		case SYM_SET: // L31: Convert SYM_SET to SYM_FUNC so SYM_SET doesn't need to be handled at run-time.  SYM_SET is required at load-time for precedence rules to apply correctly to ObjSet (obj["name"]:=value or obj.name:=value).
+		case SYM_REGEXMATCH: // a ~= b  ->  RegExMatch(a, b)
 			this_postfix->symbol = SYM_FUNC;
-		else if (this_postfix->symbol == SYM_REGEXMATCH) // L31: Similar to above.
-			this_postfix->symbol = SYM_FUNC;
+			break;
+ 		}
 		++postfix_count;
 	} // End of loop that builds postfix array from the infix array.
 end_of_infix_to_postfix:
