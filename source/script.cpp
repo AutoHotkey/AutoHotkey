@@ -2786,7 +2786,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		if (g_HotExprLineCount + 1 > g_HotExprLineCountMax)
 		{	// Allocate or reallocate g_HotExprLines.
 			g_HotExprLineCountMax += 100;
-			g_HotExprLines = (Line**)realloc(g_HotExprLines, g_HotExprLineCountMax * 4);
+			g_HotExprLines = (Line**)realloc(g_HotExprLines, g_HotExprLineCountMax * sizeof(Line**));
 		}
 		g_HotExprIndex = g_HotExprLineCount++;
 		g_HotExprLines[g_HotExprIndex] = hot_expr_line;
