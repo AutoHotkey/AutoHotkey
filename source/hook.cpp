@@ -2891,7 +2891,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				aHotstringWparamToPost = u; // Override the default set by caller.
 				aHotstringLparamToPost = MAKELONG(
 					hs.mEndCharRequired  // v1.0.48.04: Fixed to omit "&& hs.mDoBackspace" so that A_EndChar is set properly even for option "B0" (no backspacing).
-						? (UCHAR)g_HSBuf[g_HSBufLength - 1]  // Used by A_EndChar and Hotstring::DoReplace().
+						? g_HSBuf[g_HSBufLength - 1]  // Used by A_EndChar and Hotstring::DoReplace().
 						: (dead_key_sequence_complete && suppress_hotstring_final_char) // v1.0.44.09: See comments below.
 					, case_conform_mode);
 				// v1.0.44.09: dead_key_sequence_complete was added above to tell DoReplace() to do one fewer
