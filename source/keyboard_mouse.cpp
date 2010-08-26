@@ -93,8 +93,23 @@ void DisguiseWinAltIfNeeded(vk_type aVK)
 
 
 // moved from SendKeys
-inline void SendUnicodeChar(wchar_t aChar)
+void SendUnicodeChar(wchar_t aChar)
 {
+	if (sSendMode == SM_INPUT)
+	{
+		// Calling SendInput() now would cause characters to appear out of sequence.
+		// Instead, put them into the array and allow them to be sent in sequence.
+		PutKeybdEventIntoArray(0, 0, aChar, KEYEVENTF_UNICODE, KEY_IGNORE);
+		PutKeybdEventIntoArray(0, 0, aChar, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, KEY_IGNORE);
+		return;
+	}
+	//else caller has ensured sSendMode is SM_EVENT. In that mode, events are sent one at a time,
+	// so it is safe to immediately call SendInput(). SM_PLAY is not supported; for simplicity,
+	// SendASC() is called instead of this function. Although this means Unicode chars probably
+	// won't work, it seems better than sending chars out of order. One possible alternative could
+	// be to "flush" the event array, but since SendInput and SendEvent are probably much more common,
+	// this is left for a future version.
+
 	INPUT u_input[2];
 
 	u_input[0].type = INPUT_KEYBOARD;
@@ -675,7 +690,8 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 					else
 					{
 						// Use SendInput in unicode mode if available, otherwise fall back to SendASC.
-						if (g_os.IsWin2000orLater())
+						// To know why the following requires sSendMode != SM_PLAY, see SendUnicodeChar.
+						if (sSendMode != SM_PLAY && g_os.IsWin2000orLater())
 						{
 							// L25: Set modifier key-state in case it matters.
 							SetModifierLRState(mods_for_next_key | persistent_modifiers_for_this_SendKeys
@@ -1122,21 +1138,19 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 	// Production of ANSI characters above 127 has been tested on both Windows XP and 98se (but not the
 	// Win98 command prompt).
 
-#ifndef UNICODE
-	char asc_string[16], *cp = asc_string;
+	TCHAR asc_string[16], *cp = asc_string;
 
 	// The following range isn't checked because this function appears never to be called for such
 	// characters (tested in English and Russian so far), probably because VkKeyScan() finds a way to
 	// manifest them via Control+VK combinations:
 	//if (aChar > -1 && aChar < 32)
 	//	return;
-	if (aChar < 0)    // Try using ANSI.
+	if (aChar & ~127)    // Try using ANSI.
 		*cp++ = '0';  // ANSI mode is achieved via leading zero in the Alt+Numpad keystrokes.
 	//else use Alt+Numpad without the leading zero, which allows the characters a-z, A-Z, and quite
 	// a few others to be produced in Russian and perhaps other layouts, which was impossible in versions
 	// prior to 1.0.40.
-	_itoa((int)(UCHAR)aChar, cp, 10); // Convert to UCHAR in case aChar < 0.
-#endif
+	_itot(aChar, cp, 10); // Convert to UCHAR in case aChar < 0.
 
 	LONG_OPERATION_INIT
 	for (int i = 0; i < aRepeatCount; ++i)
@@ -1144,10 +1158,11 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 		if (!sSendMode)
 			LONG_OPERATION_UPDATE_FOR_SENDKEYS
 #ifdef UNICODE
-		SendUnicodeChar(aChar);
-#else
-		SendASC(asc_string);
+		if (sSendMode != SM_PLAY) // See SendUnicodeChar for comments.
+			SendUnicodeChar(aChar);
+		else
 #endif
+		SendASC(asc_string);
 		DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
 	}
 
@@ -2552,7 +2567,7 @@ void PutKeybdEventIntoArray(modLR_type aKeyAsModifiersLR, vk_type aVK, sc_type a
 		INPUT &this_event = sEventSI[sEventCount]; // For performance and convenience.
 		this_event.type = INPUT_KEYBOARD;
 		this_event.ki.wVk = aVK;
-		this_event.ki.wScan = LOBYTE(aSC);
+		this_event.ki.wScan = (aEventFlags & KEYEVENTF_UNICODE) ? aSC : LOBYTE(aSC);
 		this_event.ki.dwFlags = aEventFlags;
 		this_event.ki.dwExtraInfo = aExtraInfo; // Although our hook won't be installed (or won't detect, in the case of playback), that of other scripts might be, so set this for them.
 		this_event.ki.time = 0; // Let the system provide its own timestamp, which might be more accurate for individual events if this will be a very long SendInput.
