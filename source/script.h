@@ -25,7 +25,7 @@ GNU General Public License for more details.
 #include "WinGroup.h" // for a script's Window Groups.
 #include "Util.h" // for FileTimeToYYYYMMDD(), strlcpy()
 #include "resources/resource.h"  // For tray icon.
-#ifdef AUTOHOTKEYSC
+#ifdef ENABLE_EXEARC
 	#include "lib/exearc_read.h"
 #endif
 #include "Debugger.h"

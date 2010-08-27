@@ -9,8 +9,8 @@
     <ConfigSC>false</ConfigSC>
     <ConfigMinSize>false</ConfigMinSize>
     <ConfigRelease Condition="'$(Configuration)'=='Release' OR '$(Configuration)'=='Release(mbcs)' OR '$(Configuration)'=='Release(minimal)'">true</ConfigRelease>
-    <ConfigDebug Condition="'$(Configuration)'=='Debug' OR '$(Configuration)'=='Debug(mbcs)'">true</ConfigDebug>
-    <ConfigSC Condition="'$(Configuration)'=='Self-contained' OR '$(Configuration)'=='Self-contained(mbcs)' OR '$(Configuration)'=='Self-contained(minimal)'">true</ConfigSC>
+    <ConfigDebug Condition="'$(Configuration)'=='Debug' OR '$(Configuration)'=='Debug(mbcs)' OR '$(Configuration)'=='Self-contained(debug)'">true</ConfigDebug>
+    <ConfigSC Condition="'$(Configuration)'=='Self-contained' OR '$(Configuration)'=='Self-contained(mbcs)' OR '$(Configuration)'=='Self-contained(minimal)' OR '$(Configuration)'=='Self-contained(debug)'">true</ConfigSC>
     <ConfigMinSize Condition="'$(Configuration)'=='Release(minimal)' OR '$(Configuration)'=='Self-contained(minimal)'">true</ConfigMinSize>
     
     <!-- CharacterSet may be set on command-line:
@@ -66,7 +66,6 @@
   </ItemDefinitionGroup>
   <PropertyGroup>
     <LinkIncremental>false</LinkIncremental>
-	<LinkIncremental Condition="$(ConfigDebug)">true</LinkIncremental>
   </PropertyGroup>
   
   <!-- minimum size: dynamically-linked crt, favor size over speed -->

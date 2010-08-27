@@ -13,6 +13,10 @@
 	#endif
 #endif
 
+#if defined(AUTOHOTKEYSC) && !defined(_WIN64)
+#define ENABLE_EXEARC
+#endif
+
 #if !defined(_MBCS) && !defined(_UNICODE) && !defined(UNICODE) // If not set in project settings...
 
 // L: Comment out the next line to enable UNICODE:

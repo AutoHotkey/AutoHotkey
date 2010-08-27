@@ -9571,6 +9571,7 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 #ifdef AUTOHOTKEYSC
 	if (!allow_overwrite && Util_DoesFileExist(aDest))
 		return OK; // Let ErrorLevel tell the story.
+#ifdef ENABLE_EXEARC
 	HS_EXEArc_Read oRead;
 	// AutoIt3: Open the archive in this compiled exe.
 	// Jon gave me some details about why a password isn't needed: "The code in those libararies will
@@ -9602,6 +9603,9 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 		//MsgBox(aSource, 0, "Could not extract file:");
 		return OK; // Let ErrorLevel tell the story.
 	}
+#else
+	// TODO: Extract named resource of type RT_RCDATA.
+#endif
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 #else
 	// v1.0.35.11: Must search in A_ScriptDir by default because that's where ahk2exe will search by default.

@@ -1269,8 +1269,10 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	//else the first file was already taken care of by another means.
 
 #else // Stand-alone mode (there are no include files in this mode since all of them were merged into the main script at the time of compiling).
+	TextMem::Buffer textbuf(NULL, 0, false);
+
+#ifdef ENABLE_EXEARC
 	HS_EXEArc_Read oRead;
-	TextMem::Buffer textbuf;
 
 	// AutoIt3: Open the archive in this compiled exe.
 	// Jon gave me some details about why a password isn't needed: "The code in those libararies will
@@ -1298,6 +1300,29 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	// this means that instead of a newline character, there may also be carriage
 	// returns 0x0d 0x0a (\r\n)
 	oRead.Close(); // no longer used
+#else
+	HRSRC hRes;
+	HGLOBAL hResData;
+
+#ifdef _DEBUG
+	if (hRes = FindResource(NULL, _T("AHK"), MAKEINTRESOURCE(RT_RCDATA)))
+#else
+	if (hRes = FindResource(NULL, _T(">AUTOHOTKEY SCRIPT<"), MAKEINTRESOURCE(RT_RCDATA)))
+#endif
+		mCompiledHasCustomIcon = false;
+	else if (hRes = FindResource(NULL, _T(">AHK WITH ICON<"), MAKEINTRESOURCE(RT_RCDATA)))
+		mCompiledHasCustomIcon = true;
+	
+	if ( !( hRes 
+			&& (textbuf.mLength = SizeofResource(NULL, hRes))
+			&& (hResData = LoadResource(NULL, hRes))
+			&& (textbuf.mBuffer = LockResource(hResData)) ) )
+	{
+		MsgBox(_T("Could not extract script from EXE."), 0, aFileSpec);
+		return FAIL;
+	}
+#endif
+
 	TextMem tmem, *fp = &tmem;
 	// NOTE: Ahk2Exe strips off the UTF-8 BOM.
 	tmem.Open(textbuf, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR, CP_UTF8);
