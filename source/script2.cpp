@@ -9572,6 +9572,7 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	if (!allow_overwrite && Util_DoesFileExist(aDest))
 		return OK; // Let ErrorLevel tell the story.
 #ifdef ENABLE_EXEARC
+
 	HS_EXEArc_Read oRead;
 	// AutoIt3: Open the archive in this compiled exe.
 	// Jon gave me some details about why a password isn't needed: "The code in those libararies will
@@ -9603,11 +9604,45 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 		//MsgBox(aSource, 0, "Could not extract file:");
 		return OK; // Let ErrorLevel tell the story.
 	}
-#else
-	// TODO: Extract named resource of type RT_RCDATA.
-#endif
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-#else
+
+#else // ENABLE_EXEARC not defined:
+
+	// Open the file first since it's the most likely to fail:
+	HANDLE hfile = CreateFile(aDest, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+	if (hfile == INVALID_HANDLE_VALUE)
+		return OK;
+
+	// Create a temporary copy of aSource to ensure it is the correct case (upper-case).
+	// Ahk2Exe converts it to upper-case before adding the resource. My testing showed that
+	// using lower or mixed case in some instances prevented the resource from being found.
+	// Since file paths are case-insensitive, it certainly doesn't seem harmful to do this:
+	TCHAR source[MAX_PATH];
+	size_t source_length = _tcslen(aSource);
+	if (source_length >= _countof(source))
+		// Probably can't happen; for simplicity, truncate it.
+		source_length = _countof(source) - 1;
+	tmemcpy(source, aSource, source_length + 1);
+	_tcsupr(source);
+
+	// Find and load the resource.
+	HRSRC res;
+	HGLOBAL res_load;
+	LPVOID res_lock;
+	if ( (res = FindResource(NULL, source, MAKEINTRESOURCE(RT_RCDATA)))
+	  && (res_load = LoadResource(NULL, res))
+	  && (res_lock = LockResource(res_load))  )
+	{
+		DWORD num_bytes_written;
+		// Write the resource data to file.
+		if (WriteFile(hfile, res_lock, SizeofResource(NULL, res), &num_bytes_written, NULL))
+			g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	}
+	CloseHandle(hfile);
+
+#endif
+#else // AUTOHOTKEYSC not defined:
+
 	// v1.0.35.11: Must search in A_ScriptDir by default because that's where ahk2exe will search by default.
 	// The old behavior was to search in A_WorkingDir, which seems pointless because ahk2exe would never
 	// be able to use that value if the script changes it while running.
@@ -9615,7 +9650,9 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	if (CopyFile(aSource, aDest, !allow_overwrite))
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 	SetCurrentDirectory(g_WorkingDir); // Restore to proper value.
+
 #endif
+
 	return OK;
 }
 
