@@ -682,7 +682,7 @@ int sntprintfcat(LPTSTR aBuf, int aBufSize, LPCTSTR aFormat, ...);
 // Not currently used by anything, so commented out to possibly reduce code size:
 //int tcslcmp (LPTSTR aBuf1, LPTSTR aBuf2, UINT aLength1 = UINT_MAX, UINT aLength2 = UINT_MAX);
 int tcslicmp(LPTSTR aBuf1, LPTSTR aBuf2, size_t aLength1 = -1, size_t aLength2 = -1);
-LPTSTR tcsrstr(LPTSTR aStr, LPCTSTR aPattern, StringCaseSenseType aStringCaseSense, int aOccurrence = 1);
+LPTSTR tcsrstr(LPTSTR aStr, size_t aStr_length, LPCTSTR aPattern, StringCaseSenseType aStringCaseSense, int aOccurrence = 1);
 LPTSTR lstrcasestr(LPCTSTR phaystack, LPCTSTR pneedle);
 LPTSTR tcscasestr (LPCTSTR phaystack, LPCTSTR pneedle);
 UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType aStringCaseSense

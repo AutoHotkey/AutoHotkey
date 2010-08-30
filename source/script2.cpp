@@ -13106,32 +13106,37 @@ void BIF_InStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 		string_case_sense = SCS_INSENSITIVE_LOCALE;
 
 	LPTSTR found_pos;
-	__int64 offset = 0; // Set default.
+	INT_PTR offset = 0; // Set default.
+	int occurrence_number = 1; // Set default.
 
 	if (aParamCount >= 4) // There is a starting position present.
 	{
-		offset = TokenToInt64(*aParam[3]) - 1; // i.e. the fourth arg.
-		if (offset == -1) // Special mode to search from the right side.  Other negative values are reserved for possible future use as offsets from the right side.
+		offset = (INT_PTR)TokenToInt64(*aParam[3]); // i.e. the fourth arg.
+		if (aParamCount >= 5)
+			occurrence_number = (int)TokenToInt64(*aParam[4]);
+		// For offset validation and reverse search we need to know the length of haystack:
+		INT_PTR haystack_length = EXPR_TOKEN_LENGTH(aParam[0], haystack);
+		if (offset <= 0) // Special mode to search from the right side.
 		{
-			found_pos = tcsrstr(haystack, needle, string_case_sense, 1);
+			haystack_length += offset; // i.e. reduce haystack_length by the absolute value of offset.
+			found_pos = (haystack_length >= 0) ? tcsrstr(haystack, haystack_length, needle, string_case_sense, occurrence_number) : NULL;
 			aResultToken.value_int64 = found_pos ? (found_pos - haystack + 1) : 0;  // +1 to convert to 1-based, since 0 indicates "not found".
 			return;
 		}
-		// Otherwise, offset is less than -1 or >= 0.
-		// Since InStr("", "") yields 1, it seems consistent for InStr("Red", "", 4) to yield
-		// 4 rather than 0.  The below takes this into account:
-		if (offset < 0 || offset > // ...greater-than the length of haystack calculated below.
-			INT_PTR(aParam[0]->symbol == SYM_VAR  // LengthIgnoreBinaryClip() is used because InStr() doesn't recognize/support binary-clip, so treat it as a normal string (i.e. find first binary zero via _tcslen()).
-				? aParam[0]->var->LengthIgnoreBinaryClip() : _tcslen(haystack)))
+		--offset; // Convert from one-based to zero-based.
+		if (offset > haystack_length || occurrence_number < 1)
 		{
 			aResultToken.value_int64 = 0; // Match never found when offset is beyond length of string.
 			return;
 		}
 	}
 	// Since above didn't return:
-	haystack += offset; // Above has verified that this won't exceed the length of haystack.
-	found_pos = tcsstr2(haystack, needle, string_case_sense);
-	aResultToken.value_int64 = found_pos ? (found_pos - haystack + offset + 1) : 0;
+	size_t needle_length = (occurrence_number > 1) ? EXPR_TOKEN_LENGTH(aParam[1], needle) : 1; // Avoid unnecessary _tcslen() if occurrence_number == 1, which is the most common case.
+	int i;
+	for (i = 1, found_pos = haystack + offset; ; ++i, found_pos += needle_length)
+		if (!(found_pos = tcsstr2(found_pos, needle, string_case_sense)) || i == occurrence_number)
+			break;
+	aResultToken.value_int64 = found_pos ? (found_pos - haystack + 1) : 0;
 }
 
 

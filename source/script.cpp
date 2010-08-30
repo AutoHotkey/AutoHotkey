@@ -7302,7 +7302,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	{
 		bif = BIF_InStr;
 		min_params = 2;
-		max_params = 4;
+		max_params = 5;
 	}
 	else if (!_tcsicmp(func_name, _T("RegExMatch")))
 	{
@@ -12745,23 +12745,14 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 				int offset = ArgToInt(5); // v1.0.30.03
 				if (offset < 0)
 					offset = 0;
-				size_t haystack_length = offset ? ArgLength(2) : 1; // Avoids calling ArgLength() if no offset, in which case length isn't needed here.
+				size_t haystack_length = ArgLength(2);
 				if (offset < (int)haystack_length)
 				{
 					if (*arg4 == '1' || ctoupper(*arg4) == 'R') // Conduct the search starting at the right side, moving leftward.
 					{
-						TCHAR prev_char, *terminate_here;
-						if (offset)
-						{
-							terminate_here = haystack + haystack_length - offset;
-							prev_char = *terminate_here;
-							*terminate_here = '\0';  // Temporarily terminate for the duration of the search.
-						}
 						// Want it to behave like in this example: If searching for the 2nd occurrence of
 						// FF in the string FFFF, it should find the first two F's, not the middle two:
-						found = tcsrstr(haystack, needle, (StringCaseSenseType)g.StringCaseSense, occurrence_number);
-						if (offset)
-							*terminate_here = prev_char;
+						found = tcsrstr(haystack, haystack_length - offset, needle, (StringCaseSenseType)g.StringCaseSense, occurrence_number);
 					}
 					else
 					{

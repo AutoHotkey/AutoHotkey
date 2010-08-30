@@ -550,7 +550,7 @@ int tcslicmp(LPTSTR aBuf1, LPTSTR aBuf2, size_t aLength1, size_t aLength2)
 
 
 
-LPTSTR tcsrstr(LPTSTR aStr, LPCTSTR aPattern, StringCaseSenseType aStringCaseSense, int aOccurrence)
+LPTSTR tcsrstr(LPTSTR aStr, size_t aStr_length, LPCTSTR aPattern, StringCaseSenseType aStringCaseSense, int aOccurrence)
 // Returns NULL if not found, otherwise the address of the found string.
 // This could probably use a faster algorithm someday.  For now it seems adequate because
 // scripts rarely use it and when they do, it's usually on short haystack strings (such as
@@ -558,7 +558,6 @@ LPTSTR tcsrstr(LPTSTR aStr, LPCTSTR aPattern, StringCaseSenseType aStringCaseSen
 {
 	if (aOccurrence < 1)
 		return NULL;
-	size_t aStr_length = _tcslen(aStr);
 	if (!*aPattern)
 		// The empty string is found in every string, and since we're searching from the right, return
 		// the position of the zero terminator to indicate the situation:
