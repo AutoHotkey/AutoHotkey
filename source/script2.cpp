@@ -12811,6 +12811,10 @@ has_valid_return_type:
 			{
 			case DLL_ARG_INT64:
 			case DLL_ARG_DOUBLE:
+#ifdef _WIN64 // fincs: pointers are 64-bit on x64.
+			case DLL_ARG_WSTR:
+			case DLL_ARG_ASTR:
+#endif
 				// Same as next section but for eight bytes:
 				return_value.Int64 = *(__int64 *)return_value.Pointer;
 				break;
