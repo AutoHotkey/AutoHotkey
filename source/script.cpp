@@ -2663,6 +2663,25 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				++parameter;
 		}
 
+		if (*parameter == '<') // Support explicitly-specified <standard_lib_name>.
+		{
+			LPTSTR parameter_end = _tcschr(parameter, '>');
+			if (parameter_end && !parameter_end[1])
+			{
+				++parameter; // Remove '<'.
+				*parameter_end = '\0'; // Remove '>'.
+				bool error_was_shown, file_was_found;
+				// Attempt to include a script file based on the same rules as func() auto-include:
+				FindFuncInLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found);
+				// If any file was included, consider it a success; i.e. allow #include <lib> and #include <lib_func>.
+				if (!error_was_shown && file_was_found || ignore_load_failure)
+					return CONDITION_TRUE;
+				*parameter_end = '>'; // Restore '>' for display to the user.
+				return ScriptError(_T("Function library not found."), aBuf);
+			}
+			//else invalid syntax; treat it as a regular #include which will almost certainly fail.
+		}
+
 		size_t space_remaining = LINE_SIZE - (parameter-aBuf);
 		TCHAR buf[MAX_PATH];
 		StrReplace(parameter, _T("%A_ScriptDir%"), mFileDir, SCS_INSENSITIVE, 1, space_remaining); // v1.0.35.11.  Caller has ensured string is writable.
@@ -6908,11 +6927,12 @@ struct FuncLibrary
 	DWORD_PTR length;
 };
 
-Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown)
+Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound)
 // Caller must ensure that aFuncName doesn't already exist as a defined function.
 // If aFuncNameLength is 0, the entire length of aFuncName is used.
 {
 	aErrorWasShown = false; // Set default for this output parameter.
+	aFileWasFound = false;
 
 	int i;
 	LPTSTR char_after_last_backslash, terminate_here;
@@ -7017,6 +7037,8 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			attr = GetFileAttributes(sLib[i].path); // Testing confirms that GetFileAttributes() doesn't support wildcards; which is good because we want filenames containing question marks to be "not found" rather than being treated as a match-pattern.
 			if (attr == 0xFFFFFFFF || (attr & FILE_ATTRIBUTE_DIRECTORY)) // File doesn't exist or it's a directory. Relies on short-circuit boolean order.
 				continue;
+
+			aFileWasFound = true; // Indicate success for #include <lib>, which doesn't necessarily expect a function to be found.
 
 			// Since above didn't "continue", a file exists whose name matches that of the requested function.
 			// Before loading/including that file, set the working directory to its folder so that if it uses
@@ -8600,8 +8622,8 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 				if (   !(deref->func = FindFunc(deref->marker, deref->length))   )
 				{
 #ifndef AUTOHOTKEYSC
-					bool error_was_shown;
-					if (   !(deref->func = FindFuncInLibrary(deref->marker, deref->length, error_was_shown))   )
+					bool error_was_shown, file_was_found;
+					if (   !(deref->func = FindFuncInLibrary(deref->marker, deref->length, error_was_shown, file_was_found))   )
 					{
 						abort = true; // So that the caller doesn't also report an error.
 						// When above already displayed the proximate cause of the error, it's usually
