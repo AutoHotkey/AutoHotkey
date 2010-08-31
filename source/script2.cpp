@@ -14463,7 +14463,13 @@ void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 		target = (size_t)TokenToInt64(target_token);
 
 	if (aParamCount > 1) // Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
-		target += (ptrdiff_t)TokenToInt64(*aParam[1]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
+	{
+		if (aParamCount > 2 || TokenIsPureNumeric(*aParam[1])) // Checking aParamCount first avoids some unnecessary work in common cases where all parameters were specified.
+			target += (ptrdiff_t)TokenToInt64(*aParam[1]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
+		else
+			// Final param was omitted but this param is non-numeric, so use it as Type instead of Offset:
+			++aParamCount, --aParam; // aParam[0] is no longer valid, but that's OK.
+	}
 
 	BOOL is_signed;
 	size_t size = sizeof(DWORD_PTR); // Set default.
@@ -14569,7 +14575,13 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 		target = (size_t)TokenToInt64(target_token);
 
 	if (aParamCount > 2) // Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
-		target += (ptrdiff_t)TokenToInt64(*aParam[2]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
+	{
+		if (aParamCount > 3 || TokenIsPureNumeric(*aParam[2])) // Checking aParamCount first avoids some unnecessary work in common cases where all parameters were specified.
+			target += (ptrdiff_t)TokenToInt64(*aParam[2]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
+		else
+			// Final param was omitted but this param is non-numeric, so use it as Type instead of Offset:
+			++aParamCount, --aParam; // aParam[0] is no longer valid, but that's OK.
+	}
 
 	size_t size = sizeof(DWORD_PTR); // Set defaults.
 	BOOL is_integer = TRUE;   //
