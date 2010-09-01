@@ -6655,6 +6655,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 				return ScriptError(_T("A label must not point to a function."));
 			if (line.mActionType == ACT_ELSE)
 				return ScriptError(_T("A label must not point to an ELSE."));
+			// The following is inaccurate; each block-end is in fact owned by its block-begin
+			// and not the block that encloses them both, so this restriction is unnecessary.
+			// THE COMMENT BELOW IS OBSOLETE:
 			// Don't allow this because it may cause problems in a case such as this because
 			// label1 points to the end-block which is at the same level (and thus normally
 			// an allowable jumppoint) as the goto.  But we don't want to allow jumping into
@@ -6672,8 +6675,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 			//
 			// An alternate way to deal with the above would be to make each block-end be owned
 			// by its block-begin rather than the block that encloses them both.
-			if (line.mActionType == ACT_BLOCK_END)
-				return ScriptError(_T("A label must not point to the end of a block. For loops, use Continue vs. Goto."));
+			//if (line.mActionType == ACT_BLOCK_END)
+			//	return ScriptError(_T("A label must not point to the end of a block. For loops, use Continue vs. Goto."));
 			label->mJumpToLine = the_new_line;
 		}
 	}
