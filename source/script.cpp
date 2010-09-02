@@ -14620,10 +14620,21 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 			// Split into two phrases:
 			*first_phrase_end = '\0';
 			second_phrase = first_phrase_end + 1;
+			// Check if first_phrase should be considered a system verb:
+			if (*first_phrase == '*')
+			{
+				// Explicitly a system verb, perhaps a custom one such as "compile".
+				++first_phrase; // Exclude the leading '*' from the verb.
+				shell_action_is_system_verb = true;
+			}
+			else
+				// Is it a more common verb with no explicit prefix?
+				shell_action_is_system_verb = IS_VERB(first_phrase);
 		}
 		else // the entire string is considered to be the first_phrase, and there's no second:
 			second_phrase = NULL;
-		if (shell_action_is_system_verb = IS_VERB(first_phrase))
+		// If caller passed a quoted phrase, they most likely intended for it to be the action:
+		if (shell_action_is_system_verb || second_phrase && *parse_buf == '"')
 		{
 			shell_action = first_phrase;
 			shell_params = second_phrase ? second_phrase : _T("");
@@ -14744,7 +14755,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		}
 		else
 		{
-			if (!aParams)
+			if (shell_action == aAction) // i.e. above hasn't determined the params yet.
 			{
 // Rather than just consider the first phrase to be the executable and the rest to be the param, we check it
 // for a proper extension so that the user can launch a document name containing spaces, without having to
@@ -14752,47 +14763,49 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 // to be enclosed in double quotes.  Therefore, search the entire string, rather than just first_phrase, for
 // the left-most occurrence of a valid executable extension.  This should be fine since the user can still
 // pass in EXEs and such as params as long as the first executable is fully qualified with its real extension
-// so that we can tell that it's the action and not one of the params.
-
-// This method is rather crude because is doesn't handle an extensionless executable such as "notepad test.txt"
-// It's important that it finds the first occurrence of an executable extension in case there are other
-// occurrences in the parameters.  Also, .pif and .lnk are currently not considered executables for this purpose
-// since they probably don't accept parameters:
+// so that we can tell that it's the action and not one of the params.  UPDATE: Since any file type may
+// potentially accept parameters (.lnk or .ahk files for instance), the first space-terminated substring which
+// is either an existing file or ends in one of .exe,.bat,.com,.cmd,.hta is considered the executable and the
+// rest is considered the param.  Remaining shortcomings of this method include:
+//   -  It doesn't handle an extensionless executable such as "notepad test.txt"
+//   -  It doesn't handle custom file types (scripts etc.) which don't exist in the working directory but can
+//      still be executed due to %PATH% and %PATHEXT% even when our caller doesn't supply an absolute path.
+// These limitations seem acceptable since the caller can allow even those cases to work by simply wrapping
+// the action in quote marks; if that is done, this section is not executed.
 				_tcscpy(parse_buf, aAction);  // Restore the original value in case it was changed. parse_buf is already known to be large enough.
-				LPTSTR action_extension;
-				if (   !(action_extension = tcscasestr(parse_buf, _T(".exe ")))   )
-					if (   !(action_extension = tcscasestr(parse_buf, _T(".exe\"")))   )
-						if (   !(action_extension = tcscasestr(parse_buf, _T(".bat ")))   )
-							if (   !(action_extension = tcscasestr(parse_buf, _T(".bat\"")))   )
-								if (   !(action_extension = tcscasestr(parse_buf, _T(".com ")))   )
-									if (   !(action_extension = tcscasestr(parse_buf, _T(".com\"")))   )
-										// Not 100% sure that .cmd and .hta are genuine executables in every sense:
-										if (   !(action_extension = tcscasestr(parse_buf, _T(".cmd ")))   )
-											if (   !(action_extension = tcscasestr(parse_buf, _T(".cmd\"")))   )
-												if (   !(action_extension = tcscasestr(parse_buf, _T(".hta ")))   )
-													action_extension = tcscasestr(parse_buf, _T(".hta\""));
-
-				if (action_extension)
+				LPTSTR action_extension, action_end;
+				if (aWorkingDir) // Set current directory temporarily in case the action is a relative path:
+					SetCurrentDirectory(aWorkingDir);
+				// For each space which possibly delimits the action and params:
+				for (action_end = parse_buf + 1; action_end = _tcschr(action_end, ' '); ++action_end)
 				{
-					shell_action = parse_buf;
-					// +4 for the 3-char extension with the period:
-					shell_params = action_extension + 4;  // exec_params is now the start of params, or empty-string.
-					if (*shell_params == '"')
-						// Exclude from shell_params since it's probably belongs to the action, not the params
-						// (i.e. it's paired with another double-quote at the start):
-						++shell_params;
-					if (*shell_params)
+					// Find the beginning of the substring or file extension; if \ is encountered, this might be
+					// an extensionless filename, but it probably wouldn't be meaningful to pass params to such a
+					// file since it can't be associated with anything, so skip to the next space in that case.
+					for ( action_extension = action_end - 1;
+						  action_extension > parse_buf && !_tcschr(_T("\\/."), *action_extension);
+						  --action_extension );
+					if (*action_extension == '.') // Potential file extension; even if action_extension == parse_buf since ".ext" on its own is a valid filename.
 					{
-						// Terminate the <aAction> string in the right place.  For this to work correctly,
-						// at least one space must exist between action & params (shortcoming?):
-						*shell_params = '\0';
-						++shell_params;
-						ltrim(shell_params); // Might be empty string after this, which is ok.
+						*action_end = '\0'; // Temporarily terminate.
+						// If action_extension is a common executable extension, don't call GetFileAttributes() since
+						// the file might actually be in a location listed in %PATH% or the App Paths registry key:
+						if ( (action_end-action_extension == 4 && tcscasestr(_T(".exe.bat.com.cmd.hta"), action_extension))
+						// Otherwise the file might still be something capable of accepting params, like a script,
+						// so check if what we have is the name of an existing file:
+						  || !(GetFileAttributes(parse_buf) & FILE_ATTRIBUTE_DIRECTORY) ) // i.e. THE FILE EXISTS and is not a directory. This works because (INVALID_FILE_ATTRIBUTES & FILE_ATTRIBUTE_DIRECTORY) is non-zero.
+						{	
+							shell_action = parse_buf;
+							shell_params = action_end + 1;
+							break;
+						}
+						// What we have so far isn't an obvious executable file type or the path of an existing
+						// file, so assume it isn't a valid action.  Unterminate and continue the loop:
+						*action_end = ' ';
 					}
-					// else there doesn't appear to be any params, so just leave shell_params set to empty string.
 				}
-				// else there's no extension: so assume the whole <aAction> is a document name to be opened by
-				// the shell.  So leave shell_action and shell_params set their original defaults.
+				if (aWorkingDir)
+					SetCurrentDirectory(g_WorkingDir); // Restore to proper value.
 			}
 			//else aParams!=NULL, so the extra parsing in the block above isn't necessary.
 
