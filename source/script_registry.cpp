@@ -34,11 +34,27 @@ ResultType Line::IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR 
 	if (!aDefault || !*aDefault)
 		aDefault = _T("ERROR");  // This mirrors what AutoIt2 does for its default value.
 	TCHAR	szFileTemp[_MAX_PATH+1];
-	TCHAR	*szFilePart;
+	TCHAR	*szFilePart, *cp;
 	TCHAR	szBuffer[65535] = _T("");					// Max ini file size is 65535 under 95
 	// Get the fullpathname (ini functions need a full path):
 	GetFullPathName(aFilespec, _MAX_PATH, szFileTemp, &szFilePart);
-	GetPrivateProfileString(aSection, aKey, aDefault, szBuffer, _countof(szBuffer), szFileTemp);
+	if (*aKey)
+	{
+		GetPrivateProfileString(aSection, aKey, aDefault, szBuffer, _countof(szBuffer), szFileTemp);
+	}
+	else if (*aSection
+		? GetPrivateProfileSection(aSection, szBuffer, _countof(szBuffer), szFileTemp)
+		: GetPrivateProfileSectionNames(szBuffer, _countof(szBuffer), szFileTemp))
+	{
+		// Convert null-terminated array of null-terminated strings to newline-delimited list.
+		for (cp = szBuffer; ; ++cp)
+			if (!*cp)
+			{
+				if (!cp[1])
+					break;
+				*cp = '\n';
+			}
+	}
 	// The above function is supposed to set szBuffer to be aDefault if it can't find the
 	// file, section, or key.  In other words, it always changes the contents of szBuffer.
 	return OUTPUT_VAR->Assign(szBuffer); // Avoid using the length the API reported because it might be inaccurate if the data contains any binary zeroes, or if the data is double-terminated, etc.
@@ -77,7 +93,23 @@ ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTS
 	result = IniEncodingFix(szFileTemp);
 	if(result){
 #endif
-		result = WritePrivateProfileString(aSection, aKey, aValue, szFileTemp);  // Returns zero on failure.
+		if (*aKey)
+		{
+			result = WritePrivateProfileString(aSection, aKey, aValue, szFileTemp);  // Returns zero on failure.
+		}
+		else
+		{
+			size_t value_len = ArgLength(1);
+			TCHAR c, *cp, *szBuffer = talloca(value_len + 2); // +2 for double null-terminator.
+			// Convert newline-delimited list to null-terminated array of null-terminated strings.
+			for (cp = szBuffer; *aValue; ++cp, ++aValue)
+			{
+				c = *aValue;
+				*cp = (c == '\n') ? '\0' : c;
+			}
+			*cp = '\0', cp[1] = '\0'; // Double null-terminator.
+			result = WritePrivateProfileSection(aSection, szBuffer, szFileTemp);
+		}
 		WritePrivateProfileString(NULL, NULL, NULL, szFileTemp);	// Flush
 #ifdef UNICODE
 	}

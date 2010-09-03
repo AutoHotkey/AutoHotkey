@@ -487,8 +487,8 @@ Action g_act[] =
 	, {_T("FileGetShortcut"), 1, 8, 8 H, NULL} // Filespec, OutTarget, OutDir, OutArg, OutDescrip, OutIcon, OutIconIndex, OutShowState.
 	, {_T("FileCreateShortcut"), 2, 9, 9, {8, 9, 0}} // file, lnk [, workdir, args, desc, icon, hotkey, icon_number, run_state]
 
-	, {_T("IniRead"), 4, 5, 4 H, NULL}   // OutputVar, Filespec, Section, Key, Default (value to return if key not found)
-	, {_T("IniWrite"), 4, 4, 4, NULL}  // Value, Filespec, Section, Key
+	, {_T("IniRead"), 2, 5, 4 H, NULL}   // OutputVar, Filespec, Section, Key, Default (value to return if key not found)
+	, {_T("IniWrite"), 3, 4, 4, NULL}  // Value, Filespec, Section, Key
 	, {_T("IniDelete"), 2, 3, 3, NULL} // Filespec, Section, Key
 
 	// These require so few parameters due to registry loops, which provide the missing parameter values
