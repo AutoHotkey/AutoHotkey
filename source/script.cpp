@@ -14620,6 +14620,9 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 			// Split into two phrases:
 			*first_phrase_end = '\0';
 			second_phrase = first_phrase_end + 1;
+			if (*parse_buf == '"' && *second_phrase)
+				++second_phrase; // Skip the space between "first_phrase" and "second_phrase".
+
 			// Check if first_phrase should be considered a system verb:
 			if (*first_phrase == '*')
 			{
