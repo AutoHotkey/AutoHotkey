@@ -303,6 +303,7 @@ protected:
 		if (mPos) // Text reading was used
 		{
 			mCacheInt = 0; // cache is cleared to prevent unexpected results.
+			mWriteCharW = 0;
 
 			// Discards the buffer and rollback the file pointer.
 			ptrdiff_t offset = (mPos - mBuffer) - mLength; // should be a value <= 0
