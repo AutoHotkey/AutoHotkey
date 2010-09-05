@@ -2471,7 +2471,7 @@ private:
 #endif
 
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
-	UINT mLineCount;                  // The number of lines.
+	Line *mLastStaticLine;            // The last static var initializer.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
 	Func *mFirstFunc, *mLastFunc;     // The first and last functions in the linked list.
 	Func **mFunc; // L27: Use a binary-searchable array to speed up function searches (especially beneficial for dynamic function calls).
@@ -2509,7 +2509,7 @@ private:
 	static ActionTypeType ConvertActionType(LPTSTR aActionTypeString);
 	static ActionTypeType ConvertOldActionType(LPTSTR aActionTypeString);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
-	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, ArgCountType aArgc = 0, LPTSTR aArgMap[] = NULL);
+	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, int aArgc = 0, LPTSTR aArgMap[] = NULL);
 
 	// These aren't in the Line class because I think they're easier to implement
 	// if aStartingLine is allowed to be NULL (for recursive calls).  If they

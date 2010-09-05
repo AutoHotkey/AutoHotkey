@@ -189,13 +189,13 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	//if (!g_ForceLaunch && !restart_mode && GetLastError() == ERROR_ALREADY_EXISTS)
 
 #ifdef AUTOHOTKEYSC
-	LineNumberType load_result = g_script.LoadFromFile();
+	UINT load_result = g_script.LoadFromFile();
 #else
-	LineNumberType load_result = g_script.LoadFromFile(script_filespec == NULL);
+	UINT load_result = g_script.LoadFromFile(script_filespec == NULL);
 #endif
 	if (load_result == LOADING_FAILED) // Error during load (was already displayed by the function call).
 		return CRITICAL_ERROR;  // Should return this value because PostQuitMessage() also uses it.
-	if (!load_result) // LoadFromFile() relies upon us to do this check.  No lines were loaded, so we're done.
+	if (!load_result) // LoadFromFile() relies upon us to do this check.  No script was loaded or we're in /iLib mode, so nothing more to do.
 		return 0;
 
 	// Unless explicitly set to be non-SingleInstance via SINGLE_INSTANCE_OFF or a special kind of

@@ -39,7 +39,7 @@ static ExprOpFunc g_ObjGet(BIF_ObjInvoke, IT_GET), g_ObjSet(BIF_ObjInvoke, IT_SE
 
 
 Script::Script()
-	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL), mPlaceholderLabel(NULL), mLineCount(0)
+	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL), mPlaceholderLabel(NULL)
 	, mThisHotkeyName(_T("")), mPriorHotkeyName(_T("")), mThisHotkeyStartTime(0), mPriorHotkeyStartTime(0)
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
 	, mNextClipboardViewer(NULL), mOnClipboardChangeIsRunning(false), mOnClipboardChangeLabel(NULL)
@@ -947,9 +947,9 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 
 
 #ifdef AUTOHOTKEYSC
-LineNumberType Script::LoadFromFile()
+UINT Script::LoadFromFile()
 #else
-LineNumberType Script::LoadFromFile(bool aScriptWasNotspecified)
+UINT Script::LoadFromFile(bool aScriptWasNotspecified)
 #endif
 // Returns the number of non-comment lines that were loaded, or LOADING_FAILED on error.
 {
@@ -1128,7 +1128,9 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 	// using it as a seed superior to GetTickCount for most purposes.
 	RESEED_RANDOM_GENERATOR;
 
-	return mLineCount; // The count of runnable lines that were loaded, which might be zero.
+	return TRUE; // Must be non-zero.
+	// OBSOLETE: mLineCount was always non-zero at this point since above did AddLine().
+	//return mLineCount; // The count of runnable lines that were loaded, which might be zero.
 }
 
 
@@ -2779,33 +2781,17 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			return CONDITION_TRUE;
 		}
 
-		ResultType res;
-
 		Func *currentFunc = g->CurrentFunc;
-		bool nextLineIsFunctionBody = mNextLineIsFunctionBody;
 		Var **funcExceptionVar = mFuncExceptionVar;
-		Func *lastFunc = mLastFunc;
-		
-		// Set things up so:
-		//  a) Variable references are always global.
-		//  b) AddLine doesn't make our dummy line the body of a function in cases such as this:
-		//		function() {
-		//		#if expression
+
+		// Ensure variable references are global:
 		g->CurrentFunc = NULL;
-		mNextLineIsFunctionBody = false;
 		mFuncExceptionVar = NULL;
-		mLastFunc = NULL;
 
 		// ACT_IFEXPR vs ACT_EXPRESSION so EvaluateCondition() can be used. Also, ACT_EXPRESSION is designed to discard the result of the expression, since it normally would not be used.
-		if ((res = AddLine(ACT_IFEXPR, &parameter, 1)) != OK)
-			return res;
+		if (!AddLine(ACT_IFEXPR, &parameter, UCHAR_MAX + 1)) // UCHAR_MAX signals AddLine to avoid pointing any pending labels or functions at the new line.
+			return FAIL; // Above already displayed the error message.
 		Line *hot_expr_line = mLastLine;
-
-		// Now undo the unwanted effects of AddLine:
-
-		// Ensure no labels were pointed to the newly added line.
-		for (Label *label = mLastLabel; label != NULL && label->mJumpToLine == mLastLine; label = label->mPrevLabel)
-			label->mJumpToLine = NULL;
 
 		// Remove the newly added line from the actual script.
 		if (mFirstLine == mLastLine)
@@ -2814,13 +2800,10 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		if (mLastLine) // Will be NULL if no actual code precedes the #if.
 			mLastLine->mNextLine = NULL;
 		mCurrLine = mLastLine;
-		--mLineCount;
 
 		// Restore the properties we overrode earlier.
 		g->CurrentFunc = currentFunc;
-		mNextLineIsFunctionBody = nextLineIsFunctionBody;
 		mFuncExceptionVar = funcExceptionVar;
-		mLastFunc = lastFunc;
 
 		// Set the new criterion.
 		g_HotCriterion = HOT_IF_EXPR;
@@ -3556,8 +3539,35 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				TCHAR orig_char = *terminate_here;
 				*terminate_here = '\0'; // Temporarily terminate (it might already be the terminator, but that's harmless).
 
-				if (declare_type == VAR_DECLARE_STATIC) // v1.0.46: Support simple initializers for static variables.
+				if (declare_type == VAR_DECLARE_STATIC)
 				{
+					LPTSTR args[] = {var->mName, omit_leading_whitespace(right_side_of_operator)};
+					// UCHAR_MAX signals AddLine to avoid pointing any pending labels or functions at the new line.
+					// Otherwise, ParseAndAddLine could be used like in the section below to optimize simple
+					// assignments, but that would be nearly pointless for static initializers anyway:
+					if (!AddLine(ACT_ASSIGNEXPR, args, UCHAR_MAX + 2)) 
+						return FAIL; // Above already displayed the error.
+					mLastLine = mLastLine->mPrevLine; // Restore mLastLine to the last non-'static' line, but leave mCurrLine set to the new line.
+					// Prepend the new line to the auto-execute section:
+					if (mLastStaticLine)
+					{	// Insert after the last 'static' line to preserve order:
+						mCurrLine->mNextLine = mLastStaticLine->mNextLine; // This should point at the beginning of the real auto-execute section.
+						mLastStaticLine->mNextLine = mCurrLine;
+					}
+					else
+					{	// This is the first 'static' line.
+						mCurrLine->mNextLine = mFirstLine;
+						mFirstLine = mCurrLine;
+					}
+					mCurrLine->mPrevLine = mLastStaticLine; // Even if NULL. Must be set otherwise VicinityToText() will show the wrong line if this one has an error.
+					mLastStaticLine = mCurrLine;
+					mLastLine->mNextLine = NULL; // Remove the link from the very last actual line to this new line.
+
+					// Some of the checks below could be used to "optimize" static initializers, but since they
+					// will only be executed once each anyway, it doesn't seem useful.  Making them expressions
+					// should be overall more consistent and saves worrying about cases like the following,
+					// which previously gave unexpected results:  static var := "literal" . "literal"
+					/*
 					// The following is similar to the code used to support default values for function parameters.
 					// So maybe maintain them together.
 					right_side_of_operator = omit_leading_whitespace(right_side_of_operator);
@@ -3591,6 +3601,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						if (*right_side_of_operator) // It can be "" in cases such as "" being specified literally in the script, in which case nothing needs to be done because all variables start off as "".
 							var->Assign(right_side_of_operator);
 					}
+					*/
 				}
 				else // A non-static initializer, so a line of code must be produced that will be executed at runtime every time the function is called.
 				{
@@ -4864,7 +4875,7 @@ bool LegacyArgIsExpression(LPTSTR aArgText, LPTSTR aArgMap)
 
 
 
-ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountType aArgc, LPTSTR aArgMap[])
+ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc, LPTSTR aArgMap[])
 // aArg must be a collection of pointers to memory areas that are modifiable, and there
 // must be at least aArgc number of pointers in the aArg array.  In v1.0.40, a caller (namely
 // the "macro expansion" for remappings such as "a::b") is allowed to pass a non-NULL value for
@@ -4877,9 +4888,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 #endif
 
 	bool do_update_labels;
-	if (!aArg && aArgc == UCHAR_MAX) // Special signal from caller to avoid pointing any pending labels to this particular line.
+	if (aArgc >= UCHAR_MAX) // Special signal from caller to avoid pointing any pending labels to this particular line.
 	{
-		aArgc = 0;
+		aArgc -= UCHAR_MAX;
 		do_update_labels = false;
 	}
 	else
@@ -6589,7 +6600,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 #endif  // The above section is in place only if when not AUTOHOTKEYSC.
 	}
 
-	if (mNextLineIsFunctionBody)
+	if (mNextLineIsFunctionBody && do_update_labels) // do_update_labels: false for '#if expr' and 'static var:=expr', neither of which should be treated as part of the function's body.
 	{
 		mLastFunc->mJumpToLine = the_new_line;
 		mNextLineIsFunctionBody = false;
@@ -6681,7 +6692,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], ArgCountTy
 		}
 	}
 
-	++mLineCount;  // Right before returning "success", increment our count.
 	return OK;
 }
 
