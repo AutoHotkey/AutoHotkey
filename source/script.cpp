@@ -2679,7 +2679,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				if (!error_was_shown && file_was_found || ignore_load_failure)
 					return CONDITION_TRUE;
 				*parameter_end = '>'; // Restore '>' for display to the user.
-				return ScriptError(_T("Function library not found."), aBuf);
+				return error_was_shown ? FAIL : ScriptError(_T("Function library not found."), aBuf);
 			}
 			//else invalid syntax; treat it as a regular #include which will almost certainly fail.
 		}
