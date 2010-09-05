@@ -39,7 +39,7 @@ static ExprOpFunc g_ObjGet(BIF_ObjInvoke, IT_GET), g_ObjSet(BIF_ObjInvoke, IT_SE
 
 
 Script::Script()
-	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL), mPlaceholderLabel(NULL)
+	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL), mPlaceholderLabel(NULL), mFirstStaticLine(NULL), mLastStaticLine(NULL)
 	, mThisHotkeyName(_T("")), mPriorHotkeyName(_T("")), mThisHotkeyStartTime(0), mPriorHotkeyStartTime(0)
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
 	, mNextClipboardViewer(NULL), mOnClipboardChangeIsRunning(false), mOnClipboardChangeLabel(NULL)
@@ -1048,27 +1048,55 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 		|| !AddLine(ACT_EXIT)) // Fix for v1.0.47.04: Add an Exit because otherwise, a script that ends in an IF-statement will crash in PreparseBlocks() because PreparseBlocks() expects every IF-statements mNextLine to be non-NULL (helps loading performance too).
 		return LOADING_FAILED;
 
-	if (g_HotExprLineCount)
-	{	// Resolve function references on #if (expression) lines.
-		for (int expr_line_index = 0; expr_line_index < g_HotExprLineCount; ++expr_line_index)
+	// BELOW: Aside from setting up {} blocks, PreparseBlocks() resolves function references in expressions.
+	// Originally PreparseBlocks() resolved all function references in one sweep. Since func lib auto-inclusions
+	// are appended to the main script, they were automatically handled by a later iteration of the loop inside
+	// PreparseBlocks(). However, the introduction of #If and Static initializers bring some complications:
+	//   (a) Function-calls in the main script, #If expressions or Static initializers can cause auto-inclusions.
+	//   (b) Auto-inclusions can introduce more function-calls.
+	//   (c) Auto-inclusions can introduce more #If expressions or Static initializers.
+	// The loop below handles these potentially "recursive" cases.
+	Line *last_line_processed = NULL, *last_static_processed = NULL;
+	int expr_line_index = 0;
+	for (;;)
+	{
+		// Check for any unprocessed #if expressions:
+		for ( ; expr_line_index < g_HotExprLineCount; ++expr_line_index)
 		{
-			Line *was_last_line = mLastLine;
 			Line *line = g_HotExprLines[expr_line_index];
-			// Since PreparseBlocks assumes mNextLine!=NULL for ACT_IFEXPR, temporarily change mActionType to something else.
-			line->mActionType = ACT_INVALID;
-			PreparseBlocks(line);
+			if (!PreparseBlocks(line))
+				return LOADING_FAILED;
+			// Search for "ACT_EXPRESSION will be changed to ACT_IFEXPR" for comments about the following line:
 			line->mActionType = ACT_IFEXPR;
-
-			// The above may have auto-included a file from the userlib/stdlib,
-			// in which case function references in the newly added code will be
-			// resolved with the rest of the script, below.
 		}
+		// Check for any unprocessed static initializers:
+		if (last_static_processed != mLastStaticLine)
+		{
+			if (!PreparseBlocks(last_static_processed ? last_static_processed->mNextLine : mFirstStaticLine))
+				return LOADING_FAILED;
+			last_static_processed = mLastStaticLine;
+		}
+		// Check for any unprocessed lines in the main script:
+		if (last_line_processed != mLastLine)
+		{
+			if (!PreparseBlocks(last_line_processed ? last_line_processed->mNextLine : mFirstLine))
+				return LOADING_FAILED; // Error was already displayed by the above call.
+			last_line_processed = mLastLine;
+		}
+		// Since #If expressions and Static initializers can't directly bring about more #If expressions or Static
+		// initializers, the fact that no new lines have been added to the script since the last iteration means
+		// all lines in the main script, all #If expressions and all Static initializers have been processed.
+		else break;
 	}
-
-	if (!PreparseBlocks(mFirstLine))
-		return LOADING_FAILED; // Error was already displayed by the above calls.
 	// ABOVE: In v1.0.47, the above may have auto-included additional files from the userlib/stdlib.
 	// That's why the above is done prior to adding the EXIT lines and other things below.
+	if (mFirstStaticLine)
+	{
+		// Prepend all Static initializers to the beginning of the auto-execute section.
+		mLastStaticLine->mNextLine = mFirstLine;
+		mFirstLine->mPrevLine = mLastStaticLine;
+		mFirstLine = mFirstStaticLine;
+	}
 
 #ifndef AUTOHOTKEYSC
 	if (mIncludeLibraryFunctionsThenExit)
@@ -2788,8 +2816,10 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		g->CurrentFunc = NULL;
 		mFuncExceptionVar = NULL;
 
-		// ACT_IFEXPR vs ACT_EXPRESSION so EvaluateCondition() can be used. Also, ACT_EXPRESSION is designed to discard the result of the expression, since it normally would not be used.
-		if (!AddLine(ACT_IFEXPR, &parameter, UCHAR_MAX + 1)) // UCHAR_MAX signals AddLine to avoid pointing any pending labels or functions at the new line.
+		// ACT_EXPRESSION will be changed to ACT_IFEXPR after PreparseBlocks() is called so that EvaluateCondition()
+		// can be used and because ACT_EXPRESSION is designed to discard its result (since it normally would not be
+		// used). This can't be done before PreparseBlocks() is called since this isn't really an IF (it has no body).
+		if (!AddLine(ACT_EXPRESSION, &parameter, UCHAR_MAX + 1)) // UCHAR_MAX signals AddLine to avoid pointing any pending labels or functions at the new line.
 			return FAIL; // Above already displayed the error message.
 		Line *hot_expr_line = mLastLine;
 
@@ -3548,20 +3578,13 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					if (!AddLine(ACT_ASSIGNEXPR, args, UCHAR_MAX + 2)) 
 						return FAIL; // Above already displayed the error.
 					mLastLine = mLastLine->mPrevLine; // Restore mLastLine to the last non-'static' line, but leave mCurrLine set to the new line.
-					// Prepend the new line to the auto-execute section:
+					mLastLine->mNextLine = NULL; // Remove the new line from the main script's linked list of lines. For maintainability: AddLine() unconditionally overwrites mLastLine->mNextLine anyway.
 					if (mLastStaticLine)
-					{	// Insert after the last 'static' line to preserve order:
-						mCurrLine->mNextLine = mLastStaticLine->mNextLine; // This should point at the beginning of the real auto-execute section.
 						mLastStaticLine->mNextLine = mCurrLine;
-					}
 					else
-					{	// This is the first 'static' line.
-						mCurrLine->mNextLine = mFirstLine;
-						mFirstLine = mCurrLine;
-					}
-					mCurrLine->mPrevLine = mLastStaticLine; // Even if NULL. Must be set otherwise VicinityToText() will show the wrong line if this one has an error.
+						mFirstStaticLine = mCurrLine;
+					mCurrLine->mPrevLine = mLastStaticLine; // Even if NULL. Must be set otherwise VicinityToText() will show the wrong line if this one or one "near" it has an error.
 					mLastStaticLine = mCurrLine;
-					mLastLine->mNextLine = NULL; // Remove the link from the very last actual line to this new line.
 
 					// Some of the checks below could be used to "optimize" static initializers, but since they
 					// will only be executed once each anyway, it doesn't seem useful.  Making them expressions

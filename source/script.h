@@ -2471,7 +2471,7 @@ private:
 #endif
 
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
-	Line *mLastStaticLine;            // The last static var initializer.
+	Line *mFirstStaticLine, *mLastStaticLine; // The first and last static var initializer.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
 	Func *mFirstFunc, *mLastFunc;     // The first and last functions in the linked list.
 	Func **mFunc; // L27: Use a binary-searchable array to speed up function searches (especially beneficial for dynamic function calls).
