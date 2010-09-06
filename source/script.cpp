@@ -139,8 +139,13 @@ Script::~Script() // Destructor.
 	}
 	for (i = 0; i < MAX_SPLASHIMAGE_WINDOWS; ++i)
 	{
-		if (g_SplashImage[i].pic)
-			g_SplashImage[i].pic->Release();
+		if (g_SplashImage[i].pic_bmp)
+		{
+			if (g_SplashImage[i].pic_type == IMAGE_BITMAP)
+				DeleteObject(g_SplashImage[i].pic_bmp);
+			else
+				DestroyIcon(g_SplashImage[i].pic_icon);
+		}
 		if (g_SplashImage[i].hwnd && IsWindow(g_SplashImage[i].hwnd))
 			DestroyWindow(g_SplashImage[i].hwnd);
 		if (g_SplashImage[i].hfont1) // Destroy font only after destroying the window that uses it.

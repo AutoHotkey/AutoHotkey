@@ -253,7 +253,12 @@ struct SplashType
 	int object_width;   // Width of image.
 	int object_height;  // Height of the progress bar or image.
 	HWND hwnd;
-	LPPICTURE pic; // For SplashImage.
+	int pic_type;
+	union
+	{
+		HBITMAP pic_bmp; // For SplashImage.
+		HICON pic_icon;
+	};
 	HWND hwnd_bar;
 	HWND hwnd_text1;  // MainText
 	HWND hwnd_text2;  // SubText

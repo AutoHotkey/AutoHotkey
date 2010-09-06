@@ -168,8 +168,13 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 		DeleteObject(splash.hfont2);
 	if (splash.hbrush)
 		DeleteObject(splash.hbrush);
-	if (splash.pic)
-		splash.pic->Release();
+	if (splash.pic_bmp)
+	{
+		if (splash.pic_type == IMAGE_BITMAP)
+			DeleteObject(splash.pic_bmp);
+		else
+			DestroyIcon(splash.pic_icon);
+	}
 	ZeroMemory(&splash, sizeof(splash)); // Set the above and all other fields to zero.
 
 	if (turn_off)
@@ -408,72 +413,57 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 
 	// If there's an image, handle it first so that automatic-width can be applied (if no width was specified)
 	// for later font calculations:
-	HANDLE hfile_image;
-	if (aSplashImage && *image_filename && splash.object_height
-		&& (hfile_image = CreateFile(image_filename, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL)) != INVALID_HANDLE_VALUE)
+	if (aSplashImage && *image_filename && splash.object_height)
 	{
-		// If any of these calls fail (rare), just omit the picture from the window.
-		DWORD file_size = GetFileSize(hfile_image, NULL);
-		if (file_size != -1)
+		splash.pic_bmp = LoadPicture(image_filename,
+			splash.object_width == COORD_UNSPECIFIED ? 0 : splash.object_width,
+			splash.object_height == COORD_UNSPECIFIED ? 0 : splash.object_height,
+			splash.pic_type, 0, true);
+		if (splash.pic_bmp && (splash.object_height < 0 || splash.object_width < 0))
 		{
-			HGLOBAL hglobal = GlobalAlloc(GMEM_MOVEABLE, file_size); // MSDN: alloc memory based on file size
-			if (hglobal)
+			HBITMAP hbmp_to_measure = NULL;
+			ICONINFO iconinfo;
+			if (splash.pic_type == IMAGE_BITMAP)
+				hbmp_to_measure = splash.pic_bmp;
+			else // IMAGE_ICON
+				if (GetIconInfo(splash.pic_icon, &iconinfo))
+					hbmp_to_measure = iconinfo.hbmColor;
+			if (hbmp_to_measure)
 			{
-				LPVOID pdata = GlobalLock(hglobal);
-				if (pdata)
+				BITMAP bmp;
+				if (GetObject(hbmp_to_measure, sizeof(BITMAP), &bmp))
 				{
-					DWORD bytes_to_read = 0;
-					// MSDN: read file and store in global memory:
-					if (ReadFile(hfile_image, pdata, file_size, &bytes_to_read, NULL))
+					if (splash.object_height == -1 && splash.object_width > 0)
 					{
-						// MSDN: create IStream* from global memory:
-						LPSTREAM pstm = NULL;
-						if (SUCCEEDED(CreateStreamOnHGlobal(hglobal, TRUE, &pstm)) && pstm)
-						{
-							// MSDN: Create IPicture from image file:
-							if (FAILED(OleLoadPicture(pstm, file_size, FALSE, IID_IPicture, (LPVOID *)&splash.pic)))
-								splash.pic = NULL;
-							pstm->Release();
-							long hm_width, hm_height;
-							if (splash.object_height == -1 && splash.object_width > 0)
-							{
-								// Caller wants height calculated based on the specified width (keep aspect ratio).
-								splash.pic->get_Width(&hm_width);
-								splash.pic->get_Height(&hm_height);
-								if (hm_width) // Avoid any chance of divide-by-zero.
-									splash.object_height = (int)(((double)hm_height / hm_width) * splash.object_width + .5); // Round.
-							}
-							else if (splash.object_width == -1 && splash.object_height > 0)
-							{
-								// Caller wants width calculated based on the specified height (keep aspect ratio).
-								splash.pic->get_Width(&hm_width);
-								splash.pic->get_Height(&hm_height);
-								if (hm_height) // Avoid any chance of divide-by-zero.
-									splash.object_width = (int)(((double)hm_width / hm_height) * splash.object_height + .5); // Round.
-							}
-							else
-							{
-								if (splash.object_height == COORD_UNSPECIFIED)
-								{
-									splash.pic->get_Height(&hm_height);
-									// Convert himetric to pixels:
-									splash.object_height = MulDiv(hm_height, pixels_per_point_y, HIMETRIC_INCH);
-								}
-								if (splash.object_width == COORD_UNSPECIFIED)
-								{
-									splash.pic->get_Width(&hm_width);
-									splash.object_width = MulDiv(hm_width, GetDeviceCaps(hdc, LOGPIXELSX), HIMETRIC_INCH);
-								}
-							}
-							if (splash.width == COORD_UNSPECIFIED)
-								splash.width = splash.object_width + (2 * splash.margin_x);
-						}
+						// Caller wants height calculated based on the specified width (keep aspect ratio).
+						if (bmp.bmWidth) // Avoid any chance of divide-by-zero.
+							splash.object_height = (int)(((double)bmp.bmHeight / bmp.bmWidth) * splash.object_width + .5); // Round.
 					}
-					GlobalUnlock(hglobal);
+					else if (splash.object_width == -1 && splash.object_height > 0)
+					{
+						// Caller wants width calculated based on the specified height (keep aspect ratio).
+						if (bmp.bmHeight) // Avoid any chance of divide-by-zero.
+							splash.object_width = (int)(((double)bmp.bmWidth / bmp.bmHeight) * splash.object_height + .5); // Round.
+					}
+					else
+					{
+						// Use actual width/height where unspecified:
+						if (splash.object_height == COORD_UNSPECIFIED)
+							splash.object_height = bmp.bmHeight;
+						if (splash.object_width == COORD_UNSPECIFIED)
+							splash.object_width = bmp.bmWidth;
+					}
+					if (splash.width == COORD_UNSPECIFIED)
+						splash.width = splash.object_width + (2 * splash.margin_x);
+				}
+				if (splash.pic_type == IMAGE_ICON)
+				{
+					// Delete the bitmaps created by GetIconInfo above:
+					DeleteObject(iconinfo.hbmColor);
+					DeleteObject(iconinfo.hbmMask);
 				}
 			}
 		}
-		CloseHandle(hfile_image);
 	}
 
 	// If width is still unspecified -- which should only happen if it's a SplashImage window with
@@ -5369,17 +5359,19 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			return (LRESULT)(splash.hbrush ? splash.hbrush : GetSysColorBrush(COLOR_BTNFACE));
 		case WM_ERASEBKGND:
 		{
-			if (splash.pic) // And since there is a pic, its object_width/height should already be valid.
+			if (splash.pic_bmp) // And since there is a pic, its object_width/height should already be valid.
 			{
-				// MSDN: get width and height of picture
-				long hm_width, hm_height;
-				splash.pic->get_Width(&hm_width);
-				splash.pic->get_Height(&hm_height);
-				GetClientRect(splash.hwnd, &client_rect);
-				// MSDN: display picture using IPicture::Render
 				int ypos = splash.margin_y + (splash.text1_height ? (splash.text1_height + splash.margin_y) : 0);
-				splash.pic->Render((HDC)wParam, splash.margin_x, ypos, splash.object_width, splash.object_height
-					, 0, hm_height, hm_width, -hm_height, &client_rect);
+				if (splash.pic_type == IMAGE_BITMAP)
+				{
+					HDC hdc = CreateCompatibleDC((HDC)wParam);
+					HBITMAP hbmpOld = (HBITMAP)SelectObject(hdc, splash.pic_bmp);
+					BitBlt((HDC)wParam, splash.margin_x, ypos, splash.object_width, splash.object_width, hdc, 0, 0, SRCCOPY);
+					SelectObject(hdc, hbmpOld);
+					DeleteDC(hdc);
+				}
+				else // IMAGE_ICON
+					DrawIconEx((HDC)wParam, splash.margin_x, ypos, splash.pic_icon, splash.object_width, splash.object_height, 0, NULL, DI_NORMAL);
 				// Prevent "flashing" by erasing only the part that hasn't already been drawn:
 				ExcludeClipRect((HDC)wParam, splash.margin_x, ypos, splash.margin_x + splash.object_width
 					, ypos + splash.object_height);
