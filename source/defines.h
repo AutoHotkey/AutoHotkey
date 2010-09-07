@@ -304,7 +304,7 @@ enum enum_act {
 , ACT_CLIPWAIT, ACT_KEYWAIT
 , ACT_SLEEP, ACT_RANDOM
 , ACT_GOTO, ACT_GOSUB, ACT_ONEXIT, ACT_HOTKEY, ACT_SETTIMER, ACT_CRITICAL, ACT_THREAD, ACT_RETURN, ACT_EXIT
-, ACT_LOOP, ACT_WHILE, ACT_BREAK, ACT_CONTINUE // v1.0.48: Lexikos: Added ACT_WHILE.
+, ACT_LOOP, ACT_FOR, ACT_WHILE, ACT_BREAK, ACT_CONTINUE // v1.0.48: Lexikos: Added ACT_WHILE.
 , ACT_BLOCK_BEGIN, ACT_BLOCK_END
 , ACT_WINACTIVATE, ACT_WINACTIVATEBOTTOM
 , ACT_WINWAIT, ACT_WINWAITCLOSE, ACT_WINWAITACTIVE, ACT_WINWAITNOTACTIVE
@@ -369,7 +369,7 @@ enum enum_act_old {
 #define ACT_IS_ASSIGN(ActionType) (ActionType <= ACT_ASSIGN_LAST && ActionType >= ACT_ASSIGN_FIRST) // Ordered for short-circuit performance.
 #define ACT_IS_IF(ActionType) (ActionType >= ACT_FIRST_IF && ActionType <= ACT_LAST_IF)
 #define ACT_IS_IF_OR_ELSE_OR_LOOP(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
-	|| ActionType == ACT_LOOP || ActionType == ACT_WHILE) // Lexikos: Added check for ACT_WHILE.
+	|| ActionType == ACT_LOOP || ActionType == ACT_WHILE || ActionType == ACT_FOR)
 #define ACT_IS_IF_OLD(ActionType, OldActionType) (ActionType >= ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION && ActionType <= ACT_LAST_IF) \
 	&& (ActionType < ACT_IFEQUAL || ActionType > ACT_IFLESSOREQUAL || (OldActionType >= OLD_IFEQUAL && OldActionType <= OLD_IFLESSOREQUAL))
 	// All the checks above must be done so that cmds such as IfMsgBox (which are both "old" and "new")

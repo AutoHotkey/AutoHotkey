@@ -4429,6 +4429,34 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		}
 	} // end of special handling for MsgBox.
 
+	else if (aActionType == ACT_FOR)
+	{
+		// Validate "For" syntax and translate to conventional command syntax.
+		// "For x,y in z" -> "For x,y, z"
+		// "For x in y"   -> "For x,, y"
+		LPTSTR in;
+		for (in = action_args; *in; ++in)
+			if (IS_SPACE_OR_TAB(*in)
+				&& tolower(in[1]) == 'i'
+				&& tolower(in[2]) == 'n'
+				&& IS_SPACE_OR_TAB(in[3])) // Relies on short-circuit boolean evaluation.
+				break;
+		if (!*in)
+			return ScriptError(_T("This \"For\" is missing its \"in\"."), aLineText);
+		int vars = 1;
+		for (mark = in - action_args; mark > 0; --mark)
+			if (action_args[mark] == g_delimiter)
+				++vars;
+		in[1] = g_delimiter; // Replace "in" with a conventional delimiter.
+		if (vars > 1)
+		{	// Something like "For x,y in z".
+			if (vars > 2)
+				return ScriptError(_T("Syntax error or too many variables in \"For\" statement."), aLineText);
+			in[2] = ' ';
+		}
+		else
+			in[2] = g_delimiter; // Insert another delimiter so the expression is always arg 3.
+	}
 
 	/////////////////////////////////////////////////////////////
 	// Parse the parameter string into a list of separate params.
@@ -4754,10 +4782,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	// Loop {   ; Known limitation: Overlaps with file-pattern loop that retrieves single file of name "{".
 	// Loop 5 { ; Also overlaps, this time with file-pattern loop that retrieves numeric filename ending in '{'.
 	// Loop %Var% {  ; Similar, but like the above seems acceptable given extreme rarity of user intending a file pattern.
-	if ((aActionType == ACT_LOOP || aActionType == ACT_WHILE)
-		&& nArgs == 1 && arg[0][0])  // A loop with exactly one, non-blank arg.
+	if ((aActionType == ACT_LOOP || aActionType == ACT_WHILE) && nArgs == 1 && arg[0][0] // A loop with exactly one, non-blank arg.
+		|| (aActionType == ACT_FOR && nArgs))
 	{
-		LPTSTR arg1 = arg[0]; // For readability and possibly performance.
+		LPTSTR arg1 = arg[nArgs - 1]; // For readability and possibly performance.
 		// A loop with the above criteria (exactly one arg) can only validly be a normal/counting loop or
 		// a file-pattern loop if its parameter's last character is '{'.  For the following reasons, any
 		// single-parameter loop that ends in '{' is considered to be one-true brace:
@@ -4783,7 +4811,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			if (!rtrim(arg1)) // Trimmed down to nothing, so only a brace was present: remove the arg completely.
 				if (aActionType == ACT_LOOP)
 					nArgs = 0;    // This makes later stages recognize it as an infinite loop rather than a zero-iteration loop.
-				else // ACT_WHILE
+				else // ACT_WHILE or ACT_FOR
 					return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
 		}
 	}
@@ -5120,7 +5148,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 						// For other commands, if any telltale character is present it's definitely an
 						// expression because this is an arg that's marked as a number-or-expression.
 						// So telltales avoid the need for the complex check further below.
-						if (aActionType == ACT_ASSIGNEXPR || aActionType == ACT_WHILE // See above.
+						if (aActionType == ACT_ASSIGNEXPR || aActionType == ACT_WHILE || aActionType == ACT_FOR // See above.
 							|| StrChrAny(this_new_arg.text, EXPR_TELLTALES)) // See above.
 							this_new_arg.is_expression = true;
 						else
@@ -5134,7 +5162,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// perhaps others in the future, to become non-expressions if they contain only a single
 			// numeric literal (or are entirely blank). At runtime, such args are expanded normally
 			// rather than having to run them through the expression evaluator:
-			if (this_new_arg.is_expression && IsPureNumeric(this_new_arg.text, true, true, true))
+			if (this_new_arg.is_expression && IsPureNumeric(this_new_arg.text, true, true, true) && aActionType != ACT_FOR) // The last check is necessary to ensure "For x in 0" fails *gracefully*. Although it will hopefully never happen, a user might conceivably try (and fail) to use 0 as a *variable*.
 				this_new_arg.is_expression = false;
 
 			if (this_new_arg.is_expression)
@@ -5398,7 +5426,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// ACT_WHILE performs less than 4% faster as a non-expression in these cases, and keeping
 					// it as an expression avoids an extra check in a performance-sensitive spot of ExpandArgs
 					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).
-					if (aActionType != ACT_WHILE) // If it is ACT_WHILE, it would be something like "while x" in this case. Keep those as expressions for the reason above.
+					if (aActionType != ACT_WHILE && aActionType != ACT_FOR) // If it is ACT_WHILE, it would be something like "while x" in this case. Keep those as expressions for the reason above. PerformLoopFor() requires ACT_FOR's expression arg remain an expression.
 						this_new_arg.is_expression = false; // In addition to being an optimization, doing this might also be necessary for things like "Var := ClipboardAll" to work properly.
 					// But if aActionType is ACT_ASSIGNEXPR, it's left as ACT_ASSIGNEXPR vs. ACT_ASSIGN
 					// because it might be necessary to avoid having AutoTrim take effect for := (which
@@ -5433,7 +5461,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// there should not be any way for non-percent derefs to get mixed in with cases
 					// 2 or 3.
 					if (!deref[0].is_function && *deref[0].marker == g_DerefChar // This appears to be case #2 or #3.
-						&& aActionType != ACT_WHILE) // Nearly doubles the speed of "while %x%" and "while Array%i%" to leave WHILE as an expression.  But y:=%x% and y:=Array%i% are about the same speed either way, and "if %x%" never reaches this point because for compatibility(?), it's the same as "if x".
+						&& aActionType != ACT_WHILE // Nearly doubles the speed of "while %x%" and "while Array%i%" to leave WHILE as an expression.  But y:=%x% and y:=Array%i% are about the same speed either way, and "if %x%" never reaches this point because for compatibility(?), it's the same as "if x".
+						&& aActionType != ACT_FOR) // PerformLoopFor() requires its only expression arg remain an expression.
 					{
 						// The comment below is probably obsolete -- and perhaps so is this entire optimization
 						// because expressions are faster now.  But in case it's necessary for anything related
@@ -5632,6 +5661,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 	case ACT_WHILE: // Lexikos: ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
 		line.mAttribute = ATTR_LOOP_WHILE;
+		break;
+
+	case ACT_FOR:
+		line.mAttribute = ATTR_LOOP_FOR;
 		break;
 
 	// This one alters g_persistent so is present in its entirety (for simplicity) in both SC an non-SC version.
@@ -8700,6 +8733,16 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 				return line->PreparseError(_T("Improper line below this.")); // Short message since so rare. A function must not be defined directly below an IF/ELSE/LOOP because runtime evaluation won't handle it properly.
 			}
 
+			if (line->mActionType == ACT_FOR)
+			{
+				ASSERT(line->mArgc == 3);
+				// Now that this FOR's expression has been pre-parsed, exclude it from mArgc so that ExpandArgs()
+				// won't evaluate it -- PerformLoopFor() needs to call ExpandExpression() directly in order to
+				// receive the object reference which is the result of the expression.
+				line->mArgc--;
+			}
+
+
 			// Make the line immediately following each ELSE, IF or LOOP be enclosed by that stmt.
 			// This is done to make it illegal for a Goto or Gosub to jump into a deeper layer,
 			// such as in this example:
@@ -8817,7 +8860,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 	{
 		if (   ACT_IS_IF(line->mActionType)
 			|| line->mActionType == ACT_LOOP
-			|| line->mActionType == ACT_WHILE // Lexikos: Added check for ACT_WHILE.
+			|| line->mActionType == ACT_WHILE
+			|| line->mActionType == ACT_FOR
 			|| line->mActionType == ACT_REPEAT   )
 		{
 			// ActionType is an IF or a LOOP.
@@ -8847,6 +8891,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_file = ATTR_LOOP_NORMAL;
 			else if (aLoopTypeFile == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
 				loop_type_file = ATTR_LOOP_WHILE;
+			else if (aLoopTypeFile == ATTR_LOOP_FOR || line->mAttribute == ATTR_LOOP_FOR) // Lexikos: ACT_FOR
+				loop_type_file = ATTR_LOOP_FOR;
 
 			// The section is the same as above except for registry vs. file loops:
 			loop_type_reg = ATTR_NONE;
@@ -8858,6 +8904,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_reg = ATTR_LOOP_NORMAL;
 			else if (aLoopTypeReg == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
 				loop_type_reg = ATTR_LOOP_WHILE;
+			else if (aLoopTypeReg == ATTR_LOOP_FOR || line->mAttribute == ATTR_LOOP_FOR) // Lexikos: ACT_FOR
+				loop_type_reg = ATTR_LOOP_FOR;
 
 			// Same as above except for READ-FILE loops:
 			loop_type_read = ATTR_NONE;
@@ -8869,6 +8917,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_read = ATTR_LOOP_NORMAL;
 			else if (aLoopTypeRead == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
 				loop_type_read = ATTR_LOOP_WHILE;
+			else if (aLoopTypeRead == ATTR_LOOP_FOR || line->mAttribute == ATTR_LOOP_FOR) // Lexikos: ACT_FOR
+				loop_type_read = ATTR_LOOP_FOR;
 
 			// Same as above except for PARSING loops:
 			loop_type_parse = ATTR_NONE;
@@ -8880,6 +8930,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				loop_type_parse = ATTR_LOOP_NORMAL;
 			else if (aLoopTypeParse == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
 				loop_type_parse = ATTR_LOOP_WHILE;
+			else if (aLoopTypeParse == ATTR_LOOP_FOR || line->mAttribute == ATTR_LOOP_FOR) // Lexikos: ACT_FOR
+				loop_type_parse = ATTR_LOOP_FOR;
 
 			// Check if the IF's action-line is something we want to recurse.  UPDATE: Always
 			// recurse because other line types, such as Goto and Gosub, need to be preparsed
@@ -8933,7 +8985,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			// so always continue on to evaluate the IF's ELSE, if present:
 			if (line_temp->mActionType == ACT_ELSE)
 			{
-				if (line->mActionType == ACT_LOOP || line->mActionType == ACT_WHILE || line->mActionType == ACT_REPEAT) // Lexikos: Added check for ACT_WHILE.
+				if (line->mActionType == ACT_LOOP || line->mActionType == ACT_WHILE || line->mActionType == ACT_FOR || line->mActionType == ACT_REPEAT)
 				{
 					 // this can't be our else, so let the caller handle it.
 					if (aMode != ONLY_ONE_LINE)
@@ -10929,8 +10981,9 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			return LOOP_CONTINUE;
 
 		case ACT_LOOP:
-		case ACT_REPEAT:
 		case ACT_WHILE: // Lexikos: mAttribute should be ATTR_LOOP_WHILE.
+		case ACT_FOR: // Lexikos: mAttribute should be ATTR_LOOP_FOR.
+		case ACT_REPEAT:
 		{
 			HKEY root_key_type; // For registry loops, this holds the type of root key, independent of whether it is local or remote.
 			AttributeType attr = line->mAttribute;
@@ -11041,6 +11094,9 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				break;
 			case ATTR_LOOP_WHILE: // Lexikos: ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
 				result = line->PerformLoopWhile(aResultToken, continue_main_loop, jump_to_line);
+				break;
+			case ATTR_LOOP_FOR:
+				result = line->PerformLoopFor(aResultToken, continue_main_loop, jump_to_line);
 				break;
 			case ATTR_LOOP_PARSE:
 				// The phrase "csv" is unique enough since user can always rearrange the letters
@@ -11826,6 +11882,139 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 			break;
 		}
 	} // for()
+	return OK; // The script's loop is now over.
+}
+
+
+
+ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine)
+{
+	ResultType result;
+	Line *jump_to_line;
+	global_struct &g = *::g; // Might slightly speed up the loop below.
+
+	// Save these pointers since they will be overwritten during the loop:
+	Var *var[] = { ARGVARRAW1, ARGVARRAW2 };
+	
+	if (!sDerefBuf)
+	{
+		// This must be done in case ExpandExpression() needs the deref buf for temporary storage.
+		sDerefBufSize = (mArg[2].length < MAX_NUMBER_LENGTH ? MAX_NUMBER_LENGTH : mArg[2].length) + 1; // See EXPR_BUF_SIZE macro in script_expression.cpp.
+		if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
+		{
+			sDerefBufSize = 0;
+			return LineError(ERR_OUTOFMEM);
+		}
+	}
+
+	LPTSTR our_buf_marker = sDerefBuf;
+	LPTSTR arg_deref[] = {0, 0}; // ExpandExpression checks these if it needs to expand the deref buffer.
+	ExprTokenType object_token;
+	object_token.symbol = SYM_INVALID; // Init in case ExpandExpression() resolves to a string, in which case it won't use enum_token.
+
+	// Since expressions aren't normally capable of resolving to an object (except for RETURN), we need to
+	// call ExpandExpression() directly and pass in a "result token" which will be used if the result is an
+	// object or number. Load-time pre-parsing has ensured there are really three args, but mArgc == 2 so
+	// this one hasn't been evaluated yet:
+	if (!ExpandExpression(2, result, &object_token, our_buf_marker, sDerefBuf, sDerefBufSize, arg_deref, 0))
+		// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
+		return result;
+
+	if (object_token.symbol != SYM_OBJECT)
+		// The expression didn't resolve to an object, so no enumerator is available.
+		return OK;
+	
+	TCHAR buf[MAX_NUMBER_SIZE]; // Small buffer which may be used by object->Invoke().
+	
+	ExprTokenType enum_token;
+	ExprTokenType param_tokens[3];
+	ExprTokenType *params[] = { param_tokens, param_tokens+1, param_tokens+2 };
+	int param_count;
+
+	// Set up enum_token the way Invoke expects:
+	enum_token.symbol = SYM_STRING;
+	enum_token.marker = _T("");
+	enum_token.mem_to_free = NULL;
+	enum_token.buf = buf;
+
+	// Prepare to call object._NewEnum():
+	param_tokens[0].symbol = SYM_STRING;
+	param_tokens[0].marker = _T("_NewEnum");
+
+	object_token.object->Invoke(enum_token, object_token, IT_CALL, params, 1);
+	object_token.object->Release(); // This object reference is no longer needed.
+
+	if (enum_token.mem_to_free)
+		// Invoke returned memory for us to free.
+		free(enum_token.mem_to_free);
+
+	if (enum_token.symbol != SYM_OBJECT)
+		// The object didn't return an enumerator, so nothing more we can do.
+		return OK;
+
+	// Prepare parameters for the loop below: enum.Next(var1 [, var2])
+	param_tokens[0].marker = _T("Next");
+	param_tokens[1].symbol = SYM_VAR;
+	param_tokens[1].var = var[0];
+	if (var[1])
+	{
+		// for x,y in z  ->  enum.Next(x,y)
+		param_tokens[2].symbol = SYM_VAR;
+		param_tokens[2].var = var[1];
+		param_count = 3;
+	}
+	else
+		// for x in z  ->  enum.Next(x)
+		param_count = 2;
+
+	IObject &enumerator = *enum_token.object; // Might perform better as a reference?
+
+	ExprTokenType result_token;
+
+	for (;; ++g.mLoopIteration)
+	{
+		// Set up result_token the way Invoke expects; each Invoke() will change some or all of these:
+		result_token.symbol = SYM_STRING;
+		result_token.marker = _T("");
+		result_token.mem_to_free = NULL;
+		result_token.buf = buf;
+
+		// Call enumerator.Next(var1, var2)
+		enumerator.Invoke(result_token, enum_token, IT_CALL, params, param_count);
+
+		// Free any memory or object which may have been returned by Invoke:
+		if (result_token.mem_to_free)
+			free(result_token.mem_to_free);
+		if (result_token.symbol == SYM_OBJECT)
+			result_token.object->Release(); // Relies on the fact that TokenToBool() doesn't access the object.
+
+		if (!TokenToBOOL(result_token, TokenIsPureNumeric(result_token)))
+			// The enumerator returned false, which means there are no more items.
+			break;
+		// Otherwise the enumerator already stored the next value(s) in the variable(s) we passed it via params.
+
+		// CONCERNING ALL THE REST OF THIS FUNCTION: See comments in PerformLoop() for details.
+		if (mNextLine->mActionType == ACT_BLOCK_BEGIN)
+			do
+				result = mNextLine->mNextLine->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
+			while (jump_to_line == mNextLine);
+		else
+			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
+		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
+		{
+			enumerator.Release();
+			return result;
+		}
+		if (jump_to_line)
+		{
+			if (jump_to_line == this)
+				aContinueMainLoop = true;
+			else
+				aJumpToLine = jump_to_line;
+			break;
+		}
+	} // for()
+	enumerator.Release();
 	return OK; // The script's loop is now over.
 }
 
@@ -14177,11 +14366,15 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 			, *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName  // i.e. don't resolve dynamic variable names.
 			, g_act[mActionType].Name, RAW_ARG2, RAW_ARG3);
 	else if (ACT_IS_ASSIGN(mActionType) || (ACT_IS_IF(mActionType) && mActionType < ACT_FIRST_COMMAND))
-		// Only these other commands need custom conversion.
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s%s %s %s")
 			, ACT_IS_IF(mActionType) ? _T("if ") : _T("")
 			, *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName  // i.e. don't resolve dynamic variable names.
 			, g_act[mActionType].Name, RAW_ARG2);
+	else if (mActionType == ACT_FOR)
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("For %s,%s in %s")
+			, *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName	  // i.e. don't resolve dynamic variable names.
+			, *mArg[1].text ? mArg[1].text : VAR(mArg[1])->mName  //
+			, mArg[2].text);
 	else
 	{
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), g_act[mActionType].Name);

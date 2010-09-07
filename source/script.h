@@ -65,6 +65,7 @@ enum ExecUntilMode {NORMAL_MODE, UNTIL_RETURN, UNTIL_BLOCK_END, ONLY_ONE_LINE};
 #define ATTR_LOOP_READ_FILE (void *)5
 #define ATTR_LOOP_PARSE (void *)6
 #define ATTR_LOOP_WHILE (void *)7 // Lexikos: This is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
+#define ATTR_LOOP_FOR (void *)8
 typedef void *AttributeType;
 
 enum FileLoopModeType {FILE_LOOP_INVALID, FILE_LOOP_FILES_ONLY, FILE_LOOP_FILES_AND_FOLDERS, FILE_LOOP_FOLDERS_ONLY};
@@ -559,6 +560,7 @@ private:
 	ResultType Line::PerformLoopParseCSV(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine);
 	ResultType PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, TextStream *aReadFile, LPTSTR aWriteFileName);
 	ResultType PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
+	ResultType PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_FOR.
 	ResultType Perform();
 
 	ResultType MouseGetPos(DWORD aOptions);
@@ -986,6 +988,7 @@ public:
 			case ACT_IMAGESEARCH:
 			case ACT_INPUT:
 			case ACT_FORMATTIME:
+			case ACT_FOR:
 				return ARG_TYPE_OUTPUT_VAR;
 
 			case ACT_SORT:
@@ -1033,6 +1036,7 @@ public:
 			case ACT_IMAGESEARCH:
 			case ACT_SPLITPATH:
 			case ACT_FILEGETSHORTCUT:
+			case ACT_FOR:
 				return ARG_TYPE_OUTPUT_VAR;
 			}
 			break;
