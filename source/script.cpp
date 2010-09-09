@@ -5139,7 +5139,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 						}
 						// Otherwise, it might be an expression so do the final checks.
 						// Override the original false default of is_expression unless an exception applies.
-						// Since ACT_ASSIGNEXPR and ACT_WHILE aren't legacy commands, don't call
+						// Since ACT_ASSIGNEXPR, WHILE, FOR and UNTIL aren't legacy commands, don't call
 						// LegacyArgIsExpression() for them because that would cause things like x:=%y% and
 						// "while %x%" to behave the same as x:=y and "while x:, which would be inconsistent
 						// with how expressions are supposed to work. ACT_RETURN should have been excluded
@@ -5148,7 +5148,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 						// For other commands, if any telltale character is present it's definitely an
 						// expression because this is an arg that's marked as a number-or-expression.
 						// So telltales avoid the need for the complex check further below.
-						if (aActionType == ACT_ASSIGNEXPR || aActionType == ACT_WHILE || aActionType == ACT_FOR // See above.
+						if (aActionType == ACT_ASSIGNEXPR || aActionType >= ACT_FOR && aActionType <= ACT_UNTIL // i.e. FOR, WHILE or UNTIL
 							|| StrChrAny(this_new_arg.text, EXPR_TELLTALES)) // See above.
 							this_new_arg.is_expression = true;
 						else
@@ -5426,7 +5426,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// ACT_WHILE performs less than 4% faster as a non-expression in these cases, and keeping
 					// it as an expression avoids an extra check in a performance-sensitive spot of ExpandArgs
 					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).
-					if (aActionType != ACT_WHILE && aActionType != ACT_FOR) // If it is ACT_WHILE, it would be something like "while x" in this case. Keep those as expressions for the reason above. PerformLoopFor() requires ACT_FOR's expression arg remain an expression.
+					if (aActionType < ACT_FOR || aActionType > ACT_UNTIL) // If it is FOR, WHILE or UNTIL, it would be something like "while x" in this case. Keep those as expressions for the reason above. PerformLoopFor() requires FOR's expression arg to remain an expression.
 						this_new_arg.is_expression = false; // In addition to being an optimization, doing this might also be necessary for things like "Var := ClipboardAll" to work properly.
 					// But if aActionType is ACT_ASSIGNEXPR, it's left as ACT_ASSIGNEXPR vs. ACT_ASSIGN
 					// because it might be necessary to avoid having AutoTrim take effect for := (which
@@ -5461,8 +5461,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// there should not be any way for non-percent derefs to get mixed in with cases
 					// 2 or 3.
 					if (!deref[0].is_function && *deref[0].marker == g_DerefChar // This appears to be case #2 or #3.
-						&& aActionType != ACT_WHILE // Nearly doubles the speed of "while %x%" and "while Array%i%" to leave WHILE as an expression.  But y:=%x% and y:=Array%i% are about the same speed either way, and "if %x%" never reaches this point because for compatibility(?), it's the same as "if x".
-						&& aActionType != ACT_FOR) // PerformLoopFor() requires its only expression arg remain an expression.
+						&& (aActionType < ACT_FOR || aActionType > ACT_UNTIL)) // Nearly doubles the speed of "while %x%" and "while Array%i%" to leave WHILE as an expression.  But y:=%x% and y:=Array%i% are about the same speed either way, and "if %x%" never reaches this point because for compatibility(?), it's the same as "if x". Additionally, PerformLoopFor() requires its only expression arg to remain an expression.
 					{
 						// The comment below is probably obsolete -- and perhaps so is this entire optimization
 						// because expressions are faster now.  But in case it's necessary for anything related
@@ -9016,6 +9015,18 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				// an ELSEless IF, so see related comments above:
 				line_temp->mRelatedLine = line;
 			}
+			else if (line_temp->mActionType == ACT_UNTIL)
+			{
+				if (line->mActionType != ACT_LOOP || line->mArgc)
+				{
+					// This is similar to the section above, so see there for comments.
+					if (aMode != ONLY_ONE_LINE)
+						return line_temp->PreparseError(ERR_UNTIL_WITH_NO_LOOP);
+					return line_temp;
+				}
+				// Continue processing *after* UNTIL.
+				line = line_temp->mNextLine;
+			}
 			else // line doesn't have an else, so just continue processing from line_temp's position
 				line = line_temp;
 
@@ -9135,6 +9146,10 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			// all the elses and handle them.  UPDATE: This happens if there's
 			// an extra ELSE in this scope level that has no IF:
 			return line->PreparseError(ERR_ELSE_WITH_NO_IF);
+
+		case ACT_UNTIL:
+			// Similar to above.
+			return line->PreparseError(ERR_UNTIL_WITH_NO_LOOP);
 		} // switch()
 
 		line = line->mNextLine; // If NULL due to physical end-of-script, the for-loop's condition will catch it.
@@ -11213,6 +11228,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			// number of iterations or it was broken via the break command.  In either case, we jump
 			// to the line after our loop's structure and continue there:
 			line = line->mRelatedLine;
+			if (line->mActionType == ACT_UNTIL) // Currently only possible for Loop with no args; Loop .. Until expression.
+				line = line->mNextLine;
 			continue;  // Resume looping starting at the above line.  "continue" is actually slightly faster than "break" in these cases.
 		} // case ACT_LOOP.
 
@@ -11770,6 +11787,8 @@ ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoo
 	Line *jump_to_line;
 	global_struct &g = *::g; // Primarily for performance in this case.
 
+	Line *loop_until = (mRelatedLine->mActionType == ACT_UNTIL) ? mRelatedLine : NULL;
+
 	for (; aIsInfinite || g.mLoopIteration <= aIterationLimit; ++g.mLoopIteration)
 	{
 		// Execute once the body of the loop (either just one statement or a block of statements).
@@ -11823,6 +11842,14 @@ ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoo
 			else // jump_to_line must be a line that's at the same level or higher as our Exec_Until's LOOP statement itself.
 				aJumpToLine = jump_to_line; // Signal the caller to handle this jump.
 			break;
+		}
+		if (loop_until)
+		{
+			result = loop_until->ExpandArgs();
+			if (result != OK)
+				return result;
+			if (LegacyResultToBOOL(ARG1)) // See PerformLoopWhile() for comments about this line.
+				break;
 		}
 		// Otherwise, the result of executing the body of the loop, above, was either OK
 		// (the current iteration completed normally) or LOOP_CONTINUE (the current loop
