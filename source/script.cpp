@@ -14400,7 +14400,7 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 	else if (mActionType == ACT_FOR)
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("For %s,%s in %s")
 			, *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName	  // i.e. don't resolve dynamic variable names.
-			, *mArg[1].text ? mArg[1].text : VAR(mArg[1])->mName  //
+			, *mArg[1].text || !VAR(mArg[1]) ? mArg[1].text : VAR(mArg[1])->mName  // can be omitted.
 			, mArg[2].text);
 	else
 	{
