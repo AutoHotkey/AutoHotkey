@@ -399,7 +399,7 @@ Action g_act[] =
 	, {_T("For"), 1, 3, 3, {3, 0}}  // For var [,var] in expression
 	, {_T("While"), 1, 1, 1, {1, 0}} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
 	, {_T("Until"), 1, 1, 1, {1, 0}} // Until expression (follows a Loop)
-	, {_T("Break"), 0, 0, 0, NULL}, {_T("Continue"), 0, 0, 0, NULL}
+	, {_T("Break"), 0, 1, 1, NULL}, {_T("Continue"), 0, 1, 1, NULL}
 	, {_T("{"), 0, 0, 0, NULL}, {_T("}"), 0, 0, 0, NULL}
 
 	, {_T("WinActivate"), 0, 4, 2, NULL} // Passing zero params results in activating the LastUsed window.

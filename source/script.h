@@ -914,7 +914,7 @@ public:
 		, LPTSTR aFilePath, size_t aFilePathLength);
 
 	Label *GetJumpTarget(bool aIsDereferenced);
-	Label *IsJumpValid(Label &aTargetLabel);
+	Label *IsJumpValid(Label &aTargetLabel, bool aSilent = false);
 	BOOL IsOutsideAnyFunctionBody();
 
 	HWND DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);

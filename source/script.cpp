@@ -9029,6 +9029,50 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		case ACT_CONTINUE:
 			if (!aLoopType)
 				return line->PreparseError(_T("Break/Continue must be enclosed by a Loop."));
+			if (line->mArgc)
+			{
+				if (line->ArgHasDeref(1) || line->mArg->is_expression)
+					// It seems unlikely that computing the target loop at runtime would be useful.
+					// For simplicity, rule out things like "break %var%" and "break % func()":
+					return line->PreparseError(ERR_PARAM1_INVALID); //_T("Target label of Break/Continue cannot be dynamic."));
+				LPTSTR loop_name = line->mArg[0].text;
+				Label *loop_label;
+				Line *loop_line;
+				if (IsPureNumeric(loop_name))
+				{
+					int n = _ttoi(loop_name);
+					// Find the nth innermost loop which encloses this line:
+					for (loop_line = line->mParentLine; loop_line; loop_line = loop_line->mParentLine)
+						if (loop_line->mActionType >= ACT_LOOP && loop_line->mActionType <= ACT_WHILE) // i.e. LOOP, FOR or WHILE.
+							if (--n < 1)
+								break;
+					if (!loop_line || n != 0)
+						return line->PreparseError(ERR_PARAM1_INVALID);
+				}
+				else
+				{
+					// Target is a named loop.
+					if ( !(loop_label = FindLabel(loop_name)) )
+						return line->PreparseError(ERR_NO_LABEL, loop_name);
+					loop_line = loop_label->mJumpToLine;
+					// Ensure the label points to a Loop, For-loop or While-loop ...
+					if (   !(loop_line->mActionType >= ACT_LOOP && loop_line->mActionType <= ACT_WHILE)
+						// ... which encloses this line.  Use line->mParentLine as the starting-point of
+						// the "jump" to ensure the target isn't at the same nesting level as this line:
+						|| !line->mParentLine->IsJumpValid(*loop_label, true)   )
+						return line->PreparseError(ERR_PARAM1_INVALID); //_T("Target label does not point to an appropriate Loop."));
+					// Although we've validated that it points to a loop, we can't resolve the line
+					// after the loop's body as that (mRelatedLine) hasn't been determined yet.
+					if (loop_line == line->mParentLine
+						// line->mParentLine must be non-NULL because above verified this line is enclosed by a Loop:
+						|| line->mParentLine->mActionType == ACT_BLOCK_BEGIN && loop_line == line->mParentLine->mParentLine)
+					{
+						// Set mRelatedLine to NULL since the target loop directly encloses this line.
+						loop_line = NULL;
+					}
+				}
+				line->mRelatedLine = loop_line;
+			}
 			break;
 
 		case ACT_GOSUB: // These two must be done here (i.e. *after* all the script lines have been added),
@@ -10695,33 +10739,38 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					// else
 					//   ...
 					continue;
-				if (aMode == ONLY_ONE_LINE)
+				if (aMode == ONLY_ONE_LINE // See below.
+					|| result != OK) // i.e. FAIL, EARLY_RETURN, EARLY_EXIT, LOOP_BREAK, or LOOP_CONTINUE.
 				{
 					// When jump_to_line!=NULL, the above call to ExecUntil() told us to jump somewhere.
-					// But since we're in ONLY_ONE_LINE mode, our caller must handle it because only it knows how
-					// to extricate itself from whatever it's doing:
+					// But if we're in ONLY_ONE_LINE mode, our caller must handle it because only it knows how
+					// to extricate itself from whatever it's doing.  Additionally, if result is LOOP_CONTINUE
+					// or LOOP_BREAK and jump_to_line is not NULL, each ExecUntil() or PerformLoop() recursion
+					// layer must pass jump_to_line to its caller, all the way up to the target loop which
+					// will then know it should either BREAK or CONTINUE.
+					//
+					// EARLY_RETURN can occur if this if's action was a block and that block contained a RETURN,
+					// or if this if's only action is RETURN.  It can't occur if we just executed a Gosub,
+					// because that Gosub would have been done from a deeper recursion layer (and executing
+					// a Gosub in ONLY_ONE_LINE mode can never return EARLY_RETURN).
+					//
 					caller_jump_to_line = jump_to_line; // Tell the caller to handle this jump (if applicable). jump_to_line==NULL is ok.
 					return result;
 				}
-				if (result != OK) // i.e. FAIL, EARLY_RETURN, EARLY_EXIT, LOOP_BREAK, or LOOP_CONTINUE.
-					// EARLY_RETURN can occur if this if's action was a block, and that block
-					// contained a RETURN, or if this if's only action is RETURN.  It can't
-					// occur if we just executed a Gosub, because that Gosub would have been
-					// done from a deeper recursion layer (and executing a Gosub in
-					// ONLY_ONE_LINE mode can never return EARLY_RETURN).
-					return result;
 				// Now this if-statement, including any nested if's and their else's,
 				// has been fully evaluated by the recusion above.  We must jump to
 				// the end of this if-statement to get to the right place for
 				// execution to resume.  UPDATE: Or jump to the goto target if the
 				// call to ExecUntil told us to do that instead:
-				if (jump_to_line != NULL && jump_to_line->mParentLine != line->mParentLine)
+				if (jump_to_line != NULL)
 				{
-					caller_jump_to_line = jump_to_line; // Tell the caller to handle this jump.
-					return OK;
-				}
-				if (jump_to_line != NULL) // jump to where the caller told us to go, rather than the end of IF.
+					if (jump_to_line->mParentLine != line->mParentLine)
+					{
+						caller_jump_to_line = jump_to_line; // Tell the caller to handle this jump.
+						return OK;
+					}
 					line = jump_to_line;
+				}
 				else // Do the normal clean-up for an IF statement:
 				{
 					line = line->mRelatedLine; // The preparser has ensured that this is always non-NULL.
@@ -10737,11 +10786,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			else // if_condition == CONDITION_FALSE
 			{
 				line = line->mRelatedLine; // The preparser has ensured that this is always non-NULL.
-				if (line->mActionType != ACT_ELSE && aMode == ONLY_ONE_LINE)
-					// Since this IF statement has no ELSE, and since it was executed
-					// in ONLY_ONE_LINE mode, the IF-ELSE statement, which counts as
-					// one line for the purpose of ONLY_ONE_LINE mode, has finished:
-					return OK;
 				if (line->mActionType == ACT_ELSE) // This IF has an else.
 				{
 					if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN)
@@ -10755,33 +10799,34 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 						// Preparser has ensured that every ELSE has a non-NULL next line:
 						result = line->mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
 
-					if (aMode == ONLY_ONE_LINE)
+					if (aMode == ONLY_ONE_LINE || result != OK) // See the similar section above for comments.
 					{
-						// When jump_to_line!=NULL, the above call to ExecUntil() told us to jump somewhere.
-						// But since we're in ONLY_ONE_LINE mode, our caller must handle it because only it knows how
-						// to extricate itself from whatever it's doing:
-						caller_jump_to_line = jump_to_line; // Tell the caller to handle this jump (if applicable). jump_to_line==NULL is ok.
+						caller_jump_to_line = jump_to_line;
 						return result;
-					}
-					if (result != OK) // i.e. FAIL, EARLY_RETURN, EARLY_EXIT, LOOP_BREAK, or LOOP_CONTINUE.
-						return result;
-					if (jump_to_line != NULL && jump_to_line->mParentLine != line->mParentLine)
-					{
-						caller_jump_to_line = jump_to_line; // Tell the caller to handle this jump.
-						return OK;
 					}
 					if (jump_to_line != NULL)
+					{
+						if (jump_to_line->mParentLine != line->mParentLine)
+						{
+							caller_jump_to_line = jump_to_line; // Tell the caller to handle this jump.
+							return OK;
+						}
 						// jump to where the called function told us to go, rather than the end of our ELSE.
 						line = jump_to_line;
+					}
 					else // Do the normal clean-up for an ELSE statement.
 						line = line->mRelatedLine;
 						// Now line is the ELSE's "I'm finished" jump-point, which is where
 						// we want to be.  If line is now NULL, it will be caught when this
 						// loop iteration is ended by the "continue" stmt below.  UPDATE:
 						// it can't be NULL since all scripts now end in ACT_EXIT.
-					// else the IF had NO else, so we're already at the IF's "I'm finished" jump-point.
 				}
-				// else the IF had NO else, so we're already at the IF's "I'm finished" jump-point.
+				else if (aMode == ONLY_ONE_LINE)
+					// Since this IF statement has no ELSE, and since it was executed
+					// in ONLY_ONE_LINE mode, the IF-ELSE statement, which counts as
+					// one line for the purpose of ONLY_ONE_LINE mode, has finished:
+					return OK;
+				// else we're already at the IF's "I'm finished" jump-point.
 			} // if_condition == CONDITION_FALSE
 			continue; // Let the for-loop process the new location specified by <line>.
 		} // if (ACT_IS_IF)
@@ -10944,9 +10989,20 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			return OK;
 
 		case ACT_BREAK:
+			if (line->mRelatedLine)
+			{
+				// Rather than having PerformLoop() handle LOOP_BREAK specifically, tell our caller to jump to
+				// the line *after* the loop's body. This is always a jump our caller must handle, unlike GOTO:
+				caller_jump_to_line = line->mRelatedLine->mRelatedLine;
+			}
 			return LOOP_BREAK;
 
 		case ACT_CONTINUE:
+			if (line->mRelatedLine)
+			{
+				// Signal any loops nested between this line and the target loop to return LOOP_CONTINUE:
+				caller_jump_to_line = line->mRelatedLine; // Okay even if NULL.
+			}
 			return LOOP_CONTINUE;
 
 		case ACT_LOOP:
@@ -11150,7 +11206,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 
 			if (result == FAIL || result == EARLY_RETURN || result == EARLY_EXIT)
 				return result;
-			// else result can be LOOP_BREAK or OK, but not LOOP_CONTINUE.
+			// else result can be LOOP_BREAK or OK or LOOP_CONTINUE (but only if a loop-label was given).
 			if (continue_main_loop) // It signaled us to do this:
 				continue;
 
@@ -11171,7 +11227,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					// current line (i.e. it's not at the same nesting level) because that means
 					// the jump target is at a more shallow nesting level than where we are now:
 					caller_jump_to_line = jump_to_line; // Tell the caller to handle this jump (if applicable).
-					return OK;
+					return result; // If LOOP_CONTINUE, must be passed along so the target loop knows what to do.
 				}
 				// Since above didn't return, we're supposed to handle this jump.  So jump and then
 				// continue execution from there:
@@ -11237,21 +11293,18 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				// else
 				//   ...
 				continue;
-			if (aMode == ONLY_ONE_LINE)
+			if (aMode == ONLY_ONE_LINE
+				|| result != OK) // i.e. FAIL, EARLY_RETURN, EARLY_EXIT, LOOP_BREAK, or LOOP_CONTINUE.
 			{
-				// When jump_to_line!=NULL, the above call to ExecUntil() told us to jump somewhere.
-				// But since we're in ONLY_ONE_LINE mode, our caller must handle it because only it knows how
-				// to extricate itself from whatever it's doing:
+				// For more detailed comments, see the section (above this switch structure) which handles IF.
 				caller_jump_to_line = jump_to_line; // Tell the caller to handle this jump (if applicable).  jump_to_line==NULL is ok.
 				return result;
 			}
 			// Currently, all blocks are normally executed in ONLY_ONE_LINE mode because
 			// they are the direct actions of an IF, an ELSE, or a LOOP.  So the
 			// above will already have returned except when the user has created a
-			// generic, standalone block with no assciated control statement.
+			// generic, standalone block with no associated control statement.
 			// Check to see if we need to jump somewhere:
-			if (result != OK) // i.e. FAIL, EARLY_RETURN, EARLY_EXIT, LOOP_BREAK, or LOOP_CONTINUE.
-				return result;
 			if (jump_to_line != NULL)
 			{
 				if (line->mParentLine != jump_to_line->mParentLine)
@@ -11773,9 +11826,7 @@ ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoo
 		}
 		else
 			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
-		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-			return result;
-		if (jump_to_line)
+		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // i.e. "goto somewhere" or "continue a_loop_which_encloses_this_one".
 		{
 			if (jump_to_line == this) 
 				// Since this LOOP's ExecUntil() encountered a Goto whose target is the LOOP
@@ -11795,15 +11846,16 @@ ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoo
 				aContinueMainLoop = true;
 			else // jump_to_line must be a line that's at the same level or higher as our Exec_Until's LOOP statement itself.
 				aJumpToLine = jump_to_line; // Signal the caller to handle this jump.
-			break;
+			return result;
 		}
+		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
+			return result;
 		if (loop_until)
 		{
 			result = loop_until->ExpandArgs();
-			if (result != OK)
+			if (result != OK
+				|| LegacyResultToBOOL(ARG1)) // See PerformLoopWhile() for comments about this line.
 				return result;
-			if (LegacyResultToBOOL(ARG1)) // See PerformLoopWhile() for comments about this line.
-				break;
 		}
 		// Otherwise, the result of executing the body of the loop, above, was either OK
 		// (the current iteration completed normally) or LOOP_CONTINUE (the current loop
@@ -11852,16 +11904,16 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 			while (jump_to_line == mNextLine);
 		else
 			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
-		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-			return result;
-		if (jump_to_line)
+		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this))
 		{
 			if (jump_to_line == this)
 				aContinueMainLoop = true;
 			else
 				aJumpToLine = jump_to_line;
-			break;
+			return result;
 		}
+		if (result != OK && result != LOOP_CONTINUE)
+			return result;
 	} // for()
 	return OK; // The script's loop is now over.
 }
@@ -11970,8 +12022,10 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 			result_token.object->Release(); // Relies on the fact that TokenToBool() doesn't access the object.
 
 		if (!TokenToBOOL(result_token, TokenIsPureNumeric(result_token)))
-			// The enumerator returned false, which means there are no more items.
+		{	// The enumerator returned false, which means there are no more items.
+			result = OK;
 			break;
+		}
 		// Otherwise the enumerator already stored the next value(s) in the variable(s) we passed it via params.
 
 		// CONCERNING ALL THE REST OF THIS FUNCTION: See comments in PerformLoop() for details.
@@ -11981,12 +12035,7 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 			while (jump_to_line == mNextLine);
 		else
 			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
-		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-		{
-			enumerator.Release();
-			return result;
-		}
-		if (jump_to_line)
+		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this))
 		{
 			if (jump_to_line == this)
 				aContinueMainLoop = true;
@@ -11994,9 +12043,11 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 				aJumpToLine = jump_to_line;
 			break;
 		}
+		if (result != OK && result != LOOP_CONTINUE)
+			break;
 	} // for()
 	enumerator.Release();
-	return OK; // The script's loop is now over.
+	return result; // The script's loop is now over.
 }
 
 
@@ -12060,6 +12111,15 @@ ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aCont
 			while (jump_to_line == mNextLine);
 		else
 			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
+		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // See comments in PerformLoop() about this section.
+		{
+			if (jump_to_line == this)
+				aContinueMainLoop = true;
+			else
+				aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
+			FindClose(file_search);
+			return result;
+		}
 		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
 		{
 			FindClose(file_search);
@@ -12067,14 +12127,6 @@ ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aCont
 			// need to return LOOP_BREAK in case our caller is another instance of this
 			// same function (i.e. due to recursing into subfolders):
 			return result;
-		}
-		if (jump_to_line) // See comments in PerformLoop() about this section.
-		{
-			if (jump_to_line == this)
-				aContinueMainLoop = true;
-			else
-				aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
-			break;
 		}
 		// Otherwise, the result of executing the body of the loop, above, was either OK
 		// (the current iteration completed normally) or LOOP_CONTINUE (the current loop
@@ -12133,9 +12185,9 @@ ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aCont
 		// processed itself as a file-loop item (since this was already done in the first loop,
 		// above, if its name matches the original search pattern):
 		result = PerformLoopFilePattern(aResultToken, aContinueMainLoop, aJumpToLine, aFileLoopMode, aRecurseSubfolders, file_path);
-		// result should never be LOOP_CONTINUE because the above call to PerformLoop() should have
-		// handled that case.  However, it can be LOOP_BREAK if it encoutered the break command.
-		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
+		// Above returns LOOP_CONTINUE for cases like "continue 2" or "continue outer_loop", where the
+		// target is not this Loop but a Loop which encloses it. In those cases we want below to return:
+		if (result != OK) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
 		{
 			FindClose(file_search);
 			return result;  // Return even LOOP_BREAK, since our caller can be either ExecUntil() or ourself.
@@ -12196,18 +12248,19 @@ ResultType Line::PerformLoopReg(ExprTokenType *aResultToken, bool &aContinueMain
 		else\
 			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);\
 		++g.mLoopIteration;\
-		if (result != OK && result != LOOP_CONTINUE)\
-		{\
-			RegCloseKey(hRegKey);\
-			return result;\
-		}\
-		if (jump_to_line)\
+		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this))\
 		{\
 			if (jump_to_line == this)\
 				aContinueMainLoop = true;\
 			else\
 				aJumpToLine = jump_to_line;\
-			break;\
+			RegCloseKey(hRegKey);\
+			return result;\
+		}\
+		if (result != OK && result != LOOP_CONTINUE)\
+		{\
+			RegCloseKey(hRegKey);\
+			return result;\
 		}\
 	}
 
@@ -12264,10 +12317,10 @@ ResultType Line::PerformLoopReg(ExprTokenType *aResultToken, bool &aContinueMain
 				// (fixed for v1.0.17):
 				sntprintf(subkey_full_path, _countof(subkey_full_path), _T("%s%s%s"), reg_item.subkey
 					, *reg_item.subkey ? _T("\\") : _T(""), reg_item.name);
-				// This section is very similar to the one in PerformLoop(), so see it for comments:
+				// This section is very similar to the one in PerformLoopFilePattern(), so see it for comments:
 				result = PerformLoopReg(aResultToken, aContinueMainLoop, aJumpToLine, aFileLoopMode
 					, aRecurseSubfolders, aRootKeyType, aRootKey, subkey_full_path);
-				if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
+				if (result != OK)
 				{
 					RegCloseKey(hRegKey);
 					return result;
@@ -12382,18 +12435,19 @@ ResultType Line::PerformLoopParse(ExprTokenType *aResultToken, bool &aContinueMa
 
 		++g.mLoopIteration;
 
-		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-		{
-			FREE_PARSE_MEMORY;
-			return result;
-		}
-		if (jump_to_line) // See comments in PerformLoop() about this section.
+		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // See comments in PerformLoop() about this section.
 		{
 			if (jump_to_line == this)
 				aContinueMainLoop = true;
 			else
 				aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
-			break;
+			FREE_PARSE_MEMORY;
+			return result;
+		}
+		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
+		{
+			FREE_PARSE_MEMORY;
+			return result;
 		}
 		if (!saved_char) // The last item in the list has just been processed, so the loop is done.
 			break;
@@ -12506,18 +12560,19 @@ ResultType Line::PerformLoopParseCSV(ExprTokenType *aResultToken, bool &aContinu
 
 		++g.mLoopIteration;
 
-		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-		{
-			FREE_PARSE_MEMORY;
-			return result;
-		}
-		if (jump_to_line) // See comments in PerformLoop() about this section.
+		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // See comments in PerformLoop() about this section.
 		{
 			if (jump_to_line == this)
 				aContinueMainLoop = true;
 			else
 				aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
-			break;
+			FREE_PARSE_MEMORY;
+			return result;
+		}
+		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
+		{
+			FREE_PARSE_MEMORY;
+			return result;
 		}
 
 		if (!saved_char) // The last item in the list has just been processed, so the loop is done.
@@ -12551,8 +12606,14 @@ ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinu
 	Line *jump_to_line;
 	global_struct &g = *::g; // Primarily for performance in this case.
 
-	for (; loop_info.mReadFile->ReadLine(loop_info.mCurrentLine, _countof(loop_info.mCurrentLine)) ;)
+	for (;;)
 	{ 
+		if (!loop_info.mReadFile->ReadLine(loop_info.mCurrentLine, _countof(loop_info.mCurrentLine)))
+		{
+			// We want to return OK except in some specific cases handled below (see "break").
+			result = OK;
+			break;
+		}
 		line_length = _tcslen(loop_info.mCurrentLine);
 		if (line_length && loop_info.mCurrentLine[line_length - 1] == '\n') // Remove newlines like FileReadLine does.
 			loop_info.mCurrentLine[--line_length] = '\0';
@@ -12564,13 +12625,7 @@ ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinu
 		else
 			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
 		++g.mLoopIteration;
-		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-		{
-			if (loop_info.mWriteFile)
-				delete loop_info.mWriteFile;
-			return result;
-		}
-		if (jump_to_line) // See comments in PerformLoop() about this section.
+		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // See comments in PerformLoop() about this section.
 		{
 			if (jump_to_line == this)
 				aContinueMainLoop = true;
@@ -12578,15 +12633,14 @@ ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinu
 				aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
 			break;
 		}
+		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
+			break;
 	}
 
 	if (loop_info.mWriteFile)
 		delete loop_info.mWriteFile;
 
-	// Don't return result because we want to always return OK unless it was one of the values
-	// already explicitly checked and returned above.  In other words, there might be values other
-	// than OK that aren't explicitly checked for, above.
-	return OK;
+	return result;
 }
 
 

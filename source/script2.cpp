@@ -10445,7 +10445,7 @@ Label *Line::GetJumpTarget(bool aIsDereferenced)
 
 
 
-Label *Line::IsJumpValid(Label &aTargetLabel)
+Label *Line::IsJumpValid(Label &aTargetLabel, bool aSilent)
 // Returns aTargetLabel is the jump is valid, or NULL otherwise.
 {
 	// aTargetLabel can be NULL if this Goto's target is the physical end of the script.
@@ -10474,10 +10474,10 @@ Label *Line::IsJumpValid(Label &aTargetLabel)
 	// This can happen if the Goto's target is at a deeper level than it, or if the target
 	// is at a more shallow level but is in some block totally unrelated to it!
 	// Returns FAIL by default, which is what we want because that value is zero:
-	LineError(_T("A Goto/Gosub must not jump into a block that doesn't enclose it.")); // Omit GroupActivate from the error msg since that is rare enough to justify the increase in common-case clarify.
+	if (!aSilent)
+		LineError(_T("A Goto/Gosub must not jump into a block that doesn't enclose it.")); // Omit GroupActivate from the error msg since that is rare enough to justify the increase in common-case clarity.
 	return NULL;
-	// Above currently doesn't attempt to detect runtime vs. load-time for the purpose of appending
-	// ERR_ABORT (currently this function is called only during runtime).
+	// Above currently doesn't attempt to detect runtime vs. load-time for the purpose of appending ERR_ABORT.
 }
 
 
