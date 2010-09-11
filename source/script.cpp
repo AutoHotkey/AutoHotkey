@@ -8838,8 +8838,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 
 
 
-Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, AttributeType aLoopTypeFile
-	, AttributeType aLoopTypeReg, AttributeType aLoopTypeRead, AttributeType aLoopTypeParse)
+Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, AttributeType aLoopType)
 // Zero is the default for aMode, otherwise:
 // Will return NULL to the top-level caller if there's an error, or if
 // mLastLine is NULL (i.e. the script is empty).
@@ -8851,9 +8850,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 	// Don't check aStartingLine here at top: only do it at the bottom
 	// for it's differing return values.
 	Line *line_temp;
-	// Although rare, a statement can be enclosed in more than one type of special loop,
-	// e.g. both a file-loop and a reg-loop:
-	AttributeType loop_type_file, loop_type_reg, loop_type_read, loop_type_parse;
+	AttributeType loop_type = aLoopType;
 
 	for (Line *line = aStartingLine; line != NULL;)
 	{
@@ -8873,64 +8870,24 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			if (line_temp->mActionType == ACT_ELSE || line_temp->mActionType == ACT_BLOCK_END)
 				return line->PreparseError(_T("Inappropriate line beneath IF or LOOP."));
 
-			// We're checking for ATTR_LOOP_FILEPATTERN here to detect whether qualified commands enclosed
-			// in a true file loop are allowed to omit their filename parameter:
-			loop_type_file = ATTR_NONE;
-			if (aLoopTypeFile == ATTR_LOOP_FILEPATTERN || line->mAttribute == ATTR_LOOP_FILEPATTERN)
-				// i.e. if either one is a file-loop, that's enough to establish
-				// the fact that we're in a file loop.
-				loop_type_file = ATTR_LOOP_FILEPATTERN;
-			else if (aLoopTypeFile == ATTR_LOOP_UNKNOWN || line->mAttribute == ATTR_LOOP_UNKNOWN)
-				// ATTR_LOOP_UNKNOWN takes precedence over ATTR_LOOP_NORMAL because
-				// we can't be sure if we're in a file loop, but it's correct to
-				// assume that we are (otherwise, unwarranted syntax errors may be reported
-				// later on in here).
-				loop_type_file = ATTR_LOOP_UNKNOWN;
-			else if (aLoopTypeFile == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
-				loop_type_file = ATTR_LOOP_NORMAL;
-			else if (aLoopTypeFile == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
-				loop_type_file = ATTR_LOOP_WHILE;
-			else if (aLoopTypeFile == ATTR_LOOP_FOR || line->mAttribute == ATTR_LOOP_FOR) // Lexikos: ACT_FOR
-				loop_type_file = ATTR_LOOP_FOR;
-
-			// The section is the same as above except for registry vs. file loops:
-			loop_type_reg = ATTR_NONE;
-			if (aLoopTypeReg == ATTR_LOOP_REG || line->mAttribute == ATTR_LOOP_REG)
-				loop_type_reg = ATTR_LOOP_REG;
-			else if (aLoopTypeReg == ATTR_LOOP_UNKNOWN || line->mAttribute == ATTR_LOOP_UNKNOWN)
-				loop_type_reg = ATTR_LOOP_UNKNOWN;
-			else if (aLoopTypeReg == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
-				loop_type_reg = ATTR_LOOP_NORMAL;
-			else if (aLoopTypeReg == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
-				loop_type_reg = ATTR_LOOP_WHILE;
-			else if (aLoopTypeReg == ATTR_LOOP_FOR || line->mAttribute == ATTR_LOOP_FOR) // Lexikos: ACT_FOR
-				loop_type_reg = ATTR_LOOP_FOR;
-
-			// Same as above except for READ-FILE loops:
-			loop_type_read = ATTR_NONE;
-			if (aLoopTypeRead == ATTR_LOOP_READ_FILE || line->mAttribute == ATTR_LOOP_READ_FILE)
-				loop_type_read = ATTR_LOOP_READ_FILE;
-			else if (aLoopTypeRead == ATTR_LOOP_UNKNOWN || line->mAttribute == ATTR_LOOP_UNKNOWN)
-				loop_type_read = ATTR_LOOP_UNKNOWN;
-			else if (aLoopTypeRead == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
-				loop_type_read = ATTR_LOOP_NORMAL;
-			else if (aLoopTypeRead == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
-				loop_type_read = ATTR_LOOP_WHILE;
-			else if (aLoopTypeRead == ATTR_LOOP_FOR || line->mAttribute == ATTR_LOOP_FOR) // Lexikos: ACT_FOR
-				loop_type_read = ATTR_LOOP_FOR;
-
-			// Same as above except for PARSING loops:
-			loop_type_parse = ATTR_NONE;
-			if (aLoopTypeParse == ATTR_LOOP_PARSE || line->mAttribute == ATTR_LOOP_PARSE)
-				loop_type_parse = ATTR_LOOP_PARSE;
-			else if (aLoopTypeParse == ATTR_LOOP_UNKNOWN || line->mAttribute == ATTR_LOOP_UNKNOWN)
-				loop_type_parse = ATTR_LOOP_UNKNOWN;
-			else if (aLoopTypeParse == ATTR_LOOP_NORMAL || line->mAttribute == ATTR_LOOP_NORMAL)
-				loop_type_parse = ATTR_LOOP_NORMAL;
-			else if (aLoopTypeParse == ATTR_LOOP_WHILE || line->mAttribute == ATTR_LOOP_WHILE) // Lexikos: ACT_WHILE
-				loop_type_parse = ATTR_LOOP_WHILE;
-			else if (aLoopTypeParse == ATTR_LOOP_FOR || line->mAttribute == ATTR_LOOP_FOR) // Lexikos: ACT_FOR
-				loop_type_parse = ATTR_LOOP_FOR;
+			// Lexikos: This section once maintained separate variables for file-pattern, registry, file-reading
+			// and parsing loops. The intention seemed to be to validate certain commands such as FileAppend
+			// differently depending on whether they're contained within a qualifying type of loop (even if some
+			// other type of loop lies in between). However, that validation apparently wasn't implemented,
+			// and implementing it now seems unnecessary. Doing so would also remove a useful capability:
+			//
+			//	Loop, Read, %InputFile%, %OutputFile%
+			//	{
+			//		MyFunc(A_LoopReadLine)
+			//	}
+			//	MyFunc(line) {
+			//		... do some processing on %line% ...
+			//		FileAppend, %line%	; This line could be considered an error, though it works in practice.
+			//	}
+			//
+			if (line->mAttribute)
+				// Keep track of whether we're in a loop so Break/Continue can be validated:
+				loop_type = line->mAttribute;
 
 			// Check if the IF's action-line is something we want to recurse.  UPDATE: Always
 			// recurse because other line types, such as Goto and Gosub, need to be preparsed
@@ -8938,8 +8895,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			// Recurse this line rather than the next because we want
 			// the called function to recurse again if this line is a ACT_BLOCK_BEGIN
 			// or is itself an IF:
-			line_temp = PreparseIfElse(line_temp, ONLY_ONE_LINE, loop_type_file, loop_type_reg, loop_type_read
-				, loop_type_parse);
+			line_temp = PreparseIfElse(line_temp, ONLY_ONE_LINE, loop_type);
 			// If not end-of-script or error, line_temp is now either:
 			// 1) If this if's/loop's action was a BEGIN_BLOCK: The line after the end of the block.
 			// 2) If this if's/loop's action was another IF or LOOP:
@@ -9007,8 +8963,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_END)
 					return line_temp->PreparseError(_T("Inappropriate line beneath ELSE."));
 				// Assign to line rather than line_temp:
-				line = PreparseIfElse(line, ONLY_ONE_LINE, aLoopTypeFile, aLoopTypeReg, aLoopTypeRead
-					, aLoopTypeParse);
+				line = PreparseIfElse(line, ONLY_ONE_LINE, aLoopType);
 				if (line == NULL)
 					return NULL; // Error or end-of-script.
 				// Set this ELSE's jumppoint.  This is similar to the jumppoint set for
@@ -9048,8 +9003,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		case ACT_BLOCK_BEGIN:
 			if (line->mAttribute == ATTR_TRUE) // This is the opening brace of a function definition.
 				sInFunctionBody = TRUE; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
-			line = PreparseIfElse(line->mNextLine, UNTIL_BLOCK_END, aLoopTypeFile, aLoopTypeReg, aLoopTypeRead
-				, aLoopTypeParse);
+			line = PreparseIfElse(line->mNextLine, UNTIL_BLOCK_END, aLoopType);
 			// "line" is now either NULL due to an error, or the location of the END_BLOCK itself.
 			if (line == NULL)
 				return NULL; // Error.
@@ -9073,7 +9027,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			return line->PreparseError(_T("Q")); // Placeholder (see above). Formerly "Unexpected end-of-block (multi)."
 		case ACT_BREAK:
 		case ACT_CONTINUE:
-			if (!aLoopTypeFile && !aLoopTypeReg && !aLoopTypeRead && !aLoopTypeParse)
+			if (!aLoopType)
 				return line->PreparseError(_T("Break/Continue must be enclosed by a Loop."));
 			break;
 
