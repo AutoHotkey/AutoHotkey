@@ -6724,8 +6724,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		{
 			if (line.mActionType == ACT_BLOCK_BEGIN && line.mAttribute == ATTR_TRUE) // Non-zero mAttribute signfies the open-brace of a function body.
 				return ScriptError(_T("A label must not point to a function."));
-			if (line.mActionType == ACT_ELSE)
-				return ScriptError(_T("A label must not point to an ELSE."));
+			if (line.mActionType == ACT_ELSE || line.mActionType == ACT_UNTIL)
+				return ScriptError(_T("A label must not point to an ELSE or UNTIL."));
 			// The following is inaccurate; each block-end is in fact owned by its block-begin
 			// and not the block that encloses them both, so this restriction is unnecessary.
 			// THE COMMENT BELOW IS OBSOLETE:
