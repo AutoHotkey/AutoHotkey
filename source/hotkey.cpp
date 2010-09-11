@@ -583,7 +583,7 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
 
 
 
-bool Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, UCHAR &aNoSuppress
+HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, UCHAR &aNoSuppress
 	, bool &aFireWithNoSuppress, LPTSTR aSingleChar)
 // v1.0.44: Caller has ensured that aFireWithNoSuppress is true if has already been decided and false if undecided.
 // Upon return, caller can assume that the value in it is now decided rather than undecided.
@@ -598,7 +598,7 @@ bool Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKe
 	// The following check is for maintainability, since caller should have already checked and
 	// handled HOTKEY_ID_ALT_TAB and similar.  Less-than-zero check not necessary because it's unsigned.
 	if (hotkey_id >= sHotkeyCount)
-		return false; // Special alt-tab hotkey quasi-ID used by the hook.
+		return NULL; // Special alt-tab hotkey quasi-ID used by the hook.
 	Hotkey &hk = *shk[hotkey_id]; // For convenience and performance.
 
 	if (aFireWithNoSuppress // Caller has already determined its value with certainty...
@@ -622,7 +622,7 @@ bool Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKe
 				// Since this hotkey has variants only of one type (tilde or non-tilde), this variant must be of that type.
 				if (!aFireWithNoSuppress) // Caller hasn't yet determined its value with certainty (currently, this statement might always be true).
 					aFireWithNoSuppress = (hk.mNoSuppress & AT_LEAST_ONE_VARIANT_HAS_TILDE); // Due to other checks, this means all variants are tilde.
-				return true;
+				return vp; // Caller knows this isn't necessarily the variant that will fire since !vp->mHotCriterion.
 			}
 	}
 
@@ -633,7 +633,7 @@ bool Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKe
 	{
 		if (!aFireWithNoSuppress) // Caller hasn't yet determined its value with certainty (currently, this statement might always be true).
 			aFireWithNoSuppress = vp->mNoSuppress;
-		return true; // It found an eligible variant to fire.
+		return vp; // It found an eligible variant to fire.
 	}
 
 	// Since above didn't find any variant of the hotkey than can fire, check for other eligible hotkeys.
@@ -677,7 +677,7 @@ bool Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKe
 					if (!aFireWithNoSuppress) // Caller hasn't yet determined its value with certainty (currently, this statement might always be true).
 						aFireWithNoSuppress = vp->mNoSuppress;
 					aHotkeyIDwithFlags = hk2.mID; // Caller currently doesn't need the flags put onto it, so they're omitted.
-					return true; // It found an eligible variant to fire.
+					return vp; // It found an eligible variant to fire.
 				}
 			}
 		}
@@ -700,7 +700,7 @@ bool Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKe
 		aNoSuppress |= NO_SUPPRESS_NEXT_UP_EVENT;  // Update output parameter for the caller.
 	if (aSingleChar)
 		*aSingleChar = '#'; // '#' in KeyHistory to indicate this hotkey is disabled due to #IfWin criterion.
-	return false;
+	return NULL;
 }
 
 
@@ -1560,9 +1560,13 @@ HotkeyVariant *Hotkey::AddVariant(Label *aJumpToLabel, bool aSuffixHasTilde)
 
 	// Update the linked list:
 	if (!mFirstVariant)
+	{
+		vp->mIndex = 1; // Start at 1 since 0 means "undetermined variant".
 		mFirstVariant = mLastVariant = vp;
+	}
 	else
 	{
+		vp->mIndex = mLastVariant->mIndex + 1;
 		mLastVariant->mNextVariant = vp;
 		// This must be done after the above:
 		mLastVariant = vp;

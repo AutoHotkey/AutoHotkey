@@ -242,13 +242,13 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 #define HOTSTRING_INDEX_INVALID INT_MAX  // Use a signed maximum rather than unsigned, in case indexes ever become signed.
 #define SuppressThisKey SuppressThisKeyFunc(aHook, lParam, aVK, aSC, aKeyUp, pKeyHistoryCurr, hotkey_id_to_post)
 LRESULT SuppressThisKeyFunc(const HHOOK aHook, LPARAM lParam, const vk_type aVK, const sc_type aSC
-	, bool aKeyUp, KeyHistoryItem *pKeyHistoryCurr, HotkeyIDType aHotkeyIDToPost
+	, bool aKeyUp, KeyHistoryItem *pKeyHistoryCurr, WPARAM aHotkeyIDToPost
 	, WPARAM aHSwParamToPost = HOTSTRING_INDEX_INVALID, LPARAM aHSlParamToPost = 0);
 
 #define AllowKeyToGoToSystem AllowIt(aHook, aCode, wParam, lParam, aVK, aSC, aKeyUp, pKeyHistoryCurr, hotkey_id_to_post, false)
 #define AllowKeyToGoToSystemButDisguiseWinAlt AllowIt(aHook, aCode, wParam, lParam, aVK, aSC, aKeyUp, pKeyHistoryCurr, hotkey_id_to_post, true)
 LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, const vk_type aVK, const sc_type aSC
-	, bool aKeyUp, KeyHistoryItem *pKeyHistoryCurr, HotkeyIDType aHotkeyIDToPost, bool aDisguiseWinAlt);
+	, bool aKeyUp, KeyHistoryItem *pKeyHistoryCurr, WPARAM aHotkeyIDToPost, bool aDisguiseWinAlt);
 
 bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aKeyUp, bool aIsIgnored
 	, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost);

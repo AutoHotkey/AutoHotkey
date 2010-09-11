@@ -81,6 +81,7 @@ struct HotkeyVariant
 	int mHotExprIndex; // L4: g_HotExprLines index of the expression which controls whether this variant may activate.
 	HotkeyVariant *mNextVariant;
 	int mPriority;
+	USHORT mIndex;
 	// Keep members that are less than 32-bit adjacent to each other to conserve memory in with the default
 	// 4-byte alignment:
 	HotCriterionType mHotCriterion;
@@ -212,7 +213,7 @@ public:
 	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC);
 	HotkeyVariant *CriterionAllowsFiring(HWND *aFoundHWND = NULL);
 	static HotkeyVariant *CriterionAllowsFiring(HotkeyIDType aHotkeyID, HWND &aFoundHWND);
-	static bool CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, UCHAR &aNoSuppress
+	static HotkeyVariant *CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, UCHAR &aNoSuppress
 		, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
 	static void TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown);
 	void PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant);

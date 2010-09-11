@@ -209,7 +209,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	HWND fore_window, focused_control, focused_parent, criterion_found_hwnd;
 	TCHAR wnd_class_name[32], gui_action_errorlevel[16], *walk;
 	UserMenuItem *menu_item;
+	HotkeyIDType hk_id;
 	Hotkey *hk;
+	USHORT variant_id;
 	HotkeyVariant *variant;
 	ActionTypeType type_of_first_line;
 	int priority;
@@ -790,9 +792,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				break;
 
 			default: // hotkey
-				if (msg.wParam >= Hotkey::sHotkeyCount) // Invalid hotkey ID.
+				hk_id = msg.wParam & HOTKEY_ID_MASK;
+				if (hk_id >= Hotkey::sHotkeyCount) // Invalid hotkey ID.
 					continue;
-				hk = Hotkey::shk[msg.wParam];
+				hk = Hotkey::shk[hk_id];
 				// Check if criterion allows firing.
 				// For maintainability, this is done here rather than a little further down
 				// past the g_MaxThreadsTotal and thread-priority checks.  Those checks hardly
@@ -839,7 +842,18 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// - Most criterion hotkeys use #IfWinActive, which is a very fast call.  Also, although
 				//   WinText and/or "SetTitleMatchMode Slow" slow down window searches, those are rarely
 				//   used too.
-				if (   !(variant = hk->CriterionAllowsFiring(&criterion_found_hwnd))   )
+				//
+				variant = NULL; // Set default.
+				// For #If hotkey variants, we don't want to evaluate the expression a second time. If the hook
+				// thread determined that a specific variant should fire, it is passed via the high word of wParam:
+				if (variant_id = HIWORD(msg.wParam))
+				{
+					// The following relies on the fact that variants can't be removed or re-ordered;
+					// variant_id should always be the variant's one-based index in the linked list:
+					--variant_id; // i.e. index 1 should be mFirstVariant, not mFirstVariant->mNextVariant.
+					for (variant = hk->mFirstVariant; variant_id; variant = variant->mNextVariant, --variant_id);
+				}
+				if (   !(variant || (variant = hk->CriterionAllowsFiring(&criterion_found_hwnd)))   )
 					continue; // No criterion is eligible, so ignore this hotkey event (see other comments).
 					// If this is AHK_HOOK_HOTKEY, criterion was eligible at time message was posted,
 					// but not now.  Seems best to abort (see other comments).

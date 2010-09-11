@@ -370,7 +370,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 // maintainability.  The code size savings as of v1.0.38.06 is 3.5 KB of uncompressed code, but that
 // savings will grow larger if more complexity is ever added to the hooks.
 {
-	HotkeyIDType hotkey_id_to_post = HOTKEY_ID_INVALID; // Set default.
+	WPARAM hotkey_id_to_post = HOTKEY_ID_INVALID; // Set default.
 	bool is_ignored = IsIgnored(aExtraInfo);
 
 	// The following is done for more than just convenience.  It solves problems that would otherwise arise
@@ -750,7 +750,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 
 	bool is_explicit_key_up_hotkey = false;                // Set default.
 	HotkeyIDType hotkey_id_with_flags = HOTKEY_ID_INVALID; //
-	bool firing_is_certain = false;                        //
+	HotkeyVariant *firing_is_certain = NULL;               //
 	HotkeyIDType hotkey_id_temp; // For informal/temp storage of the ID-without-flags.
 
 	bool down_performed_action, was_down_before_up;
@@ -1676,7 +1676,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK;
 	if (hotkey_id_temp < Hotkey::sHotkeyCount // i.e. don't call the below for Alt-tab hotkeys and similar.
 		&& !firing_is_certain  // i.e. CriterionFiringIsCertain() wasn't already called earlier.
-		&& !Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type))
+		&& !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type)))
 		return AllowKeyToGoToSystem;
 	hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK; // Update in case CriterionFiringIsCertain() changed the naked/raw ID.
 
@@ -1973,6 +1973,16 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			//    ToolTip `nProblem 2`n
 			//return
 			hotkey_id_to_post = hotkey_id_to_fire; // Set this only when it is certain that this ID should be sent to the main thread via msg.
+			if (firing_is_certain->mHotCriterion == HOT_IF_EXPR)
+			{
+				// To avoid evaluating the expression twice, indicate to the main thread that the appropriate variant
+				// has already been determined, by packing the variant's index into the high word of the param:
+				hotkey_id_to_post |= firing_is_certain->mIndex << 16;
+			}
+			// Otherwise CriterionFiringIsCertain() might have returned a global variant (not necessarily the one
+			// that will actually fire), so if we ever decide to do the above for other criterion types rather than
+			// just re-evaluating the criterion later, must make sure not to send the mIndex of a global variant.
+			//if (firing_is_certain->mHotCriterion) // i.e. a specific variant has already been determined.
 	}
 
 	pKeyHistoryCurr->event_type = 'h'; // h = hook hotkey (not one registered with RegisterHotkey)
@@ -2144,7 +2154,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 
 
 LRESULT SuppressThisKeyFunc(const HHOOK aHook, LPARAM lParam, const vk_type aVK, const sc_type aSC, bool aKeyUp
-	, KeyHistoryItem *pKeyHistoryCurr, HotkeyIDType aHotkeyIDToPost, WPARAM aHSwParamToPost, LPARAM aHSlParamToPost)
+	, KeyHistoryItem *pKeyHistoryCurr, WPARAM aHotkeyIDToPost, WPARAM aHSwParamToPost, LPARAM aHSlParamToPost)
 // Always use the parameter vk rather than event.vkCode because the caller or caller's caller
 // might have adjusted vk, namely to make it a left/right specific modifier key rather than a
 // neutral one.
@@ -2214,7 +2224,7 @@ LRESULT SuppressThisKeyFunc(const HHOOK aHook, LPARAM lParam, const vk_type aVK,
 
 
 LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, const vk_type aVK, const sc_type aSC
-	, bool aKeyUp, KeyHistoryItem *pKeyHistoryCurr, HotkeyIDType aHotkeyIDToPost, bool aDisguiseWinAlt)
+	, bool aKeyUp, KeyHistoryItem *pKeyHistoryCurr, WPARAM aHotkeyIDToPost, bool aDisguiseWinAlt)
 // Always use the parameter vk rather than event.vkCode because the caller or caller's caller
 // might have adjusted vk, namely to make it a left/right specific modifier key rather than a
 // neutral one.
