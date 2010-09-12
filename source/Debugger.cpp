@@ -1450,7 +1450,8 @@ DEBUGGER_COMMAND(Debugger::redirect_stderr)
 int Debugger::WriteStreamPacket(LPCTSTR aText, LPCSTR aType)
 {
 	mResponseBuf.WriteF("<stream type=\"%s\">", aType);
-	mResponseBuf.WriteEncodeBase64((char*)aText, (_tcslen(aText) + 1) * sizeof(TCHAR)); // Includes the null-terminator.
+	CStringUTF8FromTChar packet(aText);
+	mResponseBuf.WriteEncodeBase64(packet, packet.GetLength() + 1); // Includes the null-terminator.
 	mResponseBuf.Write("</stream>");
 	return SendResponse();
 }
