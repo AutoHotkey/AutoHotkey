@@ -11925,6 +11925,11 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 
 inline bool Line::EvaluateLoopUntil(ResultType &aResult)
 {
+#ifdef CONFIG_DEBUGGER
+	// Let the debugger break at or step onto UNTIL.
+	if (g_Debugger.IsConnected())
+		g_Debugger.PreExecLine(this);
+#endif
 	return (aResult = ExpandArgs()) != OK // i.e. if it fails, shortcircuit and break the loop.
 			|| LegacyResultToBOOL(ARG1); // See PerformLoopWhile() above for comments about this line.
 }
