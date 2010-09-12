@@ -680,9 +680,9 @@ ResultType Script::AutoExecSection()
 		mLastScriptRest = mLastPeekTime = GetTickCount();
 
 		++g_nThreads;
-			DEBUGGER_STACK_PUSH(SE_Thread, mFirstLine, desc, _T("auto-execute"))
+		DEBUGGER_STACK_PUSH(mFirstLine, _T("auto-execute"))
 		ExecUntil_result = mFirstLine->ExecUntil(UNTIL_RETURN); // Might never return (e.g. infinite loop or ExitApp).
-			DEBUGGER_STACK_POP()
+		DEBUGGER_STACK_POP()
 		--g_nThreads;
 		// Our caller will take care of setting g_default properly.
 
@@ -880,7 +880,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	g_AllowInterruption = FALSE; // Mark the thread just created above as permanently uninterruptible (i.e. until it finishes and is destroyed).
 
 	sExitLabelIsRunning = true;
-	DEBUGGER_STACK_PUSH(SE_Thread, mOnExitLabel->mJumpToLine, desc, mOnExitLabel->mName)
+	DEBUGGER_STACK_PUSH(mOnExitLabel->mJumpToLine, mOnExitLabel->mName)
 	if (mOnExitLabel->Execute() == FAIL)
 	{
 		// If the subroutine encounters a failure condition such as a runtime error, exit immediately.
@@ -11770,7 +11770,8 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 	tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
 	// Critical seems to improve reliability, either because the thread completes faster (i.e. before the timeout) or because we check for messages less often.
 	InitNewThread(0, false, true, ACT_CRITICAL);
-	DEBUGGER_STACK_PUSH(SE_Thread, this, desc, _T("#If"))
+	ResultType result;
+	DEBUGGER_STACK_PUSH(this, _T("#If"))
 
 	// Update A_ThisHotkey, useful if #If calls a function to do its dirty work.
 	LPTSTR prior_hotkey_name = g_script.mThisHotkeyName;
@@ -11780,7 +11781,7 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
 
 	// EVALUATE THE EXPRESSION
-	ResultType result = ExpandArgs();
+	result = ExpandArgs();
 	if (result == OK)
 		result = EvaluateCondition();
 

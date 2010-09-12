@@ -16,7 +16,7 @@ freely, without restriction.
 
 #ifndef CONFIG_DEBUGGER
 
-#define DEBUGGER_STACK_PUSH(a,b,c,d)
+#define DEBUGGER_STACK_PUSH(...)
 #define DEBUGGER_STACK_POP()
 
 #else
@@ -98,34 +98,98 @@ class Func;
 class Label;
 
 
-enum StackEntryTypeType {SE_Thread, SE_Sub, SE_Func};
-
-struct StackEntry
+struct DbgStack
 {
-	StackEntryTypeType type;
-	Line *line;
-	union {
-		TCHAR *desc; // SE_Thread: "auto-exec", hotkey/hotstring name, "timer", etc.
-		Label *sub;
-		Func *func;
+	enum StackEntryType {SE_Thread, SE_Sub, SE_Func};
+	struct Entry
+	{
+		Line *line;
+		union
+		{
+			TCHAR *desc; // SE_Thread -- "auto-exec", hotkey/hotstring name, "timer", etc.
+			Label *sub; // SE_Sub
+			Func *func; // SE_Func
+		};
+		StackEntryType type;
 	};
-	StackEntry *upper, *lower;
+
+	Entry *mBottom, *mTop, *mTopBound;
+	size_t mSize; // i.e. capacity.
+
+	DbgStack()
+	{
+		// We don't want to set the following too low since the stack would need to be reallocated,
+		// but also don't want to set it too high since the average script mightn't recurse deeply;
+		// if the stack size never approaches its maximum, there'll be wasted memory:
+		mSize = 128;
+		mBottom = (Entry *)malloc(mSize * sizeof(Entry));
+		mTop = mBottom - 1; // ++mTop will be the first entry.
+		mTopBound = mTop + mSize; // Topmost valid position.
+	}
+
+	int Depth()
+	{
+		return mTop + 1 - mBottom;
+	}
+
+	// noinline currently seems to have a slight effect on benchmarks.
+	// Since it should be called very rarely, we don't want it inlined.
+	void __declspec(noinline) Expand()
+	{
+		mSize *= 2;
+		// To keep the design as simple as possible, assume the allocation will never fail.
+		// These reallocations should be very rare: if size starts at 128 and doubles each
+		// time, three expansions would bring it to 1024 entries, which is probably larger
+		// than any script could need.  (Generally the program's stack will run out before
+		// script recursion gets anywhere near that deep.)
+		Entry *new_bottom = (Entry *)realloc(mBottom, mSize * sizeof(Entry));
+		// Recalculate top of stack.
+		mTop = mTop - mBottom + new_bottom;
+		mBottom = new_bottom; // After using its old value.
+		// Pre-calculate upper bound to keep Push() simple.
+		mTopBound = mBottom - 1 + mSize;
+	}
+
+	Entry *Push()
+	{
+		if (mTop == mTopBound)
+			Expand();
+		return ++mTop;
+	}
+
+	void Pop()
+	{
+		ASSERT(mTop >= mBottom);
+		--mTop;
+	}
+
+	void Push(Line *aLine, TCHAR *aDesc)
+	{
+		Entry &s = *Push();
+		s.line = aLine;
+		s.desc = aDesc;
+		s.type = SE_Thread;
+	}
+	
+	void Push(Line *aLine, Label *aSub)
+	{
+		Entry &s = *Push();
+		s.line = aLine;
+		s.sub  = aSub;
+		s.type = SE_Sub;
+	}
+	
+	void Push(Line *aLine, Func *aFunc)
+	{
+		Entry &s = *Push();
+		s.line = aLine;
+		s.func = aFunc;
+		s.type = SE_Func;
+	}
 };
 
-#define DEBUGGER_STACK_PUSH(aType, aLine, aDataType, aData) \
-	if (g_Debugger.IsConnected()) \
-	{ \
-		StackEntry *se = (StackEntry*) _alloca(sizeof(StackEntry)); \
-		se->type = aType; \
-		se->line = aLine; \
-		se->aDataType = aData; \
-		g_Debugger.StackPush(se); \
-	}
-// Func::Call() calls StackPop() directly rather than using this macro, as it requires extra work to allow the user
-// to inspect variables before actually returning. If this macro is changed, also update that section.
-#define DEBUGGER_STACK_POP() \
-	if (g_Debugger.IsConnected()) \
-		g_Debugger.StackPop();
+#define DEBUGGER_STACK_PUSH(aLine, aInfo)	g_Debugger.mStack.Push(aLine, aInfo);
+#define DEBUGGER_STACK_POP()				g_Debugger.mStack.Pop();
 
 
 enum PropertyContextType {PC_Local=0, PC_Global};
@@ -144,17 +208,13 @@ public:
 	inline bool ShouldBreakAfterFunctionCall()
 	{
 		return mInternalState == DIS_StepInto
-			|| (mInternalState == DIS_StepOut || mInternalState == DIS_StepOver) && mStackDepth < mContinuationDepth;
+			|| (mInternalState == DIS_StepOut || mInternalState == DIS_StepOver)
+				&& mStack.Depth() < mContinuationDepth;
 	}
 
 	// Code flow notification functions:
 	int PreExecLine(Line *aLine); // Called before executing each line.
 	
-	// Call-stack: track threads, function-calls and gosub.
-	int StackPush(StackEntry *aEntry);
-	int StackPop();
-
-
 	// Receive and process commands. Returns when a continuation command is received.
 	int ProcessCommands();
 
@@ -201,13 +261,14 @@ public:
 	DEBUGGER_COMMAND(redirect_stderr);
 
 
-	Debugger() : mSocket(INVALID_SOCKET), mInternalState(DIS_Starting), mStackDepth(0)
+	Debugger() : mSocket(INVALID_SOCKET), mInternalState(DIS_Starting)
 		, mMaxPropertyData(1024), mContinuationTransactionId(""), mStdErrMode(SR_Disabled), mStdOutMode(SR_Disabled)
 	{
-		// Create root entry for simplicity.
-		mStackTop = mStack = new StackEntry();
 	}
 
+	
+	// Stack - keeps track of threads, function calls and gosubs.
+	DbgStack mStack;
 
 private:
 	SOCKET mSocket;
@@ -249,10 +310,6 @@ private:
 		SR_Copy = 1,
 		SR_Redirect = 2
 	} mStdErrMode, mStdOutMode;
-
-	// Stack - keeps track of threads, function calls and gosubs.
-	StackEntry *mStack, *mStackTop;
-	int mStackDepth;
 
 	int mContinuationDepth; // Stack depth at last continuation command, for step_into/step_over.
 	char *mContinuationTransactionId; // transaction_id of last continuation command.

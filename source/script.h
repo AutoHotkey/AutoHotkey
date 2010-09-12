@@ -1863,12 +1863,13 @@ public:
 	{
 		Label *prev_label =g->CurrentLabel; // This will be non-NULL when a subroutine is called from inside another subroutine.
 		g->CurrentLabel = this;
-			DEBUGGER_STACK_PUSH(SE_Sub, mJumpToLine, sub, this)
+		ResultType result;
+		DEBUGGER_STACK_PUSH(mJumpToLine, this)
 		// I'm pretty sure it's not valid for the following call to ExecUntil() to tell us to jump
 		// somewhere, because the called function, or a layer even deeper, should handle the goto
 		// prior to returning to us?  So the last parameter is omitted:
-		ResultType result = mJumpToLine->ExecUntil(UNTIL_RETURN); // The script loader has ensured that Label::mJumpToLine can't be NULL.
-			DEBUGGER_STACK_POP()
+		result = mJumpToLine->ExecUntil(UNTIL_RETURN); // The script loader has ensured that Label::mJumpToLine can't be NULL.
+		DEBUGGER_STACK_POP()
 		g->CurrentLabel = prev_label;
 		return result;
 	}
@@ -1961,10 +1962,9 @@ public:
 		// ToolTip, O, ((cos(A_Index) * 500) + 500), A_Index
 		++mInstances;
 
-		DEBUGGER_STACK_PUSH(SE_Func, mJumpToLine, func, this)
-
-		ResultType result = mJumpToLine->ExecUntil(UNTIL_BLOCK_END, aResultToken);
-
+		ResultType result;
+		DEBUGGER_STACK_PUSH(mJumpToLine, this)
+		result = mJumpToLine->ExecUntil(UNTIL_BLOCK_END, aResultToken);
 #ifdef CONFIG_DEBUGGER
 		if (g_Debugger.IsConnected())
 		{
@@ -1977,11 +1977,9 @@ public:
 				if (line)
 					g_Debugger.PreExecLine(line);
 			}
-			g_Debugger.StackPop();
 		}
-		// Not used because function calls require extra work to allow the user to inspect variables before returning:
-		//DEBUGGER_STACK_POP()
 #endif
+		DEBUGGER_STACK_POP()
 
 		--mInstances;
 		// Restore the original value in case this function is called from inside another function.
