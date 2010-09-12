@@ -1620,7 +1620,21 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 		
 		if (err == 0)
 		{
-			err = connect(s, res->ai_addr, (int)res->ai_addrlen);
+			for (;;)
+			{
+				err = connect(s, res->ai_addr, (int)res->ai_addrlen);
+				if (err == 0)
+					break;
+				switch (MessageBox(g_hWnd, DEBUGGER_ERR_FAILEDTOCONNECT, g_script.mFileSpec, MB_ABORTRETRYIGNORE | MB_ICONSTOP | MB_SETFOREGROUND | MB_APPLMODAL))
+				{
+				case IDABORT:
+					g_script.ExitApp(EXIT_ERROR, _T(""));
+					// Above should always exit, but if it doesn't, fall through to the next case:
+				case IDIGNORE:
+					closesocket(s);
+					return DEBUGGER_E_INTERNAL_ERROR;
+				}
+			}
 			
 			freeaddrinfo(res);
 			
@@ -1641,6 +1655,8 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 				{
 					return DEBUGGER_E_OK;
 				}
+
+				mSocket = INVALID_SOCKET; // Don't want FatalError() to attempt a second closesocket().
 			}
 		}
 
