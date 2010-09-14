@@ -12032,13 +12032,24 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 		// Call enumerator.Next(var1, var2)
 		enumerator.Invoke(result_token, enum_token, IT_CALL, params, param_count);
 
+		// Since any non-empty SYM_STRING is always considered "true", we need to change it to SYM_OPERAND
+		// before calling TokenToBOOL; otherwise "return false" and "return 0" will both evaluate to true
+		// since they are optimized to not be expressions (and only expressions return pure numeric values).
+		if (result_token.symbol == SYM_STRING)
+		{
+			result_token.symbol = SYM_OPERAND;
+			result_token.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
+		}
+
+		bool next_returned_true = TokenToBOOL(result_token, TokenIsPureNumeric(result_token));
+
 		// Free any memory or object which may have been returned by Invoke:
 		if (result_token.mem_to_free)
 			free(result_token.mem_to_free);
 		if (result_token.symbol == SYM_OBJECT)
 			result_token.object->Release(); // Relies on the fact that TokenToBool() doesn't access the object.
 
-		if (!TokenToBOOL(result_token, TokenIsPureNumeric(result_token)))
+		if (!next_returned_true)
 		{	// The enumerator returned false, which means there are no more items.
 			result = OK;
 			break;
