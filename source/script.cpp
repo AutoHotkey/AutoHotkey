@@ -4444,7 +4444,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		if (!*in)
 			return ScriptError(_T("This \"For\" is missing its \"in\"."), aLineText);
 		int vars = 1;
-		for (mark = in - action_args; mark > 0; --mark)
+		for (mark = (int)(in - action_args); mark > 0; --mark)
 			if (action_args[mark] == g_delimiter)
 				++vars;
 		in[1] = g_delimiter; // Replace "in" with a conventional delimiter.

@@ -129,7 +129,7 @@ struct DbgStack
 
 	int Depth()
 	{
-		return mTop + 1 - mBottom;
+		return (int)(mTop + 1 - mBottom);
 	}
 
 	// noinline currently seems to have a slight effect on benchmarks.
