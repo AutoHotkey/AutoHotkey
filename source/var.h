@@ -154,6 +154,9 @@ private:
 	// thousands of variables.
 
 	friend class Line; // For access to mBIV.
+#ifdef CONFIG_DEBUGGER
+	friend class Debugger;
+#endif
 
 	void UpdateBinaryInt64(__int64 aInt64, VarAttribType aAttrib = VAR_ATTRIB_HAS_VALID_INT64)
 	// When caller doesn't include VAR_ATTRIB_CONTENTS_OUT_OF_DATE in aAttrib, CALLER MUST ENSURE THAT
@@ -562,13 +565,6 @@ public:
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 		return (mType == VAR_ALIAS) ? mAliasFor->mType : mType;
 	}
-
-#ifdef CONFIG_DEBUGGER
-	__forceinline VarTypeType RealType()
-	{
-		return mType;
-	}
-#endif
 
 	__forceinline bool IsStatic()
 	{

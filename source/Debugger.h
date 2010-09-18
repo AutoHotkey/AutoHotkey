@@ -25,6 +25,7 @@ freely, without restriction.
 #define Debugger_h
 
 #include <winsock2.h>
+#include "script_object.h"
 
 
 #define DEBUGGER_INITIAL_BUFFER_SIZE 2048
@@ -263,6 +264,7 @@ public:
 
 	Debugger() : mSocket(INVALID_SOCKET), mInternalState(DIS_Starting)
 		, mMaxPropertyData(1024), mContinuationTransactionId(""), mStdErrMode(SR_Disabled), mStdOutMode(SR_Disabled)
+		, mMaxChildren(20), mMaxDepth(2)
 	{
 	}
 
@@ -314,7 +316,7 @@ private:
 	int mContinuationDepth; // Stack depth at last continuation command, for step_into/step_over.
 	char *mContinuationTransactionId; // transaction_id of last continuation command.
 
-	VarSizeType mMaxPropertyData;
+	int mMaxPropertyData, mMaxChildren, mMaxDepth;
 
 
 	// Receive next command from debugger UI:
@@ -327,9 +329,14 @@ private:
 	int SendContinuationResponse(char *aStatus="break", char *aReason="ok");
 
 	int WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine);
-	int WritePropertyXml(Var *aVar, VarSizeType aMaxData=VARSIZE_MAX);
-	int WriteVarSizeAndData(Var *aVar, VarSizeType aMaxData=VARSIZE_MAX);
+	int WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage = 0);
+	int WritePropertyXml(IObject *aObject, const char *aName, CStringA &aNameBuf, int aPage, int aPageSize, int aDepthRemaining, int aMaxEncodedSize, char *aFacet = "");
+	int WritePropertyXml(Object::FieldType &aField, const char *aName, CStringA &aNameBuf, int aPageSize, int aDepthRemaining, int aMaxEncodedSize);
+	int WritePropertyData(LPCTSTR aData, int aDataSize, int aMaxEncodedSize);
+	int WritePropertyData(Var &aVar, int aMaxEncodedSize);
+	int WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize);
 
+	int ParsePropertyName(const char *aFullName, int aVarScope, bool aVarMustExist, Var *&aVar, Object::FieldType *&aField);
 	int property_get_or_value(char *aArgs, bool aIsPropertyGet);
 	int redirect_std(char *aArgs, char *aCommandName);
 

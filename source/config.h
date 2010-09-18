@@ -31,10 +31,6 @@
 #ifndef AUTOHOTKEYSC
 // DBGp
 #define CONFIG_DEBUGGER
-// Send vars as UTF-16
-#ifdef UNICODE
-//#define CONFIG_DBG_UTF16_SPEED_HACKS
-#endif
 #endif
 
 // Generates warnings to help we check whether the codes are ready to handle Unicode or not.

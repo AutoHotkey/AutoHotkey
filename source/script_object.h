@@ -132,6 +132,10 @@ protected:
 	static const IndexType mKeyOffsetInt = 0;
 	IndexType mKeyOffsetObject, mKeyOffsetString;
 
+#ifdef CONFIG_DEBUGGER
+	friend class Debugger;
+#endif
+
 	Object()
 		: mBase(NULL)
 		, mFields(NULL), mFieldCount(0), mFieldCountMax(0)

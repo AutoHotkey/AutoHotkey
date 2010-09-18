@@ -62,7 +62,7 @@ public:
 	}
 
 	ComObject(IDispatch *disp)
-		: mDispatch(disp), mVarType(VT_DISPATCH), mEventSink(NULL) { }
+		: mVal64((__int64)disp), mVarType(VT_DISPATCH), mEventSink(NULL) { }
 	ComObject(__int64 llVal, VARTYPE vt)
 		: mVal64(llVal), mVarType(vt), mEventSink(NULL) { }
 	~ComObject()
@@ -82,6 +82,7 @@ public:
 	friend void BIF_ComObjActive(ExprTokenType&, ExprTokenType*[], int);
 	friend void BIF_ComObjConnect(ExprTokenType&, ExprTokenType*[], int);
 	friend class ComEvent;
+	friend class Debugger;
 };
 
 

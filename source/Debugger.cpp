@@ -26,6 +26,8 @@ freely, without restriction.
 //#include "Debugger.h" // included by globaldata.h
 #include "globaldata.h" // for access to many global vars
 #include "TextIO.h"
+#include "script_com.h"
+#include <typeinfo> // for typeid().
 
 Debugger g_Debugger;
 CStringA g_DebuggerHost;
@@ -166,6 +168,8 @@ int Debugger::ProcessCommands()
 				err = redirect_stdout(args);
 			else if (!strcmp(command, "stderr"))
 				err = redirect_stderr(args);
+			else if (!strcmp(command, "typemap_get"))
+				err = typemap_get(args);
 			else if (!strcmp(command, "detach"))
 			{	// User wants to stop the debugger but let the script keep running.
 				Exit(EXIT_NONE); // Anything but EXIT_ERROR.  Sends "stopped" response, then disconnects.
@@ -309,11 +313,7 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 			setting = NAME_VERSION;
 #endif
 	} else if (supported = !strcmp(feature_name, "encoding"))
-#ifndef CONFIG_DBG_UTF16_SPEED_HACKS
 		setting = "UTF-8";
-#else
-		setting = "UTF-8 with UTF-16 variables";
-#endif
 	else if (supported = !strcmp(feature_name, "protocol_version"))
 		setting = "1";
 	else if (supported = !strcmp(feature_name, "supports_async"))
@@ -324,9 +324,12 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 		setting = "line";
 	else if (supported = !strcmp(feature_name, "multiple_sessions"))
 		setting = "0";
-	// Not supported: max_children, max_depth - debugger must support objects first.
-	else if (!strcmp(feature_name, "max_data"))
-		setting = Exp32or64(_ultoa,_ui64toa)(mMaxPropertyData, (char*)_alloca(MAX_NUMBER_SIZE), 10);
+	else if (supported = !strcmp(feature_name, "max_data"))
+		setting = _itoa(mMaxPropertyData, (char*)_alloca(MAX_INTEGER_SIZE), 10);
+	else if (supported = !strcmp(feature_name, "max_children"))
+		setting = _ultoa(mMaxChildren, (char*)_alloca(MAX_INTEGER_SIZE), 10);
+	else if (supported = !strcmp(feature_name, "max_depth"))
+		setting = _ultoa(mMaxDepth, (char*)_alloca(MAX_INTEGER_SIZE), 10);
 	// TODO: STOPPING state for retrieving variable values, etc. after the script finishes, then implement supports_postmortem feature name. Requires debugger client support.
 	else
 	{
@@ -356,6 +359,9 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 				 || !strcmp(feature_name + 9, "value"))
 			|| !strcmp(feature_name, "status")
 			|| !strcmp(feature_name, "source")
+			|| !strcmp(feature_name, "stdout")
+			|| !strcmp(feature_name, "stderr")
+			|| !strcmp(feature_name, "typemap_get")
 			|| !strcmp(feature_name, "detach")
 			|| !strcmp(feature_name, "stop");
 	}
@@ -394,13 +400,12 @@ DEBUGGER_COMMAND(Debugger::feature_set)
 
 	bool success = false;
 
-	if (!strcmp(feature_name, "max_data"))
-	{
-		mMaxPropertyData = strtoul(feature_value, NULL, 10);
-		if (mMaxPropertyData == 0)
-			mMaxPropertyData = MAXDWORD;
-		success = true;
-	}
+	if (success = !strcmp(feature_name, "max_data"))
+		mMaxPropertyData = atoi(feature_value);
+	else if (success = !strcmp(feature_name, "max_children"))
+		mMaxChildren = atoi(feature_value);
+	else if (success = !strcmp(feature_name, "max_depth"))
+		mMaxDepth = atoi(feature_value);
 
 	mResponseBuf.WriteF("<response command=\"feature_set\" feature=\"%e\" success=\"%i\" transaction_id=\"%e\"/>"
 						, feature_name, (int)success, transaction_id);
@@ -882,7 +887,7 @@ DEBUGGER_COMMAND(Debugger::context_get)
 						, context_id, transaction_id);
 
 	for ( ; var < var_end; ++var)
-		WritePropertyXml(*var, mMaxPropertyData);
+		WritePropertyXml(**var, mMaxPropertyData);
 
 	mResponseBuf.Write("</response>");
 
@@ -894,141 +899,16 @@ DEBUGGER_COMMAND(Debugger::typemap_get)
 	DEBUGGER_COMMAND_INIT_TRANSACTION_ID;
 	
 	// Send a basic type-map with string = string.
-	mResponseBuf.WriteF("<response command=\"typemap_get\" transaction_id=\"%e\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"><map type=\"string\" name=\"string\" xsi:type=\"xsd:string\"/></response>"
+	mResponseBuf.WriteF("<response command=\"typemap_get\" transaction_id=\"%e\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">"
+							"<map type=\"string\" name=\"string\" xsi:type=\"xsd:string\"/>"
+							"<map type=\"int\" name=\"integer\" xsi:type=\"xsd:long\"/>"
+							"<map type=\"float\" name=\"float\" xsi:type=\"xsd:double\"/>"
+							"<map type=\"object\" name=\"object\"/>"
+						"</response>"
 						, transaction_id);
 
 	return SendResponse();
 }
-
-int Debugger::WritePropertyXml(Var *aVar, VarSizeType aMaxData)
-{
-	char facet[35]; // Alias Builtin Static ClipboardAll
-	facet[0] = '\0';
-	if (aVar->RealType() == VAR_ALIAS)
-		strcat(facet, "Alias ");
-	if (aVar->RealType() == VAR_BUILTIN)
-		strcat(facet, "Builtin ");
-	if (aVar->IsStatic())
-		strcat(facet, "Static ");
-	if (aVar->IsBinaryClip())
-		strcat(facet, "ClipboardAll ");
-	if (facet[0] != '\0') // Remove the final space.
-		facet[strlen(facet)-1] = '\0';
-
-	// Write as much as possible now to simplify calculation of required buffer space.
-	// We can't write the var length yet as it may not be accurate.
-	mResponseBuf.WriteF("<property name=\"%s\" fullname=\"%s\" type=\"string\" facet=\"%s\" children=\"0\" encoding=\"base64\" size=\""
-						, U4T(aVar->mName), U4T(aVar->mName), facet);
-
-	WriteVarSizeAndData(aVar, aMaxData);
-
-	mResponseBuf.Write("</property>");
-	
-	return DEBUGGER_E_OK;
-}
-
-#if !defined(UNICODE) || defined(CONFIG_DBG_UTF16_SPEED_HACKS)
-#define DEBUGGER_TRANSFER_AS_IS
-#endif
-int Debugger::WriteVarSizeAndData(Var *aVar, VarSizeType aMaxData)
-{
-	VarSizeType value_size, space_needed;
-	char *value;
-	int err;
-
-	// Variable data must be encoded in base64, but may also need to be converted to UTF-8 first.
-	// Avoid unnecessarily allocating or copying memory wherever possible, by using mResponseBuf.
-
-	// Stage 1: Determine maximum size of raw data to be base64-encoded.
-#ifdef DEBUGGER_TRANSFER_AS_IS
-	// ANSI (or UNICODE with UTF-8 translation disabled): Use the var's byte length or estimate returned by Get().
-	if (aVar->Type() == VAR_NORMAL)
-	{
-		// Only the effective string content of the variable is shown.
-		value_size = aVar->ByteLength();
-	}
-	else
-	{
-		// Get estimate of required buffer size by calling Get() with no target.
-		value_size = aVar->Get() * sizeof(TCHAR);
-	}
-#else
-	// UNICODE: Properly calculate the required buffer size for UTF-8 conversion.
-	CStringW wide_buf; // For simplified memory-management (in case we return early).
-	LPWSTR wide_value;
-	if (aVar->Type() == VAR_NORMAL)
-	{
-		wide_value = aVar->Contents();
-	}
-	else
-	{
-		// In this case, allocating some memory to temporarily hold the var's value is unavoidable.
-		if (wide_value = wide_buf.GetBufferSetLength(aVar->Get()))
-			aVar->Get(wide_value);
-		else
-			return DEBUGGER_E_INTERNAL_ERROR;
-		CLOSE_CLIPBOARD_IF_OPEN; // Above may leave the clipboard open if aVar is Clipboard.
-	}
-	// Calculate the required buffer size to convert the value to UTF-8, excluding the null-terminator.
-	// Actual conversion is not done until we've reserved some (shared) space in mResponseBuf for it.
-	value_size = WideCharToUTF8(wide_value, NULL, 0) - 1;
-#endif
-
-	// Calculate maximum length of base64-encoded data.
-	if (value_size)
-	{
-		if (value_size > aMaxData) // Limit length of source data; see below.
-			value_size = aMaxData;
-		// This should also ensure there is enough space to temporarily hold the raw value (aVar->Get()).
-		space_needed = DEBUGGER_BASE64_ENCODED_SIZE(value_size);
-	}
-	else
-	{	// Ensure there is space for a null-terminator.
-		space_needed = sizeof(TCHAR);
-	}
-	ASSERT(space_needed >= value_size + 1);
-	
-	// Reserve enough space for the var's length, "> and encoded var data.  Although VarSizeType is currently
-	// always 32-bit and will therefore fit in 10 bytes or less, using MAX_INTEGER_LENGTH seems more future-proof. 
-	space_needed += MAX_INTEGER_LENGTH + 2;
-	if (err = mResponseBuf.ExpandIfNecessary(mResponseBuf.mDataUsed + space_needed))
-		return err;
-
-#ifdef DEBUGGER_TRANSFER_AS_IS
-	if (aVar->Type() == VAR_NORMAL)
-	{
-		// Copy and base64-encode directly from the variable.
-		value = (char*) aVar->Contents();
-	}
-	else
-	{
-		// Copy the variable data to the *end* of the buffer so that we can
-		// base64-encode it without allocating more memory to hold the input data.
-		// Usually this will point to the last two-thirds of the space reserved
-		// for the final base64-encoded data.
-		value = mResponseBuf.mData + mResponseBuf.mDataSize - space_needed;
-		// Retrieve value and update value_size as it might differ from the estimate
-		// given by the previous call to Get().
-		value_size = aVar->Get((LPTSTR)value) * sizeof(TCHAR);
-		CLOSE_CLIPBOARD_IF_OPEN; // Above may leave the clipboard open if aVar is Clipboard.
-	}
-#else
-	// Convert to UTF-8, using mResponseBuf temporarily.
-	value = mResponseBuf.mData + mResponseBuf.mDataSize - space_needed;
-	value_size = WideCharToUTF8(wide_value, value, (int)space_needed) - 1;
-#endif
-
-	// Now that we know the actual length for sure, write the end of the size attribute.
-	mResponseBuf.WriteF("%u\">", value_size);
-
-	// Limit length of value returned based on -m arg, client-requested max_data, defaulted value, etc.
-	if (value_size > aMaxData)
-		value_size = aMaxData;
-
-	// Base64-encode and write the var data.
-	return mResponseBuf.WriteEncodeBase64(value, value_size, true);
-}
-#undef DEBUGGER_TRANSFER_AS_IS
 
 DEBUGGER_COMMAND(Debugger::property_get)
 {
@@ -1040,14 +920,482 @@ DEBUGGER_COMMAND(Debugger::property_value)
 	return property_get_or_value(aArgs, false);
 }
 
+
+int Debugger::WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage)
+{
+	char facet[35]; // Alias Builtin Static ClipboardAll
+	facet[0] = '\0';
+	VarAttribType attrib;
+	if (aVar.mType == VAR_ALIAS)
+	{
+		strcat(facet, "Alias ");
+		attrib = aVar.mAliasFor->mAttrib;
+	}
+	else
+		attrib = aVar.mAttrib;
+	if (aVar.Type() == VAR_BUILTIN)
+		strcat(facet, "Builtin ");
+	if (aVar.IsStatic())
+		strcat(facet, "Static ");
+	if (aVar.IsBinaryClip())
+		strcat(facet, "ClipboardAll ");
+	if (facet[0] != '\0') // Remove the final space.
+		facet[strlen(facet)-1] = '\0';
+
+	if (attrib & VAR_ATTRIB_OBJECT)
+	{
+		CStringUTF8FromTChar name_buf(aVar.mName);
+		return WritePropertyXml(aVar.Object(), name_buf.GetString(), name_buf, aPage, mMaxChildren, mMaxDepth, aMaxEncodedSize, facet);
+	}
+
+	char *type;
+	if (attrib & VAR_ATTRIB_HAS_VALID_INT64)
+		type = "integer";
+	else if (attrib & VAR_ATTRIB_HAS_VALID_DOUBLE)
+		type = "float";
+	else
+		type = "string";
+
+	// Write as much as possible now to simplify calculation of required buffer space.
+	// We can't write the data size yet as it needs to be UTF-8 encoded (see WritePropertyData).
+	mResponseBuf.WriteF("<property name=\"%s\" fullname=\"%s\" type=\"%s\" facet=\"%s\" children=\"0\" encoding=\"base64\" size=\""
+						, U4T(aVar.mName), U4T(aVar.mName), type, facet);
+
+	WritePropertyData(aVar, aMaxEncodedSize);
+
+	mResponseBuf.Write("</property>");
+	
+	return DEBUGGER_E_OK;
+}
+
+int Debugger::WritePropertyXml(IObject *aObject, const char *aName, CStringA &aNameBuf, int aPage, int aPageSize, int aDepthRemaining, int aMaxEncodedSize, char *aFacet)
+{
+	INT_PTR numchildren,
+		i = aPageSize * aPage,
+		j = aPageSize * (aPage + 1);
+	size_t aNameBuf_marker = aNameBuf.GetLength();
+	Object *objptr = dynamic_cast<Object *>(aObject);
+	ComObject *comobjptr = dynamic_cast<ComObject *>(aObject);
+	char *cp;
+	int err;
+
+	if (objptr)
+		numchildren = objptr->mFieldCount;
+	else if (comobjptr)
+		numchildren = 2; // For simplicity, assume page == 0 and pagesize >= 2.
+	else
+		numchildren = 0;
+
+	LPCSTR classname = typeid(*aObject).name();
+	if (!strncmp(classname, "class ", 6))
+		classname += 6;
+
+	mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"object\" classname=\"%s\" address=\"%p\" facet=\"%s\" size=\"0\" page=\"%i\" pagesize=\"%i\" children=\"1\" numchildren=\"%p\">"
+						, aName, aNameBuf.GetString(), classname, aObject, aFacet, aPage, aPageSize, numchildren);
+
+	if (aDepthRemaining)
+	{
+		if (objptr)
+		{
+			Object &obj = *objptr;
+			if (j > obj.mFieldCount)
+				j = obj.mFieldCount;
+			// For each field in the requested page...
+			for ( ; i < j; ++i)
+			{
+				Object::FieldType &field = obj.mFields[i];
+
+				// Append the key to the name buffer, attempting to maintain valid expression syntax.
+				// String:	var.alphanumeric or var["non-alphanumeric"]
+				// Integer:	var.123 or var[-123]
+				// Object:	var[Object(address)]
+				if (i >= obj.mKeyOffsetString) // String
+				{
+					LPTSTR tp;
+					for (tp = field.key.s; cisalnum(*tp) || *tp == '_'; ++tp);
+					bool use_dot = !*tp && tp != field.key.s; // If it got to the null-terminator, must be empty or alphanumeric.
+
+					CStringUTF8FromTChar buf(field.key.s);
+					LPCSTR key = buf.GetString();
+
+					if (use_dot)
+					{
+						// Since this string is purely composed of alphanumeric characters and/or underscore,
+						// it doesn't need any quote marks (imitating expression syntax) or escaped characters.
+						cp = aNameBuf.GetBufferSetLength(aNameBuf_marker + buf.GetLength() + 1) + aNameBuf_marker;
+						*cp++ = '.';
+						strcpy(cp, key);
+						// aNameBuf is released below.
+					}
+					else
+					{
+						// " must be replaced with "" as in expressions to remove ambiguity.
+						char c;
+						int extra = 4; // 4 for [""].  Also count double-quote marks:
+						for ( ; *key; ++key) extra += *key=='"';
+						cp = aNameBuf.GetBufferSetLength(aNameBuf_marker + buf.GetLength() + extra) + aNameBuf_marker;
+						*cp++ = '[';
+						*cp++ = '"';
+						for (key = buf.GetString(); c = *key; ++key)
+						{
+							*cp++ = c;
+							if (c == '"')
+								*cp++ = '"'; // i.e. replace " with ""
+						}
+						strcpy(cp, "\"]");
+						// aNameBuf is released below.
+					}
+				}
+				else // INT_PTR or IObject*
+				{
+					INT_PTR key = field.key.i; // Also copies field.key.p (IObject*) via union.
+					cp = aNameBuf.GetBufferSetLength(aNameBuf_marker + MAX_INTEGER_LENGTH + 10) + aNameBuf_marker; // +10 for "[Object()]"
+					sprintf(cp, (i >= obj.mKeyOffsetObject) ? "[Object(%Ii)]" : key<0 ? "[%Ii]" : ".%Ii", field.key.i);
+				}
+				aNameBuf.ReleaseBuffer();
+				aName = aNameBuf.GetString() + aNameBuf_marker;
+				if (*aName == '.') // omit '.' but not []
+					++aName;
+
+				if (err = WritePropertyXml(field, aName, aNameBuf, aPageSize, aDepthRemaining, aMaxEncodedSize))
+					return err;
+			}
+		}
+		else if (comobjptr)
+		{
+			static LPCSTR sComObjNames[] = { "__Value", "__VarType" };
+			LPCSTR name = aNameBuf.GetString();
+			size_t value_len;
+			TCHAR number_buf[MAX_NUMBER_SIZE];
+			cp = (char *)number_buf;
+			for ( ; i < 2 && i < j; ++i)
+			{
+				if (i == 0)
+					_ui64toa(comobjptr->mVal64, cp, 10);
+				else
+					_ultoa(comobjptr->mVarType, cp, 10);
+				value_len = strlen(cp);
+				mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e.%e\" type=\"integer\" facet=\"\" children=\"0\" encoding=\"base64\" size=\"%p\">"
+					, sComObjNames[i], name, sComObjNames[i], value_len);
+				mResponseBuf.WriteEncodeBase64(cp, value_len);
+				mResponseBuf.Write("</property>");
+			}
+		}
+	}
+
+	mResponseBuf.Write("</property>");
+
+	aNameBuf.Truncate(aNameBuf_marker);
+	return DEBUGGER_E_OK;
+}
+
+int Debugger::WritePropertyXml(Object::FieldType &aField, const char *aName, CStringA &aNameBuf, int aPageSize, int aDepthRemaining, int aMaxEncodedSize)
+// This function has an equivalent WritePropertyData() for property_value, so maintain the two together.
+{
+	LPTSTR value;
+	char *type;
+	TCHAR number_buf[MAX_NUMBER_SIZE];
+
+	switch (aField.symbol)
+	{
+	case SYM_OPERAND:
+		value = aField.marker;
+		type = "string";
+		break;
+
+	case SYM_INTEGER:
+	case SYM_FLOAT:
+		// The following tries to use the same methods to convert the number to a string as
+		// the script would use when converting a variable's cached binary number to a string:
+		if (aField.symbol == SYM_INTEGER)
+		{
+			ITOA64(aField.n_int64, number_buf);
+			type = "integer";
+		}
+		else
+		{
+			sntprintf(number_buf, _countof(number_buf), g->FormatFloat, aField.n_double);
+			type = "float";
+		}
+		value = number_buf;
+		break;
+
+	case SYM_OBJECT:
+		// Recursively dump object.
+		return WritePropertyXml(aField.object, aName, aNameBuf, 0, aPageSize, aDepthRemaining - 1, aMaxEncodedSize);
+
+	default:
+		ASSERT(FALSE);
+	}
+	// If we fell through, value and type have been set appropriately above.
+	mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" facet=\"\" children=\"0\" encoding=\"base64\" size=\"", aName, aNameBuf.GetString(), type);
+	int err;
+	if (err = WritePropertyData(value, (int)_tcslen(value), aMaxEncodedSize))
+		return err;
+	return mResponseBuf.Write("</property>");
+}
+
+int Debugger::WritePropertyData(LPCTSTR aData, int aDataSize, int aMaxEncodedSize)
+// Accepts a "native" string, converts it to UTF-8, base64-encodes it and writes
+// the end of the property's size attribute followed by the base64-encoded data.
+{
+	int wide_size, value_size, space_needed; // Could use size_t, but WideCharToMultiByte is limited to int.
+	char *value;
+	int err;
+	
+#ifdef UNICODE
+	LPCWSTR wide_value = aData;
+	wide_size = aDataSize;
+#else
+	CStringWCharFromChar wide_buf(aData, aDataSize);
+	LPCWSTR wide_value = wide_buf.GetString();
+	wide_size = (int)wide_buf.GetLength();
+#endif
+	
+	// Calculate the required buffer size to convert the value to UTF-8 without a null-terminator.
+	// Actual conversion is not done until we've reserved some (shared) space in mResponseBuf for it.
+	value_size = WideCharToMultiByte(CP_UTF8, 0, wide_value, wide_size, NULL, 0, NULL, NULL);
+
+	// Calculate maximum length of base64-encoded data.
+	if (value_size)
+	{
+		if (value_size > aMaxEncodedSize) // Limit length of source data; see below.
+			value_size = aMaxEncodedSize;
+		// This should also ensure there is enough space to temporarily hold the raw value (aVar.Get()).
+		space_needed = DEBUGGER_BASE64_ENCODED_SIZE(value_size);
+	}
+	else
+	{	// Ensure there is space for a null-terminator.
+		space_needed = sizeof(TCHAR);
+	}
+	ASSERT(space_needed >= value_size + 1);
+	
+	// Reserve enough space for the data's length, "> and encoded data.
+	space_needed += MAX_INTEGER_LENGTH + 2;
+	if (err = mResponseBuf.ExpandIfNecessary(mResponseBuf.mDataUsed + space_needed))
+		return err;
+
+	// Convert to UTF-8, using mResponseBuf temporarily.
+	value = mResponseBuf.mData + mResponseBuf.mDataSize - space_needed;
+	value_size = WideCharToMultiByte(CP_UTF8, 0, wide_value, wide_size, value, space_needed, NULL, NULL);
+
+	// Now that we know the actual length for sure, write the end of the size attribute.
+	mResponseBuf.WriteF("%u\">", value_size);
+
+	// Limit length of value returned based on -m arg, client-requested max_data, defaulted value, etc.
+	if (value_size > aMaxEncodedSize)
+		value_size = aMaxEncodedSize;
+
+	// Base64-encode and write the var data.
+	return mResponseBuf.WriteEncodeBase64(value, (size_t)value_size, true);
+}
+
+int Debugger::WritePropertyData(Var &aVar, int aMaxEncodedSize)
+{
+	CString buf;
+	LPTSTR value;
+	int value_size;
+
+	if (aVar.Type() == VAR_NORMAL)
+	{
+		value = aVar.Contents();
+		value_size = (int)aVar.CharLength();
+	}
+	else
+	{
+		// In this case, allocating some memory to temporarily hold the var's value is unavoidable.
+		if (value = buf.GetBufferSetLength(aVar.Get()))
+			aVar.Get(value);
+		else
+			return DEBUGGER_E_INTERNAL_ERROR;
+		CLOSE_CLIPBOARD_IF_OPEN; // Above may leave the clipboard open if aVar is Clipboard.
+		value_size = (int)buf.GetLength();
+	}
+
+	return WritePropertyData(value, value_size, aMaxEncodedSize);
+}
+
+int Debugger::WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize)
+// Write object field: used only by property_value, so does not recursively dump objects.
+// This function has an equivalent WritePropertyXml(), so maintain the two together.
+{
+	LPTSTR value;
+	char *type;
+	TCHAR number_buf[MAX_NUMBER_SIZE];
+
+	switch (aField.symbol)
+	{
+	case SYM_OPERAND:
+		value = aField.marker;
+		type = "string";
+		break;
+
+	case SYM_INTEGER:
+	case SYM_FLOAT:
+		// The following tries to use the same methods to convert the number to a string as
+		// the script would use when converting a variable's cached binary number to a string:
+		if (aField.symbol == SYM_INTEGER)
+		{
+			ITOA64(aField.n_int64, number_buf);
+			type = "integer";
+		}
+		else
+		{
+			sntprintf(number_buf, _countof(number_buf), g->FormatFloat, aField.n_double);
+			type = "float";
+		}
+		value = number_buf;
+		break;
+
+	case SYM_OBJECT:
+		value = _T("");
+		type = "object";
+		break;
+	
+	default:
+		ASSERT(FALSE);
+	}
+	// If we fell through, value and type have been set appropriately above.
+	return WritePropertyData(value, (int)_tcslen(value) + 1, aMaxEncodedSize);
+}
+
+int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarMustExist, Var *&aVar, Object::FieldType *&aField)
+{
+	CStringTCharFromUTF8 name_buf(aFullName);
+	LPTSTR name = name_buf.GetBuffer();
+	size_t name_length;
+	TCHAR c, *name_end, *src, *dst;
+	Var *var;
+	SymbolType key_type;
+	Object::KeyType key;
+    Object::FieldType *field;
+	Object::IndexType insert_pos;
+	Object *obj;
+
+	name_end = StrChrAny(name, _T(".["));
+	if (name_end)
+	{
+		c = *name_end;
+		*name_end = '\0'; // Temporarily terminate.
+	}
+	name_length = _tcslen(name);
+
+	// Validate name for more accurate error-reporting.
+	if (name_length > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name, false, DISPLAY_NO_ERROR))
+		return DEBUGGER_E_INVALID_OPTIONS;
+
+	// If we're allowed to create variables
+	if ( !aVarMustExist
+		// or this variable doesn't exist
+		|| !(var = g_script.FindVar(name, name_length, NULL, aVarScope))
+			// but it is a built-in variable which hasn't been referenced yet:
+			&& g_script.GetVarType(name) > (void*)VAR_LAST_TYPE )
+		// Find or add the variable.
+		var = g_script.FindOrAddVar(name, name_length, aVarScope);
+
+	if (!var)
+		return DEBUGGER_E_UNKNOWN_PROPERTY;
+
+	if (!name_end)
+	{
+		// Just a variable name.
+		aVar = var;
+		aField = NULL;
+		return DEBUGGER_E_OK;
+	}
+
+	if ( !var->HasObject() || !(obj = dynamic_cast<Object *>(var->Object())) )
+		return DEBUGGER_E_UNKNOWN_PROPERTY;
+
+	// aFullName contains a '.' or '['.  Although it looks like an expression, the IDE should
+	// only pass a property name which we gave it in response to a previous command, so we
+	// only need to support the subset of expression syntax used by WriteObjectPropertyXml().
+	for (*name_end = c; ; c = *name_end)
+	{
+		name = name_end + 1;
+		if (c == '[')
+		{
+			if (*name == '"')
+			{
+				// Quoted string which may contain any character.
+				// Replace "" with " in-place and find and of string:
+				for (dst = src = ++name; c = *src; ++src)
+				{
+					if (c == '"')
+					{
+						// Quote mark; but is it a literal quote mark?
+						if (*++src != '"')
+							// Nope.
+							break;
+						//else above skipped the second quote mark, so fall through:
+					}
+					*dst++ = c;
+				}
+				if (*src != ']') return DEBUGGER_E_INVALID_OPTIONS;
+				*dst = '\0'; // Only after the check above, since src might be == dst.
+				name_end = src + 1; // Set it up for the next iteration.
+				key_type = SYM_STRING;
+			}
+			else if (!_tcsnicmp(name, _T("Object("), 7))
+			{
+				// Object(n) where n is the address of a key object, as a literal signed integer.
+				name += 7;
+				name_end = _tcschr(name, ')');
+				if (!name_end || name_end[1] != ']') return DEBUGGER_E_INVALID_OPTIONS;
+				name_end += 2; // Set it up for the next iteration.
+				key_type = SYM_OBJECT;
+			}
+			else
+			{
+				// The only other valid form is a literal signed integer.
+				name_end = _tcschr(name, ']');
+				if (!name_end) return DEBUGGER_E_INVALID_OPTIONS;
+				++name_end; // Set it up for the next iteration.
+				key_type = SYM_INTEGER;
+			}
+		}
+		else if (c == '.')
+		{
+			// For simplicity, let this be any string terminated by '.' or '['.
+			// Actual expressions require it to contain only alphanumeric chars and/or '_'.
+			name_end = StrChrAny(name, _T(".[")); // This also sets it up for the next iteration.
+			key_type = IsPureNumeric(name); // SYM_INTEGER or SYM_STRING.
+		}
+		else
+			return DEBUGGER_E_INVALID_OPTIONS;
+		
+		if (key_type == SYM_STRING)
+			key.s = name;
+		else // SYM_INTEGER or SYM_OBJECT
+			key.i = Exp32or64(_ttoi,_ttoi64)(name);
+
+		if ( !(field = obj->FindField(key_type, key, insert_pos)) )
+			return DEBUGGER_E_UNKNOWN_PROPERTY;
+
+		if (!name_end || !*name_end)
+		{
+			// All done!
+			aVar = NULL;
+			aField = field;
+			return DEBUGGER_E_OK;
+		}
+
+		if ( field->symbol != SYM_OBJECT || !(obj = dynamic_cast<Object *>(field->object)) )
+			// No usable target object for the next iteration, therefore the property mustn't exist.
+			return DEBUGGER_E_UNKNOWN_PROPERTY;
+
+	} // infite loop.
+}
+
+
 int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 {
 	int err;
 	char arg, *value;
 
 	char *transaction_id = NULL, *name = NULL;
-	int context_id = 0, depth = 0;
-	VarSizeType max_data = aIsPropertyGet ? mMaxPropertyData : VARSIZE_MAX;
+	int context_id = 0, depth = 0, page = 0;
+	int max_data = aIsPropertyGet ? mMaxPropertyData : INT_MAX;
 
 	for(;;)
 	{
@@ -1065,7 +1413,9 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 		// stack depth - optional, default zero
 		case 'd': depth = atoi(value); break;
 		// max data size - optional
-		case 'm': max_data = strtoul(value, NULL, 10); break;
+		case 'm': max_data = atoi(value); break;
+		// data page - optional
+		case 'p': page = atoi(value); break;
 
 		default:
 			return DEBUGGER_E_INVALID_OPTIONS;
@@ -1091,33 +1441,13 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 		return DEBUGGER_E_INVALID_CONTEXT;
 	}
 
-	CStringTCharFromUTF8 name_t(name);
-	Var *var = NULL;
-
-	// Validate name for more accurate error-reporting.
-	if (name_t.GetLength() > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name_t, false, DISPLAY_NO_ERROR))
+	Var *var;
+	Object::FieldType *field;
+	if (err = ParsePropertyName(name, always_use, true, var, field))
 	{
+		// Var not found/invalid name.
 		if (!aIsPropertyGet)
-			return DEBUGGER_E_INVALID_OPTIONS;
-		//else see Notepad++ compatibility note below.
-		// Something like this was once used to avoid corrupting the response XML,
-		// but is no longer necessary as those characters are now automatically escaped:
-		//name = "(invalid)";
-	}
-	else
-	{
-		// Find existing variable.
-		var = g_script.FindVar((LPTSTR)name_t.GetString(), name_t.GetLength(), NULL, always_use);
-		// If above failed, maybe it's a built-in variable which hasn't been referenced in script.
-		if (!var && g_script.GetVarType((LPTSTR)name_t.GetString()) > (void*)VAR_LAST_TYPE)
-			// Use FindOrAddVar vs FindVar to add a "newly referenced" built-in variable.
-			var = g_script.FindOrAddVar((LPTSTR)name_t.GetString(), name_t.GetLength(), always_use);
-	}
-
-	if (!var) // Var not found.
-	{
-		if (!aIsPropertyGet)
-			return DEBUGGER_E_UNKNOWN_PROPERTY;
+			return err;
 
 		// NOTEPAD++ DBGP PLUGIN:
 		// The DBGp plugin for Notepad++ assumes property_get will always succeed.
@@ -1135,20 +1465,27 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 
 		return SendResponse();
 	}
+	//else var and field were set by the called function.
 
 	if (aIsPropertyGet)
 	{
 		mResponseBuf.WriteF("<response command=\"property_get\" transaction_id=\"%e\">"
 							, transaction_id);
 		
-		WritePropertyXml(var, max_data);
+		if (var)
+			WritePropertyXml(*var, max_data, page);
+		else
+			WritePropertyXml(*field, name, CStringA(name), mMaxChildren, mMaxDepth, max_data);
 	}
 	else
 	{
 		mResponseBuf.WriteF("<response command=\"property_value\" transaction_id=\"%e\" encoding=\"base64\" size=\""
 							, transaction_id);
 
-		WriteVarSizeAndData(var, max_data);
+		if (var)
+			WritePropertyData(*var, max_data);
+		else
+			WritePropertyData(*field, max_data);
 	}
 	mResponseBuf.Write("</response>");
 
@@ -1160,7 +1497,7 @@ DEBUGGER_COMMAND(Debugger::property_set)
 	int err;
 	char arg, *value;
 
-	char *transaction_id = NULL, *name = NULL, *new_value = NULL;
+	char *transaction_id = NULL, *name = NULL, *new_value = NULL, *type = "string";
 	int context_id = 0, depth = 0;
 
 	for(;;)
@@ -1180,6 +1517,8 @@ DEBUGGER_COMMAND(Debugger::property_set)
 		case 'd': depth = atoi(value); break;
 		// new base64-encoded value
 		case '-': new_value = value; break;
+		// data type: string, integer or float
+		case 't': type = value; break;
 		// not sure what the use of the 'length' arg is...
 		case 'l': break;
 
@@ -1206,26 +1545,35 @@ DEBUGGER_COMMAND(Debugger::property_set)
 		return DEBUGGER_E_INVALID_CONTEXT;
 	}
 
-	CStringTCharFromUTF8 name_t(name);
+	Var *var;
+	Object::FieldType *field;
+	if (err = ParsePropertyName(name, always_use, false, var, field))
+		return err;
 	
-	// Validate name to avoid a misleading error dialog.
-	if (name_t.GetLength() > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name_t, false, DISPLAY_NO_ERROR))
-		return DEBUGGER_E_INVALID_OPTIONS;
-	
-	Var *var = g_script.FindOrAddVar((LPTSTR) name_t.GetString(), name_t.GetLength(), always_use);
-
-	bool success = var && !VAR_IS_READONLY(*var);
-	if (success)
+	CString val_buf;
+	ExprTokenType val;
+	if (!strcmp(type, "integer"))
 	{
-#ifndef CONFIG_DBG_UTF16_SPEED_HACKS
-		CStringTCharFromUTF8 new_value_t(new_value, (int)Base64Decode(new_value, new_value));
-		success = var->Assign((LPTSTR) new_value_t.GetString(), new_value_t.GetLength());
-#else
-		int new_size = Base64Decode(new_value, new_value) / sizeof(TCHAR);
-		success = var->Assign((LPTSTR) new_value, new_size);
-#endif
+		val.symbol = SYM_INTEGER;
+		val.value_int64 = _atoi64(new_value);
 	}
-	//else var not found or is read-only/built-in.
+	else if (!strcmp(type, "float"))
+	{
+		val.symbol = SYM_FLOAT;
+		val.value_double = atof(new_value);
+	}
+	else // Assume type is "string", since that's the only other supported type.
+	{
+		StringUTF8ToTChar(new_value, val_buf, (int)Base64Decode(new_value, new_value));
+		val.symbol = SYM_STRING;
+		val.marker = (LPTSTR)val_buf.GetString();
+	}
+
+	bool success;
+	if (var)
+		success = !VAR_IS_READONLY(*var) && var->Assign(val); // Relies on shortcircuit boolean evaluation.
+	else
+		success = field->Assign(val);
 
 	mResponseBuf.WriteF("<response command=\"property_set\" success=\"%i\" transaction_id=\"%e\"/>"
 						, (int)success, transaction_id);
@@ -1880,14 +2228,14 @@ int Debugger::Buffer::Write(char *aData, size_t aDataSize)
 	return DEBUGGER_E_OK;
 }
 
-// Write formatted data into the buffer. Supports %s (char*), %e (char*, "&'<> escaped), %i (int), %u (unsigned int).
+// Write formatted data into the buffer. Supports %s (char*), %e (char*, "&'<> escaped), %i (int), %u (unsigned int), %p (UINT_PTR).
 int Debugger::Buffer::WriteF(const char *aFormat, ...)
 {
 	int i, err;
 	size_t len;
 	char c;
 	const char *format_ptr, *s, *param_ptr, *entity;
-	char number_buf[MAX_NUMBER_SIZE];
+	char number_buf[MAX_INTEGER_SIZE];
 	va_list vl;
 	
 	for (len = 0, i = 0; i < 2; ++i)
@@ -1904,6 +2252,7 @@ int Debugger::Buffer::WriteF(const char *aFormat, ...)
 				case 's': s = va_arg(vl, char*); break;
 				case 'i': s = _itoa(va_arg(vl, int), number_buf, 10); break;
 				case 'u': s = _ultoa(va_arg(vl, unsigned long), number_buf, 10); break;
+				case 'p': s = Exp32or64(_ultoa,_ui64toa)(va_arg(vl, UINT_PTR), number_buf, 10); break;
 
 				case 'e': // String, replace "&'<> with appropriate XML entity.
 				{
