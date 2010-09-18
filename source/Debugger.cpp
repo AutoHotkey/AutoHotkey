@@ -400,12 +400,23 @@ DEBUGGER_COMMAND(Debugger::feature_set)
 
 	bool success = false;
 
-	if (success = !strcmp(feature_name, "max_data"))
-		mMaxPropertyData = atoi(feature_value);
+	// Since all supported features are positive integers:
+	int ival = atoi(feature_value);
+	if (ival < 0)
+	{
+		// Since this value is invalid, return success="0" to indicate the error.
+		// Setting the feature to a negative value might cause instability elsewhere.
+	}
+	else if (success = !strcmp(feature_name, "max_data"))
+	{
+		if (ival == 0) // Although this isn't in the spec, at least one IDE relies on it.
+			ival = INT_MAX; // Strictly following the spec, we should probably return 0 bytes of data.
+		mMaxPropertyData = ival;
+	}
 	else if (success = !strcmp(feature_name, "max_children"))
-		mMaxChildren = atoi(feature_value);
+		mMaxChildren = ival;
 	else if (success = !strcmp(feature_name, "max_depth"))
-		mMaxDepth = atoi(feature_value);
+		mMaxDepth = ival;
 
 	mResponseBuf.WriteF("<response command=\"feature_set\" feature=\"%e\" success=\"%i\" transaction_id=\"%e\"/>"
 						, feature_name, (int)success, transaction_id);
@@ -1156,18 +1167,11 @@ int Debugger::WritePropertyData(LPCTSTR aData, int aDataSize, int aMaxEncodedSiz
 	// Actual conversion is not done until we've reserved some (shared) space in mResponseBuf for it.
 	value_size = WideCharToMultiByte(CP_UTF8, 0, wide_value, wide_size, NULL, 0, NULL, NULL);
 
+	if (value_size > aMaxEncodedSize) // Limit length of source data; see below.
+		value_size = aMaxEncodedSize;
 	// Calculate maximum length of base64-encoded data.
-	if (value_size)
-	{
-		if (value_size > aMaxEncodedSize) // Limit length of source data; see below.
-			value_size = aMaxEncodedSize;
-		// This should also ensure there is enough space to temporarily hold the raw value (aVar.Get()).
-		space_needed = DEBUGGER_BASE64_ENCODED_SIZE(value_size);
-	}
-	else
-	{	// Ensure there is space for a null-terminator.
-		space_needed = sizeof(TCHAR);
-	}
+	// This should also ensure there is enough space to temporarily hold the raw value (aVar.Get()).
+	space_needed = (value_size > 0) ? DEBUGGER_BASE64_ENCODED_SIZE(value_size) : sizeof(TCHAR);
 	ASSERT(space_needed >= value_size + 1);
 	
 	// Reserve enough space for the data's length, "> and encoded data.
@@ -1422,7 +1426,7 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 		}
 	}
 
-	if (!transaction_id || !name)
+	if (!transaction_id || !name || max_data < 0)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	// Currently only stack depth 0 (the top-most running function) is supported.
