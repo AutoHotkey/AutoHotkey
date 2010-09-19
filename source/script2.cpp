@@ -10785,6 +10785,7 @@ VarSizeType BIV_IsUnicode(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_FileEncoding(LPTSTR aBuf, LPTSTR aVarName)
 {
+	// A similar section may be found under "case Encoding:" in FileObject::Invoke.  Maintain that with this:
 	switch (g->Encoding)
 	{
 	case CP_ACP:

@@ -326,6 +326,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		Length,
 		AtEOF,
 		Handle,
+		Encoding,
 		Close
 	};
 
@@ -365,6 +366,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		if_member("Length", Length)
 		if_member("AtEOF", AtEOF)
 		if_member("__Handle", Handle) // Prefix with underscores because it is designed for advanced users.
+		if_member("Encoding", Encoding)
 		if_member("Close", Close)
 		// Supported for enhanced clarity:
 		if_member("Position", Position)
@@ -625,6 +627,45 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			if (aParamCount == 0)
 				aResultToken.value_int64 = (UINT_PTR) mFile.Handle();
 			return OK;
+
+		case Encoding:
+		{
+			UINT codepage;
+			if (aParamCount > 0)
+			{
+				if (TokenIsPureNumeric(*aParam[1]))
+					codepage = (UINT)TokenToInt64(*aParam[1]);
+				else
+					codepage = Line::ConvertFileEncoding(TokenToString(*aParam[1]));
+				if (codepage != -1)
+					mFile.SetCodePage(codepage);
+				// Now fall through to below and return the actual codepage.
+			}
+			LPTSTR buf = aResultToken.buf;
+			aResultToken.marker = buf;
+			aResultToken.symbol = SYM_STRING;
+			codepage = mFile.GetCodePage();
+			// This is based on BIV_FileEncoding, so maintain the two together:
+			switch (codepage)
+			{
+			// GetCodePage() returns the value of GetACP() in place of CP_ACP, so this case is not needed:
+			//case CP_ACP:
+				//*buf = '\0';
+				//return OK;
+			case CP_UTF8:					_tcscpy(buf, _T("UTF-8"));		break;
+			case CP_UTF8 | CP_AHKNOBOM:		_tcscpy(buf, _T("UTF-8-RAW"));	break;
+			case CP_UTF16:					_tcscpy(buf, _T("UTF-16"));		break;
+			case CP_UTF16 | CP_AHKNOBOM:	_tcscpy(buf, _T("UTF-16-RAW"));	break;
+			default:
+				// Although we could check codepage == GetACP() and return blank in that case, there's no way
+				// to know whether something like "CP0" or the actual codepage was passed to FileOpen, so just
+				// return "CPn" when none of the cases above apply:
+				buf[0] = _T('C');
+				buf[1] = _T('P');
+				_itot(codepage, buf + 2, 10);
+			}
+			return OK;
+		}
 
 		case Close:
 			if (aParamCount == 0)
