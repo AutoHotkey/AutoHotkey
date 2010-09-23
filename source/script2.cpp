@@ -10923,8 +10923,8 @@ VarSizeType BIV_Space_Tab(LPTSTR aBuf, LPTSTR aVarName)
 {
 	// Really old comment:
 	// A_Space is a built-in variable rather than using an escape sequence such as `s, because the escape
-	// sequence method doesn't work (probably because `s resolves to a space and is that trimmed at
-	// some point in process prior to when it can be used):
+	// sequence method doesn't work (probably because `s resolves to a space and is trimmed at some point
+	// prior to when it can be used):
 	if (aBuf)
 	{
 		*aBuf++ = aVarName[5] ? ' ' : '\t'; // A_Tab[]
@@ -11810,7 +11810,9 @@ VarSizeType BIV_EndChar(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (aBuf)
 	{
-		*aBuf++ = g_script.mEndChar;
+		if (g_script.mEndChar)
+			*aBuf++ = g_script.mEndChar;
+		//else we returned 0 previously, so MUST WRITE ONLY ONE NULL-TERMINATOR.
 		*aBuf = '\0';
 	}
 	return g_script.mEndChar ? 1 : 0; // v1.0.48.04: Fixed to support a NULL char, which happens when the hotstring has the "no ending character required" option.
