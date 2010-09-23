@@ -1226,7 +1226,7 @@ int Debugger::WritePropertyData(Var &aVar, int aMaxEncodedSize)
 		else
 			return DEBUGGER_E_INTERNAL_ERROR;
 		CLOSE_CLIPBOARD_IF_OPEN; // Above may leave the clipboard open if aVar is Clipboard.
-		value_size = (int)buf.GetLength();
+		value_size = (int)_tcslen(value);
 	}
 
 	return WritePropertyData(value, value_size, aMaxEncodedSize);
