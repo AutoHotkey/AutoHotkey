@@ -15415,11 +15415,19 @@ void BIF_OnMessage(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 			// This helps catch bugs in scripts that are assigning the wrong function to a monitor.
 			// It also preserves additional parameters for possible future use (i.e. avoids breaking
 			// existing scripts if more formal parameters are supported in a future version).
-			if (func->mIsBuiltIn || func->mParamCount > 4 || func->mMinParams < func->mParamCount) // Too many params, or some are optional.
+			// Lexikos: The flexibility of allowing ByRef and optional parameters seems to outweigh
+			// the small chance that these checks will actually catch an error and the even smaller
+			// chance that any parameters will be added in future.  For instance, a function may be
+			// called directly by the script to set or retrieve static vars which are used when the
+			// message monitor calls the function.  For these checks to actually catch an error, the
+			// author must have typed the name of the wrong function (i.e. probably not a typo), and
+			// that function must accept more than four parameters or have optional/ByRef parameters:
+			//if (func->mIsBuiltIn || func->mParamCount > 4 || func->mMinParams < func->mParamCount) // Too many params, or some are optional.
+			if (func->mIsBuiltIn || func->mMinParams > 4) // Requires too many params.
 				return; // Yield the default return value set earlier.
-			for (int i = 0; i < func->mParamCount; ++i) // Check if any formal parameters are ByRef.
-				if (func->mParam[i].is_byref)
-					return; // Yield the default return value set earlier.
+			//for (int i = 0; i < func->mParamCount; ++i) // Check if any formal parameters are ByRef.
+			//	if (func->mParam[i].is_byref)
+			//		return; // Yield the default return value set earlier.
 		}
 		else // Explicitly blank function name ("") means delete this item.  By contrast, an omitted second parameter means "give me current function of this message".
 			mode_is_delete = true;
