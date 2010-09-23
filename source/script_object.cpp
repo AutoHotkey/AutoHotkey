@@ -12,7 +12,7 @@
 
 ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 // Caller should pass an aResultToken with the usual setup:
-//	buf points to a buffer the called function may use: char[MAX_NUMBER_SIZE]
+//	buf points to a buffer the called function may use: TCHAR[MAX_NUMBER_SIZE]
 //	mem_to_free is NULL; if it is non-NULL on return, caller (or caller's caller) is responsible for it.
 // Caller is responsible for making a persistent copy of the result, if appropriate.
 {
@@ -22,101 +22,22 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 		aResultToken.marker = _T("");
 		return FAIL;
 	}
-	ResultType result = OK;
 
-	// Code heavily based on SYM_FUNC handling in script_expression.cpp; see there for detailed comments.
-	if (aFunc.mIsBuiltIn)
+	// When this variable goes out of scope, Var::FreeAndRestoreFunctionVars() is called (if appropriate):
+	FuncCallData func_call;
+	ResultType result;
+
+	// CALL THE FUNCTION.
+	if (aFunc.Call(func_call, result, aResultToken, aParam, aParamCount)
+		// Make return value persistent if applicable:
+		&& aResultToken.symbol == SYM_STRING && !aFunc.mIsBuiltIn)
 	{
-		aResultToken.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
-		aResultToken.marker = aFunc.mName;  // Inform function of which built-in function called it (allows code sharing/reduction). Can't use circuit_token because it's value is still needed later below.
-
-		// CALL THE BUILT-IN FUNCTION:
-		aFunc.mBIF(aResultToken, aParam, aParamCount);
+		// Make a persistent copy of the string in case it is the contents of one of the function's local variables.
+		if ( !*aResultToken.marker || !TokenSetResult(aResultToken, aResultToken.marker) )
+			// Above failed or the result is an empty string, so make sure it remains valid after we return:
+			aResultToken.marker = _T("");
 	}
-	else // It's not a built-in function.
-	{
-		int j, count_of_actuals_that_have_formals, var_backup_count;
-		VarBkp *var_backup = NULL;
 
-		// L: Set a default here in case we return early/abort.
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
-
-		count_of_actuals_that_have_formals = (aParamCount > aFunc.mParamCount)
-					? aFunc.mParamCount  // Omit any actuals that lack formals (this can happen when a dynamic call passes too many parameters).
-					: aParamCount;
-
-		if (aFunc.mInstances > 0)
-		{
-			// Backup/restore of function's variables is needed.
-			for (j = 0; j < count_of_actuals_that_have_formals; ++j) // For each actual parameter than has a formal.
-			{
-				ExprTokenType &this_stack_token = *aParam[j];
-				if (this_stack_token.symbol == SYM_VAR && !aFunc.mParam[j].is_byref)
-					this_stack_token.var->TokenToContents(this_stack_token);
-			}
-			if (!Var::BackupFunctionVars(aFunc, var_backup, var_backup_count)) // Out of memory.
-			{
-				//LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, aFunc.mName);
-				return FAIL;
-			}
-		}
-
-		for (j = aParamCount; j < aFunc.mParamCount; ++j) // For each formal parameter that lacks an actual, provide a default value.
-		{
-			FuncParam &this_formal_param = aFunc.mParam[j];
-			if (this_formal_param.is_byref)
-				this_formal_param.var->ConvertToNonAliasIfNecessary();
-			switch(this_formal_param.default_type)
-			{
-			case PARAM_DEFAULT_STR:   this_formal_param.var->Assign(this_formal_param.default_str);    break;
-			case PARAM_DEFAULT_INT:   this_formal_param.var->Assign(this_formal_param.default_int64);  break;
-			case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
-			//case PARAM_DEFAULT_NONE: Not possible due to the nature of this loop and due to earlier validation.
-			}
-		}
-
-		for (j = 0; j < count_of_actuals_that_have_formals; ++j) // For each actual parameter than has a formal, assign the actual to the formal.
-		{
-			ExprTokenType &token = *aParam[j];
-			if (!IS_OPERAND(token.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
-			{
-				Var::FreeAndRestoreFunctionVars(aFunc, var_backup, var_backup_count);
-				return FAIL;
-			}
-			if (aFunc.mParam[j].is_byref)
-			{
-				if (token.symbol != SYM_VAR)
-				{
-					if (j < aFunc.mMinParams || token.value_int64 != aFunc.mParam[j].default_int64)
-					{
-						Var::FreeAndRestoreFunctionVars(aFunc, var_backup, var_backup_count);
-						return FAIL;
-					}
-					aFunc.mParam[j].var->ConvertToNonAliasIfNecessary(); // L.
-				}
-				else
-				{
-					aFunc.mParam[j].var->UpdateAlias(token.var);
-					continue;
-				}
-			}
-			aFunc.mParam[j].var->Assign(token);
-		}
-
-		result = aFunc.Call(&aResultToken); // Call the UDF.
-
-		if ( !(result == EARLY_EXIT || result == FAIL) )
-		{
-			if (aResultToken.symbol == SYM_STRING) // SYM_VAR is not currently possible; SYM_OPERAND should not be possible.
-			{
-				// Make a persistent copy of the string in case it is the contents of one of the function's local variables.
-				if ( !*aResultToken.marker || !TokenSetResult(aResultToken, aResultToken.marker) )
-					aResultToken.marker = _T("");
-			}
-		}
-		Var::FreeAndRestoreFunctionVars(aFunc, var_backup, var_backup_count);
-	}
 	return result;
 }
 	
@@ -125,7 +46,7 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 // Object::Create - Called by BIF_ObjCreate to create a new object, optionally passing key/value pairs to set.
 //
 
-IObject *Object::Create(ExprTokenType *aParam[], int aParamCount)
+Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 {
 	if (aParamCount & 1)
 		return NULL; // Odd number of parameters - reserved for future use.
@@ -158,6 +79,150 @@ IObject *Object::Create(ExprTokenType *aParam[], int aParamCount)
 		}
 	}
 	return obj;
+}
+
+
+//
+// Object::Clone - Used for variadic function-calls.
+//
+
+Object *Object::Clone(INT_PTR aStartOffset)
+// Creates an object and copies to it the fields at and after the given offset.
+{
+	Object *objptr = new Object();
+	if (!objptr|| aStartOffset >= mFieldCount)
+		return objptr;
+	
+	Object &obj = *objptr;
+
+	// Allocate space in destination object.
+	IndexType field_count = mFieldCount - aStartOffset;
+	if (!obj.SetInternalCapacity(field_count))
+	{
+		obj.Release();
+		return NULL;
+	}
+
+	FieldType *fields = obj.mFields; // Newly allocated by above.
+	int failure_count = 0; // See comment below.
+	IndexType i;
+
+	obj.mFieldCount = field_count;
+	obj.mKeyOffsetObject = mKeyOffsetObject - aStartOffset;
+	obj.mKeyOffsetString = mKeyOffsetString - aStartOffset;
+	if (obj.mKeyOffsetObject < 0) // Currently might always evaluate to false.
+	{
+		obj.mKeyOffsetObject = 0; // aStartOffset excluded all integer and some or all object keys.
+		if (obj.mKeyOffsetString < 0)
+			obj.mKeyOffsetString = 0; // aStartOffset also excluded some string keys.
+	}
+	//else no need to check mKeyOffsetString since it should always be >= mKeyOffsetObject.
+
+	for (i = 0; i < field_count; ++i)
+	{
+		FieldType &dst = fields[i];
+		FieldType &src = mFields[aStartOffset + i];
+
+		// Copy key.
+		if (i >= obj.mKeyOffsetString)
+		{
+			if ( !(dst.key.s = _tcsdup(src.key.s)) )
+			{
+				// Key allocation failed. At this point, all int and object keys
+				// have been set and values for previous fields have been copied.
+				// Rather than trying to set up the object so that what we have
+				// so far is valid in order to break out of the loop, continue,
+				// make all fields valid and then allow them to be freed. 
+				++failure_count;
+			}
+		}
+		else if (i >= obj.mKeyOffsetObject)
+			(dst.key.p = src.key.p)->AddRef();
+		else
+			dst.key.i = src.key.i;
+
+		// Copy value.
+		switch (dst.symbol = src.symbol)
+		{
+		case SYM_OPERAND:
+			if (dst.size = src.size)
+			{
+				if (dst.marker = tmalloc(dst.size))
+				{
+					// Since user may have stored binary data, copy the entire field:
+					tmemcpy(dst.marker, src.marker, src.size);
+					continue;
+				}
+				// Since above didn't continue: allocation failed.
+				++failure_count; // See failure comment further above.
+			}
+			dst.marker = Var::sEmptyString;
+			dst.size = 0;
+			break;
+
+		case SYM_OBJECT:
+			(dst.object = src.object)->AddRef();
+			break;
+
+		//case SYM_INTEGER:
+		//case SYM_FLOAT:
+		default:
+			dst.n_int64 = src.n_int64; // Union copy.
+		}
+	}
+	if (failure_count)
+	{
+		// One or more memory allocations failed.  It seems best to return a clear failure
+		// indication rather than an incomplete copy.  Now that the loop above has finished,
+		// the object's contents are at least valid and it is safe to free the object:
+		obj.Release();
+		return NULL;
+	}
+	return &obj;
+}
+
+
+//
+// Object::ArrayToParams - Used for variadic function-calls.
+//
+
+ResultType Object::ArrayToParams(void *&aMemToFree, ExprTokenType **&aParam, int &aParamCount, int aMinParams)
+// Expands this object's contents into the parameter list. Due to the nature
+// of the parameter list, this function has the following limitations:
+//	- Only fields with integer keys are used (named parameters aren't supported).
+//	- Keys must be contiguous; if keys are non-contiguous, there must be a parameter
+//		missing somewhere.  We could assume an empty string for omitted parameters,
+//		but that would probably be counter-intuitive and scripts which come to rely
+//		on it would break if this limitation is ever removed.
+// RETURN VALUE: true if new memory was allocated for aParam; false otherwise.
+{
+	aMemToFree = NULL; // Init for maintainability.
+	int field_count = (int)(mKeyOffsetObject - mKeyOffsetInt);
+	if (aParamCount + field_count < aMinParams)
+		return FAIL; // There still won't be enough params, so give up.  Caller relies on us to do this check.
+	if (!field_count)
+		return OK; // Nothing to expand into the param list, so our work here is done.
+	FieldType *field = mFields + mKeyOffsetInt;
+	if (field->key.i != 1 || field[field_count-1].key.i != (IndexType)field_count)
+		// Keys are non-contiguous or don't start at 1.  See comments above.
+		return FAIL;
+	// Calculate space required for ...
+	size_t space_needed = field_count * sizeof(ExprTokenType) // ... new param tokens
+		+ (aParamCount + field_count) * sizeof(ExprTokenType *); // ... existing and new param pointers
+	// Allocate new param list and tokens; tokens first for convenience.
+	ExprTokenType *token = (ExprTokenType *)malloc(space_needed);
+	if (!token)
+		return FAIL;
+	ExprTokenType **param_list = (ExprTokenType **)(token + field_count);
+	memcpy(param_list, aParam, aParamCount * sizeof(ExprTokenType *)); // Copy the existing param pointers.
+	aParam = param_list; // Update caller's pointer.
+	param_list += aParamCount; // Point param_list at our target; past the existing params.
+	// Convert each field to a token, putting the token's address into the appropriate slot:
+	for (int i = 0; i < field_count; ++i)
+		field[i].ToToken(*(param_list[i] = &token[i]));
+	aParamCount += field_count; // Update caller's count.
+	aMemToFree = token; // Return the memory block for caller to take care of.
+	return OK;
 }
 
 
@@ -566,6 +631,35 @@ ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, Exp
 // Object:: Built-in Methods
 //
 
+bool Object::InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], int aValueCount)
+{
+	IndexType value_count = (IndexType)aValueCount;
+	IndexType need_capacity = mFieldCount + value_count;
+	if (need_capacity > mFieldCountMax && !SetInternalCapacity(need_capacity))
+		// Fail.
+		return false;
+	FieldType *field = mFields + aOffset;
+	if (aOffset < mFieldCount)
+		memmove(field + value_count, field, (mFieldCount - aOffset) * sizeof(FieldType));
+	mFieldCount += value_count;
+	mKeyOffsetObject += value_count; // ints before objects
+	mKeyOffsetString += value_count; // and strings
+	FieldType *field_end;
+	// Set keys and copy value params into the fields.
+	for (field_end = field + value_count; field < field_end; ++field)
+	{
+		field->key.i = aKey++;
+		field->symbol = SYM_INTEGER; // Must be init'd for Assign().
+		field->Assign(**(aValue++));
+	}
+	// Adjust keys of fields which have been moved.
+	for (field_end = mFields + mKeyOffsetObject; field < field_end; ++field)
+	{
+		field->key.i += value_count; // NOT =++key.i since keys might not be contiguous.
+	}
+	return true;
+}
+
 ResultType Object::_Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 // _Insert( key, value )
 {
@@ -598,29 +692,8 @@ ResultType Object::_Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 
 			if (aParamCount > 2) // Multiple value params.  Could also handle aParamCount == 2, but the simpler method is faster.
 			{
-				IndexType value_count = aParamCount - 1;
-				IndexType need_capacity = mFieldCount + value_count;
-				if (need_capacity <= mFieldCountMax || SetInternalCapacity(need_capacity))
+				if (InsertAt(insert_pos, key.i, aParam + 1, aParamCount - 1))
 				{
-					field = mFields + insert_pos;
-					if (insert_pos < mFieldCount)
-						memmove(field + value_count, field, (mFieldCount - insert_pos) * sizeof(FieldType));
-					mFieldCount += value_count;
-					mKeyOffsetObject += value_count; // ints before objects
-					mKeyOffsetString += value_count; // and strings
-					FieldType *field_end;
-					// Set keys and copy value params into the fields.
-					for (field_end = field + value_count; field < field_end; ++field)
-					{
-						field->key.i = key.i++;
-						field->symbol = SYM_INTEGER; // Must be init'd for Assign().
-						field->Assign(**(++aParam));
-					}
-					// Adjust keys of fields which have been moved.
-					for (field_end = mFields + mKeyOffsetObject; field < field_end; ++field)
-					{
-						field->key.i += value_count; // NOT =++key.i since keys might not be contiguous.
-					}
 					aResultToken.symbol = SYM_INTEGER;
 					aResultToken.value_int64 = 1;
 				}
@@ -961,7 +1034,7 @@ bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
 		symbol = SYM_OPERAND;
 		marker = Var::sEmptyString;
 		size = 0;
-		return false;
+		return true;
 	}
 	
 	if (len == -1)

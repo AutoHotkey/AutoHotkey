@@ -172,7 +172,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_MISSING_CLOSE_QUOTE _T("Missing close-quote") // No period after short phrases.
 #define ERR_MISSING_COMMA _T("Missing comma")             //
 #define ERR_BLANK_PARAM _T("Blank parameter")             //
-#define ERR_BYREF _T("Caller must pass a variable to this ByRef parameter.")
 #define ERR_TOO_MANY_PARAMS _T("Too many parameters passed to function.") // L31
 #define ERR_TOO_FEW_PARAMS _T("Too few parameters passed to function.") // L31
 #define ERR_ELSE_WITH_NO_IF _T("ELSE with no matching IF")
@@ -328,7 +327,8 @@ struct DerefType
 	};
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
-	bool is_function; // This should be kept pure bool to allow easy determination of what's in the union, above.
+	BYTE is_function;
+#define DEREF_VARIADIC 2
 	DerefParamCountType param_count; // The actual number of parameters present in this function *call*.  Left uninitialized except for functions.
 	DerefLengthType length; // Listed only after byte-sized fields, due to it being a WORD.
 };
@@ -1896,6 +1896,15 @@ struct FuncParam
 	union {LPTSTR default_str; __int64 default_int64; double default_double;};
 };
 
+struct FuncCallData
+{
+	Func *mFunc; // If non-NULL, indicates this is a UDF whose vars will need to be freed/restored later.
+	VarBkp *mBackup; // For UDFs.
+	int mBackupCount;
+	FuncCallData() : mFunc(NULL), mBackup(NULL), mBackupCount(0) { }
+	~FuncCallData();
+};
+
 typedef void (* BuiltInFunctionType)(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 class Func
@@ -1923,6 +1932,9 @@ public:
 	// Note that it's possible for a built-in function such as WinExist() to become a normal/UDF via
 	// override in the script.  So mIsBuiltIn should always be used to determine whether the function
 	// is truly built-in, not its name.
+	bool mIsVariadic;
+
+	bool Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false);
 
 	ResultType Call(ExprTokenType *aResultToken) // Making this a function vs. inline doesn't measurably impact performance.
 	{
@@ -1997,6 +2009,7 @@ public:
 		, mInstances(0) /*, mNextFunc(NULL)*/
 		, mDefaultVarType(VAR_DECLARE_NONE)
 		, mIsBuiltIn(aIsBuiltIn)
+		, mIsVariadic(false)
 	{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
@@ -2551,7 +2564,7 @@ public:
 	LPTSTR mFileDir;  // Will hold the directory containing the script file.
 	LPTSTR mFileName; // Will hold the script's naked file name.
 	LPTSTR mOurEXE; // Will hold this app's module name (e.g. C:\Program Files\AutoHotkey\AutoHotkey.exe).
-	LPTSTR mOurEXEDir;  // Same as above but just the containing diretory (for convenience).
+	LPTSTR mOurEXEDir;  // Same as above but just the containing directory (for convenience).
 	LPTSTR mMainWindowTitle; // Will hold our main window's title, for consistency & convenience.
 	bool mIsReadyToExecute;
 	bool mAutoExecSectionIsRunning;

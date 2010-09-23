@@ -206,11 +206,25 @@ public:
 	inline bool IsStepping() { return mInternalState >= DIS_StepInto; }
 	inline bool HasStdErrHook() { return mStdErrMode != SR_Disabled; }
 	inline bool HasStdOutHook() { return mStdOutMode != SR_Disabled; }
-	inline bool ShouldBreakAfterFunctionCall()
+
+	inline void PostExecFunctionCall(Line *aExpressionLine)
 	{
-		return mInternalState == DIS_StepInto
-			|| (mInternalState == DIS_StepOut || mInternalState == DIS_StepOver)
-				&& mStack.Depth() < mContinuationDepth;
+		// If the debugger is stepping into/over/out from a function call, we want to
+		// break at the line which called that function, since the next line to execute
+		// might be a line in some other function (i.e. because the line which called
+		// the function is "return func()" or calls another function after this one).
+		if ((mInternalState == DIS_StepInto
+			|| ((mInternalState == DIS_StepOut || mInternalState == DIS_StepOver)
+				// Always '<' since '<=' (for StepOver) shouldn't be possible,
+				// since we just returned from a function call:
+				&& mStack.Depth() < mContinuationDepth))
+			// The final check ensures we don't repeatedly break at a line containing
+			// multiple built-in function calls; i.e. don't break unless some script
+			// has been executed since we began evaluating aExpressionLine.  Something
+			// like "return recursivefunc()" should work if this is StepInto or StepOver
+			// since mCurrLine would probably be the '}' of that function:
+			&& mCurrLine != aExpressionLine)
+			PreExecLine(aExpressionLine);
 	}
 
 	// Code flow notification functions:
@@ -274,6 +288,7 @@ public:
 
 private:
 	SOCKET mSocket;
+	Line *mCurrLine; // Similar to g_script.mCurrLine, but may be different when breaking post-function-call, before continuing expression evaluation.
 
 	class Buffer
 	{

@@ -263,50 +263,100 @@ void BIF_ComObjConnect(ExprTokenType &aResultToken, ExprTokenType *aParam[], int
 }
 
 
-
-void AssignVariant(Var &arg, VARIANT *pvar, bool bsink = true)
+void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true)
 {
-	switch(pvar->vt)
+	switch (aVar.vt)
 	{
 	case VT_BSTR:
-		arg.AssignStringW(pvar->bstrVal, SysStringLen(pvar->bstrVal));
-		if (!bsink)
-			VariantClear(pvar);
+		aToken.symbol = SYM_STRING;
+#ifdef UNICODE
+		aToken.marker = aVar.bstrVal;
+#else
+		{
+			UINT len = SysStringLen(aVar.bstrVal);
+			if (len)
+			{
+				CStringCharFromWChar buf(aVar.bstrVal, len);
+				// Caller knows to free this afterward:
+				if ( !(aToken.marker = buf.DetachBuffer()) )
+					aToken.marker = Var::sEmptyString;
+			}
+			else
+				aToken.marker = Var::sEmptyString; // Return an empty value which caller knows not to free().
+		}
+#endif
+		if (!aRetainVar)
+			VariantClear(&aVar);
 		break;
 	case VT_I4:
 	case VT_ERROR:
-		arg.Assign((__int64)pvar->lVal);
+		aToken.symbol = SYM_INTEGER;
+		aToken.value_int64 = aVar.lVal;
 		break;
 	case VT_I2:
 	case VT_BOOL:
-		arg.Assign((__int64)pvar->iVal);
+		aToken.symbol = SYM_INTEGER;
+		aToken.value_int64 = aVar.iVal;
 		break;
 	case VT_UNKNOWN:
-		arg.Assign((__int64)pvar->punkVal);
+		aToken.symbol = SYM_INTEGER;
+		aToken.value_int64 = (__int64)aVar.punkVal;
 		break;
 	case VT_DISPATCH:
-		arg.AssignSkipAddRef(new ComObject(pvar->pdispVal));
-		if (bsink && pvar->pdispVal)
-			pvar->pdispVal->AddRef();
-		break;
+		if (aToken.object = new ComObject(aVar.pdispVal))
+		{
+			aToken.symbol = SYM_OBJECT;
+			if (aRetainVar && aVar.pdispVal)
+				aVar.pdispVal->AddRef();
+			//else we're taking ownership of the reference.
+			break;
+		}
+		// Above failed, so check if we need to release the pointer:
+		if (!aRetainVar && aVar.pdispVal)
+			aVar.pdispVal->Release();
+		// FALL THROUGH to the next case:
 	case VT_EMPTY:
 	case VT_NULL:
-		arg.Assign();
+		aToken.symbol = SYM_STRING;
+		aToken.marker = Var::sEmptyString; // For ANSI builds: return an empty value which caller knows not to free().
 		break;
 	default:
 		{
 			VARIANT var = {0};
-			if (pvar->vt < VT_ARRAY
-				&& SUCCEEDED(VariantChangeType(&var, pvar, 0, VT_BSTR)))
+			if (aVar.vt < VT_ARRAY // i.e. not byref or an array.
+				&& SUCCEEDED(VariantChangeType(&var, &aVar, 0, VT_BSTR)))
 			{
-				arg.AssignStringW(var.bstrVal, SysStringLen(var.bstrVal));
-				VariantClear(&var);
+				// Above put a string representation of aVar into var.
+				// Recursively call self for simplicitly (esp. for ANSI builds):
+				VariantToToken(var, aToken, false);
 			}
 			else
-				arg.Assign((__int64)pvar->parray);
+			{
+				aToken.symbol = SYM_INTEGER;
+				aToken.value_int64 = (__int64)aVar.parray;
+			}
 		}
 	}
 }
+
+void AssignVariant(Var &aArg, VARIANT &aVar, bool aRetainVar = true)
+{
+	if (aVar.vt == VT_BSTR)
+	{
+		// Avoid an unnecessary mem alloc and copy in ANSI builds.
+		aArg.AssignStringW(aVar.bstrVal, SysStringLen(aVar.bstrVal));
+		if (!aRetainVar)
+			VariantClear(&aVar);
+		return;
+	}
+	ExprTokenType token;
+	VariantToToken(aVar, token, aRetainVar);
+	if (token.symbol == SYM_OBJECT)
+		aArg.AssignSkipAddRef(token.object);
+	else
+		aArg.Assign(token);
+}
+
 
 void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar)
 {
@@ -441,52 +491,67 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 		return DISP_E_MEMBERNOTFOUND;
 
 	TCHAR funcName[256];
-	sntprintf(funcName, _countof(funcName), _T("%s%s"), mPrefix, memberName);
+	sntprintf(funcName, _countof(funcName), _T("%s%ws"), mPrefix, memberName);
 	SysFreeString(memberName);
 
 	Func *func = g_script.FindFunc(funcName);
 	if (!func)
 		return DISP_E_MEMBERNOTFOUND;
 
-	// TODO: ComEvent::Invoke should follow proper procedure for calling script functions:
-	//	Abort if mMinParams is too high; allow any number of optional parameters.
-	//	If any instances are already running, back up their local variables.
-	//	Set unused optional parameters to their default values.
-	//	Abort if ByRef params are encountered; or convert to non-alias.
-	//	Pass a result token to Func::Call and use this as the result.
-	//	Free/restore local variables; if result is a string, make a persistent copy first.
-
 	UINT cArgs = pDispParams->cArgs;
-	UINT mArgs = func->mParamCount;
-	//   nArgs = func->mMinParams;
-	if (mArgs > cArgs)
-	{
-		if (mArgs > cArgs + 1 || !mObject) // mObject == NULL should be next to impossible since it is only set NULL after calling Unadvise(), in which case there shouldn't be anyone left to call this->Invoke().  Check it anyway since it might be difficult to debug, depending on what we're connected to.
-			return DISP_E_MEMBERNOTFOUND;
-		func->mParam[--mArgs].var->Assign(mObject);
-	}
 
-	for (UINT i = 0; i < mArgs; i++)
+	if (cArgs >= MAX_FUNCTION_PARAMS // >= vs > to allow for 'this' object param.
+		|| !mObject) // mObject == NULL should be next to impossible since it is only set NULL after calling Unadvise(), in which case there shouldn't be anyone left to call this->Invoke().  Check it anyway since it might be difficult to debug, depending on what we're connected to.
+		return DISP_E_MEMBERNOTFOUND;
+
+	ExprTokenType param_token[MAX_FUNCTION_PARAMS];
+	ExprTokenType *param[MAX_FUNCTION_PARAMS];
+
+	for (UINT i = 0; i < cArgs; ++i)
 	{
 		VARIANTARG *pvar = &pDispParams->rgvarg[cArgs-1-i];
 		while (pvar->vt == (VT_BYREF | VT_VARIANT))
 			pvar = pvar->pvarVal;
-		AssignVariant(*func->mParam[i].var, pvar);
+		VariantToToken(*pvar, param_token[i]);
+		param[i] = &param_token[i];
 	}
 
-	if (pVarResult)
+	// Pass our object last for either of the following cases:
+	//	a) Our caller doesn't include its IDispatch interface pointer in the parameter list.
+	//	b) The script needs a reference to the original wrapper object; i.e. mObject.
+	param_token[cArgs].symbol = SYM_OBJECT;
+	param_token[cArgs].object = mObject;
+	param[cArgs] = &param_token[cArgs];
+
+	FuncCallData func_call;
+	ExprTokenType result_token;
+	ResultType result;
+	HRESULT result_to_return;
+
+	// Call the function.
+	if (func->Call(func_call, result, result_token, param, cArgs + 1))
 	{
-		ExprTokenType result_token;
-		func->Call(&result_token);
-		TokenToVariant(result_token, *pVarResult);
+		if (pVarResult)
+			TokenToVariant(result_token, *pVarResult);
 		if (result_token.symbol == SYM_OBJECT)
 			result_token.object->Release();
+		result_to_return = S_OK;
 	}
-	else
-		func->Call(NULL);
-	
-	VarBkp *var_backup = NULL; int var_backup_count;
-	Var::FreeAndRestoreFunctionVars(*func, var_backup, var_backup_count);
+	else // above failed or exited, so result_token should be ignored.
+		result_to_return = DISP_E_MEMBERNOTFOUND; // For consistency.  Probably doesn't matter whether we return this or S_OK.
+
+	// Clean up:
+	for (UINT i = 0; i < cArgs; ++i)
+	{
+		// Release COM wrapper objects:
+		if (param_token[i].symbol == SYM_OBJECT)
+			param_token[i].object->Release();
+#ifndef UNICODE
+		// Free any temporary memory used to hold ANSI strings; see VariantToToken().
+		else if (param_token[i].symbol == SYM_STRING && param_token[i].marker != Var::sEmptyString)
+			free(param_token[i].marker);
+#endif
+	}
 
 	return S_OK;
 }
@@ -653,7 +718,7 @@ int ComEnum::Next(Var *aOutput, Var *aOutputType)
 		if (aOutputType)
 			aOutputType->Assign((__int64)varResult.vt);
 		if (aOutput)
-			AssignVariant(*aOutput, &varResult, false);
+			AssignVariant(*aOutput, varResult, false);
 		return true;
 	}
 	return	false;

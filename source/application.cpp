@@ -1788,25 +1788,13 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 			return false;
 	if (monitor.instance_count >= monitor.max_instances || g->Priority > 0) // Monitor is already running more than the max number of instances, or existing thread's priority is too high to be interrupted.
 		return false;
-
-	// Need to check if backup is needed in case script explicitly called the function rather than using
-	// it solely as a callback.  UPDATE: And now that max_instances is supported, also need it for that.
-	// See ExpandExpression() for detailed comments about the following section.
-	VarBkp *var_backup = NULL;   // If needed, it will hold an array of VarBkp objects.
-	int var_backup_count; // The number of items in the above array.
-	if (func.mInstances > 0) // Backup is needed.
-		if (!Var::BackupFunctionVars(func, var_backup, var_backup_count)) // Out of memory.
-			return false;
-			// Since we're in the middle of processing messages, and since out-of-memory is so rare,
-			// it seems justifiable not to have any error reporting and instead just avoid launching
-			// the new thread.
-
 	// Since above didn't return, the launch of the new thread is now considered unavoidable.
 
 	// See MsgSleep() for comments about the following section.
 	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
 	tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
 	InitNewThread(0, false, true, func.mJumpToLine->mActionType);
+	DEBUGGER_STACK_PUSH(func.mJumpToLine, func.mName) // Push a "thread" onto the debugger's stack.  For simplicity and performance, use the function name vs something like "message 0x123".
 
 	// Set last found window (as documented).  Can be NULL.
 	// Nested controls like ComboBoxes require more than a simple call to GetParent().
@@ -1831,33 +1819,25 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	}
 	//else leave them at their init-thread defaults.
 
-	// See ExpandExpression() for detailed comments about the following section.
-	if (func.mParamCount > 0)
-	{
-		// Copy the appropriate values into each of the function's formal parameters.
-		func.mParam[0].var->Assign((DWORD)awParam); // Assign parameter #1: wParam
-		if (func.mParamCount > 1) // Assign parameter #2: lParam
-		{
-			// v1.0.38.01: LPARAM is now written out as a DWORD because the majority of system messages
-			// use LPARAM as a pointer or other unsigned value.  This shouldn't affect most scripts because
-			// of the way ATOI64() and ATOU() wrap a negative number back into the unsigned domain for
-			// commands such as PostMessage/SendMessage.
-			func.mParam[1].var->Assign((DWORD)alParam);
-			if (func.mParamCount > 2) // Assign parameter #3: Message number (in case this function monitors more than one).
-			{
-				// For performance and due to rarity of use, message number and HWND are now written out as numbers
-				// rather than hex, which allows binary-number optimizations.
-				// OLDER: Write msg number as hex because it's a lot more common. Casting issues make it easier
-				// to retain the name "AssignHWND".
-				//func.mParam[2].var->AssignHWND((HWND)(size_t)aMsg);
-				func.mParam[2].var->Assign((DWORD)aMsg);
-				if (func.mParamCount > 3) // Assign parameter #4: HWND (listed last since most scripts won't use it for anything).
-					// See comment above:
-					//func.mParam[3].var->AssignHWND(aWnd);
-					func.mParam[3].var->Assign((DWORD)(size_t)aWnd); // Can be a parent or child window. Type-casting: See comments in BIF_WinExistActive().
-			}
-		}
-	}
+	// Set up the array of parameters for Func::Call().  Benchmarks showed very little difference
+	// between this approach and the old approach of assigning directly to the function's parameters:
+	ExprTokenType param_token[4];
+	ExprTokenType *param[4];
+	// Message parameters:
+	param[0] = &param_token[0];
+	param_token[0].symbol = SYM_INTEGER;
+	param_token[0].value_int64 = (__int64)awParam;
+	param[1] = &param_token[1];
+	param_token[1].symbol = SYM_INTEGER;
+	param_token[1].value_int64 = (__int64)alParam;
+	// Message number:
+	param[2] = &param_token[2];
+	param_token[2].symbol = SYM_INTEGER;
+	param_token[2].value_int64 = aMsg;
+	// HWND:
+	param[3] = &param_token[3];
+	param_token[3].symbol = SYM_INTEGER;
+	param_token[3].value_int64 = (__int64)(size_t)aWnd;
 
 	// v1.0.38.04: Below was added to maximize responsiveness to incoming messages.  The reasoning
 	// is similar to why the same thing is done in MsgSleep() prior to its launch of a thread, so see
@@ -1865,23 +1845,30 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
 	++monitor.instance_count;
 
-	ExprTokenType result_token; // L31
+	bool block_further_processing;
+	{// Scope for func_call.
+		ExprTokenType result_token;
+		FuncCallData func_call;
+		ResultType result;
 
-	DEBUGGER_STACK_PUSH(func.mJumpToLine, func.mName)
-	func.Call(&result_token); // Call the UDF.
+		if (func.Call(func_call, result, result_token, param, 4))
+		{
+			// Fix for v1.0.47: Must handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value
+			// might be the contents of one of the function's local variables (which are about to be free'd).
+			block_further_processing = !TokenIsEmptyString(result_token); // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
+			if (block_further_processing)
+				aMsgReply = (LRESULT)TokenToInt64(result_token); // Use 64-bit in case it's an unsigned number greater than 0x7FFFFFFF, in which case this allows it to wrap around to a negative.
+			//else leave aMsgReply uninitialized because we'll be returning false later below, which tells our caller
+			// to ignore aMsgReply.
+			if (result_token.symbol == SYM_OBJECT)
+				result_token.object->Release();
+		}
+		else
+			// Above exited or failed.  result_token may not have been initialized, so treat it as empty:
+			block_further_processing = false;
+	}// func_call destructor causes Var::FreeAndRestoreFunctionVars() to be called here.
+	
 	DEBUGGER_STACK_POP()
-
-	// Fix for v1.0.47: Must handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value
-	// might be the contents of one of the function's local variables (which are about to be free'd).
-	bool block_further_processing = !TokenIsEmptyString(result_token); // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
-	if (block_further_processing)
-		aMsgReply = (LPARAM)TokenToInt64(result_token); // Use 64-bit in case it's an unsigned number greater than 0x7FFFFFFF, in which case this allows it to wrap around to a negative.
-	//else leave aMsgReply uninitialized because we'll be returning false later below, which tells our caller
-	// to ignore aMsgReply.
-	if (result_token.symbol == SYM_OBJECT) // L31
-		result_token.object->Release();
-
-	Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
 	ResumeUnderlyingThread(ErrorLevel_saved);
 
 	// Check that the msg_index item still exists (it may have been deleted during the thread that just finished,

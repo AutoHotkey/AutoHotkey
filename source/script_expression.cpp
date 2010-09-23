@@ -85,7 +85,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 	///////////////////////////////
 	// EVALUATE POSTFIX EXPRESSION
 	///////////////////////////////
-	int i, j, actual_param_count, count_of_actuals_that_have_formals, delta;
+	int i, actual_param_count, delta;
 	SymbolType right_is_number, left_is_number, result_symbol;
 	double right_double, left_double;
 	__int64 right_int64, left_int64;
@@ -100,8 +100,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 		, left_was_negative, is_pre_op; // BOOL vs. bool benchmarks slightly faster, and is slightly smaller in code size (or maybe it's cp1's int vs. char that shrunk it).
 	ExprTokenType *circuit_token, *this_postfix, *p_postfix;
 	Var *sym_assign_var, *temp_var;
-	VarBkp *var_backup = NULL;  // If needed, it will hold an array of VarBkp objects. v1.0.40.07: Initialized to NULL to facilitate an approach that's more maintainable.
-	int var_backup_count; // The number of items in the above array (when it's non-NULL).
 
 	// v1.0.44.06: EXPR_SMALL_MEM_LIMIT is the means by which _alloca() is used to boost performance a
 	// little by avoiding the overhead of malloc+free for small strings.  The limit should be something
@@ -370,399 +368,191 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			// Adjust the stack early to simplify.  Above already confirmed that the following won't underflow.
 			// Pop the actual number of params involved in this function-call off the stack.
 			stack_count -= actual_param_count; // Now stack[stack_count] is the leftmost item in an array of function-parameters, which simplifies processing later on.
+			
+			// The following two steps are now done inside Func::Call:
+			//this_token.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
+			//this_token.marker = func.mName;  // Inform function of which built-in function called it (allows code sharing/reduction). Can't use circuit_token because it's value is still needed later below.
+			this_token.buf = left_buf;       // mBIF() can use this to store a string result, and for other purposes.
+			
+			// BACK UP THE CIRCUIT TOKEN (it's saved because it can be non-NULL at this point; verified
+			// through code review).  Currently refers to the same memory as mem_to_free via union.
+			circuit_token = this_token.circuit_token;
+			this_token.mem_to_free = NULL; // Init to detect whether the called function allocates it (i.e. we're overloading it with a new purpose).  It's no longer necessary to back up & restore the previous value in circuit_token because circuit_token is used only when a result is about to get pushed onto the stack.
+			// RESIST TEMPTATIONS TO OPTIMIZE CIRCUIT_TOKEN by passing output_var as circuit_token/mem_to_free
+			// when done==true (i.e. the built-in function could then assign directly to output_var).
+			// It doesn't help performance at all except for a mere 10% or less in certain fairly rare cases.
+			// More importantly, it hurts maintainability because it makes RegExReplace() more complicated
+			// than it already is, and worse: each BIF would have to check that output_var doesn't overlap
+			// with its input/source strings because if it does, the function must not initialize a default
+			// in output_var before starting (and avoiding this would further complicate the code).
+			// Here is the crux of the abandoned approach: Any function that wishes to pass memory back to
+			// us via mem_to_free: When mem_to_free!=NULL, that function MUST INSTEAD: 1) Turn that
+			// memory over to output_var via AcceptNewMem(); 2) Set mem_to_free to NULL to indicate to
+			// us that it is a user of mem_to_free.
+			
+			FuncCallData func_call;
+			// Call the user-defined or built-in function.  Func::Call takes care of variadic parameter
+			// lists and stores local var backups for UDFs in func_call.  Once func_call goes out of scope,
+			// its destructor calls Var::FreeAndRestoreFunctionVars() if appropriate.
+			if (!func.Call(func_call, aResult, this_token, stack + stack_count, actual_param_count
+									, this_token.deref->is_function == DEREF_VARIADIC))
+			{
+				// Take a shortcut because for backward compatibility, ACT_ASSIGNEXPR (and anything else
+				// for that matter) is being aborted by this type of early return (i.e. if there's an
+				// output_var, its contents are left as-is).  In other words, this expression will have
+				// no result storable by the outside world.
+				if (aResult != OK) // i.e. EARLY_EXIT or FAIL
+					result_to_return = NULL; // Use NULL to inform our caller that this thread is finished (whether through normal means such as Exit or a critical error).
+					// Above: The callers of this function know that the value of aResult (which already contains the
+					// reason for early exit) should be considered valid/meaningful only if result_to_return is NULL.
+				goto normal_end_skip_output_var; // output_var is left unchanged in these cases.
+			}
+
+#ifdef CONFIG_DEBUGGER
+			// See PostExecFunctionCall() itself for comments.
+			g_Debugger.PostExecFunctionCall(this);
+#endif
+
+			if (IS_NUMERIC(this_token.symbol) || this_token.symbol == SYM_OBJECT) // No need for make_result_persistent or early Assign(). Any numeric result can be considered final because it's already stored in permanent memory (namely the token itself).  L31: This also applies to SYM_OBJECT.
+			{
+				// For code simplicity, the optimization for numeric results is done at a later stage.
+				// Additionally, this_token.mem_to_free is assumed to be NULL since the result is not
+				// a string; i.e. the function would've freed any memory it allocated without our help.
+				this_token.circuit_token = circuit_token; // Restore it to its original value.
+				goto push_this_token;
+			}
+			//else it's a string, which might need to be moved to persistent memory further below.
+				ASSERT(this_token.symbol == SYM_STRING);
+			
+			#define EXPR_IS_DONE (!stack_count && this_postfix[1].symbol == SYM_INVALID) // True if we've used up the last of the operators & operands.
+			done = EXPR_IS_DONE;
+
+			// v1.0.45: If possible, take a shortcut for performance.  Doing it this way saves at least
+			// two memcpy's (one into deref buffer and then another back into the output_var by
+			// ACT_ASSIGNEXPR itself).  In some cases is also saves from having to expand the deref
+			// buffer as well as the output_var (since it's current memory might be too small to hold
+			// the new memory block). Thus we give it a new block directly to avoid all of that.
+			// This should be a big boost to performance when long strings are involved.
+			Var *internal_output_var;
+			if (done) // i.e. we've now produced the final result.
+			{
+				if (mActionType == ACT_EXPRESSION) // Isolated expression: Outermost function call's result will be ignored, so no need to store it.
+				{
+					goto normal_end_skip_output_var; // No output_var is possible for ACT_EXPRESSION.
+				}
+				internal_output_var = output_var; // NULL unless this is ACT_ASSIGNEXPR.
+			}
+			// It's fairly rare that the following optimization is even applicable because it requires
+			// an assignment *internal* to an expression, such as "if not var:=func()", or "a:=b, c:=func()".
+			// But it seems best to optimize these cases so that commas aren't penalized.
+			else if (this_postfix[1].symbol == SYM_ASSIGN  // Next operation is ":=".
+					&& stack_count && stack[stack_count-1]->symbol == SYM_VAR // i.e. let the next iteration handle errors instead of doing it here.  Further below relies on this having been checked.
+					&& stack[stack_count-1]->var->Type() == VAR_NORMAL) // Don't do clipboard here because: 1) AcceptNewMem() doesn't support it; 2) Could probably use Assign() and then make its result be a newly added mem_count item, but the code complexity doesn't seem worth it given the rarity.
+				internal_output_var = stack[stack_count-1]->var;
+			else
+				internal_output_var = NULL;
+			
+			// RELIES ON THE IS_NUMERIC() CHECK above having been done first.
+			result = this_token.marker; // Marker can be used because symbol will never be SYM_VAR in this case.
+
+			if (internal_output_var
+				&& !(g->CurrentFunc == &func && internal_output_var->IsNonStaticLocal())) // Ordered for short-circuit performance.
+				// Above line is a fix for v1.0.45.03: It detects whether output_var is among the variables
+				// that are about to be restored from backup.  If it is, we can't assign to it now
+				// because it's currently a local that belongs to the instance we're in the middle of
+				// calling; i.e. it doesn't belong to our instance (which is beneath it on the call stack
+				// until after the restore-from-backup is done later below).  And we can't assign "result"
+				// to it *after* the restore because by then result may have been freed (if it happens to be
+				// a local variable too).  Therefore, continue on to the normal method, which will check
+				// whether "result" needs to be stored in more persistent memory.
+			{
+				// Check if the called function allocated some memory for its result and turned it over to us.
+				// In most cases, the string stored in mem_to_free (if it has been set) is the same address as
+				// this_token.marker (i.e. what is named "result" further below), because that's what the
+				// built-in functions are normally using the memory for.
+				if (this_token.mem_to_free == this_token.marker) // marker is checked in case caller alloc'd mem but didn't use it as its actual result.  Relies on the fact that marker is never NULL.
+				{
+					// So now, turn over responsibility for this memory to the variable. The called function
+					// is responsible for having stored the length of what's in the memory as an overload of
+					// this_token.buf, but only when that memory is the result (currently might always be true).
+					// AcceptNewMem() will shrink the memory for us, via _expand(), if there's a lot of
+					// extra/unused space in it.
+					internal_output_var->AcceptNewMem(this_token.mem_to_free, this_token.marker_length);
+				}
+				else
+				{
+					result_length = (VarSizeType)_tcslen(result);
+					// 1.0.46.06: If the UDF has stored its result in its deref buffer, take possession
+					// of that buffer, which saves a memcpy of a potentially huge string.  The cost
+					// of this is that if there are any other UDF-calls pending after this one, the
+					// code in their bodies will have to create another deref buffer if they need one.
+					if (result == sDerefBuf && result_length >= MAX_ALLOC_SIMPLE) // Result is in their buffer and it's longer than what can fit in a SimpleHeap variable (avoids wasting SimpleHeap memory).
+					{
+						internal_output_var->AcceptNewMem(result, result_length);
+						NULLIFY_S_DEREF_BUF // Force any UDFs called subsequently by us to create a new deref buffer because this one was just taken over by a variable.
+					}
+					else
+					{
+						// v1.0.45: This mode improves performance by avoiding the need to copy the result into
+						// more persistent memory, then avoiding the need to copy it into the defer buffer (which
+						// also avoids the possibility of needing to expand that buffer).
+						internal_output_var->Assign(this_token.marker); // Marker can be used because symbol will never be SYM_VAR in this case.
+					}													// ALSO: Assign() contains an optimization that avoids actually doing the mem-copying if output_var is being assigned to itself (which can happen in cases like RegExMatch()).
+				}
+				if (done)
+					goto normal_end_skip_output_var; // No need to restore circuit_token because the expression is finished.
+				// Next operation is ":=" and above has verified the target is SYM_VAR and VAR_NORMAL.
+				--stack_count; // STACK_POP;
+				this_token.circuit_token = (++this_postfix)->circuit_token; // Must be done AFTER above. Old, somewhat obsolete comment: this_postfix.circuit_token should have been NULL prior to this because the final right-side result of an assignment shouldn't be the last item of an AND/OR/IFF's left branch. The assignment itself would be that.
+				this_token.var = internal_output_var; // Make the result a variable rather than a normal operand so that its
+				this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
+				goto push_this_token;
+			}
+			// Otherwise, there's no output_var or the expression isn't finished yet, so do normal processing.
+				
+			make_result_persistent = true; // Set default.
+
+			// RESTORE THE CIRCUIT TOKEN (after handling what came back inside it):
+			if (this_token.mem_to_free) // The called function allocated some memory and turned it over to us.
+			{
+				if (mem_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
+				{
+					LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, func.mName);
+					goto abort;
+				}
+				if (this_token.mem_to_free == this_token.marker) // mem_to_free is checked in case caller alloc'd mem but didn't use it as its actual result.
+				{
+					make_result_persistent = false; // Override the default set higher above.
+				}
+				// Mark it to be freed at the time we return.
+				mem[mem_count++] = this_token.mem_to_free;
+			}
+			//else this_token.mem_to_free==NULL, so the BIF just called didn't allocate memory to give to us.
+			this_token.circuit_token = circuit_token; // Restore it to its original value.
+
+			// Empty strings are returned pretty often by UDFs, such as when they don't use "return"
+			// at all.  Therefore, handle them fully now, which should improve performance (since it
+			// avoids all the other checking later on).  It also doesn't hurt code size because this
+			// check avoids having to check for empty string in other sections later on.
+			if (!*this_token.marker) // Various make-persistent sections further below may rely on this check.
+			{
+				this_token.marker = _T(""); // Ensure it's a constant memory area, not a buf that might get overwritten soon.
+				this_token.symbol = SYM_OPERAND; // SYM_OPERAND vs. SYM_STRING probably doesn't matter in the case of empty string, but it's used for consistency with what the other UDF handling further below does.
+				this_token.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
+				goto push_this_token; // For code simplicity, the optimization for numeric results is done at a later stage.
+			}
+
 			if (func.mIsBuiltIn)
 			{
-				this_token.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
-				this_token.marker = func.mName;  // Inform function of which built-in function called it (allows code sharing/reduction). Can't use circuit_token because it's value is still needed later below.
-				this_token.buf = left_buf;       // mBIF() can use this to store a string result, and for other purposes.
-
-				// BACK UP THE CIRCUIT TOKEN (it's saved because it can be non-NULL at this point; verified
-				// through code review).  Currently refers to the same memory as mem_to_free via union.
-				circuit_token = this_token.circuit_token;
-				this_token.mem_to_free = NULL; // Init to detect whether the called function allocates it (i.e. we're overloading it with a new purpose).  It's no longer necessary to back up & restore the previous value in circuit_token because circuit_token is used only when a result is about to get pushed onto the stack.
-				// RESIST TEMPTATIONS TO OPTIMIZE CIRCUIT_TOKEN by passing output_var as circuit_token/mem_to_free
-				// when done==true (i.e. the built-in function could then assign directly to output_var).
-				// It doesn't help performance at all except for a mere 10% or less in certain fairly rare cases.
-				// More importantly, it hurts maintainability because it makes RegExReplace() more complicated
-				// than it already is, and worse: each BIF would have to check that output_var doesn't overlap
-				// with its input/source strings because if it does, the function must not initialize a default
-				// in output_var before starting (and avoiding this would further complicate the code).
-				// Here is the crux of the abandoned approach: Any function that wishes to pass memory back to
-				// us via mem_to_free: When mem_to_free!=NULL, that function MUST INSTEAD: 1) Turn that
-				// memory over to output_var via AcceptNewMem(); 2) Set mem_to_free to NULL to indicate to
-				// us that it is a user of mem_to_free.
-
-				// CALL THE BUILT-IN FUNCTION:
-				func.mBIF(this_token, stack + stack_count, actual_param_count);
-
-				// RESTORE THE CIRCUIT TOKEN (after handling what came back inside it):
-				#define EXPR_IS_DONE (!stack_count && this_postfix[1].symbol == SYM_INVALID) // True if we've used up the last of the operators & operands.
-				done = EXPR_IS_DONE;
-				done_and_have_an_output_var = done && output_var; // i.e. this is ACT_ASSIGNEXPR and we've now produced the final result.
-				make_result_persistent = true; // Set default.
-				if (this_token.mem_to_free) // The called function allocated some memory here (to facilitate returning long strings) and turned it over to us.
-				{
-					// In most cases, the string stored in mem_to_free is the same address as this_token.marker
-					// (i.e. what is named "result" further below), because that's what the built-in functions
-					// are normally using the memory for.
-					if (this_token.mem_to_free == this_token.marker) // mem_to_free is checked in case caller alloc'd mem but didn't use it as its actual result.
-					{
-						// v1.0.45: If possible, take a shortcut for performance.  Doing it this way saves at least
-						// two memcpy's (one into deref buffer and then another back into the output_var by
-						// ACT_ASSIGNEXPR itself).  In some cases is also saves from having to expand the deref
-						// buffer as well as the output_var (since it's current memory might be too small to hold
-						// the new memory block). Thus we give it a new block directly to avoid all of that.
-						// This should be a big boost to performance when long strings are involved.
-						// So now, turn over responsibility for this memory to the variable. The called function
-						// is responsible for having stored the length of what's in the memory as an overload of
-						// this_token.buf, but only when that memory is the result (currently might always be true).
-						if (done_and_have_an_output_var)
-						{
-							// AcceptNewMem() will shrink the memory for us, via _expand(), if there's a lot of
-							// extra/unused space in it.
-							output_var->AcceptNewMem(this_token.mem_to_free, this_token.marker_length);
-							goto normal_end_skip_output_var;  // No need to restore circuit_token because the expression is finished.
-						}
-						if (this_postfix[1].symbol == SYM_ASSIGN // Next operation is ":=".
-							&& stack_count && stack[stack_count-1]->symbol == SYM_VAR // i.e. let the next iteration handle it instead of doing it here.  Further below relies on this having been checked.
-							&& stack[stack_count-1]->var->Type() == VAR_NORMAL) // Don't do clipboard here because: 1) AcceptNewMem() doesn't support it; 2) Could probably use Assign() and then make its result be a newly added mem_count item, but the code complexity doesn't seem worth it given the rarity.
-						{
-							// This section is an optimization that avoids memory allocation and an extra memcpy()
-							// whenever this result is going to be assigned to a variable as the very next step.
-							// See the comment section higher above for examples.
-							ExprTokenType &left = *STACK_POP; // Above has already confirmed that it's SYM_VAR and VAR_NORMAL.
-							// AcceptNewMem() will shrink the memory for us, via _expand(), if there's a lot of
-							// extra/unused space in it.
-							left.var->AcceptNewMem(this_token.mem_to_free, this_token.marker_length);
-							this_token.circuit_token = (++this_postfix)->circuit_token; // Must be done AFTER above. Old, somewhat obsolete comment: this_postfix.circuit_token should have been NULL prior to this because the final right-side result of an assignment shouldn't be the last item of an AND/OR/IFF's left branch. The assignment itself would be that.
-							this_token.var = left.var;   // Make the result a variable rather than a normal operand so that its
-							this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
-							goto push_this_token;
-						}
-						make_result_persistent = false; // Override the default set higher above.
-					} // if (this_token.mem_to_free == this_token.marker)
-					// Since above didn't goto, we're not done yet; so handle this memory the normal way: Mark it
-					// to be freed at the time we return.
-					if (mem_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
-					{
-						LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, func.mName);
-						goto abort;
-					}
-					mem[mem_count++] = this_token.mem_to_free;
-				}
-				//else this_token.mem_to_free==NULL, so the BIF just called didn't allocate memory to give to us.
-				this_token.circuit_token = circuit_token; // Restore it to its original value.
-
-				// HANDLE THE RESULT (unless it was already handled above due to an optimization):
-				if (IS_NUMERIC(this_token.symbol) || this_token.symbol == SYM_OBJECT) // No need for make_result_persistent or early Assign(). Any numeric result can be considered final because it's already stored in permanent memory (namely the token itself).  L31: This also applies to SYM_OBJECT.
-					goto push_this_token; // For code simplicity, the optimization for numeric results is done at a later stage.
-				//else it's a string, which might need to be moved to persistent memory further below.
-				if (done_and_have_an_output_var) // RELIES ON THE IS_NUMERIC() CHECK above having been done first.
-				{
-					// v1.0.45: This mode improves performance by avoiding the need to copy the result into
-					// more persistent memory, then avoiding the need to copy it into the defer buffer (which
-					// also avoids the possibility of needing to expand that buffer).
-					output_var->Assign(this_token.marker); // Marker can be used because symbol will never be SYM_VAR
-					goto normal_end_skip_output_var;       // in this case. ALSO: Assign() contains an optimization that avoids actually doing the mem-copying if output_var is being assigned to itself (which can happen in cases like RegExMatch()).
-				}
-				// Otherwise, there's no output_var or the expression isn't finished yet, so do normal processing.
-				if (!*this_token.marker) // Various make-persistent sections further below may rely on this check.
-				{
-					this_token.marker = _T(""); // Ensure it's a constant memory area, not a buf that might get overwritten soon.
-					goto push_this_token; // For code simplicity, the optimization for numeric results is done at a later stage.
-				}
 				// Since above didn't goto, "result" is not SYM_INTEGER/FLOAT/VAR, and not "".  Therefore, it's
 				// either a pointer to static memory (such as a constant string), or more likely the small buf
 				// we gave to the BIF for storing small strings.  For simplicity assume it's the buf, which is
 				// volatile and must be made persistent if called for below.
-				result = this_token.marker; // Marker can be used because symbol will never be SYM_VAR in this case.
 				if (make_result_persistent) // At this stage, this means that the above wasn't able to determine its correct value yet.
 					make_result_persistent = !done;
 			}
-			else // It's not a built-in function, or it's a built-in that was overridden with a custom function.
+			else // It's not a built-in function.
 			{
-				count_of_actuals_that_have_formals = (actual_param_count > func.mParamCount)
-					? func.mParamCount  // Omit any actuals that lack formals (this can happen when a dynamic call passes too many parameters).
-					: actual_param_count;
-				// If there are other instances of this function already running, either via recursion or
-				// an interrupted quasi-thread, back up the local variables of the instance that lies immediately
-				// beneath ours (in turn, that instance is responsible for backing up any instance that lies
-				// beneath it, and so on, since when recursion collapses or threads resume, they always do so
-				// in the reverse order in which they were created.
-				//
-				// I think the backup-and-restore approach to local variables might enhance performance over
-				// other approaches, perhaps a lot.  This is because most of the time there will be no other
-				// instances of a given function on the call stack, thus no backup/restore is needed, and thus
-				// the function's existing local variables can be reused as though they're globals (i.e.
-				// memory allocation/deallocation overhead is often completely avoided for non-recursive calls
-				// to a function after the first).
-				if (func.mInstances > 0) // i.e. treat negatives as zero to help catch any bugs in the way mInstances is maintained.
-				{
-					// Backup/restore of function's variables is needed.
-					// Only when a backup is needed is it possible for this function to be calling itself recursively,
-					// either directly or indirectly by means of an intermediate function.  As a consequence, it's
-					// possible for this function to be passing one or more of its own params or locals to itself.
-					// The following section compensates for that to handle parameters passed by-value, but it
-					// doesn't correctly handle passing its own locals/params to itself ByRef, which is in the
-					// help file as a known limitation.  Also, the below doesn't indicate a failure when stack
-					// underflow would occur because the loop after this one needs to do that (since this
-					// one will never execute if a backup isn't needed).  Note that this loop that reviews all
-					// actual parameters is necessary as a separate loop from the one further below because this
-					// first one's conversion must occur prior to calling BackupFunctionVars().  In addition, there
-					// might be other interdependencies between formals and actuals if a function is calling itself
-					// recursively.
-					for (j = 0; j < count_of_actuals_that_have_formals; ++j) // For each actual parameter than has a formal.
-					{
-						ExprTokenType &this_stack_token = *stack[stack_count + j]; // stack[stack_count] is the first actual parameter. A check higher above has already ensured that this line won't cause stack overflow.
-						if (this_stack_token.symbol == SYM_VAR && !func.mParam[j].is_byref)
-						{
-							// Since this formal parameter is passed by value, if it's SYM_VAR, convert it to
-							// a non-var to allow the variables to be backed up and reset further below without
-							// corrupting any SYM_VARs that happen to be locals or params of this very same
-							// function.
-							// DllCall() relies on the fact that this transformation is only done for user
-							// functions, not built-in ones such as DllCall().  This is because DllCall()
-							// sometimes needs the variable of a parameter for use as an output parameter.
-							this_stack_token.var->TokenToContents(this_stack_token); // L31: Replaced some code here with TokenToContents() for object support and binary numbers vs numeric string.
-						}
-					}
-					// BackupFunctionVars() will also clear each local variable and formal parameter so that
-					// if that parameter or local var or is assigned a value by any other means during our call
-					// to it, new memory will be allocated to hold that value rather than overwriting the
-					// underlying recursed/interrupted instance's memory, which it will need intact when it's resumed.
-					if (!Var::BackupFunctionVars(func, var_backup, var_backup_count)) // Out of memory.
-					{
-						LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, func.mName);
-						goto abort;
-					}
-				} // if (func.mInstances > 0)
-				//else backup is not needed because there are no other instances of this function on the call-stack.
-				// So by definition, this function is not calling itself directly or indirectly, therefore there's no
-				// need to do the conversion of SYM_VAR because those SYM_VARs can't be ones that were blanked out
-				// due to a function exiting.  In other words, it seems impossible for a there to be no other
-				// instances of this function on the call-stack and yet SYM_VAR to be one of this function's own
-				// locals or formal params because it would have no legitimate origin.
-
-				// The following loop will have zero iterations unless at least one formal parameter lacks an actual,
-				// which should be possible only if the parameter is optional (i.e. has a default value).
-				for (j = actual_param_count; j < func.mParamCount; ++j) // For each formal parameter that lacks an actual, provide a default value.
-				{
-					// The following worsens performance by 7% under UPX 2.0 but is the faster method on UPX 3.0.
-					// This could merely be due to unpredictable cache hits/misses in a my particular CPU.
-					// In addition to being fastest, it also reduces code size by 16 bytes:
-					FuncParam &this_formal_param = func.mParam[j]; // For performance and convenience.
-					if (this_formal_param.is_byref) // v1.0.46.13: Allow ByRef parameters to by optional by converting an omitted-actual into a non-alias formal/local.
-						this_formal_param.var->ConvertToNonAliasIfNecessary(); // Convert from alias-to-normal, if necessary.
-					switch(this_formal_param.default_type)
-					{
-					case PARAM_DEFAULT_STR:   this_formal_param.var->Assign(this_formal_param.default_str);    break;
-					case PARAM_DEFAULT_INT:   this_formal_param.var->Assign(this_formal_param.default_int64);  break;
-					case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
-					//case PARAM_DEFAULT_NONE: Not possible due to the nature of this loop and due to
-					// validation at loadtime or during earlier validation of dynamic function call.
-					}
-				}
-
-				for (j = 0; j < count_of_actuals_that_have_formals; ++j) // For each actual parameter than has a formal, assign the actual to the formal.
-				{
-					ExprTokenType &token = *stack[stack_count + j]; // stack[stack_count] is the first actual parameter. A check higher above has already ensured that this line won't cause stack overflow.
-					// Below uses IS_OPERAND rather than checking for only SYM_OPERAND because the stack can contain
-					// both generic and specific operands.  Specific operands were evaluated by a previous iteration
-					// of this section.  Generic ones were pushed as-is onto the stack by a previous iteration.
-					if (!IS_OPERAND(token.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
-					{
-						Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
-						goto abort;
-					}
-					// Seems to worsen performance in this case:
-					//FuncParam &this_formal_param = func.mParam[j]; // For performance and convenience.
-					if (func.mParam[j].is_byref)
-					{
-						// Note that the previous loop might not have checked things like the following because that
-						// loop never ran unless a backup was needed:
-						if (token.symbol != SYM_VAR)
-						{
-							// In most cases this condition would have been caught by load-time validation.
-							// However, in the case of badly constructed double derefs, that won't be true
-							// (though currently, only a double deref that resolves to a built-in variable
-							// would be able to get this far to trigger this error, because something like
-							// func(Array%VarContainingSpaces%) would have been caught at an earlier stage above.
-							// UPDATE: In v1.0.47.06, a dynamic function call won't have validated at loadtime
-							// that its parameters are the right type (since the formal definition of the function
-							// won't be known until runtime).  So it seems best to treat this as a failed expression
-							// rather than aborting the current thread.
-							//LineError(ERR_BYREF ERR_ABORT, FAIL, func.mParam[j].var->mName);
-							//Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
-							//goto abort;
-							if (j < func.mMinParams || token.value_int64 != func.mParam[j].default_int64)
-							{
-								Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
-								goto abnormal_end;
-							}
-							// L31: Load-time validation prevents explicitly specifying a non-var value for a ByRef
-							// parameter, except where multi-statement commas, ternary or dynamic function calls are
-							// used (since they are difficult or impossible to validate). Checks above make it very
-							// likely that this token is the parameter's default value, either specified explicitly
-							// (if numeric and NOT literal/SYM_OPERAND) or inserted at load-time to fill a blank param.
-							// Convert the var to a non-alias if necessary, then fall through to assign it a value.
-							func.mParam[j].var->ConvertToNonAliasIfNecessary();
-						}
-						else
-						{
-							func.mParam[j].var->UpdateAlias(token.var); // Make the formal parameter point directly to the actual parameter's contents.
-							continue;
-						}
-					}
-					//else // This parameter is passed "by value".
-					// Assign actual parameter's value to the formal parameter (which is itself a
-					// local variable in the function).  
-					// token.var's Type() is always VAR_NORMAL (e.g. never the clipboard).
-					// A SYM_VAR token can still happen because the previous loop's conversion of all
-					// by-value SYM_VAR operands into SYM_OPERAND would not have happened if no
-					// backup was needed for this function (which is usually the case).
-					func.mParam[j].var->Assign(token);
-				} // for each formal parameter.
-
-				aResult = func.Call(&this_token); // Call the UDF.
-
-#ifdef CONFIG_DEBUGGER
-				// L31: Break at this line (from which the function was called).  This makes it easier to follow
-				// program flow while stepping, especially when a single line contains multiple UDF-calls.
-				if (g_Debugger.ShouldBreakAfterFunctionCall())
-					g_Debugger.PreExecLine(this);
-#endif
-
-				if (aResult == EARLY_EXIT || aResult == FAIL) // "Early return". See comment below.
-				{
-					// Take a shortcut because for backward compatibility, ACT_ASSIGNEXPR (and anything else
-					// for that matter) is being aborted by this type of early return (i.e. if there's an
-					// output_var, its contents are left as-is).  In other words, this expression will have
-					// no result storable by the outside world.
-					Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
-					result_to_return = NULL; // Use NULL to inform our caller that this thread is finished (whether through normal means such as Exit or a critical error).
-					// Above: The callers of this function know that the value of aResult (which already contains
-					// the reason for early exit) should be considered valid/meaningful only if result_to_return
-					// is NULL.  aResult has already been set higher above for our caller.
-					goto normal_end_skip_output_var; // output_var is left unchanged in these cases.
-				}
-
-				if (IS_NUMERIC(this_token.symbol) || this_token.symbol == SYM_OBJECT) // No need for make_result_persistent or early Assign(). Any numeric result can be considered final because it's already stored in permanent memory (namely the token itself).  L31: This also applies to SYM_OBJECT.
-				{
-					Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count); // L33: Added this line - it was overlooked in L31.
-					goto push_this_token; // For code simplicity, the optimization for numeric results is done at a later stage.
-				}
-				ASSERT(this_token.symbol == SYM_STRING);
-				result = this_token.marker;
-
-				// Since above didn't goto, this isn't an early return, so proceed normally.
-				if (done = EXPR_IS_DONE) // Assign. Resolve macro only once for use in more than one place below.
-				{
-					if (output_var // i.e. this is ACT_ASSIGNEXPR and we've now produced the final result.
-						&& !(var_backup && g->CurrentFunc == &func && output_var->IsNonStaticLocal())) // Ordered for short-circuit performance.
-						// Above line is a fix for v1.0.45.03: It detects whether output_var is among the variables
-						// that are about to be restored from backup.  If it is, we can't assign to it now
-						// because it's currently a local that belongs to the instance we're in the middle of
-						// calling; i.e. it doesn't belong to our instance (which is beneath it on the call stack
-						// until after the restore-from-backup is done later below).  And we can't assign "result"
-						// to it *after* the restore because by then result may have been freed (if it happens to be
-						// a local variable too).  Therefore, continue on to the normal method, which will check
-						// whether "result" needs to be stored in more persistent memory.
-					{
-						// v1.0.45: Take a shortcut for performance.  Doing it this way saves up to two memcpy's
-						// (make_result_persistent then copy into deref buffer).  In some cases, it also saves
-						// from having to make_result_persistent and prevents the need to expand the deref buffer.
-						// HOWEVER, the optimization described next isn't done because not only does it complicate
-						// the code a lot (such as verifying that the variable isn't static, isn't ALLOC_SIMPLE,
-						// isn't a ByRef to a global or some other function's local, etc.), there's also currently
-						// no way to find out which function owns a particular local variable (a name lookup
-						// via binary search is a possibility, but its performance probably isn't worth it)
-						// Abandoned idea: When a user-defined function returns one of its local variables,
-						// the contents of that local variable can be salvaged if it's about to be destroyed
-						// anyway in conjunction with normal function-call cleanup. In other words, we can take
-						// that local variable's memory and directly hang it onto the output_var.
-						result_length = (VarSizeType)_tcslen(result);
-						// 1.0.46.06: If the UDF has stored its result in its deref buffer, take possession
-						// of that buffer, which saves a memcpy of a potentially huge string.  The cost
-						// of this is that if there are any other UDF-calls pending after this one, the
-						// code in their bodies will have to create another deref buffer if they need one.
-						if (result == sDerefBuf && result_length >= MAX_ALLOC_SIMPLE) // Result is in their buffer and it's longer than what can fit in a SimpleHeap variable (avoids wasting SimpleHeap memory).
-						{
-							// AcceptNewMem() will shrink the memory for us, via _expand(), if there's a lot of
-							// extra/unused space in it.
-							output_var->AcceptNewMem(result, result_length);
-							NULLIFY_S_DEREF_BUF // Force any UDFs called subsequently by us to create a new deref buffer because this one was just taken over by a variable.
-						}
-						else
-							output_var->Assign(result, result_length);
-						Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count); // Do end-of-function-call cleanup (see comment above). No need to do make_result_persistent section.
-						goto normal_end_skip_output_var; // Nothing more to do because it has even taken care of output_var already.
-					}
-					if (mActionType == ACT_EXPRESSION) // Isolated expression: Outermost function call's result will be ignored, so no need to store it.
-					{
-						Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count); // Do end-of-function-call cleanup (see comment above). No need to do make_result_persistent section.
-						goto normal_end_skip_output_var; // No output_var is possible for ACT_EXPRESSION.
-					}
-				} // if (done)
-				// Otherwise (since above didn't goto), the following statement is true:
-				//    !output_var || !EXPR_IS_DONE || var_backup
-				// ...so do normal handling of "result". Also, no more optimizations of output_var should be
-				// attempted because either we're not "done" (i.e. it isn't valid to assign to output_var yet)
-				// or it isn't safe to store in output_var yet for the reason mentioned earlier.
-				if (!*result) // RELIED UPON by the make-persistent check further below.
-				{
-					// Empty strings are returned pretty often by UDFs, such as when they don't use "return"
-					// at all.  Therefore, handle them fully now, which should improve performance (since it
-					// avoids all the other checking later on).  It also doesn't hurt code size because this
-					// check avoids having to check for empty string in other sections later on.
-					this_token.marker = _T(""); // Ensure it's a non-volatile address instead (read-only mem is okay for expression results).
-					this_token.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
-					this_token.symbol = SYM_OPERAND; // SYM_OPERAND vs. SYM_STRING probably doesn't matter in the case of empty string, but it's used for consistency with what the other UDF handling further below does.
-					Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
-					goto push_this_token;
-				}
-				// The following section is done only for UDFs (i.e. here) rather than for BIFs too because
-				// the only BIFs remaining that haven't yet been fully handled by earlier optimizations are
-				// those whose results are almost always tiny (small strings, since floats/integers were already
-				// handled earlier). So performing the following optimization for them would probably reduce
-				// average-case performance (since both performing and checking for the optimization is costly).
-				// It's fairly rare that the following optimization is even be applicable because it requires
-				// an assignment *internal* to an expression, such as "if not var:=func()", or "a:=b, c:=func()".
-				// But it seems best to optimize these cases so that commas aren't penalized.
-				if (this_postfix[1].symbol == SYM_ASSIGN  // Next operation is ":=".
-					&& stack_count && stack[stack_count-1]->symbol == SYM_VAR) // i.e. let the next iteration handle it instead of doing it here.  Further below relies on this having been checked.
-				{
-					// This section is an optimization that avoids memory allocation and an extra memcpy()
-					// whenever this result is going to be assigned to a variable as the very next step.
-					// See the comment section higher above for examples.
-					Var &output_var_internal = *stack[stack_count-1]->var; // Above has already confirmed that it's SYM_VAR and VAR_NORMAL.
-					if (output_var_internal.Type() == VAR_NORMAL // Don't do clipboard here because don't want its result to be SYM_VAR, yet there's no place to store that result (i.e. need to continue on to make-persistent further below to get some memory for it).
-						&& !(var_backup && g->CurrentFunc == &func && output_var_internal.IsNonStaticLocal())) // Ordered for short-circuit performance.
-						// v1.0.46.09: The above line is a fix for a bug caused by 1.0.46.06's optimization below.
-						// For details, see comments in a similar line higher above.
-					{
-						--stack_count; // This officially pops the lvalue off the stack (now that we know we will be handling this operation here).
-						// The following section is similar to one higher above, so maintain them together.
-						result_length = (VarSizeType)_tcslen(result);
-						// 1.0.46.06: If the UDF has stored its result in its deref buffer, take possession
-						// of that buffer, which saves a memcpy of a potentially huge string.  The cost
-						// of this is that if there are any other UDF-calls pending after this one, the
-						// code in their bodies will have to create another deref buffer if they need one.
-						if (result == sDerefBuf && result_length >= MAX_ALLOC_SIMPLE) // Result is in their buffer and it's longer than what can fit in a SimpleHeap variable (avoids wasting SimpleHeap memory).
-						{
-							// AcceptNewMem() will shrink the memory for us, via _expand(), if there's a lot of
-							// extra/unused space in it.
-							output_var_internal.AcceptNewMem(result, result_length);
-							NULLIFY_S_DEREF_BUF // Force any UDFs called subsequently by us to get a new deref buffer because this one was just hung onto a variable.
-						}
-						else
-							output_var_internal.Assign(result, result_length);
-						this_token.circuit_token = (++this_postfix)->circuit_token; // Old, somewhat obsolete comment: this_postfix.circuit_token should have been NULL prior to this because the final right-side result of an assignment shouldn't be the last item of an AND/OR/IFF's left branch. The assignment itself would be that.
-						this_token.var = &output_var_internal;   // Make the result a variable rather than a normal operand so that its
-						this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
-						Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count); // Do end-of-function-call cleanup (see comment above). No need to do make_result_persistent section.
-						goto push_this_token;
-					}
-				}
 				// Since above didn't goto:
 				// The result just returned may need to be copied to a more persistent location.  This is done right
 				// away if the result is the contents of a local variable (since all locals are about to be freed
@@ -800,18 +590,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					// copy it from their deref buf into ours (since theirs is only deleted later, by our caller).
 					// In this case, leave make_result_persistent set to false.
 				} // This is the end of the section that determines the value of "make_result_persistent" for UDFs.
-			} // Call to a user-defined function (UDF).
+			}
 
 			this_token.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
 			this_token.symbol = SYM_OPERAND; // Use generic, not string, so that any operator or function call that uses this result is free to reinterpret it as an integer or float.
 			if (make_result_persistent) // Both UDFs and built-in functions have ensured make_result_persistent is set.
 			{
-				// BELOW RELIES ON THE ABOVE ALWAYS HAVING VERFIED FULLY HANDLED RESULT BEING AN EMPTY STRING.
+				// BELOW RELIES ON THE ABOVE ALWAYS HAVING VERIFIED AND FULLY HANDLED RESULT BEING AN EMPTY STRING.
 				// So now we know result isn't an empty string, which in turn ensures that size > 1 and length > 0,
 				// which might be relied upon by things further below.
 				result_size = _tcslen(result) + 1; // No easy way to avoid strlen currently. Maybe some future revisions to architecture will provide a length.
 				// Must cast to int to avoid loss of negative values:
-				if (result_size <= (int)(aDerefBufSize - (target - aDerefBuf))) // There is room at the end of our deref buf, so use it.
+				if (result_size <= aDerefBufSize - (target - aDerefBuf)) // There is room at the end of our deref buf, so use it.
 				{
 					// Make the token's result the new, more persistent location:
 					this_token.marker = (LPTSTR)tmemcpy(target, result, result_size); // Benches slightly faster than strcpy().
@@ -846,28 +636,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			else // make_result_persistent==false
 				this_token.marker = result;
 
-			if (!func.mIsBuiltIn)
-			{
-				// Free the memory of all the just-completed function's local variables.  This is done in
-				// both of the following cases:
-				// 1) There are other instances of this function beneath us on the call-stack: Must free
-				//    the memory to prevent a memory leak for any variable that existed prior to the call
-				//    we just did.  Although any local variables newly created as a result of our call
-				//    technically don't need to be freed, they are freed for simplicity of code and also
-				//    because not doing so might result in side-effects for instances of this function that
-				//    lie beneath ours that would expect such nonexistent variables to have blank contents
-				//    when *they* create it.
-				// 2) No other instances of this function exist on the call stack: The memory is freed and
-				//    the contents made blank for these reasons:
-				//    a) Prevents locals from all being static in duration, and users coming to rely on that,
-				//       since in the future local variables might be implemented using a non-persistent method
-				//       such as hashing (rather than maintaining a permanent list of Var*'s for each function).
-				//    b) To conserve memory between calls (in case the function's locals use a lot of memory).
-				//    c) To yield results consistent with when the same function is called while other instances
-				//       of itself exist on the call stack.  In other words, it would be inconsistent to make
-				//       all variables blank for case #1 above but not do it here in case #2.
-				Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
-			} // if (!func.mIsBuiltIn)
 			goto push_this_token;
 		} // if (this_token.symbol == SYM_FUNC)
 
@@ -1873,6 +1641,285 @@ double_deref_fail: // For the rare cases when the name of a dynamic function cal
 		goto abnormal_end;
 	else
 		goto push_this_token;
+}
+
+
+
+bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic)
+// aFuncCall: Caller passes a variable which should go out of scope after the function call's result
+//   has been used; this automatically frees and restores a UDFs local vars (where applicable).
+// aSpaceAvailable: -1 indicates this is a regular function call.  Otherwise this must be the amount of
+//   space available after aParam for expanding the array of parameters for a variadic function call.
+{
+	if (mIsBuiltIn)
+	{
+		aResultToken.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
+		aResultToken.marker = mName;       // Inform function of which built-in function called it (allows code sharing/reduction). Can't use circuit_token because it's value is still needed later below.
+
+		if (aIsVariadic) // i.e. this is a variadic function call.
+		{
+			Object *param_obj;
+			--aParamCount; // i.e. make aParamCount the count of normal params.
+			if (param_obj = dynamic_cast<Object *>(TokenToObject(*aParam[aParamCount])))
+			{
+				void *mem_to_free;
+				// Since built-in functions don't have variables we can directly assign to,
+				// we need to expand the param object's contents into an array of tokens:
+				if (!param_obj->ArrayToParams(mem_to_free, aParam, aParamCount, mMinParams))
+				{
+					aResult = OK; // Abort expression but not thread.
+					return false;
+				}
+
+				// CALL THE BUILT-IN FUNCTION:
+				mBIF(aResultToken, aParam, aParamCount);
+
+				if (mem_to_free)
+					free(mem_to_free);
+				return true;
+			}
+			// Caller-supplied "params*" is not an Object, so treat it like an empty list; however,
+			// mMinParams isn't validated at load-time for variadic calls, so we must do it here:
+			if (aParamCount < mMinParams)
+			{
+				aResult = OK; // Abort expression but not thread.
+				return false;
+			}
+			// Otherwise just call the function normally.
+		}
+
+		// CALL THE BUILT-IN FUNCTION:
+		mBIF(aResultToken, aParam, aParamCount);
+		return true;
+	}
+	else // It's not a built-in function, or it's a built-in that was overridden with a custom function.
+	{
+		ExprTokenType indexed_token, named_token; // Separate for code simplicity.
+		INT_PTR param_offset, param_key;
+		Object *param_obj = NULL;
+		if (aIsVariadic) // i.e. this is a variadic function call.
+		{
+			--aParamCount; // i.e. make aParamCount the count of normal params.
+			// For performance, only the Object class is supported:
+			if (param_obj = dynamic_cast<Object *>(TokenToObject(*aParam[aParamCount])))
+			{
+				param_offset = -1;
+				// Below retrieves the first item with integer key >= 1, or sets
+				// param_offset to the offset of the first item with a non-int key.
+				// Performance note: this might be slow if there are many items
+				// with negative integer keys; but that should be vanishingly rare.
+				while (param_obj->GetNextItem(indexed_token, param_offset, param_key)
+						&& param_key < 1);
+			}
+		}
+
+		int j, count_of_actuals_that_have_formals;
+		count_of_actuals_that_have_formals = (aParamCount > mParamCount)
+			? mParamCount  // Omit any actuals that lack formals (this can happen when a dynamic call passes too many parameters).
+			: aParamCount;
+
+		// If there are other instances of this function already running, either via recursion or
+		// an interrupted quasi-thread, back up the local variables of the instance that lies immediately
+		// beneath ours (in turn, that instance is responsible for backing up any instance that lies
+		// beneath it, and so on, since when recursion collapses or threads resume, they always do so
+		// in the reverse order in which they were created.
+		//
+		// I think the backup-and-restore approach to local variables might enhance performance over
+		// other approaches, perhaps a lot.  This is because most of the time there will be no other
+		// instances of a given function on the call stack, thus no backup/restore is needed, and thus
+		// the function's existing local variables can be reused as though they're globals (i.e.
+		// memory allocation/deallocation overhead is often completely avoided for non-recursive calls
+		// to a function after the first).
+		if (mInstances > 0) // i.e. treat negatives as zero to help catch any bugs in the way mInstances is maintained.
+		{
+			// Backup/restore of function's variables is needed.
+			// Only when a backup is needed is it possible for this function to be calling itself recursively,
+			// either directly or indirectly by means of an intermediate function.  As a consequence, it's
+			// possible for this function to be passing one or more of its own params or locals to itself.
+			// The following section compensates for that to handle parameters passed by-value, but it
+			// doesn't correctly handle passing its own locals/params to itself ByRef, which is in the
+			// help file as a known limitation.  Also, the below doesn't indicate a failure when stack
+			// underflow would occur because the loop after this one needs to do that (since this
+			// one will never execute if a backup isn't needed).  Note that this loop that reviews all
+			// actual parameters is necessary as a separate loop from the one further below because this
+			// first one's conversion must occur prior to calling BackupFunctionVars().  In addition, there
+			// might be other interdependencies between formals and actuals if a function is calling itself
+			// recursively.
+			for (j = 0; j < count_of_actuals_that_have_formals; ++j) // For each actual parameter than has a formal.
+			{
+				ExprTokenType &this_param_token = *aParam[j]; // stack[stack_count] is the first actual parameter. A check higher above has already ensured that this line won't cause stack overflow.
+				if (this_param_token.symbol == SYM_VAR && !mParam[j].is_byref)
+				{
+					// Since this formal parameter is passed by value, if it's SYM_VAR, convert it to
+					// a non-var to allow the variables to be backed up and reset further below without
+					// corrupting any SYM_VARs that happen to be locals or params of this very same
+					// function.
+					// DllCall() relies on the fact that this transformation is only done for user
+					// functions, not built-in ones such as DllCall().  This is because DllCall()
+					// sometimes needs the variable of a parameter for use as an output parameter.
+					this_param_token.var->TokenToContents(this_param_token);
+				}
+			}
+			// BackupFunctionVars() will also clear each local variable and formal parameter so that
+			// if that parameter or local var is assigned a value by any other means during our call
+			// to it, new memory will be allocated to hold that value rather than overwriting the
+			// underlying recursed/interrupted instance's memory, which it will need intact when it's resumed.
+			if (!Var::BackupFunctionVars(*this, aFuncCall.mBackup, aFuncCall.mBackupCount)) // Out of memory.
+			{
+				aResult = g_script.ScriptError(ERR_OUTOFMEM ERR_ABORT, mName);
+				return false;
+			}
+		} // if (func.mInstances > 0)
+		//else backup is not needed because there are no other instances of this function on the call-stack.
+		// So by definition, this function is not calling itself directly or indirectly, therefore there's no
+		// need to do the conversion of SYM_VAR because those SYM_VARs can't be ones that were blanked out
+		// due to a function exiting.  In other words, it seems impossible for a there to be no other
+		// instances of this function on the call-stack and yet SYM_VAR to be one of this function's own
+		// locals or formal params because it would have no legitimate origin.
+
+		// Set after above succeeds to ensure local vars are freed and the backup is restored (at some point):
+		aFuncCall.mFunc = this;
+		
+		// The following loop will have zero iterations unless at least one formal parameter lacks an actual,
+		// which should be possible only if the parameter is optional (i.e. has a default value).
+		for (j = aParamCount; j < mParamCount; ++j) // For each formal parameter that lacks an actual, provide a default value.
+		{
+			FuncParam &this_formal_param = mParam[j]; // For performance and convenience.
+			if (this_formal_param.is_byref) // v1.0.46.13: Allow ByRef parameters to be optional by converting an omitted-actual into a non-alias formal/local.
+				this_formal_param.var->ConvertToNonAliasIfNecessary(); // Convert from alias-to-normal, if necessary.
+			// Check if this parameter has been supplied a value via a param array/object:
+			if (param_obj)
+			{
+				// Numbered parameter?
+				if (param_key == j - aParamCount + 1)
+				{
+					this_formal_param.var->Assign(indexed_token);
+					// Get the next item, which might be at [i+1] (in which case the next iteration will
+					// get indexed_token) or a later index (in which case the next iteration will get a
+					// regular default value and a later iteration may get indexed_token). If there aren't
+					// any more items, param_key will be left as-is (so this IF won't be re-entered).
+					// If there aren't any more parameters needing values, param_offset will remain the
+					// offset of the first unused item; this is relied on below to copy the remaining
+					// items into the function's "param*" array if it has one (i.e. if mIsVariadic).
+					param_obj->GetNextItem(indexed_token, param_offset, param_key);
+					// This parameter has been supplied a value, so don't assign it a default value.
+					continue;
+				}
+				// Named parameter?
+				if (param_obj->GetItem(named_token, this_formal_param.var->mName))
+				{
+					this_formal_param.var->Assign(named_token);
+					continue;
+				}
+			}
+			switch(this_formal_param.default_type)
+			{
+			case PARAM_DEFAULT_STR:   this_formal_param.var->Assign(this_formal_param.default_str);    break;
+			case PARAM_DEFAULT_INT:   this_formal_param.var->Assign(this_formal_param.default_int64);  break;
+			case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
+			default: //case PARAM_DEFAULT_NONE:
+				// Since above didn't continue, no value has been supplied for this REQUIRED parameter.
+				aResult = OK; // Abort expression but not thread.
+				return false;
+			}
+		}
+
+		for (j = 0; j < count_of_actuals_that_have_formals; ++j) // For each actual parameter that has a formal, assign the actual to the formal.
+		{
+			ExprTokenType &token = *aParam[j];
+			
+			if (!IS_OPERAND(token.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
+			{
+				aResult = OK; // Abort expression but not thread.
+				return false;
+			}
+			
+			if (mParam[j].is_byref)
+			{
+				// Note that the previous loop might not have checked things like the following because that
+				// loop never ran unless a backup was needed:
+				if (token.symbol != SYM_VAR)
+				{
+					// L60: Seems more useful and in the spirit of AutoHotkey to allow ByRef parameters
+					// to act like regular parameters when no var was specified.  If we force script
+					// authors to pass a variable, they may pass a temporary variable which is then
+					// discarded, adding a little overhead and impacting the readability of the script.
+					mParam[j].var->ConvertToNonAliasIfNecessary();
+				}
+				else
+				{
+					mParam[j].var->UpdateAlias(token.var); // Make the formal parameter point directly to the actual parameter's contents.
+					continue;
+				}
+			}
+			//else // This parameter is passed "by value".
+			// Assign actual parameter's value to the formal parameter (which is itself a
+			// local variable in the function).  
+			// token.var's Type() is always VAR_NORMAL (e.g. never the clipboard).
+			// A SYM_VAR token can still happen because the previous loop's conversion of all
+			// by-value SYM_VAR operands into SYM_OPERAND would not have happened if no
+			// backup was needed for this function (which is usually the case).
+			mParam[j].var->Assign(token);
+		} // for each formal parameter.
+		
+		if (mIsVariadic) // i.e. this function is capable of accepting excess params via an object/array.
+		{
+			Object *obj;
+			if (param_obj) // i.e. caller supplied an array of params.
+			{
+				// Clone the caller's param object, excluding the numbered keys we've used:
+				if (obj = param_obj->Clone(param_offset))
+				{
+					if (mParamCount > aParamCount)
+						// Adjust numeric keys based on how many items we would've used if the "array" was contiguous:
+						obj->ReduceKeys(mParamCount - aParamCount); // Should be harmless if there are no numeric keys left.
+					//else param_offset should be 0; we didn't use any items.
+				}
+			}
+			else
+				obj = (Object *)Object::Create(NULL, 0);
+			
+			if (obj)
+			{
+				if (j < aParamCount)
+					// Insert the excess parameters from the actual parameter list.
+					obj->InsertAt(0, 1, aParam + j, aParamCount - j);
+				// Assign to the "param*" var:
+				mParam[mParamCount].var->AssignSkipAddRef(obj);
+			}
+		}
+
+		aResult = Call(&aResultToken); // Call the UDF.
+
+		return (aResult != EARLY_EXIT && aResult != FAIL);
+	}
+}
+
+// This is used for maintainability: to ensure it's never forgotten and to reduce code repetition.
+FuncCallData::~FuncCallData()
+{
+	if (mFunc) // mFunc != NULL implies it is a UDF and Var::BackupFunctionVars() has succeeded.
+	{
+		// Free the memory of all the just-completed function's local variables.  This is done in
+		// both of the following cases:
+		// 1) There are other instances of this function beneath us on the call-stack: Must free
+		//    the memory to prevent a memory leak for any variable that existed prior to the call
+		//    we just did.  Although any local variables newly created as a result of our call
+		//    technically don't need to be freed, they are freed for simplicity of code and also
+		//    because not doing so might result in side-effects for instances of this function that
+		//    lie beneath ours that would expect such nonexistent variables to have blank contents
+		//    when *they* create it.
+		// 2) No other instances of this function exist on the call stack: The memory is freed and
+		//    the contents made blank for these reasons:
+		//    a) Prevents locals from all being static in duration, and users coming to rely on that,
+		//       since in the future local variables might be implemented using a non-persistent method
+		//       such as hashing (rather than maintaining a permanent list of Var*'s for each function).
+		//    b) To conserve memory between calls (in case the function's locals use a lot of memory).
+		//    c) To yield results consistent with when the same function is called while other instances
+		//       of itself exist on the call stack.  In other words, it would be inconsistent to make
+		//       all variables blank for case #1 above but not do it here in case #2.
+		Var::FreeAndRestoreFunctionVars(*mFunc, mBackup, mBackupCount);
+	}
 }
 
 

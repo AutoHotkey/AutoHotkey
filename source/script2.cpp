@@ -15594,6 +15594,12 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 
 	g->EventInfo = cb.event_info; // This is the means to identify which caller called the callback (if the script assigned more than one caller to this callback).
 
+	// For performance and to preserve stack space, the indirect method of calling a function via the new
+	// Func::Call overload is not used here.  Using it would only be necessary to support variadic functions,
+	// which have very limited use as callbacks; instead, a "variadic" mode for callbacks is being considered
+	// for a future revision.  A variadic callback could accept a pointer to its parameter list, then use
+	// NumGet() to retrieve the values with the appropriate types.
+
 	// Need to check if backup of function's variables is needed in case:
 	// 1) The UDF is assigned to more than one callback, in which case the UDF could be running more than once
 	//    simultaneously.

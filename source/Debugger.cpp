@@ -37,30 +37,32 @@ CStringA g_DebuggerPort;
 int Breakpoint::sMaxId = 0;
 
 
-// aLine is about to execute.
+// PreExecLine: aLine is about to execute; handle current line marker, breakpoints and step into/over/out.
 int Debugger::PreExecLine(Line *aLine)
 {
-	Breakpoint *&bp = aLine->mBreakpoint;
-
-	mStack.mTop->line = aLine;
-
+	// Using this->mCurrLine might perform a little better than the alternative, at the expense of a
+	// small amount of complexity in stack_get (which is only called by request of the debugger client):
+	//	mStack.mTop->line = aLine;
+	mCurrLine = aLine;
+	
+	// Check for a breakpoint on the current line:
+	Breakpoint *bp = aLine->mBreakpoint;
 	if (bp && bp->state == BS_Enabled)
 	{
 		if (bp->temporary)
 		{
+			aLine->mBreakpoint = NULL;
 			delete bp;
-			bp = NULL;
 		}
 		return ProcessCommands();
 	}
-	int stack_depth = mStack.Depth();
+
 	if ((mInternalState == DIS_StepInto
-			|| mInternalState == DIS_StepOut && stack_depth < mContinuationDepth
-			|| mInternalState == DIS_StepOver && stack_depth <= mContinuationDepth)
-			// L31: The following check is no longer done because a) ACT_BLOCK_BEGIN belonging to an IF/ELSE/LOOP is now skipped; and b) allowing step to break at ACT_BLOCK_END makes program flow a little easier to follow in some cases.
-			// L40: Stepping on braces seems more bothersome than helpful. Although IF/ELSE/LOOP skips its block-begin, standalone/function-body block-begin still gets here.
-			&& aLine->mActionType != ACT_BLOCK_BEGIN && (aLine->mActionType != ACT_BLOCK_END || aLine->mAttribute) // For now, ignore { and }, except for function-end.
-			&& aLine->mLineNumber) // Some scripts (i.e. LowLevel/code.ahk) use mLineNumber==0 to indicate the Line has been generated and injected by the script.
+		|| mInternalState == DIS_StepOver && mStack.Depth() <= mContinuationDepth
+		|| mInternalState == DIS_StepOut && mStack.Depth() < mContinuationDepth) // Due to short-circuit boolean evaluation, mStack.Depth() is only evaluated once and only if mInternalState is StepOver or StepOut.
+		// Although IF/ELSE/LOOP skips its block-begin, standalone/function-body block-begin still gets here; we want to skip it:
+		&& aLine->mActionType != ACT_BLOCK_BEGIN && (aLine->mActionType != ACT_BLOCK_END || aLine->mAttribute) // Ignore { and }; except for function-end, since we want to break there after a "return" to inspect variables while they're still in scope.
+		&& aLine->mLineNumber) // Some scripts (i.e. LowLevel/code.ahk) use mLineNumber==0 to indicate the Line has been generated and injected by the script.
 	{
 		return ProcessCommands();
 	}
@@ -803,13 +805,25 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 	
 	int level = 0;
 	DbgStack::Entry *se;
+	FileIndexType file_index;
+	LineNumberType line_number;
 	for (se = mStack.mTop; se >= mStack.mBottom; --se)
 	{
 		if (depth == -1 || depth == level)
 		{
+			if (se == mStack.mTop && mCurrLine) // See PreExecLine() for comments.
+			{
+				file_index = mCurrLine->mFileIndex;
+				line_number = mCurrLine->mLineNumber;
+			}
+			else
+			{
+				file_index = se->line->mFileIndex;
+				line_number = se->line->mLineNumber;
+			}
 			mResponseBuf.WriteF("<stack level=\"%i\" type=\"file\" filename=\"", level);
-			mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[se->line->mFileIndex]));
-			mResponseBuf.WriteF("\" lineno=\"%u\" where=\"", se->line->mLineNumber);
+			mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[file_index]));
+			mResponseBuf.WriteF("\" lineno=\"%u\" where=\"", line_number);
 			switch (se->type)
 			{
 			case DbgStack::SE_Thread:
@@ -1175,8 +1189,7 @@ int Debugger::WritePropertyData(LPCTSTR aData, int aDataSize, int aMaxEncodedSiz
 	ASSERT(space_needed >= value_size + 1);
 	
 	// Reserve enough space for the data's length, "> and encoded data.
-	space_needed += MAX_INTEGER_LENGTH + 2;
-	if (err = mResponseBuf.ExpandIfNecessary(mResponseBuf.mDataUsed + space_needed))
+	if (err = mResponseBuf.ExpandIfNecessary(mResponseBuf.mDataUsed + space_needed + MAX_INTEGER_LENGTH + 2))
 		return err;
 
 	// Convert to UTF-8, using mResponseBuf temporarily.

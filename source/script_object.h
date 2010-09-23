@@ -101,11 +101,18 @@ protected:
 		
 		inline IntKeyType CompareKey(IntKeyType val) { return val - key.i; }  // Used by both int and object since they are stored separately.
 		inline int CompareKey(LPTSTR val) { return _tcsicmp(val, key.s); }
-		
+
 		bool Assign(LPTSTR str, size_t len = -1, bool exact_size = false);
 		bool Assign(ExprTokenType &val);
 		void Get(ExprTokenType &result);
 		void Free();
+	
+		inline void ToToken(ExprTokenType &aToken) // Used when we want the value as is, in a token.  Does not AddRef() or copy strings.
+		{
+			aToken.value_int64 = n_int64; // Union copy. Overlaps with buf on x86 builds, so do it first.
+			if ((aToken.symbol = symbol) == SYM_OPERAND)
+				aToken.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
+		}
 	};
 
 	class Enumerator : public EnumBase
@@ -162,10 +169,41 @@ protected:
 	ResultType CallField(FieldType *aField, ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	
 public:
-	static IObject *Create(ExprTokenType *aParam[], int aParamCount);
+	static Object *Create(ExprTokenType *aParam[], int aParamCount);
 
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	// Used by Func::Call() for variadic functions/function-calls:
+	Object *Clone(INT_PTR aStartOffset = 0);
+	ResultType ArrayToParams(void *&aMemToFree, ExprTokenType **&aParam, int &aParamCount, int aMinParams);
+	inline bool GetNextItem(ExprTokenType &aToken, INT_PTR &aOffset, INT_PTR &aKey)
+	{
+		if (++aOffset >= mKeyOffsetObject) // i.e. no more integer-keyed items.
+			return false;
+		FieldType &field = mFields[aOffset];
+		aKey = field.key.i;
+		field.ToToken(aToken);
+		return true;
+	}
+	inline bool GetItem(ExprTokenType &aToken, LPTSTR aKey)
+	{
+		IndexType insert_pos;
+		KeyType key;
+		key.s = aKey;
+		FieldType *field = FindField(SYM_STRING, key, insert_pos);
+		if (!field)
+			return false;
+		field->ToToken(aToken);
+		return true;
+	}
+	void ReduceKeys(INT_PTR aAmount)
+	{
+		for (IndexType i = 0; i < mKeyOffsetObject; ++i)
+			mFields[i].key.i -= aAmount;
+	}
+	// Used by Object::_Insert() and Func::Call():
+	bool InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], int aValueCount);
 	
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
 	ResultType _Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
