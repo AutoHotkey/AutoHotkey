@@ -1028,7 +1028,7 @@ ResultType Object::_HasKey(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 
 bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
 {
-	if (!str || !*str && len < 1) // If empty string or null pointer, free our contents.  Passing len >= 1 allows copying \0, so don't check *str in that case.  Ordered for short-circuit performance (len is usually -1).
+	if (!str || !*str && (len == -1 || !len)) // If empty string or null pointer, free our contents.  Passing len >= 1 allows copying \0, so don't check *str in that case.  Ordered for short-circuit performance (len is usually -1).
 	{
 		Free();
 		symbol = SYM_OPERAND;
