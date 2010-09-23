@@ -15737,6 +15737,10 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 	// much more efficient. MSDN says about GlobalAlloc: "All memory is created with execute access; no
 	// special function is required to execute dynamically generated code. Memory allocated with this function
 	// is guaranteed to be aligned on an 8-byte boundary." 
+	// ABOVE IS OBSOLETE/INACCURATE: Systems with DEP enabled (and some without) require a VirtualProtect call
+	// to allow the callback to execute.  MSDN currently says only this about the topic in the documentation
+	// for GlobalAlloc:  "To execute dynamically generated code, use the VirtualAlloc function to allocate
+	//						memory and the VirtualProtect function to grant PAGE_EXECUTE access."
 	RCCallbackFunc *callbackfunc=(RCCallbackFunc*) GlobalAlloc(GMEM_FIXED,sizeof(RCCallbackFunc));	//allocate structure off process heap, automatically RWE and fixed.
 	if(!callbackfunc) return;
 	RCCallbackFunc &cb = *callbackfunc; // For convenience and possible code-size reduction.
@@ -15785,11 +15789,10 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 	cb.actual_param_count = actual_param_count;
 	cb.create_new_thread = !StrChrAny(options, _T("Ff")); // Recognize "F" as the "fast" mode that avoids creating a new thread.
 
-#ifdef _WIN64
-	// We must set execute permissions for the callback stub function.
+	// If DEP is enabled (and sometimes when DEP is apparently "disabled"), we must change the
+	// protection of the page of memory in which the callback resides to allow it to execute:
 	DWORD dwOldProtect;
 	VirtualProtect(callbackfunc, sizeof(RCCallbackFunc), PAGE_EXECUTE_READWRITE, &dwOldProtect);
-#endif
 
 	aResultToken.symbol = SYM_INTEGER; // Override the default set earlier.
 	aResultToken.value_int64 = (__int64)callbackfunc; // Yield the callable address as the result.
