@@ -541,9 +541,15 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			{
 				if (value_param.symbol == SYM_OPERAND || value_param.symbol == SYM_STRING)
 				{
-					// L33: Use value_param since our copy may be freed prematurely in some (possibly rare) cases:
-					aResultToken.symbol		 = value_param.symbol;
-					aResultToken.value_int64 = value_param.value_int64; // Copy marker and buf (via union) in case it is SYM_OPERAND with a cached integer.
+					// Use value_param since our copy may be freed prematurely in some (possibly rare) cases:
+					aResultToken.symbol = SYM_STRING;
+					aResultToken.marker = value_param.marker;
+					// Below: no longer used as other areas expect string results to always be SYM_STRING.
+					// If it is ever used in future, we MUST copy marker and buf separately for x64 support.
+					// However, it seems appropriate *not* to return a SYM_OPERAND with cached binary integer
+					// since above has stored only the string part of it.
+					//aResultToken.symbol		 = value_param.symbol;
+					//aResultToken.value_int64 = value_param.value_int64; // Copy marker and buf (via union) in case it is SYM_OPERAND with a cached integer.
 				}
 				else
 					field->Get(aResultToken); // L34: Corrected this to be aResultToken instead of value_param (broken by L33).
