@@ -1023,6 +1023,23 @@ int Debugger::WritePropertyXml(IObject *aObject, const char *aName, CStringA &aN
 		if (objptr)
 		{
 			Object &obj = *objptr;
+			if (obj.mBase)
+			{
+				// Since this object has a "base", let it count as the first field.
+				if (i == 0) // i.e. this is the first page.
+				{
+					cp = aNameBuf.GetBufferSetLength(aNameBuf_marker + 5) + aNameBuf_marker;
+					strcpy(cp, ".base");
+					aNameBuf.ReleaseBuffer();
+					aName = "base";
+					if (err = WritePropertyXml(obj.mBase, aName, aNameBuf, 0, aPageSize, aDepthRemaining - 1, aMaxEncodedSize))
+						return err;
+					// Now fall through and retrieve field[0] (unless aPageSize == 1).
+				}
+				// So 20..39 becomes 19..38 when there's a base object:
+				else --i; 
+				--j;
+			}
 			if (j > obj.mFieldCount)
 				j = obj.mFieldCount;
 			// For each field in the requested page...
@@ -1327,7 +1344,7 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 	// aFullName contains a '.' or '['.  Although it looks like an expression, the IDE should
 	// only pass a property name which we gave it in response to a previous command, so we
 	// only need to support the subset of expression syntax used by WriteObjectPropertyXml().
-	for (*name_end = c; ; c = *name_end)
+	for (*name_end = c; ; )
 	{
 		name = name_end + 1;
 		if (c == '[')
@@ -1359,6 +1376,7 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 				name += 7;
 				name_end = _tcschr(name, ')');
 				if (!name_end || name_end[1] != ']') return DEBUGGER_E_INVALID_OPTIONS;
+				*name_end = '\0';
 				name_end += 2; // Set it up for the next iteration.
 				key_type = SYM_OBJECT;
 			}
@@ -1367,9 +1385,11 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 				// The only other valid form is a literal signed integer.
 				name_end = _tcschr(name, ']');
 				if (!name_end) return DEBUGGER_E_INVALID_OPTIONS;
+				*name_end = '\0'; // Although not actually necessary for _ttoi(), seems best for maintainability.
 				++name_end; // Set it up for the next iteration.
 				key_type = SYM_INTEGER;
 			}
+			c = *name_end; // Set for the next iteration.
 		}
 		else if (c == '.')
 		{
@@ -1377,6 +1397,12 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 			// Actual expressions require it to contain only alphanumeric chars and/or '_'.
 			name_end = StrChrAny(name, _T(".[")); // This also sets it up for the next iteration.
 			key_type = IsPureNumeric(name); // SYM_INTEGER or SYM_STRING.
+			if (name_end)
+			{
+				c = *name_end; // Save this for the next iteration.
+				*name_end = '\0';
+			}
+			//else there won't be a next iteration.
 		}
 		else
 			return DEBUGGER_E_INVALID_OPTIONS;
@@ -1387,9 +1413,34 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 			key.i = Exp32or64(_ttoi,_ttoi64)(name);
 
 		if ( !(field = obj->FindField(key_type, key, insert_pos)) )
-			return DEBUGGER_E_UNKNOWN_PROPERTY;
+		{
+			if (!_tcsicmp(name, _T("base")) && (aVarMustExist || name_end && c)) // i.e. don't return the fake field to property_set since it would Release() the base object but not actually work.
+			{
+				// Since "base" doesn't usually correspond to an actual field, let it resolve
+				// to a fake one for simplicity (dynamically allocated since we never want the
+				// destructor to be called):
+				static Object::FieldType *sBaseField = new Object::FieldType();
+				if (obj->mBase)
+				{
+					sBaseField->symbol = SYM_OBJECT;
+					sBaseField->object = obj->mBase;
+				}
+				else
+				{
+					sBaseField->symbol = SYM_OPERAND;
+					sBaseField->marker = _T("");
+					sBaseField->size = 0;
+				}
+				field = sBaseField;
+				// If this is the end of 'name', sBaseField will be returned to our caller.
+				// Otherwise the next iteration will either fail (mBase == NULL) or search
+				// the base object's fields.
+			}
+			else
+				return DEBUGGER_E_UNKNOWN_PROPERTY;
+		}
 
-		if (!name_end || !*name_end)
+		if (!name_end || !c)
 		{
 			// All done!
 			aVar = NULL;
