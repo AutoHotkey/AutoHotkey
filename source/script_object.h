@@ -213,6 +213,7 @@ public:
 	ResultType _MinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _NewEnum(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _HasKey(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Clone(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	static LPTSTR sMetaFuncName[];
 };

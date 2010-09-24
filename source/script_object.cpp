@@ -420,6 +420,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 					return _GetCapacity(aResultToken, aParam, aParamCount);
 				if (!_tcsicmp(name, _T("MinIndex")))
 					return _MinIndex(aResultToken, aParam, aParamCount);
+				if (!_tcsicmp(name, _T("Clone")))
+					return _Clone(aResultToken, aParam, aParamCount);
 				// For maintability: explicitly return since above has done ++aParam, --aParamCount.
 				return INVOKE_NOT_HANDLED;
 			}
@@ -1023,6 +1025,22 @@ ResultType Object::_HasKey(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		FieldType *field = FindField(**aParam, aResultToken.buf, key_type, key, insert_pos);
 		aResultToken.symbol = SYM_INTEGER;
 		aResultToken.value_int64 = (field != NULL);
+	}
+	return OK;
+}
+
+ResultType Object::_Clone(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	if (aParamCount == 0)
+	{
+		Object *clone = Clone();
+		if (clone)
+		{
+			if (mBase)
+				(clone->mBase = mBase)->AddRef();
+			aResultToken.object = clone;
+			aResultToken.symbol = SYM_OBJECT;
+		}
 	}
 	return OK;
 }
