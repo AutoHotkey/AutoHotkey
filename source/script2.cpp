@@ -15606,9 +15606,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 
 	// For performance and to preserve stack space, the indirect method of calling a function via the new
 	// Func::Call overload is not used here.  Using it would only be necessary to support variadic functions,
-	// which have very limited use as callbacks; instead, a "variadic" mode for callbacks is being considered
-	// for a future revision.  A variadic callback could accept a pointer to its parameter list, then use
-	// NumGet() to retrieve the values with the appropriate types.
+	// which have very limited use as callbacks; instead, we pass such functions a pointer to surplus params.
 
 	// Need to check if backup of function's variables is needed in case:
 	// 1) The UDF is assigned to more than one callback, in which case the UDF could be running more than once
@@ -15624,9 +15622,13 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 			return DEFAULT_CB_RETURN_VALUE; // Since out-of-memory is so rare, it seems justifiable not to have any error reporting and instead just avoid calling the function.
 
 	// The following section is similar to the one in ExpandExpression().  See it for detailed comments.
-	int i;
-	for (i = 0; i < cb.actual_param_count; ++i)  // For each formal parameter that has a matching actual (an earlier stage already verified that there are enough formals to cover the actuals).
+	int i, j = cb.actual_param_count < func.mParamCount ? cb.actual_param_count : func.mParamCount;
+	for (i = 0; i < j; ++i)  // For each formal parameter that has a matching actual.
 		func.mParam[i].var->Assign((UINT_PTR)params[i]); // All parameters are passed "by value" because an earlier stage ensured there are no ByRef parameters.
+	if (func.mIsVariadic)
+		// See the performance note further above.  Rather than having the "variadic" param remain empty,
+		// pass it a pointer to the first actual parameter which wasn't assigned to a formal parameter:
+		func.mParam[func.mParamCount].var->Assign((UINT_PTR)(params + i));
 	for (; i < func.mParamCount; ++i) // For each remaining formal (i.e. those that lack actuals), apply a default value (an earlier stage verified that all such parameters have a default-value available).
 	{
 		FuncParam &this_formal_param = func.mParam[i]; // For performance and convenience.
@@ -15712,6 +15714,7 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 	{
 		actual_param_count = (int)TokenToInt64(*aParam[2]);
 		if (   actual_param_count > func->mParamCount    // The function doesn't have enough formals to cover the specified number of actuals.
+				&& !func->mIsVariadic					 // ...and the function isn't designed to accept parameters via an array (or in this case, a pointer).
 			|| actual_param_count < func->mMinParams   ) // ...or the function has too many mandatory formals (caller specified insufficient actuals to cover them all).
 			return; // Indicate failure by yielding the default result set earlier.
 	}
@@ -15719,7 +15722,8 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 		actual_param_count = func->mMinParams;
 
 #ifdef WIN32_PLATFORM
-	if (actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).
+	bool use_cdecl = StrChrAny(options, _T("Cc")); // Recognize "C" as the "CDecl" option.
+	if (!use_cdecl && actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).
 		return; // Indicate failure by yielding the default result set earlier.
 #endif
 
@@ -15765,7 +15769,7 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 	cb.callfuncptr = &funcaddrptr; // xxxx: Address of C stub.
 
 	cb.data4=0xC48359 // pop ecx -- 59 ;return address... add esp, xx -- 83 C4 xx ;stack correct (add argument to add esp, nn for stack correction).
-		+ (StrChrAny(options, _T("Cc")) ? 0 : actual_param_count<<26);  // Recognize "C" as the "CDecl" option.
+		+ (use_cdecl ? 0 : actual_param_count<<26);
 
 	cb.data5=0xE1FF; // jmp ecx -- FF E1 ;return
 #endif
