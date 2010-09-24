@@ -15706,11 +15706,10 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 		|| func->mIsBuiltIn   )  // ...the function is built-in.
 		return; // Indicate failure by yielding the default result set earlier.
 
-	TCHAR options_buf[MAX_NUMBER_SIZE];
-	LPTSTR options = (aParamCount < 2) ? _T("") : TokenToString(*aParam[1], options_buf);
+	LPTSTR options = (aParamCount < 2) ? _T("") : TokenToString(*aParam[1]);
 
 	int actual_param_count;
-	if (aParamCount > 2) // A parameter count was specified.
+	if (aParamCount > 2 && !TokenIsEmptyString(*aParam[2])) // A parameter count was specified.
 	{
 		actual_param_count = (int)TokenToInt64(*aParam[2]);
 		if (   actual_param_count > func->mParamCount    // The function doesn't have enough formals to cover the specified number of actuals.
