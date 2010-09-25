@@ -8054,7 +8054,8 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 			// no way to dynamically reference the local variables of an assume-global function.
 			if (g.CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL && !is_local) // g.CurrentFunc is also known to be non-NULL in this case.
 			{
-				for (i = 0; i < g.CurrentFunc->mParamCount; ++i)
+				int j = g.CurrentFunc->mParamCount + g.CurrentFunc->mIsVariadic; // i.e. must also check the "variadic" param, which isn't included in mParamCount.
+				for (i = 0; i < j; ++i)
 					if (!_tcsicmp(var_name, g.CurrentFunc->mParam[i].var->mName)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 					{
 						is_local = true;
