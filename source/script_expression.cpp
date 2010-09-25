@@ -190,6 +190,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 						// syntax errors.
 						if (   !(deref->func = g_script.FindFunc(left_buf, var_name_length)) // Below relies on short-circuit boolean order, with this line being executed first.
 							|| deref->param_count < deref->func->mMinParams // param_count was set by the infix processing code.
+								&& deref->is_function != DEREF_VARIADIC // actual param count for a variadic call is not known until the last moment.
 							//|| deref->param_count > deref->func->mParamCount // Not checked; see below.
 							)
 							goto abnormal_end;
