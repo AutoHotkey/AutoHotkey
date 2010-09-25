@@ -141,6 +141,7 @@ BIF_METHOD(MaxIndex)
 BIF_METHOD(MinIndex)
 BIF_METHOD(NewEnum)
 BIF_METHOD(HasKey)
+BIF_METHOD(Clone)
 
 
 //
