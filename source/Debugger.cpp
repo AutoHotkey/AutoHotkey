@@ -524,33 +524,46 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 			return DEBUGGER_E_BREAKPOINT_INVALID;
 	}
 
-	Line *line;
-	for (line = g_script.mFirstLine; line; line = line->mNextLine)
-	{
-		if (line->mFileIndex == file_index)
+	Line *line = NULL;
+	bool found_line = false;
+	// Due to the introduction of expressions in static initializers, lines aren't necessarily in
+	// line number order.  First determine if any static initializers match the requested lineno.
+	// If not, use the first non-static line at or following that line number.
+
+	if (g_script.mFirstStaticLine)
+		for (line = g_script.mFirstStaticLine; ; line = line->mNextLine)
 		{
-			// Use the first line of code at or after lineno, like Visual Studio.
-			// To display the breakpoint correctly, an IDE should use breakpoint_get.
-			if (line->mLineNumber >= lineno)
+			if (line->mFileIndex == file_index && line->mLineNumber == lineno)
 			{
-				if (!line->mBreakpoint)
-					line->mBreakpoint = new Breakpoint();
-				line->mBreakpoint->state = state;
-				line->mBreakpoint->temporary = temporary;
-
-				mResponseBuf.WriteF("<response command=\"breakpoint_set\" transaction_id=\"%e\" state=\"%s\" id=\"%i\"/>"
-					, transaction_id, state ? "enabled" : "disabled", line->mBreakpoint->id);
-
-				return SendResponse();
+				found_line = true;
+				break;
 			}
-			//else if (line->mLineNumber > lineno)
-			//{
-			//	// Passed the breakpoint line without finding any code.
-			//	return DEBUGGER_E_BREAKPOINT_NO_CODE;
-			//}
+			if (line == g_script.mLastStaticLine)
+				break;
 		}
+	if (!found_line)
+		// If line is non-NULL, above has left it set to mLastStaticLine, which we want to exclude:
+		for (line = line ? line->mNextLine : g_script.mFirstLine; line; line = line->mNextLine)
+			if (line->mFileIndex == file_index && line->mLineNumber >= lineno)
+			{
+				// Use the first line of code at or after lineno, like Visual Studio.
+				// To display the breakpoint correctly, an IDE should use breakpoint_get.
+				found_line = true;
+				break;
+			}
+	if (found_line)
+	{
+		if (!line->mBreakpoint)
+			line->mBreakpoint = new Breakpoint();
+		line->mBreakpoint->state = state;
+		line->mBreakpoint->temporary = temporary;
+
+		mResponseBuf.WriteF("<response command=\"breakpoint_set\" transaction_id=\"%e\" state=\"%s\" id=\"%i\"/>"
+			, transaction_id, state ? "enabled" : "disabled", line->mBreakpoint->id);
+
+		return SendResponse();
 	}
-	// lineno is beyond the end of the file.
+	// There are no lines of code beginning at or after lineno.
 	return DEBUGGER_E_BREAKPOINT_INVALID;
 }
 
