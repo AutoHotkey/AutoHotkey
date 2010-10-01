@@ -279,7 +279,7 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 
 #ifdef UNICODE
 /* Define to enable support for Unicode properties */
-/* #define SUPPORT_UCP */
+#define SUPPORT_UCP
 
 /* Define to enable support for the UTF-8 Unicode encoding. */
 #define SUPPORT_UTF8

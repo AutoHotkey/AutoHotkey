@@ -119,6 +119,7 @@
     <ClCompile Include="pcre\pcre_study.c" />
     <ClCompile Include="pcre\pcre_tables.c" />
     <ClCompile Include="pcre\pcre_try_flipped.c" />
+    <ClCompile Include="pcre\pcre_ucp_searchfuncs.c" />
     <ClCompile Include="pcre\pcre_version.c" />
     <ClCompile Include="pcre\pcre_xclass.c" />
   </ItemGroup>

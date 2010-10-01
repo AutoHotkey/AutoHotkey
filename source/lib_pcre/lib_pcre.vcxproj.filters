@@ -60,6 +60,9 @@
     <ClCompile Include="pcre\pcre_xclass.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="pcre\pcre_ucp_searchfuncs.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pcre\config.h">
