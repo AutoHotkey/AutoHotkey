@@ -864,7 +864,7 @@ in UTF-8 mode. The code that uses this table must know about such things. */
   0,                             /* XCLASS - variable length               */ \
   3,                             /* REF                                    */ \
   1+LINK_SIZE,                   /* RECURSE                                */ \
-  6+2*LINK_SIZE,                 /* CALLOUT                                */ \
+  2+sizeof(void**)+2*LINK_SIZE,  /* CALLOUT                                */ \
   1+LINK_SIZE,                   /* Alt                                    */ \
   1+LINK_SIZE,                   /* Ket                                    */ \
   1+LINK_SIZE,                   /* KetRmax                                */ \

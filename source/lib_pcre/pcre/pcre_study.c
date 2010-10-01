@@ -183,7 +183,7 @@ do
       /* Skip over callout */
 
       case OP_CALLOUT:
-      tcode += 6 + 2*LINK_SIZE;
+      tcode += 2 + sizeof(void**) + 2*LINK_SIZE;
       break;
 
       /* Skip over lookbehind and negative lookahead assertions */
