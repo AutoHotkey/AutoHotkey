@@ -2693,10 +2693,13 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		return false;
 	}
 
-	if (ch[0] == '\r')  // Translate \r to \n since \n is more typical and useful in Windows.
-		ch[0] = '\n';
-	if (ch[1] == '\r')  // But it's never referred to if byte_count < 2
-		ch[1] = '\n';
+	if ((g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL)) == 0) // i.e. must not replace '\r' with '\n' if it is the result of Ctrl+M.
+	{
+		if (ch[0] == '\r')  // Translate \r to \n since \n is more typical and useful in Windows.
+			ch[0] = '\n';
+		if (ch[1] == '\r')  // But it's never referred to if byte_count < 2
+			ch[1] = '\n';
+	}
 
 	bool suppress_hotstring_final_char = false; // Set default.
 
