@@ -7,7 +7,7 @@
 and semantics are as close as possible to those of the Perl 5 language.
 
                        Written by Philip Hazel
-           Copyright (c) 1997-2007 University of Cambridge
+           Copyright (c) 1997-2010 University of Cambridge
 
 -----------------------------------------------------------------------------
 Redistribution and use in source and binary forms, with or without
@@ -46,12 +46,25 @@ functions whose names all begin with "_pcre_". */
 #define PCRE_INTERNAL_H
 
 #define SUPPORT_CALLOUT // Lexikos
-#include <windows.h> // for OutputDebugString
 
-/* Define DEBUG to get debugging output on stdout. */
+/* Define PCRE_DEBUG to get debugging output on stdout. */
 
 #if 0
-#define DEBUG
+#define PCRE_DEBUG
+#endif
+
+/* We do not support both EBCDIC and UTF-8 at the same time. The "configure"
+script prevents both being selected, but not everybody uses "configure". */
+
+#if defined EBCDIC && defined SUPPORT_UTF8
+#error The use of both EBCDIC and SUPPORT_UTF8 is not supported.
+#endif
+
+/* If SUPPORT_UCP is defined, SUPPORT_UTF8 must also be defined. The
+"configure" script ensures this, but not everybody uses "configure". */
+
+#if defined SUPPORT_UCP && !defined SUPPORT_UTF8
+#define SUPPORT_UTF8 1
 #endif
 
 /* Use a macro for debugging printing, 'cause that eliminates the use of #ifdef
@@ -63,7 +76,7 @@ It turns out that the Mac Debugging.h header also defines the macro DPRINTF, so
 be absolutely sure we get our version. */
 
 #undef DPRINTF
-#ifdef DEBUG
+#ifdef PCRE_DEBUG
 #define DPRINTF(p) printf p
 #else
 #define DPRINTF(p) /* Nothing */
@@ -75,8 +88,6 @@ setjmp and stdarg are used is when NO_RECURSE is set. */
 
 #include <ctype.h>
 #include <limits.h>
-#include <setjmp.h>
-#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -135,6 +146,20 @@ PCRE_EXP_DATA_DEFN only if they are not already set. */
 #  endif
 #endif
 
+/* When compiling with the MSVC compiler, it is sometimes necessary to include
+a "calling convention" before exported function names. (This is secondhand
+information; I know nothing about MSVC myself). For example, something like
+
+  void __cdecl function(....)
+
+might be needed. In order so make this easy, all the exported functions have
+PCRE_CALL_CONVENTION just before their names. It is rarely needed; if not
+set, we ensure here that it has no effect. */
+
+#ifndef PCRE_CALL_CONVENTION
+#define PCRE_CALL_CONVENTION
+#endif
+
 /* We need to have types that specify unsigned 16-bit and 32-bit integers. We
 cannot determine these outside the compilation (e.g. by running a program as
 part of "configure") because PCRE is often cross-compiled for use on other
@@ -143,18 +168,42 @@ preprocessor time in standard C environments. */
 
 #if USHRT_MAX == 65535
   typedef unsigned short pcre_uint16;
+  typedef short pcre_int16;
 #elif UINT_MAX == 65535
   typedef unsigned int pcre_uint16;
+  typedef int pcre_int16;
 #else
   #error Cannot determine a type for 16-bit unsigned integers
 #endif
 
 #if UINT_MAX == 4294967295
   typedef unsigned int pcre_uint32;
+  typedef int pcre_int32;
 #elif ULONG_MAX == 4294967295
   typedef unsigned long int pcre_uint32;
+  typedef long int pcre_int32;
 #else
   #error Cannot determine a type for 32-bit unsigned integers
+#endif
+
+/* When checking for integer overflow in pcre_compile(), we need to handle
+large integers. If a 64-bit integer type is available, we can use that.
+Otherwise we have to cast to double, which of course requires floating point
+arithmetic. Handle this by defining a macro for the appropriate type. If
+stdint.h is available, include it; it may define INT64_MAX. Systems that do not
+have stdint.h (e.g. Solaris) may have inttypes.h. The macro int64_t may be set
+by "configure". */
+
+#if HAVE_STDINT_H
+#include <stdint.h>
+#elif HAVE_INTTYPES_H
+#include <inttypes.h>
+#endif
+
+#if defined INT64_MAX || defined int64_t
+#define INT64_OR_DOUBLE int64_t
+#else
+#define INT64_OR_DOUBLE double
 #endif
 
 /* All character handling must be done as unsigned characters. Otherwise there
@@ -456,7 +505,8 @@ know we are in UTF-8 mode. */
       } \
     }
 
-/* Get the next character, testing for UTF-8 mode, and advancing the pointer */
+/* Get the next character, testing for UTF-8 mode, and advancing the pointer.
+This is called when we don't know if we are in UTF-8 mode. */
 
 #define GETCHARINCTEST(c, eptr) \
   c = *eptr++; \
@@ -478,6 +528,26 @@ if there are extra bytes. This is called when we know we are in UTF-8 mode. */
 #define GETCHARLEN(c, eptr, len) \
   c = *eptr; \
   if (c >= 0xc0) \
+    { \
+    int gcii; \
+    int gcaa = _pcre_utf8_table4[c & 0x3f];  /* Number of additional bytes */ \
+    int gcss = 6*gcaa; \
+    c = (c & _pcre_utf8_table3[gcaa]) << gcss; \
+    for (gcii = 1; gcii <= gcaa; gcii++) \
+      { \
+      gcss -= 6; \
+      c |= (eptr[gcii] & 0x3f) << gcss; \
+      } \
+    len += gcaa; \
+    }
+
+/* Get the next UTF-8 character, testing for UTF-8 mode, not advancing the
+pointer, incrementing length if there are extra bytes. This is called when we
+do not know if we are in UTF-8 mode. */
+
+#define GETCHARLENTEST(c, eptr, len) \
+  c = *eptr; \
+  if (utf8 && c >= 0xc0) \
     { \
     int gcii; \
     int gcaa = _pcre_utf8_table4[c & 0x3f];  /* Number of additional bytes */ \
@@ -514,7 +584,9 @@ Standard C system should have one. */
 
 /* Private flags containing information about the compiled regex. They used to
 live at the top end of the options word, but that got almost full, so now they
-are in a 16-bit flags word. */
+are in a 16-bit flags word. From release 8.00, PCRE_NOPARTIAL is unused, as
+the restrictions on partial matching have been lifted. It remains for backwards
+compatibility. */
 
 #define PCRE_NOPARTIAL     0x0001  /* can't use partial with this regex */
 #define PCRE_FIRSTSET      0x0002  /* first_byte is set */
@@ -526,6 +598,7 @@ are in a 16-bit flags word. */
 /* Options for the "extra" block produced by pcre_study(). */
 
 #define PCRE_STUDY_MAPPED   0x01     /* a map of starting chars exists */
+#define PCRE_STUDY_MINLEN   0x02     /* a minimum length field exists */
 
 /* Masks for identifying the public options that are permitted at compile
 time, run time, or study time, respectively. */
@@ -533,20 +606,23 @@ time, run time, or study time, respectively. */
 #define PCRE_NEWLINE_BITS (PCRE_NEWLINE_CR|PCRE_NEWLINE_LF|PCRE_NEWLINE_ANY| \
                            PCRE_NEWLINE_ANYCRLF)
 
-#define PUBLIC_OPTIONS \
+#define PUBLIC_COMPILE_OPTIONS \
   (PCRE_CASELESS|PCRE_EXTENDED|PCRE_ANCHORED|PCRE_MULTILINE| \
    PCRE_DOTALL|PCRE_DOLLAR_ENDONLY|PCRE_EXTRA|PCRE_UNGREEDY|PCRE_UTF8| \
    PCRE_NO_AUTO_CAPTURE|PCRE_NO_UTF8_CHECK|PCRE_AUTO_CALLOUT|PCRE_FIRSTLINE| \
-   PCRE_DUPNAMES|PCRE_NEWLINE_BITS|PCRE_BSR_ANYCRLF|PCRE_BSR_UNICODE)
+   PCRE_DUPNAMES|PCRE_NEWLINE_BITS|PCRE_BSR_ANYCRLF|PCRE_BSR_UNICODE| \
+   PCRE_JAVASCRIPT_COMPAT|PCRE_UCP)
 
 #define PUBLIC_EXEC_OPTIONS \
-  (PCRE_ANCHORED|PCRE_NOTBOL|PCRE_NOTEOL|PCRE_NOTEMPTY|PCRE_NO_UTF8_CHECK| \
-   PCRE_PARTIAL|PCRE_NEWLINE_BITS|PCRE_BSR_ANYCRLF|PCRE_BSR_UNICODE)
+  (PCRE_ANCHORED|PCRE_NOTBOL|PCRE_NOTEOL|PCRE_NOTEMPTY|PCRE_NOTEMPTY_ATSTART| \
+   PCRE_NO_UTF8_CHECK|PCRE_PARTIAL_HARD|PCRE_PARTIAL_SOFT|PCRE_NEWLINE_BITS| \
+   PCRE_BSR_ANYCRLF|PCRE_BSR_UNICODE|PCRE_NO_START_OPTIMIZE)
 
 #define PUBLIC_DFA_EXEC_OPTIONS \
-  (PCRE_ANCHORED|PCRE_NOTBOL|PCRE_NOTEOL|PCRE_NOTEMPTY|PCRE_NO_UTF8_CHECK| \
-   PCRE_PARTIAL|PCRE_DFA_SHORTEST|PCRE_DFA_RESTART|PCRE_NEWLINE_BITS| \
-   PCRE_BSR_ANYCRLF|PCRE_BSR_UNICODE)
+  (PCRE_ANCHORED|PCRE_NOTBOL|PCRE_NOTEOL|PCRE_NOTEMPTY|PCRE_NOTEMPTY_ATSTART| \
+   PCRE_NO_UTF8_CHECK|PCRE_PARTIAL_HARD|PCRE_PARTIAL_SOFT|PCRE_DFA_SHORTEST| \
+   PCRE_DFA_RESTART|PCRE_NEWLINE_BITS|PCRE_BSR_ANYCRLF|PCRE_BSR_UNICODE| \
+   PCRE_NO_START_OPTIMIZE)
 
 #define PUBLIC_STUDY_OPTIONS 0   /* None defined */
 
@@ -571,45 +647,589 @@ variable-length repeat, or a anything other than literal characters. */
 #define REQ_CASELESS 0x0100    /* indicates caselessness */
 #define REQ_VARY     0x0200    /* reqbyte followed non-literal item */
 
-/* Miscellaneous definitions */
+/* Miscellaneous definitions. The #ifndef is to pacify compiler warnings in
+environments where these macros are defined elsewhere. Unfortunately, there
+is no way to do the same for the typedef. */
 
 typedef int BOOL;
 
+#ifndef FALSE
 #define FALSE   0
 #define TRUE    1
+#endif
+
+/* If PCRE is to support UTF-8 on EBCDIC platforms, we cannot use normal
+character constants like '*' because the compiler would emit their EBCDIC code,
+which is different from their ASCII/UTF-8 code. Instead we define macros for
+the characters so that they always use the ASCII/UTF-8 code when UTF-8 support
+is enabled. When UTF-8 support is not enabled, the definitions use character
+literals. Both character and string versions of each character are needed, and
+there are some longer strings as well.
+
+This means that, on EBCDIC platforms, the PCRE library can handle either
+EBCDIC, or UTF-8, but not both. To support both in the same compiled library
+would need different lookups depending on whether PCRE_UTF8 was set or not.
+This would make it impossible to use characters in switch/case statements,
+which would reduce performance. For a theoretical use (which nobody has asked
+for) in a minority area (EBCDIC platforms), this is not sensible. Any
+application that did need both could compile two versions of the library, using
+macros to give the functions distinct names. */
+
+#ifndef SUPPORT_UTF8
+
+/* UTF-8 support is not enabled; use the platform-dependent character literals
+so that PCRE works on both ASCII and EBCDIC platforms, in non-UTF-mode only. */
+
+#define CHAR_HT                     '\t'
+#define CHAR_VT                     '\v'
+#define CHAR_FF                     '\f'
+#define CHAR_CR                     '\r'
+#define CHAR_NL                     '\n'
+#define CHAR_BS                     '\b'
+#define CHAR_BEL                    '\a'
+#ifdef EBCDIC
+#define CHAR_ESC                    '\047'
+#define CHAR_DEL                    '\007'
+#else
+#define CHAR_ESC                    '\033'
+#define CHAR_DEL                    '\177'
+#endif
+
+#define CHAR_SPACE                  ' '
+#define CHAR_EXCLAMATION_MARK       '!'
+#define CHAR_QUOTATION_MARK         '"'
+#define CHAR_NUMBER_SIGN            '#'
+#define CHAR_DOLLAR_SIGN            '$'
+#define CHAR_PERCENT_SIGN           '%'
+#define CHAR_AMPERSAND              '&'
+#define CHAR_APOSTROPHE             '\''
+#define CHAR_LEFT_PARENTHESIS       '('
+#define CHAR_RIGHT_PARENTHESIS      ')'
+#define CHAR_ASTERISK               '*'
+#define CHAR_PLUS                   '+'
+#define CHAR_COMMA                  ','
+#define CHAR_MINUS                  '-'
+#define CHAR_DOT                    '.'
+#define CHAR_SLASH                  '/'
+#define CHAR_0                      '0'
+#define CHAR_1                      '1'
+#define CHAR_2                      '2'
+#define CHAR_3                      '3'
+#define CHAR_4                      '4'
+#define CHAR_5                      '5'
+#define CHAR_6                      '6'
+#define CHAR_7                      '7'
+#define CHAR_8                      '8'
+#define CHAR_9                      '9'
+#define CHAR_COLON                  ':'
+#define CHAR_SEMICOLON              ';'
+#define CHAR_LESS_THAN_SIGN         '<'
+#define CHAR_EQUALS_SIGN            '='
+#define CHAR_GREATER_THAN_SIGN      '>'
+#define CHAR_QUESTION_MARK          '?'
+#define CHAR_COMMERCIAL_AT          '@'
+#define CHAR_A                      'A'
+#define CHAR_B                      'B'
+#define CHAR_C                      'C'
+#define CHAR_D                      'D'
+#define CHAR_E                      'E'
+#define CHAR_F                      'F'
+#define CHAR_G                      'G'
+#define CHAR_H                      'H'
+#define CHAR_I                      'I'
+#define CHAR_J                      'J'
+#define CHAR_K                      'K'
+#define CHAR_L                      'L'
+#define CHAR_M                      'M'
+#define CHAR_N                      'N'
+#define CHAR_O                      'O'
+#define CHAR_P                      'P'
+#define CHAR_Q                      'Q'
+#define CHAR_R                      'R'
+#define CHAR_S                      'S'
+#define CHAR_T                      'T'
+#define CHAR_U                      'U'
+#define CHAR_V                      'V'
+#define CHAR_W                      'W'
+#define CHAR_X                      'X'
+#define CHAR_Y                      'Y'
+#define CHAR_Z                      'Z'
+#define CHAR_LEFT_SQUARE_BRACKET    '['
+#define CHAR_BACKSLASH              '\\'
+#define CHAR_RIGHT_SQUARE_BRACKET   ']'
+#define CHAR_CIRCUMFLEX_ACCENT      '^'
+#define CHAR_UNDERSCORE             '_'
+#define CHAR_GRAVE_ACCENT           '`'
+#define CHAR_a                      'a'
+#define CHAR_b                      'b'
+#define CHAR_c                      'c'
+#define CHAR_d                      'd'
+#define CHAR_e                      'e'
+#define CHAR_f                      'f'
+#define CHAR_g                      'g'
+#define CHAR_h                      'h'
+#define CHAR_i                      'i'
+#define CHAR_j                      'j'
+#define CHAR_k                      'k'
+#define CHAR_l                      'l'
+#define CHAR_m                      'm'
+#define CHAR_n                      'n'
+#define CHAR_o                      'o'
+#define CHAR_p                      'p'
+#define CHAR_q                      'q'
+#define CHAR_r                      'r'
+#define CHAR_s                      's'
+#define CHAR_t                      't'
+#define CHAR_u                      'u'
+#define CHAR_v                      'v'
+#define CHAR_w                      'w'
+#define CHAR_x                      'x'
+#define CHAR_y                      'y'
+#define CHAR_z                      'z'
+#define CHAR_LEFT_CURLY_BRACKET     '{'
+#define CHAR_VERTICAL_LINE          '|'
+#define CHAR_RIGHT_CURLY_BRACKET    '}'
+#define CHAR_TILDE                  '~'
+
+#define STR_HT                      "\t"
+#define STR_VT                      "\v"
+#define STR_FF                      "\f"
+#define STR_CR                      "\r"
+#define STR_NL                      "\n"
+#define STR_BS                      "\b"
+#define STR_BEL                     "\a"
+#ifdef EBCDIC
+#define STR_ESC                     "\047"
+#define STR_DEL                     "\007"
+#else
+#define STR_ESC                     "\033"
+#define STR_DEL                     "\177"
+#endif
+
+#define STR_SPACE                   " "
+#define STR_EXCLAMATION_MARK        "!"
+#define STR_QUOTATION_MARK          "\""
+#define STR_NUMBER_SIGN             "#"
+#define STR_DOLLAR_SIGN             "$"
+#define STR_PERCENT_SIGN            "%"
+#define STR_AMPERSAND               "&"
+#define STR_APOSTROPHE              "'"
+#define STR_LEFT_PARENTHESIS        "("
+#define STR_RIGHT_PARENTHESIS       ")"
+#define STR_ASTERISK                "*"
+#define STR_PLUS                    "+"
+#define STR_COMMA                   ","
+#define STR_MINUS                   "-"
+#define STR_DOT                     "."
+#define STR_SLASH                   "/"
+#define STR_0                       "0"
+#define STR_1                       "1"
+#define STR_2                       "2"
+#define STR_3                       "3"
+#define STR_4                       "4"
+#define STR_5                       "5"
+#define STR_6                       "6"
+#define STR_7                       "7"
+#define STR_8                       "8"
+#define STR_9                       "9"
+#define STR_COLON                   ":"
+#define STR_SEMICOLON               ";"
+#define STR_LESS_THAN_SIGN          "<"
+#define STR_EQUALS_SIGN             "="
+#define STR_GREATER_THAN_SIGN       ">"
+#define STR_QUESTION_MARK           "?"
+#define STR_COMMERCIAL_AT           "@"
+#define STR_A                       "A"
+#define STR_B                       "B"
+#define STR_C                       "C"
+#define STR_D                       "D"
+#define STR_E                       "E"
+#define STR_F                       "F"
+#define STR_G                       "G"
+#define STR_H                       "H"
+#define STR_I                       "I"
+#define STR_J                       "J"
+#define STR_K                       "K"
+#define STR_L                       "L"
+#define STR_M                       "M"
+#define STR_N                       "N"
+#define STR_O                       "O"
+#define STR_P                       "P"
+#define STR_Q                       "Q"
+#define STR_R                       "R"
+#define STR_S                       "S"
+#define STR_T                       "T"
+#define STR_U                       "U"
+#define STR_V                       "V"
+#define STR_W                       "W"
+#define STR_X                       "X"
+#define STR_Y                       "Y"
+#define STR_Z                       "Z"
+#define STR_LEFT_SQUARE_BRACKET     "["
+#define STR_BACKSLASH               "\\"
+#define STR_RIGHT_SQUARE_BRACKET    "]"
+#define STR_CIRCUMFLEX_ACCENT       "^"
+#define STR_UNDERSCORE              "_"
+#define STR_GRAVE_ACCENT            "`"
+#define STR_a                       "a"
+#define STR_b                       "b"
+#define STR_c                       "c"
+#define STR_d                       "d"
+#define STR_e                       "e"
+#define STR_f                       "f"
+#define STR_g                       "g"
+#define STR_h                       "h"
+#define STR_i                       "i"
+#define STR_j                       "j"
+#define STR_k                       "k"
+#define STR_l                       "l"
+#define STR_m                       "m"
+#define STR_n                       "n"
+#define STR_o                       "o"
+#define STR_p                       "p"
+#define STR_q                       "q"
+#define STR_r                       "r"
+#define STR_s                       "s"
+#define STR_t                       "t"
+#define STR_u                       "u"
+#define STR_v                       "v"
+#define STR_w                       "w"
+#define STR_x                       "x"
+#define STR_y                       "y"
+#define STR_z                       "z"
+#define STR_LEFT_CURLY_BRACKET      "{"
+#define STR_VERTICAL_LINE           "|"
+#define STR_RIGHT_CURLY_BRACKET     "}"
+#define STR_TILDE                   "~"
+
+#define STRING_ACCEPT0              "ACCEPT\0"
+#define STRING_COMMIT0              "COMMIT\0"
+#define STRING_F0                   "F\0"
+#define STRING_FAIL0                "FAIL\0"
+#define STRING_MARK0                "MARK\0"
+#define STRING_PRUNE0               "PRUNE\0"
+#define STRING_SKIP0                "SKIP\0"
+#define STRING_THEN                 "THEN"
+
+#define STRING_alpha0               "alpha\0"
+#define STRING_lower0               "lower\0"
+#define STRING_upper0               "upper\0"
+#define STRING_alnum0               "alnum\0"
+#define STRING_ascii0               "ascii\0"
+#define STRING_blank0               "blank\0"
+#define STRING_cntrl0               "cntrl\0"
+#define STRING_digit0               "digit\0"
+#define STRING_graph0               "graph\0"
+#define STRING_print0               "print\0"
+#define STRING_punct0               "punct\0"
+#define STRING_space0               "space\0"
+#define STRING_word0                "word\0"
+#define STRING_xdigit               "xdigit"
+
+#define STRING_DEFINE               "DEFINE"
+
+#define STRING_CR_RIGHTPAR          "CR)"
+#define STRING_LF_RIGHTPAR          "LF)"
+#define STRING_CRLF_RIGHTPAR        "CRLF)"
+#define STRING_ANY_RIGHTPAR         "ANY)"
+#define STRING_ANYCRLF_RIGHTPAR     "ANYCRLF)"
+#define STRING_BSR_ANYCRLF_RIGHTPAR "BSR_ANYCRLF)"
+#define STRING_BSR_UNICODE_RIGHTPAR "BSR_UNICODE)"
+#define STRING_UTF8_RIGHTPAR        "UTF8)"
+#define STRING_UCP_RIGHTPAR         "UCP)"
+
+#else  /* SUPPORT_UTF8 */
+
+/* UTF-8 support is enabled; always use UTF-8 (=ASCII) character codes. This
+works in both modes non-EBCDIC platforms, and on EBCDIC platforms in UTF-8 mode
+only. */
+
+#define CHAR_HT                     '\011'
+#define CHAR_VT                     '\013'
+#define CHAR_FF                     '\014'
+#define CHAR_CR                     '\015'
+#define CHAR_NL                     '\012'
+#define CHAR_BS                     '\010'
+#define CHAR_BEL                    '\007'
+#define CHAR_ESC                    '\033'
+#define CHAR_DEL                    '\177'
+
+#define CHAR_SPACE                  '\040'
+#define CHAR_EXCLAMATION_MARK       '\041'
+#define CHAR_QUOTATION_MARK         '\042'
+#define CHAR_NUMBER_SIGN            '\043'
+#define CHAR_DOLLAR_SIGN            '\044'
+#define CHAR_PERCENT_SIGN           '\045'
+#define CHAR_AMPERSAND              '\046'
+#define CHAR_APOSTROPHE             '\047'
+#define CHAR_LEFT_PARENTHESIS       '\050'
+#define CHAR_RIGHT_PARENTHESIS      '\051'
+#define CHAR_ASTERISK               '\052'
+#define CHAR_PLUS                   '\053'
+#define CHAR_COMMA                  '\054'
+#define CHAR_MINUS                  '\055'
+#define CHAR_DOT                    '\056'
+#define CHAR_SLASH                  '\057'
+#define CHAR_0                      '\060'
+#define CHAR_1                      '\061'
+#define CHAR_2                      '\062'
+#define CHAR_3                      '\063'
+#define CHAR_4                      '\064'
+#define CHAR_5                      '\065'
+#define CHAR_6                      '\066'
+#define CHAR_7                      '\067'
+#define CHAR_8                      '\070'
+#define CHAR_9                      '\071'
+#define CHAR_COLON                  '\072'
+#define CHAR_SEMICOLON              '\073'
+#define CHAR_LESS_THAN_SIGN         '\074'
+#define CHAR_EQUALS_SIGN            '\075'
+#define CHAR_GREATER_THAN_SIGN      '\076'
+#define CHAR_QUESTION_MARK          '\077'
+#define CHAR_COMMERCIAL_AT          '\100'
+#define CHAR_A                      '\101'
+#define CHAR_B                      '\102'
+#define CHAR_C                      '\103'
+#define CHAR_D                      '\104'
+#define CHAR_E                      '\105'
+#define CHAR_F                      '\106'
+#define CHAR_G                      '\107'
+#define CHAR_H                      '\110'
+#define CHAR_I                      '\111'
+#define CHAR_J                      '\112'
+#define CHAR_K                      '\113'
+#define CHAR_L                      '\114'
+#define CHAR_M                      '\115'
+#define CHAR_N                      '\116'
+#define CHAR_O                      '\117'
+#define CHAR_P                      '\120'
+#define CHAR_Q                      '\121'
+#define CHAR_R                      '\122'
+#define CHAR_S                      '\123'
+#define CHAR_T                      '\124'
+#define CHAR_U                      '\125'
+#define CHAR_V                      '\126'
+#define CHAR_W                      '\127'
+#define CHAR_X                      '\130'
+#define CHAR_Y                      '\131'
+#define CHAR_Z                      '\132'
+#define CHAR_LEFT_SQUARE_BRACKET    '\133'
+#define CHAR_BACKSLASH              '\134'
+#define CHAR_RIGHT_SQUARE_BRACKET   '\135'
+#define CHAR_CIRCUMFLEX_ACCENT      '\136'
+#define CHAR_UNDERSCORE             '\137'
+#define CHAR_GRAVE_ACCENT           '\140'
+#define CHAR_a                      '\141'
+#define CHAR_b                      '\142'
+#define CHAR_c                      '\143'
+#define CHAR_d                      '\144'
+#define CHAR_e                      '\145'
+#define CHAR_f                      '\146'
+#define CHAR_g                      '\147'
+#define CHAR_h                      '\150'
+#define CHAR_i                      '\151'
+#define CHAR_j                      '\152'
+#define CHAR_k                      '\153'
+#define CHAR_l                      '\154'
+#define CHAR_m                      '\155'
+#define CHAR_n                      '\156'
+#define CHAR_o                      '\157'
+#define CHAR_p                      '\160'
+#define CHAR_q                      '\161'
+#define CHAR_r                      '\162'
+#define CHAR_s                      '\163'
+#define CHAR_t                      '\164'
+#define CHAR_u                      '\165'
+#define CHAR_v                      '\166'
+#define CHAR_w                      '\167'
+#define CHAR_x                      '\170'
+#define CHAR_y                      '\171'
+#define CHAR_z                      '\172'
+#define CHAR_LEFT_CURLY_BRACKET     '\173'
+#define CHAR_VERTICAL_LINE          '\174'
+#define CHAR_RIGHT_CURLY_BRACKET    '\175'
+#define CHAR_TILDE                  '\176'
+
+#define STR_HT                      "\011"
+#define STR_VT                      "\013"
+#define STR_FF                      "\014"
+#define STR_CR                      "\015"
+#define STR_NL                      "\012"
+#define STR_BS                      "\010"
+#define STR_BEL                     "\007"
+#define STR_ESC                     "\033"
+#define STR_DEL                     "\177"
+
+#define STR_SPACE                   "\040"
+#define STR_EXCLAMATION_MARK        "\041"
+#define STR_QUOTATION_MARK          "\042"
+#define STR_NUMBER_SIGN             "\043"
+#define STR_DOLLAR_SIGN             "\044"
+#define STR_PERCENT_SIGN            "\045"
+#define STR_AMPERSAND               "\046"
+#define STR_APOSTROPHE              "\047"
+#define STR_LEFT_PARENTHESIS        "\050"
+#define STR_RIGHT_PARENTHESIS       "\051"
+#define STR_ASTERISK                "\052"
+#define STR_PLUS                    "\053"
+#define STR_COMMA                   "\054"
+#define STR_MINUS                   "\055"
+#define STR_DOT                     "\056"
+#define STR_SLASH                   "\057"
+#define STR_0                       "\060"
+#define STR_1                       "\061"
+#define STR_2                       "\062"
+#define STR_3                       "\063"
+#define STR_4                       "\064"
+#define STR_5                       "\065"
+#define STR_6                       "\066"
+#define STR_7                       "\067"
+#define STR_8                       "\070"
+#define STR_9                       "\071"
+#define STR_COLON                   "\072"
+#define STR_SEMICOLON               "\073"
+#define STR_LESS_THAN_SIGN          "\074"
+#define STR_EQUALS_SIGN             "\075"
+#define STR_GREATER_THAN_SIGN       "\076"
+#define STR_QUESTION_MARK           "\077"
+#define STR_COMMERCIAL_AT           "\100"
+#define STR_A                       "\101"
+#define STR_B                       "\102"
+#define STR_C                       "\103"
+#define STR_D                       "\104"
+#define STR_E                       "\105"
+#define STR_F                       "\106"
+#define STR_G                       "\107"
+#define STR_H                       "\110"
+#define STR_I                       "\111"
+#define STR_J                       "\112"
+#define STR_K                       "\113"
+#define STR_L                       "\114"
+#define STR_M                       "\115"
+#define STR_N                       "\116"
+#define STR_O                       "\117"
+#define STR_P                       "\120"
+#define STR_Q                       "\121"
+#define STR_R                       "\122"
+#define STR_S                       "\123"
+#define STR_T                       "\124"
+#define STR_U                       "\125"
+#define STR_V                       "\126"
+#define STR_W                       "\127"
+#define STR_X                       "\130"
+#define STR_Y                       "\131"
+#define STR_Z                       "\132"
+#define STR_LEFT_SQUARE_BRACKET     "\133"
+#define STR_BACKSLASH               "\134"
+#define STR_RIGHT_SQUARE_BRACKET    "\135"
+#define STR_CIRCUMFLEX_ACCENT       "\136"
+#define STR_UNDERSCORE              "\137"
+#define STR_GRAVE_ACCENT            "\140"
+#define STR_a                       "\141"
+#define STR_b                       "\142"
+#define STR_c                       "\143"
+#define STR_d                       "\144"
+#define STR_e                       "\145"
+#define STR_f                       "\146"
+#define STR_g                       "\147"
+#define STR_h                       "\150"
+#define STR_i                       "\151"
+#define STR_j                       "\152"
+#define STR_k                       "\153"
+#define STR_l                       "\154"
+#define STR_m                       "\155"
+#define STR_n                       "\156"
+#define STR_o                       "\157"
+#define STR_p                       "\160"
+#define STR_q                       "\161"
+#define STR_r                       "\162"
+#define STR_s                       "\163"
+#define STR_t                       "\164"
+#define STR_u                       "\165"
+#define STR_v                       "\166"
+#define STR_w                       "\167"
+#define STR_x                       "\170"
+#define STR_y                       "\171"
+#define STR_z                       "\172"
+#define STR_LEFT_CURLY_BRACKET      "\173"
+#define STR_VERTICAL_LINE           "\174"
+#define STR_RIGHT_CURLY_BRACKET     "\175"
+#define STR_TILDE                   "\176"
+
+#define STRING_ACCEPT0              STR_A STR_C STR_C STR_E STR_P STR_T "\0"
+#define STRING_COMMIT0              STR_C STR_O STR_M STR_M STR_I STR_T "\0"
+#define STRING_F0                   STR_F "\0"
+#define STRING_FAIL0                STR_F STR_A STR_I STR_L "\0"
+#define STRING_MARK0                STR_M STR_A STR_R STR_K "\0"
+#define STRING_PRUNE0               STR_P STR_R STR_U STR_N STR_E "\0"
+#define STRING_SKIP0                STR_S STR_K STR_I STR_P "\0"
+#define STRING_THEN                 STR_T STR_H STR_E STR_N
+
+#define STRING_alpha0               STR_a STR_l STR_p STR_h STR_a "\0"
+#define STRING_lower0               STR_l STR_o STR_w STR_e STR_r "\0"
+#define STRING_upper0               STR_u STR_p STR_p STR_e STR_r "\0"
+#define STRING_alnum0               STR_a STR_l STR_n STR_u STR_m "\0"
+#define STRING_ascii0               STR_a STR_s STR_c STR_i STR_i "\0"
+#define STRING_blank0               STR_b STR_l STR_a STR_n STR_k "\0"
+#define STRING_cntrl0               STR_c STR_n STR_t STR_r STR_l "\0"
+#define STRING_digit0               STR_d STR_i STR_g STR_i STR_t "\0"
+#define STRING_graph0               STR_g STR_r STR_a STR_p STR_h "\0"
+#define STRING_print0               STR_p STR_r STR_i STR_n STR_t "\0"
+#define STRING_punct0               STR_p STR_u STR_n STR_c STR_t "\0"
+#define STRING_space0               STR_s STR_p STR_a STR_c STR_e "\0"
+#define STRING_word0                STR_w STR_o STR_r STR_d       "\0"
+#define STRING_xdigit               STR_x STR_d STR_i STR_g STR_i STR_t
+
+#define STRING_DEFINE               STR_D STR_E STR_F STR_I STR_N STR_E
+
+#define STRING_CR_RIGHTPAR          STR_C STR_R STR_RIGHT_PARENTHESIS
+#define STRING_LF_RIGHTPAR          STR_L STR_F STR_RIGHT_PARENTHESIS
+#define STRING_CRLF_RIGHTPAR        STR_C STR_R STR_L STR_F STR_RIGHT_PARENTHESIS
+#define STRING_ANY_RIGHTPAR         STR_A STR_N STR_Y STR_RIGHT_PARENTHESIS
+#define STRING_ANYCRLF_RIGHTPAR     STR_A STR_N STR_Y STR_C STR_R STR_L STR_F STR_RIGHT_PARENTHESIS
+#define STRING_BSR_ANYCRLF_RIGHTPAR STR_B STR_S STR_R STR_UNDERSCORE STR_A STR_N STR_Y STR_C STR_R STR_L STR_F STR_RIGHT_PARENTHESIS
+#define STRING_BSR_UNICODE_RIGHTPAR STR_B STR_S STR_R STR_UNDERSCORE STR_U STR_N STR_I STR_C STR_O STR_D STR_E STR_RIGHT_PARENTHESIS
+#define STRING_UTF8_RIGHTPAR        STR_U STR_T STR_F STR_8 STR_RIGHT_PARENTHESIS
+#define STRING_UCP_RIGHTPAR         STR_U STR_C STR_P STR_RIGHT_PARENTHESIS
+
+#endif  /* SUPPORT_UTF8 */
 
 /* Escape items that are just an encoding of a particular data value. */
 
 #ifndef ESC_e
-#define ESC_e 27
+#define ESC_e CHAR_ESC
 #endif
 
 #ifndef ESC_f
-#define ESC_f '\f'
+#define ESC_f CHAR_FF
 #endif
 
 #ifndef ESC_n
-#define ESC_n '\n'
+#define ESC_n CHAR_NL
 #endif
 
 #ifndef ESC_r
-#define ESC_r '\r'
+#define ESC_r CHAR_CR
 #endif
 
 /* We can't officially use ESC_t because it is a POSIX reserved identifier
 (presumably because of all the others like size_t). */
 
 #ifndef ESC_tee
-#define ESC_tee '\t'
+#define ESC_tee CHAR_HT
 #endif
 
 /* Codes for different types of Unicode property */
 
 #define PT_ANY        0    /* Any property - matches all chars */
 #define PT_LAMP       1    /* L& - the union of Lu, Ll, Lt */
-#define PT_GC         2    /* General characteristic (e.g. L) */
-#define PT_PC         3    /* Particular characteristic (e.g. Lu) */
+#define PT_GC         2    /* Specified general characteristic (e.g. L) */
+#define PT_PC         3    /* Specified particular characteristic (e.g. Lu) */
 #define PT_SC         4    /* Script (e.g. Han) */
+#define PT_ALNUM      5    /* Alphanumeric - the union of L and N */
+#define PT_SPACE      6    /* Perl space - Z plus 9,10,12,13 */
+#define PT_PXSPACE    7    /* POSIX space - Z plus 9,10,11,12,13 */
+#define PT_WORD       8    /* Word - L plus N plus underscore */
 
 /* Flag bits and data types for the extended class (OP_XCLASS) for classes that
 contain UTF-8 characters with values greater than 255. */
@@ -626,25 +1246,36 @@ contain UTF-8 characters with values greater than 255. */
 /* These are escaped items that aren't just an encoding of a particular data
 value such as \n. They must have non-zero values, as check_escape() returns
 their negation. Also, they must appear in the same order as in the opcode
-definitions below, up to ESC_z. There's a dummy for OP_ANY because it
-corresponds to "." rather than an escape sequence. The final one must be
-ESC_REF as subsequent values are used for backreferences (\1, \2, \3, etc).
-There are two tests in the code for an escape greater than ESC_b and less than
-ESC_Z to detect the types that may be repeated. These are the types that
-consume characters. If any new escapes are put in between that don't consume a
-character, that code will have to change. */
+definitions below, up to ESC_z. There's a dummy for OP_ALLANY because it
+corresponds to "." in DOTALL mode rather than an escape sequence. It is also
+used for [^] in JavaScript compatibility mode. In non-DOTALL mode, "." behaves
+like \N.
+
+The special values ESC_DU, ESC_du, etc. are used instead of ESC_D, ESC_d, etc.
+when PCRE_UCP is set, when replacement of \d etc by \p sequences is required.
+They must be contiguous, and remain in order so that the replacements can be
+looked up from a table.
+
+The final escape must be ESC_REF as subsequent values are used for
+backreferences (\1, \2, \3, etc). There are two tests in the code for an escape
+greater than ESC_b and less than ESC_Z to detect the types that may be
+repeated. These are the types that consume characters. If any new escapes are
+put in between that don't consume a character, that code will have to change.
+*/
 
 enum { ESC_A = 1, ESC_G, ESC_K, ESC_B, ESC_b, ESC_D, ESC_d, ESC_S, ESC_s,
-       ESC_W, ESC_w, ESC_dum1, ESC_C, ESC_P, ESC_p, ESC_R, ESC_H, ESC_h,
-       ESC_V, ESC_v, ESC_X, ESC_Z, ESC_z, ESC_E, ESC_Q, ESC_k, ESC_REF };
-
+       ESC_W, ESC_w, ESC_N, ESC_dum, ESC_C, ESC_P, ESC_p, ESC_R, ESC_H,
+       ESC_h, ESC_V, ESC_v, ESC_X, ESC_Z, ESC_z,
+       ESC_E, ESC_Q, ESC_g, ESC_k,
+       ESC_DU, ESC_du, ESC_SU, ESC_su, ESC_WU, ESC_wu,
+       ESC_REF };
 
 /* Opcode table: Starting from 1 (i.e. after OP_END), the values up to
 OP_EOD must correspond in order to the list of escapes immediately above.
 
 *** NOTE NOTE NOTE *** Whenever this list is updated, the two macro definitions
-that follow must also be updated to match. There is also a table called
-"coptable" in pcre_dfa_exec.c that must be updated. */
+that follow must also be updated to match. There are also tables called
+"coptable" and "poptable" in pcre_dfa_exec.c that must be updated. */
 
 enum {
   OP_END,            /* 0 End of pattern */
@@ -662,142 +1293,166 @@ enum {
   OP_WHITESPACE,         /*  9 \s */
   OP_NOT_WORDCHAR,       /* 10 \W */
   OP_WORDCHAR,           /* 11 \w */
-  OP_ANY,            /* 12 Match any character */
-  OP_ANYBYTE,        /* 13 Match any byte (\C); different to OP_ANY for UTF-8 */
-  OP_NOTPROP,        /* 14 \P (not Unicode property) */
-  OP_PROP,           /* 15 \p (Unicode property) */
-  OP_ANYNL,          /* 16 \R (any newline sequence) */
-  OP_NOT_HSPACE,     /* 17 \H (not horizontal whitespace) */
-  OP_HSPACE,         /* 18 \h (horizontal whitespace) */
-  OP_NOT_VSPACE,     /* 19 \V (not vertical whitespace) */
-  OP_VSPACE,         /* 20 \v (vertical whitespace) */
-  OP_EXTUNI,         /* 21 \X (extended Unicode sequence */
-  OP_EODN,           /* 22 End of data or \n at end of data: \Z. */
-  OP_EOD,            /* 23 End of data: \z */
+  OP_ANY,            /* 12 Match any character except newline */
+  OP_ALLANY,         /* 13 Match any character */
+  OP_ANYBYTE,        /* 14 Match any byte (\C); different to OP_ANY for UTF-8 */
+  OP_NOTPROP,        /* 15 \P (not Unicode property) */
+  OP_PROP,           /* 16 \p (Unicode property) */
+  OP_ANYNL,          /* 17 \R (any newline sequence) */
+  OP_NOT_HSPACE,     /* 18 \H (not horizontal whitespace) */
+  OP_HSPACE,         /* 19 \h (horizontal whitespace) */
+  OP_NOT_VSPACE,     /* 20 \V (not vertical whitespace) */
+  OP_VSPACE,         /* 21 \v (vertical whitespace) */
+  OP_EXTUNI,         /* 22 \X (extended Unicode sequence */
+  OP_EODN,           /* 23 End of data or \n at end of data: \Z. */
+  OP_EOD,            /* 24 End of data: \z */
 
-  OP_OPT,            /* 24 Set runtime options */
-  OP_CIRC,           /* 25 Start of line - varies with multiline switch */
-  OP_DOLL,           /* 26 End of line - varies with multiline switch */
-  OP_CHAR,           /* 27 Match one character, casefully */
-  OP_CHARNC,         /* 28 Match one character, caselessly */
-  OP_NOT,            /* 29 Match one character, not the following one */
+  OP_OPT,            /* 25 Set runtime options */
+  OP_CIRC,           /* 26 Start of line - varies with multiline switch */
+  OP_DOLL,           /* 27 End of line - varies with multiline switch */
+  OP_CHAR,           /* 28 Match one character, casefully */
+  OP_CHARNC,         /* 29 Match one character, caselessly */
+  OP_NOT,            /* 30 Match one character, not the following one */
 
-  OP_STAR,           /* 30 The maximizing and minimizing versions of */
-  OP_MINSTAR,        /* 31 these six opcodes must come in pairs, with */
-  OP_PLUS,           /* 32 the minimizing one second. */
-  OP_MINPLUS,        /* 33 This first set applies to single characters.*/
-  OP_QUERY,          /* 34 */
-  OP_MINQUERY,       /* 35 */
+  OP_STAR,           /* 31 The maximizing and minimizing versions of */
+  OP_MINSTAR,        /* 32 these six opcodes must come in pairs, with */
+  OP_PLUS,           /* 33 the minimizing one second. */
+  OP_MINPLUS,        /* 34 This first set applies to single characters.*/
+  OP_QUERY,          /* 35 */
+  OP_MINQUERY,       /* 36 */
 
-  OP_UPTO,           /* 36 From 0 to n matches */
-  OP_MINUPTO,        /* 37 */
-  OP_EXACT,          /* 38 Exactly n matches */
+  OP_UPTO,           /* 37 From 0 to n matches */
+  OP_MINUPTO,        /* 38 */
+  OP_EXACT,          /* 39 Exactly n matches */
 
-  OP_POSSTAR,        /* 39 Possessified star */
-  OP_POSPLUS,        /* 40 Possessified plus */
-  OP_POSQUERY,       /* 41 Posesssified query */
-  OP_POSUPTO,        /* 42 Possessified upto */
+  OP_POSSTAR,        /* 40 Possessified star */
+  OP_POSPLUS,        /* 41 Possessified plus */
+  OP_POSQUERY,       /* 42 Posesssified query */
+  OP_POSUPTO,        /* 43 Possessified upto */
 
-  OP_NOTSTAR,        /* 43 The maximizing and minimizing versions of */
-  OP_NOTMINSTAR,     /* 44 these six opcodes must come in pairs, with */
-  OP_NOTPLUS,        /* 45 the minimizing one second. They must be in */
-  OP_NOTMINPLUS,     /* 46 exactly the same order as those above. */
-  OP_NOTQUERY,       /* 47 This set applies to "not" single characters. */
-  OP_NOTMINQUERY,    /* 48 */
+  OP_NOTSTAR,        /* 44 The maximizing and minimizing versions of */
+  OP_NOTMINSTAR,     /* 45 these six opcodes must come in pairs, with */
+  OP_NOTPLUS,        /* 46 the minimizing one second. They must be in */
+  OP_NOTMINPLUS,     /* 47 exactly the same order as those above. */
+  OP_NOTQUERY,       /* 48 This set applies to "not" single characters. */
+  OP_NOTMINQUERY,    /* 49 */
 
-  OP_NOTUPTO,        /* 49 From 0 to n matches */
-  OP_NOTMINUPTO,     /* 50 */
-  OP_NOTEXACT,       /* 51 Exactly n matches */
+  OP_NOTUPTO,        /* 50 From 0 to n matches */
+  OP_NOTMINUPTO,     /* 51 */
+  OP_NOTEXACT,       /* 52 Exactly n matches */
 
-  OP_NOTPOSSTAR,     /* 52 Possessified versions */
-  OP_NOTPOSPLUS,     /* 53 */
-  OP_NOTPOSQUERY,    /* 54 */
-  OP_NOTPOSUPTO,     /* 55 */
+  OP_NOTPOSSTAR,     /* 53 Possessified versions */
+  OP_NOTPOSPLUS,     /* 54 */
+  OP_NOTPOSQUERY,    /* 55 */
+  OP_NOTPOSUPTO,     /* 56 */
 
-  OP_TYPESTAR,       /* 56 The maximizing and minimizing versions of */
-  OP_TYPEMINSTAR,    /* 57 these six opcodes must come in pairs, with */
-  OP_TYPEPLUS,       /* 58 the minimizing one second. These codes must */
-  OP_TYPEMINPLUS,    /* 59 be in exactly the same order as those above. */
-  OP_TYPEQUERY,      /* 60 This set applies to character types such as \d */
-  OP_TYPEMINQUERY,   /* 61 */
+  OP_TYPESTAR,       /* 57 The maximizing and minimizing versions of */
+  OP_TYPEMINSTAR,    /* 58 these six opcodes must come in pairs, with */
+  OP_TYPEPLUS,       /* 59 the minimizing one second. These codes must */
+  OP_TYPEMINPLUS,    /* 60 be in exactly the same order as those above. */
+  OP_TYPEQUERY,      /* 61 This set applies to character types such as \d */
+  OP_TYPEMINQUERY,   /* 62 */
 
-  OP_TYPEUPTO,       /* 62 From 0 to n matches */
-  OP_TYPEMINUPTO,    /* 63 */
-  OP_TYPEEXACT,      /* 64 Exactly n matches */
+  OP_TYPEUPTO,       /* 63 From 0 to n matches */
+  OP_TYPEMINUPTO,    /* 64 */
+  OP_TYPEEXACT,      /* 65 Exactly n matches */
 
-  OP_TYPEPOSSTAR,    /* 65 Possessified versions */
-  OP_TYPEPOSPLUS,    /* 66 */
-  OP_TYPEPOSQUERY,   /* 67 */
-  OP_TYPEPOSUPTO,    /* 68 */
+  OP_TYPEPOSSTAR,    /* 66 Possessified versions */
+  OP_TYPEPOSPLUS,    /* 67 */
+  OP_TYPEPOSQUERY,   /* 68 */
+  OP_TYPEPOSUPTO,    /* 69 */
 
-  OP_CRSTAR,         /* 69 The maximizing and minimizing versions of */
-  OP_CRMINSTAR,      /* 70 all these opcodes must come in pairs, with */
-  OP_CRPLUS,         /* 71 the minimizing one second. These codes must */
-  OP_CRMINPLUS,      /* 72 be in exactly the same order as those above. */
-  OP_CRQUERY,        /* 73 These are for character classes and back refs */
-  OP_CRMINQUERY,     /* 74 */
-  OP_CRRANGE,        /* 75 These are different to the three sets above. */
-  OP_CRMINRANGE,     /* 76 */
+  OP_CRSTAR,         /* 70 The maximizing and minimizing versions of */
+  OP_CRMINSTAR,      /* 71 all these opcodes must come in pairs, with */
+  OP_CRPLUS,         /* 72 the minimizing one second. These codes must */
+  OP_CRMINPLUS,      /* 73 be in exactly the same order as those above. */
+  OP_CRQUERY,        /* 74 These are for character classes and back refs */
+  OP_CRMINQUERY,     /* 75 */
+  OP_CRRANGE,        /* 76 These are different to the three sets above. */
+  OP_CRMINRANGE,     /* 77 */
 
-  OP_CLASS,          /* 77 Match a character class, chars < 256 only */
-  OP_NCLASS,         /* 78 Same, but the bitmap was created from a negative
+  OP_CLASS,          /* 78 Match a character class, chars < 256 only */
+  OP_NCLASS,         /* 79 Same, but the bitmap was created from a negative
                            class - the difference is relevant only when a UTF-8
                            character > 255 is encountered. */
 
-  OP_XCLASS,         /* 79 Extended class for handling UTF-8 chars within the
+  OP_XCLASS,         /* 80 Extended class for handling UTF-8 chars within the
                            class. This does both positive and negative. */
 
-  OP_REF,            /* 80 Match a back reference */
-  OP_RECURSE,        /* 81 Match a numbered subpattern (possibly recursive) */
-  OP_CALLOUT,        /* 82 Call out to external function if provided */
+  OP_REF,            /* 81 Match a back reference */
+  OP_RECURSE,        /* 82 Match a numbered subpattern (possibly recursive) */
+  OP_CALLOUT,        /* 83 Call out to external function if provided */
 
-  OP_ALT,            /* 83 Start of alternation */
-  OP_KET,            /* 84 End of group that doesn't have an unbounded repeat */
-  OP_KETRMAX,        /* 85 These two must remain together and in this */
-  OP_KETRMIN,        /* 86 order. They are for groups the repeat for ever. */
+  OP_ALT,            /* 84 Start of alternation */
+  OP_KET,            /* 85 End of group that doesn't have an unbounded repeat */
+  OP_KETRMAX,        /* 86 These two must remain together and in this */
+  OP_KETRMIN,        /* 87 order. They are for groups the repeat for ever. */
 
   /* The assertions must come before BRA, CBRA, ONCE, and COND.*/
 
-  OP_ASSERT,         /* 87 Positive lookahead */
-  OP_ASSERT_NOT,     /* 88 Negative lookahead */
-  OP_ASSERTBACK,     /* 89 Positive lookbehind */
-  OP_ASSERTBACK_NOT, /* 90 Negative lookbehind */
-  OP_REVERSE,        /* 91 Move pointer back - used in lookbehind assertions */
+  OP_ASSERT,         /* 88 Positive lookahead */
+  OP_ASSERT_NOT,     /* 89 Negative lookahead */
+  OP_ASSERTBACK,     /* 90 Positive lookbehind */
+  OP_ASSERTBACK_NOT, /* 91 Negative lookbehind */
+  OP_REVERSE,        /* 92 Move pointer back - used in lookbehind assertions */
 
   /* ONCE, BRA, CBRA, and COND must come after the assertions, with ONCE first,
   as there's a test for >= ONCE for a subpattern that isn't an assertion. */
 
-  OP_ONCE,           /* 92 Atomic group */
-  OP_BRA,            /* 93 Start of non-capturing bracket */
-  OP_CBRA,           /* 94 Start of capturing bracket */
-  OP_COND,           /* 95 Conditional group */
+  OP_ONCE,           /* 93 Atomic group */
+  OP_BRA,            /* 94 Start of non-capturing bracket */
+  OP_CBRA,           /* 95 Start of capturing bracket */
+  OP_COND,           /* 96 Conditional group */
 
   /* These three must follow the previous three, in the same order. There's a
   check for >= SBRA to distinguish the two sets. */
 
-  OP_SBRA,           /* 96 Start of non-capturing bracket, check empty  */
-  OP_SCBRA,          /* 97 Start of capturing bracket, check empty */
-  OP_SCOND,          /* 98 Conditional group, check empty */
+  OP_SBRA,           /* 97 Start of non-capturing bracket, check empty  */
+  OP_SCBRA,          /* 98 Start of capturing bracket, check empty */
+  OP_SCOND,          /* 99 Conditional group, check empty */
 
-  OP_CREF,           /* 99 Used to hold a capture number as condition */
-  OP_RREF,           /* 100 Used to hold a recursion number as condition */
-  OP_DEF,            /* 101 The DEFINE condition */
+  /* The next two pairs must (respectively) be kept together. */
 
-  OP_BRAZERO,        /* 102 These two must remain together and in this */
-  OP_BRAMINZERO,     /* 103 order. */
+  OP_CREF,           /* 100 Used to hold a capture number as condition */
+  OP_NCREF,          /* 101 Same, but generaged by a name reference*/
+  OP_RREF,           /* 102 Used to hold a recursion number as condition */
+  OP_NRREF,          /* 103 Same, but generaged by a name reference*/
+  OP_DEF,            /* 104 The DEFINE condition */
+
+  OP_BRAZERO,        /* 105 These two must remain together and in this */
+  OP_BRAMINZERO,     /* 106 order. */
 
   /* These are backtracking control verbs */
 
-  OP_PRUNE,          /* 104 */
-  OP_SKIP,           /* 105 */
-  OP_THEN,           /* 106 */
-  OP_COMMIT,         /* 107 */
+  OP_MARK,           /* 107 always has an argument */
+  OP_PRUNE,          /* 108 */
+  OP_PRUNE_ARG,      /* 109 same, but with argument */
+  OP_SKIP,           /* 110 */
+  OP_SKIP_ARG,       /* 111 same, but with argument */
+  OP_THEN,           /* 112 */
+  OP_THEN_ARG,       /* 113 same, but with argument */
+  OP_COMMIT,         /* 114 */
 
   /* These are forced failure and success verbs */
 
-  OP_FAIL,           /* 108 */
-  OP_ACCEPT          /* 109 */
+  OP_FAIL,           /* 115 */
+  OP_ACCEPT,         /* 116 */
+  OP_CLOSE,          /* 117 Used before OP_ACCEPT to close open captures */
+
+  /* This is used to skip a subpattern with a {0} quantifier */
+
+  OP_SKIPZERO,       /* 118 */
+
+  /* This is not an opcode, but is used to check that tables indexed by opcode
+  are the correct length, in order to catch updating errors - there have been
+  some in the past. */
+
+  OP_TABLE_LENGTH
 };
+
+/* *** NOTE NOTE NOTE *** Whenever the list above is updated, the two macro
+definitions that follow must also be updated to match. There are also tables
+called "coptable" and "poptable" in pcre_dfa_exec.c that must be updated. */
 
 
 /* This macro defines textual names for all the opcodes. These are used only
@@ -805,7 +1460,7 @@ for debugging. The macro is referenced only in pcre_printint.c. */
 
 #define OP_NAME_LIST \
   "End", "\\A", "\\G", "\\K", "\\B", "\\b", "\\D", "\\d",         \
-  "\\S", "\\s", "\\W", "\\w", "Any", "Anybyte",                   \
+  "\\S", "\\s", "\\W", "\\w", "Any", "AllAny", "Anybyte",         \
   "notprop", "prop", "\\R", "\\H", "\\h", "\\V", "\\v",           \
   "extuni",  "\\Z", "\\z",                                        \
   "Opt", "^", "$", "char", "charnc", "not",                       \
@@ -820,8 +1475,11 @@ for debugging. The macro is referenced only in pcre_printint.c. */
   "Alt", "Ket", "KetRmax", "KetRmin", "Assert", "Assert not",     \
   "AssertB", "AssertB not", "Reverse",                            \
   "Once", "Bra", "CBra", "Cond", "SBra", "SCBra", "SCond",        \
-  "Cond ref", "Cond rec", "Cond def", "Brazero", "Braminzero",    \
-  "*PRUNE", "*SKIP", "*THEN", "*COMMIT", "*FAIL", "*ACCEPT"
+  "Cond ref", "Cond nref", "Cond rec", "Cond nrec", "Cond def",   \
+  "Brazero", "Braminzero",                                        \
+  "*MARK", "*PRUNE", "*PRUNE", "*SKIP", "*SKIP",                  \
+  "*THEN", "*THEN", "*COMMIT", "*FAIL", "*ACCEPT",                \
+  "Close", "Skip zero"
 
 
 /* This macro defines the length of fixed length operations in the compiled
@@ -837,9 +1495,10 @@ in UTF-8 mode. The code that uses this table must know about such things. */
   1,                             /* End                                    */ \
   1, 1, 1, 1, 1,                 /* \A, \G, \K, \B, \b                     */ \
   1, 1, 1, 1, 1, 1,              /* \D, \d, \S, \s, \W, \w                 */ \
-  1, 1,                          /* Any, Anybyte                           */ \
-  3, 3, 1,                       /* NOTPROP, PROP, EXTUNI                  */ \
+  1, 1, 1,                       /* Any, AllAny, Anybyte                   */ \
+  3, 3,                          /* \P, \p                                 */ \
   1, 1, 1, 1, 1,                 /* \R, \H, \h, \V, \v                     */ \
+  1,                             /* \X                                     */ \
   1, 1, 2, 1, 1,                 /* \Z, \z, Opt, ^, $                      */ \
   2,                             /* Char  - the minimum length             */ \
   2,                             /* Charnc  - the minimum length           */ \
@@ -881,20 +1540,23 @@ in UTF-8 mode. The code that uses this table must know about such things. */
   1+LINK_SIZE,                   /* SBRA                                   */ \
   3+LINK_SIZE,                   /* SCBRA                                  */ \
   1+LINK_SIZE,                   /* SCOND                                  */ \
-  3,                             /* CREF                                   */ \
-  3,                             /* RREF                                   */ \
+  3, 3,                          /* CREF, NCREF                            */ \
+  3, 3,                          /* RREF, NRREF                            */ \
   1,                             /* DEF                                    */ \
   1, 1,                          /* BRAZERO, BRAMINZERO                    */ \
-  1, 1, 1, 1,                    /* PRUNE, SKIP, THEN, COMMIT,             */ \
-  1, 1                           /* FAIL, ACCEPT                           */
+  3, 1, 3,                       /* MARK, PRUNE, PRUNE_ARG,                */ \
+  1, 3, 1, 3,                    /* SKIP, SKIP_ARG, THEN, THEN_ARG,        */ \
+  1, 1, 1, 3, 1                  /* COMMIT, FAIL, ACCEPT, CLOSE, SKIPZERO  */
 
 
-/* A magic value for OP_RREF to indicate the "any recursion" condition. */
+/* A magic value for OP_RREF and OP_NRREF to indicate the "any recursion"
+condition. */
 
 #define RREF_ANY  0xffff
 
-/* Error code numbers. They are given names so that they can more easily be
-tracked. */
+/* Compile time error code numbers. They are given names so that they can more
+easily be tracked. When a new number is added, the table called eint in
+pcreposix.c must be updated. */
 
 enum { ERR0,  ERR1,  ERR2,  ERR3,  ERR4,  ERR5,  ERR6,  ERR7,  ERR8,  ERR9,
        ERR10, ERR11, ERR12, ERR13, ERR14, ERR15, ERR16, ERR17, ERR18, ERR19,
@@ -902,7 +1564,7 @@ enum { ERR0,  ERR1,  ERR2,  ERR3,  ERR4,  ERR5,  ERR6,  ERR7,  ERR8,  ERR9,
        ERR30, ERR31, ERR32, ERR33, ERR34, ERR35, ERR36, ERR37, ERR38, ERR39,
        ERR40, ERR41, ERR42, ERR43, ERR44, ERR45, ERR46, ERR47, ERR48, ERR49,
        ERR50, ERR51, ERR52, ERR53, ERR54, ERR55, ERR56, ERR57, ERR58, ERR59,
-       ERR60, ERR61 };
+       ERR60, ERR61, ERR62, ERR63, ERR64, ERR65, ERR66, ERR67, ERRCOUNT };
 
 /* The real format of the start of the pcre block; the index of names and the
 code vector run on as long as necessary after the end. We store an explicit
@@ -918,7 +1580,7 @@ Because people can now save and re-use compiled patterns, any additions to this
 structure should be made at the end, and something earlier (e.g. a new
 flag in the options or one of the dummy fields) should indicate that the new
 fields are present. Currently PCRE always sets the dummy fields to zero.
-NOTE NOTE NOTE:
+NOTE NOTE NOTE
 */
 
 typedef struct real_pcre {
@@ -945,9 +1607,21 @@ remark (see NOTE above) about extending this structure applies. */
 
 typedef struct pcre_study_data {
   pcre_uint32 size;               /* Total that was malloced */
-  pcre_uint32 options;
-  uschar start_bits[32];
+  pcre_uint32 flags;              /* Private flags */
+  uschar start_bits[32];          /* Starting char bits */
+  pcre_uint32 minlength;          /* Minimum subject length */
 } pcre_study_data;
+
+/* Structure for building a chain of open capturing subpatterns during
+compiling, so that instructions to close them can be compiled when (*ACCEPT) is
+encountered. This is also used to identify subpatterns that contain recursive
+back references to themselves, so that they can be made atomic. */
+
+typedef struct open_capitem {
+  struct open_capitem *next;    /* Chain link */
+  pcre_uint16 number;           /* Capture number */
+  pcre_uint16 flag;             /* Set TRUE if recursive back ref */
+} open_capitem;
 
 /* Structure for passing "static" information around between the functions
 doing the compiling, so that they are thread-safe. */
@@ -961,17 +1635,20 @@ typedef struct compile_data {
   const uschar *start_code;     /* The start of the compiled code */
   const uschar *start_pattern;  /* The start of the pattern */
   const uschar *end_pattern;    /* The end of the pattern */
+  open_capitem *open_caps;      /* Chain of open capture items */
   uschar *hwm;                  /* High watermark of workspace */
   uschar *name_table;           /* The name/number table */
   int  names_found;             /* Number of entries so far */
   int  name_entry_size;         /* Size of each entry */
-  int  bracount;                /* Count of capturing parens */
+  int  bracount;                /* Count of capturing parens as we compile */
+  int  final_bracount;          /* Saved value after first pass */
   int  top_backref;             /* Maximum back reference */
   unsigned int backref_map;     /* Bitmap of low back refs */
   int  external_options;        /* External (initial) options */
   int  external_flags;          /* External flag bits to be set */
   int  req_varyopt;             /* "After variable item" flag for reqbyte */
   BOOL had_accept;              /* (*ACCEPT) encountered */
+  BOOL check_lookbehind;        /* Lookbehinds need later checking */
   int  nltype;                  /* Newline type */
   int  nllen;                   /* Newline string length */
   uschar nl[4];                 /* Newline string when fixed length */
@@ -982,7 +1659,7 @@ branches, for testing for left recursion. */
 
 typedef struct branch_chain {
   struct branch_chain *outer;
-  uschar *current;
+  uschar *current_branch;
 } branch_chain;
 
 /* Structure for items in a linked list that represents an explicit recursive
@@ -991,9 +1668,9 @@ call within the pattern. */
 typedef struct recursion_info {
   struct recursion_info *prevrec; /* Previous recursion record (or NULL) */
   const uschar *after_call;     /* "Return value": points after the call in the expr */
-  USPTR save_start;             /* Old value of mstart */
   int *offset_save;             /* Pointer to start of saved offsets */
   int saved_max;                /* Number of saved offsets */
+  int save_offset_top;          /* Current value of offset_top */
   int group_num;                /* Number of group that was called */
 } recursion_info;
 
@@ -1019,6 +1696,9 @@ typedef struct match_data {
   int    offset_max;            /* The maximum usable for return data */
   int    nltype;                /* Newline type */
   int    nllen;                 /* Newline string length */
+  int    name_count;            /* Number of names in name table */
+  int    name_entry_size;       /* Size of entry in names table */
+  uschar *name_table;           /* Table of names */
   uschar nl[4];                 /* Newline string when fixed */
   const uschar *lcc;            /* Points to lower casing table */
   const uschar *ctypes;         /* Points to table of type maps */
@@ -1027,10 +1707,12 @@ typedef struct match_data {
   BOOL   noteol;                /* NOTEOL flag */
 #ifdef SUPPORT_UTF8 /* AutoHotkey: This helps detected unintended usages of utf8. */
   BOOL   utf8;                  /* UTF8 flag */
+  BOOL   use_ucp;               /* PCRE_UCP flag */
 #endif /* AutoHotkey. */
+  BOOL   jscript_compat;        /* JAVASCRIPT_COMPAT flag */
   BOOL   endonly;               /* Dollar not before final \n */
   BOOL   notempty;              /* Empty string match not wanted */
-  BOOL   partial;               /* PARTIAL flag */
+  BOOL   notempty_atstart;      /* Empty string match at start not wanted */
   BOOL   hitend;                /* Hit the end of the subject at some point */
   BOOL   bsr_anycrlf;           /* \R is just any CRLF, not full Unicode */
   const uschar *start_code;     /* For use when recursing */
@@ -1038,6 +1720,8 @@ typedef struct match_data {
   USPTR  end_subject;           /* End of the subject string */
   USPTR  start_match_ptr;       /* Start of matched string */
   USPTR  end_match_ptr;         /* Subject position at end match */
+  USPTR  start_used_ptr;        /* Earliest consulted character */
+  int    partial;               /* PARTIAL options */
   int    end_offset_top;        /* Highwater mark at end of match */
   int    capture_last;          /* Most recent capture number */
   int    start_offset;          /* The start offset value */
@@ -1045,6 +1729,7 @@ typedef struct match_data {
   int    eptrn;                 /* Next free eptrblock */
   recursion_info *recursive;    /* Linked list of recursion data */
   void  *callout_data;          /* To pass back to callouts */
+  const uschar *mark;           /* Mark pointer to pass back */
 } match_data;
 
 /* A similar structure is used for the same purpose by the DFA matching
@@ -1054,7 +1739,9 @@ typedef struct dfa_match_data {
   const uschar *start_code;     /* Start of the compiled pattern */
   const uschar *start_subject;  /* Start of the subject string */
   const uschar *end_subject;    /* End of subject string */
+  const uschar *start_used_ptr; /* Earliest consulted character */
   const uschar *tables;         /* Character tables */
+  int   start_offset;           /* The start offset value */
   int   moptions;               /* Match options */
   int   poptions;               /* Pattern options */
   int    nltype;                /* Newline type */
@@ -1069,7 +1756,7 @@ typedef struct dfa_match_data {
 #define ctype_letter  0x02
 #define ctype_digit   0x04
 #define ctype_xdigit  0x08
-#define ctype_word    0x10   /* alphameric or '_' */
+#define ctype_word    0x10   /* alphanumeric or '_' */
 #define ctype_meta    0x80   /* regexp meta char or zero (end pattern) */
 
 /* Offsets for the bitmap tables in pcre_cbits. Each table contains a set
@@ -1135,18 +1822,42 @@ extern const uschar _pcre_OP_lengths[];
 one of the exported public functions. They have to be "external" in the C
 sense, but are not part of the PCRE public API. */
 
-extern BOOL         _pcre_is_newline(const uschar *, int, const uschar *,
-                      int *, BOOL);
-extern int          _pcre_ord2utf8(int, uschar *);
-extern real_pcre   *_pcre_try_flipped(const real_pcre *, real_pcre *,
-                      const pcre_study_data *, pcre_study_data *);
-extern int          _pcre_ucp_findprop(const unsigned int, int *, int *);
-extern unsigned int _pcre_ucp_othercase(const unsigned int);
-//extern int          _pcre_valid_utf8(const uschar *, int);
-#define _pcre_valid_utf8(s, n) ((int) -1) // jackieku: We always give PCRE valid UTF-8 strings.
-extern BOOL         _pcre_was_newline(const uschar *, int, const uschar *,
-                      int *, BOOL);
-extern BOOL         _pcre_xclass(int, const uschar *);
+extern const uschar *_pcre_find_bracket(const uschar *, BOOL, int);
+extern BOOL          _pcre_is_newline(USPTR, int, USPTR, int *, BOOL);
+extern int           _pcre_ord2utf8(int, uschar *);
+extern real_pcre    *_pcre_try_flipped(const real_pcre *, real_pcre *,
+                       const pcre_study_data *, pcre_study_data *);
+#define _pcre_valid_utf8(s, n) ((int) -1) // AutoHotkey: UTF-8 inputs are always freshly converted from UTF-16 and therefore must be valid.
+//extern int           _pcre_valid_utf8(USPTR, int);
+extern BOOL          _pcre_was_newline(USPTR, int, USPTR, int *, BOOL);
+extern BOOL          _pcre_xclass(int, const uschar *);
+
+
+/* Unicode character database (UCD) */
+
+typedef struct {
+  uschar script;
+  uschar chartype;
+  pcre_int32 other_case;
+} ucd_record;
+
+extern const ucd_record  _pcre_ucd_records[];
+extern const uschar      _pcre_ucd_stage1[];
+extern const pcre_uint16 _pcre_ucd_stage2[];
+extern const int         _pcre_ucp_gentype[];
+
+
+/* UCD access macros */
+
+#define UCD_BLOCK_SIZE 128
+#define GET_UCD(ch) (_pcre_ucd_records + \
+        _pcre_ucd_stage2[_pcre_ucd_stage1[(ch) / UCD_BLOCK_SIZE] * \
+        UCD_BLOCK_SIZE + ch % UCD_BLOCK_SIZE])
+
+#define UCD_CHARTYPE(ch)  GET_UCD(ch)->chartype
+#define UCD_SCRIPT(ch)    GET_UCD(ch)->script
+#define UCD_CATEGORY(ch)  _pcre_ucp_gentype[UCD_CHARTYPE(ch)]
+#define UCD_OTHERCASE(ch) (ch + GET_UCD(ch)->other_case)
 
 #endif
 

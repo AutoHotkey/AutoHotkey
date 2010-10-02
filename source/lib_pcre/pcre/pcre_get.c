@@ -6,7 +6,7 @@
 and semantics are as close as possible to those of the Perl 5 language.
 
                        Written by Philip Hazel
-           Copyright (c) 1997-2007 University of Cambridge
+           Copyright (c) 1997-2008 University of Cambridge
 
 -----------------------------------------------------------------------------
 Redistribution and use in source and binary forms, with or without
@@ -65,7 +65,7 @@ Returns:      the number of the named parentheses, or a negative number
                 (PCRE_ERROR_NOSUBSTRING) if not found
 */
 
-int
+PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
 pcre_get_stringnumber(const pcre *code, const char *stringname)
 {
 int rc;
@@ -114,7 +114,7 @@ Returns:      the length of each entry, or a negative number
                 (PCRE_ERROR_NOSUBSTRING) if not found
 */
 
-int
+PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
 pcre_get_stringtable_entries(const pcre *code, const char *stringname,
   char **firstptr, char **lastptr)
 {
@@ -231,7 +231,7 @@ Returns:         if successful:
                    PCRE_ERROR_NOSUBSTRING (-7) no such captured substring
 */
 
-int
+PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
 pcre_copy_substring(const char *subject, int *ovector, int stringcount,
   int stringnumber, char *buffer, int size)
 {
@@ -276,7 +276,7 @@ Returns:         if successful:
                    PCRE_ERROR_NOSUBSTRING (-7) no such captured substring
 */
 
-int
+PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
 pcre_copy_named_substring(const pcre *code, const char *subject, int *ovector,
   int stringcount, const char *stringname, char *buffer, int size)
 {
@@ -308,7 +308,7 @@ Returns:         if successful: 0
                    PCRE_ERROR_NOMEMORY (-6) failed to get store
 */
 
-int
+PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
 pcre_get_substring_list(const char *subject, int *ovector, int stringcount,
   const char ***listptr)
 {
@@ -353,7 +353,7 @@ Argument:   the result of a previous pcre_get_substring_list()
 Returns:    nothing
 */
 
-void
+PCRE_EXP_DEFN void PCRE_CALL_CONVENTION
 pcre_free_substring_list(const char **pointer)
 {
 (pcre_free)((void *)pointer);
@@ -386,7 +386,7 @@ Returns:         if successful:
                    PCRE_ERROR_NOSUBSTRING (-7) substring not present
 */
 
-int
+PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
 pcre_get_substring(const char *subject, int *ovector, int stringcount,
   int stringnumber, const char **stringptr)
 {
@@ -433,7 +433,7 @@ Returns:         if successful:
                    PCRE_ERROR_NOSUBSTRING (-7) no such captured substring
 */
 
-int
+PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
 pcre_get_named_substring(const pcre *code, const char *subject, int *ovector,
   int stringcount, const char *stringname, const char **stringptr)
 {
@@ -456,7 +456,7 @@ Argument:   the result of a previous pcre_get_substring()
 Returns:    nothing
 */
 
-void
+PCRE_EXP_DEFN void PCRE_CALL_CONVENTION
 pcre_free_substring(const char *pointer)
 {
 (pcre_free)((void *)pointer);

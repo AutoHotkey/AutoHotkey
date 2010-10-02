@@ -34,7 +34,10 @@ of `a (PCRE_NEWLINE_ANY), namely that all of the following are considered newlin
 
 /* If you are compiling for a system that uses EBCDIC instead of ASCII
    character codes, define this macro as 1. On systems that can use
-   "configure", this can be done via --enable-ebcdic. */
+   "configure", this can be done via --enable-ebcdic. PCRE will then assume
+   that all input strings are in EBCDIC. If you do not define this macro, PCRE
+   will assume input strings are ASCII or UTF-8 Unicode. It is not possible to
+   build a version of PCRE that supports both EBCDIC and UTF-8. */
 /* #undef EBCDIC */
 
 /* Define to 1 if you have the `bcopy' function. */
@@ -44,6 +47,9 @@ of `a (PCRE_NEWLINE_ANY), namely that all of the following are considered newlin
 
 /* Define to 1 if you have the <bits/type_traits.h> header file. */
 /* #undef HAVE_BITS_TYPE_TRAITS_H */
+
+/* Define to 1 if you have the <bzlib.h> header file. */
+/* #undef HAVE_BZLIB_H */
 
 /* Define to 1 if you have the <dirent.h> header file. */
 #ifndef HAVE_DIRENT_H
@@ -80,6 +86,12 @@ of `a (PCRE_NEWLINE_ANY), namely that all of the following are considered newlin
 #define HAVE_MEMORY_H 1
 #endif
 
+/* Define to 1 if you have the <readline/history.h> header file. */
+/* #undef HAVE_READLINE_HISTORY_H */
+
+/* Define to 1 if you have the <readline/readline.h> header file. */
+/* #undef HAVE_READLINE_READLINE_H */
+
 /* Define to 1 if you have the <stdint.h> header file. */
 #ifndef HAVE_STDINT_H
 #define HAVE_STDINT_H 0  /* AutoHotkey: Changed from 1 to 0. */
@@ -110,12 +122,15 @@ of `a (PCRE_NEWLINE_ANY), namely that all of the following are considered newlin
 #define HAVE_STRING_H 1
 #endif
 
-/* Define to 1 if you have the `strtoll' function. */
+/* Define to 1 if you have `strtoimax'. */
+/* #undef HAVE_STRTOIMAX */
+
+/* Define to 1 if you have `strtoll'. */
 #ifndef HAVE_STRTOLL
 #define HAVE_STRTOLL 0  /* AutoHotkey: Changed from 1 to 0. */
 #endif
 
-/* Define to 1 if you have the `strtoq' function. */
+/* Define to 1 if you have `strtoq'. */
 #ifndef HAVE_STRTOQ
 #define HAVE_STRTOQ 1
 #endif
@@ -147,8 +162,10 @@ of `a (PCRE_NEWLINE_ANY), namely that all of the following are considered newlin
 /* #undef HAVE_WINDOWS_H */
 #define HAVE_WINDOWS_H 1  /* AutoHotkey: Added. */
 
-/* Define to 1 if you have the `_strtoi64' function. */
-/* #undef HAVE__STRTOI64 */
+/* Define to 1 if you have the <zlib.h> header file. */
+/* #undef HAVE_ZLIB_H */
+
+/* Define to 1 if you have `_strtoi64'. */
 #define HAVE__STRTOI64 1  /* AutoHotkey: Added. */
 
 /* The value of LINK_SIZE determines the number of bytes used to store links
@@ -160,6 +177,10 @@ of `a (PCRE_NEWLINE_ANY), namely that all of the following are considered newlin
 #ifndef LINK_SIZE
 #define LINK_SIZE 2  /* AutoHotkey: PHP also seems to use 2, so it's likely the best compromise between memory utilization and being able to handle unusually large compiled patterns. */
 #endif
+
+/* Define to the sub-directory in which libtool stores uninstalled libraries.
+   */
+/* #undef LT_OBJDIR */
 
 /* The value of MATCH_LIMIT determines the default number of times the
    internal match() function can be called during a single execution of
@@ -241,8 +262,11 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "pcre"
 
+/* Define to the home page for this package. */
+/* #undef PACKAGE_URL */
+
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "7.4"
+#define PACKAGE_VERSION "8.10"
 
 
 /* If you are compiling for a system other than a Unix-like system or
@@ -277,21 +301,39 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 #define STDC_HEADERS 1
 #endif
 
+/* Define to allow pcregrep to be linked with libbz2, so that it is able to
+   handle .bz2 files. */
+/* #undef SUPPORT_LIBBZ2 */
+
+/* Define to allow pcretest to be linked with libreadline. */
+/* #undef SUPPORT_LIBREADLINE */
+
+/* Define to allow pcregrep to be linked with libz, so that it is able to
+   handle .gz files. */
+/* #undef SUPPORT_LIBZ */
+
 #ifdef UNICODE
 /* Define to enable support for Unicode properties */
 #define SUPPORT_UCP
 
-/* Define to enable support for the UTF-8 Unicode encoding. */
+/* Define to enable support for the UTF-8 Unicode encoding. This will work
+   even in an EBCDIC environment, but it is incompatible with the EBCDIC
+   macro. That is, PCRE can support *either* EBCDIC code *or* ASCII/UTF-8, but
+   not both at once. */
 #define SUPPORT_UTF8
 #endif
 
 /* Version number of package */
 #ifndef VERSION
-#define VERSION "7.4"
+#define VERSION "8.10"
 #endif
 
 /* Define to empty if `const' does not conform to ANSI C. */
 /* #undef const */
+
+/* Define to the type of a signed integer type of width exactly 64 bits if
+   such a type exists and the standard includes do not define it. */
+/* #define int64_t __int64 */
 
 /* Define to `unsigned int' if <sys/types.h> does not define. */
 /* #undef size_t */

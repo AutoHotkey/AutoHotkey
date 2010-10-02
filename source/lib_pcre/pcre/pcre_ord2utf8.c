@@ -6,7 +6,7 @@
 and semantics are as close as possible to those of the Perl 5 language.
 
                        Written by Philip Hazel
-           Copyright (c) 1997-2007 University of Cambridge
+           Copyright (c) 1997-2008 University of Cambridge
 
 -----------------------------------------------------------------------------
 Redistribution and use in source and binary forms, with or without
@@ -78,8 +78,10 @@ for (j = i; j > 0; j--)
 *buffer = _pcre_utf8_table2[i] | cvalue;
 return i + 1;
 #else
-return 0;   /* Keep compiler happy; this function won't ever be */
-#endif      /* called when SUPPORT_UTF8 is not defined. */
+(void)(cvalue);  /* Keep compiler happy; this function won't ever be */
+(void)(buffer);  /* called when SUPPORT_UTF8 is not defined. */
+return 0;
+#endif
 }
 
 /* End of pcre_ord2utf8.c */

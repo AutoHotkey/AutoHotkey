@@ -6,7 +6,7 @@
 and semantics are as close as possible to those of the Perl 5 language.
 
                        Written by Philip Hazel
-           Copyright (c) 1997-2007 University of Cambridge
+           Copyright (c) 1997-2008 University of Cambridge
 
 -----------------------------------------------------------------------------
 Redistribution and use in source and binary forms, with or without
@@ -68,7 +68,7 @@ Returns:        the (possibly updated) count value (a non-negative number), or
                 a negative error number
 */
 
-PCRE_EXP_DEFN int
+PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
 pcre_refcount(pcre *argument_re, int adjust)
 {
 real_pcre *re = (real_pcre *)argument_re;

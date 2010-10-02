@@ -6,9 +6,8 @@
 #define _UCP_H
 
 /* This file contains definitions of the property values that are returned by
-the function _pcre_ucp_findprop(). New values that are added for new releases
-of Unicode should always be at the end of each enum, for backwards
-compatibility. */
+the UCD access macros. New values that are added for new releases of Unicode
+should always be at the end of each enum, for backwards compatibility. */
 
 /* These are the general character categories. */
 
@@ -121,11 +120,40 @@ enum {
   ucp_Tifinagh,
   ucp_Ugaritic,
   ucp_Yi,
-  ucp_Balinese,      /* New for Unicode 5.0.0 */
-  ucp_Cuneiform,     /* New for Unicode 5.0.0 */
-  ucp_Nko,           /* New for Unicode 5.0.0 */
-  ucp_Phags_Pa,      /* New for Unicode 5.0.0 */
-  ucp_Phoenician     /* New for Unicode 5.0.0 */
+  /* New for Unicode 5.0: */
+  ucp_Balinese,
+  ucp_Cuneiform,
+  ucp_Nko,
+  ucp_Phags_Pa,
+  ucp_Phoenician,
+  /* New for Unicode 5.1: */
+  ucp_Carian,
+  ucp_Cham,
+  ucp_Kayah_Li,
+  ucp_Lepcha,
+  ucp_Lycian,
+  ucp_Lydian,
+  ucp_Ol_Chiki,
+  ucp_Rejang,
+  ucp_Saurashtra,
+  ucp_Sundanese,
+  ucp_Vai,
+  /* New for Unicode 5.2: */
+  ucp_Avestan,
+  ucp_Bamum,
+  ucp_Egyptian_Hieroglyphs,
+  ucp_Imperial_Aramaic,
+  ucp_Inscriptional_Pahlavi,
+  ucp_Inscriptional_Parthian,
+  ucp_Javanese,
+  ucp_Kaithi,
+  ucp_Lisu,
+  ucp_Meetei_Mayek,
+  ucp_Old_South_Arabian,
+  ucp_Old_Turkic,
+  ucp_Samaritan,
+  ucp_Tai_Tham,
+  ucp_Tai_Viet
 };
 
 #endif

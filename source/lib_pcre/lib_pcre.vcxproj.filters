@@ -60,7 +60,7 @@
     <ClCompile Include="pcre\pcre_xclass.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_ucp_searchfuncs.c">
+    <ClCompile Include="pcre\pcre_ucd.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
