@@ -771,11 +771,20 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 			// min and max are different types, are objects, or max < min.
 			|| (max_pos == min_pos && (max_key_type == SYM_INTEGER ? max_key.i < min_key.i : _tcsicmp(max_key.s, min_key.s) < 0)))
 			// max < min, but no keys exist in that range so (max_pos < min_pos) check above didn't catch it.
-			return OK;
+		{
+			if (min_key_type == SYM_INTEGER && max_key_type == SYM_STRING && !*max_key.s)
+				// Allow Remove(i,"") to mean "remove [i] but don't adjust keys".
+				aParamCount = 1;
+			else
+				return OK;
+		}
 		//else if (max_pos == min_pos): specified range is valid, but doesn't match any keys.
 		//	Continue on, adjust integer keys as necessary and return 0 instead of "".
 	}
 	else
+		max_key_type = min_key_type;
+
+	if (aParamCount < 2)
 	{
 		if (!min_field) // Nothing to remove.
 		{
@@ -811,7 +820,7 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		}
 		// Set these up as if caller did _Remove(min_key, min_key):
 		max_pos = min_pos + 1;
-		max_key.i = min_key.i; // Used only if min_key_type == SYM_INTEGER; has no effect in other cases.
+		max_key.i = min_key.i; // Union copy. Used only if min_key_type == SYM_INTEGER; has no effect in other cases.
 	}
 
 	for (pos = min_pos; pos < max_pos; ++pos)
@@ -826,18 +835,22 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	IndexType actual_count_removed = max_pos - min_pos;
 	mFieldCount -= actual_count_removed;
 	// Adjust key offsets and numeric keys as necessary.
-	if (min_key_type != SYM_STRING)
+	if (min_key_type != SYM_STRING) // i.e. SYM_OBJECT or SYM_INTEGER
 	{
 		mKeyOffsetString -= actual_count_removed;
-		if (min_key_type != SYM_OBJECT) // min_key_type == SYM_INTEGER
+		if (min_key_type == SYM_INTEGER)
 		{
 			mKeyOffsetObject -= actual_count_removed;
-			// Regardless of whether any fields were removed, min_pos contains the position of the field which
-			// immediately followed the specified range.  Decrement each numeric key from this position onward.
-			IntKeyType logical_count_removed = max_key.i - min_key.i + 1;
-			if (logical_count_removed > 0)
-				for (pos = min_pos; pos < mKeyOffsetObject; ++pos)
-					mFields[pos].key.i -= logical_count_removed;
+			if (max_key_type == SYM_INTEGER)
+			{
+				// Regardless of whether any fields were removed, min_pos contains the position of the field which
+				// immediately followed the specified range.  Decrement each numeric key from this position onward.
+				IntKeyType logical_count_removed = max_key.i - min_key.i + 1;
+				if (logical_count_removed > 0)
+					for (pos = min_pos; pos < mKeyOffsetObject; ++pos)
+						mFields[pos].key.i -= logical_count_removed;
+			}
+			//else max_key must be "", a special flag caller may pass to indicate keys shouldn't be adjusted.
 		}
 	}
 	if (aParamCount > 1)
