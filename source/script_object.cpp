@@ -780,9 +780,12 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		if (!min_field) // Nothing to remove.
 		{
 			// L34: Must not continue since min_pos points at the wrong key or an invalid location.
-			// Empty result is reserved for invalid parameters; zero indicates no key(s) were found.
-			aResultToken.symbol = SYM_INTEGER;	
-			aResultToken.value_int64 = 0;
+			// As of L50, our return value when (aParamCount < 2) is the value which was removed, not
+			// the number of removed items. Since this[min_field] would return "", an empty string is
+			// the only sensible value we can return here. An earlier check already ensured Remove()
+			// with no params returned "" if there was nothing to remove.
+			aResultToken.symbol = SYM_STRING;	
+			aResultToken.marker = _T(""); // L61: Changed from 0 to "". See comment above.
 			return OK;
 		}
 		// Since only one field (at maximum) can be removed in this mode, it
