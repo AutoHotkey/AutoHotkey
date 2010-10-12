@@ -1150,7 +1150,7 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 	//else use Alt+Numpad without the leading zero, which allows the characters a-z, A-Z, and quite
 	// a few others to be produced in Russian and perhaps other layouts, which was impossible in versions
 	// prior to 1.0.40.
-	_itot(aChar, cp, 10); // Convert to UCHAR in case aChar < 0.
+	_itot((TBYTE)aChar, cp, 10); // Convert to UCHAR in case aChar < 0.
 
 	LONG_OPERATION_INIT
 	for (int i = 0; i < aRepeatCount; ++i)
