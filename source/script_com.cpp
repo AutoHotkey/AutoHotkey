@@ -298,6 +298,14 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 		aToken.symbol = SYM_INTEGER;
 		aToken.value_int64 = aVar.iVal;
 		break;
+	case VT_R8:
+		aToken.symbol = SYM_FLOAT;
+		aToken.value_double = aVar.dblVal;
+		break;
+	case VT_R4:
+		aToken.symbol = SYM_FLOAT;
+		aToken.value_double = (double)aVar.fltVal;
+		break;
 	case VT_UNKNOWN:
 		aToken.symbol = SYM_INTEGER;
 		aToken.value_int64 = (__int64)aVar.punkVal;
@@ -366,10 +374,19 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar)
 	switch(aToken.symbol)
 	{
 	case SYM_OPERAND:
-		if(aToken.buf)
+		if (aToken.buf)
 		{
-			aVar.vt = VT_I4;
-			aVar.lVal = *(int *)aToken.buf;
+			__int64 val = *(__int64 *)aToken.buf;
+			if (val == (int)val)
+			{
+				aVar.vt = VT_I4;
+				aVar.lVal = (int)val;
+			}
+			else
+			{
+				aVar.vt = VT_R8;
+				aVar.dblVal = (double)val;
+			}
 			break;
 		}
 	case SYM_STRING:
@@ -377,8 +394,19 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar)
 		aVar.bstrVal = SysAllocString(CStringWCharFromTCharIfNeeded(aToken.marker));
 		break;
 	case SYM_INTEGER:
-		aVar.vt = VT_I4;
-		aVar.lVal = (int)aToken.value_int64;
+		{
+			__int64 val = aToken.value_int64;
+			if (val == (int)val)
+			{
+				aVar.vt = VT_I4;
+				aVar.lVal = (int)val;
+			}
+			else
+			{
+				aVar.vt = VT_R8;
+				aVar.dblVal = (double)val;
+			}
+		}
 		break;
 	case SYM_FLOAT:
 		aVar.vt = VT_R8;
@@ -665,6 +693,14 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 		case VT_BOOL:
 			aResultToken.symbol = SYM_INTEGER;
 			aResultToken.value_int64 = varResult.iVal;
+			break;
+		case VT_R8:
+			aResultToken.symbol = SYM_FLOAT;
+			aResultToken.value_double = varResult.dblVal;
+			break;
+		case VT_R4:
+			aResultToken.symbol = SYM_FLOAT;
+			aResultToken.value_double = (double)varResult.fltVal;
 			break;
 		case VT_UNKNOWN:
 			if (varResult.punkVal)

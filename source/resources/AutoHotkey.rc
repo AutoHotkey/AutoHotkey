@@ -180,7 +180,7 @@ BEGIN
             VALUE "FileDescription", "AutoHotkey_L"
             VALUE "FileVersion", "1, 0, 48, 05"
             VALUE "InternalName", "AutoHotkey_L"
-            VALUE "LegalCopyright", "Copyright (C) 2009"
+            VALUE "LegalCopyright", "Copyright (C) 2010"
             VALUE "OriginalFilename", "AutoHotkey.exe"
             VALUE "ProductName", "AutoHotkey_L"
             VALUE "ProductVersion", "1, 0, 48, 05"
