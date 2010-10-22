@@ -192,10 +192,8 @@ protected:
 		if (mLength + aReadSize > TEXT_IO_BLOCK)
 			aReadSize = TEXT_IO_BLOCK - mLength;
 		DWORD dwRead = _Read(mBuffer + mLength, (DWORD)aReadSize);
-		if (dwRead) {
+		if (dwRead)
 			mLength += dwRead;
-			mPos = mBuffer;
-		}
 		else
 			mEOF = true;
 		return dwRead;
@@ -212,6 +210,7 @@ protected:
 		}
 		else
 			return true;
+		mPos = mBuffer;
 		if (mLength < aReadSize)
 			mEOF = true;
 		return !mEOF;
