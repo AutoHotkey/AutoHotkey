@@ -207,7 +207,7 @@ protected:
 		else if (mPos > mBuffer + mLength - aReadSize) {
 			ASSERT( (DWORD)(mPos - mBuffer) <= mLength );
 			mLength -= (DWORD)(mPos - mBuffer);
-			memcpy(mBuffer, mPos, mLength);
+			memmove(mBuffer, mPos, mLength);
 			Read(TEXT_IO_BLOCK);
 		}
 		else
