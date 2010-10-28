@@ -9312,9 +9312,18 @@ ResultType Line::WriteClipboardToFile(LPTSTR aFilespec)
 
 	for (format = 0; format = EnumClipboardFormats(format);)
 	{
+		switch (format)
+		{
+		case CF_BITMAP:
+		case CF_ENHMETAFILE:
+		case CF_DSPENHMETAFILE:
+			// These formats appear to be specific handle types, not always safe to call GlobalSize() for.
+			continue;
+		}
+
 		format_is_text = (format == CF_NATIVETEXT || format == CF_OEMTEXT || format == CF_OTHERTEXT);
 		format_is_dib = (format == CF_DIB || format == CF_DIBV5);
-		format_is_meta = (format == CF_ENHMETAFILE || format == CF_METAFILEPICT);
+		format_is_meta = (format == CF_METAFILEPICT);
 
 		// Only write one Text and one Dib format, omitting the others to save space.  See
 		// similar section in PerformAssign() for details:

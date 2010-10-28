@@ -244,12 +244,20 @@ ResultType Var::AssignClipboardAll()
 	SIZE_T size;
 	UINT format;
 	VarSizeType space_needed;
-	UINT dib_format_to_omit = 0, meta_format_to_omit = 0, text_format_to_include = 0;
+	UINT dib_format_to_omit = 0, /*meta_format_to_omit = 0,*/ text_format_to_include = 0;
 	// Start space_needed off at 4 to allow room for guaranteed final termination of the variable's contents.
 	// The termination must be of the same size as format because a single-byte terminator would
 	// be read in as a format of 0x00?????? where ?????? is an access violation beyond the buffer.
 	for (space_needed = sizeof(format), format = 0; format = EnumClipboardFormats(format);)
 	{
+		switch (format)
+		{
+		case CF_BITMAP:
+		case CF_ENHMETAFILE:
+		case CF_DSPENHMETAFILE:
+			// These formats appear to be specific handle types, not always safe to call GlobalSize() for.
+			continue;
+		}
 		// No point in calling GetLastError() since it would never be executed because the loop's
 		// condition breaks on zero return value.
 		format_is_text = (format == CF_NATIVETEXT || format == CF_OEMTEXT || format == CF_OTHERTEXT);
@@ -278,13 +286,14 @@ ResultType Var::AssignClipboardAll()
 				else if (format == CF_DIBV5)
 					dib_format_to_omit = CF_DIB;
 			}
-			if (!meta_format_to_omit) // Checked for the same reasons as dib_format_to_omit.
-			{
-				if (format == CF_ENHMETAFILE)
-					meta_format_to_omit = CF_METAFILEPICT;
-				else if (format == CF_METAFILEPICT)
-					meta_format_to_omit = CF_ENHMETAFILE;
-			}
+			// Currently CF_ENHMETAFILE isn't supported, so no need for this section:
+			//if (!meta_format_to_omit) // Checked for the same reasons as dib_format_to_omit.
+			//{
+			//	if (format == CF_ENHMETAFILE)
+			//		meta_format_to_omit = CF_METAFILEPICT;
+			//	else if (format == CF_METAFILEPICT)
+			//		meta_format_to_omit = CF_ENHMETAFILE;
+			//}
 		}
 		//else omit this format from consideration.
 	}
@@ -313,10 +322,18 @@ ResultType Var::AssignClipboardAll()
 	VarSizeType added_size, actual_space_used;
 	for (actual_space_used = sizeof(format), format = 0; format = EnumClipboardFormats(format);)
 	{
+		switch (format)
+		{
+		case CF_BITMAP:
+		case CF_ENHMETAFILE:
+		case CF_DSPENHMETAFILE:
+			// These formats appear to be specific handle types, not always safe to call GlobalSize() for.
+			continue;
+		}
 		// No point in calling GetLastError() since it would never be executed because the loop's
 		// condition breaks on zero return value.
 		if ((format == CF_NATIVETEXT || format == CF_OEMTEXT || format == CF_OTHERTEXT) && format != text_format_to_include
-			|| format == dib_format_to_omit || format == meta_format_to_omit)
+			|| format == dib_format_to_omit /*|| format == meta_format_to_omit*/)
 			continue;
 		// Although the GlobalSize() documentation implies that a valid HGLOBAL should not be zero in
 		// size, it does happen, at least in MS Word and for CF_BITMAP.  Therefore, in order to save
