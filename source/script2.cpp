@@ -13872,6 +13872,8 @@ LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx)
 #endif
 }
 
+
+
 void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount
 	, pcre *aRE, pcre_extra *aExtra, LPTSTR aHaystack, int aHaystackLength
 #ifdef UNICODE
@@ -13925,6 +13927,15 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	// See if a replacement limit was specified.  If not, use the default (-1 means "replace all").
 	int limit = (aParamCount > 4) ? (int)TokenToInt64(*aParam[4]) : -1;
 
+#ifdef UNICODE
+	// For Unicode builds, preconvert our UTF-16 offset to UTF-8.  In the loop below, break up Haystack into
+	// smaller substrings for converting UTF-8 offsets back to UTF-16.  This greatly improves performance when
+	// performing many replacements in a long string.  An alternative would be to convert the replacement text
+	// to UTF-8, perform all replacements in UTF-8 and convert the result to UTF-16; however, that approach
+	// benchmarks slightly worse for short strings.
+	int starting_offset = TPosToUTF8Pos(aHaystack,aStartingOffset);
+#endif
+
 	// aStartingOffset is altered further on in the loop; but for its initial value, the caller has ensured
 	// that it lies within aHaystackLength.  Also, if there are no replacements yet, haystack_pos ignores
 	// aStartingOffset because otherwise, when the first replacement occurs, any part of haystack that lies
@@ -13934,7 +13945,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	{
 		// Execute the expression to find the next match.
 		captured_pattern_count = (limit == 0) ? PCRE_ERROR_NOMATCH // Only when limit is exactly 0 are we done replacing.  All negative values are "replace all".
-			: pcre_exec(aRE, aExtra, UorA(utf8Haystack, aHaystack), UorA(utf8HaystackLength,aHaystackLength), TPosToUTF8Pos(aHaystack,aStartingOffset)
+			: pcre_exec(aRE, aExtra, UorA(utf8Haystack, aHaystack), UorA(utf8HaystackLength,aHaystackLength), UorA(starting_offset,aStartingOffset)
 				, empty_string_is_not_a_match, aOffset, aNumberOfIntsInOffset);
 
 		if (captured_pattern_count == PCRE_ERROR_NOMATCH)
@@ -13948,6 +13959,9 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				empty_string_is_not_a_match = 0; // Reset so that the next iteration starts off with the normal matching method.
 				result[result_length++] = *haystack_pos; // This can't overflow because the size calculations in a previous iteration reserved 3 bytes: 1 for this character, 1 for the possible LF that follows CR, and 1 for the terminator.
 				++aStartingOffset; // Advance to next candidate section of haystack.
+#ifdef UNICODE
+				++starting_offset; // Keep in sync.
+#endif
 				// v1.0.46.06: This following section was added to avoid finding a match between a CR and LF
 				// when PCRE_NEWLINE_ANY mode is in effect.  The fact that this is the only change for
 				// PCRE_NEWLINE_ANY relies on the belief that any pattern that matches the empty string in between
@@ -13974,6 +13988,9 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 					{
 						result[result_length++] = '\n'; // This can't overflow because the size calculations in a previous iteration reserved 3 bytes: 1 for this character, 1 for the possible LF that follows CR, and 1 for the terminator.
 						++aStartingOffset; // Skip over this LF because it "belongs to" the CR that preceded it.
+#ifdef UNICODE
+						++starting_offset; // Keep in sync.
+#endif
 					}
 				}
 				continue; // i.e. we're not done yet because the "no match" above was a special one and there's still more haystack to check.
@@ -14025,8 +14042,21 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		// when offset[] is too small, which it isn't).
 		++replacement_count;
 		--limit; // It's okay if it goes below -1 because all negatives are treated as "replace all".
-		match_pos = aHaystack + UTF8PosToTPos(utf8Haystack,aOffset[0]); // This is the location in aHaystack of the entire-pattern match.
+#ifdef UNICODE
+		// The assertion below can fail if \K is used in a look-behind assertion. Since it wouldn't make sense
+		// to use that with RegExReplace and this function is incapable of handling it, the rest of the function
+		// assumes that aOffset[1] >= aOffset[0] >= starting_offset:
+		ASSERT(aOffset[0] >= starting_offset);
+		// See comment near declaration of starting_offset above.
+		haystack_portion_length = UTF8PosToTPos(utf8Haystack + starting_offset, aOffset[0] - starting_offset); // The length of the haystack section between the end of the previous match and the start of the current one.
+		int match_offset = aStartingOffset + haystack_portion_length;
+		int match_end_offset = match_offset + UTF8PosToTPos(utf8Haystack + aOffset[0], aOffset[1] - aOffset[0]);
+		match_pos = haystack_pos + haystack_portion_length; // This is the location in aHaystack of the entire-pattern match.
+#else
+		match_pos = aHaystack + aOffset[0]; // This is the location in aHaystack of the entire-pattern match.
 		haystack_portion_length = (int)(match_pos - haystack_pos); // The length of the haystack section between the end of the previous match and the start of the current one.
+		int match_end_offset = aOffset[1];
+#endif
 
 		// Handle this replacement by making two passes through the replacement-text: The first calculates the size
 		// (which avoids having to constantly check for buffer overflow with potential realloc at multiple stages).
@@ -14045,8 +14075,8 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 					//    new_result_length - haystack_portion_length - (aOffset[1] - aOffset[0])
 					// Above is the length difference between the current replacement text and what it's
 					// replacing (it's negative when replacement is smaller than what it replaces).
-					REGEX_REALLOC((int)PredictReplacementSize((new_result_length - UTF8PosToTPos(utf8Haystack,aOffset[1])) / replacement_count // See above.
-						, replacement_count, limit, aHaystackLength, new_result_length+2, UTF8PosToTPos(utf8Haystack,aOffset[1]))); // +2 in case of empty_string_is_not_a_match (which needs room for up to two extra characters).  The function will also do another +1 to convert length to size (for terminator).
+					REGEX_REALLOC((int)PredictReplacementSize((new_result_length - match_end_offset) / replacement_count // See above.
+						, replacement_count, limit, aHaystackLength, new_result_length+2, match_end_offset)); // +2 in case of empty_string_is_not_a_match (which needs room for up to two extra characters).  The function will also do another +1 to convert length to size (for terminator).
 					// The above will return if an alloc error occurs.
 				}
 				//else result_size is not only large enough, but also non-zero.  Other sections rely on it always
@@ -14167,8 +14197,15 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 					// copied over literally.  So that would have to be checked for if this is changed.
 					if (ref_num >= 0 && ref_num < captured_pattern_count) // Treat ref_num==0 as reference to the entire-pattern's match.
 					{
-						int ref_num0 = UTF8PosToTPos(utf8Haystack, aOffset[ref_num*2]);
-						int ref_num1 = UTF8PosToTPos(utf8Haystack, aOffset[ref_num*2 + 1]);
+						int ref_num0 = aOffset[ref_num*2];
+						int ref_num1 = aOffset[ref_num*2 + 1];
+#ifdef UNICODE
+						int match_offset_utf8 = aOffset[0];
+						ref_num0 = ref_num0 > match_offset_utf8
+							? match_offset + UTF8PosToTPos(utf8Haystack + match_offset_utf8, ref_num0 - match_offset_utf8)
+							: UTF8PosToTPos(utf8Haystack, ref_num0);
+						ref_num1 = ref_num0 + UTF8PosToTPos(utf8Haystack + ref_num0, ref_num1 - ref_num0);
+#endif
 						if (match_length = ref_num1 - ref_num0)
 						{
 							if (second_iteration)
@@ -14236,7 +14273,10 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		// in examples like:
 		//    RegExReplace("ABC", "Z*|A", "x")
 		empty_string_is_not_a_match = (aOffset[0] == aOffset[1]) ? PCRE_NOTEMPTY|PCRE_ANCHORED : 0;
-		aStartingOffset = UTF8PosToTPos(utf8Haystack,aOffset[1]); // In either case, set starting offset to the candidate for the next search.
+		aStartingOffset = match_end_offset; // In either case, set starting offset to the candidate for the next search.
+#ifdef UNICODE
+		starting_offset = aOffset[1];
+#endif
 	} // for()
 
 	// All paths above should return (or goto some other label), so execution should never reach here except
