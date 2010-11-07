@@ -476,7 +476,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 		//    Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
 		// If that were done, bugs would be easy to introduce in a long function like this one
 		// if your forget at use the implicit "this" by accident.  So instead, just call self.
-		return mAliasFor->AssignString(aBuf, aLength, aExactSize);
+		return mAliasFor->AssignString(aBuf, aLength, aExactSize, aObeyMaxMem);
 
 	bool do_assign = true;        // Set defaults.
 	bool free_it_if_large = true; //
