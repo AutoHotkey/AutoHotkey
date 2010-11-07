@@ -1103,7 +1103,7 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 						}
 					}
 					if (aFlags & TRANS_HTML_NUMBERED)
-						length += ((int) qmathLog10(*ucp)) + 3; // &#NNN;
+						length += ((int) qmathLog10(*ucp)) + 4; // &#NNN;
 					else
 						++length;
 end_get_length:
