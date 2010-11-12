@@ -9269,7 +9269,8 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	}
 
 	// Write to the file:
-	AssignErrorLevels(ts->Write(aBuf, (DWORD)_tcslen(aBuf)) == 0);
+	DWORD length = (DWORD)_tcslen(aBuf);
+	AssignErrorLevels(length && ts->Write(aBuf, length) == 0); // Relies on short-circuit boolean evaluation.  If buf is empty, we've already succeeded in creating the file and have nothing further to do.
 
 	if (!aCurrentReadFile)
 		delete ts;
