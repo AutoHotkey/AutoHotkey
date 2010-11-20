@@ -623,8 +623,6 @@ inline LPTSTR UTF8ToWide(LPCSTR str){
 #define TLenToUTF8Len  LenToUTF8Len
 #define UTF8PosToTPos  UTF8PosToPos
 #define UTF8LenToTLen  UTF8LenToLen
-#define vAssignUTF8IfNeeded(v) v.AssignStringFromUTF8
-#define vpAssignUTF8IfNeeded(v) v->AssignStringFromUTF8
 #define ToUnicodeOrAsciiEx(wVirtKey, wScanCode, lpKeyState, pszBuff, wFlags, dwhkl) \
 	ToUnicodeEx((wVirtKey), (wScanCode), (lpKeyState), (LPWSTR)(pszBuff), 2, (wFlags), (dwhkl))
 #else
@@ -634,8 +632,6 @@ inline LPTSTR UTF8ToWide(LPCSTR str){
 #define TLenToUTF8Len(a,b,c) (c)
 #define UTF8PosToTPos(a,b)   (b)
 #define UTF8LenToTLen(a,b,c) (c)
-#define vAssignUTF8IfNeeded(v) v.Assign
-#define vpAssignUTF8IfNeeded(v) v->Assign
 #define ToUnicodeOrAsciiEx(wVirtKey, wScanCode, lpKeyState, pszBuff, wFlags, dwhkl) \
 	ToAsciiEx((wVirtKey), (wScanCode), (lpKeyState), (LPWORD)(pszBuff), (wFlags), (dwhkl))
 #endif
