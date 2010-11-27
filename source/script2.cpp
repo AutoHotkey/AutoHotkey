@@ -13149,9 +13149,9 @@ void BIF_InStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 }
 
 
+#ifdef UNICODE
 inline void RegExGetSubpatternOffset(int &pos, int &len, int *subpat_offset, LPCSTR utf8Haystack, int match_offset_utf8, int match_offset)
 {
-#ifdef UNICODE
 	// Notes about Unicode: Since the original haystack and utf8Haystack might not have a 1:1 mapping,
 	// MultiByteToWideChar must be used to convert the offsets from UTF-8 bytes to UTF-16 wide chars.
 	// Given an offset (used as length) 0, MultiByteToWideChar probably fails; but as it returns 0 on
@@ -13161,11 +13161,15 @@ inline void RegExGetSubpatternOffset(int &pos, int &len, int *subpat_offset, LPC
 	if (subpat_offset[0] >= match_offset_utf8)
 		pos = match_offset + UTF8PosToTPos(utf8Haystack + match_offset_utf8, subpat_offset[0] - match_offset_utf8);
 	else
-#endif
 	// These macros perform no actual work in ANSI builds:
 	pos = UTF8PosToTPos(utf8Haystack, subpat_offset[0]);
 	len = UTF8LenToTLen(utf8Haystack, subpat_offset[0], subpat_offset[1] - subpat_offset[0]);
 }
+#else
+#define RegExGetSubpatternOffset(pos, len, subpat_offset, ...) \
+	pos = subpat_offset[0]; \
+	len = subpat_offset[1] - subpat_offset[0];
+#endif
 
 
 void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool get_positions_not_substrings, Var &output_var, int *offset, int pattern_count, int captured_pattern_count, LPTSTR &mem_to_free
