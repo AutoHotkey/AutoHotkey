@@ -189,6 +189,9 @@
     <ClInclude Include="source\script_com.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="source\ahkversion.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="source\resources\AutoHotkey.exe.manifest">

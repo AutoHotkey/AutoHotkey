@@ -5807,7 +5807,7 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInpu
 	if (!*aTitle)
 		// If available, the script's filename seems a much better title in case the user has
 		// more than one script running:
-		aTitle = (g_script.mFileName && *g_script.mFileName) ? g_script.mFileName : tNAME_PV;
+		aTitle = (g_script.mFileName && *g_script.mFileName) ? g_script.mFileName : T_AHK_NAME_VERSION;
 	// Limit the size of what we were given to prevent unreasonably huge strings from
 	// possibly causing a failure in CreateDialog().  This copying method is always done because:
 	// Make a copy of all string parameters, using the stack, because they may reside in the deref buffer
@@ -10946,8 +10946,8 @@ VarSizeType BIV_Space_Tab(LPTSTR aBuf, LPTSTR aVarName)
 VarSizeType BIV_AhkVersion(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (aBuf)
-		_tcscpy(aBuf, tNAME_VERSION);
-	return (VarSizeType)_tcslen(tNAME_VERSION);
+		_tcscpy(aBuf, T_AHK_VERSION);
+	return (VarSizeType)_tcslen(T_AHK_VERSION);
 }
 
 VarSizeType BIV_AhkPath(LPTSTR aBuf, LPTSTR aVarName) // v1.0.41.

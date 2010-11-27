@@ -307,12 +307,12 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 		if (supported = !strcmp(feature_name + 9, "supports_threads"))
 			setting = "0";
 		else if (supported = !strcmp(feature_name + 9, "name"))
-			setting = LANG_D;
+			setting = DEBUGGER_LANG_NAME;
 		else if (supported = !strcmp(feature_name + 9, "version"))
 #ifdef UNICODE
-			setting = NAME_VERSION " (Unicode)";
+			setting = AHK_VERSION " (Unicode)";
 #else
-			setting = NAME_VERSION;
+			setting = AHK_VERSION;
 #endif
 	} else if (supported = !strcmp(feature_name, "encoding"))
 		setting = "UTF-8";
@@ -2056,7 +2056,7 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 				CStringUTF8FromTChar session(CString().GetEnvironmentVariable(_T("DBGP_COOKIE")));
 
 				// Write init message.
-				mResponseBuf.WriteF("<init appid=\"" NAME_P "\" ide_key=\"%e\" session=\"%e\" thread=\"%u\" parent=\"\" language=\"" LANG_D "\" protocol_version=\"1.0\" fileuri=\""
+				mResponseBuf.WriteF("<init appid=\"" AHK_NAME "\" ide_key=\"%e\" session=\"%e\" thread=\"%u\" parent=\"\" language=\"" DEBUGGER_LANG_NAME "\" protocol_version=\"1.0\" fileuri=\""
 					, ide_key.GetString(), session.GetString(), GetCurrentThreadId());
 				mResponseBuf.WriteFileURI(U4T(g_script.mFileSpec));
 				mResponseBuf.Write("\"/>");

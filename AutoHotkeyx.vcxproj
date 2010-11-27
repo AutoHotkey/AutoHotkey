@@ -242,6 +242,7 @@
     <ClCompile Include="source\WinGroup.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="source\ahkversion.h" />
     <ClInclude Include="source\application.h" />
     <ClInclude Include="source\clipboard.h" />
     <ClInclude Include="source\config.h" />
@@ -278,7 +279,8 @@
   <ItemDefinitionGroup>
     <CustomBuild>
       <Command>$(Masm) /Cx /Fo"$(SolutionDir)temp\$(Platform)\%(Filename).obj" /c "%(FullPath)"</Command>
-      <Message></Message>
+      <Message>
+      </Message>
       <Outputs>$(SolutionDir)temp\$(Platform)\%(Filename).obj</Outputs>
     </CustomBuild>
   </ItemDefinitionGroup>

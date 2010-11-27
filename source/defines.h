@@ -31,19 +31,12 @@ GNU General Public License for more details.
 #pragma warning(disable:4800)
 #endif
 
-#ifndef NAME_L_REVISION
-#define NAME_L_REVISION ".L61"
-#endif
+#define AHK_NAME "AutoHotkey"
+#include "ahkversion.h"
 
-#define LANG_D "AutoHotkey"
-#define NAME_P "AutoHotkey"
-#define NAME_PURE_VERSION "1.0.48.05"
-#define NAME_VERSION NAME_PURE_VERSION NAME_L_REVISION
-#define NAME_PV NAME_P " v" NAME_VERSION
-
-#define tNAME_P _T(NAME_P)
-#define tNAME_VERSION _T(NAME_PURE_VERSION) _T(NAME_L_REVISION)
-#define tNAME_PV tNAME_P _T(" v") tNAME_VERSION
+#define T_AHK_NAME			_T(AHK_NAME)
+#define T_AHK_VERSION		_T(AHK_VERSION)
+#define T_AHK_NAME_VERSION	T_AHK_NAME _T(" v") T_AHK_VERSION
 
 // Window class names: Changing these may result in new versions not being able to detect any old instances
 // that may be running (such as the use of FindWindow() in WinMain()).  It may also have other unwanted

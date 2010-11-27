@@ -151,9 +151,11 @@ END
 // Version
 //
 
+#include "..\ahkversion.h"
+
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,48,05
- PRODUCTVERSION 1,0,48,05
+ FILEVERSION AHK_VERSION_N
+ PRODUCTVERSION AHK_VERSION_N
  FILEFLAGSMASK 0x17L
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -170,20 +172,20 @@ BEGIN
         BEGIN
 #ifdef AUTOHOTKEYSC
             VALUE "FileDescription", ""
-            VALUE "FileVersion", "1, 0, 48, 05"
+            VALUE "FileVersion", AHK_VERSION
             VALUE "InternalName", ""
             VALUE "LegalCopyright", ""
             VALUE "OriginalFilename", ""
             VALUE "ProductName", ""
-            VALUE "ProductVersion", "1, 0, 48, 05"
+            VALUE "ProductVersion", AHK_VERSION
 #else
             VALUE "FileDescription", "AutoHotkey_L"
-            VALUE "FileVersion", "1, 0, 48, 05"
+            VALUE "FileVersion", AHK_VERSION
             VALUE "InternalName", "AutoHotkey_L"
             VALUE "LegalCopyright", "Copyright (C) 2010"
             VALUE "OriginalFilename", "AutoHotkey.exe"
             VALUE "ProductName", "AutoHotkey_L"
-            VALUE "ProductVersion", "1, 0, 48, 05"
+            VALUE "ProductVersion", AHK_VERSION
 #endif
         END
     END

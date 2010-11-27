@@ -2517,7 +2517,7 @@ private:
 	bool mMenuUseErrorLevel;  // Whether runtime errors should be displayed by the Menu command, vs. ErrorLevel.
 
 	#define UPDATE_TIP_FIELD tcslcpy(mNIC.szTip, (mTrayIconTip && *mTrayIconTip) ? mTrayIconTip \
-		: (mFileName ? mFileName : tNAME_P), _countof(mNIC.szTip));
+		: (mFileName ? mFileName : T_AHK_NAME), _countof(mNIC.szTip));
 	NOTIFYICONDATA mNIC; // For ease of adding and deleting our tray icon.
 
 	ResultType CloseAndReturnFail(TextStream *ts);

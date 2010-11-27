@@ -33,6 +33,8 @@ freely, without restriction.
 #define DEBUGGER_XML_TAG "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
 #define DEBUGGER_XML_TAG_SIZE (_countof(DEBUGGER_XML_TAG)-1)
 
+#define DEBUGGER_LANG_NAME AHK_NAME
+
 // DBGp Error Codes
 #define DEBUGGER_E_OK					0
 #define DEBUGGER_E_PARSE_ERROR			1
