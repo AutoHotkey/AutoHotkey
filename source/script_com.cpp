@@ -258,7 +258,12 @@ void BIF_ComObjConnect(ExprTokenType &aResultToken, ExprTokenType *aParam[], int
 		else
 			ComError(-1);
 	}
-	else if	(aParamCount == 1 && TokenIsPureNumeric(*aParam[0]))
+}
+
+void BIF_ComObjError(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	aResultToken.value_int64 = g_ComErrorNotify;
+	if (aParamCount && TokenIsPureNumeric(*aParam[0]))
 		g_ComErrorNotify = (TokenToInt64(*aParam[0]) != 0);
 }
 
