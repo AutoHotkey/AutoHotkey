@@ -664,7 +664,13 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 		hr = mDispatch->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, IS_INVOKE_SET ? DISPATCH_PROPERTYPUT : IS_INVOKE_CALL && !aParamCount ? DISPATCH_METHOD : DISPATCH_PROPERTYGET | DISPATCH_METHOD, &dispparams, &varResult, &excepinfo, NULL);
 
 	for (int i = 0; i < aParamCount; i++)
-		VariantClear(&rgvarg[i]);
+	{
+		// If this param is SYM_OBJECT, it is either an unsupported object (in which case rgvarg[i] is empty)
+		// or a ComObject, in which case rgvarg[i] is a shallow copy and calling VariantClear would free the
+		// caller's data prematurely. Even VT_DISPATCH should not be cleared since TokenToVariant didn't AddRef.
+		if (aParam[i]->symbol != SYM_OBJECT)
+			VariantClear(&rgvarg[i]);
+	}
 
 	if	(FAILED(hr))
 		ComError(hr, aName, &excepinfo);

@@ -57,8 +57,9 @@ public:
 	{
 		aVar.vt = mVarType;
 		aVar.llVal = mVal64;
-		if (VT_DISPATCH == mVarType && mDispatch)
-			mDispatch->AddRef();
+		// Caller expects this ComObject to last longer than aVar, so no need to AddRef():
+		//if (VT_DISPATCH == mVarType && mDispatch)
+		//	mDispatch->AddRef();
 	}
 
 	ComObject(IDispatch *disp)
