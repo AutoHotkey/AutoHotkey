@@ -80,39 +80,9 @@ void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int 
 	{
 		if (aParamCount > 1)
 		{
-			ITypeInfo *ptinfo;
-			if (VT_DISPATCH == obj->mVarType && obj->mDispatch
-				&& SUCCEEDED(obj->mDispatch->GetTypeInfo(0, LOCALE_USER_DEFAULT, &ptinfo)))
-			{
-				LPTSTR requested_info = TokenToString(*aParam[1]);
-				if (!_tcsicmp(requested_info, _T("name")))
-				{
-					BSTR name;
-					if (SUCCEEDED(ptinfo->GetDocumentation(MEMBERID_NIL, &name, NULL, NULL, NULL)))
-					{
-						TokenSetResult(aResultToken, CStringTCharFromWCharIfNeeded(name), SysStringLen(name));
-						SysFreeString(name);
-					}
-				}
-				else if (!_tcsicmp(requested_info, _T("iid")))
-				{
-					TYPEATTR *typeattr;
-					if (SUCCEEDED(ptinfo->GetTypeAttr(&typeattr)))
-					{
-						aResultToken.marker = aResultToken.buf;
-#ifdef UNICODE
-						StringFromGUID2(typeattr->guid, aResultToken.marker, MAX_NUMBER_SIZE);
-#else
-						WCHAR cnvbuf[MAX_NUMBER_SIZE];
-						StringFromGUID2(typeattr->guid, cnvbuf, MAX_NUMBER_SIZE);
-						CStringCharFromWChar cnvstring(cnvbuf);
-						strncpy(aResultToken.marker, cnvstring.GetBuffer(), MAX_NUMBER_SIZE);
-#endif
-						ptinfo->ReleaseTypeAttr(typeattr);
-					}
-				}
-				ptinfo->Release();
-			}
+			// For backward-compatibility:
+			aResultToken.symbol = SYM_INTEGER;
+			BIF_ComObjTypeOrValue(aResultToken, aParam, aParamCount);
 		}
 		else if (VT_DISPATCH == obj->mVarType)
 		{
@@ -265,6 +235,67 @@ void BIF_ComObjError(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 	aResultToken.value_int64 = g_ComErrorNotify;
 	if (aParamCount && TokenIsPureNumeric(*aParam[0]))
 		g_ComErrorNotify = (TokenToInt64(*aParam[0]) != 0);
+}
+
+void BIF_ComObjTypeOrValue(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	ComObject *obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0]));
+	if (!obj)
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+		return;
+	}
+	if (ctoupper(aResultToken.marker[6]) == 'V')
+	{
+		aResultToken.value_int64 = obj->mVal64;
+	}
+	else
+	{
+		if (aParamCount < 2)
+		{
+			aResultToken.value_int64 = obj->mVarType;
+		}
+		else
+		{
+			aResultToken.symbol = SYM_STRING; // for all code paths below
+			aResultToken.marker = _T(""); // in case of error
+
+			ITypeInfo *ptinfo;
+			if (VT_DISPATCH == obj->mVarType && obj->mDispatch
+				&& SUCCEEDED(obj->mDispatch->GetTypeInfo(0, LOCALE_USER_DEFAULT, &ptinfo)))
+			{
+				LPTSTR requested_info = TokenToString(*aParam[1]);
+				if (!_tcsicmp(requested_info, _T("name")))
+				{
+					BSTR name;
+					if (SUCCEEDED(ptinfo->GetDocumentation(MEMBERID_NIL, &name, NULL, NULL, NULL)))
+					{
+						TokenSetResult(aResultToken, CStringTCharFromWCharIfNeeded(name), SysStringLen(name));
+						SysFreeString(name);
+					}
+				}
+				else if (!_tcsicmp(requested_info, _T("iid")))
+				{
+					TYPEATTR *typeattr;
+					if (SUCCEEDED(ptinfo->GetTypeAttr(&typeattr)))
+					{
+						aResultToken.marker = aResultToken.buf;
+#ifdef UNICODE
+						StringFromGUID2(typeattr->guid, aResultToken.marker, MAX_NUMBER_SIZE);
+#else
+						WCHAR cnvbuf[MAX_NUMBER_SIZE];
+						StringFromGUID2(typeattr->guid, cnvbuf, MAX_NUMBER_SIZE);
+						CStringCharFromWChar cnvstring(cnvbuf);
+						strncpy(aResultToken.marker, cnvstring.GetBuffer(), MAX_NUMBER_SIZE);
+#endif
+						ptinfo->ReleaseTypeAttr(typeattr);
+					}
+				}
+				ptinfo->Release();
+			}
+		}
+	}
 }
 
 

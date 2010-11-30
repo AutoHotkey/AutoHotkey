@@ -42,6 +42,7 @@ public:
 
 class ComObject : public ObjectBase
 {
+public:
 	union
 	{
 		IDispatch *mDispatch;
@@ -50,7 +51,6 @@ class ComObject : public ObjectBase
 	ComEvent *mEventSink;
 	VARTYPE mVarType;
 
-public:
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	void ToVariant(VARIANT &aVar)
@@ -79,11 +79,6 @@ public:
 			mDispatch->Release();
 		}
 	}
-
-	friend void BIF_ComObjActive(ExprTokenType&, ExprTokenType*[], int);
-	friend void BIF_ComObjConnect(ExprTokenType&, ExprTokenType*[], int);
-	friend class ComEvent;
-	friend class Debugger;
 };
 
 

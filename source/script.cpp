@@ -7601,6 +7601,15 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 			bif = BIF_ComObjError;
 			min_params = 0;
 		}
+		else if (!_tcsicmp(suffix, _T("Type")))
+		{
+			bif = BIF_ComObjTypeOrValue;
+			max_params = 2;
+		}
+		else if (!_tcsicmp(suffix, _T("Value")))
+		{
+			bif = BIF_ComObjTypeOrValue;
+		}
 		else
 		{
 			bif = BIF_ComObjActive;
