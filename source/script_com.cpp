@@ -48,6 +48,13 @@ void BIF_ComObjGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
+	if (!aParamCount) // ComObjMissing()
+	{
+		aResultToken.symbol = SYM_OBJECT;
+        aResultToken.object = new ComObject(DISP_E_PARAMNOTFOUND, VT_ERROR);
+		return;
+	}
+
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
 
