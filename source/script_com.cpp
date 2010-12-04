@@ -349,10 +349,6 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 		aToken.symbol = SYM_FLOAT;
 		aToken.value_double = (double)aVar.fltVal;
 		break;
-	case VT_UNKNOWN:
-		aToken.symbol = SYM_INTEGER;
-		aToken.value_int64 = (__int64)aVar.punkVal;
-		break;
 	case VT_DISPATCH:
 		if (aToken.object = new ComObject(aVar.pdispVal))
 		{
@@ -374,7 +370,7 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 	default:
 		{
 			VARIANT var = {0};
-			if (aVar.vt < VT_ARRAY // i.e. not byref or an array.
+			if (aVar.vt != VT_UNKNOWN && aVar.vt < VT_ARRAY // i.e. not byref or an array.
 				&& SUCCEEDED(VariantChangeType(&var, &aVar, 0, VT_BSTR)))
 			{
 				// Above put a string representation of aVar into var.
@@ -383,8 +379,8 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 			}
 			else
 			{
-				aToken.symbol = SYM_INTEGER;
-				aToken.value_int64 = (__int64)aVar.parray;
+				aToken.symbol = SYM_OBJECT;
+				aToken.object = new ComObject((__int64)aVar.parray, aVar.vt);
 			}
 		}
 	}
@@ -755,6 +751,16 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 			aResultToken.symbol = SYM_FLOAT;
 			aResultToken.value_double = (double)varResult.fltVal;
 			break;
+		case VT_DISPATCH:
+			if (varResult.pdispVal)
+			{
+				aResultToken.symbol = SYM_OBJECT;
+				aResultToken.object = new ComObject(varResult.pdispVal);
+				break;
+			}
+		case VT_EMPTY:
+		case VT_NULL:
+			break;
 		case VT_UNKNOWN:
 			if (varResult.punkVal)
 			{
@@ -767,21 +773,8 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 					break;
 				}
 			}
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = (__int64) varResult.punkVal;
-			break;
-		case VT_DISPATCH:
-			if (varResult.pdispVal)
-			{
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = new ComObject(varResult.pdispVal);
-				break;
-			}
-		case VT_EMPTY:
-		case VT_NULL:
-			break;
 		default:
-			if (varResult.vt < VT_ARRAY
+			if (varResult.vt != VT_UNKNOWN && varResult.vt < VT_ARRAY
 				&& SUCCEEDED(VariantChangeType(&varResult, &varResult, 0, VT_BSTR)))
 			{
 				TokenSetResult(aResultToken, CStringTCharFromWCharIfNeeded(varResult.bstrVal), SysStringLen(varResult.bstrVal));
@@ -789,8 +782,8 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 			}
 			else
 			{
-				aResultToken.symbol = SYM_INTEGER;
-				aResultToken.value_int64 = (__int64) varResult.parray;
+				aResultToken.symbol = SYM_OBJECT;
+				aResultToken.object = new ComObject((__int64)varResult.parray, varResult.vt);
 			}
 		}
 	}
