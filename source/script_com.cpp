@@ -305,6 +305,30 @@ void BIF_ComObjTypeOrValue(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	}
 }
 
+void BIF_ComObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	VARTYPE vt = (VARTYPE)TokenToInt64(*aParam[0]);
+	SAFEARRAYBOUND bound[8]; // Same limit as ComObject::SafeArrayInvoke().
+	int dims = aParamCount - 1;
+	ASSERT(dims <= _countof(bound)); // Prior validation should ensure aParamCount-1 never exceeds 8.
+	for (int i = 0; i < dims; ++i)
+	{
+		bound[i].cElements = (ULONG)TokenToInt64(*aParam[i + 1]);
+		bound[i].lLbound = 0;
+	}
+	SAFEARRAY *psa = SafeArrayCreate(vt, dims, bound);
+	if (psa)
+	{
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = new ComObject((__int64)psa, VT_ARRAY | vt);
+	}
+	else
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+	}
+}
+
 
 void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true)
 {

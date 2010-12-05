@@ -7610,6 +7610,12 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		{
 			bif = BIF_ComObjTypeOrValue;
 		}
+		else if (!_tcsicmp(suffix, _T("Array")))
+		{
+			bif = BIF_ComObjArray;
+			min_params = 2;
+			max_params = 9; // up to 8 dimensions
+		}
 		else
 		{
 			bif = BIF_ComObjActive;
