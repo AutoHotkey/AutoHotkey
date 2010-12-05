@@ -52,6 +52,7 @@ public:
 	VARTYPE mVarType;
 
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	void ToVariant(VARIANT &aVar)
 	{

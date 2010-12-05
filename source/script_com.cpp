@@ -386,7 +386,8 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 			IEnumVARIANT *penum;
 			if (SUCCEEDED(aVar.punkVal->QueryInterface(IID_IEnumVARIANT, (void**) &penum)))
 			{
-				aVar.punkVal->Release();
+				if (!aRetainVar)
+					aVar.punkVal->Release();
 				aToken.symbol = SYM_OBJECT;
 				aToken.object = new ComEnum(penum);
 				break;
@@ -694,6 +695,15 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 	if (aParamCount < (IS_INVOKE_SET ? 2 : 1))
 		return OK;
 
+	if (mVarType != VT_DISPATCH)
+	{
+		if (mVarType & VT_ARRAY)
+			return SafeArrayInvoke(aResultToken, aFlags, aParam, aParamCount);
+		// Otherwise: this object can't be invoked.
+		ComError(-1);
+		return OK;
+	}
+
 	static DISPID dispidParam = DISPID_PROPERTYPUT;
 	DISPPARAMS dispparams = {NULL, NULL, 0, 0};
 	VARIANTARG *rgvarg;
@@ -765,6 +775,131 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 	g->LastError = hr;
 	return	OK;
 }
+
+ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	HRESULT hr = S_OK;
+	SAFEARRAY *psa = (SAFEARRAY*)mVal64;
+	VARTYPE item_type = (mVarType & VT_TYPEMASK);
+	if (IS_INVOKE_CALL)
+	{
+		// TODO: Implement MaxIndex() and MinIndex().
+		return OK;
+	}
+	UINT dims = SafeArrayGetDim(psa);
+	LONG index[8];
+	// Verify correct number of parameters/dimensions (maximum 8).
+	if (dims > _countof(index) || dims != (IS_INVOKE_SET ? aParamCount - 1 : aParamCount))
+		return OK;
+	// Build array of indices from parameters.
+	for (UINT i = 0; i < dims; ++i)
+	{
+		if (!TokenIsPureNumeric(*aParam[i]))
+			return OK;
+		index[i] = (LONG)TokenToInt64(*aParam[i]);
+	}
+
+	VARIANT var = {0};
+	void *item;
+
+	SafeArrayLock(psa);
+
+	hr = SafeArrayPtrOfIndex(psa, index, &item);
+	if (SUCCEEDED(hr))
+	{
+		if (IS_INVOKE_GET)
+		{
+			if (item_type == VT_VARIANT)
+			{
+				// Make shallow copy of the VARIANT item.
+				memcpy(&var, item, sizeof(VARIANT));
+			}
+			else
+			{
+				// Build VARIANT with shallow copy of the item.
+				var.vt = item_type;
+				memcpy(&var.lVal, item, SafeArrayGetElemsize(psa));
+			}
+			// Copy value into result token.
+			VariantToToken(var, aResultToken);
+		}
+		else // SET
+		{
+			ExprTokenType &rvalue = *aParam[dims];
+			TokenToVariant(rvalue, var);
+			if (var.vt == VT_DISPATCH || var.vt == VT_UNKNOWN)
+				var.punkVal->AddRef();
+			// Otherwise: it could be VT_BSTR, in which case TokenToVariant created a new BSTR which we want to
+			// put directly it into the array rather than copying it, since it would only be freed later anyway.
+			if (item_type == VT_VARIANT)
+			{
+				// Free existing value.
+				VariantClear((VARIANTARG *)item);
+				// Write new value (shallow copy).
+				memcpy(item, &var, sizeof(VARIANT));
+			}
+			else
+			{
+				if (var.vt != item_type)
+				{
+					// Attempt to coerce var to the correct type:
+					hr = VariantChangeType(&var, &var, 0, item_type);
+					if (FAILED(hr))
+					{
+						VariantClear(&var);
+						goto unlock_and_return;
+					}
+				}
+				// Free existing value.
+				if (item_type == VT_UNKNOWN || item_type == VT_DISPATCH)
+				{
+					((IUnknown **)item)[0]->Release();
+				}
+				else if (item_type == VT_BSTR)
+				{
+					SysFreeString(*((BSTR *)item));
+				}
+				// Write new value (shallow copy).
+				memcpy(item, &var.lVal, SafeArrayGetElemsize(psa));
+			}
+			// Allow chaining - using the following rather than VariantToToken allows any wrapper objects to
+			// be passed along rather than being coerced to a simple value or a new wrapper being created.
+			switch (rvalue.symbol)
+			{
+			case SYM_OPERAND:
+				if (rvalue.buf)
+				{
+					aResultToken.symbol = SYM_INTEGER;
+					aResultToken.value_int64 = *(__int64 *)rvalue.buf;
+					break;
+				}
+				// FALL THROUGH to next case:
+			case SYM_STRING:
+				aResultToken.symbol = SYM_STRING;
+				aResultToken.marker = rvalue.marker;
+				break;
+			case SYM_OBJECT:
+				aResultToken.symbol = SYM_OBJECT;
+				aResultToken.object = rvalue.object;
+				aResultToken.object->AddRef();
+				break;
+			case SYM_INTEGER:
+			case SYM_FLOAT:
+				aResultToken.symbol = rvalue.symbol;
+				aResultToken.value_int64 = rvalue.value_int64;
+				break;
+			}
+		}
+	}
+
+unlock_and_return:
+	SafeArrayUnlock(psa);
+	g->LastError = hr;
+	if (FAILED(hr))
+		ComError(hr);
+	return OK;
+}
+
 
 int ComEnum::Next(Var *aOutput, Var *aOutputType)
 {
