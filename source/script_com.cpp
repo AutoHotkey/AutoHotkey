@@ -312,22 +312,34 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 	{
 	case VT_BSTR:
 		aToken.symbol = SYM_STRING;
-#ifdef UNICODE
-		aToken.marker = aVar.bstrVal;
-#else
+		aToken.marker = _T("");		// Set defaults.
+		aToken.mem_to_free = NULL;	//
+		size_t len;
+		if (len = SysStringLen(aVar.bstrVal))
 		{
-			UINT len = SysStringLen(aVar.bstrVal);
-			if (len)
+#ifdef UNICODE
+			if (aRetainVar)
 			{
-				CStringCharFromWChar buf(aVar.bstrVal, len);
-				// Caller knows to free this afterward:
-				if ( !(aToken.marker = buf.DetachBuffer()) )
-					aToken.marker = Var::sEmptyString;
+				// It's safe to pass back the actual BSTR from aVar in this case.
+				aToken.marker = aVar.bstrVal;
 			}
-			else
-				aToken.marker = Var::sEmptyString; // Return an empty value which caller knows not to free().
-		}
+			// Allocate some memory to pass back to caller:
+			else if (aToken.mem_to_free = tmalloc(len + 1))
+			{
+				aToken.marker = aToken.mem_to_free;
+				aToken.marker_length = len;
+				tmemcpy(aToken.marker, aVar.bstrVal, len + 1); // +1 for null-terminator
+			}
+#else
+			CStringCharFromWChar buf(aVar.bstrVal, len);
+			len = buf.GetLength(); // Get ANSI length.
+			if (aToken.mem_to_free = buf.DetachBuffer())
+			{
+				aToken.marker = aToken.mem_to_free;
+				aToken.marker_length = len;
+			}
 #endif
+		}
 		if (!aRetainVar)
 			VariantClear(&aVar);
 		break;
@@ -365,16 +377,29 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 	case VT_EMPTY:
 	case VT_NULL:
 		aToken.symbol = SYM_STRING;
-		aToken.marker = Var::sEmptyString; // For ANSI builds: return an empty value which caller knows not to free().
+		aToken.marker = _T("");
+		aToken.mem_to_free = NULL;
 		break;
+	case VT_UNKNOWN:
+		if (aVar.punkVal)
+		{
+			IEnumVARIANT *penum;
+			if (SUCCEEDED(aVar.punkVal->QueryInterface(IID_IEnumVARIANT, (void**) &penum)))
+			{
+				aVar.punkVal->Release();
+				aToken.symbol = SYM_OBJECT;
+				aToken.object = new ComEnum(penum);
+				break;
+			}
+		}
+		// FALL THROUGH to the default case:
 	default:
 		{
 			VARIANT var = {0};
 			if (aVar.vt != VT_UNKNOWN && aVar.vt < VT_ARRAY // i.e. not byref or an array.
-				&& SUCCEEDED(VariantChangeType(&var, &aVar, 0, VT_BSTR)))
+				&& SUCCEEDED(VariantChangeType(&var, &aVar, 0, VT_BSTR))) // Convert it to a BSTR.
 			{
-				// Above put a string representation of aVar into var.
-				// Recursively call self for simplicitly (esp. for ANSI builds):
+				// Recursive call to handle conversions and memory management correctly:
 				VariantToToken(var, aToken, false);
 			}
 			else
@@ -390,7 +415,7 @@ void AssignVariant(Var &aArg, VARIANT &aVar, bool aRetainVar = true)
 {
 	if (aVar.vt == VT_BSTR)
 	{
-		// Avoid an unnecessary mem alloc and copy in ANSI builds.
+		// Avoid an unnecessary mem alloc and copy in some cases.
 		aArg.AssignStringW(aVar.bstrVal, SysStringLen(aVar.bstrVal));
 		if (!aRetainVar)
 			VariantClear(&aVar);
@@ -399,9 +424,16 @@ void AssignVariant(Var &aArg, VARIANT &aVar, bool aRetainVar = true)
 	ExprTokenType token;
 	VariantToToken(aVar, token, aRetainVar);
 	if (token.symbol == SYM_OBJECT)
+	{
 		aArg.AssignSkipAddRef(token.object);
+	}
 	else
+	{
 		aArg.Assign(token);
+		// VT_BSTR was handled above, but VariantToToken coerces unhandled types to strings:
+		if (token.symbol == SYM_STRING && token.mem_to_free)
+			free(token.mem_to_free);
+	}
 }
 
 
@@ -613,11 +645,9 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 		// Release COM wrapper objects:
 		if (param_token[i].symbol == SYM_OBJECT)
 			param_token[i].object->Release();
-#ifndef UNICODE
-		// Free any temporary memory used to hold ANSI strings; see VariantToToken().
-		else if (param_token[i].symbol == SYM_STRING && param_token[i].marker != Var::sEmptyString)
-			free(param_token[i].marker);
-#endif
+		// Free any temporary memory used to hold strings; see VariantToToken().
+		else if (param_token[i].symbol == SYM_STRING && param_token[i].mem_to_free)
+			free(param_token[i].mem_to_free);
 	}
 
 	return S_OK;
@@ -716,7 +746,9 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 	}
 
 	if	(FAILED(hr))
+	{
 		ComError(hr, aName, &excepinfo);
+	}
 	else if	(IS_INVOKE_SET)
 	{	// Allow chaining, e.g. obj2.prop := obj1.prop := val.
 		ExprTokenType &rvalue = *aParam[aParamCount];
@@ -727,65 +759,7 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 	}
 	else
 	{
-		switch(varResult.vt)
-		{
-		case VT_BSTR:
-			TokenSetResult(aResultToken, CStringTCharFromWCharIfNeeded(varResult.bstrVal), SysStringLen(varResult.bstrVal));
-			VariantClear(&varResult);
-			break;
-		case VT_I4:
-		case VT_ERROR:
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = varResult.lVal;
-			break;
-		case VT_I2:
-		case VT_BOOL:
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = varResult.iVal;
-			break;
-		case VT_R8:
-			aResultToken.symbol = SYM_FLOAT;
-			aResultToken.value_double = varResult.dblVal;
-			break;
-		case VT_R4:
-			aResultToken.symbol = SYM_FLOAT;
-			aResultToken.value_double = (double)varResult.fltVal;
-			break;
-		case VT_DISPATCH:
-			if (varResult.pdispVal)
-			{
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = new ComObject(varResult.pdispVal);
-				break;
-			}
-		case VT_EMPTY:
-		case VT_NULL:
-			break;
-		case VT_UNKNOWN:
-			if (varResult.punkVal)
-			{
-				IEnumVARIANT *penum;
-				if (SUCCEEDED(varResult.punkVal->QueryInterface(IID_IEnumVARIANT, (void**) &penum)))
-				{
-					varResult.punkVal->Release();
-					aResultToken.symbol = SYM_OBJECT;
-					aResultToken.object = new ComEnum(penum);
-					break;
-				}
-			}
-		default:
-			if (varResult.vt != VT_UNKNOWN && varResult.vt < VT_ARRAY
-				&& SUCCEEDED(VariantChangeType(&varResult, &varResult, 0, VT_BSTR)))
-			{
-				TokenSetResult(aResultToken, CStringTCharFromWCharIfNeeded(varResult.bstrVal), SysStringLen(varResult.bstrVal));
-				VariantClear(&varResult);
-			}
-			else
-			{
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = new ComObject((__int64)varResult.parray, varResult.vt);
-			}
-		}
+		VariantToToken(varResult, aResultToken, false);
 	}
 
 	g->LastError = hr;
