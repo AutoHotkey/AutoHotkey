@@ -781,11 +781,30 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 	HRESULT hr = S_OK;
 	SAFEARRAY *psa = (SAFEARRAY*)mVal64;
 	VARTYPE item_type = (mVarType & VT_TYPEMASK);
+
 	if (IS_INVOKE_CALL)
 	{
-		// TODO: Implement MaxIndex() and MinIndex().
+		LPTSTR name = TokenToString(*aParam[0]);
+		if (*name == '_')
+			++name;
+		LONG retval;
+		if (!_tcsicmp(name, _T("MaxIndex")))
+			hr = SafeArrayGetUBound(psa, aParamCount > 1 ? (UINT)TokenToInt64(*aParam[1]) : 1, &retval);
+		else if (!_tcsicmp(name, _T("MinIndex")))
+			hr = SafeArrayGetLBound(psa, aParamCount > 1 ? (UINT)TokenToInt64(*aParam[1]) : 1, &retval);
+		else
+			hr = DISP_E_UNKNOWNNAME; // Seems slightly better than ignoring the call.
+		g->LastError = hr;
+		if (SUCCEEDED(hr))
+		{
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = retval;
+		}
+		else
+			ComError(hr);
 		return OK;
 	}
+
 	UINT dims = SafeArrayGetDim(psa);
 	LONG index[8];
 	// Verify correct number of parameters/dimensions (maximum 8).
@@ -894,6 +913,7 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 
 unlock_and_return:
 	SafeArrayUnlock(psa);
+
 	g->LastError = hr;
 	if (FAILED(hr))
 		ComError(hr);
