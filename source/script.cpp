@@ -7620,7 +7620,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		{
 			bif = BIF_ComObjActive;
 			min_params = 0;
-			max_params = 2;
+			max_params = 3;
 		}
 	}
 #endif

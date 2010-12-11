@@ -58,32 +58,63 @@ void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int 
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
 
+	ComObject *obj;
+
 	if (TokenIsPureNumeric(*aParam[0]))
 	{
+		VARTYPE vt;
+		__int64 llVal;
+		USHORT flags = 0;
+
 		if (aParamCount > 1)
 		{
-			VARTYPE	vt = (VARTYPE)TokenToInt64(*aParam[0]);
-			__int64 llVal = TokenToInt64(*aParam[1]);
-			aResultToken.symbol = SYM_OBJECT;
-			aResultToken.object = new ComObject(llVal, vt);
-			if (vt == VT_DISPATCH && (IDispatch *)llVal) // Type-cast so upper 32-bits are ignored in 32-bit builds.
-				((IDispatch *)llVal)->AddRef();
-		}
-		else if (IUnknown *punk = (IUnknown *)TokenToInt64(*aParam[0]))
-		{
-			IDispatch *pdisp;
-			if (FAILED(punk->QueryInterface(IID_IDispatch, (void **)&pdisp)))
-			{
-				pdisp = (IDispatch *)punk;
-				pdisp->AddRef();
-			}
-			aResultToken.symbol = SYM_OBJECT;
-			aResultToken.object = new ComObject(pdisp);
+			// ComObj(vt, value [, flags])
+			vt = (VARTYPE)TokenToInt64(*aParam[0]);
+			llVal = TokenToInt64(*aParam[1]);
+			if (aParamCount > 2)
+				flags = (USHORT)TokenToInt64(*aParam[2]);
 		}
 		else
-			ComError(-1);
+		{
+			// ComObj(pdisp)
+			vt = VT_DISPATCH;
+			llVal = TokenToInt64(*aParam[0]);
+		}
+		
+		if (vt == VT_DISPATCH || vt == VT_UNKNOWN)
+		{
+			IUnknown *punk = (IUnknown *)llVal;
+			if (!punk)
+			{
+				// This check covers what is probably the most likely error.  Other invalid
+				// values and NULL values for other types, such as VT_ARRAY, are not checked.
+				ComError(-1);
+				return;
+			}
+			if (vt == VT_DISPATCH)
+			{
+				IDispatch *pdisp;
+				if (SUCCEEDED(punk->QueryInterface(IID_IDispatch, (void **)&pdisp)))
+				{
+					// Replace caller-specified interface pointer with pdisp.  If caller
+					// has requested we take responsibility for freeing it, do that now:
+					if (flags & ComObject::F_OWNVALUE)
+						punk->Release();
+					flags |= ComObject::F_OWNVALUE; // Don't AddRef() below since we own this reference.
+					llVal = (__int64)pdisp;
+				}
+				// Otherwise interpret it as IDispatch anyway, since caller has requested it and
+				// there are known cases where it works (such as some CLR COM callable wrappers).
+			}
+			if ( !(flags & ComObject::F_OWNVALUE) )
+				punk->AddRef(); // "Copy" caller's reference.
+			// Otherwise caller (or above) indicated the object now owns this reference.
+		}
+
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = new ComObject(llVal, vt, flags);
 	}
-	else if (ComObject *obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0])))
+	else if (obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0])))
 	{
 		if (aParamCount > 1)
 		{
@@ -317,10 +348,11 @@ void BIF_ComObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 		bound[i].lLbound = 0;
 	}
 	SAFEARRAY *psa = SafeArrayCreate(vt, dims, bound);
-	if (psa)
+	ComObject *obj;
+	if (psa && (obj = new ComObject((__int64)psa, VT_ARRAY | vt, ComObject::F_OWNVALUE)))
 	{
 		aResultToken.symbol = SYM_OBJECT;
-		aResultToken.object = new ComObject((__int64)psa, VT_ARRAY | vt);
+		aResultToken.object = obj;
 	}
 	else
 	{
@@ -430,7 +462,7 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 			else
 			{
 				aToken.symbol = SYM_OBJECT;
-				aToken.object = new ComObject((__int64)aVar.parray, aVar.vt);
+				aToken.object = new ComObject((__int64)aVar.parray, aVar.vt, aRetainVar ? 0 : ComObject::F_OWNVALUE);
 			}
 		}
 	}
