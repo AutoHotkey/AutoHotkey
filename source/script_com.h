@@ -83,7 +83,7 @@ public:
 			}
 			mUnknown->Release();
 		}
-		else if ((mVarType & VT_ARRAY) && (mFlags & F_OWNVALUE))
+		else if ((mVarType & (VT_BYREF|VT_ARRAY)) == VT_ARRAY && (mFlags & F_OWNVALUE))
 		{
 			SafeArrayDestroy(mArray);
 		}
