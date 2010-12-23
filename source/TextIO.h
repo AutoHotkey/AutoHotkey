@@ -191,7 +191,7 @@ protected:
 		}
 		if (mLength + aReadSize > TEXT_IO_BLOCK)
 			aReadSize = TEXT_IO_BLOCK - mLength;
-		DWORD dwRead = _Read(mBuffer + mLength, (DWORD)aReadSize);
+		DWORD dwRead = _Read(mBuffer + mLength, aReadSize);
 		if (dwRead)
 			mLength += dwRead;
 		else
@@ -274,6 +274,7 @@ public:
 		mEOF = _Tell() == _Length(); // binary IO is not buffered.
 		return dwRead;
 	}
+	DWORD	Write(LPCTSTR aBuf, DWORD aBufLen = 0) { RollbackFilePointer(); return TextStream::Write(aBuf, aBufLen); }
 	DWORD   Write(LPCVOID aBuffer, DWORD aBufSize) { RollbackFilePointer(); return _Write(aBuffer, aBufSize); }
 	bool    Seek(__int64 aDistance, int aOrigin) { RollbackFilePointer(); return _Seek(aDistance, aOrigin); }
 	__int64	Tell() { RollbackFilePointer(); return _Tell(); }
