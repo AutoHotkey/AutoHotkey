@@ -29,15 +29,16 @@ bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 		// Detect UTF-8 and UTF-16LE BOMs
 		if (mLength < 3)
 			Read(3);
+		mPos = mBuffer;
 		if (mLength >= 2) {
 			if (mBuffer[0] == 0xFF && mBuffer[1] == 0xFE) {
 				SetCodePage(CP_UTF16);
-				mPosW = mBufferW + 1;
+				mPosW += 1;
 			}
 			else if (mBuffer[0] == 0xEF && mBuffer[1] == 0xBB) {
 				if (mLength >= 3 && mBuffer[2] == 0xBF) {
 					SetCodePage(CP_UTF8);
-					mPosA = mBufferA + 3;
+					mPosA += 3;
 				}
 			}
 		}
