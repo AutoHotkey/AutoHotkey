@@ -283,7 +283,12 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// SECOND PASS THROUGH THE HOTKEYS:
 	// v1.0.42: Reset sWhichHookNeeded because it's now possible that the hook was on before but no longer
 	// needed due to changing of a hotkey from hook to registered (for various reasons described above):
-	for (sWhichHookNeeded = 0, i = 0; i < sHotkeyCount; ++i)
+	// v1.0.91: Make sure to leave the keyboard hook active if the script needs it for collecting input.
+	if (g_input.status == INPUT_IN_PROGRESS)
+		sWhichHookNeeded = HOOK_KEYBD;
+	else
+		sWhichHookNeeded = 0;
+	for (i = 0; i < sHotkeyCount; ++i)
 	{
 		if (hk_is_inactive[i])
 			continue; // v1.0.40: Treat disabled hotkeys as though they're not even present.
