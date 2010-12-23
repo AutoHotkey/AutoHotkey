@@ -14345,7 +14345,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	int haystack_length = (int)EXPR_TOKEN_LENGTH(aParam[0], haystack);
 
 #ifdef UNICODE
-	CStringUTF8FromWChar utf8Haystack(haystack);
+	CStringUTF8FromWChar utf8Haystack(haystack, haystack_length);
 	int utf8haystack_length = (int)utf8Haystack.GetLength();
 #endif
 
