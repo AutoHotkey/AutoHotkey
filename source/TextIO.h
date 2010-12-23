@@ -72,7 +72,7 @@ public:
 		LPTSTR bufEnd = aBuf + aBufLen, bufStart = aBuf;
 		while (aBuf < bufEnd) {
 			*aBuf = GetChar();
-			if (*aBuf == TEOF)
+			if (mEOF)
 				break;
 			if (*aBuf++ == '\n')
 				break;
