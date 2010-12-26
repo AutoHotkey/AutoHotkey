@@ -91,7 +91,7 @@ void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int 
 				ComError(-1);
 				return;
 			}
-			if (vt == VT_DISPATCH)
+			if (aParamCount == 1) // Implies above set vt = VT_DISPATCH.
 			{
 				IDispatch *pdisp;
 				if (SUCCEEDED(punk->QueryInterface(IID_IDispatch, (void **)&pdisp)))
