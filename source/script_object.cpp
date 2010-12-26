@@ -541,11 +541,11 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// L34: Assigning an empty string no longer removes the field.
 			if ( (field || (field = Insert(key_type, key, insert_pos))) && field->Assign(value_param) )
 			{
-				if (value_param.symbol == SYM_OPERAND || value_param.symbol == SYM_STRING)
+				if (field->symbol == SYM_OPERAND)
 				{
 					// Use value_param since our copy may be freed prematurely in some (possibly rare) cases:
 					aResultToken.symbol = SYM_STRING;
-					aResultToken.marker = value_param.marker;
+					aResultToken.marker = TokenToString(value_param);
 					// Below: no longer used as other areas expect string results to always be SYM_STRING.
 					// If it is ever used in future, we MUST copy marker and buf separately for x64 support.
 					// However, it seems appropriate *not* to return a SYM_OPERAND with cached binary integer
