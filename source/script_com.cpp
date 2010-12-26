@@ -418,17 +418,20 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 		aToken.value_double = (double)aVar.fltVal;
 		break;
 	case VT_DISPATCH:
-		if (aToken.object = new ComObject(aVar.pdispVal))
+		if (aVar.pdispVal)
 		{
-			aToken.symbol = SYM_OBJECT;
-			if (aRetainVar && aVar.pdispVal)
-				aVar.pdispVal->AddRef();
-			//else we're taking ownership of the reference.
-			break;
+			if (aToken.object = new ComObject(aVar.pdispVal))
+			{
+				aToken.symbol = SYM_OBJECT;
+				if (aRetainVar && aVar.pdispVal)
+					aVar.pdispVal->AddRef();
+				//else we're taking ownership of the reference.
+				break;
+			}
+			// Above failed, so check if we need to release the pointer:
+			if (!aRetainVar && aVar.pdispVal)
+				aVar.pdispVal->Release();
 		}
-		// Above failed, so check if we need to release the pointer:
-		if (!aRetainVar && aVar.pdispVal)
-			aVar.pdispVal->Release();
 		// FALL THROUGH to the next case:
 	case VT_EMPTY:
 	case VT_NULL:
@@ -448,6 +451,13 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 				aToken.object = new ComEnum(penum);
 				break;
 			}
+		}
+		else
+		{
+			aToken.symbol = SYM_STRING;
+			aToken.marker = _T("");
+			aToken.mem_to_free = NULL;
+			break;
 		}
 		// FALL THROUGH to the default case:
 	default:
@@ -751,7 +761,7 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 	if (aParamCount < (IS_INVOKE_SET ? 2 : 1))
 		return OK;
 
-	if (mVarType != VT_DISPATCH)
+	if (mVarType != VT_DISPATCH || !mDispatch)
 	{
 		if (mVarType & VT_ARRAY)
 			return SafeArrayInvoke(aResultToken, aFlags, aParam, aParamCount);
