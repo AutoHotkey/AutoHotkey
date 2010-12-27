@@ -13174,7 +13174,7 @@ inline void RegExGetSubpatternOffset(int &pos, int &len, int *subpat_offset, LPC
 
 void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool get_positions_not_substrings, Var &output_var, int *offset, int pattern_count, int captured_pattern_count, LPTSTR &mem_to_free
 #ifdef UNICODE
-	, LPCSTR utf8Haystack, int match_offset
+	, LPCSTR utf8Haystack, int match_offset_utf8, int match_offset
 #endif
 )
 {
@@ -13236,7 +13236,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 			}
 			else
 			{
-				RegExGetSubpatternOffset(subpat_pos, subpat_len, this_offset, utf8Haystack, offset[0], match_offset);
+				RegExGetSubpatternOffset(subpat_pos, subpat_len, this_offset, utf8Haystack, match_offset_utf8, match_offset);
 				++subpat_pos; // One-based (i.e. position zero means "not found").
 			}
 
@@ -13311,7 +13311,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 						array_item->Assign(); // Omit all parameters to make the var empty without freeing its memory (for performance, in case this RegEx is being used many times in a loop).
 					else
 					{
-						RegExGetSubpatternOffset(subpat_pos, subpat_len, this_offset, utf8Haystack, offset[0], match_offset);
+						RegExGetSubpatternOffset(subpat_pos, subpat_len, this_offset, utf8Haystack, match_offset_utf8, match_offset);
 						array_item->Assign(haystack + subpat_pos, subpat_len);
 						// Fix for v1.0.45.01: When the J option (allow duplicate named subpatterns) is in effect,
 						// PCRE returns entries for all the duplicates.  But we don't want an unmatched duplicate
@@ -13345,7 +13345,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 					array_item->Assign(); // Omit all parameters to make the var empty without freeing its memory (for performance, in case this RegEx is being used many times in a loop).
 				else
 				{
-					RegExGetSubpatternOffset(subpat_pos, subpat_len, this_offset, utf8Haystack, offset[0], match_offset);
+					RegExGetSubpatternOffset(subpat_pos, subpat_len, this_offset, utf8Haystack, match_offset_utf8, match_offset);
 					array_item->Assign(haystack + subpat_pos, subpat_len);
 				}
 			}
@@ -13473,7 +13473,7 @@ int RegExCallout(pcre_callout_block *cb)
 		
 		// Set up local vars for capturing subpatterns.
 #ifdef UNICODE
-		RegExSetSubpatternVars(cd.haystack, cd.re, cd.extra, cd.get_positions_not_substrings, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top, mem_to_free, cb->subject, match_offset);
+		RegExSetSubpatternVars(cd.haystack, cd.re, cd.extra, cd.get_positions_not_substrings, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top, mem_to_free, cb->subject, cb->start_match, match_offset);
 #else
 		RegExSetSubpatternVars(cb->subject, cd.re, cd.extra, cd.get_positions_not_substrings, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top, mem_to_free);
 #endif
@@ -14427,6 +14427,9 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 		, starting_offset_utf8, 0, offset, number_of_ints_in_offset);
 
 	int match_offset = 0; // Set default for no match/error cases below.
+#ifdef UNICODE
+	int match_offset_utf8 = 0;
+#endif
 
 	// SET THE RETURN VALUE AND ERRORLEVEL BASED ON THE RESULTS OF EXECUTING THE EXPRESSION.
 	if (captured_pattern_count == PCRE_ERROR_NOMATCH)
@@ -14446,11 +14449,14 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	{
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 #ifdef UNICODE
-		if (offset[0] >= starting_offset_utf8) // Take a shortcut:
-			match_offset = starting_offset + UTF8PosToTPos((LPCSTR)utf8Haystack + starting_offset_utf8, offset[0] - starting_offset_utf8);
+		match_offset_utf8 = offset[0];
+		if (match_offset_utf8 >= starting_offset_utf8) // Take a shortcut:
+			match_offset = starting_offset + UTF8PosToTPos((LPCSTR)utf8Haystack + starting_offset_utf8, match_offset_utf8 - starting_offset_utf8);
 		else
+			match_offset = UTF8PosToTPos(utf8Haystack, match_offset_utf8);
+#else
+		match_offset = offset[0];
 #endif
-		match_offset = UTF8PosToTPos(utf8Haystack, offset[0]);
 		aResultToken.value_int64 = match_offset + 1; // i.e. the position of the entire-pattern match is the function's return value.
 	}
 
@@ -14492,7 +14498,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	if (pattern_count > 1)
 		RegExSetSubpatternVars(haystack, re, extra, get_positions_not_substrings, output_var, offset, pattern_count, captured_pattern_count, mem_to_free
 #ifdef UNICODE
-		, utf8Haystack, match_offset
+		, utf8Haystack, match_offset_utf8, match_offset
 #endif
 		);
 
