@@ -14070,15 +14070,14 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		// assumes that aOffset[1] >= aOffset[0] >= starting_offset:
 		ASSERT(aOffset[0] >= starting_offset);
 		// See comment near declaration of starting_offset above.
-		haystack_portion_length = UTF8PosToTPos(utf8Haystack + starting_offset, aOffset[0] - starting_offset); // The length of the haystack section between the end of the previous match and the start of the current one.
-		int match_offset = aStartingOffset + haystack_portion_length;
+		int match_offset = aStartingOffset + UTF8PosToTPos(utf8Haystack + starting_offset, aOffset[0] - starting_offset);
 		int match_end_offset = match_offset + UTF8PosToTPos(utf8Haystack + aOffset[0], aOffset[1] - aOffset[0]);
-		match_pos = haystack_pos + haystack_portion_length; // This is the location in aHaystack of the entire-pattern match.
+		match_pos = aHaystack + match_offset; // This is the location in aHaystack of the entire-pattern match.
 #else
 		match_pos = aHaystack + aOffset[0]; // This is the location in aHaystack of the entire-pattern match.
-		haystack_portion_length = (int)(match_pos - haystack_pos); // The length of the haystack section between the end of the previous match and the start of the current one.
 		int match_end_offset = aOffset[1];
 #endif
+		haystack_portion_length = (int)(match_pos - haystack_pos); // The length of the haystack section between the end of the previous match and the start of the current one.
 
 		// Handle this replacement by making two passes through the replacement-text: The first calculates the size
 		// (which avoids having to constantly check for buffer overflow with potential realloc at multiple stages).
