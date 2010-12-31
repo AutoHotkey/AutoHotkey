@@ -1697,7 +1697,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 	else // It's not a built-in function, or it's a built-in that was overridden with a custom function.
 	{
 		ExprTokenType indexed_token, named_token; // Separate for code simplicity.
-		INT_PTR param_offset, param_key;
+		INT_PTR param_offset, param_key = -1;
 		Object *param_obj = NULL;
 		if (aIsVariadic) // i.e. this is a variadic function call.
 		{
