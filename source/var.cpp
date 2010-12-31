@@ -1251,6 +1251,9 @@ ResultType Var::AssignStringToCodePage(LPCWSTR aBuf, int aLength, UINT aCodePage
 		aContents[iLen] = 0;
 		if (!iLen)
 			return FAIL;
+#ifndef UNICODE
+		SetCharLength(aContents[iLen - 1] ? iLen : iLen - 1);
+#endif
 	}
 	else
 		Assign();
