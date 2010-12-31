@@ -817,7 +817,7 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 		// If this param is SYM_OBJECT, it is either an unsupported object (in which case rgvarg[i] is empty)
 		// or a ComObject, in which case rgvarg[i] is a shallow copy and calling VariantClear would free the
 		// caller's data prematurely. Even VT_DISPATCH should not be cleared since TokenToVariant didn't AddRef.
-		if (aParam[i]->symbol != SYM_OBJECT)
+		if (aParam[aParamCount-i]->symbol != SYM_OBJECT)
 			VariantClear(&rgvarg[i]);
 	}
 
