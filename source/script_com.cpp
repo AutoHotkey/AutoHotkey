@@ -828,7 +828,7 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 	else if	(IS_INVOKE_SET)
 	{	// Allow chaining, e.g. obj2.prop := obj1.prop := val.
 		ExprTokenType &rvalue = *aParam[aParamCount];
-		aResultToken.symbol = rvalue.symbol;
+		aResultToken.symbol = (rvalue.symbol == SYM_OPERAND) ? SYM_STRING : rvalue.symbol;
 		aResultToken.value_int64 = rvalue.value_int64;
 		if (rvalue.symbol == SYM_OBJECT)
 			rvalue.object->AddRef();
