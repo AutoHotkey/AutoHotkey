@@ -115,6 +115,20 @@ void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 		}
 	}
 }
+	
+
+//
+// BIF_ObjGetInPlace - Handles part of a compound assignment like x.y += z.
+//
+
+void BIF_ObjGetInPlace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	// Since the most common cases have two params, the "param count" param is omitted in
+	// those cases. Otherwise we have one visible parameter, which indicates the number of
+	// actual parameters below it on the stack.
+	aParamCount = aParamCount ? (int)TokenToInt64(*aParam[0]) : 2; // x[<n-1 params>] : x.y
+	BIF_ObjInvoke(aResultToken, aParam - aParamCount, aParamCount);
+}
 
 
 //

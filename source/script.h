@@ -2856,6 +2856,7 @@ void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 void BIF_IsObject(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjGetInPlace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // See script_object.cpp for comments.
 void BIF_ObjAddRefRelease(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 // Built-ins also available as methods -- these are available as functions for use primarily by overridden methods (i.e. where using the built-in methods isn't possible as they're no longer accessible).

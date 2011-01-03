@@ -148,7 +148,7 @@ enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
 	, SYM_BEGIN = SYM_OPERAND_END  // SYM_BEGIN is a special marker to simplify the code.
 #define IS_OPERAND(symbol) ((symbol) < SYM_OPERAND_END)
 	, SYM_POST_INCREMENT, SYM_POST_DECREMENT // Kept in this position for use by YIELDS_AN_OPERAND() [helps performance].
-	, SYM_CPAREN, SYM_CBRACKET, SYM_GET, SYM_OPAREN, SYM_OBRACKET, SYM_COMMA  // CPAREN (close-paren) must come right before OPAREN and must be the first non-operand symbol other than SYM_BEGIN.
+	, SYM_CPAREN, SYM_CBRACKET, SYM_DOT, SYM_OPAREN, SYM_OBRACKET, SYM_COMMA  // CPAREN (close-paren) must come right before OPAREN and must be the first non-operand symbol other than SYM_BEGIN.
 #define YIELDS_AN_OPERAND(symbol) ((symbol) < SYM_OPAREN) // CPAREN also covers the tail end of a function call.  Post-inc/dec yields an operand for things like Var++ + 2.  Definitely needs the parentheses around symbol.
 	, SYM_ASSIGN, SYM_ASSIGN_ADD, SYM_ASSIGN_SUBTRACT, SYM_ASSIGN_MULTIPLY, SYM_ASSIGN_DIVIDE, SYM_ASSIGN_FLOORDIVIDE
 	, SYM_ASSIGN_BITOR, SYM_ASSIGN_BITXOR, SYM_ASSIGN_BITAND, SYM_ASSIGN_BITSHIFTLEFT, SYM_ASSIGN_BITSHIFTRIGHT
@@ -172,7 +172,6 @@ enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
 	, SYM_POWER    // See comments near precedence array for why this takes precedence over SYM_NEGATIVE.
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
 	, SYM_FUNC     // A call to a function.
-	/*, SYM_GET*/, SYM_SET // L31: These are used only during load-time, before they are converted to SYM_FUNC.  SYM_GET was moved into the range for YIELDS_AN_OPERAND().
 	, SYM_REGEXMATCH // L31: Experimental ~= RegExMatch operator, equivalent to a RegExMatch call in two-parameter mode.
 	, SYM_COUNT    // Must be last because it's the total symbol count for everything above.
 	, SYM_INVALID = SYM_COUNT // Some callers may rely on YIELDS_AN_OPERAND(SYM_INVALID)==false.
