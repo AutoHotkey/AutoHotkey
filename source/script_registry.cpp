@@ -63,19 +63,36 @@ ResultType Line::IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR 
 }
 
 #ifdef UNICODE
-static BOOL IniEncodingFix(LPTSTR aFilespec){
-	if(!DoesFilePatternExist(aFilespec)){
+static BOOL IniEncodingFix(LPWSTR aFilespec, LPWSTR aSection)
+{
+	BOOL result = TRUE;
+	if (!DoesFilePatternExist(aFilespec))
+	{
 		HANDLE hFile;
 		DWORD dwWritten;
 
-		// Create an Unicode file. (UTF-16LE BOM)
+		// Create a Unicode file. (UTF-16LE BOM)
 		hFile = CreateFile(aFilespec, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL);
-		if(hFile == INVALID_HANDLE_VALUE) return FALSE;
+		if (hFile != INVALID_HANDLE_VALUE)
+		{
+			size_t cc = wcslen(aSection);
+			size_t cb = (cc + 1) * sizeof(WCHAR);
+			
+			aSection[cc] = ']'; // Temporarily replace the null-terminator.
 
-		if(!WriteFile(hFile, "\xFF\xFE", 2, &dwWritten, NULL) || dwWritten != 2){ CloseHandle(hFile); return FALSE; }
-		if(!CloseHandle(hFile)){ return FALSE; }
+			// Write a UTF-16LE BOM to identify this as a Unicode file.
+			// Write [%aSection%] to prevent WritePrivateProfileString from inserting an empty line (for consistency and style).
+			if (   !WriteFile(hFile, L"\xFEFF[", 4, &dwWritten, NULL) || dwWritten != 4
+				|| !WriteFile(hFile, aSection, cb, &dwWritten, NULL) || dwWritten != cb   )
+				result = FALSE;
+
+			if (!CloseHandle(hFile))
+				result = FALSE;
+
+			aSection[cc] = '\0'; // Re-terminate.
+		}
 	}
-	return TRUE;
+	return result;
 }
 #endif
 
@@ -90,7 +107,7 @@ ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTS
 	// WritePrivateProfileStringW() always creates INIs using the system codepage.
 	// IniEncodingFix() checks if the file exists and if it doesn't then it creates
 	// an empty file with a UTF-16LE BOM.
-	result = IniEncodingFix(szFileTemp);
+	result = IniEncodingFix(szFileTemp, aSection);
 	if(result){
 #endif
 		if (*aKey)
