@@ -2312,18 +2312,18 @@ examine_line:
 		}
 		// Otherwise, treat it as a normal script line.
 
-		// v1.0.41: Support the "} else {" style in one-true-brace (OTB).  As a side-effect,
-		// any command, not just an else, is probably supported to the right of '}', not just "else".
-		// This is undocumented because it would make for less readable scripts, and doesn't seem
-		// to have much value.
-		if (*buf == '}')
+		if (*buf == '{' || *buf == '}')
 		{
-			if (!AddLine(ACT_BLOCK_END))
+			if (!AddLine(*buf == '{' ? ACT_BLOCK_BEGIN : ACT_BLOCK_END))
 				return CloseAndReturnFail(fp);
-			// The following allows the next stage to see "else" or "else {" if it's present:
-			if (   !*(buf = omit_leading_whitespace(buf + 1))   )
-				goto continue_main_loop; // It's just a naked "}", so no more processing needed for this line.
-			buf_length = _tcslen(buf); // Update for possible use below.
+			// Allow any command/action, directive or label to the right of "{" or "}":
+			if (   *(buf = omit_leading_whitespace(buf + 1))   )
+			{
+				buf_length = _tcslen(buf); // Update.
+				mCurrLine = NULL;  // To signify that we're in transition, trying to load a new line.
+				goto examine_line; // Have the main loop process the contents of "buf" as though it came in from the script.
+			}
+			goto continue_main_loop; // It's just a naked "{" or "}", so no more processing needed for this line.
 		}
 		// First do a little special handling to support actions on the same line as their
 		// ELSE, e.g.:
@@ -2342,24 +2342,8 @@ examine_line:
 		{
 			// It's not an ELSE.  Also, at this stage it can't be ACT_EXPRESSION (such as an isolated function call)
 			// because it would have been already handled higher above.
-			// v1.0.41.01: Check if there is a command/action on the same line as the '{'.  This is apparently
-			// a style that some people use, and it also supports "{}" as a shorthand way of writing an empty block.
-			if (*buf == '{')
-			{
-				if (!AddLine(ACT_BLOCK_BEGIN))
-					return CloseAndReturnFail(fp);
-				if (   *(action_end = omit_leading_whitespace(buf + 1))   )  // There is an action to the right of the '{'.
-				{
-					mCurrLine = NULL;  // To signify that we're in transition, trying to load a new one.
-					if (!ParseAndAddLine(action_end, IsFunction(action_end) ? ACT_EXPRESSION : ACT_INVALID)) // If it's a function, it must be a call vs. a definition because a function can't be defined on the same line as an open-brace.
-						return CloseAndReturnFail(fp);
-				}
-				// Otherwise, there was either no same-line action or the same-line action was successfully added,
-				// so do nothing.
-			}
-			else
-				if (!ParseAndAddLine(buf))
-					return CloseAndReturnFail(fp);
+			if (!ParseAndAddLine(buf))
+				return CloseAndReturnFail(fp);
 		}
 		else // This line is an ELSE, possibly with another command immediately after it (on the same line).
 		{
@@ -2370,13 +2354,19 @@ examine_line:
 			if (!AddLine(ACT_ELSE))
 				return CloseAndReturnFail(fp);
 			mCurrLine = NULL;  // To signify that we're in transition, trying to load a new one.
-			action_end = omit_leading_whitespace(action_end); // Now action_end is the word after the ELSE.
-			if (*action_end == g_delimiter) // Allow "else, action"
-				action_end = omit_leading_whitespace(action_end + 1);
-			if (*action_end && !ParseAndAddLine(action_end, IsFunction(action_end) ? ACT_EXPRESSION : ACT_INVALID)) // If it's a function, it must be a call vs. a definition because a function can't be defined on the same line as an Else.
-				return CloseAndReturnFail(fp);
-			// Otherwise, there was either no same-line action or the same-line action was successfully added,
-			// so do nothing.
+			buf = omit_leading_whitespace(action_end); // Now buf is the word after the ELSE.
+			if (*buf == g_delimiter) // Allow "else, action"
+				buf = omit_leading_whitespace(buf + 1);
+			// Allow any command/action to the right of "else", including "{":
+			if (*buf)
+			{
+				// This is done rather than calling ParseAndAddLine() as it handles "{" in a way that
+				// anything to the right of it is considered an arg of that line and is basically ignored.
+				buf_length = _tcslen(buf); // Update.
+				mCurrLine = NULL;  // To signify that we're in transition, trying to load a new line.
+				goto examine_line; // Have the main loop process the contents of "buf" as though it came in from the script.
+			}
+			// Otherwise, there was either no same-line action, so do nothing.
 		}
 
 continue_main_loop: // This method is used in lieu of "continue" for performance and code size reduction.
