@@ -8848,18 +8848,12 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 
 ResultType Line::FileCreateDir(LPTSTR aDirSpec)
 {
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
 	if (!aDirSpec || !*aDirSpec)
-		return OK;  // Return OK because g_ErrorLevel tells the story.
+		return AssignErrorLevels(TRUE, ERROR_INVALID_PARAMETER);
 
 	DWORD attr = GetFileAttributes(aDirSpec);
 	if (attr != 0xFFFFFFFF)  // aDirSpec already exists.
-	{
-		if (attr & FILE_ATTRIBUTE_DIRECTORY)
-			g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Indicate success since it already exists as a dir.
-		// else leave as failure, since aDirSpec exists as a file, not a dir.
-		return OK;
-	}
+		return AssignErrorLevels(!(attr & FILE_ATTRIBUTE_DIRECTORY), ERROR_ALREADY_EXISTS); // Indicate success if it already exists as a dir.
 
 	// If it has a backslash, make sure all its parent directories exist before we attempt
 	// to create this directory:
@@ -8868,7 +8862,7 @@ ResultType Line::FileCreateDir(LPTSTR aDirSpec)
 	{
 		TCHAR parent_dir[MAX_PATH];
 		if (_tcslen(aDirSpec) >= _countof(parent_dir)) // avoid overflow
-			return OK; // Let ErrorLevel tell the story.
+			return AssignErrorLevels(TRUE, ERROR_BUFFER_OVERFLOW);
 		tcslcpy(parent_dir, aDirSpec, last_backslash - aDirSpec + 1); // Omits the last backslash.
 		FileCreateDir(parent_dir); // Recursively create all needed ancestor directories.
 
@@ -8885,7 +8879,7 @@ ResultType Line::FileCreateDir(LPTSTR aDirSpec)
 	// The above has recursively created all parent directories of aDirSpec if needed.
 	// Now we can create aDirSpec.  Be sure to explicitly set g_ErrorLevel since it's value
 	// is now indeterminate due to action above:
-	return g_ErrorLevel->Assign(CreateDirectory(aDirSpec, NULL) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
+	return AssignErrorLevels(!CreateDirectory(aDirSpec, NULL));
 }
 
 
