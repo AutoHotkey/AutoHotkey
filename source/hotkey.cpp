@@ -659,6 +659,7 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags
 		// makes the odds vanishingly small.  That's why the following simple, high-performance loop is used
 		// rather than more a more complex one that "locates the smallest (most specific) eclipsed wildcard
 		// hotkey", or "the uppermost variant among all eclipsed wildcards that is eligible to fire".
+		mod_type modifiers = ConvertModifiersLR(g_modifiersLR_logical); // Neutral modifiers.
 		for (int i = 0; i < sHotkeyCount; ++i) // This loop is undesirable; but its performance impact probably isn't measurable in the majority of cases.
 		{
 			Hotkey &hk2 = *shk[i]; // For performance and convenience.
@@ -670,8 +671,8 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags
 				&& !hk2.mModifierSC // hotkeys that happen to have the same mVK/SC.
 				&& !hk2.mHookAction // Might be unnecessary to check this; but just in case.
 				&& hk2.mID != hotkey_id // Don't consider the original hotkey because it's was already found ineligible.
-				&& (hk.mAllowExtraModifiers // Either the original hotkey must allow extra modifiers or the candidate must not have any modifiers present on the original (otherwise the user probably isn't holding down the right keys to trigger this hotkey).
-					|| !((hk.mModifiersConsolidatedLR ^ hk2.mModifiersConsolidatedLR) & hk2.mModifiersConsolidatedLR)) // "The modifiers that are different intersected with those present on the candidate", which are those present on the candidate that are absent from this original.
+				&& !(hk2.mModifiers & ~modifiers) // All neutral modifiers required by the candidate are pressed.
+				&& !(hk2.mModifiersLR & ~g_modifiersLR_logical) // All left-right specific modifiers required by the candidate are pressed.
 				//&& hk2.mType != HK_JOYSTICK // Seems unnecessary since joystick hotkeys don't call us and even if they did, probably should be included.
 				//&& hk2.mParentEnabled   ) // CriterionAllowsFiring() will check this for us.
 				)
