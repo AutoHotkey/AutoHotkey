@@ -2334,15 +2334,17 @@ examine_line:
 		// as properly detecting special commands that don't have keywords such as
 		// IF comparisons, ACT_ASSIGN, +=, -=, etc.
 		// v1.0.41: '{' was added to the line below to support no spaces inside "}else{".
-		if (!(action_end = StrChrAny(buf, _T("\t ,{")))) // Position of first tab/space/comma/open-brace.  For simplicitly, a non-standard g_delimiter is not supported.
+		if (!(action_end = StrChrAny(buf, _T("\t ,{(")))) // Position of first tab/space/comma/open-brace/open-paren.  For simplicitly, a non-standard g_delimiter is not supported.
 			action_end = buf + buf_length; // It's done this way so that ELSE can be fully handled here; i.e. that ELSE does not have to be in the list of commands recognizable by ParseAndAddLine().
 		// The following method ensures that words or variables that start with "Else", e.g. ElseAction, are not
 		// incorrectly detected as an Else command:
 		if (tcslicmp(buf, _T("Else"), action_end - buf)) // It's not an ELSE. ("Else" is used vs. g_act[ACT_ELSE].Name for performance).
 		{
 			// It's not an ELSE.  Also, at this stage it can't be ACT_EXPRESSION (such as an isolated function call)
-			// because it would have been already handled higher above.
-			if (!ParseAndAddLine(buf))
+			// because it would have been already handled higher above.  UPDATE: A multi-statement expression such
+			// as "MsgBox(z), x := y" can get to this stage since IsFunction() does not recognize it. In that case
+			// we need to pass ACT_EXPRESSION, otherwise it will be interpreted as "MsgBox,(z)..."
+			if (!ParseAndAddLine(buf, *action_end == '(' ? ACT_EXPRESSION : ACT_INVALID))
 				return CloseAndReturnFail(fp);
 		}
 		else // This line is an ELSE, possibly with another command immediately after it (on the same line).
