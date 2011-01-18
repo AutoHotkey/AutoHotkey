@@ -440,6 +440,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			{
 				if (mActionType == ACT_EXPRESSION) // Isolated expression: Outermost function call's result will be ignored, so no need to store it.
 				{
+					if (this_token.mem_to_free)
+						free(this_token.mem_to_free); // Don't bother putting it into mem[].
 					goto normal_end_skip_output_var; // No output_var is possible for ACT_EXPRESSION.
 				}
 				internal_output_var = output_var; // NULL unless this is ACT_ASSIGNEXPR.
