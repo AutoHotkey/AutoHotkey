@@ -75,8 +75,8 @@ static BOOL IniEncodingFix(LPWSTR aFilespec, LPWSTR aSection)
 		hFile = CreateFile(aFilespec, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL);
 		if (hFile != INVALID_HANDLE_VALUE)
 		{
-			size_t cc = wcslen(aSection);
-			size_t cb = (cc + 1) * sizeof(WCHAR);
+			DWORD cc = (DWORD)wcslen(aSection);
+			DWORD cb = (cc + 1) * sizeof(WCHAR);
 			
 			aSection[cc] = ']'; // Temporarily replace the null-terminator.
 
