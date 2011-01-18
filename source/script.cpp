@@ -1196,8 +1196,8 @@ bool IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace = NULL)
 	// v1.0.40.04: Added condition "action_end != aBuf" to allow a hotkey or remap or hotkey such as
 	// such as "(::" to work even if it ends in a close-parenthesis such as "(::)" or "(::MsgBox )"
 	if (   !(action_end && *action_end == '(' && action_end != aBuf
-		&& (action_end - aBuf != 2 || _tcsnicmp(aBuf, _T("IF"), 2))
-		&& (action_end - aBuf != 5 || _tcsnicmp(aBuf, _T("WHILE"), 5))) // v1.0.48.04: Recognize While() as loop rather than a function because many programmers are in the habit of writing while() and if().
+		&& tcslicmp(aBuf, _T("IF"), action_end - aBuf)
+		&& tcslicmp(aBuf, _T("WHILE"), action_end - aBuf)) // v1.0.48.04: Recognize While() as loop rather than a function because many programmers are in the habit of writing while() and if().
 		|| action_end[1] == ':'   ) // v1.0.44.07: This prevents "$(::fn_call()" from being seen as a function-call vs. hotkey-with-call.  For simplicity and due to rarity, omit_leading_whitespace() isn't called; i.e. assumes that the colon immediate follows the '('.
 		return false;
 	LPTSTR aBuf_last_char = action_end + _tcslen(action_end) - 1; // Above has already ensured that action_end is "(...".
@@ -2179,7 +2179,7 @@ examine_line:
 					// But do put in the Return regardless, in case this label is ever jumped to
 					// via Goto/Gosub:
 					if (   !(hook_action = Hotkey::ConvertAltTab(hotkey_flag, false))   )
-						if (!ParseAndAddLine(hotkey_flag, IsFunction(hotkey_flag) ? ACT_EXPRESSION : ACT_INVALID)) // It can't be a function definition vs. call since it's a single-line hotkey.
+						if (!ParseAndAddLine(hotkey_flag))
 							return CloseAndReturnFail(fp);
 				// Also add a Return that's implicit for a single-line hotkey.  This is also
 				// done for auto-replace hotstrings in case gosub/goto is ever used to jump
@@ -2340,8 +2340,6 @@ examine_line:
 		// incorrectly detected as an Else command:
 		if (tcslicmp(buf, _T("Else"), action_end - buf)) // It's not an ELSE. ("Else" is used vs. g_act[ACT_ELSE].Name for performance).
 		{
-			// It's not an ELSE.  Also, at this stage it can't be ACT_EXPRESSION (such as an isolated function call)
-			// because it would have been already handled higher above.
 			if (!ParseAndAddLine(buf))
 				return CloseAndReturnFail(fp);
 		}
@@ -3691,9 +3689,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		action_args = omit_leading_whitespace(end_marker + 1);
 		// L34: Require that named commands and their args are delimited with a space, tab or comma.
 		// Detects errors such as "MsgBox< foo" or "If!foo" and allows things like "control[x]:=y".
-		// L36: Also allow '(' for if(expr) and while(expr).
 		TCHAR end_char = end_marker[1];
-		could_be_named_action = (end_char == g_delimiter || !end_char || IS_SPACE_OR_TAB(end_char) || end_char == '(');
+		could_be_named_action = (end_char == g_delimiter || !end_char || IS_SPACE_OR_TAB(end_char)
+			// Allow If() and While() but something like MsgBox() should always be a function-call:
+			|| (end_char == '(' && (!_tcsicmp(action_name, _T("IF")) || !_tcsicmp(action_name, _T("WHILE")))));
 	}
 	else
 	{
