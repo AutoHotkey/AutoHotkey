@@ -9127,10 +9127,11 @@ ResultType Line::FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber)
 
 	LONG_OPERATION_INIT
 
+	DWORD buf_length;
 	TCHAR buf[READ_FILE_LINE_SIZE];
 	for (__int64 i = 0; i < line_number; ++i)
 	{
-		if (!tfile.ReadLine(buf, _countof(buf) - 1)) // end-of-file or error
+		if (  !(buf_length = tfile.ReadLine(buf, _countof(buf) - 1))  ) // end-of-file or error
 		{
 			g->LastError = GetLastError();
 			tfile.Close();
@@ -9140,9 +9141,9 @@ ResultType Line::FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber)
 	}
 	tfile.Close();
 
-	size_t buf_length = _tcslen(buf);
 	if (buf_length && buf[buf_length - 1] == '\n') // Remove any trailing newline for the user.
-		buf[--buf_length] = '\0';
+		--buf_length;
+
 	if (!buf_length)
 	{
 		if (!output_var.Assign()) // Explicitly call it this way so that it won't free the memory.
@@ -9151,6 +9152,7 @@ ResultType Line::FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber)
 	else
 		if (!output_var.Assign(buf, (VarSizeType)buf_length))
 			return FAIL;
+
 	return AssignErrorLevels(FALSE, 0); // Indicate success.
 }
 

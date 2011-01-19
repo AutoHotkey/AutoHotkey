@@ -2505,18 +2505,14 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 	if (!aBuf || !ts) return -1;
 	if (aMaxCharsToRead < 1) return 0;
 	if (ts->AtEOF()) return -1; // Previous call to this function probably already read the last line.
-	if (ts->ReadLine(aBuf, aMaxCharsToRead) == 0) // end-of-file or error
+	if (  !(aBuf_length = ts->ReadLine(aBuf, aMaxCharsToRead))  ) // end-of-file or error
 	{
 		*aBuf = '\0';  // Reset since on error, contents added by fgets() are indeterminate.
 		return -1;
 	}
-	aBuf_length = _tcslen(aBuf);
-	if (!aBuf_length)
-		return 0;
 	if (aBuf[aBuf_length-1] == '\n')
-		aBuf[--aBuf_length] = '\0';
-	if (aBuf[aBuf_length-1] == '\r')  // In case there are any, e.g. a Macintosh or Unix file?
-		aBuf[--aBuf_length] = '\0';
+		--aBuf_length;
+	aBuf[aBuf_length] = '\0';
 
 	if (aInContinuationSection)
 	{
@@ -12705,15 +12701,15 @@ ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinu
 
 	for (;; ++g.mLoopIteration)
 	{ 
-		if (!loop_info.mReadFile->ReadLine(loop_info.mCurrentLine, _countof(loop_info.mCurrentLine)))
+		if (  !(line_length = loop_info.mReadFile->ReadLine(loop_info.mCurrentLine, _countof(loop_info.mCurrentLine) - 1))  ) // -1 to ensure there's room for a null-terminator.
 		{
 			// We want to return OK except in some specific cases handled below (see "break").
 			result = OK;
 			break;
 		}
-		line_length = _tcslen(loop_info.mCurrentLine);
-		if (line_length && loop_info.mCurrentLine[line_length - 1] == '\n') // Remove newlines like FileReadLine does.
-			loop_info.mCurrentLine[--line_length] = '\0';
+		if (loop_info.mCurrentLine[line_length - 1] == '\n') // Remove newlines like FileReadLine does.
+			--line_length;
+		loop_info.mCurrentLine[line_length] = '\0';
 		g.mLoopReadFile = &loop_info;
 		if (mNextLine->mActionType == ACT_BLOCK_BEGIN) // See PerformLoop() for comments about this section.
 			do
@@ -12736,7 +12732,10 @@ ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinu
 	}
 
 	if (loop_info.mWriteFile)
+	{
+		loop_info.mWriteFile->Close();
 		delete loop_info.mWriteFile;
+	}
 
 	return result;
 }
