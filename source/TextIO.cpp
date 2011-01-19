@@ -150,27 +150,48 @@ DWORD TextStream::Write(LPCTSTR aBuf, DWORD aBufLen)
 	{
 #ifdef UNICODE
 		// Alias to simplify the code.  Compiler optimizations will probably make up for it.
-		LPCWSTR buf_w = aBuf;
+		LPCWSTR str = aBuf;
 #else
 		CStringWCharFromChar buf_w(aBuf, aBufLen, g_ACP);
 		aBufLen = buf_w.GetLength();
+		LPCWSTR str = buf_w;
 #endif
-		if (mFlags & EOL_CRLF)
+		if (!aBufLen) // Below may rely on this check.
+			return 0;
+
+		if (mFlags & EOL_CRLF) // This section is very similar to the one for 8-bit strings below, so maintain them together.
 		{
 			DWORD dwWritten = 0;
-			DWORD i;
-			for (i = 0; i < aBufLen; i++)
+			LPCWSTR str_end, line_end;
+
+			if (*str == '\n') // Special case: the first char is \n which *might* need to be translated.
 			{
-				if (buf_w[i] == '\n' && mWriteCharW != '\r')
+				if (mWriteCharW == '\r') // If the last character written was \r, this is its corresponding \n.
+					dwWritten += _Write(str, sizeof(WCHAR) * 1);
+				else // Otherwise, this \n should be translated to \r\n.
 					dwWritten += _Write(L"\r\n", sizeof(WCHAR) * 2);
-				else
-					dwWritten += _Write(&buf_w[i], sizeof(WCHAR));
-				mWriteCharW = buf_w[i];
+				++str; // Exclude this \n from consideration by the loop below.
+				--aBufLen;
 			}
+
+			for (str_end = str + aBufLen; str < str_end; str = line_end + 1)
+			{
+				// Find the next \n not preceded by \r:
+				if (*(line_end = str) != '\n') // i.e. str doesn't point at the next \n needing translation.
+					for (++line_end; line_end < str_end && (*line_end != '\n' || line_end[-1] == '\r'); ++line_end);
+				// Now line_end either points at the null-terminator or the next \n not preceded by \r.
+				dwWritten += _Write(str, sizeof(WCHAR) * (DWORD)(line_end - str));
+				if (line_end < str_end)
+					dwWritten += _Write(L"\r\n", sizeof(WCHAR) * 2);
+				// Otherwise, we're at the end of the string and there is no line ending to write.
+			}
+
+			mWriteCharW = str_end[-1]; // See "Special case" above.  This relies on !len having already been checked.
+
 			return dwWritten;
 		}
 
-		return _Write(buf_w, aBufLen * sizeof(WCHAR));
+		return _Write(str, sizeof(WCHAR) * aBufLen);
 	}
 	else
 	{
@@ -202,19 +223,39 @@ DWORD TextStream::Write(LPCTSTR aBuf, DWORD aBufLen)
 			str = buf_a.GetString();
 			len = (DWORD)buf_a.GetLength();
 		}
+
+		if (!len) // Below may rely on this check.
+			return 0;
 		
-		if (mFlags & EOL_CRLF)
+		if (mFlags & EOL_CRLF) // This section is very similar to the one for 16-bit strings above, so maintain them together.
 		{
 			DWORD dwWritten = 0;
-			DWORD i;
-			for (i = 0; i < len; i++)
+			LPCSTR str_end, line_end;
+
+			if (*str == '\n') // Special case: the first char is \n which *might* need to be translated.
 			{
-				if (str[i] == '\n' && mWriteCharA != '\r')
+				if (mWriteCharA == '\r') // If the last character written was \r, this is its corresponding \n.
+					dwWritten += _Write(str, sizeof(CHAR) * 1);
+				else // Otherwise, this \n should be translated to \r\n.
 					dwWritten += _Write("\r\n", sizeof(CHAR) * 2);
-				else
-					dwWritten += _Write(&str[i], sizeof(CHAR) * 1);
-				mWriteCharA = str[i];
+				++str; // Exclude this \n from consideration by the loop below.
+				--len; //
 			}
+
+			for (str_end = str + len; str < str_end; str = line_end + 1)
+			{
+				// Find the next \n not preceded by \r:
+				if (*(line_end = str) != '\n') // i.e. str doesn't point at the next \n needing translation.
+					for (++line_end; line_end < str_end && (*line_end != '\n' || line_end[-1] == '\r'); ++line_end);
+				// Now line_end either points at the null-terminator or the next \n not preceded by \r.
+				dwWritten += _Write(str, sizeof(CHAR) * (DWORD)(line_end - str));
+				if (line_end < str_end)
+					dwWritten += _Write("\r\n", sizeof(CHAR) * 2);
+				// Otherwise, we're at the end of the string and there is no line ending to write.
+			}
+
+			mWriteCharA = str_end[-1]; // See "Special case" above.  This relies on !len having already been checked.
+
 			return dwWritten;
 		}
 
