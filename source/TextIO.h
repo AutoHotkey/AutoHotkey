@@ -1,6 +1,6 @@
 #pragma once
 
-#define TEXT_IO_BLOCK	4096
+#define TEXT_IO_BLOCK	8192
 
 #ifndef CP_UTF16
 #define CP_UTF16		1200 // the codepage of UTF-16LE
@@ -51,7 +51,7 @@ public:
 	};
 
 	TextStream()
-		: mFlags(0), mCodePage(-1), mLocale(NULL), mLength(0), mBuffer(NULL), mPos(NULL), mEOF(true)
+		: mFlags(0), mCodePage(-1), mLength(0), mBuffer(NULL), mPos(NULL), mEOF(true)
 	{
 		SetCodePage(CP_ACP);
 	}
@@ -59,8 +59,8 @@ public:
 	{
 		if (mBuffer)
 			free(mBuffer);
-		if (mLocale)
-			_free_locale(mLocale);
+		//if (mLocale)
+		//	_free_locale(mLocale);
 		// Close() isn't called here, it will rise a "pure virtual function call" exception.
 	}
 
@@ -124,22 +124,8 @@ public:
 			FlushWriteBuffer();
 
 			mCodePage = aCodePage;
-
-			// mLocale is no longer relevant, so free it.
-			if (mLocale)
-				_free_locale(mLocale);
-
-			if (aCodePage != CP_UTF8 && aCodePage != CP_UTF16 && aCodePage != CP_UTF7)
-			{
-				// Recreate locale for use with _ismbblead_l.
-				char name_buf[16];
-				*name_buf = '.';
-				_ultoa(aCodePage, name_buf + 1, 10);
-				mLocale = _create_locale(LC_ALL, name_buf);
-			}
-			else
-				// _create_locale doesn't support Unicode; mLocale isn't needed for CP_UTF8 or CP_UTF16 anyway.
-				mLocale = NULL;
+			if (!GetCPInfo(aCodePage, &mCodePageInfo))
+				mCodePageInfo.LeadByte[0] = NULL;
 		}
 	}
 	UINT GetCodePage() { return mCodePage; }
@@ -175,7 +161,7 @@ protected:
 			_Write(mBuffer, mLength);
 			mLength = 0;
 		}
-		mWriteCharW = 0;
+		mLastWriteChar = 0;
 	}
 
 	bool PrepareToWrite()
@@ -234,17 +220,21 @@ protected:
 		return !mEOF;
 	}
 
+	__declspec(noinline) bool IsLeadByte(BYTE b) // noinline benchmarks slightly faster.
+	{
+		for (int i = 0; i < _countof(mCodePageInfo.LeadByte) && mCodePageInfo.LeadByte[i]; i += 2)
+			if (b >= mCodePageInfo.LeadByte[i] && b <= mCodePageInfo.LeadByte[i+1])
+				return true;
+		return false;
+	}
+
 	DWORD mFlags;
 	DWORD mLength;		// The length of available data in the buffer, in bytes.
 	UINT  mCodePage;
-	_locale_t mLocale;
+	CPINFO mCodePageInfo;
 	
 	bool  mEOF;
-	union
-	{
-		CHAR  mWriteCharA;
-		WCHAR mWriteCharW;
-	};
+	TCHAR mLastWriteChar;
 
 	union // Pointer to the next character to read in mBuffer.
 	{

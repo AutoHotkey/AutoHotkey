@@ -2,10 +2,34 @@
 #include "TextIO.h"
 #include "script.h"
 #include "script_object.h"
-#include <mbctype.h> // For _ismbblead_l.
 
 UINT g_ACP = GetACP(); // Requires a reboot to change.
 #define INVALID_CHAR UorA(0xFFFD, '?')
+
+#ifndef UNICODE
+
+CPINFO GetACPInfo()
+{
+	CPINFO info;
+	GetCPInfo(CP_ACP, &info);
+	return info;
+}
+CPINFO g_ACPInfo = GetACPInfo();
+
+// Benchmarks faster than _ismbblead_l with ACP locale:
+bool IsLeadByteACP(BYTE b)
+{
+	// Benchmarks slightly faster without this check, even when MaxCharSize == 1:
+	//if (g_ACPInfo.MaxCharSize > 1)
+	for (int i = 0; i < _countof(g_ACPInfo.LeadByte) && g_ACPInfo.LeadByte[i]; i += 2)
+		if (b >= g_ACPInfo.LeadByte[i] && b <= g_ACPInfo.LeadByte[i+1])
+			return true;
+	return false;
+}
+
+#endif
+
+
 
 //
 // TextStream
@@ -19,7 +43,7 @@ bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 	SetCodePage(aCodePage);
 	mFlags = aFlags;
 	mEOF = false;
-	mWriteCharW = 0;
+	mLastWriteChar = 0;
 
 	int mode = aFlags & ACCESS_MODE_MASK;
 	if (mode == USEHANDLE)
@@ -187,7 +211,7 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 							continue;
 						}
 					}
-					else if (mLocale && _ismbblead_l(*src, mLocale))
+					else if (IsLeadByte(*src))
 						src_size = 2;
 					// Otherwise, leave it at the default set above: 1.
 					
@@ -208,9 +232,9 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 						break;
 					}
 #ifdef UNICODE
-					dst_size = MultiByteToWideChar(mCodePage, MB_ERR_INVALID_CHARS, (LPSTR)src, src_size, dst, _countof(dst));
+					dst_size = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, (LPSTR)src, src_size, dst, _countof(dst));
 #else
-					if (mCodePage == g_ACP)
+					if (codepage == g_ACP)
 					{
 						// This char doesn't require any conversion.
 						*dst = *(LPSTR)src;
@@ -223,7 +247,7 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 						// Convert this single- or multi-byte char to Unicode.
 						int wide_size;
 						WCHAR wide_char[2];
-						wide_size = MultiByteToWideChar(mCodePage, MB_ERR_INVALID_CHARS, (LPSTR)src, src_size, wide_char, _countof(wide_char));
+						wide_size = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, (LPSTR)src, src_size, wide_char, _countof(wide_char));
 						if (wide_size)
 						{
 							// Convert from Unicode to the system ANSI code page.
@@ -359,143 +383,143 @@ DWORD TextStream::Read(LPVOID aBuf, DWORD aBufLen)
 
 
 DWORD TextStream::Write(LPCTSTR aBuf, DWORD aBufLen)
-// NOTE: This method doesn't returns the number of characters are written,
-// instead, it returns the number of bytes. Because this should be faster and the write operations
-// should never fail unless it encounters a critical error (e.g. low disk space.).
-// Therefore, the amount of characters are the same with aBufLen or wcslen(aBuf) most likely.
-// The callers have knew that already.
+// Returns the number of bytes aBuf took after performing applicable EOL and
+// code page translations.  Since data is buffered, this is generally not the
+// amount actually written to file.  Returns 0 on apparent critical failure,
+// even if *some* data was written into the buffer and/or to file.
 {
 	if (!PrepareToWrite())
 		return 0;
 
 	if (aBufLen == 0)
+	{
 		aBufLen = (DWORD)_tcslen(aBuf);
-
-	CStringA buf_a;
-	LPCVOID data;
-	DWORD data_size;
-
-	if (mCodePage == CP_UTF16)
-	{
-#ifdef UNICODE
-		// Alias to simplify the code.  Compiler optimizations will probably make up for it.
-		LPCWSTR str = aBuf;
-#else
-		CStringWCharFromChar buf_w(aBuf, aBufLen, g_ACP);
-		aBufLen = buf_w.GetLength();
-		LPCWSTR str = buf_w;
-#endif
-		if (!aBufLen) // Below may rely on this check.
+		if (aBufLen == 0) // Below may rely on this having been checked.
 			return 0;
-
-		if (mFlags & EOL_CRLF)
-		{
-			return WriteTranslateCRLF<WCHAR>((WCHAR *)str, aBufLen);
-		}
-
-		data = str;
-		data_size = sizeof(WCHAR) * aBufLen;
 	}
-	else
+	
+	DWORD bytes_flushed = 0; // Number of buffered bytes flushed to file; used to calculate our return value.
+
+	LPCTSTR src;
+	LPCTSTR src_end;
+	int src_size;
+	
+	union {
+		LPBYTE	dst;
+		LPSTR	dstA;
+		LPWSTR	dstW;
+	};
+	dst = mBuffer + mLength;
+	
+	// Allow enough space in the buffer for any one of the following:
+	//	a 4-byte UTF-8 sequence
+	//	a UTF-16 surrogate pair
+	//	a carriage-return/newline pair
+	LPBYTE dst_end = mBuffer + TEXT_IO_BLOCK - 4;
+
+	for (src = aBuf, src_end = aBuf + aBufLen; ; )
 	{
-		LPCSTR str;
-		DWORD len;
-#ifndef UNICODE
-		// Since it's probably the most common case, optimize for the active codepage:
-		if (g_ACP == mCodePage)
+		// The following section speeds up writing of ASCII characters by copying as many as
+		// possible in each iteration of the outer loop, avoiding certain checks that would
+		// otherwise be made once for each char.  This relies on the fact that ASCII chars
+		// have the same binary value (but not necessarily width) in every supported encoding.
+		// EOL logic is also handled here, for performance.  An alternative approach which is
+		// tidier and performs almost as well is to add (*src != '\n') to each loop's condition
+		// and handle it after the loop terminates.
+		if (mCodePage != CP_UTF16)
 		{
-			str = aBuf;
-			len = aBufLen;
+			for ( ; src < src_end && !(*src & ~0x7F) && dst < dst_end; ++src)
+			{
+				if (*src == '\n' && (mFlags & EOL_CRLF) && ((src == aBuf) ? mLastWriteChar : src[-1]) != '\r')
+					*dstA++ = '\r';
+				*dstA++ = (CHAR)*src;
+			}
 		}
 		else
-#endif
 		{
-			if (mCodePage == CP_UTF8)
-				StringTCharToUTF8(aBuf, buf_a, aBufLen);
-			else
-			{
 #ifdef UNICODE
-				StringWCharToChar(aBuf, buf_a, aBufLen, '?', mCodePage);
+			for ( ; src < src_end && dst < dst_end; ++src)
 #else
-				// Since mCodePage is not the active codepage, we need to convert.
-				CStringWCharFromChar buf_w(aBuf, aBufLen, g_ACP);
-				StringWCharToChar(buf_w.GetString(), buf_a, buf_w.GetLength(), '?', mCodePage);
+			for ( ; src < src_end && !(*src & ~0x7F) && dst < dst_end; ++src) // No conversion needed for ASCII chars.
 #endif
-			}
-			str = buf_a.GetString();
-			len = (DWORD)buf_a.GetLength();
-		}
-
-		if (!len) // Below may rely on this check.
-			return 0;
-
-		if (mFlags & EOL_CRLF)
-		{
-			return WriteTranslateCRLF<CHAR>((CHAR *)str, len);
-		}
-
-		data = str;
-		data_size = len;
-	}
-
-	return Write(data, data_size);
-}
-
-template<typename TCHR>
-DWORD TextStream::WriteTranslateCRLF(TCHR *str, DWORD len)
-// Caller must ensure buffer doesn't contain an odd number of bytes if sizeof(TCHR) > 1.
-{
-	DWORD dwWritten = 0;
-	TCHR *str_end;
-
-	TCHR *buf = (TCHR *)mBuffer;
-	DWORD buf_len = mLength / sizeof(TCHR);
-
-	#define FLUSH_IF_AT_CAPACITY \
-		if (buf_len == TEXT_IO_BLOCK / sizeof(TCHR)) \
-		{ \
-			_Write(buf, buf_len * sizeof(TCHR)); \
-			buf_len = 0; \
-		}
-
-	// Special case: first char is \n whose corresponding \r might've been written in a previous call.
-	if (*str == '\n' && (TCHR)mWriteCharW != '\r') 
-	{
-		// This \n had no corresponding \r, so give it one:
-		buf[buf_len++] = '\r';
-		FLUSH_IF_AT_CAPACITY;
-		++dwWritten;
-	}
-
-	str_end = str + len;
-	if (len)
-	{
-		// Write the first char without considering str[-1], since that would be invalid.
-		// If the first char is \n, it was already handled above but not yet written out.
-		buf[buf_len++] = *str++;
-		FLUSH_IF_AT_CAPACITY;
-
-		for ( ; str < str_end; ++str)
-		{
-			if (*str == '\n' && str[-1] != '\r')
 			{
-				// This \n has no corresponding \r, so give it one:
-				buf[buf_len++] = '\r';
-				FLUSH_IF_AT_CAPACITY;
-				dwWritten += sizeof(TCHR);
+				if (*src == '\n' && (mFlags & EOL_CRLF) && ((src == aBuf) ? mLastWriteChar : src[-1]) != '\r')
+					*dstW++ = '\r';
+				*dstW++ = (WCHAR)*src;
 			}
-			buf[buf_len++] = *str;
-			FLUSH_IF_AT_CAPACITY;
 		}
 
-		dwWritten += len * sizeof(TCHR); // In lieu of an extra ++dwWritten inside the loop.
+		if (dst >= dst_end)
+		{
+			DWORD len = dst - mBuffer;
+			if (_Write(mBuffer, len) < len)
+			{
+				// The following isn't done since there's no way for the caller to know
+				// how much of aBuf was successfully translated or written to file, or
+				// even how many bytes to expect due to EOL and code page translations:
+				//if (written)
+				//{
+				//	// Since a later call might succeed, remove this data from the buffer
+				//	// to prevent it from being written twice.  Note that some or all of
+				//	// this data might've been buffered by a previous call.
+				//	memmove(mBuffer, mBuffer + written, mLength - written);
+				//	mLength -= written;
+				//}
+				// Instead, dump the contents of the buffer along with the remainder of aBuf,
+				// then return 0 to indicate a critical failure.
+				mLength = 0;
+				return 0;
+			}
+			bytes_flushed += len;
+			dst = mBuffer;
+			continue; // If *src is ASCII, we want to use the high-performance mode (above).
+		}
+
+		if (src == src_end)
+			break;
+
+#ifdef UNICODE
+		if (*src >= 0xD800 && *src <= 0xDBFF // i.e. this is a UTF-16 high surrogate.
+			&& src + 1 < src_end // If this is at the end of the string, there is no low surrogate.
+			&& src[1] >= 0xDC00 && src[1] <= 0xDFFF) // This is a complete surrogate pair.
+#else
+		if (IsLeadByteACP((BYTE)*src) && src + 1 < src_end) // src[1] is the second byte of this char.
+#endif
+			src_size = 2;
+		else
+			src_size = 1;
+
+#ifdef UNICODE
+		ASSERT(mCodePage != CP_UTF16); // An optimization above already handled UTF-16.
+		dstA += WideCharToMultiByte(mCodePage, 0, src, src_size, dstA, 4, NULL, NULL);
+		src += src_size;
+#else
+		if (mCodePage == g_ACP)
+		{
+			*dst++ = (BYTE)*src++;
+			if (src_size == 2)
+				*dst++ = (BYTE)*src++;
+		}
+		else
+		{
+			WCHAR wc;
+			if (MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, src, src_size, &wc, 1))
+			{
+				if (mCodePage == CP_UTF16)
+					*dstW++ = wc;
+				else
+					dstA += WideCharToMultiByte(mCodePage, 0, &wc, 1, (LPSTR)dst, 4, NULL, NULL);
+			}
+			src += src_size;
+		}
+#endif
 	}
 
-	mWriteCharW = (WCHAR)str_end[-1]; // See "Special case" above.  This relies on !len having already been checked.
+	mLastWriteChar = src_end[-1]; // So if this is \r and the next char is \n, don't make it \r\r\n.
 
-	mLength = buf_len * sizeof(TCHR); // Update buffered data length in bytes.
-
-	return dwWritten;
+	DWORD initial_length = mLength;
+	mLength = (dst - mBuffer);
+	return bytes_flushed + mLength - initial_length; // Doing it this way should perform better and result in smaller code than counting each byte put into the buffer.
 }
 
 
