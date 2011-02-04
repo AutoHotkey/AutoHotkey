@@ -138,6 +138,7 @@ ResultType Var::Assign(Var &aVar)
 		return target_var.Assign(source_var.mObject);
 
 	// Otherwise:
+	source_var.MaybeWarnUninitialized();	// ***AC 2/4/11 ADDED MaybeWarnUninitialized
 	return target_var.Assign(source_var.mCharContents, source_var._CharLength()); // Pass length to improve performance. It isn't necessary to call Contents()/Length() because they must be already up-to-date because there is no binary number to update them from (if there were, the above would have returned).  Also, caller ensured Type()==VAR_NORMAL.
 }
 
@@ -369,6 +370,8 @@ ResultType Var::AssignClipboardAll()
 	*(UINT *)binary_contents = 0; // Final termination (must be UINT, see above).
 	mByteLength = actual_space_used;
 	mAttrib |= VAR_ATTRIB_BINARY_CLIP; // VAR_ATTRIB_CONTENTS_OUT_OF_DATE and VAR_ATTRIB_CACHE were already removed by earlier call to Assign().
+
+	MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized
 	return OK;
 }
 
@@ -392,8 +395,11 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 
 	if (mType == VAR_NORMAL) // Copy a binary variable to another variable that isn't the clipboard.
 	{
-		if (source_var.mCharContents == Contents()) // source_var.mContents vs. Contents() is okay (see above). v1.0.45: source==dest, so nothing to do. It's compared this way in case aSourceVar is a ByRef/alias. This covers even that situation.
+		if (source_var.mCharContents == Contents(TRUE, TRUE))	// ***AC 2/4/11 ADDED extra BOOL arg to avoid warning for uninitialized var	// source_var.mContents vs. Contents() is okay (see above). v1.0.45: source==dest, so nothing to do. It's compared this way in case aSourceVar is a ByRef/alias. This covers even that situation.
+		{
+			MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized (NOTE: the SetCapacity below handles this for that success case)
 			return OK;
+		}
 		if (!SetCapacity(source_var.mByteLength, true, false)) // source_var.mLength vs. Length() is okay (see above).
 			return FAIL; // Above should have already reported the error.
 		memcpy(mByteContents, source_var.mByteContents, source_var.mByteLength + sizeof(TCHAR)); // Add sizeof(TCHAR) not sizeof(format). Contents() vs. a variable for the same because mContents might have just changed due Assign() above.
@@ -445,6 +451,8 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 		//else hglobal is just an empty format, but store it for completeness/accuracy (e.g. CF_BITMAP).
 		SetClipboardData(format, hglobal); // The system now owns hglobal.
 	}
+
+	MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized (NOTE: even if g_clip.Close fails, this var has already been successfully written to)
 	return g_clip.Close();
 }
 
@@ -524,6 +532,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 	if (space_needed < 2) // Variable is being assigned the empty string (or a deref that resolves to it).
 	{
 		Free(free_it_if_large ? VAR_FREE_IF_LARGE : VAR_NEVER_FREE); // This also makes the variable blank and removes VAR_ATTRIB_OFTEN_REMOVED.
+		MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized
 		return OK;
 	}
 
@@ -675,6 +684,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 
 	// Writing to union is safe because above already ensured that "this" isn't an alias.
 	mByteLength = aLength * sizeof(TCHAR); // aLength was verified accurate higher above.
+	MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized
 	return OK;
 }
 
@@ -735,10 +745,15 @@ VarSizeType Var::Get(LPTSTR aBuf)
 				}
 				else // Size estimation phase: Since there is no such env. var., flag it for the upcoming get-contents phase.
 					cached_empty_var = this;
+		
+				MaybeWarnUninitialized();	// ***AC 2/4/11 ADDED MaybeWarnUninitialized
 				return 0;
 			}
 		}
 		length = _CharLength();
+
+		MaybeWarnUninitialized();	// ***AC 2/4/11 ADDED MaybeWarnUninitialized
+
 		// Otherwise (since above didn't return), it's not an environment variable (or it is, but there's
 		// a script variable of non-zero length that's eclipsing it).
 		if (!aBuf)
@@ -1220,7 +1235,7 @@ ResultType Var::AssignStringFromCodePage(LPCSTR aBuf, int aLength, UINT aCodePag
 	if (iLen > 0) {
 		if (!AssignString(NULL, iLen, true, false))
 			return FAIL;
-		LPWSTR aContents = Contents();
+		LPWSTR aContents = Contents(TRUE, TRUE);	// ***AC 2/4/11 ADDED extra BOOL arg to avoid warning for uninitialized var
 		iLen = MultiByteToWideChar(aCodePage, 0, aBuf, aLength, (LPWSTR) aContents, iLen);
 		aContents[iLen] = 0;
 		if (!iLen)
@@ -1246,7 +1261,7 @@ ResultType Var::AssignStringToCodePage(LPCWSTR aBuf, int aLength, UINT aCodePage
 	if (iLen > 0) {
 		if (!SetCapacity(iLen, true, false))
 			return FAIL;
-		LPSTR aContents = (LPSTR) Contents();
+		LPSTR aContents = (LPSTR) Contents(TRUE, TRUE);	// ***AC 2/4/11 ADDED extra BOOL arg to avoid warning for uninitialized var
 		iLen = WideCharToMultiByte(aCodePage, aFlags, aBuf, aLength, aContents, iLen, pDefChar, NULL);
 		aContents[iLen] = 0;
 		if (!iLen)
@@ -1258,4 +1273,16 @@ ResultType Var::AssignStringToCodePage(LPCWSTR aBuf, int aLength, UINT aCodePage
 	else
 		Assign();
 	return OK;
+}
+
+// ***AC 2/4/11 ADDED MaybeWarnUninitialized
+__forceinline void Var::MaybeWarnUninitialized()
+{
+	if (mIsUninitializedNormalVar)
+	{
+		if (mByteLength != 0)
+			MarkInitialized();	// "self-correct" if we catch a var that has normal content but wasn't marked initialized
+		else
+			g_script.WarnUninitializedVar(this);
+	}
 }

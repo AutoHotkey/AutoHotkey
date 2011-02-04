@@ -708,7 +708,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			break;
 		default:
 			// If the operand is still generic/undetermined, find out whether it is a string, integer, or float:
-			right_is_number = TokenIsPureNumeric(right); // If it's SYM_VAR, it can be the clipboard in this case, but it works even then.
+			right_is_number = TokenIsPureNumeric(right, TRUE); // If it's SYM_VAR, it can be the clipboard in this case, but it works even then.	// ***AC 2/4/11 ADDED extra BOOL arg to avoid warning for uninitialized var
 		}
 
 		// IF THIS IS A UNARY OPERATOR, we now have the single operand needed to perform the operation.
@@ -975,7 +975,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			// would make the call take a long time.  MUST NOT check the value of right_is_number until after
 			// checking for SYM_CONCAT because for SYM_CONCAT, right_is_number was left uninitialized at an
 			// earlier stage (for performance).
-			if (this_token.symbol == SYM_CONCAT || !right_is_number || !(left_is_number = TokenIsPureNumeric(left))) // See comment above.
+			if (this_token.symbol == SYM_CONCAT || !right_is_number || !(left_is_number = TokenIsPureNumeric(left, TRUE))) // See comment above.	// ***AC 2/4/11 ADDED extra BOOL arg to avoid warning for uninitialized var
 			{
 				// L31: Handle binary ops supported by objects (= == !=).
 				switch (this_token.symbol)

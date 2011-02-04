@@ -146,6 +146,7 @@ private:
 	#define VAR_ATTRIB_CACHE (VAR_ATTRIB_HAS_VALID_INT64 | VAR_ATTRIB_HAS_VALID_DOUBLE | VAR_ATTRIB_NOT_NUMERIC)
 	#define VAR_ATTRIB_OFTEN_REMOVED (VAR_ATTRIB_CACHE | VAR_ATTRIB_BINARY_CLIP | VAR_ATTRIB_CONTENTS_OUT_OF_DATE)
 	VarAttribType mAttrib;  // Bitwise combination of the above flags.
+	bool mIsUninitializedNormalVar;	// ***AC 2/4/11 ADDED mIsUninitializedNormalVar (NOTE: if mAttrib were bumped up to 16 bits, this could be just one more VAR_ATTRIB_ bit)
 	bool mIsLocal;
 	VarTypeType mType; // Keep adjacent/contiguous with the above due to struct alignment, to save memory.
 	// Performance: Rearranging mType and the other byte-sized members with respect to each other didn't seem
@@ -194,6 +195,7 @@ private:
 			// new/incoming binary number matches the one already in the cache, MUST STILL write out
 			// to mContents in case SetFormat is now different than it was before.
 		}
+		MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized
 	}
 
 	void UpdateBinaryDouble(double aDouble, VarAttribType aAttrib = 0)
@@ -238,6 +240,8 @@ private:
 					var.mAttrib |= VAR_ATTRIB_HAS_VALID_DOUBLE; // Re-enable the cache because Assign() disables it (since all other callers want that).
 			}
 			//else nothing to update, which shouldn't happen in this block unless there's a flaw or bug somewhere.
+
+			MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized (NOTE: var.Assign above handles it for 'var'; this does it for 'this' -- in case it's an alias)
 		}
 	}
 
@@ -353,6 +357,7 @@ public:
 		var.mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
 		var.mAttrib |= VAR_ATTRIB_OBJECT | VAR_ATTRIB_CACHE_DISABLED | VAR_ATTRIB_NOT_NUMERIC;
 
+		MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized
 		return OK;
 	}
 
@@ -700,7 +705,7 @@ public:
 	//	return (BYTE *) CharContents(aAllowUpdate);
 	//}
 
-	TCHAR *Contents(BOOL aAllowUpdate = TRUE)
+	TCHAR *Contents(BOOL aAllowUpdate = TRUE, BOOL aNoWarnUninitializedVar = FALSE)	// ***AC 2/4/11 ADDED optional aNoWarnUninitializedVar arg
 	// Callers should almost always pass TRUE for aAllowUpdate because any caller who wants to READ from
 	// mContents would almost always want it up-to-date.  Any caller who wants to WRITE to mContents would
 	// would almost always have called Assign(NULL, ...) prior to calling Contents(), which would have
@@ -711,7 +716,12 @@ public:
 		if ((var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE) && aAllowUpdate) // VAR_ATTRIB_CONTENTS_OUT_OF_DATE is checked here and in the function below, for performance.
 			var.UpdateContents(); // This also clears the VAR_ATTRIB_CONTENTS_OUT_OF_DATE flag.
 		if (var.mType == VAR_NORMAL)
+		{
+			// ***AC 2/4/11 NOTE: only call MaybeWarnUninitialized if aAllowUpdate, since callers passing FALSE just want to know if mCharContents address matches another
+			if (aAllowUpdate && !aNoWarnUninitializedVar)	// ***AC 2/4/11 ADDED conditional MaybeWarnUninitialized
+				MaybeWarnUninitialized();					// ***AC 2/4/11 ADDED conditional MaybeWarnUninitialized
 			return var.mCharContents;
+		}
 		if (var.mType == VAR_CLIPBOARD)
 			// The returned value will be a writable mem area if clipboard is open for write.
 			// Otherwise, the clipboard will be opened physically, if it isn't already, and
@@ -811,6 +821,7 @@ public:
 		, mByteLength(0) // This also initializes mAliasFor within the same union.
 		, mHowAllocated(ALLOC_NONE)
 		, mAttrib(0) // Seems best not to init empty vars to VAR_ATTRIB_NOT_NUMERIC because it would reduce maintainability, plus finding out whether an empty var is numeric via IsPureNumeric() is a very fast operation.
+		, mIsUninitializedNormalVar(true)	// ***AC 2/4/11 ADDED mIsUninitializedNormalVar
 		, mIsLocal(aIsLocal)
 		, mName(aVarName) // Caller gave us a pointer to dynamic memory for this (or static in the case of ResolveVarOfArg()).
 	{
@@ -818,11 +829,14 @@ public:
 		{
 			mType = VAR_BUILTIN;
 			mBIV = (BuiltInVarType)aType; // This also initializes mCapacity within the same union.
+			MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized (built-in vars are considered initialized, by definition)
 		}
 		else
 		{
 			mType = (VarTypeType)aType;
 			mByteCapacity = 0; // This also initializes mBIV within the same union.
+			if (mType != VAR_NORMAL)	// ***AC 2/4/11 ADDED conditional MarkInitialized (any vars that aren't VAR_NORMAL are considered initialized, by definition)
+				MarkInitialized();		// ***AC 2/4/11 ADDED conditional MarkInitialized (any vars that aren't VAR_NORMAL are considered initialized, by definition)
 		}
 	}
 
@@ -830,6 +844,23 @@ public:
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
+
+
+	// ***AC 2/4/11 ADDED IsUninitializedNormalVar
+	__forceinline bool IsUninitializedNormalVar()
+	{
+		return mIsUninitializedNormalVar;
+	}
+
+	// ***AC 2/4/11 ADDED MarkInitialized
+	__forceinline void MarkInitialized()
+	{
+		mIsUninitializedNormalVar = false;
+	}
+
+	// ***AC 2/4/11 ADDED MaybeWarnUninitialized
+	__forceinline void MaybeWarnUninitialized();
+
 }; // class Var
 #pragma pack(pop) // Calling pack with no arguments restores the default value (which is 8, but "the alignment of a member will be on a boundary that is either a multiple of n or a multiple of the size of the member, whichever is smaller.")
 

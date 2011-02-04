@@ -200,6 +200,9 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_VAR_IS_READONLY _T("Not allowed as an output variable.")
 #define ERR_INVALID_DOT _T("Unsupported use of \".\"") // L31
 
+#define WARNING_USE_UNSET_VARIABLE _T("Using value of uninitialized variable.")	// ***AC 2/4/11 ADDED WARNING_USE_UNSET_VARIABLE
+#define WARNING_LOCAL_SAME_AS_GLOBAL _T("Local variable with same name as global.")	// ***AC 2/4/11 ADDED WARNING_LOCAL_SAME_AS_GLOBAL
+
 //----------------------------------------------------------------------------------
 
 void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed);
@@ -2670,6 +2673,9 @@ public:
 
 	// Call this SciptError to avoid confusion with Line's error-displaying functions:
 	ResultType ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T("")); // , ResultType aErrorType = FAIL);
+	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);	// ***AC 2/4/11 ADDED ScriptWarning
+	void WarnUninitializedVar(Var *var);	// ***AC 2/4/11 ADDED WarnUninitializedVar
+	void MaybeWarnLocalSameAsGlobal(Func *func, Var *var);	// ***AC 2/4/11 ADDED MaybeWarnLocalSameAsGlobal
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
 
@@ -2799,6 +2805,7 @@ VarSizeType BIV_PtrSize(LPTSTR aBuf, LPTSTR aVarName);
 	: _tcslen(token_as_string) )
 
 #ifdef ENABLE_DLLCALL
+bool IsDllArgTypeName(LPTSTR name);	// ***AC 2/4/11 ADDED IsDllArgTypeName
 void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free = NULL); // L31: Contains code extracted from BIF_DllCall for reuse in ExpressionToPostfix.
 void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 #endif
@@ -2889,7 +2896,11 @@ BOOL LegacyResultToBOOL(LPTSTR aResult);
 BOOL LegacyVarToBOOL(Var &aVar);
 BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
+// ***AC 2/4/11 ADDED this TokenIsPureNumeric override: wraps same functionality, allows avoiding warning for uninitialized var
+SymbolType TokenIsPureNumeric(ExprTokenType &aToken, BOOL aNoWarnUninitializedVar);
 BOOL TokenIsEmptyString(ExprTokenType &aToken);
+// ***AC 2/4/11 ADDED this TokenIsEmptyString override: same functionality but allows check for uninitialized var
+BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar);
 __int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPureInteger = FALSE);
 double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE, BOOL aIsPureFloat = FALSE);
 LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL);

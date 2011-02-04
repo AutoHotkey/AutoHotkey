@@ -1104,6 +1104,23 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 		mFirstLine = mFirstStaticLine;
 	}
 
+	// ***AC 2/4/11 ADDED conditional scan of function vars for g_Warn_LocalSameAsGlobal warnings
+	if (g_Warn_LocalSameAsGlobal)
+	{
+		int i, j;
+		Func *func;
+		for (i = 0; i < mFuncCount; ++i)
+		{
+			if (!(func = mFunc[i])->mIsBuiltIn)
+			{
+				for (j = 0; j < func->mVarCount; ++j)
+					MaybeWarnLocalSameAsGlobal(func, func->mVar[j]);
+				for (j = 0; j < func->mLazyVarCount; ++j)
+					MaybeWarnLocalSameAsGlobal(func, func->mLazyVar[j]);
+			}
+		}
+	}
+
 #ifndef AUTOHOTKEYSC
 	if (mIncludeLibraryFunctionsThenExit)
 	{
@@ -3150,6 +3167,60 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			return CONDITION_TRUE;
 		else
 			return ScriptError(parameter ? ERR_PARAM1_INVALID : ERR_PARAM1_REQUIRED, aBuf);
+	}
+
+	// ***AC 2/4/11 ADDED "#Warn" directive
+	if (IS_DIRECTIVE_MATCH(_T("#Warn")))
+	{
+		if (!parameter)
+			return ScriptError(ERR_PARAM1_REQUIRED, aBuf);
+
+		LPTSTR param1_end = _tcschr(parameter, g_delimiter);
+		size_t param1_length = -1;
+		LPTSTR param2 = _T("");
+		if (param1_end)
+		{
+			param2 = omit_leading_whitespace(param1_end + 1);
+			for (param1_end; param1_end > parameter && IS_SPACE_OR_TAB(param1_end[-1]); --param1_end);	// Back up over trailing whitespace in param1
+			param1_length = param1_end - parameter;
+		}
+
+		#define IS_PARAM1_MATCH(value) (!tcslicmp(parameter, value, param1_length))
+		
+		WarnType warnType;
+		if (IS_PARAM1_MATCH(_T("All")))
+			warnType = WARN_ALL;
+		else if (IS_PARAM1_MATCH(_T("UseUnsetLocal")))
+			warnType = WARN_USE_UNSET_LOCAL;
+		else if (IS_PARAM1_MATCH(_T("UseUnsetGlobal")))
+			warnType = WARN_USE_UNSET_GLOBAL;
+		else if (IS_PARAM1_MATCH(_T("LocalSameAsGlobal")))
+			warnType = WARN_LOCAL_SAME_AS_GLOBAL;
+		else
+			return ScriptError(ERR_PARAM1_INVALID, aBuf);
+
+		WarnMode warnMode;
+		if (!*param2)
+			warnMode = WARNMODE_MSGBOX;	// omitted mode parameter implies "MsgBox" mode
+		else if (!_tcsicmp(param2, _T("MsgBox")))
+			warnMode = WARNMODE_MSGBOX;
+		else if (!_tcsicmp(param2, _T("OutputDebug")))
+			warnMode = WARNMODE_OUTPUTDEBUG;
+		else if (!_tcsicmp(param2, _T("Off")))
+			warnMode = WARNMODE_OFF;
+		else
+			return ScriptError(ERR_PARAM2_INVALID, aBuf);
+
+		if (warnType == WARN_USE_UNSET_LOCAL || warnType == WARN_ALL)
+			g_Warn_UseUnsetLocal = warnMode;
+
+		if (warnType == WARN_USE_UNSET_GLOBAL || warnType == WARN_ALL)
+			g_Warn_UseUnsetGlobal = warnMode;
+
+		if (warnType == WARN_LOCAL_SAME_AS_GLOBAL || warnType == WARN_ALL)
+			g_Warn_LocalSameAsGlobal = warnMode;
+
+		return CONDITION_TRUE;
 	}
 
 	// Otherwise, report that this line isn't a directive:
@@ -13074,7 +13145,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_STRINGLOWER:
 	case ACT_STRINGUPPER:
-		contents = output_var->Contents(); // Set default.
+		contents = output_var->Contents(TRUE, TRUE); // Set default.	// ***AC 2/4/11 ADDED extra BOOL arg to avoid warning for uninitialized var
 		if (contents != ARG2 || output_var->Type() != VAR_NORMAL) // It's compared this way in case ByRef/aliases are involved.  This will detect even them.
 		{
 			// Clipboard is involved and/or source != dest.  Do it the more comprehensive way.
@@ -14805,6 +14876,111 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 		MsgBox(buf);
 	}
 	return FAIL; // See above for why it's better to return FAIL than CRITICAL_ERROR.
+}
+
+
+
+// ***AC 2/4/11 ADDED ScriptWarning
+void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo, Line *line)
+{
+	if (warnMode == WARNMODE_OFF)
+		return;
+
+	if (!line) line = mCurrLine;
+	int fileIndex = line ? line->mFileIndex : mCurrFileIndex;
+	FileIndexType lineNumber = line ? line->mLineNumber : mCombinedLineNumber;
+
+	TCHAR buf[MSGBOX_TEXT_SIZE], *cp = buf;
+	int buf_space_remaining = (int)_countof(buf);
+	
+	cp += sntprintf(cp, buf_space_remaining, _T("%s (%d) : ==> Warning: %s\n"), Line::sSourceFile[fileIndex], lineNumber, aWarningText);
+	buf_space_remaining = (int)(_countof(buf) - (cp - buf));
+
+	if (*aExtraInfo)
+	{
+		cp += sntprintf(cp, buf_space_remaining, _T("     Specifically: %s\n"), aExtraInfo);
+		buf_space_remaining = (int)(_countof(buf) - (cp - buf));
+	}
+
+#ifndef CONFIG_DEBUGGER
+	OutputDebugString(buf);
+#else
+	g_Debugger.OutputDebug(buf);
+#endif
+
+	// In MsgBox mode, MsgBox is in addition to OutputDebug
+	if (warnMode == WARNMODE_MSGBOX)
+	{
+		if (line)
+			line->LineError(aWarningText, WARN, aExtraInfo);
+		else
+			ScriptError(aWarningText, aExtraInfo);
+	}
+}
+
+
+
+// ***AC 2/4/11 ADDED WarnUninitializedVar
+void Script::WarnUninitializedVar(Var *var)
+{
+	bool isGlobal = !var->IsLocal();
+	WarnMode warnMode = isGlobal ? g_Warn_UseUnsetGlobal : g_Warn_UseUnsetLocal;
+	if (!warnMode)
+		return;
+
+	// Note: If warning mode is MsgBox, this method has side effect of marking the var initialized, so that
+	// only a single message box gets raised per variable.  (In other modes, e.g. OutputDebug, the var remains
+	// uninitialized because it may be beneficial to see the quantity and various locations of uninitialized
+	// uses, and doesn't present the same user interface problem that multiple message boxes can.)
+	if (warnMode == WARNMODE_MSGBOX)
+		var->MarkInitialized();
+
+	bool isNonStaticLocal = var->IsNonStaticLocal();
+	LPCTSTR varClass = isNonStaticLocal ? _T("local") : (isGlobal ? _T("global") : _T("static"));
+	LPCTSTR sameNameAsGlobal = (isNonStaticLocal && FindVar(var->mName, 0, NULL, ALWAYS_USE_GLOBAL)) ? _T(" with same name as a global") : _T("");
+	TCHAR buf[DIALOG_TITLE_SIZE], *cp = buf;
+
+	int buf_space_remaining = (int)_countof(buf);
+	sntprintf(cp, buf_space_remaining, _T("%s  (a %s variable%s)"), var->mName, varClass, sameNameAsGlobal);
+
+	g_script.ScriptWarning(warnMode, WARNING_USE_UNSET_VARIABLE, buf);
+}
+
+
+
+// ***AC 2/4/11 ADDED MaybeWarnLocalSameAsGlobal
+void Script::MaybeWarnLocalSameAsGlobal(Func *func, Var *var)
+{
+	if (!g_Warn_LocalSameAsGlobal)
+		return;
+
+	if (!var->IsNonStaticLocal())
+		return;
+
+	// Exclude parameters (since they're explicitly local)
+	for (int i = 0; i < func->mParamCount; ++i)
+		if (var == func->mParam[i].var) return;
+
+	LPTSTR varName = var->mName;
+
+#ifdef ENABLE_DLLCALL
+	// Exclude unquoted DLL arg type names
+	if (IsDllArgTypeName(varName))
+		return;
+#endif
+
+	if (!FindVar(varName, 0, NULL, ALWAYS_USE_GLOBAL))
+		return;
+
+	Line *line = func->mJumpToLine;
+	while (line && line->mActionType != ACT_BLOCK_BEGIN) line = line->mPrevLine;
+	if (!line) line = func->mJumpToLine;
+
+	TCHAR buf[DIALOG_TITLE_SIZE], *cp = buf;
+	int buf_space_remaining = (int)_countof(buf);
+	sntprintf(cp, buf_space_remaining, _T("%s  (in function %s)"), varName, func->mName);
+	
+	ScriptWarning(g_Warn_LocalSameAsGlobal, WARNING_LOCAL_SAME_AS_GLOBAL, buf, line);
 }
 
 

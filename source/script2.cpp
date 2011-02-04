@@ -6967,6 +6967,7 @@ ResultType Line::StringReplace()
 		// AcceptNewMem() will shrink the memory for us, via _expand(), if there's a lot of extra/unused space in it.
 		output_var.AcceptNewMem(dest, (VarSizeType)length); // Tells the variable to adopt this memory as its new memory. Callee has set "length" for us.
 		// Above also handles the case where output_var is VAR_CLIPBOARD.
+		output_var.MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized
 	}
 	else // StrReplace gave us back "source" unaltered because no replacements were needed.
 	{
@@ -12280,6 +12281,30 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 
 
 
+// ***AC 2/4/11 ADDED IsDllArgTypeName
+bool IsDllArgTypeName(LPTSTR name)
+// Quick test for whether given name is a valid Dll arg type (used by Script::MaybeWarnLocalSameAsGlobal).
+{
+	// Ensure these are in sync with ConvertDllArgType
+	const static LPTSTR kUnsignedPrefixChars = _T("uU");
+	const static LPTSTR kNameSafePointerSuffixChars = _T("pP");
+	const static LPTSTR kDLLArgTypes[] = { _T("Int"), _T("Str"), _T("Ptr"), _T("Short"), _T("Char"), _T("Int64"), _T("Float"), _T("Double"), _T("AStr"), _T("WStr"), NULL };
+
+	TCHAR *nameEnd = name + _tcslen(name);
+	if (ctoupper(*name) == 'U') ++name;
+	if (ctoupper(nameEnd[-1]) == 'P') --nameEnd;
+	int length = nameEnd - name;
+	if (length >= 3)
+	{
+		for (const LPTSTR *dllArgTypes = kDLLArgTypes; *dllArgTypes; ++dllArgTypes)
+			if (!tcslicmp(name, *dllArgTypes, length))
+				return true;
+	}
+	return false;
+}
+
+
+
 void ConvertDllArgType(LPTSTR aBuf[], DYNAPARM &aDynaParam)
 // Helper function for DllCall().  Updates aDynaParam's type and other attributes.
 // Caller has ensured that aBuf contains exactly two strings (though the second can be NULL).
@@ -12538,7 +12563,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		LPTSTR return_type_string[2];
 		if (token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 		{
-			return_type_string[0] = token.var->Contents();
+			return_type_string[0] = token.var->Contents(TRUE, TRUE);	// ***AC 2/4/11 ADDED extra BOOL arg to avoid warning for uninitialized var
 			return_type_string[1] = token.var->mName; // v1.0.33.01: Improve convenience by falling back to the variable's name if the contents are not appropriate.
 		}
 		else
@@ -12630,7 +12655,7 @@ has_valid_return_type:
 		// Otherwise, this arg's type-name is a string as it should be, so retrieve it:
 		if (aParam[i]->symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 		{
-			arg_type_string[0] = aParam[i]->var->Contents();
+			arg_type_string[0] = aParam[i]->var->Contents(TRUE, TRUE);	// ***AC 2/4/11 ADDED extra BOOL arg to avoid warning for uninitialized var
 			arg_type_string[1] = aParam[i]->var->mName;
 			// v1.0.33.01: arg_type_string[1] improves convenience by falling back to the variable's name
 			// if the contents are not appropriate.  In other words, both Int and "Int" are treated the same.
@@ -12721,6 +12746,9 @@ has_valid_return_type:
 		//case DLL_ARG_SHORT:
 		//case DLL_ARG_CHAR:
 		//case DLL_ARG_INT64:
+			if (this_dyna_param.passed_by_address && this_param.symbol == SYM_VAR)	// ***AC 2/4/11 ADDED conditional MarkInitialized ("P"-type param var doesn't need value before DLLCall)
+				this_param.var->MarkInitialized();									// ***AC 2/4/11 ADDED conditional MarkInitialized ("P"-type param var doesn't need value before DLLCall)
+
 			if (this_dyna_param.is_unsigned && this_dyna_param.type == DLL_ARG_INT64 && !IS_NUMERIC(this_param.symbol))
 				// The above and below also apply to BIF_NumPut(), so maintain them together.
 				// !IS_NUMERIC() is checked because such tokens are already signed values, so should be
@@ -13023,7 +13051,7 @@ void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	// Loadtime validation has ensured that there's exactly one actual parameter.
 	// Calling Length() is always valid for SYM_VAR because SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 	aResultToken.value_int64 = (aParam[0]->symbol == SYM_VAR)
-		? aParam[0]->var->Length()
+		? (aParam[0]->var->MaybeWarnUninitialized(), aParam[0]->var->Length())	// ***AC 2/4/11 ADDED MaybeWarnUninitialized
 		: _tcslen(TokenToString(*aParam[0], aResultToken.buf));  // Allow StrLen(numeric_expr) for flexibility.
 }
 
@@ -14703,6 +14731,8 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	if (target < 1024 // Basic sanity check to catch incoming raw addresses that are zero or blank.
 		|| target_token.symbol == SYM_VAR && aResultToken.value_int64 > (INT_PTR)right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
+		target_token.var->MaybeWarnUninitialized();	// ***AC 2/4/11 ADDED MaybeWarnUninitialized (NOTE: doing this here so there's no added overhead in the success case)
+
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
 		return;
@@ -15129,8 +15159,14 @@ void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 					var.ByteLength() = 0;
 			}
 			else // ALLOC_SIMPLE, due to its nature, will not actually be freed, which is documented.
+			{
 				var.Free();
+				var.MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized (NOTE: the SetCapacity above handles this for that case)
+			}
 		} // if (aParamCount > 1)
+
+		var.MaybeWarnUninitialized();	// ***AC 2/4/11 ADDED MaybeWarnUninitialized, since it's an input var in this case rather than an output var
+
 		//else the var is not altered; instead, the current capacity is reported, which seems more intuitive/useful than having it do a Free().
 		if (aResultToken.value_int64 = var.ByteCapacity()) // Don't subtract 1 here in lieu doing it below (avoids underflow).
 			aResultToken.value_int64 -= sizeof(TCHAR); // Omit the room for the zero terminator since script capacity is defined as length vs. size.
@@ -15794,7 +15830,7 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 	LPTSTR options = (aParamCount < 2) ? _T("") : TokenToString(*aParam[1]);
 
 	int actual_param_count;
-	if (aParamCount > 2 && !TokenIsEmptyString(*aParam[2])) // A parameter count was specified.
+	if (aParamCount > 2 && !TokenIsEmptyString(*aParam[2], TRUE)) // A parameter count was specified.	// ***AC 2/4/11 ADDED extra BOOL arg to check for uninitialized var
 	{
 		actual_param_count = (int)TokenToInt64(*aParam[2]);
 		if (   actual_param_count > func->mParamCount    // The function doesn't have enough formals to cover the specified number of actuals.
@@ -17430,7 +17466,10 @@ BOOL LegacyVarToBOOL(Var &aVar)
 // For comments see LegacyResultToBOOL().
 {
 	if (!aVar.HasContents()) // Must be checked first because otherwise IsPureNumeric() would consider "" to be non-numeric and thus TRUE.  For performance, it also exploits the binary number cache.
+	{
+		aVar.MaybeWarnUninitialized();	// ***AC 2/4/11 ADDED MaybeWarnUninitialized
 		return FALSE;
+	}
 	switch (aVar.IsNonBlankIntegerOrFloat()) // See comments in LegacyResultToBOOL().
 	{
 	case PURE_INTEGER: return aVar.ToInt64(TRUE) != 0;
@@ -17478,6 +17517,15 @@ SymbolType TokenIsPureNumeric(ExprTokenType &aToken)
 }
 
 
+// ***AC 2/4/11 ADDED this TokenIsPureNumeric override: wraps same functionality, allows avoiding warning for uninitialized var
+SymbolType TokenIsPureNumeric(ExprTokenType &aToken, BOOL aNoWarnUninitializedVar)
+{
+	if (aNoWarnUninitializedVar && aToken.symbol == SYM_VAR && aToken.var->IsUninitializedNormalVar())
+		return PURE_NOT_NUMERIC;
+
+	return TokenIsPureNumeric(aToken);
+}
+
 
 BOOL TokenIsEmptyString(ExprTokenType &aToken) // L31
 {
@@ -17493,6 +17541,15 @@ BOOL TokenIsEmptyString(ExprTokenType &aToken) // L31
 	}
 }
 
+
+// ***AC 2/4/11 ADDED this TokenIsEmptyString override: wraps same functionality, allows adding check for uninitialized var
+BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar)
+{
+	if (aWarnUninitializedVar && aToken.symbol == SYM_VAR)
+		aToken.var->MaybeWarnUninitialized();
+
+	return TokenIsEmptyString(aToken);
+}
 
 
 __int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPureInteger)
@@ -17641,8 +17698,15 @@ IObject *TokenToObject(ExprTokenType &aToken)
 {
 	if (aToken.symbol == SYM_OBJECT)
 		return aToken.object;
-	if (aToken.symbol == SYM_VAR && aToken.var->HasObject())
-		return aToken.var->Object();
+	
+	if (aToken.symbol == SYM_VAR)				// ***AC 2/4/11 SEPARATED if-test into 2 ifs (to incorporate MaybeWarnUninitialized into SYM_VAR case)
+	{
+		if (aToken.var->HasObject())			// ***AC 2/4/11 SEPARATED if-test into 2 ifs (to incorporate MaybeWarnUninitialized into SYM_VAR case)
+			return aToken.var->Object();
+
+		aToken.var->MaybeWarnUninitialized();	// ***AC 2/4/11 ADDED MaybeWarnUninitialized
+	}
+
 	return NULL;
 }
 

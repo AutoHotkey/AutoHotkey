@@ -70,6 +70,9 @@ extern HHOOK g_MouseHook;
 extern HHOOK g_PlaybackHook;
 extern bool g_ForceLaunch;
 extern bool g_WinActivateForce;
+extern WarnMode g_Warn_UseUnsetLocal;		// ***AC 2/4/11 ADDED g_Warn_UseUnsetLocal (used by #Warn directive)
+extern WarnMode g_Warn_UseUnsetGlobal;		// ***AC 2/4/11 ADDED g_Warn_UseUnsetGlobal (used by #Warn directive)
+extern WarnMode g_Warn_LocalSameAsGlobal;	// ***AC 2/4/11 ADDED g_Warn_LocalSameAsGlobal (used by #Warn directive)
 extern SingleInstanceType g_AllowOnlyOneInstance;
 extern bool g_persistent;
 extern bool g_NoTrayIcon;
