@@ -3555,6 +3555,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					// as a default due to assume-static mode.
 					var->ConvertToNonStatic();
 
+				if (declare_type == VAR_DECLARE_LOCAL)	// ***AC 2/11/11 ADDED conditional MarkLocalExplicitlyDeclared (used by WARN_LOCAL_SAME_AS_GLOBAL warnings)
+					var->MarkLocalExplicitlyDeclared();	// ***AC 2/11/11 ADDED conditional MarkLocalExplicitlyDeclared (used by WARN_LOCAL_SAME_AS_GLOBAL warnings)
+
 				item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
 
 				bool convert_the_operator;
@@ -6940,7 +6943,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 		// new function's mDefaultVarType is always VAR_DECLARE_NONE at this early stage of its creation:
 		if (this_param.var = FindVar(param_start, param_length, &insert_pos))  // Assign.
 			return ScriptError(_T("Duplicate parameter."), param_start);
-		if (   !(this_param.var = AddVar(param_start, param_length, insert_pos, 2))   ) // Pass 2 as last parameter to mean "it's a local but more specifically a function's parameter".
+		if (   !(this_param.var = AddVar(param_start, param_length, insert_pos, LOCAL_DECLARETYPE_FUNCPARAM))   )		// ***AC 2/11/11 CHANGED last parameter from 2 to LOCAL_DECLARETYPE_FUNCPARAM	// Pass LOCAL_DECLARETYPE_FUNCPARAM as last parameter to mean "it's a local but more specifically a function's parameter".
 			return FAIL; // It already displayed the error, including attempts to have reserved names as parameter names.
 		
 		this_param.default_type = PARAM_DEFAULT_NONE;  // Set default.
@@ -8059,7 +8062,7 @@ Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aAlwaysUse
 		return var;
 	// Otherwise, no match found, so create a new var.  This will return NULL if there was a problem,
 	// in which case AddVar() will already have displayed the error:
-	return AddVar(aVarName, aVarNameLength, insert_pos, is_local);
+	return AddVar(aVarName, aVarNameLength, insert_pos, is_local ? LOCAL_DECLARETYPE_IMPLICIT : false);	// ***AC 2/11/11 CHANGED "true" value to more specific LOCAL_DECLARETYPE_IMPLICIT
 }
 
 
@@ -8266,8 +8269,13 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 // Caller must ensure that aVarName isn't NULL and that this isn't a duplicate variable name.
 // In addition, it has provided aInsertPos, which is the insertion point so that the list stays sorted.
 // Finally, aIsLocal has been provided to indicate which list, global or local, should receive this
-// new variable.  aIsLocal is normally 0 or 1 (boolean), but it may be 2 to indicate "it's a local AND a
-// function's parameter".
+// XXXXXXXXXXXXXX // ***AC 2/11/11 CHANGED comment (see following lines) XXXXXXXXXXXXXX	new variable.  aIsLocal is normally 0 or 1 (boolean), but it may be 2 to indicate "it's a local AND a
+// XXXXXXXXXXXXXX // ***AC 2/11/11 CHANGED comment (see following lines) XXXXXXXXXXXXXX	function's parameter".
+// new variable.  aIsLocal may be:
+//    false, or
+//    LOCAL_DECLARETYPE_IMPLICIT for a local that's introduced implicitly in an "assume-local" function, or
+//    LOCAL_DECLARETYPE_EXPLICIT for a local that's explicitly declared in a "Local" statement, or
+//    LOCAL_DECLARETYPE_FUNCPARAM for a local that's a function's parameter.
 {
 	if (!*aVarName) // Should never happen, so just silently indicate failure.
 		return NULL;
@@ -8302,9 +8310,9 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	void *var_type = GetVarType(var_name);
 	if (aIsLocal && (var_type != (void *)VAR_NORMAL || !_tcsicmp(var_name, _T("ErrorLevel")))) // Attempt to create built-in variable as local.
 	{
-		if (aIsLocal == 1) // It's not a UDF's parameter, so fall back to the global built-in variable of this name rather than displaying an error.
+		if (aIsLocal != LOCAL_DECLARETYPE_FUNCPARAM)	// ***AC 2/11/11 CHANGED aIsLocal test to correspond to its new possible values	// It's not a UDF's parameter, so fall back to the global built-in variable of this name rather than displaying an error.
 			return FindOrAddVar(var_name, aVarNameLength, ALWAYS_USE_GLOBAL); // Force find-or-create of global.
-		else // aIsLocal == 2, which means "this is a local variable and a function's parameter".
+		else // aIsLocal == LOCAL_DECLARETYPE_FUNCPARAM, which means "this is a local variable and a function's parameter".	// ***AC 2/11/11 CHANGED comment
 		{
 			ScriptError(_T("Illegal parameter name."), aVarName); // Short message since so rare.
 			return NULL;
@@ -8318,14 +8326,14 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 		// to bother varying the error message to include ERR_ABORT if this occurs during runtime.
 		return NULL;
 
-	Var *the_new_var = new Var(new_name, var_type, aIsLocal != 0); // , aAttrib);
+	Var *the_new_var = new Var(new_name, var_type, aIsLocal); // , aAttrib);	// ***AC 2/11/11 CHANGED type of aIsLocal param from bool to UCHAR to support several distinct non-false values
 	if (the_new_var == NULL)
 	{
 		ScriptError(ERR_OUTOFMEM);
 		return NULL;
 	}
 
-	if (aIsLocal == 1 && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_STATIC)
+	if (aIsLocal && aIsLocal != LOCAL_DECLARETYPE_FUNCPARAM && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_STATIC)	// ***AC 2/11/11 CHANGED aIsLocal test to correspond to its new possible values
 		// v1.0.48: Lexikos: Current function is assume-static, so set static attribute.
 		// This will be overwritten (again) if this variable is being explicitly declared "local".
 		the_new_var->ConvertToStatic();
@@ -14754,7 +14762,8 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		// change the error lexer of Scite recognizes this line as a Microsoft error message and it can be
 		// used to jump to that line."
 		#define STD_ERROR_FORMAT _T("%s (%d) : ==> %s\n")
-		ERR_PRINT(STD_ERROR_FORMAT, sSourceFile[mFileIndex], mLineNumber, aErrorText); // printf() does not signifantly increase the size of the EXE, probably because it shares most of the same code with sprintf(), etc.
+		#define STD_WARNING_FORMAT _T("%s (%d) : ==> Warning: %s\n")	// ***AC 2/11/11 ADDED STD_WARNING_FORMAT
+		ERR_PRINT(aErrorType == WARN ? STD_WARNING_FORMAT : STD_ERROR_FORMAT, sSourceFile[mFileIndex], mLineNumber, aErrorText); // ***AC 2/11/11 CHANGED to conditional format string // printf() does not signifantly increase the size of the EXE, probably because it shares most of the same code with sprintf(), etc.
 		if (*aExtraInfo)
 			ERR_PRINT(_T("     Specifically: %s\n"), aExtraInfo);
 	}
@@ -14893,7 +14902,7 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 	TCHAR buf[MSGBOX_TEXT_SIZE], *cp = buf;
 	int buf_space_remaining = (int)_countof(buf);
 	
-	cp += sntprintf(cp, buf_space_remaining, _T("%s (%d) : ==> Warning: %s\n"), Line::sSourceFile[fileIndex], lineNumber, aWarningText);
+	cp += sntprintf(cp, buf_space_remaining, STD_WARNING_FORMAT, Line::sSourceFile[fileIndex], lineNumber, aWarningText);	// ***AC 2/11/11 CHANGED to use STD_WARNING_FORMAT
 	buf_space_remaining = (int)(_countof(buf) - (cp - buf));
 
 	if (*aExtraInfo)
@@ -14954,12 +14963,10 @@ void Script::MaybeWarnLocalSameAsGlobal(Func *func, Var *var)
 	if (!g_Warn_LocalSameAsGlobal)
 		return;
 
-	if (!var->IsNonStaticLocal())
+	// ***AC 2/11/11 CHANGED to use Var's new fine-grain mIsLocal info, and to exclude explicitly declared locals
+	// Exclude statics, function parameters, and explicitly declared locals
+	if (!var->IsNonStaticLocal() || var->LocalIsFunctionParam() || var->LocalIsExplicitlyDeclared())
 		return;
-
-	// Exclude parameters (since they're explicitly local)
-	for (int i = 0; i < func->mParamCount; ++i)
-		if (var == func->mParam[i].var) return;
 
 	LPTSTR varName = var->mName;
 

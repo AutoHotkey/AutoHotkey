@@ -147,7 +147,10 @@ private:
 	#define VAR_ATTRIB_OFTEN_REMOVED (VAR_ATTRIB_CACHE | VAR_ATTRIB_BINARY_CLIP | VAR_ATTRIB_CONTENTS_OUT_OF_DATE)
 	VarAttribType mAttrib;  // Bitwise combination of the above flags.
 	bool mIsUninitializedNormalVar;	// ***AC 2/4/11 ADDED mIsUninitializedNormalVar (NOTE: if mAttrib were bumped up to 16 bits, this could be just one more VAR_ATTRIB_ bit)
-	bool mIsLocal;
+	#define LOCAL_DECLARETYPE_IMPLICIT	1	// ***AC 2/4/11 ADDED LOCAL_DECLARETYPE_IMPLICIT; a local that's introduced implicitly in an "assume-local" function
+	#define LOCAL_DECLARETYPE_EXPLICIT	2	// ***AC 2/4/11 ADDED LOCAL_DECLARETYPE_EXPLICIT; a local that's explicitly declared in a "Local" statement
+	#define LOCAL_DECLARETYPE_FUNCPARAM	3	// ***AC 2/4/11 ADDED LOCAL_DECLARETYPE_FUNCPARAM; a local that's a function's parameter
+	UCHAR mIsLocal;	// ***AC 2/11/11 CHANGED type of mIsLocal from bool to UCHAR to support several distinct non-false values (defined above)
 	VarTypeType mType; // Keep adjacent/contiguous with the above due to struct alignment, to save memory.
 	// Performance: Rearranging mType and the other byte-sized members with respect to each other didn't seem
 	// to help performance.  However, changing VarTypeType from UCHAR to int did boost performance a few percent,
@@ -594,6 +597,25 @@ public:
 		return mIsLocal && !(mAttrib & VAR_ATTRIB_STATIC);
 	}
 
+	// ***AC 2/11/11 ADDED LocalIsFunctionParam
+	__forceinline bool LocalIsFunctionParam()
+	{
+		return mIsLocal == LOCAL_DECLARETYPE_FUNCPARAM;
+	}
+
+	// ***AC 2/11/11 ADDED LocalIsExplicitlyDeclared
+	__forceinline bool LocalIsExplicitlyDeclared()
+	{
+		return mIsLocal == LOCAL_DECLARETYPE_EXPLICIT;
+	}
+
+	// ***AC 2/11/11 ADDED MarkLocalExplicitlyDeclared
+	__forceinline void MarkLocalExplicitlyDeclared()
+	{
+		if (mIsLocal)	// test first, to ensure this method can't be erroneously used to mark a global
+			mIsLocal = LOCAL_DECLARETYPE_EXPLICIT;
+	}
+
 	__forceinline bool IsBinaryClip()
 	{
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
@@ -814,7 +836,7 @@ public:
 	}
 
 	// Constructor:
-	Var(LPTSTR aVarName, void *aType, bool aIsLocal)
+	Var(LPTSTR aVarName, void *aType, UCHAR aIsLocal)	// ***AC 2/11/11 CHANGED type of aIsLocal (and mIsLocal) from bool to UCHAR to support several distinct non-false values
 		// The caller must ensure that aVarName is non-null.
 		: mCharContents(sEmptyString) // Invariant: Anyone setting mCapacity to 0 must also set mContents to the empty string.
 		// Doesn't need initialization: , mContentsInt64(NULL)
