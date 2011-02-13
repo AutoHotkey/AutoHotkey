@@ -147,9 +147,9 @@ private:
 	#define VAR_ATTRIB_OFTEN_REMOVED (VAR_ATTRIB_CACHE | VAR_ATTRIB_BINARY_CLIP | VAR_ATTRIB_CONTENTS_OUT_OF_DATE)
 	VarAttribType mAttrib;  // Bitwise combination of the above flags.
 	bool mIsUninitializedNormalVar;	// ***AC 2/4/11 ADDED mIsUninitializedNormalVar (NOTE: if mAttrib were bumped up to 16 bits, this could be just one more VAR_ATTRIB_ bit)
-	#define LOCAL_DECLARETYPE_IMPLICIT	1	// ***AC 2/4/11 ADDED LOCAL_DECLARETYPE_IMPLICIT; a local that's introduced implicitly in an "assume-local" function
-	#define LOCAL_DECLARETYPE_EXPLICIT	2	// ***AC 2/4/11 ADDED LOCAL_DECLARETYPE_EXPLICIT; a local that's explicitly declared in a "Local" statement
-	#define LOCAL_DECLARETYPE_FUNCPARAM	3	// ***AC 2/4/11 ADDED LOCAL_DECLARETYPE_FUNCPARAM; a local that's a function's parameter
+	#define LOCAL_DECLARETYPE_IMPLICIT	1	// ***AC 2/11/11 ADDED LOCAL_DECLARETYPE_IMPLICIT; a local that's introduced implicitly in an "assume-local" function
+	#define LOCAL_DECLARETYPE_EXPLICIT	2	// ***AC 2/11/11 ADDED LOCAL_DECLARETYPE_EXPLICIT; a local that's explicitly declared in a "Local" statement
+	#define LOCAL_DECLARETYPE_FUNCPARAM	3	// ***AC 2/11/11 ADDED LOCAL_DECLARETYPE_FUNCPARAM; a local that's a function's parameter
 	UCHAR mIsLocal;	// ***AC 2/11/11 CHANGED type of mIsLocal from bool to UCHAR to support several distinct non-false values (defined above)
 	VarTypeType mType; // Keep adjacent/contiguous with the above due to struct alignment, to save memory.
 	// Performance: Rearranging mType and the other byte-sized members with respect to each other didn't seem
@@ -198,7 +198,7 @@ private:
 			// new/incoming binary number matches the one already in the cache, MUST STILL write out
 			// to mContents in case SetFormat is now different than it was before.
 		}
-		MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized
+		var.MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias
 	}
 
 	void UpdateBinaryDouble(double aDouble, VarAttribType aAttrib = 0)
@@ -243,8 +243,6 @@ private:
 					var.mAttrib |= VAR_ATTRIB_HAS_VALID_DOUBLE; // Re-enable the cache because Assign() disables it (since all other callers want that).
 			}
 			//else nothing to update, which shouldn't happen in this block unless there's a flaw or bug somewhere.
-
-			MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized (NOTE: var.Assign above handles it for 'var'; this does it for 'this' -- in case it's an alias)
 		}
 	}
 
@@ -360,7 +358,7 @@ public:
 		var.mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
 		var.mAttrib |= VAR_ATTRIB_OBJECT | VAR_ATTRIB_CACHE_DISABLED | VAR_ATTRIB_NOT_NUMERIC;
 
-		MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized
+		var.MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias
 		return OK;
 	}
 
@@ -741,7 +739,7 @@ public:
 		{
 			// ***AC 2/4/11 NOTE: only call MaybeWarnUninitialized if aAllowUpdate, since callers passing FALSE just want to know if mCharContents address matches another
 			if (aAllowUpdate && !aNoWarnUninitializedVar)	// ***AC 2/4/11 ADDED conditional MaybeWarnUninitialized
-				MaybeWarnUninitialized();					// ***AC 2/4/11 ADDED conditional MaybeWarnUninitialized
+				var.MaybeWarnUninitialized();				// ***AC 2/4/11 ADDED conditional MaybeWarnUninitialized
 			return var.mCharContents;
 		}
 		if (var.mType == VAR_CLIPBOARD)
@@ -851,14 +849,14 @@ public:
 		{
 			mType = VAR_BUILTIN;
 			mBIV = (BuiltInVarType)aType; // This also initializes mCapacity within the same union.
-			MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized (built-in vars are considered initialized, by definition)
+			MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias (built-in vars are considered initialized, by definition)
 		}
 		else
 		{
 			mType = (VarTypeType)aType;
 			mByteCapacity = 0; // This also initializes mBIV within the same union.
-			if (mType != VAR_NORMAL)	// ***AC 2/4/11 ADDED conditional MarkInitialized (any vars that aren't VAR_NORMAL are considered initialized, by definition)
-				MarkInitialized();		// ***AC 2/4/11 ADDED conditional MarkInitialized (any vars that aren't VAR_NORMAL are considered initialized, by definition)
+			if (mType != VAR_NORMAL)		// ***AC 2/13/11 ADDED conditional MarkInitialized_no_alias (any vars that aren't VAR_NORMAL are considered initialized, by definition)
+				MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED conditional MarkInitialized_no_alias (any vars that aren't VAR_NORMAL are considered initialized, by definition)
 		}
 	}
 
@@ -871,17 +869,29 @@ public:
 	// ***AC 2/4/11 ADDED IsUninitializedNormalVar
 	__forceinline bool IsUninitializedNormalVar()
 	{
-		return mIsUninitializedNormalVar;
+		// ***AC 2/13/11 CHANGED to check aliased var in the VAR_ALIAS case
+		return (mType == VAR_ALIAS)? mAliasFor->mIsUninitializedNormalVar : mIsUninitializedNormalVar;
 	}
 
 	// ***AC 2/4/11 ADDED MarkInitialized
 	__forceinline void MarkInitialized()
 	{
-		mIsUninitializedNormalVar = false;
+		// ***AC 2/13/11 CHANGED to mark aliased var in the VAR_ALIAS case
+		if (mType == VAR_ALIAS)
+			mAliasFor->MarkInitialized_no_alias();
+		else
+			MarkInitialized_no_alias();
 	}
 
 	// ***AC 2/4/11 ADDED MaybeWarnUninitialized
 	__forceinline void MaybeWarnUninitialized();
+
+private:
+	// ***AC 2/13/11 ADDED MarkInitialized_no_alias: internal version of MarkInitialized to be used only when it's known var isn't VAR_ALIAS
+	__forceinline void MarkInitialized_no_alias()
+	{
+		mIsUninitializedNormalVar = false;
+	}
 
 }; // class Var
 #pragma pack(pop) // Calling pack with no arguments restores the default value (which is 8, but "the alignment of a member will be on a boundary that is either a multiple of n or a multiple of the size of the member, whichever is smaller.")

@@ -371,7 +371,7 @@ ResultType Var::AssignClipboardAll()
 	mByteLength = actual_space_used;
 	mAttrib |= VAR_ATTRIB_BINARY_CLIP; // VAR_ATTRIB_CONTENTS_OUT_OF_DATE and VAR_ATTRIB_CACHE were already removed by earlier call to Assign().
 
-	MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized
+	MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias
 	return OK;
 }
 
@@ -397,7 +397,7 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 	{
 		if (source_var.mCharContents == Contents(TRUE, TRUE))	// ***AC 2/4/11 ADDED extra BOOL arg to avoid warning for uninitialized var	// source_var.mContents vs. Contents() is okay (see above). v1.0.45: source==dest, so nothing to do. It's compared this way in case aSourceVar is a ByRef/alias. This covers even that situation.
 		{
-			MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized (NOTE: the SetCapacity below handles this for that success case)
+			MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias (NOTE: the SetCapacity below handles this for that success case)
 			return OK;
 		}
 		if (!SetCapacity(source_var.mByteLength, true, false)) // source_var.mLength vs. Length() is okay (see above).
@@ -452,7 +452,7 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 		SetClipboardData(format, hglobal); // The system now owns hglobal.
 	}
 
-	MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized (NOTE: even if g_clip.Close fails, this var has already been successfully written to)
+	MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias (NOTE: even if g_clip.Close fails, this var has already been successfully written to)
 	return g_clip.Close();
 }
 
@@ -532,7 +532,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 	if (space_needed < 2) // Variable is being assigned the empty string (or a deref that resolves to it).
 	{
 		Free(free_it_if_large ? VAR_FREE_IF_LARGE : VAR_NEVER_FREE); // This also makes the variable blank and removes VAR_ATTRIB_OFTEN_REMOVED.
-		MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized
+		MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias
 		return OK;
 	}
 
@@ -684,7 +684,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 
 	// Writing to union is safe because above already ensured that "this" isn't an alias.
 	mByteLength = aLength * sizeof(TCHAR); // aLength was verified accurate higher above.
-	MarkInitialized();	// ***AC 2/4/11 ADDED MarkInitialized
+	MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias
 	return OK;
 }
 
@@ -1278,7 +1278,7 @@ ResultType Var::AssignStringToCodePage(LPCWSTR aBuf, int aLength, UINT aCodePage
 // ***AC 2/4/11 ADDED MaybeWarnUninitialized
 __forceinline void Var::MaybeWarnUninitialized()
 {
-	if (mIsUninitializedNormalVar)
+	if (IsUninitializedNormalVar())
 	{
 		if (mByteLength != 0)
 			MarkInitialized();	// "self-correct" if we catch a var that has normal content but wasn't marked initialized
