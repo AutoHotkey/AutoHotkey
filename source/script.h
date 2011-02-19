@@ -198,10 +198,10 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_PERCENT _T("Must be between -100 and 100.")
 #define ERR_MOUSE_SPEED _T("Mouse speed must be between 0 and ") MAX_MOUSE_SPEED_STR _T(".")
 #define ERR_VAR_IS_READONLY _T("Not allowed as an output variable.")
-#define ERR_INVALID_DOT _T("Unsupported use of \".\"") // L31
+#define ERR_INVALID_DOT _T("Unsupported use of \".\"")
 
-#define WARNING_USE_UNSET_VARIABLE _T("Using value of uninitialized variable.")	// ***AC 2/4/11 ADDED WARNING_USE_UNSET_VARIABLE
-#define WARNING_LOCAL_SAME_AS_GLOBAL _T("Local variable with same name as global.")	// ***AC 2/4/11 ADDED WARNING_LOCAL_SAME_AS_GLOBAL
+#define WARNING_USE_UNSET_VARIABLE _T("Using value of uninitialized variable.")
+#define WARNING_LOCAL_SAME_AS_GLOBAL _T("Local variable with same name as global.")
 
 //----------------------------------------------------------------------------------
 
@@ -2673,9 +2673,9 @@ public:
 
 	// Call this SciptError to avoid confusion with Line's error-displaying functions:
 	ResultType ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T("")); // , ResultType aErrorType = FAIL);
-	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);	// ***AC 2/4/11 ADDED ScriptWarning
-	void WarnUninitializedVar(Var *var);	// ***AC 2/4/11 ADDED WarnUninitializedVar
-	void MaybeWarnLocalSameAsGlobal(Func *func, Var *var);	// ***AC 2/4/11 ADDED MaybeWarnLocalSameAsGlobal
+	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
+	void WarnUninitializedVar(Var *var);
+	void MaybeWarnLocalSameAsGlobal(Func *func, Var *var);
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
 
@@ -2805,8 +2805,8 @@ VarSizeType BIV_PtrSize(LPTSTR aBuf, LPTSTR aVarName);
 	: _tcslen(token_as_string) )
 
 #ifdef ENABLE_DLLCALL
-bool IsDllArgTypeName(LPTSTR name);	// ***AC 2/4/11 ADDED IsDllArgTypeName
-void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free = NULL); // L31: Contains code extracted from BIF_DllCall for reuse in ExpressionToPostfix.
+bool IsDllArgTypeName(LPTSTR name);
+void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free = NULL);
 void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 #endif
 void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
@@ -2896,11 +2896,9 @@ BOOL LegacyResultToBOOL(LPTSTR aResult);
 BOOL LegacyVarToBOOL(Var &aVar);
 BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
-// ***AC 2/4/11 ADDED this TokenIsPureNumeric override: wraps same functionality, allows avoiding warning for uninitialized var
-SymbolType TokenIsPureNumeric(ExprTokenType &aToken, BOOL aNoWarnUninitializedVar);
+SymbolType TokenIsPureNumeric(ExprTokenType &aToken, BOOL aNoWarnUninitializedVar); // Same as TokenIsPureNumeric but allows the possible "uninitialized var" warning to be avoiding.
 BOOL TokenIsEmptyString(ExprTokenType &aToken);
-// ***AC 2/4/11 ADDED this TokenIsEmptyString override: same functionality but allows check for uninitialized var
-BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar);
+BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar); // Same as TokenIsEmptyString but optionally warns if the token is an uninitialized var.
 __int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPureInteger = FALSE);
 double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE, BOOL aIsPureFloat = FALSE);
 LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL);

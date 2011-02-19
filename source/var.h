@@ -135,9 +135,9 @@ private:
 		BuiltInVarType mBIV;
 	};
 	AllocMethodType mHowAllocated; // Keep adjacent/contiguous with the below to save memory.
-	#define VAR_ATTRIB_BINARY_CLIP  0x01
-	#define VAR_ATTRIB_OBJECT		0x02 // L31: Marks mObject as valid.
-	#define VAR_ATTRIB_STATIC       0x04
+	#define VAR_ATTRIB_BINARY_CLIP          0x01
+	#define VAR_ATTRIB_OBJECT		        0x02 // mObject contains an object; mutually exclusive of the cache attribs.
+	#define VAR_ATTRIB_UNINITIALIZED        0x04 // Var requires initialization before use.
 	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE 0x08
 	#define VAR_ATTRIB_HAS_VALID_INT64      0x10 // Cache type 1. Mutually exclusive of the other two.
 	#define VAR_ATTRIB_HAS_VALID_DOUBLE     0x20 // Cache type 2. Mutually exclusive of the other two.
@@ -146,11 +146,11 @@ private:
 	#define VAR_ATTRIB_CACHE (VAR_ATTRIB_HAS_VALID_INT64 | VAR_ATTRIB_HAS_VALID_DOUBLE | VAR_ATTRIB_NOT_NUMERIC)
 	#define VAR_ATTRIB_OFTEN_REMOVED (VAR_ATTRIB_CACHE | VAR_ATTRIB_BINARY_CLIP | VAR_ATTRIB_CONTENTS_OUT_OF_DATE)
 	VarAttribType mAttrib;  // Bitwise combination of the above flags.
-	bool mIsUninitializedNormalVar;	// ***AC 2/4/11 ADDED mIsUninitializedNormalVar (NOTE: if mAttrib were bumped up to 16 bits, this could be just one more VAR_ATTRIB_ bit)
-	#define LOCAL_DECLARETYPE_IMPLICIT	1	// ***AC 2/11/11 ADDED LOCAL_DECLARETYPE_IMPLICIT; a local that's introduced implicitly in an "assume-local" function
-	#define LOCAL_DECLARETYPE_EXPLICIT	2	// ***AC 2/11/11 ADDED LOCAL_DECLARETYPE_EXPLICIT; a local that's explicitly declared in a "Local" statement
-	#define LOCAL_DECLARETYPE_FUNCPARAM	3	// ***AC 2/11/11 ADDED LOCAL_DECLARETYPE_FUNCPARAM; a local that's a function's parameter
-	UCHAR mIsLocal;	// ***AC 2/11/11 CHANGED type of mIsLocal from bool to UCHAR to support several distinct non-false values (defined above)
+	#define VAR_LOCAL			0x01
+	#define VAR_LOCAL_FUNCPARAM	0x02 // Indicates this local var is a function's parameter.  VAR_LOCAL_DECLARED should also be set.
+	#define VAR_LOCAL_STATIC	0x04 // Indicates this local var retains its value between function calls.
+	#define VAR_LOCAL_DECLARED	0x08 // Indicates this local var was declared somehow, not automatic.
+	UCHAR mIsLocal;  // Bitwise combination of the above flags.
 	VarTypeType mType; // Keep adjacent/contiguous with the above due to struct alignment, to save memory.
 	// Performance: Rearranging mType and the other byte-sized members with respect to each other didn't seem
 	// to help performance.  However, changing VarTypeType from UCHAR to int did boost performance a few percent,
@@ -175,7 +175,7 @@ private:
 			var.ReleaseObject();
 
 		var.mContentsInt64 = aInt64;
-		var.mAttrib &= ~VAR_ATTRIB_CACHE; // But not VAR_ATTRIB_CONTENTS_OUT_OF_DATE because the caller specifies whether or not that gets added.
+		var.mAttrib &= ~(VAR_ATTRIB_CACHE | VAR_ATTRIB_UNINITIALIZED); // But not VAR_ATTRIB_CONTENTS_OUT_OF_DATE because the caller specifies whether or not that gets added.
 		var.mAttrib |= aAttrib; // Must be done prior to below. Indicate the type of binary number and whether VAR_ATTRIB_CONTENTS_OUT_OF_DATE is present.
 		if (var.mAttrib & VAR_ATTRIB_CACHE_DISABLED) // Variables marked this way can't use either read or write caching.
 		{
@@ -198,7 +198,6 @@ private:
 			// new/incoming binary number matches the one already in the cache, MUST STILL write out
 			// to mContents in case SetFormat is now different than it was before.
 		}
-		var.MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias
 	}
 
 	void UpdateBinaryDouble(double aDouble, VarAttribType aAttrib = 0)
@@ -346,6 +345,9 @@ public:
 		
 		var.mObject = aValueToAssign;
 		
+		// Already done by Free() above:
+		//mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_UNINITIALIZED);
+
 		// Mark this variable to indicate it contains an object.
 		// Currently nothing should attempt to cache a number in a variable which contains an object, but it may become
 		// possible if a "default property" mechanism is introduced for implicitly converting an object to a string/number.
@@ -355,10 +357,8 @@ public:
 		//	   default property can implicitly change (and this change cannot be detected in order to invalidate the cache).
 		// Including VAR_ATTRIB_CACHE_DISABLED below should prevent caching from ever occurring for a variable containing an object.
 		// Including VAR_ATTRIB_NOT_NUMERIC below allows IsNonBlankIntegerOrFloat to return early if it is passed an object.
-		var.mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
 		var.mAttrib |= VAR_ATTRIB_OBJECT | VAR_ATTRIB_CACHE_DISABLED | VAR_ATTRIB_NOT_NUMERIC;
 
-		var.MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias
 		return OK;
 	}
 
@@ -524,7 +524,7 @@ public:
 	#define VAR_ALWAYS_FREE_LAST               2 // Never actually passed as a parameter, just a placeholder (see above comment).
 	#define VAR_NEVER_FREE                     3
 	#define VAR_FREE_IF_LARGE                  4
-	void Free(int aWhenToFree = VAR_ALWAYS_FREE, bool aExcludeAliases = false);
+	void Free(int aWhenToFree = VAR_ALWAYS_FREE, bool aExcludeAliasesAndRequireInit = false);
 	ResultType AppendIfRoom(LPTSTR aStr, VarSizeType aLength);
 	void AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength);
 	void SetLengthFromContents();
@@ -574,7 +574,7 @@ public:
 
 	__forceinline bool IsStatic()
 	{
-		return (mAttrib & VAR_ATTRIB_STATIC);
+		return (mIsLocal & VAR_LOCAL_STATIC);
 	}
 
 	__forceinline bool IsLocal()
@@ -588,30 +588,28 @@ public:
 	__forceinline bool IsNonStaticLocal()
 	{
 		// Since callers want to know whether this variable is local, even if it's a local alias for a
-		// global, don't use resolve VAR_ALIAS.
+		// global, don't resolve VAR_ALIAS.
 		// Even a ByRef local is considered local here because callers are interested in whether this
 		// variable can vary from call to call to the same function (and a ByRef can vary in what it
 		// points to).  Variables that vary can thus be altered by the backup/restore process.
-		return mIsLocal && !(mAttrib & VAR_ATTRIB_STATIC);
+		return mIsLocal && !(mIsLocal & VAR_LOCAL_STATIC);
 	}
 
-	// ***AC 2/11/11 ADDED LocalIsFunctionParam
-	__forceinline bool LocalIsFunctionParam()
+	//__forceinline bool IsFuncParam()
+	//{
+	//	return (mIsLocal & VAR_LOCAL_FUNCPARAM);
+	//}
+
+	__forceinline bool IsDeclaredLocal()
+	// Returns true if this is a declared local var, such as "local var", "static var" or a func param.
 	{
-		return mIsLocal == LOCAL_DECLARETYPE_FUNCPARAM;
+		return (mIsLocal & VAR_LOCAL_DECLARED);
 	}
 
-	// ***AC 2/11/11 ADDED LocalIsExplicitlyDeclared
-	__forceinline bool LocalIsExplicitlyDeclared()
+	__forceinline void MarkLocalDeclared()
 	{
-		return mIsLocal == LOCAL_DECLARETYPE_EXPLICIT;
-	}
-
-	// ***AC 2/11/11 ADDED MarkLocalExplicitlyDeclared
-	__forceinline void MarkLocalExplicitlyDeclared()
-	{
-		if (mIsLocal)	// test first, to ensure this method can't be erroneously used to mark a global
-			mIsLocal = LOCAL_DECLARETYPE_EXPLICIT;
+		if (mIsLocal) // Test first, to ensure this method can't be erroneously used to mark a global.
+			mIsLocal |= VAR_LOCAL_DECLARED;
 	}
 
 	__forceinline bool IsBinaryClip()
@@ -725,7 +723,7 @@ public:
 	//	return (BYTE *) CharContents(aAllowUpdate);
 	//}
 
-	TCHAR *Contents(BOOL aAllowUpdate = TRUE, BOOL aNoWarnUninitializedVar = FALSE)	// ***AC 2/4/11 ADDED optional aNoWarnUninitializedVar arg
+	TCHAR *Contents(BOOL aAllowUpdate = TRUE, BOOL aNoWarnUninitializedVar = FALSE)
 	// Callers should almost always pass TRUE for aAllowUpdate because any caller who wants to READ from
 	// mContents would almost always want it up-to-date.  Any caller who wants to WRITE to mContents would
 	// would almost always have called Assign(NULL, ...) prior to calling Contents(), which would have
@@ -737,9 +735,10 @@ public:
 			var.UpdateContents(); // This also clears the VAR_ATTRIB_CONTENTS_OUT_OF_DATE flag.
 		if (var.mType == VAR_NORMAL)
 		{
-			// ***AC 2/4/11 NOTE: only call MaybeWarnUninitialized if aAllowUpdate, since callers passing FALSE just want to know if mCharContents address matches another
-			if (aAllowUpdate && !aNoWarnUninitializedVar)	// ***AC 2/4/11 ADDED conditional MaybeWarnUninitialized
-				var.MaybeWarnUninitialized();				// ***AC 2/4/11 ADDED conditional MaybeWarnUninitialized
+			// If aAllowUpdate is FALSE, the caller just wants to compare mCharContents to another address.
+			// Otherwise, the caller is probably going to use mCharContents and might want a warning:
+			if (aAllowUpdate && !aNoWarnUninitializedVar)
+				var.MaybeWarnUninitialized();
 			return var.mCharContents;
 		}
 		if (var.mType == VAR_CLIPBOARD)
@@ -753,20 +752,12 @@ public:
 	void ConvertToStatic()
 	// Caller must ensure that it's a local variable.
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		if (mType == VAR_ALIAS)
-			mAliasFor->mAttrib |= VAR_ATTRIB_STATIC;
-		else
-			mAttrib |= VAR_ATTRIB_STATIC;
+		mIsLocal |= VAR_LOCAL_STATIC;
 	}
 
 	void ConvertToNonStatic()
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		if (mType == VAR_ALIAS)
-			mAliasFor->mAttrib &= ~VAR_ATTRIB_STATIC;
-		else
-			mAttrib &= ~VAR_ATTRIB_STATIC;
+		mIsLocal &= ~VAR_LOCAL_STATIC;
 	}
 
 	__forceinline void ConvertToNonAliasIfNecessary() // __forceinline because it's currently only called from one place.
@@ -834,14 +825,13 @@ public:
 	}
 
 	// Constructor:
-	Var(LPTSTR aVarName, void *aType, UCHAR aIsLocal)	// ***AC 2/11/11 CHANGED type of aIsLocal (and mIsLocal) from bool to UCHAR to support several distinct non-false values
+	Var(LPTSTR aVarName, void *aType, UCHAR aIsLocal)
 		// The caller must ensure that aVarName is non-null.
 		: mCharContents(sEmptyString) // Invariant: Anyone setting mCapacity to 0 must also set mContents to the empty string.
 		// Doesn't need initialization: , mContentsInt64(NULL)
 		, mByteLength(0) // This also initializes mAliasFor within the same union.
 		, mHowAllocated(ALLOC_NONE)
-		, mAttrib(0) // Seems best not to init empty vars to VAR_ATTRIB_NOT_NUMERIC because it would reduce maintainability, plus finding out whether an empty var is numeric via IsPureNumeric() is a very fast operation.
-		, mIsUninitializedNormalVar(true)	// ***AC 2/4/11 ADDED mIsUninitializedNormalVar
+		, mAttrib(VAR_ATTRIB_UNINITIALIZED) // Seems best not to init empty vars to VAR_ATTRIB_NOT_NUMERIC because it would reduce maintainability, plus finding out whether an empty var is numeric via IsPureNumeric() is a very fast operation.
 		, mIsLocal(aIsLocal)
 		, mName(aVarName) // Caller gave us a pointer to dynamic memory for this (or static in the case of ResolveVarOfArg()).
 	{
@@ -849,14 +839,14 @@ public:
 		{
 			mType = VAR_BUILTIN;
 			mBIV = (BuiltInVarType)aType; // This also initializes mCapacity within the same union.
-			MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias (built-in vars are considered initialized, by definition)
+			mAttrib = 0; // Built-in vars are considered initialized, by definition.
 		}
 		else
 		{
 			mType = (VarTypeType)aType;
 			mByteCapacity = 0; // This also initializes mBIV within the same union.
-			if (mType != VAR_NORMAL)		// ***AC 2/13/11 ADDED conditional MarkInitialized_no_alias (any vars that aren't VAR_NORMAL are considered initialized, by definition)
-				MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED conditional MarkInitialized_no_alias (any vars that aren't VAR_NORMAL are considered initialized, by definition)
+			if (mType != VAR_NORMAL)
+				mAttrib = 0; // Any vars that aren't VAR_NORMAL are considered initialized, by definition.
 		}
 	}
 
@@ -866,32 +856,21 @@ public:
 	void operator delete[](void *aPtr) {}
 
 
-	// ***AC 2/4/11 ADDED IsUninitializedNormalVar
 	__forceinline bool IsUninitializedNormalVar()
 	{
-		// ***AC 2/13/11 CHANGED to check aliased var in the VAR_ALIAS case
-		return (mType == VAR_ALIAS)? mAliasFor->mIsUninitializedNormalVar : mIsUninitializedNormalVar;
+		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
+		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		return (var.mAttrib & VAR_ATTRIB_UNINITIALIZED);
 	}
 
-	// ***AC 2/4/11 ADDED MarkInitialized
 	__forceinline void MarkInitialized()
 	{
-		// ***AC 2/13/11 CHANGED to mark aliased var in the VAR_ALIAS case
-		if (mType == VAR_ALIAS)
-			mAliasFor->MarkInitialized_no_alias();
-		else
-			MarkInitialized_no_alias();
+		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
+		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		mAttrib &= ~VAR_ATTRIB_UNINITIALIZED;
 	}
 
-	// ***AC 2/4/11 ADDED MaybeWarnUninitialized
 	__forceinline void MaybeWarnUninitialized();
-
-private:
-	// ***AC 2/13/11 ADDED MarkInitialized_no_alias: internal version of MarkInitialized to be used only when it's known var isn't VAR_ALIAS
-	__forceinline void MarkInitialized_no_alias()
-	{
-		mIsUninitializedNormalVar = false;
-	}
 
 }; // class Var
 #pragma pack(pop) // Calling pack with no arguments restores the default value (which is 8, but "the alignment of a member will be on a boundary that is either a multiple of n or a multiple of the size of the member, whichever is smaller.")

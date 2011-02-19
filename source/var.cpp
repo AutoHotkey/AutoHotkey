@@ -138,7 +138,7 @@ ResultType Var::Assign(Var &aVar)
 		return target_var.Assign(source_var.mObject);
 
 	// Otherwise:
-	source_var.MaybeWarnUninitialized();	// ***AC 2/4/11 ADDED MaybeWarnUninitialized
+	source_var.MaybeWarnUninitialized();
 	return target_var.Assign(source_var.mCharContents, source_var._CharLength()); // Pass length to improve performance. It isn't necessary to call Contents()/Length() because they must be already up-to-date because there is no binary number to update them from (if there were, the above would have returned).  Also, caller ensured Type()==VAR_NORMAL.
 }
 
@@ -371,7 +371,6 @@ ResultType Var::AssignClipboardAll()
 	mByteLength = actual_space_used;
 	mAttrib |= VAR_ATTRIB_BINARY_CLIP; // VAR_ATTRIB_CONTENTS_OUT_OF_DATE and VAR_ATTRIB_CACHE were already removed by earlier call to Assign().
 
-	MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias
 	return OK;
 }
 
@@ -395,9 +394,10 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 
 	if (mType == VAR_NORMAL) // Copy a binary variable to another variable that isn't the clipboard.
 	{
-		if (source_var.mCharContents == Contents(TRUE, TRUE))	// ***AC 2/4/11 ADDED extra BOOL arg to avoid warning for uninitialized var	// source_var.mContents vs. Contents() is okay (see above). v1.0.45: source==dest, so nothing to do. It's compared this way in case aSourceVar is a ByRef/alias. This covers even that situation.
+		if (this == &source_var) // i.e. source == destination.  Aliases were already resolved.
 		{
-			MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias (NOTE: the SetCapacity below handles this for that success case)
+			// No need to mark this var since it has obviously already been initialized (it contains a binary clip):
+			//MarkInitialized();
 			return OK;
 		}
 		if (!SetCapacity(source_var.mByteLength, true, false)) // source_var.mLength vs. Length() is okay (see above).
@@ -452,7 +452,6 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 		SetClipboardData(format, hglobal); // The system now owns hglobal.
 	}
 
-	MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias (NOTE: even if g_clip.Close fails, this var has already been successfully written to)
 	return g_clip.Close();
 }
 
@@ -532,7 +531,6 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 	if (space_needed < 2) // Variable is being assigned the empty string (or a deref that resolves to it).
 	{
 		Free(free_it_if_large ? VAR_FREE_IF_LARGE : VAR_NEVER_FREE); // This also makes the variable blank and removes VAR_ATTRIB_OFTEN_REMOVED.
-		MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias
 		return OK;
 	}
 
@@ -544,7 +542,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 	// For simplicity, this is done unconditionally even though it should be needed only
 	// when do_assign is true. It's the caller's responsibility to turn on the binary-clip
 	// attribute (if appropriate) by calling Var::Close() with the right option.
-	mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
+	mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_UNINITIALIZED);
 	// HOWEVER, other things like making mLength 0 and mContents blank are not done here for performance
 	// reasons (it seems too rare that early return/failure will occur below, since it's only due to
 	// out-of-memory... and even if it does happen, there are probably no consequences to leaving the variable
@@ -553,7 +551,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 
 	if (space_needed_in_bytes > mByteCapacity)
 	{
-		size_t new_size; // Use a new name, rather than overloaidng space_needed, for maintainability.
+		size_t new_size; // Use a new name, rather than overloading space_needed, for maintainability.
 		char *new_mem;
 
 		switch (mHowAllocated)
@@ -684,7 +682,6 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 
 	// Writing to union is safe because above already ensured that "this" isn't an alias.
 	mByteLength = aLength * sizeof(TCHAR); // aLength was verified accurate higher above.
-	MarkInitialized_no_alias();	// ***AC 2/13/11 ADDED MarkInitialized_no_alias
 	return OK;
 }
 
@@ -746,13 +743,13 @@ VarSizeType Var::Get(LPTSTR aBuf)
 				else // Size estimation phase: Since there is no such env. var., flag it for the upcoming get-contents phase.
 					cached_empty_var = this;
 		
-				MaybeWarnUninitialized();	// ***AC 2/4/11 ADDED MaybeWarnUninitialized
+				MaybeWarnUninitialized();
 				return 0;
 			}
 		}
 		length = _CharLength();
 
-		MaybeWarnUninitialized();	// ***AC 2/4/11 ADDED MaybeWarnUninitialized
+		MaybeWarnUninitialized();
 
 		// Otherwise (since above didn't return), it's not an environment variable (or it is, but there's
 		// a script variable of non-zero length that's eclipsing it).
@@ -843,11 +840,13 @@ VarSizeType Var::Get(LPTSTR aBuf)
 
 
 
-void Var::Free(int aWhenToFree, bool aExcludeAliases)
+void Var::Free(int aWhenToFree, bool aExcludeAliasesAndRequireInit)
 // The name "Free" is a little misleading because this function:
 // ALWAYS sets the variable to be blank (except for static variables and aExcludeAliases==true).
 // BUT ONLY SOMETIMES frees the memory, depending on various factors described further below.
 // Caller must be aware that ALLOC_SIMPLE (due to its nature) is never freed.
+// aExcludeAliasesAndRequireInit may be split into two if any caller ever wants to pass
+// true for one and not the other (currently there is only one caller who passes true).
 {
 	// Not checked because even if it's not VAR_NORMAL, there are few if any consequences to continuing.
 	//if (mType != VAR_NORMAL) // For robustness, since callers generally shouldn't call it this way.
@@ -855,7 +854,7 @@ void Var::Free(int aWhenToFree, bool aExcludeAliases)
 
 	if (mType == VAR_ALIAS) // For simplicity and reduced code size, just make a recursive call to self.
 	{
-		if (!aExcludeAliases)
+		if (!aExcludeAliasesAndRequireInit)
 			// For maintainability, it seems best not to use the following method:
 			//    Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
 			// If that were done, bugs would be easy to introduce in a long function like this one
@@ -867,14 +866,24 @@ void Var::Free(int aWhenToFree, bool aExcludeAliases)
 
 	// Must check this one first because caller relies not only on var not being freed in this case,
 	// but also on its contents not being set to an empty string:
-	if (aWhenToFree == VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC && (mAttrib & VAR_ATTRIB_STATIC))
+	if (aWhenToFree == VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC && IsStatic())
 		return; // This is the only case in which the variable ISN'T made blank.
 
 	if (IsObject()) // L31: Release this variable's reference to its object.
 		ReleaseObject();
 
 	mByteLength = 0; // Writing to union is safe because above already ensured that "this" isn't an alias.
-	mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED; // Even if it isn't free'd, variable will be made blank. So it seems proper to always remove the binary_clip attribute (since it can't be used that way after it's been made blank).
+	// Even if it isn't free'd, variable will be made blank.  So it seems proper to always remove
+	// the binary_clip attribute (since it can't be used that way after it's been made blank) and
+	// the uninitialized attribute (since *we* are initializing it).  Some callers may rely on us
+	// removing these attributes:
+	mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_UNINITIALIZED);
+
+	if (aExcludeAliasesAndRequireInit)
+		// Caller requires this var to be considered uninitialized from now on.  This attribute may
+		// have been removed above, but there was no cost involved.  It might not have been set in
+		// the first place, so we must add it here anyway:
+		mAttrib |= VAR_ATTRIB_UNINITIALIZED;
 
 	switch (mHowAllocated)
 	{
@@ -1005,7 +1014,7 @@ void Var::AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 		var.mByteCapacity = (VarSizeType)_msize(aNewMem); // Get actual capacity in case it's a lot bigger than aLength+1. _msize() is only about 36 bytes of code and probably a very fast call.
 		var.mAttrib &= ~VAR_ATTRIB_CACHE_DISABLED; // This isn't always done by Free() above, so do it here in case it wasn't (it seems too unlikely to have to check whether aNewMem==the_old_mem_address).  Reason: If the script previously took the address of this variable, that address is no longer valid; so there is no need to protect against the script directly accessing this variable.
 		// Already done by Free() above:
-		//var.mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED; // New memory is always non-binary-clip.  A new parameter could be added to change this if it's ever needed.
+		//mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_UNINITIALIZED); // New memory is always non-binary-clip.  A new parameter could be added to change this if it's ever needed.
 
 		// Shrink the memory if there's a lot of wasted space because the extra capacity is seldom utilized
 		// in real-world scripts.
@@ -1076,10 +1085,10 @@ ResultType Var::BackupFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVarBa
 	// Note that Backup() does not make the variable empty after backing it up because that is something
 	// that must be done by our caller at a later stage.
 	for (i = 0; i < aFunc.mVarCount; ++i)
-		if (!(aFunc.mVar[i]->mAttrib & VAR_ATTRIB_STATIC)) // Don't bother backing up statics because they won't need to be restored.
+		if (!aFunc.mVar[i]->IsStatic()) // Don't bother backing up statics because they won't need to be restored.
 			aFunc.mVar[i]->Backup(aVarBackup[aVarBackupCount++]);
 	for (i = 0; i < aFunc.mLazyVarCount; ++i)
-		if (!(aFunc.mLazyVar[i]->mAttrib & VAR_ATTRIB_STATIC)) // Don't bother backing up statics because they won't need to be restored.
+		if (!aFunc.mLazyVar[i]->IsStatic()) // Don't bother backing up statics because they won't need to be restored.
 			aFunc.mLazyVar[i]->Backup(aVarBackup[aVarBackupCount++]);
 	return OK;
 }
@@ -1117,9 +1126,11 @@ void Var::Backup(VarBkp &aVarBkp)
 	if (mType != VAR_ALIAS) // Fix for v1.0.42.07: Don't reset mLength if the other member of the union is in effect.
 		mByteLength = 0;        // Otherwise, functions that recursively pass ByRef parameters can crash because mType stays as VAR_ALIAS.
 	mHowAllocated = ALLOC_MALLOC; // Never NONE because that would permit SIMPLE. See comments higher above.
-	mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_CACHE_DISABLED | VAR_ATTRIB_OBJECT); // But the VAR_ATTRIB_STATIC flag isn't altered.
+	//mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_CACHE_DISABLED | VAR_ATTRIB_OBJECT);
 	// Above: Removing VAR_ATTRIB_CACHE_DISABLED doesn't cost anything in performance and might help cases where
-	// a recursively-called function does numeric, cache-only operations on a variable that has zero capacity
+	// a recursively-called function does numeric, cache-only operations on a variable that has zero capacity.
+	// Since we're removing every attribute except the one we want to add, just reset mAttrib:
+	mAttrib = VAR_ATTRIB_UNINITIALIZED; // The function's new recursion layer should consider this var uninitialized, even if it was initialized by the previous layer.
 }
 
 
@@ -1128,7 +1139,7 @@ void Var::FreeAndRestoreFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVar
 {
 	int i;
 	for (i = 0; i < aFunc.mVarCount; ++i)
-		aFunc.mVar[i]->Free(VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC, true); // Pass "true" to exclude aliases, since their targets should not be freed (they don't belong to this function).
+		aFunc.mVar[i]->Free(VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC, true); // Pass "true" to exclude aliases, since their targets should not be freed (they don't belong to this function). Also resets the "uninitialized" attribute.
 	for (i = 0; i < aFunc.mLazyVarCount; ++i)
 		aFunc.mLazyVar[i]->Free(VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC, true);
 
@@ -1235,7 +1246,7 @@ ResultType Var::AssignStringFromCodePage(LPCSTR aBuf, int aLength, UINT aCodePag
 	if (iLen > 0) {
 		if (!AssignString(NULL, iLen, true, false))
 			return FAIL;
-		LPWSTR aContents = Contents(TRUE, TRUE);	// ***AC 2/4/11 ADDED extra BOOL arg to avoid warning for uninitialized var
+		LPWSTR aContents = Contents(TRUE, TRUE);
 		iLen = MultiByteToWideChar(aCodePage, 0, aBuf, aLength, (LPWSTR) aContents, iLen);
 		aContents[iLen] = 0;
 		if (!iLen)
@@ -1261,7 +1272,7 @@ ResultType Var::AssignStringToCodePage(LPCWSTR aBuf, int aLength, UINT aCodePage
 	if (iLen > 0) {
 		if (!SetCapacity(iLen, true, false))
 			return FAIL;
-		LPSTR aContents = (LPSTR) Contents(TRUE, TRUE);	// ***AC 2/4/11 ADDED extra BOOL arg to avoid warning for uninitialized var
+		LPSTR aContents = (LPSTR) Contents(TRUE, TRUE);
 		iLen = WideCharToMultiByte(aCodePage, aFlags, aBuf, aLength, aContents, iLen, pDefChar, NULL);
 		aContents[iLen] = 0;
 		if (!iLen)
@@ -1275,14 +1286,14 @@ ResultType Var::AssignStringToCodePage(LPCWSTR aBuf, int aLength, UINT aCodePage
 	return OK;
 }
 
-// ***AC 2/4/11 ADDED MaybeWarnUninitialized
 __forceinline void Var::MaybeWarnUninitialized()
 {
 	if (IsUninitializedNormalVar())
 	{
-		if (mByteLength != 0)
-			MarkInitialized();	// "self-correct" if we catch a var that has normal content but wasn't marked initialized
-		else
+		// The following should not be possible; if it is, there's a bug and we want to know about it:
+		//if (mByteLength != 0)
+		//	MarkInitialized();	// "self-correct" if we catch a var that has normal content but wasn't marked initialized
+		//else
 			g_script.WarnUninitializedVar(this);
 	}
 }
