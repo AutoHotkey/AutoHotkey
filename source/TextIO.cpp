@@ -465,7 +465,7 @@ DWORD TextStream::Write(LPCTSTR aBuf, DWORD aBufLen)
 
 		if (dst >= dst_end)
 		{
-			DWORD len = dst - mBuffer;
+			DWORD len = (DWORD)(dst - mBuffer);
 			if (_Write(mBuffer, len) < len)
 			{
 				// The following isn't done since there's no way for the caller to know
@@ -532,7 +532,7 @@ DWORD TextStream::Write(LPCTSTR aBuf, DWORD aBufLen)
 	mLastWriteChar = src_end[-1]; // So if this is \r and the next char is \n, don't make it \r\r\n.
 
 	DWORD initial_length = mLength;
-	mLength = (dst - mBuffer);
+	mLength = (DWORD)(dst - mBuffer);
 	return bytes_flushed + mLength - initial_length; // Doing it this way should perform better and result in smaller code than counting each byte put into the buffer.
 }
 
