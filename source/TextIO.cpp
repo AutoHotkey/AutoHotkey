@@ -51,7 +51,7 @@ bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 	if (mode != TextStream::WRITE) {
 		// Detect UTF-8 and UTF-16LE BOMs
 		if (mLength < 3)
-			Read(3);
+			Read(TEXT_IO_BLOCK); // TEXT_IO_BLOCK vs 3 for consistency and average-case performance.
 		mPos = mBuffer;
 		if (mLength >= 2) {
 			if (mBuffer[0] == 0xFF && mBuffer[1] == 0xFE) {
@@ -106,15 +106,28 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 		if (target_used == aBufLen || !ReadAtLeast(4) && !mLength)
 			break;
 		
+		src = mPos;
 		src_end = mBuffer + mLength; // Maint: mLength is in bytes.
 		
-		// In UTF-16 mode, mPos should always be on a WCHAR boundary and the buffer should
-		// always contain an even number of bytes, unless we're at the end of the file and
-		// it has an odd number of bytes.  For performance and simplicity, these presumably
-		// rare errors are not caught.  Instead, the behaviour is left "undefined".
-		//if (mCodePage == CP_UTF16 && ((src_end - mPos) & 1))
+		// Ensure there are an even number of bytes in the buffer if we are reading UTF-16.
+		// This can happen (for instance) when dealing with binary files which also contain
+		// UTF-16 strings, or if a UTF-16 file is missing its last byte.
+		if (codepage == CP_UTF16 && ((src_end - src) & 1))
+		{
+			// Try to defer processing of the odd byte until the next byte is read.
+			--src_end;
+			// If it's the only byte remaining, the safest thing to do is probably to drop it
+			// from the stream and output an invalid char so that the error can be detected:
+			if (src_end == src)
+			{
+				mPos = NULL;
+				mLength = 0;
+				aBuf[target_used++] = INVALID_CHAR;
+				break;
+			}
+		}
 
-		for (src = mPos; src < src_end && target_used < aBufLen; src += src_size)
+		for ( ; src < src_end && target_used < aBufLen; src += src_size)
 		{
 			if (codepage == CP_UTF16)
 			{
@@ -225,9 +238,8 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 						if (mEOF)
 						{
 							mLength = 0; // Discard all remaining data, since it appears to be invalid.
-							mPos = NULL; //
-							aBuf[target_used] = '\0';
-							return target_used;
+							src = NULL;  //
+							aBuf[target_used++] = INVALID_CHAR;
 						}
 						break;
 					}
@@ -359,6 +371,8 @@ DWORD TextStream::Read(LPVOID aBuf, DWORD aBufLen)
 			target_used += mLength;
 			mLength = 0;
 			// Since no data remains in the buffer, mPos can remain set to NULL.
+			// UPDATE: If (mPos == mBuffer + mLength), it was not set to NULL above.
+			mPos = NULL;
 		}
 		else
 		{

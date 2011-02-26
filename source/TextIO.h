@@ -118,10 +118,10 @@ public:
 
 		if (mCodePage != aCodePage)
 		{
-			// Switching from a multi-byte encoding to UTF-16 would cause issues if there were
-			// an odd number of bytes in the buffer.  For simplicity, just clear the buffer.
-			RollbackFilePointer();
-			FlushWriteBuffer();
+			// Resist temptation to do the following as a way to avoid having an odd number of bytes in
+			// the buffer, since it breaks non-seeking devices and actually isn't sufficient for cases
+			// where the caller uses raw I/O in addition to text I/O (e.g. read one byte then read text).
+			//RollbackFilePointer();
 
 			mCodePage = aCodePage;
 			if (!GetCPInfo(aCodePage, &mCodePageInfo))
@@ -148,6 +148,9 @@ protected:
 			// Discard the buffer and rollback the file pointer.
 			ptrdiff_t offset = (mPos - mBuffer) - mLength; // should be a value <= 0
 			_Seek(offset, SEEK_CUR);
+			// Callers expect the buffer to be cleared (e.g. to be reused for buffered writing), so if
+			// _Seek fails, the data is simply discarded.  This can probably only happen for non-seeking
+			// devices such as pipes or the console, which won't typically be both read from and written to:
 			mPos = NULL;
 			mLength = 0;
 		}
