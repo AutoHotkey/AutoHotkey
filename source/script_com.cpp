@@ -761,13 +761,19 @@ void ComEvent::Connect(LPTSTR pfx)
 ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (aParamCount < (IS_INVOKE_SET ? 2 : 1))
+	{
+		// Something like x[] or x[]:=y -- reserved for possible future use.  However, it could
+		// be x[prms*] where prms is an empty array or not an array at all, so raise an error:
+		ComError(g->LastError = DISP_E_BADPARAMCOUNT);
 		return OK;
+	}
 
 	if (mVarType != VT_DISPATCH || !mDispatch)
 	{
 		if (mVarType & VT_ARRAY)
 			return SafeArrayInvoke(aResultToken, aFlags, aParam, aParamCount);
 		// Otherwise: this object can't be invoked.
+		g->LastError = DISP_E_BADVARTYPE; // Seems more informative than -1.
 		ComError(-1);
 		return OK;
 	}
@@ -877,12 +883,18 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 	LONG index[8];
 	// Verify correct number of parameters/dimensions (maximum 8).
 	if (dims > _countof(index) || dims != (IS_INVOKE_SET ? aParamCount - 1 : aParamCount))
+	{
+		g->LastError = DISP_E_BADPARAMCOUNT;
 		return OK;
+	}
 	// Build array of indices from parameters.
 	for (UINT i = 0; i < dims; ++i)
 	{
 		if (!TokenIsPureNumeric(*aParam[i]))
+		{
+			g->LastError = E_INVALIDARG;
 			return OK;
+		}
 		index[i] = (LONG)TokenToInt64(*aParam[i]);
 	}
 
