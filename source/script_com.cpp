@@ -262,10 +262,12 @@ void BIF_ComObjConnect(ExprTokenType &aResultToken, ExprTokenType *aParam[], int
 		}
 
 		if (obj->mEventSink)
+		{
 			obj->mEventSink->Connect(aParamCount>1 ? TokenToString(*aParam[1]) : NULL);
-		else
-			ComError(-1);
+			return;
+		}
 	}
+	ComError(-1);
 }
 
 void BIF_ComObjError(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
