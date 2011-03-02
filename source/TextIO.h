@@ -274,7 +274,8 @@ public:
 	}
 	__int64	Tell()
 	{
-		return _Tell() + (mPos ? mPos - (mBuffer + mLength) : (ptrdiff_t)mLength);
+		__int64 pos = _Tell();
+		return (pos == -1) ? -1 : pos + (mPos ? mPos - (mBuffer + mLength) : (ptrdiff_t)mLength);
 	}
 	__int64 Length() { return _Length(); }
 	__int64 Length(__int64 aLength)

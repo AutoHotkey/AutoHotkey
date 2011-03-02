@@ -637,8 +637,7 @@ bool TextFile::_Seek(__int64 aDistance, int aOrigin)
 __int64 TextFile::_Tell() const
 {
 	LARGE_INTEGER in = {0}, out;
-	SetFilePointerEx(mFile, in, &out, FILE_CURRENT);
-	return out.QuadPart;
+	return SetFilePointerEx(mFile, in, &out, FILE_CURRENT) ? out.QuadPart : -1;
 }
 
 __int64 TextFile::_Length() const
@@ -847,7 +846,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				if (aParamCount)
 					length = (DWORD)TokenToInt64(*aParam[1]);
 				else
-					length = (DWORD)(mFile.Length() - mFile.Tell());
+					length = (DWORD)(mFile.Length() - mFile.Tell()); // We don't know the actual number of characters these bytes will translate to, but this should be sufficient.
 				if (length == -1 || !TokenSetResult(aResultToken, NULL, length)) // Relies on short-circuit order. TokenSetResult requires non-NULL aResult if aResultLength == -1.
 				{
 					// Our caller set marker to a default result of "", which should still be in place.
