@@ -51,7 +51,7 @@ public:
 	};
 
 	TextStream()
-		: mFlags(0), mCodePage(-1), mLength(0), mBuffer(NULL), mPos(NULL), mEOF(true)
+		: mFlags(0), mCodePage(-1), mLength(0), mBuffer(NULL), mPos(NULL)
 	{
 		SetCodePage(CP_ACP);
 	}
@@ -69,7 +69,6 @@ public:
 	{
 		FlushWriteBuffer();
 		_Close();
-		mEOF = true;
 	}
 
 	DWORD Write(LPCTSTR aBuf, DWORD aBufLen = 0);
@@ -96,17 +95,13 @@ public:
 	}
 
 	bool AtEOF()
-	// The behavior isn't the same with feof().
-	// It checks the position of the file pointer, too.
+	// Returns true if there is no more data in the read buffer
+	// *and* the file pointer is at the end of the file.
 	{
-		if (mEOF)
-			return true;
-		if (!mPos || mPos >= mBuffer + mLength) {
-			__int64 pos = _Tell();
-			if (pos < 0 || pos >= _Length())
-				mEOF = true;
-		}
-		return mEOF;
+		if (mPos && mPos < mBuffer + mLength)
+			return false;
+		__int64 pos = _Tell();
+		return (pos < 0 || pos >= _Length());
 	}
 
 	void SetCodePage(UINT aCodePage)
@@ -189,8 +184,6 @@ protected:
 	DWORD Read(DWORD aReadSize = TEXT_IO_BLOCK)
 	{
 		ASSERT(aReadSize);
-		if (mEOF)
-			return 0;
 		if (!mBuffer) {
 			mBuffer = (BYTE *) malloc(TEXT_IO_BLOCK);
 			if (!mBuffer)
@@ -201,8 +194,6 @@ protected:
 		DWORD dwRead = _Read(mBuffer + mLength, aReadSize);
 		if (dwRead)
 			mLength += dwRead;
-		else
-			mEOF = true;
 		return dwRead;
 	}
 	bool ReadAtLeast(DWORD aReadSize)
@@ -218,9 +209,7 @@ protected:
 		else
 			return true;
 		mPos = mBuffer;
-		if (mLength < aReadSize)
-			mEOF = true;
-		return !mEOF;
+		return (mLength >= aReadSize);
 	}
 
 	__declspec(noinline) bool IsLeadByte(BYTE b) // noinline benchmarks slightly faster.
@@ -236,7 +225,6 @@ protected:
 	UINT  mCodePage;
 	CPINFO mCodePageInfo;
 	
-	bool  mEOF;
 	TCHAR mLastWriteChar;
 
 	union // Pointer to the next character to read in mBuffer.

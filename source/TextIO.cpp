@@ -42,7 +42,6 @@ bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 
 	SetCodePage(aCodePage);
 	mFlags = aFlags;
-	mEOF = false;
 	mLastWriteChar = 0;
 
 	int mode = aFlags & ACCESS_MODE_MASK;
@@ -105,6 +104,7 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 		// Byte mode: Try to read at least 4 bytes to simplify handling of 4-byte UTF-8 chars.
 		if (target_used == aBufLen || !ReadAtLeast(4) && !mLength)
 			break;
+#define LAST_READ_HIT_EOF (mLength < 4) // Could be (mLength < TEXT_IO_BLOCK), but this seems safer.
 		
 		src = mPos;
 		src_end = mBuffer + mLength; // Maint: mLength is in bytes.
@@ -146,7 +146,7 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 							continue;
 						}
 					}
-					else if (!mEOF)
+					else if (!LAST_READ_HIT_EOF)
 					{
 						// There's not enough data in the buffer to determine if this is \r\n.
 						// Let the next iteration handle this char after reading more data.
@@ -161,7 +161,7 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 				// the result is the same as with two separate calls: "??".
 				/*if (*cp >= 0xD800 && *cp <= 0xDBFF) // High surrogate.
 				{
-					if (src + 3 >= src_end && !mEOF)
+					if (src + 3 >= src_end && !LAST_READ_HIT_EOF)
 					{
 						// There should be a low surrogate following this, but since there's
 						// not enough data in the buffer we need to postpone processing it.
@@ -197,7 +197,7 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 								continue;
 							}
 						}
-						else if (!mEOF)
+						else if (!LAST_READ_HIT_EOF)
 						{
 							// There's not enough data in the buffer to determine if this is \r\n.
 							// Let the next iteration handle this char after reading more data.
@@ -233,9 +233,9 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 					{
 						// We can't call ReadAtLeast() here since it may move the data around.
 						// Instead, rely on the outer loop to ensure that either the buffer has
-						// at least 4 bytes in it or mEOF is set to true.
+						// at least 4 bytes in it or we're at the end of the file.
 						//if (!ReadAtLeast(trail_bytes + 1))
-						if (mEOF)
+						if (LAST_READ_HIT_EOF)
 						{
 							mLength = 0; // Discard all remaining data, since it appears to be invalid.
 							src = NULL;  //
@@ -386,9 +386,6 @@ DWORD TextStream::Read(LPVOID aBuf, DWORD aBufLen)
 	{
 		// The remaining data to be read exceeds the capacity of our buffer, so bypass it.
 		target_used += _Read(target, target_remaining);
-		// The following doesn't seem to be necessary.  Only a false-positive is likely
-		// to cause problems; if mEOF is false, AtEOF() performs this check anyway:
-		//mEOF = _Tell() == _Length();
 	}
 
 	return target_used;
@@ -628,9 +625,6 @@ DWORD TextFile::_Write(LPCVOID aBuffer, DWORD aBufSize)
 
 bool TextFile::_Seek(__int64 aDistance, int aOrigin)
 {
-	// see AtEOF()
-	if (aOrigin != SEEK_END || aDistance != 0)
-		mEOF = false;
 	return !!SetFilePointerEx(mFile, *((PLARGE_INTEGER) &aDistance), NULL, aOrigin);
 }
 
