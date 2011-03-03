@@ -5449,52 +5449,14 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	case WM_MEASUREITEM: // L17: Measure menu icon. Not used on Windows Vista or later.
 		if (hWnd == g_hWnd && wParam == 0 && !g_os.IsWinVistaOrLater())
-		{
-			LPMEASUREITEMSTRUCT measure_item_struct = (LPMEASUREITEMSTRUCT)lParam;
-
-			UserMenuItem *menu_item = g_script.FindMenuItemByID(measure_item_struct->itemID);
-			if (!menu_item) // L26: Check if the menu item is one with a submenu.
-				menu_item = g_script.FindMenuItemBySubmenu((HMENU)measure_item_struct->itemID);
-
-			if (menu_item && menu_item->mIcon)
-			{
-				BOOL size_is_valid = FALSE;
-				ICONINFO icon_info;
-				if (GetIconInfo(menu_item->mIcon, &icon_info))
-				{
-					BITMAP icon_bitmap;
-					if (GetObject(icon_info.hbmColor, sizeof(BITMAP), &icon_bitmap))
-					{
-						// Return size of icon.
-						measure_item_struct->itemWidth = icon_bitmap.bmWidth;
-						measure_item_struct->itemHeight = icon_bitmap.bmHeight;
-						size_is_valid = TRUE;
-					}
-					DeleteObject(icon_info.hbmColor);
-					DeleteObject(icon_info.hbmMask);
-				}
-				return size_is_valid;
-			}
-		}
+			if (UserMenu::OwnerMeasureItem((LPMEASUREITEMSTRUCT)lParam))
+				return TRUE;
 		break;
 
 	case WM_DRAWITEM: // L17: Draw menu icon. Not used on Windows Vista or later.
 		if (hWnd == g_hWnd && wParam == 0 && !g_os.IsWinVistaOrLater())
-		{
-			LPDRAWITEMSTRUCT draw_item_struct = (LPDRAWITEMSTRUCT)lParam;
-
-			UserMenuItem *menu_item = g_script.FindMenuItemByID(draw_item_struct->itemID);
-			if (!menu_item) // L26: Check if the menu item is one with a submenu.
-				menu_item = g_script.FindMenuItemBySubmenu((HMENU)draw_item_struct->itemID);
-
-			if (menu_item && menu_item->mIcon)
-			{
-				// Draw icon at actual size at requested position.
-				DrawIconEx(draw_item_struct->hDC
-							, draw_item_struct->rcItem.left, draw_item_struct->rcItem.top
-							, menu_item->mIcon, 0, 0, 0, NULL, DI_NORMAL);
-			}
-		}
+			if (UserMenu::OwnerDrawItem((LPDRAWITEMSTRUCT)lParam))
+				return TRUE;
 		break;
 
 	case WM_ENTERMENULOOP:

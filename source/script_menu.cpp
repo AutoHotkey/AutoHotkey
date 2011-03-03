@@ -1427,7 +1427,11 @@ bool UserMenu::ContainsMenu(UserMenu *aMenu)
 }
 
 
+
+//
 // L17: Menu-item icon functions.
+//
+
 
 ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int aIconNumber, int aWidth)
 {
@@ -1490,6 +1494,7 @@ ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int 
 	return aMenuItem->mIcon ? OK : FAIL;
 }
 
+
 // Caller has ensured mMenu is non-NULL.
 ResultType UserMenu::ApplyItemIcon(UserMenuItem *aMenuItem)
 {
@@ -1504,6 +1509,7 @@ ResultType UserMenu::ApplyItemIcon(UserMenuItem *aMenuItem)
 	}
 	return OK;
 }
+
 
 ResultType UserMenu::RemoveItemIcon(UserMenuItem *aMenuItem)
 {
@@ -1525,4 +1531,48 @@ ResultType UserMenu::RemoveItemIcon(UserMenuItem *aMenuItem)
 		aMenuItem->mIcon = NULL; // Clear mIcon/mBitmap union.
 	}
 	return OK;
+}
+
+
+BOOL UserMenu::OwnerMeasureItem(LPMEASUREITEMSTRUCT aParam)
+{
+	UserMenuItem *menu_item = g_script.FindMenuItemByID(aParam->itemID);
+	if (!menu_item) // L26: Check if the menu item is one with a submenu.
+		menu_item = g_script.FindMenuItemBySubmenu((HMENU)aParam->itemID);
+
+	if (!menu_item || !menu_item->mIcon)
+		return FALSE;
+
+	BOOL size_is_valid = FALSE;
+	ICONINFO icon_info;
+	if (GetIconInfo(menu_item->mIcon, &icon_info))
+	{
+		BITMAP icon_bitmap;
+		if (GetObject(icon_info.hbmColor, sizeof(BITMAP), &icon_bitmap))
+		{
+			// Return size of icon.
+			aParam->itemWidth = icon_bitmap.bmWidth;
+			aParam->itemHeight = icon_bitmap.bmHeight;
+			size_is_valid = TRUE;
+		}
+		DeleteObject(icon_info.hbmColor);
+		DeleteObject(icon_info.hbmMask);
+	}
+	return size_is_valid;
+}
+
+
+BOOL UserMenu::OwnerDrawItem(LPDRAWITEMSTRUCT aParam)
+{
+	UserMenuItem *menu_item = g_script.FindMenuItemByID(aParam->itemID);
+	if (!menu_item) // L26: Check if the menu item is one with a submenu.
+		menu_item = g_script.FindMenuItemBySubmenu((HMENU)aParam->itemID);
+
+	if (!menu_item || !menu_item->mIcon)
+		return FALSE;
+
+	// Draw icon at actual size at requested position.
+	return DrawIconEx(aParam->hDC
+				, aParam->rcItem.left, aParam->rcItem.top
+				, menu_item->mIcon, 0, 0, 0, NULL, DI_NORMAL);
 }

@@ -7921,14 +7921,28 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		//else since no colors were changed, let default proc handle it.
 		break;
 
+	case WM_MEASUREITEM:
+		// WM_MEASUREITEM is sent to a Gui if it has a menu bar or submenu with
+		// icons and the OS doesn't support alpha channels in menu item bitmaps.
+		if (wParam == 0 && !g_os.IsWinVistaOrLater() && GuiType::FindGui(hWnd))
+			if (UserMenu::OwnerMeasureItem((LPMEASUREITEMSTRUCT)lParam))
+				return TRUE;
+		break;
+
+
 	case WM_DRAWITEM:
 	{
-		// WM_DRAWITEM msg is never received if there are no GUI windows containing a tab
-		// control with custom tab colors.  The TCS_OWNERDRAWFIXED style is what causes
-		// this message to be received.
+		// WM_DRAWITEM msg is received in two cases:
+		//  1) If there are GUI windows containing a tab control with custom tab colors.
+		//     The TCS_OWNERDRAWFIXED style is what causes this message to be received.
+		//  2) If there are GUI windows with icons on the menu bar or a submenu.
 		if (   !(pgui = GuiType::FindGui(hWnd))   )
 			break;
 		LPDRAWITEMSTRUCT lpdis = (LPDRAWITEMSTRUCT)lParam;
+		if (UserMenu::OwnerDrawItem(lpdis))
+			// OwnerDrawItem determined this message is for a menu icon, and it drew the icon.
+			return TRUE;
+		// Otherwise, it might be a tab control with custom tab colors:
 		control_index = (GuiIndexType)GUI_ID_TO_INDEX(lpdis->CtlID); // Convert from ID to array index. Relies on unsigned to flag as out-of-bounds.
 		if (control_index >= pgui->mControlCount // Relies on short-circuit eval order.
 			|| pgui->mControl[control_index].hwnd != lpdis->hwndItem  // Handles do not match (this filters out bogus msgs).

@@ -2132,6 +2132,8 @@ public:
 	ResultType SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int aIconNumber, int aWidth);
 	ResultType ApplyItemIcon(UserMenuItem *aMenuItem);
 	ResultType RemoveItemIcon(UserMenuItem *aMenuItem);
+	static BOOL OwnerMeasureItem(LPMEASUREITEMSTRUCT aParam);
+	static BOOL OwnerDrawItem(LPDRAWITEMSTRUCT aParam);
 };
 
 
