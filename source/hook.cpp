@@ -3851,6 +3851,14 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 					continue;
 				}
 			}
+			else
+			{
+				// If this hotkey is a lone key with ~ prefix such as "~a::", the following ensures that
+				// the ~ prefix is respected even if the key is also used as a prefix in a custom combo,
+				// such as "a & b::".  This is consistent with the behaviour of "~a & b::".
+				if (!hk.mModifiersConsolidatedLR && (hk.mNoSuppress & AT_LEAST_ONE_VARIANT_HAS_TILDE))
+					pThisKey->no_suppress |= NO_SUPPRESS_PREFIX;
+			}
 		}
 
 		// At this point, since the above didn't "continue", this hotkey is one without a ModifierVK/SC.
