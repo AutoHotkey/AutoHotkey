@@ -11910,8 +11910,10 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 	DEBUGGER_STACK_PUSH(this, _T("#If"))
 
 	// Update A_ThisHotkey, useful if #If calls a function to do its dirty work.
-	LPTSTR prior_hotkey_name = g_script.mThisHotkeyName;
-	DWORD prior_hotkey_time = g_script.mThisHotkeyStartTime;
+	LPTSTR prior_hotkey_name[] = { g_script.mThisHotkeyName, g_script.mPriorHotkeyName };
+	DWORD prior_hotkey_time[] = { g_script.mThisHotkeyStartTime, g_script.mPriorHotkeyStartTime };
+	g_script.mPriorHotkeyName = g_script.mThisHotkeyName;			// For consistency
+	g_script.mPriorHotkeyStartTime = g_script.mThisHotkeyStartTime; //
 	g_script.mThisHotkeyName = aHotkeyName;
 	g_script.mThisHotkeyStartTime = // Updated for consistency.
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
@@ -11922,8 +11924,10 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 		result = EvaluateCondition();
 
 	// A_ThisHotkey must be restored else A_PriorHotkey will get an incorrect value later.
-	g_script.mThisHotkeyName = prior_hotkey_name;
-	g_script.mThisHotkeyStartTime = prior_hotkey_time;
+	g_script.mThisHotkeyName = prior_hotkey_name[0];
+	g_script.mThisHotkeyStartTime = prior_hotkey_time[0];
+	g_script.mPriorHotkeyName = prior_hotkey_name[1];
+	g_script.mPriorHotkeyStartTime = prior_hotkey_time[1];
 
 	DEBUGGER_STACK_POP()
 	ResumeUnderlyingThread(ErrorLevel_saved);
