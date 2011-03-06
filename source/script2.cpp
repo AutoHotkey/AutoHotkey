@@ -5373,7 +5373,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 				{
 					HDC hdc = CreateCompatibleDC((HDC)wParam);
 					HBITMAP hbmpOld = (HBITMAP)SelectObject(hdc, splash.pic_bmp);
-					BitBlt((HDC)wParam, splash.margin_x, ypos, splash.object_width, splash.object_width, hdc, 0, 0, SRCCOPY);
+					BitBlt((HDC)wParam, splash.margin_x, ypos, splash.object_width, splash.object_height, hdc, 0, 0, SRCCOPY);
 					SelectObject(hdc, hbmpOld);
 					DeleteDC(hdc);
 				}
