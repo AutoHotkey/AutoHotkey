@@ -415,10 +415,17 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 	// for later font calculations:
 	if (aSplashImage && *image_filename && splash.object_height)
 	{
-		splash.pic_bmp = LoadPicture(image_filename,
-			splash.object_width == COORD_UNSPECIFIED ? 0 : splash.object_width,
-			splash.object_height == COORD_UNSPECIFIED ? 0 : splash.object_height,
-			splash.pic_type, 0, true);
+		for (bool use_gdi_plus = false; ; use_gdi_plus = true)
+		{
+			splash.pic_bmp = LoadPicture(image_filename,
+				splash.object_width == COORD_UNSPECIFIED ? 0 : splash.object_width,
+				splash.object_height == COORD_UNSPECIFIED ? 0 : splash.object_height,
+				splash.pic_type, 0, use_gdi_plus);
+			if (splash.pic_bmp || use_gdi_plus)
+				break;
+			// Re-attempt with GDI+. The first attempt is made without it for backward compatibility.
+			// In particular, GDI+ causes some issues with WinSet TransColor on Windows XP.
+		}
 		if (splash.pic_bmp && (splash.object_height < 0 || splash.object_width < 0))
 		{
 			HBITMAP hbmp_to_measure = NULL;
