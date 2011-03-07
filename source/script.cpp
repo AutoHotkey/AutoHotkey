@@ -9803,7 +9803,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					StrReplace(infix[infix_count].marker, _T("\"\""), _T("\""), SCS_SENSITIVE); // Resolve each "" into a single ".  Consequently, a little bit of memory in "marker" might be wasted, but it doesn't seem worth the code size to compensate for this.
 					cp = omit_leading_whitespace(op_end); // Have the loop process whatever lies at op_end and beyond.
 					
-					if (*cp && _tcschr(_T("+-*&~!"), *cp) && cp[1] != '=')
+					if (*cp && _tcschr(_T("+-*&~!"), *cp) && cp[1] != '=' && (cp[1] != '&' || *cp != '&'))
 					{
 						// The symbol following this literal string is either a unary operator, or a
 						// binary operator for which literal strings are not valid input.  Instead of
