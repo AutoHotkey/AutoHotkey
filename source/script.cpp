@@ -9801,7 +9801,21 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp - 1))   ) // -1 to omit the ending quote.  cp was already adjusted to omit the starting quote.
 						return LineError(ERR_OUTOFMEM);
 					StrReplace(infix[infix_count].marker, _T("\"\""), _T("\""), SCS_SENSITIVE); // Resolve each "" into a single ".  Consequently, a little bit of memory in "marker" might be wasted, but it doesn't seem worth the code size to compensate for this.
-					cp = op_end; // Have the loop process whatever lies at op_end and beyond.
+					cp = omit_leading_whitespace(op_end); // Have the loop process whatever lies at op_end and beyond.
+					
+					if (*cp && _tcschr(_T("+-*&~!"), *cp) && cp[1] != '=')
+					{
+						// The symbol following this literal string is either a unary operator, or a
+						// binary operator for which literal strings are not valid input.  Instead of
+						// treating it as a syntax error (which may be difficult for the user to see),
+						// we will insert a concat operator and allow the symbol to be interpreted as
+						// a unary operator.  The most common cases where this helps are:
+						//	MsgBox % "var's address is " &var
+						//	MsgBox % "counter is now " ++var
+						if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
+							return LineError(ERR_EXPR_TOO_LONG);
+						infix[++infix_count].symbol = SYM_CONCAT;
+					}
 					continue; // Continue vs. break to avoid the ++cp at the bottom. Above has already set cp to be the character after this literal string's close-quote.
 
 				default: // NUMERIC-LITERAL, DOUBLE-DEREF, RELATIONAL OPERATOR SUCH AS "NOT", OR UNRECOGNIZED SYMBOL.
