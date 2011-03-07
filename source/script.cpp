@@ -1028,7 +1028,7 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 		// a separate field within the CreateProcess() and ShellExecute() structures:
 		sntprintf(buf, _countof(buf), _T("\"%s\""), mFileSpec);
 		if (!ActionExec(_T("edit"), buf, mFileDir, false))
-			if (!ActionExec(_T("Notepad.exe"), buf, mFileDir, false))
+			if (!ActionExec(_T("notepad.exe"), buf, mFileDir, false))
 			{
 				MsgBox(_T("Can't open script.")); // Short msg since so rare.
 				return LOADING_FAILED;
@@ -15127,9 +15127,6 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 			ScriptError(_T("String too long.") ERR_ABORT); // Short msg since so rare.
 		return FAIL;
 	}
-	// Declare this buf here to ensure it's in scope for the entire function, since its
-	// contents may be referred to indirectly:
-	LPTSTR parse_buf = talloca(aAction_length + 1); // v1.0.44.14: _alloca() helps conserve stack space.
 
 	// Make sure this is set to NULL because CreateProcess() won't work if it's the empty string:
 	if (aWorkingDir && !*aWorkingDir)
@@ -15141,66 +15138,49 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 	// Set default items to be run by ShellExecute().  These are also used by the error
 	// reporting at the end, which is why they're initialized even if CreateProcess() works
 	// and there's no need to use ShellExecute():
+	LPTSTR shell_verb = NULL;
 	LPTSTR shell_action = aAction;
-	LPTSTR shell_params = aParams ? aParams : _T("");
-	bool shell_action_is_system_verb = false;
-
+	LPTSTR shell_params = NULL;
+	
 	///////////////////////////////////////////////////////////////////////////////////
 	// This next section is done prior to CreateProcess() because when aParams is NULL,
 	// we need to find out whether aAction contains a system verb.
 	///////////////////////////////////////////////////////////////////////////////////
 	if (aParams) // Caller specified the params (even an empty string counts, for this purpose).
-		shell_action_is_system_verb = IS_VERB(shell_action);
-	else // Caller wants us to try to parse params out of aAction.
 	{
-		// Make a copy so that we can modify it (i.e. split it into action & params):
-		_tcscpy(parse_buf, aAction); // parse_buf is already known to be large enough.
-
-		// Find out the "first phrase" in the string.  This is done to support the special "find" and "explore"
-		// operations as well as minmize the chance that executable names intended by the user to be parameters
-		// will not be considered to be the program to run (e.g. for use with a compiler, perhaps).
-		LPTSTR first_phrase, first_phrase_end, second_phrase;
-		if (*parse_buf == '"')
+		if (IS_VERB(shell_action))
 		{
-			first_phrase = parse_buf + 1;  // Omit the double-quotes, for use with CreateProcess() and such.
-			first_phrase_end = _tcschr(first_phrase, '"');
+			shell_verb = shell_action;
+			shell_action = aParams;
 		}
 		else
+			shell_params = aParams;
+	}
+	else // Caller wants us to try to parse params out of aAction.
+	{
+		// Find out the "first phrase" in the string to support the special "find" and "explore" operations.
+		LPTSTR phrase;
+		size_t phrase_len;
+		// Set phrase_end to be the location of the first whitespace char, if one exists:
+		LPTSTR phrase_end = StrChrAny(shell_action, _T(" \t")); // Find space or tab.
+		if (phrase_end) // i.e. there is a second phrase.
 		{
-			first_phrase = parse_buf;
-			// Set first_phrase_end to be the location of the first whitespace char, if
-			// one exists:
-			first_phrase_end = StrChrAny(first_phrase, _T(" \t")); // Find space or tab.
+			phrase_len = phrase_end - shell_action;
+			// Create a null-terminated copy of the phrase for comparison.
+			phrase = tmemcpy(talloca(phrase_len + 1), shell_action, phrase_len);
+			phrase[phrase_len] = '\0';
+			// Firstly, treat anything following '*' as a verb, to support custom verbs like *Compile.
+			if (*phrase == '*')
+				shell_verb = phrase + 1;
+			// Secondly, check for common system verbs like "find" and "edit".
+			else if (IS_VERB(phrase))
+				shell_verb = phrase;
+			if (shell_verb)
+				// Exclude the verb and its trailing space or tab from further consideration.
+				shell_action += phrase_len + 1;
+			// Otherwise it's not a verb, and may be re-parsed later.
 		}
-		// Now first_phrase_end is either NULL, the position of the last double-quote in first-phrase,
-		// or the position of the first whitespace char to the right of first_phrase.
-		if (first_phrase_end)
-		{
-			// Split into two phrases:
-			*first_phrase_end = '\0';
-			second_phrase = first_phrase_end + 1;
-			if (*parse_buf == '"' && *second_phrase)
-				++second_phrase; // Skip the space between "first_phrase" and "second_phrase".
-
-			// Check if first_phrase should be considered a system verb:
-			if (*first_phrase == '*')
-			{
-				// Explicitly a system verb, perhaps a custom one such as "compile".
-				++first_phrase; // Exclude the leading '*' from the verb.
-				shell_action_is_system_verb = true;
-			}
-			else
-				// Is it a more common verb with no explicit prefix?
-				shell_action_is_system_verb = IS_VERB(first_phrase);
-		}
-		else // the entire string is considered to be the first_phrase, and there's no second:
-			second_phrase = NULL;
-		// If caller passed a quoted phrase, they most likely intended for it to be the action:
-		if (shell_action_is_system_verb || second_phrase && *parse_buf == '"')
-		{
-			shell_action = first_phrase;
-			shell_params = second_phrase ? second_phrase : _T("");
-		}
+		// shell_action will be split into action and params at a later stage if ShellExecuteEx is to be used.
 	}
 
 	// This is distinct from hprocess being non-NULL because the two aren't always the
@@ -15210,7 +15190,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 	TCHAR system_error_text[512] = _T("");
 
 	bool use_runas = aUseRunAs && (!mRunAsUser.IsEmpty() || !mRunAsPass.IsEmpty() || !mRunAsDomain.IsEmpty());
-	if (use_runas && shell_action_is_system_verb)
+	if (use_runas && shell_verb)
 	{
 		if (aDisplayErrors)
 			ScriptError(_T("System verbs unsupported with RunAs.") ERR_ABORT);
@@ -15223,7 +15203,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 	// In that case, we'll also skip the CreateProcess() attempt and do only the ShellExecute().
 	// If the user really meant to launch find.bat or find.exe, for example, he should add
 	// the extension (e.g. .exe) to differentiate "find" from "find.exe":
-	if (!shell_action_is_system_verb)
+	if (!shell_verb)
 	{
 		STARTUPINFO si = {0}; // Zero fill to be safer.
 		si.cb = sizeof(si);
@@ -15236,7 +15216,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 
 		// Since CreateProcess() requires that the 2nd param be modifiable, ensure that it is
 		// (even if this is ANSI and not Unicode; it's just safer):
-		LPTSTR command_line; // Need a new buffer other than parse_buf because parse_buf's contents may still be pointed to directly or indirectly for use further below.
+		LPTSTR command_line;
 		if (aParams && *aParams)
 		{
 			command_line = talloca(aAction_length + _tcslen(aParams) + 10); // +10 to allow room for space, terminator, and any extra chars that might get added in the future.
@@ -15307,18 +15287,14 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI;
 		sei.lpDirectory = aWorkingDir; // OK if NULL or blank; that will cause current dir to be used.
 		sei.nShow = (aRunShowMode && *aRunShowMode) ? Line::ConvertRunMode(aRunShowMode) : SW_SHOWNORMAL;
-		if (shell_action_is_system_verb)
+		if (shell_verb)
 		{
-			sei.lpVerb = shell_action;
-			if (!_tcsicmp(shell_action, _T("properties")))
+			sei.lpVerb = shell_verb;
+			if (!_tcsicmp(shell_verb, _T("properties")))
 				sei.fMask |= SEE_MASK_INVOKEIDLIST;  // Need to use this for the "properties" verb to work reliably.
-			sei.lpFile = shell_params;
-			sei.lpParameters = NULL;
 		}
-		else
+		if (!shell_params) // i.e. above hasn't determined the params yet.
 		{
-			if (shell_action == aAction) // i.e. above hasn't determined the params yet.
-			{
 // Rather than just consider the first phrase to be the executable and the rest to be the param, we check it
 // for a proper extension so that the user can launch a document name containing spaces, without having to
 // enclose it in double quotes.  UPDATE: Want to be able to support executable filespecs without requiring them
@@ -15333,9 +15309,23 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 //   -  It doesn't handle custom file types (scripts etc.) which don't exist in the working directory but can
 //      still be executed due to %PATH% and %PATHEXT% even when our caller doesn't supply an absolute path.
 // These limitations seem acceptable since the caller can allow even those cases to work by simply wrapping
-// the action in quote marks; if that is done, this section is not executed.
-				_tcscpy(parse_buf, aAction);  // Restore the original value in case it was changed. parse_buf is already known to be large enough.
-				LPTSTR action_extension, action_end;
+// the action in quote marks.
+			// Make a copy so that we can modify it (i.e. split it into action & params).
+			// Using talloca ensures it will stick around until the function exits:
+			LPTSTR parse_buf = talloca(aAction_length + 1); // aAction_length might be a little larger than necessary if shell_verb was set, but that seems better than calling _tcslen again.
+			_tcscpy(parse_buf, shell_action);
+			LPTSTR action_extension, action_end;
+			// Let quotation marks be used to remove all ambiguity:
+			if (*parse_buf == '"' && (action_end = _tcschr(parse_buf + 1, '"')))
+			{
+				shell_action = parse_buf + 1;
+				*action_end = '\0';
+				if (action_end[1])
+					shell_params = action_end + 1;
+				// Otherwise, there's only the action in quotation marks and no params.
+			}
+			else
+			{
 				if (aWorkingDir) // Set current directory temporarily in case the action is a relative path:
 					SetCurrentDirectory(aWorkingDir);
 				// For each space which possibly delimits the action and params:
@@ -15355,7 +15345,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 						if ( (action_end-action_extension == 4 && tcscasestr(_T(".exe.bat.com.cmd.hta"), action_extension))
 						// Otherwise the file might still be something capable of accepting params, like a script,
 						// so check if what we have is the name of an existing file:
-						  || !(GetFileAttributes(parse_buf) & FILE_ATTRIBUTE_DIRECTORY) ) // i.e. THE FILE EXISTS and is not a directory. This works because (INVALID_FILE_ATTRIBUTES & FILE_ATTRIBUTE_DIRECTORY) is non-zero.
+							|| !(GetFileAttributes(parse_buf) & FILE_ATTRIBUTE_DIRECTORY) ) // i.e. THE FILE EXISTS and is not a directory. This works because (INVALID_FILE_ATTRIBUTES & FILE_ATTRIBUTE_DIRECTORY) is non-zero.
 						{	
 							shell_action = parse_buf;
 							shell_params = action_end + 1;
@@ -15369,17 +15359,19 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 				if (aWorkingDir)
 					SetCurrentDirectory(g_WorkingDir); // Restore to proper value.
 			}
-			//else aParams!=NULL, so the extra parsing in the block above isn't necessary.
-
-			sei.lpVerb = NULL;  // A better choice than "open" because NULL causes default verb to be used.
-			sei.lpFile = shell_action;
-			sei.lpParameters = *shell_params ? shell_params : NULL; // Above has ensured that shell_params isn't NULL.
-			// Above was fixed v1.0.42.06 to be NULL rather than the empty string to prevent passing an
-			// extra space at the end of a parameter list (this might happen only when launching a shortcut
-			// [.lnk file]).  MSDN states: "If the lpFile member specifies a document file, lpParameters should
-			// be NULL."  This implies that NULL is a suitable value for lpParameters in cases where you don't
-			// want to pass any parameters at all.
 		}
+		//else aParams!=NULL, so the extra parsing in the block above isn't necessary.
+
+		// Not done because it may have been set to shell_verb above:
+		//sei.lpVerb = NULL;
+		sei.lpFile = shell_action;
+		sei.lpParameters = shell_params; // NULL if no parameters were present.
+		// Above was fixed v1.0.42.06 to be NULL rather than the empty string to prevent passing an
+		// extra space at the end of a parameter list (this might happen only when launching a shortcut
+		// [.lnk file]).  MSDN states: "If the lpFile member specifies a document file, lpParameters should
+		// be NULL."  This implies that NULL is a suitable value for lpParameters in cases where you don't
+		// want to pass any parameters at all.
+		
 		if (ShellExecuteEx(&sei)) // Relies on short-circuit boolean order.
 		{
 			hprocess = sei.hProcess;
@@ -15398,10 +15390,12 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		if (aDisplayErrors)
 		{
 			TCHAR error_text[2048], verb_text[128];
-			if (shell_action_is_system_verb)
-				sntprintf(verb_text, _countof(verb_text), _T("\nVerb: <%s>"), shell_action);
+			if (shell_verb)
+				sntprintf(verb_text, _countof(verb_text), _T("\nVerb: <%s>"), shell_verb);
 			else // Don't bother showing it if it's just "open".
 				*verb_text = '\0';
+			if (!shell_params)
+				shell_params = _T(""); // Expected to be non-NULL below.
 			// Use format specifier to make sure it doesn't get too big for the error
 			// function to display:
 			sntprintf(error_text, _countof(error_text)
