@@ -1372,3 +1372,22 @@ Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, IndexType at
 MetaObject g_MetaObject;
 
 LPTSTR Object::sMetaFuncName[] = { _T("__Get"), _T("__Set"), _T("__Call"), _T("__Delete") };
+
+ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	// Allow script-defined meta-functions to override the default behaviour:
+	ResultType result = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
+	
+	if (result == INVOKE_NOT_HANDLED && IS_INVOKE_CALL && aParamCount && TokenIsEmptyString(*aParam[0]))
+	{
+		// Support func_var.(params) as a means to call either a function or an object-function.
+		// This can be done fairly easily in script, but not in a way that supports ByRef;
+		// and as a default behaviour, it might be more appealing for func lib authors.
+		LPCTSTR func_name = TokenToString(aThisToken, aResultToken.buf);
+		Func *func = g_script.FindFunc(func_name, EXPR_TOKEN_LENGTH((&aThisToken), func_name));
+		if (func)
+			return CallFunc(*func, aResultToken, aParam + 1, aParamCount - 1);
+	}
+
+	return result;
+}

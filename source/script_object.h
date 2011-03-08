@@ -232,7 +232,7 @@ public:
 	ULONG STDMETHODCALLTYPE Release() { return 1; }
 	bool Delete() { return false; }
 
-	//ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
 extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object values.
