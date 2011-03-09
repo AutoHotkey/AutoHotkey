@@ -741,19 +741,16 @@ VarSizeType Var::Get(LPTSTR aBuf)
 			{
 				if (aBuf)
 				{
+					MaybeWarnUninitialized();
 					*aBuf = '\0';
 					cached_empty_var = NULL; // i.e. one use only to avoid cache from hiding the fact that an environment variable has newly come into existence since the previous call.
 				}
 				else // Size estimation phase: Since there is no such env. var., flag it for the upcoming get-contents phase.
 					cached_empty_var = this;
-		
-				MaybeWarnUninitialized();
 				return 0;
 			}
 		}
 		length = _CharLength();
-
-		MaybeWarnUninitialized();
 
 		// Otherwise (since above didn't return), it's not an environment variable (or it is, but there's
 		// a script variable of non-zero length that's eclipsing it).
@@ -762,6 +759,7 @@ VarSizeType Var::Get(LPTSTR aBuf)
 		else // Caller provider buffer, so if mLength is zero, just make aBuf empty now and return early (for performance).
 			if (!mByteLength)
 			{
+				MaybeWarnUninitialized();
 				*aBuf = '\0';
 				return 0;
 			}
