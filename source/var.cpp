@@ -729,9 +729,13 @@ VarSizeType Var::Get(LPTSTR aBuf)
 			{
 				// This env. var exists.
 				cached_empty_var = NULL; // i.e. one use only to avoid cache from hiding the fact that an environment variable has newly come into existence since the previous call.
-				return aBuf
-					? GetEnvVarReliable(mName, aBuf) // The caller has ensured, probably via previous call to this function with aBuf == NULL, that aBuf is large enough to hold the result.
-					: result - 1;  // -1 because GetEnvironmentVariable() returns total size needed when called that way.
+				if (aBuf)
+				{
+					if (g_Warn_UseEnv)
+						g_script.ScriptWarning(g_Warn_UseEnv, WARNING_USE_ENV_VARIABLE, mName);
+					return GetEnvVarReliable(mName, aBuf); // The caller has ensured, probably via previous call to this function with aBuf == NULL, that aBuf is large enough to hold the result.
+				}
+				return result - 1;  // -1 because GetEnvironmentVariable() returns total size needed when called that way.
 			}
 			else // No matching env. var. or the cache indicates that GetEnvironmentVariable() need not be called.
 			{

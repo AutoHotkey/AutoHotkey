@@ -3194,6 +3194,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			warnType = WARN_USE_UNSET_LOCAL;
 		else if (IS_PARAM1_MATCH(_T("UseUnsetGlobal")))
 			warnType = WARN_USE_UNSET_GLOBAL;
+		else if (IS_PARAM1_MATCH(_T("UseEnv")))
+			warnType = WARN_USE_ENV;
 		else if (IS_PARAM1_MATCH(_T("LocalSameAsGlobal")))
 			warnType = WARN_LOCAL_SAME_AS_GLOBAL;
 		else
@@ -3216,6 +3218,9 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		if (warnType == WARN_USE_UNSET_GLOBAL || warnType == WARN_ALL)
 			g_Warn_UseUnsetGlobal = warnMode;
+
+		if (warnType == WARN_USE_ENV || warnType == WARN_ALL)
+			g_Warn_UseEnv = warnMode;
 
 		if (warnType == WARN_LOCAL_SAME_AS_GLOBAL || warnType == WARN_ALL)
 			g_Warn_LocalSameAsGlobal = warnMode;
@@ -14966,7 +14971,7 @@ void Script::WarnUninitializedVar(Var *var)
 	int buf_space_remaining = (int)_countof(buf);
 	sntprintf(cp, buf_space_remaining, _T("%s  (a %s variable%s)"), var->mName, varClass, sameNameAsGlobal);
 
-	g_script.ScriptWarning(warnMode, WARNING_USE_UNSET_VARIABLE, buf);
+	ScriptWarning(warnMode, WARNING_USE_UNSET_VARIABLE, buf);
 }
 
 
