@@ -3173,7 +3173,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	if (IS_DIRECTIVE_MATCH(_T("#Warn")))
 	{
 		if (!parameter)
-			return ScriptError(ERR_PARAM1_REQUIRED, aBuf);
+			parameter = _T("All");
 
 		LPTSTR param1_end = _tcschr(parameter, g_delimiter);
 		size_t param1_length = -1;
@@ -3181,14 +3181,14 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		if (param1_end)
 		{
 			param2 = omit_leading_whitespace(param1_end + 1);
-			for (param1_end; param1_end > parameter && IS_SPACE_OR_TAB(param1_end[-1]); --param1_end);	// Back up over trailing whitespace in param1
-			param1_length = param1_end - parameter;
+			param1_end = omit_trailing_whitespace(parameter, param1_end - 1);
+			param1_length = param1_end - parameter + 1;
 		}
 
 		#define IS_PARAM1_MATCH(value) (!tcslicmp(parameter, value, param1_length))
-		
+
 		WarnType warnType;
-		if (IS_PARAM1_MATCH(_T("All")))
+		if (IS_PARAM1_MATCH(_T("All")) || !param1_length)
 			warnType = WARN_ALL;
 		else if (IS_PARAM1_MATCH(_T("UseUnsetLocal")))
 			warnType = WARN_USE_UNSET_LOCAL;
