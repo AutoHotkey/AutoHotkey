@@ -5310,6 +5310,24 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					//else any '.' not followed by a space, tab, or '=' is likely a number without a leading zero,
 					// so continue on below to process it.
 
+					cp = omit_leading_whitespace(op_end);
+					if (*cp == ':' && cp[1] != '=') // Maybe the "key:" in "{key: value}".
+					{
+						cp = omit_trailing_whitespace(this_new_arg.text, op_begin - 1);
+						if (*cp == ',' || *cp == '{')
+						{
+							// This is either the key in a key-value pair in an object literal, or a syntax
+							// error which will be caught at a later stage (since the ':' is missing its '?').
+							for (cp = op_begin; cisalnum(*cp) || *cp == '_'; ++cp);
+							if (*cp != '.') // i.e. exclude x.y as that should be parsed as normal for an expression.
+							{
+								if (cp != op_end) // op contains reserved characters.
+									return ScriptError(_T("Quote marks are required around this key."), op_begin);
+								continue;
+							}
+						}
+					}
+
 					operand_length = op_end - op_begin;
 
 					// Check if it's AND/OR/NOT:
@@ -7644,6 +7662,12 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 			bif = BIF_ObjAddRefRelease;
 		else return NULL;
 	}
+	else if (!_tcsicmp(func_name, _T("Array")))
+	{
+		bif = BIF_ObjArray;
+		min_params = 0;
+		max_params = 10000;
+	}
 #ifdef CONFIG_EXPERIMENTAL
 	else if (!_tcsicmp(func_name, _T("FileOpen")))
 	{
@@ -9330,7 +9354,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 	{
 		0,0,0,0,0,0,0,0  // SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_VAR, SYM_OPERAND, SYM_OBJECT, SYM_DYNAMIC, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
 		, 82, 82         // SYM_POST_INCREMENT, SYM_POST_DECREMENT: Highest precedence operator so that it will work even though it comes *after* a variable name (unlike other unaries, which come before).
-		, 4, 4, 86, 4, 4     // SYM_CPAREN, SYM_OPAREN (to simplify the code, parentheses must be lower than all operators in precedence).  L31: SYM_GET, SYM_CBRACKET, SYM_OBRACKET.  SYM_GET is listed here so YIELDS_AN_OPERAND(SYM_GET) == TRUE, allowing auto-concat to work for it even though it is positioned after its second operand (for simplicity, this is done for A.B, A.B:=C and A.B()).
+		, 86             // SYM_DOT
+		, 4,4,4,4,4,4    // SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE (to simplify the code, parentheses/brackets/braces must be lower than all operators in precedence).
 		, 6              // SYM_COMMA -- Must be just above SYM_OPAREN so it doesn't pop OPARENs off the stack.
 		, 7,7,7,7,7,7,7,7,7,7,7,7  // SYM_ASSIGN_*. THESE HAVE AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for cascading assignments such as x:=y:=1 to work.
 //		, 8              // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
@@ -9356,7 +9381,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 77, 77         // SYM_PRE_INCREMENT, SYM_PRE_DECREMENT (higher precedence than SYM_POWER because it doesn't make sense to evaluate power first because that would cause ++/-- to fail due to operating on a non-lvalue.
 //		, 78             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 //		, 82, 82         // RESERVED FOR SYM_POST_INCREMENT, SYM_POST_DECREMENT (which are listed higher above for the performance of YIELDS_AN_OPERAND().
-		, 86             // SYM_FUNC -- Must be of highest precedence so that it stays tightly bound together as though it's a single operand for use by other operators.
+		, 86             // SYM_FUNC -- Has special handling which ensures it stays tightly bound with its parameters as though it's a single operand for use by other operators; the actual value here is irrelevant.
 		, 30 // SYM_REGEXMATCH
 	};
 	// Most programming languages give exponentiation a higher precedence than unary minus and logical-not.
@@ -9611,14 +9636,11 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						++infix_count;
 					}
 					infix[infix_count].symbol = SYM_OPAREN; // MUST NOT REFER TO this_infix_item IN CASE ABOVE DID ++infix_count.
-					infix[infix_count].buf = cp; // Used to differentiate "obj[method_name](param)" from "obj[name] (string_to_concat)".
 					break;
 				case ')':
 					this_infix_item.symbol = SYM_CPAREN;
 					break;
 				case '[': // L31
-					if (  !(infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))  )
-						return LineError(_T("Unsupported use of \"[\""), FAIL, cp); // Reserve this for array construction; i.e. obj := [x,y,z]  (SYM_ASSIGN does not "yield an operand").
 					if (infix_count && infix[infix_count - 1].symbol == SYM_DOT // obj.x[ ...
 						&& *omit_leading_whitespace(cp + 1) != ']') // not obj.x[]
 					{
@@ -9631,8 +9653,16 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					{
 						if (  !(deref_new = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  )
 							return LineError(ERR_OUTOFMEM);
-						deref_new->func = NULL; // This will be overridden later, but must be initialized.
-						deref_new->param_count = 1; // Initially one parameter: the object.
+						if (  !(infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))  )
+						{	// Array constructor; e.g. x := [1,2,3]
+							deref_new->func = g_script.FindFunc(_T("Array"));
+							deref_new->param_count = 0;
+						}
+						else
+						{
+							deref_new->func = &g_ObjGet; // This may be overridden by standard_pop_into_postfix.
+							deref_new->param_count = 1; // Initially one parameter: the target object.
+						}
 						deref_new->marker = cp; // For error-reporting.
 						this_infix_item.deref = deref_new;
 					}
@@ -9645,7 +9675,22 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 				case ']': // L31
 					this_infix_item.symbol = SYM_CBRACKET;
-					this_infix_item.buf = cp; // Used to differentiate "obj[method_name](param)" from "obj[name] (string_to_concat)".
+					this_infix_item.buf = cp; // Used to detect "obj[method_name](param)".
+					break;
+				case '{':
+					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
+						return LineError(_T("Unexpected \"{\""));
+					if (  !(deref_new = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  )
+						return LineError(ERR_OUTOFMEM);
+					deref_new->func = g_script.FindFunc(_T("Object"));
+					deref_new->param_count = 0;
+					deref_new->marker = cp; // For error-reporting.
+					this_infix_item.deref = deref_new;
+					this_infix_item.symbol = SYM_OBRACE;
+					break;
+				case '}':
+					this_infix_item.symbol = SYM_CBRACE;
+					this_infix_item.buf = cp; // Set mainly so CBRACE can share code with CBRACKET.
 					break;
 				case '=':
 					if (cp1 == '=')
@@ -9876,7 +9921,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							for (op_end = cp; cisalnum(*op_end) || *op_end == '_'; ++op_end);
 
 							if (!_tcschr(EXPR_OPERAND_TERMINATORS, *op_end))
-								return LineError(_T("Invalid character in dotted identifier."), FAIL, op_end);
+								return LineError(_T("Only alphanumeric characters and underscore are allowed here."), FAIL, op_end);
 
 							// Rather than trying to predict how something like "obj.-1" will be handled, treat it as a syntax error.
 							// "obj.()" is allowed; it should mean "call the default method of obj" or "call the function object obj".
@@ -9908,8 +9953,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							}
 							else
 							{
-								new_symbol = SYM_DOT; // This will be converted to SYM_FUNC, either ObjGet or ObjSet.
-								new_deref->func = &g_ObjGet; // Set default.
+								new_symbol = SYM_DOT; // This will be changed to SYM_FUNC at a later stage.
+								new_deref->func = &g_ObjGet; // Set default; may be overridden by standard_pop_into_postfix.
 							}
 
 							// Output the operator next - after the operand to avoid auto-concat.
@@ -9947,7 +9992,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					if (op_end-cp == 3
 						&& (cp[0] == 'n' || cp[0] == 'N')
 						&& (  cp1 == 'o' ||   cp1 == 'O')
-						&& (cp[2] == 't' || cp[2] == 'T')) // "NOT" was found.
+						&& (cp[2] == 't' || cp[2] == 'T') // "NOT" was found.
+						&& *omit_leading_whitespace(op_end) != ':') // Exclude "not:", which is either the key in a key-value pair or a syntax error.
 					{
 						this_infix_item.symbol = SYM_LOWNOT;
 						cp = op_end; // Have the loop process whatever lies at op_end and beyond.
@@ -9960,7 +10006,7 @@ numeric_literal:
 					// because load-time validation would have caught them.  And any kind of unquoted alphanumeric
 					// characters (other than "NOT", which was detected above) wouldn't have reached this point
 					// because load-time pre-parsing would have marked it as a deref/var, not raw/literal text.
-					if (   ctoupper(op_end[-1]) == 'E' // v1.0.46.11: It looks like scientific notation...
+					if (   (*op_end == '-' || *op_end == '+') && ctoupper(op_end[-1]) == 'E' // v1.0.46.11: It looks like scientific notation...
 						&& !(cp[0] == '0' && ctoupper(cp[1]) == 'X') // ...and it's not a hex number (this check avoids falsely detecting hex numbers that end in 'E' as exponents). This line fixed in v1.0.46.12.
 						&& !(cp[0] == '-' && cp[1] == '0' && ctoupper(cp[2]) == 'X') // ...and it's not a negative hex number (this check avoids falsely detecting hex numbers that end in 'E' as exponents). This line added as a fix in v1.0.47.03.
 						)
@@ -10177,136 +10223,217 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 
 		// Since above didn't "continue", the current infix symbol is not an operand, but an operator or other symbol.
 
-		if (in_param_list && (stack_symbol == SYM_OPAREN && (infix_symbol == SYM_COMMA || infix_symbol == SYM_CPAREN)
-							|| stack_symbol == SYM_OBRACKET && (infix_symbol == SYM_COMMA || infix_symbol == SYM_CBRACKET)))
-		{
-			// Parameter counting and validation is done in this section rather than at an earlier stage
-			// to allow multiple parameters with object get/set and more accurate parameter validation.
-			// in_param_list points to the func deref which owns the current (inner-most) parameter list,
-			// as maintained by the sections which handle SYM_FUNC/SYM_CPAREN/OPAREN/CBRACKET/OBRACKET.
-			Func *func = in_param_list->func; // Can be NULL, e.g. for dynamic function calls.
-			if ( infix_symbol == SYM_COMMA || this_infix[-1].symbol != stack_symbol ) // i.e. not an empty parameter list.
-			{
-				// Ensure the function can accept this many parameters.
-				if ( func && in_param_list->param_count >= func->mParamCount )
-				{
-					if (!func->mIsVariadic)
-						return LineError(ERR_TOO_MANY_PARAMS, FAIL, in_param_list->marker);
-					func = NULL; // Indicate that no validation can be done for this parameter.
-				}
-
-				// Accessing this_infix[-1] here is necessarily safe since in_param_list is
-				// non-NULL, and that can only be the result of a previous SYM_OPAREN/BRACKET.
-				if ( this_infix[-1].symbol == SYM_COMMA || this_infix[-1].symbol == stack_symbol )
-				{
-					// Possible syntax error: (, or ,, or ,)
-					// This section allows empty parameters in static function-calls by automatically
-					// inserting the default parameter's default value.  Relies on param_count check above:
-					if ( infix_symbol == SYM_COMMA // Allow ,, with UDFs but not ,)
-						&& func && !func->mIsBuiltIn && in_param_list->param_count >= func->mMinParams )
-					{
-						FuncParam &param = func->mParam[in_param_list->param_count];
-						// Don't use this_infix since that would prevent two consecutive blank params:
-						//this_postfix = this_infix++;
-						++this_infix; // See below.
-						this_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
-						switch (param.default_type)
-						{
-						case PARAM_DEFAULT_STR:		this_postfix->symbol = SYM_STRING;	break;  // If user defines param="123" vs param=123, assume it should be PURE_NOT_NUMERIC.  If this were SYM_OPERAND, this_infix->buf must be set to NULL.  
-						case PARAM_DEFAULT_INT:		this_postfix->symbol = SYM_INTEGER;	break;
-						case PARAM_DEFAULT_FLOAT:	this_postfix->symbol = SYM_FLOAT;		break;
-						//case PARAM_DEFAULT_NONE: Should not be possible due to mMinParams check above.
-						}
-						this_postfix->value_int64 = param.default_int64; // Union copy.
-						this_postfix->circuit_token = NULL;
-						++postfix_count;
-						// Since this_infix is a function parameter comma and there are no more operators
-						// to pop off the stack, it does not need any further processing.  This method
-						// seems the only simple one since if we did not "consume" the comma here,
-						// this section would be re-entered in the next iteration, and the next, etc.
-						// We can't simply fall through to below since this_postfix ref must be updated.
-						++in_param_list->param_count;
-						continue;
-					}
-					else
-						return LineError(ERR_BLANK_PARAM, FAIL, in_param_list->marker);
-				}
-
-#ifdef ENABLE_DLLCALL
-				if (func) // i.e. not a dynamic function call.
-				{
-					if ( func->mIsBuiltIn )
-					{
-						if ( func->mBIF == &BIF_DllCall && in_param_list->param_count == 0 )
-						{
-							// Optimise DllCall by resolving function addresses at load-time where possible.
-							ExprTokenType &param1 = this_infix[-1];
-							// As mentioned above for this_infix[-1], accessing this_infix[-2] is safe
-							// because if [-1] is not SYM_OPAREN, there must be a SYM_OPAREN before it.
-							// Short-circuit evaluation prevents [-2] from being checked if [-1]
-							// is not SYM_STRING; furthermore, if [-1] was SYM_OPAREN, the param
-							// would be blank and validation above would have caught it and exited.
-							if ( param1.symbol == SYM_STRING && this_infix[-2].symbol == SYM_OPAREN )
-							{
-								// GetDllProcAddress returns NULL if:
-								//	- A file was specified and is not already loaded.
-								//	- The function could not be found.
-								//
-								// In the latter case, it might be useful to show a load-time error.
-								// However, this would require extra logic in GetDllProcAddress and
-								// might prevent some scripts from working; for instance, if a script
-								// calls an OS function and relies on ErrorLevel to tell it that
-								// function isn't implemented on this version of the OS.
-								//
-								void *function = GetDllProcAddress(param1.marker);
-								if (function)
-								{
-									param1.symbol = SYM_INTEGER;
-									param1.value_int64 = (__int64)function;
-								}
-							}
-						}
-					}
-				}
-#endif
-				// This is a SYM_COMMA or SYM_CPAREN at the end of a parameter.
-				++in_param_list->param_count;
-			}
-			// Not done because an object may define some useful behaviour for obj[] (no params):
-			//else if (stack_symbol == SYM_OBRACKET)
-			//	return LineError(ERR_TOO_FEW_PARAMS, FAIL, in_param_list->marker);
-
-			// Enforce mMinParams:
-			if (func && infix_symbol == SYM_CPAREN && in_param_list->param_count < func->mMinParams
-				&& in_param_list->is_function != DEREF_VARIADIC) // Check this last since it will probably be rare.
-				return LineError(ERR_TOO_FEW_PARAMS, FAIL, in_param_list->marker);
-		}
-
 		switch(infix_symbol)
 		{
 		case SYM_CPAREN: // Listed first for performance. It occurs frequently while emptying the stack to search for the matching open-parenthesis.
-			if (stack_symbol == SYM_OPAREN) // See comments near the bottom of this case.  The first open-paren on the stack must be the one that goes with this close-paren.
+		case SYM_CBRACKET:	// Requires similar handling to CPAREN.
+		case SYM_CBRACE:	// Requires similar handling to CPAREN.
+		case SYM_COMMA:		// COMMA is handled here with CPAREN/BRACKET/BRACE for parameter counting and validation.
+			if (infix_symbol != SYM_COMMA && !IS_OPAREN_MATCHING_CPAREN(stack_symbol, infix_symbol))
 			{
+				// This stack item is not the OPAREN/BRACKET/BRACE corresponding to this CPAREN/BRACKET/BRACE.
+				if (stack_symbol == SYM_BEGIN // This can happen with bad expressions like "Var := 1 ? (:) :" even though theoretically it should mean that paren is closed without having been opened (currently impossible due to load-time balancing).
+					|| IS_OPAREN_LIKE(stack_symbol)) // Mismatched parens/brackets/braces.
+				{
+					return LineError( (infix_symbol == SYM_CPAREN) ? ERR_MISSING_OPEN_PAREN
+									: (infix_symbol == SYM_CBRACKET) ? ERR_MISSING_OPEN_BRACKET
+									: ERR_MISSING_OPEN_BRACE );
+				}
+				else // This stack item is an operator.
+				{
+					goto standard_pop_into_postfix;
+					// By not incrementing i, the loop will continue to encounter SYM_CPAREN and thus
+					// continue to pop things off the stack until the corresponding OPAREN is reached.
+				}
+			}
+			// Otherwise, this infix item is a comma or a close-paren/bracket/brace whose corresponding
+			// open-paren/bracket/brace is now at the top of the stack.  If a function parameter has just
+			// been completed in postfix, we have extra work to do:
+			//  a) Maintain and validate the parameter count.
+			//  b) Where possible, allow empty parameters by inserting the parameter's default value.
+			//  c) Optimize DllCalls by pre-resolving common function names.
+			if (in_param_list && IS_OPAREN_LIKE(stack_symbol))
+			{
+				Func *func = in_param_list->func; // Can be NULL, e.g. for dynamic function calls.
+				if (infix_symbol == SYM_COMMA || this_infix[-1].symbol != stack_symbol) // i.e. not an empty parameter list.
+				{
+					// Ensure the function can accept this many parameters.
+					if (func && in_param_list->param_count >= func->mParamCount)
+					{
+						if (!func->mIsVariadic)
+							return LineError(ERR_TOO_MANY_PARAMS, FAIL, in_param_list->marker);
+						func = NULL; // Indicate that no validation can be done for this parameter.
+					}
+
+					// Accessing this_infix[-1] here is necessarily safe since in_param_list is
+					// non-NULL, and that can only be the result of a previous SYM_OPAREN/BRACKET.
+					if (this_infix[-1].symbol == SYM_COMMA || this_infix[-1].symbol == stack_symbol)
+					{
+						// Possible syntax error: (, or ,, or ,)
+						// This section allows empty parameters in static function-calls by automatically
+						// inserting the default parameter's default value.  Relies on param_count check above:
+						if (infix_symbol == SYM_COMMA // i.e. not ",)" since it is more likely to be an error.
+							&& func && !func->mIsBuiltIn && in_param_list->param_count >= func->mMinParams)
+						{
+							FuncParam &param = func->mParam[in_param_list->param_count];
+							// Don't use this_infix since that would prevent two consecutive blank params:
+							//this_postfix = this_infix++;
+							++this_infix; // See below.
+							this_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+							switch (param.default_type)
+							{
+							case PARAM_DEFAULT_STR:		this_postfix->symbol = SYM_STRING;	break;  // If user defines param="123" vs param=123, assume it should be PURE_NOT_NUMERIC.  If this were SYM_OPERAND, this_infix->buf must be set to NULL.  
+							case PARAM_DEFAULT_INT:		this_postfix->symbol = SYM_INTEGER;	break;
+							case PARAM_DEFAULT_FLOAT:	this_postfix->symbol = SYM_FLOAT;	break;
+							//case PARAM_DEFAULT_NONE: Should not be possible due to mMinParams check above.
+							}
+							this_postfix->value_int64 = param.default_int64; // Union copy.
+							this_postfix->circuit_token = NULL;
+							++postfix_count;
+							// Since this_infix is a function parameter comma and there are no more operators
+							// to pop off the stack, it does not need any further processing.  This method
+							// seems the only simple one since if we did not "consume" the comma here,
+							// this section would be re-entered in the next iteration, and the next, etc.
+							// We can't simply fall through to below since this_postfix ref must be updated.
+							++in_param_list->param_count;
+							continue;
+						}
+						else
+							return LineError(ERR_BLANK_PARAM, FAIL, in_param_list->marker);
+					}
+
+					#ifdef ENABLE_DLLCALL
+					if (func && func->mBIF == &BIF_DllCall // Implies mIsBuiltIn == true.
+						&& in_param_list->param_count == 0) // i.e. this is the end of the first param.
+					{
+						// Optimise DllCall by resolving function addresses at load-time where possible.
+						ExprTokenType &param1 = this_infix[-1]; // Safety note: this_infix is necessarily preceded by at least two tokens at this stage.
+						if (param1.symbol == SYM_STRING && this_infix[-2].symbol == SYM_OPAREN) // i.e. the first param is a single literal string and nothing else.
+						{
+							void *function = GetDllProcAddress(param1.marker);
+							if (function)
+							{
+								param1.symbol = SYM_INTEGER;
+								param1.value_int64 = (__int64)function;
+							}
+							// Otherwise, one of the following is true:
+							//  a) A file was specified and is not already loaded.  GetDllProcAddress avoids
+							//     loading any dlls since doing so may have undesired side-effects.  The file
+							//     might not exist at this stage, but might when DllCall is actually called.
+							//	b) The function could not be found.  This is not considered an error since the
+							//     absence of certain functions (e.g. IsWow64Process) may have some meaning to
+							//     the script; or the function may be non-essential.
+						}
+					}
+					#endif
+
+					// This is SYM_COMMA or SYM_CPAREN/BRACKET/BRACE at the end of a parameter.
+					++in_param_list->param_count;
+
+					if (stack_symbol == SYM_OBRACE && (in_param_list->param_count & 1)) // i.e. an odd number of parameters, which means no "key:" was specified.
+						return LineError(_T("Missing \"key:\" in object literal."));
+				}
+
+				// Enforce mMinParams:
+				if (func && infix_symbol == SYM_CPAREN && in_param_list->param_count < func->mMinParams
+					&& in_param_list->is_function != DEREF_VARIADIC) // Check this last since it will probably be rare.
+					return LineError(ERR_TOO_FEW_PARAMS, FAIL, in_param_list->marker);
+			}
+				
+			switch (infix_symbol)
+			{
+			case SYM_CPAREN: // implies stack_symbol == SYM_OPAREN.
+				// See comments near the bottom of this (outer) case.  The first open-paren on the stack must be the one that goes with this close-paren.
 				--stack_count; // Remove this open-paren from the stack, since it is now complete.
 				++this_infix;  // Since this pair of parentheses is done, move on to the next token in the infix expression.
 
-				in_param_list = (DerefType *)stack[stack_count]->buf; // L31: Restore in_param_list to the value it had when SYM_OPAREN was pushed onto the stack.
+				in_param_list = (DerefType *)stack[stack_count]->buf; // Restore in_param_list to the value it had when SYM_OPAREN was pushed onto the stack.
 
 				if (stack[stack_count-1]->symbol == SYM_FUNC) // i.e. topmost item on stack is SYM_FUNC.
 				{
 					goto standard_pop_into_postfix; // Within the postfix list, a function-call should always immediately follow its params.
 				}
-			}
-			else if (stack_symbol == SYM_BEGIN) // This can happen with bad expressions like "Var := 1 ? (:) :" even though theoretically it should mean that paren is closed without having been opened (currently impossible due to load-time balancing).
-				return LineError(ERR_MISSING_OPEN_PAREN); // Since this error string is used in other places, compiler string pooling should result in little extra memory needed for this line.
-			else if (stack_symbol == SYM_OBRACKET) // L31
-				return LineError(ERR_MISMATCHED_BRACKET_PAREN);
-			else // This stack item is an operator.
+				break;
+				
+			case SYM_CBRACKET: // implies stack_symbol == SYM_OBRACKET.
+			case SYM_CBRACE: // implies stack_symbol == SYM_OBRACE.
 			{
-				goto standard_pop_into_postfix;
-				// By not incrementing i, the loop will continue to encounter SYM_CPAREN and thus
-				// continue to pop things off the stack until the corresponding OPAREN is reached.
+				ExprTokenType &stack_top = *stack[stack_count - 1];
+				//--stack_count; // DON'T DO THIS.
+				stack_top.symbol = SYM_FUNC; // Change this OBRACKET to FUNC (see below).
+
+				if (this_infix->buf[1] == '(') // i.e. "]("
+				{
+					// Appears to be a method call with a computed method name, such as x[y](prms).
+					ASSERT(this_infix[1].symbol == SYM_CONCAT && this_infix[2].symbol == SYM_OPAREN);
+					if (infix_symbol == SYM_CBRACE // i.e. {...}(), seems best to reserve this for now.
+						|| in_param_list->func != &g_ObjGet // i.e. it's something like x := [y,z]().
+						|| in_param_list->param_count != 2) // i.e. the target object plus the method name = 2.
+						return LineError(_T("Unsupported method call syntax."), FAIL, in_param_list->marker); // Error message is a bit vague since this can be x[y,z]() or x.y[z]().
+					stack_top.deref->func = &g_ObjCall; // Override the default now that we know this is a method-call.
+					this_infix += 2; // Skip SYM_CBRACKET and SYM_CONCAT so this_infix points to SYM_OPAREN.
+					this_infix->buf = stack_top.buf; // This contains the old value of in_param_list.
+					// Push the open-paren over stack_top (which is now SYM_FUNC) so it will be handled
+					// like an ordinary function call when a comma or the close-paren is encountered.
+					STACK_PUSH(this_infix++);
+					// The rest of the parameter list will be handled like any other function call,
+					// except that in_param_list->param_count is already non-zero.
+					break;
+				}
+
+				++this_infix; // Since this pair of brackets is done, move on to the next token in the infix expression.
+				in_param_list = (DerefType *)stack_top.buf; // Restore in_param_list to the value it had when '[' was pushed onto the stack.					
+				goto standard_pop_into_postfix; // Pop the token (now SYM_FUNC) into the postfix array to immediately follow its params.
 			}
+
+			default: // case SYM_COMMA:
+				if (sPrecedence[stack_symbol] < sPrecedence[infix_symbol]) // i.e. stack_symbol is SYM_BEGIN or SYM_OPAREN/BRACKET/BRACE.
+				{
+					if (!in_param_list) // This comma separates statements rather than function parameters.
+					{
+						STACK_PUSH(this_infix);
+						// v1.0.46.01: Treat ", var = expr" as though the "=" is ":=", even if there's a ternary
+						// on the right side (for consistency and since such a ternary would be stand-alone,
+						// which is a rare use for ternary).  Also cascade to the right to treat things like
+						// x=y=z as assignments because its intuitiveness seems to outweigh other considerations.
+						for (fwd_infix = this_infix + 1;; fwd_infix += 2)
+						{
+							// The following is checked first to simplify things and avoid any chance of reading
+							// beyond the last item in the array. This relies on the fact that a SYM_INVALID token
+							// exists at the end of the array as a terminator.
+							if (fwd_infix->symbol == SYM_INVALID || fwd_infix[1].symbol != SYM_EQUAL) // Relies on short-circuit boolean order.
+								break; // No further checking needed because there's no qualified equal-sign.
+							// Otherwise, check what lies to the left of the equal-sign.
+							if (fwd_infix->symbol == SYM_VAR)
+							{
+								fwd_infix[1].symbol = SYM_ASSIGN;
+								continue; // Cascade to the right until the last qualified '=' operator is found.
+							}
+							// Otherwise, it's not a pure/normal variable.  But check if it's an environment var.
+							if (fwd_infix->symbol != SYM_DYNAMIC || !SYM_DYNAMIC_IS_VAR_NORMAL_OR_CLIP(fwd_infix))
+								break; // It qualifies as neither SYM_DYNAMIC nor SYM_VAR.
+							// Otherwise, this is an environment variable being assigned something, so treat
+							// it as a normal variable rather than an environment variable. This is because
+							// by tradition (and due to the fact that not many people would want it),
+							// direct assignment to environment variables isn't supported by anything other
+							// than EnvSet.
+							fwd_infix->symbol = SYM_VAR; // Convert dynamic to a normal variable, see above.
+							fwd_infix[1].symbol = SYM_ASSIGN;
+							// And now cascade to the right until the last qualified '=' operator is found.
+						}
+					}
+					else
+					{
+						// It's a function comma, so don't put it in stack because function commas aren't
+						// needed and they would probably prevent proper evaluation.  Only statement-separator
+						// commas need to go onto the stack.
+					}
+					++this_infix; // Regardless of the outcome above, move rightward to the next infix item.
+				}
+				else
+					goto standard_pop_into_postfix;
+				break;
+			} // end switch (infix_symbol)
 			break;
 
 		case SYM_FUNC:
@@ -10322,65 +10449,34 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				: NULL;					// Allow multi-statement commas at this level of parentheses.
 			STACK_PUSH(this_infix++);
 			break;
+			
+		case SYM_OBRACKET:
+		case SYM_OBRACE:
+			this_infix->buf = (LPTSTR)in_param_list; // Save current value on the stack with this SYM_OBRACKET.
+			in_param_list = this_infix->deref; // This deref holds param_count and other info for the current parameter list.
+			STACK_PUSH(this_infix++); // Push this '[' onto the stack to await its ']'.
+			break;
 
 		case SYM_DOT: // x.y
 			this_infix->symbol = SYM_FUNC;
 			STACK_PUSH(this_infix++);
 			goto standard_pop_into_postfix; // Pop it into postfix to immediately follow its operands.
 
-		case SYM_CBRACKET: // L31
-			// The basic outer structure of this section is based on SYM_CPAREN case above, see there for more comments.
-			if (stack_symbol == SYM_OBRACKET)
-			{
-				ExprTokenType &stack_top = *stack[stack_count - 1];
-				//--stack_count; // DON'T remove this SYM_OBRACKET from the stack.  It is left on the stack for reuse below.
-
-				// L37: Detect obj[method_name](params):
-				if (this_infix[1].symbol == SYM_CONCAT && this_infix[2].symbol == SYM_OPAREN && this_infix[2].buf == this_infix->buf + 1)
-				{	// The final check above ensures this is "](" and not "] (" or "] . (".
-					if (in_param_list->param_count != 2) // Require exactly one [parameter], excluding the target object.
-						return LineError(_T("Exactly one [ parameter ] required in this case"), FAIL, stack_top.deref->marker);
-					this_infix += 2; // Skip the SYM_CONCAT and SYM_CBRACKET.
-					// Treat this as a continuation of the parameter list for this operation, which is now known to be ObjCall.
-					// in_param_list must remain pointing to the same deref, which we will continue to use to count parameters.
-					stack_top.symbol = SYM_FUNC;
-					stack_top.deref->func = &g_ObjCall;
-					// Leave stack_top (now SYM_FUNC) on the stack, but also push an open-parenthesis over it:
-					this_infix->buf = stack_top.buf; // Points to the underlying/outer parameter list, which will be restored into in_param_list when this open-parenthesis is popped off the stack.
-					STACK_PUSH(this_infix++);
-					break;
-				}
-				
-				in_param_list = (DerefType *)stack_top.buf; // Restore in_param_list to the value it had when SYM_OBRACKET was pushed onto the stack.
-
-				++this_infix; // Finished processing SYM_CBRACKET.
-				
-				stack_top.symbol = SYM_FUNC;
-				stack_top.deref->func = &g_ObjGet; // This may be overridden by standard_pop_into_postfix.
-				// Pop stack_top into the postfix array, immediately after its params.
-				goto standard_pop_into_postfix;
-			}
-			else if (stack_symbol == SYM_BEGIN)
-				return LineError(ERR_MISSING_OPEN_BRACKET);
-			else if (stack_symbol == SYM_OPAREN)
-				return LineError(ERR_MISMATCHED_BRACKET_PAREN);
-			else
-				goto standard_pop_into_postfix;
-			break;
-
-		case SYM_OBRACKET: // L31
-			this_infix->buf = (LPTSTR)in_param_list; // Save current value on the stack with this SYM_OBRACKET.
-			in_param_list = this_infix->deref; // This deref holds param_count and other info for the current parameter list.
-			STACK_PUSH(this_infix++); // Push this '[' onto the stack to await its ']'.
-			break;
-
 		case SYM_IFF_ELSE: // i.e. this infix symbol is ':'.
 			if (stack_symbol == SYM_BEGIN) // An ELSE with no matching IF/THEN.
 				return LineError(_T("A \":\" is missing its \"?\"")); // Below relies on the above check having been done, to avoid underflow.
-			if (stack_symbol == SYM_OPAREN) // L34: Additional syntax validation.
+			if (in_param_list && stack_symbol == SYM_OBRACE)
+			{	// End of key in something like {x: y}.
+				++in_param_list->param_count;
+				++this_infix;
+				continue;
+			}
+			if (stack_symbol == SYM_OPAREN)
 				return LineError(_T("Missing \")\" before \":\""));
 			if (stack_symbol == SYM_OBRACKET)
 				return LineError(_T("Missing \"]\" before \":\""));
+			if (stack_symbol == SYM_OBRACE)
+				return LineError(_T("Missing \"}\" before \":\""));
 			// Otherwise:
 			this_postfix = STACK_POP; // There should be no danger of stack underflow in the following because SYM_BEGIN always exists at the bottom of the stack.
 			if (stack_symbol == SYM_IFF_THEN) // See comments near the bottom of this case. The first found "THEN" on the stack must be the one that goes with this "ELSE".
@@ -10408,6 +10504,8 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				return LineError(ERR_MISSING_CLOSE_PAREN); // Since this error string is used in other places, compiler string pooling should result in little extra memory needed for this line.
 			else if (stack_symbol == SYM_OBRACKET) // L31
 				return LineError(ERR_MISSING_CLOSE_BRACKET);
+			else if (stack_symbol == SYM_OBRACE)
+				return LineError(ERR_MISSING_CLOSE_BRACE);
 			else // Pop item off the stack, AND CONTINUE ITERATING, which will hit this line until stack is empty.
 				goto standard_pop_into_postfix;
 			// ALL PATHS ABOVE must continue or goto.
@@ -10493,55 +10591,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				// operand itself.
 				if (infix_symbol <= SYM_AND && infix_symbol >= SYM_IFF_THEN && postfix_count) // Check upper bound first for short-circuit performance.
 					postfix[postfix_count - 1]->circuit_token = this_infix; // In the case of IFF, this points the final result of the IFF's condition to its SYM_IFF_THEN (a different stage points the THEN to its ELSE).
-				if (infix_symbol != SYM_COMMA)
-					STACK_PUSH(this_infix);
-				else // infix_symbol == SYM_COMMA, but which type of comma (function vs. statement-separator).
-				{
-					if (!in_param_list) // This comma separates statements rather than function parameters.
-					{
-						STACK_PUSH(this_infix);
-						// v1.0.46.01: Treat ", var = expr" as though the "=" is ":=", even if there's a ternary
-						// on the right side (for consistency and since such a ternary would be stand-alone,
-						// which is a rare use for ternary).  Also cascade to the right to treat things like
-						// x=y=z as assignments because its intuitiveness seems to outweigh other considerations.
-						// The following comment is somewhat obsolete because it now IS done at loadtime:
-						// In a future version, the above transformations could be done at loadtime to improve
-						// runtime performance; but currently that seems more complex than it's worth (and
-						// loadtime performance and code size shouldn't be entirely ignored).
-						for (fwd_infix = this_infix + 1;; fwd_infix += 2)
-						{
-							// The following is checked first to simplify things and avoid any chance of reading
-							// beyond the last item in the array. This relies on the fact that a SYM_INVALID token
-							// exists at the end of the array as a terminator.
-							if (fwd_infix->symbol == SYM_INVALID || fwd_infix[1].symbol != SYM_EQUAL) // Relies on short-circuit boolean order.
-								break; // No further checking needed because there's no qualified equal-sign.
-							// Otherwise, check what lies to the left of the equal-sign.
-							if (fwd_infix->symbol == SYM_VAR)
-							{
-								fwd_infix[1].symbol = SYM_ASSIGN;
-								continue; // Cascade to the right until the last qualified '=' operator is found.
-							}
-							// Otherwise, it's not a pure/normal variable.  But check if it's an environment var.
-							if (fwd_infix->symbol != SYM_DYNAMIC || !SYM_DYNAMIC_IS_VAR_NORMAL_OR_CLIP(fwd_infix))
-								break; // It qualifies as neither SYM_DYNAMIC nor SYM_VAR.
-							// Otherwise, this is an environment variable being assigned something, so treat
-							// it as a normal variable rather than an environment variable. This is because
-							// by tradition (and due to the fact that not many people would want it),
-							// direct assignment to environment variables isn't supported by anything other
-							// than EnvSet.
-							fwd_infix->symbol = SYM_VAR; // Convert dynamic to a normal variable, see above.
-							fwd_infix[1].symbol = SYM_ASSIGN;
-							// And now cascade to the right until the last qualified '=' operator is found.
-						}
-					}
-					else
-					{
-						// It's a function comma, so don't put it in stack because function commas aren't
-						// needed and they would probably prevent proper evaluation.  Only statement-separator
-						// commas need to go onto the stack (see SYM_COMMA further below for comments).
-					}
-				}
-				++this_infix; // Regardless of the outcome above, move rightward to the next infix item.
+				STACK_PUSH(this_infix++); // Push this_infix onto the stack and move rightward to the next infix item.
 			}
 			else // Stack item's precedence >= infix's (if equal, left-to-right evaluation order is in effect).
 				goto standard_pop_into_postfix;

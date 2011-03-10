@@ -199,6 +199,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_MOUSE_SPEED _T("Mouse speed must be between 0 and ") MAX_MOUSE_SPEED_STR _T(".")
 #define ERR_VAR_IS_READONLY _T("Not allowed as an output variable.")
 #define ERR_INVALID_DOT _T("Unsupported use of \".\"")
+#define ERR_UNQUOTED_NON_ALNUM _T("Unquoted literals may only consist of alphanumeric characters/underscore.")
 
 #define WARNING_USE_UNSET_VARIABLE _T("Using value of uninitialized variable.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("Local variable with same name as global.")
@@ -871,7 +872,7 @@ public:
 	// "!~*&-+" as well as the parentheses chars "()":
 	#define EXPR_CORE _T("<>=/|^,:")
 	// The characters common to both EXPR_TELLTALES and EXPR_OPERAND_TERMINATORS:
-	#define EXPR_COMMON _T(" \t") EXPR_CORE _T("*&~!()[]")  // Space and Tab are included at the beginning for performance.  L31: Added [] for array-like syntax.
+	#define EXPR_COMMON _T(" \t") EXPR_CORE _T("*&~!()[]{}")  // Space and Tab are included at the beginning for performance.  L31: Added [] for array-like syntax.
 	#define CONTINUATION_LINE_SYMBOLS EXPR_CORE _T(".+-*&!?~") // v1.0.46.
 	// Characters whose presence in a mandatory-numeric param make it an expression for certain.
 	// + and - are not included here because legacy numeric parameters can contain unary plus or minus,
@@ -881,7 +882,7 @@ public:
 	#define EXPR_OPERAND_TERMINATORS_EX_DOT EXPR_COMMON _T("+-?") // L31: Used in a few places where '.' needs special treatment.
 	#define EXPR_OPERAND_TERMINATORS EXPR_OPERAND_TERMINATORS_EX_DOT _T(".") // L31: Used in expressions where '.' is always an operator.
 	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS _T("\"")
-	#define EXPR_ILLEGAL_CHARS _T("'\\;`{}") // Characters illegal in an expression.
+	#define EXPR_ILLEGAL_CHARS _T("'\\;`") // Characters illegal in an expression.
 	// The following HOTSTRING option recognizer is kept somewhat forgiving/non-specific for backward compatibility
 	// (e.g. scripts may have some invalid hotstring options, which are simply ignored).  This definition is here
 	// because it's related to continuation line symbols. Also, avoid ever adding "&" to hotstring options because
@@ -2866,6 +2867,7 @@ void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 void BIF_IsObject(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_ObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ObjGetInPlace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // See script_object.cpp for comments.
 void BIF_ObjAddRefRelease(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);

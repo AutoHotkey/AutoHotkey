@@ -43,6 +43,28 @@ void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 		aResultToken.marker = _T("");
 	}
 }
+
+
+//
+// BIF_ObjArray - Array(items*)
+//
+
+void BIF_ObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	Object *obj = Object::Create(NULL, 0);
+	if (obj)
+	{
+		if (!aParamCount || obj->InsertAt(0, 1, aParam, aParamCount))
+		{
+			aResultToken.symbol = SYM_OBJECT;
+			aResultToken.object = obj;
+			return;
+		}
+		obj->Release();
+	}
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+}
 	
 
 //
