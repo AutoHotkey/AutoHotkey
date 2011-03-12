@@ -84,31 +84,29 @@ void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int 
 		if (vt == VT_DISPATCH || vt == VT_UNKNOWN)
 		{
 			IUnknown *punk = (IUnknown *)llVal;
-			if (!punk)
+			if (punk)
 			{
-				// This check covers what is probably the most likely error.  Other invalid
-				// values and NULL values for other types, such as VT_ARRAY, are not checked.
-				ComError(-1);
-				return;
-			}
-			if (aParamCount == 1) // Implies above set vt = VT_DISPATCH.
-			{
-				IDispatch *pdisp;
-				if (SUCCEEDED(punk->QueryInterface(IID_IDispatch, (void **)&pdisp)))
+				if (aParamCount == 1) // Implies above set vt = VT_DISPATCH.
 				{
-					// Replace caller-specified interface pointer with pdisp.  If caller
-					// has requested we take responsibility for freeing it, do that now:
-					if (flags & ComObject::F_OWNVALUE)
-						punk->Release();
-					flags |= ComObject::F_OWNVALUE; // Don't AddRef() below since we own this reference.
-					llVal = (__int64)pdisp;
+					IDispatch *pdisp;
+					if (SUCCEEDED(punk->QueryInterface(IID_IDispatch, (void **)&pdisp)))
+					{
+						// Replace caller-specified interface pointer with pdisp.  If caller
+						// has requested we take responsibility for freeing it, do that now:
+						if (flags & ComObject::F_OWNVALUE)
+							punk->Release();
+						flags |= ComObject::F_OWNVALUE; // Don't AddRef() below since we own this reference.
+						llVal = (__int64)pdisp;
+					}
+					// Otherwise interpret it as IDispatch anyway, since caller has requested it and
+					// there are known cases where it works (such as some CLR COM callable wrappers).
 				}
-				// Otherwise interpret it as IDispatch anyway, since caller has requested it and
-				// there are known cases where it works (such as some CLR COM callable wrappers).
+				if ( !(flags & ComObject::F_OWNVALUE) )
+					punk->AddRef(); // "Copy" caller's reference.
+				// Otherwise caller (or above) indicated the object now owns this reference.
 			}
-			if ( !(flags & ComObject::F_OWNVALUE) )
-				punk->AddRef(); // "Copy" caller's reference.
-			// Otherwise caller (or above) indicated the object now owns this reference.
+			// Otherwise, NULL may have some meaning, so allow it.  If the
+			// script tries to invoke the object, it'll get a warning then.
 		}
 
 		aResultToken.symbol = SYM_OBJECT;
