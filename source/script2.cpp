@@ -13958,11 +13958,33 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				// at the same position.  But since we're here, it wasn't able to find such a match.  So just copy
 				// the current character over literally then advance to the next character to resume normal searching.
 				empty_string_is_not_a_match = 0; // Reset so that the next iteration starts off with the normal matching method.
+#ifdef UNICODE
+				// Need to avoid chopping a Unicode character into pieces. Further complicating this is the
+				// fact that the number of UTF-8 code units may differ from the number of UTF-16 code units.
+				WCHAR c = haystack_pos[0];
+				if (IS_SURROGATE_PAIR(c, haystack_pos[1])) // i.e. one supplementary character.
+				{
+					result[result_length++] = c;
+					result[result_length++] = haystack_pos[1];
+					aStartingOffset += 2; // Supplementary characters are in the range U+010000 to U+10FFFF,
+					starting_offset += 4; // which translates to four UTF-8 bytes.
+					continue;
+				}
+				else
+				{
+					// Since this isn't a surrogate pair, it's a code point in the range U+0000 to U+FFFF.
+					// Copy and advance one char in the original haystack (below) and the corresponding
+					// number of code units in the UTF-8 haystack.
+					if (c >= 0x800)
+						starting_offset += 3;
+					else if (c >= 0x80)
+						starting_offset += 2;
+					else
+						starting_offset += 1;
+				}
+#endif
 				result[result_length++] = *haystack_pos; // This can't overflow because the size calculations in a previous iteration reserved 3 bytes: 1 for this character, 1 for the possible LF that follows CR, and 1 for the terminator.
 				++aStartingOffset; // Advance to next candidate section of haystack.
-#ifdef UNICODE
-				++starting_offset; // Keep in sync.
-#endif
 				// v1.0.46.06: This following section was added to avoid finding a match between a CR and LF
 				// when PCRE_NEWLINE_ANY mode is in effect.  The fact that this is the only change for
 				// PCRE_NEWLINE_ANY relies on the belief that any pattern that matches the empty string in between
