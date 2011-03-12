@@ -874,7 +874,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				if (aParamCount)
 				{
 					LPTSTR param1 = TokenToString(*aParam[1], aResultToken.buf);
-					written = mFile.Write(param1, EXPR_TOKEN_LENGTH(aParam[1], param1));
+					written = mFile.Write(param1, (DWORD)EXPR_TOKEN_LENGTH(aParam[1], param1));
 				}
 				if (member == WriteLine)
 				{
