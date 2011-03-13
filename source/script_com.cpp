@@ -924,7 +924,7 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 		{
 			ExprTokenType &rvalue = *aParam[dims];
 			TokenToVariant(rvalue, var);
-			if (var.vt == VT_DISPATCH || var.vt == VT_UNKNOWN)
+			if ((var.vt == VT_DISPATCH || var.vt == VT_UNKNOWN) && var.punkVal)
 				var.punkVal->AddRef();
 			// Otherwise: it could be VT_BSTR, in which case TokenToVariant created a new BSTR which we want to
 			// put directly it into the array rather than copying it, since it would only be freed later anyway.
