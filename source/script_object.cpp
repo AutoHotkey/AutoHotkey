@@ -1115,33 +1115,50 @@ bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
 	return true; // Success.
 }
 
-bool Object::FieldType::Assign(ExprTokenType &val)
+bool Object::FieldType::Assign(ExprTokenType &aParam)
 {
-	// Currently only SYM_INTEGER/SYM_FLOAT inputs are stored as binary numbers
-	// since it seems best to preserve formatting of SYM_OPERAND/SYM_VAR (in case
-	// it is important), at the cost of performance in *some* cases.
-	if (IS_NUMERIC(val.symbol))
+	ExprTokenType temp, *val; // Seems more maintainable to use a copy; avoid any possible side-effects.
+	if (aParam.symbol == SYM_VAR)
 	{
-		Free(); // Free string or object, if applicable.
-		symbol = val.symbol; // Either SYM_INTEGER or SYM_FLOAT.  Set symbol *after* calling Free().
-		n_int64 = val.value_int64; // Also handles value_double via union.
+		// Primary reason for this check: If var has a cached binary integer, we want to use it and
+		// not the stringified copy of it.  It seems unlikely that scripts will depend on the string
+		// format of a literal number such as 0x123 or 00001, and even less likely for a number stored
+		// in an object (even implicitly via a variadic function).  If the value is eventually passed
+		// to a COM method call, it can be important that it is passed as VT_I4 and not VT_BSTR.
+		aParam.var->TokenToContents(temp);
+		val = &temp;
 	}
 	else
+		val = &aParam;
+
+	switch (val->symbol)
 	{
-		// String, object or var (can be a numeric string or var with cached binary number; see above).
-		IObject *val_as_obj;
-		if (val_as_obj = TokenToObject(val)) // SYM_OBJECT or SYM_VAR with var containing object.
+	case SYM_OPERAND:
+		if (val->buf)
 		{
-			Free(); // Free string or object, if applicable.
-			val_as_obj->AddRef();
-			symbol = SYM_OBJECT; // Set symbol *after* calling Free().
-			object = val_as_obj;
+			// Store this integer literal as a pure integer.  See above for comments.
+			Free();
+			symbol = SYM_INTEGER;
+			n_int64 = *(__int64 *)val->buf;
+			break;
 		}
-		else
-		{
-			// Handles setting symbol and allocating or resizing buffer as appropriate:
-			return Assign(TokenToString(val));
-		}
+		// FALL THROUGH to the next case.
+	case SYM_STRING:
+		return Assign(val->marker);
+	case SYM_INTEGER:
+	case SYM_FLOAT:
+		Free(); // Free string or object, if applicable.
+		symbol = val->symbol; // Either SYM_INTEGER or SYM_FLOAT.  Set symbol *after* calling Free().
+		n_int64 = val->value_int64; // Also handles value_double via union.
+		break;
+	case SYM_OBJECT:
+		Free(); // Free string or object, if applicable.
+		symbol = SYM_OBJECT; // Set symbol *after* calling Free().
+		object = val->object;
+		object->AddRef();
+		break;
+	default:
+		ASSERT(FALSE);
 	}
 	return true;
 }
