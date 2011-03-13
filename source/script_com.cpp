@@ -7,6 +7,10 @@
 #ifdef CONFIG_EXPERIMENTAL
 
 
+// IID__IObject -- .NET's System.Object:
+const IID IID__Object = {0x65074F7F, 0x63C0, 0x304E, 0xAF, 0x0A, 0xD5, 0x17, 0x41, 0xCB, 0x4A, 0x8D};
+
+
 void BIF_ComObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	HRESULT hr;
@@ -362,6 +366,24 @@ void BIF_ComObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 }
 
 
+bool SafeSetTokenObject(ExprTokenType &aToken, IObject *aObject)
+{
+	if (aObject)
+	{
+		aToken.symbol = SYM_OBJECT;
+		aToken.object = aObject;
+		return true;
+	}
+	else
+	{
+		aToken.symbol = SYM_STRING;
+		aToken.marker = _T("");
+		aToken.mem_to_free = NULL;
+		return false;
+	}
+}
+
+
 void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true)
 {
 	switch (aVar.vt)
@@ -417,28 +439,6 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 		aToken.symbol = SYM_FLOAT;
 		aToken.value_double = (double)aVar.fltVal;
 		break;
-	case VT_DISPATCH:
-		if (aVar.pdispVal)
-		{
-			if (aToken.object = new ComObject(aVar.pdispVal))
-			{
-				aToken.symbol = SYM_OBJECT;
-				if (aRetainVar && aVar.pdispVal)
-					aVar.pdispVal->AddRef();
-				//else we're taking ownership of the reference.
-				break;
-			}
-			// Above failed, so check if we need to release the pointer:
-			if (!aRetainVar && aVar.pdispVal)
-				aVar.pdispVal->Release();
-		}
-		// FALL THROUGH to the next case:
-	case VT_EMPTY:
-	case VT_NULL:
-		aToken.symbol = SYM_STRING;
-		aToken.marker = _T("");
-		aToken.mem_to_free = NULL;
-		break;
 	case VT_UNKNOWN:
 		if (aVar.punkVal)
 		{
@@ -447,23 +447,51 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 			{
 				if (!aRetainVar)
 					aVar.punkVal->Release();
-				aToken.symbol = SYM_OBJECT;
-				aToken.object = new ComEnum(penum);
+				SafeSetTokenObject(aToken, new ComEnum(penum));
+				break;
+			}
+			IDispatch *pdisp;
+			// .NET objects implement the COM IDispatch interface, but unfortunately
+			// they don't respond to QueryInterface() for said interface. So instead
+			// we have to query for the _Object interface, which itself inherits from
+			// IDispatch.
+			if (SUCCEEDED(aVar.punkVal->QueryInterface(IID__Object, (void**) &pdisp)))
+			{
+				if (!aRetainVar)
+					aVar.punkVal->Release();
+				SafeSetTokenObject(aToken, new ComObject(pdisp));
 				break;
 			}
 		}
-		else
+		// FALL THROUGH to the next case:
+	case VT_DISPATCH:
+		if (aVar.punkVal)
 		{
-			aToken.symbol = SYM_STRING;
-			aToken.marker = _T("");
-			aToken.mem_to_free = NULL;
+			if (SafeSetTokenObject(aToken, new ComObject((__int64)aVar.punkVal, aVar.vt)))
+			{
+				if (aRetainVar)
+					// Caller is keeping their ref, so we AddRef.
+					aVar.punkVal->AddRef();
+			}
+			else
+			{
+				if (!aRetainVar)
+					// Above failed, but caller doesn't want their ref, so release it.
+					aVar.punkVal->Release();
+			}
 			break;
 		}
-		// FALL THROUGH to the default case:
+		// FALL THROUGH to the next case:
+	case VT_EMPTY:
+	case VT_NULL:
+		aToken.symbol = SYM_STRING;
+		aToken.marker = _T("");
+		aToken.mem_to_free = NULL;
+		break;
 	default:
 		{
 			VARIANT var = {0};
-			if (aVar.vt != VT_UNKNOWN && aVar.vt < VT_ARRAY // i.e. not byref or an array.
+			if (aVar.vt < VT_ARRAY // i.e. not byref or an array.
 				&& SUCCEEDED(VariantChangeType(&var, &aVar, 0, VT_BSTR))) // Convert it to a BSTR.
 			{
 				// Recursive call to handle conversions and memory management correctly:
@@ -471,8 +499,8 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 			}
 			else
 			{
-				aToken.symbol = SYM_OBJECT;
-				aToken.object = new ComObject((__int64)aVar.parray, aVar.vt, aRetainVar ? 0 : ComObject::F_OWNVALUE);
+				SafeSetTokenObject(aToken,
+					new ComObject((__int64)aVar.parray, aVar.vt, aRetainVar ? 0 : ComObject::F_OWNVALUE));
 			}
 		}
 	}
