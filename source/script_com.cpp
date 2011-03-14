@@ -32,6 +32,7 @@ void BIF_ComObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int 
 	}
 }
 
+
 void BIF_ComObjGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	HRESULT hr;
@@ -49,6 +50,7 @@ void BIF_ComObjGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 		ComError(hr);
 	}
 }
+
 
 void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
@@ -156,6 +158,7 @@ void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int 
 		ComError(hr);
 	}
 }
+
 
 void BIF_ComObjConnect(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
@@ -272,12 +275,14 @@ void BIF_ComObjConnect(ExprTokenType &aResultToken, ExprTokenType *aParam[], int
 	ComError(-1);
 }
 
+
 void BIF_ComObjError(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	aResultToken.value_int64 = g_ComErrorNotify;
 	if (aParamCount && TokenIsPureNumeric(*aParam[0]))
 		g_ComErrorNotify = (TokenToInt64(*aParam[0]) != 0);
 }
+
 
 void BIF_ComObjTypeOrValue(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
@@ -340,6 +345,7 @@ void BIF_ComObjTypeOrValue(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	}
 }
 
+
 void BIF_ComObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	VARTYPE vt = (VARTYPE)TokenToInt64(*aParam[0]);
@@ -363,6 +369,57 @@ void BIF_ComObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
 	}
+}
+
+
+void BIF_ComObjQuery(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	IUnknown *punk = NULL;
+	ComObject *obj;
+	HRESULT hr;
+	
+	aResultToken.value_int64 = 0; // Set default; on 32-bit builds, only the low 32 bits may be set below.
+
+	if (obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0])))
+	{
+		// We were passed a ComObject, but does it contain an interface pointer?
+		if (obj->mVarType == VT_UNKNOWN || obj->mVarType == VT_DISPATCH)
+			punk = obj->mUnknown;
+	}
+	if (!punk)
+	{
+		// Since it wasn't a valid ComObject, it should be a raw interface pointer.
+		punk = (IUnknown *)TokenToInt64(*aParam[0]);
+		if (punk < (IUnknown *)65536) // Error-detection: the first 64KB of address space is always invalid.
+		{
+			g->LastError = E_INVALIDARG; // For consistency.
+			return;
+		}
+	}
+
+	if (aParamCount > 2) // QueryService(obj, SID, IID)
+	{
+		GUID sid, iid;
+		if (   SUCCEEDED(hr = CLSIDFromString(CStringWCharFromTCharIfNeeded(TokenToString(*aParam[1])), &sid))
+			&& SUCCEEDED(hr = CLSIDFromString(CStringWCharFromTCharIfNeeded(TokenToString(*aParam[2])), &iid))   )
+		{
+			IServiceProvider *pprov;
+			if (SUCCEEDED(hr = punk->QueryInterface<IServiceProvider>(&pprov)))
+			{
+				hr = pprov->QueryService(sid, iid, (void **)&aResultToken.value_int64);
+			}
+		}
+	}
+	else // QueryInterface(obj, IID)
+	{
+		GUID iid;
+		if (SUCCEEDED(hr = CLSIDFromString(CStringWCharFromTCharIfNeeded(TokenToString(*aParam[1])), &iid)))
+		{
+			hr = punk->QueryInterface(iid, (void **)&aResultToken.value_int64);
+		}
+	}
+
+	g->LastError = hr;
 }
 
 

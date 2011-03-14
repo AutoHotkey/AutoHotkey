@@ -7683,6 +7683,12 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 			min_params = 2;
 			max_params = 9; // up to 8 dimensions
 		}
+		else if (!_tcsicmp(suffix, _T("Query")))
+		{
+			bif = BIF_ComObjQuery;
+			min_params = 2;
+			max_params = 3;
+		}
 		else
 		{
 			bif = BIF_ComObjActive;
