@@ -1035,7 +1035,9 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 				// Free existing value.
 				if (item_type == VT_UNKNOWN || item_type == VT_DISPATCH)
 				{
-					((IUnknown **)item)[0]->Release();
+					IUnknown *punk = ((IUnknown **)item)[0];
+					if (punk)
+						punk->Release();
 				}
 				else if (item_type == VT_BSTR)
 				{
