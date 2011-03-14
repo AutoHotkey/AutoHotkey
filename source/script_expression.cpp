@@ -414,6 +414,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			// See PostExecFunctionCall() itself for comments.
 			g_Debugger.PostExecFunctionCall(this);
 #endif
+			g_script.mCurrLine = this; // For error-reporting.
 
 			if (IS_NUMERIC(this_token.symbol) || this_token.symbol == SYM_OBJECT) // No need for make_result_persistent or early Assign(). Any numeric result can be considered final because it's already stored in permanent memory (namely the token itself).  L31: This also applies to SYM_OBJECT.
 			{
