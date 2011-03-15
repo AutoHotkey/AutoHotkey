@@ -7655,7 +7655,10 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	{
 		suffix = func_name + 6;
 		if	(!_tcsicmp(suffix, _T("Create")))
+		{
 			bif = BIF_ComObjCreate;
+			max_params = 2;
+		}
 		else if	(!_tcsicmp(suffix, _T("Get")))
 			bif = BIF_ComObjGet;
 		else if	(!_tcsicmp(suffix, _T("Connect")))
