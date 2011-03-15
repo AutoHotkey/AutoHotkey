@@ -9010,17 +9010,13 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			//		FileAppend, %line%	; This line could be considered an error, though it works in practice.
 			//	}
 			//
-			if (line->mAttribute)
-				// Keep track of whether we're in a loop so Break/Continue can be validated:
-				loop_type = line->mAttribute;
 
 			// Check if the IF's action-line is something we want to recurse.  UPDATE: Always
 			// recurse because other line types, such as Goto and Gosub, need to be preparsed
-			// by this function even if they are the single-line actions of an IF or an ELSE:
-			// Recurse this line rather than the next because we want
-			// the called function to recurse again if this line is a ACT_BLOCK_BEGIN
-			// or is itself an IF:
-			line_temp = PreparseIfElse(line_temp, ONLY_ONE_LINE, loop_type);
+			// by this function even if they are the single-line actions of an IF or an ELSE.
+			// Recurse this line rather than the next because we want the called function to
+			// recurse again if this line is a ACT_BLOCK_BEGIN or is itself an IF.
+			line_temp = PreparseIfElse(line_temp, ONLY_ONE_LINE, line->mAttribute ? line->mAttribute : loop_type);
 			// If not end-of-script or error, line_temp is now either:
 			// 1) If this if's/loop's action was a BEGIN_BLOCK: The line after the end of the block.
 			// 2) If this if's/loop's action was another IF or LOOP:
