@@ -1418,7 +1418,7 @@ ResultType Line::FileRecycle(LPTSTR aFilePattern)
 
 	FileOp.pFrom = szFileTemp;
 	FileOp.wFunc = FO_DELETE;
-	FileOp.fFlags = FOF_SILENT | FOF_ALLOWUNDO | FOF_NOCONFIRMATION;
+	FileOp.fFlags = FOF_SILENT | FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING;
 
 	// SHFileOperation() returns 0 on success:
 	return g_ErrorLevel->Assign(SHFileOperation(&FileOp) ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
