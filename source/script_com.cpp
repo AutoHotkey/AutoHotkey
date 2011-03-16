@@ -600,16 +600,20 @@ void AssignVariant(Var &aArg, VARIANT &aVar, bool aRetainVar = true)
 	}
 	ExprTokenType token;
 	VariantToToken(aVar, token, aRetainVar);
-	if (token.symbol == SYM_OBJECT)
+	switch (token.symbol)
 	{
-		aArg.AssignSkipAddRef(token.object);
-	}
-	else
-	{
+	case SYM_STRING:  // VT_BSTR was handled above, but VariantToToken coerces unhandled types to strings.
+		if (token.mem_to_free)
+			aArg.AcceptNewMem(token.mem_to_free, token.marker_length);
+		else
+			aArg.Assign();
+		break;
+	case SYM_OBJECT:
+		aArg.AssignSkipAddRef(token.object); // Let aArg take responsibility for it.
+		break;
+	default:
 		aArg.Assign(token);
-		// VT_BSTR was handled above, but VariantToToken coerces unhandled types to strings:
-		if (token.symbol == SYM_STRING && token.mem_to_free)
-			free(token.mem_to_free);
+		break;
 	}
 }
 
@@ -970,7 +974,18 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 		if (*name == '_')
 			++name;
 		LONG retval;
-		if (!_tcsicmp(name, _T("MaxIndex")))
+		if (!_tcsicmp(name, _T("NewEnum")))
+		{
+			ComArrayEnum *enm;
+			if (SUCCEEDED(hr = ComArrayEnum::Begin(this, enm)))
+			{
+				aResultToken.symbol = SYM_OBJECT;
+				aResultToken.object = enm;
+				g->LastError = 0;
+				return OK;
+			}
+		}
+		else if (!_tcsicmp(name, _T("MaxIndex")))
 			hr = SafeArrayGetUBound(psa, aParamCount > 1 ? (UINT)TokenToInt64(*aParam[1]) : 1, &retval);
 		else if (!_tcsicmp(name, _T("MinIndex")))
 			hr = SafeArrayGetLBound(psa, aParamCount > 1 ? (UINT)TokenToInt64(*aParam[1]) : 1, &retval);
@@ -1123,6 +1138,67 @@ int ComEnum::Next(Var *aOutput, Var *aOutputType)
 		return true;
 	}
 	return	false;
+}
+
+
+HRESULT ComArrayEnum::Begin(ComObject *aArrayObject, ComArrayEnum *&aEnum)
+{
+	HRESULT hr;
+	SAFEARRAY *psa = aArrayObject->mArray;
+	char *arrayData, *arrayEnd;
+	long lbound, ubound;
+
+	if (SafeArrayGetDim(psa) != 1)
+		return E_NOTIMPL;
+	
+	if (   SUCCEEDED(hr = SafeArrayGetLBound(psa, 1, &lbound))
+		&& SUCCEEDED(hr = SafeArrayGetUBound(psa, 1, &ubound))
+		&& SUCCEEDED(hr = SafeArrayAccessData(psa, (void **)&arrayData))   )
+	{
+		VARTYPE arrayType = aArrayObject->mVarType & VT_TYPEMASK;
+		UINT elemSize = SafeArrayGetElemsize(psa);
+		arrayEnd = arrayData + (ubound - lbound) * elemSize;
+		if (aEnum = new ComArrayEnum(aArrayObject, arrayData, arrayEnd, elemSize, arrayType))
+		{
+			aArrayObject->AddRef(); // Keep obj alive until enumeration completes.
+		}
+		else
+		{
+			SafeArrayUnaccessData(psa);
+			hr = E_OUTOFMEMORY;
+		}
+	}
+	return hr;
+}
+
+ComArrayEnum::~ComArrayEnum()
+{
+	SafeArrayUnaccessData(mArrayObject->mArray); // Counter the lock done by ComArrayEnum::Begin.
+	mArrayObject->Release();
+}
+
+int ComArrayEnum::Next(Var *aOutput, Var *aOutputType)
+{
+	if ((mPointer += mElemSize) <= mEnd)
+	{
+		VARIANT var = {0};
+		if (mType == VT_VARIANT)
+		{
+			// Make shallow copy of the VARIANT item.
+			memcpy(&var, mPointer, sizeof(VARIANT));
+		}
+		else
+		{
+			// Build VARIANT with shallow copy of the item.
+			var.vt = mType;
+			memcpy(&var.lVal, mPointer, mElemSize);
+		}
+		// Copy value into var.
+		AssignVariant(*aOutput, var);
+		aOutputType->Assign(var.vt);
+		return true;
+	}
+	return false;
 }
 
 

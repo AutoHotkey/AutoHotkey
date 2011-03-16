@@ -109,6 +109,25 @@ public:
 };
 
 
+class ComArrayEnum : public EnumBase
+{
+	ComObject *mArrayObject;
+	char *mPointer, *mEnd;
+	UINT mElemSize;
+	VARTYPE mType;
+
+	ComArrayEnum(ComObject *aObj, char *aData, char *aDataEnd, UINT aElemSize, VARTYPE aType)
+		: mArrayObject(aObj), mPointer(aData - aElemSize), mEnd(aDataEnd), mElemSize(aElemSize), mType(aType)
+	{
+	}
+
+public:
+	static HRESULT Begin(ComObject *aArrayObject, ComArrayEnum *&aOutput);
+	int Next(Var *aOutput, Var *aOutputType);
+	~ComArrayEnum();
+};
+
+
 void ComError(HRESULT, LPTSTR = _T(""), EXCEPINFO* = NULL);
 
 bool SafeSetTokenObject(ExprTokenType &aToken, IObject *aObject);
