@@ -981,23 +981,31 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 			{
 				aResultToken.symbol = SYM_OBJECT;
 				aResultToken.object = enm;
-				g->LastError = 0;
-				return OK;
 			}
 		}
-		else if (!_tcsicmp(name, _T("MaxIndex")))
-			hr = SafeArrayGetUBound(psa, aParamCount > 1 ? (UINT)TokenToInt64(*aParam[1]) : 1, &retval);
-		else if (!_tcsicmp(name, _T("MinIndex")))
-			hr = SafeArrayGetLBound(psa, aParamCount > 1 ? (UINT)TokenToInt64(*aParam[1]) : 1, &retval);
-		else
-			hr = DISP_E_UNKNOWNNAME; // Seems slightly better than ignoring the call.
-		g->LastError = hr;
-		if (SUCCEEDED(hr))
+		else if (!_tcsicmp(name, _T("Clone")))
 		{
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = retval;
+			SAFEARRAY *clone;
+			if (SUCCEEDED(hr = SafeArrayCopy(psa, &clone)))
+				if (!SafeSetTokenObject(aResultToken, new ComObject((__int64)clone, mVarType, F_OWNVALUE)))
+					SafeArrayDestroy(clone);
 		}
 		else
+		{
+			if (!_tcsicmp(name, _T("MaxIndex")))
+				hr = SafeArrayGetUBound(psa, aParamCount > 1 ? (UINT)TokenToInt64(*aParam[1]) : 1, &retval);
+			else if (!_tcsicmp(name, _T("MinIndex")))
+				hr = SafeArrayGetLBound(psa, aParamCount > 1 ? (UINT)TokenToInt64(*aParam[1]) : 1, &retval);
+			else
+				hr = DISP_E_UNKNOWNNAME; // Seems slightly better than ignoring the call.
+			if (SUCCEEDED(hr))
+			{
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = retval;
+			}
+		}
+		g->LastError = hr;
+		if (FAILED(hr))
 			ComError(hr);
 		return OK;
 	}
