@@ -538,6 +538,7 @@ public:
 	#define DISPLAY_FUNC_ERROR 2
 	static ResultType ValidateName(LPCTSTR aName, bool aIsRuntime = false, int aDisplayError = DISPLAY_VAR_ERROR);
 
+	LPTSTR ObjectToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline)
 	// Caller must ensure that Type() == VAR_NORMAL.
 	// aBufSize is an int so that any negative values passed in from caller are not lost.
@@ -551,12 +552,12 @@ public:
 		// (it seems more useful and intuitive).
 		var.UpdateContents(); // Update mContents and mLength for use below.
 		LPTSTR aBuf_orig = aBuf;
-		if(!var.HasObject())
-		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[%Iu of %Iu]: %-1.60s%s"), mName // mName not var.mName (see comment above).
-			, var._CharLength(), var._CharCapacity() ? (var._CharCapacity() - 1) : 0  // Use -1 since it makes more sense to exclude the terminator.
-			, var.mCharContents, var._CharLength() > 60 ? _T("...") : _T(""));
+		if (var.IsObject())
+			aBuf = ObjectToText(aBuf, aBufSize);
 		else
-			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[Object]: 0x%p"), mName, var.Object());
+			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[%Iu of %Iu]: %-1.60s%s"), mName // mName not var.mName (see comment above).
+				, var._CharLength(), var._CharCapacity() ? (var._CharCapacity() - 1) : 0  // Use -1 since it makes more sense to exclude the terminator.
+				, var.mCharContents, var._CharLength() > 60 ? _T("...") : _T(""));
 		if (aAppendNewline && BUF_SPACE_REMAINING >= 2)
 		{
 			*aBuf++ = '\r';
