@@ -375,6 +375,45 @@ void BIF_ComObjTypeOrValue(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 }
 
 
+void BIF_ComObjFlags(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	ComObject *obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0]));
+	if (!obj)
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+		return;
+	}
+	if (aParamCount > 1)
+	{
+		USHORT flags, mask;
+		if (aParamCount > 2)
+		{
+			flags = (USHORT)TokenToInt64(*aParam[1]);
+			mask = (USHORT)TokenToInt64(*aParam[2]);
+		}
+		else
+		{
+			__int64 bigflags = TokenToInt64(*aParam[1]);
+			if (bigflags < 0)
+			{
+				// Remove specified -flags.
+				flags = 0;
+				mask = (USHORT)-bigflags;
+			}
+			else
+			{
+				// Add only specified flags.
+				flags = (USHORT)bigflags;
+				mask = flags;
+			}
+		}
+		obj->mFlags = (obj->mFlags & ~mask) | (flags & mask);
+	}
+	aResultToken.value_int64 = obj->mFlags;
+}
+
+
 void BIF_ComObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	VARTYPE vt = (VARTYPE)TokenToInt64(*aParam[0]);
