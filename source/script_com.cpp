@@ -1063,10 +1063,19 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 			// put directly it into the array rather than copying it, since it would only be freed later anyway.
 			if (item_type == VT_VARIANT)
 			{
-				// Free existing value.
-				VariantClear((VARIANTARG *)item);
-				// Write new value (shallow copy).
-				memcpy(item, &var, sizeof(VARIANT));
+				if ((var.vt & ~VT_TYPEMASK) == VT_ARRAY // Implies rvalue contains a ComObject.
+					&& (((ComObject *)rvalue.object)->mFlags & F_OWNVALUE))
+				{
+					// Copy array since both sides will call Destroy().
+					hr = VariantCopy((VARIANTARG *)item, &var);
+				}
+				else
+				{
+					// Free existing value.
+					VariantClear((VARIANTARG *)item);
+					// Write new value (shallow copy).
+					memcpy(item, &var, sizeof(VARIANT));
+				}
 			}
 			else
 			{
