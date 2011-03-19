@@ -15135,14 +15135,6 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 	// Launching nothing is always a success:
 	if (!aAction || !*aAction) return OK;
 
-	size_t aAction_length = _tcslen(aAction);
-	if (aAction_length >= LINE_SIZE) // Max length supported by CreateProcess() is 32 KB. But there hasn't been any demand to go above 16 KB, so seems little need to support it (plus it reduces risk of stack overflow).
-	{
-        if (aDisplayErrors)
-			ScriptError(_T("String too long.") ERR_ABORT); // Short msg since so rare.
-		return FAIL;
-	}
-
 	// Make sure this is set to NULL because CreateProcess() won't work if it's the empty string:
 	if (aWorkingDir && !*aWorkingDir)
 		aWorkingDir = NULL;
@@ -15211,6 +15203,14 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 			ScriptError(_T("System verbs unsupported with RunAs.") ERR_ABORT);
 		return FAIL;
 	}
+	
+	size_t action_length = _tcslen(shell_action); // shell_action == aAction if shell_verb == NULL.
+	if (action_length >= LINE_SIZE) // Max length supported by CreateProcess() is 32 KB. But there hasn't been any demand to go above 16 KB, so seems little need to support it (plus it reduces risk of stack overflow).
+	{
+        if (aDisplayErrors)
+			ScriptError(_T("String too long.") ERR_ABORT); // Short msg since so rare.
+		return FAIL;
+	}
 
 	// If the caller originally gave us NULL for aParams, always try CreateProcess() before
 	// trying ShellExecute().  This is because ShellExecute() is usually a lot slower.
@@ -15234,12 +15234,12 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		LPTSTR command_line;
 		if (aParams && *aParams)
 		{
-			command_line = talloca(aAction_length + _tcslen(aParams) + 10); // +10 to allow room for space, terminator, and any extra chars that might get added in the future.
+			command_line = talloca(action_length + _tcslen(aParams) + 10); // +10 to allow room for space, terminator, and any extra chars that might get added in the future.
 			_stprintf(command_line, _T("%s %s"), aAction, aParams);
 		}
 		else // We're running the original action from caller.
 		{
-			command_line = talloca(aAction_length + 1);
+			command_line = talloca(action_length + 1);
         	_tcscpy(command_line, aAction); // CreateProcessW() requires modifiable string.  Although non-W version is used now, it feels safer to make it modifiable anyway.
 		}
 
@@ -15327,7 +15327,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 // the action in quote marks.
 			// Make a copy so that we can modify it (i.e. split it into action & params).
 			// Using talloca ensures it will stick around until the function exits:
-			LPTSTR parse_buf = talloca(aAction_length + 1); // aAction_length might be a little larger than necessary if shell_verb was set, but that seems better than calling _tcslen again.
+			LPTSTR parse_buf = talloca(action_length + 1);
 			_tcscpy(parse_buf, shell_action);
 			LPTSTR action_extension, action_end;
 			// Let quotation marks be used to remove all ambiguity:
