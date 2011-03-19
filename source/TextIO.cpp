@@ -277,6 +277,10 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 
 			if (dst_size == 1)
 			{
+				// \r\n has already been handled above, even if !(mFlags & EOL_CRLF), so \r at
+				// this point can only be \r on its own:
+				if (*dst == '\r' && (mFlags & EOL_ORPHAN_CR))
+					*dst = '\n';
 				if (*dst == '\n')
 				{
 					if (--aNumLines == 0)
@@ -288,12 +292,6 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 							aBuf[target_used] = '\0';
 						return target_used;
 					}
-				}
-				// \r\n has already been handled above, even if !(mFlags & EOL_CRLF), so \r at
-				// this point can only be \r on its own:
-				else if (*dst == '\r' && (mFlags & EOL_ORPHAN_CR))
-				{
-					*dst = '\n';
 				}
 
 				// If we got to this point, dst contains a single TCHAR:
