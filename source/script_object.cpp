@@ -1155,7 +1155,9 @@ bool Object::FieldType::Assign(ExprTokenType &aParam)
 		Free(); // Free string or object, if applicable.
 		symbol = SYM_OBJECT; // Set symbol *after* calling Free().
 		object = val->object;
-		object->AddRef();
+		if (aParam.symbol != SYM_VAR)
+			object->AddRef();
+		// Otherwise, take ownership of the ref in temp.
 		break;
 	default:
 		ASSERT(FALSE);
