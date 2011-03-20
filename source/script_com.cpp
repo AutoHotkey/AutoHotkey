@@ -1252,7 +1252,8 @@ int ComArrayEnum::Next(Var *aOutput, Var *aOutputType)
 		}
 		// Copy value into var.
 		AssignVariant(*aOutput, var);
-		aOutputType->Assign(var.vt);
+		if (aOutputType)
+			aOutputType->Assign(var.vt);
 		return true;
 	}
 	return false;
