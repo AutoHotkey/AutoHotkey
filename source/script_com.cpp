@@ -452,6 +452,7 @@ void BIF_ComObjQuery(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 		if (punk < (IUnknown *)65536) // Error-detection: the first 64KB of address space is always invalid.
 		{
 			g->LastError = E_INVALIDARG; // For consistency.
+			ComError(-1);
 			return;
 		}
 	}
