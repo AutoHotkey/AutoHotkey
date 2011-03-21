@@ -14,19 +14,21 @@ freely, without restriction.
 
 #include "stdafx.h"
 
+#include "defines.h"
+#include "globaldata.h" // for access to many global vars
+#include "script_object.h"
+#include "script_com.h"
+#include "TextIO.h"
+//#include "Debugger.h" // included by globaldata.h
+
 #ifdef CONFIG_DEBUGGER
 
 // helper macro for WriteF()
 #define U4T(s) CStringUTF8FromTChar(s).GetString()
 
-#include "defines.h"
 #include <ws2tcpip.h>
 #include <wspiapi.h> // for getaddrinfo() on versions of Windows earlier than XP.
 #include <stdarg.h>
-//#include "Debugger.h" // included by globaldata.h
-#include "globaldata.h" // for access to many global vars
-#include "TextIO.h"
-#include "script_com.h"
 #include <typeinfo> // for typeid().
 
 Debugger g_Debugger;
