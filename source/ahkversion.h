@@ -1,2 +1,2 @@
-#define AHK_VERSION "1.0.96.00"
-#define AHK_VERSION_N 1,0,96,0
+#define AHK_VERSION "2.0-alpha" // Build number and commit id are added by script.
+#define AHK_VERSION_N 2,0,0,0
