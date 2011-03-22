@@ -3621,11 +3621,13 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						break;
 					case '(':
 					case '[': // L31: For this purpose, () and [] are equivalent. If they aren't balanced properly, a later stage will abort/exit.
+					case '{':
 						if (!in_quotes) // Literal parentheses inside a quoted string should not be counted for this purpose.
 							++open_parens;
 						break;
 					case ')':
 					case ']':
+					case '}':
 						if (!in_quotes)
 							--open_parens; // L31: OK if this is negative; later validation will catch the syntax error.
 						break;
