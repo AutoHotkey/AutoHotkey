@@ -1128,40 +1128,10 @@ ResultType Var::ValidateName(LPCTSTR aName, bool aIsRuntime, int aDisplayError)
 	// a numically-named var (e.g. %1% is the first arg), decided not to do this:
 	//if (*aName >= '0' && *aName <= '9')
 	//	return g_script.ScriptError("This variable name starts with a number, which is not allowed.", aName);
-	TCHAR c;
 	LPCTSTR cp;
 	for (cp = aName; *cp; ++cp)
 	{
-		// ispunct(): @ # $ _ [ ] ? ! % & " ' ( ) * + - ^ . / \ : ; , < = > ` ~ | { }
-		// Of the above, it seems best to disallow the following:
-		// () reserved: user-defined functions, e.g. var = myfunc2(myfunc1() + 2)
-		// ! reserved: "not"
-		// % reserved: deref char
-		// & reserved: "and" or "bitwise and"
-		// ' seems too iffy
-		// " seems too iffy
-		// */-+ reserved: math
-		// , reserved: delimiter
-		// . reserved: objects
-		// : reserved: ternary
-		// ? reserved: ternary
-		// ; reserved: comment
-		// \ seems too iffy
-		// <=> reserved: comparison
-		// ^ reserved: "bitwise xor"
-		// ` reserved: escape char
-		// {} reserved: blocks
-		// | reserved: "or" or "bitwise or"
-		// ~ reserved: "bitwise not"
-		// [] reserved: array/object indexing
-
-		// Rewritten for v1.0.36.02 to enhance performance and also forbid characters such as linefeed and
-		// alert/bell inside variable names.  Ordered to maximize short-circuit performance for the most-often
-		// used characters in variables names:
-		c = *cp;  // For performance.
-		if (!cisalnum(c) // It's not a core/legacy alphanumberic.
-			&& !(c & ~0x7F) // It's not an extended ASCII character such as €/¶/¿ (for simplicity and backward compatibility, these are always allowed).
-			&& !_tcschr(_T("_$#@"), c)) // It's not a permitted punctunation mark.  L31: Removed [], now reserved for array/object indexing. Also removed ? while I was at it.
+		if (!cisalnum(*cp) && *cp != '_')
 		{
 			if (aDisplayError)
 			{
