@@ -695,65 +695,13 @@ VarSizeType Var::Get(LPTSTR aBuf)
 	// For v1.0.25, don't do the following because in some cases the existing contents of aBuf will not
 	// be altered.  Instead, it will be set to blank as needed further below.
 	//if (aBuf) *aBuf = '\0';  // Init early to get it out of the way, in case of early return.
-	DWORD result;
 	VarSizeType length;
-	TCHAR buf_temp[1]; // Just a fake buffer to pass to some API functions in lieu of a NULL, to avoid any chance of misbehavior. Keep the size at 1 so that API functions will always fail to copy to buf.
 
 	switch(mType)
 	{
 	case VAR_NORMAL: // Listed first for performance.
 		UpdateContents();  // Update mContents and mLength, if necessary.
-		if (!g_NoEnv && !mByteLength) // If auto-env retrival is on and the var is empty, check to see if it's really an env. var.
-		{
-			// Regardless of whether aBuf is NULL or not, we don't know at this stage
-			// whether mName is the name of a valid environment variable.  Therefore,
-			// GetEnvironmentVariable() is currently called once in the case where
-			// aBuf is NULL and twice in the case where it's not.  There may be some
-			// way to reduce it to one call always, but that is an optimization for
-			// the future.  Another reason: Calling it twice seems safer, because we can't
-			// be completely sure that it wouldn't act on our (possibly undersized) aBuf
-			// buffer even if it doesn't find the env. var.
-			// UPDATE: v1.0.36.02: It turns out that GetEnvironmentVariable() is a fairly
-			// high overhead call. To improve the speed of accessing blank variables that
-			// aren't environment variables (and most aren't), cached_empty_var is used
-			// to indicate that the previous size-estimation call to us yielded "no such
-			// environment variable" so that the upcoming get-contents call to us can avoid
-			// calling GetEnvironmentVariable() again.  Testing shows that this doubles
-			// the speed of a simple loop that accesses an empty variable such as the following:
-			// SetBatchLines -1
-			// Loop 500000
-			//    if Var = Test
-			//    ...
-			static Var *cached_empty_var = NULL; // Doubles the speed of accessing empty variables that aren't environment variables (i.e. most of them).
-			if (!(cached_empty_var == this && aBuf) && (result = GetEnvironmentVariable(mName, buf_temp, 0)))
-			{
-				// This env. var exists.
-				cached_empty_var = NULL; // i.e. one use only to avoid cache from hiding the fact that an environment variable has newly come into existence since the previous call.
-				if (aBuf)
-				{
-					if (g_Warn_UseEnv)
-						g_script.ScriptWarning(g_Warn_UseEnv, WARNING_USE_ENV_VARIABLE, mName);
-					return GetEnvVarReliable(mName, aBuf); // The caller has ensured, probably via previous call to this function with aBuf == NULL, that aBuf is large enough to hold the result.
-				}
-				return result - 1;  // -1 because GetEnvironmentVariable() returns total size needed when called that way.
-			}
-			else // No matching env. var. or the cache indicates that GetEnvironmentVariable() need not be called.
-			{
-				if (aBuf)
-				{
-					MaybeWarnUninitialized();
-					*aBuf = '\0';
-					cached_empty_var = NULL; // i.e. one use only to avoid cache from hiding the fact that an environment variable has newly come into existence since the previous call.
-				}
-				else // Size estimation phase: Since there is no such env. var., flag it for the upcoming get-contents phase.
-					cached_empty_var = this;
-				return 0;
-			}
-		}
 		length = _CharLength();
-
-		// Otherwise (since above didn't return), it's not an environment variable (or it is, but there's
-		// a script variable of non-zero length that's eclipsing it).
 		if (!aBuf)
 			return length;
 		else // Caller provider buffer, so if mLength is zero, just make aBuf empty now and return early (for performance).

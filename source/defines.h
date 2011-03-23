@@ -115,7 +115,7 @@ enum SendModes {SM_EVENT, SM_INPUT, SM_PLAY, SM_INPUT_FALLBACK_TO_PLAY, SM_INVAL
 enum ExitReasons {EXIT_NONE, EXIT_CRITICAL, EXIT_ERROR, EXIT_DESTROY, EXIT_LOGOFF, EXIT_SHUTDOWN
 	, EXIT_WM_QUIT, EXIT_WM_CLOSE, EXIT_MENU, EXIT_EXIT, EXIT_RELOAD, EXIT_SINGLEINSTANCE};
 
-enum WarnType {WARN_USE_UNSET_LOCAL, WARN_USE_UNSET_GLOBAL, WARN_LOCAL_SAME_AS_GLOBAL, WARN_USE_ENV, WARN_ALL};
+enum WarnType {WARN_USE_UNSET_LOCAL, WARN_USE_UNSET_GLOBAL, WARN_LOCAL_SAME_AS_GLOBAL, WARN_ALL};
 
 enum WarnMode {WARNMODE_OFF, WARNMODE_OUTPUTDEBUG, WARNMODE_MSGBOX};	// WARNMODE_OFF must be zero.
 
@@ -188,7 +188,7 @@ enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
 };
 // These two are macros for maintainability (i.e. seeing them together here helps maintain them together).
 #define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) (token.buf) // SYM_DYNAMICs other than doubles have NULL buf, at least at the stage this macro is called.
-#define SYM_DYNAMIC_IS_VAR_NORMAL_OR_CLIP(token) (!(token)->buf && ((token)->var->Type() == VAR_NORMAL || (token)->var->Type() == VAR_CLIPBOARD)) // i.e. it's an evironment variable or the clipboard, not a built-in variable or double-deref.
+#define SYM_DYNAMIC_IS_CLIPBOARD(token) (!(token)->buf && (token)->var->Type() == VAR_CLIPBOARD) // i.e. it's the clipboard, not a built-in variable or double-deref.
 
 
 struct ExprTokenType; // Forward declaration for use below.

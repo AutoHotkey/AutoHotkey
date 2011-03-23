@@ -2752,11 +2752,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 #endif
 	}
 
-	if (IS_DIRECTIVE_MATCH(_T("#NoEnv")))
-	{
-		g_NoEnv = TRUE;
-		return CONDITION_TRUE;
-	}
 	if (IS_DIRECTIVE_MATCH(_T("#NoTrayIcon")))
 	{
 		g_NoTrayIcon = true;
@@ -3194,8 +3189,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			warnType = WARN_USE_UNSET_LOCAL;
 		else if (IS_PARAM1_MATCH(_T("UseUnsetGlobal")))
 			warnType = WARN_USE_UNSET_GLOBAL;
-		else if (IS_PARAM1_MATCH(_T("UseEnv")))
-			warnType = WARN_USE_ENV;
 		else if (IS_PARAM1_MATCH(_T("LocalSameAsGlobal")))
 			warnType = WARN_LOCAL_SAME_AS_GLOBAL;
 		else
@@ -3218,9 +3211,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		if (warnType == WARN_USE_UNSET_GLOBAL || warnType == WARN_ALL)
 			g_Warn_UseUnsetGlobal = warnMode;
-
-		if (warnType == WARN_USE_ENV || warnType == WARN_ALL)
-			g_Warn_UseEnv = warnMode;
 
 		if (warnType == WARN_LOCAL_SAME_AS_GLOBAL || warnType == WARN_ALL)
 			g_Warn_LocalSameAsGlobal = warnMode;
@@ -7877,7 +7867,6 @@ size_t Line::ArgIndexLength(int aArgIndex)
 		Var &var = *sArgVar[aArgIndex]; // For performance and convenience.
 		if (   var.Type() == VAR_NORMAL  // This and below ordered for short-circuit performance based on types of input expected from caller.
 			&& !(g_act[mActionType].MaxParamsAu2WithHighBit & 0x80) // Although the ones that have the highbit set are hereby omitted from the fast method, the nature of almost all of the highbit commands is such that their performance won't be measurably affected. See ArgMustBeDereferenced() for more info.
-			&& (g_NoEnv || var.HasContents()) // v1.0.46.02: Recognize environment variables (when g_NoEnv==FALSE) by falling through to _tcslen() for them.
 			&& &var != g_ErrorLevel   ) // Mostly for maintainability because the following situation is very rare: If it's g_ErrorLevel, use the deref version instead because if g_ErrorLevel is an input variable in the caller's command, and the caller changes ErrorLevel (such as to set a default) prior to calling this function, the changed/new ErrorLevel will be used rather than its original value (which is usually undesirable).
 			//&& !var.IsBinaryClip())  // This check isn't necessary because the line below handles it.
 			return var.LengthIgnoreBinaryClip(); // Do it the fast way (unless it's binary clipboard, in which case this call will internally call _tcslen()).
@@ -7909,7 +7898,6 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 		Var &var = *sArgVar[aArgIndex];
 		if (   var.Type() == VAR_NORMAL  // See ArgIndexLength() for comments about this line and below.
 			&& !(g_act[mActionType].MaxParamsAu2WithHighBit & 0x80)
-			&& (g_NoEnv || var.HasContents())
 			&& &var != g_ErrorLevel
 			&& !var.IsBinaryClip()   )
 			return var.ToInt64(FALSE);
@@ -7940,7 +7928,6 @@ double Line::ArgIndexToDouble(int aArgIndex)
 		Var &var = *sArgVar[aArgIndex];
 		if (   var.Type() == VAR_NORMAL  // See ArgIndexLength() for comments about this line and below.
 			&& !(g_act[mActionType].MaxParamsAu2WithHighBit & 0x80)
-			&& (g_NoEnv || var.HasContents())
 			&& &var != g_ErrorLevel
 			&& !var.IsBinaryClip()   )
 			return var.ToDouble(FALSE);
@@ -10077,15 +10064,13 @@ numeric_literal:
 						return LineError(ERR_EXPR_TOO_LONG);
 					infix[infix_count++].symbol = SYM_CONCAT;
 				}
-				if (this_deref_ref.var->Type() == VAR_NORMAL // VAR_ALIAS is taken into account (and resolved) by Type().
-					&& g_NoEnv) // v1.0.43.08: Added g_NoEnv.  Relies on short-circuit boolean order.
-					// "!this_deref_ref.var->Get()" isn't checked here.  See comments in SYM_DYNAMIC evaluation.
+				if (this_deref_ref.var->Type() == VAR_NORMAL) // VAR_ALIAS is taken into account (and resolved) by Type().
 				{
 					// DllCall() and possibly others rely on this having been done to support changing the
 					// value of a parameter (similar to by-ref).
 					infix[infix_count].symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the clipboard in the case of expression lvalues.  Search for VAR_CLIPBOARD further below for details.
 				}
-				else // It's either a built-in variable (including clipboard) OR a possible environment variable.
+				else // It's a built-in variable (including clipboard).
 				{
 					infix[infix_count].symbol = SYM_DYNAMIC;
 					infix[infix_count].buf = NULL; // SYM_DYNAMIC requires that buf be set to NULL for non-double-deref vars (since there are two different types of SYM_DYNAMIC).
@@ -10181,17 +10166,8 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 		// Put operands into the postfix array immediately, then move on to the next infix item:
 		if (IS_OPERAND(infix_symbol)) // At this stage, operands consist of only SYM_OPERAND and SYM_STRING.
 		{
-			if (infix_symbol == SYM_DYNAMIC && SYM_DYNAMIC_IS_VAR_NORMAL_OR_CLIP(this_infix)) // Ordered for short-circuit performance.
+			if (infix_symbol == SYM_DYNAMIC && SYM_DYNAMIC_IS_CLIPBOARD(this_infix)) // Ordered for short-circuit performance.
 			{
-				// v1.0.46.01: If an environment variable is being used as an lvalue -- regardless
-				// of whether that variable is blank in the environment -- treat it as a normal
-				// variable instead.  This is because most people would want that, and also because
-				// it's tranditional not to directly support assignments to environment variables
-				// (only EnvSet can do that, mostly for code simplicity).  In addition, things like
-				// EnvVar.="string" and EnvVar+=2 aren't supported due to obscurity/rarity (instead,
-				// such expressions treat EnvVar as blank). In light of all this, convert environment
-				// variables that are targets of ANY assignments into normal variables so that they
-				// can be seen as a valid lvalues when the time comes to do the assignment.
 				// IMPORTANT: VAR_CLIPBOARD is made into SYM_VAR here, but only for assignments.
 				// This allows built-in functions and other places in the code to treat SYM_VAR
 				// as though it's always VAR_NORMAL, which reduces code size and improves maintainability.
@@ -10199,23 +10175,8 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				if (IS_ASSIGNMENT_OR_POST_OP(sym_prev) // Post-op must be checked for VAR_CLIPBOARD (by contrast, it seems unnecessary to check it for others; see comments below).
 					|| stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT) // Stack *not* infix.
 					this_infix->symbol = SYM_VAR; // Convert clipboard or environment variable into SYM_VAR.
-				// POST-INC/DEC: It seems unnecessary to check for these except for VAR_CLIPBOARD because
-				// those assignments (and indeed any assignment other than .= and :=) will have no effect
-				// on a ON A SYM_DYNAMIC environment variable.  This is because by definition, such
-				// variables have an empty Var::Contents(), and AutoHotkey v1 does not allow
-				// math operations on blank variables.  Thus, the result of doing a math-assignment
-				// operation on a blank lvalue is almost the same as doing it on an invalid lvalue.
-				// The main difference is that with the exception of post-inc/dec, assignments
-				// wouldn't produce an lvalue unless we explicitly check for them all above.
-				// An lvalue should be produced so that the following features are consistent
-				// even for variables whose names happen to match those of environment variables:
-				// - Pass an assignment byref or takes its address; e.g. &(++x).
-				// - Cascading assigments; e.g. (++var) += 4 (rare to be sure).
-				// - Possibly other lvalue behaviors that rely on SYM_VAR being present.
 				// Above logic might not be perfect because it doesn't check for parens such as (var):=x,
-				// and possibly other obscure types of assignments.  However, it seems adequate given
-				// the rarity of such things and also because env vars are being phased out (scripts can
-				// use #NoEnv to avoid all such issues).
+				// and possibly other obscure types of assignments.
 			}
 			this_postfix = this_infix++;
 			this_postfix->circuit_token = NULL; // Set default. It's only ever overridden after it's in the postfix array.

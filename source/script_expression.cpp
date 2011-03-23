@@ -240,12 +240,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				switch (this_token.var->Type())
   				{
 				case VAR_NORMAL:
-					if (g_NoEnv || this_token.var->HasContents()) // v1.0.46.07: It's not an environment variable.
-					{
-						this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with one limited exception) is relied upon in several places such as built-in functions.
-						goto push_this_token;
-					}
-					break;
+					this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with one limited exception) is relied upon in several places such as built-in functions.
+					goto push_this_token;
 				case VAR_BUILTIN: // v1.0.48.02: Ensure it's VAR_BUILTIN prior to below because mBIV is a union with mCapacity.
 					if (this_token.var->mBIV == BIV_LoopIndex) // v1.0.48.01: Improve performance of A_Index by treating it as an integer rather than a string in expressions (avoids conversions to/from strings).
 					{
@@ -296,37 +292,15 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					// A_TimeIdle/Physical: These are seldom performance-critical.
 					break; // case VAR_BUILTIN
   				}
-				// Otherwise, it's an environment variable, built-in variable, or normal variable of zero-length
-				result_size = this_token.var->Get() + 1; // Get() is used even for environment vars because it has a cache that improves their performance.
+				// Otherwise, it's a built-in variable.
+				result_size = this_token.var->Get() + 1;
 				if (result_size == 1)
 				{
-					if (this_token.var->Type() == VAR_NORMAL) // It's an empty variable, so treated as a non-environment (normal) var.
-					{
-						// The following is done here rather than during infix creation/tokenizing because
-						// 1) It's more correct because it's conceivable that some part of the expression
-						//    that has already been evaluated before this_token has newly made an environment
-						//    variable blank or non-blank, which should be detected here (i.e. only at the
-						//    last possible moment).  For example, a function might have the side-effect of
-						//    altering an environment variable.
-						// 2) It performs better because Get()'s environment variable cache is most effective
-						//    when each size-Get() is followed immediately by a contents-Get() for the same
-						//    variable.
-						// Must make empty variables that aren't environment variables into SYM_VAR so that
-						// they can be passed by reference into functions, their address can be taken with
-						// the '&' operator, and so that they can be the lvalue for an assignment.
-						// Environment variables aren't supported for any of that because it would be silly
-						// in most cases, and would probably complicate the code far more than its worth.
-						this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with one limited exception) is relied upon in several places such as built-in functions.
-					}
-					else // It's a built-in variable that's blank.
-					{
-						this_token.marker = _T("");
-						this_token.symbol = SYM_STRING;
-					}
+					this_token.marker = _T("");
+					this_token.symbol = SYM_STRING;
 					goto push_this_token;
 				}
-				// Otherwise, it's neither an empty string nor a normal variable.
-				// It must be an environment variable or built-in variable. Need some memory to store it.
+				// Otherwise, it's a built-in variable which is not empty. Need some memory to store it.
 				// The following section is similar to that in the make_result_persistent section further
 				// below.  So maintain them together and see it for more comments.
 				// Must cast to int to avoid loss of negative values:
@@ -2125,9 +2099,7 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 				// temp buffer, it's much better for performance (especially for
 				// potentially huge variables like %clipboard%) to simply set
 				// the pointer to be the variable itself.  However, this can only
-				// be done if the var is the clipboard or a non-environment
-				// normal var (since zero-length normal vars need to be fetched via
-				// GetEnvironmentVariable() when g_NoEnv==FALSE).
+				// be done if the var is the clipboard or a normal var.
 				// Update: Changed it so that it will deref the clipboard if it contains only
 				// files and no text, so that the files will be transcribed into the deref buffer.
 				// This is because the clipboard object needs a memory area into which to write
@@ -2140,7 +2112,7 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 					(   ACT_IS_ASSIGN(mActionType) && i == 1  // By contrast, for the below i==anything (all args):
 					|| (mActionType <= ACT_LAST_OPTIMIZED_IF && mActionType >= ACT_FIRST_OPTIMIZED_IF) // Ordered for short-circuit performance.
 					//|| mActionType == ACT_WHILE // Not necessary to check this one because loadtime leaves ACT_WHILE as an expression in all common cases. Also, there's no easy way to get ACT_WHILE into the range above due to the overlap of other ranges in enum_act.
-					) && the_only_var_of_this_arg->Type() == VAR_NORMAL // Otherwise, users of this optimization would have to reproduced more of the logic in ArgMustBeDereferenced().
+					) && the_only_var_of_this_arg->Type() == VAR_NORMAL // Otherwise, users of this optimization would have to reproduce more of the logic in ArgMustBeDereferenced().
 					? _T("") : the_only_var_of_this_arg->Contents(); // See "Update #2" comment above.
 				break;
 			case CONDITION_TRUE:
@@ -2357,11 +2329,8 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 		// the clipboard has only files on it, in which case those files need
 		// to be converted into plain text:
 		return CLIPBOARD_CONTAINS_ONLY_FILES ? CONDITION_TRUE : CONDITION_FALSE;
-	if (aVar_type != VAR_NORMAL || (!g_NoEnv && !aVar->HasContents()) || aVar == g_ErrorLevel) // v1.0.43.08: Added g_NoEnv.
+	if (aVar_type != VAR_NORMAL || aVar == g_ErrorLevel)
 		// Reserved vars must always be dereferenced due to their volatile nature.
-		// When g_NoEnv==FALSE, normal vars of length zero are dereferenced because they might exist
-		// as system environment variables, whose contents are also potentially volatile (i.e. they
-		// are sometimes changed by outside forces).
 		// As of v1.0.25.12, g_ErrorLevel is always dereferenced also so that a command that sets ErrorLevel
 		// can itself use ErrorLevel as in this example: StringReplace, EndKey, ErrorLevel, EndKey:
 		return CONDITION_TRUE;
