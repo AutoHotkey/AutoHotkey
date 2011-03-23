@@ -3949,7 +3949,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			// In the above case, the user can provide the optional comma to avoid the ambiguity:
 			//    MsgBox, =
 			TCHAR action_args_2nd_char = action_args[1];
-			bool convert_pre_inc_or_dec = false; // Set default.
 
 			switch(*action_args)
 			{
@@ -3968,26 +3967,26 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			case '+':
 				// Support for ++i (and in the next case, --i).  In these cases, action_name must be either
 				// "+" or "-", and the first character of action_args must match it.
-				if ((convert_pre_inc_or_dec = action_name[0] == '+' && !action_name[1]) // i.e. the pre-increment operator; e.g. ++index.
+				if ((action_name[0] == '+' && !action_name[1]) // i.e. the pre-increment operator; e.g. ++index.
 					|| action_args_2nd_char == '=') // i.e. x+=y (by contrast, post-increment is recognized only after we check for a command name to cut down on ambiguity).
-					aActionType = ACT_ADD;
+					aActionType = ACT_EXPRESSION;
 				break;
 			case '-':
 				// Do a complete validation/recognition of the operator to allow a line such as the following,
 				// which omits the first optional comma, to still be recognized as a command rather than a
 				// variable-with-operator:
 				// SetBatchLines -1
-				if ((convert_pre_inc_or_dec = action_name[0] == '-' && !action_name[1]) // i.e. the pre-decrement operator; e.g. --index.
+				if ((action_name[0] == '-' && !action_name[1]) // i.e. the pre-decrement operator; e.g. --index.
 					|| action_args_2nd_char == '=') // i.e. x-=y  (by contrast, post-decrement is recognized only after we check for a command name to cut down on ambiguity).
-					aActionType = ACT_SUB;
+					aActionType = ACT_EXPRESSION;
 				break;
 			case '*':
 				if (action_args_2nd_char == '=') // i.e. *=
-					aActionType = ACT_MULT;
+					aActionType = ACT_EXPRESSION;
 				break;
 			case '/':
 				if (action_args_2nd_char == '=') // i.e. /=
-					aActionType = ACT_DIV;
+					aActionType = ACT_EXPRESSION;
 				// ACT_DIV is different than //= and // because ACT_DIV supports floating point inputs by yielding
 				// a floating point result (i.e. it doesn't Floor() the result when the inputs are floats).
 				else if (action_args_2nd_char == '/' && action_args[2] == '=') // i.e. //=
@@ -4046,30 +4045,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 
 			if (aActionType) // An assignment or other type of action was discovered above.
 			{
-				if (convert_pre_inc_or_dec) // Set up pre-ops like ++index and --index to be parsed properly later.
-				{
-					// The following converts:
-					// ++x -> EnvAdd x,1 (not really "EnvAdd" per se; but ACT_ADD).
-					// Set action_args to be the word that occurs after the ++ or --:
-					action_args = omit_leading_whitespace(++action_args); // Though there generally isn't any.
-					if (StrChrAny(action_args, EXPR_ALL_SYMBOLS)) // Support things like ++Var ? f1() : f2() and ++Var /= 5. Don't need strstr(action_args, " ?") because the search already looks for ':'.
-						aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
-					else
-					{
-						// Set up aLineText and action_args to be parsed later on as a list of two parameters:
-						// The variable name followed by the amount to be added or subtracted (e.g. "ScriptVar, 1").
-						// We're not changing the length of aLineText by doing this, so it should be large enough:
-						size_t new_length = _tcslen(action_args);
-						// Since action_args is just a pointer into the aLineText buffer (which caller has ensured
-						// is modifiable), use memmove() so that overlapping source & dest are properly handled:
-						tmemmove(aLineText, action_args, new_length + 1); // +1 to include the zero terminator.
-						// Append the second param, which is just "1" since the ++ and -- only inc/dec by 1:
-						aLineText[new_length++] = g_delimiter;
-						aLineText[new_length++] = '1';
-						aLineText[new_length] = '\0';
-					}
-				}
-				else if (aActionType != ACT_EXPRESSION) // i.e. it's ACT_ASSIGN/ASSIGNEXPR/ADD/SUB/MULT/DIV
+				if (aActionType != ACT_EXPRESSION) // i.e. it's ACT_ASSIGN/ASSIGNEXPR/ADD/SUB/MULT/DIV
 				{
 					if (aActionType != ACT_ASSIGN) // i.e. it's ACT_ASSIGNEXPR/ADD/SUB/MULT/DIV
 					{
