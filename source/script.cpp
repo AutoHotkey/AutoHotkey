@@ -4638,10 +4638,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 
 						TRANSFORM_NON_EXPRESSION_CASES
 						default:
-							// For all other sub-commands, Arg #3 and #4 are expression-capable.  It doesn't
-							// seem necessary to call LegacyArgIsExpression() because the mere fact that
-							// we're inside a pair of quotes or parentheses seems enough to indicate that this
-							// really is an expression.
+							// For all other sub-commands, Arg #3 and #4 are expression-capable.
 							continue;
 						}
 					}
@@ -4965,33 +4962,6 @@ inline ActionTypeType Script::ConvertOldActionType(LPTSTR aActionTypeString)
 
 
 
-bool LegacyArgIsExpression(LPTSTR aArgText, LPTSTR aArgMap)
-// Helper function for AddLine
-{
-	// The section below is here in light of rare legacy cases such as the below:
-	// -%y%   ; i.e. make it negative.
-	// +%y%   ; might happen with up/down adjustments on SoundSet, GuiControl progress/slider, etc?
-	// Although the above are detected as non-expressions and thus non-double-derefs,
-	// the following are not because they're too rare or would sacrifice too much flexibility:
-	// 1%y%.0 ; i.e. at a tens/hundreds place and make it a floating point.  In addition,
-	//          1%y% could be an array, so best not to tag that as non-expression.
-	//          For that matter, %y%.0 could be an obscure kind of reverse-notation array itself.
-	//          However, as of v1.0.29, things like %y%000 are allowed, e.g. Sleep %Seconds%000
-	// 0x%y%  ; i.e. make it hex (too rare to check for, plus it could be an array).
-	// %y%%z% ; i.e. concatenate two numbers to make a larger number (too rare to check for)
-	LPTSTR cp = aArgText + (*aArgText == '-' || *aArgText == '+'); // i.e. +1 if second term evaluates to true.
-	return *cp != g_DerefChar // If no deref, for simplicity assume it's an expression since any such non-numeric item would be extremely rare in pre-expression era.
-		|| !aArgMap || *(aArgMap + (cp != aArgText)) // There's no literal-map or this deref char is not really a deref char because it's marked as a literal.
-		|| !(cp = _tcschr(cp + 1, g_DerefChar)) // There is no next deref char.
-		|| (cp[1] && !IsPureNumeric(cp + 1, false, true, true)); // But that next deref char is not the last char, which means this is not a single isolated deref. v1.0.29: Allow things like Sleep %Var%000.
-		// Above does not need to check whether last deref char is marked literal in the
-		// arg map because if it is, it would mean the first deref char lacks a matching
-		// close-symbol, which will be caught as a syntax error below regardless of whether
-		// this is an expression.
-}
-
-
-
 ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc, LPTSTR aArgMap[])
 // aArg must be a collection of pointers to memory areas that are modifiable, and there
 // must be at least aArgc number of pointers in the aArg array.  In v1.0.40, a caller (namely
@@ -5063,9 +5033,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					{
 					TRANSFORM_NON_EXPRESSION_CASES
 					default:
-						// For all other sub-commands, Arg #3 and #4 are expression-capable and will be made so
-						// if they pass the following check:
-						this_new_arg.is_expression = LegacyArgIsExpression(this_aArg, this_aArgMap);
+						// For all other sub-commands, Arg #3 and #4 are expression-capable.
+						this_new_arg.is_expression = true;
 					}
 				}
 			}
@@ -5198,22 +5167,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 								if (aArgc > 2) // Title/text are not numeric/expressions.
 									break; // The loop is over because this arg was found in the list.
 						}
-						// Otherwise, it might be an expression so do the final checks.
-						// Override the original false default of is_expression unless an exception applies.
-						// Since ACT_ASSIGNEXPR, WHILE, FOR and UNTIL aren't legacy commands, don't call
-						// LegacyArgIsExpression() for them because that would cause things like x:=%y% and
-						// "while %x%" to behave the same as x:=y and "while x:, which would be inconsistent
-						// with how expressions are supposed to work. ACT_RETURN should have been excluded
-						// too; but it was left out for so long that it was thought best to document and keep
-						// the unexpected behavior of "return %x%".
-						// For other commands, if any telltale character is present it's definitely an
-						// expression because this is an arg that's marked as a number-or-expression.
-						// So telltales avoid the need for the complex check further below.
-						if (aActionType == ACT_ASSIGNEXPR || aActionType >= ACT_FOR && aActionType <= ACT_UNTIL // i.e. FOR, WHILE or UNTIL
-							|| StrChrAny(this_new_arg.text, EXPR_TELLTALES)) // See above.
-							this_new_arg.is_expression = true;
-						else
-							this_new_arg.is_expression = LegacyArgIsExpression(this_new_arg.text, this_aArgMap);
+						// Otherwise, it is an expression.
+						this_new_arg.is_expression = true;
 						break; // The loop is over if this arg is found in the list of mandatory-numeric args.
 					} // i is a mandatory-numeric arg
 				} // for each mandatory-numeric arg of this command, see if this arg matches its number.
