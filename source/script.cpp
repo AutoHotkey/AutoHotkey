@@ -3814,82 +3814,39 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				// If not ContainsXXX
 				bool first_word_is_not = !_tcsnicmp(action_args, _T("Not"), 3) && _tcschr(end_flags, action_args[3]);
 
-				switch (*operation)
+				// v2: Default to the most common type of IF.
+				aActionType = ACT_IFEXPR;
+
+				if (!first_word_is_not)
 				{
-				case '=': // But don't allow == to be "Equals" since the 2nd '=' might be literal.
-					aActionType = ACT_IFEQUAL;
-					break;
-				case '<':
-					switch(operation[1])
+					switch (*operation)
 					{
-					// Note: User can use whitespace to differentiate a literal symbol from
-					// part of an operator, e.g. if var1 < =  <--- char is literal
-					case '=':
-						aActionType = ACT_IFLESSOREQUAL;
-						operation[1] = ' ';
-						break;
-					case '>':
-						aActionType = ACT_IFNOTEQUAL;
-						operation[1] = ' ';
-						break;
-					default: // i.e. some other character follows '<'
-						aActionType = ACT_IFLESS;
-					}
-					break;
-				case '>': // Don't allow >< to be NotEqual since the '<' might be intended as a literal part of an arg.
-					if (operation[1] == '=')
-					{
-						aActionType = ACT_IFGREATEROREQUAL;
-						operation[1] = ' '; // Remove it from so that it won't be considered by later parsing.
-					}
-					else
-						aActionType = ACT_IFGREATER;
-					break;
-				case '!':
-					if (operation[1] == '=')
-					{
-						aActionType = ACT_IFNOTEQUAL;
-						operation[1] = ' '; // Remove it from so that it won't be considered by later parsing.
-					}
-					else
-						// To minimize the times where expressions must have an outer set of parentheses,
-						// assume all unknown operators are expressions, e.g. "if !var"
-						aActionType = ACT_IFEXPR;
-					break;
-				case 'b': // "Between"
-				case 'B':
-					// Must fall back to ACT_IFEXPR, otherwise "if not var_name_beginning_with_b" is a syntax error.
-					if (first_word_is_not || _tcsnicmp(operation, _T("between"), 7))
-						aActionType = ACT_IFEXPR;
-					else
-					{
-						aActionType = ACT_IFBETWEEN;
-						// Set things up to be parsed as args further down.  A delimiter is inserted later below:
-						tmemset(operation, ' ', 7);
-					}
-					break;
-				case 'c': // "Contains"
-				case 'C':
-					// Must fall back to ACT_IFEXPR, otherwise "if not var_name_beginning_with_c" is a syntax error.
-					if (first_word_is_not || _tcsnicmp(operation, _T("contains"), 8))
-						aActionType = ACT_IFEXPR;
-					else
-					{
-						aActionType = ACT_IFCONTAINS;
-						// Set things up to be parsed as args further down.  A delimiter is inserted later below:
-						tmemset(operation, ' ', 8);
-					}
-					break;
-				case 'i':  // "is" or "is not"
-				case 'I':
-					switch (ctoupper(operation[1]))
-					{
-					case 's':  // "IS"
-					case 'S':
-						if (first_word_is_not)        // v1.0.45: Had forgotten to fix this one with the others,
-							aActionType = ACT_IFEXPR; // so now "if not is_something" and "if not is_something()" work.
-						else
+					case 'b': // "Between"
+					case 'B':
+						// Must fall back to ACT_IFEXPR, otherwise "if not var_name_beginning_with_b" is a syntax error.
+						if (!_tcsnicmp(operation, _T("between"), 7) && IS_SPACE_OR_TAB(operation[7]))
 						{
+							aActionType = ACT_IFBETWEEN;
+							// Set things up to be parsed as args further down.  A delimiter is inserted later below:
+							tmemset(operation, ' ', 7);
+						}
+						break;
+					case 'c': // "Contains"
+					case 'C':
+						// Must fall back to ACT_IFEXPR, otherwise "if not var_name_beginning_with_c" is a syntax error.
+						if (!_tcsnicmp(operation, _T("contains"), 8) && IS_SPACE_OR_TAB(operation[8]))
+						{
+							aActionType = ACT_IFCONTAINS;
+							// Set things up to be parsed as args further down.  A delimiter is inserted later below:
+							tmemset(operation, ' ', 8);
+						}
+						break;
+					case 'i':  // "is" or "is not"
+					case 'I':
+						switch (ctoupper(operation[1]))
+						{
+						case 's':  // "IS"
+						case 'S':
 							next_word = omit_leading_whitespace(operation + 2);
 							if (_tcsnicmp(next_word, _T("not"), 3)) // No need to check for whitespace after the word "not" because things like "if var is notxxx" are never valid.
 								aActionType = ACT_IFIS;
@@ -3900,56 +3857,42 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 								tmemset(next_word, ' ', 3);
 							}
 							operation[1] = ' '; // Remove the 'S' in "IS".  'I' is replaced with ',' later below.
-						}
-						break;
-					case 'n':  // "IN"
-					case 'N':
-						if (first_word_is_not)
-							aActionType = ACT_IFEXPR;
-						else
-						{
+							break;
+						case 'n':  // "IN"
+						case 'N':
 							aActionType = ACT_IFIN;
 							operation[1] = ' '; // Remove the 'N' in "IN".  'I' is replaced with ',' later below.
-						}
+							break;
+						} // switch()
 						break;
-					default:
-						// v1.0.35.01 It must fall back to ACT_IFEXPR, otherwise "if not var_name_beginning_with_i"
-						// is a syntax error.
-						aActionType = ACT_IFEXPR;
+					case 'n':  // It's either "not in", "not between", or "not contains"
+					case 'N':
+						if (!_tcsnicmp(operation, _T("not"), 3) && IS_SPACE_OR_TAB(operation[3])) // Must also check for whitespace after the word "not" to avoid a syntax error for lines like "if not note".
+						{
+							// Remove the "NOT" separately in case there is more than one space or tab between
+							// it and the following word, e.g. "not   between":
+							tmemset(operation, ' ', 3);
+							next_word = omit_leading_whitespace(operation + 3);
+							if (!_tcsnicmp(next_word, _T("in"), 2))
+							{
+								aActionType = ACT_IFNOTIN;
+								tmemset(next_word, ' ', 2);
+							}
+							else if (!_tcsnicmp(next_word, _T("between"), 7))
+							{
+								aActionType = ACT_IFNOTBETWEEN;
+								tmemset(next_word, ' ', 7);
+							}
+							else if (!_tcsnicmp(next_word, _T("contains"), 8))
+							{
+								aActionType = ACT_IFNOTCONTAINS;
+								tmemset(next_word, ' ', 8);
+							}
+						}
+						// Otherwise, it's something like "if not var_name_beginning_with_n".
+						break;
 					} // switch()
-					break;
-				case 'n':  // It's either "not in", "not between", or "not contains"
-				case 'N':
-					// Must fall back to ACT_IFEXPR, otherwise "if not var_name_beginning_with_n" is a syntax error.
-					if (_tcsnicmp(operation, _T("not"), 3) || !IS_SPACE_OR_TAB(operation[3])) // Fix for v1.0.48: Must also check for whitespace after the word "not" to avoid a syntax error for lines like "if not note".
-						aActionType = ACT_IFEXPR;
-					else
-					{
-						// Remove the "NOT" separately in case there is more than one space or tab between
-						// it and the following word, e.g. "not   between":
-						tmemset(operation, ' ', 3);
-						next_word = omit_leading_whitespace(operation + 3);
-						if (!_tcsnicmp(next_word, _T("in"), 2))
-						{
-							aActionType = ACT_IFNOTIN;
-							tmemset(next_word, ' ', 2);
-						}
-						else if (!_tcsnicmp(next_word, _T("between"), 7))
-						{
-							aActionType = ACT_IFNOTBETWEEN;
-							tmemset(next_word, ' ', 7);
-						}
-						else if (!_tcsnicmp(next_word, _T("contains"), 8))
-						{
-							aActionType = ACT_IFNOTCONTAINS;
-							tmemset(next_word, ' ', 8);
-						}
-					}
-					break;
-
-				default: // To minimize the times where expressions must have an outer set of parentheses, assume all unknown operators are expressions.
-					aActionType = ACT_IFEXPR;
-				} // switch()
+				} // if (!first_word_is_not)
 			} // Detection of type of IF-statement.
 
 			if (aActionType == ACT_IFEXPR) // There are various ways above for aActionType to become ACT_IFEXPR.
