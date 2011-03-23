@@ -4141,21 +4141,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			LPTSTR question_mark;
 			if ((*action_args == '+' || *action_args == '-') && action_args[1] == *action_args) // Post-inc/dec. See comments further below.
 			{
-				if (action_args[2]) // i.e. if the ++ and -- isn't the last thing; e.g. x++ ? fn1() : fn2() ... Var++ //= 2
-					aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
-				else
-				{
-					// The logic here allows things like IfWinActive-- to be seen as commands even without
-					// a space before the -- or ++.  For backward compatibility and code simplicity, it seems
-					// best to keep that behavior rather than distinguishing between Command-- and Command --.
-					// In any case, "Command --" should continue to be seen as a command regardless of what
-					// changes are ever made.  That's why this section occurs below the command-name lookup.
-					// The following converts x++ to "ACT_ADD x,1".
-					aActionType = (*action_args == '+') ? ACT_ADD : ACT_SUB;
-					*action_args = g_delimiter;
-					action_args[1] = '1';
-				}
-				action_args = aLineText; // Since this is an assignment and/or expression, use the line's full text for later parsing.
+				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
+				action_args = aLineText; // Since this is an expression, use the line's full text for later parsing.
 			}
 			else if (*action_args == '?'  // L34: Below no longer requires spaces around '?'.
 				|| (question_mark = _tcschr(action_args,'?')) && _tcschr(question_mark,':')) // Rough check (see comments below). Relies on short-circuit boolean order.
