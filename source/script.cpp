@@ -3953,8 +3953,12 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 
 			switch(*action_args)
 			{
-			case '=': // i.e. var=value (old-style assignment)
-				aActionType = ACT_ASSIGN;
+			case '`': // i.e. var `= value (old-style assignment)
+				if (action_args_2nd_char == '=')
+				{
+					action_args[1] = ' ';
+					aActionType = ACT_ASSIGN;
+				}
 				break;
 			case ':':
 				// v1.0.40: Allow things like "MsgBox :: test" to be valid by insisting that '=' follows ':'.
@@ -4210,6 +4214,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				action_args = aLineText; // Since this is a function-call followed by a comma and some other expression, use the line's full text for later parsing.
 			}
+			else if (*action_args == '=')
+				// v2: Give a more specific error message since the user probably meant to do an old-style assignment.
+				return ScriptError(_T("Syntax error. Did you mean `= string or := expression?"), aLineText);
 			else
 				// v1.0.40: Give a more specific error message now now that hotkeys can make it here due to
 				// the change that avoids the need to escape double-colons:
