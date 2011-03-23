@@ -10169,7 +10169,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 	STACK_PUSH(&token_begin);
 
 	SymbolType stack_symbol, infix_symbol, sym_prev;
-	ExprTokenType *fwd_infix, *this_infix = infix;
+	ExprTokenType *this_infix = infix;
 	DerefType *in_param_list = NULL; // While processing the parameter list of a function-call, this points to its deref (for parameter counting and as an indicator).
 
 	for (;;) // While SYM_BEGIN is still on the stack, continue iterating.
@@ -10394,35 +10394,6 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 					if (!in_param_list) // This comma separates statements rather than function parameters.
 					{
 						STACK_PUSH(this_infix);
-						// v1.0.46.01: Treat ", var = expr" as though the "=" is ":=", even if there's a ternary
-						// on the right side (for consistency and since such a ternary would be stand-alone,
-						// which is a rare use for ternary).  Also cascade to the right to treat things like
-						// x=y=z as assignments because its intuitiveness seems to outweigh other considerations.
-						for (fwd_infix = this_infix + 1;; fwd_infix += 2)
-						{
-							// The following is checked first to simplify things and avoid any chance of reading
-							// beyond the last item in the array. This relies on the fact that a SYM_INVALID token
-							// exists at the end of the array as a terminator.
-							if (fwd_infix->symbol == SYM_INVALID || fwd_infix[1].symbol != SYM_EQUAL) // Relies on short-circuit boolean order.
-								break; // No further checking needed because there's no qualified equal-sign.
-							// Otherwise, check what lies to the left of the equal-sign.
-							if (fwd_infix->symbol == SYM_VAR)
-							{
-								fwd_infix[1].symbol = SYM_ASSIGN;
-								continue; // Cascade to the right until the last qualified '=' operator is found.
-							}
-							// Otherwise, it's not a pure/normal variable.  But check if it's an environment var.
-							if (fwd_infix->symbol != SYM_DYNAMIC || !SYM_DYNAMIC_IS_VAR_NORMAL_OR_CLIP(fwd_infix))
-								break; // It qualifies as neither SYM_DYNAMIC nor SYM_VAR.
-							// Otherwise, this is an environment variable being assigned something, so treat
-							// it as a normal variable rather than an environment variable. This is because
-							// by tradition (and due to the fact that not many people would want it),
-							// direct assignment to environment variables isn't supported by anything other
-							// than EnvSet.
-							fwd_infix->symbol = SYM_VAR; // Convert dynamic to a normal variable, see above.
-							fwd_infix[1].symbol = SYM_ASSIGN;
-							// And now cascade to the right until the last qualified '=' operator is found.
-						}
 					}
 					else
 					{
