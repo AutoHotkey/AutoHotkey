@@ -684,7 +684,7 @@ inline void global_init(global_struct &g)
 	// subroutine's values for these are restored prior to resuming execution:
 	global_clear_state(g);
 	g.SendMode = SM_INPUT;
-	g.TitleMatchMode = FIND_IN_LEADING_PART; // Standard default for AutoIt2 and 3.
+	g.TitleMatchMode = FIND_ANYWHERE;
 	g.TitleFindFast = true; // Since it's so much faster in many cases.
 	g.DetectHiddenWindows = false;  // Same as AutoIt2 but unlike AutoIt3; seems like a more intuitive default.
 	g.DetectHiddenText = true;  // Unlike AutoIt, which defaults to false.  This setting performs better.
