@@ -3893,10 +3893,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			{
 			case '`': // i.e. var `= value (old-style assignment)
 				if (action_args_2nd_char == '=')
-				{
-					action_args[1] = ' ';
 					aActionType = ACT_ASSIGN;
-				}
 				break;
 			case ':':
 				// v1.0.40: Allow things like "MsgBox :: test" to be valid by insisting that '=' follows ':'.
@@ -3984,9 +3981,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 
 			if (aActionType) // An assignment or other type of action was discovered above.
 			{
-				if (aActionType != ACT_EXPRESSION) // i.e. it's ACT_ASSIGN/ASSIGNEXPR/ADD/SUB/MULT/DIV
+				if (aActionType != ACT_EXPRESSION) // i.e. it's ACT_ASSIGN/ASSIGNEXPR
 				{
-					if (aActionType != ACT_ASSIGN) // i.e. it's ACT_ASSIGNEXPR/ADD/SUB/MULT/DIV
+					if (aActionType != ACT_ASSIGN) // i.e. it's ACT_ASSIGNEXPR
 					{
 						// Find the first non-function comma, which in the case of ACT_ADD/SUB can be
 						// either a statement-separator comma (expression) or the time units arg.
@@ -4027,15 +4024,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 							}
 							if (*cp == g_delimiter && !in_quotes && open_parens < 1) // A delimiting comma other than one in a sub-statement or function. Shouldn't need to worry about unquoted escaped commas since they don't make sense with += and -=.
 							{
-								if (aActionType == ACT_ADD || aActionType == ACT_SUB)
-								{
-									cp = omit_leading_whitespace(cp + 1);
-									if (StrChrAny(cp, EXPR_ALL_SYMBOLS)) // Don't need strstr(cp, " ?") because the search already looks for ':'.
-										aActionType = ACT_EXPRESSION; // It's clearly an expression not a word like Days or %VarContainingTheWordDays%.
-									//else it's probably date/time math, so leave it as-is.
-								}
-								else // ACT_ASSIGNEXPR/MULT/DIV, for which any non-function comma qualifies it as multi-statement.
-									aActionType = ACT_EXPRESSION;
+								// ACT_ASSIGNEXPR, for which any non-function comma qualifies it as multi-statement.
+								aActionType = ACT_EXPRESSION;
 								break;
 							}
 						}
@@ -4043,13 +4033,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					if (aActionType != ACT_EXPRESSION) // The above didn't make it a stand-alone expression.
 					{
 						// The following converts:
-						// x+=2 -> ACT_ADD x, 2.
-						// x:=2 -> ACT_ASSIGNEXPR, x, 2
-						// etc.
-						// But post-inc/dec are recognized only after we check for a command name to cut down on ambiguity
-						*action_args = g_delimiter; // Replace the =,+,-,:,*,/ with a delimiter for later parsing.
-						if (aActionType != ACT_ASSIGN) // i.e. it's not just a plain equal-sign (which has no 2nd char).
-							action_args[1] = ' '; // Remove the "=" from consideration.
+						// x := 2 -> ACT_ASSIGNEXPR, x, 2
+						// x `= str -> ACT_ASSIGN, x, str
+						*action_args = g_delimiter; // Replace the ":" or "`" with a delimiter for later parsing.
+						action_args[1] = ' '; // Remove the "=" from consideration.
 					}
 				}
 				//else it's already an isolated expression, so no changes are desired.
