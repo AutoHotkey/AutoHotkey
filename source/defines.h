@@ -50,10 +50,7 @@ GNU General Public License for more details.
 #define WINDOW_CLASS_SPLASH _T("AutoHotkey2")
 #define WINDOW_CLASS_GUI _T("AutoHotkeyGUI") // There's a section in Script::Edit() that relies on these all starting with "AutoHotkey".
 
-#define EXT_AUTOIT2 _T(".aut")
 #define EXT_AUTOHOTKEY _T(".ahk")
-#define CONVERSION_FLAG (EXT_AUTOIT2 EXT_AUTOHOTKEY)
-#define CONVERSION_FLAG_LENGTH 8
 
 // AutoIt2 supports lines up to 16384 characters long, and we want to be able to do so too
 // so that really long lines from aut2 scripts, such as a chain of IF commands, can be
@@ -267,22 +264,16 @@ enum enum_act {
 // Seems best to make ACT_INVALID zero so that it will be the ZeroMemory() default within
 // any POD structures that contain an action_type field:
   ACT_INVALID = FAIL  // These should both be zero for initialization and function-return-value purposes.
-, ACT_ASSIGN, ACT_ASSIGNEXPR, ACT_EXPRESSION, ACT_ADD, ACT_SUB, ACT_MULT, ACT_DIV
-, ACT_ASSIGN_FIRST = ACT_ASSIGN, ACT_ASSIGN_LAST = ACT_DIV
-, ACT_REPEAT // Never parsed directly, only provided as a translation target for the old command (see other notes).
+, ACT_ASSIGN, ACT_ASSIGNEXPR, ACT_EXPRESSION, ACT_ADD, ACT_SUB
 , ACT_ELSE   // Parsed at a lower level than most commands to support same-line ELSE-actions (e.g. "else if").
 , ACT_IFIN, ACT_IFNOTIN, ACT_IFCONTAINS, ACT_IFNOTCONTAINS, ACT_IFIS, ACT_IFISNOT
 , ACT_IFBETWEEN, ACT_IFNOTBETWEEN
 , ACT_IFEXPR  // i.e. if (expr)
+, ACT_FIRST_OPTIMIZED_IF = ACT_IFBETWEEN, ACT_LAST_OPTIMIZED_IF = ACT_IFEXPR
  // *** *** *** KEEP ALL OLD-STYLE/AUTOIT V2 IFs AFTER THIS (v1.0.20 bug fix). *** *** ***
  , ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION
  // *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
- // ACT_IS_IF_OLD() relies upon ACT_IFEQUAL through ACT_IFLESSOREQUAL being adjacent to one another
- // and it relies upon the fact that ACT_IFEQUAL is first in the series and ACT_IFLESSOREQUAL last.
-, ACT_IFEQUAL = ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION, ACT_IFNOTEQUAL, ACT_IFGREATER, ACT_IFGREATEROREQUAL
-, ACT_IFLESS, ACT_IFLESSOREQUAL
-, ACT_FIRST_OPTIMIZED_IF = ACT_IFBETWEEN, ACT_LAST_OPTIMIZED_IF = ACT_IFLESSOREQUAL
-, ACT_FIRST_COMMAND // i.e the above aren't considered commands for parsing/searching purposes.
+, ACT_FIRST_COMMAND = ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION // i.e the above aren't considered commands for parsing/searching purposes.
 , ACT_IFWINEXIST = ACT_FIRST_COMMAND
 , ACT_IFWINNOTEXIST, ACT_IFWINACTIVE, ACT_IFWINNOTACTIVE
 , ACT_IFINSTRING, ACT_IFNOTINSTRING
@@ -350,16 +341,6 @@ enum enum_act {
 // , ACT_COUNT
 };
 
-enum enum_act_old {
-  OLD_INVALID = FAIL  // These should both be zero for initialization and function-return-value purposes.
-  , OLD_SETENV, OLD_ENVADD, OLD_ENVSUB, OLD_ENVMULT, OLD_ENVDIV
-  // ACT_IS_IF_OLD() relies on the items in this next line being adjacent to one another and in this order:
-  , OLD_IFEQUAL, OLD_IFNOTEQUAL, OLD_IFGREATER, OLD_IFGREATEROREQUAL, OLD_IFLESS, OLD_IFLESSOREQUAL
-  , OLD_LEFTCLICK, OLD_RIGHTCLICK, OLD_LEFTCLICKDRAG, OLD_RIGHTCLICKDRAG
-  , OLD_HIDEAUTOITWIN, OLD_REPEAT, OLD_ENDREPEAT
-  , OLD_WINGETACTIVETITLE, OLD_WINGETACTIVESTATS
-};
-
 // It seems best not to include ACT_SUSPEND in the below, since the user may have marked
 // a large number of subroutines as "Suspend, Permit".  Even PAUSE is iffy, since the user
 // may be using it as "Pause, off/toggle", but it seems best to support PAUSE because otherwise
@@ -368,14 +349,13 @@ enum enum_act_old {
 #define ACT_IS_ALWAYS_ALLOWED(ActionType) (ActionType == ACT_EXITAPP || ActionType == ACT_PAUSE \
 	|| ActionType == ACT_EDIT || ActionType == ACT_RELOAD || ActionType == ACT_KEYHISTORY \
 	|| ActionType == ACT_LISTLINES || ActionType == ACT_LISTVARS || ActionType == ACT_LISTHOTKEYS)
-#define ACT_IS_ASSIGN(ActionType) (ActionType <= ACT_ASSIGN_LAST && ActionType >= ACT_ASSIGN_FIRST) // Ordered for short-circuit performance.
+#define ACT_IS_ASSIGN(ActionType) (ActionType == ACT_ASSIGN || ActionType == ACT_ASSIGNEXPR)
 #define ACT_IS_IF(ActionType) (ActionType >= ACT_FIRST_IF && ActionType <= ACT_LAST_IF)
 #define ACT_IS_IF_OR_ELSE_OR_LOOP(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
-	|| ActionType == ACT_LOOP || ActionType == ACT_WHILE || ActionType == ACT_FOR)
-#define ACT_IS_IF_OLD(ActionType, OldActionType) (ActionType >= ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION && ActionType <= ACT_LAST_IF) \
-	&& (ActionType < ACT_IFEQUAL || ActionType > ACT_IFLESSOREQUAL || (OldActionType >= OLD_IFEQUAL && OldActionType <= OLD_IFLESSOREQUAL))
-	// All the checks above must be done so that cmds such as IfMsgBox (which are both "old" and "new")
-	// can support parameters on the same line or on the next line.  For example, both of the above are allowed:
+	|| ActionType >= ACT_LOOP && ActionType <= ACT_WHILE)
+#define ACT_IS_IF_OLD(ActionType) (ActionType >= ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION && ActionType <= ACT_LAST_IF)
+	// The macro above allows cmds such as IfMsgBox to support parameters on the same line or on the next line.
+	// For example, both of the above are allowed:
 	// IfMsgBox, No, Gosub, XXX
 	// IfMsgBox, No
 	//     Gosub, XXX

@@ -83,7 +83,6 @@ bool g_NoTrayIcon = false;
 #ifdef AUTOHOTKEYSC
 	bool g_AllowMainWindow = false;
 #endif
-bool g_AllowSameLineComments = true;
 bool g_MainTimerExists = false;
 bool g_AutoExecTimerExists = false;
 bool g_InputTimerExists = false;
@@ -272,18 +271,10 @@ Action g_act[] =
 	// Its name should be "" so that Line::ToText() will properly display it.
 	, {_T(""), 1, 1, 1, {1, 0}}
 
+	// TODO: Make the following two functional again, but given more intuitive names like DateAdd and DateDiff.
 	, {_T("+="), 2, 3, 3, {2, 0}}
 	, {_T("-="), 1, 3, 3, {2, 0}} // Subtraction (but not addition) allows 2nd to be blank due to 3rd param.
-	, {_T("*="), 2, 2, 2, {2, 0}}
-	, {_T("/="), 2, 2, 2, {2, 0}}
 
-	// This command is never directly parsed, but we need to have it here as a translation
-	// target for the old "repeat" command.  This is because that command treats a zero
-	// first-param as an infinite loop.  Since that param can be a dereferenced variable,
-	// there's no way to reliably translate each REPEAT command into a LOOP command at
-	// load-time.  Thus, we support both types of loops as actual commands that are
-	// handled separately at runtime.
-	, {_T("Repeat"), 0, 1, 1, {1, 0}}  // Iteration Count: was mandatory in AutoIt2 but doesn't seem necessary here.
 	, {_T("Else"), 0, 0, 0, NULL}
 
 	, {_T("in"), 2, 2, 2, NULL}, {_T("not in"), 2, 2, 2, NULL}
@@ -291,12 +282,6 @@ Action g_act[] =
 	, {_T("is"), 2, 2, 2, NULL}, {_T("is not"), 2, 2, 2, NULL}
 	, {_T("between"), 1, 3, 3, NULL}, {_T("not between"), 1, 3, 3, NULL}  // Min 1 to allow #2 and #3 to be the empty string.
 	, {_T(""), 1, 1, 1, {1, 0}} // ACT_IFEXPR's name should be "" so that Line::ToText() will properly display it.
-
-	// Comparison operators take 1 param (if they're being compared to blank) or 2.
-	// For example, it's okay (though probably useless) to compare a string to the empty
-	// string this way: "If var1 >=".  Note: Line::ToText() relies on the below names:
-	, {_T("="), 1, 2, 2, NULL}, {_T("<>"), 1, 2, 2, NULL}, {_T(">"), 1, 2, 2, NULL}
-	, {_T(">="), 1, 2, 2, NULL}, {_T("<"), 1, 2, 2, NULL}, {_T("<="), 1, 2, 2, NULL}
 
 	// For these, allow a minimum of zero, otherwise, the first param (WinTitle) would
 	// be considered mandatory-non-blank by default.  It's easier to make all the params
@@ -546,27 +531,6 @@ Action g_act[] =
 // automatically get static (internal) linkage, thus such a var could never be
 // used outside this module:
 int g_ActionCount = _countof(g_act);
-
-
-
-Action g_old_act[] =
-{
-	{_T(""), 0, 0, 0, NULL}  // OLD_INVALID.
-	, {_T("SetEnv"), 1, 2, 2, NULL}
-	, {_T("EnvAdd"), 2, 3, 3, {2, 0}}, {_T("EnvSub"), 1, 3, 3, {2, 0}} // EnvSub (but not Add) allow 2nd to be blank due to 3rd param.
-	, {_T("EnvMult"), 2, 2, 2, {2, 0}}, {_T("EnvDiv"), 2, 2, 2, {2, 0}}
-	, {_T("IfEqual"), 1, 2, 2, NULL}, {_T("IfNotEqual"), 1, 2, 2, NULL}
-	, {_T("IfGreater"), 1, 2, 2, NULL}, {_T("IfGreaterOrEqual"), 1, 2, 2, NULL}
-	, {_T("IfLess"), 1, 2, 2, NULL}, {_T("IfLessOrEqual"), 1, 2, 2, NULL}
-	, {_T("LeftClick"), 2, 2, 2, {1, 2, 0}}, {_T("RightClick"), 2, 2, 2, {1, 2, 0}}
-	, {_T("LeftClickDrag"), 4, 4, 4, {1, 2, 3, 4, 0}}, {_T("RightClickDrag"), 4, 4, 4, {1, 2, 3, 4, 0}}
-	, {_T("HideAutoItWin"), 1, 1, 1, NULL}
-	  // Allow zero params, unlike AutoIt.  These params should match those for REPEAT in the above array:
-	, {_T("Repeat"), 0, 1, 1, {1, 0}}, {_T("EndRepeat"), 0, 0, 0, NULL}
-	, {_T("WinGetActiveTitle"), 1, 1, 1, NULL} // <Title Var>
-	, {_T("WinGetActiveStats"), 5, 5, 5, NULL} // <Title Var>, <Width Var>, <Height Var>, <Xpos Var>, <Ypos Var>
-};
-int g_OldActionCount = _countof(g_old_act);
 
 
 key_to_vk_type g_key_to_vk[] =

@@ -946,8 +946,6 @@ public:
 			case ACT_ASSIGNEXPR:
 			case ACT_ADD:
 			case ACT_SUB:
-			case ACT_MULT:
-			case ACT_DIV:
 			case ACT_TRANSFORM:
 			case ACT_STRINGLEFT:
 			case ACT_STRINGRIGHT:
@@ -1002,12 +1000,6 @@ public:
 			case ACT_SPLITPATH:
 			case ACT_IFINSTRING:
 			case ACT_IFNOTINSTRING:
-			case ACT_IFEQUAL:
-			case ACT_IFNOTEQUAL:
-			case ACT_IFGREATER:
-			case ACT_IFGREATEROREQUAL:
-			case ACT_IFLESS:
-			case ACT_IFLESSOREQUAL:
 			case ACT_IFBETWEEN:
 			case ACT_IFNOTBETWEEN:
 			case ACT_IFIN:
@@ -2531,12 +2523,11 @@ private:
 	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, TextStream *ts);
 	ResultType IsDirective(LPTSTR aBuf);
 	ResultType ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType = ACT_INVALID
-		, ActionTypeType aOldActionType = OLD_INVALID, LPTSTR aActionName = NULL
-		, LPTSTR aEndMarker = NULL, LPTSTR aLiteralMap = NULL, size_t aLiteralMapLength = 0);
+		, LPTSTR aActionName = NULL, LPTSTR aEndMarker = NULL
+		, LPTSTR aLiteralMap = NULL, size_t aLiteralMapLength = 0);
 	ResultType ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount);
 	LPTSTR ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool aDisplayErrors);
 	static ActionTypeType ConvertActionType(LPTSTR aActionTypeString);
-	static ActionTypeType ConvertOldActionType(LPTSTR aActionTypeString);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
 	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, int aArgc = 0, LPTSTR aArgMap[] = NULL);
 
@@ -2576,7 +2567,6 @@ public:
 	bool mIsReadyToExecute;
 	bool mAutoExecSectionIsRunning;
 	bool mIsRestart; // The app is restarting rather than starting from scratch.
-	bool mIsAutoIt2; // Whether this script is considered to be an AutoIt2 script.
 	bool mErrorStdOut; // true if load-time syntax errors should be sent to stdout vs. a MsgBox.
 #ifdef AUTOHOTKEYSC
 	bool mCompiledHasCustomIcon; // Whether the compiled script uses a custom icon.

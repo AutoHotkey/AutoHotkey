@@ -169,7 +169,7 @@ size_t Clipboard::Get(LPTSTR aBuf)
 
 
 
-ResultType Clipboard::Set(LPCTSTR aBuf, UINT_PTR aLength) //, bool aTrimIt)
+ResultType Clipboard::Set(LPCTSTR aBuf, UINT_PTR aLength)
 // Returns OK or FAIL.
 {
 	// It was already open for writing from a prior call.  Return failure because callers that do this
@@ -190,12 +190,6 @@ ResultType Clipboard::Set(LPCTSTR aBuf, UINT_PTR aLength) //, bool aTrimIt)
 		if (!PrepareForWrite(aLength + 1))
 			return FAIL;  // It already displayed the error.
 		tcslcpy(mClipMemNewLocked, aBuf, aLength + 1);  // Copy only a substring, if aLength specifies such.
-		// Only trim when the caller told us to, rather than always if g_script.mIsAutoIt2
-		// is true, since AutoIt2 doesn't always trim things (e.g. FileReadLine probably
-		// does not trim the line that was read into its output var).  UPDATE: This is
-		// no longer needed because I think AutoIt2 only auto-trims when SetEnv is used:
-		//if (aTrimIt)
-		//	trim(mClipMemNewLocked);
 	}
 	// else just do the below to empty the clipboard, which is different than setting
 	// the clipboard equal to the empty string: it's not truly empty then, as reported
