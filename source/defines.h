@@ -489,18 +489,12 @@ typedef UCHAR ActionTypeType; // If ever have more than 256 actions, will have t
 struct Action
 {
 	LPTSTR Name;
-	// Just make them int's, rather than something smaller, because the collection
-	// of actions will take up very little memory.  Int's are probably faster
-	// for the processor to access since they are the native word size, or something:
-	// Update for v1.0.40.02: Now that the ARGn macros don't check mArgc, MaxParamsAu2WithHighBit
-	// is needed to allow MaxParams to stay pure, which in turn prevents Line::Perform()
-	// from accessing a NULL arg in the sArgDeref array (i.e. an arg that exists only for
-	// non-AutoIt2 scripts, such as the extra ones in StringGetPos).
-	// Also, changing these from ints to chars greatly reduces code size since this struct
-	// is used by g_act to build static data into the code.  Testing shows that the compiler
-	// will generate a warning even when not in debug mode in the unlikely event that a constant
+	// Changing these from ints to chars greatly reduced code size since this struct is used
+	// by g_act to build static data into the code.  Testing shows that the compiler will
+	// generate a warning even when not in debug mode in the unlikely event that a constant
 	// larger than 127 is ever stored in one of these:
-	char MinParams, MaxParams, MaxParamsAu2WithHighBit;
+	char MinParams, MaxParams;
+	bool CheckOverlap;
 	// Array indicating which args must be purely numeric.  The first arg is
 	// number 1, the second 2, etc (i.e. it doesn't start at zero).  The list
 	// is ended with a zero, much like a string.  The compiler will notify us

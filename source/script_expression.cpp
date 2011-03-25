@@ -2343,8 +2343,8 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 	// StringRight/Left and similar can tolerate the same address because they always produce a string whose
 	// length is less-than-or-equal to the input-string, thus Assign() will never need to free/realloc the
 	// output-var prior to assigning the input-var's contents to it (whose contents are the same as output-var).
-	if (!(g_act[mActionType].MaxParamsAu2WithHighBit & 0x80)) // Commands that have this bit don't need final check
-		return CONDITION_FALSE;                               // further below (though they do need the ones above).
+	if (!g_act[mActionType].CheckOverlap) // Commands that have this flag don't need final check
+		return CONDITION_FALSE;           // further below (though they do need the ones above).
 
 	// Since the above didn't return, we know that this is a NORMAL input var that isn't an
 	// environment variable.  Such input vars only need to be dereferenced if they are also

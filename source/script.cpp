@@ -7518,7 +7518,7 @@ size_t Line::ArgIndexLength(int aArgIndex)
 	{
 		Var &var = *sArgVar[aArgIndex]; // For performance and convenience.
 		if (   var.Type() == VAR_NORMAL  // This and below ordered for short-circuit performance based on types of input expected from caller.
-			&& !(g_act[mActionType].MaxParamsAu2WithHighBit & 0x80) // Although the ones that have the highbit set are hereby omitted from the fast method, the nature of almost all of the highbit commands is such that their performance won't be measurably affected. See ArgMustBeDereferenced() for more info.
+			&& !g_act[mActionType].CheckOverlap // Although the ones that have CheckOverlap == true are hereby omitted from the fast method, the nature of almost all of the highbit commands is such that their performance won't be measurably affected. See ArgMustBeDereferenced() for more info.
 			&& &var != g_ErrorLevel   ) // Mostly for maintainability because the following situation is very rare: If it's g_ErrorLevel, use the deref version instead because if g_ErrorLevel is an input variable in the caller's command, and the caller changes ErrorLevel (such as to set a default) prior to calling this function, the changed/new ErrorLevel will be used rather than its original value (which is usually undesirable).
 			//&& !var.IsBinaryClip())  // This check isn't necessary because the line below handles it.
 			return var.LengthIgnoreBinaryClip(); // Do it the fast way (unless it's binary clipboard, in which case this call will internally call _tcslen()).
@@ -7549,7 +7549,7 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 	{
 		Var &var = *sArgVar[aArgIndex];
 		if (   var.Type() == VAR_NORMAL  // See ArgIndexLength() for comments about this line and below.
-			&& !(g_act[mActionType].MaxParamsAu2WithHighBit & 0x80)
+			&& !g_act[mActionType].CheckOverlap
 			&& &var != g_ErrorLevel
 			&& !var.IsBinaryClip()   )
 			return var.ToInt64(FALSE);
@@ -7579,7 +7579,7 @@ double Line::ArgIndexToDouble(int aArgIndex)
 	{
 		Var &var = *sArgVar[aArgIndex];
 		if (   var.Type() == VAR_NORMAL  // See ArgIndexLength() for comments about this line and below.
-			&& !(g_act[mActionType].MaxParamsAu2WithHighBit & 0x80)
+			&& !g_act[mActionType].CheckOverlap
 			&& &var != g_ErrorLevel
 			&& !var.IsBinaryClip()   )
 			return var.ToDouble(FALSE);
