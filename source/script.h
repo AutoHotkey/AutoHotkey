@@ -944,8 +944,6 @@ public:
 			{
 			case ACT_ASSIGN:
 			case ACT_ASSIGNEXPR:
-			case ACT_ADD:
-			case ACT_SUB:
 			case ACT_TRANSFORM:
 			case ACT_STRINGLEFT:
 			case ACT_STRINGRIGHT:
@@ -2829,6 +2827,8 @@ void BIF_ASinACos(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 void BIF_ATan(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_Exp(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_SqrtLogLn(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_DateAdd(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_DateDiff(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 void BIF_OnMessage(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 #ifdef ENABLE_REGISTERCALLBACK

@@ -272,10 +272,6 @@ Action g_act[] =
 	// Its name should be "" so that Line::ToText() will properly display it.
 	, {_T(""), 1, 1, false, {1, 0}}
 
-	// TODO: Make the following two functional again, but given more intuitive names like DateAdd and DateDiff.
-	, {_T("+="), 2, 3, false, {2, 0}}
-	, {_T("-="), 1, 3, false, {2, 0}} // Subtraction (but not addition) allows 2nd to be blank due to 3rd param.
-
 	, {_T("Else"), 0, 0, false, NULL}
 
 	, {_T("in"), 2, 2, false, NULL}, {_T("not in"), 2, 2, false, NULL}

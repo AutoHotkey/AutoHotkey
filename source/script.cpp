@@ -5290,26 +5290,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// Fix for v1.0.35.02:
 	// THESE FIRST FEW CASES MUST EXIST IN BOTH SELF-CONTAINED AND NORMAL VERSION since they alter the
 	// attributes/members of some types of lines:
-	case ACT_SUB:
-		if (aArgc < 2) // Validate at loadtime so that at runtime, DETERMINE_NUMERIC_TYPES and ARG2_AS_INT64 don't have to check that mArgc > 1.
-			return ScriptError(ERR_PARAM2_REQUIRED);
-		// ** DON'T BREAK; FALL INTO NEXT SECTION **
-	case ACT_ADD:  // ************ OR IT FELL INTO THIS SECTION FROM ABOVE ************
-#ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
-		if (aArgc > 2) // Then this is ACT_ADD OR ACT_SUB with a 3rd parameter (TimeUnits)
-		{
-			if (*new_raw_arg3 && !line.ArgHasDeref(3))
-				if (!_tcschr(_T("SMHD"), ctoupper(*new_raw_arg3)))  // (S)econds, (M)inutes, (H)ours, or (D)ays
-					return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-			if (aActionType == ACT_SUB && *new_raw_arg2 && !line.ArgHasDeref(2))
-				if (!YYYYMMDDToSystemTime(new_raw_arg2, st, true))
-					return ScriptError(ERR_INVALID_DATETIME, new_raw_arg2);
-			new_arg[1].postfix = NULL; // It's necessary to indicate that there is no cached binary number for arg #2 in the 3-arg mode of ACT_ADD due to runtime logic that checks it.  For the others, this helps maintainability.
-			break; // Don't allow processing to continue.  Other sections below rely on this.
-		}
-		// ** DON'T BREAK; FALL INTO NEXT SECTION **
-#endif
-	case ACT_ASSIGN: // **** OR IT FELL INTO THIS SECTION FROM ABOVE ****
+	case ACT_ASSIGN:
 	case ACT_ASSIGNEXPR:
 	case ACT_IFBETWEEN:
 	case ACT_IFNOTBETWEEN:
@@ -7249,6 +7230,16 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		bif = BIF_Exp;
 	else if (!_tcsicmp(func_name, _T("Sqrt")) || !_tcsicmp(func_name, _T("Log")) || !_tcsicmp(func_name, _T("Ln")))
 		bif = BIF_SqrtLogLn;
+	else if (!_tcsicmp(func_name, _T("DateAdd")))
+	{
+		bif = BIF_DateAdd;
+		min_params = max_params = 3;
+	}
+	else if (!_tcsicmp(func_name, _T("DateDiff")))
+	{
+		bif = BIF_DateDiff;
+		min_params = max_params = 3;
+	}
 	else if (!_tcsicmp(func_name, _T("OnMessage")))
 	{
 		bif = BIF_OnMessage;
@@ -12445,14 +12436,12 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 {
 	TCHAR buf_temp[MAX_REG_ITEM_SIZE], *contents; // For registry and other things.
 	WinGroup *group; // For the group commands.
-	Var *arg_var2, *output_var = OUTPUT_VAR; // Okay if NULL. Users of it should only consider it valid if their first arg is actually an output_variable.
+	Var *output_var = OUTPUT_VAR; // Okay if NULL. Users of it should only consider it valid if their first arg is actually an output_variable.
 	global_struct &g = *::g; // Reduces code size due to replacing so many g-> with g. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
-	BOOL arg2_has_binary_integer;
 	ToggleValueType toggle;  // For commands that use on/off/neutral.
 	// Use signed values for these in case they're really given an explicit negative value:
 	int start_char_num, chars_to_extract; // For String commands.
 	size_t source_length; // For String commands.
-	SymbolType var_is_pure_numeric, value_is_pure_numeric; // For math operations.
 	vk_type vk; // For GetKeyState.
 	Label *target_label;  // For ACT_SETTIMER and ACT_HOTKEY
 	int instance_number;  // For sound commands.
@@ -12531,133 +12520,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		//    x&=3
 		//    var ? func() : x:=y
 		return OK;
-
-	// Like AutoIt2, if either output_var or ARG1 aren't purely numeric, they
-	// will be considered to be zero for all of the below math functions:
-	case ACT_ADD:
-		// Notes about the macro below:
-		// Ordered for short-circuit performance. No need to check if it's g_ErrorLevel (like
-		// ArgMustBeDereferenced() does) because the commands that use it don't internally change ErrorLevel.
-		// RAW is safe because loadtime validation ensured there are at least 2 args.
-		// ACT_ADD/SUB/MULT/DIV are one of the few places that pass true to IsNonBlankIntegerOrFloat(true).
-		// This is for backward compatibility.
-		#define DEFINE_ARG_VAR2 arg_var2 = (ARGVARRAW2 && !*ARG2 && ARGVARRAW2->Type() == VAR_NORMAL) ? ARGVARRAW2 : NULL;
-		#undef DETERMINE_NUMERIC_TYPES
-		#define DETERMINE_NUMERIC_TYPES \
-			if (arg2_has_binary_integer = mArg[1].postfix && !mArg[1].is_expression)\
-			{\
-				value_is_pure_numeric = PURE_INTEGER;\
-				arg_var2 = NULL;\
-			}\
-			else\
-			{\
-				DEFINE_ARG_VAR2 \
-				value_is_pure_numeric = arg_var2 ? arg_var2->IsNonBlankIntegerOrFloat(true)\
-					: IsPureNumeric(ARG2, true, false, true, true);\
-			}\
-			var_is_pure_numeric = output_var->IsNonBlankIntegerOrFloat(true);
-		#undef ARG2_AS_DOUBLE
-		#undef ARG2_AS_INT64
-		#define ARG2_AS_DOUBLE (arg2_has_binary_integer ? (double)*(__int64*)mArg[1].postfix \
-			: arg_var2 ? arg_var2->ToDouble(FALSE) : ATOF(ARG2))
-		#define ARG2_AS_INT64 (arg2_has_binary_integer ? *(__int64*)mArg[1].postfix \
-			: (arg_var2 ? arg_var2->ToInt64(FALSE) : ATOI64(ARG2)))
-
-		// Some performance can be gained by relying on the fact that short-circuit boolean
-		// can skip the "var_is_pure_numeric" check whenever value_is_pure_numeric == PURE_FLOAT.
-		// This is because var_is_pure_numeric is never directly needed here (unlike EvaluateCondition()).
-		// However, benchmarks show that this makes such a small difference that it's not worth the
-		// loss of maintainability and the slightly larger code size due to macro expansion:
-		//#undef IF_EITHER_IS_FLOAT
-		//#define IF_EITHER_IS_FLOAT if (value_is_pure_numeric == PURE_FLOAT \
-		//	|| IsPureNumeric(output_var->Contents(), true, false, true, true) == PURE_FLOAT)
-
-		DETERMINE_NUMERIC_TYPES
-
-		if (!*ARG3 || !_tcschr(_T("SMHD"), ctoupper(*ARG3))) // ARG3 is absent or invalid, so do normal math (not date-time).
-		{
-			IF_EITHER_IS_FLOAT
-				return output_var->Assign(output_var->ToDouble(FALSE) + ARG2_AS_DOUBLE);
-			else // Non-numeric variables or values are considered to be zero for the purpose of the calculation.
-				return output_var->Assign(output_var->ToInt64(FALSE) + ARG2_AS_INT64);
-		}
-
-		// Since above didn't return, the command is being used to add a value to a date-time.
-		if (!value_is_pure_numeric) // It's considered to be zero, so the output_var is left unchanged:
-			return OK;
-		// Since above didn't return:
-		// Use double to support a floating point value for days, hours, minutes, etc:
-		double nUnits; // Declaring separate from initializing avoids compiler warning when not inside a block.
-		nUnits = ARG2_AS_DOUBLE;
-		FILETIME ft, ftNowUTC;
-		if (*output_var->Contents())
-		{
-			if (!YYYYMMDDToFileTime(output_var->Contents(), ft))
-				return output_var->Assign(_T("")); // Set to blank to indicate the problem.
-		}
-		else // The output variable is currently blank, so substitute the current time for it.
-		{
-			GetSystemTimeAsFileTime(&ftNowUTC);
-			FileTimeToLocalFileTime(&ftNowUTC, &ft);  // Convert UTC to local time.
-		}
-		// Convert to 10ths of a microsecond (the units of the FILETIME struct):
-		switch (ctoupper(*ARG3))
-		{
-		case 'S': // Seconds
-			nUnits *= (double)10000000;
-			break;
-		case 'M': // Minutes
-			nUnits *= ((double)10000000 * 60);
-			break;
-		case 'H': // Hours
-			nUnits *= ((double)10000000 * 60 * 60);
-			break;
-		case 'D': // Days
-			nUnits *= ((double)10000000 * 60 * 60 * 24);
-			break;
-		}
-		// Convert ft struct to a 64-bit variable (maybe there's some way to avoid these conversions):
-		ULARGE_INTEGER ul;
-		ul.LowPart = ft.dwLowDateTime;
-		ul.HighPart = ft.dwHighDateTime;
-		// Add the specified amount of time to the result value:
-		ul.QuadPart += (__int64)nUnits;  // Seems ok to cast/truncate in light of the *=10000000 above.
-		// Convert back into ft struct:
-		ft.dwLowDateTime = ul.LowPart;
-		ft.dwHighDateTime = ul.HighPart;
-		return output_var->Assign(FileTimeToYYYYMMDD(buf_temp, ft, false));
-
-	case ACT_SUB:
-		if (!*ARG3 || !_tcschr(_T("SMHD"), ctoupper(*ARG3))) // ARG3 is absent or invalid, so do normal math (not date-time).
-		{
-			DETERMINE_NUMERIC_TYPES
-			IF_EITHER_IS_FLOAT
-				return output_var->Assign(output_var->ToDouble(FALSE) - ARG2_AS_DOUBLE);
-			else // Non-numeric variables or values are considered to be zero for the purpose of the calculation.
-				return output_var->Assign(output_var->ToInt64(FALSE) - ARG2_AS_INT64);
-		}
-
-		// Since above didn't return, the command is being used to subtract date-time values.
-		bool failed;
-		// If either ARG2 or output_var->Contents() is blank, it will default to the current time:
-		__int64 time_until; // Declaring separate from initializing avoids compiler warning when not inside a block.
-		DEFINE_ARG_VAR2
-		time_until = YYYYMMDDSecondsUntil(arg_var2 ? arg_var2->Contents() : ARG2
-			, output_var->Contents(), failed);
-		if (failed) // Usually caused by an invalid component in the date-time string.
-			return output_var->Assign(_T(""));
-		switch (ctoupper(*ARG3))
-		{
-		// Do nothing in the case of 'S' (seconds).  Otherwise:
-		case 'M': time_until /= 60; break; // Minutes
-		case 'H': time_until /= 60 * 60; break; // Hours
-		case 'D': time_until /= 60 * 60 * 24; break; // Days
-		}
-		// Only now that any division has been performed (to reduce the magnitude of
-		// time_until) do we cast down into an int, which is the standard size
-		// used for non-float results (the result is always non-float for subtraction
-		// of two date-times):
-		return output_var->Assign(time_until); // Assign as signed 64-bit.
 
 	case ACT_STRINGLEFT:
 		chars_to_extract = ArgToInt(3); // Use 32-bit signed to detect negatives and fit it VarSizeType.

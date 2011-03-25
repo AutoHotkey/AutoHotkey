@@ -15348,6 +15348,84 @@ void BIF_SqrtLogLn(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 
 
+void BIF_DateAdd(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T(""); // Set default in case of early return.
+
+	FILETIME ft;
+	if (!YYYYMMDDToFileTime(TokenToString(*aParam[0], aResultToken.buf), ft))
+		return;
+
+	// Use double to support a floating point value for days, hours, minutes, etc:
+	double nUnits;
+	nUnits = TokenToDouble(*aParam[1]);
+
+	// Convert to 10ths of a microsecond (the units of the FILETIME struct):
+	switch (ctoupper(*TokenToString(*aParam[2])))
+	{
+	case 'S': // Seconds
+		nUnits *= (double)10000000;
+		break;
+	case 'M': // Minutes
+		nUnits *= ((double)10000000 * 60);
+		break;
+	case 'H': // Hours
+		nUnits *= ((double)10000000 * 60 * 60);
+		break;
+	case 'D': // Days
+		nUnits *= ((double)10000000 * 60 * 60 * 24);
+		break;
+	default: // Invalid
+		return;
+	}
+	// Convert ft struct to a 64-bit variable (maybe there's some way to avoid these conversions):
+	ULARGE_INTEGER ul;
+	ul.LowPart = ft.dwLowDateTime;
+	ul.HighPart = ft.dwHighDateTime;
+	// Add the specified amount of time to the result value:
+	ul.QuadPart += (__int64)nUnits;  // Seems ok to cast/truncate in light of the *=10000000 above.
+	// Convert back into ft struct:
+	ft.dwLowDateTime = ul.LowPart;
+	ft.dwHighDateTime = ul.HighPart;
+	aResultToken.marker = FileTimeToYYYYMMDD(aResultToken.buf, ft, false);
+}
+
+
+
+void BIF_DateDiff(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	// Since above didn't return, the command is being used to subtract date-time values.
+	bool failed;
+	// If either ARG2 or output_var->Contents() is blank, it will default to the current time:
+	__int64 time_until; // Declaring separate from initializing avoids compiler warning when not inside a block.
+	TCHAR number_buf[MAX_NUMBER_SIZE]; // Additional buf used in case both parameters are pure numbers.
+	time_until = YYYYMMDDSecondsUntil(
+		TokenToString(*aParam[1], aResultToken.buf),
+		TokenToString(*aParam[0], number_buf),
+		failed);
+	if (failed) // Usually caused by an invalid component in the date-time string.
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+		return;
+	}
+	switch (ctoupper(*TokenToString(*aParam[2])))
+	{
+	case 'S': break;
+	case 'M': time_until /= 60; break; // Minutes
+	case 'H': time_until /= 60 * 60; break; // Hours
+	case 'D': time_until /= 60 * 60 * 24; break; // Days
+	default: // Invalid
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+		return;
+	}
+	aResultToken.value_int64 = time_until;
+}
+
+
+
 void BIF_OnMessage(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 // Returns: An empty string on failure or the name of a function (depends on mode) on success.
 // Parameters:
