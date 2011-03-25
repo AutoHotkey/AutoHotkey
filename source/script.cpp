@@ -4345,6 +4345,14 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			in[2] = g_delimiter; // Insert another delimiter so the expression is always arg 3.
 	}
 
+	else if (aActionType == ACT_IFEXPR)
+	{
+		// To support a same-line action, we tell the loop below to make one extra iteration.
+		// If a second "arg" exists, make it into a subaction.  This approach simplifies
+		// handling of commas in the expression, such as "if Func(a,b)".
+		max_params_override = 2;
+	}
+
 	/////////////////////////////////////////////////////////////
 	// Parse the parameter string into a list of separate params.
 	/////////////////////////////////////////////////////////////
@@ -4361,7 +4369,16 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 
 	for (nArgs = mark = 0; action_args[mark] && nArgs < max_params; ++nArgs)
 	{
-		if (nArgs == 2) // i.e. the 3rd arg is about to be added.
+		if (nArgs == 1) // i.e. the 2nd arg is about to be added.
+		{
+			if (aActionType == ACT_IFEXPR)
+			{
+				subaction_start = action_args + mark;
+				subaction_type = UCHAR_MAX; // Search for "Special signal from ACT_IFEXPR" for comments.
+				break;
+			}
+		}
+		else if (nArgs == 2) // i.e. the 3rd arg is about to be added.
 		{
 			switch (aActionType) // will be ACT_INVALID if this_action is an old-style command.
 			{
@@ -4602,6 +4619,16 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	if (add_openbrace_afterward)
 		if (!AddLine(ACT_BLOCK_BEGIN))
 			return FAIL;
+	if (subaction_type == UCHAR_MAX) // Special signal from ACT_IFEXPR.
+	{
+		// This ACT_IFEXPR has a same-line action, but what type of action has not
+		// been determined.  Unlike the "legacy" IF commands, we want to support
+		// assignments and expressions, not just named commands, so we let the
+		// recursive call figure it out rather than calling ConvertActionType():
+		return ParseAndAddLine(subaction_start, ACT_INVALID, NULL, NULL
+			, literal_map + (subaction_start - action_args) // Pass only the relevant substring of literal_map.
+			, _tcslen(subaction_start));
+	}
 	if (!subaction_type) // There is no subaction in this case.
 		return OK;
 	// Otherwise, recursively add the subaction, and any subactions it might have, beneath
