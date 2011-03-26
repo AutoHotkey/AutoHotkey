@@ -10077,6 +10077,7 @@ numeric_literal:
 						return LineError(ERR_EXPR_TOO_LONG);
 					infix[infix_count++].symbol = SYM_CONCAT;
 				}
+				infix[infix_count].var = this_deref_ref.var; // Set this first to allow optimizations below to override it.
 				if (this_deref_ref.var->Type() == VAR_NORMAL // VAR_ALIAS is taken into account (and resolved) by Type().
 					&& g_NoEnv) // v1.0.43.08: Added g_NoEnv.  Relies on short-circuit boolean order.
 					// "!this_deref_ref.var->Get()" isn't checked here.  See comments in SYM_DYNAMIC evaluation.
@@ -10087,10 +10088,31 @@ numeric_literal:
 				}
 				else // It's either a built-in variable (including clipboard) OR a possible environment variable.
 				{
-					infix[infix_count].symbol = SYM_DYNAMIC;
-					infix[infix_count].buf = NULL; // SYM_DYNAMIC requires that buf be set to NULL for non-double-deref vars (since there are two different types of SYM_DYNAMIC).
+					// The following "variables" previously had optimizations in ExpandExpression(),
+					// but since their values never change at run-time, it is better to do it here:
+					if (this_deref_ref.var->mBIV == BIV_True_False)
+					{
+						infix[infix_count].symbol = SYM_INTEGER;
+						infix[infix_count].value_int64 = (ctoupper(*this_deref_ref.marker) == 'T');
+					}
+					else if (this_deref_ref.var->mBIV == BIV_PtrSize)
+					{
+						infix[infix_count].symbol = SYM_INTEGER;
+						infix[infix_count].value_int64 = sizeof(void*);
+					}
+#ifdef UNICODE
+					else if (this_deref_ref.var->mBIV == BIV_IsUnicode)
+					{
+						infix[infix_count].symbol = SYM_INTEGER;
+						infix[infix_count].value_int64 = 1;
+					}
+#endif
+					else
+					{
+						infix[infix_count].symbol = SYM_DYNAMIC;
+						infix[infix_count].buf = NULL; // SYM_DYNAMIC requires that buf be set to NULL for non-double-deref vars (since there are two different types of SYM_DYNAMIC).
+					}
 				}
-				infix[infix_count].var = this_deref_ref.var;
 			}
 		} // Handling of the var or function in this_deref.
 
