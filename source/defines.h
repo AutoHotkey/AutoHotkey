@@ -323,7 +323,7 @@ enum enum_act {
 , ACT_SETKEYDELAY, ACT_SETMOUSEDELAY, ACT_SETWINDELAY, ACT_SETCONTROLDELAY, ACT_SETBATCHLINES
 , ACT_SETTITLEMATCHMODE, ACT_SETFORMAT, ACT_FORMATTIME
 , ACT_SUSPEND, ACT_PAUSE
-, ACT_AUTOTRIM, ACT_STRINGCASESENSE, ACT_DETECTHIDDENWINDOWS, ACT_DETECTHIDDENTEXT, ACT_BLOCKINPUT
+, ACT_STRINGCASESENSE, ACT_DETECTHIDDENWINDOWS, ACT_DETECTHIDDENTEXT, ACT_BLOCKINPUT
 , ACT_SETNUMLOCKSTATE, ACT_SETSCROLLLOCKSTATE, ACT_SETCAPSLOCKSTATE, ACT_SETSTORECAPSLOCKMODE
 , ACT_KEYHISTORY, ACT_LISTLINES, ACT_LISTVARS, ACT_LISTHOTKEYS
 , ACT_EDIT, ACT_RELOAD, ACT_MENU, ACT_GUI, ACT_GUICONTROL, ACT_GUICONTROLGET
@@ -603,7 +603,6 @@ struct global_struct
 	UCHAR CoordMode; // Bitwise collection of flags.
 	UCHAR StringCaseSense; // On/Off/Locale
 	bool StoreCapslockMode;
-	bool AutoTrim;
 	char FormatInt;
 	bool MsgBoxTimedOut; // Doesn't require initialization.
 	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
@@ -697,7 +696,6 @@ inline void global_init(global_struct &g)
 	g.CoordMode = 0;  // All the flags it contains are off by default.
 	g.StringCaseSense = SCS_INSENSITIVE;  // AutoIt2 default, and it does seem best.
 	g.StoreCapslockMode = true;  // AutoIt2 (and probably 3's) default, and it makes a lot of sense.
-	g.AutoTrim = true;  // AutoIt2's default, and overall the best default in most cases.
 	_tcscpy(g.FormatFloat, _T("%0.6f"));
 	g.FormatInt = 'D';
 	g.ListLinesIsEnabled = true;

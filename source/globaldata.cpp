@@ -497,7 +497,6 @@ Action g_act[] =
 
 	, {_T("Suspend"), 0, 1, false, NULL} // On/Off/Toggle/Permit/Blank (blank is the same as toggle)
 	, {_T("Pause"), 0, 2, false, NULL} // On/Off/Toggle/Blank (blank is the same as toggle), AlwaysAffectUnderlying
-	, {_T("AutoTrim"), 1, 1, false, NULL} // On/Off
 	, {_T("StringCaseSense"), 1, 1, false, NULL} // On/Off/Locale
 	, {_T("DetectHiddenWindows"), 1, 1, false, NULL} // On/Off
 	, {_T("DetectHiddenText"), 1, 1, false, NULL} // On/Off

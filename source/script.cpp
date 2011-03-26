@@ -5213,9 +5213,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					if (aActionType < ACT_FOR || aActionType > ACT_UNTIL) // If it is FOR, WHILE or UNTIL, it would be something like "while x" in this case. Keep those as expressions for the reason above. PerformLoopFor() requires FOR's expression arg to remain an expression.
 						this_new_arg.is_expression = false; // In addition to being an optimization, doing this might also be necessary for things like "Var := ClipboardAll" to work properly.
 					// But if aActionType is ACT_ASSIGNEXPR, it's left as ACT_ASSIGNEXPR vs. ACT_ASSIGN
-					// because it might be necessary to avoid having AutoTrim take effect for := (which
-					// it never should).  In addition, ACT_ASSIGNEXPR probably performs better than
-					// ACT_ASSIGN when is_expression==false.
+					// because ACT_ASSIGNEXPR probably performs better than ACT_ASSIGN when !is_expression.
 				}
 				else if (deref_count && !StrChrAny(this_new_arg.text, EXPR_OPERAND_TERMINATORS)) // No spaces, tabs, etc.
 				{
@@ -5557,7 +5555,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(_T("Return's parameter should be blank except inside a function."));
 		break;
 
-	case ACT_AUTOTRIM:
 	case ACT_DETECTHIDDENWINDOWS:
 	case ACT_DETECTHIDDENTEXT:
 	case ACT_SETSTORECAPSLOCKMODE:
@@ -8276,7 +8273,6 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (!_tcscmp(lower, _T("titlematchmodespeed"))) return BIV_TitleMatchModeSpeed;
 	if (!_tcscmp(lower, _T("detecthiddenwindows"))) return BIV_DetectHiddenWindows;
 	if (!_tcscmp(lower, _T("detecthiddentext"))) return BIV_DetectHiddenText;
-	if (!_tcscmp(lower, _T("autotrim"))) return BIV_AutoTrim;
 	if (!_tcscmp(lower, _T("stringcasesense"))) return BIV_StringCaseSense;
 	if (!_tcscmp(lower, _T("formatinteger"))) return BIV_FormatInteger;
 	if (!_tcscmp(lower, _T("formatfloat"))) return BIV_FormatFloat;
@@ -13590,10 +13586,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return OK;
 	case ACT_PAUSE:
 		return ChangePauseState(ConvertOnOffToggle(ARG1), (bool)ArgToInt(2));
-	case ACT_AUTOTRIM:
-		if (   (toggle = ConvertOnOff(ARG1, NEUTRAL)) != NEUTRAL   )
-			g.AutoTrim = (toggle == TOGGLED_ON);
-		return OK;
 	case ACT_STRINGCASESENSE:
 		if ((g.StringCaseSense = ConvertStringCaseSense(ARG1)) == SCS_INVALID)
 			g.StringCaseSense = SCS_INSENSITIVE; // For simplicity, just fall back to default if value is invalid (normally its caught at load-time; only rarely here).

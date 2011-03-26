@@ -6692,13 +6692,11 @@ ResultType Line::PerformAssign()
 			&& arg2_with_at_least_one_deref->deref[0].length == arg2_with_at_least_one_deref->length) // and the arg contains no literal text
 		if (SINGLE_ISOLATED_DEREF) // The macro is used for maintainability because there are other places that use the same name for a macro of similar purposes.
 		{
-			if (   source_var_type == VAR_NORMAL // Not necessary to check output_var.Type()==VAR_NORMAL because VAR_CLIPBOARD is handled properly when AutoTrim is off (clipboard can never have HasUnflushedBinaryNumber()==true).
-				&& (!g->AutoTrim || source_var->HasUnflushedBinaryNumber())   ) // When AutoTrim is off, or it's on but the source variable's mContents is out-of-date, output_var.Assign() is capable of handling the copy, and does so much faster.
-				return output_var.Assign(*source_var); // In this case, it's okay if target_is_involved_in_source below would be true because this can handle copying a variable to itself.
-				// Since modern scripts don't use Var=%Var2% very often and since a lot of complicated code
-				// would be needed to change Assign(Var...) to accept a parameter such as aObeyAutoTrim, it
-				// doesn't seem worth doing (all it would save is the copying one variable's mContents to another
-				// when the original var is a number, in which case its mContents tends to be quite short anyway).
+			if (source_var_type == VAR_NORMAL) // Not necessary to check output_var.Type()==VAR_NORMAL because VAR_CLIPBOARD is handled properly.
+				// output_var.Assign() is capable of handling the copy, and does so much faster.
+				// In this case, it's okay if target_is_involved_in_source below would be true
+				// because this can handle copying a variable to itself.
+				return output_var.Assign(*source_var);
 			//else continue on to later handling.
 			arg_var[1] = source_var; // Set for use later on.
 		}
@@ -6833,15 +6831,6 @@ ResultType Line::PerformAssign()
 		// have seen that it can't optimize it that way and thus it has fully expanded the variable into the buffer.
 		if (!output_var.Assign(ARG2)) // Don't pass it space_needed-1 as the length because space_needed might be a conservative estimate larger than the actual length+terminator.
 			return FAIL;
-		if (g->AutoTrim)
-		{
-			contents = output_var.Contents();
-			if (*contents)
-			{
-				output_var.SetCharLength((VarSizeType)trim(contents, output_var.Length())); // Passing length to trim() is known to greatly improve performance for long strings.
-				output_var.Close(); // For maintainability (probably not currently necessary due to Assign() being called above).
-			}
-		}
 		return OK;
 	}
 
@@ -6867,10 +6856,7 @@ ResultType Line::PerformAssign()
 		return FAIL;  // ExpandArg() will have already displayed the error.
 	// Set the length explicitly rather than using space_needed because GetExpandedArgSize()
 	// sometimes returns a larger size than is actually needed (e.g. for ScriptGetCursor()):
-	size_t length = one_beyond_contents_end - contents - 1;
-	// v1.0.25: Passing the precalculated length to trim() greatly improves performance,
-	// especially for concat loops involving things like Var = %Var%String:
-	output_var.SetCharLength((VarSizeType)(g->AutoTrim ? trim(contents, length) : length));
+	output_var.SetCharLength((VarSizeType)(one_beyond_contents_end - contents - 1));
 	return output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 }
 
@@ -10465,13 +10451,6 @@ VarSizeType BIV_DetectHiddenText(LPTSTR aBuf, LPTSTR aVarName)
 {
 	return aBuf
 		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->DetectHiddenText ? _T("On") : _T("Off"))) // For backward compatibility (due to StringCaseSense), never change the case used here. Fixed in v1.0.42.01 to return exact length (required).
-		: 3; // Room for either On or Off (in the estimation phase).
-}
-
-VarSizeType BIV_AutoTrim(LPTSTR aBuf, LPTSTR aVarName)
-{
-	return aBuf
-		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->AutoTrim ? _T("On") : _T("Off"))) // For backward compatibility (due to StringCaseSense), never change the case used here. Fixed in v1.0.42.01 to return exact length (required).
 		: 3; // Room for either On or Off (in the estimation phase).
 }
 

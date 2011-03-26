@@ -2693,7 +2693,6 @@ VarSizeType BIV_TitleMatchMode(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_TitleMatchModeSpeed(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_DetectHiddenWindows(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_DetectHiddenText(LPTSTR aBuf, LPTSTR aVarName);
-VarSizeType BIV_AutoTrim(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_StringCaseSense(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_FormatInteger(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_FormatFloat(LPTSTR aBuf, LPTSTR aVarName);
