@@ -3454,7 +3454,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				, open_brace_was_added = false, item = cp
 				; *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
 			{
-				LPTSTR item_end = StrChrAny(item, _T(", \t=:"));  // Comma, space or tab, equal-sign, colon.
+				LPTSTR item_end = StrChrAny(item, EXPR_OPERAND_TERMINATORS);
 				if (!item_end) // This is probably the last/only variable in the list; e.g. the "x" in "local x"
 					item_end = item + _tcslen(item);
 				var_name_length = (VarSizeType)(item_end - item);
@@ -3494,7 +3494,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 
 				item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
 
-				bool convert_the_operator;
 				switch(*item_end)
 				{
 				case ',':  // No initializer is present for this variable, so move on to the next one.
@@ -3504,20 +3503,25 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					item = item_end; // Set "item" for use by the next iteration.
 					continue;
 				case ':':
-					if (item_end[1] != '=') // Colon with no following '='.
-						return ScriptError(ERR_UNRECOGNIZED_ACTION, item); // Vague error since so rare.
-					item_end += 2; // Point to the character after the ":=".
-					convert_the_operator = false;
-					break;
-				case '=': // Here '=' is clearly an assignment not a comparison, so further below it will be converted to :=
-					++item_end; // Point to the character after the "=".
-					convert_the_operator = true;
-					break;
+					if (item_end[1] == '=')
+					{
+						item_end += 2; // Point to the character after the ":=".
+						break;
+					}
+					// Colon with no following '='. Fall through to the default case.
 				default:
-					// L31: This can be reached by something not officially supported like "global var .= value_to_append".
-					// In previous versions, convert_the_operator was left uninitialized and whether it would work or be
-					// replaced with ".:=" and fail was up to chance.  (Testing showed it failed only in Debug mode.)
-					convert_the_operator = false;
+					if (declare_type != VAR_DECLARE_STATIC)
+					{
+						// Since this global or local variable might already have a value,
+						// compound assignments are valid (although not very conventional).
+						// Allowed: += -= *= /= .= |= &= ^=
+						if (_tcschr(_T("+-*/.|&^"), *item_end) && item_end[1] == '=')
+							break;
+						// Allowed: //= <<= >>=
+						if (_tcschr(_T("/<>"), *item_end) && item_end[1] == *item_end && item_end[2] == '=')
+							break;
+					}
+					return ScriptError(_T("Bad variable declaration."), item);
 				}
 				LPTSTR right_side_of_operator = item_end; // Save for use by VAR_DECLARE_STATIC below.
 
@@ -3639,23 +3643,11 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					// variable, or a complex expression is the opposite: they are always faster when done via
 					// commas, and they continue to get faster and faster as more expressions are merged into a
 					// single comma-separated expression. In light of this, a future version could combine ONLY
-					// those declarations that have initializers into a single comma-separately expression rather
+					// those declarations that have initializers into a single comma-separated expression rather
 					// than making a separate expression for each.  However, since it's not always faster to do
 					// so (e.g. x:=0,y:=1 is faster as separate statements), and since it is somewhat rare to
 					// have a long chain of initializers, and since these performance differences are documented,
 					// it might not be worth changing.
-					LPTSTR line_to_add;
-					TCHAR new_buf[LINE_SIZE]; // Declared outside the braces below so that it stays in scope long enough. Using so much stack space here and in caller seems unlikely to affect performance, so _alloca seems unlikely to help.
-					if (convert_the_operator) // Convert first '=' in item to be ":=".
-					{
-						// Prevent any chance of overflow by using new_buf (overflow might otherwise occur in cases
-						// such as this sub-statement being the very last one in the declaration list, and being
-						// at the limit of the buffer's capacity).
-						StrReplace(_tcscpy(new_buf, item), _T("="), _T(":="), SCS_SENSITIVE, 1); // Can't overflow because there's only one replacement and we know item's length can't be that close to the capacity limit.
-						line_to_add = new_buf;
-					}
-					else
-						line_to_add = item;
 					if (belongs_to_if_or_else_or_loop && !open_brace_was_added) // v1.0.46.01: Put braces to allow initializers to work even directly under an IF/ELSE/LOOP.  Note that the braces aren't added or needed for static initializers.
 					{
 						if (!AddLine(ACT_BLOCK_BEGIN))
@@ -3664,7 +3656,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					}
 					// Call Parse() vs. AddLine() because it detects and optimizes simple assignments into
 					// non-expressions for faster runtime execution.
-					if (!ParseAndAddLine(line_to_add)) // For simplicity and maintainability, call self rather than trying to set things up properly to stay in self.
+					if (!ParseAndAddLine(item)) // For simplicity and maintainability, call self rather than trying to set things up properly to stay in self.
 						return FAIL; // Above already displayed the error.
 				}
 
