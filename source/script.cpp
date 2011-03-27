@@ -3063,6 +3063,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				|| (g_CommentFlagLength == 1 && *parameter == *g_CommentFlag)   ) // Fix for v1.0.47.05: Allow deref char to be # as documented.
 				return ScriptError(ERR_PARAM1_INVALID, aBuf);
 			g_DerefChar = *parameter;
+			g_DerefEndChar = parameter[1] ? parameter[1] : g_DerefChar;
 		}
 		return CONDITION_TRUE;
 	}
@@ -5039,7 +5040,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// The following characters are either illegal in expressions or reserved for future use.
 					// This excludes g_DerefChar (which might have been customized via #DerefChar) since that
 					// is used for double-derefs in expressions.
-					for (cp = op_begin; !_tcschr(EXPR_ILLEGAL_CHARS, *cp) || *cp == g_DerefChar; ++cp); // _tcschr includes the null terminator in the search.
+					for (cp = op_begin; !_tcschr(EXPR_ILLEGAL_CHARS, *cp) || *cp == g_DerefChar || *cp == g_DerefEndChar; ++cp); // _tcschr includes the null terminator in the search.
 					if (*cp)
 						return ScriptError(ERR_EXP_ILLEGAL_CHAR, cp);
 
@@ -6487,7 +6488,7 @@ ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDere
 		// If this deref ended at a non-literal deref char, it is considered part of the deref.
 		// This allows "%var%" to be a simple deref, "the %var." to be equivalent to "the %var%."
 		// and "%n`%" to be equivalent to "%n%`%", e.g. "100%" where n = 100.
-		if (aArgText[j] == g_DerefChar && !(aArgMap && aArgMap[j]))
+		if (aArgText[j] == g_DerefEndChar && !(aArgMap && aArgMap[j]))
 			++j;
 		deref_string_length = aArgText + j - this_deref.marker;
 		this_deref.is_function = false;

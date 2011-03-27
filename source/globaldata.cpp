@@ -143,7 +143,7 @@ bool g_SortReverse;
 int g_SortColumnOffset;
 Func *g_SortFunc;
 
-TCHAR g_DerefChar = '%';
+TCHAR g_DerefChar = '%', g_DerefEndChar = '%';
 TCHAR g_EscapeChar = '`';
 
 // Hot-string vars (initialized when ResetHook() is first called):
