@@ -306,7 +306,7 @@ ResultType Var::AssignClipboardAll()
 	}
 
 	// Resize the output variable, if needed:
-	if (!SetCapacity(space_needed, true, false))
+	if (!SetCapacity(space_needed, true))
 	{
 		g_clip.Close();
 		return FAIL; // Above should have already reported the error.
@@ -400,7 +400,7 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 			//MarkInitialized();
 			return OK;
 		}
-		if (!SetCapacity(source_var.mByteLength, true, false)) // source_var.mLength vs. Length() is okay (see above).
+		if (!SetCapacity(source_var.mByteLength, true)) // source_var.mLength vs. Length() is okay (see above).
 			return FAIL; // Above should have already reported the error.
 		memcpy(mByteContents, source_var.mByteContents, source_var.mByteLength + sizeof(TCHAR)); // Add sizeof(TCHAR) not sizeof(format). Contents() vs. a variable for the same because mContents might have just changed due Assign() above.
 		mAttrib |= VAR_ATTRIB_BINARY_CLIP; // VAR_ATTRIB_CACHE and VAR_ATTRIB_CONTENTS_OUT_OF_DATE were already removed by earlier call to Assign().
@@ -457,7 +457,7 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 
 
 
-ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize, bool aObeyMaxMem)
+ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 // Returns OK or FAIL.
 // If aBuf isn't NULL, caller must ensure that aLength is either VARSIZE_MAX (which tells us that the
 // entire strlen() of aBuf should be used) or an explicit length (can be zero) that the caller must
@@ -483,7 +483,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 		//    Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
 		// If that were done, bugs would be easy to introduce in a long function like this one
 		// if your forget at use the implicit "this" by accident.  So instead, just call self.
-		return mAliasFor->AssignString(aBuf, aLength, aExactSize, aObeyMaxMem);
+		return mAliasFor->AssignString(aBuf, aLength, aExactSize);
 
 	bool do_assign = true;        // Set defaults.
 	bool free_it_if_large = true; //
@@ -525,8 +525,6 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 	}
 
 	// Since above didn't return, this variable isn't the clipboard.
-	if (space_needed_in_bytes > g_MaxVarCapacity && aObeyMaxMem) // v1.0.43.03: aObeyMaxMem was added since some callers aren't supposed to obey it.
-		return g_script.ScriptError(ERR_MEM_LIMIT_REACHED);
 
 	if (space_needed < 2) // Variable is being assigned the empty string (or a deref that resolves to it).
 	{
@@ -609,8 +607,6 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 					new_size = (size_t)(new_size * 1.01);
 				else  // 6400 KB or more: Cap the extra margin at some reasonable compromise of speed vs. mem usage: 64 KB
 					new_size += _TSIZE(64 * 1024);
-				if (new_size > g_MaxVarCapacity && aObeyMaxMem) // v1.0.43.03: aObeyMaxMem was added since some callers aren't supposed to obey it.
-					new_size = g_MaxVarCapacity;  // which has already been verified to be enough.
 			}
 			//else space_needed was already verified higher above to be within bounds.
 
@@ -1162,7 +1158,7 @@ ResultType Var::AssignStringFromCodePage(LPCSTR aBuf, int aLength, UINT aCodePag
 #else
 	int iLen = MultiByteToWideChar(aCodePage, 0, aBuf, aLength, NULL, 0);
 	if (iLen > 0) {
-		if (!AssignString(NULL, iLen, true, false))
+		if (!AssignString(NULL, iLen, true))
 			return FAIL;
 		LPWSTR aContents = Contents(TRUE, TRUE);
 		iLen = MultiByteToWideChar(aCodePage, 0, aBuf, aLength, (LPWSTR) aContents, iLen);
@@ -1188,7 +1184,7 @@ ResultType Var::AssignStringToCodePage(LPCWSTR aBuf, int aLength, UINT aCodePage
 		pDefChar = &aDefChar;
 	int iLen = WideCharToMultiByte(aCodePage, aFlags, aBuf, aLength, NULL, 0, pDefChar, NULL);
 	if (iLen > 0) {
-		if (!SetCapacity(iLen, true, false))
+		if (!SetCapacity(iLen, true))
 			return FAIL;
 		LPSTR aContents = (LPSTR) Contents(TRUE, TRUE);
 		iLen = WideCharToMultiByte(aCodePage, aFlags, aBuf, aLength, aContents, iLen, pDefChar, NULL);

@@ -897,7 +897,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 					// Check if the user requested a size larger than the variable.
 					if ( size > target_token.var->ByteCapacity()
 						// Too small: expand the target variable if reading; abort otherwise.
-						&& (!reading || !target_token.var->SetCapacity(size, false, false)) ) // Relies on short-circuit order.
+						&& (!reading || !target_token.var->SetCapacity(size, false)) ) // Relies on short-circuit order.
 					{
 						aResultToken.value_int64 = 0;
 						return OK;

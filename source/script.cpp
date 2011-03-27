@@ -2992,19 +2992,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		mErrorStdOut = true;
 		return CONDITION_TRUE;
 	}
-	if (IS_DIRECTIVE_MATCH(_T("#MaxMem")))
-	{
-		if (parameter)
-		{
-			double valuef = ATOF(parameter);  // parameter was set to the right position by the above macro
-			if (valuef > 4095)  // Don't exceed capacity of VarSizeType, which is currently a DWORD (4 gig).
-				valuef = 4095;  // Don't use 4096 since that might be a special/reserved value for some functions.
-			else if (valuef  < 1)
-				valuef = 1;
-			g_MaxVarCapacity = (VarSizeType)(valuef * 1024 * 1024);
-		}
-		return CONDITION_TRUE;
-	}
 	if (IS_DIRECTIVE_MATCH(_T("#KeyHistory")))
 	{
 		if (parameter)

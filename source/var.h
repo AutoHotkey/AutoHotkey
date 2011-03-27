@@ -273,22 +273,22 @@ public:
 	// Assign(char *, ...) has been braek into four methods below.
 	// This should prevent some mistakes, as characters and bytes are not interchangeable in the Unicode build.
 	// Callers must make sure which one is the right method to call.
-	ResultType AssignString(LPCTSTR aBuf = NULL, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true);
-	inline ResultType Assign(LPCTSTR aBuf, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true)
+	ResultType AssignString(LPCTSTR aBuf = NULL, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false);
+	inline ResultType Assign(LPCTSTR aBuf, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false)
 	{
 		ASSERT(aBuf); // aBuf shouldn't be NULL, use SetCapacity([length in bytes]) or AssignString(NULL, [length in characters]) instead.
-		return AssignString(aBuf, aLength, aExactSize, aObeyMaxMem);
+		return AssignString(aBuf, aLength, aExactSize);
 	}
 	inline ResultType Assign()
 	{
 		return AssignString();
 	}
-	ResultType SetCapacity(VarSizeType aByteLength, bool aExactSize = false, bool aObeyMaxMem = true)
+	ResultType SetCapacity(VarSizeType aByteLength, bool aExactSize = false)
 	{
 #ifdef UNICODE
-		return AssignString(NULL, (aByteLength >> 1) + (aByteLength & 1), aExactSize, aObeyMaxMem);
+		return AssignString(NULL, (aByteLength >> 1) + (aByteLength & 1), aExactSize);
 #else
-		return AssignString(NULL, aByteLength, aExactSize, aObeyMaxMem);
+		return AssignString(NULL, aByteLength, aExactSize);
 #endif
 	}
 

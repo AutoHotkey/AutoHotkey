@@ -101,7 +101,6 @@ int g_MaxHistoryKeys = 40;
 // g_MaxVarCapacity is used to prevent a buggy script from consuming all available system RAM. It is defined
 // as the maximum memory size of a variable, including the string's zero terminator.
 // The chosen default seems big enough to be flexible, yet small enough to not be a problem on 99% of systems:
-VarSizeType g_MaxVarCapacity = 64 * 1024 * 1024;
 UCHAR g_MaxThreadsPerHotkey = 1;
 int g_MaxThreadsTotal = MAX_THREADS_DEFAULT;
 // On my system, the repeat-rate (which is probably set to XP's default) is such that between 20

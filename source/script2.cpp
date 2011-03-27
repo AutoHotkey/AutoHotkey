@@ -2635,8 +2635,6 @@ ResultType Line::ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 	// PerformAssign().  Note: Using GetWindowTextTimeout() vs. GetWindowText()
 	// because it is able to get text from more types of controls (e.g. large edit controls):
 	VarSizeType space_needed = control_window ? GetWindowTextTimeout(control_window) + 1 : 1; // 1 for terminator.
-	if (space_needed > g_MaxVarCapacity) // Allow the command to succeed by truncating the text.
-		space_needed = g_MaxVarCapacity;
 
 	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
@@ -2817,7 +2815,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 
 	// SET UP THE OUTPUT VARIABLE, ENLARGING IT IF NECESSARY
 	// If the aOutputVar is of type VAR_CLIPBOARD, this call will set up the clipboard for writing:
-	aOutputVar.AssignString(NULL, (VarSizeType)total_length, true, false); // Since failure is extremely rare, continue onward using the available capacity.
+	aOutputVar.AssignString(NULL, (VarSizeType)total_length, true); // Since failure is extremely rare, continue onward using the available capacity.
 	LPTSTR contents = aOutputVar.Contents();
 	LRESULT capacity = (int)aOutputVar.CharCapacity(); // LRESULT avoids signed vs. unsigned compiler warnings.
 	if (capacity > 0) // For maintainability, avoid going negative.
@@ -3765,11 +3763,6 @@ ResultType Line::WinGetControlList(Var &aOutputVar, HWND aTargetWindow, bool aFe
 	EnumChildWindows(aTargetWindow, EnumChildGetControlList, (LPARAM)&cl);
 	if (!cl.total_length) // No controls in the window.
 		return aOutputVar.Assign();
-	// This adjustment was added because someone reported that max variable capacity was being
-	// exceeded in some cases (perhaps custom controls that retrieve large amounts of text
-	// from the disk in response to the "get text" message):
-	if (cl.total_length >= g_MaxVarCapacity) // Allow the command to succeed by truncating the text.
-		cl.total_length = g_MaxVarCapacity - 1;
 	// Set up the var, enlarging it if necessary.  If the aOutputVar is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
 	if (aOutputVar.AssignString(NULL, (VarSizeType)cl.total_length) != OK)
@@ -3893,11 +3886,6 @@ ResultType Line::WinGetText(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, L
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 		return output_var.Assign(); // Tell it not to free the memory by omitting all params.
 	}
-	// This adjustment was added because someone reported that max variable capacity was being
-	// exceeded in some cases (perhaps custom controls that retrieve large amounts of text
-	// from the disk in response to the "get text" message):
-	if (sab.total_length >= g_MaxVarCapacity)    // Allow the command to succeed by truncating the text.
-		sab.total_length = g_MaxVarCapacity - 1; // And this length will be used to limit the retrieval capacity below.
 
 	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
@@ -8939,7 +8927,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
 	if (is_binary_clipboard && // Non-binary data uses another buffer for charset conversion later.
-		output_var.SetCapacity(VarSizeType(bytes_to_read), true, false) != OK) // Probably due to "out of memory".
+		output_var.SetCapacity(VarSizeType(bytes_to_read), true) != OK) // Probably due to "out of memory".
 	{
 		CloseHandle(hfile);
 		return FAIL;  // It already displayed the error. ErrorLevel doesn't matter now because the current quasi-thread will be aborted.
@@ -14955,7 +14943,7 @@ void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 			// Since above didn't return:
 			if (new_capacity)
 			{
-				var.SetCapacity(new_capacity, true, false); // This also destroys the variables contents.
+				var.SetCapacity(new_capacity, true); // This also destroys the variables contents.
 				// in characters
 				VarSizeType capacity;
 				if (aParamCount > 2 && (capacity = var.Capacity()) > 1) // Third parameter is present and var has enough capacity to make FillMemory() meaningful.

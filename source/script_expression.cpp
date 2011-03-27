@@ -1937,10 +1937,6 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 			arg_var[i] = aArgVar[i]; // Init to values determined by caller, which helps performance if any of the args are dynamic variables.
 	}
 
-	if (space_needed > g_MaxVarCapacity)
-		// Dereferencing the variables in this line's parameters would exceed the allowed size of the temp buffer:
-		return LineError(ERR_MEM_LIMIT_REACHED);
-
 	// Only allocate the buf at the last possible moment,
 	// when it's sure the buffer will be used (improves performance when only a short
 	// script with no derefs is being run):

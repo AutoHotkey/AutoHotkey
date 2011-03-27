@@ -94,7 +94,6 @@ extern int g_nThreads;
 extern int g_nPausedThreads;
 extern int g_MaxHistoryKeys;
 
-extern VarSizeType g_MaxVarCapacity;
 extern UCHAR g_MaxThreadsPerHotkey;
 extern int g_MaxThreadsTotal;
 extern int g_MaxHotkeysPerInterval;
