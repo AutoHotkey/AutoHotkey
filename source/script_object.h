@@ -170,6 +170,7 @@ protected:
 	
 public:
 	static Object *Create(ExprTokenType *aParam[], int aParamCount);
+	static Object *CreateFromArgV(LPTSTR *aArgV, int aArgC);
 
 	// Used by Func::Call() for variadic functions/function-calls:
 	Object *Clone(INT_PTR aStartOffset = 0);

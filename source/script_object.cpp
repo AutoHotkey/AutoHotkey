@@ -633,6 +633,33 @@ ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, Exp
 	}
 	return INVOKE_NOT_HANDLED;
 }
+
+
+//
+// Helper function for WinMain()
+//
+
+Object *Object::CreateFromArgV(LPTSTR *aArgV, int aArgC)
+{
+	Object *args;
+	if (  !(args = Create(NULL, 0))  )
+		return NULL;
+	ExprTokenType *token = (ExprTokenType *)_alloca(aArgC * sizeof(ExprTokenType));
+	ExprTokenType **param = (ExprTokenType **)_alloca(aArgC * sizeof(ExprTokenType*));
+	for (int j = 0; j < aArgC; ++j)
+	{
+		token[j].symbol = SYM_STRING;
+		token[j].marker = aArgV[j];
+		param[j] = &token[j];
+	}
+	if (!args->InsertAt(0, 1, param, aArgC))
+	{
+		args->Release();
+		return NULL;
+	}
+	return args;
+}
+
 	
 
 //
