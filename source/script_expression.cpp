@@ -858,12 +858,17 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			right_int64 = TokenToInt64(right, right_is_number==PURE_INTEGER); // Although PURE_FLOAT can't be hex, for simplicity and due to the rarity of encountering a PURE_FLOAT in this case, the slight performance reduction of calling TokenToInt64() is done for both PURE_FLOAT and PURE_INTEGER.
 			if (this_token.symbol == SYM_BITNOT)
 			{
-				// Note that it is not legal to perform ~, &, |, or ^ on doubles.  Because of this, and also to
-				// conform to the behavior of the Transform command, any floating point operand is truncated to
-				// an integer above.
+				// Note that it is not legal to perform ~, &, |, or ^ on doubles.  Because of this,
+				// any floating point operand is truncated to an integer above.
 				if (right_int64 < 0 || right_int64 > UINT_MAX)
+					// Treat it as a 64-bit signed value, since no other aspects of the program
+					// (e.g. IfEqual) will recognize an unsigned 64 bit number.
 					this_token.value_int64 = ~right_int64;
-				else // See comments at TRANS_CMD_BITNOT for why it's done this way:
+				else
+					// Treat it as a 32-bit unsigned value when inverting and assigning.  This is
+					// because assigning it as a signed value would "convert" it into a 64-bit
+					// value, which in turn is caused by the fact that the script sees all negative
+					// numbers as 64-bit values (e.g. -1 is 0xFFFFFFFFFFFFFFFF).
 					this_token.value_int64 = (size_t)~(DWORD)right_int64; // Casting this way avoids compiler warning.
 			}
 			else // SYM_DEREF
@@ -1208,7 +1213,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 						if (left_was_negative && right_int64 % 2) // Negative base and odd exponent (not zero or even).
 							this_token.value_double = -this_token.value_double;
 						if (right_int64 < 0)
-							result_symbol = SYM_FLOAT; // Due to negative exponent, override to float like TRANS_CMD_POW.
+							result_symbol = SYM_FLOAT; // Due to negative exponent, override to float.
 						else
 							this_token.value_int64 = (__int64)this_token.value_double;
 					}

@@ -896,68 +896,8 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 	if (trans_cmd == TRANS_CMD_INVALID)
 		return output_var.Assign();
 
-	TCHAR buf[32];
-	int value32;
-	INT64 value64;
-	double value_double1, value_double2, multiplier;
-	double result_double;
-	SymbolType value1_is_pure_numeric, value2_is_pure_numeric;
-
-	#undef DETERMINE_NUMERIC_TYPES
-	#define DETERMINE_NUMERIC_TYPES \
-		value1_is_pure_numeric = IsPureNumeric(aValue1, true, false, true);\
-		value2_is_pure_numeric = IsPureNumeric(aValue2, true, false, true);
-
-	#define EITHER_IS_FLOAT (value1_is_pure_numeric == PURE_FLOAT || value2_is_pure_numeric == PURE_FLOAT)
-
-	// If neither input is float, the result is assigned as an integer (i.e. no decimal places):
-	#define ASSIGN_BASED_ON_TYPE \
-		DETERMINE_NUMERIC_TYPES \
-		if (EITHER_IS_FLOAT) \
-			return output_var.Assign(result_double);\
-		else\
-			return output_var.Assign((INT64)result_double);
-
-	// Have a negative exponent always cause a floating point result:
-	#define ASSIGN_BASED_ON_TYPE_POW \
-		DETERMINE_NUMERIC_TYPES \
-		if (EITHER_IS_FLOAT || value_double2 < 0) \
-			return output_var.Assign(result_double);\
-		else\
-			return output_var.Assign((INT64)result_double);
-
-	#define ASSIGN_BASED_ON_TYPE_SINGLE \
-		if (IsPureNumeric(aValue1, true, false, true) == PURE_FLOAT)\
-			return output_var.Assign(result_double);\
-		else\
-			return output_var.Assign((INT64)result_double);
-
-	// If rounding to an integer, ensure the result is stored as an integer:
-	#define ASSIGN_BASED_ON_TYPE_SINGLE_ROUND \
-		if (IsPureNumeric(aValue1, true, false, true) == PURE_FLOAT && value32 > 0)\
-			return output_var.Assign(result_double);\
-		else\
-			return output_var.Assign((INT64)result_double);
-
 	switch(trans_cmd)
 	{
-	case TRANS_CMD_ASC:
-		if (*aValue1)
-			return output_var.Assign(TRANS_CHAR_TO_INT(*aValue1));
-		else
-			return output_var.Assign();
-
-	case TRANS_CMD_CHR:
-		value32 = ATOI(aValue1);
-		if (value32 < 0 || value32 > TRANS_CHAR_MAX)
-			return output_var.Assign();
-		else
-		{
-			*buf = value32;  // Store value as a single-character string.
-			*(buf + 1) = '\0';
-			return output_var.Assign(buf);
-		}
-
 	case TRANS_CMD_DEREF:
 		return Deref(&output_var, aValue1);
 
@@ -1012,7 +952,7 @@ ResultType Line::Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2)
 #endif
 
 	case TRANS_CMD_HTML:
-	{
+	  {
 		// These are the encoding-neutral translations for ASC 128 through 255 as shown by Dreamweaver.
 		// It's possible that using just the &#number convention (e.g. &#128 through &#255;) would be
 		// more appropriate for some users, but that mode can be added in the future if it is ever
@@ -1266,145 +1206,7 @@ end_set_entity:
 		}
 		*contents = '\0';  // Terminate the string.
 		return output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-	}
-
-	case TRANS_CMD_MOD:
-		if (   !(value_double2 = ATOF(aValue2))   ) // Divide by zero, set it to be blank to indicate the problem.
-			return output_var.Assign();
-		// Otherwise:
-		result_double = qmathFmod(ATOF(aValue1), value_double2);
-		ASSIGN_BASED_ON_TYPE
-
-	case TRANS_CMD_POW:
-	{
-		// v1.0.44.11: With Laszlo's help, negative bases are now supported as long as the exponent is not fractional.
-		// See SYM_POWER in script_expression.cpp for similar code and more comments.
-		value_double1 = ATOF(aValue1);
-		value_double2 = ATOF(aValue2);
-		bool value1_was_negative = (value_double1 < 0);
-		if (value_double1 == 0.0 && value_double2 < 0  // In essense, this is divide-by-zero.
-			|| value1_was_negative && qmathFmod(value_double2, 1.0) != 0.0) // Negative base but exponent isn't close enough to being an integer: unsupported (to simplify code).
-			return output_var.Assign();  // Return a consistent result (blank) rather than something that varies.
-		// Otherwise:
-		if (value1_was_negative)
-			value_double1 = -value_double1; // Force a positive due to the limitiations of qmathPow().
-		result_double = qmathPow(value_double1, value_double2);
-		if (value1_was_negative && qmathFabs(qmathFmod(value_double2, 2.0)) == 1.0) // Negative base and exactly-odd exponent (otherwise, it can only be zero or even because if not it would have returned higher above).
-			result_double = -result_double;
-		ASSIGN_BASED_ON_TYPE_POW
-	}
-
-	case TRANS_CMD_EXP:
-		return output_var.Assign(qmathExp(ATOF(aValue1)));
-
-	case TRANS_CMD_SQRT:
-		value_double1 = ATOF(aValue1);
-		if (value_double1 < 0)
-			return output_var.Assign();
-		return output_var.Assign(qmathSqrt(value_double1));
-
-	case TRANS_CMD_LOG:
-		value_double1 = ATOF(aValue1);
-		if (value_double1 < 0)
-			return output_var.Assign();
-		return output_var.Assign(qmathLog10(ATOF(aValue1)));
-
-	case TRANS_CMD_LN:
-		value_double1 = ATOF(aValue1);
-		if (value_double1 < 0)
-			return output_var.Assign();
-		return output_var.Assign(qmathLog(ATOF(aValue1)));
-
-	case TRANS_CMD_ROUND:
-		// In the future, a string conversion algorithm might be better to avoid the loss
-		// of 64-bit integer precision that it currently caused by the use of doubles in
-		// the calculation:
-		value32 = ATOI(aValue2);
-		multiplier = *aValue2 ? qmathPow(10, value32) : 1;
-		value_double1 = ATOF(aValue1);
-		result_double = (value_double1 >= 0.0 ? qmathFloor(value_double1 * multiplier + 0.5)
-			: qmathCeil(value_double1 * multiplier - 0.5)) / multiplier;
-		ASSIGN_BASED_ON_TYPE_SINGLE_ROUND
-
-	case TRANS_CMD_CEIL:
-	case TRANS_CMD_FLOOR:
-		// The code here is similar to that in BIF_FloorCeil(), so maintain them together.
-		result_double = ATOF(aValue1);
-		result_double = (trans_cmd == TRANS_CMD_FLOOR) ? qmathFloor(result_double) : qmathCeil(result_double);
-		return output_var.Assign((__int64)(result_double + (result_double > 0 ? 0.2 : -0.2))); // Fixed for v1.0.40.05: See comments in BIF_FloorCeil() for details.
-
-	case TRANS_CMD_ABS:
-	{
-		// Seems better to convert as string to avoid loss of 64-bit integer precision
-		// that would be caused by conversion to double.  I think this will work even
-		// for negative hex numbers that are close to the 64-bit limit since they too have
-		// a minus sign when generated by the script (e.g. -0x1).
-		//result_double = qmathFabs(ATOF(aValue1));
-		//ASSIGN_BASED_ON_TYPE_SINGLE
-		LPTSTR cp = omit_leading_whitespace(aValue1); // i.e. caller doesn't have to have ltrimmed it.
-		if (*cp == '-')
-			return output_var.Assign(cp + 1);  // Omit the first minus sign (simple conversion only).
-		// Otherwise, no minus sign, so just omit the leading whitespace for consistency:
-		return output_var.Assign(cp);
-	}
-
-	case TRANS_CMD_SIN:
-		return output_var.Assign(qmathSin(ATOF(aValue1)));
-
-	case TRANS_CMD_COS:
-		return output_var.Assign(qmathCos(ATOF(aValue1)));
-
-	case TRANS_CMD_TAN:
-		return output_var.Assign(qmathTan(ATOF(aValue1)));
-
-	case TRANS_CMD_ASIN:
-		value_double1 = ATOF(aValue1);
-		if (value_double1 > 1 || value_double1 < -1)
-			return output_var.Assign(); // ASin and ACos aren't defined for other values.
-		return output_var.Assign(qmathAsin(ATOF(aValue1)));
-
-	case TRANS_CMD_ACOS:
-		value_double1 = ATOF(aValue1);
-		if (value_double1 > 1 || value_double1 < -1)
-			return output_var.Assign(); // ASin and ACos aren't defined for other values.
-		return output_var.Assign(qmathAcos(ATOF(aValue1)));
-
-	case TRANS_CMD_ATAN:
-		return output_var.Assign(qmathAtan(ATOF(aValue1)));
-
-	// For all of the below bitwise operations:
-	// Seems better to convert to signed rather than unsigned so that signed values can
-	// be supported.  i.e. it seems better to trade one bit in capacity in order to support
-	// negative numbers.  Another reason is that commands such as IfEquals use ATOI64 (signed),
-	// so if we were to produce unsigned 64 bit values here, they would be somewhat incompatible
-	// with other script operations.
-	case TRANS_CMD_BITAND:
-		return output_var.Assign(ATOI64(aValue1) & ATOI64(aValue2));
-
-	case TRANS_CMD_BITOR:
-		return output_var.Assign(ATOI64(aValue1) | ATOI64(aValue2));
-
-	case TRANS_CMD_BITXOR:
-		return output_var.Assign(ATOI64(aValue1) ^ ATOI64(aValue2));
-
-	case TRANS_CMD_BITNOT:
-		value64 = ATOI64(aValue1);
-		if (value64 < 0 || value64 > UINT_MAX)
-			// Treat it as a 64-bit signed value, since no other aspects of the program
-			// (e.g. IfEqual) will recognize an unsigned 64 bit number.
-			return output_var.Assign(~value64);
-		else
-			// Treat it as a 32-bit unsigned value when inverting and assigning.  This is
-			// because assigning it as a signed value would "convert" it into a 64-bit
-			// value, which in turn is caused by the fact that the script sees all negative
-			// numbers as 64-bit values (e.g. -1 is 0xFFFFFFFFFFFFFFFF).
-			return output_var.Assign(~(DWORD)value64);
-
-	case TRANS_CMD_BITSHIFTLEFT:  // Equivalent to multiplying by 2^value2
-		return output_var.Assign(ATOI64(aValue1) << ATOI(aValue2));
-
-	case TRANS_CMD_BITSHIFTRIGHT:  // Equivalent to dividing (integer) by 2^value2
-		return output_var.Assign(ATOI64(aValue1) >> ATOI(aValue2));
+	  }
 	}
 
 	return FAIL;  // Never executed (increases maintainability and avoids compiler warning).
@@ -14990,7 +14792,9 @@ void BIF_Round(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 {
 	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
 
-	// See TRANS_CMD_ROUND for details.
+	// In the future, a string conversion algorithm might be better to avoid the loss
+	// of 64-bit integer precision that is currently caused by the use of doubles in
+	// the calculation:
 	int param2;
 	double multiplier;
 	if (aParamCount > 1)
@@ -15061,12 +14865,11 @@ void BIF_FloorCeil(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
-	// The code here is similar to that in TRANS_CMD_FLOOR/CEIL, so maintain them together.
 	// The qmath routines are used because Floor() and Ceil() are deceptively difficult to implement in a way
 	// that gives the correct result in all permutations of the following:
 	// 1) Negative vs. positive input.
 	// 2) Whether or not the input is already an integer.
-	// Therefore, do not change this without conduction a thorough test.
+	// Therefore, do not change this without conducting a thorough test.
 	double x = TokenToDouble(*aParam[0]);
 	x = (ctoupper(aResultToken.marker[0]) == 'F') ? qmathFloor(x) : qmathCeil(x);
 	// Fix for v1.0.40.05: For some inputs, qmathCeil/Floor yield a number slightly to the left of the target
@@ -15123,7 +14926,7 @@ void BIF_Mod(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 
 void BIF_Abs(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	// Unlike TRANS_CMD_ABS, which removes the minus sign from the string if it has one,
+	// Unlike TRANS_CMD_ABS, which removed the minus sign from the string if it had one,
 	// this is done in a more traditional way.  It's hard to imagine needing the minus
 	// sign removal method here since a negative hex literal such as -0xFF seems too rare
 	// to worry about.  One additional reason not to remove minus signs from strings is

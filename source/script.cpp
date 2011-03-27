@@ -4434,7 +4434,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 #endif
 						#define TRANSFORM_NON_EXPRESSION_CASES \
 						case TRANS_CMD_INVALID:\
-						case TRANS_CMD_ASC:\
 						TRANS_CMD_UNICODE_CASES\
 						case TRANS_CMD_DEREF:\
 						case TRANS_CMD_HTML:\
@@ -5851,129 +5850,28 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			}
 #endif
 
-			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
-			// sees a valid no-deref expression such as 1+2 as invalid.
-			if (!line.ArgHasDeref(3)) // "true" since it might have been made into an InputVar due to being a simple expression.
-			{
-				switch(trans_cmd)
-				{
-				case TRANS_CMD_CHR:
-				case TRANS_CMD_BITNOT:
-				case TRANS_CMD_BITSHIFTLEFT:
-				case TRANS_CMD_BITSHIFTRIGHT:
-				case TRANS_CMD_BITAND:
-				case TRANS_CMD_BITOR:
-				case TRANS_CMD_BITXOR:
-					if (!IsPureNumeric(new_raw_arg3, true, false))
-						return ScriptError(_T("Parameter #3 must be an integer in this case."), new_raw_arg3);
-					break;
-
-				case TRANS_CMD_MOD:
-				case TRANS_CMD_EXP:
-				case TRANS_CMD_ROUND:
-				case TRANS_CMD_CEIL:
-				case TRANS_CMD_FLOOR:
-				case TRANS_CMD_ABS:
-				case TRANS_CMD_SIN:
-				case TRANS_CMD_COS:
-				case TRANS_CMD_TAN:
-				case TRANS_CMD_ASIN:
-				case TRANS_CMD_ACOS:
-				case TRANS_CMD_ATAN:
-					if (!IsPureNumeric(new_raw_arg3, true, false, true))
-						return ScriptError(_T("Parameter #3 must be a number in this case."), new_raw_arg3);
-					break;
-
-				case TRANS_CMD_POW:
-				case TRANS_CMD_SQRT:
-				case TRANS_CMD_LOG:
-				case TRANS_CMD_LN:
-					if (!IsPureNumeric(new_raw_arg3, false, false, true))
-						return ScriptError(_T("Parameter #3 must be a positive integer in this case."), new_raw_arg3);
-					break;
-
-				// The following are not listed above because no validation of Parameter #3 is needed at this stage:
-				// TRANS_CMD_ASC
-				// TRANS_CMD_UNICODE
-				// TRANS_CMD_HTML
-				// TRANS_CMD_DEREF
-				}
-			}
-
 			switch(trans_cmd)
 			{
-			case TRANS_CMD_ASC:
-			case TRANS_CMD_CHR:
 			case TRANS_CMD_DEREF:
 #ifndef UNICODE
 			case TRANS_CMD_UNICODE:
 			case TRANS_CMD_HTML:
 #endif
-			case TRANS_CMD_EXP:
-			case TRANS_CMD_SQRT:
-			case TRANS_CMD_LOG:
-			case TRANS_CMD_LN:
-			case TRANS_CMD_CEIL:
-			case TRANS_CMD_FLOOR:
-			case TRANS_CMD_ABS:
-			case TRANS_CMD_SIN:
-			case TRANS_CMD_COS:
-			case TRANS_CMD_TAN:
-			case TRANS_CMD_ASIN:
-			case TRANS_CMD_ACOS:
-			case TRANS_CMD_ATAN:
-			case TRANS_CMD_BITNOT:
 				if (*new_raw_arg4)
 					return ScriptError(ERR_PARAM4_OMIT, new_raw_arg4);
 				break;
 
-			case TRANS_CMD_BITAND:
-			case TRANS_CMD_BITOR:
-			case TRANS_CMD_BITXOR:
-				if (!line.ArgHasDeref(4) && !IsPureNumeric(new_raw_arg4, true, false))
-					return ScriptError(_T("Parameter #4 must be an integer in this case."), new_raw_arg4);
-				break;
-
-			case TRANS_CMD_BITSHIFTLEFT:
-			case TRANS_CMD_BITSHIFTRIGHT:
-				if (!line.ArgHasDeref(4) && !IsPureNumeric(new_raw_arg4, false, false))
-					return ScriptError(_T("Parameter #4 must be a positive integer in this case."), new_raw_arg4);
-				break;
-
-			case TRANS_CMD_ROUND:
 #ifdef UNICODE
 			case TRANS_CMD_HTML:
-#endif
 				if (*new_raw_arg4 && !line.ArgHasDeref(4) && !IsPureNumeric(new_raw_arg4, true, false))
 					return ScriptError(_T("Parameter #4 must be blank or an integer in this case."), new_raw_arg4);
 				break;
-
-			case TRANS_CMD_MOD:
-			case TRANS_CMD_POW:
-				if (!line.ArgHasDeref(4) && !IsPureNumeric(new_raw_arg4, true, false, true))
-					return ScriptError(_T("Parameter #4 must be a number in this case."), new_raw_arg4);
-				break;
+#endif
 
 #ifdef _DEBUG
 			default:
 				return ScriptError(_T("DEBUG: Unhandled"), new_raw_arg2);  // To improve maintainability.
 #endif
-			}
-
-			switch(trans_cmd)
-			{
-			case TRANS_CMD_CHR:
-				if (!line.ArgHasDeref(3))
-				{
-					value = ATOI(new_raw_arg3);
-					if (!IsPureNumeric(new_raw_arg3, false, false) || value > 255) // IsPureNumeric() checks for value < 0 too.
-						return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-				}
-				break;
-			case TRANS_CMD_MOD:
-				if (!line.ArgHasDeref(4) && !ATOF(new_raw_arg4)) // Parameter is omitted or something that resolves to zero.
-					return ScriptError(ERR_DIVIDEBYZERO, new_raw_arg4);
-				break;
 			}
 		}
 		break;

@@ -461,14 +461,7 @@ enum SysGetCmds {SYSGET_CMD_INVALID, SYSGET_CMD_METRICS, SYSGET_CMD_MONITORCOUNT
 	, SYSGET_CMD_MONITORAREA, SYSGET_CMD_MONITORWORKAREA, SYSGET_CMD_MONITORNAME
 };
 
-enum TransformCmds {TRANS_CMD_INVALID, TRANS_CMD_ASC, TRANS_CMD_CHR, TRANS_CMD_DEREF
-	, TRANS_CMD_UNICODE, TRANS_CMD_HTML
-	, TRANS_CMD_MOD, TRANS_CMD_POW, TRANS_CMD_EXP, TRANS_CMD_SQRT, TRANS_CMD_LOG, TRANS_CMD_LN
-	, TRANS_CMD_ROUND, TRANS_CMD_CEIL, TRANS_CMD_FLOOR, TRANS_CMD_ABS
-	, TRANS_CMD_SIN, TRANS_CMD_COS, TRANS_CMD_TAN, TRANS_CMD_ASIN, TRANS_CMD_ACOS, TRANS_CMD_ATAN
-	, TRANS_CMD_BITAND, TRANS_CMD_BITOR, TRANS_CMD_BITXOR, TRANS_CMD_BITNOT
-	, TRANS_CMD_BITSHIFTLEFT, TRANS_CMD_BITSHIFTRIGHT
-};
+enum TransformCmds {TRANS_CMD_INVALID, TRANS_CMD_DEREF, TRANS_CMD_UNICODE, TRANS_CMD_HTML};
 
 enum MenuCommands {MENU_CMD_INVALID, MENU_CMD_SHOW, MENU_CMD_USEERRORLEVEL
 	, MENU_CMD_ADD, MENU_CMD_RENAME, MENU_CMD_CHECK, MENU_CMD_UNCHECK, MENU_CMD_TOGGLECHECK
@@ -1262,35 +1255,11 @@ public:
 	static TransformCmds ConvertTransformCmd(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return TRANS_CMD_INVALID;
-		if (!_tcsicmp(aBuf, _T("Asc"))) return TRANS_CMD_ASC;
-		if (!_tcsicmp(aBuf, _T("Chr"))) return TRANS_CMD_CHR;
 		if (!_tcsicmp(aBuf, _T("Deref"))) return TRANS_CMD_DEREF;
 #ifndef UNICODE
 		if (!_tcsicmp(aBuf, _T("Unicode"))) return TRANS_CMD_UNICODE;
 #endif
 		if (!_tcsicmp(aBuf, _T("HTML"))) return TRANS_CMD_HTML;
-		if (!_tcsicmp(aBuf, _T("Mod"))) return TRANS_CMD_MOD;
-		if (!_tcsicmp(aBuf, _T("Pow"))) return TRANS_CMD_POW;
-		if (!_tcsicmp(aBuf, _T("Exp"))) return TRANS_CMD_EXP;
-		if (!_tcsicmp(aBuf, _T("Sqrt"))) return TRANS_CMD_SQRT;
-		if (!_tcsicmp(aBuf, _T("Log"))) return TRANS_CMD_LOG;
-		if (!_tcsicmp(aBuf, _T("Ln"))) return TRANS_CMD_LN;  // Natural log.
-		if (!_tcsicmp(aBuf, _T("Round"))) return TRANS_CMD_ROUND;
-		if (!_tcsicmp(aBuf, _T("Ceil"))) return TRANS_CMD_CEIL;
-		if (!_tcsicmp(aBuf, _T("Floor"))) return TRANS_CMD_FLOOR;
-		if (!_tcsicmp(aBuf, _T("Abs"))) return TRANS_CMD_ABS;
-		if (!_tcsicmp(aBuf, _T("Sin"))) return TRANS_CMD_SIN;
-		if (!_tcsicmp(aBuf, _T("Cos"))) return TRANS_CMD_COS;
-		if (!_tcsicmp(aBuf, _T("Tan"))) return TRANS_CMD_TAN;
-		if (!_tcsicmp(aBuf, _T("ASin"))) return TRANS_CMD_ASIN;
-		if (!_tcsicmp(aBuf, _T("ACos"))) return TRANS_CMD_ACOS;
-		if (!_tcsicmp(aBuf, _T("ATan"))) return TRANS_CMD_ATAN;
-		if (!_tcsicmp(aBuf, _T("BitAnd"))) return TRANS_CMD_BITAND;
-		if (!_tcsicmp(aBuf, _T("BitOr"))) return TRANS_CMD_BITOR;
-		if (!_tcsicmp(aBuf, _T("BitXOr"))) return TRANS_CMD_BITXOR;
-		if (!_tcsicmp(aBuf, _T("BitNot"))) return TRANS_CMD_BITNOT;
-		if (!_tcsicmp(aBuf, _T("BitShiftLeft"))) return TRANS_CMD_BITSHIFTLEFT;
-		if (!_tcsicmp(aBuf, _T("BitShiftRight"))) return TRANS_CMD_BITSHIFTRIGHT;
 		return TRANS_CMD_INVALID;
 	}
 
