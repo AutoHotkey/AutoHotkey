@@ -7533,7 +7533,7 @@ ResultType Line::GetKeyJoyState(LPTSTR aKeyName, LPTSTR aOption)
 	case 'P': key_state_type = KEYSTATE_PHYSICAL; break; // Physical state of key.
 	default: key_state_type = KEYSTATE_LOGICAL;
 	}
-	return output_var.Assign(ScriptGetKeyState(vk, key_state_type) ? _T("D") : _T("U"));
+	return output_var.Assign(ScriptGetKeyState(vk, key_state_type));
 }
 
 
