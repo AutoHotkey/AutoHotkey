@@ -143,7 +143,6 @@ bool g_SortReverse;
 int g_SortColumnOffset;
 Func *g_SortFunc;
 
-TCHAR g_delimiter = ',';
 TCHAR g_DerefChar = '%';
 TCHAR g_EscapeChar = '`';
 

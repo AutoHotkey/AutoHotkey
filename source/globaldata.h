@@ -130,7 +130,7 @@ extern bool g_SortReverse;
 extern int g_SortColumnOffset;
 extern Func *g_SortFunc;
 
-extern TCHAR g_delimiter;
+const TCHAR g_delimiter = ','; // There are several places in the code where "," is used in place of this value, to reduce code size/complexity. Thus, v2 does not allow it to be changed.
 extern TCHAR g_DerefChar;
 extern TCHAR g_EscapeChar;
 

@@ -3066,21 +3066,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		}
 		return CONDITION_TRUE;
 	}
-	if (IS_DIRECTIVE_MATCH(_T("#Delimiter")))
-	{
-		// Attempts to change the delimiter to its starting default (comma) are ignored.
-		// For example, "#Delimiter ," isn't meaningful if the delimiter already is a comma,
-		// which is good because "parameter" has already assumed that the comma is accidental
-		// (not a symbol) and omitted it.
-		if (parameter)
-		{
-			if (   *parameter == '#' || *parameter == g_EscapeChar || *parameter == g_DerefChar || *parameter == '.'
-				|| (g_CommentFlagLength == 1 && *parameter == *g_CommentFlag)   )
-				return ScriptError(ERR_PARAM1_INVALID, aBuf);
-			g_delimiter = *parameter;
-		}
-		return CONDITION_TRUE;
-	}
 
 	if (IS_DIRECTIVE_MATCH(_T("#MenuMaskKey")))
 	{
@@ -5222,7 +5207,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// there should not be any way for non-percent derefs to get mixed in with cases
 					// 2 or 3.
 					if (!deref[0].is_function && *deref[0].marker == g_DerefChar // This appears to be case #2 or #3.
-						&& (aActionType < ACT_FOR || aActionType > ACT_UNTIL)) // Nearly doubles the speed of "while %x%" and "while Array%i%" to leave WHILE as an expression.  But y:=%x% and y:=Array%i% are about the same speed either way, and "if %x%" never reaches this point because for compatibility(?), it's the same as "if x". Additionally, PerformLoopFor() requires its only expression arg to remain an expression.
+						&& (aActionType < ACT_FOR || aActionType > ACT_UNTIL)) // Nearly doubles the speed of "while %x%" and "while Array%i%" to leave WHILE as an expression.  But y:=%x% and y:=Array%i% are about the same speed either way. Additionally, PerformLoopFor() requires its only expression arg to remain an expression.
 					{
 						// The comment below is probably obsolete -- and perhaps so is this entire optimization
 						// because expressions are faster now.  But in case it's necessary for anything related
