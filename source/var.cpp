@@ -1122,12 +1122,10 @@ ResultType Var::ValidateName(LPCTSTR aName, bool aIsRuntime, int aDisplayError)
 // Returns OK or FAIL.
 {
 	if (!*aName) return FAIL;
-	// Seems best to disallow variables that start with numbers so that more advanced
-	// parsing (e.g. expressions) can be more easily added in the future.  UPDATE: For
-	// backward compatibility with AutoIt2's technique of storing command line args in
-	// a numically-named var (e.g. %1% is the first arg), decided not to do this:
-	//if (*aName >= '0' && *aName <= '9')
-	//	return g_script.ScriptError("This variable name starts with a number, which is not allowed.", aName);
+	// Seems best to disallow variables that start with numbers for purity, to allow
+	// something like 1e3 to be scientific notation, and possibly other reasons.
+	if (*aName >= '0' && *aName <= '9')
+		return g_script.ScriptError(_T("This variable name starts with a number, which is not allowed."), aName);
 	LPCTSTR cp;
 	for (cp = aName; *cp; ++cp)
 	{
