@@ -307,15 +307,8 @@ Action g_act[] =
 
 	, {_T("Transform"), 2, 4, true, NULL}  // output var, operation, value1, value2
 
-	, {_T("StringLeft"), 3, 3, false, {3, 0}}  // output var, input var, number of chars to extract
-	, {_T("StringRight"), 3, 3, false, {3, 0}} // same
-	, {_T("StringMid"), 3, 5, false, {3, 4, 0}} // Output Variable, Input Variable, Start char, Number of chars to extract, L
-	, {_T("StringTrimLeft"), 3, 3, false, {3, 0}}  // output var, input var, number of chars to trim
-	, {_T("StringTrimRight"), 3, 3, false, {3, 0}} // same
 	, {_T("StringLower"), 2, 3, false, NULL} // output var, input var, T = Title Case
 	, {_T("StringUpper"), 2, 3, false, NULL} // output var, input var, T = Title Case
-	, {_T("StringLen"), 2, 2, false, NULL} // output var, input var
-	, {_T("StringGetPos"), 3, 5, false, {5, 0}}  // Output Variable, Input Variable, Search Text, R or Right (from right), Offset
 	, {_T("StringReplace"), 3, 5, false, NULL} // Output Variable, Input Variable, Search String, Replace String, do-all.
 	, {_T("StringSplit"), 2, 5, false, NULL} // Output Array, Input Variable, Delimiter List (optional), Omit List, Future Use
 	, {_T("SplitPath"), 1, 6, true, NULL} // InputFilespec, OutName, OutDir, OutExt, OutNameNoExt, OutDrive

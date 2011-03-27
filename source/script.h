@@ -945,16 +945,9 @@ public:
 			case ACT_ASSIGN:
 			case ACT_ASSIGNEXPR:
 			case ACT_TRANSFORM:
-			case ACT_STRINGLEFT:
-			case ACT_STRINGRIGHT:
-			case ACT_STRINGMID:
-			case ACT_STRINGTRIMLEFT:
-			case ACT_STRINGTRIMRIGHT:
 			case ACT_STRINGLOWER:
 			case ACT_STRINGUPPER:
-			case ACT_STRINGLEN:
 			case ACT_STRINGREPLACE:
-			case ACT_STRINGGETPOS:
 			case ACT_GETKEYSTATE:
 			case ACT_CONTROLGETFOCUS:
 			case ACT_CONTROLGETTEXT:
@@ -1013,16 +1006,9 @@ public:
 		case 1:  // Arg #2
 			switch(aActionType)
 			{
-			case ACT_STRINGLEFT:
-			case ACT_STRINGRIGHT:
-			case ACT_STRINGMID:
-			case ACT_STRINGTRIMLEFT:
-			case ACT_STRINGTRIMRIGHT:
 			case ACT_STRINGLOWER:
 			case ACT_STRINGUPPER:
-			case ACT_STRINGLEN:
 			case ACT_STRINGREPLACE:
-			case ACT_STRINGGETPOS:
 			case ACT_STRINGSPLIT:
 				return ARG_TYPE_INPUT_VAR;
 

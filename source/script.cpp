@@ -5595,16 +5595,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
-	case ACT_STRINGMID:
-		if (aArgc > 4 && !line.ArgHasDeref(5) && _tcsicmp(NEW_RAW_ARG5, _T("L")))
-			return ScriptError(ERR_PARAM5_INVALID, NEW_RAW_ARG5);
-		break;
-
-	case ACT_STRINGGETPOS:
-		if (*new_raw_arg4 && !line.ArgHasDeref(4) && !_tcschr(_T("LR1"), ctoupper(*new_raw_arg4)))
-			return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
-		break;
-
 	case ACT_REGREAD:
 		// The below has two checks in case the user is using the 5-param method with the 5th parameter
 		// being blank to indicate that the key's "default" value should be read.  For example:
@@ -12455,8 +12445,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	global_struct &g = *::g; // Reduces code size due to replacing so many g-> with g. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
 	ToggleValueType toggle;  // For commands that use on/off/neutral.
 	// Use signed values for these in case they're really given an explicit negative value:
-	int start_char_num, chars_to_extract; // For String commands.
-	size_t source_length; // For String commands.
 	vk_type vk; // For GetKeyState.
 	Label *target_label;  // For ACT_SETTIMER and ACT_HOTKEY
 	int instance_number;  // For sound commands.
@@ -12536,90 +12524,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		//    var ? func() : x:=y
 		return OK;
 
-	case ACT_STRINGLEFT:
-		chars_to_extract = ArgToInt(3); // Use 32-bit signed to detect negatives and fit it VarSizeType.
-		if (chars_to_extract < 0)
-			// For these we don't report an error, since it might be intentional for
-			// it to be called this way, in which case it will do nothing other than
-			// set the output var to be blank.
-			chars_to_extract = 0;
-		else
-		{
-			source_length = ArgLength(2); // Should be quick because Arg2 is an InputVar (except when it's a built-in var perhaps).
-			if (chars_to_extract > (int)source_length)
-				chars_to_extract = (int)source_length; // Assign() requires a length that's <= the actual length of the string.
-		}
-		// It will display any error that occurs.
-		return output_var->Assign(ARG2, chars_to_extract);
-
-	case ACT_STRINGRIGHT:
-		chars_to_extract = ArgToInt(3); // Use 32-bit signed to detect negatives and fit it VarSizeType.
-		if (chars_to_extract < 0)
-			chars_to_extract = 0;
-		source_length = ArgLength(2);
-		if ((UINT)chars_to_extract > source_length)
-			chars_to_extract = (int)source_length;
-		// It will display any error that occurs:
-		return output_var->Assign(ARG2 + source_length - chars_to_extract, chars_to_extract);
-
-	case ACT_STRINGMID:
-		// v1.0.43.10: Allow chars-to-extract to be blank, which means "get all characters".
-		// However, for backward compatibility, examine the raw arg, not ARG4.  That way, any existing
-		// scripts that use a variable reference or expression that resolves to an empty string will
-		// have the parameter treated as zero (as in previous versions) rather than "all characters".
-		if (mArgc < 4 || !*mArg[3].text)
-			chars_to_extract = INT_MAX;
-		else
-		{
-			chars_to_extract = ArgToInt(4); // Use 32-bit signed to detect negatives and fit it VarSizeType.
-			if (chars_to_extract < 1)
-				return output_var->Assign();  // Set it to be blank in this case.
-		}
-		start_char_num = ArgToInt(3);
-		if (ctoupper(*ARG5) == 'L')  // Chars to the left of start_char_num will be extracted.
-		{
-			// TRANSLATE "L" MODE INTO THE EQUIVALENT NORMAL MODE:
-			if (start_char_num < 1) // Starting at a character number that is invalid for L mode.
-				return output_var->Assign();  // Blank seems most appropriate for the L option in this case.
-			start_char_num -= (chars_to_extract - 1);
-			if (start_char_num < 1)
-				// Reduce chars_to_extract to reflect the fact that there aren't enough chars
-				// to the left of start_char_num, so we'll extract only them:
-				chars_to_extract -= (1 - start_char_num);
-		}
-		// ABOVE HAS CONVERTED "L" MODE INTO NORMAL MODE, so "L" no longer needs to be considered below.
-		// UPDATE: The below is also needed for the L option to work correctly.  Older:
-		// It's somewhat debatable, but it seems best not to report an error in this and
-		// other cases.  The result here is probably enough to speak for itself, for script
-		// debugging purposes:
-		if (start_char_num < 1)
-			start_char_num = 1; // 1 is the position of the first char, unlike StringGetPos.
-		source_length = ArgLength(2); // This call seems unavoidable in both "L" mode and normal mode.
-		if (source_length < (UINT)start_char_num) // Source is empty or start_char_num lies to the right of the entire string.
-			return output_var->Assign(); // No chars exist there, so set it to be blank.
-		source_length -= (start_char_num - 1); // Fix for v1.0.44.14: Adjust source_length to be the length starting at start_char_num.  Otherwise, the length passed to Assign() could be too long, and it now expects an accurate length.
-		if ((UINT)chars_to_extract > source_length)
-			chars_to_extract = (int)source_length;
-		return output_var->Assign(ARG2 + start_char_num - 1, chars_to_extract);
-
-	case ACT_STRINGTRIMLEFT:
-		chars_to_extract = ArgToInt(3); // Use 32-bit signed to detect negatives and fit it VarSizeType.
-		if (chars_to_extract < 0)
-			chars_to_extract = 0;
-		source_length = ArgLength(2);
-		if ((UINT)chars_to_extract > source_length) // This could be intentional, so don't display an error.
-			chars_to_extract = (int)source_length;
-		return output_var->Assign(ARG2 + chars_to_extract, (VarSizeType)(source_length - chars_to_extract));
-
-	case ACT_STRINGTRIMRIGHT:
-		chars_to_extract = ArgToInt(3); // Use 32-bit signed to detect negatives and fit it VarSizeType.
-		if (chars_to_extract < 0)
-			chars_to_extract = 0;
-		source_length = ArgLength(2);
-		if ((UINT)chars_to_extract > source_length) // This could be intentional, so don't display an error.
-			chars_to_extract = (int)source_length;
-		return output_var->Assign(ARG2, (VarSizeType)(source_length - chars_to_extract)); // It already displayed any error.
-
 	case ACT_STRINGLOWER:
 	case ACT_STRINGUPPER:
 		contents = output_var->Contents(TRUE, TRUE); // Set default.	
@@ -12647,65 +12551,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		else
 			CharUpper(contents);
 		return output_var->Close();  // In case it's the clipboard.
-
-	case ACT_STRINGLEN:
-		return output_var->Assign((__int64)(ARGVARRAW2 && ARGVARRAW2->IsBinaryClip() // Load-time validation has ensured mArgc > 1.
-			? ARGVARRAW2->Length() // Total size of the binary clip.
-			: ArgLength(2)));
-		// The above must be kept in sync with the StringLen() function elsewhere.
-
-	case ACT_STRINGGETPOS:
-	{
-		LPTSTR arg4 = ARG4;
-		int pos = -1; // Set default.
-		int occurrence_number;
-		if (*arg4 && _tcschr(_T("LR"), ctoupper(*arg4)))
-			occurrence_number = *(arg4 + 1) ? ATOI(arg4 + 1) : 1;
-		else
-			occurrence_number = 1;
-		// Intentionally allow occurrence_number to resolve to a negative, for scripting flexibililty:
-		if (occurrence_number > 0)
-		{
-			if (!*ARG3) // It might be intentional, in obscure cases, to search for the empty string.
-				pos = 0;
-				// Above: empty string is always found immediately (first char from left) regardless
-				// of whether the search will be conducted from the right.  This is because it's too
-				// rare to worry about giving it any more explicit handling based on search direction.
-			else
-			{
-				LPTSTR found, haystack = ARG2, needle = ARG3;
-				int offset = ArgToInt(5); // v1.0.30.03
-				if (offset < 0)
-					offset = 0;
-				size_t haystack_length = ArgLength(2);
-				if (offset < (int)haystack_length)
-				{
-					if (*arg4 == '1' || ctoupper(*arg4) == 'R') // Conduct the search starting at the right side, moving leftward.
-					{
-						// Want it to behave like in this example: If searching for the 2nd occurrence of
-						// FF in the string FFFF, it should find the first two F's, not the middle two:
-						found = tcsrstr(haystack, haystack_length - offset, needle, (StringCaseSenseType)g.StringCaseSense, occurrence_number);
-					}
-					else
-					{
-						// Want it to behave like in this example: If searching for the 2nd occurrence of
-						// FF in the string FFFF, it should find position 3 (the 2nd pair), not position 2:
-						size_t needle_length = ArgLength(3);
-						int i;
-						for (i = 1, found = haystack + offset; ; ++i, found += needle_length)
-							if (!(found = g_tcsstr(found, needle)) || i == occurrence_number)
-								break;
-					}
-					if (found)
-						pos = (int)(found - haystack);
-					// else leave pos set to its default value, -1.
-				}
-				//else offset >= haystack_length, so no match is possible in either left or right mode.
-			}
-		}
-		g_ErrorLevel->Assign(pos < 0 ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
-		return output_var->Assign(pos); // Assign() already displayed any error that may have occurred.
-	}
 
 	case ACT_STRINGREPLACE:
 		return StringReplace();
