@@ -6464,6 +6464,7 @@ ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDere
 // Returns FAIL or OK.
 {
 	size_t deref_string_length; // So that overflow can be detected, this is not of type DerefLengthType.
+	size_t var_name_length;
 
 	// For each dereference found in aArgText:
 	for (int j = 0;; ++j)  // Increment to skip over the symbol just found by the inner for().
@@ -6477,21 +6478,21 @@ ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDere
 			return ScriptError(TOO_MANY_REFS, aArgText); // Short msg since so rare.
 		DerefType &this_deref = aDeref[aDerefCount];  // For performance.
 		this_deref.marker = aArgText + j;  // Store the deref's starting location.
-		// Find next g_DerefChar, even if it's a literal.
-		for (++j; aArgText[j] && aArgText[j] != g_DerefChar; ++j);
-		if (!aArgText[j])
-			return ScriptError(_T("This parameter contains a variable name missing its ending percent sign."), aArgText);
-		// Otherwise: Match was found; this should be the deref's close-symbol.
-		if (aArgMap && aArgMap[j])  // But it's mapped as literal g_DerefChar.
-			return ScriptError(_T("Invalid `%."), aArgText); // Short msg. since so rare.
-		deref_string_length = aArgText + j - this_deref.marker + 1;
-		if (deref_string_length == 2) // The percent signs were empty, e.g. %%
-			return ScriptError(_T("Empty variable reference (%%)."), aArgText); // Short msg. since so rare.
-		if (deref_string_length - 2 > MAX_VAR_NAME_LENGTH) // -2 for the opening & closing g_DerefChars
+		// Find the end of this deref (the next non-alphanumeric/underscore char).
+		for (++j; cisalnum(aArgText[j]) || aArgText[j] == '_'; ++j);
+		if (  !(var_name_length = aArgText + j - this_deref.marker - 1)  ) // Possible future use: something like "%%var" could be a double-deref.
+			return ScriptError(_T("Missing variable name."), aArgText); // Short msg. since so rare.
+		if (var_name_length > MAX_VAR_NAME_LENGTH)
 			return ScriptError(_T("Variable name too long."), aArgText); // Short msg. since so rare.
+		// If this deref ended at a non-literal deref char, it is considered part of the deref.
+		// This allows "%var%" to be a simple deref, "the %var." to be equivalent to "the %var%."
+		// and "%n`%" to be equivalent to "%n%`%", e.g. "100%" where n = 100.
+		if (aArgText[j] == g_DerefChar && !(aArgMap && aArgMap[j]))
+			++j;
+		deref_string_length = aArgText + j - this_deref.marker;
 		this_deref.is_function = false;
 		this_deref.length = (DerefLengthType)deref_string_length;
-		if (   !(this_deref.var = FindOrAddVar(this_deref.marker + 1, this_deref.length - 2))   )
+		if (   !(this_deref.var = FindOrAddVar(this_deref.marker + 1, var_name_length))   )
 			return FAIL;  // The called function already displayed the error.
 		++aDerefCount;
 	} // for each dereference.
