@@ -13521,12 +13521,7 @@ ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
 			// Otherwise, it's a dereference symbol, so calculate the size of that variable's contents
 			// and add that to expanded_length (or copy the contents into aOutputVar if this is the
 			// second pass).
-			// Find the reference's ending symbol (don't bother with catching escaped deref chars here
-			// -- e.g. %MyVar`% --  since it seems too troublesome to justify given how extremely rarely
-			// it would be an issue):
-			for (cp1 = cp + 1; *cp1 && *cp1 != g_DerefChar; ++cp1);
-			if (!*cp1)    // Since end of string was found, this deref is not correctly terminated.
-				continue; // For consistency, omit it entirely.
+			for (cp1 = cp + 1; cisalnum(*cp1) || *cp1 == '_'; ++cp1);
 			var_name_length = cp1 - cp - 1;
 			if (var_name_length && var_name_length <= MAX_VAR_NAME_LENGTH)
 			{
@@ -13553,6 +13548,8 @@ ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
 			// else since the variable name between the deref symbols is blank or too long: for consistency in behavior,
 			// it seems best to omit the dereference entirely (don't put it into aOutputVar).
 			cp = cp1; // For the next loop iteration, continue at the char after this reference's final deref symbol.
+			if (*cp != g_DerefEndChar)
+				--cp; // Counteract the loop's increment since this deref has no explicit end char.
 		} // for()
 	} // for() (first and second passes)
 
