@@ -1121,7 +1121,19 @@ ResultType Var::ValidateName(LPCTSTR aName, bool aIsRuntime, int aDisplayError)
 	// Seems best to disallow variables that start with numbers for purity, to allow
 	// something like 1e3 to be scientific notation, and possibly other reasons.
 	if (*aName >= '0' && *aName <= '9')
-		return g_script.ScriptError(_T("This variable name starts with a number, which is not allowed."), aName);
+	{
+		if (aDisplayError)
+		{
+			TCHAR msg[512];
+			sntprintf(msg, _countof(msg), _T("This %s name starts with a number, which is not allowed:\n\"%-1.300s\"%s")
+				, aDisplayError == DISPLAY_VAR_ERROR ? _T("variable") : _T("function")
+				, aName
+				, aIsRuntime ? (_T("\n\n") ERR_ABORT_NO_SPACES) : _T(""));
+			return g_script.ScriptError(msg);
+		}
+		else
+			return FAIL;
+	}
 	LPCTSTR cp;
 	for (cp = aName; *cp; ++cp)
 	{

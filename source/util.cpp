@@ -340,6 +340,7 @@ SymbolType IsPureNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhites
 
 	// Set defaults:
 	BOOL has_decimal_point = false;
+	BOOL has_exponent = false;
 	BOOL has_at_least_one_digit = false; // i.e. a string consisting of only "+", "-" or "." is not considered numeric.
 	int c; // int vs. char might squeeze a little more performance out of it (it does reduce code size by 5 bytes). Probably must stay signed vs. unsigned for some of the uses below.
 
@@ -382,11 +383,9 @@ SymbolType IsPureNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhites
 				}
 				else
 				{
-					// As written below, this actually tolerates malformed scientific notation such as numbers
-					// containing two or more E's (e.g. 1.0e4e+5e-6,).  But for performance and due to rarity,
-					// it seems best not to check for them.
 					if (ctoupper(c) != 'E' // v1.0.46.11: Support scientific notation in floating point numbers.
-						|| !(has_decimal_point && has_at_least_one_digit)) // But it must have a decimal point and at least one digit to the left of the 'E'. This avoids variable names like "1e4" from being seen as sci-notation literals (for backward compatibility). Some callers rely on this check.
+						|| !has_at_least_one_digit // But it must have at least one digit to the left of the 'E'. Some callers rely on this check.
+						|| has_exponent)
 						return PURE_NOT_NUMERIC;
 					if (aBuf[1] == '-' || aBuf[1] == '+') // The optional sign is present on the exponent.
 						++aBuf; // Omit it from further consideration so that the outer loop doesn't see it as an extra/illegal sign.
@@ -394,6 +393,8 @@ SymbolType IsPureNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhites
 						// Even if it is an 'e', ensure what follows it is a valid exponent.  Some callers rely
 						// on this check, such as ones that expect "0.6e" to be non-numeric (for "SetFormat Float") 
 						return PURE_NOT_NUMERIC;
+					has_exponent = true;
+					has_decimal_point = true; // For simplicity, since a decimal point after the exponent isn't valid.
 				}
 			}
 			else // This character is a valid digit or hex-digit.

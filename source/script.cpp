@@ -5046,8 +5046,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 					// Below takes care of recognizing hexadecimal integers, which avoids the 'x' character
 					// inside of something like 0xFF from being detected as the name of a variable:
-					if (   !IsPureNumeric(op_begin, true, false, true) // Not a numeric literal...
-						/*&& !(*op_begin == '?' && !op_begin[1])*/   ) // ...and not an isolated '?' operator.  Relies on short-circuit boolean order.
+					if (!IsPureNumeric(op_begin, true, false, true)) // Not a numeric literal.
 					{
 						if (*op_begin == '.') // L31: Check for something like "obj .property" - scientific-notation literals such as ".123e+1" may also be handled here.
 						{
@@ -5059,29 +5058,30 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 							*op_end = orig_char;
 							continue;
 						}
-						if (cp = _tcschr(op_begin + 1, '.')) // L31: Check for scientific-notation literal (as in previous versions) or something like "obj.property". Above has already handled "obj .property" and similar.
+						if (ctoupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-')) // Listed first for short-circuit performance with the below.
 						{
-							if (ctoupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-')) // Listed first for short-circuit performance with the below.
-							{
-								 // v1.0.46.11: This item appears to be a scientific-notation literal with the OPTIONAL +/- sign PRESENT on the exponent (e.g. 1.0e+001), so check that before checking if it's a variable name.
-								*op_end = orig_char; // Undo the temporary termination.
-								do // Skip over the sign and its exponent; e.g. the "+1" in "1.0e+1".  There must be a sign in this particular sci-notation number or we would never have arrived here.
-									++op_end;
-								while (*op_end >= '0' && *op_end <= '9'); // Avoid isdigit() because it sometimes causes a debug assertion failure at: (unsigned)(c + 1) <= 256 (probably only in debug mode), and maybe only when bad data got in it due to some other bug.
-								// No need to do the following because a number can't validly be followed by the ".=" operator:
-								//if (*op_end == '=' && op_end[-1] == '.') // v1.0.46.01: Support .=, but not any use of '.' because that is reserved as a struct/member operator.
-								//	--op_end;
+							// v1.0.46.11: This item appears to be a scientific-notation literal with the OPTIONAL +/- sign PRESENT on the exponent (e.g. 1.0e+001), so check that before checking if it's a variable name.
+							*op_end = orig_char; // Undo the temporary termination.
+							do // Skip over the sign and its exponent; e.g. the "+1" in "1.0e+1".  There must be a sign in this particular sci-notation number or we would never have arrived here.
+								++op_end;
+							while (*op_end >= '0' && *op_end <= '9'); // Avoid isdigit() because it sometimes causes a debug assertion failure at: (unsigned)(c + 1) <= 256 (probably only in debug mode), and maybe only when bad data got in it due to some other bug.
+							// No need to do the following because a number can't validly be followed by the ".=" operator:
+							//if (*op_end == '=' && op_end[-1] == '.') // v1.0.46.01: Support .=, but not any use of '.' because that is reserved as a struct/member operator.
+							//	--op_end;
 
-								// Double-check it really is a floating-point literal with signed exponent.
-								orig_char = *op_end;
-								*op_end = '\0';
-								if (IsPureNumeric(op_begin, true, false, true))
-								{
-									*op_end = orig_char;
-									continue; // Pure number, which doesn't need any processing at this stage.
-								}
+							// Double-check it really is a floating-point literal with signed exponent.
+							orig_char = *op_end;
+							*op_end = '\0';
+							if (IsPureNumeric(op_begin, true, false, true))
+							{
+								*op_end = orig_char;
+								continue; // Pure number, which doesn't need any processing at this stage.
 							}
-							// else this is NOT a scientific-notation literal with +/- sign present, so treat it as a member-access operation.
+						}
+						// Since above did not "continue", this is NOT a scientific-notation literal
+						// with +/- sign present, but maybe its an object access operation such as "x.y".
+						if (cp = _tcschr(op_begin + 1, '.'))
+						{
 							// Resolve the part preceding '.' as a variable reference. The rest is handled later, in ExpressionToPostfix.
 							if (_tcschr(cp, g_DerefChar))
 								return ScriptError(ERR_INVALID_DOT, cp);
