@@ -881,7 +881,7 @@ public:
 	#define EXPR_OPERAND_TERMINATORS_EX_DOT EXPR_COMMON _T("+-?") // L31: Used in a few places where '.' needs special treatment.
 	#define EXPR_OPERAND_TERMINATORS EXPR_OPERAND_TERMINATORS_EX_DOT _T(".") // L31: Used in expressions where '.' is always an operator.
 	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS _T("\"")
-	#define EXPR_ILLEGAL_CHARS _T("'\\;`@#$") // Characters illegal in an expression.
+	#define EXPR_ILLEGAL_CHARS _T("'\\;`@#$%") // Characters illegal in an expression.  g_DerefChar is checked, so % is included in case #DerefChar was used to change the default.
 	// The following HOTSTRING option recognizer is kept somewhat forgiving/non-specific for backward compatibility
 	// (e.g. scripts may have some invalid hotstring options, which are simply ignored).  This definition is here
 	// because it's related to continuation line symbols. Also, avoid ever adding "&" to hotstring options because

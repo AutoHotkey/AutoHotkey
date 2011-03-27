@@ -5037,10 +5037,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// done only after the above has ensured this operand is not one enclosed entirely in
 					// double quotes.
 					// The following characters are either illegal in expressions or reserved for future use.
-					// Rather than forbidding g_delimiter and g_DerefChar, it seems best to assume they are at
-					// their default values for this purpose.  Otherwise, if g_delimiter is an operator, that
-					// operator would then become impossible inside the expression.
-					if (cp = StrChrAny(op_begin, EXPR_ILLEGAL_CHARS))
+					// This excludes g_DerefChar (which might have been customized via #DerefChar) since that
+					// is used for double-derefs in expressions.
+					for (cp = op_begin; !_tcschr(EXPR_ILLEGAL_CHARS, *cp) || *cp == g_DerefChar; ++cp); // _tcschr includes the null terminator in the search.
+					if (*cp)
 						return ScriptError(ERR_EXP_ILLEGAL_CHAR, cp);
 
 					// Below takes care of recognizing hexadecimal integers, which avoids the 'x' character
