@@ -431,8 +431,6 @@ Action g_act[] =
 
 	, {_T("SoundGet"), 1, 4, true, {4, 0}} // OutputVar, ComponentType (default=master), ControlType (default=vol), Mixer/Device Number
 	, {_T("SoundSet"), 1, 4, false, {1, 4, 0}} // Volume percent-level (0-100), ComponentType, ControlType (default=vol), Mixer/Device Number
-	, {_T("SoundGetWaveVolume"), 1, 2, true, {2, 0}} // OutputVar, Mixer/Device Number
-	, {_T("SoundSetWaveVolume"), 1, 2, false, {1, 2, 0}} // Volume percent-level (0-100), Device Number (1 is the first)
 	, {_T("SoundBeep"), 0, 2, false, {1, 2, 0}} // Frequency, Duration.
 	, {_T("SoundPlay"), 1, 2, false, NULL} // Filename [, wait]
 

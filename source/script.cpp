@@ -5616,17 +5616,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 		break;
 
-	case ACT_SOUNDSETWAVEVOLUME:
-		if (aArgc > 0 && !line.ArgHasDeref(1))
-		{
-			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
-			// sees a valid no-deref expression such as 300-250 as invalid.
-			value_float = ATOF(new_raw_arg1);
-			if (value_float < -100 || value_float > 100)
-				return ScriptError(ERR_PERCENT, new_raw_arg1);
-		}
-		break;
-
 	case ACT_SOUNDPLAY:
 		if (*new_raw_arg2 && !line.ArgHasDeref(2) && _tcsicmp(new_raw_arg2, _T("wait")) && _tcsicmp(new_raw_arg2, _T("1")))
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
@@ -12986,14 +12975,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			, component_type, instance_number  // Which instance of this component, 1 = first
 			, *ARG3 ? SoundConvertControlType(ARG3) : MIXERCONTROL_CONTROLTYPE_VOLUME  // Default
 			, (UINT)device_id);
-
-	case ACT_SOUNDGETWAVEVOLUME:
-	case ACT_SOUNDSETWAVEVOLUME:
-		device_id = *ARG2 ? ArgToInt(2) - 1 : 0;
-		if (device_id < 0)
-			device_id = 0;
-		return (mActionType == ACT_SOUNDGETWAVEVOLUME) ? SoundGetWaveVolume((HWAVEOUT)device_id)
-			: SoundSetWaveVolume(ARG1, (HWAVEOUT)device_id);
 
 	case ACT_SOUNDBEEP:
 		// For simplicity and support for future/greater capabilities, no range checking is done.

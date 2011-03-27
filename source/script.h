@@ -583,8 +583,6 @@ private:
 	ResultType DriveGet(LPTSTR aCmd, LPTSTR aValue);
 	ResultType SoundSetGet(LPTSTR aSetting, DWORD aComponentType, int aComponentInstance
 		, DWORD aControlType, UINT aMixerID);
-	ResultType SoundGetWaveVolume(HWAVEOUT aDeviceID);
-	ResultType SoundSetWaveVolume(LPTSTR aVolume, HWAVEOUT aDeviceID);
 	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
 	ResultType URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec);
 	ResultType FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGreeting, LPTSTR aFilter);
@@ -960,7 +958,6 @@ public:
 			case ACT_DRIVESPACEFREE:
 			case ACT_DRIVEGET:
 			case ACT_SOUNDGET:
-			case ACT_SOUNDGETWAVEVOLUME:
 			case ACT_FILEREAD:
 			case ACT_FILEREADLINE:
 			case ACT_FILEGETATTRIB:
