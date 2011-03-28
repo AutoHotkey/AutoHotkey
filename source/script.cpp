@@ -6746,11 +6746,26 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			// Since above didn't "continue", a file exists whose name matches that of the requested function.
 			aFileWasFound = true; // Indicate success for #include <lib>, which doesn't necessarily expect a function to be found.
 
+			// Save the current settings of #CommentFlag, #EscapeChar and #DerefChar to allow library files
+			// to use their own settings without affecting the main script file.  This is not done for normal
+			// #Includes since script authors might want to do something like #Include MyCharPrefs.ahk.
+			TCHAR comment_flag[_countof(g_CommentFlag)],
+				escape_char = g_EscapeChar,
+				deref_char = g_DerefChar,
+				deref_end_char = g_DerefEndChar;
+			_tcscpy(comment_flag, g_CommentFlag);
+
 			if (!LoadIncludedFile(sLib[i].path, false, false)) // Fix for v1.0.47.05: Pass false for allow-dupe because otherwise, it's possible for a stdlib file to attempt to include itself (especially via the LibNamePrefix_ method) and thus give a misleading "duplicate function" vs. "func does not exist" error message.  Obsolete: For performance, pass true for allow-dupe so that it doesn't have to check for a duplicate file (seems too rare to worry about duplicates since by definition, the function doesn't yet exist so it's file shouldn't yet be included).
 			{
 				aErrorWasShown = true; // Above has just displayed its error (e.g. syntax error in a line, failed to open the include file, etc).  So override the default set earlier.
 				return NULL;
 			}
+
+			// Restore settings as per the comment above.
+			g_CommentFlagLength = _tcslen(_tcscpy(g_CommentFlag, comment_flag));
+			g_EscapeChar = escape_char;
+			g_DerefChar = deref_char;
+			g_DerefEndChar = deref_end_char;
 
 			if (mIncludeLibraryFunctionsThenExit)
 			{
