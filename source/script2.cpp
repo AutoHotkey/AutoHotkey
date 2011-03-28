@@ -12472,12 +12472,17 @@ has_valid_return_type:
 	for (arg_count = 0, i = 1; i < aParamCount; ++arg_count, i += 2) // Same loop as used above, so maintain them together.
 	{
 		ExprTokenType &this_param = *aParam[i + 1];  // Resolved for performance and convenience.
-		if (this_param.symbol != SYM_VAR) // Output parameters are copied back only if its counterpart parameter is a naked variable.
+		// The following check applies to DLL_ARG_xSTR, which is "AStr" on Unicode builds and "WStr"
+		// on ANSI builds.  Since the buffer is only as large as required to hold the input string,
+		// it has very limited use as an output parameter.  Thus, it seems best to ignore anything the
+		// function may have written into the buffer (primarily for performance), and just delete it:
+		if (pStr[arg_count])
 		{
-			if (pStr[arg_count]) // We don't need to copy it back, so delete it.
-				delete pStr[arg_count];
-			continue;
+			delete pStr[arg_count];
+			continue; // Nothing further to do for this parameter.
 		}
+		if (this_param.symbol != SYM_VAR) // Output parameters are copied back only if its counterpart parameter is a naked variable.
+			continue;
 		DYNAPARM &this_dyna_param = dyna_param[arg_count]; // Resolved for performance and convenience.
 		Var &output_var = *this_param.var;                 //
 		if (this_dyna_param.type == DLL_ARG_STR) // Native string type for current build config.
@@ -12493,18 +12498,6 @@ has_valid_return_type:
 			// The function might have altered Contents(), so update Length().
 			output_var.SetCharLength((VarSizeType)_tcslen(contents));
 			output_var.Close(); // Clear the attributes of the variable to reflect the fact that the contents may have changed.
-			continue;
-		}
-		if (this_dyna_param.type == DLL_ARG_xSTR) // String needing translation: ASTR on Unicode build, WSTR on ANSI build.
-		{
-			pStr[arg_count]->ReleaseBuffer();
-#ifdef UNICODE
-			output_var.AssignStringFromCodePage(
-#else
-			output_var.AssignStringToCodePage(
-#endif
-				pStr[arg_count]->GetString() );
-			delete pStr[arg_count];
 			continue;
 		}
 
