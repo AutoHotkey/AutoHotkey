@@ -8770,24 +8770,6 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					return line->PreparseError(ERR_PARAM2_INVALID);
 			break;
 
-		case ACT_GROUPADD: // This must be done here because it relies on all other lines already having been added.
-			if (*LINE_RAW_ARG4 && !line->ArgHasDeref(4))
-			{
-				// If the label name was contained in a variable, that label is now resolved and cannot
-				// be changed.  This is in contrast to something like "Gosub, %MyLabel%" where a change in
-				// the value of MyLabel will change the behavior of the Gosub at runtime:
-				Label *label = FindLabel(LINE_RAW_ARG4);
-				if (!label)
-					return line->PreparseError(ERR_NO_LABEL);
-				line->mRelatedLine = (Line *)label; // The script loader has ensured that this can't be NULL.
-				// Can't do this because the current line won't be the launching point for the
-				// Gosub.  Instead, the launching point will be the GroupActivate rather than the
-				// GroupAdd, so it will be checked by the GroupActivate or not at all (since it's
-				// not that important in the case of a Gosub -- it's mostly for Goto's):
-				//return IsJumpValid(label->mJumpToLine);
-			}
-			break;
-
 		case ACT_ELSE:
 			// Should never happen because the part that handles the if's, above, should find
 			// all the elses and handle them.  UPDATE: This happens if there's
@@ -10577,31 +10559,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			result = OK; // Set default.
 			ResultType activate_result = FAIL;
 			if (group)
-			{
 				// Note: This will take care of DoWinDelay if needed:
-				activate_result = group->Activate(*ARG2 && !_tcsicmp(ARG2, _T("R")), NULL, &jump_to_label);
-				if (jump_to_label)
-				{
-					if (!line->IsJumpValid(*jump_to_label)) // Should be checked here rather than at the time that GroupAdd specified the label because it's from HERE that the jump will actually be done.
-						return FAIL;
-
-					// The section below is just like the Gosub code above, so maintain them together.
-					jumping_from_inside_function_to_outside = g.CurrentFunc && jump_to_label->mJumpToLine->IsOutsideAnyFunctionBody();
-					if (jumping_from_inside_function_to_outside)
-					{
-						g.CurrentFuncGosub = g.CurrentFunc;
-						g.CurrentFunc = NULL;
-					}
-					result = jump_to_label->Execute();
-					if (jumping_from_inside_function_to_outside)
-					{
-						g.CurrentFunc = g.CurrentFuncGosub;
-						g.CurrentFuncGosub = NULL; // Seems more maintainable to do it here vs. when the UDF returns, but debatable which is better overall for performance.
-					}
-					if (result == FAIL || result == EARLY_EXIT)
-						return result;
-				}
-			}
+				activate_result = group->Activate(*ARG2 && !_tcsicmp(ARG2, _T("R")));
 			//else no such group, so just proceed.
 			g_ErrorLevel->Assign(activate_result ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
 			if (aMode == ONLY_ONE_LINE)  // v1.0.45: These two lines were moved here from above to provide proper handling for GroupActivate that lacks a jump/gosub and that lies directly beneath an IF or ELSE.
@@ -12769,20 +12728,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		if (   !(group = (WinGroup *)mAttribute)   )
 			if (   !(group = g_script.FindGroup(ARG1, true))   )  // Last parameter -> create-if-not-found.
 				return FAIL;  // It already displayed the error for us.
-		target_label = NULL;
-		if (*ARG4)
-		{
-			if (   !(target_label = (Label *)mRelatedLine)   ) // Jump target hasn't been resolved yet, probably due to it being a deref.
-				if (   !(target_label = g_script.FindLabel(ARG4))   )
-					return LineError(ERR_NO_LABEL ERR_ABORT, FAIL, ARG4);
-			// Can't do this because the current line won't be the launching point for the
-			// Gosub.  Instead, the launching point will be the GroupActivate rather than the
-			// GroupAdd, so it will be checked by the GroupActivate or not at all (since it's
-			// not that important in the case of a Gosub -- it's mostly for Goto's):
-			//return IsJumpValid(label->mJumpToLine);
-			group->mJumpToLabel = target_label;
-		}
-		return group->AddWindow(ARG2, ARG3, ARG5, ARG6);
+		return group->AddWindow(ARG2, ARG3, ARG4, ARG5);
 	}
 
 	// Note ACT_GROUPACTIVATE is handled by ExecUntil(), since it's better suited to do the Gosub.

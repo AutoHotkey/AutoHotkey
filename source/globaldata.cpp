@@ -420,7 +420,7 @@ Action g_act[] =
 	// NOTE FOR THE ABOVE: 0 min args so that the output vars can be optional.
 
 	// See above for why minimum is 1 vs. 2:
-	, {_T("GroupAdd"), 1, 6, false, NULL} // Group name, WinTitle, WinText, Label, exclude-title/text
+	, {_T("GroupAdd"), 1, 5, false, NULL} // Group name, WinTitle, WinText, exclude-title/text
 	, {_T("GroupActivate"), 1, 2, false, NULL}
 	, {_T("GroupDeactivate"), 1, 2, false, NULL}
 	, {_T("GroupClose"), 1, 2, false, NULL}
