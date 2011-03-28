@@ -339,12 +339,7 @@ LRESULT CALLBACK LowLevelMouseProc(int aCode, WPARAM wParam, LPARAM lParam)
 				vk = wheel_delta < 0 ? VK_WHEEL_DOWN : VK_WHEEL_UP;
 			else
 				vk = wheel_delta < 0 ? VK_WHEEL_LEFT : VK_WHEEL_RIGHT;
-			// Dividing by WHEEL_DELTA was a mistake because some mice can yield detas less than 120.
-			// However, this behavior is kept for backward compatibility because some scripts may rely
-			// on A_EventInfo==0 meaning "delta is between 1 and 119".  WheelLeft/Right were also done
-			// that way because consistency may be more important than correctness.  In the future, perhaps
-			// an A_EventInfo2 can be added, or some hotkey aliases like "FineWheelXXX".
-			sc = (wheel_delta > 0 ? wheel_delta : -wheel_delta) / WHEEL_DELTA; // See above. Note that sc is unsigned.
+			sc = (wheel_delta > 0 ? wheel_delta : -wheel_delta); // Note that sc is unsigned.
 			key_up = false; // Always consider wheel movements to be "key down" events.
 			break;
 		case WM_LBUTTONUP: vk = VK_LBUTTON;	break;
