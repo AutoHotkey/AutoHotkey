@@ -1265,6 +1265,23 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		MsgBox(msg_text);
 		return FAIL;
 	}
+	
+	// Set the working directory so that any #Include directives are relative to the directory
+	// containing this file by default.  Call SetWorkingDir() vs. SetCurrentDirectory() so that it
+	// succeeds even for a root drive like C: that lacks a backslash (see SetWorkingDir() for details).
+	if (source_file_index)
+	{
+		LPTSTR terminate_here = _tcsrchr(full_path, '\\');
+		if (terminate_here > full_path)
+		{
+			*terminate_here = '\0'; // Temporarily terminate it for use with SetWorkingDir().
+			SetWorkingDir(full_path);
+			*terminate_here = '\\'; // Undo the termination.
+		}
+		//else: probably impossible? Just leave the working dir as-is, for simplicity.
+	}
+	else
+		SetWorkingDir(mFileDir);
 
 	// This is done only after the file has been successfully opened in case aIgnoreLoadFailure==true:
 	if (source_file_index > 0)
@@ -2645,6 +2662,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				++parameter;
 		}
 
+		TCHAR buf[MAX_PATH];
+
 		if (*parameter == '<') // Support explicitly-specified <standard_lib_name>.
 		{
 			LPTSTR parameter_end = _tcschr(parameter, '>');
@@ -2653,8 +2672,13 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				++parameter; // Remove '<'.
 				*parameter_end = '\0'; // Remove '>'.
 				bool error_was_shown, file_was_found;
+				// Save the working directory; see the similar line below for details.
+				if (!GetCurrentDirectory(_countof(buf) - 1, buf))
+					*buf = '\0';
 				// Attempt to include a script file based on the same rules as func() auto-include:
 				FindFuncInLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found);
+				// Restore the working directory.
+				SetCurrentDirectory(buf);
 				// If any file was included, consider it a success; i.e. allow #include <lib> and #include <lib_func>.
 				if (!error_was_shown && file_was_found || ignore_load_failure)
 					return CONDITION_TRUE;
@@ -2665,7 +2689,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		}
 
 		size_t space_remaining = LINE_SIZE - (parameter-aBuf);
-		TCHAR buf[MAX_PATH];
 		StrReplace(parameter, _T("%A_ScriptDir%"), mFileDir, SCS_INSENSITIVE, 1, space_remaining); // v1.0.35.11.  Caller has ensured string is writable.
 		if (tcscasestr(parameter, _T("%A_AppData%"))) // v1.0.45.04: This and the next were requested by Tekl to make it easier to customize scripts on a per-user basis.
 		{
@@ -2690,9 +2713,16 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			SetWorkingDir(parameter);
 			return CONDITION_TRUE;
 		}
+		// Save the working directory because LoadIncludedFile() changes it, and we want to retain any directory
+		// set by a previous instance of "#Include DirPath" for any other instances of #Include below this line.
+		if (!GetCurrentDirectory(_countof(buf) - 1, buf))
+			*buf = '\0';
 		// Since above didn't return, it's a file (or non-existent file, in which case the below will display
 		// the error).  This will also display any other errors that occur:
-		return LoadIncludedFile(parameter, is_include_again, ignore_load_failure) ? CONDITION_TRUE : FAIL;
+		ResultType result = LoadIncludedFile(parameter, is_include_again, ignore_load_failure);
+		// Restore the working directory.
+		SetCurrentDirectory(buf);
+		return result ? CONDITION_TRUE : FAIL;
 #endif
 	}
 
@@ -6611,7 +6641,7 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 	aFileWasFound = false;
 
 	int i;
-	LPTSTR char_after_last_backslash, terminate_here;
+	LPTSTR char_after_last_backslash;
 	DWORD attr;
 
 	#define FUNC_LIB_EXT _T(".ahk")
@@ -6713,19 +6743,8 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			attr = GetFileAttributes(sLib[i].path); // Testing confirms that GetFileAttributes() doesn't support wildcards; which is good because we want filenames containing question marks to be "not found" rather than being treated as a match-pattern.
 			if (attr == 0xFFFFFFFF || (attr & FILE_ATTRIBUTE_DIRECTORY)) // File doesn't exist or it's a directory. Relies on short-circuit boolean order.
 				continue;
-
-			aFileWasFound = true; // Indicate success for #include <lib>, which doesn't necessarily expect a function to be found.
-
 			// Since above didn't "continue", a file exists whose name matches that of the requested function.
-			// Before loading/including that file, set the working directory to its folder so that if it uses
-			// #Include, it will be able to use more convenient/intuitive relative paths.  This is similar to
-			// the "#Include DirName" feature.
-			// Call SetWorkingDir() vs. SetCurrentDirectory() so that it succeeds even for a root drive like
-			// C: that lacks a backslash (see SetWorkingDir() for details).
-			terminate_here = sLib[i].path + sLib[i].length - 1; // The trailing backslash in the full-path-name to this library.
-			*terminate_here = '\0'; // Temporarily terminate it for use with SetWorkingDir().
-			SetWorkingDir(sLib[i].path); // See similar section in the #Include directive.
-			*terminate_here = '\\'; // Undo the termination.
+			aFileWasFound = true; // Indicate success for #include <lib>, which doesn't necessarily expect a function to be found.
 
 			if (!LoadIncludedFile(sLib[i].path, false, false)) // Fix for v1.0.47.05: Pass false for allow-dupe because otherwise, it's possible for a stdlib file to attempt to include itself (especially via the LibNamePrefix_ method) and thus give a misleading "duplicate function" vs. "func does not exist" error message.  Obsolete: For performance, pass true for allow-dupe so that it doesn't have to check for a duplicate file (seems too rare to worry about duplicates since by definition, the function doesn't yet exist so it's file shouldn't yet be included).
 			{
