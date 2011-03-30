@@ -2564,7 +2564,7 @@ void Debugger::Buffer::Remove(size_t aDataSize)
 LPTSTR Var::ObjectToText(LPTSTR aBuf, int aBufSize)
 {
 	LPTSTR aBuf_orig = aBuf;
-	aBuf += sntprintf(aBuf, aBufSize, _T("%s[Object]: 0x%p"), mName, mObject);
+	aBuf += sntprintf(aBuf, aBufSize, _T("%s: Object(0x%p)"), mName, mObject);
 	if (ComObject *cobj = dynamic_cast<ComObject *>(mObject))
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T(" <= ComObject(0x%04hX, 0x%I64X)"), cobj->mVarType, cobj->mVal64);
 	return aBuf;

@@ -485,12 +485,22 @@ public:
 		// (it seems more useful and intuitive).
 		var.UpdateContents(); // Update mContents and mLength for use below.
 		LPTSTR aBuf_orig = aBuf;
-		if (var.IsObject())
+		switch (var.IsPureNumericOrObject())
+		{
+		case VAR_ATTRIB_IS_INT64:
+		case VAR_ATTRIB_IS_DOUBLE:
+			// Dont display [len of cap] since it's not relevant for pure numbers.
+			// This also makes it obvious that the var contains a pure number:
+			aBuf += sntprintf(aBuf, aBufSize, _T("%s: %s"), mName, var.mCharContents);
+			break;
+		case VAR_ATTRIB_IS_OBJECT:
 			aBuf = ObjectToText(aBuf, aBufSize);
-		else
+			break;
+		default:
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[%Iu of %Iu]: %-1.60s%s"), mName // mName not var.mName (see comment above).
 				, var._CharLength(), var._CharCapacity() ? (var._CharCapacity() - 1) : 0  // Use -1 since it makes more sense to exclude the terminator.
 				, var.mCharContents, var._CharLength() > 60 ? _T("...") : _T(""));
+		}
 		if (aAppendNewline && BUF_SPACE_REMAINING >= 2)
 		{
 			*aBuf++ = '\r';
