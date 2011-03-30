@@ -657,13 +657,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 		}
 
 		if (this_token.symbol == SYM_COMMA) // This can only be a statement-separator comma, not a function comma, since function commas weren't put into the postfix array.
-			// Do nothing other than discarding the right-side operand that was just popped off the stack.
-			// This collapses the two sub-statements delimated by a given comma into a single result for
-			// subsequent uses by another operator.  Unlike C++, the leftmost operand is preserved, not the
-			// rightmost.  This is because it's faster to just discard the topmost item on the stack, but
-			// more importantly it allows ACT_ASSIGNEXPR, ACT_ADD, and others to work properly.  For example:
-			//    Var:=5, Var1:=(Var2:=1, Var3:=2)
-			// Without the behavior implemented here, the above would wrongly put Var3's rvalue into Var2.
+			// Do nothing other than discarding the operand that was just popped off the stack, which is the
+			// result of the comma's left-hand sub-statement.  At this point the right-hand sub-statement
+			// has not yet been evaluated.  Like C++ and other languages, but unlike AutoHotkey v1, the
+			// rightmost operand is preserved, not the leftmost.
 			continue;
 
 		switch (this_token.symbol)

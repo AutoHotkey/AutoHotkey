@@ -9904,7 +9904,10 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				{
 					if (!in_param_list) // This comma separates statements rather than function parameters.
 					{
-						STACK_PUSH(this_infix);
+						STACK_PUSH(this_infix++);
+						// Pop this comma immediately into postfix so that when it is encountered at
+						// run-time, it will pop and discard the result of its left-hand sub-statement.
+						goto standard_pop_into_postfix;
 					}
 					else
 					{
