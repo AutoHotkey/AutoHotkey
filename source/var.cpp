@@ -948,7 +948,7 @@ void Var::Backup(VarBkp &aVarBkp)
 {
 	aVarBkp.mVar = this; // Allows the restoration process to always know its target without searching.
 	aVarBkp.mByteContents = mByteContents;
-	aVarBkp.mContentsInt64 = mContentsInt64; // This also copies the other member of the union: mContentsDouble.
+	aVarBkp.mContentsInt64 = mContentsInt64; // This also copies the other members of the union: mContentsDouble, mObject.
 	aVarBkp.mByteLength = mByteLength; // Since it's a union, it might actually be backing up mAliasFor (happens at least for recursive functions that pass parameters ByRef).
 	aVarBkp.mByteCapacity = mByteCapacity;
 	aVarBkp.mHowAllocated = mHowAllocated; // This might be ALLOC_SIMPLE or ALLOC_NONE if backed up variable was at the lowest layer of the call stack.
@@ -974,6 +974,19 @@ void Var::Backup(VarBkp &aVarBkp)
 
 
 
+void Var::Restore(VarBkp &aVarBkp)
+{
+	mByteContents = aVarBkp.mByteContents;
+	mContentsInt64 = aVarBkp.mContentsInt64; // This also copies the other members of the union: mContentsDouble, mObject.
+	mByteLength = aVarBkp.mByteLength; // Since it's a union, it might actually be restoring mAliasFor, which is desired.
+	mByteCapacity = aVarBkp.mByteCapacity;
+	mHowAllocated = aVarBkp.mHowAllocated; // This might be ALLOC_SIMPLE or ALLOC_NONE if backed-up variable was at the lowest layer of the call stack.
+	mAttrib = aVarBkp.mAttrib;
+	mType = aVarBkp.mType;
+}
+
+
+
 void Var::FreeAndRestoreFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVarBackupCount)
 {
 	int i;
@@ -985,20 +998,13 @@ void Var::FreeAndRestoreFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVar
 	// The freeing (above) MUST be done prior to the restore-from-backup below (otherwise there would be
 	// a memory leak).  Static variables are never backed up and thus do not exist in the aVarBackup array.
 	// This is because by definition, the contents of statics are not freed or altered by the calling procedure
-	// (regardless how how recursive or multi-threaded the function is).
+	// (regardless how recursive or multi-threaded the function is).
 	if (aVarBackup) // This is the indicator that a backup was made; thus a restore is also needed.
 	{
 		for (i = 0; i < aVarBackupCount; ++i) // Static variables were never backed up so they won't be in this array. See comments above.
 		{
-			VarBkp &bkp = aVarBackup[i]; // Resolve only once for performance.
-			Var &var = *bkp.mVar;        //
-			var.mByteContents = bkp.mByteContents;
-			var.mContentsInt64 = bkp.mContentsInt64; // This also copies the other member of the union: mContentsDouble.
-			var.mByteLength = bkp.mByteLength; // Since it's a union, it might actually be restoring mAliasFor, which is desired.
-			var.mByteCapacity = bkp.mByteCapacity;
-			var.mHowAllocated = bkp.mHowAllocated; // This might be ALLOC_SIMPLE or ALLOC_NONE if backed-up variable was at the lowest layer of the call stack.
-			var.mAttrib = bkp.mAttrib;
-			var.mType = bkp.mType;
+			VarBkp &bkp = aVarBackup[i];
+			bkp.mVar->Restore(bkp);
 		}
 		free(aVarBackup);
 		aVarBackup = NULL; // Some callers want this reset; it's an indicator of whether the next function call in this expression (if any) will have a backup.

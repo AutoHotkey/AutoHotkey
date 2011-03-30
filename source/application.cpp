@@ -99,7 +99,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	// Never static because we could be recursed (e.g. when one hotkey iterruptes
 	// a hotkey that has already been interrupted) and each recursion layer should
 	// have it's own value for this:
-	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
+	VarBkp ErrorLevel_saved;
 
 	// Decided to support a true Sleep(0) for aSleepDuration == 0, as well
 	// as no delay at all if aSleepDuration < 0.  This is needed to implement
@@ -1006,10 +1006,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			}
 
 			// Also save the ErrorLevel of the subroutine that's about to be suspended.
-			// Current limitation: If the user put something big in ErrorLevel (very unlikely
-			// given its nature, but allowed) it will be truncated by this, if too large.
-			// Also: Don't use var->Get() because need better control over the size:
-			tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
+			g_ErrorLevel->Backup(ErrorLevel_saved);
 			// Make every newly launched subroutine start off with the global default values that
 			// the user set up in the auto-execute part of the script (e.g. KeyDelay, WinDelay, etc.).
 			// However, we do not set ErrorLevel to anything special here (except for GUI threads, later
@@ -1582,7 +1579,7 @@ bool CheckScriptTimers()
 	ScriptTimer *ptimer;
 	BOOL at_least_one_timer_launched;
 	DWORD tick_start;
-	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
+	VarBkp ErrorLevel_saved;
 
 	// Note: It seems inconsequential if a subroutine that the below loop executes causes a
 	// new timer to be added to the linked list while the loop is still enumerating the timers.
@@ -1620,7 +1617,7 @@ bool CheckScriptTimers()
 			// seems best since some timed subroutines might take a long time to run:
 			++g_nThreads; // These are the counterparts the decrements that will be done further
 			++g;          // below by ResumeUnderlyingThread().
-			tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved)); // Back up the current ErrorLevel for later restoration.
+			g_ErrorLevel->Backup(ErrorLevel_saved); // Back up the current ErrorLevel for later restoration.
 			// But never kill the main timer, since the mere fact that we're here means that
 			// there's at least one enabled timed subroutine.  Though later, performance can
 			// be optimized by killing it if there's exactly one enabled subroutine, or if
@@ -1791,8 +1788,8 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	// Since above didn't return, the launch of the new thread is now considered unavoidable.
 
 	// See MsgSleep() for comments about the following section.
-	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
-	tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
+	VarBkp ErrorLevel_saved;
+	g_ErrorLevel->Backup(ErrorLevel_saved);
 	InitNewThread(0, false, true, func.mJumpToLine->mActionType);
 	DEBUGGER_STACK_PUSH(func.mJumpToLine, func.mName) // Push a "thread" onto the debugger's stack.  For simplicity and performance, use the function name vs something like "message 0x123".
 
@@ -2016,12 +2013,12 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 
 
 
-void ResumeUnderlyingThread(LPTSTR aSavedErrorLevel)
+void ResumeUnderlyingThread(VarBkp aSavedErrorLevel)
 {
 	// The following section handles the switch-over to the former/underlying "g" item:
 	--g_nThreads; // Other sections below might rely on this having been done early.
 	--g;
-	g_ErrorLevel->Assign(aSavedErrorLevel);
+	g_ErrorLevel->Restore(aSavedErrorLevel);
 	// The below relies on the above having restored "g" to be the global_struct of the underlying thread.
 
 	// If the thread to be resumed was paused and has not been unpaused above, it will automatically be

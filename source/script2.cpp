@@ -2759,7 +2759,7 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 	HWND target_window, control_window;
 	if (   !(target_window = DetermineTargetWindow(sArgDeref[4], sArgDeref[5], sArgDeref[6], sArgDeref[7]))
 		|| !(control_window = *sArgDeref[3] ? ControlExist(target_window, sArgDeref[3]) : target_window)   ) // Relies on short-circuit boolean order.
-		return g_ErrorLevel->Assign(aUseSend ? _T("FAIL") : ERRORLEVEL_ERROR); // Need a special value to distinguish this from numeric reply-values.
+		return aUseSend ? g_ErrorLevel->Assign(_T("FAIL")) : g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Need a special value to distinguish this from numeric reply-values.
 
 	// UPDATE: Note that ATOU(), in both past and current versions, supports negative numbers too.
 	// For example, ATOU("-1") has always produced 0xFFFFFFFF.
@@ -2852,7 +2852,7 @@ ResultType Line::ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3)
 			}
 		}
 		// Since above didn't return, yield a PID of 0 to indicate failure.
-		return g_ErrorLevel->Assign(_T("0"));
+		return g_ErrorLevel->Assign(0);
 
 	case PROCESS_CMD_PRIORITY:
 		switch (_totupper(*aParam3))
@@ -2864,7 +2864,7 @@ ResultType Line::ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3)
 		case 'H': priority = HIGH_PRIORITY_CLASS; break;
 		case 'R': priority = REALTIME_PRIORITY_CLASS; break;
 		default:
-			return g_ErrorLevel->Assign(_T("0"));  // 0 indicates failure in this case (i.e. a PID of zero).
+			return g_ErrorLevel->Assign(0);  // 0 indicates failure in this case (i.e. a PID of zero).
 		}
 		if (pid = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId())  // Assign
 		{
@@ -2880,7 +2880,7 @@ ResultType Line::ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3)
 			}
 		}
 		// Otherwise, return a PID of 0 to indicate failure.
-		return g_ErrorLevel->Assign(_T("0"));
+		return g_ErrorLevel->Assign(0);
 
 	case PROCESS_CMD_WAIT:
 	case PROCESS_CMD_WAITCLOSE:
@@ -2913,7 +2913,7 @@ ResultType Line::ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3)
 				// Since PID cannot always be determined (i.e. if process never existed, there was
 				// no need to wait for it to close), for consistency, return 0 on success.
 				if (!pid)
-					return g_ErrorLevel->Assign(_T("0"));
+					return g_ErrorLevel->Assign(0);
 			}
 			// Must cast to int or any negative result will be lost due to DWORD type:
 			if (wait_indefinitely || (int)(sleep_duration - (GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)
@@ -5611,7 +5611,7 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInpu
 	{
 	case AHK_TIMEOUT:
 		// In this case the TimerProc already set the output variable to be what the user entered.
-		return g_ErrorLevel->Assign(_T("2"));
+		return g_ErrorLevel->Assign(2);
 	case IDOK:
 	case IDCANCEL:
 		// The output variable is set to whatever the user entered, even if the user pressed
@@ -8101,7 +8101,7 @@ ResultType Line::SoundSetGet(LPTSTR aSetting, DWORD aComponentType, int aCompone
 
 		MMRESULT result = mixerSetControlDetails((HMIXEROBJ)hMixer, &mcd, MIXER_GETCONTROLDETAILSF_VALUE);
 		mixerClose(hMixer);
-		return g_ErrorLevel->Assign(result == MMSYSERR_NOERROR ? ERRORLEVEL_NONE : _T("Can't Change Setting"));
+		return result == MMSYSERR_NOERROR ? g_ErrorLevel->Assign(ERRORLEVEL_NONE) : g_ErrorLevel->Assign(_T("Can't Change Setting"));
 	}
 
 	// Otherwise, the mode is "Get":
@@ -8528,7 +8528,7 @@ ResultType Line::FileCreateDir(LPTSTR aDirSpec)
 		// everything succeeded.  So now, when recursion finishes creating all the ancestors of this directory
 		// our own layer here does not call CreateDirectory() when there's a trailing backslash because a previous
 		// layer already did:
-		if (!last_backslash[1] || *g_ErrorLevel->Contents() == *ERRORLEVEL_ERROR) // Compare first char of each string, which is valid because ErrorLevel is stored as a quoted/literal string rather than an integer.
+		if (!last_backslash[1] || g_ErrorLevel->ToInt64() == ERRORLEVEL_ERROR)
 			return OK; // Let the previously set ErrorLevel (whatever it is) tell the story.
 	}
 
@@ -11988,7 +11988,7 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 			if (   !hmodule_to_free  ||  !(hmodule = *hmodule_to_free = LoadLibrary(dll_name))   )
 			{
 				if (hmodule_to_free) // L31: BIF_DllCall wants us to set ErrorLevel.  ExpressionToPostfix passes NULL.
-					g_ErrorLevel->Assign(_T("-3")); // Stage 3 error: DLL couldn't be loaded.
+					g_ErrorLevel->Assign(-3); // Stage 3 error: DLL couldn't be loaded.
 				return NULL;
 			}
 		if (   !(function = (void *)GetProcAddress(hmodule, function_name))   )
@@ -12042,7 +12042,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			// an ErrorLevel of 0xc0000005.
 			//if (temp64 <= 0)
 			//{
-			//	g_ErrorLevel->Assign(_T("-1")); // Stage 1 error: Invalid first param.
+			//	g_ErrorLevel->Assign(-1); // Stage 1 error: Invalid first param.
 			//	return;
 			//}
 			//// Otherwise, assume it's a valid address:
@@ -12052,7 +12052,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			function = (void *)aParam[0]->value_int64; // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
 			break;
 		default: // SYM_FLOAT, SYM_OBJECT or not an operand.
-			g_ErrorLevel->Assign(_T("-1")); // Stage 1 error: Invalid first param.
+			g_ErrorLevel->Assign(-1); // Stage 1 error: Invalid first param.
 			return;
 	}
 
@@ -12069,7 +12069,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		ExprTokenType &token = *aParam[aParamCount - 1];
 		if (IS_NUMERIC(token.symbol) || token.symbol == SYM_OBJECT) // The return type should be a string, not something purely numeric.
 		{
-			g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+			g_ErrorLevel->Assign(-2); // Stage 2 error: Invalid return type or arg type.
 			return;
 		}
 		LPTSTR return_type_string[2];
@@ -12116,7 +12116,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		ConvertDllArgType(return_type_string, return_attrib);
 		if (return_attrib.type == DLL_ARG_INVALID)
 		{
-			g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+			g_ErrorLevel->Assign(-2); // Stage 2 error: Invalid return type or arg type.
 			return;
 		}
 has_valid_return_type:
@@ -12161,7 +12161,7 @@ has_valid_return_type:
 		// Check validity of this arg's type and contents:
 		if (IS_NUMERIC(aParam[i]->symbol)) // The arg type should be a string, not something purely numeric.
 		{
-			g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+			g_ErrorLevel->Assign(-2); // Stage 2 error: Invalid return type or arg type.
 			return;
 		}
 		// Otherwise, this arg's type-name is a string as it should be, so retrieve it:
@@ -12197,7 +12197,7 @@ has_valid_return_type:
 				// to be stack memory, which would be invalid memory upon return to the caller).
 				// The complexity of this doesn't seem worth the rarity of the need, so this will be
 				// documented in the help file.
-				g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+				g_ErrorLevel->Assign(-2); // Stage 2 error: Invalid return type or arg type.
 				return;
 			}
 			// Otherwise, it's a supported type of string.
@@ -12232,7 +12232,7 @@ has_valid_return_type:
 			// See the section above for comments.
 			if (IS_NUMERIC(this_param.symbol))
 			{
-				g_ErrorLevel->Assign(_T("-2"));
+				g_ErrorLevel->Assign(-2);
 				return;
 			}
 			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
@@ -12250,7 +12250,7 @@ has_valid_return_type:
 			break;
 
 		case DLL_ARG_INVALID:
-			g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+			g_ErrorLevel->Assign(-2); // Stage 2 error: Invalid return type or arg type.
 			return;
 
 		default: // Namely:
@@ -12293,7 +12293,7 @@ has_valid_return_type:
 		function = GetDllProcAddress(aParam[0]->symbol == SYM_VAR ? aParam[0]->var->Contents() : aParam[0]->marker, &hmodule_to_free);
 		if (!function)
 		{
-			g_ErrorLevel->Assign(_T("-4")); // Stage 4 error: Function could not be found in the DLL(s).
+			g_ErrorLevel->Assign(-4); // Stage 4 error: Function could not be found in the DLL(s).
 			goto end;
 		}
 	}
@@ -13283,7 +13283,7 @@ break_both:
 	// are set properly.
 
 	const char *error_msg;
-	TCHAR error_buf[ERRORLEVEL_SAVED_SIZE];
+	TCHAR error_buf[128];
 	int error_code, error_offset;
 	pcre *re_compiled;
 
@@ -15281,7 +15281,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 #endif
 	Func &func = *cb.func; // For performance and convenience.
 
-	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
+	VarBkp ErrorLevel_saved;
 	EventInfoType EventInfo_saved;
 	BOOL pause_after_execute;
 
@@ -15307,7 +15307,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 		if (g_nThreads >= g_MaxThreadsTotal) // Since this is a callback, it seems too rare to make an exemption for functions whose first line is ExitApp. In any case, to avoid array overflow, g_MaxThreadsTotal must not be exceeded except where otherwise documented.
 			return DEFAULT_CB_RETURN_VALUE;
 		// See MsgSleep() for comments about the following section.
-		tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
+		g_ErrorLevel->Backup(ErrorLevel_saved);
 		InitNewThread(0, false, true, func.mJumpToLine->mActionType);
 		DEBUGGER_STACK_PUSH(func.mJumpToLine, func.mName)
 	}
