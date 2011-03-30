@@ -4,8 +4,6 @@
 #include "script_object.h"
 #include "script_com.h"
 
-#ifdef CONFIG_EXPERIMENTAL
-
 
 // IID__IObject -- .NET's System.Object:
 const IID IID__Object = {0x65074F7F, 0x63C0, 0x304E, 0xAF, 0x0A, 0xD5, 0x17, 0x41, 0xCB, 0x4A, 0x8D};
@@ -1235,5 +1233,3 @@ int ComArrayEnum::Next(Var *aOutput, Var *aOutputType)
 	return false;
 }
 
-
-#endif

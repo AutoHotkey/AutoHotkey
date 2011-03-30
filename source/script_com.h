@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef CONFIG_EXPERIMENTAL
-
 
 extern bool g_ComErrorNotify;
 
@@ -132,5 +130,3 @@ void ComError(HRESULT, LPTSTR = _T(""), EXCEPINFO* = NULL);
 
 bool SafeSetTokenObject(ExprTokenType &aToken, IObject *aObject);
 
-
-#endif

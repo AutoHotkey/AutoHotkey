@@ -640,7 +640,6 @@ __int64 TextFile::_Length() const
 }
 
 
-#ifdef CONFIG_EXPERIMENTAL
 // FileObject: exports TextFile interfaces to the scripts.
 class FileObject : public ObjectBase // fincs: No longer allowing the script to manipulate File objects
 {
@@ -1141,7 +1140,7 @@ void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 
 	g->LastError = GetLastError();
 }
-#endif
+
 
 //
 // TextMem
