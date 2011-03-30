@@ -12853,9 +12853,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		}
 	}
 
-	case ACT_DRIVESPACEFREE:
-		return DriveSpace(ARG2, true);
-
 	case ACT_DRIVE:
 		return Drive(THREE_ARGS);
 

@@ -423,7 +423,6 @@ Action g_act[] =
 	, {_T("GroupDeactivate"), 1, 2, false, NULL}
 	, {_T("GroupClose"), 1, 2, false, NULL}
 
-	, {_T("DriveSpaceFree"), 2, 2, true, NULL} // Output-var, path (e.g. c:\)
 	, {_T("Drive"), 1, 3, false, NULL} // Sub-command, Value1 (can be blank for Eject), Value2
 	, {_T("DriveGet"), 0, 3, true, NULL} // Output-var (optional in at least one case), Command, Value
 
