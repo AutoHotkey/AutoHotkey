@@ -681,7 +681,7 @@ private:
 	ResultType WinGetPos(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType EnvGet(LPTSTR aEnvVarName);
 	ResultType SysGet(LPTSTR aCmd, LPTSTR aValue);
-	ResultType PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorBGR, int aVariation
+	ResultType PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB, int aVariation
 		, LPTSTR aOptions, bool aIsPixelGetColor);
 	ResultType ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTSTR aImageFile);
 	ResultType PixelGetColor(int aX, int aY, LPTSTR aOptions);

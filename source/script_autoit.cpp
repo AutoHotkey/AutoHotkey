@@ -211,7 +211,7 @@ ResultType Line::PixelGetColor(int aX, int aY, LPTSTR aOptions)
 		ReleaseDC(NULL, hdc);
 
 	TCHAR buf[32];
-	_stprintf(buf, _T("0x%06X"), tcscasestr(aOptions, _T("RGB")) ? bgr_to_rgb(color) : color);
+	_stprintf(buf, _T("0x%06X"), bgr_to_rgb(color));
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 	return output_var.Assign(buf);
 }

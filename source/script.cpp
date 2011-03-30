@@ -8982,6 +8982,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								// the complexity to distinguish between expressions that can accept a post-op
 								// and those that can't (operands other than variables can have a post-op;
 								// e.g. (x:=y)++).
+								// UPDATE: Quoted literal strings now explicitly support the above, but not
+								// other operands such as 123 ++x, which would be vanishingly rare.
 								++cp; // An additional increment to have loop skip over the operator's second symbol.
 								this_infix_item.symbol = SYM_POST_INCREMENT;
 							}

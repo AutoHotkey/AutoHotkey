@@ -4120,23 +4120,13 @@ end:
 
 
 
-ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorBGR
+ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
 	, int aVariation, LPTSTR aOptions, bool aIsPixelGetColor)
-// Caller has ensured that aColor is in BGR format unless caller passed true for aUseRGB, in which case
-// it's in RGB format.
 // Author: The fast-mode PixelSearch was created by Aurelian Maga.
 {
 	// For maintainability, get options and RGB/BGR conversion out of the way early.
 	bool fast_mode = aIsPixelGetColor || tcscasestr(aOptions, _T("Fast"));
-	bool use_rgb = tcscasestr(aOptions, _T("RGB")) != NULL;
-	COLORREF aColorRGB;
-	if (use_rgb) // aColorBGR currently contains an RGB value.
-	{
-		aColorRGB = aColorBGR;
-		aColorBGR = rgb_to_bgr(aColorBGR);
-	}
-	else
-		aColorRGB = rgb_to_bgr(aColorBGR); // rgb_to_bgr() also converts in the reverse direction, i.e. bgr_to_rgb().
+	COLORREF aColorBGR = rgb_to_bgr(aColorRGB);
 
 	// Many of the following sections are similar to those in ImageSearch(), so they should be
 	// maintained together.
@@ -4236,7 +4226,7 @@ ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLOR
 		{
 			COLORREF color = screen_pixel[0] & 0x00FFFFFF; // See other 0x00FFFFFF below for explanation.
 			TCHAR buf[32];
-			_stprintf(buf, _T("0x%06X"), use_rgb ? color : rgb_to_bgr(color));
+			_stprintf(buf, _T("0x%06X"), color);
 			output_var_x->Assign(buf); // Caller has ensured that first output_var (x) won't be NULL in this mode.
 			found = true; // ErrorLevel will be set to 0 further below.
 		}
