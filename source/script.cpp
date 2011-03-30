@@ -6396,6 +6396,8 @@ ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDere
 		// If this deref ended at a non-literal deref char, it is considered part of the deref.
 		// This allows "%var%" to be a simple deref, "the %var." to be equivalent to "the %var%."
 		// and "%n`%" to be equivalent to "%n%`%", e.g. "100%" where n = 100.
+		if (aArgText[j] == '(') // Reserve %func() for future use rather than interpreting it as %var%().
+			return ScriptError(_T("Function calls are not supported."), aArgText);
 		if (aArgText[j] == g_DerefEndChar && !(aArgMap && aArgMap[j]))
 			++j;
 		deref_string_length = aArgText + j - this_deref.marker;
