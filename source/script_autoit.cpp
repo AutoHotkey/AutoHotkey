@@ -2181,7 +2181,7 @@ DWORD ProcessExist9x2000(LPTSTR aProcess, LPTSTR aProcessName)
 
 	// Determine the PID if aProcess is a pure, non-negative integer (any negative number
 	// is more likely to be the name of a process [with a leading dash], rather than the PID).
-	DWORD specified_pid = IsPureNumeric(aProcess) ? ATOU(aProcess) : 0;
+	DWORD specified_pid = IsNumeric(aProcess) ? ATOU(aProcess) : 0;
 	TCHAR szDrive[_MAX_PATH+1], szDir[_MAX_PATH+1], szFile[_MAX_PATH+1], szExt[_MAX_PATH+1];
 
 	while (lpfnProcess32Next(snapshot, &proc))
@@ -2270,7 +2270,7 @@ DWORD ProcessExistNT4(LPTSTR aProcess, LPTSTR aProcessName)
 	DWORD cProcesses = cbNeeded / sizeof(DWORD);
 	// Determine the PID if aProcess is a pure, non-negative integer (any negative number
 	// is more likely to be the name of a process [with a leading dash], rather than the PID).
-	DWORD specified_pid = IsPureNumeric(aProcess) ? ATOU(aProcess) : 0;
+	DWORD specified_pid = IsNumeric(aProcess) ? ATOU(aProcess) : 0;
 	TCHAR szDrive[_MAX_PATH+1], szDir[_MAX_PATH+1], szFile[_MAX_PATH+1], szExt[_MAX_PATH+1];
 	TCHAR szProcessName[_MAX_PATH+1];
 	HMODULE hMod;

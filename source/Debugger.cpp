@@ -982,16 +982,16 @@ int Debugger::WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage)
 	if (facet[0] != '\0') // Remove the final space.
 		facet[strlen(facet)-1] = '\0';
 
-	if (attrib & VAR_ATTRIB_OBJECT)
+	if (attrib & VAR_ATTRIB_IS_OBJECT)
 	{
 		CStringUTF8FromTChar name_buf(aVar.mName);
 		return WritePropertyXml(aVar.Object(), name_buf.GetString(), name_buf, aPage, mMaxChildren, mMaxDepth, aMaxEncodedSize, facet);
 	}
 
 	char *type;
-	if (attrib & VAR_ATTRIB_HAS_VALID_INT64)
+	if (attrib & VAR_ATTRIB_IS_INT64)
 		type = "integer";
-	else if (attrib & VAR_ATTRIB_HAS_VALID_DOUBLE)
+	else if (attrib & VAR_ATTRIB_IS_DOUBLE)
 		type = "float";
 	else
 		type = "string";
@@ -1155,7 +1155,7 @@ int Debugger::WritePropertyXml(Object::FieldType &aField, const char *aName, CSt
 
 	switch (aField.symbol)
 	{
-	case SYM_OPERAND:
+	case SYM_STRING:
 		value = aField.marker;
 		type = "string";
 		break;
@@ -1274,7 +1274,7 @@ int Debugger::WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize)
 
 	switch (aField.symbol)
 	{
-	case SYM_OPERAND:
+	case SYM_STRING:
 		value = aField.marker;
 		type = "string";
 		break;
@@ -1411,7 +1411,7 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 			// For simplicity, let this be any string terminated by '.' or '['.
 			// Actual expressions require it to contain only alphanumeric chars and/or '_'.
 			name_end = StrChrAny(name, _T(".[")); // This also sets it up for the next iteration.
-			key_type = IsPureNumeric(name); // SYM_INTEGER or SYM_STRING.
+			key_type = IsNumeric(name); // SYM_INTEGER or SYM_STRING.
 			if (name_end)
 			{
 				c = *name_end; // Save this for the next iteration.
@@ -1442,7 +1442,7 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 				}
 				else
 				{
-					sBaseField->symbol = SYM_OPERAND;
+					sBaseField->symbol = SYM_STRING;
 					sBaseField->marker = _T("");
 					sBaseField->size = 0;
 				}

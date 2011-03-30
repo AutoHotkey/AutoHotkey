@@ -1205,7 +1205,7 @@ public:
 	static DWORD SoundConvertControlType(LPTSTR aBuf)
 	{
 		// v1.0.37.06: The following was added to allow unnamed control types (if any) to be accessed via number:
-		if (IsPureNumeric(aBuf, false, false, true)) // Seems best to allowing floating point here, since .000 on the end might happen sometimes.
+		if (IsNumeric(aBuf, false, false, true)) // Seems best to allowing floating point here, since .000 on the end might happen sometimes.
 			return ATOU(aBuf);
 		// The following are the types that seem to correspond to actual sound attributes.  Some of the
 		// values are not included here, such as MIXERCONTROL_CONTROLTYPE_FADER, which seems to be a type
@@ -1244,7 +1244,7 @@ public:
 	static SysGetCmds ConvertSysGetCmd(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return SYSGET_CMD_INVALID;
-		if (IsPureNumeric(aBuf)) return SYSGET_CMD_METRICS;
+		if (IsNumeric(aBuf)) return SYSGET_CMD_METRICS;
 		if (!_tcsicmp(aBuf, _T("MonitorCount"))) return SYSGET_CMD_MONITORCOUNT;
 		if (!_tcsicmp(aBuf, _T("MonitorPrimary"))) return SYSGET_CMD_MONITORPRIMARY;
 		if (!_tcsicmp(aBuf, _T("Monitor"))) return SYSGET_CMD_MONITORAREA; // Called "Monitor" vs. "MonitorArea" to make it easier to remember.
@@ -1732,7 +1732,7 @@ public:
 		if (!_tcsicmp(aBuf, _T("UTF-8-RAW")))	return CP_UTF8 | CP_AHKNOBOM;
 		if (!_tcsicmp(aBuf, _T("UTF-16")))		return 1200;
 		if (!_tcsicmp(aBuf, _T("UTF-16-RAW")))	return 1200 | CP_AHKNOBOM;
-		if (!_tcsnicmp(aBuf, _T("CP"), 2) && IsPureNumeric(aBuf + 2, false, false))
+		if (!_tcsnicmp(aBuf, _T("CP"), 2) && IsNumeric(aBuf + 2, false, false))
 			// CPnnn
 			return ATOU(aBuf + 2);
 		return -1;
@@ -2841,14 +2841,15 @@ void BIF_ComObjQuery(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 
 
 BOOL LegacyResultToBOOL(LPTSTR aResult);
-BOOL LegacyVarToBOOL(Var &aVar);
-BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber);
+BOOL VarToBOOL(Var &aVar);
+BOOL TokenToBOOL(ExprTokenType &aToken);
+SymbolType TokenIsNumeric(ExprTokenType &aToken);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
-SymbolType TokenIsPureNumeric(ExprTokenType &aToken, BOOL aNoWarnUninitializedVar); // Same as TokenIsPureNumeric but allows the possible "uninitialized var" warning to be avoiding.
+SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aNumType);
 BOOL TokenIsEmptyString(ExprTokenType &aToken);
 BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar); // Same as TokenIsEmptyString but optionally warns if the token is an uninitialized var.
-__int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPureInteger = FALSE);
-double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE, BOOL aIsPureFloat = FALSE);
+__int64 TokenToInt64(ExprTokenType &aToken);
+double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE);
 LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL);
 ResultType TokenToDoubleOrInt64(ExprTokenType &aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31

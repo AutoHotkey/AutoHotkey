@@ -113,7 +113,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 				return OK;
 			}
 
-			if (IsPureNumeric(aParam4, true)) // pure integer or empty/whitespace
+			if (IsNumeric(aParam4, true)) // pure integer or empty/whitespace
 			{
 				// Lexikos: We are unconditionally treating this as a request to set the tray icon, so mIconFrozen may now be set.
 				if (*aOptions) // i.e. if it's blank, don't change the current setting of mIconFrozen.

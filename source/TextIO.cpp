@@ -970,7 +970,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			UINT codepage;
 			if (aParamCount > 0)
 			{
-				if (TokenIsPureNumeric(*aParam[1]))
+				if (TokenIsNumeric(*aParam[1]))
 					codepage = (UINT)TokenToInt64(*aParam[1]);
 				else
 					codepage = Line::ConvertFileEncoding(TokenToString(*aParam[1]));
@@ -1034,7 +1034,7 @@ void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	DWORD aFlags;
 	UINT aEncoding;
 
-	if (TokenIsPureNumeric(*aParam[1]))
+	if (TokenIsNumeric(*aParam[1]))
 	{
 		aFlags = (DWORD) TokenToInt64(*aParam[1]);
 	}
@@ -1107,7 +1107,7 @@ void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 
 	if (aParamCount > 2)
 	{
-		if (!TokenIsPureNumeric(*aParam[2]))
+		if (!TokenIsNumeric(*aParam[2]))
 		{
 			aEncoding = Line::ConvertFileEncoding(TokenToString(*aParam[2]));
 			if (aEncoding == -1)

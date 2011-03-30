@@ -85,7 +85,7 @@ void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int 
 
 	ComObject *obj;
 
-	if (TokenIsPureNumeric(*aParam[0]))
+	if (TokenIsNumeric(*aParam[0]))
 	{
 		VARTYPE vt;
 		__int64 llVal;
@@ -308,7 +308,7 @@ void BIF_ComObjConnect(ExprTokenType &aResultToken, ExprTokenType *aParam[], int
 void BIF_ComObjError(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	aResultToken.value_int64 = g_ComErrorNotify;
-	if (aParamCount && TokenIsPureNumeric(*aParam[0]))
+	if (aParamCount && TokenIsNumeric(*aParam[0]))
 		g_ComErrorNotify = (TokenToInt64(*aParam[0]) != 0);
 }
 
@@ -661,26 +661,10 @@ void AssignVariant(Var &aArg, VARIANT &aVar, bool aRetainVar = true)
 void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar)
 {
 	if (aToken.symbol == SYM_VAR)
-		aToken.var->TokenToContents(aToken);
+		aToken.var->ToToken(aToken);
 
 	switch(aToken.symbol)
 	{
-	case SYM_OPERAND:
-		if (aToken.buf)
-		{
-			__int64 val = *(__int64 *)aToken.buf;
-			if (val == (int)val)
-			{
-				aVar.vt = VT_I4;
-				aVar.lVal = (int)val;
-			}
-			else
-			{
-				aVar.vt = VT_R8;
-				aVar.dblVal = (double)val;
-			}
-			break;
-		}
 	case SYM_STRING:
 		aVar.vt = VT_BSTR;
 		aVar.bstrVal = SysAllocString(CStringWCharFromTCharIfNeeded(aToken.marker));
@@ -988,7 +972,7 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 	else if	(IS_INVOKE_SET)
 	{	// Allow chaining, e.g. obj2.prop := obj1.prop := val.
 		ExprTokenType &rvalue = *aParam[aParamCount];
-		aResultToken.symbol = (rvalue.symbol == SYM_OPERAND) ? SYM_STRING : rvalue.symbol;
+		aResultToken.symbol = rvalue.symbol; // Can't be SYM_VAR at this stage because TokenToVariant() would have converted it to its contents.
 		aResultToken.value_int64 = rvalue.value_int64;
 		if (rvalue.symbol == SYM_OBJECT)
 			rvalue.object->AddRef();
@@ -1061,7 +1045,7 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 	// Build array of indices from parameters.
 	for (UINT i = 0; i < dims; ++i)
 	{
-		if (!TokenIsPureNumeric(*aParam[i]))
+		if (!TokenIsNumeric(*aParam[i]))
 		{
 			g->LastError = E_INVALIDARG;
 			return OK;
@@ -1147,14 +1131,6 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 			// be passed along rather than being coerced to a simple value or a new wrapper being created.
 			switch (rvalue.symbol)
 			{
-			case SYM_OPERAND:
-				if (rvalue.buf)
-				{
-					aResultToken.symbol = SYM_INTEGER;
-					aResultToken.value_int64 = *(__int64 *)rvalue.buf;
-					break;
-				}
-				// FALL THROUGH to next case:
 			case SYM_STRING:
 				aResultToken.symbol = SYM_STRING;
 				aResultToken.marker = rvalue.marker;

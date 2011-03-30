@@ -91,8 +91,8 @@ protected:
 			double n_double;	// for SYM_FLOAT
 			IObject *object;	// for SYM_OBJECT
 			struct {
-				LPTSTR marker;		// for SYM_OPERAND
-				size_t size;		// for SYM_OPERAND; allows reuse of allocated memory. For UNICODE: count in characters
+				LPTSTR marker;		// for SYM_STRING
+				size_t size;		// for SYM_STRING; allows reuse of allocated memory. For UNICODE: count in characters
 			};
 		};
 		// key and symbol probably need to be adjacent to each other to conserve memory due to 8-byte alignment.
@@ -109,9 +109,8 @@ protected:
 	
 		inline void ToToken(ExprTokenType &aToken) // Used when we want the value as is, in a token.  Does not AddRef() or copy strings.
 		{
-			aToken.value_int64 = n_int64; // Union copy. Overlaps with buf on x86 builds, so do it first.
-			if ((aToken.symbol = symbol) == SYM_OPERAND)
-				aToken.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
+			aToken.value_int64 = n_int64;
+			aToken.symbol = symbol;
 		}
 	};
 

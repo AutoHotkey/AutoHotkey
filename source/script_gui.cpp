@@ -269,7 +269,7 @@ ResultType Script::PerformGui(LPTSTR aCommand, LPTSTR aParam2, LPTSTR aParam3, L
 				bool exact_match = !_tcsicmp(aParam4, _T("Exact")); // v1.0.37.03.
 				// Unlike "GuiControl, Choose", in this case, don't allow negatives since that would just
 				// generate an error msg further below:
-				if (!exact_match && IsPureNumeric(aParam2, false, false))
+				if (!exact_match && IsNumeric(aParam2, false, false))
 				{
 					index = ATOI(aParam2) - 1;
 					if (index < 0 || index > MAX_TABS_PER_CONTROL - 1)
@@ -574,7 +574,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 
 		case GUI_CONTROL_CHECKBOX:
 		case GUI_CONTROL_RADIO:
-			if (guicontrol_cmd == GUICONTROL_CMD_CONTENTS && IsPureNumeric(aParam3, true, false))
+			if (guicontrol_cmd == GUICONTROL_CMD_CONTENTS && IsNumeric(aParam3, true, false))
 			{
 				checked = ATOI(aParam3);
 				if (!checked || checked == 1 || (control.type == GUI_CONTROL_CHECKBOX && checked == -1))
@@ -1004,7 +1004,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			// selected tab. In this case, the tab control sends the TCN_SELCHANGING and TCN_SELCHANGE
 			// notification messages to its parent window. 
 			// Automatically switch to CHOOSESTRING if parameter isn't numeric:
-			if (guicontrol_cmd == GUICONTROL_CMD_CHOOSE && !IsPureNumeric(aParam3, true, false))
+			if (guicontrol_cmd == GUICONTROL_CMD_CHOOSE && !IsNumeric(aParam3, true, false))
 				guicontrol_cmd = GUICONTROL_CMD_CHOOSESTRING;
 			if (guicontrol_cmd == GUICONTROL_CMD_CHOOSESTRING)
 				selection_index = gui.FindTabIndexByName(control, aParam3); // Returns -1 on failure.
@@ -1044,7 +1044,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			++aParam3; // Omit this pipe char from further consideration below.
 			++extra_actions;
 		}
-		if (guicontrol_cmd == GUICONTROL_CMD_CHOOSE && !IsPureNumeric(aParam3, true, false)) // Must be done only after the above.
+		if (guicontrol_cmd == GUICONTROL_CMD_CHOOSE && !IsNumeric(aParam3, true, false)) // Must be done only after the above.
 			guicontrol_cmd = GUICONTROL_CMD_CHOOSESTRING;
 		UINT msg, x_msg, y_msg;
 		switch(control.type)
@@ -3877,7 +3877,7 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 		else if (ctoupper(*next_option) == 'E') // Extended style
 		{
 			++next_option; // Skip over the E itself.
-			if (IsPureNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "E".
+			if (IsNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "E".
 			{
 				// Pure numbers are assumed to be style additions or removals:
 				DWORD given_exstyle = ATOU(next_option); // ATOU() for unsigned.
@@ -3890,7 +3890,7 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 
 		else // Handle things that are more general than the above, such as single letter options and pure numbers:
 		{
-			if (IsPureNumeric(next_option)) // Above has already verified that *next_option can't be whitespace.
+			if (IsNumeric(next_option)) // Above has already verified that *next_option can't be whitespace.
 			{
 				// Pure numbers are assumed to be style additions or removals:
 				DWORD given_style = ATOU(next_option); // ATOU() for unsigned.
@@ -4345,7 +4345,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		else if (!_tcsnicmp(next_option, _T("LV"), 2))
 		{
 			next_option += 2;
-			if (IsPureNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "LV".
+			if (IsNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "LV".
 			{
 				DWORD given_lvstyle = ATOU(next_option); // ATOU() for unsigned.
 				if (adding) aOpt.listview_style |= given_lvstyle; else aOpt.listview_style &= ~given_lvstyle;
@@ -4972,7 +4972,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			// if "visible" and "resize" ever become valid option words, the below would otherwise wrongly
 			// detect them as variable=isible and row_count=esize, respectively.
 
-			if (IsPureNumeric(next_option)) // Above has already verified that *next_option can't be whitespace.
+			if (IsNumeric(next_option)) // Above has already verified that *next_option can't be whitespace.
 			{
 				// Pure numbers are assumed to be style additions or removals:
 				DWORD given_style = ATOU(next_option); // ATOU() for unsigned.
@@ -5103,7 +5103,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				break;
 
 			case 'E':  // Extended style
-				if (IsPureNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "E".
+				if (IsNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "E".
 				{
 					// Pure numbers are assumed to be style additions or removals:
 					DWORD given_exstyle = ATOU(next_option); // ATOU() for unsigned.

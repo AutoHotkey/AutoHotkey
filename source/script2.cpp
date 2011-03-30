@@ -65,7 +65,7 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 				if (length_to_copy < _countof(window_number_str))
 				{
 					tcslcpy(window_number_str, aImageFile, length_to_copy + 1);
-					if (IsPureNumeric(window_number_str, false, false, true)) // Seems best to allow float at runtime.
+					if (IsNumeric(window_number_str, false, false, true)) // Seems best to allow float at runtime.
 					{
 						// Note that filenames can start with spaces, so omit_leading_whitespace() is only
 						// used if the string is entirely blank:
@@ -106,7 +106,7 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 		{
 			// Allow floats at runtime for flexibility (i.e. in case aOptions was in a variable reference).
 			// But still use ATOI for the conversion:
-			if (IsPureNumeric(options, true, false, true)) // Negatives are allowed as of v1.0.25.
+			if (IsNumeric(options, true, false, true)) // Negatives are allowed as of v1.0.25.
 			{
 				bar_pos = ATOI(options);
 				bar_pos_has_been_set = true;
@@ -12033,8 +12033,8 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		case SYM_VAR:
 			// v1.0.46.08: Allow script to specify the address of a function, which might be useful for
 			// calling functions that the script discovers through unusual means such as C++ member functions.
-			function = (aParam[0]->var->IsNonBlankIntegerOrFloat() == PURE_INTEGER)
-				? (void *)aParam[0]->var->ToInt64(TRUE) // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
+			function = (aParam[0]->var->IsNumeric() == PURE_INTEGER)
+				? (void *)aParam[0]->var->ToInt64() // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
 				: NULL; // Not a pure integer, so fall back to normal method of considering it to be path+name.
 			// A check like the following is not present due to rarity of need and because if the address
 			// is zero or negative, the same result will occur as for any other invalid address:
@@ -12050,13 +12050,9 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		case SYM_INTEGER:
 			function = (void *)aParam[0]->value_int64; // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
 			break;
-		case SYM_FLOAT:
+		default: // SYM_FLOAT, SYM_OBJECT or not an operand.
 			g_ErrorLevel->Assign(_T("-1")); // Stage 1 error: Invalid first param.
 			return;
-		default: // SYM_OPERAND (SYM_OPERAND is typically a numeric literal).
-			function = (TokenIsPureNumeric(*aParam[0]) == PURE_INTEGER)
-				? (void *)TokenToInt64(*aParam[0], TRUE) // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
-				: NULL; // Not a pure integer, so fall back to normal method of considering it to be path+name.
 	}
 
 	// Determine the type of return value.
@@ -12732,7 +12728,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 			// Below converts first two bytes of each name-table entry into the pattern number (it might be
 			// possible to simplify this, but I'm not sure if big vs. little-endian will ever be a concern).
 			subpat_name[(name_table[0] << 8) + name_table[1]] = name_table + 2; // For indexing simplicity, subpat_name[0] is for the main/entire pattern though it is never actually used for that because it can't be named without being enclosed in parentheses (in which case it becomes a subpattern).
-			// For simplicity and unlike PHP, IsPureNumeric() isn't called to forbid numeric subpattern names.
+			// For simplicity and unlike PHP, IsNumeric() isn't called to forbid numeric subpattern names.
 			// It seems the worst than could happen if it is numeric is that it would overlap/overwrite some of
 			// the numerically-indexed elements in the output-array.  Seems pretty harmless given the rarity.
 		}
@@ -13718,7 +13714,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 							if (substring_name_length < _countof(substring_name))
 							{
 								tcslcpy(substring_name, substring_name_pos, substring_name_length + 1); // +1 to convert length to size, which truncates the new string at the desired position.
-								if (IsPureNumeric(substring_name, true, false, true)) // Seems best to allow floating point such as 1.0 because it will then get truncated to an integer.  It seems to rare that anyone would want to use floats as names.
+								if (IsNumeric(substring_name, true, false, true)) // Seems best to allow floating point such as 1.0 because it will then get truncated to an integer.  It seems to rare that anyone would want to use floats as names.
 									ref_num = _ttoi(substring_name); // Uses _ttoi() vs. ATOI to avoid potential overlap with non-numeric names such as ${0x5}, which should probably be considered a name not a number?  In other words, seems best not to make some names that start with numbers "special" just because they happen to be hex numbers.
 								else // For simplicity, no checking is done to ensure it consiss of the "32 alphanumeric characters and underscores".  Let pcre_get_stringnumber() figure that out for us.
 									ref_num = pcre_get_stringnumber(aRE, RegExToUTF8(substring_name)); // Returns a negative on failure, which when stored in ref_num is relied upon as an inticator.
@@ -14099,7 +14095,7 @@ void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 	if (aParamCount > 1) // Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
 	{
-		if (aParamCount > 2 || TokenIsPureNumeric(*aParam[1])) // Checking aParamCount first avoids some unnecessary work in common cases where all parameters were specified.
+		if (aParamCount > 2 || TokenIsNumeric(*aParam[1])) // Checking aParamCount first avoids some unnecessary work in common cases where all parameters were specified.
 			target += (ptrdiff_t)TokenToInt64(*aParam[1]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
 		else
 			// Final param was omitted but this param is non-numeric, so use it as Type instead of Offset:
@@ -14211,7 +14207,7 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 	if (aParamCount > 2) // Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
 	{
-		if (aParamCount > 3 || TokenIsPureNumeric(*aParam[2])) // Checking aParamCount first avoids some unnecessary work in common cases where all parameters were specified.
+		if (aParamCount > 3 || TokenIsNumeric(*aParam[2])) // Checking aParamCount first avoids some unnecessary work in common cases where all parameters were specified.
 			target += (ptrdiff_t)TokenToInt64(*aParam[2]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
 		else
 			// Final param was omitted but this param is non-numeric, so use it as Type instead of Offset:
@@ -14342,7 +14338,7 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	// - If a parameter remains, it is Encoding.
 	// Encoding may therefore only be purely numeric if Address(X) and Length(Y) are specified.
 
-	if (aParam < aParam_end && TokenIsPureNumeric(**aParam))
+	if (aParam < aParam_end && TokenIsNumeric(**aParam))
 	{
 		address = (LPVOID)TokenToInt64(**aParam);
 		++aParam;
@@ -14363,7 +14359,7 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	{
 		if (length == -1) // i.e. not StrPut(String, Encoding)
 		{
-			if (TokenIsPureNumeric(**aParam))
+			if (TokenIsNumeric(**aParam))
 			{
 				length = (int)TokenToInt64(**aParam);
 				if (length < -1 || !length)
@@ -14374,7 +14370,7 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 		}
 		if (aParam < aParam_end)
 		{
-			if (!TokenIsPureNumeric(**aParam))
+			if (!TokenIsNumeric(**aParam))
 			{
 				encoding = Line::ConvertFileEncoding(TokenToString(**aParam));
 				if (encoding == -1)
@@ -16311,7 +16307,7 @@ void BIF_LV_InsertModifyDeleteCol(ExprTokenType &aResultToken, ExprTokenType *aP
 			// Width does not have a W prefix to permit a naked expression to be used as the entirely of
 			// options.  For example: LV_SetCol(1, old_width + 10)
 			// v1.0.37: Fixed to allow floating point (although ATOI below will convert it to integer).
-			if (IsPureNumeric(next_option, true, false, true)) // Above has already verified that *next_option can't be whitespace.
+			if (IsNumeric(next_option, true, false, true)) // Above has already verified that *next_option can't be whitespace.
 			{
 				do_auto_size = 0; // Turn off any auto-sizing that may have been put into effect by default (such as for insertion).
 				lvc.mask |= LVCF_WIDTH;
@@ -16650,7 +16646,7 @@ void BIF_TV_AddModifyDelete(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 		{
 			if (!_tcsicmp(next_option, _T("First")))
 				tvi.hInsertAfter = TVI_FIRST; // For simplicity, the value of "adding" is ignored.
-			else if (IsPureNumeric(next_option, false, false, false))
+			else if (IsNumeric(next_option, false, false, false))
 				tvi.hInsertAfter = (HTREEITEM)ATOI64(next_option); // ATOI64 vs. ATOU avoids need for extra casting to avoid compiler warning.
 		}
 		//else some unknown option, just ignore it.
@@ -17050,22 +17046,20 @@ void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 ////////////////////////////////////////////////////////
 
 BOOL LegacyResultToBOOL(LPTSTR aResult)
-// The logic here is similar to LegacyVarToBOOL(), so maintain them together.
 // This is called "Legacy" because the following method of casting expression results to BOOL is inconsistent
-// with the method used interally by expressions for intermediate results. This inconsistency is retained
-// for backward compatibility.  On the other hand, some users say they would prefer using this method exclusively
-// rather than TokenToBOOL() so that expressions internally treat numerically-zero strings as zero just like
-// they do for variables (which will probably remain true as long as variables stay generic/untyped).
+// with the method used interally by expressions for intermediate results.  However, this inconsistency is
+// rarely (if ever) evident because typically the only strings we get are either boolean "1" or "" from
+// ExpandExpression() or a numeric literal from something like "if 0" or "until 1".
 {
 	UINT c1 = (UINT)*aResult; // UINT vs. UCHAR might squeenze a little more performance out of it.
 	if (c1 > 48)     // Any UCHAR greater than '0' can't be a space(32), tab(9), '+'(43), or '-'(45), or '.'(46)...
 		return TRUE; // ...so any string starting with c1>48 can't be anything that's false (e.g. " 0", "+0", "-0", ".0", "0").
-	if (!c1 // Besides performance, must be checked anyway because otherwise IsPureNumeric() would consider "" to be non-numeric and thus TRUE.
+	if (!c1 // Besides performance, must be checked anyway because otherwise IsNumeric() would consider "" to be non-numeric and thus TRUE.
 		|| c1 == 48 && !aResult[1]) // The string "0" seems common enough to detect explicitly, for performance.
 		return FALSE;
-	// IsPureNumeric() is called below because there are many variants of a false string:
+	// IsNumeric() is called below because there are many variants of a false string:
 	// e.g. "0", "0.0", "0x0", ".0", "+0", "-0", and " 0" (leading spaces/tabs).
-	switch (IsPureNumeric(aResult, true, false, true)) // It's purely numeric and not all whitespace (and due to earlier check, it's not blank).
+	switch (IsNumeric(aResult, true, false, true)) // It's purely numeric and not all whitespace (and due to earlier check, it's not blank).
 	{
 	case PURE_INTEGER: return ATOI64(aResult) != 0; // Could call ATOF() for both integers and floats; but ATOI64() probably performs better, and a float comparison to 0.0 might be a slower than an integer comparison to 0.
 	case PURE_FLOAT:   return _tstof(aResult) != 0.0; // atof() vs. ATOF() because PURE_FLOAT is never hexadecimal.
@@ -17078,75 +17072,111 @@ BOOL LegacyResultToBOOL(LPTSTR aResult)
 
 
 
-BOOL LegacyVarToBOOL(Var &aVar)
+BOOL VarToBOOL(Var &aVar)
 // For comments see LegacyResultToBOOL().
 {
-	if (!aVar.HasContents()) // Must be checked first because otherwise IsPureNumeric() would consider "" to be non-numeric and thus TRUE.  For performance, it also exploits the binary number cache.
+	if (!aVar.HasContents()) // Must be checked first because otherwise IsNumeric() would consider "" to be non-numeric and thus TRUE.  For performance, it also exploits the binary number cache.
 	{
 		aVar.MaybeWarnUninitialized();
 		return FALSE;
 	}
-	switch (aVar.IsNonBlankIntegerOrFloat()) // See comments in LegacyResultToBOOL().
+	switch (aVar.IsPureNumeric()) // IsPureNumeric() vs IsNumeric() because we want to treat numeric strings like "0" as true.
 	{
-	case PURE_INTEGER: return aVar.ToInt64(TRUE) != 0;
-	case PURE_FLOAT:   return aVar.ToDouble(TRUE) != 0.0;
-	default: // PURE_NOT_NUMERIC.
-		return TRUE; // See comments in LegacyResultToBOOL().
-	}
-}
-
-
-
-BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber)
-{
-	switch (aTokenIsNumber)
-	{
-	case PURE_INTEGER: // Probably the most common; e.g. both sides of "if (x>3 and x<6)" are the number 1/0.
-		return TokenToInt64(aToken, TRUE) != 0; // Force it to be purely 1 or 0.
-	case PURE_FLOAT: // Convert to float, not int, so that a number between 0.0001 and 0.9999 is is considered "true".
-		return TokenToDouble(aToken, FALSE, TRUE) != 0.0; // Pass FALSE for aCheckForHex since PURE_FLOAT is never hex.
+	case PURE_INTEGER:
+		return aVar.ToInt64() != 0;
+	case PURE_FLOAT:
+		return aVar.ToDouble() != 0.0;
 	default:
-		if (aToken.symbol == SYM_OBJECT || (aToken.symbol == SYM_VAR && aToken.var->HasObject())) // L31: Treat objects as "true".
-			return TRUE;
-		// This generally includes all SYM_STRINGs (even ones that are all digits such as "123") and all
-		// non-numeric SYM_OPERANDS.
-		// The only tokens considered FALSE are numeric 0 or 0.0, or an empty string.  All non-blank
-		// SYM_STRINGs are considered TRUE.  This includes literal strings like "0", and subexpressions that
-		// evaluate to pure SYM_STRING that isn't blank.
-		return *TokenToString(aToken) != '\0'; // Force it to be purely 1 or 0.
+		// Since above has confirmed aVar.HasContents(), it can't contain an empty string.
+		// All other string values are considered true, even numeric strings like "0".
+		return TRUE;
 	}
 }
 
+
+
+BOOL TokenToBOOL(ExprTokenType &aToken)
+{
+	switch (aToken.symbol)
+	{
+	case SYM_INTEGER: // Probably the most common; e.g. both sides of "if (x>3 and x<6)" are the number 1/0.
+		return aToken.value_int64 != 0; // Force it to be purely 1 or 0.
+	case SYM_VAR:
+		return VarToBOOL(*aToken.var);
+	case SYM_FLOAT:
+		return aToken.value_double != 0.0;
+	case SYM_STRING:
+		// All non-blank SYM_STRINGs are considered TRUE.  This includes literal strings
+		// like "0", and subexpressions that evaluate to pure SYM_STRING that isn't blank.
+		return *aToken.marker != '\0'; // Force it to be purely 1 or 0.
+	default:
+		// The only remaining valid symbol is SYM_OBJECT, which is always TRUE.
+		return TRUE;
+	}
+}
+
+
+SymbolType TokenIsNumeric(ExprTokenType &aToken)
+{
+	switch(aToken.symbol)
+	{
+	case SYM_INTEGER:
+	case SYM_FLOAT:
+		return aToken.symbol;
+	case SYM_VAR: 
+		return aToken.var->IsNumeric(); // Supports VAR_NORMAL and VAR_CLIPBOARD.
+	default:
+		return PURE_NOT_NUMERIC; // Explicitly-marked strings are not numeric, which allows numeric strings to be compared as strings rather than as numbers.
+	}
+}
 
 
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken)
 {
 	switch(aToken.symbol)
 	{
-	case SYM_VAR:     return aToken.var->IsNonBlankIntegerOrFloat(); // Supports VAR_NORMAL and VAR_CLIPBOARD.
-	case SYM_OPERAND: return aToken.buf ? PURE_INTEGER // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
-			: IsPureNumeric(TokenToString(aToken), true, false, true);
-	case SYM_OBJECT: // L31: Fall through to below; objects are currently treated as empty strings in most cases.
-	case SYM_STRING:  return PURE_NOT_NUMERIC; // Explicitly-marked strings are not numeric, which allows numeric strings to be compared as strings rather than as numbers.
-	default: return aToken.symbol; // SYM_INTEGER or SYM_FLOAT
+	case SYM_INTEGER:
+	case SYM_FLOAT:
+		return aToken.symbol;
+	case SYM_VAR: 
+		return aToken.var->IsPureNumeric(); // Supports VAR_NORMAL and VAR_CLIPBOARD.
+	default:
+		return PURE_NOT_NUMERIC; // Explicitly-marked strings are not numeric, which allows numeric strings to be compared as strings rather than as numbers.
 	}
 }
 
 
-SymbolType TokenIsPureNumeric(ExprTokenType &aToken, BOOL aNoWarnUninitializedVar)
+SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aNumType)
+// This function is called very frequently by ExpandExpression(), which needs to distinguish
+// between numeric strings and pure numbers, but still needs to know if the string is numeric.
 {
-	if (aNoWarnUninitializedVar && aToken.symbol == SYM_VAR && aToken.var->IsUninitializedNormalVar())
+	switch(aToken.symbol)
+	{
+	case SYM_INTEGER:
+	case SYM_FLOAT:
+		return aNumType = aToken.symbol;
+	case SYM_VAR:
+		if (aToken.var->IsUninitializedNormalVar()) // Caller doesn't want a warning, so avoid calling Contents().
+			return aNumType = PURE_NOT_NUMERIC; // i.e. empty string is non-numeric.
+		if (aNumType = aToken.var->IsPureNumeric())
+			return aNumType; // This var contains a pure binary number.
+		// Otherwise, it might be a numeric string (i.e. impure).
+		aNumType = aToken.var->IsNumeric(); // This also caches the PURE_NOT_NUMERIC result if applicable.
 		return PURE_NOT_NUMERIC;
-
-	return TokenIsPureNumeric(aToken);
+	case SYM_STRING:
+		aNumType = IsNumeric(aToken.marker, true, false, true);
+		return PURE_NOT_NUMERIC;
+	default:
+		// Only SYM_OBJECT should be possible.
+		return aNumType = PURE_NOT_NUMERIC;
+	}
 }
 
 
-BOOL TokenIsEmptyString(ExprTokenType &aToken) // L31
+BOOL TokenIsEmptyString(ExprTokenType &aToken)
 {
 	switch (aToken.symbol)
 	{
-	case SYM_OPERAND:
 	case SYM_STRING:
 		return !*aToken.marker;
 	case SYM_VAR:
@@ -17166,56 +17196,38 @@ BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar)
 }
 
 
-__int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPureInteger)
+__int64 TokenToInt64(ExprTokenType &aToken)
 // Caller has ensured that any SYM_VAR's Type() is VAR_NORMAL or VAR_CLIPBOARD.
 // Converts the contents of aToken to a 64-bit int.
-// Caller should pass FALSE for aIsPureInteger if aToken.var is either:
-// 1) Not a pure number (i.e. 123abc).
-// 2) It isn't known whether it's a pure number.
-// 3) It's pure but it's a floating point number, not an integer.
 {
-	// Some callers, such as those that cast our return value to UINT, rely on the use of 64-bit to preserve
-	// unsigned values and also wrap any signed values into the unsigned domain.
+	// Some callers, such as those that cast our return value to UINT, rely on the use of 64-bit
+	// to preserve unsigned values and also wrap any signed values into the unsigned domain.
 	switch (aToken.symbol)
 	{
-		case SYM_INTEGER: return aToken.value_int64; // Fixed in v1.0.45 not to cast to int.
-		case SYM_OPERAND: // Listed near the top for performance.
-			if (aToken.buf) // The "buf" of a SYM_OPERAND is non-NULL if points to a pure integer.
-				return *(__int64 *)aToken.buf;
-			//else don't return; continue on to the bottom.
-			break;
-		case SYM_FLOAT: return (__int64)aToken.value_double; // 1.0.48: fixed to cast to __int64 vs. int.
-		case SYM_VAR: return aToken.var->ToInt64(aIsPureInteger);
-		case SYM_OBJECT: return 0; // L31: Returning the IObject* doesn't seem appropriate since it would rarely be useful, and other uses treat objects as an empty string.
+		case SYM_INTEGER:	return aToken.value_int64;
+		case SYM_FLOAT:		return (__int64)aToken.value_double;
+		case SYM_VAR:		return aToken.var->ToInt64();
+		case SYM_STRING:	return ATOI64(aToken.marker);
 	}
-	// Since above didn't return, it's SYM_STRING, or a SYM_OPERAND that lacks a binary-integer counterpart.
-	return ATOI64(aToken.marker); // Fixed in v1.0.45 to use ATOI64 vs. ATOI().
+	// Since above didn't return, it can only be SYM_OBJECT or not an operand.
+	return 0;
 }
 
 
 
-double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex, BOOL aIsPureFloat)
+double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex)
 // Caller has ensured that any SYM_VAR's Type() is VAR_NORMAL or VAR_CLIPBOARD.
-// Converts the contents of aToken to a double. Caller should pass FALSE for aIsPureFloat if aToken.var
-// is either:
-// 1) Not a pure number (i.e. 123abc).
-// 2) It isn't known whether it's a pure number.
-// 3) It's pure but it's a an integer, not a floating point number.
+// Converts the contents of aToken to a double.
 {
 	switch (aToken.symbol)
 	{
-		case SYM_INTEGER: return (double)aToken.value_int64;
-		case SYM_FLOAT: return aToken.value_double;
-		case SYM_VAR: return aToken.var->ToDouble(aIsPureFloat);
-		case SYM_OPERAND:
-			if (aToken.buf) // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
-				return (double)*(__int64 *)aToken.buf;
-			//else continue on to the bottom.
-			break;
-		case SYM_OBJECT: return 0; // L31: Treat like empty string.
+		case SYM_FLOAT:		return aToken.value_double;
+		case SYM_INTEGER:	return (double)aToken.value_int64;
+		case SYM_VAR:		return aToken.var->ToDouble();
+		case SYM_STRING:	return aCheckForHex ? ATOF(aToken.marker) : _tstof(aToken.marker); // atof() omits the check for hexadecimal.
 	}
-	// Since above didn't return, it's SYM_STRING or a SYM_OPERAND that lacks a binary-integer counterpart.
-	return aCheckForHex ? ATOF(aToken.marker) : _tstof(aToken.marker); // atof() omits the check for hexadecimal.
+	// Since above didn't return, it can only be SYM_OBJECT or not an operand.
+	return 0;
 }
 
 
@@ -17232,7 +17244,6 @@ LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf)
 	case SYM_VAR: // Caller has ensured that any SYM_VAR's Type() is VAR_NORMAL.
 		return aToken.var->Contents(); // Contents() vs. mContents to support VAR_CLIPBOARD, and in case mContents needs to be updated by Contents().
 	case SYM_STRING:
-	case SYM_OPERAND:
 		return aToken.marker;
 	case SYM_INTEGER:
 		if (aBuf)
@@ -17247,7 +17258,7 @@ LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf)
 		}
 		//else continue on to return the default at the bottom.
 		break;
-	//case SYM_OBJECT: // L31: Treat objects as empty strings (or TRUE where appropriate).
+	//case SYM_OBJECT: // Treat objects as empty strings (or TRUE where appropriate).
 	//default: // Not an operand: continue on to return the default at the bottom.
 	}
 	return _T("");
@@ -17266,18 +17277,8 @@ ResultType TokenToDoubleOrInt64(ExprTokenType &aToken)
 		case SYM_FLOAT:
 			return OK;
 		case SYM_VAR:
-			return aToken.var->TokenToDoubleOrInt64(aToken);
+			return aToken.var->ToDoubleOrInt64(aToken);
 		case SYM_STRING:   // v1.0.40.06: Fixed to be listed explicitly so that "default" case can return failure.
-			str = aToken.marker;
-			break;
-		case SYM_OPERAND:
-			if (aToken.buf) // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
-			{
-				aToken.symbol = SYM_INTEGER;
-				aToken.value_int64 = *(__int64 *)aToken.buf;
-				return OK;
-			}
-			// Otherwise:
 			str = aToken.marker;
 			break;
 		case SYM_OBJECT: // L31: Treat objects as empty strings (or TRUE where appropriate).
@@ -17289,7 +17290,7 @@ ResultType TokenToDoubleOrInt64(ExprTokenType &aToken)
 			return FAIL;
 	}
 	// Since above didn't return, interpret "str" as a number.
-	switch (aToken.symbol = IsPureNumeric(str, true, false, true))
+	switch (aToken.symbol = IsNumeric(str, true, false, true))
 	{
 	case PURE_INTEGER:
 		aToken.value_int64 = ATOI64(str);
@@ -17372,7 +17373,7 @@ int ConvertJoy(LPTSTR aBuf, int *aJoystickID, bool aAllowOnlyButtons)
 
 	if (!_tcsnicmp(aBuf, _T("Joy"), 3))
 	{
-		if (IsPureNumeric(aBuf + 3, false, false))
+		if (IsNumeric(aBuf + 3, false, false))
 		{
 			int offset = ATOI(aBuf + 3);
 			if (offset < 1 || offset > MAX_JOY_BUTTONS)

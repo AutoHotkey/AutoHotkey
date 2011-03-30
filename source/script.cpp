@@ -862,7 +862,8 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 		int v, i;
 		for (v = 0; v < mVarCount; ++v)
 			if (mVar[v]->IsObject())
-				mVar[v]->ReleaseObject();
+				mVar[v]->ReleaseObject(); // ReleaseObject() vs Free() for performance (though probably not important at this point).
+			// Otherwise, maybe best not to free it in case an object's __Delete meta-function uses it?
 		for (v = 0; v < mLazyVarCount; ++v)
 			if (mLazyVar[v]->IsObject())
 				mLazyVar[v]->ReleaseObject();
@@ -3624,7 +3625,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 						}
 						else // It's not a quoted string (nor the empty string); or it has a missing ending quote (rare).
 						{
-							if (!IsPureNumeric(right_side_of_operator, true, false, true)) // It's not a number, and since we're here it's not a quoted/literal string either.
+							if (!IsNumeric(right_side_of_operator, true, false, true)) // It's not a number, and since we're here it's not a quoted/literal string either.
 								return ScriptError(_T("Unsupported static initializer."), right_side_of_operator);
 							//else it's an int or float, so just assign the numeric string itself (there
 							// doesn't seem to be any need to convert it to float/int first, though that would
@@ -4236,7 +4237,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				// there seems to be too much ambiguity in this case to justify trying to figure out
 				// if the first parameter is a pure deref, and thus that the command should use
 				// 3-param or 4-param mode instead).
-				if (!IsPureNumeric(action_args)) // No floats allowed.  Allow all-whitespace for aut2 compatibility.
+				if (!IsNumeric(action_args)) // No floats allowed.  Allow all-whitespace for aut2 compatibility.
 					max_params_override = 1;
 				*delimiter[0] = g_delimiter; // Restore the string.
 				if (!max_params_override)
@@ -4254,7 +4255,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 						// If the 4th parameter isn't blank or pure numeric, assume the user didn't
 						// intend it to be the MsgBox timeout (since that feature is rarely used),
 						// instead intending it to be part of parameter #3.
-						if (!IsPureNumeric(delimiter[2] + 1, false, true, true))
+						if (!IsNumeric(delimiter[2] + 1, false, true, true))
 						{
 							// Not blank and not a int or float.  Update for v1.0.20: Check if it's a
 							// single deref.  If so, assume that deref contains the timeout and thus
@@ -4916,14 +4917,25 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			//		be consistent with "For x in var_containing_num" and the rarity mightn't be worth
 			//		the added code.
 			//
-			//	b)	ACT_ASSIGNEXPR should assign a cached binary integer in addition to the numeric literal.
-			//		This might perform just as well overall but is more important for consistency, especially
-			//		with COM objects which would otherwise treat the number as a string, potentially causing
-			//		a type mismatch error.
+			//	b)	ACT_RETURN handles non-expression literal integers correctly by pre-converting
+			//		and storing them in arg.postfix.  Literal floating-point numbers can't be handled
+			//		this way, so to return them correctly they must be passed through ExpandExpression().
 			//
-			if (this_new_arg.is_expression && IsPureNumeric(this_new_arg.text, true, true, true)
-				&& aActionType != ACT_ASSIGNEXPR && aActionType != ACT_FOR)
-				this_new_arg.is_expression = false;
+			if (this_new_arg.is_expression && aActionType != ACT_FOR)
+			{
+				switch (IsNumeric(this_new_arg.text, true, true, true))
+				{
+				case PURE_FLOAT:
+					if (aActionType == ACT_RETURN)
+						// Must remain an expression so that it retains its numeric status.
+						break;
+					// ACT_ASSIGNEXPR handles floating-point literals at run-time.  All other commands
+					// will probably treat this arg the same whether it is an expression or not.
+				case PURE_INTEGER:
+					// ACT_RETURN and ACT_ASSIGNEXPR have special handling, so this is okay even for them:
+					this_new_arg.is_expression = false;
+				}
+			}
 
 			if (this_new_arg.is_expression)
 			{
@@ -5075,7 +5087,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 					// Below takes care of recognizing hexadecimal integers, which avoids the 'x' character
 					// inside of something like 0xFF from being detected as the name of a variable:
-					if (!IsPureNumeric(op_begin, true, false, true)) // Not a numeric literal.
+					if (!IsNumeric(op_begin, true, false, true)) // Not a numeric literal.
 					{
 						if (*op_begin == '.') // L31: Check for something like "obj .property" - scientific-notation literals such as ".123e+1" may also be handled here.
 						{
@@ -5101,7 +5113,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 							// Double-check it really is a floating-point literal with signed exponent.
 							orig_char = *op_end;
 							*op_end = '\0';
-							if (IsPureNumeric(op_begin, true, false, true))
+							if (IsNumeric(op_begin, true, false, true))
 							{
 								*op_end = orig_char;
 								continue; // Pure number, which doesn't need any processing at this stage.
@@ -5204,7 +5216,19 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// ACT_WHILE performs less than 4% faster as a non-expression in these cases, and keeping
 					// it as an expression avoids an extra check in a performance-sensitive spot of ExpandArgs
 					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).
-					if (aActionType < ACT_FOR || aActionType > ACT_UNTIL) // If it is FOR, WHILE or UNTIL, it would be something like "while x" in this case. Keep those as expressions for the reason above. PerformLoopFor() requires FOR's expression arg to remain an expression.
+					//
+					// ACT_FOR must remain an expression for PerformLoopFor() to work correctly.
+					//
+					// ACT_RETURN must remain an expression if this is the False var, since otherwise it would
+					// be interpreted as the string "0", which is considered true.  Furthermore, a few other
+					// built-in vars such as True, A_Index and A_EventInfo can yield integers (but only if
+					// evaluated by ExpandExpression()).  Since this optimization doesn't seem to benefit
+					// built-in vars as much as it benefits normal vars (and it would be much rarer for a UDF
+					// to return a built-in var than a normal var), let all built-in vars remain expressions.
+					// Note that normal vars are always handled correctly by ACT_RETURN even as non-expressions.
+					//
+					if ((aActionType < ACT_FOR || aActionType > ACT_UNTIL)
+						&& (aActionType != ACT_RETURN || deref[0].var->Type() != VAR_BUILTIN))
 						this_new_arg.is_expression = false; // In addition to being an optimization, doing this might also be necessary for things like "Var := ClipboardAll" to work properly.
 					// But if aActionType is ACT_ASSIGNEXPR, it's left as ACT_ASSIGNEXPR vs. ACT_ASSIGN
 					// because ACT_ASSIGNEXPR probably performs better than ACT_ASSIGN when !is_expression.
@@ -5309,35 +5333,22 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// Fix for v1.0.35.02:
 	// THESE FIRST FEW CASES MUST EXIST IN BOTH SELF-CONTAINED AND NORMAL VERSION since they alter the
 	// attributes/members of some types of lines:
-	case ACT_ASSIGN:
+	case ACT_RETURN:
+		#ifndef AUTOHOTKEYSC
+		if (aArgc > 0 && !g->CurrentFunc)
+			return ScriptError(_T("Return's parameter should be blank except inside a function."));
+		#endif
+		// Otherwise, FALL THROUGH TO BELOW:
+	//case ACT_ASSIGN: // The optimization below doesn't seem to make sense for `=, since as of v2 it's explicitly "literal assignment".
 	case ACT_ASSIGNEXPR:
 	case ACT_IFBETWEEN:
 	case ACT_IFNOTBETWEEN:
 		int arg_index;
-		for (arg_index = 1; arg_index < aArgc; ++arg_index) // Up to two iterations: arg #2 and arg#3 (for If[Not]Between)).
+		for (arg_index = (aActionType != ACT_RETURN); arg_index < aArgc; ++arg_index) // Up to two iterations: arg #2 and arg#3 (for If[Not]Between)).
 		{
-			if (   *new_arg[arg_index].text && !line.ArgHasDeref(arg_index+1)
+			if (   *new_arg[arg_index].text && !line.ArgIndexHasDeref(arg_index)
 				&& !new_arg[arg_index].is_expression  // Expressions don't make sense for this, plus they need their postfix member for other purposes.
-				&& IsPureNumeric(new_arg[arg_index].text, true, false, false) // aAllowImpure==false even for ACT_ADD/SUB/MULT/DIV because those would see almost all impure *LITERAL* numbers like 123abc as variables (too rare anyway).  Check for purity to rule out floats and expressions consisting only of literals such as 1+2 (in case they can ever be encountered here).
-				&& !((aActionType == ACT_ASSIGN || aActionType == ACT_ASSIGNEXPR) // Only these need extra checking because the display format of the number doesn't matter for ADD/SUB/IFEQUAL/IFGREATER/etc. because they treat anything that looks like a number (any format) as a pure number.
-					&& (
-							   *new_raw_arg2 == '0' || *new_raw_arg2 == '+' // Assign hex or any unusually-formatted integers the old way so that the format is retained in case its important to the operation of the script (e.g. x:="005", x:=005, x:="0x5", x:="+5", x:=+5).
-							|| new_arg[1].length > 18 // See below.
-							// Integers that are too long are probably intended to be a series of characters/digits,
-							// so assign them the old way to keep all of the digits.  Fix for v1.0.48.01: Reduced the
-							// limit from MAX_INTEGER_LENGTH (20) to 18 so that the assignment (:= and =) of integers
-							// that are 19 or 20 digits long work as they did prior to v1.0.48 (some of such integers
-							// would overflow a signed 64-bit value, so keep all of them as strings).
-							//
-							// The following can't happen anymore because x:="string" is no longer translated
-							// into is_expression==false.  There are some reasons given in a section higher above:
-							//|| IS_SPACE_OR_TAB(new_raw_arg2[new_arg[1].length-1]) // Trailing whitespace, which can happen from something like x:="abc ".
-							//|| IS_SPACE_OR_TAB(*new_raw_arg2) // This can happen via translation of x:=" abc " to x:= abc at an earlier stage.
-							// Any LITERAL whitespace around a LITERAL number has always been ignored/omitted,
-							// so storing binary integers for things like "x = 1" and "x := 1" should behave
-							// as before, with the exception of "SetFormat, Integer, Hex", which will now be obeyed
-							// by such assignments when it wasn't before.
-						))   )
+				&& IsNumeric(new_arg[arg_index].text, true, false, false)   )
 			{
 				if (   !(new_arg[arg_index].postfix = (ExprTokenType *)SimpleHeap::Malloc(sizeof(__int64)))   )
 					return ScriptError(ERR_OUTOFMEM);
@@ -5363,7 +5374,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				line.mAttribute = ATTR_LOOP_UNKNOWN;
 			else
 			{
-				if (IsPureNumeric(new_raw_arg1, false))
+				if (IsNumeric(new_raw_arg1, false))
 					line.mAttribute = ATTR_LOOP_NORMAL;
 				else
 					line.mAttribute = line.RegConvertRootKey(new_raw_arg1) ? ATTR_LOOP_REG : ATTR_LOOP_FILEPATTERN;
@@ -5488,45 +5499,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
-	case ACT_SETFORMAT: // Must be done even when AUTOHOTKEYSC is defined so that g_WriteCacheDisabledInt64/Double is properly updated.
-		if (aArgc < 1)
-			break;
-		if (line.ArgHasDeref(1)) // Something like "SetFormat, %Var%, ..."
-		{
-			// For the following and other sections further below that disable the cache, can't wait until
-			// runtime execution encounters SetFormat to disable caching because script might rely on the
-			// *default* format being *immediately* written out prior to the script changing SetFormat at
-			// some later time.
-			g_WriteCacheDisabledInt64 = TRUE;
-			g_WriteCacheDisabledDouble = TRUE;
-		}
-		else
-		{
-			if (!_tcsnicmp(new_raw_arg1, _T("Float"), 5))
-			{
-				if (_tcsicmp(new_raw_arg1 + 5, _T("Fast"))) // Cache is left enabled when the new FloatFast/IntegerFast mode is present.
-					g_WriteCacheDisabledDouble = TRUE;
-				if (aArgc > 1 && !line.ArgHasDeref(2))
-				{
-					if (!IsPureNumeric(new_raw_arg2, true, false, true, true) // v1.0.46.11: Allow impure numbers to support scientific notation; e.g. 0.6e or 0.6E.
-						|| _tcslen(new_raw_arg2) >= _countof(g->FormatFloat) - 2)
-						return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-				}
-			}
-			else if (!_tcsnicmp(new_raw_arg1, _T("Integer"), 7))
-			{
-				if (_tcsicmp(new_raw_arg1 + 7, _T("Fast"))) // Cache is left enabled when the new FloatFast/IntegerFast mode is present.
-					g_WriteCacheDisabledInt64 = TRUE;
-				if (aArgc > 1 && !line.ArgHasDeref(2) && ctoupper(*new_raw_arg2) != 'H' && ctoupper(*new_raw_arg2) != 'D')
-					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-			}
-			else
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		}
-		// Size must be less than sizeof() minus 2 because need room to prepend the '%' and append
-		// the 'f' to make it a valid format specifier string:
-		break;
-
 	case ACT_STRINGSPLIT: // v1.0.48.04: Moved this section so that it is done even when AUTOHOTKEYSC is defined, because the steps below are necessary for both.
 		if (*new_raw_arg1 && !line.ArgHasDeref(1)) // The output array must be a legal name.
 		{
@@ -5542,11 +5514,30 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		//else it's a dynamic array name.  Since that's very rare, just use the old runtime behavior for
 		// backward compatibility.
 		break;
-
+		
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
-	case ACT_RETURN:
-		if (aArgc > 0 && !g->CurrentFunc)
-			return ScriptError(_T("Return's parameter should be blank except inside a function."));
+		
+	case ACT_SETFORMAT:
+		if (aArgc < 1)
+			break;
+		if (!_tcsnicmp(new_raw_arg1, _T("Float"), 5))
+		{
+			if (aArgc > 1 && !line.ArgHasDeref(2))
+			{
+				if (!IsNumeric(new_raw_arg2, true, false, true, true) // v1.0.46.11: Allow impure numbers to support scientific notation; e.g. 0.6e or 0.6E.
+					|| _tcslen(new_raw_arg2) >= _countof(g->FormatFloat) - 2)
+					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
+			}
+		}
+		else if (!_tcsnicmp(new_raw_arg1, _T("Integer"), 7))
+		{
+			if (aArgc > 1 && !line.ArgHasDeref(2) && ctoupper(*new_raw_arg2) != 'H' && ctoupper(*new_raw_arg2) != 'D')
+				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
+		}
+		else
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
+		// Size must be less than sizeof() minus 2 because need room to prepend the '%' and append
+		// the 'f' to make it a valid format specifier string:
 		break;
 
 	case ACT_DETECTHIDDENWINDOWS:
@@ -5564,7 +5555,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_SETBATCHLINES:
 		if (aArgc > 0 && !line.ArgHasDeref(1))
 		{
-			if (!tcscasestr(new_raw_arg1, _T("ms")) && !IsPureNumeric(new_raw_arg1, true, false)) // For simplicity and due to rarity, new_arg[0].is_expression isn't checked, so a line with no variables or function-calls like "SetBatchLines % 1+1" will be wrongly seen as a syntax error.
+			if (!tcscasestr(new_raw_arg1, _T("ms")) && !IsNumeric(new_raw_arg1, true, false)) // For simplicity and due to rarity, new_arg[0].is_expression isn't checked, so a line with no variables or function-calls like "SetBatchLines % 1+1" will be wrongly seen as a syntax error.
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		}
 		break;
@@ -5770,16 +5761,16 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
 			// sees a valid no-deref expression such as 2-1 as invalid.
 			value = ATOI(new_raw_arg3);
-			bool is_pure_numeric = IsPureNumeric(new_raw_arg3, false, true); // Consider negatives to be non-numeric.
+			bool is_pure_numeric = IsNumeric(new_raw_arg3, false, true); // Consider negatives to be non-numeric.
 			if (aActionType == ACT_FILEMOVEDIR)
 			{
 				if (!is_pure_numeric && ctoupper(*new_raw_arg3) != 'R'
-					|| is_pure_numeric && value > 2) // IsPureNumeric() already checked if value < 0. 
+					|| is_pure_numeric && value > 2) // IsNumeric() already checked if value < 0. 
 					return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 			}
 			else
 			{
-				if (!is_pure_numeric || value > 1) // IsPureNumeric() already checked if value < 0.
+				if (!is_pure_numeric || value > 1) // IsNumeric() already checked if value < 0.
 					return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 			}
 		}
@@ -5796,7 +5787,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
 			// sees a valid no-deref expression such as 3-2 as invalid.
 			value = ATOI(new_raw_arg2);
-			if (!IsPureNumeric(new_raw_arg2, false, true) || value > 1) // IsPureNumeric() prevents negatives.
+			if (!IsNumeric(new_raw_arg2, false, true) || value > 1) // IsNumeric() prevents negatives.
 				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		}
 		break;
@@ -5893,7 +5884,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 #ifdef UNICODE
 			case TRANS_CMD_HTML:
-				if (*new_raw_arg4 && !line.ArgHasDeref(4) && !IsPureNumeric(new_raw_arg4, true, false))
+				if (*new_raw_arg4 && !line.ArgHasDeref(4) && !IsNumeric(new_raw_arg4, true, false))
 					return ScriptError(_T("Parameter #4 must be blank or an integer in this case."), new_raw_arg4);
 				break;
 #endif
@@ -6141,7 +6132,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				break;
 			case PROCESS_CMD_WAIT:
 			case PROCESS_CMD_WAITCLOSE:
-				if (*new_raw_arg3 && !line.ArgHasDeref(3) && !IsPureNumeric(new_raw_arg3, false, true, true))
+				if (*new_raw_arg3 && !line.ArgHasDeref(3) && !IsNumeric(new_raw_arg3, false, true, true))
 					return ScriptError(_T("If present, parameter #3 must be a positive number in this case."), new_raw_arg3);
 				break;
 			}
@@ -6235,11 +6226,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_MSGBOX:
 		if (aArgc > 1) // i.e. this MsgBox is using the 3-param or 4-param style.
 			if (!line.ArgHasDeref(1)) // i.e. if it's a deref, we won't try to validate it now.
-				if (!IsPureNumeric(new_raw_arg1)) // Allow it to be entirely whitespace to indicate 0, like Aut2.
+				if (!IsNumeric(new_raw_arg1)) // Allow it to be entirely whitespace to indicate 0, like Aut2.
 					return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		if (aArgc > 3) // EVEN THOUGH IT'S NUMERIC, due to MsgBox's smart-comma handling, this cannot be an expression because it would never have been detected as the fourth parameter to begin with.
 			if (!line.ArgHasDeref(4)) // i.e. if it's a deref, we won't try to validate it now.
-				if (!IsPureNumeric(new_raw_arg4, false, true, true))
+				if (!IsNumeric(new_raw_arg4, false, true, true))
 					return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
 		break;
 
@@ -6547,7 +6538,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 				value_length = param_end - param_start;
 				if (value_length > MAX_NUMBER_LENGTH) // Too rare to justify elaborate handling or error reporting.
 					value_length = MAX_NUMBER_LENGTH;
-				tcslcpy(buf, param_start, value_length + 1);  // Make a temp copy to simplify the below (especially IsPureNumeric).
+				tcslcpy(buf, param_start, value_length + 1);  // Make a temp copy to simplify the below (especially IsNumeric).
 				if (!_tcsicmp(buf, _T("false")))
 				{
 					this_param.default_type = PARAM_DEFAULT_INT;
@@ -6564,7 +6555,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 					// the script would be supported (since other globals don't exist yet). So it seems
 					// best to wait until full/comprehesive support for expressions is studied/designed
 					// for both static initializers and parameter-default-values.
-					switch(IsPureNumeric(buf, true, false, true))
+					switch(IsNumeric(buf, true, false, true))
 					{
 					case PURE_INTEGER:
 						// It's always been somewhat inconsistent that for parameter default values,
@@ -7444,7 +7435,7 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 			&& !g_act[mActionType].CheckOverlap
 			&& &var != g_ErrorLevel
 			&& !var.IsBinaryClip()   )
-			return var.ToInt64(FALSE);
+			return var.ToInt64();
 	}
 	// Otherwise:
 	return ATOI64(sArgDeref[aArgIndex]); // See ArgIndexLength() for comments.
@@ -7474,7 +7465,7 @@ double Line::ArgIndexToDouble(int aArgIndex)
 			&& !g_act[mActionType].CheckOverlap
 			&& &var != g_ErrorLevel
 			&& !var.IsBinaryClip()   )
-			return var.ToDouble(FALSE);
+			return var.ToDouble();
 	}
 	// Otherwise:
 	return ATOF(sArgDeref[aArgIndex]); // See ArgIndexLength() for comments.
@@ -8721,7 +8712,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				LPTSTR loop_name = line->mArg[0].text;
 				Label *loop_label;
 				Line *loop_line;
-				if (IsPureNumeric(loop_name))
+				if (IsNumeric(loop_name))
 				{
 					int n = _ttoi(loop_name);
 					// Find the nth innermost loop which encloses this line:
@@ -8799,7 +8790,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				if (   !(line->mAttribute = FindLabel(line_raw_arg1))   )
 					return line->PreparseError(ERR_NO_LABEL);
 			if (*line_raw_arg2 && !line->ArgHasDeref(2))
-				if (!Line::ConvertOnOff(line_raw_arg2) && !IsPureNumeric(line_raw_arg2, true) // v1.0.46.16: Allow negatives to support the new run-only-once mode.
+				if (!Line::ConvertOnOff(line_raw_arg2) && !IsNumeric(line_raw_arg2, true) // v1.0.46.16: Allow negatives to support the new run-only-once mode.
 					&& !line->mArg[1].is_expression) // v1.0.46.10: Don't consider expressions THAT CONTAIN NO VARIABLES OR FUNCTION-CALLS like "% 2*500" to be a syntax error.
 					return line->PreparseError(ERR_PARAM2_INVALID);
 			break;
@@ -8864,7 +8855,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 	// Also, dimensioning explicitly by SYM_COUNT helps enforce that at compile-time:
 	static UCHAR sPrecedence[SYM_COUNT] =  // Performance: UCHAR vs. INT benches a little faster, perhaps due to the slight reduction in code size it causes.
 	{
-		0,0,0,0,0,0,0,0  // SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_VAR, SYM_OPERAND, SYM_OBJECT, SYM_DYNAMIC, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
+		0,0,0,0,0,0,0  // SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_VAR, SYM_OBJECT, SYM_DYNAMIC, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
 		, 82, 82         // SYM_POST_INCREMENT, SYM_POST_DECREMENT: Highest precedence operator so that it will work even though it comes *after* a variable name (unlike other unaries, which come before).
 		, 86             // SYM_DOT
 		, 4,4,4,4,4,4    // SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE (to simplify the code, parentheses/brackets/braces must be lower than all operators in precedence).
@@ -8933,6 +8924,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 	DerefType *deref, *this_deref, *deref_start, *deref_new;
 	int derefs_in_this_double;
 	int cp1; // int vs. char benchmarks slightly faster, and is slightly smaller in code size.
+	TCHAR number_buf[MAX_NUMBER_SIZE];
 
 	for (cp = aArg.text, deref = aArg.deref // Start at the begining of this arg's text and look for the next deref.
 		;; ++deref, ++infix_count) // FOR EACH DEREF IN AN ARG:
@@ -9063,10 +9055,10 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								// -0x8000000000000000 because -0x8000000000000000**2 would in fact be undefined
 								// because ** is higher precedence than unary minus and +0x8000000000000000 is
 								// beyond the signed 64-bit range.  SEE ALSO the comments higher above.
-								// Use a temp variable because numeric_literal requires that op_end be set properly:
+								// Use a temp variable because unquoted_literal requires that op_end be set properly:
 								LPTSTR pow_temp = omit_leading_whitespace(op_end);
 								if (!(pow_temp[0] == '*' && pow_temp[1] == '*'))
-									goto numeric_literal; // Goto is used for performance and also as a patch to minimize the chance of breaking other things via redesign.
+									goto unquoted_literal; // Goto is used for performance and also as a patch to minimize the chance of breaking other things via redesign.
 								//else it's followed by pow.  Since pow is higher precedence than unary minus,
 								// leave this unary minus as an operator so that it will take effect after the pow.
 							}
@@ -9441,10 +9433,24 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								// Error message is intentionally vague since user may have intended the dot to be concatenation rather than member-access.
 								return LineError(ERR_INVALID_DOT, FAIL, cp-1);
 
-							// Output a SYM_OPERAND for the text following '.'
-							infix[infix_count].symbol = SYM_OPERAND;
-							if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   )
-								return LineError(ERR_OUTOFMEM);
+							// Output an operand for the text following '.'
+							if (op_end - cp < MAX_NUMBER_SIZE)
+								tcslcpy(number_buf, cp, op_end - cp + 1); // +1 for null terminator.
+							else
+								*number_buf = '\0'; // For simplicity; IsNumeric() should yield the correct result.
+							if (IsNumeric(number_buf, false, false) == PURE_INTEGER)
+							{
+								// Seems best to treat obj.1 as obj[1] rather than obj["1"].
+								// But what about obj.001?  That's also treated as obj[1] for now.
+								infix[infix_count].symbol = SYM_INTEGER;
+								infix[infix_count].value_int64 = ATOI64(number_buf);
+							}
+							else
+							{
+								infix[infix_count].symbol = SYM_STRING;
+								if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   )
+									return LineError(ERR_OUTOFMEM);
+							}
 							++infix_count;
 
 							cp = omit_leading_whitespace(op_end);
@@ -9511,13 +9517,13 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						cp = op_end; // Have the loop process whatever lies at op_end and beyond.
 						continue; // Continue vs. break to avoid the ++cp at the bottom (though it might not matter in this case).
 					}
-numeric_literal:
+unquoted_literal:
 					// Since above didn't "continue", this item is probably a raw numeric literal (either SYM_FLOAT
-					// or SYM_INTEGER, to be differentiated later) because just about every other possibility has
-					// been ruled out above.  For example, unrecognized symbols should be impossible at this stage
-					// because load-time validation would have caught them.  And any kind of unquoted alphanumeric
-					// characters (other than "NOT", which was detected above) wouldn't have reached this point
-					// because load-time pre-parsing would have marked it as a deref/var, not raw/literal text.
+					// or SYM_INTEGER, to be differentiated later) or the "key" in "{key: value}".  Unrecognized
+					// symbols should be impossible at this stage because load-time validation would have caught
+					// them.  Any kind of unquoted alphanumeric characters (other than "NOT", which was detected
+					// above) wouldn't have reached this point because load-time pre-parsing would have marked
+					// it as a deref/var, not raw/literal text.
 					if (   (*op_end == '-' || *op_end == '+') && ctoupper(op_end[-1]) == 'E' // v1.0.46.11: It looks like scientific notation...
 						&& !(cp[0] == '0' && ctoupper(cp[1]) == 'X') // ...and it's not a hex number (this check avoids falsely detecting hex numbers that end in 'E' as exponents). This line fixed in v1.0.46.12.
 						&& !(cp[0] == '-' && cp[1] == '0' && ctoupper(cp[2]) == 'X') // ...and it's not a negative hex number (this check avoids falsely detecting hex numbers that end in 'E' as exponents). This line added as a fix in v1.0.47.03.
@@ -9530,6 +9536,8 @@ numeric_literal:
 						do // Skip over the sign and its exponent; e.g. the "+1" in "1.0e+1".  There must be a sign in this particular sci-notation number or we would never have arrived here.
 							++op_end;
 						while (*op_end >= '0' && *op_end <= '9'); // Avoid isdigit() because it sometimes causes a debug assertion failure at: (unsigned)(c + 1) <= 256 (probably only in debug mode), and maybe only when bad data got in it due to some other bug.
+						if (!_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT, *op_end))
+							return LineError(_T("Bad numeric literal."), FAIL, cp);
 					}
 					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)) // If it's an operand, at this stage it can only be SYM_OPERAND or SYM_STRING.
 					{
@@ -9539,9 +9547,24 @@ numeric_literal:
 						++infix_count;
 					}
 					// MUST NOT REFER TO this_infix_item IN CASE ABOVE DID ++infix_count:
-					infix[infix_count].symbol = SYM_OPERAND;
-					if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   )
-						return LineError(ERR_OUTOFMEM);
+					// Now determine what type of literal this is: integer, floating-point or unquoted string.
+					if (op_end - cp < MAX_NUMBER_SIZE)
+						tcslcpy(number_buf, cp, op_end - cp + 1); // +1 for null terminator.
+					else
+						*number_buf = '\0'; // For simplicity; IsNumeric() should yield the correct result.
+					switch (infix[infix_count].symbol = IsNumeric(number_buf, true, false, true))
+					{
+					case SYM_INTEGER:
+						infix[infix_count].value_int64 = ATOI64(number_buf);
+						break;
+					case SYM_FLOAT:
+						infix[infix_count].value_double = ATOF(number_buf);
+						break;
+					default:
+						// SYM_STRING: either the "key" in "{key: value}" or a syntax error (might be impossible).
+						if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   )
+							return LineError(ERR_OUTOFMEM);
+					}
 					cp = op_end; // Have the loop process whatever lies at op_end and beyond.
 					continue; // "Continue" to avoid the ++cp at the bottom.
 				} // switch() for type of symbol/operand.
@@ -10159,17 +10182,6 @@ end_of_infix_to_postfix:
 	{
 		ExprTokenType &new_token = aArg.postfix[i];
 		new_token = *postfix[i]; // Struct copy.  This also sets circuit_token to NULL for those circuit_tokens not overridden later below.
-		if (new_token.symbol == SYM_OPERAND)
-		{
-			if (IsPureNumeric(new_token.marker, true, false, true) != PURE_INTEGER)
-				new_token.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
-			else // Pre-convert to binary integer, which can increase performance of complex expressions by up to 20%.
-			{
-				if (   !(new_token.buf = (LPTSTR) SimpleHeap::Malloc(sizeof(__int64)))   )
-					return LineError(ERR_OUTOFMEM);
-				*(__int64 *)new_token.buf = ATOI64(new_token.marker);
-			}
-		}
 		if (new_token.circuit_token) // Adjust each circuit_token address to be relative to the new array rather than the temp/infix array.
 		{
 			for (j = i + 1; postfix[j] != new_token.circuit_token; ++j); // Should always be found, and always to the right in the postfix array, so no need to check postfix_count.
@@ -10611,16 +10623,27 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			// which is desirable *even* if aResultToken is NULL (i.e. the caller will be
 			// ignoring the return value) in case the return's expression calls a function
 			// which has side-effects.  For example, "return LogThisEvent()".
-			if (aResultToken && aResultToken->symbol == SYM_STRING) // L31: Caller wants the return value, but no result has been set since caller set this default. (ExpandExpression does not use aResultToken for string values.)
+			if (aResultToken && aResultToken->symbol == SYM_STRING) // Caller wants the return value, but no result has been set since caller set this default. (ExpandExpression does not use aResultToken for string values.)
 			{
-				if (ARGVAR1 && ARGVAR1->Type() == VAR_NORMAL) // Something like return var; since var may contain an object, must not use the deref'd string value.  Cached binary numbers are also returned this way as an added benefit.
+				if (ARGVAR1 && ARGVAR1->Type() == VAR_NORMAL) // Something like "return var".
 				{
-					(ARGVAR1)->TokenToContents(*aResultToken);
+					// If this var contains a pure number or object, the following allows
+					// it to be returned correctly instead of being converted to a string:
+					ARGVAR1->ToToken(*aResultToken);
 				}
-				else // not a var, or a built-in var (which does not support TokenToContents()).
+				else // Not a var, or not one that supports ToToken().
 				{
-					aResultToken->symbol = SYM_STRING;
-					aResultToken->marker = ARG1; // This sets it to blank if this return lacks an arg.
+					if (*ARG1 && !line->mArg[0].is_expression && line->mArg[0].postfix) // *ARG1 is checked first to rule out many common cases and ensure this line has an arg.
+					{
+						// This arg is a literal integer which was converted into a non-expression.
+						aResultToken->symbol = SYM_INTEGER;
+						aResultToken->value_int64 = *(__int64 *)line->mArg[0].postfix;
+					}
+					else
+					{
+						aResultToken->symbol = SYM_STRING;
+						aResultToken->marker = ARG1; // This sets it to blank if this return lacks an arg.
+					}
 				}
 			}
 			//else the return value, if any, is discarded.
@@ -10682,7 +10705,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					// but not at load-time (since it doesn't make sense to have a literal floating
 					// point number as the iteration count, but a variable containing a pure float
 					// should be allowed):
-					if (IsPureNumeric(ARG1, true, true, true))
+					if (IsNumeric(ARG1, true, true, true))
 						attr = ATTR_LOOP_NORMAL;
 					else
 					{
@@ -11057,7 +11080,7 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 		// (like ArgMustBeDereferenced() does) because ACT_IFEXPR doesn't internally change ErrorLevel.
 		// Also, RAW is safe because loadtime validation ensured there is at least 1 arg.
 		if_condition = (ARGVARRAW1 && !*ARG1 && ARGVARRAW1->Type() == VAR_NORMAL)
-			? LegacyVarToBOOL(*ARGVARRAW1) // 30% faster than having ExpandArgs() resolve ARG1 even when it's a naked variable.
+			? VarToBOOL(*ARGVARRAW1) // 30% faster than having ExpandArgs() resolve ARG1 even when it's a naked variable.
 			: LegacyResultToBOOL(ARG1); // CAN'T simply check *ARG1=='1' because the loadtime routine has various ways of setting if_expresion to false for things that are normally expressions.
 		break;
 
@@ -11096,12 +11119,12 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 			else\
 			{\
 				arg_var2 = (mArgc > 1 && ARGVARRAW2 && !*ARG2 && ARGVARRAW2->Type() == VAR_NORMAL) ? ARGVARRAW2 : NULL;\
-				value_is_pure_numeric = arg_var2 ? arg_var2->IsNonBlankIntegerOrFloat()\
-					: IsPureNumeric(ARG2, true, false, true);\
+				value_is_pure_numeric = arg_var2 ? arg_var2->IsNumeric()\
+					: IsNumeric(ARG2, true, false, true);\
 			}\
 			arg_var1 = (!*ARG1 && ARGVARRAW1->Type() == VAR_NORMAL) ? ARGVARRAW1 : NULL;\
-			var_is_pure_numeric = arg_var1 ? arg_var1->IsNonBlankIntegerOrFloat()\
-				: IsPureNumeric(ARG1, true, false, true);
+			var_is_pure_numeric = arg_var1 ? arg_var1->IsNumeric()\
+				: IsNumeric(ARG1, true, false, true);
 		
 		#define DETERMINE_NUMERIC_TYPES2 \
 			DETERMINE_NUMERIC_TYPES \
@@ -11113,22 +11136,22 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 			else\
 			{\
 				arg_var3 = (mArgc > 2 && ARGVARRAW3 && !*ARG3 && ARGVARRAW3->Type() == VAR_NORMAL) ? ARGVARRAW3 : NULL;\
-				value2_is_pure_numeric = arg_var3 ? arg_var3->IsNonBlankIntegerOrFloat()\
-					: IsPureNumeric(ARG3, true, false, true);\
+				value2_is_pure_numeric = arg_var3 ? arg_var3->IsNumeric()\
+					: IsNumeric(ARG3, true, false, true);\
 			}
 		#define ARG1_AS_STRING (arg_var1 ? arg_var1->Contents() : ARG1)
 		#define ARG2_AS_STRING (arg_var2 ? arg_var2->Contents() : ARG2)
 		#define ARG3_AS_STRING (arg_var3 ? arg_var3->Contents() : ARG3)
-		#define ARG1_AS_DOUBLE (arg_var1 ? arg_var1->ToDouble(TRUE) : ATOF(ARG1))
+		#define ARG1_AS_DOUBLE (arg_var1 ? arg_var1->ToDouble() : ATOF(ARG1))
 		#define ARG2_AS_DOUBLE (arg2_has_binary_integer ? (double)*(__int64*)mArg[1].postfix \
-			: arg_var2 ? arg_var2->ToDouble(TRUE) : ATOF(ARG2))
+			: arg_var2 ? arg_var2->ToDouble() : ATOF(ARG2))
 		#define ARG3_AS_DOUBLE (arg3_has_binary_integer ? (double)*(__int64*)mArg[2].postfix \
-			: arg_var3 ? arg_var3->ToDouble(TRUE) : ATOF(ARG3))
-		#define ARG1_AS_INT64 (arg_var1 ? arg_var1->ToInt64(TRUE) : ATOI64(ARG1)) // Never has a binary integer because it's ARG_TYPE_INPUT_VAR.
+			: arg_var3 ? arg_var3->ToDouble() : ATOF(ARG3))
+		#define ARG1_AS_INT64 (arg_var1 ? arg_var1->ToInt64() : ATOI64(ARG1)) // Never has a binary integer because it's ARG_TYPE_INPUT_VAR.
 		#define ARG2_AS_INT64 (arg2_has_binary_integer ? *(__int64*)mArg[1].postfix \
-			: arg_var2 ? arg_var2->ToInt64(TRUE) : ATOI64(ARG2))
+			: arg_var2 ? arg_var2->ToInt64() : ATOI64(ARG2))
 		#define ARG3_AS_INT64 (arg3_has_binary_integer ? *(__int64*)mArg[2].postfix \
-			: arg_var3 ? arg_var3->ToInt64(TRUE) : ATOI64(ARG3))
+			: arg_var3 ? arg_var3->ToInt64() : ATOI64(ARG3))
 		#define IF_EITHER_IS_NON_NUMERIC if (!value_is_pure_numeric || !var_is_pure_numeric)
 		#define IF_EITHER_IS_NON_NUMERIC2 if (!value_is_pure_numeric || !value2_is_pure_numeric || !var_is_pure_numeric)
 		#undef IF_EITHER_IS_FLOAT
@@ -11210,17 +11233,19 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 
 		switch(variable_type)
 		{
+		// Since "if var is type" is a legacy command which is likely to be phased out in favour of a new
+		// "is" operator, the following three treat numeric strings as numbers (IsNumeric vs IsPureNumeric):
 		case VAR_TYPE_NUMBER:
-			if_condition = arg_var1 ? arg_var1->IsNonBlankIntegerOrFloat()
-				: IsPureNumeric(ARG1, true, false, true);  // Floats are defined as being numeric.
+			if_condition = arg_var1 ? arg_var1->IsNumeric()
+				: IsNumeric(ARG1, true, false, true);  // Floats are defined as being numeric.
 			break;
 		case VAR_TYPE_INTEGER:
-			if_condition = arg_var1 ? (arg_var1->IsNonBlankIntegerOrFloat() == PURE_INTEGER) // Explicitly compare to PURE_INTEGER because IsNonBlankIntegerOrFloat() doesn't support aAllowFloat.
-				: IsPureNumeric(ARG1, true, false, false);  // Passes false for aAllowFloat.
+			if_condition = arg_var1 ? (arg_var1->IsNumeric() == PURE_INTEGER) // Explicitly compare to PURE_INTEGER because Var::IsNumeric() doesn't support aAllowFloat.
+				: IsNumeric(ARG1, true, false, false);  // Passes false for aAllowFloat.
 			break;
 		case VAR_TYPE_FLOAT:
-			if_condition = arg_var1 ? (arg_var1->IsNonBlankIntegerOrFloat() == PURE_FLOAT) // Explicitly compare to PURE_FLOAT.
-				: (IsPureNumeric(ARG1, true, false, true) == PURE_FLOAT);
+			if_condition = arg_var1 ? (arg_var1->IsNumeric() == PURE_FLOAT) // Explicitly compare to PURE_FLOAT.
+				: (IsNumeric(ARG1, true, false, true) == PURE_FLOAT);
 			break;
 		case VAR_TYPE_TIME:
 		{
@@ -11228,7 +11253,7 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 			// Also insist on numeric, because even though YYYYMMDDToFileTime() will properly convert a
 			// non-conformant string such as "2004.4", for future compatibility, we don't want to
 			// report that such strings are valid times:
-			if_condition = IsPureNumeric(ARG1, false, false, false) && YYYYMMDDToSystemTime(ARG1, st, true); // Can't call IsNonBlankIntegerOrFloat() here because it doesn't support aAllowNegative.
+			if_condition = IsNumeric(ARG1, false, false, false) && YYYYMMDDToSystemTime(ARG1, st, true); // Can't call Var::IsNumeric() here because it doesn't support aAllowNegative.
 			break;
 		}
 		case VAR_TYPE_DIGIT:
@@ -11636,22 +11661,13 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 		// Call enumerator.Next(var1, var2)
 		enumerator.Invoke(result_token, enum_token, IT_CALL, params, param_count);
 
-		// Since any non-empty SYM_STRING is always considered "true", we need to change it to SYM_OPERAND
-		// before calling TokenToBOOL; otherwise "return false" and "return 0" will both evaluate to true
-		// since they are optimized to not be expressions (and only expressions return pure numeric values).
-		if (result_token.symbol == SYM_STRING)
-		{
-			result_token.symbol = SYM_OPERAND;
-			result_token.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
-		}
-
-		bool next_returned_true = TokenToBOOL(result_token, TokenIsPureNumeric(result_token));
+		bool next_returned_true = TokenToBOOL(result_token);
 
 		// Free any memory or object which may have been returned by Invoke:
 		if (result_token.mem_to_free)
 			free(result_token.mem_to_free);
 		if (result_token.symbol == SYM_OBJECT)
-			result_token.object->Release(); // Relies on the fact that TokenToBool() doesn't access the object.
+			result_token.object->Release();
 
 		if (!next_returned_true)
 		{	// The enumerator returned false, which means there are no more items.
@@ -12364,11 +12380,13 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 				}
 			}
 		}
-		// Since above didn't return:
-		// Note that simple assignments such as Var:="xyz" or Var:=Var2 are resolved to be
-		// non-expressions at load-time.  In these cases, ARG2 would have been expanded
-		// normally rather than evaluated as an expression.
-		return output_var->Assign(ARG2); // ARG2 now contains the above or the evaluated result of the expression.
+		// Since above didn't return, the value being assigned isn't an expression, a literal integer or
+		// a single variable deref.  Probably the only other thing it can be is a literal floating-point
+		// number, which we want to assign as such, not as a numeric string:
+		if (IsNumeric(ARG2, true, false, true) == PURE_FLOAT)
+			return output_var->Assign(ATOF(ARG2));
+		// Otherwise, it could be nothing at all (something like "x := ") which is tolerated for now.
+		return output_var->Assign(ARG2);
 
 	case ACT_EXPRESSION:
 		// Nothing needs to be done because the expression in ARG1 (which is the only arg) has already
@@ -12673,7 +12691,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		if (*ARG2)
 		{
 			toggle = Line::ConvertOnOff(ARG2);
-			if (!toggle && !IsPureNumeric(ARG2, true, true, true)) // Allow it to be neg. or floating point at runtime.
+			if (!toggle && !IsNumeric(ARG2, true, true, true)) // Allow it to be neg. or floating point at runtime.
 				return LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
 		}
 		else
@@ -12795,8 +12813,8 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			init_genrand(ArgToUInt(2)); // It's documented that an unsigned 32-bit number is required.
 			return OK;
 		}
-		bool use_float = IsPureNumeric(ARG2, true, false, true) == PURE_FLOAT
-			|| IsPureNumeric(ARG3, true, false, true) == PURE_FLOAT;
+		bool use_float = IsNumeric(ARG2, true, false, true) == PURE_FLOAT
+			|| IsNumeric(ARG3, true, false, true) == PURE_FLOAT;
 		if (use_float)
 		{
 			double rand_min = *ARG2 ? ArgToDouble(2) : 0;
@@ -13189,7 +13207,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			// Create as "%ARG2f".  Note that %f can handle doubles in MSVC++:
 			_stprintf(g.FormatFloat, _T("%%%s%s%s"), ARG2
 				, dot_pos ? _T("") : _T(".") // Add a dot if none was specified so that "0" is the same as "0.", which seems like the most user-friendly approach; it's also easier to document in the help file.
-				, IsPureNumeric(ARG2, true, true, true) ? _T("f") : _T("")); // If it's not pure numeric, assume the user already included the desired letter (e.g. SetFormat, Float, 0.6e).
+				, IsNumeric(ARG2, true, true, true) ? _T("f") : _T("")); // If it's not pure numeric, assume the user already included the desired letter (e.g. SetFormat, Float, 0.6e).
 		}
 		else if (!_tcsnicmp(ARG1, _T("Integer"), 7)) // "nicmp" vs. "icmp" so that Integer and IntegerFast are treated the same (loadtime validation already took notice of the Fast flag).
 		{

@@ -144,7 +144,7 @@ Object *Object::Clone(INT_PTR aStartOffset)
 		// Copy value.
 		switch (dst.symbol = src.symbol)
 		{
-		case SYM_OPERAND:
+		case SYM_STRING:
 			if (dst.size = src.size)
 			{
 				if (dst.marker = tmalloc(dst.size))
@@ -541,17 +541,11 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// L34: Assigning an empty string no longer removes the field.
 			if ( (field || (field = Insert(key_type, key, insert_pos))) && field->Assign(value_param) )
 			{
-				if (field->symbol == SYM_OPERAND)
+				if (field->symbol == SYM_STRING)
 				{
 					// Use value_param since our copy may be freed prematurely in some (possibly rare) cases:
 					aResultToken.symbol = SYM_STRING;
 					aResultToken.marker = TokenToString(value_param);
-					// Below: no longer used as other areas expect string results to always be SYM_STRING.
-					// If it is ever used in future, we MUST copy marker and buf separately for x64 support.
-					// However, it seems appropriate *not* to return a SYM_OPERAND with cached binary integer
-					// since above has stored only the string part of it.
-					//aResultToken.symbol		 = value_param.symbol;
-					//aResultToken.value_int64 = value_param.value_int64; // Copy marker and buf (via union) in case it is SYM_OPERAND with a cached integer.
 				}
 				else
 					field->Get(aResultToken); // L34: Corrected this to be aResultToken instead of value_param (broken by L33).
@@ -563,10 +557,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	// GET
 	else if (field)
 	{
-		if (field->symbol == SYM_OPERAND)
+		if (field->symbol == SYM_STRING)
 		{
-			// Use SYM_STRING and not SYM_OPERAND, since SYM_OPERAND's use of aResultToken.buf
-			// would conflict with the use of mem_to_free/buf to return a memory allocation.
 			aResultToken.symbol = SYM_STRING;
 			// L33: Make a persistent copy; our copy might be freed indirectly by releasing this object.
 			//		Prior to L33, callers took care of this UNLESS this was the last op in an expression.
@@ -606,7 +598,7 @@ ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, Exp
 		aParam[0] = tmp;
 		return r;
 	}
-	else if (aField->symbol == SYM_OPERAND)
+	else if (aField->symbol == SYM_STRING)
 	{
 		Func *func = g_script.FindFunc(aField->marker);
 		if (func)
@@ -828,7 +820,7 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		// seems more useful to return the field being removed than a count.
 		switch (aResultToken.symbol = min_field->symbol)
 		{
-		case SYM_OPERAND:
+		case SYM_STRING:
 			if (min_field->size)
 			{
 				// Detach the memory allocated for this field's string and pass it back to caller.
@@ -928,7 +920,7 @@ ResultType Object::_GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 		FieldType *field;
 
 		if ( (field = FindField(*aParam[0], aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
-			&& field->symbol == SYM_OPERAND )
+			&& field->symbol == SYM_STRING )
 		{
 			aResultToken.symbol = SYM_INTEGER;
 			aResultToken.value_int64 = field->size ? _TSIZE(field->size - 1) : 0; // -1 to exclude null-terminator.
@@ -946,10 +938,10 @@ ResultType Object::_GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 // _SetCapacity( [field_name,] new_capacity )
 {
-	if ((aParamCount != 1 && aParamCount != 2) || !TokenIsPureNumeric(*aParam[aParamCount - 1]))
+	if ((aParamCount != 1 && aParamCount != 2) || !TokenIsNumeric(*aParam[aParamCount - 1]))
 		// Invalid or missing param(s); return default empty string.
 		return OK;
-	__int64 desired_capacity = TokenToInt64(*aParam[aParamCount - 1], TRUE);
+	__int64 desired_capacity = TokenToInt64(*aParam[aParamCount - 1]);
 	if (aParamCount == 2) // Field name was specified.
 	{
 		if (desired_capacity < 0) // Check before sign is dropped.
@@ -967,7 +959,7 @@ ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 			|| (field = Insert(key_type, key, insert_pos)) )
 		{	
 			// Field was successfully found or inserted.
-			if (field->symbol != SYM_OPERAND)
+			if (field->symbol != SYM_STRING)
 				// Wrong type of field.
 				return OK;
 			if (!desired_size)
@@ -1034,7 +1026,7 @@ ResultType Object::_GetAddress(ExprTokenType &aResultToken, ExprTokenType *aPara
 		FieldType *field;
 
 		if ( (field = FindField(*aParam[0], aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
-			&& field->symbol == SYM_OPERAND && field->size )
+			&& field->symbol == SYM_STRING && field->size )
 		{
 			aResultToken.symbol = SYM_INTEGER;
 			aResultToken.value_int64 = (__int64)field->marker;
@@ -1098,7 +1090,7 @@ bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
 	if (!str || !*str && (len == -1 || !len)) // If empty string or null pointer, free our contents.  Passing len >= 1 allows copying \0, so don't check *str in that case.  Ordered for short-circuit performance (len is usually -1).
 	{
 		Free();
-		symbol = SYM_OPERAND;
+		symbol = SYM_STRING;
 		marker = Var::sEmptyString;
 		size = 0;
 		return true;
@@ -1107,10 +1099,10 @@ bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
 	if (len == -1)
 		len = _tcslen(str);
 
-	if (symbol != SYM_OPERAND || len >= size)
+	if (symbol != SYM_STRING || len >= size)
 	{
 		Free(); // Free object or previous buffer (which was too small).
-		symbol = SYM_OPERAND;
+		symbol = SYM_STRING;
 		size_t new_size = len + 1;
 		if (!exact_size)
 		{
@@ -1152,7 +1144,7 @@ bool Object::FieldType::Assign(ExprTokenType &aParam)
 		// format of a literal number such as 0x123 or 00001, and even less likely for a number stored
 		// in an object (even implicitly via a variadic function).  If the value is eventually passed
 		// to a COM method call, it can be important that it is passed as VT_I4 and not VT_BSTR.
-		aParam.var->TokenToContents(temp);
+		aParam.var->ToToken(temp);
 		val = &temp;
 	}
 	else
@@ -1160,16 +1152,6 @@ bool Object::FieldType::Assign(ExprTokenType &aParam)
 
 	switch (val->symbol)
 	{
-	case SYM_OPERAND:
-		if (val->buf)
-		{
-			// Store this integer literal as a pure integer.  See above for comments.
-			Free();
-			symbol = SYM_INTEGER;
-			n_int64 = *(__int64 *)val->buf;
-			break;
-		}
-		// FALL THROUGH to the next case.
 	case SYM_STRING:
 		return Assign(val->marker);
 	case SYM_INTEGER:
@@ -1205,7 +1187,7 @@ void Object::FieldType::Free()
 // entirely or the Object is being deleted.  See Object::Delete.
 // CONTAINED VALUE WILL NOT BE VALID AFTER THIS FUNCTION RETURNS.
 {
-	if (symbol == SYM_OPERAND) {
+	if (symbol == SYM_STRING) {
 		if (size)
 			free(marker);
 	} else if (symbol == SYM_OBJECT)
@@ -1267,7 +1249,7 @@ int Object::Enumerator::Next(Var *aKey, Var *aVal)
 		{
 			switch (field.symbol)
 			{
-			case SYM_OPERAND:	aVal->AssignString(field.marker);	break;
+			case SYM_STRING:	aVal->AssignString(field.marker);	break;
 			case SYM_INTEGER:	aVal->Assign(field.n_int64);			break;
 			case SYM_FLOAT:		aVal->Assign(field.n_double);		break;
 			case SYM_OBJECT:	aVal->Assign(field.object);			break;
@@ -1343,18 +1325,18 @@ Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, IndexType
 Object::FieldType *Object::FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos)
 // Searches for a field with the given key, where the key is a token passed from script.
 {
-	if (TokenIsPureNumeric(key_token) == PURE_INTEGER)
-	{	// Treat all integer keys (even numeric strings) as pure integers for consistency and performance.
-		key.i = (IntKeyType)TokenToInt64(key_token, TRUE);
+	if (TokenIsPureNumeric(key_token) == PURE_INTEGER) // TokenIsPureNumeric vs TokenIsNumeric to exclude numeric strings.
+	{	// SYM_INTEGER or SYM_VAR which contains a pure integer.
+		key.i = (IntKeyType)TokenToInt64(key_token);
 		key_type = SYM_INTEGER;
 	}
 	else if (key.p = TokenToObject(key_token))
-	{	// SYM_OBJECT or SYM_VAR containing object.
+	{	// SYM_OBJECT or SYM_VAR which contains an object.
 		key_type = SYM_OBJECT;
 	}
 	else
-	{	// SYM_STRING, SYM_FLOAT, SYM_OPERAND or SYM_VAR (all confirmed not to be an integer at this point).
-		key.s = TokenToString(key_token, aBuf); // L41: Pass aBuf to allow float->string conversion as documented (but not previously working).
+	{	// SYM_STRING, SYM_FLOAT or SYM_VAR (confirmed not to contain a pure integer).
+		key.s = TokenToString(key_token, aBuf); // Pass aBuf to allow float -> string conversion.
 		key_type = SYM_STRING;
 	}
 	return FindField(key_type, key, insert_pos);
@@ -1405,7 +1387,7 @@ Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, IndexType at
 	field.marker = _T(""); // Init for maintainability.
 	field.size = 0; // Init to ensure safe behaviour in Assign().
 	field.key = key; // Above has already copied string or called key.p->AddRef() as appropriate.
-	field.symbol = SYM_OPERAND;
+	field.symbol = SYM_STRING;
 
 	return &field;
 }

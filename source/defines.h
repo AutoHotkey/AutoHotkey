@@ -132,7 +132,7 @@ enum ToggleValueType {TOGGLE_INVALID = 0, TOGGLED_ON, TOGGLED_OFF, ALWAYS_ON, AL
 // In addition, BIF_InStr relies on SCS_SENSITIVE being 1:
 enum StringCaseSenseType {SCS_INSENSITIVE, SCS_SENSITIVE, SCS_INSENSITIVE_LOCALE, SCS_INSENSITIVE_LOGICAL, SCS_INVALID};
 
-enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
+enum SymbolType // For use with ExpandExpression() and IsNumeric().
 {
 	// The sPrecedence array in ExpandExpression() must be kept in sync with any additions, removals,
 	// or re-ordering of the below.  Also, IS_OPERAND() relies on all operand types being at the
@@ -142,7 +142,6 @@ enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
 	, SYM_STRING = PURE_NOT_NUMERIC, SYM_INTEGER = PURE_INTEGER, SYM_FLOAT = PURE_FLOAT // Specific operand types.
 #define IS_NUMERIC(symbol) ((symbol) == SYM_INTEGER || (symbol) == SYM_FLOAT) // Ordered for short-circuit performance.
 	, SYM_VAR // An operand that is a variable's contents.
-	, SYM_OPERAND // Generic/undetermined type of operand.
 	, SYM_OBJECT // L31: Represents an IObject interface pointer.
 	, SYM_DYNAMIC // An operand that needs further processing during the evaluation phase.
 	, SYM_OPERAND_END // Marks the symbol after the last operand.  This value is used below.
@@ -229,11 +228,11 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				IObject *object;
 				DerefType *deref; // for SYM_FUNC
 				Var *var;         // for SYM_VAR
-				LPTSTR marker;     // for SYM_STRING and SYM_OPERAND.
+				LPTSTR marker;     // for SYM_STRING
 			};
-			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64). It's used by SYM_FUNC (helps built-in functions), SYM_DYNAMIC, SYM_OPERAND, and perhaps other misc. purposes.
+			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).
 			{
-				LPTSTR buf;
+				LPTSTR buf; // Used by SYM_FUNC (helps built-in functions), SYM_DYNAMIC, and perhaps other misc. purposes.
 				size_t marker_length; // Used only with aResultToken. TODO: Move into separate ResultTokenType struct.
 			};
 		};  
