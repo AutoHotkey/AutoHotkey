@@ -7150,6 +7150,8 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		max_params = 4; // Leave min_params at 1.
 	}
 #endif
+	else if (!_tcsicmp(func_name, _T("Type")))
+		bif = BIF_Type;
 	else if (!_tcsicmp(func_name, _T("IsObject"))) // L31
 	{
 		bif = BIF_IsObject;

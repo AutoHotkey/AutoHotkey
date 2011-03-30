@@ -2805,6 +2805,8 @@ void BIF_IL_Add(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // L31: Also handles LTrim and RTrim.
 
+void BIF_Type(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+
 
 void BIF_IsObject(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);

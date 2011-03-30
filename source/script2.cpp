@@ -17,6 +17,7 @@ GNU General Public License for more details.
 #include "stdafx.h" // pre-compiled headers
 #include <olectl.h> // for OleLoadPicture()
 #include <winioctl.h> // For PREVENT_MEDIA_REMOVAL and CD lock/unlock.
+#include <typeinfo.h> // For typeid in BIF_Type.
 #include "qmath.h" // Used by Transform() [math.h incurs 2k larger code size just for ceil() & floor()]
 #include "mt19937ar-cok.h" // for sorting in random order
 #include "script.h"
@@ -17038,6 +17039,46 @@ void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 		// Out of memory.
 		aResultToken.marker = _T("");
 }
+
+
+
+void BIF_Type(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+// Returns the pure type of the given value.
+{
+	aResultToken.symbol = SYM_STRING;
+	if (aParam[0]->symbol == SYM_VAR)
+		aParam[0]->var->ToToken(*aParam[0]);
+	switch (aParam[0]->symbol)
+	{
+	case SYM_STRING:
+		aResultToken.marker = _T("String");
+		break;
+	case SYM_INTEGER:
+		aResultToken.marker = _T("Integer");
+		break;
+	case SYM_FLOAT:
+		aResultToken.marker = _T("Float");
+		break;
+	case SYM_OBJECT:
+	{
+		// This seems like the most future-proof and probably fastest method.
+		// Although the string returned by name() is implementation defined,
+		// for Microsoft Visual C++ it is the "human-readable name of the type".
+		LPCSTR name = typeid(*aParam[0]->object).name();
+		if (!strncmp(name, "class ", 6))
+			name += 6;
+		if (MultiByteToWideChar(CP_ACP, 0, name, -1, aResultToken.buf, MAX_NUMBER_SIZE))
+		{
+			aResultToken.marker = aResultToken.buf;
+			break;
+		}
+		// Otherwise, fall through:
+	}
+	default: // No other cases should be possible, but have a default anyway for maintainability.
+		aResultToken.marker = _T("");
+	}
+}
+
 
 
 
