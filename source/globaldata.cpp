@@ -478,7 +478,6 @@ Action g_act[] =
 	, {_T("SetControlDelay"), 1, 1, false, {1, 0}} // Delay in ms (numeric, negative allowed)
 	, {_T("SetBatchLines"), 1, 1, false, NULL} // Can be non-numeric, such as 15ms, or a number (to indicate line count).
 	, {_T("SetTitleMatchMode"), 1, 1, false, NULL} // Allowed values: 1, 2, slow, fast
-	, {_T("SetFormat"), 2, 2, false, NULL} // Float|Integer, FormatString (for float) or H|D (for int)
 	, {_T("FormatTime"), 1, 3, true, NULL} // OutputVar, YYYYMMDDHH24MISS, Format (format is last to avoid having to escape commas in it).
 
 	, {_T("Suspend"), 0, 1, false, NULL} // On/Off/Toggle/Permit/Blank (blank is the same as toggle)

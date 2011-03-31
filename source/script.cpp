@@ -5195,6 +5195,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				// However, that is no longer appropriate for ACT_ASSIGNEXPR (which was the main
 				// beneficiary) because an optimization further below would wrongly apply
 				// SetFormat to the assigning of a quoted/literal string like Var:="55".
+				// [UPDATE: SetFormat has been removed, but Var:="0055" and Var:="0x55" would
+				//  still have problems because the string would be reformatted as decimal.]
 				// Benchmarks show that performance of assigning quoted literal strings is only
 				// slightly slower when is_expression==true; also, the savings in code size and the
 				// fact that the translation made ListLines inaccurate (due to the omitted quotes)
@@ -5517,29 +5519,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
 		
-	case ACT_SETFORMAT:
-		if (aArgc < 1)
-			break;
-		if (!_tcsnicmp(new_raw_arg1, _T("Float"), 5))
-		{
-			if (aArgc > 1 && !line.ArgHasDeref(2))
-			{
-				if (!IsNumeric(new_raw_arg2, true, false, true, true) // v1.0.46.11: Allow impure numbers to support scientific notation; e.g. 0.6e or 0.6E.
-					|| _tcslen(new_raw_arg2) >= _countof(g->FormatFloat) - 2)
-					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-			}
-		}
-		else if (!_tcsnicmp(new_raw_arg1, _T("Integer"), 7))
-		{
-			if (aArgc > 1 && !line.ArgHasDeref(2) && ctoupper(*new_raw_arg2) != 'H' && ctoupper(*new_raw_arg2) != 'D')
-				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		}
-		else
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		// Size must be less than sizeof() minus 2 because need room to prepend the '%' and append
-		// the 'f' to make it a valid format specifier string:
-		break;
-
 	case ACT_DETECTHIDDENWINDOWS:
 	case ACT_DETECTHIDDENTEXT:
 	case ACT_SETSTORECAPSLOCKMODE:
@@ -8144,8 +8123,6 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (!_tcscmp(lower, _T("detecthiddenwindows"))) return BIV_DetectHiddenWindows;
 	if (!_tcscmp(lower, _T("detecthiddentext"))) return BIV_DetectHiddenText;
 	if (!_tcscmp(lower, _T("stringcasesense"))) return BIV_StringCaseSense;
-	if (!_tcscmp(lower, _T("formatinteger"))) return BIV_FormatInteger;
-	if (!_tcscmp(lower, _T("formatfloat"))) return BIV_FormatFloat;
 	if (!_tcscmp(lower, _T("keydelay"))) return BIV_KeyDelay;
 	if (!_tcscmp(lower, _T("windelay"))) return BIV_WinDelay;
 	if (!_tcscmp(lower, _T("controldelay"))) return BIV_ControlDelay;
@@ -13193,44 +13170,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		case FIND_SLOW: g.TitleFindFast = false; return OK;
 		}
 		return LineError(ERR_TITLEMATCHMODE ERR_ABORT, FAIL, ARG1);
-
-	case ACT_SETFORMAT:
-		// For now, it doesn't seem necessary to have runtime validation of the first parameter.
-		// Just ignore the command if it's not valid:
-		if (!_tcsnicmp(ARG1, _T("Float"), 5)) // "nicmp" vs. "icmp" so that Float and FloatFast are treated the same (loadtime validation already took notice of the Fast flag).
-		{
-			// -2 to allow room for the letter 'f' and the '%' that will be added:
-			if (ArgLength(2) >= _countof(g.FormatFloat) - 2) // A variable that resolved to something too long.
-				return OK; // Seems best not to bother with a runtime error for something so rare.
-			// Make sure the formatted string wouldn't exceed the buffer size:
-			__int64 width = ArgToInt64(2);
-			LPTSTR dot_pos = _tcschr(ARG2, '.');
-			__int64 precision = dot_pos ? ATOI64(dot_pos + 1) : 0;
-			if (width + precision + 2 > MAX_NUMBER_LENGTH) // +2 to allow room for decimal point itself and leading minus sign.
-				return OK; // Don't change it.
-			// Create as "%ARG2f".  Note that %f can handle doubles in MSVC++:
-			_stprintf(g.FormatFloat, _T("%%%s%s%s"), ARG2
-				, dot_pos ? _T("") : _T(".") // Add a dot if none was specified so that "0" is the same as "0.", which seems like the most user-friendly approach; it's also easier to document in the help file.
-				, IsNumeric(ARG2, true, true, true) ? _T("f") : _T("")); // If it's not pure numeric, assume the user already included the desired letter (e.g. SetFormat, Float, 0.6e).
-		}
-		else if (!_tcsnicmp(ARG1, _T("Integer"), 7)) // "nicmp" vs. "icmp" so that Integer and IntegerFast are treated the same (loadtime validation already took notice of the Fast flag).
-		{
-			switch(*ARG2)
-			{
-			case 'd':
-			case 'D':
-				g.FormatInt = 'D';
-				break;
-			case 'h':
-			case 'H':
-				g.FormatInt = (char) *ARG2;
-				break;
-			// Otherwise, since the first letter isn't recongized, do nothing since 99% of the time such a
-			// probably would be caught at load-time.
-			}
-		}
-		// Otherwise, ignore invalid type at runtime since 99% of the time it would be caught at load-time:
-		return OK;
 
 	case ACT_FORMATTIME:
 		return FormatTime(ARG2, ARG3);

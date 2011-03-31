@@ -6357,9 +6357,6 @@ ResultType GuiType::Submit(bool aHideIt)
 				// for multiple selections is left intact.
 				if (selection_number == -1)
 					selection_number = 0;
-				// Convert explicitly to decimal so that g->FormatIntAsHex is not obeyed.
-				// This is so that this result matches the decimal format tradition set by
-				// the "1" and "0" strings normally used for radios and checkboxes:
 				_itot(selection_number, temp, 10); // selection_number can be legitimately zero.
 				group_var->Assign(temp); // group_var should not be NULL since group_radios_with_var == 1
 			}

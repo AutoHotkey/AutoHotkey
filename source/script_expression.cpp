@@ -1376,13 +1376,6 @@ non_null_circuit_token:
 
 	ExprTokenType &result_token = *stack[0];  // For performance and convenience.  Even for multi-statement, the bottommost item on the stack is the final result so that things like var1:=1,var2:=2 work.
 
-	// Store the result of the expression in the deref buffer for the caller.  It is stored in the current
-	// format in effect via SetFormat because:
-	// 1) The := operator then doesn't have to convert to int/double then back to string to put the right format into effect.
-	// 2) It might add a little bit of flexibility in places parameters where floating point values are expected
-	//    (i.e. it allows a way to do automatic rounding), without giving up too much.  Changing floating point
-	//    precision from the default of 6 decimal places is rare anyway, so as long as this behavior is documented,
-	//    it seems okay for the moment.
 	if (output_var)
 	{
 		// v1.0.45: Take a shortcut, which in the case of SYM_STRING/OPERAND/VAR avoids one memcpy
@@ -1422,6 +1415,9 @@ non_null_circuit_token:
 		// Since above didn't return, the result is a string.  Continue on below to copy it into persistent memory.
 	}
 
+	//
+	// Store the result of the expression in the deref buffer for the caller.
+	//
 	result_to_return = aTarget; // Set default.
 	switch (result_token.symbol)
 	{
@@ -1435,7 +1431,7 @@ non_null_circuit_token:
 	case SYM_FLOAT:
 		// In case of float formats that are too long to be supported, use snprint() to restrict the length.
 		 // %f probably defaults to %0.6f.  %f can handle doubles in MSVC++.
-		aTarget += sntprintf(aTarget, MAX_NUMBER_SIZE, g->FormatFloat, result_token.value_double) + 1; // +1 because that's what callers want; i.e. the position after the terminator.
+		aTarget += sntprintf(aTarget, MAX_NUMBER_SIZE, FORMAT_FLOAT, result_token.value_double) + 1; // +1 because that's what callers want; i.e. the position after the terminator.
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
 	case SYM_STRING:
 	case SYM_VAR: // SYM_VAR is somewhat unusual at this late a stage.

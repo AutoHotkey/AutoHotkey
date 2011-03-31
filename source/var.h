@@ -196,7 +196,7 @@ private:
 			else if (var.mAttrib & VAR_ATTRIB_IS_DOUBLE)
 			{
 				// "%0.6f"; %f can handle doubles in MSVC++:
-				var.Assign(value_string, sntprintf(value_string, _countof(value_string), g->FormatFloat, var.mContentsDouble));
+				var.Assign(value_string, sntprintf(value_string, _countof(value_string), FORMAT_FLOAT, var.mContentsDouble));
 				var.mAttrib |= VAR_ATTRIB_IS_DOUBLE; // Re-enable the cache because Assign() disables it (since all other callers want that).
 			}
 			//else nothing to update, which shouldn't happen in this block unless there's a flaw or bug somewhere.

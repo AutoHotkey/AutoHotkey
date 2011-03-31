@@ -88,6 +88,7 @@ GNU General Public License for more details.
 	#define HIMETRIC_INCH 2540
 #endif
 
+#define FORMAT_FLOAT _T("%0.6f")
 
 #define IS_32BIT(signed_value_64) (signed_value_64 >= INT_MIN && signed_value_64 <= INT_MAX)
 #define GET_BIT(buf,n) (((buf) & (1 << (n))) >> (n))
@@ -319,7 +320,7 @@ enum enum_act {
 , ACT_INIREAD, ACT_INIWRITE, ACT_INIDELETE
 , ACT_REGREAD, ACT_REGWRITE, ACT_REGDELETE, ACT_OUTPUTDEBUG
 , ACT_SETKEYDELAY, ACT_SETMOUSEDELAY, ACT_SETWINDELAY, ACT_SETCONTROLDELAY, ACT_SETBATCHLINES
-, ACT_SETTITLEMATCHMODE, ACT_SETFORMAT, ACT_FORMATTIME
+, ACT_SETTITLEMATCHMODE, ACT_FORMATTIME
 , ACT_SUSPEND, ACT_PAUSE
 , ACT_STRINGCASESENSE, ACT_DETECTHIDDENWINDOWS, ACT_DETECTHIDDENTEXT, ACT_BLOCKINPUT
 , ACT_SETNUMLOCKSTATE, ACT_SETSCROLLLOCKSTATE, ACT_SETCAPSLOCKSTATE, ACT_SETSTORECAPSLOCKMODE
@@ -575,7 +576,6 @@ struct global_struct
 	int PressDurationPlay; // 
 	int MouseDelay;     // negative values may be used as special flags.
 	int MouseDelayPlay; //
-	TCHAR FormatFloat[32];
 	Func *CurrentFunc; // v1.0.46.16: The function whose body is currently being processed at load-time, or being run at runtime (if any).
 	Func *CurrentFuncGosub; // v1.0.48.02: Allows A_ThisFunc to work even when a function Gosubs an external subroutine.
 	Label *CurrentLabel; // The label that is currently awaiting its matching "return" (if any).
@@ -601,7 +601,6 @@ struct global_struct
 	UCHAR CoordMode; // Bitwise collection of flags.
 	UCHAR StringCaseSense; // On/Off/Locale
 	bool StoreCapslockMode;
-	char FormatInt;
 	bool MsgBoxTimedOut; // Doesn't require initialization.
 	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
 	bool ListLinesIsEnabled;
@@ -694,19 +693,8 @@ inline void global_init(global_struct &g)
 	g.CoordMode = 0;  // All the flags it contains are off by default.
 	g.StringCaseSense = SCS_INSENSITIVE;  // AutoIt2 default, and it does seem best.
 	g.StoreCapslockMode = true;  // AutoIt2 (and probably 3's) default, and it makes a lot of sense.
-	_tcscpy(g.FormatFloat, _T("%0.6f"));
-	g.FormatInt = 'D';
 	g.ListLinesIsEnabled = true;
 	g.Encoding = CP_ACP;
-	// For FormatFloat:
-	// I considered storing more than 6 digits to the right of the decimal point (which is the default
-	// for most Unices and MSVC++ it seems).  But going beyond that makes things a little weird for many
-	// numbers, due to the inherent imprecision of floating point storage.  For example, 83648.4 divided
-	// by 2 shows up as 41824.200000 with 6 digits, but might show up 41824.19999999999700000000 with
-	// 20 digits.  The extra zeros could be chopped off the end easily enough, but even so, going beyond
-	// 6 digits seems to do more harm than good for the avg. user, overall.  A default of 6 is used here
-	// in case other/future compilers have a different default (for backward compatibility, we want
-	// 6 to always be in effect as the default for future releases).
 }
 
 #ifdef UNICODE

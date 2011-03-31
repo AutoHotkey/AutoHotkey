@@ -195,16 +195,16 @@ public:
 
 	static void AllDestructAndExit(int exit_code);
 
-	#define HOTKEY_EL_BADLABEL           _T("1") // Set as strings so that SetFormat doesn't affect their appearance (for use with "If ErrorLevel in 5,6").
-	#define HOTKEY_EL_INVALID_KEYNAME    _T("2")
-	#define HOTKEY_EL_UNSUPPORTED_PREFIX _T("3")
-	#define HOTKEY_EL_ALTTAB             _T("4")
-	#define HOTKEY_EL_NOTEXIST           _T("5")
-	#define HOTKEY_EL_NOTEXISTVARIANT    _T("6")
-	#define HOTKEY_EL_WIN9X              _T("50")
-	#define HOTKEY_EL_NOREG              _T("51")
-	#define HOTKEY_EL_MAXCOUNT           _T("98") // 98 allows room for other ErrorLevels to be added in between.
-	#define HOTKEY_EL_MEM                _T("99")
+	#define HOTKEY_EL_BADLABEL           1 // OBSOLETE due to the removal of SetFormat: Set as strings so that SetFormat doesn't affect their appearance (for use with "If ErrorLevel in 5,6").
+	#define HOTKEY_EL_INVALID_KEYNAME    2
+	#define HOTKEY_EL_UNSUPPORTED_PREFIX 3
+	#define HOTKEY_EL_ALTTAB             4
+	#define HOTKEY_EL_NOTEXIST           5
+	#define HOTKEY_EL_NOTEXISTVARIANT    6
+	#define HOTKEY_EL_WIN9X              50
+	#define HOTKEY_EL_NOREG              51
+	#define HOTKEY_EL_MAXCOUNT           98 // 98 allows room for other ErrorLevels to be added in between.
+	#define HOTKEY_EL_MEM                99
 	static ResultType Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions, Label *aJumpToLabel);
 
 	static Hotkey *AddHotkey(Label *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel);

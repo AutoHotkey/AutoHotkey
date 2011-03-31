@@ -10161,27 +10161,6 @@ VarSizeType BIV_StringCaseSense(LPTSTR aBuf, LPTSTR aVarName)
 		: 6; // Room for On, Off, or Locale (in the estimation phase).
 }
 
-VarSizeType BIV_FormatInteger(LPTSTR aBuf, LPTSTR aVarName)
-{
-	if (aBuf)
-	{
-		*aBuf++ = g->FormatInt;
-		*aBuf = '\0';
-	}
-	return 1;
-}
-
-VarSizeType BIV_FormatFloat(LPTSTR aBuf, LPTSTR aVarName)
-{
-	if (!aBuf)
-		return (VarSizeType)_tcslen(g->FormatFloat);  // Include the extra chars since this is just an estimate.
-	LPTSTR str_with_leading_percent_omitted = g->FormatFloat + 1;
-	size_t length = _tcslen(str_with_leading_percent_omitted);
-	tcslcpy(aBuf, str_with_leading_percent_omitted
-		, length + !(length && str_with_leading_percent_omitted[length-1] == 'f')); // Omit the trailing character only if it's an 'f', not any other letter such as the 'e' in "%0.6e" (for backward compatibility).
-	return (VarSizeType)_tcslen(aBuf); // Must return exact length when aBuf isn't NULL.
-}
-
 VarSizeType BIV_KeyDelay(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_INTEGER_SIZE];
@@ -11453,7 +11432,7 @@ VarSizeType BIV_EventInfo(LPTSTR aBuf, LPTSTR aVarName)
 // We're returning the length of the var's contents, not the size.
 {
 	return aBuf
-		? (VarSizeType)_tcslen(Exp32or64(UTOA,UTOA64)(g->EventInfo, aBuf)) // Must return exact length when aBuf isn't NULL.
+		? (VarSizeType)_tcslen(UPTRTOA(g->EventInfo, aBuf)) // Must return exact length when aBuf isn't NULL.
 		: MAX_INTEGER_LENGTH;
 }
 
@@ -17267,7 +17246,7 @@ LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf)
 	case SYM_FLOAT:
 		if (aBuf)
 		{
-			sntprintf(aBuf, MAX_NUMBER_SIZE, g->FormatFloat, aToken.value_double);
+			sntprintf(aBuf, MAX_NUMBER_SIZE, FORMAT_FLOAT, aToken.value_double);
 			return aBuf;
 		}
 		//else continue on to return the default at the bottom.

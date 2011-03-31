@@ -1171,7 +1171,7 @@ int Debugger::WritePropertyXml(Object::FieldType &aField, const char *aName, CSt
 		}
 		else
 		{
-			sntprintf(number_buf, _countof(number_buf), g->FormatFloat, aField.n_double);
+			sntprintf(number_buf, _countof(number_buf), FORMAT_FLOAT, aField.n_double);
 			type = "float";
 		}
 		value = number_buf;
@@ -1290,7 +1290,7 @@ int Debugger::WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize)
 		}
 		else
 		{
-			sntprintf(number_buf, _countof(number_buf), g->FormatFloat, aField.n_double);
+			sntprintf(number_buf, _countof(number_buf), FORMAT_FLOAT, aField.n_double);
 			type = "float";
 		}
 		value = number_buf;

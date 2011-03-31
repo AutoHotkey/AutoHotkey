@@ -19,7 +19,6 @@ GNU General Public License for more details.
 
 #include "stdafx.h" // pre-compiled headers
 #include "defines.h"
-EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 
 #ifdef UNICODE
 #define tmemcpy			wmemcpy
@@ -445,85 +444,14 @@ inline double ATOF(LPCTSTR buf)
 	return IsHex(buf) ? (double)_tcstoi64(buf, NULL, 16) : _tstof(buf);
 }
 
-inline LPTSTR ITOA(int value, LPTSTR buf)
-{
-	if (g->FormatInt == 'D')
-	{
-		return _itot(value, buf, 10);
-	}
-	// g->FormatInt == 'h' or 'H'
-	LPTSTR our_buf_temp = buf;
-	// Negative hex numbers need special handling, otherwise something like zero minus one would create
-	// a huge 0xffffffffffffffff value, which would subsequently not be read back in correctly as
-	// a negative number (but UTOA() doesn't need this since there can't be negatives in that case).
-	if (value < 0)
-	{
-		*our_buf_temp++ = '-';
-		value = -value;
-	}
-	*our_buf_temp++ = '0';
-	*our_buf_temp++ = 'x';
-	_itot(value, our_buf_temp, 16);
-	// Must not return the result of the above because it's our_buf_temp and we want buf.
-	if (g->FormatInt == 'H') // uppercase
-		CharUpper(our_buf_temp);
-	return buf;
-}
-
-inline LPTSTR ITOA64(__int64 value, LPTSTR buf)
-{
-	if (g->FormatInt == 'D')
-	{
-		return _i64tot(value, buf, 10);
-	}
-	// g->FormatInt == 'h' or 'H'
-	LPTSTR our_buf_temp = buf;
-	if (value < 0)
-	{
-		*our_buf_temp++ = '-';
-		value = -value;
-	}
-	*our_buf_temp++ = '0';
-	*our_buf_temp++ = 'x';
-	_i64tot(value, our_buf_temp, 16);
-	// Must not return the result of the above because it's our_buf_temp and we want buf.
-	if (g->FormatInt == 'H') // uppercase
-		CharUpper(our_buf_temp);
-	return buf;
-}
-
-inline LPTSTR UTOA(unsigned long value, LPTSTR buf)
-{
-	if (g->FormatInt == 'D')
-	{
-		return _ultot(value, buf, 10);
-	}
-	// g->FormatInt == 'h' or 'H'
-	*buf = '0';
-	*(buf + 1) = 'x';
-	_ultot(value, buf + 2, 16);
-	// Must not return the result of the above because it's buf + 2 and we want buf.
-	if (g->FormatInt == 'H') // uppercase
-		CharUpper(buf + 2);
-	return buf;
-}
-
+#define ITOA(value, buf)	_itot(value, buf, 10)
+#define ITOA64(value, buf)	_i64tot(value, buf, 10)
+#define UTOA(value, buf)	_ultot(value, buf, 10)
+#define UTOA64(value, buf)	_ui64tot(value, buf, 10)
 #ifdef _WIN64
-inline LPTSTR UTOA64(unsigned __int64 value, LPTSTR buf) 
-{
-	if (g->FormatInt == 'D')
-	{
-		return _ui64tot(value, buf, 10);
-	}
-	// g->FormatInt == 'h' or 'H'
-	*buf = '0';
-	*(buf + 1) = 'x';
-	_ui64tot(value, buf + 2, 16);
-	// Must not return the result of the above because it's buf + 2 and we want buf.
-	if (g->FormatInt == 'H') // uppercase
-		CharUpper(buf + 2);
-	return buf;
-}
+#define UPTRTOA UTOA
+#else
+#define UPTRTOA UTOA64
 #endif
 
 //inline LPTSTR tcscatmove(LPTSTR aDst, LPCTSTR aSrc)
