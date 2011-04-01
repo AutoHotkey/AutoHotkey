@@ -228,7 +228,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 			{
 				IObject *object;
 				DerefType *deref; // for SYM_FUNC
-				Var *var;         // for SYM_VAR
+				Var *var;         // for SYM_VAR (and SYM_DYNAMIC when buf is NULL)
 				LPTSTR marker;     // for SYM_STRING
 			};
 			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).

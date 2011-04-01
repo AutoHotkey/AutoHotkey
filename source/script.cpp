@@ -4908,34 +4908,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				} // for each mandatory-numeric arg of this command, see if this arg matches its number.
 			} // this command has a list of mandatory numeric-args.
 
-			// To help runtime performance, the below changes args to non-expressions if they contain
-			// only a single numeric literal (or are entirely blank). At runtime, such args are expanded
-			// normally rather than having to run them through the expression evaluator. Exceptions:
-			//
-			//	a)	ACT_FOR requires an expression; it is incapable of accepting a non-expression.
-			//		Although we could treat things like "For x in 0" as load-time errors, it wouldn't
-			//		be consistent with "For x in var_containing_num" and the rarity mightn't be worth
-			//		the added code.
-			//
-			//	b)	ACT_RETURN handles non-expression literal integers correctly by pre-converting
-			//		and storing them in arg.postfix.  Literal floating-point numbers can't be handled
-			//		this way, so to return them correctly they must be passed through ExpandExpression().
-			//
-			if (this_new_arg.is_expression && aActionType != ACT_FOR)
-			{
-				switch (IsNumeric(this_new_arg.text, true, true, true))
-				{
-				case PURE_FLOAT:
-					if (aActionType == ACT_RETURN)
-						// Must remain an expression so that it retains its numeric status.
-						break;
-					// ACT_ASSIGNEXPR handles floating-point literals at run-time.  All other commands
-					// will probably treat this arg the same whether it is an expression or not.
-				case PURE_INTEGER:
-					// ACT_RETURN and ACT_ASSIGNEXPR have special handling, so this is okay even for them:
-					this_new_arg.is_expression = false;
-				}
-			}
+			if (!*this_new_arg.text) // Some later optimizations rely on this check.
+				this_new_arg.is_expression = false; // Might already be false.
 
 			if (this_new_arg.is_expression)
 			{
@@ -5186,94 +5160,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// processing at this stage.
 					*op_end = orig_char; // Undo the temporary termination.
 				} // expression pre-parsing loop.
-
-				// Now that the derefs have all been recognized above, simplify any special cases --
-				// such as single isolated derefs -- to enhance runtime performance.
-				//
-				// There used to be a section here that translated each expression that consisted
-				// solely of a quoted/literal string into a non-expression (except Post/SendMessage).
-				// However, that is no longer appropriate for ACT_ASSIGNEXPR (which was the main
-				// beneficiary) because an optimization further below would wrongly apply
-				// SetFormat to the assigning of a quoted/literal string like Var:="55".
-				// [UPDATE: SetFormat has been removed, but Var:="0055" and Var:="0x55" would
-				//  still have problems because the string would be reformatted as decimal.]
-				// Benchmarks show that performance of assigning quoted literal strings is only
-				// slightly slower when is_expression==true; also, the savings in code size and the
-				// fact that the translation made ListLines inaccurate (due to the omitted quotes)
-				// seem to support getting rid of that section.
-				//
-				// Make things like "Sleep Var" and "Var := X" into non-expressions.  At runtime,
-				// such args are expanded normally rather than having to run them through the
-				// expression evaluator.  A simple test script shows that this one change can
-				// double the runtime performance of certain commands such as EnvAdd:
-				// Below is somewhat obsolete but kept for reference:
-				// This policy is basically saying that expressions are allowed to evaluate to strings
-				// everywhere appropriate, but that at the moment the only appropriate place is x := y
-				// because all other expressions should resolve to a numeric value by virtue of the fact
-				// that they *are* numeric parameters.  ValidateName() serves to eliminate cases where
-				// a single deref is accompanied by literal numbers, strings, or operators, e.g.
-				// Var := X + 1 ... Var := Var2 "xyz" ... Var := -Var2
-				if (deref_count == 1 && Var::ValidateName(this_new_arg.text, false, DISPLAY_NO_ERROR)) // Single isolated deref.
-				{
-					// ACT_WHILE performs less than 4% faster as a non-expression in these cases, and keeping
-					// it as an expression avoids an extra check in a performance-sensitive spot of ExpandArgs
-					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).
-					//
-					// ACT_FOR must remain an expression for PerformLoopFor() to work correctly.
-					//
-					// ACT_RETURN must remain an expression if this is the False var, since otherwise it would
-					// be interpreted as the string "0", which is considered true.  Furthermore, a few other
-					// built-in vars such as True, A_Index and A_EventInfo can yield integers (but only if
-					// evaluated by ExpandExpression()).  Since this optimization doesn't seem to benefit
-					// built-in vars as much as it benefits normal vars (and it would be much rarer for a UDF
-					// to return a built-in var than a normal var), let all built-in vars remain expressions.
-					// Note that normal vars are always handled correctly by ACT_RETURN even as non-expressions.
-					//
-					if ((aActionType < ACT_FOR || aActionType > ACT_UNTIL)
-						&& (aActionType != ACT_RETURN || deref[0].var->Type() != VAR_BUILTIN))
-						this_new_arg.is_expression = false; // In addition to being an optimization, doing this might also be necessary for things like "Var := ClipboardAll" to work properly.
-					// But if aActionType is ACT_ASSIGNEXPR, it's left as ACT_ASSIGNEXPR vs. ACT_ASSIGN
-					// because ACT_ASSIGNEXPR probably performs better than ACT_ASSIGN when !is_expression.
-				}
-				else if (deref_count && !StrChrAny(this_new_arg.text, EXPR_OPERAND_TERMINATORS)) // No spaces, tabs, etc.
-				{
-					// Adjust if any of the following special cases apply:
-					// x := y  -> Mark as non-expression (after expression-parsing set up parsed derefs above)
-					//            so that the y deref will be only a single-deref to be directly stored in x.
-					//            This is done in case y contains a string.  Since an expression normally
-					//            evaluates to a number, without this workaround, x := y would be useless for
-					//            a simple assignment of a string.  This case is handled above.
-					// x := %y% -> Mark the right-side arg as an input variable so that it will be doubly
-					//             dereferenced, similar to StringTrimRight, Out, %y%, 0.  This seems best
-					//             because there would be little or no point to having it behave identically
-					//             to x := y.  It might even be confusing in light of the next case below.
-					// CASE #3:
-					// x := Literal%y%Literal%z%Literal -> Same as above.  This is done mostly to support
-					// retrieving array elements whose contents are *non-numeric* without having to use
-					// something like StringTrimRight.
-					
-					// Now we know it has at least one deref.  But if any operators or other characters disallowed
-					// in variables are present, it all three cases are disqualified and kept as expressions.
-					// This check is necessary for all three cases:
-
-					// No operators of any kind anywhere.  Not even +/- prefix, since those imply a numeric
-					// expression.  No chars illegal in var names except the percent signs themselves,
-					// e.g. *no* whitespace.
-					// Also, the first deref (indeed, all of them) should point to a percent sign, since
-					// there should not be any way for non-percent derefs to get mixed in with cases
-					// 2 or 3.
-					if (!deref[0].is_function && *deref[0].marker == g_DerefChar // This appears to be case #2 or #3.
-						&& (aActionType < ACT_FOR || aActionType > ACT_UNTIL)) // Nearly doubles the speed of "while %x%" and "while Array%i%" to leave WHILE as an expression.  But y:=%x% and y:=Array%i% are about the same speed either way. Additionally, PerformLoopFor() requires its only expression arg to remain an expression.
-					{
-						// The comment below is probably obsolete -- and perhaps so is this entire optimization
-						// because expressions are faster now.  But in case it's necessary for anything related
-						// to backward compatibility, it's kept (it may also reduce memory utilization a little
-						// because it avoids making simple things into expressions, which require extra memory).
-						// OLD: Set it up so that x:=Array%i% behaves the same as StringTrimRight, Out, Array%i%, 0.
-						this_new_arg.is_expression = false;
-						this_new_arg.type = ARG_TYPE_INPUT_VAR;
-					}
-				}
 			} // if (this_new_arg.is_expression)
 			else // this arg does not contain an expression.
 				if (!ParseDerefs(this_new_arg.text, this_aArgMap, deref, deref_count))
@@ -5335,14 +5221,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// Fix for v1.0.35.02:
 	// THESE FIRST FEW CASES MUST EXIST IN BOTH SELF-CONTAINED AND NORMAL VERSION since they alter the
 	// attributes/members of some types of lines:
-	case ACT_RETURN:
-		#ifndef AUTOHOTKEYSC
-		if (aArgc > 0 && !g->CurrentFunc)
-			return ScriptError(_T("Return's parameter should be blank except inside a function."));
-		#endif
-		// Otherwise, FALL THROUGH TO BELOW:
 	//case ACT_ASSIGN: // The optimization below doesn't seem to make sense for `=, since as of v2 it's explicitly "literal assignment".
-	case ACT_ASSIGNEXPR:
+	//case ACT_ASSIGNEXPR: // This is now done a different way, to support non-expression floats and strings.
 	case ACT_IFBETWEEN:
 	case ACT_IFNOTBETWEEN:
 		int arg_index;
@@ -5518,7 +5398,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		break;
 		
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
-		
+	
+	case ACT_RETURN:
+		if (aArgc > 0 && !g->CurrentFunc)
+			return ScriptError(_T("Return's parameter should be blank except inside a function."));
+		break;
+
 	case ACT_DETECTHIDDENWINDOWS:
 	case ACT_DETECTHIDDENTEXT:
 	case ACT_SETSTORECAPSLOCKMODE:
@@ -8367,8 +8252,6 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 					return line->PreparseError(ERR_NONEXISTENT_FUNCTION, deref->marker);
 #endif
 				}
-				// L31: Parameter counting and validation was previously done in this section,
-				//		but is now handled by ExpressionToPostfix.
 			} // for each deref of this arg
 			} // if (this_arg.deref)
 			if (!line->ExpressionToPostfix(this_arg)) // At this stage, this_arg.is_expression is known to be true. Doing this here, after the script has been loaded, might improve the compactness/adjacent-ness of the compiled expressions in memory, which might improve performance due to CPU caching.
@@ -10173,6 +10056,83 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 	} // End of loop that builds postfix array from the infix array.
 end_of_infix_to_postfix:
 
+	if (!postfix_count) // The code below relies on this check.  This can't be an empty (omitted) expression because an earlier check would've turned it into a non-expression.
+		return LineError(_T("Invalid expression."), FAIL, aArg.text);
+	
+	// The following enables ExpandExpression() to be skipped in common cases for ACT_ASSIGNEXPR
+	// and ACT_RETURN.  A similar optimization used to be done for simple literal integers by
+	// storing an __int64* in arg.postfix, but this new approach allows floating-point numbers
+	// and literal strings to be optimized, and the pure numeric status of floats to be retained.
+	// Unlike the old method, numeric literals are reformatted to look exactly like they would if
+	// this remained an expression; for example, MsgBox % 1.0 shows "1.000000" instead of "1.0".
+	ExprTokenType &only_token = *postfix[0];
+	SymbolType only_symbol = only_token.symbol;
+	if (   postfix_count == 1 && IS_OPERAND(only_symbol) // This expression is a lone operand, like (1) or "string".
+		&& (mActionType < ACT_FOR || mActionType > ACT_UNTIL) // It's not FOR, WHILE or UNTIL, which require actual expressions.
+		&& (only_symbol != SYM_STRING || mActionType != ACT_SENDMESSAGE && mActionType != ACT_POSTMESSAGE)   ) // It's not something like SendMessage WM_SETTEXT,,"New text" (which requires the leading quote mark to be present).
+	{
+		if (only_symbol == SYM_DYNAMIC) // This needs some extra checks to ensure correct behaviour.
+		{
+			if (*aArg.text != '(' && *aArg.text != '+')
+			{
+				if (SYM_DYNAMIC_IS_DOUBLE_DEREF(only_token))
+				{
+					aArg.type = ARG_TYPE_INPUT_VAR;
+					aArg.is_expression = false;
+					aArg.postfix = NULL;
+					return OK;
+				}
+				else if (only_token.var->mBIV != BIV_LoopIndex && only_token.var->mBIV != BIV_EventInfo)
+				{
+					aArg.is_expression = false;
+					aArg.postfix = NULL;
+					return OK;
+				}
+				// Otherwise, it's A_Index or A_EventInfo, which must pass through ExpandExpression() to
+				// yield a pure integer.  Correctness seems more important than performance in this case,
+				// especially if A_EventInfo can return "0"; i.e. because TokenToBOOL() would see it as TRUE.
+				// Performance might even be better this way because string -> number conversion is avoided.
+				// Note that a double-deref which resolves to the var A_Index or A_EventInfo will still yield
+				// a string, but that seems too rare to worry about.  Furthermore, it might be resolved in
+				// a future version by allowing built-in vars to return any type of value.
+			}
+			// Otherwise, it's something like (%var%) or +A_Index, which must remain an expression.
+		}
+		else
+		{
+			switch (only_symbol)
+			{
+			case SYM_INTEGER:
+			case SYM_FLOAT:
+				// Convert this numeric literal back into a string to ensure the format is consistent.
+				// This also ensures parentheses are not present in the output, for cases like MsgBox % (1.0).
+				if (  !(aArg.text = SimpleHeap::Malloc(TokenToString(only_token, number_buf)))  )
+					return LineError(ERR_OUTOFMEM);
+				break;
+			case SYM_VAR: // SYM_VAR can only be VAR_NORMAL in this case.
+				// Ensure that ExpandArgs() ignores any text before or after the deref, as in (var).
+				// This isn't needed for ACT_ASSIGNEXPR, which does output_var->Assign(*postfix).
+				aArg.deref->marker = aArg.text;
+				aArg.deref->length = _tcslen(aArg.text);
+				break;
+			case SYM_STRING:
+				// If this arg will be expanded normally, it needs a pointer to the final string,
+				// without leading/trailing quotation marks and with "" resolved to ".  This doesn't
+				// apply to ACT_ASSIGNEXPR or ACT_RETURN, since they use the string token in postfix;
+				// so avoid doing this for them since it would make ListLines look wrong.  Any other
+				// commands which ordinarily expect expressions might still look wrong in ListLines,
+				// but that seems too rare and inconsequential to worry about.
+				if (  !(mActionType == ACT_ASSIGNEXPR || mActionType == ACT_RETURN)  )
+					aArg.text = only_token.marker;
+				break;
+			}
+			aArg.is_expression = false;
+			if (mActionType != ACT_ASSIGNEXPR && mActionType != ACT_RETURN)
+				return OK;
+			// Otherwise, continue on below to copy the postfix token into persistent memory.
+		}
+	}
+
 	// Create a new postfix array and attach it to this arg of this line.
 	// SAVINGS/COMPRESSION: 4 bytes per struct could be saved by making symbol into a WORD and circuit_token
 	// into a WORD/index/offset.  This was tried once and it didn't affect performance or code size very much,
@@ -10376,7 +10336,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		// line (e.g. control stmts such as IF and LOOP).  Also, don't expand
 		// ACT_ASSIGN because a more efficient way of dereferencing may be possible
 		// in that case:
-		if (line->mActionType != ACT_ASSIGN && line->mActionType != ACT_WHILE)
+		if (line->mActionType > ACT_ASSIGNEXPR && line->mActionType != ACT_WHILE)
 		{
 			result = line->ExpandArgs(aResultToken);
 			// As of v1.0.31, ExpandArgs() will also return EARLY_EXIT if a function call inside one of this
@@ -10629,7 +10589,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			// which is desirable *even* if aResultToken is NULL (i.e. the caller will be
 			// ignoring the return value) in case the return's expression calls a function
 			// which has side-effects.  For example, "return LogThisEvent()".
-			if (aResultToken && aResultToken->symbol == SYM_STRING) // Caller wants the return value, but no result has been set since caller set this default. (ExpandExpression does not use aResultToken for string values.)
+			if (aResultToken && aResultToken->symbol == SYM_STRING && line->mArgc) // Caller wants the return value, but no result has been set since caller set this default. (ExpandExpression does not use aResultToken for string values.)
 			{
 				if (ARGVAR1 && ARGVAR1->Type() == VAR_NORMAL) // Something like "return var".
 				{
@@ -10639,13 +10599,12 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				}
 				else // Not a var, or not one that supports ToToken().
 				{
-					if (*ARG1 && !line->mArg[0].is_expression && line->mArg[0].postfix) // *ARG1 is checked first to rule out many common cases and ensure this line has an arg.
+					if (line->mArg[0].postfix && !line->mArg[0].is_expression) // Lone numeric or string literal.
 					{
-						// This arg is a literal integer which was converted into a non-expression.
-						aResultToken->symbol = SYM_INTEGER;
-						aResultToken->value_int64 = *(__int64 *)line->mArg[0].postfix;
+						aResultToken->symbol = line->mArg[0].postfix->symbol;
+						aResultToken->value_int64 = line->mArg[0].postfix->value_int64; // Union copy.
 					}
-					else
+					else // An expression which returned a string, or a lone dynamic/built-in var deref.
 					{
 						aResultToken->symbol = SYM_STRING;
 						aResultToken->marker = ARG1; // This sets it to blank if this return lacks an arg.
@@ -12345,24 +12304,40 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return PerformAssign();  // It will report any errors for us.
 
 	case ACT_ASSIGNEXPR:
+		// Note: This line's args have not yet been dereferenced in this case (i.e. ExpandArgs() hasn't been called).
 		// Currently, ACT_ASSIGNEXPR can occur even when mArg[1].is_expression==false, such as things like var:=5
 		// and var:=Array%i%.  Search on "is_expression = " to find such cases in the script-loading/parsing
 		// routines.
 		if (mArgc > 1)
 		{
-			if (mArg[1].is_expression) // v1.0.45: ExpandExpression() already took care of it for us (for performance reasons).
-				return OK;
+			if (mArg[1].is_expression)
+				return ExpandArgs(); // This will also take care of the assignment (for performance).
 
-			// Above must be checked prior to below since each uses "postfix" in a different way.
-			if (mArg[1].postfix) // There is a cached binary integer.
-				return output_var->Assign(*(__int64 *)mArg[1].postfix);
+			if (mArg[1].postfix)
+			{
+				// This is a single-operand expression which was turned into a non-expression.  Bypassing
+				// ExpandArgs() gives a slight performance boost in this case since the second arg never
+				// needs to be copied into the deref buffer.  For more details about this optimization,
+				// search this file for "only_token".  Examples of assignments this covers:
+				//		x := 123
+				//		x := 1.0
+				//		x := "quoted literal string"
+				//		x := normal_var
+				if (  !(output_var = ResolveVarOfArg(0))  )
+					return FAIL;
+				return output_var->Assign(*mArg[1].postfix);
+			}
+
+			if (!ExpandArgs()) // This also resolves OUTPUT_VAR.
+				return FAIL;
+			
+			output_var = OUTPUT_VAR;
 
 			// sArgVar is used to enhance performance, which would otherwise be poor for dynamic variables
 			// such as Var:=Array%i% (which is an expression and handled by ACT_ASSIGNEXPR rather than
 			// ACT_ASSIGN) because Array%i% would have to be resolved twice (once here and once
 			// previously by ExpandArgs()) just to find out if it's IsBinaryClip()).
-			// If ARG2 isn't blank, this ACT_ASSIGNEXPR is assigning an environment variable or g_ErrorLevel
-			// (e.g. var:=Username); so can't apply this optimization.
+			// ARG2 is non-blank for built-in vars, which this optimization can't be applied to.
 			if (ARGVARRAW2 && !*ARG2) // See above.  Also, RAW is safe due to the above check of mArgc > 1.
 			{
 				switch(ARGVARRAW2->Type())
@@ -12382,17 +12357,16 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 					return output_var->Assign(*ARGVARRAW2); // Var-to-var copy supports ARGVARRAW2 being binary clipboard, and also exploits caching of binary numbers, for performance.
 				case VAR_CLIPBOARDALL:
 					return output_var->AssignClipboardAll();
-				//Otherwise it's VAR_CLIPBOARD or a read-only variable; continue on to do assign the normal way.
+				// Otherwise it's VAR_CLIPBOARD or a read-only variable; continue on to do assign the normal way.
 				}
 			}
+			// Since above didn't return, it's probably x:=BUILT_IN_VAR.
+			return output_var->Assign(ARG2);
 		}
-		// Since above didn't return, the value being assigned isn't an expression, a literal integer or
-		// a single variable deref.  Probably the only other thing it can be is a literal floating-point
-		// number, which we want to assign as such, not as a numeric string:
-		if (IsNumeric(ARG2, true, false, true) == PURE_FLOAT)
-			return output_var->Assign(ATOF(ARG2));
-		// Otherwise, it could be nothing at all (something like "x := ") which is tolerated for now.
-		return output_var->Assign(ARG2);
+		// Otherwise it's x:= (which seems invalid, but for now it's supported).
+		if (  !(output_var = ResolveVarOfArg(0))  )
+			return FAIL;
+		return output_var->Assign();
 
 	case ACT_EXPRESSION:
 		// Nothing needs to be done because the expression in ARG1 (which is the only arg) has already

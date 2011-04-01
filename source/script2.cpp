@@ -6444,10 +6444,6 @@ ResultType Line::PerformAssign()
 	// Now output_var.Type() must be clipboard or normal because otherwise load-time validation (or
 	// ResolveVarOfArg() in GetExpandedArgSize, if it's dynamic) would have prevented us from getting this far.
 
-	// Above must be checked prior to below since each uses "postfix" in a different way.
-	if (mArgc > 1 && mArg[1].postfix) // There is a cached binary integer. is_expression is known to be false for ACT_ASSIGN, so no need to check it (since expression's use of postfix takes precedence over binary integer).
-		return output_var.Assign(*(__int64 *)mArg[1].postfix);
-
 	ArgStruct *arg2_with_at_least_one_deref;
 	Var *arg_var[MAX_ARGS];
 
