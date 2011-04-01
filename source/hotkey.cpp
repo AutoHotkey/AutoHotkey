@@ -1620,7 +1620,12 @@ ResultType Hotkey::TextInterpret(LPTSTR aName, Hotkey *aThisHotkey, bool aUseErr
 	// Even though modifiers on keys already modified by a mModifierVK are not supported, call
 	// TextToModifiers() anyway to use its output (for consistency).  The modifiers it sets
 	// are currently ignored because the mModifierVK takes precedence.
-	return TextToKey(TextToModifiers(term2, aThisHotkey), aName, false, aThisHotkey, aUseErrorLevel);
+	// UPDATE: Treat any modifier other than '~' as an error, since otherwise users expect
+	// hotkeys like "' & +e::Send È" to work.
+	//term2 = TextToModifiers(term2, aThisHotkey);
+	if (*term2 == '~')
+		++term2; // Some other stage handles this modifier, so just ignore it here.
+	return TextToKey(term2, aName, false, aThisHotkey, aUseErrorLevel);
 }
 
 

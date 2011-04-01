@@ -249,26 +249,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 						this_token.symbol = SYM_INTEGER;
 						goto push_this_token;
 					}
-					if (this_token.var->mBIV == BIV_True_False) // v1.0.48.02: True/False often used with function calls, so seems worthwhile for performance.
-					{
-						this_token.value_int64 = (this_token.var->mName[4] == '\0'); // True's 5th character is the string terminator, unlike Fals[e].
-						this_token.symbol = SYM_INTEGER;
-						goto push_this_token;
-					}
-#ifdef UNICODE
-					if (this_token.var->mBIV == BIV_IsUnicode) // fincs: A_IsUnicode was added to speed up ANSI/Unicode compatible code.
-					{
-						this_token.value_int64 = 1;
-						this_token.symbol = SYM_INTEGER;
-						goto push_this_token;
-					}
-#endif
-					if (this_token.var->mBIV == BIV_PtrSize) // fincs: A_PtrSize was added to speed up 32bit/64bit compatible code.
-					{
-						this_token.value_int64 = sizeof(void*);
-						this_token.symbol = SYM_INTEGER;
-						goto push_this_token;
-					}
 					if (this_token.var->mBIV == BIV_EventInfo) // v1.0.48.02: A_EventInfo is used often enough in performance-sensitive numeric contexts to seem worth special treatment like A_Index; e.g. LV_GetText(RowText, A_EventInfo) or RegisterCallback()'s A_EventInfo.
 					{
 						this_token.value_int64 = g->EventInfo;
@@ -290,6 +270,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					// A_LastError: Seems too rare to justify the code size and loss of performance here.
 					// A_Msec: Would help but it's probably rarely used; probably has poor granularity, not likely to be better than A_TickCount.
 					// A_TimeIdle/Physical: These are seldom performance-critical.
+					//
+					// True, False, A_IsUnicode and A_PtrSize are handled in ExpressionToPostfix().
+					// Since their values never change at run-time, they are replaced at load-time
+					// with the appropriate SYM_INTEGER value.
+					//
 					break; // case VAR_BUILTIN
   				}
 				// Otherwise, it's a built-in variable.
