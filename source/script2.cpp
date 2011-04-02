@@ -15219,7 +15219,9 @@ void BIF_WinExistActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 	aResultToken.marker = aResultToken.buf; // If necessary, this result will be moved to a persistent memory location by our caller.
 	aResultToken.marker[0] = '0';
 	aResultToken.marker[1] = 'x';
-	_ultot((UINT)(size_t)found_hwnd, aResultToken.marker + 2, 16); // See below.
+	Exp32or64(_ultot,_ui64tot)((size_t)found_hwnd, aResultToken.marker + 2, 16); // See below.
+	// Use _ultot for performance on 32-bit systems and _ui64tot on 64-bit systems in case it's
+	// possible for HWNDs to have non-zero upper 32-bits.  Comments below are mostly obsolete:
 	// Fix for v1.0.48: Any HWND or pointer that can be greater than 0x7FFFFFFF must be cast to
 	// something like (unsigned __int64)(size_t) rather than directly to (unsigned __int64). Otherwise
 	// the high-order DWORD will wind up containing FFFFFFFF.  But since everything is 32-bit now, HWNDs
