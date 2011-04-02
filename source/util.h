@@ -449,9 +449,9 @@ inline double ATOF(LPCTSTR buf)
 #define UTOA(value, buf)	_ultot(value, buf, 10)
 #define UTOA64(value, buf)	_ui64tot(value, buf, 10)
 #ifdef _WIN64
-#define UPTRTOA UTOA
-#else
 #define UPTRTOA UTOA64
+#else
+#define UPTRTOA UTOA
 #endif
 
 //inline LPTSTR tcscatmove(LPTSTR aDst, LPCTSTR aSrc)

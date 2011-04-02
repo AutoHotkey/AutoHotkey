@@ -10114,7 +10114,7 @@ end_of_infix_to_postfix:
 				// Ensure that ExpandArgs() ignores any text before or after the deref, as in (var).
 				// This isn't needed for ACT_ASSIGNEXPR, which does output_var->Assign(*postfix).
 				aArg.deref->marker = aArg.text;
-				aArg.deref->length = _tcslen(aArg.text);
+				aArg.deref->length = aArg.length;
 				break;
 			case SYM_STRING:
 				// If this arg will be expanded normally, it needs a pointer to the final string,
