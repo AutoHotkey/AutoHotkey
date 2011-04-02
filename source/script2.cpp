@@ -2960,17 +2960,12 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 		|| !(control_window = *sArgDeref[3] ? ControlExist(target_window, sArgDeref[3]) : target_window)   ) // Relies on short-circuit boolean order.
 		return g_ErrorLevel->Assign(aUseSend ? _T("FAIL") : ERRORLEVEL_ERROR); // Need a special value to distinguish this from numeric reply-values.
 
-	// UPDATE: Note that ATOU(), in both past and current versions, supports negative numbers too.
-	// For example, ATOU("-1") has always produced 0xFFFFFFFF.
-	// Use ATOU() to support unsigned (i.e. UINT, LPARAM, and WPARAM are all 32-bit unsigned values).
-	// ATOU() also supports hex strings in the script, such as 0xFF, which is why it's commonly
-	// used in functions such as this.
 	// v1.0.40.05: Support the passing of a literal (quoted) string by checking whether the
 	// original/raw arg's first character is '"'.  The avoids the need to put the string into a
 	// variable and then pass something like &MyVar.
 	UINT msg = ArgToUInt(1);
-	WPARAM wparam = (mArgc > 1 && mArg[1].text[0] == '"') ? (WPARAM)sArgDeref[1] : ArgToUInt(2);
-	LPARAM lparam = (mArgc > 2 && mArg[2].text[0] == '"') ? (LPARAM)sArgDeref[2] : ArgToUInt(3);
+	WPARAM wparam = (mArgc > 1 && mArg[1].text[0] == '"') ? (WPARAM)sArgDeref[1] : (WPARAM)ArgToInt64(2);
+	LPARAM lparam = (mArgc > 2 && mArg[2].text[0] == '"') ? (LPARAM)sArgDeref[2] : (LPARAM)ArgToInt64(3);
 	// Timeout increased from 2000 to 5000 in v1.0.27:
 	// jackieku: specify timeout by the parameter.
 	UINT timeout = mArgc > 8 ? ArgToUInt(9) : 5000;
