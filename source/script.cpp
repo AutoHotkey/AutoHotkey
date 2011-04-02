@@ -1434,7 +1434,8 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 			if (next_buf_length && next_buf_length != -1 // Prevents infinite loop when file ends with an unclosed "/*" section.  Compare directly to -1 since length is unsigned.
 				&& !in_continuation_section) // Multi-line comments can't be used in continuation sections. This line fixes '*/' being discarded in continuation sections (broken by L54).
 			{
-				if (!_tcsncmp(next_buf, _T("*/"), 2)) // Check this even if !in_comment_section so it can be ignored (for convenience) and not treated as a line-continuation operator.
+				if (!_tcsncmp(next_buf, _T("*/"), 2) // Check this even if !in_comment_section so it can be ignored (for convenience) and not treated as a line-continuation operator.
+					&& (in_comment_section || next_buf[2] != ':' || next_buf[3] != ':')) // ...but support */:: as a hotkey.
 				{
 					in_comment_section = false;
 					next_buf_length -= 2; // Adjust for removal of /* from the beginning of the string.

@@ -30,19 +30,11 @@ ResultType Var::AssignHWND(HWND aWnd)
 	// and thus UpdateBinaryInt64() isn't called here.
 	// Older comment: Always assign as hex for better compatibility with Spy++ and other apps that
 	// report window handles.
-	//
-	// Until there is a 64-bit version, the following is no longer done due to the reasons commented
-	// at the bottom of BIF_WinExistActive():
-	// Convert to unsigned 64-bit to support for 64-bit pointers.  Since most script operations --
-	// such as addition and comparison -- read strings in as signed 64-bit, it is documented that
-	// math and other numerical operations should never be performed on these while they exist
-	// as strings in script variables:
-	//#define ASSIGN_HWND_TO_VAR(var, hwnd) var->Assign((unsigned __int64)hwnd)
 	TCHAR buf[MAX_INTEGER_SIZE];
 	buf[0] = '0';
 	buf[1] = 'x';
-	_ultot((UINT)(size_t)aWnd, buf + 2, 16); // Type-casting: See comments in BIF_WinExistActive().
-	// OLD method (fixed to include (size_t)): _ui64toa((unsigned __int64)(size_t)aWnd, buf + 2, 16);
+	Exp32or64(_ultot,_ui64tot)((size_t)aWnd, buf + 2, 16);
+	// If ever decide to assign a pure integer, keep in mind the type-casting comments in BIF_WinExistActive().
 	return Assign(buf);
 }
 

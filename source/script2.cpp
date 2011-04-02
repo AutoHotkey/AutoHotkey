@@ -2761,17 +2761,12 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 		|| !(control_window = *sArgDeref[3] ? ControlExist(target_window, sArgDeref[3]) : target_window)   ) // Relies on short-circuit boolean order.
 		return aUseSend ? g_ErrorLevel->Assign(_T("FAIL")) : g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Need a special value to distinguish this from numeric reply-values.
 
-	// UPDATE: Note that ATOU(), in both past and current versions, supports negative numbers too.
-	// For example, ATOU("-1") has always produced 0xFFFFFFFF.
-	// Use ATOU() to support unsigned (i.e. UINT, LPARAM, and WPARAM are all 32-bit unsigned values).
-	// ATOU() also supports hex strings in the script, such as 0xFF, which is why it's commonly
-	// used in functions such as this.
 	// v1.0.40.05: Support the passing of a literal (quoted) string by checking whether the
 	// original/raw arg's first character is '"'.  The avoids the need to put the string into a
 	// variable and then pass something like &MyVar.
 	UINT msg = ArgToUInt(1);
-	WPARAM wparam = (mArgc > 1 && mArg[1].text[0] == '"') ? (WPARAM)sArgDeref[1] : ArgToUInt(2);
-	LPARAM lparam = (mArgc > 2 && mArg[2].text[0] == '"') ? (LPARAM)sArgDeref[2] : ArgToUInt(3);
+	WPARAM wparam = (mArgc > 1 && mArg[1].text[0] == '"') ? (WPARAM)sArgDeref[1] : (WPARAM)ArgToInt64(2);
+	LPARAM lparam = (mArgc > 2 && mArg[2].text[0] == '"') ? (LPARAM)sArgDeref[2] : (LPARAM)ArgToInt64(3);
 	// Timeout increased from 2000 to 5000 in v1.0.27:
 	// jackieku: specify timeout by the parameter.
 	UINT timeout = mArgc > 8 ? ArgToUInt(9) : 5000;
@@ -14714,7 +14709,9 @@ void BIF_WinExistActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 	aResultToken.marker = aResultToken.buf; // If necessary, this result will be moved to a persistent memory location by our caller.
 	aResultToken.marker[0] = '0';
 	aResultToken.marker[1] = 'x';
-	_ultot((UINT)(size_t)found_hwnd, aResultToken.marker + 2, 16); // See below.
+	Exp32or64(_ultot,_ui64tot)((size_t)found_hwnd, aResultToken.marker + 2, 16); // See below.
+	// Use _ultot for performance on 32-bit systems and _ui64tot on 64-bit systems in case it's
+	// possible for HWNDs to have non-zero upper 32-bits.  Comments below are mostly obsolete:
 	// Fix for v1.0.48: Any HWND or pointer that can be greater than 0x7FFFFFFF must be cast to
 	// something like (unsigned __int64)(size_t) rather than directly to (unsigned __int64). Otherwise
 	// the high-order DWORD will wind up containing FFFFFFFF.  But since everything is 32-bit now, HWNDs
