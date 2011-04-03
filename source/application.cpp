@@ -224,14 +224,12 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	bool *pgui_label_is_running, event_is_control_generated;
 	Label *gui_label;
 	HDROP hdrop_to_free;
-	DWORD tick_before, tick_after;
 	LRESULT msg_reply;
 	BOOL peek_result;
 	MSG msg;
 
 	for (;;) // Main event loop.
 	{
-		tick_before = GetTickCount();
 		if (aSleepDuration > 0 && !empty_the_queue_via_peek && !g_DeferMessagesForUnderlyingPump) // g_Defer: Requires a series of Peeks to handle non-contingous ranges, which is why GetMessage() can't be used.
 		{
 			// The following comment is mostly obsolete as of v1.0.39 (which introduces a thread
@@ -248,14 +246,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			if (GetMessage(&msg, NULL, 0, MSG_FILTER_MAX) == -1) // -1 is an error, 0 means WM_QUIT
 				continue; // Error probably happens only when bad parameters were passed to GetMessage().
 			//else let any WM_QUIT be handled below.
-			// The below was added for v1.0.20 to solve the following issue: If BatchLines is 10ms
-			// (its default) and there are one or more 10ms script-timers active, those timers would
-			// actually only run about every 20ms.  In addition to solving that problem, the below
-			// might also improve reponsiveness of hotkeys, menus, buttons, etc. when the CPU is
-			// under heavy load:
-			tick_after = GetTickCount();
-			if (tick_after - tick_before > 3)  // 3 is somewhat arbitrary, just want to make sure it rested for a meaningful amount of time.
-				g_script.mLastScriptRest = tick_after;
 		}
 		else // aSleepDuration < 1 || empty_the_queue_via_peek || g_DeferMessagesForUnderlyingPump
 		{
@@ -330,15 +320,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				peek_result = PeekMessage(&msg, NULL, 0, MSG_FILTER_MAX, PM_REMOVE);
 			if (!peek_result) // No more messages
 			{
-				// Since the Peek() didn't find any messages, our timeslice may have just been
-				// yielded if the CPU is under heavy load (update: this yielding effect is now diffcult
-				// to reproduce, so might be a thing of past service packs).  If so, it seems best to count
-				// that as a "rest" so that 10ms script-timers will run closer to the desired frequency
-				// (see above comment for more details).
-				// These next few lines exact match the ones above, so keep them in sync:
-				tick_after = GetTickCount();
-				if (tick_after - tick_before > 3)
-					g_script.mLastScriptRest = tick_after;
 				// UPDATE: The section marked "OLD" below is apparently not quite true: although Peek() has been
 				// caught yielding our timeslice, it's now difficult to reproduce.  Perhaps it doesn't consistently
 				// yield (maybe it depends on the relative priority of competing processes) and even when/if it
@@ -974,10 +955,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			// SET_MAIN_TIMER is needed in two places further below (e.g. RETURN_FROM_MSGSLEEP).
 			// OLDER COMMENTS:
 			// Always kill the main timer, for performance reasons and for simplicity of design,
-			// prior to embarking on new subroutine whose duration may be long (e.g. if BatchLines
-			// is very high or infinite, the called subroutine may not return to us for seconds,
-			// minutes, or more; during which time we don't want the timer running because it will
-			// only fill up the queue with WM_TIMER messages and thus hurt performance).
+			// prior to embarking on new subroutine whose duration may be long (e.g. the called
+			// subroutine may not return to us for seconds, minutes, or more; during which time
+			// we don't want the timer running because it will only fill up the queue with
+			// WM_TIMER messages and thus hurt performance).
 			// UPDATE: But don't kill it if it should be always-on to support the existence of
 			// at least one enabled timed subroutine or joystick hotkey:
 			//if (!g_script.mTimerEnabledCount && !Hotkey::sJoyHotkeyCount)
@@ -1016,13 +997,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			global_struct &g = *::g; // ONLY AFTER above is it safe to "lock in". Reduces code size a bit (31 bytes currently) and may improve performance.  Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
 
 			// Do this nearly last, right before launching the thread:
-			// It seems best to reset mLinesExecutedThisCycle unconditionally (now done by InitNewThread),
-			// because the user has pressed a hotkey or selected a custom menu item, so would expect
-			// maximum responsiveness (e.g. in a game where split second timing can matter) rather than
-			// the risk that a "rest" will be done immediately by ExecUntil() just because
-			// mLinesExecutedThisCycle happens to be large some prior subroutine.  The same applies to
-			// mLastScriptRest, which is why that is reset also:
-			g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
+			g_script.mLastPeekTime = GetTickCount();
 			// v1.0.38.04: The above now resets mLastPeekTime too to reduce situations in which a thread
 			// doesn't even run one line before being interrupted by another thread.  Here's how that would
 			// happen: ExecUntil() would see that a Peek() is due and call PeekMessage().  The Peek() will
@@ -1505,21 +1480,6 @@ ResultType IsCycleComplete(int aSleepDuration, DWORD aStartTime, bool aAllowEarl
 		// due to the 10ms granularity limit of SetTimer):
 		return FAIL; // Tell the caller to wait some more.
 
-	// Update for v1.0.20: In spite of the new resets of mLinesExecutedThisCycle that now appear
-	// in MsgSleep(), it seems best to retain this reset here for peace of mind, maintainability,
-	// and because it might be necessary in some cases (a full study was not done):
-	// Reset counter for the caller of our caller, any time the thread
-	// has had a chance to be idle (even if that idle time was done at a deeper
-	// recursion level and not by this one), since the CPU will have been
-	// given a rest, which is the main (perhaps only?) reason for using BatchLines
-	// (e.g. to be more friendly toward time-critical apps such as games,
-	// video capture, video playback).  UPDATE: mLastScriptRest is also reset
-	// here because it has a very similar purpose.
-	if (aSleepDuration > -1)
-	{
-		g_script.mLinesExecutedThisCycle = 0;
-		g_script.mLastScriptRest = tick_now;
-	}
 	// v1.0.38.04: Reset mLastPeekTime because caller has just done a GetMessage() or PeekMessage(),
 	// both of which should have routed events to the keyboard/mouse hooks like LONG_OPERATION_UPDATE's
 	// PeekMessage() and thus satisified the reason that mLastPeekTime is tracked in the first place.
@@ -1656,16 +1616,6 @@ bool CheckScriptTimers()
 		// for each Init(), and also it's not necessary to call update the tray icon since timers
 		// won't run if there is any paused thread, thus the icon can't currently be showing "paused".
 		InitNewThread(timer.mPriority, false, false, timer.mLabel->mJumpToLine->mActionType);
-
-		// The above also resets g_script.mLinesExecutedThisCycle to zero, which should slightly
-		// increase the expectation that any short timed subroutine will run all the way through
-		// to completion rather than being interrupted by the press of a hotkey, and thus potentially
-		// buried in the stack.  However, mLastScriptRest is not set to GetTickCount() here because
-		// unlike other events -- which are typically in response to an explicit action by the user
-		// such as pressing a button or hotkey -- timers are lower priority and more relaxed.
-		// Also, mLastScriptRest really should only be set when a call to Get/PeekMsg has just
-		// occurred, so it should be left as the responsibilty of the section in MsgSleep that
-		// launches new threads.
 
 		++timer.mExistingThreads;
 		DEBUGGER_STACK_PUSH(timer.mLabel->mJumpToLine, timer.mLabel->mName)
@@ -1838,7 +1788,7 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	// v1.0.38.04: Below was added to maximize responsiveness to incoming messages.  The reasoning
 	// is similar to why the same thing is done in MsgSleep() prior to its launch of a thread, so see
 	// MsgSleep for more comments:
-	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
+	g_script.mLastPeekTime = GetTickCount();
 	++monitor.instance_count;
 
 	bool block_further_processing;
@@ -1942,11 +1892,6 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 	if (aIncrementThreadCountAndUpdateTrayIcon)
 		g_script.UpdateTrayIcon(); // Must be done ONLY AFTER updating "g" (e.g, ++g) and/or g->IsPaused.
 
-	// v1.0.38.04: mLinesExecutedThisCycle is now reset in this function for maintainability. For simplicity,
-	// the reset is unconditional because it is desirable 99% of the time.
-	// See comments in CheckScriptTimers() for why g_script.mLastScriptRest isn't altered here.
-	g_script.mLinesExecutedThisCycle = 0; // Make it start fresh to avoid unnecessary delays due to SetBatchLines.
-
 	// For performance reasons, ErrorLevel isn't reset.  See similar line in WinMain() for other reasons.
 	//g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 
@@ -1976,13 +1921,7 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 	// it to avoid any chance that some other thread can interrupt it before it can execute its first line.
 	// This also helps performance by causing some of the code further below to be skipped.
 	if (!g.ThreadIsCritical) // If the thread default isn't "critical", make this thread critical only if it's explicitly marked that way.
-	{
-		if (g.ThreadIsCritical = (aTypeOfFirstLine == ACT_CRITICAL)) // Historically this is done even for "Critical Off". Maybe it was considered too rare for that to be the first line; plus performance considerations.  Plus when the first line actually executes, OFF will take effect instantly, so maybe it's inconsequential.
-		{
-			g.LinesPerCycle = -1;      // v1.0.47: It seems best to ensure SetBatchLines -1 is in effect because
-			g.IntervalBeforeRest = -1; // otherwise it may check messages during the interval that it isn't supposed to.
-		}
-	}
+		g.ThreadIsCritical = (aTypeOfFirstLine == ACT_CRITICAL); // Historically this is done even for "Critical Off". Maybe it was considered too rare for that to be the first line; plus performance considerations.  Plus when the first line actually executes, OFF will take effect instantly, so maybe it's inconsequential.
 	//else it's already critical, so leave it that way until "Critical Off" (which may be the very first line) is encountered at runtime.
 
 	if (g_script.mUninterruptibleTime && g_script.mUninterruptedLineCountMax // Both components must be non-zero to start off uninterruptible.

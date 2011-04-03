@@ -319,7 +319,7 @@ enum enum_act {
 , ACT_SETWORKINGDIR, ACT_FILESELECTFILE, ACT_FILESELECTFOLDER, ACT_FILEGETSHORTCUT, ACT_FILECREATESHORTCUT
 , ACT_INIREAD, ACT_INIWRITE, ACT_INIDELETE
 , ACT_REGREAD, ACT_REGWRITE, ACT_REGDELETE, ACT_OUTPUTDEBUG
-, ACT_SETKEYDELAY, ACT_SETMOUSEDELAY, ACT_SETWINDELAY, ACT_SETCONTROLDELAY, ACT_SETBATCHLINES
+, ACT_SETKEYDELAY, ACT_SETMOUSEDELAY, ACT_SETWINDELAY, ACT_SETCONTROLDELAY
 , ACT_SETTITLEMATCHMODE, ACT_FORMATTIME
 , ACT_SUSPEND, ACT_PAUSE
 , ACT_STRINGCASESENSE, ACT_DETECTHIDDENWINDOWS, ACT_DETECTHIDDENTEXT, ACT_BLOCKINPUT
@@ -546,7 +546,6 @@ struct LoopReadFileStruct;  //
 struct global_struct
 {
 	// 8-byte items are listed first, which might improve alignment for 64-bit processors (dubious).
-	__int64 LinesPerCycle; // Use 64-bits for this so that user can specify really large values.
 	__int64 mLoopIteration; // Signed, since script/ITOA64 aren't designed to handle unsigned.
 	WIN32_FIND_DATA *mLoopFile;  // The file of the current file-loop, if applicable.
 	RegItemStruct *mLoopRegItem; // The registry subkey or value of the current registry enumeration loop.
@@ -556,7 +555,6 @@ struct global_struct
 	// because they're more approriate as thread-attributes rather than being global to the entire script.
 
 	TitleMatchModes TitleMatchMode;
-	int IntervalBeforeRest;
 	int UninterruptedLineCount; // Stored as a g-struct attribute in case OnExit sub interrupts it while uninterruptible.
 	int Priority;  // This thread's priority relative to others.
 	DWORD LastError; // The result of GetLastError() after the most recent DllCall or Run.
@@ -658,9 +656,6 @@ inline void global_init(global_struct &g)
 	g.TitleFindFast = true; // Since it's so much faster in many cases.
 	g.DetectHiddenWindows = false;  // Same as AutoIt2 but unlike AutoIt3; seems like a more intuitive default.
 	g.DetectHiddenText = true;  // Unlike AutoIt, which defaults to false.  This setting performs better.
-	// Not sure what the optimal default is.  1 seems too low (scripts would be very slow by default):
-	g.LinesPerCycle = -1;
-	g.IntervalBeforeRest = 10;  // sleep for 10ms every 10ms
 	#define DEFAULT_PEEK_FREQUENCY 5
 	g.PeekFrequency = DEFAULT_PEEK_FREQUENCY; // v1.0.46. See comments in ACT_CRITICAL.
 	g.AllowThreadToBeInterrupted = true; // Separate from g_AllowInterruption so that they can have independent values.

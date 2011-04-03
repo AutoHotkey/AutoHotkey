@@ -2524,10 +2524,9 @@ public:
 #else
 	TextStream *mIncludeLibraryFunctionsThenExit;
 #endif
-	__int64 mLinesExecutedThisCycle; // Use 64-bit to match the type of g->LinesPerCycle
 	int mUninterruptedLineCountMax; // 32-bit for performance (since huge values seem unnecessary here).
 	int mUninterruptibleTime;
-	DWORD mLastScriptRest, mLastPeekTime;
+	DWORD mLastPeekTime;
 
 	CStringW mRunAsUser, mRunAsPass, mRunAsDomain;
 
@@ -2641,7 +2640,6 @@ public:
 VarSizeType BIV_True_False(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_MMM_DDD(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_DateTime(LPTSTR aBuf, LPTSTR aVarName);
-VarSizeType BIV_BatchLines(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_TitleMatchMode(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_TitleMatchModeSpeed(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_DetectHiddenWindows(LPTSTR aBuf, LPTSTR aVarName);

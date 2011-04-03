@@ -61,14 +61,14 @@ Script::Script()
 #else
 	, mIncludeLibraryFunctionsThenExit(NULL)
 #endif
-	, mLinesExecutedThisCycle(0), mUninterruptedLineCountMax(1000), mUninterruptibleTime(15)
+	, mUninterruptedLineCountMax(1000), mUninterruptibleTime(15)
 	, mCustomIcon(NULL), mCustomIconSmall(NULL) // Normally NULL unless there's a custom tray icon loaded dynamically.
 	, mCustomIconFile(NULL), mIconFrozen(false), mTrayIconTip(NULL) // Allocated on first use.
 	, mCustomIconNumber(0)
 {
-	// v1.0.25: mLastScriptRest and mLastPeekTime are now initialized right before the auto-exec
-	// section of the script is launched, which avoids an initial Sleep(10) in ExecUntil
-	// that would otherwise occur.
+	// v1.0.25: mLastScriptRest (removed in v2) and mLastPeekTime are now initialized
+	// right before the auto-exec section of the script is launched, which avoids an
+	// initial Sleep(10) in ExecUntil that would otherwise occur.
 	*mThisMenuItemName = *mThisMenuName = '\0';
 	ZeroMemory(&mNIC, sizeof(mNIC));  // Constructor initializes this, to be safe.
 	mNIC.hWnd = NULL;  // Set this as an indicator that it tray icon is not installed.
@@ -627,7 +627,7 @@ ResultType Script::AutoExecSection()
 
 		// v1.0.25: This is now done here, closer to the actual execution of the first line in the script,
 		// to avoid an unnecessary Sleep(10) that would otherwise occur in ExecUntil:
-		mLastScriptRest = mLastPeekTime = GetTickCount();
+		mLastPeekTime = GetTickCount();
 
 		++g_nThreads;
 		DEBUGGER_STACK_PUSH(mFirstLine, _T("auto-execute"))
@@ -3906,7 +3906,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				// Do a complete validation/recognition of the operator to allow a line such as the following,
 				// which omits the first optional comma, to still be recognized as a command rather than a
 				// variable-with-operator:
-				// SetBatchLines -1
+				// SetWinDelay -1
 				if ((action_name[0] == '-' && !action_name[1]) // i.e. the pre-decrement operator; e.g. --index.
 					|| action_args_2nd_char == '=') // i.e. x-=y  (by contrast, post-decrement is recognized only after we check for a command name to cut down on ambiguity).
 					aActionType = ACT_EXPRESSION;
@@ -5413,14 +5413,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_STRINGCASESENSE:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && line.ConvertStringCaseSense(new_raw_arg1) == SCS_INVALID)
 			return ScriptError(ERR_ON_OFF_LOCALE, new_raw_arg1);
-		break;
-
-	case ACT_SETBATCHLINES:
-		if (aArgc > 0 && !line.ArgHasDeref(1))
-		{
-			if (!tcscasestr(new_raw_arg1, _T("ms")) && !IsNumeric(new_raw_arg1, true, false)) // For simplicity and due to rarity, new_arg[0].is_expression isn't checked, so a line with no variables or function-calls like "SetBatchLines % 1+1" will be wrongly seen as a syntax error.
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		}
 		break;
 
 	case ACT_SUSPEND:
@@ -8000,8 +7992,6 @@ void *Script::GetVarType(LPTSTR aVarName)
 	
 	if (!_tcscmp(lower, _T("ptrsize"))) return BIV_PtrSize;
 
-	if (   !_tcscmp(lower, _T("batchlines"))
-		|| !_tcscmp(lower, _T("numbatchlines"))) return BIV_BatchLines;
 	if (!_tcscmp(lower, _T("titlematchmode"))) return BIV_TitleMatchMode;
 	if (!_tcscmp(lower, _T("titlematchmodespeed"))) return BIV_TitleMatchModeSpeed;
 	if (!_tcscmp(lower, _T("detecthiddenwindows"))) return BIV_DetectHiddenWindows;
@@ -10239,14 +10229,14 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 
 		// The below must be done at least when the keybd or mouse hook is active, but is currently
 		// always done since it's a very low overhead call, and has the side-benefit of making
-		// the app maximally responsive when the script is busy during high BatchLines.
+		// the app maximally responsive when the script is busy.
 		// This low-overhead call achieves at least two purposes optimally:
 		// 1) Keyboard and mouse lag is minimized when the hook(s) are installed, since this single
 		//    Peek() is apparently enough to route all pending input to the hooks (though it's inexplicable
 		//    why calling MsgSleep(-1) does not achieve this goal, since it too does a Peek().
 		//    Nevertheless, that is the testing result that was obtained: the mouse cursor lagged
 		//    in tight script loops even when MsgSleep(-1) or (0) was called every 10ms or so.
-		// 2) The app is maximally responsive while executing with a high or infinite BatchLines.
+		// 2) The app is maximally responsive while executing in a tight loop.
 		// 3) Hotkeys are maximally responsive.  For example, if a user has game hotkeys, using
 		//    a GetTickCount() method (which very slightly improves performance by cutting back on
 		//    the number of Peek() calls) would introduce up to 10ms of delay before the hotkey
@@ -10278,21 +10268,10 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			if (g.UninterruptedLineCount > g_script.mUninterruptedLineCountMax) // See above.
 				g.AllowThreadToBeInterrupted = true;
 			else
-				// Incrementing this unconditionally makes it a cruder measure than g.LinesPerCycle,
+				// Incrementing this unconditionally makes it a relatively crude measure,
 				// but it seems okay to be less accurate for this purpose:
 				++g.UninterruptedLineCount;
 		}
-
-		// The below handles the message-loop checking regardless of whether
-		// aMode is ONLY_ONE_LINE (i.e. recursed) or not (i.e. we're using
-		// the for-loop to execute the script linearly):
-		if ((g.LinesPerCycle > -1 && g_script.mLinesExecutedThisCycle >= g.LinesPerCycle)
-			|| (g.IntervalBeforeRest > -1 && tick_now - g_script.mLastScriptRest >= (DWORD)g.IntervalBeforeRest))
-			// Sleep in between batches of lines, like AutoIt, to reduce the chance that
-			// a maxed CPU will interfere with time-critical apps such as games,
-			// video capture, or video playback.  Note: MsgSleep() will reset
-			// mLinesExecutedThisCycle for us:
-			MsgSleep(10);  // Don't use INTERVAL_UNSPECIFIED, which wouldn't sleep at all if there's a msg waiting.
 
 		// At this point, a pause may have been triggered either by the above MsgSleep()
 		// or due to the action of a command (e.g. Pause, or perhaps tray menu "pause" was selected during Sleep):
@@ -10343,7 +10322,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 
 		if (ACT_IS_IF(line->mActionType))
 		{
-			++g_script.mLinesExecutedThisCycle;  // If and its else count as one line for this purpose.
 			if_condition = line->EvaluateCondition();
 #ifdef _DEBUG  // FAIL can be returned only in DEBUG mode.
 			if (if_condition == FAIL)
@@ -10484,7 +10462,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		case ACT_GOSUB:
 			// A single gosub can cause an infinite loop if misused (i.e. recusive gosubs),
 			// so be sure to do this to prevent the program from hanging:
-			++g_script.mLinesExecutedThisCycle;
 			if (line->mRelatedLine)
 			{
 				jump_to_label = (Label *)line->mRelatedLine;
@@ -10533,7 +10510,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		case ACT_GOTO:
 			// A single goto can cause an infinite loop if misused, so be sure to do this to
 			// prevent the program from hanging:
-			++g_script.mLinesExecutedThisCycle;
 			if (   !(jump_to_label = (Label *)line->mRelatedLine)   )
 				// The label is a dereference, otherwise it would have been resolved at load-time.
 				// So send true because we don't want to update its mRelatedLine.  This is because
@@ -10560,7 +10536,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 
 		case ACT_GROUPACTIVATE: // Similar to ACT_GOSUB, which is why this section is here rather than in Perform().
 		{
-			++g_script.mLinesExecutedThisCycle; // Always increment for GroupActivate.
 			WinGroup *group;
 			if (   !(group = (WinGroup *)mAttribute)   )
 				group = g_script.FindGroup(ARG1);
@@ -10608,10 +10583,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				}
 			}
 			//else the return value, if any, is discarded.
-			// Don't count returns against the total since they should be nearly instantaneous. UPDATE: even if
-			// the return called a function (e.g. return fn()), that function's lines would have been added
-			// to the total, so there doesn't seem much problem with not doing it here.
-			//++g_script.mLinesExecutedThisCycle;
 			if (aMode != UNTIL_RETURN)
 				// Tells the caller to return early if it's not the Gosub that directly
 				// brought us into this subroutine.  i.e. it allows us to escape from
@@ -10911,8 +10882,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				line = line->mRelatedLine; // Resume execution at the line following this functions end-block.
 				continue;  // Resume looping starting at the above line.  "continue" is actually slight faster than "break" in these cases.
 			}
-			// Don't count block-begin/end against the total since they should be nearly instantaneous:
-			//++g_script.mLinesExecutedThisCycle;
 			// In this case, line->mNextLine is already verified non-NULL by the pre-parser:
 			result = line->mNextLine->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
 			if (jump_to_line == line)
@@ -10964,8 +10933,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			continue;  // Resume looping starting at the above line.  "continue" is actually slighty faster than "break" in these cases.
 
 		case ACT_BLOCK_END:
-			// Don't count block-begin/end against the total since they should be nearly instantaneous:
-			//++g_script.mLinesExecutedThisCycle;
 			if (aMode != UNTIL_BLOCK_END)
 				// Rajat found a way for this to happen that basically amounts to this:
 				// If within a loop you gosub a label that is also inside of the block, and
@@ -10987,7 +10954,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		//	return line->LineError("Unexpected ELSE." ERR_ABORT);
 
 		default:
-			++g_script.mLinesExecutedThisCycle;
 			result = line->Perform();
 			if (!result || aMode == ONLY_ONE_LINE)
 				// Thus, Perform() should be designed to only return FAIL if it's an error that would make
@@ -11366,7 +11332,7 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 	g_script.mPriorHotkeyStartTime = g_script.mThisHotkeyStartTime; //
 	g_script.mThisHotkeyName = aHotkeyName;
 	g_script.mThisHotkeyStartTime = // Updated for consistency.
-	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
+	g_script.mLastPeekTime = GetTickCount();
 
 	// EVALUATE THE EXPRESSION
 	result = ExpandArgs();
@@ -12715,8 +12681,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		{
 			g.PeekFrequency = peek_frequency_when_critical_is_on;
 			g.AllowThreadToBeInterrupted = false;
-			g.LinesPerCycle = -1;      // v1.0.47: It seems best to ensure SetBatchLines -1 is in effect because
-			g.IntervalBeforeRest = -1; // otherwise it may check messages during the interval that it isn't supposed to.
 		}
 		else // Critical has been turned off.
 		{
@@ -13123,27 +13087,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return OK;
 	case ACT_SETCONTROLDELAY:
 		g.ControlDelay = ArgToInt(1);
-		return OK;
-
-	case ACT_SETBATCHLINES:
-		// This below ensures that IntervalBeforeRest and LinesPerCycle aren't both in effect simultaneously
-		// (i.e. that both aren't greater than -1), even though ExecUntil() has code to prevent a double-sleep
-		// even if that were to happen.
-		if (tcscasestr(ARG1, _T("ms"))) // This detection isn't perfect, but it doesn't seem necessary to be too demanding.
-		{
-			g.LinesPerCycle = -1;  // Disable the old BatchLines method in favor of the new one below.
-			g.IntervalBeforeRest = ArgToInt(1);  // If negative, script never rests.  If 0, it rests after every line.
-		}
-		else
-		{
-			g.IntervalBeforeRest = -1;  // Disable the new method in favor of the old one below:
-			// This value is signed 64-bits to support variable reference (i.e. containing a large int)
-			// the user might throw at it:
-			if (   !(g.LinesPerCycle = ArgToInt64(1))   )
-				// Don't interpret zero as "infinite" because zero can accidentally
-				// occur if the dereferenced var was blank:
-				g.LinesPerCycle = 10;  // The old default, which is retained for compatbility with existing scripts.
-		}
 		return OK;
 
 	case ACT_SETSTORECAPSLOCKMODE:

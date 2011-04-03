@@ -10095,18 +10095,6 @@ VarSizeType BIV_DateTime(LPTSTR aBuf, LPTSTR aVarName)
 	return 0; // Never reached, but avoids compiler warning.
 }
 
-VarSizeType BIV_BatchLines(LPTSTR aBuf, LPTSTR aVarName)
-{
-	// The BatchLine value can be either a numerical string or a string that ends in "ms".
-	TCHAR buf[256];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	if (g->IntervalBeforeRest > -1) // Have this new method take precedence, if it's in use by the script.
-		return _stprintf(target_buf, _T("%dms"), g->IntervalBeforeRest); // Not sntprintf().
-	// Otherwise:
-	ITOA64(g->LinesPerCycle, target_buf);
-	return (VarSizeType)_tcslen(target_buf);
-}
-
 VarSizeType BIV_TitleMatchMode(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (g->TitleMatchMode == FIND_REGEX) // v1.0.45.
@@ -15332,7 +15320,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 		}
 	}
 
-	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount(); // Somewhat debatable, but might help minimize interruptions when the callback is called via message (e.g. subclassing a control; overriding a WindowProc).
+	g_script.mLastPeekTime = GetTickCount(); // Somewhat debatable, but might help minimize interruptions when the callback is called via message (e.g. subclassing a control; overriding a WindowProc).
 
 	ExprTokenType result_token; // L31
 	func.Call(&result_token); // Call the UDF.  Call()'s own return value (e.g. EARLY_EXIT or FAIL) is ignored because it wouldn't affect the handling below.

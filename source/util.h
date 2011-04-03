@@ -380,8 +380,7 @@ inline COLORREF rgb_to_bgr(DWORD aRGB)
 
 
 inline bool IsHex(LPCTSTR aBuf) // 10/17/2006: __forceinline worsens performance, but physically ordering it near ATOI64() [via /ORDER] boosts by 3.5%.
-// Note: AHK support for hex ints reduces performance by only 10% for decimal ints, even in the tightest
-// of math loops that have SetBatchLines set to -1.
+// Note: AHK support for hex ints reduces performance by only 10% for decimal ints, even in the tightest of math loops.
 {
 	// For whatever reason, omit_leading_whitespace() benches consistently faster (albeit slightly) than
 	// the same code put inline (confirmed again on 10/17/2006, though the difference is hardly anything):
