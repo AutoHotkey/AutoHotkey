@@ -197,7 +197,8 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_PERCENT _T("Must be between -100 and 100.")
 #define ERR_MOUSE_SPEED _T("Mouse speed must be between 0 and ") MAX_MOUSE_SPEED_STR _T(".")
 #define ERR_VAR_IS_READONLY _T("Not allowed as an output variable.")
-#define ERR_INVALID_DOT _T("Unsupported use of \".\"")
+#define ERR_INVALID_CHAR _T("This character is not allowed here.")
+#define ERR_INVALID_DOT _T("Ambiguous or invalid use of \".\"")
 #define ERR_UNQUOTED_NON_ALNUM _T("Unquoted literals may only consist of alphanumeric characters/underscore.")
 
 #define WARNING_USE_UNSET_VARIABLE _T("Using value of uninitialized variable.")

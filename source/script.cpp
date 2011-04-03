@@ -3459,9 +3459,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				, open_brace_was_added = false, item = cp
 				; *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
 			{
-				LPTSTR item_end = StrChrAny(item, EXPR_OPERAND_TERMINATORS);
-				if (!item_end) // This is probably the last/only variable in the list; e.g. the "x" in "local x"
-					item_end = item + _tcslen(item);
+				LPTSTR item_end = find_identifier_end(item + 1);
 				var_name_length = (VarSizeType)(item_end - item);
 
 				int always_use;
@@ -3949,7 +3947,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					LPTSTR cp;
 					for (;;) // L35: Loop to fix x.y.z() and similar.
 					{
-						for (cp = id_begin; cisalnum(*cp) || *cp == '_'; ++cp); // Find end of identifier.
+						cp = find_identifier_end(id_begin);
 						if (*cp == '(')
 						{	// Allow function/method Call as standalone expression.
 							aActionType = ACT_EXPRESSION;
@@ -4985,7 +4983,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 						{
 							// This is either the key in a key-value pair in an object literal, or a syntax
 							// error which will be caught at a later stage (since the ':' is missing its '?').
-							for (cp = op_begin; cisalnum(*cp) || *cp == '_'; ++cp);
+							cp = find_identifier_end(op_begin);
 							if (*cp != '.') // i.e. exclude x.y as that should be parsed as normal for an expression.
 							{
 								if (cp != op_end) // op contains reserved characters.
@@ -6253,7 +6251,7 @@ ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDere
 		DerefType &this_deref = aDeref[aDerefCount];  // For performance.
 		this_deref.marker = aArgText + j;  // Store the deref's starting location.
 		// Find the end of this deref (the next non-alphanumeric/underscore char).
-		for (++j; cisalnum(aArgText[j]) || aArgText[j] == '_'; ++j);
+		for (++j; IS_IDENTIFIER_CHAR(aArgText[j]); ++j);
 		if (  !(var_name_length = aArgText + j - this_deref.marker - 1)  ) // Possible future use: something like "%%var" could be a double-deref.
 			return ScriptError(_T("Missing variable name."), aArgText); // Short msg. since so rare.
 		if (var_name_length > MAX_VAR_NAME_LENGTH)
@@ -9286,17 +9284,14 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							++cp;
 
 							// Find the end of the operand (".operand"):
-							//for (op_end = cp; !strchr(EXPR_OPERAND_TERMINATORS "\"", *op_end); ++op_end);
-							for (op_end = cp; cisalnum(*op_end) || *op_end == '_'; ++op_end);
-
+							op_end = find_identifier_end(cp);
 							if (!_tcschr(EXPR_OPERAND_TERMINATORS, *op_end))
-								return LineError(_T("Only alphanumeric characters and underscore are allowed here."), FAIL, op_end);
+								return LineError(ERR_INVALID_CHAR, FAIL, op_end);
 
 							// Rather than trying to predict how something like "obj.-1" will be handled, treat it as a syntax error.
 							// "obj.()" is allowed; it should mean "call the default method of obj" or "call the function object obj".
 							if (op_end == cp && *op_end != '(')
-								// Error message is intentionally vague since user may have intended the dot to be concatenation rather than member-access.
-								return LineError(ERR_INVALID_DOT, FAIL, cp-1);
+								return LineError(ERR_INVALID_DOT, FAIL, cp-1); // Intentionally vague since the user's intention isn't clear.
 
 							// Output an operand for the text following '.'
 							if (op_end - cp < MAX_NUMBER_SIZE)
@@ -13459,11 +13454,12 @@ ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
 			// Otherwise, it's a dereference symbol, so calculate the size of that variable's contents
 			// and add that to expanded_length (or copy the contents into aOutputVar if this is the
 			// second pass).
-			for (cp1 = cp + 1; cisalnum(*cp1) || *cp1 == '_'; ++cp1);
-			var_name_length = cp1 - cp - 1;
+			++cp; // Omit the deref char.
+			cp1 = find_identifier_end(cp);
+			var_name_length = cp1 - cp;
 			if (var_name_length && var_name_length <= MAX_VAR_NAME_LENGTH)
 			{
-				tcslcpy(var_name, cp + 1, var_name_length + 1);  // +1 to convert var_name_length to size.
+				tcslcpy(var_name, cp, var_name_length + 1);  // +1 to convert var_name_length to size.
 				// The use of ALWAYS_PREFER_LOCAL below improves flexibility of assume-global functions
 				// by allowing this command to resolve to a local first if such a local exists.
 				// Fixed for v1.0.34: Use FindOrAddVar() vs. FindVar() so that environment or built-in

@@ -1025,23 +1025,18 @@ ResultType Var::ValidateName(LPCTSTR aName, bool aIsRuntime, int aDisplayError)
 		else
 			return FAIL;
 	}
-	LPCTSTR cp;
-	for (cp = aName; *cp; ++cp)
+	if (*find_identifier_end(aName) != '\0')
 	{
-		if (!cisalnum(*cp) && *cp != '_')
+		if (aDisplayError)
 		{
-			if (aDisplayError)
-			{
-				TCHAR msg[512];
-				sntprintf(msg, _countof(msg), _T("The following %s name contains an illegal character:\n\"%-1.300s\"%s")
-					, aDisplayError == DISPLAY_VAR_ERROR ? _T("variable") : _T("function")
-					, aName
-					, aIsRuntime ? (_T("\n\n") ERR_ABORT_NO_SPACES) : _T(""));
-				return g_script.ScriptError(msg);
-			}
-			else
-				return FAIL;
+			TCHAR msg[512];
+			sntprintf(msg, _countof(msg), _T("The following %s name contains an illegal character:\n\"%-1.300s\"%s")
+				, aDisplayError == DISPLAY_VAR_ERROR ? _T("variable") : _T("function")
+				, aName
+				, aIsRuntime ? (_T("\n\n") ERR_ABORT_NO_SPACES) : _T(""));
+			return g_script.ScriptError(msg);
 		}
+		return FAIL;
 	}
 	// Otherwise:
 	return OK;
