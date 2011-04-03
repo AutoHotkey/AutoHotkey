@@ -257,11 +257,11 @@ Action g_act[] =
 {
 	{_T(""), 0, 0, false, NULL}  // ACT_INVALID.
 
-	// ACT_ASSIGN, ACT_ADD/SUB/MULT/DIV: Give them names for display purposes.
+	// ACT_ASSIGN/ASSIGNEXPR: Give them names for display purposes.
 	// Note: Line::ToText() relies on the below names being the correct symbols for the operation:
 	// 1st param is the target, 2nd (optional) is the value:
 	, {_T("="), 1, 2, true, NULL}  // Omitting the second param sets the var to be empty. "H" (high-bit) is probably needed for those cases when PerformAssign() must call ExpandArgs() or similar.
-	, {_T(":="), 1, 2, false, {2, 0}} // Same, though param #2 is flagged as numeric so that expression detection is automatic.  "H" (high-bit) doesn't appear to be needed even when ACT_ASSIGNEXPR calls AssignBinaryClip() because that AssignBinaryClip() checks for source==dest.
+	, {_T(":="), 2, 2, false, {2, 0}} // Same, though param #2 is flagged as numeric so that expression detection is automatic.  "H" (high-bit) doesn't appear to be needed even when ACT_ASSIGNEXPR calls AssignBinaryClip() because that AssignBinaryClip() checks for source==dest.
 
 	// ACT_EXPRESSION, which is a stand-alone expression outside of any IF or assignment-command;
 	// e.g. fn1(123, fn2(y)) or x&=3

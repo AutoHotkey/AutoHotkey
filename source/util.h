@@ -410,14 +410,8 @@ inline bool IsHex(LPCTSTR aBuf) // 10/17/2006: __forceinline worsens performance
 // the performance isn't any better.
 
 inline __int64 ATOI64(LPCTSTR buf)
-// The following comment only applies if the code is a macro or actually put inline by the compiler,
-// which is no longer true:
-// A more complex macro is used for ATOI64(), since it is more often called from places where
-// performance matters (e.g. ACT_ADD).  It adds about 500 bytes to the code size  in exchance for
-// a 8% faster math loops.  But it's probably about 8% slower when used with hex integers, but
-// those are so rare that the speed-up seems worth the extra code size:
-//#define ATOI64(buf) _strtoi64(buf, NULL, 0) // formerly used _atoi64()
 {
+	// See ATOI() for the reason IsHex() is used.
 	return IsHex(buf) ? _tcstoi64(buf, NULL, 16) : _ttoi64(buf);  // _atoi64() has superior performance, so use it when possible.
 }
 

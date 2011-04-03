@@ -361,7 +361,7 @@ SymbolType IsNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
 			break; // The number qualifies as pure, so fall through to the logic at the bottom. (It would already have returned elsewhere in the loop if the number is impure).
 		if (c == '.')
 		{
-			if (!aAllowFloat || has_decimal_point || is_hex) // If aAllowFloat==false, a decimal point at the very end of the number is considered non-numeric even if aAllowImpure==true.  Some callers like "case ACT_ADD" might rely on this.
+			if (!aAllowFloat || has_decimal_point || is_hex) // If aAllowFloat==false, a decimal point at the very end of the number is considered non-numeric even if aAllowImpure==true.  Some callers might rely on this.
 				// i.e. if aBuf contains 2 decimal points, it can't be a valid number.
 				// Note that decimal points are allowed in hexadecimal strings, e.g. 0xFF.EE.
 				// But since that format doesn't seem to be supported by VC++'s atof() and probably

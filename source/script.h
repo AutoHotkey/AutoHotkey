@@ -353,7 +353,7 @@ struct ArgStruct
 	WORD length; // Keep adjacent to above so that it uses no extra memory. This member was added in v1.0.44.14 to improve runtime performance.  It relies on the fact that an arg's literal text can't be longer than LINE_SIZE.
 	LPTSTR text;
 	DerefType *deref;  // Will hold a NULL-terminated array of var-deref locations within <text>.
-	ExprTokenType *postfix;  // An array of tokens in postfix order. Also used for ACT_ADD and others to store pre-converted binary integers.
+	ExprTokenType *postfix;  // An array of tokens in postfix order. Also used for ACT_(NOT)BETWEEN to store pre-converted binary integers.
 };
 
 

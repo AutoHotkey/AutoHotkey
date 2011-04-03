@@ -3980,24 +3980,15 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				{
 					if (aActionType != ACT_ASSIGN) // i.e. it's ACT_ASSIGNEXPR
 					{
-						// Find the first non-function comma, which in the case of ACT_ADD/SUB can be
-						// either a statement-separator comma (expression) or the time units arg.
-						// Reasons for this:
-						// 1) ACT_ADD/SUB: Need to distinguish compound statements from date/time math;
-						//    e.g. "x+=1, y+=2" should be marked as a stand-alone expression, not date math.
-						// 2) ACT_ASSIGNEXPR/MULT/DIV (and ACT_ADD/SUB for that matter): Need to make
-						//    comma-separated sub-expressions into one big ACT_EXPRESSION so that the
-						//    leftmost sub-expression will get evaluated prior to the others (for consistency
-						//    and as documented).  However, this has some side-effects, such as making
-						//    the leftmost /= operator into true division rather than ENV_DIV behavior,
-						//    and treating blanks as errors in math expressions when otherwise ENV_MULT
-						//    would treat them as zero.
-						// ALSO: ACT_ASSIGNEXPR/ADD/SUB/MULT/DIV are made into ACT_EXPRESSION *only* when multi-
-						// statement commas are present because the following legacy behaviors must be retained:
-						// 1) Math treatment of blanks as zero in ACT_ADD/SUB/etc.
-						// 2) EnvDiv's special behavior, which is different than both true divide and floor divide.
-						// 3) Possibly add/sub's date/time math.
-						// 4) Maybe obsolete: For performance, don't want trivial assignments to become ACT_EXPRESSION.
+						// Find the first non-function comma.
+						// This is done because ACT_ASSIGNEXPR needs to make comma-separated sub-expressions
+						// into one big ACT_EXPRESSION so that the leftmost sub-expression will get evaluated
+						// prior to the others (for consistency and as documented).  However, this has at
+						// least one side-effect; namely that if expression evaluation is aborted for some
+						// reason, the assignment is skipped completely rather than assigning a blank value.
+						// ALSO: ACT_ASSIGNEXPR is made into ACT_EXPRESSION *only* when multi-statement
+						// commas are present because it performs much better for trivial assignments,
+						// even some which aren't optimized to become non-expressions.
 						LPTSTR cp;
 						for (in_quotes = false, open_parens = 0, cp = action_args + 2; *cp; ++cp)
 						{
@@ -4071,9 +4062,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				// expressions only for things that can produce a side-effect (currently only ternaries like
 				// the ones mentioned later below need to be checked since the following other things were
 				// previously recognized as ACT_EXPRESSION if appropriate: function-calls, post- and
-				// pre-inc/dec (++/--), and assignment operators like := += *= (though these don't necessarily
-				// need to be ACT_EXPRESSION to support multi-statement; they can be ACT_ASSIGNEXPR, ACT_ADD, etc.
-				// and still support comma-separated statements.
+				// pre-inc/dec (++/--), and assignment operators like := += *=
 				// Stand-alone ternaries are checked for here rather than earlier to allow a command name
 				// (of present) to take precedence (since stand-alone ternaries seem much rarer than 
 				// "Command ? something" such as "MsgBox ? something".  Could also check for a colon somewhere
@@ -12252,10 +12241,9 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	ResultType result;  // General purpose.
 
 	// Even though the loading-parser already checked, check again, for now,
-	// at least until testing raises confidence.  UPDATE: Don't this because
-	// sometimes (e.g. ACT_ASSIGN/ADD/SUB/MULT/DIV) the number of parameters
-	// required at load-time is different from that at runtime, because params
-	// are taken out or added to the param list:
+	// at least until testing raises confidence.  UPDATE: Don't do this because
+	// sometimes the number of parameters required at load-time is different from
+	// that at runtime, because params are taken out or added to the param list:
 	//if (nArgs < g_act[mActionType].MinParams) ...
 
 	switch (mActionType)
@@ -12270,7 +12258,8 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// Currently, ACT_ASSIGNEXPR can occur even when mArg[1].is_expression==false, such as things like var:=5
 		// and var:=Array%i%.  Search on "is_expression = " to find such cases in the script-loading/parsing
 		// routines.
-		if (mArgc > 1)
+		// This isn't checked because load-time validation now ensures that there is at least one arg:
+		//if (mArgc > 1)
 		{
 			if (mArg[1].is_expression)
 				return ExpandArgs(); // This will also take care of the assignment (for performance).
@@ -12325,10 +12314,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			// Since above didn't return, it's probably x:=BUILT_IN_VAR.
 			return output_var->Assign(ARG2);
 		}
-		// Otherwise it's x:= (which seems invalid, but for now it's supported).
-		if (  !(output_var = ResolveVarOfArg(0))  )
-			return FAIL;
-		return output_var->Assign();
 
 	case ACT_EXPRESSION:
 		// Nothing needs to be done because the expression in ARG1 (which is the only arg) has already

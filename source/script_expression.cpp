@@ -2256,7 +2256,7 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 // (since normally output vars lie to the left of all input vars, so it doesn't seem worth doing anything
 // more complicated).
 // Returns CONDITION_TRUE, CONDITION_FALSE, or FAIL.
-// There are some other functions like ArgLength() and ACT_ADD that have procedures similar to this one, so
+// There are some other functions like ArgLength() that have procedures similar to this one, so
 // maintain them together.
 {
 	if (mActionType == ACT_SORT) // See PerformSort() for why it's always dereferenced.
