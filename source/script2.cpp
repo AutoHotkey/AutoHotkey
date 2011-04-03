@@ -17107,8 +17107,8 @@ SymbolType TokenIsNumeric(ExprTokenType &aToken)
 		return aToken.symbol;
 	case SYM_VAR: 
 		return aToken.var->IsNumeric(); // Supports VAR_NORMAL and VAR_CLIPBOARD.
-	default:
-		return PURE_NOT_NUMERIC; // Explicitly-marked strings are not numeric, which allows numeric strings to be compared as strings rather than as numbers.
+	default: // SYM_STRING: Callers of this function expect a "numeric" result for numeric strings.
+		return IsNumeric(aToken.marker, true, false, true);
 	}
 }
 
