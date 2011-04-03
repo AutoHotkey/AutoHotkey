@@ -14029,13 +14029,17 @@ void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 {
 	size_t right_side_bound, target; // Don't make target a pointer-type because the integer offset might not be a multiple of 4 (i.e. the below increments "target" directly by "offset" and we don't want that to use pointer math).
 	ExprTokenType &target_token = *aParam[0];
-	if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+	if (target_token.symbol == SYM_VAR // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+		&& !target_token.var->IsPureNumeric()) // If the var contains a pure/binary number, its probably an address.  Scripts can't directly access Contents() in that case anyway.
 	{
 		target = (size_t)target_token.var->Contents(); // Although Contents(TRUE) will force an update of mContents if necessary, it very unlikely to be necessary here because we're about to fetch a binary number from inside mContents, not a normal/text number.
 		right_side_bound = target + target_token.var->ByteCapacity(); // This is first illegal address to the right of target.
 	}
 	else
+	{
 		target = (size_t)TokenToInt64(target_token);
+		right_side_bound = 0;
+	}
 
 	if (aParamCount > 1) // Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
 	{
@@ -14095,8 +14099,8 @@ void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	// The following aren't covered by the check below:
 	// - Due to rarity of negative offsets, only the right-side boundary is checked, not the left.
 	// - Due to rarity and to simplify things, Float/Double (which "return" higher above) aren't checked.
-	if (target < 1024 // Basic sanity check to catch incoming raw addresses that are zero or blank.
-		|| target_token.symbol == SYM_VAR && target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
+		|| right_side_bound && target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
@@ -14141,13 +14145,17 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 	size_t right_side_bound, target; // Don't make target a pointer-type because the integer offset might not be a multiple of 4 (i.e. the below increments "target" directly by "offset" and we don't want that to use pointer math).
 	ExprTokenType &target_token = *aParam[1];
-	if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+	if (target_token.symbol == SYM_VAR // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+		&& !target_token.var->IsPureNumeric()) // If the var contains a pure/binary number, its probably an address.  Scripts can't directly access Contents() in that case anyway.
 	{
 		target = (size_t)target_token.var->Contents(FALSE); // Pass FALSE for performance because contents is about to be overwritten, followed by a call to Close(). If something goes wrong and we return early, Contents() won't have been changed, so nothing about it needs updating.
 		right_side_bound = target + target_token.var->ByteCapacity(); // This is the first illegal address to the right of target.
 	}
 	else
+	{
 		target = (size_t)TokenToInt64(target_token);
+		right_side_bound = 0;
+	}
 
 	if (aParamCount > 2) // Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
 	{
@@ -14195,8 +14203,8 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	aResultToken.value_int64 = target + size; // This is used below and also as NumPut's return value. It's the address to the right of the item to be written.  aResultToken.symbol was set to SYM_INTEGER by our caller.
 
 	// See comments in NumGet about the following section:
-	if (target < 1024 // Basic sanity check to catch incoming raw addresses that are zero or blank.
-		|| target_token.symbol == SYM_VAR && aResultToken.value_int64 > (INT_PTR)right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
+		|| right_side_bound && (size_t)aResultToken.value_int64 > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
 		if (target_token.symbol == SYM_VAR)
 		{
