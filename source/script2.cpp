@@ -17113,21 +17113,6 @@ SymbolType TokenIsNumeric(ExprTokenType &aToken)
 }
 
 
-SymbolType TokenIsPureNumeric(ExprTokenType &aToken)
-{
-	switch(aToken.symbol)
-	{
-	case SYM_INTEGER:
-	case SYM_FLOAT:
-		return aToken.symbol;
-	case SYM_VAR: 
-		return aToken.var->IsPureNumeric(); // Supports VAR_NORMAL and VAR_CLIPBOARD.
-	default:
-		return PURE_NOT_NUMERIC; // Explicitly-marked strings are not numeric, which allows numeric strings to be compared as strings rather than as numbers.
-	}
-}
-
-
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aNumType)
 // This function is called very frequently by ExpandExpression(), which needs to distinguish
 // between numeric strings and pure numbers, but still needs to know if the string is numeric.

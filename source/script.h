@@ -2844,7 +2844,6 @@ BOOL LegacyResultToBOOL(LPTSTR aResult);
 BOOL VarToBOOL(Var &aVar);
 BOOL TokenToBOOL(ExprTokenType &aToken);
 SymbolType TokenIsNumeric(ExprTokenType &aToken);
-SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aNumType);
 BOOL TokenIsEmptyString(ExprTokenType &aToken);
 BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar); // Same as TokenIsEmptyString but optionally warns if the token is an uninitialized var.
