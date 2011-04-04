@@ -303,10 +303,10 @@ Action g_act[] =
 
 	, {_T("Transform"), 2, 4, true, NULL}  // output var, operation, value1, value2
 
-	, {_T("StringLower"), 2, 3, false, NULL} // output var, input var, T = Title Case
-	, {_T("StringUpper"), 2, 3, false, NULL} // output var, input var, T = Title Case
-	, {_T("StringReplace"), 3, 5, false, NULL} // Output Variable, Input Variable, Search String, Replace String, do-all.
-	, {_T("StringSplit"), 2, 5, false, NULL} // Output Array, Input Variable, Delimiter List (optional), Omit List, Future Use
+	, {_T("StrLower"), 2, 3, false, NULL} // output var, input var, T = Title Case
+	, {_T("StrUpper"), 2, 3, false, NULL} // output var, input var, T = Title Case
+	, {_T("StrReplace"), 3, 5, false, NULL} // Output Variable, Input Variable, Search String, Replace String, do-all.
+	, {_T("StrSplit"), 2, 5, false, NULL} // Output Array, Input Variable, Delimiter List (optional), Omit List, Future Use
 	, {_T("SplitPath"), 1, 6, true, NULL} // InputFilespec, OutName, OutDir, OutExt, OutNameNoExt, OutDrive
 	, {_T("Sort"), 1, 2, false, NULL} // OutputVar (it's also the input var), Options
 
