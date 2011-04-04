@@ -2676,6 +2676,7 @@ VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_Language(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_UserName_ComputerName(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_InitialWorkingDir(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_WinDir(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_Temp(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_ComSpec(LPTSTR aBuf, LPTSTR aVarName);

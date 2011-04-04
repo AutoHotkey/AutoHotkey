@@ -1080,12 +1080,12 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 	}
 #endif
 
-	// v1.0.35.11: Restore original working directory so that changes made to it by the above (via
-	// "#Include C:\Scripts" or "#Include %A_ScriptDir%" or even stdlib/userlib) do not affect the
-	// script's runtime working directory.  This preserves the flexibility of having a startup-determined
-	// working directory for the script's runtime (i.e. it seems best that the mere presence of
-	// "#Include NewDir" should not entirely eliminate this flexibility).
-	SetCurrentDirectory(g_WorkingDirOrig); // g_WorkingDirOrig previously set by WinMain().
+	// Set the working directory to the script's directory.  This must be done after the above
+	// since the working dir may have been changed by the script's use of "#Include C:\Scripts".
+	// LoadIncludedFile() also changes it, but any value other than mFileDir would have been
+	// restored by "#Include" after LoadIncludedFile() returned.  Note that A_InitialWorkingDir
+	// contains the startup-determined working directory, so no flexibility is lost.
+	SetCurrentDirectory(mFileDir);
 
 	// Rather than do this, which seems kinda nasty if ever someday support same-line
 	// else actions such as "else return", just add two EXITs to the end of every script.
@@ -7963,6 +7963,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 		|| !_tcscmp(lower, _T("nowutc"))) return BIV_Now;
 
 	if (!_tcscmp(lower, _T("workingdir"))) return BIV_WorkingDir;
+	if (!_tcscmp(lower, _T("initialworkingdir"))) return BIV_InitialWorkingDir;
 	if (!_tcscmp(lower, _T("scriptname"))) return BIV_ScriptName;
 	if (!_tcscmp(lower, _T("scriptdir"))) return BIV_ScriptDir;
 	if (!_tcscmp(lower, _T("scriptfullpath"))) return BIV_ScriptFullPath;
