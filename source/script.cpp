@@ -12476,18 +12476,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// SetEnvironmentVariable()'s return value determine whether there's an error).
 		return g_ErrorLevel->Assign(SetEnvironmentVariable(ARG1, ARG2) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
 
-	case ACT_ENVUPDATE:
-	{
-		// From the AutoIt3 source:
-		// AutoIt3 uses SMTO_BLOCK (which prevents our thread from doing anything during the call)
-		// vs. SMTO_NORMAL.  Since I'm not sure why, I'm leaving it that way for now:
-		ULONG_PTR nResult;
-		if (SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)_T("Environment"), SMTO_BLOCK, 15000, &nResult))
-			return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-		else
-			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-	}
-
 	case ACT_URLDOWNLOADTOFILE:
 		return URLDownloadToFile(TWO_ARGS);
 

@@ -312,7 +312,6 @@ Action g_act[] =
 
 	, {_T("EnvGet"), 2, 2, true, NULL} // OutputVar, EnvVar
 	, {_T("EnvSet"), 1, 2, false, NULL} // EnvVar, Value
-	, {_T("EnvUpdate"), 0, 0, false, NULL}
 
 	, {_T("RunAs"), 0, 3, false, NULL} // user, pass, domain (0 params can be passed to disable the feature)
 	, {_T("Run"), 1, 4, true, NULL}      // TargetFile, Working Dir, WinShow-Mode/UseErrorLevel, OutputVarPID
