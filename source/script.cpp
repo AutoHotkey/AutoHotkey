@@ -46,7 +46,7 @@ Script::Script()
 	, mNextClipboardViewer(NULL), mOnClipboardChangeIsRunning(false), mOnClipboardChangeLabel(NULL)
 	, mOnExitLabel(NULL), mExitReason(EXIT_NONE)
 	, mFirstLabel(NULL), mLastLabel(NULL)
-	, mFirstFunc(NULL), mLastFunc(NULL), mFunc(NULL), mFuncCount(0), mFuncCountMax(0) // L27: Removed mFirstFunc, added mFunc, mFuncCount, mFuncCountMax.  L31: Re-enabled mFirstFunc.
+	, mLastFunc(NULL), mFunc(NULL), mFuncCount(0), mFuncCountMax(0)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
@@ -6677,17 +6677,13 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	tcslcpy(func_name, aFuncName, aFuncNameLength + 1);  // +1 to convert length to size.
 
 	Func *pfunc;
-	/*
-	for (pfunc = mFirstFunc; pfunc; pfunc = pfunc->mNextFunc)
-		if (!_tcsicmp(func_name, pfunc->mName)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
-			return pfunc; // Match found.
-	*/
-	// L27: Use binary search in array rather than linear search through a linked list.  Speeds up dynamic function calls (on average).
+	
+	// Using a binary searchable array vs a linked list speeds up dynamic function calls, on average.
 	int left, right, mid, result;
 	for (left = 0, right = mFuncCount - 1; left <= right;)
 	{
 		mid = (left + right) / 2;
-		result = _tcsicmp(func_name, mFunc[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+		result = _tcsicmp(func_name, mFunc[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 		if (result > 0)
 			left = mid + 1;
 		else if (result < 0)
@@ -7171,24 +7167,7 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 		ScriptError(ERR_OUTOFMEM);
 		return NULL;
 	}
-
-	// v1.0.47: The following ISN'T done because it would slow down commonly used functions. This is because
-	// commonly-called functions like InStr() tend to be added first (since they appear so often throughout
-	// the script); thus subsequent lookups are fast if they are kept at the beginning of the list rather
-	// than being displaced to the end by all other functions).
-	// NOT DONE for the reason above:
-	// Unlike most of the other link lists, attach new items at the beginning of the list because
-	// that allows the standard/user library feature to perform much better for scripts that have hundreds
-	// of functions.  This is because functions brought in dynamically from a library will then be at the
-	// beginning of the list, which allows the function lookup that immediately follows library-loading to
-	// find a match almost immediately.
-	if (!mFirstFunc) // The list is empty, so this will be the first and last item.
-		mFirstFunc = the_new_func;
-	else
-		mLastFunc->mNextFunc = the_new_func;
-	// L31: Re-enabled linked list of functions for LowLevel compatibility, may be removed when __findFunc is built-in.
 	
-	// L27: Replaced linked list with binary-searchable array.
 	if (mFuncCount == mFuncCountMax)
 	{
 		// Allocate or expand function list.
@@ -7210,8 +7189,7 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 	mFunc[aInsertPos] = the_new_func;
 	++mFuncCount;
 
-	// OBSOLETE COMMENT: This must be done after the above:
-	mLastFunc = the_new_func; // There's at least one spot in the code that relies on mLastFunc being the most recently added function.
+	mLastFunc = the_new_func; // Helps AddLine() define the function's body, if the_new_func is a newly defined UDF.
 
 	return the_new_func;
 }
