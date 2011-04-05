@@ -1923,8 +1923,6 @@ public:
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
 	int mInstances; // How many instances currently exist on the call stack (due to recursion or thread interruption).  Future use: Might be used to limit how deep recursion can go to help prevent stack overflow.
-	Func *mNextFunc; // Next item in linked list. // L27: Replaced linked list with binary-searchable array Script::mFunc.
-	// L31: Re-enabled mNextFunc.  See AddFunc for comments.
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
 	UCHAR mDefaultVarType;
@@ -2011,7 +2009,7 @@ public:
 		, mBIF(NULL)
 		, mParam(NULL), mParamCount(0), mMinParams(0)
 		, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
-		, mInstances(0), mNextFunc(NULL)
+		, mInstances(0)
 		, mDefaultVarType(VAR_DECLARE_NONE)
 		, mIsBuiltIn(aIsBuiltIn)
 		, mIsVariadic(false)
@@ -2502,8 +2500,8 @@ private:
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
 	Line *mFirstStaticLine, *mLastStaticLine; // The first and last static var initializer.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
-	Func *mFirstFunc, *mLastFunc;     // The first and last functions in the linked list.
-	Func **mFunc; // L27: Use a binary-searchable array to speed up function searches (especially beneficial for dynamic function calls).
+	Func *mLastFunc;  // The last added function.
+	Func **mFunc;  // Binary-searchable array of functions.
 	int mFuncCount, mFuncCountMax;
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
