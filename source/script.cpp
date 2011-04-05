@@ -6220,7 +6220,7 @@ ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDere
 	size_t var_name_length;
 
 	// For each dereference found in aArgText:
-	for (int j = 0;; ++j)  // Increment to skip over the symbol just found by the inner for().
+	for (int j = 0;;)
 	{
 		// Find next non-literal g_DerefChar:
 		for (; aArgText[j] && (aArgText[j] != g_DerefChar || (aArgMap && aArgMap[j])); ++j);
