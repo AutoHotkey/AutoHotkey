@@ -717,15 +717,15 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 	case CONTROLGET_CMD_CHECKED: //Must be a Button
 		if (!SendMessageTimeout(control_window, BM_GETCHECK, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			return output_var.Assign();
-		output_var.Assign(dwResult == BST_CHECKED ? _T("1") : _T("0"));
+		output_var.Assign(dwResult == BST_CHECKED);
 		break;
 
 	case CONTROLGET_CMD_ENABLED:
-		output_var.Assign(IsWindowEnabled(control_window) ? _T("1") : _T("0"));
+		output_var.Assign(IsWindowEnabled(control_window) ? 1 : 0); // Force pure boolean 0/1.
 		break;
 
 	case CONTROLGET_CMD_VISIBLE:
-		output_var.Assign(IsWindowVisible(control_window) ? _T("1") : _T("0"));
+		output_var.Assign(IsWindowVisible(control_window) ? 1 : 0); // Force pure boolean 0/1.
 		break;
 
 	case CONTROLGET_CMD_TAB: // must be a Tab Control

@@ -3587,9 +3587,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					// So maybe maintain them together.
 					right_side_of_operator = omit_leading_whitespace(right_side_of_operator);
 					if (!_tcsicmp(right_side_of_operator, _T("false")))
-						var->Assign(_T("0"));
+						var->Assign(FALSE);
 					else if (!_tcsicmp(right_side_of_operator, _T("true")))
-						var->Assign(_T("1"));
+						var->Assign(TRUE);
 					else // The only other supported initializers are "string", integers, and floats.
 					{
 						// Vars could be supported here via FindVar(), but only globals ABOVE this point in

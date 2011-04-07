@@ -1322,7 +1322,7 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 
 	case GUICONTROLGET_CMD_ENABLED:
 		// See commment below.
-		result = output_var.Assign(IsWindowEnabled(control.hwnd) ? _T("1") : _T("0"));
+		result = output_var.Assign(IsWindowEnabled(control.hwnd) ? 1 : 0); // Force pure boolean 0/1.
 		goto return_the_result;
 
 	case GUICONTROLGET_CMD_VISIBLE:
@@ -1330,9 +1330,9 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 		// for determining visibility than simply checking for WS_VISIBLE is the control and its parent
 		// window.  If so, it might be undocumented in MSDN.  It is mentioned here to explain why
 		// this "visible" sub-cmd is kept separate from some figure command such as "GuiControlGet, Out, Style":
-		// 1) The style method is cumbersome to script with since it requires bitwise operates afterward.
-		// 2) IsVisible() uses a different standard of detection than simply checking WS_VISIBLE.
-		result = output_var.Assign(IsWindowVisible(control.hwnd) ? _T("1") : _T("0"));
+		// 1) The style method is cumbersome to script with since it requires bitwise operations afterward.
+		// 2) IsWindowVisible() uses a different standard of detection than simply checking WS_VISIBLE.
+		result = output_var.Assign(IsWindowVisible(control.hwnd) ? 1 : 0); // Force pure boolean 0/1.
 		goto return_the_result;
 
 	case GUICONTROLGET_CMD_HWND: // v1.0.46.16: Although it overlaps with HwndOutputVar, Majkinetor wanted this to help with encapsulation/modularization.
@@ -6373,11 +6373,11 @@ ResultType GuiType::Submit(bool aHideIt)
 				else
 					selection_number = group_radios;
 				if (output_var)
-					output_var->Assign(_T("1"));
+					output_var->Assign(1);
 			}
 			else
 				if (output_var)
-					output_var->Assign(_T("0"));
+					output_var->Assign(0);
 		}
 	} // for()
 
@@ -6510,15 +6510,15 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 			switch (SendMessage(aControl.hwnd, BM_GETCHECK, 0, 0))
 			{
 			case BST_CHECKED:
-				return aOutputVar.Assign(_T("1"));
+				return aOutputVar.Assign(1);
 			case BST_UNCHECKED:
-				return aOutputVar.Assign(_T("0"));
+				return aOutputVar.Assign(0);
 			case BST_INDETERMINATE:
 				// Seems better to use a value other than blank because blank might sometimes represent the
 				// state of an unintialized or unfetched control.  In other words, a blank variable often
 				// has an external meaning that transcends the more specific meaning often desirable when
 				// retrieving the state of the control:
-				return aOutputVar.Assign(_T("-1"));
+				return aOutputVar.Assign(-1);
 			}
 			return FAIL; // Shouldn't be reached since ZERO(BST_UNCHECKED) is returned on failure.
 

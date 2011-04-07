@@ -3457,7 +3457,7 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 		if (target_window_determined)
 		{
 			if (!target_window)
-				return output_var.Assign(_T("0")); // 0 windows found
+				return output_var.Assign(0); // 0 windows found
 			if (cmd == WINGET_CMD_LIST)
 			{
 				// Otherwise, since the target window has been determined, we know that it is
@@ -3468,7 +3468,7 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 				if (!array_item->AssignHWND(target_window))
 					return FAIL;
 			}
-			return output_var.Assign(_T("1"));  // 1 window found
+			return output_var.Assign(1);  // 1 window found
 		}
 		// Otherwise, the target window(s) have not yet been determined and a special method
 		// is required to gather them.
@@ -6712,7 +6712,7 @@ ResultType Line::StringSplit(LPTSTR aArrayName, LPTSTR aInputString, LPTSTR aDel
 	}
 
 	if (!*aInputString) // The input variable is blank, thus there will be zero elements.
-		return array0->Assign(_T("0"));  // Store the count in the 0th element.
+		return array0->Assign(0);  // Store the count in the 0th element.
 
 	DWORD next_element_number;
 	Var *next_element;
