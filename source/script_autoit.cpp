@@ -356,7 +356,7 @@ else\
 				// v1.0.43.03: It's debatable, but it seems best to support locale's case insensitivity for
 				// menu items, since menu names tend to adapt to the user's locale.  By contrast, things
 				// like process names (in the Process command) do not tend to change, so it seems best to
-				// have them continue to use stricmp(): 1) avoids breaking exisitng scripts; 2) provides
+				// have them continue to use stricmp(): 1) avoids breaking existing scripts; 2) provides
 				// consistent behavior across multiple locales; 3) performance.
 				match_found = !lstrcmpni(menu_text  // This call is basically a strnicmp() that obeys locale.
 					, menu_text_length > this_menu_param_length ? this_menu_param_length : menu_text_length
@@ -2204,7 +2204,7 @@ DWORD ProcessExist9x2000(LPTSTR aProcess, LPTSTR aProcessName)
 		// But in case it ever does, ensure consistency by removing the path:
 		_tsplitpath(proc.szExeFile, szDrive, szDir, szFile, szExt);
 		_tcscat(szFile, szExt);
-		if (!_tcsicmp(szFile, aProcess)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+		if (!_tcsicmp(szFile, aProcess)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 		{
 			if (aProcessName) // Caller wanted process name also.
 				_tcscpy(aProcessName, szFile);
@@ -2307,7 +2307,7 @@ DWORD ProcessExistNT4(LPTSTR aProcess, LPTSTR aProcessName)
 			{
 				_tsplitpath(szProcessName, szDrive, szDir, szFile, szExt);
 				_tcscat(szFile, szExt);
-				if (!_tcsicmp(szFile, aProcess)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+				if (!_tcsicmp(szFile, aProcess)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 				{
 					if (aProcessName) // Caller wanted process name also.
 						_tcscpy(aProcessName, szProcessName);

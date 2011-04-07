@@ -144,11 +144,12 @@ private:
 	#define VAR_ATTRIB_TYPES (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_BINARY_CLIP) // These four are mutually exclusive (but NOT_NUMERIC may be combined with OBJECT or BINARY_CLIP).
 	#define VAR_ATTRIB_OFTEN_REMOVED (VAR_ATTRIB_CACHE | VAR_ATTRIB_BINARY_CLIP | VAR_ATTRIB_CONTENTS_OUT_OF_DATE | VAR_ATTRIB_UNINITIALIZED)
 	VarAttribType mAttrib;  // Bitwise combination of the above flags (but many of them may be mutually exclusive).
-	#define VAR_LOCAL			0x01
-	#define VAR_LOCAL_FUNCPARAM	0x02 // Indicates this local var is a function's parameter.  VAR_LOCAL_DECLARED should also be set.
-	#define VAR_LOCAL_STATIC	0x04 // Indicates this local var retains its value between function calls.
-	#define VAR_LOCAL_DECLARED	0x08 // Indicates this local var was declared somehow, not automatic.
-	UCHAR mIsLocal;  // Bitwise combination of the above flags.
+	#define VAR_GLOBAL			0x01
+	#define VAR_LOCAL			0x02
+	#define VAR_LOCAL_FUNCPARAM	0x10 // Indicates this local var is a function's parameter.  VAR_LOCAL_DECLARED should also be set.
+	#define VAR_LOCAL_STATIC	0x20 // Indicates this local var retains its value between function calls.
+	#define VAR_DECLARED		0x40 // Indicates this var was declared somehow, not automatic.
+	UCHAR mScope;  // Bitwise combination of the above flags.
 	VarTypeType mType; // Keep adjacent/contiguous with the above due to struct alignment, to save memory.
 	// Performance: Rearranging mType and the other byte-sized members with respect to each other didn't seem
 	// to help performance.  However, changing VarTypeType from UCHAR to int did boost performance a few percent,
@@ -518,7 +519,7 @@ public:
 
 	__forceinline bool IsStatic()
 	{
-		return (mIsLocal & VAR_LOCAL_STATIC);
+		return (mScope & VAR_LOCAL_STATIC);
 	}
 
 	__forceinline bool IsLocal()
@@ -526,7 +527,7 @@ public:
 		// Since callers want to know whether this variable is local, even if it's a local alias for a
 		// global, don't use the method below:
 		//    return (mType == VAR_ALIAS) ? mAliasFor->mIsLocal : mIsLocal;
-		return mIsLocal;
+		return (mScope & VAR_LOCAL);
 	}
 
 	__forceinline bool IsNonStaticLocal()
@@ -536,24 +537,23 @@ public:
 		// Even a ByRef local is considered local here because callers are interested in whether this
 		// variable can vary from call to call to the same function (and a ByRef can vary in what it
 		// points to).  Variables that vary can thus be altered by the backup/restore process.
-		return mIsLocal && !(mIsLocal & VAR_LOCAL_STATIC);
+		return (mScope & (VAR_LOCAL|VAR_LOCAL_STATIC)) == VAR_LOCAL;
 	}
 
 	//__forceinline bool IsFuncParam()
 	//{
-	//	return (mIsLocal & VAR_LOCAL_FUNCPARAM);
+	//	return (mScope & VAR_LOCAL_FUNCPARAM);
 	//}
 
-	__forceinline bool IsDeclaredLocal()
-	// Returns true if this is a declared local var, such as "local var", "static var" or a func param.
+	__forceinline bool IsDeclared()
+	// Returns true if this is a declared var, such as "local var", "static var" or a func param.
 	{
-		return (mIsLocal & VAR_LOCAL_DECLARED);
+		return (mScope & VAR_DECLARED);
 	}
 
-	__forceinline void MarkLocalDeclared()
+	__forceinline UCHAR Scope()
 	{
-		if (mIsLocal) // Test first, to ensure this method can't be erroneously used to mark a global.
-			mIsLocal |= VAR_LOCAL_DECLARED;
+		return mScope;
 	}
 
 	__forceinline bool IsBinaryClip()
@@ -689,17 +689,6 @@ public:
 		return sEmptyString; // For reserved vars (but this method should probably never be called for them).
 	}
 
-	void ConvertToStatic()
-	// Caller must ensure that it's a local variable.
-	{
-		mIsLocal |= VAR_LOCAL_STATIC;
-	}
-
-	void ConvertToNonStatic()
-	{
-		mIsLocal &= ~VAR_LOCAL_STATIC;
-	}
-
 	__forceinline void ConvertToNonAliasIfNecessary() // __forceinline because it's currently only called from one place.
 	// When this function actually converts an alias into a normal variable, the variable's old
 	// attributes (especially mContents and mCapacity) become dominant again.  This prevents a memory
@@ -765,14 +754,14 @@ public:
 	}
 
 	// Constructor:
-	Var(LPTSTR aVarName, void *aType, UCHAR aIsLocal)
+	Var(LPTSTR aVarName, void *aType, UCHAR aScope)
 		// The caller must ensure that aVarName is non-null.
 		: mCharContents(sEmptyString) // Invariant: Anyone setting mCapacity to 0 must also set mContents to the empty string.
 		// Doesn't need initialization: , mContentsInt64(NULL)
 		, mByteLength(0) // This also initializes mAliasFor within the same union.
 		, mHowAllocated(ALLOC_NONE)
 		, mAttrib(VAR_ATTRIB_UNINITIALIZED) // Seems best not to init empty vars to VAR_ATTRIB_NOT_NUMERIC because it would reduce maintainability, plus finding out whether an empty var is numeric via IsNumeric() is a very fast operation.
-		, mIsLocal(aIsLocal)
+		, mScope(aScope)
 		, mName(aVarName) // Caller gave us a pointer to dynamic memory for this (or static in the case of ResolveVarOfArg()).
 	{
 		if (aType > (void *)VAR_LAST_TYPE) // Relies on the fact that numbers less than VAR_LAST_TYPE can never realistically match the address of any function.

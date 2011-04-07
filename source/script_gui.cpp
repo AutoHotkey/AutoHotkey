@@ -1289,34 +1289,29 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 		// var names that are too long:
 		TCHAR var_name[MAX_VAR_NAME_LENGTH + 20];
 		Var *var;
-		int always_use = output_var.IsLocal() ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL;
 		if (   !(var = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sX"), output_var.mName)
-			, always_use))   ) // Called with output_var to enhance performance.
+			, sntprintf(var_name, _countof(var_name), _T("%sX"), output_var.mName)))   )
 		{
 			result = FAIL; // It will have already displayed the error.
 			goto return_the_result;
 		}
 		var->Assign(pt.x);
 		if (   !(var = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sY"), output_var.mName)
-			, always_use))   ) // Called with output_var to enhance performance.
+			, sntprintf(var_name, _countof(var_name), _T("%sY"), output_var.mName)))   )
 		{
 			result = FAIL; // It will have already displayed the error.
 			goto return_the_result;
 		}
 		var->Assign(pt.y);
 		if (   !(var = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sW"), output_var.mName)
-			, always_use))   ) // Called with output_var to enhance performance.
+			, sntprintf(var_name, _countof(var_name), _T("%sW"), output_var.mName)))   )
 		{
 			result = FAIL; // It will have already displayed the error.
 			goto return_the_result;
 		}
 		var->Assign(rect.right - rect.left);
 		if (   !(var = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sH"), output_var.mName)
-			, always_use))   ) // Called with output_var to enhance performance.
+			, sntprintf(var_name, _countof(var_name), _T("%sH"), output_var.mName)))   )
 		{
 			result = FAIL; // It will have already displayed the error.
 			goto return_the_result;
@@ -4307,7 +4302,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		else if (!_tcsicmp(next_option, _T("Theme")))
 			aOpt.use_theme = adding;
 		else if (!_tcsnicmp(next_option, _T("Hwnd"), 4))
-			aOpt.hwnd_output_var = g_script.FindOrAddVar(next_option + 4, 0, ALWAYS_PREFER_LOCAL); // ALWAYS_PREFER_LOCAL is debatable, but for simplicity it seems best since it causes HwndOutputVar to behave the same as the vVar option.
+			aOpt.hwnd_output_var = g_script.FindOrAddVar(next_option + 4);
 
 		// Picture / ListView
 		else if (!_tcsnicmp(next_option, _T("Icon"), 4)) // Caller should ignore aOpt.icon_number if it isn't applicable for this control type.
@@ -4600,7 +4595,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					++next_option; // Now it should point to the variable name of the buddy control.
 					// Check if there's an existing *global* variable of this name.  It must be global
 					// because the variable of a control can never be a local variable:
-					Var *var = g_script.FindVar(next_option, 0, NULL, ALWAYS_USE_GLOBAL); // Search globals only.
+					Var *var = g_script.FindVar(next_option, 0, NULL, FINDVAR_GLOBAL); // Search globals only.
 					if (var)
 					{
 						var = var->ResolveAlias(); // Update it to its target if it's an alias.
@@ -5058,10 +5053,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				// This is because it allows layout editors and other script generators to omit the variable
 				// and yet still be able to generate a runnable script.
 				Var *candidate_var;
-				// ALWAYS_PREFER_LOCAL is used below so that any existing local variable (e.g. a ByRef alias or
-				// static) will take precedence over a global of the same name when assume-global is in effect.
-				// If neither type of variable exists, a global will be created if assume-global is in effect.
-				if (   !(candidate_var = g_script.FindOrAddVar(next_option, 0, ALWAYS_PREFER_LOCAL))   ) // Find local or global, see below.
+				if (   !(candidate_var = g_script.FindOrAddVar(next_option))   ) // Find local or global, see below.
 					// For now, this is always a critical error that stops the current quasi-thread rather
 					// than setting ErrorLevel (if ErrorLevel is called for).  This is because adding a
 					// variable can cause one of any number of different errors to be displayed, and changing
@@ -6782,7 +6774,7 @@ GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 	// improved by skipping the first loop entirely when aControlID doesn't exist as a global
 	// variable (GUI controls always have global variables, not locals).
 	Var *var;
-	if (var = g_script.FindVar(aControlID, 0, NULL, ALWAYS_USE_GLOBAL)) // First search globals only because for backward compatibility, a GUI control whose Var* is identical to that of a global should be given precedence over a static that matches some other control.  Furthermore, since most GUI variables are global, doing this check before the static check improves avg-case performance.
+	if (var = g_script.FindVar(aControlID, 0, NULL, FINDVAR_GLOBAL)) // First search globals only because for backward compatibility, a GUI control whose Var* is identical to that of a global should be given precedence over a static that matches some other control.  Furthermore, since most GUI variables are global, doing this check before the static check improves avg-case performance.
 	{
 		// No need to do "var = var->ResolveAlias()" because the line above never finds locals, only globals.
 		// Similarly, there's no need to do confirm that var->IsLocal()==false.
@@ -6791,7 +6783,7 @@ GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 				return u;  // Match found.
 	}
 	if (g->CurrentFunc // v1.0.46.15: Since above failed to match: if we're in a function (which is checked for performance reasons), search for a static or ByRef-that-points-to-a-global-or-static because both should be supported.
-		&& (var = g_script.FindVar(aControlID, 0, NULL, ALWAYS_USE_LOCAL)))
+		&& (var = g_script.FindVar(aControlID, 0, NULL, FINDVAR_LOCAL)))
 	{
 		// No need to do "var = var->ResolveAlias()" because the line above never finds locals, only globals.
 		// Similarly, there's no need to do confirm that var->IsLocal()==false.
@@ -7088,7 +7080,7 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 int GuiType::FindFont(FontType &aFont)
 {
 	for (int i = 0; i < sFontCount; ++i)
-		if (!_tcsicmp(sFont[i].name, aFont.name) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales.
+		if (!_tcsicmp(sFont[i].name, aFont.name) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales.
 			&& sFont[i].point_size == aFont.point_size
 			&& sFont[i].weight == aFont.weight
 			&& sFont[i].italic == aFont.italic

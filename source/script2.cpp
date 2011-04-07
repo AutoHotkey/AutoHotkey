@@ -3463,8 +3463,7 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 				// Otherwise, since the target window has been determined, we know that it is
 				// the only window to be put into the array:
 				if (   !(array_item = g_script.FindOrAddVar(var_name
-					, sntprintf(var_name, _countof(var_name), _T("%s1"), output_var.mName)
-					, output_var.IsLocal() ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL))   )  // Find or create element #1.
+					, sntprintf(var_name, _countof(var_name), _T("%s1"), output_var.mName)))   )  // Find or create element #1.
 					return FAIL;  // It will have already displayed the error.
 				if (!array_item->AssignHWND(target_window))
 					return FAIL;
@@ -3607,7 +3606,7 @@ BOOL CALLBACK EnumChildGetControlList(HWND aWnd, LPARAM lParam)
 		// Check if this class already exists in the class array:
 		int class_index;
 		for (class_index = 0; class_index < cl.total_classes; ++class_index)
-			if (!_tcsicmp(cl.class_name[class_index], line)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales.
+			if (!_tcsicmp(cl.class_name[class_index], line)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales.
 				break;
 		if (class_index < cl.total_classes) // Match found.
 		{
@@ -3886,22 +3885,17 @@ ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
 		// to start the search.  Use the base array name rather than the preceding element because,
 		// for example, Array19 is alphabetially less than Array2, so we can't rely on the
 		// numerical ordering:
-		int always_use;
-		always_use = output_var.IsLocal() ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL;
 		if (   !(output_var_left = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sLeft"), output_var.mName)
-			, always_use))   )
+			, sntprintf(var_name, _countof(var_name), _T("%sLeft"), output_var.mName)))   )
 			return FAIL;  // It already reported the error.
 		if (   !(output_var_top = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sTop"), output_var.mName)
-			, always_use))   )
+			, sntprintf(var_name, _countof(var_name), _T("%sTop"), output_var.mName)))   )
 			return FAIL;
 		if (   !(output_var_right = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sRight"), output_var.mName)
-			, always_use))   )
+			, sntprintf(var_name, _countof(var_name), _T("%sRight"), output_var.mName)))   )
 			return FAIL;
 		if (   !(output_var_bottom = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sBottom"), output_var.mName), always_use))   )
+			, sntprintf(var_name, _countof(var_name), _T("%sBottom"), output_var.mName)))   )
 			return FAIL;
 
 		RECT monitor_rect;
@@ -6713,13 +6707,9 @@ ResultType Line::StringSplit(LPTSTR aArrayName, LPTSTR aInputString, LPTSTR aDel
 	{
 		var_name_suffix[0] = '0';
 		var_name_suffix[1] = '\0';
-		// ALWAYS_PREFER_LOCAL below allows any existing local variable that matches array0's name
-		// (e.g. Array0) to be given preference over creating a new global variable if the function's
-		// mode is to assume globals:
-		if (   !(array0 = g_script.FindOrAddVar(var_name, 0, ALWAYS_PREFER_LOCAL))   )
+		if (   !(array0 = g_script.FindOrAddVar(var_name))   )
 			return FAIL;  // It will have already displayed the error.
 	}
-	int always_use = array0->IsLocal() ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL;
 
 	if (!*aInputString) // The input variable is blank, thus there will be zero elements.
 		return array0->Assign(_T("0"));  // Store the count in the 0th element.
@@ -6738,7 +6728,7 @@ ResultType Line::StringSplit(LPTSTR aArrayName, LPTSTR aInputString, LPTSTR aDel
 			// to start the search.  Use element #0 rather than the preceding element because,
 			// for example, Array19 is alphabetially less than Array2, so we can't rely on the
 			// numerical ordering:
-			if (   !(next_element = g_script.FindOrAddVar(var_name, 0, always_use))   )
+			if (   !(next_element = g_script.FindOrAddVar(var_name))   )
 				return FAIL;  // It will have already displayed the error.
 
 			if (delimiter = StrChrAny(contents_of_next_element, aDelimiterList)) // A delimiter was found.
@@ -6791,7 +6781,7 @@ ResultType Line::StringSplit(LPTSTR aArrayName, LPTSTR aInputString, LPTSTR aDel
 		if (*dp) // Omitted.
 			continue;
 		_ultot(next_element_number, var_name_suffix, 10);
-		if (   !(next_element = g_script.FindOrAddVar(var_name, 0, always_use))   )
+		if (   !(next_element = g_script.FindOrAddVar(var_name))   )
 			return FAIL;  // It will have already displayed the error.
 		if (!next_element->Assign(cp, 1))
 			return FAIL;
@@ -12682,7 +12672,6 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 	_tcscpy(var_name, output_var.mName); // This prefix is copied in only once, for performance.
 	size_t suffix_length, prefix_length = _tcslen(var_name);
 	LPTSTR var_name_suffix = var_name + prefix_length; // The position at which to copy the sequence number (index).
-	int always_use = output_var.IsLocal() ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL;
 	int n, p = 1, *this_offset = offset + 2; // Init for both loops below.
 	Var *array_item;
 	bool subpat_not_matched;
@@ -12715,10 +12704,10 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 					const LPCTSTR &the_subpat_name = subpat_name[p];
 #endif
 					suffix_length = _stprintf(var_name_suffix, _T("Pos%s"), the_subpat_name); // Append the subpattern to the array's base name.
-					if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length, always_use))
+					if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length))
 						array_item->Assign(subpat_pos);
 					suffix_length = _stprintf(var_name_suffix, _T("Len%s"), the_subpat_name); // Append the subpattern name to the array's base name.
-					if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length, always_use))
+					if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length))
 						array_item->Assign(subpat_len); // It seemed more convenient for scripts to store Length instead of an ending offset.
 					// Fix for v1.0.45.01: Section below added.  See similar section further below for comments.
 					if (!subpat_not_matched && allow_dupe_subpat_names) // Explicitly check subpat_not_matched not pos/len so that behavior is consistent with the default mode (non-position).
@@ -12732,11 +12721,11 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 			{
 				// For comments about this section, see the similar for-loop later below.
 				suffix_length = _stprintf(var_name_suffix, _T("Pos%d"), p); // Append the element number to the array's base name.
-				if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length, always_use))
+				if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length))
 					array_item->Assign(subpat_pos);
 				//else var couldn't be created: no error reporting currently, since it basically should never happen.
 				suffix_length = _stprintf(var_name_suffix, _T("Len%d"), p); // Append the element number to the array's base name.
-				if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length, always_use))
+				if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length))
 					array_item->Assign(subpat_len);
 			}
 		}
@@ -12764,7 +12753,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 			{
 				// This section is similar to the one in the "else" below, so see it for more comments.
 				_tcscpy(var_name_suffix, UorA(CStringTCharFromUTF8(subpat_name[p]), subpat_name[p])); // Append the subpat name to the array's base name.  _tcscpy() seems safe because PCRE almost certainly enforces the 32-char limit on subpattern names.
-				if (array_item = g_script.FindOrAddVar(var_name, 0, always_use))
+				if (array_item = g_script.FindOrAddVar(var_name))
 				{
 					if (p < pattern_count-1 // i.e. there's at least one more subpattern after this one (if there weren't, making a copy of haystack wouldn't be necessary because overlap can't harm this final assignment).
 						&& haystack == array_item->Contents(FALSE)) // For more comments, see similar section in BIF_RegEx.
@@ -12799,7 +12788,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 			// to start the search.  Use the base array name rather than the preceding element because,
 			// for example, Array19 is alphabetially less than Array2, so we can't rely on the
 			// numerical ordering:
-			if (array_item = g_script.FindOrAddVar(var_name, 0, always_use))
+			if (array_item = g_script.FindOrAddVar(var_name))
 			{
 				if (p < pattern_count-1 // i.e. there's at least one more subpattern after this one (if there weren't, making a copy of haystack wouldn't be necessary because overlap can't harm this final assignment).
 					&& haystack == array_item->Contents(FALSE)) // For more comments, see similar section in BIF_RegEx.
@@ -12870,7 +12859,7 @@ int RegExCallout(pcre_callout_block *cb)
 	Func *callout_func = (Func *)cb->user_callout;
 	if (!callout_func)
 	{
-		Var *pcre_callout_var = g_script.FindVar(_T("pcre_callout"), 12, NULL, ALWAYS_PREFER_LOCAL); // Local to caller of RegExMatch/Replace().
+		Var *pcre_callout_var = g_script.FindVar(_T("pcre_callout"), 12); // This may be a local of the UDF which called RegExMatch/Replace().
 		if (!pcre_callout_var)
 			return 0; // Seems best to ignore the callout rather than aborting the match.
 

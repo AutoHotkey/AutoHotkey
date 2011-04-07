@@ -221,9 +221,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					// since it seems relatively harmless to create a blank variable in something like var := Array%i%
 					// (though it will produce a runtime error if the double resolves to an illegal variable name such
 					// as one containing spaces).
-					// The use of ALWAYS_PREFER_LOCAL below improves flexibility of assume-global functions
-					// by allowing this command to resolve to a local first if such a local exists:
-					if (   !(temp_var = g_script.FindOrAddVar(left_buf, var_name_length, ALWAYS_PREFER_LOCAL))   )
+					if (   !(temp_var = g_script.FindOrAddVar(left_buf, var_name_length))   )
 					{
 						// Above already displayed the error.  As of v1.0.31, this type of error is displayed and
 						// causes the current thread to terminate, which seems more useful than the old behavior

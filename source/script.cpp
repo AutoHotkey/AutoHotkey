@@ -51,7 +51,6 @@ Script::Script()
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 	, mCurrentFuncOpenBlockCount(0), mNextLineIsFunctionBody(false)
-	, mFuncExceptionVar(NULL), mFuncExceptionVarCount(0)
 	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true), mMenuUseErrorLevel(false)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
@@ -1379,8 +1378,8 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	two_char_string[2] = '\0';  //
 	int continuation_line_count;
 
-	#define MAX_FUNC_VAR_EXCEPTIONS 2000
-	Var *func_exception_var[MAX_FUNC_VAR_EXCEPTIONS];
+	#define MAX_FUNC_VAR_GLOBALS 2000
+	Var *func_global_var[MAX_FUNC_VAR_GLOBALS];
 
 	// Init both for main file and any included files loaded by this function:
 	mCurrFileIndex = source_file_index;  // source_file_index is kept on the stack due to recursion (from #include).
@@ -1870,11 +1869,11 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 					// Though it might be allowed in the future -- perhaps to have nested functions have
 					// access to their parent functions' local variables, or perhaps just to improve
 					// script readability and maintainability -- it's currently not allowed because of
-					// the practice of maintaining the func_exception_var list on our stack:
+					// the practice of maintaining the func_global_var list on our stack:
 					ScriptError(_T("Functions cannot contain functions."), pending_function);
 					return CloseAndReturnFail(fp);
 				}
-				if (!DefineFunc(pending_function, func_exception_var))
+				if (!DefineFunc(pending_function, func_global_var))
 					return CloseAndReturnFail(fp);
 				if (pending_function_has_brace) // v1.0.41: Support one-true-brace for function def, e.g. fn() {
 				{
@@ -2789,11 +2788,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		}
 
 		Func *currentFunc = g->CurrentFunc;
-		Var **funcExceptionVar = mFuncExceptionVar;
-
 		// Ensure variable references are global:
 		g->CurrentFunc = NULL;
-		mFuncExceptionVar = NULL;
 
 		ConvertEscapeSequences(parameter, g_EscapeChar, false); // Normally done in ParseAndAddLine().
 
@@ -2812,9 +2808,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			mLastLine->mNextLine = NULL;
 		mCurrLine = mLastLine;
 
-		// Restore the properties we overrode earlier.
+		// Restore to previous value:
 		g->CurrentFunc = currentFunc;
-		mFuncExceptionVar = funcExceptionVar;
 
 		// Set the new criterion.
 		g_HotCriterion = HOT_IF_EXPR;
@@ -3277,7 +3272,7 @@ Label *Script::FindLabel(LPTSTR aLabelName)
 {
 	if (!aLabelName || !*aLabelName) return NULL;
 	for (Label *label = mFirstLabel; label != NULL; label = label->mNextLabel)
-		if (!_tcsicmp(label->mName, aLabelName)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+		if (!_tcsicmp(label->mName, aLabelName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			return label; // Match found.
 	return NULL; // No match found.
 }
@@ -3415,13 +3410,12 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				// If the first non-directive, non-label line in the function's body contains
 				// the "local" keyword, everything inside this function will assume that variables
 				// are global unless they are explicitly declared local (this is the opposite of
-				// the default).  The converse is also true.  UPDATE: "static" must also force ASSUME_LOCAL
-				// into effect because otherwise statics wouldn't go into the exception list and thus
-				// wouldn't be properly looked up when they're referenced throughout the function body.
-				// Therefore, if the first line of the function body is "static MyVar", VAR_DECLARE_LOCAL
-				// goes into effect permanently, which can be worked around by using the word "global"
-				// as the first word of the function instead.
-				g->CurrentFunc->mDefaultVarType = declare_type == VAR_DECLARE_LOCAL ? VAR_DECLARE_GLOBAL : VAR_DECLARE_LOCAL;
+				// the default).  The converse is also true.
+				if (declare_type != VAR_DECLARE_STATIC)
+					g->CurrentFunc->mDefaultVarType = declare_type == VAR_DECLARE_LOCAL ? VAR_DECLARE_GLOBAL : VAR_DECLARE_LOCAL;
+				// Otherwise, leave it as-is to allow the following:
+				// static x
+				// local y
 			}
 			else // Since this isn't the first line of the function's body, mDefaultVarType has aleady been set permanently.
 			{
@@ -3443,14 +3437,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			// Since above didn't break or return, a variable is being declared as an exception to the
 			// mode specified by mDefaultVarType.
 
-			// v1.0.48: A declaration is an exception to this function's assume-mode when the
-			// declaration's general nature as a local-or-global (in which static is considered local)
-			// differs from that of the current mode.  In other words, a static or local declaration is
-			// not an exception unless this function is assume-global.  Also, earlier logic has ensured
-			// that mDefaultVarType!=VAR_DECLARE_NONE by the time the first variable declaration is reached.
-			// Lexikos: Changed the following to support assume-static mode - i.e. when declaring a local,
-			// it is only an "exception" if the function is assume-global.
-			bool is_exception = ((declare_type == VAR_DECLARE_GLOBAL) != (g->CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL));
 			bool open_brace_was_added, belongs_to_if_or_else_or_loop;
 			size_t var_name_length;
 			LPTSTR item;
@@ -3462,38 +3448,35 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				LPTSTR item_end = find_identifier_end(item + 1);
 				var_name_length = (VarSizeType)(item_end - item);
 
-				int always_use;
-				if (is_exception)
-					always_use = g->CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL;
-				else
-					always_use = ALWAYS_USE_DEFAULT;
-
-				Var *var;
-				bool is_already_exception;
-				if (   !(var = FindOrAddVar(item, var_name_length, always_use, &is_already_exception))   )
-					return FAIL; // It already displayed the error.
-				if (is_already_exception) // It was already in the exception list (previously declared).
-					return ScriptError(_T("Duplicate declaration."), item);
-				if (var->Type() != VAR_NORMAL || !tcslicmp(item, _T("ErrorLevel"), var_name_length)) // Shouldn't be declared either way (global or local).
-					return ScriptError(_T("Built-in variables must not be declared."), item);
-				for (int i = 0; i < g->CurrentFunc->mParamCount; ++i) // Search by name to find both global and local declarations.
+				Var *var = NULL;
+				int i;
+				for (i = 0; i < g->CurrentFunc->mParamCount; ++i) // Search by name to find both global and local declarations.
 					if (!tcslicmp(item, g->CurrentFunc->mParam[i].var->mName, var_name_length))
 						return ScriptError(_T("Parameters must not be declared."), item);
-				if (is_exception)
-				{
-					if (mFuncExceptionVarCount >= MAX_FUNC_VAR_EXCEPTIONS)
-						return ScriptError(_T("Too many declarations."), item); // Short message since it's so unlikely.
-					mFuncExceptionVar[mFuncExceptionVarCount++] = var;
-				}
-				if (declare_type == VAR_DECLARE_STATIC)
-					var->ConvertToStatic();
-				else if (declare_type == VAR_DECLARE_LOCAL && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_STATIC) // v1.0.48: Lexikos.
-					// For explicitly-declared locals, remove VAR_LOCAL_STATIC because AddVar() earlier set it
-					// as a default due to assume-static mode.
-					var->ConvertToNonStatic();
+				// Detect conflicting declarations:
+				var = FindVar(item, var_name_length, NULL, FINDVAR_LOCAL);
+				if (var && (var->Scope() & ~VAR_DECLARED) == (declare_type & ~VAR_DECLARED) && declare_type != VAR_DECLARE_STATIC)
+					var = NULL; // Allow redeclaration using same scope; e.g. "local x := 1 ... local x := 2" down two different code paths.
+				if (!var && declare_type != VAR_DECLARE_GLOBAL)
+					for (i = 0; i < g->CurrentFunc->mGlobalVarCount; ++i) // Explicitly search this array vs calling FindVar() in case func is assume-global.
+						if (!tcslicmp(g->CurrentFunc->mGlobalVar[i]->mName, item, -1, var_name_length))
+						{
+							var = g->CurrentFunc->mGlobalVar[i];
+							break;
+						}
+				if (var)
+					return ScriptError(var->IsDeclared() ? _T("Duplicate declaration.") : _T("Declaration conflicts with existing var."), item);
 
-				if (declare_type != VAR_DECLARE_GLOBAL)	// i.e. local or static.
-					var->MarkLocalDeclared();
+				if (   !(var = FindOrAddVar(item, var_name_length, declare_type))   )
+					return FAIL; // It already displayed the error.
+				if (var->Type() != VAR_NORMAL || !tcslicmp(item, _T("ErrorLevel"), var_name_length)) // Shouldn't be declared either way (global or local).
+					return ScriptError(_T("Built-in variables must not be declared."), item);
+				if (declare_type == VAR_DECLARE_GLOBAL)
+				{
+					if (g->CurrentFunc->mGlobalVarCount >= MAX_FUNC_VAR_GLOBALS)
+						return ScriptError(_T("Too many declarations."), item); // Short message since it's so unlikely.
+					g->CurrentFunc->mGlobalVar[g->CurrentFunc->mGlobalVarCount++] = var;
+				}
 
 				item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
 
@@ -6152,9 +6135,20 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		--mCurrentFuncOpenBlockCount; // It's okay to increment unconditionally because it is reset to zero every time a new function definition is entered.
 		if (g->CurrentFunc && !mCurrentFuncOpenBlockCount) // Any negative mCurrentFuncOpenBlockCount is caught by a different stage.
 		{
+			Func &func = *g->CurrentFunc;
+			if (func.mGlobalVarCount)
+			{
+				// Now that there can be no more "global" declarations, copy the list into persistent memory.
+				Var **global_vars;
+				if (  !(global_vars = (Var **)SimpleHeap::Malloc(func.mGlobalVarCount * sizeof(Var *)))  )
+					return ScriptError(ERR_OUTOFMEM);
+				memcpy(global_vars, func.mGlobalVar, func.mGlobalVarCount * sizeof(Var *));
+				func.mGlobalVar = global_vars;
+			}
+			else
+				func.mGlobalVar = NULL; // For maintainability.
 			line.mAttribute = ATTR_TRUE;  // Flag this ACT_BLOCK_END as the ending brace of a function's body.
 			g->CurrentFunc = NULL;
-			mFuncExceptionVar = NULL;  // Notify FindVar() that there is no exception list to search.
 		}
 	}
 
@@ -6257,7 +6251,7 @@ ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDere
 
 
 
-ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
+ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 // Returns OK or FAIL.
 // Caller has already called ValidateName() on the function, and it is known that this valid name
 // is followed immediately by an open-paren.  aFuncExceptionVar is the address of an array on
@@ -6325,7 +6319,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 		// new function's mDefaultVarType is always VAR_DECLARE_NONE at this early stage of its creation:
 		if (this_param.var = FindVar(param_start, param_length, &insert_pos))  // Assign.
 			return ScriptError(_T("Duplicate parameter."), param_start);
-		if (   !(this_param.var = AddVar(param_start, param_length, insert_pos, VAR_LOCAL_FUNCPARAM | VAR_LOCAL_DECLARED))   )	// Pass VAR_LOCAL_FUNCPARAM as last parameter to mean "it's a local but more specifically a function's parameter".
+		if (   !(this_param.var = AddVar(param_start, param_length, insert_pos, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM))   )	// Pass VAR_LOCAL_FUNCPARAM as last parameter to mean "it's a local but more specifically a function's parameter".
 			return FAIL; // It already displayed the error, including attempts to have reserved names as parameter names.
 		
 		this_param.default_type = PARAM_DEFAULT_NONE;  // Set default.
@@ -6456,8 +6450,8 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 	//else leave func.mParam/mParamCount set to their NULL/0 defaults.
 
 	// Indicate success:
-	mFuncExceptionVar = aFuncExceptionVar; // Give mFuncExceptionVar its address, to be used for any var declarations inside this function's body.
-	mFuncExceptionVarCount = 0;  // Reset in preparation of declarations that appear beneath this function's definition.
+	func.mGlobalVar = aFuncGlobalVar; // Give func.mGlobalVar its address, to be used for any var declarations inside this function's body.
+	func.mGlobalVarCount = 0;  // Reset in preparation of declarations that appear beneath this function's definition.
 	return OK;
 }
 
@@ -7408,9 +7402,7 @@ Var *Line::ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary)
 		// check it if we're not calling that):
 		if (!Var::ValidateName(sVarName, g_script.mIsReadyToExecute))
 			return NULL; // Above already displayed error for us.
-		// The use of ALWAYS_PREFER_LOCAL below improves flexibility of assume-global functions
-		// by allowing this command to resolve to a local first if such a local exists:
-		if (found_var = g_script.FindVar(sVarName, var_name_length, NULL, ALWAYS_PREFER_LOCAL)) // Assign.
+		if (found_var = g_script.FindVar(sVarName, var_name_length)) // Assign.
 			return found_var;
 		// At this point, this is either a non-existent variable or a reserved/built-in variable
 		// that was never statically referenced in the script (only dynamically), e.g. A_IPAddress%A_Index%
@@ -7424,10 +7416,8 @@ Var *Line::ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary)
 		//     StringTrimRight, IP, A_IPAddress%A_Index%, 0
 	}
 	// Otherwise, aCreateIfNecessary is true or we want to create this variable unconditionally for the
-	// reason described above.  ALWAYS_PREFER_LOCAL is used so that any existing local variable will
-	// take precedence over a global of the same name when assume-global is in effect.  If neither type
-	// of variable exists, a global variable will be created if assume-global is in effect.
-	if (   !(found_var = g_script.FindOrAddVar(sVarName, var_name_length, ALWAYS_PREFER_LOCAL))   )
+	// reason described above.
+	if (   !(found_var = g_script.FindOrAddVar(sVarName, var_name_length))   )
 		return NULL;  // Above will already have displayed the error.
 	if (this_arg.type == ARG_TYPE_OUTPUT_VAR && VAR_IS_READONLY(*found_var))
 	{
@@ -7440,7 +7430,7 @@ Var *Line::ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary)
 
 
 
-Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aAlwaysUse, bool *apIsException)
+Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aScope)
 // Caller has ensured that aVarName isn't NULL.
 // Returns the Var whose name matches aVarName.  If it doesn't exist, it is created.
 {
@@ -7449,17 +7439,18 @@ Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aAlwaysUse
 	int insert_pos;
 	bool is_local; // Used to detect which type of var should be added in case the result of the below is NULL.
 	Var *var;
-	if (var = FindVar(aVarName, aVarNameLength, &insert_pos, aAlwaysUse, apIsException, &is_local))
+	if (var = FindVar(aVarName, aVarNameLength, &insert_pos, aScope, &is_local))
 		return var;
 	// Otherwise, no match found, so create a new var.  This will return NULL if there was a problem,
 	// in which case AddVar() will already have displayed the error:
-	return AddVar(aVarName, aVarNameLength, insert_pos, is_local ? VAR_LOCAL : FALSE);
+	return AddVar(aVarName, aVarNameLength, insert_pos
+		, (aScope & ~(VAR_LOCAL | VAR_GLOBAL)) | (is_local ? VAR_LOCAL : VAR_GLOBAL)); // When aScope == FINDVAR_DEFAULT, it contains both the "local" and "global" bits.  This ensures only the appropriate bit is set.
 }
 
 
 
-Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, int aAlwaysUse
-	, bool *apIsException, bool *apIsLocal)
+Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, int aScope
+	, bool *apIsLocal)
 // Caller has ensured that aVarName isn't NULL.  It must also ignore the contents of apInsertPos when
 // a match (non-NULL value) is returned.
 // Returns the Var whose name matches aVarName.  If it doesn't exist, NULL is returned.
@@ -7485,90 +7476,14 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 	tcslcpy(var_name, aVarName, aVarNameLength + 1);  // +1 to convert length to size.
 
 	global_struct &g = *::g; // Reduces code size and may improve performance.
-	Var *found_var = NULL; // Set default.
-	bool is_local;
-	if (aAlwaysUse == ALWAYS_USE_GLOBAL)
-		is_local = false;
-	else if (aAlwaysUse == ALWAYS_USE_LOCAL)
-		// v1.0.44.10: The following was changed from it's former value of "true" so that places further below
-		// (including passing is_local is call to AddVar()) don't have to ensure that g.CurrentFunc!=NULL.
-		// This fixes a crash that occured when a caller specified ALWAYS_USE_LOCAL even though the current
-		// thread isn't actually inside a *called* function (perhaps meaning things like a timed subroutine
-		// that lies inside a "container function").
-		// Some callers like SYSGET_CMD_MONITORAREA might try to find/add a local array if they see that their
-		// base variable is classified as local (such classification occurs at loadtime, but only for non-dynamic
-		// variable references).  But the current thread entered a "container function" by means other than a
-		// function-call (such as SetTimer), not only is g.CurrentFunc NULL, but there's no easy way to discover
-		// which function owns the currently executing line (a means could be added to the class "Var" or "Line"
-		// but doesn't seem worth it yet due to performance and memory reduction).
-		is_local = (g.CurrentFunc != NULL);
-	else if (aAlwaysUse == ALWAYS_PREFER_LOCAL)
-	{
-		if (g.CurrentFunc) // Caller relies on us to do this final check.
-			is_local = true;
-		else
-		{
-			is_local = false;
-			aAlwaysUse = ALWAYS_USE_GLOBAL;  // Override aAlwaysUse for maintainability, in case there are more references to it below.
-		}
-	}
-	else // aAlwaysUse == ALWAYS_USE_DEFAULT
-	{
-		is_local = g.CurrentFunc && g.CurrentFunc->mDefaultVarType != VAR_DECLARE_GLOBAL; // i.e. ASSUME_LOCAL or ASSUME_NONE
-		if (mFuncExceptionVar) // Caller has ensured that this non-NULL if and only if g.CurrentFunc is non-NULL.
-		{
-			int i;
-			for (i = 0; i < mFuncExceptionVarCount; ++i)
-			{
-				if (!_tcsicmp(var_name, mFuncExceptionVar[i]->mName)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
-				{
-					is_local = !is_local;  // Since it's an exception, it's always the opposite of what it would have been.
-					found_var = mFuncExceptionVar[i];
-					break;
-				}
-			}
-			// The following section is necessary because a function's parameters are not put into the
-			// exception list during load-time.  Thus, for an assume-global function, these are basically
-			// treated as exceptions too.
-			// If this function is one that assumes variables are global, the function's parameters are
-			// implicitly declared local because parameters are always local:
-			// Since the following is inside this block, it is checked only at loadtime.  It doesn't need
-			// to be checked at runtime because most things that resolve input variables or variables whose
-			// contents will be read (as compared to something that tries to create a dynamic variable, such
-			// as ResolveVarOfArg() for an output variable) at runtime use the ALWAYS_PREFER_LOCAL flag to
-			// indicate that a local of the same name as a global should take precedence.  This adds more
-			// flexibility/benefit than its costs in terms of confusion because otherwise there would be
-			// no way to dynamically reference the local variables of an assume-global function.
-			if (g.CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL && !is_local) // g.CurrentFunc is also known to be non-NULL in this case.
-			{
-				int j = g.CurrentFunc->mParamCount + g.CurrentFunc->mIsVariadic; // i.e. must also check the "variadic" param, which isn't included in mParamCount.
-				for (i = 0; i < j; ++i)
-					if (!_tcsicmp(var_name, g.CurrentFunc->mParam[i].var->mName)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
-					{
-						is_local = true;
-						found_var = g.CurrentFunc->mParam[i].var;
-						break;
-					}
-			}
-		} // if (there is an exception list)
-	} // aAlwaysUse == ALWAYS_USE_DEFAULT
+	bool search_local = (aScope & VAR_LOCAL) && g.CurrentFunc;
 
-	// Above has ensured that g.CurrentFunc!=NULL whenever is_local==true.
-
-	if (apIsLocal) // Its purpose is to inform caller of type it would have been in case we don't find a match.
-		*apIsLocal = is_local; // And it stays this way even if globals will be searched because caller wants that.  In other words, a local var is created by default when there is not existing global or local.
-	if (apInsertPos) // Set default.  Caller should ignore the value when match is found.
-		*apInsertPos = -1;
-	if (apIsException)
-		*apIsException = (found_var != NULL);
-
-	if (found_var) // Match found (as an exception or load-time "is parameter" exception).
-		return found_var; // apInsertPos does not need to be set because caller doesn't need it when match is found.
+	// Above has ensured that g.CurrentFunc!=NULL whenever search_local==true.
 
 	// Init for binary search loop:
 	int left, right, mid, result;  // left/right must be ints to allow them to go negative and detect underflow.
 	Var **var;  // An array of pointers-to-var.
-	if (is_local)
+	if (search_local)
 	{
 		var = g.CurrentFunc->mVar;
 		right = g.CurrentFunc->mVarCount - 1;
@@ -7583,7 +7498,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 	for (left = 0; left <= right;) // "right" was already initialized above.
 	{
 		mid = (left + right) / 2;
-		result = _tcsicmp(var_name, var[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+		result = _tcsicmp(var_name, var[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 		if (result > 0)
 			left = mid + 1;
 		else if (result < 0)
@@ -7595,7 +7510,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 	// Since above didn't return, no match was found in the main list, so search the lazy list if there
 	// is one.  If there's no lazy list, the value of "left" established above will be used as the
 	// insertion point further below:
-	if (is_local)
+	if (search_local)
 	{
 		var = g.CurrentFunc->mLazyVar;
 		right = g.CurrentFunc->mLazyVarCount - 1;
@@ -7612,7 +7527,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 		for (left = 0; left <= right;)  // "right" was already initialized above.
 		{
 			mid = (left + right) / 2;
-			result = _tcsicmp(var_name, var[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+			result = _tcsicmp(var_name, var[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			if (result > 0)
 				left = mid + 1;
 			else if (result < 0)
@@ -7628,25 +7543,24 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 	// Set the output parameter, if present:
 	if (apInsertPos) // Caller wants this value even if we'll be resorting to searching the global list below.
 		*apInsertPos = left; // This is the index a newly inserted item should have to keep alphabetical order.
+	
+	if (apIsLocal) // Its purpose is to inform caller of type it would have been in case we don't find a match.
+		*apIsLocal = search_local;
 
 	// Since no match was found, if this is a local fall back to searching the list of globals at runtime
 	// if the caller didn't insist on a particular type:
-	if (is_local)
+	if (search_local && aScope == FINDVAR_DEFAULT)
 	{
-		if (aAlwaysUse == ALWAYS_PREFER_LOCAL)
-		{
-			// In this case, callers want to fall back to globals when a local wasn't found.  However,
-			// they want the insertion (if our caller will be doing one) to insert according to the
-			// current assume-mode.  Therefore, if the mode is assume-global, pass the apIsLocal
-			// and apInsertPos variables to FindVar() so that it will update them to be global.
-			// Otherwise, do not pass them since they were already set correctly by us above.
-			if (g.CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL)
-				return FindVar(aVarName, aVarNameLength, apInsertPos, ALWAYS_USE_GLOBAL, NULL, apIsLocal);
-			else
-				return FindVar(aVarName, aVarNameLength, NULL, ALWAYS_USE_GLOBAL);
-		}
-		if (aAlwaysUse == ALWAYS_USE_DEFAULT && mIsReadyToExecute) // In this case, fall back to globals only at runtime.
-			return FindVar(aVarName, aVarNameLength, NULL, ALWAYS_USE_GLOBAL);
+		// In this case, callers want to fall back to globals when a local wasn't found.  However,
+		// they want the insertion (if our caller will be doing one) to insert according to the
+		// current assume-mode.  Therefore, if the mode is assume-global, pass the apIsLocal
+		// and apInsertPos variables to FindVar() so that it will update them to be global.
+		if (g.CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL)
+			return FindVar(aVarName, aVarNameLength, apInsertPos, FINDVAR_GLOBAL, apIsLocal);
+		// Otherwise, caller only wants globals which are declared in *this* function:
+		for (int i = 0; i < g.CurrentFunc->mGlobalVarCount; ++i)
+			if (!_tcsicmp(var_name, g.CurrentFunc->mGlobalVar[i]->mName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+				return g.CurrentFunc->mGlobalVar[i];
 	}
 	// Otherwise, since above didn't return:
 	return NULL; // No match.
@@ -7654,7 +7568,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 
 
 
-Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aIsLocal)
+Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope)
 // Returns the address of the new variable or NULL on failure.
 // Caller must ensure that g->CurrentFunc!=NULL whenever aIsLocal!=0.
 // Caller must ensure that aVarName isn't NULL and that this isn't a duplicate variable name.
@@ -7688,6 +7602,8 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 		// Above already displayed error for us.  This can happen at loadtime or runtime (e.g. StringSplit).
 		return NULL;
 
+	bool aIsLocal = (aScope & VAR_LOCAL);
+
 	// Not necessary or desirable to add built-in variables to a function's list of locals.  Always keep
 	// built-in vars in the global list for efficiency and to keep them out of ListVars.  Note that another
 	// section at loadtime displays an error for any attempt to explicitly declare built-in variables as
@@ -7695,8 +7611,8 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	void *var_type = GetVarType(var_name);
 	if (aIsLocal && (var_type != (void *)VAR_NORMAL || !_tcsicmp(var_name, _T("ErrorLevel")))) // Attempt to create built-in variable as local.
 	{
-		if (  !(aIsLocal & VAR_LOCAL_FUNCPARAM)  ) // It's not a UDF's parameter, so fall back to the global built-in variable of this name rather than displaying an error.
-			return FindOrAddVar(var_name, aVarNameLength, ALWAYS_USE_GLOBAL); // Force find-or-create of global.
+		if (  !(aScope & VAR_LOCAL_FUNCPARAM)  ) // It's not a UDF's parameter, so fall back to the global built-in variable of this name rather than displaying an error.
+			return FindOrAddVar(var_name, aVarNameLength, FINDVAR_GLOBAL); // Force find-or-create of global.
 		else // (aIsLocal & VAR_LOCAL_FUNCPARAM), which means "this is a local variable and a function's parameter".
 		{
 			ScriptError(_T("Illegal parameter name."), aVarName); // Short message since so rare.
@@ -7713,14 +7629,13 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 
 	// Below specifically tests for VAR_LOCAL and excludes other non-zero values/flags:
 	//   VAR_LOCAL_FUNCPARAM should not be made static.
-	//   VAR_LOCAL_DECLARED indicates mDefaultVarType is irrelevant.
 	//   VAR_LOCAL_STATIC is already static.
-	if (aIsLocal == VAR_LOCAL && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_STATIC)
+	//   VAR_DECLARED indicates mDefaultVarType is irrelevant.
+	if (aScope == VAR_LOCAL && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_STATIC)
 		// v1.0.48: Lexikos: Current function is assume-static, so set static attribute.
-		// This will be overwritten (again) if this variable is being explicitly declared "local".
-		aIsLocal |= VAR_LOCAL_STATIC;
+		aScope |= VAR_LOCAL_STATIC;
 
-	Var *the_new_var = new Var(new_name, var_type, aIsLocal);
+	Var *the_new_var = new Var(new_name, var_type, aScope);
 	if (the_new_var == NULL)
 	{
 		ScriptError(ERR_OUTOFMEM);
@@ -7863,7 +7778,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 		for (target_name = lazy_var[i]->mName, left = 0, right = (int)(insert_pos - var - 1); left <= right;)
 		{
 			mid = (left + right) / 2;
-			if (_tcsicmp(target_name, var[mid]->mName) > 0) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+			if (_tcsicmp(target_name, var[mid]->mName) > 0) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 				left = mid + 1;
 			else // it must be < 0 because caller has ensured it can't be equal (i.e. that there will be no match)
 				right = mid - 1;
@@ -8108,7 +8023,7 @@ WinGroup *Script::FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound)
 	if (!*aGroupName)
 		return NULL;
 	for (WinGroup *group = mFirstGroup; group != NULL; group = group->mNextGroup)
-		if (!_tcsicmp(group->mName, aGroupName)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+		if (!_tcsicmp(group->mName, aGroupName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			return group; // Match found.
 	// Otherwise, no match found, so create a new group.
 	if (!aCreateIfNotFound || AddGroup(aGroupName) != OK)
@@ -13283,7 +13198,6 @@ ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
 	// in the script's variable list (due to the fact that they aren't directly referenced elsewhere
 	// in the script):
 	TCHAR var_name[MAX_VAR_NAME_LENGTH + 1] = _T("");
-	Var temp_var(var_name, (void *)VAR_NORMAL, false);
 
 	Var *var;
 	VarSizeType expanded_length;
@@ -13355,16 +13269,11 @@ ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
 			if (var_name_length && var_name_length <= MAX_VAR_NAME_LENGTH)
 			{
 				tcslcpy(var_name, cp, var_name_length + 1);  // +1 to convert var_name_length to size.
-				// The use of ALWAYS_PREFER_LOCAL below improves flexibility of assume-global functions
-				// by allowing this command to resolve to a local first if such a local exists.
 				// Fixed for v1.0.34: Use FindOrAddVar() vs. FindVar() so that environment or built-in
 				// variables that aren't directly referenced elsewhere in the script will still work:
-				if (   !(var = g_script.FindOrAddVar(var_name, var_name_length, ALWAYS_PREFER_LOCAL))   )
-					// Variable doesn't exist, but since it might be an environment variable never referenced
-					// directly elsewhere in the script, do special handling:
-					var = &temp_var;  // Relies on the fact that var_temp.mName *is* the var_name pointer.
-				else
-					var = var->ResolveAlias(); // This was already done (above) for aOutputVar.
+				if (   !(var = g_script.FindOrAddVar(var_name, var_name_length))   )
+					return FAIL; // Above already displayed the error.
+				var = var->ResolveAlias();
 				// Don't allow the output variable to be read into itself this way because its contents
 				if (var != aOutputVar) // Both of these have had ResolveAlias() called, if required, to make the comparison accurate.
 				{
@@ -13926,7 +13835,7 @@ void Script::WarnUninitializedVar(Var *var)
 
 	bool isNonStaticLocal = var->IsNonStaticLocal();
 	LPCTSTR varClass = isNonStaticLocal ? _T("local") : (isGlobal ? _T("global") : _T("static"));
-	LPCTSTR sameNameAsGlobal = (isNonStaticLocal && FindVar(var->mName, 0, NULL, ALWAYS_USE_GLOBAL)) ? _T(" with same name as a global") : _T("");
+	LPCTSTR sameNameAsGlobal = (isNonStaticLocal && FindVar(var->mName, 0, NULL, FINDVAR_GLOBAL)) ? _T(" with same name as a global") : _T("");
 	TCHAR buf[DIALOG_TITLE_SIZE], *cp = buf;
 
 	int buf_space_remaining = (int)_countof(buf);
@@ -13942,7 +13851,7 @@ void Script::MaybeWarnLocalSameAsGlobal(Func *func, Var *var)
 	if (!g_Warn_LocalSameAsGlobal)
 		return;
 
-	if (var->IsDeclaredLocal()) // Exclude function parameters and explicitly declared locals.
+	if (var->IsDeclared()) // Exclude function parameters and explicitly declared locals.
 		return;
 
 	LPTSTR varName = var->mName;
@@ -13955,7 +13864,7 @@ void Script::MaybeWarnLocalSameAsGlobal(Func *func, Var *var)
 		return;
 #endif
 
-	if (!FindVar(varName, 0, NULL, ALWAYS_USE_GLOBAL))
+	if (!FindVar(varName, 0, NULL, FINDVAR_GLOBAL))
 		return;
 
 	Line *line = func->mJumpToLine;
