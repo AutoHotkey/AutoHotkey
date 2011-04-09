@@ -3341,28 +3341,31 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	{
 		for (;;) // A loop with only one iteration so that "break" can be used instead of a lot of nested if's.
 		{
-			if (!g->CurrentFunc) // Not inside a function body, so "Global"/"Local"/"Static" get no special treatment.
-				break;
-
 			int declare_type;
 			LPTSTR cp;
 			if (!_tcsnicmp(aLineText, _T("Global"), 6)) // Checked first because it's more common than the others.
 			{
 				cp = aLineText + 6; // The character after the declaration word.
-				declare_type = VAR_DECLARE_GLOBAL;
+				declare_type = g->CurrentFunc ? VAR_DECLARE_GLOBAL : VAR_DECLARE_SUPER_GLOBAL;
 			}
-			else if (!_tcsnicmp(aLineText, _T("Local"), 5))
+			else
 			{
-				cp = aLineText + 5; // The character after the declaration word.
-				declare_type = VAR_DECLARE_LOCAL;
+				if (!g->CurrentFunc) // Not inside a function body, so "Local"/"Static" get no special treatment.
+					break;
+
+				if (!_tcsnicmp(aLineText, _T("Local"), 5))
+				{
+					cp = aLineText + 5; // The character after the declaration word.
+					declare_type = VAR_DECLARE_LOCAL;
+				}
+				else if (!_tcsnicmp(aLineText, _T("Static"), 6)) // Static also implies local (for functions that default to global).
+				{
+					cp = aLineText + 6; // The character after the declaration word.
+					declare_type = VAR_DECLARE_STATIC;
+				}
+				else // It's not the word "global", "local", or static, so no further checking is done.
+					break;
 			}
-			else if (!_tcsnicmp(aLineText, _T("Static"), 6)) // Static also implies local (for functions that default to global).
-			{
-				cp = aLineText + 6; // The character after the declaration word.
-				declare_type = VAR_DECLARE_STATIC;
-			}
-			else // It's not the word "global", "local", or static, so no further checking is done.
-				break;
 
 			if (*cp && !IS_SPACE_OR_TAB(*cp)) // There is a character following the word local but it's not a space or tab.
 				break; // It doesn't qualify as being the global or local keyword because it's something like global2.
@@ -3419,7 +3422,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			}
 			else // Since this isn't the first line of the function's body, mDefaultVarType has aleady been set permanently.
 			{
-				if (declare_type == g->CurrentFunc->mDefaultVarType) // Can't be VAR_DECLARE_NONE at this point.
+				if (g->CurrentFunc && declare_type == g->CurrentFunc->mDefaultVarType) // Can't be VAR_DECLARE_NONE at this point.
 				{
 					// Seems best to flag redundant/unnecessary declarations since they might be an indication
 					// to the user that something is being done incorrectly in this function. This errors also
@@ -3441,7 +3444,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			size_t var_name_length;
 			LPTSTR item;
 
-			for (belongs_to_if_or_else_or_loop = ACT_IS_IF_OR_ELSE_OR_LOOP(mLastLine->mActionType)
+			for (belongs_to_if_or_else_or_loop = mLastLine && ACT_IS_IF_OR_ELSE_OR_LOOP(mLastLine->mActionType)
 				, open_brace_was_added = false, item = cp
 				; *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
 			{
@@ -3450,23 +3453,26 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 
 				Var *var = NULL;
 				int i;
-				for (i = 0; i < g->CurrentFunc->mParamCount; ++i) // Search by name to find both global and local declarations.
-					if (!tcslicmp(item, g->CurrentFunc->mParam[i].var->mName, var_name_length))
-						return ScriptError(_T("Parameters must not be declared."), item);
-				// Detect conflicting declarations:
-				var = FindVar(item, var_name_length, NULL, FINDVAR_LOCAL);
-				if (var && (var->Scope() & ~VAR_DECLARED) == (declare_type & ~VAR_DECLARED) && declare_type != VAR_DECLARE_STATIC)
-					var = NULL; // Allow redeclaration using same scope; e.g. "local x := 1 ... local x := 2" down two different code paths.
-				if (!var && declare_type != VAR_DECLARE_GLOBAL)
-					for (i = 0; i < g->CurrentFunc->mGlobalVarCount; ++i) // Explicitly search this array vs calling FindVar() in case func is assume-global.
-						if (!tcslicmp(g->CurrentFunc->mGlobalVar[i]->mName, item, -1, var_name_length))
-						{
-							var = g->CurrentFunc->mGlobalVar[i];
-							break;
-						}
-				if (var)
-					return ScriptError(var->IsDeclared() ? _T("Duplicate declaration.") : _T("Declaration conflicts with existing var."), item);
-
+				if (g->CurrentFunc)
+				{
+					for (i = 0; i < g->CurrentFunc->mParamCount; ++i) // Search by name to find both global and local declarations.
+						if (!tcslicmp(item, g->CurrentFunc->mParam[i].var->mName, var_name_length))
+							return ScriptError(_T("Parameters must not be declared."), item);
+					// Detect conflicting declarations:
+					var = FindVar(item, var_name_length, NULL, FINDVAR_LOCAL);
+					if (var && (var->Scope() & ~VAR_DECLARED) == (declare_type & ~VAR_DECLARED) && declare_type != VAR_DECLARE_STATIC)
+						var = NULL; // Allow redeclaration using same scope; e.g. "local x := 1 ... local x := 2" down two different code paths.
+					if (!var && declare_type != VAR_DECLARE_GLOBAL)
+						for (i = 0; i < g->CurrentFunc->mGlobalVarCount; ++i) // Explicitly search this array vs calling FindVar() in case func is assume-global.
+							if (!tcslicmp(g->CurrentFunc->mGlobalVar[i]->mName, item, -1, var_name_length))
+							{
+								var = g->CurrentFunc->mGlobalVar[i];
+								break;
+							}
+					if (var)
+						return ScriptError(var->IsDeclared() ? _T("Duplicate declaration.") : _T("Declaration conflicts with existing var."), item);
+				}
+				
 				if (   !(var = FindOrAddVar(item, var_name_length, declare_type))   )
 					return FAIL; // It already displayed the error.
 				if (var->Type() != VAR_NORMAL || !tcslicmp(item, _T("ErrorLevel"), var_name_length)) // Shouldn't be declared either way (global or local).
@@ -7561,6 +7567,10 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 		for (int i = 0; i < g.CurrentFunc->mGlobalVarCount; ++i)
 			if (!_tcsicmp(var_name, g.CurrentFunc->mGlobalVar[i]->mName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 				return g.CurrentFunc->mGlobalVar[i];
+		// As a last resort, check for a super-global:
+		Var *gvar = FindVar(aVarName, aVarNameLength, NULL, FINDVAR_GLOBAL, NULL);
+		if (gvar && gvar->IsSuperGlobal())
+			return gvar;
 	}
 	// Otherwise, since above didn't return:
 	return NULL; // No match.

@@ -149,6 +149,7 @@ private:
 	#define VAR_LOCAL_FUNCPARAM	0x10 // Indicates this local var is a function's parameter.  VAR_LOCAL_DECLARED should also be set.
 	#define VAR_LOCAL_STATIC	0x20 // Indicates this local var retains its value between function calls.
 	#define VAR_DECLARED		0x40 // Indicates this var was declared somehow, not automatic.
+	#define VAR_SUPER_GLOBAL	0x80 // Indicates this global var should be visible in all functions.
 	UCHAR mScope;  // Bitwise combination of the above flags.
 	VarTypeType mType; // Keep adjacent/contiguous with the above due to struct alignment, to save memory.
 	// Performance: Rearranging mType and the other byte-sized members with respect to each other didn't seem
@@ -549,6 +550,11 @@ public:
 	// Returns true if this is a declared var, such as "local var", "static var" or a func param.
 	{
 		return (mScope & VAR_DECLARED);
+	}
+
+	__forceinline bool IsSuperGlobal()
+	{
+		return (mScope & VAR_SUPER_GLOBAL);
 	}
 
 	__forceinline UCHAR Scope()
