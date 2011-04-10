@@ -10433,6 +10433,7 @@ VarSizeType BIV_Now(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(aBuf);
 }
 
+#ifdef CONFIG_WIN9X
 VarSizeType BIV_OSType(LPTSTR aBuf, LPTSTR aVarName)
 {
 	LPTSTR type = g_os.IsWinNT() ? _T("WIN32_NT") : _T("WIN32_WINDOWS");
@@ -10440,43 +10441,13 @@ VarSizeType BIV_OSType(LPTSTR aBuf, LPTSTR aVarName)
 		_tcscpy(aBuf, type);
 	return (VarSizeType)_tcslen(type); // Return length of type, not aBuf.
 }
+#endif
 
 VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName)
 {
-	LPCTSTR version = _T("");  // Init in case OS is something later than Win2003.
-	if (g_os.IsWinNT()) // "NT" includes all NT-kernal OSes: NT4/2000/XP/2003/Vista/7.
-	{
-		if (g_os.IsWinXP())
-			version = _T("WIN_XP");
-		else if (g_os.IsWin7())
-			version = _T("WIN_7");
-		else if (g_os.IsWinVista())
-			version = _T("WIN_VISTA");
-		else if (g_os.IsWin2003())
-			version = _T("WIN_2003");
-		else
-		{
-			if (g_os.IsWin2000())
-				version = _T("WIN_2000");
-			else
-				version = _T("WIN_NT4");
-		}
-	}
-	else
-	{
-		if (g_os.IsWin95())
-			version = _T("WIN_95");
-		else
-		{
-			if (g_os.IsWin98())
-				version = _T("WIN_98");
-			else
-				version = _T("WIN_ME");
-		}
-	}
 	if (aBuf)
-		_tcscpy(aBuf, version);
-	return (VarSizeType)_tcslen(version); // Always return the length of version, not aBuf.
+		_tcscpy(aBuf, g_os.Version());
+	return (VarSizeType)_tcslen(g_os.Version());
 }
 
 VarSizeType BIV_Language(LPTSTR aBuf, LPTSTR aVarName)

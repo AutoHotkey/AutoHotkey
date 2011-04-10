@@ -101,6 +101,10 @@ void OS_Version::Init(void)
 	m_dwMinorVersion	= m_OSvi.dwMinorVersion;
 	m_dwBuildNumber		= m_OSvi.dwBuildNumber;
 
+	// Compose human-readable version number.
+	_vsntprintf(m_szVersion, _countof(m_szVersion)-1, _T("%u.%u.%u"), (va_list)&m_OSvi.dwMajorVersion);
+	m_szVersion[_countof(m_szVersion)-1] = '\0'; // For the slim chance that it's too long to fit in the buffer (and therefore wasn't null-terminated).
+
 	// Get CSD information
 	nTemp = (int)_tcslen(m_OSvi.szCSDVersion);
 

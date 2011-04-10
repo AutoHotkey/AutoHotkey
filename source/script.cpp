@@ -7885,7 +7885,9 @@ void *Script::GetVarType(LPTSTR aVarName)
 
 	if (!_tcscmp(lower, _T("exitreason"))) return BIV_ExitReason;
 
+#ifdef CONFIG_WIN9X
 	if (!_tcscmp(lower, _T("ostype"))) return BIV_OSType;
+#endif
 	if (!_tcscmp(lower, _T("osversion"))) return BIV_OSVersion;
 	if (!_tcscmp(lower, _T("language"))) return BIV_Language;
 	if (   !_tcscmp(lower, _T("computername"))
