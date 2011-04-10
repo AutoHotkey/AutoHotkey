@@ -1110,13 +1110,6 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 	if (!PreparseIfElse(mFirstLine))
 		return LOADING_FAILED; // Error was already displayed by the above calls.
 
-	// Use FindOrAdd, not Add, because the user may already have added it simply by
-	// referring to it in the script:
-	if (   !(g_ErrorLevel = FindOrAddVar(_T("ErrorLevel")))   )
-		return LOADING_FAILED; // Error.  Above already displayed it for us.
-	// Initialize the var state to zero right before running anything in the script:
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-
 	// Initialize the random number generator:
 	// Note: On 32-bit hardware, the generator module uses only 2506 bytes of static
 	// data, so it doesn't seem worthwhile to put it in a class (so that the mem is
@@ -3104,6 +3097,25 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			return ScriptError(parameter ? ERR_PARAM1_INVALID : ERR_PARAM1_REQUIRED, aBuf);
 	}
 
+	if (IS_DIRECTIVE_MATCH(_T("#MustDeclare")))
+	{
+		if (g->CurrentFunc) // Behavior wouldn't be intuitive, so disallow it.
+			return ScriptError(_T("#MustDeclare cannot be used inside a function."));
+		switch (Line::ConvertOnOff(parameter))
+		{
+		case NEUTRAL:		// #MustDeclare
+		case TOGGLED_ON:	// #MustDeclare On
+			g_MustDeclare = true;
+			break;
+		case TOGGLED_OFF:	// #MustDeclare Off
+			g_MustDeclare = false;
+			break;
+		default:			// #MustDeclare <invalid parameter>
+			return ScriptError(ERR_PARAM1_INVALID, aBuf);
+		}
+		return CONDITION_TRUE;
+	}
+
 	if (IS_DIRECTIVE_MATCH(_T("#Warn")))
 	{
 		if (!parameter)
@@ -3343,7 +3355,20 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		{
 			int declare_type;
 			LPTSTR cp;
-			if (!_tcsnicmp(aLineText, _T("Global"), 6)) // Checked first because it's more common than the others.
+			if (!_tcsnicmp(aLineText, _T("Var"), 3))
+			{
+				cp = aLineText + 3; // The character after the declaration word.
+				if (!g->CurrentFunc)
+					declare_type = VAR_DECLARE_GLOBAL; // Ordinary global, not super-global.
+				else
+					// Seems best to require the more specific forms of "Local"/"Global"/"Static",
+					// for clarity in scripts, to simplify the documentation and so we don't need
+					// to test as many different combinations of declarations.
+					//if (  !(declare_type = g->CurrentFunc->mDefaultVarType)  )
+					//	declare_type = VAR_DECLARE_LOCAL;
+					break;
+			}
+			else if (!_tcsnicmp(aLineText, _T("Global"), 6))
 			{
 				cp = aLineText + 6; // The character after the declaration word.
 				declare_type = g->CurrentFunc ? VAR_DECLARE_GLOBAL : VAR_DECLARE_SUPER_GLOBAL;
@@ -3385,14 +3410,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			}
 			else // It's the word "global", "local", "static" by itself.  But only global or static is valid that way (when it's the first line in the function body).
 			{
-				// All of the following must be checked to catch back-to-back conflicting declarations such
-				// as these:
-				//    global x
-				//    global  ; Should be an error because global vars are implied/automatic.
-				// v1.0.48: Lexikos: Added assume-static mode. For now, this requires "static" to be
-				// placed above local or global variable declarations.
-				if (declare_type != VAR_DECLARE_LOCAL  // i.e. VAR_DECLARE_GLOBAL or VAR_DECLARE_STATIC (can't due be VAR_DECLARE_NONE due to checks higher above).
-					&& mNextLineIsFunctionBody && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE)
+				// Any combination of declarations is allowed here for simplicity, but only declarations can
+				// appear above this line:
+				if (mNextLineIsFunctionBody)
 				{
 					g->CurrentFunc->mDefaultVarType = declare_type;
 					// No further action is required for the word "global" or "static" by itself.
@@ -3402,43 +3422,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				// or it's the word global or static by itself, but it occurs too far down in the body.
 				return ScriptError(ERR_UNRECOGNIZED_ACTION, aLineText); // Vague error since so rare.
 			}
-			if (mNextLineIsFunctionBody && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE)
-			{
-				// Both of the above must be checked to catch back-to-back conflicting declarations such
-				// as these:
-				// local x
-				// global y  ; Should be an error because global vars are implied/automatic.
-				// This line will become first non-directive, non-label line in the function's body.
-
-				// If the first non-directive, non-label line in the function's body contains
-				// the "local" keyword, everything inside this function will assume that variables
-				// are global unless they are explicitly declared local (this is the opposite of
-				// the default).  The converse is also true.
-				if (declare_type != VAR_DECLARE_STATIC)
-					g->CurrentFunc->mDefaultVarType = declare_type == VAR_DECLARE_LOCAL ? VAR_DECLARE_GLOBAL : VAR_DECLARE_LOCAL;
-				// Otherwise, leave it as-is to allow the following:
-				// static x
-				// local y
-			}
-			else // Since this isn't the first line of the function's body, mDefaultVarType has aleady been set permanently.
-			{
-				if (g->CurrentFunc && declare_type == g->CurrentFunc->mDefaultVarType) // Can't be VAR_DECLARE_NONE at this point.
-				{
-					// Seems best to flag redundant/unnecessary declarations since they might be an indication
-					// to the user that something is being done incorrectly in this function. This errors also
-					// remind the user what mode the function is in:
-					if (declare_type == VAR_DECLARE_GLOBAL)
-						return ScriptError(_T("Global variables must not be declared in this function."), aLineText);
-					if (declare_type == VAR_DECLARE_LOCAL)
-						return ScriptError(_T("Local variables must not be declared in this function."), aLineText);
-					// In assume-static mode, allow declarations in case they contain initializers.
-					// Would otherwise lose the ability to "initialize only once upon startup".
-					//if (declare_type == VAR_DECLARE_STATIC)
-					//	return ScriptError("Static variables must not be declared in this function.", aLineText);
-				}
-			}
-			// Since above didn't break or return, a variable is being declared as an exception to the
-			// mode specified by mDefaultVarType.
+			
+			// Since above didn't break or return, a variable is being declared.
 
 			bool open_brace_was_added, belongs_to_if_or_else_or_loop;
 			size_t var_name_length;
@@ -3477,7 +3462,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					return FAIL; // It already displayed the error.
 				if (var->Type() != VAR_NORMAL || !tcslicmp(item, _T("ErrorLevel"), var_name_length)) // Shouldn't be declared either way (global or local).
 					return ScriptError(_T("Built-in variables must not be declared."), item);
-				if (declare_type == VAR_DECLARE_GLOBAL)
+				if (declare_type == VAR_DECLARE_GLOBAL && g->CurrentFunc)
 				{
 					if (g->CurrentFunc->mGlobalVarCount >= MAX_FUNC_VAR_GLOBALS)
 						return ScriptError(_T("Too many declarations."), item); // Short message since it's so unlikely.
@@ -6107,8 +6092,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	{
 		mLastFunc->mJumpToLine = the_new_line;
 		mNextLineIsFunctionBody = false;
-		if (g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE)
-			g->CurrentFunc->mDefaultVarType = VAR_DECLARE_LOCAL;  // Set default since no override was discovered at the top of the body.
 	}
 
 	// No checking for unbalanced blocks is done here.  That is done by PreparseBlocks() because
@@ -6455,6 +6438,9 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 	}
 	//else leave func.mParam/mParamCount set to their NULL/0 defaults.
 
+	if (!g_MustDeclare)
+		func.mDefaultVarType = VAR_DECLARE_LOCAL; // Set default.
+
 	// Indicate success:
 	func.mGlobalVar = aFuncGlobalVar; // Give func.mGlobalVar its address, to be used for any var declarations inside this function's body.
 	func.mGlobalVarCount = 0;  // Reset in preparation of declarations that appear beneath this function's definition.
@@ -6590,6 +6576,7 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 				escape_char = g_EscapeChar,
 				deref_char = g_DerefChar,
 				deref_end_char = g_DerefEndChar;
+			bool must_declare = g_MustDeclare; // Same for #MustDeclare.
 			_tcscpy(comment_flag, g_CommentFlag);
 
 			if (!LoadIncludedFile(sLib[i].path, false, false)) // Fix for v1.0.47.05: Pass false for allow-dupe because otherwise, it's possible for a stdlib file to attempt to include itself (especially via the LibNamePrefix_ method) and thus give a misleading "duplicate function" vs. "func does not exist" error message.  Obsolete: For performance, pass true for allow-dupe so that it doesn't have to check for a duplicate file (seems too rare to worry about duplicates since by definition, the function doesn't yet exist so it's file shouldn't yet be included).
@@ -6603,6 +6590,7 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			g_EscapeChar = escape_char;
 			g_DerefChar = deref_char;
 			g_DerefEndChar = deref_end_char;
+			g_MustDeclare = must_declare;
 
 			if (mIncludeLibraryFunctionsThenExit)
 			{
@@ -7447,8 +7435,8 @@ Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aScope)
 	Var *var;
 	if (var = FindVar(aVarName, aVarNameLength, &insert_pos, aScope, &is_local))
 		return var;
-	// Otherwise, no match found, so create a new var.  This will return NULL if there was a problem,
-	// in which case AddVar() will already have displayed the error:
+	// Otherwise, no match found, so create a new var.
+	// This will return NULL if there was a problem, in which case AddVar() will already have displayed the error:
 	return AddVar(aVarName, aVarNameLength, insert_pos
 		, (aScope & ~(VAR_LOCAL | VAR_GLOBAL)) | (is_local ? VAR_LOCAL : VAR_GLOBAL)); // When aScope == FINDVAR_DEFAULT, it contains both the "local" and "global" bits.  This ensures only the appropriate bit is set.
 }
@@ -7619,15 +7607,23 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	// section at loadtime displays an error for any attempt to explicitly declare built-in variables as
 	// either global or local.
 	void *var_type = GetVarType(var_name);
-	if (aIsLocal && (var_type != (void *)VAR_NORMAL || !_tcsicmp(var_name, _T("ErrorLevel")))) // Attempt to create built-in variable as local.
+	if (var_type != (void *)VAR_NORMAL || !_tcsicmp(var_name, _T("ErrorLevel"))) // Attempt to create built-in variable as local.
 	{
-		if (  !(aScope & VAR_LOCAL_FUNCPARAM)  ) // It's not a UDF's parameter, so fall back to the global built-in variable of this name rather than displaying an error.
-			return FindOrAddVar(var_name, aVarNameLength, FINDVAR_GLOBAL); // Force find-or-create of global.
-		else // (aIsLocal & VAR_LOCAL_FUNCPARAM), which means "this is a local variable and a function's parameter".
+		if (aIsLocal)
 		{
-			ScriptError(_T("Illegal parameter name."), aVarName); // Short message since so rare.
-			return NULL;
+			if (  !(aScope & VAR_LOCAL_FUNCPARAM)  ) // It's not a UDF's parameter, so fall back to the global built-in variable of this name rather than displaying an error.
+				return FindOrAddVar(var_name, aVarNameLength, FINDVAR_GLOBAL); // Force find-or-create of global.
+			else // (aIsLocal & VAR_LOCAL_FUNCPARAM), which means "this is a local variable and a function's parameter".
+			{
+				ScriptError(_T("Illegal parameter name."), aVarName); // Short message since so rare.
+				return NULL;
+			}
 		}
+	}
+	else if (!mIsReadyToExecute && !(aScope & VAR_DECLARED) && (g->CurrentFunc ? g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE : g_MustDeclare))
+	{
+		ScriptError(_T("This variable must be declared."), aVarName);
+		return NULL;
 	}
 
 	// Allocate some dynamic memory to pass to the constructor:

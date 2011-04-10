@@ -158,6 +158,12 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// never returns, perhaps because it contains an infinite loop (intentional or not):
 	CopyMemory(&g_default, g, sizeof(global_struct));
 
+	// Use FindOrAdd vs Add for maintainability, although it shouldn't already exist:
+	if (   !(g_ErrorLevel = g_script.FindOrAddVar(_T("ErrorLevel")))   )
+		return CRITICAL_ERROR; // Error.  Above already displayed it for us.
+	// Initialize the var state to zero:
+	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+
 	// Could use CreateMutex() but that seems pointless because we have to discover the
 	// hWnd of the existing process so that we can close or restart it, so we would have
 	// to do this check anyway, which serves both purposes.  Alt method is this:
