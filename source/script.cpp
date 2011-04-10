@@ -4779,14 +4779,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					{
 						if (aActionType == ACT_WINMOVE)
 						{
-							if (i > 1)
-							{
-								// i indicates this is Arg #3 or beyond, which is one of the args that is
-								// either the word "default" or a number/expression.
-								if (!_tcsicmp(this_aArg, _T("default"))) // It's not an expression.
-									break; // The loop is over because this arg was found in the list.
-							}
-							else // This is the first or second arg, which are title/text vs. X/Y when aArgc > 2.
+							if (i < 2) // This is the first or second arg, which are title/text vs. X/Y when aArgc > 2.
 								if (aArgc > 2) // Title/text are not numeric/expressions.
 									break; // The loop is over because this arg was found in the list.
 						}

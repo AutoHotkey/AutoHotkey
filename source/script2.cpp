@@ -1919,10 +1919,10 @@ ResultType Line::WinMove(LPTSTR aTitle, LPTSTR aText, LPTSTR aX, LPTSTR aY
 	if (!GetWindowRect(target_window, &rect))
 		return OK;  // Can't set errorlevel, see above.
 	MoveWindow(target_window
-		, *aX && _tcsicmp(aX, _T("default")) ? ATOI(aX) : rect.left  // X-position
-		, *aY && _tcsicmp(aY, _T("default")) ? ATOI(aY) : rect.top   // Y-position
-		, *aWidth && _tcsicmp(aWidth, _T("default")) ? ATOI(aWidth) : rect.right - rect.left
-		, *aHeight && _tcsicmp(aHeight, _T("default")) ? ATOI(aHeight) : rect.bottom - rect.top
+		, *aX ? ATOI(aX) : rect.left  // X-position
+		, *aY ? ATOI(aY) : rect.top   // Y-position
+		, *aWidth ? ATOI(aWidth) : rect.right - rect.left
+		, *aHeight ? ATOI(aHeight) : rect.bottom - rect.top
 		, TRUE);  // Do repaint.
 	DoWinDelay;
 	return OK;
