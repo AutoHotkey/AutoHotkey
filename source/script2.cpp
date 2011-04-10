@@ -2765,8 +2765,8 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 	// original/raw arg's first character is '"'.  The avoids the need to put the string into a
 	// variable and then pass something like &MyVar.
 	UINT msg = ArgToUInt(1);
-	WPARAM wparam = (mArgc > 1 && mArg[1].text[0] == '"') ? (WPARAM)sArgDeref[1] : (WPARAM)ArgToInt64(2);
-	LPARAM lparam = (mArgc > 2 && mArg[2].text[0] == '"') ? (LPARAM)sArgDeref[2] : (LPARAM)ArgToInt64(3);
+	WPARAM wparam = (mArgc > 1 && (mArg[1].text[0] == '"' || mArg[1].text[0] == '\'')) ? (WPARAM)sArgDeref[1] : (WPARAM)ArgToInt64(2);
+	LPARAM lparam = (mArgc > 2 && (mArg[2].text[0] == '"' || mArg[2].text[0] == '\'')) ? (LPARAM)sArgDeref[2] : (LPARAM)ArgToInt64(3);
 	// Timeout increased from 2000 to 5000 in v1.0.27:
 	// jackieku: specify timeout by the parameter.
 	UINT timeout = mArgc > 8 ? ArgToUInt(9) : 5000;

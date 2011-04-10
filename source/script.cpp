@@ -1598,10 +1598,11 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 							// Finally, keep in mind that an expression-continuation line can start with two
 							// consecutive unary operators like !! or !*. It can also start with a double-symbol
 							// operator such as <=, <>, !=, &&, ||, //, **.
-							for (cp = next_buf; cp < hotkey_flag && *cp != '"'; ++cp);
+							for (cp = next_buf; cp < hotkey_flag && *cp != '"' && *cp != '\''; ++cp);
 							if (cp == hotkey_flag) // No '"' found to left of "::", so this "::" appears to be a real hotkey flag rather than part of a literal string.
 								break; // Treat this line as a normal line vs. continuation line.
-							for (cp = hotkey_flag + HOTKEY_FLAG_LENGTH; *cp && *cp != '"'; ++cp);
+							TCHAR in_quote = *cp;
+							for (cp = hotkey_flag + HOTKEY_FLAG_LENGTH; *cp && *cp != in_quote; ++cp);
 							if (*cp)
 							{
 								// Closing quote was found so "::" is probably inside a literal string of an
@@ -3338,7 +3339,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		return ScriptError(_T("DEBUG: ParseAndAddLine() called incorrectly."));
 #endif
 
-	bool in_quotes;
+	TCHAR in_quotes;
 	int open_parens;
 
 	TCHAR action_name[MAX_VAR_NAME_LENGTH + 1], *end_marker;
@@ -3518,7 +3519,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				// The search must exclude commas that are inside quoted/literal strings and those that
 				// are inside parentheses (chiefly those of function-calls, but possibly others).
 
-				for (in_quotes = false, open_parens = 0; *item_end; ++item_end) // FIND THE NEXT "REAL" COMMA.
+				for (in_quotes = 0, open_parens = 0; *item_end; ++item_end) // FIND THE NEXT "REAL" COMMA.
 				{
 					if (*item_end == ',') // This is outside the switch() further below so that its "break" can get out of the loop.
 					{
@@ -3530,10 +3531,15 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					switch (*item_end)
 					{
 					case '"': // There are sections similar this one later below; so see them for comments.
-						in_quotes = !in_quotes;
+					case '\'':
+						if (in_quotes == *item_end)
+							in_quotes = 0;
+						else if (!in_quotes)
+							in_quotes = *item_end;
+						//else the other type of quote mark was used to begin this quoted string.
 						break;
 					case '`':
-						if (in_quotes && item_end[1] == '"')
+						if (in_quotes && (item_end[1] == '"' || item_end[1] == '\''))
 							++item_end; // Skip the literal quote mark.
 						break;
 					case '(':
@@ -3943,15 +3949,20 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 						// commas are present because it performs much better for trivial assignments,
 						// even some which aren't optimized to become non-expressions.
 						LPTSTR cp;
-						for (in_quotes = false, open_parens = 0, cp = action_args + 2; *cp; ++cp)
+						for (in_quotes = 0, open_parens = 0, cp = action_args + 2; *cp; ++cp)
 						{
 							switch (*cp)
 							{
 							case '"': // This is whole section similar to another one later below, so see it for comments.
-								in_quotes = !in_quotes;
+							case '\'':
+								if (in_quotes == *cp)
+									in_quotes = 0;
+								else if (!in_quotes)
+									in_quotes = *cp;
+								//else the other type of quote mark was used to begin this quoted string.
 								break;
 							case '`':
-								if (in_quotes && cp[1] == '"')
+								if (in_quotes && (cp[1] == '"' || cp[1] == '\''))
 									++cp; // Skip the literal quote mark.
 								break;
 							case '(':
@@ -4318,12 +4329,17 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			&& IS_SPACE_OR_TAB(arg[nArgs][1]); // Followed by a space or tab.
 
 		// Find the end of the above arg:
-		for (in_quotes = false, open_parens = 0; action_args[mark]; ++mark)
+		for (in_quotes = 0, open_parens = 0; action_args[mark]; ++mark)
 		{
 			switch (action_args[mark])
 			{
 			case '"':
-				in_quotes = !in_quotes || literal_map[mark]; // i.e. only a non-literal quote mark terminates the string.
+			case '\'':
+				if (in_quotes == action_args[mark] && !literal_map[mark]) // i.e. an unescaped quote mark of the type used to begin the string.
+					in_quotes = 0;
+				else if (!in_quotes)
+					in_quotes = action_args[mark];
+				//else the other type of quote mark was used to begin this quoted string.
 				break;
 			case '(':
 			case '[': // L31: For this purpose, () and [] are equivalent. If they aren't balanced properly, a later stage will detect the error.
@@ -4873,14 +4889,15 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 					// Now op_begin is the start of an operand, which might be a variable reference, a numeric
 					// literal, or a string literal.  If it's a string literal, it is left as-is:
-					if (*op_begin == '"')
+					if (*op_begin == '"' || *op_begin == '\'')
 					{
+						TCHAR in_quote = *op_begin;
 						// Find the end of this string literal:
 						for (j = op_begin - this_new_arg.text + 1; ; ++j)
 						{
 							if (j >= this_new_arg.length)
 								return ScriptError(ERR_MISSING_CLOSE_QUOTE, op_begin);
-							if (this_new_arg.text[j] == '"' && !(this_aArgMap && this_aArgMap[j])) // A non-literal quote mark.
+							if (this_new_arg.text[j] == in_quote && !(this_aArgMap && this_aArgMap[j])) // A non-literal quote mark.
 							{
 								op_end = this_new_arg.text + j + 1;
 								break;
@@ -6296,8 +6313,9 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		if (*param_start == '=') // This is the default value of the param just added.
 		{
 			param_start = omit_leading_whitespace(param_start + 1); // Start of the default value.
-			if (*param_start == '"') // Quoted literal string, or the empty string.
+			if (*param_start == '"' || *param_start == '\'') // Quoted literal string, or the empty string.
 			{
+				TCHAR in_quote = *param_start;
 				// v1.0.46.13: Added support for quoted/literal strings beyond simply "".
 				// The following section is nearly identical to one in ExpandExpression().
 				// Find the end of this string literal, noting that a pair of double quotes is
@@ -6306,7 +6324,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 				{
 					if (!*param_end) // No matching end-quote. Probably impossible due to load-time validation.
 						return ScriptError(ERR_MISSING_CLOSE_QUOTE, param_start); // Reporting param_start vs. aBuf seems more informative in the case of quoted/literal strings.
-					if (*param_end == '"' && param_end[-1] != '`')
+					if (*param_end == in_quote && param_end[-1] != '`')
 					{
 						++param_end;
 						break;  // The previous char is the ending quote.
@@ -9032,6 +9050,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 
 				case '"': // QUOTED/LITERAL STRING.
+				case '\'':
+					cp1 = *cp; // cp1 contains the starting quote mark: " or '.
 					// Note that single and double-derefs are impossible inside string-literals
 					// because the load-time deref parser would never detect anything inside
 					// of quotes -- even non-escaped percent signs -- as derefs.
@@ -9047,7 +9067,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					{
 						if (j >= aArg.length) // No matching end-quote. Probably impossible due to load-time validation.
 							return LineError(ERR_MISSING_CLOSE_QUOTE); // Since this error string is used in other places, compiler string pooling should result in little extra memory needed for this line.
-						if (aArg.text[j] == '"')
+						if (aArg.text[j] == cp1) // i.e. this is the same type of quote mark that started the string.
 						{
 							for (; *arg_map < j; ++arg_map); // Get the next highest "escaped" offset to determine if this char is escaped.  arg_map was initialized earlier.  Relies on ARGMAP_END_MARKER being higher than any possible character offset.
 							if (*arg_map > j) // i.e. this quote mark was not escaped, so it terminates the string.
