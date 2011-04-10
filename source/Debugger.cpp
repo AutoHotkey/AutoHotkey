@@ -1097,7 +1097,7 @@ int Debugger::WritePropertyXml(IObject *aObject, const char *aName, CStringA &aN
 						{
 							*cp++ = c;
 							if (c == '"')
-								*cp++ = '"'; // i.e. replace " with ""
+								*cp++ = '"'; // i.e. replace " with "".  This currently doesn't match up with expression syntax, but is left this way for simplicity.
 						}
 						strcpy(cp, "\"]");
 						// aNameBuf is released below.
@@ -1367,13 +1367,13 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 			if (*name == '"')
 			{
 				// Quoted string which may contain any character.
-				// Replace "" with " in-place and find and of string:
+				// Replace "" with " in-place and find end of string:
 				for (dst = src = ++name; c = *src; ++src)
 				{
 					if (c == '"')
 					{
 						// Quote mark; but is it a literal quote mark?
-						if (*++src != '"')
+						if (*++src != '"') // This currently doesn't match up with expression syntax, but is left this way for simplicity.
 							// Nope.
 							break;
 						//else above skipped the second quote mark, so fall through:

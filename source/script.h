@@ -339,9 +339,11 @@ struct DerefType
 };
 
 typedef UCHAR ArgTypeType;  // UCHAR vs. an enum, to save memory.
+typedef WORD ArgLengthType; // Relies on the fact that an arg's literal text can't be longer than LINE_SIZE.
 #define ARG_TYPE_NORMAL     (UCHAR)0
 #define ARG_TYPE_INPUT_VAR  (UCHAR)1
 #define ARG_TYPE_OUTPUT_VAR (UCHAR)2
+#define ARGMAP_END_MARKER ((ArgLengthType)~0) // ExpressionToPostfix() may rely on this being greater than any possible arg character offset.
 
 struct ArgStruct
 {
@@ -350,7 +352,7 @@ struct ArgStruct
 	// Above are kept adjacent to each other to conserve memory (any fields that aren't an even
 	// multiple of 4, if adjacent to each other, consume less memory due to default byte alignment
 	// setting [which helps performance]).
-	WORD length; // Keep adjacent to above so that it uses no extra memory. This member was added in v1.0.44.14 to improve runtime performance.  It relies on the fact that an arg's literal text can't be longer than LINE_SIZE.
+	ArgLengthType length; // Keep adjacent to above so that it uses no extra memory. This member was added in v1.0.44.14 to improve runtime performance.
 	LPTSTR text;
 	DerefType *deref;  // Will hold a NULL-terminated array of var-deref locations within <text>.
 	ExprTokenType *postfix;  // An array of tokens in postfix order. Also used for ACT_(NOT)BETWEEN to store pre-converted binary integers.

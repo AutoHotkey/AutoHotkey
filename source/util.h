@@ -631,7 +631,7 @@ void AssignColor(LPTSTR aColorName, COLORREF &aColor, HBRUSH &aBrush);
 COLORREF ColorNameToBGR(LPTSTR aColorName);
 HRESULT MySetWindowTheme(HWND hwnd, LPCWSTR pszSubAppName, LPCWSTR pszSubIdList);
 //HRESULT MyEnableThemeDialogTexture(HWND hwnd, DWORD dwFlags);
-LPTSTR ConvertEscapeSequences(LPTSTR aBuf, TCHAR aEscapeChar, bool aAllowEscapedSpace);
+LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap, TCHAR aEscapeChar, bool aAllowEscapedSpace = false);
 POINT CenterWindow(int aWidth, int aHeight);
 bool FontExist(HDC aHdc, LPCTSTR aTypeface);
 void ScreenToWindow(POINT &aPoint, HWND aHwnd);

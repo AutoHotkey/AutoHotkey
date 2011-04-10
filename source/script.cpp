@@ -1681,7 +1681,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						// Passing true for the last parameter supports `s as the special escape character,
 						// which allows space to be used by itself and also at the beginning or end of a string
 						// containing other chars.
-						ConvertEscapeSequences(suffix, g_EscapeChar, true);
+						ConvertEscapeSequences(suffix, NULL, g_EscapeChar, true);
 						suffix_length = _tcslen(suffix);
 					}
 					else if (!_tcsnicmp(next_option, _T("LTrim"), 5))
@@ -2784,12 +2784,15 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// Ensure variable references are global:
 		g->CurrentFunc = NULL;
 
-		ConvertEscapeSequences(parameter, g_EscapeChar, false); // Normally done in ParseAndAddLine().
+		TCHAR literal_map[LINE_SIZE];  // See similar declaration in ParseAndAddLine() for comments.
+		ZeroMemory(literal_map, sizeof(literal_map));  // Must be fully zeroed for this purpose.
+		ConvertEscapeSequences(parameter, literal_map, g_EscapeChar); // Normally done in ParseAndAddLine().
+		LPTSTR arg_map[] = { literal_map };
 
 		// ACT_EXPRESSION will be changed to ACT_IFEXPR after PreparseBlocks() is called so that EvaluateCondition()
 		// can be used and because ACT_EXPRESSION is designed to discard its result (since it normally would not be
 		// used). This can't be done before PreparseBlocks() is called since this isn't really an IF (it has no body).
-		if (!AddLine(ACT_EXPRESSION, &parameter, UCHAR_MAX + 1)) // UCHAR_MAX signals AddLine to avoid pointing any pending labels or functions at the new line.
+		if (!AddLine(ACT_EXPRESSION, &parameter, UCHAR_MAX + 1, arg_map)) // UCHAR_MAX signals AddLine to avoid pointing any pending labels or functions at the new line.
 			return FAIL; // Above already displayed the error message.
 		Line *hot_expr_line = mLastLine;
 
@@ -2887,12 +2890,12 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			// The following must be done only after trimming and omitting whitespace above, so that
 			// `s and `t can be used to insert leading/trailing spaces/tabs.  ConvertEscapeSequences()
 			// also supports insertion of literal commas via escaped sequences.
-			ConvertEscapeSequences(hot_win_text, g_EscapeChar, true);
+			ConvertEscapeSequences(hot_win_text, NULL, g_EscapeChar, true);
 		}
 		else
 			hot_win_text = _T(""); // And leave hot_win_title set to the entire string because there's only one parameter.
 		// The following must be done only after trimming and omitting whitespace above (see similar comment above).
-		ConvertEscapeSequences(hot_win_title, g_EscapeChar, true);
+		ConvertEscapeSequences(hot_win_title, NULL, g_EscapeChar, true);
 		// The following also handles the case where both title and text are blank, which could happen
 		// due to something weird but legit like: #IfWinActive, ,
 		if (!SetGlobalHotTitleText(hot_win_title, hot_win_text))
@@ -2914,7 +2917,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				if (    !(parameter = StrChrAny(suboption, _T("\t ")))   )
 					return CONDITION_TRUE;
 				tcslcpy(g_EndChars, ++parameter, _countof(g_EndChars));
-				ConvertEscapeSequences(g_EndChars, g_EscapeChar, false);
+				ConvertEscapeSequences(g_EndChars, NULL, g_EscapeChar);
 				return CONDITION_TRUE;
 			}
 			if (!_tcsnicmp(parameter, _T("NoMouse"), 7)) // v1.0.42.03
@@ -3529,6 +3532,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					case '"': // There are sections similar this one later below; so see them for comments.
 						in_quotes = !in_quotes;
 						break;
+					case '`':
+						if (in_quotes && item_end[1] == '"')
+							++item_end; // Skip the literal quote mark.
+						break;
 					case '(':
 					case '[': // L31: For this purpose, () and [] are equivalent. If they aren't balanced properly, a later stage will abort/exit.
 					case '{':
@@ -3552,64 +3559,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				TCHAR orig_char = *terminate_here;
 				*terminate_here = '\0'; // Temporarily terminate (it might already be the terminator, but that's harmless).
 
-				if (declare_type == VAR_DECLARE_STATIC)
-				{
-					LPTSTR args[] = {var->mName, ConvertEscapeSequences(omit_leading_whitespace(right_side_of_operator), g_EscapeChar, false)};
-					// UCHAR_MAX signals AddLine to avoid pointing any pending labels or functions at the new line.
-					// Otherwise, ParseAndAddLine could be used like in the section below to optimize simple
-					// assignments, but that would be nearly pointless for static initializers anyway:
-					if (!AddLine(ACT_ASSIGNEXPR, args, UCHAR_MAX + 2)) 
-						return FAIL; // Above already displayed the error.
-					mLastLine = mLastLine->mPrevLine; // Restore mLastLine to the last non-'static' line, but leave mCurrLine set to the new line.
-					mLastLine->mNextLine = NULL; // Remove the new line from the main script's linked list of lines. For maintainability: AddLine() unconditionally overwrites mLastLine->mNextLine anyway.
-					if (mLastStaticLine)
-						mLastStaticLine->mNextLine = mCurrLine;
-					else
-						mFirstStaticLine = mCurrLine;
-					mCurrLine->mPrevLine = mLastStaticLine; // Even if NULL. Must be set otherwise VicinityToText() will show the wrong line if this one or one "near" it has an error.
-					mLastStaticLine = mCurrLine;
-
-					// Some of the checks below could be used to "optimize" static initializers, but since they
-					// will only be executed once each anyway, it doesn't seem useful.  Making them expressions
-					// should be overall more consistent and saves worrying about cases like the following,
-					// which previously gave unexpected results:  static var := "literal" . "literal"
-					/*
-					// The following is similar to the code used to support default values for function parameters.
-					// So maybe maintain them together.
-					right_side_of_operator = omit_leading_whitespace(right_side_of_operator);
-					if (!_tcsicmp(right_side_of_operator, _T("false")))
-						var->Assign(FALSE);
-					else if (!_tcsicmp(right_side_of_operator, _T("true")))
-						var->Assign(TRUE);
-					else // The only other supported initializers are "string", integers, and floats.
-					{
-						// Vars could be supported here via FindVar(), but only globals ABOVE this point in
-						// the script would be supported (since other globals don't exist yet; in fact, even
-						// those that do exist don't have any contents yet, so it would be pointless). So it
-						// seems best to wait until full/comprehesive support for expressions is
-						// studied/designed for both statics and parameter-default-values.
-						if (*right_side_of_operator == '"' && terminate_here[-1] == '"') // Quoted/literal string.
-						{
-							++right_side_of_operator; // Omit the opening-quote from further consideration.
-							terminate_here[-1] = '\0'; // Remove the close-quote from further consideration.
-							ConvertEscapeSequences(right_side_of_operator, g_EscapeChar, false); // Raw escape sequences like `n haven't been converted yet, so do it now.
-							// Convert all pairs of quotes into single literal quotes:
-							StrReplace(right_side_of_operator, _T("\"\""), _T("\""), SCS_SENSITIVE);
-						}
-						else // It's not a quoted string (nor the empty string); or it has a missing ending quote (rare).
-						{
-							if (!IsNumeric(right_side_of_operator, true, false, true)) // It's not a number, and since we're here it's not a quoted/literal string either.
-								return ScriptError(_T("Unsupported static initializer."), right_side_of_operator);
-							//else it's an int or float, so just assign the numeric string itself (there
-							// doesn't seem to be any need to convert it to float/int first, though that would
-							// make things more consistent such as storing .1 as 0.1).
-						}
-						if (*right_side_of_operator) // It can be "" in cases such as "" being specified literally in the script, in which case nothing needs to be done because all variables start off as "".
-							var->Assign(right_side_of_operator);
-					}
-					*/
-				}
-				else // A non-static initializer, so a line of code must be produced that will be executed at runtime every time the function is called.
+				if (declare_type != VAR_DECLARE_STATIC)
 				{
 					// PERFORMANCE: As of v1.0.48 (with cached binary numbers and pre-postfixed expressions),
 					// assignments of literal integers to variables are up to 10% slower when done as a combined
@@ -3643,9 +3593,38 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					? omit_leading_whitespace(item_end + 1)
 					: item_end; // It's the terminator, so let the loop detect that to finish.
 			} // for() each item in the declaration list.
+
+			if (declare_type == VAR_DECLARE_STATIC && _tcschr(aLineText, '='))
+			{
+				// Process this Static declaration or list of Static declarations as one big expression.
+				// It is done this way to properly support escaped quote marks in strings, but has the
+				// additional benefit that the debugger will step onto this line a maximum of once,
+				// instead of once per variable declaration (even for simple assignments). Declarations
+				// which don't have initializers are left as part of the expression for simplicity;
+				// performance is not a concern since this line will only be evaluated once.
+				TCHAR literal_map[LINE_SIZE];  // See similar declaration further below for comments.
+				ZeroMemory(literal_map, sizeof(literal_map));  // Must be fully zeroed for this purpose.
+				LPTSTR arg[] = { ConvertEscapeSequences(omit_leading_whitespace(aLineText + 6), literal_map, g_EscapeChar) }; // +6 to omit "Static"
+				LPTSTR arg_map[] = { literal_map };
+				// UCHAR_MAX signals AddLine to avoid pointing any pending labels or functions at the new line.
+				// Otherwise, ParseAndAddLine could be used like in the section below to optimize simple
+				// assignments, but that would be nearly pointless for static initializers anyway:
+				if (!AddLine(ACT_EXPRESSION, arg, UCHAR_MAX + 1, arg_map)) 
+					return FAIL; // Above already displayed the error.
+				mLastLine = mLastLine->mPrevLine; // Restore mLastLine to the last non-'static' line, but leave mCurrLine set to the new line.
+				mLastLine->mNextLine = NULL; // Remove the new line from the main script's linked list of lines. For maintainability: AddLine() unconditionally overwrites mLastLine->mNextLine anyway.
+				if (mLastStaticLine)
+					mLastStaticLine->mNextLine = mCurrLine;
+				else
+					mFirstStaticLine = mCurrLine;
+				mCurrLine->mPrevLine = mLastStaticLine; // Even if NULL. Must be set otherwise VicinityToText() will show the wrong line if this one or one "near" it has an error.
+				mLastStaticLine = mCurrLine;
+			}
+
 			if (open_brace_was_added)
 				if (!AddLine(ACT_BLOCK_END))
 					return FAIL;
+
 			return OK;
 		} // single-iteration for-loop
 
@@ -3971,6 +3950,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 							case '"': // This is whole section similar to another one later below, so see it for comments.
 								in_quotes = !in_quotes;
 								break;
+							case '`':
+								if (in_quotes && cp[1] == '"')
+									++cp; // Skip the literal quote mark.
+								break;
 							case '(':
 							case '[': // L31: For this purpose, () and [] are equivalent. If they aren't balanced properly, a later stage will detect the error.
 							case '{':
@@ -4106,48 +4089,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		//string1; string2 <-- not a problem since string2 won't be considered a comment by the above.
 		//string1 ; string2  <-- this would be a user mistake if string2 wasn't supposed to be a comment.
 		//string1 `; string 2  <-- since esc seq. is resolved *after* checking for comments, this behaves as intended.
-		// Current limitation: a comment-flag longer than 1 can't be escaped, so if "//" were used,
-		// as a comment flag, it could never have whitespace to the left of it if it were meant to be literal.
-		// Note: This section resolves all escape sequences except those involving g_DerefChar, which
-		// are handled by a later section.
-		TCHAR c;
-		int i;
-		for (i = 0; ; ++i)  // Increment to skip over the symbol just found by the inner for().
-		{
-			for (; action_args[i] && action_args[i] != g_EscapeChar; ++i);  // Find the next escape char.
-			if (!action_args[i]) // end of string.
-				break;
-			c = action_args[i + 1];
-			switch (c)
-			{
-				// Only lowercase is recognized for these:
-				case 'a': action_args[i + 1] = '\a'; break;  // alert (bell) character
-				case 'b': action_args[i + 1] = '\b'; break;  // backspace
-				case 'f': action_args[i + 1] = '\f'; break;  // formfeed
-				case 'n': action_args[i + 1] = '\n'; break;  // newline
-				case 'r': action_args[i + 1] = '\r'; break;  // carriage return
-				case 't': action_args[i + 1] = '\t'; break;  // horizontal tab
-				case 'v': action_args[i + 1] = '\v'; break;  // vertical tab
-			}
-			// Replace escape-sequence with its single-char value.  This is done even if the pair isn't
-			// a recognizable escape sequence (e.g. `? becomes ?), which is the Microsoft approach
-			// and might not be a bad way of handling things.  There are some exceptions, however.
-			// The first of these exceptions (g_DerefChar) is mandatory because that char must be
-			// handled at a later stage or escaped g_DerefChars won't work right.  The others are
-			// questionable, and might be worth further consideration.  UPDATE: g_DerefChar is now
-			// done here because otherwise, examples such as this fail:
-			// - The escape char is backslash.
-			// - any instances of \\%, such as c:\\%var% , will not work because the first escape
-			// sequence (\\) is resolved to a single literal backslash.  But then when \% is encountered
-			// by the section that resolves escape sequences for g_DerefChar, the backslash is seen
-			// as an escape char rather than a literal backslash, which is not correct.  Thus, we
-			// resolve all escapes sequences HERE in one go, from left to right.
-			// So these are also done as well, and don't need an explicit check:
-			// g_EscapeChar , g_delimiter , (when g_CommentFlagLength > 1 ??): *g_CommentFlag
-			// Below has a final +1 to include the terminator:
-			tmemcpy(action_args + i, action_args + i + 1, _tcslen(action_args + i + 1) + 1);
-			literal_map[i] = 1;  // In the map, mark this char as literal.
-		}
+		ConvertEscapeSequences(action_args, literal_map, g_EscapeChar);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -4381,11 +4323,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			switch (action_args[mark])
 			{
 			case '"':
-				// The simple method below is sufficient for our purpose even if a quoted string contains
-				// pairs of double-quotes to represent a single literal quote, e.g. "quoted ""word""".
-				// In other words, it relies on the fact that there must be an even number of quotes
-				// inside any mandatory-numeric arg that is an expression such as x=="red,blue"
-				in_quotes = !in_quotes;
+				in_quotes = !in_quotes || literal_map[mark]; // i.e. only a non-literal quote mark terminates the string.
 				break;
 			case '(':
 			case '[': // L31: For this purpose, () and [] are equivalent. If they aren't balanced properly, a later stage will detect the error.
@@ -4814,6 +4752,37 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 						aActionType = ACT_ASSIGNEXPR;
 				}
 			}
+			
+			if (np = g_act[aActionType].NumericParams) // This command has at least one numeric parameter.
+			{
+				// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
+				i_plus_one = i + 1;
+				for (; *np; ++np)
+				{
+					if (*np == i_plus_one) // This arg is enforced to be purely numeric.
+					{
+						if (aActionType == ACT_WINMOVE)
+						{
+							if (i > 1)
+							{
+								// i indicates this is Arg #3 or beyond, which is one of the args that is
+								// either the word "default" or a number/expression.
+								if (!_tcsicmp(this_aArg, _T("default"))) // It's not an expression.
+									break; // The loop is over because this arg was found in the list.
+							}
+							else // This is the first or second arg, which are title/text vs. X/Y when aArgc > 2.
+								if (aArgc > 2) // Title/text are not numeric/expressions.
+									break; // The loop is over because this arg was found in the list.
+						}
+						// Otherwise, it is an expression.
+						this_new_arg.is_expression = true;
+						break; // The loop is over if this arg is found in the list of mandatory-numeric args.
+					} // i is a mandatory-numeric arg
+				} // for each mandatory-numeric arg of this command, see if this arg matches its number.
+			} // this command has a list of mandatory numeric-args.
+
+			if (!*this_aArg) // Some later optimizations rely on this check.
+				this_new_arg.is_expression = false; // Might already be false.
 
 			// Below will set the new var to be the constant empty string if the
 			// source var is NULL or blank.
@@ -4831,9 +4800,35 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// (if the alloc fails, an inaccurate length won't matter because it's an program-abort situation).
 			// The length must fit into a WORD, which it will since each arg is literal text from a script's line,
 			// which is limited to LINE_SIZE. The length member was added in v1.0.44.14 to boost runtime performance.
-			this_new_arg.length = (WORD)_tcslen(this_aArg);
-			if (   !(this_new_arg.text = SimpleHeap::Malloc(this_aArg, this_new_arg.length))   )
+			this_new_arg.length = (ArgLengthType)_tcslen(this_aArg);
+			
+			// Calculate size of condensed arg map; see below for comments.
+			int argmap_size = 1; // 1 for end marker.
+			if (this_new_arg.is_expression && this_aArgMap)
+				for (j = 0; j < this_new_arg.length; ++j)
+					if (this_aArgMap[j])
+						++argmap_size;
+
+			// Allocate memory for arg text and argmap.
+			if (   !(this_new_arg.text = (LPTSTR)SimpleHeap::Malloc((this_new_arg.length + 1) * sizeof(TCHAR) + argmap_size * sizeof(ArgLengthType)))   )
 				return FAIL;  // It already displayed the error for us.
+			// Copy arg text to persistent memory.
+			tmemcpy(this_new_arg.text, this_aArg, this_new_arg.length + 1); // +1 for null terminator.
+			// If this arg is an expression, store a condensed map of escaped/literal chars after this arg's text
+			// so that ExpressionToPostfix() can detect escaped quotation marks (and possibly other things).
+			ArgLengthType *argmap = (ArgLengthType *)(this_new_arg.text + this_new_arg.length + 1);
+			if (argmap_size > 1) // Implies is_expression && this_aArgMap, and at least one escaped char.
+			{
+				// Store the offset of each escaped char and terminate with ARGMAP_END_MARKER.
+				for (j = 0, argmap_size = 0; j < this_new_arg.length; ++j)
+					if (this_aArgMap[j])
+						argmap[argmap_size++] = j;
+				argmap[argmap_size] = ARGMAP_END_MARKER;
+			}
+			else
+				// Not an expression, no arg map, or no escaped chars.  Include a
+				// terminator in all cases, for simplicity and maintainability.
+				*argmap = ARGMAP_END_MARKER;
 
 			////////////////////////////////////////////////////
 			// Build the list of dereferenced vars for this arg.
@@ -4845,37 +4840,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// than this_aArg because we want to establish pointers to the correct area of
 			// memory:
 			deref_count = 0;  // Init for each arg.
-
-			if (np = g_act[aActionType].NumericParams) // This command has at least one numeric parameter.
-			{
-				// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
-				i_plus_one = i + 1;
-				for (; *np; ++np)
-				{
-					if (*np == i_plus_one) // This arg is enforced to be purely numeric.
-					{
-						if (aActionType == ACT_WINMOVE)
-						{
-							if (i > 1)
-							{
-								// i indicates this is Arg #3 or beyond, which is one of the args that is
-								// either the word "default" or a number/expression.
-								if (!_tcsicmp(this_new_arg.text, _T("default"))) // It's not an expression.
-									break; // The loop is over because this arg was found in the list.
-							}
-							else // This is the first or second arg, which are title/text vs. X/Y when aArgc > 2.
-								if (aArgc > 2) // Title/text are not numeric/expressions.
-									break; // The loop is over because this arg was found in the list.
-						}
-						// Otherwise, it is an expression.
-						this_new_arg.is_expression = true;
-						break; // The loop is over if this arg is found in the list of mandatory-numeric args.
-					} // i is a mandatory-numeric arg
-				} // for each mandatory-numeric arg of this command, see if this arg matches its number.
-			} // this command has a list of mandatory numeric-args.
-
-			if (!*this_new_arg.text) // Some later optimizations rely on this check.
-				this_new_arg.is_expression = false; // Might already be false.
 
 			if (this_new_arg.is_expression)
 			{
@@ -4911,19 +4875,15 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// literal, or a string literal.  If it's a string literal, it is left as-is:
 					if (*op_begin == '"')
 					{
-						// Find the end of this string literal, noting that a pair of double quotes is
-						// a literal double quote inside the string:
-						for (op_end = op_begin + 1;; ++op_end)
+						// Find the end of this string literal:
+						for (j = op_begin - this_new_arg.text + 1; ; ++j)
 						{
-							if (!*op_end)
+							if (j >= this_new_arg.length)
 								return ScriptError(ERR_MISSING_CLOSE_QUOTE, op_begin);
-							if (*op_end == '"') // If not followed immediately by another, this is the end of it.
+							if (this_new_arg.text[j] == '"' && !(this_aArgMap && this_aArgMap[j])) // A non-literal quote mark.
 							{
-								++op_end;
-								if (*op_end != '"') // String terminator or some non-quote character.
-									break;  // The previous char is the ending quote.
-								//else a pair of quotes, which resolves to a single literal quote.
-								// This pair is skipped over and the loop continues until the real end-quote is found.
+								op_end = this_new_arg.text + j + 1;
+								break;
 							}
 						}
 						// op_end is now set correctly to allow the outer loop to continue.
@@ -6338,7 +6298,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 			param_start = omit_leading_whitespace(param_start + 1); // Start of the default value.
 			if (*param_start == '"') // Quoted literal string, or the empty string.
 			{
-				// v1.0.46.13: Adde support for quoted/literal strings beyond simply "".
+				// v1.0.46.13: Added support for quoted/literal strings beyond simply "".
 				// The following section is nearly identical to one in ExpandExpression().
 				// Find the end of this string literal, noting that a pair of double quotes is
 				// a literal double quote inside the string.
@@ -6346,21 +6306,17 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 				{
 					if (!*param_end) // No matching end-quote. Probably impossible due to load-time validation.
 						return ScriptError(ERR_MISSING_CLOSE_QUOTE, param_start); // Reporting param_start vs. aBuf seems more informative in the case of quoted/literal strings.
-					if (*param_end == '"') // And if it's not followed immediately by another, this is the end of it.
+					if (*param_end == '"' && param_end[-1] != '`')
 					{
 						++param_end;
-						if (*param_end != '"') // String terminator or some non-quote character.
-							break;  // The previous char is the ending quote.
-						//else a pair of quotes, which resolves to a single literal quote. So fall through
-						// to the below, which will copy of quote character to the buffer. Then this pair
-						// is skipped over and the loop continues until the real end-quote is found.
+						break;  // The previous char is the ending quote.
 					}
-					//else some character other than '\0' or '"'.
+					//else an escaped '"' or some character other than '\0' or '"'.
 					*target++ = *param_end++;
 				}
 				*target = '\0'; // Terminate it in the buffer.
 				// The above has also set param_end for use near the bottom of the loop.
-				ConvertEscapeSequences(buf, g_EscapeChar, false); // Raw escape sequences like `n haven't been converted yet, so do it now.
+				ConvertEscapeSequences(buf, NULL, g_EscapeChar); // Raw escape sequences like `n haven't been converted yet, so do it now.
 				this_param.default_type = PARAM_DEFAULT_STR;
 				this_param.default_str = *buf ? SimpleHeap::Malloc(buf, target-buf) : _T("");
 			}
@@ -8669,6 +8625,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 	int derefs_in_this_double;
 	int cp1; // int vs. char benchmarks slightly faster, and is slightly smaller in code size.
 	TCHAR number_buf[MAX_NUMBER_SIZE];
+	ArgLengthType *arg_map = (ArgLengthType *)(aArg.text + aArg.length + 1);
 
 	for (cp = aArg.text, deref = aArg.deref // Start at the begining of this arg's text and look for the next deref.
 		;; ++deref, ++infix_count) // FOR EACH DEREF IN AN ARG:
@@ -9085,33 +9042,28 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						this_infix_item.symbol = SYM_CONCAT;
 						++infix_count;
 					}
-					// The following section is nearly identical to one in DefineFunc().
-					// Find the end of this string literal, noting that a pair of double quotes is
-					// a literal double quote inside the string:
-					for (op_end = ++cp;;) // Omit the starting-quote from consideration, and from the resulting/built string.
+					// Find the end of this string literal:
+					for (int j = ++cp - aArg.text; ; ++j)
 					{
-						if (!*op_end) // No matching end-quote. Probably impossible due to load-time validation.
+						if (j >= aArg.length) // No matching end-quote. Probably impossible due to load-time validation.
 							return LineError(ERR_MISSING_CLOSE_QUOTE); // Since this error string is used in other places, compiler string pooling should result in little extra memory needed for this line.
-						if (*op_end == '"') // And if it's not followed immediately by another, this is the end of it.
+						if (aArg.text[j] == '"')
 						{
-							++op_end;
-							if (*op_end != '"') // String terminator or some non-quote character.
-								break;  // The previous char is the ending quote.
-							//else a pair of quotes, which resolves to a single literal quote. So fall through
-							// to the below, which will copy of quote character to the buffer. Then this pair
-							// is skipped over and the loop continues until the real end-quote is found.
+							for (; *arg_map < j; ++arg_map); // Get the next highest "escaped" offset to determine if this char is escaped.  arg_map was initialized earlier.  Relies on ARGMAP_END_MARKER being higher than any possible character offset.
+							if (*arg_map > j) // i.e. this quote mark was not escaped, so it terminates the string.
+							{
+								op_end = aArg.text + j; // This points at the ending quote.
+								break;
+							}
 						}
-						//else some character other than '\0' or '"'.
-						++op_end;
 					}
-					// Since above didn't "goto", op_end is now the character after the ending '"'.
+					// Since above didn't "return", op_end is now the character after the ending '"'.
 
 					// MUST NOT REFER TO this_infix_item IN CASE HIGHER ABOVE DID ++infix_count:
 					infix[infix_count].symbol = SYM_STRING; // Marked explicitly as string vs. SYM_OPERAND to prevent it from being seen as a number, e.g. if (var == "12.0") would be false if var contains "12" with no trailing ".0".
-					if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp - 1))   ) // -1 to omit the ending quote.  cp was already adjusted to omit the starting quote.
+					if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   ) // cp was already adjusted to omit the starting quote.
 						return LineError(ERR_OUTOFMEM);
-					StrReplace(infix[infix_count].marker, _T("\"\""), _T("\""), SCS_SENSITIVE); // Resolve each "" into a single ".  Consequently, a little bit of memory in "marker" might be wasted, but it doesn't seem worth the code size to compensate for this.
-					cp = omit_leading_whitespace(op_end); // Have the loop process whatever lies at op_end and beyond.
+					cp = omit_leading_whitespace(op_end + 1); // Have the loop process whatever lies beyond the ending quote.
 					
 					if (*cp && _tcschr(_T("+-*&~!"), *cp) && cp[1] != '=' && (cp[1] != '&' || *cp != '&'))
 					{

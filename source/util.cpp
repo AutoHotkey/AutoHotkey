@@ -2486,18 +2486,18 @@ HRESULT MySetWindowTheme(HWND hwnd, LPCWSTR pszSubAppName, LPCWSTR pszSubIdList)
 
 
 
-LPTSTR ConvertEscapeSequences(LPTSTR aBuf, TCHAR aEscapeChar, bool aAllowEscapedSpace)
+LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap, TCHAR aEscapeChar, bool aAllowEscapedSpace)
 // Replaces any escape sequences in aBuf with their reduced equivalent.  For example, if aEscapeChar
 // is accent, Each `n would become a literal linefeed.  aBuf's length should always be the same or
 // lower than when the process started, so there is no chance of overflow.
 {
-	LPTSTR cp, cp1;
-	for (cp = aBuf; ; ++cp)  // Increment to skip over the symbol just found by the inner for().
+	int i;
+	for (i = 0; ; ++i)  // Increment to skip over the symbol just found by the inner for().
 	{
-		for (; *cp && *cp != aEscapeChar; ++cp);  // Find the next escape char.
-		if (!*cp) // end of string.
+		for (; aBuf[i] && aBuf[i] != g_EscapeChar; ++i);  // Find the next escape char.
+		if (!aBuf[i]) // end of string.
 			break;
-		cp1 = cp + 1;
+		LPTSTR cp1 = aBuf + i + 1;
 		switch (*cp1)
 		{
 			// Only lowercase is recognized for these:
@@ -2513,15 +2513,13 @@ LPTSTR ConvertEscapeSequences(LPTSTR aBuf, TCHAR aEscapeChar, bool aAllowEscaped
 					*cp1 = ' ';
 				//else do nothing extra, just let the standard action for unrecognized escape sequences.
 				break;
-			// Otherwise, if it's not one of the above, the escape-char is considered to
-			// mark the next character as literal, regardless of what it is. Examples:
-			// `` -> `
-			// `:: -> :: (effectively)
-			// `; -> ;
-			// `c -> c (i.e. unknown escape sequences resolve to the char after the `)
 		}
-		// Below has a final +1 to include the terminator:
-		tmemmove(cp, cp1, _tcslen(cp1) + 1);
+		// Replace escape-sequence with its single-char value.  This is done even if the pair isn't
+		// a recognizable escape sequence (e.g. `? becomes ?), which is the Microsoft approach and
+		// might not be a bad way of handling things. Below has a final +1 to include the terminator:
+		tmemmove(aBuf + i, cp1, _tcslen(cp1) + 1);
+		if (aLiteralMap)
+			aLiteralMap[i] = 1;  // In the map, mark this char as literal.
 	}
 	return aBuf;
 }
