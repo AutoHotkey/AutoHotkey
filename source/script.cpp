@@ -7938,8 +7938,8 @@ void *Script::GetVarType(LPTSTR aVarName)
 			if (!_tcscmp(lower, _T("shortname"))) return BIV_LoopFileShortName;
 			if (!_tcscmp(lower, _T("ext"))) return BIV_LoopFileExt;
 			if (!_tcscmp(lower, _T("dir"))) return BIV_LoopFileDir;
+			if (!_tcscmp(lower, _T("path"))) return BIV_LoopFilePath;
 			if (!_tcscmp(lower, _T("fullpath"))) return BIV_LoopFileFullPath;
-			if (!_tcscmp(lower, _T("longpath"))) return BIV_LoopFileLongPath;
 			if (!_tcscmp(lower, _T("shortpath"))) return BIV_LoopFileShortPath;
 			if (!_tcscmp(lower, _T("attrib"))) return BIV_LoopFileAttrib;
 

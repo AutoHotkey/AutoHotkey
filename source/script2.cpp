@@ -10911,7 +10911,7 @@ VarSizeType BIV_LoopFileDir(LPTSTR aBuf, LPTSTR aVarName)
 	return length;
 }
 
-VarSizeType BIV_LoopFileFullPath(LPTSTR aBuf, LPTSTR aVarName)
+VarSizeType BIV_LoopFilePath(LPTSTR aBuf, LPTSTR aVarName)
 {
 	// The loop handler already prepended the script's directory in cFileName for us:
 	LPTSTR full_path = g->mLoopFile ? g->mLoopFile->cFileName : _T("");
@@ -10920,7 +10920,7 @@ VarSizeType BIV_LoopFileFullPath(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(full_path);
 }
 
-VarSizeType BIV_LoopFileLongPath(LPTSTR aBuf, LPTSTR aVarName)
+VarSizeType BIV_LoopFileFullPath(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR *unused, buf[MAX_PATH] = _T(""); // Set default.
 	if (g->mLoopFile)
