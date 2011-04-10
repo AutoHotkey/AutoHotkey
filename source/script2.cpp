@@ -8347,7 +8347,7 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 		ofn.Flags |= OFN_OVERWRITEPROMPT;
 	if (options & 0x08)
 		ofn.Flags |= OFN_CREATEPROMPT;
-	if (new_multi_select_method || (options & 0x04))
+	if (new_multi_select_method)
 		ofn.Flags |= OFN_ALLOWMULTISELECT;
 	if (options & 0x02)
 		ofn.Flags |= OFN_PATHMUSTEXIST;
@@ -8395,59 +8395,41 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 	if (ofn.Flags & OFN_ALLOWMULTISELECT)
 	{
 		LPTSTR cp;
-		if (new_multi_select_method) // v1.0.25.05+ method.
+		// If the first terminator in file_buf is also the last, the user selected only
+		// a single file:
+		size_t length = _tcslen(file_buf);
+		if (!file_buf[length + 1]) // The list contains only a single file (full path and name).
 		{
-			// If the first terminator in file_buf is also the last, the user selected only
-			// a single file:
-			size_t length = _tcslen(file_buf);
-			if (!file_buf[length + 1]) // The list contains only a single file (full path and name).
+			// v1.0.25.05: To make the result of selecting one file the same as selecting multiple files
+			// -- and thus easier to work with in a script -- convert the result into the multi-file
+			// format (folder as first item and naked filename as second):
+			if (cp = _tcsrchr(file_buf, '\\'))
 			{
-				// v1.0.25.05: To make the result of selecting one file the same as selecting multiple files
-				// -- and thus easier to work with in a script -- convert the result into the multi-file
-				// format (folder as first item and naked filename as second):
-				if (cp = _tcsrchr(file_buf, '\\'))
+				*cp = '\n';
+				// If the folder is the root folder, add a backslash so that selecting a single
+				// file yields the same reported folder as selecting multiple files.  One reason
+				// for doing it this way is that SetCurrentDirectory() requires a backslash after
+				// a root folder to succeed.  This allows a script to use SetWorkingDir to change
+				// to the selected folder before operating on each of the selected/naked filenames.
+				if (cp - file_buf == 2 && cp[-1] == ':') // e.g. "C:"
 				{
-					*cp = '\n';
-					// If the folder is the root folder, add a backslash so that selecting a single
-					// file yields the same reported folder as selecting multiple files.  One reason
-					// for doing it this way is that SetCurrentDirectory() requires a backslash after
-					// a root folder to succeed.  This allows a script to use SetWorkingDir to change
-					// to the selected folder before operating on each of the selected/naked filenames.
-					if (cp - file_buf == 2 && cp[-1] == ':') // e.g. "C:"
-					{
-						tmemmove(cp + 1, cp, _tcslen(cp) + 1); // Make room to insert backslash (since only one file was selcted, the buf is large enough).
-						*cp = '\\';
-					}
-				}
-			}
-			else // More than one file was selected.
-			{
-				// Use the same method as the old multi-select format except don't provide a
-				// linefeed after the final item.  That final linefeed would make parsing via
-				// a parsing loop more complex because a parsing loop would see a blank item
-				// at the end of the list:
-				for (cp = file_buf;;)
-				{
-					for (; *cp; ++cp); // Find the next terminator.
-					if (!cp[1]) // This is the last file because it's double-terminated, so we're done.
-						break;
-					*cp = '\n'; // Replace zero-delimiter with a visible/printable delimiter, for the user.
+					tmemmove(cp + 1, cp, _tcslen(cp) + 1); // Make room to insert backslash (since only one file was selcted, the buf is large enough).
+					*cp = '\\';
 				}
 			}
 		}
-		else  // Old multi-select method is in effect (kept for backward compatibility).
+		else // More than one file was selected.
 		{
-			// Replace all the zero terminators with a delimiter, except the one for the last file
-			// (the last file should be followed by two sequential zero terminators).
-			// Use a delimiter that can't be confused with a real character inside a filename, i.e.
-			// not a comma.  We only have room for one without getting into the complexity of having
-			// to expand the string, so \r\n is disqualified for now.
+			// Use the same method as the old multi-select format except don't provide a
+			// linefeed after the final item.  That final linefeed would make parsing via
+			// a parsing loop more complex because a parsing loop would see a blank item
+			// at the end of the list:
 			for (cp = file_buf;;)
 			{
 				for (; *cp; ++cp); // Find the next terminator.
-				*cp = '\n'; // Replace zero-delimiter with a visible/printable delimiter, for the user.
 				if (!cp[1]) // This is the last file because it's double-terminated, so we're done.
 					break;
+				*cp = '\n'; // Replace zero-delimiter with a visible/printable delimiter, for the user.
 			}
 		}
 	}
