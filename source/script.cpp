@@ -4900,6 +4900,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 							if (this_new_arg.text[j] == in_quote && !(this_aArgMap && this_aArgMap[j])) // A non-literal quote mark.
 							{
 								op_end = this_new_arg.text + j + 1;
+								// See ParseDerefs() call further below for comments.
+								if (!ParseDerefs(op_begin, this_aArgMap ? this_aArgMap + (op_begin - this_new_arg.text) : NULL
+									, deref, deref_count))
+									return FAIL;
 								break;
 							}
 						}
@@ -9052,16 +9056,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 				case '"': // QUOTED/LITERAL STRING.
 				case '\'':
 					cp1 = *cp; // cp1 contains the starting quote mark: " or '.
-					// Note that single and double-derefs are impossible inside string-literals
-					// because the load-time deref parser would never detect anything inside
-					// of quotes -- even non-escaped percent signs -- as derefs.
-					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)) // If it's an operand, at this stage it can only be SYM_OPERAND or SYM_STRING.
-					{
-						if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
-							return LineError(ERR_EXPR_TOO_LONG);
-						this_infix_item.symbol = SYM_CONCAT;
-						++infix_count;
-					}
 					// Find the end of this string literal:
 					for (int j = ++cp - aArg.text; ; ++j)
 					{
@@ -9076,11 +9070,65 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								break;
 							}
 						}
+						if (deref && (aArg.text + j) == deref->marker) // Implies deref->marker != NULL.
+						{
+							if (infix_count > MAX_TOKENS - 6) // -6 to allow for four operands in this iteration and a mandatory two after the loop completes.
+								return LineError(ERR_EXPR_TOO_LONG);
+							op_end = aArg.text + j; // This points at the deref char.
+							// MUST NOT REFER TO this_infix_item AT ANY POINT DURING THE LOOP (in case a previous iteration did ++infix_count).
+							if (op_end > cp)
+							{
+								// 1) If the last infix token is an operand, it could be:
+								//     - An operand preceding the quoted string: apply auto-concat.
+								//     - A deref output by a previous iteration, to be concatenated with this substring.
+								if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
+									infix[infix_count++].symbol = SYM_CONCAT;
+								// 2) Output the next literal fragment of this quoted string.
+								if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   )
+									return LineError(ERR_OUTOFMEM);
+								infix[infix_count++].symbol = SYM_STRING;
+							}
+							// 3) If the last infix token is an operand, it could be:
+							//     - An operand preceding the quoted string: apply auto-concat.
+							//     - A substring output by the section above.
+							//     - A deref output by a previous iteration (i.e. there was no literal text between this and that).
+							//    It might not be an operand because the section above didn't output one if op_end == cp (i.e. this deref is at the beginning of the string).
+							if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)) // Both need to be checked; see above.
+								infix[infix_count++].symbol = SYM_CONCAT;
+							// 4) Output this deref.
+							if (deref->var->Type() == VAR_NORMAL)
+							{
+								infix[infix_count].symbol = SYM_VAR;
+							}
+							else
+							{
+								infix[infix_count].symbol = SYM_DYNAMIC;
+								infix[infix_count].buf = NULL; // SYM_DYNAMIC requires that buf be set to NULL for non-double-deref vars (since there are two different types of SYM_DYNAMIC).
+							}
+							infix[infix_count++].var = deref->var;
+							// The next iteration (if any) or the section below will insert a concat operator as necessary.
+							j += deref->length; // Let the next iteration resume after the deref.
+							++deref;
+							cp = aArg.text + j; // Update cp for the substring following the final deref; it will be used below.
+							--j; // -1 to counter the loop's increment.
+						}
 					}
-					// Since above didn't "return", op_end is now the character after the ending '"'.
-
+					// Since above didn't "return", op_end now points at the ending '"'.
+					
+					this_deref = deref && deref->marker ? deref : NULL; // Update in case above changed it.
+					
+					// If the loop above output one or more substrings and/or derefs, still need to output
+					// a concat operator and the remainder of the string, EVEN IF IT IS EMPTY.  Otherwise
+					// something like ("%var%") would cause inconsistency if var contains a non-string value.
+					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
+					{
+						if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
+							return LineError(ERR_EXPR_TOO_LONG);
+						infix[infix_count++].symbol = SYM_CONCAT;
+					}
+					
 					// MUST NOT REFER TO this_infix_item IN CASE HIGHER ABOVE DID ++infix_count:
-					infix[infix_count].symbol = SYM_STRING; // Marked explicitly as string vs. SYM_OPERAND to prevent it from being seen as a number, e.g. if (var == "12.0") would be false if var contains "12" with no trailing ".0".
+					infix[infix_count].symbol = SYM_STRING;
 					if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   ) // cp was already adjusted to omit the starting quote.
 						return LineError(ERR_OUTOFMEM);
 					cp = omit_leading_whitespace(op_end + 1); // Have the loop process whatever lies beyond the ending quote.
@@ -9094,7 +9142,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						// a unary operator.  The most common cases where this helps are:
 						//	MsgBox % "var's address is " &var
 						//	MsgBox % "counter is now " ++var
-						if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
+						if (infix_count > MAX_TOKENS - 2) // -2 to allow for this token and the one added above (for which infix_count hasn't been incremented yet).
 							return LineError(ERR_EXPR_TOO_LONG);
 						infix[++infix_count].symbol = SYM_CONCAT;
 					}
