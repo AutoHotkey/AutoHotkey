@@ -4886,7 +4886,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					{
 						TCHAR in_quote = *op_begin;
 						// Find the end of this string literal:
-						for (j = op_begin - this_new_arg.text + 1; ; ++j)
+						for (j = (int)(op_begin - this_new_arg.text + 1); ; ++j)
 						{
 							if (j >= this_new_arg.length)
 								return ScriptError(ERR_MISSING_CLOSE_QUOTE, op_begin);
@@ -9052,7 +9052,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 				case '\'':
 					cp1 = *cp; // cp1 contains the starting quote mark: " or '.
 					// Find the end of this string literal:
-					for (int j = ++cp - aArg.text; ; ++j)
+					for (int j = (int)(++cp - aArg.text); ; ++j)
 					{
 						if (j >= aArg.length) // No matching end-quote. Probably impossible due to load-time validation.
 							return LineError(ERR_MISSING_CLOSE_QUOTE); // Since this error string is used in other places, compiler string pooling should result in little extra memory needed for this line.
