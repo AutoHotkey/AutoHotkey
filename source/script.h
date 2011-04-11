@@ -914,6 +914,7 @@ public:
 		, LPTSTR aFilePath, size_t aFilePathLength);
 
 	Label *GetJumpTarget(bool aIsDereferenced);
+	Label *GetJumpTarget(bool aIsDereferenced, Func *aFunc);
 	Label *IsJumpValid(Label &aTargetLabel, bool aSilent = false);
 	BOOL IsOutsideAnyFunctionBody();
 
@@ -1865,6 +1866,7 @@ public:
 	FuncParam *mParam;  // Will hold an array of FuncParams.
 	int mParamCount; // The number of items in the above array.  This is also the function's maximum number of params.
 	int mMinParams;  // The number of mandatory parameters (populated for both UDFs and built-in's).
+	Label *mFirstLabel, *mLastLabel; // Linked list of private labels.
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	Var **mGlobalVar; // Array of global declarations.
 	int mVarCount, mVarCountMax, mLazyVarCount, mGlobalVarCount; // Count of items in the above array as well as the maximum capacity.
@@ -1955,6 +1957,7 @@ public:
 		: mName(aFuncName) // Caller gave us a pointer to dynamic memory for this.
 		, mBIF(NULL)
 		, mParam(NULL), mParamCount(0), mMinParams(0)
+		, mFirstLabel(NULL), mLastLabel(NULL)
 		, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 		, mGlobalVar(NULL), mGlobalVarCount(0)
 		, mInstances(0)
@@ -2579,6 +2582,7 @@ public:
 	WinGroup *FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound = false);
 	ResultType AddGroup(LPTSTR aGroupName);
 	Label *FindLabel(LPTSTR aLabelName);
+	Label *FindLabel(LPTSTR aLabelName, Func *aFunc);
 
 	ResultType DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, bool aUpdateLastError, WORD aShowWindow
 		, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, LPTSTR aSystemErrorText);

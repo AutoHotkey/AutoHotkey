@@ -3278,8 +3278,14 @@ ResultType Script::UpdateOrCreateTimer(Label *aLabel, LPTSTR aPeriod, LPTSTR aPr
 }
 
 
-
 Label *Script::FindLabel(LPTSTR aLabelName)
+// See below.  This overload is called when g->CurrentFunc accurately reflects the function
+// from which this label is being referenced.  PreparseIfElse() passes the Func explicitly.
+{
+	return FindLabel(aLabelName, g->CurrentFunc);
+}
+
+Label *Script::FindLabel(LPTSTR aLabelName, Func *aFunc)
 // Returns the first label whose name matches aLabelName, or NULL if not found.
 // v1.0.42: Since duplicates labels are now possible (to support #IfWin variants of a particular
 // hotkey or hotstring), callers must be aware that only the first match is returned.
@@ -3287,7 +3293,12 @@ Label *Script::FindLabel(LPTSTR aLabelName)
 // a match is found.
 {
 	if (!aLabelName || !*aLabelName) return NULL;
-	for (Label *label = mFirstLabel; label != NULL; label = label->mNextLabel)
+	Label *label;
+	if (aFunc)
+		for (label = aFunc->mFirstLabel; label != NULL; label = label->mNextLabel)
+			if (!_tcsicmp(label->mName, aLabelName))
+				return label;
+	for (label = mFirstLabel; label != NULL; label = label->mNextLabel)
 		if (!_tcsicmp(label->mName, aLabelName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			return label; // Match found.
 	return NULL; // No match found.
@@ -3300,26 +3311,33 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 {
 	if (!*aLabelName)
 		return FAIL; // For now, silent failure because callers should check this beforehand.
-	if (!aAllowDupe && FindLabel(aLabelName)) // Relies on short-circuit boolean order.
-		// Don't attempt to dereference "duplicate_label->mJumpToLine because it might not
-		// exist yet.  Example:
-		// label1:
-		// label1:  <-- This would be a dupe-error but it doesn't yet have an mJumpToLine.
-		// return
-		return ScriptError(_T("Duplicate label."), aLabelName);
+	Label *&first_label = g->CurrentFunc ? g->CurrentFunc->mFirstLabel : mFirstLabel;
+	Label *&last_label  = g->CurrentFunc ? g->CurrentFunc->mLastLabel  : mLastLabel;
+	if (!aAllowDupe)
+	{
+		// Not using FindLabel() because we want to allow func-local labels to overshadow global ones:
+		for (Label *label = first_label; label != NULL; label = label->mNextLabel)
+			if (!_tcsicmp(label->mName, aLabelName))
+				// Don't attempt to dereference label->mJumpToLine because it might not
+				// exist yet.  Example:
+				// label1:
+				// label1:  <-- This would be a dupe-error but it doesn't yet have an mJumpToLine.
+				// return
+				return ScriptError(_T("Duplicate label."), aLabelName);
+	}
 	LPTSTR new_name = SimpleHeap::Malloc(aLabelName);
 	if (!new_name)
 		return FAIL;  // It already displayed the error for us.
 	Label *the_new_label = new Label(new_name); // Pass it the dynamic memory area we created.
 	if (the_new_label == NULL)
 		return ScriptError(ERR_OUTOFMEM);
-	the_new_label->mPrevLabel = mLastLabel;  // Whether NULL or not.
-	if (mFirstLabel == NULL)
-		mFirstLabel = the_new_label;
+	the_new_label->mPrevLabel = last_label;  // Whether NULL or not.
+	if (first_label == NULL)
+		first_label = the_new_label;
 	else
-		mLastLabel->mNextLabel = the_new_label;
+		last_label->mNextLabel = the_new_label;
 	// This must be done after the above:
-	mLastLabel = the_new_label;
+	last_label = the_new_label;
 	if (!_tcsicmp(new_name, _T("OnClipboardChange")))
 		mOnClipboardChangeLabel = the_new_label;
 	return OK;
@@ -6090,7 +6108,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// The above check relies upon the fact that mLastFunc->mIsBuiltIn must be false at this stage,
 			// which is the case because any non-overridden built-in function won't get added until after all
 			// lines have been added, namely PreparseBlocks().
-			line.mAttribute = ATTR_TRUE;  // Flag this ACT_BLOCK_BEGIN as the opening brace of the function's body.
+			line.mAttribute = mLastFunc;  // Flag this ACT_BLOCK_BEGIN as the opening brace of the function's body.
 			// For efficiency, and to prevent ExecUntil from starting a new recursion layer for the function's
 			// body, the function's execution should begin at the first line after its open-brace (even if that
 			// first line is another open-brace or the function's close-brace (i.e. an empty function):
@@ -6135,9 +6153,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// return
 	if (do_update_labels)
 	{
-		for (Label *label = mLastLabel; label != NULL && label->mJumpToLine == NULL; label = label->mPrevLabel)
+		for (Label *label = g->CurrentFunc ? g->CurrentFunc->mLastLabel : mLastLabel;
+			label != NULL && label->mJumpToLine == NULL; label = label->mPrevLabel)
 		{
-			if (line.mActionType == ACT_BLOCK_BEGIN && line.mAttribute == ATTR_TRUE) // Non-zero mAttribute signfies the open-brace of a function body.
+			if (line.mActionType == ACT_BLOCK_BEGIN && line.mAttribute) // Non-zero mAttribute signifies the open-brace of a function body.
 				return ScriptError(_T("A label must not point to a function."));
 			if (line.mActionType == ACT_ELSE || line.mActionType == ACT_UNTIL)
 				return ScriptError(_T("A label must not point to an ELSE or UNTIL."));
@@ -8123,7 +8142,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 		if (ACT_IS_IF_OR_ELSE_OR_LOOP(line->mActionType))
 		{
 			// In this case, the loader should have already ensured that line->mNextLine is not NULL.
-			if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN && line->mNextLine->mAttribute == ATTR_TRUE)
+			if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN && line->mNextLine->mAttribute)
 			{
 				abort = true; // So that the caller doesn't also report an error.
 				return line->PreparseError(_T("Improper line below this.")); // Short message since so rare. A function must not be defined directly below an IF/ELSE/LOOP because runtime evaluation won't handle it properly.
@@ -8243,7 +8262,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 // only when aStartingLine's ActionType is something recursable such
 // as IF and BEGIN_BLOCK.  Otherwise, it won't return after only one line.
 {
-	static BOOL sInFunctionBody = FALSE; // Improves loadtime performance by allowing IsOutsideAnyFunctionBody() to be called only when necessary.
+	static Func *sInFunctionBody = NULL; // Improves loadtime performance by allowing IsOutsideAnyFunctionBody() to be called only when necessary.
 	// Don't check aStartingLine here at top: only do it at the bottom
 	// for it's differing return values.
 	Line *line_temp;
@@ -8392,16 +8411,16 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		switch (line->mActionType)
 		{
 		case ACT_BLOCK_BEGIN:
-			if (line->mAttribute == ATTR_TRUE) // This is the opening brace of a function definition.
-				sInFunctionBody = TRUE; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
+			if (line->mAttribute) // This is the opening brace of a function definition.
+				sInFunctionBody = (Func *)line->mAttribute; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
 			line = PreparseIfElse(line->mNextLine, UNTIL_BLOCK_END, aLoopType);
 			// "line" is now either NULL due to an error, or the location of the END_BLOCK itself.
 			if (line == NULL)
 				return NULL; // Error.
 			break;
 		case ACT_BLOCK_END:
-			if (line->mAttribute == ATTR_TRUE) // This is the closing brace of a function definition.
-				sInFunctionBody = FALSE; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
+			if (line->mAttribute) // This is the closing brace of a function definition.
+				sInFunctionBody = NULL; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
 			if (aMode == ONLY_ONE_LINE)
 				 // Syntax error.  The caller would never expect this single-line to be an
 				 // end-block.  UPDATE: I think this is impossible because callers only use
@@ -8443,7 +8462,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				else
 				{
 					// Target is a named loop.
-					if ( !(loop_label = FindLabel(loop_name)) )
+					if ( !(loop_label = FindLabel(loop_name, sInFunctionBody)) )
 						return line->PreparseError(ERR_NO_LABEL, loop_name);
 					loop_line = loop_label->mJumpToLine;
 					// Ensure the label points to a Loop, For-loop or While-loop ...
@@ -8473,7 +8492,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				line->mRelatedLine = NULL;
   			else
 			{
-				if (!line->GetJumpTarget(false))
+				if (!line->GetJumpTarget(false, sInFunctionBody))
 					return NULL; // Error was already displayed by called function.
 				if (   line->mActionType == ACT_GOSUB && sInFunctionBody
 					&& ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()   ) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
@@ -8489,7 +8508,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		// so that labels both above and below this line can be resolved:
 		case ACT_ONEXIT:
 			if (*line_raw_arg1 && !line->ArgHasDeref(1))
-				if (   !(line->mAttribute = FindLabel(line_raw_arg1))   )
+				if (   !(line->mAttribute = FindLabel(line_raw_arg1, sInFunctionBody))   )
 					return line->PreparseError(ERR_NO_LABEL);
 			break;
 
@@ -8497,14 +8516,14 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			if (   *line_raw_arg2 && !line->ArgHasDeref(2)
 				&& !line->ArgHasDeref(1) && _tcsnicmp(line_raw_arg1, _T("IfWin"), 5) // v1.0.42: Omit IfWinXX from validation.
 				&& _tcsnicmp(line_raw_arg1, _T("If"), 2)	)	// L4: Also omit If from validation - for #if (expression).
-				if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
+				if (   !(line->mAttribute = FindLabel(line_raw_arg2, sInFunctionBody))   )
 					if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
 						return line->PreparseError(ERR_NO_LABEL);
 			break;
 
 		case ACT_SETTIMER:
 			if (!line->ArgHasDeref(1))
-				if (   !(line->mAttribute = FindLabel(line_raw_arg1))   )
+				if (   !(line->mAttribute = FindLabel(line_raw_arg1, sInFunctionBody))   )
 					return line->PreparseError(ERR_NO_LABEL);
 			if (*line_raw_arg2 && !line->ArgHasDeref(2))
 				if (!Line::ConvertOnOff(line_raw_arg2) && !IsNumeric(line_raw_arg2, true) // v1.0.46.16: Allow negatives to support the new run-only-once mode.
@@ -10785,7 +10804,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			return g_script.ExitApp(EXIT_EXIT, NULL, (int)line->ArgIndexToInt64(0));
 
 		case ACT_BLOCK_BEGIN:
-			if (line->mAttribute == ATTR_TRUE) // This is the ACT_BLOCK_BEGIN that starts a function's body.
+			if (line->mAttribute) // This is the ACT_BLOCK_BEGIN that starts a function's body.
 			{
 				// Anytime this happens at runtime it means a function has been defined inside the
 				// auto-execute section, a block, or other place the flow of execution can reach

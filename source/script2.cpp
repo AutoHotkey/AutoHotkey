@@ -9909,8 +9909,13 @@ bool Line::FileIsFilteredOut(WIN32_FIND_DATA &aCurrentFile, FileLoopModeType aFi
 
 Label *Line::GetJumpTarget(bool aIsDereferenced)
 {
+	return GetJumpTarget(aIsDereferenced, g->CurrentFunc);
+}
+
+Label *Line::GetJumpTarget(bool aIsDereferenced, Func *aFunc)
+{
 	LPTSTR target_label = aIsDereferenced ? ARG1 : RAW_ARG1;
-	Label *label = g_script.FindLabel(target_label);
+	Label *label = g_script.FindLabel(target_label, aFunc);
 	if (!label)
 	{
 		if (aIsDereferenced)
@@ -9968,8 +9973,8 @@ Label *Line::IsJumpValid(Label &aTargetLabel, bool aSilent)
 BOOL Line::IsOutsideAnyFunctionBody() // v1.0.48.02
 {
 	for (Line *ancestor = mParentLine; ancestor != NULL; ancestor = ancestor->mParentLine)
-		if (ancestor->mAttribute == ATTR_TRUE && ancestor->mActionType == ACT_BLOCK_BEGIN) // Ordered for short-circuit performance.
-			return FALSE; // ATTR_TRUE marks an open-brace as belonging to a function's body, so indicate this this line is inside a function.
+		if (ancestor->mAttribute && ancestor->mActionType == ACT_BLOCK_BEGIN) // Ordered for short-circuit performance.
+			return FALSE; // Non-zero mAttribute marks an open-brace as belonging to a function's body, so indicate this line is inside a function.
 	return TRUE; // Indicate that this line is not inside any function body.
 }
 
