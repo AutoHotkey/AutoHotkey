@@ -285,8 +285,6 @@ Action g_act[] =
 	, {_T("IfWinExist"), 0, 4, false, NULL}, {_T("IfWinNotExist"), 0, 4, false, NULL}  // Title, text, exclude-title, exclude-text
 	// Passing zero params results in activating the LastUsed window:
 	, {_T("IfWinActive"), 0, 4, false, NULL}, {_T("IfWinNotActive"), 0, 4, false, NULL} // same
-	, {_T("IfExist"), 1, 1, false, NULL} // File or directory.
-	, {_T("IfNotExist"), 1, 1, false, NULL} // File or directory.
 	// IfMsgBox must be physically adjacent to the other IFs in this array:
 	, {_T("IfMsgBox"), 1, 1, false, NULL} // MsgBox result (e.g. OK, YES, NO)
 	, {_T("MsgBox"), 0, 4, false, {4, 0}} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.

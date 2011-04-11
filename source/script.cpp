@@ -11203,13 +11203,6 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 		if_condition = !WinActive(*g, FOUR_ARGS, true);
 		break;
 
-	case ACT_IFEXIST:
-		if_condition = DoesFilePatternExist(ARG1);
-		break;
-	case ACT_IFNOTEXIST:
-		if_condition = !DoesFilePatternExist(ARG1);
-		break;
-
 	case ACT_IFMSGBOX:
 	{
 		int mb_result = ConvertMsgBoxResult(ARG1);
