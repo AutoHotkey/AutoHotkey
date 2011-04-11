@@ -9244,13 +9244,16 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			{
 				if (!line->GetJumpTarget(false))
 					return NULL; // Error was already displayed by called function.
-				if (   line->mActionType == ACT_GOSUB && sInFunctionBody
-					&& ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()   ) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
+				if (sInFunctionBody && ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
+				{
+					if (line->mActionType == ACT_GOTO)
+						return line->PreparseError(_T("A Goto cannot jump from inside a function to outside."));
 					// Since this Gosub and its target line are both inside a function, they must both
 					// be in the same function because otherwise GetJumpTarget() would have reported
 					// the target as invalid.
 					line->mAttribute = ATTR_TRUE; // v1.0.48.02: To improve runtime performance, mark this Gosub as having a target that is outside of any function body.
-				//else leave above at its line-constructor default of ATTR_NONE.
+				}
+				//else leave mAttribute at its line-constructor default of ATTR_NONE.
 			}
 			break;
 
