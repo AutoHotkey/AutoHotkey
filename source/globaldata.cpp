@@ -277,14 +277,6 @@ Action g_act[] =
 	, {_T("between"), 1, 3, false, NULL}, {_T("not between"), 1, 3, false, NULL}  // Min 1 to allow #2 and #3 to be the empty string.
 	, {_T(""), 1, 1, false, {1, 0}} // ACT_IFEXPR's name should be "" so that Line::ToText() will properly display it.
 
-	// For these, allow a minimum of zero, otherwise, the first param (WinTitle) would
-	// be considered mandatory-non-blank by default.  It's easier to make all the params
-	// optional and validate elsewhere that at least one of the four isn't blank.
-	// Also, All the IFs must be physically adjacent to each other in this array
-	// so that ACT_FIRST_IF and ACT_LAST_IF can be used to detect if a command is an IF:
-	, {_T("IfWinExist"), 0, 4, false, NULL}, {_T("IfWinNotExist"), 0, 4, false, NULL}  // Title, text, exclude-title, exclude-text
-	// Passing zero params results in activating the LastUsed window:
-	, {_T("IfWinActive"), 0, 4, false, NULL}, {_T("IfWinNotActive"), 0, 4, false, NULL} // same
 	// IfMsgBox must be physically adjacent to the other IFs in this array:
 	, {_T("IfMsgBox"), 1, 1, false, NULL} // MsgBox result (e.g. OK, YES, NO)
 	, {_T("MsgBox"), 0, 4, false, {4, 0}} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.

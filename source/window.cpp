@@ -552,8 +552,7 @@ HWND WinExist(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExc
 	if (!(*aTitle || *aText || *aExcludeTitle || *aExcludeText))
 		// User passed no params, so use the window most recently found by WinExist().
 		// It's correct to do this even in this function because it's called by
-		// WINWAITCLOSE and IFWINEXIST specifically to discover if the Last-Used
-		// window still exists.
+		// WINWAITCLOSE specifically to discover if the Last-Used window still exists.
 		return GetValidLastUsedWindow(aSettings);
 
 	WindowSearch ws;
@@ -754,7 +753,7 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR
 	// Set default ErrorLevel, which is a special value (2 vs. 1) in the case of StatusBarWait:
 	g_ErrorLevel->Assign(aOutputVar ? ERRORLEVEL_ERROR : ERRORLEVEL_ERROR2);
 
-	// Legacy: Waiting 500ms in place of a "0" seems more useful than a true zero, which doens't need
+	// Legacy: Waiting 500ms in place of a "0" seems more useful than a true zero, which doesn't need
 	// to be supported because it's the same thing as something like "IfWinExist":
 	if (!aWaitTime)
 		aWaitTime = 500;

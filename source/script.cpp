@@ -956,7 +956,7 @@ _T("\n")
 _T("#z::Run www.autohotkey.com\n")
 _T("\n")
 _T("^!n::\n")
-_T("IfWinExist Untitled - Notepad\n")
+_T("If WinExist(\"Untitled - Notepad\")\n")
 _T("\tWinActivate\n")
 _T("else\n")
 _T("\tRun Notepad\n")
@@ -2029,12 +2029,6 @@ examine_line:
 				// safely exist inside a function body and since the body is a block, other validation
 				// ensures that a Gosub or Goto can't jump to it from outside the function.
 				ScriptError(_T("Hotkeys/hotstrings are not allowed inside functions."), buf);
-				return CloseAndReturnFail(fp);
-			}
-			if (mLastLine && mLastLine->mActionType == ACT_IFWINACTIVE)
-			{
-				mCurrLine = mLastLine; // To show vicinity lines.
-				ScriptError(_T("IfWin should be #IfWin."), buf);
 				return CloseAndReturnFail(fp);
 			}
 			*hotkey_flag = '\0'; // Terminate so that buf is now the label itself.
@@ -4309,24 +4303,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				break;
 			}
 		}
-		else if (nArgs == 2) // i.e. the 3rd arg is about to be added.
-		{
-			switch (aActionType) // will be ACT_INVALID if this_action is an old-style command.
-			{
-			case ACT_IFWINEXIST:
-			case ACT_IFWINNOTEXIST:
-			case ACT_IFWINACTIVE:
-			case ACT_IFWINNOTACTIVE:
-				subaction_start = action_args + mark;
-				if (subaction_end_marker = ParseActionType(subaction_name, subaction_start, false))
-					subaction_type = ConvertActionType(subaction_name);
-				break;
-			}
-			if (subaction_type)
-				// A valid command was found (i.e. AutoIt2-style) in place of this commands Exclude Title
-				// parameter, so don't add this item as a param to the command.
-				break;
-		}
 		arg[nArgs] = action_args + mark;
 		arg_map[nArgs] = literal_map + mark;
 		if (nArgs == max_params_minus_one)
@@ -5959,12 +5935,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// runtime for them all to resolve to be blank, without an error being reported.
 	// It's probably more flexible that way since the commands are equipped to handle
 	// all-blank params.
-	// Not these because they can be used with the "last-used window" mode:
-	//case ACT_IFWINEXIST:
-	//case ACT_IFWINNOTEXIST:
 	// Not these because they can have their window params all-blank to work in "last-used window" mode:
-	//case ACT_IFWINACTIVE:
-	//case ACT_IFWINNOTACTIVE:
 	//case ACT_WINACTIVATE:
 	//case ACT_WINWAITCLOSE:
 	//case ACT_WINWAITACTIVE:
@@ -8162,10 +8133,10 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 			// This is done to make it illegal for a Goto or Gosub to jump into a deeper layer,
 			// such as in this example:
 			// #y::
-			// ifwinexist, pad
+			// if winexist("pad")
 			// {
 			//    goto, label1
-			//    ifwinexist, pad
+			//    if winexist("pad")
 			//    label1:
 			//    ; With or without the enclosing block, the goto would still go to an illegal place
 			//    ; in the below, resulting in an "unexpected else" error:
@@ -11183,25 +11154,6 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 			if_condition = !if_condition;
 		break;
 	}
-
-	// For ACT_IFWINEXIST and ACT_IFWINNOTEXIST, although we validate that at least one
-	// of their window params is non-blank during load, it's okay at runtime for them
-	// all to resolve to be blank (due to derefs), without an error being reported.
-	// It's probably more flexible that way, and in any event WinExist() is equipped to
-	// handle all-blank params:
-	case ACT_IFWINEXIST:
-		// NULL-check this way avoids compiler warnings:
-		if_condition = (WinExist(*g, FOUR_ARGS, false, true) != NULL);
-		break;
-	case ACT_IFWINNOTEXIST:
-		if_condition = !WinExist(*g, FOUR_ARGS, false, true); // Seems best to update last-used even here.
-		break;
-	case ACT_IFWINACTIVE:
-		if_condition = (WinActive(*g, FOUR_ARGS, true) != NULL);
-		break;
-	case ACT_IFWINNOTACTIVE:
-		if_condition = !WinActive(*g, FOUR_ARGS, true);
-		break;
 
 	case ACT_IFMSGBOX:
 	{

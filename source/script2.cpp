@@ -1756,7 +1756,7 @@ ResultType Line::PerformWait()
 		sleep_duration = (int)(ATOF(mActionType == ACT_CLIPWAIT ? ARG1 : ARG3) * 1000); // Can be zero.
 		if (sleep_duration < 1)
 			// Waiting 500ms in place of a "0" seems more useful than a true zero, which
-			// doens't need to be supported because it's the same thing as something like
+			// doesn't need to be supported because it's the same thing as something like
 			// "IfWinExist".  A true zero for clipboard would be the same as
 			// "IfEqual, clipboard, , xxx" (though admittedly it's higher overhead to
 			// actually fetch the contents of the clipboard).
@@ -14652,7 +14652,6 @@ void BIF_WinExistActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 		// evaluated by a previous iteration of this section.  Generic ones were pushed as-is
 		// onto the stack by a previous iteration.
 
-	// Should be called the same was as ACT_IFWINEXIST and ACT_IFWINACTIVE:
 	HWND found_hwnd = (ctoupper(bif_name[3]) == 'E') // Win[E]xist.
 		? WinExist(*g, param[0], param[1], param[2], param[3], false, true)
 		: WinActive(*g, param[0], param[1], param[2], param[3], true);
