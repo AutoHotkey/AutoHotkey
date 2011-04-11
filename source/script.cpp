@@ -11046,16 +11046,6 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 			if_condition = !if_condition;
 		break;
 
-	case ACT_IFINSTRING:
-	case ACT_IFNOTINSTRING:
-	{
-		// The most common mode is listed first for performance:
-		if_condition = g_tcsstr(ARG1, ARG2) != NULL; // To reduce code size, resolve large macro only once for both these commands.
-		if (mActionType == ACT_IFNOTINSTRING)
-			if_condition = !if_condition;
-		break;
-	}
-
 	case ACT_IFIN:
 	case ACT_IFNOTIN:
 		if_condition = IsStringInList(ARG1, ARG2, true);

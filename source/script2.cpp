@@ -3546,7 +3546,7 @@ ResultType Line::WinGetControlList(Var &aOutputVar, HWND aTargetWindow, bool aFe
 // second script array containing the quantity of each class) because it's conceivable that the
 // z-order of the controls will be useful information to some script authors.
 // A delimited list is used rather than the array technique used by "WinGet, OutputVar, List" because:
-// 1) It allows the flexibility of searching the list more easily with something like IfInString.
+// 1) It allows the flexibility of searching the list more easily with something like InStr.
 // 2) It seems rather rare that the count of items in the list would be useful info to a script author
 //    (the count can be derived with a parsing loop if it's ever needed).
 // 3) It saves memory since script arrays are permanent and since each array element would incur
