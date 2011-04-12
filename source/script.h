@@ -395,7 +395,7 @@ struct LoopReadFileStruct
 {
 	TextStream *mReadFile, *mWriteFile;
 	TCHAR mWriteFileName[MAX_PATH];
-	#define READ_FILE_LINE_SIZE (64 * 1024)  // This is also used by FileReadLine().
+	#define READ_FILE_LINE_SIZE (64 * 1024)
 	TCHAR mCurrentLine[READ_FILE_LINE_SIZE];
 	LoopReadFileStruct(TextStream *aReadFile, LPTSTR aWriteFileName)
 		: mReadFile(aReadFile), mWriteFile(NULL) // mWriteFile is opened by FileAppend() only upon first use.
@@ -406,7 +406,7 @@ struct LoopReadFileStruct
 	}
 };
 
-// TextStream flags for LoadIncludedFile (script files), file-reading loops and FileReadLine.
+// TextStream flags for LoadIncludedFile (script files) and file-reading loops.
 // Do not lock read/write: older versions used fopen(), which is implicitly permissive.
 #define DEFAULT_READ_FLAGS (TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR | TextStream::SHARE_READ | TextStream::SHARE_WRITE)
 
@@ -584,7 +584,6 @@ private:
 		, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState);
 	ResultType FileCreateDir(LPTSTR aDirSpec);
 	ResultType FileRead(LPTSTR aFilespec);
-	ResultType FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber);
 	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *aCurrentReadFile);
 	ResultType WriteClipboardToFile(LPTSTR aFilespec);
 	ResultType ReadClipboardFromFile(HANDLE hfile);
@@ -945,7 +944,6 @@ public:
 			case ACT_DRIVEGET:
 			case ACT_SOUNDGET:
 			case ACT_FILEREAD:
-			case ACT_FILEREADLINE:
 			case ACT_FILEGETATTRIB:
 			case ACT_FILEGETTIME:
 			case ACT_FILEGETSIZE:

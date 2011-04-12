@@ -8482,67 +8482,6 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 
 
 
-ResultType Line::FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber)
-// Returns OK or FAIL.  Will almost always return OK because if an error occurs,
-// the script's ErrorLevel variable will be set accordingly.  However, if some
-// kind of unexpected and more serious error occurs, such as variable-out-of-memory,
-// that will cause FAIL to be returned.
-{
-	Var &output_var = *OUTPUT_VAR; // Fix for v1.0.45.01: Must be resolved and saved before MsgSleep() (LONG_OPERATION) because that allows some other thread to interrupt and overwrite sArgVar[].
-
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
-	__int64 line_number = ATOI64(aLineNumber);
-	if (line_number < 1)
-	{
-		g->LastError = ERROR_INVALID_PARAMETER;
-		return OK;  // Return OK because g_ErrorLevel tells the story.
-	}
-	TextFile tfile;
-	if (!tfile.Open(aFilespec, DEFAULT_READ_FLAGS, g->Encoding & CP_AHKCP))
-	{
-		g->LastError = GetLastError();
-		return OK;  // Return OK because g_ErrorLevel tells the story.
-	}
-
-	// Remember that once the first call to MsgSleep() is done, a new hotkey subroutine
-	// may fire and suspend what we're doing here.  Such a subroutine might also overwrite
-	// the values our params, some of which may be in the deref buffer.  So be sure not
-	// to refer to those strings once MsgSleep() has been done, below.  Alternatively,
-	// a copy of such params can be made using our own stack space.
-
-	LONG_OPERATION_INIT
-
-	DWORD buf_length;
-	TCHAR buf[READ_FILE_LINE_SIZE];
-	for (__int64 i = 0; i < line_number; ++i)
-	{
-		if (  !(buf_length = tfile.ReadLine(buf, _countof(buf) - 1))  ) // end-of-file or error
-		{
-			g->LastError = GetLastError();
-			tfile.Close();
-			return OK;  // Return OK because g_ErrorLevel tells the story.
-		}
-		LONG_OPERATION_UPDATE
-	}
-	tfile.Close();
-
-	if (buf_length && buf[buf_length - 1] == '\n') // Remove any trailing newline for the user.
-		--buf_length;
-
-	if (!buf_length)
-	{
-		if (!output_var.Assign()) // Explicitly call it this way so that it won't free the memory.
-			return FAIL;
-	}
-	else
-		if (!output_var.Assign(buf, (VarSizeType)buf_length))
-			return FAIL;
-
-	return AssignErrorLevels(FALSE, 0); // Indicate success.
-}
-
-
-
 ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *aCurrentReadFile)
 {
 	// The below is avoided because want to allow "nothing" to be written to a file in case the

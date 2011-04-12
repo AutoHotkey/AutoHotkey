@@ -11785,7 +11785,7 @@ ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinu
 			result = OK;
 			break;
 		}
-		if (loop_info.mCurrentLine[line_length - 1] == '\n') // Remove newlines like FileReadLine does.
+		if (loop_info.mCurrentLine[line_length - 1] == '\n') // Remove end-of-line character.
 			--line_length;
 		loop_info.mCurrentLine[line_length] = '\0';
 		g.mLoopReadFile = &loop_info;
@@ -12389,9 +12389,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_FILEREAD:
 		return FileRead(ARG2);
-
-	case ACT_FILEREADLINE:
-		return FileReadLine(ARG2, ARG3);
 
 	case ACT_FILEDELETE:
 		return FileDelete();

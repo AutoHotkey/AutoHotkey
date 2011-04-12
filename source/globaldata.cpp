@@ -422,7 +422,6 @@ Action g_act[] =
 
 	, {_T("FileAppend"), 0, 3, false, NULL} // text, filename (which can be omitted in a read-file loop). Update: Text can be omitted too, to create an empty file or alter the timestamp of an existing file.
 	, {_T("FileRead"), 2, 2, true, NULL} // Output variable, filename
-	, {_T("FileReadLine"), 3, 3, true, {3, 0}} // Output variable, filename, line-number
 	, {_T("FileDelete"), 1, 1, false, NULL} // filename or pattern
 	, {_T("FileRecycle"), 1, 1, false, NULL} // filename or pattern
 	, {_T("FileRecycleEmpty"), 0, 1, false, NULL} // optional drive letter (all bins will be emptied if absent.
