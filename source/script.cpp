@@ -3726,16 +3726,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				{
 					switch (*operation)
 					{
-					case 'b': // "Between"
-					case 'B':
-						// Must fall back to ACT_IFEXPR, otherwise "if not var_name_beginning_with_b" is a syntax error.
-						if (!_tcsnicmp(operation, _T("between"), 7) && IS_SPACE_OR_TAB(operation[7]))
-						{
-							aActionType = ACT_IFBETWEEN;
-							// Set things up to be parsed as args further down.  A delimiter is inserted later below:
-							tmemset(operation, ' ', 7);
-						}
-						break;
 					case 'c': // "Contains"
 					case 'C':
 						// Must fall back to ACT_IFEXPR, otherwise "if not var_name_beginning_with_c" is a syntax error.
@@ -3783,11 +3773,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 								aActionType = ACT_IFNOTIN;
 								tmemset(next_word, ' ', 2);
 							}
-							else if (!_tcsnicmp(next_word, _T("between"), 7))
-							{
-								aActionType = ACT_IFNOTBETWEEN;
-								tmemset(next_word, ' ', 7);
-							}
 							else if (!_tcsnicmp(next_word, _T("contains"), 8))
 							{
 								aActionType = ACT_IFNOTCONTAINS;
@@ -3815,31 +3800,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			{
 				// Set things up to be parsed as args later on.
 				*operation = g_delimiter;
-				if (aActionType == ACT_IFBETWEEN || aActionType == ACT_IFNOTBETWEEN)
-				{
-					// I decided against the syntax "if var between 3,8" because the gain in simplicity
-					// and the small avoidance of ambiguity didn't seem worth the cost in terms of readability.
-					for (next_word = operation;;)
-					{
-						if (   !(next_word = tcscasestr(next_word, _T("and")))   )
-							return ScriptError(_T("BETWEEN requires the word AND."), aLineText); // Seems too rare a thing to warrant falling back to ACT_IFEXPR for this.
-						if (_tcschr(_T(" \t"), *(next_word - 1)) && _tcschr(_T(" \t"), *(next_word + 3)))
-						{
-							// Since there's a space or tab on both sides, we know this is the correct "and",
-							// i.e. not one contained within one of the parameters.  Examples:
-							// if var between band and cat  ; Don't falsely detect "band"
-							// if var betwwen Andy and David  ; Don't falsely detect "Andy".
-							// Replace the word AND with a delimiter so that it will be parsed correctly later:
-							*next_word = g_delimiter;
-							*(next_word + 1) = ' ';
-							*(next_word + 2) = ' ';
-							break;
-						}
-						else
-							next_word += 3;  // Skip over this false "and".
-					} // for()
-				} // ACT_IFBETWEEN
-			} // aActionType != ACT_IFEXPR
+			}
 		}
 		else // It isn't an IF-statement, so check for assignments/operators that determine that this line isn't one that starts with a named command.
 		{
@@ -5155,26 +5116,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// Fix for v1.0.35.02:
 	// THESE FIRST FEW CASES MUST EXIST IN BOTH SELF-CONTAINED AND NORMAL VERSION since they alter the
 	// attributes/members of some types of lines:
-	//case ACT_ASSIGN: // The optimization below doesn't seem to make sense for `=, since as of v2 it's explicitly "literal assignment".
-	//case ACT_ASSIGNEXPR: // This is now done a different way, to support non-expression floats and strings.
-	case ACT_IFBETWEEN:
-	case ACT_IFNOTBETWEEN:
-		int arg_index;
-		for (arg_index = (aActionType != ACT_RETURN); arg_index < aArgc; ++arg_index) // Up to two iterations: arg #2 and arg#3 (for If[Not]Between)).
-		{
-			if (   *new_arg[arg_index].text && !line.ArgIndexHasDeref(arg_index)
-				&& !new_arg[arg_index].is_expression  // Expressions don't make sense for this, plus they need their postfix member for other purposes.
-				&& IsNumeric(new_arg[arg_index].text, true, false, false)   )
-			{
-				if (   !(new_arg[arg_index].postfix = (ExprTokenType *)SimpleHeap::Malloc(sizeof(__int64)))   )
-					return ScriptError(ERR_OUTOFMEM);
-				*(__int64 *)new_arg[arg_index].postfix = ATOI64(new_arg[arg_index].text);
-			}
-			else
-				new_arg[arg_index].postfix = NULL; // Indicate that there is no cached binary number.
-		}
-		break;
-
 	case ACT_LOOP:
 		// If possible, determine the type of loop so that the preparser can better
 		// validate some things:
@@ -10899,10 +10840,8 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 			ERR_ABORT);
 #endif
 
-	SymbolType var_is_pure_numeric, value_is_pure_numeric, value2_is_pure_numeric;
 	int if_condition;
-	BOOL arg2_has_binary_integer, arg3_has_binary_integer;
-	Var *arg_var1, *arg_var2, *arg_var3;
+	Var *arg_var1;
 
 	switch (mActionType)
 	{
@@ -10913,108 +10852,6 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 		if_condition = (ARGVARRAW1 && !*ARG1 && ARGVARRAW1->Type() == VAR_NORMAL)
 			? VarToBOOL(*ARGVARRAW1) // 30% faster than having ExpandArgs() resolve ARG1 even when it's a naked variable.
 			: LegacyResultToBOOL(ARG1); // CAN'T simply check *ARG1=='1' because the loadtime routine has various ways of setting if_expresion to false for things that are normally expressions.
-		break;
-
-	case ACT_IFBETWEEN:
-	case ACT_IFNOTBETWEEN:
-		// For now, these seem to be the best rules to follow:
-		// 1) If either one is non-empty and non-numeric, they're compared as strings.
-		// 2) Otherwise, they're compared as numbers (with empty vars treated as zero).
-		// In light of the above, two empty values compared to each other is the same as
-		// "0 compared to 0".  e.g. if the clipboard is blank, the line "if clipboard ="
-		// would be true.  However, the following are side-effects (are there any more?):
-		// if var1 =    ; statement is true if var1 contains a literal zero (possibly harmful)
-		// if var1 = 0  ; statement is true if var1 is blank (mostly harmless?)
-		// if var1 !=   ; statement is false if var1 contains a literal zero (possibly harmful)
-		// if var1 != 0 ; statement is false if var1 is blank (mostly harmless?)
-		// In light of the above, the BOTH_ARE_NUMERIC macro has been altered to return
-		// false if one of the items is a literal zero and the other is blank, so that
-		// the two items will be compared as strings.  UPDATE: Altered it again because it
-		// seems best to consider blanks to always be non-numeric (i.e. if either var is blank,
-		// they will be compared as strings rather than as numbers):
-
-		// Notes about the macros below:
-		// Ordered for short-circuit performance. No need to check if it's g_ErrorLevel (like
-		// ArgMustBeDereferenced() does) because the commands that use these macros don't internally
-		// change ErrorLevel.
-		// RAW is safe (for arg_var1) because loadtime validation ensured there is at least 1 arg.
-		// For arg_var1, it isn't necessary to check ARGVARRAW1!=NULL because arg1 is ARG_TYPE_INPUT_VAR
-		// for all the commands that use these macros, so loadtime validation ensures ARGVARRAW1!=NULL.
-		#undef DETERMINE_NUMERIC_TYPES
-		#define DETERMINE_NUMERIC_TYPES \
-			if (arg2_has_binary_integer = mArgc > 1 && mArg[1].postfix && !mArg[1].is_expression)\
-			{\
-				arg_var2 = NULL;\
-				value_is_pure_numeric = PURE_INTEGER;\
-			}\
-			else\
-			{\
-				arg_var2 = (mArgc > 1 && ARGVARRAW2 && !*ARG2 && ARGVARRAW2->Type() == VAR_NORMAL) ? ARGVARRAW2 : NULL;\
-				value_is_pure_numeric = arg_var2 ? arg_var2->IsNumeric()\
-					: IsNumeric(ARG2, true, false, true);\
-			}\
-			arg_var1 = (!*ARG1 && ARGVARRAW1->Type() == VAR_NORMAL) ? ARGVARRAW1 : NULL;\
-			var_is_pure_numeric = arg_var1 ? arg_var1->IsNumeric()\
-				: IsNumeric(ARG1, true, false, true);
-		
-		#define DETERMINE_NUMERIC_TYPES2 \
-			DETERMINE_NUMERIC_TYPES \
-			if (arg3_has_binary_integer = mArgc > 2 && mArg[2].postfix && !mArg[2].is_expression)\
-			{\
-				arg_var3 = NULL;\
-				value2_is_pure_numeric = PURE_INTEGER;\
-			}\
-			else\
-			{\
-				arg_var3 = (mArgc > 2 && ARGVARRAW3 && !*ARG3 && ARGVARRAW3->Type() == VAR_NORMAL) ? ARGVARRAW3 : NULL;\
-				value2_is_pure_numeric = arg_var3 ? arg_var3->IsNumeric()\
-					: IsNumeric(ARG3, true, false, true);\
-			}
-		#define ARG1_AS_STRING (arg_var1 ? arg_var1->Contents() : ARG1)
-		#define ARG2_AS_STRING (arg_var2 ? arg_var2->Contents() : ARG2)
-		#define ARG3_AS_STRING (arg_var3 ? arg_var3->Contents() : ARG3)
-		#define ARG1_AS_DOUBLE (arg_var1 ? arg_var1->ToDouble() : ATOF(ARG1))
-		#define ARG2_AS_DOUBLE (arg2_has_binary_integer ? (double)*(__int64*)mArg[1].postfix \
-			: arg_var2 ? arg_var2->ToDouble() : ATOF(ARG2))
-		#define ARG3_AS_DOUBLE (arg3_has_binary_integer ? (double)*(__int64*)mArg[2].postfix \
-			: arg_var3 ? arg_var3->ToDouble() : ATOF(ARG3))
-		#define ARG1_AS_INT64 (arg_var1 ? arg_var1->ToInt64() : ATOI64(ARG1)) // Never has a binary integer because it's ARG_TYPE_INPUT_VAR.
-		#define ARG2_AS_INT64 (arg2_has_binary_integer ? *(__int64*)mArg[1].postfix \
-			: arg_var2 ? arg_var2->ToInt64() : ATOI64(ARG2))
-		#define ARG3_AS_INT64 (arg3_has_binary_integer ? *(__int64*)mArg[2].postfix \
-			: arg_var3 ? arg_var3->ToInt64() : ATOI64(ARG3))
-		#define IF_EITHER_IS_NON_NUMERIC if (!value_is_pure_numeric || !var_is_pure_numeric)
-		#define IF_EITHER_IS_NON_NUMERIC2 if (!value_is_pure_numeric || !value2_is_pure_numeric || !var_is_pure_numeric)
-		#undef IF_EITHER_IS_FLOAT
-		#define IF_EITHER_IS_FLOAT if (value_is_pure_numeric == PURE_FLOAT || var_is_pure_numeric == PURE_FLOAT)
-
-		// Using the new macros is up to 62% faster than the old way that didn't exploit the ability of
-		// one or more of the args involved to be variables that can cache binary numbers.
-		DETERMINE_NUMERIC_TYPES2
-		IF_EITHER_IS_NON_NUMERIC2
-		{
-			LPTSTR arg1_as_string = ARG1_AS_STRING; // Resolve only once.
-			LPTSTR arg2_as_string = ARG2_AS_STRING; //
-			LPTSTR arg3_as_string = ARG3_AS_STRING; //
-			if (g->StringCaseSense == SCS_INSENSITIVE) // The most common mode is listed first for performance.
-				if_condition = !(_tcsicmp(arg1_as_string, arg2_as_string) < 0 || _tcsicmp(arg1_as_string, arg3_as_string) > 0);
-			else if (g->StringCaseSense == SCS_INSENSITIVE_LOCALE)
-				if_condition = lstrcmpi(arg1_as_string, arg2_as_string) > -1 && lstrcmpi(arg1_as_string, arg3_as_string) < 1;
-			else  // case sensitive
-				if_condition = !(_tcscmp(arg1_as_string, arg2_as_string) < 0 || _tcscmp(arg1_as_string, arg3_as_string) > 0);
-		}
-		else IF_EITHER_IS_FLOAT
-		{
-			double arg1_as_double = ARG1_AS_DOUBLE;
-			if_condition = arg1_as_double >= ARG2_AS_DOUBLE && arg1_as_double <= ARG3_AS_DOUBLE;
-		}
-		else
-		{
-			__int64 arg1_as_int64 = ARG1_AS_INT64;
-			if_condition = arg1_as_int64 >= ARG2_AS_INT64 && arg1_as_int64 <= ARG3_AS_INT64;
-		}
-		if (mActionType == ACT_IFNOTBETWEEN)
-			if_condition = !if_condition;
 		break;
 
 	case ACT_IFIN:
@@ -13448,11 +13285,7 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 	if (aLineWasResumed)
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("STILL WAITING (%0.2f): "), (float)aElapsed / 1000.0);
 
-	if (mActionType == ACT_IFBETWEEN || mActionType == ACT_IFNOTBETWEEN)
-		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("if %s %s %s and %s")
-			, *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName  // i.e. don't resolve dynamic variable names.
-			, g_act[mActionType].Name, RAW_ARG2, RAW_ARG3);
-	else if (ACT_IS_ASSIGN(mActionType) || mActionType == ACT_EXPRESSION || (ACT_IS_IF(mActionType) && mActionType < ACT_FIRST_COMMAND))
+	if (ACT_IS_ASSIGN(mActionType) || mActionType == ACT_EXPRESSION || (ACT_IS_IF(mActionType) && mActionType < ACT_FIRST_COMMAND))
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s%s %s %s")
 			, ACT_IS_IF(mActionType) ? _T("if ") : _T("")
 			, *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName  // i.e. don't resolve dynamic variable names.

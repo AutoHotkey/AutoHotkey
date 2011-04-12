@@ -274,7 +274,6 @@ Action g_act[] =
 	, {_T("in"), 2, 2, false, NULL}, {_T("not in"), 2, 2, false, NULL}
 	, {_T("contains"), 2, 2, false, NULL}, {_T("not contains"), 2, 2, false, NULL}  // Very similar to "in" and "not in"
 	, {_T("is"), 2, 2, false, NULL}, {_T("is not"), 2, 2, false, NULL}
-	, {_T("between"), 1, 3, false, NULL}, {_T("not between"), 1, 3, false, NULL}  // Min 1 to allow #2 and #3 to be the empty string.
 	, {_T(""), 1, 1, false, {1, 0}} // ACT_IFEXPR's name should be "" so that Line::ToText() will properly display it.
 
 	// IfMsgBox must be physically adjacent to the other IFs in this array:

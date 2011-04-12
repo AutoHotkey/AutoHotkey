@@ -982,8 +982,6 @@ public:
 
 			case ACT_SORT:
 			case ACT_SPLITPATH:
-			case ACT_IFBETWEEN:
-			case ACT_IFNOTBETWEEN:
 			case ACT_IFIN:
 			case ACT_IFNOTIN:
 			case ACT_IFCONTAINS:

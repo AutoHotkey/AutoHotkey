@@ -267,9 +267,7 @@ enum enum_act {
 , ACT_ASSIGN, ACT_ASSIGNEXPR, ACT_EXPRESSION
 , ACT_ELSE   // Parsed at a lower level than most commands to support same-line ELSE-actions (e.g. "else if").
 , ACT_IFIN, ACT_IFNOTIN, ACT_IFCONTAINS, ACT_IFNOTCONTAINS, ACT_IFIS, ACT_IFISNOT
-, ACT_IFBETWEEN, ACT_IFNOTBETWEEN
 , ACT_IFEXPR  // i.e. if (expr)
-, ACT_FIRST_OPTIMIZED_IF = ACT_IFBETWEEN, ACT_LAST_OPTIMIZED_IF = ACT_IFEXPR
  // *** *** *** KEEP ALL OLD-STYLE/AUTOIT V2 IFs AFTER THIS (v1.0.20 bug fix). *** *** ***
  , ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION
  // *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
