@@ -12250,15 +12250,17 @@ void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	INT_PTR haystack_length = (INT_PTR)EXPR_TOKEN_LENGTH(aParam[0], haystack);
 
 	// Load-time validation has ensured that at least the first two parameters are present:
-	INT_PTR starting_offset = (INT_PTR)TokenToInt64(*aParam[1]) - 1; // The one-based starting position in haystack (if any).  Convert it to zero-based.
-	if (starting_offset > haystack_length)
+	INT_PTR starting_offset = (INT_PTR)TokenToInt64(*aParam[1]); // The one-based starting position in haystack (if any).
+	if (starting_offset > haystack_length || starting_offset == 0)
 		return; // Yield the empty string (a default set higher above).
-	if (starting_offset < 0) // Same convention as RegExMatch/Replace(): Treat a StartingPos of 0 (offset -1) as "start at the string's last char".  Similarly, treat negatives as starting further to the left of the end of the string.
+	if (starting_offset < 0) // Same convention as RegExMatch/Replace(): Treat negative StartingPos as a position relative to the end of the string.
 	{
 		starting_offset += haystack_length;
 		if (starting_offset < 0)
 			starting_offset = 0;
 	}
+	else
+		--starting_offset; // Convert to zero-based.
 
 	INT_PTR remaining_length_available = haystack_length - starting_offset;
 	INT_PTR extract_length;
@@ -13580,8 +13582,8 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 		starting_offset = 0; // The one-based starting position in haystack (if any).  Convert it to zero-based.
 	else
 	{
-		starting_offset = (int)TokenToInt64(*aParam[param_index]) - 1;
-		if (starting_offset < 0) // Same convention as SubStr(): Treat a StartingPos of 0 (offset -1) as "start at the string's last char".  Similarly, treat negatives as starting further to the left of the end of the string.
+		starting_offset = (int)TokenToInt64(*aParam[param_index]);
+		if (starting_offset < 0) // Same convention as SubStr(): Treat negative StartingPos as a position relative to the end of the string.
 		{
 			starting_offset += haystack_length;
 			if (starting_offset < 0)
@@ -13594,6 +13596,8 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 			// looks backward from itself; but that seems too rare to support and might create code that's
 			// harder to maintain, especially in RegExReplace()).
 			starting_offset = haystack_length; // Due to rarity of this condition, opt for simplicity: just point it to the terminator, which is in essence an empty string (which will cause result in "no match" except when searcing for "").
+		else
+			--starting_offset; // Convert to zero-based.
 	}
 
 	// SET UP THE OFFSET ARRAY, which consists of int-pairs containing the start/end offset of each match.
