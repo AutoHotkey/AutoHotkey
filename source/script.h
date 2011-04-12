@@ -567,7 +567,6 @@ private:
 
 	ResultType MouseGetPos(DWORD aOptions);
 	ResultType FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat);
-	ResultType PerformAssign();
 	ResultType StringReplace();
 	ResultType StringSplit(LPTSTR aArrayName, LPTSTR aInputString, LPTSTR aDelimiterList, LPTSTR aOmitList);
 	ResultType SplitPath(LPTSTR aFileSpec);
@@ -937,7 +936,6 @@ public:
 		case 0:  // Arg #1
 			switch(aActionType)
 			{
-			case ACT_ASSIGN:
 			case ACT_ASSIGNEXPR:
 			case ACT_TRANSFORM:
 			case ACT_STRINGLOWER:

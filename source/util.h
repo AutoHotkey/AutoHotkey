@@ -235,7 +235,6 @@ inline size_t omit_trailing_any(LPTSTR aBuf, LPTSTR aOmitList, LPTSTR aBuf_marke
 inline size_t ltrim(LPTSTR aStr, size_t aLength = -1)
 // Caller must ensure that aStr is not NULL.
 // v1.0.25: Returns the length if it was discovered as a result of the operation, or aLength otherwise.
-// This greatly improves the performance of PerformAssign().
 // NOTE: THIS VERSION trims only tabs and spaces.  It specifically avoids
 // trimming newlines because some callers want to retain those.
 {
@@ -244,7 +243,7 @@ inline size_t ltrim(LPTSTR aStr, size_t aLength = -1)
 	// Find the first non-whitespace char (which might be the terminator):
 	for (ptr = aStr; IS_SPACE_OR_TAB(*ptr); ++ptr); // Self-contained loop.
 	// v1.0.25: If no trimming needed, don't do the memmove.  This seems to make a big difference
-	// in the performance of critical sections of the program such as PerformAssign():
+	// in the performance of critical sections of the program:
 	size_t offset;
 	if (offset = ptr - aStr) // Assign.
 	{
@@ -260,8 +259,7 @@ inline size_t ltrim(LPTSTR aStr, size_t aLength = -1)
 inline size_t rtrim(LPTSTR aStr, size_t aLength = -1)
 // Caller must ensure that aStr is not NULL.
 // To improve performance, caller may specify a length (e.g. when it is already known).
-// v1.0.25: Always returns the new length of the string.  This greatly improves the performance of
-// PerformAssign().
+// v1.0.25: Always returns the new length of the string.
 // NOTE: THIS VERSION trims only tabs and spaces.  It specifically avoids trimming newlines because
 // some callers want to retain those.
 {
@@ -334,8 +332,7 @@ inline size_t trim(LPTSTR aStr, size_t aLength = -1)
 {
 	aLength = ltrim(aStr, aLength);  // It may return -1 to indicate that it still doesn't know the length.
     return rtrim(aStr, aLength);
-	// v1.0.25: rtrim() always returns the new length of the string.  This greatly improves the
-	// performance of PerformAssign() and possibly other things.
+	// v1.0.25: rtrim() always returns the new length of the string.
 }
 
 inline size_t strip_trailing_backslash(LPTSTR aPath)

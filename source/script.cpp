@@ -2305,7 +2305,7 @@ examine_line:
 		// complicated to do there (already tried it) mostly due to the fact that
 		// literal_map has to be properly passed in a recursive call to itself, as well
 		// as properly detecting special commands that don't have keywords such as
-		// IF comparisons, ACT_ASSIGN, +=, -=, etc.
+		// IF comparisons, ACT_ASSIGNEXPR, +=, -=, etc.
 		// v1.0.41: '{' was added to the line below to support no spaces inside "}else{".
 		if (!(action_end = StrChrAny(buf, _T("\t ,{")))) // Position of first tab/space/comma/open-brace.  For simplicitly, a non-standard g_delimiter is not supported.
 			action_end = buf + buf_length; // It's done this way so that ELSE can be fully handled here; i.e. that ELSE does not have to be in the list of commands recognizable by ParseAndAddLine().
@@ -3818,47 +3818,32 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 
 			switch(*action_args)
 			{
-			case '`': // i.e. var `= value (old-style assignment)
-				if (action_args_2nd_char == '=')
-					aActionType = ACT_ASSIGN;
-				break;
 			case ':':
 				// v1.0.40: Allow things like "MsgBox :: test" to be valid by insisting that '=' follows ':'.
 				if (action_args_2nd_char == '=') // i.e. :=
 					aActionType = ACT_ASSIGNEXPR;
 				break;
 			case '+':
-				// Support for ++i (and in the next case, --i).  In these cases, action_name must be either
-				// "+" or "-", and the first character of action_args must match it.
-				if ((action_name[0] == '+' && !action_name[1]) // i.e. the pre-increment operator; e.g. ++index.
-					|| action_args_2nd_char == '=') // i.e. x+=y (by contrast, post-increment is recognized only after we check for a command name to cut down on ambiguity).
-					aActionType = ACT_EXPRESSION;
-				break;
 			case '-':
-				// Do a complete validation/recognition of the operator to allow a line such as the following,
-				// which omits the first optional comma, to still be recognized as a command rather than a
-				// variable-with-operator:
+				// Support for ++i and --i.  In these cases, action_name must be either "+" or "-", and the
+				// first character of action_args must match it.  Do a complete validation/recognition of the
+				// operator to allow a line such as the following, which omits the first optional comma, to
+				// still be recognized as a command rather than a variable-with-operator:
 				// SetWinDelay -1
-				if ((action_name[0] == '-' && !action_name[1]) // i.e. the pre-decrement operator; e.g. --index.
-					|| action_args_2nd_char == '=') // i.e. x-=y  (by contrast, post-decrement is recognized only after we check for a command name to cut down on ambiguity).
-					aActionType = ACT_EXPRESSION;
-				break;
-			case '*':
-				if (action_args_2nd_char == '=') // i.e. *=
-					aActionType = ACT_EXPRESSION;
-				break;
-			case '/':
-				if (action_args_2nd_char == '=') // i.e. /=
-					aActionType = ACT_EXPRESSION;
-				// ACT_DIV is different than //= and // because ACT_DIV supports floating point inputs by yielding
-				// a floating point result (i.e. it doesn't Floor() the result when the inputs are floats).
-				else if (action_args_2nd_char == '/' && action_args[2] == '=') // i.e. //=
+				if ((*action_name == *action_args && !action_name[1]) // i.e. the pre-increment/decrement operator; e.g. ++index or --index.
+					|| action_args_2nd_char == '=') // i.e. x+=y or x-=y (by contrast, post-increment/decrement is recognized only after we check for a command name to cut down on ambiguity).
 					aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				break;
-			case '|':
-			case '&':
-			case '^':
-				if (action_args_2nd_char == '=') // i.e. .= and |= and &= and ^=
+			case '*': // *=
+			case '|': // |=
+			case '&': // &=
+			case '^': // ^=
+				if (action_args_2nd_char == '=')
+					aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
+				break;
+			case '/':
+				if (action_args_2nd_char == '=' // i.e. /=
+					|| action_args_2nd_char == '/' && action_args[2] == '=') // i.e. //=
 					aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				break;
 			//case '?': Stand-alone ternary such as true ? fn1() : fn2().  These are rare so are
@@ -3908,63 +3893,59 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 
 			if (aActionType) // An assignment or other type of action was discovered above.
 			{
-				if (aActionType != ACT_EXPRESSION) // i.e. it's ACT_ASSIGN/ASSIGNEXPR
+				if (aActionType != ACT_EXPRESSION) // i.e. it's ACT_ASSIGNEXPR
 				{
-					if (aActionType != ACT_ASSIGN) // i.e. it's ACT_ASSIGNEXPR
+					// Find the first non-function comma.
+					// This is done because ACT_ASSIGNEXPR needs to make comma-separated sub-expressions
+					// into one big ACT_EXPRESSION so that the leftmost sub-expression will get evaluated
+					// prior to the others (for consistency and as documented).  However, this has at
+					// least one side-effect; namely that if expression evaluation is aborted for some
+					// reason, the assignment is skipped completely rather than assigning a blank value.
+					// ALSO: ACT_ASSIGNEXPR is made into ACT_EXPRESSION *only* when multi-statement
+					// commas are present because it performs much better for trivial assignments,
+					// even some which aren't optimized to become non-expressions.
+					LPTSTR cp;
+					for (in_quotes = 0, open_parens = 0, cp = action_args + 2; *cp; ++cp)
 					{
-						// Find the first non-function comma.
-						// This is done because ACT_ASSIGNEXPR needs to make comma-separated sub-expressions
-						// into one big ACT_EXPRESSION so that the leftmost sub-expression will get evaluated
-						// prior to the others (for consistency and as documented).  However, this has at
-						// least one side-effect; namely that if expression evaluation is aborted for some
-						// reason, the assignment is skipped completely rather than assigning a blank value.
-						// ALSO: ACT_ASSIGNEXPR is made into ACT_EXPRESSION *only* when multi-statement
-						// commas are present because it performs much better for trivial assignments,
-						// even some which aren't optimized to become non-expressions.
-						LPTSTR cp;
-						for (in_quotes = 0, open_parens = 0, cp = action_args + 2; *cp; ++cp)
+						switch (*cp)
 						{
-							switch (*cp)
-							{
-							case '"': // This is whole section similar to another one later below, so see it for comments.
-							case '\'':
-								if (in_quotes == *cp)
-									in_quotes = 0;
-								else if (!in_quotes)
-									in_quotes = *cp;
-								//else the other type of quote mark was used to begin this quoted string.
-								break;
-							case '`':
-								if (in_quotes && (cp[1] == '"' || cp[1] == '\''))
-									++cp; // Skip the literal quote mark.
-								break;
-							case '(':
-							case '[': // L31: For this purpose, () and [] are equivalent. If they aren't balanced properly, a later stage will detect the error.
-							case '{':
-								if (!in_quotes) // Literal parentheses inside a quoted string should not be counted for this purpose.
-									++open_parens;
-								break;
-							case ')':
-							case ']':
-							case '}':
-								if (!in_quotes)
-									--open_parens;
-								break;
-							}
-							if (*cp == g_delimiter && !in_quotes && open_parens < 1) // A delimiting comma other than one in a sub-statement or function. Shouldn't need to worry about unquoted escaped commas since they don't make sense with += and -=.
-							{
-								// ACT_ASSIGNEXPR, for which any non-function comma qualifies it as multi-statement.
-								aActionType = ACT_EXPRESSION;
-								break;
-							}
+						case '"': // This is whole section similar to another one later below, so see it for comments.
+						case '\'':
+							if (in_quotes == *cp)
+								in_quotes = 0;
+							else if (!in_quotes)
+								in_quotes = *cp;
+							//else the other type of quote mark was used to begin this quoted string.
+							break;
+						case '`':
+							if (in_quotes && (cp[1] == '"' || cp[1] == '\''))
+								++cp; // Skip the literal quote mark.
+							break;
+						case '(':
+						case '[': // L31: For this purpose, () and [] are equivalent. If they aren't balanced properly, a later stage will detect the error.
+						case '{':
+							if (!in_quotes) // Literal parentheses inside a quoted string should not be counted for this purpose.
+								++open_parens;
+							break;
+						case ')':
+						case ']':
+						case '}':
+							if (!in_quotes)
+								--open_parens;
+							break;
+						}
+						if (*cp == g_delimiter && !in_quotes && open_parens < 1) // A delimiting comma other than one in a sub-statement or function. Shouldn't need to worry about unquoted escaped commas since they don't make sense with += and -=.
+						{
+							// ACT_ASSIGNEXPR, for which any non-function comma qualifies it as multi-statement.
+							aActionType = ACT_EXPRESSION;
+							break;
 						}
 					}
 					if (aActionType != ACT_EXPRESSION) // The above didn't make it a stand-alone expression.
 					{
 						// The following converts:
 						// x := 2 -> ACT_ASSIGNEXPR, x, 2
-						// x `= str -> ACT_ASSIGN, x, str
-						*action_args = g_delimiter; // Replace the ":" or "`" with a delimiter for later parsing.
+						*action_args = g_delimiter; // Replace the ":" with a delimiter for later parsing.
 						action_args[1] = ' '; // Remove the "=" from consideration.
 					}
 				}
@@ -4716,11 +4697,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					this_aArg += 2;
 					if (this_aArgMap)
 						this_aArgMap += 2;
-					// ACT_ASSIGN isn't capable of dealing with expressions because ExecUntil() does not
-					// call ExpandArgs() automatically for it.  Thus its function, PerformAssign(), would
-					// not be given the expanded result of the expression.
-					if (aActionType == ACT_ASSIGN)
-						aActionType = ACT_ASSIGNEXPR;
 				}
 			}
 			
@@ -10147,10 +10123,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		// Expand any dereferences contained in this line's args.
 		// Note: Only one line at a time be expanded via the above function.  So be sure
 		// to store any parts of a line that are needed prior to moving on to the next
-		// line (e.g. control stmts such as IF and LOOP).  Also, don't expand
-		// ACT_ASSIGN because a more efficient way of dereferencing may be possible
-		// in that case:
-		if (line->mActionType > ACT_ASSIGNEXPR && line->mActionType != ACT_WHILE)
+		// line (e.g. control stmts such as IF and LOOP).
+		if (line->mActionType != ACT_ASSIGNEXPR && line->mActionType != ACT_WHILE)
 		{
 			result = line->ExpandArgs(aResultToken);
 			// As of v1.0.31, ExpandArgs() will also return EARLY_EXIT if a function call inside one of this
@@ -11964,11 +11938,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	switch (mActionType)
 	{
-	case ACT_ASSIGN:
-		// Note: This line's args have not yet been dereferenced in this case (i.e. ExpandArgs() hasn't been
-		// called).  The below function will handle that if it is needed.
-		return PerformAssign();  // It will report any errors for us.
-
 	case ACT_ASSIGNEXPR:
 		// Note: This line's args have not yet been dereferenced in this case (i.e. ExpandArgs() hasn't been called).
 		// Currently, ACT_ASSIGNEXPR can occur even when mArg[1].is_expression==false, such as things like var:=5
@@ -12001,9 +11970,8 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			output_var = OUTPUT_VAR;
 
 			// sArgVar is used to enhance performance, which would otherwise be poor for dynamic variables
-			// such as Var:=Array%i% (which is an expression and handled by ACT_ASSIGNEXPR rather than
-			// ACT_ASSIGN) because Array%i% would have to be resolved twice (once here and once
-			// previously by ExpandArgs()) just to find out if it's IsBinaryClip()).
+			// such as Var:=Array%i% because it would have to be resolved twice (once here and once previously
+			// by ExpandArgs()) just to find out if it's IsBinaryClip().
 			// ARG2 is non-blank for built-in vars, which this optimization can't be applied to.
 			if (ARGVARRAW2 && !*ARG2) // See above.  Also, RAW is safe due to the above check of mArgc > 1.
 			{
@@ -12015,12 +11983,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 					// In the case of ARGVARRAW2->IsBinaryClip(), performance should be good since
 					// IsBinaryClip() implies a single isolated deref, which would never have been copied
 					// into the deref buffer.
-					//
-					// v1.0.46.01: ARGVARRAW2->IsBinaryClip() can be true because loadtime no longer translates
-					// such statements into ACT_ASSIGN vs. ACT_ASSIGNEXPR.  Even without that change, it can also
-					// be reached by something like:
-					//    DynClipboardAll = ClipboardAll
-					//    ClipSaved := %DynClipboardAll%
 					return output_var->Assign(*ARGVARRAW2); // Var-to-var copy supports ARGVARRAW2 being binary clipboard, and also exploits caching of binary numbers, for performance.
 				case VAR_CLIPBOARDALL:
 					return output_var->AssignClipboardAll();

@@ -412,12 +412,8 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 		if (do_assign)
 			// Just return the result of this.  Note: The clipboard var's attributes,
 			// such as mLength, are not maintained because it's a variable whose
-			// contents usually aren't under our control.  UPDATE: aTrimIt isn't
-			// needed because the clipboard is never assigned something that needs
-			// to be trimmed in this way (i.e. PerformAssign handles the trimming
-			// on its own for the clipboard, due to the fact that dereferencing
-			// into the temp buf is unnecessary when the clipboard is the target):
-			return g_clip.Set(aBuf, aLength); //, aTrimIt);
+			// contents usually aren't under our control.
+			return g_clip.Set(aBuf, aLength);
 		else
 			// We open it for write now, because some caller's don't call
 			// this function to write to the contents of the var, they
@@ -609,11 +605,7 @@ VarSizeType Var::Get(LPTSTR aBuf)
 				return 0;
 			}
 			//else continue on below.
-		if (aBuf == mCharContents)
-			// When we're called from ExpandArg() that was called from PerformAssign(), PerformAssign()
-			// relies on this check to avoid the overhead of copying a variables contents onto itself.
-			return length;
-		else if (mByteLength < 100000)
+		if (mByteLength < 100000)
 		{
 			// Copy the var contents into aBuf.  Although a little bit slower than CopyMemory() for large
 			// variables (say, over 100K), this loop seems much faster for small ones, which is the typical

@@ -2434,8 +2434,7 @@ ResultType Line::ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 	// param is set to be the empty string, which is the proper thing to do
 	// rather than leaving whatever was in there before.
 
-	// Handle the output parameter.  This section is similar to that in
-	// PerformAssign().  Note: Using GetWindowTextTimeout() vs. GetWindowText()
+	// Handle the output parameter.  Note: Using GetWindowTextTimeout() vs. GetWindowText()
 	// because it is able to get text from more types of controls (e.g. large edit controls):
 	VarSizeType space_needed = control_window ? GetWindowTextTimeout(control_window) + 1 : 1; // 1 for terminator.
 
@@ -6422,212 +6421,6 @@ ResultType Line::FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat)
 
 
 
-ResultType Line::PerformAssign()
-// Returns OK or FAIL.  Caller has ensured that none of this line's derefs is a function-call.
-{
-	Var *p_output_var; // Can't use OUTPUT_VAR or sArgVar here because ExpandArgs() isn't called prior to PerformAssign().
-	if (   !(p_output_var = ResolveVarOfArg(0))   ) // Fix for v1.0.46.07: Must do this check in case of illegal dynamically-build variable name.
-		return FAIL;
-	p_output_var = p_output_var->ResolveAlias(); // Resolve alias now to detect "source_is_being_appended_to_target" and perhaps other things.
-	Var &output_var = *p_output_var; // For performance.
-	// Now output_var.Type() must be clipboard or normal because otherwise load-time validation (or
-	// ResolveVarOfArg() in GetExpandedArgSize, if it's dynamic) would have prevented us from getting this far.
-
-	ArgStruct *arg2_with_at_least_one_deref;
-	Var *arg_var[MAX_ARGS];
-
-	if (mArgc < 2 || !mArg[1].deref || !mArg[1].deref[0].marker) // Relies on short-circuit boolean order. None of ACT_ASSIGN's args are ever ARG_TYPE_INPUT_VAR.
-	{
-		arg2_with_at_least_one_deref = NULL;
-		arg_var[1] = NULL; // By contrast, arg_var[0] is the output_var, which historically is left uninitialized.
-	}
-	else // Arg #2 exists, has at least one deref, and (since function-calls aren't allowed in x=%y% statements) each such deref must be a variable.
-	{
-		arg2_with_at_least_one_deref = mArg + 1;
-		// Can't use sArgVar here because ExecUntil() never calls ExpandArgs() for ACT_ASSIGN.
-		// For simplicity, we don't check that it's the only deref, nor whether it has any literal text
-		// around it, since those things aren't supported anyway.
-		Var *source_var = arg2_with_at_least_one_deref->deref[0].var; // Caller has ensured none of this line's derefs is a function-call, so var should always be the proper member of the union to check.
-		VarTypeType source_var_type = source_var->Type();
-		if (source_var_type == VAR_CLIPBOARDALL) // The caller is performing the special mode "Var = %ClipboardAll%".
-			return output_var.AssignClipboardAll(); // Outsourced to another function to help CPU cache hits/misses in this frequently-called function.
-		if (source_var->IsBinaryClip()) // Caller wants a variable with binary contents assigned (copied) to another variable (usually VAR_CLIPBOARD).
-			return output_var.AssignBinaryClip(*source_var); // Outsourced to another function to help CPU cache hits/misses in this frequently-called function.
-
-		#define SINGLE_ISOLATED_DEREF (!arg2_with_at_least_one_deref->deref[1].marker\
-			&& arg2_with_at_least_one_deref->deref[0].length == arg2_with_at_least_one_deref->length) // and the arg contains no literal text
-		if (SINGLE_ISOLATED_DEREF) // The macro is used for maintainability because there are other places that use the same name for a macro of similar purposes.
-		{
-			if (source_var_type == VAR_NORMAL) // Not necessary to check output_var.Type()==VAR_NORMAL because VAR_CLIPBOARD is handled properly.
-				// output_var.Assign() is capable of handling the copy, and does so much faster.
-				// In this case, it's okay if target_is_involved_in_source below would be true
-				// because this can handle copying a variable to itself.
-				return output_var.Assign(*source_var);
-			//else continue on to later handling.
-			arg_var[1] = source_var; // Set for use later on.
-		}
-		else
-			arg_var[1] = NULL; // By contrast, arg_var[0] is the output_var, which historically is left uninitialized.
-	}
-
-	// Otherwise (since above didn't return):
-	// Find out if output_var (the var being assigned to) is dereferenced (mentioned) in this line's
-	// second arg, which is the value to be assigned.  If it isn't, things are much simpler.
-	// Note: Since Arg#2 for this function is never an output or an input variable, it is not
-	// necessary to check whether its the same variable as Arg#1 for this determination.
-	bool target_is_involved_in_source = false;
-	bool source_is_being_appended_to_target = false; // v1.0.25
-	if (arg2_with_at_least_one_deref // There's at least one deref in arg #2, and...
-		&& output_var.Type() != VAR_CLIPBOARD) // ...output_var isn't the clipboard. Checked because:
-		// If type is VAR_CLIPBOARD, the checks below can be skipped because the clipboard can be used
-		// in the source deref(s) while also being the target -- without having to use the deref buffer
-		// -- because the clipboard has it's own temp buffer: the memory area to which the result is
-		// written. The prior content of the clipboard remains available in its other memory area until
-		// Commit() is called (i.e. long enough for this purpose).  For this reason,
-		// source_is_being_appended_to_target also doesn't need to be determined for the clipboard.
-	{
-		// It has a second arg, which in this case is the value to be assigned to the var.
-		// Examine any derefs that the second arg has to see if output_var is mentioned.
-		// Also, calls to script functions aren't possible within these derefs because
-		// our caller has ensured there are no expressions, and thus no function calls,
-		// inside this line.
-		for (DerefType *deref = arg2_with_at_least_one_deref->deref; deref->marker; ++deref)
-		{
-			if (source_is_being_appended_to_target)
-			{
-				// Check if target is mentioned more than once in source, e.g. Var = %Var%Some Text%Var%
-				// would be disqualified for the "fast append" method because %Var% occurs more than once.
-				if (deref->var->ResolveAlias() == p_output_var) // deref->is_function was checked above just in case.
-				{
-					source_is_being_appended_to_target = false;
-					break;
-				}
-			}
-			else
-			{
-				if (deref->var->ResolveAlias() == p_output_var) // deref->is_function was checked above just in case.
-				{
-					target_is_involved_in_source = true;
-					// The below disqualifies both of the following cases from the simple-append mode:
-					// Var = %OtherVar%%Var%   ; Var is not the first item as required.
-					// Var = LiteralText%Var%  ; Same.
-					if (deref->marker == arg2_with_at_least_one_deref->text)
-						source_is_being_appended_to_target = true;
-						// And continue the loop to ensure that Var is not referenced more than once,
-						// e.g. Var = %Var%%Var% would be disqualified.
-					else
-						break;
-				}
-			}
-		}
-	}
-
-	// Note: It might be possible to improve performance in the case where
-	// the target variable is large enough to accommodate the new source data
-	// by moving memory around inside it.  For example, Var1 = xxxxxVar1
-	// could be handled by moving the memory in Var1 to make room to insert
-	// the literal string.  In addition to being quicker than the ExpandArgs()
-	// method, this approach would avoid the possibility of needing to expand the
-	// deref buffer just to handle the operation.  However, if that is ever done,
-	// be sure to check that output_var is mentioned only once in the list of derefs.
-	// For example, something like this would probably be much easier to
-	// implement by using ExpandArgs(): Var1 = xxxx %Var1% %Var2% %Var1% xxxx.
-	// So the main thing to be possibly later improved here is the case where
-	// output_var is mentioned only once in the deref list (which as of v1.0.25,
-	// has been partially done via the concatenation improvement, e.g. Var = %Var%Text).
-	VarSizeType space_needed;
-	if (target_is_involved_in_source && !source_is_being_appended_to_target) // If true, output_var isn't the clipboard due to invariant: target_is_involved_in_source==false whenever output_var.Type()==VAR_CLIPBOARD.
-	{
-		if (ExpandArgs() != OK)
-			return FAIL;
-		// ARG2 now contains the dereferenced (literal) contents of the text we want to assign.
-		// Therefore, calling ArgLength() is safe now too (i.e. ExpandArgs set things up for it).
-		space_needed = (VarSizeType)ArgLength(2) + 1;  // +1 for the zero terminator.
-	}
-	else
-	{
-		// The following section is a simplified version of GetExpandedArgSize(), so maintain them together:
-		if (mArgc < 2) // It's an assignment with nothing on the right side like "Var=".
-			space_needed = 1;
-		else if (arg_var[1]) // Arg #2 is a single isolated variable, discovered at an earlier stage.
-			space_needed = arg_var[1]->Get() + 1;  // +1 for the zero terminator.
-		else // This arg has more than one deref, or a single deref with some literal text around it.
-		{
-			space_needed = mArg[1].length + 1; // +1 for this arg's zero terminator in the buffer.
-			if (arg2_with_at_least_one_deref)
-			{
-				for (DerefType *deref = arg2_with_at_least_one_deref->deref; deref->marker; ++deref)
-				{
-					// Replace the length of the deref's literal text with the length of its variable's contents.
-					// All deref items for non-expressions like ACT_ASSIGN have been verified at loadtime to be
-					// variables, not function-calls, so no need to check which type each deref is.
-					space_needed -= deref->length;
-					space_needed += deref->var->Get(); // If an environment var, Get() will yield its length.
-				}
-			}
-		}
-	}
-
-	// Now above has ensured that space_needed is at least 1 (it should not be zero because even
-	// the empty string uses up 1 char for its zero terminator).  The below relies upon this fact.
-
-	if (space_needed < 2) // Variable is being assigned the empty string (or a deref that resolves to it).
-		return output_var.Assign(_T(""));  // If the var is of large capacity, this will also free its memory.
-
-	if (source_is_being_appended_to_target)
-	{
-		if (space_needed > output_var.Capacity())
-		{
-			// Since expanding the size of output_var while preserving its existing contents would
-			// likely be a slow operation, revert to the normal method rather than the fast-append
-			// mode.  Expand the args then continue on normally to the below.
-			if (ExpandArgs(NULL, space_needed, arg_var) != OK) // In this case, both params were previously calculated by GetExpandedArgSize().
-				return FAIL;
-		}
-		else // there's enough capacity in output_var to accept the text to be appended.
-			target_is_involved_in_source = false;  // Tell the below not to consider expanding the args.
-	}
-
-	LPTSTR contents;
-	if (target_is_involved_in_source) // output_var can't be clipboard due to invariant: target_is_involved_in_source==false whenever output_var.Type()==VAR_CLIPBOARD.
-	{
-		// It was already dereferenced above, so use ARG2, which points to the deref'ed contents of ARG2
-		// (i.e. the data to be assigned).  I don't think there's any point to checking ARGVAR2!=NULL
-		// and if so passing ARGVAR2->LengthIgnoreBinaryClip, because when we're here, ExpandArgs() will
-		// have seen that it can't optimize it that way and thus it has fully expanded the variable into the buffer.
-		if (!output_var.Assign(ARG2)) // Don't pass it space_needed-1 as the length because space_needed might be a conservative estimate larger than the actual length+terminator.
-			return FAIL;
-		return OK;
-	}
-
-	// Otherwise: target isn't involved in source (output_var isn't itself involved in the source data/parameter).
-	// First set everything up for the operation.  If output_var is the clipboard, this
-	// will prepare the clipboard for writing.  Update: If source is being appended
-	// to target using the simple method, we know output_var isn't the clipboard because the
-	// logic at the top of this function ensures that.
-	if (!source_is_being_appended_to_target)
-		if (output_var.AssignString(NULL, space_needed - 1) != OK)
-			return FAIL;
-	// Expand Arg2 directly into the var.  Note: If output_var is the clipboard,
-	// it's probably okay if the below actually writes less than the size of
-	// the mem that has already been allocated for the new clipboard contents
-	// That might happen due to a failure or size discrepancy between the
-	// deref size-estimate and the actual deref itself:
-	contents = output_var.Contents();
-	// This knows not to copy the first var-ref onto itself (for when source_is_being_appended_to_target is true).
-	// In addition, to reach this point, arg_var[0]'s value will already have been determined (possibly NULL)
-	// by GetExpandedArgSize():
-	LPTSTR one_beyond_contents_end = ExpandArg(contents, 1, arg_var[1]); // v1.0.45: Fixed arg_var[0] to be arg_var[1] (but this was only a performance issue).
-	if (!one_beyond_contents_end)
-		return FAIL;  // ExpandArg() will have already displayed the error.
-	// Set the length explicitly rather than using space_needed because GetExpandedArgSize()
-	// sometimes returns a larger size than is actually needed (e.g. for ScriptGetCursor()):
-	output_var.SetCharLength((VarSizeType)(one_beyond_contents_end - contents - 1));
-	return output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-}
-
-
-
 ResultType Line::StringReplace()
 // v1.0.45: Revised to improve average-case performance and reduce memory utilization.
 {
@@ -8873,7 +8666,7 @@ ResultType Line::WriteClipboardToFile(LPTSTR aFilespec)
 // Returns OK or FAIL.  If OK, it sets ErrorLevel to the appropriate result.
 // If the clipboard is empty, a zero length file will be written, which seems best for its consistency.
 {
-	// This method used is very similar to that used in PerformAssign(), so see that section
+	// This method used is very similar to that used in AssignClipboardAll(), so see that section
 	// for a large quantity of comments.
 
 	if (!g_clip.Open())
@@ -8915,7 +8708,7 @@ ResultType Line::WriteClipboardToFile(LPTSTR aFilespec)
 		format_is_meta = (format == CF_METAFILEPICT);
 
 		// Only write one Text and one Dib format, omitting the others to save space.  See
-		// similar section in PerformAssign() for details:
+		// similar section in AssignClipboardAll() for details:
 		if (format_is_text && text_was_already_written
 			|| format_is_dib && dib_was_already_written
 			|| format_is_meta && meta_was_already_written)
@@ -8971,7 +8764,7 @@ ResultType Line::WriteClipboardToFile(LPTSTR aFilespec)
 ResultType Line::ReadClipboardFromFile(HANDLE hfile)
 // Returns OK or FAIL.  If OK, ErrorLevel is overridden from the callers ERRORLEVEL_ERROR setting to
 // ERRORLEVEL_SUCCESS, if appropriate.  This function also closes hfile before returning.
-// The method used here is very similar to that used in PerformAssign(), so see that section
+// The method used here is very similar to that used in AssignClipboardAll(), so see that section
 // for a large quantity of comments.
 {
 	if (!g_clip.Open())
