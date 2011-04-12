@@ -11514,12 +11514,10 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			if (IS_PERSISTENT)
 				return EARLY_EXIT;  // It's "early" because only the very end of the script is the "normal" exit.
 				// EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
-			else
-				// This has been tested and it does yield to the OS the error code indicated in ARG1,
-				// if present (otherwise it returns 0, naturally) as expected:
-				return g_script.ExitApp(EXIT_EXIT, NULL, (int)line->ArgIndexToInt64(0));
-
+			// Otherwise, FALL THROUGH TO BELOW:
 		case ACT_EXITAPP: // Unconditional exit.
+			// This has been tested and it does yield to the OS the error code indicated in ARG1,
+			// if present (otherwise it returns 0, naturally) as expected:
 			return g_script.ExitApp(EXIT_EXIT, NULL, (int)line->ArgIndexToInt64(0));
 
 		case ACT_BLOCK_BEGIN:
