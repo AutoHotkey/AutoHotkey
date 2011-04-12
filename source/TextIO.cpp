@@ -857,6 +857,8 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				if (!TokenSetResult(aResultToken, NULL, READ_FILE_LINE_SIZE))
 					return OK; 
 				DWORD length = mFile.ReadLine(aResultToken.marker, READ_FILE_LINE_SIZE - 1);
+				if (length && aResultToken.marker[length - 1] == '\n')
+					--length;
 				aResultToken.marker[length] = '\0';
 				aResultToken.buf = (LPTSTR)(size_t) length;
 				return OK;
