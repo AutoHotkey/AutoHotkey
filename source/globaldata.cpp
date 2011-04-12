@@ -353,7 +353,11 @@ Action g_act[] =
 	, {_T("Thread"), 1, 3, false, {2, 3, 0}}  // Command, value1 (can be blank for interrupt), value2
 	, {_T("Return"), 0, 1, false, {1, 0}}
 	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
-	, {_T("Loop"), 0, 4, false, NULL} // Iteration Count or FilePattern or root key name [,subkey name], FileLoopMode, Recurse? (custom validation for these last two)
+	, {_T("Loop"), 0, 1, false, {1, 0}} // IterationCount
+	, {_T("LoopFiles"), 1, 3, false, NULL} // FilePattern [, IncludeFolders?, Recurse?] -- LoopFiles vs LoopFile for clarity.
+	, {_T("LoopReg"), 1, 4, false, NULL} // RootKey [, Key, IncludeSubkeys?, Recurse?]
+	, {_T("LoopRead"), 1, 2, false, NULL} // InputFile [, OutputFile]
+	, {_T("LoopParse"), 1, 3, false, NULL} // InputVar [, Delimiters, OmitChars]
 	, {_T("For"), 1, 3, false, {3, 0}}  // For var [,var] in expression
 	, {_T("While"), 1, 1, false, {1, 0}} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
 	, {_T("Until"), 1, 1, false, {1, 0}} // Until expression (follows a Loop)

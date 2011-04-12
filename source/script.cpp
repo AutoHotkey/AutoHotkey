@@ -4632,11 +4632,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// Before allocating memory for this Arg's text, first check if it's a pure
 			// variable.  If it is, we store it differently (and there's no need to resolve
 			// escape sequences in these cases, since var names can't contain them):
-			if (aActionType == ACT_LOOP && i == 1 && aArg[0] && !_tcsicmp(aArg[0], _T("Parse"))) // Verified.
-				// i==1 --> 2nd arg's type is based on 1st arg's text.
-				this_new_arg.type = ARG_TYPE_INPUT_VAR;
-			else
-				this_new_arg.type = Line::ArgIsVar(aActionType, i);
+			this_new_arg.type = Line::ArgIsVar(aActionType, i);
 			// Since some vars are optional, the below allows them all to be blank or
 			// not present in the arg list.  If a mandatory var is blank at this stage,
 			// it's okay because all mandatory args are validated to be non-blank elsewhere:
@@ -5089,69 +5085,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 	switch(aActionType)
 	{
-	// Fix for v1.0.35.02:
 	// THESE FIRST FEW CASES MUST EXIST IN BOTH SELF-CONTAINED AND NORMAL VERSION since they alter the
 	// attributes/members of some types of lines:
-	case ACT_LOOP:
-		// If possible, determine the type of loop so that the preparser can better
-		// validate some things:
-		switch (aArgc)
-		{
-		case 0:
-			line.mAttribute = ATTR_LOOP_NORMAL;
-			break;
-		case 1: // With only 1 arg, it must be a normal loop, file-pattern loop, or registry loop.
-			// v1.0.43.07: Added check for new_arg[0].is_expression so that an expression without any variables
-			// it it works (e.g. Loop % 1+1):
-			if (line.ArgHasDeref(1) || new_arg[0].is_expression) // Impossible to know now what type of loop (only at runtime).
-				line.mAttribute = ATTR_LOOP_UNKNOWN;
-			else
-			{
-				if (IsNumeric(new_raw_arg1, false))
-					line.mAttribute = ATTR_LOOP_NORMAL;
-				else
-					line.mAttribute = line.RegConvertRootKey(new_raw_arg1) ? ATTR_LOOP_REG : ATTR_LOOP_FILEPATTERN;
-			}
-			break;
-		default:  // has 2 or more args.
-			if (line.ArgHasDeref(1)) // Impossible to know now what type of loop (only at runtime).
-				line.mAttribute = ATTR_LOOP_UNKNOWN;
-			else if (!_tcsicmp(new_raw_arg1, _T("Read")))
-				line.mAttribute = ATTR_LOOP_READ_FILE;
-			else if (!_tcsicmp(new_raw_arg1, _T("Parse")))
-				line.mAttribute = ATTR_LOOP_PARSE;
-			else // the 1st arg can either be a Root Key or a File Pattern, depending on the type of loop.
-			{
-				line.mAttribute = line.RegConvertRootKey(new_raw_arg1) ? ATTR_LOOP_REG : ATTR_LOOP_FILEPATTERN;
-				if (line.mAttribute == ATTR_LOOP_FILEPATTERN)
-				{
-					// Validate whatever we can rather than waiting for runtime validation:
-					if (!line.ArgHasDeref(2) && Line::ConvertLoopMode(new_raw_arg2) == FILE_LOOP_INVALID)
-						return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-					if (*new_raw_arg3 && !line.ArgHasDeref(3))
-						if (_tcslen(new_raw_arg3) > 1 || (*new_raw_arg3 != '0' && *new_raw_arg3 != '1'))
-							return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-				}
-				else // Registry loop.
-				{
-					if (aArgc > 2 && !line.ArgHasDeref(3) && Line::ConvertLoopMode(new_raw_arg3) == FILE_LOOP_INVALID)
-						return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-					if (*new_raw_arg4 && !line.ArgHasDeref(4))
-						if (_tcslen(new_raw_arg4) > 1 || (*new_raw_arg4 != '0' && *new_raw_arg4 != '1'))
-							return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
-				}
-			}
-		}
-		break; // Outer switch().
-
-	case ACT_WHILE: // Lexikos: ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
-		line.mAttribute = ATTR_LOOP_WHILE;
-		break;
-
-	case ACT_FOR:
-		line.mAttribute = ATTR_LOOP_FOR;
-		break;
-
+	
 	// This one alters g_persistent so is present in its entirety (for simplicity) in both SC an non-SC version.
 	case ACT_GUI:
 		// By design, scripts that use the GUI cmd anywhere are persistent.  Doing this here
@@ -5250,6 +5186,22 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
 	
+	case ACT_LOOP_FILE:
+		if (!line.ArgHasDeref(2) && Line::ConvertLoopMode(new_raw_arg2) == FILE_LOOP_INVALID)
+			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
+		if (*new_raw_arg3 && !line.ArgHasDeref(3))
+			if (_tcslen(new_raw_arg3) > 1 || (*new_raw_arg3 != '0' && *new_raw_arg3 != '1'))
+				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
+		break;
+
+	case ACT_LOOP_REG:
+		if (aArgc > 2 && !line.ArgHasDeref(3) && Line::ConvertLoopMode(new_raw_arg3) == FILE_LOOP_INVALID)
+			return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
+		if (*new_raw_arg4 && !line.ArgHasDeref(4))
+			if (_tcslen(new_raw_arg4) > 1 || (*new_raw_arg4 != '0' && *new_raw_arg4 != '1'))
+				return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
+		break;
+
 	case ACT_RETURN:
 		if (aArgc > 0 && !g->CurrentFunc)
 			return ScriptError(_T("Return's parameter should be blank except inside a function."));
@@ -8270,7 +8222,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			}
 			else if (line_temp->mActionType == ACT_UNTIL)
 			{
-				if (line->mActionType != ACT_LOOP && line->mActionType != ACT_FOR) // Doesn't seem useful to allow it with WHILE?
+				if (!ACT_LOOP_ALLOWS_UNTIL(line->mActionType))
 				{
 					// This is similar to the section above, so see there for comments.
 					if (aMode != ONLY_ONE_LINE)
@@ -10423,61 +10375,18 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			return LOOP_CONTINUE;
 
 		case ACT_LOOP:
-		case ACT_WHILE: // Lexikos: mAttribute should be ATTR_LOOP_WHILE.
-		case ACT_FOR: // Lexikos: mAttribute should be ATTR_LOOP_FOR.
+		case ACT_LOOP_FILE:
+		case ACT_LOOP_REG:
+		case ACT_LOOP_READ:
+		case ACT_LOOP_PARSE:
+		case ACT_FOR:
+		case ACT_WHILE:
 		{
-			HKEY root_key_type; // For registry loops, this holds the type of root key, independent of whether it is local or remote.
-			AttributeType attr = line->mAttribute;
-			if (attr == ATTR_LOOP_REG)
-				root_key_type = RegConvertRootKey(ARG1);
-			else if (ATTR_LOOP_IS_UNKNOWN_OR_NONE(attr))
-			{
-				// Since it couldn't be determined at load-time (probably due to derefs),
-				// determine whether it's a file-loop, registry-loop or a normal/counter loop.
-				// But don't change the value of line->mAttribute because that's our
-				// indicator of whether this needs to be evaluated every time for
-				// this particular loop (since the nature of the loop can change if the
-				// contents of the variables dereferenced for this line change during runtime):
-				switch (line->mArgc)
-				{
-				case 0:
-					attr = ATTR_LOOP_NORMAL;
-					break;
-				case 1:
-					// Unlike at loadtime, allow it to be negative at runtime in case it was a variable
-					// reference that resolved to a negative number, to indicate that 0 iterations
-					// should be performed.  UPDATE: Also allow floating point numbers at runtime
-					// but not at load-time (since it doesn't make sense to have a literal floating
-					// point number as the iteration count, but a variable containing a pure float
-					// should be allowed):
-					if (IsNumeric(ARG1, true, true, true))
-						attr = ATTR_LOOP_NORMAL;
-					else
-					{
-						root_key_type = RegConvertRootKey(ARG1);
-						attr = root_key_type ? ATTR_LOOP_REG : ATTR_LOOP_FILEPATTERN;
-					}
-					break;
-				default: // 2 or more args.
-					if (!_tcsicmp(ARG1, _T("Read")))
-						attr = ATTR_LOOP_READ_FILE;
-					// Note that a "Parse" loop is not allowed to have it's first param be a variable reference
-					// that resolves to the word "Parse" at runtime.  This is because the input variable would not
-					// have been resolved in this case (since the type of loop was unknown at load-time),
-					// and it would be complicated to have to add code for that, especially since there's
-					// virtually no conceivable use for allowing it be a variable reference.
-					else
-					{
-						root_key_type = RegConvertRootKey(ARG1);
-						attr = root_key_type ? ATTR_LOOP_REG : ATTR_LOOP_FILEPATTERN;
-					}
-				}
-			}
-
 			// HANDLE ANY ERROR CONDITIONS THAT CAN ABORT THE LOOP:
 			FileLoopModeType file_loop_mode;
 			bool recurse_subfolders;
-			if (attr == ATTR_LOOP_FILEPATTERN)
+			HKEY root_key_type; // For registry loops, this holds the type of root key, independent of whether it is local or remote.
+			if (line->mActionType == ACT_LOOP_FILE)
 			{
 				file_loop_mode = (line->mArgc <= 1) ? FILE_LOOP_FILES_ONLY : ConvertLoopMode(ARG2);
 				if (file_loop_mode == FILE_LOOP_INVALID)
@@ -10490,8 +10399,10 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					return line->LineError(ERR_PARAM1_INVALID ERR_ABORT, FAIL, ARG1);
 				recurse_subfolders = (*ARG3 == '1' && !*(ARG3 + 1));
 			}
-			else if (attr == ATTR_LOOP_REG)
+			else if (line->mActionType == ACT_LOOP_REG)
 			{
+				if (  !(root_key_type = RegConvertRootKey(ARG1))  )
+					return line->LineError(ERR_PARAM1_INVALID ERR_ABORT, FAIL, ARG1);
 				file_loop_mode = (line->mArgc <= 2) ? FILE_LOOP_FILES_ONLY : ConvertLoopMode(ARG3);
 				if (file_loop_mode == FILE_LOOP_INVALID)
 					return line->LineError(ERR_PARAM3_INVALID ERR_ABORT, FAIL, ARG3);
@@ -10530,9 +10441,9 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			g.mLoopIteration = 1;
 
 			// PERFORM THE LOOP:
-			switch ((size_t)attr)
+			switch (line->mActionType)
 			{
-			case ATTR_LOOP_NORMAL: // Listed first for performance.
+			case ACT_LOOP: // Listed first for performance.
 				bool is_infinite; // "is_infinite" is more maintainable and future-proof than using LLONG_MAX to simulate an infinite loop. Plus it gives peace-of-mind and the LLONG_MAX method doesn't measurably improve benchmarks (nor does BOOL vs. bool).
 				__int64 iteration_limit;
 				if (line->mArgc > 0) // At least one parameter is present.
@@ -10548,27 +10459,27 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				result = line->PerformLoop(aResultToken, continue_main_loop, jump_to_line, until
 					, iteration_limit, is_infinite);
 				break;
-			case ATTR_LOOP_WHILE: // Lexikos: ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
+			case ACT_WHILE: // Lexikos: ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
 				result = line->PerformLoopWhile(aResultToken, continue_main_loop, jump_to_line);
 				break;
-			case ATTR_LOOP_FOR:
+			case ACT_FOR:
 				result = line->PerformLoopFor(aResultToken, continue_main_loop, jump_to_line, until);
 				break;
-			case ATTR_LOOP_PARSE:
+			case ACT_LOOP_PARSE:
 				// The phrase "csv" is unique enough since user can always rearrange the letters
 				// to do a literal parse using C, S, and V as delimiters:
-				if (_tcsicmp(ARG3, _T("CSV")))
+				if (_tcsicmp(ARG2, _T("CSV")))
 					result = line->PerformLoopParse(aResultToken, continue_main_loop, jump_to_line, until);
 				else
 					result = line->PerformLoopParseCSV(aResultToken, continue_main_loop, jump_to_line, until);
 				break;
-			case ATTR_LOOP_READ_FILE:
+			case ACT_LOOP_READ:
 				{
 					TextFile tfile;
-					if (*ARG2 && tfile.Open(ARG2, DEFAULT_READ_FLAGS, g.Encoding & CP_AHKCP)) // v1.0.47: Added check for "" to avoid debug-assertion failure while in debug mode (maybe it's bad to to open file "" in release mode too).
+					if (tfile.Open(ARG1, DEFAULT_READ_FLAGS, g.Encoding & CP_AHKCP))
 					{
 						result = line->PerformLoopReadFile(aResultToken, continue_main_loop, jump_to_line, until
-							, &tfile, ARG3);
+							, &tfile, ARG2);
 						tfile.Close();
 					}
 					else
@@ -10579,11 +10490,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 						result = OK;
 				}
 				break;
-			case ATTR_LOOP_FILEPATTERN:
+			case ACT_LOOP_FILE:
 				result = line->PerformLoopFilePattern(aResultToken, continue_main_loop, jump_to_line, until
 					, file_loop_mode, recurse_subfolders, ARG1);
 				break;
-			case ATTR_LOOP_REG:
+			case ACT_LOOP_REG:
 				// This isn't the most efficient way to do things (e.g. the repeated calls to
 				// RegConvertRootKey()), but it the simplest way for now.  Optimization can
 				// be done at a later time:
@@ -10671,7 +10582,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			// to the line after our loop's structure and continue there:
 			line = finished_line;
 			continue;  // Resume looping starting at the above line.  "continue" is actually slightly faster than "break" in these cases.
-		} // case ACT_LOOP.
+		} // case ACT_LOOP, ACT_LOOP_*, ACT_FOR, ACT_WHILE.
 
 		case ACT_EXIT:
 			// If this script has no hotkeys and hasn't activated one of the hooks, EXIT will cause the
@@ -11599,25 +11510,25 @@ ResultType Line::PerformLoopReg(ExprTokenType *aResultToken, bool &aContinueMain
 
 ResultType Line::PerformLoopParse(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil)
 {
-	if (!*ARG2) // Since the input variable's contents are blank, the loop will execute zero times.
+	if (!*ARG1) // Since the input variable's contents are blank, the loop will execute zero times.
 		return OK;
 
 	// The following will be used to hold the parsed items.  It needs to have its own storage because
-	// even though ARG2 might always be a writable memory area, we can't rely upon it being
+	// even though ARG1 might always be a writable memory area, we can't rely upon it being
 	// persistent because it might reside in the deref buffer, in which case the other commands
-	// in the loop's body would probably overwrite it.  Even if the ARG2's contents aren't in
+	// in the loop's body would probably overwrite it.  Even if the ARG1's contents aren't in
 	// the deref buffer, we still can't modify it (i.e. to temporarily terminate it and thus
 	// bypass the need for malloc() below) because that might modify the variable contents, and
 	// that variable may be referenced elsewhere in the body of the loop (which would result
 	// in unexpected side-effects).  So, rather than have a limit of 64K or something (which
 	// would limit this feature's usefulness for parsing a large list of filenames, for example),
 	// it seems best to dynamically allocate a temporary buffer large enough to hold the
-	// contents of ARG2 (the input variable).  Update: Since these loops tend to be enclosed
+	// contents of ARG1 (the input variable).  Update: Since these loops tend to be enclosed
 	// by file-read loops, and thus may be called thousands of times in a short period,
 	// it should help average performance to use the stack for small vars rather than
 	// constantly doing malloc() and free(), which are much higher overhead and probably
 	// cause memory fragmentation (especially with thousands of calls):
-	size_t space_needed = ArgLength(2) + 1;  // +1 for the zero terminator.
+	size_t space_needed = ArgLength(1) + 1;  // +1 for the zero terminator.
 	LPTSTR stack_buf, buf;
 	#define FREE_PARSE_MEMORY if (buf != stack_buf) free(buf)  // Also used by the CSV version of this function.
 	#define LOOP_PARSE_BUF_SIZE 40000                          //
@@ -11634,13 +11545,13 @@ ResultType Line::PerformLoopParse(ExprTokenType *aResultToken, bool &aContinueMa
 			return LineError(ERR_OUTOFMEM, FAIL, ARG2);
 		stack_buf = NULL; // For comparison purposes later below.
 	}
-	_tcscpy(buf, ARG2); // Make the copy.
+	_tcscpy(buf, ARG1); // Make the copy.
 
-	// Make a copy of ARG3 and ARG4 in case either one's contents are in the deref buffer, which would
+	// Make a copy of ARG2 and ARG3 in case either one's contents are in the deref buffer, which would
 	// probably be overwritten by the commands in the script loop's body:
 	TCHAR delimiters[512], omit_list[512];
-	tcslcpy(delimiters, ARG3, _countof(delimiters));
-	tcslcpy(omit_list, ARG4, _countof(omit_list));
+	tcslcpy(delimiters, ARG2, _countof(delimiters));
+	tcslcpy(omit_list, ARG3, _countof(omit_list));
 
 	ResultType result;
 	Line *jump_to_line;
@@ -11724,11 +11635,11 @@ ResultType Line::PerformLoopParseCSV(ExprTokenType *aResultToken, bool &aContinu
 // See PerformLoopParse() for comments about the below (comments have been mostly stripped
 // from this function).
 {
-	if (!*ARG2) // Since the input variable's contents are blank, the loop will execute zero times.
+	if (!*ARG1) // Since the input variable's contents are blank, the loop will execute zero times.
 		return OK;
 
 	// See comments in PerformLoopParse() for details.
-	size_t space_needed = ArgLength(2) + 1;  // +1 for the zero terminator.
+	size_t space_needed = ArgLength(1) + 1;  // +1 for the zero terminator.
 	LPTSTR stack_buf, buf;
 	if (space_needed <= LOOP_PARSE_BUF_SIZE)
 	{
@@ -11738,13 +11649,13 @@ ResultType Line::PerformLoopParseCSV(ExprTokenType *aResultToken, bool &aContinu
 	else
 	{
 		if (   !(buf = tmalloc(space_needed))   )
-			return LineError(ERR_OUTOFMEM, FAIL, ARG2);
+			return LineError(ERR_OUTOFMEM, FAIL, ARG1);
 		stack_buf = NULL; // For comparison purposes later below.
 	}
-	_tcscpy(buf, ARG2); // Make the copy.
+	_tcscpy(buf, ARG1); // Make the copy.
 
 	TCHAR omit_list[512];
-	tcslcpy(omit_list, ARG4, _countof(omit_list));
+	tcslcpy(omit_list, ARG3, _countof(omit_list));
 
 	ResultType result;
 	Line *jump_to_line;

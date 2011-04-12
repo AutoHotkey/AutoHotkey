@@ -57,15 +57,6 @@ enum ExecUntilMode {NORMAL_MODE, UNTIL_RETURN, UNTIL_BLOCK_END, ONLY_ONE_LINE};
 // might just match one of them:
 #define ATTR_NONE (void *)0  // Some places migh rely on this being zero.
 #define ATTR_TRUE (void *)1
-#define ATTR_LOOP_UNKNOWN (void *)1 // Same value as the above.        // KEEP IN SYNC WITH BELOW.
-#define ATTR_LOOP_IS_UNKNOWN_OR_NONE(attr) (attr <= ATTR_LOOP_UNKNOWN) // KEEP IN SYNC WITH ABOVE.
-#define ATTR_LOOP_NORMAL (void *)2
-#define ATTR_LOOP_FILEPATTERN (void *)3
-#define ATTR_LOOP_REG (void *)4
-#define ATTR_LOOP_READ_FILE (void *)5
-#define ATTR_LOOP_PARSE (void *)6
-#define ATTR_LOOP_WHILE (void *)7 // Lexikos: This is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
-#define ATTR_LOOP_FOR (void *)8
 typedef void *AttributeType;
 
 enum FileLoopModeType {FILE_LOOP_INVALID, FILE_LOOP_FILES_ONLY, FILE_LOOP_FILES_AND_FOLDERS, FILE_LOOP_FOLDERS_ONLY};
@@ -978,6 +969,7 @@ public:
 			case ACT_FOR:
 				return ARG_TYPE_OUTPUT_VAR;
 
+			case ACT_LOOP_PARSE:
 			case ACT_SORT:
 			case ACT_SPLITPATH:
 			case ACT_IFIN:
