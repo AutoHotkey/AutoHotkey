@@ -8244,13 +8244,16 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, ActionTyp
 			{
 				if (!line->GetJumpTarget(false, sInFunctionBody))
 					return NULL; // Error was already displayed by called function.
-				if (   line->mActionType == ACT_GOSUB && sInFunctionBody
-					&& ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()   ) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
+				if (sInFunctionBody && ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
+				{
+					if (line->mActionType == ACT_GOTO)
+						return line->PreparseError(_T("A Goto cannot jump from inside a function to outside."));
 					// Since this Gosub and its target line are both inside a function, they must both
 					// be in the same function because otherwise GetJumpTarget() would have reported
 					// the target as invalid.
 					line->mAttribute = ATTR_TRUE; // v1.0.48.02: To improve runtime performance, mark this Gosub as having a target that is outside of any function body.
-				//else leave above at its line-constructor default of ATTR_NONE.
+				}
+				//else leave mAttribute at its line-constructor default of ATTR_NONE.
 			}
 			break;
 
@@ -10502,12 +10505,10 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			if (IS_PERSISTENT)
 				return EARLY_EXIT;  // It's "early" because only the very end of the script is the "normal" exit.
 				// EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
-			else
-				// This has been tested and it does yield to the OS the error code indicated in ARG1,
-				// if present (otherwise it returns 0, naturally) as expected:
-				return g_script.ExitApp(EXIT_EXIT, NULL, (int)line->ArgIndexToInt64(0));
-
+			// Otherwise, FALL THROUGH TO BELOW:
 		case ACT_EXITAPP: // Unconditional exit.
+			// This has been tested and it does yield to the OS the error code indicated in ARG1,
+			// if present (otherwise it returns 0, naturally) as expected:
 			return g_script.ExitApp(EXIT_EXIT, NULL, (int)line->ArgIndexToInt64(0));
 
 		case ACT_BLOCK_BEGIN:
