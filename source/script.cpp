@@ -24,9 +24,6 @@ GNU General Public License for more details.
 #include "TextIO.h"
 
 // Globals that are for only this module:
-#define MAX_COMMENT_FLAG_LENGTH 15
-static TCHAR g_CommentFlag[MAX_COMMENT_FLAG_LENGTH + 1] = _T(";"); // Adjust the below for any changes.
-static size_t g_CommentFlagLength = 1; // pre-calculated for performance
 static ExprOpFunc g_ObjGet(BIF_ObjInvoke, IT_GET), g_ObjSet(BIF_ObjInvoke, IT_SET), g_ObjCall(BIF_ObjInvoke, IT_CALL);
 static ExprOpFunc g_ObjGetInPlace(BIF_ObjGetInPlace, IT_GET);
 
@@ -1682,7 +1679,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						// Passing true for the last parameter supports `s as the special escape character,
 						// which allows space to be used by itself and also at the beginning or end of a string
 						// containing other chars.
-						ConvertEscapeSequences(suffix, NULL, g_EscapeChar, true);
+						ConvertEscapeSequences(suffix, NULL, true);
 						suffix_length = _tcslen(suffix);
 					}
 					else if (!_tcsnicmp(next_option, _T("LTrim"), 5))
@@ -1701,7 +1698,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						{
 							switch (*next_option)
 							{
-							case '`': // Although not using g_EscapeChar (reduces code size/complexity), #EscapeChar is still supported by continuation sections; it's just that enabling the option uses '`' rather than the custom escape-char (one reason is that that custom escape-char might be ambiguous with future/past options if it's somehing weird like an alphabetic character).
+							case '`': // OBSOLETE because g_EscapeChar is now constant: Although not using g_EscapeChar (reduces code size/complexity), #EscapeChar is still supported by continuation sections; it's just that enabling the option uses '`' rather than the custom escape-char (one reason is that that custom escape-char might be ambiguous with future/past options if it's somehing weird like an alphabetic character).
 								literal_escapes = true;
 								break;
 							case '%': // Same comment as above.
@@ -1766,31 +1763,13 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 				// 2) The translation doesn't affect the functionality of the script since escaped literals
 				//    are always de-escaped at a later stage, at least for everything that's likely to matter
 				//    or that's reasonable to put into a continuation section (e.g. a hotstring's replacement text).
-				// UPDATE for v1.0.44.11: #EscapeChar, #DerefChar, #Delimiter are now supported by continuation
-				// sections because there were some requests for that in forum.
 				int replacement_count = 0;
 				if (literal_escapes) // literal_escapes must be done FIRST because otherwise it would also replace any accents added for literal_delimiters or literal_derefs.
-				{
-					one_char_string[0] = g_EscapeChar; // These strings were terminated earlier, so no need to
-					two_char_string[0] = g_EscapeChar; // do it here.  In addition, these strings must be set by
-					two_char_string[1] = g_EscapeChar; // each iteration because the #EscapeChar (and similar directives) can occur multiple times, anywhere in the script.
-					replacement_count += StrReplace(next_buf, one_char_string, two_char_string, SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
-				}
+					replacement_count += StrReplace(next_buf, _T("`"), _T("``"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
 				if (literal_derefs)
-				{
-					one_char_string[0] = g_DerefChar;
-					two_char_string[0] = g_EscapeChar;
-					two_char_string[1] = g_DerefChar;
-					replacement_count += StrReplace(next_buf, one_char_string, two_char_string, SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
-				}
+					replacement_count += StrReplace(next_buf, _T("%"), _T("`%"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
 				if (literal_delimiters)
-				{
-					one_char_string[0] = g_delimiter;
-					two_char_string[0] = g_EscapeChar;
-					two_char_string[1] = g_delimiter;
-					replacement_count += StrReplace(next_buf, one_char_string, two_char_string, SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
-				}
-
+					replacement_count += StrReplace(next_buf, _T(","), _T("`,"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
 				if (replacement_count) // Update the length if any actual replacements were done.
 					next_buf_length = _tcslen(next_buf);
 			} // Handling of a normal line within a continuation section.
@@ -2505,7 +2484,7 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 		else // aInContinuationSection == CONTINUATION_SECTION_WITH_COMMENTS (i.e. comments are allowed in this continuation section).
 		{
 			// Fix for v1.0.46.09+: The "com" option shouldn't put "ltrim" into effect.
-			if (!_tcsncmp(cp, g_CommentFlag, g_CommentFlagLength)) // Case sensitive.
+			if (*cp == g_CommentChar)
 			{
 				*aBuf = '\0'; // Since this line is a comment, have the caller ignore it.
 				return -2; // Callers tolerate -2 only when in a continuation section.  -2 indicates, "don't include this line at all, not even as a blank line to which the JOIN string (default "\n") will apply.
@@ -2528,7 +2507,7 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 	if (aInContinuationSection != CONTINUATION_SECTION_WITH_COMMENTS) // Case #1 & #2 above.
 	{
 		aBuf_length = trim(aBuf);
-		if (!_tcsncmp(aBuf, g_CommentFlag, g_CommentFlagLength)) // Case sensitive.
+		if (*aBuf == g_CommentChar)
 		{
 			// Due to other checks, aInContinuationSection==false whenever the above condition is true.
 			*aBuf = '\0';
@@ -2542,7 +2521,7 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 
 	// Handle comment-flags that appear to the right of a valid line:
 	LPTSTR cp, prevp;
-	for (cp = _tcsstr(aBuf, g_CommentFlag); cp; cp = _tcsstr(cp + g_CommentFlagLength, g_CommentFlag))
+	for (cp = _tcschr(aBuf, g_CommentChar); cp; cp = _tcschr(cp + 1, g_CommentChar))
 	{
 		// If no whitespace to its left, it's not a valid comment.
 		// We insist on this so that a semi-colon (for example) immediately after
@@ -2781,7 +2760,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		TCHAR literal_map[LINE_SIZE];  // See similar declaration in ParseAndAddLine() for comments.
 		ZeroMemory(literal_map, sizeof(literal_map));  // Must be fully zeroed for this purpose.
-		ConvertEscapeSequences(parameter, literal_map, g_EscapeChar); // Normally done in ParseAndAddLine().
+		ConvertEscapeSequences(parameter, literal_map); // Normally done in ParseAndAddLine().
 		LPTSTR arg_map[] = { literal_map };
 
 		// ACT_EXPRESSION will be changed to ACT_IFEXPR after PreparseBlocks() is called so that EvaluateCondition()
@@ -2885,12 +2864,12 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			// The following must be done only after trimming and omitting whitespace above, so that
 			// `s and `t can be used to insert leading/trailing spaces/tabs.  ConvertEscapeSequences()
 			// also supports insertion of literal commas via escaped sequences.
-			ConvertEscapeSequences(hot_win_text, NULL, g_EscapeChar, true);
+			ConvertEscapeSequences(hot_win_text, NULL, true);
 		}
 		else
 			hot_win_text = _T(""); // And leave hot_win_title set to the entire string because there's only one parameter.
 		// The following must be done only after trimming and omitting whitespace above (see similar comment above).
-		ConvertEscapeSequences(hot_win_title, NULL, g_EscapeChar, true);
+		ConvertEscapeSequences(hot_win_title, NULL, true);
 		// The following also handles the case where both title and text are blank, which could happen
 		// due to something weird but legit like: #IfWinActive, ,
 		if (!SetGlobalHotTitleText(hot_win_title, hot_win_text))
@@ -2912,7 +2891,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				if (    !(parameter = StrChrAny(suboption, _T("\t ")))   )
 					return CONDITION_TRUE;
 				tcslcpy(g_EndChars, ++parameter, _countof(g_EndChars));
-				ConvertEscapeSequences(g_EndChars, NULL, g_EscapeChar);
+				ConvertEscapeSequences(g_EndChars, NULL);
 				return CONDITION_TRUE;
 			}
 			if (!_tcsnicmp(parameter, _T("NoMouse"), 7)) // v1.0.42.03
@@ -3026,62 +3005,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			//    not dangerous anyway).
 			// 2) To reduce the impression that AutoHotkey designed for key logging (the key history file
 			//    is in a very unfriendly format that type of key logging anyway).
-		}
-		return CONDITION_TRUE;
-	}
-
-	// For the below series, it seems okay to allow the comment flag to contain other reserved chars,
-	// such as DerefChar, since comments are evaluated, and then taken out of the game at an earlier
-	// stage than DerefChar and the other special chars.
-	if (IS_DIRECTIVE_MATCH(_T("#CommentFlag")))
-	{
-		if (parameter)
-		{
-			if (!*(parameter + 1))  // i.e. the length is 1
-			{
-				// Don't allow '#' since it's the preprocessor directive symbol being used here.
-				// Seems ok to allow "." to be the comment flag, since other constraints mandate
-				// that at least one space or tab occur to its left for it to be considered a
-				// comment marker.
-				if (*parameter == '#' || *parameter == g_DerefChar || *parameter == g_EscapeChar || *parameter == g_delimiter)
-					return ScriptError(ERR_PARAM1_INVALID, aBuf);
-				// Exclude hotkey definition chars, such as ^ and !, because otherwise
-				// the following example wouldn't work:
-				// User defines ! as the comment flag.
-				// The following hotkey would never be in effect since it's considered to
-				// be commented out:
-				// !^a::run,notepad
-				if (*parameter == '!' || *parameter == '^' || *parameter == '+' || *parameter == '$' || *parameter == '~' || *parameter == '*'
-					|| *parameter == '<' || *parameter == '>')
-					// Note that '#' is already covered by the other stmt. above.
-					return ScriptError(ERR_PARAM1_INVALID, aBuf);
-			}
-			tcslcpy(g_CommentFlag, parameter, MAX_COMMENT_FLAG_LENGTH + 1);
-			g_CommentFlagLength = _tcslen(g_CommentFlag);  // Keep this in sync with above.
-		}
-		return CONDITION_TRUE;
-	}
-	if (IS_DIRECTIVE_MATCH(_T("#EscapeChar")))
-	{
-		if (parameter)
-		{
-			// Don't allow '.' since that can be part of literal floating point numbers:
-			if (   *parameter == '#' || *parameter == g_DerefChar || *parameter == g_delimiter || *parameter == '.'
-				|| (g_CommentFlagLength == 1 && *parameter == *g_CommentFlag)   )
-				return ScriptError(ERR_PARAM1_INVALID, aBuf);
-			g_EscapeChar = *parameter;
-		}
-		return CONDITION_TRUE;
-	}
-	if (IS_DIRECTIVE_MATCH(_T("#DerefChar")))
-	{
-		if (parameter)
-		{
-			if (   *parameter == g_EscapeChar || *parameter == g_delimiter || *parameter == '.'
-				|| (g_CommentFlagLength == 1 && *parameter == *g_CommentFlag)   ) // Fix for v1.0.47.05: Allow deref char to be # as documented.
-				return ScriptError(ERR_PARAM1_INVALID, aBuf);
-			g_DerefChar = *parameter;
-			g_DerefEndChar = parameter[1] ? parameter[1] : g_DerefChar;
 		}
 		return CONDITION_TRUE;
 	}
@@ -3622,7 +3545,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				// performance is not a concern since this line will only be evaluated once.
 				TCHAR literal_map[LINE_SIZE];  // See similar declaration further below for comments.
 				ZeroMemory(literal_map, sizeof(literal_map));  // Must be fully zeroed for this purpose.
-				LPTSTR arg[] = { ConvertEscapeSequences(omit_leading_whitespace(aLineText + 6), literal_map, g_EscapeChar) }; // +6 to omit "Static"
+				LPTSTR arg[] = { ConvertEscapeSequences(omit_leading_whitespace(aLineText + 6), literal_map) }; // +6 to omit "Static"
 				LPTSTR arg_map[] = { literal_map };
 				// UCHAR_MAX signals AddLine to avoid pointing any pending labels or functions at the new line.
 				// Otherwise, ParseAndAddLine could be used like in the section below to optimize simple
@@ -4054,7 +3977,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		//string1; string2 <-- not a problem since string2 won't be considered a comment by the above.
 		//string1 ; string2  <-- this would be a user mistake if string2 wasn't supposed to be a comment.
 		//string1 `; string 2  <-- since esc seq. is resolved *after* checking for comments, this behaves as intended.
-		ConvertEscapeSequences(action_args, literal_map, g_EscapeChar);
+		ConvertEscapeSequences(action_args, literal_map);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -4113,7 +4036,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				*delimiter[0] = g_delimiter; // Restore the string.
 				if (!max_params_override)
 				{
-					// IMPORATANT: The MsgBox cmd effectively has 3 parameter modes:
+					// IMPORTANT: The MsgBox cmd effectively has 3 parameter modes:
 					// 1-parameter (where all commas in the 1st parameter are automatically literal)
 					// 3-parameter (where all commas in the 3rd parameter are automatically literal)
 					// 4-parameter (whether the 4th parameter is the timeout value)
@@ -4920,9 +4843,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// done only after the above has ensured this operand is not one enclosed entirely in
 					// double quotes.
 					// The following characters are either illegal in expressions or reserved for future use.
-					// This excludes g_DerefChar (which might have been customized via #DerefChar) since that
-					// is used for double-derefs in expressions.
-					for (cp = op_begin; !_tcschr(EXPR_ILLEGAL_CHARS, *cp) || *cp == g_DerefChar || *cp == g_DerefEndChar; ++cp); // _tcschr includes the null terminator in the search.
+					for (cp = op_begin; !_tcschr(EXPR_ILLEGAL_CHARS, *cp); ++cp); // _tcschr includes the null terminator in the search.
 					if (*cp)
 						return ScriptError(ERR_EXP_ILLEGAL_CHAR, cp);
 
@@ -6062,7 +5983,7 @@ ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDere
 		// and "%n`%" to be equivalent to "%n%`%", e.g. "100%" where n = 100.
 		if (aArgText[j] == '(') // Reserve %func() for future use rather than interpreting it as %var%().
 			return ScriptError(_T("Function calls are not supported."), aArgText);
-		if (aArgText[j] == g_DerefEndChar && !(aArgMap && aArgMap[j]))
+		if (aArgText[j] == g_DerefChar && !(aArgMap && aArgMap[j]))
 			++j;
 		deref_string_length = aArgText + j - this_deref.marker;
 		this_deref.is_function = false;
@@ -6190,7 +6111,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 				}
 				*target = '\0'; // Terminate it in the buffer.
 				// The above has also set param_end for use near the bottom of the loop.
-				ConvertEscapeSequences(buf, NULL, g_EscapeChar); // Raw escape sequences like `n haven't been converted yet, so do it now.
+				ConvertEscapeSequences(buf, NULL); // Raw escape sequences like `n haven't been converted yet, so do it now.
 				this_param.default_type = PARAM_DEFAULT_STR;
 				this_param.default_str = *buf ? SimpleHeap::Malloc(buf, target-buf) : _T("");
 			}
@@ -6403,15 +6324,9 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			// Since above didn't "continue", a file exists whose name matches that of the requested function.
 			aFileWasFound = true; // Indicate success for #include <lib>, which doesn't necessarily expect a function to be found.
 
-			// Save the current settings of #CommentFlag, #EscapeChar and #DerefChar to allow library files
-			// to use their own settings without affecting the main script file.  This is not done for normal
-			// #Includes since script authors might want to do something like #Include MyCharPrefs.ahk.
-			TCHAR comment_flag[_countof(g_CommentFlag)],
-				escape_char = g_EscapeChar,
-				deref_char = g_DerefChar,
-				deref_end_char = g_DerefEndChar;
-			bool must_declare = g_MustDeclare; // Same for #MustDeclare.
-			_tcscpy(comment_flag, g_CommentFlag);
+			// Save the current #MustDeclare setting to allow func lib authors a choice about
+			// whether they use it, without imposing their choice on users of their libs.
+			bool must_declare = g_MustDeclare;
 
 			if (!LoadIncludedFile(sLib[i].path, false, false)) // Fix for v1.0.47.05: Pass false for allow-dupe because otherwise, it's possible for a stdlib file to attempt to include itself (especially via the LibNamePrefix_ method) and thus give a misleading "duplicate function" vs. "func does not exist" error message.  Obsolete: For performance, pass true for allow-dupe so that it doesn't have to check for a duplicate file (seems too rare to worry about duplicates since by definition, the function doesn't yet exist so it's file shouldn't yet be included).
 			{
@@ -6419,11 +6334,7 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 				return NULL;
 			}
 
-			// Restore settings as per the comment above.
-			g_CommentFlagLength = _tcslen(_tcscpy(g_CommentFlag, comment_flag));
-			g_EscapeChar = escape_char;
-			g_DerefChar = deref_char;
-			g_DerefEndChar = deref_end_char;
+			// Restore setting as per the comment above.
 			g_MustDeclare = must_declare;
 
 			if (mIncludeLibraryFunctionsThenExit)
@@ -12912,7 +12823,7 @@ ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
 		else // First pass.
 			expanded_length = 0; // Init prior to accumulation.
 
-		for (cp = aBuf; ; ++cp)  // Increment to skip over the deref/escape just found by the inner for().
+		for (cp = aBuf; ; )
 		{
 			// Find the next escape char or deref symbol:
 			for (; *cp && *cp != g_EscapeChar && *cp != g_DerefChar; ++cp)
@@ -12945,10 +12856,9 @@ ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
 				}
 				else
 					++expanded_length;
-				// Increment cp here and it will be incremented again by the outer loop, i.e. +2.
-				// In other words, skip over the escape character, treating it and its target character
+				// Skip over the escape character, treating it and its target character
 				// as a single character.
-				++cp;
+				cp += 2;
 				continue;
 			}
 			// Otherwise, it's a dereference symbol, so calculate the size of that variable's contents
@@ -12977,8 +12887,8 @@ ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
 			// else since the variable name between the deref symbols is blank or too long: for consistency in behavior,
 			// it seems best to omit the dereference entirely (don't put it into aOutputVar).
 			cp = cp1; // For the next loop iteration, continue at the char after this reference's final deref symbol.
-			if (*cp != g_DerefEndChar)
-				--cp; // Counteract the loop's increment since this deref has no explicit end char.
+			if (*cp == g_DerefChar)
+				++cp; // Skip this deref's explicit end char.
 		} // for()
 	} // for() (first and second passes)
 
