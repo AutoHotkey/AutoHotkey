@@ -8094,7 +8094,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 
 
 
-Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, AttributeType aLoopType)
+Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, ActionTypeType aLoopType)
 // Zero is the default for aMode, otherwise:
 // Will return NULL to the top-level caller if there's an error, or if
 // mLastLine is NULL (i.e. the script is empty).
@@ -8106,13 +8106,12 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 	// Don't check aStartingLine here at top: only do it at the bottom
 	// for it's differing return values.
 	Line *line_temp;
-	AttributeType loop_type = aLoopType;
+	ActionTypeType loop_type = aLoopType;
 
 	for (Line *line = aStartingLine; line != NULL;)
 	{
-		if (   ACT_IS_IF(line->mActionType)
-			|| line->mActionType >= ACT_LOOP
-			&& line->mActionType <= ACT_WHILE   ) // i.e. LOOP, FOR or WHILE.
+		if (   ACT_IS_IF(line->mActionType)			// Any type of IF.
+			|| ACT_IS_LOOP(line->mActionType)   )	// Any type of LOOP, FOR or WHILE.
 		{
 			// ActionType is an IF or a LOOP.
 			line_temp = line->mNextLine;  // line_temp is now this IF's or LOOP's action-line.
@@ -8145,7 +8144,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			// by this function even if they are the single-line actions of an IF or an ELSE.
 			// Recurse this line rather than the next because we want the called function to
 			// recurse again if this line is a ACT_BLOCK_BEGIN or is itself an IF.
-			line_temp = PreparseIfElse(line_temp, ONLY_ONE_LINE, line->mAttribute ? line->mAttribute : loop_type);
+			line_temp = PreparseIfElse(line_temp, ONLY_ONE_LINE, ACT_IS_LOOP(line->mActionType) ? line->mActionType : loop_type);
 			// If not end-of-script or error, line_temp is now either:
 			// 1) If this if's/loop's action was a BEGIN_BLOCK: The line after the end of the block.
 			// 2) If this if's/loop's action was another IF or LOOP:
@@ -8190,7 +8189,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			// so always continue on to evaluate the IF's ELSE, if present:
 			if (line_temp->mActionType == ACT_ELSE)
 			{
-				if (line->mActionType >= ACT_LOOP && line->mActionType <= ACT_WHILE) // i.e. LOOP, FOR or WHILE.
+				if (ACT_IS_LOOP(line->mActionType)) // Any type of LOOP, FOR or WHILE.
 				{
 					 // this can't be our else, so let the caller handle it.
 					if (aMode != ONLY_ONE_LINE)
@@ -8293,7 +8292,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					int n = _ttoi(loop_name);
 					// Find the nth innermost loop which encloses this line:
 					for (loop_line = line->mParentLine; loop_line; loop_line = loop_line->mParentLine)
-						if (loop_line->mActionType >= ACT_LOOP && loop_line->mActionType <= ACT_WHILE) // i.e. LOOP, FOR or WHILE.
+						if (ACT_IS_LOOP(loop_line->mActionType)) // Any type of LOOP, FOR or WHILE.
 							if (--n < 1)
 								break;
 					if (!loop_line || n != 0)
@@ -8306,7 +8305,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 						return line->PreparseError(ERR_NO_LABEL, loop_name);
 					loop_line = loop_label->mJumpToLine;
 					// Ensure the label points to a Loop, For-loop or While-loop ...
-					if (   !(loop_line->mActionType >= ACT_LOOP && loop_line->mActionType <= ACT_WHILE)
+					if (   !ACT_IS_LOOP(loop_line->mActionType)
 						// ... which encloses this line.  Use line->mParentLine as the starting-point of
 						// the "jump" to ensure the target isn't at the same nesting level as this line:
 						|| !line->mParentLine->IsJumpValid(*loop_label, true)   )

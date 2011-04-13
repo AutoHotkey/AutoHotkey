@@ -346,9 +346,10 @@ enum enum_act {
 	|| ActionType == ACT_EDIT || ActionType == ACT_RELOAD || ActionType == ACT_KEYHISTORY \
 	|| ActionType == ACT_LISTLINES || ActionType == ACT_LISTVARS || ActionType == ACT_LISTHOTKEYS)
 #define ACT_IS_ASSIGN(ActionType) (ActionType == ACT_ASSIGNEXPR)
-#define ACT_IS_IF(ActionType) (ActionType >= ACT_FIRST_IF && ActionType <= ACT_LAST_IF)
+#define ACT_IS_IF(ActionType) (ActionType <= ACT_LAST_IF && ActionType >= ACT_FIRST_IF) // Ordered for short-circuit performance.
+#define ACT_IS_LOOP(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_WHILE)
 #define ACT_IS_IF_OR_ELSE_OR_LOOP(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
-	|| ActionType >= ACT_LOOP && ActionType <= ACT_WHILE)
+	|| ACT_IS_LOOP(ActionType))
 #define ACT_LOOP_ALLOWS_UNTIL(ActionType) (ActionType <= ACT_FOR && ActionType >= ACT_LOOP) // UNTIL is currently unsupported with WHILE, for performance/code size (doesn't seem useful anyway).
 #define ACT_IS_IF_OLD(ActionType) (ActionType >= ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION && ActionType <= ACT_LAST_IF)
 	// The macro above allows cmds such as IfMsgBox to support parameters on the same line or on the next line.
