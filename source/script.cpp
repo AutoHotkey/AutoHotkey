@@ -5876,27 +5876,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			mNextLineIsFunctionBody = true;
 		}
 	}
-	else if (aActionType == ACT_BLOCK_END)
-	{
-		--mCurrentFuncOpenBlockCount; // It's okay to increment unconditionally because it is reset to zero every time a new function definition is entered.
-		if (g->CurrentFunc && !mCurrentFuncOpenBlockCount) // Any negative mCurrentFuncOpenBlockCount is caught by a different stage.
-		{
-			Func &func = *g->CurrentFunc;
-			if (func.mGlobalVarCount)
-			{
-				// Now that there can be no more "global" declarations, copy the list into persistent memory.
-				Var **global_vars;
-				if (  !(global_vars = (Var **)SimpleHeap::Malloc(func.mGlobalVarCount * sizeof(Var *)))  )
-					return ScriptError(ERR_OUTOFMEM);
-				memcpy(global_vars, func.mGlobalVar, func.mGlobalVarCount * sizeof(Var *));
-				func.mGlobalVar = global_vars;
-			}
-			else
-				func.mGlobalVar = NULL; // For maintainability.
-			line.mAttribute = ATTR_TRUE;  // Flag this ACT_BLOCK_END as the ending brace of a function's body.
-			g->CurrentFunc = NULL;
-		}
-	}
+	// See further below for ACT_BLOCK_END.
 
 	// Above must be done prior to the below, since it sometimes sets mAttribute for use below.
 
@@ -5944,6 +5924,35 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			//if (line.mActionType == ACT_BLOCK_END)
 			//	return ScriptError(_T("A label must not point to the end of a block. For loops, use Continue vs. Goto."));
 			label->mJumpToLine = the_new_line;
+		}
+	}
+
+	// Above must be done prior to the below, because otherwise a function-local label's mJumpToLine
+	// would not be set in a case like the following:
+	// Func(){
+	//    ...
+	//    local_label:
+	// }
+
+	if (aActionType == ACT_BLOCK_END)
+	{
+		--mCurrentFuncOpenBlockCount; // It's okay to increment unconditionally because it is reset to zero every time a new function definition is entered.
+		if (g->CurrentFunc && !mCurrentFuncOpenBlockCount) // Any negative mCurrentFuncOpenBlockCount is caught by a different stage.
+		{
+			Func &func = *g->CurrentFunc;
+			if (func.mGlobalVarCount)
+			{
+				// Now that there can be no more "global" declarations, copy the list into persistent memory.
+				Var **global_vars;
+				if (  !(global_vars = (Var **)SimpleHeap::Malloc(func.mGlobalVarCount * sizeof(Var *)))  )
+					return ScriptError(ERR_OUTOFMEM);
+				memcpy(global_vars, func.mGlobalVar, func.mGlobalVarCount * sizeof(Var *));
+				func.mGlobalVar = global_vars;
+			}
+			else
+				func.mGlobalVar = NULL; // For maintainability.
+			line.mAttribute = ATTR_TRUE;  // Flag this ACT_BLOCK_END as the ending brace of a function's body.
+			g->CurrentFunc = NULL;
 		}
 	}
 
