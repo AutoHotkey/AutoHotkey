@@ -909,11 +909,6 @@ public:
 
 	HWND DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 
-#ifndef AUTOHOTKEYSC
-	static int ConvertEscapeChar(LPTSTR aFilespec);
-	static size_t ConvertEscapeCharGetLine(LPTSTR aBuf, int aMaxCharsToRead, FILE *fp);
-#endif  // The functions above are not needed by the self-contained version.
-
 	
 	// This is in the .h file so that it's more likely the compiler's cost/benefit estimate will
 	// make it inline (since it is called from only one place).  Inline would be good since it
