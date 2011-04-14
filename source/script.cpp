@@ -241,7 +241,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		// Since no script-file was specified on the command line, use the default name.
 		// For portability, first check if there's an <EXENAME>.ahk file in the current directory.
 		LPTSTR suffix, dot;
-		GetModuleFileName(NULL, exe_buf, _countof(buf));
+		GetModuleFileName(NULL, exe_buf, _countof(exe_buf));
 		if (  (suffix = _tcsrchr(exe_buf, '\\')) // Find name part of path.
 			&& (dot = _tcsrchr(suffix, '.')) // Find extension part of name.
 			&& dot - exe_buf + 5 < _countof(exe_buf)  ) // Enough space in buffer?
@@ -251,7 +251,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		else // Very unlikely.
 			return FAIL;
 
-		aScriptFilename = suffix + 1;
+		aScriptFilename = exe_buf; // Use the entire path, including the exe's directory.
 		if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF) // File doesn't exist, so fall back to new method.
 		{
 			aScriptFilename = def_buf;
@@ -10313,12 +10313,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				file_loop_mode = (line->mArgc <= 1) ? FILE_LOOP_FILES_ONLY : ConvertLoopMode(ARG2);
 				if (file_loop_mode == FILE_LOOP_INVALID)
 					return line->LineError(ERR_PARAM2_INVALID ERR_ABORT, FAIL, ARG2);
-				if (cisalpha(*ARG1) && ARG1[1] == ':' && !ARG1[2])
-					// FilePattern is something like "C:".  MSDN indicates FindFirstFile does not support
-					// targetting the root directory itself (but "C:\*" is okay).  Testing has shown that
-					// FindFirstFile does not always fail with "C:" -- sometimes it gives inexplicable
-					// results, such as a folder which exists neither in C: nor in the working dir.
-					return line->LineError(ERR_PARAM1_INVALID ERR_ABORT, FAIL, ARG1);
 				recurse_subfolders = (*ARG3 == '1' && !*(ARG3 + 1));
 			}
 			else if (line->mActionType == ACT_LOOP_REG)
@@ -10360,7 +10354,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			// can be intrinsically recursive (this is also related to the loop-recursion bugfix documented
 			// for v1.0.20: fixes A_Index so that it doesn't wrongly reset to 0 inside recursive file-loops
 			// and registry loops).
-			g.mLoopIteration = 1;
+			if (line->mActionType != ACT_FOR) // PerformLoopFor() sets it later so its enumerator expression (which is evaluated only once) can refer to the A_Index of the outer loop.
+				g.mLoopIteration = 1;
 
 			// PERFORM THE LOOP:
 			switch (line->mActionType)
@@ -11086,6 +11081,9 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 	IObject &enumerator = *enum_token.object; // Might perform better as a reference?
 
 	ExprTokenType result_token;
+
+	// Now that the enumerator expression has been evaluated, init A_Index:
+	g.mLoopIteration = 1;
 
 	for (;; ++g.mLoopIteration)
 	{
