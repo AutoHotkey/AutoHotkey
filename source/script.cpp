@@ -11313,12 +11313,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				file_loop_mode = (line->mArgc <= 1) ? FILE_LOOP_FILES_ONLY : ConvertLoopMode(ARG2);
 				if (file_loop_mode == FILE_LOOP_INVALID)
 					return line->LineError(ERR_PARAM2_INVALID ERR_ABORT, FAIL, ARG2);
-				if (cisalpha(*ARG1) && ARG1[1] == ':' && !ARG1[2])
-					// FilePattern is something like "C:".  MSDN indicates FindFirstFile does not support
-					// targetting the root directory itself (but "C:\*" is okay).  Testing has shown that
-					// FindFirstFile does not always fail with "C:" -- sometimes it gives inexplicable
-					// results, such as a folder which exists neither in C: nor in the working dir.
-					return line->LineError(ERR_PARAM1_INVALID ERR_ABORT, FAIL, ARG1);
 				recurse_subfolders = (*ARG3 == '1' && !*(ARG3 + 1));
 			}
 			else if (attr == ATTR_LOOP_REG)
