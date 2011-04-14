@@ -245,7 +245,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		// Since no script-file was specified on the command line, use the default name.
 		// For portability, first check if there's an <EXENAME>.ahk file in the current directory.
 		LPTSTR suffix, dot;
-		GetModuleFileName(NULL, exe_buf, _countof(buf));
+		GetModuleFileName(NULL, exe_buf, _countof(exe_buf));
 		if (  (suffix = _tcsrchr(exe_buf, '\\')) // Find name part of path.
 			&& (dot = _tcsrchr(suffix, '.')) // Find extension part of name.
 			&& dot - exe_buf + 5 < _countof(exe_buf)  ) // Enough space in buffer?
@@ -255,7 +255,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		else // Very unlikely.
 			return FAIL;
 
-		aScriptFilename = suffix + 1;
+		aScriptFilename = exe_buf; // Use the entire path, including the exe's directory.
 		if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF) // File doesn't exist, so fall back to new method.
 		{
 			aScriptFilename = def_buf;
