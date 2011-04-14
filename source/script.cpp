@@ -10656,7 +10656,7 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 		// Also, RAW is safe because loadtime validation ensured there is at least 1 arg.
 		if_condition = (ARGVARRAW1 && !*ARG1 && ARGVARRAW1->Type() == VAR_NORMAL)
 			? VarToBOOL(*ARGVARRAW1) // 30% faster than having ExpandArgs() resolve ARG1 even when it's a naked variable.
-			: LegacyResultToBOOL(ARG1); // CAN'T simply check *ARG1=='1' because the loadtime routine has various ways of setting if_expresion to false for things that are normally expressions.
+			: ResultToBOOL(ARG1); // CAN'T simply check *ARG1=='1' because the loadtime routine has various ways of setting if_expresion to false for things that are normally expressions.
 		break;
 
 	case ACT_IFIN:
@@ -10964,7 +10964,7 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 		// "while x" and "while %x%" into non-expressions (the latter actually performs much
 		// better as an expression).  That is why the following check is much simpler than the
 		// one used at at ACT_IFEXPR in EvaluateCondition():
-		if (!LegacyResultToBOOL(ARG1))
+		if (!ResultToBOOL(ARG1))
 			break;
 
 		// CONCERNING ALL THE REST OF THIS FUNCTION: See comments in PerformLoop() for details.
@@ -10998,7 +10998,7 @@ inline bool Line::EvaluateLoopUntil(ResultType &aResult)
 		g_Debugger.PreExecLine(this);
 #endif
 	return (aResult = ExpandArgs()) != OK // i.e. if it fails, shortcircuit and break the loop.
-			|| LegacyResultToBOOL(ARG1); // See PerformLoopWhile() above for comments about this line.
+			|| ResultToBOOL(ARG1); // See PerformLoopWhile() above for comments about this line.
 }
 
 

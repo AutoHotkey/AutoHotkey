@@ -1371,8 +1371,7 @@ non_null_circuit_token:
 	{
 		// This is an optimization that improves the speed of ACT_IFEXPR by up to 50% (ACT_WHILE is
 		// probably improved by only up-to-15%). Simple expressions like "if (x < y)" see the biggest
-		// speedup.  Additionally, this allows the legacy behaviour of LegacyResultToBOOL() to be
-		// avoided whenever the IF/WHILE/UNTIL's condition is an expression.
+		// speedup.
 		result_to_return = TokenToBOOL(result_token) ? _T("1") : _T(""); // Return "" vs. "0" for FALSE for consistency with "goto abnormal_end" (which bypasses this section).
 		goto normal_end_skip_output_var; // ACT_IFEXPR never has an output_var.
 	}

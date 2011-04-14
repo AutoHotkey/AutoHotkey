@@ -2825,7 +2825,7 @@ void BIF_ComObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 void BIF_ComObjQuery(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 
-BOOL LegacyResultToBOOL(LPTSTR aResult);
+BOOL ResultToBOOL(LPTSTR aResult);
 BOOL VarToBOOL(Var &aVar);
 BOOL TokenToBOOL(ExprTokenType &aToken);
 SymbolType TokenIsNumeric(ExprTokenType &aToken);

@@ -16716,11 +16716,7 @@ void BIF_Type(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
 
-BOOL LegacyResultToBOOL(LPTSTR aResult)
-// This is called "Legacy" because the following method of casting expression results to BOOL is inconsistent
-// with the method used interally by expressions for intermediate results.  However, this inconsistency is
-// rarely (if ever) evident because typically the only strings we get are either boolean "1" or "" from
-// ExpandExpression() or a numeric literal from something like "if 0" or "until 1".
+BOOL ResultToBOOL(LPTSTR aResult)
 {
 	UINT c1 = (UINT)*aResult; // UINT vs. UCHAR might squeenze a little more performance out of it.
 	if (c1 > 48)     // Any UCHAR greater than '0' can't be a space(32), tab(9), '+'(43), or '-'(45), or '.'(46)...
@@ -16744,7 +16740,6 @@ BOOL LegacyResultToBOOL(LPTSTR aResult)
 
 
 BOOL VarToBOOL(Var &aVar)
-// For comments see LegacyResultToBOOL().
 {
 	if (!aVar.HasContents()) // Must be checked first because otherwise IsNumeric() would consider "" to be non-numeric and thus TRUE.  For performance, it also exploits the binary number cache.
 	{
@@ -16777,9 +16772,7 @@ BOOL TokenToBOOL(ExprTokenType &aToken)
 	case SYM_FLOAT:
 		return aToken.value_double != 0.0;
 	case SYM_STRING:
-		// All non-blank SYM_STRINGs are considered TRUE.  This includes literal strings
-		// like "0", and subexpressions that evaluate to pure SYM_STRING that isn't blank.
-		return *aToken.marker != '\0'; // Force it to be purely 1 or 0.
+		return ResultToBOOL(aToken.marker);
 	default:
 		// The only remaining valid symbol is SYM_OBJECT, which is always TRUE.
 		return TRUE;
