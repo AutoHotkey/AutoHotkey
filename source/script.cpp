@@ -11358,7 +11358,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			// can be intrinsically recursive (this is also related to the loop-recursion bugfix documented
 			// for v1.0.20: fixes A_Index so that it doesn't wrongly reset to 0 inside recursive file-loops
 			// and registry loops).
-			g.mLoopIteration = 1;
+			if (attr != ATTR_LOOP_FOR) // PerformLoopFor() sets it later so its enumerator expression (which is evaluated only once) can refer to the A_Index of the outer loop.
+				g.mLoopIteration = 1;
 
 			// PERFORM THE LOOP:
 			switch ((size_t)attr)
@@ -12275,6 +12276,9 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 	IObject &enumerator = *enum_token.object; // Might perform better as a reference?
 
 	ExprTokenType result_token;
+
+	// Now that the enumerator expression has been evaluated, init A_Index:
+	g.mLoopIteration = 1;
 
 	for (;; ++g.mLoopIteration)
 	{
