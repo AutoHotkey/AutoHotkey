@@ -5403,10 +5403,11 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		}
 		break;
 
+	case WM_CLIPBOARDUPDATE: // For Vista and later.
 	case WM_DRAWCLIPBOARD:
 		if (g_script.mOnClipboardChangeLabel) // In case it's a bogus msg, it's our responsibility to avoid posting the msg if there's no label to launch.
 			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, 0, 0); // It's done this way to buffer it when the script is uninterruptible, etc.  v1.0.44: Post to g_hWnd vs. NULL so that notifications aren't lost when script is displaying a MsgBox or other dialog.
-		if (g_script.mNextClipboardViewer) // Will be NULL if there are no other windows in the chain.
+		if (g_script.mNextClipboardViewer) // Will be NULL if there are no other windows in the chain, or if we're on Vista or later and used AddClipboardFormatListener instead of SetClipboardViewer (in which case iMsg should be WM_CLIPBOARDUPDATE).
 			SendMessageTimeout(g_script.mNextClipboardViewer, iMsg, wParam, lParam, SMTO_ABORTIFHUNG, 2000, &dwTemp);
 		return 0;
 

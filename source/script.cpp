@@ -30,6 +30,13 @@ static size_t g_CommentFlagLength = 1; // pre-calculated for performance
 static ExprOpFunc g_ObjGet(BIF_ObjInvoke, IT_GET), g_ObjSet(BIF_ObjInvoke, IT_SET), g_ObjCall(BIF_ObjInvoke, IT_CALL);
 static ExprOpFunc g_ObjGetInPlace(BIF_ObjGetInPlace, IT_GET);
 
+// See Script::CreateWindows() for details about the following:
+typedef BOOL (WINAPI* AddRemoveClipboardListenerType)(HWND);
+static AddRemoveClipboardListenerType MyRemoveClipboardListener = (AddRemoveClipboardListenerType)
+	GetProcAddress(GetModuleHandle(_T("user32")), "RemoveClipboardFormatListener");
+static AddRemoveClipboardListenerType MyAddClipboardListener = (AddRemoveClipboardListenerType)
+	GetProcAddress(GetModuleHandle(_T("user32")), "AddClipboardFormatListener");
+
 // General note about the methods in here:
 // Want to be able to support multiple simultaneous points of execution
 // because more than one subroutine can be executing simultaneously
@@ -200,7 +207,10 @@ Script::~Script() // Destructor.
 		DeleteObject(g_hFontSplash);
 
 	if (mOnClipboardChangeLabel) // Remove from viewer chain.
-		ChangeClipboardChain(g_hWnd, mNextClipboardViewer);
+		if (MyRemoveClipboardListener && MyAddClipboardListener)
+			MyRemoveClipboardListener(g_hWnd); // MyAddClipboardListener was used.
+		else
+			ChangeClipboardChain(g_hWnd, mNextClipboardViewer); // SetClipboardViewer was used.
 
 	// Close any open sound item to prevent hang-on-exit in certain operating systems or conditions.
 	// If there's any chance that a sound was played and not closed out, or that it is still playing,
@@ -534,7 +544,20 @@ ResultType Script::CreateWindows()
 		CreateTrayIcon();
 
 	if (mOnClipboardChangeLabel)
-		mNextClipboardViewer = SetClipboardViewer(g_hWnd);
+	{
+		if (MyAddClipboardListener && MyRemoveClipboardListener) // Should be impossible for only one of these to be NULL, but check both anyway to be safe.
+		{
+			// The old clipboard viewer chain method is prone to break when some other application uses
+			// it incorrectly.  This newer method should be more reliable, but requires Vista or later:
+			MyAddClipboardListener(g_hWnd);
+			// But this method doesn't appear to send an initial WM_CLIPBOARDUPDATE message.
+			// For consistency with the other method (below) and for backward compatiblity,
+			// run the OnClipboardChange label once when the script first starts:
+			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, 0, 0);
+		}
+		else
+			mNextClipboardViewer = SetClipboardViewer(g_hWnd);
+	}
 
 	return OK;
 }
