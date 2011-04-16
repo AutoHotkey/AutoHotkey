@@ -3935,7 +3935,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			}
 			else if (*action_args == '=')
 				// v2: Give a more specific error message since the user probably meant to do an old-style assignment.
-				return ScriptError(_T("Syntax error. Did you mean `= string or := expression?"), aLineText);
+				return ScriptError(_T("Syntax error. Did you mean to use \":=\"?"), aLineText);
 			else
 				// v1.0.40: Give a more specific error message now now that hotkeys can make it here due to
 				// the change that avoids the need to escape double-colons:
