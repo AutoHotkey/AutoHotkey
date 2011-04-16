@@ -2743,12 +2743,7 @@ VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_WinDir(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_Temp(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_ComSpec(LPTSTR aBuf, LPTSTR aVarName);
-VarSizeType BIV_ProgramFiles(LPTSTR aBuf, LPTSTR aVarName);
-VarSizeType BIV_AppData(LPTSTR aBuf, LPTSTR aVarName);
-VarSizeType BIV_Desktop(LPTSTR aBuf, LPTSTR aVarName);
-VarSizeType BIV_StartMenu(LPTSTR aBuf, LPTSTR aVarName);
-VarSizeType BIV_Programs(LPTSTR aBuf, LPTSTR aVarName);
-VarSizeType BIV_Startup(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_SpecialFolderPath(LPTSTR aBuf, LPTSTR aVarName); // Handles various variables.
 VarSizeType BIV_MyDocuments(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_Caret(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_Cursor(LPTSTR aBuf, LPTSTR aVarName);

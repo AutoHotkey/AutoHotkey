@@ -2749,12 +2749,12 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		StrReplace(parameter, _T("%A_ScriptDir%"), mFileDir, SCS_INSENSITIVE, 1, space_remaining); // v1.0.35.11.  Caller has ensured string is writable.
 		if (tcscasestr(parameter, _T("%A_AppData%"))) // v1.0.45.04: This and the next were requested by Tekl to make it easier to customize scripts on a per-user basis.
 		{
-			BIV_AppData(buf, _T("A_AppData"));
+			BIV_SpecialFolderPath(buf, _T("A_AppData"));
 			StrReplace(parameter, _T("%A_AppData%"), buf, SCS_INSENSITIVE, 1, space_remaining);
 		}
 		if (tcscasestr(parameter, _T("%A_AppDataCommon%"))) // v1.0.45.04.
 		{
-			BIV_AppData(buf, _T("A_AppDataCommon"));
+			BIV_SpecialFolderPath(buf, _T("A_AppDataCommon"));
 			StrReplace(parameter, _T("%A_AppDataCommon%"), buf, SCS_INSENSITIVE, 1, space_remaining);
 		}
 
@@ -8587,7 +8587,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 		if (!_tcscmp(lowercase, _T("clipboard"))) return (void *)VAR_CLIPBOARD;
 		if (!_tcscmp(lowercase, _T("clipboardall"))) return (void *)VAR_CLIPBOARDALL;
 		if (!_tcscmp(lowercase, _T("comspec"))) return BIV_ComSpec; // Lacks an "A_" prefix for backward compatibility with pre-NoEnv scripts and also it's easier to type & remember.
-		if (!_tcscmp(lowercase, _T("programfiles"))) return BIV_ProgramFiles; // v1.0.43.08: Added to ease the transition to #NoEnv.
+		if (!_tcscmp(lowercase, _T("programfiles"))) return BIV_SpecialFolderPath; // v1.0.43.08: Added to ease the transition to #NoEnv.
 		// Otherwise:
 		return (void *)VAR_NORMAL;
 	}
@@ -8677,19 +8677,20 @@ void *Script::GetVarType(LPTSTR aVarName)
 
 	if (!_tcscmp(lower, _T("windir"))) return BIV_WinDir;
 	if (!_tcscmp(lower, _T("temp"))) return BIV_Temp; // Debatably should be A_TempDir, but brevity seemed more popular with users, perhaps for heavy uses of the temp folder.
-	if (!_tcscmp(lower, _T("programfiles"))) return BIV_ProgramFiles;
 	if (!_tcscmp(lower, _T("mydocuments"))) return BIV_MyDocuments;
 
-	if (   !_tcscmp(lower, _T("appdata"))
-		|| !_tcscmp(lower, _T("appdatacommon"))) return BIV_AppData;
-	if (   !_tcscmp(lower, _T("desktop"))
-		|| !_tcscmp(lower, _T("desktopcommon"))) return BIV_Desktop;
-	if (   !_tcscmp(lower, _T("startmenu"))
-		|| !_tcscmp(lower, _T("startmenucommon"))) return BIV_StartMenu;
-	if (   !_tcscmp(lower, _T("programs"))
-		|| !_tcscmp(lower, _T("programscommon"))) return BIV_Programs;
-	if (   !_tcscmp(lower, _T("startup"))
-		|| !_tcscmp(lower, _T("startupcommon"))) return BIV_Startup;
+	if (   !_tcscmp(lower, _T("programfiles"))
+		|| !_tcscmp(lower, _T("appdata"))
+		|| !_tcscmp(lower, _T("appdatacommon"))
+		|| !_tcscmp(lower, _T("desktop"))
+		|| !_tcscmp(lower, _T("desktopcommon"))
+		|| !_tcscmp(lower, _T("startmenu"))
+		|| !_tcscmp(lower, _T("startmenucommon"))
+		|| !_tcscmp(lower, _T("programs"))
+		|| !_tcscmp(lower, _T("programscommon"))
+		|| !_tcscmp(lower, _T("startup"))
+		|| !_tcscmp(lower, _T("startupcommon")))
+		return BIV_SpecialFolderPath;
 
 	if (!_tcscmp(lower, _T("isadmin"))) return BIV_IsAdmin;
 	if (!_tcscmp(lower, _T("cursor"))) return BIV_Cursor;
