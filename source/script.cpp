@@ -3299,10 +3299,11 @@ ResultType Script::UpdateOrCreateTimer(Label *aLabel, LPTSTR aPeriod, LPTSTR aPr
 	else if (!aEnable && timer->mEnabled) // Must check both or the below count will be wrong.
 		timer->Disable();
 
+	aPeriod = omit_leading_whitespace(aPeriod); // This causes A_Space to be treated as "omitted" rather than zero, so may change the behaviour of some poorly-written scripts, but simplifies the check below which allows -0 to work.
 	if (*aPeriod) // Caller wanted us to update this member.
 	{
 		__int64 period = ATOI64(aPeriod);
-		if (period < 0) // v1.0.46.16: Support negative periods to mean "run only once".
+		if (*aPeriod == '-') // v1.0.46.16: Support negative periods to mean "run only once".
 		{
 			timer->mRunOnlyOnce = true;
 			timer->mPeriod = (DWORD)-period;
