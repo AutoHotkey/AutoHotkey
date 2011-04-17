@@ -235,6 +235,14 @@ bool Object::Delete()
 {
 	if (mBase)
 	{
+		KeyType key;
+		IndexType insert_pos;
+		key.s = _T("__Class");
+		if (FindField(SYM_STRING, key, insert_pos))
+			// This object appears to be a class definition, so it would probably be
+			// undesirable to call the super-class' __Delete() meta-function for this.
+			return ObjectBase::Delete();
+
 		ExprTokenType result_token, this_token, param_token, *param;
 		
 		result_token.marker = _T("");
