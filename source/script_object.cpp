@@ -1393,11 +1393,83 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ExprTokenType &aResultToken, ExprToken
 	if (!aParamCount)
 		return INVOKE_NOT_HANDLED;
 
+	LPTSTR member = TokenToString(*aParam[0]);
+
 	if (!IS_INVOKE_CALL)
+	{
+		if (!_tcsicmp(member, _T("Name")))
+		{
+			aResultToken.symbol = SYM_STRING;
+			aResultToken.marker = mName;
+			return OK;
+		}
+		else if (!_tcsicmp(member, _T("MinParams")))
+		{
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = mMinParams;
+		}
+		else if (!_tcsicmp(member, _T("MaxParams")))
+		{
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = mParamCount;
+		}
+		else if (!_tcsicmp(member, _T("IsBuiltIn")))
+		{
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = mIsBuiltIn;
+		}
+		else if (!_tcsicmp(member, _T("IsVariadic")))
+		{
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = mIsVariadic;
+		}
 		return INVOKE_NOT_HANDLED;
+	}
 	
 	if (  !(aFlags & IF_FUNCOBJ)  )
 	{
+		if (!_tcsicmp(member, _T("IsOptional")) && aParamCount <= 2)
+		{
+			if (aParamCount == 2)
+			{
+				int param = (int)TokenToInt64(*aParam[1]); // One-based.
+				if (param > 0 && (param <= mParamCount || mIsVariadic))
+				{
+					aResultToken.symbol = SYM_INTEGER;
+					aResultToken.value_int64 = param > mMinParams;
+				}
+			}
+			else
+			{
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = mMinParams != mParamCount || mIsVariadic; // True if any params are optional.
+			}
+			return OK;
+		}
+		else if (!_tcsicmp(member, _T("IsByRef")) && aParamCount <= 2)
+		{
+			if (aParamCount == 2)
+			{
+				int param = (int)TokenToInt64(*aParam[1]); // One-based.
+				if (param > 0 && (param <= mParamCount || mIsVariadic))
+				{
+					aResultToken.symbol = SYM_INTEGER;
+					aResultToken.value_int64 = param <= mParamCount && mParam[param-1].is_byref;
+				}
+			}
+			else
+			{
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = FALSE;
+				for (int param = 0; param < mParamCount; ++param)
+					if (mParam[param].is_byref)
+					{
+						aResultToken.value_int64 = TRUE;
+						break;
+					}
+			}
+			return OK;
+		}
 		if (!TokenIsEmptyString(*aParam[0]))
 			return INVOKE_NOT_HANDLED; // Reserved.
 		// Called explicitly by script, such as by "obj.funcref.()" or "x := obj.funcref, x.()"
