@@ -9641,13 +9641,8 @@ bool Line::FileIsFilteredOut(WIN32_FIND_DATA &aCurrentFile, FileLoopModeType aFi
 
 Label *Line::GetJumpTarget(bool aIsDereferenced)
 {
-	return GetJumpTarget(aIsDereferenced, g->CurrentFunc);
-}
-
-Label *Line::GetJumpTarget(bool aIsDereferenced, Func *aFunc)
-{
 	LPTSTR target_label = aIsDereferenced ? ARG1 : RAW_ARG1;
-	Label *label = g_script.FindLabel(target_label, aFunc);
+	Label *label = g_script.FindLabel(target_label);
 	if (!label)
 	{
 		if (aIsDereferenced)
