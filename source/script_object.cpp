@@ -1494,7 +1494,10 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, Exp
 	// Allow script-defined meta-functions to override the default behaviour:
 	ResultType result = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
 	
-	if (result == INVOKE_NOT_HANDLED && IS_INVOKE_CALL && aParamCount && TokenIsEmptyString(*aParam[0]))
+	if (result != INVOKE_NOT_HANDLED || !aParamCount)
+		return result;
+
+	if (IS_INVOKE_CALL && TokenIsEmptyString(*aParam[0]))
 	{
 		// Support func_var.(params) as a means to call either a function or an object-function.
 		// This can be done fairly easily in script, but not in a way that supports ByRef;
@@ -1503,6 +1506,29 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, Exp
 		Func *func = g_script.FindFunc(func_name, EXPR_TOKEN_LENGTH((&aThisToken), func_name));
 		if (func)
 			return CallFunc(*func, aResultToken, aParam + 1, aParamCount - 1);
+	}
+
+	if (aThisToken.symbol == SYM_VAR && !_tcsicmp(aThisToken.var->mName, _T("base")) // Something like base.Method().
+		&& !aThisToken.var->HasContents() // Let scripts overwrite "base" var if they don't need this functionality.
+		&& g->CurrentFunc)
+	{
+		LPCTSTR full_name = g->CurrentFunc->mName;
+		LPCTSTR end_marker = _tcsrchr(full_name, '.');
+		Object *this_class;
+		Var *this_var;
+		if (   end_marker // Appears to be a class definition.
+			&& (this_class = g_script.FindClass(full_name, end_marker - full_name)) // Can fail if the class var was reassigned at run-time.
+			&& (this_var = g->CurrentFunc->mParam[0].var)->IsObject()   ) // Valid 'this' param.
+		{
+			ExprTokenType this_token;
+			this_token.symbol = SYM_VAR;
+			this_token.var = this_var;
+			if (IObject *this_class_base = this_class->Base())
+			{
+				return this_class_base->Invoke(aResultToken, this_token, aFlags | IF_META, aParam, aParamCount);
+			}
+			return OK;
+		}
 	}
 
 	return result;
