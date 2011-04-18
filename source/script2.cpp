@@ -15002,6 +15002,21 @@ void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 
 
+void BIF_Func(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+// Returns a reference to an existing user-defined or built-in function, as an object.
+{
+	Func *func = g_script.FindFunc(TokenToString(*aParam[0], aResultToken.buf));
+	if (func)
+	{
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = func;
+	}
+	else
+		aResultToken.value_int64 = 0;
+}
+
+
+
 void BIF_GetKeyState(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	TCHAR key_name_buf[MAX_NUMBER_SIZE]; // Because aResultToken.buf is used for something else below.

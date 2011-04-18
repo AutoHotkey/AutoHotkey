@@ -7581,6 +7581,8 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	}
 	else if (!_tcsicmp(func_name, _T("IsLabel")))
 		bif = BIF_IsLabel;
+	else if (!_tcsicmp(func_name, _T("Func")))
+		bif = BIF_Func;
 	else if (!_tcsicmp(func_name, _T("IsFunc")))
 		bif = BIF_IsFunc;
 #ifdef ENABLE_DLLCALL
