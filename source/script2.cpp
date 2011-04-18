@@ -14996,7 +14996,9 @@ void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 // dynamic function-call fails when too few parameters are passed (but not too many), it seems best to
 // indicate to the caller not only that the function exists, but also how many parameters are required.
 {
-	Func *func = g_script.FindFunc(TokenToString(*aParam[0], aResultToken.buf));
+	Func *func;
+	if (  !(func = dynamic_cast<Func *>(TokenToObject(*aParam[0])))  )
+		func = g_script.FindFunc(TokenToString(*aParam[0], aResultToken.buf));
 	aResultToken.value_int64 = func ? (__int64)func->mMinParams+1 : 0;
 }
 
