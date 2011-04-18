@@ -9663,7 +9663,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					// for prior to checking the below.  For example, if what immediately follows the open-paren is
 					// the string "int)", this symbol is not open-paren at all but instead the unary type-cast-to-int
 					// operator.
-					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)) // If it's an operand, at this stage it can only be SYM_OPERAND or SYM_STRING.
+					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)
+						&& _tcschr(_T(" t)\""), cp[-1])) // For backward-compatibility, )( and "foo"(bar) are allowed.  Otherwise, a space/tab is required, as documented and so things like x[y]() don't need to deal with an extraneous SYM_CONCAT.
 					{
 						if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
 							return LineError(ERR_EXPR_TOO_LONG);
@@ -10422,13 +10423,13 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				if (this_infix->buf[1] == '(') // i.e. "]("
 				{
 					// Appears to be a method call with a computed method name, such as x[y](prms).
-					ASSERT(this_infix[1].symbol == SYM_CONCAT && this_infix[2].symbol == SYM_OPAREN);
+					ASSERT(this_infix[1].symbol == SYM_OPAREN);
 					if (infix_symbol == SYM_CBRACE // i.e. {...}(), seems best to reserve this for now.
 						|| in_param_list->func != &g_ObjGet // i.e. it's something like x := [y,z]().
 						|| in_param_list->param_count != 2) // i.e. the target object plus the method name = 2.
 						return LineError(_T("Unsupported method call syntax."), FAIL, in_param_list->marker); // Error message is a bit vague since this can be x[y,z]() or x.y[z]().
 					stack_top.deref->func = &g_ObjCall; // Override the default now that we know this is a method-call.
-					this_infix += 2; // Skip SYM_CBRACKET and SYM_CONCAT so this_infix points to SYM_OPAREN.
+					++this_infix; // Skip SYM_CBRACKET so this_infix points to SYM_OPAREN.
 					this_infix->buf = stack_top.buf; // This contains the old value of in_param_list.
 					// Push the open-paren over stack_top (which is now SYM_FUNC) so it will be handled
 					// like an ordinary function call when a comma or the close-paren is encountered.
