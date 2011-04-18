@@ -17,6 +17,12 @@ class DECLSPEC_NOVTABLE ObjectBase : public IObject
 {
 protected:
 	ULONG mRefCount;
+	
+	virtual bool Delete()
+	{
+		delete this; // Derived classes MUST be instantiated with 'new' or override this function.
+		return true; // See Release() for comments.
+	}
 
 public:
 	ULONG STDMETHODCALLTYPE AddRef()
@@ -43,12 +49,6 @@ public:
 	}
 
 	ObjectBase() : mRefCount(1) {}
-
-	virtual bool Delete()
-	{
-		delete this; // Derived classes MUST be instantiated with 'new' or override this function.
-		return true; // See Release() for comments.
-	}
 
 	// Declare a virtual destructor for correct 'delete this' behaviour in Delete(),
 	// and because it is likely to be more convenient and reliable than overriding
@@ -174,6 +174,7 @@ public:
 	// Used by Func::Call() for variadic functions/function-calls:
 	Object *Clone(INT_PTR aStartOffset = 0);
 	ResultType ArrayToParams(void *&aMemToFree, ExprTokenType **&aParam, int &aParamCount, int aMinParams);
+	
 	inline bool GetNextItem(ExprTokenType &aToken, INT_PTR &aOffset, INT_PTR &aKey)
 	{
 		if (++aOffset >= mKeyOffsetObject) // i.e. no more integer-keyed items.
@@ -183,7 +184,8 @@ public:
 		field.ToToken(aToken);
 		return true;
 	}
-	inline bool GetItem(ExprTokenType &aToken, LPTSTR aKey)
+	
+	bool GetItem(ExprTokenType &aToken, LPTSTR aKey)
 	{
 		IndexType insert_pos;
 		KeyType key;
@@ -194,11 +196,46 @@ public:
 		field->ToToken(aToken);
 		return true;
 	}
+	
+	bool SetItem(LPTSTR aKey, ExprTokenType &aValue)
+	{
+		IndexType insert_pos;
+		KeyType key;
+		key.s = aKey;
+		FieldType *field = FindField(SYM_STRING, key, insert_pos);
+		if (  !field && !(field = Insert(SYM_STRING, key, insert_pos))  ) // Relies on short-circuit boolean evaluation.
+			return false;
+		return field->Assign(aValue);
+	}
+
+	bool SetItem(LPTSTR aKey, IObject *aValue)
+	{
+		ExprTokenType token;
+		token.symbol = SYM_OBJECT;
+		token.object = aValue;
+		return SetItem(aKey, token);
+	}
+	
 	void ReduceKeys(INT_PTR aAmount)
 	{
 		for (IndexType i = 0; i < mKeyOffsetObject; ++i)
 			mFields[i].key.i -= aAmount;
 	}
+
+	void SetBase(IObject *aNewBase)
+	{ 
+		if (aNewBase)
+			aNewBase->AddRef();
+		if (mBase)
+			mBase->Release();
+		mBase = aNewBase;
+	}
+
+	IObject *Base() 
+	{
+		return mBase; // Callers only want to call Invoke(), so no AddRef is done.
+	}
+	
 	// Used by Object::_Insert() and Func::Call():
 	bool InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], int aValueCount);
 	

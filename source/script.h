@@ -2516,6 +2516,12 @@ private:
 	Var **mFuncExceptionVar;   // A list of variables declared explicitly local or global.
 	int mFuncExceptionVarCount; // The number of items in the array.
 
+#define MAX_NESTED_CLASSES 5
+#define MAX_CLASS_NAME_LENGTH UCHAR_MAX
+	int mClassObjectCount;
+	Object *mClassObject[MAX_NESTED_CLASSES]; // Class definition currently being parsed.
+	TCHAR mClassName[MAX_CLASS_NAME_LENGTH + 1]; // Only used during load-time.
+
 	// These two track the file number and line number in that file of the line currently being loaded,
 	// which simplifies calls to ScriptError() and LineError() (reduces the number of params that must be passed).
 	// These are used ONLY while loading the script into memory.  After that (while the script is running),
@@ -2625,8 +2631,11 @@ public:
 #ifndef AUTOHOTKEYSC
 	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound);
 #endif
-	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0, int *apInsertPos = NULL); // L27: Added apInsertPos for binary-search.
-	Func *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos); // L27: Added aInsertPos for binary-search.
+	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0, int *apInsertPos = NULL);
+	Func *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos, Object *aClassObject = NULL);
+
+	ResultType DefineClass(LPTSTR aBuf);
+	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
 
 	#define ALWAYS_USE_DEFAULT  0
 	#define ALWAYS_USE_GLOBAL   1
@@ -2867,8 +2876,9 @@ void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 void BIF_IsObject(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjGetInPlace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // See script_object.cpp for comments.
+void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // Pseudo-operator. See script_object.cpp for comments.
+void BIF_ObjGetInPlace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // Pseudo-operator.
+void BIF_ObjNew(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // Pseudo-operator.
 void BIF_ObjAddRefRelease(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 // Built-ins also available as methods -- these are available as functions for use primarily by overridden methods (i.e. where using the built-in methods isn't possible as they're no longer accessible).
 void BIF_ObjInsert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);

@@ -58,7 +58,7 @@ Script::Script()
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 	, mCurrentFuncOpenBlockCount(0), mNextLineIsFunctionBody(false)
-	, mFuncExceptionVar(NULL), mFuncExceptionVarCount(0)
+	, mFuncExceptionVar(NULL), mFuncExceptionVarCount(0), mClassObjectCount(0)
 	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true), mMenuUseErrorLevel(false)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
@@ -1258,6 +1258,27 @@ bool IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace = NULL)
 
 
 
+inline LPTSTR IsClassDefinition(LPTSTR aBuf, bool &aHasOTB)
+{
+	if (_tcsnicmp(aBuf, _T("Class"), 5) || !IS_SPACE_OR_TAB(aBuf[5])) // i.e. it's not "Class" followed by a space or tab.
+		return NULL;
+	LPTSTR class_name = omit_leading_whitespace(aBuf + 6);
+	if (_tcschr(EXPR_ALL_SYMBOLS EXPR_ILLEGAL_CHARS, *class_name))
+		// It's probably something like "Class := GetClass()".
+		return NULL;
+	// Check for opening brace on same line:
+	LPTSTR aBuf_last_char = class_name + _tcslen(class_name) - 1;
+	if (aHasOTB = (*aBuf_last_char == '{')) // Caller has ensured that aBuf is rtrim'd.
+	{
+		*aBuf_last_char = '\0'; // For the caller, remove it from further consideration.
+		rtrim(aBuf, aBuf_last_char - aBuf); // Omit trailing whitespace too.
+	}
+	// Validation of the name is left up to the caller, for simplicity.
+	return class_name;
+}
+
+
+
 ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure)
 // Returns OK or FAIL.
 // Below: Use double-colon as delimiter to set these apart from normal labels.
@@ -1323,10 +1344,11 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 #endif
 
 	// <buf> should be no larger than LINE_SIZE because some later functions rely upon that:
-	TCHAR msg_text[MAX_PATH + 256], buf1[LINE_SIZE], buf2[LINE_SIZE], suffix[16], pending_function[LINE_SIZE] = _T("");
+	TCHAR msg_text[MAX_PATH + 256], buf1[LINE_SIZE], buf2[LINE_SIZE], suffix[16], pending_buf[LINE_SIZE] = _T("");
 	LPTSTR buf = buf1, next_buf = buf2; // Oscillate between bufs to improve performance (avoids memcpy from buf2 to buf1).
 	size_t buf_length, next_buf_length, suffix_length;
-	bool pending_function_has_brace;
+	bool pending_buf_has_brace;
+	bool pending_buf_is_class; // True for class definition, false for function definition/call.
 
 #ifndef AUTOHOTKEYSC
 	TextFile tfile, *fp = &tfile;
@@ -1411,7 +1433,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 	LPTSTR hotkey_flag, cp, cp1, action_end, hotstring_start, hotstring_options;
 	Hotkey *hk;
-	LineNumberType pending_function_line_number, saved_line_number;
+	LineNumberType pending_buf_line_number, saved_line_number;
 	HookActionType hook_action;
 	bool is_label, suffix_has_tilde, in_comment_section, hotstring_options_all_valid;
 
@@ -1897,7 +1919,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 		// If there's a previous line waiting to be processed, its fate can now be determined based on the
 		// nature of *this* line:
-		if (*pending_function)
+		if (*pending_buf)
 		{
 			// Somewhat messy to decrement then increment later, but it's probably easier than the
 			// alternatives due to the use of "continue" in some places above.  NOTE: phys_line_number
@@ -1908,61 +1930,120 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 			// might be some blank lines or commented-out lines between this function call/definition
 			// and the line that follows it, each of which will have previously incremented mCombinedLineNumber.
 			saved_line_number = mCombinedLineNumber;
-			mCombinedLineNumber = pending_function_line_number;  // Done so that any syntax errors that occur during the calls below will report the correct line number.
+			mCombinedLineNumber = pending_buf_line_number;  // Done so that any syntax errors that occur during the calls below will report the correct line number.
 			// Open brace means this is a function definition. NOTE: buf was already ltrimmed by GetLine().
 			// Could use *g_act[ACT_BLOCK_BEGIN].Name instead of '{', but it seems too elaborate to be worth it.
-			if (*buf == '{' || pending_function_has_brace) // v1.0.41: Support one-true-brace, e.g. fn(...) {
+			if (*buf == '{' || pending_buf_has_brace) // v1.0.41: Support one-true-brace, e.g. fn(...) {
 			{
-				// Note that two consecutive function definitions aren't possible:
-				// fn1()
-				// fn2()
-				// {
-				//  ...
-				// }
-				// In the above, the first would automatically be deemed a function call by means of
-				// the check higher above (by virtue of the fact that the line after it isn't an open-brace).
-				if (g->CurrentFunc)
+				if (pending_buf_is_class)
 				{
-					// Though it might be allowed in the future -- perhaps to have nested functions have
-					// access to their parent functions' local variables, or perhaps just to improve
-					// script readability and maintainability -- it's currently not allowed because of
-					// the practice of maintaining the func_exception_var list on our stack:
-					ScriptError(_T("Functions cannot contain functions."), pending_function);
-					return CloseAndReturnFail(fp);
-				}
-				if (!DefineFunc(pending_function, func_exception_var))
-					return CloseAndReturnFail(fp);
-				if (pending_function_has_brace) // v1.0.41: Support one-true-brace for function def, e.g. fn() {
-				{
-					if (!AddLine(ACT_BLOCK_BEGIN))
+					if (!DefineClass(pending_buf))
 						return CloseAndReturnFail(fp);
-					mCurrLine = NULL; // L30: Prevents showing misleading vicinity lines if the line after a OTB function def is a syntax error.
+				}
+				else
+				{
+					// Note that two consecutive function definitions aren't possible:
+					// fn1()
+					// fn2()
+					// {
+					//  ...
+					// }
+					// In the above, the first would automatically be deemed a function call by means of
+					// the check higher above (by virtue of the fact that the line after it isn't an open-brace).
+					if (g->CurrentFunc)
+					{
+						// Though it might be allowed in the future -- perhaps to have nested functions have
+						// access to their parent functions' local variables, or perhaps just to improve
+						// script readability and maintainability -- it's currently not allowed because of
+						// the practice of maintaining the func_exception_var list on our stack:
+						ScriptError(_T("Functions cannot contain functions."), pending_buf);
+						return CloseAndReturnFail(fp);
+					}
+					if (!DefineFunc(pending_buf, func_exception_var))
+						return CloseAndReturnFail(fp);
+					if (pending_buf_has_brace) // v1.0.41: Support one-true-brace for function def, e.g. fn() {
+					{
+						if (!AddLine(ACT_BLOCK_BEGIN))
+							return CloseAndReturnFail(fp);
+						mCurrLine = NULL; // L30: Prevents showing misleading vicinity lines if the line after a OTB function def is a syntax error.
+					}
 				}
 			}
 			else // It's a function call on a line by itself, such as fn(x). It can't be if(..) because another section checked that.
 			{
-				if (!ParseAndAddLine(pending_function, ACT_EXPRESSION))
+				if (pending_buf_is_class)
+				{
+					// This is something like "Class Foo" without any open-brace.
+					ScriptError(_T("Invalid class definition."), pending_buf);
+					return CloseAndReturnFail(fp);
+				}
+				if (!ParseAndAddLine(pending_buf, ACT_EXPRESSION))
 					return CloseAndReturnFail(fp);
 				mCurrLine = NULL; // Prevents showing misleading vicinity lines if the line after a function call is a syntax error.
 			}
 			mCombinedLineNumber = saved_line_number;
-			*pending_function = '\0'; // Reset now that it's been fully handled, as an indicator for subsequent iterations.
+			*pending_buf = '\0'; // Reset now that it's been fully handled, as an indicator for subsequent iterations.
+			if (pending_buf_is_class && !pending_buf_has_brace)
+			{
+				// This is the open-brace of a class definition, so requires no further processing.
+				if (  !*(cp = omit_leading_whitespace(buf + 1))  )
+					goto continue_main_loop;
+				// Otherwise, there's something following the "{", possibly "}" or a function definition.
+				tmemmove(buf, cp, (buf_length = _tcslen(cp)) + 1);
+			}
 			// Now fall through to the below so that *this* line (the one after it) will be processed.
 			// Note that this line might be a pre-processor directive, label, etc. that won't actually
 			// become a runtime line per se.
 		} // if (*pending_function)
 
+		if (*buf == '}' && mClassObjectCount && !g->CurrentFunc)
+		{
+			// Handling this before the two sections below allows a function or class definition
+			// to begin immediately after the close-brace of a previous class definition.
+			// This loop allows something like }}} to terminate multiple nested classes:
+			for (cp = buf; *cp == '}' && mClassObjectCount; cp = omit_leading_whitespace(cp + 1))
+			{
+				mClassObject[--mClassObjectCount]->Release(); // This is the end of this class definition.
+				if (cp1 = _tcsrchr(mClassName, '.'))
+					*cp1 = '\0';
+				else
+					*mClassName = '\0';
+			}
+			// cp now points at the next non-whitespace char after the brace.
+			if (!*cp)
+				goto continue_main_loop;
+			// Otherwise, there is something following this close-brace, so continue on below to process it.
+			tmemmove(buf, cp, buf_length = _tcslen(cp));
+		}
+
 		// By doing the following section prior to checking for hotkey and hotstring labels, double colons do
 		// not need to be escaped inside naked function calls and function definitions such as the following:
 		// fn("::")      ; Function call.
 		// fn(Str="::")  ; Function definition with default value for its parameter.
-		if (IsFunction(buf, &pending_function_has_brace)) // If true, it's either a function definition or a function call (to be distinguished later).
+		if (IsFunction(buf, &pending_buf_has_brace)) // If true, it's either a function definition or a function call (to be distinguished later).
 		{
 			// Defer this line until the next line comes in, which helps determine whether this line is
 			// a function call vs. definition:
-			_tcscpy(pending_function, buf);
-			pending_function_line_number = mCombinedLineNumber;
+			_tcscpy(pending_buf, buf);
+			pending_buf_line_number = mCombinedLineNumber;
+			pending_buf_is_class = false;
 			goto continue_main_loop; // In lieu of "continue", for performance.
+		}
+
+		if (LPTSTR class_name = IsClassDefinition(buf, pending_buf_has_brace))
+		{
+			// Defer this line until the next line comes in to simplify handling of '{' and OTB:
+			_tcscpy(pending_buf, class_name);
+			pending_buf_line_number = mCombinedLineNumber;
+			pending_buf_is_class = true;
+			goto continue_main_loop; // In lieu of "continue", for performance.
+		}
+
+		if (mClassObjectCount && !g->CurrentFunc)
+		{
+			// Anything not already handled above is not valid directly inside a class definition.
+			ScriptError(_T("Expected class or method definition."), buf);
+			return CloseAndReturnFail(fp);
 		}
 
 		// The following "examine_line" label skips the following parts above:
@@ -2512,13 +2593,18 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		// performance because it avoids memcpy from buf2 to buf1.
 	} // for each whole/constructed line.
 
-	if (*pending_function) // Since this is the last non-comment line, the pending function must be a function call, not a function definition.
+	if (*pending_buf) // Since this is the last non-comment line, the pending function must be a function call, not a function definition.
 	{
 		// Somewhat messy to decrement then increment later, but it's probably easier than the
 		// alternatives due to the use of "continue" in some places above.
 		saved_line_number = mCombinedLineNumber;
-		mCombinedLineNumber = pending_function_line_number; // Done so that any syntax errors that occur during the calls below will report the correct line number.
-		if (!ParseAndAddLine(pending_function, ACT_EXPRESSION)) // Must be function call vs. definition since otherwise the above would have detected the opening brace beneath it and already cleared pending_function.
+		mCombinedLineNumber = pending_buf_line_number; // Done so that any syntax errors that occur during the calls below will report the correct line number.
+		if (pending_buf_is_class)
+		{
+			ScriptError(ERR_UNRECOGNIZED_ACTION, pending_buf);
+			return CloseAndReturnFail(fp);
+		}
+		if (!ParseAndAddLine(pending_buf, ACT_EXPRESSION)) // Must be function call vs. definition since otherwise the above would have detected the opening brace beneath it and already cleared pending_function.
 			return CloseAndReturnFail(fp);
 		mCombinedLineNumber = saved_line_number;
 	}
@@ -6939,25 +7025,48 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 	LPTSTR param_end, param_start = _tcschr(aBuf, '('); // Caller has ensured that this will return non-NULL.
 	int insert_pos;
 	
-	Func *found_func = FindFunc(aBuf, param_start - aBuf, &insert_pos); // L27: Added insert_pos.
-	if (found_func)
+	if (mClassObjectCount)
 	{
-		if (!found_func->mIsBuiltIn)
-			return ScriptError(_T("Duplicate function definition."), aBuf); // Seems more descriptive than "Function already defined."
-		else // It's a built-in function that the user wants to override with a custom definition.
+		Object *class_object = mClassObject[mClassObjectCount - 1];
+		LPTSTR full_name;
+		// Build the fully-qualified method name for A_ThisFunc and ListVars:
+		*param_start = '\0'; // Temporarily terminate.
+		if (  !(full_name = (LPTSTR)SimpleHeap::Malloc((_tcslen(mClassName) + _tcslen(aBuf) + 2) * sizeof(TCHAR)))  ) // +2 for dot and null-terminator.
+			return FAIL;
+		_stprintf(full_name, _T("%s.%s"), mClassName, aBuf);
+		*param_start = '('; // Undo termination.
+		// Check for duplicates and determine insert_pos:
+		if (Func *found_func = FindFunc(full_name, 0, &insert_pos))
 		{
-			found_func->mIsBuiltIn = false;  // Override built-in with custom.
-			found_func->mParamCount = 0; // Revert to the default appropriate for non-built-in functions.
-			found_func->mMinParams = 0;  //
-			found_func->mJumpToLine = NULL; // Fixed for v1.0.35.12: Must reset for detection elsewhere.
-			g->CurrentFunc = found_func;
+			*param_start = '(';
+			return ScriptError(_T("Duplicate method definition."), aBuf);
 		}
+		// Below passes class_object for AddFunc() to store the func "by reference" in it:
+		if (  !(g->CurrentFunc = AddFunc(full_name, 0, false, insert_pos, class_object))  )
+			return FAIL;
 	}
 	else
-		// The value of g->CurrentFunc must be set here rather than by our caller since AddVar(), which we call,
-		// relies upon it having been done.
-		if (   !(g->CurrentFunc = AddFunc(aBuf, param_start - aBuf, false, insert_pos))   )
-			return FAIL; // It already displayed the error.
+	{
+		Func *found_func = FindFunc(aBuf, param_start - aBuf, &insert_pos);
+		if (found_func)
+		{
+			if (!found_func->mIsBuiltIn)
+				return ScriptError(_T("Duplicate function definition."), aBuf); // Seems more descriptive than "Function already defined."
+			else // It's a built-in function that the user wants to override with a custom definition.
+			{
+				found_func->mIsBuiltIn = false;  // Override built-in with custom.
+				found_func->mParamCount = 0; // Revert to the default appropriate for non-built-in functions.
+				found_func->mMinParams = 0;  //
+				found_func->mJumpToLine = NULL; // Fixed for v1.0.35.12: Must reset for detection elsewhere.
+				g->CurrentFunc = found_func;
+			}
+		}
+		else
+			// The value of g->CurrentFunc must be set here rather than by our caller since AddVar(), which we call,
+			// relies upon it having been done.
+			if (   !(g->CurrentFunc = AddFunc(aBuf, param_start - aBuf, false, insert_pos))   )
+				return FAIL; // It already displayed the error.
+	}
 
 	mCurrentFuncOpenBlockCount = 0; // v1.0.48.01: Initializing this here makes function definions work properly when they're inside a block.
 	Func &func = *g->CurrentFunc; // For performance and convenience.
@@ -6966,6 +7075,18 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 	int param_count = 0;
 	TCHAR buf[LINE_SIZE], *target;
 	bool param_must_have_default = false;
+
+	if (mClassObjectCount)
+	{
+		// Add the automatic/hidden "this" parameter.
+		if (  !(param[0].var = FindOrAddVar(_T("this")))  )
+			return FAIL;
+		param[0].var->MarkLocalDeclared();
+		param[0].default_type = PARAM_DEFAULT_NONE;
+		param[0].is_byref = false;
+		++param_count;
+		++func.mMinParams;
+	}
 
 	for (param_start = omit_leading_whitespace(param_start + 1);;)
 	{
@@ -7132,6 +7253,127 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 	mFuncExceptionVarCount = 0;  // Reset in preparation of declarations that appear beneath this function's definition.
 	return OK;
 }
+
+
+
+ResultType Script::DefineClass(LPTSTR aBuf)
+{
+	if (mClassObjectCount == MAX_NESTED_CLASSES)
+		return ScriptError(_T("This class definition is nested too deep."), aBuf);
+
+	LPTSTR cp, class_name = aBuf;
+	Object *outer_class, *base_class = NULL;
+	Object *&class_object = mClassObject[mClassObjectCount]; // For convenience.
+	Var *class_var;
+	ExprTokenType token;
+
+	for (cp = aBuf; *cp && !IS_SPACE_OR_TAB(*cp); ++cp);
+	if (*cp)
+	{
+		*cp = '\0'; // Null-terminate here for class_name.
+		cp = omit_leading_whitespace(cp + 1);
+		if (_tcsnicmp(cp, _T("extends"), 7) || !IS_SPACE_OR_TAB(cp[7]))
+			return ScriptError(_T("Syntax error in class definition."), cp);
+		LPTSTR base_class_name = omit_leading_whitespace(cp + 8);
+		if (!*base_class_name)
+			return ScriptError(_T("Missing class name."), cp);
+		if (  !(base_class = FindClass(base_class_name))  )
+			return ScriptError(_T("Unknown class."), base_class_name);
+	}
+
+	// Validate the name even if this is a nested definition, for consistency.
+	if (!Var::ValidateName(class_name, false, DISPLAY_NO_ERROR))
+		return ScriptError(_T("Invalid class name."), class_name);
+
+	class_object = NULL; // This initializes the entry in the mClassObject array.
+	
+	if (mClassObjectCount) // Nested class definition.
+	{
+		outer_class = mClassObject[mClassObjectCount - 1];
+		if (outer_class->GetItem(token, class_name))
+			// At this point it can only be an Object() created by a class definition.
+			class_object = (Object *)token.object;
+	}
+	else // Top-level class definition.
+	{
+		*mClassName = '\0'; // Init.
+		if (  !(class_var = FindOrAddVar(class_name))  )
+			return FAIL;
+		if (class_var->IsObject())
+			// At this point it can only be an Object() created by a class definition.
+			class_object = (Object *)class_var->Object();
+	}
+	
+	if (_tcslen(mClassName) + _tcslen(class_name) + 1 >= _countof(mClassName)) // +1 for '.'
+		return ScriptError(_T("Full class name is too long."));
+	if (*mClassName)
+		_tcscat(mClassName, _T("."));
+	_tcscat(mClassName, class_name);
+
+	// For now, it seems more useful to detect a duplicate as an error rather than as
+	// a continuation of the previous definition.  Partial definitions might be allowed
+	// in future, perhaps via something like "Class Foo continued".
+	if (class_object)
+		return ScriptError(_T("Duplicate class definition."), aBuf);
+
+	token.symbol = SYM_STRING;
+	token.marker = mClassName;
+
+	if (   !(class_object = Object::Create(NULL, 0))
+		|| !(class_object->SetItem(_T("__Class"), token))
+		|| !(mClassObjectCount
+				? outer_class->SetItem(class_name, class_object) // Assign to super_class[class_name].
+				: class_var->Assign(class_object))   ) // Assign to global variable named %class_name%.
+		return ScriptError(ERR_OUTOFMEM);
+
+	class_object->SetBase(base_class); // May be NULL.
+
+	++mClassObjectCount;
+	return OK;
+}
+
+
+Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
+{
+	if (!aClassNameLength)
+		aClassNameLength = _tcslen(aClassName);
+	if (!aClassNameLength || aClassNameLength > MAX_CLASS_NAME_LENGTH)
+		return NULL;
+
+	LPTSTR cp, key;
+	ExprTokenType token;
+	Object *base_object = NULL;
+	TCHAR class_name[MAX_CLASS_NAME_LENGTH + 2]; // Extra +1 for '.' to simplify parsing.
+	
+	// Make temporary copy which we can modify.
+	tmemcpy(class_name, aClassName, aClassNameLength);
+	class_name[aClassNameLength] = '.'; // To simplify parsing.
+	class_name[aClassNameLength + 1] = '\0';
+
+	// Get base variable; e.g. "MyClass" in "MyClass.MySubClass".
+	cp = _tcschr(class_name + 1, '.');
+	Var *base_var = FindVar(class_name, cp - class_name);
+	if (!base_var)
+		return NULL;
+
+	// Although at load time only the "Object" type can exist, dynamic_cast is used in case we're called at run-time:
+	if (  !(base_var->IsObject() && (base_object = dynamic_cast<Object *>(base_var->Object())))  )
+		return NULL;
+
+	// Even if the loop below has no iterations, it initializes 'key' to the appropriate value:
+	for (key = cp + 1; cp = _tcschr(key, '.'); key = cp + 1) // For each key in something like TypeVar.Key1.Key2.
+	{
+		if (cp == key)
+			return NULL; // ScriptError(_T("Missing name."), cp);
+		*cp = '\0'; // Terminate at the delimiting dot.
+		if (!base_object->GetItem(token, key))
+			return NULL;
+		base_object = (Object *)token.object; // See comment about Object() above.
+	}
+
+	return base_object;
+}
+
 
 
 
@@ -7775,7 +8017,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 
 
 
-Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos) // L27: Added aInsertPos for binary-search.
+Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos, Object *aClassObject)
 // This function should probably not be called by anyone except FindOrAddFunc, which has already done
 // the dupe-checking.
 // Returns the address of the new function or NULL on failure.
@@ -7810,7 +8052,7 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 	// 3) Those scripts that are broken are not broken in a bad way because the pre-parser will generate a
 	//    load-time error, which is easy to fix (unlike runtime errors, which require that part of the script
 	//    to actually execute).
-	if (!Var::ValidateName(func_name, mIsReadyToExecute, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
+	if (!aClassObject && !Var::ValidateName(func_name, mIsReadyToExecute, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
 		// Above already displayed error for us.  This can happen at loadtime or runtime (e.g. StringSplit).
 		return NULL;
 
@@ -7826,6 +8068,23 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 	{
 		ScriptError(ERR_OUTOFMEM);
 		return NULL;
+	}
+
+	if (aClassObject)
+	{
+		LPTSTR key = _tcsrchr(new_name, '.');
+		if (!key)
+		{
+			ScriptError(_T("Invalid method name."), new_name); // Shouldn't ever happen.
+			return NULL;
+		}
+		if (!aClassObject->SetItem(key + 1, the_new_func))
+		{
+			ScriptError(ERR_OUTOFMEM);
+			return NULL;
+		}
+		// Also add it to the script's list of functions, to support #Warn LocalSameAsGlobal
+		// and automatic cleanup of objects in static vars on program exit.
 	}
 	
 	if (mFuncCount == mFuncCountMax)
