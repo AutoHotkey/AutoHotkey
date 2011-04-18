@@ -1912,7 +1912,7 @@ struct FuncCallData
 
 typedef void (* BuiltInFunctionType)(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
-class Func
+class Func : public IObject
 {
 public:
 	LPTSTR mName;
@@ -2003,6 +2003,11 @@ public:
 		g->CurrentFunc = prev_func;
 		return result;
 	}
+
+	// IObject.
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
+	ULONG STDMETHODCALLTYPE Release() { return 1; }
 
 	Func(LPTSTR aFuncName, bool aIsBuiltIn) // Constructor.
 		: mName(aFuncName) // Caller gave us a pointer to dynamic memory for this.

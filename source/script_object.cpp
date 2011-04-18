@@ -602,7 +602,7 @@ ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, Exp
 		// Consequently, if 'that[this]' contains a value, it is invoked; seems obscure but rare, and could
 		// also be of use (for instance, as a means to remove the 'this' parameter or replace it with 'that').
 		aParam[0] = &aThisToken;
-		ResultType r = aField->object->Invoke(aResultToken, field_token, IT_CALL, aParam, aParamCount);
+		ResultType r = aField->object->Invoke(aResultToken, field_token, IT_CALL | IF_FUNCOBJ, aParam, aParamCount);
 		aParam[0] = tmp;
 		return r;
 	}
@@ -1381,6 +1381,31 @@ Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, IndexType at
 	field.symbol = SYM_OPERAND;
 
 	return &field;
+}
+
+
+//
+// Func: Script interface, accessible via "function reference".
+//
+
+ResultType STDMETHODCALLTYPE Func::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (!aParamCount)
+		return INVOKE_NOT_HANDLED;
+
+	if (!IS_INVOKE_CALL)
+		return INVOKE_NOT_HANDLED;
+	
+	if (  !(aFlags & IF_FUNCOBJ)  )
+	{
+		if (!TokenIsEmptyString(*aParam[0]))
+			return INVOKE_NOT_HANDLED; // Reserved.
+		// Called explicitly by script, such as by "obj.funcref.()" or "x := obj.funcref, x.()"
+		// rather than implicitly, like "obj.funcref()".
+		++aParam;		// Discard the "method name" parameter.
+		--aParamCount;	// 
+	}
+	return CallFunc(*this, aResultToken, aParam, aParamCount);
 }
 	
 
