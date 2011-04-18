@@ -170,6 +170,43 @@ void BIF_ObjGetInPlace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int
 
 
 //
+// BIF_ObjNew - Handles "new" as in "new Class()".
+//
+
+void BIF_ObjNew(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+
+	ExprTokenType *class_token = aParam[0]; // Save this to be restored later.
+
+	IObject *class_object = TokenToObject(*class_token);
+	if (!class_object)
+		return;
+
+	Object *new_object = Object::Create(NULL, 0);
+	if (!new_object)
+		return;
+
+	new_object->SetBase(class_object);
+
+	ExprTokenType name_token, this_token;
+	name_token.symbol = SYM_STRING;
+	name_token.marker = Object::sMetaFuncName[4]; // __New
+	this_token.symbol = SYM_OBJECT;
+	this_token.object = new_object;
+	aParam[0] = &name_token;
+	if (class_object->Invoke(aResultToken, this_token, IT_CALL | IF_META, aParam, aParamCount) == INVOKE_NOT_HANDLED)
+	{
+		// Since it wasn't handled, neither this class nor any of its super-classes define __New().
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = new_object;
+	}
+	aParam[0] = class_token;
+}
+
+
+//
 // Functions for accessing built-in methods (even if obscured by a user-defined method).
 //
 

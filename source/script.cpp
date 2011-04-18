@@ -29,6 +29,7 @@ static TCHAR g_CommentFlag[MAX_COMMENT_FLAG_LENGTH + 1] = _T(";"); // Adjust the
 static size_t g_CommentFlagLength = 1; // pre-calculated for performance
 static ExprOpFunc g_ObjGet(BIF_ObjInvoke, IT_GET), g_ObjSet(BIF_ObjInvoke, IT_SET), g_ObjCall(BIF_ObjInvoke, IT_CALL);
 static ExprOpFunc g_ObjGetInPlace(BIF_ObjGetInPlace, IT_GET);
+static ExprOpFunc g_ObjNew(BIF_ObjNew, 0);
 
 // See Script::CreateWindows() for details about the following:
 typedef BOOL (WINAPI* AddRemoveClipboardListenerType)(HWND);
@@ -5148,7 +5149,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	LPTSTR this_aArgMap, this_aArg, cp;
 	ActionTypeType *np;
 	TransformCmds trans_cmd;
-	bool is_function;
+	bool is_function, pending_function_is_new_op = false;
 
 	//////////////////////////////////////////////////////////
 	// Build the new arg list in dynamic memory.
@@ -5486,6 +5487,24 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 								if (   (op_begin[1] == 'o' || op_begin[1] == 'O') // Relies on short-circuit boolean order.
 									&& (op_begin[2] == 't' || op_begin[2] == 'T')   )
 									continue; // "NOT" was found.
+								if (   (op_begin[1] == 'e' || op_begin[1] == 'E')
+									&& (op_begin[2] == 'w' || op_begin[2] == 'W')
+									&& IS_SPACE_OR_TAB(op_begin[3])   )
+								{
+									cp = omit_leading_whitespace(op_begin + 4);
+									// This "new " is a keyword only if followed immediately by an operand,
+									// such as "new ClassVar", "new Class.NestedClass()" or "new %Var%()",
+									// but not "new := 1" or "x := new + 1".
+									if (!_tcschr(EXPR_OPERAND_TERMINATORS, *cp))
+									{
+										// If this is "new ClassVar()", we need to avoid parsing "ClassVar()" as a
+										// function deref.  The check below handles that.  Note that "new X.Y()" is
+										// excluded, since it wouldn't be parsed as a function deref anyway.
+										for ( ; !_tcschr(EXPR_OPERAND_TERMINATORS, *cp); ++cp); // Find end of var.
+										pending_function_is_new_op = (*cp == '(');
+										continue;
+									}
+								}
 								break;
 							}
 						}
@@ -5556,6 +5575,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 						}
 						else
 							is_function = (orig_char == '(');
+
+						if (is_function && pending_function_is_new_op)
+							pending_function_is_new_op = is_function = false;
 
 						// This operand must be a variable/function reference or string literal, otherwise it's
 						// a syntax error.
@@ -9656,7 +9678,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 //		, 78             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 //		, 82, 82         // RESERVED FOR SYM_POST_INCREMENT, SYM_POST_DECREMENT (which are listed higher above for the performance of YIELDS_AN_OPERAND().
 		, 86             // SYM_FUNC -- Has special handling which ensures it stays tightly bound with its parameters as though it's a single operand for use by other operators; the actual value here is irrelevant.
-		, 30 // SYM_REGEXMATCH
+		, 86             // SYM_NEW -- should be popped off the stack immediately after the pseudo function-call which follows it.
+		, 30             // SYM_REGEXMATCH
 	};
 	// Most programming languages give exponentiation a higher precedence than unary minus and logical-not.
 	// For example, -2**2 is evaluated as -(2**2), not (-2)**2 (the latter is unsupported by qmathPow anyway).
@@ -10204,6 +10227,19 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								// Error message is intentionally vague since user may have intended the dot to be concatenation rather than member-access.
 								return LineError(ERR_INVALID_DOT, FAIL, cp-1);
 
+							bool is_new_op = false;
+							// For the '(' check below, determine if this op is part of a "new" operation, such as "new Class.NestedClass()".
+							for (ExprTokenType *prev_infix = infix + infix_count - 1; prev_infix >= infix; prev_infix -= 2)
+							{
+								if (prev_infix->symbol != SYM_DOT)
+								{
+									if (IS_OPERAND(prev_infix->symbol) && prev_infix > infix)
+										--prev_infix; // This is the target of the SYM_DOT, as in "target.foo".
+									is_new_op = (prev_infix->symbol == SYM_NEW);
+									break;
+								}
+							}
+
 							// Output a SYM_OPERAND for the text following '.'
 							infix[infix_count].symbol = SYM_OPERAND;
 							if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   )
@@ -10219,7 +10255,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							new_deref->marker = cp - 1; // Not typically needed, set for error-reporting.
 							new_deref->param_count = 2; // Initially two parameters: the object and identifier.
 							
-							if (*op_end == '(')
+							if (*op_end == '(' && !is_new_op)
 							{
 								new_symbol = SYM_FUNC;
 								new_deref->func = &g_ObjCall;
@@ -10266,13 +10302,38 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					// symbol would appear in ListLines).
 					if (op_end-cp == 3
 						&& (cp[0] == 'n' || cp[0] == 'N')
-						&& (  cp1 == 'o' ||   cp1 == 'O')
-						&& (cp[2] == 't' || cp[2] == 'T') // "NOT" was found.
-						&& *omit_leading_whitespace(op_end) != ':') // Exclude "not:", which is either the key in a key-value pair or a syntax error.
+						&& *omit_leading_whitespace(op_end) != ':') // Exclude "not:" and "new:", which are either the key in a key-value pair or a syntax error.
 					{
-						this_infix_item.symbol = SYM_LOWNOT;
-						cp = op_end; // Have the loop process whatever lies at op_end and beyond.
-						continue; // Continue vs. break to avoid the ++cp at the bottom (though it might not matter in this case).
+						if (   (cp1   == 'o' || cp1   == 'O')
+							&& (cp[2] == 't' || cp[2] == 'T')   ) // "NOT" was found.
+						{
+							this_infix_item.symbol = SYM_LOWNOT;
+							cp = op_end; // Have the loop process whatever lies at op_end and beyond.
+							continue; // Continue vs. break to avoid the ++cp at the bottom (though it might not matter in this case).
+						}
+						if (   (cp1   == 'e' || cp1   == 'E')
+							&& (cp[2] == 'w' || cp[2] == 'W')   ) // "NEW" was found.
+						{
+							if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
+							{
+								if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
+									return LineError(ERR_EXPR_TOO_LONG);
+								this_infix_item.symbol = SYM_CONCAT;
+								++infix_count;
+							}
+							// A previous stage ensured this "new" is followed by something which looks like
+							// a function call.  Push this pseudo-operator onto the stack.  When the open-
+							// parenthesis is encountered, symbol will be changed to SYM_FUNC.
+							if (  !(deref_new = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  )
+								return LineError(ERR_OUTOFMEM);
+							deref_new->marker = cp; // For error-reporting.
+							deref_new->param_count = 1; // Start counting at the class object, which precedes the open-parenthesis.
+							deref_new->func = &g_ObjNew;
+							infix[infix_count].symbol = SYM_NEW;
+							infix[infix_count].deref = deref_new;
+							cp = op_end; // See comments above.
+							continue;    //
+						}
 					}
 numeric_literal:
 					// Since above didn't "continue", this item is probably a raw numeric literal (either SYM_FLOAT
@@ -10741,9 +10802,17 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 		case SYM_OPAREN:
 			// Open-parentheses always go on the stack to await their matching close-parentheses.
 			this_infix->buf = (LPTSTR)in_param_list; // L31: Save current value on the stack with this SYM_OPAREN.
-			in_param_list = (infix_symbol == SYM_FUNC) // L31: If true, we fell through from 'case SYM_FUNC', i.e. this SYM_OPAREN is the beginning of a parameter list.
-				? this_infix[-1].deref	// Point at the deref of the SYM_FUNC to which this SYM_OPAREN belongs.
-				: NULL;					// Allow multi-statement commas at this level of parentheses.
+			if (infix_symbol == SYM_FUNC)
+				in_param_list = this_infix[-1].deref	; // Store this SYM_FUNC's deref.
+			else if (stack_symbol == SYM_NEW)
+			{
+				// Now that the SYM_OPAREN of this SYM_NEW has been found, translate it to SYM_FUNC
+				// so that it will be popped off the stack immediately after its parameter list:
+				stack[stack_count - 1]->symbol = SYM_FUNC;
+				in_param_list = stack[stack_count - 1]->deref;
+			}
+			else
+				in_param_list = NULL; // Allow multi-statement commas, even in cases like Func((x,y)).
 			STACK_PUSH(this_infix++);
 			break;
 			
@@ -10976,7 +11045,8 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				assign_op->symbol = SYM_FUNC; // An earlier stage already set up the func and param_count.
 			}
 		}
-		else if (postfix_symbol == SYM_REGEXMATCH) // a ~= b  ->  RegExMatch(a, b)
+		else if (postfix_symbol == SYM_NEW // This is probably something like "new Class", without "()", otherwise an earlier stage would've handled it.
+			|| postfix_symbol == SYM_REGEXMATCH) // a ~= b  ->  RegExMatch(a, b)
 		{
 			this_postfix->symbol = SYM_FUNC;
 		}
