@@ -30,6 +30,8 @@ static size_t g_CommentFlagLength = 1; // pre-calculated for performance
 static ExprOpFunc g_ObjGet(BIF_ObjInvoke, IT_GET), g_ObjSet(BIF_ObjInvoke, IT_SET), g_ObjCall(BIF_ObjInvoke, IT_CALL);
 static ExprOpFunc g_ObjGetInPlace(BIF_ObjGetInPlace, IT_GET);
 static ExprOpFunc g_ObjNew(BIF_ObjNew, 0);
+static ExprOpFunc g_ObjPreInc(BIF_ObjIncDec, SYM_PRE_INCREMENT), g_ObjPreDec(BIF_ObjIncDec, SYM_PRE_DECREMENT)
+				, g_ObjPostInc(BIF_ObjIncDec, SYM_POST_INCREMENT), g_ObjPostDec(BIF_ObjIncDec, SYM_POST_DECREMENT);
 
 // See Script::CreateWindows() for details about the following:
 typedef BOOL (WINAPI* AddRemoveClipboardListenerType)(HWND);
@@ -10246,8 +10248,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								return LineError(ERR_OUTOFMEM);
 							++infix_count;
 
-							cp = omit_leading_whitespace(op_end);
-							
 							SymbolType new_symbol; // Type of token: SYM_FUNC or SYM_DOT (which must be treated differently as it doesn't have parentheses).
 							DerefType *new_deref; // Holds a reference to the appropriate function, and parameter count.
 							if (   !(new_deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))   )
@@ -10976,43 +10976,71 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			//	x.y := z	->	x "y" z (set)
 			//	x[y] += z	->	x y (get in-place, assume 2 params) z (add) (set)
 			//	x.y[i] /= z	->	x "y" i 3 (get in-place, n params) z (div) (set)
-			if ((this_postfix->deref->func == &g_ObjGet || this_postfix->deref->func == &g_ObjCall) // Allow g_ObjCall for something like x.y(i) := z, since x.y(i) can act as x.y[i] for COM objects.
-				&& IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(infix_symbol))
+			if (this_postfix->deref->func == &g_ObjGet || this_postfix->deref->func == &g_ObjCall) // Allow g_ObjCall for something like x.y(i) := z, since x.y(i) can act as x.y[i] for COM objects.
 			{
-				if (infix_symbol != SYM_ASSIGN)
+				if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(infix_symbol))
 				{
-					int param_count = this_postfix->deref->param_count; // Number of parameters preceding the assignment operator.
-					if (param_count != 2)
+					if (infix_symbol != SYM_ASSIGN)
 					{
-						// Pass the actual param count via a separate token:
-						this_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
-						this_postfix->symbol = SYM_INTEGER;
-						this_postfix->value_int64 = param_count;
-						this_postfix->circuit_token = NULL;
-						postfix_count++;
-						param_count = 1; // ExpandExpression should consider there to be only one param; the others should be left on the stack.
+						int param_count = this_postfix->deref->param_count; // Number of parameters preceding the assignment operator.
+						if (param_count != 2)
+						{
+							// Pass the actual param count via a separate token:
+							this_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+							this_postfix->symbol = SYM_INTEGER;
+							this_postfix->value_int64 = param_count;
+							this_postfix->circuit_token = NULL;
+							postfix_count++;
+							param_count = 1; // ExpandExpression should consider there to be only one param; the others should be left on the stack.
+						}
+						else
+						{
+							param_count = 0; // Omit the "param count" token to indicate the most common case: two params.
+						}
+						ExprTokenType *&that_postfix = postfix[postfix_count]; // In case above did postfix_count++.
+						that_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+						that_postfix->symbol = SYM_FUNC;
+						if (  !(that_postfix->deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  ) // Must be persistent memory, unlike that_postfix itself.
+							return LineError(ERR_OUTOFMEM);
+						that_postfix->deref->func = &g_ObjGetInPlace;
+						that_postfix->deref->param_count = param_count;
+						that_postfix->circuit_token = NULL;
 					}
 					else
 					{
-						param_count = 0; // Omit the "param count" token to indicate the most common case: two params.
+						--postfix_count; // Discard this token; the assignment op will be converted into SYM_FUNC later.
 					}
-					ExprTokenType *&that_postfix = postfix[postfix_count]; // In case above did postfix_count++.
-					that_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
-					that_postfix->symbol = SYM_FUNC;
-					if (  !(that_postfix->deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  ) // Must be persistent memory, unlike that_postfix itself.
-						return LineError(ERR_OUTOFMEM);
-					that_postfix->deref->func = &g_ObjGetInPlace;
-					that_postfix->deref->param_count = param_count;
-					that_postfix->circuit_token = NULL;
+					this_infix->deref = stack[stack_count]->deref; // Mark this assignment as an object assignment for the section below.
+					this_infix->deref->func = &g_ObjSet;
+					this_infix->deref->param_count++;
+					// Now let this_infix be processed by the next iteration.
 				}
-				else
+				else if (!IS_OPERAND(infix_symbol))
 				{
-					--postfix_count; // Discard this token; the assignment op will be converted into SYM_FUNC later.
+					// Post-increment/decrement has higher precedence, so check for it first:
+					if (infix_symbol == SYM_POST_INCREMENT || infix_symbol == SYM_POST_DECREMENT)
+					{
+						// Replace the func with BIF_ObjIncDec to perform the operation. This has
+						// the same effect as the section above with x.y(z) := 1; i.e. x.y(z)++ is
+						// equivalent to x.y[z]++.  This is done for consistency, simplicity and
+						// because x.y(z)++ would otherwise be a useless syntax error.
+						this_postfix->deref->func = (infix_symbol == SYM_POST_INCREMENT ? &g_ObjPostInc : &g_ObjPostDec);
+						++this_infix; // Discard this operator.
+					}
+					else
+					{
+						stack_symbol = stack[stack_count - 1]->symbol;
+						if (stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT)
+						{
+							// See comments in the similar section above.
+							this_postfix->deref->func = (stack_symbol == SYM_PRE_INCREMENT ? &g_ObjPreInc : &g_ObjPreDec);
+							--stack_count; // Discard this operator.
+						}
+					}
 				}
-				this_infix->deref = stack[stack_count]->deref; // Mark this assignment as an object assignment for the section below.
-				this_infix->deref->func = &g_ObjSet;
-				this_infix->deref->param_count++;
-				// Now let this_infix be processed by the next iteration.
+				// Otherwise, IS_OPERAND(infix_symbol) == true, which should only be possible
+				// if this_infix[1] is SYM_DOT.  In that case, a later iteration should apply
+				// the transformations above to that operator.
 			}
 		}
 		else if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(postfix_symbol))
