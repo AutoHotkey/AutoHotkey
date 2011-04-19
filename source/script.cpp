@@ -1503,7 +1503,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		// tested).
 		if (!_tcsnicmp(buf, _T("#CommentFlag"), 12)) // Have IsDirective() process this now (it will also process it again later, which is harmless).
 			if (IsDirective(buf) == FAIL) // IsDirective() already displayed the error.
-				return CloseAndReturnFail(fp);
+				return FAIL;
 
 		// Read in the next line (if that next line is the start of a continuation secttion, append
 		// it to the line currently being processed:
@@ -1706,10 +1706,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 					if (is_continuation_line)
 					{
 						if (buf_length + next_buf_length >= LINE_SIZE - 1) // -1 to account for the extra space added below.
-						{
-							ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, next_buf);
-							return CloseAndReturnFail(fp);
-						}
+							return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, next_buf);
 						if (*next_buf != ',') // Insert space before expression operators so that built/combined expression works correctly (some operators like 'and', 'or', '.', and '?' currently require spaces on either side) and also for readability of ListLines.
 							buf[buf_length++] = ' ';
 						tmemcpy(buf + buf_length, next_buf, next_buf_length + 1); // Append this line to prev. and include the zero terminator.
@@ -1818,10 +1815,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 			// Since above didn't "continue", we're in the continuation section and thus next_buf contains
 			// either a line to be appended onto buf or the closing parenthesis of this continuation section.
 			if (next_buf_length == -1) // Compare directly to -1 since length is unsigned.
-			{
-				ScriptError(ERR_MISSING_CLOSE_PAREN, buf);
-				return CloseAndReturnFail(fp);
-			}
+				return ScriptError(ERR_MISSING_CLOSE_PAREN, buf);
 			if (next_buf_length == -2) // v1.0.45.03: Special flag that means "this is a commented-out line to be
 				continue;              // entirely omitted from the continuation section." Compare directly to -2 since length is unsigned.
 
@@ -1885,10 +1879,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 			// Must check the combined length only after anything that might have expanded the string above.
 			if (buf_length + next_buf_length + suffix_length >= LINE_SIZE)
-			{
-				ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, cp);
-				return CloseAndReturnFail(fp);
-			}
+				return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, cp);
 
 			++continuation_line_count;
 			// Append this continuation line onto the primary line.
@@ -1941,7 +1932,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 				if (pending_buf_is_class)
 				{
 					if (!DefineClass(pending_buf))
-						return CloseAndReturnFail(fp);
+						return FAIL;
 				}
 				else
 				{
@@ -1959,15 +1950,14 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						// access to their parent functions' local variables, or perhaps just to improve
 						// script readability and maintainability -- it's currently not allowed because of
 						// the practice of maintaining the func_exception_var list on our stack:
-						ScriptError(_T("Functions cannot contain functions."), pending_buf);
-						return CloseAndReturnFail(fp);
+						return ScriptError(_T("Functions cannot contain functions."), pending_buf);
 					}
 					if (!DefineFunc(pending_buf, func_exception_var))
-						return CloseAndReturnFail(fp);
+						return FAIL;
 					if (pending_buf_has_brace) // v1.0.41: Support one-true-brace for function def, e.g. fn() {
 					{
 						if (!AddLine(ACT_BLOCK_BEGIN))
-							return CloseAndReturnFail(fp);
+							return FAIL;
 						mCurrLine = NULL; // L30: Prevents showing misleading vicinity lines if the line after a OTB function def is a syntax error.
 					}
 				}
@@ -1975,13 +1965,10 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 			else // It's a function call on a line by itself, such as fn(x). It can't be if(..) because another section checked that.
 			{
 				if (pending_buf_is_class)
-				{
 					// This is something like "Class Foo" without any open-brace.
-					ScriptError(_T("Invalid class definition."), pending_buf);
-					return CloseAndReturnFail(fp);
-				}
+					return ScriptError(_T("Invalid class definition."), pending_buf);
 				if (!ParseAndAddLine(pending_buf, ACT_EXPRESSION))
-					return CloseAndReturnFail(fp);
+					return FAIL;
 				mCurrLine = NULL; // Prevents showing misleading vicinity lines if the line after a function call is a syntax error.
 			}
 			mCombinedLineNumber = saved_line_number;
@@ -2043,11 +2030,8 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		}
 
 		if (mClassObjectCount && !g->CurrentFunc)
-		{
 			// Anything not already handled above is not valid directly inside a class definition.
-			ScriptError(_T("Expected class or method definition."), buf);
-			return CloseAndReturnFail(fp);
-		}
+			return ScriptError(_T("Expected class or method definition."), buf);
 
 		// The following "examine_line" label skips the following parts above:
 		// 1) IsFunction() because that's only for a function call or definition alone on a line
@@ -2175,14 +2159,12 @@ examine_line:
 				// if it were.  It doesn't seem useful in any case.  By contrast, normal labels can
 				// safely exist inside a function body and since the body is a block, other validation
 				// ensures that a Gosub or Goto can't jump to it from outside the function.
-				ScriptError(_T("Hotkeys/hotstrings are not allowed inside functions."), buf);
-				return CloseAndReturnFail(fp);
+				return ScriptError(_T("Hotkeys/hotstrings are not allowed inside functions."), buf);
 			}
 			if (mLastLine && mLastLine->mActionType == ACT_IFWINACTIVE)
 			{
 				mCurrLine = mLastLine; // To show vicinity lines.
-				ScriptError(_T("IfWin should be #IfWin."), buf);
-				return CloseAndReturnFail(fp);
+				return ScriptError(_T("IfWin should be #IfWin."), buf);
 			}
 			*hotkey_flag = '\0'; // Terminate so that buf is now the label itself.
 			hotkey_flag += HOTKEY_FLAG_LENGTH;  // Now hotkey_flag is the hotkey's action, if any.
@@ -2286,7 +2268,7 @@ examine_line:
 			{\
 				mNoHotkeyLabels = false;\
 				if (!AddLine(ACT_RETURN, NULL, UCHAR_MAX))\
-					return CloseAndReturnFail(fp);\
+					return FAIL;\
 				mCurrLine = NULL;\
 			}
 			CHECK_mNoHotkeyLabels
@@ -2296,7 +2278,7 @@ examine_line:
 			// ::abc::
 			// :c:abc::
 			if (!AddLabel(buf, true)) // Always add a label before adding the first line of its section.
-				return CloseAndReturnFail(fp);
+				return FAIL;
 			hook_action = 0; // Set default.
 			if (*hotkey_flag) // This hotkey's action is on the same line as its label.
 			{
@@ -2306,12 +2288,12 @@ examine_line:
 					// via Goto/Gosub:
 					if (   !(hook_action = Hotkey::ConvertAltTab(hotkey_flag, false))   )
 						if (!ParseAndAddLine(hotkey_flag))
-							return CloseAndReturnFail(fp);
+							return FAIL;
 				// Also add a Return that's implicit for a single-line hotkey.  This is also
 				// done for auto-replace hotstrings in case gosub/goto is ever used to jump
 				// to their labels:
 				if (!AddLine(ACT_RETURN))
-					return CloseAndReturnFail(fp);
+					return FAIL;
 			}
 
 			if (hotstring_start)
@@ -2322,8 +2304,7 @@ examine_line:
 					// the hotstring (as a label) does not actually exist as a line.  But it seems
 					// best to report it this way in case the hotstring is inside a #Include file,
 					// so that the correct file name and approximate line number are shown:
-					ScriptError(_T("This hotstring is missing its abbreviation."), buf); // Display buf vs. hotkey_flag in case the line is simply "::::".
-					return CloseAndReturnFail(fp);
+					return ScriptError(_T("This hotstring is missing its abbreviation."), buf); // Display buf vs. hotkey_flag in case the line is simply "::::".
 				}
 				// In the case of hotstrings, hotstring_start is the beginning of the hotstring itself,
 				// i.e. the character after the second colon.  hotstring_options is NULL if no options,
@@ -2336,7 +2317,7 @@ examine_line:
 				// hotstrings) because of all the hotstring options.
 				if (!Hotstring::AddHotstring(mLastLabel, hotstring_options ? hotstring_options : _T("")
 					, hotstring_start, hotkey_flag, has_continuation_section))
-					return CloseAndReturnFail(fp);
+					return FAIL;
 			}
 			else // It's a hotkey vs. hotstring.
 			{
@@ -2357,19 +2338,15 @@ examine_line:
 						if (hk->FindVariant()) // See if there's already a variant matching the current criteria (suffix_has_tilde does not make variants distinct form each other because it would require firing two hotkey IDs in response to pressing one hotkey, which currently isn't in the design).
 						{
 							mCurrLine = NULL;  // Prevents showing unhelpful vicinity lines.
-							ScriptError(_T("Duplicate hotkey."), buf);
-							return CloseAndReturnFail(fp);
+							return ScriptError(_T("Duplicate hotkey."), buf);
 						}
 						if (!hk->AddVariant(mLastLabel, suffix_has_tilde))
-						{
-							ScriptError(ERR_OUTOFMEM, buf);
-							return CloseAndReturnFail(fp);
-						}
+							return ScriptError(ERR_OUTOFMEM, buf);
 					}
 				}
 				else // No parent hotkey yet, so create it.
 					if (   !(hk = Hotkey::AddHotkey(mLastLabel, hook_action, NULL, suffix_has_tilde, false))   )
-						return CloseAndReturnFail(fp); // It already displayed the error.
+						return FAIL; // It already displayed the error.
 			}
 			goto continue_main_loop; // In lieu of "continue", for performance.
 		} // if (is_label = ...)
@@ -2378,10 +2355,7 @@ examine_line:
 		if (buf[buf_length - 1] == ':') // Labels must end in a colon (buf was previously rtrimmed).
 		{
 			if (buf_length == 1) // v1.0.41.01: Properly handle the fact that this line consists of only a colon.
-			{
-				ScriptError(ERR_UNRECOGNIZED_ACTION, buf);
-				return CloseAndReturnFail(fp);
-			}
+				return ScriptError(ERR_UNRECOGNIZED_ACTION, buf);
 			// Labels (except hotkeys) must contain no whitespace, delimiters, or escape-chars.
 			// This is to avoid problems where a legitimate action-line ends in a colon,
 			// such as "WinActivate SomeTitle" and "#Include c:".
@@ -2413,7 +2387,7 @@ examine_line:
 				buf[--buf_length] = '\0';  // Remove the trailing colon.
 				rtrim(buf, buf_length); // Has already been ltrimmed.
 				if (!AddLabel(buf, false))
-					return CloseAndReturnFail(fp);
+					return FAIL;
 				goto continue_main_loop; // In lieu of "continue", for performance.
 			}
 		}
@@ -2432,7 +2406,7 @@ examine_line:
 				mCombinedLineNumber = saved_line_number;
 				goto continue_main_loop; // In lieu of "continue", for performance.
 			case FAIL: // IsDirective() already displayed the error.
-				return CloseAndReturnFail(fp);
+				return FAIL;
 			//case CONDITION_FALSE: Do nothing; let processing below handle it.
 			}
 		}
@@ -2441,7 +2415,7 @@ examine_line:
 		if (*buf == '{' || *buf == '}')
 		{
 			if (!AddLine(*buf == '{' ? ACT_BLOCK_BEGIN : ACT_BLOCK_END))
-				return CloseAndReturnFail(fp);
+				return FAIL;
 			// Allow any command/action, directive or label to the right of "{" or "}":
 			if (   *(buf = omit_leading_whitespace(buf + 1))   )
 			{
@@ -2467,7 +2441,7 @@ examine_line:
 		if (tcslicmp(buf, _T("Else"), action_end - buf)) // It's not an ELSE. ("Else" is used vs. g_act[ACT_ELSE].Name for performance).
 		{
 			if (!ParseAndAddLine(buf))
-				return CloseAndReturnFail(fp);
+				return FAIL;
 		}
 		else // This line is an ELSE, possibly with another command immediately after it (on the same line).
 		{
@@ -2476,7 +2450,7 @@ examine_line:
 			// don't want because we wouldn't have access to the corresponding literal-map to
 			// figure out the proper use of escaped characters:
 			if (!AddLine(ACT_ELSE))
-				return CloseAndReturnFail(fp);
+				return FAIL;
 			mCurrLine = NULL;  // To signify that we're in transition, trying to load a new one.
 			buf = omit_leading_whitespace(action_end); // Now buf is the word after the ELSE.
 			if (*buf == g_delimiter) // Allow "else, action"
@@ -2572,7 +2546,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 				mCurrLine = NULL; // v1.0.40.04: Prevents showing misleading vicinity lines for a syntax-error such as %::%
 				_stprintf(buf, _T("{Blind}%s%s{%s DownTemp}"), extra_event, remap_dest_modifiers, remap_dest); // v1.0.44.05: DownTemp vs. Down. See Send's DownTemp handler for details.
 				if (!AddLine(ACT_SEND, &buf, 1, NULL)) // v1.0.40.04: Check for failure due to bad remaps such as %::%.
-					return CloseAndReturnFail(fp);
+					return FAIL;
 				AddLine(ACT_RETURN);
 				// Add key-up hotkey label, e.g. *LButton up::
 				buf_length = _stprintf(buf, _T("*%s up::"), remap_source); // Should be no risk of buffer overflow due to prior validation.
@@ -2603,12 +2577,9 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		saved_line_number = mCombinedLineNumber;
 		mCombinedLineNumber = pending_buf_line_number; // Done so that any syntax errors that occur during the calls below will report the correct line number.
 		if (pending_buf_is_class)
-		{
-			ScriptError(ERR_UNRECOGNIZED_ACTION, pending_buf);
-			return CloseAndReturnFail(fp);
-		}
+			return ScriptError(ERR_UNRECOGNIZED_ACTION, pending_buf);
 		if (!ParseAndAddLine(pending_buf, ACT_EXPRESSION)) // Must be function call vs. definition since otherwise the above would have detected the opening brace beneath it and already cleared pending_function.
-			return CloseAndReturnFail(fp);
+			return FAIL;
 		mCombinedLineNumber = saved_line_number;
 	}
 
@@ -2617,14 +2588,6 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 	// This is not required, it is called by the destructor.
 	// fp->Close();
 	return OK;
-}
-
-
-
-inline ResultType Script::CloseAndReturnFail(TextStream *ts)
-{
-	ts->Close();
-	return FAIL;
 }
 
 
