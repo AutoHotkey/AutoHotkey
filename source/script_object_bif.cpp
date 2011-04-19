@@ -207,6 +207,92 @@ void BIF_ObjNew(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 
 //
+// BIF_ObjIncDec - Handles pre/post-increment/decrement for object fields, such as ++x[y].
+//
+
+void BIF_ObjIncDec(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	// Func::mName (which aResultToken.marker is set to) has been overloaded to pass
+	// the type of increment/decrement to be performed on this object's field.
+	SymbolType op = (SymbolType)(INT_PTR)aResultToken.marker;
+
+	ExprTokenType temp_result, current_value, value_to_set;
+
+	// Set the defaults expected by BIF_ObjInvoke:
+	temp_result.symbol = SYM_INTEGER;
+	temp_result.marker = (LPTSTR)IT_GET;
+	temp_result.buf = aResultToken.buf;
+	temp_result.mem_to_free = NULL;
+
+	// Retrieve the current value.  Do it this way instead of calling Object::Invoke
+	// so that if aParam[0] is not an object, g_MetaObject is correctly invoked.
+	BIF_ObjInvoke(temp_result, aParam, aParamCount);
+
+	switch (value_to_set.symbol = current_value.symbol = TokenIsNumeric(temp_result))
+	{
+	case PURE_INTEGER:
+		value_to_set.value_int64 = (current_value.value_int64 = TokenToInt64(temp_result))
+			+ ((op == SYM_POST_INCREMENT || op == SYM_PRE_INCREMENT) ? +1 : -1);
+		break;
+
+	case PURE_FLOAT:
+		value_to_set.value_double = (current_value.value_double = TokenToDouble(temp_result))
+			+ ((op == SYM_POST_INCREMENT || op == SYM_PRE_INCREMENT) ? +1 : -1);
+		break;
+	}
+
+	// Free the object or string returned by BIF_ObjInvoke, if applicable.
+	if (temp_result.symbol == SYM_OBJECT)
+		temp_result.object->Release();
+	if (temp_result.mem_to_free)
+		free(temp_result.mem_to_free);
+
+	if (current_value.symbol == PURE_NOT_NUMERIC)
+	{
+		// Value is non-numeric, so return "".
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+		return;
+	}
+
+	// Although it's likely our caller's param array has enough space to hold the extra
+	// parameter, there's no way to know for sure whether it's safe, so we allocate our own:
+	ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
+	memcpy(param, aParam, aParamCount * sizeof(ExprTokenType *)); // Copy caller's param pointers.
+	param[aParamCount++] = &value_to_set; // Append new value as the last parameter.
+
+	if (op == SYM_PRE_INCREMENT || op == SYM_PRE_DECREMENT)
+	{
+		aResultToken.marker = (LPTSTR)IT_SET;
+		// Set the new value and pass the return value of the invocation back to our caller.
+		// This should be consistent with something like x.y := x.y + 1.
+		BIF_ObjInvoke(aResultToken, param, aParamCount);
+	}
+	else // SYM_POST_INCREMENT || SYM_POST_DECREMENT
+	{
+		// Must be re-initialized (and must use IT_SET instead of IT_GET):
+		temp_result.symbol = SYM_INTEGER;
+		temp_result.marker = (LPTSTR)IT_SET;
+		temp_result.buf = aResultToken.buf;
+		temp_result.mem_to_free = NULL;
+		
+		// Set the new value.
+		BIF_ObjInvoke(temp_result, param, aParamCount);
+		
+		// Dispose of the result safely.
+		if (temp_result.symbol == SYM_OBJECT)
+			temp_result.object->Release();
+		if (temp_result.mem_to_free)
+			free(temp_result.mem_to_free);
+
+		// Return the previous value.
+		aResultToken.symbol = current_value.symbol;
+		aResultToken.value_int64 = current_value.value_int64; // Union copy.
+	}
+}
+
+
+//
 // Functions for accessing built-in methods (even if obscured by a user-defined method).
 //
 
