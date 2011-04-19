@@ -179,6 +179,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_POWER    // See comments near precedence array for why this takes precedence over SYM_NEGATIVE.
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
 	, SYM_FUNC     // A call to a function.
+	, SYM_NEW      // new Class()
 	, SYM_REGEXMATCH // L31: Experimental ~= RegExMatch operator, equivalent to a RegExMatch call in two-parameter mode.
 	, SYM_COUNT    // Must be last because it's the total symbol count for everything above.
 	, SYM_INVALID = SYM_COUNT // Some callers may rely on YIELDS_AN_OPERAND(SYM_INVALID)==false.
@@ -209,6 +210,7 @@ struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 #define IF_METAOBJ			0x10000 // Indicates 'this' is a meta-object/base of aThisToken. Restricts some functionality and causes aThisToken to be inserted into the param list of called functions.
 #define IF_METAFUNC			0x20000 // Indicates Invoke should call a meta-function before checking the object's fields.
 #define IF_META				(IF_METAOBJ | IF_METAFUNC)	// Flags for regular recursion into base object.
+#define IF_FUNCOBJ			0x40000 // Indicates 'this' is a function, being called via another object (aParam[0]).
 
 
 struct DerefType; // Forward declarations for use below.

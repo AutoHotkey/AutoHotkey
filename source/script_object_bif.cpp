@@ -101,8 +101,16 @@ void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
     obj_param = *aParam; // aParam[0].  Load-time validation has ensured at least one parameter was specified.
 	++aParam;
 	--aParamCount;
+
+	// The following is used in place of TokenToObject to bypass #Warn UseUnset:
+	if (obj_param->symbol == SYM_OBJECT)
+		obj = obj_param->object;
+	else if (obj_param->symbol == SYM_VAR && obj_param->var->HasObject())
+		obj = obj_param->var->Object();
+	else
+		obj = NULL;
     
-    if (obj = TokenToObject(*obj_param))
+    if (obj)
 	{
 		bool param_is_var = obj_param->symbol == SYM_VAR;
 		if (param_is_var)
@@ -115,25 +123,33 @@ void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 			obj->Release();
 	}
 	// Invoke meta-functions of g_MetaObject.
-	else if (INVOKE_NOT_HANDLED == g_MetaObject.Invoke(aResultToken, *obj_param, invoke_type | IF_META, aParam, aParamCount)
-		// If above did not handle it, check for attempts to access .base of non-object value (g_MetaObject itself).
-		// CALL is unsupported (for simplicity); SET is supported only in "multi-dimensional" mode: "".base[x]:=y
-		&& invoke_type != IT_CALL && (invoke_type == IT_SET ? aParamCount > 2 : aParamCount)
-		&& !_tcsicmp(TokenToString(*aParam[0]), _T("base")))
+	else if (INVOKE_NOT_HANDLED == g_MetaObject.Invoke(aResultToken, *obj_param, invoke_type | IF_META, aParam, aParamCount))
 	{
-		if (aParamCount > 1)	// "".base[x] or similar
+		// Since above did not handle it, check for attempts to access .base of non-object value (g_MetaObject itself).
+		if (   invoke_type != IT_CALL // Exclude things like "".base().
+			&& aParamCount > (invoke_type == IT_SET ? 2 : 0) // SET is supported only when an index is specified: "".base[x]:=y
+			&& !_tcsicmp(TokenToString(*aParam[0]), _T("base"))   )
 		{
-			// Re-invoke g_MetaObject without meta flag or "base" param.
-			ExprTokenType base_token;
-			base_token.symbol = SYM_OBJECT;
-			base_token.object = &g_MetaObject;
-			g_MetaObject.Invoke(aResultToken, base_token, invoke_type, aParam + 1, aParamCount - 1);
+			if (aParamCount > 1)	// "".base[x] or similar
+			{
+				// Re-invoke g_MetaObject without meta flag or "base" param.
+				ExprTokenType base_token;
+				base_token.symbol = SYM_OBJECT;
+				base_token.object = &g_MetaObject;
+				g_MetaObject.Invoke(aResultToken, base_token, invoke_type, aParam + 1, aParamCount - 1);
+			}
+			else					// "".base
+			{
+				// Return a reference to g_MetaObject.  No need to AddRef as g_MetaObject ignores it.
+				aResultToken.symbol = SYM_OBJECT;
+				aResultToken.object = &g_MetaObject;
+			}
 		}
-		else					// "".base
+		else
 		{
-			// Return a reference to g_MetaObject.  No need to AddRef as g_MetaObject ignores it.
-			aResultToken.symbol = SYM_OBJECT;
-			aResultToken.object = &g_MetaObject;
+			// Since it wasn't handled (not even by g_MetaObject), maybe warn at this point:
+			if (obj_param->symbol == SYM_VAR)
+				obj_param->var->MaybeWarnUninitialized();
 		}
 	}
 }
@@ -150,6 +166,43 @@ void BIF_ObjGetInPlace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int
 	// actual parameters below it on the stack.
 	aParamCount = aParamCount ? (int)TokenToInt64(*aParam[0]) : 2; // x[<n-1 params>] : x.y
 	BIF_ObjInvoke(aResultToken, aParam - aParamCount, aParamCount);
+}
+
+
+//
+// BIF_ObjNew - Handles "new" as in "new Class()".
+//
+
+void BIF_ObjNew(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+
+	ExprTokenType *class_token = aParam[0]; // Save this to be restored later.
+
+	IObject *class_object = TokenToObject(*class_token);
+	if (!class_object)
+		return;
+
+	Object *new_object = Object::Create(NULL, 0);
+	if (!new_object)
+		return;
+
+	new_object->SetBase(class_object);
+
+	ExprTokenType name_token, this_token;
+	name_token.symbol = SYM_STRING;
+	name_token.marker = Object::sMetaFuncName[4]; // __New
+	this_token.symbol = SYM_OBJECT;
+	this_token.object = new_object;
+	aParam[0] = &name_token;
+	if (class_object->Invoke(aResultToken, this_token, IT_CALL | IF_META, aParam, aParamCount) == INVOKE_NOT_HANDLED)
+	{
+		// Since it wasn't handled, neither this class nor any of its super-classes define __New().
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = new_object;
+	}
+	aParam[0] = class_token;
 }
 
 

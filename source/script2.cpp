@@ -5177,10 +5177,11 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		}
 		break;
 
+	case WM_CLIPBOARDUPDATE: // For Vista and later.
 	case WM_DRAWCLIPBOARD:
 		if (g_script.mOnClipboardChangeLabel) // In case it's a bogus msg, it's our responsibility to avoid posting the msg if there's no label to launch.
 			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, 0, 0); // It's done this way to buffer it when the script is uninterruptible, etc.  v1.0.44: Post to g_hWnd vs. NULL so that notifications aren't lost when script is displaying a MsgBox or other dialog.
-		if (g_script.mNextClipboardViewer) // Will be NULL if there are no other windows in the chain.
+		if (g_script.mNextClipboardViewer) // Will be NULL if there are no other windows in the chain, or if we're on Vista or later and used AddClipboardFormatListener instead of SetClipboardViewer (in which case iMsg should be WM_CLIPBOARDUPDATE).
 			SendMessageTimeout(g_script.mNextClipboardViewer, iMsg, wParam, lParam, SMTO_ABORTIFHUNG, 2000, &dwTemp);
 		return 0;
 
@@ -10293,87 +10294,48 @@ VarSizeType BIV_ComSpec(LPTSTR aBuf, LPTSTR aVarName)
 		: GetEnvironmentVariable(_T("comspec"), buf_temp, 0); // Avoids subtracting 1 to be conservative and to reduce code size (due to the need to otherwise check for zero and avoid subtracting 1 in that case).
 }
 
-VarSizeType BIV_ProgramFiles(LPTSTR aBuf, LPTSTR aVarName)
-{
-	TCHAR buf[MAX_PATH];
-	VarSizeType length = ReadRegString(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\Microsoft\\Windows\\CurrentVersion"), _T("ProgramFilesDir"), buf, MAX_PATH);
-	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string).
-	return length;
-}
-
-VarSizeType BIV_AppData(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple callers.
+VarSizeType BIV_SpecialFolderPath(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_PATH]; // One caller relies on this being explicitly limited to MAX_PATH.
-	VarSizeType length = aVarName[9] // A_AppData[C]ommon
-		? ReadRegString(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders")
-			, _T("Common AppData"), buf, MAX_PATH)
-		: 0;
-	if (!length) // Either the above failed or we were told to get the user/private dir instead.
-		length = ReadRegString(HKEY_CURRENT_USER, _T("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders")
-			, _T("AppData"), buf, MAX_PATH);
+	int aFolder;
+	switch (ctoupper(aVarName[2]))
+	{
+	case 'P': // A_[P]rogram...
+	case 'O': // Pr[o]gramFiles
+		if (ctoupper(aVarName[9]) == 'F') // A_Program[F]iles
+			aFolder = CSIDL_PROGRAM_FILES;
+		else // A_Programs(Common)
+			aFolder = aVarName[10] ? CSIDL_COMMON_PROGRAMS : CSIDL_PROGRAMS;
+		break;
+	case 'A': // A_AppData(Common)
+		aFolder = aVarName[9] ? CSIDL_COMMON_APPDATA : CSIDL_APPDATA;
+		break;
+	case 'D': // A_Desktop(Common)
+		aFolder = aVarName[9] ? CSIDL_COMMON_DESKTOPDIRECTORY : CSIDL_DESKTOPDIRECTORY;
+		break;
+	case 'S':
+		if (ctoupper(aVarName[7]) == 'M') // A_Start[M]enu(Common)
+			aFolder = aVarName[11] ? CSIDL_COMMON_STARTMENU : CSIDL_STARTMENU;
+		else // A_Startup(Common)
+			aFolder = aVarName[9] ? CSIDL_COMMON_STARTUP : CSIDL_STARTUP;
+		break;
+#ifdef _DEBUG
+	default:
+		MsgBox(_T("DEBUG: Unhandled SpecialFolderPath variable."));
+#endif
+	}
+	if (SHGetFolderPath(NULL, aFolder, NULL, SHGFP_TYPE_CURRENT, buf) != S_OK)
+		*buf = '\0';
 	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string).
-	return length;
-}
-
-VarSizeType BIV_Desktop(LPTSTR aBuf, LPTSTR aVarName)
-{
-	TCHAR buf[MAX_PATH];
-	VarSizeType length = aVarName[9] // A_Desktop[C]ommon
-		? ReadRegString(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders"), _T("Common Desktop"), buf, MAX_PATH)
-		: 0;
-	if (!length) // Either the above failed or we were told to get the user/private dir instead.
-		length = ReadRegString(HKEY_CURRENT_USER, _T("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders"), _T("Desktop"), buf, MAX_PATH);
-	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string).
-	return length;
-}
-
-VarSizeType BIV_StartMenu(LPTSTR aBuf, LPTSTR aVarName)
-{
-	TCHAR buf[MAX_PATH];
-	VarSizeType length = aVarName[11] // A_StartMenu[C]ommon
-		? ReadRegString(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders"), _T("Common Start Menu"), buf, MAX_PATH)
-		: 0;
-	if (!length) // Either the above failed or we were told to get the user/private dir instead.
-		length = ReadRegString(HKEY_CURRENT_USER, _T("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders"), _T("Start Menu"), buf, MAX_PATH);
-	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string).
-	return length;
-}
-
-VarSizeType BIV_Programs(LPTSTR aBuf, LPTSTR aVarName)
-{
-	TCHAR buf[MAX_PATH];
-	VarSizeType length = aVarName[10] // A_Programs[C]ommon
-		? ReadRegString(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders"), _T("Common Programs"), buf, MAX_PATH)
-		: 0;
-	if (!length) // Either the above failed or we were told to get the user/private dir instead.
-		length = ReadRegString(HKEY_CURRENT_USER, _T("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders"), _T("Programs"), buf, MAX_PATH);
-	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string).
-	return length;
-}
-
-VarSizeType BIV_Startup(LPTSTR aBuf, LPTSTR aVarName)
-{
-	TCHAR buf[MAX_PATH];
-	VarSizeType length = aVarName[9] // A_Startup[C]ommon
-		? ReadRegString(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders"), _T("Common Startup"), buf, MAX_PATH)
-		: 0;
-	if (!length) // Either the above failed or we were told to get the user/private dir instead.
-		length = ReadRegString(HKEY_CURRENT_USER, _T("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders"), _T("Startup"), buf, MAX_PATH);
-	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string).
-	return length;
+		_tcscpy(aBuf, buf); // Must be done as a separate copy because SHGetFolderPath requires a buffer of length MAX_PATH, and aBuf is usually smaller.
+	return _tcslen(buf);
 }
 
 VarSizeType BIV_MyDocuments(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple callers.
 {
 	TCHAR buf[MAX_PATH];
-	ReadRegString(HKEY_CURRENT_USER, _T("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders")
-		, _T("Personal"), buf, MAX_PATH); // Some callers might rely on MAX_PATH being the limit, to avoid overflow.
+	if (SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, buf) != S_OK)
+		*buf = '\0';
 	// Since it is common (such as in networked environments) to have My Documents on the root of a drive
 	// (such as a mapped drive letter), remove the backslash from something like M:\ because M: is more
 	// appropriate for most uses:
@@ -14210,8 +14172,25 @@ void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 // dynamic function-call fails when too few parameters are passed (but not too many), it seems best to
 // indicate to the caller not only that the function exists, but also how many parameters are required.
 {
-	Func *func = g_script.FindFunc(TokenToString(*aParam[0], aResultToken.buf));
+	Func *func;
+	if (  !(func = dynamic_cast<Func *>(TokenToObject(*aParam[0])))  )
+		func = g_script.FindFunc(TokenToString(*aParam[0], aResultToken.buf));
 	aResultToken.value_int64 = func ? (__int64)func->mMinParams+1 : 0;
+}
+
+
+
+void BIF_Func(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+// Returns a reference to an existing user-defined or built-in function, as an object.
+{
+	Func *func = g_script.FindFunc(TokenToString(*aParam[0], aResultToken.buf));
+	if (func)
+	{
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = func;
+	}
+	else
+		aResultToken.value_int64 = 0;
 }
 
 
