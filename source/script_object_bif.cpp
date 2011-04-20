@@ -196,9 +196,22 @@ void BIF_ObjNew(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	this_token.symbol = SYM_OBJECT;
 	this_token.object = new_object;
 	aParam[0] = &name_token;
-	if (class_object->Invoke(aResultToken, this_token, IT_CALL | IF_META, aParam, aParamCount) == INVOKE_NOT_HANDLED)
+	if (class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, aParamCount) != EARLY_RETURN)
 	{
-		// Since it wasn't handled, neither this class nor any of its super-classes define __New().
+		// Although it isn't likely to happen, if __New points at a built-in function or if mBase
+		// (or an ancestor) is not an Object (i.e. it's a ComObject), aResultToken can be set even when
+		// the result is not EARLY_RETURN.  So make sure to clean up any result we're not going to use.
+		if (aResultToken.symbol == SYM_OBJECT)
+			aResultToken.object->Release();
+		if (aResultToken.mem_to_free)
+		{
+			// This can be done by our caller, but is done here for maintainability; i.e. because
+			// some callers might expect mem_to_free to be NULL when the result isn't a string.
+			free(aResultToken.mem_to_free);
+			aResultToken.mem_to_free = NULL;
+		}
+		// Either it wasn't handled (i.e. neither this class nor any of its super-classes define __New()),
+		// or there was no explicit "return", so just return the new object.
 		aResultToken.symbol = SYM_OBJECT;
 		aResultToken.object = new_object;
 	}
