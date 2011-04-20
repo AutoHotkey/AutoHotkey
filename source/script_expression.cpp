@@ -800,7 +800,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			if (IObject *obj = TokenToObject(right))
 			{
 				this_token.symbol = SYM_INTEGER;
-				this_token.value_int64 = (__int64)right.object;
+				this_token.value_int64 = (__int64)obj;
 			}
 			else if (right.symbol == SYM_VAR // At this stage, SYM_VAR is always a normal variable, never a built-in one, so taking its address should be safe.
 				&& !right.var->IsPureNumeric()) // Seems best not to return Contents() in this case since any changes to it might cause inconsistency.
