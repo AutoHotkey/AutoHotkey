@@ -7342,7 +7342,7 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
 
 	// Get base variable; e.g. "MyClass" in "MyClass.MySubClass".
 	cp = _tcschr(class_name + 1, '.');
-	Var *base_var = FindVar(class_name, cp - class_name);
+	Var *base_var = FindVar(class_name, cp - class_name, NULL, ALWAYS_USE_GLOBAL);
 	if (!base_var)
 		return NULL;
 
