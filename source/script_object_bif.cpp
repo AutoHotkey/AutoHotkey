@@ -202,6 +202,8 @@ void BIF_ObjNew(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 		aResultToken.symbol = SYM_OBJECT;
 		aResultToken.object = new_object;
 	}
+	else
+		new_object->Release();
 	aParam[0] = class_token;
 }
 
