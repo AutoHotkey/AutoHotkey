@@ -2019,19 +2019,22 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 			pending_buf_is_class = false;
 			goto continue_main_loop; // In lieu of "continue", for performance.
 		}
-
-		if (LPTSTR class_name = IsClassDefinition(buf, pending_buf_has_brace))
+		
+		if (!g->CurrentFunc)
 		{
-			// Defer this line until the next line comes in to simplify handling of '{' and OTB:
-			_tcscpy(pending_buf, class_name);
-			pending_buf_line_number = mCombinedLineNumber;
-			pending_buf_is_class = true;
-			goto continue_main_loop; // In lieu of "continue", for performance.
-		}
+			if (LPTSTR class_name = IsClassDefinition(buf, pending_buf_has_brace))
+			{
+				// Defer this line until the next line comes in to simplify handling of '{' and OTB:
+				_tcscpy(pending_buf, class_name);
+				pending_buf_line_number = mCombinedLineNumber;
+				pending_buf_is_class = true;
+				goto continue_main_loop; // In lieu of "continue", for performance.
+			}
 
-		if (mClassObjectCount && !g->CurrentFunc)
-			// Anything not already handled above is not valid directly inside a class definition.
-			return ScriptError(_T("Expected class or method definition."), buf);
+			if (mClassObjectCount)
+				// Anything not already handled above is not valid directly inside a class definition.
+				return ScriptError(_T("Expected class or method definition."), buf);
+		}
 
 		// The following "examine_line" label skips the following parts above:
 		// 1) IsFunction() because that's only for a function call or definition alone on a line
