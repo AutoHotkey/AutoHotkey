@@ -2435,7 +2435,6 @@ private:
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
 	Line *mFirstStaticLine, *mLastStaticLine; // The first and last static var initializer.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
-	Func *mLastFunc;  // The last added function.
 	Func **mFunc;  // Binary-searchable array of functions.
 	int mFuncCount, mFuncCountMax;
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
@@ -2464,7 +2463,6 @@ private:
 		: (mFileName ? mFileName : T_AHK_NAME), _countof(mNIC.szTip));
 	NOTIFYICONDATA mNIC; // For ease of adding and deleting our tray icon.
 
-	ResultType CloseAndReturnFail(TextStream *ts);
 	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, TextStream *ts);
 	ResultType IsDirective(LPTSTR aBuf);
 	ResultType ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType = ACT_INVALID
