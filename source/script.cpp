@@ -4850,11 +4850,13 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 								return ScriptError(ERR_MISSING_CLOSE_QUOTE, op_begin);
 							if (this_new_arg.text[j] == in_quote && !(this_aArgMap && this_aArgMap[j])) // A non-literal quote mark.
 							{
-								op_end = this_new_arg.text + j + 1;
+								op_end = this_new_arg.text + j;
+								*op_end = '\0'; // Temporarily null-terminate.
 								// See ParseDerefs() call further below for comments.
 								if (!ParseDerefs(op_begin, this_aArgMap ? this_aArgMap + (op_begin - this_new_arg.text) : NULL
 									, deref, deref_count))
 									return FAIL;
+								*op_end++ = in_quote; // Undo termination and advance op_end to a position after the ending quote mark.
 								break;
 							}
 						}
