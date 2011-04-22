@@ -3474,9 +3474,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		return ScriptError(_T("DEBUG: ParseAndAddLine() called incorrectly."));
 #endif
 
-	bool in_quotes;
-	int open_parens;
-
 	TCHAR action_name[MAX_VAR_NAME_LENGTH + 1], *end_marker;
 	if (aActionName) // i.e. this function was called recursively with explicit values for the optional params.
 	{
@@ -3685,38 +3682,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				// The search must exclude commas that are inside quoted/literal strings and those that
 				// are inside parentheses (chiefly those of function-calls, but possibly others).
 
-				for (in_quotes = false, open_parens = 0; *item_end; ++item_end) // FIND THE NEXT "REAL" COMMA.
-				{
-					if (*item_end == ',') // This is outside the switch() further below so that its "break" can get out of the loop.
-					{
-						if (!(in_quotes || open_parens)) // A delimiting comma other than one in a sub-statement or function. Shouldn't need to worry about unquoted escaped commas since they don't make sense in a declaration list.
-							break;
-						// Otherwise, its a quoted/literal comma or one in parentheses (such as function-call).
-						continue; // Continue past it to look for the correct comma.
-					}
-					switch (*item_end)
-					{
-					case '"': // There are sections similar this one later below; so see them for comments.
-						in_quotes = !in_quotes;
-						break;
-					case '(':
-					case '[': // L31: For this purpose, () and [] are equivalent. If they aren't balanced properly, a later stage will abort/exit.
-					case '{':
-						if (!in_quotes) // Literal parentheses inside a quoted string should not be counted for this purpose.
-							++open_parens;
-						break;
-					case ')':
-					case ']':
-					case '}':
-						if (!in_quotes)
-							--open_parens; // L31: OK if this is negative; later validation will catch the syntax error.
-						break;
-					//default: some other character; just have the loop skip over it.
-					}
-				} // for() to look for the ending comma or terminator of this sub-statement.
-				// L31: Since the introduction of brackets[] would complicate validation in this section,
-				//		validation of parentheses and quotes is now done only in ExpressionToPostfix.
-
+				item_end += FindNextDelimiter(item_end); // FIND THE NEXT "REAL" COMMA (or the end of the string).
+				
 				// Above has now found the final comma of this sub-statement (or the terminator if there is no comma).
 				LPTSTR terminate_here = omit_trailing_whitespace(item, item_end-1) + 1; // v1.0.47.02: Fix the fact that "x=5 , y=6" would preserve the whitespace at the end of "5".  It also fixes wrongly showing a syntax error for things like: static d="xyz"  , e = 5
 				TCHAR orig_char = *terminate_here;
@@ -4236,40 +4203,18 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						// 2) EnvDiv's special behavior, which is different than both true divide and floor divide.
 						// 3) Possibly add/sub's date/time math.
 						// 4) Maybe obsolete: For performance, don't want trivial assignments to become ACT_EXPRESSION.
-						LPTSTR cp;
-						for (in_quotes = false, open_parens = 0, cp = action_args + 2; *cp; ++cp)
+						LPTSTR cp = action_args + FindNextDelimiter(action_args, g_delimiter, 2);
+						if (*cp) // Found a delimiting comma other than one in a sub-statement or function. Shouldn't need to worry about unquoted escaped commas since they don't make sense with += and -=.
 						{
-							switch (*cp)
+							if (aActionType == ACT_ADD || aActionType == ACT_SUB)
 							{
-							case '"': // This is whole section similar to another one later below, so see it for comments.
-								in_quotes = !in_quotes;
-								break;
-							case '(':
-							case '[': // L31: For this purpose, () and [] are equivalent. If they aren't balanced properly, a later stage will detect the error.
-							case '{':
-								if (!in_quotes) // Literal parentheses inside a quoted string should not be counted for this purpose.
-									++open_parens;
-								break;
-							case ')':
-							case ']':
-							case '}':
-								if (!in_quotes)
-									--open_parens;
-								break;
+								cp = omit_leading_whitespace(cp + 1);
+								if (StrChrAny(cp, EXPR_ALL_SYMBOLS)) // Don't need strstr(cp, " ?") because the search already looks for ':'.
+									aActionType = ACT_EXPRESSION; // It's clearly an expression not a word like Days or %VarContainingTheWordDays%.
+								//else it's probably date/time math, so leave it as-is.
 							}
-							if (*cp == g_delimiter && !in_quotes && open_parens < 1) // A delimiting comma other than one in a sub-statement or function. Shouldn't need to worry about unquoted escaped commas since they don't make sense with += and -=.
-							{
-								if (aActionType == ACT_ADD || aActionType == ACT_SUB)
-								{
-									cp = omit_leading_whitespace(cp + 1);
-									if (StrChrAny(cp, EXPR_ALL_SYMBOLS)) // Don't need strstr(cp, " ?") because the search already looks for ':'.
-										aActionType = ACT_EXPRESSION; // It's clearly an expression not a word like Days or %VarContainingTheWordDays%.
-									//else it's probably date/time math, so leave it as-is.
-								}
-								else // ACT_ASSIGNEXPR/MULT/DIV, for which any non-function comma qualifies it as multi-statement.
-									aActionType = ACT_EXPRESSION;
-								break;
-							}
+							else // ACT_ASSIGNEXPR/MULT/DIV, for which any non-function comma qualifies it as multi-statement.
+								aActionType = ACT_EXPRESSION;
 						}
 					}
 					if (aActionType != ACT_EXPRESSION) // The above didn't make it a stand-alone expression.
@@ -4670,110 +4615,86 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		is_expression = *arg[nArgs] == g_DerefChar && !*arg_map[nArgs] // It's a non-literal deref character.
 			&& IS_SPACE_OR_TAB(arg[nArgs][1]); // Followed by a space or tab.
 
-		// Find the end of the above arg:
-		for (in_quotes = false, open_parens = 0; action_args[mark]; ++mark)
+		if (!is_expression)
 		{
-			switch (action_args[mark])
+			if (aActionType == ACT_TRANSFORM && (nArgs == 2 || nArgs == 3)) // i.e. the 3rd or 4th arg is about to be added.
 			{
-			case '"':
-				// The simple method below is sufficient for our purpose even if a quoted string contains
-				// pairs of double-quotes to represent a single literal quote, e.g. "quoted ""word""".
-				// In other words, it relies on the fact that there must be an even number of quotes
-				// inside any mandatory-numeric arg that is an expression such as x=="red,blue"
-				in_quotes = !in_quotes;
-				break;
-			case '(':
-			case '[': // L31: For this purpose, () and [] are equivalent. If they aren't balanced properly, a later stage will detect the error.
-			case '{':
-				if (!in_quotes) // Literal parentheses inside a quoted string should not be counted for this purpose.
-					++open_parens;
-				break;
-			case ')':
-			case ']':
-			case '}':
-				if (!in_quotes)
-					--open_parens;
-				break;
-			}
-
-			if (action_args[mark] == g_delimiter && !literal_map[mark])  // A non-literal delimiter (unless its within double-quotes of a mandatory-numeric arg) is a match.
-			{
-				// If we're inside a pair of quotes or parentheses and this arg is known to be an expression, this
-				// delimiter is part this arg and thus not to be used as a delimiter between command args:
-				if (in_quotes || open_parens > 0)
+				// Somewhat inefficient since it has to be called for both Arg#2 and Arg#3, but seems
+				// worth the benefit in terms of code simplification.  Note that the following might
+				// return TRANS_CMD_INVALID just because the sub-command is containined in a variable
+				// reference.  That is why TRANS_CMD_INVALID does not produce an error at this stage,
+				// but only later when the line has been constructed far enough to call ArgHasDeref():
+				// i.e. Not the first param, only the third and fourth, which currently are either both numeric or both non-numeric for all cases.
+				switch(Line::ConvertTransformCmd(arg[1])) // arg[1] is the second arg.
 				{
-					if (is_expression)
-						continue;
-					if (aActionType == ACT_TRANSFORM && (nArgs == 2 || nArgs == 3)) // i.e. the 3rd or 4th arg is about to be added.
-					{
-						// Somewhat inefficient in the case where it has to be called for both Arg#2 and Arg#3,
-						// but that is pretty rare.  Overall, expressions and quoted strings in these args
-						// is rare too, so the inefficiency of redundant calls to ConvertTransformCmd() is
-						// very small on average, and seems worth the benefit in terms of code simplification.
-						// Note that the following might return TRANS_CMD_INVALID just because the sub-command
-						// is containined in a variable reference.  That is why TRANS_CMD_INVALID does not
-						// produce an error at this stage, but only later when the line has been constructed
-						// far enough to call ArgHasDeref():
-						// i.e. Not the first param, only the third and fourth, which currently are either both numeric or both non-numeric for all cases.
-						switch(Line::ConvertTransformCmd(arg[1])) // arg[1] is the second arg.
-						{
-						// See comment above for why TRANS_CMD_INVALID isn't yet reported as an error:
+				// See comment above for why TRANS_CMD_INVALID isn't yet reported as an error:
 #ifdef UNICODE
-						#define TRANS_CMD_UNICODE_CASES
+				#define TRANS_CMD_UNICODE_CASES
 #else
-						#define TRANS_CMD_UNICODE_CASES \
-						case TRANS_CMD_UNICODE:
+				#define TRANS_CMD_UNICODE_CASES \
+				case TRANS_CMD_UNICODE:
 #endif
-						#define TRANSFORM_NON_EXPRESSION_CASES \
-						case TRANS_CMD_INVALID:\
-						case TRANS_CMD_ASC:\
-						TRANS_CMD_UNICODE_CASES\
-						case TRANS_CMD_DEREF:\
-						case TRANS_CMD_HTML:\
-							break; // Do nothing.  Leave this_new_arg.is_expression set to its default of false.
+				#define TRANSFORM_NON_EXPRESSION_CASES \
+				case TRANS_CMD_INVALID:\
+				case TRANS_CMD_ASC:\
+				TRANS_CMD_UNICODE_CASES\
+				case TRANS_CMD_DEREF:\
+				case TRANS_CMD_HTML:\
+					break; // Do nothing.  Leave is_expression set to its default of false.
 
-						TRANSFORM_NON_EXPRESSION_CASES
-						default:
-							// For all other sub-commands, Arg #3 and #4 are expression-capable.  It doesn't
-							// seem necessary to call LegacyArgIsExpression() because the mere fact that
-							// we're inside a pair of quotes or parentheses seems enough to indicate that this
-							// really is an expression.
-							continue;
-						}
-					}
-					// v1.0.43.07: Fixed below to use this_action instead of g_act[aActionType] so that the
-					// numeric params of legacy commands like EnvAdd/Sub/LeftClick can be detected.  Without
-					// this fix, the last comma in a line like "EnvSub, var, Add(2, 3)" is seen as a parameter
-					// delimiter, which causes a loadtime syntax error.
-					if (np = this_action.NumericParams) // This command has at least one numeric parameter.
-					{
-						// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
-						nArgs_plus_one = nArgs + 1;
-						for (; *np; ++np)
-							if (*np == nArgs_plus_one) // This arg is enforced to be purely numeric.
-								break;
-						if (*np) // Match found, so this is a purely numeric arg.
-							continue; // This delimiter is disqualified, so look for the next one.
-					}
-				} // if in quotes or parentheses
-				// Since above didn't "continue", this is a real delimiter.
-				action_args[mark] = '\0';  // Terminate the previous arg.
-				// Trim any whitespace from the previous arg.  This operation
-				// will not alter the contents of anything beyond action_args[i],
-				// so it should be safe.  In addition, even though it changes
-				// the contents of the arg[nArgs] substring, we don't have to
-				// update literal_map because the map is still accurate due
-				// to the nature of rtrim).  UPDATE: Note that this version
-				// of rtrim() specifically avoids trimming newline characters,
-				// since the user may have included literal newlines at the end
-				// of the string by using an escape sequence:
-				rtrim(arg[nArgs]);
-				// Omit the leading whitespace from the next arg:
-				for (++mark; IS_SPACE_OR_TAB(action_args[mark]); ++mark);
-				// Now <mark> marks the end of the string, the start of the next arg,
-				// or a delimiter-char (if the next arg is blank).
-				break;  // Arg was found, so let the outer loop handle it.
+				TRANSFORM_NON_EXPRESSION_CASES
+				default:
+					// For all other sub-commands, Arg #3 and #4 are expression-capable.  It doesn't
+					// seem necessary to call LegacyArgIsExpression() because is_expression is only
+					// used below to avoid misinterpreting commas in quoted strings and parentheses;
+					// i.e. detecting those legacy cases wouldn't affect the outcome.
+					is_expression = true;
+					break;
+				}
 			}
+			else
+			{
+				// v1.0.43.07: Fixed below to use this_action instead of g_act[aActionType] so that the
+				// numeric params of legacy commands like EnvAdd/Sub/LeftClick can be detected.  Without
+				// this fix, the last comma in a line like "EnvSub, var, Add(2, 3)" is seen as a parameter
+				// delimiter, which causes a loadtime syntax error.
+				if (np = this_action.NumericParams) // This command has at least one numeric parameter.
+				{
+					// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
+					nArgs_plus_one = nArgs + 1;
+					for (; *np; ++np)
+						if (*np == nArgs_plus_one) // This arg is enforced to be purely numeric.
+							break;
+					if (*np) // Match found, so this is a purely numeric arg.
+						is_expression = true;
+				}
+			}
+		} // if (!is_expression)
+
+		// Find the end of the above arg:
+		if (is_expression)
+			// Find the next delimiter, taking into account quote marks, parentheses, etc.
+			mark = FindNextDelimiter(action_args, g_delimiter, mark, literal_map);
+		else
+			// Find the next non-literal delimiter.
+			for (; action_args[mark]; ++mark)
+				if (action_args[mark] == g_delimiter && !literal_map[mark])
+					break;
+
+		if (action_args[mark])  // A non-literal delimiter was found.
+		{
+			action_args[mark] = '\0';  // Terminate the previous arg.
+			// Trim any whitespace from the previous arg.  This operation will not alter the contents
+			// of anything beyond action_args[i], so it should be safe.  In addition, even though it
+			// changes the contents of the arg[nArgs] substring, we don't have to update literal_map
+			// because the map is still accurate due to the nature of rtrim).  UPDATE: Note that this
+			// version of rtrim() specifically avoids trimming newline characters, since the user may
+			// have included literal newlines at the end of the string by using an escape sequence:
+			rtrim(arg[nArgs]);
+			// Omit the leading whitespace from the next arg:
+			for (++mark; IS_SPACE_OR_TAB(action_args[mark]); ++mark);
+			// Now <mark> marks the end of the string, the start of the next arg,
+			// or a delimiter-char (if the next arg is blank).
 		}
 	}
 

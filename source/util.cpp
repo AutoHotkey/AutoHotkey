@@ -2526,6 +2526,50 @@ LPTSTR ConvertEscapeSequences(LPTSTR aBuf, TCHAR aEscapeChar, bool aAllowEscaped
 
 
 
+int FindNextDelimiter(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLiteralMap)
+// Returns the index of the next delimiter, taking into account quotes, parentheses, etc.
+// If the delimiter is not found, returns the length of aBuf.
+{
+	bool in_quotes = false;
+	int open_parens = 0;
+	for (int mark = aStartIndex; ; ++mark)
+	{
+		if (aBuf[mark] == aDelimiter)
+		{
+			if (!in_quotes && open_parens <= 0 && !(aLiteralMap && aLiteralMap[mark]))
+				// A delimiting comma other than one in a sub-statement or function.
+				return mark;
+			// Otherwise, its a quoted/literal comma or one in parentheses (such as function-call).
+			continue;
+		}
+		switch (aBuf[mark])
+		{
+		case '"': // There are sections similar this one later below; so see them for comments.
+			in_quotes = !in_quotes;
+			break;
+		case '(': // For our purpose, "(", "[" and "{" can be treated the same.
+		case '[': // If they aren't balanced properly, a later stage will detect it.
+		case '{': //
+			if (!in_quotes) // Literal parentheses inside a quoted string should not be counted for this purpose.
+				++open_parens;
+			break;
+		case ')':
+		case ']':
+		case '}':
+			if (!in_quotes)
+				--open_parens; // If this makes it negative, validation later on will catch the syntax error.
+			break;
+		case '\0':
+			// Reached the end of the string without finding a delimiter.  Return the
+			// index of the null-terminator since that's typically what the caller wants.
+			return mark;
+		//default: some other character; just have the loop skip over it.
+		}
+	}
+}
+
+
+
 bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch)
 // Checks if aStr exists in aList (which is a comma-separated list).
 // If aStr is blank, aList must start with a delimiting comma for there to be a match.
