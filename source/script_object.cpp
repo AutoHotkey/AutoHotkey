@@ -385,7 +385,10 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		//		3) Repeat 1 through 3 for the base object's own base.
 		if (mBase)
 		{
-			ResultType r = mBase->Invoke(aResultToken, aThisToken, aFlags | IF_META, aParam, aParamCount);
+			// aFlags: If caller specified IF_METAOBJ but not IF_METAFUNC, they want to recursively
+			// find and execute a specific meta-function (__new or __delete) but don't want any base
+			// object to invoke __call.  So if this is already a meta-invocation, don't change aFlags.
+			ResultType r = mBase->Invoke(aResultToken, aThisToken, aFlags | (IS_INVOKE_META ? 0 : IF_META), aParam, aParamCount);
 			if (r != INVOKE_NOT_HANDLED)
 				return r;
 
