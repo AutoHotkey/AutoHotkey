@@ -4172,7 +4172,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						cp = omit_leading_whitespace(cp);
 						if (*cp == '[' || !*cp // x.y[z] or x.y
 							|| cp[1] == '=' && _tcschr(_T(":+-*/|&^."), cp[0]) // Two-char assignment operator.
-							|| _tcschr(_T("/<>"), cp[0]) && cp[1] == cp[0] && cp[2] == '=') // //=, <<= or >>=
+							|| cp[1] == cp[0]
+								&& (   _tcschr(_T("/<>"), cp[0]) && cp[2] == '=' // //=, <<= or >>=
+									|| *cp == '+' || *cp == '-'   )) // x.y++ or x.y--
 						{	// Allow Set and bracketed Get as standalone expression.
 							aActionType = ACT_EXPRESSION;
 							break;
