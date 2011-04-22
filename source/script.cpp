@@ -2032,8 +2032,16 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 			}
 
 			if (mClassObjectCount)
+			{
+				if (!_tcsnicmp(buf, _T("Var"), 3) && IS_SPACE_OR_TAB(buf[3]))
+				{
+					if (!DefineClassVars(buf + 4))
+						return FAIL; // Above already displayed the error.
+					goto continue_main_loop; // In lieu of "continue", for performance.
+				}
 				// Anything not already handled above is not valid directly inside a class definition.
-				return ScriptError(_T("Expected class or method definition."), buf);
+				return ScriptError(_T("Expected class, var or method definition."), buf);
+			}
 		}
 
 		// The following "examine_line" label skips the following parts above:
@@ -3618,7 +3626,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				if (   !(var = FindOrAddVar(item, var_name_length, always_use, &is_already_exception))   )
 					return FAIL; // It already displayed the error.
 				if (is_already_exception) // It was already in the exception list (previously declared).
-					return ScriptError(_T("Duplicate declaration."), item);
+					return ScriptError(ERR_DUPLICATE_DECLARATION, item);
 				if (var->Type() != VAR_NORMAL || !tcslicmp(item, _T("ErrorLevel"), var_name_length)) // Shouldn't be declared either way (global or local).
 					return ScriptError(_T("Built-in variables must not be declared."), item);
 				for (int i = 0; i < g->CurrentFunc->mParamCount; ++i) // Search by name to find both global and local declarations.
@@ -6947,13 +6955,16 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 		if (  !(full_name = (LPTSTR)SimpleHeap::Malloc((_tcslen(mClassName) + _tcslen(aBuf) + 2) * sizeof(TCHAR)))  ) // +2 for dot and null-terminator.
 			return FAIL;
 		_stprintf(full_name, _T("%s.%s"), mClassName, aBuf);
-		*param_start = '('; // Undo termination.
 		// Check for duplicates and determine insert_pos:
-		if (Func *found_func = FindFunc(full_name, 0, &insert_pos))
+		Func *found_func;
+		ExprTokenType found_item;
+		if (class_object->GetItem(found_item, aBuf) // Must be done in addition to the below to detect conflicting var/method declarations.
+			|| (found_func = FindFunc(full_name, 0, &insert_pos))) // Must be done to determine insert_pos.
 		{
 			*param_start = '(';
-			return ScriptError(_T("Duplicate method definition."), aBuf);
+			return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
 		}
+		*param_start = '('; // Undo termination.
 		// Below passes class_object for AddFunc() to store the func "by reference" in it:
 		if (  !(g->CurrentFunc = AddFunc(full_name, 0, false, insert_pos, class_object))  )
 			return FAIL;
@@ -7242,6 +7253,97 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	class_object->SetBase(base_class); // May be NULL.
 
 	++mClassObjectCount;
+	return OK;
+}
+
+
+ResultType Script::DefineClassVars(LPTSTR aBuf)
+{
+	Object *class_object = mClassObject[mClassObjectCount - 1];
+	LPTSTR item, item_end;
+	TCHAR orig_char, buf[LINE_SIZE];
+	size_t buf_used = 0;
+	ExprTokenType temp_token, empty_token;
+	empty_token.symbol = SYM_STRING;
+	empty_token.marker = _T("");
+					
+	for (item = omit_leading_whitespace(aBuf); *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
+	{
+		for (item_end = item; cisalnum(*item_end) || *item_end == '_'; ++item_end); // Find end of identifier.
+		if (item_end == item)
+			return ScriptError(ERR_INVALID_CLASS_VAR, item);
+		orig_char = *item_end;
+		*item_end = '\0'; // Temporarily terminate.
+		if (class_object->GetItem(temp_token, item))
+			return ScriptError(ERR_DUPLICATE_DECLARATION, item);
+		// Assigning class_object[item] := "" is sufficient to mark it as a class variable:
+		if (!class_object->SetItem(item, empty_token))
+			return ScriptError(ERR_OUTOFMEM);
+		*item_end = orig_char; // Undo termination.
+		size_t name_length = item_end - item;
+						
+		// This section is very similar to the on in ParseAndAddLine() which deals with
+		// variable declarations, so maybe maintain them together:
+
+		item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
+		switch (*item_end)
+		{
+		case ',':  // No initializer is present for this variable, so move on to the next one.
+			item = omit_leading_whitespace(item_end + 1); // Set "item" for use by the next iteration.
+			continue; // No further processing needed below.
+		case '\0': // No initializer is present for this variable, so move on to the next one.
+			item = item_end; // Set "item" for use by the loop's condition.
+			continue;
+		case '=': // Supported for consistency with v1 syntax; to be removed in v2.
+			++item_end; // Point to the character after the "=".
+			break;
+		case ':':
+			if (item_end[1] == '=')
+			{
+				item_end += 2; // Point to the character after the ":=".
+				break;
+			}
+			// Otherwise, fall through to below:
+		default:
+			return ScriptError(ERR_INVALID_CLASS_VAR, item);
+		}
+						
+		// Since above didn't "continue", this declared variable also has an initializer.
+		// Append the class name, ":=" and initializer to pending_buf, to be turned into
+		// an expression below, and executed at script start-up.
+		item_end = omit_leading_whitespace(item_end);
+		LPTSTR right_side_of_operator = item_end; // Save for use below.
+
+		item_end += FindNextDelimiter(item_end); // Find the next comma which is not part of the initializer (or find end of string).
+
+		// Append "ClassName.VarName := Initializer, " to the buffer.
+		int chars_written = _sntprintf(buf + buf_used, _countof(buf) - buf_used, _T("%s.%.*s := %.*s, ")
+			, mClassName, name_length, item, item_end - right_side_of_operator, right_side_of_operator);
+		if (chars_written < 0)
+			return ScriptError(_T("Declaration too long.")); // Short message since should be rare.
+		buf_used += chars_written;
+
+		// Set "item" for use by the next iteration:
+		item = (*item_end == ',') // i.e. it's not the terminator and thus not the final item in the list.
+			? omit_leading_whitespace(item_end + 1)
+			: item_end; // It's the terminator, so let the loop detect that to finish.
+	}
+	if (buf_used)
+	{
+		// Above wrote at least one initializer expression into buf.
+		buf[buf_used -= 2] = '\0'; // Remove the final ", "
+		if (!ParseAndAddLine(buf, ACT_EXPRESSION))
+			return FAIL; // Above already displayed the error.
+		// This part is identical to the code used for static var initializers:
+		mLastLine = mLastLine->mPrevLine; // Restore mLastLine to the last non-'static' line, but leave mCurrLine set to the new line.
+		mLastLine->mNextLine = NULL; // Remove the new line from the main script's linked list of lines. For maintainability: AddLine() unconditionally overwrites mLastLine->mNextLine anyway.
+		if (mLastStaticLine)
+			mLastStaticLine->mNextLine = mCurrLine;
+		else
+			mFirstStaticLine = mCurrLine;
+		mCurrLine->mPrevLine = mLastStaticLine; // Even if NULL. Must be set otherwise VicinityToText() will show the wrong line if this one or one "near" it has an error.
+		mLastStaticLine = mCurrLine;
+	}
 	return OK;
 }
 
