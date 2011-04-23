@@ -1457,7 +1457,7 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ExprTokenType &aResultToken, ExprToken
 			}
 			return OK;
 		}
-		else if (!_tcsicmp(member, _T("IsByRef")) && aParamCount <= 2)
+		else if (!_tcsicmp(member, _T("IsByRef")) && aParamCount <= 2 && !mIsBuiltIn)
 		{
 			if (aParamCount == 2)
 			{
