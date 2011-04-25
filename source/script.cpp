@@ -10624,6 +10624,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					if (line->mArg[0].postfix && !line->mArg[0].is_expression) // Lone numeric or string literal.
 					{
 						aResultToken->symbol = line->mArg[0].postfix->symbol;
+#ifndef _WIN64
+						if (aResultToken->symbol == SYM_STRING)
+							aResultToken->marker = line->mArg[0].postfix->marker; // Avoid union copy in this case since some callers use aResultToken.buf to make the string persistent.
+						else
+#endif
 						aResultToken->value_int64 = line->mArg[0].postfix->value_int64; // Union copy.
 					}
 					else // An expression which returned a string, or a lone dynamic/built-in var deref.
