@@ -6282,9 +6282,6 @@ ResultType Script::DefineClassVars(LPTSTR aBuf)
 		case '\0': // No initializer is present for this variable, so move on to the next one.
 			item = item_end; // Set "item" for use by the loop's condition.
 			continue;
-		case '=': // Supported for consistency with v1 syntax; to be removed in v2.
-			++item_end; // Point to the character after the "=".
-			break;
 		case ':':
 			if (item_end[1] == '=')
 			{
