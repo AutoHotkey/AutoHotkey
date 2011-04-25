@@ -191,6 +191,8 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_CHAR _T("This character is not allowed here.")
 #define ERR_INVALID_DOT _T("Ambiguous or invalid use of \".\"")
 #define ERR_UNQUOTED_NON_ALNUM _T("Unquoted literals may only consist of alphanumeric characters/underscore.")
+#define ERR_DUPLICATE_DECLARATION _T("Duplicate declaration.")
+#define ERR_INVALID_CLASS_VAR _T("Invalid class variable declaration.")
 
 #define WARNING_USE_UNSET_VARIABLE _T("Using value of uninitialized variable.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("Local variable with same name as global.")
@@ -2544,6 +2546,7 @@ public:
 	Func *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos, Object *aClassObject = NULL);
 
 	ResultType DefineClass(LPTSTR aBuf);
+	ResultType DefineClassVars(LPTSTR aBuf);
 	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
 
 	#define FINDVAR_DEFAULT  (VAR_LOCAL | VAR_GLOBAL)
