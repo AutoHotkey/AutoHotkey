@@ -1116,9 +1116,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			{
 				// Because both are integers and the operation isn't division, the result is integer.
 				// The result is also an integer for the bitwise operations listed in the if-statement
-				// above.  This is because it is not legal to perform ~, &, |, or ^ on doubles, and also
-				// because this behavior conforms to that of the Transform command.  Any floating point
-				// operands are truncated to integers prior to doing the bitwise operation.
+				// above.  This is because it is not legal to perform ~, &, |, or ^ on doubles.  Any
+				// floating point operands are truncated to integers prior to doing the bitwise operation.
 				right_int64 = TokenToInt64(right); // It can't be SYM_STRING because in here, both right and
 				left_int64 = TokenToInt64(left);    // left are known to be numbers (otherwise an earlier "else if" would have executed instead of this one).
 				result_symbol = SYM_INTEGER; // Set default.

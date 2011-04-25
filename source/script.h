@@ -455,8 +455,6 @@ enum SysGetCmds {SYSGET_CMD_INVALID, SYSGET_CMD_METRICS, SYSGET_CMD_MONITORCOUNT
 	, SYSGET_CMD_MONITORAREA, SYSGET_CMD_MONITORWORKAREA, SYSGET_CMD_MONITORNAME
 };
 
-enum TransformCmds {TRANS_CMD_INVALID, TRANS_CMD_DEREF, TRANS_CMD_UNICODE, TRANS_CMD_HTML};
-
 enum MenuCommands {MENU_CMD_INVALID, MENU_CMD_SHOW, MENU_CMD_USEERRORLEVEL
 	, MENU_CMD_ADD, MENU_CMD_RENAME, MENU_CMD_CHECK, MENU_CMD_UNCHECK, MENU_CMD_TOGGLECHECK
 	, MENU_CMD_ENABLE, MENU_CMD_DISABLE, MENU_CMD_TOGGLEENABLE
@@ -621,7 +619,6 @@ private:
 
 	ResultType ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID);
 	ResultType TrayTip(LPTSTR aTitle, LPTSTR aText, LPTSTR aTimeout, LPTSTR aOptions);
-	ResultType Transform(LPTSTR aCmd, LPTSTR aValue1, LPTSTR aValue2);
 	ResultType Input(); // The Input command.
 
 	#define SW_NONE -1
@@ -922,7 +919,7 @@ public:
 			switch(aActionType)
 			{
 			case ACT_ASSIGNEXPR:
-			case ACT_TRANSFORM:
+			case ACT_DEREF:
 			case ACT_STRINGLOWER:
 			case ACT_STRINGUPPER:
 			case ACT_STRINGREPLACE:
@@ -1233,17 +1230,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("MonitorWorkArea"))) return SYSGET_CMD_MONITORWORKAREA;
 		if (!_tcsicmp(aBuf, _T("MonitorName"))) return SYSGET_CMD_MONITORNAME;
 		return SYSGET_CMD_INVALID;
-	}
-
-	static TransformCmds ConvertTransformCmd(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf) return TRANS_CMD_INVALID;
-		if (!_tcsicmp(aBuf, _T("Deref"))) return TRANS_CMD_DEREF;
-#ifndef UNICODE
-		if (!_tcsicmp(aBuf, _T("Unicode"))) return TRANS_CMD_UNICODE;
-#endif
-		if (!_tcsicmp(aBuf, _T("HTML"))) return TRANS_CMD_HTML;
-		return TRANS_CMD_INVALID;
 	}
 
 	static MenuCommands ConvertMenuCommand(LPTSTR aBuf)

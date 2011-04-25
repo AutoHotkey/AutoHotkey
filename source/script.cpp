@@ -4297,39 +4297,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				{
 					if (is_expression)
 						continue;
-					if (aActionType == ACT_TRANSFORM && (nArgs == 2 || nArgs == 3)) // i.e. the 3rd or 4th arg is about to be added.
-					{
-						// Somewhat inefficient in the case where it has to be called for both Arg#2 and Arg#3,
-						// but that is pretty rare.  Overall, expressions and quoted strings in these args
-						// is rare too, so the inefficiency of redundant calls to ConvertTransformCmd() is
-						// very small on average, and seems worth the benefit in terms of code simplification.
-						// Note that the following might return TRANS_CMD_INVALID just because the sub-command
-						// is containined in a variable reference.  That is why TRANS_CMD_INVALID does not
-						// produce an error at this stage, but only later when the line has been constructed
-						// far enough to call ArgHasDeref():
-						// i.e. Not the first param, only the third and fourth, which currently are either both numeric or both non-numeric for all cases.
-						switch(Line::ConvertTransformCmd(arg[1])) // arg[1] is the second arg.
-						{
-						// See comment above for why TRANS_CMD_INVALID isn't yet reported as an error:
-#ifdef UNICODE
-						#define TRANS_CMD_UNICODE_CASES
-#else
-						#define TRANS_CMD_UNICODE_CASES \
-						case TRANS_CMD_UNICODE:
-#endif
-						#define TRANSFORM_NON_EXPRESSION_CASES \
-						case TRANS_CMD_INVALID:\
-						TRANS_CMD_UNICODE_CASES\
-						case TRANS_CMD_DEREF:\
-						case TRANS_CMD_HTML:\
-							break; // Do nothing.  Leave this_new_arg.is_expression set to its default of false.
-
-						TRANSFORM_NON_EXPRESSION_CASES
-						default:
-							// For all other sub-commands, Arg #3 and #4 are expression-capable.
-							continue;
-						}
-					}
 					// v1.0.43.07: Fixed below to use this_action instead of g_act[aActionType] so that the
 					// numeric params of legacy commands like EnvAdd/Sub/LeftClick can be detected.  Without
 					// this fix, the last comma in a line like "EnvSub, var, Add(2, 3)" is seen as a parameter
@@ -4580,7 +4547,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	LPTSTR op_begin, op_end;
 	LPTSTR this_aArgMap, this_aArg, cp;
 	ActionTypeType *np;
-	TransformCmds trans_cmd;
 	bool is_function, pending_function_is_new_op = false;
 
 	//////////////////////////////////////////////////////////
@@ -4605,27 +4571,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			this_aArgMap = aArgMap ? aArgMap[i] : NULL; // Same.
 			ArgStruct &this_new_arg = new_arg[i];       // Same.
 			this_new_arg.is_expression = false;         // Set default early, for maintainability.
-
-			if (aActionType == ACT_TRANSFORM)
-			{
-				if (i == 1) // The second parameter (since the first is the OutputVar).
-					// Note that the following might return TRANS_CMD_INVALID just because the sub-command
-					// is containined in a variable reference.  That is why TRANS_CMD_INVALID does not
-					// produce an error at this stage, but only later when the line has been constructed
-					// far enough to call ArgHasDeref():
-					trans_cmd = Line::ConvertTransformCmd(this_aArg);
-					// The value of trans_cmd is also used by the syntax checker further below.
-				else if (i > 1) // i.e. Not the first param, only the third and fourth, which currently are either both numeric or both non-numeric for all cases.
-				{
-					switch(trans_cmd)
-					{
-					TRANSFORM_NON_EXPRESSION_CASES
-					default:
-						// For all other sub-commands, Arg #3 and #4 are expression-capable.
-						this_new_arg.is_expression = true;
-					}
-				}
-			}
 
 			// Before allocating memory for this Arg's text, first check if it's a pure
 			// variable.  If it is, we store it differently (and there's no need to resolve
@@ -5537,60 +5482,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_SETTITLEMATCHMODE:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertTitleMatchMode(new_raw_arg1))
 			return ScriptError(ERR_TITLEMATCHMODE, new_raw_arg1);
-		break;
-
-	case ACT_TRANSFORM:
-		if (aArgc > 1 && !line.ArgHasDeref(2))
-		{
-			// The value of trans_cmd was already set at an earlier stage, but only here can the error
-			// for new_raw_arg3 be displayed because only here was it finally possible to call
-			// ArgHasDeref() [above].
-			if (trans_cmd == TRANS_CMD_INVALID)
-				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-#ifndef UNICODE
-			if (trans_cmd == TRANS_CMD_UNICODE && !*line.mArg[0].text) // blank text means output-var is not a dynamically built one.
-			{
-				// If the output var isn't the clipboard, the mode is "retrieve clipboard text as UTF-8".
-				// Therefore, Param#3 should be blank in that case to avoid unnecessary fetching of the
-				// entire clipboard contents as plain text when in fact the command itself will be
-				// directly accessing the clipboard rather than relying on the automatic parameter and
-				// deref handling.
-				if (VAR(line.mArg[0])->Type() == VAR_CLIPBOARD)
-				{
-					if (aArgc < 3)
-						return ScriptError(_T("Parameter #3 must not be blank in this case."));
-				}
-				else
-					if (aArgc > 2)
-						return ScriptError(ERR_PARAM3_MUST_BE_BLANK, new_raw_arg3);
-				break; // This type has been fully checked above.
-			}
-#endif
-
-			switch(trans_cmd)
-			{
-			case TRANS_CMD_DEREF:
-#ifndef UNICODE
-			case TRANS_CMD_UNICODE:
-			case TRANS_CMD_HTML:
-#endif
-				if (*new_raw_arg4)
-					return ScriptError(ERR_PARAM4_OMIT, new_raw_arg4);
-				break;
-
-#ifdef UNICODE
-			case TRANS_CMD_HTML:
-				if (*new_raw_arg4 && !line.ArgHasDeref(4) && !IsNumeric(new_raw_arg4, true, false))
-					return ScriptError(_T("Parameter #4 must be blank or an integer in this case."), new_raw_arg4);
-				break;
-#endif
-
-#ifdef _DEBUG
-			default:
-				return ScriptError(_T("DEBUG: Unhandled"), new_raw_arg2);  // To improve maintainability.
-#endif
-			}
-		}
 		break;
 
 	case ACT_MENU:
@@ -12230,8 +12121,8 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	case ACT_STRINGREPLACE:
 		return StringReplace();
 
-	case ACT_TRANSFORM:
-		return Transform(ARG2, ARG3, ARG4);
+	case ACT_DEREF:
+		return Deref(OUTPUT_VAR, ARG2);
 
 	case ACT_STRINGSPLIT:
 		return StringSplit(ARG1, ARG2, ARG3, ARG4);

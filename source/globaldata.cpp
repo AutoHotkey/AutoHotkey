@@ -284,7 +284,7 @@ Action g_act[] =
 
 	, {_T("Input"), 0, 4, true, NULL}  // OutputVar, Options, EndKeys, MatchList.
 
-	, {_T("Transform"), 2, 4, true, NULL}  // output var, operation, value1, value2
+	, {_T("Deref"), 2, 2, true, NULL}  // output var, value
 
 	, {_T("StrLower"), 2, 3, false, NULL} // output var, input var, T = Title Case
 	, {_T("StrUpper"), 2, 3, false, NULL} // output var, input var, T = Title Case
