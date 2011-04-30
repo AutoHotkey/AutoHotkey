@@ -678,7 +678,7 @@ BOOL CALLBACK EnumChildFind(HWND aWnd, LPARAM lParam)
 	// with the fast mode vs. the slow mode (unverified).  So it seems best NOT to do this and stick with
 	// the simple approach above.
 	if (!text_length) // It has no text (or failure to fetch it).
-		return TRUE;  // Skip this child and keep enumerating to try to find a match among the other children.
+		*win_text = '\0';
 
 	// For compatibility with AutoIt v2, strstr() is always used for control/child text elements.
 
