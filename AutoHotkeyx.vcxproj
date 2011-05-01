@@ -283,6 +283,9 @@
       </Message>
       <Outputs>$(SolutionDir)temp\$(Platform)\%(Filename).obj</Outputs>
     </CustomBuild>
+    <ClCompile>
+      <TreatWarningAsError Condition="!$(ConfigDebug)">true</TreatWarningAsError>
+    </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <CustomBuild Include="source\lib\win2kcompat.asm">
