@@ -99,7 +99,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 	size_t result_size, alloca_usage = 0; // v1.0.45: Track amount of alloca mem to avoid stress on stack from extreme expressions (mostly theoretical).
 	BOOL done, done_and_have_an_output_var, make_result_persistent, left_branch_is_true
 		, left_was_negative, is_pre_op; // BOOL vs. bool benchmarks slightly faster, and is slightly smaller in code size (or maybe it's cp1's int vs. char that shrunk it).
-	ExprTokenType *circuit_token, *this_postfix, *p_postfix;
+	ExprTokenType *this_postfix, *p_postfix;
 	Var *sym_assign_var, *temp_var;
 
 	// v1.0.44.06: EXPR_SMALL_MEM_LIMIT is the means by which _alloca() is used to boost performance a
@@ -329,24 +329,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			
 			// The following two steps are now done inside Func::Call:
 			//this_token.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
-			//this_token.marker = func.mName;  // Inform function of which built-in function called it (allows code sharing/reduction). Can't use circuit_token because it's value is still needed later below.
+			//this_token.marker = func.mName;  // Inform function of which built-in function called it (allows code sharing/reduction).
 			this_token.buf = left_buf;       // mBIF() can use this to store a string result, and for other purposes.
 			
-			// BACK UP THE CIRCUIT TOKEN (it's saved because it can be non-NULL at this point; verified
-			// through code review).  Currently refers to the same memory as mem_to_free via union.
-			circuit_token = this_token.circuit_token;
-			this_token.mem_to_free = NULL; // Init to detect whether the called function allocates it (i.e. we're overloading it with a new purpose).  It's no longer necessary to back up & restore the previous value in circuit_token because circuit_token is used only when a result is about to get pushed onto the stack.
-			// RESIST TEMPTATIONS TO OPTIMIZE CIRCUIT_TOKEN by passing output_var as circuit_token/mem_to_free
-			// when done==true (i.e. the built-in function could then assign directly to output_var).
-			// It doesn't help performance at all except for a mere 10% or less in certain fairly rare cases.
-			// More importantly, it hurts maintainability because it makes RegExReplace() more complicated
-			// than it already is, and worse: each BIF would have to check that output_var doesn't overlap
-			// with its input/source strings because if it does, the function must not initialize a default
-			// in output_var before starting (and avoiding this would further complicate the code).
-			// Here is the crux of the abandoned approach: Any function that wishes to pass memory back to
-			// us via mem_to_free: When mem_to_free!=NULL, that function MUST INSTEAD: 1) Turn that
-			// memory over to output_var via AcceptNewMem(); 2) Set mem_to_free to NULL to indicate to
-			// us that it is a user of mem_to_free.
+			this_token.mem_to_free = NULL; // Init to detect whether the called function allocates it.
 			
 			FuncCallData func_call;
 			// Call the user-defined or built-in function.  Func::Call takes care of variadic parameter
@@ -378,7 +364,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				// be considered final because it's already stored in permanent memory (the token itself).
 				// Additionally, this_token.mem_to_free is assumed to be NULL since the result is not
 				// a string; i.e. the function would've had no need to return memory to us.
-				this_token.circuit_token = circuit_token; // Restore it to its original value.
 				goto push_this_token;
 			}
 			
@@ -463,7 +448,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					goto normal_end_skip_output_var; // No need to restore circuit_token because the expression is finished.
 				// Next operation is ":=" and above has verified the target is SYM_VAR and VAR_NORMAL.
 				--stack_count; // STACK_POP;
-				this_token.circuit_token = (++this_postfix)->circuit_token; // Must be done AFTER above. Old, somewhat obsolete comment: this_postfix.circuit_token should have been NULL prior to this because the final right-side result of an assignment shouldn't be the last item of an AND/OR/IFF's left branch. The assignment itself would be that.
 				this_token.var = internal_output_var; // Make the result a variable rather than a normal operand so that its
 				this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
 				goto push_this_token;
@@ -488,8 +472,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				mem[mem_count++] = this_token.mem_to_free;
 			}
 			//else this_token.mem_to_free==NULL, so the BIF just called didn't allocate memory to give to us.
-			this_token.circuit_token = circuit_token; // Restore it to its original value.
-
+			
 			// Empty strings are returned pretty often by UDFs, such as when they don't use "return"
 			// at all.  Therefore, handle them fully now, which should improve performance (since it
 			// avoids all the other checking later on).  It also doesn't hurt code size because this
@@ -595,22 +578,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			goto push_this_token;
 		} // if (this_token.symbol == SYM_FUNC)
 
-		if (this_token.symbol == SYM_IFF_ELSE) // This is encountered when a ternary's condition was found to be false by a prior iteration.
+		if (this_token.symbol == SYM_IFF_ELSE)
 		{
-			if (this_token.circuit_token // This ternary's result is some other ternary's condition (somewhat rare).
-				&& stack_count) // Prevent underflow (this check might not be necessary; so it's just in case there's a way it can happen).
-			{
-				// To support *cascading* short-circuit when ternary/IFF's are nested inside each other, pop the
-				// topmost operand off the stack to modify its circuit_token.  The routine below will then
-				// use this as the parent IFF's *condition*, which is an non-operand of sorts because it's
-				// used only to determine which branch of an IFF will become the operand/result of this IFF.
-				this_token = *STACK_POP; // Struct copy.  Doing it this way is more maintainable than other methods, and is unlikely to perform much worse.
-				this_token.circuit_token = this_postfix->circuit_token; // Override the circuit_token that was just set in the line above.
-				goto non_null_circuit_token; // Must do this so that it properly evaluates this_postfix as the next ternary's condition.
-			}
-			// Otherwise, ignore it because its final result has already been evaluated and pushed onto the
-			// stack via prior iterations.  In other words, this ELSE branch was the IFF's final result, which
-			// is now topmost on the stack for use as an operand by a future operator.
+			// SYM_IFF_ELSE is encountered only when a previous iteration has determined that the ternary's condition
+			// is true.  At this stage, the ternary's "THEN" branch has already been evaluated and stored at the top
+			// of the stack.  So skip over its "else" branch (short-circuit) because that doesn't need to be evaluated.
+			this_postfix = this_token.circuit_token; // The address in any circuit_token always points into the arg's postfix array (never any temporary array or token created here) due to the nature/definition of circuit_token.
+			// And very soon, the outer loop will skip over the SYM_IFF_ELSE just found above.
 			continue;
 		}
 
@@ -621,30 +595,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 		ExprTokenType &right = *STACK_POP;
 		if (!IS_OPERAND(right.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
 			goto abnormal_end;
-
-		// The following check is done after popping "right" off the stack because a prior iteration has set up
-		// SYM_IFF_THEN to be a unary operator of sorts.
-		if (this_token.symbol == SYM_IFF_THEN) // This is encountered when a ternary's condition was found to be true by a prior iteration.
-		{
-			if (!this_token.circuit_token) // This check is needed for syntax errors such as "1 ? 2" (no matching else) and perhaps other unusual circumstances.
-				goto abnormal_end; // Seems best to consider it a syntax error rather than supporting partial functionality (hard to imagine much legitimate need to omit an ELSE).
-			// SYM_IFF_THEN is encountered only when a previous iteration has determined that the ternary's condition
-			// is true.  At this stage, the ternary's "THEN" branch has already been evaluated and stored in
-			// "right".  So skip over its "else" branch (short-circuit) because that doesn't need to be evaluated.
-			this_postfix = this_token.circuit_token; // The address in any circuit_token always points into the arg's postfix array (never any temporary array or token created here) due to the nature/definition of circuit_token.
-			// And very soon, the outer loop will skip over the SYM_IFF_ELSE just found above.
-			right.circuit_token = this_token.circuit_token->circuit_token; // Can be NULL (in fact, it usually is).
-			this_token = right;   // Struct copy to set things up for push_this_token, which in turn is needed
-			right.symbol = SYM_INTEGER; // L33: Bugfix.  Since only one reference is counted and this reference is no longer needed, "disable" it.  This avoids calling Release too many times; an alternative would be to call AddRef (if this is an object) and let Release be called later.
-			goto push_this_token; // (rather than a simple STACK_PUSH(right)) because it checks for *cascading* short circuit in cases where this ternary's result is the boolean condition of another ternary.
-		}
-
-		if (this_token.symbol == SYM_COMMA) // This can only be a statement-separator comma, not a function comma, since function commas weren't put into the postfix array.
-			// Do nothing other than discarding the operand that was just popped off the stack, which is the
-			// result of the comma's left-hand sub-statement.  At this point the right-hand sub-statement
-			// has not yet been evaluated.  Like C++ and other languages, but unlike AutoHotkey v1, the
-			// rightmost operand is preserved, not the leftmost.
-			continue;
 
 		switch (this_token.symbol)
 		{
@@ -657,6 +607,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 		case SYM_LOWNOT:		//
 		case SYM_HIGHNOT:		//
 			break;
+			
+		case SYM_COMMA: // This can only be a statement-separator comma, not a function comma, since function commas weren't put into the postfix array.
+			// Do nothing other than discarding the operand that was just popped off the stack, which is the
+			// result of the comma's left-hand sub-statement.  At this point the right-hand sub-statement
+			// has not yet been evaluated.  Like C++ and other languages, but unlike AutoHotkey v1, the
+			// rightmost operand is preserved, not the leftmost.
+			continue;
 
 		default:
 			// If the operand is still generic/undetermined, find out whether it is a string, integer, or float:
@@ -669,11 +626,35 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 		sym_assign_var = NULL; // Set default for use at the bottom of the following switch().
 		switch (this_token.symbol)
 		{
-		case SYM_AND: // These are now unary operators because short-circuit has made them so.  If the AND/OR
-		case SYM_OR:  // had short-circuited, we would never be here, so this is the right branch of a non-short-circuit AND/OR.
-			this_token.value_int64 = TokenToBOOL(right);
-			this_token.symbol = SYM_INTEGER; // Result of AND or OR is always a boolean integer (one or zero).
-			break;
+		case SYM_AND:
+		case SYM_OR:
+		case SYM_IFF_THEN:
+			// this_token is the left branch of an AND/OR or the condition of a ternary op.  Check for short-circuit.
+			left_branch_is_true = TokenToBOOL(right);
+
+			if (left_branch_is_true == (this_token.symbol == SYM_OR))
+			{
+				// The ternary's condition is false or this AND/OR causes a short-circuit.
+				// Discard the entire right branch of this AND/OR or "then" branch of this IFF:
+				this_postfix = this_token.circuit_token; // The address in any circuit_token always points into the arg's postfix array (never any temporary array or token created here) due to the nature/definition of circuit_token.
+
+				if (this_token.symbol != SYM_IFF_THEN)
+				{
+					// This will be the final result of this AND/OR because it's right branch was
+					// discarded above without having been evaluated nor any of its functions called:
+					this_token = right;
+					right.symbol = SYM_INTEGER; // i.e if it was SYM_OBJECT, don't call Release() for this copy of the pointer.
+					break;
+				}
+			}
+			else
+			{
+				// AND/OR: This left branch is simply discarded (by means of the outer loop) because its
+				//	right branch will be the sole determination of whether this AND/OR is true or false.
+				// IFF: The ternary's condition is true.  Do nothing; just let subsequent iterations evaluate
+				//	the THEN portion; the SYM_IFF_ELSE which follows it will jump over the ELSE branch.
+			}
+			continue;
 
 		case SYM_LOWNOT:  // The operator-word "not".
 		case SYM_HIGHNOT: // The symbol '!'. Both NOTs are equivalent at this stage because precedence was already acted upon by infix-to-postfix.
@@ -889,7 +870,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					if (left.var->Type() == VAR_CLIPBOARD) // v1.0.46.01: Clipboard is present as SYM_VAR, but only for assign-to-clipboard so that built-in functions and other code sections don't need handling for VAR_CLIPBOARD.
 					{
 						this_token = right; // Struct copy.  Doing it this way is more maintainable than other methods, and is unlikely to perform much worse.
-						this_token.circuit_token = this_postfix->circuit_token; // Override the circuit_token that was just set in the line above.
+						right.symbol = SYM_INTEGER; // i.e if it was SYM_OBJECT (which would be pointless in this case, but could happen), don't call Release() for this copy of the pointer.
 					}
 					else
 					{
@@ -1023,7 +1004,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 									goto normal_end_skip_output_var; // Nothing more to do because it has even taken care of output_var already.
 								else // temp_var is from look-ahead to a future assignment.
 								{
-									this_token.circuit_token = (++this_postfix)->circuit_token; // Old, somewhat obsolete comment: this_postfix.circuit_token should have been NULL prior to this because the final right-side result of an assignment shouldn't be the last item of an AND/OR/IFF's left branch. The assignment itself would be that.
 									this_token.var = STACK_POP->var; // Make the result a variable rather than a normal operand so that its
 									this_token.symbol = SYM_VAR;     // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
 									goto push_this_token;
@@ -1052,7 +1032,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 								goto normal_end_skip_output_var; // Nothing more to do because it has even taken care of output_var already.
 							else // temp_var is from look-ahead to a future assignment.
 							{
-								this_token.circuit_token = (++this_postfix)->circuit_token; // Old, somewhat obsolete comment: this_token.circuit_token should have been NULL prior to this because the final right-side result of an assignment shouldn't be the last item of an AND/OR/IFF's left branch. The assignment itself would be that.
 								this_token.var = STACK_POP->var; // Make the result a variable rather than a normal operand so that its
 								this_token.symbol = SYM_VAR;     // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
 								goto push_this_token;
@@ -1251,96 +1230,22 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 		}
 
 push_this_token:
-		if (!this_token.circuit_token) // It's not capable of short-circuit.
+		while (high_water_mark > stack_count)
 		{
-			while (high_water_mark > stack_count)
-			{	// L31: Release any objects which have been previously popped off the stack. This seems
-				// to be the simplest way to do it as tokens are popped off the stack at multiple points,
-				// but only this one point where parameters are pushed.  high_water_mark allows us to determine
-				// if there were tokens on the stack before returning, regardless of how expression evaluation
-				// ended (abort, abnormal_end, normal_end_skip_output_var...).  This method also ensures any
-				// objects passed as parameters to a function (such as ObjGet()) are released *AFTER* the return
-				// value is made persistent, which is important if the return value refers to the object's memory.
-				--high_water_mark;
-				if (stack[high_water_mark]->symbol == SYM_OBJECT)
-					stack[high_water_mark]->object->Release();
-			}
-			STACK_PUSH(&this_token);   // Push the result onto the stack for use as an operand by a future operator.
-			high_water_mark = stack_count; // L31
+			// Release any objects which have been previously popped off the stack. This seems to be the
+			// simplest way to do it as tokens are popped off the stack at multiple points, but only this
+			// one point where parameters are pushed.  high_water_mark allows us to determine if there were
+			// tokens on the stack before returning, regardless of how expression evaluation ended (abort,
+			// abnormal_end, normal_end_skip_output_var...).  This method also ensures any objects passed as
+			// parameters to a function (such as ObjGet()) are released *AFTER* the return value is made
+			// persistent, which is important if the return value refers to the object's memory (but that
+			// might currently never happen?).
+			--high_water_mark;
+			if (stack[high_water_mark]->symbol == SYM_OBJECT)
+				stack[high_water_mark]->object->Release();
 		}
-		else // This is the final result of an IFF's condition or a AND or OR's left branch.  Apply short-circuit boolean method to it.
-		{
-non_null_circuit_token:
-			// Cast this left-branch result to true/false, then determine whether it should cause its
-			// parent AND/OR/IFF to short-circuit.
-			left_branch_is_true = TokenToBOOL(this_token);
-			if (this_token.circuit_token->symbol == SYM_IFF_THEN)
-			{
-				if (!left_branch_is_true) // The ternary's condition is false.
-				{
-					// Discard the entire "then" branch of this ternary operator, leaving only the
-					// "else" branch to be evaluated later as the result.
-					// Ternaries nested inside each other don't need to be considered special for the purpose
-					// of discarding ternary branches due to the very nature of postfix (i.e. it's already put
-					// nesting in the right postfix order to support this method of discarding a branch).
-					this_postfix = this_token.circuit_token; // The address in any circuit_token always points into the arg's postfix array (never any temporary array or token created here) due to the nature/definition of circuit_token.
-					// The outer loop will now discard the SYM_IFF_THEN itself.
-				}
-				//else the ternary's condition is true.  Do nothing; just let the next iteration evaluate the
-				// THEN portion and then treat the SYM_IFF_THEN it encounters as a unary operator (after that,
-				// it will discard the ELSE branch).
-				continue;
-			}
-			// Since above didn't "continue", this_token is the left branch of an AND/OR.  Check for short-circuit.
-			// The following loop exists to support cascading short-circuiting such as the following example:
-			// 2>3 and 2>3 and 2>3
-			// In postfix notation, the above looks like:
-			// 2 3 > 2 3 > and 2 3 > and
-			// When the first '>' operator is evaluated to false, it sees that its parent is an AND and
-			// thus it short-circuits, discarding everything between the first '>' and the "and".
-			// But since the first and's parent is the second "and", that false result just produced is now
-			// the left branch of the second "and", so the loop conducts a second iteration to discard
-			// everything between the first "and" and the second.  By contrast, if the second "and" were
-			// an "or", the second iteration would never occur because the loop's condition would be false
-			// on the second iteration, which would then cause the first and's false value to be discarded
-			// (due to the loop ending without having PUSHed) because solely the right side of the "or" should
-			// determine the final result of the "or".
-			//
-			// The following code is probably equivalent to the loop below it.  However, it's only slightly
-			// smaller in code size when you examine what it actually does, and it almost certainly performs
-			// slightly worse because the "goto" incurs unnecessary steps such as recalculating left_branch_is_true.
-			// Therefore, it doesn't seem worth changing it:
-			//if (left_branch_is_true == (this_token.circuit_token->symbol == SYM_OR)) // If true, this AND/OR causes a short-circuit
-			//{
-			//	for (++i; postfix+i != this_token.circuit_token; ++i); // (This line obsolete; needs revision.) Should always be found, so no need to guard against reading beyond the end of the array.
-			//	this_token.symbol = SYM_INTEGER;
-			//	this_token.value_int64 = left_branch_is_true; // Assign a pure 1 (for SYM_OR) or 0 (for SYM_AND).
-			//	this_token.circuit_token = this_postfix->circuit_token; // In case circuit_token == SYM_IFF_THEN.
-			//	goto push_this_token; // In lieu of STACK_PUSH(this_token) in case circuit_token == SYM_IFF_THEN.
-			//}
-			for (circuit_token = this_token.circuit_token
-				; left_branch_is_true == (circuit_token->symbol == SYM_OR);) // If true, this AND/OR causes a short-circuit
-			{
-				// Discard the entire right branch of this AND/OR:
-				this_postfix = circuit_token; // The address in any circuit_token always points into the arg's postfix array (never any temporary array or token created here) due to the nature/definition of circuit_token.
-				if (   !(circuit_token = this_postfix->circuit_token) // This value is also used by our loop's condition. Relies on short-circuit boolean order with the below.
-					|| circuit_token->symbol == SYM_IFF_THEN   ) // Don't cascade from AND/OR into IFF because IFF requires a different cascade approach that's implemented only after its winning branch is evaluated.  Otherwise, things like "0 and 1 ? 3 : 4" wouldn't work.
-				{
-					// No more cascading is needed because this AND/OR isn't the left branch of another.
-					// This will be the final result of this AND/OR because it's right branch was discarded
-					// above without having been evaluated nor any of its functions called.
-					this_token.symbol = SYM_INTEGER;
-					this_token.value_int64 = left_branch_is_true; // Assign a pure 1 (for SYM_OR) or 0 (for SYM_AND).
-					this_token.circuit_token = circuit_token; // In case circuit_token->symbol == SYM_IFF_THEN.
-					goto push_this_token; // In lieu of STACK_PUSH(this_token) in case circuit_token->symbol == SYM_IFF_THEN.
-				}
-				//else there is more cascading to be checked, so continue looping.
-			}
-			// If the loop ends normally (not via "break"), this_postfix is now the left branch of an
-			// AND/OR that should not short-circuit.  As a result, this left branch is simply discarded
-			// (by means of the outer loop) because its right branch will be the sole determination
-			// of whether this AND/OR is true or false.
-		} // Short-circuit (an IFF or the left branch of an AND/OR).
+		STACK_PUSH(&this_token);   // Push the result onto the stack for use as an operand by a future operator.
+		high_water_mark = stack_count;
 	} // For each item in the postfix array.
 
 	// Although ACT_EXPRESSION was already checked higher above for function calls, there are other ways besides

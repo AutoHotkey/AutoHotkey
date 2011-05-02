@@ -12704,7 +12704,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	// Caller has provided mem_to_free (initially NULL) as a means of passing back memory we allocate here.
 	// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
 	LPTSTR &result = aResultToken.mem_to_free; // Make an alias for convenience.
-	size_t &result_length = aResultToken.marker_length; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: set marker_length to the length of the string in marker.
+	size_t &result_length = aResultToken.marker_length; // MANDATORY FOR USERS OF MEM_TO_FREE: set marker_length to the length of the string.
 	result_size = 0;   // And caller has already set "result" to be NULL.  The buffer is allocated only upon
 	result_length = 0; // first use to avoid a potentially massive allocation that might be wasted and cause swapping (not to mention that we'll have better ability to estimate the correct total size after the first replacement is discovered).
 
@@ -16638,7 +16638,7 @@ ResultType TokenSetResult(ExprTokenType &aResultToken, LPCTSTR aResult, size_t a
 		if (   !(aResultToken.mem_to_free = tmalloc(aResultLength + 1))   ) // Out of memory. Due to rarity, don't display an error dialog (there's currently no way for a built-in function to abort the current thread anyway?)
 			return FAIL;
 		aResultToken.marker = aResultToken.mem_to_free; // Store the address of the result for the caller.
-		aResultToken.marker_length = aResultLength; // MANDATORY FOR USERS OF CIRCUIT_TOKEN: set marker_length to the length of the string in marker.
+		aResultToken.marker_length = aResultLength; // MANDATORY FOR USERS OF MEM_TO_FREE: set marker_length to the length of the string.
 	}
 	if (aResult) // Caller may pass NULL to retrieve a buffer of sufficient size.
 		tmemcpy(aResultToken.marker, aResult, aResultLength);

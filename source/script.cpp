@@ -9429,10 +9429,9 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 		derefs_in_this_double = (int)(deref - deref_start);
 		--deref; // Compensate for the outer loop's ++deref.
 
-		// There's insufficient room to shoehorn all the necessary data into the token (since circuit_token probably
-		// can't be safely overloaded at this stage), so allocate a little bit of stack memory, just enough for the
-		// number of derefs (variables) whose contents comprise the name of this double-deref variable (typically
-		// there's only one; e.g. the "i" in Array%i%).
+		// There's insufficient room to shoehorn all the necessary data into the token, so allocate a little
+		// bit of stack memory, just enough for the number of derefs (variables) whose contents comprise the
+		// name of this double-deref variable (typically there's only one; e.g. the "i" in Array%i%).
 		if (   !(deref_new = (DerefType *)SimpleHeap::Malloc((derefs_in_this_double + 1) * sizeof(DerefType)))   ) // Provides one extra at the end as a terminator.
 			return LineError(ERR_OUTOFMEM);
 		memcpy(deref_new, deref_start, derefs_in_this_double * sizeof(DerefType));
@@ -9502,9 +9501,8 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				// and possibly other obscure types of assignments.
 			}
 			this_postfix = this_infix++;
-			this_postfix->circuit_token = NULL; // Set default. It's only ever overridden after it's in the postfix array.
 			++postfix_count;
-			continue; // Doing a goto to a hypothetical "standard_postfix_circuit_token" (in lieu of these last 3 lines) reduced performance and didn't help code size.
+			continue; // Doing a goto to a hypothetical "standard_postfix" (in lieu of these last 3 lines) reduced performance and didn't help code size.
 		}
 
 		// Since above didn't "continue", the current infix symbol is not an operand, but an operator or other symbol.
@@ -9574,7 +9572,6 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 							//case PARAM_DEFAULT_NONE: Should not be possible due to mMinParams check above.
 							}
 							this_postfix->value_int64 = param.default_int64; // Union copy.
-							this_postfix->circuit_token = NULL;
 							++postfix_count;
 							// Since this_infix is a function parameter comma and there are no more operators
 							// to pop off the stack, it does not need any further processing.  This method
@@ -9748,15 +9745,21 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 			// Otherwise:
 			if (stack_symbol == SYM_IFF_THEN) // See comments near the bottom of this case. The first found "THEN" on the stack must be the one that goes with this "ELSE".
 			{
-				this_postfix = STACK_POP; // Pop this "THEN" into the postfix array.
-				this_postfix->circuit_token = this_infix; // Point this "THEN" to its "ELSE" for use by short-circuit. This simplifies short-circuit by means such as avoiding the need to take notice of nested IFF's when discarding a branch (a different stage points the IFF's condition to its "THEN").
+				// An earlier stage put THEN directly into the postfix array before also pushing it onto the stack.
+				// Pop this THEN off the stack and point it at its ELSE, but don't write it into postfix again:
+				STACK_POP->circuit_token = this_infix;
+				// Since this ELSE also marks the end of the THEN branch, write it to postfix (in place of the above)
+				// so that after the THEN branch is evaluated it will hit this ELSE and skip over the ELSE branch:
+				this_postfix = this_infix;
 				++postfix_count;
-				STACK_PUSH(this_infix++); // Push the ELSE onto the stack so that its operands will go into the postfix array before it.
-				// Above also does ++i since this ELSE found its matching IF/THEN, so it's time to move on to the next token in the infix expression.
+				// Also push this ELSE onto the stack. Once the end of branch is found, ELSE will be popped off the
+				// stack, updated to point to the end of the ELSE branch and not written to postfix a second time:
+				STACK_PUSH(this_infix++);
+				// Above also increments this_infix: this ELSE found its matching IF/THEN, so it's time to move on to the next token in the infix expression.
 			}
-			else // This stack item is an operator INCLUDE some other THEN's ELSE (all such ELSE's should be purged from the stack so that 1 ? 1 ? 2 : 3 : 4 creates postfix 112?3:?4: not something like 112?3?4::.
+			else // This stack item is an operator, possibly even some other THEN's ELSE (all such ELSE's should be purged from the stack to properly support nested ternary).
 			{
-				// By not incrementing i, the loop will continue to encounter SYM_IFF_ELSE and thus
+				// By not incrementing this_infix, the loop will continue to encounter SYM_IFF_ELSE and thus
 				// continue to pop things off the stack until the corresponding SYM_IFF_THEN is reached.
 				goto standard_pop_into_postfix;
 			}
@@ -9842,23 +9845,56 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				// '*' a higher precedence than the other unaries): !*Var, -*Var and ~*Var
 				// !x  ; Supported even if X contains a negative number, since x is recognized as an isolated operand and not something containing unary minus.
 				//
-				// To facilitate short-circuit boolean evaluation, right before an AND/OR/IFF is pushed onto the
-				// stack, point the end of it's left branch to it.  Note that the following postfix token
-				// can itself be of type AND/OR/IFF, a simple example of which is "if (true and true and true)",
-				// in which the first and's parent (in an imaginary tree) is the second "and".
-				// But how is it certain that this is the final operator or operand of and AND/OR/IFF's left branch?
-				// Here is the explanation:
-				// Everything higher precedence than the AND/OR/IFF came off the stack right before it, resulting in
-				// what must be a balanced/complete sub-postfix-expression in and of itself (unless the expression
-				// has a syntax error, which is caught in various places).  Because it's complete, during the
-				// postfix evaluation phase, that sub-expression will result in a new operand for the stack,
-				// which must then be the left side of the AND/OR/IFF because the right side immediately follows it
-				// within the postfix array, which in turn is immediately followed its operator (namely AND/OR/IFF).
-				// Also, the final result of an IFF's condition-branch must point to the IFF/THEN symbol itself
-				// because that's the means by which the condition is merely "checked" rather than becoming an
-				// operand itself.
-				if (infix_symbol <= SYM_AND && infix_symbol >= SYM_IFF_THEN && postfix_count) // Check upper bound first for short-circuit performance.
-					postfix[postfix_count - 1]->circuit_token = this_infix; // In the case of IFF, this points the final result of the IFF's condition to its SYM_IFF_THEN (a different stage points the THEN to its ELSE).
+				if (infix_symbol <= SYM_AND && infix_symbol >= SYM_IFF_THEN) // Check upper bound first for short-circuit performance.
+				{
+					// Short-circuit boolean evaluation works as follows:
+					//
+					// When an AND/OR/IFF is encountered in infix, it is immediately put into postfix to act as a
+					// unary operator on its left operand and something like a conditional jump instruction. It is
+					// also pushed onto the stack so that the end of its right branch can be found in accordance with
+					// precedence rules; when it is popped off the stack, circuit_token is set to the last token in
+					// postfix at that point, which is necessarily the end of the operator's right branch.
+					//
+					// x AND y
+					// x OR y
+					// x IFF_THEN y IFF_ELSE z
+					//
+					// AND/OR: Pop operand off stack. If short-circuit condition is satified, push the operand back
+					// onto the stack and jump over the operator's right branch; otherwise simply continue, allowing
+					// the right branch to be evaluated and its result used as the overall result of the AND/OR.
+					//
+					// IFF_THEN: Pop operand off stack. If false, jump to the "else" branch; otherwise continue.
+					// IFF_ELSE: Encountered only after evaluating the "then" branch; jumps over the "else" branch.
+					//
+					// This new approach has the following benefits over the old approach:
+					// 1) circuit_token doesn't need to be checked every time a value is pushed onto the stack.
+					// 2) circuit_token doesn't need to propagate from an operator or function-call to its result.
+					// 3) Cascading of short-circuit operators does not need to be handled specifically
+					//    as it is naturally supported via infix-to-postfix conversion.
+					// 4) Since circuit_token is only needed in the actual operators, it can overlap with
+					//    the value fields -- i.e. the size of ExprTokenType may be reduced (assuming
+					//    the other uses of circuit_token can be eliminated).
+					//
+					// OBSOLETE COMMENTS:
+					// To facilitate short-circuit boolean evaluation, right before an AND/OR/IFF is pushed onto the
+					// stack, point the end of it's left branch to it.  Note that the following postfix token
+					// can itself be of type AND/OR/IFF, a simple example of which is "if (true and true and true)",
+					// in which the first and's parent (in an imaginary tree) is the second "and".
+					// But how is it certain that this is the final operator or operand of and AND/OR/IFF's left branch?
+					// Here is the explanation:
+					// Everything higher precedence than the AND/OR/IFF came off the stack right before it, resulting in
+					// what must be a balanced/complete sub-postfix-expression in and of itself (unless the expression
+					// has a syntax error, which is caught in various places).  Because it's complete, during the
+					// postfix evaluation phase, that sub-expression will result in a new operand for the stack,
+					// which must then be the left side of the AND/OR/IFF because the right side immediately follows it
+					// within the postfix array, which in turn is immediately followed its operator (namely AND/OR/IFF).
+					// Also, the final result of an IFF's condition-branch must point to the IFF/THEN symbol itself
+					// because that's the means by which the condition is merely "checked" rather than becoming an
+					// operand itself.
+					//
+					this_postfix = this_infix;
+					++postfix_count;
+				}
 				STACK_PUSH(this_infix++); // Push this_infix onto the stack and move rightward to the next infix item.
 			}
 			else // Stack item's precedence >= infix's (if equal, left-to-right evaluation order is in effect).
@@ -9868,11 +9904,11 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 		continue; // Avoid falling into the label below except via explicit jump.  Performance: Doing it this way rather than replacing break with continue everywhere above generates slightly smaller and slightly faster code.
 standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 		this_postfix = STACK_POP;
-		this_postfix->circuit_token = NULL; // Set default. It's only ever overridden after it's in the postfix array.
-		// Additional processing for syntax sugar:
+		// Additional processing for short-circuit evaluation and syntax sugar:
 		SymbolType postfix_symbol = this_postfix->symbol;
-		if (postfix_symbol == SYM_FUNC)
+		switch (postfix_symbol)
 		{
+		case SYM_FUNC:
 			infix_symbol = this_infix->symbol;
 			// The sections below pre-process assignments to work with objects:
 			//	x.y := z	->	x "y" z (set)
@@ -9944,11 +9980,34 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				// if this_infix[1] is SYM_DOT.  In that case, a later iteration should apply
 				// the transformations above to that operator.
 			}
-		}
-		else if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(postfix_symbol))
+			break;
+		
+		case SYM_NEW: // This is probably something like "new Class", without "()", otherwise an earlier stage would've handled it.
+		case SYM_REGEXMATCH: // a ~= b  ->  RegExMatch(a, b)
+			this_postfix->symbol = SYM_FUNC;
+			break;
+
+		case SYM_AND:
+		case SYM_OR:
+		case SYM_IFF_ELSE:
 		{
-			if (this_postfix->deref) // The section above marked this as an object assignment in an earlier iteration.
+			// Point this short-circuit operator to the end of its right operand.
+			ExprTokenType *iff_end = postfix[postfix_count - 1];
+			if (this_postfix == iff_end) // i.e. the last token is the operator itself.
+				return LineError(_T("Missing operand"), FAIL, this_postfix->buf);
+			// Point the original token already in postfix to the end of its right branch:
+			this_postfix->circuit_token = iff_end;
+			continue; // This token was already put into postfix by an earlier stage, so skip it this time.
+		}
+		case SYM_IFF_THEN:
+			return LineError(_T("A \"?\" is missing its \":\""), FAIL, this_postfix->buf);
+		
+		default:
+			if (!IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(postfix_symbol))
+				break;
+			if (this_postfix->deref)
 			{
+				// An earlier iteration of the SYM_FUNC section above used deref to mark this as an object assignment.
 				ExprTokenType *assign_op = this_postfix;
 				if (postfix_symbol != SYM_ASSIGN) // e.g. += or .=
 				{
@@ -9974,11 +10033,6 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				}
 				assign_op->symbol = SYM_FUNC; // An earlier stage already set up the func and param_count.
 			}
-		}
-		else if (postfix_symbol == SYM_NEW // This is probably something like "new Class", without "()", otherwise an earlier stage would've handled it.
-			|| postfix_symbol == SYM_REGEXMATCH) // a ~= b  ->  RegExMatch(a, b)
-		{
-			this_postfix->symbol = SYM_FUNC;
 		}
 		++postfix_count;
 	} // End of loop that builds postfix array from the infix array.
@@ -10062,12 +10116,6 @@ end_of_infix_to_postfix:
 	}
 
 	// Create a new postfix array and attach it to this arg of this line.
-	// SAVINGS/COMPRESSION: 4 bytes per struct could be saved by making symbol into a WORD and circuit_token
-	// into a WORD/index/offset.  This was tried once and it didn't affect performance or code size very much,
-	// but it did increase complexity and reduce maintainability quite a bit.  If ever try to do this, avoid
-	// any 8-byte members like __int64 or double in the compressed struct because that would change the default
-	// alignment to 64-bit vs. 32-bit, which would keep the struct size at 16 bytes rather than allowing it to
-	// fall to 12 bytes.
 	if (   !(aArg.postfix = (ExprTokenType *)SimpleHeap::Malloc((postfix_count+1)*sizeof(ExprTokenType)))   ) // +1 for the terminator item added below.
 		return LineError(ERR_OUTOFMEM);
 
@@ -10075,9 +10123,10 @@ end_of_infix_to_postfix:
 	for (i = 0; i < postfix_count; ++i) // Copy the postfix array in physically sorted order into the new postfix array.
 	{
 		ExprTokenType &new_token = aArg.postfix[i];
-		new_token = *postfix[i]; // Struct copy.  This also sets circuit_token to NULL for those circuit_tokens not overridden later below.
-		if (new_token.circuit_token) // Adjust each circuit_token address to be relative to the new array rather than the temp/infix array.
+		new_token = *postfix[i]; // Struct copy.
+		if (new_token.symbol <= SYM_AND && new_token.symbol >= SYM_IFF_ELSE) // Adjust each circuit_token address to be relative to the new array rather than the temp/infix array.
 		{
+			// circuit_token should always be non-NULL at this point.
 			for (j = i + 1; postfix[j] != new_token.circuit_token; ++j); // Should always be found, and always to the right in the postfix array, so no need to check postfix_count.
 			new_token.circuit_token = aArg.postfix + j;
 		}

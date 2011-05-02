@@ -232,6 +232,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				DerefType *deref; // for SYM_FUNC
 				Var *var;         // for SYM_VAR (and SYM_DYNAMIC when buf is NULL)
 				LPTSTR marker;     // for SYM_STRING
+				ExprTokenType *circuit_token; // for short-circuit operators
 			};
 			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).
 			{
@@ -245,14 +246,20 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	// or SYM_VAR's var pointed to a location that was changed as a side effect of an expression's
 	// call to a script function, the length would then be invalid.
 	SymbolType symbol; // Short-circuit benchmark is currently much faster with this and the next beneath the union, perhaps due to CPU optimizations for 8-byte alignment.
-	union
-	{
-		ExprTokenType *circuit_token; // Facilitates short-circuit boolean evaluation.
-		LPTSTR mem_to_free; // Used only with aResultToken. TODO: Move into separate ResultTokenType struct.
-	};
+	LPTSTR mem_to_free; // Used only with aResultToken. TODO: Move into separate ResultTokenType struct.
 	// The above two probably need to be adjacent to each other to conserve memory due to 8-byte alignment,
 	// which is the default alignment (for performance reasons) in any struct that contains 8-byte members
 	// such as double and __int64.
+	ExprTokenType & operator = (ExprTokenType &other)
+	{
+		value_int64 = other.value_int64;
+#ifdef _WIN64
+		buf = other.buf; // Already covered by above on x86.
+#endif
+		symbol = other.symbol;
+		// Don't copy mem_to_free since that's only needed for SYM_FUNC result token, which doesn't use this operator.
+		return *this;
+	}
 };
 #define MAX_TOKENS 512 // Max number of operators/operands.  Seems enough to handle anything realistic, while conserving call-stack space.
 #define STACK_PUSH(token_ptr) stack[stack_count++] = token_ptr
