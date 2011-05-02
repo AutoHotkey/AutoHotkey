@@ -425,10 +425,10 @@ Action g_act[] =
 	, {_T("FileInstall"), 2, 3, false, {3, 0}} // source, dest, flag (1/0, where 1=overwrite)
 	, {_T("FileCopy"), 2, 3, false, {3, 0}} // source, dest, flag
 	, {_T("FileMove"), 2, 3, false, {3, 0}} // source, dest, flag
-	, {_T("FileCopyDir"), 2, 3, false, {3, 0}} // source, dest, flag
-	, {_T("FileMoveDir"), 2, 3, false, NULL} // source, dest, flag (which can be non-numeric in this case)
-	, {_T("FileCreateDir"), 1, 1, false, NULL} // dir name
-	, {_T("FileRemoveDir"), 1, 2, false, {2, 0}} // dir name, flag
+	, {_T("DirCopy"), 2, 3, false, {3, 0}} // source, dest, flag
+	, {_T("DirMove"), 2, 3, false, NULL} // source, dest, flag (which can be non-numeric in this case)
+	, {_T("DirCreate"), 1, 1, false, NULL} // dir name
+	, {_T("DirDelete"), 1, 2, false, {2, 0}} // dir name, flag
 
 	, {_T("FileGetAttrib"), 1, 2, true, NULL} // OutputVar, Filespec (if blank, uses loop's current file)
 	, {_T("FileSetAttrib"), 1, 4, false, {3, 4, 0}} // Attribute(s), FilePattern, OperateOnFolders?, Recurse? (custom validation for these last two)

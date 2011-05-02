@@ -5306,15 +5306,15 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_FILEINSTALL:
 	case ACT_FILECOPY:
 	case ACT_FILEMOVE:
-	case ACT_FILECOPYDIR:
-	case ACT_FILEMOVEDIR:
+	case ACT_DIRCOPY:
+	case ACT_DIRMOVE:
 		if (*new_raw_arg3 && !line.ArgHasDeref(3))
 		{
 			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
 			// sees a valid no-deref expression such as 2-1 as invalid.
 			value = ATOI(new_raw_arg3);
 			bool is_pure_numeric = IsNumeric(new_raw_arg3, false, true); // Consider negatives to be non-numeric.
-			if (aActionType == ACT_FILEMOVEDIR)
+			if (aActionType == ACT_DIRMOVE)
 			{
 				if (!is_pure_numeric && ctoupper(*new_raw_arg3) != 'R'
 					|| is_pure_numeric && value > 2) // IsNumeric() already checked if value < 0. 
@@ -5333,7 +5333,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		}
 		break;
 
-	case ACT_FILEREMOVEDIR:
+	case ACT_DIRDELETE:
 		if (*new_raw_arg2 && !line.ArgHasDeref(2))
 		{
 			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
@@ -12587,9 +12587,9 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	}
 	case ACT_FILEMOVE:
 		return g_ErrorLevel->Assign(Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1, true, g.LastError));
-	case ACT_FILECOPYDIR:
+	case ACT_DIRCOPY:
 		return g_ErrorLevel->Assign(Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
-	case ACT_FILEMOVEDIR:
+	case ACT_DIRMOVE:
 		if (ctoupper(*ARG3) == 'R')
 		{
 			// Perform a simple rename instead, which prevents the operation from being only partially
@@ -12602,9 +12602,9 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// Otherwise:
 		return g_ErrorLevel->Assign(Util_MoveDir(ARG1, ARG2, ArgToInt(3)) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
 
-	case ACT_FILECREATEDIR:
+	case ACT_DIRCREATE:
 		return FileCreateDir(ARG1);
-	case ACT_FILEREMOVEDIR:
+	case ACT_DIRDELETE:
 		if (!*ARG1) // Consider an attempt to create or remove a blank dir to be an error.
 			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 		return g_ErrorLevel->Assign(Util_RemoveDir(ARG1, ArgToInt(2) == 1) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
