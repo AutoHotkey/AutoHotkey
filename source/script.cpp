@@ -7054,13 +7054,6 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 	TCHAR func_name[MAX_VAR_NAME_LENGTH + 1];
 	tcslcpy(func_name, aFuncName, aFuncNameLength + 1);  // See explanation above.  +1 to convert length to size.
 
-	// In the future, it might be best to add another check here to disallow function names that consist
-	// entirely of numbers.  However, this hasn't been done yet because:
-	// 1) Not sure if there will ever be a good enough reason.
-	// 2) Even if it's done in the far future, it won't break many scripts (pure-numeric functions should be very rare).
-	// 3) Those scripts that are broken are not broken in a bad way because the pre-parser will generate a
-	//    load-time error, which is easy to fix (unlike runtime errors, which require that part of the script
-	//    to actually execute).
 	if (!aClassObject && !Var::ValidateName(func_name, mIsReadyToExecute, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
 		// Above already displayed error for us.  This can happen at loadtime or runtime (e.g. StringSplit).
 		return NULL;
