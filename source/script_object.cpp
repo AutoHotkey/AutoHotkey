@@ -1417,11 +1417,13 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ExprTokenType &aResultToken, ExprToken
 
 	if (!IS_INVOKE_CALL)
 	{
+		if (IS_INVOKE_SET || aParamCount > 1)
+			return INVOKE_NOT_HANDLED;
+
 		if (!_tcsicmp(member, _T("Name")))
 		{
 			aResultToken.symbol = SYM_STRING;
 			aResultToken.marker = mName;
-			return OK;
 		}
 		else if (!_tcsicmp(member, _T("MinParams")))
 		{
@@ -1443,7 +1445,10 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ExprTokenType &aResultToken, ExprToken
 			aResultToken.symbol = SYM_INTEGER;
 			aResultToken.value_int64 = mIsVariadic;
 		}
-		return INVOKE_NOT_HANDLED;
+		else
+			return INVOKE_NOT_HANDLED;
+
+		return OK;
 	}
 	
 	if (  !(aFlags & IF_FUNCOBJ)  )

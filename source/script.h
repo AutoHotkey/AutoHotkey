@@ -28,6 +28,7 @@ GNU General Public License for more details.
 #ifdef ENABLE_EXEARC
 	#include "lib/exearc_read.h"
 #endif
+#include "script_object.h"
 #include "Debugger.h"
 
 #include "os_version.h" // For the global OS_Version object

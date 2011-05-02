@@ -6319,9 +6319,12 @@ ResultType Script::DefineClassVars(LPTSTR aBuf)
 		buf[buf_used -= 2] = '\0'; // Remove the final ", "
 		if (!ParseAndAddLine(buf, ACT_EXPRESSION))
 			return FAIL; // Above already displayed the error.
-		// This part is identical to the code used for static var initializers:
+		// This part is almost identical to the code used for static var initializers:
 		mLastLine = mLastLine->mPrevLine; // Restore mLastLine to the last non-'static' line, but leave mCurrLine set to the new line.
-		mLastLine->mNextLine = NULL; // Remove the new line from the main script's linked list of lines. For maintainability: AddLine() unconditionally overwrites mLastLine->mNextLine anyway.
+		if (mLastLine) // This can be NULL if the class definition is at the top of the script.
+			mLastLine->mNextLine = NULL; // Remove the new line from the main script's linked list of lines. For maintainability: AddLine() unconditionally overwrites mLastLine->mNextLine anyway.
+		else
+			mFirstLine = NULL;
 		if (mLastStaticLine)
 			mLastStaticLine->mNextLine = mCurrLine;
 		else
