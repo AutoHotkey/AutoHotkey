@@ -9973,7 +9973,6 @@ VarSizeType BIV_SpecialFolderPath(LPTSTR aBuf, LPTSTR aVarName)
 	switch (ctoupper(aVarName[2]))
 	{
 	case 'P': // A_[P]rogram...
-	case 'O': // Pr[o]gramFiles
 		if (ctoupper(aVarName[9]) == 'F') // A_Program[F]iles
 			aFolder = CSIDL_PROGRAM_FILES;
 		else // A_Programs(Common)

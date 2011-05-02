@@ -7763,7 +7763,6 @@ void *Script::GetVarType(LPTSTR aVarName)
 		if (!_tcscmp(lowercase, _T("clipboard"))) return (void *)VAR_CLIPBOARD;
 		if (!_tcscmp(lowercase, _T("clipboardall"))) return (void *)VAR_CLIPBOARDALL;
 		if (!_tcscmp(lowercase, _T("comspec"))) return BIV_ComSpec; // Lacks an "A_" prefix for backward compatibility with pre-NoEnv scripts and also it's easier to type & remember.
-		if (!_tcscmp(lowercase, _T("programfiles"))) return BIV_SpecialFolderPath; // v1.0.43.08: Added to ease the transition to #NoEnv.
 		// Otherwise:
 		return (void *)VAR_NORMAL;
 	}
