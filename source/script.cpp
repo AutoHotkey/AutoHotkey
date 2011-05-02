@@ -10836,20 +10836,20 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 			if (stack_symbol == SYM_OBRACE)
 				return LineError(_T("Missing \"}\" before \":\""));
 			// Otherwise:
-			this_postfix = STACK_POP; // There should be no danger of stack underflow in the following because SYM_BEGIN always exists at the bottom of the stack.
 			if (stack_symbol == SYM_IFF_THEN) // See comments near the bottom of this case. The first found "THEN" on the stack must be the one that goes with this "ELSE".
 			{
+				this_postfix = STACK_POP; // Pop this "THEN" into the postfix array.
 				this_postfix->circuit_token = this_infix; // Point this "THEN" to its "ELSE" for use by short-circuit. This simplifies short-circuit by means such as avoiding the need to take notice of nested IFF's when discarding a branch (a different stage points the IFF's condition to its "THEN").
+				++postfix_count;
 				STACK_PUSH(this_infix++); // Push the ELSE onto the stack so that its operands will go into the postfix array before it.
 				// Above also does ++i since this ELSE found its matching IF/THEN, so it's time to move on to the next token in the infix expression.
 			}
 			else // This stack item is an operator INCLUDE some other THEN's ELSE (all such ELSE's should be purged from the stack so that 1 ? 1 ? 2 : 3 : 4 creates postfix 112?3:?4: not something like 112?3?4::.
 			{
-				this_postfix->circuit_token = NULL; // Set default. It's only ever overridden after it's in the postfix array.
 				// By not incrementing i, the loop will continue to encounter SYM_IFF_ELSE and thus
 				// continue to pop things off the stack until the corresponding SYM_IFF_THEN is reached.
+				goto standard_pop_into_postfix;
 			}
-			++postfix_count;
 			break;
 
 		case SYM_INVALID:
