@@ -733,7 +733,7 @@ ResultType Object::_Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 				if (InsertAt(insert_pos, key.i, aParam + 1, aParamCount - 1))
 				{
 					aResultToken.symbol = SYM_INTEGER;
-					aResultToken.value_int64 = 1;
+					aResultToken.value_int64 = aParamCount - 1;
 				}
 				return OK;
 			}
