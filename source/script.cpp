@@ -6838,7 +6838,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		bif = BIF_VarSetCapacity;
 		max_params = 3;
 	}
-	else if (!_tcsicmp(func_name, _T("FileExist")))
+	else if (!_tcsicmp(func_name, _T("FileExist")) || !_tcsicmp(func_name, _T("DirExist")))
 		bif = BIF_FileExist;
 	else if (!_tcsicmp(func_name, _T("WinExist")) || !_tcsicmp(func_name, _T("WinActive")))
 	{

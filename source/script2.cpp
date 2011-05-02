@@ -13987,10 +13987,12 @@ void BIF_FileExist(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 {
 	TCHAR filename_buf[MAX_NUMBER_SIZE]; // Because aResultToken.buf is used for something else below.
 	LPTSTR filename = TokenToString(*aParam[0], filename_buf);
+	bool want_dir = ctoupper(*aResultToken.marker) == 'D'; // i.e. DirExist().
 	aResultToken.marker = aResultToken.buf; // If necessary, it will be moved to a persistent memory location by our caller.
 	aResultToken.symbol = SYM_STRING;
 	DWORD attr;
-	if (DoesFilePatternExist(filename, &attr))
+	if (DoesFilePatternExist(filename, &attr)
+		&& (!want_dir || (attr & FILE_ATTRIBUTE_DIRECTORY)))
 	{
 		// Yield the attributes of the first matching file.  If not match, yield an empty string.
 		// This relies upon the fact that a file's attributes are never legitimately zero, which
