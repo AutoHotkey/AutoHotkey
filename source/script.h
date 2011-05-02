@@ -874,10 +874,9 @@ public:
 	#define IS_HOTSTRING_OPTION(chr) (cisalnum(chr) || _tcschr(_T("?*- \t"), chr))
 	// The characters below are ordered with most-often used ones first, for performance:
 	#define DEFINE_END_FLAGS \
-		TCHAR end_flags[] = {' ', g_delimiter, '(', '\t', '<', '>', ':', '=', '+', '-', '*', '/', '!', '~', '&', '|', '^', '[', '.', '?', '`', '\0'}; // '\0' must be last.
+		LPTSTR end_flags = _T(" ,(\t<>:=+-*/!~&|^[.?");
 		// L31: Added '[' for standalone ObjSet/Get to work as ACT_EXPRESSION.  "Get" is allowed for simplicity and for future use with functions-as-values (e.g. varContainingFunc[]).
 		// L34: Added '.' and changed dot handling to fix x.=y, improve support in other areas, catch more errors and give slightly better error messages.
-		// v2: Added '`' for var`=value.
 
 	#define ArgLength(aArgNum) ArgIndexLength((aArgNum)-1)
 	#define ArgToDouble(aArgNum) ArgIndexToDouble((aArgNum)-1)
