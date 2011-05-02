@@ -54,28 +54,28 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 	Object *obj = new Object();
 	if (obj && aParamCount)
 	{
-		ExprTokenType result_token, this_token;
-		TCHAR buf[MAX_NUMBER_SIZE];
+		if (aParamCount > 8)
+			// Set initial capacity to avoid multiple expansions.
+			// For simplicity, failure is handled by the loop below.
+			obj->SetInternalCapacity(aParamCount >> 1);
+		// Otherwise, there are 4 or less key-value pairs.  When the first
+		// item is inserted, a default initial capacity of 4 will be set.
 
-		this_token.symbol = SYM_OBJECT;
-		this_token.object = obj;
+		TCHAR buf[MAX_NUMBER_SIZE];
+		FieldType *field;
+		SymbolType key_type;
+		KeyType key;
+		IndexType insert_pos;
 		
 		for (int i = 0; i + 1 < aParamCount; i += 2)
 		{
-			result_token.symbol = SYM_STRING;
-			result_token.marker = _T("");
-			result_token.mem_to_free = NULL;
-			result_token.buf = buf;
-
-			// This is used rather than a more direct approach to ensure it is equivalent to assignment.
-			// For instance, Object("base",MyBase,"a",1,"b",2) invokes meta-functions contained by MyBase.
-			// For future consideration: Maybe it *should* bypass the meta-mechanism?
-			obj->Invoke(result_token, this_token, IT_SET, aParam + i, 2);
-
-			if (result_token.symbol == SYM_OBJECT) // L33: Bugfix.  Invoke must assume the result will be used and as a result we must account for this object reference:
-				result_token.object->Release();
-			if (result_token.mem_to_free) // Comment may be obsolete: Currently should never happen, but may happen in future.
-				free(result_token.mem_to_free);
+			if (  !((field = obj->FindField(*aParam[i], buf, key_type, key, insert_pos))
+				 || (field = obj->Insert(key_type, key, insert_pos)))
+				|| !field->Assign(*aParam[i + 1])  )
+			{	// Out of memory.
+				obj->Release();
+				return NULL;
+			}
 		}
 	}
 	return obj;
