@@ -614,24 +614,17 @@ ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, Exp
 		Func *func = g_script.FindFunc(aField->marker);
 		if (func)
 		{
-			// At this point, aIdCount == 1 and aParamCount includes only the explicit parameters for the call.
-			if (IS_INVOKE_META)
-			{
-				ExprTokenType *tmp = aParam[0];
-				// Called indirectly by means of the meta-object mechanism (mBase); treat it as a "method call".
-				// For this type of call, "this" object is included as the first parameter.  To do this, aParam[0] is
-				// temporarily overwritten with a pointer to aThisToken.  Note that aThisToken contains the original
-				// object specified in script, not the real "this" which is actually a meta-object/base of that object.
-				aParam[0] = &aThisToken;
-				ResultType r = CallFunc(*func, aResultToken, aParam, aParamCount);
-				aParam[0] = tmp;
-				return r;
-			}
-			else
-				// This object directly contains a function name.  Assume this object is intended
-				// as a simple array of functions; do not pass aThisToken as is done above.
-				// aParam + 1 vs aParam because aParam[0] is the key which was used to find this field, not a parameter of the call.
-				return CallFunc(*func, aResultToken, aParam + 1, aParamCount - 1);
+			ExprTokenType *tmp = aParam[0];
+			// v2: Always pass "this" as the first parameter.  The old behaviour of passing it only when called
+			// indirectly via mBase was confusing to many users, and isn't needed now that the script can do
+			// this.func.() instead of this.func() if they don't want to pass "this".
+			// For this type of call, "this" object is included as the first parameter.  To do this, aParam[0] is
+			// temporarily overwritten with a pointer to aThisToken.  Note that aThisToken contains the original
+			// object specified in script, not the C++ "this" which is actually a meta-object/base of that object.
+			aParam[0] = &aThisToken;
+			ResultType r = CallFunc(*func, aResultToken, aParam, aParamCount);
+			aParam[0] = tmp;
+			return r;
 		}
 	}
 	return INVOKE_NOT_HANDLED;
