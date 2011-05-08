@@ -11118,10 +11118,10 @@ VarSizeType BIV_SpecialFolderPath(LPTSTR aBuf, LPTSTR aVarName)
 	{
 	case 'P': // A_[P]rogram...
 	case 'O': // Pr[o]gramFiles
-		if (ctoupper(aVarName[9]) == 'F') // A_Program[F]iles
-			aFolder = CSIDL_PROGRAM_FILES;
-		else // A_Programs(Common)
+		if (ctoupper(aVarName[9]) == 'S') // A_Programs(Common)
 			aFolder = aVarName[10] ? CSIDL_COMMON_PROGRAMS : CSIDL_PROGRAMS;
+		else // A_Program[F]iles or ProgramFi[L]es
+			aFolder = CSIDL_PROGRAM_FILES;
 		break;
 	case 'A': // A_AppData(Common)
 		aFolder = aVarName[9] ? CSIDL_COMMON_APPDATA : CSIDL_APPDATA;
