@@ -10871,6 +10871,8 @@ VarSizeType BIV_PriorKeyEvent(LPTSTR aBuf, LPTSTR aVarName)
 	}
 	else
 	{
+		// g_KeyHistoryNext is 1 ahead of the current event.
+		// Add and mod on g_MaxHistoryKeys since it's stored circularly.
 		int i = ((g_KeyHistoryNext - 2) + g_MaxHistoryKeys) % g_MaxHistoryKeys;
 		if (!g_KeyHistory[i].vk)
 		{
