@@ -10859,7 +10859,30 @@ VarSizeType BIV_IconNumber(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(UTOA(g_script.mCustomIconNumber, target_buf));
 }
 
+VarSizeType BIV_PriorKeyEvent(LPTSTR aBuf, LPTSTR aVarName)
+{
+	const int bufSize = 32;
+	if (!aBuf)
+		return bufSize;
 
+	if (!g_KeyHistory)
+	{
+		_tcscpy(aBuf, _T("KeyHistory is disabled"));
+	}
+	else
+	{
+		int i = ((g_KeyHistoryNext - 2) + g_MaxHistoryKeys) % g_MaxHistoryKeys;
+		if (!g_KeyHistory[i].vk)
+		{
+			*aBuf = '\0';
+		}
+		else
+		{
+			VKtoKeyName(g_KeyHistory[i].vk, g_KeyHistory[i].sc, aBuf, bufSize);
+		}
+	}
+	return (VarSizeType)_tcslen(aBuf);
+}
 
 VarSizeType BIV_ExitReason(LPTSTR aBuf, LPTSTR aVarName)
 {
