@@ -10865,24 +10865,27 @@ VarSizeType BIV_PriorKeyEvent(LPTSTR aBuf, LPTSTR aVarName)
 	if (!aBuf)
 		return bufSize;
 
+	*aBuf = '\0'; // Init for error & not-found cases
+
 	if (!g_KeyHistory)
 	{
-		*aBuf = '\0';
 		g_ErrorLevel->Assign(_T("KeyHistory is disabled"));
 	}
 	else
 	{
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-		// g_KeyHistoryNext is 1 ahead of the current event.
-		// Add and mod on g_MaxHistoryKeys since it's stored circularly.
-		int i = ((g_KeyHistoryNext - 2) + g_MaxHistoryKeys) % g_MaxHistoryKeys;
-		if (!g_KeyHistory[i].vk)
+		int validEventCount = 0;
+		// Start at the current event (offset 1)
+		for (int iOffset = 1; iOffset <= g_MaxHistoryKeys; ++iOffset)
 		{
-			*aBuf = '\0';
-		}
-		else
-		{
-			VKtoKeyName(g_KeyHistory[i].vk, g_KeyHistory[i].sc, aBuf, bufSize);
+			// Get index for circular buffer
+			int i = (g_KeyHistoryNext + g_MaxHistoryKeys - iOffset) % g_MaxHistoryKeys;
+			// Keep looking until we hit the second valid event
+			if (g_KeyHistory[i].event_type != _T('i') && ++validEventCount > 1)
+			{
+				if (g_KeyHistory[i].vk)
+					VKtoKeyName(g_KeyHistory[i].vk, g_KeyHistory[i].sc, aBuf, bufSize);
+				break;
+			}
 		}
 	}
 	return (VarSizeType)_tcslen(aBuf);
