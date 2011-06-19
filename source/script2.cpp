@@ -10867,10 +10867,12 @@ VarSizeType BIV_PriorKeyEvent(LPTSTR aBuf, LPTSTR aVarName)
 
 	if (!g_KeyHistory)
 	{
-		_tcscpy(aBuf, _T("KeyHistory is disabled"));
+		*aBuf = '\0';
+		g_ErrorLevel->Assign(_T("KeyHistory is disabled"));
 	}
 	else
 	{
+		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 		// g_KeyHistoryNext is 1 ahead of the current event.
 		// Add and mod on g_MaxHistoryKeys since it's stored circularly.
 		int i = ((g_KeyHistoryNext - 2) + g_MaxHistoryKeys) % g_MaxHistoryKeys;
