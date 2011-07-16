@@ -1509,25 +1509,11 @@ LPTSTR Object::sMetaFuncName[] = { _T("__Get"), _T("__Set"), _T("__Call"), _T("_
 
 ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	// Allow script-defined meta-functions to override the default behaviour:
-	ResultType result = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
-	
-	if (result != INVOKE_NOT_HANDLED || !aParamCount)
-		return result;
-
-	if (IS_INVOKE_CALL && TokenIsEmptyString(*aParam[0]))
-	{
-		// Support func_var.(params) as a means to call either a function or an object-function.
-		// This can be done fairly easily in script, but not in a way that supports ByRef;
-		// and as a default behaviour, it might be more appealing for func lib authors.
-		LPCTSTR func_name = TokenToString(aThisToken, aResultToken.buf);
-		Func *func = g_script.FindFunc(func_name, EXPR_TOKEN_LENGTH((&aThisToken), func_name));
-		if (func)
-			return CallFunc(*func, aResultToken, aParam + 1, aParamCount - 1);
-	}
-
-	if (aThisToken.symbol == SYM_VAR && !_tcsicmp(aThisToken.var->mName, _T("base")) // Something like base.Method().
-		&& !aThisToken.var->HasContents() // Let scripts overwrite "base" var if they don't need this functionality.
+	// For something like base.Method() in a class-defined method:
+	// It seems more useful and intuitive for this special behaviour to take precedence over
+	// the default meta-functions, especially since "base" may become a reserved word in future.
+	if (aThisToken.symbol == SYM_VAR && !_tcsicmp(aThisToken.var->mName, _T("base"))
+		&& !aThisToken.var->HasContents() // Since scripts are able to assign to it, may as well let them use the assigned value.
 		&& g->CurrentFunc)
 	{
 		LPCTSTR full_name = g->CurrentFunc->mName;
@@ -1547,6 +1533,23 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, Exp
 			}
 			return OK;
 		}
+	}
+
+	// Allow script-defined meta-functions to override the default behaviour:
+	ResultType result = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
+	
+	if (result != INVOKE_NOT_HANDLED || !aParamCount)
+		return result;
+
+	if (IS_INVOKE_CALL && TokenIsEmptyString(*aParam[0]))
+	{
+		// Support func_var.(params) as a means to call either a function or an object-function.
+		// This can be done fairly easily in script, but not in a way that supports ByRef;
+		// and as a default behaviour, it might be more appealing for func lib authors.
+		LPCTSTR func_name = TokenToString(aThisToken, aResultToken.buf);
+		Func *func = g_script.FindFunc(func_name, EXPR_TOKEN_LENGTH((&aThisToken), func_name));
+		if (func)
+			return CallFunc(*func, aResultToken, aParam + 1, aParamCount - 1);
 	}
 
 	return result;
