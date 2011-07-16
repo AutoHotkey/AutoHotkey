@@ -1247,7 +1247,7 @@ int Debugger::WritePropertyData(Var &aVar, int aMaxEncodedSize)
 
 	if (aVar.Type() == VAR_NORMAL)
 	{
-		value = aVar.Contents();
+		value = aVar.Contents(TRUE, TRUE);
 		value_size = (int)aVar.CharLength();
 	}
 	else
