@@ -993,6 +993,8 @@ int Debugger::WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage)
 		type = "integer";
 	else if (attrib & VAR_ATTRIB_HAS_VALID_DOUBLE)
 		type = "float";
+	else if (attrib & VAR_ATTRIB_UNINITIALIZED)
+		type = "undefined";
 	else
 		type = "string";
 
