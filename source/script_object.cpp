@@ -245,9 +245,11 @@ bool Object::Delete()
 
 		ExprTokenType result_token, this_token, param_token, *param;
 		
+		TCHAR dummy_buf[MAX_NUMBER_SIZE];
 		result_token.marker = _T("");
 		result_token.symbol = SYM_STRING;
 		result_token.mem_to_free = NULL;
+		result_token.buf = dummy_buf; // This is required in the case where __Delete returns a short string (although there's no good reason to ever do that).
 
 		this_token.symbol = SYM_OBJECT;
 		this_token.object = this;
