@@ -1438,7 +1438,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	Hotkey *hk;
 	LineNumberType pending_buf_line_number, saved_line_number;
 	HookActionType hook_action;
-	bool is_label, suffix_has_tilde, in_comment_section, hotstring_options_all_valid;
+	bool is_label, suffix_has_tilde, hook_is_mandatory, in_comment_section, hotstring_options_all_valid;
 
 	// For the remap mechanism, e.g. a::b
 	int remap_stage;
@@ -2332,7 +2332,7 @@ examine_line:
 			}
 			else // It's a hotkey vs. hotstring.
 			{
-				if (hk = Hotkey::FindHotkeyByTrueNature(buf, suffix_has_tilde)) // Parent hotkey found.  Add a child/variant hotkey for it.
+				if (hk = Hotkey::FindHotkeyByTrueNature(buf, suffix_has_tilde, hook_is_mandatory)) // Parent hotkey found.  Add a child/variant hotkey for it.
 				{
 					if (hook_action) // suffix_has_tilde has always been ignored for these types (alt-tab hotkeys).
 					{
@@ -2353,6 +2353,16 @@ examine_line:
 						}
 						if (!hk->AddVariant(mLastLabel, suffix_has_tilde))
 							return ScriptError(ERR_OUTOFMEM, buf);
+						if (hook_is_mandatory || (!g_os.IsWin9x() && g_ForceKeybdHook))
+						{
+							// Require the hook for all variants of this hotkey if any variant requires it.
+							// This seems more intuitive than the old behaviour, which required $ or #UseHook
+							// to be used on the *first* variant, even though it affected all variants.
+							if (g_os.IsWin9x())
+								hk->mUnregisterDuringThread = true;
+							else
+								hk->mKeybdHookMandatory = true;
+						}
 					}
 				}
 				else // No parent hotkey yet, so create it.

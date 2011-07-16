@@ -936,8 +936,8 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	// both can be zero/NULL only when the caller is updating an existing hotkey to have new options
 	// (i.e. it's retaining its current label).
 
-	bool suffix_has_tilde;
-	Hotkey *hk = FindHotkeyByTrueNature(aHotkeyName, suffix_has_tilde); // NULL if not found.
+	bool suffix_has_tilde, hook_is_mandatory;
+	Hotkey *hk = FindHotkeyByTrueNature(aHotkeyName, suffix_has_tilde, hook_is_mandatory); // NULL if not found.
 	HotkeyVariant *variant = hk ? hk->FindVariant() : NULL;
 	bool update_all_hotkeys = false;  // This method avoids multiple calls to ManifestAllHotkeysHotstringsHooks() (which is high-overhead).
 	bool variant_was_just_created = false;
@@ -1048,6 +1048,16 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 						RETURN_HOTKEY_ERROR(HOTKEY_EL_MEM, ERR_OUTOFMEM, aHotkeyName);
 					variant_was_just_created = true;
 					update_all_hotkeys = true;
+					if (hook_is_mandatory || (!g_os.IsWin9x() && g_ForceKeybdHook))
+					{
+						// Require the hook for all variants of this hotkey if any variant requires it.
+						// This seems more intuitive than the old behaviour, which required $ or #UseHook
+						// to be used on the *first* variant, even though it affected all variants.
+						if (g_os.IsWin9x())
+							hk->mUnregisterDuringThread = true;
+						else
+							hk->mKeybdHookMandatory = true;
+					}
 				}
 			}
 			//else NULL label, so either it just became an alt-tab hotkey above, or it's "Hotkey, Name,, Options".
@@ -1697,6 +1707,8 @@ LPTSTR Hotkey::TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperti
 					aThisHotkey->mKeybdHookMandatory = true; // This flag will be ignored if TextToKey() decides this is a JOYSTICK or MOUSE hotkey.
 				// else ignore the flag and try to register normally, which in most cases seems better
 				// than disabling the hotkey.
+			if (aProperties)
+				aProperties->hook_is_mandatory = true;
 			break;
 		case '!':
 			if ((!key_right && !key_left))
@@ -2050,7 +2062,7 @@ void Hotkey::InstallMouseHook()
 
 
 
-Hotkey *Hotkey::FindHotkeyByTrueNature(LPTSTR aName, bool &aSuffixHasTilde)
+Hotkey *Hotkey::FindHotkeyByTrueNature(LPTSTR aName, bool &aSuffixHasTilde, bool &aHookIsMandatory)
 // Returns the address of the hotkey if found, NULL otherwise.
 // In v1.0.42, it tries harder to find a match so that the order of modifier symbols doesn't affect the true nature of a hotkey.
 // For example, ^!c should be the same as !^c, primarily because RegisterHotkey() and the hook would consider them the same.
@@ -2067,6 +2079,7 @@ Hotkey *Hotkey::FindHotkeyByTrueNature(LPTSTR aName, bool &aSuffixHasTilde)
 	HotkeyProperties prop_candidate, prop_existing;
 	TextToModifiers(aName, NULL, &prop_candidate);
 	aSuffixHasTilde = prop_candidate.suffix_has_tilde; // Set for caller.
+	aHookIsMandatory = prop_candidate.hook_is_mandatory; // Set for caller.
 	// Both suffix_has_tilde and a hypothetical prefix_has_tilde are ignored during dupe-checking below.
 	// See comments inside the loop for details.
 

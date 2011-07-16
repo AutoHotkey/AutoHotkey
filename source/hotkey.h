@@ -230,6 +230,7 @@ public:
 		bool suffix_has_tilde; // As opposed to "prefix has tilde".
 		bool has_asterisk;
 		bool is_key_up;
+		bool hook_is_mandatory;
 	};
 	static LPTSTR TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperties *aProperties = NULL);
 	static ResultType TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier, Hotkey *aThisHotkey, bool aUseErrorLevel);
@@ -306,7 +307,7 @@ public:
 		return 0;
 	}
 
-	static Hotkey *FindHotkeyByTrueNature(LPTSTR aName, bool &aSuffixHasTilde);
+	static Hotkey *FindHotkeyByTrueNature(LPTSTR aName, bool &aSuffixHasTilde, bool &aHookIsMandatory);
 	static Hotkey *FindHotkeyContainingModLR(modLR_type aModifiersLR);  //, HotkeyIDType hotkey_id_to_omit);
 	//static Hotkey *FindHotkeyWithThisModifier(vk_type aVK, sc_type aSC);
 	//static Hotkey *FindHotkeyBySC(sc2_type aSC2, mod_type aModifiers, modLR_type aModifiersLR);
