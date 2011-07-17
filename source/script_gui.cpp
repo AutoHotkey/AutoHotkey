@@ -3931,11 +3931,15 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 			// desirable due to possible side effects caused to any script that happens to be watching
 			// for its existence/non-existence, so it would be nice if some better way can be discovered
 			// to do this.
+			// Update by Lexikos: I've been unable to produce the "strange effect" described above using
+			// WinSet on Win2k/XP/7, so changing this section to use the same method as WinSet. If there
+			// are any problems, at least WinSet and Gui will be consistent.
 			// SetWindowPos is also necessary, otherwise the frame thickness entirely around the window
 			// does not get updated (just parts of it):
 			SetWindowPos(mHwnd, NULL, 0, 0, 0, 0, SWP_DRAWFRAME|SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
-			ShowWindow(mHwnd, SW_HIDE);
-			ShowWindow(mHwnd, SW_SHOWNA); // i.e. don't activate it if it wasn't before. Note that SW_SHOWNA avoids restoring the window if it is currently minimized or maximized (unlike SW_SHOWNOACTIVATE).
+			// ShowWindow(mHwnd, SW_HIDE);
+			// ShowWindow(mHwnd, SW_SHOWNA); // i.e. don't activate it if it wasn't before. Note that SW_SHOWNA avoids restoring the window if it is currently minimized or maximized (unlike SW_SHOWNOACTIVATE).
+			InvalidateRect(mHwnd, NULL, TRUE); // Quite a few styles require this to become visibly manifest.
 			// None of the following methods alone is enough, at least not when the window is currently active:
 			// 1) InvalidateRect(mHwnd, NULL, TRUE);
 			// 2) SendMessage(mHwnd, WM_NCPAINT, 1, 0);  // 1 = Repaint entire frame.
