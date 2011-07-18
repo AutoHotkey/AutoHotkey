@@ -2636,7 +2636,7 @@ public:
 	Func *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos, Object *aClassObject = NULL);
 
 	ResultType DefineClass(LPTSTR aBuf);
-	ResultType DefineClassVars(LPTSTR aBuf);
+	ResultType DefineClassVars(LPTSTR aBuf, bool aStatic);
 	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
 
 	#define ALWAYS_USE_DEFAULT  0

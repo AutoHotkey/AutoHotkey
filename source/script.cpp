@@ -2035,13 +2035,13 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 			{
 				if (!_tcsnicmp(buf, _T("Var"), 3) && IS_SPACE_OR_TAB(buf[3]))
 				{
-					if (!DefineClassVars(buf + 4))
+					if (!DefineClassVars(buf + 4, false))
 						return FAIL; // Above already displayed the error.
 					goto continue_main_loop; // In lieu of "continue", for performance.
 				}
 				if (!_tcsnicmp(buf, _T("Static"), 6) && IS_SPACE_OR_TAB(buf[6]))
 				{
-					if (!DefineClassVars(buf + 7))
+					if (!DefineClassVars(buf + 7, true))
 						return FAIL; // Above already displayed the error.
 					goto continue_main_loop; // In lieu of "continue", for performance.
 				}
@@ -7273,7 +7273,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 }
 
 
-ResultType Script::DefineClassVars(LPTSTR aBuf)
+ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 {
 	Object *class_object = mClassObject[mClassObjectCount - 1];
 	LPTSTR item, item_end;
@@ -7332,9 +7332,9 @@ ResultType Script::DefineClassVars(LPTSTR aBuf)
 
 		item_end += FindNextDelimiter(item_end); // Find the next comma which is not part of the initializer (or find end of string).
 
-		// Append "ClassName.VarName := Initializer, " to the buffer.
+		// Append "ClassNameOrThis.VarName := Initializer, " to the buffer.
 		int chars_written = _sntprintf(buf + buf_used, _countof(buf) - buf_used, _T("%s.%.*s := %.*s, ")
-			, mClassName, name_length, item, item_end - right_side_of_operator, right_side_of_operator);
+			, aStatic ? mClassName : _T("this"), name_length, item, item_end - right_side_of_operator, right_side_of_operator);
 		if (chars_written < 0)
 			return ScriptError(_T("Declaration too long.")); // Short message since should be rare.
 		buf_used += chars_written;
@@ -7348,20 +7348,84 @@ ResultType Script::DefineClassVars(LPTSTR aBuf)
 	{
 		// Above wrote at least one initializer expression into buf.
 		buf[buf_used -= 2] = '\0'; // Remove the final ", "
+
+		// The following section temporarily replaces mLastLine in order to insert script lines
+		// either at the end of the list of static initializers (separate from the main script)
+		// or at the end of the __Init method belonging to this class.  Save the current values:
+		Line *script_first_line = mFirstLine, *script_last_line = mLastLine;
+		Line *block_end;
+		Func *init_func = NULL;
+		Var *exvar;
+
+		if (aStatic)
+		{
+			mLastLine = mLastStaticLine;
+			mFirstLine = mFirstStaticLine;
+		}
+		else
+		{
+			ExprTokenType token;
+			if (class_object->GetItem(token, _T("__Init")) && token.symbol == SYM_OBJECT
+				&& (init_func = dynamic_cast<Func *>(token.object))) // This cast SHOULD always succeed; done for maintainability.
+			{
+				// __Init method already exists, so find the end of its body.
+				for (block_end = init_func->mJumpToLine;
+					 block_end->mActionType != ACT_BLOCK_END || !block_end->mAttribute;
+					 block_end = block_end->mNextLine);
+			}
+			else
+			{
+				// Create an __Init method for this class.
+				TCHAR def[] = _T("__Init()");
+				if (!DefineFunc(def, NULL) || !AddLine(ACT_BLOCK_BEGIN)
+					|| (class_object->Base() && !ParseAndAddLine(_T("base.__Init()"), ACT_EXPRESSION))) // Initialize base-class variables first. Relies on short-circuit evaluation.
+					return FAIL;
+				
+				mLastLine->mLineNumber = 0; // Signal the debugger to skip this line while stepping in/over/out.
+				init_func = g->CurrentFunc;
+				init_func->mDefaultVarType = VAR_DECLARE_GLOBAL; // Allow global variables/class names in initializer expressions.
+				
+				if (!AddLine(ACT_BLOCK_END)) // This also resets g->CurrentFunc to NULL.
+					return FAIL;
+				block_end = mLastLine;
+				block_end->mLineNumber = 0; // See above.
+				
+				// These must be updated as one or both have changed:
+				script_first_line = mFirstLine;
+				script_last_line = mLastLine;
+			}
+			g->CurrentFunc = init_func; // g->CurrentFunc should be NULL prior to this.
+			mFuncExceptionVar = &exvar; // Must be non-NULL for "this" to be resolved correctly, even though mFuncExceptionVarCount is 0.
+			mLastLine = block_end->mPrevLine; // i.e. insert before block_end.
+			mLastLine->mNextLine = NULL; // For maintainability; AddLine() should overwrite it regardless.
+		}
+
 		if (!ParseAndAddLine(buf, ACT_EXPRESSION))
 			return FAIL; // Above already displayed the error.
-		// This part is almost identical to the code used for static var initializers:
-		mLastLine = mLastLine->mPrevLine; // Restore mLastLine to the last non-'static' line, but leave mCurrLine set to the new line.
-		if (mLastLine) // This can be NULL if the class definition is at the top of the script.
-			mLastLine->mNextLine = NULL; // Remove the new line from the main script's linked list of lines. For maintainability: AddLine() unconditionally overwrites mLastLine->mNextLine anyway.
+		
+		if (aStatic)
+		{
+			if (!mFirstStaticLine)
+				mFirstStaticLine = mLastLine;
+			mLastStaticLine = mLastLine;
+			// The following is necessary if there weren't any executable lines above this static
+			// initializer (i.e. mFirstLine was NULL and has been set to the newly created line):
+			mFirstLine = script_first_line;
+		}
 		else
-			mFirstLine = NULL;
-		if (mLastStaticLine)
-			mLastStaticLine->mNextLine = mCurrLine;
-		else
-			mFirstStaticLine = mCurrLine;
-		mCurrLine->mPrevLine = mLastStaticLine; // Even if NULL. Must be set otherwise VicinityToText() will show the wrong line if this one or one "near" it has an error.
-		mLastStaticLine = mCurrLine;
+		{
+			if (init_func->mJumpToLine == block_end) // This can be true only for the first initializer of a class with no base-class.
+				init_func->mJumpToLine = mLastLine;
+			// Rejoin the function's block-end (and any lines following it) to the main script.
+			mLastLine->mNextLine = block_end;
+			block_end->mPrevLine = mLastLine;
+			// mFirstLine should be left as it is: if it was NULL, it now contains a pointer to our
+			// __init function's block-begin, which is now the very first executable line in the script.
+			mFuncExceptionVar = NULL;
+			g->CurrentFunc = NULL;
+		}
+		// Restore mLastLine so that any subsequent script lines are added at the correct point.
+		mLastLine = script_last_line;
 	}
 	return OK;
 }
