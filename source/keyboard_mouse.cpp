@@ -93,7 +93,7 @@ void DisguiseWinAltIfNeeded(vk_type aVK)
 
 
 // moved from SendKeys
-void SendUnicodeChar(wchar_t aChar)
+void SendUnicodeChar(wchar_t aChar, int aModifiers = -1)
 {
 	if (sSendMode == SM_INPUT)
 	{
@@ -109,6 +109,16 @@ void SendUnicodeChar(wchar_t aChar)
 	// won't work, it seems better than sending chars out of order. One possible alternative could
 	// be to "flush" the event array, but since SendInput and SendEvent are probably much more common,
 	// this is left for a future version.
+
+	// Set modifier keystate for consistent results. If not specified by caller, default to releasing
+	// Alt/Ctrl/Shift since these are known to interfere in some cases, and because SendAsc() does it
+	// (except for LAlt). Leave LWin/RWin as they are, for consistency with SendAsc().
+	if (aModifiers == -1)
+	{
+		aModifiers = sSendMode ? sEventModifiersLR : GetModifierLRState();
+		aModifiers &= ~(MOD_LALT | MOD_RALT | MOD_LCONTROL | MOD_RCONTROL | MOD_LSHIFT | MOD_RSHIFT);
+	}
+	SetModifierLRState((modLR_type)aModifiers, sSendMode ? sEventModifiersLR : GetModifierLRState(), NULL, false, true, KEY_IGNORE);
 
 	INPUT u_input[2];
 
@@ -691,10 +701,7 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 						// To know why the following requires sSendMode != SM_PLAY, see SendUnicodeChar.
 						if (sSendMode != SM_PLAY && g_os.IsWin2000orLater())
 						{
-							// L25: Set modifier key-state in case it matters.
-							SetModifierLRState(mods_for_next_key | persistent_modifiers_for_this_SendKeys
-								, sSendMode ? sEventModifiersLR : GetModifierLRState(), NULL, false, true, KEY_IGNORE);
-							SendUnicodeChar(u_code);
+							SendUnicodeChar(u_code, mods_for_next_key | persistent_modifiers_for_this_SendKeys);
 						}
 						else // Note that this method generally won't work with Unicode characters except
 						{	 // with specific controls which support it, such as RichEdit (tested on WordPad).
@@ -3902,6 +3909,9 @@ vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLa
 	vk_type vk = LOBYTE(mod_plus_vk);
 	char keyscan_modifiers = HIBYTE(mod_plus_vk);
 	if (keyscan_modifiers == -1 && vk == (UCHAR)-1) // No translation could be made.
+		return 0;
+	if (keyscan_modifiers & 0x08) // "The Hankaku key is pressed"
+		// Callers expect failure in this case so that a fallback method can be used.
 		return 0;
 
 	// For v1.0.35, pModifiersLR was changed to modLR vs. mod so that AltGr keys such as backslash and

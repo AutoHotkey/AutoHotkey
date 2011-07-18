@@ -187,10 +187,14 @@ public:
 	
 	bool GetItem(ExprTokenType &aToken, LPTSTR aKey)
 	{
-		IndexType insert_pos;
 		KeyType key;
-		key.s = aKey;
-		FieldType *field = FindField(SYM_STRING, key, insert_pos);
+		SymbolType key_type = IsNumeric(aKey, FALSE, FALSE, FALSE); // SYM_STRING or SYM_INTEGER.
+		if (key_type == SYM_INTEGER)
+			key.i = ATOI(aKey);
+		else
+			key.s = aKey;
+		IndexType insert_pos;
+		FieldType *field = FindField(key_type, key, insert_pos);
 		if (!field)
 			return false;
 		field->ToToken(aToken);
@@ -199,11 +203,15 @@ public:
 	
 	bool SetItem(LPTSTR aKey, ExprTokenType &aValue)
 	{
-		IndexType insert_pos;
 		KeyType key;
-		key.s = aKey;
-		FieldType *field = FindField(SYM_STRING, key, insert_pos);
-		if (  !field && !(field = Insert(SYM_STRING, key, insert_pos))  ) // Relies on short-circuit boolean evaluation.
+		SymbolType key_type = IsNumeric(aKey, FALSE, FALSE, FALSE); // SYM_STRING or SYM_INTEGER.
+		if (key_type == SYM_INTEGER)
+			key.i = ATOI(aKey);
+		else
+			key.s = aKey;
+		IndexType insert_pos;
+		FieldType *field = FindField(key_type, key, insert_pos);
+		if (  !field && !(field = Insert(key_type, key, insert_pos))  ) // Relies on short-circuit boolean evaluation.
 			return false;
 		return field->Assign(aValue);
 	}

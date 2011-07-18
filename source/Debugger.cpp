@@ -993,6 +993,8 @@ int Debugger::WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage)
 		type = "integer";
 	else if (attrib & VAR_ATTRIB_IS_DOUBLE)
 		type = "float";
+	else if (attrib & VAR_ATTRIB_UNINITIALIZED)
+		type = "undefined";
 	else
 		type = "string";
 
@@ -1247,7 +1249,7 @@ int Debugger::WritePropertyData(Var &aVar, int aMaxEncodedSize)
 
 	if (aVar.Type() == VAR_NORMAL)
 	{
-		value = aVar.Contents();
+		value = aVar.Contents(TRUE, TRUE);
 		value_size = (int)aVar.CharLength();
 	}
 	else

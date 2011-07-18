@@ -59,8 +59,8 @@ static key_type *ksc = NULL;
 // Macros for convenience in accessing the above arrays as multidimensional objects.
 // When using them, be sure to consistently access the first index as ModLR (i.e. the rows)
 // and the second as VK or SC (i.e. the columns):
-#define Kvkm(i,j) kvkm[(i)*(MODLR_MAX + 1) + (j)]
-#define Kscm(i,j) kscm[(i)*(MODLR_MAX + 1) + (j)]
+#define Kvkm(i,j) kvkm[(i)*(VK_ARRAY_COUNT) + (j)]
+#define Kscm(i,j) kscm[(i)*(SC_ARRAY_COUNT) + (j)]
 #define KVKM_SIZE ((MODLR_MAX + 1)*(VK_ARRAY_COUNT))
 #define KSCM_SIZE ((MODLR_MAX + 1)*(SC_ARRAY_COUNT))
 
