@@ -24,6 +24,7 @@ GNU General Public License for more details.
 #include "application.h" // for MsgSleep()
 #include "resources/resource.h"  // For InputBox.
 #include "TextIO.h"
+#include <Psapi.h> // for GetModuleBaseName.
 
 #define PCRE_STATIC             // For RegEx. PCRE_STATIC tells PCRE to declare its functions for normal, static
 #include "lib_pcre/pcre/pcre.h" // linkage rather than as functions inside an external DLL.
@@ -3634,9 +3635,9 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 			if (cmd == WINGET_CMD_PID)
 				return output_var.Assign(pid);
 			// Otherwise, get the full path and name of the executable that owns this window.
-			_ultot(pid, buf, 10);
 			TCHAR process_name[MAX_PATH];
-			if (ProcessExist(buf, process_name))
+			HANDLE hproc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+			if (hproc && GetModuleBaseName(hproc, NULL, process_name, _countof(process_name)))
 				return output_var.Assign(process_name);
 		}
 		// If above didn't return:

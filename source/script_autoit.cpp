@@ -2164,11 +2164,8 @@ void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed)
 // PROCESS ROUTINES
 ////////////////////
 
-DWORD ProcessExist9x2000(LPTSTR aProcess, LPTSTR aProcessName)
+DWORD ProcessExist9x2000(LPTSTR aProcess)
 {
-	if (aProcessName) // Init this output variable in case of early return.
-		*aProcessName = '\0';
-
 	// We must dynamically load the function or program will probably not launch at all on NT4.
 	typedef BOOL (WINAPI *PROCESSWALK)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
 	typedef HANDLE (WINAPI *CREATESNAPSHOT)(DWORD dwFlags, DWORD th32ProcessID);
@@ -2194,13 +2191,6 @@ DWORD ProcessExist9x2000(LPTSTR aProcess, LPTSTR aProcessName)
 	{
 		if (specified_pid && specified_pid == proc.th32ProcessID)
 		{
-			if (aProcessName) // Caller wanted process name also.
-			{
-				// For consistency in results, use _splitpath() both here and below rather than
-				// something that just checks for a rightmost backslash.
-				_tsplitpath(proc.szExeFile, szDrive, szDir, aProcessName, szExt);
-				_tcscat(aProcessName, szExt);
-			}
 			CloseHandle(snapshot);
 			return specified_pid;
 		}
@@ -2212,8 +2202,6 @@ DWORD ProcessExist9x2000(LPTSTR aProcess, LPTSTR aProcessName)
 		_tcscat(szFile, szExt);
 		if (!_tcsicmp(szFile, aProcess)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 		{
-			if (aProcessName) // Caller wanted process name also.
-				_tcscpy(aProcessName, szFile);
 			CloseHandle(snapshot);
 			return proc.th32ProcessID;
 		}
