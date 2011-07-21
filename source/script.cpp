@@ -1720,11 +1720,6 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 				// OTHERWISE in_continuation_section != 0, so the above has found the first line of a new
 				// continuation section.
-				// "has_continuation_section" indicates whether the line we're about to construct is partially
-				// composed of continuation lines beneath it.  It's separate from continuation_line_count
-				// in case there is another continuation section immediately after/adjacent to the first one,
-				// but the second one doesn't have any lines in it:
-				has_continuation_section = true;
 				continuation_line_count = 0; // Reset for this new section.
 				// Otherwise, parse options.  First set the defaults, which can be individually overridden
 				// by any options actually present.  RTrim defaults to ON for two reasons:
@@ -1799,6 +1794,14 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 							case 'c': // identify it as the option to allow comments in the section.
 								in_continuation_section = CONTINUATION_SECTION_WITH_COMMENTS; // Override the default, which is boolean true (i.e. 1).
 								break;
+							case ')':
+								// Probably something like (x.y)[z](), which is not intended as the beginning of
+								// a continuation section.  Doing this only when ")" is found should remove the
+								// need to escape "(" in most real-world expressions while still allowing new
+								// options to be added later with minimal risk of breaking scripts.
+								in_continuation_section = 0;
+								*option_end = orig_char; // Undo the temporary termination.
+								goto process_completed_line;
 							}
 						}
 					}
@@ -1808,6 +1811,12 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 					*option_end = orig_char; // Undo the temporary termination.
 
 				} // for() each item in option list
+
+				// "has_continuation_section" indicates whether the line we're about to construct is partially
+				// composed of continuation lines beneath it.  It's separate from continuation_line_count
+				// in case there is another continuation section immediately after/adjacent to the first one,
+				// but the second one doesn't have any lines in it:
+				has_continuation_section = true;
 
 				continue; // Now that the open-parenthesis of this continuation section has been processed, proceed to the next line.
 			} // if (!in_continuation_section)
@@ -1905,6 +1914,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		if (!buf_length) // Done only after the line number increments above so that the physical line number is properly tracked.
 			goto continue_main_loop; // In lieu of "continue", for performance.
 
+process_completed_line:
 		// Since neither of the above executed, or they did but didn't "continue",
 		// buf now contains a non-commented line, either by itself or built from
 		// any continuation sections/lines that might have been present.  Also note that
@@ -4325,7 +4335,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		}
 		if (!aActionType) // Above still didn't find a valid action (i.e. check aActionType again in case the above changed it).
 		{
-			if (*action_args == '(' || *action_args == '[') // v1.0.46.11: Recognize as multi-statements that start with a function, like "fn(), x:=4".  v1.0.47.03: Removed the following check to allow a close-brace to be followed by a comma-less function-call: strchr(action_args, g_delimiter).
+			if (*action_args == '(' || *action_args == '[' // v1.0.46.11: Recognize as multi-statements that start with a function, like "fn(), x:=4".  v1.0.47.03: Removed the following check to allow a close-brace to be followed by a comma-less function-call: strchr(action_args, g_delimiter).
+				|| *aLineText == '(') // Probably an expression with parentheses to control order of evaluation.
 			{
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				action_args = aLineText; // Since this is a function-call followed by a comma and some other expression, use the line's full text for later parsing.
