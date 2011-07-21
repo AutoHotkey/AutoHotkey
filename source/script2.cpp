@@ -14563,7 +14563,7 @@ void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	// The following aren't covered by the check below:
 	// - Due to rarity of negative offsets, only the right-side boundary is checked, not the left.
 	// - Due to rarity and to simplify things, Float/Double (which "return" higher above) aren't checked.
-	if (target < 1024 // Basic sanity check to catch incoming raw addresses that are zero or blank.
+	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.
 		|| target_token.symbol == SYM_VAR && target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
 		aResultToken.symbol = SYM_STRING;
@@ -14663,7 +14663,7 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	aResultToken.value_int64 = target + size; // This is used below and also as NumPut's return value. It's the address to the right of the item to be written.  aResultToken.symbol was set to SYM_INTEGER by our caller.
 
 	// See comments in NumGet about the following section:
-	if (target < 1024 // Basic sanity check to catch incoming raw addresses that are zero or blank.
+	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.
 		|| target_token.symbol == SYM_VAR && aResultToken.value_int64 > (INT_PTR)right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
 		if (target_token.symbol == SYM_VAR)
@@ -14795,7 +14795,7 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 	// Check for obvious errors to prevent an Access Violation.
 	// Address can be zero for StrPut if length is also zero (see below).
-	if ( address < (LPVOID)1024
+	if ( address < (LPVOID)65536
 		// Also check for overlap, in case memcpy is used instead of MultiByteToWideChar/WideCharToMultiByte.
 		// (Behaviour for memcpy would be "undefined", whereas MBTWC/WCTBM would fail.)  Overlap in the
 		// other direction (source_string beginning inside address..length) should not be possible.
