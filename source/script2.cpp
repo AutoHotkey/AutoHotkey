@@ -10859,7 +10859,7 @@ VarSizeType BIV_IconNumber(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(UTOA(g_script.mCustomIconNumber, target_buf));
 }
 
-VarSizeType BIV_PriorKeyEvent(LPTSTR aBuf, LPTSTR aVarName)
+VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
 {
 	const int bufSize = 32;
 	if (!aBuf)
