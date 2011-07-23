@@ -394,7 +394,7 @@ Action g_act[] =
 	, {_T("Gosub"), 1, 1, 1, NULL}   // Label (or dereference that resolves to a label).
 	, {_T("OnExit"), 0, 2, 2, NULL}  // Optional label, future use (since labels are allowed to contain commas)
 	, {_T("Hotkey"), 1, 3, 3, NULL}  // Mod+Keys, Label/Action (blank to avoid changing curr. label), Options
-	, {_T("SetTimer"), 1, 3, 3, {3, 0}}  // Label (or dereference that resolves to a label), period (or ON/OFF), Priority
+	, {_T("SetTimer"), 0, 3, 3, {3, 0}}  // Label (or dereference that resolves to a label), period (or ON/OFF), Priority
 	, {_T("Critical"), 0, 1, 1, NULL}  // On|Off
 	, {_T("Thread"), 1, 3, 3, {2, 3, 0}}  // Command, value1 (can be blank for interrupt), value2
 	, {_T("Return"), 0, 1, 1, {1, 0}}
