@@ -7900,10 +7900,18 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		min_params = 2;
 		max_params = 6;
 	}
-	else if (!_tcsicmp(func_name, _T("GetKeyState")))
+	else if (!_tcsnicmp(func_name, _T("GetKey"), 6))
 	{
-		bif = BIF_GetKeyState;
-		max_params = 2;
+		suffix = func_name + 6;
+		if (!_tcsicmp(suffix, _T("State")))
+		{
+			bif = BIF_GetKeyState;
+			max_params = 2;
+		}
+		else if (!_tcsicmp(suffix, _T("Name")) || !_tcsicmp(suffix, _T("VK")) || !_tcsicmp(suffix, _T("SC")))
+			bif = BIF_GetKeyName;
+		else
+			return NULL;
 	}
 	else if (!_tcsicmp(func_name, _T("Asc")))
 		bif = BIF_Asc;

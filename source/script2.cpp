@@ -15070,6 +15070,42 @@ void BIF_GetKeyState(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 
 
 
+void BIF_GetKeyName(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	// Get VK and/or SC from the first parameter, which may be a key name, scXXX or vkXX.
+	// Key names are allowed even for GetKeyName() for simplicity and so that it can be
+	// used to normalise a key name; e.g. GetKeyName("Esc") returns "Escape".
+	LPTSTR key = TokenToString(*aParam[0], aResultToken.buf);
+	vk_type vk = TextToVK(key, NULL, true); // Pass true for the third parameter to avoid it calling TextToSC(), in case this is something like vk23sc14F.
+	sc_type sc = TextToSC(key);
+	if (!sc)
+	{
+		if (LPTSTR cp = tcscasestr(key, _T("SC"))) // TextToSC() supports SCxxx but not VKxxSCyyy.
+			sc = (sc_type)_tcstoul(cp + 2, NULL, 16);
+		else
+			sc = vk_to_sc(vk);
+	}
+	else if (!vk)
+		vk = sc_to_vk(sc);
+
+	switch (ctoupper(aResultToken.marker[6]))
+	{
+	case 'V': // GetKey[V]K
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = vk;
+		break;
+	case 'S': // GetKey[S]C
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = sc;
+		break;
+	default: // GetKey[N]ame
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = GetKeyName(vk, sc, aResultToken.buf, MAX_NUMBER_SIZE, _T(""));
+	}
+}
+
+
+
 void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 // Returns: The variable's new capacity.
 // Parameters:
