@@ -15031,6 +15031,23 @@ void BIF_Func(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 }
 
 
+void BIF_IsByRef(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	if (aParam[0]->symbol != SYM_VAR)
+	{
+		// Incorrect usage: return empty string to indicate the error.
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+	}
+	else
+	{
+		// Return true if the var is an alias for another var.
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = (aParam[0]->var->ResolveAlias() != aParam[0]->var);
+	}
+}
+
+
 
 void BIF_GetKeyState(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {

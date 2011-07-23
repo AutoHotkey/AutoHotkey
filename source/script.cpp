@@ -7944,6 +7944,8 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		bif = BIF_Func;
 	else if (!_tcsicmp(func_name, _T("IsFunc")))
 		bif = BIF_IsFunc;
+	else if (!_tcsicmp(func_name, _T("IsByRef")))
+		bif = BIF_IsByRef;
 #ifdef ENABLE_DLLCALL
 	else if (!_tcsicmp(func_name, _T("DllCall")))
 	{
