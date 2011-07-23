@@ -11327,6 +11327,18 @@ VarSizeType BIV_ScriptFullPath(LPTSTR aBuf, LPTSTR aVarName)
 		:(VarSizeType)(_tcslen(g_script.mFileDir) + _tcslen(g_script.mFileName) + 1);
 }
 
+VarSizeType BIV_ScriptHwnd(LPTSTR aBuf, LPTSTR aVarName)
+{
+	if (aBuf)
+	{
+		aBuf[0] = '0';
+		aBuf[1] = 'x';
+		Exp32or64(_ultot,_ui64tot)((size_t)g_hWnd, aBuf + 2, 16); // See BIF_WinExistActive for comments.
+		return (VarSizeType)_tcslen(aBuf);
+	}
+	return MAX_INTEGER_LENGTH;
+}
+
 VarSizeType BIV_LineNumber(LPTSTR aBuf, LPTSTR aVarName)
 // Caller has ensured that g_script.mCurrLine is not NULL.
 {

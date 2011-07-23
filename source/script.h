@@ -2765,6 +2765,7 @@ VarSizeType BIV_ScreenWidth_Height(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_ScriptName(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_ScriptDir(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_ScriptFullPath(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ScriptHwnd(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_LineNumber(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_LineFile(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_LoopFileName(LPTSTR aBuf, LPTSTR aVarName);

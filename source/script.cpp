@@ -8973,6 +8973,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (!_tcscmp(lower, _T("scriptname"))) return BIV_ScriptName;
 	if (!_tcscmp(lower, _T("scriptdir"))) return BIV_ScriptDir;
 	if (!_tcscmp(lower, _T("scriptfullpath"))) return BIV_ScriptFullPath;
+	if (!_tcscmp(lower, _T("scripthwnd"))) return BIV_ScriptHwnd;
 	if (!_tcscmp(lower, _T("linenumber"))) return BIV_LineNumber;
 	if (!_tcscmp(lower, _T("linefile"))) return BIV_LineFile;
 
