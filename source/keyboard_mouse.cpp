@@ -3811,7 +3811,7 @@ ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr)
 
 
 
-LPTSTR SCtoKeyName(sc_type aSC, LPTSTR aBuf, int aBufSize)
+LPTSTR SCtoKeyName(sc_type aSC, LPTSTR aBuf, int aBufSize, bool aUseFallback)
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // Always produces a non-empty string.
 {
@@ -3824,13 +3824,16 @@ LPTSTR SCtoKeyName(sc_type aSC, LPTSTR aBuf, int aBufSize)
 		}
 	}
 	// Since above didn't return, no match was found.  Use the default format for an unknown scan code:
-	sntprintf(aBuf, aBufSize, _T("SC%03x"), aSC);
+	if (aUseFallback)
+		sntprintf(aBuf, aBufSize, _T("sc%03X"), aSC);
+	else
+		*aBuf = '\0';
 	return aBuf;
 }
 
 
 
-LPTSTR VKtoKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize)
+LPTSTR VKtoKeyName(vk_type aVK, LPTSTR aBuf, int aBufSize, bool aUseFallback)
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // Caller may omit aSC and it will be derived if needed.
 {
@@ -3842,9 +3845,15 @@ LPTSTR VKtoKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize)
 			return aBuf;
 		}
 	}
-	// Since above didn't return, no match was found.  Ask the OS for the name instead (it's probably
-	// a letter key such as A through Z, but could be anything for which we don't have a listing):
-	return GetKeyName(aVK, aSC, aBuf, aBufSize);
+	// Since above didn't return, no match was found.  Try to map it to
+	// a character or use the default format for an unknown key code:
+	if (*aBuf = (TCHAR)MapVirtualKey(aVK, MAPVK_VK_TO_CHAR))
+		aBuf[1] = '\0';
+	else if (aUseFallback)
+		sntprintf(aBuf, aBufSize, _T("vk%02X"), aVK);
+	else
+		*aBuf = '\0';
+	return aBuf;
 }
 
 
@@ -4131,7 +4140,7 @@ ResultType KeyHistoryToFile(LPTSTR aFilespec, char aType, bool aKeyUp, vk_type a
 
 
 
-LPTSTR GetKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize)
+LPTSTR GetKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize, LPTSTR aDefault)
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // Caller has ensured that aBuf isn't NULL.
 {
@@ -4148,29 +4157,18 @@ LPTSTR GetKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize)
 		if (!aSC)
 			aSC = vk_to_sc(aVK);
 
-	// Use 0x02000000 to tell it that we want it to give left/right specific info, lctrl/rctrl etc.
-	// Relies on short-circuit boolean order.  v1.0.43: WheelDown/Up store the notch/turn count in SC,
-	// so don't consider that to be a valid SC:
-	if (!aSC || IS_WHEEL_VK(aVK) || !GetKeyNameText((long)(aSC) << 16, aBuf, (int)(aBufSize/sizeof(TCHAR))))
+	// Check SC first to properly differentiate between Home/NumpadHome, End/NumpadEnd, etc.
+	// v1.0.43: WheelDown/Up store the notch/turn count in SC, so don't consider that to be a valid SC.
+	if (aSC && !IS_WHEEL_VK(aVK))
 	{
-		int j;
-		for (j = 0; j < g_key_to_vk_count; ++j)
-			if (g_key_to_vk[j].vk == aVK)
-				break;
-		if (j < g_key_to_vk_count) // Match found.
-			tcslcpy(aBuf, g_key_to_vk[j].key_name, aBufSize);
-		else
-		{
-			if (_istprint(aVK))
-			{
-				aBuf[0] = aVK;
-				aBuf[1] = '\0';
-			}
-			else
-				tcslcpy(aBuf, _T("not found"), aBufSize);
-		}
+		if (*SCtoKeyName(aSC, aBuf, aBufSize, false))
+			return aBuf;
+		// Otherwise this key is probably one we can handle by VK.
 	}
-	return aBuf;
+	if (*VKtoKeyName(aVK, aBuf, aBufSize, false))
+		return aBuf;
+	// Since this key is unrecognized, return the caller-supplied default value.
+	return aDefault;
 }
 
 

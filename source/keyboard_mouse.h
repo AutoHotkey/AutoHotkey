@@ -319,8 +319,8 @@ ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr = LAYOUT_UNDETERMINE
 
 //---------------------------------------------------------------------
 
-LPTSTR SCtoKeyName(sc_type aSC, LPTSTR aBuf, int aBufSize);
-LPTSTR VKtoKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize);
+LPTSTR SCtoKeyName(sc_type aSC, LPTSTR aBuf, int aBufSize, bool aUseFallback = true);
+LPTSTR VKtoKeyName(vk_type aVK, LPTSTR aBuf, int aBufSize, bool aUseFallback = true);
 sc_type TextToSC(LPTSTR aText);
 vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR = NULL, bool aExcludeThoseHandledByScanCode = false
 	, bool aAllowExplicitVK = true, HKL aKeybdLayout = GetKeyboardLayout(0));
@@ -333,7 +333,7 @@ ResultType KeyHistoryToFile(LPTSTR aFilespec = NULL, TCHAR aType = '\0', bool aK
 	, vk_type aVK = 0, sc_type aSC = 0);
 #endif
 
-LPTSTR GetKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize);
+LPTSTR GetKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize, LPTSTR aDefault = _T("not found"));
 sc_type vk_to_sc(vk_type aVK, bool aReturnSecondary = false);
 vk_type sc_to_vk(sc_type aSC);
 

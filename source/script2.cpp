@@ -1765,7 +1765,7 @@ ResultType Line::Input()
 		}
 		else
 			g_input.EndedBySC ? SCtoKeyName(g_input.EndingSC, key_name + 7, _countof(key_name) - 7)
-				: VKtoKeyName(g_input.EndingVK, g_input.EndingSC, key_name + 7, _countof(key_name) - 7);
+				: VKtoKeyName(g_input.EndingVK, key_name + 7, _countof(key_name) - 7);
 		g_ErrorLevel->Assign(key_name);
 		break;
 	}
