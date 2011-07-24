@@ -14,6 +14,7 @@ class ComEvent : public IDispatch
 	ComObject *mObject;
 	ITypeInfo *mTypeInfo;
 	IID mIID;
+	IObject *mAhkObject;
 	TCHAR mPrefix[64];
 
 public:
@@ -25,15 +26,17 @@ public:
 	STDMETHODIMP GetIDsOfNames(REFIID riid, LPOLESTR *rgszNames, UINT cNames, LCID lcid, DISPID *rgDispId);
 	STDMETHODIMP Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr);
 
-	void Connect(LPTSTR pfx = NULL);
+	void Connect(LPTSTR pfx = NULL, IObject *ahkObject = NULL);
 
 	ComEvent(ComObject *obj, ITypeInfo *tinfo, IID iid)
-		: mRefCount(1), mCookie(0), mObject(obj), mTypeInfo(tinfo), mIID(iid)
+		: mRefCount(1), mCookie(0), mObject(obj), mTypeInfo(tinfo), mIID(iid), mAhkObject(NULL)
 	{
 	}
 	~ComEvent()
 	{
 		mTypeInfo->Release();
+		if (mAhkObject)
+			mAhkObject->Release();
 	}
 
 	friend class ComObject;

@@ -297,7 +297,10 @@ void BIF_ComObjConnect(ExprTokenType &aResultToken, ExprTokenType *aParam[], int
 
 		if (obj->mEventSink)
 		{
-			obj->mEventSink->Connect(aParamCount>1 ? TokenToString(*aParam[1]) : NULL);
+			if (aParamCount < 2)
+				obj->mEventSink->Connect(); // Disconnect.
+			else
+				obj->mEventSink->Connect(TokenToString(*aParam[1]), TokenToObject(*aParam[1]));
 			return;
 		}
 	}
@@ -805,63 +808,86 @@ STDMETHODIMP ComEvent::GetIDsOfNames(REFIID riid, LPOLESTR *rgszNames, UINT cNam
 
 STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
 {
+	if (!mObject) // mObject == NULL should be next to impossible since it is only set NULL after calling Unadvise(), in which case there shouldn't be anyone left to call this->Invoke().  Check it anyway since it might be difficult to debug, depending on what we're connected to.
+		return DISP_E_MEMBERNOTFOUND;
+
+	// Resolve method name.
 	BSTR memberName;
 	UINT nNames;
 	if (FAILED(mTypeInfo->GetNames(dispIdMember, &memberName, 1, &nNames)))
 		return DISP_E_MEMBERNOTFOUND;
 
+	// Copy method name into our buffer, applying prefix and converting if necessary.
 	TCHAR funcName[256];
 	sntprintf(funcName, _countof(funcName), _T("%s%ws"), mPrefix, memberName);
 	SysFreeString(memberName);
 
-	Func *func = g_script.FindFunc(funcName);
-	if (!func)
-		return DISP_E_MEMBERNOTFOUND;
-
 	UINT cArgs = pDispParams->cArgs;
-
-	if (cArgs >= MAX_FUNCTION_PARAMS // >= vs > to allow for 'this' object param.
-		|| !mObject) // mObject == NULL should be next to impossible since it is only set NULL after calling Unadvise(), in which case there shouldn't be anyone left to call this->Invoke().  Check it anyway since it might be difficult to debug, depending on what we're connected to.
-		return DISP_E_MEMBERNOTFOUND;
+	const UINT ADDITIONAL_PARAMS = 2; // mObject (passed by us) and mAhkObject (passed by Object::Invoke).
+	const UINT MAX_COM_PARAMS = MAX_FUNCTION_PARAMS - ADDITIONAL_PARAMS;
+	if (cArgs > MAX_COM_PARAMS) // Probably won't happen in any real-world script.
+		cArgs = MAX_COM_PARAMS; // Just omit the rest of the params.
 
 	ExprTokenType param_token[MAX_FUNCTION_PARAMS];
 	ExprTokenType *param[MAX_FUNCTION_PARAMS];
-
-	for (UINT i = 0; i < cArgs; ++i)
+	
+	for (UINT i = 1; i <= cArgs; ++i)
 	{
-		VARIANTARG *pvar = &pDispParams->rgvarg[cArgs-1-i];
+		VARIANTARG *pvar = &pDispParams->rgvarg[cArgs-i];
 		while (pvar->vt == (VT_BYREF | VT_VARIANT))
 			pvar = pvar->pvarVal;
 		VariantToToken(*pvar, param_token[i]);
 		param[i] = &param_token[i];
 	}
-
+	
 	// Pass our object last for either of the following cases:
 	//	a) Our caller doesn't include its IDispatch interface pointer in the parameter list.
 	//	b) The script needs a reference to the original wrapper object; i.e. mObject.
-	param_token[cArgs].symbol = SYM_OBJECT;
-	param_token[cArgs].object = mObject;
-	param[cArgs] = &param_token[cArgs];
+	param_token[cArgs + 1].symbol = SYM_OBJECT;
+	param_token[cArgs + 1].object = mObject;
+	param[cArgs + 1] = &param_token[cArgs + 1];
 
-	FuncCallData func_call;
 	ExprTokenType result_token;
-	ResultType result;
 	HRESULT result_to_return;
 
-	// Call the function.
-	if (func->Call(func_call, result, result_token, param, cArgs + 1))
+	if (mAhkObject)
 	{
-		if (pVarResult)
-			TokenToVariant(result_token, *pVarResult);
-		if (result_token.symbol == SYM_OBJECT)
-			result_token.object->Release();
-		result_to_return = S_OK;
+		ExprTokenType this_token;
+		this_token.symbol = SYM_OBJECT;
+		this_token.object = mAhkObject;
+
+		param_token[0].symbol = SYM_STRING;
+		param_token[0].marker = funcName;
+		param[0] = &param_token[0];
+
+		// Call method of mAhkObject by name.
+		if (mAhkObject->Invoke(result_token, this_token, IT_CALL, param, cArgs + 2) != INVOKE_NOT_HANDLED)
+			result_to_return = S_OK;
+		else
+			result_to_return = DISP_E_MEMBERNOTFOUND;
 	}
-	else // above failed or exited, so result_token should be ignored.
-		result_to_return = DISP_E_MEMBERNOTFOUND; // For consistency.  Probably doesn't matter whether we return this or S_OK.
+	else
+	{
+		// Call function by name (= prefix . method_name).
+		Func *func = g_script.FindFunc(funcName);
+
+		FuncCallData func_call;
+		ResultType result;
+
+		// Call the function.
+		if (func && func->Call(func_call, result, result_token, param + 1, cArgs + 1))
+			result_to_return = S_OK;
+		else
+			result_to_return = DISP_E_MEMBERNOTFOUND; // Indicate result_token should not be used below.
+	}
+
+	if (pVarResult && result_to_return == S_OK)
+		TokenToVariant(result_token, *pVarResult);
+	if (result_token.symbol == SYM_OBJECT)
+		result_token.object->Release();
 
 	// Clean up:
-	for (UINT i = 0; i < cArgs; ++i)
+	for (UINT i = 1; i <= cArgs; ++i)
 	{
 		// Release COM wrapper objects:
 		if (param_token[i].symbol == SYM_OBJECT)
@@ -874,7 +900,7 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	return S_OK;
 }
 
-void ComEvent::Connect(LPTSTR pfx)
+void ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
 {
 	HRESULT hr;
 	IConnectionPointContainer *pcpc;
@@ -889,6 +915,8 @@ void ComEvent::Connect(LPTSTR pfx)
 			{
 				if (!mCookie)
 				{
+					if (mAhkObject = ahkObject)
+						mAhkObject->AddRef();
 					_tcscpy(mPrefix, pfx);
 					hr = pconn->Advise(this, &mCookie);
 				}
@@ -900,6 +928,11 @@ void ComEvent::Connect(LPTSTR pfx)
 					hr = pconn->Unadvise(mCookie);
 					if (SUCCEEDED(hr))
 						mCookie = 0;
+					if (mAhkObject) // Even if above failed:
+					{
+						mAhkObject->Release();
+						mAhkObject = NULL;
+					}
 				}
 			}
 			pconn->Release();
