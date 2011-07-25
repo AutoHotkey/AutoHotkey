@@ -903,27 +903,22 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 void ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
 {
 	HRESULT hr;
-	IConnectionPointContainer *pcpc;
-	hr = mObject->mDispatch->QueryInterface(IID_IConnectionPointContainer, (void **)&pcpc);
-	if (SUCCEEDED(hr))
+
+	if ((pfx != NULL) != (mCookie != 0)) // want_connection != have_connection
 	{
-		IConnectionPoint *pconn;
-		hr = pcpc->FindConnectionPoint(mIID, &pconn);
+		IConnectionPointContainer *pcpc;
+		hr = mObject->mDispatch->QueryInterface(IID_IConnectionPointContainer, (void **)&pcpc);
 		if (SUCCEEDED(hr))
 		{
-			if (pfx)
+			IConnectionPoint *pconn;
+			hr = pcpc->FindConnectionPoint(mIID, &pconn);
+			if (SUCCEEDED(hr))
 			{
-				if (!mCookie)
+				if (pfx)
 				{
-					if (mAhkObject = ahkObject)
-						mAhkObject->AddRef();
-					_tcscpy(mPrefix, pfx);
 					hr = pconn->Advise(this, &mCookie);
 				}
-			}
-			else
-			{
-				if (mCookie)
+				else
 				{
 					hr = pconn->Unadvise(mCookie);
 					if (SUCCEEDED(hr))
@@ -934,12 +929,28 @@ void ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
 						mAhkObject = NULL;
 					}
 				}
+				pconn->Release();
 			}
-			pconn->Release();
+			pcpc->Release();
 		}
-		pcpc->Release();
 	}
-	if (FAILED(hr))
+	else
+		hr = S_OK; // No change required.
+
+	if (SUCCEEDED(hr))
+	{
+		if (mAhkObject)
+			// Release this object before storing the new one below.
+			mAhkObject->Release();
+		// Update prefix/object.
+		if (mAhkObject = ahkObject)
+			mAhkObject->AddRef();
+		if (pfx)
+			_tcscpy(mPrefix, pfx);
+		else
+			*mPrefix = '\0'; // For maintainability.
+	}
+	else
 		ComError(hr);
 }
 
