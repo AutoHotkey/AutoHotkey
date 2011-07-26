@@ -14,7 +14,7 @@
 #endif
 
 #if defined(AUTOHOTKEYSC) && !defined(_WIN64)
-#define ENABLE_EXEARC
+//#define ENABLE_EXEARC
 #endif
 
 #if !defined(_MBCS) && !defined(_UNICODE) && !defined(UNICODE) // If not set in project settings...
