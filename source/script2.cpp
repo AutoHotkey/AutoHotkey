@@ -14762,6 +14762,8 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	// - If a parameter remains, it is Encoding.
 	// Encoding may therefore only be purely numeric if Address(X) and Length(Y) are specified.
 
+	const LPVOID FIRST_VALID_ADDRESS = (LPVOID)65536;
+
 	if (aParam < aParam_end && TokenIsPureNumeric(**aParam))
 	{
 		address = (LPVOID)TokenToInt64(**aParam);
@@ -14776,7 +14778,7 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 		// A length of 0 when passed to the Win API conversion functions (or the code below) means
 		// "calculate the required buffer size, but don't do anything else."
 		length = 0;
-		address = (LPVOID)1024; // Skip validation below; address should never be used when length == 0.
+		address = FIRST_VALID_ADDRESS; // Skip validation below; address should never be used when length == 0.
 	}
 
 	if (aParam < aParam_end)
@@ -14807,7 +14809,7 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 	// Check for obvious errors to prevent an Access Violation.
 	// Address can be zero for StrPut if length is also zero (see below).
-	if ( address < (LPVOID)65536
+	if ( address < FIRST_VALID_ADDRESS
 		// Also check for overlap, in case memcpy is used instead of MultiByteToWideChar/WideCharToMultiByte.
 		// (Behaviour for memcpy would be "undefined", whereas MBTWC/WCTBM would fail.)  Overlap in the
 		// other direction (source_string beginning inside address..length) should not be possible.
