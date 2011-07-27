@@ -6242,10 +6242,9 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 	// Update for v1.0.25: The below is now done last to prevent the GuiSize label (if any) from launching
 	// while this function is still incomplete; in other words, don't allow the GuiSize label to launch
 	// until after all of the above members and actions have been completed.
-	// This is done for the same reason it's done for ACT_SPLASHTEXTON.  If it weren't done, whenever
-	// a command that blocks (fully uses) the main thread such as "Drive Eject" immediately follows
-	// "Gui Show", the GUI window might not appear until afterward because our thread never had a
-	// chance to call its WindowProc with all the messages needed to actually show the window:
+	// If this weren't done, whenever a command that blocks (fully uses) the main thread such as "Drive Eject"
+	// immediately follows "Gui Show", the GUI window might not appear until afterward because our thread
+	// never had a chance to call its WindowProc with all the messages needed to actually show the window:
 	SLEEP_WITHOUT_INTERRUPTION(-1)
 	// UpdateWindow() would probably achieve the same effect as the above, but it feels safer to do
 	// the above because it ensures that our message queue is empty prior to returning to our caller.

@@ -242,41 +242,6 @@ struct InputBoxType
 	HFONT font;
 };
 
-struct SplashType
-{
-	int width;
-	int height;
-	int bar_pos;  // The amount of progress of the bar (it's position).
-	int margin_x; // left/right margin
-	int margin_y; // top margin
-	int text1_height; // Height of main text control.
-	int object_width;   // Width of image.
-	int object_height;  // Height of the progress bar or image.
-	HWND hwnd;
-	int pic_type;
-	union
-	{
-		HBITMAP pic_bmp; // For SplashImage.
-		HICON pic_icon;
-	};
-	HWND hwnd_bar;
-	HWND hwnd_text1;  // MainText
-	HWND hwnd_text2;  // SubText
-	HFONT hfont1; // Main
-	HFONT hfont2; // Sub
-	HBRUSH hbrush; // Window background color brush.
-	COLORREF color_bk; // The background color itself.
-	COLORREF color_text; // Color of the font.
-};
-
-// Use GetClientRect() to determine the available width so that control's can be centered.
-#define SPLASH_CALC_YPOS \
-	int bar_y = splash.margin_y + (splash.text1_height ? (splash.text1_height + splash.margin_y) : 0);\
-	int sub_y = bar_y + splash.object_height + (splash.object_height ? splash.margin_y : 0); // i.e. don't include margin_y twice if there's no bar.
-#define PROGRESS_MAIN_POS splash.margin_x, splash.margin_y, control_width, splash.text1_height
-#define PROGRESS_BAR_POS  splash.margin_x, bar_y, control_width, splash.object_height
-#define PROGRESS_SUB_POS  splash.margin_x, sub_y, control_width, (client_rect.bottom - client_rect.top) - sub_y
-
 // From AutoIt3's InputBox.  This doesn't add a measurable amount of code size, so the compiler seems to implement
 // it efficiently (somewhat like a macro).
 template <class T>
@@ -609,9 +574,6 @@ private:
 	ResultType RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName, LPTSTR aValue);
 	ResultType RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName);
 	static bool RegRemoveSubkeys(HKEY hRegKey);
-
-	ResultType Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTSTR aTitle, LPTSTR aFontName
-		, LPTSTR aImageFile, bool aSplashImage);
 
 	ResultType ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID);
 	ResultType TrayTip(LPTSTR aTitle, LPTSTR aText, LPTSTR aTimeout, LPTSTR aOptions);

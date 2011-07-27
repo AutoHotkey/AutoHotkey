@@ -131,39 +131,8 @@ Script::~Script() // Destructor.
 	AddRemoveHooks(0); // Remove all hooks.
 	if (mNIC.hWnd) // Tray icon is installed.
 		Shell_NotifyIcon(NIM_DELETE, &mNIC); // Remove it.
-	// Destroy any Progress/SplashImage windows that haven't already been destroyed.  This is necessary
-	// because sometimes these windows aren't owned by the main window:
-	int i;
-	for (i = 0; i < MAX_PROGRESS_WINDOWS; ++i)
-	{
-		if (g_Progress[i].hwnd && IsWindow(g_Progress[i].hwnd))
-			DestroyWindow(g_Progress[i].hwnd);
-		if (g_Progress[i].hfont1) // Destroy font only after destroying the window that uses it.
-			DeleteObject(g_Progress[i].hfont1);
-		if (g_Progress[i].hfont2) // Destroy font only after destroying the window that uses it.
-			DeleteObject(g_Progress[i].hfont2);
-		if (g_Progress[i].hbrush)
-			DeleteObject(g_Progress[i].hbrush);
-	}
-	for (i = 0; i < MAX_SPLASHIMAGE_WINDOWS; ++i)
-	{
-		if (g_SplashImage[i].pic_bmp)
-		{
-			if (g_SplashImage[i].pic_type == IMAGE_BITMAP)
-				DeleteObject(g_SplashImage[i].pic_bmp);
-			else
-				DestroyIcon(g_SplashImage[i].pic_icon);
-		}
-		if (g_SplashImage[i].hwnd && IsWindow(g_SplashImage[i].hwnd))
-			DestroyWindow(g_SplashImage[i].hwnd);
-		if (g_SplashImage[i].hfont1) // Destroy font only after destroying the window that uses it.
-			DeleteObject(g_SplashImage[i].hfont1);
-		if (g_SplashImage[i].hfont2) // Destroy font only after destroying the window that uses it.
-			DeleteObject(g_SplashImage[i].hfont2);
-		if (g_SplashImage[i].hbrush)
-			DeleteObject(g_SplashImage[i].hbrush);
-	}
 
+	int i;
 	// It is safer/easier to destroy the GUI windows prior to the menus (especially the menu bars).
 	// This is because one GUI window might get destroyed and take with it a menu bar that is still
 	// in use by an existing GUI window.  GuiType::Destroy() adheres to this philosophy by detaching
@@ -177,7 +146,7 @@ Script::~Script() // Destructor.
 	// But that should be harmless:
 	// MSDN: "It is not necessary (but it is not harmful) to delete stock objects by calling DeleteObject."
 
-	// Above: Probably best to have removed icon from tray and destroyed any Gui/Splash windows that were
+	// Above: Probably best to have removed icon from tray and destroyed any Gui windows that were
 	// using it prior to getting rid of the script's custom icon below:
 	if (mCustomIcon)
 	{
@@ -353,16 +322,6 @@ ResultType Script::CreateWindows()
 	wc.hCursor = LoadCursor((HINSTANCE) NULL, IDC_ARROW);
 	wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);  // Needed for ProgressBar. Old: (HBRUSH)GetStockObject(WHITE_BRUSH);
 	wc.lpszMenuName = MAKEINTRESOURCE(IDR_MENU_MAIN); // NULL; // "MainMenu";
-	if (!RegisterClassEx(&wc))
-	{
-		MsgBox(_T("RegClass")); // Short/generic msg since so rare.
-		return FAIL;
-	}
-
-	// Register a second class for the splash window.  The only difference is that
-	// it doesn't have the menu bar:
-	wc.lpszClassName = WINDOW_CLASS_SPLASH;
-	wc.lpszMenuName = NULL; // Override the non-NULL value set higher above.
 	if (!RegisterClassEx(&wc))
 	{
 		MsgBox(_T("RegClass")); // Short/generic msg since so rare.
@@ -12889,12 +12848,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			, ArgToDouble(10)  // Timeout
 			, ARG11  // Initial default string for the edit field.
 			);
-
-	case ACT_PROGRESS:
-		return Splash(FIVE_ARGS, _T(""), false);  // ARG6 is for future use and currently not passed.
-
-	case ACT_SPLASHIMAGE:
-		return Splash(ARG2, ARG3, ARG4, ARG5, ARG6, ARG1, true);  // ARG7 is for future use and currently not passed.
 
 	case ACT_TOOLTIP:
 		return ToolTip(FOUR_ARGS);

@@ -114,8 +114,6 @@ extern int g_nInputBoxes;
 extern int g_nFileDialogs;
 extern int g_nFolderDialogs;
 extern InputBoxType g_InputBox[MAX_INPUTBOXES];
-extern SplashType g_Progress[MAX_PROGRESS_WINDOWS];
-extern SplashType g_SplashImage[MAX_SPLASHIMAGE_WINDOWS];
 EXTERN_GUI;
 extern HWND g_hWndToolTip[MAX_TOOLTIPS];
 extern MsgMonitorStruct *g_MsgMonitor; // An array to be allocated upon first use (if any).

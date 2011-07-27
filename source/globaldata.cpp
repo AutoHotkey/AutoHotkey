@@ -126,8 +126,6 @@ int g_nInputBoxes = 0;
 int g_nFileDialogs = 0;
 int g_nFolderDialogs = 0;
 InputBoxType g_InputBox[MAX_INPUTBOXES];
-SplashType g_Progress[MAX_PROGRESS_WINDOWS] = {{0}};
-SplashType g_SplashImage[MAX_SPLASHIMAGE_WINDOWS] = {{0}};
 GuiType *g_gui[MAX_GUI_WINDOWS] = {NULL};
 HWND g_hWndToolTip[MAX_TOOLTIPS] = {NULL};
 MsgMonitorStruct *g_MsgMonitor = NULL; // An array to be allocated upon first use (if any).
@@ -273,8 +271,6 @@ Action g_act[] =
 	, {_T("IfMsgBox"), 1, 1, false, NULL} // MsgBox result (e.g. OK, YES, NO)
 	, {_T("MsgBox"), 0, 4, false, {4, 0}} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
 	, {_T("InputBox"), 1, 11, true, {5, 6, 7, 8, 10, 0}} // Output var, title, prompt, hide-text (e.g. passwords), width, height, X, Y, Font (e.g. courier:8 maybe), Timeout, Default
-	, {_T("Progress"), 0, 6, false, NULL}  // Off|Percent|Options, SubText, MainText, Title, Font, FutureUse
-	, {_T("SplashImage"), 0, 7, false, NULL}  // Off|ImageFile, |Options, SubText, MainText, Title, Font, FutureUse
 	, {_T("ToolTip"), 0, 4, false, {2, 3, 4, 0}}  // Text, X, Y, ID.  If Text is omitted, the Tooltip is turned off.
 	, {_T("TrayTip"), 0, 4, false, {3, 4, 0}}  // Title, Text, Timeout, Options
 

@@ -47,7 +47,6 @@ GNU General Public License for more details.
 // the same process. Also, because class names occupy space in the system's private atom table, you
 // should keep class name strings as short a possible:
 #define WINDOW_CLASS_MAIN _T("AutoHotkey")
-#define WINDOW_CLASS_SPLASH _T("AutoHotkey2")
 #define WINDOW_CLASS_GUI _T("AutoHotkeyGUI") // There's a section in Script::Edit() that relies on these all starting with "AutoHotkey".
 
 #define EXT_AUTOHOTKEY _T(".ahk")
@@ -283,7 +282,7 @@ enum enum_act {
 , ACT_FIRST_COMMAND = ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION // i.e the above aren't considered commands for parsing/searching purposes.
 , ACT_IFMSGBOX = ACT_FIRST_COMMAND
 , ACT_FIRST_IF = ACT_IFIN, ACT_LAST_IF = ACT_IFMSGBOX  // Keep this range updated with any new IFs that are added.
-, ACT_MSGBOX, ACT_INPUTBOX, ACT_PROGRESS, ACT_SPLASHIMAGE
+, ACT_MSGBOX, ACT_INPUTBOX
 , ACT_TOOLTIP, ACT_TRAYTIP, ACT_INPUT
 , ACT_DEREF, ACT_STRINGLOWER, ACT_STRINGUPPER
 , ACT_STRINGREPLACE, ACT_STRINGSPLIT, ACT_SPLITPATH, ACT_SORT
@@ -378,10 +377,6 @@ enum enum_act {
 // And these to prevent mutual dependency problem between window.h and globaldata.h:
 #define MAX_MSGBOXES 7 // Probably best not to change this because it's used by OurTimers to set the timer IDs, which should probably be kept the same for backward compatibility.
 #define MAX_INPUTBOXES 4
-#define MAX_PROGRESS_WINDOWS 10  // Allow a lot for downloads and such.
-#define MAX_PROGRESS_WINDOWS_STR _T("10") // Keep this in sync with above.
-#define MAX_SPLASHIMAGE_WINDOWS 10
-#define MAX_SPLASHIMAGE_WINDOWS_STR _T("10") // Keep this in sync with above.
 #define MAX_GUI_WINDOWS 99  // Things that parse the "NN:" prefix for Gui/GuiControl might rely on this being 2-digit.
 #define MAX_GUI_WINDOWS_STR _T("99") // Keep this in sync with above.
 #define MAX_MSG_MONITORS 500
