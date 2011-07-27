@@ -371,15 +371,20 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		// Prior validation of ObjSet() param count ensures the result won't be negative:
 		--param_count_excluding_rvalue;
 		
-		if (IS_INVOKE_META)
-		{
-			if (param_count_excluding_rvalue == 1)
-				// Prevent below from searching for or setting a field, since this is a base object of aThisToken.
-				// Relies on mBase->Invoke recursion using aParamCount and not param_count_excluding_rvalue.
-				param_count_excluding_rvalue = 0;
-			//else: Allow SET to operate on a field of an object stored in the target's base.
-			//		For instance, x[y,z]:=w may operate on x[y][z], x.base[y][z], x[y].base[z], etc.
-		}
+		// Since defining base[key] prevents base.base.__Get and __Call from being invoked, it seems best
+		// to have it also block __Set. The code below is disabled to achieve this, with a slight cost to
+		// performance when assigning to a new key in any object which has a base object. (The cost may
+		// depend on how many key-value pairs each base object has.) Note that this doesn't affect meta-
+		// functions defined in *this* base object, since they were already invoked if present.
+		//if (IS_INVOKE_META)
+		//{
+		//	if (param_count_excluding_rvalue == 1)
+		//		// Prevent below from unnecessarily searching for a field, since it won't actually be assigned to.
+		//		// Relies on mBase->Invoke recursion using aParamCount and not param_count_excluding_rvalue.
+		//		param_count_excluding_rvalue = 0;
+		//	//else: Allow SET to operate on a field of an object stored in the target's base.
+		//	//		For instance, x[y,z]:=w may operate on x[y][z], x.base[y][z], x[y].base[z], etc.
+		//}
 	}
 	
 	if (param_count_excluding_rvalue)
