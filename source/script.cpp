@@ -2055,12 +2055,6 @@ process_completed_line:
 						goto continue_main_loop;
 					}
 				}
-				if (!_tcsnicmp(buf, _T("Var"), 3) && IS_SPACE_OR_TAB(buf[3]))
-				{
-					if (!DefineClassVars(buf + 4, false))
-						return FAIL; // Above already displayed the error.
-					goto continue_main_loop; // In lieu of "continue", for performance.
-				}
 				if (!_tcsnicmp(buf, _T("Static"), 6) && IS_SPACE_OR_TAB(buf[6]))
 				{
 					if (!DefineClassVars(buf + 7, true))
@@ -2068,7 +2062,7 @@ process_completed_line:
 					goto continue_main_loop; // In lieu of "continue", for performance.
 				}
 				// Anything not already handled above is not valid directly inside a class definition.
-				return ScriptError(_T("Expected class, var or method definition."), buf);
+				return ScriptError(_T("Expected assignment or class/method definition."), buf);
 			}
 		}
 
