@@ -202,18 +202,18 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 //----------------------------------------------------------------------------------
 
 void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed);
-DWORD ProcessExist9x2000(LPTSTR aProcess, LPTSTR aProcessName);
+DWORD ProcessExist9x2000(LPTSTR aProcess);
 #ifdef CONFIG_WINNT4
-DWORD ProcessExistNT4(LPTSTR aProcess, LPTSTR aProcessName);
+DWORD ProcessExistNT4(LPTSTR aProcess);
 #endif
 
-inline DWORD ProcessExist(LPTSTR aProcess, LPTSTR aProcessName = NULL)
+inline DWORD ProcessExist(LPTSTR aProcess)
 {
 	return 
 #ifdef CONFIG_WINNT4
-		g_os.IsWinNT4() ? ProcessExistNT4(aProcess, aProcessName) :
+		g_os.IsWinNT4() ? ProcessExistNT4(aProcess) :
 #endif
-		ProcessExist9x2000(aProcess, aProcessName);
+		ProcessExist9x2000(aProcess);
 }
 
 bool Util_Shutdown(int nFlag);
@@ -2546,7 +2546,7 @@ public:
 	Func *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos, Object *aClassObject = NULL);
 
 	ResultType DefineClass(LPTSTR aBuf);
-	ResultType DefineClassVars(LPTSTR aBuf);
+	ResultType DefineClassVars(LPTSTR aBuf, bool aStatic);
 	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
 
 	#define FINDVAR_DEFAULT  (VAR_LOCAL | VAR_GLOBAL)
@@ -2672,6 +2672,7 @@ VarSizeType BIV_ScreenWidth_Height(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_ScriptName(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_ScriptDir(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_ScriptFullPath(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_ScriptHwnd(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_LineNumber(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_LineFile(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_LoopFileName(LPTSTR aBuf, LPTSTR aVarName);
@@ -2741,7 +2742,9 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 void BIF_IsLabel(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_Func(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_IsByRef(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_GetKeyState(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_GetKeyName(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_FileExist(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_WinExistActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);

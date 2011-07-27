@@ -191,11 +191,42 @@ void BIF_ObjNew(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	new_object->SetBase(class_object);
 
 	ExprTokenType name_token, this_token;
-	name_token.symbol = SYM_STRING;
-	name_token.marker = Object::sMetaFuncName[4]; // __New
 	this_token.symbol = SYM_OBJECT;
 	this_token.object = new_object;
+	name_token.symbol = SYM_STRING;
 	aParam[0] = &name_token;
+
+	ResultType result;
+	LPTSTR buf = aResultToken.buf; // In case Invoke overwrites it via the union.
+
+	// __Init was added so that instance variables can be initialized in the correct order
+	// (beginning at the root class and ending at class_object) before __New is called.
+	// It shouldn't be explicitly defined by the user, but auto-generated in DefineClassVars().
+	name_token.marker = _T("__Init");
+	result = class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, 1);
+	if (result != INVOKE_NOT_HANDLED)
+	{
+		// See similar section below for comments.
+		if (aResultToken.symbol == SYM_OBJECT)
+			aResultToken.object->Release();
+		if (aResultToken.mem_to_free)
+		{
+			free(aResultToken.mem_to_free);
+			aResultToken.mem_to_free = NULL;
+		}
+		// Reset to defaults for __New, invoked below.
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+		aResultToken.buf = buf;
+		if (result == FAIL)
+		{
+			aParam[0] = class_token; // Restore it to original caller-supplied value.
+			return;
+		}
+	}
+	
+	// __New may be defined by the script for custom initialization code.
+	name_token.marker = Object::sMetaFuncName[4]; // __New
 	if (class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, aParamCount) != EARLY_RETURN)
 	{
 		// Although it isn't likely to happen, if __New points at a built-in function or if mBase

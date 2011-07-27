@@ -8534,30 +8534,21 @@ LPTSTR GuiType::HotkeyToText(WORD aHotkey, LPTSTR aBuf)
 	// KNOWN ISSUE: Someone pointed out that the following will typically produce ^A instead of ^a, which will
 	// produce an unwanted shift keystroke if for some reason the script uses the Send command to send the hotkey.
 	// However, for the following reasons, it seems best not to try to "fix" it:
-	// 1) It's not easy to fix it since VKtoKeyName indirectly calls GetKeyNameText() to get the key's name,
-	//    and there's no telling what names (single-character or otherwise) various keyboard layouts/languages
+	// 1) There's no telling what names (single-character or otherwise) various keyboard layouts/languages
 	//    might produce.
 	// 2) ^A seems more readable than ^a (which is probably the exact reason the OS's hotkey control displays it
 	//     in uppercase).  Of course, this has merit only when the script actually displays the hotkey somewhere.
 	// 3) There's a slight possibility that changing it would break existing scripts that rely on uppercase.
 	// 4) Using the Send command to send the hotkey seems very rare; the script would normally Gosub the hotkey's
 	//    subroutine instead.
-	VKtoKeyName(vk, 0, cp, 100);
+	return VKtoKeyName(vk, cp, 100);
 
 	// v1.0.48: The above calls GetKeyName(), which calls GetKeyNameText(), which produces the character's
 	// name rather than the character iself if the VK is a dead key (e.g. Zircumflex rather than ^ in the
 	// German keyboard layout).  Since such names are not currently supported by commands like
 	// Hotkey/GetKeyState/Send, try another method to convert it.  Testing shows that MapVirtualKey() produces
 	// the correct character, at least for dead keys in the German keyboard layout.
-	if (*cp  // cp can be blank when the user has pressed only some modifiers so far, such as Ctrl+Alt.
-		&& !TextToVK(cp)) // Check if it would be a valid hotkey name.  See comment-block above.
-	{
-		if (*cp = (char)MapVirtualKey(vk, 2)) // It is not necessary to call the Ex() version of MapVirtualKey because this hotkey control is one of our own, so its language/layout should be the same as this thread's
-			cp[1] = '\0'; // It seems unlikely that TextToVK() won't find a reverse mapping for the character found above, so that isn't checked. This whole situation is rare anyway because it only occurs for dead keys.
-		else // Might never happen, but here for completeness.
-			_stprintf(cp, _T("vk%02X"), vk); // If this weren't done, arguably the name that was just in cp prior to MapVirtualKey() should be put back in there (or never taken out in the first place).
-	}
-	return aBuf;
+	// Update by Lexikos on 2011-07-23: GetKeyNameText() is no longer used.
 }
 
 
