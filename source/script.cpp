@@ -2043,6 +2043,18 @@ process_completed_line:
 
 			if (mClassObjectCount)
 			{
+				// Check for assignment first, in case of something like "Static := 123".
+				for (cp = buf; cisalnum(*cp) || *cp == '_'; ++cp);
+				if (cp > buf) // i.e. buf begins with an identifier.
+				{
+					cp = omit_leading_whitespace(cp);
+					if (*cp == ':' && cp[1] == '=') // This is an assignment.
+					{
+						if (!DefineClassVars(buf, false)) // See above for comments.
+							return FAIL;
+						goto continue_main_loop;
+					}
+				}
 				if (!_tcsnicmp(buf, _T("Var"), 3) && IS_SPACE_OR_TAB(buf[3]))
 				{
 					if (!DefineClassVars(buf + 4, false))
