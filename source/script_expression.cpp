@@ -450,6 +450,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				--stack_count; // STACK_POP;
 				this_token.var = internal_output_var; // Make the result a variable rather than a normal operand so that its
 				this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
+				++this_postfix; // We've fully handled the assignment.
 				goto push_this_token;
 			}
 			// Otherwise, there's no output_var or the expression isn't finished yet, so do normal processing.
