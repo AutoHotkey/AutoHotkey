@@ -69,7 +69,20 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 		
 		for (int i = 0; i + 1 < aParamCount; i += 2)
 		{
-			if (  !((field = obj->FindField(*aParam[i], buf, key_type, key, insert_pos))
+			field = obj->FindField(*aParam[i], buf, key_type, key, insert_pos);
+			if (!field // Probably NULL, but calling FindField() first avoids an extra call to TokenToString() below.
+				&& key_type == SYM_STRING && !_tcsicmp(key.s, _T("base")))
+			{
+				// For consistency with assignments, the following is allowed to overwrite a previous
+				// base object (although having "base" occur twice in the parameter list would be quite
+				// useless) or set mBase to NULL if the value parameter is not an object.
+				if (obj->mBase)
+					obj->mBase->Release();
+				if (obj->mBase = TokenToObject(*aParam[i + 1]))
+					obj->mBase->AddRef();
+				continue;
+			}
+			if (  !(field
 				 || (field = obj->Insert(key_type, key, insert_pos)))
 				|| !field->Assign(*aParam[i + 1])  )
 			{	// Out of memory.
