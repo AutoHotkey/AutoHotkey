@@ -1567,24 +1567,6 @@ public:
 		return FILE_LOOP_INVALID;
 	}
 
-	static int ConvertMsgBoxResult(LPTSTR aBuf)
-	// Returns the matching ID, or zero if none.
-	{
-		if (!aBuf || !*aBuf) return 0;
-		// Keeping the most oft-used ones up top helps perf. a little:
-		if (!_tcsicmp(aBuf, _T("YES"))) return IDYES;
-		if (!_tcsicmp(aBuf, _T("NO"))) return IDNO;
-		if (!_tcsicmp(aBuf, _T("OK"))) return IDOK;
-		if (!_tcsicmp(aBuf, _T("CANCEL"))) return IDCANCEL;
-		if (!_tcsicmp(aBuf, _T("ABORT"))) return IDABORT;
-		if (!_tcsicmp(aBuf, _T("IGNORE"))) return IDIGNORE;
-		if (!_tcsicmp(aBuf, _T("RETRY"))) return IDRETRY;
-		if (!_tcsicmp(aBuf, _T("CONTINUE"))) return IDCONTINUE; // v1.0.44.08: For use with 2000/XP's "Cancel/Try Again/Continue" MsgBox.
-		if (!_tcsicmp(aBuf, _T("TRYAGAIN"))) return IDTRYAGAIN; //
-		if (!_tcsicmp(aBuf, _T("Timeout"))) return AHK_TIMEOUT; // Our custom result value.
-		return 0;
-	}
-
 	static int ConvertRunMode(LPTSTR aBuf)
 	// Returns the matching WinShow mode, or SW_SHOWNORMAL if none.
 	// These are also the modes that AutoIt3 uses.

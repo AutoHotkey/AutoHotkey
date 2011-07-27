@@ -267,8 +267,6 @@ Action g_act[] =
 	, {_T("is"), 2, 2, false, NULL}, {_T("is not"), 2, 2, false, NULL}
 	, {_T(""), 1, 1, false, {1, 0}} // ACT_IFEXPR's name should be "" so that Line::ToText() will properly display it.
 
-	// IfMsgBox must be physically adjacent to the other IFs in this array:
-	, {_T("IfMsgBox"), 1, 1, false, NULL} // MsgBox result (e.g. OK, YES, NO)
 	, {_T("MsgBox"), 0, 4, false, {4, 0}} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
 	, {_T("InputBox"), 1, 11, true, {5, 6, 7, 8, 10, 0}} // Output var, title, prompt, hide-text (e.g. passwords), width, height, X, Y, Font (e.g. courier:8 maybe), Timeout, Default
 	, {_T("ToolTip"), 0, 4, false, {2, 3, 4, 0}}  // Text, X, Y, ID.  If Text is omitted, the Tooltip is turned off.

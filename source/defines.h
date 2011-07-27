@@ -276,14 +276,9 @@ enum enum_act {
 , ACT_ELSE   // Parsed at a lower level than most commands to support same-line ELSE-actions (e.g. "else if").
 , ACT_IFIN, ACT_IFNOTIN, ACT_IFCONTAINS, ACT_IFNOTCONTAINS, ACT_IFIS, ACT_IFISNOT
 , ACT_IFEXPR  // i.e. if (expr)
- // *** *** *** KEEP ALL OLD-STYLE/AUTOIT V2 IFs AFTER THIS (v1.0.20 bug fix). *** *** ***
- , ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION
- // *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
-, ACT_FIRST_COMMAND = ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION // i.e the above aren't considered commands for parsing/searching purposes.
-, ACT_IFMSGBOX = ACT_FIRST_COMMAND
-, ACT_FIRST_IF = ACT_IFIN, ACT_LAST_IF = ACT_IFMSGBOX  // Keep this range updated with any new IFs that are added.
-, ACT_MSGBOX, ACT_INPUTBOX
-, ACT_TOOLTIP, ACT_TRAYTIP, ACT_INPUT
+, ACT_FIRST_IF = ACT_IFIN, ACT_LAST_IF = ACT_IFEXPR // Keep this range updated with any new IFs that are added.
+, ACT_FIRST_COMMAND, ACT_MSGBOX = ACT_FIRST_COMMAND
+, ACT_INPUTBOX, ACT_TOOLTIP, ACT_TRAYTIP, ACT_INPUT
 , ACT_DEREF, ACT_STRINGLOWER, ACT_STRINGUPPER
 , ACT_STRINGREPLACE, ACT_STRINGSPLIT, ACT_SPLITPATH, ACT_SORT
 , ACT_ENVGET, ACT_ENVSET
@@ -359,12 +354,6 @@ enum enum_act {
 #define ACT_IS_IF_OR_ELSE_OR_LOOP(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
 	|| ACT_IS_LOOP(ActionType))
 #define ACT_LOOP_ALLOWS_UNTIL(ActionType) (ActionType <= ACT_FOR && ActionType >= ACT_LOOP) // UNTIL is currently unsupported with WHILE, for performance/code size (doesn't seem useful anyway).
-#define ACT_IS_IF_OLD(ActionType) (ActionType >= ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION && ActionType <= ACT_LAST_IF)
-	// The macro above allows cmds such as IfMsgBox to support parameters on the same line or on the next line.
-	// For example, both of the above are allowed:
-	// IfMsgBox, No, Gosub, XXX
-	// IfMsgBox, No
-	//     Gosub, XXX
 
 // For convenience in many places.  Must cast to int to avoid loss of negative values.
 #define BUF_SPACE_REMAINING ((int)(aBufSize - (aBuf - aBuf_orig)))

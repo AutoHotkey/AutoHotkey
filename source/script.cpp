@@ -4151,8 +4151,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	// Any g_delimiter-delimited items beyond MaxParams will be included in a lump inside the last param:
 	int nArgs, nArgs_plus_one;
 	LPTSTR arg[MAX_ARGS], arg_map[MAX_ARGS];
-	ActionTypeType subaction_type = ACT_INVALID; // Must init this.
-	TCHAR subaction_name[MAX_VAR_NAME_LENGTH + 1], *subaction_end_marker = NULL, *subaction_start = NULL;
+	TCHAR *subaction_start = NULL;
 	int max_params = max_params_override ? max_params_override : this_action.MaxParams;
 	int max_params_minus_one = max_params - 1;
 	bool is_expression;
@@ -4165,7 +4164,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			if (aActionType == ACT_IFEXPR)
 			{
 				subaction_start = action_args + mark;
-				subaction_type = UCHAR_MAX; // Search for "Special signal from ACT_IFEXPR" for comments.
 				break;
 			}
 		}
@@ -4254,44 +4252,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			return ScriptError(error_msg, aLineText);
 		}
 
-	//////////////////////////////////////////////////////////////////////////////////////////////////
-	// Handle AutoIt2-style IF-statements (i.e. the IF's action is on the same line as the condition).
-	//////////////////////////////////////////////////////////////////////////////////////////////////
-	// The check below: Don't bother if this IF (e.g. IfWinActive) has zero params or if the
-	// subaction was already found above:
-	if (nArgs && !subaction_type && ACT_IS_IF_OLD(aActionType))
-	{
-		LPTSTR delimiter;
-		LPTSTR last_arg = arg[nArgs - 1];
-		for (mark = (int)(last_arg - action_args); action_args[mark]; ++mark)
-		{
-			if (action_args[mark] == g_delimiter && !literal_map[mark])  // Match found: a non-literal delimiter.
-			{
-				delimiter = action_args + mark; // save the location of this delimiter
-				// Omit the leading whitespace from the next arg:
-				for (++mark; IS_SPACE_OR_TAB(action_args[mark]); ++mark);
-				// Now <mark> marks the end of the string, the start of the next arg,
-				// or a delimiter-char (if the next arg is blank).
-				subaction_start = action_args + mark;
-				if (subaction_end_marker = ParseActionType(subaction_name, subaction_start, false))
-				{
-					subaction_type = ConvertActionType(subaction_name);
-					if (subaction_type) // A valid sub-action (command) was found.
-					{
-						// Remove this subaction from its parent line; we want it separate:
-						*delimiter = '\0';
-						rtrim(last_arg);
-					}
-					// else leave it as-is, i.e. as part of the last param, because the delimiter
-					// found above is probably being used as a literal char even though it isn't
-					// escaped, e.g. "ifequal, var1, string with embedded, but non-escaped, commas"
-				}
-				// else, do nothing; reasoning perhaps similar to above comment.
-				break;
-			}
-		}
-	}
-
 	// In v1.0.41, the following one-true-brace styles are also supported:
 	// Loop {   ; Known limitation: Overlaps with file-pattern loop that retrieves single file of name "{".
 	// Loop 5 { ; Also overlaps, this time with file-pattern loop that retrieves numeric filename ending in '{'.
@@ -4335,7 +4295,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	if (add_openbrace_afterward)
 		if (!AddLine(ACT_BLOCK_BEGIN))
 			return FAIL;
-	if (subaction_type == UCHAR_MAX) // Special signal from ACT_IFEXPR.
+	if (subaction_start)
 	{
 		// This ACT_IFEXPR has a same-line action, but what type of action has not
 		// been determined.  Unlike the "legacy" IF commands, we want to support
@@ -4345,18 +4305,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			, literal_map + (subaction_start - action_args) // Pass only the relevant substring of literal_map.
 			, _tcslen(subaction_start));
 	}
-	if (!subaction_type) // There is no subaction in this case.
-		return OK;
-	// Otherwise, recursively add the subaction, and any subactions it might have, beneath
-	// the line just added.  The following example:
-	// IfWinExist, x, y, IfWinNotExist, a, b, Gosub, Sub1
-	// would break down into these lines:
-	// IfWinExist, x, y
-	//    IfWinNotExist, a, b
-	//       Gosub, Sub1
-	return ParseAndAddLine(subaction_start, subaction_type, subaction_name, subaction_end_marker
-		, literal_map + (subaction_end_marker - action_args) // Pass only the relevant substring of literal_map.
-		, _tcslen(subaction_end_marker));
+	return OK;
 }
 
 
@@ -5714,11 +5663,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			if (!line.ArgHasDeref(4)) // i.e. if it's a deref, we won't try to validate it now.
 				if (!IsNumeric(new_raw_arg4, false, true, true))
 					return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
-		break;
-
-	case ACT_IFMSGBOX:
-		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertMsgBoxResult(new_raw_arg1))
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_IFIS:
@@ -11161,15 +11105,6 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 		break;
 	}
 
-	case ACT_IFMSGBOX:
-	{
-		int mb_result = ConvertMsgBoxResult(ARG1);
-		// Seems best not to report runtime error for such a rare thing, just let it discover "false" further below:
-		//if (!mb_result)
-		//	return LineError(ERR_PARAM1_INVALID ERR_ABORT, FAIL, ARG1);
-		if_condition = (g->MsgBoxResult == mb_result);
-		break;
-	}
 #ifdef _DEBUG
 	default: // Should never happen, but return an error if it does.
 		return LineError(_T("DEBUG: EvaluateCondition(): Unhandled type of IF.") ERR_ABORT);
