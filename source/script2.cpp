@@ -8898,6 +8898,35 @@ VarSizeType BIV_FileEncoding(LPTSTR aBuf, LPTSTR aVarName)
 
 
 
+VarSizeType BIV_MsgBoxResult(LPTSTR aBuf, LPTSTR aVarName)
+{
+	LPTSTR result;
+	switch (g->MsgBoxResult)
+	{
+	case IDYES:			result = _T("Yes"); break;
+	case IDNO:			result = _T("No"); break;
+	case IDOK:			result = _T("OK"); break;
+	case IDCANCEL:		result = _T("Cancel"); break;
+	case IDABORT:		result = _T("Abort"); break;
+	case IDIGNORE:		result = _T("Ignore"); break;
+	case IDRETRY:		result = _T("Retry"); break;
+	case IDCONTINUE:	result = _T("Continue"); break;
+	case IDTRYAGAIN:	result = _T("TryAgain"); break;
+	case AHK_TIMEOUT:	result = _T("Timeout"); break;
+	case 0:				result = _T(""); break;
+	default:
+		// In case other values are possible or are added by future OS updates, return the number:
+		if (aBuf)
+			return _tcslen(ITOA(g->MsgBoxResult, aBuf));
+		return MAX_INTEGER_LENGTH;
+	}
+	if (aBuf)
+		_tcscpy(aBuf, result);
+	return _tcslen(result);
+}
+
+
+
 VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_INTEGER_SIZE];

@@ -2597,6 +2597,7 @@ VarSizeType BIV_IsCompiled(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IsUnicode(LPTSTR aBuf, LPTSTR aVarName);
 #endif
 VarSizeType BIV_FileEncoding(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_MsgBoxResult(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IconHidden(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IconTip(LPTSTR aBuf, LPTSTR aVarName);
