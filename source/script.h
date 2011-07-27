@@ -2804,6 +2804,7 @@ VarSizeType BIV_TimeIdlePhysical(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IPAddress(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IsAdmin(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_PtrSize(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName);
 
 
 
