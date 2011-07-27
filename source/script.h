@@ -610,13 +610,6 @@ private:
 	ResultType RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName);
 	static bool RegRemoveSubkeys(HKEY hRegKey);
 
-	#define DESTROY_SPLASH \
-	{\
-		if (g_hWndSplash && IsWindow(g_hWndSplash))\
-			DestroyWindow(g_hWndSplash);\
-		g_hWndSplash = NULL;\
-	}
-	ResultType SplashTextOn(int aWidth, int aHeight, LPTSTR aTitle, LPTSTR aText);
 	ResultType Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTSTR aTitle, LPTSTR aFontName
 		, LPTSTR aImageFile, bool aSplashImage);
 

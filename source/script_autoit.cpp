@@ -218,81 +218,6 @@ ResultType Line::PixelGetColor(int aX, int aY, LPTSTR aOptions)
 
 
 
-ResultType Line::SplashTextOn(int aWidth, int aHeight, LPTSTR aTitle, LPTSTR aText)
-{
-	// Add some caption and frame size to window:
-	aWidth += GetSystemMetrics(SM_CXFIXEDFRAME) * 2;
-	int min_height = GetSystemMetrics(SM_CYCAPTION) + (GetSystemMetrics(SM_CXFIXEDFRAME) * 2);
-	// This method seems more friendly than setting aHeight = min_height when aHeight < min_height.
-	aHeight += min_height;
-
-	POINT pt = CenterWindow(aWidth, aHeight); // Determine how to center the window in the region that excludes the task bar.
-
-	// My: Probably not too much overhead to do this, though it probably would perform better to resize and
-	// "re-text" the existing window rather than recreating it like this:
-	DESTROY_SPLASH
-
-	// Doesn't seem necessary to have it owned by the main window, but neither
-	// does doing so seem to cause any harm.  Feels safer to have it be
-	// an independent window.  Update: Must make it owned by the parent window
-	// otherwise it will get its own task-bar icon, which is usually undesirable.
-	// In addition, making it an owned window should automatically cause it to be
-	// destroyed when it's parent window is destroyed:
-	g_hWndSplash = CreateWindowEx(WS_EX_TOPMOST, WINDOW_CLASS_SPLASH, aTitle, WS_DISABLED|WS_POPUP|WS_CAPTION
-		, pt.x, pt.y, aWidth, aHeight, g_hWnd, (HMENU)NULL, g_hInstance, NULL);
-
-	RECT rect;
-	GetClientRect(g_hWndSplash, &rect);	// get the client size
-
-	// CREATE static label full size of client area.
-	HWND static_win = CreateWindowEx(0, _T("static"), aText, WS_CHILD|WS_VISIBLE|SS_CENTER
-		, 0, 0, rect.right - rect.left, rect.bottom - rect.top, g_hWndSplash, (HMENU)NULL, g_hInstance, NULL);
-
-	if (!g_hFontSplash)
-	{
-		TCHAR default_font_name[65];
-		int CyPixels, nSize = 12, nWeight = FW_NORMAL;
-		HDC hdc = CreateDC(_T("DISPLAY"), NULL, NULL, NULL);
-		if (FontExist(hdc, _T("Segoe UI"))) // Use a more appealing font under Windows Vista or later (Segoe UI).
-		{
-			nSize = 11;
-			_tcscpy(default_font_name, _T("Segoe UI"));
-		}
-		else
-		{
-			SelectObject(hdc, (HFONT)GetStockObject(DEFAULT_GUI_FONT));		// Get Default Font Name
-			GetTextFace(hdc, _countof(default_font_name) - 1, default_font_name); // -1 just in case, like AutoIt3.
-		}
-		CyPixels = GetDeviceCaps(hdc, LOGPIXELSY);			// For Some Font Size Math
-		DeleteDC(hdc);
-		//strcpy(default_font_name,vParams[7].szValue());	// Font Name
-		//nSize = vParams[8].nValue();		// Font Size
-		//if ( vParams[9].nValue() >= 0 && vParams[9].nValue() <= 1000 )
-		//	nWeight = vParams[9].nValue();			// Font Weight
-		g_hFontSplash = CreateFont(0-(nSize*CyPixels)/72,0,0,0,nWeight,0,0,0,DEFAULT_CHARSET,
-			OUT_TT_PRECIS,CLIP_DEFAULT_PRECIS,PROOF_QUALITY,FF_DONTCARE,default_font_name);	// Create Font
-		// The font is deleted when by g_script's destructor.
-	}
-
-	SendMessage(static_win, WM_SETFONT, (WPARAM)g_hFontSplash, MAKELPARAM(TRUE, 0));	// Do Font
-	ShowWindow(g_hWndSplash, SW_SHOWNOACTIVATE);				// Show the Splash
-	// Doesn't help with the brief delay in updating the window that happens when
-	// something like URLDownloadToFile is used immediately after SplashTextOn:
-	//InvalidateRect(g_hWndSplash, NULL, TRUE);
-	// But this does, but for now it seems unnecessary since the user can always do
-	// a manual sleep in the extremely rare cases this ever happens (even when it does
-	// happen, the window updates eventually, after the download starts, at least on
-	// my system.  Update: Might as well do it since it's a little nicer this way
-	// (the text appears more quickly when the command after the splash is something
-	// that might keep our thread tied up and unable to check messages).
-	SLEEP_WITHOUT_INTERRUPTION(-1)
-	// UpdateWindow() would probably achieve the same effect as the above, but it feels safer to do
-	// the above because it ensures that our message queue is empty prior to returning to our caller.
-	return OK;
-}
-
-
-
 ResultType Line::WinMenuSelectItem(LPTSTR aTitle, LPTSTR aText, LPTSTR aMenu1, LPTSTR aMenu2
 	, LPTSTR aMenu3, LPTSTR aMenu4, LPTSTR aMenu5, LPTSTR aMenu6, LPTSTR aMenu7
 	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
@@ -2060,7 +1985,7 @@ flags can be a combination of:
 BOOL Util_ShutdownHandler(HWND hwnd, DWORD lParam)
 {
 	// if the window is me, don't terminate!
-	if (hwnd != g_hWnd && hwnd != g_hWndSplash)
+	if (hwnd != g_hWnd)
 		Util_WinKill(hwnd);
 
 	// Continue the enumeration.

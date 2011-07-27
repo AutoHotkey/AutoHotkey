@@ -203,9 +203,6 @@ Script::~Script() // Destructor.
 		if (g_hWndToolTip[i] && IsWindow(g_hWndToolTip[i]))
 			DestroyWindow(g_hWndToolTip[i]);
 
-	if (g_hFontSplash) // The splash window itself should auto-destroyed, since it's owned by main.
-		DeleteObject(g_hFontSplash);
-
 	if (mOnClipboardChangeLabel) // Remove from viewer chain.
 		if (MyRemoveClipboardListener && MyAddClipboardListener)
 			MyRemoveClipboardListener(g_hWnd); // MyAddClipboardListener was used.
@@ -12892,12 +12889,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			, ArgToDouble(10)  // Timeout
 			, ARG11  // Initial default string for the edit field.
 			);
-
-	case ACT_SPLASHTEXTON:
-		return SplashTextOn(*ARG1 ? ArgToInt(1) : 200, *ARG2 ? ArgToInt(2) : 0, ARG3, ARG4);
-	case ACT_SPLASHTEXTOFF:
-		DESTROY_SPLASH
-		return OK;
 
 	case ACT_PROGRESS:
 		return Splash(FIVE_ARGS, _T(""), false);  // ARG6 is for future use and currently not passed.

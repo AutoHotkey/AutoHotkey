@@ -34,9 +34,7 @@ extern UINT g_DefaultScriptCodepage;
 extern bool g_DestroyWindowCalled;
 extern HWND g_hWnd;  // The main window
 extern HWND g_hWndEdit;  // The edit window, child of main.
-extern HWND g_hWndSplash;  // The SplashText window.
 extern HFONT g_hFontEdit;
-extern HFONT g_hFontSplash;
 extern HACCEL g_hAccelTable; // Accelerator table for main menu shortcut keys.
 
 typedef int (WINAPI *StrCmpLogicalW_type)(LPCWSTR, LPCWSTR);

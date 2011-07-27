@@ -38,9 +38,7 @@ UINT g_DefaultScriptCodepage = UorA(CP_UTF8, CP_ACP);
 bool g_DestroyWindowCalled = false;
 HWND g_hWnd = NULL;
 HWND g_hWndEdit = NULL;
-HWND g_hWndSplash = NULL;
 HFONT g_hFontEdit = NULL;
-HFONT g_hFontSplash = NULL;  // So that font can be deleted on program close.
 HACCEL g_hAccelTable = NULL;
 
 typedef int (WINAPI *StrCmpLogicalW_type)(LPCWSTR, LPCWSTR);
@@ -275,8 +273,6 @@ Action g_act[] =
 	, {_T("IfMsgBox"), 1, 1, false, NULL} // MsgBox result (e.g. OK, YES, NO)
 	, {_T("MsgBox"), 0, 4, false, {4, 0}} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
 	, {_T("InputBox"), 1, 11, true, {5, 6, 7, 8, 10, 0}} // Output var, title, prompt, hide-text (e.g. passwords), width, height, X, Y, Font (e.g. courier:8 maybe), Timeout, Default
-	, {_T("SplashTextOn"), 0, 4, false, {1, 2, 0}} // Width, height, title, text
-	, {_T("SplashTextOff"), 0, 0, false, NULL}
 	, {_T("Progress"), 0, 6, false, NULL}  // Off|Percent|Options, SubText, MainText, Title, Font, FutureUse
 	, {_T("SplashImage"), 0, 7, false, NULL}  // Off|ImageFile, |Options, SubText, MainText, Title, Font, FutureUse
 	, {_T("ToolTip"), 0, 4, false, {2, 3, 4, 0}}  // Text, X, Y, ID.  If Text is omitted, the Tooltip is turned off.

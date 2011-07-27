@@ -4658,7 +4658,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		break;
 
 	case WM_CLOSE:
-		if (hWnd == g_hWnd) // i.e. not the SplashText window or anything other than the main.
+		if (hWnd == g_hWnd) // i.e. not anything other than the main window.
 		{
 			// Receiving this msg is fairly unusual since SC_CLOSE is intercepted and redefined above.
 			// However, it does happen if an external app is asking us to close, such as another
@@ -4693,7 +4693,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		return 0; // Whether ExitApp() terminates depends on whether there's an OnExit subroutine and what it does.
 
 	case WM_DESTROY:
-		if (hWnd == g_hWnd) // i.e. not the SplashText window or anything other than the main.
+		if (hWnd == g_hWnd) // i.e. not anything other than the main window.
 		{
 			if (!g_DestroyWindowCalled)
 				// This is done because I believe it's possible for a WM_DESTROY message to be received
@@ -4738,11 +4738,11 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 					MoveWindow(g_hWndEdit, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
 				return 0; // The correct return value for this msg.
 			}
-			if (hWnd == g_hWndSplash || wParam == SIZE_MINIMIZED)
+			if (wParam == SIZE_MINIMIZED)
 				break;  // Let DefWindowProc() handle it for splash window and Progress windows.
 		}
 		else
-			if (hWnd == g_hWnd || hWnd == g_hWndSplash)
+			if (hWnd == g_hWnd)
 				break; // Let DWP handle it.
 
 		for (i = 0; i < MAX_SPLASHIMAGE_WINDOWS; ++i)
@@ -4755,8 +4755,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 				if (g_Progress[i].hwnd == hWnd)
 					break;
 			if (i == MAX_PROGRESS_WINDOWS) // It's not a progress window either.
-				// Let DefWindowProc() handle it (should probably never happen since currently the only
-				// other type of window is SplashText, which never receive this msg?)
+				// Let DefWindowProc() handle it (should probably never happen?)
 				break;
 		}
 
