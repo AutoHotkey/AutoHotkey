@@ -10860,7 +10860,30 @@ VarSizeType BIV_IconNumber(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(UTOA(g_script.mCustomIconNumber, target_buf));
 }
 
+VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
+{
+	const int bufSize = 32;
+	if (!aBuf)
+		return bufSize;
 
+	*aBuf = '\0'; // Init for error & not-found cases
+
+	int validEventCount = 0;
+	// Start at the current event (offset 1)
+	for (int iOffset = 1; iOffset <= g_MaxHistoryKeys; ++iOffset)
+	{
+		// Get index for circular buffer
+		int i = (g_KeyHistoryNext + g_MaxHistoryKeys - iOffset) % g_MaxHistoryKeys;
+		// Keep looking until we hit the second valid event
+		if (g_KeyHistory[i].event_type != _T('i') && ++validEventCount > 1)
+		{
+			if (g_KeyHistory[i].vk)
+				GetKeyName(g_KeyHistory[i].vk, g_KeyHistory[i].sc, aBuf, bufSize);
+			break;
+		}
+	}
+	return (VarSizeType)_tcslen(aBuf);
+}
 
 VarSizeType BIV_ExitReason(LPTSTR aBuf, LPTSTR aVarName)
 {
