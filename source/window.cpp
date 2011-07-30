@@ -18,7 +18,7 @@ GNU General Public License for more details.
 #include "window.h"
 #include "util.h" // for strlcpy()
 #include "application.h" // for MsgSleep()
-#include "psapi.h" // for ahk_path
+#include "psapi.h" // for ahk_exe
 
 
 HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
@@ -1555,11 +1555,14 @@ ResultType WindowSearch::SetCriteria(global_struct &aSettings, LPTSTR aTitle, LP
 			mCriteria |= CRITERION_PID;
 			mCriterionPID = ATOU(cp);
 		}
-		else if (!_tcsnicmp(cp, _T("path"), 4))
+		else if (!_tcsnicmp(cp, _T("exe"), 3))
 		{
-			cp += 4;
+			cp += 3;
 			mCriteria |= CRITERION_PATH;
 			tcslcpy(mCriterionPath, omit_leading_whitespace(cp), _countof(mCriterionPath));
+			// Allow something like "ahk_exe firefox.exe" to be an exact match for the process name
+			// instead of full path, but for flexibility, always use full path when in regex mode.
+			mCriterionPathIsNameOnly = mSettings->TitleMatchMode != FIND_REGEX && !_tcschr(mCriterionPath, '\\');
 		}
 		else if (!_tcsnicmp(cp, _T("class"), 5))
 		{
@@ -1651,12 +1654,19 @@ void WindowSearch::UpdateCandidateAttributes()
 			*mCandidateTitle = '\0'; // Failure or blank title is okay.
 	if (mCriteria & CRITERION_PID) // In which case mCriterionPID should already be filled in, though it might be an explicitly specified zero.
 		GetWindowThreadProcessId(mCandidateParent, &mCandidatePID);
-	if (mCriteria & CRITERION_PATH) {
+	if (mCriteria & CRITERION_PATH)
+	{
 		DWORD dwPid = 0;
 		GetWindowThreadProcessId(mCandidateParent, &dwPid);
-		HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, dwPid);
-		int res = GetModuleFileNameEx(hProc, NULL, mCandidatePath, _countof(mCandidatePath));
-		CloseHandle(hProc);
+		if (HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, dwPid))
+		{
+			int res;
+			if (mCriterionPathIsNameOnly)
+				res = GetModuleBaseName(hProc, NULL, mCandidatePath, _countof(mCandidatePath));
+			else
+				res = GetModuleFileNameEx(hProc, NULL, mCandidatePath, _countof(mCandidatePath));
+			CloseHandle(hProc);
+		}
 	}
 	if (mCriteria & CRITERION_CLASS)
 		GetClassName(mCandidateParent, mCandidateClass, _countof(mCandidateClass)); // Limit to WINDOW_CLASS_SIZE in this case since that's the maximum that can be searched.
