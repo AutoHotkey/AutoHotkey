@@ -1838,6 +1838,11 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 						target_layout_has_altgr = LayoutHasAltGr(target_keybd_layout, IsKeyDownAsync(control_vk) ? CONDITION_FALSE : CONDITION_TRUE);
 				}
 			}
+			// The following is done to avoid an extraneous artificial {LCtrl Up} later on,
+			// since the keyboard driver should insert one in response to this {RAlt Up}:
+			if (target_layout_has_altgr && aSC == SC_RALT)
+				sEventModifiersLR &= ~MOD_LCONTROL;
+
 			if (do_key_history)
 				UpdateKeyEventHistory(true, aVK, aSC);
 		}
