@@ -3634,11 +3634,15 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 			GetWindowThreadProcessId(target_window, &pid);
 			if (cmd == WINGET_CMD_PID)
 				return output_var.Assign(pid);
-			// Otherwise, get the full path and name of the executable that owns this window.
+			// Otherwise, get the name of the executable that owns this window.
 			TCHAR process_name[MAX_PATH];
 			HANDLE hproc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
-			if (hproc && GetModuleBaseName(hproc, NULL, process_name, _countof(process_name)))
-				return output_var.Assign(process_name);
+			if (hproc)
+			{
+				if (GetModuleBaseName(hproc, NULL, process_name, _countof(process_name)))
+					return output_var.Assign(process_name);
+				CloseHandle(hproc);
+			}
 		}
 		// If above didn't return:
 		return output_var.Assign();
