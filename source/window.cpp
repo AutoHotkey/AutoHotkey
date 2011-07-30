@@ -1721,8 +1721,18 @@ HWND WindowSearch::IsMatch(bool aInvert)
 		return NULL;
 	//else it's a match so far, but continue onward in case there are other criteria.
 
-	if ((mCriteria & CRITERION_PATH) && _tcsicmp(mCandidatePath, mCriterionPath) != 0) // Doesn't match required path.
-		return NULL;
+	if (mCriteria & CRITERION_PATH)
+	{
+		if (mSettings->TitleMatchMode == FIND_REGEX)
+		{
+			if (!RegExMatch(mCandidatePath, mCriterionPath))
+				return NULL;
+		}
+		else
+			if (_tcsicmp(mCandidatePath, mCriterionPath)) // Doesn't match the required path.
+				return NULL;
+		// If nothing above returned, it's a match so far so continue onward to the other checks.
+	}
 
 	// The following also handles the fact that mCriterionGroup might be NULL if the specified group
 	// does not exist or was never successfully created:
