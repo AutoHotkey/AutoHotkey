@@ -3626,6 +3626,7 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 
 	case WINGET_CMD_PID:
 	case WINGET_CMD_PROCESSNAME:
+	case WINGET_CMD_PROCESSPATH:
 		if (!target_window_determined)
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 		if (target_window)
@@ -3634,12 +3635,14 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 			GetWindowThreadProcessId(target_window, &pid);
 			if (cmd == WINGET_CMD_PID)
 				return output_var.Assign(pid);
-			// Otherwise, get the name of the executable that owns this window.
+			// Otherwise, get the full path and name of the executable that owns this window.
 			TCHAR process_name[MAX_PATH];
 			HANDLE hproc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
 			if (hproc)
 			{
-				if (GetModuleBaseName(hproc, NULL, process_name, _countof(process_name)))
+				if ((cmd == WINGET_CMD_PROCESSNAME)
+					? GetModuleBaseName(hproc, NULL, process_name, _countof(process_name))
+					: GetModuleFileNameEx(hproc, NULL, process_name, _countof(process_name)))
 					return output_var.Assign(process_name);
 				CloseHandle(hproc);
 			}
