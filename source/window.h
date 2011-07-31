@@ -76,6 +76,7 @@ inline bool IsTextMatch(LPTSTR aHaystack, LPTSTR aNeedle)
 #define CRITERION_PID   0x04
 #define CRITERION_CLASS 0x08
 #define CRITERION_GROUP 0x10
+#define CRITERION_PATH	0x20
 
 class WindowSearch
 {
@@ -99,7 +100,9 @@ public:
 	HWND mCriterionHwnd;                      // For "ahk_id".
 	DWORD mCriterionPID;                      // For "ahk_pid".
 	WinGroup *mCriterionGroup;                // For "ahk_group".
+	TCHAR mCriterionPath[SEARCH_PHRASE_SIZE]; // For "ahk_exe".
 
+	bool mCriterionPathIsNameOnly;
 	bool mFindLastMatch; // Whether to keep searching even after a match is found, so that last one is found.
 	int mFoundCount;     // Accumulates how many matches have been found (either 0 or 1 unless mFindLastMatch==true).
 	HWND mFoundParent;   // Must be separate from mCandidateParent because some callers don't have access to IsMatch()'s return value.
@@ -117,6 +120,8 @@ public:
 	DWORD mCandidatePID;
 	TCHAR mCandidateTitle[WINDOW_TEXT_SIZE];  // For storing title or class name of the given mCandidateParent.
 	TCHAR mCandidateClass[WINDOW_CLASS_SIZE]; // Must not share mem with mCandidateTitle because even if ahk_class is in effect, ExcludeTitle can also be in effect.
+	TCHAR mCandidatePath[MAX_PATH];
+
 
 	void SetCandidate(HWND aWnd) // Must be kept thread-safe since it may be called indirectly by the hook thread.
 	{

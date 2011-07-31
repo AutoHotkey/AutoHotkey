@@ -2438,6 +2438,7 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 
 	case WINGET_CMD_PID:
 	case WINGET_CMD_PROCESSNAME:
+	case WINGET_CMD_PROCESSPATH:
 		if (!target_window_determined)
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 		if (target_window)
@@ -2449,8 +2450,14 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 			// Otherwise, get the full path and name of the executable that owns this window.
 			TCHAR process_name[MAX_PATH];
 			HANDLE hproc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
-			if (hproc && GetModuleBaseName(hproc, NULL, process_name, _countof(process_name)))
-				return output_var.Assign(process_name);
+			if (hproc)
+			{
+				if ((cmd == WINGET_CMD_PROCESSNAME)
+					? GetModuleBaseName(hproc, NULL, process_name, _countof(process_name))
+					: GetModuleFileNameEx(hproc, NULL, process_name, _countof(process_name)))
+					return output_var.Assign(process_name);
+				CloseHandle(hproc);
+			}
 		}
 		// If above didn't return:
 		return output_var.Assign();
@@ -8998,7 +9005,30 @@ VarSizeType BIV_IconNumber(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(UTOA(g_script.mCustomIconNumber, target_buf));
 }
 
+VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
+{
+	const int bufSize = 32;
+	if (!aBuf)
+		return bufSize;
 
+	*aBuf = '\0'; // Init for error & not-found cases
+
+	int validEventCount = 0;
+	// Start at the current event (offset 1)
+	for (int iOffset = 1; iOffset <= g_MaxHistoryKeys; ++iOffset)
+	{
+		// Get index for circular buffer
+		int i = (g_KeyHistoryNext + g_MaxHistoryKeys - iOffset) % g_MaxHistoryKeys;
+		// Keep looking until we hit the second valid event
+		if (g_KeyHistory[i].event_type != _T('i') && ++validEventCount > 1)
+		{
+			if (g_KeyHistory[i].vk)
+				GetKeyName(g_KeyHistory[i].vk, g_KeyHistory[i].sc, aBuf, bufSize);
+			break;
+		}
+	}
+	return (VarSizeType)_tcslen(aBuf);
+}
 
 VarSizeType BIV_ExitReason(LPTSTR aBuf, LPTSTR aVarName)
 {

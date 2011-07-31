@@ -7952,6 +7952,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 		|| !_tcscmp(lower, _T("tab"))) return BIV_Space_Tab;
 	if (!_tcscmp(lower, _T("ahkversion"))) return BIV_AhkVersion;
 	if (!_tcscmp(lower, _T("ahkpath"))) return BIV_AhkPath;
+	if (!_tcscmp(lower, _T("priorkey"))) return BIV_PriorKey;
 
 	// Since above didn't return:
 	return (void *)VAR_NORMAL;
