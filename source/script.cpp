@@ -9949,7 +9949,6 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 							return LineError(ERR_OUTOFMEM);
 						that_postfix->deref->func = &g_ObjGetInPlace;
 						that_postfix->deref->param_count = param_count;
-						that_postfix->circuit_token = NULL;
 					}
 					else
 					{
