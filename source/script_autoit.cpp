@@ -218,7 +218,7 @@ ResultType Line::PixelGetColor(int aX, int aY, LPTSTR aOptions)
 
 
 
-ResultType Line::WinMenuSelectItem(LPTSTR aTitle, LPTSTR aText, LPTSTR aMenu1, LPTSTR aMenu2
+ResultType Line::MenuSelect(LPTSTR aTitle, LPTSTR aText, LPTSTR aMenu1, LPTSTR aMenu2
 	, LPTSTR aMenu3, LPTSTR aMenu4, LPTSTR aMenu5, LPTSTR aMenu6, LPTSTR aMenu7
 	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 {

@@ -5596,7 +5596,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_WINDOW_PARAM);
 		break;
 
-	case ACT_WINMENUSELECTITEM:
+	case ACT_MENUSELECT:
 		// Window params can all be blank in this case, but the first menu param should
 		// be non-blank (but it's ok if its a dereferenced var that resolves to blank
 		// at runtime):
@@ -12318,8 +12318,8 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	case ACT_WINMOVE:
 		return mArgc > 2 ? WinMove(EIGHT_ARGS) : WinMove(_T(""), _T(""), ARG1, ARG2);
 
-	case ACT_WINMENUSELECTITEM:
-		return WinMenuSelectItem(ELEVEN_ARGS);
+	case ACT_MENUSELECT:
+		return MenuSelect(ELEVEN_ARGS);
 
 	case ACT_CONTROLSEND:
 	case ACT_CONTROLSENDRAW:

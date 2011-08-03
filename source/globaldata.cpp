@@ -368,7 +368,7 @@ Action g_act[] =
 	// Note for WinMove: title/text are marked as numeric because in two-param mode, they are the X/Y params.
 	// This helps speed up loading expression-detection.  Also, xpos/ypos/width/height can be the string "default",
 	// but that is explicitly checked for, even though it is required it to be numeric in the definition here.
-	, {_T("WinMenuSelectItem"), 0, 11, false, NULL} // WinTitle, WinText, Menu name, 6 optional sub-menu names, ExcludeTitle/Text
+	, {_T("MenuSelect"), 0, 11, false, NULL} // WinTitle, WinText, Menu name, 6 optional sub-menu names, ExcludeTitle/Text
 
 	, {_T("Process"), 1, 3, false, NULL}  // Sub-cmd, PID/name, Param3 (use minimum of 1 param so that 2nd can be blank)
 
