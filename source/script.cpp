@@ -7833,6 +7833,11 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 			min_params = 2;
 			max_params = 2;
 		}
+		else if (!_tcsicmp(suffix, _T("SetImageList")))
+		{
+			bif = BIF_TV_SetImageList;
+			max_params = 2; // Leave min at 1.
+		}
 		else
 			return NULL;
 	}
