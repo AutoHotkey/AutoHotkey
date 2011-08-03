@@ -19,7 +19,7 @@
 //#include <winsock.h>  // for WSADATA.  This also requires wsock32.lib to be linked in.
 #include <winsock2.h>
 #include <tlhelp32.h> // For the ProcessExist routines.
-#include <wininet.h> // For URLDownloadToFile().
+#include <wininet.h> // For Download().
 #include "script.h"
 #include "globaldata.h" // for g_ErrorLevel and probably other globals.
 #include "window.h" // For ControlExist().
@@ -902,7 +902,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 
 
 
-ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
+ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 {
 	// Check that we have IE3 and access to wininet.dll
 	HINSTANCE hinstLib = LoadLibrary(_T("wininet"));
@@ -932,8 +932,8 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	// v1.0.44.07: Set default to INTERNET_FLAG_RELOAD vs. 0 because the vast majority of usages would want
 	// the file to be retrieved directly rather than from the cache.
 	// v1.0.46.04: Added more no-cache flags because otherwise, it definitely falls back to the cache if
-	// the remote server doesn't repond (and perhaps other errors), which defeats the ability to use
-	// UrlDownloadToFile for uptime/server monitoring.  Also, in spite of what MSDN says, it seems nearly
+	// the remote server doesn't repond (and perhaps other errors), which defeats the ability to use the
+	// Download command for uptime/server monitoring.  Also, in spite of what MSDN says, it seems nearly
 	// certain based on other sources that more than one flag is supported.  Someone also mentioned that
 	// INTERNET_FLAG_CACHE_IF_NET_FAIL is related to this, but there's no way to specify it in these
 	// particular calls, and it's the opposite of the desired behavior anyway; so it seems impossible to
@@ -978,7 +978,7 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 	}
 
-	BYTE bufData[1024 * 1]; // v1.0.44.11: Reduced from 8 KB to alleviate GUI window lag during UrlDownloadtoFile.  Testing shows this reduction doesn't affect performance on high-speed downloads (in fact, downloads are slightly faster; I tested two sites, one at 184 KB/s and the other at 380 KB/s).  It might affect slow downloads, but that seems less likely so wasn't tested.
+	BYTE bufData[1024 * 1]; // v1.0.44.11: Reduced from 8 KB to alleviate GUI window lag during Download.  Testing shows this reduction doesn't affect performance on high-speed downloads (in fact, downloads are slightly faster; I tested two sites, one at 184 KB/s and the other at 380 KB/s).  It might affect slow downloads, but that seems less likely so wasn't tested.
 	INTERNET_BUFFERSA buffers = {0};
 	buffers.dwStructSize = sizeof(INTERNET_BUFFERSA);
 	buffers.lpvBuffer = bufData;

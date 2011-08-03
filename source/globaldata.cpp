@@ -289,7 +289,7 @@ Action g_act[] =
 	, {_T("RunAs"), 0, 3, false, NULL} // user, pass, domain (0 params can be passed to disable the feature)
 	, {_T("Run"), 1, 4, true, NULL}      // TargetFile, Working Dir, WinShow-Mode/UseErrorLevel, OutputVarPID
 	, {_T("RunWait"), 1, 4, true, NULL}  // TargetFile, Working Dir, WinShow-Mode/UseErrorLevel, OutputVarPID
-	, {_T("URLDownloadToFile"), 2, 2, false, NULL} // URL, save-as-filename
+	, {_T("Download"), 2, 2, false, NULL} // URL, save-as-filename
 
 	, {_T("GetKeyState"), 2, 3, true, NULL} // OutputVar, key name, mode (optional) P = Physical, T = Toggle
 	, {_T("Send"), 1, 1, false, NULL}         // But that first param can validly be a deref that resolves to a blank param.

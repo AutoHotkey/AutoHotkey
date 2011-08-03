@@ -536,7 +536,7 @@ private:
 	ResultType SoundSetGet(LPTSTR aSetting, DWORD aComponentType, int aComponentInstance
 		, DWORD aControlType, UINT aMixerID);
 	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
-	ResultType URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec);
+	ResultType Download(LPTSTR aURL, LPTSTR aFilespec);
 	ResultType FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGreeting, LPTSTR aFilter);
 
 	// Bitwise flags:

@@ -11734,7 +11734,7 @@ pcre *get_compiled_regex(LPTSTR aRegEx, bool &aGetPositionsNotSubstrings, pcre_e
 	// that scripts will use are expected to come from:
 	// 50%: FileRead: Uses `r`n by default, for performance)
 	// 10%: Clipboard: Normally uses `r`n (includes files copied from Explorer, text data, etc.)
-	// 20%: UrlDownloadToFile: Testing shows that it varies: e.g. microsoft.com uses `r`n, but `n is probably
+	// 20%: Download: Testing shows that it varies: e.g. microsoft.com uses `r`n, but `n is probably
 	//      more common due to FTP programs automatically translating CRLF to LF when uploading to UNIX servers.
 	// 20%: Other sources such as GUI edit controls: It's fairly unusual to want to use RegEx on multiline data
 	//      from GUI controls, but in such case `n is much more common than `r`n.

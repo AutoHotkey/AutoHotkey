@@ -10244,7 +10244,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		//    granularity is 10ms on mosts OSes, so that's the true interval).
 		// 4) Timed subroutines are run as consistently as possible (to help with this, a check
 		//    similar to the below is also done for single commmands that take a long time, such
-		//    as URLDownloadToFile, FileSetAttrib, etc.
+		//    as Download, FileSetAttrib, etc.
 		LONG_OPERATION_UPDATE
 
 		// If interruptions are currently forbidden, it's our responsibility to check if the number
@@ -12286,8 +12286,8 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// SetEnvironmentVariable()'s return value determine whether there's an error).
 		return g_ErrorLevel->Assign(SetEnvironmentVariable(ARG1, ARG2) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
 
-	case ACT_URLDOWNLOADTOFILE:
-		return URLDownloadToFile(TWO_ARGS);
+	case ACT_DOWNLOAD:
+		return Download(TWO_ARGS);
 
 	case ACT_RUNAS:
 		if (!g_os.IsWin2000orLater()) // Do nothing if the OS doesn't support it.
