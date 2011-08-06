@@ -2331,9 +2331,6 @@ void Hotstring::DoReplace(LPARAM alParam)
 		int backspace_count = mStringLength - 1;
 		if (mEndCharRequired)
 			++backspace_count;
-		else
-			if (LOWORD(alParam)) // Added for v1.0.44.09 as a dead key fix (see CollectInput()).
-				--backspace_count;
 		for (int i = 0; i < backspace_count; ++i)
 			*start_of_replacement++ = '\b';  // Use raw backspaces, not {BS n}, in case the send will be raw.
 		*start_of_replacement = '\0'; // Terminate the string created above.
