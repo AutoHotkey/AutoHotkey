@@ -73,7 +73,6 @@ extern WarnMode g_Warn_UseUnsetLocal;
 extern WarnMode g_Warn_UseUnsetGlobal;
 extern WarnMode g_Warn_LocalSameAsGlobal;
 extern SingleInstanceType g_AllowOnlyOneInstance;
-extern bool g_persistent;
 extern bool g_NoTrayIcon;
 #ifdef AUTOHOTKEYSC
 	extern bool g_AllowMainWindow;

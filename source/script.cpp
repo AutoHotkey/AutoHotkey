@@ -672,7 +672,6 @@ bool Script::IsPersistent()
 	if (Hotkey::sHotkeyCount || Hotstring::sHotstringCount // At least one hotkey or hotstring exists.
 		// No attempt is made to determine if the hotkeys/hotstrings are enabled, since even if they
 		// are, it's impossible to detect whether #If/#IfWin will allow them to ever execute.
-		|| g_persistent // #Persistent has been used somewhere in the script.
 		|| g_script.mTimerEnabledCount // At least one script timer is currently enabled.
 		|| g_MsgMonitorCount // At least one message monitor is active (installed by OnMessage).
 		// The following isn't checked because there has to be at least one script thread
@@ -2806,11 +2805,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	if (IS_DIRECTIVE_MATCH(_T("#NoTrayIcon")))
 	{
 		g_NoTrayIcon = true;
-		return CONDITION_TRUE;
-	}
-	if (IS_DIRECTIVE_MATCH(_T("#Persistent")))
-	{
-		g_persistent = true;
 		return CONDITION_TRUE;
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#SingleInstance")))
