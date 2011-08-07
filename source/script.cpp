@@ -4669,6 +4669,16 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					if (!*op_begin) // The above loop reached the end of the string: No operands remaining.
 						break;
 
+					if (*op_begin == '\n')
+					{
+						// Allow `n unquoted in expressions so that continuation sections can be used to
+						// spread an expression across multiple lines without requiring the "Join" option;
+						// but replace them with spaces now so they don't need to be handled later on.
+						*op_begin = ' ';
+						op_end = op_begin + 1; // Continue at the next char.
+						continue;
+					}
+
 					// Now op_begin is the start of an operand, which might be a variable reference, a numeric
 					// literal, or a string literal.  If it's a string literal, it is left as-is:
 					if (*op_begin == '"' || *op_begin == '\'')
@@ -4696,7 +4706,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					}
 					
 					// Find the end of this operand (if *op_end is '\0', strchr() will find that too):
-					for (op_end = op_begin + 1; !_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT, *op_end); ++op_end); // Find first whitespace, operator, or paren.
+					for (op_end = op_begin + 1; !_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT _T("\n"), *op_end); ++op_end); // Find first whitespace, operator, or paren.
 					if (*op_end == '=' && op_end[-1] == '.') // v1.0.46.01: Support .=, but not any use of '.' because that is reserved as a struct/member operator.
 						--op_end;
 					// Now op_end marks the end of this operand.  The end might be the zero terminator, an operator, etc.
