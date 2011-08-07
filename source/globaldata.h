@@ -167,8 +167,8 @@ extern global_struct g_default, *g_array;
 extern TCHAR g_WorkingDir[MAX_PATH];  // Explicit size needed here in .h file for use with sizeof().
 extern LPTSTR g_WorkingDirOrig;
 
-extern bool g_ContinuationLTrim;
 extern bool g_ForceKeybdHook;
+extern ToggleValueType g_ContinuationLTrim;
 extern ToggleValueType g_ForceNumLock;
 extern ToggleValueType g_ForceCapsLock;
 extern ToggleValueType g_ForceScrollLock;

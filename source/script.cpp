@@ -1393,11 +1393,13 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	bool remap_source_is_mouse, remap_dest_is_mouse, remap_keybd_to_mouse;
 
 	// For the line continuation mechanism:
-	bool do_ltrim, do_rtrim, literal_escapes, literal_derefs, literal_delimiters, literal_quotes
+	bool do_rtrim, literal_escapes, literal_derefs, literal_delimiters, literal_quotes
 		, has_continuation_section, is_continuation_line;
 	#define CONTINUATION_SECTION_WITHOUT_COMMENTS 1 // MUST BE 1 because it's the default set by anything that's boolean-true.
 	#define CONTINUATION_SECTION_WITH_COMMENTS    2 // Zero means "not in a continuation section".
-	int in_continuation_section;
+	int in_continuation_section, indent_level;
+	TCHAR indent_char;
+	ToggleValueType do_ltrim;
 
 	LPTSTR next_option, option_end;
 	TCHAR orig_char, one_char_string[2], two_char_string[3]; // Line continuation mechanism's option parsing.
@@ -1713,7 +1715,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						suffix_length = _tcslen(suffix);
 					}
 					else if (!_tcsnicmp(next_option, _T("LTrim"), 5))
-						do_ltrim = (next_option[5] != '0');  // i.e. Only an explicit zero will turn it off.
+						do_ltrim = (next_option[5] == '0') ? TOGGLED_OFF : TOGGLED_ON;  // i.e. Only an explicit zero will turn it off.
 					else if (!_tcsnicmp(next_option, _T("RTrim"), 5))
 						do_rtrim = (next_option[5] != '0');
 					else
@@ -1797,7 +1799,40 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 				// in the previous block.
 				if (do_rtrim)
 					next_buf_length = rtrim(next_buf, next_buf_length);
-				if (do_ltrim)
+				if (do_ltrim == NEUTRAL)
+				{
+					// Neither "LTrim" nor "LTrim0" was present in this section's options, so
+					// trim the continuation section based on the indentation of the first line.
+					if (!continuation_line_count)
+					{
+						// This is the first line.
+						indent_char = *next_buf;
+						if (IS_SPACE_OR_TAB(indent_char))
+						{
+							// For simplicity, require that only one type of indent char is used. Otherwise
+							// we'd have to provide some way to set the width (in spaces) of a tab char.
+							for (indent_level = 1; next_buf[indent_level] == indent_char; ++indent_level);
+							// Let the section below actually remove the indentation on this and subsequent lines.
+						}
+						else
+							indent_level = 0; // No trimming is to be done.
+					}
+					if (indent_level)
+					{
+						int i;
+						for (i = 0; i < indent_level && next_buf[i] == indent_char; ++i);
+						if (i == indent_level)
+						{
+							// LTrim exactly (indent_level) occurrences of (indent_char).
+							tmemmove(next_buf, next_buf + i, next_buf_length - i + 1); // +1 for null terminator.
+							next_buf_length -= i;
+						}
+						// Otherwise, the indentation on this line is inconsistent with the first line,
+						// so just leave it as is.
+					}
+				}
+				else if (do_ltrim == TOGGLED_ON)
+					// Trim all leading whitespace.
 					next_buf_length = ltrim(next_buf, next_buf_length);
 				// Escape each comma and percent sign in the body of the continuation section so that
 				// the later parsing stages will see them as literals.  Although, it's not always
@@ -3091,7 +3126,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#LTrim")))
 	{
-		g_ContinuationLTrim = !parameter || Line::ConvertOnOff(parameter) != TOGGLED_OFF;
+		g_ContinuationLTrim = parameter ? Line::ConvertOnOff(parameter) : TOGGLED_ON;
 		return CONDITION_TRUE;
 	}
 
