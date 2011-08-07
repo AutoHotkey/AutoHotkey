@@ -1393,7 +1393,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	bool remap_source_is_mouse, remap_dest_is_mouse, remap_keybd_to_mouse;
 
 	// For the line continuation mechanism:
-	bool do_ltrim, do_rtrim, literal_escapes, literal_derefs, literal_delimiters
+	bool do_ltrim, do_rtrim, literal_escapes, literal_derefs, literal_delimiters, literal_quotes
 		, has_continuation_section, is_continuation_line;
 	#define CONTINUATION_SECTION_WITHOUT_COMMENTS 1 // MUST BE 1 because it's the default set by anything that's boolean-true.
 	#define CONTINUATION_SECTION_WITH_COMMENTS    2 // Zero means "not in a continuation section".
@@ -1683,6 +1683,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 				literal_escapes = false;
 				literal_derefs = false;
 				literal_delimiters = true; // This is the default even for hotstrings because although using (*buf != ':') would improve loading performance, it's not a 100% reliable way to detect hotstrings.
+				literal_quotes = true; // This is the default even for non-expressions for simplicity (it should ultimately have no effect except inside an expression anyway).
 				// The default is linefeed because:
 				// 1) It's the best choice for hotstrings, for which the line continuation mechanism is well suited.
 				// 2) It's good for FileAppend.
@@ -1739,6 +1740,10 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 							case 'C': // v1.0.45.03: For simplicity, anything that begins with "C" is enough to
 							case 'c': // identify it as the option to allow comments in the section.
 								in_continuation_section = CONTINUATION_SECTION_WITH_COMMENTS; // Override the default, which is boolean true (i.e. 1).
+								break;
+							case 'Q':
+							case 'q':
+								literal_quotes = false;
 								break;
 							case ')':
 								// Probably something like (x.y)[z](), which is not intended as the beginning of
@@ -1810,6 +1815,11 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 					replacement_count += StrReplace(next_buf, _T("%"), _T("`%"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
 				if (literal_delimiters)
 					replacement_count += StrReplace(next_buf, _T(","), _T("`,"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
+				if (literal_quotes)
+				{
+					replacement_count += StrReplace(next_buf, _T("'"), _T("`'"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
+					replacement_count += StrReplace(next_buf, _T("\""), _T("`\""), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
+				}
 				if (replacement_count) // Update the length if any actual replacements were done.
 					next_buf_length = _tcslen(next_buf);
 			} // Handling of a normal line within a continuation section.
