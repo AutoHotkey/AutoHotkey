@@ -195,7 +195,6 @@ TCHAR g_WorkingDir[MAX_PATH] = _T("");
 TCHAR *g_WorkingDirOrig = NULL;  // Assigned a value in WinMain().
 
 bool g_ForceKeybdHook = false;
-ToggleValueType g_ContinuationLTrim = NEUTRAL;
 ToggleValueType g_ForceNumLock = NEUTRAL;
 ToggleValueType g_ForceCapsLock = NEUTRAL;
 ToggleValueType g_ForceScrollLock = NEUTRAL;

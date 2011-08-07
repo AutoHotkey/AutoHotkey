@@ -1676,7 +1676,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 				//    how command parsing works.
 				// 2) Copy & paste from the forum and perhaps other web sites leaves a space at the end of each
 				//    line.  Although this behavior is probably site/browser-specific, it's a consideration.
-				do_ltrim = g_ContinuationLTrim; // Start off at global default.
+				do_ltrim = NEUTRAL; // Start off at neutral/smart-trim.
 				do_rtrim = true; // Seems best to rtrim even if this line is a hotstring, since it is very rare that trailing spaces and tabs would ever be desirable.
 				// For hotstrings (which could be detected via *buf==':'), it seems best not to default the
 				// escape character (`) to be literal because the ability to have `t `r and `n inside the
@@ -3122,11 +3122,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	{
 		if (parameter)
 			g_ClipboardTimeout = ATOI(parameter);  // parameter was set to the right position by the above macro
-		return CONDITION_TRUE;
-	}
-	if (IS_DIRECTIVE_MATCH(_T("#LTrim")))
-	{
-		g_ContinuationLTrim = parameter ? Line::ConvertOnOff(parameter) : TOGGLED_ON;
 		return CONDITION_TRUE;
 	}
 
