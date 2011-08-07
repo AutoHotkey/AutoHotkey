@@ -680,7 +680,7 @@ inline void global_init(global_struct &g)
 	g.CoordMode = 0;  // All the flags it contains are off by default.
 	g.StringCaseSense = SCS_INSENSITIVE;  // AutoIt2 default, and it does seem best.
 	g.StoreCapslockMode = true;  // AutoIt2 (and probably 3's) default, and it makes a lot of sense.
-	g.ListLinesIsEnabled = true;
+	g.ListLinesIsEnabled = false;
 	g.Encoding = CP_ACP;
 }
 
