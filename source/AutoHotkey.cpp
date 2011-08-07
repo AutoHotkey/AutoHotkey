@@ -187,7 +187,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// Unless explicitly set to be non-SingleInstance via SINGLE_INSTANCE_OFF or a special kind of
 	// SingleInstance such as SINGLE_INSTANCE_REPLACE and SINGLE_INSTANCE_IGNORE, persistent scripts
 	// and those that contain hotkeys/hotstrings are automatically SINGLE_INSTANCE_PROMPT as of v1.0.16:
-	if (g_AllowOnlyOneInstance == ALLOW_MULTI_INSTANCE && IS_PERSISTENT)
+	if (g_AllowOnlyOneInstance == ALLOW_MULTI_INSTANCE && (Hotkey::sHotkeyCount || Hotstring::sHotstringCount))
 		g_AllowOnlyOneInstance = SINGLE_INSTANCE_PROMPT;
 
 	HWND w_existing = NULL;

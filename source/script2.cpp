@@ -520,10 +520,6 @@ ResultType Line::Input()
 	g_input.EndSC = end_sc;
 	g_input.status = INPUT_IN_PROGRESS; // Signal the hook to start the input.
 
-	// Make script persistent.  This is mostly for backward compatibility because it is documented behavior.
-	// even though as of v1.0.42.03, the keyboard hook does not become permanent (which allows a subsequent
-	// use of the commands Suspend/Hotkey to deinstall it, which seems to add flexibility/benefit).
-	g_persistent = true;
 	Hotkey::InstallKeybdHook(); // Install the hook (if needed).
 
 	// A timer is used rather than monitoring the elapsed time here directly because

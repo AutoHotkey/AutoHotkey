@@ -1983,6 +1983,10 @@ void ResumeUnderlyingThread(VarBkp aSavedErrorLevel)
 	// ABOVE: if g==g_array now, g->ThreadIsCritical==true should be possible only when the AutoExec
 	// section is still running (and it has turned on Critical), or if a threadless RegisterCallback()
 	// function is running in the idle thread (the docs discourage that).
+
+	// If this was the last running thread and the script has nothing keeping it open (hotkeys, Gui,
+	// message monitors, etc.) then it should terminate now:
+	g_script.ExitIfNotPersistent(EXIT_EXIT);
 }
 
 

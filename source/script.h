@@ -93,8 +93,6 @@ enum VariableTypeType {VAR_TYPE_INVALID, VAR_TYPE_NUMBER, VAR_TYPE_INTEGER, VAR_
 	init_genrand(ft.dwLowDateTime);\
 }
 
-#define IS_PERSISTENT (Hotkey::sHotkeyCount || Hotstring::sHotstringCount || g_KeybdHook || g_MouseHook || g_persistent)
-
 // Since WM_COMMAND IDs must be shared among all menus and controls, they are carefully conserved,
 // especially since there are only 65,535 possible IDs.  In addition, they are assigned to ranges
 // to minimize the need that they will need to be changed in the future (changing the ID of a main
@@ -2463,6 +2461,8 @@ public:
 	void CreateTrayIcon();
 	void UpdateTrayIcon(bool aForceUpdate = false);
 	ResultType AutoExecSection();
+	bool IsPersistent();
+	void ExitIfNotPersistent(ExitReasons aExitReason);
 	ResultType Edit();
 	ResultType Reload(bool aDisplayErrors);
 	ResultType ExitApp(ExitReasons aExitReason, LPTSTR aBuf = NULL, int ExitCode = 0);

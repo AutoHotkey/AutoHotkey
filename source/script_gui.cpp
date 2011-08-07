@@ -1463,6 +1463,8 @@ ResultType GuiType::Destroy(GuiIndexType aWindowIndex)
 	// For simplicity and performance, any fonts used *solely* by a destroyed window are destroyed
 	// only when the program terminates.  Another reason for this is that sometimes a destroyed window
 	// is soon recreated to use the same fonts it did before.
+	// If this Gui was the last thing keeping the script running, exit the script:
+	g_script.ExitIfNotPersistent(EXIT_DESTROY);
 	return OK;
 }
 
@@ -6267,6 +6269,8 @@ ResultType GuiType::Cancel()
 {
 	if (mHwnd)
 		ShowWindow(mHwnd, SW_HIDE);
+	// If this Gui was the last thing keeping the script running, exit the script:
+	g_script.ExitIfNotPersistent(EXIT_WM_CLOSE);
 	return OK;
 }
 

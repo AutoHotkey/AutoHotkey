@@ -657,13 +657,46 @@ ResultType Script::AutoExecSection()
 
 	// BEFORE DOING THE BELOW, "g" and "g_default" should be set up properly in case there's an OnExit
 	// routine (even non-persistent scripts can have one).
-	// If no hotkeys are in effect, the user hasn't requested a hook to be activated, and the script
-	// doesn't contain the #Persistent directive we're done unless there is an OnExit subroutine and it
-	// doesn't do "ExitApp":
-	if (!IS_PERSISTENT) // Resolve macro again in case any of its components changed since the last time.
+	// See Script::IsPersistent() for a list of conditions that cause the program to continue running.
+	if (!g_script.IsPersistent())
 		g_script.ExitApp(ExecUntil_result == FAIL ? EXIT_ERROR : EXIT_EXIT);
 
 	return OK;
+}
+
+
+
+bool Script::IsPersistent()
+{
+	// Consider the script "persistent" if any of the following conditions are true:
+	if (Hotkey::sHotkeyCount || Hotstring::sHotstringCount // At least one hotkey or hotstring exists.
+		// No attempt is made to determine if the hotkeys/hotstrings are enabled, since even if they
+		// are, it's impossible to detect whether #If/#IfWin will allow them to ever execute.
+		|| g_persistent // #Persistent has been used somewhere in the script.
+		|| g_script.mTimerEnabledCount // At least one script timer is currently enabled.
+		|| g_MsgMonitorCount // At least one message monitor is active (installed by OnMessage).
+		// The following isn't checked because there has to be at least one script thread
+		// running for it to be true, in which case we shouldn't have been called:
+		//|| (g_input.status == INPUT_IN_PROGRESS) // The hook is actively collecting input for the Input command.
+		|| (mNIC.hWnd && mTrayMenu->mMenuItemCount)) // The tray icon is visible and its menu has custom items.
+		return true;
+	if (GuiType::sGuiCount)
+		for (int i = 0; i < MAX_GUI_WINDOWS; ++i)
+			if (g_gui[i] // A GUI exists...
+				&& IsWindowVisible(g_gui[i]->mHwnd)) // ...and is visible.
+				return true;
+	// Otherwise, none of the above conditions are true; but there might still be
+	// one or more script threads running.  Caller is responsible for checking that.
+	return false;
+}
+
+
+
+void Script::ExitIfNotPersistent(ExitReasons aExitReason)
+{
+	if (g_nThreads || IsPersistent())
+		return;
+	g_script.ExitApp(aExitReason);
 }
 
 
@@ -823,8 +856,8 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 		TerminateApp(aExitReason, aExitCode);
 
 	// Otherwise:
-	ResumeUnderlyingThread(ErrorLevel_saved);
 	g_AllowInterruption = g_AllowInterruption_prev;  // Restore original setting.
+	ResumeUnderlyingThread(ErrorLevel_saved);
 
 	return OK;  // for caller convenience.
 }
@@ -4901,15 +4934,49 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// THESE FIRST FEW CASES MUST EXIST IN BOTH SELF-CONTAINED AND NORMAL VERSION since they alter the
 	// attributes/members of some types of lines:
 	
-	// This one alters g_persistent so is present in its entirety (for simplicity) in both SC an non-SC version.
-	case ACT_GUI:
-		// By design, scripts that use the GUI cmd anywhere are persistent.  Doing this here
-		// also allows WinMain() to later detect whether this script should become #SingleInstance.
-		// Note: Don't directly change g_AllowOnlyOneInstance here in case the remainder of the
-		// script-loading process comes across any explicit uses of #SingleInstance, which would
-		// override the default set here.
-		g_persistent = true;
+	case ACT_GROUPADD:
+	case ACT_GROUPACTIVATE:
+	case ACT_GROUPDEACTIVATE:
+	case ACT_GROUPCLOSE:
+		// For all these, store a pointer to the group to help performance.
+		// We create a non-existent group even for ACT_GROUPACTIVATE, ACT_GROUPDEACTIVATE
+		// and ACT_GROUPCLOSE because we can't rely on the ACT_GROUPADD commands having
+		// been parsed prior to them (e.g. something like "Gosub, DefineGroups" may appear
+		// in the auto-execute portion of the script).
+		if (!line.ArgHasDeref(1))
+			if (   !(line.mAttribute = FindGroup(new_raw_arg1, true))   ) // Create-if-not-found so that performance is enhanced at runtime.
+				return FAIL;  // The above already displayed the error.
+		if (aActionType == ACT_GROUPACTIVATE || aActionType == ACT_GROUPDEACTIVATE)
+		{
+			if (*new_raw_arg2 && !line.ArgHasDeref(2))
+				if (_tcslen(new_raw_arg2) > 1 || ctoupper(*new_raw_arg2) != 'R')
+					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
+		}
+		else if (aActionType == ACT_GROUPCLOSE)
+			if (*new_raw_arg2 && !line.ArgHasDeref(2))
+				if (_tcslen(new_raw_arg2) > 1 || !_tcschr(_T("RA"), ctoupper(*new_raw_arg2)))
+					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
+		break;
+
+	case ACT_STRINGSPLIT: // v1.0.48.04: Moved this section so that it is done even when AUTOHOTKEYSC is defined, because the steps below are necessary for both.
+		if (*new_raw_arg1 && !line.ArgHasDeref(1)) // The output array must be a legal name.
+		{
+			// 1.0.46.10: Fixed to look up ArrayName0 in advance (here at loadtime) so that runtime can
+			// know whether it's local or global.  This is necessary because only here at loadtime
+			// is there any awareness of the current function's list of declared variables (to conserve
+			// memory, that list is longer available at runtime).
+			TCHAR temp_var_name[MAX_VAR_NAME_LENGTH + 10]; // Provide extra room for trailing "0", and to detect names that are too long.
+			sntprintf(temp_var_name, _countof(temp_var_name), _T("%s0"), new_raw_arg1);
+			if (   !(the_new_line->mAttribute = FindOrAddVar(temp_var_name))   )
+				return FAIL;  // The above already displayed the error.
+		}
+		//else it's a dynamic array name.  Since that's very rare, just use the old runtime behavior for
+		// backward compatibility.
+		break;
+		
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
+		
+	case ACT_GUI:
 		if (aArgc > 0 && !line.ArgHasDeref(1))
 		{
 			GuiCommands gui_cmd = line.ConvertGuiCommand(new_raw_arg1);
@@ -4954,50 +5021,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			//case GUI_CMD_COLOR: No load-time param validation to avoid larger EXE size.
 			}
 		}
-#endif
 		break;
-
-	case ACT_GROUPADD:
-	case ACT_GROUPACTIVATE:
-	case ACT_GROUPDEACTIVATE:
-	case ACT_GROUPCLOSE:
-		// For all these, store a pointer to the group to help performance.
-		// We create a non-existent group even for ACT_GROUPACTIVATE, ACT_GROUPDEACTIVATE
-		// and ACT_GROUPCLOSE because we can't rely on the ACT_GROUPADD commands having
-		// been parsed prior to them (e.g. something like "Gosub, DefineGroups" may appear
-		// in the auto-execute portion of the script).
-		if (!line.ArgHasDeref(1))
-			if (   !(line.mAttribute = FindGroup(new_raw_arg1, true))   ) // Create-if-not-found so that performance is enhanced at runtime.
-				return FAIL;  // The above already displayed the error.
-		if (aActionType == ACT_GROUPACTIVATE || aActionType == ACT_GROUPDEACTIVATE)
-		{
-			if (*new_raw_arg2 && !line.ArgHasDeref(2))
-				if (_tcslen(new_raw_arg2) > 1 || ctoupper(*new_raw_arg2) != 'R')
-					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		}
-		else if (aActionType == ACT_GROUPCLOSE)
-			if (*new_raw_arg2 && !line.ArgHasDeref(2))
-				if (_tcslen(new_raw_arg2) > 1 || !_tcschr(_T("RA"), ctoupper(*new_raw_arg2)))
-					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		break;
-
-	case ACT_STRINGSPLIT: // v1.0.48.04: Moved this section so that it is done even when AUTOHOTKEYSC is defined, because the steps below are necessary for both.
-		if (*new_raw_arg1 && !line.ArgHasDeref(1)) // The output array must be a legal name.
-		{
-			// 1.0.46.10: Fixed to look up ArrayName0 in advance (here at loadtime) so that runtime can
-			// know whether it's local or global.  This is necessary because only here at loadtime
-			// is there any awareness of the current function's list of declared variables (to conserve
-			// memory, that list is longer available at runtime).
-			TCHAR temp_var_name[MAX_VAR_NAME_LENGTH + 10]; // Provide extra room for trailing "0", and to detect names that are too long.
-			sntprintf(temp_var_name, _countof(temp_var_name), _T("%s0"), new_raw_arg1);
-			if (   !(the_new_line->mAttribute = FindOrAddVar(temp_var_name))   )
-				return FAIL;  // The above already displayed the error.
-		}
-		//else it's a dynamic array name.  Since that's very rare, just use the old runtime behavior for
-		// backward compatibility.
-		break;
-		
-#ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
 
 	case ACT_LOOP:
 		// Since users of v1 might habitually type "Loop Parse, Var" instead of "LoopParse, Var",
@@ -6898,12 +6922,6 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	{
 		bif = BIF_OnMessage;
 		max_params = 3;  // Leave min at 1.
-		// By design, scripts that use OnMessage are persistent by default.  Doing this here
-		// also allows WinMain() to later detect whether this script should become #SingleInstance.
-		// Note: Don't directly change g_AllowOnlyOneInstance here in case the remainder of the
-		// script-loading process comes across any explicit uses of #SingleInstance, which would
-		// override the default set here.
-		g_persistent = true;
 	}
 #ifdef ENABLE_REGISTERCALLBACK
 	else if (!_tcsicmp(func_name, _T("RegisterCallback")))
@@ -10820,14 +10838,13 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		} // case ACT_LOOP, ACT_LOOP_*, ACT_FOR, ACT_WHILE.
 
 		case ACT_EXIT:
-			// If this script has no hotkeys and hasn't activated one of the hooks, EXIT will cause the
-			// the program itself to terminate.  Otherwise, it causes us to return from all blocks
-			// and Gosubs (i.e. all the way out of the current subroutine, which was usually triggered
-			// by a hotkey):
-			if (IS_PERSISTENT)
-				return EARLY_EXIT;  // It's "early" because only the very end of the script is the "normal" exit.
-				// EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
-			// Otherwise, FALL THROUGH TO BELOW:
+			// It seems best to simply return EARLY_EXIT rather than sometimes calling ExitApp(); even
+			// if the script isn't persistent NOW, this thread might've interrupted another which should
+			// be allowed to complete normally.  For instance, maybe the auto-execute section is still
+			// running (perhaps in a loop) and this is a timer thread, but the timer disabled itself
+			// so the script is no longer persistent.
+			return EARLY_EXIT; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
+
 		case ACT_EXITAPP: // Unconditional exit.
 			// This has been tested and it does yield to the OS the error code indicated in ARG1,
 			// if present (otherwise it returns 0, naturally) as expected:
