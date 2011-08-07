@@ -184,15 +184,9 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	if (!load_result) // LoadFromFile() relies upon us to do this check.  No script was loaded or we're in /iLib mode, so nothing more to do.
 		return 0;
 
-	// Unless explicitly set to be non-SingleInstance via SINGLE_INSTANCE_OFF or a special kind of
-	// SingleInstance such as SINGLE_INSTANCE_REPLACE and SINGLE_INSTANCE_IGNORE, persistent scripts
-	// and those that contain hotkeys/hotstrings are automatically SINGLE_INSTANCE_PROMPT as of v1.0.16:
-	if (g_AllowOnlyOneInstance == ALLOW_MULTI_INSTANCE && (Hotkey::sHotkeyCount || Hotstring::sHotstringCount))
-		g_AllowOnlyOneInstance = SINGLE_INSTANCE_PROMPT;
-
 	HWND w_existing = NULL;
 	UserMessages reason_to_close_prior = (UserMessages)0;
-	if (g_AllowOnlyOneInstance && g_AllowOnlyOneInstance != SINGLE_INSTANCE_OFF && !restart_mode && !g_ForceLaunch)
+	if (g_AllowOnlyOneInstance && !restart_mode && !g_ForceLaunch)
 	{
 		// Note: the title below must be constructed the same was as is done by our
 		// CreateWindows(), which is why it's standardized in g_script.mMainWindowTitle:

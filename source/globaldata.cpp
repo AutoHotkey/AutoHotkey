@@ -76,7 +76,7 @@ bool g_MustDeclare = false; // Used by #MustDeclare.
 WarnMode g_Warn_UseUnsetLocal = WARNMODE_OFF;		// Used by #Warn directive.
 WarnMode g_Warn_UseUnsetGlobal = WARNMODE_OFF;		//
 WarnMode g_Warn_LocalSameAsGlobal = WARNMODE_OFF;	//
-SingleInstanceType g_AllowOnlyOneInstance = ALLOW_MULTI_INSTANCE;
+SingleInstanceType g_AllowOnlyOneInstance = SINGLE_INSTANCE_PROMPT;
 bool g_NoTrayIcon = false;
 #ifdef AUTOHOTKEYSC
 	bool g_AllowMainWindow = false;

@@ -2809,16 +2809,19 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#SingleInstance")))
 	{
-		g_AllowOnlyOneInstance = SINGLE_INSTANCE_PROMPT; // Set default.
-		if (parameter)
-		{
-			if (!_tcsicmp(parameter, _T("Force")))
-				g_AllowOnlyOneInstance = SINGLE_INSTANCE_REPLACE;
-			else if (!_tcsicmp(parameter, _T("Ignore")))
-				g_AllowOnlyOneInstance = SINGLE_INSTANCE_IGNORE;
-			else if (!_tcsicmp(parameter, _T("Off")))
-				g_AllowOnlyOneInstance = SINGLE_INSTANCE_OFF;
-		}
+		// Since "Prompt" is the default mode when #SingleInstance is not present, make #SingleInstance
+		// on its own activate "Force" mode.  But also allow "Force" and "Prompt" explicitly, since it
+		// might help clarity (and may be useful for overriding an #include?).
+		if (!parameter || !_tcsicmp(parameter, _T("Force")))
+			g_AllowOnlyOneInstance = SINGLE_INSTANCE_REPLACE;
+		else if (!_tcsicmp(parameter, _T("Prompt")))
+			g_AllowOnlyOneInstance = SINGLE_INSTANCE_PROMPT;
+		else if (!_tcsicmp(parameter, _T("Ignore")))
+			g_AllowOnlyOneInstance = SINGLE_INSTANCE_IGNORE;
+		else if (!_tcsicmp(parameter, _T("Off")))
+			g_AllowOnlyOneInstance = SINGLE_INSTANCE_OFF;
+		else // Since it could be a typo like "Of", alert the user:
+			return ScriptError(ERR_PARAM1_INVALID, aBuf);
 		return CONDITION_TRUE;
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#InstallKeybdHook")))
