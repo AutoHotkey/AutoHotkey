@@ -3925,7 +3925,7 @@ vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLa
 	char keyscan_modifiers = HIBYTE(mod_plus_vk);
 	if (keyscan_modifiers == -1 && vk == (UCHAR)-1) // No translation could be made.
 		return 0;
-	if (keyscan_modifiers & 0x08) // "The Hankaku key is pressed"
+	if (keyscan_modifiers & 0x38) // "The Hankaku key is pressed" or either of the "Reserved" state bits (for instance, used by Neo2 keyboard layout).
 		// Callers expect failure in this case so that a fallback method can be used.
 		return 0;
 

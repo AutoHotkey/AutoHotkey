@@ -15541,6 +15541,35 @@ void BIF_TV_Get(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 
 
+void BIF_TV_SetImageList(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+// Returns (MSDN): "handle to the image list previously associated with the control if successful; NULL otherwise."
+// Parameters:
+// 1: HIMAGELIST obtained from somewhere such as IL_Create().
+// 2: Optional: Type of list.
+{
+	aResultToken.value_int64 = 0; // Set default return value.
+	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
+	// the following conditions:
+	// Window doesn't exist.
+	// Control doesn't exist (i.e. no TreeView in window).
+
+	if (!g_gui[g->GuiDefaultWindowIndex])
+		return;
+	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	if (!gui.mCurrentTreeView)
+		return;
+	// Caller has ensured that there is at least one incoming parameter:
+	HIMAGELIST himl = (HIMAGELIST)TokenToInt64(*aParam[0]);
+	int list_type;
+	if (aParamCount > 1)
+		list_type = (int)TokenToInt64(*aParam[1]);
+	else
+		list_type = TVSIL_NORMAL;
+	aResultToken.value_int64 = (__int64)TreeView_SetImageList(gui.mCurrentTreeView->hwnd, himl, list_type);
+}
+
+
+
 void BIF_IL_Create(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 // Returns: Handle to the new image list, or 0 on failure.
 // Parameters:

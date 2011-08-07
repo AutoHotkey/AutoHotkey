@@ -36,7 +36,6 @@ static bool sDisguiseNextRWinUp;        //
 static bool sDisguiseNextLAltUp;        //
 static bool sDisguiseNextRAltUp;        //
 static bool sAltTabMenuIsVisible;       //
-static vk_type sVKtoIgnoreNextTimeDown; //
 
 // The prefix key that's currently down (i.e. in effect).
 // It's tracked this way, rather than as a count of the number of prefixes currently down, out of
@@ -2290,9 +2289,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 
 		// This is done unconditionally so that even if a qualified Input is not in progress, the
 		// variable will be correctly reset anyway:
-		if (sVKtoIgnoreNextTimeDown && sVKtoIgnoreNextTimeDown == aVK && !aKeyUp)
-			sVKtoIgnoreNextTimeDown = 0;  // i.e. this ignore-for-the-sake-of-CollectInput() ticket has now been used.
-		else if ((Hotstring::mAtLeastOneEnabled && !is_ignored) || (g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && is_ignored)))
+		if ((Hotstring::mAtLeastOneEnabled && !is_ignored) || (g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && is_ignored)))
 			if (!CollectInput(event, aVK, aSC, aKeyUp, is_ignored, hs_wparam_to_post, hs_lparam_to_post)) // Key should be invisible (suppressed).
 				return SuppressThisKeyFunc(aHook, lParam, aVK, aSC, aKeyUp, pKeyHistoryCurr, aHotkeyIDToPost, hs_wparam_to_post, hs_lparam_to_post);
 
@@ -2658,13 +2655,13 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	//    suppressed both), which allows the main thread to do a Sleep or MsgSleep.  Such a Sleep be more effective
 	//    because the main thread's priority is lower than that of the hook's, allowing better round-robin.
 	// 
-	// If this key isn't a dead key but there's a dead key pending and this incoming key is capable of
+	// If this key is a dead key or there's a dead key pending and this incoming key is capable of
 	// completing/triggering it, do a workaround for the side-effects of ToAsciiEx().  This workaround
 	// allows dead keys to continue to operate properly in the user's foreground window, while still
 	// being capturable by the Input command and recognizable by any defined hotstrings whose
 	// abbreviations use diacritical letters:
 	bool dead_key_sequence_complete = sPendingDeadKeyVK && aVK != VK_TAB && aVK != VK_ESCAPE;
-	if (char_count < 0 && !dead_key_sequence_complete) // It's a dead key and it doesn't complete a sequence (i.e. there is no pending dead key before it).
+	if (char_count < 0) // It's a dead key, and it doesn't complete a sequence since in that case char_count would be >= 1.
 	{
 		if (treat_as_visible)
 		{
@@ -2682,11 +2679,31 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 			//sPendingDeadKeyUsedAltGr = (g_modifiersLR_logical & (MOD_LCONTROL | MOD_RALT)) == (MOD_LCONTROL | MOD_RALT);
 			sPendingDeadKeyUsedAltGr = (g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL))
 				&& (g_modifiersLR_logical & (MOD_LALT | MOD_RALT));
+			
+			// Lexikos: Testing shows that calling ToUnicodeEx with the VK/SC of a dead key
+			// acts the same as actually pressing that key.  Calling it once when there is
+			// no pending dead key places the dead key in the keyboard layout's buffer and
+			// returns -1; calling it again consumes the dead key and returns either 1 or 2,
+			// depending on the keyboard layout.  For instance:
+			//	- Passing vkC0 twice with US-International gives the string "``".
+			//  - Passing vkBA twice with Neo2 gives just the combining version of "^".
+			// 
+			// Normally ToUnicodeEx would be called by the active window (after the hook
+			// returns), thus placing the dead key in the buffer.  Since our call above
+			// has already done that, we need to remove the dead key from the buffer
+			// before returning.  The benefits of this over the old method include:
+			//  - The hook is not called recursively since no extra keystrokes are generated.
+			//  - It's probably faster for the same reason.
+			//  - It works correctly even when there are multiple scripts with hotstrings,
+			//    all calling ToUnicodeEx in sequence.
+			//
+			// The other half of this workaround can be found by searching for "if (dead_key_sequence_complete)".
+			//
+			ToUnicodeOrAsciiEx(aVK, aEvent.scanCode, key_state, ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
 		}
-		// Dead keys must always be hidden, otherwise they would be shown twice literally due to
-		// having been "damaged" by ToAsciiEx():
-		return false;
+		return treat_as_visible;
 	}
+
 
 	if ((g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL)) == 0) // i.e. must not replace '\r' with '\n' if it is the result of Ctrl+M.
 	{
@@ -2900,17 +2917,8 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				aHotstringLparamToPost = MAKELONG(
 					hs.mEndCharRequired  // v1.0.48.04: Fixed to omit "&& hs.mDoBackspace" so that A_EndChar is set properly even for option "B0" (no backspacing).
 						? g_HSBuf[g_HSBufLength - 1]  // Used by A_EndChar and Hotstring::DoReplace().
-						: (dead_key_sequence_complete && suppress_hotstring_final_char) // v1.0.44.09: See comments below.
+						: 0
 					, case_conform_mode);
-				// v1.0.44.09: dead_key_sequence_complete was added above to tell DoReplace() to do one fewer
-				// backspaces in cases where the final/triggering key of a hotstring is the second key of
-				// a dead key sequence (such as a tilde in Portuguese followed by virtually any character).
-				// What happens in that case is that the dead key is suppressed (for the reasons described in
-				// the dead keys handler), but so is the key that follows it when suppress_hotstring_final_char
-				// is true.  In addition to being suppressed, no substitute ever needs to be sent for the dead key
-				// because it will never appear on the screen (due to being a true auto-replace hotstring).
-				// Note: To enhance maintainability and understandability, above also checks
-				// suppress_hotstring_final_char (even though probably not strictly necessary).
 
 				// Clean up.
 				// The keystrokes to be sent by the other thread upon receiving the message prepared above
@@ -2988,44 +2996,14 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		// been in progress upon entry to this function but now isn't due to INPUT_TERMINATED_BY_ENDKEY above.
 		if (treat_as_visible)
 		{
-			// Tell the recursively called next instance of the keyboard hook not do the following for
-			// the below KEYEVENT_PHYS: Do not call ToAsciiEx() on it and do not capture it as part of
-			// the Input itself.  Although this is only needed for the case where the statement
-			// "(do_input && g_input.status == INPUT_IN_PROGRESS && !g_input.IgnoreAHKInput)" is true
-			// (since hotstrings don't capture/monitor AHK-generated input), it's simpler and about the
-			// same in performance to do it unconditonally:
-			sVKtoIgnoreNextTimeDown = vk_to_send;
-			// Ensure the correct shift-state is set for the below event.  The correct shift key (left or
-			// right) must be used to prevent sticking keys and other side-effects:
-			vk_type which_shift_down = 0;
-			if (g_modifiersLR_logical & MOD_LSHIFT)
-				which_shift_down = VK_LSHIFT;
-			else if (g_modifiersLR_logical & MOD_RSHIFT)
-				which_shift_down = VK_RSHIFT;
-			vk_type which_shift_to_send = which_shift_down ? which_shift_down : VK_LSHIFT;
-			if (sPendingDeadKeyUsedShift != (bool)which_shift_down)
-				KeyEvent(sPendingDeadKeyUsedShift ? KEYDOWN : KEYUP, which_shift_to_send);
-			// v1.0.25.14: Apply AltGr too, if necessary.  This is necessary because some keyboard
-			// layouts have dead keys that are manifest only by holding down AltGr and pressing
-			// another key.  If this weren't done, a hotstring script running on Belgian/French
-			// layout (and probably many others that have AltGr dead keys) would disrupt the user's
-			// ability to use the tilde dead key.  For example, pressing AltGr+Slash (equals sign
-			// on Belgian keyboard) followed by the letter o should produce the tilde-over-o
-			// character, but it would not if the following AltGr fix isn't in effect.
-			// If sPendingDeadKeyUsedAltGr is true, the current keyboard layout has an AltGr key.
-			// That plus the fact that VK_RMENU is not down should mean definitively that AltGr is not
-			// down. Also, it might be necessary to assign the below to a variable more than just for
-			// performance/readability: KeyEvent() results in a recursive call to this hook function,
-			// which causes g_modifiersLR_logical to be different after the call.
-			bool apply_altgr = sPendingDeadKeyUsedAltGr && !(g_modifiersLR_logical & MOD_RALT);
-			if (apply_altgr) // Push down RAlt even if the dead key was achieved via Ctrl+Alt: 1) For code simplicity; 2) It might improve compatibility with Putty and other apps that demand that AltGr be RAlt (not Ctrl+Alt).
-				KeyEvent(KEYDOWN, VK_RMENU); // This will also push down LCTRL as an intrinsic part of AltGr's functionality.
-			// Since it's a substitute for the previously suppressed physical dead key event, mark it as physical:
-			KEYEVENT_PHYS(KEYDOWNANDUP, vk_to_send, sPendingDeadKeySC);
-			if (apply_altgr)
-				KeyEvent(KEYUP, VK_RMENU); // This will also release LCTRL as an intrinsic part of AltGr's functionality.
-			if (sPendingDeadKeyUsedShift != (bool)which_shift_down) // Restore the original shift state.
-				KeyEvent(sPendingDeadKeyUsedShift ? KEYUP : KEYDOWN, which_shift_to_send);
+			// Since our call to ToUnicodeOrAsciiEx above has removed the pending dead key from the
+			// buffer, we need to put it back for the active window or the next hook in the chain:
+			ZeroMemory(key_state, 256);
+			AdjustKeyState(key_state
+				, (sPendingDeadKeyUsedAltGr ? MOD_LCONTROL|MOD_RALT : 0)
+				| (sPendingDeadKeyUsedShift ? MOD_RSHIFT : 0)); // Left vs Right Shift probably doesn't matter in this context.
+			TCHAR temp_ch[2];
+			ToUnicodeOrAsciiEx(vk_to_send, sPendingDeadKeySC, key_state, temp_ch, 0, active_window_keybd_layout);
 		}
 	}
 
@@ -4442,7 +4420,6 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 		sDisguiseNextLAltUp = false;
 		sDisguiseNextRAltUp = false;
 		sAltTabMenuIsVisible = (FindWindow(_T("#32771"), NULL) != NULL); // I've seen indications that MS wants this to work on all operating systems.
-		sVKtoIgnoreNextTimeDown = 0;
 
 		ZeroMemory(sPadState, sizeof(sPadState));
 
