@@ -5392,46 +5392,30 @@ ResultType Line::StringReplace()
 
 
 
-ResultType Line::StringSplit(LPTSTR aArrayName, LPTSTR aInputString, LPTSTR aDelimiterList, LPTSTR aOmitList)
+void BIF_StrSplit(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	// Make it longer than Max so that FindOrAddVar() will be able to spot and report var names
-	// that are too long, either because the base-name is too long, or the name becomes too long
-	// as a result of appending the array index number:
-	TCHAR var_name[MAX_VAR_NAME_LENGTH + 21]; // Allow room for largest 64-bit integer, 20 chars: 18446744073709551616.
-	tcslcpy(var_name, aArrayName, MAX_VAR_NAME_LENGTH+1); // This prefix is copied into it only once, for performance.
-	LPTSTR var_name_suffix = var_name + _tcslen(var_name);
-
-	Var *array0;
-	if (mAttribute != ATTR_NONE) // 1.0.46.10: Fixed to rely on loadtime's determination of whether ArrayName0 is truly local or global (only loadtime currently has any awareness of declarations, so the determination must be made there unless "ArrayName" itself is a dynamic variable, which seems too rare to worry about).
-		array0 = (Var *)mAttribute;
-	else
+	Object *output_array = Object::Create(NULL, 0);
+	if (!output_array)
 	{
-		var_name_suffix[0] = '0';
-		var_name_suffix[1] = '\0';
-		if (   !(array0 = g_script.FindOrAddVar(var_name))   )
-			return FAIL;  // It will have already displayed the error.
+		aResultToken.value_int64 = 0;
+		return;
 	}
+	aResultToken.symbol = SYM_OBJECT;	// Set default, overridden only for critical errors.
+	aResultToken.object = output_array;	//
+
+	LPTSTR aInputString		= TokenToString(*aParam[0], aResultToken.buf);
+	LPTSTR aDelimiterList	= aParamCount > 1 ? TokenToString(*aParam[1]) : _T("");
+	LPTSTR aOmitList		= aParamCount > 2 ? TokenToString(*aParam[2]) : _T("");
 
 	if (!*aInputString) // The input variable is blank, thus there will be zero elements.
-		return array0->Assign(0);  // Store the count in the 0th element.
-
-	DWORD next_element_number;
-	Var *next_element;
+		return;
 
 	if (*aDelimiterList) // The user provided a list of delimiters, so process the input variable normally.
 	{
 		LPTSTR contents_of_next_element, delimiter, new_starting_pos;
 		size_t element_length;
-		for (contents_of_next_element = aInputString, next_element_number = 1; ; ++next_element_number)
+		for (contents_of_next_element = aInputString; ; )
 		{
-			_ultot(next_element_number, var_name_suffix, 10);
-			// To help performance (in case the linked list of variables is huge), tell it where
-			// to start the search.  Use element #0 rather than the preceding element because,
-			// for example, Array19 is alphabetially less than Array2, so we can't rely on the
-			// numerical ordering:
-			if (   !(next_element = g_script.FindOrAddVar(var_name))   )
-				return FAIL;  // It will have already displayed the error.
-
 			if (delimiter = StrChrAny(contents_of_next_element, aDelimiterList)) // A delimiter was found.
 			{
 				element_length = delimiter - contents_of_next_element;
@@ -5444,8 +5428,8 @@ ResultType Line::StringSplit(LPTSTR aArrayName, LPTSTR aInputString, LPTSTR aDel
 				}
 				// If there are no chars to the left of the delim, or if they were all in the list of omitted
 				// chars, the variable will be assigned the empty string:
-				if (!next_element->Assign(contents_of_next_element, (VarSizeType)element_length))
-					return FAIL;
+				if (!output_array->Append(contents_of_next_element, element_length))
+					break;
 				contents_of_next_element = delimiter + 1;  // Omit the delimiter since it's never included in contents.
 			}
 			else // the entire length of contents_of_next_element is what will be stored
@@ -5464,31 +5448,36 @@ ResultType Line::StringSplit(LPTSTR aArrayName, LPTSTR aInputString, LPTSTR aDel
 				}
 				// If there are no chars to the left of the delim, or if they were all in the list of omitted
 				// chars, the variable will be assigned the empty string:
-				if (!next_element->Assign(contents_of_next_element, (VarSizeType)element_length))
-					return FAIL;
+				if (!output_array->Append(contents_of_next_element, element_length))
+					break;
 				// This is the only way out of the loop other than critical errors:
-				return array0->Assign(next_element_number); // Store the count of how many items were stored in the array.
+				return;
 			}
 		}
 	}
-
-	// Otherwise aDelimiterList is empty, so store each char of aInputString in its own array element.
-	LPTSTR cp, dp;
-	for (cp = aInputString, next_element_number = 1; *cp; ++cp)
+	else
 	{
-		for (dp = aOmitList; *dp; ++dp)
-			if (*cp == *dp) // This char is a member of the omitted list, thus it is not included in the output array.
+		// Otherwise aDelimiterList is empty, so store each char of aInputString in its own array element.
+		LPTSTR cp, dp;
+		for (cp = aInputString; ; ++cp)
+		{
+			if (!*cp)
+				return; // All done; result already set.
+			for (dp = aOmitList; *dp; ++dp)
+				if (*cp == *dp) // This char is a member of the omitted list, thus it is not included in the output array.
+					break;
+			if (*dp) // Omitted.
+				continue;
+			if (!output_array->Append(cp, 1))
 				break;
-		if (*dp) // Omitted.
-			continue;
-		_ultot(next_element_number, var_name_suffix, 10);
-		if (   !(next_element = g_script.FindOrAddVar(var_name))   )
-			return FAIL;  // It will have already displayed the error.
-		if (!next_element->Assign(cp, 1))
-			return FAIL;
-		++next_element_number; // Only increment this if above didn't "continue".
+		}
 	}
-	return array0->Assign(next_element_number - 1); // Store the count of how many items were stored in the array.
+	// The fact that this section is executing means that a memory allocation failed and caused the
+	// loop to break, so return a false value to let the caller detect the failure.  Empty string
+	// is used vs 0 for consistency with Object() and Array().
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+	output_array->Release(); // Since we're not returning it.
 }
 
 

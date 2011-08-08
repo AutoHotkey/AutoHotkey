@@ -5005,22 +5005,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
-	case ACT_STRINGSPLIT: // v1.0.48.04: Moved this section so that it is done even when AUTOHOTKEYSC is defined, because the steps below are necessary for both.
-		if (*new_raw_arg1 && !line.ArgHasDeref(1)) // The output array must be a legal name.
-		{
-			// 1.0.46.10: Fixed to look up ArrayName0 in advance (here at loadtime) so that runtime can
-			// know whether it's local or global.  This is necessary because only here at loadtime
-			// is there any awareness of the current function's list of declared variables (to conserve
-			// memory, that list is longer available at runtime).
-			TCHAR temp_var_name[MAX_VAR_NAME_LENGTH + 10]; // Provide extra room for trailing "0", and to detect names that are too long.
-			sntprintf(temp_var_name, _countof(temp_var_name), _T("%s0"), new_raw_arg1);
-			if (   !(the_new_line->mAttribute = FindOrAddVar(temp_var_name))   )
-				return FAIL;  // The above already displayed the error.
-		}
-		//else it's a dynamic array name.  Since that's very rare, just use the old runtime behavior for
-		// backward compatibility.
-		break;
-		
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
 		
 	case ACT_GUI:
@@ -6853,6 +6837,12 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		bif = BIF_InStr;
 		min_params = 2;
 		max_params = 5;
+	}
+	else if (!_tcsicmp(func_name, _T("StrSplit")))
+	{
+		bif = BIF_StrSplit;
+		min_params = 2;
+		max_params = 3;
 	}
 	else if (!_tcsicmp(func_name, _T("RegExMatch")))
 	{
@@ -12242,9 +12232,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_DEREF:
 		return Deref(OUTPUT_VAR, ARG2);
-
-	case ACT_STRINGSPLIT:
-		return StringSplit(ARG1, ARG2, ARG3, ARG4);
 
 	case ACT_SPLITPATH:
 		return SplitPath(ARG1);

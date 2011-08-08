@@ -170,6 +170,8 @@ protected:
 public:
 	static Object *Create(ExprTokenType *aParam[], int aParamCount);
 	static Object *CreateFromArgV(LPTSTR *aArgV, int aArgC);
+	
+	bool Append(LPTSTR aValue, size_t aValueLength = -1);
 
 	// Used by Func::Call() for variadic functions/function-calls:
 	Object *Clone(INT_PTR aStartOffset = 0);
@@ -223,7 +225,7 @@ public:
 		token.object = aValue;
 		return SetItem(aKey, token);
 	}
-	
+
 	void ReduceKeys(INT_PTR aAmount)
 	{
 		for (IndexType i = 0; i < mKeyOffsetObject; ++i)

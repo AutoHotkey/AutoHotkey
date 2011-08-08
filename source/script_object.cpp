@@ -676,6 +676,51 @@ Object *Object::CreateFromArgV(LPTSTR *aArgV, int aArgC)
 	return args;
 }
 
+
+
+//
+// Helper function for StringSplit()
+//
+
+bool Object::Append(LPTSTR aValue, size_t aValueLength)
+{
+	if (mFieldCount == mFieldCountMax && !Expand()) // Attempt to expand if at capacity.
+		return false;
+
+	if (aValueLength == -1)
+		aValueLength = _tcslen(aValue);
+	
+	FieldType &field = mFields[mKeyOffsetObject];
+	if (mKeyOffsetObject < mFieldCount)
+		// For maintainability. This might never be done, because our caller
+		// doesn't use string/object keys. Move existing fields to make room:
+		memmove(&field + 1, &field, (mFieldCount - mKeyOffsetObject) * sizeof(FieldType));
+	++mFieldCount; // Only after memmove above.
+	++mKeyOffsetObject;
+	++mKeyOffsetString;
+	
+	// The following relies on the fact that callers of this function ONLY use
+	// this function, so the last integer key == the number of integer keys.
+	field.key.i = mKeyOffsetObject;
+
+	field.symbol = SYM_STRING;
+	if (aValueLength) // i.e. a non-empty string was supplied.
+	{
+		++aValueLength; // Convert length to size.
+		if (field.marker = tmalloc(aValueLength))
+		{
+			tmemcpy(field.marker, aValue, aValueLength);
+			field.marker[aValueLength-1] = '\0';
+			field.size = aValueLength;
+			return true;
+		}
+		// Otherwise, mem alloc failed; assign an empty string.
+	}
+	field.marker = Var::sEmptyString;
+	field.size = 0;
+	return (aValueLength == 0); // i.e. true if caller supplied an empty string.
+}
+
 	
 
 //

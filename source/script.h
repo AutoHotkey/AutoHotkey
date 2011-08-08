@@ -524,7 +524,6 @@ private:
 	ResultType MouseGetPos(DWORD aOptions);
 	ResultType FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat);
 	ResultType StringReplace();
-	ResultType StringSplit(LPTSTR aArrayName, LPTSTR aInputString, LPTSTR aDelimiterList, LPTSTR aOmitList);
 	ResultType SplitPath(LPTSTR aFileSpec);
 	ResultType PerformSort(LPTSTR aContents, LPTSTR aOptions);
 	ResultType GetKeyJoyState(LPTSTR aKeyName, LPTSTR aOption);
@@ -934,7 +933,6 @@ public:
 			case ACT_STRINGLOWER:
 			case ACT_STRINGUPPER:
 			case ACT_STRINGREPLACE:
-			case ACT_STRINGSPLIT:
 				return ARG_TYPE_INPUT_VAR;
 
 			case ACT_MOUSEGETPOS:
@@ -2674,6 +2672,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_InStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_StrSplit(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_Asc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_Chr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
