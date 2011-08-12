@@ -10884,9 +10884,12 @@ VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
 		// Keep looking until we hit the second valid event
 		if (g_KeyHistory[i].event_type != _T('i') && ++validEventCount > 1)
 		{
-			if (g_KeyHistory[i].vk)
+			// Find the next most recent key-down
+			if (!g_KeyHistory[i].key_up)
+			{
 				GetKeyName(g_KeyHistory[i].vk, g_KeyHistory[i].sc, aBuf, bufSize);
-			break;
+				break;
+			}
 		}
 	}
 	return (VarSizeType)_tcslen(aBuf);
