@@ -3637,15 +3637,8 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 				return output_var.Assign(pid);
 			// Otherwise, get the full path and name of the executable that owns this window.
 			TCHAR process_name[MAX_PATH];
-			HANDLE hproc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
-			if (hproc)
-			{
-				if ((cmd == WINGET_CMD_PROCESSNAME)
-					? GetModuleBaseName(hproc, NULL, process_name, _countof(process_name))
-					: GetModuleFileNameEx(hproc, NULL, process_name, _countof(process_name)))
-					return output_var.Assign(process_name);
-				CloseHandle(hproc);
-			}
+			GetProcessName(pid, process_name, _countof(process_name), cmd == WINGET_CMD_PROCESSNAME);
+			return output_var.Assign(process_name);
 		}
 		// If above didn't return:
 		return output_var.Assign();
@@ -18088,4 +18081,79 @@ double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToke
 	aToken.symbol = SYM_FLOAT; // Override default type.
 	aToken.value_double = result_double;
 	return result_double;
+}
+
+
+
+DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNameOnly)
+{
+	*aBuf = '\0'; // Set default.
+	HANDLE hproc;
+	if (  !(hproc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, aProcessID))  )
+		// OpenProcess failed, so try fallback access; this will probably cause the
+		// first method below to fail and fall back to GetProcessImageFileName.
+		if (  !(hproc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, aProcessID))  )
+			return 0;
+
+	// Attempt these first, since they return exactly what we want and are available on Win2k:
+	DWORD buf_length = aGetNameOnly
+		? GetModuleBaseName(hproc, NULL, aBuf, aBufSize)
+		: GetModuleFileNameEx(hproc, NULL, aBuf, aBufSize);
+
+	typedef DWORD (WINAPI *MyGetName)(HANDLE, LPTSTR, DWORD);
+	// This must be loaded dynamically or the program will probably not launch at all on Win2k:
+	static MyGetName lpfnGetName = (MyGetName)GetProcAddress(GetModuleHandle(_T("psapi")), "GetProcessImageFileName" WINAPI_SUFFIX);;
+
+	if (!buf_length && lpfnGetName)
+	{
+		// Above failed, possibly for one of the following reasons:
+		//	- Our process is 32-bit, but that one is 64-bit.
+		//	- That process is running at a higher integrity level (UAC is interfering).
+		//	- We didn't have permission to use PROCESS_VM_READ access?
+		//
+		// So fall back to GetProcessImageFileName (XP or later required):
+		buf_length = lpfnGetName(hproc, aBuf, aBufSize);
+		if (buf_length)
+		{
+			LPTSTR cp;
+			if (aGetNameOnly)
+			{
+				// Convert full path to just name.
+				cp = _tcsrchr(aBuf, '\\');
+				if (cp)
+					tmemmove(aBuf, cp + 1, _tcslen(cp)); // Includes the null terminator.
+			}
+			else
+			{
+				// Convert device path to logical path.
+				TCHAR device_path[MAX_PATH];
+				TCHAR letter[3];
+				letter[1] = ':';
+				letter[2] = '\0';
+				// For simplicity and because GetLogicalDriveStrings does not exist on Win2k, it is not used.
+				for (*letter = 'A'; *letter <= 'Z'; ++(*letter))
+				{
+					DWORD device_path_length = QueryDosDevice(letter, device_path, _countof(device_path));
+					if (device_path_length > 2) // Includes two null terminators.
+					{
+						device_path_length -= 2;
+						if (!_tcsncmp(device_path, aBuf, device_path_length)
+							&& aBuf[device_path_length] == '\\') // Relies on short-circuit evaluation.
+						{
+							// Copy drive letter:
+							aBuf[0] = letter[0];
+							aBuf[1] = letter[1];
+							// Contract path to remove remainder of device name.
+							tmemmove(aBuf + 2, aBuf + device_path_length, buf_length - device_path_length + 1);
+							buf_length -= device_path_length - 2;
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	CloseHandle(hproc);
+	return buf_length;
 }

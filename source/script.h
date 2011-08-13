@@ -225,6 +225,8 @@ inline DWORD ProcessExist(LPTSTR aProcess)
 		ProcessExist9x2000(aProcess);
 }
 
+DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNameOnly);
+
 bool Util_Shutdown(int nFlag);
 BOOL Util_ShutdownHandler(HWND hwnd, DWORD lParam);
 void Util_WinKill(HWND hWnd);

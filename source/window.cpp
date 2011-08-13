@@ -1656,17 +1656,10 @@ void WindowSearch::UpdateCandidateAttributes()
 		GetWindowThreadProcessId(mCandidateParent, &mCandidatePID);
 	if (mCriteria & CRITERION_PATH)
 	{
-		DWORD dwPid = 0;
-		GetWindowThreadProcessId(mCandidateParent, &dwPid);
-		if (HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, dwPid))
-		{
-			int res;
-			if (mCriterionPathIsNameOnly)
-				res = GetModuleBaseName(hProc, NULL, mCandidatePath, _countof(mCandidatePath));
-			else
-				res = GetModuleFileNameEx(hProc, NULL, mCandidatePath, _countof(mCandidatePath));
-			CloseHandle(hProc);
-		}
+		DWORD dwPid;
+		if (GetWindowThreadProcessId(mCandidateParent, &dwPid))
+			if (!GetProcessName(dwPid, mCandidatePath, _countof(mCandidatePath), mCriterionPathIsNameOnly))
+				*mCandidatePath = '\0';
 	}
 	if (mCriteria & CRITERION_CLASS)
 		GetClassName(mCandidateParent, mCandidateClass, _countof(mCandidateClass)); // Limit to WINDOW_CLASS_SIZE in this case since that's the maximum that can be searched.
