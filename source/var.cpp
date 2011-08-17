@@ -613,7 +613,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 				free(mByteContents); // The other members are left temporarily out-of-sync for performance (they're resync'd only if an error occurs).
 			//else mContents contains a "" or it points to memory on SimpleHeap, so don't attempt to free it.
 
-			if (   new_size > 2147483647 || !(new_mem = (char *)malloc(new_size))   ) // v1.0.44.10: Added a sanity limit of 2 GB so that small negatives like VarSetCapacity(Var, -2) [and perhaps other callers of this function] don't crash.
+			if (   (ptrdiff_t)new_size < 0 || !(new_mem = (char *)malloc(new_size))   ) // v1.0.44.10: Added a sanity limit of 2 GB so that small negatives like VarSetCapacity(Var, -2) [and perhaps other callers of this function] don't crash.
 			{
 				if (memory_was_freed) // Resync members to reflect the fact that it was freed (it's done this way for performance).
 				{
