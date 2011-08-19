@@ -108,12 +108,13 @@ extern LPTSTR g_HotWinTitle;
 extern LPTSTR g_HotWinText;
 extern HotkeyCriterion *g_FirstHotCriterion, *g_LastHotCriterion;
 
-// L4: Added global variables for #if (expression). See globaldata.cpp for comments.
+// Global variables for #if (expression). See globaldata.cpp for comments.
 extern int g_HotExprIndex;
 extern Line **g_HotExprLines;
 extern int g_HotExprLineCount;
 extern int g_HotExprLineCountMax;
 extern UINT g_HotExprTimeout;
+extern HWND g_HotExprLFW;
 
 extern MenuTypeType g_MenuIsVisible;
 extern int g_nMessageBoxes;

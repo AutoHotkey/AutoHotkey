@@ -12502,6 +12502,13 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 	if (result == OK)
 		result = EvaluateCondition();
 
+	// The following allows the expression to set the Last Found Window for the
+	// hotkey subroutine, so that #if WinActive(T) and similar behave like #IfWin.
+	// There may be some rare cases where the wrong hotkey gets this HWND (perhaps
+	// if there are multiple hotkey messages in the queue), but there doesn't seem
+	// to be any easy way around that.
+	g_HotExprLFW = g->hWndLastUsed; // Even if above failed, for simplicity.
+
 	// A_ThisHotkey must be restored else A_PriorHotkey will get an incorrect value later.
 	g_script.mThisHotkeyName = prior_hotkey_name[0];
 	g_script.mThisHotkeyStartTime = prior_hotkey_time[0];
