@@ -1022,7 +1022,7 @@ int Debugger::WritePropertyXml(IObject *aObject, const char *aName, CStringA &aN
 	int err;
 
 	if (objptr)
-		numchildren = objptr->mFieldCount;
+		numchildren = objptr->mFieldCount + (objptr->mBase != NULL);
 	else if (comobjptr)
 		numchildren = 2; // For simplicity, assume page == 0 and pagesize >= 2.
 	else

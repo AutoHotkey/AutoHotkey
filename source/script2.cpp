@@ -2445,15 +2445,8 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 				return output_var.Assign(pid);
 			// Otherwise, get the full path and name of the executable that owns this window.
 			TCHAR process_name[MAX_PATH];
-			HANDLE hproc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
-			if (hproc)
-			{
-				if ((cmd == WINGET_CMD_PROCESSNAME)
-					? GetModuleBaseName(hproc, NULL, process_name, _countof(process_name))
-					: GetModuleFileNameEx(hproc, NULL, process_name, _countof(process_name)))
-					return output_var.Assign(process_name);
-				CloseHandle(hproc);
-			}
+			GetProcessName(pid, process_name, _countof(process_name), cmd == WINGET_CMD_PROCESSNAME);
+			return output_var.Assign(process_name);
 		}
 		// If above didn't return:
 		return output_var.Assign();
@@ -9007,9 +9000,12 @@ VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
 		// Keep looking until we hit the second valid event
 		if (g_KeyHistory[i].event_type != _T('i') && ++validEventCount > 1)
 		{
-			if (g_KeyHistory[i].vk)
+			// Find the next most recent key-down
+			if (!g_KeyHistory[i].key_up)
+			{
 				GetKeyName(g_KeyHistory[i].vk, g_KeyHistory[i].sc, aBuf, bufSize);
-			break;
+				break;
+			}
 		}
 	}
 	return (VarSizeType)_tcslen(aBuf);
@@ -13271,19 +13267,6 @@ void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 				var.Close(); // v1.0.44.14: Removes attributes like VAR_ATTRIB_BINARY_CLIP (if present) because it seems more flexible to convert binary-to-normal rather than checking IsBinaryClip() then doing nothing if it binary.
 				return;
 			}
-#ifdef UNICODE
-			// In case the content is an ANSI string.
-			if (new_capacity == -2) // Adjust variable's internal length. Since new_capacity is unsigned, compare directly to -2 rather than doing <0.
-			{
-				// Seems more useful to report length vs. capacity in this special case. Scripts might be able
-				// to use this to boost performance.
-				new_capacity = (VarSizeType) strlen((const char *) var.Contents()); // Performance: Length() and Contents() will update mContents if necessary, it's unlikely to be necessary under the circumstances of this call.  In any case, it seems appropriate to do it this way.
-				new_capacity += new_capacity & 1; // sizeof(wchar_t) == 2
-				aResultToken.value_int64 = var.ByteLength() = new_capacity;
-				var.Close(); // v1.0.44.14: Removes attributes like VAR_ATTRIB_BINARY_CLIP (if present) because it seems more flexible to convert binary-to-normal rather than checking IsBinaryClip() then doing nothing if it binary.
-				return;
-			}
-#endif
 			// Since above didn't return:
 			if (new_capacity)
 			{
@@ -16280,4 +16263,79 @@ double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToke
 	aToken.symbol = SYM_FLOAT; // Override default type.
 	aToken.value_double = result_double;
 	return result_double;
+}
+
+
+
+DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNameOnly)
+{
+	*aBuf = '\0'; // Set default.
+	HANDLE hproc;
+	if (  !(hproc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, aProcessID))  )
+		// OpenProcess failed, so try fallback access; this will probably cause the
+		// first method below to fail and fall back to GetProcessImageFileName.
+		if (  !(hproc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, aProcessID))  )
+			return 0;
+
+	// Attempt these first, since they return exactly what we want and are available on Win2k:
+	DWORD buf_length = aGetNameOnly
+		? GetModuleBaseName(hproc, NULL, aBuf, aBufSize)
+		: GetModuleFileNameEx(hproc, NULL, aBuf, aBufSize);
+
+	typedef DWORD (WINAPI *MyGetName)(HANDLE, LPTSTR, DWORD);
+	// This must be loaded dynamically or the program will probably not launch at all on Win2k:
+	static MyGetName lpfnGetName = (MyGetName)GetProcAddress(GetModuleHandle(_T("psapi")), "GetProcessImageFileName" WINAPI_SUFFIX);;
+
+	if (!buf_length && lpfnGetName)
+	{
+		// Above failed, possibly for one of the following reasons:
+		//	- Our process is 32-bit, but that one is 64-bit.
+		//	- That process is running at a higher integrity level (UAC is interfering).
+		//	- We didn't have permission to use PROCESS_VM_READ access?
+		//
+		// So fall back to GetProcessImageFileName (XP or later required):
+		buf_length = lpfnGetName(hproc, aBuf, aBufSize);
+		if (buf_length)
+		{
+			LPTSTR cp;
+			if (aGetNameOnly)
+			{
+				// Convert full path to just name.
+				cp = _tcsrchr(aBuf, '\\');
+				if (cp)
+					tmemmove(aBuf, cp + 1, _tcslen(cp)); // Includes the null terminator.
+			}
+			else
+			{
+				// Convert device path to logical path.
+				TCHAR device_path[MAX_PATH];
+				TCHAR letter[3];
+				letter[1] = ':';
+				letter[2] = '\0';
+				// For simplicity and because GetLogicalDriveStrings does not exist on Win2k, it is not used.
+				for (*letter = 'A'; *letter <= 'Z'; ++(*letter))
+				{
+					DWORD device_path_length = QueryDosDevice(letter, device_path, _countof(device_path));
+					if (device_path_length > 2) // Includes two null terminators.
+					{
+						device_path_length -= 2;
+						if (!_tcsncmp(device_path, aBuf, device_path_length)
+							&& aBuf[device_path_length] == '\\') // Relies on short-circuit evaluation.
+						{
+							// Copy drive letter:
+							aBuf[0] = letter[0];
+							aBuf[1] = letter[1];
+							// Contract path to remove remainder of device name.
+							tmemmove(aBuf + 2, aBuf + device_path_length, buf_length - device_path_length + 1);
+							buf_length -= device_path_length - 2;
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	CloseHandle(hproc);
+	return buf_length;
 }

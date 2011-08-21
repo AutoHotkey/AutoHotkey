@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
 <assemblyIdentity
-	version="1.0.48.05"
+	version="1.1.00.00"
 	processorArchitecture="*"
-	name="Microsoft.Windows.AutoHotkey"
+	name="AutoHotkey"
 	type="win32"
 />
 <dependency>

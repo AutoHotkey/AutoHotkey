@@ -839,8 +839,11 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// If this is AHK_HOOK_HOTKEY, criterion was eligible at time message was posted,
 					// but not now.  Seems best to abort (see other comments).
 				// Now that above has ensured variant is non-NULL:
-				if (!(variant->mHotCriterion == HOT_IF_ACTIVE || variant->mHotCriterion == HOT_IF_EXIST))
+				if (variant->mHotCriterion == HOT_IF_NOT_ACTIVE || variant->mHotCriterion == HOT_IF_NOT_EXIST)
 					criterion_found_hwnd = NULL; // For "NONE" and "NOT", there is no last found window.
+				else if (variant->mHotCriterion == HOT_IF_EXPR) // Variants of this type may 
+					criterion_found_hwnd = g_HotExprLFW; // For #if WinExist(WinTitle) and similar.
+
 				type_of_first_line = variant->mJumpToLabel->mJumpToLine->mActionType;
 			} // switch(msg.message)
 

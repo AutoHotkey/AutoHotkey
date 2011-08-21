@@ -112,12 +112,13 @@ LPTSTR g_HotWinTitle = _T(""); // In spite of the above being the primary indica
 LPTSTR g_HotWinText = _T("");  // these are initialized for maintainability.
 HotkeyCriterion *g_FirstHotCriterion = NULL, *g_LastHotCriterion = NULL;
 
-// L4: Added global variables for #if (expression).
+// Global variables for #if (expression).
 int g_HotExprIndex = -1; // The index of the Line containing the expression defined by the most recent #if (expression) directive.
 Line **g_HotExprLines = NULL; // Array of pointers to expression lines, allocated when needed.
 int g_HotExprLineCount = 0; // Number of expression lines currently present.
 int g_HotExprLineCountMax = 0; // Current capacity of g_HotExprLines.
 UINT g_HotExprTimeout = 1000; // Timeout for #if (expression) evaluation, in milliseconds.
+HWND g_HotExprLFW = NULL; // Last Found Window of last #if expression.
 
 MenuTypeType g_MenuIsVisible = MENU_TYPE_NONE;
 int g_nMessageBoxes = 0;

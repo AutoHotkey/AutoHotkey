@@ -82,10 +82,6 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-  <!-- x64 toolset: must precede the import below -->
-  <PropertyGroup Label="Configuration" Condition="'$(Platform)'=='x64'">
-    <PlatformToolset>Windows7.1SDK</PlatformToolset>
-  </PropertyGroup>
   <!-- import common config -->
   <Import Project="Config.vcxproj" />
   <!-- platform: win32 & x64 (common) -->
