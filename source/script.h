@@ -203,6 +203,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_UNQUOTED_NON_ALNUM _T("Unquoted literals may only consist of alphanumeric characters/underscore.")
 #define ERR_DUPLICATE_DECLARATION _T("Duplicate declaration.")
 #define ERR_INVALID_CLASS_VAR _T("Invalid class variable declaration.")
+#define ERR_INVALID_GUI_NAME _T("Invalid Gui name.")
 
 #define WARNING_USE_UNSET_VARIABLE _T("Using value of uninitialized variable.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("Local variable with same name as global.")
@@ -309,7 +310,7 @@ BOOL CALLBACK EnumChildGetControlList(HWND aWnd, LPARAM lParam);
 BOOL CALLBACK EnumMonitorProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM lParam);
 BOOL CALLBACK EnumChildGetText(HWND aWnd, LPARAM lParam);
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam);
-bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, WPARAM aGuiIndex);
+bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd);
 
 
 typedef UINT LineNumberType;
@@ -1355,25 +1356,37 @@ public:
 		if (!_tcsicmp(aBuf, _T("NoMainWindow"))) return MENU_CMD_NOMAINWINDOW;
 		return MENU_CMD_INVALID;
 	}
-
-	static GuiCommands ConvertGuiCommand(LPTSTR aBuf, int *aWindowIndex = NULL, LPTSTR *aOptions = NULL)
+	
+	static void ConvertGuiName(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName = NULL, size_t *aNameLength = NULL)
 	{
-		// Notes about the below macro:
-		// "< 3" avoids ambiguity with a future use such as "gui +cmd:whatever" while still allowing
-		// up to 99 windows, e.g. "gui 99:add"
-		// omit_leading_whitespace(): Move the buf pointer to the location of the sub-command.
-		#define DETERMINE_WINDOW_INDEX \
-			LPTSTR colon_pos = _tcschr(aBuf, ':');\
-			if (colon_pos && colon_pos - aBuf < 3)\
-			{\
-				if (aWindowIndex)\
-					*aWindowIndex = ATOI(aBuf) - 1;\
-				aBuf = omit_leading_whitespace(colon_pos + 1);\
-			}
-			//else leave it set to the default already put in it by the caller.
-		DETERMINE_WINDOW_INDEX
-		if (aOptions)
-			*aOptions = aBuf; // Return position where options start to the caller.
+		LPTSTR colon_pos;
+		// Check for '+' and '-' to avoid ambiguity with something like "gui +Delimiter:".
+		if (*aBuf == '+' || *aBuf == '-' || !(colon_pos = _tcschr(aBuf, ':'))) // Assignment.
+		{
+			aCommand = aBuf;
+			// Name not specified, so leave it at the default set by caller.
+			return;
+		}
+
+		size_t name_length = colon_pos - aBuf;
+	
+		// For backward compatibility, "01" to "09" must be treated as "1" to "9".
+		if (name_length == 2 && *aBuf == '0' && aBuf[1] >= '1' && aBuf[1] <= '9')
+		{
+			// Normalize the number by excluding its leading "0".
+			++aBuf;
+			--name_length;
+		}
+	
+		if (aName)
+			*aName = aBuf;
+		if (aNameLength)
+			*aNameLength = name_length;
+		aCommand = omit_leading_whitespace(colon_pos + 1);
+	}
+
+	static GuiCommands ConvertGuiCommand(LPTSTR aBuf)
+	{
 		if (!*aBuf || *aBuf == '+' || *aBuf == '-') // Assume a var ref that resolves to blank is "options" (for runtime flexibility).
 			return GUI_CMD_OPTIONS;
 		if (!_tcsicmp(aBuf, _T("Add"))) return GUI_CMD_ADD;
@@ -1396,11 +1409,8 @@ public:
 		return GUI_CMD_INVALID;
 	}
 
-	GuiControlCmds ConvertGuiControlCmd(LPTSTR aBuf, int *aWindowIndex = NULL, LPTSTR *aOptions = NULL)
+	static GuiControlCmds ConvertGuiControlCmd(LPTSTR aBuf)
 	{
-		DETERMINE_WINDOW_INDEX
-		if (aOptions)
-			*aOptions = aBuf; // Return position where options start to the caller.
 		// If it's blank without a deref, that's CONTENTS.  Otherwise, assume it's OPTIONS for better
 		// runtime flexibility (i.e. user can leave the variable blank to make the command do nothing).
 		// Fix for v1.0.40.11: Since the above is counterintuitive and undocumented, it has been fixed
@@ -1437,9 +1447,8 @@ public:
 		return GUICONTROL_CMD_INVALID;
 	}
 
-	static GuiControlGetCmds ConvertGuiControlGetCmd(LPTSTR aBuf, int *aWindowIndex = NULL)
+	static GuiControlGetCmds ConvertGuiControlGetCmd(LPTSTR aBuf)
 	{
-		DETERMINE_WINDOW_INDEX
 		if (!*aBuf) return GUICONTROLGET_CMD_CONTENTS; // The implicit command when nothing was specified.
 		if (!_tcsicmp(aBuf, _T("Pos"))) return GUICONTROLGET_CMD_POS;
 		if (!_tcsicmp(aBuf, _T("Focus"))) return GUICONTROLGET_CMD_FOCUS;
@@ -2314,15 +2323,16 @@ public:
 	// to be what other apps use too, and seems to make edits stand out a little nicer:
 	#define GUI_CTL_VERTICAL_DEADSPACE 8
 	#define PROGRESS_DEFAULT_THICKNESS (2 * sFont[mCurrentFontIndex].point_size)
+	LPTSTR mName;
 	HWND mHwnd, mStatusBarHwnd;
 	// Control IDs are higher than their index in the array by the below amount.  This offset is
 	// necessary because windows that behave like dialogs automatically return IDOK and IDCANCEL in
 	// response to certain types of standard actions:
-	GuiIndexType mWindowIndex;
 	GuiIndexType mControlCount;
 	GuiIndexType mControlCapacity; // How many controls can fit into the current memory size of mControl.
 	GuiControlType *mControl; // Will become an array of controls when the window is first created.
 	GuiIndexType mDefaultButtonIndex; // Index vs. pointer is needed for some things.
+	ULONG mReferenceCount; // For keeping this structure in memory during execution of the Gui's labels.
 	Label *mLabelForClose, *mLabelForEscape, *mLabelForSize, *mLabelForDropFiles, *mLabelForContextMenu;
 	bool mLabelForCloseIsRunning, mLabelForEscapeIsRunning, mLabelForSizeIsRunning; // DropFiles doesn't need one of these.
 	bool mLabelsHaveBeenSet;
@@ -2353,7 +2363,6 @@ public:
 	#define MAX_GUI_FONTS 200  // v1.0.44.14: Increased from 100 to 200 due to feedback that 100 wasn't enough.  But to alleviate memory usage, the array is now allocated upon first use.
 	static FontType *sFont; // An array of structs, allocated upon first use.
 	static int sFontCount;
-	static int sGuiCount; // The number of non-NULL items in the g_gui array. Maintained only for performance reasons.
 	static HWND sTreeWithEditInProgress; // Needed because TreeView's edit control for label-editing conflicts with IDOK (default button).
 
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
@@ -2362,10 +2371,10 @@ public:
 	// Keep the default destructor to avoid entering the "Law of the Big Three": If your class requires a
 	// copy constructor, copy assignment operator, or a destructor, then it very likely will require all three.
 
-	GuiType(int aWindowIndex) // Constructor
-		: mHwnd(NULL), mStatusBarHwnd(NULL), mWindowIndex(aWindowIndex), mControlCount(0), mControlCapacity(0)
+	GuiType() // Constructor
+		: mName(NULL), mHwnd(NULL), mStatusBarHwnd(NULL), mControlCount(0), mControlCapacity(0)
 		, mDefaultButtonIndex(-1), mLabelForClose(NULL), mLabelForEscape(NULL), mLabelForSize(NULL)
-		, mLabelForDropFiles(NULL), mLabelForContextMenu(NULL)
+		, mLabelForDropFiles(NULL), mLabelForContextMenu(NULL), mReferenceCount(1)
 		, mLabelForCloseIsRunning(false), mLabelForEscapeIsRunning(false), mLabelForSizeIsRunning(false)
 		, mLabelsHaveBeenSet(false)
 		// The styles DS_CENTER and DS_3DLOOK appear to be ineffectual in this case.
@@ -2400,9 +2409,11 @@ public:
 		//ZeroMemory(mControl, sizeof(mControl));
 	}
 
-	static ResultType Destroy(GuiIndexType aWindowIndex);
+	static ResultType Destroy(GuiType &gui);
 	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
 	ResultType Create();
+	void AddRef();
+	void Release();
 	void SetLabels(LPTSTR aLabelPrefix);
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText);
@@ -2423,30 +2434,12 @@ public:
 	ResultType Submit(bool aHideIt);
 	ResultType ControlGetContents(Var &aOutputVar, GuiControlType &aControl, LPTSTR aMode = _T(""));
 
-	static VarSizeType ControlGetName(GuiIndexType aGuiWindowIndex, GuiIndexType aControlIndex, LPTSTR aBuf);
-	static GuiType *FindGui(HWND aHwnd) // Find which GUI object owns the specified window.
-	{
-		#define EXTERN_GUI extern GuiType *g_gui[MAX_GUI_WINDOWS]
-		EXTERN_GUI;
-		if (!sGuiCount)
-			return NULL;
+	static VarSizeType ControlGetName(GuiType *aGuiWindow, GuiIndexType aControlIndex, LPTSTR aBuf);
+	
+	static GuiType *FindGui(LPTSTR aName);
+	static GuiType *FindGui(HWND aHwnd);
 
-		// The loop will usually find it on the first iteration since the #1 window is default
-		// and thus most commonly used.
-		int i, gui_count;
-		for (i = 0, gui_count = 0; i < MAX_GUI_WINDOWS; ++i)
-		{
-			if (g_gui[i])
-			{
-				if (g_gui[i]->mHwnd == aHwnd)
-					return g_gui[i];
-				if (sGuiCount == ++gui_count) // No need to keep searching.
-					break;
-			}
-		}
-		return NULL;
-	}
-
+	static GuiType *ValidGui(GuiType *&aGuiRef); // Updates aGuiRef if it points to a destroyed Gui.
 
 	GuiIndexType FindControl(LPTSTR aControlID);
 	GuiControlType *FindControl(HWND aHwnd, bool aRetrieveIndexInstead = false)
@@ -2690,7 +2683,8 @@ public:
 		return NULL;
 	}
 
-	ResultType PerformGui(LPTSTR aCommand, LPTSTR aControlType, LPTSTR aOptions, LPTSTR aParam4);
+	ResultType PerformGui(LPTSTR aBuf, LPTSTR aControlType, LPTSTR aOptions, LPTSTR aParam4);
+	static GuiType *ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName = NULL, size_t *aNameLength = NULL);
 
 	// Call this SciptError to avoid confusion with Line's error-displaying functions:
 	ResultType ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T("")); // , ResultType aErrorType = FAIL);

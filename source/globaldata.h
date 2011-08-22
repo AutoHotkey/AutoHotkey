@@ -124,7 +124,8 @@ extern int g_nFolderDialogs;
 extern InputBoxType g_InputBox[MAX_INPUTBOXES];
 extern SplashType g_Progress[MAX_PROGRESS_WINDOWS];
 extern SplashType g_SplashImage[MAX_SPLASHIMAGE_WINDOWS];
-EXTERN_GUI;
+extern GuiType **g_gui;
+extern int g_guiCount, g_guiCountMax;
 extern HWND g_hWndToolTip[MAX_TOOLTIPS];
 extern MsgMonitorStruct *g_MsgMonitor; // An array to be allocated upon first use (if any).
 extern int g_MsgMonitorCount;

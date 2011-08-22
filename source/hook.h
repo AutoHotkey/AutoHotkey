@@ -71,11 +71,11 @@ enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_
 // And these macros are kept here so that all this trickery is centrally located and thus more maintainable:
 #define ASK_INSTANCE_TO_CLOSE(hwnd, reason) PostMessage(hwnd, WM_COMMNOTIFY, reason, 0);
 
-// POST_AHK_USER_MENU: A gui_index value >= 0 is passed with the message if it came from a GUI's menu bar.
+// POST_AHK_USER_MENU: A gui_hwnd value != 0 is passed with the message if it came from a GUI's menu bar.
 // This is done because it's good way to pass the info, but also so that its value will be in sync with the
 // timestamp of the message (in case the message is stuck in the queue for a long time).  No pointer is
 // passed in this case since they might become invalid between the time the msg is posted vs. processed.
-#define POST_AHK_USER_MENU(hwnd, menu, gui_index) PostMessage(hwnd, AHK_USER_MENU, gui_index, menu);
+#define POST_AHK_USER_MENU(hwnd, menu, gui_hwnd) PostMessage(hwnd, AHK_USER_MENU, gui_hwnd, menu);
 #define POST_AHK_GUI_ACTION(hwnd, control_index, gui_event, event_info) PostMessage(hwnd, AHK_GUI_ACTION \
 	, (WPARAM)(((control_index) << 16) | (gui_event)), (LPARAM)(event_info)); // Caller must ensure that gui_event is less than 0xFFFF.
 // POST_AHK_DIALOG:

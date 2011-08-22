@@ -171,8 +171,8 @@ Script::~Script() // Destructor.
 	// This is because one GUI window might get destroyed and take with it a menu bar that is still
 	// in use by an existing GUI window.  GuiType::Destroy() adheres to this philosophy by detaching
 	// its menu bar prior to destroying its window:
-	for (i = 0; i < MAX_GUI_WINDOWS; ++i)
-		GuiType::Destroy(i); // Static method to avoid problems with object destroying itself.
+	while (g_guiCount)
+		GuiType::Destroy(*g_gui[g_guiCount-1]); // Static method to avoid problems with object destroying itself.
 	for (i = 0; i < GuiType::sFontCount; ++i) // Now that GUI windows are gone, delete all GUI fonts.
 		if (GuiType::sFont[i].hfont)
 			DeleteObject(GuiType::sFont[i].hfont);
@@ -5846,7 +5846,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
 		if (aArgc > 0 && !line.ArgHasDeref(1))
 		{
-			GuiCommands gui_cmd = line.ConvertGuiCommand(new_raw_arg1);
+			LPTSTR command, name;
+			ResolveGui(new_raw_arg1, command, &name);
+			if (!name)
+				return ScriptError(ERR_INVALID_GUI_NAME, new_raw_arg1);
+
+			GuiCommands gui_cmd = line.ConvertGuiCommand(command);
 
 			switch (gui_cmd)
 			{
@@ -6594,7 +6599,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_PARAM2_REQUIRED);
 		if (aArgc > 0 && !line.ArgHasDeref(1))
 		{
-			GuiControlCmds guicontrol_cmd = line.ConvertGuiControlCmd(new_raw_arg1);
+			LPTSTR command, name;
+			ResolveGui(new_raw_arg1, command, &name);
+			if (!name)
+				return ScriptError(ERR_INVALID_GUI_NAME, new_raw_arg1);
+
+			GuiControlCmds guicontrol_cmd = line.ConvertGuiControlCmd(command);
 			switch (guicontrol_cmd)
 			{
 			case GUICONTROL_CMD_INVALID:
@@ -6619,7 +6629,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_GUICONTROLGET:
 		if (aArgc > 1 && !line.ArgHasDeref(2))
 		{
-			GuiControlGetCmds guicontrolget_cmd = line.ConvertGuiControlGetCmd(new_raw_arg2);
+			LPTSTR command, name;
+			ResolveGui(new_raw_arg1, command, &name);
+			if (!name)
+				return ScriptError(ERR_INVALID_GUI_NAME, new_raw_arg1);
+
+			GuiControlGetCmds guicontrolget_cmd = line.ConvertGuiControlGetCmd(command);
 			// This first check's error messages take precedence over the next check's:
 			switch (guicontrolget_cmd)
 			{

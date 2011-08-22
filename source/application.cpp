@@ -204,7 +204,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	bool sleep0_was_done = false;
 	bool empty_the_queue_via_peek = false;
 
-	int i, gui_count;
+	int i;
 	bool msg_was_handled;
 	HWND fore_window, focused_control, focused_parent, criterion_found_hwnd;
 	TCHAR wnd_class_name[32], gui_action_errorlevel[16], *walk;
@@ -218,7 +218,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	Hotstring *hs;
 	GuiType *pgui; // This is just a temp variable and should not be referred to once the below has been determined.
 	GuiControlType *pcontrol, *ptab_control;
-	GuiIndexType gui_control_index, gui_index; // gui_index is needed to avoid using pgui in cases where that pointer becomes invalid (e.g. if ExecUntil() executes "Gui Destroy").
+	GuiIndexType gui_control_index;
 	GuiEventType gui_action;
 	DWORD gui_event_info, gui_size;
 	bool *pgui_label_is_running, event_is_control_generated;
@@ -462,9 +462,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		// else with the message.  This must be done first because some of the standard controls
 		// also use WM_USER messages, so we must not assume they're generic thread messages just
 		// because they're >= WM_USER.  The exception is AHK_GUI_ACTION should always be handled
-		// here rather than by IsDialogMessage().  Note: sGuiCount is checked first to help
+		// here rather than by IsDialogMessage().  Note: g_guiCount is checked first to help
 		// performance, since all messages must come through this bottleneck.
-		if (GuiType::sGuiCount && msg.hwnd && msg.hwnd != g_hWnd && !(msg.message == AHK_GUI_ACTION || msg.message == AHK_USER_MENU))
+		if (g_guiCount && msg.hwnd && msg.hwnd != g_hWnd && !(msg.message == AHK_GUI_ACTION || msg.message == AHK_USER_MENU))
 		{
 			if (msg.message == WM_KEYDOWN)
 			{
@@ -579,7 +579,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				}
 			} // if (msg.message == WM_KEYDOWN)
 
-			for (i = 0, gui_count = 0, msg_was_handled = false; i < MAX_GUI_WINDOWS; ++i)
+			for (i = 0, msg_was_handled = false; i < g_guiCount; ++i)
 			{
 				// Note: indications are that IsDialogMessage() should not be called with NULL as
 				// its first parameter (perhaps as an attempt to get allow dialogs owned by our
@@ -588,23 +588,16 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// Also, can't call IsDialogMessage against msg.hwnd because that is not a complete
 				// solution: at the very least, tab key navigation will not work in GUI windows.
 				// There are probably other side-effects as well.
-				if (g_gui[i])
+				//if (g_gui[i]->mHwnd) // Always non-NULL for any item in g_gui.
+				g->CalledByIsDialogMessageOrDispatch = true;
+				g->CalledByIsDialogMessageOrDispatchMsg = msg.message; // Added in v1.0.44.11 because it's known that IsDialogMessage can change the message number (e.g. WM_KEYDOWN->WM_NOTIFY for UpDowns)
+				if (IsDialogMessage(g_gui[i]->mHwnd, &msg))
 				{
-					if (g_gui[i]->mHwnd)
-					{
-						g->CalledByIsDialogMessageOrDispatch = true;
-						g->CalledByIsDialogMessageOrDispatchMsg = msg.message; // Added in v1.0.44.11 because it's known that IsDialogMessage can change the message number (e.g. WM_KEYDOWN->WM_NOTIFY for UpDowns)
-						if (IsDialogMessage(g_gui[i]->mHwnd, &msg))
-						{
-							msg_was_handled = true;
-							g->CalledByIsDialogMessageOrDispatch = false;
-							break;
-						}
-						g->CalledByIsDialogMessageOrDispatch = false;
-					}
-					if (GuiType::sGuiCount == ++gui_count) // No need to keep searching.
-						break;
+					msg_was_handled = true;
+					g->CalledByIsDialogMessageOrDispatch = false;
+					break;
 				}
+				g->CalledByIsDialogMessageOrDispatch = false;
 			}
 			if (msg_was_handled) // This message was handled by IsDialogMessage() above.
 				continue; // Continue with the main message loop.
@@ -646,11 +639,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				if (   !(pgui = GuiType::FindGui(msg.hwnd))   ) // No associated GUI object, so ignore this event.
 					// v1.0.44: Dispatch vs. continue/discard since it's probably for a common control
 					// whose msg number happens to be AHK_GUI_ACTION.  Do this *only* when HWND isn't recognized,
-					// not when msg content is inavalid, because dispatching a msg whose HWND is one of our own
+					// not when msg content is invalid, because dispatching a msg whose HWND is one of our own
 					// GUI windows might cause GuiWindowProc to fwd it back to us, creating an infinite loop.
 					goto break_out_of_main_switch; // Goto seems preferably in this case for code size & performance.
-				gui_index = pgui->mWindowIndex; // Stored in case ExecUntil() performs "Gui Destroy" further below.
-
+				
 				gui_event_info =    (DWORD)msg.lParam;
 				gui_action =        LOWORD(msg.wParam);
 				gui_control_index = HIWORD(msg.wParam); // Caller has set it to NO_CONTROL_INDEX if it isn't applicable.
@@ -914,11 +906,11 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// Below: the menu type is passed with the message so that its value will be in sync
 				// with the timestamp of the message (in case this message has been stuck in the
 				// queue for a long time):
-				if (msg.wParam < MAX_GUI_WINDOWS) // Poster specified that this menu item was from a gui's menu bar (since wParam is unsigned, any incoming -1 is seen as greater than max).
+				if (msg.wParam) // Poster specified that this menu item was from a gui's menu bar (since wParam is unsigned, any incoming -1 is seen as greater than max).
 				{
-					// msg.wParam is the index rather than a pointer to avoid any chance of problems with
+					// msg.wParam is the HWND rather than a pointer to avoid any chance of problems with
 					// a gui object or its window having been destroyed while the msg was waiting in the queue.
-					if (!(pgui = g_gui[msg.wParam]) // Not a GUI's menu bar item...
+					if (!(pgui = GuiType::FindGui((HWND)msg.wParam)) // Not a GUI's menu bar item...
 						&& msg.hwnd && msg.hwnd != g_hWnd) // ...and not a script menu item.
 						goto break_out_of_main_switch; // See "goto break_out_of_main_switch" higher above for complete explanation.
 				}
@@ -1191,8 +1183,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// IsWindowVisible/DetectHiddenWindows now that the last-found window is exempt from
 				// DetectHiddenWindows if the last-found window is one of the script's GUI windows [v1.0.25.13]:
 				g.hWndLastUsed = pgui->mHwnd;
-				g.GuiWindowIndex = pgui->mWindowIndex;
-				g.GuiDefaultWindowIndex = pgui->mWindowIndex; // GUI threads default to operating upon their own window.
+				pgui->AddRef(); // Keep the pointer valid at least until the thread finishes.
+				pgui->AddRef(); //
+				g.GuiWindow = g.GuiDefaultWindow = pgui; // GUI threads default to operating upon their own window.
 				g.GuiControlIndex = gui_control_index; // Must be set only after the "g" struct has been initialized. This will be NO_CONTROL_INDEX if the sender of the message said to do that.
 				g.EventInfo = gui_event_info; // Override the thread-default of NO_EVENT_INFO.
 
@@ -1211,38 +1204,26 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// Bug-fix for v1.0.22: If the above ExecUntil() performed a "Gui Destroy", the
 				// pointers below are now invalid so should not be dereferenced.  In such a case,
 				// hdrop_to_free will already have been freed as part of the window destruction
-				// process, so don't do it here.  g_gui[gui_index] is checked to ensure the window
-				// still exists:
-				if (pgui = g_gui[gui_index]) // Assign.  This refresh is a bug-fix as explained below.
+				// process, so don't do it here.
+				if (pgui->mHwnd)
 				{
-					// Bug-fix for v1.0.30.04: If the thread that was just launched above destroyed
-					// its own GUI window, but then recreated it, that window's members obviously aren't
-					// guaranteed to have the same memory addresses that they did prior to destruction.
-					// Even g_gui[gui_index] would probably be a different address, so pgui would be
-					// invalid too.  Therefore, refresh the original pointers (pgui is refreshed above).
-					// See similar switch() higher above for comments about the below:
-					pcontrol = gui_control_index < pgui->mControlCount ? pgui->mControl + gui_control_index : NULL; // Refresh unconditionally for maintainability.
-					switch(gui_action)
+					if (pgui_label_is_running) // i.e. GuiClose, GuiEscape, and related window-level events.
+						*pgui_label_is_running = false;
+					else if (event_is_control_generated) // An earlier stage has ensured pcontrol isn't NULL in this case.
+						pcontrol->attrib &= ~GUI_CONTROL_ATTRIB_LABEL_IS_RUNNING; // Must be careful to set this flag only when the event is control-generated, not for a drag-and-drop onto the control, or context menu on the control, etc.
+					if (hdrop_to_free) // This is only non-NULL when gui_action==GUI_EVENT_DROPFILES
 					{
-					case GUI_EVENT_RESIZE: pgui->mLabelForSizeIsRunning = false; break;   // Safe to reset even if there is
-					case GUI_EVENT_CLOSE:  pgui->mLabelForCloseIsRunning = false; break;  // no label due to the window having
-					case GUI_EVENT_ESCAPE: pgui->mLabelForEscapeIsRunning = false; break; // been destroyed and recreated.
-					case GUI_EVENT_CONTEXTMENU: break; // Do nothing, but avoid the default case below.
-					case GUI_EVENT_DROPFILES:
-						if (pgui->mHdrop) // It's no longer safe to refer to hdrop_to_free (see comments above).
-						{
-							DragFinish(pgui->mHdrop); // Since the DropFiles quasi-thread is finished, free the HDROP resources.
-							pgui->mHdrop = NULL; // Indicate that this GUI window is ready for another drop.
-						}
+						DragFinish(hdrop_to_free); // Since the DropFiles quasi-thread is finished, free the HDROP resources.
+						pgui->mHdrop = NULL; // Indicate that this GUI window is ready for another drop.
 						// Fix for v1.0.31.02: The window's current ExStyle is fetched every time in case a non-GUI
 						// command altered it (such as making it transparent):
 						SetWindowLong(pgui->mHwnd, GWL_EXSTYLE, GetWindowLong(pgui->mHwnd, GWL_EXSTYLE) | WS_EX_ACCEPTFILES);
-						break;
-					default: // It's a control's action, so set its attribute.
-						if (pcontrol) // Recheck to ensure that control still exists (in case window was recreated as explained above).
-							pcontrol->attrib &= ~GUI_CONTROL_ATTRIB_LABEL_IS_RUNNING;
 					}
-				} // if (this gui window wasn't destroyed-without-recreation by the thread we just launched).
+				}
+				// Counteract the earler AddRef(). If the Gui was destroyed (and none of this
+				// Gui's other labels are still running), this will free the Gui structure.
+				pgui->Release(); // g.GuiWindow
+				//g.GuiDefaultWindow->Release(); // This is done by ResumeUnderlyingThread().
 				break;
 
 			case AHK_USER_MENU: // user-defined menu item
@@ -1258,11 +1239,18 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// This flags GUI menu items as being GUI so that the script has a way of detecting
 					// whether a given submenu's item was selected from inside a menu bar vs. a popup:
 					g.GuiEvent = GUI_EVENT_NORMAL;
-					g.GuiWindowIndex = g.GuiDefaultWindowIndex = pgui->mWindowIndex; // But leave GuiControl at its default, which flags this event as from a menu item.
+					pgui->AddRef(); // Keep the pointer valid at least until the thread finishes.
+					pgui->AddRef(); //
+					g.GuiWindow = g.GuiDefaultWindow = pgui; // But leave GuiControl at its default, which flags this event as from a menu item.
 				}
 				DEBUGGER_STACK_PUSH(menu_item->mLabel->mJumpToLine, menu_item->mLabel->mName)
 				menu_item->mLabel->Execute();
 				DEBUGGER_STACK_POP()
+				if (pgui)
+				{
+					pgui->Release(); // g.GuiWindow
+					//g.GuiDefaultWindow->Release(); // This is done by ResumeUnderlyingThread().
+				}
 				break;
 
 			case AHK_HOTSTRING:
@@ -1799,15 +1787,19 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	InitNewThread(0, false, true, func.mJumpToLine->mActionType);
 	DEBUGGER_STACK_PUSH(func.mJumpToLine, func.mName) // Push a "thread" onto the debugger's stack.  For simplicity and performance, use the function name vs something like "message 0x123".
 
+	GuiType *pgui = NULL;
+	
 	// Set last found window (as documented).  Can be NULL.
 	// Nested controls like ComboBoxes require more than a simple call to GetParent().
 	if (g->hWndLastUsed = GetNonChildParent(aWnd)) // Assign parent window as the last found window (it's ok if it's hidden).
 	{
-		GuiType *pgui = GuiType::FindGui(g->hWndLastUsed);
+		pgui = GuiType::FindGui(g->hWndLastUsed);
 		if (pgui) // This parent window is a GUI window.
 		{
-			g->GuiWindowIndex = pgui->mWindowIndex;  // Update the built-in variable A_GUI.
-			g->GuiDefaultWindowIndex = pgui->mWindowIndex; // Consider this a GUI thread; so it defaults to operating upon its own window.
+			pgui->AddRef(); // Keep the pointer valid at least until the thread finishes.
+			pgui->AddRef(); //
+			g->GuiWindow = pgui;  // Update the built-in variable A_GUI.
+			g->GuiDefaultWindow = pgui; // Consider this a GUI thread; so it defaults to operating upon its own window.
 			GuiIndexType control_index = (GuiIndexType)(size_t)pgui->FindControl(aWnd, true); // v1.0.44.03: Call FindControl() vs. GUI_HWND_TO_INDEX so that a combobox's edit control is properly resolved to the combobox itself.
 			if (control_index < pgui->mControlCount) // Match found (relies on unsigned for out-of-bounds detection).
 				g->GuiControlIndex = control_index;
@@ -1872,6 +1864,13 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	}// func_call destructor causes Var::FreeAndRestoreFunctionVars() to be called here.
 	
 	DEBUGGER_STACK_POP()
+
+	if (pgui) // i.e. we set g->GuiWindow and g->GuiDefaultWindow above.
+	{
+		pgui->Release(); // g->GuiWindow
+		//g->GuiDefaultWindow->Release(); // This is done by ResumeUnderlyingThread().
+	}
+
 	ResumeUnderlyingThread(ErrorLevel_saved);
 
 	// Check that the msg_index item still exists (it may have been deleted during the thread that just finished,
@@ -2021,6 +2020,12 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 
 void ResumeUnderlyingThread(LPTSTR aSavedErrorLevel)
 {
+	// These two may be set by any thread, so must be released here:
+	if (g->GuiDefaultWindow)
+		g->GuiDefaultWindow->Release();
+	if (g->DialogOwner)
+		g->DialogOwner->Release();
+
 	// The following section handles the switch-over to the former/underlying "g" item:
 	--g_nThreads; // Other sections below might rely on this having been done early.
 	--g;

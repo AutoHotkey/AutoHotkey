@@ -554,7 +554,7 @@ ResultType Script::ScriptDeleteMenu(UserMenu *aMenu)
 #define aMenuItem_ID (aMenuItem->mSubmenu ? GetSubmenuPos(aMenuItem->mSubmenu->mMenu) : aMenuItem->mMenuID)
 #define aMenuItem_MF_BY (aMenuItem->mSubmenu ? MF_BYPOSITION : MF_BYCOMMAND)
 #define UPDATE_GUI_MENU_BARS(menu_type, hmenu) \
-	if (menu_type == MENU_TYPE_BAR && GuiType::sGuiCount)\
+	if (menu_type == MENU_TYPE_BAR && g_guiCount)\
 		GuiType::UpdateMenuBars(hmenu); // Above: If it's not a popup, it's probably a menu bar.
 
 
@@ -1174,18 +1174,10 @@ ResultType UserMenu::Destroy()
 	{
 		// As a precaution, don't allow a menu to be destroyed if a window is using it as its
 		// menu bar. That might have bad side-effects on some OSes, especially older ones:
-		if (mMenuType == MENU_TYPE_BAR && GuiType::sGuiCount)
-		{
-			int i, gui_count;
-			for (i = 0, gui_count = 0; i < MAX_GUI_WINDOWS; ++i)
-				if (g_gui[i])
-				{
-					if (g_gui[i]->mHwnd && GetMenu(g_gui[i]->mHwnd) == mMenu)
-						return FAIL; // A GUI window is using this menu, so don't destroy the menu.
-					if (GuiType::sGuiCount == ++gui_count) // No need to keep searching.
-						break;
-				}
-		}
+		if (mMenuType == MENU_TYPE_BAR)
+			for (int i = 0; i < g_guiCount; ++i)
+				if (GetMenu(g_gui[i]->mHwnd) == mMenu) // mHwnd is always non-NULL for any item in g_gui.
+					return FAIL; // A GUI window is using this menu, so don't destroy the menu.
 		if (!DestroyMenu(mMenu)) // v1.0.30.01: Doesn't seem to be a reason *not* to check the return value and return FAIL if it failed.
 			return FAIL;
 	}

@@ -5018,7 +5018,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 	switch (iMsg)
 	{
 	case WM_COMMAND:
-		if (HandleMenuItem(hWnd, LOWORD(wParam), -1)) // It was handled fully. -1 flags it as a non-GUI menu item such as a tray menu or popup menu.
+		if (HandleMenuItem(hWnd, LOWORD(wParam), NULL)) // It was handled fully. NULL flags it as a non-GUI menu item such as a tray menu or popup menu.
 			return 0; // If an application processes this message, it should return zero.
 		break; // Otherwise, let DefWindowProc() try to handle it (this actually seems to happen normally sometimes).
 
@@ -5035,7 +5035,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			//else fall through to the next case.
 		case WM_LBUTTONDBLCLK:
 			if (g_script.mTrayMenu->mDefault)
-				POST_AHK_USER_MENU(hWnd, g_script.mTrayMenu->mDefault->mMenuID, -1) // -1 flags it as a non-GUI menu item.
+				POST_AHK_USER_MENU(hWnd, g_script.mTrayMenu->mDefault->mMenuID, NULL) // NULL flags it as a non-GUI menu item.
 #ifdef AUTOHOTKEYSC
 			else if (g_script.mTrayMenu->mIncludeStandardItems && g_AllowMainWindow)
 				ShowMainWindow();
@@ -5488,7 +5488,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 
 
-bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, WPARAM aGuiIndex)
+bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
 // See if an item was selected from the tray menu or main menu.  Note that it is possible
 // for one of the standard menu items to be triggered from a GUI menu if the menu or one of
 // its submenus was modified with the "menu, MenuName, Standard" command.
@@ -5596,7 +5596,7 @@ bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, WPARAM aGuiIndex)
 		// It seems best to treat the selection of a custom menu item in a way similar
 		// to how hotkeys are handled by the hook. See comments near the definition of
 		// POST_AHK_USER_MENU for more details.
-		POST_AHK_USER_MENU(aHwnd, aMenuItemID, aGuiIndex) // Send the menu's cmd ID and the window index (index is safer than pointer, since pointer might get deleted).
+		POST_AHK_USER_MENU(aHwnd, aMenuItemID, (WPARAM)aGuiHwnd) // Send the menu's cmd ID and the window index (index is safer than pointer, since pointer might get deleted).
 		// Try to maintain a list here of all the ways the script can be uninterruptible
 		// at this moment in time, and whether that uninterruptibility should be overridden here:
 		// 1) YES: g_MenuIsVisible is true (which in turn means that the script is marked
@@ -11797,7 +11797,7 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 	TCHAR buf[MAX_INTEGER_SIZE];
 	LPTSTR target_buf = aBuf ? aBuf : buf;
 
-	if (g->GuiWindowIndex >= MAX_GUI_WINDOWS) // The current thread was not launched as a result of GUI action.
+	if (!g->GuiWindow) // The current thread was not launched as a result of GUI action.
 	{
 		*target_buf = '\0';
 		return 0;
@@ -11822,8 +11822,9 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 		_itot(g->GuiPoint.y, target_buf, 10);
 		break;
 	case '\0': // A_Gui
-		_itot(g->GuiWindowIndex + 1, target_buf, 10);  // Always stored as decimal vs. hex, regardless of script settings.
-		break;
+		if (aBuf)
+			_tcscpy(aBuf, g->GuiWindow->mName);
+		return _tcslen(g->GuiWindow->mName);
 	}
 
 	return (VarSizeType)_tcslen(target_buf);
@@ -11833,9 +11834,7 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_GuiControl(LPTSTR aBuf, LPTSTR aVarName)
 {
-	// Other logic ensures that g->GuiControlIndex is out-of-bounds whenever g->GuiWindowIndex is.
-	// That is why g->GuiWindowIndex is not checked to make sure it's less than MAX_GUI_WINDOWS.
-	return GuiType::ControlGetName(g->GuiWindowIndex, g->GuiControlIndex, aBuf);
+	return GuiType::ControlGetName(g->GuiWindow, g->GuiControlIndex, aBuf);
 }
 
 
@@ -11848,10 +11847,10 @@ VarSizeType BIV_GuiEvent(LPTSTR aBuf, LPTSTR aVarName)
 	{
 		GuiType *pgui;
 		UINT u, file_count;
-		// GUI_EVENT_DROPFILES should mean that g.GuiWindowIndex < MAX_GUI_WINDOWS, but the below will double check
-		// that in case g.GuiEvent can ever be set to that value as a result of receiving a bogus message in the queue.
-		if (g.GuiWindowIndex >= MAX_GUI_WINDOWS  // The current thread was not launched as a result of GUI action or this is a bogus msg.
-			|| !(pgui = g_gui[g.GuiWindowIndex]) // Gui window no longer exists.  Relies on short-circuit boolean.
+		// GUI_EVENT_DROPFILES should mean that g.GuiWindow != NULL, but the below will double check that in
+		// case g.GuiEvent can ever be set to that value as a result of receiving a bogus message in the queue.
+		if (!(pgui = g.GuiWindow) // The current thread was not launched as a result of GUI action or this is a bogus msg.
+			|| !pgui->mHwnd // Gui window no longer exists.  Relies on short-circuit boolean.
 			|| !pgui->mHdrop // No HDROP (probably impossible unless g.GuiEvent was given a bogus value somehow).
 			|| !(file_count = DragQueryFile(pgui->mHdrop, 0xFFFFFFFF, NULL, 0))) // No files in the drop (not sure if this is possible).
 			// All of the above rely on short-circuit boolean order.
@@ -15978,11 +15977,10 @@ void BIF_StatusBar(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	// Window doesn't exist.
 	// Control doesn't exist (i.e. no StatusBar in window).
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid()) // Always operate on thread's default window to simplify the syntax.
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
 	HWND control_hwnd;
-	if (   !(control_hwnd = gui.mStatusBarHwnd)   )
+	if (   !(control_hwnd = g->GuiDefaultWindow->mStatusBarHwnd)   )
 		return;
 
 	HICON hicon;
@@ -16078,9 +16076,9 @@ void BIF_LV_GetNextOrCount(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	// Control doesn't exist (i.e. no ListView in window).
 	// Item not found in ListView.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentListView)
 		return;
 	HWND control_hwnd = gui.mCurrentListView->hwnd;
@@ -16158,9 +16156,9 @@ void BIF_LV_GetText(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aP
 	// Item not found in ListView.
 	// And others.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentListView)
 		return;
 	// Caller has ensured there is at least two parameters:
@@ -16244,9 +16242,9 @@ void BIF_LV_AddInsertModify(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 		--aParamCount;
 	}
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentListView)
 		return;
 	GuiControlType &control = *gui.mCurrentListView;
@@ -16481,9 +16479,9 @@ void BIF_LV_Delete(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	// Control doesn't exist (i.e. no ListView in window).
 	// And others as shown below.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentListView)
 		return;
 	HWND control_hwnd = gui.mCurrentListView->hwnd;
@@ -16520,9 +16518,9 @@ void BIF_LV_InsertModifyDeleteCol(ExprTokenType &aResultToken, ExprTokenType *aP
 	// Control doesn't exist (i.e. no ListView in window).
 	// Column not found in ListView.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentListView)
 		return;
 	GuiControlType &control = *gui.mCurrentListView;
@@ -16826,9 +16824,9 @@ void BIF_LV_SetImageList(ExprTokenType &aResultToken, ExprTokenType *aParam[], i
 	// Control doesn't exist (i.e. no ListView in window).
 	// Column not found in ListView.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentListView)
 		return;
 	// Caller has ensured that there is at least one incoming parameter:
@@ -16872,9 +16870,9 @@ void BIF_TV_AddModifyDelete(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 	// Control doesn't exist (i.e. no TreeView in window).
 	// And others as shown below.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentTreeView)
 		return;
 	GuiControlType &control = *gui.mCurrentTreeView;
@@ -17166,9 +17164,9 @@ void BIF_TV_GetRelatedItem(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	// Control doesn't exist (i.e. no TreeView in window).
 	// Item not found in TreeView.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentTreeView)
 		return;
 	HWND control_hwnd = gui.mCurrentTreeView->hwnd;
@@ -17274,9 +17272,9 @@ void BIF_TV_Get(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	// Item not found in TreeView.
 	// And others.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentTreeView)
 		return;
 	HWND control_hwnd = gui.mCurrentTreeView->hwnd;
@@ -17349,9 +17347,9 @@ void BIF_TV_SetImageList(ExprTokenType &aResultToken, ExprTokenType *aParam[], i
 	// Window doesn't exist.
 	// Control doesn't exist (i.e. no TreeView in window).
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentTreeView)
 		return;
 	// Caller has ensured that there is at least one incoming parameter:
