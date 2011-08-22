@@ -3855,7 +3855,7 @@ LPTSTR VKtoKeyName(vk_type aVK, LPTSTR aBuf, int aBufSize, bool aUseFallback)
 	// a character or use the default format for an unknown key code:
 	if (*aBuf = (TCHAR)MapVirtualKey(aVK, MAPVK_VK_TO_CHAR))
 		aBuf[1] = '\0';
-	else if (aUseFallback)
+	else if (aUseFallback && aVK)
 		sntprintf(aBuf, aBufSize, _T("vk%02X"), aVK);
 	else
 		*aBuf = '\0';
