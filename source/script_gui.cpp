@@ -3891,18 +3891,29 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 		*option_end = '\0';
 
 		// Attributes and option words:
-		if (!_tcsnicmp(next_option, _T("Owner"), 5))
+
+		bool set_owner;
+		if ((set_owner = !_tcsnicmp(next_option, _T("Owner"), 5))
+			  || !_tcsnicmp(next_option, _T("Parent"), 6))
 		{
-			if (!mHwnd)
+			if (!mHwnd || !set_owner)
 			{
 				if (!adding)
+				{
 					mOwner = NULL;
+					if (!set_owner) // -Parent.
+					{
+						mStyle = mStyle & ~WS_CHILD | WS_POPUP;
+						if (mHwnd)
+							SetParent(mHwnd, NULL);
+					}
+				}
 				else
 				{
-					if (option_end - next_option > 5) // Length is greater than 5, so it has a name or number (e.g. Owned1).
+					LPTSTR name = next_option + 5 + !set_owner; // 6 for "Parent"
+					if (*name || !set_owner) // i.e. "+Parent" on its own is invalid (and should not default to g_hWnd).
 					{
 						HWND new_owner = NULL;
-						LPTSTR name = next_option + 5;
 						if (IsPureNumeric(name, TRUE, FALSE) == PURE_INTEGER) // Allow negatives, for flexibility.
 						{
 							__int64 gui_num = ATOI64(name);
@@ -3922,7 +3933,13 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 						if (new_owner && new_owner != mHwnd) // Window can't own itself!
 							mOwner = new_owner;
 						else
-							return g_script.ScriptError(_T("Invalid or nonexistent owner window.") ERR_ABORT, next_option);
+							return g_script.ScriptError(_T("Invalid or nonexistent owner or parent window.") ERR_ABORT, next_option);
+						if (!set_owner) // +Parent
+						{
+							mStyle = mStyle & ~WS_POPUP | WS_CHILD;
+							if (mHwnd)
+								SetParent(mHwnd, mOwner);
+						}
 					}
 					else
 						mOwner = g_hWnd; // Make a window owned (by script's main window) omits its taskbar button.
@@ -3955,8 +3972,7 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 			if (adding) mStyle |= WS_BORDER; else mStyle &= ~WS_BORDER;
 
 		else if (!_tcsicmp(next_option, _T("Caption")))
-			// To remove title bar successfully, the WS_POPUP style must also be applied:
-			if (adding) mStyle |= WS_CAPTION; else mStyle = mStyle & ~WS_CAPTION | WS_POPUP;
+			if (adding) mStyle |= WS_CAPTION; else mStyle = mStyle & ~WS_CAPTION;
 
 		else if (!_tcsnicmp(next_option, _T("Delimiter"), 9))
 		{
