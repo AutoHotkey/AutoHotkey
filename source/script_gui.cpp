@@ -1744,8 +1744,6 @@ ResultType GuiType::Create()
 	// The above is done prior to creating the window so that mLabelForDropFiles can determine
 	// whether to add the WS_EX_ACCEPTFILES style.
 
-	// WS_EX_APPWINDOW: "Forces a top-level window onto the taskbar when the window is minimized."
-	// But it doesn't since the window is currently always unowned, there is not yet any need to use it.
 	if (   !(mHwnd = CreateWindowEx(mExStyle, WINDOW_CLASS_GUI, g_script.mFileName, mStyle, 0, 0, 0, 0
 		, mOwner, NULL, g_hInstance, NULL))   )
 		return FAIL;
@@ -2076,8 +2074,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// its own even though it doesn't even give itself the SBARS_SIZEGRIP style.
 		if (mStyle & WS_SIZEBOX) // Parent window is resizable.
 			opt.style_add |= SBARS_SIZEGRIP; // Provide a grip by default.
-		// Below: Seems best to provide SBARS_TOOLTIPS by default, since we're not bound by backward compatbility
-		// like the OS is.  In tneory, tips should be displayed only when the script has actually set some tip text
+		// Below: Seems best to provide SBARS_TOOLTIPS by default, since we're not bound by backward compatibility
+		// like the OS is.  In theory, tips should be displayed only when the script has actually set some tip text
 		// (e.g. via SendMessage).  In practice, tips are never displayed, even under the precise conditions
 		// described at MSDN's SB_SETTIPTEXT, perhaps under certain OS versions and themes.  See bottom of
 		// BIF_StatusBar() for more comments.
