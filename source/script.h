@@ -2325,6 +2325,7 @@ public:
 	#define PROGRESS_DEFAULT_THICKNESS (2 * sFont[mCurrentFontIndex].point_size)
 	LPTSTR mName;
 	HWND mHwnd, mStatusBarHwnd;
+	HWND mOwner;  // The window that owns this one, if any.  Note that Windows provides no way to change owners after window creation.
 	// Control IDs are higher than their index in the array by the below amount.  This offset is
 	// necessary because windows that behave like dialogs automatically return IDOK and IDCANCEL in
 	// response to certain types of standard actions:
@@ -2339,24 +2340,23 @@ public:
 	DWORD mStyle, mExStyle; // Style of window.
 	bool mInRadioGroup; // Whether the control currently being created is inside a prior radio-group.
 	bool mUseTheme;  // Whether XP theme and styles should be applied to the parent window and subsequently added controls.
-	HWND mOwner;  // The window that owns this one, if any.  Note that Windows provides no way to change owners after window creation.
 	TCHAR mDelimiter;  // The default field delimiter when adding items to ListBox, DropDownList, ListView, etc.
-	int mCurrentFontIndex;
 	GuiControlType *mCurrentListView, *mCurrentTreeView; // The ListView and TreeView upon which the LV/TV functions operate.
-	TabControlIndexType mTabControlCount;
-	TabControlIndexType mCurrentTabControlIndex; // Which tab control of the window.
-	TabIndexType mCurrentTabIndex;// Which tab of a tab control is currently the default for newly added controls.
+	int mCurrentFontIndex;
 	COLORREF mCurrentColor;       // The default color of text in controls.
 	COLORREF mBackgroundColorWin; // The window's background color itself.
-	HBRUSH mBackgroundBrushWin;   // Brush corresponding to the above.
 	COLORREF mBackgroundColorCtl; // Background color for controls.
-	HBRUSH mBackgroundBrushCtl;   // Brush corresponding to the above.
+	HBRUSH mBackgroundBrushWin;   // Brush corresponding to mBackgroundColorWin.
+	HBRUSH mBackgroundBrushCtl;   // Brush corresponding to mBackgroundColorCtl.
 	HDROP mHdrop;                 // Used for drag and drop operations.
 	HICON mIconEligibleForDestruction; // The window's icon, which can be destroyed when the window is destroyed if nothing else is using it.
 	HICON mIconEligibleForDestructionSmall; // L17: A window may have two icons: ICON_SMALL and ICON_BIG.
 	int mMarginX, mMarginY, mPrevX, mPrevY, mPrevWidth, mPrevHeight, mMaxExtentRight, mMaxExtentDown
 		, mSectionX, mSectionY, mMaxExtentRightSection, mMaxExtentDownSection;
 	LONG mMinWidth, mMinHeight, mMaxWidth, mMaxHeight;
+	TabControlIndexType mTabControlCount;
+	TabControlIndexType mCurrentTabControlIndex; // Which tab control of the window.
+	TabIndexType mCurrentTabIndex;// Which tab of a tab control is currently the default for newly added controls.
 	bool mGuiShowHasNeverBeenDone, mFirstActivation, mShowIsInProgress, mDestroyWindowHasBeenCalled;
 	bool mControlWidthWasSetByContents; // Whether the most recently added control was auto-width'd to fit its contents.
 
