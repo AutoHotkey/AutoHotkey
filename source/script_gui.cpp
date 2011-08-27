@@ -1536,6 +1536,14 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 	case GUICONTROLGET_CMD_HWND: // v1.0.46.16: Although it overlaps with HwndOutputVar, Majkinetor wanted this to help with encapsulation/modularization.
 		result = output_var.AssignHWND(control.hwnd); // See also: CONTROLGET_CMD_HWND
 		goto return_the_result;
+
+	case GUICONTROLGET_CMD_NAME:
+	{
+		TCHAR control_name[MAX_VAR_NAME_LENGTH + 1];
+		GuiType::ControlGetName(&gui, control_index, control_name);
+		result = output_var.Assign(control_name);
+		goto return_the_result;
+	}
 	} // switch()
 
 	result = FAIL;  // Should never be reached, but avoids compiler warning and improves bug detection.
