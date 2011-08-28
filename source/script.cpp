@@ -9800,7 +9800,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 //		, 82, 82         // RESERVED FOR SYM_POST_INCREMENT, SYM_POST_DECREMENT (which are listed higher above for the performance of YIELDS_AN_OPERAND().
 		, 86             // SYM_FUNC -- Has special handling which ensures it stays tightly bound with its parameters as though it's a single operand for use by other operators; the actual value here is irrelevant.
 		, 86             // SYM_NEW -- should be popped off the stack immediately after the pseudo function-call which follows it.
-		, 30             // SYM_REGEXMATCH
+		, 36             // SYM_REGEXMATCH
 	};
 	// Most programming languages give exponentiation a higher precedence than unary minus and logical-not.
 	// For example, -2**2 is evaluated as -(2**2), not (-2)**2 (the latter is unsupported by qmathPow anyway).
