@@ -2899,7 +2899,6 @@ void BIF_ObjHasKey(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 void BIF_ObjClone(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 
-#ifdef CONFIG_EXPERIMENTAL
 // Advanced file IO interfaces
 void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
@@ -2911,7 +2910,6 @@ void BIF_ComObjTypeOrValue(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 void BIF_ComObjFlags(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ComObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ComObjQuery(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-#endif
 
 
 BOOL LegacyResultToBOOL(LPTSTR aResult);
