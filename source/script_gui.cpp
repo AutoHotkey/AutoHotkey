@@ -934,6 +934,10 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			else
 				SendMessage(control.hwnd, PBM_SETPOS, ATOI(aParam3), 0);
 			goto return_the_result; // Don't break since don't the other actions below to be taken.
+			
+		case GUI_CONTROL_ACTIVEX:
+			// Don't do anything.
+			goto return_the_result;
 
 		case GUI_CONTROL_STATUSBAR:
 			SetWindowText(control.hwnd, aParam3);
@@ -2083,6 +2087,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		opt.use_theme = false;
 		opt.style_add |= WS_TABSTOP|TCS_MULTILINE;
 		break;
+	case GUI_CONTROL_ACTIVEX:
+		opt.style_add |= WS_CLIPSIBLINGS;
+		break;
 	case GUI_CONTROL_STATUSBAR:
 		// Although the following appears unnecessary, at least on XP, there's a good chance it's required
 		// on older OSes such as Win 95/NT.  On newer OSes, apparently the control shows a grip on
@@ -2248,6 +2255,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	//case GUI_CONTROL_UPDOWN:
 	//case GUI_CONTROL_SLIDER:
 	//case GUI_CONTROL_PROGRESS:
+	//case GUI_CONTROL_ACTIVEX:
 	//case GUI_CONTROL_STATUSBAR:
 	}
 
@@ -2428,6 +2436,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		//case GUI_CONTROL_CHECKBOX:  Same
 		//case GUI_CONTROL_RADIO:     Same
 		//case GUI_CONTROL_MONTHCAL:  Leave row-count unspecified so that an explicit r1 can be distinguished from "unspecified".
+		//case GUI_CONTROL_ACTIVEX:   N/A
 		//case GUI_CONTROL_STATUSBAR: For now, row-count is ignored/unused.
 		}
 	}
@@ -2522,6 +2531,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			//case GUI_CONTROL_SLIDER:   Same.
 			//case GUI_CONTROL_PROGRESS: Same.
 			//case GUI_CONTROL_MONTHCAL: Not included at all in this section because it treats "rows" differently.
+			//case GUI_CONTROL_ACTIVEX:  N/A
 			//case GUI_CONTROL_STATUSBAR: N/A
 			} // switch
 		}
@@ -2659,6 +2669,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		//case GUI_CONTROL_LISTVIEW:      Has custom handling later below.
 		//case GUI_CONTROL_TREEVIEW:      Same.
 		//case GUI_CONTROL_MONTHCAL:      Same.
+		//case GUI_CONTROL_ACTIVEX:       N/A?
 		//case GUI_CONTROL_STATUSBAR:     Ignores width/height, so no need to handle here.
 
 		//case GUI_CONTROL_DROPDOWNLIST:  These last ones are given (later below) a standard width based on font size.
@@ -2724,6 +2735,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		//case GUI_CONTROL_CHECKBOX:  Same.
 		//case GUI_CONTROL_RADIO:     Same.
 		//case GUI_CONTROL_MONTHCAL:  Exact width will be calculated after the control is created (size to fit month).
+		//case GUI_CONTROL_ACTIVEX:   Defaults to zero width/height, which could be useful in some cases.
 		//case GUI_CONTROL_STATUSBAR: Ignores width, so no need to handle here.
 		}
 	}
@@ -3646,6 +3658,41 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			//#include <uxtheme.h> // For EnableThemeDialogTexture()'s constants.
 		}
 		break;
+		
+	case GUI_CONTROL_ACTIVEX:
+	{
+		static bool sAtlAxInitialized = false;
+		if (!sAtlAxInitialized)
+		{
+			typedef BOOL (WINAPI *MyAtlAxWinInit)();
+			if (HMODULE hmodAtl = LoadLibrary(_T("atl")))
+			{
+				if (MyAtlAxWinInit fnAtlAxWinInit = (MyAtlAxWinInit)GetProcAddress(hmodAtl, "AtlAxWinInit"))
+					sAtlAxInitialized = fnAtlAxWinInit();
+				if (!sAtlAxInitialized)
+					FreeLibrary(hmodAtl);
+				// Otherwise, init was successful so don't unload it.
+			}
+			// If any of the above calls failed, attempt to create the window anyway:
+		}
+		if (control.hwnd = CreateWindowEx(exstyle, _T("AtlAxWin"), aText, style
+			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
+		{
+			IObject *activex_obj;
+			// This is done even if no output_var, to ensure the control was successfully created:
+			if (  !(activex_obj = ControlGetActiveX(control.hwnd))  )
+			{
+				DestroyWindow(control.hwnd);
+				control.hwnd = NULL;
+				break;
+			}
+			if (control.output_var)
+				control.output_var->AssignSkipAddRef(activex_obj); // Let the var take ownership.
+			else
+				activex_obj->Release(); // The script can retrieve it later via GuiControlGet.
+		}
+		break;
+	}
 
 	case GUI_CONTROL_STATUSBAR:
 		if (control.hwnd = CreateStatusWindow(style, aText, mHwnd, (UINT)(size_t)control_id))
@@ -6962,6 +7009,16 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 				return aOutputVar.Assign(tci.pszText);
 			return aOutputVar.Assign();
 
+		case GUI_CONTROL_ACTIVEX:
+			if (!submit_mode)
+			{
+				// Below returns a new ComObject wrapper, not the one originally stored in aControl.output_var:
+				if (IObject *activex_obj = ControlGetActiveX(aControl.hwnd))
+					return aOutputVar.AssignSkipAddRef(activex_obj);
+				return aOutputVar.Assign();
+			}
+			// Otherwise: Don't overwrite the var with a new wrapper object, since that would waste
+			// resources and cause any connected (ComObjConnect) event sinks to be disconnected.
 		case GUI_CONTROL_TEXT:
 		case GUI_CONTROL_PIC:
 		case GUI_CONTROL_GROUPBOX:
@@ -6969,6 +7026,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 		case GUI_CONTROL_PROGRESS:
 		case GUI_CONTROL_LISTVIEW: // LV and TV do not obey Submit. Instead, more flexible methods are available to the script.
 		case GUI_CONTROL_TREEVIEW: //
+		//GUI_CONTROL_ACTIVEX: // May have fallen through from above.
 			if (submit_mode) // In submit mode, do not waste memory & cpu time to save the above.
 				// There doesn't seem to be a strong/net advantage to setting the vars to be blank
 				// because even if that were done, it seems it would not do much to reserve flexibility

@@ -1310,3 +1310,34 @@ int ComArrayEnum::Next(Var *aOutput, Var *aOutputType)
 	return false;
 }
 
+
+IObject *GuiType::ControlGetActiveX(HWND aWnd)
+{
+	typedef HRESULT (WINAPI *MyAtlAxGetControl)(HWND h, IUnknown **p);
+	static MyAtlAxGetControl fnAtlAxGetControl = NULL;
+	if (!fnAtlAxGetControl)
+		if (HMODULE hmodAtl = GetModuleHandle(_T("atl"))) // GuiType::AddControl should have already permanently loaded it.
+			fnAtlAxGetControl = (MyAtlAxGetControl)GetProcAddress(hmodAtl, "AtlAxGetControl");
+	if (fnAtlAxGetControl) // Should always be non-NULL if aControl is actually an ActiveX control.
+	{
+		IUnknown *punk;
+		if (SUCCEEDED(fnAtlAxGetControl(aWnd, &punk)))
+		{
+			IObject *pobj;
+			IDispatch *pdisp;
+			if (SUCCEEDED(punk->QueryInterface(IID_IDispatch, (void **)&pdisp)))
+			{
+				punk->Release();
+				if (  !(pobj = new ComObject(pdisp))  )
+					pdisp->Release();
+			}
+			else
+			{
+				if (  !(pobj = new ComObject((__int64)punk, VT_UNKNOWN))  )
+					punk->Release();
+			}
+			return pobj;
+		}
+	}
+	return NULL;
+}
