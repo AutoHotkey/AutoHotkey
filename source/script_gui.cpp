@@ -1550,9 +1550,12 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 
 	case GUICONTROLGET_CMD_NAME:
 	{
-		TCHAR control_name[MAX_VAR_NAME_LENGTH + 1];
-		GuiType::ControlGetName(&gui, control_index, control_name);
-		result = output_var.Assign(control_name);
+		// Assign only a variable name rather than falling back to the control's text like ControlGetName,
+		// otherwise the script mightn't be able to distinguish between a control with associated variable
+		// and one which merely contains text similar to a variable name:
+		if (control.output_var)
+			result = output_var.Assign(control.output_var->mName);
+		// Otherwise: leave ErrorLevel 0 and output_var blank, indicating this control exists but has no var.
 		goto return_the_result;
 	}
 	} // switch()
