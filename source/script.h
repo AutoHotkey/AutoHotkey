@@ -165,10 +165,12 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_MISSING_OUTPUT_VAR _T("Requires at least one of its output variables.")
 #define ERR_MISSING_OPEN_PAREN _T("Missing \"(\"")
 #define ERR_MISSING_OPEN_BRACE _T("Missing \"{\"")
-#define ERR_MISSING_OPEN_BRACKET _T("Missing \"[\"") // L31
 #define ERR_MISSING_CLOSE_PAREN _T("Missing \")\"")
 #define ERR_MISSING_CLOSE_BRACE _T("Missing \"}\"")
 #define ERR_MISSING_CLOSE_BRACKET _T("Missing \"]\"") // L31
+#define ERR_UNEXPECTED_CLOSE_PAREN _T("Unexpected \")\"")
+#define ERR_UNEXPECTED_CLOSE_BRACKET _T("Unexpected \"]\"")
+#define ERR_UNEXPECTED_CLOSE_BRACE _T("Unexpected \"}\"")
 #define ERR_MISMATCHED_BRACKET_PAREN _T("Mismatched [] or ()") // L31
 #define ERR_MISSING_CLOSE_QUOTE _T("Missing close-quote") // No period after short phrases.
 #define ERR_MISSING_COMMA _T("Missing comma")             //

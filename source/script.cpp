@@ -10712,9 +10712,9 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				if (stack_symbol == SYM_BEGIN // This can happen with bad expressions like "Var := 1 ? (:) :" even though theoretically it should mean that paren is closed without having been opened (currently impossible due to load-time balancing).
 					|| IS_OPAREN_LIKE(stack_symbol)) // Mismatched parens/brackets/braces.
 				{
-					return LineError( (infix_symbol == SYM_CPAREN) ? ERR_MISSING_OPEN_PAREN
-									: (infix_symbol == SYM_CBRACKET) ? ERR_MISSING_OPEN_BRACKET
-									: ERR_MISSING_OPEN_BRACE );
+					return LineError( (infix_symbol == SYM_CPAREN) ? ERR_UNEXPECTED_CLOSE_PAREN
+									: (infix_symbol == SYM_CBRACKET) ? ERR_UNEXPECTED_CLOSE_BRACKET
+									: ERR_UNEXPECTED_CLOSE_BRACE );
 				}
 				else // This stack item is an operator.
 				{
