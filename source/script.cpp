@@ -12610,6 +12610,15 @@ ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoo
 }
 
 
+#define LOG_THIS_LINE \
+	{\
+		sLog[sLogNext] = this;\
+		sLogTick[sLogNext++] = GetTickCount();\
+		if (sLogNext >= LINE_LOG_SIZE)\
+			sLogNext = 0;\
+	}
+	// The lines above are the similar to those used in ExecUntil(), so the two should be
+	// maintained together.
 
 // Lexikos: ACT_WHILE
 ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine)
@@ -12620,6 +12629,8 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 
 	for (;; ++g.mLoopIteration)
 	{
+		if (g.ListLinesIsEnabled)
+			LOG_THIS_LINE
 #ifdef CONFIG_DEBUGGER
 		// L31: Let the debugger break at the 'While' line each iteration. Before this change,
 		// a While loop with empty body such as While FuncWithSideEffect() {} would be "hit"
@@ -12663,8 +12674,10 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 
 
 
-inline bool Line::EvaluateLoopUntil(ResultType &aResult)
+bool Line::EvaluateLoopUntil(ResultType &aResult)
 {
+	if (g->ListLinesIsEnabled)
+		LOG_THIS_LINE
 #ifdef CONFIG_DEBUGGER
 	// Let the debugger break at or step onto UNTIL.
 	if (g_Debugger.IsConnected())
