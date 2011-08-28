@@ -81,7 +81,7 @@ ResultType SetGlobalHotTitleText(LPTSTR aWinTitle, LPTSTR aWinText)
 
 	// Storing combinations of WinTitle+WinText doesn't have as good a best-case memory savings as
 	// have a separate linked list for Title vs. Text.  But it does save code size, and in the vast
-	// majority of scripts, the memory savings would be insignficant.
+	// majority of scripts, the memory savings would be insignificant.
 	HotkeyCriterion *cp;
 	for (cp = g_FirstHotCriterion; cp; cp = cp->mNextCriterion)
 		if (!_tcscmp(cp->mHotWinTitle, aWinTitle) && !_tcscmp(cp->mHotWinText, aWinText)) // Case insensitive.
@@ -143,7 +143,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// v1.0.37.05: A prefix key such as "a" in "a & b" should cause any use of "a" as a suffix
 	// (such as ^!a) also to be a hook hotkey.  Otherwise, the ^!a hotkey won't fire because the
 	// hook prevents the OS's hotkey monitor from seeing that the hotkey was pressed.  NOTE:
-	// This is done only for vitual keys because prefix keys that are done by scan code (mModifierSC)
+	// This is done only for virtual keys because prefix keys that are done by scan code (mModifierSC)
 	// should already be hook hotkeys when used as suffix keys (there may be a few unusual exceptions,
 	// but they seem too rare to justify the extra code size).
 	// Update for v1.0.40: This first pass through the hotkeys now also checks things for hotkeys
@@ -241,7 +241,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 		}
 
 		// v1.0.42: The following is now not done for Win9x because it seems inappropriate for
-		// a wilcard hotkey (which will be attempt-registered due to Win9x's lack of hook) to also
+		// a wildcard hotkey (which will be attempt-registered due to Win9x's lack of hook) to also
 		// disable hotkeys that share the same suffix as the wildcard.
 		// v1.0.40: If this is a wildcard hotkey, any hotkeys it eclipses (i.e. includes as subsets)
 		// should be made into hook hotkeys also, because otherwise they would be overridden by hook.
@@ -312,7 +312,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 				// v1.0.42: Since the above has ascertained that the OS isn't Win9x, any #IfWin
 				// keyboard hotkey must use the hook if it lacks an enabled, non-suspended, global variant.
 				// Under those conditions, the hotkey is either:
-				// 1) Single-variant hotkey that has critiera (non-global).
+				// 1) Single-variant hotkey that has criteria (non-global).
 				// 2) Multi-variant hotkey but all variants have criteria (non-global).
 				// 3) A hotkey with a non-suppressed (~) variant (always, for code simplicity): already handled by AddVariant().
 				// In both cases above, the hook must handle the hotkey because there can be
@@ -425,7 +425,7 @@ void Hotkey::AllDestructAndExit(int aExitCode)
 {
 	// PostQuitMessage() might be needed to prevent hang-on-exit.  Once this is done, no message boxes or
 	// other dialogs can be displayed.  MSDN: "The exit value returned to the system must be the wParam
-	// parameterof the WM_QUIT message."  In our case, PostQuitMessage() should announce the same exit code
+	// parameter of the WM_QUIT message."  In our case, PostQuitMessage() should announce the same exit code
 	// that we will eventually call exit() with:
 	PostQuitMessage(aExitCode);
 
@@ -529,7 +529,7 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC)
 				&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
 				&& (!vp->mHotCriterion || HotCriterionAllowsFiring(vp->mHotCriterion
 					// L4: Added vp->mHotExprIndex for #if (expression).
-					, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex, hk.mName))   ) // ... and its critieria allow it to fire.
+					, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex, hk.mName))   ) // ... and its criteria allow it to fire.
 				return false; // At least one of this prefix's suffixes is eligible for firing.
 	}
 	// Since above didn't return, no hotkeys were found for this prefix that are capable of firing.
@@ -573,13 +573,13 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
 			&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
 			&& (!vp->mHotCriterion || (found_hwnd = HotCriterionAllowsFiring(vp->mHotCriterion
 				// L4: Added vp->mHotExprIndex for #if (expression).
-				, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex, mName)))   ) // ... and its critieria allow it to fire.
+				, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex, mName)))   ) // ... and its criteria allow it to fire.
 		{
 			if (vp->mHotCriterion) // Since this is the first criteria hotkey, it takes precedence.
 				return vp;
-			//else since this is variant has no critieria, let the first criteria variant in the list
+			//else since this is variant has no criteria, let the first criteria variant in the list
 			// take precedence over it (if there is one).  If none is found, the vp_to_fire will stay
-			// set as the non-critierion variant.
+			// set as the non-criterion variant.
 			vp_to_fire = vp;
 		}
 	}
@@ -693,7 +693,7 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags
 	if (!aFireWithNoSuppress) // Caller hasn't yet determined its value with certainty.
 		aFireWithNoSuppress = true; // Fix for v1.0.47.04: Added this line and the one above to fix the fact that a context-sensitive hotkey like "a UP::" would block the down-event of that key even when the right window/criteria aren't met.
 	// If this is a key-down hotkey:
-	// Leave aHotkeyToFireUponRelease set to whatever it was so that the critieria are
+	// Leave aHotkeyToFireUponRelease set to whatever it was so that the criteria are
 	// evaluated later, at the time of release.  It seems more correct that way, though the actual
 	// change (hopefully improvement) in usability is unknown.
 	// Since the down-event of this key won't be suppressed, it seems best never to suppress the
@@ -746,7 +746,7 @@ void Hotkey::TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown)
 
 
 void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
-// Caller is reponsible for having called PerformIsAllowed() before calling us.
+// Caller is responsible for having called PerformIsAllowed() before calling us.
 // Caller must have already created a new thread for us, and must close the thread when we return.
 {
 	static bool sDialogIsDisplayed = false;  // Prevents double-display caused by key buffering.
@@ -784,7 +784,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 			_T("Do you want to continue?\n(see #MaxHotkeysPerInterval in the help file)")  // In case its stuck in a loop.
 			, throttled_key_count, time_until_now);
 
-		// Turn off any RunAgain flags that may be on, which in essense is the same as de-buffering
+		// Turn off any RunAgain flags that may be on, which in essence is the same as de-buffering
 		// any pending hotkey keystrokes that haven't yet been fired:
 		ResetRunAgainAfterFinished();
 
@@ -1042,7 +1042,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 						// keystroke+modifiers (e.g. ^!c).
 					}
 				}
-				else // No existing variant matching current #IfWin critieria, so create a new variant.
+				else // No existing variant matching current #IfWin criteria, so create a new variant.
 				{
 					if (   !(variant = hk->AddVariant(aJumpToLabel, suffix_has_tilde))   ) // Out of memory.
 						RETURN_HOTKEY_ERROR(HOTKEY_EL_MEM, ERR_OUTOFMEM, aHotkeyName);
@@ -1237,7 +1237,7 @@ Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction
 		// Remove any modifiers that are obviously redundant from keys (even NORMAL/registered ones
 		// due to cases where RegisterHotkey() fails and the key is then auto-enabled via the hook).
 		// No attempt is currently made to correct a silly hotkey such as "lwin & lwin".  In addition,
-		// weird hotkeyssuch as <^Control and ^LControl are not currently validated and might yield
+		// weird hotkeys such as <^Control and ^LControl are not currently validated and might yield
 		// unpredictable results.
 		bool is_neutral;
 		modLR_type modifiers_lr;
@@ -1806,7 +1806,7 @@ break_loop:
 		}
 		else // A normal (non-composite) hotkey, so suffix_has_tilde was already set properly (higher above).
 			tcslcpy(aProperties->suffix_text, omit_leading_whitespace(marker), _countof(aProperties->suffix_text)); // Protect against overflow case script ultra-long (and thus invalid) key name.
-		if (temp = tcscasestr(aProperties->suffix_text, _T(" Up"))) // Should be reliable detection method because leading spaces have been omitted and it's unlikely a legitmate key name will ever contain a space followed by "Up".
+		if (temp = tcscasestr(aProperties->suffix_text, _T(" Up"))) // Should be reliable detection method because leading spaces have been omitted and it's unlikely a legitimate key name will ever contain a space followed by "Up".
 		{
 			omit_trailing_whitespace(aProperties->suffix_text, temp)[1] = '\0'; // Omit " Up" from suffix_text since caller wants that.
 			aProperties->is_key_up = true; // Override the default set earlier.
@@ -1912,7 +1912,7 @@ ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier,
 					g_script.ScriptError(error_text);
 				}
 				//else do not show an error in this case because the loader will attempt to interpret
-				// this line as a commmand.  If that too fails, it will show an "unrecognized action"
+				// this line as a command.  If that too fails, it will show an "unrecognized action"
 				// dialog.
 				return FAIL;
 			}
@@ -2001,7 +2001,7 @@ ResultType Hotkey::Register()
 	// done in case this hotkey will now be handled by the hook, which doesn't want any
 	// extra modifiers that were added above.
 	// UPDATE: In v1.0.42, the mModifiers value is never changed here because a hotkey that
-	// gets registered here one time might fail to be registered someother time (perhaps due
+	// gets registered here one time might fail to be registered some other time (perhaps due
 	// to Suspend, followed by some other app taking ownership that hotkey, followed by
 	// de-suspend, which would then have a hotkey with the wrong modifiers in it for the hook.
 

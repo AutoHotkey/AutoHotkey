@@ -1469,7 +1469,7 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 			// No usable target object for the next iteration, therefore the property mustn't exist.
 			return DEBUGGER_E_UNKNOWN_PROPERTY;
 
-	} // infite loop.
+	} // infinite loop.
 }
 
 

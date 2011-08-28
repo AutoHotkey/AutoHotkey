@@ -139,7 +139,7 @@ public:
 
 	WindowSearch() // Constructor.
 		// For performance and code size, only the most essential members are initialized.
-		// The others do not require it or are intialized by SetCriteria() or SetCandidate().
+		// The others do not require it or are initialized by SetCriteria() or SetCandidate().
 		: mCriteria(0), mCriterionExcludeTitle(_T("")) // ExcludeTitle is referenced often, so should be initialized.
 		, mFoundCount(0), mFoundParent(NULL) // Must be initialized here since none of the member functions is allowed to do it.
 		, mFoundChild(NULL) // ControlExist() relies upon this.
@@ -293,7 +293,7 @@ void SetForegroundLockTimeout();
 // dismisses the dialog, the thread becomes critical again.
 // 
 // Update for v1.0.38.04: Rather than setting AllowInterruption unconditionally to
-// true, make it reflect the state of g->ThreadIsCritical.  This increases flexbility by allowing
+// true, make it reflect the state of g->ThreadIsCritical.  This increases flexibility by allowing
 // threads to stay interrruptible even when they're displaying a dialog.  In such cases, an
 // incoming thread-event such as a hotkey will get routed to our MainWindowProc by the dialog's
 // message pump; and from there it will get reposted to our queue, and then get pumped again.

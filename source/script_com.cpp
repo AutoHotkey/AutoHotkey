@@ -830,7 +830,15 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	param[cArgs + 1] = &param_token[cArgs + 1];
 
 	ExprTokenType result_token;
+	TCHAR result_token_buf[MAX_NUMBER_SIZE];
+	result_token.buf = result_token_buf; // May be used below for short return values and misc purposes.
+	result_token.marker = _T("");
+	result_token.symbol = SYM_STRING;	// These must be initialized for the cleanup code below.
+	result_token.mem_to_free = NULL;	//
+
 	HRESULT result_to_return;
+
+	FuncCallData func_call; // For UDFs: must remain in scope until the result has been copied into pVarResult.
 
 	if (mAhkObject)
 	{
@@ -853,7 +861,6 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 		// Call function by name (= prefix . method_name).
 		Func *func = g_script.FindFunc(funcName);
 
-		FuncCallData func_call;
 		ResultType result;
 
 		// Call the function.
@@ -867,6 +874,8 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 		TokenToVariant(result_token, *pVarResult);
 	if (result_token.symbol == SYM_OBJECT)
 		result_token.object->Release();
+	if (result_token.mem_to_free)
+		free(result_token.mem_to_free);
 
 	// Clean up:
 	for (UINT i = 1; i <= cArgs; ++i)
@@ -1277,3 +1286,34 @@ int ComArrayEnum::Next(Var *aOutput, Var *aOutputType)
 	return false;
 }
 
+
+IObject *GuiType::ControlGetActiveX(HWND aWnd)
+{
+	typedef HRESULT (WINAPI *MyAtlAxGetControl)(HWND h, IUnknown **p);
+	static MyAtlAxGetControl fnAtlAxGetControl = NULL;
+	if (!fnAtlAxGetControl)
+		if (HMODULE hmodAtl = GetModuleHandle(_T("atl"))) // GuiType::AddControl should have already permanently loaded it.
+			fnAtlAxGetControl = (MyAtlAxGetControl)GetProcAddress(hmodAtl, "AtlAxGetControl");
+	if (fnAtlAxGetControl) // Should always be non-NULL if aControl is actually an ActiveX control.
+	{
+		IUnknown *punk;
+		if (SUCCEEDED(fnAtlAxGetControl(aWnd, &punk)))
+		{
+			IObject *pobj;
+			IDispatch *pdisp;
+			if (SUCCEEDED(punk->QueryInterface(IID_IDispatch, (void **)&pdisp)))
+			{
+				punk->Release();
+				if (  !(pobj = new ComObject(pdisp))  )
+					pdisp->Release();
+			}
+			else
+			{
+				if (  !(pobj = new ComObject((__int64)punk, VT_UNKNOWN))  )
+					punk->Release();
+			}
+			return pobj;
+		}
+	}
+	return NULL;
+}

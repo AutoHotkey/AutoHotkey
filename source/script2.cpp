@@ -181,8 +181,8 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 		// Since Tooltip is being shown at the cursor's coordinates, try to ensure that the above
 		// adjustment doesn't result in the cursor being inside the tooltip's window boundaries,
 		// since that tends to cause problems such as blocking the tray area (which can make a
-		// tootip script impossible to terminate).  Normally, that can only happen in this case
-		// (one_or_both_coords_unspecified == true) when the cursor is near the buttom-right
+		// tooltip script impossible to terminate).  Normally, that can only happen in this case
+		// (one_or_both_coords_unspecified == true) when the cursor is near the bottom-right
 		// corner of the screen (unless the mouse is moving more quickly than the script's
 		// ToolTip update-frequency can cope with, but that seems inconsequential since it
 		// will adjust when the cursor slows down):
@@ -239,7 +239,7 @@ ResultType Line::Input()
 // This signals the quasi-threads beneath, when they finally return, that their input
 // was terminated due to a new input that took precedence.
 {
-	if (g_os.IsWin9x()) // v1.0.44.14: For simplicity, do nothing on Win9x rather than try to see if it actually supports the hook (such as if its some kind of emultated/hybrid OS).
+	if (g_os.IsWin9x()) // v1.0.44.14: For simplicity, do nothing on Win9x rather than try to see if it actually supports the hook (such as if its some kind of emulated/hybrid OS).
 		return OK; // Could also set ErrorLevel to "Timeout" and output_var to be blank, but the benefits to backward compatibility seemed too dubious.
 
 	// Since other script threads can interrupt this command while it's running, it's important that
@@ -310,7 +310,7 @@ ResultType Line::Input()
 			*end_pos = '\0';  // temporarily terminate the string here.
 
 			// v1.0.45: Fixed this section to differentiate between } and ] (and also { and [, as well as
-			// anything else enclosed in {} that requirds END_KEY_WITH_SHIFT/END_KEY_WITHOUT_SHIFT consideration.
+			// anything else enclosed in {} that requires END_KEY_WITH_SHIFT/END_KEY_WITHOUT_SHIFT consideration.
 			modifiersLR = 0;  // Init prior to below.
 			if (vk = TextToVK(aEndKeys + 1, &modifiersLR, true))
 			{
@@ -412,7 +412,7 @@ ResultType Line::Input()
 			{
 				++g_input.MatchCount;
 				g_input.match[g_input.MatchCount] = ++dest;
-				*dest = '\0';  // Init to prevent crash on ophaned comma such as "btw,otoh,"
+				*dest = '\0';  // Init to prevent crash on orphaned comma such as "btw,otoh,"
 			}
 			if (*(source + 1)) // There is a next element.
 			{
@@ -666,7 +666,7 @@ ResultType Line::PerformShowWindow(ActionTypeType aActionType, LPTSTR aTitle, LP
 		// it probably does since there's absolutely no mention to the contrary
 		// anywhere on MS's site or on the web.  But clearly, if it does work, it
 		// does so only because Async() doesn't really post the message to the thread's
-		// queue, instead opting for more aggresive measures.  Thus, it seems best
+		// queue, instead opting for more aggressive measures.  Thus, it seems best
 		// to do it this way to have maximum confidence in it:
 		//if (nCmdShow == SW_FORCEMINIMIZE) // Safer not to use ShowWindowAsync() in this case.
 			ShowWindow(target_window, nCmdShow);
@@ -1020,7 +1020,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 		}
 	}
 
-	// It's debatable, but might be best for flexibility (and backward compatbility) to allow target_window to itself
+	// It's debatable, but might be best for flexibility (and backward compatibility) to allow target_window to itself
 	// be a control (at least for the position_mode handler below).  For example, the script may have called SetParent
 	// to make a top-level window the child of some other window, in which case this policy allows it to be seen like
 	// a non-child.
@@ -1154,7 +1154,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 	// control, the target window itself will be sent the event (which might have no effect depending
 	// on the nature of the window)."  In other words, it seems too complicated and rare to add explicit
 	// handling for "ahk_id %ControlHWND%" (though the below rules should work).
-	// The line "ControlClick,, ahk_id %HWND%" can have mulitple meanings depending on the nature of HWND:
+	// The line "ControlClick,, ahk_id %HWND%" can have multiple meanings depending on the nature of HWND:
 	// 1) If HWND is a top-level window, its topmost child will be clicked.
 	// 2) If HWND is a top-level window that has become a child of another window via SetParent: same.
 	// 3) If HWND is a control, its topmost child will be clicked (or itself if it has no children).
@@ -1229,7 +1229,7 @@ ResultType Line::ControlMove(LPTSTR aControl, LPTSTR aX, LPTSTR aY, LPTSTR aWidt
 		// as cases where the script has called SetParent() to make a top-level window the child of some
 		// other window, in which case the target control's immediate parent should be used, not its most
 		// distant ancestor. This might also be desirable for controls that are children of other controls,
-		// such as as Combobox's Edit.
+		// such as Combobox's Edit.
 		if (!GetWindowRect(target_window == control_window ? GetNonChildParent(target_window) : target_window
 			, &rect))
 			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
@@ -1452,7 +1452,7 @@ ResultType Line::ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 	if (output_var.AssignString(NULL, space_needed - 1) != OK)
 		return FAIL;  // It already displayed the error.
 	// Fetch the text directly into the var.  Also set the length explicitly
-	// in case actual size written was off from the esimated size (since
+	// in case actual size written was off from the estimated size (since
 	// GetWindowTextLength() can return more space that will actually be required
 	// in certain circumstances, see MS docs):
 	if (control_window)
@@ -1707,7 +1707,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 
 break_both:
 	if (contents) // Might be NULL if Assign() failed and thus var has zero capacity.
-		*contents = '\0'; // Final termination.  Above has reserved room for for this one byte.
+		*contents = '\0'; // Final termination.  Above has reserved room for this one byte.
 
 	// CLEAN UP
 	FreeInterProcMem(handle, p_remote_lvi);
@@ -2389,7 +2389,7 @@ ResultType WinGetList(Var &aOutputVar, WinGetCmds aCmd, LPTSTR aTitle, LPTSTR aT
 	ws.mArrayStart = (aCmd == WINGET_CMD_LIST) ? &aOutputVar : NULL; // Provide the position in the var list of where the array-element vars will be.
 	// If aTitle is ahk_id nnnn, the Enum() below will be inefficient.  However, ahk_id is almost unheard of
 	// in this context because it makes little sense, so no extra code is added to make that case efficient.
-	if (ws.SetCriteria(*g, aTitle, aText, aExcludeTitle, aExcludeText)) // These criteria allow the possibilty of a match.
+	if (ws.SetCriteria(*g, aTitle, aText, aExcludeTitle, aExcludeText)) // These criteria allow the possibility of a match.
 		EnumWindows(EnumParentFind, (LPARAM)&ws);
 	//else leave ws.mFoundCount set to zero (by the constructor).
 	return aOutputVar.Assign(ws.mFoundCount);
@@ -2487,7 +2487,7 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 		// Testing shows that it's not possible for a minimized window to also be maximized (under
 		// the theory that upon restoration, it *would* be maximized.  This is unfortunate if there
-		// is no other way to determine what the restoration size and maxmized state will be for a
+		// is no other way to determine what the restoration size and maximized state will be for a
 		// minimized window.
 		if (target_window)
 			return output_var.Assign(IsZoomed(target_window) ? 1 : (IsIconic(target_window) ? -1 : 0));
@@ -2573,7 +2573,7 @@ ResultType Line::WinGetControlList(Var &aOutputVar, HWND aTargetWindow, bool aFe
 	if (aOutputVar.AssignString(NULL, (VarSizeType)cl.total_length) != OK)
 		return FAIL;  // It already displayed the error.
 	// Fetch the text directly into the var.  Also set the length explicitly
-	// in case actual size written was off from the esimated size (in case the list of
+	// in case actual size written was off from the estimated size (in case the list of
 	// controls changed in the split second between pass #1 and pass #2):
 	CL_INIT_CONTROL_LIST(cl)
 	cl.target_buf = aOutputVar.Contents();  // Second pass: Write to the buffer.
@@ -2698,7 +2698,7 @@ ResultType Line::WinGetText(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, L
 		return FAIL;  // It already displayed the error.
 
 	// Fetch the text directly into the var.  Also set the length explicitly
-	// in case actual size written was different than the esimated size (since
+	// in case actual size written was different than the estimated size (since
 	// GetWindowTextLength() can return more space that will actually be required
 	// in certain circumstances, see MSDN):
 	sab.buf = output_var.Contents();
@@ -2868,7 +2868,7 @@ ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
 		// MSDN: "GetSystemMetrics(SM_CMONITORS) counts only display monitors. This is different from
 		// EnumDisplayMonitors, which enumerates display monitors and also non-display pseudo-monitors."
 		if (!MyEnumDisplayMonitors) // Since system only supports 1 monitor, the first must be primary.
-			return output_var.Assign(1); // Assign as 1 vs. "1" to use hexidecimal display if that is in effect.
+			return output_var.Assign(1); // Assign as 1 vs. "1" to use hexadecimal display if that is in effect.
 		mip.monitor_number_to_find = COUNT_ALL_MONITORS;
 		MyEnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
 		return output_var.Assign(mip.count); // Will assign zero if the API ever returns a legitimate zero.
@@ -2878,8 +2878,8 @@ ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
 	// policy ever changes:
 	case SYSGET_CMD_MONITORPRIMARY:
 		if (!MyEnumDisplayMonitors) // Since system only supports 1 monitor, the first must be primary.
-			return output_var.Assign(1); // Assign as 1 vs. "1" to use hexidecimal display if that is in effect.
-		// The mip struct's values have already initalized correctly for the below:
+			return output_var.Assign(1); // Assign as 1 vs. "1" to use hexadecimal display if that is in effect.
+		// The mip struct's values have already initialized correctly for the below:
 		MyEnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
 		return output_var.Assign(mip.count); // Will assign zero if the API ever returns a legitimate zero.
 
@@ -2891,7 +2891,7 @@ ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
 		TCHAR var_name[MAX_VAR_NAME_LENGTH + 20];
 		// To help performance (in case the linked list of variables is huge), tell FindOrAddVar where
 		// to start the search.  Use the base array name rather than the preceding element because,
-		// for example, Array19 is alphabetially less than Array2, so we can't rely on the
+		// for example, Array19 is alphabetically less than Array2, so we can't rely on the
 		// numerical ordering:
 		if (   !(output_var_left = g_script.FindOrAddVar(var_name
 			, sntprintf(var_name, _countof(var_name), _T("%sLeft"), output_var.mName)))   )
@@ -3063,14 +3063,14 @@ LPCOLORREF getbits(HBITMAP ahImage, HDC hdc, LONG &aWidth, LONG &aHeight, bool &
 	// Perhaps that is normal.
 	tdc_orig_select = SelectObject(tdc, ahImage); // Returns NULL when we're called the second time?
 
-	// Appparently there is no need to specify DIB_PAL_COLORS below when color depth is 8-bit because
+	// Apparently there is no need to specify DIB_PAL_COLORS below when color depth is 8-bit because
 	// DIB_RGB_COLORS also retrieves the color indices.
 	if (   !(GetDIBits(tdc, ahImage, 0, aHeight, image_pixel, (LPBITMAPINFO)&bmi, DIB_RGB_COLORS))   )
 		goto end;
 
 	if (is_8bit) // This section added in v1.0.40.10.
 	{
-		// Convert the color indicies to RGB colors by going through the array in reverse order.
+		// Convert the color indices to RGB colors by going through the array in reverse order.
 		// Reverse order allows an in-place conversion of each 8-bit color index to its corresponding
 		// 32-bit RGB color.
 		LPDWORD palette = (LPDWORD)_alloca(256 * sizeof(PALETTEENTRY));
@@ -3234,7 +3234,7 @@ ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLOR
 			for (i = 0; i < screen_pixel_count; ++i)
 			{
 				// Note that screen pixels sometimes have a non-zero high-order byte.  That's why
-				// bit-and with 0x00FFFFFF is done.  Otherwise, Redish/orangish colors are not properly
+				// bit-and with 0x00FFFFFF is done.  Otherwise, reddish/orangish colors are not properly
 				// found:
 				if ((screen_pixel[i] & 0x00FFFFFF) == aColorRGB)
 				{
@@ -3321,7 +3321,7 @@ fast_end:
 	// Otherwise (since above didn't return): fast_mode==false
 	// This old/slower method is kept  because fast mode will break older scripts that rely on
 	// which match is found if there is more than one match (since fast mode searches the
-	// pixels in a different order (horizontally rather than verically, I believe).
+	// pixels in a different order (horizontally rather than vertically, I believe).
 	// In addition, there is doubt that the fast mode works in all the screen color depths, games,
 	// and other circumstances that the slow mode is known to work in.
 
@@ -3648,7 +3648,7 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 					{
 						x = 0; // Return to the leftmost column of the image.
 						++y;   // Move one row downward in the image.
-						// Move to the next row within the current-candiate region (not the entire search region).
+						// Move to the next row within the current-candidate region (not the entire search region).
 						// This is done by moving vertically downward from "i" (which is the upper-left pixel of the
 						// current-candidate region) by "y" rows.
 						k = i + y*screen_width; // Verified correct.
@@ -3799,7 +3799,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 	switch (iMsg)
 	{
 	case WM_COMMAND:
-		if (HandleMenuItem(hWnd, LOWORD(wParam), -1)) // It was handled fully. -1 flags it as a non-GUI menu item such as a tray menu or popup menu.
+		if (HandleMenuItem(hWnd, LOWORD(wParam), NULL)) // It was handled fully. NULL flags it as a non-GUI menu item such as a tray menu or popup menu.
 			return 0; // If an application processes this message, it should return zero.
 		break; // Otherwise, let DefWindowProc() try to handle it (this actually seems to happen normally sometimes).
 
@@ -3816,7 +3816,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			//else fall through to the next case.
 		case WM_LBUTTONDBLCLK:
 			if (g_script.mTrayMenu->mDefault)
-				POST_AHK_USER_MENU(hWnd, g_script.mTrayMenu->mDefault->mMenuID, -1) // -1 flags it as a non-GUI menu item.
+				POST_AHK_USER_MENU(hWnd, g_script.mTrayMenu->mDefault->mMenuID, NULL) // NULL flags it as a non-GUI menu item.
 #ifdef AUTOHOTKEYSC
 			else if (g_script.mTrayMenu->mIncludeStandardItems && g_AllowMainWindow)
 				ShowMainWindow();
@@ -4161,7 +4161,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 
 
-bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, WPARAM aGuiIndex)
+bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
 // See if an item was selected from the tray menu or main menu.  Note that it is possible
 // for one of the standard menu items to be triggered from a GUI menu if the menu or one of
 // its submenus was modified with the "menu, MenuName, Standard" command.
@@ -4213,7 +4213,7 @@ bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, WPARAM aGuiIndex)
 			// Even if this is the self-contained version (AUTOHOTKEYSC), attempt to launch anyway in
 			// case the user has put a copy of the help file in the same dir with the compiled script:
 			// Also, for this one I saw it report failure once on Win98SE even though the help file did
-			// wind up getting launched.  Couldn't repeat it.  So in reponse to that try explicit "hh.exe":
+			// wind up getting launched.  Couldn't repeat it.  So in response to that try explicit "hh.exe":
 			sntprintfcat(buf_temp, _countof(buf_temp), _T("%sAutoHotkey.chm\""), g_script.mOurEXEDir);
 		if (!g_script.ActionExec(_T("hh.exe"), buf_temp, NULL, false))
 		{
@@ -4269,7 +4269,7 @@ bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, WPARAM aGuiIndex)
 		// It seems best to treat the selection of a custom menu item in a way similar
 		// to how hotkeys are handled by the hook. See comments near the definition of
 		// POST_AHK_USER_MENU for more details.
-		POST_AHK_USER_MENU(aHwnd, aMenuItemID, aGuiIndex) // Send the menu's cmd ID and the window index (index is safer than pointer, since pointer might get deleted).
+		POST_AHK_USER_MENU(aHwnd, aMenuItemID, (WPARAM)aGuiHwnd) // Send the menu's cmd ID and the window index (index is safer than pointer, since pointer might get deleted).
 		// Try to maintain a list here of all the ways the script can be uninterruptible
 		// at this moment in time, and whether that uninterruptibility should be overridden here:
 		// 1) YES: g_MenuIsVisible is true (which in turn means that the script is marked
@@ -4323,7 +4323,7 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 	// don't allow potentially sensitive info such as script lines and variables to be shown.
 	// This is done so that scripts can be compiled more securely, making it difficult for anyone
 	// to use ListLines to see the author's source code.  Rather than make exceptions for things
-	// like KeyHistory, it seems best to forbit all information reporting except in cases where
+	// like KeyHistory, it seems best to forbid all information reporting except in cases where
 	// existing info in the main window -- which must have gotten their via an allowed command
 	// such as ListLines encountered in the script -- is being refreshed.  This is because in
 	// that case, the script author has given de facto permission for that loophole (and it's
@@ -4394,7 +4394,7 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 	if (!IsWindowVisible(g_hWnd))
 	{
 		ShowWindow(g_hWnd, SW_SHOW);
-		if (IsIconic(g_hWnd)) // This happens whenver the window was last hidden via the minimize button.
+		if (IsIconic(g_hWnd)) // This happens whenever the window was last hidden via the minimize button.
 			ShowWindow(g_hWnd, SW_RESTORE);
 	}
 	if (g_hWnd != GetForegroundWindow())
@@ -5063,7 +5063,7 @@ ResultType Line::FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat)
 			}
 			//else leave options set to NULL to indicate that there are none.
 
-			// Pass "false" for validatation so that times can still be reported even if the year
+			// Pass "false" for validation so that times can still be reported even if the year
 			// is prior to 1601.  If the time and/or date is invalid, GetTimeFormat() and GetDateFormat()
 			// will refuse to produce anything, which is documented behavior:
 			YYYYMMDDToSystemTime(yyyymmdd, st, false);
@@ -5368,7 +5368,7 @@ ResultType Line::StringReplace()
 			if (source != output_var.Contents(FALSE)) // It's compared this way in case ByRef/aliases are involved.  This will detect even them.
 				output_var.Assign(source, (VarSizeType)length); // Callee has set "length" for us.
 			//else the unaltered result and output_var same the same address.  Nothing needs to be done (for
-			// simplicity, not even the binary-clipboard attribute is removed if it happnes to be present).
+			// simplicity, not even the binary-clipboard attribute is removed if it happens to be present).
 		}
 		else // output_var is of type VAR_CLIPBOARD.
 			if (ARGVARRAW2->Type() != VAR_CLIPBOARD) // Arg index #1 (the second arg) is a normal var or some read-only var.
@@ -5635,7 +5635,7 @@ ResultType Line::SplitPath(LPTSTR aFileSpec)
 int SortWithOptions(const void *a1, const void *a2)
 // Decided to just have one sort function since there are so many permutations.  The performance
 // will be a little bit worse, but it seems simpler to implement and maintain.
-// This function's input parameters are pointers to the elements of the array.  Snce those elements
+// This function's input parameters are pointers to the elements of the array.  Since those elements
 // are themselves pointers, the input parameters are therefore pointers to pointers (handles).
 {
 	LPTSTR sort_item1 = *(LPTSTR *)a1;
@@ -5709,7 +5709,7 @@ int SortUDF(const void *a1, const void *a2)
 {
 	// Need to check if backup of function's variables is needed in case:
 	// 1) The UDF is assigned to more than one callback, in which case the UDF could be running more than one
-	//    simultantously.
+	//    simultaneously.
 	// 2) The callback is intended to be reentrant (e.g. a subclass/WindowProc that doesn't Critical).
 	// 3) Script explicitly calls the UDF in addition to using it as a callback.
 	//
@@ -5829,11 +5829,11 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 				|| g_SortFunc->mParamCount > 3  // Reserve 4-or-more parameters for possible future use (to avoid breaking existing scripts if such features are ever added).
 				|| g_SortFunc->mParam[0].is_byref || g_SortFunc->mParam[1].is_byref) // Relies on short-circuit boolean order.
 				goto end; // For simplicity, just abort the sort.
-			// Otherwise, the function meets the minimum contraints (though for simplicity, optional parameters
+			// Otherwise, the function meets the minimum constraints (though for simplicity, optional parameters
 			// (default values), if any, aren't populated).
 			// Fix for v1.0.47.05: The following line now subtracts 1 in case *cp_end=='\0'; otherwise the
 			// loop's ++cp would go beyond the terminator when there are no more options.
-			cp = cp_end - 1; // In the next interation (which also does a ++cp), resume looking for options after the function's name.
+			cp = cp_end - 1; // In the next iteration (which also does a ++cp), resume looking for options after the function's name.
 			break;
 		case 'N':
 			g_SortNumeric = true;
@@ -5899,7 +5899,7 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 		terminate_last_item_with_delimiter = true; // Have a later stage add the delimiter to the end of the sorted list so that the length and format of the sorted list is the same as the unsorted list.
 		--item_count; // Indicate that the blank item at the end of the list isn't being counted as an item.
 	}
-	else // The final character isn't a delimiter or it is but there's a blank item to its right.  Either way, the following is necessary (veriifed correct).
+	else // The final character isn't a delimiter or it is but there's a blank item to its right.  Either way, the following is necessary (verified correct).
 	{
 		if (delimiter == '\n')
 		{
@@ -6297,7 +6297,7 @@ ResultType Line::Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2) // aValue not
 		mciSendString(_T("close cd wait"), NULL, 0, NULL);
 		return g_ErrorLevel->Assign(error ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE); // Indicate success or failure.
 
-	case DRIVE_CMD_LABEL: // Note that is is possible and allowed for the new label to be blank.
+	case DRIVE_CMD_LABEL: // Note that it is possible and allowed for the new label to be blank.
 		DRIVE_SET_PATH
 		SetErrorMode(SEM_FAILCRITICALERRORS);  // So that a floppy drive doesn't prompt for a disk
 		return g_ErrorLevel->Assign(SetVolumeLabel(path, aValue2) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
@@ -6318,7 +6318,7 @@ ResultType Line::DriveLock(TCHAR aDriveLetter, bool aLockIt)
 	if (g_os.IsWin9x())
 	{
 		// blisteringhot@hotmail.com has confirmed that the code below works on Win98 with an IDE CD Drive:
-		// System:  Win98 IDE CdRom (my ejecter is CloseTray)
+		// System:  Win98 IDE CdRom (my ejector is CloseTray)
 		// I get a blue screen when I try to eject after using the test script.
 		// "eject request to drive in use"
 		// It asks me to Ok or Esc, Ok is default.
@@ -6720,7 +6720,7 @@ ResultType Line::SoundSetGet(LPTSTR aSetting, DWORD aComponentType, int aCompone
 		else // For all others, assume the control can have more than just ON/OFF as its allowed states.
 		{
 			// Make this an __int64 vs. DWORD to avoid underflow (so that a setting_percent of -100
-			// is supported whenenver the difference between Min and Max is large, such as MAXDWORD):
+			// is supported whenever the difference between Min and Max is large, such as MAXDWORD):
 			__int64 specified_vol = (__int64)((mc.Bounds.dwMaximum - mc.Bounds.dwMinimum) * (setting_percent / 100.0));
 			if (adjust_current_setting)
 			{
@@ -6852,7 +6852,7 @@ void SetWorkingDir(LPTSTR aNewDir)
 					tcslcpy(actual_working_dir, aNewDir, _countof(buf)); // But still report "no error" (below) because the Set() actually did succeed.
 					// But treat this as a success like the similar one higher above.
 			}
-			//else Set() failed; but since the origial Set() succeeded (and for simplicity) report ErrorLevel "none".
+			//else Set() failed; but since the original Set() succeeded (and for simplicity) report ErrorLevel "none".
 		}
 	}
 
@@ -7445,7 +7445,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 		// That is useful to write Unix style text files whose lines end in solitary linefeeds.
 	}
 
-	// Check if the file needes to be opened.  As of 1.0.25, this is done here rather than
+	// Check if the file needs to be opened.  As of 1.0.25, this is done here rather than
 	// at the time the loop first begins so that:
 	// 1) Binary mode can be auto-detected if the first block of text appended to the file
 	//    contains any \r\n's.
@@ -7787,8 +7787,8 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 
 	HS_EXEArc_Read oRead;
 	// AutoIt3: Open the archive in this compiled exe.
-	// Jon gave me some details about why a password isn't needed: "The code in those libararies will
-	// only allow files to be extracted from the exe is is bound to (i.e the script that it was
+	// Jon gave me some details about why a password isn't needed: "The code in those libraries will
+	// only allow files to be extracted from the exe it is bound to (i.e the script that it was
 	// compiled with).  There are various checks and CRCs to make sure that it can't be used to read
 	// the files from any other exe that is passed."
 	if (oRead.Open(CStringCharFromTCharIfNeeded(g_script.mFileSpec), "") != HS_EXEARC_E_OK)
@@ -8111,7 +8111,7 @@ int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeTyp
 				// If FilePatternOrName doesn't contain a wildcard, the recursion
 				// process will attempt to operate on the originally-specified
 				// single filename or folder name if it occurs anywhere else in the
-				// tree, e.g. recursing C:\Temp\temp.txt would affect all occurences
+				// tree, e.g. recursing C:\Temp\temp.txt would affect all occurrences
 				// of temp.txt both in C:\Temp and any subdirectories it might contain:
 				_stprintf(append_pos, _T("%s\\%s") // Above has ensured this won't overflow.
 					, current_file.cFileName, naked_filename_or_pattern);
@@ -8517,7 +8517,7 @@ bool Line::FileIsFilteredOut(WIN32_FIND_DATA &aCurrentFile, FileLoopModeType aFi
 			// v1.0.45.03: Filter out filenames that would be truncated because it seems undesirable in 99% of
 			// cases to include such "faulty" data in the loop.  Most scripts would want to skip them rather than
 			// seeing the truncated names.  Furthermore, a truncated name might accidentally match the name
-			// of a legitimate non-trucated filename, which could cause such a name to get retrieved twice by
+			// of a legitimate non-truncated filename, which could cause such a name to get retrieved twice by
 			// the loop (or other undesirable side-effects).
 			return true;
 		//else no overflow is possible, so below can move things around inside the buffer without concern.
@@ -9551,12 +9551,12 @@ VarSizeType BIV_LoopFileDir(LPTSTR aBuf, LPTSTR aVarName)
 	if (!aBuf)
 	{
 		if (last_backslash)
-			*last_backslash = '\\';  // Restore the orginal value.
+			*last_backslash = '\\';  // Restore the original value.
 		return length;
 	}
 	_tcscpy(aBuf, file_dir);
 	if (last_backslash)
-		*last_backslash = '\\';  // Restore the orginal value.
+		*last_backslash = '\\';  // Restore the original value.
 	return length;
 }
 
@@ -9575,7 +9575,7 @@ VarSizeType BIV_LoopFileFullPath(LPTSTR aBuf, LPTSTR aVarName)
 	if (g->mLoopFile)
 	{
 		// GetFullPathName() is done in addition to ConvertFilespecToCorrectCase() for the following reasons:
-		// 1) It's currrently the only easy way to get the full path of the directory in which a file resides.
+		// 1) It's currently the only easy way to get the full path of the directory in which a file resides.
 		//    For example, if a script is passed a filename via command line parameter, that file could be
 		//    either an absolute path or a relative path.  If relative, of course it's relative to A_WorkingDir.
 		//    The problem is, the script would have to manually detect this, which would probably take several
@@ -9889,7 +9889,7 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 	TCHAR buf[MAX_INTEGER_SIZE];
 	LPTSTR target_buf = aBuf ? aBuf : buf;
 
-	if (g->GuiWindowIndex >= MAX_GUI_WINDOWS) // The current thread was not launched as a result of GUI action.
+	if (!g->GuiWindow) // The current thread was not launched as a result of GUI action.
 	{
 		*target_buf = '\0';
 		return 0;
@@ -9914,8 +9914,9 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 		_itot(g->GuiPoint.y, target_buf, 10);
 		break;
 	case '\0': // A_Gui
-		_itot(g->GuiWindowIndex + 1, target_buf, 10);  // Always stored as decimal vs. hex, regardless of script settings.
-		break;
+		if (aBuf)
+			_tcscpy(aBuf, g->GuiWindow->mName);
+		return _tcslen(g->GuiWindow->mName);
 	}
 
 	return (VarSizeType)_tcslen(target_buf);
@@ -9925,9 +9926,7 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_GuiControl(LPTSTR aBuf, LPTSTR aVarName)
 {
-	// Other logic ensures that g->GuiControlIndex is out-of-bounds whenever g->GuiWindowIndex is.
-	// That is why g->GuiWindowIndex is not checked to make sure it's less than MAX_GUI_WINDOWS.
-	return GuiType::ControlGetName(g->GuiWindowIndex, g->GuiControlIndex, aBuf);
+	return GuiType::ControlGetName(g->GuiWindow, g->GuiControlIndex, aBuf);
 }
 
 
@@ -9940,10 +9939,10 @@ VarSizeType BIV_GuiEvent(LPTSTR aBuf, LPTSTR aVarName)
 	{
 		GuiType *pgui;
 		UINT u, file_count;
-		// GUI_EVENT_DROPFILES should mean that g.GuiWindowIndex < MAX_GUI_WINDOWS, but the below will double check
-		// that in case g.GuiEvent can ever be set to that value as a result of receiving a bogus message in the queue.
-		if (g.GuiWindowIndex >= MAX_GUI_WINDOWS  // The current thread was not launched as a result of GUI action or this is a bogus msg.
-			|| !(pgui = g_gui[g.GuiWindowIndex]) // Gui window no longer exists.  Relies on short-circuit boolean.
+		// GUI_EVENT_DROPFILES should mean that g.GuiWindow != NULL, but the below will double check that in
+		// case g.GuiEvent can ever be set to that value as a result of receiving a bogus message in the queue.
+		if (!(pgui = g.GuiWindow) // The current thread was not launched as a result of GUI action or this is a bogus msg.
+			|| !pgui->mHwnd // Gui window no longer exists.  Relies on short-circuit boolean.
 			|| !pgui->mHdrop // No HDROP (probably impossible unless g.GuiEvent was given a bogus value somehow).
 			|| !(file_count = DragQueryFile(pgui->mHdrop, 0xFFFFFFFF, NULL, 0))) // No files in the drop (not sure if this is possible).
 			// All of the above rely on short-circuit boolean order.
@@ -9961,7 +9960,7 @@ VarSizeType BIV_GuiEvent(LPTSTR aBuf, LPTSTR aVarName)
 			for (u = 0; u < file_count; ++u)
 			{
 				length = DragQueryFile(pgui->mHdrop, u, buf, MAX_PATH); // MAX_PATH is arbitrary since aBuf is already known to be large enough.
-				_tcscpy(cp, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for something that isn't actually that large (though clearly large enoug) due to previous size-estimation phase) can crash because the API may read/write data beyond what it actually needs.
+				_tcscpy(cp, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for something that isn't actually that large (though clearly large enough) due to previous size-estimation phase) can crash because the API may read/write data beyond what it actually needs.
 				cp += length;
 				if (u < file_count - 1) // i.e omit the LF after the last file to make parsing via "Loop, Parse" easier.
 					*cp++ = '\n';
@@ -10229,7 +10228,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		// stack by the callee, meaning that too few args were provided to it.  In either case,
 		// and even for CDECL, the following line restores esp to what it was before we pushed the
 		// function's args onto the stack, which in the case of DC_CALL_STD helps prevent crashes
-		// due too too many or to few args having been passed.
+		// due to too many or to few args having been passed.
 		mov dwEAX, eax          // Save eax/edx registers
 		mov dwEDX, edx
 	}
@@ -10323,7 +10322,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	// In other words, any exception was likely caused by the fact that there were too many or too few.
 	if (aException)
 	{
-		// It's a little easier to recongize the common error codes when they're in hex format.
+		// It's a little easier to recognize the common error codes when they're in hex format.
 		buf[0] = '0';
 		buf[1] = 'x';
 		_ultot(aException, buf + 2, 16);
@@ -10753,7 +10752,7 @@ has_valid_return_type:
 			// Of course, it's not a complete solution because it doesn't stop a script from
 			// passing a variable whose capacity is non-zero yet too small to handle what the
 			// function will write to it.  But it's a far cry better than nothing because it's
-			// common for a script to forget to call VarSetCapacity before psssing a buffer to some
+			// common for a script to forget to call VarSetCapacity before passing a buffer to some
 			// function that writes a string to it.
 			//if (this_dyna_param.str == Var::sEmptyString) // To improve performance, compare directly to Var::sEmptyString rather than calling Capacity().
 			//	this_dyna_param.str = _T(""); // Make it read-only to force an exception.  See comments above.
@@ -11076,7 +11075,7 @@ end:
 
 void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 // Caller has ensured that SYM_VAR's Type() is VAR_NORMAL and that it's either not an environment
-// variable or the caller wants environment varibles treated as having zero length.
+// variable or the caller wants environment variables treated as having zero length.
 // Result is always an integer (caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need
 // to set it here).
 {
@@ -11390,7 +11389,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 			_itot(p, var_name_suffix, 10); // Append the element number to the array's base name.
 			// To help performance (in case the linked list of variables is huge), tell it where
 			// to start the search.  Use the base array name rather than the preceding element because,
-			// for example, Array19 is alphabetially less than Array2, so we can't rely on the
+			// for example, Array19 is alphabetically less than Array2, so we can't rely on the
 			// numerical ordering:
 			if (array_item = g_script.FindOrAddVar(var_name))
 			{
@@ -11823,7 +11822,7 @@ break_both:
 	{
 		if (aResultToken) // Only when this is non-NULL does caller want ErrorLevel changed.
 		{
-			// Since both the error code and the offset are desirable outputs, it semes best to also
+			// Since both the error code and the offset are desirable outputs, it seems best to also
 			// include descriptive error text (debatable).
 			g_ErrorLevel->Assign(error_buf
 				, sntprintf(error_buf, _countof(error_buf), _T("Compile error %d at offset %d: %s")
@@ -12248,8 +12247,8 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 								tcslcpy(substring_name, substring_name_pos, substring_name_length + 1); // +1 to convert length to size, which truncates the new string at the desired position.
 								if (IsNumeric(substring_name, true, false, true)) // Seems best to allow floating point such as 1.0 because it will then get truncated to an integer.  It seems to rare that anyone would want to use floats as names.
 									ref_num = _ttoi(substring_name); // Uses _ttoi() vs. ATOI to avoid potential overlap with non-numeric names such as ${0x5}, which should probably be considered a name not a number?  In other words, seems best not to make some names that start with numbers "special" just because they happen to be hex numbers.
-								else // For simplicity, no checking is done to ensure it consiss of the "32 alphanumeric characters and underscores".  Let pcre_get_stringnumber() figure that out for us.
-									ref_num = pcre_get_stringnumber(aRE, RegExToUTF8(substring_name)); // Returns a negative on failure, which when stored in ref_num is relied upon as an inticator.
+								else // For simplicity, no checking is done to ensure it consists of the "32 alphanumeric characters and underscores".  Let pcre_get_stringnumber() figure that out for us.
+									ref_num = pcre_get_stringnumber(aRE, RegExToUTF8(substring_name)); // Returns a negative on failure, which when stored in ref_num is relied upon as an indicator.
 							}
 							//else it's too long, so it seems best (debatable) to treat it as a unmatched/unfound name, i.e. "".
 							src = closing_brace; // Set things up for the next iteration to resume at the char after "${..}"
@@ -12364,7 +12363,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		// if PCRE_NOTEMPTY actually finds a match, or what would happen if this PCRE_NOTEMPTY method weren't
 		// used at all (i.e. infinite loop as mentioned in the previous paragraph).
 		// 
-		// If this match is "" (length 0), then by definitition we just found a match in normal mode, not
+		// If this match is "" (length 0), then by definition we just found a match in normal mode, not
 		// PCRE_NOTEMPTY mode (since that mode isn't capable of finding "").  Thus, empty_string_is_not_a_match
 		// is currently 0.  If "" was just found (and replaced), now try to find a second match at the same
 		// position, but one that isn't "". This is done by switching to an alternate mode and doing another
@@ -12591,7 +12590,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 void BIF_Asc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	// Result will always be an integer (this simplifies scripts that work with binary zeros since an
-	// empy string yields zero).
+	// empty string yields zero).
 	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
 	aResultToken.value_int64 = (TBYTE)*TokenToString(*aParam[0], aResultToken.buf);
 }
@@ -13119,7 +13118,7 @@ void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 // Although it's tempting to return an integer like 0x8000000_min_max, where min/max are the function's
 // minimum and maximum number of parameters stored in the low-order DWORD, it would be more friendly and
 // readable to implement those outputs as optional ByRef parameters;
-//     e.g. IsFunc(FunctionName, ByRef MinParamters, ByRef MaxParamters)
+//     e.g. IsFunc(FunctionName, ByRef Minparameters, ByRef Maxparameters)
 // It's also tempting to return something like 1+func.mInstances; but mInstances is tracked only due to
 // the nature of the current implementation of function-recursion; it might not be something that would
 // be tracked in future versions, and its value to the script is questionable.  Finally, a pointer to
@@ -13283,7 +13282,7 @@ void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 					BYTE fill_byte = (BYTE)TokenToInt64(*aParam[2]); // For simplicity, only numeric characters are supported, not something like "a" to mean the character 'a'.
 					LPTSTR contents = var.Contents();
 					FillMemory(contents, capacity * sizeof(TCHAR), fill_byte); // Last byte of variable is always left as a binary zero.
-					contents[capacity] = '\0'; // Must terminate because nothing else is explicitly reponsible for doing it.
+					contents[capacity] = '\0'; // Must terminate because nothing else is explicitly responsible for doing it.
 					var.SetCharLength(fill_byte ? capacity : 0); // Length is same as capacity unless fill_byte is zero.
 				}
 				else
@@ -13332,9 +13331,9 @@ void BIF_FileExist(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 		if (!*aResultToken.marker) // See above.
 		{
 			// The attributes might be all 0, but more likely the file has some of the newer attributes
-			// such as FILE_ATTRIBUTE_ENCRYPTED (or has undefined attributs).  So rather than storing attr as
+			// such as FILE_ATTRIBUTE_ENCRYPTED (or has undefined attributes).  So rather than storing attr as
 			// a hex number (which could be zero and thus defeat FileExist's ability to detect the file), it
-			// seems better to store some arbirary letter (other than those in "RASHNDOCT") so that FileExist's
+			// seems better to store some arbitrary letter (other than those in "RASHNDOCT") so that FileExist's
 			// return value is seen as boolean "true".
 			aResultToken.marker[0] = 'X';
 			aResultToken.marker[1] = '\0';
@@ -13970,7 +13969,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 	{
 		FuncParam &this_formal_param = func.mParam[i]; // For performance and convenience.
 		// The following isn't necessary because an earlier stage has already ensured that there
-		// are no ByRef paramaters in a callback:
+		// are no ByRef parameters in a callback:
 		//if (this_formal_param.is_byref)
 		//	this_formal_param.var->ConvertToNonAliasIfNecessary();
 		switch(this_formal_param.default_type)
@@ -14150,11 +14149,10 @@ void BIF_StatusBar(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	// Window doesn't exist.
 	// Control doesn't exist (i.e. no StatusBar in window).
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid()) // Always operate on thread's default window to simplify the syntax.
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
 	HWND control_hwnd;
-	if (   !(control_hwnd = gui.mStatusBarHwnd)   )
+	if (   !(control_hwnd = g->GuiDefaultWindow->mStatusBarHwnd)   )
 		return;
 
 	HICON hicon;
@@ -14250,9 +14248,9 @@ void BIF_LV_GetNextOrCount(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	// Control doesn't exist (i.e. no ListView in window).
 	// Item not found in ListView.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentListView)
 		return;
 	HWND control_hwnd = gui.mCurrentListView->hwnd;
@@ -14330,9 +14328,9 @@ void BIF_LV_GetText(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aP
 	// Item not found in ListView.
 	// And others.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentListView)
 		return;
 	// Caller has ensured there is at least two parameters:
@@ -14416,9 +14414,9 @@ void BIF_LV_AddInsertModify(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 		--aParamCount;
 	}
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentListView)
 		return;
 	GuiControlType &control = *gui.mCurrentListView;
@@ -14433,7 +14431,7 @@ void BIF_LV_AddInsertModify(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 
 	// Parse list of space-delimited options:
 	TCHAR *next_option, *option_end, orig_char;
-	bool adding; // Whether this option is beeing added (+) or removed (-).
+	bool adding; // Whether this option is being added (+) or removed (-).
 
 	for (next_option = options; *next_option; next_option = omit_leading_whitespace(option_end))
 	{
@@ -14517,7 +14515,7 @@ void BIF_LV_AddInsertModify(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 		{
 			if (adding)
 			{
-				col_start_index = ATOI(next_option + 3) - 1; // The ability start start at a column other than 1 (i.e. subitem vs. item).
+				col_start_index = ATOI(next_option + 3) - 1; // The ability to start at a column other than 1 (i.e. subitem vs. item).
 				if (col_start_index < 0)
 					col_start_index = 0;
 			}
@@ -14610,10 +14608,10 @@ void BIF_LV_AddInsertModify(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 				SendMessage(control.hwnd, LVM_ENSUREVISIBLE, lvi.iItem, FALSE); // PartialOK==FALSE is somewhat arbitrary.
 		}
 
-		// For each remainining parameter, assign its text to a subitem.
+		// For each remaining parameter, assign its text to a subitem.
 		// Testing shows that if the control has too few columns for all of the fields/parameters
 		// present, the ones at the end are automatically ignored: they do not consume memory nor
-		// do they signficantly impact performance (at least on Windows XP).  For this reason, there
+		// do they significantly impact performance (at least on Windows XP).  For this reason, there
 		// is no code above the for-loop above to reduce aParamCount if it's "too large" because
 		// it might reduce flexibility (in case future/past OSes allow non-existent columns to be
 		// populated, or in case current OSes allow the contents of recently removed columns to be modified).
@@ -14653,9 +14651,9 @@ void BIF_LV_Delete(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	// Control doesn't exist (i.e. no ListView in window).
 	// And others as shown below.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentListView)
 		return;
 	HWND control_hwnd = gui.mCurrentListView->hwnd;
@@ -14666,7 +14664,7 @@ void BIF_LV_Delete(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 		return;
 	}
 
-	// Since above didn't return, there is a first paramter present.
+	// Since above didn't return, there is a first parameter present.
 	int index = (int)TokenToInt64(*aParam[0]) - 1; // -1 to convert to zero-based.
 	if (index > -1)
 		aResultToken.value_int64 = SendMessage(control_hwnd, LVM_DELETEITEM, index, 0); // Returns TRUE/FALSE.
@@ -14692,9 +14690,9 @@ void BIF_LV_InsertModifyDeleteCol(ExprTokenType &aResultToken, ExprTokenType *aP
 	// Control doesn't exist (i.e. no ListView in window).
 	// Column not found in ListView.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentListView)
 		return;
 	GuiControlType &control = *gui.mCurrentListView;
@@ -14789,7 +14787,7 @@ void BIF_LV_InsertModifyDeleteCol(ExprTokenType &aResultToken, ExprTokenType *aP
 
 	// Parse list of space-delimited options:
 	TCHAR *next_option, *option_end, orig_char;
-	bool adding; // Whether this option is beeing added (+) or removed (-).
+	bool adding; // Whether this option is being added (+) or removed (-).
 
 	for (next_option = options; *next_option; next_option = omit_leading_whitespace(option_end))
 	{
@@ -14968,7 +14966,7 @@ void BIF_LV_InsertModifyDeleteCol(ExprTokenType &aResultToken, ExprTokenType *aP
 		// to make the following idea work:
 		// When index==0, retain the existing attributes due to the unique behavior of inserting a new first
 		// column: The new first column inherit's the old column's values (fields), so it seems best to also have it
-		// inherit the old column's attributs.
+		// inherit the old column's attributes.
 		++lv_attrib.col_count; // New column successfully added.  Must be done only after the MoveMemory() above.
 	}
 
@@ -14998,9 +14996,9 @@ void BIF_LV_SetImageList(ExprTokenType &aResultToken, ExprTokenType *aParam[], i
 	// Control doesn't exist (i.e. no ListView in window).
 	// Column not found in ListView.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentListView)
 		return;
 	// Caller has ensured that there is at least one incoming parameter:
@@ -15044,9 +15042,9 @@ void BIF_TV_AddModifyDelete(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 	// Control doesn't exist (i.e. no TreeView in window).
 	// And others as shown below.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentTreeView)
 		return;
 	GuiControlType &control = *gui.mCurrentTreeView;
@@ -15070,7 +15068,7 @@ void BIF_TV_AddModifyDelete(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 	if (add_mode) // TV_Add()
 	{
 		tvi.hParent = (aParamCount > 1) ? (HTREEITEM)TokenToInt64(*aParam[1]) : NULL;
-		tvi.hInsertAfter = TVI_LAST; // i.e. default is to insert the new item underneath the bottomost sibling.
+		tvi.hInsertAfter = TVI_LAST; // i.e. default is to insert the new item underneath the bottommost sibling.
 		options = (aParamCount > 2) ? TokenToString(*aParam[2], buf) : _T("");
 	}
 	else // TV_Modify()
@@ -15080,7 +15078,7 @@ void BIF_TV_AddModifyDelete(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 		tvi.item.hItem = (HTREEITEM)TokenToInt64(*aParam[0]); // Load-time validation has ensured there is a first parameter for TV_Modify().
 		// For modify-mode, set default return value to be "success" from this point forward.  Note that
 		// in the case of sorting the root-level items, this will set it to zero, but since that almost
-		// always suceeds and the script rarely cares whether it succeeds or not, adding code size for that
+		// always succeeds and the script rarely cares whether it succeeds or not, adding code size for that
 		// doesn't seem worth it:
 		aResultToken.value_int64 = (size_t)tvi.item.hItem;
 		if (aParamCount < 2) // In one-parameter mode, simply select the item.
@@ -15105,7 +15103,7 @@ void BIF_TV_AddModifyDelete(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 
 	// Parse list of space-delimited options:
 	TCHAR *next_option, *option_end, orig_char;
-	bool adding; // Whether this option is beeing added (+) or removed (-).
+	bool adding; // Whether this option is being added (+) or removed (-).
 
 	for (next_option = options; *next_option; next_option = omit_leading_whitespace(option_end))
 	{
@@ -15145,7 +15143,7 @@ void BIF_TV_AddModifyDelete(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 		if (!_tcsicmp(next_option, _T("Select"))) // Could further allow "ed" suffix by checking for that inside, but "Selected" is getting long so it doesn't seem something many would want to use.
 		{
 			// Selection of an item apparently needs to be done via message for the control to update itself
-			// properly.  Otherwise, single-select isn't enforced via de-selecitng previous item and the newly
+			// properly.  Otherwise, single-select isn't enforced via de-selecting previous item and the newly
 			// selected item isn't revealed/shown.  There may be other side-effects.
 			if (adding)
 				select_flag = TVGN_CARET;
@@ -15225,7 +15223,7 @@ void BIF_TV_AddModifyDelete(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 			if (adding)
 			{
 				// To me, having a different icon for when the item is selected seems rarely used.  After all,
-				// its obvious the item is selected because it's highlighed (unless it lacks a name?)  So this
+				// its obvious the item is selected because it's highlighted (unless it lacks a name?)  So this
 				// policy makes things easier for scripts that don't want to distinguish.  If ever it is needed,
 				// new options such as IconSel and IconUnsel can be added.
 				tvi.item.mask |= TVIF_IMAGE|TVIF_SELECTEDIMAGE;
@@ -15338,9 +15336,9 @@ void BIF_TV_GetRelatedItem(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	// Control doesn't exist (i.e. no TreeView in window).
 	// Item not found in TreeView.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentTreeView)
 		return;
 	HWND control_hwnd = gui.mCurrentTreeView->hwnd;
@@ -15358,7 +15356,7 @@ void BIF_TV_GetRelatedItem(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		case 'S': flag = TVGN_CARET; break; // TV_GetSelection(). TVGN_CARET is focused item.
 		case 'P': flag = (char7 == 'A') ? TVGN_PARENT : TVGN_PREVIOUS; break; // TV_GetParent/Prev.
 		case 'N': flag = (aParamCount < 1 || !hitem) ? TVGN_ROOT : TVGN_NEXT; break; // TV_GetNext(no-parameters) yields very first item in Tree (TVGN_ROOT).
-		// Above: It seems best to treat hitem==0 as "get root", even though it sacrificies some error detection,
+		// Above: It seems best to treat hitem==0 as "get root", even though it sacrifices some error detection,
 		// because not doing so would be inconsistent with the fact that TV_GetNext(0, "Full") does get the root
 		// (which needs to be retained to make script loops to traverse entire tree easier).
 		case 'C':
@@ -15446,9 +15444,9 @@ void BIF_TV_Get(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	// Item not found in TreeView.
 	// And others.
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentTreeView)
 		return;
 	HWND control_hwnd = gui.mCurrentTreeView->hwnd;
@@ -15521,9 +15519,9 @@ void BIF_TV_SetImageList(ExprTokenType &aResultToken, ExprTokenType *aParam[], i
 	// Window doesn't exist.
 	// Control doesn't exist (i.e. no TreeView in window).
 
-	if (!g_gui[g->GuiDefaultWindowIndex])
+	if (!g->GuiDefaultWindowValid())
 		return;
-	GuiType &gui = *g_gui[g->GuiDefaultWindowIndex]; // Always operate on thread's default window to simplify the syntax.
+	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	if (!gui.mCurrentTreeView)
 		return;
 	// Caller has ensured that there is at least one incoming parameter:
@@ -15720,7 +15718,7 @@ void BIF_Type(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 BOOL ResultToBOOL(LPTSTR aResult)
 {
-	UINT c1 = (UINT)*aResult; // UINT vs. UCHAR might squeenze a little more performance out of it.
+	UINT c1 = (UINT)*aResult; // UINT vs. UCHAR might squeeze a little more performance out of it.
 	if (c1 > 48)     // Any UCHAR greater than '0' can't be a space(32), tab(9), '+'(43), or '-'(45), or '.'(46)...
 		return TRUE; // ...so any string starting with c1>48 can't be anything that's false (e.g. " 0", "+0", "-0", ".0", "0").
 	if (!c1 // Besides performance, must be checked anyway because otherwise IsNumeric() would consider "" to be non-numeric and thus TRUE.

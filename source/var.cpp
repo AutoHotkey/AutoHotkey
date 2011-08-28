@@ -317,7 +317,7 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 	// In case the variable contents are incomplete or corrupted (such as having been read in from a
 	// bad file with FileRead), prevent reading beyond the end of the variable:
 	LPVOID next, binary_contents = source_var.mByteContents; // Fix for v1.0.47.05: Changed aSourceVar to source_var in this line and the next.
-	LPVOID binary_contents_max = (char *)binary_contents + source_var.mByteLength; // The last acessible byte, which should be the last byte of the (UINT)0 terminator.
+	LPVOID binary_contents_max = (char *)binary_contents + source_var.mByteLength; // The last accessible byte, which should be the last byte of the (UINT)0 terminator.
 	HGLOBAL hglobal;
 	LPVOID hglobal_locked;
 	UINT format;
@@ -369,7 +369,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 // Any existing contents of this variable will be destroyed regardless of whether aBuf is NULL.
 // Note that aBuf's memory can safely overlap with that of this->Contents() because in that case the
 // new length of the contents will always be less than or equal to the old length, and thus no
-// reallocation/expanion is needed (such an expansion would free the source before it could be
+// reallocation/expansion is needed (such an expansion would free the source before it could be
 // written to the destination).  This is because callers pass in an aBuf that is either:
 // 1) Between this->Contents() and its terminator.
 // 2) Equal to this->Contents() but with aLength passed in as shorter than this->Length().
@@ -739,7 +739,7 @@ void Var::Free(int aWhenToFree, bool aExcludeAliasesAndRequireInit)
 		if (mByteCapacity)
 		{
 			// aWhenToFree==VAR_FREE_IF_LARGE: the memory is not freed if it is a small area because
-			// it might help reduce memory fragmentation amd improve performance in cases where
+			// it might help reduce memory fragmentation and improve performance in cases where
 			// the memory will soon be needed again (in which case one free+malloc is saved).
 			if (   aWhenToFree < VAR_ALWAYS_FREE_LAST  // Fixed for v1.0.40.07 to prevent memory leak in recursive script-function calls.
 				|| aWhenToFree == VAR_FREE_IF_LARGE && mByteCapacity > (4 * 1024)   )
@@ -846,7 +846,7 @@ void Var::AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 		// Shrink the memory if there's a lot of wasted space because the extra capacity is seldom utilized
 		// in real-world scripts.
 		// A simple rule seems best because shrinking is probably fast regardless of the sizes involved,
-		// plus and there's consierable rarity to ever needing capacity beyond what's in a variable
+		// plus and there's considerable rarity to ever needing capacity beyond what's in a variable
 		// (concat/append is one example).  This will leave a large percentage of extra space in small variables,
 		// but in those rare cases when a script needs to create thousands of such variables, there may be a
 		// current or future way to shrink an existing variable to contain only its current length, such as
@@ -927,7 +927,7 @@ void Var::Backup(VarBkp &aVarBkp)
 // (they don't need to be backed up or restored anyway).
 // This method is used rather than struct copy (=) because it's of expected higher performance than
 // using the Var::constructor to make a copy of each var.  Also note that something like memcpy()
-// can't be used on Var objects since they're not POD (e.g. they have a contructor and they have
+// can't be used on Var objects since they're not POD (e.g. they have a constructor and they have
 // private members).
 {
 	aVarBkp.mVar = this; // Allows the restoration process to always know its target without searching.

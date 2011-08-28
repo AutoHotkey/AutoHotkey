@@ -1,5 +1,5 @@
 #pragma once
-// This file defines some macros for compile-time configrations.
+// This file defines some macros for compile-time configurations.
 // (Like many projects on *nix that using autotools.)
 
 #if defined(WIN32) && !defined(_WIN64)

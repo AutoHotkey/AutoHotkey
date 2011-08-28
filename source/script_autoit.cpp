@@ -1041,7 +1041,7 @@ int CALLBACK FileSelectFolderCallback(HWND hwnd, UINT uMsg, LPARAM lParam, LPARA
 		SendMessage(hwnd, BFFM_SETSELECTION, TRUE, lpData);
 	// In spite of the quote below, the behavior does not seem to vary regardless of what value is returned
 	// upon receipt of BFFM_VALIDATEFAILED, at least on XP.  But in case it matters on other OSes, preserve
-	// compatibilty with versions older than 1.0.36.03 by keeping the dialog displayed even if the user enters
+	// compatibility with versions older than 1.0.36.03 by keeping the dialog displayed even if the user enters
 	// an invalid folder:
 	// MSDN: "Returns zero except in the case of BFFM_VALIDATEFAILED. For that flag, returns zero to dismiss
 	// the dialog or nonzero to keep the dialog displayed."
@@ -1084,7 +1084,7 @@ ResultType Line::FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGree
 		if (initial_folder > root_dir && IS_SPACE_OR_TAB(initial_folder[-1]))
 			initial_folder[-1] = '\0';
 		// In case absolute paths can ever have literal leading whitespace, preserve that whitespace
-		// by incremently by only one and not calling omit_leading_whitespace().  This has been documented.
+		// by incrementing by only one and not calling omit_leading_whitespace().  This has been documented.
 		++initial_folder;
 	}
 	else
@@ -1246,7 +1246,7 @@ ResultType Line::FileGetShortcut(LPTSTR aShortcutFile) // Credited to Holger <Ho
 					output_var_show_state->Assign(show_cmd);
 					// For the above, decided not to translate them to Max/Min/Normal since other
 					// show-state numbers might be supported in the future (or are already).  In other
-					// words, this allows the flexibilty to specify some number other than 1/3/7 when
+					// words, this allows the flexibility to specify some number other than 1/3/7 when
 					// creating the shortcut in case it happens to work.  Of course, that applies only
 					// to FileCreateShortcut, not here.  But it's done here so that this command is
 					// compatible with that one.
@@ -1259,7 +1259,7 @@ ResultType Line::FileGetShortcut(LPTSTR aShortcutFile) // Credited to Holger <Ho
 	}
 	CoUninitialize();
 
-	return OK;  // ErrorLevel might still indicate failture if one of the above calls failed.
+	return OK;  // ErrorLevel might still indicate failure if one of the above calls failed.
 }
 
 
@@ -1448,8 +1448,8 @@ bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 			return false;
 	}
 
-	// To work under old versions AND new version of shell32.dll the source must be specifed
-	// as "dir\*.*" and the destination directory must already exist... Godamn Microsoft and their APIs...
+	// To work under old versions AND new version of shell32.dll the source must be specified
+	// as "dir\*.*" and the destination directory must already exist... Goddamn Microsoft and their APIs...
 	_tcscat(szSource, _T("\\*.*"));
 
 	// We must also make source\dest double nulled strings for the SHFileOp API
@@ -1528,7 +1528,7 @@ bool Line::Util_MoveDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int Overwrit
 	FileOp.pTo = szDest;
 	FileOp.wFunc = FO_MOVE;
 	FileOp.fFlags = FOF_SILENT | FOF_NOCONFIRMMKDIR | FOF_NOCONFIRMATION | FOF_NOERRORUI; // Set default. FOF_NO_UI ("perform the operation with no user input") is not present for in case it would break compatibility somehow, and because the other flags already present seem to make its behavior implicit.
-	if (OverwriteMode == 2) // v1.0.46.07: Using the FOF_MULTIDESTFILES flag (as hinted by MSDN) overwrites/merges any existing target directory.  This logic supercedes and fixes old logic that didn't work properly when the source dir was being both renamed and moved to overwrite an existing directory.
+	if (OverwriteMode == 2) // v1.0.46.07: Using the FOF_MULTIDESTFILES flag (as hinted by MSDN) overwrites/merges any existing target directory.  This logic supersedes and fixes old logic that didn't work properly when the source dir was being both renamed and moved to overwrite an existing directory.
 		FileOp.fFlags |= FOF_MULTIDESTFILES;
 	// All of the below left set to NULL/FALSE by the struct initializer higher above:
 	//FileOp.hNameMappings			= NULL;
@@ -1618,7 +1618,7 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 	aLastError = 0; // Set default. Overridden only when a failure occurs.
 
 	// Otherwise, loop through all the matching files.
-	// Split source into file and extension (we need this info in the loop below to recontstruct the path)
+	// Split source into file and extension (we need this info in the loop below to reconstruct the path)
 	_tsplitpath(szSource, szDrive, szDir, szFile, szExt);
 	// Note we now rely on the SOURCE being the contents of szDrive, szDir, szFile, etc.
 	size_t szTempPath_length = sntprintf(szTempPath, _countof(szTempPath), _T("%s%s"), szDrive, szDir);
@@ -1721,7 +1721,7 @@ void Line::Util_ExpandFilenameWildcard(LPCTSTR szSource, LPCTSTR szDest, LPTSTR 
 	TCHAR	szDestFile[_MAX_PATH+1];
 	TCHAR	szDestExt[_MAX_PATH+1];
 
-	// If the destination doesn't include a wildcard, send it back vertabim
+	// If the destination doesn't include a wildcard, send it back verbatim
 	if (_tcschr(szDest, '*') == NULL)
 	{
 		_tcscpy(szExpandedDest, szDest);

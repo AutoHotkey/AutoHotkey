@@ -246,7 +246,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 	UserMenu *menu = FindMenu(aMenu);
 	if (!menu)
 	{
-		// Menus can be created only in conjuction with the ADD command. Update: As of v1.0.25.12, they can
+		// Menus can be created only in conjunction with the ADD command. Update: As of v1.0.25.12, they can
 		// also be created with the "Menu, MyMenu, Standard" command.
 		if (menu_command != MENU_CMD_ADD && menu_command != MENU_CMD_STANDARD)
 			RETURN_MENU_ERROR(ERR_MENU, aMenu);
@@ -325,7 +325,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 	// command has so many modes of operation that would be difficult to parse at load-time:
 	Label *target_label = NULL;  // Set default.
 	UserMenu *submenu = NULL;    // Set default.
-	if (menu_command == MENU_CMD_ADD && !update_exiting_item_options) // Labels and submenus are only used in conjuction with the ADD command.
+	if (menu_command == MENU_CMD_ADD && !update_exiting_item_options) // Labels and submenus are only used in conjunction with the ADD command.
 	{
 		if (!*aParam4) // Allow the label/submenu to default to the menu name.
 			aParam4 = aParam3; // Note that aParam3 will be blank in the case of a separator line.
@@ -380,7 +380,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 		// menus larger than around 15000-25000 items.
 		static UINT sLastFreeID = ID_USER_FIRST - 1;
 		// Increment by one for each new search, both due to the above line and because the
-		// last-found free ID has a high likelyhood of still being in use:
+		// last-found free ID has a high likelihood of still being in use:
 		++sLastFreeID;
 		bool id_in_use;
 		UserMenu *m;
@@ -554,7 +554,7 @@ ResultType Script::ScriptDeleteMenu(UserMenu *aMenu)
 #define aMenuItem_ID (aMenuItem->mSubmenu ? GetSubmenuPos(aMenuItem->mSubmenu->mMenu) : aMenuItem->mMenuID)
 #define aMenuItem_MF_BY (aMenuItem->mSubmenu ? MF_BYPOSITION : MF_BYCOMMAND)
 #define UPDATE_GUI_MENU_BARS(menu_type, hmenu) \
-	if (menu_type == MENU_TYPE_BAR && GuiType::sGuiCount)\
+	if (menu_type == MENU_TYPE_BAR && g_guiCount)\
 		GuiType::UpdateMenuBars(hmenu); // Above: If it's not a popup, it's probably a menu bar.
 
 
@@ -785,7 +785,7 @@ ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName)
 // Returns FAIL if the new name conflicts with an existing name.
 {
 	if (_tcslen(aNewName) > MAX_MENU_NAME_LENGTH)
-		return FAIL; // Caller should diplay error if desired.
+		return FAIL; // Caller should display error if desired.
 
 	if (!mMenu) // Just update the member variables for later use when the menu is created.
 		return UpdateName(aMenuItem, aNewName);
@@ -1079,7 +1079,7 @@ void UserMenu::SetColor(LPTSTR aColorName, bool aApplyToSubmenus)
 		return;
 	AssignColor(aColorName, mColor, mBrush);  // Takes care of deleting old brush, etc.
 	// To avoid complications, such as a submenu being detached from its parent and then its parent
-	// later being being deleted (which causes the HBRUSH to get deleted too), give each submenu it's
+	// later being deleted (which causes the HBRUSH to get deleted too), give each submenu it's
 	// own HBRUSH handle by calling AssignColor() for each:
 	if (aApplyToSubmenus)
 		for (UserMenuItem *mi = mFirstMenuItem; mi; mi = mi->mNextMenuItem)
@@ -1174,18 +1174,10 @@ ResultType UserMenu::Destroy()
 	{
 		// As a precaution, don't allow a menu to be destroyed if a window is using it as its
 		// menu bar. That might have bad side-effects on some OSes, especially older ones:
-		if (mMenuType == MENU_TYPE_BAR && GuiType::sGuiCount)
-		{
-			int i, gui_count;
-			for (i = 0, gui_count = 0; i < MAX_GUI_WINDOWS; ++i)
-				if (g_gui[i])
-				{
-					if (g_gui[i]->mHwnd && GetMenu(g_gui[i]->mHwnd) == mMenu)
-						return FAIL; // A GUI window is using this menu, so don't destroy the menu.
-					if (GuiType::sGuiCount == ++gui_count) // No need to keep searching.
-						break;
-				}
-		}
+		if (mMenuType == MENU_TYPE_BAR)
+			for (int i = 0; i < g_guiCount; ++i)
+				if (GetMenu(g_gui[i]->mHwnd) == mMenu) // mHwnd is always non-NULL for any item in g_gui.
+					return FAIL; // A GUI window is using this menu, so don't destroy the menu.
 		if (!DestroyMenu(mMenu)) // v1.0.30.01: Doesn't seem to be a reason *not* to check the return value and return FAIL if it failed.
 			return FAIL;
 	}
@@ -1228,12 +1220,12 @@ ResultType UserMenu::Destroy()
 
 
 ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
-// aForceToForeground defaults to true because when a menu is displayed spontanesouly rather than
+// aForceToForeground defaults to true because when a menu is displayed spontaneously rather than
 // in response to the user right-clicking the tray icon, I believe that the OS will revert to its
 // behavior of "resisting" a window that tries to "steal focus".  I believe this resistance does
 // not occur when the user clicks the icon because that click causes the task bar to get focus,
 // and it is likely that the OS allows other windows to steal focus from the task bar without
-// resistence.  This is done because if the main window is *not* successfully activated prior to
+// resistance.  This is done because if the main window is *not* successfully activated prior to
 // displaying the menu, it might be impossible to dismiss the menu by clicking outside of it.
 {
 	if (!mMenuItemCount && !mIncludeStandardItems)
@@ -1340,7 +1332,7 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 			// before we continued using our timeslice to return to our caller and launch our new thread.
 			// In other words, the menu thread would launch before SetForegroundWindow() actually had a chance
 			// to take effect:
-			// 0 is exactly the amount of time (-1 is not enough because it doesn't yeild) needed for that
+			// 0 is exactly the amount of time (-1 is not enough because it doesn't yield) needed for that
 			// other process to actually ack/perform the activation of its window and clean out its queue using
 			// one timeslice.  This has been tested even when the CPU is maxed from some third-party process.
 			// For performance and code simplicity, it seems best not to do a GetForegroundWindow() loop that
@@ -1377,7 +1369,7 @@ UINT UserMenu::GetSubmenuPos(HMENU ahMenu)
 // Returns UINT_MAX if this->mMenu is NULL, ahMenu is NULL, or if ahMenu can't be found in this->mMenu.
 // Testing shows that neither ModifyMenu() nor SetMenuItemInfo() nor any other Menu modifying
 // API call will accept aMenuItem->mMenuID or aMenuItem->mSubmenu as a way to uniquely
-// indentify the menu item we want to change (even though GetMenuItemInfo indicates that
+// identify the menu item we want to change (even though GetMenuItemInfo indicates that
 // aMenuItem->mSubmenu is the "ID" of sorts).  Thus, the menu item can only be modified
 // by position.  Rather than having to maintain each submenu's position in every menu, thus
 // making the code less maintainable since you always have to worry about standard menu items
@@ -1445,7 +1437,7 @@ ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int 
 
 	int image_type;
 	HICON new_icon;
-	// Currently height is always -1 and cannot be overriden. -1 means maintain aspect ratio, usually 1:1 for icons.
+	// Currently height is always -1 and cannot be overridden. -1 means maintain aspect ratio, usually 1:1 for icons.
 	if ( !(new_icon = (HICON)LoadPicture(aFilename, aWidth, -1, image_type, aIconNumber, false)) )
 		return FAIL;
 

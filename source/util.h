@@ -61,7 +61,7 @@ GNU General Public License for more details.
 
 
 // Locale independent ctype (applied to the ASCII characters only)
-// isctype/iswctype affacts the some non-ASCII characters.
+// isctype/iswctype affects the some non-ASCII characters.
 inline int cisctype(TBYTE c, int type)
 {
 	return (c & (~0x7F)) ? 0 : _isctype(c, type);
@@ -419,7 +419,7 @@ inline unsigned __int64 ATOU64(LPCTSTR buf)
 
 inline int ATOI(LPCTSTR buf)
 {
-	// Below has been updated because values with leading zeros were being intepreted as
+	// Below has been updated because values with leading zeros were being interpreted as
 	// octal, which is undesirable.
 	// Formerly: #define ATOI(buf) strtol(buf, NULL, 0) // Use zero as last param to support both hex & dec.
 	return IsHex(buf) ? _tcstol(buf, NULL, 16) : _ttoi(buf); // atoi() has superior performance, so use it when possible.
@@ -570,7 +570,7 @@ inline LPTSTR UTF8ToWide(LPCSTR str){
 // is meaningful only to people who use more than one keyboard layout.  In the case of hotstrings:
 // It seems that the vast majority of them would want the Hotstring monitoring to adhere to the active
 // window's current keyboard layout rather than the script's.  This change is somewhat less certain to
-// be desirable uncondionally for the Input command (especially invisible/non-V-option Inputs); but it 
+// be desirable unconditionally for the Input command (especially invisible/non-V-option Inputs); but it 
 // seems best to use the same approach to avoid calling ToAsciiEx() more than once in cases where a
 // script has hotstrings and also uses the Input command. Calling ToAsciiEx() twice in such a case would
 // be likely to aggravate its side effects with dead keys as described at length in the hook/Input code).

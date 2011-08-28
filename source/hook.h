@@ -71,11 +71,11 @@ enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_
 // And these macros are kept here so that all this trickery is centrally located and thus more maintainable:
 #define ASK_INSTANCE_TO_CLOSE(hwnd, reason) PostMessage(hwnd, WM_COMMNOTIFY, reason, 0);
 
-// POST_AHK_USER_MENU: A gui_index value >= 0 is passed with the message if it came from a GUI's menu bar.
+// POST_AHK_USER_MENU: A gui_hwnd value != 0 is passed with the message if it came from a GUI's menu bar.
 // This is done because it's good way to pass the info, but also so that its value will be in sync with the
 // timestamp of the message (in case the message is stuck in the queue for a long time).  No pointer is
 // passed in this case since they might become invalid between the time the msg is posted vs. processed.
-#define POST_AHK_USER_MENU(hwnd, menu, gui_index) PostMessage(hwnd, AHK_USER_MENU, gui_index, menu);
+#define POST_AHK_USER_MENU(hwnd, menu, gui_hwnd) PostMessage(hwnd, AHK_USER_MENU, gui_hwnd, menu);
 #define POST_AHK_GUI_ACTION(hwnd, control_index, gui_event, event_info) PostMessage(hwnd, AHK_GUI_ACTION \
 	, (WPARAM)(((control_index) << 16) | (gui_event)), (LPARAM)(event_info)); // Caller must ensure that gui_event is less than 0xFFFF.
 // POST_AHK_DIALOG:
@@ -133,7 +133,7 @@ struct key_type
 	bool it_put_shift_down;  // this key resulted in SHIFT being pushed down (due to shift-alt-tab).
 	bool down_performed_action; // the last key-down resulted in an action (modifiers matched those of a valid hotkey)
 	bool hotkey_down_was_suppressed; // Whether the down-event for a key was suppressed (thus its up-event should be too).
-	// The values for "was_just_used" (zero is the inialized default, meaning it wasn't just used):
+	// The values for "was_just_used" (zero is the initialized default, meaning it wasn't just used):
 	char was_just_used; // a non-modifier key of any kind was pressed while this prefix key was down.
 	// And these are the values for the above (besides 0):
 	#define AS_PREFIX 1
@@ -165,7 +165,7 @@ struct key_type
 }
 
 // Since index zero is a placeholder for the invalid virtual key or scan code, add one to each MAX value
-// to compute the number of elements actually needed to accomodate 0 up to and including VK_MAX or SC_MAX:
+// to compute the number of elements actually needed to accommodate 0 up to and including VK_MAX or SC_MAX:
 #define VK_ARRAY_COUNT (VK_MAX + 1)
 #define SC_ARRAY_COUNT (SC_MAX + 1)
 
@@ -193,7 +193,7 @@ struct input_type
 	UINT MatchCountMax; // The maximum number of strings that the match array can contain.
 	#define INPUT_ARRAY_BLOCK_SIZE 1024  // The increment by which the above array expands.
 	LPTSTR MatchBuf; // The is the buffer whose contents are pointed to by the match array.
-	UINT MatchBufSize; // The capacity of the above above buffer.
+	UINT MatchBufSize; // The capacity of the above buffer.
 	bool BackspaceIsUndo;
 	bool CaseSensitive;
 	bool IgnoreAHKInput; // Whether input from any AHK script is ignored for the purpose of finding a match.

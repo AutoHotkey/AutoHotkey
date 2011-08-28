@@ -366,8 +366,6 @@ enum enum_act {
 // And these to prevent mutual dependency problem between window.h and globaldata.h:
 #define MAX_MSGBOXES 7 // Probably best not to change this because it's used by OurTimers to set the timer IDs, which should probably be kept the same for backward compatibility.
 #define MAX_INPUTBOXES 4
-#define MAX_GUI_WINDOWS 99  // Things that parse the "NN:" prefix for Gui/GuiControl might rely on this being 2-digit.
-#define MAX_GUI_WINDOWS_STR _T("99") // Keep this in sync with above.
 #define MAX_MSG_MONITORS 500
 
 // IMPORTANT: Before ever changing the below, note that it will impact the IDs of menu items created
@@ -421,7 +419,7 @@ typedef UCHAR HookType;
 // mLastPeekTime is global/static so that recursive functions, such as FileSetAttrib(),
 // will sleep as often as intended even if the target files require frequent recursion.
 // The use of a global/static is not friendly to recursive calls to the function (i.e. calls
-// maded as a consequence of the current script subroutine being interrupted by another during
+// made as a consequence of the current script subroutine being interrupted by another during
 // this instance's MsgSleep()).  However, it doesn't seem to be that much of a consequence
 // since the exact interval/period of the MsgSleep()'s isn't that important.  It's also
 // pretty unlikely that the interrupting subroutine will also just happen to call the same
@@ -442,7 +440,7 @@ typedef UCHAR HookType;
 // Since the Peek() will yield when there are no messages, it will often take 20ms or more to return
 // (UPDATE: this can't be reproduced with simple tests, so either the OS has changed through service
 // packs, or Peek() yields only when the OS detects that the app is calling it too often or calling
-// it in certain ways [PM_REMOVE vs. PM_NOREMOVE seems to make no differnce: either way it doesn't yield]).
+// it in certain ways [PM_REMOVE vs. PM_NOREMOVE seems to make no difference: either way it doesn't yield]).
 // Therefore, must update tick_now again (its value is used by macro and possibly by its caller)
 // to avoid having to Peek() immediately after the next iteration.
 // ...
@@ -535,6 +533,7 @@ class Func;                 // Forward declarations
 class Label;                //
 struct RegItemStruct;       //
 struct LoopReadFileStruct;  //
+class GuiType;				//
 struct global_struct
 {
 	// 8-byte items are listed first, which might improve alignment for 64-bit processors (dubious).
@@ -544,7 +543,7 @@ struct global_struct
 	LoopReadFileStruct *mLoopReadFile;  // The file whose contents are currently being read by a File-Read Loop.
 	LPTSTR mLoopField;  // The field of the current string-parsing loop.
 	// v1.0.44.14: The above mLoop attributes were moved into this structure from the script class
-	// because they're more approriate as thread-attributes rather than being global to the entire script.
+	// because they're more appropriate as thread-attributes rather than being global to the entire script.
 
 	TitleMatchModes TitleMatchMode;
 	int UninterruptedLineCount; // Stored as a g-struct attribute in case OnExit sub interrupts it while uninterruptible.
@@ -553,11 +552,12 @@ struct global_struct
 	GuiEventType GuiEvent; // This thread's triggering event, e.g. DblClk vs. normal click.
 	EventInfoType EventInfo; // Not named "GuiEventInfo" because it applies to non-GUI events such as clipboard.
 	POINT GuiPoint; // The position of GuiEvent. Stored as a thread vs. window attribute so that underlying threads see their original values when resumed.
-	GuiIndexType GuiWindowIndex, GuiControlIndex; // The GUI window index and control index that launched this thread.
-	GuiIndexType GuiDefaultWindowIndex; // This thread's default GUI window, used except when specified "Gui, 2:Add, ..."
-	GuiIndexType DialogOwnerIndex; // This thread's GUI owner, if any. Stored as Index vs. HWND to insulate against the case where a GUI window has been destroyed and recreated with a new HWND.
-	#define THREAD_DIALOG_OWNER ((::g->DialogOwnerIndex < MAX_GUI_WINDOWS && g_gui[::g->DialogOwnerIndex]) \
-	? g_gui[::g->DialogOwnerIndex]->mHwnd : NULL) // Above line relies on short-circuit eval. order.
+	GuiType *GuiWindow; // The GUI window that launched this thread.
+	GuiType *GuiDefaultWindow; // This thread's default GUI window, used except when specified "Gui, 2:Add, ..."
+	GuiType *GuiDefaultWindowValid(); // Updates and returns GuiDefaultWindow in case "Gui, Name: Default" wasn't used or the Gui has been destroyed; returns NULL if GuiDefaultWindow is invalid.
+	GuiType *DialogOwner; // This thread's GUI owner, if any.
+	GuiIndexType GuiControlIndex; // The GUI control index that launched this thread.
+	#define THREAD_DIALOG_OWNER (GuiType::ValidGui(::g->DialogOwner) ? ::g->DialogOwner->mHwnd : NULL)
 	int WinDelay;  // negative values may be used as special flags.
 	int ControlDelay; // negative values may be used as special flags.
 	int KeyDelay;     //
@@ -620,9 +620,9 @@ inline void global_clear_state(global_struct &g)
 	g.MsgBoxResult = 0;
 	g.IsPaused = false;
 	g.UninterruptedLineCount = 0;
-	g.DialogOwnerIndex = MAX_GUI_WINDOWS; // Initialized to out-of-bounds.
+	g.DialogOwner = NULL;
 	g.CalledByIsDialogMessageOrDispatch = false; // CalledByIsDialogMessageOrDispatchMsg doesn't need to be cleared because it's value is only considered relevant when CalledByIsDialogMessageOrDispatch==true.
-	g.GuiDefaultWindowIndex = 0;
+	g.GuiDefaultWindow = NULL;
 	// Above line is done because allowing it to be permanently changed by the auto-exec section
 	// seems like it would cause more confusion that it's worth.  A change to the global default
 	// or even an override/always-use-this-window-number mode can be added if there is ever a
@@ -662,9 +662,9 @@ inline void global_init(global_struct &g)
 	g.GuiPoint.y = COORD_UNSPECIFIED;
 	// For these, indexes rather than pointers are stored because handles can become invalid during the
 	// lifetime of a thread (while it's suspended, or if it destroys the control or window that created itself):
-	g.GuiWindowIndex = MAX_GUI_WINDOWS;   // Default them to out-of-bounds.
-	g.GuiControlIndex = NO_CONTROL_INDEX; //
-	g.GuiDefaultWindowIndex = 0;
+	g.GuiWindow = NULL;
+	g.GuiControlIndex = NO_CONTROL_INDEX; // Default to out-of-bounds.
+	g.GuiDefaultWindow = NULL;
 	g.WinDelay = 100;
 	g.ControlDelay = 20;
 	g.KeyDelay = 10;
