@@ -1393,13 +1393,14 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 		output_var.Assign(); // For backward-compatibility and also serves as an additional indicator of failure.
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 	}
-	else if (guicontrolget_cmd != GUICONTROLGET_CMD_POS) // v1.0.46.09: Avoid resetting the variable for the POS mode, since it uses and array and the user might want the existing contents of the GUI variable retained.
-		output_var.Assign(); // Set default to be blank for all commands except POS, for consistency.
 	if (!pgui)
+	{
 		// This departs from the tradition used by PerformGui() but since this type of error is rare,
 		// and since use ErrorLevel adds a little bit of flexibility (since the script's current thread
 		// is not unconditionally aborted), this seems best:
+		output_var.Assign(); // For backward-compatibility and also serves as an additional indicator of failure.
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	}
 	
 	GuiType &gui = *pgui;  // For performance.
 	if (!*aControlID) // In this case, default to the name of the output variable, as documented.
@@ -1415,6 +1416,7 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 	// Handle GUICONTROLGET_CMD_FOCUS(V) early since it doesn't need a specified ControlID:
 	if (guicontrolget_cmd == GUICONTROLGET_CMD_FOCUS || guicontrolget_cmd == GUICONTROLGET_CMD_FOCUSV)
 	{
+		output_var.Assign(); // Set default to be blank (in case of failure).
 		class_and_hwnd_type cah;
 		cah.hwnd = GetFocus();
 		GuiControlType *pcontrol;
@@ -1447,11 +1449,16 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 			// Append the class sequence number onto the class name set the output param to be that value:
 			sntprintfcat(focused_control, _countof(focused_control), _T("%d"), cah.class_count);
 		}
-		output_var.Assign(focused_control); // And leave ErrorLevel set to NONE.
+		result = output_var.Assign(focused_control); // And leave ErrorLevel set to NONE.
 		goto return_the_result;
 	}
 
 	GuiIndexType control_index = gui.FindControl(aControlID);
+
+	// Fix for v1.1.03: Set output_var only after calling FindControl() so that something like the following will work:  ControlGet Control, Hwnd,, %Control%
+	if (guicontrolget_cmd != GUICONTROLGET_CMD_POS) // v1.0.46.09: Avoid resetting the variable for the POS mode, since it uses and array and the user might want the existing contents of the GUI variable retained.
+		output_var.Assign(); // Set default to be blank for all commands except POS, for consistency.
+
 	if (control_index >= gui.mControlCount) // Not found.
 	{
 		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
