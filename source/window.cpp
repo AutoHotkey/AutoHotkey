@@ -52,8 +52,8 @@ HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR a
 	else
 	{
 		/*
-		// Might not help avg. perfomance any?
-		if (!aFindLastMatch) // Else even if the windows is already active, we want the bottomost one.
+		// Might not help avg. performance any?
+		if (!aFindLastMatch) // Else even if the windows is already active, we want the bottommost one.
 			if (hwnd = WinActive(aTitle, aText, aExcludeTitle, aExcludeText)) // Already active.
 				return target_window;
 		*/
@@ -274,7 +274,7 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 	// - This call will often hang our thread if aTargetWindow is a hung window: ShowWindow(aTargetWindow, SW_MINIMIZE)
 	// - Using SW_FORCEMINIMIZE instead of SW_MINIMIZE has at least one (and probably more)
 	// side effect: When the window is restored, at least via SW_RESTORE, it is no longer
-	// maximized even if it was before the minmize.  So don't use it.
+	// maximized even if it was before the minimize.  So don't use it.
 	if (!new_foreground_wnd) // Not successful yet.
 	{
 		// Some apps may be intentionally blocking us by having called the API function
@@ -394,7 +394,7 @@ HWND WinClose(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, int aTimeTo
 	else if (*aTitle || *aText || *aExcludeTitle || *aExcludeText)
 	{
 		// Since EnumWindows() is *not* guaranteed to start proceed in z-order from topmost to
-		// bottomost (though it almost certainly does), do it this way to ensure that the
+		// bottommost (though it almost certainly does), do it this way to ensure that the
 		// topmost window is closed in preference to any other windows with the same <aTitle>
 		// and <aText>:
 		if (   !(target_window = WinActive(aSettings, aTitle, aText, aExcludeTitle, aExcludeText))   )
@@ -429,14 +429,14 @@ HWND WinClose(HWND aWnd, int aTimeToWaitForClose, bool aKillIfHung)
 		// have disabled Alt-F4 processing will not be successfully closed.  It seems
 		// best not to send both SC_CLOSE and WM_CLOSE because some apps with an 
 		// "Unsaved.  Are you sure?" type dialog might close down completely rather than
-		// waiting for the user to confirm.  Anyway, it's extrememly rare for a window
+		// waiting for the user to confirm.  Anyway, it's extremely rare for a window
 		// not to respond to Alt-F4 (though it is possible that it handles Alt-F4 in a
 		// non-standard way, i.e. that sending SC_CLOSE equivalent to Alt-F4
 		// for windows that handle Alt-F4 manually?)  But on the upside, this is nicer
 		// for apps that upon receiving Alt-F4 do some behavior other than closing, such
 		// as minimizing to the tray.  Such apps might shut down entirely if they received
 		// a true WM_CLOSE, which is probably not what the user would want.
-		// Update: Swithced back to using WM_CLOSE so that instances of AutoHotkey
+		// Update: Switched back to using WM_CLOSE so that instances of AutoHotkey
 		// can be terminated via another instances use of the WinClose command:
 		//PostMessage(aWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
 		PostMessage(aWnd, WM_CLOSE, 0, 0);
@@ -565,7 +565,7 @@ HWND WinExist(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExc
 	ws.mAlreadyVisited = aAlreadyVisited;
 	ws.mAlreadyVisitedCount = aAlreadyVisitedCount;
 
-	if (ws.mCriteria & CRITERION_ID) // "ahk_id" will be satisified if that HWND still exists and is valid.
+	if (ws.mCriteria & CRITERION_ID) // "ahk_id" will be satisfied if that HWND still exists and is valid.
 	{
 		// Explicitly allow HWND_BROADCAST for all commands that use WinExist (which is just about all
 		// window commands), even though it's only valid with ScriptPostSendMessage().
@@ -892,7 +892,7 @@ HWND ControlExist(HWND aParentWindow, LPTSTR aClassNameAndNum)
 		ws.mCriterionText = aClassNameAndNum;
 	}
 
-	EnumChildWindows(aParentWindow, EnumControlFind, (LPARAM)&ws); // mFoundChild was initialized by the contructor.
+	EnumChildWindows(aParentWindow, EnumControlFind, (LPARAM)&ws); // mFoundChild was initialized by the constructor.
 
 	if (is_class_name && !ws.mFoundChild)
 	{
@@ -939,7 +939,7 @@ BOOL CALLBACK EnumControlFind(HWND aWnd, LPARAM lParam)
 			// which is correctly deemed not to match "01".  By contrast, the atoi() method would give
 			// the wrong result because the two numbers are numerically equal.
 			_itot(++ws.mAlreadyVisitedCount, ws.mCandidateTitle, 10);  // Overwrite the buffer to contain only the count.
-			// lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior
+			// lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior
 			// across multiple locales:
 			if (!_tcsicmp(ws.mCandidateTitle, ws.mCriterionClass + length)) // The counts match too, so it's a full match.
 			{
@@ -1175,7 +1175,7 @@ HWND FindOurTopDialog()
 // *owned*, not children of the main window.  There doesn't appear to be any easier way to
 // find out which windows another window owns.  GetTopWindow(), GetActiveWindow(), and GetWindow()
 // do not work for this purpose.  And using FindWindow() discouraged because it can hang
-// in certain circumtances (Enum is probably just as fast anyway).
+// in certain circumstances (Enum is probably just as fast anyway).
 {
 	// The return value of EnumWindows() is probably a raw indicator of success or failure,
 	// not whether the Enum found something or continued all the way through all windows.
@@ -1488,7 +1488,7 @@ int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf, INT_PTR aBufSize, UINT aTimeout
 
 ResultType WindowSearch::SetCriteria(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 // Returns FAIL if the new criteria can't possibly match a window (due to ahk_id being in invalid
-// window or the specfied ahk_group not existing).  Otherwise, it returns OK.
+// window or the specified ahk_group not existing).  Otherwise, it returns OK.
 // Callers must ensure that aText, aExcludeTitle, and aExcludeText point to buffers whose contents
 // will be available for the entire duration of the search.  In other words, the caller should not
 // call MsgSleep() in a way that would allow another thread to launch and overwrite the contents
@@ -1615,7 +1615,7 @@ ResultType WindowSearch::SetCriteria(global_struct &aSettings, LPTSTR aTitle, LP
 		// as CRITERION_TITLE.  However, for backward compatibility it seems best to disqualify any title
 		// consisting entirely of whitespace.  This is because some scripts might have a variable containing
 		// whitespace followed by the string ahk_class, etc. (however, any such whitespace is included as a
-		// literal part of the title criterion for flexibilty and backward compatibility).
+		// literal part of the title criterion for flexibility and backward compatibility).
 		if (!criteria_count && ahk_flag > omit_leading_whitespace(aTitle))
 		{
 			mCriteria |= CRITERION_TITLE;
@@ -1778,7 +1778,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 			if (!_tcscmp(mCandidateTitle, mCriterionExcludeTitle))
 				return NULL;
 		}
-		// If above didn't return, WinTitle and ExcludeTitle are both satisified.  So continue
+		// If above didn't return, WinTitle and ExcludeTitle are both satisfied.  So continue
 		// on below in case there is some WinText or ExcludeText to search.
 	}
 
@@ -1818,7 +1818,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 		TCHAR var_name[MAX_VAR_NAME_LENGTH + 20];
 		// To help performance (in case the linked list of variables is huge), tell it where
 		// to start the search.  Use the base array name rather than the preceding element because,
-		// for example, Array19 is alphabetially less than Array2, so we can't rely on the
+		// for example, Array19 is alphabetically less than Array2, so we can't rely on the
 		// numerical ordering:
 		Var *array_item = g_script.FindOrAddVar(var_name
 			, sntprintf(var_name, _countof(var_name), _T("%s%u"), mArrayStart->mName, mFoundCount)

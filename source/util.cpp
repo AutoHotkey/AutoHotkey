@@ -885,9 +885,9 @@ UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType 
 //
 // MODE 1 (when aDest==NULL): aHaystack is used as both the source and the destination (sometimes temporary memory
 // is used for performance, but it's freed afterward and so transparent to the caller).
-// When it passes in -1 for aSizeLimit (the deafult), caller must ensure that aHaystack has enough capacity to hold
+// When it passes in -1 for aSizeLimit (the default), caller must ensure that aHaystack has enough capacity to hold
 // the new/replaced result.  When non-NULL, aSizeLimit will be enforced by limiting the number of replacements to
-// the available memory (i.e. any remamining replacements are simply not done and that part of haystack is unaltered).
+// the available memory (i.e. any remaining replacements are simply not done and that part of haystack is unaltered).
 //
 // MODE 2 (when aDest!=NULL): If zero replacements are needed, we set *aDest to be aHaystack to indicate that no
 // new memory was allocated.  Otherwise, we store in *aDest the address of the new memory that holds the result.
@@ -931,14 +931,14 @@ UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType 
 		// Nothing to do if aHaystack is blank. If aOld is blank, that is not supported because it would be an
 		// infinite loop. This policy is now largely due to backward compatibility because some other policy
 		// may have been better.
-		result = aHaystack; // Return unaltered string to caller in its output paremeter (result is an alias for *aDest).
+		result = aHaystack; // Return unaltered string to caller in its output parameter (result is an alias for *aDest).
 		result_length = haystack_length; // This is an alias for an output parameter, so update it for caller.
 		return 0; // Report "no replacements".
 	}
 
 	size_t aOld_length = _tcslen(aOld);
 	size_t aNew_length = _tcslen(aNew);
-	int length_delta = (int)(aNew_length - aOld_length); // Cast to int to avoid loss of unsigned. A negative delta means the replacment substring is smaller than what it's replacing.
+	int length_delta = (int)(aNew_length - aOld_length); // Cast to int to avoid loss of unsigned. A negative delta means the replacement substring is smaller than what it's replacing.
 
 	if (aSizeLimit != -1) // Caller provided a size *restriction*, so if necessary reduce aLimit to stay within bounds.  Compare directly to -1 due to unsigned.
 	{
@@ -1024,7 +1024,7 @@ UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType 
 	{
 		// The following steps are appropriate for both mode #1 and #2 (for simplicity and maintainability,
 		// they're all done unconditionally even though mode #1 might not require them all).
-		result = aHaystack; // Return unaltered string to caller in its output paremeter (result is an alias for *aDest).
+		result = aHaystack; // Return unaltered string to caller in its output parameter (result is an alias for *aDest).
 		result_length = haystack_length; // This is an alias for an output parameter, so update it for caller.
 		return replacement_count;
 		// Since no memory was allocated, there's never anything to free.
@@ -1163,7 +1163,7 @@ size_t PredictReplacementSize(ptrdiff_t aLengthDelta, int aReplacementCount, int
 			else // No limit or additional_replacements_expected is within the limit.
 			{
 				// So now things are set up so that there's about a 50/50 chance than no more reallocs
-				// will be needed.  Since recalloc is costly (due to internal memcpy), try to reduce
+				// will be needed.  Since realloc is costly (due to internal memcpy), try to reduce
 				// the odds of it happening without going overboard on memory utilization.
 				// Something a lot more complicated could be used in place of the below to improve things
 				// a little, but it just doesn't seem worth it given the usage patterns expected and
@@ -1572,7 +1572,7 @@ void WindowToScreen(int &aX, int &aY)
 	//else no active window per se, so don't convert the coordinates.  Leave them as-is as desired by the
 	// caller.  More details:
 	// Revert to screen coordinates if the foreground window is minimized.  Although it might be
-	// impossible for a visible window to be both foreground and minmized, it seems that hidden
+	// impossible for a visible window to be both foreground and minimized, it seems that hidden
 	// windows -- such as the script's own main window when activated for the purpose of showing
 	// a popup menu -- can be foreground while simultaneously being minimized.  This fixes an
 	// issue where the mouse will move to the upper-left corner of the screen rather than the
@@ -2060,7 +2060,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 				return NULL;
 			}
 			// Specify TRUE to have it do the GlobalFree() for us.  But since the call might fail, it seems best
-			// to free the mem ourselves to avoid uncertainy over what it does on failure:
+			// to free the mem ourselves to avoid uncertainty over what it does on failure:
 			if (FAILED(OleLoadPicture(stream, 0, FALSE, IID_IPicture, (void **)&pic)))
 				pic = NULL;
 			stream->Release();
@@ -2114,7 +2114,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		}
 		if (aImageType != IMAGE_BITMAP)
 		{
-			// It's our reponsibility to delete these two when they're no longer needed:
+			// It's our responsibility to delete these two when they're no longer needed:
 			DeleteObject(ii.hbmColor);
 			DeleteObject(ii.hbmMask);
 			// If LoadImage() vs. ExtractIcon() was used originally, call LoadImage() again because
@@ -2322,7 +2322,7 @@ HBITMAP IconToBitmap(HICON ahIcon, bool aDestroyIcon)
 					SelectObject(hdc, old_object); // Might be needed (prior to deleting hdc) to prevent memory leak.
 				}
 			}
-			// It's our reponsibility to delete these two when they're no longer needed:
+			// It's our responsibility to delete these two when they're no longer needed:
 			DeleteObject(ii.hbmColor);
 			DeleteObject(ii.hbmMask);
 		}
@@ -2433,7 +2433,7 @@ HBITMAP IconToBitmap32(HICON ahIcon, bool aDestroyIcon)
 		}
 	}
 
-	// It's our reponsibility to delete these two when they're no longer needed:
+	// It's our responsibility to delete these two when they're no longer needed:
 	DeleteObject(icon_info.hbmColor);
 	DeleteObject(icon_info.hbmMask);
 

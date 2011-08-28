@@ -189,7 +189,7 @@ enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
 };
 // These two are macros for maintainability (i.e. seeing them together here helps maintain them together).
 #define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) (token.buf) // SYM_DYNAMICs other than doubles have NULL buf, at least at the stage this macro is called.
-#define SYM_DYNAMIC_IS_VAR_NORMAL_OR_CLIP(token) (!(token)->buf && ((token)->var->Type() == VAR_NORMAL || (token)->var->Type() == VAR_CLIPBOARD)) // i.e. it's an evironment variable or the clipboard, not a built-in variable or double-deref.
+#define SYM_DYNAMIC_IS_VAR_NORMAL_OR_CLIP(token) (!(token)->buf && ((token)->var->Type() == VAR_NORMAL || (token)->var->Type() == VAR_CLIPBOARD)) // i.e. it's an environment variable or the clipboard, not a built-in variable or double-deref.
 
 
 struct ExprTokenType; // Forward declaration for use below.
@@ -450,7 +450,7 @@ typedef UCHAR HookType;
 // mLastPeekTime is global/static so that recursive functions, such as FileSetAttrib(),
 // will sleep as often as intended even if the target files require frequent recursion.
 // The use of a global/static is not friendly to recursive calls to the function (i.e. calls
-// maded as a consequence of the current script subroutine being interrupted by another during
+// made as a consequence of the current script subroutine being interrupted by another during
 // this instance's MsgSleep()).  However, it doesn't seem to be that much of a consequence
 // since the exact interval/period of the MsgSleep()'s isn't that important.  It's also
 // pretty unlikely that the interrupting subroutine will also just happen to call the same
@@ -471,7 +471,7 @@ typedef UCHAR HookType;
 // Since the Peek() will yield when there are no messages, it will often take 20ms or more to return
 // (UPDATE: this can't be reproduced with simple tests, so either the OS has changed through service
 // packs, or Peek() yields only when the OS detects that the app is calling it too often or calling
-// it in certain ways [PM_REMOVE vs. PM_NOREMOVE seems to make no differnce: either way it doesn't yield]).
+// it in certain ways [PM_REMOVE vs. PM_NOREMOVE seems to make no difference: either way it doesn't yield]).
 // Therefore, must update tick_now again (its value is used by macro and possibly by its caller)
 // to avoid having to Peek() immediately after the next iteration.
 // ...
@@ -581,7 +581,7 @@ struct global_struct
 	LoopReadFileStruct *mLoopReadFile;  // The file whose contents are currently being read by a File-Read Loop.
 	LPTSTR mLoopField;  // The field of the current string-parsing loop.
 	// v1.0.44.14: The above mLoop attributes were moved into this structure from the script class
-	// because they're more approriate as thread-attributes rather than being global to the entire script.
+	// because they're more appropriate as thread-attributes rather than being global to the entire script.
 
 	TitleMatchModes TitleMatchMode;
 	int IntervalBeforeRest;

@@ -345,7 +345,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 
 			ResultType r = CallField(field, aResultToken, aThisToken, aFlags, meta_params, aParamCount + 1);
 			if (r == EARLY_RETURN)
-				// Propogate EARLY_RETURN in case this was the __Call meta-function of a
+				// Propagate EARLY_RETURN in case this was the __Call meta-function of a
 				// "function object" which is used as a meta-function of some other object.
 				return EARLY_RETURN; // TODO: Detection of 'return' vs 'return empty_value'.
 		}
@@ -435,7 +435,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 					return _MinIndex(aResultToken, aParam, aParamCount);
 				if (!_tcsicmp(name, _T("Clone")))
 					return _Clone(aResultToken, aParam, aParamCount);
-				// For maintability: explicitly return since above has done ++aParam, --aParamCount.
+				// For maintainability: explicitly return since above has done ++aParam, --aParamCount.
 				return INVOKE_NOT_HANDLED;
 			}
 			//

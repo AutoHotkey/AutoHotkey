@@ -17,7 +17,7 @@ GNU General Public License for more details.
 #include "stdafx.h" // pre-compiled headers
 #include "application.h"
 #include "globaldata.h" // for access to g_clip, the "g" global struct, etc.
-#include "window.h" // for serveral MsgBox and window functions
+#include "window.h" // for several MsgBox and window functions
 #include "util.h" // for strlcpy()
 #include "resources/resource.h"  // For ID_TRAY_OPEN.
 
@@ -96,7 +96,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	// This var allows us to suspend the currently-running subroutine and run any
 	// hotkey events waiting in the message queue (if there are more than one, they
 	// will be executed in sequence prior to resuming the suspended subroutine).
-	// Never static because we could be recursed (e.g. when one hotkey iterruptes
+	// Never static because we could be recursed (e.g. when one hotkey interrupts
 	// a hotkey that has already been interrupted) and each recursion layer should
 	// have it's own value for this:
 	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
@@ -232,7 +232,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	for (;;) // Main event loop.
 	{
 		tick_before = GetTickCount();
-		if (aSleepDuration > 0 && !empty_the_queue_via_peek && !g_DeferMessagesForUnderlyingPump) // g_Defer: Requires a series of Peeks to handle non-contingous ranges, which is why GetMessage() can't be used.
+		if (aSleepDuration > 0 && !empty_the_queue_via_peek && !g_DeferMessagesForUnderlyingPump) // g_Defer: Requires a series of Peeks to handle non-contiguous ranges, which is why GetMessage() can't be used.
 		{
 			// The following comment is mostly obsolete as of v1.0.39 (which introduces a thread
 			// dedicated to the hooks).  However, using GetMessage() is still superior to
@@ -251,7 +251,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			// The below was added for v1.0.20 to solve the following issue: If BatchLines is 10ms
 			// (its default) and there are one or more 10ms script-timers active, those timers would
 			// actually only run about every 20ms.  In addition to solving that problem, the below
-			// might also improve reponsiveness of hotkeys, menus, buttons, etc. when the CPU is
+			// might also improve responsiveness of hotkeys, menus, buttons, etc. when the CPU is
 			// under heavy load:
 			tick_after = GetTickCount();
 			if (tick_after - tick_before > 3)  // 3 is somewhat arbitrary, just want to make sure it rested for a meaningful amount of time.
@@ -260,7 +260,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		else // aSleepDuration < 1 || empty_the_queue_via_peek || g_DeferMessagesForUnderlyingPump
 		{
 			bool do_special_msg_filter, peek_was_done = false; // Set default.
-			// Check the active window in each iteration in case a signficant amount of time has passed since
+			// Check the active window in each iteration in case a significant amount of time has passed since
 			// the previous iteration (due to launching threads, etc.)
 			if (g_DeferMessagesForUnderlyingPump && (fore_window = GetForegroundWindow()) != NULL  // There is a foreground window.
 				&& GetWindowThreadProcessId(fore_window, NULL) == g_MainThreadID) // And it belongs to our main thread (the main thread is the only one that owns any windows).
@@ -331,7 +331,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			if (!peek_result) // No more messages
 			{
 				// Since the Peek() didn't find any messages, our timeslice may have just been
-				// yielded if the CPU is under heavy load (update: this yielding effect is now diffcult
+				// yielded if the CPU is under heavy load (update: this yielding effect is now difficult
 				// to reproduce, so might be a thing of past service packs).  If so, it seems best to count
 				// that as a "rest" so that 10ms script-timers will run closer to the desired frequency
 				// (see above comment for more details).
@@ -365,7 +365,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// via the following test, which shows that while BurnK6 (CPU maxing program)
 					// is foreground, a Sleep(0) really does a Sleep(60).  But when it's not
 					// foreground, it only does a Sleep(20).  This behavior is UNAFFECTED by
-					// the added presence of of a HIWORD(GetQueueStatus(QS_ALLEVENTS)) check here:
+					// the added presence of a HIWORD(GetQueueStatus(QS_ALLEVENTS)) check here:
 					//SplashTextOn,,, xxx
 					//WinWait, xxx  ; set last found window
 					//Loop
@@ -503,7 +503,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					{
 						// If ptab_control wasn't determined above, check if focused control is owned by a tab control:
 						if (!ptab_control && !(ptab_control = pgui->FindTabControl(pcontrol->tab_control_index))   )
-							// Fall back to the first tab control (for consistency & simplicty, seems best
+							// Fall back to the first tab control (for consistency & simplicity, seems best
 							// to always use the first rather than something fancier such as "nearest in z-order".
 							ptab_control = pgui->FindTabControl(0);
 						if (ptab_control)
@@ -811,11 +811,11 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// eligible for firing, a different variant might now be called for (e.g. due to a change
 				// in the active window).  Since most criteria hotkeys have at most only a few criteria,
 				// and since most such criteria are #IfWinActive rather than Exist, the performance will
-				// typically not be reduced much at all.  Futhermore, trading performance for greater
+				// typically not be reduced much at all.  Furthermore, trading performance for greater
 				// reliability seems worth it in this case.
 				// 
 				// The inefficiency of calling HotCriterionAllowsFiring() twice for each hotkey --
-				// once in the hook and again here -- seems justifed for the following reasons:
+				// once in the hook and again here -- seems justified for the following reasons:
 				// - It only happens twice if the hotkey a hook hotkey (multi-variant keyboard hotkeys
 				//   that have a global variant are usually non-hook, even on NT/2k/XP).
 				// - The hook avoids doing its first check of WinActive/Exist if it sees that the hotkey
@@ -928,7 +928,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			default: // hotkey
 				// Due to the key-repeat feature and the fact that most scripts use a value of 1
 				// for their #MaxThreadsPerHotkey, this check will often help average performance
-				// by avoiding a lot of unncessary overhead that would otherwise occur:
+				// by avoiding a lot of unnecessary overhead that would otherwise occur:
 				if (!hk->PerformIsAllowed(*variant))
 				{
 					// The key is buffered in this case to boost the responsiveness of hotkeys
@@ -1075,12 +1075,12 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 							// v1.0.44: I realized that it would perhaps be more correct/flexible to use ListView_HitTest()
 							// when g.GuiEvent != GUI_EVENT_NORMAL (like TreeVIew below).  However, for the following reasons,
 							// it hasn't yet been done:
-							// 1) Backward compatbility for scripts that rely on the old behavior.
+							// 1) Backward compatibility for scripts that rely on the old behavior.
 							// 2) It may be more complex to implement than TreeView's hittest due to dealing with subitems vs. items in a ListView.
 							// 3) Code size.
 							// Therefore, this difference in behavior will be documented in the help.
 							gui_event_info = 1 + ListView_GetNextItem(pcontrol->hwnd, -1, LVNI_FOCUSED);
-							// Testing shows that only one item at a time can have focus, even when mulitple items are selected.
+							// Testing shows that only one item at a time can have focus, even when multiple items are selected.
 							break;
 						case GUI_CONTROL_TREEVIEW:
 							// Retrieves the HTREEITEM that is the true target of this event.
@@ -1220,7 +1220,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						SetWindowLong(pgui->mHwnd, GWL_EXSTYLE, GetWindowLong(pgui->mHwnd, GWL_EXSTYLE) | WS_EX_ACCEPTFILES);
 					}
 				}
-				// Counteract the earler AddRef(). If the Gui was destroyed (and none of this
+				// Counteract the earlier AddRef(). If the Gui was destroyed (and none of this
 				// Gui's other labels are still running), this will free the Gui structure.
 				pgui->Release(); // g.GuiWindow
 				//g.GuiDefaultWindow->Release(); // This is done by ResumeUnderlyingThread().
@@ -1517,7 +1517,7 @@ ResultType IsCycleComplete(int aSleepDuration, DWORD aStartTime, bool aAllowEarl
 	}
 	// v1.0.38.04: Reset mLastPeekTime because caller has just done a GetMessage() or PeekMessage(),
 	// both of which should have routed events to the keyboard/mouse hooks like LONG_OPERATION_UPDATE's
-	// PeekMessage() and thus satisified the reason that mLastPeekTime is tracked in the first place.
+	// PeekMessage() and thus satisfied the reason that mLastPeekTime is tracked in the first place.
 	// UPDATE: Although the hooks now have a dedicated thread, there's a good chance mLastPeekTime is
 	// beneficial in terms of increasing GUI & script responsiveness, so it is kept.
 	// The following might also improve performance slightly by avoiding extra Peek() calls, while also
@@ -1659,7 +1659,7 @@ bool CheckScriptTimers()
 		// unlike other events -- which are typically in response to an explicit action by the user
 		// such as pressing a button or hotkey -- timers are lower priority and more relaxed.
 		// Also, mLastScriptRest really should only be set when a call to Get/PeekMsg has just
-		// occurred, so it should be left as the responsibilty of the section in MsgSleep that
+		// occurred, so it should be left as the responsibility of the section in MsgSleep that
 		// launches new threads.
 
 		++timer.mExistingThreads;
@@ -1769,7 +1769,7 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	Func &func = *monitor.func;                          // Above, but also in case monitor item gets deleted while the function is running (e.g. by the function itself).
 
 	// Many of the things done below are similar to the thread-launch procedure used in MsgSleep(),
-	// so maintain them together and see MsgSleep() for more detailed commments.
+	// so maintain them together and see MsgSleep() for more detailed comments.
 	if (g_nThreads >= g_MaxThreadsTotal)
 		// Below: Only a subset of ACT_IS_ALWAYS_ALLOWED is done here because:
 		// 1) The omitted action types seem too obscure to grant always-run permission for msg-monitor events.
@@ -1884,7 +1884,7 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	//
 	// But what if step 2 above created the same msg+func in the same position as before?  It's instance_count
 	// member would have been wrongly decremented, which would have allowed this msg-monitor thread to launch
-	// a thread beyond max-threads while it was techically still running above.  This scenario seems too rare
+	// a thread beyond max-threads while it was technically still running above.  This scenario seems too rare
 	// and the consequences too small to justify the extra code size, so it is documented here as a known limitation.
 	//
 	// Thus, if "monitor" is defunct due to deletion, decrementing its instance_count is harmless.
@@ -2041,7 +2041,7 @@ void ResumeUnderlyingThread(LPTSTR aSavedErrorLevel)
 	// due to the command having done a MsgSleep to allow a thread to interrupt).
 	// Older comment: Always update the tray icon in case the paused state of the subroutine
 	// we're about to resume is different from our previous paused state.  Do this even
-	// when the macro is used by CheckScriptTimers(), which although it might not techically
+	// when the macro is used by CheckScriptTimers(), which although it might not technically
 	// need it, lends maintainability and peace of mind.
 	g_script.UpdateTrayIcon();
 
@@ -2081,7 +2081,7 @@ BOOL IsInterruptible()
 	//     there's also the below.
 	// (2) Suspending or hibernating the computer while a thread is uninterruptible could cause the thread to
 	//    become semi-permanently uninterruptible.  For example:
-	//     - If a thread's unnterruptibility timeout is 60 seconds (or even 60 milliseconds);
+	//     - If a thread's uninterruptibility timeout is 60 seconds (or even 60 milliseconds);
 	//     - And the computer is suspended/hibernated before the uninterruptibility can time out;
 	//     - And the computer is then resumed 25 days later;
 	//     - Thread would be wrongly uninterruptible for ~24 days because the single-field method
@@ -2131,7 +2131,7 @@ VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime
 		EndDialog(hWnd, AHK_TIMEOUT);
 	KillTimer(hWnd, idEvent);
 	// v1.0.33: The following was added to fix the fact that a MsgBox with only an OK button
-	// does not acutally send back the code sent by EndDialog() above.  The HWND is checked
+	// does not actually send back the code sent by EndDialog() above.  The HWND is checked
 	// in case "g" is no longer the original thread due to another thread having interrupted it.
 	// Consequently, MsgBox's with an OK button won't be 100% reliable with the timeout feature
 	// if an interrupting thread is running at the time the box times out.  This is in the help

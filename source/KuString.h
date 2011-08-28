@@ -710,7 +710,7 @@ public:
 		va_copy(ap2, ap);
 		int len = U::FormatV(NULL, 0, fmt, ap);
 		ASSERT(len >= 0);
-		// NOTE: The length argument of format function has different implementions.
+		// NOTE: The length argument of format function has different implementations.
 		// Use safe one, though it may waste 1 character space.
 		len++;
 		m_pData->Alloc(len);
@@ -732,7 +732,7 @@ public:
 		va_copy(ap2, ap);
 		int len = U::FormatV(NULL, 0, fmt, ap);
 		ASSERT(len >= 0);
-		// NOTE: The length argument of format function has different implementions.
+		// NOTE: The length argument of format function has different implementations.
 		// Use safe one, though it may waste 1 character space.
 		len++;
 		m_pData->Alloc(m_pData->m_iLength + len);

@@ -407,7 +407,7 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 	// In case the variable contents are incomplete or corrupted (such as having been read in from a
 	// bad file with FileRead), prevent reading beyond the end of the variable:
 	LPVOID next, binary_contents = source_var.mByteContents; // Fix for v1.0.47.05: Changed aSourceVar to source_var in this line and the next.
-	LPVOID binary_contents_max = (char *)binary_contents + source_var.mByteLength; // The last acessible byte, which should be the last byte of the (UINT)0 terminator.
+	LPVOID binary_contents_max = (char *)binary_contents + source_var.mByteLength; // The last accessible byte, which should be the last byte of the (UINT)0 terminator.
 	HGLOBAL hglobal;
 	LPVOID hglobal_locked;
 	UINT format;
@@ -459,7 +459,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 // Any existing contents of this variable will be destroyed regardless of whether aBuf is NULL.
 // Note that aBuf's memory can safely overlap with that of this->Contents() because in that case the
 // new length of the contents will always be less than or equal to the old length, and thus no
-// reallocation/expanion is needed (such an expansion would free the source before it could be
+// reallocation/expansion is needed (such an expansion would free the source before it could be
 // written to the destination).  This is because callers pass in an aBuf that is either:
 // 1) Between this->Contents() and its terminator.
 // 2) Equal to this->Contents() but with aLength passed in as shorter than this->Length().
@@ -695,7 +695,7 @@ VarSizeType Var::Get(LPTSTR aBuf)
 	{
 	case VAR_NORMAL: // Listed first for performance.
 		UpdateContents();  // Update mContents and mLength, if necessary.
-		if (!g_NoEnv && !mByteLength) // If auto-env retrival is on and the var is empty, check to see if it's really an env. var.
+		if (!g_NoEnv && !mByteLength) // If auto-env retrieval is on and the var is empty, check to see if it's really an env. var.
 		{
 			// Regardless of whether aBuf is NULL or not, we don't know at this stage
 			// whether mName is the name of a valid environment variable.  Therefore,
@@ -903,7 +903,7 @@ void Var::Free(int aWhenToFree, bool aExcludeAliasesAndRequireInit)
 		if (mByteCapacity)
 		{
 			// aWhenToFree==VAR_FREE_IF_LARGE: the memory is not freed if it is a small area because
-			// it might help reduce memory fragmentation amd improve performance in cases where
+			// it might help reduce memory fragmentation and improve performance in cases where
 			// the memory will soon be needed again (in which case one free+malloc is saved).
 			if (   aWhenToFree < VAR_ALWAYS_FREE_LAST  // Fixed for v1.0.40.07 to prevent memory leak in recursive script-function calls.
 				|| aWhenToFree == VAR_FREE_IF_LARGE && mByteCapacity > (4 * 1024)   )
@@ -1013,7 +1013,7 @@ void Var::AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 		// Shrink the memory if there's a lot of wasted space because the extra capacity is seldom utilized
 		// in real-world scripts.
 		// A simple rule seems best because shrinking is probably fast regardless of the sizes involved,
-		// plus and there's consierable rarity to ever needing capacity beyond what's in a variable
+		// plus and there's considerable rarity to ever needing capacity beyond what's in a variable
 		// (concat/append is one example).  This will leave a large percentage of extra space in small variables,
 		// but in those rare cases when a script needs to create thousands of such variables, there may be a
 		// current or future way to shrink an existing variable to contain only its current length, such as
@@ -1094,7 +1094,7 @@ void Var::Backup(VarBkp &aVarBkp)
 // (they don't need to be backed up or restored anyway).
 // This method is used rather than struct copy (=) because it's of expected higher performance than
 // using the Var::constructor to make a copy of each var.  Also note that something like memcpy()
-// can't be used on Var objects since they're not POD (e.g. they have a contructor and they have
+// can't be used on Var objects since they're not POD (e.g. they have a constructor and they have
 // private members).
 {
 	aVarBkp.mVar = this; // Allows the restoration process to always know its target without searching.
@@ -1140,7 +1140,7 @@ void Var::FreeAndRestoreFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVar
 	// The freeing (above) MUST be done prior to the restore-from-backup below (otherwise there would be
 	// a memory leak).  Static variables are never backed up and thus do not exist in the aVarBackup array.
 	// This is because by definition, the contents of statics are not freed or altered by the calling procedure
-	// (regardless how how recursive or multi-threaded the function is).
+	// (regardless how recursive or multi-threaded the function is).
 	if (aVarBackup) // This is the indicator that a backup was made; thus a restore is also needed.
 	{
 		for (i = 0; i < aVarBackupCount; ++i) // Static variables were never backed up so they won't be in this array. See comments above.
@@ -1169,7 +1169,7 @@ ResultType Var::ValidateName(LPCTSTR aName, bool aIsRuntime, int aDisplayError)
 	// Seems best to disallow variables that start with numbers so that more advanced
 	// parsing (e.g. expressions) can be more easily added in the future.  UPDATE: For
 	// backward compatibility with AutoIt2's technique of storing command line args in
-	// a numically-named var (e.g. %1% is the first arg), decided not to do this:
+	// a numerically-named var (e.g. %1% is the first arg), decided not to do this:
 	//if (*aName >= '0' && *aName <= '9')
 	//	return g_script.ScriptError("This variable name starts with a number, which is not allowed.", aName);
 	TCHAR c;
@@ -1203,9 +1203,9 @@ ResultType Var::ValidateName(LPCTSTR aName, bool aIsRuntime, int aDisplayError)
 		// alert/bell inside variable names.  Ordered to maximize short-circuit performance for the most-often
 		// used characters in variables names:
 		c = *cp;  // For performance.
-		if (!cisalnum(c) // It's not a core/legacy alphanumberic.
+		if (!cisalnum(c) // It's not a core/legacy alphanumeric.
 			&& !(c & ~0x7F) // It's not an extended ASCII character such as €/¶/¿ (for simplicity and backward compatibility, these are always allowed).
-			&& !_tcschr(_T("_$#@"), c)) // It's not a permitted punctunation mark.  L31: Removed [], now reserved for array/object indexing. Also removed ? while I was at it.
+			&& !_tcschr(_T("_$#@"), c)) // It's not a permitted punctuation mark.  L31: Removed [], now reserved for array/object indexing. Also removed ? while I was at it.
 		{
 			if (aDisplayError)
 			{

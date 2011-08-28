@@ -272,7 +272,7 @@ class MetaObject : public Object
 public:
 	// In addition to ensuring g_MetaObject is never "deleted", this avoids a
 	// tiny bit of work when any reference to this object is added or released.
-	// Temporary references such as when evaluting "".base.foo are most common.
+	// Temporary references such as when evaluating "".base.foo are most common.
 	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
 	ULONG STDMETHODCALLTYPE Release() { return 1; }
 	bool Delete() { return false; }

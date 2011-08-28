@@ -62,7 +62,7 @@ EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 
 
 // Locale independent ctype (applied to the ASCII characters only)
-// isctype/iswctype affacts the some non-ASCII characters.
+// isctype/iswctype affects the some non-ASCII characters.
 inline int cisctype(TBYTE c, int type)
 {
 	return (c & (~0x7F)) ? 0 : _isctype(c, type);
@@ -403,7 +403,7 @@ inline __int64 ATOI64(LPCTSTR buf)
 // The following comment only applies if the code is a macro or actually put inline by the compiler,
 // which is no longer true:
 // A more complex macro is used for ATOI64(), since it is more often called from places where
-// performance matters (e.g. ACT_ADD).  It adds about 500 bytes to the code size  in exchance for
+// performance matters (e.g. ACT_ADD).  It adds about 500 bytes to the code size  in exchange for
 // a 8% faster math loops.  But it's probably about 8% slower when used with hex integers, but
 // those are so rare that the speed-up seems worth the extra code size:
 //#define ATOI64(buf) _strtoi64(buf, NULL, 0) // formerly used _atoi64()
@@ -418,7 +418,7 @@ inline unsigned __int64 ATOU64(LPCTSTR buf)
 
 inline int ATOI(LPCTSTR buf)
 {
-	// Below has been updated because values with leading zeros were being intepreted as
+	// Below has been updated because values with leading zeros were being interpreted as
 	// octal, which is undesirable.
 	// Formerly: #define ATOI(buf) strtol(buf, NULL, 0) // Use zero as last param to support both hex & dec.
 	return IsHex(buf) ? _tcstol(buf, NULL, 16) : _ttoi(buf); // atoi() has superior performance, so use it when possible.
@@ -640,7 +640,7 @@ inline LPTSTR UTF8ToWide(LPCSTR str){
 // is meaningful only to people who use more than one keyboard layout.  In the case of hotstrings:
 // It seems that the vast majority of them would want the Hotstring monitoring to adhere to the active
 // window's current keyboard layout rather than the script's.  This change is somewhat less certain to
-// be desirable uncondionally for the Input command (especially invisible/non-V-option Inputs); but it 
+// be desirable unconditionally for the Input command (especially invisible/non-V-option Inputs); but it 
 // seems best to use the same approach to avoid calling ToAsciiEx() more than once in cases where a
 // script has hotstrings and also uses the Input command. Calling ToAsciiEx() twice in such a case would
 // be likely to aggravate its side effects with dead keys as described at length in the hook/Input code).

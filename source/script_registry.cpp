@@ -399,7 +399,7 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	{
 		int nLen = (int)_tcslen(aValue);
 
-		// Stringlength must be a multiple of 2 
+		// String length must be a multiple of 2 
 		if (nLen % 2)
 		{
 			RegCloseKey(hRegKey);

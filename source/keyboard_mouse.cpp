@@ -55,7 +55,7 @@ static bool sFirstCallForThisEvent;  //
 static bool sInBlindMode;            //
 static DWORD sThisEventTime;         //
 
-// Dyamically resolve SendInput() because otherwise the app won't launch at all on Windows 95/NT-pre-SP3:
+// Dynamically resolve SendInput() because otherwise the app won't launch at all on Windows 95/NT-pre-SP3:
 typedef UINT (WINAPI *MySendInputType)(UINT, LPINPUT, int);
 static MySendInputType sMySendInput = (MySendInputType)GetProcAddress(GetModuleHandle(_T("user32")), "SendInput");
 // Above will be NULL for Win95/NT-pre-SP3.
@@ -172,7 +172,7 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 		// Both of these modes fall back to a different mode depending on whether some other script
 		// is running with a keyboard/mouse hook active.  Of course, the detection of this isn't foolproof
 		// because older versions of AHK may be running and/or other apps with LL keyboard hooks. It's
-		// just designed to add a lot of value for typical usage because SendInput is prefered due to it
+		// just designed to add a lot of value for typical usage because SendInput is preferred due to it
 		// being considerably faster than SendPlay, especially for long replacements when the CPU is under
 		// heavy load.
 		if (   !sMySendInput // Win95/NT-pre-SP3 don't support SendInput, so fall back to the specified mode.
@@ -872,7 +872,7 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 		// user, and we want such modifiers to be taken into account for the purpose of deciding whether
 		// other hotkeys should fire (or the same one again if auto-repeating):
 		// v1.0.42.04: A previous call to SendKey() might have left Shift/Ctrl in the down position
-		// because by procrastinatating, extraneous keystrokes in examples such as "Send ABCD" are
+		// because by procrastinating, extraneous keystrokes in examples such as "Send ABCD" are
 		// eliminated (previously, such that example released the shift key after sending each key,
 		// only to have to press it down again for the next one.  For this reason, some modifiers
 		// might get released here in addition to any that need to get pressed down.  That's why
@@ -937,7 +937,7 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 	, int aRepeatCount, KeyEventTypes aEventType, modLR_type aKeyAsModifiersLR, HWND aTargetWindow
 	, int aX, int aY, bool aMoveOffset)
 // Caller has ensured that: 1) vk or sc may be zero, but not both; 2) aRepeatCount > 0.
-// This function is reponsible for first setting the correct state of the modifier keys
+// This function is responsible for first setting the correct state of the modifier keys
 // (as specified by the caller) before sending the key.  After sending, it should put the
 // modifier keys  back to the way they were originally (UPDATE: It does this only for Win/Alt
 // for the reasons described near the end of this function).
@@ -956,7 +956,7 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 	// possibly dangerous.  So it seems best to default to making sure all modifiers are in the
 	// proper down/up position prior to sending any Keybd events.  UPDATE: This has been changed
 	// so that only modifiers that were actually used to trigger that hotkey are released during
-	// the send.  Other modifiers that are down may be down intentially, e.g. due to a previous
+	// the send.  Other modifiers that are down may be down intentionally, e.g. due to a previous
 	// call to Send such as: Send {ShiftDown}.
 	// UPDATE: It seems best to save the initial state only once, prior to sending the key-group,
 	// because only at the beginning can the original state be determined without having to
@@ -1029,7 +1029,7 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 			// both hooks so that the Start Menu doesn't appear when the Win key is released, so we're
 			// not responsible for that type of disguising here.
 			SetModifierLRState(modifiersLR_specified, sSendMode ? sEventModifiersLR : GetModifierLRState()
-				, aTargetWindow, false, true, KEY_IGNORE); // See keyboard_mouse.h for explantion of KEY_IGNORE.
+				, aTargetWindow, false, true, KEY_IGNORE); // See keyboard_mouse.h for explanation of KEY_IGNORE.
 			// SetModifierLRState() also does DoKeyDelay(g->PressDuration).
 		}
 
@@ -1081,8 +1081,8 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 		//    (by definition) already in effect prior to the Send, putting them back down for the
 		//    purpose of firing hook hotkeys does not seem unreasonable, and may in fact add value.
 		// DISGUISE DOWN: When SetModifierLRState() is called below, it should only release keys, not press
-		// any down (except if the user's physical keystrokes interferred).  Therefore, passing true or false
-		// for the disguise-down-events paramater doesn't matter much (but pass "true" in case the user's
+		// any down (except if the user's physical keystrokes interfered).  Therefore, passing true or false
+		// for the disguise-down-events parameter doesn't matter much (but pass "true" in case the user's
 		// keystrokes did interfere in a way that requires a Alt or Win to be pressed back down, because
 		// disguising it seems best).
 		// DISGUISE UP: When SetModifierLRState() is called below, it is passed "false" for disguise-up
@@ -1136,7 +1136,7 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 	// all of the characters above Chr(127) while under Russian layout produces Cyrillic characters
 	// if the active window's focused control is an Edit control (even if its an ANSI app).
 	// I don't know the difference between how such characters are actually displayed as opposed to how
-	// they're stored stored in memory (in notepad at least, there appears to be some kind of on-the-fly
+	// they're stored in memory (in notepad at least, there appears to be some kind of on-the-fly
 	// translation to Unicode as shown when you try to save such a file).  But for now it doesn't matter
 	// because for backward compatibility, it seems best not to change it until some alternative is
 	// discovered that's high enough in value to justify breaking existing scripts that run under Russian
@@ -1317,14 +1317,14 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam)
 			event.paramH = source_event.sc & 0xFF; // 0xFF omits the extended-key-bit, if present.
 			if (source_event.sc & 0x100) // It's an extended key.
 				event.paramH |= 0x8000; // So mark it that way using EVENTMSG's convention.
-			// Notes about inability of playback to simulate LWin and RWin in a way that performs their native funcion:
+			// Notes about inability of playback to simulate LWin and RWin in a way that performs their native function:
 			// For the following reasons, it seems best not to send LWin/RWin via keybd_event inside the playback hook:
 			// 1) Complexities such as having to check for an array that consists entirely of LWin/RWin events,
 			//    in which case the playback hook mustn't be activated because it requires that we send
 			//    at least one event through it.  Another complexity is that all keys modified by Win would
 			//    have to be flagged in the array as needing to be sent via keybd_event.
-			// 2) It might preserve some flexibilility to be able to send LWin/RWin events directly to awindow,
-			//    similiar to ControlSend (perhaps for shells other than Explorer, who might allow apps to make
+			// 2) It might preserve some flexibility to be able to send LWin/RWin events directly to a window,
+			//    similar to ControlSend (perhaps for shells other than Explorer, who might allow apps to make
 			//    use of LWin/RWin internally). The window should receive LWIN/RWIN as WM_KEYDOWN messages when
 			//    sent via playback.  Note: unlike the neutral SHIFT/ALT/CTRL keys, which are detectible via the
 			//    target thread's call to GetKeyState(), LWin and RWin aren't detectible that way.
@@ -1350,7 +1350,7 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam)
 		}
 		else // MOUSE EVENT.
 		{
-			// Unlike keybd_event() and SendInput(), explicit coordintes must be specified for each mouse event.
+			// Unlike keybd_event() and SendInput(), explicit coordinates must be specified for each mouse event.
 			// The builder of this array must ensure that coordinates are valid or set to COORD_UNSPECIFIED_SHORT.
 			if (source_event.x == COORD_UNSPECIFIED_SHORT || has_coord_offset)
 			{
@@ -1440,7 +1440,7 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam)
 		// is compliant enough if you read between the lines).  Their sample code indicates that
 		// "return CallNextHook()"  should be done for basically everything except HC_SKIP/HC_GETNEXT, so
 		// as of 1.0.43.08, that is what is done here.
-		// Testing shows that when a so-called system modial dialog is displayed (even if it isn't the
+		// Testing shows that when a so-called system modal dialog is displayed (even if it isn't the
 		// active window) playback stops automatically, probably because the system doesn't call the hook
 		// during such times (only a "MsgBox 4096" has been tested so far).
 		//
@@ -1517,7 +1517,7 @@ LRESULT CALLBACK RecordProc(int aCode, WPARAM wParam, LPARAM lParam)
 void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWindow
 	, bool aDoKeyDelay, DWORD aExtraInfo)
 // aSC or aVK (but not both), can be zero to cause the default to be used.
-// For keys like NumpadEnter -- that have have a unique scancode but a non-unique virtual key --
+// For keys like NumpadEnter -- that have a unique scancode but a non-unique virtual key --
 // caller can just specify the sc.  In addition, the scan code should be specified for keys
 // like NumpadPgUp and PgUp.  In that example, the caller would send the same scan code for
 // both except that PgUp would be extended.   sc_to_vk() would map both of them to the same
@@ -1578,10 +1578,10 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 	DWORD event_flags = HIBYTE(aSC) ? KEYEVENTF_EXTENDEDKEY : 0;
 
 	// Do this only after the above, so that the SC is left/right specific if the VK was such,
-	// even on Win9x (though it's probably never called that way for Win9x; it's probably aways
+	// even on Win9x (though it's probably never called that way for Win9x; it's probably always
 	// called with either just the proper left/right SC or that plus the neutral VK).
 	// Under WinNT/2k/XP, sending VK_LCONTROL and such result in the high-level (but not low-level
-	// I think) hook receiving VK_CONTROL.  So somewhere interally it's being translated (probably
+	// I think) hook receiving VK_CONTROL.  So somewhere internally it's being translated (probably
 	// by keybd_event itself).  In light of this, translate the keys here manually to ensure full
 	// support under Win9x (which might not support this internal translation).  The scan code
 	// looked up above should still be correct for left-right centric keys even under Win9x.
@@ -1707,7 +1707,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 		if (we_turned_blockinput_off)
 			Line::ScriptBlockInput(false);
 
-		vk_type control_vk;      // When not set somewhere below, these are left unitialized to help catch bugs.
+		vk_type control_vk;      // When not set somewhere below, these are left uninitialized to help catch bugs.
 		HKL target_keybd_layout; //
 		ResultType r_mem, &target_layout_has_altgr = caller_is_keybd_hook ? r_mem : sTargetLayoutHasAltGr; // Same as above.
 		bool hookable_ralt, lcontrol_was_down, do_detect_altgr;
@@ -1738,7 +1738,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 				g_HookReceiptOfLControlMeansAltGr = aExtraInfo;
 				// Thread-safe: g_HookReceiptOfLControlMeansAltGr isn't thread-safe, but by its very nature it probably
 				// shouldn't be (ways to do it might introduce an unwarranted amount of complexity and performance loss
-				// given that the odds of collision might be astronimically low in this case, and the consequences too
+				// given that the odds of collision might be astronomically low in this case, and the consequences too
 				// mild).  The whole point of g_HookReceiptOfLControlMeansAltGr and related altgr things below is to
 				// watch what keystrokes the hook receives in response to simulating a press of the right-alt key.
 				// Due to their global/system nature, keystrokes are never thread-safe in the sense that any process
@@ -2120,7 +2120,7 @@ void MouseClickDrag(vk_type aVK, int aX1, int aY1, int aX2, int aY2, int aSpeed,
 		MouseMove(aX1, aY1, event_flags, aSpeed, aMoveOffset); // It calls DoMouseDelay() and also converts aX1 and aY1 to MOUSEEVENTF_ABSOLUTE coordinates.
 		// v1.0.43: event_flags was added to improve reliability.  Explanation: Since the mouse was just moved to an
 		// explicitly specified set of coordinates, use those coordinates with subsequent clicks.  This has been
-		// shown to signficantly improve reliability in cases where the user is moving the mouse during the
+		// shown to significantly improve reliability in cases where the user is moving the mouse during the
 		// MouseClick/Drag commands.
 	}
 	MouseEvent(event_flags | event_down, event_data, aX1, aY1); // It ignores aX and aY when MOUSEEVENTF_MOVE is absent.
@@ -2169,7 +2169,7 @@ void MouseClick(vk_type aVK, int aX, int aY, int aRepeatCount, int aSpeed, KeyEv
 		MouseMove(aX, aY, event_flags, aSpeed, aMoveOffset); // It calls DoMouseDelay() and also converts aX and aY to MOUSEEVENTF_ABSOLUTE coordinates.
 		// v1.0.43: event_flags was added to improve reliability.  Explanation: Since the mouse was just moved to an
 		// explicitly specified set of coordinates, use those coordinates with subsequent clicks.  This has been
-		// shown to signficantly improve reliability in cases where the user is moving the mouse during the
+		// shown to significantly improve reliability in cases where the user is moving the mouse during the
 		// MouseClick/Drag commands.
 	}
 	// Above must be done prior to below because initial mouse-move is supported even for wheel turning.
@@ -2401,7 +2401,7 @@ void MouseMove(int &aX, int &aY, DWORD &aEventFlags, int aSpeed, bool aMoveOffse
 	if (sSendMode == SM_PLAY) // Journal playback mode.
 	{
 		// Mouse speed (aSpeed) is ignored for SendInput/Play mode: the mouse always moves instantaneously
-		// (though in the case of playback-mode, MouseDelay still applies between each movmement and click).
+		// (though in the case of playback-mode, MouseDelay still applies between each movement and click).
 		// Playback-mode ignores mouse speed because the cases where the user would want to move the mouse more
 		// slowly (such as a demo) seem too rare to justify the code size and complexity, especially since the
 		// incremental-move code would have to be implemented in the hook itself to ensure reliability.  This is
@@ -2503,7 +2503,7 @@ void MouseMove(int &aX, int &aY, DWORD &aEventFlags, int aSpeed, bool aMoveOffse
 	else
 		if (aSpeed > MAX_MOUSE_SPEED)
 			aSpeed = MAX_MOUSE_SPEED;
-	if (aSpeed == 0 || sSendMode == SM_INPUT) // Instantanous move to destination coordinates with no incremental positions in between.
+	if (aSpeed == 0 || sSendMode == SM_INPUT) // Instantaneous move to destination coordinates with no incremental positions in between.
 	{
 		// See the comments in the playback-mode section at the top of this function for why SM_INPUT ignores aSpeed.
 		MouseEvent(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, 0, aX, aY);
@@ -2543,7 +2543,7 @@ void MouseEvent(DWORD aEventFlags, DWORD aData, DWORD aX, DWORD aY)
 
 void PutKeybdEventIntoArray(modLR_type aKeyAsModifiersLR, vk_type aVK, sc_type aSC, DWORD aEventFlags, DWORD aExtraInfo)
 // This function is designed to be called from only one thread (the main thread) since it's not thread-safe.
-// Playback hook only supports sending neutral modifiers.  Caller must ensure that any left/right modfiiers
+// Playback hook only supports sending neutral modifiers.  Caller must ensure that any left/right modifiers
 // such as VK_RCONTROL are translated into neutral (e.g. VK_CONTROL).
 {
 	bool key_up = aEventFlags & KEYEVENTF_KEYUP;
@@ -2954,7 +2954,7 @@ void DoMouseDelay() // Helper function for the mouse functions below.
 	// the script's own main window's title bar buttons for min/max/close would not
 	// properly respond to left-clicks.  By contrast, the following is no longer an issue
 	// due to the dedicated thread in v1.0.39 (or more likely, due to an older change that
-	// causes the tray menu to upon upon RButton-up rather than down):
+	// causes the tray menu to open upon RButton-up rather than down):
 	// RButton is a hotkey that includes "MouseClick right" somewhere in its subroutine,
 	// the user would not be able to correctly open the script's own tray menu via
 	// right-click (note that this issue affected only the one script itself, not others).
@@ -3147,7 +3147,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 	// the added code complexity/size.  But if there is ever a need to do so, the following note applies:
 	// If the hook is installed, could tell it to disguise any need-to-be-disguised Alt-up that occurs
 	// after receipt of the registered ALT hotkey.  But what if that hotkey uses the send command:
-	// there might be intereference?  Doesn't seem so, because the hook only disguises non-ignored events.
+	// there might be interference?  Doesn't seem so, because the hook only disguises non-ignored events.
 
 	// Set up some conditions so that the keystrokes that disguise the release of Win or Alt
 	// are only sent when necessary (which helps avoid complications caused by keystroke interaction,
@@ -3390,7 +3390,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 
 	// When calling KeyEvent(), probably best not to specify a scan code unless
 	// absolutely necessary, since some keyboards may have non-standard scan codes
-	// which KeyEvent() will resolve into the proper vk tranlations for us.
+	// which KeyEvent() will resolve into the proper vk translations for us.
 	// Decided not to Sleep() between keystrokes, even zero, out of concern that this
 	// would result in a significant delay (perhaps more than 10ms) while the system
 	// is under load.
@@ -3441,7 +3441,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 		// the hook does something to reveal itself, such as suppressing keystrokes). Serialization avoids
 		// any chance of synchronization problems such as a program that changes the state of a key then
 		// immediately checks the state of that same key via GetAsyncKeyState().  Another way to look at
-		// all of this is that in essense, a single-threaded hook program that simulates keystrokes or
+		// all of this is that in essence, a single-threaded hook program that simulates keystrokes or
 		// mouse clicks should behave the same when the hook is moved into a separate thread because from
 		// the program's point-of-view, keystrokes & mouse clicks result in a calling the hook almost
 		// exactly as if the hook were in the same thread.
@@ -3580,7 +3580,7 @@ modLR_type GetModifierLRState(bool aExplicitlyGet)
 		// To limit the scope of this workaround, only change the state of the hook modifiers
 		// to be "up" for those keys the hook thinks are logically down but which the OS thinks
 		// are logically up.  Note that it IS possible for a key to be physically down without
-		// being logically down (i.e. during a Send command where the user is phyiscally holding
+		// being logically down (i.e. during a Send command where the user is physically holding
 		// down a modifier, but the Send command needs to put it up temporarily), so do not
 		// change the hook's physical state for such keys in that case.
 		// UPDATE: The following adjustment is now also relied upon by the SendInput method
@@ -3943,7 +3943,7 @@ vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLa
 	// perhaps it would prefer the right scan code vs. the left in apps such as Putty, but until that
 	// is proven, the complexity is not added here).  Otherwise, on French and other layouts on NT4,
 	// AltGr-produced characters such as backslash do not get sent properly.  In hindsight, this is
-	// not suprising because the keyboard hook also receives neutral modifier keys on NT4 rather than
+	// not surprising because the keyboard hook also receives neutral modifier keys on NT4 rather than
 	// a more specific left/right key.
 
 	// The win docs for VkKeyScan() are a bit confusing, referring to flag "bits" when it should really

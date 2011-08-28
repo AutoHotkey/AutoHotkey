@@ -113,7 +113,7 @@ private:
 		//    binary number were allocated on demand, recursive functions couldn't use caching because the
 		//    memory from SimpleHeap could never be freed, thus producing a memory leak.
 		// The main drawback is that some scripts are known to create a million variables or more, so the
-		// extra 8 bytes per variable would increase memory load by 8+ MB (possily with a boost in
+		// extra 8 bytes per variable would increase memory load by 8+ MB (possibly with a boost in
 		// performance if those variables are ever numeric).
 		__int64 mContentsInt64;
 		double mContentsDouble;
@@ -260,7 +260,7 @@ public:
 	// cuts down on code size due to not having to always check Capacity() and/or create more functions to
 	// protect from writing to read-only strings, which would hurt performance.
 	// The biggest offender of buffer overflow in sEmptyString is DllCall, which happens most frequently
-	// when a script forgets to call VarSetCapacity before psssing a buffer to some function that writes a
+	// when a script forgets to call VarSetCapacity before passing a buffer to some function that writes a
 	// string to it.  There is now some code there that tries to detect when that happens.
 	static TCHAR sEmptyString[1]; // See above.
 
@@ -270,7 +270,7 @@ public:
 	ResultType Assign(ExprTokenType &aToken);
 	ResultType AssignClipboardAll();
 	ResultType AssignBinaryClip(Var &aSourceVar);
-	// Assign(char *, ...) has been braek into four methods below.
+	// Assign(char *, ...) has been break into four methods below.
 	// This should prevent some mistakes, as characters and bytes are not interchangeable in the Unicode build.
 	// Callers must make sure which one is the right method to call.
 	ResultType AssignString(LPCTSTR aBuf = NULL, VarSizeType aLength = VARSIZE_MAX, bool aExactSize = false, bool aObeyMaxMem = true);
@@ -543,7 +543,7 @@ public:
 	// Caller must ensure that Type() == VAR_NORMAL.
 	// aBufSize is an int so that any negative values passed in from caller are not lost.
 	// Caller has ensured that aBuf isn't NULL.
-	// Translates this var into its text equivalent, putting the result into aBuf andp
+	// Translates this var into its text equivalent, putting the result into aBuf and
 	// returning the position in aBuf of its new string terminator.
 	{
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).

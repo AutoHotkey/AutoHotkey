@@ -56,7 +56,7 @@ enum ExecUntilMode {NORMAL_MODE, UNTIL_RETURN, UNTIL_BLOCK_END, ONLY_ONE_LINE};
 // If it is storing a pointer for a given Action Type, be sure never to compare it
 // for equality against these constants because by coincidence, the pointer value
 // might just match one of them:
-#define ATTR_NONE (void *)0  // Some places migh rely on this being zero.
+#define ATTR_NONE (void *)0  // Some places might rely on this being zero.
 #define ATTR_TRUE (void *)1
 #define ATTR_LOOP_UNKNOWN (void *)1 // Same value as the above.        // KEEP IN SYNC WITH BELOW.
 #define ATTR_LOOP_IS_UNKNOWN_OR_NONE(attr) (attr <= ATTR_LOOP_UNKNOWN) // KEEP IN SYNC WITH ABOVE.
@@ -759,7 +759,7 @@ public:
 	Breakpoint *mBreakpoint;
 #endif
 
-	// Probably best to always use ARG1 even if other things have supposedly verfied
+	// Probably best to always use ARG1 even if other things have supposedly verified
 	// that it exists, since it's count-check should make the dereference of a NULL
 	// pointer (or accessing non-existent array elements) virtually impossible.
 	// Empty-string is probably more universally useful than NULL, since some
@@ -815,7 +815,7 @@ public:
 	#define ARGVARRAW3 (sArgVar[2]) // exists by checking mArgc at loadtime or runtime.
 	#define ARGVAR1 ARGVARRAW1 // This first one doesn't need the check below because ExpandArgs() has ensured it's initialized.
 	#define ARGVAR2 (mArgc > 1 ? sArgVar[1] : NULL) // Caller relies on the check of mArgc because for performance,
-	#define ARGVAR3 (mArgc > 2 ? sArgVar[2] : NULL) // sArgVar[] isn't initialied for parameters the script
+	#define ARGVAR3 (mArgc > 2 ? sArgVar[2] : NULL) // sArgVar[] isn't initialized for parameters the script
 	#define ARGVAR4 (mArgc > 3 ? sArgVar[3] : NULL) // omitted entirely from the end of the parameter list.
 	#define ARGVAR5 (mArgc > 4 ? sArgVar[4] : NULL)
 	#define ARGVAR6 (mArgc > 5 ? sArgVar[5] : NULL)
@@ -1415,7 +1415,7 @@ public:
 		// runtime flexibility (i.e. user can leave the variable blank to make the command do nothing).
 		// Fix for v1.0.40.11: Since the above is counterintuitive and undocumented, it has been fixed
 		// to behave the way most users would expect; that is, the contents of any deref in parameter 1
-		// will behave the same as when such contents is present literally as parametter 1.  Another
+		// will behave the same as when such contents is present literally as parameter 1.  Another
 		// reason for doing this is that otherwise, there is no way to specify the CONTENTS sub-command
 		// in a variable.  For example, the following wouldn't work:
 		// GuiControl, %WindowNumber%:, ...
@@ -1693,7 +1693,7 @@ public:
 		if (!_tcsnicmp(aBuf, _T("Input"), 5)) // This IF must be listed last so that it can fall through to bottom line.
 		{
 			aBuf += 5;
-			if (!*aBuf || !_tcsicmp(aBuf, _T("ThenEvent"))) // "ThenEvent" is supported for backward compatibiltity with 1.0.43.00.
+			if (!*aBuf || !_tcsicmp(aBuf, _T("ThenEvent"))) // "ThenEvent" is supported for backward compatibility with 1.0.43.00.
 				return SM_INPUT;
 			if (!_tcsicmp(aBuf, _T("ThenPlay")))
 				return SM_INPUT_FALLBACK_TO_PLAY;
@@ -2405,7 +2405,7 @@ public:
 		, mGuiShowHasNeverBeenDone(true), mFirstActivation(true), mShowIsInProgress(false)
 		, mDestroyWindowHasBeenCalled(false), mControlWidthWasSetByContents(false)
 	{
-		// The array of controls is left unitialized to catch bugs.  Each control's attributes should be
+		// The array of controls is left uninitialized to catch bugs.  Each control's attributes should be
 		// fully populated when it is created.
 		//ZeroMemory(mControl, sizeof(mControl));
 	}
@@ -2811,7 +2811,7 @@ VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName);
 // BUILT-IN FUNCTIONS //
 ////////////////////////
 // Caller has ensured that SYM_VAR's Type() is VAR_NORMAL and that it's either not an environment
-// variable or the caller wants environment varibles treated as having zero length.
+// variable or the caller wants environment variables treated as having zero length.
 #define EXPR_TOKEN_LENGTH(token_raw, token_as_string) \
 ( (token_raw->symbol == SYM_VAR && !token_raw->var->IsBinaryClip()) \
 	? token_raw->var->Length()\

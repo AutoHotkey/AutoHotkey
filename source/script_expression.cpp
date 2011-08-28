@@ -18,7 +18,7 @@ GNU General Public License for more details.
 // v1.0.40.02: This is now a separate file to allow its compiler optimization settings
 // to be set independently of those of the other modules.  In one benchmark, this
 // improved performance of expressions and function calls by 9% (that is, when the
-// other modules are set to "minmize size" such as for the AutoHotkeySC.bin file).
+// other modules are set to "minimize size" such as for the AutoHotkeySC.bin file).
 // This gain in performance is at the cost of a 1.5 KB increase in the size of the
 // compressed code, which seems well worth it given how often expressions and
 // function-calls are used (such as in loops).
@@ -43,7 +43,7 @@ GNU General Public License for more details.
 #include "globaldata.h" // for a lot of things
 #include "qmath.h" // For ExpandExpression()
 
-// __forceinline: Decided against it for this function because alhough it's only called by one caller,
+// __forceinline: Decided against it for this function because although it's only called by one caller,
 // testing shows that it wastes stack space (room for its automatic variables would be unconditionally 
 // reserved in the stack of its caller).  Also, the performance benefit of inlining this is too slight.
 // Here's a simple way to verify wasted stack space in a caller that calls an inlined function:
@@ -60,7 +60,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 // 3) Some persistent location not in aDerefBuf, namely the mContents of a variable or a literal string/number,
 //    such as a function-call that returns "abc", 123, or a variable.
 // 4) At position aTarget inside aDerefBuf (note that aDerefBuf might have been reallocated by us).
-// aTarget is left unchnaged except in case #4, in which case aTarget has been adjusted to the position after our
+// aTarget is left unchanged except in case #4, in which case aTarget has been adjusted to the position after our
 // result-string's terminator.  In addition, in case #4, aDerefBuf, aDerefBufSize, and aArgDeref[] have been adjusted
 // for our caller if aDerefBuf was too small and needed to be enlarged.
 //
@@ -139,7 +139,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				{
 					// Start off by looking for the first deref.
 					deref = (DerefType *)this_token.var; // MUST BE DONE PRIOR TO OVERWRITING MARKER/UNION BELOW.
-					cp = this_token.buf; // Start at the begining of this arg's text.
+					cp = this_token.buf; // Start at the beginning of this arg's text.
 					size_t var_name_length = 0;
 
 					this_token.marker = _T("");         // Set default in case of early goto.  Must be done after above.
@@ -550,7 +550,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				// difficult to distinguish between when the function returned one of its own local variables
 				// rather than a global or a string/numeric literal).  The only exceptions are covered below.
 				// Old method, not necessary to be so thorough because "return" always puts its result as the
-				// very first item in its deref buf.  So this is commneted out in favor of the line below it:
+				// very first item in its deref buf.  So this is commented out in favor of the line below it:
 				//if (result < sDerefBuf || result >= sDerefBuf + sDerefBufSize)
 				if (result != sDerefBuf) // Not in their deref buffer (yields correct result even if sDerefBuf is NULL; also, see above.)
 					// In this case, the result must be assumed to be one of their local variables (since there's
@@ -566,7 +566,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 						// value is in the new deref buffer, must copy result to somewhere non-volatile whenever
 						// there's another function-call pending by us.  Note that an empty-string result was
 						// already checked and fully handled higher above.
-						// If we don't have have any more user-defined function calls pending, we can skip the
+						// If we don't have any more user-defined function calls pending, we can skip the
 						// make-persistent section since this deref buffer will not be overwritten during the
 						// period we need it.
 						for (p_postfix = this_postfix + 1; p_postfix->symbol != SYM_INVALID; ++p_postfix)
@@ -604,7 +604,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				}
 				else // Need to create some new persistent memory for our temporary use.
 				{
-					// In real-world scripts the need for additonal memory allocation should be quite
+					// In real-world scripts the need for additional memory allocation should be quite
 					// rare because it requires a combination of worst-case situations:
 					// - Called-function's return value is in their new deref buf (rare because return
 					//   values are more often literal numbers, true/false, or variables).
@@ -678,7 +678,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 
 		if (this_token.symbol == SYM_COMMA) // This can only be a statement-separator comma, not a function comma, since function commas weren't put into the postfix array.
 			// Do nothing other than discarding the right-side operand that was just popped off the stack.
-			// This collapses the two sub-statements delimated by a given comma into a single result for
+			// This collapses the two sub-statements delimited by a given comma into a single result for
 			// subsequent uses by another operator.  Unlike C++, the leftmost operand is preserved, not the
 			// rightmost.  This is because it's faster to just discard the topmost item on the stack, but
 			// more importantly it allows ACT_ASSIGNEXPR, ACT_ADD, and others to work properly.  For example:
@@ -751,9 +751,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					{
 						// v1.0.46.01: For consistency, it seems best to make the result of a pre-op be a
 						// variable whenever a variable came in.  This allows its address to be taken, and it
-						// to be passed byreference, and other SYM_VAR behaviors, even if the operation itself
+						// to be passed by reference, and other SYM_VAR behaviors, even if the operation itself
 						// produces a blank value.
-						// KNOWN LIMITATION: Although this behavior is convenient to have have, I realize now
+						// KNOWN LIMITATION: Although this behavior is convenient to have, I realize now
 						// that it produces at least one weird effect: whenever a binary operator's operands
 						// both use a pre-op on the same variable, or whenever two or more of a function-call's
 						// parameters both do a pre-op on the same variable, that variable will have the same
@@ -773,7 +773,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 							this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(++x)
 							break;
 						}
-						//else VAR_CLIPBOARD, which is allowed in only when it's the lvalue of an assignent or
+						//else VAR_CLIPBOARD, which is allowed in only when it's the lvalue of an assignment or
 						// inc/dec.  So fall through to make the result blank because clipboard isn't allowed as
 						// SYM_VAR beyond this point (to simplify the code and improve maintainability).
 					}
@@ -788,7 +788,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			// DUE TO CODE SIZE AND PERFORMANCE decided not to support things like the following:
 			// -> ++++i ; This one actually works because pre-ops produce a variable (usable by future pre-ops).
 			// -> i++++ ; Fails because the first ++ produces an operand that isn't a variable.  It could be
-			//    supported via a cascade loop here to pull all remaining consective post/pre ops out of
+			//    supported via a cascade loop here to pull all remaining consecutive post/pre ops out of
 			//    the postfix array and apply them to "delta", but it just doesn't seem worth it.
 			// -> --Var++ ; Fails because ++ has higher precedence than --, but it produces an operand that isn't
 			//    a variable, so the "--" fails.  Things like --Var++ seem pointless anyway because they seem
@@ -814,7 +814,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					this_token.var = right.var;  // Make the result a variable rather than a normal operand so that its
 					this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(++x)
 				}
-				else // VAR_CLIPBOARD, which is allowed in only when it's the lvalue of an assignent or inc/dec.
+				else // VAR_CLIPBOARD, which is allowed in only when it's the lvalue of an assignment or inc/dec.
 				{
 					// Clipboard isn't allowed as SYM_VAR beyond this point (to simplify the code and
 					// improve maintainability).  So use the new contents of the clipboard as the result,
@@ -1205,7 +1205,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					// Note: The function pow() in math.h adds about 28 KB of code size (uncompressed)!
 					// Even assuming pow() supports negative bases such as (-2)**2, its size is why it's not used.
 					// v1.0.44.11: With Laszlo's help, negative integer bases are now supported.
-					if (!left_int64 && right_int64 < 0) // In essense, this is divide-by-zero.
+					if (!left_int64 && right_int64 < 0) // In essence, this is divide-by-zero.
 					{
 						// Return a consistent result rather than something that varies:
 						this_token.marker = _T("");
@@ -1214,7 +1214,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					else // We have a valid base and exponent and both are integers, so the calculation will always have a defined result.
 					{
 						if (left_was_negative = (left_int64 < 0))
-							left_int64 = -left_int64; // Force a positive due to the limitiations of qmathPow().
+							left_int64 = -left_int64; // Force a positive due to the limitations of qmathPow().
 						this_token.value_double = qmathPow((double)left_int64, (double)right_int64);
 						if (left_was_negative && right_int64 % 2) // Negative base and odd exponent (not zero or even).
 							this_token.value_double = -this_token.value_double;
@@ -1263,7 +1263,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					// v1.0.44.11: With Laszlo's help, negative bases are now supported as long as the exponent is not fractional.
 					// See the other SYM_POWER higher above for more details about below.
 					left_was_negative = (left_double < 0);
-					if (left_double == 0.0 && right_double < 0  // In essense, this is divide-by-zero.
+					if (left_double == 0.0 && right_double < 0  // In essence, this is divide-by-zero.
 						|| left_was_negative && qmathFmod(right_double, 1.0) != 0.0) // Negative base, but exponent isn't close enough to being an integer: unsupported (to simplify code).
 					{
 						this_token.marker = _T("");
@@ -1272,7 +1272,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					else
 					{
 						if (left_was_negative)
-							left_double = -left_double; // Force a positive due to the limitiations of qmathPow().
+							left_double = -left_double; // Force a positive due to the limitations of qmathPow().
 						this_token.value_double = qmathPow(left_double, right_double);
 						if (left_was_negative && qmathFabs(qmathFmod(right_double, 2.0)) == 1.0) // Negative base and exactly-odd exponent (otherwise, it can only be zero or even because if not it would have returned higher above).
 							this_token.value_double = -this_token.value_double;
@@ -2175,7 +2175,7 @@ end:
 	// As of v1.0.31, there can be multiple deref buffers simultaneously if one or more called functions
 	// requires a deref buffer of its own (separate from ours).  In addition, if a called function is
 	// interrupted by a new thread before it finishes, the interrupting thread will also use the
-	// new/separate deref buffer.  To minimize the amount of memory used in such cases cases,
+	// new/separate deref buffer.  To minimize the amount of memory used in such cases,
 	// each line containing one or more expression with one or more function call (rather than each
 	// function call) will get up to one deref buffer of its own (i.e. only if its function body contains
 	// commands that actually require a second deref buffer).  This is achieved by saving sDerefBuf's
@@ -2214,7 +2214,7 @@ end:
 	//    a deref buffer other than the one it was originally intended for.  But in real world
 	//    scenarios, that seems rare.  In addition, the consequences seem to be limited to
 	//    some slight memory inefficiency.
-	// It could be aruged that the timer should only be activated when a hypothetical static
+	// It could be argued that the timer should only be activated when a hypothetical static
 	// var sLayers that we maintain here indicates that we're the only layer.  However, if that
 	// were done and the launch of a script function creates (directly or through thread
 	// interruption, indirectly) a large deref buffer, and that thread is waiting for something
@@ -2406,7 +2406,7 @@ LPTSTR Line::ExpandArg(LPTSTR aBuf, int aArgIndex, Var *aArgVar) // 10/2/2006: D
 		// +1 so that we return the position after the terminator, as required.
 		return aBuf += aArgVar->Get(aBuf) + 1;
 
-	LPTSTR this_marker, pText = this_arg.text;  // Start at the begining of this arg's text.
+	LPTSTR this_marker, pText = this_arg.text;  // Start at the beginning of this arg's text.
 	if (this_arg.deref) // There's at least one deref.
 	{
 		for (DerefType *deref = this_arg.deref  // Start off by looking for the first deref.

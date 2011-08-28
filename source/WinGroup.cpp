@@ -181,7 +181,7 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec, L
 			// more than one that matches (e.g. multiple notepads).  But first,
 			// mark the current window as having been visited if it hasn't
 			// already by marked by a prior iteration.  Update: This method
-			// doesn't work because if a unvisted matching window became the
+			// doesn't work because if a unvisited matching window became the
 			// foreground window by means other than using GroupActivate
 			// (e.g. launching a new instance of the app: now there's another
 			// matching window in the foreground).  So just call it straight
@@ -310,7 +310,7 @@ ResultType WinGroup::Deactivate(bool aStartWithMostRecent)
 
 	if (ws.mFoundParent)
 	{
-		// If the window we're about to activate owns other visble parent windows, it can
+		// If the window we're about to activate owns other visible parent windows, it can
 		// never truly be activated because it must always be below them in the z-order.
 		// Thus, instead of activating it, activate the first (and usually the only?)
 		// visible window that it owns.  Doing this makes things nicer for some apps that
@@ -416,7 +416,7 @@ BOOL CALLBACK EnumParentFindAnyExcept(HWND aWnd, LPARAM lParam)
 	// they both seem okay even in light of the ahk_group method.
 
 	if (!IsWindowVisible(aWnd))
-		// Skip these because we alwayswant them to stay invisible, regardless
+		// Skip these because we always want them to stay invisible, regardless
 		// of the setting for g->DetectHiddenWindows:
 		return TRUE;
 

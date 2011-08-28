@@ -301,7 +301,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	size_t filename_length = _tcslen(filename_marker);
 	if (   mIsAutoIt2 = (filename_length >= 4 && !_tcsicmp(filename_marker + filename_length - 4, EXT_AUTOIT2))   )
 	{
-		// Set the old/AutoIt2 defaults for maximum safety and compatibilility.
+		// Set the old/AutoIt2 defaults for maximum safety and compatibility.
 		// Standalone EXEs (compiled scripts) are always considered to be non-AutoIt2 (otherwise,
 		// the user should probably be using the AutoIt2 compiler).
 		g_AllowSameLineComments = false;
@@ -554,7 +554,7 @@ ResultType Script::CreateWindows()
 			// it incorrectly.  This newer method should be more reliable, but requires Vista or later:
 			MyAddClipboardListener(g_hWnd);
 			// But this method doesn't appear to send an initial WM_CLIPBOARDUPDATE message.
-			// For consistency with the other method (below) and for backward compatiblity,
+			// For consistency with the other method (below) and for backward compatibility,
 			// run the OnClipboardChange label once when the script first starts:
 			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, 0, 0);
 		}
@@ -724,7 +724,7 @@ ResultType Script::AutoExecSection()
 	// supposed to store the global settings that are currently in effect as the default values.
 	// In other words, the only purpose of AutoExecSectionTimeout() is to handle cases where
 	// the AutoExecute section takes a long time to complete, or never completes (perhaps because
-	// it is being used by the script as a "backround thread" of sorts):
+	// it is being used by the script as a "background thread" of sorts):
 	// Save the values of KeyDelay, WinDelay etc. in case they were changed by the auto-execute part
 	// of the script.  These new defaults will be put into effect whenever a new hotkey subroutine
 	// is launched.  Each launched subroutine may then change the values for its own purposes without
@@ -896,7 +896,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	// 1) It avoids the need to do "int mUninterruptedLineCountMax_prev = g_script.mUninterruptedLineCountMax;"
 	//    (Disable this item so that ExecUntil() won't automatically make our new thread uninterruptible
 	//    after it has executed a certain number of lines).
-	// 2) Mostly obsolete: If the thread we're interrupting is uninterruptible, the uinterruptible timer
+	// 2) Mostly obsolete: If the thread we're interrupting is uninterruptible, the uninterruptible timer
 	//    might be currently pending.  When it fires, it would make the OnExit subroutine interruptible
 	//    rather than the underlying subroutine.  The above fixes the first part of that problem.
 	//    The 2nd part is fixed by reinstating the timer when the uninterruptible thread is resumed.
@@ -1236,7 +1236,7 @@ bool IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace = NULL)
 	// we're only interested in the first "word" of aBuf: If this is indeed a function call or definition, what
 	// lies to the left of its first open-parenthesis can't contain any colons anyway because the above would
 	// have caught it as first-expr-char-is-not-open-parenthesis.  In other words, there's no way for a function's
-	// opening parenthesis to occur after a legtimate/quoted colon or double-colon in its parameters.
+	// opening parenthesis to occur after a legitimate/quoted colon or double-colon in its parameters.
 	// v1.0.40.04: Added condition "action_end != aBuf" to allow a hotkey or remap or hotkey such as
 	// such as "(::" to work even if it ends in a close-parenthesis such as "(::)" or "(::MsgBox )"
 	if (   !(action_end && *action_end == '(' && action_end != aBuf
@@ -1377,8 +1377,8 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	HS_EXEArc_Read oRead;
 
 	// AutoIt3: Open the archive in this compiled exe.
-	// Jon gave me some details about why a password isn't needed: "The code in those libararies will
-	// only allow files to be extracted from the exe is is bound to (i.e the script that it was
+	// Jon gave me some details about why a password isn't needed: "The code in those libraries will
+	// only allow files to be extracted from the exe it is bound to (i.e the script that it was
 	// compiled with).  There are various checks and CRCs to make sure that it can't be used to read
 	// the files from any other exe that is passed."
 	if (oRead.Open(CStringCharFromTCharIfNeeded(aFileSpec), "") != HS_EXEARC_E_OK)
@@ -1505,7 +1505,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 			if (IsDirective(buf) == FAIL) // IsDirective() already displayed the error.
 				return FAIL;
 
-		// Read in the next line (if that next line is the start of a continuation secttion, append
+		// Read in the next line (if that next line is the start of a continuation section, append
 		// it to the line currently being processed:
 		for (has_continuation_section = false, in_continuation_section = 0;;)
 		{
@@ -1547,7 +1547,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 			if (!in_continuation_section) // This is either the first iteration or the line after the end of a previous continuation section.
 			{
 				// v1.0.38.06: The following has been fixed to exclude "(:" and "(::".  These should be
-				// labels/hotkeys, not the start of a contination section.  In addition, a line that starts
+				// labels/hotkeys, not the start of a continuation section.  In addition, a line that starts
 				// with '(' but that ends with ':' should be treated as a label because labels such as
 				// "(label):" are far more common than something obscure like a continuation section whose
 				// join character is colon, namely "(Join:".
@@ -1613,7 +1613,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						// ++ and -- are ambiguous with an isolated line containing ++Var or --Var (and besides,
 						// wanting to use ++ to continue an expression seems extremely rare, though if there's ever
 						// demand for it, might be able to look at what lies to the right of the operator's operand
-						// -- though that would produce inconsisent continuation behavior since ++Var itself still
+						// -- though that would produce inconsistent continuation behavior since ++Var itself still
 						// could never be a continuation line due to ambiguity).
 						//
 						// The logic here isn't smart enough to differentiate between a leading ! or - that's
@@ -1675,7 +1675,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 							// way to detect hotkeys such as the following:
 							//   +keyname:: (and other hotkey modifier symbols such as ! and ^)
 							//   +keyname1 & keyname2::
-							//   +^:: (i.e. a modifier symbol followed by something that is a hotkey modifer and/or a hotkey suffix and/or an expression operator).
+							//   +^:: (i.e. a modifier symbol followed by something that is a hotkey modifier and/or a hotkey suffix and/or an expression operator).
 							//   <:: and &:: (i.e. hotkeys that are also expression-continuation symbols)
 							// By contrast, expressions that qualify as continuation lines can look like:
 							//   . "xxx::yyy"
@@ -1781,7 +1781,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						{
 							switch (*next_option)
 							{
-							case '`': // Although not using g_EscapeChar (reduces code size/complexity), #EscapeChar is still supported by continuation sections; it's just that enabling the option uses '`' rather than the custom escape-char (one reason is that that custom escape-char might be ambiguous with future/past options if it's somehing weird like an alphabetic character).
+							case '`': // Although not using g_EscapeChar (reduces code size/complexity), #EscapeChar is still supported by continuation sections; it's just that enabling the option uses '`' rather than the custom escape-char (one reason is that that custom escape-char might be ambiguous with future/past options if it's something weird like an alphabetic character).
 								literal_escapes = true;
 								break;
 							case '%': // Same comment as above.
@@ -2268,7 +2268,7 @@ examine_line:
 			// else don't trim hotstrings since literal spaces in both substrings are significant.
 
 			// If this is the first hotkey label encountered, Add a return before
-			// adding the label, so that the auto-exectute section is terminated.
+			// adding the label, so that the auto-execute section is terminated.
 			// Only do this if the label is a hotkey because, for example,
 			// the user may want to fully execute a normal script that contains
 			// no hotkeys but does contain normal labels to which the execution
@@ -2477,7 +2477,7 @@ examine_line:
 		// as properly detecting special commands that don't have keywords such as
 		// IF comparisons, ACT_ASSIGN, +=, -=, etc.
 		// v1.0.41: '{' was added to the line below to support no spaces inside "}else{".
-		if (!(action_end = StrChrAny(buf, _T("\t ,{")))) // Position of first tab/space/comma/open-brace.  For simplicitly, a non-standard g_delimiter is not supported.
+		if (!(action_end = StrChrAny(buf, _T("\t ,{")))) // Position of first tab/space/comma/open-brace.  For simplicity, a non-standard g_delimiter is not supported.
 			action_end = buf + buf_length; // It's done this way so that ELSE can be fully handled here; i.e. that ELSE does not have to be in the list of commands recognizable by ParseAndAddLine().
 		// The following method ensures that words or variables that start with "Else", e.g. ElseAction, are not
 		// incorrectly detected as an Else command:
@@ -2807,7 +2807,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// "parameter" is checked rather than parameter_raw for backward compatibility with earlier versions,
 		// in which a leading comma is not considered part of the filename.  Although this behavior is incorrect
 		// because it prevents files whose names start with a comma from being included without the first
-		// delim-comma being there too, it is kept because filesnames that start with a comma seem
+		// delim-comma being there too, it is kept because filenames that start with a comma seem
 		// exceedingly rare.  As a workaround, the script can do #Include ,,FilenameWithLeadingComma.ahk
 		if (!parameter)
 			return ScriptError(ERR_PARAM1_REQUIRED, aBuf);
@@ -3009,7 +3009,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			return CONDITION_TRUE;
 		}
 		LPTSTR hot_win_title = parameter, hot_win_text; // Set default for title; text is determined later.
-		// Scan for the first non-escaped comma.  If there is one, it marks the second paramter: WinText.
+		// Scan for the first non-escaped comma.  If there is one, it marks the second parameter: WinText.
 		LPTSTR cp, first_non_escaped_comma;
 		for (first_non_escaped_comma = NULL, cp = hot_win_title; ; ++cp)  // Increment to skip over the symbol just found by the inner for().
 		{
@@ -3040,7 +3040,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			// Omit whitespace to (seems best to conform to convention/expectations rather than give
 			// strange whitespace flexibility that would likely cause unwanted bugs due to inadvertently
 			// have two spaces instead of one).  The user may use `s and `t to put literal leading/trailing
-			// spaces/tabs into these paramters.
+			// spaces/tabs into these parameters.
 			hot_win_text = omit_leading_whitespace(first_non_escaped_comma + 1);
 			*first_non_escaped_comma = '\0'; // Terminate at the comma to split off hot_win_title on its own.
 			rtrim(hot_win_title, first_non_escaped_comma - hot_win_title);  // Omit whitespace (see similar comment above).
@@ -3380,7 +3380,7 @@ ResultType Script::UpdateOrCreateTimer(Label *aLabel, LPTSTR aPeriod, LPTSTR aPr
 	, bool aUpdatePriorityOnly)
 // Caller should specific a blank aPeriod to prevent the timer's period from being changed
 // (i.e. if caller just wants to turn on or off an existing timer).  But if it does this
-// for a non-existent timer, that timer will be created with the default period as specfied in
+// for a non-existent timer, that timer will be created with the default period as specified in
 // the constructor.
 {
 	ScriptTimer *timer;
@@ -3463,7 +3463,7 @@ Label *Script::FindLabel(LPTSTR aLabelName)
 {
 	if (!aLabelName || !*aLabelName) return NULL;
 	for (Label *label = mFirstLabel; label != NULL; label = label->mNextLabel)
-		if (!_tcsicmp(label->mName, aLabelName)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+		if (!_tcsicmp(label->mName, aLabelName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			return label; // Match found.
 	return NULL; // No match found.
 }
@@ -3606,7 +3606,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				// as the first word of the function instead.
 				g->CurrentFunc->mDefaultVarType = declare_type == VAR_DECLARE_LOCAL ? VAR_DECLARE_GLOBAL : VAR_DECLARE_LOCAL;
 			}
-			else // Since this isn't the first line of the function's body, mDefaultVarType has aleady been set permanently.
+			else // Since this isn't the first line of the function's body, mDefaultVarType has already been set permanently.
 			{
 				if (declare_type == g->CurrentFunc->mDefaultVarType) // Can't be VAR_DECLARE_NONE at this point.
 				{
@@ -3763,7 +3763,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						// Vars could be supported here via FindVar(), but only globals ABOVE this point in
 						// the script would be supported (since other globals don't exist yet; in fact, even
 						// those that do exist don't have any contents yet, so it would be pointless). So it
-						// seems best to wait until full/comprehesive support for expressions is
+						// seems best to wait until full/comprehensive support for expressions is
 						// studied/designed for both statics and parameter-default-values.
 						if (*right_side_of_operator == '"' && terminate_here[-1] == '"') // Quoted/literal string.
 						{
@@ -4077,7 +4077,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 							// Since there's a space or tab on both sides, we know this is the correct "and",
 							// i.e. not one contained within one of the parameters.  Examples:
 							// if var between band and cat  ; Don't falsely detect "band"
-							// if var betwwen Andy and David  ; Don't falsely detect "Andy".
+							// if var between Andy and David  ; Don't falsely detect "Andy".
 							// Replace the word AND with a delimiter so that it will be parsed correctly later:
 							*next_word = g_delimiter;
 							*(next_word + 1) = ' ';
@@ -4348,7 +4348,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				action_args = aLineText; // Since this is a function-call followed by a comma and some other expression, use the line's full text for later parsing.
 			}
 			else
-				// v1.0.40: Give a more specific error message now now that hotkeys can make it here due to
+				// v1.0.40: Give a more specific error message now that hotkeys can make it here due to
 				// the change that avoids the need to escape double-colons:
 				return ScriptError(_tcsstr(aLineText, HOTKEY_FLAG) ? _T("Invalid hotkey.") : ERR_UNRECOGNIZED_ACTION, aLineText);
 		}
@@ -4662,7 +4662,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			{
 				// Somewhat inefficient since it has to be called for both Arg#2 and Arg#3, but seems
 				// worth the benefit in terms of code simplification.  Note that the following might
-				// return TRANS_CMD_INVALID just because the sub-command is containined in a variable
+				// return TRANS_CMD_INVALID just because the sub-command is contained in a variable
 				// reference.  That is why TRANS_CMD_INVALID does not produce an error at this stage,
 				// but only later when the line has been constructed far enough to call ArgHasDeref():
 				// i.e. Not the first param, only the third and fourth, which currently are either both numeric or both non-numeric for all cases.
@@ -4918,7 +4918,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		//    a) Loop % (expression) {   ; Ambiguous because expression could resolve to a string, thus it would be seen as a file-pattern loop.
 		//    b) Loop %Var% {            ; Similar as above, which means all three of these unintentionally support
 		//    c) Loop filename{          ; OTB for some types of file loops because it's not worth the code size to "unsupport" them.
-		//    d) Loop *.txt {            ; Like the above: Unintentionally supported, but not documnented.
+		//    d) Loop *.txt {            ; Like the above: Unintentionally supported, but not documented.
 		//    e) (While-loops are also checked here now)
 		// Insist that no characters follow the '{' in case the user intended it to be a file-pattern loop
 		// such as "Loop {literal-filename".
@@ -5110,7 +5110,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			{
 				if (i == 1) // The second parameter (since the first is the OutputVar).
 					// Note that the following might return TRANS_CMD_INVALID just because the sub-command
-					// is containined in a variable reference.  That is why TRANS_CMD_INVALID does not
+					// is contained in a variable reference.  That is why TRANS_CMD_INVALID does not
 					// produce an error at this stage, but only later when the line has been constructed
 					// far enough to call ArgHasDeref():
 					trans_cmd = Line::ConvertTransformCmd(this_aArg);
@@ -5165,7 +5165,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 						// isn't a special/reserved one:
 						if (this_new_arg.type == ARG_TYPE_OUTPUT_VAR && VAR_IS_READONLY(*target_var))
 							return ScriptError(ERR_VAR_IS_READONLY, this_aArg);
-						// Rather than removing this arg from the list altogether -- which would distrub
+						// Rather than removing this arg from the list altogether -- which would disturb
 						// the ordering and hurt the maintainability of the code -- the next best thing
 						// in terms of saving memory is to store an empty string in place of the arg's
 						// text if that arg is a pure variable (i.e. since the name of the variable is already
@@ -5526,7 +5526,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 							// per-operand basis) rather than all at once for the entire arg because
 							// the deref array must contain both percent-sign derefs and non-%-derefs interspersed
 							// and ordered according to their physical position inside the arg, but ParseDerefs
-							// only handles percent-sign derefs, not expresion derefs like x+y.  In the following
+							// only handles percent-sign derefs, not expression derefs like x+y.  In the following
 							// example, the order of derefs must be x,i,y: if (x = Array%i% and y = 3)
 							if (!ParseDerefs(op_begin, this_aArgMap ? this_aArgMap + (op_begin - this_new_arg.text) : NULL
 								, deref, deref_count))
@@ -6664,7 +6664,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 			if (drive_cmd != DRIVE_CMD_EJECT && !*new_raw_arg2)
 				return ScriptError(_T("Parameter #2 must not be blank in this case."));
-			// For DRIVE_CMD_LABEL: Note that is is possible and allowed for the new label to be blank.
+			// For DRIVE_CMD_LABEL: Note that it is possible and allowed for the new label to be blank.
 			// Not currently done since all sub-commands take a mandatory or optional ARG3:
 			//if (drive_cmd != ... && *new_raw_arg3)
 			//	return ScriptError(ERR_PARAM3_MUST_BE_BLANK, new_raw_arg3);
@@ -6906,7 +6906,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	{
 		for (Label *label = mLastLabel; label != NULL && label->mJumpToLine == NULL; label = label->mPrevLabel)
 		{
-			if (line.mActionType == ACT_BLOCK_BEGIN && line.mAttribute == ATTR_TRUE) // Non-zero mAttribute signfies the open-brace of a function body.
+			if (line.mActionType == ACT_BLOCK_BEGIN && line.mAttribute == ATTR_TRUE) // Non-zero mAttribute signifies the open-brace of a function body.
 				return ScriptError(_T("A label must not point to a function."));
 			if (line.mActionType == ACT_ELSE || line.mActionType == ACT_UNTIL)
 				return ScriptError(_T("A label must not point to an ELSE or UNTIL."));
@@ -7040,7 +7040,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 				return FAIL; // It already displayed the error.
 	}
 
-	mCurrentFuncOpenBlockCount = 0; // v1.0.48.01: Initializing this here makes function definions work properly when they're inside a block.
+	mCurrentFuncOpenBlockCount = 0; // v1.0.48.01: Initializing this here makes function definitions work properly when they're inside a block.
 	Func &func = *g->CurrentFunc; // For performance and convenience.
 	size_t param_length, value_length;
 	FuncParam param[MAX_FUNCTION_PARAMS];
@@ -7116,7 +7116,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 			param_start = omit_leading_whitespace(param_start + 1); // Start of the default value.
 			if (*param_start == '"') // Quoted literal string, or the empty string.
 			{
-				// v1.0.46.13: Adde support for quoted/literal strings beyond simply "".
+				// v1.0.46.13: Added support for quoted/literal strings beyond simply "".
 				// The following section is nearly identical to one in ExpandExpression().
 				// Find the end of this string literal, noting that a pair of double quotes is
 				// a literal double quote inside the string.
@@ -7164,7 +7164,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[])
 				{
 					// Vars could be supported here via FindVar(), but only globals ABOVE this point in
 					// the script would be supported (since other globals don't exist yet). So it seems
-					// best to wait until full/comprehesive support for expressions is studied/designed
+					// best to wait until full/comprehensive support for expressions is studied/designed
 					// for both static initializers and parameter-default-values.
 					switch(IsPureNumeric(buf, true, false, true))
 					{
@@ -7887,7 +7887,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	{
 		bif = BIF_StatusBar;
 		min_params = 0;
-		max_params = 255; // 255 params alllows for up to 256 parts, which is SB's max.
+		max_params = 255; // 255 params allows for up to 256 parts, which is SB's max.
 	}
 	else if (!_tcsicmp(func_name, _T("SB_SetIcon")))
 	{
@@ -8275,7 +8275,7 @@ size_t Line::ArgIndexLength(int aArgIndex)
 #endif
 	if (aArgIndex >= mArgc) // Arg doesn't exist, so don't try accessing sArgVar (unlike sArgDeref, it wouldn't be valid to do so).
 		return 0; // i.e. treat it as the empty string.
-	// The length is not known and must be calculcated in the following situations:
+	// The length is not known and must be calculated in the following situations:
 	// - The arg consists of more than just a single isolated variable name (not possible if the arg is
 	//   ARG_TYPE_INPUT_VAR).
 	// - The arg is a built-in variable, in which case the length isn't known, so it must be derived from
@@ -8406,7 +8406,7 @@ Var *Line::ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary)
 
 	// At this point, we know the requested arg is a variable that must be dynamically resolved.
 	// This section is similar to that in ExpandArg(), so they should be maintained together:
-	LPTSTR pText = this_arg.text; // Start at the begining of this arg's text.
+	LPTSTR pText = this_arg.text; // Start at the beginning of this arg's text.
 	size_t var_name_length = 0;
 
 	if (this_arg.deref) // There's at least one deref.
@@ -8423,7 +8423,7 @@ Var *Line::ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary)
 				// This type of error is just a warning because this function isn't set up to cause a true
 				// failure.  This is because the use of dynamically named variables is rare, and only for
 				// people who should know what they're doing.  In any case, when the caller of this
-				// function called it to resolve an output variable, it will see tha the result is
+				// function called it to resolve an output variable, it will see the the result is
 				// NULL and terminate the current subroutine.
 				#define DYNAMIC_TOO_LONG _T("This dynamically built variable name is too long.") \
 					_T("  If this variable was not intended to be dynamic, remove the % symbols from it.")
@@ -8557,7 +8557,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 	else if (aAlwaysUse == ALWAYS_USE_LOCAL)
 		// v1.0.44.10: The following was changed from it's former value of "true" so that places further below
 		// (including passing is_local is call to AddVar()) don't have to ensure that g.CurrentFunc!=NULL.
-		// This fixes a crash that occured when a caller specified ALWAYS_USE_LOCAL even though the current
+		// This fixes a crash that occurred when a caller specified ALWAYS_USE_LOCAL even though the current
 		// thread isn't actually inside a *called* function (perhaps meaning things like a timed subroutine
 		// that lies inside a "container function").
 		// Some callers like SYSGET_CMD_MONITORAREA might try to find/add a local array if they see that their
@@ -8585,7 +8585,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 			int i;
 			for (i = 0; i < mFuncExceptionVarCount; ++i)
 			{
-				if (!_tcsicmp(var_name, mFuncExceptionVar[i]->mName)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+				if (!_tcsicmp(var_name, mFuncExceptionVar[i]->mName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 				{
 					is_local = !is_local;  // Since it's an exception, it's always the opposite of what it would have been.
 					found_var = mFuncExceptionVar[i];
@@ -8608,7 +8608,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 			{
 				int j = g.CurrentFunc->mParamCount + g.CurrentFunc->mIsVariadic; // i.e. must also check the "variadic" param, which isn't included in mParamCount.
 				for (i = 0; i < j; ++i)
-					if (!_tcsicmp(var_name, g.CurrentFunc->mParam[i].var->mName)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+					if (!_tcsicmp(var_name, g.CurrentFunc->mParam[i].var->mName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 					{
 						is_local = true;
 						found_var = g.CurrentFunc->mParam[i].var;
@@ -8648,7 +8648,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 	for (left = 0; left <= right;) // "right" was already initialized above.
 	{
 		mid = (left + right) / 2;
-		result = _tcsicmp(var_name, var[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+		result = _tcsicmp(var_name, var[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 		if (result > 0)
 			left = mid + 1;
 		else if (result < 0)
@@ -8677,7 +8677,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 		for (left = 0; left <= right;)  // "right" was already initialized above.
 		{
 			mid = (left + right) / 2;
-			result = _tcsicmp(var_name, var[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+			result = _tcsicmp(var_name, var[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			if (result > 0)
 				left = mid + 1;
 			else if (result < 0)
@@ -8805,7 +8805,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 		lazy_var[aInsertPos] = the_new_var;
 		++lazy_var_count;
 		// In a testing creating between 200,000 and 400,000 variables, using a size of 1000 vs. 500 improves
-		// the speed by 17%, but when you substract out the binary search time (leaving only the insert time),
+		// the speed by 17%, but when you subtract out the binary search time (leaving only the insert time),
 		// the increase is more like 34%.  But there is a diminishing return after that: Going to 2000 only
 		// gains 20%, and to 4000 only gains an addition 10%.  Therefore, to conserve memory in functions that
 		// have so many variables that the lazy list is used, a good trade-off seems to be 2000 (8 KB of memory)
@@ -8882,7 +8882,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 
 	// Since the lazy list is now at its max capacity, merge it into the main list (if the
 	// main list was at capacity, this section relies upon the fact that the above already
-	// increased its capacity by an amount far larger than the number of items containined
+	// increased its capacity by an amount far larger than the number of items contained
 	// in the lazy list).
 
 	// LAZY LIST: Although it's not nearly as good as hashing (which might be implemented in the future,
@@ -8928,12 +8928,12 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 		for (target_name = lazy_var[i]->mName, left = 0, right = (int)(insert_pos - var - 1); left <= right;)
 		{
 			mid = (left + right) / 2;
-			if (_tcsicmp(target_name, var[mid]->mName) > 0) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+			if (_tcsicmp(target_name, var[mid]->mName) > 0) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 				left = mid + 1;
 			else // it must be < 0 because caller has ensured it can't be equal (i.e. that there will be no match)
 				right = mid - 1;
 		}
-		// Now "left" contains the insertion point is is known to be less than var_count due to a previous
+		// Now "left" contains the insertion point and is known to be less than var_count due to a previous
 		// set of loops above.  Make a gap there large enough to hold all items because that allows a
 		// smaller total amount of memory to be moved by shifting the gap to the left in the main list,
 		// gradually filling it as we go:
@@ -9173,14 +9173,14 @@ void *Script::GetVarType(LPTSTR aVarName)
 WinGroup *Script::FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound)
 // Caller must ensure that aGroupName isn't NULL.  But if it's the empty string, NULL is returned.
 // Returns the Group whose name matches aGroupName.  If it doesn't exist, it is created if aCreateIfNotFound==true.
-// Thread-safety: This function is thread-safe (except when when called with aCreateIfNotFound==true) even when
+// Thread-safety: This function is thread-safe (except when called with aCreateIfNotFound==true) even when
 // the main thread happens to be calling AddGroup() and changing the linked list while it's being traversed here
 // by the hook thread.  However, any subsequent changes to this function or AddGroup() must be carefully reviewed.
 {
 	if (!*aGroupName)
 		return NULL;
 	for (WinGroup *group = mFirstGroup; group != NULL; group = group->mNextGroup)
-		if (!_tcsicmp(group->mName, aGroupName)) // lstrcmpi() is not used: 1) avoids breaking exisitng scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+		if (!_tcsicmp(group->mName, aGroupName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			return group; // Match found.
 	// Otherwise, no match found, so create a new group.
 	if (!aCreateIfNotFound || AddGroup(aGroupName) != OK)
@@ -9192,7 +9192,7 @@ WinGroup *Script::FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound)
 
 ResultType Script::AddGroup(LPTSTR aGroupName)
 // Returns OK or FAIL.
-// The caller must already have verfied that this isn't a duplicate group.
+// The caller must already have verified that this isn't a duplicate group.
 // This function is not thread-safe because it adds an entry to the quasi-global list of window groups.
 // In addition, if this function is being called by one thread while another thread is calling FindGroup(),
 // the thread-safety notes in FindGroup() apply.
@@ -9480,7 +9480,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			if (line_temp == NULL) // Error or end-of-script was reached.
 				return NULL;
 
-			// Seems best to keep this check for mainability because changes to other checks can impact
+			// Seems best to keep this check for maintainability because changes to other checks can impact
 			// whether this check will ever be "true":
 			if (line->mRelatedLine != NULL)
 				return line->PreparseError(_T("Q")); // Placeholder since it shouldn't happen.  Formerly "This if-statement or LOOP unexpectedly already had an ELSE or end-point."
@@ -9514,7 +9514,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					 // this can't be our else, so let the caller handle it.
 					if (aMode != ONLY_ONE_LINE)
 						// This ELSE was encountered while sequentially scanning the contents
-						// of a block or at the otuermost nesting layer.  More thought is required
+						// of a block or at the outermost nesting layer.  More thought is required
 						// to verify this is correct.  UPDATE: This check is very old and I haven't
 						// found a case that can produce it yet, but until proven otherwise its safer
 						// to assume it's possible.
@@ -9730,7 +9730,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			// ACT_EXIT should never be parsed here in ONLY_ONE_LINE mode because the only time
 			// that mode is used is for the action of an IF, an ELSE, or possibly a LOOP.
 			// In all of those cases, the final ACT_EXIT line in the script (which is explicitly
-			// insertted by the loader) cannot be the line that was just processed by the
+			// inserted by the loader) cannot be the line that was just processed by the
 			// switch().  Therefore, the above assignment should not have set line to NULL
 			// (which is good because NULL would probably be construed as "failure" by our
 			// caller in this case):
@@ -9842,7 +9842,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 	int derefs_in_this_double;
 	int cp1; // int vs. char benchmarks slightly faster, and is slightly smaller in code size.
 
-	for (cp = aArg.text, deref = aArg.deref // Start at the begining of this arg's text and look for the next deref.
+	for (cp = aArg.text, deref = aArg.deref // Start at the beginning of this arg's text and look for the next deref.
 		;; ++deref, ++infix_count) // FOR EACH DEREF IN AN ARG:
 	{
 		this_deref = deref && deref->marker ? deref : NULL; // A deref with a NULL marker terminates the list (i.e. the final deref isn't a deref, merely a terminator of sorts.
@@ -9887,7 +9887,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							{
 								// For consistency, assume that since the previous item is an operand (even if it's
 								// ')'), this is a post-op that applies to that operand.  For example, the following
-								// are all treated the same for consistency (implicit concatention where the '.'
+								// are all treated the same for consistency (implicit concatenation where the '.'
 								// is omitted is rare anyway).
 								// x++ y
 								// x ++ y
@@ -10663,7 +10663,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				// v1.0.46.01: If an environment variable is being used as an lvalue -- regardless
 				// of whether that variable is blank in the environment -- treat it as a normal
 				// variable instead.  This is because most people would want that, and also because
-				// it's tranditional not to directly support assignments to environment variables
+				// it's traditional not to directly support assignments to environment variables
 				// (only EnvSet can do that, mostly for code simplicity).  In addition, things like
 				// EnvVar.="string" and EnvVar+=2 aren't supported due to obscurity/rarity (instead,
 				// such expressions treat EnvVar as blank). In light of all this, convert environment
@@ -10687,7 +10687,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				// An lvalue should be produced so that the following features are consistent
 				// even for variables whose names happen to match those of environment variables:
 				// - Pass an assignment byref or takes its address; e.g. &(++x).
-				// - Cascading assigments; e.g. (++var) += 4 (rare to be sure).
+				// - Cascading assignments; e.g. (++var) += 4 (rare to be sure).
 				// - Possibly other lvalue behaviors that rely on SYM_VAR being present.
 				// Above logic might not be perfect because it doesn't check for parens such as (var):=x,
 				// and possibly other obscure types of assignments.  However, it seems adequate given
@@ -11028,7 +11028,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				// precedence rules would be produce a syntax error due to "assigning to non-lvalue".
 				// So instead, apply any pending operator on the stack (which lies to the left of the lvalue
 				// in the infix expression) *after* the assignment by leaving it on the stack.  For example,
-				// C++ and probably other langauges (but not the older ANSI C) evaluate "true ? x:=1 : y:=1"
+				// C++ and probably other languages (but not the older ANSI C) evaluate "true ? x:=1 : y:=1"
 				// as a pair of assignments rather than as who-knows-what (probably a syntax error if you
 				// strictly followed precedence).  Similarly, C++ evaluates "true ? var1 : var2 := 3" not as
 				// "(true ? var1 : var2) := 3" (like ANSI C) but as "true ? var1 : (var2 := 3)".  Other examples:
@@ -11054,7 +11054,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				// evaluated as 2**(-2) rather than being seen as an error.  However, as of v1.0.46, consecutive
 				// unary operators are supported via the right-to-left evaluation flag above (formerly, consecutive
 				// unaries produced a failure [blank value]).  For example:
-				// !!x  ; Useful to convert a blank value into a zero for use with unitialized variables.
+				// !!x  ; Useful to convert a blank value into a zero for use with uninitialized variables.
 				// not not x  ; Same as above.
 				// Other examples: !-x, -!x, !&x, -&Var, ~&Var
 				// And these deref ones (which worked even before v1.0.46 by different means: giving
@@ -11339,9 +11339,9 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		//    can sometimes be only 10 or 20ms. UPDATE: It looks like PeekMessage() yields CPU time
 		//    automatically, similar to a Sleep(0), when our queue has no messages.  Since this would
 		//    make scripts slow to a crawl, only do the Peek() every 5ms or so (though the timer
-		//    granularity is 10ms on mosts OSes, so that's the true interval).
+		//    granularity is 10ms on most OSes, so that's the true interval).
 		// 4) Timed subroutines are run as consistently as possible (to help with this, a check
-		//    similar to the below is also done for single commmands that take a long time, such
+		//    similar to the below is also done for single commands that take a long time, such
 		//    as URLDownloadToFile, FileSetAttrib, etc.
 		LONG_OPERATION_UPDATE
 
@@ -11489,7 +11489,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					return result;
 				}
 				// Now this if-statement, including any nested if's and their else's,
-				// has been fully evaluated by the recusion above.  We must jump to
+				// has been fully evaluated by the recursion above.  We must jump to
 				// the end of this if-statement to get to the right place for
 				// execution to resume.  UPDATE: Or jump to the goto target if the
 				// call to ExecUntil told us to do that instead:
@@ -11567,7 +11567,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		switch (line->mActionType)
 		{
 		case ACT_GOSUB:
-			// A single gosub can cause an infinite loop if misused (i.e. recusive gosubs),
+			// A single gosub can cause an infinite loop if misused (i.e. recursive gosubs),
 			// so be sure to do this to prevent the program from hanging:
 			++g_script.mLinesExecutedThisCycle;
 			if (line->mRelatedLine)
@@ -12061,7 +12061,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				// Now line is the line after the end of this block.  Can be NULL (end of script).
 				// UPDATE: It can't be NULL (not that it matters in this case) since the loader
 				// has ensured that all scripts now end in an ACT_EXIT.
-			continue;  // Resume looping starting at the above line.  "continue" is actually slighty faster than "break" in these cases.
+			continue;  // Resume looping starting at the above line.  "continue" is actually slightly faster than "break" in these cases.
 
 		case ACT_BLOCK_END:
 			// Don't count block-begin/end against the total since they should be nearly instantaneous:
@@ -12861,7 +12861,7 @@ ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aCont
 	BOOL file_found;
 	WIN32_FIND_DATA new_current_file;
 	HANDLE file_search = FindFirstFile(aFilePattern, &new_current_file);
-	for ( file_found = (file_search != INVALID_HANDLE_VALUE) // Convert FindFirst's return value into a boolean so that it's compatible with with FindNext's.
+	for ( file_found = (file_search != INVALID_HANDLE_VALUE) // Convert FindFirst's return value into a boolean so that it's compatible with FindNext's.
 		; file_found && FileIsFilteredOut(new_current_file, aFileLoopMode, file_path, file_path_length)
 		; file_found = FindNextFile(file_search, &new_current_file));
 	// file_found and new_current_file have now been set for use below.
@@ -13088,7 +13088,7 @@ ResultType Line::PerformLoopReg(ExprTokenType *aResultToken, bool &aContinueMain
 			if (aRecurseSubfolders) // Now recurse into the subkey, regardless of whether it was processed above.
 			{
 				// Build the new subkey name using the an area of memory on the stack that we won't need
-				// after the recusive call returns to us.  Omit the leading backslash if subkey is blank,
+				// after the recursive call returns to us.  Omit the leading backslash if subkey is blank,
 				// which supports recursively searching the contents of keys contained within a root key
 				// (fixed for v1.0.17):
 				sntprintf(subkey_full_path, _countof(subkey_full_path), _T("%s%s%s"), reg_item.subkey
@@ -13427,7 +13427,7 @@ ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinu
 
 
 
-__forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() reduces code size a little (since this function is called from only one place) and boosts performance a bit, though it's probably more due to the butterly effect and cache hits/misses.
+__forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() reduces code size a little (since this function is called from only one place) and boosts performance a bit, though it's probably more due to the butterfly effect and cache hits/misses.
 // Performs only this line's action.
 // Returns OK or FAIL.
 // The function should not be called to perform any flow-control actions such as
@@ -13800,7 +13800,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			occurrence_number = *(arg4 + 1) ? ATOI(arg4 + 1) : 1;
 		else
 			occurrence_number = 1;
-		// Intentionally allow occurrence_number to resolve to a negative, for scripting flexibililty:
+		// Intentionally allow occurrence_number to resolve to a negative, for scripting flexibility:
 		if (occurrence_number > 0)
 		{
 			if (!*ARG3) // It might be intentional, in obscure cases, to search for the empty string.
@@ -14462,7 +14462,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 				--sLogNext;
 			else
 				sLogNext = LINE_LOG_SIZE - 1;
-			sLog[sLogNext] = NULL; // Without this, one of the lines in the history would be invalid due to the circular nature of the line history array, which would also cause the line history to show the wrong chronlogical order in some cases.
+			sLog[sLogNext] = NULL; // Without this, one of the lines in the history would be invalid due to the circular nature of the line history array, which would also cause the line history to show the wrong chronological order in some cases.
 		}
 		g.ListLinesIsEnabled = (toggle == TOGGLED_ON);
 		return OK;
@@ -14617,7 +14617,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			if (   !(g.LinesPerCycle = ArgToInt64(1))   )
 				// Don't interpret zero as "infinite" because zero can accidentally
 				// occur if the dereferenced var was blank:
-				g.LinesPerCycle = 10;  // The old default, which is retained for compatbility with existing scripts.
+				g.LinesPerCycle = 10;  // The old default, which is retained for compatibility with existing scripts.
 		}
 		return OK;
 
@@ -14669,7 +14669,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			case 'H':
 				g.FormatInt = (char) *ARG2;
 				break;
-			// Otherwise, since the first letter isn't recongized, do nothing since 99% of the time such a
+			// Otherwise, since the first letter isn't recognized, do nothing since 99% of the time such a
 			// probably would be caught at load-time.
 			}
 		}
@@ -15198,7 +15198,7 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 		for (int i = 0; i < mArgc; ++i)
 			// This method a little more efficient than using snprintfcat().
 			// Also, always use the arg's text for input and output args whose variables haven't
-			// been been resolved at load-time, since the text has everything in it we want to display
+			// been resolved at load-time, since the text has everything in it we want to display
 			// and thus there's no need to "resolve" dynamic variables here (e.g. array%i%).
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T(",%s"), (mArg[i].type != ARG_TYPE_NORMAL && !*mArg[i].text)
 				? VAR(mArg[i])->mName : mArg[i].text);
@@ -15255,7 +15255,7 @@ ResultType Line::ChangePauseState(ToggleValueType aChangeTo, bool aAlwaysOperate
 	switch (aChangeTo)
 	{
 	case TOGGLED_ON:
-		break; // By breaking insteading of returning, pause will be put into effect further below.
+		break; // By breaking instead of returning, pause will be put into effect further below.
 	case TOGGLED_OFF:
 		// v1.0.37.06: The old method was to unpause the the nearest paused thread on the call stack;
 		// but it was flawed because if the thread that made the flag true is interrupted, and the new
@@ -15322,7 +15322,7 @@ ResultType Line::ScriptBlockInput(bool aEnable)
 	typedef void (CALLBACK *BlockInput)(BOOL);
 	static BlockInput lpfnDLLProc = (BlockInput)GetProcAddress(GetModuleHandle(_T("user32")), "BlockInput");
 	// Always turn input ON/OFF even if g_BlockInput says its already in the right state.  This is because
-	// BlockInput can be externally and undetectibly disabled, e.g. if the user presses Ctrl-Alt-Del:
+	// BlockInput can be externally and undetectably disabled, e.g. if the user presses Ctrl-Alt-Del:
 	if (lpfnDLLProc)
 		(*lpfnDLLProc)(aEnable ? TRUE : FALSE);
 	g_BlockInput = aEnable;
@@ -15369,7 +15369,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		// used to jump to that line."
 		#define STD_ERROR_FORMAT _T("%s (%d) : ==> %s\n")
 		#define STD_WARNING_FORMAT _T("%s (%d) : ==> Warning: %s\n")
-		ERR_PRINT(aErrorType == WARN ? STD_WARNING_FORMAT : STD_ERROR_FORMAT, sSourceFile[mFileIndex], mLineNumber, aErrorText); // printf() does not signifantly increase the size of the EXE, probably because it shares most of the same code with sprintf(), etc.
+		ERR_PRINT(aErrorType == WARN ? STD_WARNING_FORMAT : STD_ERROR_FORMAT, sSourceFile[mFileIndex], mLineNumber, aErrorText); // printf() does not significantly increase the size of the EXE, probably because it shares most of the same code with sprintf(), etc.
 		if (*aExtraInfo)
 			ERR_PRINT(_T("     Specifically: %s\n"), aExtraInfo);
 	}
@@ -15699,7 +15699,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 // Remember that aAction and aParams can both be NULL, so don't dereference without checking first.
 // Note: For the Run & RunWait commands, aParams should always be NULL.  Params are parsed out of
 // the aActionString at runtime, here, rather than at load-time because Run & RunWait might contain
-// deferenced variable(s), which can only be resolved at runtime.
+// dereferenced variable(s), which can only be resolved at runtime.
 {
 	HANDLE hprocess_local;
 	HANDLE &hprocess = aProcess ? *aProcess : hprocess_local; // To simplify other things.

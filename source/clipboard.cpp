@@ -54,7 +54,7 @@ size_t Clipboard::Get(LPTSTR aBuf)
 		// can alter its size while we have it open).  The is to prevent a
 		// buffer overflow from happening in a scenario such as the following:
 		// Caller calls us and we return zero size, either because there's no
-		// CF_TEXT on the clipboard orthere was a problem opening the clipboard.
+		// CF_TEXT on the clipboard or there was a problem opening the clipboard.
 		// In these two cases, the clipboard isn't open, so by the time the
 		// caller calls us again, there's a chance (vanishingly small perhaps)
 		// that another app (if our thread were preempted long enough, or the
@@ -371,7 +371,7 @@ HANDLE Clipboard::GetClipboardDataTimeout(UINT uFormat)
 #endif
 
 	TCHAR format_name[MAX_PATH + 1]; // MSDN's RegisterClipboardFormat() doesn't document any max length, but the ones we're interested in certainly don't exceed MAX_PATH.
-	if (uFormat < 0xC000 || uFormat > 0xFFFF) // It's a registered format (you're supposted to verify in-range before calling GetClipboardFormatName()).  Also helps performance.
+	if (uFormat < 0xC000 || uFormat > 0xFFFF) // It's a registered format (you're supposed to verify in-range before calling GetClipboardFormatName()).  Also helps performance.
 		*format_name = '\0'; // Don't need the name if it's a standard/CF_* format.
 	else
 	{

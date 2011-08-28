@@ -27,7 +27,7 @@ UINT SimpleHeap::sBlockCount = 0;
 LPTSTR SimpleHeap::Malloc(LPTSTR aBuf, size_t aLength)
 // v1.0.44.14: Added aLength to improve performance in cases where callers already know the length.
 // If aLength is at its default of -1, the length will be calculated here.
-// Caller must ensture that aBuf isn't NULL.
+// Caller must ensure that aBuf isn't NULL.
 {
 	if (!aBuf || !*aBuf) // aBuf is checked for NULL because it's not worth avoiding it for such a low-level, frequently-called function.
 		return _T(""); // Return the constant empty string to the caller (not aBuf itself since that might be volatile).

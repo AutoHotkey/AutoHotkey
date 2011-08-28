@@ -227,7 +227,7 @@ bool g_BlockMouseMove = false;
 // many mutual dependency problems between modules).  Note: Action names must not contain any
 // spaces or tabs because within a script, those characters can be used in lieu of a delimiter
 // to separate the action-type-name from the first parameter.
-// Note about the sub-array: Since the parent array array is global, it would be automatically
+// Note about the sub-array: Since the parent array is global, it would be automatically
 // zero-filled if we didn't provide specific initialization.  But since we do, I'm not sure
 // what value the unused elements in the NumericParams subarray will have.  Therefore, it seems
 // safest to always terminate these subarrays with an explicit zero, below.

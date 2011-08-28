@@ -293,7 +293,7 @@ if (!g_InputTimerExists)\
 	g_InputTimerExists = SetTimer(g_hWnd, TIMER_ID_INPUT, aTimeoutValue, InputTimeout);
 
 // For this one, SetTimer() is called unconditionally because our caller wants the timer reset
-// (as though it were killed and recreated) uncondtionally.  MSDN's comments are a little vague
+// (as though it were killed and recreated) unconditionally.  MSDN's comments are a little vague
 // about this, but testing shows that calling SetTimer() against an existing timer does completely
 // reset it as though it were killed and recreated.  Note also that g_hWnd is used vs. NULL so that
 // the timer will fire even when a msg pump other than our own is running, such as that of a MsgBox.

@@ -329,7 +329,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		return CRITICAL_ERROR;
 	// REMEMBER: The call above will never return if one of the following happens:
 	// 1) The AutoExec section never finishes (e.g. infinite loop).
-	// 2) The AutoExec function uses uses the Exit or ExitApp command to terminate the script.
+	// 2) The AutoExec function uses the Exit or ExitApp command to terminate the script.
 	// 3) The script isn't persistent and its last line is reached (in which case an ExitApp is implicit).
 
 	// Call it in this special mode to kick off the main event loop.

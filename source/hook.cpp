@@ -71,7 +71,7 @@ static key_type *ksc = NULL;
 // or physically down, and a dual-state numpad key is pressed or released (i.e. the shift
 // key might not have been down for the press, but if it's down for the release, the driver
 // will suddenly start generating shift events).  I think the purpose of these events is to
-// allow the shift keyto temporarily alter the state of the Numlock key for the purpose of
+// allow the shift key to temporarily alter the state of the Numlock key for the purpose of
 // sending that one key, without the shift key actually being "seen" as down while the key
 // itself is sent (since some apps may have special behavior when they detect the shift key
 // is down).
@@ -320,7 +320,7 @@ LRESULT CALLBACK LowLevelMouseProc(int aCode, WPARAM wParam, LPARAM lParam)
 	// This is expected because each click in a doubleclick could be separately suppressed by
 	// the hook, which would make it become a non-doubleclick.
 	vk_type vk = 0;
-	sc_type sc = 0; // To be overriden if this even is a wheel turn.
+	sc_type sc = 0; // To be overridden if this even is a wheel turn.
 	short wheel_delta;
 	bool key_up = true;  // Set default to safest value.
 
@@ -338,7 +338,7 @@ LRESULT CALLBACK LowLevelMouseProc(int aCode, WPARAM wParam, LPARAM lParam)
 				vk = wheel_delta < 0 ? VK_WHEEL_DOWN : VK_WHEEL_UP;
 			else
 				vk = wheel_delta < 0 ? VK_WHEEL_LEFT : VK_WHEEL_RIGHT;
-			// Dividing by WHEEL_DELTA was a mistake because some mice can yield detas less than 120.
+			// Dividing by WHEEL_DELTA was a mistake because some mice can yield deltas less than 120.
 			// However, this behavior is kept for backward compatibility because some scripts may rely
 			// on A_EventInfo==0 meaning "delta is between 1 and 119".  WheelLeft/Right were also done
 			// that way because consistency may be more important than correctness.  In the future, perhaps
@@ -424,12 +424,12 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				// SOLUTION:
 				// Post the message to our main thread to have it do the GetWindowText call.  That way, if
 				// the target window is one of the main thread's own window's, there's no chance it can be
-				// in an unreponsive state like the deadlock described above.  In addition, do this for ALL
-				// windows because its simpler, more maintainable, and especially might sovle other hook
+				// in an unresponsive state like the deadlock described above.  In addition, do this for ALL
+				// windows because its simpler, more maintainable, and especially might solve other hook
 				// performance problems if GetWindowText() has other situations where it is slow to return
 				// (which seems likely).
 				// Although the above solution could create rare situations where there's a lag before window text
-				// is updated, that seems unlikely to be common or have signficant consequences.  Furthermore,
+				// is updated, that seems unlikely to be common or have significant consequences.  Furthermore,
 				// it has the advantage of improving hook performance by avoiding the call to GetWindowText (which
 				// incidentally might solve hotkey lag problems that have been observed while the active window
 				// is momentarily busy/unresponsive -- but maybe not because the main thread would then be lagged
@@ -468,7 +468,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	pKeyHistoryCurr->sc = aSC; // Will be zero if our caller is the mouse hook (except for wheel notch count).
 	// After logging the wheel notch count (above), purify aSC for readability and maintainability.
 	if (IS_WHEEL_VK(aVK))
-		aSC = 0; // Also relied upon by by sc_takes_precedence below.
+		aSC = 0; // Also relied upon by sc_takes_precedence below.
 
 	bool is_artificial;
 	if (aHook == g_MouseHook)
@@ -580,7 +580,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			return SuppressThisKey; // Testing shows that by contrast, the upcoming key-up on Escape doesn't require this logic.
 		}
 		// Otherwise, the alt-tab window doesn't exist or (more likely) it's owned by some other process
-		// such as crss.exe.  Do nothing extra to avoid inteferring with the native function of Escape or
+		// such as crss.exe.  Do nothing extra to avoid interfering with the native function of Escape or
 		// any remappings or hotkeys assigned to Escape.  Also, do not set sAltTabMenuIsVisible to false
 		// in any of the cases here because there is logic elsewhere in the hook that does that more
 		// reliably; it takes into account things such as whether the Escape keystroke will be suppressed
@@ -766,7 +766,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			hotkey_id_with_flags = this_key.hotkey_to_fire_upon_release;
 			is_explicit_key_up_hotkey = true; // Can't rely on (hotkey_id_with_flags & HOTKEY_KEY_UP) because some key-up hotkeys (such as the hotkey_up array) might not be flagged that way.
 			// The line below is done even though the down-event also resets it in case it is ever
-			// possible for keys to generate mulitple consecutive key-up events (faulty or unusual keyboards?)
+			// possible for keys to generate multiple consecutive key-up events (faulty or unusual keyboards?)
 			this_key.hotkey_to_fire_upon_release = HOTKEY_ID_INVALID;
 		}
 	}
@@ -828,7 +828,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			&& Hotkey::PrefixHasNoEnabledSuffixes(sc_takes_precedence ? aSC : aVK, sc_takes_precedence))   )
 		{
 			// This check is necessary in cases such as the following, in which the "A" key continues
-			// to repeat becauses pressing a mouse button (unlike pressing a keyboard key) does not
+			// to repeat because pressing a mouse button (unlike pressing a keyboard key) does not
 			// stop the prefix key from repeating:
 			// $a::send, a
 			// a & lbutton::
@@ -1501,7 +1501,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				this_key.hotkey_down_was_suppressed = true;
 			return SuppressThisKey;
 		} // end of alt-tab section.
-		// Since abov didn't return, this isn't a prefix-triggered alt-tab action (though it might be
+		// Since above didn't return, this isn't a prefix-triggered alt-tab action (though it might be
 		// a non-prefix alt-tab action, which is handled later below).
 	} // end of section that searches for a suffix modified by the prefix that's currently held down.
 
@@ -1812,7 +1812,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				// Unlike CONTROL, SHIFT, AND ALT, the LWIN/RWIN keys don't seem to need any
 				// special handling to make them work with the alt-tab features.
 
-				bool vk_is_alt = aVK == VK_LMENU || aVK == VK_RMENU;  // Tranlated & no longer needed: || vk == VK_MENU;
+				bool vk_is_alt = aVK == VK_LMENU || aVK == VK_RMENU;  // Translated & no longer needed: || vk == VK_MENU;
 				bool vk_is_shift = aVK == VK_LSHIFT || aVK == VK_RSHIFT;  // || vk == VK_SHIFT;
 				bool vk_is_control = aVK == VK_LCONTROL || aVK == VK_RCONTROL;  // || vk == VK_CONTROL;
 
@@ -2057,7 +2057,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			bool suppress_to_prevent_toggle = this_key.pForceToggle && *this_key.pForceToggle != NEUTRAL;
 			// The following isn't checked as part of the above because this_key.was_just_used would
 			// never be true with hotkeys such as the Capslock pair shown above. That's because
-			// Caplock isn't a prefix in that case, it's just a suffix. Even if it were a prefix, it would
+			// Capslock isn't a prefix in that case, it's just a suffix. Even if it were a prefix, it would
 			// never reach this point in the execution because places higher above return early if the value of
 			// this_key.was_just_used is AS_PREFIX/AS_PREFIX_FOR_HOTKEY.
 			// Used as either a prefix for a hotkey or just a plain modifier for another key.
@@ -2456,7 +2456,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 
 bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aKeyUp, bool aIsIgnored
 	, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost)
-// Caller is reponsible for having initialized aHotstringWparamToPost to HOTSTRING_INDEX_INVALID.
+// Caller is responsible for having initialized aHotstringWparamToPost to HOTSTRING_INDEX_INVALID.
 // Returns true if the caller should treat the key as visible (non-suppressed).
 // Always use the parameter vk rather than event.vkCode because the caller or caller's caller
 // might have adjusted vk, namely to make it a left/right specific modifier key rather than a
@@ -2794,7 +2794,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				// short-circuit boolean order):
 				if (   cphs >= hs.mString // One of the loops above stopped early due discovering "no match"...
 					// ... or it did but the "?" option is not present to protect from the fact that
-					// what lies to the left of this hotstring abbreviation is an alphanumberic character:
+					// what lies to the left of this hotstring abbreviation is an alphanumeric character:
 					|| !hs.mDetectWhenInsideWord && cpbuf >= g_HSBuf && IsCharAlphaNumeric(*cpbuf)
 					// ... v1.0.41: Or it's a perfect match but the right window isn't active or doesn't exist.
 					// In that case, continue searching for other matches in case the script contains
@@ -2820,7 +2820,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				// and replacing here.  This is because a KeyDelay of 0 might be fairly slow at
 				// sending keystrokes if the system is under heavy load, in which case we would
 				// not be returning to our caller in a timely fashion, which would case the OS to
-				// think the hook is unreponsive, which in turn would cause it to timeout and
+				// think the hook is unresponsive, which in turn would cause it to timeout and
 				// route the key through anyway (testing confirms this).
 				if (!hs.mConformToCase)
 					case_conform_mode = CASE_CONFORM_NONE;
@@ -2850,7 +2850,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 						case_conform_mode = CASE_CONFORM_NONE;
 					else if (case_capable_characters == 1)
 						// Since there is only a single character with case potential, it seems best as
-						// a default behavior to capitalize the first letter of the replacment whenever
+						// a default behavior to capitalize the first letter of the replacement whenever
 						// that character was typed in uppercase.  The behavior can be overridden by
 						// turning off the case-conform mode.
 						case_conform_mode = first_char_with_case_is_upper ? CASE_CONFORM_FIRST_CAP : CASE_CONFORM_NONE;
@@ -2892,7 +2892,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 					// its replacement text, the Input script's hook will get a hold of it first
 					// before the Hotstring's script has a chance to suppress it.  In other words,
 					// The Input command will capture the ending character and then there will
-					// be insufficient backspaces sent to clear the abbrevation out of it.  This
+					// be insufficient backspaces sent to clear the abbreviation out of it.  This
 					// situation is quite rare so for now it's just mentioned here as a known limitation.
 					treat_as_visible = false; // It might already have been false due to an invisible-input in progress, etc.
 					suppress_hotstring_final_char = true; // This var probably must be separate from treat_as_visible to support invisible inputs.
@@ -3060,7 +3060,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 			for (UINT i = 0; i < g_input.MatchCount; ++i)
 			{
 				// v1.0.43.03: Changed lstrcasestr to strcasestr because it seems unlikely to break any existing
-				// scripts and is also more useful given that that Input with match-list is pretty rarely used,
+				// scripts and is also more useful given that Input with match-list is pretty rarely used,
 				// and even when it is used, match lists are usually short (so performance isn't impacted much
 				// by this change).
 				if (lstrcasestr(g_input.buffer, g_input.match[i]))
@@ -3273,12 +3273,12 @@ bool KeybdEventIsPhysical(DWORD aEventFlags, const vk_type aVK, bool aKeyUp)
 	// v1.0.42.04:
 	// The time member of the incoming event struct has been observed to be wrongly zero sometimes, perhaps only
 	// for AltGr keyboard layouts that generate LControl events when RAlt is pressed (but in such cases, I think
-	// it's only sometimes zero, not always).  It might also occur during simultation of Alt+Numpad keystrokes
+	// it's only sometimes zero, not always).  It might also occur during simulation of Alt+Numpad keystrokes
 	// to support {Asc NNNN}.  In addition, SendInput() is documented to have the ability to set its own timestamps;
 	// if it's callers put in a bad timestamp, it will probably arrive here that way too.  Thus, use GetTickCount().
 	// More importantly, when a script or other application simulates an AltGr keystroke (either down or up),
 	// the LControl event received here is marked as physical by the OS or keyboard driver.  This is undesirable
-	// primarly because it makes g_TimeLastInputPhysical inaccurate, but also because falsely marked physical
+	// primarily because it makes g_TimeLastInputPhysical inaccurate, but also because falsely marked physical
 	// events can impact the script's calls to GetKeyState("LControl", "P"), etc.
 	g_TimeLastInputPhysical = GetTickCount();
 	return true;
@@ -3296,7 +3296,7 @@ bool DualStateNumpadKeyIsDown()
 	// physically holding down the shift-key will change VK generated by the driver to appear
 	// to be that of the numpad without the numlock key on.  In other words, we can't just
 	// consult the g_PhysicalKeyState array because it won't tell whether a key such as
-	// NumpadEnd is truly phyiscally down:
+	// NumpadEnd is truly physically down:
 	for (int i = 0; i < PAD_TOTAL_COUNT; ++i)
 		if (sPadState[i])
 			return true;
@@ -3388,7 +3388,7 @@ int sort_most_general_before_least(const void *a1, const void *a2)
 
 	// However the order of suffixes that don't allow extra modifiers, among themselves, may be important.
 	// Thus we don't return a zero if both have AllowExtraModifiers = 0.
-	// Example: User defines ^a, but also defines >^a.  What should probably happen is that >^a fores ^a
+	// Example: User defines ^a, but also defines >^a.  What should probably happen is that >^a forces ^a
 	// to fire only when <^a occurs.
 
 	mod_type mod_a1_merged = b1.modifiers;
@@ -3436,7 +3436,7 @@ int sort_most_general_before_least(const void *a1, const void *a2)
 	mod_type mod_intersect = mod_a1_merged & mod_a2_merged;
 
 	if (mod_a1_merged == mod_intersect)
-		// a1's modifiers are containined entirely within a2's, thus a1 is more general and
+		// a1's modifiers are contained entirely within a2's, thus a1 is more general and
 		// should be considered smaller so that it will go closer to the top of the list:
 		return -1;
 	if (mod_a2_merged == mod_intersect)
@@ -3547,7 +3547,7 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 // Returns the set of hooks that are active after processing is complete.
 {
 	// v1.0.39: For simplicity and maintainability, don't even make the attempt on Win9x since it
-	// seems too rare that they would have LL hook capability somehow (such as in an emultator).
+	// seems too rare that they would have LL hook capability somehow (such as in an emulFator).
 	// NOTE: Some sections rely on the fact that no warning dialogs are displayed if the hook is
 	// called for but the OS doesn't support it.  For example, ManifestAllHotkeysHotstringsHooks()
 	// doesn't check the OS version in many cases when marking hotkeys as hook hotkeys.
@@ -3585,7 +3585,7 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 	// performance would be slightly worse for the "average" script).  Presumably, the
 	// caller is requesting the keyboard hook with zero hotkeys to support the forcing
 	// of Num/Caps/ScrollLock always on or off (a fairly rare situation, probably):
-	if (!kvk)  // Since it's an initialzied global, this indicates that all 4 objects are not yet allocated.
+	if (!kvk)  // Since it's an initialized global, this indicates that all 4 objects are not yet allocated.
 	{
 		if (   !(kvk = new key_type[VK_ARRAY_COUNT])
 			|| !(ksc = new key_type[SC_ARRAY_COUNT])
@@ -3646,7 +3646,7 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 	}
 
 	// Init only those attributes which reflect the hotkey's definition, not those that reflect
-	// the key's current status (since those are intialized only if the hook state is changing
+	// the key's current status (since those are initialized only if the hook state is changing
 	// from OFF to ON (later below):
 	int i;
 	for (i = 0; i < VK_ARRAY_COUNT; ++i)
@@ -3659,7 +3659,7 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 		if (g_key_to_sc[i].sc > 0 && g_key_to_sc[i].sc <= SC_MAX)
 			ksc[g_key_to_sc[i].sc].sc_takes_precedence = true;
 
-	// These have to be initialized with with element value INVALID.
+	// These have to be initialized with element value INVALID.
 	// Don't use FillMemory because the array elements are too big (bigger than bytes):
 	for (i = 0; i < KVKM_SIZE; ++i) // Simplify by viewing 2-dimensional array as a 1-dimensional array.
 		kvkm[i] = HOTKEY_ID_INVALID;
@@ -3912,7 +3912,7 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 						// *MButton::
 						// *Mbutton Up::
 						// MButton Up::  ; This is the key point: that this hotkey lacks a counterpart down-key.
-						// Because there's no down-counterpart to the non-asterisk hotkey, the non-asterik
+						// Because there's no down-counterpart to the non-asterisk hotkey, the non-asterisk
 						// hotkey's MButton Up takes over completely and *MButton is ignored.  This is because
 						// a given hotkey ID can only have one entry in the hotkey_up array.  What should
 						// really happen is that every Up hotkey should have an implicit identical down hotkey
@@ -4056,7 +4056,7 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 		// Confirmation from MSDN: "Another work around is to link the *executable* to the CRT in a *DLL*
 		// instead of the static CRT."
 		//
-		// The hooks are designed to make miminmal use of C-library calls, currently calling only things
+		// The hooks are designed to make minimal use of C-library calls, currently calling only things
 		// like memcpy() and strlen(), which are thread safe in the single-threaded library (according to
 		// their source code).  However, the hooks may indirectly call other library functions via calls
 		// to KeyEvent() and other functions, which has already been reviewed for thread-safety but needs
@@ -4092,7 +4092,7 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 			// 24 = REALTIME_PRIORITY_CLASS process + THREAD_PRIORITY_NORMAL thread.
 		else // Failed to create thread.  Seems to rare to justify the display of an error.
 		{
-			FreeHookMem(); // If everything's designed right, there should be no hooks now (even if therre is, they can't be functional because their thread is nonexistent).
+			FreeHookMem(); // If everything's designed right, there should be no hooks now (even if there is, they can't be functional because their thread is nonexistent).
 			return;
 		}
 	}
@@ -4157,7 +4157,7 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 					if (!GetActiveHooks() && !aChangeIsTemporary) // The failure is such that no hooks are now active, and thus (due to the mode) the hook thread will exit.
 					{
 						// Convert this loop into the mode that waits for the hook thread to exit.
-						// This allows the thead handle to be closed and the memory to be freed.
+						// This allows the thread handle to be closed and the memory to be freed.
 						aHooksToBeActive = 0;
 						continue;
 					}
@@ -4183,9 +4183,9 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 				if (exit_code != STILL_ACTIVE) // The hook thread is now gone.
 				{
 					// Do the following only if it actually exited (i.e. not if this loop timed out):
-					CloseHandle(sThreadHandle); // Release our refererence to it to allow the OS to delete the thread object.
+					CloseHandle(sThreadHandle); // Release our reference to it to allow the OS to delete the thread object.
 					sThreadHandle = NULL;
-					FreeHookMem(); // There should be no hooks now (even if therre is, they can't be functional because their thread is nonexistent).
+					FreeHookMem(); // There should be no hooks now (even if there is, they can't be functional because their thread is nonexistent).
 					break;
 				}
 			}
@@ -4209,7 +4209,7 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 	// If the above loop timed out without the hook thread exiting (if it was asked to exit), sThreadHandle
 	// is left as non-NULL to reflect this condition.
 
-	// In case mutex create/open/close can be a high-overhread operation, do it only when the hook isn't
+	// In case mutex create/open/close can be a high-overhead operation, do it only when the hook isn't
 	// being quickly/temporarily removed then added back again.
 	if (!aChangeIsTemporary)
 	{
@@ -4346,12 +4346,12 @@ DWORD WINAPI HookThreadProc(LPVOID aUnused)
 			// explicitly waiting for this message (so there's no chance that a MsgBox msg pump
 			// will discard the message unless the caller has timed out, which seems impossible
 			// in this case).
-			if (msg.wParam) // The caller wants a reply only when it didn't ask us to terminate via deactiving both hooks.
+			if (msg.wParam) // The caller wants a reply only when it didn't ask us to terminate via deactivating both hooks.
 				PostThreadMessage(g_MainThreadID, AHK_CHANGE_HOOK_STATE, problem_activating_hooks, 0);
 			//else this is WM_QUIT or the caller wanted this thread to terminate.  Send no reply.
 
 			// If caller passes true for msg.lParam, it wants a permanent change to hook state; so in that case, terminate this
-			// thread whenever neither hook is no longe present.
+			// thread whenever neither hook is no longer present.
 			if (msg.lParam && !(g_KeybdHook || g_MouseHook)) // Both hooks are inactive (for whatever reason).
 				return 0; // Thread is no longer needed. The "return" automatically calls ExitThread().
 				// 1) Due to this thread's non-GUI nature, there doesn't seem to be any need to call
