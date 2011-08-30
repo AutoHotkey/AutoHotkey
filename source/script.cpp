@@ -720,7 +720,7 @@ ResultType Script::AutoExecSection()
 	// (e.g. infinite loop) or it uses Exit/ExitApp.
 
 	// Check if an exception has been thrown
-	if (ExecUntil_result == EXCPT_THROWN)
+	if (g->ThrownToken)
 		// Display an error message
 		ExecUntil_result = g_script.UnhandledException(*g->ThrownToken, g->ExcptLine);
 
@@ -11647,7 +11647,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			}
 
 			// Must do these return conditions in this specific order:
-			if (result == FAIL || result == EARLY_EXIT || result == EXCPT_THROWN)
+			if (result == FAIL || result == EARLY_EXIT)
 				return result;
 			if (aMode == ONLY_ONE_LINE)
 				// This Gosub doesn't want its caller to know that the gosub's
@@ -12070,7 +12070,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				continue;
 
 			if (aMode == ONLY_ONE_LINE
-				|| result != OK && (this_act != ACT_TRY || result != EXCPT_THROWN)) // TRY handles EXCPT_THROWN
+				|| result != OK && (this_act != ACT_TRY || !g.ThrownToken))
 			{
 				caller_jump_to_line = jump_to_line;
 				return result;
@@ -12092,7 +12092,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				{
 					bool bHasCatchHandler = line->mActionType == ACT_CATCH;
 
-					if (bHasCatchHandler && result != EXCPT_THROWN)
+					if (bHasCatchHandler && !g.ThrownToken)
 						// Ignore the catch handler
 						line = line->mRelatedLine;
 					else
@@ -12155,7 +12155,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			// Throw the newly-created token
 			g.ExcptLine = line;
 			g.ThrownToken = token;
-			return EXCPT_THROWN;
+			return FAIL;
 		}
 
 		case ACT_EXIT:

@@ -101,7 +101,7 @@ GNU General Public License for more details.
 // (and false is a failure):
 enum ResultType {FAIL = 0, OK, WARN = OK, CRITICAL_ERROR  // Some things might rely on OK==1 (i.e. boolean "true")
 	, CONDITION_TRUE, CONDITION_FALSE
-	, LOOP_BREAK, LOOP_CONTINUE, EXCPT_THROWN
+	, LOOP_BREAK, LOOP_CONTINUE
 	, EARLY_RETURN, EARLY_EXIT}; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
 
 enum SendModes {SM_EVENT, SM_INPUT, SM_PLAY, SM_INPUT_FALLBACK_TO_PLAY, SM_INVALID}; // SM_EVENT must be zero.
