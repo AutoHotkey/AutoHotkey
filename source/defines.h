@@ -101,7 +101,7 @@ GNU General Public License for more details.
 // (and false is a failure):
 enum ResultType {FAIL = 0, OK, WARN = OK, CRITICAL_ERROR  // Some things might rely on OK==1 (i.e. boolean "true")
 	, CONDITION_TRUE, CONDITION_FALSE
-	, LOOP_BREAK, LOOP_CONTINUE
+	, LOOP_BREAK, LOOP_CONTINUE, EXCPT_THROWN
 	, EARLY_RETURN, EARLY_EXIT}; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
 
 enum SendModes {SM_EVENT, SM_INPUT, SM_PLAY, SM_INPUT_FALLBACK_TO_PLAY, SM_INVALID}; // SM_EVENT must be zero.
@@ -309,6 +309,7 @@ enum enum_act {
 , ACT_SLEEP, ACT_RANDOM
 , ACT_GOTO, ACT_GOSUB, ACT_ONEXIT, ACT_HOTKEY, ACT_SETTIMER, ACT_CRITICAL, ACT_THREAD, ACT_RETURN, ACT_EXIT
 , ACT_LOOP, ACT_FOR, ACT_WHILE, ACT_UNTIL, ACT_BREAK, ACT_CONTINUE // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
+, ACT_TRY, ACT_CATCH, ACT_THROW
 , ACT_BLOCK_BEGIN, ACT_BLOCK_END
 , ACT_WINACTIVATE, ACT_WINACTIVATEBOTTOM
 , ACT_WINWAIT, ACT_WINWAITCLOSE, ACT_WINWAITACTIVE, ACT_WINWAITNOTACTIVE
@@ -568,6 +569,7 @@ typedef UINT_PTR EventInfoType;
 // be copied back into the g struct when the thread is resumed:
 class Func;                 // Forward declarations
 class Label;                //
+class Line;                 //
 struct RegItemStruct;       //
 struct LoopReadFileStruct;  //
 class GuiType;				//
@@ -637,6 +639,8 @@ struct global_struct
 	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
 	bool ListLinesIsEnabled;
 	UINT Encoding;
+	ExprTokenType* ThrownToken;
+	Line* ExcptLine;
 };
 
 inline void global_maximize_interruptibility(global_struct &g)
@@ -674,6 +678,9 @@ inline void global_clear_state(global_struct &g)
 	g.mLoopRegItem = NULL;
 	g.mLoopReadFile = NULL;
 	g.mLoopField = NULL;
+	if (g.ThrownToken && g.ThrownToken->symbol == SYM_OBJECT)
+		g.ThrownToken->object->Release();
+	g.ThrownToken = NULL;
 }
 
 inline void global_init(global_struct &g)

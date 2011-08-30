@@ -1881,7 +1881,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 
 		aResult = Call(&aResultToken); // Call the UDF.
 
-		return (aResult != EARLY_EXIT && aResult != FAIL);
+		return (aResult != EARLY_EXIT && aResult != EXCPT_THROWN && aResult != FAIL);
 	}
 }
 
