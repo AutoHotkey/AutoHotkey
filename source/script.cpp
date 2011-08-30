@@ -4300,7 +4300,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			aActionType = ACT_LOOP;
 			add_openbrace_afterward = true;
 		}
-		// fincs: same as above, but for try, catch & finally:
+		// fincs: same as above, but for try and catch:
 		else if (!_tcsicmp(action_name, _T("try{")) && !*action_args)
 		{
 			aActionType = ACT_TRY;
