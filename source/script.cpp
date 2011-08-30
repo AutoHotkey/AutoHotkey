@@ -12121,6 +12121,17 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			ExprTokenType* token = new ExprTokenType;
 
 			// The following is based on code from PerformLoopFor()
+
+			if (!sDerefBuf)
+			{
+				sDerefBufSize = (mArg[0].length < MAX_NUMBER_LENGTH ? MAX_NUMBER_LENGTH : mArg[0].length) + 1;
+				if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
+				{
+					sDerefBufSize = 0;
+					return LineError(ERR_OUTOFMEM);
+				}
+			}
+
 			LPTSTR our_buf_marker = sDerefBuf;
 			LPTSTR arg_deref[] = {0, 0};
 			LPTSTR strVal;
@@ -15671,6 +15682,7 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 
 ResultType Script::UnhandledException(ExprTokenType& aToken, Line* line)
 {
+	// FUTURE: add more information about the thrown token itself
 	return line->LineError(_T("Unhandled exception!"));
 }
 
