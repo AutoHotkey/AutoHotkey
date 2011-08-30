@@ -9461,7 +9461,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 
 			// Other things rely on this check having been done, such as "if (line->mRelatedLine != NULL)":
 			if (line_temp->mActionType == ACT_ELSE || line_temp->mActionType == ACT_BLOCK_END || line_temp->mActionType == ACT_CATCH)
-				return line->PreparseError(_T("Inappropriate line beneath IF or LOOP or TRY."));
+				return line->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 
 			// Lexikos: This section once maintained separate variables for file-pattern, registry, file-reading
 			// and parsing loops. The intention seemed to be to validate certain commands such as FileAppend
@@ -9551,7 +9551,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				//if (line == NULL) // An else with no action.
 				//	return line_temp->PreparseError(_T("Q")); // Placeholder since impossible. Formerly "This ELSE has no action."
 				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_END || line->mActionType == ACT_CATCH)
-					return line_temp->PreparseError(_T("Inappropriate line beneath ELSE."));
+					return line_temp->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 				// Assign to line rather than line_temp:
 				line = PreparseIfElse(line, ONLY_ONE_LINE, aLoopType);
 				if (line == NULL)
@@ -9582,7 +9582,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				}
 				line = line_temp->mNextLine;
 				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_END || line->mActionType == ACT_CATCH)
-					return line_temp->PreparseError(_T("Inappropriate line beneath TRY."));
+					return line_temp->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 				// Assign to line rather than line_temp:
 				line = PreparseIfElse(line, ONLY_ONE_LINE, aLoopType);
 				if (line == NULL)
