@@ -12222,7 +12222,10 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	{
 		*buf = 'A'; // The 'A' prefix indicates the call was made, but with too many or too few args.
 		_itot(esp_delta, buf + 1, 10);
-		g_ErrorLevel->Assign(buf); // Assign buf not _itoa()'s return value, which is the wrong location.
+		if(!g->InTryBlock)
+			g_ErrorLevel->Assign(buf); // Assign buf not _itoa()'s return value, which is the wrong location.
+		else
+			g_script.ScriptError(_T("This STDCALL function was passed an incorrect number of parameters."), buf);
 	}
 	else
 #endif
@@ -12234,7 +12237,10 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		buf[0] = '0';
 		buf[1] = 'x';
 		_ultot(aException, buf + 2, 16);
-		g_ErrorLevel->Assign(buf); // Positive ErrorLevel numbers are reserved for exception codes.
+		if(!g->InTryBlock)
+			g_ErrorLevel->Assign(buf); // Positive ErrorLevel numbers are reserved for exception codes.
+		else
+			g_script.ScriptError(_T("A Win32 exception has occurred."), buf);
 	}
 	else
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
@@ -12425,7 +12431,10 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 			if (   !hmodule_to_free  ||  !(hmodule = *hmodule_to_free = LoadLibrary(dll_name))   )
 			{
 				if (hmodule_to_free) // L31: BIF_DllCall wants us to set ErrorLevel.  ExpressionToPostfix passes NULL.
-					g_ErrorLevel->Assign(_T("-3")); // Stage 3 error: DLL couldn't be loaded.
+					if (!g->InTryBlock)
+						g_ErrorLevel->Assign(_T("-3")); // Stage 3 error: DLL couldn't be loaded.
+					else
+						g_script.ScriptError(_T("The specified DLL couldn't be loaded."), dll_name);
 				return NULL;
 			}
 		if (   !(function = (void *)GetProcAddress(hmodule, function_name))   )
@@ -12489,7 +12498,10 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			function = (void *)aParam[0]->value_int64; // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
 			break;
 		case SYM_FLOAT:
-			g_ErrorLevel->Assign(_T("-1")); // Stage 1 error: Invalid first param.
+			if (!g->InTryBlock)
+				g_ErrorLevel->Assign(_T("-1")); // Stage 1 error: Invalid first param.
+			else
+				g_script.ScriptError(_T("Invalid first parameter."));
 			return;
 		default: // SYM_OPERAND (SYM_OPERAND is typically a numeric literal).
 			function = (TokenIsPureNumeric(*aParam[0]) == PURE_INTEGER)
@@ -12510,7 +12522,10 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		ExprTokenType &token = *aParam[aParamCount - 1];
 		if (IS_NUMERIC(token.symbol) || token.symbol == SYM_OBJECT) // The return type should be a string, not something purely numeric.
 		{
-			g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+			if (!g->InTryBlock)
+				g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+			else
+				g_script.ScriptError(ERR_DLLCALL_STAGE2);
 			return;
 		}
 		LPTSTR return_type_string[2];
@@ -12557,7 +12572,10 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		ConvertDllArgType(return_type_string, return_attrib);
 		if (return_attrib.type == DLL_ARG_INVALID)
 		{
-			g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+			if (!g->InTryBlock)
+				g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+			else
+				g_script.ScriptError(ERR_DLLCALL_STAGE2);
 			return;
 		}
 has_valid_return_type:
@@ -12602,7 +12620,10 @@ has_valid_return_type:
 		// Check validity of this arg's type and contents:
 		if (IS_NUMERIC(aParam[i]->symbol)) // The arg type should be a string, not something purely numeric.
 		{
-			g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+			if (!g->InTryBlock)
+				g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+			else
+				g_script.ScriptError(ERR_DLLCALL_STAGE2);
 			return;
 		}
 		// Otherwise, this arg's type-name is a string as it should be, so retrieve it:
@@ -12638,7 +12659,10 @@ has_valid_return_type:
 				// to be stack memory, which would be invalid memory upon return to the caller).
 				// The complexity of this doesn't seem worth the rarity of the need, so this will be
 				// documented in the help file.
-				g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+				if (!g->InTryBlock)
+					g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+				else
+					g_script.ScriptError(ERR_DLLCALL_STAGE2);
 				return;
 			}
 			// Otherwise, it's a supported type of string.
@@ -12673,7 +12697,10 @@ has_valid_return_type:
 			// See the section above for comments.
 			if (IS_NUMERIC(this_param.symbol))
 			{
-				g_ErrorLevel->Assign(_T("-2"));
+				if (!g->InTryBlock)
+					g_ErrorLevel->Assign(_T("-2"));
+				else
+					g_script.ScriptError(ERR_DLLCALL_STAGE2);
 				return;
 			}
 			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
@@ -12691,7 +12718,10 @@ has_valid_return_type:
 			break;
 
 		case DLL_ARG_INVALID:
-			g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+			if (!g->InTryBlock)
+				g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
+			else
+				g_script.ScriptError(ERR_DLLCALL_STAGE2);
 			return;
 
 		default: // Namely:
@@ -12731,10 +12761,14 @@ has_valid_return_type:
     
 	if (!function) // The function's address hasn't yet been determined.
 	{
-		function = GetDllProcAddress(aParam[0]->symbol == SYM_VAR ? aParam[0]->var->Contents() : aParam[0]->marker, &hmodule_to_free);
+		LPCTSTR aFuncName;
+		function = GetDllProcAddress(aFuncName = aParam[0]->symbol == SYM_VAR ? aParam[0]->var->Contents() : aParam[0]->marker, &hmodule_to_free);
 		if (!function)
 		{
-			g_ErrorLevel->Assign(_T("-4")); // Stage 4 error: Function could not be found in the DLL(s).
+			if (!g->InTryBlock)
+				g_ErrorLevel->Assign(_T("-4")); // Stage 4 error: Function could not be found in the DLL(s).
+			else if (!g->ThrownToken)
+				g_script.ScriptError(_T("The specified function could not be found in the DLL."), aFuncName);
 			goto end;
 		}
 	}
@@ -12763,6 +12797,7 @@ has_valid_return_type:
 		// Don't bother with freeing hmodule_to_free since a critical error like this calls for minimal cleanup.
 		// The OS almost certainly frees it upon termination anyway.
 		// Call ScriptErrror() so that the user knows *which* DllCall is at fault:
+		g->InTryBlock = false; // do not throw an exception
 		g_script.ScriptError(_T("This DllCall requires a prior VarSetCapacity. The program is now unstable and will exit."));
 		g_script.ExitApp(EXIT_CRITICAL); // Called this way, it will run the OnExit routine, which is debatable because it could cause more good than harm, but might avoid loss of data if the OnExit routine does something important.
 	}

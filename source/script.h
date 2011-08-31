@@ -209,6 +209,8 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_CLASS_VAR _T("Invalid class variable declaration.")
 #define ERR_INVALID_GUI_NAME _T("Invalid Gui name.")
 
+#define ERR_DLLCALL_STAGE2 _T("Invalid return type or argument type.")
+
 #define WARNING_USE_UNSET_VARIABLE _T("Using value of uninitialized variable.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("Local variable with same name as global.")
 #define WARNING_USE_ENV_VARIABLE _T("Using value of environment variable.")
