@@ -678,12 +678,6 @@ inline void global_clear_state(global_struct &g)
 	g.mLoopRegItem = NULL;
 	g.mLoopReadFile = NULL;
 	g.mLoopField = NULL;
-	if (g.ThrownToken)
-	{
-		if (g.ThrownToken->symbol == SYM_OBJECT)
-			g.ThrownToken->object->Release();
-		delete g.ThrownToken;
-	}
 	g.ThrownToken = NULL;
 }
 

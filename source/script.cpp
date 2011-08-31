@@ -722,7 +722,7 @@ ResultType Script::AutoExecSection()
 	// Check if an exception has been thrown
 	if (g->ThrownToken)
 		// Display an error message
-		ExecUntil_result = g_script.UnhandledException(*g->ThrownToken, g->ExcptLine);
+		ExecUntil_result = g_script.UnhandledException(g->ThrownToken, g->ExcptLine);
 
 	// The below is done even if AutoExecSectionTimeout() already set the values once.
 	// This is because when the AutoExecute section finally does finish, by definition it's
@@ -15680,10 +15680,17 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 	return FAIL; // See above for why it's better to return FAIL than CRITICAL_ERROR.
 }
 
-ResultType Script::UnhandledException(ExprTokenType& aToken, Line* line)
+ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* line)
 {
 	// FUTURE: add more information about the thrown token itself
-	return line->LineError(_T("Unhandled exception!"));
+	line->LineError(_T("Unhandled exception!"));
+
+	if (aToken->symbol == SYM_OBJECT)
+		aToken->object->Release();
+	delete aToken;
+	aToken = NULL;
+
+	return FAIL;
 }
 
 void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo, Line *line)

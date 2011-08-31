@@ -2028,15 +2028,8 @@ void ResumeUnderlyingThread(LPTSTR aSavedErrorLevel)
 
 	// Check if somebody has thrown an exception and it's not been caught yet
 	if (g->ThrownToken)
-	{
 		// Display an error message
-		g_script.UnhandledException(*g->ThrownToken, g->ExcptLine);
-
-		// Free the exception
-		if (g->ThrownToken->symbol == SYM_OBJECT)
-			g->ThrownToken->object->Release();
-		delete g->ThrownToken;
-	}
+		g_script.UnhandledException(g->ThrownToken, g->ExcptLine);
 
 	// The following section handles the switch-over to the former/underlying "g" item:
 	--g_nThreads; // Other sections below might rely on this having been done early.

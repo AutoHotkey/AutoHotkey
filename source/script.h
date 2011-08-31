@@ -2700,7 +2700,7 @@ public:
 	void WarnUninitializedVar(Var *var);
 	void MaybeWarnLocalSameAsGlobal(Func *func, Var *var);
 
-	ResultType UnhandledException(ExprTokenType& aToken, Line* line);
+	ResultType UnhandledException(ExprTokenType*& aToken, Line* line);
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
 
