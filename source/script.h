@@ -210,6 +210,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_GUI_NAME _T("Invalid Gui name.")
 
 #define ERR_DLLCALL_STAGE2 _T("Invalid return type or argument type.")
+#define ERR_REGEX_EXECUTE _T("An error occurred during the execution of the regular expression.")
 
 #define WARNING_USE_UNSET_VARIABLE _T("Using value of uninitialized variable.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("Local variable with same name as global.")

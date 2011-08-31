@@ -13777,9 +13777,12 @@ break_both:
 		{
 			// Since both the error code and the offset are desirable outputs, it seems best to also
 			// include descriptive error text (debatable).
-			g_ErrorLevel->Assign(error_buf
-				, sntprintf(error_buf, _countof(error_buf), _T("Compile error %d at offset %d: %s")
-					, error_code, UTF8PosToTPos(regex_utf8, error_offset), (LPCTSTR)CStringTCharFromCharIfNeeded(error_msg)));
+			VarSizeType error_len = sntprintf(error_buf, _countof(error_buf), _T("Compile error %d at offset %d: %s")
+					, error_code, UTF8PosToTPos(regex_utf8, error_offset), (LPCTSTR)CStringTCharFromCharIfNeeded(error_msg));
+			if (!g->InTryBlock)
+				g_ErrorLevel->Assign(error_buf, error_len);
+			else
+				g_script.ScriptError(_T("Invalid regular expression."), error_buf);
 		}
 		goto error;
 	}
@@ -14086,7 +14089,14 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		// Otherwise:
 		if (captured_pattern_count < 0) // An error other than "no match". These seem very rare, so it seems best to abort rather than yielding a partially-converted result.
 		{
-			g_ErrorLevel->Assign(captured_pattern_count); // No error text is stored; just a negative integer (since these errors are pretty rare).
+			if (!g->InTryBlock)
+				g_ErrorLevel->Assign(captured_pattern_count); // No error text is stored; just a negative integer (since these errors are pretty rare).
+			else
+			{
+				TCHAR buf[32];
+				sntprintf(buf, _countof(buf), _T("%d"), captured_pattern_count);
+				g_script.ScriptError(ERR_REGEX_EXECUTE, buf);
+			}
 			goto set_count_and_return; // Goto vs. break to leave aResultToken.marker set to aHaystack and replacement_count set to 0, and let ErrorLevel tell the story.
 		}
 
@@ -14471,7 +14481,14 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	}
 	else if (captured_pattern_count < 0) // An error other than "no match".
 	{
-		g_ErrorLevel->Assign(captured_pattern_count); // No error text is stored; just a negative integer (since these errors are pretty rare).
+		if (!g->InTryBlock)
+			g_ErrorLevel->Assign(captured_pattern_count); // No error text is stored; just a negative integer (since these errors are pretty rare).
+		else
+		{
+			TCHAR buf[32];
+			sntprintf(buf, _countof(buf), _T("%d"), captured_pattern_count);
+			g_script.ScriptError(ERR_REGEX_EXECUTE, buf);
+		}
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
 	}
