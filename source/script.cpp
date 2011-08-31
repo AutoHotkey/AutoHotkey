@@ -12073,8 +12073,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			if (jump_to_line == line)
 				continue;
 
-			if (aMode == ONLY_ONE_LINE
-				|| result != OK && (this_act != ACT_TRY || !g.ThrownToken))
+			if ((aMode == ONLY_ONE_LINE || result != OK) && (this_act != ACT_TRY || !g.ThrownToken))
 			{
 				caller_jump_to_line = jump_to_line;
 				return result;
