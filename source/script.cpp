@@ -12101,12 +12101,14 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 						line = line->mRelatedLine;
 					else
 					{
-						if (!bHasCatchHandler)
+						if (!bHasCatchHandler && g.ThrownToken)
 						{
 							// Free the thrown token, see ACT_CATCH section above for comments
 							ExprTokenType*& thrown_token = g.ThrownToken;
 							if (thrown_token->symbol == SYM_OBJECT)
 								thrown_token->object->Release();
+							if (thrown_token->mem_to_free)
+								free(thrown_token->mem_to_free);
 							delete thrown_token;
 							thrown_token = NULL;
 						}
