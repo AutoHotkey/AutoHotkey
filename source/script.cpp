@@ -12132,11 +12132,14 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				}
 			}
 
-			LPTSTR our_buf_marker = sDerefBuf;
+			PRIVATIZE_S_DEREF_BUF;
+			LPTSTR our_buf_marker = our_deref_buf;
 			LPTSTR arg_deref[] = {0, 0};
 			LPTSTR strVal;
 			token->symbol = SYM_INVALID;
-			strVal = line->ExpandExpression(0, result, token, our_buf_marker, sDerefBuf, sDerefBufSize, arg_deref, 0);
+			strVal = line->ExpandExpression(0, result, token, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, 0);
+			DEPRIVATIZE_S_DEREF_BUF;
+
 			if (!strVal)
 			{
 				// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
