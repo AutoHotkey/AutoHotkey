@@ -12128,7 +12128,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 
 			if (!sDerefBuf)
 			{
-				sDerefBufSize = (mArg[0].length < MAX_NUMBER_LENGTH ? MAX_NUMBER_LENGTH : mArg[0].length) + 1;
+				sDerefBufSize = (line->mArg[0].length < MAX_NUMBER_LENGTH ? MAX_NUMBER_LENGTH : line->mArg[0].length) + 1;
 				if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
 				{
 					sDerefBufSize = 0;
