@@ -1666,7 +1666,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 
 				if (mem_to_free)
 					free(mem_to_free);
-				return true;
+				return !g->ThrownToken;
 			}
 			// Caller-supplied "params*" is not an Object, so treat it like an empty list; however,
 			// mMinParams isn't validated at load-time for variadic calls, so we must do it here:
@@ -1680,7 +1680,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 
 		// CALL THE BUILT-IN FUNCTION:
 		mBIF(aResultToken, aParam, aParamCount);
-		return true;
+		return !g->ThrownToken;
 	}
 	else // It's not a built-in function, or it's a built-in that was overridden with a custom function.
 	{
