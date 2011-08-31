@@ -12051,6 +12051,10 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				if (thrown_token->symbol == SYM_OBJECT)
 					thrown_token->object->Release();
 
+				// If the thrown token contains memory, free it
+				if (thrown_token->mem_to_free)
+					free(thrown_token->mem_to_free);
+
 				// Free the thrown token
 				delete thrown_token;
 				thrown_token = NULL;
@@ -12138,7 +12142,13 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			LPTSTR strVal;
 			token->symbol = SYM_INVALID;
 			strVal = line->ExpandExpression(0, result, token, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, 0);
-			DEPRIVATIZE_S_DEREF_BUF;
+			if (strVal == our_deref_buf)
+				token->mem_to_free = strVal;
+			else
+			{
+				token->mem_to_free = NULL;
+				DEPRIVATIZE_S_DEREF_BUF;
+			}
 
 			if (!strVal)
 			{
@@ -15690,6 +15700,8 @@ ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* line)
 
 	if (aToken->symbol == SYM_OBJECT)
 		aToken->object->Release();
+	if (aToken->mem_to_free)
+		free(aToken->mem_to_free);
 	delete aToken;
 	aToken = NULL;
 
