@@ -641,6 +641,7 @@ struct global_struct
 	UINT Encoding;
 	ExprTokenType* ThrownToken;
 	Line* ExcptLine;
+	bool InTryBlock;
 };
 
 inline void global_maximize_interruptibility(global_struct &g)
@@ -679,6 +680,7 @@ inline void global_clear_state(global_struct &g)
 	g.mLoopReadFile = NULL;
 	g.mLoopField = NULL;
 	g.ThrownToken = NULL;
+	g.InTryBlock = false;
 }
 
 inline void global_init(global_struct &g)

@@ -12032,6 +12032,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		case ACT_CATCH:
 		{
 			ActionTypeType this_act = line->mActionType;
+			bool bSavedInTryBlock = g.InTryBlock;
 
 			if (this_act == ACT_CATCH)
 			{
@@ -12059,6 +12060,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				delete thrown_token;
 				thrown_token = NULL;
 			}
+			else if (this_act == ACT_TRY)
+				g.InTryBlock = true;
 
 			// The following section is similar to ACT_IF.
 			jump_to_line = NULL;
@@ -12070,6 +12073,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			}
 			else
 				result = line->mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
+
+			if (this_act == ACT_TRY)
+				// Restore the previous InTryBlock value
+				g.InTryBlock = bSavedInTryBlock;
+
 			if (jump_to_line == line)
 				continue;
 
@@ -15546,6 +15554,47 @@ Line *Line::PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo)
 	return NULL; // Always return NULL because the callers use it as their return value.
 }
 
+ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo)
+{
+	ExprTokenType& token = *(g->ThrownToken = new ExprTokenType);
+	g->ExcptLine = this;
+
+	// Build the parameters for Object::Create()
+	ExprTokenType aParams[5*2]; int aParamCount = 4*2;
+	ExprTokenType* aParam[5*2] = { aParams + 0, aParams + 1, aParams + 2, aParams + 3, aParams + 4
+		, aParams + 5, aParams + 6, aParams + 7, aParams + 8, aParams + 9 };
+	aParams[0].symbol = SYM_STRING;
+	aParams[0].marker = _T("what");
+	aParams[1].symbol = SYM_STRING;
+	aParams[1].marker = _T("AhkRuntimeError");
+	aParams[2].symbol = SYM_STRING;
+	aParams[2].marker = _T("file");
+	aParams[3].symbol = SYM_STRING;
+	aParams[3].marker = Line::sSourceFile[mFileIndex];
+	aParams[4].symbol = SYM_STRING;
+	aParams[4].marker = _T("line");
+	aParams[5].symbol = SYM_INTEGER;
+	aParams[5].value_int64 = mLineNumber;
+	aParams[6].symbol = SYM_STRING;
+	aParams[6].marker = _T("message");
+	aParams[7].symbol = SYM_STRING;
+	aParams[7].marker = (LPTSTR)aErrorText;
+	if (aExtraInfo && *aExtraInfo)
+	{
+		aParamCount += 2;
+		aParams[8].symbol = SYM_STRING;
+		aParams[8].marker = _T("extra");
+		aParams[9].symbol = SYM_STRING;
+		aParams[9].marker = (LPTSTR)aExtraInfo;
+	}
+
+	token.object = Object::Create(aParam, aParamCount);
+	token.symbol = SYM_OBJECT;
+	token.mem_to_free = NULL;
+
+	return aErrorType;
+}
+
 #define ERR_PRINT(fmt, ...) _ftprintf(stderr, fmt, __VA_ARGS__)
 
 ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo)
@@ -15554,6 +15603,9 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		aErrorText = _T("");
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
+
+	if (g->InTryBlock && aErrorType != CRITICAL_ERROR)
+		return ThrowRuntimeException(aErrorText, aErrorType, aExtraInfo);
 
 	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute) // i.e. runtime errors are always displayed via dialog.
 	{
