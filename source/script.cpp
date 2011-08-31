@@ -12126,6 +12126,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				}
 			}
 
+			if (aMode == ONLY_ONE_LINE)
+				return result;
 			continue;
 		}
 
