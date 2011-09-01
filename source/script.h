@@ -179,6 +179,8 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_TOO_FEW_PARAMS _T("Too few parameters passed to function.") // L31
 #define ERR_ELSE_WITH_NO_IF _T("ELSE with no matching IF")
 #define ERR_UNTIL_WITH_NO_LOOP _T("UNTIL with no matching LOOP")
+#define ERR_CATCH_WITH_NO_TRY _T("CATCH with no matching TRY")
+#define ERR_EXPECTED_BLOCK_OR_ACTION _T("Expected \"{\" or single-line action.")
 #define ERR_OUTOFMEM _T("Out of memory.")  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
 #define ERR_EXPR_TOO_LONG _T("Expression too long")
 #define ERR_MEM_LIMIT_REACHED _T("Memory limit reached (see #MaxMem in the help file).") ERR_ABORT
@@ -1004,6 +1006,7 @@ public:
 			case ACT_INPUT:
 			case ACT_FORMATTIME:
 			case ACT_FOR:
+			case ACT_CATCH:
 				return ARG_TYPE_OUTPUT_VAR;
 
 			case ACT_SORT:
@@ -1835,6 +1838,7 @@ public:
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
+	ResultType ThrowRuntimeException(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
 
 	Line(FileIndexType aFileIndex, LineNumberType aFileLineNumber, ActionTypeType aActionType
 		, ArgStruct aArg[], ArgCountType aArgc) // Constructor
@@ -2696,6 +2700,10 @@ public:
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
 	void WarnUninitializedVar(Var *var);
 	void MaybeWarnLocalSameAsGlobal(Func *func, Var *var);
+
+	ResultType UnhandledException(ExprTokenType*& aToken, Line* line);
+	ResultType SetErrorLevelOrThrow(LPCTSTR aErrorValue, LPCTSTR aMessage, VarSizeType iErrorLen = VARSIZE_MAX);
+	ResultType SetErrorLevelOrThrow(int aErrorValue, LPCTSTR aMessage);
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
 

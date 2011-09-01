@@ -180,8 +180,8 @@ ResultType Line::PixelGetColor(int aX, int aY, LPTSTR aOptions)
 {
 	if (tcscasestr(aOptions, _T("Slow"))) // New mode for v1.0.43.10.  Takes precedence over Alt mode.
 		return PixelSearch(aX, aY, aX, aY, 0, 0, aOptions, true); // It takes care of setting ErrorLevel and the output-var.
+
 	Var &output_var = *OUTPUT_VAR;
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
 	output_var.Assign(); // Init to empty string regardless of whether we succeed here.
 
 	if (!(g->CoordMode & COORD_MODE_PIXEL)) // Using relative vs. screen coordinates.
@@ -189,7 +189,7 @@ ResultType Line::PixelGetColor(int aX, int aY, LPTSTR aOptions)
 		// Convert from relative to absolute (screen) coordinates:
 		RECT rect;
 		if (!GetWindowRect(GetForegroundWindow(), &rect))
-			return OK;  // Let ErrorLevel tell the story.
+			return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("PixelGetColor"));
 		aX += rect.left;
 		aY += rect.top;
 	}
@@ -197,7 +197,7 @@ ResultType Line::PixelGetColor(int aX, int aY, LPTSTR aOptions)
 	bool use_alt_mode = tcscasestr(aOptions, _T("Alt")) != NULL; // New mode for v1.0.43.10: Two users reported that CreateDC works better in certain windows such as SciTE, at least one some systems.
 	HDC hdc = use_alt_mode ? CreateDC(_T("DISPLAY"), NULL, NULL, NULL) : GetDC(NULL);
 	if (!hdc)
-		return OK;  // Let ErrorLevel tell the story.
+		return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("PixelGetColor"));
 
 	// Assign the value as an 32-bit int to match Window Spy reports color values.
 	// Update for v1.0.21: Assigning in hex format seems much better, since it's easy to
@@ -307,18 +307,17 @@ ResultType Line::WinMenuSelectItem(LPTSTR aTitle, LPTSTR aText, LPTSTR aMenu1, L
 	// in a loop.  Also add a NULL at the end to simplify the loop a little:
 	LPTSTR menu_param[] = {aMenu1, aMenu2, aMenu3, aMenu4, aMenu5, aMenu6, aMenu7, NULL};
 
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
 	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
 	if (!target_window)
-		return OK;  // Let ErrorLevel tell the story.
+		goto error;
 
 	HMENU hMenu = GetMenu(target_window);
 	if (!hMenu) // Window has no menu bar.
-		return OK;  // Let ErrorLevel tell the story.
+		goto error;
 
 	int menu_item_count = GetMenuItemCount(hMenu);
 	if (menu_item_count < 1) // Menu bar has no menus.
-		return OK;  // Let ErrorLevel tell the story.
+		goto error;
 	
 #define MENU_ITEM_IS_SUBMENU 0xFFFFFFFF
 #define UPDATE_MENU_VARS(menu_pos) \
@@ -344,14 +343,14 @@ else\
 		if (!(this_menu_param && *this_menu_param))
 			break;
 		if (!hMenu)  // The nesting of submenus ended prior to the end of the list of menu search terms.
-			return OK;  // Let ErrorLevel tell the story.
+			goto error;
 
 		this_menu_param_length = _tcslen(this_menu_param);
 		target_menu_pos = (this_menu_param[this_menu_param_length - 1] == '&') ? ATOI(this_menu_param) - 1 : -1;
 		if (target_menu_pos > -1)
 		{
 			if (target_menu_pos >= menu_item_count)  // Invalid menu position (doesn't exist).
-				return OK;  // Let ErrorLevel tell the story.
+				goto error;
 			UPDATE_MENU_VARS(target_menu_pos)
 		}
 		else // Searching by text rather than numerical position.
@@ -386,7 +385,7 @@ else\
 				}
 			} // inner for()
 			if (!match_found) // The search hierarchy (nested menus) specified in the params could not be found.
-				return OK;  // Let ErrorLevel tell the story.
+				goto error;
 		} // else
 	} // outer for()
 
@@ -394,11 +393,14 @@ else\
 	// or if the caller specified a submenu as the target (which doesn't seem valid since an app would
 	// next expect to ever receive a message for a submenu?):
 	if (menu_id == MENU_ITEM_IS_SUBMENU)
-		return OK;  // Let ErrorLevel tell the story.
+		goto error;
 
 	// Since the above didn't return, the specified search hierarchy was completely found.
 	PostMessage(target_window, WM_COMMAND, (WPARAM)menu_id, 0);
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+
+error:
+	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("WinMenuSelectItem"));
 }
 
 
@@ -409,20 +411,19 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 // in MSIE (whose Internet Explorer_TridentCmboBx2 does not respond to "Control Choose" but
 // does respond to "Control Focus").  But it didn't help.
 {
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);  // Set default since there are many points of return.
 	ControlCmds control_cmd = ConvertControlCmd(aCmd);
 	// Since command names are validated at load-time, this only happens if the command name
 	// was contained in a variable reference.  Since that is very rare, just set ErrorLevel
 	// and return:
 	if (control_cmd == CONTROL_CMD_INVALID)
-		return OK;  // Let ErrorLevel tell the story.
+		goto error;
 
 	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
 	if (!target_window)
-		return OK;  // Let ErrorLevel tell the story.
+		goto error;
 	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
 	if (!control_window)
-		return OK;  // Let ErrorLevel tell the story.
+		goto error;
 
 	HWND immediate_parent;  // Possibly not the same as target_window since controls can themselves have children.
 	int control_id, control_index;
@@ -441,7 +442,7 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 	{ // Need braces for ATTACH_THREAD_INPUT macro.
 		new_button_state = (control_cmd == CONTROL_CMD_CHECK) ? BST_CHECKED : BST_UNCHECKED;
 		if (!SendMessageTimeout(control_window, BM_GETCHECK, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			return OK;  // Let ErrorLevel tell the story.
+			goto error;
 		if (dwResult == new_button_state) // It's already in the right state, so don't press it.
 			break;
 		// MSDN docs for BM_CLICK (and au3 author says it applies to this situation also):
@@ -511,7 +512,7 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 				return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 			}
 		}
-		return OK; // Let ErrorLevel tell the story. As documented, DoControlDelay is not done for these.
+		goto error; // As documented, DoControlDelay is not done for these.
 	}
 
 	case CONTROL_CMD_SHOWDROPDOWN:
@@ -521,7 +522,7 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 		if (!SendMessageTimeout(control_window, CB_SHOWDROPDOWN
 			, (WPARAM)(control_cmd == CONTROL_CMD_SHOWDROPDOWN)
 			, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			return OK;  // Let ErrorLevel tell the story.
+			goto error;
 		break;
 
 	case CONTROL_CMD_TABLEFT:
@@ -550,20 +551,20 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 		else if (tcscasestr(aControl, _T("List")))
 			msg = LB_ADDSTRING;
 		else
-			return OK;  // Must be ComboBox or ListBox.  Let ErrorLevel tell the story.
+			goto error;  // Must be ComboBox or ListBox.
 		if (!SendMessageTimeout(control_window, msg, 0, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			return OK;  // Let ErrorLevel tell the story.
+			goto error;
 		if (dwResult == CB_ERR || dwResult == CB_ERRSPACE) // General error or insufficient space to store it.
 			// CB_ERR == LB_ERR
-			return OK;  // Let ErrorLevel tell the story.
+			goto error;
 		break;
 
 	case CONTROL_CMD_DELETE:
 		if (!*aValue)
-			return OK;
+			goto error;
 		control_index = ATOI(aValue) - 1;
 		if (control_index < 0)
-			return OK;
+			goto error;
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
 			GetClassName(control_window, temp_buf, _countof(temp_buf));
@@ -574,19 +575,19 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 		else if (tcscasestr(aControl, _T("List")))
 			msg = LB_DELETESTRING;
 		else
-			return OK;  // Must be ComboBox or ListBox.  Let ErrorLevel tell the story.
+			goto error;  // Must be ComboBox or ListBox.
 		if (!SendMessageTimeout(control_window, msg, (WPARAM)control_index, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			return OK;  // Let ErrorLevel tell the story.
+			goto error;
 		if (dwResult == CB_ERR)  // CB_ERR == LB_ERR
-			return OK;  // Let ErrorLevel tell the story.
+			goto error;
 		break;
 
 	case CONTROL_CMD_CHOOSE:
 		if (!*aValue)
-			return OK;
+			goto error;
 		control_index = ATOI(aValue) - 1;
 		if (control_index < 0)
-			return OK;  // Let ErrorLevel tell the story.
+			goto error;
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
 			GetClassName(control_window, temp_buf, _countof(temp_buf));
@@ -608,27 +609,27 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 			y_msg = LBN_DBLCLK;
 		}
 		else
-			return OK;  // Must be ComboBox or ListBox.  Let ErrorLevel tell the story.
+			goto error;
 		if (msg == LB_SETSEL) // Multi-select, so use the cumulative method.
 		{
 			if (!SendMessageTimeout(control_window, msg, TRUE, control_index, SMTO_ABORTIFHUNG, 2000, &dwResult))
-				return OK;  // Let ErrorLevel tell the story.
+				goto error;
 		}
 		else // ComboBox or single-select ListBox.
 			if (!SendMessageTimeout(control_window, msg, control_index, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-				return OK;  // Let ErrorLevel tell the story.
+				goto error;
 		if (dwResult == CB_ERR)  // CB_ERR == LB_ERR
-			return OK;
+			goto error;
 		if (   !(immediate_parent = GetParent(control_window))   )
-			return OK;
+			goto error;
 		if (   !(control_id = GetDlgCtrlID(control_window))   )
-			return OK;
+			goto error;
 		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, x_msg)
 			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			return OK;
+			goto error;
 		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, y_msg)
 			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			return OK;
+			goto error;
 		// Otherwise break and do the end-function processing.
 		break;
 
@@ -654,7 +655,7 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 			y_msg = LBN_DBLCLK;
 		}
 		else
-			return OK;  // Must be ComboBox or ListBox.  Let ErrorLevel tell the story.
+			goto error;  // Must be ComboBox or ListBox.
 		if (msg == LB_FINDSTRING) // Multi-select ListBox (LB_SELECTSTRING is not supported by these).
 		{
 			DWORD_PTR item_index;
@@ -662,34 +663,37 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 				|| item_index == LB_ERR
 				|| !SendMessageTimeout(control_window, LB_SETSEL, TRUE, item_index, SMTO_ABORTIFHUNG, 2000, &dwResult)
 				|| dwResult == LB_ERR) // Relies on short-circuit boolean.
-				return OK;  // Let ErrorLevel tell the story.
+				goto error;
 		}
 		else // ComboBox or single-select ListBox.
 			if (!SendMessageTimeout(control_window, msg, 1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult)
 				|| dwResult == CB_ERR) // CB_ERR == LB_ERR
-				return OK;  // Let ErrorLevel tell the story.
+				goto error;
 		if (   !(immediate_parent = GetParent(control_window))   )
-			return OK;
+			goto error;
 		if (   !(control_id = GetDlgCtrlID(control_window))   )
-			return OK;
+			goto error;
 		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, x_msg)
 			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			return OK;
+			goto error;
 		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, y_msg)
 			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			return OK;
+			goto error;
 		// Otherwise break and do the end-function processing.
 		break;
 
 	case CONTROL_CMD_EDITPASTE:
 		if (!SendMessageTimeout(control_window, EM_REPLACESEL, TRUE, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			return OK;  // Let ErrorLevel tell the story.
+			goto error;
 		// Note: dwResult is not used by EM_REPLACESEL since it doesn't return a value.
 		break;
 	} // switch()
 
 	DoControlDelay;  // Seems safest to do this for all of these commands.
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+
+error:
+	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("Control"));
 }
 
 
@@ -698,20 +702,19 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 {
 	Var &output_var = *OUTPUT_VAR;
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);  // Set default since there are many points of return.
 	ControlGetCmds control_cmd = ConvertControlGetCmd(aCmd);
 	// Since command names are validated at load-time, this only happens if the command name
 	// was contained in a variable reference.  Since that is very rare, just set ErrorLevel
 	// and return:
 	if (control_cmd == CONTROLGET_CMD_INVALID)
-		return output_var.Assign();  // Let ErrorLevel tell the story.
+		goto error;
 
 	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
 	if (!target_window)
-		return output_var.Assign();  // Let ErrorLevel tell the story.
+		goto error;
 	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
 	if (!control_window)
-		return output_var.Assign();  // Let ErrorLevel tell the story.
+		goto error;
 
 	DWORD_PTR dwResult, index, length, item_length, start, end, u, item_count;
 	UINT msg, x_msg, y_msg;
@@ -722,7 +725,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 	{
 	case CONTROLGET_CMD_CHECKED: //Must be a Button
 		if (!SendMessageTimeout(control_window, BM_GETCHECK, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			return output_var.Assign();
+			goto error;
 		output_var.Assign(dwResult == BST_CHECKED ? _T("1") : _T("0"));
 		break;
 
@@ -736,7 +739,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 
 	case CONTROLGET_CMD_TAB: // must be a Tab Control
 		if (!SendMessageTimeout(control_window, TCM_GETCURSEL, 0, 0, SMTO_ABORTIFHUNG, 2000, &index) || index == -1) // Relies on short-circuit boolean order.
-			return output_var.Assign();
+			goto error;
 		output_var.Assign(index + 1);
 		break;
 
@@ -751,10 +754,10 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 		else if (tcscasestr(aControl, _T("List")))
 			msg = LB_FINDSTRINGEXACT;
 		else // Must be ComboBox or ListBox
-			return output_var.Assign();  // Let ErrorLevel tell the story.
+			goto error;
 		if (!SendMessageTimeout(control_window, msg, 1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &index)
 			|| index == CB_ERR) // CB_ERR == LB_ERR
-			return output_var.Assign();
+			goto error;
 		output_var.Assign(index + 1);
 		break;
 
@@ -782,7 +785,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 			|| index == CB_ERR  // CB_ERR == LB_ERR.  There is no selection (or very rarely, some other type of problem).
 			|| !SendMessageTimeout(control_window, x_msg, (WPARAM)index, 0, SMTO_ABORTIFHUNG, 2000, &length)
 			|| length == CB_ERR)  // CB_ERR == LB_ERR
-			return output_var.Assign(); // Above relies on short-circuit boolean order.
+			goto error; // Above relies on short-circuit boolean order.
 		// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
 		// being when the item's text is retrieved.  This should be harmless, since there are many
 		// other precedents where a variable is sized to something larger than it winds up carrying.
@@ -795,7 +798,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 			|| length == CB_ERR) // Probably impossible given the way it was called above.  Also, CB_ERR == LB_ERR. Relies on short-circuit boolean order.
 		{
 			output_var.Close();
-			return output_var.Assign(); // Let ErrorLevel tell the story.
+			goto error;
 		}
 		output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 		output_var.SetCharLength(length);  // Update to actual vs. estimated length.
@@ -827,10 +830,10 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 			y_msg = LB_GETTEXT;
 		}
 		else // Must be ComboBox or ListBox
-			return output_var.Assign();  // Let ErrorLevel tell the story.
+			goto error;
 		if (!(SendMessageTimeout(control_window, msg, 0, 0, SMTO_ABORTIFHUNG, 5000, &item_count))
 			|| item_count < 1) // No items in ListBox/ComboBox or there was a problem getting the count.
-			return output_var.Assign();  // Let ErrorLevel tell the story.
+			goto error;
 		// Calculate the length of delimited list of items.  Length is initialized to provide enough
 		// room for each item's delimiter (the last item does not have a delimiter).
 		for (length = item_count - 1, u = 0; u < item_count; ++u)
@@ -868,13 +871,13 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 	case CONTROLGET_CMD_LINECOUNT:  //Must be an Edit
 		// MSDN: "If the control has no text, the return value is 1. The return value will never be less than 1."
 		if (!SendMessageTimeout(control_window, EM_GETLINECOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			return output_var.Assign();
+			goto error;
 		output_var.Assign(dwResult);
 		break;
 
 	case CONTROLGET_CMD_CURRENTLINE:
 		if (!SendMessageTimeout(control_window, EM_LINEFROMCHAR, -1, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			return output_var.Assign();
+			goto error;
 		output_var.Assign(dwResult + 1);
 		break;
 
@@ -884,7 +887,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 		// The dwResult from the first msg below is not useful and is not checked.
 		if (   !SendMessageTimeout(control_window, EM_GETSEL, (WPARAM)&start, (LPARAM)&end, SMTO_ABORTIFHUNG, 2000, &dwResult)
 			|| !SendMessageTimeout(control_window, EM_LINEFROMCHAR, (WPARAM)start, 0, SMTO_ABORTIFHUNG, 2000, &line_number)   )
-			return output_var.Assign();
+			goto error;
 		if (!line_number) // Since we're on line zero, the column number is simply start+1.
 		{
 			output_var.Assign(start + 1);  // +1 to convert from zero based.
@@ -896,7 +899,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 		for (;;)
 		{
 			if (!SendMessageTimeout(control_window, EM_LINEFROMCHAR, (WPARAM)start, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-				return output_var.Assign();
+				goto error;
 			if (dwResult != line_number)
 				break;
 			--start;
@@ -907,16 +910,16 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 
 	case CONTROLGET_CMD_LINE:
 		if (!*aValue)
-			return output_var.Assign();
+			goto error;
 		control_index = ATOI(aValue) - 1;
 		if (control_index < 0)
-			return output_var.Assign();  // Let ErrorLevel tell the story.
+			goto error;
 		// jackieku: 32768 * sizeof(wchar_t) = 65536, which can not be stored in a unsigned 16bit integer.
 		dyn_buf = (LPTSTR)talloca(32767); // 32768 is the size Au3 uses for GETLINE and such.
 		*(LPWORD)dyn_buf = 32767; // EM_GETLINE requires first word of string to be set to its size.
 		if (   !SendMessageTimeout(control_window, EM_GETLINE, (WPARAM)control_index, (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 2000, &dwResult)
 			|| !dwResult   ) // due to the specified line number being greater than the number of lines in the edit control.
-			return output_var.Assign();
+			goto error;
 		dyn_buf[dwResult] = '\0'; // Ensure terminated since the API might not do it in some cases.
 		output_var.Assign(dyn_buf);
 		break;
@@ -926,7 +929,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 		// with this technique.  Au3 has the same problem with them, so for now it's just documented here
 		// as a limitation.
 		if (!SendMessageTimeout(control_window, EM_GETSEL, (WPARAM)&start, (LPARAM)&end, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			return output_var.Assign();
+			goto error;
 		// The above sets start to be the zero-based position of the start of the selection (similar for end).
 		// If there is no selection, start and end will be equal, at least in the edit controls I tried it with.
 		// The dwResult from the above is not useful and is not checked.
@@ -941,7 +944,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 		if (   !SendMessageTimeout(control_window, WM_GETTEXTLENGTH, 0, 0, SMTO_ABORTIFHUNG, 2000, &length)
 			|| !length  // Since the above didn't return for start == end, this is an error because we have a selection of non-zero length, but no text to go with it!
 			|| !(dyn_buf = tmalloc(length + 1))   ) // Relies on short-circuit boolean order.
-			return output_var.Assign();
+			goto error;
 		if (   !SendMessageTimeout(control_window, WM_GETTEXT, (WPARAM)(length + 1), (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 2000, &length)
 			|| !length || end > length   )
 		{
@@ -950,7 +953,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 			// a problem because the end of the selection should not be beyond length of text
 			// that was retrieved.
 			free(dyn_buf);
-			return output_var.Assign();
+			goto error;
 		}
 		dyn_buf[end] = '\0'; // Terminate the string at the end of the selection.
 		output_var.Assign(dyn_buf + start);
@@ -979,6 +982,10 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 
 	// Note that ControlDelay is not done for the Get type commands, because it seems unnecessary.
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+
+error:
+	output_var.Assign();
+	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("ControlGet"));
 }
 
 
@@ -988,7 +995,7 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	// Check that we have IE3 and access to wininet.dll
 	HINSTANCE hinstLib = LoadLibrary(_T("wininet"));
 	if (!hinstLib)
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		goto error;
 
 	typedef HINTERNET (WINAPI *MyInternetOpen)(LPCTSTR, DWORD, LPCTSTR, LPCTSTR, DWORD dwFlags);
 	typedef HINTERNET (WINAPI *MyInternetOpenUrl)(HINTERNET hInternet, LPCTSTR, LPCTSTR, DWORD, DWORD, LPDWORD);
@@ -1010,7 +1017,7 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	if (!(lpfnInternetOpen && lpfnInternetOpenUrl && lpfnInternetCloseHandle && lpfnInternetReadFileEx && lpfnInternetReadFile))
 	{
 		FreeLibrary(hinstLib);
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		goto error;
 	}
 
 	// v1.0.44.07: Set default to INTERNET_FLAG_RELOAD vs. 0 because the vast majority of usages would want
@@ -1040,7 +1047,7 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	if (!hInet)
 	{
 		FreeLibrary(hinstLib);
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		goto error;
 	}
 
 	// Open the required URL
@@ -1049,7 +1056,7 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	{
 		lpfnInternetCloseHandle(hInet);
 		FreeLibrary(hinstLib);
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		goto error;
 	}
 
 	// Open our output file
@@ -1059,10 +1066,10 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 		lpfnInternetCloseHandle(hFile);
 		lpfnInternetCloseHandle(hInet);
 		FreeLibrary(hinstLib);
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		goto error;
 	}
 
-	BYTE bufData[1024 * 1]; // v1.0.44.11: Reduced from 8 KB to alleviate GUI window lag during UrlDownloadtoFile.  Testing shows this reduction doesn't affect performance on high-speed downloads (in fact, downloads are slightly faster; I tested two sites, one at 184 KB/s and the other at 380 KB/s).  It might affect slow downloads, but that seems less likely so wasn't tested.
+	{BYTE bufData[1024 * 1]; // v1.0.44.11: Reduced from 8 KB to alleviate GUI window lag during UrlDownloadtoFile.  Testing shows this reduction doesn't affect performance on high-speed downloads (in fact, downloads are slightly faster; I tested two sites, one at 184 KB/s and the other at 380 KB/s).  It might affect slow downloads, but that seems less likely so wasn't tested.
 	INTERNET_BUFFERSA buffers = {0};
 	buffers.dwStructSize = sizeof(INTERNET_BUFFERSA);
 	buffers.lpvBuffer = bufData;
@@ -1110,8 +1117,11 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	else // An error occurred during the transfer.
 	{
 		DeleteFile(aFilespec);  // delete damaged/incomplete file
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-	}
+		// Fall down to the error handler
+	}}
+
+error:
+	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("URLDownloadToFile"));
 }
 
 
@@ -1137,7 +1147,6 @@ ResultType Line::FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGree
 // This is because an interrupting thread usually changes the values to something inappropriate for this thread.
 {
 	Var &output_var = *OUTPUT_VAR; // Must be resolved early.  See comment above.
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
 	if (!output_var.Assign())  // Initialize the output variable.
 		return FAIL;
 
@@ -1150,7 +1159,7 @@ ResultType Line::FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGree
 
 	LPMALLOC pMalloc;
     if (SHGetMalloc(&pMalloc) != NOERROR)	// Initialize
-		return OK;  // Let ErrorLevel tell the story.
+		goto error;
 
 	// v1.0.36.03: Support initial folder, which is different than the root folder because the root only
 	// controls the origin point (above which the control cannot navigate).
@@ -1233,7 +1242,7 @@ ResultType Line::FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGree
 
 	DIALOG_END
 	if (!lpItemIDList)
-		return OK;  // Let ErrorLevel tell the story.
+		goto error;
 
 	*Result = '\0';  // Reuse this var, this time to old the result of the below:
 	SHGetPathFromIDList(lpItemIDList, Result);
@@ -1242,6 +1251,9 @@ ResultType Line::FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGree
 
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 	return output_var.Assign(Result);
+
+error:
+	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileSelectFolder"));
 }
 
 
@@ -1266,10 +1278,10 @@ ResultType Line::FileGetShortcut(LPTSTR aShortcutFile) // Credited to Holger <Ho
 	if (output_var_icon_idx) output_var_icon_idx->Assign();
 	if (output_var_show_state) output_var_show_state->Assign();
 
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
+	bool bSucceeded = false;
 
 	if (!Util_DoesFileExist(aShortcutFile))
-		return OK;  // Let ErrorLevel tell the story.
+		goto error;
 
 	CoInitialize(NULL);
 	IShellLink *psl;
@@ -1333,6 +1345,7 @@ ResultType Line::FileGetShortcut(LPTSTR aShortcutFile) // Credited to Holger <Ho
 					// compatible with that one.
 				}
 				g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+				bSucceeded = true;
 			}
 			ppf->Release();
 		}
@@ -1340,7 +1353,13 @@ ResultType Line::FileGetShortcut(LPTSTR aShortcutFile) // Credited to Holger <Ho
 	}
 	CoUninitialize();
 
+	if (!bSucceeded)
+		goto error;
+
 	return OK;  // ErrorLevel might still indicate failure if one of the above calls failed.
+
+error:
+	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileGetShortcut"));
 }
 
 
@@ -1348,7 +1367,7 @@ ResultType Line::FileGetShortcut(LPTSTR aShortcutFile) // Credited to Holger <Ho
 ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
 	, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState)
 {
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default ErrorLevel.
+	bool bSucceeded = false;
 	CoInitialize(NULL);
 	IShellLink *psl;
 
@@ -1386,14 +1405,20 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 #else
 			if (SUCCEEDED(ppf->Save(aShortcutFile, TRUE)))
 #endif
+			{
 				g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+				bSucceeded = true;
+			}
 			ppf->Release();
 		}
 		psl->Release();
 	}
 
 	CoUninitialize();
-	return OK; // ErrorLevel indicates whether or not it succeeded.
+	if (bSucceeded)
+		return OK;
+	else
+		return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileCreateShortcut"));
 }
 
 
@@ -1401,7 +1426,7 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 ResultType Line::FileRecycle(LPTSTR aFilePattern)
 {
 	if (!aFilePattern || !*aFilePattern)
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);  // Since this is probably not what the user intended.
+		return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileRecycle"));  // Since this is probably not what the user intended.
 
 	SHFILEOPSTRUCT FileOp;
 	TCHAR szFileTemp[_MAX_PATH+2];
@@ -1424,7 +1449,7 @@ ResultType Line::FileRecycle(LPTSTR aFilePattern)
 	FileOp.fFlags = FOF_SILENT | FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING;
 
 	// SHFileOperation() returns 0 on success:
-	return g_ErrorLevel->Assign(SHFileOperation(&FileOp) ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
+	return g_script.SetErrorLevelOrThrow(SHFileOperation(&FileOp) ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE, _T("FileRecycle"));
 }
 
 
@@ -1435,43 +1460,45 @@ ResultType Line::FileRecycleEmpty(LPTSTR aDriveLetter)
 	// always automatically present in every process (e.g. if shell is something other than Explorer):
 	HINSTANCE hinstLib = LoadLibrary(_T("shell32"));
 	if (!hinstLib)
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		goto error;
 	// au3: Get the address of all the functions we require
 	typedef HRESULT (WINAPI *MySHEmptyRecycleBin)(HWND, LPCTSTR, DWORD);
  	MySHEmptyRecycleBin lpfnEmpty = (MySHEmptyRecycleBin)GetProcAddress(hinstLib, "SHEmptyRecycleBin" WINAPI_SUFFIX);
 	if (!lpfnEmpty)
 	{
 		FreeLibrary(hinstLib);
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		goto error;
 	}
 	LPCTSTR szPath = *aDriveLetter ? aDriveLetter : NULL;
 	if (lpfnEmpty(NULL, szPath, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND) != S_OK)
 	{
 		FreeLibrary(hinstLib);
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		goto error;
 	}
 	FreeLibrary(hinstLib);
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+
+error:
+	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileRecycleEmpty"));
 }
 
 
 
 ResultType Line::FileGetVersion(LPTSTR aFilespec)
 {
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Set default
 	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.
 
 	if (!aFilespec || !*aFilespec)
 	{
 		g->LastError = ERROR_INVALID_PARAMETER;
-		return OK;  // Let ErrorLevel indicate an error, since this is probably not what the user intended.
+		goto error;  // Error out, since this is probably not what the user intended.
 	}
 
 	DWORD dwUnused, dwSize;
 	if (   !(dwSize = GetFileVersionInfoSize(aFilespec, &dwUnused))   )  // No documented limit on how large it can be, so don't use _alloca().
 	{
 		g->LastError = GetLastError();
-		return OK;  // Let ErrorLevel tell the story.
+		goto error;
 	}
 
 	BYTE *pInfo = (BYTE*)malloc(dwSize);  // Allocate the size retrieved by the above.
@@ -1485,7 +1512,7 @@ ResultType Line::FileGetVersion(LPTSTR aFilespec)
 	{
 		g->LastError = GetLastError();
 		free(pInfo);
-		return OK;  // Let ErrorLevel tell the story.
+		goto error;
 	}
 
 	// extract the fields you want from pFFI
@@ -1500,6 +1527,9 @@ ResultType Line::FileGetVersion(LPTSTR aFilespec)
 	g->LastError = 0;
     g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Indicate success.
 	return OUTPUT_VAR->Assign(version_string);
+
+error:
+	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileGetVersion"));
 }
 
 

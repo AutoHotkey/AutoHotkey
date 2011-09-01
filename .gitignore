@@ -1,6 +1,9 @@
 temp/
 bin/
+ipch/
 *.suo
 *.user
 *.ncb
 *.aps
+*.sdf
+*.opensdf
