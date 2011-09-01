@@ -12222,10 +12222,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	{
 		*buf = 'A'; // The 'A' prefix indicates the call was made, but with too many or too few args.
 		_itot(esp_delta, buf + 1, 10);
-		if(!g->InTryBlock)
-			g_ErrorLevel->Assign(buf); // Assign buf not _itoa()'s return value, which is the wrong location.
-		else
-			g_script.ScriptError(_T("This STDCALL function was passed an incorrect number of parameters."), buf);
+		g_script.SetErrorLevelOrThrow(buf, _T("DllCall")); // Assign buf not _itot()'s return value, which is the wrong location.
 	}
 	else
 #endif
@@ -12237,10 +12234,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		buf[0] = '0';
 		buf[1] = 'x';
 		_ultot(aException, buf + 2, 16);
-		if(!g->InTryBlock)
-			g_ErrorLevel->Assign(buf); // Positive ErrorLevel numbers are reserved for exception codes.
-		else
-			g_script.ScriptError(_T("A Win32 exception has occurred."), buf);
+		g_script.SetErrorLevelOrThrow(buf, _T("DllCall")); // Positive ErrorLevel numbers are reserved for exception codes.
 	}
 	else
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
@@ -12431,10 +12425,7 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 			if (   !hmodule_to_free  ||  !(hmodule = *hmodule_to_free = LoadLibrary(dll_name))   )
 			{
 				if (hmodule_to_free) // L31: BIF_DllCall wants us to set ErrorLevel.  ExpressionToPostfix passes NULL.
-					if (!g->InTryBlock)
-						g_ErrorLevel->Assign(_T("-3")); // Stage 3 error: DLL couldn't be loaded.
-					else
-						g_script.ScriptError(_T("The specified DLL couldn't be loaded."), dll_name);
+					g_script.SetErrorLevelOrThrow(_T("-3"), _T("DllCall")); // Stage 3 error: DLL couldn't be loaded.
 				return NULL;
 			}
 		if (   !(function = (void *)GetProcAddress(hmodule, function_name))   )
@@ -12498,10 +12489,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			function = (void *)aParam[0]->value_int64; // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
 			break;
 		case SYM_FLOAT:
-			if (!g->InTryBlock)
-				g_ErrorLevel->Assign(_T("-1")); // Stage 1 error: Invalid first param.
-			else
-				g_script.ScriptError(_T("Invalid first parameter."));
+			g_script.SetErrorLevelOrThrow(_T("-1"), _T("DllCall")); // Stage 1 error: Invalid first param.
 			return;
 		default: // SYM_OPERAND (SYM_OPERAND is typically a numeric literal).
 			function = (TokenIsPureNumeric(*aParam[0]) == PURE_INTEGER)
@@ -12522,10 +12510,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		ExprTokenType &token = *aParam[aParamCount - 1];
 		if (IS_NUMERIC(token.symbol) || token.symbol == SYM_OBJECT) // The return type should be a string, not something purely numeric.
 		{
-			if (!g->InTryBlock)
-				g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
-			else
-				g_script.ScriptError(ERR_DLLCALL_STAGE2);
+			g_script.SetErrorLevelOrThrow(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
 			return;
 		}
 		LPTSTR return_type_string[2];
@@ -12572,10 +12557,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		ConvertDllArgType(return_type_string, return_attrib);
 		if (return_attrib.type == DLL_ARG_INVALID)
 		{
-			if (!g->InTryBlock)
-				g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
-			else
-				g_script.ScriptError(ERR_DLLCALL_STAGE2);
+			g_script.SetErrorLevelOrThrow(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
 			return;
 		}
 has_valid_return_type:
@@ -12620,10 +12602,7 @@ has_valid_return_type:
 		// Check validity of this arg's type and contents:
 		if (IS_NUMERIC(aParam[i]->symbol)) // The arg type should be a string, not something purely numeric.
 		{
-			if (!g->InTryBlock)
-				g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
-			else
-				g_script.ScriptError(ERR_DLLCALL_STAGE2);
+			g_script.SetErrorLevelOrThrow(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
 			return;
 		}
 		// Otherwise, this arg's type-name is a string as it should be, so retrieve it:
@@ -12659,10 +12638,7 @@ has_valid_return_type:
 				// to be stack memory, which would be invalid memory upon return to the caller).
 				// The complexity of this doesn't seem worth the rarity of the need, so this will be
 				// documented in the help file.
-				if (!g->InTryBlock)
-					g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
-				else
-					g_script.ScriptError(ERR_DLLCALL_STAGE2);
+				g_script.SetErrorLevelOrThrow(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
 				return;
 			}
 			// Otherwise, it's a supported type of string.
@@ -12697,10 +12673,7 @@ has_valid_return_type:
 			// See the section above for comments.
 			if (IS_NUMERIC(this_param.symbol))
 			{
-				if (!g->InTryBlock)
-					g_ErrorLevel->Assign(_T("-2"));
-				else
-					g_script.ScriptError(ERR_DLLCALL_STAGE2);
+				g_script.SetErrorLevelOrThrow(_T("-2"), _T("DllCall"));
 				return;
 			}
 			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
@@ -12718,10 +12691,7 @@ has_valid_return_type:
 			break;
 
 		case DLL_ARG_INVALID:
-			if (!g->InTryBlock)
-				g_ErrorLevel->Assign(_T("-2")); // Stage 2 error: Invalid return type or arg type.
-			else
-				g_script.ScriptError(ERR_DLLCALL_STAGE2);
+			g_script.SetErrorLevelOrThrow(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
 			return;
 
 		default: // Namely:
@@ -12765,10 +12735,7 @@ has_valid_return_type:
 		function = GetDllProcAddress(aFuncName = aParam[0]->symbol == SYM_VAR ? aParam[0]->var->Contents() : aParam[0]->marker, &hmodule_to_free);
 		if (!function)
 		{
-			if (!g->InTryBlock)
-				g_ErrorLevel->Assign(_T("-4")); // Stage 4 error: Function could not be found in the DLL(s).
-			else if (!g->ThrownToken)
-				g_script.ScriptError(_T("The specified function could not be found in the DLL."), aFuncName);
+			g_script.SetErrorLevelOrThrow(_T("-4"), _T("DllCall")); // Stage 4 error: Function could not be found in the DLL(s).
 			goto end;
 		}
 	}
@@ -13777,12 +13744,8 @@ break_both:
 		{
 			// Since both the error code and the offset are desirable outputs, it seems best to also
 			// include descriptive error text (debatable).
-			VarSizeType error_len = sntprintf(error_buf, _countof(error_buf), _T("Compile error %d at offset %d: %s")
-					, error_code, UTF8PosToTPos(regex_utf8, error_offset), (LPCTSTR)CStringTCharFromCharIfNeeded(error_msg));
-			if (!g->InTryBlock)
-				g_ErrorLevel->Assign(error_buf, error_len);
-			else
-				g_script.ScriptError(_T("Invalid regular expression."), error_buf);
+			g_script.SetErrorLevelOrThrow(error_buf, _T("RegEx"), sntprintf(error_buf, _countof(error_buf), _T("Compile error %d at offset %d: %s")
+					, error_code, UTF8PosToTPos(regex_utf8, error_offset), (LPCTSTR)CStringTCharFromCharIfNeeded(error_msg)));
 		}
 		goto error;
 	}
@@ -14089,14 +14052,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		// Otherwise:
 		if (captured_pattern_count < 0) // An error other than "no match". These seem very rare, so it seems best to abort rather than yielding a partially-converted result.
 		{
-			if (!g->InTryBlock)
-				g_ErrorLevel->Assign(captured_pattern_count); // No error text is stored; just a negative integer (since these errors are pretty rare).
-			else
-			{
-				TCHAR buf[32];
-				sntprintf(buf, _countof(buf), _T("%d"), captured_pattern_count);
-				g_script.ScriptError(ERR_REGEX_EXECUTE, buf);
-			}
+			g_script.SetErrorLevelOrThrow(captured_pattern_count, _T("RegExReplace")); // No error text is stored; just a negative integer (since these errors are pretty rare).
 			goto set_count_and_return; // Goto vs. break to leave aResultToken.marker set to aHaystack and replacement_count set to 0, and let ErrorLevel tell the story.
 		}
 
@@ -14481,14 +14437,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	}
 	else if (captured_pattern_count < 0) // An error other than "no match".
 	{
-		if (!g->InTryBlock)
-			g_ErrorLevel->Assign(captured_pattern_count); // No error text is stored; just a negative integer (since these errors are pretty rare).
-		else
-		{
-			TCHAR buf[32];
-			sntprintf(buf, _countof(buf), _T("%d"), captured_pattern_count);
-			g_script.ScriptError(ERR_REGEX_EXECUTE, buf);
-		}
+		g_script.SetErrorLevelOrThrow(captured_pattern_count, _T("RegExMatch")); // No error text is stored; just a negative integer (since these errors are pretty rare).
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
 	}

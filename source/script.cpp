@@ -15597,6 +15597,28 @@ ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, ResultType aErrorType
 	return aErrorType;
 }
 
+ResultType Script::SetErrorLevelOrThrow(LPCTSTR aErrorValue, LPCTSTR aMessage, VarSizeType iErrorLen)
+{
+	if (!g->InTryBlock)
+		return g_ErrorLevel->Assign(aErrorValue, iErrorLen);
+	else
+		// This throws an exception.
+		return ScriptError(aMessage, aErrorValue);
+}
+
+ResultType Script::SetErrorLevelOrThrow(int aErrorValue, LPCTSTR aMessage)
+{
+	if (!g->InTryBlock)
+		return g_ErrorLevel->Assign(aErrorValue);
+	else
+	{
+		// This throws an exception.
+		TCHAR buf[32];
+		sntprintf(buf, _countof(buf), _T("%d"), aErrorValue);
+		return ScriptError(aMessage, buf);
+	}
+}
+
 #define ERR_PRINT(fmt, ...) _ftprintf(stderr, fmt, __VA_ARGS__)
 
 ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo)
