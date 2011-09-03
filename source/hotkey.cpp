@@ -880,13 +880,13 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		else if (!_tcsnicmp(aHotkeyName + (invert ? 8 : 5), _T("Exist"), 5))
 			hot_criterion = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
 		else // It starts with IfWin but isn't Active or Exist: Don't alter the current criterion.
-			return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("Hotkey"));
+			return g_script.SetErrorLevelOrThrow();
 		if (!(*aLabelName || *aOptions)) // This check is done only after detecting bad spelling of IfWin above.
 			g_HotCriterion = HOT_NO_CRITERION;
 		else if (SetGlobalHotTitleText(aLabelName, aOptions)) // Currently, it only fails upon out-of-memory.
 			g_HotCriterion = hot_criterion; // Only set at the last minute so that previous criteria will stay in effect if it fails.
 		else
-			return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("Hotkey"));
+			return g_script.SetErrorLevelOrThrow();
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 	}
 
@@ -895,7 +895,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	{
 		if (*aOptions)
 		{	// Let the script know of this error since it may indicate an unescaped comma in the expression text.
-			return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("Hotkey"));
+			return g_script.SetErrorLevelOrThrow();
 		}
 		if (!*aLabelName)
 		{
@@ -916,7 +916,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				}
 			}
 			if (i == g_HotExprLineCount)
-				return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("Hotkey"));
+				return g_script.SetErrorLevelOrThrow();
 		}
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	}
@@ -924,7 +924,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	// For maintainability (and script readability), don't support "U" as a substitute for "UseErrorLevel",
 	// since future options might contain the letter U as a "parameter" that immediately follows an option-letter.
 	bool use_errorlevel = tcscasestr(aOptions, _T("UseErrorLevel"));
-	#define RETURN_HOTKEY_ERROR(level, msg, info) return use_errorlevel ? g_script.SetErrorLevelOrThrow(level, _T("Hotkey")) \
+	#define RETURN_HOTKEY_ERROR(level, msg, info) return use_errorlevel ? g_script.SetErrorLevelOrThrowStr(level) \
 		: g_script.ScriptError(msg ERR_ABORT, info)
 
 	HookActionType hook_action = 0; // Set default.
@@ -1169,7 +1169,7 @@ Hotkey *Hotkey::AddHotkey(Label *aJumpToLabel, HookActionType aHookAction, LPTST
 	if (   !(shk[sNextID] = new Hotkey(sNextID, aJumpToLabel, aHookAction, aName, aSuffixHasTilde, aUseErrorLevel))   )
 	{
 		if (aUseErrorLevel)
-			g_script.SetErrorLevelOrThrow(HOTKEY_EL_MEM, _T("Hotkey"));
+			g_script.SetErrorLevelOrThrowStr(HOTKEY_EL_MEM);
 		//else currently a silent failure due to rarity.
 		return NULL;
 	}
@@ -1222,7 +1222,7 @@ Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction
 		// This will actually cause the script to terminate if this hotkey is a static (load-time)
 		// hotkey.  In the future, some other behavior is probably better:
 		if (aUseErrorLevel)
-			g_script.SetErrorLevelOrThrow(HOTKEY_EL_MAXCOUNT, _T("Hotkey"));
+			g_script.SetErrorLevelOrThrowStr(HOTKEY_EL_MAXCOUNT);
 		else
 			MsgBox(_T("Max hotkeys."));  // Brief msg since so rare.
 		return;
@@ -1260,7 +1260,7 @@ Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction
 			if (mModifiers)
 			{
 				if (aUseErrorLevel)
-					g_script.SetErrorLevelOrThrow(HOTKEY_EL_ALTTAB, _T("Hotkey"));
+					g_script.SetErrorLevelOrThrowStr(HOTKEY_EL_ALTTAB);
 				else
 				{
 					// Neutral modifier has been specified.  Future enhancement: improve this
@@ -1295,7 +1295,7 @@ Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction
 				case MOD_RWIN: mModifierVK = VK_RWIN; break;
 				default:
 					if (aUseErrorLevel)
-						g_script.SetErrorLevelOrThrow(HOTKEY_EL_ALTTAB, _T("Hotkey"));
+						g_script.SetErrorLevelOrThrowStr(HOTKEY_EL_ALTTAB);
 					else
 					{
 						sntprintf(error_text, _countof(error_text), _T("The AltTab hotkey \"%s\" must have exactly ")
@@ -1505,7 +1505,7 @@ Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction
 		|| !(AddVariant(aJumpToLabel, aSuffixHasTilde))   ) // Too rare to worry about freeing the other if only one fails.
 	{
 		if (aUseErrorLevel)
-			g_script.SetErrorLevelOrThrow(HOTKEY_EL_MEM, _T("Hotkey"));
+			g_script.SetErrorLevelOrThrowStr(HOTKEY_EL_MEM);
 		else
 			g_script.ScriptError(ERR_OUTOFMEM);
 		return;
@@ -1857,7 +1857,7 @@ ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier,
 			if (IS_WHEEL_VK(temp_vk))
 			{
 				if (aUseErrorLevel)
-					g_script.SetErrorLevelOrThrow(HOTKEY_EL_UNSUPPORTED_PREFIX, _T("Hotkey"));
+					g_script.SetErrorLevelOrThrowStr(HOTKEY_EL_UNSUPPORTED_PREFIX);
 				else
 				{
 					// In this case, aThisHotkey is NOT checked because it seems better to yield a double
@@ -1898,7 +1898,7 @@ ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier,
 					// Tempting to store the name of the invalid key in ErrorLevel, but because it might
 					// be really long, it seems best not to.  Another reason is that the keyname could
 					// conceivably be the same as one of the other/reserved ErrorLevel numbers.
-					g_script.SetErrorLevelOrThrow(HOTKEY_EL_INVALID_KEYNAME, _T("Hotkey"));
+					g_script.SetErrorLevelOrThrowStr(HOTKEY_EL_INVALID_KEYNAME);
 				else if (aThisHotkey)
 				{
 					// If it fails while aThisHotkey!=NULL, that should mean that this was called as

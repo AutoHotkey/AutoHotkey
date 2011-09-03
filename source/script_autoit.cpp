@@ -189,7 +189,7 @@ ResultType Line::PixelGetColor(int aX, int aY, LPTSTR aOptions)
 		// Convert from relative to absolute (screen) coordinates:
 		RECT rect;
 		if (!GetWindowRect(GetForegroundWindow(), &rect))
-			return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("PixelGetColor"));
+			return SetErrorLevelOrThrow();
 		aX += rect.left;
 		aY += rect.top;
 	}
@@ -197,7 +197,7 @@ ResultType Line::PixelGetColor(int aX, int aY, LPTSTR aOptions)
 	bool use_alt_mode = tcscasestr(aOptions, _T("Alt")) != NULL; // New mode for v1.0.43.10: Two users reported that CreateDC works better in certain windows such as SciTE, at least one some systems.
 	HDC hdc = use_alt_mode ? CreateDC(_T("DISPLAY"), NULL, NULL, NULL) : GetDC(NULL);
 	if (!hdc)
-		return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("PixelGetColor"));
+		return SetErrorLevelOrThrow();
 
 	// Assign the value as an 32-bit int to match Window Spy reports color values.
 	// Update for v1.0.21: Assigning in hex format seems much better, since it's easy to
@@ -400,7 +400,7 @@ else\
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("WinMenuSelectItem"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -693,7 +693,7 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("Control"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -985,7 +985,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 
 error:
 	output_var.Assign();
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("ControlGet"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -1121,7 +1121,7 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	}}
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("URLDownloadToFile"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -1253,7 +1253,7 @@ ResultType Line::FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGree
 	return output_var.Assign(Result);
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileSelectFolder"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -1359,7 +1359,7 @@ ResultType Line::FileGetShortcut(LPTSTR aShortcutFile) // Credited to Holger <Ho
 	return OK;  // ErrorLevel might still indicate failure if one of the above calls failed.
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileGetShortcut"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -1418,7 +1418,7 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 	if (bSucceeded)
 		return OK;
 	else
-		return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileCreateShortcut"));
+		return SetErrorLevelOrThrow();
 }
 
 
@@ -1426,7 +1426,7 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 ResultType Line::FileRecycle(LPTSTR aFilePattern)
 {
 	if (!aFilePattern || !*aFilePattern)
-		return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileRecycle"));  // Since this is probably not what the user intended.
+		return SetErrorLevelOrThrow();  // Since this is probably not what the user intended.
 
 	SHFILEOPSTRUCT FileOp;
 	TCHAR szFileTemp[_MAX_PATH+2];
@@ -1449,7 +1449,7 @@ ResultType Line::FileRecycle(LPTSTR aFilePattern)
 	FileOp.fFlags = FOF_SILENT | FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING;
 
 	// SHFileOperation() returns 0 on success:
-	return g_script.SetErrorLevelOrThrow(SHFileOperation(&FileOp) ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE, _T("FileRecycle"));
+	return SetErrorLevelOrThrowBool(SHFileOperation(&FileOp));
 }
 
 
@@ -1479,7 +1479,7 @@ ResultType Line::FileRecycleEmpty(LPTSTR aDriveLetter)
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileRecycleEmpty"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -1529,7 +1529,7 @@ ResultType Line::FileGetVersion(LPTSTR aFilespec)
 	return OUTPUT_VAR->Assign(version_string);
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileGetVersion"));
+	return SetErrorLevelOrThrow();
 }
 
 

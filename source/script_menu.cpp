@@ -457,7 +457,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 	return FAIL;  // Should never be reached, but avoids compiler warning and improves bug detection.
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("Menu"));
+	return g_script.SetErrorLevelOrThrow();
 }
 
 

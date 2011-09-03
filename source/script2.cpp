@@ -30,12 +30,6 @@ GNU General Public License for more details.
 #include "lib_pcre/pcre/pcre.h" // linkage rather than as functions inside an external DLL.
 
 
-ResultType AssignErrorLevels(BOOL aSetError, DWORD aLastErrorOverride = -1)
-{
-	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
-	return g_script.SetErrorLevelOrThrow(aSetError ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE, _T("")); // TODO: provide information about the command that failed
-}
-
 
 ////////////////////
 // Window related //
@@ -1439,7 +1433,7 @@ ResultType Line::Input()
 		// when its quasi-thread is resumed:
 		bool prior_input_is_being_terminated = (g_input.status == INPUT_IN_PROGRESS);
 		g_input.status = INPUT_OFF;
-		return g_script.SetErrorLevelOrThrow(prior_input_is_being_terminated ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR, _T("Input"));
+		return SetErrorLevelOrThrowBool(!prior_input_is_being_terminated);
 		// Above: It's considered an "error" of sorts when there is no prior input to terminate.
 	}
 
@@ -1893,18 +1887,12 @@ ResultType Line::PerformWait()
 
 	if (mActionType == ACT_RUNWAIT)
 	{
-		if (tcscasestr(ARG3, _T("UseErrorLevel")))
-		{
-			if (!g_script.ActionExec(ARG1, NULL, ARG2, false, ARG3, &running_process, true, true, ARGVAR4)) // Load-time validation has ensured that the arg is a valid output variable (e.g. not a built-in var).
-				return g_script.SetErrorLevelOrThrow(_T("ERROR"), _T("RunWait")); // See above comment for explanation.
-			//else fall through to the waiting-phase of the operation.
-			// Above: The special string ERROR is used, rather than a number like 1, because currently
-			// RunWait might in the future be able to return any value, including 259 (STATUS_PENDING).
-		}
-		else // If launch fails, display warning dialog and terminate current thread.
-			if (!g_script.ActionExec(ARG1, NULL, ARG2, true, ARG3, &running_process, false, true, ARGVAR4)) // Load-time validation has ensured that the arg is a valid output variable (e.g. not a built-in var).
-				return FAIL;
-			//else fall through to the waiting-phase of the operation.
+		bool use_el = tcscasestr(ARG3, _T("UseErrorLevel"));
+		if (!g_script.ActionExec(ARG1, NULL, ARG2, !use_el, ARG3, &running_process, use_el, true, ARGVAR4)) // Load-time validation has ensured that the arg is a valid output variable (e.g. not a built-in var).
+			return use_el ? SetErrorLevelOrThrowStr(_T("ERROR")) : FAIL;
+		//else fall through to the waiting-phase of the operation.
+		// Above: The special string ERROR is used, rather than a number like 1, because currently
+		// RunWait might in the future be able to return any value, including 259 (STATUS_PENDING).
 	}
 	
 	// Must NOT use ELSE-IF in line below due to ELSE further down needing to execute for RunWait.
@@ -2145,7 +2133,7 @@ ResultType Line::ControlSend(LPTSTR aControl, LPTSTR aKeysToSend, LPTSTR aTitle,
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("ControlSend"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -2390,7 +2378,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE);} // Indicate success.
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("ControlClick"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -2464,7 +2452,7 @@ ResultType Line::ControlMove(LPTSTR aControl, LPTSTR aX, LPTSTR aY, LPTSTR aWidt
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("ControlMove"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -2551,7 +2539,7 @@ ResultType Line::ControlGetFocus(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTit
 	return output_var.Assign(class_name);
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("ControlGetFocus"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -2606,7 +2594,7 @@ ResultType Line::ControlFocus(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 	return OK;
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("ControlFocus"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -2630,7 +2618,7 @@ ResultType Line::ControlSetText(LPTSTR aControl, LPTSTR aNewText, LPTSTR aTitle,
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("ControlSetText"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -2639,7 +2627,6 @@ ResultType Line::ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 {
 	Var &output_var = *OUTPUT_VAR;
-	bool bSucceeded = false;
 	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
 	HWND control_window = target_window ? ControlExist(target_window, aControl) : NULL; // This can return target_window itself for cases such as ahk_id %ControlHWND%.
 	// Even if control_window is NULL, we want to continue on so that the output
@@ -2666,8 +2653,6 @@ ResultType Line::ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 		if (   !(output_var.SetCharLength((VarSizeType)GetWindowTextTimeout(control_window
 			, output_var.Contents(), space_needed)))   ) // There was no text to get or GetWindowTextTimeout() failed.
 			*output_var.Contents() = '\0';  // Safe because Assign() gave us a non-constant memory area.
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-		bSucceeded = true;
 	}
 	else
 	{
@@ -2681,7 +2666,7 @@ ResultType Line::ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 	ResultType result = output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 	if (result != OK)
 		return result;
-	return bSucceeded ? OK : g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("ControlGetText"));
+	return SetErrorLevelOrThrowBool(!control_window);
 }
 
 
@@ -2975,7 +2960,7 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 	HWND target_window, control_window;
 	if (   !(target_window = DetermineTargetWindow(sArgDeref[4], sArgDeref[5], sArgDeref[6], sArgDeref[7]))
 		|| !(control_window = *sArgDeref[3] ? ControlExist(target_window, sArgDeref[3]) : target_window)   ) // Relies on short-circuit boolean order.
-		return g_script.SetErrorLevelOrThrow(aUseSend ? _T("FAIL") : ERRORLEVEL_ERROR, _T("")); // Need a special value to distinguish this from numeric reply-values.
+		return SetErrorLevelOrThrowStr(aUseSend ? _T("FAIL") : ERRORLEVEL_ERROR); // Need a special value to distinguish this from numeric reply-values.
 
 	// v1.0.40.05: Support the passing of a literal (quoted) string by checking whether the
 	// original/raw arg's first character is '"'.  The avoids the need to put the string into a
@@ -3017,13 +3002,13 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 	{
 		DWORD_PTR dwResult;
 		if (!SendMessageTimeout(control_window, msg, wparam, lparam, SMTO_ABORTIFHUNG, timeout, &dwResult))
-			return g_script.SetErrorLevelOrThrow(_T("FAIL"), _T("")); // Need a special value to distinguish this from numeric reply-values.
+			return SetErrorLevelOrThrowStr(_T("FAIL")); // Need a special value to distinguish this from numeric reply-values.
 		g_ErrorLevel->Assign(dwResult); // UINT seems best most of the time?
 	}
 	else // Post vs. Send
 	{
 		if (!PostMessage(control_window, msg, wparam, lparam))
-			return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T(""));
+			return SetErrorLevelOrThrow();
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	}
 
@@ -3305,7 +3290,7 @@ ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints)
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("WinSet"));
+	return g_script.SetErrorLevelOrThrow();
 }
 
 
@@ -3525,7 +3510,7 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 	return OK;
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("WinSet"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -3897,11 +3882,11 @@ ResultType Line::WinGetText(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, L
 	// rather than leaving whatever was in there before:
 	if (!target_window)
 	{
-		ResultType result = output_var.Assign(); // Tell it not to free the memory by not calling with "".
-		return result != OK ? result : g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("WinGetText"));
+		if (output_var.Assign() != OK) // Tell it not to free the memory by omitting all params.
+			return FAIL;
+		return SetErrorLevelOrThrow();
 	}
 
-	bool bSucceeded = false;
 	length_and_buf_type sab;
 	sab.buf = NULL; // Tell it just to calculate the length this time around.
 	sab.total_length = 0; // Init
@@ -3942,13 +3927,12 @@ ResultType Line::WinGetText(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, L
 	// the string in the buffer reduced in size (to a minimum of half that of the wParam value) due to
 	// conversion from ANSI to Unicode."
 	output_var.SetCharLength((VarSizeType)sab.total_length);
-	if (sab.total_length)
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE), bSucceeded = true; // Indicate success.
-	else // Something went wrong, so make sure we set to empty string.
+	if (!sab.total_length)
+		// Something went wrong, so make sure we set to empty string.
 		*sab.buf = '\0';  // Safe because Assign() gave us a non-constant memory area.
-	ResultType result = output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-	if (result != OK) return result;
-	return bSucceeded ? OK : g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("WinGetText"));
+	if (output_var.Close() != OK) // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
+		return FAIL;
+	return SetErrorLevelOrThrowBool(!sab.total_length);
 }
 
 
@@ -4629,8 +4613,7 @@ fast_end:
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 error:
-	return g_script.SetErrorLevelOrThrow(aIsPixelGetColor ? ERRORLEVEL_ERROR : ERRORLEVEL_ERROR2
-		, aIsPixelGetColor ? _T("PixelGetColor") : _T("PixelSearch")); // 2 means error other than "color not found".
+	return SetErrorLevelOrThrowStr(aIsPixelGetColor ? ERRORLEVEL_ERROR : ERRORLEVEL_ERROR2); // 2 means error other than "color not found".
 }
 
 
@@ -5018,7 +5001,7 @@ end:
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR2, _T("ImageSearch"));
+	return SetErrorLevelOrThrowStr(ERRORLEVEL_ERROR2);
 }
 
 
@@ -7868,7 +7851,7 @@ ResultType Line::DriveSpace(LPTSTR aPath, bool aGetFreeSpace)
 	return OUTPUT_VAR->Assign(free_space);
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T(""));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -7897,11 +7880,11 @@ ResultType Line::Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2) // aValue not
 		// Since command names are validated at load-time, this only happens if the command name
 		// was contained in a variable reference.  Since that is very rare, just set ErrorLevel
 		// and return:
-		return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("Drive"));
+		return SetErrorLevelOrThrow();
 
 	case DRIVE_CMD_LOCK:
 	case DRIVE_CMD_UNLOCK:
-		return g_script.SetErrorLevelOrThrow(DriveLock(*aValue, drive_cmd == DRIVE_CMD_LOCK) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR, _T("Drive")); // Indicate success or failure.
+		return SetErrorLevelOrThrowBool(!DriveLock(*aValue, drive_cmd == DRIVE_CMD_LOCK));
 
 	case DRIVE_CMD_EJECT:
 		// Don't do DRIVE_SET_PATH in this case since trailing backslash might prevent it from
@@ -7928,20 +7911,20 @@ ResultType Line::Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2) // aValue not
 		{
 			sntprintf(mci_string, _countof(mci_string), _T("set cdaudio door %s wait"), ATOI(aValue2) == 1 ? _T("closed") : _T("open"));
 			error = mciSendString(mci_string, NULL, 0, NULL); // Open or close the tray.
-			return g_script.SetErrorLevelOrThrow(error ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE, _T("Drive")); // Indicate success or failure.
+			return SetErrorLevelOrThrowBool(error);
 		}
 		sntprintf(mci_string, _countof(mci_string), _T("open %s type cdaudio alias cd wait shareable"), aValue);
 		if (mciSendString(mci_string, NULL, 0, NULL)) // Error.
-			return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("Drive"));
+			return SetErrorLevelOrThrow();
 		sntprintf(mci_string, _countof(mci_string), _T("set cd door %s wait"), ATOI(aValue2) == 1 ? _T("closed") : _T("open"));
 		error = mciSendString(mci_string, NULL, 0, NULL); // Open or close the tray.
 		mciSendString(_T("close cd wait"), NULL, 0, NULL);
-		return g_script.SetErrorLevelOrThrow(error ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE, _T("Drive")); // Indicate success or failure.
+		return SetErrorLevelOrThrowBool(error);
 
 	case DRIVE_CMD_LABEL: // Note that it is possible and allowed for the new label to be blank.
 		DRIVE_SET_PATH
 		SetErrorMode(SEM_FAILCRITICALERRORS);  // So that a floppy drive doesn't prompt for a disk
-		return g_script.SetErrorLevelOrThrow(SetVolumeLabel(path, aValue2) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR, _T("Drive"));
+		return SetErrorLevelOrThrowBool(!SetVolumeLabel(path, aValue2));
 
 	} // switch()
 
@@ -8204,7 +8187,7 @@ error2:
 	ResultType result = output_var.Assign();
 	if (result != OK) return result;
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("DriveGet"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -8235,12 +8218,12 @@ ResultType Line::SoundSetGet(LPTSTR aSetting, DWORD aComponentType, int aCompone
 	// Text values for ErrorLevels should be kept below 64 characters in length so that the variable doesn't
 	// have to be expanded with a different memory allocation method:
 	if (aControlType == MIXERCONTROL_CONTROLTYPE_INVALID || aComponentType == MIXERLINE_COMPONENTTYPE_DST_UNDEFINED)
-		return g_script.SetErrorLevelOrThrow(_T("Invalid Control Type or Component Type"), _T(""));
+		return SetErrorLevelOrThrowStr(_T("Invalid Control Type or Component Type"));
 	
 	// Open the specified mixer ID:
 	HMIXER hMixer;
     if (mixerOpen(&hMixer, aMixerID, 0, 0, 0) != MMSYSERR_NOERROR)
-		return g_script.SetErrorLevelOrThrow(_T("Can't Open Specified Mixer"), _T(""));
+		return SetErrorLevelOrThrowStr(_T("Can't Open Specified Mixer"));
 
 	// Find out how many destinations are available on this mixer (should always be at least one):
 	int dest_count;
@@ -8259,7 +8242,7 @@ ResultType Line::SoundSetGet(LPTSTR aSetting, DWORD aComponentType, int aCompone
 		if (mixerGetLineInfo((HMIXEROBJ)hMixer, &ml, MIXER_GETLINEINFOF_COMPONENTTYPE) != MMSYSERR_NOERROR)
 		{
 			mixerClose(hMixer);
-			return g_script.SetErrorLevelOrThrow(_T("Mixer Doesn't Support This Component Type"), _T(""));
+			return SetErrorLevelOrThrowStr(_T("Mixer Doesn't Support This Component Type"));
 		}
 	}
 	else
@@ -8295,7 +8278,7 @@ ResultType Line::SoundSetGet(LPTSTR aSetting, DWORD aComponentType, int aCompone
 		if (!found)
 		{
 			mixerClose(hMixer);
-			return g_script.SetErrorLevelOrThrow(_T("Mixer Doesn't Have That Many of That Component Type"), _T(""));
+			return SetErrorLevelOrThrowStr(_T("Mixer Doesn't Have That Many of That Component Type"));
 		}
 	}
 
@@ -8311,7 +8294,7 @@ ResultType Line::SoundSetGet(LPTSTR aSetting, DWORD aComponentType, int aCompone
 	if (mixerGetLineControls((HMIXEROBJ)hMixer, &mlc, MIXER_GETLINECONTROLSF_ONEBYTYPE) != MMSYSERR_NOERROR)
 	{
 		mixerClose(hMixer);
-		return g_script.SetErrorLevelOrThrow(_T("Component Doesn't Support This Control Type"), _T(""));
+		return SetErrorLevelOrThrowStr(_T("Component Doesn't Support This Control Type"));
 	}
 
 	// Does user want to adjust the current setting by a certain amount?
@@ -8334,7 +8317,7 @@ ResultType Line::SoundSetGet(LPTSTR aSetting, DWORD aComponentType, int aCompone
 		if (mixerGetControlDetails((HMIXEROBJ)hMixer, &mcd, MIXER_GETCONTROLDETAILSF_VALUE) != MMSYSERR_NOERROR)
 		{
 			mixerClose(hMixer);
-			return g_script.SetErrorLevelOrThrow(_T("Can't Get Current Setting"), _T(""));
+			return SetErrorLevelOrThrowStr(_T("Can't Get Current Setting"));
 		}
 	}
 
@@ -8383,7 +8366,7 @@ ResultType Line::SoundSetGet(LPTSTR aSetting, DWORD aComponentType, int aCompone
 
 		MMRESULT result = mixerSetControlDetails((HMIXEROBJ)hMixer, &mcd, MIXER_GETCONTROLDETAILSF_VALUE);
 		mixerClose(hMixer);
-		return g_script.SetErrorLevelOrThrow(result == MMSYSERR_NOERROR ? ERRORLEVEL_NONE : _T("Can't Change Setting"), _T(""));
+		return SetErrorLevelOrThrowStr(result == MMSYSERR_NOERROR ? ERRORLEVEL_NONE : _T("Can't Change Setting"));
 	}
 
 	// Otherwise, the mode is "Get":
@@ -8407,7 +8390,7 @@ ResultType Line::SoundGetWaveVolume(HWAVEOUT aDeviceID)
 
 	DWORD current_vol;
 	if (waveOutGetVolume(aDeviceID, &current_vol) != MMSYSERR_NOERROR)
-		return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("SoundGetWaveVolume"));
+		return SetErrorLevelOrThrow();
 
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
@@ -8437,7 +8420,7 @@ ResultType Line::SoundSetWaveVolume(LPTSTR aVolume, HWAVEOUT aDeviceID)
 	{
 		DWORD current_vol;
 		if (waveOutGetVolume(aDeviceID, &current_vol) != MMSYSERR_NOERROR)
-			return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("SoundSetWaveVolume"));
+			return SetErrorLevelOrThrow();
 		// Adjust left & right independently so that we at least attempt to retain the user's
 		// balance setting (if overflow or underflow occurs, the relative balance might be lost):
 		int vol_left = LOWORD(current_vol); // Make them ints so that overflow/underflow can be detected.
@@ -8461,7 +8444,7 @@ ResultType Line::SoundSetWaveVolume(LPTSTR aVolume, HWAVEOUT aDeviceID)
 	if (waveOutSetVolume(aDeviceID, vol_new) == MMSYSERR_NOERROR)
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	else
-		return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("SoundGetWaveVolume"));
+		return SetErrorLevelOrThrow();
 }
 
 
@@ -8470,7 +8453,7 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 {
 	LPTSTR cp = omit_leading_whitespace(aFilespec);
 	if (*cp == '*')
-		return g_script.SetErrorLevelOrThrow(MessageBeep(ATOU(cp + 1)) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR, _T("SoundPlay"));
+		return SetErrorLevelOrThrowBool(!MessageBeep(ATOU(cp + 1)));
 		// ATOU() returns 0xFFFFFFFF for -1, which is relied upon to support the -1 sound.
 	// See http://msdn.microsoft.com/library/default.asp?url=/library/en-us/multimed/htm/_win32_play.asp
 	// for some documentation mciSendString() and related.
@@ -8480,10 +8463,10 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 		mciSendString(_T("close ") SOUNDPLAY_ALIAS, NULL, 0, NULL);
 	sntprintf(buf, _countof(buf), _T("open \"%s\" alias ") SOUNDPLAY_ALIAS, aFilespec);
 	if (mciSendString(buf, NULL, 0, NULL)) // Failure.
-		return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("SoundPlay"));
+		return SetErrorLevelOrThrow();
 	g_SoundWasPlayed = true;  // For use by Script's destructor.
 	if (mciSendString(_T("play ") SOUNDPLAY_ALIAS, NULL, 0, NULL)) // Failure.
-		return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("SoundPlay"));
+		return SetErrorLevelOrThrow();
 	// Otherwise, the sound is now playing.
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	if (!aSleepUntilDone)
@@ -8519,7 +8502,7 @@ void SetWorkingDir(LPTSTR aNewDir)
 	if (!SetCurrentDirectory(aNewDir)) // Caused by nonexistent directory, permission denied, etc.
 	{
 		if (g_script.mIsReadyToExecute)
-			g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("SetWorkingDir"));
+			g_script.SetErrorLevelOrThrow();
 		return;
 	}
 
@@ -8582,8 +8565,7 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 	if (g_nFileDialogs >= MAX_FILEDIALOGS)
 	{
 		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
-		MsgBox(_T("The maximum number of File Dialogs has been reached.") ERR_ABORT);
-		return FAIL;
+		return LineError(_T("The maximum number of File Dialogs has been reached.") ERR_ABORT);
 	}
 	
 	// Large in case more than one file is allowed to be selected.
@@ -8777,10 +8759,14 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 		SetCurrentDirectory(g_WorkingDir);
 
 	if (!result) // User pressed CANCEL vs. OK to dismiss the dialog or there was a problem displaying it.
+	{
 		// It seems best to clear the variable in these cases, since this is a scripting
 		// language where performance is not the primary goal.  So do that and return OK,
 		// but leave ErrorLevel set to ERRORLEVEL_ERROR.
-		goto error;
+		if (output_var.Assign() != OK)
+			return FAIL;
+		return SetErrorLevelOrThrow();
+	}
 	else
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate that the user pressed OK vs. CANCEL.
 
@@ -8844,11 +8830,6 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 		}
 	}
 	return output_var.Assign(file_buf);
-
-error:
-	ResultType result2 = output_var.Assign(); // Tell it not to free the memory by not calling with "".
-	if (result2 != OK) return result2;
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("InputBox"));
 }
 
 
@@ -9102,7 +9083,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	return output_var.Close(is_binary_clipboard); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileRead"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -9165,7 +9146,7 @@ ResultType Line::FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber)
 	return AssignErrorLevels(FALSE, 0);} // Indicate success.
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileReadLine"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -9385,7 +9366,7 @@ ResultType Line::WriteClipboardToFile(LPTSTR aFilespec)
 	CloseHandle(hfile);
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T(""));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -9472,7 +9453,7 @@ ResultType Line::ReadClipboardFromFile(HANDLE hfile)
 
 	// The loop ended as a result of a file error.
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T(""));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -9573,7 +9554,7 @@ ResultType Line::FileDelete()
 	} while (FindNextFile(file_search, &current_file));
 	FindClose(file_search);
 
-	return g_script.SetErrorLevelOrThrow(failure_count, _T("FileDelete")); // i.e. indicate success if there were no failures.
+	return SetErrorLevelOrThrowInt(failure_count); // i.e. indicate success if there were no failures.
 }
 
 
@@ -9671,7 +9652,7 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	return OK;
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileInstall"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -9699,7 +9680,7 @@ ResultType Line::FileGetAttrib(LPTSTR aFilespec)
 	return OUTPUT_VAR->Assign(FileAttribToStr(attr_string, attr));
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileGetAttrib"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -9930,11 +9911,11 @@ int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeTyp
 	} // if (aDoRecurse)
 
 	if (!aCalledRecursively) // i.e. Only need to do this if we're returning to top-level caller:
-		g_script.SetErrorLevelOrThrow(failure_count, _T("FileSetAttrib")); // i.e. indicate success if there were no failures.
+		SetErrorLevelOrThrowInt(failure_count); // i.e. indicate success if there were no failures.
 	return failure_count;
 
 error:
-	g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileSetAttrib"));
+	SetErrorLevelOrThrow();
 	return 0;
 }
 
@@ -9979,7 +9960,7 @@ ResultType Line::FileGetTime(LPTSTR aFilespec, TCHAR aWhichTime)
 	return OUTPUT_VAR->Assign(FileTimeToYYYYMMDD(local_file_time_string, local_file_time));
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileGetTime"));
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -10191,11 +10172,11 @@ int Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
 	} // if (aDoRecurse)
 
 	if (!aCalledRecursively) // i.e. Only need to do this if we're returning to top-level caller:
-		g_script.SetErrorLevelOrThrow(failure_count, _T("FileSetTime")); // i.e. indicate success if there were no failures.
+		SetErrorLevelOrThrowInt(failure_count); // i.e. indicate success if there were no failures.
 	return failure_count;
 	
 error:
-	g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileSetTime"));
+	SetErrorLevelOrThrow();
 	return 0;
 }
 
@@ -12288,7 +12269,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	{
 		*buf = 'A'; // The 'A' prefix indicates the call was made, but with too many or too few args.
 		_itot(esp_delta, buf + 1, 10);
-		g_script.SetErrorLevelOrThrow(buf, _T("DllCall")); // Assign buf not _itot()'s return value, which is the wrong location.
+		g_script.SetErrorLevelOrThrowStr(buf, _T("DllCall")); // Assign buf not _itot()'s return value, which is the wrong location.
 	}
 	else
 #endif
@@ -12300,7 +12281,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		buf[0] = '0';
 		buf[1] = 'x';
 		_ultot(aException, buf + 2, 16);
-		g_script.SetErrorLevelOrThrow(buf, _T("DllCall")); // Positive ErrorLevel numbers are reserved for exception codes.
+		g_script.SetErrorLevelOrThrowStr(buf, _T("DllCall")); // Positive ErrorLevel numbers are reserved for exception codes.
 	}
 	else
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
@@ -12491,7 +12472,7 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 			if (   !hmodule_to_free  ||  !(hmodule = *hmodule_to_free = LoadLibrary(dll_name))   )
 			{
 				if (hmodule_to_free) // L31: BIF_DllCall wants us to set ErrorLevel.  ExpressionToPostfix passes NULL.
-					g_script.SetErrorLevelOrThrow(_T("-3"), _T("DllCall")); // Stage 3 error: DLL couldn't be loaded.
+					g_script.SetErrorLevelOrThrowStr(_T("-3"), _T("DllCall")); // Stage 3 error: DLL couldn't be loaded.
 				return NULL;
 			}
 		if (   !(function = (void *)GetProcAddress(hmodule, function_name))   )
@@ -12555,7 +12536,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 			function = (void *)aParam[0]->value_int64; // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
 			break;
 		case SYM_FLOAT:
-			g_script.SetErrorLevelOrThrow(_T("-1"), _T("DllCall")); // Stage 1 error: Invalid first param.
+			g_script.SetErrorLevelOrThrowStr(_T("-1"), _T("DllCall")); // Stage 1 error: Invalid first param.
 			return;
 		default: // SYM_OPERAND (SYM_OPERAND is typically a numeric literal).
 			function = (TokenIsPureNumeric(*aParam[0]) == PURE_INTEGER)
@@ -12576,7 +12557,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		ExprTokenType &token = *aParam[aParamCount - 1];
 		if (IS_NUMERIC(token.symbol) || token.symbol == SYM_OBJECT) // The return type should be a string, not something purely numeric.
 		{
-			g_script.SetErrorLevelOrThrow(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
+			g_script.SetErrorLevelOrThrowStr(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
 			return;
 		}
 		LPTSTR return_type_string[2];
@@ -12623,7 +12604,7 @@ void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 		ConvertDllArgType(return_type_string, return_attrib);
 		if (return_attrib.type == DLL_ARG_INVALID)
 		{
-			g_script.SetErrorLevelOrThrow(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
+			g_script.SetErrorLevelOrThrowStr(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
 			return;
 		}
 has_valid_return_type:
@@ -12668,7 +12649,7 @@ has_valid_return_type:
 		// Check validity of this arg's type and contents:
 		if (IS_NUMERIC(aParam[i]->symbol)) // The arg type should be a string, not something purely numeric.
 		{
-			g_script.SetErrorLevelOrThrow(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
+			g_script.SetErrorLevelOrThrowStr(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
 			return;
 		}
 		// Otherwise, this arg's type-name is a string as it should be, so retrieve it:
@@ -12704,7 +12685,7 @@ has_valid_return_type:
 				// to be stack memory, which would be invalid memory upon return to the caller).
 				// The complexity of this doesn't seem worth the rarity of the need, so this will be
 				// documented in the help file.
-				g_script.SetErrorLevelOrThrow(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
+				g_script.SetErrorLevelOrThrowStr(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
 				return;
 			}
 			// Otherwise, it's a supported type of string.
@@ -12739,7 +12720,7 @@ has_valid_return_type:
 			// See the section above for comments.
 			if (IS_NUMERIC(this_param.symbol))
 			{
-				g_script.SetErrorLevelOrThrow(_T("-2"), _T("DllCall"));
+				g_script.SetErrorLevelOrThrowStr(_T("-2"), _T("DllCall"));
 				return;
 			}
 			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
@@ -12757,7 +12738,7 @@ has_valid_return_type:
 			break;
 
 		case DLL_ARG_INVALID:
-			g_script.SetErrorLevelOrThrow(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
+			g_script.SetErrorLevelOrThrowStr(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
 			return;
 
 		default: // Namely:
@@ -12801,7 +12782,7 @@ has_valid_return_type:
 		function = GetDllProcAddress(aFuncName = aParam[0]->symbol == SYM_VAR ? aParam[0]->var->Contents() : aParam[0]->marker, &hmodule_to_free);
 		if (!function)
 		{
-			g_script.SetErrorLevelOrThrow(_T("-4"), _T("DllCall")); // Stage 4 error: Function could not be found in the DLL(s).
+			g_script.SetErrorLevelOrThrowStr(_T("-4"), _T("DllCall")); // Stage 4 error: Function could not be found in the DLL(s).
 			goto end;
 		}
 	}
@@ -13810,8 +13791,9 @@ break_both:
 		{
 			// Since both the error code and the offset are desirable outputs, it seems best to also
 			// include descriptive error text (debatable).
-			g_script.SetErrorLevelOrThrow(error_buf, _T("RegEx"), sntprintf(error_buf, _countof(error_buf), _T("Compile error %d at offset %d: %s")
-					, error_code, UTF8PosToTPos(regex_utf8, error_offset), (LPCTSTR)CStringTCharFromCharIfNeeded(error_msg)));
+			sntprintf(error_buf, _countof(error_buf), _T("Compile error %d at offset %d: %s"), error_code
+				, UTF8PosToTPos(regex_utf8, error_offset), (LPCTSTR)CStringTCharFromCharIfNeeded(error_msg));
+			g_script.SetErrorLevelOrThrowStr(error_buf, aResultToken->marker);
 		}
 		goto error;
 	}
@@ -14118,7 +14100,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		// Otherwise:
 		if (captured_pattern_count < 0) // An error other than "no match". These seem very rare, so it seems best to abort rather than yielding a partially-converted result.
 		{
-			g_script.SetErrorLevelOrThrow(captured_pattern_count, _T("RegExReplace")); // No error text is stored; just a negative integer (since these errors are pretty rare).
+			g_script.SetErrorLevelOrThrowInt(captured_pattern_count, _T("RegExReplace")); // No error text is stored; just a negative integer (since these errors are pretty rare).
 			goto set_count_and_return; // Goto vs. break to leave aResultToken.marker set to aHaystack and replacement_count set to 0, and let ErrorLevel tell the story.
 		}
 
@@ -14369,7 +14351,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	// through goto:
 out_of_mem:
 	// Due to extreme rarity and since this is a regex execution error of sorts, use PCRE's own error code.
-	g_script.SetErrorLevelOrThrow(PCRE_ERROR_NOMEMORY, _T("RegExReplace"));
+	g_script.SetErrorLevelOrThrowInt(PCRE_ERROR_NOMEMORY, _T("RegExReplace"));
 	if (result)
 	{
 		free(result);  // Since result is probably an non-terminated string (not to mention an incompletely created result), it seems best to free it here to remove it from any further consideration by the caller.
@@ -14503,7 +14485,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	}
 	else if (captured_pattern_count < 0) // An error other than "no match".
 	{
-		g_script.SetErrorLevelOrThrow(captured_pattern_count, _T("RegExMatch")); // No error text is stored; just a negative integer (since these errors are pretty rare).
+		g_script.SetErrorLevelOrThrowInt(captured_pattern_count, _T("RegExMatch")); // No error text is stored; just a negative integer (since these errors are pretty rare).
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
 	}

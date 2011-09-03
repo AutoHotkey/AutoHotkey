@@ -11720,7 +11720,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				}
 			}
 			//else no such group, so just proceed.
-			g_script.SetErrorLevelOrThrow(activate_result ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR, _T("GroupActivate"));
+			SetErrorLevelOrThrowBool(!activate_result);
 			if (aMode == ONLY_ONE_LINE)  // v1.0.45: These two lines were moved here from above to provide proper handling for GroupActivate that lacks a jump/gosub and that lies directly beneath an IF or ELSE.
 				return (result == EARLY_RETURN) ? OK : result;
 			line = line->mNextLine;
@@ -14165,7 +14165,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// SetEnvironmentVariable()'s return value determine whether there's an error).  However, I just
 		// realized that it's impossible to "retrieve" the value of an env var that has spaces (until now,
 		// since the EnvGet command is available).
-		return g_script.SetErrorLevelOrThrow(SetEnvironmentVariable(ARG1, ARG2) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR, _T("EnvSet"));
+		return SetErrorLevelOrThrowBool(!SetEnvironmentVariable(ARG1, ARG2));
 
 	case ACT_ENVUPDATE:
 	{
@@ -14173,10 +14173,8 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// AutoIt3 uses SMTO_BLOCK (which prevents our thread from doing anything during the call)
 		// vs. SMTO_NORMAL.  Since I'm not sure why, I'm leaving it that way for now:
 		ULONG_PTR nResult;
-		if (SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)_T("Environment"), SMTO_BLOCK, 15000, &nResult))
-			return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-		else
-			return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("EnvSet"));
+		return SetErrorLevelOrThrowBool(!SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE,
+										0, (LPARAM)_T("Environment"), SMTO_BLOCK, 15000, &nResult));
 	}
 
 	case ACT_URLDOWNLOADTOFILE:
@@ -14190,14 +14188,17 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		StringTCharToWChar(ARG3, g_script.mRunAsDomain);
 		return OK;
 
-	case ACT_RUN: // Be sure to pass NULL for 2nd param.
-		if (tcscasestr(ARG3, _T("UseErrorLevel")))
-			return g_script.SetErrorLevelOrThrow(g_script.ActionExec(ARG1, NULL, ARG2, false, ARG3
-				, NULL, true, true, ARGVAR4) ? ERRORLEVEL_NONE : _T("ERROR"), _T("Run"));
+	case ACT_RUN:
+	{
+		bool use_el = tcscasestr(ARG3, _T("UseErrorLevel"));
+		result = g_script.ActionExec(ARG1, NULL, ARG2, !use_el, ARG3, NULL, use_el, true, ARGVAR4); // Be sure to pass NULL for 2nd param.
+		if (use_el)
 			// The special string ERROR is used, rather than a number like 1, because currently
 			// RunWait might in the future be able to return any value, including 259 (STATUS_PENDING).
-		else // If launch fails, display warning dialog and terminate current thread.
-			return g_script.ActionExec(ARG1, NULL, ARG2, true, ARG3, NULL, false, true, ARGVAR4); // Load-time validation has ensured that the arg is a valid output variable (e.g. not a built-in var).
+			result = SetErrorLevelOrThrowStr(result ? ERRORLEVEL_NONE : _T("ERROR"));
+		// Otherwise, if result == FAIL, above already displayed the error (or threw an exception).
+		return result;
+	}
 
 	case ACT_RUNWAIT:
 	case ACT_CLIPWAIT:
@@ -14553,12 +14554,12 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 		if (g_script.mIsAutoIt2)
 			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // For backward compatibility with v2.
-		return g_script.SetErrorLevelOrThrow(error_count, _T("FileCopy"));
+		return SetErrorLevelOrThrowInt(error_count);
 	}
 	case ACT_FILEMOVE:
-		return g_script.SetErrorLevelOrThrow(Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1, true, g.LastError), _T("FileMove"));
+		return SetErrorLevelOrThrowInt(Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1, true, g.LastError));
 	case ACT_FILECOPYDIR:
-		return g_script.SetErrorLevelOrThrow(Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR, _T("FileCopyDir"));
+		return SetErrorLevelOrThrowBool(!Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1));
 	case ACT_FILEMOVEDIR:
 		if (ctoupper(*ARG3) == 'R')
 		{
@@ -14566,18 +14567,16 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			// complete if the source directory is in use (due to being a working dir for a currently
 			// running process, or containing a file that is being written to).  In other words,
 			// the operation will be "all or none":
-			g_script.SetErrorLevelOrThrow(MoveFile(ARG1, ARG2) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR, _T("FileMoveDir"));
-			return OK;
+			return SetErrorLevelOrThrowBool(!MoveFile(ARG1, ARG2));
 		}
 		// Otherwise:
-		return g_script.SetErrorLevelOrThrow(Util_MoveDir(ARG1, ARG2, ArgToInt(3)) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR, _T("FileMoveDir"));
+		return SetErrorLevelOrThrowBool(!Util_MoveDir(ARG1, ARG2, ArgToInt(3)));
 
 	case ACT_FILECREATEDIR:
 		return FileCreateDir(ARG1);
 	case ACT_FILEREMOVEDIR:
-		if (!*ARG1) // Consider an attempt to create or remove a blank dir to be an error.
-			return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("FileRemoveDir"));
-		return g_script.SetErrorLevelOrThrow(Util_RemoveDir(ARG1, ArgToInt(2) == 1) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR, _T("FileRemoveDir"));
+		return SetErrorLevelOrThrowBool(!*ARG1 // Consider an attempt to create or remove a blank dir to be an error.
+			|| Util_RemoveDir(ARG1, ArgToInt(2) == 1)); // Relies on short-circuit evaluation.
 
 	case ACT_FILEGETATTRIB:
 		// The specified ARG, if non-blank, takes precedence over the file-loop's file (if any):
@@ -15539,6 +15538,7 @@ Line *Line::PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo)
 	return NULL; // Always return NULL because the callers use it as their return value.
 }
 
+
 ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo)
 {
 	ExprTokenType& token = *(g->ThrownToken = new ExprTokenType);
@@ -15580,29 +15580,82 @@ ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, ResultType aErrorType
 	return aErrorType;
 }
 
-ResultType Script::SetErrorLevelOrThrow(LPCTSTR aErrorValue, LPCTSTR aMessage, VarSizeType iErrorLen)
+
+ResultType Line::SetErrorLevelOrThrowBool(bool aError)
 {
-	if (!g->InTryBlock || (aErrorValue[0] == '0' && !aErrorValue[1]))
-		return g_ErrorLevel->Assign(aErrorValue, iErrorLen);
-	else
-	{
-		// This throws an exception.
-		return ScriptError(aMessage, aErrorValue);
-	}
+	if (!aError)
+		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+	if (!g->InTryBlock)
+		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return g_script.ScriptError(g_act[mActionType].Name, ERRORLEVEL_ERROR);
 }
 
-ResultType Script::SetErrorLevelOrThrow(int aErrorValue, LPCTSTR aMessage)
+ResultType Line::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
 {
-	if (!g->InTryBlock || !aErrorValue)
+	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
 		return g_ErrorLevel->Assign(aErrorValue);
-	else
-	{
-		// This throws an exception.
-		TCHAR buf[32];
-		sntprintf(buf, _countof(buf), _T("%d"), aErrorValue);
-		return ScriptError(aMessage, buf);
-	}
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return g_script.ScriptError(g_act[mActionType].Name, aErrorValue);
 }
+
+ResultType Line::SetErrorLevelOrThrowInt(int aErrorValue)
+{
+	if (!aErrorValue || !g->InTryBlock)
+		return g_ErrorLevel->Assign(aErrorValue);
+	TCHAR buf[12];
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return g_script.ScriptError(g_act[mActionType].Name, _itot(aErrorValue, buf, 10));
+}
+
+// Logic from the above functions is duplicated in the below functions rather than calling
+// g_script.mCurrLine->SetErrorLevelOrThrow() to squeeze out a little extra performance for
+// "success" cases.  These are done as overloads vs making aMessage optional to reduce code
+// size, since they're called from numerous places.  (Even omitted parameters are passed
+// "explicitly" in the compiled code.)
+
+ResultType Script::SetErrorLevelOrThrowBool(bool aError)
+{
+	if (!aError)
+		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+	if (!g->InTryBlock)
+		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return g_script.ScriptError(g_act[g_script.mCurrLine->mActionType].Name, ERRORLEVEL_ERROR);
+}
+
+ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
+{
+	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
+		return g_ErrorLevel->Assign(aErrorValue);
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return g_script.ScriptError(g_act[g_script.mCurrLine->mActionType].Name, ERRORLEVEL_ERROR);
+}
+
+ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aMessage)
+{
+	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
+		return g_ErrorLevel->Assign(aErrorValue);
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return g_script.ScriptError(aMessage, aErrorValue);
+}
+
+ResultType Script::SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aMessage)
+{
+	if (!aErrorValue || !g->InTryBlock)
+		return g_ErrorLevel->Assign(aErrorValue);
+	TCHAR buf[12];
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return g_script.ScriptError(aMessage, _itot(aErrorValue, buf, 10));
+}
+
+
+ResultType Line::AssignErrorLevels(bool aSetError, DWORD aLastErrorOverride)
+{
+	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
+	return SetErrorLevelOrThrowBool(aSetError);
+}
+
 
 #define ERR_PRINT(fmt, ...) _ftprintf(stderr, fmt, __VA_ARGS__)
 

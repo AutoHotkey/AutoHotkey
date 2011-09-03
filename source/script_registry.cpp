@@ -131,7 +131,7 @@ ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTS
 #ifdef UNICODE
 	}
 #endif
-	return g_script.mIsAutoIt2 ? OK : g_script.SetErrorLevelOrThrow(result ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR, _T("IniWrite"));
+	return g_script.mIsAutoIt2 ? OK : SetErrorLevelOrThrowBool(!result);
 }
 
 
@@ -145,7 +145,7 @@ ResultType Line::IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 	GetFullPathName(aFilespec, _MAX_PATH, szFileTemp, &szFilePart);
 	BOOL result = WritePrivateProfileString(aSection, aKey, NULL, szFileTemp);  // Returns zero on failure.
 	WritePrivateProfileString(NULL, NULL, NULL, szFileTemp);	// Flush
-	return g_script.mIsAutoIt2 ? OK : g_script.SetErrorLevelOrThrow(result ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR, _T("IniDelete"));
+	return g_script.mIsAutoIt2 ? OK : SetErrorLevelOrThrowBool(!result);
 }
 
 
@@ -305,7 +305,7 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 	// Fall down to the error handler:
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("RegRead"));
+	return SetErrorLevelOrThrow();
 } // RegRead()
 
 
@@ -444,7 +444,7 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	RegCloseKey(hRegKey);
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("RegWrite"));
+	return SetErrorLevelOrThrow();
 } // RegWrite()
 
 
@@ -517,5 +517,5 @@ ResultType Line::RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("RegDelete"));
+	return SetErrorLevelOrThrow();
 } // RegDelete()

@@ -1744,7 +1744,7 @@ public:
 	// These are also the modes that AutoIt3 uses.
 	{
 		// For v1.0.19, this was made more permissive (the use of strcasestr vs. stricmp) to support
-		// the optional word ErrorLevel inside this parameter:
+		// the optional word UseErrorLevel inside this parameter:
 		if (!aBuf || !*aBuf) return SW_SHOWNORMAL;
 		if (tcscasestr(aBuf, _T("MIN"))) return SW_MINIMIZE;
 		if (tcscasestr(aBuf, _T("MAX"))) return SW_MAXIMIZE;
@@ -1839,6 +1839,12 @@ public:
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
+	
+	ResultType AssignErrorLevels(bool aSetError, DWORD aLastErrorOverride = -1);
+	ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
+	ResultType SetErrorLevelOrThrowBool(bool aError);        //
+	ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue); // Explicit names to avoid calling the wrong overload.
+	ResultType SetErrorLevelOrThrowInt(int aErrorValue);     //
 
 	Line(FileIndexType aFileIndex, LineNumberType aFileLineNumber, ActionTypeType aActionType
 		, ArgStruct aArg[], ArgCountType aArgc) // Constructor
@@ -2701,10 +2707,13 @@ public:
 	void WarnUninitializedVar(Var *var);
 	void MaybeWarnLocalSameAsGlobal(Func *func, Var *var);
 
-	ResultType UnhandledException(ExprTokenType*& aToken, Line* line);
-	ResultType SetErrorLevelOrThrow(LPCTSTR aErrorValue, LPCTSTR aMessage, VarSizeType iErrorLen = VARSIZE_MAX);
-	ResultType SetErrorLevelOrThrow(int aErrorValue, LPCTSTR aMessage);
-	void FreeExceptionToken(ExprTokenType*& aToken);
+	static ResultType UnhandledException(ExprTokenType*& aToken, Line* line);
+	static ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
+	static ResultType SetErrorLevelOrThrowBool(bool aError);
+	static ResultType SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aMessage);
+	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue);
+	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aMessage);
+	static void FreeExceptionToken(ExprTokenType*& aToken);
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
 

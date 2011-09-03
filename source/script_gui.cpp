@@ -1352,10 +1352,10 @@ return_the_result:
 	return result;
 
 error:
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("GuiControl"));
+	return SetErrorLevelOrThrow();
 
 error2:
-	result = g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("GuiControl"));
+	result = SetErrorLevelOrThrow();
 	goto return_the_result;
 }
 
@@ -1527,10 +1527,10 @@ return_the_result:
 
 error:
 	output_var.Assign(); // For backward-compatibility and also serves as an additional indicator of failure.
-	return g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("GuiControlGet"));
+	return SetErrorLevelOrThrow();
 
 error2:
-	result = g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("GuiControlGet"));
+	result = SetErrorLevelOrThrow();
 	goto return_the_result;
 }
 
@@ -5285,7 +5285,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				if (aControl.type == GUI_CONTROL_GROUPBOX || aControl.type == GUI_CONTROL_PROGRESS)
 					// If control's hwnd exists, we were called from a caller who wants ErrorLevel set
 					// instead of a message displayed:
-					return aControl.hwnd ? g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("Gui"))
+					return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
 						: g_script.ScriptError(_T("This control type should not have an associated subroutine.")
 							ERR_ABORT, next_option - 1);
 				Label *candidate_label;
@@ -5301,7 +5301,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					//else if (!_tcsicmp(label_name, "Clear")) -->
 					//	control.options |= GUI_CONTROL_ATTRIB_IMPLICIT_CLEAR;
 					else // Since a non-special label was explicitly specified, it's an error that it can't be found.
-						return aControl.hwnd ? g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("Gui"))
+						return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
 							: g_script.ScriptError(ERR_NO_LABEL ERR_ABORT, next_option - 1);
 				}
 				if (aControl.type == GUI_CONTROL_TEXT || aControl.type == GUI_CONTROL_PIC)
@@ -5363,7 +5363,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				GuiIndexType u;
 				for (u = 0; u < mControlCount; ++u)
 					if (mControl[u].output_var == candidate_var)
-						return aControl.hwnd ? g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("Gui"))
+						return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
 							: g_script.ScriptError(_T("The same variable cannot be used for more than one control.") // It used to say "one control per window" but that seems more confusing than it's worth.
 								ERR_ABORT, next_option - 1);
 				aControl.output_var = candidate_var;
@@ -5841,7 +5841,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			InvalidateRect(aControl.hwnd, NULL, TRUE); // Assume there's text in the control.
 
 		if (style_needed_changing && !style_change_ok) // Override the default errorlevel set by our caller, GuiControl().
-			g_script.SetErrorLevelOrThrow(ERRORLEVEL_ERROR, _T("Gui"));
+			g_script.SetErrorLevelOrThrow();
 	} // aControl.hwnd is not NULL
 
 	return OK;

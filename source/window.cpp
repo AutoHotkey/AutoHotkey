@@ -861,7 +861,7 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR
 	return result_to_return;
 
 error:
-	return g_script.SetErrorLevelOrThrow(aOutputVar ? ERRORLEVEL_ERROR : ERRORLEVEL_ERROR2, _T(""));
+	return g_script.SetErrorLevelOrThrowStr(aOutputVar ? ERRORLEVEL_ERROR : ERRORLEVEL_ERROR2);
 }
 
 
