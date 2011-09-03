@@ -8765,7 +8765,8 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 		// but leave ErrorLevel set to ERRORLEVEL_ERROR.
 		if (output_var.Assign() != OK)
 			return FAIL;
-		return SetErrorLevelOrThrow();
+		return CommDlgExtendedError() ? SetErrorLevelOrThrow() // An error occurred.
+			: g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // User pressed CANCEL, so never throw an exception.
 	}
 	else
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate that the user pressed OK vs. CANCEL.
