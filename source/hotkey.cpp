@@ -875,9 +875,9 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	{
 		HotCriterionType hot_criterion;
 		bool invert = !_tcsnicmp(aHotkeyName + 5, _T("Not"), 3);
-		if (!_tcsnicmp(aHotkeyName + (invert ? 8 : 5), _T("Active"), 6)) // It matches #IfWin[Not]Active.
+		if (!_tcsicmp(aHotkeyName + (invert ? 8 : 5), _T("Active"))) // It matches #IfWin[Not]Active.
 			hot_criterion = invert ? HOT_IF_NOT_ACTIVE : HOT_IF_ACTIVE;
-		else if (!_tcsnicmp(aHotkeyName + (invert ? 8 : 5), _T("Exist"), 5))
+		else if (!_tcsicmp(aHotkeyName + (invert ? 8 : 5), _T("Exist")))
 			hot_criterion = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
 		else // It starts with IfWin but isn't Active or Exist: Don't alter the current criterion.
 			return g_script.SetErrorLevelOrThrow();

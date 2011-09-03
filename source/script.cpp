@@ -9713,12 +9713,20 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			break;
 
 		case ACT_HOTKEY:
-			if (   *line_raw_arg2 && !line->ArgHasDeref(2)
-				&& !line->ArgHasDeref(1) && _tcsnicmp(line_raw_arg1, _T("IfWin"), 5) // v1.0.42: Omit IfWinXX from validation.
-				&& _tcsnicmp(line_raw_arg1, _T("If"), 2)	)	// L4: Also omit If from validation - for #if (expression).
-				if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
+			if (*line_raw_arg2 && !line->ArgHasDeref(2) && !line->ArgHasDeref(1))
+			{
+				if (!_tcsnicmp(line_raw_arg1, _T("If"), 2))
+				{
+					LPTSTR cp = line_raw_arg1 + 2;
+					if (!_tcsnicmp(cp, _T("Not"), 3))
+						cp += 3;
+					if (*cp && _tcsicmp(cp, _T("WinActive")) && _tcsicmp(cp, _T("WinExist")))
+						return line->PreparseError(ERR_PARAM1_INVALID);
+				}
+				else if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
 					if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
 						return line->PreparseError(ERR_NO_LABEL);
+			}
 			break;
 
 		case ACT_SETTIMER:
