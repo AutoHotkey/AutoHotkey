@@ -1153,13 +1153,12 @@ ResultType Line::FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGree
 	if (g_nFolderDialogs >= MAX_FOLDERDIALOGS)
 	{
 		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
-		MsgBox(_T("The maximum number of Folder Dialogs has been reached.") ERR_ABORT);
-		return FAIL;
+		return LineError(_T("The maximum number of Folder Dialogs has been reached.") ERR_ABORT);
 	}
 
 	LPMALLOC pMalloc;
     if (SHGetMalloc(&pMalloc) != NOERROR)	// Initialize
-		goto error;
+		return SetErrorLevelOrThrow();
 
 	// v1.0.36.03: Support initial folder, which is different than the root folder because the root only
 	// controls the origin point (above which the control cannot navigate).
@@ -1242,7 +1241,10 @@ ResultType Line::FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGree
 
 	DIALOG_END
 	if (!lpItemIDList)
-		goto error;
+		// Due to rarity and because there doesn't seem to be any way to detect it,
+		// no exception is thrown when the function fails.  Instead, we just assume
+		// that the user pressed CANCEL (which should not be treated as an error):
+		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 
 	*Result = '\0';  // Reuse this var, this time to old the result of the below:
 	SHGetPathFromIDList(lpItemIDList, Result);
@@ -1251,9 +1253,6 @@ ResultType Line::FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGree
 
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 	return output_var.Assign(Result);
-
-error:
-	return SetErrorLevelOrThrow();
 }
 
 
