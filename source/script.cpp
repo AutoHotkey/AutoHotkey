@@ -15547,7 +15547,7 @@ Line *Line::PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo)
 }
 
 
-ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo)
+ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, ResultType aErrorType, LPCTSTR aExtraInfo)
 {
 	ExprTokenType& token = *(g->ThrownToken = new ExprTokenType);
 	g->ExcptLine = this;
@@ -15556,29 +15556,19 @@ ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, ResultType aErrorType
 	ExprTokenType aParams[5*2]; int aParamCount = 4*2;
 	ExprTokenType* aParam[5*2] = { aParams + 0, aParams + 1, aParams + 2, aParams + 3, aParams + 4
 		, aParams + 5, aParams + 6, aParams + 7, aParams + 8, aParams + 9 };
-	aParams[0].symbol = SYM_STRING;
-	aParams[0].marker = _T("what");
-	aParams[1].symbol = SYM_STRING;
-	aParams[1].marker = _T("AhkRuntimeError");
-	aParams[2].symbol = SYM_STRING;
-	aParams[2].marker = _T("file");
-	aParams[3].symbol = SYM_STRING;
-	aParams[3].marker = Line::sSourceFile[mFileIndex];
-	aParams[4].symbol = SYM_STRING;
-	aParams[4].marker = _T("line");
-	aParams[5].symbol = SYM_INTEGER;
-	aParams[5].value_int64 = mLineNumber;
-	aParams[6].symbol = SYM_STRING;
-	aParams[6].marker = _T("message");
-	aParams[7].symbol = SYM_STRING;
-	aParams[7].marker = (LPTSTR)aErrorText;
+	aParams[0].symbol = SYM_STRING;  aParams[0].marker = _T("What");
+	aParams[1].symbol = SYM_STRING;  aParams[1].marker = aWhat ? (LPTSTR)aWhat : g_act[mActionType].Name;
+	aParams[2].symbol = SYM_STRING;  aParams[2].marker = _T("File");
+	aParams[3].symbol = SYM_STRING;  aParams[3].marker = Line::sSourceFile[mFileIndex];
+	aParams[4].symbol = SYM_STRING;  aParams[4].marker = _T("Line");
+	aParams[5].symbol = SYM_INTEGER; aParams[5].value_int64 = mLineNumber;
+	aParams[6].symbol = SYM_STRING;  aParams[6].marker = _T("Message");
+	aParams[7].symbol = SYM_STRING;  aParams[7].marker = (LPTSTR)aErrorText;
 	if (aExtraInfo && *aExtraInfo)
 	{
 		aParamCount += 2;
-		aParams[8].symbol = SYM_STRING;
-		aParams[8].marker = _T("extra");
-		aParams[9].symbol = SYM_STRING;
-		aParams[9].marker = (LPTSTR)aExtraInfo;
+		aParams[8].symbol = SYM_STRING; aParams[8].marker = _T("Extra");
+		aParams[9].symbol = SYM_STRING; aParams[9].marker = (LPTSTR)aExtraInfo;
 	}
 
 	token.object = Object::Create(aParam, aParamCount);
@@ -15596,7 +15586,7 @@ ResultType Line::SetErrorLevelOrThrowBool(bool aError)
 	if (!g->InTryBlock)
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return g_script.ScriptError(g_act[mActionType].Name, ERRORLEVEL_ERROR);
+	return ThrowRuntimeException(ERRORLEVEL_ERROR);
 }
 
 ResultType Line::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
@@ -15604,7 +15594,7 @@ ResultType Line::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
 	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
 		return g_ErrorLevel->Assign(aErrorValue);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return g_script.ScriptError(g_act[mActionType].Name, aErrorValue);
+	return ThrowRuntimeException(aErrorValue);
 }
 
 ResultType Line::SetErrorLevelOrThrowInt(int aErrorValue)
@@ -15613,7 +15603,7 @@ ResultType Line::SetErrorLevelOrThrowInt(int aErrorValue)
 		return g_ErrorLevel->Assign(aErrorValue);
 	TCHAR buf[12];
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return g_script.ScriptError(g_act[mActionType].Name, _itot(aErrorValue, buf, 10));
+	return ThrowRuntimeException(_itot(aErrorValue, buf, 10));
 }
 
 // Logic from the above functions is duplicated in the below functions rather than calling
@@ -15629,7 +15619,8 @@ ResultType Script::SetErrorLevelOrThrowBool(bool aError)
 	if (!g->InTryBlock)
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return g_script.ScriptError(g_act[g_script.mCurrLine->mActionType].Name, ERRORLEVEL_ERROR);
+	Line *line = g_script.mCurrLine;
+	return line->ThrowRuntimeException(ERRORLEVEL_ERROR);
 }
 
 ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
@@ -15637,24 +15628,25 @@ ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
 	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
 		return g_ErrorLevel->Assign(aErrorValue);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return g_script.ScriptError(g_act[g_script.mCurrLine->mActionType].Name, ERRORLEVEL_ERROR);
+	Line *line = g_script.mCurrLine;
+	return line->ThrowRuntimeException(ERRORLEVEL_ERROR);
 }
 
-ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aMessage)
+ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat)
 {
 	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
 		return g_ErrorLevel->Assign(aErrorValue);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return g_script.ScriptError(aMessage, aErrorValue);
+	return g_script.mCurrLine->ThrowRuntimeException(aErrorValue, aWhat);
 }
 
-ResultType Script::SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aMessage)
+ResultType Script::SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat)
 {
 	if (!aErrorValue || !g->InTryBlock)
 		return g_ErrorLevel->Assign(aErrorValue);
 	TCHAR buf[12];
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return g_script.ScriptError(aMessage, _itot(aErrorValue, buf, 10));
+	return g_script.mCurrLine->ThrowRuntimeException(_itot(aErrorValue, buf, 10), aWhat);
 }
 
 
@@ -15674,8 +15666,8 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
 
-	if (g->InTryBlock && aErrorType != CRITICAL_ERROR)
-		return ThrowRuntimeException(aErrorText, aErrorType, aExtraInfo);
+	if (g->InTryBlock && aErrorType != CRITICAL_ERROR && aErrorType != WARN)
+		return ThrowRuntimeException(aErrorText, NULL, aErrorType, aExtraInfo);
 
 	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute) // i.e. runtime errors are always displayed via dialog.
 	{

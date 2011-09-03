@@ -1838,7 +1838,7 @@ public:
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
-	ResultType ThrowRuntimeException(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
+	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
 	
 	ResultType AssignErrorLevels(bool aSetError, DWORD aLastErrorOverride = -1);
 	ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
@@ -2710,9 +2710,9 @@ public:
 	static ResultType UnhandledException(ExprTokenType*& aToken, Line* line);
 	static ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
 	static ResultType SetErrorLevelOrThrowBool(bool aError);
-	static ResultType SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aMessage);
+	static ResultType SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat);
 	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue);
-	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aMessage);
+	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat);
 	static void FreeExceptionToken(ExprTokenType*& aToken);
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
