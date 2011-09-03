@@ -4921,8 +4921,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	// Loop 5 { ; Also overlaps, this time with file-pattern loop that retrieves numeric filename ending in '{'.
 	// Loop %Var% {  ; Similar, but like the above seems acceptable given extreme rarity of user intending a file pattern.
 	if ((aActionType == ACT_LOOP || aActionType == ACT_WHILE) && nArgs == 1 && arg[0][0] // A loop with exactly one, non-blank arg.
-		|| (aActionType == ACT_FOR && nArgs)
-		|| (aActionType == ACT_CATCH && nArgs)) // fincs: this one too
+		|| ((aActionType == ACT_FOR || aActionType == ACT_CATCH) && nArgs))
 	{
 		LPTSTR arg1 = arg[nArgs - 1]; // For readability and possibly performance.
 		// A loop with the above criteria (exactly one arg) can only validly be a normal/counting loop or
@@ -5616,7 +5615,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// ACT_WHILE performs less than 4% faster as a non-expression in these cases, and keeping
 					// it as an expression avoids an extra check in a performance-sensitive spot of ExpandArgs
 					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).
-					if ((aActionType < ACT_FOR || aActionType > ACT_UNTIL) && aActionType != ACT_THROW) // If it is FOR, WHILE, UNTIL or THROW, it would be something like "while x" in this case. Keep those as expressions for the reason above. PerformLoopFor() requires FOR's expression arg to remain an expression.
+					if (aActionType < ACT_FOR || aActionType > ACT_UNTIL && aActionType != ACT_THROW) // If it is FOR, WHILE, UNTIL or THROW, it would be something like "while x" in this case. Keep those as expressions for the reason above. PerformLoopFor() requires FOR's expression arg to remain an expression.
 						this_new_arg.is_expression = false; // In addition to being an optimization, doing this might also be necessary for things like "Var := ClipboardAll" to work properly.
 					// But if aActionType is ACT_ASSIGNEXPR, it's left as ACT_ASSIGNEXPR vs. ACT_ASSIGN
 					// because it might be necessary to avoid having AutoTrim take effect for := (which
@@ -12036,31 +12035,19 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 
 			if (this_act == ACT_CATCH)
 			{
-				Var* catch_var = ARGVARRAW1;
-				ExprTokenType*& thrown_token = g.ThrownToken;
-
 				// The following should never happen:
-				//
-				//if (!thrown_token)
+				//if (!g.ThrownToken)
 				//	return line->LineError(_T("Attempt to catch nothing!"), CRITICAL_ERROR);
 
-				// Assign the thrown token to the variable if provided
+				Var* catch_var = ARGVARRAW1;
+
+				// Assign the thrown token to the variable if provided.
 				if (catch_var)
 					catch_var->Assign(*g.ThrownToken);
 
-				// If the thrown token contains an object, release it
-				if (thrown_token->symbol == SYM_OBJECT)
-					thrown_token->object->Release();
-
-				// If the thrown token contains memory, free it
-				if (thrown_token->mem_to_free)
-					free(thrown_token->mem_to_free);
-
-				// Free the thrown token
-				delete thrown_token;
-				thrown_token = NULL;
+				g_script.FreeExceptionToken(g.ThrownToken);
 			}
-			else if (this_act == ACT_TRY)
+			else // (this_act == ACT_TRY)
 				g.InTryBlock = true;
 
 			// The following section is similar to ACT_IF.
@@ -12074,20 +12061,45 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			else
 				result = line->mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
 
+			// Move to the next line after the 'try' or 'catch' block.
+			line = line->mRelatedLine;
+
 			if (this_act == ACT_TRY)
-				// Restore the previous InTryBlock value
+			{
+				// Restore the previous InTryBlock value.
 				g.InTryBlock = bSavedInTryBlock;
 
-			if (jump_to_line == line)
-				continue;
-
-			if ((aMode == ONLY_ONE_LINE || result != OK) && (this_act != ACT_TRY || !g.ThrownToken))
+				if (line->mActionType == ACT_CATCH)
+				{
+					if (g.ThrownToken)
+					{
+						// An exception was thrown and we have a 'catch' block, so let the next
+						// iteration handle it.  Implies result == FAIL && jump_to_line == NULL,
+						// but result won't have any meaning for the next iteration.
+						continue;
+					}
+					// Otherwise: no exception was thrown, so skip the 'catch' block.
+					line = line->mRelatedLine;
+				}
+				else
+				{
+					if (g.ThrownToken)
+					{
+						// An exception was thrown, but no 'catch' is present.  In this case 'try'
+						// acts as a catch-all.
+						g_script.FreeExceptionToken(g.ThrownToken);
+						result = OK;
+					}
+				}
+			}
+			
+			if (aMode == ONLY_ONE_LINE || result != OK)
 			{
 				caller_jump_to_line = jump_to_line;
 				return result;
 			}
 
-			if (jump_to_line != NULL)
+			if (jump_to_line != NULL) // Implies goto or break/continue loop_name was used.
 			{
 				if (jump_to_line->mParentLine != line->mParentLine)
 				{
@@ -12096,44 +12108,15 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				}
 				line = jump_to_line;
 			}
-			else
-			{
-				line = line->mRelatedLine;
-				if (this_act == ACT_TRY)
-				{
-					bool bHasCatchHandler = line->mActionType == ACT_CATCH;
 
-					if (bHasCatchHandler && !g.ThrownToken)
-						// Ignore the catch handler
-						line = line->mRelatedLine;
-					else
-					{
-						if (!bHasCatchHandler && g.ThrownToken)
-						{
-							// Free the thrown token, see ACT_CATCH section above for comments
-							ExprTokenType*& thrown_token = g.ThrownToken;
-							if (thrown_token->symbol == SYM_OBJECT)
-								thrown_token->object->Release();
-							if (thrown_token->mem_to_free)
-								free(thrown_token->mem_to_free);
-							delete thrown_token;
-							thrown_token = NULL;
-						}
-
-						// Force an OK result code
-						result = OK;
-					}
-				}
-			}
-
-			if (aMode == ONLY_ONE_LINE)
-				return result;
 			continue;
 		}
 
 		case ACT_THROW:
 		{
 			ExprTokenType* token = new ExprTokenType;
+			if (!token) // Unlikely.
+				return LineError(ERR_OUTOFMEM);
 
 			// The following is based on code from PerformLoopFor()
 
@@ -15777,15 +15760,25 @@ ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* line)
 	// FUTURE: add more information about the thrown token itself
 	line->LineError(_T("Unhandled exception!"));
 
-	if (aToken->symbol == SYM_OBJECT)
-		aToken->object->Release();
-	if (aToken->mem_to_free)
-		free(aToken->mem_to_free);
-	delete aToken;
-	aToken = NULL;
+	FreeExceptionToken(aToken);
 
 	return FAIL;
 }
+
+void Script::FreeExceptionToken(ExprTokenType*& aToken)
+{
+	// If an object was thrown, release it.
+	if (aToken->symbol == SYM_OBJECT)
+		aToken->object->Release();
+	// If a string was thrown and memory allocated for it, free it.
+	if (aToken->mem_to_free)
+		free(aToken->mem_to_free);
+	// Free the token itself.
+	delete aToken;
+	// Clear caller's variable.
+	aToken = NULL;
+}
+
 
 void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo, Line *line)
 {

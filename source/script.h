@@ -2704,6 +2704,7 @@ public:
 	ResultType UnhandledException(ExprTokenType*& aToken, Line* line);
 	ResultType SetErrorLevelOrThrow(LPCTSTR aErrorValue, LPCTSTR aMessage, VarSizeType iErrorLen = VARSIZE_MAX);
 	ResultType SetErrorLevelOrThrow(int aErrorValue, LPCTSTR aMessage);
+	void FreeExceptionToken(ExprTokenType*& aToken);
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
 
