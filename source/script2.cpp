@@ -9545,10 +9545,11 @@ ResultType Line::FileDelete()
 
 ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 {
+	bool success;
 	bool allow_overwrite = (ATOI(aFlag) == 1);
 #ifdef AUTOHOTKEYSC
 	if (!allow_overwrite && Util_DoesFileExist(aDest))
-		goto error;
+		return SetErrorLevelOrThrow();
 #ifdef ENABLE_EXEARC
 
 	HS_EXEArc_Read oRead;
@@ -9558,10 +9559,8 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	// compiled with).  There are various checks and CRCs to make sure that it can't be used to read
 	// the files from any other exe that is passed."
 	if (oRead.Open(CStringCharFromTCharIfNeeded(g_script.mFileSpec), "") != HS_EXEARC_E_OK)
-	{
-		MsgBox(ERR_EXE_CORRUPTED, 0, g_script.mFileSpec); // Usually caused by virus corruption. Probably impossible since it was previously opened successfully to run the main script.
-		goto error;
-	}
+		return LineError(ERR_EXE_CORRUPTED); // Usually caused by virus corruption. Probably impossible since it was previously opened successfully to run the main script.
+	
 	// aSource should be the same as the "file id" used to originally compress the file
 	// when it was compiled into an EXE.  So this should seek for the right file:
 	int result = oRead.FileExtract(CStringCharFromTCharIfNeeded(aSource), CStringCharFromTCharIfNeeded(aDest));
@@ -9573,23 +9572,19 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	// something that somehow resets the static data used by init_genrand().
 	RESEED_RANDOM_GENERATOR;
 
-	if (result != HS_EXEARC_E_OK)
-	{
+	success = (result == HS_EXEARC_E_OK);
 		// v1.0.48: Since extraction failure can occur more than rarely (e.g. when disk is full,
 		// permission denied, etc.), Ladiko suggested that no dialog be displayed.  The script
 		// can consult ErrorLevel to detect the failure and decide whether a MsgBox or other action
 		// is appropriate:
 		//MsgBox(aSource, 0, "Could not extract file:");
-		goto error;
-	}
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 #else // ENABLE_EXEARC not defined:
 
 	// Open the file first since it's the most likely to fail:
 	HANDLE hfile = CreateFile(aDest, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
 	if (hfile == INVALID_HANDLE_VALUE)
-		goto error;
+		return SetErrorLevelOrThrow();
 
 	// Create a temporary copy of aSource to ensure it is the correct case (upper-case).
 	// Ahk2Exe converts it to upper-case before adding the resource. My testing showed that
@@ -9613,9 +9608,10 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	{
 		DWORD num_bytes_written;
 		// Write the resource data to file.
-		if (WriteFile(hfile, res_lock, SizeofResource(NULL, res), &num_bytes_written, NULL))
-			g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+		success = WriteFile(hfile, res_lock, SizeofResource(NULL, res), &num_bytes_written, NULL);
 	}
+	else
+		success = false;
 	CloseHandle(hfile);
 
 #endif
@@ -9625,18 +9621,12 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	// The old behavior was to search in A_WorkingDir, which seems pointless because ahk2exe would never
 	// be able to use that value if the script changes it while running.
 	SetCurrentDirectory(g_script.mFileDir);
-	if (CopyFile(aSource, aDest, !allow_overwrite))
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-	else
-		goto error;
+	success = CopyFile(aSource, aDest, !allow_overwrite);
 	SetCurrentDirectory(g_WorkingDir); // Restore to proper value.
 
 #endif
 
-	return OK;
-
-error:
-	return SetErrorLevelOrThrow();
+	return SetErrorLevelOrThrowBool(!success);
 }
 
 
