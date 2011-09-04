@@ -635,7 +635,7 @@ private:
 	ResultType RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName);
 	ResultType RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName, LPTSTR aValue);
 	ResultType RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName);
-	static bool RegRemoveSubkeys(HKEY hRegKey);
+	static LONG RegRemoveSubkeys(HKEY hRegKey);
 
 	#define DESTROY_SPLASH \
 	{\
