@@ -26,7 +26,8 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 	if (mMenuUseErrorLevel)
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Set default, which is "none" for the Menu command.
 
-	#define RETURN_MENU_ERROR(msg, info) do { if(mMenuUseErrorLevel) goto error; return ScriptError(msg ERR_ABORT, info); } while(0)
+	#define RETURN_MENU_ERROR(msg, info) return mMenuUseErrorLevel ? g_ErrorLevel->Assign(ERRORLEVEL_ERROR) \
+		: ScriptError(msg ERR_ABORT, info)
 	#define RETURN_IF_NOT_TRAY if (!is_tray) RETURN_MENU_ERROR(ERR_MENUTRAY, aMenu)
 
 	MenuCommands menu_command = Line::ConvertMenuCommand(aCommand);
@@ -455,9 +456,6 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 		return menu->RemoveItemIcon(menu_item);
 	} // switch()
 	return FAIL;  // Should never be reached, but avoids compiler warning and improves bug detection.
-
-error:
-	return g_script.SetErrorLevelOrThrow();
 }
 
 

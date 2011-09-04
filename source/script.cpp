@@ -14203,7 +14203,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		if (use_el)
 			// The special string ERROR is used, rather than a number like 1, because currently
 			// RunWait might in the future be able to return any value, including 259 (STATUS_PENDING).
-			result = SetErrorLevelOrThrowStr(result ? ERRORLEVEL_NONE : _T("ERROR"));
+			result = g_ErrorLevel->Assign(result ? ERRORLEVEL_NONE : _T("ERROR"));
 		// Otherwise, if result == FAIL, above already displayed the error (or threw an exception).
 		return result;
 	}

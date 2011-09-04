@@ -1889,7 +1889,7 @@ ResultType Line::PerformWait()
 	{
 		bool use_el = tcscasestr(ARG3, _T("UseErrorLevel"));
 		if (!g_script.ActionExec(ARG1, NULL, ARG2, !use_el, ARG3, &running_process, use_el, true, ARGVAR4)) // Load-time validation has ensured that the arg is a valid output variable (e.g. not a built-in var).
-			return use_el ? SetErrorLevelOrThrowStr(_T("ERROR")) : FAIL;
+			return use_el ? g_ErrorLevel->Assign(_T("ERROR")) : FAIL;
 		//else fall through to the waiting-phase of the operation.
 		// Above: The special string ERROR is used, rather than a number like 1, because currently
 		// RunWait might in the future be able to return any value, including 259 (STATUS_PENDING).
