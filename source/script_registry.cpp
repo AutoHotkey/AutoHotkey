@@ -320,7 +320,7 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 	}
 
 finish:
-	return SetErrorLevelOrThrowBool(result != ERROR_SUCCESS);
+	return SetErrorsOrThrow(result != ERROR_SUCCESS, result);
 } // RegRead()
 
 
@@ -456,7 +456,7 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	// Additionally, fall through to below:
 
 finish:
-	return SetErrorLevelOrThrowBool(result != ERROR_SUCCESS);
+	return SetErrorsOrThrow(result != ERROR_SUCCESS, result);
 } // RegWrite()
 
 
@@ -530,5 +530,5 @@ ResultType Line::RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 	}
 
 finish:
-	return SetErrorLevelOrThrowBool(result != ERROR_SUCCESS);
+	return SetErrorsOrThrow(result != ERROR_SUCCESS, result);
 } // RegDelete()
