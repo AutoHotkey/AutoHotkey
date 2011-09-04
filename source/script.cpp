@@ -15650,10 +15650,11 @@ ResultType Script::SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat)
 }
 
 
-ResultType Line::AssignErrorLevels(bool aSetError, DWORD aLastErrorOverride)
+ResultType Line::SetErrorsOrThrow(bool aError, DWORD aLastErrorOverride)
 {
+	// LastError is set even if we're going to throw an exception, for simplicity:
 	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
-	return SetErrorLevelOrThrowBool(aSetError);
+	return SetErrorLevelOrThrowBool(aError);
 }
 
 

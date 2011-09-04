@@ -1840,7 +1840,7 @@ public:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
 	
-	ResultType AssignErrorLevels(bool aSetError, DWORD aLastErrorOverride = -1);
+	ResultType SetErrorsOrThrow(bool aError, DWORD aLastErrorOverride = -1);
 	ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
 	ResultType SetErrorLevelOrThrowBool(bool aError);        //
 	ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue); // Explicit names to avoid calling the wrong overload.

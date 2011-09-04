@@ -1488,17 +1488,11 @@ ResultType Line::FileGetVersion(LPTSTR aFilespec)
 	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.
 
 	if (!aFilespec || !*aFilespec)
-	{
-		g->LastError = ERROR_INVALID_PARAMETER;
-		goto error;  // Error out, since this is probably not what the user intended.
-	}
+		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER); // Error out, since this is probably not what the user intended.
 
 	DWORD dwUnused, dwSize;
 	if (   !(dwSize = GetFileVersionInfoSize(aFilespec, &dwUnused))   )  // No documented limit on how large it can be, so don't use _alloca().
-	{
-		g->LastError = GetLastError();
-		goto error;
-	}
+		return SetErrorsOrThrow(true);
 
 	BYTE *pInfo = (BYTE*)malloc(dwSize);  // Allocate the size retrieved by the above.
 	VS_FIXEDFILEINFO *pFFI;
@@ -1511,7 +1505,7 @@ ResultType Line::FileGetVersion(LPTSTR aFilespec)
 	{
 		g->LastError = GetLastError();
 		free(pInfo);
-		goto error;
+		return SetErrorLevelOrThrow();
 	}
 
 	// extract the fields you want from pFFI
@@ -1523,12 +1517,8 @@ ResultType Line::FileGetVersion(LPTSTR aFilespec)
 
 	free(pInfo);
 
-	g->LastError = 0;
-    g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Indicate success.
+	SetErrorsOrThrow(false, 0); // Indicate success.
 	return OUTPUT_VAR->Assign(version_string);
-
-error:
-	return SetErrorLevelOrThrow();
 }
 
 
