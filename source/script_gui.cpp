@@ -551,17 +551,17 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 		// This is caught at load-time 99% of the time and can only occur here if the sub-command name
 		// or Gui name is contained in a variable reference.  Since it's so rare, the handling of it is
 		// debatable, but to keep it simple just set ErrorLevel:
-		goto error;
+		return SetErrorLevelOrThrow();
 	if (!pgui)
 		// This departs from the tradition used by PerformGui() but since this type of error is rare,
 		// and since use ErrorLevel adds a little bit of flexibility (since the script's current thread
 		// is not unconditionally aborted), this seems best:
-		goto error;
+		return SetErrorLevelOrThrow();
 
 	GuiType &gui = *pgui;  // For performance.
 	GuiIndexType control_index = gui.FindControl(aControlID);
 	if (control_index >= gui.mControlCount) // Not found.
-		goto error;
+		return SetErrorLevelOrThrow();
 	GuiControlType &control = gui.mControl[control_index];   // For performance and convenience.
 
 	// Beyond this point, errors are rare so set the default to "no error":
@@ -702,7 +702,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			int image_type;
 			if (   !(control.union_hbitmap = LoadPicture(aParam3, width, height, image_type, icon_number
 				, control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))   )
-				goto error2;
+				goto error;
 			DWORD style = GetWindowLong(control.hwnd, GWL_STYLE);
 			DWORD style_image_type = style & 0x0F;
 			style &= ~0x0F;  // Purge the low-order four bits in case style-image-type needs to be altered below.
@@ -1060,7 +1060,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			, width == COORD_UNSPECIFIED ? rect.right - rect.left : width
 			, height == COORD_UNSPECIFIED ? rect.bottom - rect.top : height
 			, TRUE))  // Do repaint.
-			goto error2;
+			goto error;
 
 		// Note that GUI_CONTROL_UPDOWN has no special handling here.  This is because unlike slider buddies,
 		// whose only purpose is to label the control, an up-down's is also content-linked to it, so the
@@ -1103,7 +1103,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			result = OK;
 			goto return_the_result;
 		} // else
-		goto error2;
+		goto error;
 
 	case GUICONTROL_CMD_ENABLE:
 	case GUICONTROL_CMD_DISABLE:
@@ -1206,12 +1206,12 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			else
 				selection_index = ATOI(aParam3) - 1;
 			if (selection_index < 0 || selection_index > MAX_TABS_PER_CONTROL - 1)
-				goto error2;
+				goto error;
 			int previous_selection_index = TabCtrl_GetCurSel(control.hwnd);
 			if (!extra_actions || (GetWindowLong(control.hwnd, GWL_STYLE) & TCS_BUTTONS))
 			{
 				if (TabCtrl_SetCurSel(control.hwnd, selection_index) == -1)
-					goto error2;
+					goto error;
 				// In this case but not the "else" below, must update the tab to show the proper controls:
 				if (previous_selection_index != selection_index)
 					gui.ControlUpdateCurrentTab(control, extra_actions > 0); // And set focus if the more forceful extra_actions was done.
@@ -1220,7 +1220,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			{
 				TabCtrl_SetCurFocus(control.hwnd, selection_index); // No return value, so check for success below.
 				if (TabCtrl_GetCurSel(control.hwnd) != selection_index)
-					goto error2;
+					goto error;
 			}
 			goto return_the_result;
 		}
@@ -1260,7 +1260,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			y_msg = LBN_DBLCLK;
 			break;
 		default:  // Not a supported control type.
-			goto error2;
+			goto error;
 		} // switch(control.type)
 
 		if (guicontrol_cmd == GUICONTROL_CMD_CHOOSESTRING)
@@ -1271,27 +1271,27 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 				// in this case.
 				LRESULT found_item = SendMessage(control.hwnd, msg, -1, (LPARAM)aParam3);
 				if (found_item == CB_ERR) // CB_ERR == LB_ERR
-					goto error2;
+					goto error;
 				if (SendMessage(control.hwnd, LB_SETSEL, TRUE, found_item) == CB_ERR) // CB_ERR == LB_ERR
-					goto error2;
+					goto error;
 			}
 			else // Fixed 1 to be -1 in v1.0.35.05:
 				if (SendMessage(control.hwnd, msg, -1, (LPARAM)aParam3) == CB_ERR) // CB_ERR == LB_ERR
-					goto error2;
+					goto error;
 		}
 		else // Choose by position vs. string.
 		{
 			selection_index = ATOI(aParam3) - 1;
 			if (selection_index < 0)
-				goto error2;
+				goto error;
 			if (msg == LB_SETSEL) // Multi-select, so use the cumulative method.
 			{
 				if (SendMessage(control.hwnd, msg, TRUE, selection_index) == CB_ERR) // CB_ERR == LB_ERR
-					goto error2;
+					goto error;
 			}
 			else
 				if (SendMessage(control.hwnd, msg, selection_index, 0) == CB_ERR) // CB_ERR == LB_ERR
-					goto error2;
+					goto error;
 		}
 		int control_id = GUI_INDEX_TO_ID(control_index);
 		if (extra_actions > 0)
@@ -1352,9 +1352,6 @@ return_the_result:
 	return result;
 
 error:
-	return SetErrorLevelOrThrow();
-
-error2:
 	result = SetErrorLevelOrThrow();
 	goto return_the_result;
 }
@@ -1370,12 +1367,12 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 		// This is caught at load-time 99% of the time and can only occur here if the sub-command name
 		// or Gui name is contained in a variable reference.  Since it's so rare, the handling of it is
 		// debatable, but to keep it simple just set ErrorLevel:
-		goto error;
+		return SetErrorLevelOrThrow();
 	if (!pgui)
 		// This departs from the tradition used by PerformGui() but since this type of error is rare,
 		// and since use ErrorLevel adds a little bit of flexibility (since the script's current thread
 		// is not unconditionally aborted), this seems best:
-		goto error;
+		return SetErrorLevelOrThrow();
 	
 	GuiType &gui = *pgui;  // For performance.
 	if (!*aControlID) // In this case, default to the name of the output variable, as documented.
@@ -1396,7 +1393,7 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 		cah.hwnd = GetFocus();
 		GuiControlType *pcontrol;
 		if (!cah.hwnd || !(pcontrol = gui.FindControl(cah.hwnd))) // Relies on short-circuit boolean order.
-			goto error2;
+			goto error;
 		TCHAR focused_control[WINDOW_CLASS_SIZE];
 		if (guicontrolget_cmd == GUICONTROLGET_CMD_FOCUSV) // v1.0.43.06.
 			// GUI_HWND_TO_INDEX vs FindControl() is enough because FindControl() was already called above:
@@ -1406,12 +1403,12 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 			// This section is the same as that in ControlGetFocus():
 			cah.class_name = focused_control;
 			if (!GetClassName(cah.hwnd, focused_control, _countof(focused_control) - 5)) // -5 to allow room for sequence number.
-				goto error2;
+				goto error;
 			cah.class_count = 0;  // Init for the below.
 			cah.is_found = false; // Same.
 			EnumChildWindows(gui.mHwnd, EnumChildFindSeqNum, (LPARAM)&cah);
 			if (!cah.is_found) // Should be impossible due to FindControl() having already found it above.
-				goto error2;
+				goto error;
 			// Append the class sequence number onto the class name set the output param to be that value:
 			sntprintfcat(focused_control, _countof(focused_control), _T("%d"), cah.class_count);
 		}
@@ -1426,7 +1423,7 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 		output_var.Assign(); // Set default to be blank for all commands except POS, for consistency.
 
 	if (control_index >= gui.mControlCount) // Not found.
-		goto error2;
+		goto error;
 	GuiControlType &control = gui.mControl[control_index];   // For performance and convenience.
 
 	switch(guicontrolget_cmd)
@@ -1526,10 +1523,6 @@ return_the_result:
 	return result;
 
 error:
-	output_var.Assign(); // For backward-compatibility and also serves as an additional indicator of failure.
-	return SetErrorLevelOrThrow();
-
-error2:
 	result = SetErrorLevelOrThrow();
 	goto return_the_result;
 }
