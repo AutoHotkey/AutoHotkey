@@ -691,6 +691,7 @@ private:
 	ResultType ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3);
 	ResultType WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints);
 	ResultType WinSetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aNewTitle
 		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
 	ResultType WinGetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);

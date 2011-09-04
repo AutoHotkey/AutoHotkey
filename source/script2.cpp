@@ -3127,7 +3127,7 @@ ResultType Line::ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3)
 
 
 
-ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints)
+ResultType Line::WinSetRegion(HWND aWnd, LPTSTR aPoints)
 {
 	if (!*aPoints) // Attempt to restore the window's normal/correct region.
 	{
@@ -3155,9 +3155,7 @@ ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints)
 
 		// It's undocumented by MSDN, but apparently setting the Window's region to NULL restores it
 		// to proper working order:
-		if (SetWindowRgn(aWnd, NULL, TRUE))
-			return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-		return OK; // Let ErrorLevel tell the story.
+		return SetErrorLevelOrThrowBool(!SetWindowRgn(aWnd, NULL, TRUE)); // Let ErrorLevel tell the story.
 	}
 
 	#define MAX_REGION_POINTS 2000  // 2000 requires 16 KB of stack space.
@@ -3199,7 +3197,7 @@ ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints)
 			// "x" is not used to avoid detecting "x" inside hex numbers.
 			#define REGION_DELIMITER '-'
 			if (   !(cp = _tcschr(cp + 1, REGION_DELIMITER))   ) // v1.0.38.02: cp + 1 to omit any leading minus sign.
-				return OK; // Let ErrorLevel tell the story.
+				goto error;
 			pt[pt_count].y = ATOI(++cp);  // Increment cp by only 1 to support negative Y-coord.
 			++pt_count; // Move on to the next element of the pt array.
 		}
@@ -3256,26 +3254,15 @@ ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints)
 
 	HRGN hrgn;
 	if (use_ellipse) // Ellipse.
-	{
-		if (!width_and_height_were_both_specified || !(hrgn = CreateEllipticRgn(pt[0].x, pt[0].y, width, height)))
-			goto error;
-	}
+		hrgn = width_and_height_were_both_specified ? CreateEllipticRgn(pt[0].x, pt[0].y, width, height) : NULL;
 	else if (rr_width != COORD_UNSPECIFIED) // Rounded rectangle.
-	{
-		if (!width_and_height_were_both_specified || !(hrgn = CreateRoundRectRgn(pt[0].x, pt[0].y, width, height, rr_width, rr_height)))
-			goto error;
-	}
+		hrgn = width_and_height_were_both_specified ? CreateRoundRectRgn(pt[0].x, pt[0].y, width, height, rr_width, rr_height) : NULL;
 	else if (width_and_height_were_both_specified) // Rectangle.
-	{
-		if (!(hrgn = CreateRectRgn(pt[0].x, pt[0].y, width, height)))
-			goto error;
-	}
+		hrgn = CreateRectRgn(pt[0].x, pt[0].y, width, height);
 	else // Polygon
-	{
-		if (   !(hrgn = CreatePolygonRgn(pt, pt_count, fill_mode))   )
-			goto error;
-	}
-
+		hrgn = CreatePolygonRgn(pt, pt_count, fill_mode);
+	if (!hrgn)
+		goto error;
 	// Since above didn't return, hrgn is now a non-NULL region ready to be assigned to the window.
 
 	// Presumably, the system deletes the window's former region upon a successful call to SetWindowRgn():
@@ -3287,10 +3274,10 @@ ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints)
 	//else don't delete hrgn since the system has taken ownership of it.
 
 	// Since above didn't return, indicate success.
-	return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+	return SetErrorLevelOrThrowBool(false);
 
 error:
-	return g_script.SetErrorLevelOrThrow();
+	return SetErrorLevelOrThrow();
 }
 
 
@@ -3302,11 +3289,8 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 	if (attrib == WINSET_INVALID)
 		return LineError(ERR_PARAM1_INVALID, FAIL, aAttrib);
 
-	// Set default ErrorLevel for any commands that change ErrorLevel.
-	// The default should be ERRORLEVEL_ERROR so that that value will be returned
-	// by default when the target window doesn't exist:
-	//if (attrib == WINSET_STYLE || attrib == WINSET_EXSTYLE || attrib == WINSET_REGION)
-	//	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	// Only the following sub-commands affect ErrorLevel:
+	bool use_errorlevel = (attrib == WINSET_STYLE || attrib == WINSET_EXSTYLE || attrib == WINSET_REGION);
 
 	// Since this is a macro, avoid repeating it for every case of the switch():
 	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
@@ -3450,7 +3434,7 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 			goto error; // Seems best not to treat an explicit blank as zero.
 		int style_index = (attrib == WINSET_STYLE) ? GWL_STYLE : GWL_EXSTYLE;
 		DWORD new_style, orig_style = GetWindowLong(target_window, style_index);
-		if (!_tcschr(_T("+-^"), *aValue))  // | and & are used instead of +/- to allow +/- to have their native function.
+		if (!_tcschr(_T("+-^"), *aValue))
 			new_style = ATOU(aValue); // No prefix, so this new style will entirely replace the current style.
 		else
 		{
@@ -3477,10 +3461,10 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 				// Since SetWindowPos() probably doesn't know that the style changed, below is probably necessary
 				// too, at least in some cases:
 				InvalidateRect(target_window, NULL, TRUE); // Quite a few styles require this to become visibly manifest.
-				return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+				break; // Success. See below.
 			}
 		}
-		goto error; // Since above didn't return, it's a failure.
+		goto error; // Since above didn't break, it's a failure.
 	}
 
 	case WINSET_ENABLE:
@@ -3507,10 +3491,12 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 		break;
 
 	} // switch()
-	return OK;
+	return use_errorlevel ? SetErrorLevelOrThrowBool(false) : OK;
 
 error:
-	return SetErrorLevelOrThrow();
+	// Only STYLE, EXSTYLE and REDRAW affect ErrorLevel for compatibility reasons,
+	// but seems best to allow the other sub-commands to throw exceptions:
+	return (use_errorlevel || g->InTryBlock) ? SetErrorLevelOrThrow() : OK;
 }
 
 
