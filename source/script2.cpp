@@ -8901,17 +8901,17 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 		case 'M': // Maximum number of bytes to load.
 			max_bytes_to_load = ATOU64(cp + 1); // Relies upon the fact that it ceases conversion upon reaching a space or tab.
 			if (max_bytes_to_load > FILEREAD_MAX) // Force a failure to avoid breaking scripts if this limit is increased in the future.
-				goto error;
+				return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
 			// Skip over the digits of this option in case it's the last option.
 			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
-				goto error;
+				return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
 			--cp; // Standardize it to make it conform to the other options, for use below.
 			break;
 		case 'P':
 			codepage = _ttoi(cp + 1);
 			// Skip over the digits of this option in case it's the last option.
 			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
-				goto error;
+				return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
 			--cp; // Standardize it to make it conform to the other options, for use below.
 			break;
 		case 'T': // Text mode.
@@ -8961,20 +8961,17 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	if (bytes_to_read == ULLONG_MAX // GetFileSize64() failed...
 		|| max_bytes_to_load == ULLONG_MAX && bytes_to_read > FILEREAD_MAX) // ...or the file is too large to be completely read (and the script wanted it completely read).
 	{
-		g->LastError = GetLastError();
+		g->LastError = (bytes_to_read == ULLONG_MAX) ? GetLastError() : ERROR_FILE_TOO_LARGE;
 		CloseHandle(hfile);
-		goto error;
+		return SetErrorLevelOrThrow();
 	}
 	if (max_bytes_to_load < bytes_to_read)
 		bytes_to_read = max_bytes_to_load;
 
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Set default for this point forward to be "success".
-
 	if (!bytes_to_read)
 	{
-		g->LastError = 0;
 		CloseHandle(hfile);
-		return OK; // And ErrorLevel will indicate success (a zero-length file results in empty output_var).
+		return SetErrorsOrThrow(false, 0); // Indicate success (a zero-length file results in empty output_var).
 	}
 
 	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
@@ -9007,7 +9004,8 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			bool has_bom;
 			if (bytes_actually_read >= 3 && output_buf[0] == 0xEF && output_buf[1] == 0xBB && output_buf[2] == 0xBF) // UTF-8 BOM
 			{
-				output_var.AssignStringFromUTF8((LPCSTR)output_buf + 3, bytes_actually_read - 3);
+				if (!output_var.AssignStringFromUTF8((LPCSTR)output_buf + 3, bytes_actually_read - 3))
+					result = FALSE;
 			}
 			else if ( (has_bom = (bytes_actually_read >= 2 && output_buf[0] == 0xFF && output_buf[1] == 0xFE)) // UTF-16LE BOM
 					|| codepage == CP_UTF16 ) // Covers FileEncoding UTF-16 and FileEncoding UTF-16-RAW.
@@ -9018,7 +9016,8 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 					text_start ++; // Skip BOM.
 					text_size -= 2; // Exclude BOM from calculations below for consistency; include only the actual data.
 				}
-				output_var.AssignStringW(text_start, text_size / sizeof(wchar_t));
+				if (!output_var.AssignStringW(text_start, text_size / sizeof(wchar_t)))
+					result = FALSE;
 			}
 			else
 			{
@@ -9031,9 +9030,10 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 				}
 				else
 #endif
-				output_var.AssignStringFromCodePage((LPCSTR)output_buf, bytes_actually_read, codepage);
+				if (!output_var.AssignStringFromCodePage((LPCSTR)output_buf, bytes_actually_read, codepage))
+					result = FALSE;
 			}
-			if (output_buf)
+			if (output_buf) // i.e. it wasn't "claimed" above.
 				free(output_buf);
 			output_buf = (LPBYTE) output_var.Contents();
 		}
@@ -9054,19 +9054,16 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 		// file contents into output_var.  ErrorLevel will indicate the failure.
 		// Since ReadFile() failed, to avoid complications or side-effects in functions such as Var::Close(),
 		// avoid storing a potentially non-terminated string in the variable.
-		//*output_buf = '\0';
-		//output_var.ByteLength() = 0;
+		*((LPTSTR)output_buf) = '\0'; // Assign() at this point would fail for the clipboard since it's already open for writing.
+		output_var.ByteLength() = 0;
 		if (!is_binary_clipboard)
 			free(output_buf);
-		output_var.Assign();
-		goto error;
 	}
 
-	// ErrorLevel, as set in various places above, indicates success or failure.
-	return output_var.Close(is_binary_clipboard); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
+	if (!output_var.Close(is_binary_clipboard)) // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
+		return FAIL;
 
-error:
-	return SetErrorLevelOrThrow();
+	return SetErrorLevelOrThrowBool(!result);
 }
 
 
