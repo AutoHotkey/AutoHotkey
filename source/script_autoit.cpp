@@ -995,7 +995,7 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	// Check that we have IE3 and access to wininet.dll
 	HINSTANCE hinstLib = LoadLibrary(_T("wininet"));
 	if (!hinstLib)
-		goto error;
+		return SetErrorLevelOrThrow();
 
 	typedef HINTERNET (WINAPI *MyInternetOpen)(LPCTSTR, DWORD, LPCTSTR, LPCTSTR, DWORD dwFlags);
 	typedef HINTERNET (WINAPI *MyInternetOpenUrl)(HINTERNET hInternet, LPCTSTR, LPCTSTR, DWORD, DWORD, LPDWORD);
@@ -1017,7 +1017,7 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	if (!(lpfnInternetOpen && lpfnInternetOpenUrl && lpfnInternetCloseHandle && lpfnInternetReadFileEx && lpfnInternetReadFile))
 	{
 		FreeLibrary(hinstLib);
-		goto error;
+		return SetErrorLevelOrThrow();
 	}
 
 	// v1.0.44.07: Set default to INTERNET_FLAG_RELOAD vs. 0 because the vast majority of usages would want
@@ -1047,7 +1047,7 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	if (!hInet)
 	{
 		FreeLibrary(hinstLib);
-		goto error;
+		return SetErrorLevelOrThrow();
 	}
 
 	// Open the required URL
@@ -1056,7 +1056,7 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	{
 		lpfnInternetCloseHandle(hInet);
 		FreeLibrary(hinstLib);
-		goto error;
+		return SetErrorLevelOrThrow();
 	}
 
 	// Open our output file
@@ -1066,10 +1066,10 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 		lpfnInternetCloseHandle(hFile);
 		lpfnInternetCloseHandle(hInet);
 		FreeLibrary(hinstLib);
-		goto error;
+		return SetErrorLevelOrThrow();
 	}
 
-	{BYTE bufData[1024 * 1]; // v1.0.44.11: Reduced from 8 KB to alleviate GUI window lag during UrlDownloadtoFile.  Testing shows this reduction doesn't affect performance on high-speed downloads (in fact, downloads are slightly faster; I tested two sites, one at 184 KB/s and the other at 380 KB/s).  It might affect slow downloads, but that seems less likely so wasn't tested.
+	BYTE bufData[1024 * 1]; // v1.0.44.11: Reduced from 8 KB to alleviate GUI window lag during UrlDownloadtoFile.  Testing shows this reduction doesn't affect performance on high-speed downloads (in fact, downloads are slightly faster; I tested two sites, one at 184 KB/s and the other at 380 KB/s).  It might affect slow downloads, but that seems less likely so wasn't tested.
 	INTERNET_BUFFERSA buffers = {0};
 	buffers.dwStructSize = sizeof(INTERNET_BUFFERSA);
 	buffers.lpvBuffer = bufData;
@@ -1112,16 +1112,9 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	// Close output file:
 	fclose(fptr);
 
-	if (result)
-		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Indicate success.
-	else // An error occurred during the transfer.
-	{
-		DeleteFile(aFilespec);  // delete damaged/incomplete file
-		// Fall down to the error handler
-	}}
-
-error:
-	return SetErrorLevelOrThrow();
+	if (!result) // An error occurred during the transfer.
+		DeleteFile(aFilespec);  // Delete damaged/incomplete file.
+	return SetErrorLevelOrThrowBool(!result);
 }
 
 
