@@ -8041,6 +8041,8 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 
 	Var &output_var = *OUTPUT_VAR;
 
+	output_var.Assign(); // Init to empty string.
+
 	switch(drive_get_cmd)
 	{
 
@@ -8048,7 +8050,7 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 		// Since command names are validated at load-time, this only happens if the command name
 		// was contained in a variable reference.  Since that is very rare, just set ErrorLevel
 		// and return:
-		goto error2;
+		goto error;
 
 	case DRIVEGET_CMD_LIST:
 	{
@@ -8100,7 +8102,7 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 		DWORD serial_number, max_component_length, file_system_flags;
 		if (!GetVolumeInformation(path, volume_name, _countof(volume_name) - 1, &serial_number, &max_component_length
 			, &file_system_flags, file_system, _countof(file_system) - 1))
-			goto error2;
+			goto error;
 		switch(drive_get_cmd)
 		{
 		case DRIVEGET_CMD_FILESYSTEM: output_var.Assign(file_system); break;
@@ -8123,7 +8125,7 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 		case DRIVE_CDROM:     output_var.Assign(_T("CDROM")); break;
 		case DRIVE_RAMDISK:   output_var.Assign(_T("RAMDisk")); break;
 		default: // DRIVE_NO_ROOT_DIR
-			goto error2;
+			goto error;
 		}
 		break;
 	}
@@ -8162,17 +8164,17 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 		if (!*aValue) // When drive is omitted, operate upon default CD/DVD drive.
 		{
 			if (mciSendString(_T("status cdaudio mode"), status, _countof(status), NULL)) // Error.
-				goto error2;
+				goto error;
 		}
 		else // Operate upon a specific drive letter.
 		{
 			sntprintf(mci_string, _countof(mci_string), _T("open %s type cdaudio alias cd wait shareable"), aValue);
 			if (mciSendString(mci_string, NULL, 0, NULL)) // Error.
-				goto error2;
+				goto error;
 			MCIERROR error = mciSendString(_T("status cd mode"), status, _countof(status), NULL);
 			mciSendString(_T("close cd wait"), NULL, 0, NULL);
 			if (error)
-				goto error2;
+				goto error;
 		}
 		// Otherwise, success:
 		output_var.Assign(status);
@@ -8183,9 +8185,6 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 	// Note that ControlDelay is not done for the Get type commands, because it seems unnecessary.
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
-error2:
-	ResultType result = output_var.Assign();
-	if (result != OK) return result;
 error:
 	return SetErrorLevelOrThrow();
 }
