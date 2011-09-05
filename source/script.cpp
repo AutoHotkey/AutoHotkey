@@ -15547,7 +15547,7 @@ Line *Line::PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo)
 }
 
 
-ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, ResultType aErrorType, LPCTSTR aExtraInfo)
+ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
 {
 	ExprTokenType& token = *(g->ThrownToken = new ExprTokenType);
 	g->ExcptLine = this;
@@ -15575,7 +15575,9 @@ ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, Result
 	token.symbol = SYM_OBJECT;
 	token.mem_to_free = NULL;
 
-	return aErrorType;
+	// Returning FAIL causes each caller to also return FAIL, until either the
+	// thread has fully exited or the recursion layer handling ACT_TRY is reached:
+	return FAIL;
 }
 
 
@@ -15667,8 +15669,8 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
 
-	if (g->InTryBlock && aErrorType != CRITICAL_ERROR && aErrorType != WARN)
-		return ThrowRuntimeException(aErrorText, NULL, aErrorType, aExtraInfo);
+	if (g->InTryBlock && aErrorType == FAIL) // i.e. not CRITICAL_ERROR or WARN.
+		return ThrowRuntimeException(aErrorText, NULL, aExtraInfo);
 
 	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute) // i.e. runtime errors are always displayed via dialog.
 	{
