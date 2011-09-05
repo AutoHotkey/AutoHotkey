@@ -15549,9 +15549,6 @@ Line *Line::PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo)
 
 ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
 {
-	ExprTokenType& token = *(g->ThrownToken = new ExprTokenType);
-	g->ExcptLine = this;
-
 	// Build the parameters for Object::Create()
 	ExprTokenType aParams[5*2]; int aParamCount = 4*2;
 	ExprTokenType* aParam[5*2] = { aParams + 0, aParams + 1, aParams + 2, aParams + 3, aParams + 4
@@ -15571,9 +15568,25 @@ ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTST
 		aParams[9].symbol = SYM_STRING; aParams[9].marker = (LPTSTR)aExtraInfo;
 	}
 
-	token.object = Object::Create(aParam, aParamCount);
-	token.symbol = SYM_OBJECT;
-	token.mem_to_free = NULL;
+	ExprTokenType* token;
+	if (   !(token = new ExprTokenType)
+		|| !(token->object = Object::Create(aParam, aParamCount))   )
+	{
+		// Out of memory. It's likely that we were called for this very reason.
+		// Since we don't even have enough memory to allocate an exception object,
+		// just show an error message and exit the thread. Don't call LineError(),
+		// since that would recurse into this function.
+		if (token)
+			delete token;
+		MsgBox(ERR_OUTOFMEM ERR_ABORT);
+		return FAIL;
+	}
+
+	token->symbol = SYM_OBJECT;
+	token->mem_to_free = NULL;
+
+	g->ThrownToken = token;
+	g->ExcptLine = this;
 
 	// Returning FAIL causes each caller to also return FAIL, until either the
 	// thread has fully exited or the recursion layer handling ACT_TRY is reached:
