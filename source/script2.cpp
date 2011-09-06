@@ -17566,15 +17566,6 @@ SymbolType TokenIsPureNumeric(ExprTokenType &aToken)
 }
 
 
-SymbolType TokenIsPureNumeric(ExprTokenType &aToken, BOOL aNoWarnUninitializedVar)
-{
-	if (aNoWarnUninitializedVar && aToken.symbol == SYM_VAR && aToken.var->IsUninitializedNormalVar())
-		return PURE_NOT_NUMERIC;
-
-	return TokenIsPureNumeric(aToken);
-}
-
-
 BOOL TokenIsEmptyString(ExprTokenType &aToken) // L31
 {
 	switch (aToken.symbol)
