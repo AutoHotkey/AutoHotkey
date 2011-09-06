@@ -9713,13 +9713,28 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			break;
 
 		case ACT_HOTKEY:
-			if (*line_raw_arg2 && !line->ArgHasDeref(2) && !line->ArgHasDeref(1))
+			if (!line->ArgHasDeref(1))
 			{
 				if (!_tcsnicmp(line_raw_arg1, _T("If"), 2))
 				{
 					LPTSTR cp = line_raw_arg1 + 2;
 					if (!*cp) // Just "If"
+					{
+						if (*line_raw_arg2 && !line->ArgHasDeref(2))
+						{
+							// Hotkey, If, Expression: Ensure the expression matches exactly an existing #If,
+							// as required by the Hotkey command.  This seems worth doing since the current
+							// behaviour might be unexpected (despite being documented), and because typos
+							// are likely due to the fact that case and whitespace matter.
+							int i;
+							for (i = 0; i < g_HotExprLineCount; ++i)
+								if (!_tcscmp(line_raw_arg2, g_HotExprLines[i]->mArg[0].text))
+									break;
+							if (i == g_HotExprLineCount)
+								return line->PreparseError(_T("Parameter #2 must match an existing #If expression."));
+						}
 						break;
+					}
 					if (!_tcsnicmp(cp, _T("Win"), 3))
 					{
 						cp += 3;
@@ -9731,9 +9746,10 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					// Since above didn't break, it's something invalid starting with "If".
 					return line->PreparseError(ERR_PARAM1_INVALID);
 				}
-				else if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
-					if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
-						return line->PreparseError(ERR_NO_LABEL);
+				if (*line_raw_arg2 && !line->ArgHasDeref(2))
+					if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
+						if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
+							return line->PreparseError(ERR_NO_LABEL);
 			}
 			break;
 
