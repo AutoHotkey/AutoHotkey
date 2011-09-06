@@ -2854,7 +2854,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				*parameter_end = '\0'; // Remove '>'.
 				bool error_was_shown, file_was_found;
 				// Attempt to include a script file based on the same rules as func() auto-include:
-				FindFuncInLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found);
+				FindFuncInLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found, false);
 				// If any file was included, consider it a success; i.e. allow #include <lib> and #include <lib_func>.
 				if (!error_was_shown && file_was_found || ignore_load_failure)
 					return CONDITION_TRUE;
@@ -7553,7 +7553,7 @@ struct FuncLibrary
 	DWORD_PTR length;
 };
 
-Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound)
+Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude)
 // Caller must ensure that aFuncName doesn't already exist as a defined function.
 // If aFuncNameLength is 0, the entire length of aFuncName is used.
 {
@@ -7683,9 +7683,9 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 				return NULL;
 			}
 
-			if (mIncludeLibraryFunctionsThenExit)
+			if (mIncludeLibraryFunctionsThenExit && aIsAutoInclude)
 			{
-				// For each included library-file, write out two #Include lines:
+				// For each auto-included library-file, write out two #Include lines:
 				// 1) Use #Include in its "change working directory" mode so that any explicit #include directives
 				//    or FileInstalls inside the library file itself will work consistently and properly.
 				// 2) Use #IncludeAgain (to improve performance since no dupe-checking is needed) to include
@@ -9312,7 +9312,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 				{
 #ifndef AUTOHOTKEYSC
 					bool error_was_shown, file_was_found;
-					if (   !(deref->func = FindFuncInLibrary(deref->marker, deref->length, error_was_shown, file_was_found))   )
+					if (   !(deref->func = FindFuncInLibrary(deref->marker, deref->length, error_was_shown, file_was_found, true))   )
 					{
 						abort = true; // So that the caller doesn't also report an error.
 						// When above already displayed the proximate cause of the error, it's usually
