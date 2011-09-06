@@ -762,7 +762,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				case 'F': size = 4; is_float = true; break; // Float.
 				}
 				if (!size)
-					break; // and return ""
+					break; // Return "" or throw.
 
 				union {
 						__int64 i8;
@@ -777,7 +777,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				{
 					buf.i8 = 0;
 					if ( !mFile.Read(&buf, size) )
-						break; // and return ""
+						break; // Return "" or throw.
 
 					if (is_float)
 					{
@@ -805,7 +805,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				else
 				{
 					if (aParamCount != 1)
-						break; // and return ""
+						break; // Return "" or throw.
 
 					ExprTokenType &token_to_write = *aParam[1];
 					
@@ -823,7 +823,11 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 							buf.i8 = TokenToInt64(token_to_write);
 					}
 					
-					aResultToken.value_int64 = mFile.Write(&buf, size);
+					DWORD bytes_written = mFile.Write(&buf, size);
+					if (!bytes_written && g->InTryBlock)
+						break; // Throw an exception.
+					// Otherwise, we should return bytes_written even if it is 0:
+					aResultToken.value_int64 = bytes_written;
 				}
 				return OK;
 			}
@@ -832,18 +836,15 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		case Read:
 			if (aParamCount <= 1)
 			{
-				aResultToken.symbol = SYM_STRING; // Set for both paths below.
 				DWORD length;
 				if (aParamCount)
 					length = (DWORD)TokenToInt64(*aParam[1]);
 				else
 					length = (DWORD)(mFile.Length() - mFile.Tell()); // We don't know the actual number of characters these bytes will translate to, but this should be sufficient.
 				if (length == -1 || !TokenSetResult(aResultToken, NULL, length)) // Relies on short-circuit order. TokenSetResult requires non-NULL aResult if aResultLength == -1.
-				{
-					// Our caller set marker to a default result of "", which should still be in place.
-					return OK; // FAIL vs OK currently has no real effect here, but in Line::ExecUntil it is used to exit the current thread when a critical error occurs.  Since that behaviour might be implemented for objects someday and in this particular case a bad parameter is more likely than critically low memory, FAIL seems inappropriate.
-				}
+					break; // Return "" or throw.
 				length = mFile.Read(aResultToken.marker, length);
+				aResultToken.symbol = SYM_STRING;
 				aResultToken.marker[length] = '\0';
 				aResultToken.buf = (LPTSTR)(size_t) length; // Update buf to the actual number of characters read. Only strictly necessary in some cases; see TokenSetResult.
 				return OK;
@@ -853,10 +854,10 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		case ReadLine:
 			if (aParamCount == 0)
 			{	// See above for comments.
-				aResultToken.symbol = SYM_STRING;
 				if (!TokenSetResult(aResultToken, NULL, READ_FILE_LINE_SIZE))
-					return OK; 
+					break; // Return "" or throw.
 				DWORD length = mFile.ReadLine(aResultToken.marker, READ_FILE_LINE_SIZE - 1);
+				aResultToken.symbol = SYM_STRING;
 				aResultToken.marker[length] = '\0';
 				aResultToken.buf = (LPTSTR)(size_t) length;
 				return OK;
@@ -867,17 +868,25 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		case WriteLine:
 			if (aParamCount <= 1)
 			{
-				DWORD written = 0;
+				DWORD bytes_written = 0, chars_to_write = 0;
 				if (aParamCount)
 				{
 					LPTSTR param1 = TokenToString(*aParam[1], aResultToken.buf);
-					written = mFile.Write(param1, (DWORD)EXPR_TOKEN_LENGTH(aParam[1], param1));
+					chars_to_write = (DWORD)EXPR_TOKEN_LENGTH(aParam[1], param1);
+					bytes_written = mFile.Write(param1, chars_to_write);
 				}
-				if (member == WriteLine)
+				if (member == WriteLine && (bytes_written || !chars_to_write)) // i.e. don't attempt it if above failed.
 				{
-					written += mFile.Write(_T("\n"), 1);
+					chars_to_write += 1;
+					bytes_written += mFile.Write(_T("\n"), 1);
 				}
-				aResultToken.value_int64 = written;
+				// If no data was written and some should have been, consider it a failure:
+				if (!bytes_written && chars_to_write && g->InTryBlock)
+					break; // Throw an exception.
+				// Otherwise, some data was written (partial writes are considered successful),
+				// no data was requested to be written, or no TRY block is active, so we need to
+				// return the value of bytes_written even if it is 0:
+				aResultToken.value_int64 = bytes_written;
 				return OK;
 			}
 			break;
@@ -898,6 +907,8 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 						// Too small: expand the target variable if reading; abort otherwise.
 						&& (!reading || !target_token.var->SetCapacity(size, false, false)) ) // Relies on short-circuit order.
 					{
+						if (g->InTryBlock)
+							break; // Throw an exception.
 						aResultToken.value_int64 = 0;
 						return OK;
 					}
@@ -907,12 +918,15 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 					target = (LPVOID)TokenToInt64(target_token);
 
 				DWORD result;
-				if (target < (LPVOID)1024) // Basic sanity check to catch incoming raw addresses that are zero or blank.
+				if (target < (LPVOID)65536) // Basic sanity check to catch incoming raw addresses that are zero or blank.
 					result = 0;
 				else if (reading)
 					result = mFile.Read(target, size);
 				else
 					result = mFile.Write(target, size);
+				if (!result && size && g->InTryBlock)
+					break; // Throw an exception.
+				// Otherwise, it was a complete or partial success, or no TRY block is active.
 				aResultToken.value_int64 = result;
 				return OK;
 			}
@@ -933,7 +947,14 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				else // Defaulting to SEEK_END when distance is negative seems more useful than allowing it to be interpreted as an unsigned value (> 9.e18 bytes).
 					origin = (distance < 0) ? SEEK_END : SEEK_SET;
 
-				aResultToken.value_int64 = mFile.Seek(distance, origin);
+				if (!mFile.Seek(distance, origin))
+				{
+					if (g->InTryBlock)
+						break; // Throw an exception.
+					aResultToken.value_int64 = 0;
+				}
+				else
+					aResultToken.value_int64 = 1;
 				return OK;
 			}
 			break;
@@ -950,7 +971,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 					return OK;
 				else // Empty string seems like a more suitable failure indicator than -1.
 					aResultToken.marker = _T("");
-					// Let below set symbol back to SYM_STRING.
+					// Let below set symbol back to SYM_STRING and throw an exception if appropriate.
 			}
 			break;
 
@@ -1012,6 +1033,9 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		// Since above didn't return, an error must've occurred.
 		aResultToken.symbol = SYM_STRING;
 		// marker should already be set to "".
+		if (g->InTryBlock)
+			// For simplicity, don't attempt to identify what kind of error occurred:
+			Script::ThrowRuntimeException(ERRORLEVEL_ERROR, _T("FileObject"));
 		return OK;
 	}
 
@@ -1060,9 +1084,7 @@ void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		case 'h': aFlags = TextStream::USEHANDLE; break;
 		default:
 			// Invalid flag.
-			aResultToken.value_int64 = 0;
-			g->LastError = ERROR_INVALID_PARAMETER; // For consistency.
-			return;
+			goto invalid_param;
 		}
 		
 		// Default to not locking file, for consistency with fopen/standard AutoHotkey and because it seems best for flexibility.
@@ -1097,9 +1119,7 @@ void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				break;
 			default:
 				// Invalid flag.
-				aResultToken.value_int64 = 0;
-				g->LastError = ERROR_INVALID_PARAMETER; // For consistency.
-				return;
+				goto invalid_param;
 			}
 		}
 	}
@@ -1111,9 +1131,7 @@ void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 			aEncoding = Line::ConvertFileEncoding(TokenToString(*aParam[2]));
 			if (aEncoding == -1)
 			{	// Invalid param.
-				aResultToken.value_int64 = 0;
-				g->LastError = ERROR_INVALID_PARAMETER; // For consistency.
-				return;
+				goto invalid_param;
 			}
 		}
 		else aEncoding = (UINT) TokenToInt64(*aParam[2]);
@@ -1135,10 +1153,23 @@ void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 
 	if (aResultToken.object = FileObject::Open(aFileName, aFlags, aEncoding & CP_AHKCP))
 		aResultToken.symbol = SYM_OBJECT;
-	else
-		aResultToken.value_int64 = 0; // and symbol is already SYM_INTEGER.
 
-	g->LastError = GetLastError();
+	g->LastError = GetLastError(); // Even on success, since it might provide something useful.
+	
+	if (!aResultToken.object)
+	{
+		aResultToken.value_int64 = 0; // and symbol is already SYM_INTEGER.
+		if (g->InTryBlock)
+			Script::ThrowRuntimeException(_T("Failed to open file."), _T("FileOpen"));
+	}
+
+	return;
+
+invalid_param:
+	aResultToken.value_int64 = 0;
+	g->LastError = ERROR_INVALID_PARAMETER; // For consistency.
+	if (g->InTryBlock)
+		Script::ThrowRuntimeException(ERR_PARAM2_INVALID, _T("FileOpen"));
 }
 
 
