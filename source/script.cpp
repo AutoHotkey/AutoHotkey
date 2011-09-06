@@ -9718,10 +9718,18 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				if (!_tcsnicmp(line_raw_arg1, _T("If"), 2))
 				{
 					LPTSTR cp = line_raw_arg1 + 2;
-					if (!_tcsnicmp(cp, _T("Not"), 3))
+					if (!*cp) // Just "If"
+						break;
+					if (!_tcsnicmp(cp, _T("Win"), 3))
+					{
 						cp += 3;
-					if (*cp && _tcsicmp(cp, _T("WinActive")) && _tcsicmp(cp, _T("WinExist")))
-						return line->PreparseError(ERR_PARAM1_INVALID);
+						if (!_tcsnicmp(cp, _T("Not"), 3))
+							cp += 3;
+						if (!_tcsicmp(cp, _T("Active")) || !_tcsicmp(cp, _T("Exist")))
+							break;
+					}
+					// Since above didn't break, it's something invalid starting with "If".
+					return line->PreparseError(ERR_PARAM1_INVALID);
 				}
 				else if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
 					if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
