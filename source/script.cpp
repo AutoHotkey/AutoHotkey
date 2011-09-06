@@ -9196,7 +9196,13 @@ WinGroup *Script::FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound)
 // by the hook thread.  However, any subsequent changes to this function or AddGroup() must be carefully reviewed.
 {
 	if (!*aGroupName)
+	{
+		if (aCreateIfNotFound)
+			// An error message must be shown in this case since or caller is about to
+			// exit the current script thread (and we don't want it to happen silently).
+			ScriptError(_T("Blank group name."));
 		return NULL;
+	}
 	for (WinGroup *group = mFirstGroup; group != NULL; group = group->mNextGroup)
 		if (!_tcsicmp(group->mName, aGroupName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			return group; // Match found.
