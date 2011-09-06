@@ -15593,6 +15593,11 @@ ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTST
 	return FAIL;
 }
 
+ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
+{
+	return g_script.mCurrLine->ThrowRuntimeException(aErrorText, aWhat, aExtraInfo);
+}
+
 
 ResultType Line::SetErrorLevelOrThrowBool(bool aError)
 {
@@ -15634,8 +15639,7 @@ ResultType Script::SetErrorLevelOrThrowBool(bool aError)
 	if (!g->InTryBlock)
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	Line *line = g_script.mCurrLine;
-	return line->ThrowRuntimeException(ERRORLEVEL_ERROR);
+	return ThrowRuntimeException(ERRORLEVEL_ERROR);
 }
 
 ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
@@ -15643,8 +15647,7 @@ ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
 	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
 		return g_ErrorLevel->Assign(aErrorValue);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	Line *line = g_script.mCurrLine;
-	return line->ThrowRuntimeException(ERRORLEVEL_ERROR);
+	return ThrowRuntimeException(ERRORLEVEL_ERROR);
 }
 
 ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat)
@@ -15652,7 +15655,7 @@ ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat)
 	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
 		return g_ErrorLevel->Assign(aErrorValue);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return g_script.mCurrLine->ThrowRuntimeException(aErrorValue, aWhat);
+	return ThrowRuntimeException(aErrorValue, aWhat);
 }
 
 ResultType Script::SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat)
@@ -15661,7 +15664,7 @@ ResultType Script::SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat)
 		return g_ErrorLevel->Assign(aErrorValue);
 	TCHAR buf[12];
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return g_script.mCurrLine->ThrowRuntimeException(_itot(aErrorValue, buf, 10), aWhat);
+	return ThrowRuntimeException(_itot(aErrorValue, buf, 10), aWhat);
 }
 
 
