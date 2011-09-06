@@ -5737,7 +5737,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 			if (aActionType == ACT_SUB && *new_raw_arg2 && !line.ArgHasDeref(2))
 				if (!YYYYMMDDToSystemTime(new_raw_arg2, st, true))
-					return ScriptError(ERR_INVALID_DATETIME, new_raw_arg2);
+					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 			new_arg[1].postfix = NULL; // It's necessary to indicate that there is no cached binary number for arg #2 in the 3-arg mode of ACT_ADD due to runtime logic that checks it.  For the others, this helps maintainability.
 			break; // Don't allow processing to continue.  Other sections below rely on this.
 		}
@@ -6006,12 +6006,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_DETECTHIDDENTEXT:
 	case ACT_SETSTORECAPSLOCKMODE:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertOnOff(new_raw_arg1))
-			return ScriptError(ERR_ON_OFF, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_STRINGCASESENSE:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && line.ConvertStringCaseSense(new_raw_arg1) == SCS_INVALID)
-			return ScriptError(ERR_ON_OFF_LOCALE, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_SETBATCHLINES:
@@ -6024,7 +6024,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 	case ACT_SUSPEND:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertOnOffTogglePermit(new_raw_arg1))
-			return ScriptError(ERR_ON_OFF_TOGGLE_PERMIT, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_BLOCKINPUT:
@@ -6040,7 +6040,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_PAUSE:
 	case ACT_KEYHISTORY:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertOnOffToggle(new_raw_arg1))
-			return ScriptError(ERR_ON_OFF_TOGGLE, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_SETNUMLOCKSTATE:
@@ -6068,11 +6068,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		{
 			// The obsolete 5-param method is being used, wherein ValueType is the 2nd param.
 			if (*new_raw_arg3 && !line.ArgHasDeref(3) && !line.RegConvertRootKey(new_raw_arg3))
-				return ScriptError(ERR_REG_KEY, new_raw_arg3);
+				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 		}
 		else // 4-param method.
 			if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertRootKey(new_raw_arg2))
-				return ScriptError(ERR_REG_KEY, new_raw_arg2);
+				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
 	case ACT_REGWRITE:
@@ -6081,15 +6081,15 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		if (aArgc > 1)
 		{
 			if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertValueType(new_raw_arg1))
-				return ScriptError(ERR_REG_VALUE_TYPE, new_raw_arg1);
+				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 			if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertRootKey(new_raw_arg2))
-				return ScriptError(ERR_REG_KEY, new_raw_arg2);
+				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		}
 		break;
 
 	case ACT_REGDELETE:
 		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertRootKey(new_raw_arg1))
-			return ScriptError(ERR_REG_KEY, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_SOUNDGET:
@@ -6100,7 +6100,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// sees a valid no-deref expression such as 300-250 as invalid.
 			value_float = ATOF(new_raw_arg1);
 			if (value_float < -100 || value_float > 100)
-				return ScriptError(ERR_PERCENT, new_raw_arg1);
+				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		}
 		if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.SoundConvertComponentType(new_raw_arg2))
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
@@ -6115,7 +6115,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// sees a valid no-deref expression such as 300-250 as invalid.
 			value_float = ATOF(new_raw_arg1);
 			if (value_float < -100 || value_float > 100)
-				return ScriptError(ERR_PERCENT, new_raw_arg1);
+				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		}
 		break;
 
@@ -6154,7 +6154,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// sees a valid no-deref expression such as 1+2 as invalid.
 			value = ATOI(new_raw_arg1);
 			if (value < 0 || value > MAX_MOUSE_SPEED)
-				return ScriptError(ERR_MOUSE_SPEED, new_raw_arg1);
+				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		}
 		break;
 
@@ -6165,7 +6165,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// sees a valid no-deref expression such as 200-150 as invalid.
 			value = ATOI(new_raw_arg3);
 			if (value < 0 || value > MAX_MOUSE_SPEED)
-				return ScriptError(ERR_MOUSE_SPEED, new_raw_arg3);
+				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 		}
 		if (*new_raw_arg4 && !line.ArgHasDeref(4) && ctoupper(*new_raw_arg4) != 'R')
 			return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
@@ -6180,7 +6180,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// sees a valid no-deref expression such as 200-150 as invalid.
 			value = ATOI(NEW_RAW_ARG5);
 			if (value < 0 || value > MAX_MOUSE_SPEED)
-				return ScriptError(ERR_MOUSE_SPEED, NEW_RAW_ARG5);
+				return ScriptError(ERR_PARAM5_INVALID, NEW_RAW_ARG5);
 		}
 		if (*NEW_RAW_ARG6 && !line.ArgHasDeref(6))
 			if (_tcslen(NEW_RAW_ARG6) > 1 || !_tcschr(_T("UD"), ctoupper(*NEW_RAW_ARG6)))  // Up / Down
@@ -6189,7 +6189,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_PARAM7_INVALID, NEW_RAW_ARG7);
 		// Check that the button is valid (e.g. left/right/middle):
 		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.ConvertMouseButton(new_raw_arg1)) // Treats blank as "Left".
-			return ScriptError(ERR_MOUSE_BUTTON, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		if (!line.ValidateMouseCoords(new_raw_arg2, new_raw_arg3))
 			return ScriptError(ERR_MOUSE_COORD, new_raw_arg2);
 		break;
@@ -6205,13 +6205,13 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// sees a valid no-deref expression such as 200-150 as invalid.
 			value = ATOI(NEW_RAW_ARG6);
 			if (value < 0 || value > MAX_MOUSE_SPEED)
-				return ScriptError(ERR_MOUSE_SPEED, NEW_RAW_ARG6);
+				return ScriptError(ERR_PARAM6_INVALID, NEW_RAW_ARG6);
 		}
 		if (*NEW_RAW_ARG7 && !line.ArgHasDeref(7) && ctoupper(*NEW_RAW_ARG7) != 'R')
 			return ScriptError(ERR_PARAM7_INVALID, NEW_RAW_ARG7);
 		if (!line.ArgHasDeref(1))
 			if (!line.ConvertMouseButton(new_raw_arg1, false))
-				return ScriptError(ERR_MOUSE_BUTTON, new_raw_arg1);
+				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		if (!line.ValidateMouseCoords(new_raw_arg2, new_raw_arg3))
 			return ScriptError(ERR_MOUSE_COORD, new_raw_arg2);
 		if (!line.ValidateMouseCoords(new_raw_arg4, NEW_RAW_ARG5))
@@ -6231,7 +6231,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		// Check that the button is valid (e.g. left/right/middle):
 		if (*new_raw_arg4 && !line.ArgHasDeref(4)) // i.e. it's allowed to be blank (defaults to left).
 			if (!line.ConvertMouseButton(new_raw_arg4)) // Treats blank as "Left".
-				return ScriptError(ERR_MOUSE_BUTTON, new_raw_arg4);
+				return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
 		break;
 
 	case ACT_FILEINSTALL:
@@ -6301,7 +6301,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_FILESETTIME:
 		if (*new_raw_arg1 && !line.ArgHasDeref(1))
 			if (!YYYYMMDDToSystemTime(new_raw_arg1, st, true))
-				return ScriptError(ERR_INVALID_DATETIME, new_raw_arg1);
+				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		if (*new_raw_arg3 && !line.ArgHasDeref(3))
 			if (_tcslen(new_raw_arg3) > 1 || !_tcschr(_T("MCA"), ctoupper(*new_raw_arg3)))
 				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
@@ -6323,7 +6323,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 	case ACT_SETTITLEMATCHMODE:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertTitleMatchMode(new_raw_arg1))
-			return ScriptError(ERR_TITLEMATCHMODE, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_TRANSFORM:
@@ -6786,7 +6786,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				break;
 			case WINSET_ALWAYSONTOP:
 				if (aArgc > 1 && !line.ArgHasDeref(2) && !line.ConvertOnOffToggle(new_raw_arg2))
-					return ScriptError(ERR_ON_OFF_TOGGLE, new_raw_arg2);
+					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 				break;
 			case WINSET_BOTTOM:
 			case WINSET_TOP:
@@ -6845,12 +6845,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		// v1.0.44.03: Don't validate single-character key names because although a character like ü might have no
 		// matching VK in system's default layout, that layout could change to something which does have a VK for it.
 		if (aArgc > 1 && !line.ArgHasDeref(2) && _tcslen(new_raw_arg2) > 1 && !TextToVK(new_raw_arg2) && !ConvertJoy(new_raw_arg2))
-			return ScriptError(ERR_INVALID_KEY_OR_BUTTON, new_raw_arg2);
+			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
 	case ACT_KEYWAIT: // v1.0.44.03: See comment above.
 		if (aArgc > 0 && !line.ArgHasDeref(1) && _tcslen(new_raw_arg1) > 1 && !TextToVK(new_raw_arg1) && !ConvertJoy(new_raw_arg1))
-			return ScriptError(ERR_INVALID_KEY_OR_BUTTON, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_FILEAPPEND:
@@ -14253,7 +14253,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_CONTROLCLICK:
 		if (   !(vk = ConvertMouseButton(ARG4))   ) // Treats blank as "Left".
-			return LineError(ERR_MOUSE_BUTTON ERR_ABORT, FAIL, ARG4);
+			return LineError(ERR_PARAM4_INVALID ERR_ABORT, FAIL, ARG4);
 		return ControlClick(vk, *ARG5 ? ArgToInt(5) : 1, ARG6, ARG1, ARG2, ARG3, ARG7, ARG8);
 
 	case ACT_CONTROLMOVE:
@@ -14861,7 +14861,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		case FIND_FAST: g.TitleFindFast = true; return OK;
 		case FIND_SLOW: g.TitleFindFast = false; return OK;
 		}
-		return LineError(ERR_TITLEMATCHMODE ERR_ABORT, FAIL, ARG1);
+		return LineError(ERR_PARAM1_INVALID ERR_ABORT, FAIL, ARG1);
 
 	case ACT_SETFORMAT:
 		// For now, it doesn't seem necessary to have runtime validation of the first parameter.

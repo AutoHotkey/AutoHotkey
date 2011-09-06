@@ -727,7 +727,6 @@ inline void global_init(global_struct &g)
 	g.MouseDelayPlay = -1;
 	#define DEFAULT_MOUSE_SPEED 2
 	#define MAX_MOUSE_SPEED 100
-	#define MAX_MOUSE_SPEED_STR _T("100")
 	g.DefaultMouseSpeed = DEFAULT_MOUSE_SPEED;
 	g.CoordMode = 0;  // All the flags it contains are off by default.
 	g.StringCaseSense = SCS_INSENSITIVE;  // AutoIt2 default, and it does seem best.
