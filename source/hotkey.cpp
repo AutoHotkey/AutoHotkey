@@ -875,18 +875,18 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	{
 		HotCriterionType hot_criterion;
 		bool invert = !_tcsnicmp(aHotkeyName + 5, _T("Not"), 3);
-		if (!_tcsnicmp(aHotkeyName + (invert ? 8 : 5), _T("Active"), 6)) // It matches #IfWin[Not]Active.
+		if (!_tcsicmp(aHotkeyName + (invert ? 8 : 5), _T("Active"))) // It matches #IfWin[Not]Active.
 			hot_criterion = invert ? HOT_IF_NOT_ACTIVE : HOT_IF_ACTIVE;
-		else if (!_tcsnicmp(aHotkeyName + (invert ? 8 : 5), _T("Exist"), 5))
+		else if (!_tcsicmp(aHotkeyName + (invert ? 8 : 5), _T("Exist")))
 			hot_criterion = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
 		else // It starts with IfWin but isn't Active or Exist: Don't alter the current criterion.
-			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			return g_script.SetErrorLevelOrThrow();
 		if (!(*aLabelName || *aOptions)) // This check is done only after detecting bad spelling of IfWin above.
 			g_HotCriterion = HOT_NO_CRITERION;
 		else if (SetGlobalHotTitleText(aLabelName, aOptions)) // Currently, it only fails upon out-of-memory.
 			g_HotCriterion = hot_criterion; // Only set at the last minute so that previous criteria will stay in effect if it fails.
 		else
-			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			return g_script.SetErrorLevelOrThrow();
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 	}
 
@@ -895,7 +895,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	{
 		if (*aOptions)
 		{	// Let the script know of this error since it may indicate an unescaped comma in the expression text.
-			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			return g_script.SetErrorLevelOrThrow();
 		}
 		if (!*aLabelName)
 		{
@@ -916,7 +916,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				}
 			}
 			if (i == g_HotExprLineCount)
-				return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				return g_script.SetErrorLevelOrThrow();
 		}
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	}

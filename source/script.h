@@ -169,6 +169,8 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_BAD_OPTIONAL_PARAM _T("Expected \":=\"")
 #define ERR_ELSE_WITH_NO_IF _T("ELSE with no matching IF")
 #define ERR_UNTIL_WITH_NO_LOOP _T("UNTIL with no matching LOOP")
+#define ERR_CATCH_WITH_NO_TRY _T("CATCH with no matching TRY")
+#define ERR_EXPECTED_BLOCK_OR_ACTION _T("Expected \"{\" or single-line action.")
 #define ERR_OUTOFMEM _T("Out of memory.")  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
 #define ERR_EXPR_TOO_LONG _T("Expression too long")
 #define ERR_NO_LABEL _T("Target label does not exist.")
@@ -576,7 +578,7 @@ private:
 	ResultType RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName);
 	ResultType RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName, LPTSTR aValue);
 	ResultType RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName);
-	static bool RegRemoveSubkeys(HKEY hRegKey);
+	static LONG RegRemoveSubkeys(HKEY hRegKey);
 
 	ResultType ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID);
 	ResultType TrayTip(LPTSTR aTitle, LPTSTR aText, LPTSTR aTimeout, LPTSTR aOptions);
@@ -621,6 +623,7 @@ private:
 	ResultType ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3);
 	ResultType WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints);
 	ResultType WinSetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aNewTitle
 		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
 	ResultType WinGetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
@@ -917,6 +920,7 @@ public:
 			case ACT_INPUT:
 			case ACT_FORMATTIME:
 			case ACT_FOR:
+			case ACT_CATCH:
 				return ARG_TYPE_OUTPUT_VAR;
 
 			case ACT_LOOP_PARSE:
@@ -1585,7 +1589,7 @@ public:
 	// These are also the modes that AutoIt3 uses.
 	{
 		// For v1.0.19, this was made more permissive (the use of strcasestr vs. stricmp) to support
-		// the optional word ErrorLevel inside this parameter:
+		// the optional word UseErrorLevel inside this parameter:
 		if (!aBuf || !*aBuf) return SW_SHOWNORMAL;
 		if (tcscasestr(aBuf, _T("MIN"))) return SW_MINIMIZE;
 		if (tcscasestr(aBuf, _T("MAX"))) return SW_MAXIMIZE;
@@ -1679,6 +1683,13 @@ public:
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
+	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
+	
+	ResultType SetErrorsOrThrow(bool aError, DWORD aLastErrorOverride = -1);
+	ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
+	ResultType SetErrorLevelOrThrowBool(bool aError);        //
+	ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue); // Explicit names to avoid calling the wrong overload.
+	ResultType SetErrorLevelOrThrowInt(int aErrorValue);     //
 
 	Line(FileIndexType aFileIndex, LineNumberType aFileLineNumber, ActionTypeType aActionType
 		, ArgStruct aArg[], ArgCountType aArgc) // Constructor
@@ -2540,6 +2551,15 @@ public:
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
 	void WarnUninitializedVar(Var *var);
 	void MaybeWarnLocalSameAsGlobal(Func *func, Var *var);
+
+	static ResultType UnhandledException(ExprTokenType*& aToken, Line* line);
+	static ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
+	static ResultType SetErrorLevelOrThrowBool(bool aError);
+	static ResultType SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat = NULL);
+	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue);
+	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat);
+	static ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
+	static void FreeExceptionToken(ExprTokenType*& aToken);
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
 

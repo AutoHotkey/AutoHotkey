@@ -621,6 +621,11 @@ ResultType Script::AutoExecSection()
 	// REMEMBER: The ExecUntil() call above will never return if the AutoExec section never finishes
 	// (e.g. infinite loop) or it uses Exit/ExitApp.
 
+	// Check if an exception has been thrown
+	if (g->ThrownToken)
+		// Display an error message
+		ExecUntil_result = g_script.UnhandledException(g->ThrownToken, g->ExcptLine);
+
 	// The below is done even if AutoExecSectionTimeout() already set the values once.
 	// This is because when the AutoExecute section finally does finish, by definition it's
 	// supposed to store the global settings that are currently in effect as the default values.
@@ -2435,8 +2440,9 @@ examine_line:
 			goto continue_main_loop; // It's just a naked "{" or "}", so no more processing needed for this line.
 		}
 		// First do a little special handling to support actions on the same line as their
-		// ELSE, e.g.:
+		// ELSE or TRY, e.g.:
 		// else if x = 1
+		// try someFunction()
 		// This is done here rather than in ParseAndAddLine() because it's fairly
 		// complicated to do there (already tried it) mostly due to the fact that
 		// literal_map has to be properly passed in a recursive call to itself, as well
@@ -2447,24 +2453,26 @@ examine_line:
 			action_end = buf + buf_length; // It's done this way so that ELSE can be fully handled here; i.e. that ELSE does not have to be in the list of commands recognizable by ParseAndAddLine().
 		// The following method ensures that words or variables that start with "Else", e.g. ElseAction, are not
 		// incorrectly detected as an Else command:
-		if (tcslicmp(buf, _T("Else"), action_end - buf)) // It's not an ELSE. ("Else" is used vs. g_act[ACT_ELSE].Name for performance).
+		int try_cmp = 1;
+		if (tcslicmp(buf, _T("Else"), action_end - buf) // It's not an ELSE or a TRY. ("Else"/"Try" is used vs. g_act[ACT_ELSE/TRY].Name for performance).
+		  && (try_cmp = tcslicmp(buf, _T("Try"), action_end - buf)))
 		{
 			if (!ParseAndAddLine(buf))
 				return FAIL;
 		}
-		else // This line is an ELSE, possibly with another command immediately after it (on the same line).
+		else // This line is an ELSE or a TRY, possibly with another command immediately after it (on the same line).
 		{
-			// Add the ELSE directly rather than calling ParseAndAddLine() because that function
+			// Add the ELSE or TRY directly rather than calling ParseAndAddLine() because that function
 			// would resolve escape sequences throughout the entire length of <buf>, which we
 			// don't want because we wouldn't have access to the corresponding literal-map to
 			// figure out the proper use of escaped characters:
-			if (!AddLine(ACT_ELSE))
+			if (!AddLine(try_cmp ? ACT_ELSE : ACT_TRY))
 				return FAIL;
 			mCurrLine = NULL;  // To signify that we're in transition, trying to load a new one.
-			buf = omit_leading_whitespace(action_end); // Now buf is the word after the ELSE.
-			if (*buf == g_delimiter) // Allow "else, action"
+			buf = omit_leading_whitespace(action_end); // Now buf is the word after the ELSE or TRY.
+			if (*buf == g_delimiter) // Allow "else, action" and "try, action"
 				buf = omit_leading_whitespace(buf + 1);
-			// Allow any command/action to the right of "else", including "{":
+			// Allow any command/action to the right of "else" or "try", including "{":
 			if (*buf)
 			{
 				// This is done rather than calling ParseAndAddLine() as it handles "{" in a way that
@@ -3962,6 +3970,17 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			aActionType = ACT_LOOP;
 			add_openbrace_afterward = true;
 		}
+		// fincs: same as above, but for try and catch:
+		else if (!_tcsicmp(action_name, _T("try{")) && !*action_args)
+		{
+			aActionType = ACT_TRY;
+			add_openbrace_afterward = true;
+		}
+		else if (!_tcsicmp(action_name, _T("catch{")) && !*action_args)
+		{
+			aActionType = ACT_CATCH;
+			add_openbrace_afterward = true;
+		}
 		else if (_tcschr(EXPR_ALL_SYMBOLS, *action_args))
 		{
 			LPTSTR question_mark;
@@ -4325,7 +4344,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	// Loop 5 { ; Also overlaps, this time with file-pattern loop that retrieves numeric filename ending in '{'.
 	// Loop %Var% {  ; Similar, but like the above seems acceptable given extreme rarity of user intending a file pattern.
 	if ((aActionType == ACT_LOOP || aActionType == ACT_WHILE) && nArgs == 1 && arg[0][0] // A loop with exactly one, non-blank arg.
-		|| (aActionType == ACT_FOR && nArgs))
+		|| ((aActionType == ACT_FOR || aActionType == ACT_CATCH) && nArgs))
 	{
 		LPTSTR arg1 = arg[nArgs - 1]; // For readability and possibly performance.
 		// A loop with the above criteria (exactly one arg) can only validly be a normal/counting loop or
@@ -4351,7 +4370,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			add_openbrace_afterward = true;
 			*arg1_last_char = '\0';  // Since it will be fully handled here, remove the brace from further consideration.
 			if (!rtrim(arg1)) // Trimmed down to nothing, so only a brace was present: remove the arg completely.
-				if (aActionType == ACT_LOOP)
+				if (aActionType == ACT_LOOP || aActionType == ACT_CATCH)
 					nArgs = 0;    // This makes later stages recognize it as an infinite loop rather than a zero-iteration loop.
 				else // ACT_WHILE or ACT_FOR
 					return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
@@ -5818,8 +5837,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		{
 			if (line.mActionType == ACT_BLOCK_BEGIN && line.mAttribute) // Non-zero mAttribute signifies the open-brace of a function body.
 				return ScriptError(_T("A label must not point to a function."));
-			if (line.mActionType == ACT_ELSE || line.mActionType == ACT_UNTIL)
-				return ScriptError(_T("A label must not point to an ELSE or UNTIL."));
+			if (line.mActionType == ACT_ELSE || line.mActionType == ACT_UNTIL || line.mActionType == ACT_CATCH)
+				return ScriptError(_T("A label must not point to an ELSE or UNTIL or CATCH."));
 			// The following is inaccurate; each block-end is in fact owned by its block-begin
 			// and not the block that encloses them both, so this restriction is unnecessary.
 			// THE COMMENT BELOW IS OBSOLETE:
@@ -8293,17 +8312,18 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, ActionTyp
 	for (Line *line = aStartingLine; line != NULL;)
 	{
 		if (   ACT_IS_IF(line->mActionType)			// Any type of IF.
-			|| ACT_IS_LOOP(line->mActionType)   )	// Any type of LOOP, FOR or WHILE.
+			|| ACT_IS_LOOP(line->mActionType)		// Any type of LOOP, FOR or WHILE.
+			|| line->mActionType == ACT_TRY   )
 		{
-			// ActionType is an IF or a LOOP.
-			line_temp = line->mNextLine;  // line_temp is now this IF's or LOOP's action-line.
+			// ActionType is an IF or a LOOP or a TRY.
+			line_temp = line->mNextLine;  // line_temp is now this IF's or LOOP's or TRY's action-line.
 			// Update: Below is commented out because it's now impossible (since all scripts end in ACT_EXIT):
 			//if (line_temp == NULL) // This is an orphan IF/LOOP (has no action-line) at the end of the script.
 			//	return line->PreparseError(_T("Q")); // Placeholder. Formerly "This if-statement or loop has no action."
 
 			// Other things rely on this check having been done, such as "if (line->mRelatedLine != NULL)":
-			if (line_temp->mActionType == ACT_ELSE || line_temp->mActionType == ACT_BLOCK_END)
-				return line->PreparseError(_T("Inappropriate line beneath IF or LOOP."));
+			if (line_temp->mActionType == ACT_ELSE || line_temp->mActionType == ACT_BLOCK_END || line_temp->mActionType == ACT_CATCH)
+				return line->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 
 			// Lexikos: This section once maintained separate variables for file-pattern, registry, file-reading
 			// and parsing loops. The intention seemed to be to validate certain commands such as FileAppend
@@ -8371,7 +8391,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, ActionTyp
 			// so always continue on to evaluate the IF's ELSE, if present:
 			if (line_temp->mActionType == ACT_ELSE)
 			{
-				if (ACT_IS_LOOP(line->mActionType)) // Any type of LOOP, FOR or WHILE.
+				if (ACT_IS_LOOP(line->mActionType) || line->mActionType == ACT_TRY) // Any type of LOOP, FOR or WHILE; or TRY.
 				{
 					 // this can't be our else, so let the caller handle it.
 					if (aMode != ONLY_ONE_LINE)
@@ -8391,8 +8411,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, ActionTyp
 				// Thus, it's commented out:
 				//if (line == NULL) // An else with no action.
 				//	return line_temp->PreparseError(_T("Q")); // Placeholder since impossible. Formerly "This ELSE has no action."
-				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_END)
-					return line_temp->PreparseError(_T("Inappropriate line beneath ELSE."));
+				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_END || line->mActionType == ACT_CATCH)
+					return line_temp->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 				// Assign to line rather than line_temp:
 				line = PreparseIfElse(line, ONLY_ONE_LINE, aLoopType);
 				if (line == NULL)
@@ -8412,6 +8432,24 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, ActionTyp
 				}
 				// Continue processing *after* UNTIL.
 				line = line_temp->mNextLine;
+			}
+			else if (line_temp->mActionType == ACT_CATCH)
+			{
+				if (line->mActionType != ACT_TRY)
+				{
+					// Again, this is similar to the section above, so see there for comments.
+					if (aMode != ONLY_ONE_LINE)
+						return line_temp->PreparseError(ERR_CATCH_WITH_NO_TRY);
+				}
+				line = line_temp->mNextLine;
+				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_END || line->mActionType == ACT_CATCH)
+					return line_temp->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
+				// Assign to line rather than line_temp:
+				line = PreparseIfElse(line, ONLY_ONE_LINE, aLoopType);
+				if (line == NULL)
+					return NULL; // Error or end-of-script.
+				// Set this CATCH's jumppoint.
+				line_temp->mRelatedLine = line;
 			}
 			else // line doesn't have an else, so just continue processing from line_temp's position
 				line = line_temp;
@@ -8537,12 +8575,20 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, ActionTyp
 			break;
 
 		case ACT_HOTKEY:
-			if (   *line_raw_arg2 && !line->ArgHasDeref(2)
-				&& !line->ArgHasDeref(1) && _tcsnicmp(line_raw_arg1, _T("IfWin"), 5) // v1.0.42: Omit IfWinXX from validation.
-				&& _tcsnicmp(line_raw_arg1, _T("If"), 2)	)	// L4: Also omit If from validation - for #if (expression).
-				if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
+			if (*line_raw_arg2 && !line->ArgHasDeref(2) && !line->ArgHasDeref(1))
+			{
+				if (!_tcsnicmp(line_raw_arg1, _T("If"), 2))
+				{
+					LPTSTR cp = line_raw_arg1 + 2;
+					if (!_tcsnicmp(cp, _T("Not"), 3))
+						cp += 3;
+					if (*cp && _tcsicmp(cp, _T("WinActive")) && _tcsicmp(cp, _T("WinExist")))
+						return line->PreparseError(ERR_PARAM1_INVALID);
+				}
+				else if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
 					if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
 						return line->PreparseError(ERR_NO_LABEL);
+			}
 			break;
 
 		case ACT_SETTIMER:
@@ -8564,6 +8610,10 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, ActionTyp
 		case ACT_UNTIL:
 			// Similar to above.
 			return line->PreparseError(ERR_UNTIL_WITH_NO_LOOP);
+
+		case ACT_CATCH:
+			// Similar to above.
+			return line->PreparseError(ERR_CATCH_WITH_NO_TRY);
 		} // switch()
 
 		line = line->mNextLine; // If NULL due to physical end-of-script, the for-loop's condition will catch it.
@@ -10384,7 +10434,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		// Note: Only one line at a time be expanded via the above function.  So be sure
 		// to store any parts of a line that are needed prior to moving on to the next
 		// line (e.g. control stmts such as IF and LOOP).
-		if (line->mActionType != ACT_ASSIGNEXPR && line->mActionType != ACT_WHILE)
+		if (line->mActionType != ACT_ASSIGNEXPR && line->mActionType != ACT_WHILE && line->mActionType != ACT_THROW)
 		{
 			result = line->ExpandArgs(aResultToken);
 			// As of v1.0.31, ExpandArgs() will also return EARLY_EXIT if a function call inside one of this
@@ -10618,7 +10668,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				// Note: This will take care of DoWinDelay if needed:
 				activate_result = group->Activate(*ARG2 && !_tcsicmp(ARG2, _T("R")));
 			//else no such group, so just proceed.
-			g_ErrorLevel->Assign(activate_result ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
+			SetErrorLevelOrThrowBool(!activate_result);
 			if (aMode == ONLY_ONE_LINE)  // v1.0.45: These two lines were moved here from above to provide proper handling for GroupActivate that lacks a jump/gosub and that lies directly beneath an IF or ELSE.
 				return (result == EARLY_RETURN) ? OK : result;
 			line = line->mNextLine;
@@ -10891,6 +10941,144 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			line = finished_line;
 			continue;  // Resume looping starting at the above line.  "continue" is actually slightly faster than "break" in these cases.
 		} // case ACT_LOOP, ACT_LOOP_*, ACT_FOR, ACT_WHILE.
+
+		case ACT_TRY:
+		case ACT_CATCH:
+		{
+			ActionTypeType this_act = line->mActionType;
+			bool bSavedInTryBlock = g.InTryBlock;
+
+			if (this_act == ACT_CATCH)
+			{
+				// The following should never happen:
+				//if (!g.ThrownToken)
+				//	return line->LineError(_T("Attempt to catch nothing!"), CRITICAL_ERROR);
+
+				Var* catch_var = ARGVARRAW1;
+
+				// Assign the thrown token to the variable if provided.
+				if (catch_var)
+					catch_var->Assign(*g.ThrownToken);
+
+				g_script.FreeExceptionToken(g.ThrownToken);
+			}
+			else // (this_act == ACT_TRY)
+				g.InTryBlock = true;
+
+			// The following section is similar to ACT_IF.
+			jump_to_line = NULL;
+			if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN)
+			{
+				do
+					result = line->mNextLine->mNextLine->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
+				while (jump_to_line == line->mNextLine); // The above call encountered a Goto that jumps to the "{". See ACT_BLOCK_BEGIN in ExecUntil() for details.
+			}
+			else
+				result = line->mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
+
+			// Move to the next line after the 'try' or 'catch' block.
+			line = line->mRelatedLine;
+
+			if (this_act == ACT_TRY)
+			{
+				// Restore the previous InTryBlock value.
+				g.InTryBlock = bSavedInTryBlock;
+
+				if (line->mActionType == ACT_CATCH)
+				{
+					if (g.ThrownToken)
+					{
+						// An exception was thrown and we have a 'catch' block, so let the next
+						// iteration handle it.  Implies result == FAIL && jump_to_line == NULL,
+						// but result won't have any meaning for the next iteration.
+						continue;
+					}
+					// Otherwise: no exception was thrown, so skip the 'catch' block.
+					line = line->mRelatedLine;
+				}
+				else
+				{
+					if (g.ThrownToken)
+					{
+						// An exception was thrown, but no 'catch' is present.  In this case 'try'
+						// acts as a catch-all.
+						g_script.FreeExceptionToken(g.ThrownToken);
+						result = OK;
+					}
+				}
+			}
+			
+			if (aMode == ONLY_ONE_LINE || result != OK)
+			{
+				caller_jump_to_line = jump_to_line;
+				return result;
+			}
+
+			if (jump_to_line != NULL) // Implies goto or break/continue loop_name was used.
+			{
+				if (jump_to_line->mParentLine != line->mParentLine)
+				{
+					caller_jump_to_line = jump_to_line;
+					return OK;
+				}
+				line = jump_to_line;
+			}
+
+			continue;
+		}
+
+		case ACT_THROW:
+		{
+			ExprTokenType* token = new ExprTokenType;
+			if (!token) // Unlikely.
+				return LineError(ERR_OUTOFMEM);
+
+			// The following is based on code from PerformLoopFor()
+
+			if (!sDerefBuf)
+			{
+				sDerefBufSize = (line->mArg[0].length < MAX_NUMBER_LENGTH ? MAX_NUMBER_LENGTH : line->mArg[0].length) + 1;
+				if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
+				{
+					sDerefBufSize = 0;
+					return LineError(ERR_OUTOFMEM);
+				}
+			}
+
+			PRIVATIZE_S_DEREF_BUF;
+			LPTSTR our_buf_marker = our_deref_buf;
+			LPTSTR arg_deref[] = {0, 0};
+			LPTSTR strVal;
+			token->symbol = SYM_INVALID;
+			strVal = line->ExpandExpression(0, result, token, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, 0);
+			if (strVal == our_deref_buf)
+				token->mem_to_free = strVal;
+			else
+			{
+				token->mem_to_free = NULL;
+				DEPRIVATIZE_S_DEREF_BUF;
+			}
+
+			if (!strVal)
+			{
+				// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
+				delete token;
+				return result;
+			}
+
+			// Check if ExpandExpression has not returned a token at all
+			if (token->symbol == SYM_INVALID)
+			{
+				// Store the returned string in the token
+				token->symbol = SYM_STRING;
+				token->marker = strVal;
+			}
+
+			// Throw the newly-created token
+			g.ExcptLine = line;
+			g.ThrownToken = token;
+			return FAIL;
+		}
 
 		case ACT_EXIT:
 			// It seems best to simply return EARLY_EXIT rather than sometimes calling ExitApp(); even
@@ -11318,6 +11506,7 @@ ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoo
 	// The script's loop is now over.
 	return OK;
 }
+
 
 
 #define LOG_THIS_LINE \
@@ -12378,7 +12567,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// Note: It seems, at least under WinXP, that env variable names can contain spaces.  So it's best
 		// not to validate ARG1 the same way we validate script variables (i.e. just let\
 		// SetEnvironmentVariable()'s return value determine whether there's an error).
-		return g_ErrorLevel->Assign(SetEnvironmentVariable(ARG1, ARG2) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
+		return SetErrorLevelOrThrowBool(!SetEnvironmentVariable(ARG1, ARG2));
 
 	case ACT_DOWNLOAD:
 		return Download(TWO_ARGS);
@@ -12391,14 +12580,17 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		StringTCharToWChar(ARG3, g_script.mRunAsDomain);
 		return OK;
 
-	case ACT_RUN: // Be sure to pass NULL for 2nd param.
-		if (tcscasestr(ARG3, _T("UseErrorLevel")))
-			return g_script.ActionExec(ARG1, NULL, ARG2, false, ARG3, NULL, true, true, ARGVAR4)
-				? g_ErrorLevel->Assign(ERRORLEVEL_NONE) : g_ErrorLevel->Assign(_T("ERROR"));
+	case ACT_RUN:
+	{
+		bool use_el = tcscasestr(ARG3, _T("UseErrorLevel"));
+		result = g_script.ActionExec(ARG1, NULL, ARG2, !use_el, ARG3, NULL, use_el, true, ARGVAR4); // Be sure to pass NULL for 2nd param.
+		if (use_el)
 			// The special string ERROR is used, rather than a number like 1, because currently
 			// RunWait might in the future be able to return any value, including 259 (STATUS_PENDING).
-		else // If launch fails, display warning dialog and terminate current thread.
-			return g_script.ActionExec(ARG1, NULL, ARG2, true, ARG3, NULL, false, true, ARGVAR4); // Load-time validation has ensured that the arg is a valid output variable (e.g. not a built-in var).
+			result = result ? g_ErrorLevel->Assign(ERRORLEVEL_NONE) : g_ErrorLevel->Assign(_T("ERROR"));
+		// Otherwise, if result == FAIL, above already displayed the error (or threw an exception).
+		return result;
+	}
 
 	case ACT_RUNWAIT:
 	case ACT_CLIPWAIT:
@@ -12723,12 +12915,12 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		int error_count = Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1, false, g.LastError);
 		if (!error_count)
 			return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-		return g_ErrorLevel->Assign(error_count);
+		return SetErrorLevelOrThrowInt(error_count);
 	}
 	case ACT_FILEMOVE:
-		return g_ErrorLevel->Assign(Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1, true, g.LastError));
+		return SetErrorLevelOrThrowInt(Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1, true, g.LastError));
 	case ACT_DIRCOPY:
-		return g_ErrorLevel->Assign(Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
+		return SetErrorLevelOrThrowBool(!Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1));
 	case ACT_DIRMOVE:
 		if (ctoupper(*ARG3) == 'R')
 		{
@@ -12736,18 +12928,16 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			// complete if the source directory is in use (due to being a working dir for a currently
 			// running process, or containing a file that is being written to).  In other words,
 			// the operation will be "all or none":
-			g_ErrorLevel->Assign(MoveFile(ARG1, ARG2) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
-			return OK;
+			return SetErrorLevelOrThrowBool(!MoveFile(ARG1, ARG2));
 		}
 		// Otherwise:
-		return g_ErrorLevel->Assign(Util_MoveDir(ARG1, ARG2, ArgToInt(3)) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
+		return SetErrorLevelOrThrowBool(!Util_MoveDir(ARG1, ARG2, ArgToInt(3)));
 
 	case ACT_DIRCREATE:
 		return FileCreateDir(ARG1);
 	case ACT_DIRDELETE:
-		if (!*ARG1) // Consider an attempt to create or remove a blank dir to be an error.
-			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-		return g_ErrorLevel->Assign(Util_RemoveDir(ARG1, ArgToInt(2) == 1) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
+		return SetErrorLevelOrThrowBool(!*ARG1 // Consider an attempt to create or remove a blank dir to be an error.
+			|| Util_RemoveDir(ARG1, ArgToInt(2) == 1)); // Relies on short-circuit evaluation.
 
 	case ACT_FILEGETATTRIB:
 		// The specified ARG, if non-blank, takes precedence over the file-loop's file (if any):
@@ -12755,12 +12945,12 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return FileGetAttrib(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2));
 	case ACT_FILESETATTRIB:
 		FileSetAttrib(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), ConvertLoopMode(ARG3), ArgToInt(4) == 1);
-		return OK; // Always return OK since ErrorLevel will indicate if there was a problem.
+		return !g.ThrownToken ? OK : FAIL;
 	case ACT_FILEGETTIME:
 		return FileGetTime(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3);
 	case ACT_FILESETTIME:
 		FileSetTime(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3, ConvertLoopMode(ARG4), ArgToInt(5) == 1);
-		return OK; // Always return OK since ErrorLevel will indicate if there was a problem.
+		return !g.ThrownToken ? OK : FAIL;
 	case ACT_FILEGETSIZE:
 		return FileGetSize(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), ARG3);
 	case ACT_FILEGETVERSION:
@@ -12768,7 +12958,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_SETWORKINGDIR:
 		SetWorkingDir(ARG1);
-		return OK;
+		return !g.ThrownToken ? OK : FAIL;
 
 	case ACT_FILESELECTFILE:
 		return FileSelectFile(ARG2, ARG3, ARG4, ARG5);
@@ -13621,6 +13811,136 @@ Line *Line::PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo)
 	return NULL; // Always return NULL because the callers use it as their return value.
 }
 
+
+ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
+{
+	// Build the parameters for Object::Create()
+	ExprTokenType aParams[5*2]; int aParamCount = 4*2;
+	ExprTokenType* aParam[5*2] = { aParams + 0, aParams + 1, aParams + 2, aParams + 3, aParams + 4
+		, aParams + 5, aParams + 6, aParams + 7, aParams + 8, aParams + 9 };
+	aParams[0].symbol = SYM_STRING;  aParams[0].marker = _T("What");
+	aParams[1].symbol = SYM_STRING;  aParams[1].marker = aWhat ? (LPTSTR)aWhat : g_act[mActionType].Name;
+	aParams[2].symbol = SYM_STRING;  aParams[2].marker = _T("File");
+	aParams[3].symbol = SYM_STRING;  aParams[3].marker = Line::sSourceFile[mFileIndex];
+	aParams[4].symbol = SYM_STRING;  aParams[4].marker = _T("Line");
+	aParams[5].symbol = SYM_INTEGER; aParams[5].value_int64 = mLineNumber;
+	aParams[6].symbol = SYM_STRING;  aParams[6].marker = _T("Message");
+	aParams[7].symbol = SYM_STRING;  aParams[7].marker = (LPTSTR)aErrorText;
+	if (aExtraInfo && *aExtraInfo)
+	{
+		aParamCount += 2;
+		aParams[8].symbol = SYM_STRING; aParams[8].marker = _T("Extra");
+		aParams[9].symbol = SYM_STRING; aParams[9].marker = (LPTSTR)aExtraInfo;
+	}
+
+	ExprTokenType* token;
+	if (   !(token = new ExprTokenType)
+		|| !(token->object = Object::Create(aParam, aParamCount))   )
+	{
+		// Out of memory. It's likely that we were called for this very reason.
+		// Since we don't even have enough memory to allocate an exception object,
+		// just show an error message and exit the thread. Don't call LineError(),
+		// since that would recurse into this function.
+		if (token)
+			delete token;
+		MsgBox(ERR_OUTOFMEM ERR_ABORT);
+		return FAIL;
+	}
+
+	token->symbol = SYM_OBJECT;
+	token->mem_to_free = NULL;
+
+	g->ThrownToken = token;
+	g->ExcptLine = this;
+
+	// Returning FAIL causes each caller to also return FAIL, until either the
+	// thread has fully exited or the recursion layer handling ACT_TRY is reached:
+	return FAIL;
+}
+
+ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
+{
+	return g_script.mCurrLine->ThrowRuntimeException(aErrorText, aWhat, aExtraInfo);
+}
+
+
+ResultType Line::SetErrorLevelOrThrowBool(bool aError)
+{
+	if (!aError)
+		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+	if (!g->InTryBlock)
+		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return ThrowRuntimeException(ERRORLEVEL_ERROR_STR);
+}
+
+ResultType Line::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
+{
+	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
+		return g_ErrorLevel->Assign(aErrorValue);
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return ThrowRuntimeException(aErrorValue);
+}
+
+ResultType Line::SetErrorLevelOrThrowInt(int aErrorValue)
+{
+	if (!aErrorValue || !g->InTryBlock)
+		return g_ErrorLevel->Assign(aErrorValue);
+	TCHAR buf[12];
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return ThrowRuntimeException(_itot(aErrorValue, buf, 10));
+}
+
+// Logic from the above functions is duplicated in the below functions rather than calling
+// g_script.mCurrLine->SetErrorLevelOrThrow() to squeeze out a little extra performance for
+// "success" cases.  These are done as overloads vs making aMessage optional to reduce code
+// size, since they're called from numerous places.  (Even omitted parameters are passed
+// "explicitly" in the compiled code.)
+
+ResultType Script::SetErrorLevelOrThrowBool(bool aError)
+{
+	if (!aError)
+		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+	if (!g->InTryBlock)
+		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return ThrowRuntimeException(ERRORLEVEL_ERROR_STR);
+}
+
+ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
+{
+	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
+		return g_ErrorLevel->Assign(aErrorValue);
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return ThrowRuntimeException(ERRORLEVEL_ERROR_STR);
+}
+
+ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat)
+{
+	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
+		return g_ErrorLevel->Assign(aErrorValue);
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return ThrowRuntimeException(aErrorValue, aWhat);
+}
+
+ResultType Script::SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat)
+{
+	if (!aErrorValue || !g->InTryBlock)
+		return g_ErrorLevel->Assign(aErrorValue);
+	TCHAR buf[12];
+	// Otherwise, an error occurred and there is a try block, so throw an exception:
+	return ThrowRuntimeException(_itot(aErrorValue, buf, 10), aWhat);
+}
+
+
+ResultType Line::SetErrorsOrThrow(bool aError, DWORD aLastErrorOverride)
+{
+	// LastError is set even if we're going to throw an exception, for simplicity:
+	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
+	return SetErrorLevelOrThrowBool(aError);
+}
+
+
 #define ERR_PRINT(fmt, ...) _ftprintf(stderr, fmt, __VA_ARGS__)
 
 ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo)
@@ -13629,6 +13949,9 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		aErrorText = _T("");
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
+
+	if (g->InTryBlock && aErrorType == FAIL) // i.e. not CRITICAL_ERROR or WARN.
+		return ThrowRuntimeException(aErrorText, NULL, aExtraInfo);
 
 	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute) // i.e. runtime errors are always displayed via dialog.
 	{
@@ -13769,6 +14092,29 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 	return FAIL; // See above for why it's better to return FAIL than CRITICAL_ERROR.
 }
 
+ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* line)
+{
+	// FUTURE: add more information about the thrown token itself
+	line->LineError(_T("Unhandled exception!"));
+
+	FreeExceptionToken(aToken);
+
+	return FAIL;
+}
+
+void Script::FreeExceptionToken(ExprTokenType*& aToken)
+{
+	// If an object was thrown, release it.
+	if (aToken->symbol == SYM_OBJECT)
+		aToken->object->Release();
+	// If a string was thrown and memory allocated for it, free it.
+	if (aToken->mem_to_free)
+		free(aToken->mem_to_free);
+	// Free the token itself.
+	delete aToken;
+	// Clear caller's variable.
+	aToken = NULL;
+}
 
 
 void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo, Line *line)

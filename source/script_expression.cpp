@@ -1503,6 +1503,11 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 
 				if (mem_to_free)
 					free(mem_to_free);
+				if (g->ThrownToken)
+				{
+					aResult = FAIL; // If this is not done, aResult would contain garbage
+					return false;
+				}
 				return true;
 			}
 			// Caller-supplied "params*" is not an Object, so treat it like an empty list; however,
@@ -1517,6 +1522,11 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 
 		// CALL THE BUILT-IN FUNCTION:
 		mBIF(aResultToken, aParam, aParamCount);
+		if (g->ThrownToken)
+		{
+			aResult = FAIL; // See above.
+			return false;
+		}
 		return true;
 	}
 	else // It's not a built-in function, or it's a built-in that was overridden with a custom function.

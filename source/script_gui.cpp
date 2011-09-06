@@ -551,17 +551,17 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 		// This is caught at load-time 99% of the time and can only occur here if the sub-command name
 		// or Gui name is contained in a variable reference.  Since it's so rare, the handling of it is
 		// debatable, but to keep it simple just set ErrorLevel:
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		return SetErrorLevelOrThrow();
 	if (!pgui)
 		// This departs from the tradition used by PerformGui() but since this type of error is rare,
 		// and since use ErrorLevel adds a little bit of flexibility (since the script's current thread
 		// is not unconditionally aborted), this seems best:
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		return SetErrorLevelOrThrow();
 
 	GuiType &gui = *pgui;  // For performance.
 	GuiIndexType control_index = gui.FindControl(aControlID);
 	if (control_index >= gui.mControlCount) // Not found.
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		return SetErrorLevelOrThrow();
 	GuiControlType &control = gui.mControl[control_index];   // For performance and convenience.
 
 	// Beyond this point, errors are rare so set the default to "no error":
@@ -702,10 +702,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			int image_type;
 			if (   !(control.union_hbitmap = LoadPicture(aParam3, width, height, image_type, icon_number
 				, control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))   )
-			{
-				g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-				goto return_the_result;
-			}
+				goto error;
 			DWORD style = GetWindowLong(control.hwnd, GWL_STYLE);
 			DWORD style_image_type = style & 0x0F;
 			style &= ~0x0F;  // Purge the low-order four bits in case style-image-type needs to be altered below.
@@ -1063,10 +1060,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			, width == COORD_UNSPECIFIED ? rect.right - rect.left : width
 			, height == COORD_UNSPECIFIED ? rect.bottom - rect.top : height
 			, TRUE))  // Do repaint.
-		{
-			g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-			goto return_the_result;
-		}
+			goto error;
 
 		// Note that GUI_CONTROL_UPDOWN has no special handling here.  This is because unlike slider buddies,
 		// whose only purpose is to label the control, an up-down's is also content-linked to it, so the
@@ -1104,8 +1098,12 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 	}
 
 	case GUICONTROL_CMD_FOCUS:
-		result = SetFocus(control.hwnd) ? OK : g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-		goto return_the_result;
+		if (SetFocus(control.hwnd))
+		{
+			result = OK;
+			goto return_the_result;
+		} // else
+		goto error;
 
 	case GUICONTROL_CMD_ENABLE:
 	case GUICONTROL_CMD_DISABLE:
@@ -1208,18 +1206,12 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			else
 				selection_index = ATOI(aParam3) - 1;
 			if (selection_index < 0 || selection_index > MAX_TABS_PER_CONTROL - 1)
-			{
-				g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-				goto return_the_result;
-			}
+				goto error;
 			int previous_selection_index = TabCtrl_GetCurSel(control.hwnd);
 			if (!extra_actions || (GetWindowLong(control.hwnd, GWL_STYLE) & TCS_BUTTONS))
 			{
 				if (TabCtrl_SetCurSel(control.hwnd, selection_index) == -1)
-				{
-					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-					goto return_the_result;
-				}
+					goto error;
 				// In this case but not the "else" below, must update the tab to show the proper controls:
 				if (previous_selection_index != selection_index)
 					gui.ControlUpdateCurrentTab(control, extra_actions > 0); // And set focus if the more forceful extra_actions was done.
@@ -1228,10 +1220,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			{
 				TabCtrl_SetCurFocus(control.hwnd, selection_index); // No return value, so check for success below.
 				if (TabCtrl_GetCurSel(control.hwnd) != selection_index)
-				{
-					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-					goto return_the_result;
-				}
+					goto error;
 			}
 			goto return_the_result;
 		}
@@ -1271,8 +1260,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			y_msg = LBN_DBLCLK;
 			break;
 		default:  // Not a supported control type.
-			g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-			goto return_the_result;
+			goto error;
 		} // switch(control.type)
 
 		if (guicontrol_cmd == GUICONTROL_CMD_CHOOSESTRING)
@@ -1283,45 +1271,27 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 				// in this case.
 				LRESULT found_item = SendMessage(control.hwnd, msg, -1, (LPARAM)aParam3);
 				if (found_item == CB_ERR) // CB_ERR == LB_ERR
-				{
-					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-					goto return_the_result;
-				}
+					goto error;
 				if (SendMessage(control.hwnd, LB_SETSEL, TRUE, found_item) == CB_ERR) // CB_ERR == LB_ERR
-				{
-					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-					goto return_the_result;
-				}
+					goto error;
 			}
 			else // Fixed 1 to be -1 in v1.0.35.05:
 				if (SendMessage(control.hwnd, msg, -1, (LPARAM)aParam3) == CB_ERR) // CB_ERR == LB_ERR
-				{
-					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-					goto return_the_result;
-				}
+					goto error;
 		}
 		else // Choose by position vs. string.
 		{
 			selection_index = ATOI(aParam3) - 1;
 			if (selection_index < 0)
-			{
-				g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-				goto return_the_result;
-			}
+				goto error;
 			if (msg == LB_SETSEL) // Multi-select, so use the cumulative method.
 			{
 				if (SendMessage(control.hwnd, msg, TRUE, selection_index) == CB_ERR) // CB_ERR == LB_ERR
-				{
-					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-					goto return_the_result;
-				}
+					goto error;
 			}
 			else
 				if (SendMessage(control.hwnd, msg, selection_index, 0) == CB_ERR) // CB_ERR == LB_ERR
-				{
-					g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-					goto return_the_result;
-				}
+					goto error;
 		}
 		int control_id = GUI_INDEX_TO_ID(control_index);
 		if (extra_actions > 0)
@@ -1380,6 +1350,10 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 return_the_result:
 	DEPRIVATIZE_S_DEREF_BUF;
 	return result;
+
+error:
+	result = SetErrorLevelOrThrow();
+	goto return_the_result;
 }
 
 
@@ -1390,21 +1364,15 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 	GuiType *pgui = Script::ResolveGui(aCommand, aCommand);
 	GuiControlGetCmds guicontrolget_cmd = Line::ConvertGuiControlGetCmd(aCommand);
 	if (guicontrolget_cmd == GUICONTROLGET_CMD_INVALID)
-	{
 		// This is caught at load-time 99% of the time and can only occur here if the sub-command name
 		// or Gui name is contained in a variable reference.  Since it's so rare, the handling of it is
 		// debatable, but to keep it simple just set ErrorLevel:
-		output_var.Assign(); // For backward-compatibility and also serves as an additional indicator of failure.
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-	}
+		return SetErrorLevelOrThrow();
 	if (!pgui)
-	{
 		// This departs from the tradition used by PerformGui() but since this type of error is rare,
 		// and since use ErrorLevel adds a little bit of flexibility (since the script's current thread
 		// is not unconditionally aborted), this seems best:
-		output_var.Assign(); // For backward-compatibility and also serves as an additional indicator of failure.
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-	}
+		return SetErrorLevelOrThrow();
 	
 	GuiType &gui = *pgui;  // For performance.
 	if (!*aControlID) // In this case, default to the name of the output variable, as documented.
@@ -1425,10 +1393,7 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 		cah.hwnd = GetFocus();
 		GuiControlType *pcontrol;
 		if (!cah.hwnd || !(pcontrol = gui.FindControl(cah.hwnd))) // Relies on short-circuit boolean order.
-		{
-			g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-			goto return_the_result;
-		}
+			goto error;
 		TCHAR focused_control[WINDOW_CLASS_SIZE];
 		if (guicontrolget_cmd == GUICONTROLGET_CMD_FOCUSV) // v1.0.43.06.
 			// GUI_HWND_TO_INDEX vs FindControl() is enough because FindControl() was already called above:
@@ -1438,18 +1403,12 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 			// This section is the same as that in ControlGetFocus():
 			cah.class_name = focused_control;
 			if (!GetClassName(cah.hwnd, focused_control, _countof(focused_control) - 5)) // -5 to allow room for sequence number.
-			{
-				g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-				goto return_the_result;
-			}
+				goto error;
 			cah.class_count = 0;  // Init for the below.
 			cah.is_found = false; // Same.
 			EnumChildWindows(gui.mHwnd, EnumChildFindSeqNum, (LPARAM)&cah);
 			if (!cah.is_found) // Should be impossible due to FindControl() having already found it above.
-			{
-				g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-				goto return_the_result;
-			}
+				goto error;
 			// Append the class sequence number onto the class name set the output param to be that value:
 			sntprintfcat(focused_control, _countof(focused_control), _T("%d"), cah.class_count);
 		}
@@ -1464,10 +1423,7 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 		output_var.Assign(); // Set default to be blank for all commands except POS, for consistency.
 
 	if (control_index >= gui.mControlCount) // Not found.
-	{
-		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-		goto return_the_result;
-	}
+		goto error;
 	GuiControlType &control = gui.mControl[control_index];   // For performance and convenience.
 
 	switch(guicontrolget_cmd)
@@ -1560,6 +1516,10 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 return_the_result:
 	DEPRIVATIZE_S_DEREF_BUF;
 	return result;
+
+error:
+	result = SetErrorLevelOrThrow();
+	goto return_the_result;
 }
 
 
@@ -5315,7 +5275,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				if (aControl.type == GUI_CONTROL_GROUPBOX || aControl.type == GUI_CONTROL_PROGRESS)
 					// If control's hwnd exists, we were called from a caller who wants ErrorLevel set
 					// instead of a message displayed:
-					return aControl.hwnd ? g_ErrorLevel->Assign(ERRORLEVEL_ERROR)
+					return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
 						: g_script.ScriptError(_T("This control type should not have an associated subroutine.")
 							ERR_ABORT, next_option - 1);
 				Label *candidate_label;
@@ -5331,7 +5291,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					//else if (!_tcsicmp(label_name, "Clear")) -->
 					//	control.options |= GUI_CONTROL_ATTRIB_IMPLICIT_CLEAR;
 					else // Since a non-special label was explicitly specified, it's an error that it can't be found.
-						return aControl.hwnd ? g_ErrorLevel->Assign(ERRORLEVEL_ERROR)
+						return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
 							: g_script.ScriptError(ERR_NO_LABEL ERR_ABORT, next_option - 1);
 				}
 				if (aControl.type == GUI_CONTROL_TEXT || aControl.type == GUI_CONTROL_PIC)
@@ -5390,7 +5350,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				GuiIndexType u;
 				for (u = 0; u < mControlCount; ++u)
 					if (mControl[u].output_var == candidate_var)
-						return aControl.hwnd ? g_ErrorLevel->Assign(ERRORLEVEL_ERROR)
+						return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
 							: g_script.ScriptError(_T("The same variable cannot be used for more than one control.") // It used to say "one control per window" but that seems more confusing than it's worth.
 								ERR_ABORT, next_option - 1);
 				aControl.output_var = candidate_var;
@@ -5868,7 +5828,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			InvalidateRect(aControl.hwnd, NULL, TRUE); // Assume there's text in the control.
 
 		if (style_needed_changing && !style_change_ok) // Override the default errorlevel set by our caller, GuiControl().
-			g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			g_script.SetErrorLevelOrThrow();
 	} // aControl.hwnd is not NULL
 
 	return OK;

@@ -751,8 +751,6 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR
 {
 	if (aOutputVar)
 		aOutputVar->Assign(); // Init to blank in case of early return.
-	// Set default ErrorLevel, which is a special value (2 vs. 1) in the case of StatusBarWait:
-	g_ErrorLevel->Assign(aOutputVar ? ERRORLEVEL_ERROR : ERRORLEVEL_ERROR2);
 
 	// Legacy: Waiting 500ms in place of a "0" seems more useful than a true zero, which doesn't need
 	// to be supported because it's the same thing as something like "IfWinExist":
@@ -783,7 +781,7 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR
 		|| !SendMessageTimeout(aBarHwnd, SB_GETPARTS, 0, 0, SMTO_ABORTIFHUNG, SB_TIMEOUT, (PDWORD_PTR)&part_count) // It failed or timed out.
 		|| aPartNumber > part_count
 		|| !(remote_buf = AllocInterProcMem(handle, _TSIZE(WINDOW_TEXT_SIZE + 1), aBarHwnd))) // Alloc mem last.
-		return OK; // Let ErrorLevel tell the story.
+		goto error;
 
 	TCHAR buf_for_nt[WINDOW_TEXT_SIZE + 1]; // Needed only for NT/2k/XP: the local counterpart to the buf allocated remotely above.
 	bool is_win9x = g_os.IsWin9x();
@@ -848,7 +846,7 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR
 			MsgSleep(aCheckInterval);
 		else // Timed out.
 		{
-			g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Override default to indicate timeout vs. "other error".
+			g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Indicate "timeout".
 			break;
 		}
 	} // for()
@@ -860,6 +858,9 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR
 	ResultType result_to_return = aOutputVar ? aOutputVar->Assign(local_buf) : OK;
 	FreeInterProcMem(handle, remote_buf); // Don't free until after the above because above needs file mapping for Win9x.
 	return result_to_return;
+
+error:
+	return g_script.SetErrorLevelOrThrowInt(aOutputVar ? ERRORLEVEL_ERROR : ERRORLEVEL_ERROR2);
 }
 
 

@@ -226,7 +226,7 @@ bool g_BlockMouseMove = false;
 //    The subarray should indicate the param numbers that must be numeric (first param is numbered 1,
 //    not zero).  That subarray should be terminated with an explicit zero to be safe and
 //    so that the compiler will complain if the sub-array size needs to be increased to
-//    accommodate all the elements in the new sub-array, including room for it's 0 terminator.
+//    accommodate all the elements in the new sub-array, including room for its 0 terminator.
 //    Note: If you use a value for MinParams than is greater than zero, remember than any params
 //    beneath that threshold will also be required to be non-blank (i.e. user can't omit them even
 //    if later, non-blank params are provided).  UPDATE: For a parameter to recognize an expression
@@ -348,6 +348,9 @@ Action g_act[] =
 	, {_T("While"), 1, 1, false, {1, 0}} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
 	, {_T("Until"), 1, 1, false, {1, 0}} // Until expression (follows a Loop)
 	, {_T("Break"), 0, 1, false, NULL}, {_T("Continue"), 0, 1, false, NULL}
+	, {_T("Try"), 0, 0, false, NULL}
+	, {_T("Catch"), 0, 1, false, NULL} // fincs: seems best to allow catch without a parameter
+	, {_T("Throw"), 1, 1, false, {1, 0}}
 	, {_T("{"), 0, 0, false, NULL}, {_T("}"), 0, 0, false, NULL}
 
 	, {_T("WinActivate"), 0, 4, false, NULL} // Passing zero params results in activating the LastUsed window.

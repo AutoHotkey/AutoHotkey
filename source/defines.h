@@ -297,6 +297,7 @@ enum enum_act {
 , ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE
 , ACT_FOR, ACT_WHILE, ACT_UNTIL // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
 , ACT_BREAK, ACT_CONTINUE
+, ACT_TRY, ACT_CATCH, ACT_THROW
 , ACT_BLOCK_BEGIN, ACT_BLOCK_END
 , ACT_WINACTIVATE, ACT_WINACTIVATEBOTTOM
 , ACT_WINWAIT, ACT_WINWAITCLOSE, ACT_WINWAITACTIVE, ACT_WINWAITNOTACTIVE
@@ -531,6 +532,7 @@ typedef UINT_PTR EventInfoType;
 // be copied back into the g struct when the thread is resumed:
 class Func;                 // Forward declarations
 class Label;                //
+class Line;                 //
 struct RegItemStruct;       //
 struct LoopReadFileStruct;  //
 class GuiType;				//
@@ -595,6 +597,9 @@ struct global_struct
 	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
 	bool ListLinesIsEnabled;
 	UINT Encoding;
+	ExprTokenType* ThrownToken;
+	Line* ExcptLine;
+	bool InTryBlock;
 };
 
 inline void global_maximize_interruptibility(global_struct &g)
@@ -632,6 +637,8 @@ inline void global_clear_state(global_struct &g)
 	g.mLoopRegItem = NULL;
 	g.mLoopReadFile = NULL;
 	g.mLoopField = NULL;
+	g.ThrownToken = NULL;
+	g.InTryBlock = false;
 }
 
 inline void global_init(global_struct &g)
