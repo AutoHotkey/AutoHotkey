@@ -2679,7 +2679,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 	// GET ROW COUNT
 	LRESULT row_count;
 	if (!SendMessageTimeout(aHwnd, LVM_GETITEMCOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&row_count)) // Timed out or failed.
-		return OK;  // Let ErrorLevel tell the story.
+		return SetErrorLevelOrThrow();
 
 	// GET COLUMN COUNT
 	// Through testing, could probably get to a level of 90% certainty that a ListView for which
@@ -2725,7 +2725,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 	int requested_col = col_option ? ATOI(col_option + 3) - 1 : -1;
 	// If the above yields a negative col number for any reason, it's ok because below will just ignore it.
 	if (col_count > -1 && requested_col > -1 && requested_col >= col_count) // Specified column does not exist.
-		return OK;  // Let ErrorLevel tell the story.
+		return SetErrorLevelOrThrow();
 
 	// IF THE "COUNT" OPTION IS PRESENT, FULLY HANDLE THAT AND RETURN
 	if (get_count)
@@ -2734,13 +2734,13 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 		if (include_focused_only) // Listed first so that it takes precedence over include_selected_only.
 		{
 			if (!SendMessageTimeout(aHwnd, LVM_GETNEXTITEM, -1, LVNI_FOCUSED, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&result)) // Timed out or failed.
-				return OK;  // Let ErrorLevel tell the story.
+				return SetErrorLevelOrThrow();
 			++result; // i.e. Set it to 0 if not found, or the 1-based row-number otherwise.
 		}
 		else if (include_selected_only)
 		{
 			if (!SendMessageTimeout(aHwnd, LVM_GETSELECTEDCOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&result)) // Timed out or failed.
-				return OK;  // Let ErrorLevel tell the story.
+				return SetErrorLevelOrThrow();
 		}
 		else if (col_option) // "Count Col" returns the number of columns.
 			result = (int)col_count;
@@ -2758,7 +2758,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 	HANDLE handle;
 	LPVOID p_remote_lvi; // Not of type LPLVITEM to help catch bugs where p_remote_lvi->member is wrongly accessed here in our process.
 	if (   !(p_remote_lvi = AllocInterProcMem(handle, LV_REMOTE_BUF_SIZE + sizeof(LVITEM), aHwnd))   ) // Allocate the right type of memory (depending on OS type). Allocate both the LVITEM struct and its internal string buffer in one go because MyVirtualAllocEx() is probably a high overhead call.
-		return OK;  // Let ErrorLevel tell the story.
+		return SetErrorLevelOrThrow();
 	bool is_win9x = g_os.IsWin9x(); // Resolve once for possible slight perf./code size benefit.
 
 	// PREPARE LVI STRUCT MEMBERS FOR TEXT RETRIEVAL
