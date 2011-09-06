@@ -194,6 +194,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_UNQUOTED_NON_ALNUM _T("Unquoted literals may only consist of alphanumeric characters/underscore.")
 #define ERR_DUPLICATE_DECLARATION _T("Duplicate declaration.")
 #define ERR_INVALID_CLASS_VAR _T("Invalid class variable declaration.")
+#define ERR_INVALID_LINE_IN_CLASS_DEF _T("Expected assignment or class/method definition.")
 #define ERR_INVALID_GUI_NAME _T("Invalid Gui name.")
 
 #define WARNING_USE_UNSET_VARIABLE _T("Using value of uninitialized variable.")

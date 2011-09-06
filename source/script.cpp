@@ -1134,7 +1134,7 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 		mFirstLine->mPrevLine = mLastStaticLine;
 		mFirstLine = mFirstStaticLine;
 	}
-
+	
 	if (g_Warn_LocalSameAsGlobal)
 	{
 		// Scan all "automatic" local vars and warn the user if there are any with the same
@@ -1979,23 +1979,35 @@ process_completed_line:
 			}
 			else // It's a function call on a line by itself, such as fn(x). It can't be if(..) because another section checked that.
 			{
-				if (pending_buf_is_class)
-					// This is something like "Class Foo" without any open-brace.
-					return ScriptError(_T("Invalid class definition."), pending_buf);
+				if (pending_buf_is_class) // Missing open-brace for class definition.
+					return ScriptError(ERR_MISSING_OPEN_BRACE, pending_buf);
+				if (mClassObjectCount && !g->CurrentFunc) // Unexpected function call in class definition.
+					return ScriptError(ERR_INVALID_LINE_IN_CLASS_DEF, pending_buf);
 				if (!ParseAndAddLine(pending_buf, ACT_EXPRESSION))
 					return FAIL;
 				mCurrLine = NULL; // Prevents showing misleading vicinity lines if the line after a function call is a syntax error.
 			}
-			mCombinedLineNumber = saved_line_number;
 			*pending_buf = '\0'; // Reset now that it's been fully handled, as an indicator for subsequent iterations.
-			if (pending_buf_is_class && !pending_buf_has_brace)
+			if (pending_buf_is_class)
 			{
-				// This is the open-brace of a class definition, so requires no further processing.
-				if (  !*(cp = omit_leading_whitespace(buf + 1))  )
-					goto continue_main_loop;
-				// Otherwise, there's something following the "{", possibly "}" or a function definition.
-				tmemmove(buf, cp, (buf_length = _tcslen(cp)) + 1);
+				// We have the "{" for this class, either in pending_buf (OTB) or in buf (the line after).
+				// Add a block-begin so that PreparseBlocks() will point at this line if the block-end is
+				// missing.  Without this, such errors mightn't be detected at all.
+				if (!AddLine(ACT_BLOCK_BEGIN))
+					return FAIL;
+				if (!pending_buf_has_brace)
+				{
+					// This is the open-brace of a class definition, so requires no further processing.
+					if (  !*(cp = omit_leading_whitespace(buf + 1))  )
+					{
+						mCombinedLineNumber = saved_line_number;
+						goto continue_main_loop;
+					}
+					// Otherwise, there's something following the "{", possibly "}" or a function definition.
+					tmemmove(buf, cp, (buf_length = _tcslen(cp)) + 1);
+				}
 			}
+			mCombinedLineNumber = saved_line_number;
 			// Now fall through to the below so that *this* line (the one after it) will be processed.
 			// Note that this line might be a pre-processor directive, label, etc. that won't actually
 			// become a runtime line per se.
@@ -2008,11 +2020,16 @@ process_completed_line:
 			// This loop allows something like }}} to terminate multiple nested classes:
 			for (cp = buf; *cp == '}' && mClassObjectCount; cp = omit_leading_whitespace(cp + 1))
 			{
-				mClassObject[--mClassObjectCount]->Release(); // This is the end of this class definition.
+				// End of class definition: release this reference.
+				mClassObject[--mClassObjectCount]->Release();
+				// Revert to the name of the class this class is nested inside, or "" if none.
 				if (cp1 = _tcsrchr(mClassName, '.'))
 					*cp1 = '\0';
 				else
 					*mClassName = '\0';
+				// Add a block-end to counter the block-begin, for validation purposes.
+				if (!AddLine(ACT_BLOCK_END))
+					return FAIL;
 			}
 			// cp now points at the next non-whitespace char after the brace.
 			if (!*cp)
@@ -2067,7 +2084,7 @@ process_completed_line:
 					goto continue_main_loop; // In lieu of "continue", for performance.
 				}
 				// Anything not already handled above is not valid directly inside a class definition.
-				return ScriptError(_T("Expected assignment or class/method definition."), buf);
+				return ScriptError(ERR_INVALID_LINE_IN_CLASS_DEF, buf);
 			}
 		}
 
@@ -2628,7 +2645,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		saved_line_number = mCombinedLineNumber;
 		mCombinedLineNumber = pending_buf_line_number; // Done so that any syntax errors that occur during the calls below will report the correct line number.
 		if (pending_buf_is_class)
-			return ScriptError(ERR_UNRECOGNIZED_ACTION, pending_buf);
+			return ScriptError(pending_buf_has_brace ? ERR_MISSING_CLOSE_BRACE : ERR_MISSING_OPEN_BRACE, pending_buf);
 		if (!ParseAndAddLine(pending_buf, ACT_EXPRESSION)) // Must be function call vs. definition since otherwise the above would have detected the opening brace beneath it and already cleared pending_function.
 			return FAIL;
 		mCombinedLineNumber = saved_line_number;
