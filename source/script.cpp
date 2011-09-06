@@ -3352,6 +3352,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			warnMode = WARNMODE_MSGBOX;
 		else if (!_tcsicmp(param2, _T("OutputDebug")))
 			warnMode = WARNMODE_OUTPUTDEBUG;
+		else if (!_tcsicmp(param2, _T("StdOut")))
+			warnMode = WARNMODE_STDOUT;
 		else if (!_tcsicmp(param2, _T("Off")))
 			warnMode = WARNMODE_OFF;
 		else
@@ -15735,7 +15737,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 	if (g->InTryBlock && aErrorType == FAIL) // i.e. not CRITICAL_ERROR or WARN.
 		return ThrowRuntimeException(aErrorText, NULL, aExtraInfo);
 
-	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute) // i.e. runtime errors are always displayed via dialog.
+	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute && aErrorType != WARN) // i.e. runtime errors are always displayed via dialog.
 	{
 		// JdeB said:
 		// Just tested it in Textpad, Crimson and Scite. they all recognise the output and jump
@@ -15749,8 +15751,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		// change the error lexer of Scite recognizes this line as a Microsoft error message and it can be
 		// used to jump to that line."
 		#define STD_ERROR_FORMAT _T("%s (%d) : ==> %s\n")
-		#define STD_WARNING_FORMAT _T("%s (%d) : ==> Warning: %s\n")
-		ERR_PRINT(aErrorType == WARN ? STD_WARNING_FORMAT : STD_ERROR_FORMAT, sSourceFile[mFileIndex], mLineNumber, aErrorText); // printf() does not significantly increase the size of the EXE, probably because it shares most of the same code with sprintf(), etc.
+		ERR_PRINT(STD_ERROR_FORMAT, sSourceFile[mFileIndex], mLineNumber, aErrorText); // printf() does not significantly increase the size of the EXE, probably because it shares most of the same code with sprintf(), etc.
 		if (*aExtraInfo)
 			ERR_PRINT(_T("     Specifically: %s\n"), aExtraInfo);
 	}
@@ -15911,6 +15912,7 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 	TCHAR buf[MSGBOX_TEXT_SIZE], *cp = buf;
 	int buf_space_remaining = (int)_countof(buf);
 	
+	#define STD_WARNING_FORMAT _T("%s (%d) : ==> Warning: %s\n")
 	cp += sntprintf(cp, buf_space_remaining, STD_WARNING_FORMAT, Line::sSourceFile[fileIndex], lineNumber, aWarningText);
 	buf_space_remaining = (int)(_countof(buf) - (cp - buf));
 
@@ -15920,10 +15922,15 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 		buf_space_remaining = (int)(_countof(buf) - (cp - buf));
 	}
 
+	if (warnMode == WARNMODE_STDOUT)
 #ifndef CONFIG_DEBUGGER
-	OutputDebugString(buf);
+		_fputts(buf, stdout);
+	else
+		OutputDebugString(buf);
 #else
-	g_Debugger.OutputDebug(buf);
+		g_Debugger.FileAppendStdOut(buf);
+	else
+		g_Debugger.OutputDebug(buf);
 #endif
 
 	// In MsgBox mode, MsgBox is in addition to OutputDebug

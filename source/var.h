@@ -418,7 +418,7 @@ public:
 		// So any string of digits that is too long to be a legitimate number is still treated as a number
 		// anyway (overflow).  Most of our callers are expressions anyway, in which case any unquoted
 		// series of digits is always a number, never a string.
-		SymbolType is_pure_numeric = IsPureNumeric(var.Contents(), true, false, true, aAllowImpure); // Contents() vs. mContents to support VAR_CLIPBOARD lvalue in a pure expression such as "clipboard:=1,clipboard+=5"
+		SymbolType is_pure_numeric = IsPureNumeric(var.Contents(FALSE), true, false, true, aAllowImpure); // Contents() vs. mContents to support VAR_CLIPBOARD lvalue in a pure expression such as "clipboard:=1,clipboard+=5"
 		if (is_pure_numeric == PURE_NOT_NUMERIC && !(var.mAttrib & VAR_ATTRIB_CACHE_DISABLED))
 			var.mAttrib |= VAR_ATTRIB_NOT_NUMERIC;
 		//else it may be a pure number, which isn't currently tracked via mAttrib (until a cached number is
