@@ -2421,7 +2421,7 @@ public:
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText);
 
-	ResultType ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs);
+	ResultType ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs, Var *&aHwndVar);
 	void GetNonClientArea(LONG &aWidth, LONG &aHeight);
 	void GetTotalWidthAndHeight(LONG &aWidth, LONG &aHeight);
 

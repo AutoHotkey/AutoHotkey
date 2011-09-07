@@ -293,8 +293,9 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 	// where the window doesn't already exist:
 	bool set_last_found_window = false;
 	ToggleValueType own_dialogs = TOGGLE_INVALID;
+	Var *hwnd_var = NULL;
 	if (gui_command == GUI_CMD_OPTIONS)
-		if (!gui.ParseOptions(aCommand, set_last_found_window, own_dialogs))
+		if (!gui.ParseOptions(aCommand, set_last_found_window, own_dialogs, hwnd_var))
 		{
 			result = FAIL; // It already displayed the error.
 			goto return_the_result;
@@ -309,6 +310,9 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		result = ScriptError(_T("Could not create window.") ERR_ABORT);
 		goto return_the_result;
 	}
+
+	if (hwnd_var) // v1.1.04: +HwndVarName option.
+		hwnd_var->AssignHWND(gui.mHwnd);
 
 	// After creating the window, return from any commands that were fully handled above:
 	if (gui_command == GUI_CMD_OPTIONS)
@@ -3856,7 +3860,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 
 
-ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs)
+ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs, Var *&aHwndVar)
 // This function is similar to ControlParseOptions() further below, so should be maintained alongside it.
 // Caller must have already initialized aSetLastFoundWindow/, bool &aOwnDialogs with desired starting values.
 // Caller must ensure that aOptions is a modifiable string, since this method temporarily alters it.
@@ -4024,6 +4028,9 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 			// Gui, +AlwaysOnTop +Disabled -SysMenu
 			if (adding) mStyle |= WS_DISABLED; else mStyle &= ~WS_DISABLED;
 		}
+		
+		else if (!_tcsnicmp(next_option, _T("Hwnd"), 4))
+			aHwndVar = g_script.FindOrAddVar(next_option + 4, 0, ALWAYS_PREFER_LOCAL); // ALWAYS_PREFER_LOCAL is debatable, but for simplicity it seems best since it causes HwndOutputVar to behave the same as the vVar option.
 
 		else if (!_tcsnicmp(next_option, _T("Label"), 5)) // v1.0.44.09: Allow custom label prefix for the reasons described in SetLabels().
 		{
