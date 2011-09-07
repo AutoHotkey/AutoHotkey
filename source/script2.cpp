@@ -8869,15 +8869,6 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	// Caller must check ErrorLevel to distinguish between an empty file and an error.
 	output_var.Assign();
 
-	// The program is currently compiled with a 2GB address limit, so loading files larger than that
-	// would probably fail or perhaps crash the program.  Therefore, just putting a basic 1.0 GB sanity
-	// limit on the file here, for now.  Note: a variable can still be operated upon without necessarily
-	// using the deref buffer, since that buffer only comes into play when there is no other way to
-	// manipulate the variable.  In other words, the deref buffer won't necessarily grow to be the same
-	// size as the file, which if it happened for a 1GB file would exceed the 2GB address limit.
-	// That is why a smaller limit such as 800 MB seems too severe:
-	#define FILEREAD_MAX (1024*1024*1024) // 1 GB.
-
 	// Set default options:
 	bool translate_crlf_to_lf = false;
 	bool is_binary_clipboard = false;
@@ -8900,8 +8891,6 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			break;
 		case 'M': // Maximum number of bytes to load.
 			max_bytes_to_load = ATOU64(cp + 1); // Relies upon the fact that it ceases conversion upon reaching a space or tab.
-			if (max_bytes_to_load > FILEREAD_MAX) // Force a failure to avoid breaking scripts if this limit is increased in the future.
-				return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
 			// Skip over the digits of this option in case it's the last option.
 			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
 				return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
@@ -8958,10 +8947,9 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	// clipboard file should already have the (UINT)0 as its ending terminator.
 
 	unsigned __int64 bytes_to_read = GetFileSize64(hfile);
-	if (bytes_to_read == ULLONG_MAX // GetFileSize64() failed...
-		|| max_bytes_to_load == ULLONG_MAX && bytes_to_read > FILEREAD_MAX) // ...or the file is too large to be completely read (and the script wanted it completely read).
+	if (bytes_to_read == ULLONG_MAX) // GetFileSize64() failed.
 	{
-		g->LastError = (bytes_to_read == ULLONG_MAX) ? GetLastError() : ERROR_FILE_TOO_LARGE;
+		g->LastError = GetLastError();
 		CloseHandle(hfile);
 		return SetErrorLevelOrThrow();
 	}
