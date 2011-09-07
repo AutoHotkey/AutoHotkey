@@ -5523,6 +5523,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 	{
 		DWORD current_style = GetWindowLong(aControl.hwnd, GWL_STYLE);
 		DWORD new_style = (current_style | aOpt.style_add) & ~aOpt.style_remove; // Some things such as GUI_CONTROL_TEXT+SS_TYPEMASK might rely on style_remove being applied *after* style_add.
+		UINT current_value_uint; // Currently only used for Progress controls.
 
 		// Fix for v1.0.24:
 		// Certain styles can't be applied with a simple bit-or.  The below section is a subset of
@@ -5716,6 +5717,11 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				else if (!(new_style & WS_HSCROLL) && (current_style & WS_HSCROLL)) // Scroll bar being removed.
 					SendMessage(aControl.hwnd, LB_SETHORIZONTALEXTENT, 0, 0);
 				break;
+			case GUI_CONTROL_PROGRESS:
+				// SetWindowLong with GWL_STYLE appears to reset the position,
+				// so save the current position here to be restored later:
+				current_value_uint = (UINT)SendMessage(aControl.hwnd, PBM_GETPOS, 0, 0);
+				break;
 			} // switch()
 			SetLastError(0); // Prior to SetWindowLong(), as recommended by MSDN.
 			// Call this even for buttons because BM_SETSTYLE only handles the LOWORD part of the style:
@@ -5799,6 +5805,9 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		case GUI_CONTROL_PROGRESS:
 			ControlSetProgressOptions(aControl, aOpt, new_style);
 			// Above strips theme if required by new options.  It also applies new colors.
+			if (current_style != new_style)
+				// SetWindowLong with GWL_STYLE resets the position, so restore it here.
+				SendMessage(aControl.hwnd, PBM_SETPOS, current_value_uint, 0);
 			break;
 		case GUI_CONTROL_EDIT:
 			if (aOpt.tabstop_count)
