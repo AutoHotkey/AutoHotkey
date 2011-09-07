@@ -351,7 +351,13 @@ public:
 		// So any string of digits that is too long to be a legitimate number is still treated as a number
 		// anyway (overflow).  Most of our callers are expressions anyway, in which case any unquoted
 		// series of digits would've been assigned as a pure number and handled above.
-		SymbolType is_pure_numeric = ::IsNumeric(var.Contents(), true, false, true); // Contents() vs. mContents to support VAR_CLIPBOARD lvalue in a pure expression such as "clipboard:=1,clipboard+=5"
+		// Below passes FALSE for aUpdateContents because we've already confirmed this var doesn't contain
+		// a cached number (so can't need updating) and to suppress an "uninitialized variable" warning.
+		// The majority of our callers will call ToInt64/Double() or Contents() after we return, which would
+		// trigger a second warning if we didn't suppress ours and StdOut/OutputDebug warn mode is in effect.
+		// IF-IS is the only caller that wouldn't cause a warning, but in that case ExpandArgs() would have
+		// already caused one.
+		SymbolType is_pure_numeric = ::IsNumeric(var.Contents(FALSE), true, false, true); // Contents() vs. mContents to support VAR_CLIPBOARD lvalue in a pure expression such as "clipboard:=1,clipboard+=5"
 		if (is_pure_numeric == PURE_NOT_NUMERIC && var.mType != VAR_CLIPBOARD)
 			var.mAttrib |= VAR_ATTRIB_NOT_NUMERIC;
 		return is_pure_numeric;

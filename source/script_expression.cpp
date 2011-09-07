@@ -1582,7 +1582,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 			// first one's conversion must occur prior to calling BackupFunctionVars().  In addition, there
 			// might be other interdependencies between formals and actuals if a function is calling itself
 			// recursively.
-			for (j = 0; j < count_of_actuals_that_have_formals; ++j) // For each actual parameter than has a formal.
+			for (j = 0; j < aParamCount; ++j) // For each actual parameter.
 			{
 				ExprTokenType &this_param_token = *aParam[j]; // stack[stack_count] is the first actual parameter. A check higher above has already ensured that this line won't cause stack overflow.
 				if (this_param_token.symbol == SYM_VAR && !mParam[j].is_byref)

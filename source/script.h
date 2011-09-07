@@ -150,7 +150,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_PARAM2_MUST_BE_BLANK _T("Parameter #2 must be blank in this case.")
 #define ERR_PARAM3_MUST_BE_BLANK _T("Parameter #3 must be blank in this case.")
 #define ERR_PARAM4_MUST_BE_BLANK _T("Parameter #4 must be blank in this case.")
-#define ERR_INVALID_KEY_OR_BUTTON _T("Invalid key or button name")
 #define ERR_MISSING_OUTPUT_VAR _T("Requires at least one of its output variables.")
 #define ERR_MISSING_OPEN_PAREN _T("Missing \"(\"")
 #define ERR_MISSING_OPEN_BRACE _T("Missing \"{\"")
@@ -160,7 +159,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_UNEXPECTED_CLOSE_PAREN _T("Unexpected \")\"")
 #define ERR_UNEXPECTED_CLOSE_BRACKET _T("Unexpected \"]\"")
 #define ERR_UNEXPECTED_CLOSE_BRACE _T("Unexpected \"}\"")
-#define ERR_MISMATCHED_BRACKET_PAREN _T("Mismatched [] or ()") // L31
 #define ERR_MISSING_CLOSE_QUOTE _T("Missing close-quote") // No period after short phrases.
 #define ERR_MISSING_COMMA _T("Missing comma")             //
 #define ERR_BLANK_PARAM _T("Blank parameter")             //
@@ -177,26 +175,16 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_MENU _T("Menu does not exist.")
 #define ERR_SUBMENU _T("Submenu does not exist.")
 #define ERR_WINDOW_PARAM _T("Requires at least one of its window parameters.")
-#define ERR_ON_OFF _T("Requires ON/OFF/blank")
-#define ERR_ON_OFF_LOCALE _T("Requires ON/OFF/LOCALE")
-#define ERR_ON_OFF_TOGGLE _T("Requires ON/OFF/TOGGLE/blank")
-#define ERR_ON_OFF_TOGGLE_PERMIT _T("Requires ON/OFF/TOGGLE/PERMIT/blank")
-#define ERR_TITLEMATCHMODE _T("Requires 1/2/3/Slow/Fast")
 #define ERR_MENUTRAY _T("Supported only for the tray menu")
-#define ERR_REG_KEY _T("Invalid registry root key")
-#define ERR_REG_VALUE_TYPE _T("Invalid registry value type")
-#define ERR_INVALID_DATETIME _T("Invalid YYYYMMDDHHMISS value")
-#define ERR_MOUSE_BUTTON _T("Invalid mouse button")
 #define ERR_MOUSE_COORD _T("X & Y must be either both absent or both present.")
 #define ERR_DIVIDEBYZERO _T("Divide by zero")
-#define ERR_PERCENT _T("Must be between -100 and 100.")
-#define ERR_MOUSE_SPEED _T("Mouse speed must be between 0 and ") MAX_MOUSE_SPEED_STR _T(".")
 #define ERR_VAR_IS_READONLY _T("Not allowed as an output variable.")
 #define ERR_INVALID_CHAR _T("This character is not allowed here.")
 #define ERR_INVALID_DOT _T("Ambiguous or invalid use of \".\"")
 #define ERR_UNQUOTED_NON_ALNUM _T("Unquoted literals may only consist of alphanumeric characters/underscore.")
 #define ERR_DUPLICATE_DECLARATION _T("Duplicate declaration.")
 #define ERR_INVALID_CLASS_VAR _T("Invalid class variable declaration.")
+#define ERR_INVALID_LINE_IN_CLASS_DEF _T("Expected assignment or class/method definition.")
 #define ERR_INVALID_GUI_NAME _T("Invalid Gui name.")
 
 #define WARNING_USE_UNSET_VARIABLE _T("Using value of uninitialized variable.")
@@ -2488,7 +2476,7 @@ public:
 
 	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[]);
 #ifndef AUTOHOTKEYSC
-	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound);
+	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
 #endif
 	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0, int *apInsertPos = NULL);
 	Func *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos, Object *aClassObject = NULL);

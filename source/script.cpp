@@ -1067,7 +1067,7 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 		mFirstLine->mPrevLine = mLastStaticLine;
 		mFirstLine = mFirstStaticLine;
 	}
-
+	
 	if (g_Warn_LocalSameAsGlobal)
 	{
 		// Scan all "automatic" local vars and warn the user if there are any with the same
@@ -1950,23 +1950,35 @@ process_completed_line:
 			}
 			else // It's a function call on a line by itself, such as fn(x). It can't be if(..) because another section checked that.
 			{
-				if (pending_buf_is_class)
-					// This is something like "Class Foo" without any open-brace.
-					return ScriptError(_T("Invalid class definition."), pending_buf);
+				if (pending_buf_is_class) // Missing open-brace for class definition.
+					return ScriptError(ERR_MISSING_OPEN_BRACE, pending_buf);
+				if (mClassObjectCount && !g->CurrentFunc) // Unexpected function call in class definition.
+					return ScriptError(ERR_INVALID_LINE_IN_CLASS_DEF, pending_buf);
 				if (!ParseAndAddLine(pending_buf, ACT_EXPRESSION))
 					return FAIL;
 				mCurrLine = NULL; // Prevents showing misleading vicinity lines if the line after a function call is a syntax error.
 			}
-			mCombinedLineNumber = saved_line_number;
 			*pending_buf = '\0'; // Reset now that it's been fully handled, as an indicator for subsequent iterations.
-			if (pending_buf_is_class && !pending_buf_has_brace)
+			if (pending_buf_is_class)
 			{
-				// This is the open-brace of a class definition, so requires no further processing.
-				if (  !*(cp = omit_leading_whitespace(buf + 1))  )
-					goto continue_main_loop;
-				// Otherwise, there's something following the "{", possibly "}" or a function definition.
-				tmemmove(buf, cp, (buf_length = _tcslen(cp)) + 1);
+				// We have the "{" for this class, either in pending_buf (OTB) or in buf (the line after).
+				// Add a block-begin so that PreparseBlocks() will point at this line if the block-end is
+				// missing.  Without this, such errors mightn't be detected at all.
+				if (!AddLine(ACT_BLOCK_BEGIN))
+					return FAIL;
+				if (!pending_buf_has_brace)
+				{
+					// This is the open-brace of a class definition, so requires no further processing.
+					if (  !*(cp = omit_leading_whitespace(buf + 1))  )
+					{
+						mCombinedLineNumber = saved_line_number;
+						goto continue_main_loop;
+					}
+					// Otherwise, there's something following the "{", possibly "}" or a function definition.
+					tmemmove(buf, cp, (buf_length = _tcslen(cp)) + 1);
+				}
 			}
+			mCombinedLineNumber = saved_line_number;
 			// Now fall through to the below so that *this* line (the one after it) will be processed.
 			// Note that this line might be a pre-processor directive, label, etc. that won't actually
 			// become a runtime line per se.
@@ -1979,11 +1991,16 @@ process_completed_line:
 			// This loop allows something like }}} to terminate multiple nested classes:
 			for (cp = buf; *cp == '}' && mClassObjectCount; cp = omit_leading_whitespace(cp + 1))
 			{
-				mClassObject[--mClassObjectCount]->Release(); // This is the end of this class definition.
+				// End of class definition: release this reference.
+				mClassObject[--mClassObjectCount]->Release();
+				// Revert to the name of the class this class is nested inside, or "" if none.
 				if (cp1 = _tcsrchr(mClassName, '.'))
 					*cp1 = '\0';
 				else
 					*mClassName = '\0';
+				// Add a block-end to counter the block-begin, for validation purposes.
+				if (!AddLine(ACT_BLOCK_END))
+					return FAIL;
 			}
 			// cp now points at the next non-whitespace char after the brace.
 			if (!*cp)
@@ -2038,7 +2055,7 @@ process_completed_line:
 					goto continue_main_loop; // In lieu of "continue", for performance.
 				}
 				// Anything not already handled above is not valid directly inside a class definition.
-				return ScriptError(_T("Expected assignment or class/method definition."), buf);
+				return ScriptError(ERR_INVALID_LINE_IN_CLASS_DEF, buf);
 			}
 		}
 
@@ -2594,7 +2611,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		saved_line_number = mCombinedLineNumber;
 		mCombinedLineNumber = pending_buf_line_number; // Done so that any syntax errors that occur during the calls below will report the correct line number.
 		if (pending_buf_is_class)
-			return ScriptError(ERR_UNRECOGNIZED_ACTION, pending_buf);
+			return ScriptError(pending_buf_has_brace ? ERR_MISSING_CLOSE_BRACE : ERR_MISSING_OPEN_BRACE, pending_buf);
 		if (!ParseAndAddLine(pending_buf, ACT_EXPRESSION)) // Must be function call vs. definition since otherwise the above would have detected the opening brace beneath it and already cleared pending_function.
 			return FAIL;
 		mCombinedLineNumber = saved_line_number;
@@ -2803,7 +2820,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				if (!GetCurrentDirectory(_countof(buf) - 1, buf))
 					*buf = '\0';
 				// Attempt to include a script file based on the same rules as func() auto-include:
-				FindFuncInLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found);
+				FindFuncInLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found, false);
 				// Restore the working directory.
 				SetCurrentDirectory(buf);
 				// If any file was included, consider it a success; i.e. allow #include <lib> and #include <lib_func>.
@@ -3225,6 +3242,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			warnMode = WARNMODE_MSGBOX;
 		else if (!_tcsicmp(param2, _T("OutputDebug")))
 			warnMode = WARNMODE_OUTPUTDEBUG;
+		else if (!_tcsicmp(param2, _T("StdOut")))
+			warnMode = WARNMODE_STDOUT;
 		else if (!_tcsicmp(param2, _T("Off")))
 			warnMode = WARNMODE_OFF;
 		else
@@ -5119,17 +5138,17 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_DETECTHIDDENTEXT:
 	case ACT_SETSTORECAPSLOCKMODE:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertOnOff(new_raw_arg1))
-			return ScriptError(ERR_ON_OFF, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_STRINGCASESENSE:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && line.ConvertStringCaseSense(new_raw_arg1) == SCS_INVALID)
-			return ScriptError(ERR_ON_OFF_LOCALE, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_SUSPEND:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertOnOffTogglePermit(new_raw_arg1))
-			return ScriptError(ERR_ON_OFF_TOGGLE_PERMIT, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_BLOCKINPUT:
@@ -5145,7 +5164,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_PAUSE:
 	case ACT_KEYHISTORY:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertOnOffToggle(new_raw_arg1))
-			return ScriptError(ERR_ON_OFF_TOGGLE, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_SETNUMLOCKSTATE:
@@ -5163,11 +5182,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		{
 			// The obsolete 5-param method is being used, wherein ValueType is the 2nd param.
 			if (*new_raw_arg3 && !line.ArgHasDeref(3) && !line.RegConvertRootKey(new_raw_arg3))
-				return ScriptError(ERR_REG_KEY, new_raw_arg3);
+				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 		}
 		else // 4-param method.
 			if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertRootKey(new_raw_arg2))
-				return ScriptError(ERR_REG_KEY, new_raw_arg2);
+				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
 	case ACT_REGWRITE:
@@ -5176,15 +5195,15 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		if (aArgc > 1)
 		{
 			if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertValueType(new_raw_arg1))
-				return ScriptError(ERR_REG_VALUE_TYPE, new_raw_arg1);
+				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 			if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertRootKey(new_raw_arg2))
-				return ScriptError(ERR_REG_KEY, new_raw_arg2);
+				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		}
 		break;
 
 	case ACT_REGDELETE:
 		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertRootKey(new_raw_arg1))
-			return ScriptError(ERR_REG_KEY, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_SOUNDGET:
@@ -5195,7 +5214,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// sees a valid no-deref expression such as 300-250 as invalid.
 			value_float = ATOF(new_raw_arg1);
 			if (value_float < -100 || value_float > 100)
-				return ScriptError(ERR_PERCENT, new_raw_arg1);
+				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		}
 		if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.SoundConvertComponentType(new_raw_arg2))
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
@@ -5238,7 +5257,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// sees a valid no-deref expression such as 1+2 as invalid.
 			value = ATOI(new_raw_arg1);
 			if (value < 0 || value > MAX_MOUSE_SPEED)
-				return ScriptError(ERR_MOUSE_SPEED, new_raw_arg1);
+				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		}
 		break;
 
@@ -5249,7 +5268,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// sees a valid no-deref expression such as 200-150 as invalid.
 			value = ATOI(new_raw_arg3);
 			if (value < 0 || value > MAX_MOUSE_SPEED)
-				return ScriptError(ERR_MOUSE_SPEED, new_raw_arg3);
+				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 		}
 		if (*new_raw_arg4 && !line.ArgHasDeref(4) && ctoupper(*new_raw_arg4) != 'R')
 			return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
@@ -5264,7 +5283,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// sees a valid no-deref expression such as 200-150 as invalid.
 			value = ATOI(NEW_RAW_ARG5);
 			if (value < 0 || value > MAX_MOUSE_SPEED)
-				return ScriptError(ERR_MOUSE_SPEED, NEW_RAW_ARG5);
+				return ScriptError(ERR_PARAM5_INVALID, NEW_RAW_ARG5);
 		}
 		if (*NEW_RAW_ARG6 && !line.ArgHasDeref(6))
 			if (_tcslen(NEW_RAW_ARG6) > 1 || !_tcschr(_T("UD"), ctoupper(*NEW_RAW_ARG6)))  // Up / Down
@@ -5273,7 +5292,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_PARAM7_INVALID, NEW_RAW_ARG7);
 		// Check that the button is valid (e.g. left/right/middle):
 		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.ConvertMouseButton(new_raw_arg1)) // Treats blank as "Left".
-			return ScriptError(ERR_MOUSE_BUTTON, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		if (!line.ValidateMouseCoords(new_raw_arg2, new_raw_arg3))
 			return ScriptError(ERR_MOUSE_COORD, new_raw_arg2);
 		break;
@@ -5289,13 +5308,13 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// sees a valid no-deref expression such as 200-150 as invalid.
 			value = ATOI(NEW_RAW_ARG6);
 			if (value < 0 || value > MAX_MOUSE_SPEED)
-				return ScriptError(ERR_MOUSE_SPEED, NEW_RAW_ARG6);
+				return ScriptError(ERR_PARAM6_INVALID, NEW_RAW_ARG6);
 		}
 		if (*NEW_RAW_ARG7 && !line.ArgHasDeref(7) && ctoupper(*NEW_RAW_ARG7) != 'R')
 			return ScriptError(ERR_PARAM7_INVALID, NEW_RAW_ARG7);
 		if (!line.ArgHasDeref(1))
 			if (!line.ConvertMouseButton(new_raw_arg1, false))
-				return ScriptError(ERR_MOUSE_BUTTON, new_raw_arg1);
+				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		if (!line.ValidateMouseCoords(new_raw_arg2, new_raw_arg3))
 			return ScriptError(ERR_MOUSE_COORD, new_raw_arg2);
 		if (!line.ValidateMouseCoords(new_raw_arg4, NEW_RAW_ARG5))
@@ -5315,7 +5334,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		// Check that the button is valid (e.g. left/right/middle):
 		if (*new_raw_arg4 && !line.ArgHasDeref(4)) // i.e. it's allowed to be blank (defaults to left).
 			if (!line.ConvertMouseButton(new_raw_arg4)) // Treats blank as "Left".
-				return ScriptError(ERR_MOUSE_BUTTON, new_raw_arg4);
+				return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
 		break;
 
 	case ACT_FILEINSTALL:
@@ -5385,7 +5404,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_FILESETTIME:
 		if (*new_raw_arg1 && !line.ArgHasDeref(1))
 			if (!YYYYMMDDToSystemTime(new_raw_arg1, st, true))
-				return ScriptError(ERR_INVALID_DATETIME, new_raw_arg1);
+				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		if (*new_raw_arg3 && !line.ArgHasDeref(3))
 			if (_tcslen(new_raw_arg3) > 1 || !_tcschr(_T("MCA"), ctoupper(*new_raw_arg3)))
 				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
@@ -5407,7 +5426,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 	case ACT_SETTITLEMATCHMODE:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertTitleMatchMode(new_raw_arg1))
-			return ScriptError(ERR_TITLEMATCHMODE, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_MENU:
@@ -5710,7 +5729,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				break;
 			case WINSET_ALWAYSONTOP:
 				if (aArgc > 1 && !line.ArgHasDeref(2) && !line.ConvertOnOffToggle(new_raw_arg2))
-					return ScriptError(ERR_ON_OFF_TOGGLE, new_raw_arg2);
+					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 				break;
 			case WINSET_BOTTOM:
 			case WINSET_TOP:
@@ -5764,12 +5783,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		// v1.0.44.03: Don't validate single-character key names because although a character like ü might have no
 		// matching VK in system's default layout, that layout could change to something which does have a VK for it.
 		if (aArgc > 1 && !line.ArgHasDeref(2) && _tcslen(new_raw_arg2) > 1 && !TextToVK(new_raw_arg2) && !ConvertJoy(new_raw_arg2))
-			return ScriptError(ERR_INVALID_KEY_OR_BUTTON, new_raw_arg2);
+			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
 	case ACT_KEYWAIT: // v1.0.44.03: See comment above.
 		if (aArgc > 0 && !line.ArgHasDeref(1) && _tcslen(new_raw_arg1) > 1 && !TextToVK(new_raw_arg1) && !ConvertJoy(new_raw_arg1))
-			return ScriptError(ERR_INVALID_KEY_OR_BUTTON, new_raw_arg1);
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	case ACT_FILEAPPEND:
@@ -6474,7 +6493,7 @@ struct FuncLibrary
 	DWORD_PTR length;
 };
 
-Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound)
+Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude)
 // Caller must ensure that aFuncName doesn't already exist as a defined function.
 // If aFuncNameLength is 0, the entire length of aFuncName is used.
 {
@@ -6600,9 +6619,9 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			// Restore setting as per the comment above.
 			g_MustDeclare = must_declare;
 
-			if (mIncludeLibraryFunctionsThenExit)
+			if (mIncludeLibraryFunctionsThenExit && aIsAutoInclude)
 			{
-				// For each included library-file, write out two #Include lines:
+				// For each auto-included library-file, write out two #Include lines:
 				// 1) Use #Include in its "change working directory" mode so that any explicit #include directives
 				//    or FileInstalls inside the library file itself will work consistently and properly.
 				// 2) Use #IncludeAgain (to improve performance since no dupe-checking is needed) to include
@@ -8065,7 +8084,13 @@ WinGroup *Script::FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound)
 // by the hook thread.  However, any subsequent changes to this function or AddGroup() must be carefully reviewed.
 {
 	if (!*aGroupName)
+	{
+		if (aCreateIfNotFound)
+			// An error message must be shown in this case since or caller is about to
+			// exit the current script thread (and we don't want it to happen silently).
+			ScriptError(_T("Blank group name."));
 		return NULL;
+	}
 	for (WinGroup *group = mFirstGroup; group != NULL; group = group->mNextGroup)
 		if (!_tcsicmp(group->mName, aGroupName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			return group; // Match found.
@@ -8156,7 +8181,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 				{
 #ifndef AUTOHOTKEYSC
 					bool error_was_shown, file_was_found;
-					if (   !(deref->func = FindFuncInLibrary(deref->marker, deref->length, error_was_shown, file_was_found))   )
+					if (   !(deref->func = FindFuncInLibrary(deref->marker, deref->length, error_was_shown, file_was_found, true))   )
 					{
 						abort = true; // So that the caller doesn't also report an error.
 						// When above already displayed the proximate cause of the error, it's usually
@@ -8575,19 +8600,43 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, ActionTyp
 			break;
 
 		case ACT_HOTKEY:
-			if (*line_raw_arg2 && !line->ArgHasDeref(2) && !line->ArgHasDeref(1))
+			if (!line->ArgHasDeref(1))
 			{
 				if (!_tcsnicmp(line_raw_arg1, _T("If"), 2))
 				{
 					LPTSTR cp = line_raw_arg1 + 2;
-					if (!_tcsnicmp(cp, _T("Not"), 3))
+					if (!*cp) // Just "If"
+					{
+						if (*line_raw_arg2 && !line->ArgHasDeref(2))
+						{
+							// Hotkey, If, Expression: Ensure the expression matches exactly an existing #If,
+							// as required by the Hotkey command.  This seems worth doing since the current
+							// behaviour might be unexpected (despite being documented), and because typos
+							// are likely due to the fact that case and whitespace matter.
+							int i;
+							for (i = 0; i < g_HotExprLineCount; ++i)
+								if (!_tcscmp(line_raw_arg2, g_HotExprLines[i]->mArg[0].text))
+									break;
+							if (i == g_HotExprLineCount)
+								return line->PreparseError(_T("Parameter #2 must match an existing #If expression."));
+						}
+						break;
+					}
+					if (!_tcsnicmp(cp, _T("Win"), 3))
+					{
 						cp += 3;
-					if (*cp && _tcsicmp(cp, _T("WinActive")) && _tcsicmp(cp, _T("WinExist")))
-						return line->PreparseError(ERR_PARAM1_INVALID);
+						if (!_tcsnicmp(cp, _T("Not"), 3))
+							cp += 3;
+						if (!_tcsicmp(cp, _T("Active")) || !_tcsicmp(cp, _T("Exist")))
+							break;
+					}
+					// Since above didn't break, it's something invalid starting with "If".
+					return line->PreparseError(ERR_PARAM1_INVALID);
 				}
-				else if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
-					if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
-						return line->PreparseError(ERR_NO_LABEL);
+				if (*line_raw_arg2 && !line->ArgHasDeref(2))
+					if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
+						if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
+							return line->PreparseError(ERR_NO_LABEL);
 			}
 			break;
 
@@ -12613,7 +12662,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_CONTROLCLICK:
 		if (   !(vk = ConvertMouseButton(ARG4))   ) // Treats blank as "Left".
-			return LineError(ERR_MOUSE_BUTTON ERR_ABORT, FAIL, ARG4);
+			return LineError(ERR_PARAM4_INVALID ERR_ABORT, FAIL, ARG4);
 		return ControlClick(vk, *ARG5 ? ArgToInt(5) : 1, ARG6, ARG1, ARG2, ARG3, ARG7, ARG8);
 
 	case ACT_CONTROLMOVE:
@@ -13157,7 +13206,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		case FIND_FAST: g.TitleFindFast = true; return OK;
 		case FIND_SLOW: g.TitleFindFast = false; return OK;
 		}
-		return LineError(ERR_TITLEMATCHMODE ERR_ABORT, FAIL, ARG1);
+		return LineError(ERR_PARAM1_INVALID ERR_ABORT, FAIL, ARG1);
 
 	case ACT_FORMATTIME:
 		return FormatTime(ARG2, ARG3);
@@ -13953,7 +14002,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 	if (g->InTryBlock && aErrorType == FAIL) // i.e. not CRITICAL_ERROR or WARN.
 		return ThrowRuntimeException(aErrorText, NULL, aExtraInfo);
 
-	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute) // i.e. runtime errors are always displayed via dialog.
+	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute && aErrorType != WARN) // i.e. runtime errors are always displayed via dialog.
 	{
 		// JdeB said:
 		// Just tested it in Textpad, Crimson and Scite. they all recognise the output and jump
@@ -13967,8 +14016,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		// change the error lexer of Scite recognizes this line as a Microsoft error message and it can be
 		// used to jump to that line."
 		#define STD_ERROR_FORMAT _T("%s (%d) : ==> %s\n")
-		#define STD_WARNING_FORMAT _T("%s (%d) : ==> Warning: %s\n")
-		ERR_PRINT(aErrorType == WARN ? STD_WARNING_FORMAT : STD_ERROR_FORMAT, sSourceFile[mFileIndex], mLineNumber, aErrorText); // printf() does not significantly increase the size of the EXE, probably because it shares most of the same code with sprintf(), etc.
+		ERR_PRINT(STD_ERROR_FORMAT, sSourceFile[mFileIndex], mLineNumber, aErrorText); // printf() does not significantly increase the size of the EXE, probably because it shares most of the same code with sprintf(), etc.
 		if (*aExtraInfo)
 			ERR_PRINT(_T("     Specifically: %s\n"), aExtraInfo);
 	}
@@ -14129,6 +14177,7 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 	TCHAR buf[MSGBOX_TEXT_SIZE], *cp = buf;
 	int buf_space_remaining = (int)_countof(buf);
 	
+	#define STD_WARNING_FORMAT _T("%s (%d) : ==> Warning: %s\n")
 	cp += sntprintf(cp, buf_space_remaining, STD_WARNING_FORMAT, Line::sSourceFile[fileIndex], lineNumber, aWarningText);
 	buf_space_remaining = (int)(_countof(buf) - (cp - buf));
 
@@ -14138,10 +14187,15 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 		buf_space_remaining = (int)(_countof(buf) - (cp - buf));
 	}
 
+	if (warnMode == WARNMODE_STDOUT)
 #ifndef CONFIG_DEBUGGER
-	OutputDebugString(buf);
+		_fputts(buf, stdout);
+	else
+		OutputDebugString(buf);
 #else
-	g_Debugger.OutputDebug(buf);
+		g_Debugger.FileAppendStdOut(buf);
+	else
+		g_Debugger.OutputDebug(buf);
 #endif
 
 	// In MsgBox mode, MsgBox is in addition to OutputDebug

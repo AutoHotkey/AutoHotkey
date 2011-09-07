@@ -114,7 +114,7 @@ enum ExitReasons {EXIT_NONE, EXIT_CRITICAL, EXIT_ERROR, EXIT_DESTROY, EXIT_LOGOF
 
 enum WarnType {WARN_USE_UNSET_LOCAL, WARN_USE_UNSET_GLOBAL, WARN_LOCAL_SAME_AS_GLOBAL, WARN_ALL};
 
-enum WarnMode {WARNMODE_OFF, WARNMODE_OUTPUTDEBUG, WARNMODE_MSGBOX};	// WARNMODE_OFF must be zero.
+enum WarnMode {WARNMODE_OFF, WARNMODE_OUTPUTDEBUG, WARNMODE_MSGBOX, WARNMODE_STDOUT};	// WARNMODE_OFF must be zero.
 
 enum SingleInstanceType {SINGLE_INSTANCE_OFF, SINGLE_INSTANCE_PROMPT, SINGLE_INSTANCE_REPLACE
 	, SINGLE_INSTANCE_IGNORE }; // SINGLE_INSTANCE_OFF must be zero.
@@ -682,7 +682,6 @@ inline void global_init(global_struct &g)
 	g.MouseDelayPlay = -1;
 	#define DEFAULT_MOUSE_SPEED 2
 	#define MAX_MOUSE_SPEED 100
-	#define MAX_MOUSE_SPEED_STR _T("100")
 	g.DefaultMouseSpeed = DEFAULT_MOUSE_SPEED;
 	g.CoordMode = 0;  // All the flags it contains are off by default.
 	g.StringCaseSense = SCS_INSENSITIVE;  // AutoIt2 default, and it does seem best.
