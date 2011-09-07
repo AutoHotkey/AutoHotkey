@@ -7055,6 +7055,15 @@ GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 	if (!*aControlID)
 		return -1;
 	GuiIndexType u;
+	if (IsPureNumeric(aControlID, TRUE, FALSE) == PURE_INTEGER) // Allow negatives, for flexibility.
+	{
+		// v1.1.04: Allow Gui controls to be referenced by HWND.  There is some risk of breaking
+		// scripts, but only if the text of one control contains the HWND of another control.
+		u = (GuiIndexType)FindControl((HWND)ATOI64(aControlID), true);
+		if (u < mControlCount)
+			return u;
+		// Otherwise: no match was found, so fall back to considering it as text.
+	}
 	// To keep things simple, the first search method is always conducted: It looks for a
 	// matching variable name, but only among the variables used by this particular window's
 	// controls (i.e. avoid ambiguity by NOT having earlier matched up aControlID against
