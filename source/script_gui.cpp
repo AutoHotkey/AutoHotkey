@@ -77,17 +77,19 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 	}
 
 	// Search for the Gui!
-	if (GuiType *found_gui = GuiType::FindGui(name))
-		return found_gui;
+	GuiType *found_gui = GuiType::FindGui(name);
 	
-	// Since no Gui with this name exists, if aName != NULL, our caller wants to know what
+	// If no Gui with this name exists and aName is not NULL, our caller wants to know what
 	// name to give a new Gui.  Before returning the name, ensure it is valid.  At the very
 	// least, space must be outlawed for Gui label names and +OwnerGUINAME.  Requiring the
 	// name to be valid as a variable name allows for possible future use of the Gui name
 	// as part of a variable or function name.
 	if (aName)
 	{
-		if (Var::ValidateName(name, true, false))
+		// found_gui: *aName must be set for GUI_CMD_NEW even if a GUI was found, since
+		// found_gui will be destroyed (along with found_gui->mName) and recreated. If a
+		// GUI was found, obviously the name is valid and ValidateName() can be skipped.
+		if (found_gui || Var::ValidateName(name, true, false))
 		{
 			// This name is okay.
 			*aName = name_marker;
@@ -96,7 +98,8 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 		}
 		// Otherwise, leave it set to NULL so our caller knows it is invalid.
 	}
-	return NULL;
+
+	return found_gui;
 }
 
 
@@ -136,9 +139,14 @@ GuiType *global_struct::GuiDefaultWindowValid()
 
 GuiType *GuiType::ValidGui(GuiType *&aGuiRef)
 {
-	if (aGuiRef && !aGuiRef->mHwnd)
+	if (aGuiRef && !aGuiRef->mHwnd) // Gui existed but has been destroyed.
 	{
-		// Gui has been destroyed.
+		if (!*aGuiRef->mName) // v1.1.04: It was an anonymous GUI, so no point keeping it around.
+		{
+			aGuiRef->Release();
+			aGuiRef = NULL;
+			return NULL;
+		}
 		GuiType *recreated_gui;
 		if (   !(recreated_gui = GuiType::FindGui(aGuiRef->mName))   )
 			return NULL; // Gui is not valid, so return NULL.
@@ -215,6 +223,27 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		else
 			result = ScriptError(ERR_OUTOFMEM);
 		goto return_the_result;
+
+	case GUI_CMD_NEW: // v1.1.04: Gui, New.
+		if (_tcschr(aBuf, ':'))
+		{
+			if (pgui)
+			{
+				// Caller explicitly asked for a "new" Gui, so destroy this one:
+				GuiType::Destroy(*pgui);
+				pgui = NULL;
+			}
+		}
+		else
+		{
+			// In this case, caller has omitted the name and wants to create an "anonymous" Gui.
+			pgui = NULL; // Override pgui, which was set to the default Gui (if it exists).
+			name_length = 0; // Override name_length, which was set to the length of the default Gui name.
+			//name = _T(""); // Unnecessary since name is not expected to be null-terminated.
+			// Below will allocate an empty name, for simplicity and maintainability --
+			// this way, mName is always non-NULL and points to malloc'd memory.
+		}
+		break;
 	}
 
 
@@ -262,7 +291,7 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 			g_gui = new_gui_array;
 			g_guiCountMax = new_max;
 		}
-		
+
 		// Otherwise: Create the object and (later) its window, since all the other sub-commands below need it:
 		for (;;) // For break, to reduce repetition of cleanup-on-failure code.
 		{
@@ -291,11 +320,20 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 
 	// Now handle any commands that should be handled prior to creation of the window in the case
 	// where the window doesn't already exist:
+	
+	LPTSTR options;
+	if (gui_command == GUI_CMD_OPTIONS)
+		options = aCommand;
+	else if (gui_command == GUI_CMD_NEW)
+		options = aParam2;
+	else
+		options = NULL;
+	
 	bool set_last_found_window = false;
 	ToggleValueType own_dialogs = TOGGLE_INVALID;
 	Var *hwnd_var = NULL;
-	if (gui_command == GUI_CMD_OPTIONS)
-		if (!gui.ParseOptions(aCommand, set_last_found_window, own_dialogs, hwnd_var))
+	if (options)
+		if (!gui.ParseOptions(options, set_last_found_window, own_dialogs, hwnd_var))
 		{
 			result = FAIL; // It already displayed the error.
 			goto return_the_result;
@@ -311,16 +349,33 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		goto return_the_result;
 	}
 
+	if (!name_length) // v1.1.04: Gui, New.
+	{
+		// Now that the HWND is known, we could use it as the Gui's name.  However, that isn't
+		// done because it would allow a Gui to be created using an invalid HWND as a name
+		// (and that invalid HWND could become valid for some other window, later):
+		//
+		//    Gui, New  ; Creates a new Gui and sets it as default.
+		//    Gui, Destroy  ; Destroys the Gui but does not affect g->GuiDefaultWindow or g->DialogOwner.
+		//    Gui, +LastFound  ; This would create a Gui using the HWND of the previous one as a name.
+		//
+		// Instead, A_Gui returns the HWND when mName is an empty string.
+
+		// Make the new (unnamed) window the default, for convenience:
+		if (g->GuiDefaultWindow)
+			g->GuiDefaultWindow->Release();
+		pgui->AddRef();
+		g->GuiDefaultWindow = pgui;
+	}
+
 	if (hwnd_var) // v1.1.04: +HwndVarName option.
 		hwnd_var->AssignHWND(gui.mHwnd);
 
-	// After creating the window, return from any commands that were fully handled above:
-	if (gui_command == GUI_CMD_OPTIONS)
+	if (options)
 	{
+		// After creating the window, apply remaining options:
 		if (set_last_found_window)
 			g->hWndLastUsed = gui.mHwnd;
-		// Fix for v1.0.35.05: Must do the following only if gui_command==GUI_CMD_OPTIONS, otherwise
-		// the own_dialogs setting will get reset during other commands such as "Gui Show", "Gui Add"
 		if (own_dialogs != TOGGLE_INVALID) // v1.0.35.06: Plus or minus "OwnDialogs" was present rather than being entirely absent.
 		{
 			if (g->DialogOwner)
@@ -333,6 +388,8 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 			else
 				g->DialogOwner = NULL; // Reset to NULL when "-OwnDialogs" is present.
 		}
+		if (gui_command == GUI_CMD_NEW && *aParam3)
+			SetWindowText(gui.mHwnd, aParam3);
 		goto return_the_result;
 	}
 

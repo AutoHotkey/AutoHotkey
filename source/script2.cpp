@@ -11786,6 +11786,8 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 		_itot(g->GuiPoint.y, target_buf, 10);
 		break;
 	case '\0': // A_Gui
+		if (!*g->GuiWindow->mName) // v1.1.04: Anonymous GUI.
+			return _stprintf(target_buf, _T("0x%Ix"), g->GuiWindow->mHwnd);
 		if (aBuf)
 			_tcscpy(aBuf, g->GuiWindow->mName);
 		return _tcslen(g->GuiWindow->mName);

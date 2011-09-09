@@ -5925,6 +5925,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					return ScriptError(_T("Parameter #3 and beyond should be omitted in this case."), new_raw_arg3);
 				break;
 			// No action for these since they have a varying number of optional params:
+			//case GUI_CMD_NEW:
 			//case GUI_CMD_SHOW:
 			//case GUI_CMD_FONT:
 			//case GUI_CMD_MARGIN:
