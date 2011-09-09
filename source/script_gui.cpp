@@ -4219,9 +4219,9 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 				else
 					mStyle &= ~given_style;
 			}
+			else // v1.1.04: Validate Gui options.
+				return g_script.ScriptError(ERR_INVALID_OPTION ERR_ABORT, next_option);
 		}
-
-		// If the item was not handled by the above, ignore it because it is unknown.
 
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 
@@ -5308,9 +5308,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			++next_option;  // Above has already verified that next_option isn't the empty string.
 			if (!*next_option)
 			{
-				// The option word consists of only one character, so ignore allow except the below
-				// since mandatory arg should immediately follow it.  Example: An isolated letter H
-				// should do nothing rather than cause the height to be set to zero.
+				// The option word consists of only one character, so consider it valid only if it doesn't
+				// require an arg.  Example: An isolated "H" should not cause the height to be set to zero.
 				switch (ctoupper(next_option[-1]))
 				{
 				case 'C':
@@ -5326,6 +5325,9 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				case 'V':
 					aControl.output_var = NULL;
 					break;
+				default:
+					// v1.1.04: Validate Gui options.
+					return g_script.ScriptError(ERR_INVALID_OPTION ERR_ABORT, next_option-1);
 				}
 				*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 				continue;
@@ -5424,15 +5426,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 							: g_script.ScriptError(_T("The same variable cannot be used for more than one control.") // It used to say "one control per window" but that seems more confusing than it's worth.
 								ERR_ABORT, next_option - 1);
 				aControl.output_var = candidate_var;
-				break;
-
-			case 'E':  // Extended style
-				if (IsPureNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "E".
-				{
-					// Pure numbers are assumed to be style additions or removals:
-					DWORD given_exstyle = ATOU(next_option); // ATOU() for unsigned.
-					if (adding) aOpt.exstyle_add |= given_exstyle; else aOpt.exstyle_remove |= given_exstyle;
-				}
 				break;
 
 			case 'C':  // Color
@@ -5573,10 +5566,26 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			case 'R': // The number of rows desired in the control.  Use ATOF() so that fractional rows are allowed.
 				aOpt.row_count = (float)ATOF(next_option); // Don't need double precision.
 				break;
+
+			default:
+				// Extended style is handled here so that something like +ection is detected as an error.
+				// However, the options above don't get the same treatment:
+				//  G/V: Already validated -- must be followed by a a valid label/variable name.
+				//  T/C/W/H/X/Y/R: If not followed by a valid letter (e.g. "XP"), it's assumed to be
+				//  a number; if it isn't numeric, it will be treated as 0, which will probably be
+				//  easy to detect. Cases like the following are ignored for simplicity and due to
+				//  rarity: xpp (trailing p is ignored) y100abc (abc is ignored).
+				if (ctoupper(next_option[-1]) == 'E' && IsPureNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "E".
+				{
+					// Pure numbers are assumed to be style additions or removals:
+					DWORD given_exstyle = ATOU(next_option); // ATOU() for unsigned.
+					if (adding) aOpt.exstyle_add |= given_exstyle; else aOpt.exstyle_remove |= given_exstyle;
+					break;
+				}
+				// v1.1.04: Validate Gui options.
+				return g_script.ScriptError(ERR_INVALID_OPTION ERR_ABORT, next_option-1);
 			} // switch()
 		} // Final "else" in the "else if" ladder.
-
-		// If the item was not handled by the above, ignore it because it is unknown.
 
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 
@@ -6150,18 +6159,21 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 	else
 		show_mode = SW_SHOWNORMAL;
 
-	for (LPTSTR cp = aOptions; *cp; ++cp)
+	for (LPTSTR cp_end = aOptions, cp = aOptions; *cp; cp = cp_end)
 	{
 		switch(ctoupper(*cp))
 		{
 		// For options such as W, H, X and Y: Use _ttoi() vs. ATOI() to avoid interpreting something like 0x01B
 		// as hex when in fact the B was meant to be an option letter.
+		case ' ':
+		case '\t':
+			++cp_end;
+			break;
 		case 'A':
 			if (!_tcsnicmp(cp, _T("AutoSize"), 8))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 7 vs. 8 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 7;
+				cp_end += 8;
 				auto_size = true;
 			}
 			break;
@@ -6169,8 +6181,7 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 			if (!_tcsnicmp(cp, _T("Center"), 6))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 5 vs. 6 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 5;
+				cp_end += 6;
 				x = COORD_CENTERED;
 				y = COORD_CENTERED;
 				// If the window is currently maximized, show_mode isn't set to SW_RESTORE unconditionally here
@@ -6183,15 +6194,13 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 			if (!_tcsnicmp(cp, _T("Minimize"), 8)) // Seems best to reserve "Min" for other things, such as Min W/H. "Minimize" is also more self-documenting.
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 7 vs. 8 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 7;
+				cp_end += 8;
 				show_mode = SW_MINIMIZE;  // Seems more typically useful/desirable than SW_SHOWMINIMIZED.
 			}
 			else if (!_tcsnicmp(cp, _T("Maximize"), 8))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 7 vs. 8 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 7;
+				cp_end += 8;
 				show_mode = SW_MAXIMIZE;  // SW_MAXIMIZE == SW_SHOWMAXIMIZED
 			}
 			break;
@@ -6199,15 +6208,13 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 			if (!_tcsnicmp(cp, _T("NA"), 2))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 1 vs. 2 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 1;
+				cp_end += 2;
 				show_mode = SW_SHOWNA;
 			}
 			else if (!_tcsnicmp(cp, _T("NoActivate"), 10))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 9 vs. 10 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 9;
+				cp_end += 10;
 				show_mode = SW_SHOWNOACTIVATE;
 			}
 			break;
@@ -6215,46 +6222,49 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 			if (!_tcsnicmp(cp, _T("Restore"), 7))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 6 vs. 7 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 6;
+				cp_end += 7;
 				show_mode = SW_RESTORE;
 			}
 			break;
+		case 'X':
+		case 'Y':
+			if (!_tcsnicmp(cp + 1, _T("Center"), 6))
+			{
+				if (ctoupper(*cp) == 'X')
+					x = COORD_CENTERED;
+				else
+					y = COORD_CENTERED;
+				cp_end += 7; // 7 in this case since we're working with cp + 1
+				continue;
+			}
+			// OTHERWISE, FALL THROUGH:
 		case 'W':
-			width = _ttoi(cp + 1);
-			break;
 		case 'H':
 			if (!_tcsnicmp(cp, _T("Hide"), 4))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 3 vs. 4 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 3;
+				cp_end += 4;
 				show_mode = SW_HIDE;
+				continue;
 			}
-			else
-				// Allow any width/height to be specified so that the window can be "rolled up" to its title bar:
-				height = _ttoi(cp + 1);
-			break;
-		case 'X':
-			if (!_tcsnicmp(cp + 1, _T("Center"), 6))
+			int n = _tcstol(cp + 1, &cp_end, 10);
+			if (cp_end == cp + 1) // No number.
 			{
-				cp += 6; // 6 in this case since we're working with cp + 1
-				x = COORD_CENTERED;
+				cp_end = cp; // Flag it as invalid.
+				break;
 			}
-			else
-				x = _ttoi(cp + 1);
-			break;
-		case 'Y':
-			if (!_tcsnicmp(cp + 1, _T("Center"), 6))
+			switch (ctoupper(*cp))
 			{
-				cp += 6; // 6 in this case since we're working with cp + 1
-				y = COORD_CENTERED;
+			case 'X': x = n; break;
+			case 'Y': y = n; break;
+			// Allow any width/height to be specified so that the window can be "rolled up" to its title bar:
+			case 'W': width = n; break;
+			case 'H': height = n; break;
 			}
-			else
-				y = _ttoi(cp + 1);
 			break;
-		// Otherwise: Ignore other characters, such as the digits that occur after the P/X/Y option letters.
 		} // switch()
+		if (cp_end == cp)
+			return g_script.ScriptError(ERR_INVALID_OPTION ERR_ABORT, cp);
 	} // for()
 
 	int width_orig = width;
