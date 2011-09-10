@@ -2153,6 +2153,7 @@ public:
 	UINT GetSubmenuPos(HMENU ahMenu);
 	UINT GetItemPos(LPTSTR aMenuItemName);
 	bool ContainsMenu(UserMenu *aMenu);
+	void UpdateAccelerators();
 	// L17: Functions for menu icons.
 	ResultType SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int aIconNumber, int aWidth);
 	ResultType ApplyItemIcon(UserMenuItem *aMenuItem);
@@ -2356,6 +2357,7 @@ public:
 	HDROP mHdrop;                 // Used for drag and drop operations.
 	HICON mIconEligibleForDestruction; // The window's icon, which can be destroyed when the window is destroyed if nothing else is using it.
 	HICON mIconEligibleForDestructionSmall; // L17: A window may have two icons: ICON_SMALL and ICON_BIG.
+	HACCEL mAccel; // Keyboard accelerator table.
 	int mMarginX, mMarginY, mPrevX, mPrevY, mPrevWidth, mPrevHeight, mMaxExtentRight, mMaxExtentDown
 		, mSectionX, mSectionY, mMaxExtentRightSection, mMaxExtentDownSection;
 	LONG mMinWidth, mMinHeight, mMaxWidth, mMaxHeight;
@@ -2398,6 +2400,7 @@ public:
 		, mBackgroundColorWin(CLR_DEFAULT), mBackgroundBrushWin(NULL)
 		, mBackgroundColorCtl(CLR_DEFAULT), mBackgroundBrushCtl(NULL)
 		, mHdrop(NULL), mIconEligibleForDestruction(NULL), mIconEligibleForDestructionSmall(NULL)
+		, mAccel(NULL)
 		, mMarginX(COORD_UNSPECIFIED), mMarginY(COORD_UNSPECIFIED) // These will be set when the first control is added.
 		, mPrevX(0), mPrevY(0)
 		, mPrevWidth(0), mPrevHeight(0) // Needs to be zero for first control to start off at right offset.
@@ -2495,6 +2498,11 @@ public:
 	static void LV_Sort(GuiControlType &aControl, int aColumnIndex, bool aSortOnlyIfEnabled, TCHAR aForceDirection = '\0');
 	static DWORD ControlGetListViewMode(HWND aWnd);
 	static IObject *ControlGetActiveX(HWND aWnd);
+	
+	void UpdateAccelerators(UserMenu &aMenu);
+	void UpdateAccelerators(UserMenu &aMenu, LPACCEL aAccel, int &aAccelCount);
+	void RemoveAccelerators();
+	static bool ConvertAccelerator(LPTSTR aString, ACCEL &aAccel);
 };
 
 

@@ -466,13 +466,20 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		// performance, since all messages must come through this bottleneck.
 		if (g_guiCount && msg.hwnd && msg.hwnd != g_hWnd && !(msg.message == AHK_GUI_ACTION || msg.message == AHK_USER_MENU))
 		{
-			if (msg.message == WM_KEYDOWN)
+			// Relies heavily on short-circuit boolean order:
+			if (  (msg.message >= WM_KEYFIRST || msg.message <= WM_KEYLAST)
+				&& (focused_control = GetFocus())
+				&& (focused_parent = GetNonChildParent(focused_control))
+				&& (pgui = GuiType::FindGui(focused_parent))  )
 			{
+				if (pgui->mAccel) // v1.1.04: Keyboard accelerators.
+					if (TranslateAccelerator(focused_parent, pgui->mAccel, &msg))
+						continue; // Above call handled it.
+
 				// Relies heavily on short-circuit boolean order:
-				if (  (msg.wParam == VK_NEXT || msg.wParam == VK_PRIOR || msg.wParam == VK_TAB
-					|| msg.wParam == VK_LEFT || msg.wParam == VK_RIGHT)
-					&& (focused_control = GetFocus()) && (focused_parent = GetNonChildParent(focused_control))
-					&& (pgui = GuiType::FindGui(focused_parent)) && pgui->mTabControlCount
+				if (  msg.message == WM_KEYDOWN && pgui->mTabControlCount
+					&& (msg.wParam == VK_NEXT || msg.wParam == VK_PRIOR || msg.wParam == VK_TAB
+					 || msg.wParam == VK_LEFT || msg.wParam == VK_RIGHT)
 					&& (pcontrol = pgui->FindControl(focused_control)) && pcontrol->type != GUI_CONTROL_HOTKEY   )
 				{
 					ptab_control = NULL; // Set default.
@@ -532,10 +539,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// check what modifiers are down because we never receive the keystroke for Ctrl-Esc and Alt-Esc
 				// (the OS handles those beforehand) and both Win-Esc and Shift-Esc are identical to a naked Esc
 				// inside an edit.  The following check relies heavily on short-circuit eval. order.
-				if (   (msg.wParam == VK_ESCAPE || msg.wParam == VK_TAB // v1.0.38.03: Added VK_TAB handling for "WantTab".
+				if (   msg.message == WM_KEYDOWN
+					&& (msg.wParam == VK_ESCAPE || msg.wParam == VK_TAB // v1.0.38.03: Added VK_TAB handling for "WantTab".
 						|| (msg.wParam == 'A' && (GetKeyState(VK_CONTROL) & 0x8000))) // v1.0.44: Added support for "WantCtrlA".
-					&& (focused_control = GetFocus()) && (focused_parent = GetNonChildParent(focused_control))
-					&& (pgui = GuiType::FindGui(focused_parent)) && (pcontrol = pgui->FindControl(focused_control))
+					&& (pcontrol = pgui->FindControl(focused_control))
 					&& pcontrol->type == GUI_CONTROL_EDIT)
 				{
 					switch(msg.wParam)
@@ -564,7 +571,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					} // switch()
 				}
 
-				if (GuiType::sTreeWithEditInProgress)
+				if (GuiType::sTreeWithEditInProgress && msg.message == WM_KEYDOWN)
 				{
 					if (msg.wParam == VK_RETURN)
 					{
@@ -577,7 +584,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						continue;
 					}
 				}
-			} // if (msg.message == WM_KEYDOWN)
+			} // if (keyboard message sent to GUI)
 
 			for (i = 0, msg_was_handled = false; i < g_guiCount; ++i)
 			{

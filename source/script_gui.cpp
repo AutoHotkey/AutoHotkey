@@ -431,6 +431,10 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		else
 			menu = NULL;
 		SetMenu(gui.mHwnd, menu ? menu->mMenu : NULL);  // Add or remove the menu.
+		if (menu) // v1.1.04: Keyboard accelerators.
+			gui.UpdateAccelerators(*menu);
+		else
+			gui.RemoveAccelerators();
 		goto return_the_result;
 
 	case GUI_CMD_SHOW:
@@ -1695,17 +1699,18 @@ ResultType GuiType::Destroy(GuiType &gui)
 		else if (control.type == GUI_CONTROL_LISTVIEW) // It was ensured at an earlier stage that union_lv_attrib != NULL.
 			free(control.union_lv_attrib);
 	}
-	gui.mHwnd = NULL;
-	gui.mControlCount = 0; // All child windows (controls) are automatically destroyed with parent.
 	HICON icon_eligible_for_destruction = gui.mIconEligibleForDestruction;
 	HICON icon_eligible_for_destruction_small = gui.mIconEligibleForDestructionSmall;
-	free(gui.mControl); // Free the control array, which was previously malloc'd.
-	gui.Release(); // After this, the var "gui" is invalid so should not be referenced.
 	if (icon_eligible_for_destruction && icon_eligible_for_destruction != g_script.mCustomIcon) // v1.0.37.07.
-		DestroyIconsIfUnused(icon_eligible_for_destruction, icon_eligible_for_destruction_small); // Must be done only after "g_gui[aWindowIndex] = NULL".
+		DestroyIconsIfUnused(icon_eligible_for_destruction, icon_eligible_for_destruction_small); // Must be done only after removal from g_gui.
 	// For simplicity and performance, any fonts used *solely* by a destroyed window are destroyed
 	// only when the program terminates.  Another reason for this is that sometimes a destroyed window
 	// is soon recreated to use the same fonts it did before.
+	gui.RemoveAccelerators();
+	gui.mHwnd = NULL;
+	gui.mControlCount = 0; // All child windows (controls) are automatically destroyed with parent.
+	free(gui.mControl); // Free the control array, which was previously malloc'd.
+	gui.Release(); // After this, the var "gui" is invalid so should not be referenced.
 	return OK;
 }
 
@@ -9871,4 +9876,116 @@ DWORD GuiType::ControlGetListViewMode(HWND aWnd)
 	// Also, the following relies on the fact that LV_VIEW_ICON==LVS_ICON, LV_VIEW_DETAILS==LVS_REPORT,
 	// LVS_SMALLICON==LV_VIEW_SMALLICON, and LVS_LIST==LV_VIEW_LIST.
 	return g_os.IsWinXPorLater() ? ListView_GetView(aWnd) : (GetWindowLong(aWnd, GWL_STYLE) & LVS_TYPEMASK);
+}
+
+
+
+#define MAX_ACCELERATORS 128
+
+void GuiType::UpdateAccelerators(UserMenu &aMenu)
+{
+	// Destroy the old accelerator table, if any.
+	RemoveAccelerators();
+
+	int accel_count = 0;
+	ACCEL accel[MAX_ACCELERATORS];
+
+	// Call recursive function to handle submenus.
+	UpdateAccelerators(aMenu, accel, accel_count);
+
+	if (accel_count)
+		mAccel = CreateAcceleratorTable(accel, accel_count);
+}
+
+void GuiType::UpdateAccelerators(UserMenu &aMenu, LPACCEL aAccel, int &aAccelCount)
+{
+	UserMenuItem *item;
+	for (item = aMenu.mFirstMenuItem; item && aAccelCount < MAX_ACCELERATORS; item = item->mNextMenuItem)
+	{
+		if (item->mSubmenu)
+		{
+			// Recursively process accelerators in submenus.
+			UpdateAccelerators(*item->mSubmenu, aAccel, aAccelCount);
+		}
+		else if (LPTSTR tab = _tcschr(item->mName, '\t'))
+		{
+			if (ConvertAccelerator(tab + 1, aAccel[aAccelCount]))
+			{
+				// This accelerator is valid.
+				aAccel[aAccelCount++].cmd = item->mMenuID;
+			}
+			// Otherwise, the text following '\t' was an invalid accelerator or not an accelerator
+			// at all. For simplicity, flexibility and backward-compatibility, just ignore it.
+		}
+	}
+}
+
+void GuiType::RemoveAccelerators()
+{
+	if (mAccel)
+	{
+		DestroyAcceleratorTable(mAccel);
+		mAccel = NULL;
+	}
+}
+
+bool GuiType::ConvertAccelerator(LPTSTR aString, ACCEL &aAccel)
+{
+	aString = omit_leading_whitespace(aString);
+	if (!*aString) // Multiple points below rely on this check.
+		return false;
+
+	// Omitting FVIRTKEY and storing a character code instead of a vk code allows the
+	// accelerator to be triggered by Alt+Numpad and perhaps IME or other means. However,
+	// testing shows that it also causes the modifier key flags to be ignored, so this
+	// approach can only be used if aString is a lone character:
+	if (!aString[1])
+	{
+		aAccel.key = (WORD)(TBYTE)*aString;
+		aAccel.fVirt = 0;
+		return true;
+	}
+
+	aAccel.fVirt = FVIRTKEY; // Init.
+
+	modLR_type modLR = 0;
+
+	LPTSTR cp;
+	while (cp = _tcschr(aString + 1, '+')) // For each modifier.  +1 is used in case "+" is the key.
+	{
+		LPTSTR cp_end = omit_trailing_whitespace(aString, cp - 1);
+		size_t len = cp_end - aString + 1;
+		if (!_tcsnicmp(aString, _T("Ctrl"), len))
+			modLR |= MOD_LCONTROL;
+		else if (!_tcsnicmp(aString, _T("Alt"), len))
+			modLR |= MOD_LALT;
+		else if (!_tcsnicmp(aString, _T("Shift"), len))
+			modLR |= MOD_LSHIFT;
+		else
+			return false;
+		aString = omit_leading_whitespace(cp + 1);
+		if (!*aString) // Below relies on this check.
+			return false; // "Modifier+", but no key name.
+	}
+
+	// Now that any modifiers have been parsed and removed, convert the key name.
+	// If only a single character remains, this may set additional modifiers.
+	if (!aString[1])
+	{
+		// It seems preferable to treat "Ctrl+O" as ^o and not ^+o, so convert the character
+		// to lower-case so that MOD_LSHIFT is added only for keys like "@". Seems best to use
+		// the locale-dependent method, though somewhat debatable.
+		aAccel.key = CharToVKAndModifiers(ltolower(*aString), &modLR, GetKeyboardLayout(0));
+	}
+	else
+		aAccel.key = TextToVK(aString);
+
+	if (modLR & MOD_LCONTROL)
+		aAccel.fVirt |= FCONTROL;
+	if (modLR & MOD_LALT) // Not MOD_RALT, which would mean AltGr (unsupported).
+		aAccel.fVirt |= FALT;
+	if (modLR & MOD_LSHIFT)
+		aAccel.fVirt |= FSHIFT;
+
+	return aAccel.key; // i.e. false if not a valid key name.
 }

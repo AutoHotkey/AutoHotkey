@@ -623,6 +623,8 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, Label *aLabel, UserMenu
 	++mMenuItemCount;  // Only after memory has been successfully allocated.
 	if (*aOptions)
 		UpdateOptions(menu_item, aOptions);
+	if (_tcschr(aName, '\t')) // v1.1.04: The new item has a keyboard accelerator.
+		UpdateAccelerators();
 	return OK;
 }
 
@@ -815,11 +817,20 @@ ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName)
 			mii.hSubMenu = NULL;
 		}
 	}
+	
+	// v1.1.04: If the new and old names both have accelerators, call UpdateAccelerators() if they
+	// are different. Otherwise call it if only one is NULL (i.e. accelerator was added or removed).
+	LPTSTR old_accel = _tcschr(aMenuItem->mName, '\t'), new_accel = _tcschr(aNewName, '\t');
+	bool update_accel = old_accel && new_accel ? _tcsicmp(old_accel, new_accel) : old_accel != new_accel;
 
 	// Failure is rare enough in the below that no attempt is made to undo the above:
 	BOOL result = SetMenuItemInfo(mMenu, aMenuItem_ID, aMenuItem->mSubmenu != NULL, &mii);
 	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
-	return result ? UpdateName(aMenuItem, aNewName) : FAIL;
+	if (  !(result && UpdateName(aMenuItem, aNewName))  )
+		return FAIL;
+	if (update_accel) // v1.1.04: Above determined this item's accelerator was changed.
+		UpdateAccelerators(); // Must not be done until after mName is updated.
+	return OK;
 }
 
 
@@ -1416,6 +1427,38 @@ bool UserMenu::ContainsMenu(UserMenu *aMenu)
 				return true;
 			//else keep searching
 	return false;
+}
+
+
+
+void UserMenu::UpdateAccelerators()
+{
+	if (!mMenu)
+		// Menu doesn't exist yet, so can't be attached (directly or indirectly) to any GUIs.
+		return;
+
+	if (mMenuType == MENU_TYPE_BAR)
+	{
+		for (int i = 0; i < g_guiCount; ++i)
+			if (GetMenu(g_gui[i]->mHwnd) == mMenu)
+			{
+				g_gui[i]->UpdateAccelerators(*this);
+				// Continue in case there are other GUIs using this menu.
+				//break;
+			}
+	}
+	else
+	{
+		// This menu isn't a menu bar, but perhaps it is contained by one.
+		for (UserMenu *menu = g_script.mFirstMenu; menu; menu = menu->mNextMenu)
+			if (menu->mMenuType == MENU_TYPE_BAR && menu->ContainsMenu(this))
+			{
+				menu->UpdateAccelerators();
+				// Continue in case there are other menus which contain this submenu.
+				//break;
+			}
+		return;
+	}
 }
 
 
