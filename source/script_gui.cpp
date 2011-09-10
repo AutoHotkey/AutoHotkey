@@ -224,6 +224,17 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 			result = ScriptError(ERR_OUTOFMEM);
 		goto return_the_result;
 
+	case GUI_CMD_OPTIONS:
+		// v1.0.43.09:
+		// Don't overload "+LastFound" because it would break existing scripts that rely on the window
+		// being created by +LastFound.
+		if (!_tcsicmp(aCommand, _T("+LastFoundExist")))
+		{
+			g->hWndLastUsed = pgui ? pgui->mHwnd : NULL;
+			goto return_the_result;
+		}
+		break;
+
 	case GUI_CMD_NEW: // v1.1.04: Gui, New.
 		if (_tcschr(aBuf, ':'))
 		{
@@ -263,17 +274,6 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		case GUI_CMD_MAXIMIZE:
 		case GUI_CMD_RESTORE:
 			goto return_the_result; // Nothing needs to be done since the window object doesn't exist.
-
-		// v1.0.43.09:
-		// Don't overload "+LastFound" because it would break existing scripts that rely on the window
-		// being created by +LastFound.
-		case GUI_CMD_OPTIONS:
-			if (!_tcsicmp(aCommand, _T("+LastFoundExist")))
-			{
-				g->hWndLastUsed = NULL;
-				goto return_the_result;
-			}
-			break;
 		}
 
 		if (g_guiCount == g_guiCountMax)
@@ -4106,7 +4106,7 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 			// Alternative: Could also use some char that's illegal in labels to indicate one or more of the above.
 		}
 
-		else if (!_tcsnicmp(next_option, _T("LastFound"), 9)) // _tcsnicmp so that "LastFoundExist" is also recognized.
+		else if (!_tcsicmp(next_option, _T("LastFound")))
 			aSetLastFoundWindow = true; // Regardless of whether "adding" is true or false.
 
 		else if (!_tcsicmp(next_option, _T("MaximizeBox"))) // See above comment.
