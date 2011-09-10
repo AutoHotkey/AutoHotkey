@@ -8872,7 +8872,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	// Set default options:
 	bool translate_crlf_to_lf = false;
 	bool is_binary_clipboard = false;
-	unsigned __int64 max_bytes_to_load = ULLONG_MAX;
+	unsigned __int64 max_bytes_to_load = VARSIZE_MAX-2; // NOT ULLONG_MAX; see comments near bytes_to_read below.  -2 to avoid overflow when calling malloc().
 	UINT codepage = g->Encoding & CP_AHKCP;
 
 	// It's done as asterisk+option letter to permit future expansion.  A plain asterisk such as used
@@ -8891,6 +8891,11 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			break;
 		case 'M': // Maximum number of bytes to load.
 			max_bytes_to_load = ATOU64(cp + 1); // Relies upon the fact that it ceases conversion upon reaching a space or tab.
+#ifndef _WIN64
+			// See near bytes_to_read below for comments.
+			if (max_bytes_to_load > SIZE_MAX)
+				max_bytes_to_load = SIZE_MAX;
+#endif
 			// Skip over the digits of this option in case it's the last option.
 			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
 				return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
@@ -8953,7 +8958,10 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 		CloseHandle(hfile);
 		return SetErrorLevelOrThrow();
 	}
-	if (max_bytes_to_load < bytes_to_read)
+	// In addition to imposing the limit set by the *M option, the following check prevents an error
+	// caused by 64 to 32-bit truncation -- that is, a file size of 0x100000001 would be truncated to
+	// 0x1, allowing the command to complete even though it should fail.
+	if (bytes_to_read > max_bytes_to_load) // Default (and absolute maximum) limit is SIZE_MAX.
 		bytes_to_read = max_bytes_to_load;
 
 	if (!bytes_to_read)
