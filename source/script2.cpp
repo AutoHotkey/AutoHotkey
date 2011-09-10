@@ -8962,15 +8962,27 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 		return SetErrorsOrThrow(false, 0); // Indicate success (a zero-length file results in empty output_var).
 	}
 
-	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-	// this call will set up the clipboard for writing:
-	if (is_binary_clipboard && // Non-binary data uses another buffer for charset conversion later.
-		output_var.SetCapacity(VarSizeType(bytes_to_read), true, false) != OK) // Probably due to "out of memory".
+	LPBYTE output_buf;
+	if (is_binary_clipboard)
+	{
+		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
+		// this call will set up the clipboard for writing:
+		if (output_var.SetCapacity(VarSizeType(bytes_to_read), true, false) == OK)
+			output_buf = (LPBYTE) output_var.Contents();
+		else
+			output_buf = NULL; // Above already displayed the error message.
+	}
+	else
+	{
+		// Allocate a temporary buffer; output_var will be assigned the text after conversion.
+		output_buf = (LPBYTE) malloc(size_t(bytes_to_read + sizeof(wchar_t)));
+	}
+	if (!output_buf)
 	{
 		CloseHandle(hfile);
-		return FAIL;  // It already displayed the error. ErrorLevel doesn't matter now because the current quasi-thread will be aborted.
+		// ErrorLevel doesn't matter now because the current quasi-thread will be aborted.
+		return is_binary_clipboard ? FAIL : LineError(ERR_OUTOFMEM ERR_ABORT);
 	}
-	LPBYTE output_buf = !is_binary_clipboard ? (LPBYTE) malloc(size_t(bytes_to_read + sizeof(wchar_t))) : (LPBYTE) output_var.Contents();
 
 	DWORD bytes_actually_read;
 	BOOL result = ReadFile(hfile, output_buf, (DWORD)bytes_to_read, &bytes_actually_read, NULL);
