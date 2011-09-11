@@ -1829,6 +1829,7 @@ public:
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
+	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	
 	ResultType SetErrorsOrThrow(bool aError, DWORD aLastErrorOverride = -1);
@@ -2932,6 +2933,9 @@ void BIF_ComObjTypeOrValue(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 void BIF_ComObjFlags(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ComObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_ComObjQuery(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+
+
+void BIF_Exception(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 
 BOOL LegacyResultToBOOL(LPTSTR aResult);

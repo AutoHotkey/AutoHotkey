@@ -17488,6 +17488,73 @@ void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 
 
+void BIF_Exception(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	LPTSTR message = TokenToString(*aParam[0], aResultToken.buf);
+	TCHAR what_buf[MAX_NUMBER_SIZE], extra_buf[MAX_NUMBER_SIZE];
+	LPTSTR what = NULL, extra = _T("");
+	Line *line = NULL;
+
+	if (aParamCount < 2)
+	{
+		line = g_script.mCurrLine;
+		if (g->CurrentFunc)
+			what = g->CurrentFunc->mName;
+		else if (g->CurrentLabel)
+			what = g->CurrentLabel->mName;
+		else
+			what = _T(""); // Probably the auto-execute section?
+	}
+	else
+	{
+#ifdef CONFIG_DEBUGGER
+		int offset = TokenIsPureNumeric(*aParam[1]) ? (int)TokenToInt64(*aParam[1]) : 0;
+		if (offset < 0)
+		{
+			DbgStack::Entry *se = g_Debugger.mStack.mTop + offset;
+			if (se >= g_Debugger.mStack.mBottom)
+			{
+				// Self-contained loop to ensure the entry belongs to the current thread
+				// (below also relies on this loop to verify se[1].type != SE_Thread):
+				while (++offset <= 0 && g_Debugger.mStack.mTop[offset].type != DbgStack::SE_Thread); // Relies on short-circuit evaluation.
+				if (offset == 1)
+				{
+					line = se->line;
+					// se->line contains the line at the given offset from the top of the stack.
+					// Rather than returning the name of the function or sub which contains that
+					// line, return the name of the function or sub which that line called.
+					// In other words, an offset of -1 gives the name of the current function and
+					// the file and number of the line which it was called from.
+					what = se[1].type == DbgStack::SE_Func ? se[1].func->mName : se[1].sub->mName;
+				}
+			}
+			// Otherwise, not a valid offset.
+		}
+#endif
+		if (!what)
+		{
+			line = g_script.mCurrLine;
+			what = TokenToString(*aParam[1], what_buf);
+		}
+
+		if (aParamCount > 2)
+			extra = TokenToString(*aParam[2], extra_buf);
+	}
+
+	if (aResultToken.object = line->CreateRuntimeException(message, what, extra))
+	{
+		aResultToken.symbol = SYM_OBJECT;
+	}
+	else
+	{
+		// Out of memory. Seems best to alert the user.
+		MsgBox(ERR_OUTOFMEM);
+		aResultToken.value_int64 = 0;
+	}
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
