@@ -9249,7 +9249,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 		delete ts;
 	// else it's the caller's responsibility, or it's caller's, to close it.
 
-	return SetErrorsOrThrow(!result);
+	return SetErrorsOrThrow(result);
 }
 
 
