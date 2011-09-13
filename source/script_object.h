@@ -173,9 +173,9 @@ public:
 	
 	bool Append(LPTSTR aValue, size_t aValueLength = -1);
 
-	// Used by Func::Call() for variadic functions/function-calls:
 	Object *Clone(INT_PTR aStartOffset = 0);
 	ResultType ArrayToParams(void *&aMemToFree, ExprTokenType **&aParam, int &aParamCount, int aMinParams);
+	ResultType ArrayToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax);
 	
 	inline bool GetNextItem(ExprTokenType &aToken, INT_PTR &aOffset, INT_PTR &aKey)
 	{
@@ -186,7 +186,12 @@ public:
 		field.ToToken(aToken);
 		return true;
 	}
-	
+
+	int GetNumericItemCount()
+	{
+		return (int)mKeyOffsetObject;
+	}
+
 	bool GetItem(ExprTokenType &aToken, LPTSTR aKey)
 	{
 		KeyType key;

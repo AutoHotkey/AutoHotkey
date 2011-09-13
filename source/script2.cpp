@@ -5388,29 +5388,53 @@ ResultType Line::StringReplace()
 
 void BIF_StrSplit(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
+	LPTSTR aInputString = TokenToString(*aParam[0], aResultToken.buf);
+	LPTSTR *aDelimiterList = NULL;
+	int aDelimiterCount = 0;
+	LPTSTR aOmitList = _T("");
+
+	if (aParamCount > 1)
+	{
+		if (Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[1])))
+		{
+			aDelimiterCount = obj->GetNumericItemCount();
+			aDelimiterList = (LPTSTR *)_alloca(aDelimiterCount * sizeof(LPTSTR *));
+			if (!obj->ArrayToStrings(aDelimiterList, aDelimiterCount, aDelimiterCount))
+				// Array contains something other than a string.
+				goto return_empty_string;
+			for (int i = 0; i < aDelimiterCount; ++i)
+				if (!*aDelimiterList[i])
+					// Empty string in delimiter list. Although it could be treated similarly to the
+					// "no delimiter" case, it's far more likely to be an error. If ever this check
+					// is removed, the loop below must be changed to support "" as a delimiter.
+					goto return_empty_string;
+		}
+		else
+		{
+			aDelimiterList = (LPTSTR *)_alloca(sizeof(LPTSTR *));
+			*aDelimiterList = TokenToString(*aParam[1]);
+			aDelimiterCount = **aDelimiterList != '\0'; // i.e. non-empty string.
+		}
+		if (aParamCount > 2)
+			aOmitList = TokenToString(*aParam[2]);
+	}
+	
 	Object *output_array = Object::Create(NULL, 0);
 	if (!output_array)
-	{
-		aResultToken.value_int64 = 0;
-		return;
-	}
+		goto return_empty_string;
 	aResultToken.symbol = SYM_OBJECT;	// Set default, overridden only for critical errors.
 	aResultToken.object = output_array;	//
 
-	LPTSTR aInputString		= TokenToString(*aParam[0], aResultToken.buf);
-	LPTSTR aDelimiterList	= aParamCount > 1 ? TokenToString(*aParam[1]) : _T("");
-	LPTSTR aOmitList		= aParamCount > 2 ? TokenToString(*aParam[2]) : _T("");
-
 	if (!*aInputString) // The input variable is blank, thus there will be zero elements.
 		return;
-
-	if (*aDelimiterList) // The user provided a list of delimiters, so process the input variable normally.
+	
+	if (aDelimiterCount) // The user provided a list of delimiters, so process the input variable normally.
 	{
 		LPTSTR contents_of_next_element, delimiter, new_starting_pos;
-		size_t element_length;
+		size_t element_length, delimiter_length;
 		for (contents_of_next_element = aInputString; ; )
 		{
-			if (delimiter = StrChrAny(contents_of_next_element, aDelimiterList)) // A delimiter was found.
+			if (delimiter = InStrAny(contents_of_next_element, aDelimiterList, aDelimiterCount, delimiter_length)) // A delimiter was found.
 			{
 				element_length = delimiter - contents_of_next_element;
 				if (*aOmitList && element_length > 0)
@@ -5424,7 +5448,7 @@ void BIF_StrSplit(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				// chars, the variable will be assigned the empty string:
 				if (!output_array->Append(contents_of_next_element, element_length))
 					break;
-				contents_of_next_element = delimiter + 1;  // Omit the delimiter since it's never included in contents.
+				contents_of_next_element = delimiter + delimiter_length;  // Omit the delimiter since it's never included in contents.
 			}
 			else // the entire length of contents_of_next_element is what will be stored
 			{
@@ -5469,9 +5493,10 @@ void BIF_StrSplit(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	// The fact that this section is executing means that a memory allocation failed and caused the
 	// loop to break, so return a false value to let the caller detect the failure.  Empty string
 	// is used vs 0 for consistency with Object() and Array().
+	output_array->Release(); // Since we're not returning it.
+return_empty_string:
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
-	output_array->Release(); // Since we're not returning it.
 }
 
 

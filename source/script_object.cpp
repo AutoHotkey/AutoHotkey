@@ -240,6 +240,23 @@ ResultType Object::ArrayToParams(void *&aMemToFree, ExprTokenType **&aParam, int
 
 
 //
+// Object::ArrayToStrings - Used by BIF_StrSplit.
+//
+
+ResultType Object::ArrayToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax)
+{
+	int i, j;
+	for (i = 0, j = 0; i < aStringsMax && j < mKeyOffsetObject; ++j)
+		if (SYM_STRING == mFields[j].symbol)
+			aStrings[i++] = mFields[j].marker;
+		else
+			return FAIL;
+	aStringCount = i;
+	return OK;
+}
+
+
+//
 // Object::Delete - Called immediately before the object is deleted.
 //					Returns false if object should not be deleted yet.
 //
