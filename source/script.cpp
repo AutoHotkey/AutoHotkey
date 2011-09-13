@@ -5176,18 +5176,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		break;
 
 	case ACT_REGREAD:
-		// The below has two checks in case the user is using the 5-param method with the 5th parameter
-		// being blank to indicate that the key's "default" value should be read.  For example:
-		// RegRead, OutVar, REG_SZ, HKEY_CURRENT_USER, Software\Winamp,
-		if (aArgc > 4 || line.RegConvertValueType(new_raw_arg2))
-		{
-			// The obsolete 5-param method is being used, wherein ValueType is the 2nd param.
-			if (*new_raw_arg3 && !line.ArgHasDeref(3) && !line.RegConvertRootKey(new_raw_arg3))
-				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-		}
-		else // 4-param method.
-			if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertRootKey(new_raw_arg2))
-				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
+		if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertRootKey(new_raw_arg2))
+			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
 	case ACT_REGWRITE:
@@ -13359,10 +13349,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			// Also, do not use RegCloseKey() on this, even if it's a remote key, since our caller handles that:
 			return RegRead(g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name);
 		// Otherwise:
-		if (mArgc > 4 || RegConvertValueType(ARG2)) // The obsolete 5-param method (ARG2 is unused).
-			result = RegRead(root_key = RegConvertRootKey(ARG3, &is_remote_registry), ARG4, ARG5);
-		else
-			result = RegRead(root_key = RegConvertRootKey(ARG2, &is_remote_registry), ARG3, ARG4);
+		result = RegRead(root_key = RegConvertRootKey(ARG2, &is_remote_registry), ARG3, ARG4);
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS keeps always-open.
 			RegCloseKey(root_key);
 		return result;

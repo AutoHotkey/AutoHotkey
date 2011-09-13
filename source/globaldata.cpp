@@ -443,7 +443,7 @@ Action g_act[] =
 	// These require so few parameters due to registry loops, which provide the missing parameter values
 	// automatically.  In addition, RegRead can't require more than 1 param since the 2nd param is
 	// an option/obsolete parameter:
-	, {_T("RegRead"), 1, 5, true, NULL} // output var, (ValueType [optional]), RegKey, RegSubkey, ValueName
+	, {_T("RegRead"), 1, 4, true, NULL} // output var, RegKey, RegSubkey, ValueName
 	, {_T("RegWrite"), 0, 5, false, NULL} // ValueType, RegKey, RegSubKey, ValueName, Value (set to blank if omitted?)
 	, {_T("RegDelete"), 0, 3, false, NULL} // RegKey, RegSubKey, ValueName
 
