@@ -77,17 +77,19 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 	}
 
 	// Search for the Gui!
-	if (GuiType *found_gui = GuiType::FindGui(name))
-		return found_gui;
+	GuiType *found_gui = GuiType::FindGui(name);
 	
-	// Since no Gui with this name exists, if aName != NULL, our caller wants to know what
+	// If no Gui with this name exists and aName is not NULL, our caller wants to know what
 	// name to give a new Gui.  Before returning the name, ensure it is valid.  At the very
 	// least, space must be outlawed for Gui label names and +OwnerGUINAME.  Requiring the
 	// name to be valid as a variable name allows for possible future use of the Gui name
 	// as part of a variable or function name.
 	if (aName)
 	{
-		if (Var::ValidateName(name, true, false))
+		// found_gui: *aName must be set for GUI_CMD_NEW even if a GUI was found, since
+		// found_gui will be destroyed (along with found_gui->mName) and recreated. If a
+		// GUI was found, obviously the name is valid and ValidateName() can be skipped.
+		if (found_gui || Var::ValidateName(name, true, false))
 		{
 			// This name is okay.
 			*aName = name_marker;
@@ -96,7 +98,8 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 		}
 		// Otherwise, leave it set to NULL so our caller knows it is invalid.
 	}
-	return NULL;
+
+	return found_gui;
 }
 
 
@@ -136,9 +139,14 @@ GuiType *global_struct::GuiDefaultWindowValid()
 
 GuiType *GuiType::ValidGui(GuiType *&aGuiRef)
 {
-	if (aGuiRef && !aGuiRef->mHwnd)
+	if (aGuiRef && !aGuiRef->mHwnd) // Gui existed but has been destroyed.
 	{
-		// Gui has been destroyed.
+		if (!*aGuiRef->mName) // v1.1.04: It was an anonymous GUI, so no point keeping it around.
+		{
+			aGuiRef->Release();
+			aGuiRef = NULL;
+			return NULL;
+		}
 		GuiType *recreated_gui;
 		if (   !(recreated_gui = GuiType::FindGui(aGuiRef->mName))   )
 			return NULL; // Gui is not valid, so return NULL.
@@ -215,6 +223,38 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		else
 			result = ScriptError(ERR_OUTOFMEM);
 		goto return_the_result;
+
+	case GUI_CMD_OPTIONS:
+		// v1.0.43.09:
+		// Don't overload "+LastFound" because it would break existing scripts that rely on the window
+		// being created by +LastFound.
+		if (!_tcsicmp(aCommand, _T("+LastFoundExist")))
+		{
+			g->hWndLastUsed = pgui ? pgui->mHwnd : NULL;
+			goto return_the_result;
+		}
+		break;
+
+	case GUI_CMD_NEW: // v1.1.04: Gui, New.
+		if (_tcschr(aBuf, ':'))
+		{
+			if (pgui)
+			{
+				// Caller explicitly asked for a "new" Gui, so destroy this one:
+				GuiType::Destroy(*pgui);
+				pgui = NULL;
+			}
+		}
+		else
+		{
+			// In this case, caller has omitted the name and wants to create an "anonymous" Gui.
+			pgui = NULL; // Override pgui, which was set to the default Gui (if it exists).
+			name_length = 0; // Override name_length, which was set to the length of the default Gui name.
+			//name = _T(""); // Unnecessary since name is not expected to be null-terminated.
+			// Below will allocate an empty name, for simplicity and maintainability --
+			// this way, mName is always non-NULL and points to malloc'd memory.
+		}
+		break;
 	}
 
 
@@ -234,17 +274,6 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		case GUI_CMD_MAXIMIZE:
 		case GUI_CMD_RESTORE:
 			goto return_the_result; // Nothing needs to be done since the window object doesn't exist.
-
-		// v1.0.43.09:
-		// Don't overload "+LastFound" because it would break existing scripts that rely on the window
-		// being created by +LastFound.
-		case GUI_CMD_OPTIONS:
-			if (!_tcsicmp(aCommand, _T("+LastFoundExist")))
-			{
-				g->hWndLastUsed = NULL;
-				goto return_the_result;
-			}
-			break;
 		}
 
 		if (g_guiCount == g_guiCountMax)
@@ -262,7 +291,7 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 			g_gui = new_gui_array;
 			g_guiCountMax = new_max;
 		}
-		
+
 		// Otherwise: Create the object and (later) its window, since all the other sub-commands below need it:
 		for (;;) // For break, to reduce repetition of cleanup-on-failure code.
 		{
@@ -291,10 +320,20 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 
 	// Now handle any commands that should be handled prior to creation of the window in the case
 	// where the window doesn't already exist:
+	
+	LPTSTR options;
+	if (gui_command == GUI_CMD_OPTIONS)
+		options = aCommand;
+	else if (gui_command == GUI_CMD_NEW)
+		options = aParam2;
+	else
+		options = NULL;
+	
 	bool set_last_found_window = false;
 	ToggleValueType own_dialogs = TOGGLE_INVALID;
-	if (gui_command == GUI_CMD_OPTIONS)
-		if (!gui.ParseOptions(aCommand, set_last_found_window, own_dialogs))
+	Var *hwnd_var = NULL;
+	if (options)
+		if (!gui.ParseOptions(options, set_last_found_window, own_dialogs, hwnd_var))
 		{
 			result = FAIL; // It already displayed the error.
 			goto return_the_result;
@@ -310,13 +349,33 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		goto return_the_result;
 	}
 
-	// After creating the window, return from any commands that were fully handled above:
-	if (gui_command == GUI_CMD_OPTIONS)
+	if (!name_length) // v1.1.04: Gui, New.
 	{
+		// Now that the HWND is known, we could use it as the Gui's name.  However, that isn't
+		// done because it would allow a Gui to be created using an invalid HWND as a name
+		// (and that invalid HWND could become valid for some other window, later):
+		//
+		//    Gui, New  ; Creates a new Gui and sets it as default.
+		//    Gui, Destroy  ; Destroys the Gui but does not affect g->GuiDefaultWindow or g->DialogOwner.
+		//    Gui, +LastFound  ; This would create a Gui using the HWND of the previous one as a name.
+		//
+		// Instead, A_Gui returns the HWND when mName is an empty string.
+
+		// Make the new (unnamed) window the default, for convenience:
+		if (g->GuiDefaultWindow)
+			g->GuiDefaultWindow->Release();
+		pgui->AddRef();
+		g->GuiDefaultWindow = pgui;
+	}
+
+	if (hwnd_var) // v1.1.04: +HwndVarName option.
+		hwnd_var->AssignHWND(gui.mHwnd);
+
+	if (options)
+	{
+		// After creating the window, apply remaining options:
 		if (set_last_found_window)
 			g->hWndLastUsed = gui.mHwnd;
-		// Fix for v1.0.35.05: Must do the following only if gui_command==GUI_CMD_OPTIONS, otherwise
-		// the own_dialogs setting will get reset during other commands such as "Gui Show", "Gui Add"
 		if (own_dialogs != TOGGLE_INVALID) // v1.0.35.06: Plus or minus "OwnDialogs" was present rather than being entirely absent.
 		{
 			if (g->DialogOwner)
@@ -329,6 +388,8 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 			else
 				g->DialogOwner = NULL; // Reset to NULL when "-OwnDialogs" is present.
 		}
+		if (gui_command == GUI_CMD_NEW && *aParam3)
+			SetWindowText(gui.mHwnd, aParam3);
 		goto return_the_result;
 	}
 
@@ -370,6 +431,10 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		else
 			menu = NULL;
 		SetMenu(gui.mHwnd, menu ? menu->mMenu : NULL);  // Add or remove the menu.
+		if (menu) // v1.1.04: Keyboard accelerators.
+			gui.UpdateAccelerators(*menu);
+		else
+			gui.RemoveAccelerators();
 		goto return_the_result;
 
 	case GUI_CMD_SHOW:
@@ -1629,17 +1694,18 @@ ResultType GuiType::Destroy(GuiType &gui)
 		else if (control.type == GUI_CONTROL_LISTVIEW) // It was ensured at an earlier stage that union_lv_attrib != NULL.
 			free(control.union_lv_attrib);
 	}
-	gui.mHwnd = NULL;
-	gui.mControlCount = 0; // All child windows (controls) are automatically destroyed with parent.
 	HICON icon_eligible_for_destruction = gui.mIconEligibleForDestruction;
 	HICON icon_eligible_for_destruction_small = gui.mIconEligibleForDestructionSmall;
-	free(gui.mControl); // Free the control array, which was previously malloc'd.
-	gui.Release(); // After this, the var "gui" is invalid so should not be referenced.
 	if (icon_eligible_for_destruction && icon_eligible_for_destruction != g_script.mCustomIcon) // v1.0.37.07.
-		DestroyIconsIfUnused(icon_eligible_for_destruction, icon_eligible_for_destruction_small); // Must be done only after "g_gui[aWindowIndex] = NULL".
+		DestroyIconsIfUnused(icon_eligible_for_destruction, icon_eligible_for_destruction_small); // Must be done only after removal from g_gui.
 	// For simplicity and performance, any fonts used *solely* by a destroyed window are destroyed
 	// only when the program terminates.  Another reason for this is that sometimes a destroyed window
 	// is soon recreated to use the same fonts it did before.
+	gui.RemoveAccelerators();
+	gui.mHwnd = NULL;
+	gui.mControlCount = 0; // All child windows (controls) are automatically destroyed with parent.
+	free(gui.mControl); // Free the control array, which was previously malloc'd.
+	gui.Release(); // After this, the var "gui" is invalid so should not be referenced.
 	// If this Gui was the last thing keeping the script running, exit the script:
 	g_script.ExitIfNotPersistent(EXIT_DESTROY);
 	return OK;
@@ -3853,7 +3919,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 
 
-ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs)
+ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs, Var *&aHwndVar)
 // This function is similar to ControlParseOptions() further below, so should be maintained alongside it.
 // Caller must have already initialized aSetLastFoundWindow/, bool &aOwnDialogs with desired starting values.
 // Caller must ensure that aOptions is a modifiable string, since this method temporarily alters it.
@@ -4021,6 +4087,9 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 			// Gui, +AlwaysOnTop +Disabled -SysMenu
 			if (adding) mStyle |= WS_DISABLED; else mStyle &= ~WS_DISABLED;
 		}
+		
+		else if (!_tcsnicmp(next_option, _T("Hwnd"), 4))
+			aHwndVar = g_script.FindOrAddVar(next_option + 4);
 
 		else if (!_tcsnicmp(next_option, _T("Label"), 5)) // v1.0.44.09: Allow custom label prefix for the reasons described in SetLabels().
 		{
@@ -4034,7 +4103,7 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 			// Alternative: Could also use some char that's illegal in labels to indicate one or more of the above.
 		}
 
-		else if (!_tcsnicmp(next_option, _T("LastFound"), 9)) // _tcsnicmp so that "LastFoundExist" is also recognized.
+		else if (!_tcsicmp(next_option, _T("LastFound")))
 			aSetLastFoundWindow = true; // Regardless of whether "adding" is true or false.
 
 		else if (!_tcsicmp(next_option, _T("MaximizeBox"))) // See above comment.
@@ -4152,9 +4221,9 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 				else
 					mStyle &= ~given_style;
 			}
+			else // v1.1.04: Validate Gui options.
+				return g_script.ScriptError(ERR_INVALID_OPTION ERR_ABORT, next_option);
 		}
-
-		// If the item was not handled by the above, ignore it because it is unknown.
 
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 
@@ -5241,9 +5310,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			++next_option;  // Above has already verified that next_option isn't the empty string.
 			if (!*next_option)
 			{
-				// The option word consists of only one character, so ignore allow except the below
-				// since mandatory arg should immediately follow it.  Example: An isolated letter H
-				// should do nothing rather than cause the height to be set to zero.
+				// The option word consists of only one character, so consider it valid only if it doesn't
+				// require an arg.  Example: An isolated "H" should not cause the height to be set to zero.
 				switch (ctoupper(next_option[-1]))
 				{
 				case 'C':
@@ -5259,6 +5327,9 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				case 'V':
 					aControl.output_var = NULL;
 					break;
+				default:
+					// v1.1.04: Validate Gui options.
+					return g_script.ScriptError(ERR_INVALID_OPTION ERR_ABORT, next_option-1);
 				}
 				*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 				continue;
@@ -5354,15 +5425,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 							: g_script.ScriptError(_T("The same variable cannot be used for more than one control.") // It used to say "one control per window" but that seems more confusing than it's worth.
 								ERR_ABORT, next_option - 1);
 				aControl.output_var = candidate_var;
-				break;
-
-			case 'E':  // Extended style
-				if (IsNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "E".
-				{
-					// Pure numbers are assumed to be style additions or removals:
-					DWORD given_exstyle = ATOU(next_option); // ATOU() for unsigned.
-					if (adding) aOpt.exstyle_add |= given_exstyle; else aOpt.exstyle_remove |= given_exstyle;
-				}
 				break;
 
 			case 'C':  // Color
@@ -5503,10 +5565,26 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			case 'R': // The number of rows desired in the control.  Use ATOF() so that fractional rows are allowed.
 				aOpt.row_count = (float)ATOF(next_option); // Don't need double precision.
 				break;
+
+			default:
+				// Extended style is handled here so that something like +ection is detected as an error.
+				// However, the options above don't get the same treatment:
+				//  G/V: Already validated -- must be followed by a a valid label/variable name.
+				//  T/C/W/H/X/Y/R: If not followed by a valid letter (e.g. "XP"), it's assumed to be
+				//  a number; if it isn't numeric, it will be treated as 0, which will probably be
+				//  easy to detect. Cases like the following are ignored for simplicity and due to
+				//  rarity: xpp (trailing p is ignored) y100abc (abc is ignored).
+				if (ctoupper(next_option[-1]) == 'E' && IsNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "E".
+				{
+					// Pure numbers are assumed to be style additions or removals:
+					DWORD given_exstyle = ATOU(next_option); // ATOU() for unsigned.
+					if (adding) aOpt.exstyle_add |= given_exstyle; else aOpt.exstyle_remove |= given_exstyle;
+					break;
+				}
+				// v1.1.04: Validate Gui options.
+				return g_script.ScriptError(ERR_INVALID_OPTION ERR_ABORT, next_option-1);
 			} // switch()
 		} // Final "else" in the "else if" ladder.
-
-		// If the item was not handled by the above, ignore it because it is unknown.
 
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 
@@ -5517,6 +5595,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 	{
 		DWORD current_style = GetWindowLong(aControl.hwnd, GWL_STYLE);
 		DWORD new_style = (current_style | aOpt.style_add) & ~aOpt.style_remove; // Some things such as GUI_CONTROL_TEXT+SS_TYPEMASK might rely on style_remove being applied *after* style_add.
+		UINT current_value_uint; // Currently only used for Progress controls.
 
 		// Fix for v1.0.24:
 		// Certain styles can't be applied with a simple bit-or.  The below section is a subset of
@@ -5710,6 +5789,11 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				else if (!(new_style & WS_HSCROLL) && (current_style & WS_HSCROLL)) // Scroll bar being removed.
 					SendMessage(aControl.hwnd, LB_SETHORIZONTALEXTENT, 0, 0);
 				break;
+			case GUI_CONTROL_PROGRESS:
+				// SetWindowLong with GWL_STYLE appears to reset the position,
+				// so save the current position here to be restored later:
+				current_value_uint = (UINT)SendMessage(aControl.hwnd, PBM_GETPOS, 0, 0);
+				break;
 			} // switch()
 			SetLastError(0); // Prior to SetWindowLong(), as recommended by MSDN.
 			// Call this even for buttons because BM_SETSTYLE only handles the LOWORD part of the style:
@@ -5793,6 +5877,9 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		case GUI_CONTROL_PROGRESS:
 			ControlSetProgressOptions(aControl, aOpt, new_style);
 			// Above strips theme if required by new options.  It also applies new colors.
+			if (current_style != new_style)
+				// SetWindowLong with GWL_STYLE resets the position, so restore it here.
+				SendMessage(aControl.hwnd, PBM_SETPOS, current_value_uint, 0);
 			break;
 		case GUI_CONTROL_EDIT:
 			if (aOpt.tabstop_count)
@@ -6071,18 +6158,21 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 	else
 		show_mode = SW_SHOWNORMAL;
 
-	for (LPTSTR cp = aOptions; *cp; ++cp)
+	for (LPTSTR cp_end = aOptions, cp = aOptions; *cp; cp = cp_end)
 	{
 		switch(ctoupper(*cp))
 		{
 		// For options such as W, H, X and Y: Use _ttoi() vs. ATOI() to avoid interpreting something like 0x01B
 		// as hex when in fact the B was meant to be an option letter.
+		case ' ':
+		case '\t':
+			++cp_end;
+			break;
 		case 'A':
 			if (!_tcsnicmp(cp, _T("AutoSize"), 8))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 7 vs. 8 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 7;
+				cp_end += 8;
 				auto_size = true;
 			}
 			break;
@@ -6090,8 +6180,7 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 			if (!_tcsnicmp(cp, _T("Center"), 6))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 5 vs. 6 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 5;
+				cp_end += 6;
 				x = COORD_CENTERED;
 				y = COORD_CENTERED;
 				// If the window is currently maximized, show_mode isn't set to SW_RESTORE unconditionally here
@@ -6104,15 +6193,13 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 			if (!_tcsnicmp(cp, _T("Minimize"), 8)) // Seems best to reserve "Min" for other things, such as Min W/H. "Minimize" is also more self-documenting.
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 7 vs. 8 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 7;
+				cp_end += 8;
 				show_mode = SW_MINIMIZE;  // Seems more typically useful/desirable than SW_SHOWMINIMIZED.
 			}
 			else if (!_tcsnicmp(cp, _T("Maximize"), 8))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 7 vs. 8 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 7;
+				cp_end += 8;
 				show_mode = SW_MAXIMIZE;  // SW_MAXIMIZE == SW_SHOWMAXIMIZED
 			}
 			break;
@@ -6120,15 +6207,13 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 			if (!_tcsnicmp(cp, _T("NA"), 2))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 1 vs. 2 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 1;
+				cp_end += 2;
 				show_mode = SW_SHOWNA;
 			}
 			else if (!_tcsnicmp(cp, _T("NoActivate"), 10))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 9 vs. 10 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 9;
+				cp_end += 10;
 				show_mode = SW_SHOWNOACTIVATE;
 			}
 			break;
@@ -6136,46 +6221,49 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 			if (!_tcsnicmp(cp, _T("Restore"), 7))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 6 vs. 7 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 6;
+				cp_end += 7;
 				show_mode = SW_RESTORE;
 			}
 			break;
+		case 'X':
+		case 'Y':
+			if (!_tcsnicmp(cp + 1, _T("Center"), 6))
+			{
+				if (ctoupper(*cp) == 'X')
+					x = COORD_CENTERED;
+				else
+					y = COORD_CENTERED;
+				cp_end += 7; // 7 in this case since we're working with cp + 1
+				continue;
+			}
+			// OTHERWISE, FALL THROUGH:
 		case 'W':
-			width = _ttoi(cp + 1);
-			break;
 		case 'H':
 			if (!_tcsnicmp(cp, _T("Hide"), 4))
 			{
 				// Skip over the text of the name so that it isn't interpreted as option letters.
-				// 3 vs. 4 to avoid the loop's addition ++cp from reading beyond the length of the string:
-				cp += 3;
+				cp_end += 4;
 				show_mode = SW_HIDE;
+				continue;
 			}
-			else
-				// Allow any width/height to be specified so that the window can be "rolled up" to its title bar:
-				height = _ttoi(cp + 1);
-			break;
-		case 'X':
-			if (!_tcsnicmp(cp + 1, _T("Center"), 6))
+			int n = _tcstol(cp + 1, &cp_end, 10);
+			if (cp_end == cp + 1) // No number.
 			{
-				cp += 6; // 6 in this case since we're working with cp + 1
-				x = COORD_CENTERED;
+				cp_end = cp; // Flag it as invalid.
+				break;
 			}
-			else
-				x = _ttoi(cp + 1);
-			break;
-		case 'Y':
-			if (!_tcsnicmp(cp + 1, _T("Center"), 6))
+			switch (ctoupper(*cp))
 			{
-				cp += 6; // 6 in this case since we're working with cp + 1
-				y = COORD_CENTERED;
+			case 'X': x = n; break;
+			case 'Y': y = n; break;
+			// Allow any width/height to be specified so that the window can be "rolled up" to its title bar:
+			case 'W': width = n; break;
+			case 'H': height = n; break;
 			}
-			else
-				y = _ttoi(cp + 1);
 			break;
-		// Otherwise: Ignore other characters, such as the digits that occur after the P/X/Y option letters.
 		} // switch()
+		if (cp_end == cp)
+			return g_script.ScriptError(ERR_INVALID_OPTION ERR_ABORT, cp);
 	} // for()
 
 	int width_orig = width;
@@ -7038,6 +7126,15 @@ GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 	if (!*aControlID)
 		return -1;
 	GuiIndexType u;
+	if (IsNumeric(aControlID, TRUE, FALSE) == PURE_INTEGER) // Allow negatives, for flexibility.
+	{
+		// v1.1.04: Allow Gui controls to be referenced by HWND.  There is some risk of breaking
+		// scripts, but only if the text of one control contains the HWND of another control.
+		u = (GuiIndexType)FindControl((HWND)ATOI64(aControlID), true);
+		if (u < mControlCount)
+			return u;
+		// Otherwise: no match was found, so fall back to considering it as text.
+	}
 	// To keep things simple, the first search method is always conducted: It looks for a
 	// matching variable name, but only among the variables used by this particular window's
 	// controls (i.e. avoid ambiguity by NOT having earlier matched up aControlID against
@@ -9771,4 +9868,116 @@ DWORD GuiType::ControlGetListViewMode(HWND aWnd)
 	// Also, the following relies on the fact that LV_VIEW_ICON==LVS_ICON, LV_VIEW_DETAILS==LVS_REPORT,
 	// LVS_SMALLICON==LV_VIEW_SMALLICON, and LVS_LIST==LV_VIEW_LIST.
 	return g_os.IsWinXPorLater() ? ListView_GetView(aWnd) : (GetWindowLong(aWnd, GWL_STYLE) & LVS_TYPEMASK);
+}
+
+
+
+#define MAX_ACCELERATORS 128
+
+void GuiType::UpdateAccelerators(UserMenu &aMenu)
+{
+	// Destroy the old accelerator table, if any.
+	RemoveAccelerators();
+
+	int accel_count = 0;
+	ACCEL accel[MAX_ACCELERATORS];
+
+	// Call recursive function to handle submenus.
+	UpdateAccelerators(aMenu, accel, accel_count);
+
+	if (accel_count)
+		mAccel = CreateAcceleratorTable(accel, accel_count);
+}
+
+void GuiType::UpdateAccelerators(UserMenu &aMenu, LPACCEL aAccel, int &aAccelCount)
+{
+	UserMenuItem *item;
+	for (item = aMenu.mFirstMenuItem; item && aAccelCount < MAX_ACCELERATORS; item = item->mNextMenuItem)
+	{
+		if (item->mSubmenu)
+		{
+			// Recursively process accelerators in submenus.
+			UpdateAccelerators(*item->mSubmenu, aAccel, aAccelCount);
+		}
+		else if (LPTSTR tab = _tcschr(item->mName, '\t'))
+		{
+			if (ConvertAccelerator(tab + 1, aAccel[aAccelCount]))
+			{
+				// This accelerator is valid.
+				aAccel[aAccelCount++].cmd = item->mMenuID;
+			}
+			// Otherwise, the text following '\t' was an invalid accelerator or not an accelerator
+			// at all. For simplicity, flexibility and backward-compatibility, just ignore it.
+		}
+	}
+}
+
+void GuiType::RemoveAccelerators()
+{
+	if (mAccel)
+	{
+		DestroyAcceleratorTable(mAccel);
+		mAccel = NULL;
+	}
+}
+
+bool GuiType::ConvertAccelerator(LPTSTR aString, ACCEL &aAccel)
+{
+	aString = omit_leading_whitespace(aString);
+	if (!*aString) // Multiple points below rely on this check.
+		return false;
+
+	// Omitting FVIRTKEY and storing a character code instead of a vk code allows the
+	// accelerator to be triggered by Alt+Numpad and perhaps IME or other means. However,
+	// testing shows that it also causes the modifier key flags to be ignored, so this
+	// approach can only be used if aString is a lone character:
+	if (!aString[1])
+	{
+		aAccel.key = (WORD)(TBYTE)*aString;
+		aAccel.fVirt = 0;
+		return true;
+	}
+
+	aAccel.fVirt = FVIRTKEY; // Init.
+
+	modLR_type modLR = 0;
+
+	LPTSTR cp;
+	while (cp = _tcschr(aString + 1, '+')) // For each modifier.  +1 is used in case "+" is the key.
+	{
+		LPTSTR cp_end = omit_trailing_whitespace(aString, cp - 1);
+		size_t len = cp_end - aString + 1;
+		if (!_tcsnicmp(aString, _T("Ctrl"), len))
+			modLR |= MOD_LCONTROL;
+		else if (!_tcsnicmp(aString, _T("Alt"), len))
+			modLR |= MOD_LALT;
+		else if (!_tcsnicmp(aString, _T("Shift"), len))
+			modLR |= MOD_LSHIFT;
+		else
+			return false;
+		aString = omit_leading_whitespace(cp + 1);
+		if (!*aString) // Below relies on this check.
+			return false; // "Modifier+", but no key name.
+	}
+
+	// Now that any modifiers have been parsed and removed, convert the key name.
+	// If only a single character remains, this may set additional modifiers.
+	if (!aString[1])
+	{
+		// It seems preferable to treat "Ctrl+O" as ^o and not ^+o, so convert the character
+		// to lower-case so that MOD_LSHIFT is added only for keys like "@". Seems best to use
+		// the locale-dependent method, though somewhat debatable.
+		aAccel.key = CharToVKAndModifiers(ltolower(*aString), &modLR, GetKeyboardLayout(0));
+	}
+	else
+		aAccel.key = TextToVK(aString);
+
+	if (modLR & MOD_LCONTROL)
+		aAccel.fVirt |= FCONTROL;
+	if (modLR & MOD_LALT) // Not MOD_RALT, which would mean AltGr (unsupported).
+		aAccel.fVirt |= FALT;
+	if (modLR & MOD_LSHIFT)
+		aAccel.fVirt |= FSHIFT;
+
+	return aAccel.key; // i.e. false if not a valid key name.
 }

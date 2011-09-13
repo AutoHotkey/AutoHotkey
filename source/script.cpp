@@ -5086,6 +5086,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					return ScriptError(_T("Parameter #3 and beyond should be omitted in this case."), new_raw_arg3);
 				break;
 			// No action for these since they have a varying number of optional params:
+			//case GUI_CMD_NEW:
 			//case GUI_CMD_SHOW:
 			//case GUI_CMD_FONT:
 			//case GUI_CMD_MARGIN:
@@ -7129,6 +7130,11 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 			min_params = 0;
 			max_params = 3;
 		}
+	}
+	else if (!_tcsicmp(func_name, _T("Exception")))
+	{
+		bif = BIF_Exception;
+		max_params = 3;
 	}
 	else
 		return NULL; // Maint: There may be other lines above that also return NULL.
@@ -13861,7 +13867,7 @@ Line *Line::PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo)
 }
 
 
-ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
+IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
 {
 	// Build the parameters for Object::Create()
 	ExprTokenType aParams[5*2]; int aParamCount = 4*2;
@@ -13882,9 +13888,15 @@ ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTST
 		aParams[9].symbol = SYM_STRING; aParams[9].marker = (LPTSTR)aExtraInfo;
 	}
 
-	ExprTokenType* token;
+	return Object::Create(aParam, aParamCount);
+}
+
+
+ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
+{
+	ExprTokenType *token;
 	if (   !(token = new ExprTokenType)
-		|| !(token->object = Object::Create(aParam, aParamCount))   )
+		|| !(token->object = CreateRuntimeException(aErrorText, aWhat, aExtraInfo))   )
 	{
 		// Out of memory. It's likely that we were called for this very reason.
 		// Since we don't even have enough memory to allocate an exception object,

@@ -153,12 +153,7 @@ struct DbgStack
 		mTopBound = mBottom - 1 + mSize;
 	}
 
-	Entry *Push()
-	{
-		if (mTop == mTopBound)
-			Expand();
-		return ++mTop;
-	}
+	Entry *Push();
 
 	void Pop()
 	{

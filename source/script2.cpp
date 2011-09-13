@@ -7179,19 +7179,10 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	// Caller must check ErrorLevel to distinguish between an empty file and an error.
 	output_var.Assign();
 
-	// The program is currently compiled with a 2GB address limit, so loading files larger than that
-	// would probably fail or perhaps crash the program.  Therefore, just putting a basic 1.0 GB sanity
-	// limit on the file here, for now.  Note: a variable can still be operated upon without necessarily
-	// using the deref buffer, since that buffer only comes into play when there is no other way to
-	// manipulate the variable.  In other words, the deref buffer won't necessarily grow to be the same
-	// size as the file, which if it happened for a 1GB file would exceed the 2GB address limit.
-	// That is why a smaller limit such as 800 MB seems too severe:
-	#define FILEREAD_MAX (1024*1024*1024) // 1 GB.
-
 	// Set default options:
 	bool translate_crlf_to_lf = false;
 	bool is_binary_clipboard = false;
-	unsigned __int64 max_bytes_to_load = ULLONG_MAX;
+	unsigned __int64 max_bytes_to_load = VARSIZE_MAX-2; // NOT ULLONG_MAX; see comments near bytes_to_read below.  -2 to avoid overflow when calling malloc().
 	UINT codepage = g->Encoding & CP_AHKCP;
 
 	// It's done as asterisk+option letter to permit future expansion.  A plain asterisk such as used
@@ -7210,8 +7201,11 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			break;
 		case 'M': // Maximum number of bytes to load.
 			max_bytes_to_load = ATOU64(cp + 1); // Relies upon the fact that it ceases conversion upon reaching a space or tab.
-			if (max_bytes_to_load > FILEREAD_MAX) // Force a failure to avoid breaking scripts if this limit is increased in the future.
-				return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
+#ifndef _WIN64
+			// See near bytes_to_read below for comments.
+			if (max_bytes_to_load > SIZE_MAX)
+				max_bytes_to_load = SIZE_MAX;
+#endif
 			// Skip over the digits of this option in case it's the last option.
 			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
 				return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
@@ -7268,14 +7262,16 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	// clipboard file should already have the (UINT)0 as its ending terminator.
 
 	unsigned __int64 bytes_to_read = GetFileSize64(hfile);
-	if (bytes_to_read == ULLONG_MAX // GetFileSize64() failed...
-		|| max_bytes_to_load == ULLONG_MAX && bytes_to_read > FILEREAD_MAX) // ...or the file is too large to be completely read (and the script wanted it completely read).
+	if (bytes_to_read == ULLONG_MAX) // GetFileSize64() failed.
 	{
-		g->LastError = (bytes_to_read == ULLONG_MAX) ? GetLastError() : ERROR_FILE_TOO_LARGE;
+		g->LastError = GetLastError();
 		CloseHandle(hfile);
 		return SetErrorLevelOrThrow();
 	}
-	if (max_bytes_to_load < bytes_to_read)
+	// In addition to imposing the limit set by the *M option, the following check prevents an error
+	// caused by 64 to 32-bit truncation -- that is, a file size of 0x100000001 would be truncated to
+	// 0x1, allowing the command to complete even though it should fail.
+	if (bytes_to_read > max_bytes_to_load) // Default (and absolute maximum) limit is SIZE_MAX.
 		bytes_to_read = max_bytes_to_load;
 
 	if (!bytes_to_read)
@@ -7284,15 +7280,27 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 		return SetErrorsOrThrow(false, 0); // Indicate success (a zero-length file results in empty output_var).
 	}
 
-	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-	// this call will set up the clipboard for writing:
-	if (is_binary_clipboard && // Non-binary data uses another buffer for charset conversion later.
-		output_var.SetCapacity(VarSizeType(bytes_to_read), true) != OK) // Probably due to "out of memory".
+	LPBYTE output_buf;
+	if (is_binary_clipboard)
+	{
+		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
+		// this call will set up the clipboard for writing:
+		if (output_var.SetCapacity(VarSizeType(bytes_to_read), true) == OK)
+			output_buf = (LPBYTE) output_var.Contents();
+		else
+			output_buf = NULL; // Above already displayed the error message.
+	}
+	else
+	{
+		// Allocate a temporary buffer; output_var will be assigned the text after conversion.
+		output_buf = (LPBYTE) malloc(size_t(bytes_to_read + sizeof(wchar_t)));
+	}
+	if (!output_buf)
 	{
 		CloseHandle(hfile);
-		return FAIL;  // It already displayed the error. ErrorLevel doesn't matter now because the current quasi-thread will be aborted.
+		// ErrorLevel doesn't matter now because the current quasi-thread will be aborted.
+		return is_binary_clipboard ? FAIL : LineError(ERR_OUTOFMEM ERR_ABORT);
 	}
-	LPBYTE output_buf = !is_binary_clipboard ? (LPBYTE) malloc(size_t(bytes_to_read + sizeof(wchar_t))) : (LPBYTE) output_var.Contents();
 
 	DWORD bytes_actually_read;
 	BOOL result = ReadFile(hfile, output_buf, (DWORD)bytes_to_read, &bytes_actually_read, NULL);
@@ -7496,7 +7504,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 		delete ts;
 	// else it's the caller's responsibility, or it's caller's, to close it.
 
-	return SetErrorsOrThrow(!result);
+	return SetErrorsOrThrow(result);
 }
 
 
@@ -9897,6 +9905,8 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 		_itot(g->GuiPoint.y, target_buf, 10);
 		break;
 	case '\0': // A_Gui
+		if (!*g->GuiWindow->mName) // v1.1.04: Anonymous GUI.
+			return _stprintf(target_buf, _T("0x%Ix"), g->GuiWindow->mHwnd);
 		if (aBuf)
 			_tcscpy(aBuf, g->GuiWindow->mName);
 		return _tcslen(g->GuiWindow->mName);
@@ -15694,6 +15704,72 @@ void BIF_Type(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 	}
 }
 
+
+
+void BIF_Exception(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	LPTSTR message = TokenToString(*aParam[0], aResultToken.buf);
+	TCHAR what_buf[MAX_NUMBER_SIZE], extra_buf[MAX_NUMBER_SIZE];
+	LPTSTR what = NULL, extra = _T("");
+	Line *line = NULL;
+
+	if (aParamCount < 2)
+	{
+		line = g_script.mCurrLine;
+		if (g->CurrentFunc)
+			what = g->CurrentFunc->mName;
+		else if (g->CurrentLabel)
+			what = g->CurrentLabel->mName;
+		else
+			what = _T(""); // Probably the auto-execute section?
+	}
+	else
+	{
+#ifdef CONFIG_DEBUGGER
+		int offset = TokenIsNumeric(*aParam[1]) ? (int)TokenToInt64(*aParam[1]) : 0;
+		if (offset < 0)
+		{
+			DbgStack::Entry *se = g_Debugger.mStack.mTop + offset;
+			if (se >= g_Debugger.mStack.mBottom)
+			{
+				// Self-contained loop to ensure the entry belongs to the current thread
+				// (below also relies on this loop to verify se[1].type != SE_Thread):
+				while (++offset <= 0 && g_Debugger.mStack.mTop[offset].type != DbgStack::SE_Thread); // Relies on short-circuit evaluation.
+				if (offset == 1)
+				{
+					line = se->line;
+					// se->line contains the line at the given offset from the top of the stack.
+					// Rather than returning the name of the function or sub which contains that
+					// line, return the name of the function or sub which that line called.
+					// In other words, an offset of -1 gives the name of the current function and
+					// the file and number of the line which it was called from.
+					what = se[1].type == DbgStack::SE_Func ? se[1].func->mName : se[1].sub->mName;
+				}
+			}
+			// Otherwise, not a valid offset.
+		}
+#endif
+		if (!what)
+		{
+			line = g_script.mCurrLine;
+			what = TokenToString(*aParam[1], what_buf);
+		}
+
+		if (aParamCount > 2)
+			extra = TokenToString(*aParam[2], extra_buf);
+	}
+
+	if (aResultToken.object = line->CreateRuntimeException(message, what, extra))
+	{
+		aResultToken.symbol = SYM_OBJECT;
+	}
+	else
+	{
+		// Out of memory. Seems best to alert the user.
+		MsgBox(ERR_OUTOFMEM);
+		aResultToken.value_int64 = 0;
+	}
+}
 
 
 

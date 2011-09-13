@@ -2558,6 +2558,28 @@ void Debugger::Buffer::Remove(size_t aDataSize)
 	mDataUsed -= aDataSize;
 }
 
+
+
+DbgStack::Entry *DbgStack::Push()
+{
+	if (mTop == mTopBound)
+		Expand();
+	if (mTop >= mBottom)
+	{
+		// Whenever this entry != mTop, Entry::line is used instead of g_Debugger.mCurrLine,
+		// which means that it needs to point to the last executed line at that depth. The
+		// following fixes a bug where the line number of this entry appears to revert to
+		// the first line of the function or sub whenever the debugger steps into another
+		// function or sub.  Entry::line is now also used by BIF_Exception even when the
+		// debugger is disconnected, which has two consequences:
+		//  - g_script.mCurrLine must be used in place of g_Debugger.mCurrLine.
+		//  - Changing PreExecLine() to update mStack.mTop->line won't help.
+		mTop->line = g_script.mCurrLine;
+	}
+	return ++mTop;
+}
+
+
 #endif
 
 
