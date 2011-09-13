@@ -172,7 +172,7 @@ private:
 			var.mObject->Release();
 
 		var.mContentsInt64 = aNumberAsInt64;
-		var.mAttrib &= ~(VAR_ATTRIB_TYPES | VAR_ATTRIB_UNINITIALIZED);
+		var.mAttrib &= ~(VAR_ATTRIB_TYPES | VAR_ATTRIB_NOT_NUMERIC | VAR_ATTRIB_UNINITIALIZED);
 		var.mAttrib |= (VAR_ATTRIB_CONTENTS_OUT_OF_DATE | aAttrib); // Must be done prior to below.  aAttrib indicates the type of binary number.
 		
 		if (var.mType == VAR_CLIPBOARD) // Clipboard can't use either read or write caching.
