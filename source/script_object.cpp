@@ -830,9 +830,12 @@ ResultType Object::_Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		if (key_type == SYM_INTEGER)
 			for (pos = insert_pos + 1; pos < mKeyOffsetObject; ++pos)
 				++mFields[pos].key.i;
-		// Return indication of success.  Probably isn't useful to return the caller-specified index; zero can be a valid index (and may be mistaken for "fail").
+		// Return indication of success.  If caller supplied only one parameter,
+		// return the index of the insertion.  Otherwise the caller specified the
+		// index; returning it wouldn't be as useful, so return a value guaranteed
+		// to be "true" (even if the caller specifies 0 as the index).
 		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = 1;
+		aResultToken.value_int64 = (aParamCount == 1) ? key.i : 1;
 	}
 	// else insert failed; leave aResultToken at default, empty string.  Numeric indices are *not* adjusted in this case.
 	return OK;
