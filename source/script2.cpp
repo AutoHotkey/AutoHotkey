@@ -1769,7 +1769,7 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 	if (   !(target_window = DetermineTargetWindow(sArgDeref[4], sArgDeref[5], sArgDeref[6], sArgDeref[7]))
 		|| !(control_window = *sArgDeref[3] ? ControlExist(target_window, sArgDeref[3]) : target_window)   ) // Relies on short-circuit boolean order.
 		 // aUseSend: Need a special value to distinguish this from numeric reply-values.
-		return aUseSend ? SetErrorLevelOrThrowStr(_T("FAIL")) : SetErrorLevelOrThrow();
+		return aUseSend ? SetErrorLevelOrThrowStr(_T("ERROR")) : SetErrorLevelOrThrow();
 
 	// v1.0.40.05: Support the passing of a literal (quoted) string by checking whether the
 	// original/raw arg's first character is '"'.  The avoids the need to put the string into a
@@ -1811,7 +1811,7 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 	{
 		DWORD_PTR dwResult;
 		if (!SendMessageTimeout(control_window, msg, wparam, lparam, SMTO_ABORTIFHUNG, timeout, &dwResult))
-			return SetErrorLevelOrThrowStr(_T("FAIL")); // Need a special value to distinguish this from numeric reply-values.
+			return SetErrorLevelOrThrowStr(_T("ERROR")); // Need a special value to distinguish this from numeric reply-values.
 		g_ErrorLevel->Assign(dwResult); // UINT seems best most of the time?
 	}
 	else // Post vs. Send
