@@ -2103,9 +2103,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	case GUI_CONTROL_SLIDER:
 		opt.style_add |= WS_TABSTOP;
 		break;
-	case GUI_CONTROL_PROGRESS:
-		opt.style_add |= PBS_SMOOTH; // The smooth ones seem preferable as a default.  Theme is removed later below.
-		break;
 	case GUI_CONTROL_TAB:
 		// Override the normal default, requiring a manual +Theme in the control's options.  This is done
 		// because themed tabs have a gradient background that is currently not well supported by the method
@@ -2135,6 +2132,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	//case GUI_CONTROL_MONTHCAL: Can't be focused, so no tabstop.
 	//case GUI_CONTROL_PIC:
 	//case GUI_CONTROL_GROUPBOX:
+	//case GUI_CONTROL_PROGRESS:
 		// v1.0.44.11: The following was commented out for GROUPBOX to avoid unwanted wrapping of last letter when
 		// the font is bold on XP Classic theme (other font styles and desktop themes may also be cause this).
 		// Avoiding this problem seems to outweigh the breaking of old scripts that use GroupBoxes with more than
