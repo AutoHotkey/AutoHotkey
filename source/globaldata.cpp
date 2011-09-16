@@ -402,7 +402,7 @@ Action g_act[] =
 	, {_T("GroupClose"), 1, 2, false, NULL}
 
 	, {_T("Drive"), 1, 3, false, NULL} // Sub-command, Value1 (can be blank for Eject), Value2
-	, {_T("DriveGet"), 0, 3, true, NULL} // Output-var (optional in at least one case), Command, Value
+	, {_T("DriveGet"), 2, 3, true, NULL} // Output-var, Command, Value
 
 	, {_T("SoundGet"), 1, 4, true, {4, 0}} // OutputVar, ComponentType (default=master), ControlType (default=vol), Mixer/Device Number
 	, {_T("SoundSet"), 1, 4, false, {1, 4, 0}} // Volume percent-level (0-100), ComponentType, ControlType (default=vol), Mixer/Device Number

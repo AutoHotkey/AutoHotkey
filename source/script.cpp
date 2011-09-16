@@ -5631,16 +5631,13 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		break;
 
 	case ACT_DRIVEGET:
-		if (!line.ArgHasDeref(2))  // Don't check "aArgc > 1" because of DRIVEGET_CMD_SETLABEL's param format.
+		if (!line.ArgHasDeref(2))
 		{
 			DriveGetCmds drive_get_cmd = line.ConvertDriveGetCmd(new_raw_arg2);
 			if (!drive_get_cmd)
 				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 			if (drive_get_cmd != DRIVEGET_CMD_LIST && drive_get_cmd != DRIVEGET_CMD_STATUSCD && !*new_raw_arg3)
 				return ScriptError(_T("Parameter #3 must not be blank in this case."));
-			if (drive_get_cmd != DRIVEGET_CMD_SETLABEL && (aArgc < 1 || line.mArg[0].type == ARG_TYPE_NORMAL))
-				// The output variable has been omitted.
-				return ScriptError(_T("Parameter #1 must not be blank in this case."));
 		}
 		break;
 

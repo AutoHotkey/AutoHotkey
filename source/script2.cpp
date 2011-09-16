@@ -6435,14 +6435,6 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 	TCHAR path[MAX_PATH + 1];  // +1 to allow room for trailing backslash in case it needs to be added.
 	size_t path_length;
 
-	if (drive_get_cmd == DRIVEGET_CMD_SETLABEL) // The is retained for backward compatibility even though the Drive cmd is normally used.
-	{
-		DRIVE_SET_PATH
-		SetErrorMode(SEM_FAILCRITICALERRORS); // If drive is a floppy, prevents pop-up dialog prompting to insert disk.
-		LPTSTR new_label = omit_leading_whitespace(aCmd + 9);  // Example: SetLabel:MyLabel
-		return g_ErrorLevel->Assign(SetVolumeLabel(path, new_label) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
-	}
-
 	Var &output_var = *OUTPUT_VAR;
 
 	output_var.Assign(); // Init to empty string.
