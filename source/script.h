@@ -1606,15 +1606,26 @@ public:
 		return 0;
 	}
 
-	static CoordModeAttribType ConvertCoordModeAttrib(LPTSTR aBuf)
+	static CoordModeType ConvertCoordMode(LPTSTR aBuf)
 	{
-		if (!aBuf || !*aBuf) return 0;
+		if (!aBuf || !*aBuf || !_tcsicmp(aBuf, _T("Screen")))
+			return COORD_MODE_SCREEN;
+		else if (!_tcsicmp(aBuf, _T("Relative")) || !_tcsicmp(aBuf, _T("Window")))
+			return COORD_MODE_WINDOW;
+		else if (!_tcsicmp(aBuf, _T("Client")))
+			return COORD_MODE_CLIENT;
+		return -1;
+	}
+
+	static CoordModeType ConvertCoordModeCmd(LPTSTR aBuf)
+	{
+		if (!aBuf || !*aBuf) return -1;
 		if (!_tcsicmp(aBuf, _T("Pixel"))) return COORD_MODE_PIXEL;
 		if (!_tcsicmp(aBuf, _T("Mouse"))) return COORD_MODE_MOUSE;
 		if (!_tcsicmp(aBuf, _T("ToolTip"))) return COORD_MODE_TOOLTIP;
 		if (!_tcsicmp(aBuf, _T("Caret"))) return COORD_MODE_CARET;
 		if (!_tcsicmp(aBuf, _T("Menu"))) return COORD_MODE_MENU;
-		return 0;
+		return -1;
 	}
 
 	static VariableTypeType ConvertVariableTypeName(LPTSTR aBuf)

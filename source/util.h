@@ -633,7 +633,8 @@ int FindNextDelimiter(LPCTSTR aBuf, TCHAR aDelimiter = ',', int aStartIndex = 0,
 POINT CenterWindow(int aWidth, int aHeight);
 bool FontExist(HDC aHdc, LPCTSTR aTypeface);
 void ScreenToWindow(POINT &aPoint, HWND aHwnd);
-void WindowToScreen(int &aX, int &aY);
+void CoordToScreen(int &aX, int &aY, int aWhichMode);
+void CoordToScreen(POINT &aPoint, int aWhichMode);
 void GetVirtualDesktopRect(RECT &aRect);
 LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd);
 void FreeInterProcMem(HANDLE aHandle, LPVOID aMem);

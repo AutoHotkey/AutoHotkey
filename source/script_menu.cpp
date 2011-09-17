@@ -1258,12 +1258,16 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 		GetCursorPos(&pt);
 	if (!(aX == COORD_UNSPECIFIED && aY == COORD_UNSPECIFIED)) // At least one was specified.
 	{
+		// If one coordinate was omitted, pt contains the cursor position in SCREEN COORDINATES.
+		// So don't do something like this, which would incorrectly offset the cursor position
+		// by the window position if CoordMode != Screen:
+		//CoordToScreen(pt, COORD_MODE_MENU);
+		POINT origin = {0};
+		CoordToScreen(origin, COORD_MODE_MENU);
 		if (aX != COORD_UNSPECIFIED)
-			pt.x = aX;
+			pt.x = aX + origin.x;
 		if (aY != COORD_UNSPECIFIED)
-			pt.y = aY;
-		if (!(g->CoordMode & COORD_MODE_MENU))  // Using coords relative to the active window (rather than screen).
-			WindowToScreen((int &)pt.x, (int &)pt.y);
+			pt.y = aY + origin.y;
 	}
 
 	// UPDATE: For v1.0.35.14, must ensure one of the script's windows is active before showing the menu

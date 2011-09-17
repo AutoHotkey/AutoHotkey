@@ -184,16 +184,8 @@ ResultType Line::PixelGetColor(int aX, int aY, LPTSTR aOptions)
 	Var &output_var = *OUTPUT_VAR;
 	output_var.Assign(); // Init to empty string regardless of whether we succeed here.
 
-	if (!(g->CoordMode & COORD_MODE_PIXEL)) // Using relative vs. screen coordinates.
-	{
-		// Convert from relative to absolute (screen) coordinates:
-		RECT rect;
-		if (!GetWindowRect(GetForegroundWindow(), &rect))
-			return SetErrorLevelOrThrow();
-		aX += rect.left;
-		aY += rect.top;
-	}
-
+	CoordToScreen(aX, aY, COORD_MODE_PIXEL);
+	
 	bool use_alt_mode = tcscasestr(aOptions, _T("Alt")) != NULL; // New mode for v1.0.43.10: Two users reported that CreateDC works better in certain windows such as SciTE, at least one some systems.
 	HDC hdc = use_alt_mode ? CreateDC(_T("DISPLAY"), NULL, NULL, NULL) : GetDC(NULL);
 	if (!hdc)
