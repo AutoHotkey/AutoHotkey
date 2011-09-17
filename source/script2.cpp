@@ -1039,12 +1039,9 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 		if (!*cp)
 			goto error;
 		pah.pt.y = ATOI(cp);
-		// The passed-in coordinates are always relative to target_window's upper left corner because offering
+		// The passed-in coordinates are always relative to target_window's client area because offering
 		// an option for absolute/screen coordinates doesn't seem useful.
-		RECT rect;
-		GetWindowRect(target_window, &rect);
-		pah.pt.x += rect.left; // Convert to screen coordinates.
-		pah.pt.y += rect.top;
+		ClientToScreen(target_window, &pah.pt); // Convert to screen coordinates.
 		EnumChildWindows(target_window, EnumChildFindPoint, (LPARAM)&pah); // Find topmost control containing point.
 		// If no control is at this point, try posting the mouse event message(s) directly to the
 		// parent window to increase the flexibility of this feature:
@@ -1203,54 +1200,31 @@ ResultType Line::ControlMove(LPTSTR aControl, LPTSTR aX, LPTSTR aY, LPTSTR aWidt
 	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
 	if (!control_window)
 		goto error;
+	
+	// The following macro is used to keep ControlMove and ControlGetPos in sync:
+	#define CONTROL_COORD_PARENT(target, control) \
+		(target == control ? GetNonChildParent(target) : target)
 
-	POINT point;
-	point.x = *aX ? ATOI(aX) : COORD_UNSPECIFIED;
-	point.y = *aY ? ATOI(aY) : COORD_UNSPECIFIED;
+	// Determine which window the supplied coordinates are relative to:
+	HWND coord_parent = CONTROL_COORD_PARENT(target_window, control_window);
 
-	// First convert the user's given coordinates -- which by default are relative to the window's
-	// upper left corner -- to screen coordinates:
-	if (point.x != COORD_UNSPECIFIED || point.y != COORD_UNSPECIFIED)
-	{
-		RECT rect;
-		// v1.0.44.13: Below was fixed to allow for the fact that target_window might be the control
-		// itself (e.g. via ahk_id %ControlHWND%).  For consistency with ControlGetPos and other things,
-		// it seems best to call GetNonChildParent rather than GetParent(); for example, a Tab control
-		// that contains a child window that in turn contains the actual controls should probably report
-		// the position of each control relative to the dialog itself rather than the tab control or its
-		// master window.  The lost argument in favor of GetParent is that it seems more flexible, such
-		// as cases where the script has called SetParent() to make a top-level window the child of some
-		// other window, in which case the target control's immediate parent should be used, not its most
-		// distant ancestor. This might also be desirable for controls that are children of other controls,
-		// such as Combobox's Edit.
-		if (!GetWindowRect(target_window == control_window ? GetNonChildParent(target_window) : target_window
-			, &rect))
-			goto error;
-		if (point.x != COORD_UNSPECIFIED)
-			point.x += rect.left;
-		if (point.y != COORD_UNSPECIFIED)
-			point.y += rect.top;
-	}
-
-	// If either coordinate is unspecified, put the control's current screen coordinate(s)
-	// into point:
+	// Determine the controls current coordinates relative to coord_parent in case one
+	// or more parameters were omitted.
 	RECT control_rect;
-	if (!GetWindowRect(control_window, &control_rect))
+	if (!GetWindowRect(control_window, &control_rect)
+		|| !MapWindowPoints(NULL, coord_parent, (LPPOINT)&control_rect, 2))
 		goto error;
-	if (point.x == COORD_UNSPECIFIED)
-		point.x = control_rect.left;
-	if (point.y == COORD_UNSPECIFIED)
-		point.y = control_rect.top;
+	
+	POINT point;
+	point.x = *aX ? ATOI(aX) : control_rect.left;
+	point.y = *aY ? ATOI(aY) : control_rect.top;
 
-	// Use the immediate parent since controls can themselves have child controls:
+	// MoveWindow accepts coordinates relative to the control's immediate parent, which might
+	// be different to coord_parent since controls can themselves have child controls.  So if
+	// necessary, map the caller-supplied coordinates to the control's immediate parent:
 	HWND immediate_parent = GetParent(control_window);
-	if (!immediate_parent)
-		goto error;
-
-	// Convert from absolute screen coordinates to coordinates used with MoveWindow(),
-	// which are relative to control_window's parent's client area:
-	if (!ScreenToClient(immediate_parent, &point))
-		goto error;
+	if (immediate_parent != coord_parent)
+		MapWindowPoints(coord_parent, immediate_parent, &point, 1);
 
 	MoveWindow(control_window
 		, point.x
@@ -1290,16 +1264,19 @@ ResultType Line::ControlGetPos(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText, LPT
 		return OK;
 	}
 
-	RECT parent_rect, child_rect;
+	// Determine which window the returned coordinates should be relative to:
+	HWND coord_parent = CONTROL_COORD_PARENT(target_window, control_window);
+
+	RECT child_rect;
 	// Realistically never fails since DetermineTargetWindow() and ControlExist() should always yield
 	// valid window handles:
-	GetWindowRect(target_window == control_window ? GetNonChildParent(target_window) : target_window
-		, &parent_rect); // v1.0.44.13: Above was fixed to allow for the fact that target_window might be the control itself (e.g. via ahk_id %ControlHWND%).  See ControlMove for details.
 	GetWindowRect(control_window, &child_rect);
+	// Map the screen coordinates returned by GetWindowRect to the client area of coord_parent.
+	MapWindowPoints(NULL, coord_parent, (LPPOINT)&child_rect, 2);
 
-	if (output_var_x && !output_var_x->Assign(child_rect.left - parent_rect.left))
+	if (output_var_x && !output_var_x->Assign(child_rect.left))
 		return FAIL;
-	if (output_var_y && !output_var_y->Assign(child_rect.top - parent_rect.top))
+	if (output_var_y && !output_var_y->Assign(child_rect.top))
 		return FAIL;
 	if (output_var_width && !output_var_width->Assign(child_rect.right - child_rect.left))
 		return FAIL;
