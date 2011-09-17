@@ -4934,8 +4934,10 @@ BOOL CALLBACK EnumChildFindPoint(HWND aWnd, LPARAM lParam)
 		return TRUE;
 	// The given point must be inside aWnd's bounds.  Then, if there is no hwnd found yet or if aWnd
 	// is entirely contained within the previously found hwnd, update to a "better" found window like
-	// Window Spy.  This overcomes the limitations of WindowFromPoint() and ChildWindowFromPoint():
-	if (pah.pt.x >= rect.left && pah.pt.x <= rect.right && pah.pt.y >= rect.top && pah.pt.y <= rect.bottom)
+	// Window Spy.  This overcomes the limitations of WindowFromPoint() and ChildWindowFromPoint().
+	// The pixel at (left, top) lies inside the control, whereas MSDN says "the pixel at (right, bottom)
+	// lies immediately outside the rectangle" -- so use < instead of <= below:
+	if (pah.pt.x >= rect.left && pah.pt.x < rect.right && pah.pt.y >= rect.top && pah.pt.y < rect.bottom)
 	{
 		// If the window's center is closer to the given point, break the tie and have it take
 		// precedence.  This solves the problem where a particular control from a set of overlapping
