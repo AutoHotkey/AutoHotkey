@@ -742,19 +742,15 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 		//	pt.y = dtw.bottom - 20;
 	}
 
-	RECT rect = {0};
-	if ((*aX || *aY) && !(g->CoordMode & COORD_MODE_TOOLTIP)) // Need the rect.
-	{
-		if (!GetWindowRect(GetForegroundWindow(), &rect))
-			return OK;  // Don't bother setting ErrorLevel with this command.
-	}
-	//else leave all of rect's members initialized to zero.
+	POINT origin = {0};
+	if (*aX || *aY) // Need the offsets.
+		CoordToScreen(origin, COORD_MODE_TOOLTIP);
 
-	// This will also convert from relative to screen coordinates if rect contains non-zero values:
+	// This will also convert from relative to screen coordinates if appropriate:
 	if (*aX)
-		pt.x = ATOI(aX) + rect.left;
+		pt.x = ATOI(aX) + origin.x;
 	if (*aY)
-		pt.y = ATOI(aY) + rect.top;
+		pt.y = ATOI(aY) + origin.y;
 
 	TOOLINFO ti = {0};
 	ti.cbSize = sizeof(ti) - sizeof(void *); // Fixed for v1.0.36.05: Tooltips fail to work on Win9x and probably NT4/2000 unless the size for the *lpReserved member in _WIN32_WINNT 0x0501 is omitted.
@@ -4350,16 +4346,12 @@ ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLOR
 	if (output_var_y)
 		output_var_y->Assign();  // Same.
 
-	RECT rect = {0};
-	if (!(g->CoordMode & COORD_MODE_PIXEL)) // Using relative vs. screen coordinates.
-	{
-		if (!GetWindowRect(GetForegroundWindow(), &rect))
-			goto error;
-		aLeft   += rect.left;
-		aTop    += rect.top;
-		aRight  += rect.left;  // Add left vs. right because we're adjusting based on the position of the window.
-		aBottom += rect.top;   // Same.
-	}
+	POINT origin = {0};
+	CoordToScreen(origin, COORD_MODE_PIXEL);
+	aLeft   += origin.x;
+	aTop    += origin.y;
+	aRight  += origin.x;
+	aBottom += origin.y;
 
 	if (aVariation < 0)
 		aVariation = 0;
@@ -4522,9 +4514,9 @@ fast_end:
 		// zeroes if this doesn't need to be done):
 		if (!aIsPixelGetColor)
 		{
-			if (output_var_x && !output_var_x->Assign((aLeft + i%screen_width) - rect.left))
+			if (output_var_x && !output_var_x->Assign((aLeft + i%screen_width) - origin.x))
 				return FAIL;
-			if (output_var_y && !output_var_y->Assign((aTop + i/screen_width) - rect.top))
+			if (output_var_y && !output_var_y->Assign((aTop + i/screen_width) - origin.y))
 				return FAIL;
 		}
 
@@ -4591,9 +4583,9 @@ fast_end:
 	// Otherwise, this pixel matches one of the specified color(s).
 	// Adjust coords to make them relative to the position of the target window
 	// (rect will contain zeroes if this doesn't need to be done):
-	if (output_var_x && !output_var_x->Assign(xpos - rect.left))
+	if (output_var_x && !output_var_x->Assign(xpos - origin.x))
 		return FAIL;
-	if (output_var_y && !output_var_y->Assign(ypos - rect.top))
+	if (output_var_y && !output_var_y->Assign(ypos - origin.y))
 		return FAIL;
 	// Since above didn't return:
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
@@ -4619,16 +4611,12 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 	if (output_var_y)
 		output_var_y->Assign(); // Same.
 
-	RECT rect = {0}; // Set default (for CoordMode == "screen").
-	if (!(g->CoordMode & COORD_MODE_PIXEL)) // Using relative vs. screen coordinates.
-	{
-		if (!GetWindowRect(GetForegroundWindow(), &rect))
-			goto error;
-		aLeft   += rect.left;
-		aTop    += rect.top;
-		aRight  += rect.left;  // Add left vs. right because we're adjusting based on the position of the window.
-		aBottom += rect.top;   // Same.
-	}
+	POINT origin = {0};
+	CoordToScreen(origin, COORD_MODE_PIXEL);
+	aLeft   += origin.x;
+	aTop    += origin.y;
+	aRight  += origin.x;
+	aBottom += origin.y;
 
 	// Options are done as asterisk+option to permit future expansion.
 	// Set defaults to be possibly overridden by any specified options:
@@ -4979,9 +4967,9 @@ end:
 	// Otherwise, success.  Calculate xpos and ypos of where the match was found and adjust
 	// coords to make them relative to the position of the target window (rect will contain
 	// zeroes if this doesn't need to be done):
-	if (output_var_x && !output_var_x->Assign((aLeft + i%screen_width) - rect.left))
+	if (output_var_x && !output_var_x->Assign((aLeft + i%screen_width) - origin.x))
 		return FAIL;
-	if (output_var_y && !output_var_y->Assign((aTop + i/screen_width) - rect.top))
+	if (output_var_y && !output_var_y->Assign((aTop + i/screen_width) - origin.y))
 		return FAIL;
 
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
@@ -6229,18 +6217,14 @@ ResultType Line::MouseGetPos(DWORD aOptions)
 	POINT point;
 	GetCursorPos(&point);  // Realistically, can't fail?
 
-	RECT rect = {0};  // ensure it's initialized for later calculations.
-	if (!(g->CoordMode & COORD_MODE_MOUSE)) // Using relative vs. absolute coordinates.
-	{
-		HWND fore_win = GetForegroundWindow();
-		GetWindowRect(fore_win, &rect);  // If this call fails, above default values will be used.
-	}
+	POINT origin = {0};
+	CoordToScreen(origin, COORD_MODE_MOUSE);
 
 	if (output_var_x) // else the user didn't want the X coordinate, just the Y.
-		if (!output_var_x->Assign(point.x - rect.left))
+		if (!output_var_x->Assign(point.x - origin.x))
 			return FAIL;
 	if (output_var_y) // else the user didn't want the Y coordinate, just the X.
-		if (!output_var_y->Assign(point.y - rect.top))
+		if (!output_var_y->Assign(point.y - origin.y))
 			return FAIL;
 
 	if (!output_var_parent && !output_var_child)
@@ -11211,9 +11195,13 @@ VarSizeType BIV_Caret(LPTSTR aBuf, LPTSTR aVarName)
 			*aBuf = '\0';
 			return 0;
 		}
+		// Unconditionally convert to screen coordinates, for simplicity.
 		ClientToScreen(focused_control ? focused_control : target_window, &sPoint);
-		if (!(g->CoordMode & COORD_MODE_CARET))  // Using the default, which is coordinates relative to window.
-			ScreenToWindow(sPoint, target_window);
+		// Now convert back to whatever is expected for the current mode.
+		POINT origin = {0};
+		CoordToScreen(origin, COORD_MODE_CARET);
+		sPoint.x -= origin.x;
+		sPoint.y -= origin.y;
 		// Now that all failure conditions have been checked, update static variables for the next caller:
 		sForeWinPrev = target_window;
 		sTimestamp = now_tick;

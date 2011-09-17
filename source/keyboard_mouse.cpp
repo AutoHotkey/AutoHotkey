@@ -1354,7 +1354,7 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam)
 			// The builder of this array must ensure that coordinates are valid or set to COORD_UNSPECIFIED_SHORT.
 			if (source_event.x == COORD_UNSPECIFIED_SHORT || has_coord_offset)
 			{
-				// For simplicity with calls such as WindowToScreen(), the one who set up this array has ensured
+				// For simplicity with calls such as CoordToScreen(), the one who set up this array has ensured
 				// that both X and Y are either COORD_UNSPECIFIED_SHORT or not so (i.e. not a combination).
 				// Since the user nor anything else can move the cursor during our playback, GetCursorPos()
 				// should accurately reflect the position set by any previous mouse-move done by this playback.
@@ -1379,8 +1379,8 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam)
 			{
 				event.paramL = source_event.x;
 				event.paramH = source_event.y;
-				if (!(g->CoordMode & COORD_MODE_MOUSE) && !sThisEventIsScreenCoord) // Coordinates are relative to the window that is active now (during realtime playback).
-					WindowToScreen((int &)event.paramL, (int &)event.paramH); // Playback uses screen coords.
+				if (!sThisEventIsScreenCoord) // Coordinates are relative to the window that is active now (during realtime playback).
+					CoordToScreen((int &)event.paramL, (int &)event.paramH, COORD_MODE_MOUSE); // Playback uses screen coords.
 			}
 		}
 		LRESULT time_until_event = (int)(sThisEventTime - GetTickCount()); // Cast to int to avoid loss of negatives from DWORD subtraction.
@@ -2235,8 +2235,7 @@ void MouseClick(vk_type aVK, int aX, int aY, int aRepeatCount, int aSpeed, KeyEv
 		// (see detailed comments below).  Furthermore, if the MouseMove were supported in array-mode,
 		// it would require that GetCursorPos() below be conditionally replaced with something like
 		// the following (since when in array-mode, the cursor hasn't actually moved *yet*):
-		//		if (!(g->CoordMode & COORD_MODE_MOUSE))  // Moving mouse relative to the active window.
-		//			WindowToScreen(aX_orig, aY_orig);
+		//		CoordToScreen(aX_orig, aY_orig, COORD_MODE_MOUSE);  // Moving mouse relative to the active window.
 		// Known limitation: the work-around described below isn't as complete for SendPlay as it is
 		// for the other modes: because dragging the title bar of one of this thread's windows with a
 		// remap such as F1::LButton doesn't work if that remap uses SendPlay internally (the window
@@ -2453,8 +2452,12 @@ void MouseMove(int &aX, int &aY, DWORD &aEventFlags, int aSpeed, bool aMoveOffse
 			aY += cursor_pos.y;
 		}
 	}
-	else if (!(g->CoordMode & COORD_MODE_MOUSE))  // Moving mouse relative to the active window (rather than screen).
-		WindowToScreen(aX, aY);  // None of this is done for playback mode since that mode already returned higher above.
+	else
+	{
+		// Convert relative coords to screen coords if necessary (depends on CoordMode).
+		// None of this is done for playback mode since that mode already returned higher above.
+		CoordToScreen(aX, aY, COORD_MODE_MOUSE);
+	}
 
 	if (sSendMode == SM_INPUT) // Track predicted cursor position for use by subsequent events put into the array.
 	{

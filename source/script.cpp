@@ -6162,13 +6162,14 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		break;
 
 	case ACT_COORDMODE:
-		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.ConvertCoordModeAttrib(new_raw_arg1))
+		if (*new_raw_arg1 && !line.ArgHasDeref(1) && line.ConvertCoordModeCmd(new_raw_arg1) == -1)
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
+		if (*new_raw_arg2 && !line.ArgHasDeref(2) && line.ConvertCoordMode(new_raw_arg2) == -1)
+			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
 	case ACT_SETDEFAULTMOUSESPEED:
 		if (*new_raw_arg1 && !line.ArgHasDeref(1))
-
 		{
 			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
 			// sees a valid no-deref expression such as 1+2 as invalid.
@@ -14797,21 +14798,10 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_COORDMODE:
 	{
-		bool screen_mode;
-		if (!*ARG2 || !_tcsicmp(ARG2, _T("Screen")))
-			screen_mode = true;
-		else if (!_tcsicmp(ARG2, _T("Relative")))
-			screen_mode = false;
-		else  // Since validated at load-time, too rare to return FAIL for.
-			return OK;
-		CoordModeAttribType attrib = ConvertCoordModeAttrib(ARG1);
-		if (attrib)
-		{
-			if (screen_mode)
-				g.CoordMode |= attrib;
-			else
-				g.CoordMode &= ~attrib;
-		}
+		CoordModeType mode = ConvertCoordMode(ARG2);
+		CoordModeType shift = ConvertCoordModeCmd(ARG1);
+		if (shift != -1 && mode != -1) // Compare directly to -1 because unsigned.
+			g.CoordMode = (g.CoordMode & ~(COORD_MODE_MASK << shift)) | (mode << shift);
 		//else too rare to report an error, since load-time validation normally catches it.
 		return OK;
 	}

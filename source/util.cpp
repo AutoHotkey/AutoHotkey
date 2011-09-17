@@ -1558,25 +1558,53 @@ void ScreenToWindow(POINT &aPoint, HWND aHwnd)
 
 
 
-void WindowToScreen(int &aX, int &aY)
-// aX and aY are assumed to be relative to the currently active window.  Here they are converted to
-// screen coordinates based on the position of the active window upper-left corner (not its client area).
+void CoordToScreen(int &aX, int &aY, int aWhichMode)
+// aX and aY are interpreted according to the current coord mode.  If necessary, they are converted to
+// screen coordinates based on the position of the active window's upper-left corner (or its client area).
 {
-	RECT rect;
+	int coord_mode = ((g->CoordMode >> aWhichMode) & COORD_MODE_MASK);
+
+	if (coord_mode == COORD_MODE_SCREEN)
+		return;
+
 	HWND active_window = GetForegroundWindow();
-	if (active_window && !IsIconic(active_window) && GetWindowRect(active_window, &rect))
+	if (active_window && !IsIconic(active_window))
 	{
-		aX += rect.left;
-		aY += rect.top;
+		if (coord_mode == COORD_MODE_WINDOW)
+		{
+			RECT rect;
+			if (GetWindowRect(active_window, &rect))
+			{
+				aX += rect.left;
+				aY += rect.top;
+			}
+		}
+		else // (coord_mode == COORD_MODE_CLIENT)
+		{
+			POINT pt = {0};
+			if (ClientToScreen(active_window, &pt))
+			{
+				aX += pt.x;
+				aY += pt.y;
+			}
+		}
 	}
-	//else no active window per se, so don't convert the coordinates.  Leave them as-is as desired by the
-	// caller.  More details:
+	//else no active window per se, so don't convert the coordinates.  Leave them as-is as desired
+	// by the caller.  More details:
 	// Revert to screen coordinates if the foreground window is minimized.  Although it might be
 	// impossible for a visible window to be both foreground and minimized, it seems that hidden
 	// windows -- such as the script's own main window when activated for the purpose of showing
 	// a popup menu -- can be foreground while simultaneously being minimized.  This fixes an
 	// issue where the mouse will move to the upper-left corner of the screen rather than the
-	// intended coordinates (v1.0.17):
+	// intended coordinates (v1.0.17).
+}
+
+
+
+void CoordToScreen(POINT &aPoint, int aWhichMode)
+// For convenience. See function above for comments.
+{
+	CoordToScreen((int &)aPoint.x, (int &)aPoint.y, aWhichMode);
 }
 
 

@@ -548,13 +548,19 @@ enum GuiEventTypes {GUI_EVENT_NONE  // NONE must be zero for any uses of ZeroMem
 	, GUI_EVENT_CLOSE, GUI_EVENT_ESCAPE, GUI_EVENT_RESIZE, GUI_EVENT_CONTEXTMENU
 	, GUI_EVENT_DIGIT_0 = 48}; // Here just as a reminder that this value and higher are reserved so that a single printable character or digit (mnemonic) can be sent, and also so that ListView's "I" notification can add extra data into the high-byte (which lies just to the left of the "I" character in the bitfield).
 
-// Bitwise flags:
-typedef UCHAR CoordModeAttribType;
-#define COORD_MODE_PIXEL   0x01
-#define COORD_MODE_MOUSE   0x02
-#define COORD_MODE_TOOLTIP 0x04
-#define COORD_MODE_CARET   0x08
-#define COORD_MODE_MENU    0x10
+typedef USHORT CoordModeType;
+
+// Bit-field offsets:
+#define COORD_MODE_PIXEL   0
+#define COORD_MODE_MOUSE   2
+#define COORD_MODE_TOOLTIP 4
+#define COORD_MODE_CARET   6
+#define COORD_MODE_MENU    8
+
+#define COORD_MODE_WINDOW  0
+#define COORD_MODE_CLIENT  1
+#define COORD_MODE_SCREEN  2
+#define COORD_MODE_MASK    3
 
 #define COORD_CENTERED (INT_MIN + 1)
 #define COORD_UNSPECIFIED INT_MIN
@@ -630,7 +636,7 @@ struct global_struct
 	bool AllowTimers; // v1.0.40.01 Whether new timer threads are allowed to start during this thread.
 	bool ThreadIsCritical; // Whether this thread has been marked (un)interruptible by the "Critical" command.
 	UCHAR DefaultMouseSpeed;
-	UCHAR CoordMode; // Bitwise collection of flags.
+	CoordModeType CoordMode; // Bitwise collection of flags.
 	UCHAR StringCaseSense; // On/Off/Locale
 	bool StoreCapslockMode;
 	bool AutoTrim;
