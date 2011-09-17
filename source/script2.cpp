@@ -4074,17 +4074,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		// it might do more harm than good).
 		return 0;
 
-	case AHK_RETURN_PID:
-		// This is obsolete in light of WinGet's support for fetching the PID of any window.
-		// But since it's simple, it is retained for backward compatibility.
-		// Rajat wanted this so that it's possible to discover the PID based on the title of each
-		// script's main window (i.e. if there are multiple scripts running).  Also note that this
-		// msg can be sent via TRANSLATE_AHK_MSG() to prevent it from ever being filtered out (and
-		// thus delayed) while the script is uninterruptible.  For example:
-		// SendMessage, 0x44, 1029,,, %A_ScriptFullPath% - AutoHotkey
-		// SendMessage, 1029,,,, %A_ScriptFullPath% - AutoHotkey  ; Same as above but not sent via TRANSLATE.
-		return GetCurrentProcessId(); // Don't use ReplyMessage because then our thread can't reply to itself with this answer.
-
 	case AHK_HOT_IF_EXPR: // L4: HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
 		if ((int)wParam > -1 && (int)wParam < g_HotExprLineCount)
 			return g_HotExprLines[(int)wParam]->EvaluateHotCriterionExpression((LPTSTR)lParam);
