@@ -520,8 +520,8 @@ typedef USHORT CoordModeType;
 #define COORD_MODE_CARET   6
 #define COORD_MODE_MENU    8
 
-#define COORD_MODE_WINDOW  0
-#define COORD_MODE_CLIENT  1
+#define COORD_MODE_CLIENT  0
+#define COORD_MODE_WINDOW  1
 #define COORD_MODE_SCREEN  2
 #define COORD_MODE_MASK    3
 
