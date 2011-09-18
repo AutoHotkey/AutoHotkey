@@ -227,7 +227,8 @@ void BIF_ObjNew(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	
 	// __New may be defined by the script for custom initialization code.
 	name_token.marker = Object::sMetaFuncName[4]; // __New
-	if (class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, aParamCount) != EARLY_RETURN)
+	result = class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, aParamCount);
+	if (result != EARLY_RETURN)
 	{
 		// Although it isn't likely to happen, if __New points at a built-in function or if mBase
 		// (or an ancestor) is not an Object (i.e. it's a ComObject), aResultToken can be set even when
@@ -241,10 +242,19 @@ void BIF_ObjNew(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 			free(aResultToken.mem_to_free);
 			aResultToken.mem_to_free = NULL;
 		}
-		// Either it wasn't handled (i.e. neither this class nor any of its super-classes define __New()),
-		// or there was no explicit "return", so just return the new object.
-		aResultToken.symbol = SYM_OBJECT;
-		aResultToken.object = new_object;
+		if (result == FAIL)
+		{
+			// Invocation failed, probably due to omitting a required parameter.
+			aResultToken.symbol = SYM_STRING;
+			aResultToken.marker = _T("");
+		}
+		else
+		{
+			// Either it wasn't handled (i.e. neither this class nor any of its super-classes define __New()),
+			// or there was no explicit "return", so just return the new object.
+			aResultToken.symbol = SYM_OBJECT;
+			aResultToken.object = new_object;
+		}
 	}
 	else
 		new_object->Release();
