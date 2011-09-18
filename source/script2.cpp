@@ -11320,9 +11320,9 @@ VarSizeType BIV_ScriptDir(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_ScriptFullPath(LPTSTR aBuf, LPTSTR aVarName)
 {
-	return aBuf
-		? _stprintf(aBuf, _T("%s\\%s"), g_script.mFileDir, g_script.mFileName)
-		:(VarSizeType)(_tcslen(g_script.mFileDir) + _tcslen(g_script.mFileName) + 1);
+	if (aBuf)
+		_tcscpy(aBuf, g_script.mFileSpec);
+	return _tcslen(g_script.mFileSpec);
 }
 
 VarSizeType BIV_ScriptHwnd(LPTSTR aBuf, LPTSTR aVarName)
