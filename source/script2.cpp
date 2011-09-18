@@ -9404,9 +9404,9 @@ VarSizeType BIV_ScriptDir(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_ScriptFullPath(LPTSTR aBuf, LPTSTR aVarName)
 {
-	return aBuf
-		? _stprintf(aBuf, _T("%s\\%s"), g_script.mFileDir, g_script.mFileName)
-		:(VarSizeType)(_tcslen(g_script.mFileDir) + _tcslen(g_script.mFileName) + 1);
+	if (aBuf)
+		_tcscpy(aBuf, g_script.mFileSpec);
+	return _tcslen(g_script.mFileSpec);
 }
 
 VarSizeType BIV_ScriptHwnd(LPTSTR aBuf, LPTSTR aVarName)
@@ -11197,7 +11197,7 @@ inline void RegExGetSubpatternOffset(int &pos, int &len, int *subpat_offset, LPC
 #endif
 
 
-void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool get_positions_not_substrings, Var &output_var, int *offset, int pattern_count, int captured_pattern_count, LPTSTR &mem_to_free
+void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, TCHAR output_mode, Var &output_var, int *offset, int pattern_count, int captured_pattern_count, LPTSTR &mem_to_free
 #ifdef UNICODE
 	, LPCSTR utf8Haystack, int match_offset_utf8, int match_offset
 #endif
@@ -11236,6 +11236,20 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 	//else one of the pcre_fullinfo() calls may have failed.  The PCRE docs indicate that this realistically never
 	// happens unless bad inputs were given.  So due to rarity, just leave subpat_name==NULL; i.e. "no named subpatterns".
 
+	if (output_mode == 'O')
+	{
+		IObject *m = RegExMatchObject::Create(haystack, offset, subpat_name, captured_pattern_count
+			#ifdef UNICODE
+			, utf8Haystack, match_offset_utf8, match_offset
+			#endif
+			);
+		if (m)
+			output_var.AssignSkipAddRef(m);
+		else
+			output_var.Assign();
+		return;
+	}
+
 	// Make var_name longer than Max so that FindOrAddVar() will be able to spot and report var names
 	// that are too long, either because the base-name is too long, or the name becomes too long
 	// as a result of appending the array index number:
@@ -11248,7 +11262,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 	bool subpat_not_matched;
 	int subpat_pos, subpat_len;
 
-	if (get_positions_not_substrings)
+	if (output_mode == 'P')
 	{
 		for (; p < pattern_count; ++p, this_offset += 2) // Start at 1 because above already did pattern #0 (the full pattern).
 		{
@@ -11302,7 +11316,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 		}
 		//goto free_and_return;
 		return;
-	} // if (get_positions_not_substrings)
+	} // if (output_mode == 'P')
 
 	// Otherwise, we're in get-substring mode (not offset mode), so store the substring that matches each subpattern.
 	for (; p < pattern_count; ++p, this_offset += 2) // Start at 1 because above already did pattern #0 (the full pattern).
@@ -11378,6 +11392,168 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, bool 
 	} // for() each subpattern.
 }
 
+
+RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCSTR *aPatternName, int aCapturedPatternCount
+#ifdef UNICODE
+	, LPCSTR aUTF8Haystack, int aMatchOffsetUTF8, int aMatchOffset
+#endif
+)
+{
+	RegExMatchObject *m = new RegExMatchObject();
+	if (!m)
+		return NULL;
+
+	ASSERT(aCapturedPatternCount >= 1);
+
+	m->mPatternCount = aCapturedPatternCount;
+	
+	// Copy haystack.  Must copy the whole haystack since it is possible (though rare) for a
+	// subpattern to precede the overall match - for instance, if \K is used or a subpattern
+	// is captured inside a look-behind assertion.
+	if (  !(m->mHaystack = _tcsdup(aHaystack))
+	   // Allocate memory for a copy of the offset array.
+	   || !(m->mOffset = (int *)malloc(aCapturedPatternCount * 2 * sizeof(int *)))  )
+	{
+		m->Release(); // This also frees m->mHaystack if it is non-NULL.
+		return NULL;
+	}
+	
+	int p, i, pos, len;
+
+	// Convert start/end offsets to offset and length (also convert offsets from UTF-8 to UTF-16 in Unicode build).
+	for (p = 0, i = 0; p < aCapturedPatternCount; ++p)
+	{
+		if (aOffset[i] < 0)
+		{
+			pos = -1;
+			len = 0;
+		}
+		else
+		{
+			RegExGetSubpatternOffset(pos, len, aOffset + i, aUTF8Haystack, aMatchOffsetUTF8, aMatchOffset);
+		}
+		m->mOffset[i++] = pos;
+		m->mOffset[i++] = len;
+	}
+
+	// Copy subpattern names.
+	if (aPatternName)
+	{
+		// Allocate array of pointers.
+		if (  !(m->mPatternName = (LPTSTR *)malloc(aCapturedPatternCount * sizeof(LPTSTR *)))  )
+		{
+			m->Release();
+			return NULL;
+		}
+
+		// Copy names and initialize array.
+		m->mPatternName[0] = NULL;
+		for (p = 1; p < aCapturedPatternCount; ++p)
+			if (aPatternName[p])
+				// A failed allocation here seems rare and the consequences would be
+				// negligible, so in that case just act as if the subpattern has no name.
+				m->mPatternName[p] = UorA(UTF8ToWide(aPatternName[p]), strdup(aPatternName[p]));
+			else
+				m->mPatternName[p] = NULL;
+	}
+
+	// Since above didn't return, the object has been set up successfully.
+	return m;
+}
+
+ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (aParamCount < 1 || aParamCount > 2 || IS_INVOKE_SET)
+		return INVOKE_NOT_HANDLED;
+
+	LPTSTR name;
+	int p = -1;
+
+	// Check for a subpattern offset/name first so that a subpattern named "Pos" takes
+	// precedence over our "Pos" property when invoked like m.Pos (but not m.Pos()).
+	if (aParamCount > 1 || !IS_INVOKE_CALL)
+	{
+		ExprTokenType &name_param = *aParam[aParamCount - 1];
+
+		if (TokenIsPureNumeric(name_param))
+		{
+			p = (int)TokenToInt64(name_param, TRUE);
+		}
+		else if (mPatternName) // i.e. there is at least one named subpattern.
+		{
+			name = TokenToString(name_param);
+			for (p = 0; p < mPatternCount; ++p)
+				if (mPatternName[p] && !_tcsicmp(mPatternName[p], name))
+					break;
+		}
+	}
+
+	bool pattern_found = p >= 0 && p < mPatternCount;
+	
+	// Checked for named properties:
+	if (aParamCount > 1 || !pattern_found)
+	{
+		name = TokenToString(*aParam[0]);
+
+		if (!pattern_found && aParamCount == 1)
+		{
+			p = 0; // For m.Pos, m.Len and m.Value, use the overall match.
+			pattern_found = true; // Relies on below returning if the property name is invalid.
+		}
+
+		if (!_tcsicmp(name, _T("Pos")))
+		{
+			if (pattern_found)
+			{
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = mOffset[2*p] + 1;
+			}
+			return OK;
+		}
+		else if (!_tcsicmp(name, _T("Len")))
+		{
+			if (pattern_found)
+			{
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = mOffset[2*p + 1];
+			}
+			return OK;
+		}
+		else if (!_tcsicmp(name, _T("Count")))
+		{
+			if (aParamCount == 1)
+			{
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = mPatternCount - 1; // Return number of subpatterns (exclude overall match).
+			}
+			return OK;
+		}
+		else if (!_tcsicmp(name, _T("Name")))
+		{
+			if (pattern_found && mPatternName && mPatternName[p])
+				TokenSetResult(aResultToken, mPatternName[p]);
+			return OK;
+		}
+		else if (_tcsicmp(name, _T("Value"))) // i.e. NOT "Value".
+		{
+			// This is something like m[n] where n is not a valid subpattern or property name,
+			// or m.Foo[n] where Foo is not a valid property name.  For the two-param case,
+			// reset pattern_found so that if n is a valid subpattern it won't be returned:
+			pattern_found = false;
+		}
+	}
+
+	if (pattern_found)
+	{
+		// Gives the correct result even if there was no match (because length is 0):
+		TokenSetResult(aResultToken, mHaystack + mOffset[p*2], mOffset[p*2+1]);
+		return OK;
+	}
+
+	return INVOKE_NOT_HANDLED;
+}
+
+
 void *RegExResolveUserCallout(LPCSTR aCalloutParam, int aCalloutParamLength)
 {
 	// If no Func is found, pcre will handle the case where aCalloutParam is a pure integer.
@@ -11405,7 +11581,7 @@ struct RegExCalloutData // L14: Used by BIF_RegEx to pass necessary info to RegE
 	LPTSTR haystack;
 	int haystack_length;
 #endif
-	bool get_positions_not_substrings;
+	TCHAR output_mode;
 };
 
 int RegExCallout(pcre_callout_block *cb)
@@ -11488,7 +11664,7 @@ int RegExCallout(pcre_callout_block *cb)
 		int match_length = UTF8LenToTLen(cb->subject, cb->start_match, cb->current_position - cb->start_match);
 
 		// Overall match or its length.
-		if (cd.get_positions_not_substrings)
+		if (cd.output_mode == 'P')
 			output_var.Assign(match_length);
 		else
 			output_var.AssignString(UorA(cd.haystack, cb->subject) + match_offset, match_length);
@@ -11497,9 +11673,9 @@ int RegExCallout(pcre_callout_block *cb)
 		
 		// Set up local vars for capturing subpatterns.
 #ifdef UNICODE
-		RegExSetSubpatternVars(cd.haystack, cd.re, cd.extra, cd.get_positions_not_substrings, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top, mem_to_free, cb->subject, cb->start_match, match_offset);
+		RegExSetSubpatternVars(cd.haystack, cd.re, cd.extra, cd.output_mode, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top, mem_to_free, cb->subject, cb->start_match, match_offset);
 #else
-		RegExSetSubpatternVars(cb->subject, cd.re, cd.extra, cd.get_positions_not_substrings, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top, mem_to_free);
+		RegExSetSubpatternVars(cb->subject, cd.re, cd.extra, cd.output_mode, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top, mem_to_free);
 #endif
 		
 		if (mem_to_free) // Should never happen since even if haystack were one of our local vars, BackupFunctionVars() would hide that from the above function. Check it anyway for maintainability.
@@ -11556,7 +11732,7 @@ int RegExCallout(pcre_callout_block *cb)
 	return number_to_return;
 }
 
-pcre *get_compiled_regex(LPTSTR aRegEx, bool &aGetPositionsNotSubstrings, pcre_extra *&aExtra
+pcre *get_compiled_regex(LPTSTR aRegEx, TCHAR &aOutputMode, pcre_extra *&aExtra
 	, int *aOptionsLength, ExprTokenType *aResultToken)
 // Returns the compiled RegEx, or NULL on failure.
 // This function is called by things other than built-in functions so it should be kept general-purpose.
@@ -11612,7 +11788,7 @@ pcre *get_compiled_regex(LPTSTR aRegEx, bool &aGetPositionsNotSubstrings, pcre_e
 		pcre_extra *extra; // NULL unless a study() was done (and NULL even then if study() didn't find anything).
 		// int pcre_options; // Not currently needed in the cache since options are implicitly inside re_compiled.
 		int options_length; // Lexikos: See aOptionsLength comment at beginning of this function.
-		bool get_positions_not_substrings;
+		TCHAR output_mode;
 	};
 
 	#define PCRE_CACHE_SIZE 100 // Going too high would be counterproductive due to the slowness of linear search (and also the memory utilization of so many compiled RegEx's).
@@ -11694,7 +11870,7 @@ pcre *get_compiled_regex(LPTSTR aRegEx, bool &aGetPositionsNotSubstrings, pcre_e
 	#define SET_DEFAULT_PCRE_OPTIONS \
 	{\
 		pcre_options = PCRE_NEWLINE_CRLF | AHK_PCRE_CHARSET_OPTIONS;\
-		aGetPositionsNotSubstrings = false;\
+		aOutputMode = '\0';\
 		do_study = false;\
 	}
 	#define PCRE_NEWLINE_BITS (PCRE_NEWLINE_CRLF | PCRE_NEWLINE_ANY) // Covers all bits that are used for newline options.
@@ -11745,8 +11921,13 @@ pcre *get_compiled_regex(LPTSTR aRegEx, bool &aGetPositionsNotSubstrings, pcre_e
 			break;
 
 		// Other options (uppercase so that lowercase can be reserved for future/PERL options):
-		case 'P': aGetPositionsNotSubstrings = true;   break;
-		case 'S': do_study = true;                     break;
+		case 'O':
+		case 'P':
+			aOutputMode = *pat;
+			break;
+		case 'S':
+			do_study = true;
+			break;
 
 		case ' ':  // Allow only spaces and tabs as fillers so that everything else is protected/reserved for
 		case '\t': // future use (such as future PERL options).
@@ -11841,7 +12022,7 @@ break_both:
 	this_entry.re_raw = _tcsdup(aRegEx); // _strdup() is very tiny and basically just calls _tcslen+malloc+_tcscpy.
 	this_entry.re_compiled = re_compiled;
 	this_entry.extra = aExtra;
-	this_entry.get_positions_not_substrings = aGetPositionsNotSubstrings;
+	this_entry.output_mode = aOutputMode;
 	// "this_entry.pcre_options" doesn't exist because it isn't currently needed in the cache.  This is
 	// because the RE's options are implicitly stored inside re_compiled.
 
@@ -11860,7 +12041,7 @@ break_both:
 	return re_compiled; // Indicate success.
 
 match_found: // RegEx was found in the cache at position sLastFound, so return the cached info back to the caller.
-	aGetPositionsNotSubstrings = sCache[sLastFound].get_positions_not_substrings;
+	aOutputMode = sCache[sLastFound].output_mode;
 	aExtra = sCache[sLastFound].extra;
 	if (aOptionsLength) // Lexikos: See aOptionsLength comment at beginning of this function.
 		*aOptionsLength = sCache[sLastFound].options_length; 
@@ -11884,12 +12065,12 @@ error: // Since NULL is returned here, caller should ignore the contents of the 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx)
 // Returns NULL if no match.  Otherwise, returns the address where the pattern was found in aHaystack.
 {
-	bool get_positions_not_substrings; // Currently ignored.
+	TCHAR output_mode; // Currently ignored.
 	pcre_extra *extra;
 	pcre *re;
 
 	// Compile the regex or get it from cache.
-	if (   !(re = get_compiled_regex(aNeedleRegEx, get_positions_not_substrings, extra, NULL, NULL))   ) // Compiling problem.
+	if (   !(re = get_compiled_regex(aNeedleRegEx, output_mode, extra, NULL, NULL))   ) // Compiling problem.
 		return NULL; // Our callers just want there to be "no match" in this case.
 
 	// Set up the offset array, which consists of int-pairs containing the start/end offset of each match.
@@ -12375,13 +12556,13 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	bool mode_is_replace = ctoupper(aResultToken.marker[5]) == 'R'; // Union's marker initially contains the function name; e.g. RegEx[R]eplace.
 	LPTSTR needle = TokenToString(*aParam[1], aResultToken.buf); // Load-time validation has already ensured that at least two actual parameters are present.
 
-	bool get_positions_not_substrings;
+	TCHAR output_mode;
 	pcre_extra *extra;
 	pcre *re;
 	int options_length;
 
 	// COMPILE THE REGEX OR GET IT FROM CACHE.
-	if (   !(re = get_compiled_regex(needle, get_positions_not_substrings, extra, &options_length, &aResultToken))   ) // Compiling problem.
+	if (   !(re = get_compiled_regex(needle, output_mode, extra, &options_length, &aResultToken))   ) // Compiling problem.
 		return; // It already set ErrorLevel and aResultToken for us. If caller provided an output var/array, it is not changed under these conditions because there's no way of knowing how many subpatterns are in the RegEx, and thus no way of knowing how far to init the array.
 
 	// Since compiling succeeded, get info about other parameters.
@@ -12436,7 +12617,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	callout_data.re_text = needle;
 	callout_data.options_length = options_length;
 	callout_data.pattern_count = pattern_count;
-	callout_data.get_positions_not_substrings = get_positions_not_substrings;
+	callout_data.output_mode = output_mode;
 	if (extra)
 	{	// S (study) option was specified, use existing pcre_extra struct.
 		extra->flags |= PCRE_EXTRA_CALLOUT_DATA;	
@@ -12492,7 +12673,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
 	}
-	else // Match found, and captured_pattern_count <= 0 (but should never be 0 in this case because that only happens when offset[] is too small, which it isn't).
+	else // Match found, and captured_pattern_count >= 0 (but should never be 0 in this case because that only happens when offset[] is too small, which it isn't).
 	{
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 #ifdef UNICODE
@@ -12513,37 +12694,41 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	// OTHERWISE, THE CALLER PROVIDED AN OUTPUT VAR/ARRAY: Store the substrings that matched the patterns.
 	Var &output_var = *aParam[2]->var; // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 	LPTSTR mem_to_free = NULL; // Set default.
-	
-	int match_length = (captured_pattern_count < 0) ? 0 // Seems better to store length of zero rather than something non-length like -1 (after all, the return value is blank in this case, which should be used as the error indicator).
-		: UTF8LenToTLen(utf8Haystack, offset[0], offset[1] - offset[0]);
 
-	if (get_positions_not_substrings) // In this mode, it's done this way to avoid creating an array if there are no subpatterns; i.e. the return value is the starting position and the array name will contain the length of what was found.
-		output_var.Assign(match_length);
-	else
+	if (output_mode != 'O')
 	{
-		if (captured_pattern_count < 0) // Failed or no match.
-			output_var.Assign(); // Make the full-pattern substring blank as a further indicator, and for convenience consistency in the script.
-		else // Greater than 0 (it can't be equal to zero because offset[] was definitely large enough).
+		int match_length = (captured_pattern_count < 0) ? 0 // Seems better to store length of zero rather than something non-length like -1 (after all, the return value is blank in this case, which should be used as the error indicator).
+			: UTF8LenToTLen(utf8Haystack, offset[0], offset[1] - offset[0]);
+
+		if (output_mode == 'P') // In this mode, it's done this way to avoid creating an array if there are no subpatterns; i.e. the return value is the starting position and the array name will contain the length of what was found.
+			output_var.Assign(match_length);
+		else
 		{
-			// Fix for v1.0.45.07: The following check allow haystack to be the same script-variable as the
-			// output-var/array.  Unless a copy of haystack is made, any subpatterns to be populated after the
-			// entire-pattern output-var below would be corrupted.  In other words, anything that refers to the
-			// contents of haystack after the output-var has been assigned would otherwise refer to the wrong
-			// string.  Note that the following isn't done for the get_positions_not_substrings mode higher above
-			// because that mode never refers to haystack when populating its subpatterns.
-			if (pattern_count > 1 && haystack == output_var.Contents(FALSE)) // i.e. there are subpatterns to be output afterward, and haystack is the same variable as the output-var that's about to be overwritten below.
-				if (mem_to_free = _tcsdup(haystack)) // _strdup() is very tiny and basically just calls strlen+malloc+strcpy.
-					haystack = mem_to_free;
-				//else due to the extreme rarity of running out of memory AND SIMULTANEOUSLY having output-var match
-				// haystack, continue on so that at least partial success is achieved (the only thing that will
-				// be wrong in this case is the subpatterns, if any).
-			output_var.Assign(haystack + match_offset, match_length); // It shouldn't be possible for the full-pattern match's offset to be -1, since if where here, a match on the full pattern was always found.
+			if (captured_pattern_count < 0) // Failed or no match.
+				output_var.Assign(); // Make the full-pattern substring blank as a further indicator, and for convenience consistency in the script.
+			else // Greater than 0 (it can't be equal to zero because offset[] was definitely large enough).
+			{
+				// Fix for v1.0.45.07: The following check allow haystack to be the same script-variable as the
+				// output-var/array.  Unless a copy of haystack is made, any subpatterns to be populated after the
+				// entire-pattern output-var below would be corrupted.  In other words, anything that refers to the
+				// contents of haystack after the output-var has been assigned would otherwise refer to the wrong
+				// string.  Note that the following isn't done for the 'P' or 'O' output modes higher above
+				// because that mode never refers to haystack when populating its subpatterns.
+				if (pattern_count > 1 && haystack == output_var.Contents(FALSE)) // i.e. there are subpatterns to be output afterward, and haystack is the same variable as the output-var that's about to be overwritten below.
+					if (mem_to_free = _tcsdup(haystack)) // _strdup() is very tiny and basically just calls strlen+malloc+strcpy.
+						haystack = mem_to_free;
+					//else due to the extreme rarity of running out of memory AND SIMULTANEOUSLY having output-var match
+					// haystack, continue on so that at least partial success is achieved (the only thing that will
+					// be wrong in this case is the subpatterns, if any).
+				output_var.Assign(haystack + match_offset, match_length); // It shouldn't be possible for the full-pattern match's offset to be -1, since if where here, a match on the full pattern was always found.
+			}
 		}
 	}
+	// Otherwise, output_mode == 'O', so the function call below does all the work.
 	
 	// L14: Moved this section into a function to allow it to be used by callouts.
-	if (pattern_count > 1)
-		RegExSetSubpatternVars(haystack, re, extra, get_positions_not_substrings, output_var, offset, pattern_count, captured_pattern_count, mem_to_free
+	if (pattern_count > 1 || output_mode == 'O')
+		RegExSetSubpatternVars(haystack, re, extra, output_mode, output_var, offset, pattern_count, captured_pattern_count, mem_to_free
 #ifdef UNICODE
 		, utf8Haystack, match_offset_utf8, match_offset
 #endif

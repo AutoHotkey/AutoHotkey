@@ -289,3 +289,42 @@ public:
 
 extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object values.
 
+
+//
+// RegExMatchObject:  Returned by RegExMatch via UnquotedOutputVar.
+//
+class RegExMatchObject : public ObjectBase
+{
+	LPTSTR mHaystack;
+	int *mOffset;
+	LPTSTR *mPatternName;
+	int mPatternCount;
+
+	RegExMatchObject() : mHaystack(NULL), mOffset(NULL), mPatternName(NULL), mPatternCount(0) {}
+	
+	~RegExMatchObject()
+	{
+		if (mHaystack)
+			free(mHaystack);
+		if (mOffset)
+			free(mOffset);
+		if (mPatternName)
+		{
+			// Free the strings:
+			for (int p = 1; p < mPatternCount; ++p) // Start at 1 since 0 never has a name.
+				if (mPatternName[p])
+					free(mPatternName[p]);
+			// Free the array:
+			free(mPatternName);
+		}
+	}
+
+public:
+	static RegExMatchObject *Create(LPCTSTR aHaystack, int *aOffset, LPCSTR *aPatternName, int aCapturedPatternCount
+	#ifdef UNICODE
+		, LPCSTR aUTF8Haystack, int aMatchOffsetUTF8, int aMatchOffset
+	#endif
+	);
+	
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+};

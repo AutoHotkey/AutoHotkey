@@ -1292,8 +1292,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 			return OK;
 		sntprintf(msg_text, _countof(msg_text), _T("%s file \"%s\" cannot be opened.")
 			, Line::sSourceFileCount > 0 ? _T("#Include") : _T("Script"), aFileSpec);
-		MsgBox(msg_text);
-		return FAIL;
+		return ScriptError(msg_text);
 	}
 	
 	// Set the working directory so that any #Include directives are relative to the directory
