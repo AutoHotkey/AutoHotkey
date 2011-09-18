@@ -13445,6 +13445,21 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ExprTokenType &aResultToke
 			}
 			return OK;
 		}
+		else if (!_tcsicmp(name, _T("Count")))
+		{
+			if (aParamCount == 1)
+			{
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = mPatternCount - 1; // Return number of subpatterns (exclude overall match).
+			}
+			return OK;
+		}
+		else if (!_tcsicmp(name, _T("Name")))
+		{
+			if (pattern_found && mPatternName && mPatternName[p])
+				TokenSetResult(aResultToken, mPatternName[p]);
+			return OK;
+		}
 		else if (_tcsicmp(name, _T("Value"))) // i.e. NOT "Value".
 		{
 			// This is something like m[n] where n is not a valid subpattern or property name,
