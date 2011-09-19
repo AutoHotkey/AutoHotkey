@@ -313,6 +313,7 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 /* #undef SUPPORT_LIBZ */
 
 #ifdef UNICODE
+
 /* Define to enable support for Unicode properties */
 #define SUPPORT_UCP
 
@@ -321,6 +322,11 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
    macro. That is, PCRE can support *either* EBCDIC code *or* ASCII/UTF-8, but
    not both at once. */
 #define SUPPORT_UTF8
+
+/* Define to define utf8 flag as constant TRUE, since we always use UTF-8 mode.
+   This allows the compiler optimizer to omit non-UTF-8 code that we don't need. */
+#define SUPPORT_UTF8_ONLY
+
 #endif
 
 /* Version number of package */

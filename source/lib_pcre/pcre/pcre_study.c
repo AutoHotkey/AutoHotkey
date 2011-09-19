@@ -79,7 +79,11 @@ static int
 find_minlength(const uschar *code, const uschar *startcode, int options)
 {
 int length = -1;
+#ifdef SUPPORT_UTF8_ONLY
+const BOOL utf8 = TRUE;
+#else
 BOOL utf8 = (options & PCRE_UTF8) != 0;
+#endif
 BOOL had_recurse = FALSE;
 register int branchlength = 0;
 register uschar *cc = (uschar *)code + 1 + LINK_SIZE;

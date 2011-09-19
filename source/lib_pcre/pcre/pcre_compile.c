@@ -604,7 +604,11 @@ check_escape(const uschar **ptrptr, int *errorcodeptr, int bracount,
   int options, BOOL isclass)
 {
 #ifdef SUPPORT_UTF8 /* AutoHotkey. */
+#ifdef SUPPORT_UTF8_ONLY
+	const BOOL utf8 = TRUE;
+#else
 	BOOL utf8 = (options & PCRE_UTF8) != 0;
+#endif
 #endif /* AutoHotkey. */
 const uschar *ptr = *ptrptr + 1;
 int c, i;
@@ -2951,12 +2955,16 @@ uschar classbits[32];
 
 #ifdef SUPPORT_UTF8
 BOOL class_utf8;
+#ifdef SUPPORT_UTF8_ONLY
+const BOOL utf8 = TRUE;
+#else
 BOOL utf8 = (options & PCRE_UTF8) != 0;
+#endif
 uschar *class_utf8data;
 uschar *class_utf8data_base;
 uschar utf8_char[6];
 #else
-BOOL utf8 = FALSE;
+const BOOL utf8 = FALSE;
 uschar *utf8_char = NULL;
 #endif
 
@@ -6774,7 +6782,11 @@ int length = 1;  /* For final END opcode */
 int firstbyte, reqbyte, newline;
 int errorcode = 0;
 int skipatstart = 0;
+#ifdef SUPPORT_UTF8_ONLY
+const BOOL utf8 = TRUE;
+#else
 BOOL utf8;
+#endif
 size_t size;
 uschar *code;
 const uschar *codestart;
@@ -6870,7 +6882,9 @@ while (ptr[skipatstart] == CHAR_LEFT_PARENTHESIS &&
   else break;
   }
 
+#ifndef SUPPORT_UTF8_ONLY
 utf8 = (options & PCRE_UTF8) != 0;
+#endif
 
 /* Can't support UTF8 unless PCRE has been compiled to include the code. */
 
