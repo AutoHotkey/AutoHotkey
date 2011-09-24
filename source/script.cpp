@@ -15750,7 +15750,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
 
-	if (g->InTryBlock && aErrorType == FAIL) // i.e. not CRITICAL_ERROR or WARN.
+	if (g->InTryBlock && aErrorType == FAIL || aErrorType == EARLY_EXIT) // FAIL is most common, but EARLY_EXIT is used by ComError(). WARN and CRITICAL_ERROR are excluded.
 		return ThrowRuntimeException(aErrorText, NULL, aExtraInfo);
 
 	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute && aErrorType != WARN) // i.e. runtime errors are always displayed via dialog.
