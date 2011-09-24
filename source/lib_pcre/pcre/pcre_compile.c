@@ -339,7 +339,7 @@ static const tchar error_texts[] =
   _T("range out of order in character class\0")
   _T("nothing to repeat\0")
   /* 10 */
-  _T("operand of unlimited repeat could match the empty string\0")  /** DEAD **/
+  _T(" \0")  /** DEAD: operand of unlimited repeat could match the empty string **/
   _T("internal error: unexpected repeat\0")
   _T("unrecognized character after (? or (?-\0")
   _T("POSIX named classes are supported only within a class\0")
@@ -349,7 +349,7 @@ static const tchar error_texts[] =
   _T("erroffset passed as NULL\0")
   _T("unknown option bit(s) set\0")
   _T("missing ) after comment\0")
-  _T("parentheses nested too deeply\0")  /** DEAD **/
+  _T(" \0")  /** DEAD: parentheses nested too deeply **/
   /* 20 */
   _T("regular expression is too large\0")
   _T("failed to get memory\0")
@@ -366,7 +366,7 @@ static const tchar error_texts[] =
   _T("unknown POSIX class name\0")
   _T("POSIX collating elements are not supported\0")
   _T("this version of PCRE is not compiled with PCRE_UTF8 support\0")
-  _T("spare error\0")  /** DEAD **/
+  _T(" \0")  /** DEAD: spare error **/
   _T("character value in \\x{...} sequence is too large\0")
   /* 35 */
   _T("invalid condition (?(0)\0")
@@ -387,13 +387,13 @@ static const tchar error_texts[] =
   _T("subpattern name is too long (maximum ") XSTRING(MAX_NAME_SIZE) _T(" characters)\0")
   _T("too many named subpatterns (maximum ") XSTRING(MAX_NAME_COUNT) _T(")\0")
   /* 50 */
-  _T("repeated subpattern is too long\0")    /** DEAD **/
+  _T(" \0")    /** DEAD: repeated subpattern is too long **/
   _T("octal value is greater than \\377 (not in UTF-8 mode)\0")
   _T("internal error: overran compiling workspace\0")
   _T("internal error: previously-checked referenced subpattern not found\0")
   _T("DEFINE group contains more than one branch\0")
   /* 55 */
-  _T("repeating a DEFINE group is not allowed\0")  /** DEAD **/
+  _T(" \0")  /** DEAD: repeating a DEFINE group is not allowed **/
   _T("inconsistent NEWLINE options\0")
   _T("\\g is not followed by a braced, angle-bracketed, or quoted name/number or by a plain number\0")
   _T("a numbered reference must not be zero\0")
