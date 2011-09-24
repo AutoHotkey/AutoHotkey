@@ -77,9 +77,9 @@ _pcre_is_newline(USPTR ptr, int type, USPTR endptr, int *lenptr, BOOL utf8)
 {
 int c;
 #ifdef SUPPORT_UTF8 /* AutoHotkey. */
-	if (utf8) { GETCHAR(c, ptr); } else c = *ptr;
+    if (utf8) { GETCHAR(c, ptr); } else c = *ptr;
 #else
-	c = *ptr; /* AutoHotkey. */
+    c = *ptr; /* AutoHotkey. */
 #endif /* AutoHotkey. */
 
 if (type == NLTYPE_ANYCRLF) switch(c)

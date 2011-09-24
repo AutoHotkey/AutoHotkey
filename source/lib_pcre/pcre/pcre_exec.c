@@ -479,9 +479,9 @@ register int  i;           /* Used for loops not involving calls to RMATCH() */
 register unsigned int c;   /* Character values not kept over RMATCH() calls */
 #ifdef SUPPORT_UTF8 /* AutoHotkey: This helps detected unintended usages of utf8. */
 #ifdef SUPPORT_UTF8_ONLY
-	const BOOL utf8 = TRUE;
+    const BOOL utf8 = TRUE;
 #else
-	register BOOL utf8;        /* Local copy of UTF-8 flag for speed */
+    register BOOL utf8;        /* Local copy of UTF-8 flag for speed */
 #endif
 #endif /* AutoHotkey. */
 
@@ -5591,9 +5591,9 @@ BOOL first_byte_caseless = FALSE;
 BOOL req_byte_caseless = FALSE;
 #ifdef SUPPORT_UTF8 /* AutoHotkey: This helps detected unintended usages of utf8. */
 #ifdef SUPPORT_UTF8_ONLY
-	const BOOL utf8 = TRUE;
+    const BOOL utf8 = TRUE;
 #else
-	BOOL utf8;
+    BOOL utf8;
 #endif
 #endif /* AutoHotkey. */
 match_data match_block;
@@ -5689,9 +5689,9 @@ end_subject = md->end_subject;
 md->endonly = (re->options & PCRE_DOLLAR_ENDONLY) != 0;
 #ifdef SUPPORT_UTF8 /* AutoHotkey. */
 #ifndef SUPPORT_UTF8_ONLY
-	utf8 = md->utf8 = (re->options & PCRE_UTF8) != 0;
+    utf8 = md->utf8 = (re->options & PCRE_UTF8) != 0;
 #endif
-	md->use_ucp = (re->options & PCRE_UCP) != 0;
+    md->use_ucp = (re->options & PCRE_UCP) != 0;
 #endif /* AutoHotkey. */
 md->jscript_compat = (re->options & PCRE_JAVASCRIPT_COMPAT) != 0;
 

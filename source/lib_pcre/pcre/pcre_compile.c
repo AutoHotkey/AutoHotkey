@@ -605,9 +605,9 @@ check_escape(const uschar **ptrptr, int *errorcodeptr, int bracount,
 {
 #ifdef SUPPORT_UTF8 /* AutoHotkey. */
 #ifdef SUPPORT_UTF8_ONLY
-	const BOOL utf8 = TRUE;
+    const BOOL utf8 = TRUE;
 #else
-	BOOL utf8 = (options & PCRE_UTF8) != 0;
+    BOOL utf8 = (options & PCRE_UTF8) != 0;
 #endif
 #endif /* AutoHotkey. */
 const uschar *ptr = *ptrptr + 1;
@@ -2933,7 +2933,7 @@ int zeroreqbyte, zerofirstbyte;
 int req_caseopt, reqvary, tempreqvary;
 int options = *optionsptr;
 #ifdef SUPPORT_CALLOUT  /* AutoHotkey: Omit the callout feature from the code until it's needed. */
-	int after_manual_callout = 0;
+    int after_manual_callout = 0;
 #endif /* AutoHotkey */
 int length_prevgroup = 0;
 register int c;
@@ -2948,7 +2948,7 @@ const uschar *tempptr;
 const uschar *nestptr = NULL;
 uschar *previous = NULL;
 #ifdef SUPPORT_CALLOUT  /* AutoHotkey: Omit the callout feature from the code until it's needed. */
-	uschar *previous_callout = NULL;
+    uschar *previous_callout = NULL;
 #endif /* AutoHotkey */
 uschar *save_hwm = NULL;
 uschar classbits[32];
@@ -5167,40 +5167,40 @@ for (;; ptr++)
         after_manual_callout = 1; /* Skip one item before completing */
         *code++ = OP_CALLOUT;
           {
-		  int n = 0;
-		  void *user_callout = NULL;
-		  tempptr = ptr;
-		  while ((digitab[*(++ptr)] & ctype_digit) != 0)
+          int n = 0;
+          void *user_callout = NULL;
+          tempptr = ptr;
+          while ((digitab[*(++ptr)] & ctype_digit) != 0)
             n = n * 10 + *ptr - CHAR_0;
           if (*ptr != CHAR_RIGHT_PARENTHESIS)
-			{
-			if (*ptr) /* Not end of string, so try to resolve it to a user-defined callout */
-			  {
-			  if (*ptr != ':') /* Treat (?C123Func) as 123Func() with callout_number == 0 */
-				{
-				n = 0;
-				ptr = tempptr; /* Reset to address saved above */
-				}
-			  /* ptr now points at the character immediately preceding the function name - i.e. 'C' or ':' */
-			  tempptr = ptr + 1;
-			  while (*(++ptr) && *ptr != ')');
-			  if (*ptr)
-			    user_callout = pcre_resolve_user_callout(tempptr, (int)(ptr - tempptr));
-			  /* else fall through to return ERR39 */
-			  }
-			if (user_callout == NULL) /* Unresolved user callout, or missing ')' */
-			  {
-			  *errorcodeptr = ERR39;
-			  goto FAILED;
-			  }
-			}
-		  if (n > 255)
-			{
-			*errorcodeptr = ERR38;
-			goto FAILED;
-			}
-		  *code++ = n;
-		  *((void **)code)++ = user_callout;
+            {
+            if (*ptr) /* Not end of string, so try to resolve it to a user-defined callout */
+              {
+              if (*ptr != ':') /* Treat (?C123Func) as 123Func() with callout_number == 0 */
+                {
+                n = 0;
+                ptr = tempptr; /* Reset to address saved above */
+                }
+              /* ptr now points at the character immediately preceding the function name - i.e. 'C' or ':' */
+              tempptr = ptr + 1;
+              while (*(++ptr) && *ptr != ')');
+              if (*ptr)
+                user_callout = pcre_resolve_user_callout(tempptr, (int)(ptr - tempptr));
+              /* else fall through to return ERR39 */
+              }
+            if (user_callout == NULL) /* Unresolved user callout, or missing ')' */
+              {
+              *errorcodeptr = ERR39;
+              goto FAILED;
+              }
+            }
+          if (n > 255)
+            {
+            *errorcodeptr = ERR38;
+            goto FAILED;
+            }
+          *code++ = n;
+          *((void **)code)++ = user_callout;
           PUT(code, 0, (int)(ptr - cd->start_pattern + 1)); /* Pattern offset */
           PUT(code, LINK_SIZE, 0);                          /* Default length */
           code += 2 * LINK_SIZE;
