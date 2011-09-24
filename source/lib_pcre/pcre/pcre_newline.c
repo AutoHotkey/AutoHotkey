@@ -77,9 +77,9 @@ _pcre_is_newline(USPTR ptr, int type, USPTR endptr, int *lenptr, BOOL utf8)
 {
 int c;
 #ifdef SUPPORT_UTF8 /* AutoHotkey. */
-	if (utf8) { GETCHAR(c, ptr); } else c = *ptr;
+    if (utf8) { TGETCHAR(c, ptr); } else c = *ptr;
 #else
-	c = *ptr; /* AutoHotkey. */
+    c = *ptr; /* AutoHotkey. */
 #endif /* AutoHotkey. */
 
 if (type == NLTYPE_ANYCRLF) switch(c)
@@ -99,13 +99,19 @@ else switch(c)
   case 0x000c: *lenptr = 1; return TRUE;             /* FF */
   case 0x000d: *lenptr = (ptr < endptr - 1 && ptr[1] == 0x0a)? 2 : 1;
                return TRUE;                          /* CR */
-#ifdef SUPPORT_UTF8 /* AutoHotkey. */
+#ifdef SUPPORT_UTF8_SUBJECT /* AutoHotkey. */
   case 0x0085: *lenptr = utf8? 2 : 1; return TRUE;   /* NEL */
 #else
   case 0x0085: *lenptr = 1; return TRUE;             /* NEL */  /* AutoHotkey. */
 #endif /* AutoHotkey. */
   case 0x2028:                                       /* LS */
-  case 0x2029: *lenptr = 3; return TRUE;             /* PS */
+  case 0x2029:
+#ifndef PCRE_USE_UTF16 /* AutoHotkey. */
+      *lenptr = 3;
+#else
+      *lenptr = 1;
+#endif
+      return TRUE;                                   /* PS */
   default: return FALSE;
   }
 }
@@ -137,8 +143,8 @@ ptr--;
 #ifdef SUPPORT_UTF8
 if (utf8)
   {
-  BACKCHAR(ptr);
-  GETCHAR(c, ptr);
+  TBACKCHAR(ptr);
+  TGETCHAR(c, ptr);
   }
 else c = *ptr;
 #else   /* no UTF-8 support */
@@ -160,13 +166,18 @@ else switch(c)
   case 0x000b:                                      /* VT */
   case 0x000c:                                      /* FF */
   case 0x000d: *lenptr = 1; return TRUE;            /* CR */
-#ifdef SUPPORT_UTF8 /* AutoHotkey. */
-  case 0x0085: *lenptr = utf8? 2 : 1; return TRUE;  /* NEL */
+#ifdef SUPPORT_UTF8_SUBJECT /* AutoHotkey. */
+  case 0x0085: *lenptr = utf8? 2 : 1; return TRUE;   /* NEL */
 #else
-  case 0x0085: *lenptr = 1; return TRUE;            /* NEL */ /* AutoHotkey. */
+  case 0x0085: *lenptr = 1; return TRUE;             /* NEL */  /* AutoHotkey. */
 #endif /* AutoHotkey. */
-  case 0x2028:                                      /* LS */
-  case 0x2029: *lenptr = 3; return TRUE;            /* PS */
+  case 0x2028:                                       /* LS */
+  case 0x2029:
+#ifndef PCRE_USE_UTF16 /* AutoHotkey. */
+      *lenptr = 3;
+#else
+      *lenptr = 1;
+#endif
   default: return FALSE;
   }
 }

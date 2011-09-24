@@ -7,7 +7,7 @@ and semantics are as close as possible to those of the Perl 5 language (but see
 below for why this module is different).
 
                        Written by Philip Hazel
-           Copyright (c) 1997-2010 University of Cambridge
+           Copyright (c) 1997-2011 University of Cambridge
 
 -----------------------------------------------------------------------------
 Redistribution and use in source and binary forms, with or without
@@ -121,18 +121,25 @@ static const uschar coptable[] = {
   0, 0,                          /* \P, \p                                 */
   0, 0, 0, 0, 0,                 /* \R, \H, \h, \V, \v                     */
   0,                             /* \X                                     */
-  0, 0, 0, 0, 0,                 /* \Z, \z, Opt, ^, $                      */
+  0, 0, 0, 0, 0, 0,              /* \Z, \z, ^, ^M, $, $M                   */
   1,                             /* Char                                   */
-  1,                             /* Charnc                                 */
+  1,                             /* Chari                                  */
   1,                             /* not                                    */
+  1,                             /* noti                                   */
   /* Positive single-char repeats                                          */
   1, 1, 1, 1, 1, 1,              /* *, *?, +, +?, ?, ??                    */
   3, 3, 3,                       /* upto, minupto, exact                   */
   1, 1, 1, 3,                    /* *+, ++, ?+, upto+                      */
+  1, 1, 1, 1, 1, 1,              /* *I, *?I, +I, +?I, ?I, ??I              */
+  3, 3, 3,                       /* upto I, minupto I, exact I             */
+  1, 1, 1, 3,                    /* *+I, ++I, ?+I, upto+I                  */
   /* Negative single-char repeats - only for chars < 256                   */
   1, 1, 1, 1, 1, 1,              /* NOT *, *?, +, +?, ?, ??                */
   3, 3, 3,                       /* NOT upto, minupto, exact               */
-  1, 1, 1, 3,                    /* NOT *+, ++, ?+, updo+                  */
+  1, 1, 1, 3,                    /* NOT *+, ++, ?+, upto+                  */
+  1, 1, 1, 1, 1, 1,              /* NOT *I, *?I, +I, +?I, ?I, ??I          */
+  3, 3, 3,                       /* NOT upto I, minupto I, exact I         */
+  1, 1, 1, 3,                    /* NOT *+I, ++I, ?+I, upto+I              */
   /* Positive type repeats                                                 */
   1, 1, 1, 1, 1, 1,              /* Type *, *?, +, +?, ?, ??               */
   3, 3, 3,                       /* Type upto, minupto, exact              */
@@ -144,26 +151,29 @@ static const uschar coptable[] = {
   0,                             /* NCLASS                                 */
   0,                             /* XCLASS - variable length               */
   0,                             /* REF                                    */
+  0,                             /* REFI                                   */
   0,                             /* RECURSE                                */
   0,                             /* CALLOUT                                */
   0,                             /* Alt                                    */
   0,                             /* Ket                                    */
   0,                             /* KetRmax                                */
   0,                             /* KetRmin                                */
+  0,                             /* KetRpos                                */
+  0,                             /* Reverse                                */
   0,                             /* Assert                                 */
   0,                             /* Assert not                             */
   0,                             /* Assert behind                          */
   0,                             /* Assert behind not                      */
-  0,                             /* Reverse                                */
-  0, 0, 0, 0,                    /* ONCE, BRA, CBRA, COND                  */
-  0, 0, 0,                       /* SBRA, SCBRA, SCOND                     */
+  0, 0, 0, 0, 0, 0,              /* ONCE, BRA, BRAPOS, CBRA, CBRAPOS, COND */
+  0, 0, 0, 0, 0,                 /* SBRA, SBRAPOS, SCBRA, SCBRAPOS, SCOND  */
   0, 0,                          /* CREF, NCREF                            */
   0, 0,                          /* RREF, NRREF                            */
   0,                             /* DEF                                    */
-  0, 0,                          /* BRAZERO, BRAMINZERO                    */
-  0, 0, 0,                       /* MARK, PRUNE, PRUNE_ARG,                */
-  0, 0, 0, 0,                    /* SKIP, SKIP_ARG, THEN, THEN_ARG,        */
-  0, 0, 0, 0, 0                  /* COMMIT, FAIL, ACCEPT, CLOSE, SKIPZERO  */
+  0, 0, 0,                       /* BRAZERO, BRAMINZERO, BRAPOSZERO        */
+  0, 0, 0,                       /* MARK, PRUNE, PRUNE_ARG                 */
+  0, 0, 0, 0,                    /* SKIP, SKIP_ARG, THEN, THEN_ARG         */
+  0, 0, 0, 0,                    /* COMMIT, FAIL, ACCEPT, ASSERT_ACCEPT    */
+  0, 0                           /* CLOSE, SKIPZERO  */
 };
 
 /* This table identifies those opcodes that inspect a character. It is used to
@@ -179,18 +189,25 @@ static const uschar poptable[] = {
   1, 1,                          /* \P, \p                                 */
   1, 1, 1, 1, 1,                 /* \R, \H, \h, \V, \v                     */
   1,                             /* \X                                     */
-  0, 0, 0, 0, 0,                 /* \Z, \z, Opt, ^, $                      */
+  0, 0, 0, 0, 0, 0,              /* \Z, \z, ^, ^M, $, $M                   */
   1,                             /* Char                                   */
-  1,                             /* Charnc                                 */
+  1,                             /* Chari                                  */
   1,                             /* not                                    */
+  1,                             /* noti                                   */
   /* Positive single-char repeats                                          */
   1, 1, 1, 1, 1, 1,              /* *, *?, +, +?, ?, ??                    */
   1, 1, 1,                       /* upto, minupto, exact                   */
   1, 1, 1, 1,                    /* *+, ++, ?+, upto+                      */
+  1, 1, 1, 1, 1, 1,              /* *I, *?I, +I, +?I, ?I, ??I              */
+  1, 1, 1,                       /* upto I, minupto I, exact I             */
+  1, 1, 1, 1,                    /* *+I, ++I, ?+I, upto+I                  */
   /* Negative single-char repeats - only for chars < 256                   */
   1, 1, 1, 1, 1, 1,              /* NOT *, *?, +, +?, ?, ??                */
   1, 1, 1,                       /* NOT upto, minupto, exact               */
   1, 1, 1, 1,                    /* NOT *+, ++, ?+, upto+                  */
+  1, 1, 1, 1, 1, 1,              /* NOT *I, *?I, +I, +?I, ?I, ??I          */
+  1, 1, 1,                       /* NOT upto I, minupto I, exact I         */
+  1, 1, 1, 1,                    /* NOT *+I, ++I, ?+I, upto+I              */
   /* Positive type repeats                                                 */
   1, 1, 1, 1, 1, 1,              /* Type *, *?, +, +?, ?, ??               */
   1, 1, 1,                       /* Type upto, minupto, exact              */
@@ -202,26 +219,29 @@ static const uschar poptable[] = {
   1,                             /* NCLASS                                 */
   1,                             /* XCLASS - variable length               */
   0,                             /* REF                                    */
+  0,                             /* REFI                                   */
   0,                             /* RECURSE                                */
   0,                             /* CALLOUT                                */
   0,                             /* Alt                                    */
   0,                             /* Ket                                    */
   0,                             /* KetRmax                                */
   0,                             /* KetRmin                                */
+  0,                             /* KetRpos                                */
+  0,                             /* Reverse                                */
   0,                             /* Assert                                 */
   0,                             /* Assert not                             */
   0,                             /* Assert behind                          */
   0,                             /* Assert behind not                      */
-  0,                             /* Reverse                                */
-  0, 0, 0, 0,                    /* ONCE, BRA, CBRA, COND                  */
-  0, 0, 0,                       /* SBRA, SCBRA, SCOND                     */
+  0, 0, 0, 0, 0, 0,              /* ONCE, BRA, BRAPOS, CBRA, CBRAPOS, COND */
+  0, 0, 0, 0, 0,                 /* SBRA, SBRAPOS, SCBRA, SCBRAPOS, SCOND  */
   0, 0,                          /* CREF, NCREF                            */
   0, 0,                          /* RREF, NRREF                            */
   0,                             /* DEF                                    */
-  0, 0,                          /* BRAZERO, BRAMINZERO                    */
-  0, 0, 0,                       /* MARK, PRUNE, PRUNE_ARG,                */
-  0, 0, 0, 0,                    /* SKIP, SKIP_ARG, THEN, THEN_ARG,        */
-  0, 0, 0, 0, 0                  /* COMMIT, FAIL, ACCEPT, CLOSE, SKIPZERO  */
+  0, 0, 0,                       /* BRAZERO, BRAMINZERO, BRAPOSZERO        */
+  0, 0, 0,                       /* MARK, PRUNE, PRUNE_ARG                 */
+  0, 0, 0, 0,                    /* SKIP, SKIP_ARG, THEN, THEN_ARG         */
+  0, 0, 0, 0,                    /* COMMIT, FAIL, ACCEPT, ASSERT_ACCEPT    */
+  0, 0                           /* CLOSE, SKIPZERO                        */
 };
 
 /* These 2 tables allow for compact code for testing for \D, \d, \S, \s, \W,
@@ -252,7 +272,6 @@ these structures in, is a vector of ints. */
 typedef struct stateblock {
   int offset;                     /* Offset to opcode */
   int count;                      /* Count for repeats */
-  int ims;                        /* ims flag bits */
   int data;                       /* Some use extra data */
 } stateblock;
 
@@ -308,9 +327,7 @@ Arguments:
   offsetcount       size of same
   workspace         vector of workspace
   wscount           size of same
-  ims               the current ims flags
   rlevel            function call recursion level
-  recursing         regex recursive call level
 
 Returns:            > 0 => number of match offset pairs placed in offsets
                     = 0 => offsets overflowed; longest matches are present
@@ -325,7 +342,6 @@ for the current character, one for the following character). */
     { \
     next_active_state->offset = (x); \
     next_active_state->count  = (y); \
-    next_active_state->ims    = ims; \
     next_active_state++; \
     DPRINTF(("%.*sADD_ACTIVE(%d,%d)\n", rlevel*2-2, SP, (x), (y))); \
     } \
@@ -336,7 +352,6 @@ for the current character, one for the following character). */
     { \
     next_active_state->offset = (x); \
     next_active_state->count  = (y); \
-    next_active_state->ims    = ims; \
     next_active_state->data   = (z); \
     next_active_state++; \
     DPRINTF(("%.*sADD_ACTIVE_DATA(%d,%d,%d)\n", rlevel*2-2, SP, (x), (y), (z))); \
@@ -348,7 +363,6 @@ for the current character, one for the following character). */
     { \
     next_new_state->offset = (x); \
     next_new_state->count  = (y); \
-    next_new_state->ims    = ims; \
     next_new_state++; \
     DPRINTF(("%.*sADD_NEW(%d,%d)\n", rlevel*2-2, SP, (x), (y))); \
     } \
@@ -359,7 +373,6 @@ for the current character, one for the following character). */
     { \
     next_new_state->offset = (x); \
     next_new_state->count  = (y); \
-    next_new_state->ims    = ims; \
     next_new_state->data   = (z); \
     next_new_state++; \
     DPRINTF(("%.*sADD_NEW_DATA(%d,%d,%d)\n", rlevel*2-2, SP, (x), (y), (z))); \
@@ -378,9 +391,7 @@ internal_dfa_exec(
   int offsetcount,
   int *workspace,
   int wscount,
-  int ims,
-  int  rlevel,
-  int  recursing)
+  int  rlevel)
 {
 stateblock *active_states, *new_states, *temp_states;
 stateblock *next_active_state, *next_new_state;
@@ -388,6 +399,8 @@ stateblock *next_active_state, *next_new_state;
 const uschar *ctypes, *lcc, *fcc;
 const uschar *ptr;
 const uschar *end_code, *first_op;
+
+dfa_recursion_info new_recursive;
 
 int active_count, new_count, match_count;
 
@@ -412,8 +425,8 @@ wscount = (wscount - (wscount % (INTS_PER_STATEBLOCK * 2))) /
           (2 * INTS_PER_STATEBLOCK);
 
 DPRINTF(("\n%.*s---------------------\n"
-  "%.*sCall to internal_dfa_exec f=%d r=%d\n",
-  rlevel*2-2, SP, rlevel*2-2, SP, rlevel, recursing));
+  "%.*sCall to internal_dfa_exec f=%d\n",
+  rlevel*2-2, SP, rlevel*2-2, SP, rlevel));
 
 ctypes = md->tables + ctypes_offset;
 lcc = md->tables + lcc_offset;
@@ -426,7 +439,8 @@ next_new_state = new_states = active_states + wscount;
 new_count = 0;
 
 first_op = this_start_code + 1 + LINK_SIZE +
-  ((*this_start_code == OP_CBRA || *this_start_code == OP_SCBRA)? 2:0);
+  ((*this_start_code == OP_CBRA || *this_start_code == OP_SCBRA ||
+    *this_start_code == OP_CBRAPOS || *this_start_code == OP_SCBRAPOS)? 2:0);
 
 /* The first thing in any (sub) pattern is a bracket of some sort. Push all
 the alternative states onto the list, and find out where the end is. This
@@ -525,7 +539,9 @@ else
   else
     {
     int length = 1 + LINK_SIZE +
-      ((*this_start_code == OP_CBRA || *this_start_code == OP_SCBRA)? 2:0);
+      ((*this_start_code == OP_CBRA || *this_start_code == OP_SCBRA ||
+        *this_start_code == OP_CBRAPOS || *this_start_code == OP_SCBRAPOS)?
+        2:0);
     do
       {
       ADD_NEW((int)(end_code - start_code + length), 0);
@@ -605,6 +621,7 @@ for (;;)
   for (i = 0; i < active_count; i++)
     {
     stateblock *current_state = active_states + i;
+    BOOL caseless = FALSE;
     const uschar *code;
     int state_offset = current_state->offset;
     int count, codevalue, rrc;
@@ -615,10 +632,6 @@ for (;;)
       else if (c > 32 && c < 127) printf("'%c'\n", c);
         else printf("0x%02x\n", c);
 #endif
-
-    /* This variable is referred to implicity in the ADD_xxx macros. */
-
-    ims = current_state->ims;
 
     /* A negative offset is a special case meaning "hold off going to this
     (negated) state until the number of characters in the data field have
@@ -725,7 +738,12 @@ for (;;)
 
 /* ========================================================================== */
       /* Reached a closing bracket. If not at the end of the pattern, carry
-      on with the next opcode. Otherwise, unless we have an empty string and
+      on with the next opcode. For repeating opcodes, also add the repeat
+      state. Note that KETRPOS will always be encountered at the end of the
+      subpattern, because the possessive subpattern repeats are always handled
+      using recursive calls. Thus, it never adds any new states.
+
+      At the end of the (sub)pattern, unless we have an empty string and
       PCRE_NOTEMPTY is set, or PCRE_NOTEMPTY_ATSTART is set and we are at the
       start of the subject, save the match data, shifting up all previous
       matches so we always have the longest first. */
@@ -733,6 +751,7 @@ for (;;)
       case OP_KET:
       case OP_KETRMIN:
       case OP_KETRMAX:
+      case OP_KETRPOS:
       if (code != end_code)
         {
         ADD_ACTIVE(state_offset + 1 + LINK_SIZE, 0);
@@ -822,22 +841,25 @@ for (;;)
 
       /*-----------------------------------------------------------------*/
       case OP_CIRC:
+      if (ptr == start_subject && (md->moptions & PCRE_NOTBOL) == 0)
+        { ADD_ACTIVE(state_offset + 1, 0); }
+      break;
+
+      /*-----------------------------------------------------------------*/
+      case OP_CIRCM:
       if ((ptr == start_subject && (md->moptions & PCRE_NOTBOL) == 0) ||
-          ((ims & PCRE_MULTILINE) != 0 &&
-            ptr != end_subject &&
-            WAS_NEWLINE(ptr)))
+          (ptr != end_subject && WAS_NEWLINE(ptr)))
         { ADD_ACTIVE(state_offset + 1, 0); }
       break;
 
       /*-----------------------------------------------------------------*/
       case OP_EOD:
-      if (ptr >= end_subject) { ADD_ACTIVE(state_offset + 1, 0); }
-      break;
-
-      /*-----------------------------------------------------------------*/
-      case OP_OPT:
-      ims = code[1];
-      ADD_ACTIVE(state_offset + 2, 0);
+      if (ptr >= end_subject)
+        {
+        if ((md->moptions & PCRE_PARTIAL_HARD) != 0)
+          could_continue = TRUE;
+        else { ADD_ACTIVE(state_offset + 1, 0); }
+        }
       break;
 
       /*-----------------------------------------------------------------*/
@@ -871,7 +893,9 @@ for (;;)
 
       /*-----------------------------------------------------------------*/
       case OP_EODN:
-      if (clen == 0 || (IS_NEWLINE(ptr) && ptr == end_subject - md->nllen))
+      if (clen == 0 && (md->moptions & PCRE_PARTIAL_HARD) != 0)
+        could_continue = TRUE;
+      else if (clen == 0 || (IS_NEWLINE(ptr) && ptr == end_subject - md->nllen))
         { ADD_ACTIVE(state_offset + 1, 0); }
       break;
 
@@ -879,13 +903,27 @@ for (;;)
       case OP_DOLL:
       if ((md->moptions & PCRE_NOTEOL) == 0)
         {
-        if (clen == 0 ||
+        if (clen == 0 && (md->moptions & PCRE_PARTIAL_HARD) != 0)
+          could_continue = TRUE;
+        else if (clen == 0 ||
             ((md->poptions & PCRE_DOLLAR_ENDONLY) == 0 && IS_NEWLINE(ptr) &&
-               ((ims & PCRE_MULTILINE) != 0 || ptr == end_subject - md->nllen)
+               (ptr == end_subject - md->nllen)
             ))
           { ADD_ACTIVE(state_offset + 1, 0); }
         }
-      else if ((ims & PCRE_MULTILINE) != 0 && IS_NEWLINE(ptr))
+      break;
+
+      /*-----------------------------------------------------------------*/
+      case OP_DOLLM:
+      if ((md->moptions & PCRE_NOTEOL) == 0)
+        {
+        if (clen == 0 && (md->moptions & PCRE_PARTIAL_HARD) != 0)
+          could_continue = TRUE;
+        else if (clen == 0 ||
+            ((md->poptions & PCRE_DOLLAR_ENDONLY) == 0 && IS_NEWLINE(ptr)))
+          { ADD_ACTIVE(state_offset + 1, 0); }
+        }
+      else if (IS_NEWLINE(ptr))
         { ADD_ACTIVE(state_offset + 1, 0); }
       break;
 
@@ -1941,7 +1979,7 @@ for (;;)
       break;
 
       /*-----------------------------------------------------------------*/
-      case OP_CHARNC:
+      case OP_CHARI:
       if (clen == 0) break;
 
 #ifdef SUPPORT_UTF8
@@ -2127,19 +2165,35 @@ for (;;)
       break;
 
       /*-----------------------------------------------------------------*/
-      /* Match a negated single character. This is only used for one-byte
-      characters, that is, we know that d < 256. The character we are
+      /* Match a negated single character casefully. This is only used for
+      one-byte characters, that is, we know that d < 256. The character we are
       checking (c) can be multibyte. */
 
       case OP_NOT:
-      if (clen > 0)
-        {
-        unsigned int otherd = ((ims & PCRE_CASELESS) != 0)? fcc[d] : d;
-        if (c != d && c != otherd) { ADD_NEW(state_offset + dlen + 1, 0); }
-        }
+      if (clen > 0 && c != d) { ADD_NEW(state_offset + dlen + 1, 0); }
       break;
 
       /*-----------------------------------------------------------------*/
+      /* Match a negated single character caselessly. This is only used for
+      one-byte characters, that is, we know that d < 256. The character we are
+      checking (c) can be multibyte. */
+
+      case OP_NOTI:
+      if (clen > 0 && c != d && c != fcc[d])
+        { ADD_NEW(state_offset + dlen + 1, 0); }
+      break;
+
+      /*-----------------------------------------------------------------*/
+      case OP_PLUSI:
+      case OP_MINPLUSI:
+      case OP_POSPLUSI:
+      case OP_NOTPLUSI:
+      case OP_NOTMINPLUSI:
+      case OP_NOTPOSPLUSI:
+      caseless = TRUE;
+      codevalue -= OP_STARI - OP_STAR;
+
+      /* Fall through */
       case OP_PLUS:
       case OP_MINPLUS:
       case OP_POSPLUS:
@@ -2151,7 +2205,7 @@ for (;;)
       if (clen > 0)
         {
         unsigned int otherd = NOTACHAR;
-        if ((ims & PCRE_CASELESS) != 0)
+        if (caseless)
           {
 #ifdef SUPPORT_UTF8
           if (utf8 && d >= 128)
@@ -2179,6 +2233,15 @@ for (;;)
       break;
 
       /*-----------------------------------------------------------------*/
+      case OP_QUERYI:
+      case OP_MINQUERYI:
+      case OP_POSQUERYI:
+      case OP_NOTQUERYI:
+      case OP_NOTMINQUERYI:
+      case OP_NOTPOSQUERYI:
+      caseless = TRUE;
+      codevalue -= OP_STARI - OP_STAR;
+      /* Fall through */
       case OP_QUERY:
       case OP_MINQUERY:
       case OP_POSQUERY:
@@ -2189,7 +2252,7 @@ for (;;)
       if (clen > 0)
         {
         unsigned int otherd = NOTACHAR;
-        if ((ims & PCRE_CASELESS) != 0)
+        if (caseless)
           {
 #ifdef SUPPORT_UTF8
           if (utf8 && d >= 128)
@@ -2215,6 +2278,15 @@ for (;;)
       break;
 
       /*-----------------------------------------------------------------*/
+      case OP_STARI:
+      case OP_MINSTARI:
+      case OP_POSSTARI:
+      case OP_NOTSTARI:
+      case OP_NOTMINSTARI:
+      case OP_NOTPOSSTARI:
+      caseless = TRUE;
+      codevalue -= OP_STARI - OP_STAR;
+      /* Fall through */
       case OP_STAR:
       case OP_MINSTAR:
       case OP_POSSTAR:
@@ -2225,7 +2297,7 @@ for (;;)
       if (clen > 0)
         {
         unsigned int otherd = NOTACHAR;
-        if ((ims & PCRE_CASELESS) != 0)
+        if (caseless)
           {
 #ifdef SUPPORT_UTF8
           if (utf8 && d >= 128)
@@ -2251,13 +2323,18 @@ for (;;)
       break;
 
       /*-----------------------------------------------------------------*/
+      case OP_EXACTI:
+      case OP_NOTEXACTI:
+      caseless = TRUE;
+      codevalue -= OP_STARI - OP_STAR;
+      /* Fall through */
       case OP_EXACT:
       case OP_NOTEXACT:
       count = current_state->count;  /* Number already matched */
       if (clen > 0)
         {
         unsigned int otherd = NOTACHAR;
-        if ((ims & PCRE_CASELESS) != 0)
+        if (caseless)
           {
 #ifdef SUPPORT_UTF8
           if (utf8 && d >= 128)
@@ -2281,6 +2358,15 @@ for (;;)
       break;
 
       /*-----------------------------------------------------------------*/
+      case OP_UPTOI:
+      case OP_MINUPTOI:
+      case OP_POSUPTOI:
+      case OP_NOTUPTOI:
+      case OP_NOTMINUPTOI:
+      case OP_NOTPOSUPTOI:
+      caseless = TRUE;
+      codevalue -= OP_STARI - OP_STAR;
+      /* Fall through */
       case OP_UPTO:
       case OP_MINUPTO:
       case OP_POSUPTO:
@@ -2292,7 +2378,7 @@ for (;;)
       if (clen > 0)
         {
         unsigned int otherd = NOTACHAR;
-        if ((ims & PCRE_CASELESS) != 0)
+        if (caseless)
           {
 #ifdef SUPPORT_UTF8
           if (utf8 && d >= 128)
@@ -2435,9 +2521,7 @@ for (;;)
           sizeof(local_offsets)/sizeof(int),    /* size of same */
           local_workspace,                      /* workspace vector */
           sizeof(local_workspace)/sizeof(int),  /* size of same */
-          ims,                                  /* the current ims flags */
-          rlevel,                               /* function recursion level */
-          recursing);                           /* pass on regex recursion */
+          rlevel);                              /* function recursion level */
 
         if (rc == PCRE_ERROR_DFA_UITEM) return rc;
         if ((rc >= 0) == (codevalue == OP_ASSERT || codevalue == OP_ASSERTBACK))
@@ -2476,6 +2560,7 @@ for (;;)
             cb.capture_top      = 1;
             cb.capture_last     = -1;
             cb.callout_data     = md->callout_data;
+            cb.mark             = NULL;   /* No (*MARK) support */
             if ((rrc = (*pcre_callout)(&cb)) < 0) return rrc;   /* Abandon */
             }
           if (rrc > 0) break;                      /* Fail this thread */
@@ -2502,7 +2587,7 @@ for (;;)
           {
           int value = GET2(code, LINK_SIZE+2);
           if (value != RREF_ANY) return PCRE_ERROR_DFA_UCOND;
-          if (recursing > 0)
+          if (md->recursive != NULL)
             { ADD_ACTIVE(state_offset + LINK_SIZE + 4, 0); }
           else { ADD_ACTIVE(state_offset + codelink + LINK_SIZE + 1, 0); }
           }
@@ -2526,9 +2611,7 @@ for (;;)
             sizeof(local_offsets)/sizeof(int),    /* size of same */
             local_workspace,                      /* workspace vector */
             sizeof(local_workspace)/sizeof(int),  /* size of same */
-            ims,                                  /* the current ims flags */
-            rlevel,                               /* function recursion level */
-            recursing);                           /* pass on regex recursion */
+            rlevel);                              /* function recursion level */
 
           if (rc == PCRE_ERROR_DFA_UITEM) return rc;
           if ((rc >= 0) ==
@@ -2543,28 +2626,47 @@ for (;;)
       /*-----------------------------------------------------------------*/
       case OP_RECURSE:
         {
+        dfa_recursion_info *ri;
         int local_offsets[1000];
         int local_workspace[1000];
+        const uschar *callpat = start_code + GET(code, 1);
+        int recno = (callpat == md->start_code)? 0 :
+          GET2(callpat, 1 + LINK_SIZE);
         int rc;
 
-        DPRINTF(("%.*sStarting regex recursion %d\n", rlevel*2-2, SP,
-          recursing + 1));
+        DPRINTF(("%.*sStarting regex recursion\n", rlevel*2-2, SP));
+
+        /* Check for repeating a recursion without advancing the subject
+        pointer. This should catch convoluted mutual recursions. (Some simple
+        cases are caught at compile time.) */
+
+        for (ri = md->recursive; ri != NULL; ri = ri->prevrec)
+          if (recno == ri->group_num && ptr == ri->subject_position)
+            return PCRE_ERROR_RECURSELOOP;
+
+        /* Remember this recursion and where we started it so as to
+        catch infinite loops. */
+
+        new_recursive.group_num = recno;
+        new_recursive.subject_position = ptr;
+        new_recursive.prevrec = md->recursive;
+        md->recursive = &new_recursive;
 
         rc = internal_dfa_exec(
           md,                                   /* fixed match data */
-          start_code + GET(code, 1),            /* this subexpression's code */
+          callpat,                              /* this subexpression's code */
           ptr,                                  /* where we currently are */
           (int)(ptr - start_subject),           /* start offset */
           local_offsets,                        /* offset vector */
           sizeof(local_offsets)/sizeof(int),    /* size of same */
           local_workspace,                      /* workspace vector */
           sizeof(local_workspace)/sizeof(int),  /* size of same */
-          ims,                                  /* the current ims flags */
-          rlevel,                               /* function recursion level */
-          recursing + 1);                       /* regex recurse level */
+          rlevel);                              /* function recursion level */
 
-        DPRINTF(("%.*sReturn from regex recursion %d: rc=%d\n", rlevel*2-2, SP,
-          recursing + 1, rc));
+        md->recursive = new_recursive.prevrec;  /* Done this recursion */
+
+        DPRINTF(("%.*sReturn from regex recursion: rc=%d\n", rlevel*2-2, SP,
+          rc));
 
         /* Ran out of internal offsets */
 
@@ -2597,6 +2699,95 @@ for (;;)
       break;
 
       /*-----------------------------------------------------------------*/
+      case OP_BRAPOS:
+      case OP_SBRAPOS:
+      case OP_CBRAPOS:
+      case OP_SCBRAPOS:
+      case OP_BRAPOSZERO:
+        {
+        int charcount, matched_count;
+        const uschar *local_ptr = ptr;
+        BOOL allow_zero;
+
+        if (codevalue == OP_BRAPOSZERO)
+          {
+          allow_zero = TRUE;
+          codevalue = *(++code);  /* Codevalue will be one of above BRAs */
+          }
+        else allow_zero = FALSE;
+
+        /* Loop to match the subpattern as many times as possible as if it were
+        a complete pattern. */
+
+        for (matched_count = 0;; matched_count++)
+          {
+          int local_offsets[2];
+          int local_workspace[1000];
+
+          int rc = internal_dfa_exec(
+            md,                                   /* fixed match data */
+            code,                                 /* this subexpression's code */
+            local_ptr,                            /* where we currently are */
+            (int)(ptr - start_subject),           /* start offset */
+            local_offsets,                        /* offset vector */
+            sizeof(local_offsets)/sizeof(int),    /* size of same */
+            local_workspace,                      /* workspace vector */
+            sizeof(local_workspace)/sizeof(int),  /* size of same */
+            rlevel);                              /* function recursion level */
+
+          /* Failed to match */
+
+          if (rc < 0)
+            {
+            if (rc != PCRE_ERROR_NOMATCH) return rc;
+            break;
+            }
+
+          /* Matched: break the loop if zero characters matched. */
+
+          charcount = local_offsets[1] - local_offsets[0];
+          if (charcount == 0) break;
+          local_ptr += charcount;    /* Advance temporary position ptr */
+          }
+
+        /* At this point we have matched the subpattern matched_count
+        times, and local_ptr is pointing to the character after the end of the
+        last match. */
+
+        if (matched_count > 0 || allow_zero)
+          {
+          const uschar *end_subpattern = code;
+          int next_state_offset;
+
+          do { end_subpattern += GET(end_subpattern, 1); }
+            while (*end_subpattern == OP_ALT);
+          next_state_offset =
+            (int)(end_subpattern - start_code + LINK_SIZE + 1);
+
+          /* Optimization: if there are no more active states, and there
+          are no new states yet set up, then skip over the subject string
+          right here, to save looping. Otherwise, set up the new state to swing
+          into action when the end of the matched substring is reached. */
+
+          if (i + 1 >= active_count && new_count == 0)
+            {
+            ptr = local_ptr;
+            clen = 0;
+            ADD_NEW(next_state_offset, 0);
+            }
+          else
+            {
+            const uschar *p = ptr;
+            const uschar *pp = local_ptr;
+            charcount = pp - p;
+            while (p < pp) if ((*p++ & 0xc0) == 0x80) charcount--;
+            ADD_NEW_DATA(-next_state_offset, 0, (charcount - 1));
+            }
+          }
+        }
+      break;
+
+      /*-----------------------------------------------------------------*/
       case OP_ONCE:
         {
         int local_offsets[2];
@@ -2611,9 +2802,7 @@ for (;;)
           sizeof(local_offsets)/sizeof(int),    /* size of same */
           local_workspace,                      /* workspace vector */
           sizeof(local_workspace)/sizeof(int),  /* size of same */
-          ims,                                  /* the current ims flags */
-          rlevel,                               /* function recursion level */
-          recursing);                           /* pass on regex recursion */
+          rlevel);                              /* function recursion level */
 
         if (rc >= 0)
           {
@@ -2647,7 +2836,7 @@ for (;;)
           /* Optimization: if there are no more active states, and there
           are no new states yet set up, then skip over the subject string
           right here, to save looping. Otherwise, set up the new state to swing
-          into action when the end of the substring is reached. */
+          into action when the end of the matched substring is reached. */
 
           else if (i + 1 >= active_count && new_count == 0)
             {
@@ -2677,7 +2866,6 @@ for (;;)
             if (repeat_state_offset >= 0)
               { ADD_NEW_DATA(-repeat_state_offset, 0, (charcount - 1)); }
             }
-
           }
         else if (rc != PCRE_ERROR_NOMATCH) return rc;
         }
@@ -2704,6 +2892,7 @@ for (;;)
         cb.capture_top      = 1;
         cb.capture_last     = -1;
         cb.callout_data     = md->callout_data;
+        cb.mark             = NULL;   /* No (*MARK) support */
         if ((rrc = (*pcre_callout)(&cb)) < 0) return rrc;   /* Abandon */
         }
       if (rrc == 0)
@@ -2744,8 +2933,8 @@ for (;;)
         ((md->moptions & PCRE_PARTIAL_SOFT) != 0 &&  /* Soft partial and */
          match_count < 0)                            /* no matches */
         ) &&                                         /* And... */
-        ptr >= end_subject &&                     /* Reached end of subject */
-        ptr > current_subject)                    /* Matched non-empty string */
+        ptr >= end_subject &&                  /* Reached end of subject */
+        ptr > md->start_used_ptr)              /* Inspected non-empty string */
       {
       if (offsetcount >= 2)
         {
@@ -2835,6 +3024,7 @@ if (re == NULL || subject == NULL || workspace == NULL ||
    (offsets == NULL && offsetcount > 0)) return PCRE_ERROR_NULL;
 if (offsetcount < 0) return PCRE_ERROR_BADCOUNT;
 if (wscount < 20) return PCRE_ERROR_DFA_WSSIZE;
+if (start_offset < 0 || start_offset > length) return PCRE_ERROR_BADOFFSET;
 
 /* We need to find the pointer to any study data before we test for byte
 flipping, so we scan the extra_data block first. This may set two fields in the
@@ -2953,17 +3143,21 @@ back the character offset. */
 #ifdef SUPPORT_UTF8
 if (utf8 && (options & PCRE_NO_UTF8_CHECK) == 0)
   {
-  if (_pcre_valid_utf8((uschar *)subject, length) >= 0)
-    return PCRE_ERROR_BADUTF8;
-  if (start_offset > 0 && start_offset < length)
+  int erroroffset;
+  int errorcode = _pcre_valid_utf8((uschar *)subject, length, &erroroffset);
+  if (errorcode != 0)
     {
-    int tb = ((uschar *)subject)[start_offset];
-    if (tb > 127)
+    if (offsetcount >= 2)
       {
-      tb &= 0xc0;
-      if (tb != 0 && tb != 0xc0) return PCRE_ERROR_BADUTF8_OFFSET;
+      offsets[0] = erroroffset;
+      offsets[1] = errorcode;
       }
+    return (errorcode <= PCRE_UTF8_ERR5 && (options & PCRE_PARTIAL_HARD) != 0)?
+      PCRE_ERROR_SHORTUTF8 : PCRE_ERROR_BADUTF8;
     }
+  if (start_offset > 0 && start_offset < length &&
+        (((USPTR)subject)[start_offset] & 0xc0) == 0x80)
+    return PCRE_ERROR_BADUTF8_OFFSET;
   }
 #endif
 
@@ -3049,9 +3243,11 @@ for (;;)
 
     /* There are some optimizations that avoid running the match if a known
     starting point is not found. However, there is an option that disables
-    these, for testing and for ensuring that all callouts do actually occur. */
+    these, for testing and for ensuring that all callouts do actually occur.
+    The option can be set in the regex by (*NO_START_OPT) or passed in
+    match-time options. */
 
-    if ((options & PCRE_NO_START_OPTIMIZE) == 0)
+    if (((options | re->options) & PCRE_NO_START_OPTIMIZE) == 0)
       {
       /* Advance to a known first byte. */
 
@@ -3199,6 +3395,7 @@ for (;;)
   /* OK, now we can do the business */
 
   md->start_used_ptr = current_subject;
+  md->recursive = NULL;
 
   rc = internal_dfa_exec(
     md,                                /* fixed match data */
@@ -3209,9 +3406,7 @@ for (;;)
     offsetcount,                       /* size of same */
     workspace,                         /* workspace vector */
     wscount,                           /* size of same */
-    re->options & (PCRE_CASELESS|PCRE_MULTILINE|PCRE_DOTALL), /* ims flags */
-    0,                                 /* function recurse level */
-    0);                                /* regex recurse level */
+    0);                                /* function recurse level */
 
   /* Anything other than "no match" means we are done, always; otherwise, carry
   on only if not anchored. */

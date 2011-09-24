@@ -143,7 +143,7 @@ switch (what)
   break;
 
   case PCRE_INFO_NAMETABLE:
-  *((const uschar **)where) = (const uschar *)re + re->name_table_offset;
+  *((const utchar **)where) = (const utchar *)((uschar *)re + re->name_table_offset);
   break;
 
   case PCRE_INFO_DEFAULT_TABLES:

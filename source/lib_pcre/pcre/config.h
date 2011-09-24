@@ -257,7 +257,7 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 #define PACKAGE_NAME "PCRE"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "PCRE 7.4"
+#define PACKAGE_STRING "PCRE 8.13"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "pcre"
@@ -266,7 +266,7 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 /* #undef PACKAGE_URL */
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "8.10"
+#define PACKAGE_VERSION "8.13"
 
 
 /* If you are compiling for a system other than a Unix-like system or
@@ -312,7 +312,8 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
    handle .gz files. */
 /* #undef SUPPORT_LIBZ */
 
-#ifdef UNICODE
+#if defined UNICODE || defined PCRE_USE_UTF16
+
 /* Define to enable support for Unicode properties */
 #define SUPPORT_UCP
 
@@ -321,11 +322,18 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
    macro. That is, PCRE can support *either* EBCDIC code *or* ASCII/UTF-8, but
    not both at once. */
 #define SUPPORT_UTF8
+
+#ifdef PCRE_USE_UTF16
+/* Define to define utf8 flag as constant TRUE, since we always use UTF-8 mode.
+   This allows the compiler optimizer to omit non-UTF-8 code that we don't need. */
+#define SUPPORT_UTF8_ONLY
+#endif
+
 #endif
 
 /* Version number of package */
 #ifndef VERSION
-#define VERSION "8.10"
+#define VERSION "8.13"
 #endif
 
 /* Define to empty if `const' does not conform to ANSI C. */

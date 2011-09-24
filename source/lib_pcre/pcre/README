@@ -159,7 +159,15 @@ possible to build it as a C++ library, though the provided building apparatus
 does not have any features to support this.
 
 There are some optional features that can be included or omitted from the PCRE
-library. You can read more about them in the pcrebuild man page.
+library. They are also documented in the pcrebuild man page.
+
+. By default, both shared and static libraries are built. You can change this
+  by adding one of these options to the "configure" command:
+
+  --disable-shared
+  --disable-static
+
+  (See also "Shared libraries on Unix-like systems" below.)
 
 . If you want to suppress the building of the C++ wrapper library, you can add
   --disable-cpp to the "configure" command. Otherwise, when "configure" is run,
@@ -278,6 +286,13 @@ library. You can read more about them in the pcrebuild man page.
   --enable-pcregrep-libbz2
 
   Of course, the relevant libraries must be installed on your system.
+
+. The default size of internal buffer used by pcregrep can be set by, for
+  example:
+
+  --with-pcregrep-bufsize=50K
+
+  The default value is 20K.
 
 . It is possible to compile pcretest so that it links with the libreadline
   library, by specifying
@@ -796,4 +811,4 @@ The distribution should contain the following files:
 Philip Hazel
 Email local part: ph10
 Email domain: cam.ac.uk
-Last updated: 19 January 2010
+Last updated: 02 August 2011
