@@ -13547,7 +13547,7 @@ int RegExCallout(pcre_callout_block *cb)
 		// Overall match or its length.
 		if (cd.output_mode == 'P')
 			output_var.Assign(match_length);
-		else
+		else if (cd.output_mode != 'O')
 			output_var.AssignString(cb->subject + match_offset, match_length);
 
 		LPTSTR mem_to_free = NULL;
