@@ -1025,7 +1025,7 @@ Returns:    pointer to a pcre_extra block, with study_data filled in and the
 */
 
 PCRE_EXP_DEFN pcre_extra * PCRE_CALL_CONVENTION
-pcre_study(const pcre *external_re, int options, const char **errorptr)
+pcre_study(const pcre *external_re, int options, const tchar **errorptr)
 {
 int min;
 BOOL bits_set = FALSE;
@@ -1041,18 +1041,18 @@ const real_pcre *re = (const real_pcre *)external_re;
 
 if (re == NULL || re->magic_number != MAGIC_NUMBER)
   {
-  *errorptr = "argument is not a compiled regular expression";
+  *errorptr = _T("argument is not a compiled regular expression");
   return NULL;
   }
 
 if ((options & ~PUBLIC_STUDY_OPTIONS) != 0)
   {
-  *errorptr = "unknown or incorrect option bit(s) set";
+  *errorptr = _T("unknown or incorrect option bit(s) set");
   return NULL;
   }
 
 code = (uschar *)re + re->name_table_offset +
-  (re->name_count * re->name_entry_size);
+  (re->name_count * re->name_entry_size * sizeof(utchar));
 
 /* For an anchored pattern, or an unanchored pattern that has a first char, or
 a multiline pattern that matches only at "line starts", there is no point in
@@ -1101,7 +1101,7 @@ extra = (pcre_extra *)(pcre_malloc)
 
 if (extra == NULL)
   {
-  *errorptr = "failed to get memory";
+  *errorptr = _T("failed to get memory");
   return NULL;
   }
 
@@ -1114,6 +1114,20 @@ study->flags = 0;
 
 if (bits_set)
   {
+#ifdef PCRE_USE_UTF16
+  /* AutoHotkey: Since the compiled pattern uses UTF-8, the second half of
+  start_bits indicates which UTF-8 lead bytes the start of the match can be.
+  Calculating the UTF-8 lead byte for each character (single code unit or
+  surrogate pair) in the UTF-16 subject (up to the first potential starting
+  char) might do more harm to performance than good, so we just treat all
+  non-ASCII characters the same.  In other words, non-ASCII chars are skipped
+  if and only if no non-ASCII start bits are set.  This section avoids a small
+  amount of work in pcre_exec() by overloading the last byte of start_bits,
+  which is normally never used since it corresponds to invalid UTF-8 bytes. */
+  int i;
+  for (i = 16; i < 32 && !start_bits[i]; ++i);
+  start_bits[31] = (i == 32);
+#endif
   study->flags |= PCRE_STUDY_MAPPED;
   memcpy(study->start_bits, start_bits, sizeof(start_bits));
   }

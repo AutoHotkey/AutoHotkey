@@ -312,7 +312,7 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
    handle .gz files. */
 /* #undef SUPPORT_LIBZ */
 
-#ifdef UNICODE
+#if defined UNICODE || defined PCRE_USE_UTF16
 
 /* Define to enable support for Unicode properties */
 #define SUPPORT_UCP
@@ -323,9 +323,11 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
    not both at once. */
 #define SUPPORT_UTF8
 
+#ifdef PCRE_USE_UTF16
 /* Define to define utf8 flag as constant TRUE, since we always use UTF-8 mode.
    This allows the compiler optimizer to omit non-UTF-8 code that we don't need. */
 #define SUPPORT_UTF8_ONLY
+#endif
 
 #endif
 

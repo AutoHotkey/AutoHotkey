@@ -67,6 +67,10 @@ script prevents both being selected, but not everybody uses "configure". */
 #define SUPPORT_UTF8 1
 #endif
 
+#if defined SUPPORT_UTF8 && !defined PCRE_USE_UTF16
+#define SUPPORT_UTF8_SUBJECT
+#endif
+
 /* Use a macro for debugging printing, 'cause that eliminates the use of #ifdef
 inline, and there are *still* stupid compilers about that don't like indented
 pre-processor statements, or at least there were when I first wrote this. After
@@ -215,6 +219,34 @@ Unix, where it is defined in sys/types, so use "uschar" instead. */
 
 typedef unsigned char uschar;
 
+#ifdef PCRE_USE_UTF16
+
+#define _T(t) L##t
+typedef wchar_t tchar;
+typedef wchar_t utchar;
+#define tmemcpy(d,s,c) memcpy((d),(s),(c) << 1)
+#define tmemmove(d,s,c) memmove((d),(s),(c) << 1)
+#define tmemcmp(a,b,c) memcmp((a),(b),(c) << 1)
+#define tstrcmp wcscmp
+#define tstrncmp wcsncmp
+#define tstrlen wcslen
+
+#else
+
+#define _T(t) t
+typedef char tchar;
+typedef unsigned char utchar;
+#define tmemcpy memcpy
+#define tmemmove memmove
+#define tmemcmp memcmp
+#define tstrcmp strcmp
+#define tstrncmp strncmp
+#define tstrlen strlen
+
+#endif
+
+#define _UT(t) ((utchar *)_T(t))
+
 /* This is an unsigned int value that no character can ever have. UTF-8
 characters only go up to 0x7fffffff (though Unicode doesn't go beyond
 0x0010ffff). */
@@ -300,8 +332,8 @@ must begin with PCRE_. */
 #define PCRE_SPTR CUSTOM_SUBJECT_PTR
 #define USPTR CUSTOM_SUBJECT_PTR
 #else
-#define PCRE_SPTR const char *
-#define USPTR const unsigned char *
+#define PCRE_SPTR const tchar *
+#define USPTR const utchar *
 #endif
 
 
@@ -567,7 +599,78 @@ because almost all calls are already within a block of UTF-8 only code. */
 
 #define BACKCHAR(eptr) while((*eptr & 0xc0) == 0x80) eptr--
 
+/* AutoHotkey: Opposite of BACKCHAR; skip trail bytes of a multi-byte char. */
+
+#define SKIPCHAR(eptr) \
+  while (eptr < md->end_subject && (*eptr & 0xc0) == 0x80) eptr++
+
 #endif
+
+#ifdef PCRE_USE_UTF16  /* AutoHotkey */
+
+#ifndef IS_SURROGATE_PAIR
+#define IS_HIGH_SURROGATE(wch) (((wch) >= 0xd800) && ((wch) <= 0xdbff))
+#define IS_LOW_SURROGATE(wch)  (((wch) >= 0xdc00) && ((wch) <= 0xdfff))
+#define IS_SURROGATE_PAIR(hs, ls) (IS_HIGH_SURROGATE(hs) && IS_LOW_SURROGATE(ls))
+#endif
+
+#define COMBINE_SURROGATE(hs, ls) ((((hs) - 0xd800) << 10) + ((ls) - 0xdc00) + 0x10000)
+
+#define TGETCHAR(c, eptr) \
+  c = *eptr; \
+  if (IS_HIGH_SURROGATE(c)) \
+    { \
+    int ls = eptr[1]; \
+    if (IS_LOW_SURROGATE(ls)) \
+      c = COMBINE_SURROGATE(c, ls); \
+    }
+
+#define TGETCHARINC(c, eptr) \
+  c = *eptr++; \
+  if (IS_HIGH_SURROGATE(c)) \
+    { \
+    int ls = *eptr; \
+    if (IS_LOW_SURROGATE(ls)) \
+      { \
+      c = COMBINE_SURROGATE(c, ls); \
+      ++eptr; \
+      } \
+    }
+
+#define TGETCHARLEN(c, eptr, len) \
+  c = *eptr; \
+  if (IS_HIGH_SURROGATE(c)) \
+    { \
+    int ls = eptr[1]; \
+    if (IS_LOW_SURROGATE(ls)) \
+      { \
+      c = COMBINE_SURROGATE(c, ls); \
+      ++len; \
+      } \
+    }
+
+#define TGETCHARTEST TGETCHAR
+#define TGETCHARINCTEST TGETCHARINC
+#define TGETCHARLENTEST TGETCHARLEN
+
+#define TBACKCHAR(eptr) \
+  while (IS_LOW_SURROGATE(*eptr) && IS_HIGH_SURROGATE(eptr[-1])) eptr--
+
+#define TSKIPCHAR(eptr) \
+  if (IS_LOW_SURROGATE(*eptr) && IS_HIGH_SURROGATE(eptr[-1])) eptr++
+
+#else  /* PCRE_USE_UTF16 */
+
+#define TGETCHAR GETCHAR
+#define TGETCHARINC GETCHARINC
+#define TGETCHARLEN GETCHARLEN
+#define TGETCHARTEST GETCHARTEST
+#define TGETCHARINCTEST GETCHARINCTEST
+#define TGETCHARLENTEST GETCHARLENTEST
+#define TBACKCHAR BACKCHAR
+#define TSKIPCHAR SKIPCHAR
+
+#endif  /* PCRE_USE_UTF16 */
 
 
 /* In case there is no definition of offsetof() provided - though any proper
@@ -791,152 +894,152 @@ so that PCRE works on both ASCII and EBCDIC platforms, in non-UTF-mode only. */
 #define CHAR_RIGHT_CURLY_BRACKET    '}'
 #define CHAR_TILDE                  '~'
 
-#define STR_HT                      "\t"
-#define STR_VT                      "\v"
-#define STR_FF                      "\f"
-#define STR_CR                      "\r"
-#define STR_NL                      "\n"
-#define STR_BS                      "\b"
-#define STR_BEL                     "\a"
+#define STR_HT                      _T("\t")
+#define STR_VT                      _T("\v")
+#define STR_FF                      _T("\f")
+#define STR_CR                      _T("\r")
+#define STR_NL                      _T("\n")
+#define STR_BS                      _T("\b")
+#define STR_BEL                     _T("\a")
 #ifdef EBCDIC
-#define STR_ESC                     "\047"
-#define STR_DEL                     "\007"
+#define STR_ESC                     _T("\047")
+#define STR_DEL                     _T("\007")
 #else
-#define STR_ESC                     "\033"
-#define STR_DEL                     "\177"
+#define STR_ESC                     _T("\033")
+#define STR_DEL                     _T("\177")
 #endif
 
-#define STR_SPACE                   " "
-#define STR_EXCLAMATION_MARK        "!"
-#define STR_QUOTATION_MARK          "\""
-#define STR_NUMBER_SIGN             "#"
-#define STR_DOLLAR_SIGN             "$"
-#define STR_PERCENT_SIGN            "%"
-#define STR_AMPERSAND               "&"
-#define STR_APOSTROPHE              "'"
-#define STR_LEFT_PARENTHESIS        "("
-#define STR_RIGHT_PARENTHESIS       ")"
-#define STR_ASTERISK                "*"
-#define STR_PLUS                    "+"
-#define STR_COMMA                   ","
-#define STR_MINUS                   "-"
-#define STR_DOT                     "."
-#define STR_SLASH                   "/"
-#define STR_0                       "0"
-#define STR_1                       "1"
-#define STR_2                       "2"
-#define STR_3                       "3"
-#define STR_4                       "4"
-#define STR_5                       "5"
-#define STR_6                       "6"
-#define STR_7                       "7"
-#define STR_8                       "8"
-#define STR_9                       "9"
-#define STR_COLON                   ":"
-#define STR_SEMICOLON               ";"
-#define STR_LESS_THAN_SIGN          "<"
-#define STR_EQUALS_SIGN             "="
-#define STR_GREATER_THAN_SIGN       ">"
-#define STR_QUESTION_MARK           "?"
-#define STR_COMMERCIAL_AT           "@"
-#define STR_A                       "A"
-#define STR_B                       "B"
-#define STR_C                       "C"
-#define STR_D                       "D"
-#define STR_E                       "E"
-#define STR_F                       "F"
-#define STR_G                       "G"
-#define STR_H                       "H"
-#define STR_I                       "I"
-#define STR_J                       "J"
-#define STR_K                       "K"
-#define STR_L                       "L"
-#define STR_M                       "M"
-#define STR_N                       "N"
-#define STR_O                       "O"
-#define STR_P                       "P"
-#define STR_Q                       "Q"
-#define STR_R                       "R"
-#define STR_S                       "S"
-#define STR_T                       "T"
-#define STR_U                       "U"
-#define STR_V                       "V"
-#define STR_W                       "W"
-#define STR_X                       "X"
-#define STR_Y                       "Y"
-#define STR_Z                       "Z"
-#define STR_LEFT_SQUARE_BRACKET     "["
-#define STR_BACKSLASH               "\\"
-#define STR_RIGHT_SQUARE_BRACKET    "]"
-#define STR_CIRCUMFLEX_ACCENT       "^"
-#define STR_UNDERSCORE              "_"
-#define STR_GRAVE_ACCENT            "`"
-#define STR_a                       "a"
-#define STR_b                       "b"
-#define STR_c                       "c"
-#define STR_d                       "d"
-#define STR_e                       "e"
-#define STR_f                       "f"
-#define STR_g                       "g"
-#define STR_h                       "h"
-#define STR_i                       "i"
-#define STR_j                       "j"
-#define STR_k                       "k"
-#define STR_l                       "l"
-#define STR_m                       "m"
-#define STR_n                       "n"
-#define STR_o                       "o"
-#define STR_p                       "p"
-#define STR_q                       "q"
-#define STR_r                       "r"
-#define STR_s                       "s"
-#define STR_t                       "t"
-#define STR_u                       "u"
-#define STR_v                       "v"
-#define STR_w                       "w"
-#define STR_x                       "x"
-#define STR_y                       "y"
-#define STR_z                       "z"
-#define STR_LEFT_CURLY_BRACKET      "{"
-#define STR_VERTICAL_LINE           "|"
-#define STR_RIGHT_CURLY_BRACKET     "}"
-#define STR_TILDE                   "~"
+#define STR_SPACE                   _T(" ")
+#define STR_EXCLAMATION_MARK        _T("!")
+#define STR_QUOTATION_MARK          _T("\")"
+#define STR_NUMBER_SIGN             _T("#")
+#define STR_DOLLAR_SIGN             _T("$")
+#define STR_PERCENT_SIGN            _T("%")
+#define STR_AMPERSAND               _T("&")
+#define STR_APOSTROPHE              _T("'")
+#define STR_LEFT_PARENTHESIS        _T("(")
+#define STR_RIGHT_PARENTHESIS       _T(")")
+#define STR_ASTERISK                _T("*")
+#define STR_PLUS                    _T("+")
+#define STR_COMMA                   _T(",")
+#define STR_MINUS                   _T("-")
+#define STR_DOT                     _T(".")
+#define STR_SLASH                   _T("/")
+#define STR_0                       _T("0")
+#define STR_1                       _T("1")
+#define STR_2                       _T("2")
+#define STR_3                       _T("3")
+#define STR_4                       _T("4")
+#define STR_5                       _T("5")
+#define STR_6                       _T("6")
+#define STR_7                       _T("7")
+#define STR_8                       _T("8")
+#define STR_9                       _T("9")
+#define STR_COLON                   _T(":")
+#define STR_SEMICOLON               _T(";")
+#define STR_LESS_THAN_SIGN          _T("<")
+#define STR_EQUALS_SIGN             _T("=")
+#define STR_GREATER_THAN_SIGN       _T(">")
+#define STR_QUESTION_MARK           _T("?")
+#define STR_COMMERCIAL_AT           _T("@")
+#define STR_A                       _T("A")
+#define STR_B                       _T("B")
+#define STR_C                       _T("C")
+#define STR_D                       _T("D")
+#define STR_E                       _T("E")
+#define STR_F                       _T("F")
+#define STR_G                       _T("G")
+#define STR_H                       _T("H")
+#define STR_I                       _T("I")
+#define STR_J                       _T("J")
+#define STR_K                       _T("K")
+#define STR_L                       _T("L")
+#define STR_M                       _T("M")
+#define STR_N                       _T("N")
+#define STR_O                       _T("O")
+#define STR_P                       _T("P")
+#define STR_Q                       _T("Q")
+#define STR_R                       _T("R")
+#define STR_S                       _T("S")
+#define STR_T                       _T("T")
+#define STR_U                       _T("U")
+#define STR_V                       _T("V")
+#define STR_W                       _T("W")
+#define STR_X                       _T("X")
+#define STR_Y                       _T("Y")
+#define STR_Z                       _T("Z")
+#define STR_LEFT_SQUARE_BRACKET     _T("[")
+#define STR_BACKSLASH               _T("\\")
+#define STR_RIGHT_SQUARE_BRACKET    _T("]")
+#define STR_CIRCUMFLEX_ACCENT       _T("^")
+#define STR_UNDERSCORE              _T("_")
+#define STR_GRAVE_ACCENT            _T("`")
+#define STR_a                       _T("a")
+#define STR_b                       _T("b")
+#define STR_c                       _T("c")
+#define STR_d                       _T("d")
+#define STR_e                       _T("e")
+#define STR_f                       _T("f")
+#define STR_g                       _T("g")
+#define STR_h                       _T("h")
+#define STR_i                       _T("i")
+#define STR_j                       _T("j")
+#define STR_k                       _T("k")
+#define STR_l                       _T("l")
+#define STR_m                       _T("m")
+#define STR_n                       _T("n")
+#define STR_o                       _T("o")
+#define STR_p                       _T("p")
+#define STR_q                       _T("q")
+#define STR_r                       _T("r")
+#define STR_s                       _T("s")
+#define STR_t                       _T("t")
+#define STR_u                       _T("u")
+#define STR_v                       _T("v")
+#define STR_w                       _T("w")
+#define STR_x                       _T("x")
+#define STR_y                       _T("y")
+#define STR_z                       _T("z")
+#define STR_LEFT_CURLY_BRACKET      _T("{")
+#define STR_VERTICAL_LINE           _T("|")
+#define STR_RIGHT_CURLY_BRACKET     _T("}")
+#define STR_TILDE                   _T("~")
 
-#define STRING_ACCEPT0              "ACCEPT\0"
-#define STRING_COMMIT0              "COMMIT\0"
-#define STRING_F0                   "F\0"
-#define STRING_FAIL0                "FAIL\0"
-#define STRING_MARK0                "MARK\0"
-#define STRING_PRUNE0               "PRUNE\0"
-#define STRING_SKIP0                "SKIP\0"
-#define STRING_THEN                 "THEN"
+#define STRING_ACCEPT0              _T("ACCEPT\0")
+#define STRING_COMMIT0              _T("COMMIT\0")
+#define STRING_F0                   _T("F\0")
+#define STRING_FAIL0                _T("FAIL\0")
+#define STRING_MARK0                _T("MARK\0")
+#define STRING_PRUNE0               _T("PRUNE\0")
+#define STRING_SKIP0                _T("SKIP\0")
+#define STRING_THEN                 _T("THEN")
 
-#define STRING_alpha0               "alpha\0"
-#define STRING_lower0               "lower\0"
-#define STRING_upper0               "upper\0"
-#define STRING_alnum0               "alnum\0"
-#define STRING_ascii0               "ascii\0"
-#define STRING_blank0               "blank\0"
-#define STRING_cntrl0               "cntrl\0"
-#define STRING_digit0               "digit\0"
-#define STRING_graph0               "graph\0"
-#define STRING_print0               "print\0"
-#define STRING_punct0               "punct\0"
-#define STRING_space0               "space\0"
-#define STRING_word0                "word\0"
-#define STRING_xdigit               "xdigit"
+#define STRING_alpha0               _T("alpha\0")
+#define STRING_lower0               _T("lower\0")
+#define STRING_upper0               _T("upper\0")
+#define STRING_alnum0               _T("alnum\0")
+#define STRING_ascii0               _T("ascii\0")
+#define STRING_blank0               _T("blank\0")
+#define STRING_cntrl0               _T("cntrl\0")
+#define STRING_digit0               _T("digit\0")
+#define STRING_graph0               _T("graph\0")
+#define STRING_print0               _T("print\0")
+#define STRING_punct0               _T("punct\0")
+#define STRING_space0               _T("space\0")
+#define STRING_word0                _T("word\0")
+#define STRING_xdigit               _T("xdigit")
 
-#define STRING_DEFINE               "DEFINE"
+#define STRING_DEFINE               _T("DEFINE")
 
-#define STRING_CR_RIGHTPAR          "CR)"
-#define STRING_LF_RIGHTPAR          "LF)"
-#define STRING_CRLF_RIGHTPAR        "CRLF)"
-#define STRING_ANY_RIGHTPAR         "ANY)"
-#define STRING_ANYCRLF_RIGHTPAR     "ANYCRLF)"
-#define STRING_BSR_ANYCRLF_RIGHTPAR "BSR_ANYCRLF)"
-#define STRING_BSR_UNICODE_RIGHTPAR "BSR_UNICODE)"
-#define STRING_UTF8_RIGHTPAR        "UTF8)"
-#define STRING_UCP_RIGHTPAR         "UCP)"
+#define STRING_CR_RIGHTPAR          _T("CR)")
+#define STRING_LF_RIGHTPAR          _T("LF)")
+#define STRING_CRLF_RIGHTPAR        _T("CRLF)")
+#define STRING_ANY_RIGHTPAR         _T("ANY)")
+#define STRING_ANYCRLF_RIGHTPAR     _T("ANYCRLF)")
+#define STRING_BSR_ANYCRLF_RIGHTPAR _T("BSR_ANYCRLF)")
+#define STRING_BSR_UNICODE_RIGHTPAR _T("BSR_UNICODE)")
+#define STRING_UTF8_RIGHTPAR        _T("UTF8)")
+#define STRING_UCP_RIGHTPAR         _T("UCP)")
 
 #else  /* SUPPORT_UTF8 */
 
@@ -1050,134 +1153,134 @@ only. */
 #define CHAR_RIGHT_CURLY_BRACKET    '\175'
 #define CHAR_TILDE                  '\176'
 
-#define STR_HT                      "\011"
-#define STR_VT                      "\013"
-#define STR_FF                      "\014"
-#define STR_CR                      "\015"
-#define STR_NL                      "\012"
-#define STR_BS                      "\010"
-#define STR_BEL                     "\007"
-#define STR_ESC                     "\033"
-#define STR_DEL                     "\177"
+#define STR_HT                      _T("\011")
+#define STR_VT                      _T("\013")
+#define STR_FF                      _T("\014")
+#define STR_CR                      _T("\015")
+#define STR_NL                      _T("\012")
+#define STR_BS                      _T("\010")
+#define STR_BEL                     _T("\007")
+#define STR_ESC                     _T("\033")
+#define STR_DEL                     _T("\177")
 
-#define STR_SPACE                   "\040"
-#define STR_EXCLAMATION_MARK        "\041"
-#define STR_QUOTATION_MARK          "\042"
-#define STR_NUMBER_SIGN             "\043"
-#define STR_DOLLAR_SIGN             "\044"
-#define STR_PERCENT_SIGN            "\045"
-#define STR_AMPERSAND               "\046"
-#define STR_APOSTROPHE              "\047"
-#define STR_LEFT_PARENTHESIS        "\050"
-#define STR_RIGHT_PARENTHESIS       "\051"
-#define STR_ASTERISK                "\052"
-#define STR_PLUS                    "\053"
-#define STR_COMMA                   "\054"
-#define STR_MINUS                   "\055"
-#define STR_DOT                     "\056"
-#define STR_SLASH                   "\057"
-#define STR_0                       "\060"
-#define STR_1                       "\061"
-#define STR_2                       "\062"
-#define STR_3                       "\063"
-#define STR_4                       "\064"
-#define STR_5                       "\065"
-#define STR_6                       "\066"
-#define STR_7                       "\067"
-#define STR_8                       "\070"
-#define STR_9                       "\071"
-#define STR_COLON                   "\072"
-#define STR_SEMICOLON               "\073"
-#define STR_LESS_THAN_SIGN          "\074"
-#define STR_EQUALS_SIGN             "\075"
-#define STR_GREATER_THAN_SIGN       "\076"
-#define STR_QUESTION_MARK           "\077"
-#define STR_COMMERCIAL_AT           "\100"
-#define STR_A                       "\101"
-#define STR_B                       "\102"
-#define STR_C                       "\103"
-#define STR_D                       "\104"
-#define STR_E                       "\105"
-#define STR_F                       "\106"
-#define STR_G                       "\107"
-#define STR_H                       "\110"
-#define STR_I                       "\111"
-#define STR_J                       "\112"
-#define STR_K                       "\113"
-#define STR_L                       "\114"
-#define STR_M                       "\115"
-#define STR_N                       "\116"
-#define STR_O                       "\117"
-#define STR_P                       "\120"
-#define STR_Q                       "\121"
-#define STR_R                       "\122"
-#define STR_S                       "\123"
-#define STR_T                       "\124"
-#define STR_U                       "\125"
-#define STR_V                       "\126"
-#define STR_W                       "\127"
-#define STR_X                       "\130"
-#define STR_Y                       "\131"
-#define STR_Z                       "\132"
-#define STR_LEFT_SQUARE_BRACKET     "\133"
-#define STR_BACKSLASH               "\134"
-#define STR_RIGHT_SQUARE_BRACKET    "\135"
-#define STR_CIRCUMFLEX_ACCENT       "\136"
-#define STR_UNDERSCORE              "\137"
-#define STR_GRAVE_ACCENT            "\140"
-#define STR_a                       "\141"
-#define STR_b                       "\142"
-#define STR_c                       "\143"
-#define STR_d                       "\144"
-#define STR_e                       "\145"
-#define STR_f                       "\146"
-#define STR_g                       "\147"
-#define STR_h                       "\150"
-#define STR_i                       "\151"
-#define STR_j                       "\152"
-#define STR_k                       "\153"
-#define STR_l                       "\154"
-#define STR_m                       "\155"
-#define STR_n                       "\156"
-#define STR_o                       "\157"
-#define STR_p                       "\160"
-#define STR_q                       "\161"
-#define STR_r                       "\162"
-#define STR_s                       "\163"
-#define STR_t                       "\164"
-#define STR_u                       "\165"
-#define STR_v                       "\166"
-#define STR_w                       "\167"
-#define STR_x                       "\170"
-#define STR_y                       "\171"
-#define STR_z                       "\172"
-#define STR_LEFT_CURLY_BRACKET      "\173"
-#define STR_VERTICAL_LINE           "\174"
-#define STR_RIGHT_CURLY_BRACKET     "\175"
-#define STR_TILDE                   "\176"
+#define STR_SPACE                   _T("\040")
+#define STR_EXCLAMATION_MARK        _T("\041")
+#define STR_QUOTATION_MARK          _T("\042")
+#define STR_NUMBER_SIGN             _T("\043")
+#define STR_DOLLAR_SIGN             _T("\044")
+#define STR_PERCENT_SIGN            _T("\045")
+#define STR_AMPERSAND               _T("\046")
+#define STR_APOSTROPHE              _T("\047")
+#define STR_LEFT_PARENTHESIS        _T("\050")
+#define STR_RIGHT_PARENTHESIS       _T("\051")
+#define STR_ASTERISK                _T("\052")
+#define STR_PLUS                    _T("\053")
+#define STR_COMMA                   _T("\054")
+#define STR_MINUS                   _T("\055")
+#define STR_DOT                     _T("\056")
+#define STR_SLASH                   _T("\057")
+#define STR_0                       _T("\060")
+#define STR_1                       _T("\061")
+#define STR_2                       _T("\062")
+#define STR_3                       _T("\063")
+#define STR_4                       _T("\064")
+#define STR_5                       _T("\065")
+#define STR_6                       _T("\066")
+#define STR_7                       _T("\067")
+#define STR_8                       _T("\070")
+#define STR_9                       _T("\071")
+#define STR_COLON                   _T("\072")
+#define STR_SEMICOLON               _T("\073")
+#define STR_LESS_THAN_SIGN          _T("\074")
+#define STR_EQUALS_SIGN             _T("\075")
+#define STR_GREATER_THAN_SIGN       _T("\076")
+#define STR_QUESTION_MARK           _T("\077")
+#define STR_COMMERCIAL_AT           _T("\100")
+#define STR_A                       _T("\101")
+#define STR_B                       _T("\102")
+#define STR_C                       _T("\103")
+#define STR_D                       _T("\104")
+#define STR_E                       _T("\105")
+#define STR_F                       _T("\106")
+#define STR_G                       _T("\107")
+#define STR_H                       _T("\110")
+#define STR_I                       _T("\111")
+#define STR_J                       _T("\112")
+#define STR_K                       _T("\113")
+#define STR_L                       _T("\114")
+#define STR_M                       _T("\115")
+#define STR_N                       _T("\116")
+#define STR_O                       _T("\117")
+#define STR_P                       _T("\120")
+#define STR_Q                       _T("\121")
+#define STR_R                       _T("\122")
+#define STR_S                       _T("\123")
+#define STR_T                       _T("\124")
+#define STR_U                       _T("\125")
+#define STR_V                       _T("\126")
+#define STR_W                       _T("\127")
+#define STR_X                       _T("\130")
+#define STR_Y                       _T("\131")
+#define STR_Z                       _T("\132")
+#define STR_LEFT_SQUARE_BRACKET     _T("\133")
+#define STR_BACKSLASH               _T("\134")
+#define STR_RIGHT_SQUARE_BRACKET    _T("\135")
+#define STR_CIRCUMFLEX_ACCENT       _T("\136")
+#define STR_UNDERSCORE              _T("\137")
+#define STR_GRAVE_ACCENT            _T("\140")
+#define STR_a                       _T("\141")
+#define STR_b                       _T("\142")
+#define STR_c                       _T("\143")
+#define STR_d                       _T("\144")
+#define STR_e                       _T("\145")
+#define STR_f                       _T("\146")
+#define STR_g                       _T("\147")
+#define STR_h                       _T("\150")
+#define STR_i                       _T("\151")
+#define STR_j                       _T("\152")
+#define STR_k                       _T("\153")
+#define STR_l                       _T("\154")
+#define STR_m                       _T("\155")
+#define STR_n                       _T("\156")
+#define STR_o                       _T("\157")
+#define STR_p                       _T("\160")
+#define STR_q                       _T("\161")
+#define STR_r                       _T("\162")
+#define STR_s                       _T("\163")
+#define STR_t                       _T("\164")
+#define STR_u                       _T("\165")
+#define STR_v                       _T("\166")
+#define STR_w                       _T("\167")
+#define STR_x                       _T("\170")
+#define STR_y                       _T("\171")
+#define STR_z                       _T("\172")
+#define STR_LEFT_CURLY_BRACKET      _T("\173")
+#define STR_VERTICAL_LINE           _T("\174")
+#define STR_RIGHT_CURLY_BRACKET     _T("\175")
+#define STR_TILDE                   _T("\176")
 
-#define STRING_ACCEPT0              STR_A STR_C STR_C STR_E STR_P STR_T "\0"
-#define STRING_COMMIT0              STR_C STR_O STR_M STR_M STR_I STR_T "\0"
-#define STRING_F0                   STR_F "\0"
-#define STRING_FAIL0                STR_F STR_A STR_I STR_L "\0"
-#define STRING_MARK0                STR_M STR_A STR_R STR_K "\0"
-#define STRING_PRUNE0               STR_P STR_R STR_U STR_N STR_E "\0"
-#define STRING_SKIP0                STR_S STR_K STR_I STR_P "\0"
+#define STRING_ACCEPT0              STR_A STR_C STR_C STR_E STR_P STR_T _T("\0")
+#define STRING_COMMIT0              STR_C STR_O STR_M STR_M STR_I STR_T _T("\0")
+#define STRING_F0                   STR_F _T("\0")
+#define STRING_FAIL0                STR_F STR_A STR_I STR_L _T("\0")
+#define STRING_MARK0                STR_M STR_A STR_R STR_K _T("\0")
+#define STRING_PRUNE0               STR_P STR_R STR_U STR_N STR_E _T("\0")
+#define STRING_SKIP0                STR_S STR_K STR_I STR_P _T("\0")
 #define STRING_THEN                 STR_T STR_H STR_E STR_N
 
-#define STRING_alpha0               STR_a STR_l STR_p STR_h STR_a "\0"
-#define STRING_lower0               STR_l STR_o STR_w STR_e STR_r "\0"
-#define STRING_upper0               STR_u STR_p STR_p STR_e STR_r "\0"
-#define STRING_alnum0               STR_a STR_l STR_n STR_u STR_m "\0"
-#define STRING_ascii0               STR_a STR_s STR_c STR_i STR_i "\0"
-#define STRING_blank0               STR_b STR_l STR_a STR_n STR_k "\0"
-#define STRING_cntrl0               STR_c STR_n STR_t STR_r STR_l "\0"
-#define STRING_digit0               STR_d STR_i STR_g STR_i STR_t "\0"
-#define STRING_graph0               STR_g STR_r STR_a STR_p STR_h "\0"
-#define STRING_print0               STR_p STR_r STR_i STR_n STR_t "\0"
-#define STRING_punct0               STR_p STR_u STR_n STR_c STR_t "\0"
-#define STRING_space0               STR_s STR_p STR_a STR_c STR_e "\0"
-#define STRING_word0                STR_w STR_o STR_r STR_d       "\0"
+#define STRING_alpha0               STR_a STR_l STR_p STR_h STR_a _T("\0")
+#define STRING_lower0               STR_l STR_o STR_w STR_e STR_r _T("\0")
+#define STRING_upper0               STR_u STR_p STR_p STR_e STR_r _T("\0")
+#define STRING_alnum0               STR_a STR_l STR_n STR_u STR_m _T("\0")
+#define STRING_ascii0               STR_a STR_s STR_c STR_i STR_i _T("\0")
+#define STRING_blank0               STR_b STR_l STR_a STR_n STR_k _T("\0")
+#define STRING_cntrl0               STR_c STR_n STR_t STR_r STR_l _T("\0")
+#define STRING_digit0               STR_d STR_i STR_g STR_i STR_t _T("\0")
+#define STRING_graph0               STR_g STR_r STR_a STR_p STR_h _T("\0")
+#define STRING_print0               STR_p STR_r STR_i STR_n STR_t _T("\0")
+#define STRING_punct0               STR_p STR_u STR_n STR_c STR_t _T("\0")
+#define STRING_space0               STR_s STR_p STR_a STR_c STR_e _T("\0")
+#define STRING_word0                STR_w STR_o STR_r STR_d       _T("\0")
 #define STRING_xdigit               STR_x STR_d STR_i STR_g STR_i STR_t
 
 #define STRING_DEFINE               STR_D STR_E STR_F STR_I STR_N STR_E
@@ -1633,11 +1736,11 @@ typedef struct compile_data {
   const uschar *ctypes;         /* Points to table of type maps */
   const uschar *start_workspace;/* The start of working space */
   const uschar *start_code;     /* The start of the compiled code */
-  const uschar *start_pattern;  /* The start of the pattern */
-  const uschar *end_pattern;    /* The end of the pattern */
+  const utchar *start_pattern;  /* The start of the pattern */
+  const utchar *end_pattern;    /* The end of the pattern */
   open_capitem *open_caps;      /* Chain of open capture items */
   uschar *hwm;                  /* High watermark of workspace */
-  uschar *name_table;           /* The name/number table */
+  utchar *name_table;           /* The name/number table */
   int  names_found;             /* Number of entries so far */
   int  name_entry_size;         /* Size of each entry */
   int  bracount;                /* Count of capturing parens as we compile */
@@ -1698,7 +1801,7 @@ typedef struct match_data {
   int    nllen;                 /* Newline string length */
   int    name_count;            /* Number of names in name table */
   int    name_entry_size;       /* Size of entry in names table */
-  uschar *name_table;           /* Table of names */
+  utchar *name_table;           /* Table of names */
   uschar nl[4];                 /* Newline string when fixed */
   const uschar *lcc;            /* Points to lower casing table */
   const uschar *ctypes;         /* Points to table of type maps */
@@ -1809,7 +1912,7 @@ extern const uschar _pcre_utf8_table4[];
 extern const int    _pcre_utf8_table1_size;
 #endif /* AutoHotkey. */
 
-extern const char   _pcre_utt_names[];
+extern const tchar  _pcre_utt_names[];
 extern const ucp_type_table _pcre_utt[];
 extern const int _pcre_utt_size;
 
@@ -1825,12 +1928,23 @@ sense, but are not part of the PCRE public API. */
 extern const uschar *_pcre_find_bracket(const uschar *, BOOL, int);
 extern BOOL          _pcre_is_newline(USPTR, int, USPTR, int *, BOOL);
 extern int           _pcre_ord2utf8(int, uschar *);
+extern int           _pcre_ord2utf16(int, utchar *);
 extern real_pcre    *_pcre_try_flipped(const real_pcre *, real_pcre *,
                        const pcre_study_data *, pcre_study_data *);
-#define _pcre_valid_utf8(s, n) ((int) -1) // AutoHotkey: UTF-8 inputs are always freshly converted from UTF-16 and therefore must be valid.
 //extern int           _pcre_valid_utf8(USPTR, int);
 extern BOOL          _pcre_was_newline(USPTR, int, USPTR, int *, BOOL);
 extern BOOL          _pcre_xclass(int, const uschar *);
+
+#ifdef PCRE_USE_UTF16
+/* AutoHotkey: For performance, unpaired surrogate code units are tolerated
+anywhere in the string except at the beginning, since the TBACKCHAR() macro
+is not written to safely handle that case. */
+#define _pcre_valid_utf(s, n) (IS_LOW_SURROGATE(*(s)) - 1)
+#else
+/* Obsolete code: Previously, UTF-8 inputs were always freshly converted
+from UTF-16 and therefore always valid.  Now all inputs are UTF-16. */
+#define _pcre_valid_utf(s, n) (-1)
+#endif
 
 
 /* Unicode character database (UCD) */

@@ -193,8 +193,8 @@ typedef struct verbitem {
   int   op_arg;              /* Op when arg present, or -1 if not allowed */
 } verbitem;
 
-static const char verbnames[] =
-  "\0"                       /* Empty name is a shorthand for MARK */
+static const tchar verbnames[] =
+  _T("\0")                       /* Empty name is a shorthand for MARK */
   STRING_MARK0
   STRING_ACCEPT0
   STRING_COMMIT0
@@ -225,7 +225,7 @@ library is dynamically loaded. The list of lengths is terminated by a zero
 length entry. The first three must be alpha, lower, upper, as this is assumed
 for handling case independence. */
 
-static const char posix_names[] =
+static const tchar posix_names[] =
   STRING_alpha0 STRING_lower0 STRING_upper0 STRING_alnum0
   STRING_ascii0 STRING_blank0 STRING_cntrl0 STRING_digit0
   STRING_graph0 STRING_print0 STRING_punct0 STRING_space0
@@ -266,50 +266,50 @@ substitutes must be in the order of the names, defined above, and there are
 both positive and negative cases. NULL means no substitute. */
 
 #ifdef SUPPORT_UCP
-static const uschar *substitutes[] = {
-  (uschar *)"\\P{Nd}",    /* \D */
-  (uschar *)"\\p{Nd}",    /* \d */
-  (uschar *)"\\P{Xsp}",   /* \S */       /* NOTE: Xsp is Perl space */
-  (uschar *)"\\p{Xsp}",   /* \s */
-  (uschar *)"\\P{Xwd}",   /* \W */
-  (uschar *)"\\p{Xwd}"    /* \w */
+static const utchar *substitutes[] = {
+  _UT("\\P{Nd}"),         /* \D */
+  _UT("\\p{Nd}"),         /* \d */
+  _UT("\\P{Xsp}"),        /* \S */       /* NOTE: Xsp is Perl space */
+  _UT("\\p{Xsp}"),        /* \s */
+  _UT("\\P{Xwd}"),        /* \W */
+  _UT("\\p{Xwd}")         /* \w */
 };
 
-static const uschar *posix_substitutes[] = {
-  (uschar *)"\\p{L}",     /* alpha */
-  (uschar *)"\\p{Ll}",    /* lower */
-  (uschar *)"\\p{Lu}",    /* upper */
-  (uschar *)"\\p{Xan}",   /* alnum */
+static const utchar *posix_substitutes[] = {
+  _UT("\\p{L}"),          /* alpha */
+  _UT("\\p{Ll}"),         /* lower */
+  _UT("\\p{Lu}"),         /* upper */
+  _UT("\\p{Xan}"),        /* alnum */
   NULL,                   /* ascii */
-  (uschar *)"\\h",        /* blank */
+  _UT("\\h"),             /* blank */
   NULL,                   /* cntrl */
-  (uschar *)"\\p{Nd}",    /* digit */
+  _UT("\\p{Nd}"),         /* digit */
   NULL,                   /* graph */
   NULL,                   /* print */
   NULL,                   /* punct */
-  (uschar *)"\\p{Xps}",   /* space */    /* NOTE: Xps is POSIX space */
-  (uschar *)"\\p{Xwd}",   /* word */
+  _UT("\\p{Xps}"),        /* space */    /* NOTE: Xps is POSIX space */
+  _UT("\\p{Xwd}"),        /* word */
   NULL,                   /* xdigit */
   /* Negated cases */
-  (uschar *)"\\P{L}",     /* ^alpha */
-  (uschar *)"\\P{Ll}",    /* ^lower */
-  (uschar *)"\\P{Lu}",    /* ^upper */
-  (uschar *)"\\P{Xan}",   /* ^alnum */
+  _UT("\\P{L}"),          /* ^alpha */
+  _UT("\\P{Ll}"),         /* ^lower */
+  _UT("\\P{Lu}"),         /* ^upper */
+  _UT("\\P{Xan}"),        /* ^alnum */
   NULL,                   /* ^ascii */
-  (uschar *)"\\H",        /* ^blank */
+  _UT("\\H"),             /* ^blank */
   NULL,                   /* ^cntrl */
-  (uschar *)"\\P{Nd}",    /* ^digit */
+  _UT("\\P{Nd}"),         /* ^digit */
   NULL,                   /* ^graph */
   NULL,                   /* ^print */
   NULL,                   /* ^punct */
-  (uschar *)"\\P{Xps}",   /* ^space */   /* NOTE: Xps is POSIX space */
-  (uschar *)"\\P{Xwd}",   /* ^word */
+  _UT("\\P{Xps}"),        /* ^space */   /* NOTE: Xps is POSIX space */
+  _UT("\\P{Xwd}"),        /* ^word */
   NULL                    /* ^xdigit */
 };
 #define POSIX_SUBSIZE (sizeof(posix_substitutes)/sizeof(uschar *))
 #endif
 
-#define STRING(a)  # a
+#define STRING(a)  _T(# a)
 #define XSTRING(s) STRING(s)
 
 /* The texts of compile-time error messages. These are "char *" because they
@@ -326,88 +326,88 @@ Each substring ends with \0 to insert a null character. This includes the final
 substring, so that the whole string ends with \0\0, which can be detected when
 counting through. */
 
-static const char error_texts[] =
-  "no error\0"
-  "\\ at end of pattern\0"
-  "\\c at end of pattern\0"
-  "unrecognized character follows \\\0"
-  "numbers out of order in {} quantifier\0"
+static const tchar error_texts[] =
+  _T("no error\0")
+  _T("\\ at end of pattern\0")
+  _T("\\c at end of pattern\0")
+  _T("unrecognized character follows \\\0")
+  _T("numbers out of order in {} quantifier\0")
   /* 5 */
-  "number too big in {} quantifier\0"
-  "missing terminating ] for character class\0"
-  "invalid escape sequence in character class\0"
-  "range out of order in character class\0"
-  "nothing to repeat\0"
+  _T("number too big in {} quantifier\0")
+  _T("missing terminating ] for character class\0")
+  _T("invalid escape sequence in character class\0")
+  _T("range out of order in character class\0")
+  _T("nothing to repeat\0")
   /* 10 */
-  "operand of unlimited repeat could match the empty string\0"  /** DEAD **/
-  "internal error: unexpected repeat\0"
-  "unrecognized character after (? or (?-\0"
-  "POSIX named classes are supported only within a class\0"
-  "missing )\0"
+  _T("operand of unlimited repeat could match the empty string\0")  /** DEAD **/
+  _T("internal error: unexpected repeat\0")
+  _T("unrecognized character after (? or (?-\0")
+  _T("POSIX named classes are supported only within a class\0")
+  _T("missing )\0")
   /* 15 */
-  "reference to non-existent subpattern\0"
-  "erroffset passed as NULL\0"
-  "unknown option bit(s) set\0"
-  "missing ) after comment\0"
-  "parentheses nested too deeply\0"  /** DEAD **/
+  _T("reference to non-existent subpattern\0")
+  _T("erroffset passed as NULL\0")
+  _T("unknown option bit(s) set\0")
+  _T("missing ) after comment\0")
+  _T("parentheses nested too deeply\0")  /** DEAD **/
   /* 20 */
-  "regular expression is too large\0"
-  "failed to get memory\0"
-  "unmatched parentheses\0"
-  "internal error: code overflow\0"
-  "unrecognized character after (?<\0"
+  _T("regular expression is too large\0")
+  _T("failed to get memory\0")
+  _T("unmatched parentheses\0")
+  _T("internal error: code overflow\0")
+  _T("unrecognized character after (?<\0")
   /* 25 */
-  "lookbehind assertion is not fixed length\0"
-  "malformed number or name after (?(\0"
-  "conditional group contains more than two branches\0"
-  "assertion expected after (?(\0"
-  "(?R or (?[+-]digits must be followed by )\0"
+  _T("lookbehind assertion is not fixed length\0")
+  _T("malformed number or name after (?(\0")
+  _T("conditional group contains more than two branches\0")
+  _T("assertion expected after (?(\0")
+  _T("(?R or (?[+-]digits must be followed by )\0")
   /* 30 */
-  "unknown POSIX class name\0"
-  "POSIX collating elements are not supported\0"
-  "this version of PCRE is not compiled with PCRE_UTF8 support\0"
-  "spare error\0"  /** DEAD **/
-  "character value in \\x{...} sequence is too large\0"
+  _T("unknown POSIX class name\0")
+  _T("POSIX collating elements are not supported\0")
+  _T("this version of PCRE is not compiled with PCRE_UTF8 support\0")
+  _T("spare error\0")  /** DEAD **/
+  _T("character value in \\x{...} sequence is too large\0")
   /* 35 */
-  "invalid condition (?(0)\0"
-  "\\C not allowed in lookbehind assertion\0"
-  "PCRE does not support \\L, \\l, \\N{name}, \\U, or \\u\0"
-  "number after (?C is > 255\0"
-  "closing ) for (?C expected\0"
+  _T("invalid condition (?(0)\0")
+  _T("\\C not allowed in lookbehind assertion\0")
+  _T("PCRE does not support \\L, \\l, \\N{name}, \\U, or \\u\0")
+  _T("number after (?C is > 255\0")
+  _T("closing ) for (?C expected\0")
   /* 40 */
-  "recursive call could loop indefinitely\0"
-  "unrecognized character after (?P\0"
-  "syntax error in subpattern name (missing terminator)\0"
-  "two named subpatterns have the same name\0"
-  "invalid UTF-8 string\0"
+  _T("recursive call could loop indefinitely\0")
+  _T("unrecognized character after (?P\0")
+  _T("syntax error in subpattern name (missing terminator)\0")
+  _T("two named subpatterns have the same name\0")
+  _T("invalid UTF-8 string\0")
   /* 45 */
-  "support for \\P, \\p, and \\X has not been compiled\0"
-  "malformed \\P or \\p sequence\0"
-  "unknown property name after \\P or \\p\0"
-  "subpattern name is too long (maximum " XSTRING(MAX_NAME_SIZE) " characters)\0"
-  "too many named subpatterns (maximum " XSTRING(MAX_NAME_COUNT) ")\0"
+  _T("support for \\P, \\p, and \\X has not been compiled\0")
+  _T("malformed \\P or \\p sequence\0")
+  _T("unknown property name after \\P or \\p\0")
+  _T("subpattern name is too long (maximum ") XSTRING(MAX_NAME_SIZE) _T(" characters)\0")
+  _T("too many named subpatterns (maximum ") XSTRING(MAX_NAME_COUNT) _T(")\0")
   /* 50 */
-  "repeated subpattern is too long\0"    /** DEAD **/
-  "octal value is greater than \\377 (not in UTF-8 mode)\0"
-  "internal error: overran compiling workspace\0"
-  "internal error: previously-checked referenced subpattern not found\0"
-  "DEFINE group contains more than one branch\0"
+  _T("repeated subpattern is too long\0")    /** DEAD **/
+  _T("octal value is greater than \\377 (not in UTF-8 mode)\0")
+  _T("internal error: overran compiling workspace\0")
+  _T("internal error: previously-checked referenced subpattern not found\0")
+  _T("DEFINE group contains more than one branch\0")
   /* 55 */
-  "repeating a DEFINE group is not allowed\0"
-  "inconsistent NEWLINE options\0"
-  "\\g is not followed by a braced, angle-bracketed, or quoted name/number or by a plain number\0"
-  "a numbered reference must not be zero\0"
-  "an argument is not allowed for (*ACCEPT), (*FAIL), or (*COMMIT)\0"
+  _T("repeating a DEFINE group is not allowed\0")
+  _T("inconsistent NEWLINE options\0")
+  _T("\\g is not followed by a braced, angle-bracketed, or quoted name/number or by a plain number\0")
+  _T("a numbered reference must not be zero\0")
+  _T("an argument is not allowed for (*ACCEPT), (*FAIL), or (*COMMIT)\0")
   /* 60 */
-  "(*VERB) not recognized\0"
-  "number is too big\0"
-  "subpattern name expected\0"
-  "digit expected after (?+\0"
-  "] is an invalid data character in JavaScript compatibility mode\0"
+  _T("(*VERB) not recognized\0")
+  _T("number is too big\0")
+  _T("subpattern name expected\0")
+  _T("digit expected after (?+\0")
+  _T("] is an invalid data character in JavaScript compatibility mode\0")
   /* 65 */
-  "different names for subpatterns of the same number are not allowed\0"
-  "(*MARK) must have an argument\0"
-  "this version of PCRE is not compiled with PCRE_UCP support\0"
+  _T("different names for subpatterns of the same number are not allowed\0")
+  _T("(*MARK) must have an argument\0")
+  _T("this version of PCRE is not compiled with PCRE_UCP support\0")
   ;
 
 /* Table to identify digits and hex digits. This is used when compiling
@@ -540,11 +540,23 @@ static const unsigned char ebcdic_chartab[] = { /* chartable partial dup */
   0x1c,0x1c,0x00,0x00,0x00,0x00,0x00,0x00};/*  8 -255 */
 #endif
 
+#ifdef PCRE_USE_UTF16
+/* AutoHotkey: These are used for safety with tchar type (where c may be > 256).
+The first one is function vs macro to avoid any issues with side-effects of
+evaluating the arg twice.  Usually the compiler will inline it anyway. */
+BOOL is_tchar_digit(utchar c) { return (c <= 127 && (digitab[c] & ctype_digit) != 0); }
+#define is_tchar_xdigit(c)             (c <= 127 && (digitab[c] & ctype_xdigit) != 0)
+#define is_tchar_ctype(c, type)        (c <= 127 && (cd->ctypes[c] & ctype_##type) != 0)
+#else
+#define is_tchar_digit(c)              ((digitab[c] & ctype_digit) != 0)
+#define is_tchar_xdigit(c)             ((digitab[c] & ctype_xdigit) != 0)
+#define is_tchar_ctype(c, type)        ((cd->ctypes[c] & ctype_##type) != 0)
+#endif
 
 /* Definition to allow mutual recursion */
 
 static BOOL
-  compile_regex(int, int, uschar **, const uschar **, int *, BOOL, BOOL, int,
+  compile_regex(int, int, uschar **, const utchar **, int *, BOOL, BOOL, int,
     int *, int *, branch_chain *, compile_data *, int *);
 
 
@@ -562,14 +574,14 @@ Argument:   the error number
 Returns:    pointer to the error string
 */
 
-static const char *
+static const tchar *
 find_error_text(int n)
 {
-const char *s = error_texts;
+const tchar *s = error_texts;
 for (; n > 0; n--)
   {
   while (*s++ != 0) {};
-  if (*s == 0) return "Error text not found (please report)";
+  if (*s == 0) return _T("Error text not found (please report)");
   }
 return s;
 }
@@ -600,20 +612,20 @@ Returns:         zero or positive => a data character
 */
 
 static int
-check_escape(const uschar **ptrptr, int *errorcodeptr, int bracount,
+check_escape(const utchar **ptrptr, int *errorcodeptr, int bracount,
   int options, BOOL isclass)
 {
 #ifdef SUPPORT_UTF8 /* AutoHotkey. */
 #ifdef SUPPORT_UTF8_ONLY
-    const BOOL utf8 = TRUE;
+    const BOOL utf8 = TRUE; /* AutoHotkey: UTF-enabled (not necessarily UTF-8). */
 #else
     BOOL utf8 = (options & PCRE_UTF8) != 0;
 #endif
 #endif /* AutoHotkey. */
-const uschar *ptr = *ptrptr + 1;
+const utchar *ptr = *ptrptr + 1;
 int c, i;
 
-GETCHARINCTEST(c, ptr);           /* Get character value, increment pointer */
+TGETCHARINCTEST(c, ptr);          /* Get character value, increment pointer */
 ptr--;                            /* Set pointer back to the last byte */
 
 /* If backslash is at the end of the pattern, it's an error. */
@@ -637,7 +649,7 @@ else if ((i = escapes[c - 0x48]) != 0)  c = i;
 
 else
   {
-  const uschar *oldptr;
+  const utchar *oldptr;
   BOOL braced, negated;
 
   switch (c)
@@ -679,9 +691,9 @@ else
 
     if (ptr[1] == CHAR_LEFT_CURLY_BRACKET)
       {
-      const uschar *p;
+      const utchar *p;
       for (p = ptr+2; *p != 0 && *p != CHAR_RIGHT_CURLY_BRACKET; p++)
-        if (*p != CHAR_MINUS && (digitab[*p] & ctype_digit) == 0) break;
+        if (*p != CHAR_MINUS && !is_tchar_digit(*p)) break;
       if (*p != 0 && *p != CHAR_RIGHT_CURLY_BRACKET)
         {
         c = -ESC_k;
@@ -700,7 +712,7 @@ else
     else negated = FALSE;
 
     c = 0;
-    while ((digitab[ptr[1]] & ctype_digit) != 0)
+    while (is_tchar_digit(ptr[1]))
       c = c * 10 + *(++ptr) - CHAR_0;
 
     if (c < 0)   /* Integer overflow */
@@ -753,7 +765,7 @@ else
       {
       oldptr = ptr;
       c -= CHAR_0;
-      while ((digitab[ptr[1]] & ctype_digit) != 0)
+      while (is_tchar_digit(ptr[1]))
         c = c * 10 + *(++ptr) - CHAR_0;
       if (c < 0)    /* Integer overflow */
         {
@@ -803,11 +815,11 @@ else
     case CHAR_x:
     if (ptr[1] == CHAR_LEFT_CURLY_BRACKET)
       {
-      const uschar *pt = ptr + 2;
+      const utchar *pt = ptr + 2;
       int count = 0;
 
       c = 0;
-      while ((digitab[*pt] & ctype_xdigit) != 0)
+      while (is_tchar_xdigit(*pt))
         {
         register int cc = *pt++;
         if (c == 0 && cc == CHAR_0) continue;     /* Leading zeroes */
@@ -840,7 +852,7 @@ else
     /* Read just a single-byte hex-defined char */
 
     c = 0;
-    while (i++ < 2 && (digitab[ptr[1]] & ctype_xdigit) != 0)
+    while (i++ < 2 && is_tchar_xdigit(ptr[1]))
       {
       int cc;                                  /* Some compilers don't like */
       cc = *(++ptr);                           /* ++ in initializers */
@@ -931,11 +943,11 @@ Returns:         type value from ucp_type_table, or -1 for an invalid type
 */
 
 static int
-get_ucp(const uschar **ptrptr, BOOL *negptr, int *dptr, int *errorcodeptr)
+get_ucp(const utchar **ptrptr, BOOL *negptr, int *dptr, int *errorcodeptr)
 {
 int c, i, bot, top;
-const uschar *ptr = *ptrptr;
-char name[32];
+const utchar *ptr = *ptrptr;
+tchar name[32];
 
 c = *(++ptr);
 if (c == 0) goto ERROR_RETURN;
@@ -981,7 +993,7 @@ top = _pcre_utt_size;
 while (bot < top)
   {
   i = (bot + top) >> 1;
-  c = strcmp(name, _pcre_utt_names + _pcre_utt[i].name_offset);
+  c = tstrcmp(name, _pcre_utt_names + _pcre_utt[i].name_offset);
   if (c == 0)
     {
     *dptr = _pcre_utt[i].value;
@@ -1020,17 +1032,18 @@ Returns:    TRUE or FALSE
 */
 
 static BOOL
-is_counted_repeat(const uschar *p)
+is_counted_repeat(const utchar *p)
 {
-if ((digitab[*p++] & ctype_digit) == 0) return FALSE;
-while ((digitab[*p] & ctype_digit) != 0) p++;
+if (!is_tchar_digit(*p++)) return FALSE;
+while (is_tchar_digit(*p)) p++;
+
 if (*p == CHAR_RIGHT_CURLY_BRACKET) return TRUE;
 
 if (*p++ != CHAR_COMMA) return FALSE;
 if (*p == CHAR_RIGHT_CURLY_BRACKET) return TRUE;
 
-if ((digitab[*p++] & ctype_digit) == 0) return FALSE;
-while ((digitab[*p] & ctype_digit) != 0) p++;
+if (!is_tchar_digit(*p++)) return FALSE;
+while (is_tchar_digit(*p)) p++;
 
 return (*p == CHAR_RIGHT_CURLY_BRACKET);
 }
@@ -1056,8 +1069,8 @@ Returns:         pointer to '}' on success;
                  current ptr on error, with errorcodeptr set non-zero
 */
 
-static const uschar *
-read_repeat_counts(const uschar *p, int *minp, int *maxp, int *errorcodeptr)
+static const utchar *
+read_repeat_counts(const utchar *p, int *minp, int *maxp, int *errorcodeptr)
 {
 int min = 0;
 int max = -1;
@@ -1065,7 +1078,7 @@ int max = -1;
 /* Read the minimum value and do a paranoid check: a negative value indicates
 an integer overflow. */
 
-while ((digitab[*p] & ctype_digit) != 0) min = min * 10 + *p++ - CHAR_0;
+while (is_tchar_digit(*p)) min = min * 10 + *p++ - CHAR_0;
 if (min < 0 || min > 65535)
   {
   *errorcodeptr = ERR5;
@@ -1080,7 +1093,7 @@ if (*p == CHAR_RIGHT_CURLY_BRACKET) max = min; else
   if (*(++p) != CHAR_RIGHT_CURLY_BRACKET)
     {
     max = 0;
-    while((digitab[*p] & ctype_digit) != 0) max = max * 10 + *p++ - CHAR_0;
+    while (is_tchar_digit(*p)) max = max * 10 + *p++ - CHAR_0;
     if (max < 0 || max > 65535)
       {
       *errorcodeptr = ERR5;
@@ -1130,10 +1143,10 @@ Returns:       the number of the named subpattern, or -1 if not found
 */
 
 static int
-find_parens_sub(uschar **ptrptr, compile_data *cd, const uschar *name, int lorn,
+find_parens_sub(const utchar **ptrptr, compile_data *cd, const utchar *name, int lorn,
   BOOL xmode, int *count)
 {
-uschar *ptr = *ptrptr;
+const utchar *ptr = *ptrptr;
 int start_count = *count;
 int hwm_count = start_count;
 BOOL dup_parens = FALSE;
@@ -1200,7 +1213,7 @@ if (ptr[0] == CHAR_LEFT_PARENTHESIS)
         ptr[1] != CHAR_EQUALS_SIGN) || *ptr == CHAR_APOSTROPHE)
       {
       int term;
-      const uschar *thisname;
+      const utchar *thisname;
       *count += 1;
       if (name == NULL && *count == lorn) return *count;
       term = *ptr++;
@@ -1208,7 +1221,7 @@ if (ptr[0] == CHAR_LEFT_PARENTHESIS)
       thisname = ptr;
       while (*ptr != term) ptr++;
       if (name != NULL && lorn == ptr - thisname &&
-          strncmp((const char *)name, (const char *)thisname, lorn) == 0)
+          tstrncmp(name, thisname, lorn) == 0)
         return *count;
       term++;
       }
@@ -1249,8 +1262,7 @@ for (; *ptr != 0; ptr++)
         {
         if (ptr[2] == CHAR_E)
           ptr+= 2;
-        else if (strncmp((const char *)ptr+2,
-                 STR_Q STR_BACKSLASH STR_E, 3) == 0)
+        else if (tstrncmp(ptr+2, STR_Q STR_BACKSLASH STR_E, 3) == 0)
           ptr += 4;
         else
           break;
@@ -1352,9 +1364,9 @@ Returns:       the number of the found subpattern, or -1 if not found
 */
 
 static int
-find_parens(compile_data *cd, const uschar *name, int lorn, BOOL xmode)
+find_parens(compile_data *cd, const utchar *name, int lorn, BOOL xmode)
 {
-uschar *ptr = (uschar *)cd->start_pattern;
+const utchar *ptr = cd->start_pattern;
 int count = 0;
 int rc;
 
@@ -2201,7 +2213,7 @@ Returns:   TRUE or FALSE
 */
 
 static BOOL
-check_posix_syntax(const uschar *ptr, const uschar **endptr)
+check_posix_syntax(const utchar *ptr, const utchar **endptr)
 {
 int terminator;          /* Don't combine these lines; the Solaris cc */
 terminator = *(++ptr);   /* compiler warns about "non-constant" initializer. */
@@ -2238,14 +2250,14 @@ Returns:     a value representing the name, or -1 if unknown
 */
 
 static int
-check_posix_name(const uschar *ptr, int len)
+check_posix_name(const utchar *ptr, int len)
 {
-const char *pn = posix_names;
+const tchar *pn = posix_names;
 register int yield = 0;
 while (posix_name_lengths[yield] != 0)
   {
   if (len == posix_name_lengths[yield] &&
-    strncmp((const char *)ptr, pn, len) == 0) return yield;
+    tstrncmp(ptr, pn, len) == 0) return yield;
   pn += posix_name_lengths[yield] + 1;
   yield++;
   }
@@ -2340,7 +2352,7 @@ Returns:         new code pointer
 
 #ifdef SUPPORT_CALLOUT  /* AutoHotkey: Omit the callout feature from the code until it's needed. */
 static uschar *
-auto_callout(uschar *code, const uschar *ptr, compile_data *cd)
+auto_callout(uschar *code, const utchar *ptr, compile_data *cd)
 {
 *code++ = OP_CALLOUT;
 *code++ = 255;
@@ -2371,7 +2383,7 @@ Returns:             nothing
 
 #ifdef SUPPORT_CALLOUT  /* AutoHotkey: Omit the callout feature from the code until it's needed. */
 static void
-complete_callout(uschar *previous_callout, const uschar *ptr, compile_data *cd)
+complete_callout(uschar *previous_callout, const utchar *ptr, compile_data *cd)
 {
 int length = (int)(ptr - cd->start_pattern - GET(previous_callout, 2 + sizeof(void **)));
 PUT(previous_callout, 2 + sizeof(void **) + LINK_SIZE, length);
@@ -2510,7 +2522,7 @@ Returns:        TRUE if possessifying is wanted
 */
 
 static BOOL
-check_auto_possessive(const uschar *previous, BOOL utf8, const uschar *ptr,
+check_auto_possessive(const uschar *previous, BOOL utf8, const utchar *ptr,
   int options, compile_data *cd)
 {
 int c, next;
@@ -2522,7 +2534,7 @@ if ((options & PCRE_EXTENDED) != 0)
   {
   for (;;)
     {
-    while ((cd->ctypes[*ptr] & ctype_space) != 0) ptr++;
+    while (is_tchar_ctype(*ptr, space)) ptr++;
     if (*ptr == CHAR_NUMBER_SIGN)
       {
       while (*(++ptr) != 0)
@@ -2543,10 +2555,10 @@ if (*ptr == CHAR_BACKSLASH)
   ptr++;    /* Point after the escape sequence */
   }
 
-else if ((cd->ctypes[*ptr] & ctype_meta) == 0)
+else if (!is_tchar_ctype(*ptr, meta))
   {
 #ifdef SUPPORT_UTF8
-  if (utf8) { GETCHARINC(next, ptr); } else
+  if (utf8) { TGETCHARINC(next, ptr); } else
 #endif
   next = *ptr++;
   }
@@ -2559,7 +2571,7 @@ if ((options & PCRE_EXTENDED) != 0)
   {
   for (;;)
     {
-    while ((cd->ctypes[*ptr] & ctype_space) != 0) ptr++;
+    while (is_tchar_ctype(*ptr, space)) ptr++;
     if (*ptr == CHAR_NUMBER_SIGN)
       {
       while (*(++ptr) != 0)
@@ -2572,7 +2584,7 @@ if ((options & PCRE_EXTENDED) != 0)
 /* If the next thing is itself optional, we have to give up. */
 
 if (*ptr == CHAR_ASTERISK || *ptr == CHAR_QUESTION_MARK ||
-  strncmp((char *)ptr, STR_LEFT_CURLY_BRACKET STR_0 STR_COMMA, 3) == 0)
+  tstrncmp(ptr, STR_LEFT_CURLY_BRACKET STR_0 STR_COMMA, 3) == 0)
     return FALSE;
 
 /* Now compare the next item with the previous opcode. First, handle cases when
@@ -2830,7 +2842,7 @@ switch(op_code)
       to the original \d etc. At this point, ptr will point to a zero byte. */
 
       if (*ptr == CHAR_ASTERISK || *ptr == CHAR_QUESTION_MARK ||
-        strncmp((char *)ptr, STR_LEFT_CURLY_BRACKET STR_0 STR_COMMA, 3) == 0)
+        tstrncmp(ptr, STR_LEFT_CURLY_BRACKET STR_0 STR_COMMA, 3) == 0)
           return FALSE;
 
       /* Do the property check. */
@@ -2920,7 +2932,7 @@ Returns:         TRUE on success
 */
 
 static BOOL
-compile_branch(int *optionsptr, uschar **codeptr, const uschar **ptrptr,
+compile_branch(int *optionsptr, uschar **codeptr, const utchar **ptrptr,
   int *errorcodeptr, int *firstbyteptr, int *reqbyteptr, branch_chain *bcptr,
   compile_data *cd, int *lengthptr)
 {
@@ -2943,9 +2955,9 @@ uschar *orig_code = code;
 uschar *tempcode;
 BOOL inescq = FALSE;
 BOOL groupsetfirstbyte = FALSE;
-const uschar *ptr = *ptrptr;
-const uschar *tempptr;
-const uschar *nestptr = NULL;
+const utchar *ptr = *ptrptr;
+const utchar *tempptr;
+const utchar *nestptr = NULL;
 uschar *previous = NULL;
 #ifdef SUPPORT_CALLOUT  /* AutoHotkey: Omit the callout feature from the code until it's needed. */
     uschar *previous_callout = NULL;
@@ -3015,8 +3027,6 @@ for (;; ptr++)
   int subreqbyte;
   int subfirstbyte;
   int terminator;
-  int mclength;
-  uschar mcbuffer[8];
 
   /* Get next byte in the pattern */
 
@@ -3145,7 +3155,7 @@ for (;; ptr++)
 
   if ((options & PCRE_EXTENDED) != 0)
     {
-    if ((cd->ctypes[c] & ctype_space) != 0) continue;
+    if (is_tchar_ctype(c, space)) continue;
     if (c == CHAR_NUMBER_SIGN)
       {
       while (*(++ptr) != 0)
@@ -3271,8 +3281,7 @@ for (;; ptr++)
         {
         if (ptr[1] == CHAR_E)
           ptr++;
-        else if (strncmp((const char *)ptr+1,
-                          STR_Q STR_BACKSLASH STR_E, 3) == 0)
+        else if (tstrncmp(ptr+1, STR_Q STR_BACKSLASH STR_E, 3) == 0)
           ptr += 3;
         else
           break;
@@ -3328,12 +3337,12 @@ for (;; ptr++)
 
     if (c != 0) do
       {
-      const uschar *oldptr;
+      const utchar *oldptr;
 
 #ifdef SUPPORT_UTF8
       if (utf8 && c > 127)
         {                           /* Braces are required because the */
-        GETCHARLEN(c, ptr, ptr);    /* macro generates multiple statements */
+        TGETCHARLEN(c, ptr, ptr);    /* macro generates multiple statements */
         }
 
       /* In the pre-compile phase, accumulate the length of any UTF-8 extra
@@ -3739,7 +3748,7 @@ for (;; ptr++)
 #ifdef SUPPORT_UTF8
         if (utf8)
           {                           /* Braces are required because the */
-          GETCHARLEN(d, ptr, ptr);    /* macro generates multiple statements */
+          TGETCHARLEN(d, ptr, ptr);    /* macro generates multiple statements */
           }
         else
 #endif
@@ -3978,18 +3987,10 @@ for (;; ptr++)
         break;
         }
 
-      /* For a single, positive character, get the value into mcbuffer, and
+      /* For a single, positive character, get the value into c, and
       then we can handle this with the normal one-character code. */
 
-#ifdef SUPPORT_UTF8
-      if (utf8 && class_lastchar > 127)
-        mclength = _pcre_ord2utf8(class_lastchar, mcbuffer);
-      else
-#endif
-        {
-        mcbuffer[0] = class_lastchar;
-        mclength = 1;
-        }
+      c = class_lastchar;
       goto ONE_CHAR;
       }       /* End of 1-char optimization */
 
@@ -4787,22 +4788,21 @@ for (;; ptr++)
     /* First deal with various "verbs" that can be introduced by '*'. */
 
     if (*(++ptr) == CHAR_ASTERISK &&
-         ((cd->ctypes[ptr[1]] & ctype_letter) != 0 || ptr[1] == ':'))
+         (is_tchar_ctype(ptr[1], letter) || ptr[1] == ':'))
       {
       int i, namelen;
       int arglen = 0;
-      const char *vn = verbnames;
-      const uschar *name = ptr + 1;
-      const uschar *arg = NULL;
+      const tchar *vn = verbnames;
+      const utchar *name = ptr + 1;
+      const utchar *arg = NULL;
       previous = NULL;
-      while ((cd->ctypes[*++ptr] & ctype_letter) != 0) {};
+      do ++ptr; while (is_tchar_ctype(*ptr, letter));
       namelen = (int)(ptr - name);
 
       if (*ptr == CHAR_COLON)
         {
         arg = ++ptr;
-        while ((cd->ctypes[*ptr] & (ctype_letter|ctype_digit)) != 0
-          || *ptr == '_') ptr++;
+        while (is_tchar_ctype(*ptr, word)) ptr++;
         arglen = (int)(ptr - arg);
         }
 
@@ -4817,7 +4817,7 @@ for (;; ptr++)
       for (i = 0; i < verbcount; i++)
         {
         if (namelen == verbs[i].len &&
-            strncmp((char *)name, vn, namelen) == 0)
+            tstrncmp(name, vn, namelen) == 0)
           {
           /* Check for open captures before ACCEPT */
 
@@ -4853,8 +4853,7 @@ for (;; ptr++)
               }
             *code++ = verbs[i].op_arg;
             *code++ = arglen;
-            memcpy(code, arg, arglen);
-            code += arglen;
+            while (arglen--) *code++ = (uschar)*arg++;   /* Confirmed ASCII */
             *code++ = 0;
             }
 
@@ -4876,8 +4875,8 @@ for (;; ptr++)
       {
       int i, set, unset, namelen;
       int *optset;
-      const uschar *name;
-      uschar *slot;
+      const utchar *name;
+      utchar *slot;
 
       switch (*(++ptr))
         {
@@ -4966,7 +4965,7 @@ for (;; ptr++)
 
         /* We now expect to read a name; any thing else is an error */
 
-        if ((cd->ctypes[ptr[1]] & ctype_word) == 0)
+        if (!is_tchar_ctype(ptr[1], word))
           {
           ptr += 1;  /* To get the right offset */
           *errorcodeptr = ERR28;
@@ -4977,10 +4976,10 @@ for (;; ptr++)
 
         recno = 0;
         name = ++ptr;
-        while ((cd->ctypes[*ptr] & ctype_word) != 0)
+        while (is_tchar_ctype(*ptr, word))
           {
           if (recno >= 0)
-            recno = ((digitab[*ptr] & ctype_digit) != 0)?
+            recno = is_tchar_digit(*ptr)?
               recno * 10 + *ptr - CHAR_0 : -1;
           ptr++;
           }
@@ -5029,7 +5028,7 @@ for (;; ptr++)
         slot = cd->name_table;
         for (i = 0; i < cd->names_found; i++)
           {
-          if (strncmp((char *)name, (char *)slot+2, namelen) == 0) break;
+          if (tstrncmp(name, slot+2, namelen) == 0) break;
           slot += cd->name_entry_size;
           }
 
@@ -5071,7 +5070,7 @@ for (;; ptr++)
           recno = 0;
           for (i = 1; i < namelen; i++)
             {
-            if ((digitab[name[i]] & ctype_digit) == 0)
+            if (!is_tchar_digit(name[i]))
               {
               *errorcodeptr = ERR15;
               goto FAILED;
@@ -5086,7 +5085,7 @@ for (;; ptr++)
         /* Similarly, check for the (?(DEFINE) "condition", which is always
         false. */
 
-        else if (namelen == 6 && strncmp((char *)name, STRING_DEFINE, 6) == 0)
+        else if (namelen == 6 && tstrncmp(name, STRING_DEFINE, 6) == 0)
           {
           code[1+LINK_SIZE] = OP_DEF;
           skipbytes = 1;
@@ -5145,7 +5144,7 @@ for (;; ptr++)
           break;
 
           default:                /* Could be name define, else bad */
-          if ((cd->ctypes[ptr[1]] & ctype_word) != 0) goto DEFINE_NAME;
+          if (is_tchar_ctype(ptr[1], word)) goto DEFINE_NAME;
           ptr++;                  /* Correct offset for error */
           *errorcodeptr = ERR24;
           goto FAILED;
@@ -5170,7 +5169,7 @@ for (;; ptr++)
           int n = 0;
           void *user_callout = NULL;
           tempptr = ptr;
-          while ((digitab[*(++ptr)] & ctype_digit) != 0)
+          while (is_tchar_digit(*(++ptr)))
             n = n * 10 + *ptr - CHAR_0;
           if (*ptr != CHAR_RIGHT_PARENTHESIS)
             {
@@ -5235,7 +5234,7 @@ for (;; ptr++)
             CHAR_GREATER_THAN_SIGN : CHAR_APOSTROPHE;
           name = ++ptr;
 
-          while ((cd->ctypes[*ptr] & ctype_word) != 0) ptr++;
+          while (is_tchar_ctype(*ptr, word)) ptr++;
           namelen = (int)(ptr - name);
 
           /* In the pre-compile phase, just do a syntax check. */
@@ -5283,7 +5282,7 @@ for (;; ptr++)
 
             for (i = 0; i < cd->names_found; i++)
               {
-              int crc = memcmp(name, slot+2, namelen);
+              int crc = tmemcmp(name, slot+2, namelen);
               if (crc == 0)
                 {
                 if (slot[2+namelen] == 0)
@@ -5306,7 +5305,7 @@ for (;; ptr++)
 
               if (crc < 0)
                 {
-                memmove(slot + cd->name_entry_size, slot,
+                tmemmove(slot + cd->name_entry_size, slot,
                   (cd->names_found - i) * cd->name_entry_size);
                 break;
                 }
@@ -5321,7 +5320,7 @@ for (;; ptr++)
 
             if (!dupname)
               {
-              uschar *cslot = cd->name_table;
+              utchar *cslot = cd->name_table;
               for (i = 0; i < cd->names_found; i++)
                 {
                 if (cslot != slot)
@@ -5338,7 +5337,7 @@ for (;; ptr++)
               }
 
             PUT2(slot, 0, cd->bracount + 1);
-            memcpy(slot + 2, name, namelen);
+            tmemcpy(slot + 2, name, namelen);
             slot[2+namelen] = 0;
             }
           }
@@ -5365,7 +5364,7 @@ for (;; ptr++)
 
         NAMED_REF_OR_RECURSE:
         name = ++ptr;
-        while ((cd->ctypes[*ptr] & ctype_word) != 0) ptr++;
+        while (is_tchar_ctype(*ptr, word)) ptr++;
         namelen = (int)(ptr - name);
 
         /* In the pre-compile phase, do a syntax check and set a dummy
@@ -5401,7 +5400,7 @@ for (;; ptr++)
           slot = cd->name_table;
           for (i = 0; i < cd->names_found; i++)
             {
-            if (strncmp((char *)name, (char *)slot+2, namelen) == 0 &&
+            if (tstrncmp(name, slot+2, namelen) == 0 &&
                 slot[2+namelen] == 0)
               break;
             slot += cd->name_entry_size;
@@ -5452,7 +5451,7 @@ for (;; ptr++)
           if ((refsign = *ptr) == CHAR_PLUS)
             {
             ptr++;
-            if ((digitab[*ptr] & ctype_digit) == 0)
+            if (!is_tchar_digit(*ptr))
               {
               *errorcodeptr = ERR63;
               goto FAILED;
@@ -5460,13 +5459,13 @@ for (;; ptr++)
             }
           else if (refsign == CHAR_MINUS)
             {
-            if ((digitab[ptr[1]] & ctype_digit) == 0)
+            if (!is_tchar_digit(ptr[1]))
               goto OTHER_CHAR_AFTER_QUERY;
             ptr++;
             }
 
           recno = 0;
-          while((digitab[*ptr] & ctype_digit) != 0)
+          while (is_tchar_digit(*ptr))
             recno = recno * 10 + *ptr++ - CHAR_0;
 
           if (*ptr != terminator)
@@ -5907,7 +5906,7 @@ for (;; ptr++)
 
       if (-c == ESC_g)
         {
-        const uschar *p;
+        const utchar *p;
         save_hwm = cd->hwm;   /* Normally this is set when '(' is read */
         terminator = (*(++ptr) == CHAR_LESS_THAN_SIGN)?
           CHAR_GREATER_THAN_SIGN : CHAR_APOSTROPHE;
@@ -5927,8 +5926,8 @@ for (;; ptr++)
           BOOL isnumber = TRUE;
           for (p = ptr + 1; *p != 0 && *p != terminator; p++)
             {
-            if ((cd->ctypes[*p] & ctype_digit) == 0) isnumber = FALSE;
-            if ((cd->ctypes[*p] & ctype_word) == 0) break;
+            if (!is_tchar_digit(*p)) isnumber = FALSE;
+            if (!is_tchar_ctype(*p, word)) break;
             }
           if (*p != terminator)
             {
@@ -5947,7 +5946,7 @@ for (;; ptr++)
         /* Test a signed number in angle brackets or quotes. */
 
         p = ptr + 2;
-        while ((digitab[*p] & ctype_digit) != 0) p++;
+        while (is_tchar_digit(*p)) p++;
         if (*p != terminator)
           {
           *errorcodeptr = ERR57;
@@ -6050,20 +6049,8 @@ for (;; ptr++)
       continue;
       }
 
-    /* We have a data character whose value is in c. In UTF-8 mode it may have
-    a value > 127. We set its representation in the length/buffer, and then
-    handle it as a data character. */
+    /* We have a data character whose value is in c. */
 
-#ifdef SUPPORT_UTF8
-    if (utf8 && c > 127)
-      mclength = _pcre_ord2utf8(c, mcbuffer);
-    else
-#endif
-
-     {
-     mcbuffer[0] = c;
-     mclength = 1;
-     }
     goto ONE_CHAR;
 
 
@@ -6074,28 +6061,30 @@ for (;; ptr++)
 
     default:
     NORMAL_CHAR:
-    mclength = 1;
-    mcbuffer[0] = c;
 
 #ifdef SUPPORT_UTF8
-    if (utf8 && c >= 0xc0)
-      {
-      while ((ptr[1] & 0xc0) == 0x80)
-        mcbuffer[mclength++] = *(++ptr);
-      }
+#ifndef PCRE_USE_UTF16
+    GETCHARLEN(c, ptr, ptr);
+#else
+    if (IS_HIGH_SURROGATE(c) && IS_LOW_SURROGATE(ptr[1]))
+      c = COMBINE_SURROGATE(c, *++ptr);
+#endif
 #endif
 
-    /* At this point we have the character's bytes in mcbuffer, and the length
-    in mclength. When not in UTF-8 mode, the length is always 1. */
+    /* At this point we have the character's ordinal value in c. */
 
     ONE_CHAR:
     previous = code;
     *code++ = ((options & PCRE_CASELESS) != 0)? OP_CHARNC : OP_CHAR;
-    for (c = 0; c < mclength; c++) *code++ = mcbuffer[c];
+#ifdef SUPPORT_UTF8
+    code += _pcre_ord2utf8(c, code);
+#else
+    *code++ = c;
+#endif
 
     /* Remember if \r or \n were seen */
 
-    if (mcbuffer[0] == CHAR_CR || mcbuffer[0] == CHAR_NL)
+    if (c == CHAR_CR || c == CHAR_NL)
       cd->external_flags |= PCRE_HASCRORLF;
 
     /* Set the first and required bytes appropriately. If no previous first
@@ -6108,25 +6097,23 @@ for (;; ptr++)
       zerofirstbyte = REQ_NONE;
       zeroreqbyte = reqbyte;
 
-      /* If the character is more than one byte long, we can set firstbyte
-      only if it is not to be matched caselessly. */
-
-      if (mclength == 1 || req_caseopt == 0)
+      if (c < 128) /* AutoHotkey: Optimization disabled for non-ASCII chars, for simplicity. */
         {
-        firstbyte = mcbuffer[0] | req_caseopt;
-        if (mclength != 1) reqbyte = code[-1] | cd->req_varyopt;
+        firstbyte = c | req_caseopt;
+#ifdef SUPPORT_UTF8
+        if (c > 127) reqbyte = code[-1] | cd->req_varyopt;
+#endif
         }
       else firstbyte = reqbyte = REQ_NONE;
       }
 
-    /* firstbyte was previously set; we can set reqbyte only the length is
-    1 or the matching is caseful. */
+    /* firstbyte was previously set. */
 
     else
       {
       zerofirstbyte = firstbyte;
       zeroreqbyte = reqbyte;
-      if (mclength == 1 || req_caseopt == 0)
+      if (c < 128) /* AutoHotkey: Optimization disabled for non-ASCII chars, for simplicity. */
         reqbyte = code[-1] | req_caseopt | cd->req_varyopt;
       }
 
@@ -6183,12 +6170,12 @@ Returns:         TRUE on success
 */
 
 static BOOL
-compile_regex(int options, int oldims, uschar **codeptr, const uschar **ptrptr,
+compile_regex(int options, int oldims, uschar **codeptr, const utchar **ptrptr,
   int *errorcodeptr, BOOL lookbehind, BOOL reset_bracount, int skipbytes,
   int *firstbyteptr, int *reqbyteptr, branch_chain *bcptr, compile_data *cd,
   int *lengthptr)
 {
-const uschar *ptr = *ptrptr;
+const utchar *ptr = *ptrptr;
 uschar *code = *codeptr;
 uschar *last_branch = code;
 uschar *start_bracket = code;
@@ -6766,7 +6753,7 @@ Returns:        pointer to compiled data block, or NULL on error,
 */
 
 PCRE_EXP_DEFN pcre * PCRE_CALL_CONVENTION
-pcre_compile(const char *pattern, int options, const char **errorptr,
+pcre_compile(PCRE_STR pattern, int options, PCRE_STR *errorptr,
   int *erroroffset, const unsigned char *tables)
 {
 return pcre_compile2(pattern, options, NULL, errorptr, erroroffset, tables);
@@ -6774,8 +6761,8 @@ return pcre_compile2(pattern, options, NULL, errorptr, erroroffset, tables);
 
 
 PCRE_EXP_DEFN pcre * PCRE_CALL_CONVENTION
-pcre_compile2(const char *pattern, int options, int *errorcodeptr,
-  const char **errorptr, int *erroroffset, const unsigned char *tables)
+pcre_compile2(PCRE_STR pattern, int options, int *errorcodeptr,
+  PCRE_STR *errorptr, int *erroroffset, const unsigned char *tables)
 {
 real_pcre *re;
 int length = 1;  /* For final END opcode */
@@ -6790,7 +6777,7 @@ BOOL utf8;
 size_t size;
 uschar *code;
 const uschar *codestart;
-const uschar *ptr;
+const utchar *ptr;
 compile_data compile_block;
 compile_data *cd = &compile_block;
 
@@ -6804,7 +6791,7 @@ uschar cworkspace[COMPILE_WORK_SIZE];
 
 /* Set this early so that early errors get offset 0. */
 
-ptr = (const uschar *)pattern;
+ptr = (const utchar *)pattern;
 
 /* We can't pass back an error message if errorptr is NULL; I guess the best we
 can do is just return NULL, but we can set a code value if there is a code
@@ -6854,25 +6841,25 @@ while (ptr[skipatstart] == CHAR_LEFT_PARENTHESIS &&
   int newnl = 0;
   int newbsr = 0;
 
-  if (strncmp((char *)(ptr+skipatstart+2), STRING_UTF8_RIGHTPAR, 5) == 0)
+  if (tstrncmp(ptr+skipatstart+2, STRING_UTF8_RIGHTPAR, 5) == 0)
     { skipatstart += 7; options |= PCRE_UTF8; continue; }
-  else if (strncmp((char *)(ptr+skipatstart+2), STRING_UCP_RIGHTPAR, 4) == 0)
+  else if (tstrncmp(ptr+skipatstart+2, STRING_UCP_RIGHTPAR, 4) == 0)
     { skipatstart += 6; options |= PCRE_UCP; continue; }
 
-  if (strncmp((char *)(ptr+skipatstart+2), STRING_CR_RIGHTPAR, 3) == 0)
+  if (tstrncmp(ptr+skipatstart+2, STRING_CR_RIGHTPAR, 3) == 0)
     { skipatstart += 5; newnl = PCRE_NEWLINE_CR; }
-  else if (strncmp((char *)(ptr+skipatstart+2), STRING_LF_RIGHTPAR, 3)  == 0)
+  else if (tstrncmp(ptr+skipatstart+2, STRING_LF_RIGHTPAR, 3)  == 0)
     { skipatstart += 5; newnl = PCRE_NEWLINE_LF; }
-  else if (strncmp((char *)(ptr+skipatstart+2), STRING_CRLF_RIGHTPAR, 5)  == 0)
+  else if (tstrncmp(ptr+skipatstart+2, STRING_CRLF_RIGHTPAR, 5)  == 0)
     { skipatstart += 7; newnl = PCRE_NEWLINE_CR + PCRE_NEWLINE_LF; }
-  else if (strncmp((char *)(ptr+skipatstart+2), STRING_ANY_RIGHTPAR, 4) == 0)
+  else if (tstrncmp(ptr+skipatstart+2, STRING_ANY_RIGHTPAR, 4) == 0)
     { skipatstart += 6; newnl = PCRE_NEWLINE_ANY; }
-  else if (strncmp((char *)(ptr+skipatstart+2), STRING_ANYCRLF_RIGHTPAR, 8) == 0)
+  else if (tstrncmp(ptr+skipatstart+2, STRING_ANYCRLF_RIGHTPAR, 8) == 0)
     { skipatstart += 10; newnl = PCRE_NEWLINE_ANYCRLF; }
 
-  else if (strncmp((char *)(ptr+skipatstart+2), STRING_BSR_ANYCRLF_RIGHTPAR, 12) == 0)
+  else if (tstrncmp(ptr+skipatstart+2, STRING_BSR_ANYCRLF_RIGHTPAR, 12) == 0)
     { skipatstart += 14; newbsr = PCRE_BSR_ANYCRLF; }
-  else if (strncmp((char *)(ptr+skipatstart+2), STRING_BSR_UNICODE_RIGHTPAR, 12) == 0)
+  else if (tstrncmp(ptr+skipatstart+2, STRING_BSR_UNICODE_RIGHTPAR, 12) == 0)
     { skipatstart += 14; newbsr = PCRE_BSR_UNICODE; }
 
   if (newnl != 0)
@@ -6884,13 +6871,15 @@ while (ptr[skipatstart] == CHAR_LEFT_PARENTHESIS &&
 
 #ifndef SUPPORT_UTF8_ONLY
 utf8 = (options & PCRE_UTF8) != 0;
+#else
+options |= PCRE_UTF8;
 #endif
 
 /* Can't support UTF8 unless PCRE has been compiled to include the code. */
 
 #ifdef SUPPORT_UTF8
 if (utf8 && (options & PCRE_NO_UTF8_CHECK) == 0 &&
-     (*erroroffset = _pcre_valid_utf8((USPTR)pattern, -1)) >= 0)
+     (*erroroffset = _pcre_valid_utf((USPTR)pattern, -1)) >= 0)
   {
   errorcode = ERR44;
   goto PCRE_EARLY_ERROR_RETURN2;
@@ -6990,8 +6979,8 @@ cd->name_table = NULL;
 cd->start_workspace = cworkspace;
 cd->start_code = cworkspace;
 cd->hwm = cworkspace;
-cd->start_pattern = (const uschar *)pattern;
-cd->end_pattern = (const uschar *)(pattern + strlen(pattern));
+cd->start_pattern = (const utchar *)pattern;
+cd->end_pattern = (const utchar *)(pattern + tstrlen(pattern));
 cd->req_varyopt = 0;
 cd->external_options = options;
 cd->external_flags = 0;
@@ -7064,8 +7053,8 @@ field; this time it's used for remembering forward references to subpatterns.
 cd->final_bracount = cd->bracount;  /* Save for checking forward references */
 cd->bracount = 0;
 cd->names_found = 0;
-cd->name_table = (uschar *)re + re->name_table_offset;
-codestart = cd->name_table + re->name_entry_size * re->name_count;
+cd->name_table = (utchar *)((uschar *)re + re->name_table_offset);
+codestart = (uschar *)(cd->name_table + re->name_entry_size * re->name_count);
 cd->start_code = codestart;
 cd->hwm = cworkspace;
 cd->req_varyopt = 0;
@@ -7077,7 +7066,7 @@ cd->open_caps = NULL;
 error, errorcode will be set non-zero, so we don't need to look at the result
 of the function here. */
 
-ptr = (const uschar *)pattern + skipatstart;
+ptr = (const utchar *)pattern + skipatstart;
 code = (uschar *)codestart;
 *code = OP_BRA;
 (void)compile_regex(re->options, re->options & PCRE_IMS, &code, &ptr,
@@ -7167,7 +7156,7 @@ if (errorcode != 0)
   {
   (pcre_free)(re);
   PCRE_EARLY_ERROR_RETURN:
-  *erroroffset = (int)(ptr - (const uschar *)pattern);
+  *erroroffset = (int)(ptr - (const utchar *)pattern);
   PCRE_EARLY_ERROR_RETURN2:
   *errorptr = find_error_text(errorcode);
   if (errorcodeptr != NULL) *errorcodeptr = errorcode;
@@ -7254,7 +7243,7 @@ if (code - codestart > length)
   {
   (pcre_free)(re);
   *errorptr = find_error_text(ERR23);
-  *erroroffset = ptr - (uschar *)pattern;
+  *erroroffset = ptr - (const utchar *)pattern;
   if (errorcodeptr != NULL) *errorcodeptr = ERR23;
   return NULL;
   }

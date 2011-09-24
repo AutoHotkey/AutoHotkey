@@ -41,3 +41,8 @@
 #define CONFIG_WIN9X
 #define CONFIG_WINNT4
 #endif
+
+// pcre
+#ifdef UNICODE
+#define PCRE_USE_UTF16
+#endif

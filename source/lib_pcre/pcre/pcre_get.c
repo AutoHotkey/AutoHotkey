@@ -66,12 +66,12 @@ Returns:      the number of the named parentheses, or a negative number
 */
 
 PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
-pcre_get_stringnumber(const pcre *code, const char *stringname)
+pcre_get_stringnumber(const pcre *code, PCRE_STR stringname)
 {
 int rc;
 int entrysize;
 int top, bot;
-uschar *nametable;
+utchar *nametable;
 
 if ((rc = pcre_fullinfo(code, NULL, PCRE_INFO_NAMECOUNT, &top)) != 0)
   return rc;
@@ -86,8 +86,8 @@ bot = 0;
 while (top > bot)
   {
   int mid = (top + bot) / 2;
-  uschar *entry = nametable + entrysize*mid;
-  int c = strcmp(stringname, (char *)(entry + 2));
+  utchar *entry = nametable + entrysize*mid;
+  int c = tstrcmp(stringname, entry + 2);
   if (c == 0) return (entry[0] << 8) + entry[1];
   if (c > 0) bot = mid + 1; else top = mid;
   }
@@ -115,13 +115,13 @@ Returns:      the length of each entry, or a negative number
 */
 
 PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
-pcre_get_stringtable_entries(const pcre *code, const char *stringname,
-  char **firstptr, char **lastptr)
+pcre_get_stringtable_entries(const pcre *code, PCRE_STR stringname,
+  PCRE_STR *firstptr, PCRE_STR *lastptr)
 {
 int rc;
 int entrysize;
 int top, bot;
-uschar *nametable, *lastentry;
+utchar *nametable, *lastentry;
 
 if ((rc = pcre_fullinfo(code, NULL, PCRE_INFO_NAMECOUNT, &top)) != 0)
   return rc;
@@ -137,24 +137,24 @@ bot = 0;
 while (top > bot)
   {
   int mid = (top + bot) / 2;
-  uschar *entry = nametable + entrysize*mid;
-  int c = strcmp(stringname, (char *)(entry + 2));
+  utchar *entry = nametable + entrysize*mid;
+  int c = tstrcmp(stringname, entry + 2);
   if (c == 0)
     {
-    uschar *first = entry;
-    uschar *last = entry;
+    utchar *first = entry;
+    utchar *last = entry;
     while (first > nametable)
       {
-      if (strcmp(stringname, (char *)(first - entrysize + 2)) != 0) break;
+      if (tstrcmp(stringname, first - entrysize + 2) != 0) break;
       first -= entrysize;
       }
     while (last < lastentry)
       {
-      if (strcmp(stringname, (char *)(last + entrysize + 2)) != 0) break;
+      if (tstrcmp(stringname, last + entrysize + 2) != 0) break;
       last += entrysize;
       }
-    *firstptr = (char *)first;
-    *lastptr = (char *)last;
+    *firstptr = (tchar *)first;
+    *lastptr = (tchar *)last;
     return entrysize;
     }
   if (c > 0) bot = mid + 1; else top = mid;
@@ -183,17 +183,17 @@ Returns:       the number of the first that is set,
 */
 
 static int
-get_first_set(const pcre *code, const char *stringname, int *ovector)
+get_first_set(const pcre *code, PCRE_STR stringname, int *ovector)
 {
 const real_pcre *re = (const real_pcre *)code;
 int entrysize;
-char *first, *last;
-uschar *entry;
+const tchar *first, *last;
+utchar *entry;
 if ((re->options & PCRE_DUPNAMES) == 0 && (re->flags & PCRE_JCHANGED) == 0)
   return pcre_get_stringnumber(code, stringname);
 entrysize = pcre_get_stringtable_entries(code, stringname, &first, &last);
 if (entrysize <= 0) return entrysize;
-for (entry = (uschar *)first; entry <= (uschar *)last; entry += entrysize)
+for (entry = (utchar *)first; entry <= (utchar *)last; entry += entrysize)
   {
   int n = (entry[0] << 8) + entry[1];
   if (ovector[n*2] >= 0) return n;
@@ -232,8 +232,8 @@ Returns:         if successful:
 */
 
 PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
-pcre_copy_substring(const char *subject, int *ovector, int stringcount,
-  int stringnumber, char *buffer, int size)
+pcre_copy_substring(PCRE_STR subject, int *ovector, int stringcount,
+  int stringnumber, PCRE_CHAR *buffer, int size)
 {
 int yield;
 if (stringnumber < 0 || stringnumber >= stringcount)
@@ -241,7 +241,7 @@ if (stringnumber < 0 || stringnumber >= stringcount)
 stringnumber *= 2;
 yield = ovector[stringnumber+1] - ovector[stringnumber];
 if (size < yield + 1) return PCRE_ERROR_NOMEMORY;
-memcpy(buffer, subject + ovector[stringnumber], yield);
+tmemcpy(buffer, subject + ovector[stringnumber], yield);
 buffer[yield] = 0;
 return yield;
 }
@@ -277,8 +277,8 @@ Returns:         if successful:
 */
 
 PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
-pcre_copy_named_substring(const pcre *code, const char *subject, int *ovector,
-  int stringcount, const char *stringname, char *buffer, int size)
+pcre_copy_named_substring(const pcre *code, PCRE_STR subject, int *ovector,
+  int stringcount, PCRE_STR stringname, PCRE_CHAR *buffer, int size)
 {
 int n = get_first_set(code, stringname, ovector);
 if (n <= 0) return n;
@@ -309,28 +309,28 @@ Returns:         if successful: 0
 */
 
 PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
-pcre_get_substring_list(const char *subject, int *ovector, int stringcount,
-  const char ***listptr)
+pcre_get_substring_list(PCRE_STR subject, int *ovector, int stringcount,
+  PCRE_STR **listptr)
 {
 int i;
-int size = sizeof(char *);
+int size = sizeof(tchar *);
 int double_count = stringcount * 2;
-char **stringlist;
-char *p;
+tchar **stringlist;
+tchar *p;
 
 for (i = 0; i < double_count; i += 2)
-  size += sizeof(char *) + ovector[i+1] - ovector[i] + 1;
+  size += sizeof(tchar *) + ovector[i+1] - ovector[i] + 1;
 
-stringlist = (char **)(pcre_malloc)(size);
+stringlist = (tchar **)(pcre_malloc)(size);
 if (stringlist == NULL) return PCRE_ERROR_NOMEMORY;
 
-*listptr = (const char **)stringlist;
-p = (char *)(stringlist + stringcount + 1);
+*listptr = (const tchar **)stringlist;
+p = (tchar *)(stringlist + stringcount + 1);
 
 for (i = 0; i < double_count; i += 2)
   {
   int len = ovector[i+1] - ovector[i];
-  memcpy(p, subject + ovector[i], len);
+  tmemcpy(p, subject + ovector[i], len);
   *stringlist++ = p;
   p += len;
   *p++ = 0;
@@ -354,7 +354,7 @@ Returns:    nothing
 */
 
 PCRE_EXP_DEFN void PCRE_CALL_CONVENTION
-pcre_free_substring_list(const char **pointer)
+pcre_free_substring_list(PCRE_STR *pointer)
 {
 (pcre_free)((void *)pointer);
 }
@@ -387,18 +387,18 @@ Returns:         if successful:
 */
 
 PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
-pcre_get_substring(const char *subject, int *ovector, int stringcount,
-  int stringnumber, const char **stringptr)
+pcre_get_substring(PCRE_STR subject, int *ovector, int stringcount,
+  int stringnumber, PCRE_STR *stringptr)
 {
 int yield;
-char *substring;
+tchar *substring;
 if (stringnumber < 0 || stringnumber >= stringcount)
   return PCRE_ERROR_NOSUBSTRING;
 stringnumber *= 2;
 yield = ovector[stringnumber+1] - ovector[stringnumber];
-substring = (char *)(pcre_malloc)(yield + 1);
+substring = (tchar *)(pcre_malloc)(yield + 1);
 if (substring == NULL) return PCRE_ERROR_NOMEMORY;
-memcpy(substring, subject + ovector[stringnumber], yield);
+tmemcpy(substring, subject + ovector[stringnumber], yield);
 substring[yield] = 0;
 *stringptr = substring;
 return yield;
@@ -434,8 +434,8 @@ Returns:         if successful:
 */
 
 PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
-pcre_get_named_substring(const pcre *code, const char *subject, int *ovector,
-  int stringcount, const char *stringname, const char **stringptr)
+pcre_get_named_substring(const pcre *code, PCRE_STR subject, int *ovector,
+  int stringcount, PCRE_STR stringname, PCRE_STR *stringptr)
 {
 int n = get_first_set(code, stringname, ovector);
 if (n <= 0) return n;
@@ -457,7 +457,7 @@ Returns:    nothing
 */
 
 PCRE_EXP_DEFN void PCRE_CALL_CONVENTION
-pcre_free_substring(const char *pointer)
+pcre_free_substring(PCRE_STR pointer)
 {
 (pcre_free)((void *)pointer);
 }

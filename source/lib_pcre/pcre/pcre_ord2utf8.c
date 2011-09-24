@@ -84,4 +84,30 @@ return 0;
 #endif
 }
 
+
+/*************************************************
+*       Convert character value to UTF-16        *
+*************************************************/
+
+int
+_pcre_ord2utf16(int cvalue, utchar *buffer)
+{
+#ifdef PCRE_USE_UTF16
+if (cvalue >= 0x10000)
+  {
+  cvalue -= 0x10000;
+  buffer[0] = 0xd800 + ((cvalue >> 10) & 0x3ff);
+  buffer[1] = 0xdc00 + ( cvalue        & 0x3ff);
+  return 2;
+  }
+*buffer = cvalue;
+return 1;
+#else
+(void)(cvalue);  /* Keep compiler happy; this function won't ever be */
+(void)(buffer);  /* called when PCRE_USE_UTF16 is not defined. */
+return 0;
+#endif
+}
+
+
 /* End of pcre_ord2utf8.c */

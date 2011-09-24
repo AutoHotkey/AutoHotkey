@@ -313,11 +313,7 @@ class RegExMatchObject : public ObjectBase
 	}
 
 public:
-	static RegExMatchObject *Create(LPCTSTR aHaystack, int *aOffset, LPCSTR *aPatternName, int aCapturedPatternCount
-	#ifdef UNICODE
-		, LPCSTR aUTF8Haystack, int aMatchOffsetUTF8, int aMatchOffset
-	#endif
-	);
+	static RegExMatchObject *Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName, int aCapturedPatternCount);
 	
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };

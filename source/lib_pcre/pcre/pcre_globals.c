@@ -80,7 +80,7 @@ PCRE_EXP_DATA_DEFN void  (*pcre_stack_free)(void *) = free;
 
 PCRE_EXP_DATA_DEFN int   (*pcre_callout)(pcre_callout_block *) = NULL;
 #ifdef SUPPORT_CALLOUT  /* AutoHotkey: Omit the callout feature from the code until it's needed. */
-PCRE_EXP_DECL void *(*pcre_resolve_user_callout)(const char *, int) = NULL;
+PCRE_EXP_DECL void *(*pcre_resolve_user_callout)(PCRE_STR, int) = NULL;
 #endif
 
 /* End of pcre_globals.c */
