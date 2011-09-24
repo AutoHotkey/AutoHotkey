@@ -11174,7 +11174,7 @@ void BIF_InStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 }
 
 
-void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, TCHAR output_mode, Var &output_var, int *offset, int pattern_count, int captured_pattern_count, LPTSTR &mem_to_free)
+void RegExSetMatchVar(LPCTSTR haystack, pcre *re, pcre_extra *extra, Var &output_var, int *offset, int pattern_count, int captured_pattern_count)
 {
 	// OTHERWISE, CONTINUE ON TO STORE THE SUBSTRINGS THAT MATCHED THE SUBPATTERNS (EVEN IF PCRE_ERROR_NOMATCH).
 	// For lookup performance, create a table of subpattern names indexed by subpattern number.
@@ -11209,154 +11209,11 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, TCHAR
 	//else one of the pcre_fullinfo() calls may have failed.  The PCRE docs indicate that this realistically never
 	// happens unless bad inputs were given.  So due to rarity, just leave subpat_name==NULL; i.e. "no named subpatterns".
 
-	if (output_mode == 'O')
-	{
-		IObject *m = RegExMatchObject::Create(haystack, offset, subpat_name, captured_pattern_count);
-		if (m)
-			output_var.AssignSkipAddRef(m);
-		else
-			output_var.Assign();
-		return;
-	}
-
-	// Make var_name longer than Max so that FindOrAddVar() will be able to spot and report var names
-	// that are too long, either because the base-name is too long, or the name becomes too long
-	// as a result of appending the array index number:
-	TCHAR var_name[MAX_VAR_NAME_LENGTH + 68]; // Allow +3 extra for "Len" and "Pos" suffixes, +1 for terminator, and +64 for largest sub-pattern name (actually it's 32, but 64 allows room for future expansion).  64 is also enough room for the largest 64-bit integer, 20 chars: 18446744073709551616
-	_tcscpy(var_name, output_var.mName); // This prefix is copied in only once, for performance.
-	size_t suffix_length, prefix_length = _tcslen(var_name);
-	LPTSTR var_name_suffix = var_name + prefix_length; // The position at which to copy the sequence number (index).
-	int n, p = 1, *this_offset = offset + 2; // Init for both loops below.
-	Var *array_item;
-	bool subpat_not_matched;
-	int subpat_pos, subpat_len;
-
-	if (output_mode == 'P')
-	{
-		for (; p < pattern_count; ++p, this_offset += 2) // Start at 1 because above already did pattern #0 (the full pattern).
-		{
-			subpat_not_matched = (p >= captured_pattern_count || this_offset[0] < 0); // See comments in similar section below about this.
-			if (subpat_not_matched)
-			{
-				subpat_pos = 0;
-				subpat_len = 0;
-			}
-			else
-			{
-				subpat_pos = this_offset[0];
-				subpat_len = this_offset[1] - subpat_pos;
-				++subpat_pos; // One-based (i.e. position zero means "not found").
-			}
-
-			if (subpat_name && subpat_name[p]) // This subpattern number has a name, so store it under that name.
-			{
-				if (*subpat_name[p]) // This check supports allow_dupe_subpat_names. See comments below.
-				{
-					const LPCTSTR &the_subpat_name = subpat_name[p];
-					suffix_length = _stprintf(var_name_suffix, _T("Pos%s"), the_subpat_name); // Append the subpattern to the array's base name.
-					if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length))
-						array_item->Assign(subpat_pos);
-					suffix_length = _stprintf(var_name_suffix, _T("Len%s"), the_subpat_name); // Append the subpattern name to the array's base name.
-					if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length))
-						array_item->Assign(subpat_len); // It seemed more convenient for scripts to store Length instead of an ending offset.
-					// Fix for v1.0.45.01: Section below added.  See similar section further below for comments.
-					if (!subpat_not_matched && allow_dupe_subpat_names) // Explicitly check subpat_not_matched not pos/len so that behavior is consistent with the default mode (non-position).
-						for (n = p + 1; n < pattern_count; ++n) // Search to the right of this subpat to find others with the same name.
-							if (subpat_name[n] && !_tcsicmp(subpat_name[n], subpat_name[p])) // Case-insensitive because unlike PCRE, named subpatterns conform to AHK convention of insensitive variable names.
-								subpat_name[n] = _T(""); // Empty string signals subsequent iterations to skip it entirely.
-				}
-				//else an empty subpat name caused by "allow duplicate names".  Do nothing (see comments above).
-			}
-			else // This subpattern has no name, so write it out as its pattern number instead. For performance and memory utilization, it seems best to store only one or the other (named or number), not both.
-			{
-				// For comments about this section, see the similar for-loop later below.
-				suffix_length = _stprintf(var_name_suffix, _T("Pos%d"), p); // Append the element number to the array's base name.
-				if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length))
-					array_item->Assign(subpat_pos);
-				//else var couldn't be created: no error reporting currently, since it basically should never happen.
-				suffix_length = _stprintf(var_name_suffix, _T("Len%d"), p); // Append the element number to the array's base name.
-				if (array_item = g_script.FindOrAddVar(var_name, prefix_length + suffix_length))
-					array_item->Assign(subpat_len);
-			}
-		}
-		//goto free_and_return;
-		return;
-	} // if (output_mode == 'P')
-
-	// Otherwise, we're in get-substring mode (not offset mode), so store the substring that matches each subpattern.
-	for (; p < pattern_count; ++p, this_offset += 2) // Start at 1 because above already did pattern #0 (the full pattern).
-	{
-		// If both items in this_offset are -1, that means the substring wasn't populated because it's
-		// subpattern wasn't needed to find a match (or there was no match for *anything*).  For example:
-		// "(xyz)|(abc)" (in which only one is subpattern will match).
-		// NOTE: PCRE isn't clear on this, but it seems likely that captured_pattern_count
-		// (returned from pcre_exec()) can be less than pattern_count (from pcre_fullinfo/
-		// PCRE_INFO_CAPTURECOUNT).  So the below takes this into account by not trusting values
-		// in offset[] that are beyond captured_pattern_count.  Further evidence of this is PCRE's
-		// pcre_copy_substring() function, which consults captured_pattern_count to decide whether to
-		// consult the offset array. The formula below works even if captured_pattern_count==PCRE_ERROR_NOMATCH.
-		subpat_not_matched = (p >= captured_pattern_count || this_offset[0] < 0); // Relies on short-circuit boolean order.
-
-		if (subpat_name && subpat_name[p]) // This subpattern number has a name, so store it under that name.
-		{
-			if (*subpat_name[p]) // This check supports allow_dupe_subpat_names. See comments below.
-			{
-				// This section is similar to the one in the "else" below, so see it for more comments.
-				_tcscpy(var_name_suffix, subpat_name[p]); // Append the subpat name to the array's base name.  _tcscpy() seems safe because PCRE almost certainly enforces the 32-char limit on subpattern names.
-				if (array_item = g_script.FindOrAddVar(var_name))
-				{
-					if (p < pattern_count-1 // i.e. there's at least one more subpattern after this one (if there weren't, making a copy of haystack wouldn't be necessary because overlap can't harm this final assignment).
-						&& haystack == array_item->Contents(FALSE)) // For more comments, see similar section in BIF_RegEx.
-						if (mem_to_free = _tcsdup(haystack))
-							haystack = mem_to_free;
-
-					if (subpat_not_matched)
-						array_item->Assign(); // Omit all parameters to make the var empty without freeing its memory (for performance, in case this RegEx is being used many times in a loop).
-					else
-					{
-						subpat_pos = this_offset[0];
-						subpat_len = this_offset[1] - subpat_pos;
-						array_item->Assign(haystack + subpat_pos, subpat_len);
-						// Fix for v1.0.45.01: When the J option (allow duplicate named subpatterns) is in effect,
-						// PCRE returns entries for all the duplicates.  But we don't want an unmatched duplicate
-						// to overwrite a previously matched duplicate.  To prevent this, when we're here (i.e.
-						// this subpattern matched something), mark duplicate entries in the names array that lie
-						// to the right of this item to indicate that they should be skipped by subsequent iterations.
-						if (allow_dupe_subpat_names)
-							for (n = p + 1; n < pattern_count; ++n) // Search to the right of this subpat to find others with the same name.
-								if (subpat_name[n] && !_tcsicmp(subpat_name[n], subpat_name[p])) // Case-insensitive because unlike PCRE, named subpatterns conform to AHK convention of insensitive variable names.
-									subpat_name[n] = _T(""); // Empty string signals subsequent iterations to skip it entirely.
-					}
-				}
-				//else var couldn't be created: no error reporting currently, since it basically should never happen.
-			}
-			//else an empty subpat name caused by "allow duplicate names".  Do nothing (see comments above).
-		}
-		else // This subpattern has no name, so instead write it out as its actual pattern number. For performance and memory utilization, it seems best to store only one or the other (named or number), not both.
-		{
-			_itot(p, var_name_suffix, 10); // Append the element number to the array's base name.
-			// To help performance (in case the linked list of variables is huge), tell it where
-			// to start the search.  Use the base array name rather than the preceding element because,
-			// for example, Array19 is alphabetically less than Array2, so we can't rely on the
-			// numerical ordering:
-			if (array_item = g_script.FindOrAddVar(var_name))
-			{
-				if (p < pattern_count-1 // i.e. there's at least one more subpattern after this one (if there weren't, making a copy of haystack wouldn't be necessary because overlap can't harm this final assignment).
-					&& haystack == array_item->Contents(FALSE)) // For more comments, see similar section in BIF_RegEx.
-					if (mem_to_free = _tcsdup(haystack))
-						haystack = mem_to_free;
-				if (subpat_not_matched)
-					array_item->Assign(); // Omit all parameters to make the var empty without freeing its memory (for performance, in case this RegEx is being used many times in a loop).
-				else
-				{
-					subpat_pos = this_offset[0];
-					subpat_len = this_offset[1] - subpat_pos;
-					array_item->Assign(haystack + subpat_pos, subpat_len);
-				}
-			}
-			//else var couldn't be created: no error reporting currently, since it basically should never happen.
-		}
-	} // for() each subpattern.
+	IObject *m = RegExMatchObject::Create(haystack, offset, subpat_name, captured_pattern_count);
+	if (m)
+		output_var.AssignSkipAddRef(m);
+	else
+		output_var.Assign();
 }
 
 
@@ -11536,7 +11393,6 @@ struct RegExCalloutData // L14: Used by BIF_RegEx to pass necessary info to RegE
 	int options_length; // used to adjust cb->pattern_position
 	int pattern_count; // to save calling pcre_fullinfo unnecessarily for each callout
 	pcre_extra *extra;
-	TCHAR output_mode;
 };
 
 int RegExCallout(pcre_callout_block *cb)
@@ -11615,23 +11471,9 @@ int RegExCallout(pcre_callout_block *cb)
 		// Set local vars of callout func where applicable.
 		g->CurrentFunc = &func;
 
-		int match_offset = cb->start_match;
-		int match_length = cb->current_position - match_offset;
-
-		// Overall match or its length.
-		if (cd.output_mode == 'P')
-			output_var.Assign(match_length);
-		else
-			output_var.AssignString(cb->subject + match_offset, match_length);
-
-		LPTSTR mem_to_free = NULL;
-		
 		// Set up local vars for capturing subpatterns.
-		RegExSetSubpatternVars(cb->subject, cd.re, cd.extra, cd.output_mode, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top, mem_to_free);
+		RegExSetMatchVar(cb->subject, cd.re, cd.extra, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top);
 		
-		if (mem_to_free) // Should never happen since even if haystack were one of our local vars, BackupFunctionVars() would hide that from the above function. Check it anyway for maintainability.
-			free(mem_to_free);
-
 		// Restore g.CurrentFunc - func.Call() will also save, overwrite and restore it.
 		g->CurrentFunc = prev_func;
 
@@ -11642,8 +11484,8 @@ int RegExCallout(pcre_callout_block *cb)
 
 			if (func.mParamCount > 2)
 			{
-				// FoundPos
-				func.mParam[2].var->Assign(match_offset + 1);
+				// FoundPos (distinct from Match.Pos, which hasn't been set yet)
+				func.mParam[2].var->Assign(cb->start_match + 1);
 
 				if (func.mParamCount > 3)
 				{
@@ -11659,7 +11501,6 @@ int RegExCallout(pcre_callout_block *cb)
 			}
 		}
 	}
-
 
 	// Make all string positions one-based. UPDATE: offset_vector cannot be modified, so for consistency don't do this:
 	//++cb->pattern_position;
@@ -11683,8 +11524,7 @@ int RegExCallout(pcre_callout_block *cb)
 	return number_to_return;
 }
 
-pcre *get_compiled_regex(LPTSTR aRegEx, TCHAR &aOutputMode, pcre_extra *&aExtra
-	, int *aOptionsLength, ExprTokenType *aResultToken)
+pcre *get_compiled_regex(LPTSTR aRegEx, pcre_extra *&aExtra, int *aOptionsLength, ExprTokenType *aResultToken)
 // Returns the compiled RegEx, or NULL on failure.
 // This function is called by things other than built-in functions so it should be kept general-purpose.
 // Upon failure, if aResultToken!=NULL:
@@ -11732,7 +11572,6 @@ pcre *get_compiled_regex(LPTSTR aRegEx, TCHAR &aOutputMode, pcre_extra *&aExtra
 		pcre_extra *extra; // NULL unless a study() was done (and NULL even then if study() didn't find anything).
 		// int pcre_options; // Not currently needed in the cache since options are implicitly inside re_compiled.
 		int options_length; // Lexikos: See aOptionsLength comment at beginning of this function.
-		TCHAR output_mode;
 	};
 
 	#define PCRE_CACHE_SIZE 100 // Going too high would be counterproductive due to the slowness of linear search (and also the memory utilization of so many compiled RegEx's).
@@ -11814,7 +11653,6 @@ pcre *get_compiled_regex(LPTSTR aRegEx, TCHAR &aOutputMode, pcre_extra *&aExtra
 	#define SET_DEFAULT_PCRE_OPTIONS \
 	{\
 		pcre_options = PCRE_NEWLINE_CRLF | AHK_PCRE_CHARSET_OPTIONS;\
-		aOutputMode = '\0';\
 		do_study = false;\
 	}
 	#define PCRE_NEWLINE_BITS (PCRE_NEWLINE_CRLF | PCRE_NEWLINE_ANY) // Covers all bits that are used for newline options.
@@ -11860,10 +11698,6 @@ pcre *get_compiled_regex(LPTSTR aRegEx, TCHAR &aOutputMode, pcre_extra *&aExtra
 			break;
 
 		// Other options (uppercase so that lowercase can be reserved for future/PERL options):
-		case 'O':
-		case 'P':
-			aOutputMode = *pat;
-			break;
 		case 'S':
 			do_study = true;
 			break;
@@ -11961,7 +11795,6 @@ break_both:
 	this_entry.re_raw = _tcsdup(aRegEx); // _strdup() is very tiny and basically just calls _tcslen+malloc+_tcscpy.
 	this_entry.re_compiled = re_compiled;
 	this_entry.extra = aExtra;
-	this_entry.output_mode = aOutputMode;
 	// "this_entry.pcre_options" doesn't exist because it isn't currently needed in the cache.  This is
 	// because the RE's options are implicitly stored inside re_compiled.
 
@@ -11980,7 +11813,6 @@ break_both:
 	return re_compiled; // Indicate success.
 
 match_found: // RegEx was found in the cache at position sLastFound, so return the cached info back to the caller.
-	aOutputMode = sCache[sLastFound].output_mode;
 	aExtra = sCache[sLastFound].extra;
 	if (aOptionsLength) // Lexikos: See aOptionsLength comment at beginning of this function.
 		*aOptionsLength = sCache[sLastFound].options_length; 
@@ -12004,12 +11836,11 @@ error: // Since NULL is returned here, caller should ignore the contents of the 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx)
 // Returns NULL if no match.  Otherwise, returns the address where the pattern was found in aHaystack.
 {
-	TCHAR output_mode; // Currently ignored.
 	pcre_extra *extra;
 	pcre *re;
 
 	// Compile the regex or get it from cache.
-	if (   !(re = get_compiled_regex(aNeedleRegEx, output_mode, extra, NULL, NULL))   ) // Compiling problem.
+	if (   !(re = get_compiled_regex(aNeedleRegEx, extra, NULL, NULL))   ) // Compiling problem.
 		return NULL; // Our callers just want there to be "no match" in this case.
 
 	// Set up the offset array, which consists of int-pairs containing the start/end offset of each match.
@@ -12434,13 +12265,12 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	bool mode_is_replace = ctoupper(aResultToken.marker[5]) == 'R'; // Union's marker initially contains the function name; e.g. RegEx[R]eplace.
 	LPTSTR needle = TokenToString(*aParam[1], aResultToken.buf); // Load-time validation has already ensured that at least two actual parameters are present.
 
-	TCHAR output_mode;
 	pcre_extra *extra;
 	pcre *re;
 	int options_length;
 
 	// COMPILE THE REGEX OR GET IT FROM CACHE.
-	if (   !(re = get_compiled_regex(needle, output_mode, extra, &options_length, &aResultToken))   ) // Compiling problem.
+	if (   !(re = get_compiled_regex(needle, extra, &options_length, &aResultToken))   ) // Compiling problem.
 		return; // It already set ErrorLevel and aResultToken for us. If caller provided an output var/array, it is not changed under these conditions because there's no way of knowing how many subpatterns are in the RegEx, and thus no way of knowing how far to init the array.
 
 	// Since compiling succeeded, get info about other parameters.
@@ -12486,7 +12316,6 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	callout_data.re_text = needle;
 	callout_data.options_length = options_length;
 	callout_data.pattern_count = pattern_count;
-	callout_data.output_mode = output_mode;
 	if (extra)
 	{	// S (study) option was specified, use existing pcre_extra struct.
 		extra->flags |= PCRE_EXTRA_CALLOUT_DATA;	
@@ -12539,47 +12368,9 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 	if (aParamCount < 3 || aParam[2]->symbol != SYM_VAR) // No output var, so nothing more to do.
 		return;
 
-	// OTHERWISE, THE CALLER PROVIDED AN OUTPUT VAR/ARRAY: Store the substrings that matched the patterns.
 	Var &output_var = *aParam[2]->var; // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-	LPTSTR mem_to_free = NULL; // Set default.
-
-	if (output_mode != 'O')
-	{
-		int match_length = (captured_pattern_count < 0) ? 0 // Seems better to store length of zero rather than something non-length like -1 (after all, the return value is blank in this case, which should be used as the error indicator).
-			: offset[1] - offset[0];
-
-		if (output_mode == 'P') // In this mode, it's done this way to avoid creating an array if there are no subpatterns; i.e. the return value is the starting position and the array name will contain the length of what was found.
-			output_var.Assign(match_length);
-		else
-		{
-			if (captured_pattern_count < 0) // Failed or no match.
-				output_var.Assign(); // Make the full-pattern substring blank as a further indicator, and for convenience consistency in the script.
-			else // Greater than 0 (it can't be equal to zero because offset[] was definitely large enough).
-			{
-				// Fix for v1.0.45.07: The following check allow haystack to be the same script-variable as the
-				// output-var/array.  Unless a copy of haystack is made, any subpatterns to be populated after the
-				// entire-pattern output-var below would be corrupted.  In other words, anything that refers to the
-				// contents of haystack after the output-var has been assigned would otherwise refer to the wrong
-				// string.  Note that the following isn't done for the 'P' or 'O' output modes higher above
-				// because that mode never refers to haystack when populating its subpatterns.
-				if (pattern_count > 1 && haystack == output_var.Contents(FALSE)) // i.e. there are subpatterns to be output afterward, and haystack is the same variable as the output-var that's about to be overwritten below.
-					if (mem_to_free = _tcsdup(haystack)) // _strdup() is very tiny and basically just calls strlen+malloc+strcpy.
-						haystack = mem_to_free;
-					//else due to the extreme rarity of running out of memory AND SIMULTANEOUSLY having output-var match
-					// haystack, continue on so that at least partial success is achieved (the only thing that will
-					// be wrong in this case is the subpatterns, if any).
-				output_var.Assign(haystack + match_offset, match_length); // It shouldn't be possible for the full-pattern match's offset to be -1, since if where here, a match on the full pattern was always found.
-			}
-		}
-	}
-	// Otherwise, output_mode == 'O', so the function call below does all the work.
 	
-	// L14: Moved this section into a function to allow it to be used by callouts.
-	if (pattern_count > 1 || output_mode == 'O')
-		RegExSetSubpatternVars(haystack, re, extra, output_mode, output_var, offset, pattern_count, captured_pattern_count, mem_to_free);
-
-	if (mem_to_free)
-		free(mem_to_free);
+	RegExSetMatchVar(haystack, re, extra, output_var, offset, pattern_count, captured_pattern_count);
 }
 
 
