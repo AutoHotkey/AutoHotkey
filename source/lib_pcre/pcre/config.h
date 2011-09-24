@@ -257,7 +257,7 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 #define PACKAGE_NAME "PCRE"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "PCRE 8.10"
+#define PACKAGE_STRING "PCRE 8.13"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "pcre"
@@ -266,7 +266,7 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 /* #undef PACKAGE_URL */
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "8.10"
+#define PACKAGE_VERSION "8.13"
 
 
 /* If you are compiling for a system other than a Unix-like system or
@@ -333,7 +333,7 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 
 /* Version number of package */
 #ifndef VERSION
-#define VERSION "8.10"
+#define VERSION "8.13"
 #endif
 
 /* Define to empty if `const' does not conform to ANSI C. */

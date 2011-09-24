@@ -180,6 +180,7 @@ utf8 = (options & PCRE_UTF8) != 0;
 for(;;)
   {
   uschar *ccode;
+  const char *flag = "  ";
   int c;
   int extra = 0;
 
@@ -214,10 +215,6 @@ for(;;)
     fprintf(f, "------------------------------------------------------------------\n");
     return;
 
-    case OP_OPT:
-    fprintf(f, " %.2x %s", code[1], OP_names[*code]);
-    break;
-
     case OP_CHAR:
     fprintf(f, "    ");
     do
@@ -229,28 +226,33 @@ for(;;)
     fprintf(f, "\n");
     continue;
 
-    case OP_CHARNC:
-    fprintf(f, " NC ");
+    case OP_CHARI:
+    fprintf(f, " /i ");
     do
       {
       code++;
       code += 1 + print_char(f, code, utf8);
       }
-    while (*code == OP_CHARNC);
+    while (*code == OP_CHARI);
     fprintf(f, "\n");
     continue;
 
     case OP_CBRA:
+    case OP_CBRAPOS:
     case OP_SCBRA:
+    case OP_SCBRAPOS:
     if (print_lengths) fprintf(f, "%3d ", GET(code, 1));
       else fprintf(f, "    ");
     fprintf(f, "%s %d", OP_names[*code], GET2(code, 1+LINK_SIZE));
     break;
 
     case OP_BRA:
+    case OP_BRAPOS:
     case OP_SBRA:
+    case OP_SBRAPOS:
     case OP_KETRMAX:
     case OP_KETRMIN:
+    case OP_KETRPOS:
     case OP_ALT:
     case OP_KET:
     case OP_ASSERT:
@@ -295,6 +297,17 @@ for(;;)
     fprintf(f, "    Cond def");
     break;
 
+    case OP_STARI:
+    case OP_MINSTARI:
+    case OP_POSSTARI:
+    case OP_PLUSI:
+    case OP_MINPLUSI:
+    case OP_POSPLUSI:
+    case OP_QUERYI:
+    case OP_MINQUERYI:
+    case OP_POSQUERYI:
+    flag = "/i";
+    /* Fall through */
     case OP_STAR:
     case OP_MINSTAR:
     case OP_POSSTAR:
@@ -313,7 +326,7 @@ for(;;)
     case OP_TYPEQUERY:
     case OP_TYPEMINQUERY:
     case OP_TYPEPOSQUERY:
-    fprintf(f, "    ");
+    fprintf(f, " %s ", flag);
     if (*code >= OP_TYPESTAR)
       {
       fprintf(f, "%s", OP_names[code[1]]);
@@ -327,17 +340,23 @@ for(;;)
     fprintf(f, "%s", OP_names[*code]);
     break;
 
+    case OP_EXACTI:
+    case OP_UPTOI:
+    case OP_MINUPTOI:
+    case OP_POSUPTOI:
+    flag = "/i";
+    /* Fall through */
     case OP_EXACT:
     case OP_UPTO:
     case OP_MINUPTO:
     case OP_POSUPTO:
-    fprintf(f, "    ");
+    fprintf(f, " %s ", flag);
     extra = print_char(f, code+3, utf8);
     fprintf(f, "{");
-    if (*code != OP_EXACT) fprintf(f, "0,");
+    if (*code != OP_EXACT && *code != OP_EXACTI) fprintf(f, "0,");
     fprintf(f, "%d}", GET2(code,1));
-    if (*code == OP_MINUPTO) fprintf(f, "?");
-      else if (*code == OP_POSUPTO) fprintf(f, "+");
+    if (*code == OP_MINUPTO || *code == OP_MINUPTOI) fprintf(f, "?");
+      else if (*code == OP_POSUPTO || *code == OP_POSUPTOI) fprintf(f, "+");
     break;
 
     case OP_TYPEEXACT:
@@ -357,11 +376,26 @@ for(;;)
       else if (*code == OP_TYPEPOSUPTO) fprintf(f, "+");
     break;
 
+    case OP_NOTI:
+    flag = "/i";
+    /* Fall through */
     case OP_NOT:
     c = code[1];
-    if (PRINTABLE(c)) fprintf(f, "    [^%c]", c);
-      else fprintf(f, "    [^\\x%02x]", c);
+    if (PRINTABLE(c)) fprintf(f, " %s [^%c]", flag, c);
+      else fprintf(f, " %s [^\\x%02x]", flag, c);
     break;
+
+    case OP_NOTSTARI:
+    case OP_NOTMINSTARI:
+    case OP_NOTPOSSTARI:
+    case OP_NOTPLUSI:
+    case OP_NOTMINPLUSI:
+    case OP_NOTPOSPLUSI:
+    case OP_NOTQUERYI:
+    case OP_NOTMINQUERYI:
+    case OP_NOTPOSQUERYI:
+    flag = "/i";
+    /* Fall through */
 
     case OP_NOTSTAR:
     case OP_NOTMINSTAR:
@@ -373,22 +407,30 @@ for(;;)
     case OP_NOTMINQUERY:
     case OP_NOTPOSQUERY:
     c = code[1];
-    if (PRINTABLE(c)) fprintf(f, "    [^%c]", c);
-      else fprintf(f, "    [^\\x%02x]", c);
+    if (PRINTABLE(c)) fprintf(f, " %s [^%c]", flag, c);
+      else fprintf(f, " %s [^\\x%02x]", flag, c);
     fprintf(f, "%s", OP_names[*code]);
     break;
+
+    case OP_NOTEXACTI:
+    case OP_NOTUPTOI:
+    case OP_NOTMINUPTOI:
+    case OP_NOTPOSUPTOI:
+    flag = "/i";
+    /* Fall through */
 
     case OP_NOTEXACT:
     case OP_NOTUPTO:
     case OP_NOTMINUPTO:
     case OP_NOTPOSUPTO:
     c = code[3];
-    if (PRINTABLE(c)) fprintf(f, "    [^%c]{", c);
-      else fprintf(f, "    [^\\x%02x]{", c);
-    if (*code != OP_NOTEXACT) fprintf(f, "0,");
+    if (PRINTABLE(c)) fprintf(f, " %s [^%c]{", flag, c);
+      else fprintf(f, " %s [^\\x%02x]{", flag, c);
+    if (*code != OP_NOTEXACT && *code != OP_NOTEXACTI) fprintf(f, "0,");
     fprintf(f, "%d}", GET2(code,1));
-    if (*code == OP_NOTMINUPTO) fprintf(f, "?");
-      else if (*code == OP_NOTPOSUPTO) fprintf(f, "+");
+    if (*code == OP_NOTMINUPTO || *code == OP_NOTMINUPTOI) fprintf(f, "?");
+      else
+    if (*code == OP_NOTPOSUPTO || *code == OP_NOTPOSUPTOI) fprintf(f, "+");
     break;
 
     case OP_RECURSE:
@@ -397,8 +439,11 @@ for(;;)
     fprintf(f, "%s", OP_names[*code]);
     break;
 
+    case OP_REFI:
+    flag = "/i";
+    /* Fall through */
     case OP_REF:
-    fprintf(f, "    \\%d", GET2(code,1));
+    fprintf(f, " %s \\%d", flag, GET2(code,1));
     ccode = code + _pcre_OP_lengths[*code];
     goto CLASS_REF_REPEAT;
 
@@ -537,15 +582,35 @@ for(;;)
     case OP_MARK:
     case OP_PRUNE_ARG:
     case OP_SKIP_ARG:
-    case OP_THEN_ARG:
     fprintf(f, "    %s %s", OP_names[*code], code + 2);
     extra += code[1];
     break;
 
-    /* Anything else is just an item with no data*/
+    case OP_THEN:
+    if (print_lengths)
+      fprintf(f, "    %s %d", OP_names[*code], GET(code, 1));
+    else
+      fprintf(f, "    %s", OP_names[*code]);
+    break;
+
+    case OP_THEN_ARG:
+    if (print_lengths)
+      fprintf(f, "    %s %d %s", OP_names[*code], GET(code, 1),
+        code + 2 + LINK_SIZE);
+    else
+      fprintf(f, "    %s %s", OP_names[*code], code + 2 + LINK_SIZE);
+    extra += code[1+LINK_SIZE];
+    break;
+
+    case OP_CIRCM:
+    case OP_DOLLM:
+    flag = "/m";
+    /* Fall through */
+
+    /* Anything else is just an item with no data, but possibly a flag. */
 
     default:
-    fprintf(f, "    %s", OP_names[*code]);
+    fprintf(f, " %s %s", flag, OP_names[*code]);
     break;
     }
 

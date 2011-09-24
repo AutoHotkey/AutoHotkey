@@ -52,7 +52,7 @@ supporting functions. */
 
 /* Returns from set_start_bits() */
 
-enum { SSB_FAIL, SSB_DONE, SSB_CONTINUE };
+enum { SSB_FAIL, SSB_DONE, SSB_CONTINUE, SSB_UNKNOWN };
 
 
 
@@ -66,17 +66,21 @@ string of that length that matches. In UTF8 mode, the result is in characters
 rather than bytes.
 
 Arguments:
-  code       pointer to start of group (the bracket)
-  startcode  pointer to start of the whole pattern
-  options    the compiling options
+  code        pointer to start of group (the bracket)
+  startcode   pointer to start of the whole pattern
+  options     the compiling options
+  had_accept  pointer to flag for (*ACCEPT) encountered
+  int         RECURSE depth
 
 Returns:   the minimum length
            -1 if \C was encountered
            -2 internal error (missing capturing bracket)
+           -3 internal error (opcode not listed)
 */
 
 static int
-find_minlength(const uschar *code, const uschar *startcode, int options)
+find_minlength(const uschar *code, const uschar *startcode, int options,
+  BOOL *had_accept_ptr, int recurse_depth)
 {
 int length = -1;
 #ifdef SUPPORT_UTF8_ONLY
@@ -88,7 +92,8 @@ BOOL had_recurse = FALSE;
 register int branchlength = 0;
 register uschar *cc = (uschar *)code + 1 + LINK_SIZE;
 
-if (*code == OP_CBRA || *code == OP_SCBRA) cc += 2;
+if (*code == OP_CBRA || *code == OP_SCBRA ||
+    *code == OP_CBRAPOS || *code == OP_SCBRAPOS) cc += 2;
 
 /* Scan along the opcodes for this branch. If we get to the end of the
 branch, check the length against that of the other branches. */
@@ -122,26 +127,38 @@ for (;;)
     case OP_SCBRA:
     case OP_BRA:
     case OP_SBRA:
+    case OP_CBRAPOS:
+    case OP_SCBRAPOS:
+    case OP_BRAPOS:
+    case OP_SBRAPOS:
     case OP_ONCE:
-    d = find_minlength(cc, startcode, options);
+    d = find_minlength(cc, startcode, options, had_accept_ptr, recurse_depth);
     if (d < 0) return d;
     branchlength += d;
+    if (*had_accept_ptr) return branchlength;
     do cc += GET(cc, 1); while (*cc == OP_ALT);
     cc += 1 + LINK_SIZE;
     break;
 
     /* Reached end of a branch; if it's a ket it is the end of a nested
-    call. If it's ALT it is an alternation in a nested call. If it is
-    END it's the end of the outer call. All can be handled by the same code. */
+    call. If it's ALT it is an alternation in a nested call. If it is END it's
+    the end of the outer call. All can be handled by the same code. If it is
+    ACCEPT, it is essentially the same as END, but we set a flag so that
+    counting stops. */
 
+    case OP_ACCEPT:
+    case OP_ASSERT_ACCEPT:
+    *had_accept_ptr = TRUE;
+    /* Fall through */
     case OP_ALT:
     case OP_KET:
     case OP_KETRMAX:
     case OP_KETRMIN:
+    case OP_KETRPOS:
     case OP_END:
     if (length < 0 || (!had_recurse && branchlength < length))
       length = branchlength;
-    if (*cc != OP_ALT) return length;
+    if (op != OP_ALT) return length;
     cc += 1 + LINK_SIZE;
     branchlength = 0;
     had_recurse = FALSE;
@@ -164,14 +181,15 @@ for (;;)
     case OP_RREF:
     case OP_NRREF:
     case OP_DEF:
-    case OP_OPT:
     case OP_CALLOUT:
     case OP_SOD:
     case OP_SOM:
     case OP_EOD:
     case OP_EODN:
     case OP_CIRC:
+    case OP_CIRCM:
     case OP_DOLL:
+    case OP_DOLLM:
     case OP_NOT_WORD_BOUNDARY:
     case OP_WORD_BOUNDARY:
     cc += _pcre_OP_lengths[*cc];
@@ -181,6 +199,7 @@ for (;;)
 
     case OP_BRAZERO:
     case OP_BRAMINZERO:
+    case OP_BRAPOSZERO:
     case OP_SKIPZERO:
     cc += _pcre_OP_lengths[*cc];
     do cc += GET(cc, 1); while (*cc == OP_ALT);
@@ -190,14 +209,21 @@ for (;;)
     /* Handle literal characters and + repetitions */
 
     case OP_CHAR:
-    case OP_CHARNC:
+    case OP_CHARI:
     case OP_NOT:
+    case OP_NOTI:
     case OP_PLUS:
+    case OP_PLUSI:
     case OP_MINPLUS:
+    case OP_MINPLUSI:
     case OP_POSPLUS:
+    case OP_POSPLUSI:
     case OP_NOTPLUS:
+    case OP_NOTPLUSI:
     case OP_NOTMINPLUS:
+    case OP_NOTMINPLUSI:
     case OP_NOTPOSPLUS:
+    case OP_NOTPOSPLUSI:
     branchlength++;
     cc += 2;
 #ifdef SUPPORT_UTF8
@@ -216,7 +242,9 @@ for (;;)
     need to skip over a multibyte character in UTF8 mode.  */
 
     case OP_EXACT:
+    case OP_EXACTI:
     case OP_NOTEXACT:
+    case OP_NOTEXACTI:
     branchlength += GET2(cc,1);
     cc += 4;
 #ifdef SUPPORT_UTF8
@@ -253,10 +281,11 @@ for (;;)
     cc++;
     break;
 
-    /* "Any newline" might match two characters */
+    /* "Any newline" might match two characters, but it also might match just
+    one. */
 
     case OP_ANYNL:
-    branchlength += 2;
+    branchlength += 1;
     cc++;
     break;
 
@@ -341,6 +370,7 @@ for (;;)
     that case we must set the minimum length to zero. */
 
     case OP_REF:
+    case OP_REFI:
     if ((options & PCRE_JAVASCRIPT_COMPAT) == 0)
       {
       ce = cs = (uschar *)_pcre_find_bracket(startcode, utf8, GET2(cc, 1));
@@ -351,7 +381,12 @@ for (;;)
         d = 0;
         had_recurse = TRUE;
         }
-      else d = find_minlength(cs, startcode, options);
+      else
+        {
+        d = find_minlength(cs, startcode, options, had_accept_ptr,
+          recurse_depth);
+        *had_accept_ptr = FALSE;
+        }
       }
     else d = 0;
     cc += 3;
@@ -365,6 +400,12 @@ for (;;)
       case OP_CRQUERY:
       case OP_CRMINQUERY:
       min = 0;
+      cc++;
+      break;
+
+      case OP_CRPLUS:
+      case OP_CRMINPLUS:
+      min = 1;
       cc++;
       break;
 
@@ -382,36 +423,71 @@ for (;;)
     branchlength += min * d;
     break;
 
+    /* We can easily detect direct recursion, but not mutual recursion. This is
+    caught by a recursion depth count. */
+
     case OP_RECURSE:
     cs = ce = (uschar *)startcode + GET(cc, 1);
     if (cs == NULL) return -2;
     do ce += GET(ce, 1); while (*ce == OP_ALT);
-    if (cc > cs && cc < ce)
+    if ((cc > cs && cc < ce) || recurse_depth > 10)
       had_recurse = TRUE;
     else
-      branchlength += find_minlength(cs, startcode, options);
+      {
+      branchlength += find_minlength(cs, startcode, options, had_accept_ptr,
+        recurse_depth + 1);
+      *had_accept_ptr = FALSE;
+      }
     cc += 1 + LINK_SIZE;
     break;
 
     /* Anything else does not or need not match a character. We can get the
     item's length from the table, but for those that can match zero occurrences
-    of a character, we must take special action for UTF-8 characters. */
+    of a character, we must take special action for UTF-8 characters. As it
+    happens, the "NOT" versions of these opcodes are used at present only for
+    ASCII characters, so they could be omitted from this list. However, in
+    future that may change, so we include them here so as not to leave a
+    gotcha for a future maintainer. */
 
     case OP_UPTO:
+    case OP_UPTOI:
     case OP_NOTUPTO:
+    case OP_NOTUPTOI:
     case OP_MINUPTO:
+    case OP_MINUPTOI:
     case OP_NOTMINUPTO:
+    case OP_NOTMINUPTOI:
     case OP_POSUPTO:
+    case OP_POSUPTOI:
+    case OP_NOTPOSUPTO:
+    case OP_NOTPOSUPTOI:
+
     case OP_STAR:
+    case OP_STARI:
+    case OP_NOTSTAR:
+    case OP_NOTSTARI:
     case OP_MINSTAR:
+    case OP_MINSTARI:
     case OP_NOTMINSTAR:
+    case OP_NOTMINSTARI:
     case OP_POSSTAR:
+    case OP_POSSTARI:
     case OP_NOTPOSSTAR:
+    case OP_NOTPOSSTARI:
+
     case OP_QUERY:
+    case OP_QUERYI:
+    case OP_NOTQUERY:
+    case OP_NOTQUERYI:
     case OP_MINQUERY:
+    case OP_MINQUERYI:
     case OP_NOTMINQUERY:
+    case OP_NOTMINQUERYI:
     case OP_POSQUERY:
+    case OP_POSQUERYI:
     case OP_NOTPOSQUERY:
+    case OP_NOTPOSQUERYI:
+
     cc += _pcre_OP_lengths[op];
 #ifdef SUPPORT_UTF8
     if (utf8 && cc[-1] >= 0xc0) cc += _pcre_utf8_table4[cc[-1] & 0x3f];
@@ -423,17 +499,30 @@ for (;;)
     case OP_MARK:
     case OP_PRUNE_ARG:
     case OP_SKIP_ARG:
-    case OP_THEN_ARG:
     cc += _pcre_OP_lengths[op] + cc[1];
     break;
 
-    /* For the record, these are the opcodes that are matched by "default":
-    OP_ACCEPT, OP_CLOSE, OP_COMMIT, OP_FAIL, OP_PRUNE, OP_SET_SOM, OP_SKIP,
-    OP_THEN. */
+    case OP_THEN_ARG:
+    cc += _pcre_OP_lengths[op] + cc[1+LINK_SIZE];
+    break;
 
-    default:
+    /* The remaining opcodes are just skipped over. */
+
+    case OP_CLOSE:
+    case OP_COMMIT:
+    case OP_FAIL:
+    case OP_PRUNE:
+    case OP_SET_SOM:
+    case OP_SKIP:
+    case OP_THEN:
     cc += _pcre_OP_lengths[op];
     break;
+
+    /* This should not occur: we list all opcodes explicitly so that when
+    new ones get added they are properly considered. */
+
+    default:
+    return -3;
     }
   }
 /* Control never gets here */
@@ -579,18 +668,18 @@ function fails unless the result is SSB_DONE.
 Arguments:
   code         points to an expression
   start_bits   points to a 32-byte table, initialized to 0
-  caseless     the current state of the caseless flag
   utf8         TRUE if in UTF-8 mode
   cd           the block with char table pointers
 
 Returns:       SSB_FAIL     => Failed to find any starting bytes
                SSB_DONE     => Found mandatory starting bytes
                SSB_CONTINUE => Found optional starting bytes
+               SSB_UNKNOWN  => Hit an unrecognized opcode
 */
 
 static int
-set_start_bits(const uschar *code, uschar *start_bits, BOOL caseless,
-  BOOL utf8, compile_data *cd)
+set_start_bits(const uschar *code, uschar *start_bits, BOOL utf8,
+  compile_data *cd)
 {
 register int c;
 int yield = SSB_DONE;
@@ -615,18 +704,105 @@ volatile int dummy;
 
 do
   {
-  const uschar *tcode = code + (((int)*code == OP_CBRA)? 3:1) + LINK_SIZE;
   BOOL try_next = TRUE;
+  const uschar *tcode = code + 1 + LINK_SIZE;
+
+  if (*code == OP_CBRA || *code == OP_SCBRA ||
+      *code == OP_CBRAPOS || *code == OP_SCBRAPOS) tcode += 2;
 
   while (try_next)    /* Loop for items in this branch */
     {
     int rc;
+
     switch(*tcode)
       {
-      /* Fail if we reach something we don't understand */
+      /* If we reach something we don't understand, it means a new opcode has
+      been created that hasn't been added to this code. Hopefully this problem
+      will be discovered during testing. */
 
       default:
+      return SSB_UNKNOWN;
+
+      /* Fail for a valid opcode that implies no starting bits. */
+
+      case OP_ACCEPT:
+      case OP_ASSERT_ACCEPT:
+      case OP_ALLANY:
+      case OP_ANY:
+      case OP_ANYBYTE:
+      case OP_CIRC:
+      case OP_CIRCM:
+      case OP_CLOSE:
+      case OP_COMMIT:
+      case OP_COND:
+      case OP_CREF:
+      case OP_DEF:
+      case OP_DOLL:
+      case OP_DOLLM:
+      case OP_END:
+      case OP_EOD:
+      case OP_EODN:
+      case OP_EXTUNI:
+      case OP_FAIL:
+      case OP_MARK:
+      case OP_NCREF:
+      case OP_NOT:
+      case OP_NOTEXACT:
+      case OP_NOTEXACTI:
+      case OP_NOTI:
+      case OP_NOTMINPLUS:
+      case OP_NOTMINPLUSI:
+      case OP_NOTMINQUERY:
+      case OP_NOTMINQUERYI:
+      case OP_NOTMINSTAR:
+      case OP_NOTMINSTARI:
+      case OP_NOTMINUPTO:
+      case OP_NOTMINUPTOI:
+      case OP_NOTPLUS:
+      case OP_NOTPLUSI:
+      case OP_NOTPOSPLUS:
+      case OP_NOTPOSPLUSI:
+      case OP_NOTPOSQUERY:
+      case OP_NOTPOSQUERYI:
+      case OP_NOTPOSSTAR:
+      case OP_NOTPOSSTARI:
+      case OP_NOTPOSUPTO:
+      case OP_NOTPOSUPTOI:
+      case OP_NOTPROP:
+      case OP_NOTQUERY:
+      case OP_NOTQUERYI:
+      case OP_NOTSTAR:
+      case OP_NOTSTARI:
+      case OP_NOTUPTO:
+      case OP_NOTUPTOI:
+      case OP_NOT_HSPACE:
+      case OP_NOT_VSPACE:
+      case OP_NRREF:
+      case OP_PROP:
+      case OP_PRUNE:
+      case OP_PRUNE_ARG:
+      case OP_RECURSE:
+      case OP_REF:
+      case OP_REFI:
+      case OP_REVERSE:
+      case OP_RREF:
+      case OP_SCOND:
+      case OP_SET_SOM:
+      case OP_SKIP:
+      case OP_SKIP_ARG:
+      case OP_SOD:
+      case OP_SOM:
+      case OP_THEN:
+      case OP_THEN_ARG:
+      case OP_XCLASS:
       return SSB_FAIL;
+
+      /* We can ignore word boundary tests. */
+
+      case OP_WORD_BOUNDARY:
+      case OP_NOT_WORD_BOUNDARY:
+      tcode++;
+      break;
 
       /* If we hit a bracket or a positive lookahead assertion, recurse to set
       bits from within the subpattern. If it can't find anything, we have to
@@ -637,10 +813,14 @@ do
       case OP_SBRA:
       case OP_CBRA:
       case OP_SCBRA:
+      case OP_BRAPOS:
+      case OP_SBRAPOS:
+      case OP_CBRAPOS:
+      case OP_SCBRAPOS:
       case OP_ONCE:
       case OP_ASSERT:
-      rc = set_start_bits(tcode, start_bits, caseless, utf8, cd);
-      if (rc == SSB_FAIL) return SSB_FAIL;
+      rc = set_start_bits(tcode, start_bits, utf8, cd);
+      if (rc == SSB_FAIL || rc == SSB_UNKNOWN) return rc;
       if (rc == SSB_DONE) try_next = FALSE; else
         {
         do tcode += GET(tcode, 1); while (*tcode == OP_ALT);
@@ -663,6 +843,7 @@ do
       case OP_KET:
       case OP_KETRMAX:
       case OP_KETRMIN:
+      case OP_KETRPOS:
       return SSB_CONTINUE;
 
       /* Skip over callout */
@@ -680,19 +861,13 @@ do
       tcode += 1 + LINK_SIZE;
       break;
 
-      /* Skip over an option setting, changing the caseless flag */
-
-      case OP_OPT:
-      caseless = (tcode[1] & PCRE_CASELESS) != 0;
-      tcode += 2;
-      break;
-
       /* BRAZERO does the bracket, but carries on. */
 
       case OP_BRAZERO:
       case OP_BRAMINZERO:
-      if (set_start_bits(++tcode, start_bits, caseless, utf8, cd) == SSB_FAIL)
-        return SSB_FAIL;
+      case OP_BRAPOSZERO:
+      rc = set_start_bits(++tcode, start_bits, utf8, cd);
+      if (rc == SSB_FAIL || rc == SSB_UNKNOWN) return rc;
 /* =========================================================================
       See the comment at the head of this function concerning the next line,
       which was an old fudge for the benefit of OS/2.
@@ -718,7 +893,16 @@ do
       case OP_QUERY:
       case OP_MINQUERY:
       case OP_POSQUERY:
-      tcode = set_table_bit(start_bits, tcode + 1, caseless, cd, utf8);
+      tcode = set_table_bit(start_bits, tcode + 1, FALSE, cd, utf8);
+      break;
+
+      case OP_STARI:
+      case OP_MINSTARI:
+      case OP_POSSTARI:
+      case OP_QUERYI:
+      case OP_MINQUERYI:
+      case OP_POSQUERYI:
+      tcode = set_table_bit(start_bits, tcode + 1, TRUE, cd, utf8);
       break;
 
       /* Single-char upto sets the bit and tries the next */
@@ -726,20 +910,36 @@ do
       case OP_UPTO:
       case OP_MINUPTO:
       case OP_POSUPTO:
-      tcode = set_table_bit(start_bits, tcode + 3, caseless, cd, utf8);
+      tcode = set_table_bit(start_bits, tcode + 3, FALSE, cd, utf8);
+      break;
+
+      case OP_UPTOI:
+      case OP_MINUPTOI:
+      case OP_POSUPTOI:
+      tcode = set_table_bit(start_bits, tcode + 3, TRUE, cd, utf8);
       break;
 
       /* At least one single char sets the bit and stops */
 
-      case OP_EXACT:       /* Fall through */
+      case OP_EXACT:
       tcode += 2;
-
+      /* Fall through */
       case OP_CHAR:
-      case OP_CHARNC:
       case OP_PLUS:
       case OP_MINPLUS:
       case OP_POSPLUS:
-      (void)set_table_bit(start_bits, tcode + 1, caseless, cd, utf8);
+      (void)set_table_bit(start_bits, tcode + 1, FALSE, cd, utf8);
+      try_next = FALSE;
+      break;
+
+      case OP_EXACTI:
+      tcode += 2;
+      /* Fall through */
+      case OP_CHARI:
+      case OP_PLUSI:
+      case OP_MINPLUSI:
+      case OP_POSPLUSI:
+      (void)set_table_bit(start_bits, tcode + 1, TRUE, cd, utf8);
       try_next = FALSE;
       break;
 
@@ -969,7 +1169,8 @@ do
           for (c = 0; c < 32; c++) start_bits[c] |= tcode[c];
           }
 
-        /* Advance past the bit map, and act on what follows */
+        /* Advance past the bit map, and act on what follows. For a zero
+        minimum repeat, continue; otherwise stop processing. */
 
         tcode += 32;
         switch (*tcode)
@@ -1005,6 +1206,8 @@ return yield;
 
 
 
+
+
 /*************************************************
 *          Study a compiled expression           *
 *************************************************/
@@ -1029,6 +1232,7 @@ pcre_study(const pcre *external_re, int options, const tchar **errorptr)
 {
 int min;
 BOOL bits_set = FALSE;
+BOOL had_accept = FALSE;
 uschar start_bits[32];
 pcre_extra *extra;
 pcre_study_data *study;
@@ -1061,6 +1265,8 @@ seeking a list of starting bytes. */
 if ((re->options & PCRE_ANCHORED) == 0 &&
     (re->flags & (PCRE_FIRSTSET|PCRE_STARTLINE)) == 0)
   {
+  int rc;
+
   /* Set the character tables in the block that is passed around */
 
   tables = re->tables;
@@ -1076,18 +1282,24 @@ if ((re->options & PCRE_ANCHORED) == 0 &&
   /* See if we can find a fixed set of initial characters for the pattern. */
 
   memset(start_bits, 0, 32 * sizeof(uschar));
-  bits_set = set_start_bits(code, start_bits,
-    (re->options & PCRE_CASELESS) != 0, (re->options & PCRE_UTF8) != 0,
-    &compile_block) == SSB_DONE;
+  rc = set_start_bits(code, start_bits, (re->options & PCRE_UTF8) != 0,
+    &compile_block);
+  bits_set = rc == SSB_DONE;
+  if (rc == SSB_UNKNOWN) *errorptr = _T("internal error: opcode not recognized");
   }
 
 /* Find the minimum length of subject string. */
 
-min = find_minlength(code, code, re->options);
+switch(min = find_minlength(code, code, re->options, &had_accept, 0))
+  {
+  case -2: *errorptr = _T("internal error: missing capturing bracket"); break;
+  case -3: *errorptr = _T("internal error: opcode not recognized"); break;
+  default: break;
+  }
 
-/* Return NULL if no optimization is possible. */
+/* Return NULL if there's been an error or if no optimization is possible. */
 
-if (!bits_set && min < 0) return NULL;
+if (*errorptr != NULL || (!bits_set && min < 0)) return NULL;
 
 /* Get a pcre_extra block and a pcre_study_data block. The study data is put in
 the latter, which is pointed to by the former, which may also get additional
