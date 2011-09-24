@@ -517,7 +517,8 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 	}
 
 	// Since above didn't return, this variable isn't the clipboard.
-	if (space_needed_in_bytes > g_MaxVarCapacity && aObeyMaxMem) // v1.0.43.03: aObeyMaxMem was added since some callers aren't supposed to obey it.
+	if (space_needed_in_bytes > g_MaxVarCapacity && aObeyMaxMem // v1.0.43.03: aObeyMaxMem was added since some callers aren't supposed to obey it.
+		&& space_needed_in_bytes > mByteCapacity) // v1.1.05: Fixed to allow assignment if a prior VarSetCapacity set the capacity high enough.
 		return g_script.ScriptError(ERR_MEM_LIMIT_REACHED);
 
 	if (space_needed < 2) // Variable is being assigned the empty string (or a deref that resolves to it).
