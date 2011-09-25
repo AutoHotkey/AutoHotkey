@@ -1817,13 +1817,9 @@ HWND WindowSearch::IsMatch(bool aInvert)
 		// Make it longer than Max var name so that FindOrAddVar() will be able to spot and report
 		// var names that are too long:
 		TCHAR var_name[MAX_VAR_NAME_LENGTH + 20];
-		// To help performance (in case the linked list of variables is huge), tell it where
-		// to start the search.  Use the base array name rather than the preceding element because,
-		// for example, Array19 is alphabetically less than Array2, so we can't rely on the
-		// numerical ordering:
 		Var *array_item = g_script.FindOrAddVar(var_name
 			, sntprintf(var_name, _countof(var_name), _T("%s%u"), mArrayStart->mName, mFoundCount)
-			, mArrayStart->IsLocal() ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL);
+			, mArrayStart->IsLocal() ? FINDVAR_LOCAL : FINDVAR_GLOBAL);
 		if (array_item)
 			array_item->AssignHWND(mFoundParent);
 		//else no error reporting currently, since should be very rare.

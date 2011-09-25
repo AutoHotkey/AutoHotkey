@@ -3652,7 +3652,8 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 				// the only window to be put into the array:
 				if (   !(array_item = g_script.FindOrAddVar(var_name
 					, sntprintf(var_name, _countof(var_name), _T("%s1"), output_var.mName)
-					, output_var.IsLocal() ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL))   )  // Find or create element #1.
+					, output_var.IsLocal() ? FINDVAR_LOCAL : FINDVAR_GLOBAL))   )  // Find or create element #1.
+
 					return FAIL;  // It will have already displayed the error.
 				if (!array_item->AssignHWND(target_window))
 					return FAIL;
@@ -4089,7 +4090,7 @@ ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
 		// for example, Array19 is alphabetically less than Array2, so we can't rely on the
 		// numerical ordering:
 		int always_use;
-		always_use = output_var.IsLocal() ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL;
+		always_use = output_var.IsLocal() ? FINDVAR_LOCAL : FINDVAR_GLOBAL;
 		if (   !(output_var_left = g_script.FindOrAddVar(var_name
 			, sntprintf(var_name, _countof(var_name), _T("%sLeft"), output_var.mName)
 			, always_use))   )
@@ -4103,7 +4104,8 @@ ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
 			, always_use))   )
 			return FAIL;
 		if (   !(output_var_bottom = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sBottom"), output_var.mName), always_use))   )
+			, sntprintf(var_name, _countof(var_name), _T("%sBottom"), output_var.mName)
+			, always_use))   )
 			return FAIL;
 
 		RECT monitor_rect;
@@ -6961,13 +6963,10 @@ ResultType Line::StringSplit(LPTSTR aArrayName, LPTSTR aInputString, LPTSTR aDel
 	{
 		var_name_suffix[0] = '0';
 		var_name_suffix[1] = '\0';
-		// ALWAYS_PREFER_LOCAL below allows any existing local variable that matches array0's name
-		// (e.g. Array0) to be given preference over creating a new global variable if the function's
-		// mode is to assume globals:
-		if (   !(array0 = g_script.FindOrAddVar(var_name, 0, ALWAYS_PREFER_LOCAL))   )
+		if (   !(array0 = g_script.FindOrAddVar(var_name))   )
 			return FAIL;  // It will have already displayed the error.
 	}
-	int always_use = array0->IsLocal() ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL;
+	int always_use = array0->IsLocal() ? FINDVAR_LOCAL : FINDVAR_GLOBAL;
 
 	if (!*aInputString) // The input variable is blank, thus there will be zero elements.
 		return array0->Assign(_T("0"));  // Store the count in the 0th element.
@@ -13151,7 +13150,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, TCHAR
 	_tcscpy(var_name, output_var.mName); // This prefix is copied in only once, for performance.
 	size_t suffix_length, prefix_length = _tcslen(var_name);
 	LPTSTR var_name_suffix = var_name + prefix_length; // The position at which to copy the sequence number (index).
-	int always_use = output_var.IsLocal() ? ALWAYS_USE_LOCAL : ALWAYS_USE_GLOBAL;
+	int always_use = output_var.IsLocal() ? FINDVAR_LOCAL : FINDVAR_GLOBAL;
 	int n, p = 1, *this_offset = offset + 2; // Init for both loops below.
 	Var *array_item;
 	bool subpat_not_matched;
@@ -13487,7 +13486,7 @@ int RegExCallout(pcre_callout_block *cb)
 	Func *callout_func = (Func *)cb->user_callout;
 	if (!callout_func)
 	{
-		Var *pcre_callout_var = g_script.FindVar(_T("pcre_callout"), 12, NULL, ALWAYS_PREFER_LOCAL); // Local to caller of RegExMatch/Replace().
+		Var *pcre_callout_var = g_script.FindVar(_T("pcre_callout"), 12); // This may be a local of the UDF which called RegExMatch/Replace().
 		if (!pcre_callout_var)
 			return 0; // Seems best to ignore the callout rather than aborting the match.
 

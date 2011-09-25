@@ -1519,9 +1519,9 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 	{
 	// It seems best to allow context id zero to retrieve either a local or global,
 	// rather than requiring the IDE to check each context when looking up a variable.
-	//case PC_Local:	always_use = ALWAYS_USE_LOCAL;	break;
-	case PC_Local:	always_use = ALWAYS_PREFER_LOCAL;	break;
-	case PC_Global:	always_use = ALWAYS_USE_GLOBAL;		break;
+	//case PC_Local:	always_use = FINDVAR_LOCAL; break;
+	case PC_Local:	always_use = FINDVAR_DEFAULT; break;
+	case PC_Global:	always_use = FINDVAR_GLOBAL; break;
 	default:
 		return DEBUGGER_E_INVALID_CONTEXT;
 	}
@@ -1623,9 +1623,9 @@ DEBUGGER_COMMAND(Debugger::property_set)
 	switch (context_id)
 	{
 	// For consistency with property_get, create a local only if no global exists.
-	//case PC_Local:	always_use = ALWAYS_USE_LOCAL;	break;
-	case PC_Local:	always_use = ALWAYS_PREFER_LOCAL;	break;
-	case PC_Global:	always_use = ALWAYS_USE_GLOBAL;		break;
+	//case PC_Local:	always_use = FINDVAR_LOCAL; break;
+	case PC_Local:	always_use = FINDVAR_DEFAULT; break;
+	case PC_Global:	always_use = FINDVAR_GLOBAL; break;
 	default:
 		return DEBUGGER_E_INVALID_CONTEXT;
 	}
