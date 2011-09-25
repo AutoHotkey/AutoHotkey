@@ -13550,9 +13550,21 @@ int RegExCallout(pcre_callout_block *cb)
 			output_var.AssignString(cb->subject + match_offset, match_length);
 
 		LPTSTR mem_to_free = NULL;
+
+		// Since matching is still in progress, these *should* be -1.
+		// For maintainability and peace of mind, save them anyway:
+		int offset[] = { cb->offset_vector[0], cb->offset_vector[1] };
+		
+		// Temporarily set these for use by the function below:
+		cb->offset_vector[0] = cb->start_match;
+		cb->offset_vector[1] = cb->current_position;
 		
 		// Set up local vars for capturing subpatterns.
 		RegExSetSubpatternVars(cb->subject, cd.re, cd.extra, cd.output_mode, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top, mem_to_free);
+
+		// Restore to former offsets (probably -1):
+		cb->offset_vector[0] = offset[0];
+		cb->offset_vector[1] = offset[1];
 		
 		if (mem_to_free) // Should never happen since even if haystack were one of our local vars, BackupFunctionVars() would hide that from the above function. Check it anyway for maintainability.
 			free(mem_to_free);
