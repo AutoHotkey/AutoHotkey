@@ -6907,17 +6907,13 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		if (g->CurrentFunc && !mCurrentFuncOpenBlockCount) // Any negative mCurrentFuncOpenBlockCount is caught by a different stage.
 		{
 			Func &func = *g->CurrentFunc;
-			if (func.mGlobalVarCount)
-			{
-				// Now that there can be no more "global" declarations, copy the list into persistent memory.
-				Var **global_vars;
-				if (  !(global_vars = (Var **)SimpleHeap::Malloc(func.mGlobalVarCount * sizeof(Var *)))  )
-					return ScriptError(ERR_OUTOFMEM);
-				memcpy(global_vars, func.mGlobalVar, func.mGlobalVarCount * sizeof(Var *));
-				func.mGlobalVar = global_vars;
-			}
-			else
-				func.mGlobalVar = NULL; // For maintainability.
+			// v1: mGlobalVar isn't used after this point. In v2 it is used to prevent dynamic
+			// variable references from resolving to globals which aren't declared in this
+			// function, but doing that in v1 would break numerous scripts. It could be moved
+			// from Func to Script to reduce memory usage, but v2 needs it in Func, so it's
+			// left there for maintainability.
+			func.mGlobalVarCount = 0; // For maintainability; shouldn't be used at run-time.
+			func.mGlobalVar = NULL;   // For maintainability; shouldn't be used when count is 0.
 			line.mAttribute = ATTR_TRUE;  // Flag this ACT_BLOCK_END as the ending brace of a function's body.
 			g->CurrentFunc = NULL;
 		}
@@ -8662,6 +8658,9 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 		// and apInsertPos variables to FindVar() so that it will update them to be global.
 		if (g.CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL)
 			return FindVar(aVarName, aVarNameLength, apInsertPos, FINDVAR_GLOBAL, apIsLocal);
+		// v1: Each *dynamic* variable reference may resolve to a global if one exists.
+		if (mIsReadyToExecute)
+			return FindVar(aVarName, aVarNameLength, NULL, FINDVAR_GLOBAL);
 		// Otherwise, caller only wants globals which are declared in *this* function:
 		for (int i = 0; i < g.CurrentFunc->mGlobalVarCount; ++i)
 			if (!_tcsicmp(var_name, g.CurrentFunc->mGlobalVar[i]->mName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
