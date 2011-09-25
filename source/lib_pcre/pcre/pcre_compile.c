@@ -7269,7 +7269,7 @@ externally provided function. Integer overflow should no longer be possible
 because nowadays we limit the maximum value of cd->names_found and
 cd->name_entry_size. */
 
-size = length + sizeof(real_pcre) + cd->names_found * (cd->name_entry_size + 3);
+size = length + sizeof(real_pcre) + (cd->names_found * (cd->name_entry_size + 3) * sizeof(utchar));
 re = (real_pcre *)(pcre_malloc)(size);
 
 if (re == NULL)

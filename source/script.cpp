@@ -10999,8 +10999,17 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				Var* catch_var = ARGVARRAW1;
 
 				// Assign the thrown token to the variable if provided.
-				if (catch_var)
-					catch_var->Assign(*g.ThrownToken);
+				if (catch_var && !catch_var->Assign(*g.ThrownToken))
+				{
+					// If this TRY/CATCH is inside some other TRY, Assign() has indirectly freed
+					// our token and possibly created a new one. So in that case, let someone else
+					// handle the token. Otherwise, free our token to avoid an "Unhandled" error
+					// message (since an error message has already been shown, and it probably
+					// indicated the thread will exit).
+					if (!g.InTryBlock)
+						g_script.FreeExceptionToken(g.ThrownToken);
+					return FAIL;
+				}
 
 				g_script.FreeExceptionToken(g.ThrownToken);
 			}
@@ -13867,6 +13876,12 @@ IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR
 
 ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
 {
+	// ThrownToken may already exist if Assign() fails in ACT_CATCH, or possibly
+	// in other extreme cases. In such a case, just free the old token. If this
+	// line is CATCH, it won't handle the new exception; an outer TRY/CATCH will.
+	if (g->ThrownToken)
+		g_script.FreeExceptionToken(g->ThrownToken);
+
 	ExprTokenType *token;
 	if (   !(token = new ExprTokenType)
 		|| !(token->object = CreateRuntimeException(aErrorText, aWhat, aExtraInfo))   )
@@ -13984,7 +13999,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
 
-	if (g->InTryBlock && aErrorType == FAIL) // i.e. not CRITICAL_ERROR or WARN.
+	if (g->InTryBlock && aErrorType == FAIL || aErrorType == EARLY_EXIT) // FAIL is most common, but EARLY_EXIT is used by ComError(). WARN and CRITICAL_ERROR are excluded.
 		return ThrowRuntimeException(aErrorText, NULL, aExtraInfo);
 
 	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute && aErrorType != WARN) // i.e. runtime errors are always displayed via dialog.
@@ -14128,7 +14143,7 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* line)
 {
 	// FUTURE: add more information about the thrown token itself
-	line->LineError(_T("Unhandled exception!"));
+	line->LineError(_T("Unhandled exception!"), WARN);
 
 	FreeExceptionToken(aToken);
 
