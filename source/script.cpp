@@ -3695,6 +3695,12 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						return ScriptError(_T("Too many declarations."), item); // Short message since it's so unlikely.
 					g->CurrentFunc->mGlobalVar[g->CurrentFunc->mGlobalVarCount++] = var;
 				}
+				else if (declare_type == VAR_DECLARE_SUPER_GLOBAL)
+				{
+					// Ensure the "declared" and "super-global" flags are set, in case this
+					// var was added to the list via a reference prior to the declaration.
+					var->Scope() = declare_type;
+				}
 
 				item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
 
