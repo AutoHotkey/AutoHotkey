@@ -6667,9 +6667,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		if (aArgc > 1 && !line.ArgHasDeref(2))
 		{
 			LPTSTR command, name;
-			ResolveGui(new_raw_arg1, command, &name);
+			ResolveGui(new_raw_arg2, command, &name);
 			if (!name)
-				return ScriptError(ERR_INVALID_GUI_NAME, new_raw_arg1);
+				return ScriptError(ERR_INVALID_GUI_NAME, new_raw_arg2);
 
 			GuiControlGetCmds guicontrolget_cmd = line.ConvertGuiControlGetCmd(command);
 			// This first check's error messages take precedence over the next check's:
