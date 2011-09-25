@@ -564,7 +564,7 @@ public:
 		return (mScope & VAR_SUPER_GLOBAL);
 	}
 
-	__forceinline UCHAR Scope()
+	__forceinline UCHAR &Scope()
 	{
 		return mScope;
 	}

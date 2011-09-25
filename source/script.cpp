@@ -1068,21 +1068,22 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 		mFirstLine = mFirstStaticLine;
 	}
 	
-	if (g_Warn_LocalSameAsGlobal)
+	// Scan for undeclared local variables which are named the same as a global variable.
+	// This loop has two purposes (but it's all handled in PreprocessLocalVars()):
+	//
+	//  1) Allow super-global variables to be referenced above the point of declaration.
+	//     This is a bit of a hack to work around the fact that variable references are
+	//     resolved as they are encountered, before all declarations have been processed.
+	//
+	//  2) Warn the user (if appropriate) since they probably meant it to be global.
+	//
+	for (int i = 0; i < mFuncCount; ++i)
 	{
-		// Scan all "automatic" local vars and warn the user if there are any with the same
-		// name as a global variable, since that would probably indicate a missing declaration:
-		int i, j;
-		Func *func;
-		for (i = 0; i < mFuncCount; ++i)
+		Func &func = *mFunc[i];
+		if (!func.mIsBuiltIn)
 		{
-			if (!(func = mFunc[i])->mIsBuiltIn)
-			{
-				for (j = 0; j < func->mVarCount; ++j)
-					MaybeWarnLocalSameAsGlobal(func, func->mVar[j]);
-				for (j = 0; j < func->mLazyVarCount; ++j)
-					MaybeWarnLocalSameAsGlobal(func, func->mLazyVar[j]);
-			}
+			PreprocessLocalVars(func, func.mVar, func.mVarCount);
+			PreprocessLocalVars(func, func.mLazyVar, func.mLazyVarCount);
 		}
 	}
 
@@ -3568,6 +3569,12 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					if (g->CurrentFunc->mGlobalVarCount >= MAX_FUNC_VAR_GLOBALS)
 						return ScriptError(_T("Too many declarations."), item); // Short message since it's so unlikely.
 					g->CurrentFunc->mGlobalVar[g->CurrentFunc->mGlobalVarCount++] = var;
+				}
+				else if (declare_type == VAR_DECLARE_SUPER_GLOBAL)
+				{
+					// Ensure the "declared" and "super-global" flags are set, in case this
+					// var was added to the list via a reference prior to the declaration.
+					var->Scope() = declare_type;
 				}
 
 				item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
@@ -6247,6 +6254,11 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		if (class_var->IsObject())
 			// At this point it can only be an Object() created by a class definition.
 			class_object = (Object *)class_var->Object();
+		else
+			// Force the variable to be super-global rather than passing this flag to
+			// FindOrAddVar: a prior reference to this variable may have created it as
+			// an ordinary global.
+			class_var->Scope() = VAR_DECLARE_SUPER_GLOBAL;
 	}
 	
 	if (_tcslen(mClassName) + _tcslen(class_name) + 1 >= _countof(mClassName)) // +1 for '.'
@@ -14238,36 +14250,60 @@ void Script::WarnUninitializedVar(Var *var)
 
 
 
-void Script::MaybeWarnLocalSameAsGlobal(Func *func, Var *var)
+void Script::MaybeWarnLocalSameAsGlobal(Func &func, Var &var)
+// Caller has verified the following:
+//  1) var is not a declared variable.
+//  2) a global variable with the same name definitely exists.
 {
 	if (!g_Warn_LocalSameAsGlobal)
 		return;
 
-	if (var->IsDeclared()) // Exclude function parameters and explicitly declared locals.
-		return;
-
-	LPTSTR varName = var->mName;
-
 #ifdef ENABLE_DLLCALL
-	if (IsDllArgTypeName(varName))
+	if (IsDllArgTypeName(var.mName))
 		// Exclude unquoted DllCall arg type names.  Although variable names like "str" and "ptr"
 		// might be used for other purposes, it seems far more likely that both this var and its
 		// global counterpart (if it exists) are blank vars which were used as DllCall arg types.
 		return;
 #endif
 
-	if (!FindVar(varName, 0, NULL, FINDVAR_GLOBAL))
-		return;
-
-	Line *line = func->mJumpToLine;
+	Line *line = func.mJumpToLine;
 	while (line && line->mActionType != ACT_BLOCK_BEGIN) line = line->mPrevLine;
-	if (!line) line = func->mJumpToLine;
+	if (!line) line = func.mJumpToLine;
 
 	TCHAR buf[DIALOG_TITLE_SIZE], *cp = buf;
 	int buf_space_remaining = (int)_countof(buf);
-	sntprintf(cp, buf_space_remaining, _T("%s  (in function %s)"), varName, func->mName);
+	sntprintf(cp, buf_space_remaining, _T("%s  (in function %s)"), var.mName, func.mName);
 	
 	ScriptWarning(g_Warn_LocalSameAsGlobal, WARNING_LOCAL_SAME_AS_GLOBAL, buf, line);
+}
+
+
+
+void Script::PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount)
+{
+	for (int v = 0; v < aVarCount; ++v)
+	{
+		Var &var = *aVarList[v];
+		if (var.IsDeclared()) // Not a canditate for a super-global or warning.
+			continue;
+		Var *global_var = FindVar(var.mName, 0, NULL, FINDVAR_GLOBAL);
+		if (!global_var) // No global variable with that name.
+			continue;
+		if (global_var->IsSuperGlobal())
+		{
+			// Make this local variable an alias for the super-global. Above has already
+			// verified this var was not declared and therefore isn't a function parameter.
+			var.UpdateAlias(global_var);
+			// Remove the variable from the local list to prevent it from being shown in
+			// ListVars or being reset when the function returns.
+			memmove(aVarList + v, aVarList + v + 1, (--aVarCount - v) * sizeof(Var *));
+			--v; // Counter the loop's increment.
+		}
+		else
+		// Since this undeclared local variable has the same name as a global, there's
+		// a chance the user intended it to be global. So consider warning the user:
+		MaybeWarnLocalSameAsGlobal(aFunc, var);
+	}
 }
 
 
