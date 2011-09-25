@@ -2715,7 +2715,9 @@ public:
 	ResultType ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T("")); // , ResultType aErrorType = FAIL);
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
 	void WarnUninitializedVar(Var *var);
-	void MaybeWarnLocalSameAsGlobal(Func *func, Var *var);
+	void MaybeWarnLocalSameAsGlobal(Func &func, Var &var);
+
+	void PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount);
 
 	static ResultType UnhandledException(ExprTokenType*& aToken, Line* line);
 	static ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
