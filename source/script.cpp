@@ -7317,6 +7317,11 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		if (class_var->IsObject())
 			// At this point it can only be an Object() created by a class definition.
 			class_object = (Object *)class_var->Object();
+		else
+			// Force the variable to be super-global rather than passing this flag to
+			// FindOrAddVar: a prior reference to this variable may have created it as
+			// an ordinary global.
+			class_var->Scope() = VAR_DECLARE_SUPER_GLOBAL;
 	}
 	
 	if (_tcslen(mClassName) + _tcslen(class_name) + 1 >= _countof(mClassName)) // +1 for '.'
