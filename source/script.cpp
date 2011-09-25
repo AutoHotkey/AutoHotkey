@@ -10227,6 +10227,7 @@ end_of_infix_to_postfix:
 	SymbolType only_symbol = only_token.symbol;
 	if (   postfix_count == 1 && IS_OPERAND(only_symbol) // This expression is a lone operand, like (1) or "string".
 		&& (mActionType < ACT_FOR || mActionType > ACT_UNTIL) // It's not FOR, WHILE or UNTIL, which require actual expressions.
+		&& (mActionType != ACT_THROW) // It's not THROW, which requires an actual expression.
 		&& (only_symbol != SYM_STRING || mActionType != ACT_SENDMESSAGE && mActionType != ACT_POSTMESSAGE)   ) // It's not something like SendMessage WM_SETTEXT,,"New text" (which requires the leading quote mark to be present).
 	{
 		if (only_symbol == SYM_DYNAMIC) // This needs some extra checks to ensure correct behaviour.
