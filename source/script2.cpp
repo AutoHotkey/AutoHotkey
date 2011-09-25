@@ -11652,7 +11652,7 @@ pcre *get_compiled_regex(LPTSTR aRegEx, pcre_extra *&aExtra, int *aOptionsLength
 #endif
 	#define SET_DEFAULT_PCRE_OPTIONS \
 	{\
-		pcre_options = PCRE_NEWLINE_CRLF | AHK_PCRE_CHARSET_OPTIONS;\
+		pcre_options = AHK_PCRE_CHARSET_OPTIONS;\
 		do_study = false;\
 	}
 	#define PCRE_NEWLINE_BITS (PCRE_NEWLINE_CRLF | PCRE_NEWLINE_ANY) // Covers all bits that are used for newline options.
@@ -11688,7 +11688,7 @@ pcre *get_compiled_regex(LPTSTR aRegEx, pcre_extra *&aExtra, int *aOptionsLength
 			// The PCRE_NEWLINE_XXX options are valid for both compile() and exec(), but specifying it for exec()
 			// would only serve to override the default stored inside the compiled pattern (seems rarely needed).
 		case '\r':
-			if (pat[1] == '\n') // Even though `r`n is the default, it's recognized as an option for flexibility and intuitiveness.
+			if (pat[1] == '\n')
 			{
 				++pat; // Skip over the second character so that it's not recognized as a separate option by the next iteration.
 				pcre_options = (pcre_options & ~PCRE_NEWLINE_BITS) | PCRE_NEWLINE_CRLF; // Set explicitly in case it was unset by an earlier option. Remember that PCRE_NEWLINE_CRLF is a bitwise combination of PCRE_NEWLINE_LF and CR.

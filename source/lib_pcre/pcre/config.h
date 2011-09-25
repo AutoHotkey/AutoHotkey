@@ -231,10 +231,8 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
    that support it, "configure" can be used to override the default, which is
    10. The possible values are 10 (LF), 13 (CR), 3338 (CRLF), -1 (ANY), or -2
    (ANYCRLF). */
-/* AutoHotkey: Changed below from default of 10 to 3338 because there's a
-   slight chance that compiling this way improves performance. */
 #ifndef NEWLINE
-#define NEWLINE 3338
+#define NEWLINE -2
 #endif
 
 /* PCRE uses recursive function calls to handle backtracking while matching.
