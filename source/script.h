@@ -2651,7 +2651,7 @@ public:
 	ResultType UpdateOrCreateTimer(Label *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
 		, bool aUpdatePriorityOnly);
 
-	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncExceptionVar[]);
+	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[]);
 #ifndef AUTOHOTKEYSC
 	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
 #endif

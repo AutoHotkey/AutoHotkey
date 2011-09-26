@@ -3683,14 +3683,14 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 								break;
 							}
 					if (var)
-						return ScriptError(var->IsDeclared() ? _T("Duplicate declaration.") : _T("Declaration conflicts with existing var."), item);
+						return ScriptError(var->IsDeclared() ? ERR_DUPLICATE_DECLARATION : _T("Declaration conflicts with existing var."), item);
 				}
 				
 				if (   !(var = FindOrAddVar(item, var_name_length, declare_type))   )
 					return FAIL; // It already displayed the error.
 				if (var->Type() != VAR_NORMAL || !tcslicmp(item, _T("ErrorLevel"), var_name_length)) // Shouldn't be declared either way (global or local).
 					return ScriptError(_T("Built-in variables must not be declared."), item);
-				if (declare_type == VAR_DECLARE_GLOBAL)
+				if (declare_type == VAR_DECLARE_GLOBAL) // Can only be true if g->CurrentFunc is non-NULL.
 				{
 					if (g->CurrentFunc->mGlobalVarCount >= MAX_FUNC_VAR_GLOBALS)
 						return ScriptError(_T("Too many declarations."), item); // Short message since it's so unlikely.
@@ -7265,7 +7265,6 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 
 	// Indicate success:
 	func.mGlobalVar = aFuncGlobalVar; // Give func.mGlobalVar its address, to be used for any var declarations inside this function's body.
-	func.mGlobalVarCount = 0;  // Reset in preparation of declarations that appear beneath this function's definition.
 	return OK;
 }
 
