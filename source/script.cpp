@@ -10260,8 +10260,7 @@ end_of_infix_to_postfix:
 					return OK;
 				}
 				// Otherwise, it's A_Index or A_EventInfo, which must pass through ExpandExpression() to
-				// yield a pure integer.  Correctness seems more important than performance in this case,
-				// especially if A_EventInfo can return "0"; i.e. because TokenToBOOL() would see it as TRUE.
+				// yield a pure integer.  Correctness seems more important than performance in this case.
 				// Performance might even be better this way because string -> number conversion is avoided.
 				// Note that a double-deref which resolves to the var A_Index or A_EventInfo will still yield
 				// a string, but that seems too rare to worry about.  Furthermore, it might be resolved in
