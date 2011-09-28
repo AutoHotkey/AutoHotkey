@@ -59,9 +59,10 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 	tmemcpy(name, name_marker, name_length);
 	name[name_length] = '\0';
 	
+	__int64 gui_num = 0;
 	if (IsNumeric(name, TRUE, FALSE) == PURE_INTEGER) // Allow negatives, for flexibility.
 	{
-		__int64 gui_num = ATOI64(name);
+		gui_num = ATOI64(name);
 		if (gui_num < 1 || gui_num > 99 // The range of valid Gui numbers prior to v1.1.03.
 			|| name_length > 2) // Length is also checked because that's how it used to be.
 		{
@@ -89,7 +90,7 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 		// found_gui: *aName must be set for GUI_CMD_NEW even if a GUI was found, since
 		// found_gui will be destroyed (along with found_gui->mName) and recreated. If a
 		// GUI was found, obviously the name is valid and ValidateName() can be skipped.
-		if (found_gui || Var::ValidateName(name, true, false))
+		if (found_gui || gui_num || Var::ValidateName(name, true, false))
 		{
 			// This name is okay.
 			*aName = name_marker;
