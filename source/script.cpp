@@ -12118,9 +12118,12 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 
 		case ACT_THROW:
 		{
+			if (!line->mArgc)
+				return line->ThrowRuntimeException(_T("An exception was thrown."));
+
 			ExprTokenType* token = new ExprTokenType;
 			if (!token) // Unlikely.
-				return LineError(ERR_OUTOFMEM);
+				return line->LineError(ERR_OUTOFMEM);
 
 			// The following is based on code from PerformLoopFor()
 
@@ -12130,7 +12133,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
 				{
 					sDerefBufSize = 0;
-					return LineError(ERR_OUTOFMEM);
+					return line->LineError(ERR_OUTOFMEM);
 				}
 			}
 
