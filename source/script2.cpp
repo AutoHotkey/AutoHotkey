@@ -11438,7 +11438,7 @@ int RegExCallout(pcre_callout_block *cb)
 	int var_backup_count; // The number of items in the above array.
 	if (func.mInstances > 0) // Backup is needed.
 		if (!Var::BackupFunctionVars(func, var_backup, var_backup_count)) // Out of memory.
-			return 0;
+			return PCRE_ERROR_NOMEMORY;
 
 	EventInfoType EventInfo_saved = g->EventInfo;
 
@@ -11471,8 +11471,20 @@ int RegExCallout(pcre_callout_block *cb)
 		// Set local vars of callout func where applicable.
 		g->CurrentFunc = &func;
 
+		// Since matching is still in progress, these *should* be -1.
+		// For maintainability and peace of mind, save them anyway:
+		int offset[] = { cb->offset_vector[0], cb->offset_vector[1] };
+		
+		// Temporarily set these for use by the function below:
+		cb->offset_vector[0] = cb->start_match;
+		cb->offset_vector[1] = cb->current_position;
+
 		// Set up local vars for capturing subpatterns.
 		RegExSetMatchVar(cb->subject, cd.re, cd.extra, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top);
+
+		// Restore to former offsets (probably -1):
+		cb->offset_vector[0] = offset[0];
+		cb->offset_vector[1] = offset[1];
 		
 		// Restore g.CurrentFunc - func.Call() will also save, overwrite and restore it.
 		g->CurrentFunc = prev_func;
@@ -11508,7 +11520,7 @@ int RegExCallout(pcre_callout_block *cb)
 	//++cb->current_position;
 
 	ExprTokenType result_token;
-	func.Call(&result_token); // Call the UDF.
+	ResultType result = func.Call(&result_token); // Call the UDF.
 
 	// MUST handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value
 	// might be the contents of one of the function's local variables (which are about to be freed).
@@ -11519,6 +11531,15 @@ int RegExCallout(pcre_callout_block *cb)
 	Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
 
 	g->EventInfo = EventInfo_saved;
+
+	if (result == FAIL)
+	{
+		// If a runtime error occurred, the user probably expects the thread to exit.  That can't
+		// be easily done, so as a compromise, just abort matching.  If an exception was thrown,
+		// the actual return value doesn't matter as long as matching is aborted, since execution
+		// will be transferred to the CATCH block.
+		number_to_return = PCRE_ERROR_NOMATCH;
+	}
 
 	// Behaviour of return values is defined by PCRE.
 	return number_to_return;

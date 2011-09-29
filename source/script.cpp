@@ -3564,7 +3564,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					return FAIL; // It already displayed the error.
 				if (var->Type() != VAR_NORMAL || !tcslicmp(item, _T("ErrorLevel"), var_name_length)) // Shouldn't be declared either way (global or local).
 					return ScriptError(_T("Built-in variables must not be declared."), item);
-				if (declare_type == VAR_DECLARE_GLOBAL && g->CurrentFunc)
+				if (declare_type == VAR_DECLARE_GLOBAL) // Can only be true if g->CurrentFunc is non-NULL.
 				{
 					if (g->CurrentFunc->mGlobalVarCount >= MAX_FUNC_VAR_GLOBALS)
 						return ScriptError(_T("Too many declarations."), item); // Short message since it's so unlikely.
@@ -5596,9 +5596,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		if (aArgc > 1 && !line.ArgHasDeref(2))
 		{
 			LPTSTR command, name;
-			ResolveGui(new_raw_arg1, command, &name);
+			ResolveGui(new_raw_arg2, command, &name);
 			if (!name)
-				return ScriptError(ERR_INVALID_GUI_NAME, new_raw_arg1);
+				return ScriptError(ERR_INVALID_GUI_NAME, new_raw_arg2);
 
 			GuiControlGetCmds guicontrolget_cmd = line.ConvertGuiControlGetCmd(command);
 			// This first check's error messages take precedence over the next check's:
@@ -6202,7 +6202,6 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 
 	// Indicate success:
 	func.mGlobalVar = aFuncGlobalVar; // Give func.mGlobalVar its address, to be used for any var declarations inside this function's body.
-	func.mGlobalVarCount = 0;  // Reset in preparation of declarations that appear beneath this function's definition.
 	return OK;
 }
 
@@ -11092,9 +11091,12 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 
 		case ACT_THROW:
 		{
+			if (!line->mArgc)
+				return line->ThrowRuntimeException(_T("An exception was thrown."));
+
 			ExprTokenType* token = new ExprTokenType;
 			if (!token) // Unlikely.
-				return LineError(ERR_OUTOFMEM);
+				return line->LineError(ERR_OUTOFMEM);
 
 			// The following is based on code from PerformLoopFor()
 
@@ -11104,7 +11106,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
 				{
 					sDerefBufSize = 0;
-					return LineError(ERR_OUTOFMEM);
+					return line->LineError(ERR_OUTOFMEM);
 				}
 			}
 
@@ -14011,7 +14013,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
 
-	if (g->InTryBlock && aErrorType == FAIL || aErrorType == EARLY_EXIT) // FAIL is most common, but EARLY_EXIT is used by ComError(). WARN and CRITICAL_ERROR are excluded.
+	if (g->InTryBlock && (aErrorType == FAIL || aErrorType == EARLY_EXIT)) // FAIL is most common, but EARLY_EXIT is used by ComError(). WARN and CRITICAL_ERROR are excluded.
 		return ThrowRuntimeException(aErrorText, NULL, aExtraInfo);
 
 	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute && aErrorType != WARN) // i.e. runtime errors are always displayed via dialog.

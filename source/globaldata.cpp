@@ -350,7 +350,7 @@ Action g_act[] =
 	, {_T("Break"), 0, 1, false, NULL}, {_T("Continue"), 0, 1, false, NULL}
 	, {_T("Try"), 0, 0, false, NULL}
 	, {_T("Catch"), 0, 1, false, NULL} // fincs: seems best to allow catch without a parameter
-	, {_T("Throw"), 1, 1, false, {1, 0}}
+	, {_T("Throw"), 0, 1, false, {1, 0}}
 	, {_T("{"), 0, 0, false, NULL}, {_T("}"), 0, 0, false, NULL}
 
 	, {_T("WinActivate"), 0, 4, false, NULL} // Passing zero params results in activating the LastUsed window.
