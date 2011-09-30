@@ -8178,36 +8178,39 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 		// Preparse command-style function calls:
 		if (line->mActionType == ACT_FUNC)
 		{
-			ArgStruct &first_arg = line->mArg[0];
+			ArgStruct &first_arg = line->mArg[0]; // Contains the function name.
+			int param_count = line->mArgc - 1;
 			// Now that function declarations have been processed, resolve this line's function.
-			// first_arg never contains a deref since the arg comes from the action name itself:
-			Func *func = FindFunc(first_arg.text);
-			if (!func)
+			Func *func = NULL;
+			if (!first_arg.deref)
 			{
-#ifndef AUTOHOTKEYSC
-				bool error_was_shown, file_was_found;
-				if (   !(func = FindFuncInLibrary(first_arg.text, first_arg.length, error_was_shown, file_was_found, true))   )
+				func = FindFunc(first_arg.text);
+				if (!func)
 				{
-					abort = true; // So that the caller doesn't also report an error.
-					// When above already displayed the proximate cause of the error, it's usually
-					// undesirable to show the cascade effects of that error in a second dialog:
-					return error_was_shown ? NULL : line->PreparseError(ERR_NONEXISTENT_FUNCTION, first_arg.text);
-				}
+#ifndef AUTOHOTKEYSC
+					bool error_was_shown, file_was_found;
+					if (   !(func = FindFuncInLibrary(first_arg.text, first_arg.length, error_was_shown, file_was_found, true))   )
+					{
+						abort = true; // So that the caller doesn't also report an error.
+						// When above already displayed the proximate cause of the error, it's usually
+						// undesirable to show the cascade effects of that error in a second dialog:
+						return error_was_shown ? NULL : line->PreparseError(ERR_NONEXISTENT_FUNCTION, first_arg.text);
+					}
 #else
-				abort = true;
-				return line->PreparseError(ERR_NONEXISTENT_FUNCTION, first_arg.text);
+					abort = true;
+					return line->PreparseError(ERR_NONEXISTENT_FUNCTION, first_arg.text);
 #endif
-			}
-			int param_count = line->mArgc - 1; // -1 to exclude function name arg.
-			if (param_count < func->mMinParams)
-			{
-				abort = true;
-				return line->PreparseError(ERR_TOO_FEW_PARAMS);
-			}
-			if (param_count > func->mParamCount)
-			{
-				abort = true;
-				return line->PreparseError(ERR_TOO_MANY_PARAMS);
+				}
+				if (param_count < func->mMinParams)
+				{
+					abort = true;
+					return line->PreparseError(ERR_TOO_FEW_PARAMS);
+				}
+				if (param_count > func->mParamCount)
+				{
+					abort = true;
+					return line->PreparseError(ERR_TOO_MANY_PARAMS);
+				}
 			}
 			line->mAttribute = func;
 		}
@@ -13462,12 +13465,19 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_FUNC:
 	{
-		ExprTokenType params[MAX_ARGS], *param[MAX_ARGS];
+		Func *func = (Func *)mAttribute;
+		if (!func && !(func = g_script.FindFunc(ARG1)))
+			return LineError(ERR_NONEXISTENT_FUNCTION, FAIL, ARG1);
+		
 		int param_count = mArgc - 1;
+		if (param_count < func->mMinParams)
+			return LineError(ERR_TOO_FEW_PARAMS, FAIL, ARG1);
+
+		ExprTokenType params[MAX_ARGS], *param[MAX_ARGS];
 		for (int i = 0; i < param_count; ++i)
 		{
 			param[i] = &params[i];
-			if (sArgVar[i])
+			if (sArgVar[i+1])
 			{
 				params[i].symbol = SYM_VAR;
 				params[i].var = sArgVar[i+1]; // +1 to skip arg containing function name.
@@ -13485,7 +13495,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		result_token.mem_to_free = NULL; // Init to allow detection below.
 
 		// CALL THE FUNCTION.
-		((Func *)mAttribute)->Call(func_call, result, result_token, param, param_count);
+		func->Call(func_call, result, result_token, param, param_count);
 
 		// Return value is currently unused, so just clean up:
 		if (result_token.mem_to_free)
