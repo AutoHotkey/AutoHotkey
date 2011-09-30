@@ -332,9 +332,8 @@ enum enum_act {
 , ACT_FILEENCODING
 // Make these the last ones before the count so they will be less often processed.  This helps
 // performance because this one doesn't actually have a keyword so will never result
-// in a match anyway.  UPDATE: No longer used because Run/RunWait is now required, which greatly
-// improves syntax checking during load:
-//, ACT_EXEC
+// in a match anyway.
+, ACT_FUNC
 // It's safer not to do this here.  It's better set by a
 // calculation immediately after the array is declared and initialized,
 // at which time we know its true size:

@@ -4049,6 +4049,15 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			else if (*action_args == '=')
 				// v2: Give a more specific error message since the user probably meant to do an old-style assignment.
 				return ScriptError(_T("Syntax error. Did you mean to use \":=\"?"), aLineText);
+			else if (could_be_named_action)
+			{
+				// Assume this is a function; a later stage will throw up an error if it isn't.
+				aActionType = ACT_FUNC;
+				// Include the function name as an arg:
+				if (end_marker[1])
+					end_marker[1] = g_delimiter;
+				action_args = aLineText;
+			}
 			else
 				// v1.0.40: Give a more specific error message now that hotkeys can make it here due to
 				// the change that avoids the need to escape double-colons:
@@ -8166,6 +8175,43 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 	// for its differing return values.
 	for (Line *line = aStartingLine; line;)
 	{
+		// Preparse command-style function calls:
+		if (line->mActionType == ACT_FUNC)
+		{
+			ArgStruct &first_arg = line->mArg[0];
+			// Now that function declarations have been processed, resolve this line's function.
+			// first_arg never contains a deref since the arg comes from the action name itself:
+			Func *func = FindFunc(first_arg.text);
+			if (!func)
+			{
+#ifndef AUTOHOTKEYSC
+				bool error_was_shown, file_was_found;
+				if (   !(func = FindFuncInLibrary(first_arg.text, first_arg.length, error_was_shown, file_was_found, true))   )
+				{
+					abort = true; // So that the caller doesn't also report an error.
+					// When above already displayed the proximate cause of the error, it's usually
+					// undesirable to show the cascade effects of that error in a second dialog:
+					return error_was_shown ? NULL : line->PreparseError(ERR_NONEXISTENT_FUNCTION, first_arg.text);
+				}
+#else
+				abort = true;
+				return line->PreparseError(ERR_NONEXISTENT_FUNCTION, first_arg.text);
+#endif
+			}
+			int param_count = line->mArgc - 1; // -1 to exclude function name arg.
+			if (param_count < func->mMinParams)
+			{
+				abort = true;
+				return line->PreparseError(ERR_TOO_FEW_PARAMS);
+			}
+			if (param_count > func->mParamCount)
+			{
+				abort = true;
+				return line->PreparseError(ERR_TOO_MANY_PARAMS);
+			}
+			line->mAttribute = func;
+		}
+
 		// Check if any of each arg's derefs are function calls.  If so, do some validation and
 		// preprocessing to set things up for better runtime performance:
 		for (i = 0; i < line->mArgc; ++i) // For each arg.
@@ -13406,11 +13452,50 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return Util_Shutdown(ArgToInt(1)) ? OK : FAIL; // Range of ARG1 is not validated in case other values are supported in the future.
 
 	case ACT_FILEENCODING:
+	{
 		UINT new_encoding = ConvertFileEncoding(ARG1);
 		if (new_encoding == -1)
 			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1); // Probably a variable, otherwise load-time validation would've caught it.
 		g.Encoding = new_encoding;
 		return OK;
+	}
+
+	case ACT_FUNC:
+	{
+		ExprTokenType params[MAX_ARGS], *param[MAX_ARGS];
+		int param_count = mArgc - 1;
+		for (int i = 0; i < param_count; ++i)
+		{
+			param[i] = &params[i];
+			if (sArgVar[i])
+			{
+				params[i].symbol = SYM_VAR;
+				params[i].var = sArgVar[i+1]; // +1 to skip arg containing function name.
+			}
+			else
+			{
+				params[i].symbol = SYM_STRING;
+				params[i].marker = sArgDeref[i+1];
+			}
+		}
+		
+		ExprTokenType result_token;
+		FuncCallData func_call;
+		ResultType result;
+		result_token.mem_to_free = NULL; // Init to allow detection below.
+
+		// CALL THE FUNCTION.
+		((Func *)mAttribute)->Call(func_call, result, result_token, param, param_count);
+
+		// Return value is currently unused, so just clean up:
+		if (result_token.mem_to_free)
+			free(result_token.mem_to_free);
+		if (result_token.symbol == SYM_OBJECT)
+			result_token.object->Release();
+
+		return OK;
+	}
+
 	} // switch()
 
 	// Since above didn't return, this line's mActionType isn't handled here,

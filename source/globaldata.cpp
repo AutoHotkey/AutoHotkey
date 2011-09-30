@@ -482,6 +482,8 @@ Action g_act[] =
 	, {_T("Shutdown"), 1, 1, false, {1, 0}} // Seems best to make the first param (the flag/code) mandatory.
 
 	, {_T("FileEncoding"), 0, 1, false, NULL}
+
+	, {_T(""), 1, MAX_ARGS, true, NULL} // Command-style function-call.
 };
 // Below is the most maintainable way to determine the actual count?
 // Due to C++ lang. restrictions, can't easily make this a const because constants
