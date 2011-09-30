@@ -12416,6 +12416,14 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 		}
 	}
 
+	if (!function && hmodule_to_free) // Caller wants us to set ErrorLevel.
+	{
+		// This must be done here since only we know for certain that the dll
+		// was loaded okay (if GetModuleHandle succeeded, nothing is passed
+		// back to the caller).
+		g_script.SetErrorLevelOrThrowStr(_T("-4"), _T("DllCall")); // Stage 4 error: Function could not be found in the DLL(s).
+	}
+
 	return function;
 }
 
@@ -12704,13 +12712,9 @@ has_valid_return_type:
     
 	if (!function) // The function's address hasn't yet been determined.
 	{
-		LPCTSTR aFuncName;
-		function = GetDllProcAddress(aFuncName = aParam[0]->symbol == SYM_VAR ? aParam[0]->var->Contents() : aParam[0]->marker, &hmodule_to_free);
+		function = GetDllProcAddress(aParam[0]->symbol == SYM_VAR ? aParam[0]->var->Contents() : aParam[0]->marker, &hmodule_to_free);
 		if (!function)
-		{
-			g_script.SetErrorLevelOrThrowStr(_T("-4"), _T("DllCall")); // Stage 4 error: Function could not be found in the DLL(s).
 			goto end;
-		}
 	}
 
 	////////////////////////
