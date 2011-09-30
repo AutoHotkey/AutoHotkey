@@ -3564,7 +3564,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					return FAIL; // It already displayed the error.
 				if (var->Type() != VAR_NORMAL || !tcslicmp(item, _T("ErrorLevel"), var_name_length)) // Shouldn't be declared either way (global or local).
 					return ScriptError(_T("Built-in variables must not be declared."), item);
-				if (declare_type == VAR_DECLARE_GLOBAL) // Can only be true if g->CurrentFunc is non-NULL.
+				if (declare_type == VAR_DECLARE_GLOBAL && g->CurrentFunc) // i.e. "global x" in a function, not "var x" (which is also VAR_DECLARE_GLOBAL).
 				{
 					if (g->CurrentFunc->mGlobalVarCount >= MAX_FUNC_VAR_GLOBALS)
 						return ScriptError(_T("Too many declarations."), item); // Short message since it's so unlikely.
