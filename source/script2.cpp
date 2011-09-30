@@ -13291,6 +13291,9 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, TCHAR
 
 RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName, int aCapturedPatternCount)
 {
+	if (aCapturedPatternCount < 1)
+		return NULL;
+
 	RegExMatchObject *m = new RegExMatchObject();
 	if (!m)
 		return NULL;
