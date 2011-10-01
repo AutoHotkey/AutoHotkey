@@ -15840,11 +15840,59 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 	return FAIL; // See above for why it's better to return FAIL than CRITICAL_ERROR.
 }
 
-ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* line)
-{
-	// FUTURE: add more information about the thrown token itself
-	line->LineError(_T("Unhandled exception!"), WARN);
 
+
+ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine)
+{
+	LPCTSTR message = _T(""), extra = _T("");
+	TCHAR extra_buf[MAX_NUMBER_SIZE], message_buf[MAX_NUMBER_SIZE];
+
+	if (Object *ex = dynamic_cast<Object *>(TokenToObject(*aToken)))
+	{
+		// For simplicity and safety, we call into the Object directly rather than via Invoke().
+		ExprTokenType t;
+		if (ex->GetItem(t, _T("Message")))
+			message = TokenToString(t, message_buf);
+		if (ex->GetItem(t, _T("Extra")))
+			extra = TokenToString(t, extra_buf);
+		if (ex->GetItem(t, _T("Line")))
+		{
+			LineNumberType line_no = (LineNumberType)TokenToInt64(t);
+			if (ex->GetItem(t, _T("File")))
+			{
+				LPCTSTR file = TokenToString(t);
+				// Locate the line by number and file index, then display that line instead
+				// of the caller supplied one since it's probably more relevant.
+				int file_index;
+				for (file_index = 0; file_index < Line::sSourceFileCount; ++file_index)
+					if (!_tcsicmp(file, Line::sSourceFile[file_index]))
+						break;
+				Line *line;
+				for (line = g_script.mFirstLine;
+					line && (line->mLineNumber != line_no || line->mFileIndex != file_index);
+					line = line->mNextLine);
+				if (line)
+					aLine = line;
+			}
+		}
+	}
+	else
+	{
+		// Assume it's a string or number.
+		message = TokenToString(*aToken, message_buf);
+	}
+
+	// If message is empty or numeric, display a default message for clarity.
+	if (!*extra && IsPureNumeric(message, TRUE, TRUE, TRUE))
+	{
+		extra = message;
+		message = _T("Unhandled exception.");
+	}	
+
+	TCHAR buf[MSGBOX_TEXT_SIZE];
+	Line::FormatError(buf, _countof(buf), FAIL, message, extra, aLine, _T("The thread has exited."));
+	MsgBox(buf);
+	
 	FreeExceptionToken(aToken);
 
 	return FAIL;
