@@ -48,7 +48,7 @@ ResultType Script::DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDispla
 	if (!hinstLib)
 	{
 		if (aDisplayErrors)
-			ScriptError(_T("RunAs: Missing advapi32.dll.") ERR_ABORT);
+			ScriptError(_T("RunAs: Missing advapi32.dll."));
 		return FAIL;
 	}
 	MyCreateProcessWithLogonW lpfnDLLProc = (MyCreateProcessWithLogonW)GetProcAddress(hinstLib, "CreateProcessWithLogonW");
@@ -56,7 +56,7 @@ ResultType Script::DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDispla
 	{
 		FreeLibrary(hinstLib);
 		if (aDisplayErrors)
-			ScriptError(_T("CreateProcessWithLogonW.") ERR_ABORT); // Short msg since it probably never happens.
+			ScriptError(_T("CreateProcessWithLogonW.")); // Short msg since it probably never happens.
 		return FAIL;
 	}
 	// Set up wide char version that we need for CreateProcessWithLogon
@@ -1138,7 +1138,7 @@ ResultType Line::FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGree
 	if (g_nFolderDialogs >= MAX_FOLDERDIALOGS)
 	{
 		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
-		return LineError(_T("The maximum number of Folder Dialogs has been reached.") ERR_ABORT);
+		return LineError(_T("The maximum number of Folder Dialogs has been reached."));
 	}
 
 	LPMALLOC pMalloc;

@@ -3589,7 +3589,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				// local += 3
 				TCHAR orig_char = cp[1];
 				cp[1] = '\0'; // Temporarily terminate.
-				ResultType result = Var::ValidateName(cp, false, DISPLAY_NO_ERROR);
+				ResultType result = Var::ValidateName(cp, DISPLAY_NO_ERROR);
 				cp[1] = orig_char; // Undo the termination.
 				if (!result) // It's probably operator, e.g. local = %var%
 					break;
@@ -5625,7 +5625,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				// that they *are* numeric parameters.  ValidateName() serves to eliminate cases where
 				// a single deref is accompanied by literal numbers, strings, or operators, e.g.
 				// Var := X + 1 ... Var := Var2 "xyz" ... Var := -Var2
-				if (deref_count == 1 && Var::ValidateName(this_new_arg.text, false, DISPLAY_NO_ERROR)) // Single isolated deref.
+				if (deref_count == 1 && Var::ValidateName(this_new_arg.text, DISPLAY_NO_ERROR)) // Single isolated deref.
 				{
 					// ACT_WHILE performs less than 4% faster as a non-expression in these cases, and keeping
 					// it as an expression avoids an extra check in a performance-sensitive spot of ExpandArgs
@@ -7296,7 +7296,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	}
 
 	// Validate the name even if this is a nested definition, for consistency.
-	if (!Var::ValidateName(class_name, false, DISPLAY_NO_ERROR))
+	if (!Var::ValidateName(class_name, DISPLAY_NO_ERROR))
 		return ScriptError(_T("Invalid class name."), class_name);
 
 	class_object = NULL; // This initializes the entry in the mClassObject array.
@@ -8220,16 +8220,7 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 
 	if (aFuncNameLength > MAX_VAR_NAME_LENGTH)
 	{
-		// Dynamic function-calls such as MyFuncArray%i%() aren't currently supported, so the first
-		// item below is commented out:
-		// Load-time callers should check for this.  But at runtime, it's possible for a dynamically
-		// resolved function name to be too long.  Note that aFuncName should be the exact variable
-		// name and does not need to be truncated to aFuncNameLength whenever this error occurs
-		// (i.e. at runtime):
-		//if (mIsReadyToExecute) // Runtime error.
-		//	ScriptError("Function name too long." ERR_ABORT, aFuncName);
-		//else
-			ScriptError(_T("Function name too long."), aFuncName);
+		ScriptError(_T("Function name too long."), aFuncName);
 		return NULL;
 	}
 
@@ -8244,15 +8235,14 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 	// 3) Those scripts that are broken are not broken in a bad way because the pre-parser will generate a
 	//    load-time error, which is easy to fix (unlike runtime errors, which require that part of the script
 	//    to actually execute).
-	if (!aClassObject && !Var::ValidateName(func_name, mIsReadyToExecute, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
+	if (!aClassObject && !Var::ValidateName(func_name, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
 		// Above already displayed error for us.  This can happen at loadtime or runtime (e.g. StringSplit).
 		return NULL;
 
 	// Allocate some dynamic memory to pass to the constructor:
 	LPTSTR new_name = SimpleHeap::Malloc(func_name, aFuncNameLength);
 	if (!new_name)
-		// It already displayed the error for us.  These mem errors are so unusual that we're not going
-		// to bother varying the error message to include ERR_ABORT if this occurs during runtime.
+		// It already displayed the error for us.
 		return NULL;
 
 	Func *the_new_func = new Func(new_name, aIsBuiltIn);
@@ -8518,7 +8508,7 @@ Var *Line::ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary)
 		// Now we've dynamically build the variable name.  It's possible that the name is illegal,
 		// so check that (the name is automatically checked by FindOrAddVar(), so we only need to
 		// check it if we're not calling that):
-		if (!Var::ValidateName(sVarName, g_script.mIsReadyToExecute))
+		if (!Var::ValidateName(sVarName))
 			return NULL; // Above already displayed error for us.
 		if (found_var = g_script.FindVar(sVarName, var_name_length)) // Assign.
 			return found_var;
@@ -8708,14 +8698,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 
 	if (aVarNameLength > MAX_VAR_NAME_LENGTH)
 	{
-		// Load-time callers should check for this.  But at runtime, it's possible for a dynamically
-		// resolved variable name to be too long.  Note that aVarName should be the exact variable
-		// name and does not need to be truncated to aVarNameLength whenever this error occurs
-		// (i.e. at runtime):
-		if (mIsReadyToExecute) // Runtime error.
-			ScriptError(_T("Variable name too long.") ERR_ABORT, aVarName);
-		else
-			ScriptError(_T("Variable name too long."), aVarName);
+		ScriptError(_T("Variable name too long."), aVarName);
 		return NULL;
 	}
 
@@ -8723,7 +8706,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	TCHAR var_name[MAX_VAR_NAME_LENGTH + 1];
 	tcslcpy(var_name, aVarName, aVarNameLength + 1);  // See explanation above.  +1 to convert length to size.
 
-	if (!Var::ValidateName(var_name, mIsReadyToExecute))
+	if (!Var::ValidateName(var_name))
 		// Above already displayed error for us.  This can happen at loadtime or runtime (e.g. StringSplit).
 		return NULL;
 
@@ -8748,8 +8731,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	// Allocate some dynamic memory to pass to the constructor:
 	LPTSTR new_name = SimpleHeap::Malloc(var_name, aVarNameLength);
 	if (!new_name)
-		// It already displayed the error for us.  These mem errors are so unusual that we're not going
-		// to bother varying the error message to include ERR_ABORT if this occurs during runtime.
+		// It already displayed the error for us.
 		return NULL;
 
 	// Below specifically tests for VAR_LOCAL and excludes other non-zero values/flags:
@@ -9181,7 +9163,7 @@ ResultType Script::AddGroup(LPTSTR aGroupName)
 	size_t aGroupName_length = _tcslen(aGroupName);
 	if (aGroupName_length > MAX_VAR_NAME_LENGTH)
 		return ScriptError(_T("Group name too long."), aGroupName);
-	if (!Var::ValidateName(aGroupName, false, DISPLAY_NO_ERROR)) // Seems best to use same validation as var names.
+	if (!Var::ValidateName(aGroupName, DISPLAY_NO_ERROR)) // Seems best to use same validation as var names.
 		return ScriptError(_T("Illegal group name."), aGroupName);
 
 	LPTSTR new_name = SimpleHeap::Malloc(aGroupName, aGroupName_length);
@@ -11834,14 +11816,14 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			{
 				file_loop_mode = (line->mArgc <= 1) ? FILE_LOOP_FILES_ONLY : ConvertLoopMode(ARG2);
 				if (file_loop_mode == FILE_LOOP_INVALID)
-					return line->LineError(ERR_PARAM2_INVALID ERR_ABORT, FAIL, ARG2);
+					return line->LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
 				recurse_subfolders = (*ARG3 == '1' && !*(ARG3 + 1));
 			}
 			else if (attr == ATTR_LOOP_REG)
 			{
 				file_loop_mode = (line->mArgc <= 2) ? FILE_LOOP_FILES_ONLY : ConvertLoopMode(ARG3);
 				if (file_loop_mode == FILE_LOOP_INVALID)
-					return line->LineError(ERR_PARAM3_INVALID ERR_ABORT, FAIL, ARG3);
+					return line->LineError(ERR_PARAM3_INVALID, FAIL, ARG3);
 				recurse_subfolders = (*ARG4 == '1' && !*(ARG4 + 1));
 			}
 
@@ -12263,7 +12245,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				// the subroutine has put us into a waiting-for-return state rather than a
 				// waiting-for-block-end state, so when block-end's are encountered, that is
 				// considered a runtime error:
-				return line->LineError(_T("A \"return\" must be encountered prior to this \"}\".") ERR_ABORT);  // Former error msg was "Unexpected end-of-block (Gosub without Return?)."
+				return line->LineError(_T("A \"return\" must be encountered prior to this \"}\"."));  // Former error msg was "Unexpected end-of-block (Gosub without Return?)."
 			return OK; // It's the caller's responsibility to resume execution at the next line, if appropriate.
 
 		// ACT_ELSE can happen when one of the cases in this switch failed to properly handle
@@ -12272,7 +12254,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		// So it's commented out:
 		//case ACT_ELSE:
 		//	// Shouldn't happen if the pre-parser and this function are designed properly?
-		//	return line->LineError("Unexpected ELSE." ERR_ABORT);
+		//	return line->LineError("Unexpected ELSE.");
 
 		default:
 			++g_script.mLinesExecutedThisCycle;
@@ -12313,8 +12295,7 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 {
 #ifdef _DEBUG
 	if (!ACT_IS_IF(mActionType))
-		return LineError(_T("DEBUG: EvaluateCondition() was called with a line that isn't a condition.")
-			ERR_ABORT);
+		return LineError(_T("DEBUG: EvaluateCondition() was called with a line that isn't a condition."));
 #endif
 
 	SymbolType var_is_pure_numeric, value_is_pure_numeric, value2_is_pure_numeric;
@@ -12658,13 +12639,13 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 		int mb_result = ConvertMsgBoxResult(ARG1);
 		// Seems best not to report runtime error for such a rare thing, just let it discover "false" further below:
 		//if (!mb_result)
-		//	return LineError(ERR_PARAM1_INVALID ERR_ABORT, FAIL, ARG1);
+		//	return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
 		if_condition = (g->MsgBoxResult == mb_result);
 		break;
 	}
 #ifdef _DEBUG
 	default: // Should never happen, but return an error if it does.
-		return LineError(_T("DEBUG: EvaluateCondition(): Unhandled type of IF.") ERR_ABORT);
+		return LineError(_T("DEBUG: EvaluateCondition(): Unhandled type of IF."));
 #endif
 	}
 	return if_condition ? CONDITION_TRUE : CONDITION_FALSE;
@@ -14233,7 +14214,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_CONTROLCLICK:
 		if (   !(vk = ConvertMouseButton(ARG4))   ) // Treats blank as "Left".
-			return LineError(ERR_PARAM4_INVALID ERR_ABORT, FAIL, ARG4);
+			return LineError(ERR_PARAM4_INVALID, FAIL, ARG4);
 		return ControlClick(vk, *ARG5 ? ArgToInt(5) : 1, ARG6, ARG1, ARG2, ARG3, ARG7, ARG8);
 
 	case ACT_CONTROLMOVE:
@@ -14297,7 +14278,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// If it wasn't resolved at load-time, it must be a variable reference:
 		if (   !(target_label = (Label *)mAttribute)   )
 			if (   !(target_label = g_script.FindLabel(ARG1))   )
-				return LineError(ERR_NO_LABEL ERR_ABORT, FAIL, ARG1);
+				return LineError(ERR_NO_LABEL, FAIL, ARG1);
 		g_script.mOnExitLabel = target_label;
 		return OK;
 
@@ -14310,7 +14291,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// that allows us to figure out whether to "update or create" when searching the list of timers.
 		if (   !(target_label = (Label *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
 			if (   !(target_label = (*ARG1 ? g_script.FindLabel(ARG1) : g.CurrentLabel))   )
-				return LineError(ERR_NO_LABEL ERR_ABORT, FAIL, ARG1);
+				return LineError(ERR_NO_LABEL, FAIL, ARG1);
 		// And don't update mAttribute (leave it NULL) because we want ARG1 to be dynamically resolved
 		// every time the command is executed (in case the contents of the referenced variable change).
 		// In the data structure that holds the timers, we store the target label rather than the target
@@ -14417,7 +14398,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		{
 			if (   !(target_label = (Label *)mRelatedLine)   ) // Jump target hasn't been resolved yet, probably due to it being a deref.
 				if (   !(target_label = g_script.FindLabel(ARG4))   )
-					return LineError(ERR_NO_LABEL ERR_ABORT, FAIL, ARG4);
+					return LineError(ERR_NO_LABEL, FAIL, ARG4);
 			// Can't do this because the current line won't be the launching point for the
 			// Gosub.  Instead, the launching point will be the GroupActivate rather than the
 			// GroupAdd, so it will be checked by the GroupActivate or not at all (since it's
@@ -14705,7 +14686,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		//	// the user of this via a final MessageBox dialog, so our call here will
 		//	// not have any effect.  The below only takes effect if MsgBox()'s call to
 		//	// MessageBox() failed in some unexpected way:
-		//	LineError("The MsgBox could not be displayed." ERR_ABORT);
+		//	LineError("The MsgBox could not be displayed.");
 		return result ? OK : FAIL;
 	}
 
@@ -14830,7 +14811,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		case FIND_FAST: g.TitleFindFast = true; return OK;
 		case FIND_SLOW: g.TitleFindFast = false; return OK;
 		}
-		return LineError(ERR_PARAM1_INVALID ERR_ABORT, FAIL, ARG1);
+		return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
 
 	case ACT_SETFORMAT:
 		// For now, it doesn't seem necessary to have runtime validation of the first parameter.
@@ -15082,7 +15063,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	// Script::AddLine() forbids it.
 
 #ifdef _DEBUG
-	return LineError(_T("DEBUG: Perform(): Unhandled action type.") ERR_ABORT);
+	return LineError(_T("DEBUG: Perform(): Unhandled action type."));
 #else
 	return FAIL;
 #endif
@@ -15710,9 +15691,10 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		TCHAR buf[MSGBOX_TEXT_SIZE];
 		FormatError(buf, _countof(buf), aErrorType, aErrorText, aExtraInfo, this
 			// The last parameter determines the final line of the message:
-			, (aErrorType == CRITICAL_ERROR || (aErrorType == FAIL && !g_script.mIsReadyToExecute))
-			? (g_script.mIsRestart ? OLD_STILL_IN_EFFECT : WILL_EXIT)
-			: (aErrorType == EARLY_EXIT ? _T("Continue running the script?") : NULL));
+			, (aErrorType == FAIL && g_script.mIsReadyToExecute) ? ERR_ABORT_NO_SPACES
+			: (aErrorType == CRITICAL_ERROR || aErrorType == FAIL) ? (g_script.mIsRestart ? OLD_STILL_IN_EFFECT : WILL_EXIT)
+			: (aErrorType == EARLY_EXIT) ? _T("Continue running the script?")
+			: NULL);
 
 		g_script.mCurrLine = this;  // This needs to be set in some cases where the caller didn't.
 		
@@ -15950,9 +15932,13 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 	// In MsgBox mode, MsgBox is in addition to OutputDebug
 	if (warnMode == WARNMODE_MSGBOX)
 	{
+		if (!line)
+			line = mCurrLine; // Call mCurrLine->LineError() vs ScriptError() to pass WARN.
 		if (line)
 			line->LineError(aWarningText, WARN, aExtraInfo);
 		else
+			// Realistically shouldn't happen.  If it does, the message might be slightly
+			// misleading since ScriptError isn't equipped to display "warning" messages.
 			ScriptError(aWarningText, aExtraInfo);
 	}
 }
@@ -16224,7 +16210,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 	if (use_runas && shell_verb)
 	{
 		if (aDisplayErrors)
-			ScriptError(_T("System verbs unsupported with RunAs.") ERR_ABORT);
+			ScriptError(_T("System verbs unsupported with RunAs."));
 		return FAIL;
 	}
 	
@@ -16232,7 +16218,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 	if (action_length >= LINE_SIZE) // Max length supported by CreateProcess() is 32 KB. But there hasn't been any demand to go above 16 KB, so seems little need to support it (plus it reduces risk of stack overflow).
 	{
         if (aDisplayErrors)
-			ScriptError(_T("String too long.") ERR_ABORT); // Short msg since so rare.
+			ScriptError(_T("String too long.")); // Short msg since so rare.
 		return FAIL;
 	}
 
@@ -16313,7 +16299,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 			// best to display an error rather than trying to run it without the RunAs settings.
 			// This policy encourages users to have RunAs in effect only when necessary:
 			if (aDisplayErrors)
-				ScriptError(_T("Launch Error (possibly related to RunAs).") ERR_ABORT, system_error_text);
+				ScriptError(_T("Launch Error (possibly related to RunAs)."), system_error_text);
 			return FAIL;
 		}
 		SHELLEXECUTEINFO sei = {0};
@@ -16441,7 +16427,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 				, _T("Failed attempt to launch program or document:")
 				_T("\nAction: <%-0.400s%s>")
 				_T("%s")
-				_T("\nParams: <%-0.400s%s>\n\n") ERR_ABORT_NO_SPACES
+				_T("\nParams: <%-0.400s%s>")
 				, shell_action, _tcslen(shell_action) > 400 ? _T("...") : _T("")
 				, verb_text
 				, shell_params, _tcslen(shell_params) > 400 ? _T("...") : _T("")

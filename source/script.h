@@ -181,7 +181,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_EXPECTED_BLOCK_OR_ACTION _T("Expected \"{\" or single-line action.")
 #define ERR_OUTOFMEM _T("Out of memory.")  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
 #define ERR_EXPR_TOO_LONG _T("Expression too long")
-#define ERR_MEM_LIMIT_REACHED _T("Memory limit reached (see #MaxMem in the help file).") ERR_ABORT
+#define ERR_MEM_LIMIT_REACHED _T("Memory limit reached (see #MaxMem in the help file).")
 #define ERR_NO_LABEL _T("Target label does not exist.")
 #define ERR_MENU _T("Menu does not exist.")
 #define ERR_SUBMENU _T("Submenu does not exist.")

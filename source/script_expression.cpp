@@ -329,7 +329,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
 						|| !(mem[mem_count] = tmalloc(result_size)))
 					{
-						LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, this_token.var->mName);
+						LineError(ERR_OUTOFMEM, FAIL, this_token.var->mName);
 						goto abort;
 					}
 					// Point result to its new, more persistent location:
@@ -506,7 +506,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			{
 				if (mem_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
 				{
-					LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, func.mName);
+					LineError(ERR_OUTOFMEM, FAIL, func.mName);
 					goto abort;
 				}
 				if (this_token.mem_to_free == this_token.marker) // mem_to_free is checked in case caller alloc'd mem but didn't use it as its actual result.
@@ -614,7 +614,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
 						|| !(mem[mem_count] = tmalloc(result_size)))
 					{
-						LineError(ERR_OUTOFMEM ERR_ABORT, FAIL, func.mName);
+						LineError(ERR_OUTOFMEM, FAIL, func.mName);
 						goto abort;
 					}
 					// Make the token's result the new, more persistent location:
@@ -1127,7 +1127,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 						if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
 							|| !(this_token.marker = mem[mem_count] = tmalloc(result_size)))
 						{
-							LineError(ERR_OUTOFMEM ERR_ABORT);
+							LineError(ERR_OUTOFMEM);
 							goto abort;
 						}
 						++mem_count;
@@ -1543,7 +1543,7 @@ non_null_circuit_token:
 			LPTSTR new_buf;
 			if (   !(new_buf = tmalloc(new_buf_size))   )
 			{
-				LineError(ERR_OUTOFMEM ERR_ABORT);
+				LineError(ERR_OUTOFMEM);
 				goto abort;
 			}
 			if (new_buf_size > LARGE_DEREF_BUF_SIZE)
@@ -1769,7 +1769,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 			// underlying recursed/interrupted instance's memory, which it will need intact when it's resumed.
 			if (!Var::BackupFunctionVars(*this, aFuncCall.mBackup, aFuncCall.mBackupCount)) // Out of memory.
 			{
-				aResult = g_script.ScriptError(ERR_OUTOFMEM ERR_ABORT, mName);
+				aResult = g_script.ScriptError(ERR_OUTOFMEM, mName);
 				return false;
 			}
 		} // if (func.mInstances > 0)
@@ -2010,7 +2010,7 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 		{
 			// Error msg was formerly: "Ran out of memory while attempting to dereference this line's parameters."
 			sDerefBufSize = 0;  // Reset so that it can make another attempt, possibly smaller, next time.
-			return LineError(ERR_OUTOFMEM ERR_ABORT); // Short msg since so rare.
+			return LineError(ERR_OUTOFMEM); // Short msg since so rare.
 		}
 		sDerefBufSize = new_buf_size;
 		if (sDerefBufSize > LARGE_DEREF_BUF_SIZE)

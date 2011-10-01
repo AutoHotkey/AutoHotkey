@@ -544,7 +544,7 @@ public:
 	#define DISPLAY_NO_ERROR   0  // Must be zero.
 	#define DISPLAY_VAR_ERROR  1
 	#define DISPLAY_FUNC_ERROR 2
-	static ResultType ValidateName(LPCTSTR aName, bool aIsRuntime = false, int aDisplayError = DISPLAY_VAR_ERROR);
+	static ResultType ValidateName(LPCTSTR aName, int aDisplayError = DISPLAY_VAR_ERROR);
 
 	LPTSTR ObjectToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline)

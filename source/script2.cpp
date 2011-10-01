@@ -70,7 +70,7 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 							image_filename = image_filename_omit_leading_whitespace;
 						window_index = ATOI(window_number_str) - 1;
 						if (window_index < 0 || window_index >= MAX_SPLASHIMAGE_WINDOWS)
-							return LineError(_T("Max window number is ") MAX_SPLASHIMAGE_WINDOWS_STR _T(".") ERR_ABORT
+							return LineError(_T("Max window number is ") MAX_SPLASHIMAGE_WINDOWS_STR _T(".")
 								, FAIL, aOptions);
 					}
 				}
@@ -89,7 +89,7 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 		{
 			window_index = ATOI(aOptions) - 1;
 			if (window_index < 0 || window_index >= MAX_PROGRESS_WINDOWS)
-				return LineError(_T("Max window number is ") MAX_PROGRESS_WINDOWS_STR _T(".") ERR_ABORT, FAIL, aOptions);
+				return LineError(_T("Max window number is ") MAX_PROGRESS_WINDOWS_STR _T("."), FAIL, aOptions);
 			++options;
 		}
 		options = omit_leading_whitespace(options); // Added in v1.0.38.04 per someone's suggestion.
@@ -700,7 +700,7 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 {
 	int window_index = *aID ? ATOI(aID) - 1 : 0;
 	if (window_index < 0 || window_index >= MAX_TOOLTIPS)
-		return LineError(_T("Max window number is ") MAX_TOOLTIPS_STR _T(".") ERR_ABORT, FAIL, aID);
+		return LineError(_T("Max window number is ") MAX_TOOLTIPS_STR _T("."), FAIL, aID);
 	HWND tip_hwnd = g_hWndToolTip[window_index];
 
 	// Destroy windows except the first (for performance) so that resources/mem are conserved.
@@ -3022,7 +3022,7 @@ ResultType Line::ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3)
 	ProcessCmds process_cmd = ConvertProcessCmd(aCmd);
 	// Runtime error is rare since it is caught at load-time unless it's in a var. ref.
 	if (process_cmd == PROCESS_CMD_INVALID)
-		return LineError(ERR_PARAM1_INVALID ERR_ABORT, FAIL, aCmd);
+		return LineError(ERR_PARAM1_INVALID, FAIL, aCmd);
 
 	HANDLE hProcess;
 	DWORD pid, priority;
@@ -3585,7 +3585,7 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 	// was contained in a variable reference.  But for simplicity of design here, return
 	// failure in this case (unlike other functions similar to this one):
 	if (cmd == WINGET_CMD_INVALID)
-		return LineError(ERR_PARAM2_INVALID ERR_ABORT, FAIL, aCmd);
+		return LineError(ERR_PARAM2_INVALID, FAIL, aCmd);
 
 	bool target_window_determined = true;  // Set default.
 	HWND target_window;
@@ -4037,7 +4037,7 @@ ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
 	// was contained in a variable reference.  But for simplicity of design here, return
 	// failure in this case (unlike other functions similar to this one):
 	if (cmd == SYSGET_CMD_INVALID)
-		return LineError(ERR_PARAM2_INVALID ERR_ABORT, FAIL, aCmd);
+		return LineError(ERR_PARAM2_INVALID, FAIL, aCmd);
 
 	MonitorInfoPackage mip = {0};  // Improves maintainability to initialize unconditionally, here.
 	mip.monitor_info_ex.cbSize = sizeof(MONITORINFOEX); // Also improves maintainability.
@@ -5756,7 +5756,7 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInpu
 	if (g_nInputBoxes >= MAX_INPUTBOXES)
 	{
 		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
-		MsgBox(_T("The maximum number of InputBoxes has been reached.") ERR_ABORT);
+		MsgBox(_T("The maximum number of InputBoxes has been reached."));
 		return FAIL;
 	}
 	if (!aOutputVar) return FAIL;
@@ -6910,7 +6910,7 @@ ResultType Line::StringReplace()
 		, replacement_limit, -1, &dest, &length); // Length of haystack is passed to improve performance because ArgLength() can often discover it instantaneously.
 
 	if (!dest) // Failure due to out of memory.
-		return LineError(ERR_OUTOFMEM ERR_ABORT);
+		return LineError(ERR_OUTOFMEM);
 
 	if (dest != source) // StrReplace() allocated new memory rather than returning "source" to us unaltered.
 	{
@@ -8533,7 +8533,7 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 	if (g_nFileDialogs >= MAX_FILEDIALOGS)
 	{
 		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
-		return LineError(_T("The maximum number of File Dialogs has been reached.") ERR_ABORT);
+		return LineError(_T("The maximum number of File Dialogs has been reached."));
 	}
 	
 	// Large in case more than one file is allowed to be selected.
@@ -8972,7 +8972,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	{
 		CloseHandle(hfile);
 		// ErrorLevel doesn't matter now because the current quasi-thread will be aborted.
-		return is_binary_clipboard ? FAIL : LineError(ERR_OUTOFMEM ERR_ABORT);
+		return is_binary_clipboard ? FAIL : LineError(ERR_OUTOFMEM);
 	}
 
 	DWORD bytes_actually_read;
@@ -10368,10 +10368,7 @@ Label *Line::GetJumpTarget(bool aIsDereferenced)
 	Label *label = g_script.FindLabel(target_label);
 	if (!label)
 	{
-		if (aIsDereferenced)
-			LineError(ERR_NO_LABEL ERR_ABORT, FAIL, target_label);
-		else
-			LineError(ERR_NO_LABEL, FAIL, target_label);
+		LineError(ERR_NO_LABEL, FAIL, target_label);
 		return NULL;
 	}
 	if (!aIsDereferenced)
@@ -10416,7 +10413,6 @@ Label *Line::IsJumpValid(Label &aTargetLabel, bool aSilent)
 	if (!aSilent)
 		LineError(_T("A Goto/Gosub must not jump into a block that doesn't enclose it.")); // Omit GroupActivate from the error msg since that is rare enough to justify the increase in common-case clarity.
 	return NULL;
-	// Above currently doesn't attempt to detect runtime vs. load-time for the purpose of appending ERR_ABORT.
 }
 
 

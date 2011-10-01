@@ -627,7 +627,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 				// Also, don't bother making the variable blank and its length zero.  Just leave its contents
 				// untouched due to the rarity of out-of-memory and the fact that the script thread will be terminated
 				// anyway, so in most cases won't care what the contents are.
-				return g_script.ScriptError(ERR_OUTOFMEM ERR_ABORT); // ERR_ABORT since an error is most likely to occur at runtime.
+				return g_script.ScriptError(ERR_OUTOFMEM); // since an error is most likely to occur at runtime.
 			}
 
 			// Below is necessary because it might have fallen through from case ALLOC_SIMPLE.
@@ -1163,7 +1163,7 @@ void Var::FreeAndRestoreFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVar
 
 
 
-ResultType Var::ValidateName(LPCTSTR aName, bool aIsRuntime, int aDisplayError)
+ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError)
 // Returns OK or FAIL.
 {
 	if (!*aName) return FAIL;
@@ -1211,10 +1211,9 @@ ResultType Var::ValidateName(LPCTSTR aName, bool aIsRuntime, int aDisplayError)
 			if (aDisplayError)
 			{
 				TCHAR msg[512];
-				sntprintf(msg, _countof(msg), _T("The following %s name contains an illegal character:\n\"%-1.300s\"%s")
+				sntprintf(msg, _countof(msg), _T("The following %s name contains an illegal character:\n\"%-1.300s\"")
 					, aDisplayError == DISPLAY_VAR_ERROR ? _T("variable") : _T("function")
-					, aName
-					, aIsRuntime ? (_T("\n\n") ERR_ABORT_NO_SPACES) : _T(""));
+					, aName);
 				return g_script.ScriptError(msg);
 			}
 			else
