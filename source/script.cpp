@@ -8319,6 +8319,8 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 				abort = true; // So that the caller doesn't also report an error.
 				return line->PreparseError(_T("Nesting too deep.")); // Short msg since so rare.
 			}
+			if (line->mAttribute) // This is the block-begin of a function's body.
+				g->CurrentFunc = (Func *)line->mAttribute;
 			// Since the current convention is to store the line *after* the
 			// BLOCK_END as the BLOCK_BEGIN's related line, that line can
 			// be legitimately NULL if this block's BLOCK_END is the last
@@ -8335,6 +8337,8 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 					return line->PreparseError(ERR_MISSING_CLOSE_BRACE);
 				}
 			--nest_level;
+			if (line->mAttribute) // This was the block-begin of a function's body.
+				g->CurrentFunc = NULL; // The function's body including block-end was processed by the recursive call above.
 			// The convention is to have the BLOCK_BEGIN's related_line
 			// point to the line *after* the BLOCK_END.
 			line->mRelatedLine = line->mRelatedLine->mNextLine;  // Might be NULL now.
