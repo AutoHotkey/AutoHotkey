@@ -994,7 +994,7 @@ int MsgBox(int aValue)
 
 
 
-int MsgBox(LPTSTR aText, UINT uType, LPTSTR aTitle, double aTimeout, HWND aOwner)
+int MsgBox(LPCTSTR aText, UINT uType, LPTSTR aTitle, double aTimeout, HWND aOwner)
 // Returns 0 if the attempt failed because of too many existing MessageBox windows,
 // or if MessageBox() itself failed.
 // MB_SETFOREGROUND or some similar setting appears to dismiss some types of screen savers (if active).
