@@ -4607,6 +4607,34 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					if (this_aArgMap)
 						this_aArgMap += 2;
 				}
+				else if (aActionType == ACT_FUNC)
+				{
+					// If this arg looks like a variable name, attempt to resolve it to an existing
+					// variable; but don't create any variables since we don't yet know whether the
+					// target parameter is ByRef.
+					if (Var::ValidateName(this_aArg, false, DISPLAY_NO_ERROR))
+					{
+						this_new_arg.deref = (DerefType *)FindVar(this_aArg);
+						// If a variable was found, indicate this by setting type.  If no variable was
+						// found and #MustDeclare is in effect at this point in the script, this might
+						// be an error.  But since we don't know if the target parameter is ByRef yet,
+						// just pass this information along by using a combination of NULL deref and
+						// ARG_TYPE_INPUT_VAR.  Otherwise (no variable was found and #MustDeclare is
+						// not in effect) let it be resolved later if appropriate.
+						if (this_new_arg.deref || g_MustDeclare)
+							this_new_arg.type = ARG_TYPE_INPUT_VAR;
+						// Store the text even if it was converted to an input var, since it might be
+						// converted back at a later stage.  Can't use Var::mName since it might have
+						// different case ("var" vs "Var").
+						if (   !(this_new_arg.text = SimpleHeap::Malloc(this_aArg))   )
+							return FAIL;
+						this_new_arg.length = (ArgLengthType)_tcslen(this_aArg);
+						continue;
+					}
+					// Otherwise, it may be text or a double-deref like Array%i%.  In either case
+					// the derefs will be preparsed correctly below, and a later stage will make
+					// this arg ARG_TYPE_INPUT_VAR if appropriate.
+				}
 			}
 			
 			if (np = g_act[aActionType].NumericParams) // This command has at least one numeric parameter.
@@ -7686,7 +7714,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	}
 	else if (!mIsReadyToExecute && !(aScope & VAR_DECLARED) && (g->CurrentFunc ? g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE : g_MustDeclare))
 	{
-		ScriptError(_T("This variable must be declared."), aVarName);
+		ScriptError(ERR_MUST_DECLARE, aVarName);
 		return NULL;
 	}
 
@@ -8210,6 +8238,45 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 				{
 					abort = true;
 					return line->PreparseError(ERR_TOO_MANY_PARAMS);
+				}
+			}
+			for (i = 0; i < param_count; ++i)
+			{
+				ArgStruct &arg = line->mArg[i+1];
+
+				if (func && !func->mIsBuiltIn && func->mParam[i].is_byref)
+				{
+					if (arg.type == ARG_TYPE_INPUT_VAR)
+					{
+						if (!arg.deref) // Implies #MustDeclare was in effect for this line.
+							return line->PreparseError(ERR_MUST_DECLARE, arg.text);
+						// An earlier stage resolved arg.text to a variable, but left text set
+						// in case the parameter wasn't ByRef.  Since it is ByRef, just mark
+						// this arg as pre-resolved:
+						arg.text = _T("");
+						arg.length = 0;
+					}
+					else if (!arg.is_expression)
+					{
+						if (!arg.deref)
+						{
+							if (   !(arg.deref = (DerefType *)FindOrAddVar(arg.text))   )
+								return NULL;
+							arg.text = _T(""); // Marks this as pre-resolved.
+							arg.length = 0;
+						}
+						// Otherwise, it's something like Array%i%, where i has been resolved and
+						// placed in arg.deref, but the final var will be resolved at run-time.
+						arg.type = ARG_TYPE_INPUT_VAR;
+					}
+					// Otherwise, it is explicitly an expression (which may or may not resolve
+					// to a variable; only a sole variable reference would work for ByRef).
+				}
+				else if (arg.type == ARG_TYPE_INPUT_VAR)
+				{
+					// Revert this arg to plain text.
+					arg.type = ARG_TYPE_NORMAL;
+					arg.deref = NULL;
 				}
 			}
 			line->mAttribute = func;
