@@ -9541,6 +9541,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					// Again, this is similar to the section above, so see there for comments.
 					if (aMode != ONLY_ONE_LINE)
 						return line_temp->PreparseError(ERR_CATCH_WITH_NO_TRY);
+					return line_temp;
 				}
 				line = line_temp->mNextLine;
 				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_END || line->mActionType == ACT_CATCH)
