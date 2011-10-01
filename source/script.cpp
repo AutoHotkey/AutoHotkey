@@ -15706,29 +15706,14 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 	}
 	else
 	{
-		TCHAR source_file[MAX_PATH * 2];
-		if (mFileIndex)
-			sntprintf(source_file, _countof(source_file), _T(" in #include file \"%s\""), sSourceFile[mFileIndex]);
-		else
-			*source_file = '\0'; // Don't bother cluttering the display if it's the main script file.
-
 		TCHAR buf[MSGBOX_TEXT_SIZE];
-		LPTSTR buf_marker = buf + sntprintf(buf, _countof(buf), _T("%s%s:%s %-1.500s\n\n")  // Keep it to a sane size in case it's huge.
-			, aErrorType == WARN ? _T("Warning") : (aErrorType == CRITICAL_ERROR ? _T("Critical Error") : _T("Error"))
-			, source_file, *source_file ? _T("\n    ") : _T(" "), aErrorText);
-		if (*aExtraInfo)
-			// Use format specifier to make sure really huge strings that get passed our
-			// way, such as a var containing clipboard text, are kept to a reasonable size:
-			buf_marker += sntprintfcat(buf, _countof(buf), _T("Specifically: %-1.100s%s\n\n")
-			, aExtraInfo, _tcslen(aExtraInfo) > 100 ? _T("...") : _T(""));
-		buf_marker = VicinityToText(buf_marker, (int)(_countof(buf) - (buf_marker - buf))); // Cast to int to avoid loss of negative values.
-		if (aErrorType == CRITICAL_ERROR || (aErrorType == FAIL && !g_script.mIsReadyToExecute))
-			tcslcpy(buf_marker, g_script.mIsRestart ? (_T("\n") OLD_STILL_IN_EFFECT) : (_T("\n") WILL_EXIT)
-				, _countof(buf) - (buf_marker - buf)); // Cast to int to avoid loss of negative values.
-		g_script.mCurrLine = this;  // This needs to be set in some cases where the caller didn't.
+		FormatError(buf, _countof(buf), aErrorType, aErrorText, aExtraInfo, this
+			// The last parameter determines the final line of the message:
+			, (aErrorType == CRITICAL_ERROR || (aErrorType == FAIL && !g_script.mIsReadyToExecute))
+			? (g_script.mIsRestart ? OLD_STILL_IN_EFFECT : WILL_EXIT)
+			: (aErrorType == EARLY_EXIT ? _T("Continue running the script?") : NULL));
 
-		if (aErrorType == EARLY_EXIT)
-			_tcsncat(buf_marker, _T("\nContinue running the script?"), _countof(buf) - (buf_marker - buf));
+		g_script.mCurrLine = this;  // This needs to be set in some cases where the caller didn't.
 		
 #ifdef CONFIG_DEBUGGER
 		if (g_Debugger.HasStdErrHook())
@@ -15754,6 +15739,37 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		g_script.ExitApp(EXIT_ERROR);
 
 	return aErrorType; // The caller told us whether it should be a critical error or not.
+}
+
+
+
+int Line::FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine, LPCTSTR aFooter)
+{
+	TCHAR source_file[MAX_PATH * 2];
+	if (aLine && aLine->mFileIndex)
+		sntprintf(source_file, _countof(source_file), _T(" in #include file \"%s\""), sSourceFile[aLine->mFileIndex]);
+	else
+		*source_file = '\0'; // Don't bother cluttering the display if it's the main script file.
+
+	LPTSTR aBuf_orig = aBuf;
+	// Error message:
+	aBuf += sntprintf(aBuf, aBufSize, _T("%s%s:%s %-1.500s\n\n")  // Keep it to a sane size in case it's huge.
+		, aErrorType == WARN ? _T("Warning") : (aErrorType == CRITICAL_ERROR ? _T("Critical Error") : _T("Error"))
+		, source_file, *source_file ? _T("\n    ") : _T(" "), aErrorText);
+	// Specifically:
+	if (*aExtraInfo)
+		// Use format specifier to make sure really huge strings that get passed our
+		// way, such as a var containing clipboard text, are kept to a reasonable size:
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("Specifically: %-1.100s%s\n\n")
+			, aExtraInfo, _tcslen(aExtraInfo) > 100 ? _T("...") : _T(""));
+	// Relevant lines of code:
+	if (aLine)
+		aBuf = aLine->VicinityToText(aBuf, BUF_SPACE_REMAINING);
+	// What now?:
+	if (aFooter)
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("\n%s"), aFooter);
+	
+	return (int)(aBuf - aBuf_orig);
 }
 
 
