@@ -12819,8 +12819,6 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 
 	for (;; ++g.mLoopIteration)
 	{
-		if (g.ListLinesIsEnabled)
-			LOG_THIS_LINE
 #ifdef CONFIG_DEBUGGER
 		// L31: Let the debugger break at the 'While' line each iteration. Before this change,
 		// a While loop with empty body such as While FuncWithSideEffect() {} would be "hit"
@@ -12858,6 +12856,12 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 		}
 		if (result != OK && result != LOOP_CONTINUE)
 			return result;
+
+		// Before re-evaluating the condition, add it to the ListLines log again.  This is done
+		// at the end of the loop rather than the beginning because ExecUntil already added the
+		// line once immediately before the first iteration.
+		if (g.ListLinesIsEnabled)
+			LOG_THIS_LINE
 	} // for()
 	return OK; // The script's loop is now over.
 }
