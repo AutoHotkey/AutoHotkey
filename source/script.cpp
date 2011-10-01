@@ -6646,11 +6646,18 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			// whether they use it, without imposing their choice on users of their libs.
 			bool must_declare = g_MustDeclare;
 
+			// g->CurrentFunc is non-NULL when the function-call being resolved is inside
+			// a function.  Save and reset it for correct behaviour in the include file:
+			Func *current_func = g->CurrentFunc;
+			g->CurrentFunc = NULL;
+
 			if (!LoadIncludedFile(sLib[i].path, false, false)) // Fix for v1.0.47.05: Pass false for allow-dupe because otherwise, it's possible for a stdlib file to attempt to include itself (especially via the LibNamePrefix_ method) and thus give a misleading "duplicate function" vs. "func does not exist" error message.  Obsolete: For performance, pass true for allow-dupe so that it doesn't have to check for a duplicate file (seems too rare to worry about duplicates since by definition, the function doesn't yet exist so it's file shouldn't yet be included).
 			{
 				aErrorWasShown = true; // Above has just displayed its error (e.g. syntax error in a line, failed to open the include file, etc).  So override the default set earlier.
 				return NULL;
 			}
+
+			g->CurrentFunc = current_func; // Restore.
 
 			// Restore setting as per the comment above.
 			g_MustDeclare = must_declare;
