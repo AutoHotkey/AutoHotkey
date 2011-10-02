@@ -8215,11 +8215,15 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 						abort = true; // So that the caller doesn't also report an error.
 						// When above already displayed the proximate cause of the error, it's usually
 						// undesirable to show the cascade effects of that error in a second dialog:
-						return error_was_shown ? NULL : line->PreparseError(ERR_NONEXISTENT_FUNCTION, first_arg.text);
+						if (error_was_shown)
+							return NULL;
+						return line->PreparseError(*first_arg.text == '#' ? ERR_UNRECOGNIZED_DIRECTIVE // Give a more sensible error message for something like "#NoEnv".
+							: ERR_NONEXISTENT_FUNCTION, first_arg.text);
 					}
 #else
 					abort = true;
-					return line->PreparseError(ERR_NONEXISTENT_FUNCTION, first_arg.text);
+					return line->PreparseError(*first_arg.text == '#' ? ERR_UNRECOGNIZED_DIRECTIVE // Give a more sensible error message for something like "#NoEnv".
+						: ERR_NONEXISTENT_FUNCTION, first_arg.text);
 #endif
 				}
 				if (param_count < func->mMinParams)
