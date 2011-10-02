@@ -10824,24 +10824,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			line = jump_to_label->mJumpToLine;
 			continue;  // Resume looping starting at the above line.  "continue" is actually slight faster than "break" in these cases.
 
-		case ACT_GROUPACTIVATE: // Similar to ACT_GOSUB, which is why this section is here rather than in Perform().
-		{
-			WinGroup *group;
-			if (   !(group = (WinGroup *)mAttribute)   )
-				group = g_script.FindGroup(ARG1);
-			result = OK; // Set default.
-			ResultType activate_result = FAIL;
-			if (group)
-				// Note: This will take care of DoWinDelay if needed:
-				activate_result = group->Activate(*ARG2 && !_tcsicmp(ARG2, _T("R")));
-			//else no such group, so just proceed.
-			SetErrorLevelOrThrowBool(!activate_result);
-			if (aMode == ONLY_ONE_LINE)  // v1.0.45: These two lines were moved here from above to provide proper handling for GroupActivate that lacks a jump/gosub and that lies directly beneath an IF or ELSE.
-				return (result == EARLY_RETURN) ? OK : result;
-			line = line->mNextLine;
-			continue;  // Resume looping starting at the above line.  "continue" is actually slight faster than "break" in these cases.
-		}
-
 		case ACT_RETURN:
 			// Although a return is really just a kind of block-end, keep it separate
 			// because when a return is encountered inside a block, it has a double function:
@@ -12974,8 +12956,13 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 				return FAIL;  // It already displayed the error for us.
 		return group->AddWindow(ARG2, ARG3, ARG4, ARG5);
 	}
+	
+	case ACT_GROUPACTIVATE:
+		if (   !(group = (WinGroup *)mAttribute)   )
+			group = g_script.FindGroup(ARG1);
+		// Note: This will take care of DoWinDelay if needed:
+		return SetErrorLevelOrThrowBool(!group || !group->Activate(*ARG2 && !_tcsicmp(ARG2, _T("R"))));
 
-	// Note ACT_GROUPACTIVATE is handled by ExecUntil(), since it's better suited to do the Gosub.
 	case ACT_GROUPDEACTIVATE:
 		if (   !(group = (WinGroup *)mAttribute)   )
 			group = g_script.FindGroup(ARG1);
