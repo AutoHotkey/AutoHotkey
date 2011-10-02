@@ -2020,8 +2020,10 @@ process_completed_line:
 			// This loop allows something like }}} to terminate multiple nested classes:
 			for (cp = buf; *cp == '}' && mClassObjectCount; cp = omit_leading_whitespace(cp + 1))
 			{
-				// End of class definition: release this reference.
-				mClassObject[--mClassObjectCount]->Release();
+				// End of class definition.
+				--mClassObjectCount;
+				mClassObject[mClassObjectCount]->EndClassDefinition(); // Remove instance variables from the class object.
+				mClassObject[mClassObjectCount]->Release();
 				// Revert to the name of the class this class is nested inside, or "" if none.
 				if (cp1 = _tcsrchr(mClassName, '.'))
 					*cp1 = '\0';
@@ -7358,9 +7360,11 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 	LPTSTR item, item_end;
 	TCHAR orig_char, buf[LINE_SIZE];
 	size_t buf_used = 0;
-	ExprTokenType temp_token, empty_token;
+	ExprTokenType temp_token, empty_token, int_token;
 	empty_token.symbol = SYM_STRING;
 	empty_token.marker = _T("");
+	int_token.symbol = SYM_INTEGER; // Value used to mark instance variables.
+	int_token.value_int64 = 1;      //
 					
 	for (item = omit_leading_whitespace(aBuf); *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
 	{
@@ -7372,7 +7376,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		if (class_object->GetItem(temp_token, item))
 			return ScriptError(ERR_DUPLICATE_DECLARATION, item);
 		// Assigning class_object[item] := "" is sufficient to mark it as a class variable:
-		if (!class_object->SetItem(item, empty_token))
+		if (!class_object->SetItem(item, aStatic ? empty_token : int_token))
 			return ScriptError(ERR_OUTOFMEM);
 		*item_end = orig_char; // Undo termination.
 		size_t name_length = item_end - item;

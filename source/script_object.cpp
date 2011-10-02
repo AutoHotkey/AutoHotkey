@@ -646,6 +646,23 @@ ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, Exp
 	}
 	return INVOKE_NOT_HANDLED;
 }
+
+
+//
+// Helper function used with class definitions.
+//
+
+void Object::EndClassDefinition()
+{
+	// Instance variables were previously created as keys in the class object to prevent duplicate or
+	// conflicting declarations.  Since these variables will be added at run-time to the derived objects,
+	// we don't want them in the class object.  So delete any key-value pairs with the special marker
+	// value (currently any integer, since static initializers haven't been evaluated yet).
+	for (IndexType i = mFieldCount - 1; i >= 0; --i)
+		if (mFields[i].symbol == SYM_INTEGER)
+			if (i < --mFieldCount)
+				memmove(mFields + i, mFields + i + 1, (mFieldCount - i) * sizeof(FieldType));
+}
 	
 
 //
