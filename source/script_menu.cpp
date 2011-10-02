@@ -27,7 +27,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Set default, which is "none" for the Menu command.
 
 	#define RETURN_MENU_ERROR(msg, info) return mMenuUseErrorLevel ? g_ErrorLevel->Assign(ERRORLEVEL_ERROR) \
-		: ScriptError(msg ERR_ABORT, info)
+		: ScriptError(msg, info)
 	#define RETURN_IF_NOT_TRAY if (!is_tray) RETURN_MENU_ERROR(ERR_MENUTRAY, aMenu)
 
 	MenuCommands menu_command = Line::ConvertMenuCommand(aCommand);

@@ -1332,7 +1332,7 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 	name_length = _tcslen(name);
 
 	// Validate name for more accurate error-reporting.
-	if (name_length > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name, false, DISPLAY_NO_ERROR))
+	if (name_length > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name, DISPLAY_NO_ERROR))
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	// If we're allowed to create variables

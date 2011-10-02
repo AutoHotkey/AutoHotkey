@@ -253,6 +253,8 @@ public:
 	
 	// Used by Object::_Insert() and Func::Call():
 	bool InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], int aValueCount);
+
+	void EndClassDefinition();
 	
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 

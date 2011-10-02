@@ -925,7 +925,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	// since future options might contain the letter U as a "parameter" that immediately follows an option-letter.
 	bool use_errorlevel = tcscasestr(aOptions, _T("UseErrorLevel"));
 	#define RETURN_HOTKEY_ERROR(level, msg, info) return use_errorlevel ? g_ErrorLevel->Assign(level) \
-		: g_script.ScriptError(msg ERR_ABORT, info)
+		: g_script.ScriptError(msg, info)
 
 	HookActionType hook_action = 0; // Set default.
 	if (!aJumpToLabel) // It wasn't provided by caller (resolved at load-time).
@@ -1268,10 +1268,7 @@ Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction
 					// location of the suffix key on the keyboard.
 					sntprintf(error_text, _countof(error_text), _T("The AltTab hotkey \"%s\" must specify which key (L or R)."), hotkey_name);
 					if (g_script.mIsReadyToExecute) // Dynamically registered via the Hotkey command.
-					{
-						sntprintfcat(error_text, _countof(error_text), _T("\n\n%s"), ERR_ABORT_NO_SPACES);
 						g_script.ScriptError(error_text);
-					}
 					else
 						MsgBox(error_text);
 				}
@@ -1301,10 +1298,7 @@ Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction
 						sntprintf(error_text, _countof(error_text), _T("The AltTab hotkey \"%s\" must have exactly ")
 							_T("one modifier/prefix."), hotkey_name);
 						if (g_script.mIsReadyToExecute) // Dynamically registered via the Hotkey command.
-						{
-							sntprintfcat(error_text, _countof(error_text), ERR_ABORT);
 							g_script.ScriptError(error_text);
-						}
 						else
 							MsgBox(error_text);
 					}
@@ -1866,10 +1860,7 @@ ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier,
 					// also uses the below to show a single error dialog.
 					sntprintf(error_text, _countof(error_text), _T("\"%s\" is not allowed as a prefix key."), aText);
 					if (g_script.mIsReadyToExecute) // Dynamically registered via the Hotkey command.
-					{
-						sntprintfcat(error_text, _countof(error_text), ERR_ABORT);
 						g_script.ScriptError(error_text);
-					}
 					else
 						MsgBox(error_text);
 				}
@@ -1908,7 +1899,7 @@ ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier,
 					// would make loadtime's second call to create the hotkey always succeed. Also, it's
 					// more appropriate to say "key name" than "hotkey" in this message because it's only
 					// showing the one bad key name when it's a composite hotkey such as "Capslock & y".
-					sntprintf(error_text, _countof(error_text), _T("\"%s\" is not a valid key name.") ERR_ABORT, aText);
+					sntprintf(error_text, _countof(error_text), _T("\"%s\" is not a valid key name."), aText);
 					g_script.ScriptError(error_text);
 				}
 				//else do not show an error in this case because the loader will attempt to interpret
