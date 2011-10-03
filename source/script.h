@@ -518,6 +518,7 @@ private:
 	ResultType PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
 	ResultType PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil); // Lexikos: ACT_FOR.
 	ResultType Perform();
+	friend void BIF_PerformAction(ExprTokenType &, ExprTokenType *[], int);
 
 	ResultType MouseGetPos(DWORD aOptions);
 	ResultType FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat);
@@ -2803,6 +2804,8 @@ void BIF_ComObjQuery(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 
 
 void BIF_Exception(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+
+void BIF_PerformAction(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 
 BOOL ResultToBOOL(LPTSTR aResult);

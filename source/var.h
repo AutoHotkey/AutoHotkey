@@ -459,6 +459,22 @@ public:
 		}
 	}
 
+	void DisableSimpleMalloc()
+	// Caller must ensure that mType == VAR_NORMAL and mByteCapacity == 0.
+	{
+		mHowAllocated = ALLOC_MALLOC;
+	}
+
+	LPTSTR StealMem()
+	// Caller must ensure that mType == VAR_NORMAL and mHowAllocated == ALLOC_MALLOC.
+	{
+		LPTSTR mem = mCharContents;
+		mCharContents = Var::sEmptyString;
+		mByteCapacity = 0;
+		mByteLength = 0;
+		return mem;
+	}
+
 	// Not an enum so that it can be global more easily:
 	#define VAR_ALWAYS_FREE                    0 // This item and the next must be first and numerically adjacent to
 	#define VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC 1 // each other so that VAR_ALWAYS_FREE_LAST covers only them.

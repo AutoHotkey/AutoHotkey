@@ -6764,6 +6764,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	int max_params = 1;
 	BuiltInFunctionType bif;
 	LPTSTR suffix = func_name + 3;
+	ActionTypeType action_type = ACT_INVALID;
 
 	if (!_tcsnicmp(func_name, _T("LV_"), 3)) // As a built-in function, LV_* can only be a ListView function.
 	{
@@ -7183,7 +7184,26 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		max_params = 3;
 	}
 	else
-		return NULL; // Maint: There may be other lines above that also return NULL.
+	{
+		// The following handles calling of commands using function syntax:
+		action_type = ConvertActionType(func_name);
+		if (action_type == ACT_INVALID
+			// The following are not implemented in Line::Perform, so are not supported.
+			// Most are control flow statements which can only be handled correctly in
+			// Line::ExecUntil and therefore can't be implemented as functions.
+			|| (action_type >= ACT_RETURN && action_type <= ACT_BLOCK_END)
+			|| action_type == ACT_GOSUB || action_type == ACT_GOTO || action_type == ACT_EXITAPP)
+			return NULL; // Maint: There may be other lines above that also return NULL.
+		// Otherwise, there is a command with this name which can be converted to a function.
+		bif = BIF_PerformAction;
+		min_params = g_act[action_type].MinParams;
+		max_params = g_act[action_type].MaxParams;
+		// Reserve some space in Func::mName to hold some extra data (see below).
+		aFuncNameLength += max_params + 1;
+		// This should never exceed func_name because all command names are much
+		// shorter than the maximum function name length.
+		ASSERT(aFuncNameLength < _countof(func_name));
+	}
 
 	// Since above didn't return, this is a built-in function that hasn't yet been added to the list.
 	// Add it now:
@@ -7193,6 +7213,31 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	pfunc->mBIF = bif;
 	pfunc->mMinParams = min_params;
 	pfunc->mParamCount = max_params;
+
+	if (action_type != ACT_INVALID)
+	{
+		// For performance, the action and arg types are cached in Func::mName, which is
+		// accessible from BIF_PerformAction via aResultToken.marker.  But since mName
+		// needs to point to the correct name, we adjust it here so that it points into
+		// the middle of the memory block, where the extra data ends and the name begins:
+		TCHAR *type = pfunc->mName;
+		pfunc->mName += max_params + 1;
+		tmemmove(pfunc->mName, type, aFuncNameLength - max_params); // Includes \0.
+		int i;
+		// Store the arg types:
+		for (i = 0; i < max_params; ++i)
+			type[i] = (TCHAR)Line::ArgIsVar(action_type, i);
+		// Store the action type (now at mName[-1]):
+		type[i] = (TCHAR)action_type;
+		// If the command's first arg is an output var (and its second arg isn't), it will
+		// be used as the return value.  So adjust min/max params in that case.
+		if (max_params && type[0] == ARG_TYPE_OUTPUT_VAR && type[1] != ARG_TYPE_OUTPUT_VAR)
+		{
+			if (min_params)
+				--pfunc->mMinParams;
+			--pfunc->mParamCount;
+		}
+	}
 
 	return pfunc;
 }
@@ -12496,7 +12541,7 @@ ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinu
 
 
 
-__forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() reduces code size a little (since this function is called from only one place) and boosts performance a bit, though it's probably more due to the butterfly effect and cache hits/misses.
+ResultType Line::Perform()
 // Performs only this line's action.
 // Returns OK or FAIL.
 // The function should not be called to perform any flow-control actions such as
@@ -13576,6 +13621,178 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 #else
 	return FAIL;
 #endif
+}
+
+
+
+void BIF_PerformAction(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	// aResultToken.marker was overloaded to pass us the name of the function,
+	// which in this case is immediately preceded by the arg types and action type.
+	ActionTypeType act = (ActionTypeType)aResultToken.marker[-1];
+	int max_params = g_act[act].MaxParams;
+	TCHAR *arg_type = aResultToken.marker - (max_params + 1);
+	
+	// An array of args is constructed containing the var or text of each parameter,
+	// which is then used by ExpandArgs() to populate sArgDeref[] and sArgVar[].  This
+	// approach is used rather than directly assigning to those arrays because it avoids
+	// having to duplicate a fair bit of logic and code, including ArgMustBeDereferenced()
+	// and allocation of the deref buffer.
+	ArgStruct arg[MAX_ARGS];
+	
+	TCHAR number_buf[MAX_ARGS * MAX_NUMBER_SIZE]; // Enough for worst case.
+	Var *output_var;
+	Var stack_var(_T(""), (void *)VAR_NORMAL, 0);
+	// Prevent the use of SimpleHeap::Malloc().  Otherwise, each call could allocate
+	// some memory which cannot be freed until the program exits.
+	stack_var.DisableSimpleMalloc();
+
+	int i = 0;
+
+	if (max_params && arg_type[0] == ARG_TYPE_OUTPUT_VAR && arg_type[1] != ARG_TYPE_OUTPUT_VAR)
+	{
+		// This command's first arg is an output variable and its second arg is not.
+		// Insert an implicit output variable to receive the return value:
+		arg[0].type = ARG_TYPE_OUTPUT_VAR;
+		arg[0].deref = (DerefType *)(output_var = &stack_var);
+		arg[0].text = _T(""); // Mark it as a pre-resolved var.
+		//arg[0].length = 0;
+		arg[0].is_expression = false;
+		--aParam; // i.e. make aParam[1] the first parameter.
+		++aParamCount;
+		++i;
+	}
+	else
+	{
+		// Use ErrorLevel as the return value:
+		output_var = g_ErrorLevel;
+	}
+	if (i < aParamCount && arg_type[i] == ARG_TYPE_INPUT_VAR && aParam[i]->symbol != SYM_VAR)
+	{
+		// This command's first (e.g. SplitPath) or second (e.g. StrUpper) arg is an input var,
+		// but the caller didn't provide a variable.  Copy the value into our automatic variable
+		// and pass it to the command.  Note that stack_var might already be in use as an output
+		// var; the command should handle that case, and might even optimize for it.
+		stack_var.Assign(*aParam[i]);
+		arg[i].type = ARG_TYPE_INPUT_VAR;
+		arg[i].deref = (DerefType *)&stack_var;
+		arg[i].text = _T(""); // Mark it as a pre-resolved var.
+		//arg[i].length = 0;
+		arg[i].is_expression = false;
+		++i;
+	}
+
+	for ( ; i < aParamCount; ++i)
+	{
+		arg[i].is_expression = false;
+
+		if (aParam[i]->symbol == SYM_VAR)
+		{
+			if (arg_type[i] == ARG_TYPE_OUTPUT_VAR)
+				arg[i].type = ARG_TYPE_OUTPUT_VAR;
+			else
+				arg[i].type = ARG_TYPE_INPUT_VAR;
+			arg[i].deref = (DerefType *)aParam[i]->var;
+			arg[i].text = _T(""); // Mark it as a pre-resolved var.
+			//arg[i].length = 0;
+			continue;
+		}
+
+		// If this arg is optional and an empty string was passed, make it ARG_TYPE_NORMAL.
+		if (i >= g_act[act].MinParams && aParam[i]->symbol == SYM_STRING && !*aParam[i]->marker)
+			arg[i].type = ARG_TYPE_NORMAL;
+		else
+			arg[i].type = (ArgTypeType)arg_type[i];
+		
+		if (arg[i].type != ARG_TYPE_NORMAL) // It's an input or output var.
+		{
+			// This arg requires a var for input or output, but since it wasn't already handled
+			// above, the caller must have provided something other than a var.  Currently this
+			// can only happen for OUTPUT vars since the stack_var workaround above covers the
+			// INPUT var for all known commands.
+			sntprintf(aResultToken.buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
+				, i+1, aResultToken.marker);
+			Script::ThrowRuntimeException(aResultToken.buf, aResultToken.marker);
+			stack_var.Free(VAR_ALWAYS_FREE); // It might've been used as an input var.
+			return;
+		}
+		
+		arg[i].text = TokenToString(*aParam[i], number_buf + (i * MAX_NUMBER_SIZE));
+		arg[i].deref = NULL;
+		// Since this arg contains no derefs, a pointer to the text will be copied directly
+		// into sArgDeref and length won't actually be used.  Otherwise this wouldn't always
+		// work, since ArgLengthType is currently limited to 65535:
+		//arg[i].length = (ArgLengthType)_tcslen(arg[i].text);
+	}
+
+	
+	// Always have LineError() throw an exception, for two reasons:
+	//  1) It would otherwise give the message that the current thread will exit, but we can't
+	//     actually make that happen.
+	//  2) If it reported an error immediately, the dialog would show our temporary line rather
+	//     than the line which actually called this function (which is far more relevant).
+	bool in_try = g->InTryBlock;
+	g->InTryBlock = true;
+
+	// Construct a Line containing the required context for ExpandArgs() and Perform().
+	Line line(0, 0, act, arg, aParamCount);
+
+	// Expand args BEFORE RESETTING ERRORLEVEL BELOW.
+	if (!line.ExpandArgs())
+	{
+		// On failure, ExpandArgs() has called LineError(), which has thrown an exception.
+		g->ExcptLine = g_script.mCurrLine; // See comments under Perform().
+		g->InTryBlock = in_try;
+		stack_var.Free(VAR_ALWAYS_FREE); // It might've been used as an input var.
+		return;
+	}
+
+	// Back up ErrorLevel and reset it to avoid returning an irrelevant value.  As an added
+	// benefit, ErrorLevel is not affected by the function if it is used as the return value.
+	VarBkp el_bkp;
+	if (output_var == g_ErrorLevel)
+		g_ErrorLevel->Backup(el_bkp);
+
+
+	// PERFORM THE ACTION
+	if (line.Perform())
+	{
+		// Return the value of the output var if there is one, or ErrorLevel if there isn't:
+		output_var->ToToken(aResultToken);
+		if (aResultToken.symbol == SYM_STRING && aResultToken.marker != Var::sEmptyString)
+		{
+			// Let the caller take responsibility for the output var's memory:
+			aResultToken.marker_length = output_var->Length();
+			aResultToken.marker = aResultToken.mem_to_free = output_var->StealMem();
+		}
+	}
+	else
+	{
+		if (g->ExcptLine == &line)
+		{
+			// LineError() was called and it threw an exception.  Update ExcptLine to point
+			// to the current script line.  This is done for reasons mentioned in an earlier
+			// comment and also because our line exists only until this function returns.
+			g->ExcptLine = g_script.mCurrLine;
+		}
+		// Otherwise, maybe the command somehow caused script to execute, and that threw an
+		// exception; or some other type of critical error occurred?
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+	}
+
+
+	// Important to restore this if we're not really in a TRY block:
+	g->InTryBlock = in_try;
+
+	// Restore ErrorLevel to its previous value.
+	if (output_var == g_ErrorLevel)
+	{
+		g_ErrorLevel->Free(VAR_ALWAYS_FREE);
+		g_ErrorLevel->Restore(el_bkp);
+	}
+	// Free the stack variable (which may have been used as an output and/or input variable).
+	stack_var.Free(VAR_ALWAYS_FREE);
 }
 
 
