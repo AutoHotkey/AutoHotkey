@@ -13135,7 +13135,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, TCHAR
 
 	if (output_mode == 'O')
 	{
-		IObject *m = RegExMatchObject::Create(haystack, offset, subpat_name, captured_pattern_count);
+		IObject *m = RegExMatchObject::Create(haystack, offset, subpat_name, pattern_count, captured_pattern_count);
 		if (m)
 			output_var.AssignSkipAddRef(m);
 		else
@@ -13285,8 +13285,10 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, TCHAR
 }
 
 
-RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName, int aCapturedPatternCount)
+RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName
+	, int aPatternCount, int aCapturedPatternCount)
 {
+	// If there was no match, seems best to not return an object:
 	if (aCapturedPatternCount < 1)
 		return NULL;
 
@@ -13295,15 +13297,20 @@ RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCT
 		return NULL;
 
 	ASSERT(aCapturedPatternCount >= 1);
+	ASSERT(aPatternCount >= aCapturedPatternCount);
 
-	m->mPatternCount = aCapturedPatternCount;
+	// Use aPatternCount vs aCapturedPatternCount since we want to be able to retrieve the
+	// names of *all* subpatterns, even ones that weren't captured.  For instance, a loop
+	// converting the object to an old-style pseudo-array would need to initialize even the
+	// array items that weren't captured.
+	m->mPatternCount = aPatternCount;
 	
 	// Copy haystack.  Must copy the whole haystack since it is possible (though rare) for a
 	// subpattern to precede the overall match - for instance, if \K is used or a subpattern
 	// is captured inside a look-behind assertion.
 	if (  !(m->mHaystack = _tcsdup(aHaystack))
 	   // Allocate memory for a copy of the offset array.
-	   || !(m->mOffset = (int *)malloc(aCapturedPatternCount * 2 * sizeof(int *)))  )
+	   || !(m->mOffset = (int *)malloc(aPatternCount * 2 * sizeof(int *)))  )
 	{
 		m->Release(); // This also frees m->mHaystack if it is non-NULL.
 		return NULL;
@@ -13311,7 +13318,7 @@ RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCT
 	
 	int p, i, pos, len;
 
-	// Convert start/end offsets to offset and length (also convert offsets from UTF-8 to UTF-16 in Unicode build).
+	// Convert start/end offsets to offset and length.
 	for (p = 0, i = 0; p < aCapturedPatternCount; ++p)
 	{
 		if (aOffset[i] < 0)
@@ -13327,12 +13334,18 @@ RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCT
 		m->mOffset[i++] = pos;
 		m->mOffset[i++] = len;
 	}
+	// Initialize the remainder of the offset vector (patterns which were not captured):
+	for ( ; p < aPatternCount; ++p)
+	{
+		m->mOffset[i++] = -1;
+		m->mOffset[i++] = 0;
+	}
 
 	// Copy subpattern names.
 	if (aPatternName)
 	{
 		// Allocate array of pointers.
-		if (  !(m->mPatternName = (LPTSTR *)malloc(aCapturedPatternCount * sizeof(LPTSTR *)))  )
+		if (  !(m->mPatternName = (LPTSTR *)malloc(aPatternCount * sizeof(LPTSTR *)))  )
 		{
 			m->Release();
 			return NULL;
@@ -13340,7 +13353,7 @@ RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCT
 
 		// Copy names and initialize array.
 		m->mPatternName[0] = NULL;
-		for (p = 1; p < aCapturedPatternCount; ++p)
+		for (p = 1; p < aPatternCount; ++p)
 			if (aPatternName[p])
 				// A failed allocation here seems rare and the consequences would be
 				// negligible, so in that case just act as if the subpattern has no name.
