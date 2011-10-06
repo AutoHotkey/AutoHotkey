@@ -1976,6 +1976,7 @@ void ResumeUnderlyingThread(VarBkp aSavedErrorLevel)
 	// The following section handles the switch-over to the former/underlying "g" item:
 	--g_nThreads; // Other sections below might rely on this having been done early.
 	--g;
+	g_ErrorLevel->Free();
 	g_ErrorLevel->Restore(aSavedErrorLevel);
 	// The below relies on the above having restored "g" to be the global_struct of the underlying thread.
 
