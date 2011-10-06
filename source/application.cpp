@@ -989,7 +989,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			}
 
 			// Also save the ErrorLevel of the subroutine that's about to be suspended.
-			g_ErrorLevel->Backup(ErrorLevel_saved);
+			ErrorLevel_Backup(ErrorLevel_saved);
 			// Make every newly launched subroutine start off with the global default values that
 			// the user set up in the auto-execute part of the script (e.g. KeyDelay, WinDelay, etc.).
 			// However, we do not set ErrorLevel to anything special here (except for GUI threads, later
@@ -1574,7 +1574,7 @@ bool CheckScriptTimers()
 			// seems best since some timed subroutines might take a long time to run:
 			++g_nThreads; // These are the counterparts the decrements that will be done further
 			++g;          // below by ResumeUnderlyingThread().
-			g_ErrorLevel->Backup(ErrorLevel_saved); // Back up the current ErrorLevel for later restoration.
+			ErrorLevel_Backup(ErrorLevel_saved); // Back up the current ErrorLevel for later restoration.
 			// But never kill the main timer, since the mere fact that we're here means that
 			// there's at least one enabled timed subroutine.  Though later, performance can
 			// be optimized by killing it if there's exactly one enabled subroutine, or if
@@ -1736,7 +1736,7 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 
 	// See MsgSleep() for comments about the following section.
 	VarBkp ErrorLevel_saved;
-	g_ErrorLevel->Backup(ErrorLevel_saved);
+	ErrorLevel_Backup(ErrorLevel_saved);
 	InitNewThread(0, false, true, func.mJumpToLine->mActionType);
 	DEBUGGER_STACK_PUSH(func.mJumpToLine, func.mName) // Push a "thread" onto the debugger's stack.  For simplicity and performance, use the function name vs something like "message 0x123".
 

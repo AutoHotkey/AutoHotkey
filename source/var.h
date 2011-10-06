@@ -30,6 +30,7 @@ EXTERN_CLIPBOARD;
 #define ERRORLEVEL_ERROR	1
 #define ERRORLEVEL_ERROR2	2
 #define ERRORLEVEL_ERROR_STR _T("1")
+#define ErrorLevel_Backup(bkp) g_ErrorLevel->Backup(bkp), g_ErrorLevel->Assign(ERRORLEVEL_NONE)
 
 enum AllocMethod {ALLOC_NONE, ALLOC_SIMPLE, ALLOC_MALLOC};
 enum VarTypes

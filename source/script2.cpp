@@ -13721,7 +13721,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 		if (g_nThreads >= g_MaxThreadsTotal) // Since this is a callback, it seems too rare to make an exemption for functions whose first line is ExitApp. In any case, to avoid array overflow, g_MaxThreadsTotal must not be exceeded except where otherwise documented.
 			return DEFAULT_CB_RETURN_VALUE;
 		// See MsgSleep() for comments about the following section.
-		g_ErrorLevel->Backup(ErrorLevel_saved);
+		ErrorLevel_Backup(ErrorLevel_saved);
 		InitNewThread(0, false, true, func.mJumpToLine->mActionType);
 		DEBUGGER_STACK_PUSH(func.mJumpToLine, func.mName)
 	}
