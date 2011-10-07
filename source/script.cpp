@@ -4077,6 +4077,35 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				// the change that avoids the need to escape double-colons:
 				return ScriptError(_tcsstr(aLineText, HOTKEY_FLAG) ? _T("Invalid hotkey.") : ERR_UNRECOGNIZED_ACTION, aLineText);
 		}
+	} // if (!aActionType)
+	else if (aActionType == ACT_LOOP)
+	{
+		LPTSTR cp = StrChrAny(action_args, EXPR_OPERAND_TERMINATORS);
+		LPTSTR delim = cp ? omit_leading_whitespace(cp) : NULL;
+		if (delim && *delim == g_delimiter && delim > action_args)
+		{
+			// Now delim points at the comma and term points at the comma or the first whitespace
+			// character following the arg.
+			*cp = '\0'; // Terminate the sub-command name.
+			if (!_tcsicmp(_T("Files"), action_args))
+				aActionType = ACT_LOOP_FILE;
+			else if (!_tcsicmp(_T("Reg"), action_args))
+				aActionType = ACT_LOOP_REG;
+			else if (!_tcsicmp(_T("Read"), action_args))
+				aActionType = ACT_LOOP_READ;
+			else if (!_tcsicmp(_T("Parse"), action_args))
+				aActionType = ACT_LOOP_PARSE;
+			else
+			{
+				// This is a plain word or variable reference followed by a comma.  It could be a
+				// multi-statement expression, but in this case the first sub-statement would have
+				// no effect, so it's probably an error.
+				return ScriptError(_tcschr(action_args, g_DerefChar)
+					? _T("Dynamic loop sub-commands are not supported.") : _T("Unknown loop sub-command.")
+					, action_args);
+			}
+			action_args = omit_leading_whitespace(delim + 1);
+		}
 	}
 
 	Action &this_action = g_act[aActionType];
