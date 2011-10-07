@@ -340,8 +340,8 @@ Action g_act[] =
 	, {_T("Return"), 0, 1, false, {1, 0}}
 	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
 	, {_T("Loop"), 0, 1, false, {1, 0}} // IterationCount
-	, {_T("LoopFiles"), 1, 3, false, NULL} // FilePattern [, IncludeFolders?, Recurse?] -- LoopFiles vs LoopFile for clarity.
-	, {_T("LoopReg"), 1, 3, false, NULL} // Key [, IncludeSubkeys?, Recurse?]
+	, {_T("LoopFiles"), 1, 2, false, NULL} // FilePattern [, Mode] -- LoopFiles vs LoopFile for clarity.
+	, {_T("LoopReg"), 1, 2, false, NULL} // Key [, Mode]
 	, {_T("LoopRead"), 1, 2, false, NULL} // InputFile [, OutputFile]
 	, {_T("LoopParse"), 1, 3, false, NULL} // InputVar [, Delimiters, OmitChars]
 	, {_T("For"), 1, 3, false, {3, 0}}  // For var [,var] in expression
@@ -423,9 +423,9 @@ Action g_act[] =
 	, {_T("DirDelete"), 1, 2, false, {2, 0}} // dir name, flag
 
 	, {_T("FileGetAttrib"), 1, 2, true, NULL} // OutputVar, Filespec (if blank, uses loop's current file)
-	, {_T("FileSetAttrib"), 1, 4, false, {3, 4, 0}} // Attribute(s), FilePattern, OperateOnFolders?, Recurse? (custom validation for these last two)
+	, {_T("FileSetAttrib"), 1, 3, false, NULL} // Attribute(s), FilePattern, Mode
 	, {_T("FileGetTime"), 1, 3, true, NULL} // OutputVar, Filespec, WhichTime (modified/created/accessed)
-	, {_T("FileSetTime"), 0, 5, false, {1, 4, 5, 0}} // datetime (YYYYMMDDHH24MISS), FilePattern, WhichTime, OperateOnFolders?, Recurse?
+	, {_T("FileSetTime"), 0, 4, false, {1, 0}} // datetime (YYYYMMDDHH24MISS), FilePattern, WhichTime, Mode
 	, {_T("FileGetSize"), 1, 3, true, NULL} // OutputVar, Filespec, B|K|M (bytes, kb, or mb)
 	, {_T("FileGetVersion"), 1, 2, true, NULL} // OutputVar, Filespec
 

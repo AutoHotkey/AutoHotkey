@@ -60,7 +60,13 @@ enum ExecUntilMode {NORMAL_MODE, UNTIL_RETURN, UNTIL_BLOCK_END, ONLY_ONE_LINE};
 #define ATTR_TRUE (void *)1
 typedef void *AttributeType;
 
-enum FileLoopModeType {FILE_LOOP_INVALID, FILE_LOOP_FILES_ONLY, FILE_LOOP_FILES_AND_FOLDERS, FILE_LOOP_FOLDERS_ONLY};
+typedef int FileLoopModeType;
+#define FILE_LOOP_INVALID		0
+#define FILE_LOOP_FILES_ONLY	1
+#define FILE_LOOP_FOLDERS_ONLY	2
+#define FILE_LOOP_RECURSE		4
+#define FILE_LOOP_FILES_AND_FOLDERS (FILE_LOOP_FILES_ONLY | FILE_LOOP_FOLDERS_ONLY)
+
 enum VariableTypeType {VAR_TYPE_INVALID, VAR_TYPE_NUMBER, VAR_TYPE_INTEGER, VAR_TYPE_FLOAT
 	, VAR_TYPE_TIME	, VAR_TYPE_DIGIT, VAR_TYPE_XDIGIT, VAR_TYPE_ALNUM, VAR_TYPE_ALPHA
 	, VAR_TYPE_UPPER, VAR_TYPE_LOWER, VAR_TYPE_SPACE};
@@ -1575,14 +1581,33 @@ public:
 	static FileLoopModeType ConvertLoopMode(LPTSTR aBuf)
 	// Returns the file loop mode, or FILE_LOOP_INVALID if aBuf contains an invalid mode.
 	{
-		switch (ATOI(aBuf))
+		for (FileLoopModeType mode = FILE_LOOP_INVALID;;)
 		{
-		case 0: return FILE_LOOP_FILES_ONLY; // This is also the default mode if the param is blank.
-		case 1: return FILE_LOOP_FILES_AND_FOLDERS;
-		case 2: return FILE_LOOP_FOLDERS_ONLY;
+			switch (ctoupper(*aBuf++))
+			{
+			// For simplicity, both are allowed with either kind of loop:
+			case 'F': // Files
+			case 'V': // Values
+				mode |= FILE_LOOP_FILES_ONLY;
+				break;
+			case 'D': // Directories
+			case 'K': // Keys
+				mode |= FILE_LOOP_FOLDERS_ONLY;
+				break;
+			case 'R':
+				mode |= FILE_LOOP_RECURSE;
+				break;
+			case ' ':  // Allow whitespace.
+			case '\t': //
+				break;
+			case '\0':
+				if ((mode & FILE_LOOP_FILES_AND_FOLDERS) == 0)
+					mode |= FILE_LOOP_FILES_ONLY; // Set default.
+				return mode;
+			default: // Invalid character.
+				return FILE_LOOP_INVALID;
+			}
 		}
-		// Otherwise:
-		return FILE_LOOP_INVALID;
 	}
 
 	static int ConvertRunMode(LPTSTR aBuf)

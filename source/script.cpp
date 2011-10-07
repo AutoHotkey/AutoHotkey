@@ -5186,9 +5186,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_LOOP_REG:
 		if (!line.ArgHasDeref(2) && Line::ConvertLoopMode(new_raw_arg2) == FILE_LOOP_INVALID)
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		if (*new_raw_arg3 && !line.ArgHasDeref(3))
-			if (_tcslen(new_raw_arg3) > 1 || (*new_raw_arg3 != '0' && *new_raw_arg3 != '1'))
-				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
 		break;
 
 	case ACT_RETURN:
@@ -5443,9 +5440,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		// sees a valid no-deref expression such as 300-200 as invalid.
 		if (aArgc > 2 && !line.ArgHasDeref(3) && line.ConvertLoopMode(new_raw_arg3) == FILE_LOOP_INVALID)
 			return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-		if (*new_raw_arg4 && !line.ArgHasDeref(4))
-			if (_tcslen(new_raw_arg4) > 1 || (*new_raw_arg4 != '0' && *new_raw_arg4 != '1'))
-				return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
 		break;
 
 	case ACT_FILEGETTIME:
@@ -5466,9 +5460,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		// sees a valid no-deref expression such as 300-200 as invalid.
 		if (aArgc > 3 && !line.ArgHasDeref(4) && line.ConvertLoopMode(new_raw_arg4) == FILE_LOOP_INVALID)
 			return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
-		if (*NEW_RAW_ARG5 && !line.ArgHasDeref(5))
-			if (_tcslen(NEW_RAW_ARG5) > 1 || (*NEW_RAW_ARG5 != '0' && *NEW_RAW_ARG5 != '1'))
-				return ScriptError(ERR_PARAM5_INVALID, NEW_RAW_ARG5);
 		break;
 
 	case ACT_FILEGETSIZE:
@@ -10961,7 +10952,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		{
 			// HANDLE ANY ERROR CONDITIONS THAT CAN ABORT THE LOOP:
 			FileLoopModeType file_loop_mode;
-			bool recurse_subfolders;
 			HKEY root_key_type; // For registry loops, this holds the type of root key, independent of whether it is local or remote.
 			if (line->mActionType == ACT_LOOP_FILE || line->mActionType == ACT_LOOP_REG)
 			{
@@ -10972,7 +10962,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				file_loop_mode = (line->mArgc <= 1) ? FILE_LOOP_FILES_ONLY : ConvertLoopMode(ARG2);
 				if (file_loop_mode == FILE_LOOP_INVALID)
 					return line->LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
-				recurse_subfolders = (*ARG3 == '1' && !*(ARG3 + 1));
 			}
 
 			// ONLY AFTER THE ABOVE IS IT CERTAIN THE LOOP WILL LAUNCH (i.e. there was no error or early return).
@@ -11059,7 +11048,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				break;
 			case ACT_LOOP_FILE:
 				result = line->PerformLoopFilePattern(aResultToken, continue_main_loop, jump_to_line, until
-					, file_loop_mode, recurse_subfolders, ARG1);
+					, (file_loop_mode & ~FILE_LOOP_RECURSE), (file_loop_mode & FILE_LOOP_RECURSE), ARG1);
 				break;
 			case ACT_LOOP_REG:
 				// This isn't the most efficient way to do things (e.g. the repeated calls to
@@ -11072,7 +11061,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				{
 					// root_key_type needs to be passed in order to support GetLoopRegKey():
 					result = line->PerformLoopReg(aResultToken, continue_main_loop, jump_to_line, until
-						, file_loop_mode, recurse_subfolders, root_key_type, root_key, subkey);
+						, (file_loop_mode & ~FILE_LOOP_RECURSE), (file_loop_mode & FILE_LOOP_RECURSE), root_key_type, root_key, subkey);
 					if (is_remote_registry)
 						RegCloseKey(root_key);
 				}
@@ -13175,13 +13164,19 @@ ResultType Line::Perform()
 		#define USE_FILE_LOOP_FILE_IF_ARG_BLANK(arg) (*arg ? arg : (g.mLoopFile ? g.mLoopFile->cFileName : _T("")))
 		return FileGetAttrib(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2));
 	case ACT_FILESETATTRIB:
-		FileSetAttrib(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), ConvertLoopMode(ARG3), ArgToInt(4) == 1);
+	{
+		FileLoopModeType mode = ConvertLoopMode(ARG3);
+		FileSetAttrib(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), (mode & ~FILE_LOOP_RECURSE), (mode & FILE_LOOP_RECURSE));
 		return !g.ThrownToken ? OK : FAIL;
+	}
 	case ACT_FILEGETTIME:
 		return FileGetTime(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3);
 	case ACT_FILESETTIME:
-		FileSetTime(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3, ConvertLoopMode(ARG4), ArgToInt(5) == 1);
+	{
+		FileLoopModeType mode = ConvertLoopMode(ARG4);
+		FileSetTime(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3, (mode & ~FILE_LOOP_RECURSE), (mode & FILE_LOOP_RECURSE));
 		return !g.ThrownToken ? OK : FAIL;
+	}
 	case ACT_FILEGETSIZE:
 		return FileGetSize(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), ARG3);
 	case ACT_FILEGETVERSION:
