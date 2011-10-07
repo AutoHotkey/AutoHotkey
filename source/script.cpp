@@ -5182,24 +5182,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		}
 		break;
 
-	case ACT_LOOP:
-		// Since users of v1 might habitually type "Loop Parse, Var" instead of "LoopParse, Var",
-		// detect it as an error.  For simplicity, the actual command name is not checked.
-		// Examples detected as errors:
-		//    Loop Parse, InputVar, Delimiters
-		//    Loop %Cmd%, %Param%			; Probably an attempt to use a legacy Loop sub-command.
-		//    Loop IgnoredCount, RealCount	; IgnoredCount has no effect whatsoever, so okay to treat as an error.
-		// Examples which should be allowed:
-		//    Loop Parse					; Variable named "Parse" contains the loop count.
-		//    Loop Func(x, y)
-		//    Loop x += y, x + 1			; x += y has a side-effect and x + 1 is the actual value.
-		// Also allowed:
-		//    Loop x+y, x + 1				; x+y has no effect, but there's probably no need to detect it.
-		cp = StrChrAny(new_raw_arg1, EXPR_OPERAND_TERMINATORS);
-		if (cp && *cp == g_delimiter) // i.e. simple name or variable reference followed by a delimiter.
-			return ScriptError(_T("Loop sub-commands are not supported."));
-		break;
-	
 	case ACT_LOOP_FILE:
 		if (!line.ArgHasDeref(2) && Line::ConvertLoopMode(new_raw_arg2) == FILE_LOOP_INVALID)
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
