@@ -1017,46 +1017,55 @@ public:
 			return (arg.type == ARG_TYPE_INPUT_VAR);
 	}
 
-	static HKEY RegConvertRootKey(LPTSTR aBuf, bool *aIsRemoteRegistry = NULL)
+	static HKEY RegConvertKey(LPTSTR aBuf, LPTSTR *aSubkey = NULL, bool *aIsRemoteRegistry = NULL)
 	{
-		// Even if the computer name is a single letter, it seems like using a colon as delimiter is ok
-		// (e.g. a:HKEY_LOCAL_MACHINE), since we wouldn't expect the root key to be used as a filename
-		// in that exact way, i.e. a drive letter should be followed by a backslash 99% of the time in
-		// this context.
-		// Research indicates that colon is an illegal char in a computer name (at least for NT,
-		// and by extension probably all other OSes).  So it should be safe to use it as a delimiter
-		// for the remote registry feature.  But just in case, get the right-most one,
-		// e.g. Computer:01:HKEY_LOCAL_MACHINE  ; the first colon is probably illegal on all OSes.
-		// Additional notes from the Internet:
-		// "A Windows NT computer name can be up to 15 alphanumeric characters with no blank spaces
-		// and must be unique on the network. It can contain the following special characters:
-		// ! @ # $ % ^ & ( ) -   ' { } .
-		// It may not contain:
-		// \ * + = | : ; " ? ,
-		// The following is a list of illegal characters in a computer name:
-		// regEx.Pattern = "`|~|!|@|#|\$|\^|\&|\*|\(|\)|\=|\+|{|}|\\|;|:|'|<|>|/|\?|\||%"
+		const size_t COMPUTER_NAME_BUF_SIZE = 128;
 
-		LPTSTR colon_pos = _tcsrchr(aBuf, ':');
-		LPTSTR key_name = colon_pos ? omit_leading_whitespace(colon_pos + 1) : aBuf;
-		if (aIsRemoteRegistry) // Caller wanted the below put into the output parameter.
-			*aIsRemoteRegistry = (colon_pos != NULL);
-		HKEY root_key = NULL; // Set default.
+		LPTSTR key_name_pos = aBuf, computer_name_end = NULL;
+
+		if (*aBuf == '\\' && aBuf[1] == '\\') // Something like \\ComputerName\HKLM.
+		{
+			if (  !(computer_name_end = _tcschr(aBuf + 2, '\\'))
+				|| (computer_name_end - aBuf) >= COMPUTER_NAME_BUF_SIZE  )
+				return NULL;
+			key_name_pos = computer_name_end + 1;
+		}
+
+		// Copy root key name into temporary buffer for use by _tcsicmp().
+		TCHAR key_name[20];
+		int i;
+		for (i = 0; key_name_pos[i] && key_name_pos[i] != '\\'; ++i)
+		{
+			if (i == 19)
+				return NULL; // Too long to be valid.
+			key_name[i] = key_name_pos[i];
+		}
+		key_name[i] = '\0';
+		
+		// Set output parameters for caller.
+		if (aSubkey)
+			*aSubkey = key_name_pos + i + (key_name_pos[i] == '\\');
+		if (aIsRemoteRegistry)
+			*aIsRemoteRegistry = (computer_name_end != NULL);
+
+		HKEY root_key;
 		if (!_tcsicmp(key_name, _T("HKLM")) || !_tcsicmp(key_name, _T("HKEY_LOCAL_MACHINE")))       root_key = HKEY_LOCAL_MACHINE;
 		else if (!_tcsicmp(key_name, _T("HKCR")) || !_tcsicmp(key_name, _T("HKEY_CLASSES_ROOT")))   root_key = HKEY_CLASSES_ROOT;
 		else if (!_tcsicmp(key_name, _T("HKCC")) || !_tcsicmp(key_name, _T("HKEY_CURRENT_CONFIG"))) root_key = HKEY_CURRENT_CONFIG;
 		else if (!_tcsicmp(key_name, _T("HKCU")) || !_tcsicmp(key_name, _T("HKEY_CURRENT_USER")))   root_key = HKEY_CURRENT_USER;
 		else if (!_tcsicmp(key_name, _T("HKU")) || !_tcsicmp(key_name, _T("HKEY_USERS")))           root_key = HKEY_USERS;
-		if (!root_key)  // Invalid or unsupported root key name.
+		else // Invalid or unsupported root key name.
 			return NULL;
-		if (!aIsRemoteRegistry || !colon_pos) // Either caller didn't want it opened, or it doesn't need to be.
+
+		if (!aIsRemoteRegistry || !computer_name_end) // Either caller didn't want it opened, or it doesn't need to be.
 			return root_key; // If it's a remote key, this value should only be used by the caller as an indicator.
 		// Otherwise, it's a remote computer whose registry the caller wants us to open:
 		// It seems best to require the two leading backslashes in case the computer name contains
 		// spaces (just in case spaces are allowed on some OSes or perhaps for Unix interoperability, etc.).
 		// Therefore, make no attempt to trim leading and trailing spaces from the computer name:
-		TCHAR computer_name[128];
+		TCHAR computer_name[COMPUTER_NAME_BUF_SIZE];
 		tcslcpy(computer_name, aBuf, _countof(computer_name));
-		computer_name[colon_pos - aBuf] = '\0';
+		computer_name[computer_name_end - aBuf] = '\0';
 		HKEY remote_key;
 		return (RegConnectRegistry(computer_name, root_key, &remote_key) == ERROR_SUCCESS) ? remote_key : NULL;
 	}

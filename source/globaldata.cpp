@@ -341,7 +341,7 @@ Action g_act[] =
 	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
 	, {_T("Loop"), 0, 1, false, {1, 0}} // IterationCount
 	, {_T("LoopFiles"), 1, 3, false, NULL} // FilePattern [, IncludeFolders?, Recurse?] -- LoopFiles vs LoopFile for clarity.
-	, {_T("LoopReg"), 1, 4, false, NULL} // RootKey [, Key, IncludeSubkeys?, Recurse?]
+	, {_T("LoopReg"), 1, 3, false, NULL} // Key [, IncludeSubkeys?, Recurse?]
 	, {_T("LoopRead"), 1, 2, false, NULL} // InputFile [, OutputFile]
 	, {_T("LoopParse"), 1, 3, false, NULL} // InputVar [, Delimiters, OmitChars]
 	, {_T("For"), 1, 3, false, {3, 0}}  // For var [,var] in expression
@@ -441,11 +441,10 @@ Action g_act[] =
 	, {_T("IniDelete"), 2, 3, false, NULL} // Filespec, Section, Key
 
 	// These require so few parameters due to registry loops, which provide the missing parameter values
-	// automatically.  In addition, RegRead can't require more than 1 param since the 2nd param is
-	// an option/obsolete parameter:
-	, {_T("RegRead"), 1, 4, true, NULL} // output var, RegKey, RegSubkey, ValueName
-	, {_T("RegWrite"), 0, 5, false, NULL} // ValueType, RegKey, RegSubKey, ValueName, Value (set to blank if omitted?)
-	, {_T("RegDelete"), 0, 3, false, NULL} // RegKey, RegSubKey, ValueName
+	// automatically:
+	, {_T("RegRead"), 1, 3, true, NULL} // output var, RegKey, ValueName
+	, {_T("RegWrite"), 0, 4, false, NULL} // ValueType, RegKey, ValueName, Value (set to blank if omitted?)
+	, {_T("RegDelete"), 0, 2, false, NULL} // RegKey, ValueName
 
 	, {_T("OutputDebug"), 1, 1, false, NULL}
 

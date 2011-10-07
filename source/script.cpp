@@ -5183,19 +5183,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		break;
 
 	case ACT_LOOP_FILE:
+	case ACT_LOOP_REG:
 		if (!line.ArgHasDeref(2) && Line::ConvertLoopMode(new_raw_arg2) == FILE_LOOP_INVALID)
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		if (*new_raw_arg3 && !line.ArgHasDeref(3))
 			if (_tcslen(new_raw_arg3) > 1 || (*new_raw_arg3 != '0' && *new_raw_arg3 != '1'))
 				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-		break;
-
-	case ACT_LOOP_REG:
-		if (aArgc > 2 && !line.ArgHasDeref(3) && Line::ConvertLoopMode(new_raw_arg3) == FILE_LOOP_INVALID)
-			return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-		if (*new_raw_arg4 && !line.ArgHasDeref(4))
-			if (_tcslen(new_raw_arg4) > 1 || (*new_raw_arg4 != '0' && *new_raw_arg4 != '1'))
-				return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
 		break;
 
 	case ACT_RETURN:
@@ -5244,7 +5237,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		break;
 
 	case ACT_REGREAD:
-		if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertRootKey(new_raw_arg2))
+		if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertKey(new_raw_arg2))
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
@@ -5255,13 +5248,13 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		{
 			if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertValueType(new_raw_arg1))
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-			if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertRootKey(new_raw_arg2))
+			if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertKey(new_raw_arg2))
 				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		}
 		break;
 
 	case ACT_REGDELETE:
-		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertRootKey(new_raw_arg1))
+		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertKey(new_raw_arg1))
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
@@ -10970,21 +10963,16 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			FileLoopModeType file_loop_mode;
 			bool recurse_subfolders;
 			HKEY root_key_type; // For registry loops, this holds the type of root key, independent of whether it is local or remote.
-			if (line->mActionType == ACT_LOOP_FILE)
+			if (line->mActionType == ACT_LOOP_FILE || line->mActionType == ACT_LOOP_REG)
 			{
+				if (line->mActionType == ACT_LOOP_REG)
+					if (  !(root_key_type = RegConvertKey(ARG1))  )
+						return line->LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
+
 				file_loop_mode = (line->mArgc <= 1) ? FILE_LOOP_FILES_ONLY : ConvertLoopMode(ARG2);
 				if (file_loop_mode == FILE_LOOP_INVALID)
 					return line->LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
 				recurse_subfolders = (*ARG3 == '1' && !*(ARG3 + 1));
-			}
-			else if (line->mActionType == ACT_LOOP_REG)
-			{
-				if (  !(root_key_type = RegConvertRootKey(ARG1))  )
-					return line->LineError(ERR_PARAM1_INVALID ERR_ABORT, FAIL, ARG1);
-				file_loop_mode = (line->mArgc <= 2) ? FILE_LOOP_FILES_ONLY : ConvertLoopMode(ARG3);
-				if (file_loop_mode == FILE_LOOP_INVALID)
-					return line->LineError(ERR_PARAM3_INVALID, FAIL, ARG3);
-				recurse_subfolders = (*ARG4 == '1' && !*(ARG4 + 1));
 			}
 
 			// ONLY AFTER THE ABOVE IS IT CERTAIN THE LOOP WILL LAUNCH (i.e. there was no error or early return).
@@ -11079,11 +11067,12 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				// be done at a later time:
 				bool is_remote_registry;
 				HKEY root_key;
-				if (root_key = RegConvertRootKey(ARG1, &is_remote_registry)) // This will open the key if it's remote.
+				LPTSTR subkey;
+				if (root_key = RegConvertKey(ARG1, &subkey, &is_remote_registry)) // This will open the key if it's remote.
 				{
 					// root_key_type needs to be passed in order to support GetLoopRegKey():
 					result = line->PerformLoopReg(aResultToken, continue_main_loop, jump_to_line, until
-						, file_loop_mode, recurse_subfolders, root_key_type, root_key, ARG2);
+						, file_loop_mode, recurse_subfolders, root_key_type, root_key, subkey);
 					if (is_remote_registry)
 						RegCloseKey(root_key);
 				}
@@ -12583,6 +12572,7 @@ ResultType Line::Perform()
 	__int64 device_id;  // For sound commands.  __int64 helps avoid compiler warning for some conversions.
 	bool is_remote_registry; // For Registry commands.
 	HKEY root_key; // For Registry commands.
+	LPTSTR subkey; // For Registry commands.
 	ResultType result;  // General purpose.
 
 	// Even though the loading-parser already checked, check again, for now,
@@ -13534,7 +13524,8 @@ ResultType Line::Perform()
 			// Also, do not use RegCloseKey() on this, even if it's a remote key, since our caller handles that:
 			return RegRead(g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name);
 		// Otherwise:
-		result = RegRead(root_key = RegConvertRootKey(ARG2, &is_remote_registry), ARG3, ARG4);
+		root_key = RegConvertKey(ARG2, &subkey, &is_remote_registry);
+		result = RegRead(root_key, subkey, ARG3);
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS keeps always-open.
 			RegCloseKey(root_key);
 		return result;
@@ -13545,8 +13536,8 @@ ResultType Line::Perform()
 			// g.mLoopRegItem->type is an unsupported type:
 			return RegWrite(g.mLoopRegItem->type, g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name, ARG1);
 		// Otherwise:
-		result = RegWrite(RegConvertValueType(ARG1), root_key = RegConvertRootKey(ARG2, &is_remote_registry)
-			, ARG3, ARG4, ARG5); // If RegConvertValueType(ARG1) yields REG_NONE, RegWrite() will set ErrorLevel rather than displaying a runtime error.
+		root_key = RegConvertKey(ARG2, &subkey, &is_remote_registry);
+		result = RegWrite(RegConvertValueType(ARG1), root_key, subkey, ARG3, ARG4); // If RegConvertValueType(ARG1) yields REG_NONE, RegWrite() will set ErrorLevel rather than displaying a runtime error.
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS keeps always-open.
 			RegCloseKey(root_key);
 		return result;
@@ -13565,7 +13556,8 @@ ResultType Line::Perform()
 				return RegDelete(g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name);
 		}
 		// Otherwise:
-		result = RegDelete(root_key = RegConvertRootKey(ARG1, &is_remote_registry), ARG2, ARG3);
+		root_key = RegConvertKey(ARG1, &subkey, &is_remote_registry);
+		result = RegDelete(root_key, subkey, ARG2);
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS always keeps open.
 			RegCloseKey(root_key);
 		return result;
