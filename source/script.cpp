@@ -13007,7 +13007,7 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 		if (result != OK && result != LOOP_CONTINUE)
 			break;
 		if (aUntil && aUntil->EvaluateLoopUntil(result))
-			return result;
+			break;
 	} // for()
 	enumerator.Release();
 	return result; // The script's loop is now over.
