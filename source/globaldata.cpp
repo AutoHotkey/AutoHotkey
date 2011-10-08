@@ -268,7 +268,7 @@ Action g_act[] =
 	, {_T(""), 1, 1, false, {1, 0}} // ACT_IFEXPR's name should be "" so that Line::ToText() will properly display it.
 
 	, {_T("MsgBox"), 0, 4, false, {4, 0}} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
-	, {_T("InputBox"), 1, 11, true, {5, 6, 7, 8, 10, 0}} // Output var, title, prompt, hide-text (e.g. passwords), width, height, X, Y, Font (e.g. courier:8 maybe), Timeout, Default
+	, {_T("InputBox"), 1, 5, true, NULL} // OutputVar, Title, Prompt, Options, Default
 	, {_T("ToolTip"), 0, 4, false, {2, 3, 4, 0}}  // Text, X, Y, ID.  If Text is omitted, the Tooltip is turned off.
 	, {_T("TrayTip"), 0, 4, false, {3, 4, 0}}  // Title, Text, Timeout, Options
 

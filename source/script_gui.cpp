@@ -4773,11 +4773,11 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				aOpt.style_add |= ES_PASSWORD;
 				if (aControl.hwnd) // Update the existing edit.
 				{
-					// Don't know how to achieve the black circle on XP *after* the control has
+					// Don't know how to use the actual system password char *after* the control has
 					// been created.  Maybe it's impossible.  Thus, provide default since otherwise
 					// pass-char will be removed vs. added:
 					if (!aOpt.password_char)
-						aOpt.password_char = '*';
+						aOpt.password_char = UorA(L'\x25CF', '*');
 					SendMessage(aControl.hwnd, EM_SETPASSWORDCHAR, (WPARAM)aOpt.password_char, 0);
 				}
 			}

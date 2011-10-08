@@ -4385,8 +4385,49 @@ DWORD GetAHKInstallDir(LPTSTR aBuf)
 // InputBox //
 //////////////
 
-ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInput, int aWidth, int aHeight
-	, int aX, int aY, double aTimeout, LPTSTR aDefault)
+ResultType InputBoxParseOptions(LPTSTR aOptions, InputBoxType &aInputBox)
+{
+	LPTSTR next_option, option_end;
+	for (next_option = aOptions; *next_option; next_option = omit_leading_whitespace(option_end))
+	{
+		// Find the end of this option item:
+		if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )  // Space or tab.
+			option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
+
+		// Temporarily terminate for simplicity and to reduce ambiguity:
+		TCHAR orig_char = *option_end;
+		*option_end = '\0';
+
+		// The legacy InputBox command used "Hide", but "Password" seems clearer
+		// and better for consistency with the equivalent Edit control option:
+		if (!_tcsnicmp(next_option, _T("Password"), 8) && _tcslen(next_option) <= 9)
+			aInputBox.password_char = next_option[8] ? next_option[8] : UorA(L'\x25CF', '*');
+		else
+		{
+			// All of the remaining options are single-letter followed by a number:
+			TCHAR option_char = ctoupper(*next_option);
+			if (!_tcschr(_T("XYWHT"), option_char) // Not a valid option char.
+				|| !IsNumeric(next_option + 1 // Or not a valid number.
+					, option_char == 'X' || option_char == 'Y' // Only X and Y allow negative numbers.
+					, FALSE, option_char == 'T')) // Only Timeout allows floating-point.
+				return g_script.ScriptError(ERR_INVALID_OPTION, next_option);
+
+			switch (ctoupper(*next_option))
+			{
+			case 'W': aInputBox.width = ATOI(next_option + 1); break;
+			case 'H': aInputBox.height = ATOI(next_option + 1); break;
+			case 'X': aInputBox.xpos = ATOI(next_option + 1); break;
+			case 'Y': aInputBox.ypos = ATOI(next_option + 1); break;
+			case 'T': aInputBox.timeout = (DWORD)(ATOF(next_option + 1) * 1000); break;
+			}
+		}
+		
+		*option_end = orig_char; // Undo the temporary termination.
+	}
+	return OK;
+}
+
+ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, LPTSTR aOptions, LPTSTR aDefault)
 {
 	if (g_nInputBoxes >= MAX_INPUTBOXES)
 	{
@@ -4414,20 +4455,17 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInpu
 	g_InputBox[g_nInputBoxes].title = title;
 	g_InputBox[g_nInputBoxes].text = text;
 	g_InputBox[g_nInputBoxes].default_string = default_string;
-
-	if (aTimeout > 2147483) // This is approximately the max number of seconds that SetTimer() can handle.
-		aTimeout = 2147483;
-	if (aTimeout < 0) // But it can be equal to zero to indicate no timeout at all.
-		aTimeout = 0.1;  // A value that might cue the user that something is wrong.
-	g_InputBox[g_nInputBoxes].timeout = (DWORD)(aTimeout * 1000);  // Convert to ms
-
-	// Allow 0 width or height (hides the window):
-	g_InputBox[g_nInputBoxes].width = aWidth != INPUTBOX_DEFAULT && aWidth < 0 ? 0 : aWidth;
-	g_InputBox[g_nInputBoxes].height = aHeight != INPUTBOX_DEFAULT && aHeight < 0 ? 0 : aHeight;
-	g_InputBox[g_nInputBoxes].xpos = aX;  // But seems okay to allow these to be negative, even if absolute coords.
-	g_InputBox[g_nInputBoxes].ypos = aY;
 	g_InputBox[g_nInputBoxes].output_var = aOutputVar;
-	g_InputBox[g_nInputBoxes].password_char = aHideInput ? '*' : '\0';
+	// Set defaults:
+	g_InputBox[g_nInputBoxes].width = INPUTBOX_DEFAULT;
+	g_InputBox[g_nInputBoxes].height = INPUTBOX_DEFAULT;
+	g_InputBox[g_nInputBoxes].xpos = INPUTBOX_DEFAULT;
+	g_InputBox[g_nInputBoxes].ypos = INPUTBOX_DEFAULT;
+	g_InputBox[g_nInputBoxes].password_char = '\0';
+	g_InputBox[g_nInputBoxes].timeout = 0;
+	// Parse options and override defaults:
+	if (!InputBoxParseOptions(aOptions, g_InputBox[g_nInputBoxes]))
+		return FAIL; // It already displayed the error.
 
 	// At this point, we know a dialog will be displayed.  See macro's comments for details:
 	DIALOG_PREP

@@ -239,6 +239,7 @@ struct InputBoxType
 	int ypos;
 	Var *output_var;
 	TCHAR password_char;
+	bool set_password_char;
 	LPTSTR default_string;
 	DWORD timeout;
 	HWND hwnd;
@@ -255,8 +256,8 @@ inline void swap(T &v1, T &v2) {
 }
 
 #define INPUTBOX_DEFAULT INT_MIN
-ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInput
-	, int aWidth, int aHeight, int aX, int aY, double aTimeout, LPTSTR aDefault);
+ResultType InputBoxParseOptions(LPTSTR aOptions, InputBoxType &aInputBox);
+ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, LPTSTR aOptions, LPTSTR aDefault);
 INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);

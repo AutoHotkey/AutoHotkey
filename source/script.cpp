@@ -5796,11 +5796,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
-	case ACT_INPUTBOX:
-		if (*NEW_RAW_ARG9)  // && !line.ArgHasDeref(9)
-			return ScriptError(_T("Parameter #9 must be blank."), NEW_RAW_ARG9);
-		break;
-
 	case ACT_MSGBOX:
 		if (aArgc > 1) // i.e. this MsgBox is using the 3-param or 4-param style.
 			if (!line.ArgHasDeref(1)) // i.e. if it's a deref, we won't try to validate it now.
@@ -13296,15 +13291,7 @@ ResultType Line::Perform()
 	}
 
 	case ACT_INPUTBOX:
-		return InputBox(output_var, ARG2, ARG3, ctoupper(*ARG4) == 'H' // 4th is whether to hide input.
-			, *ARG5 ? ArgToInt(5) : INPUTBOX_DEFAULT  // Width
-			, *ARG6 ? ArgToInt(6) : INPUTBOX_DEFAULT  // Height
-			, *ARG7 ? ArgToInt(7) : INPUTBOX_DEFAULT  // Xpos
-			, *ARG8 ? ArgToInt(8) : INPUTBOX_DEFAULT  // Ypos
-			// ARG9: future use for Font name & size, e.g. "Courier:8"
-			, ArgToDouble(10)  // Timeout
-			, ARG11  // Initial default string for the edit field.
-			);
+		return InputBox(output_var, ARG2, ARG3, ARG4, ARG5);
 
 	case ACT_TOOLTIP:
 		return ToolTip(FOUR_ARGS);
