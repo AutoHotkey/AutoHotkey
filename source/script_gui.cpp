@@ -3984,56 +3984,74 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 		if ((set_owner = !_tcsnicmp(next_option, _T("Owner"), 5))
 			  || !_tcsnicmp(next_option, _T("Parent"), 6))
 		{
-			if (!mHwnd || !set_owner)
+			if (!adding)
+				mOwner = NULL;
+			else
 			{
-				if (!adding)
+				LPTSTR name = next_option + 5 + !set_owner; // 6 for "Parent"
+				if (*name || !set_owner) // i.e. "+Parent" on its own is invalid (and should not default to g_hWnd).
 				{
-					mOwner = NULL;
-					if (!set_owner) // -Parent.
+					HWND new_owner = NULL;
+					if (IsPureNumeric(name, TRUE, FALSE) == PURE_INTEGER) // Allow negatives, for flexibility.
 					{
-						mStyle = mStyle & ~WS_CHILD | WS_POPUP;
-						if (mHwnd)
-							SetParent(mHwnd, NULL);
+						__int64 gui_num = ATOI64(name);
+						if (gui_num < 1 || gui_num > 99 || (option_end - name) > 2) // See similar checks in ResolveGui() for comments.
+						{
+							// Something like +Owner%Hwnd%, where Hwnd may or may not be a Gui.
+							if (IsWindow((HWND)gui_num))
+								new_owner = (HWND)gui_num;
+						}
 					}
+					if (!new_owner)
+					{
+						// Something like +OwnerMyGui or +Owner1.
+						if (GuiType *owner_gui = FindGui(name))
+							new_owner = owner_gui->mHwnd;
+					}
+					if (new_owner && new_owner != mHwnd) // Window can't own itself!
+						mOwner = new_owner;
+					else
+						return g_script.ScriptError(_T("Invalid or nonexistent owner or parent window."), next_option);
 				}
 				else
-				{
-					LPTSTR name = next_option + 5 + !set_owner; // 6 for "Parent"
-					if (*name || !set_owner) // i.e. "+Parent" on its own is invalid (and should not default to g_hWnd).
-					{
-						HWND new_owner = NULL;
-						if (IsPureNumeric(name, TRUE, FALSE) == PURE_INTEGER) // Allow negatives, for flexibility.
-						{
-							__int64 gui_num = ATOI64(name);
-							if (gui_num < 1 || gui_num > 99 || (option_end - name) > 2) // See similar checks in ResolveGui() for comments.
-							{
-								// Something like +Owner%Hwnd%, where Hwnd may or may not be a Gui.
-								if (IsWindow((HWND)gui_num))
-									new_owner = (HWND)gui_num;
-							}
-						}
-						if (!new_owner)
-						{
-							// Something like +OwnerMyGui or +Owner1.
-							if (GuiType *owner_gui = FindGui(name))
-								new_owner = owner_gui->mHwnd;
-						}
-						if (new_owner && new_owner != mHwnd) // Window can't own itself!
-							mOwner = new_owner;
-						else
-							return g_script.ScriptError(_T("Invalid or nonexistent owner or parent window."), next_option);
-						if (!set_owner) // +Parent
-						{
-							mStyle = mStyle & ~WS_POPUP | WS_CHILD;
-							if (mHwnd)
-								SetParent(mHwnd, mOwner);
-						}
-					}
-					else
-						mOwner = g_hWnd; // Make a window owned (by script's main window) omits its taskbar button.
-				}
+					mOwner = g_hWnd; // Make a window owned (by script's main window) omits its taskbar button.
 			}
-			//else mHwnd!=NULL. Since OS provides no way to change an existing window's owner, do nothing as documented.
+			if (set_owner) // +/-Owner
+			{
+				if (mStyle & WS_CHILD)
+				{
+					// Since Owner and Parent are mutually-exclusive by nature, it seems appropriate for
+					// +Owner to also apply -Parent.  If this wasn't done, +Owner would merely change the
+					// parent window (see comments further below).
+					mStyle = mStyle & ~WS_CHILD | WS_POPUP;
+					if (mHwnd)
+					{
+						// This seems to be necessary even if SetWindowLong() is called to update the
+						// style before attempting to change the owner.  By contrast, there doesn't seem
+						// to be any problem with delaying the style update until after all of the other
+						// options are parsed.
+						SetParent(mHwnd, NULL);
+					}
+				}
+				// Although MSDN doesn't explicitly document any way to change the owner of an existing
+				// window, the following method was mentioned in a PDC talk by Raymond Chen.  MSDN does
+				// say it shouldn't be used to change the parent of a child window, but maybe what it
+				// actually means is that "HWNDPARENT" is a misnomer; it should've been "HWNDOWNER".
+				// On the other hand, this method ACTUALLY DOES CHANGE THE PARENT WINDOW if mHwnd is a
+				// child window and the check above is disabled (at least it did during testing).
+				if (mHwnd)
+					SetWindowLongPtr(mHwnd, GWLP_HWNDPARENT, (LONG_PTR)mOwner);
+			}
+			else // +/-Parent
+			{
+				if (mHwnd)
+					SetParent(mHwnd, mOwner);
+				if (mOwner)
+					mStyle = mStyle & ~WS_POPUP | WS_CHILD;
+				else
+					mStyle = mStyle & ~WS_CHILD | WS_POPUP;
+				// The new style will be applied by a later section.
+			}
 		}
 
 		else if (!_tcsicmp(next_option, _T("AlwaysOnTop")))
