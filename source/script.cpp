@@ -11865,6 +11865,12 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 		// The object didn't return an enumerator, so nothing more we can do.
 		return OK;
 
+	// "Localize" the loop variables.
+	VarBkp var_bkp[2];
+	var[0]->Backup(var_bkp[0]);
+	if (var[1])
+		var[1]->Backup(var_bkp[1]);
+
 	// Prepare parameters for the loop below: enum.Next(var1 [, var2])
 	param_tokens[0].marker = _T("Next");
 	param_tokens[1].symbol = SYM_VAR;
@@ -11934,6 +11940,13 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 			break;
 	} // for()
 	enumerator.Release();
+	var[0]->Free();
+	var[0]->Restore(var_bkp[0]);
+	if (var[1])
+	{
+		var[1]->Free();
+		var[1]->Restore(var_bkp[1]);
+	}
 	return result; // The script's loop is now over.
 }
 
