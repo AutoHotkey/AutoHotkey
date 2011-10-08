@@ -8246,6 +8246,8 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 		{
 			ArgStruct &first_arg = line->mArg[0]; // Contains the function name.
 			int param_count = line->mArgc - 1;
+			if (param_count)
+				--param_count; // Always reserve one arg as an output var for the return value.
 			// Now that function declarations have been processed, resolve this line's function.
 			Func *func = NULL;
 			// Dynamic calling is currently disabled because it changes the way the parameters
@@ -8287,7 +8289,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 			}
 			for (i = 0; i < param_count; ++i)
 			{
-				ArgStruct &arg = line->mArg[i+1];
+				ArgStruct &arg = line->mArg[i+2];
 
 				if (func && !func->mIsBuiltIn && func->mParam[i].is_byref)
 				{
@@ -8306,7 +8308,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 						if (!arg.deref)
 						{
 							if (   !(arg.deref = (DerefType *)FindOrAddVar(arg.text))   )
-								return NULL;
+								return NULL; // It already displayed the error.
 							arg.text = _T(""); // Marks this as pre-resolved.
 							arg.length = 0;
 						}
@@ -13585,6 +13587,8 @@ ResultType Line::Perform()
 		//	return LineError(ERR_NONEXISTENT_FUNCTION, FAIL, ARG1);
 		
 		int param_count = mArgc - 1;
+		if (param_count)
+			--param_count; // Exclude the return value output var.
 		//if (param_count < func->mMinParams)
 		//	return LineError(ERR_TOO_FEW_PARAMS, FAIL, ARG1);
 
@@ -13614,7 +13618,20 @@ ResultType Line::Perform()
 		// CALL THE FUNCTION.
 		func->Call(func_call, result, result_token, param, param_count);
 
-		// Return value is currently unused, so just clean up:
+		if (output_var = ARGVAR2)
+		{
+			if (result_token.symbol == SYM_STRING && result_token.marker == result_token.mem_to_free)
+			{
+				// Rather than copying the result, take ownership of the block of memory
+				// returned by the function:
+				output_var->AcceptNewMem(result_token.marker, result_token.marker_length);
+				result_token.mem_to_free = NULL;
+			}
+			else
+				output_var->Assign(result_token);
+		}
+
+		// Clean up:
 		if (result_token.mem_to_free)
 			free(result_token.mem_to_free);
 		if (result_token.symbol == SYM_OBJECT)

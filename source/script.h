@@ -951,6 +951,7 @@ public:
 			case ACT_SPLITPATH:
 			case ACT_FILEGETSHORTCUT:
 			case ACT_FOR:
+			case ACT_FUNC:
 				return ARG_TYPE_OUTPUT_VAR;
 			}
 			break;
