@@ -13604,9 +13604,11 @@ ResultType Line::Perform()
 			}
 		}
 		
+		TCHAR result_buf[MAX_NUMBER_SIZE];
 		ExprTokenType result_token;
 		FuncCallData func_call;
 		ResultType result;
+		result_token.buf = result_buf; // Built-in functions expect this to be available.
 		result_token.mem_to_free = NULL; // Init to allow detection below.
 
 		// CALL THE FUNCTION.
