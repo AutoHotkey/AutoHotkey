@@ -5279,13 +5279,12 @@ ResultType Line::StringReplace()
 // v1.0.45: Revised to improve average-case performance and reduce memory utilization.
 {
 	Var &output_var = *OUTPUT_VAR;
+	Var *output_var_count = ARGVAR5; // Ok if NULL.
 	LPTSTR source = ARG2;
 	size_t length = ArgLength(2); // Going in, it's the haystack length. Later (coming out), it's the result length.
 
-	bool alternate_errorlevel = tcscasestr(ARG5, _T("UseErrorLevel")); // This also implies replace-all.
-	UINT replacement_limit = (alternate_errorlevel || StrChrAny(ARG5, _T("1aA"))) // This must be done in a way that recognizes "AllSlow" as meaning replace-all (even though the slow method itself is obsolete).
-		? UINT_MAX : 1;
-
+	UINT replacement_limit = *ARG6 ? ArgToUInt(6) : UINT_MAX;
+	
 	// In case the strings involved are massive, free the output_var in advance of the operation to
 	// reduce memory load and avoid swapping (but only if output_var isn't the same address as the input_var).
 	if (output_var.Type() == VAR_NORMAL && source != output_var.Contents(FALSE)) // It's compared this way in case ByRef/aliases are involved.  This will detect even them.
@@ -5329,10 +5328,8 @@ ResultType Line::StringReplace()
 			//else the unaltered result and output_var are both the clipboard.  Nothing needs to be done.
 	}
 
-	if (alternate_errorlevel)
-		g_ErrorLevel->Assign((DWORD)found_count);
-	else // Use old ErrorLevel method for backward compatibility.
-		g_ErrorLevel->Assign(found_count ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
+	if (output_var_count)
+		output_var_count->Assign((DWORD)found_count);
 	return OK;
 }
 

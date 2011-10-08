@@ -981,6 +981,9 @@ public:
 			break;
 
 		case 4:  // Arg #5
+			if (aActionType == ACT_STRINGREPLACE)
+				return ARG_TYPE_OUTPUT_VAR;
+			// Otherwise, fall through to below:
 		case 5:  // Arg #6
 			if (aActionType == ACT_SPLITPATH || aActionType == ACT_FILEGETSHORTCUT)
 				return ARG_TYPE_OUTPUT_VAR;

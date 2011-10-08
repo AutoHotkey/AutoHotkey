@@ -278,7 +278,7 @@ Action g_act[] =
 
 	, {_T("StrLower"), 2, 3, false, NULL} // output var, input var, T = Title Case
 	, {_T("StrUpper"), 2, 3, false, NULL} // output var, input var, T = Title Case
-	, {_T("StrReplace"), 3, 5, false, NULL} // Output Variable, Input Variable, Search String, Replace String, do-all.
+	, {_T("StrReplace"), 3, 6, false, {6, 0}} // OutputVar, InputVar, SearchText [, ReplaceText, OutputVarCount, Limit]
 	, {_T("SplitPath"), 1, 6, true, NULL} // InputFilespec, OutName, OutDir, OutExt, OutNameNoExt, OutDrive
 	, {_T("Sort"), 1, 2, false, NULL} // OutputVar (it's also the input var), Options
 
