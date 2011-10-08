@@ -12417,7 +12417,17 @@ void BIF_Ord(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 	// Result will always be an integer (this simplifies scripts that work with binary zeros since an
 	// empty string yields zero).
 	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
-	aResultToken.value_int64 = (TBYTE)*TokenToString(*aParam[0], aResultToken.buf);
+	LPTSTR cp = TokenToString(*aParam[0], aResultToken.buf);
+#ifndef UNICODE
+	// This section could convert a single- or multi-byte character to a Unicode code point
+	// for consistency, but since the ANSI build won't be officially supported that doesn't
+	// seem necessary.
+#else
+	if (IS_SURROGATE_PAIR(cp[0], cp[1]))
+		aResultToken.value_int64 = ((cp[0] - 0xd800) << 10) + (cp[1] - 0xdc00) + 0x10000;
+	else
+#endif
+		aResultToken.value_int64 = (TBYTE)*cp;
 }
 
 
@@ -12426,8 +12436,19 @@ void BIF_Chr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 {
 	int param1 = (int)TokenToInt64(*aParam[0]); // Convert to INT vs. UINT so that negatives can be detected.
 	LPTSTR cp = aResultToken.buf; // If necessary, it will be moved to a persistent memory location by our caller.
-	if (param1 < 0 || param1 > TRANS_CHAR_MAX)
+	if (param1 < 0 || param1 > UorA(0x10FFFF, UCHAR_MAX))
 		*cp = '\0'; // Empty string indicates both Chr(0) and an out-of-bounds param1.
+#ifdef UNICODE
+	else if (param1 >= 0x10000)
+	{
+		param1 -= 0x10000;
+		cp[0] = 0xd800 + ((param1 >> 10) & 0x3ff);
+		cp[1] = 0xdc00 + ( param1        & 0x3ff);
+		cp[2] = '\0';
+	}
+#else
+	// See #ifndef in BIF_Ord for related comment.
+#endif
 	else
 	{
 		cp[0] = param1;

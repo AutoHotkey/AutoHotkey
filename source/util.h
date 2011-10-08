@@ -45,14 +45,6 @@ GNU General Public License for more details.
 #define IS_SPACE_OR_TAB_OR_NBSP(c) IS_SPACE_OR_TAB(c) // wchar_t is unsigned
 #endif
 
-#ifdef UNICODE
-#define TRANS_CHAR_TO_INT(a) ((int)(USHORT)(a)) // Cast not actually necessary since wchar_t is usually unsigned.
-#define TRANS_CHAR_MAX 65535
-#else
-#define TRANS_CHAR_TO_INT(a) ((int)(UCHAR)(a)) // Cast to UCHAR so that chars above Asc(127) show as positive.
-#define TRANS_CHAR_MAX 255
-#endif
-
 // v1.0.43.04: The following are macros to avoid crash bugs caused by improper casting, namely a failure to cast
 // a signed char to UCHAR before promoting it to LPSTR, which crashes since CharLower/Upper would interpret
 // such a high unsigned value as an address rather than a single char.
