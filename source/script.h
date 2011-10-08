@@ -2744,7 +2744,7 @@ void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 void BIF_InStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_StrSplit(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_Asc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_Ord(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_Chr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);

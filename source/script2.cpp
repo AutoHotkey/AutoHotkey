@@ -12412,7 +12412,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 
 
 
-void BIF_Asc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+void BIF_Ord(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	// Result will always be an integer (this simplifies scripts that work with binary zeros since an
 	// empty string yields zero).
