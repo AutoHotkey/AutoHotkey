@@ -8248,7 +8248,10 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 			int param_count = line->mArgc - 1;
 			// Now that function declarations have been processed, resolve this line's function.
 			Func *func = NULL;
-			if (!first_arg.deref)
+			// Dynamic calling is currently disabled because it changes the way the parameters
+			// are interpreted, which seems tacky.  Expressions offer equivalent functionality
+			// without that problem.
+			//if (!first_arg.deref)
 			{
 				func = FindFunc(first_arg.text);
 				if (!func)
@@ -13578,12 +13581,12 @@ ResultType Line::Perform()
 	case ACT_FUNC:
 	{
 		Func *func = (Func *)mAttribute;
-		if (!func && !(func = g_script.FindFunc(ARG1)))
-			return LineError(ERR_NONEXISTENT_FUNCTION, FAIL, ARG1);
+		//if (!func && !(func = g_script.FindFunc(ARG1)))
+		//	return LineError(ERR_NONEXISTENT_FUNCTION, FAIL, ARG1);
 		
 		int param_count = mArgc - 1;
-		if (param_count < func->mMinParams)
-			return LineError(ERR_TOO_FEW_PARAMS, FAIL, ARG1);
+		//if (param_count < func->mMinParams)
+		//	return LineError(ERR_TOO_FEW_PARAMS, FAIL, ARG1);
 
 		ExprTokenType params[MAX_ARGS], *param[MAX_ARGS];
 		for (int i = 0; i < param_count; ++i)
