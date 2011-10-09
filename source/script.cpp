@@ -2030,7 +2030,7 @@ process_completed_line:
 			if (mClassObjectCount)
 			{
 				// Check for assignment first, in case of something like "Static := 123".
-				for (cp = buf; cisalnum(*cp) || *cp == '_'; ++cp);
+				cp = find_identifier_end(buf);
 				if (cp > buf) // i.e. buf begins with an identifier.
 				{
 					cp = omit_leading_whitespace(cp);
@@ -6346,7 +6346,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 					
 	for (item = omit_leading_whitespace(aBuf); *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
 	{
-		for (item_end = item; cisalnum(*item_end) || *item_end == '_'; ++item_end); // Find end of identifier.
+		item_end = find_identifier_end(item); // Find end of identifier.
 		if (item_end == item)
 			return ScriptError(ERR_INVALID_CLASS_VAR, item);
 		orig_char = *item_end;
