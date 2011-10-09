@@ -1649,7 +1649,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 					{
 						if (buf_length + next_buf_length >= LINE_SIZE - 1) // -1 to account for the extra space added below.
 							return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, next_buf);
-						if (*next_buf != ',') // Insert space before expression operators so that built/combined expression works correctly (some operators like 'and', 'or', '.', and '?' currently require spaces on either side) and also for readability of ListLines.
+						if (*next_buf != ',') // Insert space before expression operators so that built/combined expression works correctly (some operators like 'and', 'or' and concat currently require spaces on either side) and also for readability of ListLines.
 							buf[buf_length++] = ' ';
 						tmemcpy(buf + buf_length, next_buf, next_buf_length + 1); // Append this line to prev. and include the zero terminator.
 						buf_length += next_buf_length;
@@ -2105,7 +2105,7 @@ examine_line:
 		if (hotstring_start)
 		{
 			// Find the hotstring's final double-colon by considering escape sequences from left to right.
-			// This is necessary for to handles cases such as the following:
+			// This is necessary for it to handle cases such as the following:
 			// ::abc```::::Replacement String
 			// The above hotstring translates literally into "abc`::".
 			LPTSTR escaped_double_colon = NULL;
