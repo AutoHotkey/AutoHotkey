@@ -2056,6 +2056,19 @@ process_completed_line:
 						return FAIL; // Above already displayed the error.
 					goto continue_main_loop; // In lieu of "continue", for performance.
 				}
+				if (*buf == '#') // See the identical section further below for comments.
+				{
+					saved_line_number = mCombinedLineNumber;
+					switch(IsDirective(buf))
+					{
+					case CONDITION_TRUE:
+						mCurrFileIndex = source_file_index;
+						mCombinedLineNumber = saved_line_number;
+						goto continue_main_loop;
+					case FAIL:
+						return FAIL;
+					}
+				}
 				// Anything not already handled above is not valid directly inside a class definition.
 				return ScriptError(ERR_INVALID_LINE_IN_CLASS_DEF, buf);
 			}
