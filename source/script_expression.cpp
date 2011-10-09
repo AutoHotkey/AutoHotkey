@@ -1007,6 +1007,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 									goto normal_end_skip_output_var; // Nothing more to do because it has even taken care of output_var already.
 								else // temp_var is from look-ahead to a future assignment.
 								{
+									++this_postfix;
 									this_token.var = STACK_POP->var; // Make the result a variable rather than a normal operand so that its
 									this_token.symbol = SYM_VAR;     // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
 									goto push_this_token;
@@ -1035,6 +1036,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 								goto normal_end_skip_output_var; // Nothing more to do because it has even taken care of output_var already.
 							else // temp_var is from look-ahead to a future assignment.
 							{
+								++this_postfix;
 								this_token.var = STACK_POP->var; // Make the result a variable rather than a normal operand so that its
 								this_token.symbol = SYM_VAR;     // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
 								goto push_this_token;
