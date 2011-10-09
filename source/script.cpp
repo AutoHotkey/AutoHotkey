@@ -1446,15 +1446,6 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		// indirectly by calling something that changed it:
 		mCurrLine = NULL;  // To signify that we're in transition, trying to load a new one.
 
-		// v1.0.44.13: An additional call to IsDirective() is now made up here so that #CommentFlag affects
-		// the line beneath it the same way as other lines (#EscapeChar et. al. didn't have this bug).
-		// It's best not to process ALL directives up here because then they would no longer support a
-		// continuation section beneath them (and possibly other drawbacks because it was never thoroughly
-		// tested).
-		if (!_tcsnicmp(buf, _T("#CommentFlag"), 12)) // Have IsDirective() process this now (it will also process it again later, which is harmless).
-			if (IsDirective(buf) == FAIL) // IsDirective() already displayed the error.
-				return FAIL;
-
 		// Read in the next line (if that next line is the start of a continuation section, append
 		// it to the line currently being processed:
 		for (has_continuation_section = false, in_continuation_section = 0;;)
