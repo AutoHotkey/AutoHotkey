@@ -13600,7 +13600,7 @@ ResultType Line::Perform()
 		for (int i = 0, arg = 2; i < param_count; ++i, ++arg) // arg=2 excludes function name and output var.
 		{
 			param[i] = &params[i];
-			if (sArgVar[arg])
+			if (sArgVar[arg] && sArgVar[arg]->Type() == VAR_NORMAL) // Only normal variables can be SYM_VAR.
 			{
 				params[i].symbol = SYM_VAR;
 				params[i].var = sArgVar[arg];
