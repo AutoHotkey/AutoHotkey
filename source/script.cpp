@@ -4654,7 +4654,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					if (this_aArgMap)
 						this_aArgMap += 2;
 				}
-				else if (aActionType == ACT_FUNC)
+				else if (aActionType == ACT_FUNC && i > 1)
 				{
 					// If this arg looks like a variable name, attempt to resolve it to an existing
 					// variable; but don't create any variables since we don't yet know whether the
