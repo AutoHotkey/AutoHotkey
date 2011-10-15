@@ -13597,18 +13597,18 @@ ResultType Line::Perform()
 		//	return LineError(ERR_TOO_FEW_PARAMS, FAIL, ARG1);
 
 		ExprTokenType params[MAX_ARGS], *param[MAX_ARGS];
-		for (int i = 0; i < param_count; ++i)
+		for (int i = 0, arg = 2; i < param_count; ++i, ++arg) // arg=2 excludes function name and output var.
 		{
 			param[i] = &params[i];
-			if (sArgVar[i+1])
+			if (sArgVar[arg])
 			{
 				params[i].symbol = SYM_VAR;
-				params[i].var = sArgVar[i+1]; // +1 to skip arg containing function name.
+				params[i].var = sArgVar[arg];
 			}
 			else
 			{
 				params[i].symbol = SYM_STRING;
-				params[i].marker = sArgDeref[i+1];
+				params[i].marker = sArgDeref[arg];
 			}
 		}
 		
