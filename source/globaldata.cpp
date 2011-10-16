@@ -259,6 +259,7 @@ Action g_act[] =
 	// e.g. fn1(123, fn2(y)) or x&=3
 	// Its name should be "" so that Line::ToText() will properly display it.
 	, {_T(""), 1, 1, false, {1, 0}}
+	, {_T(""), 1, MAX_ARGS, true, NULL} // Command-style function-call (ACT_FUNC).
 
 	, {_T("Else"), 0, 0, false, NULL}
 
@@ -266,6 +267,25 @@ Action g_act[] =
 	, {_T("contains"), 2, 2, false, NULL}, {_T("not contains"), 2, 2, false, NULL}  // Very similar to "in" and "not in"
 	, {_T("is"), 2, 2, false, NULL}, {_T("is not"), 2, 2, false, NULL}
 	, {_T(""), 1, 1, false, {1, 0}} // ACT_IFEXPR's name should be "" so that Line::ToText() will properly display it.
+
+	, {_T("Goto"), 1, 1, false, NULL}
+	, {_T("Gosub"), 1, 1, false, NULL}   // Label (or dereference that resolves to a label).
+	, {_T("Return"), 0, 1, false, {1, 0}}
+	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
+	, {_T("ExitApp"), 0, 1, false, {1, 0}}  // Optional exit-code. v1.0.48.01: Allow an expression like ACT_EXIT does.
+	, {_T("Loop"), 0, 1, false, {1, 0}} // IterationCount
+	, {_T("LoopFiles"), 1, 2, false, NULL} // FilePattern [, Mode] -- LoopFiles vs LoopFile for clarity.
+	, {_T("LoopReg"), 1, 2, false, NULL} // Key [, Mode]
+	, {_T("LoopRead"), 1, 2, false, NULL} // InputFile [, OutputFile]
+	, {_T("LoopParse"), 1, 3, false, NULL} // InputVar [, Delimiters, OmitChars]
+	, {_T("For"), 1, 3, false, {3, 0}}  // For var [,var] in expression
+	, {_T("While"), 1, 1, false, {1, 0}} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
+	, {_T("Until"), 1, 1, false, {1, 0}} // Until expression (follows a Loop)
+	, {_T("Break"), 0, 1, false, NULL}, {_T("Continue"), 0, 1, false, NULL}
+	, {_T("Try"), 0, 0, false, NULL}
+	, {_T("Catch"), 0, 1, false, NULL} // fincs: seems best to allow catch without a parameter
+	, {_T("Throw"), 0, 1, false, {1, 0}}
+	, {_T("{"), 0, 0, false, NULL}, {_T("}"), 0, 0, false, NULL}
 
 	, {_T("MsgBox"), 0, 4, false, {4, 0}} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
 	, {_T("InputBox"), 1, 5, true, NULL} // OutputVar, Title, Prompt, Options, Default
@@ -330,28 +350,11 @@ Action g_act[] =
 	, {_T("Sleep"), 1, 1, false, {1, 0}} // Sleep time in ms (numeric)
 	, {_T("Random"), 0, 3, false, {2, 3, 0}} // Output var, Min, Max (Note: MinParams is 1 so that param2 can be blank).
 
-	, {_T("Goto"), 1, 1, false, NULL}
-	, {_T("Gosub"), 1, 1, false, NULL}   // Label (or dereference that resolves to a label).
 	, {_T("OnExit"), 0, 2, false, NULL}  // Optional label, future use (since labels are allowed to contain commas)
 	, {_T("Hotkey"), 1, 3, false, NULL}  // Mod+Keys, Label/Action (blank to avoid changing curr. label), Options
 	, {_T("SetTimer"), 0, 3, false, {3, 0}}  // Label (or dereference that resolves to a label), period (or ON/OFF), Priority
 	, {_T("Critical"), 0, 1, false, NULL}  // On|Off
 	, {_T("Thread"), 1, 3, false, {2, 3, 0}}  // Command, value1 (can be blank for interrupt), value2
-	, {_T("Return"), 0, 1, false, {1, 0}}
-	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
-	, {_T("Loop"), 0, 1, false, {1, 0}} // IterationCount
-	, {_T("LoopFiles"), 1, 2, false, NULL} // FilePattern [, Mode] -- LoopFiles vs LoopFile for clarity.
-	, {_T("LoopReg"), 1, 2, false, NULL} // Key [, Mode]
-	, {_T("LoopRead"), 1, 2, false, NULL} // InputFile [, OutputFile]
-	, {_T("LoopParse"), 1, 3, false, NULL} // InputVar [, Delimiters, OmitChars]
-	, {_T("For"), 1, 3, false, {3, 0}}  // For var [,var] in expression
-	, {_T("While"), 1, 1, false, {1, 0}} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
-	, {_T("Until"), 1, 1, false, {1, 0}} // Until expression (follows a Loop)
-	, {_T("Break"), 0, 1, false, NULL}, {_T("Continue"), 0, 1, false, NULL}
-	, {_T("Try"), 0, 0, false, NULL}
-	, {_T("Catch"), 0, 1, false, NULL} // fincs: seems best to allow catch without a parameter
-	, {_T("Throw"), 0, 1, false, {1, 0}}
-	, {_T("{"), 0, 0, false, NULL}, {_T("}"), 0, 0, false, NULL}
 
 	, {_T("WinActivate"), 0, 4, false, NULL} // Passing zero params results in activating the LastUsed window.
 	, {_T("WinActivateBottom"), 0, 4, false, NULL} // Min. 0 so that 1st params can be blank and later ones not blank.
@@ -477,12 +480,9 @@ Action g_act[] =
 	, {_T("GuiControl"), 0, 3, true, NULL} // Sub-cmd (defaults to "contents"), ControlName/ID, Text
 	, {_T("GuiControlGet"), 1, 4, false, NULL} // OutputVar, Sub-cmd (defaults to "contents"), ControlName/ID (defaults to control assoc. with OutputVar), Text/FutureUse
 
-	, {_T("ExitApp"), 0, 1, false, {1, 0}}  // Optional exit-code. v1.0.48.01: Allow an expression like ACT_EXIT does.
 	, {_T("Shutdown"), 1, 1, false, {1, 0}} // Seems best to make the first param (the flag/code) mandatory.
 
 	, {_T("FileEncoding"), 0, 1, false, NULL}
-
-	, {_T(""), 1, MAX_ARGS, true, NULL} // Command-style function-call.
 };
 // Below is the most maintainable way to determine the actual count?
 // Due to C++ lang. restrictions, can't easily make this a const because constants

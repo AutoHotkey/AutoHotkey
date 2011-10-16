@@ -4526,7 +4526,7 @@ inline ActionTypeType Script::ConvertActionType(LPTSTR aActionTypeString)
 	// For the loop's index:
 	// Use an int rather than ActionTypeType since it's sure to be large enough to go beyond
 	// 256 if there happen to be exactly 256 actions in the array:
- 	for (int action_type = ACT_FIRST_COMMAND; action_type < g_ActionCount; ++action_type)
+ 	for (int action_type = ACT_FIRST_NAMED_ACTION; action_type < g_ActionCount; ++action_type)
 		if (!_tcsicmp(aActionTypeString, g_act[action_type].Name)) // Match found.
 			return action_type;
 	return ACT_INVALID;  // On failure to find a match.
@@ -7202,8 +7202,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 			// The following are not implemented in Line::Perform, so are not supported.
 			// Most are control flow statements which can only be handled correctly in
 			// Line::ExecUntil and therefore can't be implemented as functions.
-			|| (action_type >= ACT_RETURN && action_type <= ACT_BLOCK_END)
-			|| action_type == ACT_GOSUB || action_type == ACT_GOTO || action_type == ACT_EXITAPP)
+			|| ACT_IS_CONTROL_FLOW(action_type))
 			return NULL; // Maint: There may be other lines above that also return NULL.
 		// Otherwise, there is a command with this name which can be converted to a function.
 		bif = BIF_PerformAction;
@@ -14161,7 +14160,7 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 	if (aLineWasResumed)
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("STILL WAITING (%0.2f): "), (float)aElapsed / 1000.0);
 
-	if (ACT_IS_ASSIGN(mActionType) || mActionType == ACT_EXPRESSION || (ACT_IS_IF(mActionType) && mActionType < ACT_FIRST_COMMAND))
+	if (ACT_IS_ASSIGN(mActionType) || mActionType == ACT_EXPRESSION || ACT_IS_IF(mActionType))
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s%s %s %s")
 			, ACT_IS_IF(mActionType) ? _T("if ") : _T("")
 			, *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName  // i.e. don't resolve dynamic variable names.

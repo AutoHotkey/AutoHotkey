@@ -272,11 +272,19 @@ enum enum_act {
 // Seems best to make ACT_INVALID zero so that it will be the ZeroMemory() default within
 // any POD structures that contain an action_type field:
   ACT_INVALID = FAIL  // These should both be zero for initialization and function-return-value purposes.
-, ACT_ASSIGNEXPR, ACT_EXPRESSION
+, ACT_ASSIGNEXPR, ACT_EXPRESSION, ACT_FUNC
 , ACT_ELSE   // Parsed at a lower level than most commands to support same-line ELSE-actions (e.g. "else if").
 , ACT_IFIN, ACT_IFNOTIN, ACT_IFCONTAINS, ACT_IFNOTCONTAINS, ACT_IFIS, ACT_IFISNOT
 , ACT_IFEXPR  // i.e. if (expr)
 , ACT_FIRST_IF = ACT_IFIN, ACT_LAST_IF = ACT_IFEXPR // Keep this range updated with any new IFs that are added.
+, ACT_FIRST_NAMED_ACTION, ACT_GOTO = ACT_FIRST_NAMED_ACTION, ACT_GOSUB
+, ACT_RETURN, ACT_EXIT, ACT_EXITAPP
+, ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE
+, ACT_FOR, ACT_WHILE, ACT_UNTIL // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
+, ACT_BREAK, ACT_CONTINUE
+, ACT_TRY, ACT_CATCH, ACT_THROW
+, ACT_BLOCK_BEGIN, ACT_BLOCK_END
+, ACT_FIRST_CONTROL_FLOW = ACT_ELSE, ACT_LAST_CONTROL_FLOW = ACT_BLOCK_END
 , ACT_FIRST_COMMAND, ACT_MSGBOX = ACT_FIRST_COMMAND
 , ACT_INPUTBOX, ACT_TOOLTIP, ACT_TRAYTIP, ACT_INPUT
 , ACT_DEREF, ACT_STRINGLOWER, ACT_STRINGUPPER
@@ -293,12 +301,7 @@ enum enum_act {
 , ACT_STATUSBARWAIT
 , ACT_CLIPWAIT, ACT_KEYWAIT
 , ACT_SLEEP, ACT_RANDOM
-, ACT_GOTO, ACT_GOSUB, ACT_ONEXIT, ACT_HOTKEY, ACT_SETTIMER, ACT_CRITICAL, ACT_THREAD, ACT_RETURN, ACT_EXIT
-, ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE
-, ACT_FOR, ACT_WHILE, ACT_UNTIL // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
-, ACT_BREAK, ACT_CONTINUE
-, ACT_TRY, ACT_CATCH, ACT_THROW
-, ACT_BLOCK_BEGIN, ACT_BLOCK_END
+, ACT_ONEXIT, ACT_HOTKEY, ACT_SETTIMER, ACT_CRITICAL, ACT_THREAD
 , ACT_WINACTIVATE, ACT_WINACTIVATEBOTTOM
 , ACT_WINWAIT, ACT_WINWAITCLOSE, ACT_WINWAITACTIVE, ACT_WINWAITNOTACTIVE
 , ACT_WINMINIMIZE, ACT_WINMAXIMIZE, ACT_WINRESTORE
@@ -327,13 +330,8 @@ enum enum_act {
 , ACT_SETNUMLOCKSTATE, ACT_SETSCROLLLOCKSTATE, ACT_SETCAPSLOCKSTATE, ACT_SETSTORECAPSLOCKMODE
 , ACT_KEYHISTORY, ACT_LISTLINES, ACT_LISTVARS, ACT_LISTHOTKEYS
 , ACT_EDIT, ACT_RELOAD, ACT_MENU, ACT_GUI, ACT_GUICONTROL, ACT_GUICONTROLGET
-, ACT_EXITAPP
 , ACT_SHUTDOWN
 , ACT_FILEENCODING
-// Make these the last ones before the count so they will be less often processed.  This helps
-// performance because this one doesn't actually have a keyword so will never result
-// in a match anyway.
-, ACT_FUNC
 // It's safer not to do this here.  It's better set by a
 // calculation immediately after the array is declared and initialized,
 // at which time we know its true size:
@@ -348,6 +346,7 @@ enum enum_act {
 #define ACT_IS_ALWAYS_ALLOWED(ActionType) (ActionType == ACT_EXITAPP || ActionType == ACT_PAUSE \
 	|| ActionType == ACT_EDIT || ActionType == ACT_RELOAD || ActionType == ACT_KEYHISTORY \
 	|| ActionType == ACT_LISTLINES || ActionType == ACT_LISTVARS || ActionType == ACT_LISTHOTKEYS)
+#define ACT_IS_CONTROL_FLOW(ActionType) (ActionType <= ACT_LAST_CONTROL_FLOW && ActionType >= ACT_FIRST_CONTROL_FLOW)
 #define ACT_IS_ASSIGN(ActionType) (ActionType == ACT_ASSIGNEXPR)
 #define ACT_IS_IF(ActionType) (ActionType <= ACT_LAST_IF && ActionType >= ACT_FIRST_IF) // Ordered for short-circuit performance.
 #define ACT_IS_LOOP(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_WHILE)
