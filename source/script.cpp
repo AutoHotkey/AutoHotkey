@@ -8315,6 +8315,13 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 				}
 				else
 				{
+					// For consistency with normal commands, mandatory parameters must not be blank.
+					if (!*arg.text && func && param_index < func->mMinParams)
+					{
+						TCHAR buf[50];
+						sntprintf(buf, _countof(buf), _T("Parameter #%i required"), i + 1);
+						return line->PreparseError(buf);
+					}
 					// Any non-empty ByRef parameter should be treated as an input var (unless it
 					// was explicitly flagged as an expression; that is handled later).
 					if (*arg.text && func && !func->mIsBuiltIn && func->mParam[param_index].is_byref)
