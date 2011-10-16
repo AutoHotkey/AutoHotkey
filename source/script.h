@@ -922,9 +922,7 @@ public:
 			case ACT_CATCH:
 				return ARG_TYPE_OUTPUT_VAR;
 
-			case ACT_LOOP_PARSE:
 			case ACT_SORT:
-			case ACT_SPLITPATH:
 			case ACT_IFIN:
 			case ACT_IFNOTIN:
 			case ACT_IFCONTAINS:
@@ -938,11 +936,6 @@ public:
 		case 1:  // Arg #2
 			switch(aActionType)
 			{
-			case ACT_STRINGLOWER:
-			case ACT_STRINGUPPER:
-			case ACT_STRINGREPLACE:
-				return ARG_TYPE_INPUT_VAR;
-
 			case ACT_MOUSEGETPOS:
 			case ACT_WINGETPOS:
 			case ACT_CONTROLGETPOS:
