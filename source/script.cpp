@@ -4654,7 +4654,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					if (this_aArgMap)
 						this_aArgMap += 2;
 				}
-				else if (aActionType == ACT_FUNC && i > 1)
+				else if (aActionType == ACT_FUNC && i > 0)
 				{
 					// If this arg looks like a variable name, attempt to resolve it to an existing
 					// variable; but don't create any variables since we don't yet know whether the
@@ -5130,6 +5130,18 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				if (_tcslen(new_raw_arg2) > 1 || !_tcschr(_T("RA"), ctoupper(*new_raw_arg2)))
 					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
+		
+	case ACT_RETURN:
+		if (aArgc > 0)
+		{
+			if (g->CurrentFunc)
+				g->CurrentFunc->mHasReturn = true;
+#ifndef AUTOHOTKEYSC
+			else
+				return ScriptError(_T("Return's parameter should be blank except inside a function."));
+#endif
+		}
+		break;
 
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
 		
@@ -5190,11 +5202,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_LOOP_REG:
 		if (!line.ArgHasDeref(2) && Line::ConvertLoopMode(new_raw_arg2) == FILE_LOOP_INVALID)
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		break;
-
-	case ACT_RETURN:
-		if (aArgc > 0 && !g->CurrentFunc)
-			return ScriptError(_T("Return's parameter should be blank except inside a function."));
 		break;
 
 	case ACT_DETECTHIDDENWINDOWS:
@@ -8249,9 +8256,8 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 		if (line->mActionType == ACT_FUNC)
 		{
 			ArgStruct &first_arg = line->mArg[0]; // Contains the function name.
-			int param_count = line->mArgc - 1;
-			if (param_count)
-				--param_count; // Always reserve one arg as an output var for the return value.
+			int param_count = line->mArgc - 1; // This is not the final parameter count since it includes the output var (if present).
+			bool has_output_var = true; // Set default.
 			// Now that function declarations have been processed, resolve this line's function.
 			Func *func = NULL;
 			// Dynamic calling is currently disabled because it changes the way the parameters
@@ -8280,12 +8286,14 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 						: ERR_NONEXISTENT_FUNCTION, first_arg.text);
 #endif
 				}
-				if (param_count < func->mMinParams)
+				if (  !(func->mIsBuiltIn || func->mHasReturn)  )
+					has_output_var = false; // This UDF doesn't need an output var.
+				if (param_count - has_output_var < func->mMinParams)
 				{
 					abort = true;
 					return line->PreparseError(ERR_TOO_FEW_PARAMS);
 				}
-				if (param_count > func->mParamCount)
+				if (param_count - has_output_var > func->mParamCount)
 				{
 					abort = true;
 					return line->PreparseError(ERR_TOO_MANY_PARAMS);
@@ -8293,35 +8301,66 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 			}
 			for (i = 0; i < param_count; ++i)
 			{
-				ArgStruct &arg = line->mArg[i+2];
-
-				if (func && !func->mIsBuiltIn && func->mParam[i].is_byref)
+				ArgStruct &arg = line->mArg[i+1];
+				int param_index = i - has_output_var; // For maintainability.
+				
+				// Determine what type of arg this should be.
+				ArgTypeType arg_type;
+				if (param_index < 0)
 				{
+					// Output var used for the return value, not one of the function's parameters.
+					// This arg is optional; if omitted, it must be ARG_TYPE_NORMAL since it won't
+					// resolve to a variable.
+					arg_type = *arg.text ? ARG_TYPE_OUTPUT_VAR : ARG_TYPE_NORMAL;
+				}
+				else
+				{
+					// Any non-empty ByRef parameter should be treated as an input var (unless it
+					// was explicitly flagged as an expression; that is handled later).
+					if (*arg.text && func && !func->mIsBuiltIn && func->mParam[param_index].is_byref)
+						arg_type = ARG_TYPE_INPUT_VAR;
+					else
+						arg_type = ARG_TYPE_NORMAL;
+				}
+
+				// Convert the arg to the appropriate type.
+				if (arg_type != ARG_TYPE_NORMAL)
+				{
+					// This arg needs to be an input or output var.
+					Var *lone_var = NULL;
 					if (arg.type == ARG_TYPE_INPUT_VAR)
 					{
-						if (!arg.deref) // Implies #MustDeclare was in effect for this line.
+						// At this stage, this arg type is only possible if the arg was a plain
+						// variable name.  It was already resolved to a variable reference, unless
+						// #MustDeclare was in effect and the variable hadn't yet been declared.
+						if (  !(lone_var = (Var *)arg.deref)  )
 							return line->PreparseError(ERR_MUST_DECLARE, arg.text);
-						// An earlier stage resolved arg.text to a variable, but left text set
-						// in case the parameter wasn't ByRef.  Since it is ByRef, just mark
-						// this arg as pre-resolved:
-						arg.text = _T("");
-						arg.length = 0;
 					}
 					else if (!arg.is_expression)
 					{
 						if (!arg.deref)
-						{
-							if (   !(arg.deref = (DerefType *)FindOrAddVar(arg.text))   )
+							if (  !(lone_var = FindOrAddVar(arg.text))  )
 								return NULL; // It already displayed the error.
-							arg.text = _T(""); // Marks this as pre-resolved.
-							arg.length = 0;
-						}
 						// Otherwise, it's something like Array%i%, where i has been resolved and
 						// placed in arg.deref, but the final var will be resolved at run-time.
-						arg.type = ARG_TYPE_INPUT_VAR;
 					}
-					// Otherwise, it is explicitly an expression (which may or may not resolve
-					// to a variable; only a sole variable reference would work for ByRef).
+					else
+					{
+						// This arg is explicitly an expression (which may or may not resolve
+						// to a variable; only a sole variable reference would work for ByRef).
+						if (arg_type == ARG_TYPE_OUTPUT_VAR)
+							return line->PreparseError(ERR_PARAM1_INVALID, arg.text);
+					}
+					if (lone_var)
+					{
+						if (arg_type == ARG_TYPE_OUTPUT_VAR && VAR_IS_READONLY(*lone_var))
+							return line->PreparseError(ERR_VAR_IS_READONLY, arg.text);
+						// Convert this arg to a "pre-resolved" var:
+						arg.deref = (DerefType *)lone_var;
+						arg.text = _T("");
+						arg.length = 0;
+					}
+					arg.type = arg_type;
 				}
 				else if (arg.type == ARG_TYPE_INPUT_VAR)
 				{
@@ -13591,13 +13630,24 @@ ResultType Line::Perform()
 		//	return LineError(ERR_NONEXISTENT_FUNCTION, FAIL, ARG1);
 		
 		int param_count = mArgc - 1;
-		if (param_count)
-			--param_count; // Exclude the return value output var.
+		int arg = 1;
+		if (param_count && (func->mIsBuiltIn || func->mHasReturn))
+		{
+			// Above: mArg[1].type isn't checked because the output var is optional and
+			// might have been omitted, in which case type would be ARG_TYPE_NORMAL.
+			// Below: sArgVar[1] contains the output variable, or NULL if it was omitted.
+			output_var = sArgVar[1];
+			// Exclude it from the list of parameters actually passed to the function:
+			--param_count;
+			++arg;
+		}
+		else
+			output_var = NULL;
 		//if (param_count < func->mMinParams)
 		//	return LineError(ERR_TOO_FEW_PARAMS, FAIL, ARG1);
 
 		ExprTokenType params[MAX_ARGS], *param[MAX_ARGS];
-		for (int i = 0, arg = 2; i < param_count; ++i, ++arg) // arg=2 excludes function name and output var.
+		for (int i = 0; i < param_count; ++i, ++arg)
 		{
 			param[i] = &params[i];
 			if (sArgVar[arg] && sArgVar[arg]->Type() == VAR_NORMAL) // Only normal variables can be SYM_VAR.
@@ -13622,7 +13672,7 @@ ResultType Line::Perform()
 		// CALL THE FUNCTION.
 		func->Call(func_call, result, result_token, param, param_count);
 
-		if (output_var = ARGVAR2)
+		if (output_var)
 		{
 			if (result_token.symbol == SYM_STRING && result_token.marker == result_token.mem_to_free)
 			{

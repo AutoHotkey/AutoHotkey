@@ -951,7 +951,6 @@ public:
 			case ACT_SPLITPATH:
 			case ACT_FILEGETSHORTCUT:
 			case ACT_FOR:
-			case ACT_FUNC:
 				return ARG_TYPE_OUTPUT_VAR;
 			}
 			break;
@@ -1857,6 +1856,7 @@ public:
 	// override in the script.  So mIsBuiltIn should always be used to determine whether the function
 	// is truly built-in, not its name.
 	bool mIsVariadic;
+	bool mHasReturn; // Does the UDF have at least one ACT_RETURN with a value specified?
 
 	bool Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false);
 
@@ -1941,6 +1941,7 @@ public:
 		, mDefaultVarType(VAR_DECLARE_NONE)
 		, mIsBuiltIn(aIsBuiltIn)
 		, mIsVariadic(false)
+		, mHasReturn(false)
 	{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
