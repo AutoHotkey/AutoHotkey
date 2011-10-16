@@ -4354,7 +4354,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		is_expression = *arg[nArgs] == g_DerefChar && !*arg_map[nArgs] // It's a non-literal deref character.
 			&& IS_SPACE_OR_TAB(arg[nArgs][1]); // Followed by a space or tab.
 
-		if (!is_expression)
+		if (!is_expression && aActionType < ACT_FIRST_COMMAND) // v2: Search for "NumericParams" for comments.
 		{
 			// v1.0.43.07: Fixed below to use this_action instead of g_act[aActionType] so that the
 			// numeric params of legacy commands like EnvAdd/Sub/LeftClick can be detected.  Without
@@ -4684,7 +4684,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				}
 			}
 			
-			if (np = g_act[aActionType].NumericParams) // This command has at least one numeric parameter.
+			// Experimental v2 behaviour: Where function syntax could've been used but isn't, require %
+			// for expressions.  This doesn't include control flow statements such as IF, WHILE, FOR, etc.
+			// since we want those to always be expressions (and function syntax can't be used for those).
+			if (aActionType < ACT_FIRST_COMMAND // See above.
+				&& (np = g_act[aActionType].NumericParams)) // This command has at least one numeric parameter.
 			{
 				// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
 				i_plus_one = i + 1;
@@ -4692,12 +4696,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				{
 					if (*np == i_plus_one) // This arg is enforced to be purely numeric.
 					{
-						if (aActionType == ACT_WINMOVE)
-						{
-							if (i < 2) // This is the first or second arg, which are title/text vs. X/Y when aArgc > 2.
-								if (aArgc > 2) // Title/text are not numeric/expressions.
-									break; // The loop is over because this arg was found in the list.
-						}
+						//if (aActionType == ACT_WINMOVE)
+						//{
+						//	if (i < 2) // This is the first or second arg, which are title/text vs. X/Y when aArgc > 2.
+						//		if (aArgc > 2) // Title/text are not numeric/expressions.
+						//			break; // The loop is over because this arg was found in the list.
+						//}
 						// Otherwise, it is an expression.
 						this_new_arg.is_expression = true;
 						break; // The loop is over if this arg is found in the list of mandatory-numeric args.
