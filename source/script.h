@@ -920,9 +920,9 @@ public:
 			case ACT_FORMATTIME:
 			case ACT_FOR:
 			case ACT_CATCH:
+			case ACT_SORT:
 				return ARG_TYPE_OUTPUT_VAR;
 
-			case ACT_SORT:
 			case ACT_IFIN:
 			case ACT_IFNOTIN:
 			case ACT_IFCONTAINS:

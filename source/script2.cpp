@@ -5778,15 +5778,6 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 // Caller must ensure that aContents is modifiable (ArgMustBeDereferenced() currently ensures this) because
 // not only does this function modify it, it also needs to store its result back into output_var in a way
 // that requires that output_var not be at the same address as the contents that were sorted.
-// It seems best to treat ACT_SORT's var to be an input vs. output var because if
-// it's an environment variable or the clipboard, the input variable handler will
-// automatically resolve it to be ARG1 (i.e. put its contents into the deref buf).
-// This is especially necessary if the clipboard contains files, in which case
-// output_var->Get(), not Contents(),  must be used to resolve the filenames into text.
-// And on average, using the deref buffer for this operation will not be wasteful in
-// terms of expanding it unnecessarily, because usually the contents will have been
-// already (or will soon be) in the deref buffer as a result of commands before
-// or after the Sort command in the script.
 {
 	// Set defaults in case of early goto:
 	LPTSTR mem_to_free = NULL;

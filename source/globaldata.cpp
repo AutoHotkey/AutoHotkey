@@ -280,7 +280,7 @@ Action g_act[] =
 	, {_T("StrUpper"), 2, 3, false, NULL} // output var, input var, T = Title Case
 	, {_T("StrReplace"), 3, 6, false, {6, 0}} // OutputVar, InputVar, SearchText [, ReplaceText, OutputVarCount, Limit]
 	, {_T("SplitPath"), 1, 6, true, NULL} // InputFilespec, OutName, OutDir, OutExt, OutNameNoExt, OutDrive
-	, {_T("Sort"), 1, 2, false, NULL} // OutputVar (it's also the input var), Options
+	, {_T("Sort"), 2, 3, false, NULL} // OutputVar, InputText, Options
 
 	, {_T("EnvGet"), 2, 2, true, NULL} // OutputVar, EnvVar
 	, {_T("EnvSet"), 1, 2, false, NULL} // EnvVar, Value

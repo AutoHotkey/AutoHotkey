@@ -12734,7 +12734,7 @@ ResultType Line::Perform()
 		return SplitPath(ARG1);
 
 	case ACT_SORT:
-		return PerformSort(ARG1, ARG2);
+		return PerformSort(ARG2, ARG3);
 
 	case ACT_PIXELSEARCH:
 		// ArgToInt() works on ARG7 (the color) because any valid BGR or RGB color has 0x00 in the high order byte:
