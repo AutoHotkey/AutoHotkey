@@ -8296,7 +8296,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 					abort = true;
 					return line->PreparseError(ERR_TOO_FEW_PARAMS);
 				}
-				if (param_count - has_output_var > func->mParamCount)
+				if (!func->mIsVariadic && param_count - has_output_var > func->mParamCount)
 				{
 					abort = true;
 					return line->PreparseError(ERR_TOO_MANY_PARAMS);
