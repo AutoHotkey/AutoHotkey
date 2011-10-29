@@ -260,19 +260,11 @@ Action g_act[] =
 	// Its name should be "" so that Line::ToText() will properly display it.
 	, {_T(""), 1, 1, false, {1, 0}}
 	, {_T(""), 1, MAX_ARGS, true, NULL} // Command-style function-call (ACT_FUNC).
+	, {_T("{"), 0, 0, false, NULL}, {_T("}"), 0, 0, false, NULL}
 
 	, {_T("Else"), 0, 0, false, NULL}
 
-	, {_T("in"), 2, 2, false, NULL}, {_T("not in"), 2, 2, false, NULL}
-	, {_T("contains"), 2, 2, false, NULL}, {_T("not contains"), 2, 2, false, NULL}  // Very similar to "in" and "not in"
-	, {_T("is"), 2, 2, false, NULL}, {_T("is not"), 2, 2, false, NULL}
-	, {_T(""), 1, 1, false, {1, 0}} // ACT_IFEXPR's name should be "" so that Line::ToText() will properly display it.
-
-	, {_T("Goto"), 1, 1, false, NULL}
-	, {_T("Gosub"), 1, 1, false, NULL}   // Label (or dereference that resolves to a label).
-	, {_T("Return"), 0, 1, false, {1, 0}}
-	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
-	, {_T("ExitApp"), 0, 1, false, {1, 0}}  // Optional exit-code. v1.0.48.01: Allow an expression like ACT_EXIT does.
+	, {_T("If"), 1, 1, false, {1, 0}}
 	, {_T("Loop"), 0, 1, false, {1, 0}} // IterationCount
 	, {_T("LoopFiles"), 1, 2, false, NULL} // FilePattern [, Mode] -- LoopFiles vs LoopFile for clarity.
 	, {_T("LoopReg"), 1, 2, false, NULL} // Key [, Mode]
@@ -282,10 +274,14 @@ Action g_act[] =
 	, {_T("While"), 1, 1, false, {1, 0}} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
 	, {_T("Until"), 1, 1, false, {1, 0}} // Until expression (follows a Loop)
 	, {_T("Break"), 0, 1, false, NULL}, {_T("Continue"), 0, 1, false, NULL}
+	, {_T("Goto"), 1, 1, false, NULL}
+	, {_T("Gosub"), 1, 1, false, NULL}   // Label (or dereference that resolves to a label).
+	, {_T("Return"), 0, 1, false, {1, 0}}
+	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
+	, {_T("ExitApp"), 0, 1, false, {1, 0}}  // Optional exit-code. v1.0.48.01: Allow an expression like ACT_EXIT does.
 	, {_T("Try"), 0, 0, false, NULL}
 	, {_T("Catch"), 0, 1, false, NULL} // fincs: seems best to allow catch without a parameter
 	, {_T("Throw"), 0, 1, false, {1, 0}}
-	, {_T("{"), 0, 0, false, NULL}, {_T("}"), 0, 0, false, NULL}
 
 	, {_T("MsgBox"), 0, 4, false, {4, 0}} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
 	, {_T("InputBox"), 1, 5, true, NULL} // OutputVar, Title, Prompt, Options, Default

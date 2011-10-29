@@ -922,14 +922,6 @@ public:
 			case ACT_CATCH:
 			case ACT_SORT:
 				return ARG_TYPE_OUTPUT_VAR;
-
-			case ACT_IFIN:
-			case ACT_IFNOTIN:
-			case ACT_IFCONTAINS:
-			case ACT_IFNOTCONTAINS:
-			case ACT_IFIS:
-			case ACT_IFISNOT:
-				return ARG_TYPE_INPUT_VAR;
 			}
 			break;
 

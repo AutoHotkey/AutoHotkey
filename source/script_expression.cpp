@@ -1278,13 +1278,13 @@ push_this_token:
 		goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
 	}
 
-	if (mActionType == ACT_IFEXPR || mActionType == ACT_WHILE || mActionType == ACT_UNTIL)
+	if (mActionType == ACT_IF || mActionType == ACT_WHILE || mActionType == ACT_UNTIL)
 	{
-		// This is an optimization that improves the speed of ACT_IFEXPR by up to 50% (ACT_WHILE is
+		// This is an optimization that improves the speed of ACT_IF by up to 50% (ACT_WHILE is
 		// probably improved by only up-to-15%). Simple expressions like "if (x < y)" see the biggest
 		// speedup.
 		result_to_return = TokenToBOOL(result_token) ? _T("1") : _T(""); // Return "" vs. "0" for FALSE for consistency with "goto abnormal_end" (which bypasses this section).
-		goto normal_end_skip_output_var; // ACT_IFEXPR never has an output_var.
+		goto normal_end_skip_output_var; // ACT_IF never has an output_var.
 	}
 
 	if (aResultToken)
@@ -1987,7 +1987,7 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 				// as a special indicator for the loop below to call Contents().
 				arg_deref[i] = // The following is ordered for short-circuit performance:
 					(   ACT_IS_ASSIGN(mActionType) && i == 1  // By contrast, for the below i==anything (all args):
-					||  mActionType == ACT_IFEXPR
+					||  mActionType == ACT_IF
 					//|| mActionType == ACT_WHILE // Not necessary to check this one because loadtime leaves ACT_WHILE as an expression in all common cases. Also, there's no easy way to get ACT_WHILE into the range above due to the overlap of other ranges in enum_act.
 					) && the_only_var_of_this_arg->Type() == VAR_NORMAL // Otherwise, users of this optimization would have to reproduce more of the logic in ArgMustBeDereferenced().
 					? _T("") : NULL; // See "Update #2" and later comments above.

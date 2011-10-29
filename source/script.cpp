@@ -1036,8 +1036,8 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 			Line *line = g_HotExprLines[expr_line_index];
 			if (!PreparseBlocks(line))
 				return LOADING_FAILED;
-			// Search for "ACT_EXPRESSION will be changed to ACT_IFEXPR" for comments about the following line:
-			line->mActionType = ACT_IFEXPR;
+			// Search for "ACT_EXPRESSION will be changed to ACT_IF" for comments about the following line:
+			line->mActionType = ACT_IF;
 		}
 		// Check for any unprocessed static initializers:
 		if (last_static_processed != mLastStaticLine)
@@ -2943,7 +2943,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		ConvertEscapeSequences(parameter, literal_map); // Normally done in ParseAndAddLine().
 		LPTSTR arg_map[] = { literal_map };
 
-		// ACT_EXPRESSION will be changed to ACT_IFEXPR after PreparseBlocks() is called so that EvaluateCondition()
+		// ACT_EXPRESSION will be changed to ACT_IF after PreparseBlocks() is called so that EvaluateCondition()
 		// can be used and because ACT_EXPRESSION is designed to discard its result (since it normally would not be
 		// used). This can't be done before PreparseBlocks() is called since this isn't really an IF (it has no body).
 		if (!AddLine(ACT_EXPRESSION, &parameter, UCHAR_MAX + 1, arg_map)) // UCHAR_MAX signals AddLine to avoid pointing any pending labels or functions at the new line.
@@ -3758,133 +3758,16 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	}
 	else if (!aActionType) // i.e. the caller hasn't yet determined this line's action type.
 	{
-		if (could_be_named_action && !_tcsicmp(action_name, _T("IF"))) // It's an IF-statement.
-		{
-			/////////////////////////////////////
-			// Detect all types of IF-statements.
-			/////////////////////////////////////
-			LPTSTR operation, next_word;
-			if (   *action_args == '(' // i.e. if (expression)
-				|| *action_args == g_DerefChar && IS_SPACE_OR_TAB(action_args[1])   ) // v1.0.48.04: "if % expr" is always an expressions. This check was added to allow lines like "if % IniWinCount = b" to work rather than being misinterpreted as "if var in", "if var is", and possibly other things.  However, "if %var%..." is NOT always an expression because it might be something like: if %A_Index%Array <> unquoted_literal_string
-			{
-				// To support things like the following, the outermost enclosing parentheses are not removed:
-				// if (x < 3) or (x > 6)
-				// Also note that although the expression must normally start with an open-parenthesis to be
-				// recognized as ACT_IFEXPR, it need not end in a close-paren; e.g. if (x = 1) or !done.
-				// If these or any other parentheses are unbalanced, it will caught further below.
-				aActionType = ACT_IFEXPR; // Fixed for v1.0.31.01.
-			}
-			else // Generic or indeterminate IF-statement, so find out what type it is.
-			{
-				// Skip over the variable name so that the "is" and "is not" operators are properly supported:
-				DEFINE_END_FLAGS
-				if (operation = StrChrAny(action_args, end_flags))
-					operation = omit_leading_whitespace(operation);
-				else
-					operation = action_args + _tcslen(action_args); // Point it to the NULL terminator instead.
-
-				// v1.0.42: Fix "If not Installed" not be seen as "If var-named-'not' in MatchList", being
-				// careful not to break "If NotInstalled in MatchList".  The following are also fixed in
-				// a similar way:
-				// If not BetweenXXX
-				// If not ContainsXXX
-				bool first_word_is_not = !_tcsnicmp(action_args, _T("Not"), 3) && _tcschr(end_flags, action_args[3]);
-
-				// v2: Default to the most common type of IF.
-				aActionType = ACT_IFEXPR;
-
-				if (!first_word_is_not)
-				{
-					switch (*operation)
-					{
-					case 'c': // "Contains"
-					case 'C':
-						// Must fall back to ACT_IFEXPR, otherwise "if not var_name_beginning_with_c" is a syntax error.
-						if (!_tcsnicmp(operation, _T("contains"), 8) && IS_SPACE_OR_TAB(operation[8]))
-						{
-							aActionType = ACT_IFCONTAINS;
-							// Set things up to be parsed as args further down.  A delimiter is inserted later below:
-							tmemset(operation, ' ', 8);
-						}
-						break;
-					case 'i':  // "is" or "is not"
-					case 'I':
-						switch (ctoupper(operation[1]))
-						{
-						case 's':  // "IS"
-						case 'S':
-							next_word = omit_leading_whitespace(operation + 2);
-							if (_tcsnicmp(next_word, _T("not"), 3)) // No need to check for whitespace after the word "not" because things like "if var is notxxx" are never valid.
-								aActionType = ACT_IFIS;
-							else
-							{
-								aActionType = ACT_IFISNOT;
-								// Remove the word "not" to set things up to be parsed as args further down.
-								tmemset(next_word, ' ', 3);
-							}
-							operation[1] = ' '; // Remove the 'S' in "IS".  'I' is replaced with ',' later below.
-							break;
-						case 'n':  // "IN"
-						case 'N':
-							aActionType = ACT_IFIN;
-							operation[1] = ' '; // Remove the 'N' in "IN".  'I' is replaced with ',' later below.
-							break;
-						} // switch()
-						break;
-					case 'n':  // It's either "not in", "not between", or "not contains"
-					case 'N':
-						if (!_tcsnicmp(operation, _T("not"), 3) && IS_SPACE_OR_TAB(operation[3])) // Must also check for whitespace after the word "not" to avoid a syntax error for lines like "if not note".
-						{
-							// Remove the "NOT" separately in case there is more than one space or tab between
-							// it and the following word, e.g. "not   between":
-							tmemset(operation, ' ', 3);
-							next_word = omit_leading_whitespace(operation + 3);
-							if (!_tcsnicmp(next_word, _T("in"), 2))
-							{
-								aActionType = ACT_IFNOTIN;
-								tmemset(next_word, ' ', 2);
-							}
-							else if (!_tcsnicmp(next_word, _T("contains"), 8))
-							{
-								aActionType = ACT_IFNOTCONTAINS;
-								tmemset(next_word, ' ', 8);
-							}
-						}
-						// Otherwise, it's something like "if not var_name_beginning_with_n".
-						break;
-					} // switch()
-				} // if (!first_word_is_not)
-			} // Detection of type of IF-statement.
-
-			if (aActionType == ACT_IFEXPR) // There are various ways above for aActionType to become ACT_IFEXPR.
-			{
-				// Since this is ACT_IFEXPR, action_args is known not to be an empty string, which is relied on below.
-				LPTSTR action_args_last_char = action_args + _tcslen(action_args) - 1; // Shouldn't be a whitespace char since those should already have been removed at an earlier stage.
-				if (*action_args_last_char == '{') // This is an if-expression statement with an open-brace on the same line.
-				{
-					*action_args_last_char = '\0';
-					rtrim(action_args, action_args_last_char - action_args);  // Remove the '{' and all its whitespace from further consideration.
-					add_openbrace_afterward = true;
-				}
-			}
-			else // It's a IF-statement, but a traditional/non-expression one.
-			{
-				// Set things up to be parsed as args later on.
-				*operation = g_delimiter;
-			}
-		}
-		else // It isn't an IF-statement, so check for assignments/operators that determine that this line isn't one that starts with a named command.
-		{
 			//////////////////////////////////////////////////////
 			// Detect operators and assignments such as := and +=
 			//////////////////////////////////////////////////////
 			// This section is done before the section that checks whether action_name is a valid command
 			// because it avoids ambiguity in a line such as the following:
-			//    Input = test  ; Would otherwise be confused with the Input command.
+			//    Input := test  ; Would otherwise be confused with the Input command.
 			// But there may be times when a line like this is used:
-			//    MsgBox =  ; i.e. the equals is intended to be the first parameter, not an operator.
+			//    MsgBox :=  ; i.e. it is intended to be the first parameter, not an operator.
 			// In the above case, the user can provide the optional comma to avoid the ambiguity:
-			//    MsgBox, =
+			//    MsgBox, :=
 			TCHAR action_args_2nd_char = action_args[1];
 
 			switch(*action_args)
@@ -3994,8 +3877,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				//else it's already an isolated expression, so no changes are desired.
 				action_args = aLineText; // Since this is an assignment and/or expression, use the line's full text for later parsing.
 			} // if (aActionType)
-		} // Handling of assignments and other operators.
-	}
+
+	} // Handling of assignments and other operators.
 	//else aActionType was already determined by the caller.
 
 	// Now the above has ensured that action_args is the first parameter itself, or empty-string if none.
@@ -4304,7 +4187,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			in[2] = g_delimiter; // Insert another delimiter so the expression is always arg 3.
 	}
 
-	else if (aActionType == ACT_IFEXPR)
+	else if (aActionType == ACT_IF)
 	{
 		// To support a same-line action, we tell the loop below to make one extra iteration.
 		// If a second "arg" exists, make it into a subaction.  This approach simplifies
@@ -4329,7 +4212,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	{
 		if (nArgs == 1) // i.e. the 2nd arg is about to be added.
 		{
-			if (aActionType == ACT_IFEXPR)
+			if (aActionType == ACT_IF)
 			{
 				subaction_start = action_args + mark;
 				break;
@@ -4424,8 +4307,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	// Loop {   ; Known limitation: Overlaps with file-pattern loop that retrieves single file of name "{".
 	// Loop 5 { ; Also overlaps, this time with file-pattern loop that retrieves numeric filename ending in '{'.
 	// Loop %Var% {  ; Similar, but like the above seems acceptable given extreme rarity of user intending a file pattern.
-	if ((aActionType == ACT_LOOP || aActionType == ACT_WHILE) && nArgs == 1 && arg[0][0] // A loop with exactly one, non-blank arg.
-		|| ((aActionType == ACT_FOR || aActionType == ACT_CATCH) && nArgs))
+	if (aActionType == ACT_IF || aActionType == ACT_WHILE || aActionType == ACT_FOR // Implies there is at least one non-blank arg.
+		|| ((aActionType == ACT_LOOP || aActionType == ACT_CATCH) && nArgs == 1 && arg[0][0])) // A Loop or Catch with exactly one, non-blank arg.
 	{
 		LPTSTR arg1 = arg[nArgs - 1]; // For readability and possibly performance.
 		// A loop with the above criteria (exactly one arg) can only validly be a normal/counting loop or
@@ -4465,7 +4348,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			return FAIL;
 	if (subaction_start)
 	{
-		// This ACT_IFEXPR has a same-line action, but what type of action has not
+		// This ACT_IF has a same-line action, but what type of action has not
 		// been determined.  Unlike the "legacy" IF commands, we want to support
 		// assignments and expressions, not just named commands, so we let the
 		// recursive call figure it out rather than calling ConvertActionType():
@@ -5820,14 +5703,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			if (!line.ArgHasDeref(4)) // i.e. if it's a deref, we won't try to validate it now.
 				if (!IsNumeric(new_raw_arg4, false, true, true))
 					return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
-		break;
-
-	case ACT_IFIS:
-	case ACT_IFISNOT:
-		if (aArgc > 1 && !line.ArgHasDeref(2) && !line.ConvertVariableTypeName(new_raw_arg2))
-			// Don't refer to it as "Parameter #2" because this command isn't formatted/displayed that way.
-			// Update: Param2 is more descriptive than the other (short) alternatives:
-			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
 	case ACT_GETKEYSTATE:
@@ -10717,8 +10592,9 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				return result; // In the case of FAIL: Abort the current subroutine, but don't terminate the app.
 		}
 
-		if (ACT_IS_IF(line->mActionType))
+		switch (line->mActionType)
 		{
+		case ACT_IF:
 			if_condition = line->EvaluateCondition();
 #ifdef _DEBUG  // FAIL can be returned only in DEBUG mode.
 			if (if_condition == FAIL)
@@ -10850,12 +10726,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				// else we're already at the IF's "I'm finished" jump-point.
 			} // if_condition == CONDITION_FALSE
 			continue; // Let the for-loop process the new location specified by <line>.
-		} // if (ACT_IS_IF)
 
-		// If above didn't continue, it's not an IF, so handle the other
-		// flow-control types:
-		switch (line->mActionType)
-		{
 		case ACT_GOSUB:
 			// A single gosub can cause an infinite loop if misused (i.e. recursive gosubs),
 			// so be sure to do this to prevent the program from hanging:
@@ -11471,171 +11342,23 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 
 
 
-ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks, probably because it reduces caching effectiveness by having code in the case that doesn't execute much in the benchmarks.
+ResultType Line::EvaluateCondition()
 // Returns CONDITION_TRUE or CONDITION_FALSE (FAIL is returned only in DEBUG mode).
 {
 #ifdef _DEBUG
-	if (!ACT_IS_IF(mActionType))
+	if (mActionType != ACT_IF)
 		return LineError(_T("DEBUG: EvaluateCondition() was called with a line that isn't a condition."));
 #endif
 
 	int if_condition;
-	Var *arg_var1;
 
-	switch (mActionType)
-	{
-	case ACT_IFEXPR: // Listed first for performance.
-		// The following is ordered for short-circuit performance. No need to check if it's g_ErrorLevel
-		// (like ArgMustBeDereferenced() does) because ACT_IFEXPR doesn't internally change ErrorLevel.
-		// Also, RAW is safe because loadtime validation ensured there is at least 1 arg.
-		if_condition = (ARGVARRAW1 && !*ARG1 && ARGVARRAW1->Type() == VAR_NORMAL)
-			? VarToBOOL(*ARGVARRAW1) // 30% faster than having ExpandArgs() resolve ARG1 even when it's a naked variable.
-			: ResultToBOOL(ARG1); // CAN'T simply check *ARG1=='1' because the loadtime routine has various ways of setting if_expresion to false for things that are normally expressions.
-		break;
+	// The following is ordered for short-circuit performance. No need to check if it's g_ErrorLevel
+	// (like ArgMustBeDereferenced() does) because ACT_IF doesn't internally change ErrorLevel.
+	// Also, RAW is safe because loadtime validation ensured there is at least 1 arg.
+	if_condition = (ARGVARRAW1 && !*ARG1 && ARGVARRAW1->Type() == VAR_NORMAL)
+		? VarToBOOL(*ARGVARRAW1) // 30% faster than having ExpandArgs() resolve ARG1 even when it's a naked variable.
+		: ResultToBOOL(ARG1); // CAN'T simply check *ARG1=='1' because the loadtime routine has various ways of setting if_expresion to false for things that are normally expressions.
 
-	case ACT_IFIN:
-	case ACT_IFNOTIN:
-		if_condition = IsStringInList(ARG1, ARG2, true);
-		if (mActionType == ACT_IFNOTIN)
-			if_condition = !if_condition;
-		break;
-
-	case ACT_IFCONTAINS:
-	case ACT_IFNOTCONTAINS:
-		if_condition = IsStringInList(ARG1, ARG2, false);
-		if (mActionType == ACT_IFNOTCONTAINS)
-			if_condition = !if_condition;
-		break;
-
-	case ACT_IFIS:
-	case ACT_IFISNOT:
-	{
-		LPTSTR cp;
-		VariableTypeType variable_type = ConvertVariableTypeName(ARG2);
-		if (variable_type == VAR_TYPE_INVALID)
-		{
-			// Type is probably a dereferenced variable that resolves to an invalid type name.
-			// It seems best to make the condition false in these cases, rather than pop up
-			// a runtime error dialog:
-			if_condition = false;
-			break;
-		}
-
-		// Although ExpandArgs() has already flushed the binary-number cache for ACT_IFIS/ACT_IFISNOT
-		// (since it doesn't optimize these due to them having too many subcommands/modes), can still
-		// read from the binary number cache to avoid having to convert from text-to-number.
-		// In the below, it isn't necessary to check ARGVARRAW1!=NULL because arg1 is ARG_TYPE_INPUT_VAR
-		// for all the commands that use these macros, so loadtime validation ensures ARGVARRAW1!=NULL.
-		arg_var1 = (ARGVARRAW1->Type() == VAR_NORMAL) ? ARGVARRAW1 : NULL;
-
-		switch(variable_type)
-		{
-		// Since "if var is type" is a legacy command which is likely to be phased out in favour of a new
-		// "is" operator, the following three treat numeric strings as numbers (IsNumeric vs IsPureNumeric):
-		case VAR_TYPE_NUMBER:
-			if_condition = arg_var1 ? arg_var1->IsNumeric()
-				: IsNumeric(ARG1, true, false, true);  // Floats are defined as being numeric.
-			break;
-		case VAR_TYPE_INTEGER:
-			if_condition = arg_var1 ? (arg_var1->IsNumeric() == PURE_INTEGER) // Explicitly compare to PURE_INTEGER because Var::IsNumeric() doesn't support aAllowFloat.
-				: IsNumeric(ARG1, true, false, false);  // Passes false for aAllowFloat.
-			break;
-		case VAR_TYPE_FLOAT:
-			if_condition = arg_var1 ? (arg_var1->IsNumeric() == PURE_FLOAT) // Explicitly compare to PURE_FLOAT.
-				: (IsNumeric(ARG1, true, false, true) == PURE_FLOAT);
-			break;
-		case VAR_TYPE_TIME:
-		{
-			SYSTEMTIME st;
-			// Also insist on numeric, because even though YYYYMMDDToFileTime() will properly convert a
-			// non-conformant string such as "2004.4", for future compatibility, we don't want to
-			// report that such strings are valid times:
-			if_condition = IsNumeric(ARG1, false, false, false) && YYYYMMDDToSystemTime(ARG1, st, true); // Can't call Var::IsNumeric() here because it doesn't support aAllowNegative.
-			break;
-		}
-		case VAR_TYPE_DIGIT:
-			if_condition = true;
-			for (cp = ARG1; *cp; ++cp)
-				if (!_istdigit((UCHAR)*cp))
-				{
-					if_condition = false;
-					break;
-				}
-			break;
-		case VAR_TYPE_XDIGIT:
-			cp = ARG1;
-			if (!_tcsnicmp(cp, _T("0x"), 2)) // v1.0.44.09: Allow 0x prefix, which seems to do more good than harm (unlikely to break existing scripts).
-				cp += 2;
-			if_condition = true;
-			for (; *cp; ++cp)
-				if (!_istxdigit((UCHAR)*cp))
-				{
-					if_condition = false;
-					break;
-				}
-			break;
-		case VAR_TYPE_ALNUM:
-			// Like AutoIt3, the empty string is considered to be alphabetic, which is only slightly debatable.
-			if_condition = true;
-			for (cp = ARG1; *cp; ++cp)
-				//if (!IsCharAlphaNumeric(*cp)) // Use this to better support chars from non-English languages.
-				if (!aisalnum(*cp)) // But some users don't like it, Chinese users for example.
-				{
-					if_condition = false;
-					break;
-				}
-			break;
-		case VAR_TYPE_ALPHA:
-			// Like AutoIt3, the empty string is considered to be alphabetic, which is only slightly debatable.
-			if_condition = true;
-			for (cp = ARG1; *cp; ++cp)
-				//if (!IsCharAlpha(*cp)) // Use this to better support chars from non-English languages.
-				if (!aisalpha(*cp)) // But some users don't like it, Chinese users for example.
-				{
-					if_condition = false;
-					break;
-				}
-			break;
-		case VAR_TYPE_UPPER:
-			if_condition = true;
-			for (cp = ARG1; *cp; ++cp)
-				//if (!IsCharUpper(*cp)) // Use this to better support chars from non-English languages.
-				if (!aisupper(*cp)) // But some users don't like it, Chinese users for example.
-				{
-					if_condition = false;
-					break;
-				}
-			break;
-		case VAR_TYPE_LOWER:
-			if_condition = true;
-			for (cp = ARG1; *cp; ++cp)
-				//if (!IsCharLower(*cp)) // Use this to better support chars from non-English languages.
-				if (!aislower(*cp)) // But some users don't like it, Chinese users for example.
-				{
-					if_condition = false;
-					break;
-				}
-			break;
-		case VAR_TYPE_SPACE:
-			if_condition = true;
-			for (cp = ARG1; *cp; ++cp)
-				if (!_istspace(*cp))
-				{
-					if_condition = false;
-					break;
-				}
-			break;
-		}
-		if (mActionType == ACT_IFISNOT)
-			if_condition = !if_condition;
-		break;
-	}
-
-#ifdef _DEBUG
-	default: // Should never happen, but return an error if it does.
-		return LineError(_T("DEBUG: EvaluateCondition(): Unhandled type of IF."));
-#endif
-	}
 	return if_condition ? CONDITION_TRUE : CONDITION_FALSE;
 }
 
@@ -11805,7 +11528,7 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 		// Unlike if(expression), performance isn't significantly improved to make cases like
 		// "while x" and "while %x%" into non-expressions (the latter actually performs much
 		// better as an expression).  That is why the following check is much simpler than the
-		// one used at at ACT_IFEXPR in EvaluateCondition():
+		// one used at at ACT_IF in EvaluateCondition():
 		if (!ResultToBOOL(ARG1))
 			break;
 
@@ -14164,11 +13887,11 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 	if (aLineWasResumed)
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("STILL WAITING (%0.2f): "), (float)aElapsed / 1000.0);
 
-	if (ACT_IS_ASSIGN(mActionType) || mActionType == ACT_EXPRESSION || ACT_IS_IF(mActionType))
-		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s%s %s %s")
-			, ACT_IS_IF(mActionType) ? _T("if ") : _T("")
+	if (mActionType == ACT_ASSIGNEXPR || mActionType == ACT_EXPRESSION || mActionType == ACT_IF)
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s%s%s%s")
+			, mActionType == ACT_IF ? _T("if ") : _T("")
 			, *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName  // i.e. don't resolve dynamic variable names.
-			, g_act[mActionType].Name, RAW_ARG2);
+			, mActionType == ACT_ASSIGNEXPR ? _T(" := ") : _T(""), RAW_ARG2);
 	else if (mActionType == ACT_FOR)
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("For %s,%s in %s")
 			, *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName	  // i.e. don't resolve dynamic variable names.

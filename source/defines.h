@@ -273,18 +273,15 @@ enum enum_act {
 // any POD structures that contain an action_type field:
   ACT_INVALID = FAIL  // These should both be zero for initialization and function-return-value purposes.
 , ACT_ASSIGNEXPR, ACT_EXPRESSION, ACT_FUNC
+, ACT_BLOCK_BEGIN, ACT_BLOCK_END
 , ACT_ELSE   // Parsed at a lower level than most commands to support same-line ELSE-actions (e.g. "else if").
-, ACT_IFIN, ACT_IFNOTIN, ACT_IFCONTAINS, ACT_IFNOTCONTAINS, ACT_IFIS, ACT_IFISNOT
-, ACT_IFEXPR  // i.e. if (expr)
-, ACT_FIRST_IF = ACT_IFIN, ACT_LAST_IF = ACT_IFEXPR // Keep this range updated with any new IFs that are added.
-, ACT_FIRST_NAMED_ACTION, ACT_GOTO = ACT_FIRST_NAMED_ACTION, ACT_GOSUB
-, ACT_RETURN, ACT_EXIT, ACT_EXITAPP
+, ACT_FIRST_NAMED_ACTION, ACT_IF = ACT_FIRST_NAMED_ACTION
 , ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE
 , ACT_FOR, ACT_WHILE, ACT_UNTIL // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
 , ACT_BREAK, ACT_CONTINUE
+, ACT_GOTO, ACT_GOSUB, ACT_RETURN, ACT_EXIT, ACT_EXITAPP
 , ACT_TRY, ACT_CATCH, ACT_THROW
-, ACT_BLOCK_BEGIN, ACT_BLOCK_END
-, ACT_FIRST_CONTROL_FLOW = ACT_ELSE, ACT_LAST_CONTROL_FLOW = ACT_BLOCK_END
+, ACT_FIRST_CONTROL_FLOW = ACT_BLOCK_BEGIN, ACT_LAST_CONTROL_FLOW = ACT_THROW
 , ACT_FIRST_COMMAND, ACT_MSGBOX = ACT_FIRST_COMMAND
 , ACT_INPUTBOX, ACT_TOOLTIP, ACT_TRAYTIP, ACT_INPUT
 , ACT_DEREF, ACT_STRINGLOWER, ACT_STRINGUPPER
@@ -348,10 +345,9 @@ enum enum_act {
 	|| ActionType == ACT_LISTLINES || ActionType == ACT_LISTVARS || ActionType == ACT_LISTHOTKEYS)
 #define ACT_IS_CONTROL_FLOW(ActionType) (ActionType <= ACT_LAST_CONTROL_FLOW && ActionType >= ACT_FIRST_CONTROL_FLOW)
 #define ACT_IS_ASSIGN(ActionType) (ActionType == ACT_ASSIGNEXPR)
-#define ACT_IS_IF(ActionType) (ActionType <= ACT_LAST_IF && ActionType >= ACT_FIRST_IF) // Ordered for short-circuit performance.
+#define ACT_IS_IF(ActionType) (ActionType == ACT_IF)
 #define ACT_IS_LOOP(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_WHILE)
-#define ACT_IS_IF_OR_ELSE_OR_LOOP(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
-	|| ACT_IS_LOOP(ActionType))
+#define ACT_IS_IF_OR_ELSE_OR_LOOP(ActionType) (ActionType <= ACT_WHILE && ActionType >= ACT_ELSE)
 #define ACT_LOOP_ALLOWS_UNTIL(ActionType) (ActionType <= ACT_FOR && ActionType >= ACT_LOOP) // UNTIL is currently unsupported with WHILE, for performance/code size (doesn't seem useful anyway).
 
 // For convenience in many places.  Must cast to int to avoid loss of negative values.
