@@ -1147,14 +1147,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// We're still in case AHK_GUI_ACTION; other cases have their own handling for g.EventInfo.
 				// gui_event_info is a separate variable because it is sometimes set before g.EventInfo is available
 				// for the new thread.
-				// v1.0.44: For the following reasons, make ErrorLevel mirror A_EventInfo only when it
-				// is documented to do so for backward compatibility:
-				// 1) Avoids slight performance drain of having to convert a number to text and store it in ErrorLevel.
-				// 2) Reserves ErrorLevel for potential future uses.
-				if (gui_action == GUI_EVENT_RESIZE || gui_action == GUI_EVENT_DROPFILES)
-					g_ErrorLevel->Assign(gui_event_info); // For backward compatibility.
-				else
-					g_ErrorLevel->Assign(gui_action_errorlevel); // Helps reserve it for future use. See explanation above.
+				g_ErrorLevel->Assign(gui_action_errorlevel);
 
 				// Set last found window (as documented).  It's not necessary to check IsWindow/IsWindowVisible/
 				// DetectHiddenWindows since GetValidLastUsedWindow() takes care of that whenever the script
