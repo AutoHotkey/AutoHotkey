@@ -302,7 +302,7 @@ public:
 	struct Buffer
 	{
 		Buffer(LPVOID aBuf = NULL, DWORD aBufLen = 0, bool aOwned = true)
-			: mBuffer(aBuf), mLength(aBufLen), mOwned(aOwned)
+			: mBuffer((LPBYTE)aBuf), mLength(aBufLen), mOwned(aOwned)
 		{}
 		operator LPCTSTR() const { return (LPCTSTR) this; }
 		LPVOID mBuffer;
@@ -310,7 +310,13 @@ public:
 		bool mOwned;	// If true, the memory will be freed by _Close().
 	};
 
-	TextMem() : mOwned(false) {}
+	TextMem()
+	{
+		mData.mBuffer = NULL;
+		mData.mLength = 0;
+		mData.mOwned = false;
+		mDataPos = NULL;
+	}
 	virtual ~TextMem() { _Close(); }
 protected:
 	virtual bool    _Open(LPCTSTR aFileSpec, DWORD aFlags);
@@ -321,5 +327,6 @@ protected:
 	virtual __int64	_Tell() const;
 	virtual __int64 _Length() const;
 private:
-	bool mOwned;
+	Buffer mData;
+	LPBYTE mDataPos;
 };
