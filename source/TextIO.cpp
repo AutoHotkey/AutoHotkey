@@ -1220,10 +1220,10 @@ bool TextMem::_Seek(__int64 aDistance, int aOrigin)
 
 __int64 TextMem::_Tell() const
 {
-	return -1; // negative values means it is not supported
+	return (__int64) (mDataPos - mData.mBuffer);
 }
 
 __int64 TextMem::_Length() const
 {
-	return mLength;
+	return mData.mLength;
 }
