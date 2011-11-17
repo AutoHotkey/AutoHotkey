@@ -2681,7 +2681,6 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 
 	if (!aBuf || !ts) return -1;
 	if (aMaxCharsToRead < 1) return 0;
-	if (ts->AtEOF()) return -1; // Previous call to this function probably already read the last line.
 	if (  !(aBuf_length = ts->ReadLine(aBuf, aMaxCharsToRead))  ) // end-of-file or error
 	{
 		*aBuf = '\0';  // Reset since on error, contents added by fgets() are indeterminate.
