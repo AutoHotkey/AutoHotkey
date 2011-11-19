@@ -1220,7 +1220,7 @@ bool TextMem::_Seek(__int64 aDistance, int aOrigin)
 
 __int64 TextMem::_Tell() const
 {
-	return (__int64) (mDataPos - mData.mBuffer);
+	return (__int64) (mDataPos - (LPBYTE)mData.mBuffer);
 }
 
 __int64 TextMem::_Length() const
