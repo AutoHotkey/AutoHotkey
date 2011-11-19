@@ -10644,7 +10644,8 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 			deref_start->marker = infix[infix_count].buf + (deref_start->marker - cp); // Point each to its position in the *new* buf.
 		infix[infix_count].var = (Var *)deref_new; // Postfix evaluation uses this to build the variable's name dynamically.
 
-		if (*op_end == '(') // i.e. dynamic function call (v1.0.47.06)
+		if (*op_end == '(' // i.e. dynamic function call (v1.0.47.06)
+			&& !(infix_count && infix[infix_count-1].symbol == SYM_NEW)) // Not something like "new TestClass%n%()".
 		{
 			if (infix_count > MAX_TOKENS - 2) // No room for the following symbol to be added (plus the ++infix done that will be done by the outer loop).
 				return LineError(ERR_EXPR_TOO_LONG);
