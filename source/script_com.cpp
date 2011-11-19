@@ -271,22 +271,23 @@ void BIF_ComObjConnect(ExprTokenType &aResultToken, ExprTokenType *aParam[], int
 				for(UINT j = 0; j < cImplTypes; j++)
 				{
 					INT flags;
-					if (SUCCEEDED(ptinfo->GetImplTypeFlags(j, &flags)) && flags == (IMPLTYPEFLAG_FDEFAULT | IMPLTYPEFLAG_FSOURCE))
+					HREFTYPE reftype;
+					ITypeInfo *prinfo;
+					if (SUCCEEDED(ptinfo->GetImplTypeFlags(j, &flags)) && flags == (IMPLTYPEFLAG_FDEFAULT | IMPLTYPEFLAG_FSOURCE)
+						&& SUCCEEDED(ptinfo->GetRefTypeOfImplType(j, &reftype))
+						&& SUCCEEDED(ptinfo->GetRefTypeInfo(reftype, &prinfo)))
 					{
-						HREFTYPE reftype;
-						ITypeInfo *prinfo;
-						if (SUCCEEDED(ptinfo->GetRefTypeOfImplType(j, &reftype))
-							&& SUCCEEDED(ptinfo->GetRefTypeInfo(reftype, &prinfo)))
+						if (SUCCEEDED(prinfo->GetTypeAttr(&typeattr)))
 						{
-							if (SUCCEEDED(prinfo->GetTypeAttr(&typeattr)))
+							if (typeattr->typekind == TKIND_DISPATCH)
 							{
 								obj->mEventSink = new ComEvent(obj, prinfo, typeattr->guid);
 								prinfo->ReleaseTypeAttr(typeattr);
+								break;
 							}
-							else
-								prinfo->Release();
+							prinfo->ReleaseTypeAttr(typeattr);
 						}
-						break;
+						prinfo->Release();
 					}
 				}
 				ptinfo->Release();
@@ -301,8 +302,11 @@ void BIF_ComObjConnect(ExprTokenType &aResultToken, ExprTokenType *aParam[], int
 				obj->mEventSink->Connect(TokenToString(*aParam[1]), TokenToObject(*aParam[1]));
 			return;
 		}
+
+		ComError(E_NOINTERFACE);
 	}
-	ComError(-1);
+	else
+		ComError(-1); // "No COM object"
 }
 
 
