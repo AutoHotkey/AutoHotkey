@@ -1185,27 +1185,32 @@ bool TextMem::_Open(LPCTSTR aFileSpec, DWORD aFlags)
 {
 	ASSERT( (aFlags & ACCESS_MODE_MASK) == TextStream::READ ); // Only read mode is supported.
 
-	Buffer *buf = (Buffer *) aFileSpec;
-	if (mOwned && mBuffer)
-		free(mBuffer);
-	mPosA = mBufferA = (LPSTR) buf->mBuffer;
-	mLength = buf->mLength;
-	mOwned = buf->mOwned;
+	if (mData.mOwned && mData.mBuffer)
+		free(mData.mBuffer);
+	mData = *(Buffer *)aFileSpec; // Struct copy.
+	mDataPos = (LPBYTE)mData.mBuffer;
+	mPos = NULL; // Discard temp buffer contents, if any.
+	mLength = 0;
 	return true;
 }
 
 void TextMem::_Close()
 {
-	if (mBuffer) {
-		if (mOwned)
-			free(mBuffer);
-		mBuffer = NULL;
+	if (mData.mBuffer) {
+		if (mData.mOwned)
+			free(mData.mBuffer);
+		mData.mBuffer = NULL;
 	}
 }
 
 DWORD TextMem::_Read(LPVOID aBuffer, DWORD aBufSize)
 {
-	return 0;
+	DWORD remainder = (DWORD)((LPBYTE)mData.mBuffer + mData.mLength - mDataPos);
+	if (aBufSize > remainder)
+		aBufSize = remainder;
+	memmove(aBuffer, mDataPos, aBufSize);
+	mDataPos += aBufSize;
+	return aBufSize;
 }
 
 DWORD TextMem::_Write(LPCVOID aBuffer, DWORD aBufSize)
@@ -1220,10 +1225,10 @@ bool TextMem::_Seek(__int64 aDistance, int aOrigin)
 
 __int64 TextMem::_Tell() const
 {
-	return -1; // negative values means it is not supported
+	return (__int64) (mDataPos - (LPBYTE)mData.mBuffer);
 }
 
 __int64 TextMem::_Length() const
 {
-	return mLength;
+	return mData.mLength;
 }

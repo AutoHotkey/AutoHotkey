@@ -95,6 +95,16 @@ void DisguiseWinAltIfNeeded(vk_type aVK)
 // moved from SendKeys
 void SendUnicodeChar(wchar_t aChar, int aModifiers = -1)
 {
+	// Set modifier keystate for consistent results. If not specified by caller, default to releasing
+	// Alt/Ctrl/Shift since these are known to interfere in some cases, and because SendAsc() does it
+	// (except for LAlt). Leave LWin/RWin as they are, for consistency with SendAsc().
+	if (aModifiers == -1)
+	{
+		aModifiers = sSendMode ? sEventModifiersLR : GetModifierLRState();
+		aModifiers &= ~(MOD_LALT | MOD_RALT | MOD_LCONTROL | MOD_RCONTROL | MOD_LSHIFT | MOD_RSHIFT);
+	}
+	SetModifierLRState((modLR_type)aModifiers, sSendMode ? sEventModifiersLR : GetModifierLRState(), NULL, false, true, KEY_IGNORE);
+
 	if (sSendMode == SM_INPUT)
 	{
 		// Calling SendInput() now would cause characters to appear out of sequence.
@@ -109,16 +119,6 @@ void SendUnicodeChar(wchar_t aChar, int aModifiers = -1)
 	// won't work, it seems better than sending chars out of order. One possible alternative could
 	// be to "flush" the event array, but since SendInput and SendEvent are probably much more common,
 	// this is left for a future version.
-
-	// Set modifier keystate for consistent results. If not specified by caller, default to releasing
-	// Alt/Ctrl/Shift since these are known to interfere in some cases, and because SendAsc() does it
-	// (except for LAlt). Leave LWin/RWin as they are, for consistency with SendAsc().
-	if (aModifiers == -1)
-	{
-		aModifiers = sSendMode ? sEventModifiersLR : GetModifierLRState();
-		aModifiers &= ~(MOD_LALT | MOD_RALT | MOD_LCONTROL | MOD_RCONTROL | MOD_LSHIFT | MOD_RSHIFT);
-	}
-	SetModifierLRState((modLR_type)aModifiers, sSendMode ? sEventModifiersLR : GetModifierLRState(), NULL, false, true, KEY_IGNORE);
 
 	INPUT u_input[2];
 
