@@ -3314,7 +3314,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		}
 		return CONDITION_TRUE;
 	}
-
 	if (IS_DIRECTIVE_MATCH(_T("#MenuMaskKey")))
 	{
 		// L38: Allow scripts to specify an alternate "masking" key in place of VK_CONTROL.
@@ -3323,7 +3322,32 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		else
 			return ScriptError(parameter ? ERR_PARAM1_INVALID : ERR_PARAM1_REQUIRED, aBuf);
 	}
+	if (IS_DIRECTIVE_MATCH(_T("#InputGroup")))
+	{
+		// To avoid infinite loops and other side effects, AHK ignores self-generated input events.
+		// It does this by setting a sentinel value in the ExtraInfo field when sending input. In
+		// previous versions, a single sentinel value was used for all scripts, making it impossible
+		// for a script to send input that triggers a hotkey in another script.
+		//
+		// The #InputGroup directive provides a way to change the sentinel, so that each script only
+		// ignores input from the other scripts in the same input group.
+		//
+		// A common use case for this is global key remapping. If script A remaps keys 1, 2, and 3
+		// to X, script B can specify a different #InputGroup and set a hotkey for X that is
+		// triggered by any of the keys remapped by script A.
+		//
+		// The group can be any number from 0 to 65535. The default value is 0.
 
+		if (!parameter)
+			return ScriptError(ERR_PARAM1_REQUIRED, aBuf);
+		
+		int group = ATOI(parameter);
+		if (group < 0 || group > 65535)
+			return ScriptError(ERR_PARAM1_INVALID, aBuf);
+
+		g_KeyIgnoreSentinel = KEY_IGNORE_DEFAULT + (group * KEY_IGNORE_GROUP_SIZE);
+		return CONDITION_TRUE;
+	}
 	if (IS_DIRECTIVE_MATCH(_T("#Warn")))
 	{
 		if (!parameter)

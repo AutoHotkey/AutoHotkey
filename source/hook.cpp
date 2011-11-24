@@ -147,7 +147,8 @@ inline bool IsIgnored(ULONG_PTR aExtraInfo)
 // such events as true physical events might cause infinite loops or other side-effects in
 // the instance that generated the event.  More review of this is needed if KEY_PHYS_IGNORE
 // events ever need to be treated as true physical events by the instances of the hook that
-// didn't originate them:
+// didn't originate them. UPDATE: The foregoing can now be accomplished using the #InputGroup
+// directive.
 {
 	return aExtraInfo == KEY_IGNORE || aExtraInfo == KEY_PHYS_IGNORE || aExtraInfo == KEY_IGNORE_ALL_EXCEPT_MODIFIER;
 }
