@@ -234,10 +234,14 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam);
 // Below uses a pseudo-random value.  It's best that this be constant so that if multiple instances
 // of the app are running, they will all ignore each other's keyboard & mouse events.  Also, a value
 // close to UINT_MAX might be a little better since it's might be less likely to be used as a pointer
-// value by any apps that send keybd events whose ExtraInfo is really a pointer value:
-#define KEY_IGNORE 0xFFC3D44F
+// value by any apps that send keybd events whose ExtraInfo is really a pointer value.
+// See the comments for the #InputGroup directive for details on why KEY_IGNORE is no longer a constant.
+extern DWORD g_KeyIgnoreSentinel;
+#define KEY_IGNORE_DEFAULT 0xFFC3D44F
+#define KEY_IGNORE g_KeyIgnoreSentinel
 #define KEY_PHYS_IGNORE (KEY_IGNORE - 1)  // Same as above but marked as physical for other instances of the hook.
 #define KEY_IGNORE_ALL_EXCEPT_MODIFIER (KEY_IGNORE - 2)  // Non-physical and ignored only if it's not a modifier.
+#define KEY_IGNORE_GROUP_SIZE 3 // Number of values defined above using offsets from KEY_IGNORE
 
 // The default in the below is KEY_IGNORE_ALL_EXCEPT_MODIFIER, which causes standard calls to
 // KeyEvent() to update g_modifiersLR_logical_non_ignored the same way it updates g_modifiersLR_logical.
