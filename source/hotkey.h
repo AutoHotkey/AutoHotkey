@@ -86,6 +86,7 @@ struct HotkeyVariant
 	// 4-byte alignment:
 	HotCriterionType mHotCriterion;
 	UCHAR mExistingThreads, mMaxThreads;
+	char mInputGroup;
 	bool mNoSuppress; // v1.0.44: This became a per-variant attribute because it's more useful/flexible that way.
 	bool mMaxThreadsBuffer;
 	bool mRunAgainAfterFinished;
@@ -213,8 +214,8 @@ public:
 	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC);
 	HotkeyVariant *CriterionAllowsFiring(HWND *aFoundHWND = NULL);
 	static HotkeyVariant *CriterionAllowsFiring(HotkeyIDType aHotkeyID, HWND &aFoundHWND);
-	static HotkeyVariant *CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, UCHAR &aNoSuppress
-		, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
+	static HotkeyVariant *CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, ULONG_PTR aExtraInfo
+		, UCHAR &aNoSuppress, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
 	static void TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown);
 	void PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant);
 	static void ManifestAllHotkeysHotstringsHooks();
@@ -314,6 +315,10 @@ public:
 
 	static LPTSTR ListHotkeys(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline);
+
+private:
+	static HotkeyVariant *CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, UCHAR &aNoSuppress
+		, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
 };
 
 

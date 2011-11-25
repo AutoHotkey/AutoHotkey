@@ -18,6 +18,7 @@ GNU General Public License for more details.
 #define keyboard_h
 
 #include "defines.h"
+EXTERN_G;
 
 // The max number of keystrokes to Send prior to taking a break to pump messages:
 #define MAX_LUMP_KEYS 50
@@ -236,12 +237,17 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam);
 // close to UINT_MAX might be a little better since it's might be less likely to be used as a pointer
 // value by any apps that send keybd events whose ExtraInfo is really a pointer value.
 // See the comments for the #InputGroup directive for details on why KEY_IGNORE is no longer a constant.
-extern DWORD g_KeyIgnoreSentinel;
-#define KEY_IGNORE_DEFAULT 0xFFC3D44F
-#define KEY_IGNORE g_KeyIgnoreSentinel
+#define KEY_IGNORE_SENTINEL_BASE 0xFFC3D44F
+#define KEY_IGNORE (KEY_IGNORE_SENTINEL_BASE + (g->InputGroup * KEY_IGNORE_COUNT))
 #define KEY_PHYS_IGNORE (KEY_IGNORE - 1)  // Same as above but marked as physical for other instances of the hook.
 #define KEY_IGNORE_ALL_EXCEPT_MODIFIER (KEY_IGNORE - 2)  // Non-physical and ignored only if it's not a modifier.
-#define KEY_IGNORE_GROUP_SIZE 3 // Number of values defined above using offsets from KEY_IGNORE
+#define KEY_IGNORE_COUNT 3 // Number of values defined above using offsets from KEY_IGNORE
+
+#define INPUT_GROUP_MIN -127LL // The compiler (MSVC 2010) complains about KEY_IGNORE_SENTINEL_MIN without the LL
+#define INPUT_GROUP_MAX 128
+// These are adjusted to account for the KEY_IGNORE offsets above being negative.
+#define KEY_IGNORE_SENTINEL_MIN (KEY_IGNORE_SENTINEL_BASE + ((INPUT_GROUP_MIN - 1) * KEY_IGNORE_COUNT) + 1)
+#define KEY_IGNORE_SENTINEL_MAX (KEY_IGNORE_SENTINEL_BASE + (INPUT_GROUP_MAX * KEY_IGNORE_COUNT))
 
 // The default in the below is KEY_IGNORE_ALL_EXCEPT_MODIFIER, which causes standard calls to
 // KeyEvent() to update g_modifiersLR_logical_non_ignored the same way it updates g_modifiersLR_logical.
@@ -281,7 +287,6 @@ void InitEventArray(void *aMem, UINT aMaxEvents, modLR_type aModifiersLR);
 void SendEventArray(int &aFinalKeyDelay, modLR_type aModsDuringSend);
 void CleanupEventArray(int aFinalKeyDelay);
 
-EXTERN_G; // For the DoKeyDelay() prototype below.
 extern SendModes sSendMode;
 void DoKeyDelay(int aDelay = (sSendMode == SM_PLAY) ? g->KeyDelayPlay : g->KeyDelay);
 void DoMouseDelay();

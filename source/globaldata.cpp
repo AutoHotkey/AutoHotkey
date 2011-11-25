@@ -115,6 +115,7 @@ int g_MaxThreadsTotal = MAX_THREADS_DEFAULT;
 int g_MaxHotkeysPerInterval = 70; // Increased to 70 because 60 was still causing the warning dialog for repeating keys sometimes.  Increased from 50 to 60 for v1.0.31.02 since 50 would be triggered by keyboard auto-repeat when it is set to its fastest.
 int g_HotkeyThrottleInterval = 2000; // Milliseconds.
 bool g_MaxThreadsBuffer = false;  // This feature usually does more harm than good, so it defaults to OFF.
+char g_InputGroup = 0;
 HotCriterionType g_HotCriterion = HOT_NO_CRITERION;
 LPTSTR g_HotWinTitle = _T(""); // In spite of the above being the primary indicator,
 LPTSTR g_HotWinText = _T("");  // these are initialized for maintainability.

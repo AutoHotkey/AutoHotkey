@@ -641,6 +641,7 @@ struct global_struct
 	bool StoreCapslockMode;
 	bool AutoTrim;
 	char FormatInt;
+	char InputGroup;
 	bool MsgBoxTimedOut; // Doesn't require initialization.
 	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
 	bool ListLinesIsEnabled;
@@ -740,6 +741,7 @@ inline void global_init(global_struct &g)
 	g.AutoTrim = true;  // AutoIt2's default, and overall the best default in most cases.
 	_tcscpy(g.FormatFloat, _T("%0.6f"));
 	g.FormatInt = 'D';
+	g.InputGroup = 0;
 	g.ListLinesIsEnabled = true;
 	g.Encoding = CP_ACP;
 	// For FormatFloat:

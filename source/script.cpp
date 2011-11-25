@@ -3338,14 +3338,11 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		//
 		// The group can be any number from 0 to 65535. The default value is 0.
 
-		if (!parameter)
-			return ScriptError(ERR_PARAM1_REQUIRED, aBuf);
-		
-		int group = ATOI(parameter);
-		if (group < 0 || group > 65535)
+		int group = parameter ? ATOI(parameter) : 0;
+		if (group < INPUT_GROUP_MIN || group > INPUT_GROUP_MAX)
 			return ScriptError(ERR_PARAM1_INVALID, aBuf);
 
-		g_KeyIgnoreSentinel = KEY_IGNORE_DEFAULT + (group * KEY_IGNORE_GROUP_SIZE);
+		g_InputGroup = group;
 		return CONDITION_TRUE;
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#Warn")))

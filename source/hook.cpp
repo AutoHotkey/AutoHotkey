@@ -150,7 +150,8 @@ inline bool IsIgnored(ULONG_PTR aExtraInfo)
 // didn't originate them. UPDATE: The foregoing can now be accomplished using the #InputGroup
 // directive.
 {
-	return aExtraInfo == KEY_IGNORE || aExtraInfo == KEY_PHYS_IGNORE || aExtraInfo == KEY_IGNORE_ALL_EXCEPT_MODIFIER;
+	// TODO - Refactor
+	return aExtraInfo == KEY_IGNORE_SENTINEL_BASE || aExtraInfo == KEY_IGNORE_SENTINEL_BASE - 1 || aExtraInfo == KEY_IGNORE_SENTINEL_BASE - 2;
 }
 
 
@@ -1390,7 +1391,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// v1.0.41:
 			if (hotkey_id_temp < Hotkey::sHotkeyCount) // Don't call the below for Alt-tab hotkeys and similar.
 				if (   !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags
-					, aKeyUp, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type))   )
+					, aKeyUp, aExtraInfo, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type))   )
 					return AllowKeyToGoToSystem; // This should handle pForceToggle for us, suppressing if necessary.
 				else // The naked hotkey ID may have changed, so update it (flags currently don't matter in this case).
 					hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK; // Update in case CriterionFiringIsCertain() changed it.
@@ -1650,6 +1651,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// releases the key, but there doesn't seem any way around that.
 			Hotkey::CriterionFiringIsCertain(this_key.hotkey_to_fire_upon_release // firing_is_certain==false under these conditions, so no need to check it.
 				, true  // Always a key-up since it's will fire upon release.
+				, 0 // Not applicable here, only affects aSingleChar and return value
 				, this_key.no_suppress // Unused and won't be altered because above is "true".
 				, fire_with_no_suppress, NULL); // fire_with_no_suppress is the value we really need to get back from it.
 			return fire_with_no_suppress ? AllowKeyToGoToSystem : SuppressThisKey;
@@ -1676,7 +1678,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK;
 	if (hotkey_id_temp < Hotkey::sHotkeyCount // i.e. don't call the below for Alt-tab hotkeys and similar.
 		&& !firing_is_certain  // i.e. CriterionFiringIsCertain() wasn't already called earlier.
-		&& !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type)))
+		&& !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type)))
 		return AllowKeyToGoToSystem;
 	hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK; // Update in case CriterionFiringIsCertain() changed the naked/raw ID.
 

@@ -22,8 +22,6 @@ GNU General Public License for more details.
 #include "window.h" // for IsWindowHung()
 
 
-DWORD g_KeyIgnoreSentinel = KEY_IGNORE_DEFAULT;
-
 // Added for v1.0.25.  Search on sPrevEventType for more comments:
 static KeyEventTypes sPrevEventType;
 static vk_type sPrevVK = 0;
