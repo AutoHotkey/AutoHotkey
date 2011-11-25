@@ -108,8 +108,8 @@ void SendUnicodeChar(wchar_t aChar, int aModifiers = -1)
 	{
 		// Calling SendInput() now would cause characters to appear out of sequence.
 		// Instead, put them into the array and allow them to be sent in sequence.
-		PutKeybdEventIntoArray(0, 0, aChar, KEYEVENTF_UNICODE, KEY_IGNORE);
-		PutKeybdEventIntoArray(0, 0, aChar, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, KEY_IGNORE);
+		PutKeybdEventIntoArray(0, 0, aChar, KEYEVENTF_UNICODE, KEY_IGNORE_BY_SENDLEVEL);
+		PutKeybdEventIntoArray(0, 0, aChar, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, KEY_IGNORE_BY_SENDLEVEL);
 		return;
 	}
 	//else caller has ensured sSendMode is SM_EVENT. In that mode, events are sent one at a time,
@@ -127,14 +127,14 @@ void SendUnicodeChar(wchar_t aChar, int aModifiers = -1)
 	u_input[0].ki.dwFlags = KEYEVENTF_UNICODE;
 	u_input[0].ki.time = 0;
 	// L25: Set dwExtraInfo to ensure AutoHotkey ignores the event; otherwise it may trigger a SCxxx hotkey (where xxx is u_code).
-	u_input[0].ki.dwExtraInfo = KEY_IGNORE;
+	u_input[0].ki.dwExtraInfo = KEY_IGNORE_BY_SENDLEVEL;
 	
 	u_input[1].type = INPUT_KEYBOARD;
 	u_input[1].ki.wVk = 0;
 	u_input[1].ki.wScan = aChar;
 	u_input[1].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
 	u_input[1].ki.time = 0;
-	u_input[1].ki.dwExtraInfo = KEY_IGNORE;
+	u_input[1].ki.dwExtraInfo = KEY_IGNORE_BY_SENDLEVEL;
 
 	SendInput(2, u_input, sizeof(INPUT));
 }
@@ -1041,7 +1041,7 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 		else
 			// Sending mouse clicks via ControlSend is not supported, so in that case fall back to the
 			// old method of sending the VK directly (which probably has no effect 99% of the time):
-			KeyEvent(aEventType, aVK, aSC, aTargetWindow, true);
+			KeyEvent(aEventType, aVK, aSC, aTargetWindow, true, KEY_IGNORE_ALL_EXCEPT_MODIFIER_BY_SENDLEVEL);
 	} // for() [aRepeatCount]
 
 	// The final iteration by the above loop does a key or mouse delay (KeyEvent and MouseClick do it internally)
@@ -2535,7 +2535,7 @@ void MouseEvent(DWORD aEventFlags, DWORD aData, DWORD aX, DWORD aY)
 		mouse_event(aEventFlags
 			, aX == COORD_UNSPECIFIED ? 0 : aX // v1.0.43.01: Must be zero if no change in position is desired
 			, aY == COORD_UNSPECIFIED ? 0 : aY // (fixes compatibility with certain apps/games).
-			, aData, KEY_IGNORE);
+			, aData, KEY_IGNORE_BY_SENDLEVEL);
 }
 
 
@@ -2648,7 +2648,7 @@ void PutMouseEventIntoArray(DWORD aEventFlags, DWORD aData, DWORD aX, DWORD aY)
 		this_event.mi.dy = (aY == COORD_UNSPECIFIED) ? 0 : aY; // desired (fixes compatibility with certain apps/games).
 		this_event.mi.dwFlags = aEventFlags;
 		this_event.mi.mouseData = aData;
-		this_event.mi.dwExtraInfo = KEY_IGNORE; // Although our hook won't be installed (or won't detect, in the case of playback), that of other scripts might be, so set this for them.
+		this_event.mi.dwExtraInfo = KEY_IGNORE_BY_SENDLEVEL; // Although our hook won't be installed (or won't detect, in the case of playback), that of other scripts might be, so set this for them.
 		this_event.mi.time = 0; // Let the system provide its own timestamp, which might be more accurate for individual events if this will be a very long SendInput.
 		sHooksToRemoveDuringSendInput |= HOOK_MOUSE; // Presence of mouse hook defeats uninterruptibility of mouse clicks/moves.
 	}

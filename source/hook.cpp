@@ -149,8 +149,7 @@ inline bool IsIgnored(ULONG_PTR aExtraInfo)
 // events ever need to be treated as true physical events by the instances of the hook that
 // didn't originate them. UPDATE: The foregoing can now be accomplished using SendLevel.
 {
-	// TODO - Refactor
-	return aExtraInfo == KEY_IGNORE_SENTINEL_BASE || aExtraInfo == KEY_IGNORE_SENTINEL_BASE - 1 || aExtraInfo == KEY_IGNORE_SENTINEL_BASE - 2;
+	return aExtraInfo == KEY_IGNORE || aExtraInfo == KEY_PHYS_IGNORE || aExtraInfo == KEY_IGNORE_ALL_EXCEPT_MODIFIER;
 }
 
 
