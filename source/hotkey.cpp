@@ -597,9 +597,9 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags
 	if (aExtraInfo >= KEY_IGNORE_SENTINEL_MIN && aExtraInfo <= KEY_IGNORE_SENTINEL_MAX)
 	{
 		// We can safely cast here since aExtraInfo is constrained above
-		int hotkeySentinelOffset = (int) (aExtraInfo - KEY_IGNORE_SENTINEL_BASE); // e.g. InputGroup 0: [-2...0], InputGroup 1: [1 .. 3]
-		int inputGroupMaxSentinelOffset = (hkv->mInputGroup * KEY_IGNORE_COUNT); // e.g. InputGroup 0: [0], InputGroup 1: [3]
-		if (hotkeySentinelOffset <= inputGroupMaxSentinelOffset) {
+		int hotkeySentinelOffset = (int) (aExtraInfo - KEY_IGNORE_SENTINEL_BASE); // e.g. InputLevel 0: [-2...0], InputLevel 1: [1 .. 3]
+		int inputLevelMaxSentinelOffset = (hkv->mInputLevel * KEY_IGNORE_COUNT);  // e.g. InputLevel 0: [0], InputLevel 1: [3]
+		if (hotkeySentinelOffset <= inputLevelMaxSentinelOffset) {
 			if (aSingleChar)
 				*aSingleChar = 'z'; // Mark as ignored in KeyHistory
 			return NULL;
@@ -1572,7 +1572,7 @@ HotkeyVariant *Hotkey::AddVariant(Label *aJumpToLabel, bool aSuffixHasTilde)
 	v.mJumpToLabel = aJumpToLabel ? aJumpToLabel : g_script.mPlaceholderLabel;
 	v.mMaxThreads = g_MaxThreadsPerHotkey;    // The values of these can vary during load-time.
 	v.mMaxThreadsBuffer = g_MaxThreadsBuffer; //
-	v.mInputGroup = g_InputGroup;
+	v.mInputLevel = g_InputLevel;
 	v.mHotCriterion = g_HotCriterion; // If this hotkey is an alt-tab one (mHookAction), this is stored but ignored until/unless the Hotkey command converts it into a non-alt-tab hotkey.
 	v.mHotWinTitle = g_HotWinTitle;
 	v.mHotWinText = g_HotWinText;  // The value of this and other globals used above can vary during load-time.

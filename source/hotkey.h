@@ -86,7 +86,7 @@ struct HotkeyVariant
 	// 4-byte alignment:
 	HotCriterionType mHotCriterion;
 	UCHAR mExistingThreads, mMaxThreads;
-	char mInputGroup;
+	UCHAR mInputLevel;
 	bool mNoSuppress; // v1.0.44: This became a per-variant attribute because it's more useful/flexible that way.
 	bool mMaxThreadsBuffer;
 	bool mRunAgainAfterFinished;
