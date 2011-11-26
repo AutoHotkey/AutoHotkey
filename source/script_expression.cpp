@@ -1423,7 +1423,7 @@ non_null_circuit_token:
 		goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
 	}
 
-	if (mActionType == ACT_IFEXPR || mActionType == ACT_WHILE) // This is an optimization that improves the speed of ACT_IFEXPR by up to 50% (ACT_WHILE is probably improved by only up-to-15%). Simple expressions like "if (x < y)" see the biggest speedup.
+	if (mActionType == ACT_IFEXPR || mActionType == ACT_WHILE || mActionType == ACT_UNTIL) // This is an optimization that improves the speed of ACT_IFEXPR by up to 50% (ACT_WHILE is probably improved by only up-to-15%). Simple expressions like "if (x < y)" see the biggest speedup.
 	{
 		BOOL result_is_true;
 		switch (result_token.symbol)
