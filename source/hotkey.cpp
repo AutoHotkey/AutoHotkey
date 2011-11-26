@@ -594,12 +594,11 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags
 	if (!hkv)
 		return NULL;
 
-	if (aExtraInfo >= KEY_IGNORE_SENTINEL_MIN && aExtraInfo <= KEY_IGNORE_SENTINEL_MAX)
+	if (aExtraInfo >= KEY_IGNORE_MIN && aExtraInfo <= KEY_IGNORE_MAX)
 	{
 		// We can safely cast here since aExtraInfo is constrained above
-		int hotkeySentinelOffset = (int) (aExtraInfo - KEY_IGNORE); // e.g. InputLevel 0: [-2...0], InputLevel 1: [1 .. 3]
-		int inputLevelMaxSentinelOffset = (hkv->mInputLevel * KEY_IGNORE_COUNT);  // e.g. InputLevel 0: [0], InputLevel 1: [3]
-		if (hotkeySentinelOffset <= inputLevelMaxSentinelOffset) {
+		int level = (int)(KEY_IGNORE_LEVEL(0) - aExtraInfo);
+		if (level <= hkv->mInputLevel) {
 			if (aSingleChar)
 				*aSingleChar = 'z'; // Mark as ignored in KeyHistory
 			return NULL;

@@ -3339,7 +3339,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// The group can be any number from 0 to 65535. The default value is 0.
 
 		int group = parameter ? ATOI(parameter) : 0;
-		if (group < INPUT_GROUP_MIN || group > INPUT_GROUP_MAX)
+		if (group < 0 || group > KEY_IGNORE_MAX_LEVEL)
 			return ScriptError(ERR_PARAM1_INVALID, aBuf);
 
 		g_InputLevel = group;

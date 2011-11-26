@@ -240,17 +240,18 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam);
 #define KEY_IGNORE 0xFFC3D44F
 #define KEY_PHYS_IGNORE (KEY_IGNORE - 1)  // Same as above but marked as physical for other instances of the hook.
 #define KEY_IGNORE_ALL_EXCEPT_MODIFIER (KEY_IGNORE - 2)  // Non-physical and ignored only if it's not a modifier.
-#define KEY_IGNORE_COUNT 3 // Number of values defined above using offsets from KEY_IGNORE
+// Same as KEY_IGNORE_ALL_EXCEPT_MODIFIER, but only ignored by HotkeyVariants at InputLevel LEVEL and below.
+// The levels are set up to use negative offsets from KEY_IGNORE_ALL_EXCEPT_MODIFIER so that we can leave
+// the values above unchanged and maintain KEY_IGNORE_LEVEL(0) == KEY_IGNORE_ALL_EXCEPT_MODIFIER
+#define KEY_IGNORE_LEVEL(LEVEL) (KEY_IGNORE_ALL_EXCEPT_MODIFIER - LEVEL)
 
-#define KEY_IGNORE_BY_SENDLEVEL (KEY_IGNORE + (g->SendLevel * KEY_IGNORE_COUNT))
-#define KEY_PHYS_IGNORE_BY_SENDLEVEL (KEY_PHYS_IGNORE + (g->SendLevel * KEY_IGNORE_COUNT))
-#define KEY_IGNORE_ALL_EXCEPT_MODIFIER_BY_SENDLEVEL (KEY_IGNORE_ALL_EXCEPT_MODIFIER + (g->SendLevel * KEY_IGNORE_COUNT))
-
-#define INPUT_GROUP_MIN 0LL // The compiler (MSVC 2010) complains about KEY_IGNORE_SENTINEL_MIN without the LL
-#define INPUT_GROUP_MAX 100
-// These are adjusted to account for the KEY_IGNORE offsets above being negative.
-#define KEY_IGNORE_SENTINEL_MIN (KEY_IGNORE + ((INPUT_GROUP_MIN - 1) * KEY_IGNORE_COUNT) + 1)
-#define KEY_IGNORE_SENTINEL_MAX (KEY_IGNORE + (INPUT_GROUP_MAX * KEY_IGNORE_COUNT))
+// Setting the max level to 100 is somewhat arbitrary. It seems that typical usage would only
+// require a few levels at most. We do want to keep the max somewhat small to keep the range
+// for magic values that get used in dwExtraInfo to a minimum, to avoid conflicts with other
+// apps that may be using the field in other ways.
+#define KEY_IGNORE_MAX_LEVEL 100
+#define KEY_IGNORE_MIN KEY_IGNORE_LEVEL(KEY_IGNORE_MAX_LEVEL)
+#define KEY_IGNORE_MAX KEY_IGNORE // There are two extra values above KEY_IGNORE_LEVEL(0)
 
 // The default in the below is KEY_IGNORE_ALL_EXCEPT_MODIFIER, which causes standard calls to
 // KeyEvent() to update g_modifiersLR_logical_non_ignored the same way it updates g_modifiersLR_logical.
