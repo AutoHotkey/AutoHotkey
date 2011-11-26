@@ -252,6 +252,8 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam);
 #define KEY_IGNORE_MAX_LEVEL 100
 #define KEY_IGNORE_MIN KEY_IGNORE_LEVEL(KEY_IGNORE_MAX_LEVEL)
 #define KEY_IGNORE_MAX KEY_IGNORE // There are two extra values above KEY_IGNORE_LEVEL(0)
+inline bool KeyIgnoreLevelIsValid(int level) { return level >= 0 && level <= KEY_IGNORE_MAX_LEVEL; }
+
 
 // The default in the below is KEY_IGNORE_ALL_EXCEPT_MODIFIER, which causes standard calls to
 // KeyEvent() to update g_modifiersLR_logical_non_ignored the same way it updates g_modifiersLR_logical.

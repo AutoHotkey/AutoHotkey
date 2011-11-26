@@ -377,6 +377,7 @@ Action g_act[] =
 	, {_T("ControlGet"), 2, 8, 8 H, NULL}   // Output-var, Command, Value, Control, std. 4 window params
 
 	, {_T("SendMode"), 1, 1, 1, NULL}
+	, {_T("SendLevel"), 1, 1, 1, {1, 0}}
 	, {_T("CoordMode"), 1, 2, 2, NULL} // Attribute, screen|relative
 	, {_T("SetDefaultMouseSpeed"), 1, 1, 1, {1, 0}} // speed (numeric)
 	, {_T("Click"), 0, 1, 1, NULL} // Flex-list of options.

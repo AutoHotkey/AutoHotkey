@@ -3339,7 +3339,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// The group can be any number from 0 to 65535. The default value is 0.
 
 		int group = parameter ? ATOI(parameter) : 0;
-		if (group < 0 || group > KEY_IGNORE_MAX_LEVEL)
+		if (!KeyIgnoreLevelIsValid(group))
 			return ScriptError(ERR_PARAM1_INVALID, aBuf);
 
 		g_InputLevel = group;
@@ -6085,6 +6085,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 	case ACT_SENDMODE:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && line.ConvertSendMode(new_raw_arg1, SM_INVALID) == SM_INVALID)
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
+		break;
+
+	case ACT_SENDLEVEL:
+		if (aArgc > 0 && !line.ArgHasDeref(1) && !KeyIgnoreLevelIsValid(ATOI(new_raw_arg1)))
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
@@ -14781,6 +14786,15 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	case ACT_SENDMODE:
 		g.SendMode = ConvertSendMode(ARG1, g.SendMode); // Leave value unchanged if ARG1 is invalid.
 		return OK;
+
+	case ACT_SENDLEVEL:
+	{
+		int sendLevel = ArgToInt(1);
+		if (KeyIgnoreLevelIsValid(sendLevel))
+			g.SendLevel = sendLevel;
+
+		return OK;
+	}
 
 	case ACT_SETKEYDELAY:
 		if (!_tcsicmp(ARG3, _T("Play")))
