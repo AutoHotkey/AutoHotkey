@@ -2386,10 +2386,16 @@ void Hotstring::DoReplace(LPARAM alParam)
 	int old_press_duration = g.PressDuration;
 	int old_delay_play = g.KeyDelayPlay;
 	int old_press_duration_play = g.PressDurationPlay;
+	SendLevelType old_send_level = g.SendLevel;
+
 	g.KeyDelay = mKeyDelay; // This is relatively safe since SendKeys() normally can't be interrupted by a new thread.
 	g.PressDuration = -1;   // Always -1, since Send command can be used in body of hotstring to have a custom press duration.
 	g.KeyDelayPlay = -1;
 	g.PressDurationPlay = mKeyDelay; // Seems likely to be more useful (such as in games) to apply mKeyDelay to press duration rather than above.
+	// Setting the SendLevel to 0 rather than this->mInputLevel since auto-replace hotstrings are used for text replacement rather than
+	// key remapping, which means the user almost always won't want the generated input to trigger other hotkeys or hotstrings.
+	// Action hotstrings (not using auto-replace) do get their thread's SendLevel initialized to the hotstring's InputLevel.
+	g.SendLevel = 0;
 
 	// v1.0.43: The following section gives time for the hook to pass the final keystroke of the hotstring to the
 	// system.  This is necessary only for modes other than the original/SendEvent mode because that one takes
@@ -2403,10 +2409,12 @@ void Hotstring::DoReplace(LPARAM alParam)
 
 	SendKeys(SendBuf, mSendRaw, mSendMode); // Send the backspaces and/or replacement.
 
-	g.KeyDelay = old_delay;                        // Restore original values.
-	g.PressDuration = old_press_duration;          //
-	g.KeyDelayPlay = old_delay_play;               //
-	g.PressDurationPlay = old_press_duration_play; //
+	// Restore original values.
+	g.KeyDelay = old_delay;
+	g.PressDuration = old_press_duration;
+	g.KeyDelayPlay = old_delay_play;
+	g.PressDurationPlay = old_press_duration_play;
+	g.SendLevel = old_send_level;
 }
 
 
