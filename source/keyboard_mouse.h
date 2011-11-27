@@ -244,15 +244,8 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam);
 // The levels are set up to use negative offsets from KEY_IGNORE_ALL_EXCEPT_MODIFIER so that we can leave
 // the values above unchanged and maintain KEY_IGNORE_LEVEL(0) == KEY_IGNORE_ALL_EXCEPT_MODIFIER
 #define KEY_IGNORE_LEVEL(LEVEL) (KEY_IGNORE_ALL_EXCEPT_MODIFIER - LEVEL)
-
-// Setting the max level to 100 is somewhat arbitrary. It seems that typical usage would only
-// require a few levels at most. We do want to keep the max somewhat small to keep the range
-// for magic values that get used in dwExtraInfo to a minimum, to avoid conflicts with other
-// apps that may be using the field in other ways.
-#define KEY_IGNORE_MAX_LEVEL 100
-#define KEY_IGNORE_MIN KEY_IGNORE_LEVEL(KEY_IGNORE_MAX_LEVEL)
+#define KEY_IGNORE_MIN KEY_IGNORE_LEVEL(SendLevelMax)
 #define KEY_IGNORE_MAX KEY_IGNORE // There are two extra values above KEY_IGNORE_LEVEL(0)
-inline bool KeyIgnoreLevelIsValid(int level) { return level >= 0 && level <= KEY_IGNORE_MAX_LEVEL; }
 
 
 // The default in the below is KEY_IGNORE_ALL_EXCEPT_MODIFIER, which causes standard calls to

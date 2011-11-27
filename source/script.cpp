@@ -3339,7 +3339,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// The group can be any number from 0 to 65535. The default value is 0.
 
 		int group = parameter ? ATOI(parameter) : 0;
-		if (!KeyIgnoreLevelIsValid(group))
+		if (!SendLevelIsValid(group))
 			return ScriptError(ERR_PARAM1_INVALID, aBuf);
 
 		g_InputLevel = group;
@@ -6089,7 +6089,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		break;
 
 	case ACT_SENDLEVEL:
-		if (aArgc > 0 && !line.ArgHasDeref(1) && !KeyIgnoreLevelIsValid(ATOI(new_raw_arg1)))
+		if (aArgc > 0 && !line.ArgHasDeref(1) && !SendLevelIsValid(ATOI(new_raw_arg1)))
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
@@ -14790,7 +14790,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	case ACT_SENDLEVEL:
 	{
 		int sendLevel = ArgToInt(1);
-		if (KeyIgnoreLevelIsValid(sendLevel))
+		if (SendLevelIsValid(sendLevel))
 			g.SendLevel = sendLevel;
 
 		return OK;
