@@ -3324,19 +3324,11 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#InputLevel")))
 	{
-		// To avoid infinite loops and other side effects, AHK ignores self-generated input events.
-		// It does this by setting a sentinel value in the ExtraInfo field when sending input. In
-		// previous versions, a single sentinel value was used for all scripts, making it impossible
-		// for a script to send input that triggers a hotkey in another script.
-		//
-		// The #InputLevel directive provides a way to change the sentinel, so that each script only
-		// ignores input from the other scripts in the same input group.
-		//
-		// A common use case for this is global key remapping. If script A remaps keys 1, 2, and 3
-		// to X, script B can specify a different #InputLevel and set a hotkey for X that is
-		// triggered by any of the keys remapped by script A.
-		//
-		// The group can be any number from 0 to 65535. The default value is 0.
+		// All hotkeys declared after this directive are assigned the specified InputLevel.
+		// Input generated at a given SendLevel can only trigger hotkeys that belong to the
+		// same or lower InputLevel. Hotkeys at the lowest level (0) cannot be triggered by
+		// any generated input (the same behavior as AHK versions before this feature).
+		// The default level is 0.
 
 		int group = parameter ? ATOI(parameter) : 0;
 		if (!SendLevelIsValid(group))
