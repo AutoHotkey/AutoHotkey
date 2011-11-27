@@ -2470,6 +2470,7 @@ Hotstring::Hotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LP
 	, mOmitEndChar(g_HSOmitEndChar), mSendRaw(aHasContinuationSection ? true : g_HSSendRaw)
 	, mEndCharRequired(g_HSEndCharRequired), mDetectWhenInsideWord(g_HSDetectWhenInsideWord), mDoReset(g_HSDoReset)
 	, mHotCriterion(g_HotCriterion)
+	, mInputLevel(g_InputLevel)
 	, mHotWinTitle(g_HotWinTitle), mHotWinText(g_HotWinText)
 	, mConstructedOK(false)
 	, mHotExprIndex(g_HotExprIndex)	// L4: Added mHotExprIndex for #if (expression).

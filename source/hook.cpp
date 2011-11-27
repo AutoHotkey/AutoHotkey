@@ -2296,7 +2296,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 		// This is done unconditionally so that even if a qualified Input is not in progress, the
 		// variable will be correctly reset anyway:
 		if ((Hotstring::mAtLeastOneEnabled && !is_ignored) || (g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && is_ignored)))
-			if (!CollectInput(event, aVK, aSC, aKeyUp, is_ignored, hs_wparam_to_post, hs_lparam_to_post)) // Key should be invisible (suppressed).
+			if (!CollectInput(event, aVK, aSC, aKeyUp, is_ignored, pKeyHistoryCurr, hs_wparam_to_post, hs_lparam_to_post)) // Key should be invisible (suppressed).
 				return SuppressThisKeyFunc(aHook, lParam, aVK, aSC, aKeyUp, pKeyHistoryCurr, aHotkeyIDToPost, hs_wparam_to_post, hs_lparam_to_post);
 
 		// Do these here since the above "return SuppressThisKey" will have already done it in that case.
@@ -2456,7 +2456,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 
 
 bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aKeyUp, bool aIsIgnored
-	, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost)
+	, KeyHistoryItem *pKeyHistoryCurr, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost)
 // Caller is responsible for having initialized aHotstringWparamToPost to HOTSTRING_INDEX_INVALID.
 // Returns true if the caller should treat the key as visible (non-suppressed).
 // Always use the parameter vk rather than event.vkCode because the caller or caller's caller
@@ -2815,7 +2815,15 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 					// more flexible not to do it; instead, to let the script determine (even by resorting to
 					// #IfWinNOTActive) what precedence hotstrings have with respect to each other.
 
+				//////////////////////////////////////////////////////////////
 				// MATCHING HOTSTRING WAS FOUND (since above didn't continue).
+				//////////////////////////////////////////////////////////////
+
+				// Now that we have a match, see if its InputLevel is allowed. If not,
+				// consider the key ignored (rather than continuing to search for more matches).
+				if (!HotInputLevelAllowsFiring(hs.mInputLevel, aEvent.dwExtraInfo, &pKeyHistoryCurr->event_type))
+					break;
+
 				// Since default KeyDelay is 0, and since that is expected to be typical, it seems
 				// best to unconditionally post a message rather than trying to handle the backspacing
 				// and replacing here.  This is because a KeyDelay of 0 might be fairly slow at

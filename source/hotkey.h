@@ -349,6 +349,7 @@ public:
 	// Keep members that are smaller than 32-bit adjacent with each other to conserve memory (due to 4-byte alignment).
 	SendModes mSendMode;
 	HotCriterionType mHotCriterion;
+	SendLevelType mInputLevel;
 	UCHAR mStringLength;
 	bool mSuspended;
 	UCHAR mExistingThreads, mMaxThreads;
