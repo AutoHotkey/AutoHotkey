@@ -586,6 +586,21 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
 	return vp_to_fire; // Either NULL or the variant found by the loop.
 }
 
+bool HotInputLevelAllowsFiring(SendLevelType inputLevel, ULONG_PTR aEventExtraInfo, LPTSTR aKeyHistoryChar)
+{
+	if (aEventExtraInfo >= KEY_IGNORE_MIN && aEventExtraInfo <= KEY_IGNORE_MAX)
+	{
+		// We can safely cast here since aExtraInfo is constrained above
+		int eventInputLevel = (int)(KEY_IGNORE_LEVEL(0) - aEventExtraInfo);
+		if (eventInputLevel <= inputLevel) {
+			if (aKeyHistoryChar)
+				*aKeyHistoryChar = 'z'; // Mark as ignored in KeyHistory
+			return false;
+		}
+	}
+	return true;
+}
+
 
 HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, ULONG_PTR aExtraInfo
 	, UCHAR &aNoSuppress, bool &aFireWithNoSuppress, LPTSTR aSingleChar)
@@ -594,17 +609,7 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags
 	if (!hkv)
 		return NULL;
 
-	if (aExtraInfo >= KEY_IGNORE_MIN && aExtraInfo <= KEY_IGNORE_MAX)
-	{
-		// We can safely cast here since aExtraInfo is constrained above
-		int level = (int)(KEY_IGNORE_LEVEL(0) - aExtraInfo);
-		if (level <= hkv->mInputLevel) {
-			if (aSingleChar)
-				*aSingleChar = 'z'; // Mark as ignored in KeyHistory
-			return NULL;
-		}
-	}
-	return hkv;
+	return HotInputLevelAllowsFiring(hkv->mInputLevel, aExtraInfo, aSingleChar) ? hkv : NULL;
 }
 
 

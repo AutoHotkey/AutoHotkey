@@ -61,6 +61,7 @@ typedef UCHAR HotCriterionType;
 // L4: Added HOT_IF_EXPR and aHotExprIndex for #if (expression).
 enum HotCriterionEnum {HOT_NO_CRITERION, HOT_IF_ACTIVE, HOT_IF_NOT_ACTIVE, HOT_IF_EXIST, HOT_IF_NOT_EXIST, HOT_IF_EXPR}; // HOT_NO_CRITERION must be zero.
 HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, LPTSTR aWinText, int aHotExprIndex, LPTSTR aHotkeyName); // Used by hotkeys and hotstrings.
+bool HotInputLevelAllowsFiring(SendLevelType inputLevel, ULONG_PTR aEventExtraInfo, LPTSTR aKeyHistoryChar);
 ResultType SetGlobalHotTitleText(LPTSTR aWinTitle, LPTSTR aWinText);
 
 
