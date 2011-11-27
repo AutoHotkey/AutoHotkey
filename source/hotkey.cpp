@@ -594,7 +594,7 @@ bool HotInputLevelAllowsFiring(SendLevelType inputLevel, ULONG_PTR aEventExtraIn
 		int eventInputLevel = (int)(KEY_IGNORE_LEVEL(0) - aEventExtraInfo);
 		if (eventInputLevel <= inputLevel) {
 			if (aKeyHistoryChar)
-				*aKeyHistoryChar = 'z'; // Mark as ignored in KeyHistory
+				*aKeyHistoryChar = 'i'; // Mark as ignored in KeyHistory
 			return false;
 		}
 	}
