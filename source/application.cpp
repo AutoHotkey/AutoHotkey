@@ -1262,6 +1262,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 			case AHK_HOTSTRING:
 				g.hWndLastUsed = criterion_found_hwnd; // v1.0.42. Even if the window is invalid for some reason, IsWindow() and such are called whenever the script accesses it (GetValidLastUsedWindow()).
+				g.SendLevel = hs->mInputLevel;
 				hs->PerformInNewThreadMadeByCaller();
 				break;
 
