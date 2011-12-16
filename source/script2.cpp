@@ -13389,7 +13389,19 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ExprTokenType &aResultToke
 			name = TokenToString(name_param);
 			for (p = 0; p < mPatternCount; ++p)
 				if (mPatternName[p] && !_tcsicmp(mPatternName[p], name))
+				{
+					if (mOffset[2*p] < 0)
+						// This pattern wasn't matched, so check for one with a duplicate name.
+						for (int i = p + 1; i < mPatternCount; ++i)
+							if (mPatternName[i] && !_tcsicmp(mPatternName[i], name) // It has the same name.
+								&& mOffset[2*i] >= 0) // It matched something.
+							{
+								// Prefer this pattern.
+								p = i;
+								break;
+							}
 					break;
+				}
 		}
 	}
 
