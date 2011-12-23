@@ -11032,15 +11032,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			if (continue_main_loop) // It signaled us to do this:
 				continue;
 
-			if (aMode == ONLY_ONE_LINE)
-			{
-				// When jump_to_line!=NULL, the above call to ExecUntil() told us to jump somewhere.
-				// But since we're in ONLY_ONE_LINE mode, our caller must handle it because only it knows how
-				// to extricate itself from whatever it's doing:
-				caller_jump_to_line = jump_to_line; // Tell the caller to handle this jump (if any).  jump_to_line==NULL is ok.
-				// Return OK even if our result was LOOP_CONTINUE because we already handled the continue:
-				return OK;
-			}
 			if (jump_to_line)
 			{
 				if (jump_to_line->mParentLine != line->mParentLine)
@@ -11056,6 +11047,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				line = jump_to_line;
 				continue; // end this case of the switch().
 			}
+			if (aMode == ONLY_ONE_LINE)
+				return OK;
 			// Since the above didn't return or break, either the loop has completed the specified
 			// number of iterations or it was broken via the break command.  In either case, we jump
 			// to the line after our loop's structure and continue there:

@@ -203,6 +203,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	//bool was_interrupted = false;
 	bool sleep0_was_done = false;
 	bool empty_the_queue_via_peek = false;
+	int messages_received = 0; // This is used to ensure we Sleep() at least a minimal amount if no messages are received.
 
 	int i;
 	bool msg_was_handled;
@@ -360,6 +361,12 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					continue;
 				}
 				// Otherwise: aSleepDuration is non-zero or we already did the Sleep(0)
+				if (messages_received == 0 && allow_early_return)
+				{
+					Sleep(5); // Since Peek() didn't find a message, avoid maxing the CPU.  This is a somewhat arbitrary value: the intent of a value below 10 is to avoid yielding more than one timeslice on all systems even if they have unusual timeslice sizes / system timers.
+					++messages_received; // Don't repeat this section.
+					continue;
+				}
 				// Notes for the macro further below:
 				// Must decrement prior to every RETURN to balance it.
 				// Do this prior to checking whether timer should be killed, below.
@@ -424,6 +431,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 		// Since above didn't return or "continue", a message has been received that is eligible
 		// for further processing.
+		++messages_received;
 
 		// For max. flexibility, it seems best to allow the message filter to have the first
 		// crack at looking at the message, before even TRANSLATE_AHK_MSG:

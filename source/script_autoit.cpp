@@ -627,7 +627,8 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 	if (!control_window)
 		goto error;
 
-	DWORD_PTR dwResult, index, length, item_length, start, end, u, item_count;
+	DWORD_PTR dwResult, index, length, item_length, u, item_count;
+	DWORD start, end;
 	UINT msg, x_msg, y_msg;
 	int control_index;
 	TCHAR *cp, *dyn_buf, temp_buf[32];
