@@ -745,6 +745,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			{
 				if (right.symbol == SYM_VAR) // Thus due to the above check, it's a non-numeric target such as ++i when "i" is blank or contains text. This line was fixed in v1.0.46.16.
 				{
+					right.var->MaybeWarnUninitialized(); // This line should always be reached if the var is uninitialized.
 					right.var->Assign(); // If target var contains "" or "non-numeric text", make it blank. Clipboard is also supported here.
 					if (is_pre_op)
 					{
