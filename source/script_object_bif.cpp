@@ -274,6 +274,13 @@ void BIF_ObjIncDec(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 	// so that if aParam[0] is not an object, g_MetaObject is correctly invoked.
 	BIF_ObjInvoke(temp_result, aParam, aParamCount);
 
+	// Change SYM_STRING to SYM_OPERAND so below may treat it as a numeric string.
+	if (temp_result.symbol == SYM_STRING)
+	{
+		temp_result.symbol = SYM_OPERAND;
+		temp_result.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
+	}
+
 	switch (value_to_set.symbol = current_value.symbol = TokenIsPureNumeric(temp_result))
 	{
 	case PURE_INTEGER:
