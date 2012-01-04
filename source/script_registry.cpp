@@ -190,6 +190,7 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, (LPBYTE)&dwBuf, &dwRes);
 			if (result == ERROR_SUCCESS)
 				output_var.Assign((DWORD)dwBuf);
+			RegCloseKey(hRegKey);
 			break;
 
 		// Note: The contents of any of these types can be >64K on NT/2k/XP+ (though that is probably rare):
