@@ -316,6 +316,7 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 				return FAIL;
 		}
 		default:
+			RegCloseKey(hRegKey);
 			result = ERROR_UNSUPPORTED_TYPE; // Indicate the error.
 			break;
 	}
