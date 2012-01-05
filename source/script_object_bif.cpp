@@ -302,10 +302,11 @@ void BIF_ObjIncDec(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 	if (current_value.symbol == PURE_NOT_NUMERIC)
 	{
-		// Value is non-numeric, so return "".
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
-		return;
+		// Value is non-numeric, so assign and return "".
+		value_to_set.symbol = SYM_STRING;
+		value_to_set.marker = _T("");
+		//current_value.symbol = SYM_STRING; // Already done (SYM_STRING == PURE_NOT_NUMERIC).
+		current_value.marker = _T("");
 	}
 
 	// Although it's likely our caller's param array has enough space to hold the extra
