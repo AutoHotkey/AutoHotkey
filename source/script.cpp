@@ -4779,9 +4779,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			// because the map is still accurate due to the nature of rtrim).  UPDATE: Note that this
 			// version of rtrim() specifically avoids trimming newline characters, since the user may
 			// have included literal newlines at the end of the string by using an escape sequence:
-			rtrim(arg[nArgs]);
+			rtrim_literal(arg[nArgs], arg_map[nArgs]);
 			// Omit the leading whitespace from the next arg:
-			for (++mark; IS_SPACE_OR_TAB(action_args[mark]); ++mark);
+			for (++mark; IS_SPACE_OR_TAB(action_args[mark]) && !literal_map[mark]; ++mark);
 			// Now <mark> marks the end of the string, the start of the next arg,
 			// or a delimiter-char (if the next arg is blank).
 		}
