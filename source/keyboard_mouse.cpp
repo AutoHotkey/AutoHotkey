@@ -1028,7 +1028,7 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 			// both hooks so that the Start Menu doesn't appear when the Win key is released, so we're
 			// not responsible for that type of disguising here.
 			SetModifierLRState(modifiersLR_specified, sSendMode ? sEventModifiersLR : GetModifierLRState()
-				, aTargetWindow, false, true, KEY_IGNORE); // See keyboard_mouse.h for explanation of KEY_IGNORE.
+				, aTargetWindow, false, true, KEY_IGNORE_LEVEL(g->SendLevel)); // See keyboard_mouse.h for explanation of KEY_IGNORE.
 			// SetModifierLRState() also does DoKeyDelay(g->PressDuration).
 		}
 
