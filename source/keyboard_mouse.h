@@ -18,6 +18,7 @@ GNU General Public License for more details.
 #define keyboard_h
 
 #include "defines.h"
+EXTERN_G;
 
 // The max number of keystrokes to Send prior to taking a break to pump messages:
 #define MAX_LUMP_KEYS 50
@@ -234,10 +235,26 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam);
 // Below uses a pseudo-random value.  It's best that this be constant so that if multiple instances
 // of the app are running, they will all ignore each other's keyboard & mouse events.  Also, a value
 // close to UINT_MAX might be a little better since it's might be less likely to be used as a pointer
-// value by any apps that send keybd events whose ExtraInfo is really a pointer value:
+// value by any apps that send keybd events whose ExtraInfo is really a pointer value.
 #define KEY_IGNORE 0xFFC3D44F
 #define KEY_PHYS_IGNORE (KEY_IGNORE - 1)  // Same as above but marked as physical for other instances of the hook.
 #define KEY_IGNORE_ALL_EXCEPT_MODIFIER (KEY_IGNORE - 2)  // Non-physical and ignored only if it's not a modifier.
+// Same as KEY_IGNORE_ALL_EXCEPT_MODIFIER, but only ignored by Hotkeys & Hotstrings at InputLevel LEVEL and below.
+// The levels are set up to use negative offsets from KEY_IGNORE_ALL_EXCEPT_MODIFIER so that we can leave
+// the values above unchanged and have KEY_IGNORE_LEVEL(0) == KEY_IGNORE_ALL_EXCEPT_MODIFIER.
+//
+// In general, KEY_IGNORE_LEVEL(g->SendLevel) should be used for any input that's meant to be treated as "real",
+// as opposed to input generated for side effects (e.g., masking modifier keys to prevent default OS responses).
+// A lot of the calls that generate input fall into the latter category, so KEY_IGNORE_ALL_EXCEPT_MODIFIER
+// (aka KEY_IGNORE_LEVEL(0)) still gets used quite often.
+//
+// Note that there are no "level" equivalents for KEY_IGNORE or KEY_PHYS_IGNORE (only KEY_IGNORE_ALL_EXCEPT_MODIFIER).
+// For the KEY_IGNORE_LEVEL use cases, there isn't a need to ignore modifiers or differentiate between physical
+// and non-physical, and leaving them out keeps the code much simpler.
+#define KEY_IGNORE_LEVEL(LEVEL) (KEY_IGNORE_ALL_EXCEPT_MODIFIER - LEVEL)
+#define KEY_IGNORE_MIN KEY_IGNORE_LEVEL(SendLevelMax)
+#define KEY_IGNORE_MAX KEY_IGNORE // There are two extra values above KEY_IGNORE_LEVEL(0)
+
 
 // The default in the below is KEY_IGNORE_ALL_EXCEPT_MODIFIER, which causes standard calls to
 // KeyEvent() to update g_modifiersLR_logical_non_ignored the same way it updates g_modifiersLR_logical.
@@ -277,7 +294,6 @@ void InitEventArray(void *aMem, UINT aMaxEvents, modLR_type aModifiersLR);
 void SendEventArray(int &aFinalKeyDelay, modLR_type aModsDuringSend);
 void CleanupEventArray(int aFinalKeyDelay);
 
-EXTERN_G; // For the DoKeyDelay() prototype below.
 extern SendModes sSendMode;
 void DoKeyDelay(int aDelay = (sSendMode == SM_PLAY) ? g->KeyDelayPlay : g->KeyDelay);
 void DoMouseDelay();

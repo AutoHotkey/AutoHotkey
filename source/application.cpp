@@ -1270,6 +1270,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 			case AHK_HOTSTRING:
 				g.hWndLastUsed = criterion_found_hwnd; // v1.0.42. Even if the window is invalid for some reason, IsWindow() and such are called whenever the script accesses it (GetValidLastUsedWindow()).
+				g.SendLevel = hs->mInputLevel;
 				hs->PerformInNewThreadMadeByCaller();
 				break;
 
@@ -1290,6 +1291,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					g.EventInfo = (DWORD)msg.lParam; // v1.0.43.03: Override the thread default of 0 with the number of notches by which the wheel was turned.
 					// Above also works for RunAgainAfterFinished since that feature reuses the same thread attributes set above.
 				g.hWndLastUsed = criterion_found_hwnd; // v1.0.42. Even if the window is invalid for some reason, IsWindow() and such are called whenever the script accesses it (GetValidLastUsedWindow()).
+				g.SendLevel = variant->mInputLevel;
 				hk->PerformInNewThreadMadeByCaller(*variant);
 			}
 
