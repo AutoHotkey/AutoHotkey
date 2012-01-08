@@ -1582,6 +1582,11 @@ HotkeyVariant *Hotkey::AddVariant(Label *aJumpToLabel, bool aSuffixHasTilde)
 	v.mHotWinText = g_HotWinText;  // The value of this and other globals used above can vary during load-time.
 	v.mHotExprIndex = g_HotExprIndex;	// L4: Added mHotExprIndex for #if (expression).
 	v.mEnabled = true;
+	if (v.mInputLevel > 0)
+	{
+		// A non-zero InputLevel only works when using the hook
+		mKeybdHookMandatory = true;
+	}
 	if (aSuffixHasTilde)
 	{
 		v.mNoSuppress = true; // Override the false value set by ZeroMemory above.
