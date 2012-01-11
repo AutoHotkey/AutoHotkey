@@ -5406,7 +5406,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 						return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
 							: g_script.ScriptError(ERR_NO_LABEL, next_option - 1);
 				}
-				if (aControl.type == GUI_CONTROL_TEXT || aControl.type == GUI_CONTROL_PIC)
+				if (aControl.type == GUI_CONTROL_TEXT || aControl.type == GUI_CONTROL_PIC || aControl.type == GUI_CONTROL_LINK)
 					// Apply the SS_NOTIFY style *only* if the control actually has an associated action.
 					// This is because otherwise the control would steal all clicks for any other controls
 					// drawn on top of it (e.g. a picture control with some edit fields drawn on top of it).
@@ -7107,6 +7107,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 			// Otherwise: Don't overwrite the var with a new wrapper object, since that would waste
 			// resources and cause any connected (ComObjConnect) event sinks to be disconnected.
 		case GUI_CONTROL_TEXT:
+		case GUI_CONTROL_LINK:
 		case GUI_CONTROL_PIC:
 		case GUI_CONTROL_GROUPBOX:
 		case GUI_CONTROL_BUTTON:
@@ -8240,6 +8241,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			// Types not included above because they support transparent background or because the attempt
 			// to make the background transparent has no effect:
 			//case GUI_CONTROL_TEXT:         Supported via WM_CTLCOLORSTATIC
+			//case GUI_CONTROL_LINK:         Supported via WM_CTLCOLORSTATIC
 			//case GUI_CONTROL_PIC:          Supported via WM_CTLCOLORSTATIC
 			//case GUI_CONTROL_GROUPBOX:     Supported via WM_CTLCOLORSTATIC
 			//case GUI_CONTROL_BUTTON:       Can't reach this point because WM_CTLCOLORBTN is not handled above.
@@ -8759,6 +8761,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 		//case GUI_CONTROL_TAB: // aNotifyCode == TCN_SELCHANGE should be the only possibility.
 		//case GUI_CONTROL_DATETIME:
 		//case GUI_CONTROL_MONTHCAL:
+		//case GUI_CONTROL_LINK:
 		//
 		// The following are not needed because execution never reaches this point.  This is because these types
 		// are forbidden from having a gLabel. Search on "case 'G'" for details.
@@ -9641,6 +9644,7 @@ void GuiType::ControlGetPosOfFocusedItem(GuiControlType &aControl, POINT &aPoint
 	// Notes about control types not handled above:
 	//case GUI_CONTROL_STATUSBAR: For this and many others below, caller should never call it for this type.
 	//case GUI_CONTROL_TEXT:
+	//case GUI_CONTROL_LINK:
 	//case GUI_CONTROL_PIC:
 	//case GUI_CONTROL_GROUPBOX:
 	//case GUI_CONTROL_BUTTON:
