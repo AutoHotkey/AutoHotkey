@@ -2076,6 +2076,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	case GUI_CONTROL_EDIT:
 		opt.style_add |= WS_TABSTOP;
 		opt.exstyle_add |= WS_EX_CLIENTEDGE;
+		break;		
+	case GUI_CONTROL_LINK:
+		opt.style_add |= WS_TABSTOP;
 		break;
 	case GUI_CONTROL_UPDOWN:
 		// UDS_NOTHOUSANDS is debatable:
