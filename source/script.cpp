@@ -3323,7 +3323,21 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		else
 			return ScriptError(parameter ? ERR_PARAM1_INVALID : ERR_PARAM1_REQUIRED, aBuf);
 	}
+	if (IS_DIRECTIVE_MATCH(_T("#InputLevel")))
+	{
+		// All hotkeys declared after this directive are assigned the specified InputLevel.
+		// Input generated at a given SendLevel can only trigger hotkeys that belong to the
+		// same or lower InputLevel. Hotkeys at the lowest level (0) cannot be triggered by
+		// any generated input (the same behavior as AHK versions before this feature).
+		// The default level is 0.
 
+		int group = parameter ? ATOI(parameter) : 0;
+		if (!SendLevelIsValid(group))
+			return ScriptError(ERR_PARAM1_INVALID, aBuf);
+
+		g_InputLevel = group;
+		return CONDITION_TRUE;
+	}
 	if (IS_DIRECTIVE_MATCH(_T("#Warn")))
 	{
 		if (!parameter)
@@ -6064,6 +6078,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 	case ACT_SENDMODE:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && line.ConvertSendMode(new_raw_arg1, SM_INVALID) == SM_INVALID)
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
+		break;
+
+	case ACT_SENDLEVEL:
+		if (aArgc > 0 && !line.ArgHasDeref(1) && !SendLevelIsValid(ATOI(new_raw_arg1)))
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
@@ -14753,6 +14772,15 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	case ACT_SENDMODE:
 		g.SendMode = ConvertSendMode(ARG1, g.SendMode); // Leave value unchanged if ARG1 is invalid.
 		return OK;
+
+	case ACT_SENDLEVEL:
+	{
+		int sendLevel = ArgToInt(1);
+		if (SendLevelIsValid(sendLevel))
+			g.SendLevel = sendLevel;
+
+		return OK;
+	}
 
 	case ACT_SETKEYDELAY:
 		if (!_tcsicmp(ARG3, _T("Play")))
