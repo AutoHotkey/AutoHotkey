@@ -1347,15 +1347,15 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 		else // Choose by position vs. string.
 		{
 			selection_index = ATOI(aParam3) - 1;
-			if (selection_index < 0)
+			if (selection_index < -1)
 				goto error;
 			if (msg == LB_SETSEL) // Multi-select, so use the cumulative method.
 			{
-				if (SendMessage(control.hwnd, msg, TRUE, selection_index) == CB_ERR) // CB_ERR == LB_ERR
+				if (SendMessage(control.hwnd, msg, selection_index >= 0, selection_index) == CB_ERR) // CB_ERR == LB_ERR
 					goto error;
 			}
 			else
-				if (SendMessage(control.hwnd, msg, selection_index, 0) == CB_ERR) // CB_ERR == LB_ERR
+				if (SendMessage(control.hwnd, msg, selection_index, 0) == CB_ERR && selection_index != -1) // CB_ERR == LB_ERR
 					goto error;
 		}
 		int control_id = GUI_INDEX_TO_ID(control_index);
