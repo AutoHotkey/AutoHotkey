@@ -8123,7 +8123,11 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			{
 				NMLINK &nmLink = *(PNMLINK)lParam;
 				LITEM item = nmLink.item;
-				pgui->Event(control_index, nmhdr.code, GUI_EVENT_NORMAL, item.iLink + 1); // Link control uses 1-based index for g-labels
+				//Link control tries to execute the link URL if AltSubmit is not set.
+				if(control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT)
+					pgui->Event(control_index, nmhdr.code, GUI_EVENT_NORMAL, item.iLink + 1); // Link control uses 1-based index for g-labels
+				else
+					g_script.ActionExec(item.szUrl, NULL, NULL, false);
 			}
 			return 0;
 		case GUI_CONTROL_STATUSBAR:
