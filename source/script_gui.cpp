@@ -8124,9 +8124,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				NMLINK &nmLink = *(PNMLINK)lParam;
 				LITEM item = nmLink.item;
 				//Link control tries to execute the link URL if href property is set. Otherwise, it will execute a g-label if it exists.
-				if(wcslen(item.szID) == 0)
-					g_script.ActionExec(CStringTCharFromWCharIfNeeded(item.szUrl), NULL, NULL, false);
-				else if(control.jump_to_label)
+				if (!*item.szUrl || !g_script.ActionExec((LPTSTR)CStringTCharFromWCharIfNeeded(item.szUrl), NULL, NULL, false))
 					pgui->Event(control_index, nmhdr.code, GUI_EVENT_NORMAL, item.iLink + 1); // Link control uses 1-based index for g-labels
 			}
 			return 0;
