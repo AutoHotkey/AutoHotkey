@@ -2874,7 +2874,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	case GUI_CONTROL_LINK:
 		// Seems best to omit SS_NOPREFIX by default so that ampersand can be used to create shortcut keys.
-		control.hwnd = CreateWindowEx(exstyle, WC_LINK, aText, style
+		control.hwnd = CreateWindowEx(exstyle, _T("SysLink"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
 		break;
 
@@ -8124,10 +8124,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				NMLINK &nmLink = *(PNMLINK)lParam;
 				LITEM item = nmLink.item;
 				//Link control tries to execute the link URL if AltSubmit is not set.
-				if(control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT)
+				if(control.jump_to_label)
 					pgui->Event(control_index, nmhdr.code, GUI_EVENT_NORMAL, item.iLink + 1); // Link control uses 1-based index for g-labels
 				else
-					g_script.ActionExec(item.szUrl, NULL, NULL, false);
+					g_script.ActionExec(CStringTCharFromWCharIfNeeded(item.szUrl), NULL, NULL, false);
 			}
 			return 0;
 		case GUI_CONTROL_STATUSBAR:
