@@ -2962,6 +2962,7 @@ double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE, BOOL aIsPu
 LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL);
 ResultType TokenToDoubleOrInt64(ExprTokenType &aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
+Func *TokenToFunc(ExprTokenType &aToken);
 ResultType TokenSetResult(ExprTokenType &aResultToken, LPCTSTR aResult, size_t aResultLength = -1);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
