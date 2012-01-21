@@ -1189,6 +1189,16 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// 2) Reserves ErrorLevel for potential future uses.
 				if (gui_action == GUI_EVENT_RESIZE || gui_action == GUI_EVENT_DROPFILES)
 					g_ErrorLevel->Assign(gui_event_info); // For backward compatibility.
+				//this might not be the best place to put this, but other places would need a larger gui_action_errorlevel buffer or a new variable.
+				else if(pcontrol->type == GUI_CONTROL_LINK)
+				{
+					LITEM item;
+					ZeroMemory(&item,sizeof(item));
+					item.mask=LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
+					item.iLink = gui_event_info - 1;
+					bool result = SendMessage(pcontrol->hwnd,LM_GETITEM,NULL,(LPARAM)&item);
+					g_ErrorLevel->AssignString(*item.szUrl ? CStringTCharFromWCharIfNeeded(item.szUrl) : CStringTCharFromWCharIfNeeded(item.szID));
+				}
 				else
 					g_ErrorLevel->Assign(gui_action_errorlevel); // Helps reserve it for future use. See explanation above.
 
