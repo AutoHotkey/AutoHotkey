@@ -1298,12 +1298,16 @@ push_this_token:
 			// Return numeric or object result as-is.
 			aResultToken->symbol = result_token.symbol;
 			aResultToken->value_int64 = result_token.value_int64; // Union copy.
-			return _T(""); // Must not return NULL; any other value is OK (and will be ignored).
+			if (result_token.symbol == SYM_OBJECT)
+				result_token.object->AddRef();
+			result_to_return = _T(""); // Must not return NULL; any other value is OK (and will be ignored).
+			goto normal_end_skip_output_var;
 		case SYM_VAR:
 			if (result_token.var->IsPureNumericOrObject())
 			{
 				result_token.var->ToToken(*aResultToken);
-				return _T("");
+				result_to_return = _T("");
+				goto normal_end_skip_output_var;
 			}
 		}
 		// Since above didn't return, the result is a string.  Continue on below to copy it into persistent memory.
