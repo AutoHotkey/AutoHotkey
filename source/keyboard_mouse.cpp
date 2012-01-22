@@ -237,7 +237,7 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 		// able to detect when the user physically releases the key.
 		if (   (g_script.mThisHotkeyModifiersLR & (MOD_LWIN|MOD_RWIN)) // Limit the scope to only those hotkeys that have a Win modifier, since anything outside that scope hasn't been fully analyzed.
 			&& (GetTickCount() - g_script.mThisHotkeyStartTime) < (DWORD)50 // Ensure g_script.mThisHotkeyModifiersLR is up-to-date enough to be reliable.
-			&& aSendModeOrig == SM_EVENT // SM_INPUT's workaround for Vista is handled by another section. v1.0.48.04: Fixed sSendMode to be aSendModeOrig.
+			&& aSendModeOrig != SM_PLAY // SM_PLAY is reported to be incapable of locking the computer.
 			&& !sInBlindMode // The philosophy of blind-mode is that the script should have full control, so don't do any waiting during blind mode.
 			&& g_os.IsWinVistaOrLater() // Only Vista (and presumably later OSes) check the physical state of the Windows key for Win+L.
 			&& GetCurrentThreadId() == g_MainThreadID // Exclude the hook thread because it isn't allowed to call anything like MsgSleep, nor are any calls from the hook thread within the understood/analyzed scope of this workaround.
@@ -969,29 +969,6 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 	// in pressed down even after it's sent.
 	modLR_type modifiersLR_specified = aModifiersLR | aModifiersLRPersistent;
 	bool vk_is_mouse = IsMouseVK(aVK); // Caller has ensured that VK is non-zero when it wants a mouse click.
-
-	// v1.0.48.01: On Vista or later, work around the fact that an "L" keystroke (physical or artificial) will
-	// lock the computer whenever either Windows key is physically pressed down (artificially releasing the
-	// Windows key isn't enough to solve it because Win+L is apparently detected aggressively like Ctrl-Alt-Delete).
-	// Must do the following check BEFORE calling anything like SetModifierLRState() because that is likely to defeat
-	// the ability to detect when the user has physically released LWin/RWin.
-	if (   aVK == 'L' // The virtual key of a letter A-Z is the same as the Ascii code of the uppercase letter.
-		&& sSendMode == SM_INPUT // SM_EVENT is handled in another section. SM_PLAY is reported to be incapable of locking the computer.
-		&& !sInBlindMode // The philosophy of blind-mode is that the script should have full control, so don't do any waiting during blind mode.
-		&& !aTargetWindow // i.e. ControlSend (which is incapable of locking the computer).
-		&& g_os.IsWinVistaOrLater() // Only Vista (and presumably later OSes) check the physical state of the Windows key for Win+L.
-		&& !(modifiersLR_specified & (MOD_LWIN|MOD_RWIN)) // Exclude any #L keystrokes because they are usually intended by the user to lock the computer.
-		&& (g_script.mThisHotkeyModifiersLR & (MOD_LWIN|MOD_RWIN)) // Limit the scope to only those hotkeys that have a Win modifier, since anything outside that scope hasn't been fully analyzed.
-		&& (GetTickCount() - g_script.mThisHotkeyStartTime) < (DWORD)50 // Ensure g_script.mThisHotkeyModifiersLR is up-to-date enough to be reliable.
-		&& aRepeatCount > 0
-		//&& aEventType != KEYUP // An up-event without a down-event is unlikely to need this workaround, but due to rarity (and in case it is necessary for up-events) don't check.
-		&& GetCurrentThreadId() == g_MainThreadID // Exclude the hook thread because it isn't allowed to call anything like MsgSleep, nor are any calls from the hook thread within the understood/analyzed scope of this workaround.
-		)
-		while (IsKeyDownAsync(VK_LWIN) || IsKeyDownAsync(VK_RWIN)) // Even if the keyboard hook is installed, it seems best to use IsKeyDownAsync() vs. g_PhysicalKeyState[] because it's more likely to produce consistent behavior.
-			SLEEP_WITHOUT_INTERRUPTION(INTERVAL_UNSPECIFIED); // Seems best not to allow other threads to launch, for maintainability and because SendKeys() isn't designed to be interruptible. Also, INTERVAL_UNSPECIFIED performs better.
-			// Sleeping indefinitely seems like the lesser evil compared to having it timeout after a few seconds
-			// because having the PC become accidentally locked might have side effects such as the script continuing
-			// to operate while an incorrect/unintended window is active.
 
 	LONG_OPERATION_INIT
 	for (int i = 0; i < aRepeatCount; ++i)
