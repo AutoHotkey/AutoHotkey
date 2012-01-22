@@ -1190,7 +1190,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				if (gui_action == GUI_EVENT_RESIZE || gui_action == GUI_EVENT_DROPFILES)
 					g_ErrorLevel->Assign(gui_event_info); // For backward compatibility.
 				//this might not be the best place to put this, but other places would need a larger gui_action_errorlevel buffer or a new variable.
-				else if(pcontrol->type == GUI_CONTROL_LINK)
+				else if(pcontrol && pcontrol->type == GUI_CONTROL_LINK)
 				{
 					LITEM item = {};
 					item.mask=LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
