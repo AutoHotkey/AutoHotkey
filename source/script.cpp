@@ -16435,11 +16435,18 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		
 		if (ShellExecuteEx(&sei)) // Relies on short-circuit boolean order.
 		{
-			hprocess = sei.hProcess;
-			// aOutputVar is left blank because:
-			// ProcessID is not available when launched this way, and since GetProcessID() is only
-			// available in WinXP SP1, no effort is currently made to dynamically load it from
-			// kernel32.dll (to retain compatibility with older OSes).
+			typedef DWORD (WINAPI *GetProcessIDType)(HANDLE);
+			// GetProcessID is only available on WinXP SP1 or later, so load it dynamically.
+			static GetProcessIDType fnGetProcessID = (GetProcessIDType)GetProcAddress(GetModuleHandle(_T("kernel32.dll")), "GetProcessId");
+
+			if (hprocess = sei.hProcess)
+			{
+				// A new process was created, so get its ID if possible.
+				if (aOutputVar && fnGetProcessID)
+					aOutputVar->Assign(fnGetProcessID(hprocess));
+			}
+			// Even if there's no process handle, it's considered a success because some
+			// system verbs and file associations do not create a new process, by design.
 			success = true;
 		}
 		else
