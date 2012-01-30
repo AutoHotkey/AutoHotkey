@@ -2648,13 +2648,41 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			}
 			if (opt.width != COORD_UNSPECIFIED) // Since a width was given, auto-expand the height via word-wrapping.
 				draw_format |= DT_WORDBREAK;
+
 			RECT draw_rect;
 			draw_rect.left = 0;
 			draw_rect.top = 0;
 			draw_rect.right = (opt.width == COORD_UNSPECIFIED) ? 0 : opt.width - extra_width; // extra_width
 			draw_rect.bottom = (opt.height == COORD_UNSPECIFIED) ? 0 : opt.height;
-			// If no text, "H" is used in case the function requires a non-empty string to give consistent results:
-			int draw_height = DrawText(hdc, *aText ? aText : _T("H"), -1, &draw_rect, draw_format);
+
+			int draw_height;
+
+			//Link controls don't strip the HTML tags out for size calculation, so it needs to be done manually here.
+			if (aControlType == GUI_CONTROL_LINK)
+			{	
+				TCHAR aChar = 0;
+				LPTSTR aTextCopy = new TCHAR[_tcslen(aText) + 1];
+				ZeroMemory(aTextCopy, sizeof(TCHAR) * (_tcslen(aText) +1));
+				int state = 0; //0 = text, 1 = tag
+				int pos = 0; //position in the new string
+				for(int i = 0, aChar = aText[0]; aChar; aChar = aText[++i])
+				{
+					if(state == 0 && aChar != '<')
+						aTextCopy[pos++] = aChar;
+					else if(state == 1 && aChar == '>')
+						state = 0;
+					else if(aChar == '<' || state == 1)
+						state = 1;
+				}
+
+				// If no text, "H" is used in case the function requires a non-empty string to give consistent results:
+				draw_height = DrawText(hdc, *aTextCopy ? aTextCopy : _T("H"), -1, &draw_rect, draw_format);
+				delete[] aTextCopy;
+			}
+			else
+				// If no text, "H" is used in case the function requires a non-empty string to give consistent results:
+				draw_height = DrawText(hdc, *aText ? aText : _T("H"), -1, &draw_rect, draw_format);
+			
 			int draw_width = draw_rect.right - draw_rect.left;
 			// Even if either height or width was already explicitly specified above, it seems best to
 			// override it if DrawText() says it's not big enough.  REASONING: It seems too rare that
