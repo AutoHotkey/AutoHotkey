@@ -79,4 +79,5 @@ GNU General Public License for more details.
 #define WM_MOUSEHWHEEL      0x020E
 #define MOUSEEVENTF_HWHEEL  0x01000 /* hwheel button rolled */
 #define LWS_NOPREFIX		0x0004 // SysLink control
+#define LWS_RIGHT			0x0020 // SysLink control
 #endif

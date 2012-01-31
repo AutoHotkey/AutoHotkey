@@ -5287,6 +5287,9 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				case GUI_CONTROL_TAB:
 					aOpt.style_add |= TCS_VERTICAL|TCS_MULTILINE|TCS_RIGHT;
 					break;
+				case GUI_CONTROL_LINK:
+					aOpt.style_add |= LWS_RIGHT;
+					break;
 				// Not applicable for:
 				//case GUI_CONTROL_MONTHCAL:
 				//case GUI_CONTROL_PIC: SS_RIGHTJUST is currently not used due to auto-pic-scaling/fitting.
@@ -5295,7 +5298,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				//case GUI_CONTROL_LISTBOX:
 				//case GUI_CONTROL_LISTVIEW:
 				//case GUI_CONTROL_TREEVIEW:
-				//case GUI_CONTROL_LINK:
 				}
 			}
 			else // Removing.
