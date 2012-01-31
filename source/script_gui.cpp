@@ -2659,20 +2659,102 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 			//Link controls don't strip the HTML tags out for size calculation, so it needs to be done manually here.
 			if (aControlType == GUI_CONTROL_LINK)
-			{	
-				TCHAR aChar = 0;
+			{
+				TCHAR aChar = 0, tagChar = 0;
 				LPTSTR aTextCopy = new TCHAR[_tcslen(aText) + 1];
 				ZeroMemory(aTextCopy, sizeof(TCHAR) * (_tcslen(aText) +1));
-				int state = 0; //0 = text, 1 = tag
 				int pos = 0; //position in the new string
+				bool foundAmp = style & SS_NOPREFIX; //remove first & if this style is not set
+				bool inLink = false; //true if the current character belongs to a link. Needed for treating closing tags.
 				for(int i = 0, aChar = aText[0]; aChar; aChar = aText[++i])
 				{
-					if(state == 0 && aChar != '<')
+					if(!foundAmp && aChar == '&')
+						foundAmp = true;
+					else if(!inLink && aChar == '<' && ctoupper(aText[i+1]) == 'A') //possible opening of tag
+					{
+						int tagstate = 0;
+						bool isTag = false;
+						for(int j = i + 2, tagChar = aText[j]; tagChar; tagChar = aText[++j])
+						{
+							if(tagstate == 0) //0 = looking for spaces or end of empty tags
+							{
+								if(tagChar == ' ') //spaces between tag type and attribute are allowed
+									continue;
+								else if(tagChar == '>') //no attribute, valid link!
+								{
+									inLink = true;
+									i = j;
+									break;
+								}
+								else if(tagChar == '=' && aText[j+1] && aText[j+1] == '"') //end of empty tag and start of URL
+								{
+									j++;
+									tagstate = 3;
+									continue;
+								}
+								else if(tagChar != '"') //no unexpected character here: start of attribute
+									tagstate = 1;
+								else //unexpected character, treat as part of the text
+									break;
+							}
+							if(tagstate == 1) //1 = require character for attribute
+							{
+								if(tagChar == ' ' || tagChar == '=' || tagChar == '"' || tagChar == '<') //invalid characters in attribute
+									break;
+								else //atleast one character found for attribute
+								{
+									tagstate = 2;
+									continue;
+								}
+							}
+							else if(tagstate == 2) //2 = further characters in attribute
+							{
+								if(tagChar == ' ' || tagChar == '"') //invalid characters in attribute
+									break;
+								else if(tagChar == '=' && aText[j+1] && aText[j+1] == '"') //end of tag and start of URL
+								{
+									j++;
+									tagstate = 3;
+									continue;
+								}
+								else //more attribute characters
+									continue;
+							}
+							else if(tagstate == 3) //3 = in URL
+							{
+								if(tagChar == '"') //end of URL
+									tagstate = 4;
+								else if(tagChar == '>') //invalid URL, treat as text
+									break;
+								else //part of the URL
+									continue;
+							}
+							else if(tagstate == 4) //expecting spaces or closing tag
+							{
+								if(tagChar == ' ') //spaces after link are allowed
+									continue;
+								else if(tagChar == '>') //end of tag, valid!
+								{
+									inLink = true;
+									i = j;
+									break;
+								}
+								else //unexpected characters, treat as text
+									break;
+							}
+						}
+						if(inLink)
+							continue;
+					}
+					
+					if(inLink && aText[i+1] == '<' && aText[i+2] == '/' && ctoupper(aText[i+3]) == 'A' && aText[i+4] == '>') //closing tag of link needs to be skipped
+					{
+						i += 3;
+						inLink = false;
+						continue;
+					}
+					else //normal text, unrecognized tags, nested <A> tags and redundant closing </a> tags are used for calculation
 						aTextCopy[pos++] = aChar;
-					else if(state == 1 && aChar == '>')
-						state = 0;
-					else if(aChar == '<' || state == 1)
-						state = 1;
 				}
 
 				// If no text, "H" is used in case the function requires a non-empty string to give consistent results:
