@@ -671,6 +671,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 		switch (control.type)
 		{
 		case GUI_CONTROL_TEXT:
+		case GUI_CONTROL_LINK:
 		case GUI_CONTROL_GROUPBOX:
 			do_redraw_unconditionally = (control.attrib & GUI_CONTROL_ATTRIB_BACKGROUND_TRANS); // v1.0.40.01.
 			// Note that it isn't sufficient in this case to do InvalidateRect(control.hwnd, ...).
@@ -2075,6 +2076,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	case GUI_CONTROL_EDIT:
 		opt.style_add |= WS_TABSTOP;
 		opt.exstyle_add |= WS_EX_CLIENTEDGE;
+		break;		
+	case GUI_CONTROL_LINK:
+		opt.style_add |= WS_TABSTOP;
 		break;
 	case GUI_CONTROL_UPDOWN:
 		// UDS_NOTHOUSANDS is debatable:
@@ -2135,6 +2139,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	// Nothing extra for these currently:
 	//case GUI_CONTROL_RADIO: This one is handled separately above the switch().
 	//case GUI_CONTROL_TEXT:
+	//case GUI_CONTROL_LINK:
 	//case GUI_CONTROL_MONTHCAL: Can't be focused, so no tabstop.
 	//case GUI_CONTROL_PIC:
 	//case GUI_CONTROL_GROUPBOX:
@@ -2275,6 +2280,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	// Nothing extra for these currently:
 	//case GUI_CONTROL_TEXT:  Ensuring SS_BITMAP and such are absent seems too over-protective.
+	//case GUI_CONTROL_LINK:
 	//case GUI_CONTROL_PIC:   SS_BITMAP/SS_ICON are applied after the control isn't created so that it doesn't try to auto-load a resource.
 	//case GUI_CONTROL_LISTVIEW:
 	//case GUI_CONTROL_TREEVIEW:
@@ -2348,8 +2354,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			opt.x = mPrevX;
 			opt.y = mPrevY + mPrevHeight + mMarginY;  // Don't use mMaxExtentDown in this is a new column.
 		}
-		if (aControlType == GUI_CONTROL_TEXT && mControlCount // This is a text control and there is a previous control before it.
-			&& prev_control.type == GUI_CONTROL_TEXT
+		if ((aControlType == GUI_CONTROL_TEXT || aControlType == GUI_CONTROL_LINK) && mControlCount // This is a text control and there is a previous control before it.
+			&& (prev_control.type == GUI_CONTROL_TEXT || prev_control.type == GUI_CONTROL_LINK)
 			&& prev_control.tab_control_index == control.tab_control_index  // v1.0.44.03: Don't do the adjustment if
 			&& prev_control.tab_index == control.tab_index)                 // it's on another page or in another tab control.
 			// Since this text control is being auto-positioned immediately below another, provide extra
@@ -2460,6 +2466,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// Types not included
 		// ------------------
 		//case GUI_CONTROL_TEXT:      Rows are based on control's contents.
+		//case GUI_CONTROL_LINK:      Rows are based on control's contents.
 		//case GUI_CONTROL_PIC:       N/A
 		//case GUI_CONTROL_BUTTON:    Rows are based on control's contents.
 		//case GUI_CONTROL_CHECKBOX:  Same
@@ -2553,6 +2560,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			// Types not included
 			// ------------------
 			//case GUI_CONTROL_TEXT:     Uses basic height calculated above the switch().
+			//case GUI_CONTROL_LINK:     Uses basic height calculated above the switch().
 			//case GUI_CONTROL_PIC:      Uses basic height calculated above the switch() (seems OK even for pic).
 			//case GUI_CONTROL_CHECKBOX: Uses basic height calculated above the switch().
 			//case GUI_CONTROL_RADIO:    Same.
@@ -2617,9 +2625,10 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		case GUI_CONTROL_BUTTON:
 		case GUI_CONTROL_CHECKBOX:
 		case GUI_CONTROL_RADIO:
+		case GUI_CONTROL_LINK:
 		{
 			GUI_SET_HDC
-			if (aControlType == GUI_CONTROL_TEXT)
+			if (aControlType == GUI_CONTROL_TEXT || aControlType == GUI_CONTROL_LINK)
 			{
 				draw_format |= DT_EXPANDTABS; // Buttons can't expand tabs, so don't add this for them.
 				if (style & SS_NOPREFIX) // v1.0.44.10: This is necessary to auto-width the control properly if its contents include any ampersands.
@@ -2639,13 +2648,123 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			}
 			if (opt.width != COORD_UNSPECIFIED) // Since a width was given, auto-expand the height via word-wrapping.
 				draw_format |= DT_WORDBREAK;
+
 			RECT draw_rect;
 			draw_rect.left = 0;
 			draw_rect.top = 0;
 			draw_rect.right = (opt.width == COORD_UNSPECIFIED) ? 0 : opt.width - extra_width; // extra_width
 			draw_rect.bottom = (opt.height == COORD_UNSPECIFIED) ? 0 : opt.height;
-			// If no text, "H" is used in case the function requires a non-empty string to give consistent results:
-			int draw_height = DrawText(hdc, *aText ? aText : _T("H"), -1, &draw_rect, draw_format);
+
+			int draw_height;
+
+			//Link controls don't strip the HTML tags out for size calculation, so it needs to be done manually here.
+			if (aControlType == GUI_CONTROL_LINK)
+			{
+				TCHAR aChar = 0, tagChar = 0;
+				LPTSTR aTextCopy = new TCHAR[_tcslen(aText) + 1];
+				ZeroMemory(aTextCopy, sizeof(TCHAR) * (_tcslen(aText) +1));
+				int pos = 0; //position in the new string
+				bool foundAmp = style & SS_NOPREFIX; //remove first & if this style is not set
+				bool inLink = false; //true if the current character belongs to a link. Needed for treating closing tags.
+				for(int i = 0, aChar = aText[0]; aChar; aChar = aText[++i])
+				{
+					if(!foundAmp && aChar == '&')
+						foundAmp = true;
+					else if(!inLink && aChar == '<' && ctoupper(aText[i+1]) == 'A') //possible opening of tag
+					{
+						int tagstate = 0;
+						bool isTag = false;
+						for(int j = i + 2, tagChar = aText[j]; tagChar; tagChar = aText[++j])
+						{
+							if(tagstate == 0) //0 = looking for spaces or end of empty tags
+							{
+								if(tagChar == ' ') //spaces between tag type and attribute are allowed
+									continue;
+								else if(tagChar == '>') //no attribute, valid link!
+								{
+									inLink = true;
+									i = j;
+									break;
+								}
+								else if(tagChar == '=' && aText[j+1] && aText[j+1] == '"') //end of empty tag and start of URL
+								{
+									j++;
+									tagstate = 3;
+									continue;
+								}
+								else if(tagChar != '"') //no unexpected character here: start of attribute
+									tagstate = 1;
+								else //unexpected character, treat as part of the text
+									break;
+							}
+							if(tagstate == 1) //1 = require character for attribute
+							{
+								if(tagChar == ' ' || tagChar == '=' || tagChar == '"' || tagChar == '<') //invalid characters in attribute
+									break;
+								else //atleast one character found for attribute
+								{
+									tagstate = 2;
+									continue;
+								}
+							}
+							else if(tagstate == 2) //2 = further characters in attribute
+							{
+								if(tagChar == ' ' || tagChar == '"') //invalid characters in attribute
+									break;
+								else if(tagChar == '=' && aText[j+1] && aText[j+1] == '"') //end of tag and start of URL
+								{
+									j++;
+									tagstate = 3;
+									continue;
+								}
+								else //more attribute characters
+									continue;
+							}
+							else if(tagstate == 3) //3 = in URL
+							{
+								if(tagChar == '"') //end of URL
+									tagstate = 4;
+								else if(tagChar == '>') //invalid URL, treat as text
+									break;
+								else //part of the URL
+									continue;
+							}
+							else if(tagstate == 4) //expecting spaces or closing tag
+							{
+								if(tagChar == ' ') //spaces after link are allowed
+									continue;
+								else if(tagChar == '>') //end of tag, valid!
+								{
+									inLink = true;
+									i = j;
+									break;
+								}
+								else //unexpected characters, treat as text
+									break;
+							}
+						}
+						if(inLink)
+							continue;
+					}
+					
+					if(inLink && aText[i+1] == '<' && aText[i+2] == '/' && ctoupper(aText[i+3]) == 'A' && aText[i+4] == '>') //closing tag of link needs to be skipped
+					{
+						i += 3;
+						inLink = false;
+						continue;
+					}
+					else //normal text, unrecognized tags, nested <A> tags and redundant closing </a> tags are used for calculation
+						aTextCopy[pos++] = aChar;
+				}
+
+				// If no text, "H" is used in case the function requires a non-empty string to give consistent results:
+				draw_height = DrawText(hdc, *aTextCopy ? aTextCopy : _T("H"), -1, &draw_rect, draw_format);
+				delete[] aTextCopy;
+			}
+			else
+				// If no text, "H" is used in case the function requires a non-empty string to give consistent results:
+				draw_height = DrawText(hdc, *aText ? aText : _T("H"), -1, &draw_rect, draw_format);
+			
 			int draw_width = draw_rect.right - draw_rect.left;
 			// Even if either height or width was already explicitly specified above, it seems best to
 			// override it if DrawText() says it's not big enough.  REASONING: It seems too rare that
@@ -2686,7 +2805,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 					opt.width += 2 * GetSystemMetrics(SM_CXEDGE) + sFont[mCurrentFontIndex].point_size;
 			}
 			break;
-		} // case for text/button/checkbox/radio
+		} // case for text/button/checkbox/radio/link
 
 		// Types not included
 		// ------------------
@@ -2759,6 +2878,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// Types not included
 		// ------------------
 		//case GUI_CONTROL_TEXT:      Exact width should already have been calculated based on contents.
+		//case GUI_CONTROL_LINK:      Exact width should already have been calculated based on contents.
 		//case GUI_CONTROL_PIC:       Calculated based on actual pic size if no explicit width was given.
 		//case GUI_CONTROL_BUTTON:    Exact width should already have been calculated based on contents.
 		//case GUI_CONTROL_CHECKBOX:  Same.
@@ -2859,6 +2979,12 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	case GUI_CONTROL_TEXT:
 		// Seems best to omit SS_NOPREFIX by default so that ampersand can be used to create shortcut keys.
 		control.hwnd = CreateWindowEx(exstyle, _T("static"), aText, style
+			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
+		break;
+
+	case GUI_CONTROL_LINK:
+		// Seems best to omit SS_NOPREFIX by default so that ampersand can be used to create shortcut keys.
+		control.hwnd = CreateWindowEx(exstyle, _T("SysLink"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
 		break;
 
@@ -4596,6 +4722,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			//case GUI_CONTROL_HOTKEY:
 			//case GUI_CONTROL_SLIDER:
 			//case GUI_CONTROL_PROGRESS:
+			//case GUI_CONTROL_LINK:
 			}
 		}
 		else if (!_tcsnicmp(next_option, _T("Background"), 10))
@@ -5069,6 +5196,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				//case GUI_CONTROL_UPDOWN:
 				//case GUI_CONTROL_DATETIME:
 				//case GUI_CONTROL_MONTHCAL:
+				//case GUI_CONTROL_LINK:
 				}
 			}
 			else // Removing.
@@ -5113,6 +5241,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				//case GUI_CONTROL_UPDOWN:
 				//case GUI_CONTROL_DATETIME:
 				//case GUI_CONTROL_MONTHCAL:
+				//case GUI_CONTROL_LINK:
 				}
 			}
 
@@ -5164,6 +5293,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				//case GUI_CONTROL_LISTBOX:
 				//case GUI_CONTROL_LISTVIEW:
 				//case GUI_CONTROL_TREEVIEW:
+				//case GUI_CONTROL_LINK:
 				}
 			}
 			else // Removing.
@@ -5213,6 +5343,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				//case GUI_CONTROL_LISTBOX:
 				//case GUI_CONTROL_LISTVIEW:
 				//case GUI_CONTROL_TREEVIEW:
+				//case GUI_CONTROL_LINK:
 				}
 			}
 
@@ -5265,6 +5396,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				//case GUI_CONTROL_LISTBOX:
 				//case GUI_CONTROL_LISTVIEW:
 				//case GUI_CONTROL_TREEVIEW:
+				//case GUI_CONTROL_LINK:
 				}
 			}
 			else // Removing.
@@ -5307,6 +5439,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				//case GUI_CONTROL_LISTVIEW:
 				//case GUI_CONTROL_TREEVIEW:
 				//case GUI_CONTROL_EDIT:
+				//case GUI_CONTROL_LINK:
 				}
 			}
 		} // else if
@@ -5386,7 +5519,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 						return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
 							: g_script.ScriptError(ERR_NO_LABEL, next_option - 1);
 				}
-				if (aControl.type == GUI_CONTROL_TEXT || aControl.type == GUI_CONTROL_PIC)
+				if (aControl.type == GUI_CONTROL_TEXT || aControl.type == GUI_CONTROL_PIC || aControl.type == GUI_CONTROL_LINK)
 					// Apply the SS_NOTIFY style *only* if the control actually has an associated action.
 					// This is because otherwise the control would steal all clicks for any other controls
 					// drawn on top of it (e.g. a picture control with some edit fields drawn on top of it).
@@ -5720,6 +5853,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		//case GUI_CONTROL_TREEVIEW:
 		//case GUI_CONTROL_EDIT:
 		//case GUI_CONTROL_TEXT:  Ensuring SS_BITMAP and such are absent seems too over-protective.
+		//case GUI_CONTROL_LINK:
 		//case GUI_CONTROL_DATETIME:
 		//case GUI_CONTROL_MONTHCAL:
 		//case GUI_CONTROL_HOTKEY:
@@ -7086,6 +7220,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 			// Otherwise: Don't overwrite the var with a new wrapper object, since that would waste
 			// resources and cause any connected (ComObjConnect) event sinks to be disconnected.
 		case GUI_CONTROL_TEXT:
+		case GUI_CONTROL_LINK:
 		case GUI_CONTROL_PIC:
 		case GUI_CONTROL_GROUPBOX:
 		case GUI_CONTROL_BUTTON:
@@ -8093,7 +8228,16 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				if (control.output_var && control.jump_to_label) // Set the variable's contents, for use when the corresponding TCN_SELCHANGE comes in to launch the label after this.
 					pgui->ControlGetContents(*control.output_var, control);
 			return 0; // 0 is appropriate for all TAB notifications.
-
+		case GUI_CONTROL_LINK:
+			if(nmhdr.code == NM_CLICK || nmhdr.code == NM_RETURN)
+			{
+				NMLINK &nmLink = *(PNMLINK)lParam;
+				LITEM item = nmLink.item;
+				//Link control tries to execute the link URL if href property is set. Otherwise, it will execute a g-label if it exists.
+				if (!*item.szUrl || !g_script.ActionExec((LPTSTR)(LPCTSTR)CStringTCharFromWCharIfNeeded(item.szUrl), NULL, NULL, false))
+					pgui->Event(control_index, nmhdr.code, GUI_EVENT_NORMAL, item.iLink + 1); // Link control uses 1-based index for g-labels
+			}
+			return 0;
 		case GUI_CONTROL_STATUSBAR:
 			if (!(control.jump_to_label || (control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)))// These is checked to avoid returning TRUE below, and also for performance.
 				break; // Let default proc handle it.
@@ -8212,6 +8356,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			// Types not included above because they support transparent background or because the attempt
 			// to make the background transparent has no effect:
 			//case GUI_CONTROL_TEXT:         Supported via WM_CTLCOLORSTATIC
+			//case GUI_CONTROL_LINK:         Supported via WM_CTLCOLORSTATIC
 			//case GUI_CONTROL_PIC:          Supported via WM_CTLCOLORSTATIC
 			//case GUI_CONTROL_GROUPBOX:     Supported via WM_CTLCOLORSTATIC
 			//case GUI_CONTROL_BUTTON:       Can't reach this point because WM_CTLCOLORBTN is not handled above.
@@ -8731,6 +8876,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 		//case GUI_CONTROL_TAB: // aNotifyCode == TCN_SELCHANGE should be the only possibility.
 		//case GUI_CONTROL_DATETIME:
 		//case GUI_CONTROL_MONTHCAL:
+		//case GUI_CONTROL_LINK:
 		//
 		// The following are not needed because execution never reaches this point.  This is because these types
 		// are forbidden from having a gLabel. Search on "case 'G'" for details.
@@ -9342,6 +9488,7 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 			switch(control.type)
 			{
 			case GUI_CONTROL_TEXT:
+			case GUI_CONTROL_LINK:
 			case GUI_CONTROL_PIC:
 			case GUI_CONTROL_GROUPBOX:
 			case GUI_CONTROL_PROGRESS:
@@ -9612,6 +9759,7 @@ void GuiType::ControlGetPosOfFocusedItem(GuiControlType &aControl, POINT &aPoint
 	// Notes about control types not handled above:
 	//case GUI_CONTROL_STATUSBAR: For this and many others below, caller should never call it for this type.
 	//case GUI_CONTROL_TEXT:
+	//case GUI_CONTROL_LINK:
 	//case GUI_CONTROL_PIC:
 	//case GUI_CONTROL_GROUPBOX:
 	//case GUI_CONTROL_BUTTON:
