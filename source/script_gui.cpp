@@ -2139,7 +2139,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	// Nothing extra for these currently:
 	//case GUI_CONTROL_RADIO: This one is handled separately above the switch().
 	//case GUI_CONTROL_TEXT:
-	//case GUI_CONTROL_LINK:
 	//case GUI_CONTROL_MONTHCAL: Can't be focused, so no tabstop.
 	//case GUI_CONTROL_PIC:
 	//case GUI_CONTROL_GROUPBOX:
@@ -2628,7 +2627,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		case GUI_CONTROL_LINK:
 		{
 			GUI_SET_HDC
-			if (aControlType == GUI_CONTROL_TEXT || aControlType == GUI_CONTROL_LINK)
+			if (aControlType == GUI_CONTROL_TEXT)
 			{
 				draw_format |= DT_EXPANDTABS; // Buttons can't expand tabs, so don't add this for them.
 				if (style & SS_NOPREFIX) // v1.0.44.10: This is necessary to auto-width the control properly if its contents include any ampersands.
@@ -2660,6 +2659,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			//Link controls don't strip the HTML tags out for size calculation, so it needs to be done manually here.
 			if (aControlType == GUI_CONTROL_LINK)
 			{
+				if (style & LWS_NOPREFIX) // This is necessary to auto-width the control properly if its contents include any ampersands.
+					draw_format |= DT_NOPREFIX;
+
 				TCHAR aChar = 0, tagChar = 0;
 				LPTSTR aTextCopy = new TCHAR[_tcslen(aText) + 1];
 				ZeroMemory(aTextCopy, sizeof(TCHAR) * (_tcslen(aText) +1));
@@ -2983,7 +2985,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		break;
 
 	case GUI_CONTROL_LINK:
-		// Seems best to omit SS_NOPREFIX by default so that ampersand can be used to create shortcut keys.
+		// Seems best to omit LWS_NOPREFIX by default so that ampersand can be used to create shortcut keys.
 		control.hwnd = CreateWindowEx(exstyle, _T("SysLink"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
 		break;
@@ -5519,7 +5521,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 						return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
 							: g_script.ScriptError(ERR_NO_LABEL, next_option - 1);
 				}
-				if (aControl.type == GUI_CONTROL_TEXT || aControl.type == GUI_CONTROL_PIC || aControl.type == GUI_CONTROL_LINK)
+				if (aControl.type == GUI_CONTROL_TEXT || aControl.type == GUI_CONTROL_PIC)
 					// Apply the SS_NOTIFY style *only* if the control actually has an associated action.
 					// This is because otherwise the control would steal all clicks for any other controls
 					// drawn on top of it (e.g. a picture control with some edit fields drawn on top of it).
@@ -9488,7 +9490,6 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 			switch(control.type)
 			{
 			case GUI_CONTROL_TEXT:
-			case GUI_CONTROL_LINK:
 			case GUI_CONTROL_PIC:
 			case GUI_CONTROL_GROUPBOX:
 			case GUI_CONTROL_PROGRESS:
@@ -9510,6 +9511,7 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 			//case GUI_CONTROL_HOTKEY:
 			//case GUI_CONTROL_SLIDER:
 			//case GUI_CONTROL_TAB:
+			//case GUI_CONTROL_LINK:
 				// Fix for v1.0.24: Don't check the return value of SetFocus() because sometimes it returns
 				// NULL even when the call will wind up succeeding.  For example, if the user clicks on
 				// the second tab in a tab control, SetFocus() will probably return NULL because there
