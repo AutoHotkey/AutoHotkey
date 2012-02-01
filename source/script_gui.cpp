@@ -2656,111 +2656,81 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 			int draw_height;
 
-			//Link controls don't strip the HTML tags out for size calculation, so it needs to be done manually here.
+			// Since a Link control's text contains markup which isn't actually rendered, we need
+			// to strip it out before calling DrawText or it will put out the size calculation:
 			if (aControlType == GUI_CONTROL_LINK)
 			{
-				if (style & LWS_NOPREFIX) // This is necessary to auto-width the control properly if its contents include any ampersands.
+				// Unless the control has the LWS_NOPREFIX style, the first ampersand causes the character
+				// following it to be rendered with an underline, and the ampersand itself is not rendered.
+				// Since DrawText has this same behaviour by default, we can simply set DT_NOPREFIX when
+				// appropriate and it should handle the ampersands correctly.
+				if (style & LWS_NOPREFIX)
 					draw_format |= DT_NOPREFIX;
 
-				TCHAR aChar = 0, tagChar = 0;
 				LPTSTR aTextCopy = new TCHAR[_tcslen(aText) + 1];
-				ZeroMemory(aTextCopy, sizeof(TCHAR) * (_tcslen(aText) +1));
-				int pos = 0; //position in the new string
-				bool foundAmp = style & SS_NOPREFIX; //remove first & if this style is not set
-				bool inLink = false; //true if the current character belongs to a link. Needed for treating closing tags.
-				for(int i = 0, aChar = aText[0]; aChar; aChar = aText[++i])
+
+				TCHAR *src, *dst;
+				for (src = aText, dst = aTextCopy; *src; ++src)
 				{
-					if(!foundAmp && aChar == '&')
-						foundAmp = true;
-					else if(!inLink && aChar == '<' && ctoupper(aText[i+1]) == 'A') //possible opening of tag
+					if (*src == '<' && ctoupper(src[1]) == 'A')
 					{
-						int tagstate = 0;
-						bool isTag = false;
-						for(int j = i + 2, tagChar = aText[j]; tagChar; tagChar = aText[++j])
+						TCHAR *linkText = NULL;
+						TCHAR *cp = omit_leading_whitespace(src + 2);
+
+						// It is important to note that while the SysLink control's syntax is similar to HTML,
+						// it is not HTML.  Some valid HTML won't work, and some invalid HTML will.  Testing
+						// indicates that whitespace is not required between "<A" and the attribute, so there
+						// is no check to see if the above actually omitted whitespace.
+						for (;;)
 						{
-							if(tagstate == 0) //0 = looking for spaces or end of empty tags
+							if (*cp == '>')
 							{
-								if(tagChar == ' ') //spaces between tag type and attribute are allowed
-									continue;
-								else if(tagChar == '>') //no attribute, valid link!
-								{
-									inLink = true;
-									i = j;
-									break;
-								}
-								else if(tagChar == '=' && aText[j+1] && aText[j+1] == '"') //end of empty tag and start of URL
-								{
-									j++;
-									tagstate = 3;
-									continue;
-								}
-								else if(tagChar != '"') //no unexpected character here: start of attribute
-									tagstate = 1;
-								else //unexpected character, treat as part of the text
-									break;
+								linkText = cp + 1;
+								break;
 							}
-							if(tagstate == 1) //1 = require character for attribute
+
+							// Testing indicates that attribute names can only be alphanumeric chars.  This
+							// method of testing for the attribute name does not treat <a=""> as an error,
+							// which is perfect since the control tolerates it (the attribute is ignored).
+							while (cisalnum(*cp)) 
+								cp++;
+							
+							// What follows next must be the attribute value.  Spaces are not tolerated.
+							if (*cp != '=' || '"' != cp[1])
+								break; // Not valid.
+								
+							// Testing indicates that the attribute value can contain virtually anything,
+							// including </a> but not quotation marks.
+							cp = _tcschr(cp + 2, '"');
+							if (!cp)
+								break; // Not valid.
+							
+							// Allow whitespace after the attribute (before '>' or the next attribute).
+							cp = omit_leading_whitespace(cp + 1);
+						} // for (attribute-parsing loop)
+
+						if (linkText)
+						{
+							// Testing indicates that spaces in the end tag are not tolerated:
+							if (LPTSTR endTag = tcscasestr(linkText, _T("</a>")))
 							{
-								if(tagChar == ' ' || tagChar == '=' || tagChar == '"' || tagChar == '<') //invalid characters in attribute
-									break;
-								else //atleast one character found for attribute
-								{
-									tagstate = 2;
-									continue;
-								}
+								// Copy the link text and skip over the end tag.
+								for (cp = linkText; cp < endTag; *dst++ = *cp++);
+								src = endTag + 3; // The outer loop's increment makes it + 4.
+								continue;
 							}
-							else if(tagstate == 2) //2 = further characters in attribute
-							{
-								if(tagChar == ' ' || tagChar == '"') //invalid characters in attribute
-									break;
-								else if(tagChar == '=' && aText[j+1] && aText[j+1] == '"') //end of tag and start of URL
-								{
-									j++;
-									tagstate = 3;
-									continue;
-								}
-								else //more attribute characters
-									continue;
-							}
-							else if(tagstate == 3) //3 = in URL
-							{
-								if(tagChar == '"') //end of URL
-									tagstate = 4;
-								else if(tagChar == '>') //invalid URL, treat as text
-									break;
-								else //part of the URL
-									continue;
-							}
-							else if(tagstate == 4) //expecting spaces or closing tag
-							{
-								if(tagChar == ' ') //spaces after link are allowed
-									continue;
-								else if(tagChar == '>') //end of tag, valid!
-								{
-									inLink = true;
-									i = j;
-									break;
-								}
-								else //unexpected characters, treat as text
-									break;
-							}
+							// Otherwise, there's no end tag so the begin tag is treated as text.
 						}
-						if(inLink)
-							continue;
-					}
-					
-					if(inLink && aText[i+1] == '<' && aText[i+2] == '/' && ctoupper(aText[i+3]) == 'A' && aText[i+4] == '>') //closing tag of link needs to be skipped
-					{
-						i += 3;
-						inLink = false;
-						continue;
-					}
-					else //normal text, unrecognized tags, nested <A> tags and redundant closing </a> tags are used for calculation
-						aTextCopy[pos++] = aChar;
-				}
+						// Otherwise, it wasn't a valid tag, so it is treated as text.
+					} // if (found a tag)
+					*dst++ = *src;
+				} // for (searching for tag, copying text)
+				
+				*dst = '\0';
 
 				// If no text, "H" is used in case the function requires a non-empty string to give consistent results:
 				draw_height = DrawText(hdc, *aTextCopy ? aTextCopy : _T("H"), -1, &draw_rect, draw_format);
+				
 				delete[] aTextCopy;
 			}
 			else
