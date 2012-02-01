@@ -15232,6 +15232,9 @@ LPTSTR Line::LogToText(LPTSTR aBuf, int aBufSize) // aBufSize should be an int t
 		_T(" the right (if not 0).  The bottommost line's elapsed time is the number of seconds since it executed.\r\n\r\n"));
 
 	int i, lines_to_show, line_index, line_index2, space_remaining; // space_remaining must be an int to detect negatives.
+#ifndef AUTOHOTKEYSC
+	int last_file_index = -1;
+#endif
 	DWORD elapsed;
 	bool this_item_is_special, next_item_is_special;
 
@@ -15281,6 +15284,14 @@ LPTSTR Line::LogToText(LPTSTR aBuf, int aBufSize) // aBufSize should be an int t
 			}
 			else // This is the last line (whether special or not), so compare it's time against the current time instead.
 				elapsed = GetTickCount() - sLogTick[line_index];
+#ifndef AUTOHOTKEYSC
+			// If the this line and the previous line are in different files, display the filename:
+			if (last_file_index != sLog[line_index]->mFileIndex)
+			{
+				last_file_index = sLog[line_index]->mFileIndex;
+				aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("---- %s\r\n"), sSourceFile[last_file_index]);
+			}
+#endif
 			space_remaining = BUF_SPACE_REMAINING;  // Resolve macro only once for performance.
 			// Truncate really huge lines so that the Edit control's size is less likely to be exhausted.
 			// In v1.0.30.02, this is even more likely due to having increased the line-buf's capacity from
