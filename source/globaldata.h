@@ -95,6 +95,7 @@ extern int g_MaxThreadsTotal;
 extern int g_MaxHotkeysPerInterval;
 extern int g_HotkeyThrottleInterval;
 extern bool g_MaxThreadsBuffer;
+extern SendLevelType g_InputLevel;
 extern HotCriterionType g_HotCriterion;
 extern LPTSTR g_HotWinTitle;
 extern LPTSTR g_HotWinText;

@@ -107,6 +107,7 @@ int g_MaxThreadsTotal = MAX_THREADS_DEFAULT;
 int g_MaxHotkeysPerInterval = 70; // Increased to 70 because 60 was still causing the warning dialog for repeating keys sometimes.  Increased from 50 to 60 for v1.0.31.02 since 50 would be triggered by keyboard auto-repeat when it is set to its fastest.
 int g_HotkeyThrottleInterval = 2000; // Milliseconds.
 bool g_MaxThreadsBuffer = false;  // This feature usually does more harm than good, so it defaults to OFF.
+SendLevelType g_InputLevel = 0;
 HotCriterionType g_HotCriterion = HOT_NO_CRITERION;
 LPTSTR g_HotWinTitle = _T(""); // In spite of the above being the primary indicator,
 LPTSTR g_HotWinText = _T("");  // these are initialized for maintainability.
@@ -330,6 +331,7 @@ Action g_act[] =
 	, {_T("ControlGet"), 2, 8, true, NULL}   // Output-var, Command, Value, Control, std. 4 window params
 
 	, {_T("SendMode"), 1, 1, false, NULL}
+	, {_T("SendLevel"), 1, 1, false, {1, 0}}
 	, {_T("CoordMode"), 1, 2, false, NULL} // Attribute, screen|relative
 	, {_T("SetDefaultMouseSpeed"), 1, 1, false, {1, 0}} // speed (numeric)
 	, {_T("Click"), 0, 1, false, NULL} // Flex-list of options.

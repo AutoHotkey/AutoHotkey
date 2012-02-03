@@ -147,7 +147,7 @@ inline bool IsIgnored(ULONG_PTR aExtraInfo)
 // such events as true physical events might cause infinite loops or other side-effects in
 // the instance that generated the event.  More review of this is needed if KEY_PHYS_IGNORE
 // events ever need to be treated as true physical events by the instances of the hook that
-// didn't originate them:
+// didn't originate them. UPDATE: The foregoing can now be accomplished using SendLevel.
 {
 	return aExtraInfo == KEY_IGNORE || aExtraInfo == KEY_PHYS_IGNORE || aExtraInfo == KEY_IGNORE_ALL_EXCEPT_MODIFIER;
 }
@@ -1384,7 +1384,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// v1.0.41:
 			if (hotkey_id_temp < Hotkey::sHotkeyCount) // Don't call the below for Alt-tab hotkeys and similar.
 				if (   !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags
-					, aKeyUp, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type))   )
+					, aKeyUp, aExtraInfo, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type))   )
 					return AllowKeyToGoToSystem; // This should handle pForceToggle for us, suppressing if necessary.
 				else // The naked hotkey ID may have changed, so update it (flags currently don't matter in this case).
 					hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK; // Update in case CriterionFiringIsCertain() changed it.
@@ -1644,6 +1644,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// releases the key, but there doesn't seem any way around that.
 			Hotkey::CriterionFiringIsCertain(this_key.hotkey_to_fire_upon_release // firing_is_certain==false under these conditions, so no need to check it.
 				, true  // Always a key-up since it's will fire upon release.
+				, 0 // Not applicable here, only affects aSingleChar and return value
 				, this_key.no_suppress // Unused and won't be altered because above is "true".
 				, fire_with_no_suppress, NULL); // fire_with_no_suppress is the value we really need to get back from it.
 			return fire_with_no_suppress ? AllowKeyToGoToSystem : SuppressThisKey;
@@ -1670,7 +1671,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK;
 	if (hotkey_id_temp < Hotkey::sHotkeyCount // i.e. don't call the below for Alt-tab hotkeys and similar.
 		&& !firing_is_certain  // i.e. CriterionFiringIsCertain() wasn't already called earlier.
-		&& !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type)))
+		&& !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type)))
 		return AllowKeyToGoToSystem;
 	hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK; // Update in case CriterionFiringIsCertain() changed the naked/raw ID.
 
@@ -2290,7 +2291,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 		// This is done unconditionally so that even if a qualified Input is not in progress, the
 		// variable will be correctly reset anyway:
 		if ((Hotstring::mAtLeastOneEnabled && !is_ignored) || (g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && is_ignored)))
-			if (!CollectInput(event, aVK, aSC, aKeyUp, is_ignored, hs_wparam_to_post, hs_lparam_to_post)) // Key should be invisible (suppressed).
+			if (!CollectInput(event, aVK, aSC, aKeyUp, is_ignored, pKeyHistoryCurr, hs_wparam_to_post, hs_lparam_to_post)) // Key should be invisible (suppressed).
 				return SuppressThisKeyFunc(aHook, lParam, aVK, aSC, aKeyUp, pKeyHistoryCurr, aHotkeyIDToPost, hs_wparam_to_post, hs_lparam_to_post);
 
 		// Do these here since the above "return SuppressThisKey" will have already done it in that case.
@@ -2450,7 +2451,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 
 
 bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aKeyUp, bool aIsIgnored
-	, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost)
+	, KeyHistoryItem *pKeyHistoryCurr, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost)
 // Caller is responsible for having initialized aHotstringWparamToPost to HOTSTRING_INDEX_INVALID.
 // Returns true if the caller should treat the key as visible (non-suppressed).
 // Always use the parameter vk rather than event.vkCode because the caller or caller's caller
@@ -2809,7 +2810,15 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 					// more flexible not to do it; instead, to let the script determine (even by resorting to
 					// #IfWinNOTActive) what precedence hotstrings have with respect to each other.
 
+				//////////////////////////////////////////////////////////////
 				// MATCHING HOTSTRING WAS FOUND (since above didn't continue).
+				//////////////////////////////////////////////////////////////
+
+				// Now that we have a match, see if its InputLevel is allowed. If not,
+				// consider the key ignored (rather than continuing to search for more matches).
+				if (!HotInputLevelAllowsFiring(hs.mInputLevel, aEvent.dwExtraInfo, &pKeyHistoryCurr->event_type))
+					break;
+
 				// Since default KeyDelay is 0, and since that is expected to be typical, it seems
 				// best to unconditionally post a message rather than trying to handle the backspacing
 				// and replacing here.  This is because a KeyDelay of 0 might be fairly slow at

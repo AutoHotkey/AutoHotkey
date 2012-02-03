@@ -251,7 +251,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 	, bool aKeyUp, KeyHistoryItem *pKeyHistoryCurr, WPARAM aHotkeyIDToPost, bool aDisguiseWinAlt);
 
 bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aKeyUp, bool aIsIgnored
-	, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost);
+	, KeyHistoryItem *pKeyHistoryCurr, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost);
 void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aKeyUp, bool aIsSuppressed);
 bool KeybdEventIsPhysical(DWORD aEventFlags, const vk_type aVK, bool aKeyUp);
 bool DualStateNumpadKeyIsDown();

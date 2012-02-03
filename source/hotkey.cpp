@@ -586,9 +586,34 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
 	return vp_to_fire; // Either NULL or the variant found by the loop.
 }
 
+bool HotInputLevelAllowsFiring(SendLevelType inputLevel, ULONG_PTR aEventExtraInfo, LPTSTR aKeyHistoryChar)
+{
+	if (aEventExtraInfo >= KEY_IGNORE_MIN && aEventExtraInfo <= KEY_IGNORE_MAX)
+	{
+		// We can safely cast here since aExtraInfo is constrained above
+		int eventInputLevel = (int)(KEY_IGNORE_LEVEL(0) - aEventExtraInfo);
+		if (eventInputLevel <= inputLevel) {
+			if (aKeyHistoryChar)
+				*aKeyHistoryChar = 'i'; // Mark as ignored in KeyHistory
+			return false;
+		}
+	}
+	return true;
+}
 
 
-HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, UCHAR &aNoSuppress
+HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, ULONG_PTR aExtraInfo
+	, UCHAR &aNoSuppress, bool &aFireWithNoSuppress, LPTSTR aSingleChar)
+{
+	HotkeyVariant *hkv = CriterionFiringIsCertainHelper(aHotkeyIDwithFlags, aKeyUp, aNoSuppress, aFireWithNoSuppress, aSingleChar);
+	if (!hkv)
+		return NULL;
+
+	return HotInputLevelAllowsFiring(hkv->mInputLevel, aExtraInfo, aSingleChar) ? hkv : NULL;
+}
+
+
+HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, UCHAR &aNoSuppress
 	, bool &aFireWithNoSuppress, LPTSTR aSingleChar)
 // v1.0.44: Caller has ensured that aFireWithNoSuppress is true if has already been decided and false if undecided.
 // Upon return, caller can assume that the value in it is now decided rather than undecided.
@@ -1551,11 +1576,17 @@ HotkeyVariant *Hotkey::AddVariant(Label *aJumpToLabel, bool aSuffixHasTilde)
 	v.mJumpToLabel = aJumpToLabel ? aJumpToLabel : g_script.mPlaceholderLabel;
 	v.mMaxThreads = g_MaxThreadsPerHotkey;    // The values of these can vary during load-time.
 	v.mMaxThreadsBuffer = g_MaxThreadsBuffer; //
+	v.mInputLevel = g_InputLevel;
 	v.mHotCriterion = g_HotCriterion; // If this hotkey is an alt-tab one (mHookAction), this is stored but ignored until/unless the Hotkey command converts it into a non-alt-tab hotkey.
 	v.mHotWinTitle = g_HotWinTitle;
 	v.mHotWinText = g_HotWinText;  // The value of this and other globals used above can vary during load-time.
 	v.mHotExprIndex = g_HotExprIndex;	// L4: Added mHotExprIndex for #if (expression).
 	v.mEnabled = true;
+	if (v.mInputLevel > 0)
+	{
+		// A non-zero InputLevel only works when using the hook
+		mKeybdHookMandatory = true;
+	}
 	if (aSuffixHasTilde)
 	{
 		v.mNoSuppress = true; // Override the false value set by ZeroMemory above.
@@ -2360,10 +2391,16 @@ void Hotstring::DoReplace(LPARAM alParam)
 	int old_press_duration = g.PressDuration;
 	int old_delay_play = g.KeyDelayPlay;
 	int old_press_duration_play = g.PressDurationPlay;
+	SendLevelType old_send_level = g.SendLevel;
+
 	g.KeyDelay = mKeyDelay; // This is relatively safe since SendKeys() normally can't be interrupted by a new thread.
 	g.PressDuration = -1;   // Always -1, since Send command can be used in body of hotstring to have a custom press duration.
 	g.KeyDelayPlay = -1;
 	g.PressDurationPlay = mKeyDelay; // Seems likely to be more useful (such as in games) to apply mKeyDelay to press duration rather than above.
+	// Setting the SendLevel to 0 rather than this->mInputLevel since auto-replace hotstrings are used for text replacement rather than
+	// key remapping, which means the user almost always won't want the generated input to trigger other hotkeys or hotstrings.
+	// Action hotstrings (not using auto-replace) do get their thread's SendLevel initialized to the hotstring's InputLevel.
+	g.SendLevel = 0;
 
 	// v1.0.43: The following section gives time for the hook to pass the final keystroke of the hotstring to the
 	// system.  This is necessary only for modes other than the original/SendEvent mode because that one takes
@@ -2377,10 +2414,12 @@ void Hotstring::DoReplace(LPARAM alParam)
 
 	SendKeys(SendBuf, mSendRaw, mSendMode); // Send the backspaces and/or replacement.
 
-	g.KeyDelay = old_delay;                        // Restore original values.
-	g.PressDuration = old_press_duration;          //
-	g.KeyDelayPlay = old_delay_play;               //
-	g.PressDurationPlay = old_press_duration_play; //
+	// Restore original values.
+	g.KeyDelay = old_delay;
+	g.PressDuration = old_press_duration;
+	g.KeyDelayPlay = old_delay_play;
+	g.PressDurationPlay = old_press_duration_play;
+	g.SendLevel = old_send_level;
 }
 
 
@@ -2444,6 +2483,7 @@ Hotstring::Hotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LP
 	, mOmitEndChar(g_HSOmitEndChar), mSendRaw(aHasContinuationSection ? true : g_HSSendRaw)
 	, mEndCharRequired(g_HSEndCharRequired), mDetectWhenInsideWord(g_HSDetectWhenInsideWord), mDoReset(g_HSDoReset)
 	, mHotCriterion(g_HotCriterion)
+	, mInputLevel(g_InputLevel)
 	, mHotWinTitle(g_HotWinTitle), mHotWinText(g_HotWinText)
 	, mConstructedOK(false)
 	, mHotExprIndex(g_HotExprIndex)	// L4: Added mHotExprIndex for #if (expression).

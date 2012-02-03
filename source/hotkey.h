@@ -61,6 +61,7 @@ typedef UCHAR HotCriterionType;
 // L4: Added HOT_IF_EXPR and aHotExprIndex for #if (expression).
 enum HotCriterionEnum {HOT_NO_CRITERION, HOT_IF_ACTIVE, HOT_IF_NOT_ACTIVE, HOT_IF_EXIST, HOT_IF_NOT_EXIST, HOT_IF_EXPR}; // HOT_NO_CRITERION must be zero.
 HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, LPTSTR aWinText, int aHotExprIndex, LPTSTR aHotkeyName); // Used by hotkeys and hotstrings.
+bool HotInputLevelAllowsFiring(SendLevelType inputLevel, ULONG_PTR aEventExtraInfo, LPTSTR aKeyHistoryChar);
 ResultType SetGlobalHotTitleText(LPTSTR aWinTitle, LPTSTR aWinText);
 
 
@@ -86,6 +87,7 @@ struct HotkeyVariant
 	// 4-byte alignment:
 	HotCriterionType mHotCriterion;
 	UCHAR mExistingThreads, mMaxThreads;
+	SendLevelType mInputLevel;
 	bool mNoSuppress; // v1.0.44: This became a per-variant attribute because it's more useful/flexible that way.
 	bool mMaxThreadsBuffer;
 	bool mRunAgainAfterFinished;
@@ -213,8 +215,8 @@ public:
 	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC);
 	HotkeyVariant *CriterionAllowsFiring(HWND *aFoundHWND = NULL);
 	static HotkeyVariant *CriterionAllowsFiring(HotkeyIDType aHotkeyID, HWND &aFoundHWND);
-	static HotkeyVariant *CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, UCHAR &aNoSuppress
-		, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
+	static HotkeyVariant *CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, ULONG_PTR aExtraInfo
+		, UCHAR &aNoSuppress, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
 	static void TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown);
 	void PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant);
 	static void ManifestAllHotkeysHotstringsHooks();
@@ -314,6 +316,10 @@ public:
 
 	static LPTSTR ListHotkeys(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline);
+
+private:
+	static HotkeyVariant *CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, UCHAR &aNoSuppress
+		, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
 };
 
 
@@ -343,6 +349,7 @@ public:
 	// Keep members that are smaller than 32-bit adjacent with each other to conserve memory (due to 4-byte alignment).
 	SendModes mSendMode;
 	HotCriterionType mHotCriterion;
+	SendLevelType mInputLevel;
 	UCHAR mStringLength;
 	bool mSuspended;
 	UCHAR mExistingThreads, mMaxThreads;

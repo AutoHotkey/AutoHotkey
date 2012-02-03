@@ -22,7 +22,6 @@ GNU General Public License for more details.
 #include "window.h" // for IsWindowHung()
 
 
-
 // Added for v1.0.25.  Search on sPrevEventType for more comments:
 static KeyEventTypes sPrevEventType;
 static vk_type sPrevVK = 0;
@@ -109,8 +108,8 @@ void SendUnicodeChar(wchar_t aChar, int aModifiers = -1)
 	{
 		// Calling SendInput() now would cause characters to appear out of sequence.
 		// Instead, put them into the array and allow them to be sent in sequence.
-		PutKeybdEventIntoArray(0, 0, aChar, KEYEVENTF_UNICODE, KEY_IGNORE);
-		PutKeybdEventIntoArray(0, 0, aChar, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, KEY_IGNORE);
+		PutKeybdEventIntoArray(0, 0, aChar, KEYEVENTF_UNICODE, KEY_IGNORE_LEVEL(g->SendLevel));
+		PutKeybdEventIntoArray(0, 0, aChar, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, KEY_IGNORE_LEVEL(g->SendLevel));
 		return;
 	}
 	//else caller has ensured sSendMode is SM_EVENT. In that mode, events are sent one at a time,
@@ -128,14 +127,14 @@ void SendUnicodeChar(wchar_t aChar, int aModifiers = -1)
 	u_input[0].ki.dwFlags = KEYEVENTF_UNICODE;
 	u_input[0].ki.time = 0;
 	// L25: Set dwExtraInfo to ensure AutoHotkey ignores the event; otherwise it may trigger a SCxxx hotkey (where xxx is u_code).
-	u_input[0].ki.dwExtraInfo = KEY_IGNORE;
+	u_input[0].ki.dwExtraInfo = KEY_IGNORE_LEVEL(g->SendLevel);
 	
 	u_input[1].type = INPUT_KEYBOARD;
 	u_input[1].ki.wVk = 0;
 	u_input[1].ki.wScan = aChar;
 	u_input[1].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
 	u_input[1].ki.time = 0;
-	u_input[1].ki.dwExtraInfo = KEY_IGNORE;
+	u_input[1].ki.dwExtraInfo = KEY_IGNORE_LEVEL(g->SendLevel);
 
 	SendInput(2, u_input, sizeof(INPUT));
 }
@@ -238,7 +237,7 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 		// able to detect when the user physically releases the key.
 		if (   (g_script.mThisHotkeyModifiersLR & (MOD_LWIN|MOD_RWIN)) // Limit the scope to only those hotkeys that have a Win modifier, since anything outside that scope hasn't been fully analyzed.
 			&& (GetTickCount() - g_script.mThisHotkeyStartTime) < (DWORD)50 // Ensure g_script.mThisHotkeyModifiersLR is up-to-date enough to be reliable.
-			&& aSendModeOrig == SM_EVENT // SM_INPUT's workaround for Vista is handled by another section. v1.0.48.04: Fixed sSendMode to be aSendModeOrig.
+			&& aSendModeOrig != SM_PLAY // SM_PLAY is reported to be incapable of locking the computer.
 			&& !sInBlindMode // The philosophy of blind-mode is that the script should have full control, so don't do any waiting during blind mode.
 			&& g_os.IsWinVistaOrLater() // Only Vista (and presumably later OSes) check the physical state of the Windows key for Win+L.
 			&& GetCurrentThreadId() == g_MainThreadID // Exclude the hook thread because it isn't allowed to call anything like MsgSleep, nor are any calls from the hook thread within the understood/analyzed scope of this workaround.
@@ -969,29 +968,6 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 	modLR_type modifiersLR_specified = aModifiersLR | aModifiersLRPersistent;
 	bool vk_is_mouse = IsMouseVK(aVK); // Caller has ensured that VK is non-zero when it wants a mouse click.
 
-	// v1.0.48.01: On Vista or later, work around the fact that an "L" keystroke (physical or artificial) will
-	// lock the computer whenever either Windows key is physically pressed down (artificially releasing the
-	// Windows key isn't enough to solve it because Win+L is apparently detected aggressively like Ctrl-Alt-Delete).
-	// Must do the following check BEFORE calling anything like SetModifierLRState() because that is likely to defeat
-	// the ability to detect when the user has physically released LWin/RWin.
-	if (   aVK == 'L' // The virtual key of a letter A-Z is the same as the Ascii code of the uppercase letter.
-		&& sSendMode == SM_INPUT // SM_EVENT is handled in another section. SM_PLAY is reported to be incapable of locking the computer.
-		&& !sInBlindMode // The philosophy of blind-mode is that the script should have full control, so don't do any waiting during blind mode.
-		&& !aTargetWindow // i.e. ControlSend (which is incapable of locking the computer).
-		&& g_os.IsWinVistaOrLater() // Only Vista (and presumably later OSes) check the physical state of the Windows key for Win+L.
-		&& !(modifiersLR_specified & (MOD_LWIN|MOD_RWIN)) // Exclude any #L keystrokes because they are usually intended by the user to lock the computer.
-		&& (g_script.mThisHotkeyModifiersLR & (MOD_LWIN|MOD_RWIN)) // Limit the scope to only those hotkeys that have a Win modifier, since anything outside that scope hasn't been fully analyzed.
-		&& (GetTickCount() - g_script.mThisHotkeyStartTime) < (DWORD)50 // Ensure g_script.mThisHotkeyModifiersLR is up-to-date enough to be reliable.
-		&& aRepeatCount > 0
-		//&& aEventType != KEYUP // An up-event without a down-event is unlikely to need this workaround, but due to rarity (and in case it is necessary for up-events) don't check.
-		&& GetCurrentThreadId() == g_MainThreadID // Exclude the hook thread because it isn't allowed to call anything like MsgSleep, nor are any calls from the hook thread within the understood/analyzed scope of this workaround.
-		)
-		while (IsKeyDownAsync(VK_LWIN) || IsKeyDownAsync(VK_RWIN)) // Even if the keyboard hook is installed, it seems best to use IsKeyDownAsync() vs. g_PhysicalKeyState[] because it's more likely to produce consistent behavior.
-			SLEEP_WITHOUT_INTERRUPTION(INTERVAL_UNSPECIFIED); // Seems best not to allow other threads to launch, for maintainability and because SendKeys() isn't designed to be interruptible. Also, INTERVAL_UNSPECIFIED performs better.
-			// Sleeping indefinitely seems like the lesser evil compared to having it timeout after a few seconds
-			// because having the PC become accidentally locked might have side effects such as the script continuing
-			// to operate while an incorrect/unintended window is active.
-
 	LONG_OPERATION_INIT
 	for (int i = 0; i < aRepeatCount; ++i)
 	{
@@ -1027,7 +1003,7 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 			// both hooks so that the Start Menu doesn't appear when the Win key is released, so we're
 			// not responsible for that type of disguising here.
 			SetModifierLRState(modifiersLR_specified, sSendMode ? sEventModifiersLR : GetModifierLRState()
-				, aTargetWindow, false, true, KEY_IGNORE); // See keyboard_mouse.h for explanation of KEY_IGNORE.
+				, aTargetWindow, false, true, KEY_IGNORE_LEVEL(g->SendLevel)); // See keyboard_mouse.h for explanation of KEY_IGNORE.
 			// SetModifierLRState() also does DoKeyDelay(g->PressDuration).
 		}
 
@@ -1040,7 +1016,7 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 		else
 			// Sending mouse clicks via ControlSend is not supported, so in that case fall back to the
 			// old method of sending the VK directly (which probably has no effect 99% of the time):
-			KeyEvent(aEventType, aVK, aSC, aTargetWindow, true);
+			KeyEvent(aEventType, aVK, aSC, aTargetWindow, true, KEY_IGNORE_LEVEL(g->SendLevel));
 	} // for() [aRepeatCount]
 
 	// The final iteration by the above loop does a key or mouse delay (KeyEvent and MouseClick do it internally)
@@ -2534,7 +2510,7 @@ void MouseEvent(DWORD aEventFlags, DWORD aData, DWORD aX, DWORD aY)
 		mouse_event(aEventFlags
 			, aX == COORD_UNSPECIFIED ? 0 : aX // v1.0.43.01: Must be zero if no change in position is desired
 			, aY == COORD_UNSPECIFIED ? 0 : aY // (fixes compatibility with certain apps/games).
-			, aData, KEY_IGNORE);
+			, aData, KEY_IGNORE_LEVEL(g->SendLevel));
 }
 
 
@@ -2647,7 +2623,7 @@ void PutMouseEventIntoArray(DWORD aEventFlags, DWORD aData, DWORD aX, DWORD aY)
 		this_event.mi.dy = (aY == COORD_UNSPECIFIED) ? 0 : aY; // desired (fixes compatibility with certain apps/games).
 		this_event.mi.dwFlags = aEventFlags;
 		this_event.mi.mouseData = aData;
-		this_event.mi.dwExtraInfo = KEY_IGNORE; // Although our hook won't be installed (or won't detect, in the case of playback), that of other scripts might be, so set this for them.
+		this_event.mi.dwExtraInfo = KEY_IGNORE_LEVEL(g->SendLevel); // Although our hook won't be installed (or won't detect, in the case of playback), that of other scripts might be, so set this for them.
 		this_event.mi.time = 0; // Let the system provide its own timestamp, which might be more accurate for individual events if this will be a very long SendInput.
 		sHooksToRemoveDuringSendInput |= HOOK_MOUSE; // Presence of mouse hook defeats uninterruptibility of mouse clicks/moves.
 	}
@@ -3218,7 +3194,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 			// to trigger the language switch.
 			if (ctrl_nor_shift_nor_alt_down && aDisguiseUpWinAlt // Nor will they be pushed down later below, otherwise defer_win_release would have been true and we couldn't get to this point.
 				&& sSendMode != SM_PLAY) // SendPlay can't display Start Menu, so disguise not needed (also, disguise might mess up some games).
-				KeyEvent(KEYDOWNANDUP, VK_CONTROL, 0, NULL, false, aExtraInfo); // Disguise key release to suppress Start Menu.
+				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Disguise key release to suppress Start Menu.
 				// The above event is safe because if we're here, it means VK_CONTROL will not be
 				// pressed down further below.  In other words, we're not defeating the job
 				// of this function by sending these disguise keystrokes.
@@ -3229,10 +3205,10 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 	else if (!(aModifiersLRnow & MOD_LWIN) && (aModifiersLRnew & MOD_LWIN)) // Press down LWin.
 	{
 		if (disguise_win_down)
-			KeyEvent(KEYDOWN, VK_CONTROL, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
+			KeyEvent(KEYDOWN, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
 		KeyEvent(KEYDOWN, VK_LWIN, 0, NULL, false, aExtraInfo);
 		if (disguise_win_down)
-			KeyEvent(KEYUP, VK_CONTROL, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
+			KeyEvent(KEYUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
 	}
 
 	if (release_rwin)
@@ -3240,7 +3216,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 		if (!defer_win_release)
 		{
 			if (ctrl_nor_shift_nor_alt_down && MOD_RWIN && sSendMode != SM_PLAY)
-				KeyEvent(KEYDOWNANDUP, VK_CONTROL, 0, NULL, false, aExtraInfo); // Disguise key release to suppress Start Menu.
+				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Disguise key release to suppress Start Menu.
 			KeyEvent(KEYUP, VK_RWIN, 0, NULL, false, aExtraInfo);
 		}
 		// else release it only after the normal operation of the function pushes down the disguise keys.
@@ -3248,10 +3224,10 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 	else if (!(aModifiersLRnow & MOD_RWIN) && (aModifiersLRnew & MOD_RWIN)) // Press down RWin.
 	{
 		if (disguise_win_down)
-			KeyEvent(KEYDOWN, VK_CONTROL, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
+			KeyEvent(KEYDOWN, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
 		KeyEvent(KEYDOWN, VK_RWIN, 0, NULL, false, aExtraInfo);
 		if (disguise_win_down)
-			KeyEvent(KEYUP, VK_CONTROL, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
+			KeyEvent(KEYUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
 	}
 
 	// ** SHIFT (PART 1 OF 2)
@@ -3269,17 +3245,17 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 		if (!defer_alt_release)
 		{
 			if (ctrl_not_down && aDisguiseUpWinAlt)
-				KeyEvent(KEYDOWNANDUP, VK_CONTROL, 0, NULL, false, aExtraInfo); // Disguise key release to suppress menu activation.
+				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Disguise key release to suppress menu activation.
 			KeyEvent(KEYUP, VK_LMENU, 0, NULL, false, aExtraInfo);
 		}
 	}
 	else if (!(aModifiersLRnow & MOD_LALT) && (aModifiersLRnew & MOD_LALT))
 	{
 		if (disguise_alt_down)
-			KeyEvent(KEYDOWN, VK_CONTROL, 0, NULL, false, aExtraInfo); // Ensures that menu bar is not activated.
+			KeyEvent(KEYDOWN, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that menu bar is not activated.
 		KeyEvent(KEYDOWN, VK_LMENU, 0, NULL, false, aExtraInfo);
 		if (disguise_alt_down)
-			KeyEvent(KEYUP, VK_CONTROL, 0, NULL, false, aExtraInfo);
+			KeyEvent(KEYUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo);
 	}
 
 	if (release_ralt)
@@ -3300,7 +3276,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 			}
 			else // No AltGr, so check if disguise is necessary (AltGr itself never needs disguise).
 				if (ctrl_not_down && aDisguiseUpWinAlt)
-					KeyEvent(KEYDOWNANDUP, VK_CONTROL, 0, NULL, false, aExtraInfo); // Disguise key release to suppress menu activation.
+					KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Disguise key release to suppress menu activation.
 			KeyEvent(KEYUP, VK_RMENU, 0, NULL, false, aExtraInfo);
 		}
 	}
@@ -3311,9 +3287,9 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 		// disguise_alt_key also applies to the left alt key.
 		if (disguise_alt_down && sTargetLayoutHasAltGr != CONDITION_TRUE)
 		{
-			KeyEvent(KEYDOWN, VK_CONTROL, 0, NULL, false, aExtraInfo); // Ensures that menu bar is not activated.
+			KeyEvent(KEYDOWN, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that menu bar is not activated.
 			KeyEvent(KEYDOWN, VK_RMENU, 0, NULL, false, aExtraInfo);
-			KeyEvent(KEYUP, VK_CONTROL, 0, NULL, false, aExtraInfo);
+			KeyEvent(KEYUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo);
 		}
 		else // No disguise needed.
 		{

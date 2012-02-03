@@ -13012,9 +13012,7 @@ void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 // dynamic function-call fails when too few parameters are passed (but not too many), it seems best to
 // indicate to the caller not only that the function exists, but also how many parameters are required.
 {
-	Func *func;
-	if (  !(func = dynamic_cast<Func *>(TokenToObject(*aParam[0])))  )
-		func = g_script.FindFunc(TokenToString(*aParam[0], aResultToken.buf));
+	Func *func = TokenToFunc(*aParam[0]);
 	aResultToken.value_int64 = func ? (__int64)func->mMinParams+1 : 0;
 }
 
@@ -13919,11 +13917,8 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 	aResultToken.marker = _T("");
 
 	// Loadtime validation has ensured that at least 1 parameter is present.
-	TCHAR func_buf[MAX_NUMBER_SIZE], *func_name;
 	Func *func;
-	if (   !*(func_name = TokenToString(*aParam[0], func_buf))  // Blank function name or...
-		|| !(func = g_script.FindFunc(func_name))  // ...the function doesn't exist or...
-		|| func->mIsBuiltIn   )  // ...the function is built-in.
+	if (  !(func = TokenToFunc(*aParam[0])) || func->mIsBuiltIn  )  // Not a valid user-defined function.
 		return; // Indicate failure by yielding the default result set earlier.
 
 	LPTSTR options = (aParamCount < 2) ? _T("") : TokenToString(*aParam[1]);
@@ -15922,6 +15917,17 @@ IObject *TokenToObject(ExprTokenType &aToken)
 	}
 
 	return NULL;
+}
+
+
+
+Func *TokenToFunc(ExprTokenType &aToken)
+{
+	TCHAR buf[MAX_NUMBER_SIZE];
+	Func *func;
+	if (  !(func = dynamic_cast<Func *>(TokenToObject(aToken)))  )
+		func = g_script.FindFunc(TokenToString(aToken, buf));
+	return func;
 }
 
 

@@ -3191,6 +3191,22 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		else
 			return ScriptError(parameter ? ERR_PARAM1_INVALID : ERR_PARAM1_REQUIRED, aBuf);
 	}
+	
+	if (IS_DIRECTIVE_MATCH(_T("#InputLevel")))
+	{
+		// All hotkeys declared after this directive are assigned the specified InputLevel.
+		// Input generated at a given SendLevel can only trigger hotkeys that belong to the
+		// same or lower InputLevel. Hotkeys at the lowest level (0) cannot be triggered by
+		// any generated input (the same behavior as AHK versions before this feature).
+		// The default level is 0.
+
+		int group = parameter ? ATOI(parameter) : 0;
+		if (!SendLevelIsValid(group))
+			return ScriptError(ERR_PARAM1_INVALID, aBuf);
+
+		g_InputLevel = group;
+		return CONDITION_TRUE;
+	}
 
 	if (IS_DIRECTIVE_MATCH(_T("#MustDeclare")))
 	{
@@ -4273,9 +4289,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			// because the map is still accurate due to the nature of rtrim).  UPDATE: Note that this
 			// version of rtrim() specifically avoids trimming newline characters, since the user may
 			// have included literal newlines at the end of the string by using an escape sequence:
-			rtrim(arg[nArgs]);
+			rtrim_literal(arg[nArgs], arg_map[nArgs]);
 			// Omit the leading whitespace from the next arg:
-			for (++mark; IS_SPACE_OR_TAB(action_args[mark]); ++mark);
+			for (++mark; IS_SPACE_OR_TAB(action_args[mark]) && !literal_map[mark]; ++mark);
 			// Now <mark> marks the end of the string, the start of the next arg,
 			// or a delimiter-char (if the next arg is blank).
 		}
@@ -5114,6 +5130,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 	case ACT_SENDMODE:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && line.ConvertSendMode(new_raw_arg1, SM_INVALID) == SM_INVALID)
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
+		break;
+
+	case ACT_SENDLEVEL:
+		if (aArgc > 0 && !line.ArgHasDeref(1) && !SendLevelIsValid(ATOI(new_raw_arg1)))
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
@@ -13100,6 +13121,15 @@ ResultType Line::Perform()
 		g.SendMode = ConvertSendMode(ARG1, g.SendMode); // Leave value unchanged if ARG1 is invalid.
 		return OK;
 
+	case ACT_SENDLEVEL:
+	{
+		int sendLevel = ArgToInt(1);
+		if (SendLevelIsValid(sendLevel))
+			g.SendLevel = sendLevel;
+
+		return OK;
+	}
+
 	case ACT_SETKEYDELAY:
 		if (!_tcsicmp(ARG3, _T("Play")))
 		{
@@ -13729,6 +13759,9 @@ LPTSTR Line::LogToText(LPTSTR aBuf, int aBufSize) // aBufSize should be an int t
 		_T(" the right (if not 0).  The bottommost line's elapsed time is the number of seconds since it executed.\r\n\r\n"));
 
 	int i, lines_to_show, line_index, line_index2, space_remaining; // space_remaining must be an int to detect negatives.
+#ifndef AUTOHOTKEYSC
+	int last_file_index = -1;
+#endif
 	DWORD elapsed;
 	bool this_item_is_special, next_item_is_special;
 
@@ -13778,6 +13811,14 @@ LPTSTR Line::LogToText(LPTSTR aBuf, int aBufSize) // aBufSize should be an int t
 			}
 			else // This is the last line (whether special or not), so compare it's time against the current time instead.
 				elapsed = GetTickCount() - sLogTick[line_index];
+#ifndef AUTOHOTKEYSC
+			// If the this line and the previous line are in different files, display the filename:
+			if (last_file_index != sLog[line_index]->mFileIndex)
+			{
+				last_file_index = sLog[line_index]->mFileIndex;
+				aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("---- %s\r\n"), sSourceFile[last_file_index]);
+			}
+#endif
 			space_remaining = BUF_SPACE_REMAINING;  // Resolve macro only once for performance.
 			// Truncate really huge lines so that the Edit control's size is less likely to be exhausted.
 			// In v1.0.30.02, this is even more likely due to having increased the line-buf's capacity from
@@ -14932,11 +14973,18 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		
 		if (ShellExecuteEx(&sei)) // Relies on short-circuit boolean order.
 		{
-			hprocess = sei.hProcess;
-			// aOutputVar is left blank because:
-			// ProcessID is not available when launched this way, and since GetProcessID() is only
-			// available in WinXP SP1, no effort is currently made to dynamically load it from
-			// kernel32.dll (to retain compatibility with older OSes).
+			typedef DWORD (WINAPI *GetProcessIDType)(HANDLE);
+			// GetProcessID is only available on WinXP SP1 or later, so load it dynamically.
+			static GetProcessIDType fnGetProcessID = (GetProcessIDType)GetProcAddress(GetModuleHandle(_T("kernel32.dll")), "GetProcessId");
+
+			if (hprocess = sei.hProcess)
+			{
+				// A new process was created, so get its ID if possible.
+				if (aOutputVar && fnGetProcessID)
+					aOutputVar->Assign(fnGetProcessID(hprocess));
+			}
+			// Even if there's no process handle, it's considered a success because some
+			// system verbs and file associations do not create a new process, by design.
 			success = true;
 		}
 		else

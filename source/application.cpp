@@ -1152,10 +1152,16 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					g.GuiEvent = gui_action; // Set g.GuiEvent to indicate whether a double-click or other non-standard event launched it.
 				} // switch (msg.message)
 
-				// We're still in case AHK_GUI_ACTION; other cases have their own handling for g.EventInfo.
-				// gui_event_info is a separate variable because it is sometimes set before g.EventInfo is available
-				// for the new thread.
-				g_ErrorLevel->Assign(gui_action_errorlevel);
+				if (pcontrol && pcontrol->type == GUI_CONTROL_LINK)
+				{
+					LITEM item = {};
+					item.mask=LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
+					item.iLink = gui_event_info - 1;
+					if(SendMessage(pcontrol->hwnd,LM_GETITEM,NULL,(LPARAM)&item))
+						g_ErrorLevel->AssignString(*item.szUrl ? CStringTCharFromWCharIfNeeded(item.szUrl) : CStringTCharFromWCharIfNeeded(item.szID));
+				}
+				else
+					g_ErrorLevel->Assign(gui_action_errorlevel);
 
 				// Set last found window (as documented).  It's not necessary to check IsWindow/IsWindowVisible/
 				// DetectHiddenWindows since GetValidLastUsedWindow() takes care of that whenever the script
@@ -1235,6 +1241,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 			case AHK_HOTSTRING:
 				g.hWndLastUsed = criterion_found_hwnd; // v1.0.42. Even if the window is invalid for some reason, IsWindow() and such are called whenever the script accesses it (GetValidLastUsedWindow()).
+				g.SendLevel = hs->mInputLevel;
 				hs->PerformInNewThreadMadeByCaller();
 				break;
 
@@ -1254,6 +1261,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					g.EventInfo = (DWORD)msg.lParam; // v1.0.43.03: Override the thread default of 0 with the number of notches by which the wheel was turned.
 					// Above also works for RunAgainAfterFinished since that feature reuses the same thread attributes set above.
 				g.hWndLastUsed = criterion_found_hwnd; // v1.0.42. Even if the window is invalid for some reason, IsWindow() and such are called whenever the script accesses it (GetValidLastUsedWindow()).
+				g.SendLevel = variant->mInputLevel;
 				hk->PerformInNewThreadMadeByCaller(*variant);
 			}
 
