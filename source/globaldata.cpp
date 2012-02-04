@@ -317,7 +317,7 @@ Action g_act[] =
 	, {_T("IfNotExist"), 1, 1, 1, NULL} // File or directory.
 	// IfMsgBox must be physically adjacent to the other IFs in this array:
 	, {_T("IfMsgBox"), 1, 1, 1, NULL} // MsgBox result (e.g. OK, YES, NO)
-	, {_T("MsgBox"), 0, 4, 3, {4, 0}} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
+	, {_T("MsgBox"), 0, 4, 3, NULL} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
 	, {_T("InputBox"), 1, 11, 11 H, {5, 6, 7, 8, 10, 0}} // Output var, title, prompt, hide-text (e.g. passwords), width, height, X, Y, Font (e.g. courier:8 maybe), Timeout, Default
 	, {_T("SplashTextOn"), 0, 4, 4, {1, 2, 0}} // Width, height, title, text
 	, {_T("SplashTextOff"), 0, 0, 0, NULL}
