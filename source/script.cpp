@@ -4559,10 +4559,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			}
 			else if (arg == 4) // Timeout (or part of Text)
 			{
-				// Since the timeout feature is rarely used, if there are more than 4 parameters or
-				// exactly 4 but the 4th isn't blank, pure numeric, or a deref: assume it's being used
-				// in 3-parameter mode and that all the other delimiters were intended to be literal.
-
 				// If the 4th parameter isn't blank or pure numeric, assume the user didn't intend it
 				// to be the MsgBox timeout (since that feature is rarely used), instead intending it
 				// to be part of parameter #3.
