@@ -8954,16 +8954,8 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (!_tcscmp(lower, _T("linenumber"))) return BIV_LineNumber;
 	if (!_tcscmp(lower, _T("linefile"))) return BIV_LineFile;
 
-// A_IsCompiled is left blank/undefined in uncompiled scripts.
-#ifdef AUTOHOTKEYSC
 	if (!_tcscmp(lower, _T("iscompiled"))) return BIV_IsCompiled;
-#endif
-
-// A_IsUnicode is left blank/undefined in the ANSI version.
-#ifdef UNICODE
-	if (!_tcscmp(lower, _T("isunicode"))) return BIV_IsUnicode;
-#endif
-	
+	if (!_tcscmp(lower, _T("isunicode"))) return BIV_IsUnicode;	
 	if (!_tcscmp(lower, _T("ptrsize"))) return BIV_PtrSize;
 
 	if (   !_tcscmp(lower, _T("batchlines"))
@@ -10559,13 +10551,16 @@ numeric_literal:
 						infix[infix_count].symbol = SYM_INTEGER;
 						infix[infix_count].value_int64 = sizeof(void*);
 					}
-#ifdef UNICODE
 					else if (this_deref_ref.var->mBIV == BIV_IsUnicode)
 					{
+#ifdef UNICODE
 						infix[infix_count].symbol = SYM_INTEGER;
 						infix[infix_count].value_int64 = 1;
-					}
+#else
+						infix[infix_count].symbol = SYM_STRING;
+						infix[infix_count].marker = _T(""); // See BIV_IsUnicode for comments about why it is blank.
 #endif
+					}
 					else
 					{
 						infix[infix_count].symbol = SYM_DYNAMIC;
