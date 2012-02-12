@@ -4551,7 +4551,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				// there seems to be too much ambiguity in this case to justify trying to figure out
 				// if the first parameter is a pure deref, and thus that the command should use
 				// 3-param or 4-param mode instead).
-				if (!IsPureNumeric(action_args + next)) // No floats allowed.
+				if (!IsPureNumeric(action_args + mark)) // No floats allowed.
 					max_params_override = 1;
 				action_args[next] = g_delimiter; // Restore the string.
 				if (max_params_override)
