@@ -9059,7 +9059,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					// the string "int)", this symbol is not open-paren at all but instead the unary type-cast-to-int
 					// operator.
 					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)
-						&& _tcschr(_T(" \t)\""), cp[-1])) // For backward-compatibility, )( and "foo"(bar) are allowed.  Otherwise, a space/tab is required, as documented and so things like x[y]() don't need to deal with an extraneous SYM_CONCAT.
+						&& IS_SPACE_OR_TAB(cp[-1])) // A space/tab is required: as documented, and to simplify handling of expressions like x[y]().
 					{
 						if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
 							return LineError(ERR_EXPR_TOO_LONG);
