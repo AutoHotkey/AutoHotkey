@@ -8805,29 +8805,58 @@ VarSizeType BIV_IsSuspended(LPTSTR aBuf, LPTSTR aVarName)
 
 
 
-#ifdef AUTOHOTKEYSC  // A_IsCompiled is left blank/undefined in uncompiled scripts.
 VarSizeType BIV_IsCompiled(LPTSTR aBuf, LPTSTR aVarName)
 {
+#ifdef AUTOHOTKEYSC
 	if (aBuf)
 	{
 		*aBuf++ = '1';
 		*aBuf = '\0';
 	}
 	return 1;
-}
+#else
+	// v1.1.06: A_IsCompiled is defined so that it does not cause warnings with #Warn enabled,
+	// but left empty for backward-compatibility.  Defining the variable (even though it is
+	// left empty) has some side-effects:
+	//
+	//  1) Uncompiled scripts can no longer assign a value to A_IsCompiled.  Even if a script
+	//     assigned A_IsCompiled:=0 to make certain calculations easier, it would have to be
+	//     done dynamically to avoid a load-time error if the script is compiled.  So this
+	//     seems unlikely to be a problem.
+	//
+	//  2) Address-of will return an empty string instead of the address of a global variable
+	//     (or the address of Var::sEmptyString if the variable hasn't been given a value).
+	//
+	//  3) A_IsCompiled will never show up in ListVars, even if the script is uncompiled.
+	//     
+	if (aBuf)
+		*aBuf = '\0';
+	return 0;
 #endif
+}
 
-#ifdef UNICODE  // A_IsUnicode is left blank/undefined in the ANSI version.
+
+
 VarSizeType BIV_IsUnicode(LPTSTR aBuf, LPTSTR aVarName)
 {
+#ifdef UNICODE
 	if (aBuf)
 	{
 		*aBuf++ = '1';
 		*aBuf = '\0';
 	}
 	return 1;
-}
+#else
+	// v1.1.06: A_IsUnicode is defined so that it does not cause warnings with #Warn enabled,
+	// but left empty to encourage compatibility with older versions and AutoHotkey Basic.
+	// This prevents scripts from using expressions like A_IsUnicode+1, which would succeed
+	// if A_IsUnicode is 0 or 1 but fail if it is "".  This change has side-effects similar
+	// to those described for A_IsCompiled above.
+	if (aBuf)
+		*aBuf = '\0';
+	return 0;
 #endif
+}
 
 
 
