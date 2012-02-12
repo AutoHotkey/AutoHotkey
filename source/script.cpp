@@ -4754,22 +4754,19 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 									&& (op_begin[2] == 't' || op_begin[2] == 'T')   )
 									continue; // "NOT" was found.
 								if (   (op_begin[1] == 'e' || op_begin[1] == 'E')
-									&& (op_begin[2] == 'w' || op_begin[2] == 'W')
-									&& IS_SPACE_OR_TAB(op_begin[3])   )
+									&& (op_begin[2] == 'w' || op_begin[2] == 'W')   ) // "new"
 								{
-									cp = omit_leading_whitespace(op_begin + 4);
-									// This "new " is a keyword only if followed immediately by an operand,
-									// such as "new ClassVar", "new Class.NestedClass()" or "new %Var%()",
-									// but not "new := 1" or "x := new + 1" and not '"string" new "string"'.
+									cp = omit_leading_whitespace(op_begin + 3);
 									if (!_tcschr(EXPR_OPERAND_TERMINATORS, *cp) && *cp != '"')
 									{
-										// If this is "new ClassVar()", we need to avoid parsing "ClassVar()" as a
-										// function deref.  The check below handles that.  Note that "new X.Y()" is
-										// excluded, since it wouldn't be parsed as a function deref anyway.
+										// This "new" is followed by something that looks like an operand;
+										// perhaps "new ClassVar()", which we need to avoid parsing as a
+										// function-call.  The check below intentionally excludes "new X.Y()"
+										// since it wouldn't be parsed as a function deref anyway.
 										for ( ; !_tcschr(EXPR_OPERAND_TERMINATORS, *cp); ++cp); // Find end of var.
 										pending_function_is_new_op = (*cp == '(');
-										continue;
 									}
+									continue;
 								}
 								break;
 							}
@@ -8807,7 +8804,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 //		, 78             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 //		, 82, 82         // RESERVED FOR SYM_POST_INCREMENT, SYM_POST_DECREMENT (which are listed higher above for the performance of YIELDS_AN_OPERAND().
 		, 86             // SYM_FUNC -- Has special handling which ensures it stays tightly bound with its parameters as though it's a single operand for use by other operators; the actual value here is irrelevant.
-		, 86             // SYM_NEW -- should be popped off the stack immediately after the pseudo function-call which follows it.
+		, 87             // SYM_NEW.  Unlike SYM_FUNC, SYM_DOT, etc., precedence actually matters for this one.
 		, 36             // SYM_REGEXMATCH
 	};
 	// Most programming languages give exponentiation a higher precedence than unary minus and logical-not.
@@ -9398,19 +9395,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							if (op_end == cp && *op_end != '(')
 								return LineError(ERR_INVALID_DOT, FAIL, cp-1); // Intentionally vague since the user's intention isn't clear.
 
-							bool is_new_op = false;
-							// For the '(' check below, determine if this op is part of a "new" operation, such as "new Class.NestedClass()".
-							for (ExprTokenType *prev_infix = infix + infix_count - 1; prev_infix >= infix; prev_infix -= 2)
-							{
-								if (prev_infix->symbol != SYM_DOT)
-								{
-									if (IS_OPERAND(prev_infix->symbol) && prev_infix > infix)
-										--prev_infix; // This is the target of the SYM_DOT, as in "target.foo".
-									is_new_op = (prev_infix->symbol == SYM_NEW);
-									break;
-								}
-							}
-
 							// Output an operand for the text following '.'
 							if (op_end - cp < MAX_NUMBER_SIZE)
 								tcslcpy(number_buf, cp, op_end - cp + 1); // +1 for null terminator.
@@ -9439,7 +9423,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							new_deref->marker = cp - 1; // Not typically needed, set for error-reporting.
 							new_deref->param_count = 2; // Initially two parameters: the object and identifier.
 							
-							if (*op_end == '(' && !is_new_op)
+							if (*op_end == '(')
 							{
 								new_symbol = SYM_FUNC;
 								new_deref->func = &g_ObjCall;
@@ -9505,9 +9489,9 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								this_infix_item.symbol = SYM_CONCAT;
 								++infix_count;
 							}
-							// A previous stage ensured this "new" is followed by something which looks like
-							// a function call.  Push this pseudo-operator onto the stack.  When the open-
-							// parenthesis is encountered, symbol will be changed to SYM_FUNC.
+							// Push this pseudo-operator onto the stack.  When it is popped off the stack
+							// (perhaps because an open-parenthesis is encountered), its symbol will be
+							// changed to SYM_FUNC.
 							if (  !(deref_new = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  )
 								return LineError(ERR_OUTOFMEM);
 							deref_new->marker = cp; // For error-reporting.
@@ -9896,7 +9880,8 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				//--stack_count; // DON'T DO THIS.
 				stack_top.symbol = SYM_FUNC; // Change this OBRACKET to FUNC (see below).
 
-				if (this_infix->buf[1] == '(') // i.e. "]("
+				if (this_infix->buf[1] == '(' // i.e. "]("
+					&& !(stack_count > 1 && stack[stack_count - 2]->symbol == SYM_NEW)) // Not "new x[n]()" or "new {...}()"
 				{
 					// Appears to be a method call with a computed method name, such as x[y](prms).
 					ASSERT(this_infix[1].symbol == SYM_OPAREN);
@@ -9952,15 +9937,37 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 		case SYM_OPAREN:
 			// Open-parentheses always go on the stack to await their matching close-parentheses.
 			this_infix->buf = (LPTSTR)in_param_list; // L31: Save current value on the stack with this SYM_OPAREN.
-			if (infix_symbol == SYM_FUNC)
-				in_param_list = this_infix[-1].deref	; // Store this SYM_FUNC's deref.
-			else if (stack_symbol == SYM_NEW)
+			if (stack_symbol == SYM_NEW // Something like "new Class()".
+				&& this_infix[-1].symbol != SYM_NEW) // Not "new (Class)" or "new(Class)".
 			{
+				if (infix_symbol == SYM_FUNC)
+				{
+					// It can't be anything but ObjCall at this point because stack_symbol == SYM_NEW.
+					//	new Func()		; This would be SYM_VAR, SYM_OPAREN, SYM_CPAREN.
+					//	new (Func())	; stack_symbol would be SYM_OPAREN.
+					//	new x[Func()]()	; stack_symbol would be SYM_OBRACKET.
+					//	new x Func()	; SYM_NEW would've been popped off the stack by auto-SYM_CONCAT.
+					ASSERT(this_infix[-1].deref->func == &g_ObjCall);
+					// It can be anything like:
+					//	new x.y(z)		; This simple case could be easily handled at an earlier stage.
+					//	new (getClass()).y(z)
+					//	new x[y](z)
+					// So at this point, this_infix[-1] has two parameters: the target object x
+					// and method name y.  Instead of calling method y of object x, we want to
+					// get property y of object x and use the result as the class to instantiate.
+					// To achieve this, we can just change ObjCall to ObjGet:
+					this_infix[-1].deref->func = &g_ObjGet;
+					goto standard_pop_into_postfix;
+					// Let the next iteration encounter SYM_OPAREN while stack_symbol is still
+					// SYM_NEW so that the lines below will be executed:
+				}
 				// Now that the SYM_OPAREN of this SYM_NEW has been found, translate it to SYM_FUNC
 				// so that it will be popped off the stack immediately after its parameter list:
 				stack[stack_count - 1]->symbol = SYM_FUNC;
 				in_param_list = stack[stack_count - 1]->deref;
 			}
+			else if (infix_symbol == SYM_FUNC)
+				in_param_list = this_infix[-1].deref	; // Store this SYM_FUNC's deref.
 			else
 				in_param_list = NULL; // Allow multi-statement commas, even in cases like Func((x,y)).
 			STACK_PUSH(this_infix++);
