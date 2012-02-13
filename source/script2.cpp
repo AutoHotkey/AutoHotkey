@@ -10118,7 +10118,7 @@ ResultType Line::FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity)
 		return SetErrorsOrThrow(true); // Let ErrorLevel tell the story.
 	FindClose(file_search);
 
-	unsigned __int64 size = (found_file.nFileSizeHigh * (unsigned __int64)MAXDWORD) + found_file.nFileSizeLow;
+	unsigned __int64 size = ((unsigned __int64)found_file.nFileSizeHigh << 32) | found_file.nFileSizeLow;
 
 	switch(ctoupper(*aGranularity))
 	{
