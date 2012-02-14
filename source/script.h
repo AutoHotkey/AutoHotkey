@@ -1842,7 +1842,7 @@ public:
 	// override in the script.  So mIsBuiltIn should always be used to determine whether the function
 	// is truly built-in, not its name.
 	bool mIsVariadic;
-	bool mHasReturn; // Does the UDF have at least one ACT_RETURN with a value specified?
+	bool mHasReturn; // Does the function require an output var to receive the return value in command syntax mode?
 
 	bool Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false);
 
@@ -1948,6 +1948,15 @@ public:
 		mMinParams = aMinParams;	// These are only enforced in some cases.
 		mParamCount = aParamCount;	//
 	}
+};
+
+
+struct FuncEntry
+{
+	LPCTSTR mName;
+	BuiltInFunctionType mBIF;
+	int mMinParams, mMaxParams;
+	bool mHasReturn;
 };
 
 

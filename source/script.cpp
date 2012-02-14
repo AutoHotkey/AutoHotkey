@@ -30,6 +30,125 @@ static ExprOpFunc g_ObjNew(BIF_ObjNew, 0);
 static ExprOpFunc g_ObjPreInc(BIF_ObjIncDec, SYM_PRE_INCREMENT), g_ObjPreDec(BIF_ObjIncDec, SYM_PRE_DECREMENT)
 				, g_ObjPostInc(BIF_ObjIncDec, SYM_POST_INCREMENT), g_ObjPostDec(BIF_ObjIncDec, SYM_POST_DECREMENT);
 
+FuncEntry g_BIF[] =
+{
+	{_T("LV_GetNext"), BIF_LV_GetNextOrCount, 0, 2, true},
+	{_T("LV_GetCount"), BIF_LV_GetNextOrCount, 0, 1, true},
+	{_T("LV_GetText"), BIF_LV_GetText, 2, 3, true},
+	{_T("LV_Add"), BIF_LV_AddInsertModify, 0, 10000, true},
+	{_T("LV_Insert"), BIF_LV_AddInsertModify, 1, 10000, true},
+	{_T("LV_Modify"), BIF_LV_AddInsertModify, 2, 10000, true},
+	{_T("LV_Delete"), BIF_LV_Delete, 0, 1, true},
+	{_T("LV_InsertCol"), BIF_LV_InsertModifyDeleteCol, 1, 3, true},
+	{_T("LV_ModifyCol"), BIF_LV_InsertModifyDeleteCol, 0, 3, true},
+	{_T("LV_DeleteCol"), BIF_LV_InsertModifyDeleteCol, 1, 1, true},
+	{_T("LV_SetImageList"), BIF_LV_SetImageList, 1, 2, true},
+	
+	{_T("TV_Add"), BIF_TV_AddModifyDelete, 1, 3, true},
+	{_T("TV_Modify"), BIF_TV_AddModifyDelete, 1, 3, true},
+	{_T("TV_Delete"), BIF_TV_AddModifyDelete, 0, 1, true},
+	{_T("TV_GetParent"), BIF_TV_GetRelatedItem, 1, 1, true},
+	{_T("TV_GetChild"), BIF_TV_GetRelatedItem, 1, 1, true},
+	{_T("TV_GetPrev"), BIF_TV_GetRelatedItem, 1, 1, true},
+	{_T("TV_GetCount"), BIF_TV_GetRelatedItem, 0, 0, true},
+	{_T("TV_GetSelection"), BIF_TV_GetRelatedItem, 0, 0, true},
+	{_T("TV_GetNext"), BIF_TV_GetRelatedItem, 0, 2, true},
+	{_T("TV_Get"), BIF_TV_Get, 2, 2, true},
+	{_T("TV_GetText"), BIF_TV_Get, 2, 2, true},
+	{_T("TV_SetImageList"), BIF_TV_SetImageList, 1, 2, true},
+
+	{_T("IL_Create"), BIF_IL_Create, 0, 3, true},
+	{_T("IL_Destroy"), BIF_IL_Destroy, 1, 1, true},
+	{_T("IL_Add"), BIF_IL_Add, 2, 4, true},
+	
+	{_T("SB_SetText"), BIF_StatusBar, 1, 3, true},
+	{_T("SB_SetParts"), BIF_StatusBar, 0, 255, true},
+	{_T("SB_SetIcon"), BIF_StatusBar, 1, 3, true},
+
+	{_T("StrLen"), BIF_StrLen, 1, 1, true},
+	{_T("SubStr"), BIF_SubStr, 2, 3, true},
+	{_T("Trim"), BIF_Trim, 1, 2, true},
+	{_T("LTrim"), BIF_Trim, 1, 2, true},
+	{_T("RTrim"), BIF_Trim, 1, 2, true},
+	{_T("InStr"), BIF_InStr, 2, 5, true},
+	{_T("StrSplit"), BIF_StrSplit, 2, 3, true},
+	{_T("RegExMatch"), BIF_RegEx, 2, 4, true},
+	{_T("RegExReplace"), BIF_RegEx, 2, 6, true},
+
+	{_T("GetKeyState"), BIF_GetKeyState, 1, 2, true},
+	{_T("GetKeyName"), BIF_GetKeyName, 1, 1, true},
+	{_T("GetKeyVK"), BIF_GetKeyName, 1, 1, true},
+	{_T("GetKeySC"), BIF_GetKeyName, 1, 1, true},
+
+	{_T("Ord"), BIF_Ord, 1, 1, true},
+	{_T("Chr"), BIF_Chr, 1, 1, true},
+	{_T("StrGet"), BIF_StrGetPut, 1, 3, true},
+	{_T("StrPut"), BIF_StrGetPut, 1, 4, true},
+	{_T("NumGet"), BIF_NumGet, 1, 3, true},
+	{_T("NumPut"), BIF_NumPut, 2, 4, true},
+	{_T("IsLabel"), BIF_IsLabel, 1, 1, true},
+	{_T("Func"), BIF_Func, 1, 1, true},
+	{_T("IsFunc"), BIF_IsFunc, 1, 1, true},
+	{_T("IsByRef"), BIF_IsByRef, 1, 1, true},
+	{_T("DllCall"), BIF_DllCall, 1, 10000, true},
+	{_T("VarSetCapacity"), BIF_VarSetCapacity, 1, 3, true},
+	{_T("FileExist"), BIF_FileExist, 1, 1, true},
+	{_T("DirExist"), BIF_FileExist, 1, 1, true},
+	{_T("WinExist"), BIF_WinExistActive, 0, 4, true},
+	{_T("WinActive"), BIF_WinExistActive, 0, 4, true},
+	{_T("Round"), BIF_Round, 1, 2, true},
+	{_T("Floor"), BIF_FloorCeil, 1, 1, true},
+	{_T("Ceil"), BIF_FloorCeil, 1, 1, true},
+	{_T("Mod"), BIF_Mod, 2, 2, true},
+	{_T("Abs"), BIF_Abs, 1, 1, true},
+	{_T("Sin"), BIF_Sin, 1, 1, true},
+	{_T("Cos"), BIF_Cos, 1, 1, true},
+	{_T("Tan"), BIF_Tan, 1, 1, true},
+	{_T("ASin"), BIF_ASinACos, 1, 1, true},
+	{_T("ACos"), BIF_ASinACos, 1, 1, true},
+	{_T("ATan"), BIF_ATan, 1, 1, true},
+	{_T("Exp"), BIF_Exp, 1, 1, true},
+	{_T("Sqrt"), BIF_SqrtLogLn, 1, 1, true},
+	{_T("Log"), BIF_SqrtLogLn, 1, 1, true},
+	{_T("Ln"), BIF_SqrtLogLn, 1, 1, true},
+	{_T("DateAdd"), BIF_DateAdd, 3, 3, true},
+	{_T("DateDiff"), BIF_DateDiff, 3, 3, true},
+	{_T("OnMessage"), BIF_OnMessage, 1, 3, true},
+	{_T("RegisterCallback"), BIF_RegisterCallback, 1, 4, true},
+	{_T("Type"), BIF_Type, 1, 1, true},
+	{_T("IsObject"), BIF_IsObject, 1, 10000, true},
+	
+	{_T("Object"), BIF_ObjCreate, 0, 10000, true},
+	{_T("ObjInsert"), BIF_ObjInsert, 2, 10000, true},
+	{_T("ObjRemove"), BIF_ObjRemove, 1, 3, true},
+	{_T("ObjMinIndex"), BIF_ObjMinIndex, 1, 1, true},
+	{_T("ObjMaxIndex"), BIF_ObjMaxIndex, 1, 1, true},
+	{_T("ObjHasKey"), BIF_ObjHasKey, 2, 2, true},
+	{_T("ObjGetCapacity"), BIF_ObjGetCapacity, 1, 2, true},
+	{_T("ObjSetCapacity"), BIF_ObjSetCapacity, 2, 3, true},
+	{_T("ObjGetAddress"), BIF_ObjGetAddress, 2, 2, true},
+	{_T("ObjNewEnum"), BIF_ObjNewEnum, 1, 1, true},
+	{_T("ObjClone"), BIF_ObjClone, 1, 1, true},
+	{_T("ObjAddRef"), BIF_ObjAddRefRelease, 1, 1, true},
+	{_T("ObjRelease"), BIF_ObjAddRefRelease, 1, 1, true},
+
+	{_T("Array"), BIF_ObjArray, 0, 10000, true},
+	{_T("FileOpen"), BIF_FileOpen, 2, 3, true},
+	
+	{_T("ComObject"), BIF_ComObjActive, 0, 3, true},
+	{_T("ComObjCreate"), BIF_ComObjCreate, 1, 2, true},
+	{_T("ComObjGet"), BIF_ComObjGet, 1, 1, true},
+	{_T("ComObjConnect"), BIF_ComObjConnect, 1, 2, true},
+	{_T("ComObjError"), BIF_ComObjError, 0, 1, true},
+	{_T("ComObjType"), BIF_ComObjTypeOrValue, 1, 2, true},
+	{_T("ComObjValue"), BIF_ComObjTypeOrValue, 1, 1, true},
+	{_T("ComObjFlags"), BIF_ComObjFlags, 1, 3, true},
+	{_T("ComObjArray"), BIF_ComObjArray, 2, 9, true},
+	{_T("ComObjQuery"), BIF_ComObjQuery, 2, 3, true},
+	
+	{_T("Exception"), BIF_Exception, 1, 3, true},
+};
+
 // See Script::CreateWindows() for details about the following:
 typedef BOOL (WINAPI* AddRemoveClipboardListenerType)(HWND);
 static AddRemoveClipboardListenerType MyRemoveClipboardListener = (AddRemoveClipboardListenerType)
@@ -6617,432 +6736,25 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	// Since above didn't return, there is no match.  See if it's a built-in function that hasn't yet
 	// been added to the function list.
 
-	// Set defaults to be possibly overridden below:
-	int min_params = 1;
-	int max_params = 1;
-	BuiltInFunctionType bif;
-	LPTSTR suffix = func_name + 3;
+	FuncEntry bif;
+	bif.mBIF = NULL; // Set default.
 	ActionTypeType action_type = ACT_INVALID;
 
-	if (!_tcsnicmp(func_name, _T("LV_"), 3)) // As a built-in function, LV_* can only be a ListView function.
+	for (int i = 0; i < _countof(g_BIF); i++)
 	{
-		suffix = func_name + 3;
-		if (!_tcsicmp(suffix, _T("GetNext")))
+		if (!_tcsicmp(g_BIF[i].mName, func_name))
 		{
-			bif = BIF_LV_GetNextOrCount;
-			min_params = 0;
-			max_params = 2;
+			bif = g_BIF[i]; // Struct copy.
+			break;
 		}
-		else if (!_tcsicmp(suffix, _T("GetCount")))
-		{
-			bif = BIF_LV_GetNextOrCount;
-			min_params = 0; // But leave max at its default of 1.
-		}
-		else if (!_tcsicmp(suffix, _T("GetText")))
-		{
-			bif = BIF_LV_GetText;
-			min_params = 2;
-			max_params = 3;
-		}
-		else if (!_tcsicmp(suffix, _T("Add")))
-		{
-			bif = BIF_LV_AddInsertModify;
-			min_params = 0; // 0 params means append a blank row.
-			max_params = 10000; // An arbitrarily high limit that will never realistically be reached.
-		}
-		else if (!_tcsicmp(suffix, _T("Insert")))
-		{
-			bif = BIF_LV_AddInsertModify;
-			// Leave min_params at 1.  Passing only 1 param to it means "insert a blank row".
-			max_params = 10000; // An arbitrarily high limit that will never realistically be reached.
-		}
-		else if (!_tcsicmp(suffix, _T("Modify")))
-		{
-			bif = BIF_LV_AddInsertModify; // Although it shares the same function with "Insert", it can still have its own min/max params.
-			min_params = 2;
-			max_params = 10000; // An arbitrarily high limit that will never realistically be reached.
-		}
-		else if (!_tcsicmp(suffix, _T("Delete")))
-		{
-			bif = BIF_LV_Delete;
-			min_params = 0; // Leave max at its default of 1.
-		}
-		else if (!_tcsicmp(suffix, _T("InsertCol")))
-		{
-			bif = BIF_LV_InsertModifyDeleteCol;
-			// Leave min_params at 1 because inserting a blank column ahead of the first column
-			// does not seem useful enough to sacrifice the no-parameter mode, which might have
-			// potential future uses.
-			max_params = 3;
-		}
-		else if (!_tcsicmp(suffix, _T("ModifyCol")))
-		{
-			bif = BIF_LV_InsertModifyDeleteCol;
-			min_params = 0;
-			max_params = 3;
-		}
-		else if (!_tcsicmp(suffix, _T("DeleteCol")))
-			bif = BIF_LV_InsertModifyDeleteCol; // Leave min/max set to 1.
-		else if (!_tcsicmp(suffix, _T("SetImageList")))
-		{
-			bif = BIF_LV_SetImageList;
-			max_params = 2; // Leave min at 1.
-		}
-		else
-			return NULL;
 	}
-	else if (!_tcsnicmp(func_name, _T("TV_"), 3)) // As a built-in function, TV_* can only be a TreeView function.
-	{
-		suffix = func_name + 3;
-		if (!_tcsicmp(suffix, _T("Add")))
-		{
-			bif = BIF_TV_AddModifyDelete;
-			max_params = 3; // Leave min at its default of 1.
-		}
-		else if (!_tcsicmp(suffix, _T("Modify")))
-		{
-			bif = BIF_TV_AddModifyDelete;
-			max_params = 3; // One-parameter mode is "select specified item".
-		}
-		else if (!_tcsicmp(suffix, _T("Delete")))
-		{
-			bif = BIF_TV_AddModifyDelete;
-			min_params = 0;
-		}
-		else if (!_tcsicmp(suffix, _T("GetParent")) || !_tcsicmp(suffix, _T("GetChild")) || !_tcsicmp(suffix, _T("GetPrev")))
-			bif = BIF_TV_GetRelatedItem;
-		else if (!_tcsicmp(suffix, _T("GetCount")) || !_tcsicmp(suffix, _T("GetSelection")))
-		{
-			bif = BIF_TV_GetRelatedItem;
-			min_params = 0;
-			max_params = 0;
-		}
-		else if (!_tcsicmp(suffix, _T("GetNext"))) // Unlike "Prev", Next also supports 0 or 2 parameters.
-		{
-			bif = BIF_TV_GetRelatedItem;
-			min_params = 0;
-			max_params = 2;
-		}
-		else if (!_tcsicmp(suffix, _T("Get")) || !_tcsicmp(suffix, _T("GetText")))
-		{
-			bif = BIF_TV_Get;
-			min_params = 2;
-			max_params = 2;
-		}
-		else if (!_tcsicmp(suffix, _T("SetImageList")))
-		{
-			bif = BIF_TV_SetImageList;
-			max_params = 2; // Leave min at 1.
-		}
-		else
-			return NULL;
-	}
-	else if (!_tcsnicmp(func_name, _T("IL_"), 3)) // It's an ImageList function.
-	{
-		suffix = func_name + 3;
-		if (!_tcsicmp(suffix, _T("Create")))
-		{
-			bif = BIF_IL_Create;
-			min_params = 0;
-			max_params = 3;
-		}
-		else if (!_tcsicmp(suffix, _T("Destroy")))
-		{
-			bif = BIF_IL_Destroy; // Leave Min/Max set to 1.
-		}
-		else if (!_tcsicmp(suffix, _T("Add")))
-		{
-			bif = BIF_IL_Add;
-			min_params = 2;
-			max_params = 4;
-		}
-		else
-			return NULL;
-	}
-	else if (!_tcsicmp(func_name, _T("SB_SetText")))
-	{
-		bif = BIF_StatusBar;
-		max_params = 3; // Leave min_params at its default of 1.
-	}
-	else if (!_tcsicmp(func_name, _T("SB_SetParts")))
-	{
-		bif = BIF_StatusBar;
-		min_params = 0;
-		max_params = 255; // 255 params allows for up to 256 parts, which is SB's max.
-	}
-	else if (!_tcsicmp(func_name, _T("SB_SetIcon")))
-	{
-		bif = BIF_StatusBar;
-		max_params = 3; // Leave min_params at its default of 1.
-	}
-	else if (!_tcsicmp(func_name, _T("StrLen")))
-		bif = BIF_StrLen;
-	else if (!_tcsicmp(func_name, _T("SubStr")))
-	{
-		bif = BIF_SubStr;
-		min_params = 2;
-		max_params = 3;
-	}
-	else if (!_tcsicmp(func_name, _T("Trim")) || !_tcsicmp(func_name, _T("LTrim")) || !_tcsicmp(func_name, _T("RTrim"))) // L31
-	{
-		bif = BIF_Trim;
-		min_params = 1;
-		max_params = 2;
-	}
-	else if (!_tcsicmp(func_name, _T("InStr")))
-	{
-		bif = BIF_InStr;
-		min_params = 2;
-		max_params = 5;
-	}
-	else if (!_tcsicmp(func_name, _T("StrSplit")))
-	{
-		bif = BIF_StrSplit;
-		min_params = 2;
-		max_params = 3;
-	}
-	else if (!_tcsicmp(func_name, _T("RegExMatch")))
-	{
-		bif = BIF_RegEx;
-		min_params = 2;
-		max_params = 4;
-	}
-	else if (!_tcsicmp(func_name, _T("RegExReplace")))
-	{
-		bif = BIF_RegEx;
-		min_params = 2;
-		max_params = 6;
-	}
-	else if (!_tcsnicmp(func_name, _T("GetKey"), 6))
-	{
-		suffix = func_name + 6;
-		if (!_tcsicmp(suffix, _T("State")))
-		{
-			bif = BIF_GetKeyState;
-			max_params = 2;
-		}
-		else if (!_tcsicmp(suffix, _T("Name")) || !_tcsicmp(suffix, _T("VK")) || !_tcsicmp(suffix, _T("SC")))
-			bif = BIF_GetKeyName;
-		else
-			return NULL;
-	}
-	else if (!_tcsicmp(func_name, _T("Ord")))
-		bif = BIF_Ord;
-	else if (!_tcsicmp(func_name, _T("Chr")))
-		bif = BIF_Chr;
-	else if (!_tcsicmp(func_name, _T("StrGet")))
-	{
-		bif = BIF_StrGetPut;
-		max_params = 3;
-	}
-	else if (!_tcsicmp(func_name, _T("StrPut")))
-	{
-		bif = BIF_StrGetPut;
-		max_params = 4;
-	}
-	else if (!_tcsicmp(func_name, _T("NumGet")))
-	{
-		bif = BIF_NumGet;
-		max_params = 3;
-	}
-	else if (!_tcsicmp(func_name, _T("NumPut")))
-	{
-		bif = BIF_NumPut;
-		min_params = 2;
-		max_params = 4;
-	}
-	else if (!_tcsicmp(func_name, _T("IsLabel")))
-		bif = BIF_IsLabel;
-	else if (!_tcsicmp(func_name, _T("Func")))
-		bif = BIF_Func;
-	else if (!_tcsicmp(func_name, _T("IsFunc")))
-		bif = BIF_IsFunc;
-	else if (!_tcsicmp(func_name, _T("IsByRef")))
-		bif = BIF_IsByRef;
-#ifdef ENABLE_DLLCALL
-	else if (!_tcsicmp(func_name, _T("DllCall")))
-	{
-		bif = BIF_DllCall;
-		max_params = 10000; // An arbitrarily high limit that will never realistically be reached.
-	}
-#endif
-	else if (!_tcsicmp(func_name, _T("VarSetCapacity")))
-	{
-		bif = BIF_VarSetCapacity;
-		max_params = 3;
-	}
-	else if (!_tcsicmp(func_name, _T("FileExist")) || !_tcsicmp(func_name, _T("DirExist")))
-		bif = BIF_FileExist;
-	else if (!_tcsicmp(func_name, _T("WinExist")) || !_tcsicmp(func_name, _T("WinActive")))
-	{
-		bif = BIF_WinExistActive;
-		min_params = 0;
-		max_params = 4;
-	}
-	else if (!_tcsicmp(func_name, _T("Round")))
-	{
-		bif = BIF_Round;
-		max_params = 2;
-	}
-	else if (!_tcsicmp(func_name, _T("Floor")) || !_tcsicmp(func_name, _T("Ceil")))
-		bif = BIF_FloorCeil;
-	else if (!_tcsicmp(func_name, _T("Mod")))
-	{
-		bif = BIF_Mod;
-		min_params = 2;
-		max_params = 2;
-	}
-	else if (!_tcsicmp(func_name, _T("Abs")))
-		bif = BIF_Abs;
-	else if (!_tcsicmp(func_name, _T("Sin")))
-		bif = BIF_Sin;
-	else if (!_tcsicmp(func_name, _T("Cos")))
-		bif = BIF_Cos;
-	else if (!_tcsicmp(func_name, _T("Tan")))
-		bif = BIF_Tan;
-	else if (!_tcsicmp(func_name, _T("ASin")) || !_tcsicmp(func_name, _T("ACos")))
-		bif = BIF_ASinACos;
-	else if (!_tcsicmp(func_name, _T("ATan")))
-		bif = BIF_ATan;
-	else if (!_tcsicmp(func_name, _T("Exp")))
-		bif = BIF_Exp;
-	else if (!_tcsicmp(func_name, _T("Sqrt")) || !_tcsicmp(func_name, _T("Log")) || !_tcsicmp(func_name, _T("Ln")))
-		bif = BIF_SqrtLogLn;
-	else if (!_tcsicmp(func_name, _T("DateAdd")))
-	{
-		bif = BIF_DateAdd;
-		min_params = max_params = 3;
-	}
-	else if (!_tcsicmp(func_name, _T("DateDiff")))
-	{
-		bif = BIF_DateDiff;
-		min_params = max_params = 3;
-	}
-	else if (!_tcsicmp(func_name, _T("OnMessage")))
-	{
-		bif = BIF_OnMessage;
-		max_params = 3;  // Leave min at 1.
-	}
-#ifdef ENABLE_REGISTERCALLBACK
-	else if (!_tcsicmp(func_name, _T("RegisterCallback")))
-	{
-		bif = BIF_RegisterCallback;
-		max_params = 4; // Leave min_params at 1.
-	}
-#endif
-	else if (!_tcsicmp(func_name, _T("Type")))
-		bif = BIF_Type;
-	else if (!_tcsicmp(func_name, _T("IsObject"))) // L31
-	{
-		bif = BIF_IsObject;
-		max_params = 10000; // Leave min_params at 1.
-	}
-	else if (!_tcsnicmp(func_name, _T("Obj"), 3)) // L31: See script_object.cpp for details.
-	{
-		suffix = func_name + 3;
 
-		if (!_tcsicmp(suffix, _T("ect"))) // i.e. "Object"
-		{
-			bif = BIF_ObjCreate;
-			min_params = 0;
-			max_params = 10000;
-		}
-#define BIF_OBJ_CASE(aCaseSuffix, aMinParams, aMaxParams) \
-		else if (!_tcsicmp(suffix, _T(#aCaseSuffix))) \
-		{ \
-			bif = BIF_Obj##aCaseSuffix; \
-			min_params = (1 + aMinParams); \
-			max_params = (1 + aMaxParams); \
-		}
-		// All of these functions require the "object" parameter,
-		// but it is excluded from the counts below for clarity:
-		BIF_OBJ_CASE(Insert, 		1, 10000) // [key,] value [, value2, ...]
-		BIF_OBJ_CASE(Remove, 		0, 2) // [min_key, max_key]
-		BIF_OBJ_CASE(MinIndex, 		0, 0)
-		BIF_OBJ_CASE(MaxIndex, 		0, 0)
-		BIF_OBJ_CASE(HasKey,		1, 1) // key
-		BIF_OBJ_CASE(GetCapacity,	0, 1) // [key]
-		BIF_OBJ_CASE(SetCapacity,	1, 2) // [key,] new_capacity
-		BIF_OBJ_CASE(GetAddress,	1, 1) // key
-		BIF_OBJ_CASE(NewEnum,		0, 0)
-		BIF_OBJ_CASE(Clone,			0, 0)
-#undef BIF_OBJ_CASE
-		else if (!_tcsicmp(suffix, _T("AddRef")) || !_tcsicmp(suffix, _T("Release")))
-			bif = BIF_ObjAddRefRelease;
-		else return NULL;
-	}
-	else if (!_tcsicmp(func_name, _T("Array")))
+	if (!bif.mBIF)
 	{
-		bif = BIF_ObjArray;
-		min_params = 0;
-		max_params = 10000;
-	}
-	else if (!_tcsicmp(func_name, _T("FileOpen")))
-	{
-		bif = BIF_FileOpen;
-		min_params = 2;
-		max_params = 3;
-	}
-	else if (!_tcsnicmp(func_name, _T("ComObj"), 6))
-	{
-		suffix = func_name + 6;
-		if	(!_tcsicmp(suffix, _T("Create")))
-		{
-			bif = BIF_ComObjCreate;
-			max_params = 2;
-		}
-		else if	(!_tcsicmp(suffix, _T("Get")))
-			bif = BIF_ComObjGet;
-		else if	(!_tcsicmp(suffix, _T("Connect")))
-		{
-			bif = BIF_ComObjConnect;
-			max_params = 2;
-		}
-		else if (!_tcsicmp(suffix, _T("Error")))
-		{
-			bif = BIF_ComObjError;
-			min_params = 0;
-		}
-		else if (!_tcsicmp(suffix, _T("Type")))
-		{
-			bif = BIF_ComObjTypeOrValue;
-			max_params = 2;
-		}
-		else if (!_tcsicmp(suffix, _T("Value")))
-		{
-			bif = BIF_ComObjTypeOrValue;
-		}
-		else if (!_tcsicmp(suffix, _T("Flags")))
-		{
-			bif = BIF_ComObjFlags;
-			max_params = 3;
-		}
-		else if (!_tcsicmp(suffix, _T("Array")))
-		{
-			bif = BIF_ComObjArray;
-			min_params = 2;
-			max_params = 9; // up to 8 dimensions
-		}
-		else if (!_tcsicmp(suffix, _T("Query")))
-		{
-			bif = BIF_ComObjQuery;
-			min_params = 2;
-			max_params = 3;
-		}
-		else
-		{
-			bif = BIF_ComObjActive;
-			min_params = 0;
-			max_params = 3;
-		}
-	}
-	else if (!_tcsicmp(func_name, _T("Exception")))
-	{
-		bif = BIF_Exception;
-		max_params = 3;
-	}
-	else
-	{
+		if (!_tcsnicmp(func_name, _T("ComObj"), 6))
+			// Recursive call for simplicity.  This check may be removed in future.
+			return FindFunc(_T("ComObject"), 9, apInsertPos);
+
 		// The following handles calling of commands using function syntax:
 		action_type = ConvertActionType(func_name);
 		if (action_type == ACT_INVALID
@@ -7052,49 +6764,53 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 			|| ACT_IS_CONTROL_FLOW(action_type))
 			return NULL; // Maint: There may be other lines above that also return NULL.
 		// Otherwise, there is a command with this name which can be converted to a function.
-		bif = BIF_PerformAction;
-		min_params = g_act[action_type].MinParams;
-		max_params = g_act[action_type].MaxParams;
+
+		bif.mBIF = BIF_PerformAction;
+		bif.mMinParams = g_act[action_type].MinParams;
+		bif.mMaxParams = g_act[action_type].MaxParams;
+		
 		// Reserve some space in Func::mName to hold some extra data (see below).
-		aFuncNameLength += max_params + 1;
-		// This should never exceed func_name because all command names are much
-		// shorter than the maximum function name length.
-		ASSERT(aFuncNameLength < _countof(func_name));
-	}
-
-	// Since above didn't return, this is a built-in function that hasn't yet been added to the list.
-	// Add it now:
-	if (   !(pfunc = AddFunc(func_name, aFuncNameLength, true, left))   ) // L27: left contains the position within mFunc to insert the function.  Cannot use *apInsertPos as caller may have omitted it or passed NULL.
-		return NULL;
-
-	pfunc->mBIF = bif;
-	pfunc->mMinParams = min_params;
-	pfunc->mParamCount = max_params;
-
-	if (action_type != ACT_INVALID)
-	{
+		aFuncNameLength = _tcslen(g_act[action_type].Name) + bif.mMaxParams + 1;
+		
+		LPTSTR new_name = (LPTSTR)SimpleHeap::Malloc(aFuncNameLength * sizeof(TCHAR));
+		if (!new_name)
+			return NULL;
+		
 		// For performance, the action and arg types are cached in Func::mName, which is
 		// accessible from BIF_PerformAction via aResultToken.marker.  But since mName
 		// needs to point to the correct name, we adjust it here so that it points into
 		// the middle of the memory block, where the extra data ends and the name begins:
-		TCHAR *type = pfunc->mName;
-		pfunc->mName += max_params + 1;
-		tmemmove(pfunc->mName, type, aFuncNameLength - max_params); // Includes \0.
+		TCHAR *type = new_name;
+		new_name += bif.mMaxParams + 1;
+		_tcscpy(new_name, g_act[action_type].Name);
 		int i;
 		// Store the arg types:
-		for (i = 0; i < max_params; ++i)
+		for (i = 0; i < bif.mMaxParams; ++i)
 			type[i] = (TCHAR)Line::ArgIsVar(action_type, i);
-		// Store the action type (now at mName[-1]):
+		// Store the action type (now at new_name[-1]):
 		type[i] = (TCHAR)action_type;
 		// If the command's first arg is an output var (and its second arg isn't), it will
 		// be used as the return value.  So adjust min/max params in that case.
-		if (max_params && type[0] == ARG_TYPE_OUTPUT_VAR && type[1] != ARG_TYPE_OUTPUT_VAR)
+		if (bif.mMaxParams && type[0] == ARG_TYPE_OUTPUT_VAR && type[1] != ARG_TYPE_OUTPUT_VAR)
 		{
-			if (min_params)
-				--pfunc->mMinParams;
-			--pfunc->mParamCount;
+			if (bif.mMinParams)
+				bif.mMinParams--;
+			bif.mMaxParams--;
 		}
+
+		// Pass this pointer to AddFunc():
+		bif.mName = new_name;
 	}
+
+	// Since above didn't return, this is a built-in function that hasn't yet been added to the list.
+	// Add it now:
+	if (   !(pfunc = AddFunc(bif.mName, aFuncNameLength, true, left))   ) // L27: left contains the position within mFunc to insert the function.  Cannot use *apInsertPos as caller may have omitted it or passed NULL.
+		return NULL;
+
+	pfunc->mBIF = bif.mBIF;
+	pfunc->mMinParams = bif.mMinParams;
+	pfunc->mParamCount = bif.mMaxParams;
+	pfunc->mHasReturn = bif.mHasReturn;
 
 	return pfunc;
 }
@@ -7124,8 +6840,11 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 		// Above already displayed error for us.  This can happen at loadtime or runtime (e.g. StringSplit).
 		return NULL;
 
-	// Allocate some dynamic memory to pass to the constructor:
-	LPTSTR new_name = SimpleHeap::Malloc(func_name, aFuncNameLength);
+	// If this function is built-in, caller wants us to store the pointer as-is.  It is either a
+	// pointer to static memory (just a name) or a memory block containing the name and additional
+	// information (for BIF_PerformAction).  Otherwise, allocate some dynamic memory to pass to
+	// the constructor:
+	LPTSTR new_name = aIsBuiltIn ? (LPTSTR)aFuncName : SimpleHeap::Malloc(func_name, aFuncNameLength);
 	if (!new_name)
 		// It already displayed the error for us.
 		return NULL;
@@ -8124,8 +7843,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 						: ERR_NONEXISTENT_FUNCTION, first_arg.text);
 #endif
 				}
-				if (  !(func->mIsBuiltIn || func->mHasReturn)  )
-					has_output_var = false; // This UDF doesn't need an output var.
+				has_output_var = func->mHasReturn; // Does it need an output var?
 				if (param_count - has_output_var < func->mMinParams)
 				{
 					abort = true;
@@ -13340,7 +13058,7 @@ ResultType Line::Perform()
 		
 		int param_count = mArgc - 1;
 		int arg = 1;
-		if (param_count && (func->mIsBuiltIn || func->mHasReturn))
+		if (param_count && func->mHasReturn)
 		{
 			// Above: mArg[1].type isn't checked because the output var is optional and
 			// might have been omitted, in which case type would be ARG_TYPE_NORMAL.
