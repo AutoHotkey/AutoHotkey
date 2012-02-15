@@ -169,7 +169,7 @@ protected:
 	ResultType CallField(FieldType *aField, ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	
 public:
-	static Object *Create(ExprTokenType *aParam[], int aParamCount);
+	static Object *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
 
 	// Used by Func::Call() for variadic functions/function-calls:
 	Object *Clone(INT_PTR aStartOffset = 0);

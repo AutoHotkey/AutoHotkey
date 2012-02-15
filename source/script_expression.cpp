@@ -1893,7 +1893,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 				}
 			}
 			else
-				obj = (Object *)Object::Create(NULL, 0);
+				obj = (Object *)Object::Create();
 			
 			if (obj)
 			{
