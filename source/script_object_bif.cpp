@@ -51,7 +51,7 @@ void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 void BIF_ObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	Object *obj = Object::Create(NULL, 0);
+	Object *obj = Object::Create();
 	if (obj)
 	{
 		if (!aParamCount || obj->InsertAt(0, 1, aParam, aParamCount))
@@ -184,7 +184,7 @@ void BIF_ObjNew(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 	if (!class_object)
 		return;
 
-	Object *new_object = Object::Create(NULL, 0);
+	Object *new_object = Object::Create();
 	if (!new_object)
 		return;
 

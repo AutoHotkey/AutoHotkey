@@ -6289,7 +6289,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	token.symbol = SYM_STRING;
 	token.marker = mClassName;
 
-	if (   !(class_object = Object::Create(NULL, 0))
+	if (   !(class_object = Object::Create())
 		|| !(class_object->SetItem(_T("__Class"), token))
 		|| !(mClassObjectCount
 				? outer_class->SetItem(class_name, class_object) // Assign to super_class[class_name].
