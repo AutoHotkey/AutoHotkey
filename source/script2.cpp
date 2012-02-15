@@ -2352,13 +2352,18 @@ ResultType WinGetList(Var &aOutputVar, WinGetCmds aCmd, LPTSTR aTitle, LPTSTR aT
 {
 	WindowSearch ws;
 	ws.mFindLastMatch = true; // Must set mFindLastMatch to get all matches rather than just the first.
-	ws.mArrayStart = (aCmd == WINGET_CMD_LIST) ? &aOutputVar : NULL; // Provide the position in the var list of where the array-element vars will be.
+	if (aCmd == WINGET_CMD_LIST)
+		if (  !(ws.mArray = Object::Create())  )
+			return FAIL;
 	// If aTitle is ahk_id nnnn, the Enum() below will be inefficient.  However, ahk_id is almost unheard of
 	// in this context because it makes little sense, so no extra code is added to make that case efficient.
 	if (ws.SetCriteria(*g, aTitle, aText, aExcludeTitle, aExcludeText)) // These criteria allow the possibility of a match.
 		EnumWindows(EnumParentFind, (LPARAM)&ws);
 	//else leave ws.mFoundCount set to zero (by the constructor).
-	return aOutputVar.Assign(ws.mFoundCount);
+	if (aCmd == WINGET_CMD_LIST)
+		return aOutputVar.AssignSkipAddRef(ws.mArray);
+	else
+		return aOutputVar.Assign(ws.mFoundCount);
 }
 
 
@@ -2382,10 +2387,8 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 	else
 		target_window_determined = false;  // A different method is required.
 
-	// Used with WINGET_CMD_LIST to create an array (if needed).  Make it longer than Max var name
-	// so that FindOrAddVar() will be able to spot and report var names that are too long:
-	TCHAR var_name[MAX_VAR_NAME_LENGTH + 20], buf[32];
-	Var *array_item;
+	// Used by a few sub-commands.
+	TCHAR buf[32];
 
 	switch(cmd)
 	{
@@ -2430,19 +2433,20 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 		// breaks from the StringSplit tradition:
 		if (target_window_determined)
 		{
-			if (!target_window)
-				return output_var.Assign(0); // 0 windows found
-			if (cmd == WINGET_CMD_LIST)
+			if (cmd == WINGET_CMD_COUNT)
 			{
-				// Otherwise, since the target window has been determined, we know that it is
-				// the only window to be put into the array:
-				if (   !(array_item = g_script.FindOrAddVar(var_name
-					, sntprintf(var_name, _countof(var_name), _T("%s1"), output_var.mName)))   )  // Find or create element #1.
-					return FAIL;  // It will have already displayed the error.
-				if (!array_item->AssignHWND(target_window))
-					return FAIL;
+				return output_var.Assign(target_window != NULL); // i.e. 1 if a window was found.
 			}
-			return output_var.Assign(1);  // 1 window found
+			// Otherwise, it's WINGET_CMD_LIST:
+			Object *arr = Object::Create();
+			if (!arr)
+				return FAIL;
+			if (target_window)
+				// Since the target window has been determined, we know that it is the only window
+				// to be put into the array:
+				arr->Append(HwndToString(target_window, buf));
+			// Otherwise, return an empty array.
+			return output_var.AssignSkipAddRef(arr);
 		}
 		// Otherwise, the target window(s) have not yet been determined and a special method
 		// is required to gather them.
@@ -2519,36 +2523,14 @@ ResultType Line::WinGetControlList(Var &aOutputVar, HWND aTargetWindow, bool aFe
 // Every control is fetched rather than just a list of distinct class names (possibly with a
 // second script array containing the quantity of each class) because it's conceivable that the
 // z-order of the controls will be useful information to some script authors.
-// A delimited list is used rather than the array technique used by "WinGet, OutputVar, List" because:
-// 1) It allows the flexibility of searching the list more easily with something like InStr.
-// 2) It seems rather rare that the count of items in the list would be useful info to a script author
-//    (the count can be derived with a parsing loop if it's ever needed).
-// 3) It saves memory since script arrays are permanent and since each array element would incur
-//    the overhead of being a script variable, not to mention that each variable has a minimum
-//    capacity (additional overhead) of 64 bytes.
 {
 	control_list_type cl; // A big struct containing room to store class names and counts for each.
+	if (  !(cl.target_array = Object::Create())  )
+		return FAIL;
 	CL_INIT_CONTROL_LIST(cl)
 	cl.fetch_hwnds = aFetchHWNDs;
-	cl.target_buf = NULL;  // First pass: Signal it not not to write to the buf, but instead only calculate the length.
 	EnumChildWindows(aTargetWindow, EnumChildGetControlList, (LPARAM)&cl);
-	if (!cl.total_length) // No controls in the window.
-		return aOutputVar.Assign();
-	// Set up the var, enlarging it if necessary.  If the aOutputVar is of type VAR_CLIPBOARD,
-	// this call will set up the clipboard for writing:
-	if (aOutputVar.AssignString(NULL, (VarSizeType)cl.total_length) != OK)
-		return FAIL;  // It already displayed the error.
-	// Fetch the text directly into the var.  Also set the length explicitly
-	// in case actual size written was off from the estimated size (in case the list of
-	// controls changed in the split second between pass #1 and pass #2):
-	CL_INIT_CONTROL_LIST(cl)
-	cl.target_buf = aOutputVar.Contents();  // Second pass: Write to the buffer.
-	cl.capacity = aOutputVar.Capacity(); // Because granted capacity might be a little larger than we asked for.
-	EnumChildWindows(aTargetWindow, EnumChildGetControlList, (LPARAM)&cl);
-	aOutputVar.SetCharLength((VarSizeType)cl.total_length);  // In case it wound up being smaller than expected.
-	if (!cl.total_length) // Something went wrong, so make sure its terminated just in case.
-		*aOutputVar.Contents() = '\0';  // Safe because Assign() gave us a non-constant memory area.
-	return aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
+	return aOutputVar.AssignSkipAddRef(cl.target_array);
 }
 
 
@@ -2563,7 +2545,7 @@ BOOL CALLBACK EnumChildGetControlList(HWND aWnd, LPARAM lParam)
 	// scripts that want to operate directly on the HWNDs.
 	if (cl.fetch_hwnds)
 	{
-		line_length = (int)_tcslen(HwndToString(aWnd, line));
+		HwndToString(aWnd, line);
 	}
 	else // The mode that fetches ClassNN vs. HWND.
 	{
@@ -2600,33 +2582,9 @@ BOOL CALLBACK EnumChildGetControlList(HWND aWnd, LPARAM lParam)
 		}
 
 		_itot(cl.class_count[class_index], line + line_length, 10); // Append the seq. number to line.
-		line_length = (int)_tcslen(line);  // Update the length.
 	}
 
-	int extra_length;
-	if (cl.is_first_iteration)
-	{
-		extra_length = 0; // All items except the first are preceded by a delimiting LF.
-		cl.is_first_iteration = false;
-	}
-	else
-		extra_length = 1;
-
-	if (cl.target_buf)
-	{
-		if ((int)(cl.capacity - cl.total_length - extra_length - 1) < line_length)
-			// No room in target_buf (i.e. don't write a partial item to the buffer).
-			return TRUE;  // Rare: it should only happen if size in pass #2 differed from that calc'd in pass #1.
-		if (extra_length)
-		{
-			cl.target_buf[cl.total_length] = '\n'; // Replace previous item's terminator with newline.
-			cl.total_length += extra_length;
-		}
-		_tcscpy(cl.target_buf + cl.total_length, line); // Write hwnd or class name+seq. number.
-		cl.total_length += line_length;
-	}
-	else // Caller only wanted the total length calculated.
-		cl.total_length += line_length + extra_length;
+	cl.target_array->Append(line); // Append hwnd or class name+seq. number to the array.
 
 	return TRUE; // Continue enumeration through all the windows.
 }

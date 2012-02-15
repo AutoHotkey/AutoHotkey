@@ -113,7 +113,7 @@ public:
 	WindowSpec *mFirstWinSpec;  // Linked list used by the WinGroup commands.
 	ActionTypeType mActionType; // Used only by WinGroup::PerformShowWindow().
 	int mTimeToWaitForClose;    // Same.
-	Var *mArrayStart;           // Used by WinGetList() to fetch an array of matching HWNDs.
+	Object *mArray;             // Used by WinGetList() to fetch an array of matching HWNDs.
 
 	// Controlled by the SetCandidate() method:
 	HWND mCandidateParent;
@@ -148,7 +148,7 @@ public:
 		// them in those relatively rare cases when they need to be.  WinGroup::ActUponAll() and
 		// WinGroup::Deactivate() (and probably other callers) rely on these attributes being retained
 		// after they were overridden even upon multiple subsequent calls to SetCriteria():
-		, mFindLastMatch(false), mAlreadyVisited(NULL), mAlreadyVisitedCount(0), mFirstWinSpec(NULL), mArrayStart(NULL)
+		, mFindLastMatch(false), mAlreadyVisited(NULL), mAlreadyVisitedCount(0), mFirstWinSpec(NULL), mArray(NULL)
 	{
 	}
 };
@@ -160,16 +160,11 @@ struct control_list_type
 	// For something this simple, a macro is probably a lot less overhead that making this struct
 	// non-POD and giving it a constructor:
 	#define CL_INIT_CONTROL_LIST(cl) \
-		cl.is_first_iteration = true;\
 		cl.total_classes = 0;\
-		cl.total_length = 0;\
 		cl.buf_free_spot = cl.class_buf; // Points to the next available/writable place in the buf.
 	bool fetch_hwnds;         // True if fetching HWND of each control rather than its ClassNN.
-	bool is_first_iteration;  // Must be initialized to true by Enum's caller.
 	int total_classes;        // Must be initialized to 0.
-	VarSizeType total_length; // Must be initialized to 0.
-	VarSizeType capacity;     // Must be initialized to size of the below buffer.
-	LPTSTR target_buf;         // Caller sets it to NULL if only the total_length is to be retrieved.
+	Object *target_array;
 	#define CL_CLASS_BUF_SIZE (32 * 1024) // Even if class names average 50 chars long, this supports 655 of them.
 	TCHAR class_buf[CL_CLASS_BUF_SIZE];
 	LPTSTR buf_free_spot;      // Must be initialized to point to the beginning of class_buf.

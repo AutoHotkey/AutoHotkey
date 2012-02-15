@@ -1678,7 +1678,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 // in case previous match(es) were found when mFindLastMatch is in effect.
 // Thread-safety: With the following exception, this function must be kept thread-safe because it may be
 // called (indirectly) by hook thread too: The hook thread must never call here directly or indirectly with
-// mArrayStart!=NULL because the corresponding section below is probably not thread-safe.
+// mArray!=NULL because the corresponding section below is probably not thread-safe.
 {
 	if (!mCandidateParent || !mCriteria) // Nothing to check, so no match.
 		return NULL;
@@ -1807,20 +1807,16 @@ HWND WindowSearch::IsMatch(bool aInvert)
 	if (!aInvert)
 	{
 		mFoundParent = mCandidateParent;
-		++mFoundCount; // This must be done prior to the mArrayStart section below.
+		++mFoundCount; // This must be done prior to the mArray section below.
 	}
 	//else aInvert==true, which means caller doesn't want the above set.
 
-	if (mArrayStart) // Probably not thread-safe due to FindOrAddVar(), so hook thread must call only with NULL mArrayStart.
+	if (mArray) // Probably not thread-safe, so hook thread must call only with NULL mArray.
 	{
-		// Make it longer than Max var name so that FindOrAddVar() will be able to spot and report
-		// var names that are too long:
-		TCHAR var_name[MAX_VAR_NAME_LENGTH + 20];
-		Var *array_item = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%s%u"), mArrayStart->mName, mFoundCount));
-		if (array_item)
-			array_item->AssignHWND(mFoundParent);
-		//else no error reporting currently, since should be very rare.
+		// Use hex strings for consistency with WinExist() and because it is more conventional:
+		TCHAR buf[MAX_INTEGER_SIZE];
+		mArray->Append(HwndToString(mFoundParent, buf));
+		// No error reporting currently, since should be very rare.
 	}
 
 	// Fix for v1.0.30.01: Don't return mFoundParent because its NULL when aInvert is true.
