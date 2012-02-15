@@ -2346,7 +2346,7 @@ ResultType Line::WinGetClass(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, 
 
 
 
-ResultType WinGetList(Var &aOutputVar, WinGetCmds aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+void WinGetList(ExprTokenType &aResultToken, WinGetCmds aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 // Helper function for WinGet() to avoid having a WindowSearch object on its stack (since that object
 // normally isn't needed).
 {
@@ -2354,29 +2354,46 @@ ResultType WinGetList(Var &aOutputVar, WinGetCmds aCmd, LPTSTR aTitle, LPTSTR aT
 	ws.mFindLastMatch = true; // Must set mFindLastMatch to get all matches rather than just the first.
 	if (aCmd == WINGET_CMD_LIST)
 		if (  !(ws.mArray = Object::Create())  )
-			return FAIL;
+			return;
 	// If aTitle is ahk_id nnnn, the Enum() below will be inefficient.  However, ahk_id is almost unheard of
 	// in this context because it makes little sense, so no extra code is added to make that case efficient.
 	if (ws.SetCriteria(*g, aTitle, aText, aExcludeTitle, aExcludeText)) // These criteria allow the possibility of a match.
 		EnumWindows(EnumParentFind, (LPARAM)&ws);
 	//else leave ws.mFoundCount set to zero (by the constructor).
 	if (aCmd == WINGET_CMD_LIST)
-		return aOutputVar.AssignSkipAddRef(ws.mArray);
+	{
+		// Return the array even if it is empty:
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = ws.mArray;
+	}
 	else
-		return aOutputVar.Assign(ws.mFoundCount);
+	{
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = ws.mFoundCount;
+	}
 }
 
+void WinGetControlList(ExprTokenType &aResultToken, HWND aTargetWindow, bool aFetchHWNDs); // Forward declaration.
 
 
-ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+
+void BIF_WinGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	Var &output_var = *OUTPUT_VAR;  // This is done even for WINGET_CMD_LIST.
-	WinGetCmds cmd = ConvertWinGetCmd(aCmd);
-	// Since command names are validated at load-time, this only happens if the command name
-	// was contained in a variable reference.  But for simplicity of design here, return
-	// failure in this case (unlike other functions similar to this one):
-	if (cmd == WINGET_CMD_INVALID)
-		return LineError(ERR_PARAM2_INVALID, FAIL, aCmd);
+	BIF_DECL_STRING_PARAM(1, aTitle);
+	BIF_DECL_STRING_PARAM(2, aText);
+	BIF_DECL_STRING_PARAM(3, aExcludeTitle);
+	BIF_DECL_STRING_PARAM(4, aExcludeText);
+
+	WinGetCmds cmd = Line::ConvertWinGetCmd(aResultToken.marker + 6); // Get the "CMD" from "WinGetCMD".
+	// Since an invalid name wouldn't resolve to this function in the first place,
+	// the following check should be unnecessary:
+	ASSERT(cmd != WINGET_CMD_INVALID);
+
+	// Set default return value (it's done this way so that sub-commands which
+	// return a short string can simply write directly into aResultToken.buf):
+	aResultToken.symbol = SYM_STRING;
+	*aResultToken.buf = '\0';
+	aResultToken.marker = aResultToken.buf;
 
 	bool target_window_determined = true;  // Set default.
 	HWND target_window;
@@ -2387,9 +2404,6 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 	else
 		target_window_determined = false;  // A different method is required.
 
-	// Used by a few sub-commands.
-	TCHAR buf[32];
-
 	switch(cmd)
 	{
 	case WINGET_CMD_ID:
@@ -2397,9 +2411,9 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 		if (!target_window_determined)
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText, cmd == WINGET_CMD_IDLAST);
 		if (target_window)
-			return output_var.AssignHWND(target_window);
-		else
-			return output_var.Assign();
+			HwndToString(target_window, aResultToken.buf);
+		// Otherwise, return the default value.
+		return;
 
 	case WINGET_CMD_PID:
 	case WINGET_CMD_PROCESSNAME:
@@ -2411,14 +2425,17 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 			DWORD pid;
 			GetWindowThreadProcessId(target_window, &pid);
 			if (cmd == WINGET_CMD_PID)
-				return output_var.Assign(pid);
+			{
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = pid;
+				return;
+			}
 			// Otherwise, get the full path and name of the executable that owns this window.
 			TCHAR process_name[MAX_PATH];
 			GetProcessName(pid, process_name, _countof(process_name), cmd == WINGET_CMD_PROCESSNAME);
-			return output_var.Assign(process_name);
+			TokenSetResult(aResultToken, process_name);
 		}
-		// If above didn't return:
-		return output_var.Assign();
+		return;
 
 	case WINGET_CMD_COUNT:
 	case WINGET_CMD_LIST:
@@ -2435,22 +2452,28 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 		{
 			if (cmd == WINGET_CMD_COUNT)
 			{
-				return output_var.Assign(target_window != NULL); // i.e. 1 if a window was found.
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = (target_window != NULL); // i.e. 1 if a window was found.
+				return;
 			}
 			// Otherwise, it's WINGET_CMD_LIST:
 			Object *arr = Object::Create();
 			if (!arr)
-				return FAIL;
+				return;
+			TCHAR buf[MAX_INTEGER_SIZE];
 			if (target_window)
 				// Since the target window has been determined, we know that it is the only window
 				// to be put into the array:
 				arr->Append(HwndToString(target_window, buf));
 			// Otherwise, return an empty array.
-			return output_var.AssignSkipAddRef(arr);
+			aResultToken.symbol = SYM_OBJECT;
+			aResultToken.object = arr;
+			return;
 		}
 		// Otherwise, the target window(s) have not yet been determined and a special method
 		// is required to gather them.
-		return WinGetList(output_var, cmd, aTitle, aText, aExcludeTitle, aExcludeText); // Outsourced to avoid having a WindowSearch object on this function's stack.
+		WinGetList(aResultToken, cmd, aTitle, aText, aExcludeTitle, aExcludeText); // Outsourced to avoid having a WindowSearch object on this function's stack.
+		return;
 
 	case WINGET_CMD_MINMAX:
 		if (!target_window_determined)
@@ -2459,33 +2482,35 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 		// the theory that upon restoration, it *would* be maximized.  This is unfortunate if there
 		// is no other way to determine what the restoration size and maximized state will be for a
 		// minimized window.
-		if (target_window)
-			return output_var.Assign(IsZoomed(target_window) ? 1 : (IsIconic(target_window) ? -1 : 0));
-		else
-			return output_var.Assign();
+		if (!target_window)
+			return;
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = IsZoomed(target_window) ? 1 : (IsIconic(target_window) ? -1 : 0);
+		return;
 
 	case WINGET_CMD_CONTROLLIST:
 	case WINGET_CMD_CONTROLLISTHWND:
 		if (!target_window_determined)
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
-		return target_window ? WinGetControlList(output_var, target_window, cmd == WINGET_CMD_CONTROLLISTHWND)
-			: output_var.Assign();
+		if (target_window)
+			WinGetControlList(aResultToken, target_window, cmd == WINGET_CMD_CONTROLLISTHWND);
+		return;
 
 	case WINGET_CMD_STYLE:
 	case WINGET_CMD_EXSTYLE:
 		if (!target_window_determined)
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 		if (!target_window)
-			return output_var.Assign();
-		_stprintf(buf, _T("0x%08X"), GetWindowLong(target_window, cmd == WINGET_CMD_STYLE ? GWL_STYLE : GWL_EXSTYLE));
-		return output_var.Assign(buf);
+			return;
+		_stprintf(aResultToken.buf, _T("0x%08X"), GetWindowLong(target_window, cmd == WINGET_CMD_STYLE ? GWL_STYLE : GWL_EXSTYLE));
+		return;
 
 	case WINGET_CMD_TRANSPARENT:
 	case WINGET_CMD_TRANSCOLOR:
 		if (!target_window_determined)
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 		if (!target_window)
-			return output_var.Assign();
+			return;
 		typedef BOOL (WINAPI *MyGetLayeredWindowAttributesType)(HWND, COLORREF*, BYTE*, DWORD*);
 		static MyGetLayeredWindowAttributesType MyGetLayeredWindowAttributes = (MyGetLayeredWindowAttributesType)
 			GetProcAddress(GetModuleHandle(_T("user32")), "GetLayeredWindowAttributes");
@@ -2496,29 +2521,32 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 		// SetLayeredWindowAttributes(), which works on Windows 2000, GetLayeredWindowAttributes()
 		// is supported only on XP or later.
 		if (!MyGetLayeredWindowAttributes || !(MyGetLayeredWindowAttributes(target_window, &color, &alpha, &flags)))
-			return output_var.Assign();
+			return;
 		if (cmd == WINGET_CMD_TRANSPARENT)
-			return (flags & LWA_ALPHA) ? output_var.Assign((DWORD)alpha) : output_var.Assign();
+		{
+			if (flags & LWA_ALPHA)
+			{
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = (UINT)alpha;
+			}
+		}
 		else // WINGET_CMD_TRANSCOLOR
 		{
 			if (flags & LWA_COLORKEY)
 			{
 				// Store in hex format to aid in debugging scripts.  Also, the color is always
 				// stored in RGB format, since that's what WinSet uses:
-				_stprintf(buf, _T("0x%06X"), bgr_to_rgb(color));
-				return output_var.Assign(buf);
+				_stprintf(aResultToken.buf, _T("0x%06X"), bgr_to_rgb(color));
 			}
-			else // This window does not have a transparent color (or it's not accessible to us, perhaps for reasons described at MSDN GetLayeredWindowAttributes()).
-				return output_var.Assign();
+			// Otherwise, this window does not have a transparent color (or it's not accessible to us,
+			// perhaps for reasons described at MSDN GetLayeredWindowAttributes()).
 		}
 	}
-
-	return FAIL;  // Never executed (increases maintainability and avoids compiler warning).
 }
 
 
 
-ResultType Line::WinGetControlList(Var &aOutputVar, HWND aTargetWindow, bool aFetchHWNDs)
+void WinGetControlList(ExprTokenType &aResultToken, HWND aTargetWindow, bool aFetchHWNDs)
 // Caller must ensure that aTargetWindow is non-NULL and valid.
 // Every control is fetched rather than just a list of distinct class names (possibly with a
 // second script array containing the quantity of each class) because it's conceivable that the
@@ -2526,11 +2554,12 @@ ResultType Line::WinGetControlList(Var &aOutputVar, HWND aTargetWindow, bool aFe
 {
 	control_list_type cl; // A big struct containing room to store class names and counts for each.
 	if (  !(cl.target_array = Object::Create())  )
-		return FAIL;
+		return;
 	CL_INIT_CONTROL_LIST(cl)
 	cl.fetch_hwnds = aFetchHWNDs;
 	EnumChildWindows(aTargetWindow, EnumChildGetControlList, (LPARAM)&cl);
-	return aOutputVar.AssignSkipAddRef(cl.target_array);
+	aResultToken.symbol = SYM_OBJECT;
+	aResultToken.object = cl.target_array;
 }
 
 

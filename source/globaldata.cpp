@@ -382,7 +382,6 @@ Action g_act[] =
 	, {_T("WinSetTitle"), 0, 5, false, NULL} // title, text, newtitle, exclude-title, exclude-text
 	, {_T("WinGetTitle"), 1, 5, true, NULL} // Output-var, std. 4 window params
 	, {_T("WinGetClass"), 1, 5, true, NULL} // Output-var, std. 4 window params
-	, {_T("WinGet"), 1, 6, true, NULL} // Output-var/array, cmd (if omitted, defaults to ID), std. 4 window params
 	, {_T("WinGetPos"), 0, 8, true, NULL} // Four optional output vars: xpos, ypos, width, height.  Std. 4 window params.
 	, {_T("WinGetText"), 1, 5, true, NULL} // Output var, std 4 window params.
 

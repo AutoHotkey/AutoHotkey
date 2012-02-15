@@ -147,6 +147,21 @@ FuncEntry g_BIF[] =
 	{_T("ComObjQuery"), BIF_ComObjQuery, 2, 3, true},
 	
 	{_T("Exception"), BIF_Exception, 1, 3, true},
+
+	{_T("WinGetID"), BIF_WinGet, 0, 4, true},
+	{_T("WinGetIDLast"), BIF_WinGet, 0, 4, true},
+	{_T("WinGetPID"), BIF_WinGet, 0, 4, true},
+	{_T("WinGetProcessName"), BIF_WinGet, 0, 4, true},
+	{_T("WinGetProcessPath"), BIF_WinGet, 0, 4, true},
+	{_T("WinGetCount"), BIF_WinGet, 0, 4, true},
+	{_T("WinGetList"), BIF_WinGet, 0, 4, true},
+	{_T("WinGetMinMax"), BIF_WinGet, 0, 4, true},
+	{_T("WinGetControlList"), BIF_WinGet, 0, 4, true},
+	{_T("WinGetControlListHwnd"), BIF_WinGet, 0, 4, true},
+	{_T("WinGetTransparent"), BIF_WinGet, 0, 4, true},
+	{_T("WinGetTransColor"), BIF_WinGet, 0, 4, true},
+	{_T("WinGetStyle"), BIF_WinGet, 0, 4, true},
+	{_T("WinGetExStyle"), BIF_WinGet, 0, 4, true},
 };
 
 // See Script::CreateWindows() for details about the following:
@@ -5767,11 +5782,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 			}
 		}
-		break;
-
-	case ACT_WINGET:
-		if (!line.ArgHasDeref(2) && !line.ConvertWinGetCmd(new_raw_arg2)) // It's okay if ARG2 is blank.
-			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
 	case ACT_SYSGET:
@@ -12336,8 +12346,6 @@ ResultType Line::Perform()
 		return WinGetTitle(ARG2, ARG3, ARG4, ARG5);
 	case ACT_WINGETCLASS:
 		return WinGetClass(ARG2, ARG3, ARG4, ARG5);
-	case ACT_WINGET:
-		return WinGet(ARG2, ARG3, ARG4, ARG5, ARG6);
 	case ACT_WINGETTEXT:
 		return WinGetText(ARG2, ARG3, ARG4, ARG5);
 	case ACT_WINGETPOS:

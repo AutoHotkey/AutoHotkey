@@ -627,8 +627,6 @@ private:
 		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
 	ResultType WinGetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType WinGetClass(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType WinGetControlList(Var &aOutputVar, HWND aTargetWindow, bool aFetchHWNDs);
 	ResultType WinGetText(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType WinGetPos(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType EnvGet(LPTSTR aEnvVarName);
@@ -907,7 +905,6 @@ public:
 			case ACT_MOUSEGETPOS:
 			case ACT_WINGETTITLE:
 			case ACT_WINGETCLASS:
-			case ACT_WINGET:
 			case ACT_WINGETTEXT:
 			case ACT_WINGETPOS:
 			case ACT_SYSGET:
@@ -2736,6 +2733,7 @@ bool IsDllArgTypeName(LPTSTR name);
 void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free = NULL);
 void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 #endif
+
 void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_InStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
@@ -2836,7 +2834,16 @@ void BIF_ComObjQuery(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 
 void BIF_Exception(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
+
+void BIF_WinGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+
+
 void BIF_PerformAction(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+
+
+#define BIF_DECL_STRING_PARAM(n, name) \
+	TCHAR name##_buf[MAX_NUMBER_SIZE], \
+	*name = (aParamCount >= n ? TokenToString(*aParam[n-1], name##_buf) : _T(""))
 
 
 BOOL ResultToBOOL(LPTSTR aResult);
