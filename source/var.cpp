@@ -31,11 +31,7 @@ ResultType Var::AssignHWND(HWND aWnd)
 	// Older comment: Always assign as hex for better compatibility with Spy++ and other apps that
 	// report window handles.
 	TCHAR buf[MAX_INTEGER_SIZE];
-	buf[0] = '0';
-	buf[1] = 'x';
-	Exp32or64(_ultot,_ui64tot)((size_t)aWnd, buf + 2, 16);
-	// If ever decide to assign a pure integer, keep in mind the type-casting comments in BIF_WinExistActive().
-	return Assign(buf);
+	return Assign(HwndToString(aWnd, buf));
 }
 
 

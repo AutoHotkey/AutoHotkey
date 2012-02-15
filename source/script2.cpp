@@ -3784,9 +3784,7 @@ BOOL CALLBACK EnumChildGetControlList(HWND aWnd, LPARAM lParam)
 	// scripts that want to operate directly on the HWNDs.
 	if (cl.fetch_hwnds)
 	{
-		line[0] = '0';
-		line[1] = 'x';
-		line_length = 2 + (int)_tcslen(_ultot((UINT)(size_t)aWnd, line + 2, 16)); // Type-casting: See comments in BIF_WinExistActive().
+		line_length = (int)_tcslen(HwndToString(aWnd, line));
 	}
 	else // The mode that fetches ClassNN vs. HWND.
 	{
@@ -11352,12 +11350,7 @@ VarSizeType BIV_ScriptFullPath(LPTSTR aBuf, LPTSTR aVarName)
 VarSizeType BIV_ScriptHwnd(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (aBuf)
-	{
-		aBuf[0] = '0';
-		aBuf[1] = 'x';
-		Exp32or64(_ultot,_ui64tot)((size_t)g_hWnd, aBuf + 2, 16); // See BIF_WinExistActive for comments.
-		return (VarSizeType)_tcslen(aBuf);
-	}
+		return (VarSizeType)_tcslen(HwndToString(g_hWnd, aBuf));
 	return MAX_INTEGER_LENGTH;
 }
 
@@ -15339,28 +15332,13 @@ void BIF_WinExistActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 	TCHAR *param[4], param_buf[4][MAX_NUMBER_SIZE];
 	for (int j = 0; j < 4; ++j) // For each formal parameter, including optional ones.
 		param[j] = (j >= aParamCount) ? _T("") : TokenToString(*aParam[j], param_buf[j]);
-		// For above, the following are notes from a time when this function was part of expression evaluation:
-		// Assign empty string if no actual to go with it.
-		// Otherwise, assign actual parameter's value to the formal parameter.
-		// The stack can contain both generic and specific operands.  Specific operands were
-		// evaluated by a previous iteration of this section.  Generic ones were pushed as-is
-		// onto the stack by a previous iteration.
 
 	// Should be called the same was as ACT_IFWINEXIST and ACT_IFWINACTIVE:
 	HWND found_hwnd = (ctoupper(bif_name[3]) == 'E') // Win[E]xist.
 		? WinExist(*g, param[0], param[1], param[2], param[3], false, true)
 		: WinActive(*g, param[0], param[1], param[2], param[3], true);
-	aResultToken.marker = aResultToken.buf; // If necessary, this result will be moved to a persistent memory location by our caller.
-	aResultToken.marker[0] = '0';
-	aResultToken.marker[1] = 'x';
-	Exp32or64(_ultot,_ui64tot)((size_t)found_hwnd, aResultToken.marker + 2, 16); // See below.
-	// Use _ultot for performance on 32-bit systems and _ui64tot on 64-bit systems in case it's
-	// possible for HWNDs to have non-zero upper 32-bits.  Comments below are mostly obsolete:
-	// Fix for v1.0.48: Any HWND or pointer that can be greater than 0x7FFFFFFF must be cast to
-	// something like (unsigned __int64)(size_t) rather than directly to (unsigned __int64). Otherwise
-	// the high-order DWORD will wind up containing FFFFFFFF.  But since everything is 32-bit now, HWNDs
-	// are only 32-bit, so use _ultot() for performance.
-	// OLD/WRONG: _ui64toa((unsigned __int64)found_hwnd, aResultToken.marker + 2, 16);
+
+	aResultToken.marker = HwndToString(found_hwnd, aResultToken.buf);
 }
 
 
