@@ -11001,10 +11001,10 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 
 		default:
 			result = line->Perform();
-			if (!result || aMode == ONLY_ONE_LINE)
+			if (result != OK || aMode == ONLY_ONE_LINE)
 				// Thus, Perform() should be designed to only return FAIL if it's an error that would make
 				// it unsafe to proceed in the subroutine we're executing now:
-				return result; // Can be either OK or FAIL.
+				return result; // Usually OK or FAIL; can also be EARLY_EXIT.
 			line = line->mNextLine;
 		} // switch()
 	} // for each line
@@ -13117,6 +13117,8 @@ ResultType Line::Perform()
 		if (result_token.symbol == SYM_OBJECT)
 			result_token.object->Release();
 
+		if (result == EARLY_RETURN) // This would cause our caller to "return".
+			result = OK;
 		return result;
 	}
 
