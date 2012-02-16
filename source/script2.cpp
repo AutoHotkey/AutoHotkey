@@ -1909,7 +1909,7 @@ ResultType Line::ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3)
 
 
 
-ResultType Line::WinSetRegion(HWND aWnd, LPTSTR aPoints)
+ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints)
 {
 	if (!*aPoints) // Attempt to restore the window's normal/correct region.
 	{
@@ -1937,7 +1937,7 @@ ResultType Line::WinSetRegion(HWND aWnd, LPTSTR aPoints)
 
 		// It's undocumented by MSDN, but apparently setting the Window's region to NULL restores it
 		// to proper working order:
-		return SetErrorLevelOrThrowBool(!SetWindowRgn(aWnd, NULL, TRUE)); // Let ErrorLevel tell the story.
+		return Script::SetErrorLevelOrThrowBool(!SetWindowRgn(aWnd, NULL, TRUE)); // Let ErrorLevel tell the story.
 	}
 
 	#define MAX_REGION_POINTS 2000  // 2000 requires 16 KB of stack space.
@@ -2056,26 +2056,35 @@ ResultType Line::WinSetRegion(HWND aWnd, LPTSTR aPoints)
 	//else don't delete hrgn since the system has taken ownership of it.
 
 	// Since above didn't return, indicate success.
-	return SetErrorLevelOrThrowBool(false);
+	return Script::SetErrorLevelOrThrowBool(false);
 
 error:
-	return SetErrorLevelOrThrow();
+	return Script::SetErrorLevelOrThrow();
 }
 
 
-						
-ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aText
-	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+
+void BIF_WinSet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	WinSetAttributes attrib = ConvertWinSetAttribute(aAttrib);
-	if (attrib == WINSET_INVALID)
-		return LineError(ERR_PARAM1_INVALID, FAIL, aAttrib);
+	BIF_DECL_STRING_PARAM(1, aValue);
+	BIF_DECL_STRING_PARAM(2, aTitle);
+	BIF_DECL_STRING_PARAM(3, aText);
+	BIF_DECL_STRING_PARAM(4, aExcludeTitle);
+	BIF_DECL_STRING_PARAM(5, aExcludeText);
+
+	WinSetAttributes attrib = Line::ConvertWinSetAttribute(aResultToken.marker + 6); // Get the "CMD" from "WinSetCMD".
+	// Since an invalid name wouldn't resolve to this function in the first place,
+	// the following check should be unnecessary:
+	ASSERT(attrib != WINSET_INVALID);
+
+	// Set default return value.
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
 
 	// Only the following sub-commands affect ErrorLevel:
 	bool use_errorlevel = (attrib == WINSET_STYLE || attrib == WINSET_EXSTYLE || attrib == WINSET_REGION);
 
-	// Since this is a macro, avoid repeating it for every case of the switch():
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	HWND target_window = Line::DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
 	if (!target_window)
 		goto error;
 
@@ -2087,15 +2096,15 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 	case WINSET_ALWAYSONTOP:
 	{
 		if (   !(exstyle = GetWindowLong(target_window, GWL_EXSTYLE))   )
-			return OK;
+			return;
 		HWND topmost_or_not;
-		switch(ConvertOnOffToggle(aValue))
+		switch(Line::ConvertOnOffToggle(aValue))
 		{
 		case TOGGLED_ON: topmost_or_not = HWND_TOPMOST; break;
 		case TOGGLED_OFF: topmost_or_not = HWND_NOTOPMOST; break;
 		case NEUTRAL: // parameter was blank, so it defaults to TOGGLE.
 		case TOGGLE: topmost_or_not = (exstyle & WS_EX_TOPMOST) ? HWND_NOTOPMOST : HWND_TOPMOST; break;
-		default: return OK;
+		default: return;
 		}
 		// SetWindowLong() didn't seem to work, at least not on some windows.  But this does.
 		// As of v1.0.25.14, SWP_NOACTIVATE is also specified, though its absence does not actually
@@ -2146,7 +2155,7 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 		static MySetLayeredWindowAttributesType MySetLayeredWindowAttributes = (MySetLayeredWindowAttributesType)
 			GetProcAddress(GetModuleHandle(_T("user32")), "SetLayeredWindowAttributes");
 		if (!MySetLayeredWindowAttributes || !(exstyle = GetWindowLong(target_window, GWL_EXSTYLE)))
-			return OK;  // Do nothing on OSes that don't support it.
+			return;  // Do nothing on OSes that don't support it.
 		if (!_tcsicmp(aValue, _T("Off")))
 			// One user reported that turning off the attribute helps window's scrolling performance.
 			SetWindowLong(target_window, GWL_EXSTYLE, exstyle & ~WS_EX_LAYERED);
@@ -2252,10 +2261,11 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 	case WINSET_ENABLE:
 	case WINSET_DISABLE: // These are separate sub-commands from WINSET_STYLE because merely changing the WS_DISABLED style is usually not as effective as calling EnableWindow().
 		EnableWindow(target_window, attrib == WINSET_ENABLE);
-		return OK;
+		return;
 
 	case WINSET_REGION:
-		return WinSetRegion(target_window, aValue);
+		WinSetRegion(target_window, aValue);
+		return;
 
 	case WINSET_REDRAW:
 		// Seems best to always have the last param be TRUE, for now, so that aValue can be
@@ -2273,12 +2283,15 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 		break;
 
 	} // switch()
-	return use_errorlevel ? SetErrorLevelOrThrowBool(false) : OK;
+	if (use_errorlevel)
+		Script::SetErrorLevelOrThrowBool(false);
+	return;
 
 error:
 	// Only STYLE, EXSTYLE and REDRAW affect ErrorLevel for compatibility reasons,
 	// but seems best to allow the other sub-commands to throw exceptions:
-	return (use_errorlevel || g->InTryBlock) ? SetErrorLevelOrThrow() : OK;
+	if (use_errorlevel || g->InTryBlock)
+		Script::SetErrorLevelOrThrow();
 }
 
 

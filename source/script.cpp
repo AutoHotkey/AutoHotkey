@@ -162,6 +162,21 @@ FuncEntry g_BIF[] =
 	{_T("WinGetTransColor"), BIF_WinGet, 0, 4, true},
 	{_T("WinGetStyle"), BIF_WinGet, 0, 4, true},
 	{_T("WinGetExStyle"), BIF_WinGet, 0, 4, true},
+
+	{_T("WinSetTrans"), BIF_WinSet, 1, 5, false},
+	{_T("WinSetTransparent"), BIF_WinSet, 1, 5, false},
+	{_T("WinSetTransColor"), BIF_WinSet, 1, 5, false},
+	{_T("WinSetAlwaysOnTop"), BIF_WinSet, 0, 5, false},
+	{_T("WinSetTopmost"), BIF_WinSet, 0, 5, false},
+	{_T("WinSetBottom"), BIF_WinSet, 0, 5, false},
+	{_T("WinSetTop"), BIF_WinSet, 0, 5, false},
+	{_T("WinSetStyle"), BIF_WinSet, 1, 5, false},
+	{_T("WinSetExStyle"), BIF_WinSet, 1, 5, false},
+	{_T("WinSetRedraw"), BIF_WinSet, 0, 5, false},
+	{_T("WinSetEnable"), BIF_WinSet, 0, 5, false},
+	{_T("WinSetDisable"), BIF_WinSet, 0, 5, false},
+	{_T("WinSetRegion"), BIF_WinSet, 0, 5, false},
+	
 };
 
 // See Script::CreateWindows() for details about the following:
@@ -12338,8 +12353,6 @@ ResultType Line::Perform()
 		return ScriptPostSendMessage(mActionType == ACT_SENDMESSAGE);
 	case ACT_PROCESS:
 		return ScriptProcess(THREE_ARGS);
-	case ACT_WINSET:
-		return WinSet(SIX_ARGS);
 	case ACT_WINSETTITLE:
 		return mArgc > 1 ? WinSetTitle(FIVE_ARGS) : WinSetTitle(_T(""), _T(""), ARG1);
 	case ACT_WINGETTITLE:

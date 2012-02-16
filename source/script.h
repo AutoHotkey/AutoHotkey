@@ -620,9 +620,6 @@ private:
 		, LPTSTR aInterval, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ScriptPostSendMessage(bool aUseSend);
 	ResultType ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3);
-	ResultType WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aText
-		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints);
 	ResultType WinSetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aNewTitle
 		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
 	ResultType WinGetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
@@ -864,7 +861,7 @@ public:
 	Label *IsJumpValid(Label &aTargetLabel, bool aSilent = false);
 	BOOL IsOutsideAnyFunctionBody();
 
-	HWND DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	static HWND DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 
 	
 	// This is in the .h file so that it's more likely the compiler's cost/benefit estimate will
@@ -2836,6 +2833,7 @@ void BIF_Exception(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 
 void BIF_WinGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+void BIF_WinSet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 
 void BIF_PerformAction(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
