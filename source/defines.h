@@ -329,10 +329,12 @@ enum enum_act {
 , ACT_EDIT, ACT_RELOAD, ACT_MENU, ACT_GUI, ACT_GUICONTROL, ACT_GUICONTROLGET
 , ACT_SHUTDOWN
 , ACT_FILEENCODING
-// It's safer not to do this here.  It's better set by a
-// calculation immediately after the array is declared and initialized,
-// at which time we know its true size:
-// , ACT_COUNT
+// It's safer to use g_ActionCount, which is calculated immediately after the array is declared
+// and initialized, at which time we know its true size.  However, the following lets us detect
+// when the size of the array doesn't match the enum (in debug mode):
+#ifdef _DEBUG
+, ACT_COUNT
+#endif
 };
 
 // It seems best not to include ACT_SUSPEND in the below, since the user may have marked
