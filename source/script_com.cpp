@@ -146,7 +146,7 @@ BIF_DECL(BIF_ComObjActive)
 		{
 			// For backward-compatibility:
 			aResultToken.symbol = SYM_INTEGER;
-			BIF_ComObjTypeOrValue(aResultToken, aParam, aParamCount);
+			BIF_ComObjTypeOrValue(aResult, aResultToken, aParam, aParamCount);
 		}
 		else if (VT_DISPATCH == obj->mVarType)
 		{

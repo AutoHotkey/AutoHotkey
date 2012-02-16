@@ -118,12 +118,12 @@ BIF_DECL(BIF_ObjInvoke)
 			// This is not necessary for SYM_OBJECT since that reference is already counted and cannot be released before we return.  Each object
 			// could take care not to delete itself prematurely, but it seems more proper, more reliable and more maintainable to handle it here.
 			obj->AddRef();
-        obj->Invoke(aResultToken, *obj_param, invoke_type, aParam, aParamCount);
+        aResult = obj->Invoke(aResultToken, *obj_param, invoke_type, aParam, aParamCount);
 		if (param_is_var)
 			obj->Release();
 	}
 	// Invoke meta-functions of g_MetaObject.
-	else if (INVOKE_NOT_HANDLED == g_MetaObject.Invoke(aResultToken, *obj_param, invoke_type | IF_META, aParam, aParamCount))
+	else if (INVOKE_NOT_HANDLED == (aResult = g_MetaObject.Invoke(aResultToken, *obj_param, invoke_type | IF_META, aParam, aParamCount)))
 	{
 		// Since above did not handle it, check for attempts to access .base of non-object value (g_MetaObject itself).
 		if (   invoke_type != IT_CALL // Exclude things like "".base().
@@ -152,6 +152,8 @@ BIF_DECL(BIF_ObjInvoke)
 				obj_param->var->MaybeWarnUninitialized();
 		}
 	}
+	if (aResult == INVOKE_NOT_HANDLED)
+		aResult = OK;
 }
 	
 
@@ -165,7 +167,7 @@ BIF_DECL(BIF_ObjGetInPlace)
 	// those cases. Otherwise we have one visible parameter, which indicates the number of
 	// actual parameters below it on the stack.
 	aParamCount = aParamCount ? (int)TokenToInt64(*aParam[0]) : 2; // x[<n-1 params>] : x.y
-	BIF_ObjInvoke(aResultToken, aParam - aParamCount, aParamCount);
+	BIF_ObjInvoke(aResult, aResultToken, aParam - aParamCount, aParamCount);
 }
 
 
@@ -272,7 +274,10 @@ BIF_DECL(BIF_ObjIncDec)
 
 	// Retrieve the current value.  Do it this way instead of calling Object::Invoke
 	// so that if aParam[0] is not an object, g_MetaObject is correctly invoked.
-	BIF_ObjInvoke(temp_result, aParam, aParamCount);
+	BIF_ObjInvoke(aResult, temp_result, aParam, aParamCount);
+
+	if (aResult == FAIL || aResult == EARLY_EXIT)
+		return;
 
 	// Change SYM_STRING to SYM_OPERAND so below may treat it as a numeric string.
 	if (temp_result.symbol == SYM_STRING)
@@ -320,7 +325,7 @@ BIF_DECL(BIF_ObjIncDec)
 		aResultToken.marker = (LPTSTR)IT_SET;
 		// Set the new value and pass the return value of the invocation back to our caller.
 		// This should be consistent with something like x.y := x.y + 1.
-		BIF_ObjInvoke(aResultToken, param, aParamCount);
+		BIF_ObjInvoke(aResult, aResultToken, param, aParamCount);
 	}
 	else // SYM_POST_INCREMENT || SYM_POST_DECREMENT
 	{
@@ -331,7 +336,7 @@ BIF_DECL(BIF_ObjIncDec)
 		temp_result.mem_to_free = NULL;
 		
 		// Set the new value.
-		BIF_ObjInvoke(temp_result, param, aParamCount);
+		BIF_ObjInvoke(aResult, temp_result, param, aParamCount);
 		
 		// Dispose of the result safely.
 		if (temp_result.symbol == SYM_OBJECT)

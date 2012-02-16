@@ -355,7 +355,7 @@ struct ArgStruct
 	ExprTokenType *postfix;  // An array of tokens in postfix order. Also used for ACT_ADD and others to store pre-converted binary integers.
 };
 
-#define BIF_DECL_PARAMS ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount
+#define BIF_DECL_PARAMS ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount
 
 // The following macro is used for definitions and declarations of built-in functions:
 #define BIF_DECL(name) void name(BIF_DECL_PARAMS)
