@@ -13135,7 +13135,7 @@ ResultType Line::Perform()
 
 
 
-void BIF_PerformAction(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_PerformAction)
 {
 	// aResultToken.marker was overloaded to pass us the name of the function,
 	// which in this case is immediately preceded by the arg types and action type.

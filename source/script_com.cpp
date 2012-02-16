@@ -9,7 +9,7 @@
 const IID IID__Object = {0x65074F7F, 0x63C0, 0x304E, 0xAF, 0x0A, 0xD5, 0x17, 0x41, 0xCB, 0x4A, 0x8D};
 
 
-void BIF_ComObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ComObjCreate)
 {
 	HRESULT hr;
 	CLSID clsid, iid;
@@ -50,7 +50,7 @@ void BIF_ComObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int 
 }
 
 
-void BIF_ComObjGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ComObjGet)
 {
 	HRESULT hr;
 	IDispatch *pdisp;
@@ -70,7 +70,7 @@ void BIF_ComObjGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 }
 
 
-void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ComObjActive)
 {
 	if (!aParamCount) // ComObjMissing()
 	{
@@ -146,7 +146,7 @@ void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int 
 		{
 			// For backward-compatibility:
 			aResultToken.symbol = SYM_INTEGER;
-			BIF_ComObjTypeOrValue(aResultToken, aParam, aParamCount);
+			BIF_ComObjTypeOrValue(aResult, aResultToken, aParam, aParamCount);
 		}
 		else if (VT_DISPATCH == obj->mVarType)
 		{
@@ -187,7 +187,7 @@ void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int 
 }
 
 
-void BIF_ComObjConnect(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ComObjConnect)
 {
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
@@ -310,7 +310,7 @@ void BIF_ComObjConnect(ExprTokenType &aResultToken, ExprTokenType *aParam[], int
 }
 
 
-void BIF_ComObjError(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ComObjError)
 {
 	aResultToken.value_int64 = g_ComErrorNotify;
 	if (aParamCount && TokenIsNumeric(*aParam[0]))
@@ -318,7 +318,7 @@ void BIF_ComObjError(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 }
 
 
-void BIF_ComObjTypeOrValue(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ComObjTypeOrValue)
 {
 	ComObject *obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0]));
 	if (!obj)
@@ -380,7 +380,7 @@ void BIF_ComObjTypeOrValue(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 }
 
 
-void BIF_ComObjFlags(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ComObjFlags)
 {
 	ComObject *obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0]));
 	if (!obj)
@@ -419,7 +419,7 @@ void BIF_ComObjFlags(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 }
 
 
-void BIF_ComObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ComObjArray)
 {
 	VARTYPE vt = (VARTYPE)TokenToInt64(*aParam[0]);
 	SAFEARRAYBOUND bound[8]; // Same limit as ComObject::SafeArrayInvoke().
@@ -436,7 +436,7 @@ void BIF_ComObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 }
 
 
-void BIF_ComObjQuery(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ComObjQuery)
 {
 	IUnknown *punk = NULL;
 	ComObject *obj;

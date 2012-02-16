@@ -1490,6 +1490,8 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 // aSpaceAvailable: -1 indicates this is a regular function call.  Otherwise this must be the amount of
 //   space available after aParam for expanding the array of parameters for a variadic function call.
 {
+	aResult = OK; // Set default.
+
 	if (mIsBuiltIn)
 	{
 		aResultToken.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
@@ -1505,41 +1507,29 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 				// Since built-in functions don't have variables we can directly assign to,
 				// we need to expand the param object's contents into an array of tokens:
 				if (!param_obj->ArrayToParams(mem_to_free, aParam, aParamCount, mMinParams))
-				{
-					aResult = OK; // Abort expression but not thread.
-					return false;
-				}
+					return false; // Abort expression.
 
 				// CALL THE BUILT-IN FUNCTION:
-				mBIF(aResultToken, aParam, aParamCount);
+				mBIF(aResult, aResultToken, aParam, aParamCount);
 
 				if (mem_to_free)
 					free(mem_to_free);
 				if (g->ThrownToken)
-				{
-					aResult = FAIL; // If this is not done, aResult would contain garbage
-					return false;
-				}
-				return true;
+					aResult = FAIL; // Abort thread.
+				return (aResult != EARLY_EXIT && aResult != FAIL);
 			}
 			// Caller-supplied "params*" is not an Object, so treat it like an empty list; however,
 			// mMinParams isn't validated at load-time for variadic calls, so we must do it here:
 			if (aParamCount < mMinParams)
-			{
-				aResult = OK; // Abort expression but not thread.
-				return false;
-			}
+				return false; // Abort expression.
 			// Otherwise just call the function normally.
 		}
 
 		// CALL THE BUILT-IN FUNCTION:
-		mBIF(aResultToken, aParam, aParamCount);
+		mBIF(aResult, aResultToken, aParam, aParamCount);
+		
 		if (g->ThrownToken)
-		{
-			aResult = FAIL; // See above.
-			return false;
-		}
-		return true;
+			aResult = FAIL; // Abort thread.
 	}
 	else // It's not a built-in function, or it's a built-in that was overridden with a custom function.
 	{
@@ -1676,8 +1666,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 			case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
 			default: //case PARAM_DEFAULT_NONE:
 				// Since above didn't continue, no value has been supplied for this REQUIRED parameter.
-				aResult = OK; // Abort expression but not thread.
-				return false;
+				return false; // Abort expression.
 			}
 		}
 
@@ -1686,10 +1675,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 			ExprTokenType &token = *aParam[j];
 			
 			if (!IS_OPERAND(token.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
-			{
-				aResult = OK; // Abort expression but not thread.
-				return false;
-			}
+				return false; // Abort expression.
 			
 			if (mParam[j].is_byref)
 			{
@@ -1751,9 +1737,8 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 		}
 
 		aResult = Call(&aResultToken); // Call the UDF.
-
-		return (aResult != EARLY_EXIT && aResult != FAIL);
 	}
+	return (aResult != EARLY_EXIT && aResult != FAIL);
 }
 
 // This is used for maintainability: to ensure it's never forgotten and to reduce code repetition.

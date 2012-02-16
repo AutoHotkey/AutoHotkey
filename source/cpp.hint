@@ -1,0 +1,1 @@
+#define BIF_DECL(name) BIF_ResultType name(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)

@@ -321,6 +321,11 @@ struct ArgStruct
 	ExprTokenType *postfix;  // An array of tokens in postfix order. Also used for ACT_(NOT)BETWEEN to store pre-converted binary integers.
 };
 
+#define BIF_DECL_PARAMS ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount
+
+// The following macro is used for definitions and declarations of built-in functions:
+#define BIF_DECL(name) void name(BIF_DECL_PARAMS)
+
 
 // Some of these lengths and such are based on the MSDN example at
 // http://msdn.microsoft.com/library/default.asp?url=/library/en-us/sysinfo/base/enumerating_registry_subkeys.asp:
@@ -525,7 +530,7 @@ private:
 	ResultType PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
 	ResultType PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil); // Lexikos: ACT_FOR.
 	ResultType Perform();
-	friend void BIF_PerformAction(ExprTokenType &, ExprTokenType *[], int);
+	friend BIF_DECL(BIF_PerformAction);
 
 	ResultType MouseGetPos(DWORD aOptions);
 	ResultType FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat);
@@ -1806,7 +1811,7 @@ struct FuncCallData
 	~FuncCallData();
 };
 
-typedef void (* BuiltInFunctionType)(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+typedef BIF_DECL((* BuiltInFunctionType));
 
 class Func : public IObject
 {
@@ -2727,115 +2732,116 @@ VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName);
 #ifdef ENABLE_DLLCALL
 bool IsDllArgTypeName(LPTSTR name);
 void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free = NULL);
-void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_DllCall);
 #endif
 
-void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_InStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_StrSplit(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_Ord(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_Chr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_IsLabel(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_Func(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_IsByRef(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_GetKeyState(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_GetKeyName(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_FileExist(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_WinExistActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_Round(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_FloorCeil(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_Mod(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_Abs(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_Sin(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_Cos(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_Tan(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ASinACos(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ATan(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_Exp(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_SqrtLogLn(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_DateAdd(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_DateDiff(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_StrLen);
+BIF_DECL(BIF_SubStr);
+BIF_DECL(BIF_InStr);
+BIF_DECL(BIF_StrSplit);
+BIF_DECL(BIF_RegEx);
+BIF_DECL(BIF_Ord);
+BIF_DECL(BIF_Chr);
+BIF_DECL(BIF_NumGet);
+BIF_DECL(BIF_NumPut);
+BIF_DECL(BIF_StrGetPut);
+BIF_DECL(BIF_IsLabel);
+BIF_DECL(BIF_IsFunc);
+BIF_DECL(BIF_Func);
+BIF_DECL(BIF_IsByRef);
+BIF_DECL(BIF_GetKeyState);
+BIF_DECL(BIF_GetKeyName);
+BIF_DECL(BIF_VarSetCapacity);
+BIF_DECL(BIF_FileExist);
+BIF_DECL(BIF_WinExistActive);
+BIF_DECL(BIF_Round);
+BIF_DECL(BIF_FloorCeil);
+BIF_DECL(BIF_Mod);
+BIF_DECL(BIF_Abs);
+BIF_DECL(BIF_Sin);
+BIF_DECL(BIF_Cos);
+BIF_DECL(BIF_Tan);
+BIF_DECL(BIF_ASinACos);
+BIF_DECL(BIF_ATan);
+BIF_DECL(BIF_Exp);
+BIF_DECL(BIF_SqrtLogLn);
+BIF_DECL(BIF_DateAdd);
+BIF_DECL(BIF_DateDiff);
 
-void BIF_OnMessage(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_OnMessage);
+
 #ifdef ENABLE_REGISTERCALLBACK
-void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_RegisterCallback);
 #endif
 
-void BIF_StatusBar(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_StatusBar);
 
-void BIF_LV_GetNextOrCount(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_LV_GetText(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_LV_AddInsertModify(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_LV_Delete(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_LV_InsertModifyDeleteCol(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_LV_SetImageList(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_LV_GetNextOrCount);
+BIF_DECL(BIF_LV_GetText);
+BIF_DECL(BIF_LV_AddInsertModify);
+BIF_DECL(BIF_LV_Delete);
+BIF_DECL(BIF_LV_InsertModifyDeleteCol);
+BIF_DECL(BIF_LV_SetImageList);
 
-void BIF_TV_AddModifyDelete(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_TV_GetRelatedItem(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_TV_Get(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_TV_SetImageList(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_TV_AddModifyDelete);
+BIF_DECL(BIF_TV_GetRelatedItem);
+BIF_DECL(BIF_TV_Get);
+BIF_DECL(BIF_TV_SetImageList);
 
-void BIF_IL_Create(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_IL_Destroy(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_IL_Add(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_IL_Create);
+BIF_DECL(BIF_IL_Destroy);
+BIF_DECL(BIF_IL_Add);
 
-void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // L31: Also handles LTrim and RTrim.
+BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.
 
-void BIF_Type(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_Type);
 
 
-void BIF_IsObject(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // Pseudo-operator. See script_object.cpp for comments.
-void BIF_ObjGetInPlace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // Pseudo-operator.
-void BIF_ObjNew(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // Pseudo-operator.
-void BIF_ObjIncDec(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount); // Pseudo-operator.
-void BIF_ObjAddRefRelease(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_IsObject);
+BIF_DECL(BIF_ObjCreate);
+BIF_DECL(BIF_ObjArray);
+BIF_DECL(BIF_ObjInvoke); // Pseudo-operator. See script_object.cpp for comments.
+BIF_DECL(BIF_ObjGetInPlace); // Pseudo-operator.
+BIF_DECL(BIF_ObjNew); // Pseudo-operator.
+BIF_DECL(BIF_ObjIncDec); // Pseudo-operator.
+BIF_DECL(BIF_ObjAddRefRelease);
 // Built-ins also available as methods -- these are available as functions for use primarily by overridden methods (i.e. where using the built-in methods isn't possible as they're no longer accessible).
-void BIF_ObjInsert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjRemove(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjGetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjGetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjMaxIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjMinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjNewEnum(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjHasKey(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ObjClone(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_ObjInsert);
+BIF_DECL(BIF_ObjRemove);
+BIF_DECL(BIF_ObjGetCapacity);
+BIF_DECL(BIF_ObjSetCapacity);
+BIF_DECL(BIF_ObjGetAddress);
+BIF_DECL(BIF_ObjMaxIndex);
+BIF_DECL(BIF_ObjMinIndex);
+BIF_DECL(BIF_ObjNewEnum);
+BIF_DECL(BIF_ObjHasKey);
+BIF_DECL(BIF_ObjClone);
 
 
 // Advanced file IO interfaces
-void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_FileOpen);
 
 
 // COM interop
-void BIF_ComObjActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ComObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ComObjGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ComObjConnect(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ComObjError(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ComObjTypeOrValue(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ComObjFlags(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ComObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_ComObjQuery(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_ComObjActive);
+BIF_DECL(BIF_ComObjCreate);
+BIF_DECL(BIF_ComObjGet);
+BIF_DECL(BIF_ComObjConnect);
+BIF_DECL(BIF_ComObjError);
+BIF_DECL(BIF_ComObjTypeOrValue);
+BIF_DECL(BIF_ComObjFlags);
+BIF_DECL(BIF_ComObjArray);
+BIF_DECL(BIF_ComObjQuery);
 
 
-void BIF_Exception(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_Exception);
 
 
-void BIF_WinGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_WinSet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-void BIF_Process(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_WinGet);
+BIF_DECL(BIF_WinSet);
+BIF_DECL(BIF_Process);
 
-void BIF_PerformAction(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+BIF_DECL(BIF_PerformAction);
 
 
 #define BIF_DECL_STRING_PARAM(n, name) \

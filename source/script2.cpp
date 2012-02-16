@@ -1803,7 +1803,7 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 
 
 
-void BIF_Process(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_Process)
 {
 	BIF_DECL_STRING_PARAM(1, aProcess);
 
@@ -2073,7 +2073,7 @@ error:
 
 
 
-void BIF_WinSet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_WinSet)
 {
 	BIF_DECL_STRING_PARAM(1, aValue);
 	BIF_DECL_STRING_PARAM(2, aTitle);
@@ -2399,7 +2399,7 @@ void WinGetControlList(ExprTokenType &aResultToken, HWND aTargetWindow, bool aFe
 
 
 
-void BIF_WinGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_WinGet)
 {
 	BIF_DECL_STRING_PARAM(1, aTitle);
 	BIF_DECL_STRING_PARAM(2, aText);
@@ -5380,7 +5380,7 @@ ResultType Line::StringReplace()
 
 
 
-void BIF_StrSplit(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_StrSplit)
 {
 	LPTSTR aInputString = TokenToString(*aParam[0], aResultToken.buf);
 	LPTSTR *aDelimiterList = NULL;
@@ -10567,7 +10567,7 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 
 
 
-void BIF_DllCall(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_DllCall)
 // Stores a number or a SYM_STRING result in aResultToken.
 // Sets ErrorLevel to the error code appropriate to any problem that occurred.
 // Caller has set up aParam to be viewable as a left-to-right array of params rather than a stack.
@@ -11098,7 +11098,7 @@ end:
 #endif
 
 
-void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_StrLen)
 // Caller has ensured that SYM_VAR's Type() is VAR_NORMAL and that it's either not an environment
 // variable or the caller wants environment variables treated as having zero length.
 // Result is always an integer (caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need
@@ -11113,7 +11113,7 @@ void BIF_StrLen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 
 
-void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount) // Added in v1.0.46.
+BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 {
 	// Set default return value in case of early return.
 	aResultToken.symbol = SYM_STRING;
@@ -11174,7 +11174,7 @@ void BIF_SubStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 
 
-void BIF_InStr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_InStr)
 {
 	// Load-time validation has already ensured that at least two actual parameters are present.
 	TCHAR needle_buf[MAX_NUMBER_SIZE];
@@ -12364,7 +12364,7 @@ set_count_and_return:
 
 
 
-void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_RegEx)
 // This function is the initial entry point for both RegExMatch() and RegExReplace().
 // Caller has set aResultToken.symbol to a default of SYM_INTEGER.
 {
@@ -12481,7 +12481,7 @@ void BIF_RegEx(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 
 
 
-void BIF_Ord(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_Ord)
 {
 	// Result will always be an integer (this simplifies scripts that work with binary zeros since an
 	// empty string yields zero).
@@ -12501,7 +12501,7 @@ void BIF_Ord(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 
 
 
-void BIF_Chr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_Chr)
 {
 	int param1 = (int)TokenToInt64(*aParam[0]); // Convert to INT vs. UINT so that negatives can be detected.
 	LPTSTR cp = aResultToken.buf; // If necessary, it will be moved to a persistent memory location by our caller.
@@ -12529,7 +12529,7 @@ void BIF_Chr(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 
 
 
-void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_NumGet)
 {
 	size_t right_side_bound, target; // Don't make target a pointer-type because the integer offset might not be a multiple of 4 (i.e. the below increments "target" directly by "offset" and we don't want that to use pointer math).
 	ExprTokenType &target_token = *aParam[0];
@@ -12642,7 +12642,7 @@ void BIF_NumGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 
 
-void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_NumPut)
 {
 	// Load-time validation has ensured that at least the first two parameters are present.
 	ExprTokenType &token_to_write = *aParam[0];
@@ -12757,7 +12757,7 @@ void BIF_NumPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 
 
-void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_StrGetPut)
 {
 	// To simplify flexible handling of parameters:
 	ExprTokenType **aParam_end = aParam + aParamCount;
@@ -13016,7 +13016,7 @@ void BIF_StrGetPut(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 
 
-void BIF_IsLabel(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_IsLabel)
 // For performance and code-size reasons, this function does not currently return what
 // type of label it is (hotstring, hotkey, or generic).  To preserve the option to do
 // this in the future, it has been documented that the function returns non-zero rather
@@ -13029,7 +13029,7 @@ void BIF_IsLabel(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 
 
 
-void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount) // Lexikos: Added for use with dynamic function calls.
+BIF_DECL(BIF_IsFunc) // Lexikos: Added for use with dynamic function calls.
 // Although it's tempting to return an integer like 0x8000000_min_max, where min/max are the function's
 // minimum and maximum number of parameters stored in the low-order DWORD, it would be more friendly and
 // readable to implement those outputs as optional ByRef parameters;
@@ -13049,7 +13049,7 @@ void BIF_IsFunc(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 
 
-void BIF_Func(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_Func)
 // Returns a reference to an existing user-defined or built-in function, as an object.
 {
 	Func *func = g_script.FindFunc(TokenToString(*aParam[0], aResultToken.buf));
@@ -13063,7 +13063,7 @@ void BIF_Func(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 }
 
 
-void BIF_IsByRef(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_IsByRef)
 {
 	if (aParam[0]->symbol != SYM_VAR)
 	{
@@ -13081,7 +13081,7 @@ void BIF_IsByRef(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 
 
 
-void BIF_GetKeyState(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_GetKeyState)
 {
 	TCHAR key_name_buf[MAX_NUMBER_SIZE]; // Because aResultToken.buf is used for something else below.
 	LPTSTR key_name = TokenToString(*aParam[0], key_name_buf);
@@ -13119,7 +13119,7 @@ void BIF_GetKeyState(ExprTokenType &aResultToken, ExprTokenType *aParam[], int a
 
 
 
-void BIF_GetKeyName(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_GetKeyName)
 {
 	// Get VK and/or SC from the first parameter, which may be a key name, scXXX or vkXX.
 	// Key names are allowed even for GetKeyName() for simplicity and so that it can be
@@ -13155,7 +13155,7 @@ void BIF_GetKeyName(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aP
 
 
 
-void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_VarSetCapacity)
 // Returns: The variable's new capacity.
 // Parameters:
 // 1: Target variable (unquoted).
@@ -13221,7 +13221,7 @@ void BIF_VarSetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 
 
 
-void BIF_FileExist(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_FileExist)
 {
 	TCHAR filename_buf[MAX_NUMBER_SIZE]; // Because aResultToken.buf is used for something else below.
 	LPTSTR filename = TokenToString(*aParam[0], filename_buf);
@@ -13258,7 +13258,7 @@ void BIF_FileExist(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 
 
-void BIF_WinExistActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_WinExistActive)
 {
 	LPTSTR bif_name = aResultToken.marker;  // Save this early for maintainability (it is the name of the function, provided by the caller).
 	aResultToken.symbol = SYM_STRING; // Returns a string to preserve hex format.
@@ -13276,7 +13276,7 @@ void BIF_WinExistActive(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 
 
 
-void BIF_Round(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_Round)
 // For simplicity and backward compatibility, this always yields something numeric (or a string that's numeric).
 // Even Round(empty_or_unintialized_var) is zero rather than "".
 {
@@ -13346,7 +13346,7 @@ void BIF_Round(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamC
 
 
 
-void BIF_FloorCeil(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_FloorCeil)
 // Probably saves little code size to merge extremely short/fast functions, hence FloorCeil.
 // Floor() rounds down to the nearest integer; that is, to the integer that lies to the left on the
 // number line (this is not the same as truncation because Floor(-1.2) is -2, not -1).
@@ -13373,7 +13373,7 @@ void BIF_FloorCeil(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 
 
-void BIF_Mod(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_Mod)
 {
 	// Load-time validation has already ensured there are exactly two parameters.
 	// "Cast" each operand to Int64/Double depending on whether it has a decimal point.
@@ -13414,7 +13414,7 @@ void BIF_Mod(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 
 
 
-void BIF_Abs(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_Abs)
 {
 	// Unlike TRANS_CMD_ABS, which removed the minus sign from the string if it had one,
 	// this is done in a more traditional way.  It's hard to imagine needing the minus
@@ -13444,7 +13444,7 @@ void BIF_Abs(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 
 
 
-void BIF_Sin(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_Sin)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
@@ -13454,7 +13454,7 @@ void BIF_Sin(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 
 
 
-void BIF_Cos(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_Cos)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
@@ -13464,7 +13464,7 @@ void BIF_Cos(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 
 
 
-void BIF_Tan(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_Tan)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
@@ -13474,7 +13474,7 @@ void BIF_Tan(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 
 
 
-void BIF_ASinACos(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ASinACos)
 {
 	double value = TokenToDouble(*aParam[0]);
 	if (value > 1 || value < -1) // ASin and ACos aren't defined for such values.
@@ -13494,7 +13494,7 @@ void BIF_ASinACos(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 
 
 
-void BIF_ATan(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ATan)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
@@ -13504,7 +13504,7 @@ void BIF_ATan(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 
 
-void BIF_Exp(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_Exp)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
@@ -13514,7 +13514,7 @@ void BIF_Exp(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCou
 
 
 
-void BIF_SqrtLogLn(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_SqrtLogLn)
 {
 	double value = TokenToDouble(*aParam[0]);
 	if (value < 0) // Result is undefined in these cases, so make blank to indicate.
@@ -13543,7 +13543,7 @@ void BIF_SqrtLogLn(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 
 
-void BIF_DateAdd(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_DateAdd)
 {
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T(""); // Set default in case of early return.
@@ -13588,7 +13588,7 @@ void BIF_DateAdd(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPara
 
 
 
-void BIF_DateDiff(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_DateDiff)
 {
 	// Since above didn't return, the command is being used to subtract date-time values.
 	bool failed;
@@ -13621,7 +13621,7 @@ void BIF_DateDiff(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 
 
 
-void BIF_OnMessage(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_OnMessage)
 // Returns: An empty string on failure or the name of a function (depends on mode) on success.
 // Parameters:
 // 1: Message number to monitor.
@@ -13918,7 +13918,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 
 
 
-void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_RegisterCallback)
 // Returns: Address of callback procedure, or empty string on failure.
 // Parameters:
 // 1: Name of the function to be called when the callback routine is executed.
@@ -14034,7 +14034,7 @@ void BIF_RegisterCallback(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 
 #endif
 
-void BIF_StatusBar(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_StatusBar)
 {
 	TCHAR mode = ctoupper(aResultToken.marker[6]); // Union's marker initially contains the function name. SB_Set[T]ext.
 	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
@@ -14126,7 +14126,7 @@ void BIF_StatusBar(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 
 
-void BIF_LV_GetNextOrCount(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_LV_GetNextOrCount)
 // LV_GetNext:
 // Returns: The index of the found item, or 0 on failure.
 // Parameters:
@@ -14207,7 +14207,7 @@ void BIF_LV_GetNextOrCount(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 
 
 
-void BIF_LV_GetText(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_LV_GetText)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: Output variable (doing it this way allows success/fail return value to more closely mirror the API and
@@ -14277,7 +14277,7 @@ void BIF_LV_GetText(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aP
 
 
 
-void BIF_LV_AddInsertModify(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_LV_AddInsertModify)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: For Add(), this is the options.  For Insert/Modify, it's the row index (one-based when it comes in).
@@ -14534,7 +14534,7 @@ void BIF_LV_AddInsertModify(ExprTokenType &aResultToken, ExprTokenType *aParam[]
 
 
 
-void BIF_LV_Delete(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_LV_Delete)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: Row index (one-based when it comes in).
@@ -14568,7 +14568,7 @@ void BIF_LV_Delete(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 
 
-void BIF_LV_InsertModifyDeleteCol(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: Column index (one-based when it comes in).
@@ -14878,7 +14878,7 @@ void BIF_LV_InsertModifyDeleteCol(ExprTokenType &aResultToken, ExprTokenType *aP
 
 
 
-void BIF_LV_SetImageList(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_LV_SetImageList)
 // Returns (MSDN): "handle to the image list previously associated with the control if successful; NULL otherwise."
 // Parameters:
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
@@ -14912,7 +14912,7 @@ void BIF_LV_SetImageList(ExprTokenType &aResultToken, ExprTokenType *aParam[], i
 
 
 
-void BIF_TV_AddModifyDelete(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_TV_AddModifyDelete)
 // TV_Add():
 // Returns the HTREEITEM of the item on success, zero on failure.
 // Parameters:
@@ -15215,7 +15215,7 @@ HTREEITEM GetNextTreeItem(HWND aTreeHwnd, HTREEITEM aItem)
 
 
 
-void BIF_TV_GetRelatedItem(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_TV_GetRelatedItem)
 // TV_GetParent/Child/Selection/Next/Prev(hitem):
 // The above all return the HTREEITEM (or 0 on failure).
 // When TV_GetNext's second parameter is present, the search scope expands to include not just siblings,
@@ -15316,7 +15316,7 @@ void BIF_TV_GetRelatedItem(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 
 
 
-void BIF_TV_Get(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_TV_Get)
 // LV_Get()
 // Returns: Varies depending on param #2.
 // Parameters:
@@ -15402,7 +15402,7 @@ void BIF_TV_Get(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 
 
-void BIF_TV_SetImageList(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_TV_SetImageList)
 // Returns (MSDN): "handle to the image list previously associated with the control if successful; NULL otherwise."
 // Parameters:
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
@@ -15431,7 +15431,7 @@ void BIF_TV_SetImageList(ExprTokenType &aResultToken, ExprTokenType *aParam[], i
 
 
 
-void BIF_IL_Create(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_IL_Create)
 // Returns: Handle to the new image list, or 0 on failure.
 // Parameters:
 // 1: Initial image count (ImageList_Create() ignores values <=0, so no need for error checking).
@@ -15453,7 +15453,7 @@ void BIF_IL_Create(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 
 
-void BIF_IL_Destroy(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_IL_Destroy)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
@@ -15466,7 +15466,7 @@ void BIF_IL_Destroy(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aP
 
 
 
-void BIF_IL_Add(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_IL_Add)
 // Returns: the one-based index of the newly added icon, or zero on failure.
 // Parameters:
 // 1: HIMAGELIST: Handle of an existing ImageList.
@@ -15527,7 +15527,7 @@ void BIF_IL_Add(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 
 
 
-void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount) // L31
+BIF_DECL(BIF_Trim) // L31
 {
 	TCHAR trim_type = ctoupper(*aResultToken.marker); // aResultToken.marker points to the name of the Func which was called.
 
@@ -15567,7 +15567,7 @@ void BIF_Trim(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 
 
-void BIF_Type(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_Type)
 // Returns the pure type of the given value.
 {
 	aResultToken.symbol = SYM_STRING;
@@ -15606,7 +15606,7 @@ void BIF_Type(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 
 
-void BIF_Exception(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_Exception)
 {
 	LPTSTR message = TokenToString(*aParam[0], aResultToken.buf);
 	TCHAR what_buf[MAX_NUMBER_SIZE], extra_buf[MAX_NUMBER_SIZE];
