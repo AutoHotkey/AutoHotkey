@@ -4127,7 +4127,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				// Assume this is a function; a later stage will throw up an error if it isn't.
 				aActionType = ACT_FUNC;
 				// Include the function name as an arg:
-				if (end_marker[1])
+				if (end_marker[1] && g_delimiter != *omit_leading_whitespace(end_marker + 1))
 					end_marker[1] = g_delimiter;
 				action_args = aLineText;
 			}
