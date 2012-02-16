@@ -97,6 +97,8 @@ Script::Script()
 		ScriptError(_T("DEBUG: ID_FILE_EXIT is too large (conflicts with IDs reserved via ID_USER_FIRST)."));
 	if (MAX_CONTROLS_PER_GUI > ID_USER_FIRST - 3)
 		ScriptError(_T("DEBUG: MAX_CONTROLS_PER_GUI is too large (conflicts with IDs reserved via ID_USER_FIRST)."));
+	if (g_ActionCount != ACT_COUNT) // This enum value only exists in debug mode.
+		ScriptError(_T("DEBUG: g_act and enum_act are out of sync."));
 	int LargestMaxParams, i, j;
 	ActionTypeType *np;
 	// Find the Largest value of MaxParams used by any command and make sure it

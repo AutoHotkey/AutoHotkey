@@ -347,10 +347,12 @@ enum enum_act {
 // in a match anyway.  UPDATE: No longer used because Run/RunWait is now required, which greatly
 // improves syntax checking during load:
 //, ACT_EXEC
-// It's safer not to do this here.  It's better set by a
-// calculation immediately after the array is declared and initialized,
-// at which time we know its true size:
-// , ACT_COUNT
+// It's safer to use g_ActionCount, which is calculated immediately after the array is declared
+// and initialized, at which time we know its true size.  However, the following lets us detect
+// when the size of the array doesn't match the enum (in debug mode):
+#ifdef _DEBUG
+, ACT_COUNT
+#endif
 };
 
 enum enum_act_old {
