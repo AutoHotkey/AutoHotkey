@@ -1009,7 +1009,6 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 		TerminateApp(aExitReason, aExitCode);
 	}
 	DEBUGGER_STACK_POP()
-	sExitLabelIsRunning = false;  // In case the user wanted the thread to end normally (see above).
 
 	if (terminate_afterward)
 		TerminateApp(aExitReason, aExitCode);
@@ -1017,6 +1016,10 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	// Otherwise:
 	g_AllowInterruption = g_AllowInterruption_prev;  // Restore original setting.
 	ResumeUnderlyingThread(ErrorLevel_saved);
+	// If this OnExit thread is the last script thread and the script is not persistent, the above
+	// call recurses into this function.  sExitLabelIsRunning == true prevents infinite recursion
+	// in that case.  It is now safe to reset:
+	sExitLabelIsRunning = false;  // In case the user wanted the thread to end normally (see above).
 
 	return OK;  // for caller convenience.
 }
