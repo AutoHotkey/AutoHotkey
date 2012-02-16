@@ -13117,7 +13117,7 @@ ResultType Line::Perform()
 		if (result_token.symbol == SYM_OBJECT)
 			result_token.object->Release();
 
-		return OK;
+		return result;
 	}
 
 	} // switch()
