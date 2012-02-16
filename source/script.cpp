@@ -177,6 +177,12 @@ FuncEntry g_BIF[] =
 	{_T("WinSetDisable"), BIF_WinSet, 0, 5, false},
 	{_T("WinSetRegion"), BIF_WinSet, 0, 5, false},
 	
+	{_T("ProcessExist"), BIF_Process, 0, 1, true},
+	{_T("ProcessClose"), BIF_Process, 1, 1, true},
+	{_T("ProcessPriority"), BIF_Process, 2, 2, true},
+	{_T("ProcessWait"), BIF_Process, 1, 2, true},
+	{_T("ProcessWaitClose"), BIF_Process, 1, 2, true},
+
 };
 
 // See Script::CreateWindows() for details about the following:
@@ -5706,34 +5712,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 			if (drive_get_cmd != DRIVEGET_CMD_LIST && drive_get_cmd != DRIVEGET_CMD_STATUSCD && !*new_raw_arg3)
 				return ScriptError(_T("Parameter #3 must not be blank in this case."));
-		}
-		break;
-
-	case ACT_PROCESS:
-		if (aArgc > 0 && !line.ArgHasDeref(1))
-		{
-			ProcessCmds process_cmd = line.ConvertProcessCmd(new_raw_arg1);
-			if (process_cmd != PROCESS_CMD_PRIORITY && process_cmd != PROCESS_CMD_EXIST && !*new_raw_arg2)
-				return ScriptError(_T("Parameter #2 must not be blank in this case."));
-			switch (process_cmd)
-			{
-			case PROCESS_CMD_INVALID:
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-			case PROCESS_CMD_EXIST:
-			case PROCESS_CMD_CLOSE:
-				if (*new_raw_arg3)
-					return ScriptError(ERR_PARAM3_MUST_BE_BLANK, new_raw_arg3);
-				break;
-			case PROCESS_CMD_PRIORITY:
-				if (!*new_raw_arg3 || (!line.ArgHasDeref(3) && !_tcschr(PROCESS_PRIORITY_LETTERS, ctoupper(*new_raw_arg3))))
-					return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-				break;
-			case PROCESS_CMD_WAIT:
-			case PROCESS_CMD_WAITCLOSE:
-				if (*new_raw_arg3 && !line.ArgHasDeref(3) && !IsNumeric(new_raw_arg3, false, true, true))
-					return ScriptError(_T("If present, parameter #3 must be a positive number in this case."), new_raw_arg3);
-				break;
-			}
 		}
 		break;
 
@@ -12353,8 +12331,6 @@ ResultType Line::Perform()
 	case ACT_POSTMESSAGE:
 	case ACT_SENDMESSAGE:
 		return ScriptPostSendMessage(mActionType == ACT_SENDMESSAGE);
-	case ACT_PROCESS:
-		return ScriptProcess(THREE_ARGS);
 	case ACT_WINSETTITLE:
 		return mArgc > 1 ? WinSetTitle(FIVE_ARGS) : WinSetTitle(_T(""), _T(""), ARG1);
 	case ACT_WINGETTITLE:

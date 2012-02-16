@@ -1803,37 +1803,46 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 
 
 
-ResultType Line::ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3)
+void BIF_Process(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	ProcessCmds process_cmd = ConvertProcessCmd(aCmd);
-	// Runtime error is rare since it is caught at load-time unless it's in a var. ref.
-	if (process_cmd == PROCESS_CMD_INVALID)
-		return LineError(ERR_PARAM1_INVALID, FAIL, aCmd);
+	BIF_DECL_STRING_PARAM(1, aProcess);
+
+	ProcessCmds process_cmd = Line::ConvertProcessCmd(aResultToken.marker + 7);
+	// Since an invalid name wouldn't resolve to this function in the first place,
+	// the following check should be unnecessary:
+	ASSERT(process_cmd != PROCESS_CMD_INVALID);
 
 	HANDLE hProcess;
 	DWORD pid, priority;
-	BOOL result;
+	
+	//aResultToken.symbol = SYM_INTEGER; // Caller already set this.
+	aResultToken.value_int64 = 0; // Set default return value: indicate failure.
 
 	switch (process_cmd)
 	{
 	case PROCESS_CMD_EXIST:
-		return g_ErrorLevel->Assign(*aProcess ? ProcessExist(aProcess) : GetCurrentProcessId()); // The discovered PID or zero if none.
+		// Return the discovered PID or zero if none.
+		aResultToken.value_int64 = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId();
+		return; 
 
 	case PROCESS_CMD_CLOSE:
 		if (pid = ProcessExist(aProcess))  // Assign
 		{
 			if (hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid))
 			{
-				result = TerminateProcess(hProcess, 0);
+				if (TerminateProcess(hProcess, 0))
+					aResultToken.value_int64 = pid; // Indicate success.
 				CloseHandle(hProcess);
-				return g_ErrorLevel->Assign(result ? pid : 0); // Indicate success or failure.
+				return;
 			}
 		}
 		// Since above didn't return, yield a PID of 0 to indicate failure.
-		return g_ErrorLevel->Assign(0);
+		return;
 
 	case PROCESS_CMD_PRIORITY:
-		switch (_totupper(*aParam3))
+	{
+		LPTSTR aPriority = aParamCount > 1 ? TokenToString(*aParam[1]) : _T("");
+		switch (_totupper(*aPriority))
 		{
 		case 'L': priority = IDLE_PRIORITY_CLASS; break;
 		case 'B': priority = BELOW_NORMAL_PRIORITY_CLASS; break;
@@ -1842,7 +1851,8 @@ ResultType Line::ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3)
 		case 'H': priority = HIGH_PRIORITY_CLASS; break;
 		case 'R': priority = REALTIME_PRIORITY_CLASS; break;
 		default:
-			return g_ErrorLevel->Assign(0);  // 0 indicates failure in this case (i.e. a PID of zero).
+			// Since above didn't break, yield a PID of 0 to indicate failure.
+			return;
 		}
 		if (pid = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId())  // Assign
 		{
@@ -1852,13 +1862,14 @@ ResultType Line::ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3)
 				// since "above/below normal" aren't that dramatically different from normal:
 				if (!g_os.IsWin2000orLater() && (priority == BELOW_NORMAL_PRIORITY_CLASS || priority == ABOVE_NORMAL_PRIORITY_CLASS))
 					priority = NORMAL_PRIORITY_CLASS;
-				result = SetPriorityClass(hProcess, priority);
+				if (SetPriorityClass(hProcess, priority))
+					aResultToken.value_int64 = pid; // Indicate success.
 				CloseHandle(hProcess);
-				return g_ErrorLevel->Assign(result ? pid : 0); // Indicate success or failure.
 			}
 		}
 		// Otherwise, return a PID of 0 to indicate failure.
-		return g_ErrorLevel->Assign(0);
+		return;
+	}
 
 	case PROCESS_CMD_WAIT:
 	case PROCESS_CMD_WAITCLOSE:
@@ -1867,10 +1878,10 @@ ResultType Line::ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3)
 		bool wait_indefinitely;
 		int sleep_duration;
 		DWORD start_time;
-		if (*aParam3) // the param containing the timeout value isn't blank.
+		if (aParamCount > 1) // The param containing the timeout value was specified.
 		{
 			wait_indefinitely = false;
-			sleep_duration = (int)(ATOF(aParam3) * 1000); // Can be zero.
+			sleep_duration = (int)(TokenToDouble(*aParam[1]) * 1000); // Can be zero.
 			start_time = GetTickCount();
 		}
 		else
@@ -1881,30 +1892,28 @@ ResultType Line::ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3)
 		for (;;)
 		{ // Always do the first iteration so that at least one check is done.
 			pid = ProcessExist(aProcess);
-			if (process_cmd == PROCESS_CMD_WAIT)
+			if ((process_cmd == PROCESS_CMD_WAIT) == (pid != 0)) // i.e. condition of this cmd is satisfied.
 			{
-				if (pid)
-					return g_ErrorLevel->Assign(pid);
-			}
-			else // PROCESS_CMD_WAITCLOSE
-			{
-				// Since PID cannot always be determined (i.e. if process never existed, there was
-				// no need to wait for it to close), for consistency, return 0 on success.
-				if (!pid)
-					return g_ErrorLevel->Assign(0);
+				// For WaitClose: Since PID cannot always be determined (i.e. if process never existed,
+				// there was no need to wait for it to close), for consistency, return 0 on success.
+				aResultToken.value_int64 = pid;
+				return;
 			}
 			// Must cast to int or any negative result will be lost due to DWORD type:
 			if (wait_indefinitely || (int)(sleep_duration - (GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)
+			{
 				MsgSleep(100);  // For performance reasons, don't check as often as the WinWait family does.
+			}
 			else // Done waiting.
-				return g_ErrorLevel->Assign(pid);
-				// Above assigns 0 if "Process Wait" times out; or the PID of the process that still exists
+			{
+				// Return 0 if "Process Wait" times out; or the PID of the process that still exists
 				// if "Process WaitClose" times out.
+				aResultToken.value_int64 = pid;
+				return;
+			}
 		} // for()
 	} // case
 	} // switch()
-
-	return FAIL;  // Should never be executed; just here to catch bugs.
 }
 
 

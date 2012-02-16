@@ -619,7 +619,6 @@ private:
 	ResultType StatusBarWait(LPTSTR aTextToWaitFor, LPTSTR aSeconds, LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aInterval, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ScriptPostSendMessage(bool aUseSend);
-	ResultType ScriptProcess(LPTSTR aCmd, LPTSTR aProcess, LPTSTR aParam3);
 	ResultType WinSetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aNewTitle
 		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
 	ResultType WinGetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
@@ -2834,7 +2833,7 @@ void BIF_Exception(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 
 void BIF_WinGet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 void BIF_WinSet(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-
+void BIF_Process(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 void BIF_PerformAction(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
