@@ -10,7 +10,7 @@
 // BIF_ObjCreate - Object()
 //
 
-void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ObjCreate)
 {
 	IObject *obj = NULL;
 
@@ -49,7 +49,7 @@ void BIF_ObjCreate(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 // BIF_ObjArray - Array(items*)
 //
 
-void BIF_ObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ObjArray)
 {
 	Object *obj = Object::Create();
 	if (obj)
@@ -71,7 +71,7 @@ void BIF_ObjArray(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 // BIF_IsObject - IsObject(obj)
 //
 
-void BIF_IsObject(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_IsObject)
 // IsObject(obj) is currently equivalent to (obj && obj=""), but much more intuitive.
 {
 	int i;
@@ -84,7 +84,7 @@ void BIF_IsObject(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 // BIF_ObjInvoke - Handles ObjGet/Set/Call() and get/set/call syntax.
 //
 
-void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ObjInvoke)
 {
     int invoke_type;
     IObject *obj;
@@ -159,7 +159,7 @@ void BIF_ObjInvoke(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 // BIF_ObjGetInPlace - Handles part of a compound assignment like x.y += z.
 //
 
-void BIF_ObjGetInPlace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ObjGetInPlace)
 {
 	// Since the most common cases have two params, the "param count" param is omitted in
 	// those cases. Otherwise we have one visible parameter, which indicates the number of
@@ -173,7 +173,7 @@ void BIF_ObjGetInPlace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int
 // BIF_ObjNew - Handles "new" as in "new Class()".
 //
 
-void BIF_ObjNew(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ObjNew)
 {
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
@@ -256,7 +256,7 @@ void BIF_ObjNew(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParam
 // BIF_ObjIncDec - Handles pre/post-increment/decrement for object fields, such as ++x[y].
 //
 
-void BIF_ObjIncDec(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ObjIncDec)
 {
 	// Func::mName (which aResultToken.marker is set to) has been overloaded to pass
 	// the type of increment/decrement to be performed on this object's field.
@@ -351,7 +351,7 @@ void BIF_ObjIncDec(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPa
 //
 
 #define BIF_METHOD(name) \
-void BIF_Obj##name(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount) \
+BIF_DECL(BIF_Obj##name) \
 { \
 	aResultToken.symbol = SYM_STRING; \
 	aResultToken.marker = _T(""); \
@@ -377,7 +377,7 @@ BIF_METHOD(Clone)
 // ObjAddRef/ObjRelease - used with pointers rather than object references.
 //
 
-void BIF_ObjAddRefRelease(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_ObjAddRefRelease)
 {
 	IObject *obj = (IObject *)TokenToInt64(*aParam[0]);
 	if (obj < (IObject *)4096) // Rule out some obvious errors.

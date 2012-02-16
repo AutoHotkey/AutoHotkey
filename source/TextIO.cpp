@@ -1052,7 +1052,7 @@ public:
 	}
 };
 
-void BIF_FileOpen(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+BIF_DECL(BIF_FileOpen)
 {
 	DWORD aFlags;
 	UINT aEncoding;
