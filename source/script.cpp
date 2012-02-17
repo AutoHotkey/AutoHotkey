@@ -10906,19 +10906,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			return FAIL;
 		}
 
-		case ACT_EXIT:
-			// It seems best to simply return EARLY_EXIT rather than sometimes calling ExitApp(); even
-			// if the script isn't persistent NOW, this thread might've interrupted another which should
-			// be allowed to complete normally.  For instance, maybe the auto-execute section is still
-			// running (perhaps in a loop) and this is a timer thread, but the timer disabled itself
-			// so the script is no longer persistent.
-			return EARLY_EXIT; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
-
-		case ACT_EXITAPP: // Unconditional exit.
-			// This has been tested and it does yield to the OS the error code indicated in ARG1,
-			// if present (otherwise it returns 0, naturally) as expected:
-			return g_script.ExitApp(EXIT_EXIT, NULL, (int)line->ArgIndexToInt64(0));
-
 		case ACT_BLOCK_BEGIN:
 			if (line->mAttribute) // This is the ACT_BLOCK_BEGIN that starts a function's body.
 			{
@@ -13124,6 +13111,19 @@ ResultType Line::Perform()
 			result = OK;
 		return result;
 	}
+	
+	case ACT_EXIT:
+		// It seems best to simply return EARLY_EXIT rather than sometimes calling ExitApp(); even
+		// if the script isn't persistent NOW, this thread might've interrupted another which should
+		// be allowed to complete normally.  For instance, maybe the auto-execute section is still
+		// running (perhaps in a loop) and this is a timer thread, but the timer disabled itself
+		// so the script is no longer persistent.
+		return EARLY_EXIT; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
+
+	case ACT_EXITAPP: // Unconditional exit.
+		// This has been tested and it does yield to the OS the error code indicated in ARG1,
+		// if present (otherwise it returns 0, naturally) as expected:
+		return g_script.ExitApp(EXIT_EXIT, NULL, (int)ArgIndexToInt64(0));
 
 	} // switch()
 
@@ -13270,7 +13270,9 @@ BIF_DECL(BIF_PerformAction)
 
 
 	// PERFORM THE ACTION
-	if (line.Perform())
+	aResult = line.Perform();
+
+	if (aResult == OK) // Can be OK, FAIL or EARLY_EXIT.
 	{
 		// Return the value of the output var if there is one, or ErrorLevel if there isn't:
 		output_var->ToToken(aResultToken);
@@ -13290,8 +13292,7 @@ BIF_DECL(BIF_PerformAction)
 			// comment and also because our line exists only until this function returns.
 			g->ExcptLine = g_script.mCurrLine;
 		}
-		// Otherwise, maybe the command somehow caused script to execute, and that threw an
-		// exception; or some other type of critical error occurred?
+		// Set the result to an empty string for maintainability.
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
 	}

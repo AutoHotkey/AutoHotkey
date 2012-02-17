@@ -278,11 +278,11 @@ Action g_act[] =
 	, {_T("Goto"), 1, 1, false, NULL}
 	, {_T("Gosub"), 1, 1, false, NULL}   // Label (or dereference that resolves to a label).
 	, {_T("Return"), 0, 1, false, {1, 0}}
-	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
-	, {_T("ExitApp"), 0, 1, false, {1, 0}}  // Optional exit-code. v1.0.48.01: Allow an expression like ACT_EXIT does.
 	, {_T("Try"), 0, 0, false, NULL}
 	, {_T("Catch"), 0, 1, false, NULL} // fincs: seems best to allow catch without a parameter
 	, {_T("Throw"), 0, 1, false, {1, 0}}
+	, {_T("Exit"), 0, 1, false, NULL} // ExitCode
+	, {_T("ExitApp"), 0, 1, false, NULL} // ExitCode
 
 	, {_T("MsgBox"), 0, 4, false, NULL} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
 	, {_T("InputBox"), 1, 5, true, NULL} // OutputVar, Title, Prompt, Options, Default
