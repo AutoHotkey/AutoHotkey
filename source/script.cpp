@@ -932,7 +932,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	ResumeUnderlyingThread(ErrorLevel_saved);
 	g_AllowInterruption = g_AllowInterruption_prev;  // Restore original setting.
 
-	return OK;  // for caller convenience.
+	return EARLY_EXIT;
 }
 
 
