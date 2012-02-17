@@ -13113,13 +13113,14 @@ ResultType Line::Perform()
 	}
 	
 	case ACT_EXIT:
-		// It seems best to simply return EARLY_EXIT rather than sometimes calling ExitApp(); even
-		// if the script isn't persistent NOW, this thread might've interrupted another which should
-		// be allowed to complete normally.  For instance, maybe the auto-execute section is still
-		// running (perhaps in a loop) and this is a timer thread, but the timer disabled itself
-		// so the script is no longer persistent.
-		return EARLY_EXIT; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
-
+		// Even if the script isn't persistent, this thread might've interrupted another which should
+		// be allowed to complete normally.  This is especially important in v2 because a persistent
+		// script can become non-persistent by disabling a timer, closing a GUI, etc.  So if there
+		// are any threads below this one, only exit this thread:
+		if (g_nThreads > 1 || g_script.IsPersistent())
+			return EARLY_EXIT; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
+		// Otherwise, this is the last thread in a non-persistent script.
+		// FALL THROUGH TO BELOW (this is the only time Exit's ExitCode is used):
 	case ACT_EXITAPP: // Unconditional exit.
 		// This has been tested and it does yield to the OS the error code indicated in ARG1,
 		// if present (otherwise it returns 0, naturally) as expected:
