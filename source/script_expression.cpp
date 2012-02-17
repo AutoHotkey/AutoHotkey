@@ -141,13 +141,42 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					deref = (DerefType *)this_token.var; // MUST BE DONE PRIOR TO OVERWRITING MARKER/UNION BELOW.
 					cp = this_token.buf; // Start at the beginning of this arg's text.
 					size_t var_name_length = 0;
-
+					
 					this_token.marker = _T("");         // Set default in case of early goto.  Must be done after above.
 					this_token.symbol = SYM_STRING; //
 
-					//if (deref->marker == cp && !cp[deref->length] && (deref+1)->is_function && deref->var->IsObject()) // L31: %varContainingObject%().  Possible future use: functions-as-values.
-					//{
-					//}
+					if (deref->marker == cp && !cp[deref->length] && (deref+1)->is_function // %soleDeref%()
+						&& (deref->var->HasObject() // It's an object.
+						|| !deref->var->HasContents())) // It's an empty string (which may be passed to __Call).
+					{
+						// This dynamic function call deref consists of a single var containing an object
+						// or an empty string; both need special handling.
+						if (deref->var->HasObject())
+						{
+							// Push the object, not the var, in case this variable is modified in the
+							// parameter list of this function call (which is evaluated prior to SYM_FUNC).
+							this_token.symbol = SYM_OBJECT;
+							this_token.object = deref->var->Object();
+							this_token.object->AddRef();
+						}
+						// Otherwise, leave it set to the empty string.
+						goto push_this_token;
+					}
+					// Otherwise, it could still be %var%() where var contains a string which is too
+					// long for the section below to handle.  Supporting that case doesn't seem
+					// worthwhile for the following reasons:
+					//  1) It would require some logic in the above section to allocate memory for the
+					//     string, keeping in mind that deref->var could be VAR_CLIPBOARD/BUILTIN which
+					//     can't be pushed directly onto the stack.
+					//  2) Pushing a var onto the stack would cause inconsistent behaviour if that var
+					//     is modified within the function call's parameter list (although that already
+					//     causes inconsistent behaviour if the var appears multiple times in the list).
+					//  3) Even if the %var%() case was supported, we don't know at this point whether
+					//     xxx%var%() or similar will exceed MAX_VAR_NAME_LENGTH, which means one more
+					//     inconsistency.
+					//  4) The only benefit of supporting long strings is consistency with regard to
+					//     __Call, which will probably only be used for debugging.  Future changes to
+					//     error-handling in expressions could supersede that.
 
 					// Loadtime validation has ensured that none of these derefs are function-calls
 					// (i.e. deref->is_function is alway false) with the possible exception of the final
@@ -184,33 +213,16 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					// v1.0.47.06 dynamic function calls: As a result of a prior loop, deref = the null-marker
 					// deref which terminates the deref list. is_function is set by the infix processing code.
 					if (deref->is_function)
-					{
-						// Traditionally, expressions don't display any runtime errors.  So if the function is being
-						// called incorrectly by the script, the expression is aborted like it would be for other
-						// syntax errors.
-						if (   !(deref->func = g_script.FindFunc(left_buf, var_name_length)) // Below relies on short-circuit boolean order, with this line being executed first.
-							|| deref->param_count < deref->func->mMinParams // param_count was set by the infix processing code.
-								&& deref->is_function != DEREF_VARIADIC // actual param count for a variadic call is not known until the last moment.
-							//|| deref->param_count > deref->func->mParamCount // Not checked; see below.
-							)
-							goto abnormal_end;
-						// v1.0.48: Although passing too many parameters is useful (due to the absence of a
-						// means to dynamically execute code; e.g. Eval()), passing too few parameters (and
-						// treating the missing ones as optional) seems a little inappropriate because it would
-						// allow the function's caller to second-guess the function's designer (the designer
-						// could provide a default value if a parameter is capable of being omitted). Another
-						// issue might be misbehavior by built-in functions that assume that the minimum
-						// number of parameters are present due to prior validation. So either all the built-in
-						// functions would have to be reviewed, or the minimum would have to be enforced for
-						// them but not user-defined functions, which is inconsistent. Finally, allowing too-few
-						// parameters seems like it would reduce the ability to detect script bugs at runtime.
-						//
-						// Since the SYM_FUNC associated with the SYM_DYNAMIC points to the SAME deref as above,
-						// updating the above also updates the SYM_FUNC (which might otherwise be difficult to
-						// find in the postfix array because I think a function call's parameters (which may
-						// not have been evaluated/collapsed yet?) lie between its SYM_DYNAMIC and its SYM_FUNC
-						// within the postfix array.
-						continue; // Nothing more needs to be done (see above), so move on to the next postfix item.
+					{	
+						// Since the parameter list is evaluated between SYM_DYNAMIC and its corresponding
+						// SYM_FUNC, it is possible for a recursive script to re-evaluate this token a second
+						// time prior to actually calling the function the first time.  With the old approach
+						// of setting the SYM_FUNC's deref->func in this section, such recursion could cause
+						// the wrong function to be called.  Instead, push the function name onto the stack
+						// to await SYM_FUNC:
+						this_token.symbol = SYM_STRING;
+						this_token.marker = _tcscpy(talloca(var_name_length + 1), left_buf);
+						goto push_this_token;
 					}
 
 					// In v1.0.31, FindOrAddVar() vs. FindVar() is called below to support the passing of non-existent
@@ -346,13 +358,60 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 
 		if (this_token.symbol == SYM_FUNC) // A call to a function (either built-in or defined by the script).
 		{
-			Func &func = *this_token.deref->func; // For performance.
+			Func *func = this_token.deref->func;
 			actual_param_count = this_token.deref->param_count; // For performance.
 			if (actual_param_count > stack_count) // Prevent stack underflow (probably impossible if actual_param_count is accurate).
 				goto abnormal_end;
 			// Adjust the stack early to simplify.  Above already confirmed that the following won't underflow.
 			// Pop the actual number of params involved in this function-call off the stack.
 			stack_count -= actual_param_count; // Now stack[stack_count] is the leftmost item in an array of function-parameters, which simplifies processing later on.
+			ExprTokenType **params = stack + stack_count;
+
+			if (!func)
+			{
+				// This is a dynamic function call.
+				if (!stack_count) // SYM_DYNAMIC should have pushed a function name or reference onto the stack, but a syntax error may still cause this condition.
+					goto abnormal_end;
+				stack_count--;
+				func = TokenToFunc(*stack[stack_count]); // Supports function names and function references.
+				if (!func)
+				{
+					// This isn't a function name or reference, but it could be an object emulating
+					// a function reference.  Additionally, we want something like %emptyvar%() to
+					// invoke g_MetaObject, so this part is done even if stack[stack_count] is not
+					// an object.  To "call" the object/value, we need to insert an empty method
+					// name between the object/value and the parameter list.  There should always
+					// be room for this since the maximum number of operands at any one time <=
+					// postfix token count < infix token count < MAX_TOKENS == _countof(stack).
+					// That is, each extra (SYM_OPAREN, SYM_COMMA or SYM_CPAREN) token in infix
+					// effectively reserves one stack slot.
+					if (actual_param_count)
+						memmove(params + 1, params, actual_param_count * sizeof(ExprTokenType *));
+					// Insert an empty string:
+					params[0] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+					params[0]->symbol = SYM_STRING;
+					params[0]->marker = _T("");
+					params--; // Include the object, which is already in the right place.
+					actual_param_count += 2;
+					extern ExprOpFunc g_ObjCall;
+					func = &g_ObjCall;
+				}
+				// Above has set func to a non-NULL value, but still need to verify there are enough params.
+				// Although passing too many parameters is useful (due to the limitations of variadic calls),
+				// passing too few parameters (and treating the missing ones as optional) seems a little
+				// inappropriate because it would allow the function's caller to second-guess the function's
+				// designer (the designer could provide a default value if a parameter is capable of being
+				// omitted). Another issue might be misbehavior by built-in functions that assume that the
+				// minimum number of parameters are present due to prior validation.  So either all the
+				// built-in functions would have to be reviewed, or the minimum would have to be enforced
+				// for them but not user-defined functions, which is inconsistent.  Finally, allowing too-
+				// few parameters seems like it would reduce the ability to detect script bugs at runtime.
+				// Traditionally, expressions don't display any runtime errors.  So if the function is being
+				// called incorrectly by the script, the expression is aborted like it would be for other
+				// syntax errors:
+				if (actual_param_count < func->mMinParams && this_token.deref->is_function != DEREF_VARIADIC)
+					goto abnormal_end;
+			}
 			
 			// The following two steps are now done inside Func::Call:
 			//this_token.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
@@ -379,7 +438,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			// Call the user-defined or built-in function.  Func::Call takes care of variadic parameter
 			// lists and stores local var backups for UDFs in func_call.  Once func_call goes out of scope,
 			// its destructor calls Var::FreeAndRestoreFunctionVars() if appropriate.
-			if (!func.Call(func_call, aResult, this_token, stack + stack_count, actual_param_count
+			if (!func->Call(func_call, aResult, this_token, params, actual_param_count
 									, this_token.deref->is_function == DEREF_VARIADIC))
 			{
 				// Take a shortcut because for backward compatibility, ACT_ASSIGNEXPR (and anything else
@@ -444,7 +503,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			result = this_token.marker; // Marker can be used because symbol will never be SYM_VAR in this case.
 
 			if (internal_output_var
-				&& !(g->CurrentFunc == &func && internal_output_var->IsNonStaticLocal())) // Ordered for short-circuit performance.
+				&& !(g->CurrentFunc == func && internal_output_var->IsNonStaticLocal())) // Ordered for short-circuit performance.
 				// Above line is a fix for v1.0.45.03: It detects whether output_var is among the variables
 				// that are about to be restored from backup.  If it is, we can't assign to it now
 				// because it's currently a local that belongs to the instance we're in the middle of
@@ -506,7 +565,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			{
 				if (mem_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
 				{
-					LineError(ERR_OUTOFMEM, FAIL, func.mName);
+					LineError(ERR_OUTOFMEM, FAIL, func->mName);
 					goto abort;
 				}
 				if (this_token.mem_to_free == this_token.marker) // mem_to_free is checked in case caller alloc'd mem but didn't use it as its actual result.
@@ -531,7 +590,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				goto push_this_token; // For code simplicity, the optimization for numeric results is done at a later stage.
 			}
 
-			if (func.mIsBuiltIn)
+			if (func->mIsBuiltIn)
 			{
 				// Since above didn't goto, "result" is not SYM_INTEGER/FLOAT/VAR, and not "".  Therefore, it's
 				// either a pointer to static memory (such as a constant string), or more likely the small buf
@@ -614,7 +673,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
 						|| !(mem[mem_count] = tmalloc(result_size)))
 					{
-						LineError(ERR_OUTOFMEM, FAIL, func.mName);
+						LineError(ERR_OUTOFMEM, FAIL, func->mName);
 						goto abort;
 					}
 					// Make the token's result the new, more persistent location:

@@ -17896,10 +17896,11 @@ IObject *TokenToObject(ExprTokenType &aToken)
 
 Func *TokenToFunc(ExprTokenType &aToken)
 {
-	TCHAR buf[MAX_NUMBER_SIZE];
+	// No need for buf since function names can't be pure numeric:
+	//TCHAR buf[MAX_NUMBER_SIZE];
 	Func *func;
 	if (  !(func = dynamic_cast<Func *>(TokenToObject(aToken)))  )
-		func = g_script.FindFunc(TokenToString(aToken, buf));
+		func = g_script.FindFunc(TokenToString(aToken));
 	return func;
 }
 
