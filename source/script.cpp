@@ -24,11 +24,12 @@ GNU General Public License for more details.
 #include "TextIO.h"
 
 // Globals that are for only this module:
-static ExprOpFunc g_ObjGet(BIF_ObjInvoke, IT_GET), g_ObjSet(BIF_ObjInvoke, IT_SET), g_ObjCall(BIF_ObjInvoke, IT_CALL);
+static ExprOpFunc g_ObjGet(BIF_ObjInvoke, IT_GET), g_ObjSet(BIF_ObjInvoke, IT_SET);
 static ExprOpFunc g_ObjGetInPlace(BIF_ObjGetInPlace, IT_GET);
 static ExprOpFunc g_ObjNew(BIF_ObjNew, 0);
 static ExprOpFunc g_ObjPreInc(BIF_ObjIncDec, SYM_PRE_INCREMENT), g_ObjPreDec(BIF_ObjIncDec, SYM_PRE_DECREMENT)
 				, g_ObjPostInc(BIF_ObjIncDec, SYM_POST_INCREMENT), g_ObjPostDec(BIF_ObjIncDec, SYM_POST_DECREMENT);
+ExprOpFunc g_ObjCall(BIF_ObjInvoke, IT_CALL); // Also needed in script_expression.cpp.
 
 FuncEntry g_BIF[] =
 {
@@ -1021,7 +1022,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	// in that case.  It is now safe to reset:
 	sExitLabelIsRunning = false;  // In case the user wanted the thread to end normally (see above).
 
-	return OK;  // for caller convenience.
+	return EARLY_EXIT;
 }
 
 
