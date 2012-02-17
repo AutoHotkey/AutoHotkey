@@ -17900,7 +17900,15 @@ Func *TokenToFunc(ExprTokenType &aToken)
 	//TCHAR buf[MAX_NUMBER_SIZE];
 	Func *func;
 	if (  !(func = dynamic_cast<Func *>(TokenToObject(aToken)))  )
-		func = g_script.FindFunc(TokenToString(aToken));
+	{
+		LPTSTR func_name = TokenToString(aToken);
+		// Dynamic function calls rely on the following check to avoid a lengthy and
+		// futile search through all function and action names when aToken is an object
+		// emulating a function.  The check works because TokenToString() returns ""
+		// when aToken is an object (or a pure number, since no buffer was passed).
+		if (*func_name)
+			func = g_script.FindFunc(func_name);
+	}
 	return func;
 }
 
