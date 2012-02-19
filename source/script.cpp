@@ -6778,10 +6778,8 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		bif.mMinParams = g_act[action_type].MinParams;
 		bif.mMaxParams = g_act[action_type].MaxParams;
 		
-		// Reserve some space in Func::mName to hold some extra data (see below).
-		aFuncNameLength = _tcslen(g_act[action_type].Name) + bif.mMaxParams + 1;
-		
-		LPTSTR new_name = (LPTSTR)SimpleHeap::Malloc(aFuncNameLength * sizeof(TCHAR));
+		// Func::mName is overloaded to contain the name, param types and action type.  +1 for '\0'
+		LPTSTR new_name = (LPTSTR)SimpleHeap::Malloc((aFuncNameLength + bif.mMaxParams + 2) * sizeof(TCHAR));
 		if (!new_name)
 			return NULL;
 		
