@@ -6030,6 +6030,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 				found_func->mParamCount = 0; // Revert to the default appropriate for non-built-in functions.
 				found_func->mMinParams = 0;  //
 				found_func->mJumpToLine = NULL; // Fixed for v1.0.35.12: Must reset for detection elsewhere.
+				found_func->mHasReturn = false; // For consistency.
 				g->CurrentFunc = found_func;
 			}
 		}
