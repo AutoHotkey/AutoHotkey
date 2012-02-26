@@ -783,9 +783,7 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR
 		|| !(remote_buf = AllocInterProcMem(handle, _TSIZE(WINDOW_TEXT_SIZE + 1), aBarHwnd))) // Alloc mem last.
 		goto error;
 
-	TCHAR buf_for_nt[WINDOW_TEXT_SIZE + 1]; // Needed only for NT/2k/XP: the local counterpart to the buf allocated remotely above.
-	bool is_win9x = g_os.IsWin9x();
-	LPTSTR local_buf = is_win9x ? (LPTSTR)remote_buf : buf_for_nt; // Local is the same as remote for Win9x.
+	TCHAR local_buf[WINDOW_TEXT_SIZE + 1]; // The local counterpart to the buf allocated remotely above.
 
 	DWORD_PTR result, start_time;
 	--aPartNumber; // Convert to zero-based for use below.
@@ -804,16 +802,12 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR
 			// Retrieve the bar's text:
 			if (SendMessageTimeout(aBarHwnd, SB_GETTEXT, aPartNumber, (LPARAM)remote_buf, SMTO_ABORTIFHUNG, SB_TIMEOUT, &result))
 			{
-				if (!is_win9x)
+				if (!ReadProcessMemory(handle, remote_buf, local_buf, _TSIZE(LOWORD(result) + 1), NULL)) // +1 to include the terminator (verified: length doesn't include zero terminator).
 				{
-					if (!ReadProcessMemory(handle, remote_buf, local_buf, _TSIZE(LOWORD(result) + 1), NULL)) // +1 to include the terminator (verified: length doesn't include zero terminator).
-					{
-						// Fairly critical error (though rare) so seems best to abort.
-						*local_buf = '\0';  // In case it changed the buf before failing.
-						break;
-					}
+					// Fairly critical error (though rare) so seems best to abort.
+					*local_buf = '\0';  // In case it changed the buf before failing.
+					break;
 				}
-				//else Win9x, in which case the local and remote buffers are the same (no copying is needed).
 
 				// Check if the retrieved text matches the caller's criteria. In addition to
 				// normal/intuitive matching, a match is also achieved if both are empty strings.
@@ -856,7 +850,7 @@ ResultType StatusBarUtil(Var *aOutputVar, HWND aBarHwnd, int aPartNumber, LPTSTR
 	// Note we use a temp buf rather than writing directly to the var contents above, because
 	// we don't know how long the text will be until after the above operation finishes.
 	ResultType result_to_return = aOutputVar ? aOutputVar->Assign(local_buf) : OK;
-	FreeInterProcMem(handle, remote_buf); // Don't free until after the above because above needs file mapping for Win9x.
+	FreeInterProcMem(handle, remote_buf);
 	return result_to_return;
 
 error:

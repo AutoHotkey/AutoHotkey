@@ -1534,21 +1534,75 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 	// FINAL CHECKS
 	if (row_count < 1 || !col_count) // But don't return when col_count == -1 (i.e. always make the attempt when col count is undetermined).
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // No text in the control, so indicate success.
+	
+	// Notes about the following struct definitions:  The layout of LVITEM depends on
+	// which platform THIS executable was compiled for, but we need it to match what
+	// the TARGET process expects.  If the target process is 32-bit and we are 64-bit
+	// or vice versa, LVITEM can't be used.  The following structs are copies of
+	// LVITEM with UINT (32-bit) or UINT64 (64-bit) in place of the pointer fields.
+	struct LVITEM32
+	{
+		UINT mask;
+		int iItem;
+		int iSubItem;
+		UINT state;
+		UINT stateMask;
+		UINT pszText;
+		int cchTextMax;
+		int iImage;
+		UINT lParam;
+		int iIndent;
+		int iGroupId;
+		UINT cColumns;
+		UINT puColumns;
+		UINT piColFmt;
+		int iGroup;
+	};
+	struct LVITEM64
+	{
+		UINT mask;
+		int iItem;
+		int iSubItem;
+		UINT state;
+		UINT stateMask;
+		UINT64 pszText;
+		int cchTextMax;
+		int iImage;
+		UINT64 lParam;
+		int iIndent;
+		int iGroupId;
+		UINT cColumns;
+		UINT64 puColumns;
+		UINT64 piColFmt;
+		int iGroup;
+	};
+	union
+	{
+		LVITEM32 i32;
+		LVITEM64 i64;
+	} local_lvi;
 
 	// ALLOCATE INTERPROCESS MEMORY FOR TEXT RETRIEVAL
 	HANDLE handle;
 	LPVOID p_remote_lvi; // Not of type LPLVITEM to help catch bugs where p_remote_lvi->member is wrongly accessed here in our process.
-	if (   !(p_remote_lvi = AllocInterProcMem(handle, LV_REMOTE_BUF_SIZE + sizeof(LVITEM), aHwnd))   ) // Allocate the right type of memory (depending on OS type). Allocate both the LVITEM struct and its internal string buffer in one go because MyVirtualAllocEx() is probably a high overhead call.
+	if (   !(p_remote_lvi = AllocInterProcMem(handle, sizeof(local_lvi) + _TSIZE(LV_REMOTE_BUF_SIZE), aHwnd, PROCESS_QUERY_INFORMATION))   ) // Allocate both the LVITEM struct and its internal string buffer in one go because VirtualAllocEx() is probably a high overhead call.
 		return SetErrorLevelOrThrow();
-	bool is_win9x = g_os.IsWin9x(); // Resolve once for possible slight perf./code size benefit.
-
+	LPVOID p_remote_text = (LPVOID)((UINT_PTR)p_remote_lvi + sizeof(local_lvi)); // The next buffer is the memory area adjacent to, but after the struct.
+	
 	// PREPARE LVI STRUCT MEMBERS FOR TEXT RETRIEVAL
-	LVITEM lvi_for_nt; // Only used for NT/2k/XP method.
-	LVITEM &local_lvi = is_win9x ? *(LPLVITEM)p_remote_lvi : lvi_for_nt; // Local is the same as remote for Win9x.
-	// Subtract 1 because of that nagging doubt about size vs. length. Some MSDN examples subtract one,
-	// such as TabCtrl_GetItem()'s cchTextMax:
-	local_lvi.cchTextMax = LV_REMOTE_BUF_SIZE - 1; // Note that LVM_GETITEM doesn't update this member to reflect the new length.
-	local_lvi.pszText = (LPTSTR)p_remote_lvi + sizeof(LVITEM); // The next buffer is the memory area adjacent to, but after the struct.
+	if (IsProcess64Bit(handle))
+	{
+		// See the section below for comments.
+		local_lvi.i64.cchTextMax = LV_REMOTE_BUF_SIZE - 1;
+		local_lvi.i64.pszText = (UINT64)p_remote_text;
+	}
+	else
+	{
+		// Subtract 1 because of that nagging doubt about size vs. length. Some MSDN examples subtract one,
+		// such as TabCtrl_GetItem()'s cchTextMax:
+		local_lvi.i32.cchTextMax = LV_REMOTE_BUF_SIZE - 1; // Note that LVM_GETITEM doesn't update this member to reflect the new length.
+		local_lvi.i32.pszText = (UINT)p_remote_text; 
+	}
 
 	LRESULT i, next, length, total_length;
 	bool is_selective = include_focused_only || include_selected_only;
@@ -1580,11 +1634,11 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 		}
 		else
 			next = i;
-		for (local_lvi.iSubItem = (requested_col > -1) ? requested_col : 0 // iSubItem is which field to fetch. If it's zero, the item vs. subitem will be fetched.
-			; col_count == -1 || local_lvi.iSubItem < col_count // If column count is undetermined (-1), always make the attempt.
-			; ++local_lvi.iSubItem) // For each column:
+		for (local_lvi.i32.iSubItem = (requested_col > -1) ? requested_col : 0 // iSubItem is which field to fetch. If it's zero, the item vs. subitem will be fetched.
+			; col_count == -1 || local_lvi.i32.iSubItem < col_count // If column count is undetermined (-1), always make the attempt.
+			; ++local_lvi.i32.iSubItem) // For each column:
 		{
-			if ((is_win9x || WriteProcessMemory(handle, p_remote_lvi, &local_lvi, sizeof(LVITEM), NULL)) // Relies on short-circuit boolean order.
+			if (WriteProcessMemory(handle, p_remote_lvi, &local_lvi, sizeof(local_lvi), NULL)
 				&& SendMessageTimeout(aHwnd, LVM_GETITEMTEXT, next, (LPARAM)p_remote_lvi, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&length))
 				total_length += length;
 			//else timed out or failed, don't include the length in the estimate.  Instead, the
@@ -1628,18 +1682,18 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 		}
 
 		// iSubItem is which field to fetch. If it's zero, the item vs. subitem will be fetched:
-		for (local_lvi.iSubItem = (requested_col > -1) ? requested_col : 0
-			; col_count == -1 || local_lvi.iSubItem < col_count // If column count is undetermined (-1), always make the attempt.
-			; ++local_lvi.iSubItem) // For each column:
+		for (local_lvi.i32.iSubItem = (requested_col > -1) ? requested_col : 0
+			; col_count == -1 || local_lvi.i32.iSubItem < col_count // If column count is undetermined (-1), always make the attempt.
+			; ++local_lvi.i32.iSubItem) // For each column:
 		{
 			// Insert a tab before each column except the first and except when in single-column mode:
-			if (!single_col_mode && local_lvi.iSubItem && total_length < capacity)  // If we're at capacity, it will exit the loops when the next field is read.
+			if (!single_col_mode && local_lvi.i32.iSubItem && total_length < capacity)  // If we're at capacity, it will exit the loops when the next field is read.
 			{
 				*contents++ = '\t';
 				++total_length;
 			}
 
-			if (!(is_win9x || WriteProcessMemory(handle, p_remote_lvi, &local_lvi, sizeof(LVITEM), NULL)) // Relies on short-circuit boolean order.
+			if (!WriteProcessMemory(handle, p_remote_lvi, &local_lvi, sizeof(local_lvi), NULL)
 				|| !SendMessageTimeout(aHwnd, LVM_GETITEMTEXT, next, (LPARAM)p_remote_lvi, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&length))
 				continue; // Timed out or failed. It seems more useful to continue getting text rather than aborting the operation.
 
@@ -1657,21 +1711,12 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 				// should not assume that the text will necessarily be placed in the specified
 				// buffer. The control may instead change the pszText member of the structure
 				// to point to the new text, rather than place it in the buffer."
-				if (is_win9x)
+				if (ReadProcessMemory(handle, p_remote_text, contents, length * sizeof(TCHAR), NULL))
 				{
-					tmemcpy(contents, local_lvi.pszText, length); // Usually benches a little faster than _tcscpy().
 					contents += length; // Point it to the position where the next char will be written.
 					total_length += length; // Recalculate length in case its different than the estimate (for any reason).
 				}
-				else
-				{
-					if (ReadProcessMemory(handle, local_lvi.pszText, contents, length * sizeof(TCHAR), NULL)) // local_lvi.pszText == p_remote_lvi->pszText
-					{
-						contents += length; // Point it to the position where the next char will be written.
-						total_length += length; // Recalculate length in case its different than the estimate (for any reason).
-					}
-					//else it failed; but even so, continue on to put in a tab (if called for).
-				}
+				//else it failed; but even so, continue on to put in a tab (if called for).
 			}
 			//else length is zero; but even so, continue on to put in a tab (if called for).
 			if (single_col_mode)
@@ -15943,7 +15988,15 @@ Func *TokenToFunc(ExprTokenType &aToken)
 	//TCHAR buf[MAX_NUMBER_SIZE];
 	Func *func;
 	if (  !(func = dynamic_cast<Func *>(TokenToObject(aToken)))  )
-		func = g_script.FindFunc(TokenToString(aToken));
+	{
+		LPTSTR func_name = TokenToString(aToken);
+		// Dynamic function calls rely on the following check to avoid a lengthy and
+		// futile search through all function and action names when aToken is an object
+		// emulating a function.  The check works because TokenToString() returns ""
+		// when aToken is an object (or a pure number, since no buffer was passed).
+		if (*func_name)
+			func = g_script.FindFunc(func_name);
+	}
 	return func;
 }
 

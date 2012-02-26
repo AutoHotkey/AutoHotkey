@@ -671,7 +671,8 @@ void ScreenToWindow(POINT &aPoint, HWND aHwnd);
 void CoordToScreen(int &aX, int &aY, int aWhichMode);
 void CoordToScreen(POINT &aPoint, int aWhichMode);
 void GetVirtualDesktopRect(RECT &aRect);
-LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd);
+BOOL IsProcess64Bit(HANDLE aHandle);
+LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd, DWORD aExtraAccess = 0);
 void FreeInterProcMem(HANDLE aHandle, LPVOID aMem);
 
 DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf);

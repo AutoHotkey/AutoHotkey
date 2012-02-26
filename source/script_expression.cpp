@@ -359,7 +359,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					// That is, each extra (SYM_OPAREN, SYM_COMMA or SYM_CPAREN) token in infix
 					// effectively reserves one stack slot.
 					if (actual_param_count)
+					{
 						memmove(params + 1, params, actual_param_count * sizeof(ExprTokenType *));
+						high_water_mark++; // If this isn't done and the last param is an object, it won't be released.
+					}
 					// Insert an empty string:
 					params[0] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
 					params[0]->symbol = SYM_STRING;
