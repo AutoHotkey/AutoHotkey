@@ -1549,7 +1549,10 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, Exp
 			this_token.var = this_var;
 			if (IObject *this_class_base = this_class->Base())
 			{
-				return this_class_base->Invoke(aResultToken, this_token, (aFlags & ~IF_METAFUNC) | IF_METAOBJ, aParam, aParamCount);
+				ResultType result = this_class_base->Invoke(aResultToken, this_token, (aFlags & ~IF_METAFUNC) | IF_METAOBJ, aParam, aParamCount);
+				// Avoid returning INVOKE_NOT_HANDLED in this case so that our caller never
+				// shows an "uninitialized var" warning for base.Foo() in a class method.
+				return result == INVOKE_NOT_HANDLED ? OK : result;
 			}
 			return OK;
 		}
