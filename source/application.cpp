@@ -382,7 +382,16 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// Otherwise: aSleepDuration is non-zero or we already did the Sleep(0)
 				if (messages_received == 0 && allow_early_return)
 				{
-					Sleep(5); // Since Peek() didn't find a message, avoid maxing the CPU.  This is a somewhat arbitrary value: the intent of a value below 10 is to avoid yielding more than one timeslice on all systems even if they have unusual timeslice sizes / system timers.
+					// Fix for v1.1.05.04: Since Peek() didn't find a message, avoid maxing the CPU.
+					// This specific section is needed for PerformWait() when an underlying thread
+					// is displaying a dialog, and perhaps in other cases.
+					// Fix for v1.1.07.00: Avoid Sleep() if caller specified a duration of zero;
+					// otherwise SendEvent with a key delay of 0 will be slower than expected.
+					// This affects auto-replace hotstrings in SendEvent mode (which is the default
+					// when SendInput is unavailable).  Note that if aSleepDuration == 0, Sleep(0)
+					// was already called above or by a prior iteration.
+					if (aSleepDuration > 0)
+						Sleep(5); // This is a somewhat arbitrary value: the intent of a value below 10 is to avoid yielding more than one timeslice on all systems even if they have unusual timeslice sizes / system timers.
 					++messages_received; // Don't repeat this section.
 					continue;
 				}
