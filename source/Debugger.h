@@ -330,6 +330,70 @@ private:
 
 	int mMaxPropertyData, mMaxChildren, mMaxDepth;
 
+	
+	struct PropertyWriter : public IDebugProperties
+	{
+		Debugger &mDbg;
+		IObject *mObject;
+		LPCSTR mName;
+		CStringA &mNameBuf;
+		size_t mNameLength;
+		int mPage;
+		int mPageSize;
+		int mDepth;
+		int mMaxDepth;
+		int mMaxEncodedSize;
+		int mError;
+
+		PropertyWriter(Debugger &aDbg, IObject *aObject, LPCSTR aName, CStringA &aNameBuf, int aPage, int aPageSize, int aMaxDepth, int aMaxEncodedSize)
+			: mDbg(aDbg)
+			, mObject(aObject)
+			, mName(aName)
+			, mNameBuf(aNameBuf)
+			, mNameLength(aNameBuf.GetLength())
+			, mPage(aPage)
+			, mPageSize(aPageSize)
+			, mDepth(0)
+			, mMaxDepth(aMaxDepth)
+			, mMaxEncodedSize(aMaxEncodedSize)
+			, mError(0)
+		{
+		}
+
+		void WriteProperty(LPCSTR aName, LPTSTR aValue)
+		{
+			ExprTokenType value;
+			value.symbol = SYM_STRING;
+			value.marker = aValue;
+			WriteProperty(aName, value);
+		}
+
+		void WriteProperty(LPCSTR aName, __int64 aValue)
+		{
+			ExprTokenType value;
+			value.symbol = SYM_INTEGER;
+			value.value_int64 = aValue;
+			WriteProperty(aName, value);
+		}
+		
+		void WriteProperty(LPCSTR aName, IObject *aValue)
+		{
+			ExprTokenType value;
+			value.symbol = SYM_OBJECT;
+			value.object = aValue;
+			WriteProperty(aName, value);
+		}
+
+		void WriteProperty(LPCSTR aName, ExprTokenType &aValue);
+		void WriteProperty(INT_PTR aKey, ExprTokenType &aValue);
+		void WriteProperty(IObject *aKey, ExprTokenType &aValue);
+
+		void _WriteProperty(ExprTokenType &aValue);
+
+		void BeginProperty(LPCSTR aName, LPCSTR aType, int aNumChildren, DebugCookie &aCookie);
+		void EndProperty(DebugCookie aCookie);
+	};
+
 
 	// Receive next command from debugger UI:
 	int ReceiveCommand(int *aCommandSize=NULL);
@@ -341,9 +405,14 @@ private:
 	int SendContinuationResponse(char *aStatus="break", char *aReason="ok");
 
 	int WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine);
+
+	void AppendKeyName(CStringA &aNameBuf, size_t aParentNameLength, const char *aName);
+
 	int WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage = 0);
 	int WritePropertyXml(IObject *aObject, const char *aName, CStringA &aNameBuf, int aPage, int aPageSize, int aDepthRemaining, int aMaxEncodedSize, char *aFacet = "");
+	int WritePropertyXml(ExprTokenType &aValue, const char *aName, CStringA &aNameBuf, int aPageSize, int aDepthRemaining, int aMaxEncodedSize);
 	int WritePropertyXml(Object::FieldType &aField, const char *aName, CStringA &aNameBuf, int aPageSize, int aDepthRemaining, int aMaxEncodedSize);
+
 	int WritePropertyData(LPCTSTR aData, int aDataSize, int aMaxEncodedSize);
 	int WritePropertyData(Var &aVar, int aMaxEncodedSize);
 	int WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize);

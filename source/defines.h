@@ -192,7 +192,10 @@ enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
 #define SYM_DYNAMIC_IS_VAR_NORMAL_OR_CLIP(token) (!(token)->buf && ((token)->var->Type() == VAR_NORMAL || (token)->var->Type() == VAR_CLIPBOARD)) // i.e. it's an environment variable or the clipboard, not a built-in variable or double-deref.
 
 
-struct ExprTokenType; // Forward declaration for use below.
+struct ExprTokenType; // Forward declarations for use below.
+struct IDebugProperties;
+
+
 struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 {
 	// See script_object.cpp for comments.
@@ -202,7 +205,33 @@ struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 	// Some scripts may rely on these being at the same offset as IUnknown::AddRef/Release.
 	virtual ULONG STDMETHODCALLTYPE AddRef(void) = 0;
     virtual ULONG STDMETHODCALLTYPE Release(void) = 0;
+
+#ifdef CONFIG_DEBUGGER
+	virtual void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aMaxDepth) = 0;
+#endif
 };
+
+
+#ifdef CONFIG_DEBUGGER
+
+typedef void *DebugCookie;
+
+struct DECLSPEC_NOVTABLE IDebugProperties
+{
+	// For simplicity/code size, the debugger handles failures internally
+	// rather than returning an error code and requiring caller to handle it.
+	virtual void WriteProperty(LPCSTR aName, LPTSTR aValue) = 0;
+	virtual void WriteProperty(LPCSTR aName, __int64 aValue) = 0;
+	virtual void WriteProperty(LPCSTR aName, IObject *aValue) = 0;
+	virtual void WriteProperty(LPCSTR aName, ExprTokenType &aValue) = 0;
+	virtual void WriteProperty(INT_PTR aKey, ExprTokenType &aValue) = 0;
+	virtual void WriteProperty(IObject *aKey, ExprTokenType &aValue) = 0;
+	virtual void BeginProperty(LPCSTR aName, LPCSTR aType, int aNumChildren, DebugCookie &aCookie) = 0;
+	virtual void EndProperty(DebugCookie aCookie) = 0;
+};
+
+#endif
+
 
 // Flags used when calling Invoke; also used by g_ObjGet etc.:
 #define IT_GET				0

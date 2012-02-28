@@ -54,6 +54,10 @@ public:
 	// and because it is likely to be more convenient and reliable than overriding
 	// Delete(), especially with a chain of derived types.
 	virtual ~ObjectBase() {}
+
+#ifdef CONFIG_DEBUGGER
+	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
+#endif
 };	
 
 
@@ -263,6 +267,10 @@ public:
 	ResultType _Clone(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	static LPTSTR sMetaFuncName[];
+
+#ifdef CONFIG_DEBUGGER
+	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
+#endif
 };
 
 
@@ -319,4 +327,8 @@ public:
 		, int aPatternCount, int aCapturedPatternCount);
 	
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+#ifdef CONFIG_DEBUGGER
+	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
+#endif
 };
