@@ -209,7 +209,10 @@
     <ClCompile Include="source\application.cpp" />
     <ClCompile Include="source\AutoHotkey.cpp" />
     <ClCompile Include="source\clipboard.cpp" />
-    <ClCompile Include="source\Debugger.cpp" />
+    <ClCompile Include="source\Debugger.cpp">
+      <FavorSizeOrSpeed Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Size</FavorSizeOrSpeed>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="source\globaldata.cpp" />
     <ClCompile Include="source\hook.cpp" />
     <ClCompile Include="source\hotkey.cpp" />
