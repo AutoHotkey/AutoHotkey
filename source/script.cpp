@@ -7920,6 +7920,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 						// to a variable; only a sole variable reference would work for ByRef).
 						if (arg_type == ARG_TYPE_OUTPUT_VAR)
 							return line->PreparseError(ERR_PARAM1_INVALID, arg.text);
+						continue; // Leave it as it is.
 					}
 					if (lone_var)
 					{
