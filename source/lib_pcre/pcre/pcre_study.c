@@ -83,7 +83,7 @@ find_minlength(const pcre_uchar *code, const pcre_uchar *startcode, int options,
 {
 int length = -1;
 /* PCRE_UTF16 has the same value as PCRE_UTF8. */
-BOOL utf = (options & PCRE_UTF8) != 0;
+BOOL utf = UTF_ENABLED((options & PCRE_UTF8) != 0);
 BOOL had_recurse = FALSE;
 register int branchlength = 0;
 register pcre_uchar *cc = (pcre_uchar *)code + 1 + LINK_SIZE;

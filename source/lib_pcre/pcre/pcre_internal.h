@@ -78,6 +78,19 @@ Until then we define it if SUPPORT_UTF is defined. */
 #define SUPPORT_UTF8 1
 #endif
 
+/* AutoHotkey: UTF mode is always enabled in some builds and never enabled in
+others. This macros is used to aid the compiler to reduce code size. */
+
+#if defined SUPPORT_UTF_OPTION && defined SUPPORT_UTF
+#  define UTF_ENABLED(flag)	flag
+#else
+#  ifdef SUPPORT_UTF
+#    define UTF_ENABLED(flag) TRUE
+#  else
+#    define UTF_ENABLED(flag) FALSE
+#  endif
+#endif
+
 /* We do not support both EBCDIC and UTF-8/16 at the same time. The "configure"
 script prevents both being selected, but not everybody uses "configure". */
 

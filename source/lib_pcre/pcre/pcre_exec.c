@@ -671,11 +671,7 @@ defined). However, RMATCH isn't like a function call because it's quite a
 complicated macro. It has to be used in one particular way. This shouldn't,
 however, impact performance when true recursion is being used. */
 
-#ifdef SUPPORT_UTF
-utf = md->utf;       /* Local copy of the flag */
-#else
-utf = FALSE;
-#endif
+utf = UTF_ENABLED(md->utf);       /* Local copy of the flag */
 
 /* First check that we haven't called match() too many times, or that we
 haven't exceeded the recursive call limit. */
@@ -6243,7 +6239,7 @@ during "normal" pcre_exec() processing, not when the JIT support is in use,
 so they are set up later. */
 
 /* PCRE_UTF16 has the same value as PCRE_UTF8. */
-utf = md->utf = (re->options & PCRE_UTF8) != 0;
+utf = md->utf = UTF_ENABLED((re->options & PCRE_UTF8) != 0);
 md->partial = ((options & PCRE_PARTIAL_HARD) != 0)? 2 :
               ((options & PCRE_PARTIAL_SOFT) != 0)? 1 : 0;
 

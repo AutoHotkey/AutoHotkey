@@ -763,7 +763,7 @@ check_escape(const pcre_uchar **ptrptr, int *errorcodeptr, int bracount,
   int options, BOOL isclass)
 {
 /* PCRE_UTF16 has the same value as PCRE_UTF8. */
-BOOL utf = (options & PCRE_UTF8) != 0;
+BOOL utf = UTF_ENABLED((options & PCRE_UTF8) != 0);
 const pcre_uchar *ptr = *ptrptr + 1;
 pcre_int32 c;
 int i;
@@ -3416,7 +3416,7 @@ dynamically as we process the pattern. */
 
 #ifdef SUPPORT_UTF
 /* PCRE_UTF16 has the same value as PCRE_UTF8. */
-BOOL utf = (options & PCRE_UTF8) != 0;
+BOOL utf = UTF_ENABLED((options & PCRE_UTF8) != 0);
 pcre_uchar utf_chars[6];
 #else
 BOOL utf = FALSE;
@@ -7723,7 +7723,7 @@ while (ptr[skipatstart] == CHAR_LEFT_PARENTHESIS &&
   }
 
 /* PCRE_UTF16 has the same value as PCRE_UTF8. */
-utf = (options & PCRE_UTF8) != 0;
+utf = UTF_ENABLED((options & PCRE_UTF8) != 0);
 
 /* Can't support UTF unless PCRE has been compiled to include the code. The
 return of an error code from PRIV(valid_utf)() is a new feature, introduced in

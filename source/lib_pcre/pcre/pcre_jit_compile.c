@@ -299,7 +299,9 @@ typedef struct compiler_common {
   jump_list *caselesscmp;
   BOOL jscript_compat;
 #ifdef SUPPORT_UTF
+#ifdef SUPPORT_UTF_OPTION /* AutoHotkey: Helps detect any usages which aren't macro'd out. */
   BOOL utf;
+#endif
 #ifdef SUPPORT_UCP
   BOOL use_ucp;
 #endif
@@ -505,7 +507,7 @@ switch(*cc)
 
   case OP_ANYBYTE:
 #ifdef SUPPORT_UTF
-  if (common->utf) return NULL;
+  if (UTF_ENABLED(common->utf)) return NULL;
 #endif
   return cc + 1;
 
@@ -551,7 +553,7 @@ switch(*cc)
   case OP_NOTPOSQUERYI:
   cc += 2;
 #ifdef SUPPORT_UTF
-  if (common->utf && HAS_EXTRALEN(cc[-1])) cc += GET_EXTRALEN(cc[-1]);
+  if (UTF_ENABLED(common->utf) && HAS_EXTRALEN(cc[-1])) cc += GET_EXTRALEN(cc[-1]);
 #endif
   return cc;
 
@@ -573,7 +575,7 @@ switch(*cc)
   case OP_NOTPOSUPTOI:
   cc += 2 + IMM2_SIZE;
 #ifdef SUPPORT_UTF
-  if (common->utf && HAS_EXTRALEN(cc[-1])) cc += GET_EXTRALEN(cc[-1]);
+  if (UTF_ENABLED(common->utf) && HAS_EXTRALEN(cc[-1])) cc += GET_EXTRALEN(cc[-1]);
 #endif
   return cc;
 
@@ -1274,7 +1276,7 @@ static SLJIT_INLINE BOOL char_has_othercase(compiler_common *common, pcre_uchar*
 unsigned int c;
 
 #ifdef SUPPORT_UTF
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
   GETCHAR(c, cc);
   if (c > 127)
@@ -1299,7 +1301,7 @@ static SLJIT_INLINE unsigned int char_othercase(compiler_common *common, unsigne
 {
 /* Returns with the othercase. */
 #ifdef SUPPORT_UTF
-if (common->utf && c > 127)
+if (UTF_ENABLED(common->utf) && c > 127)
   {
 #ifdef SUPPORT_UCP
   return UCD_OTHERCASE(c);
@@ -1320,7 +1322,7 @@ int n;
 #endif
 
 #ifdef SUPPORT_UTF
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
   GETCHAR(c, cc);
   if (c <= 127)
@@ -1358,7 +1360,7 @@ if (!ispowerof2(bit))
 #ifdef COMPILE_PCRE8
 
 #ifdef SUPPORT_UTF
-if (common->utf && c > 127)
+if (UTF_ENABLED(common->utf) && c > 127)
   {
   n = GET_EXTRALEN(*cc);
   while ((bit & 0x3f) == 0)
@@ -1375,7 +1377,7 @@ return (0 << 8) | bit;
 
 #ifdef COMPILE_PCRE16
 #ifdef SUPPORT_UTF
-if (common->utf && c > 65535)
+if (UTF_ENABLED(common->utf) && c > 65535)
   {
   if (bit >= (1 << 10))
     bit >>= 10;
@@ -1406,7 +1408,7 @@ struct sljit_jump *jump;
 
 OP1(MOV_UCHAR, TMP1, 0, SLJIT_MEM1(STR_PTR), 0);
 #ifdef SUPPORT_UTF
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
 #ifdef COMPILE_PCRE8
   jump = CMP(SLJIT_C_LESS, TMP1, 0, SLJIT_IMM, 0xc0);
@@ -1433,7 +1435,7 @@ struct sljit_jump *jump;
 
 OP1(MOV_UCHAR, TMP1, 0, SLJIT_MEM1(STR_PTR), 0);
 #ifdef SUPPORT_UTF
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
 #ifdef COMPILE_PCRE8
   jump = CMP(SLJIT_C_LESS, TMP1, 0, SLJIT_IMM, 0xc0);
@@ -1458,7 +1460,7 @@ struct sljit_jump *jump;
 #endif
 
 #ifdef SUPPORT_UTF
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
   OP1(MOV_UCHAR, TMP2, 0, SLJIT_MEM1(STR_PTR), 0);
   OP2(SLJIT_ADD, STR_PTR, 0, STR_PTR, 0, SLJIT_IMM, IN_UCHARS(1));
@@ -1506,7 +1508,7 @@ DEFINE_COMPILER;
 #if defined SUPPORT_UTF && defined COMPILE_PCRE8
 struct sljit_label *label;
 
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
   label = LABEL();
   OP1(MOV_UCHAR, TMP1, 0, SLJIT_MEM1(STR_PTR), -IN_UCHARS(1));
@@ -1517,7 +1519,7 @@ if (common->utf)
   }
 #endif
 #if defined SUPPORT_UTF && defined COMPILE_PCRE16
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
   OP1(MOV_UCHAR, TMP1, 0, SLJIT_MEM1(STR_PTR), -IN_UCHARS(1));
   OP2(SLJIT_SUB, STR_PTR, 0, STR_PTR, 0, SLJIT_IMM, IN_UCHARS(1));
@@ -1789,7 +1791,7 @@ mainloop = LABEL();
 
 /* Increasing the STR_PTR here requires one less jump in the most common case. */
 #ifdef SUPPORT_UTF
-if (common->utf) readuchar = TRUE;
+if (UTF_ENABLED(common->utf)) readuchar = TRUE;
 #endif
 if (newlinecheck) readuchar = TRUE;
 
@@ -1801,7 +1803,7 @@ if (newlinecheck)
 
 OP2(SLJIT_ADD, STR_PTR, 0, STR_PTR, 0, SLJIT_IMM, IN_UCHARS(1));
 #if defined SUPPORT_UTF && defined COMPILE_PCRE8
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
   singlechar = CMP(SLJIT_C_LESS, TMP1, 0, SLJIT_IMM, 0xc0);
   OP1(SLJIT_MOV_UB, TMP1, 0, SLJIT_MEM1(TMP1), (sljit_w)PRIV(utf8_table4) - 0xc0);
@@ -1810,7 +1812,7 @@ if (common->utf)
   }
 #endif
 #if defined SUPPORT_UTF && defined COMPILE_PCRE16
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
   singlechar = CMP(SLJIT_C_LESS, TMP1, 0, SLJIT_IMM, 0xd800);
   OP2(SLJIT_AND, TMP1, 0, TMP1, 0, SLJIT_IMM, 0xfc00);
@@ -1855,7 +1857,7 @@ if (caseless)
   {
   oc = TABLE_GET(first_char, common->fcc, first_char);
 #if defined SUPPORT_UCP && !(defined COMPILE_PCRE8)
-  if (first_char > 127 && common->utf)
+  if (first_char > 127 && UTF_ENABLED(common->utf))
     oc = UCD_OTHERCASE(first_char);
 #endif
   }
@@ -1881,7 +1883,7 @@ else
 
 OP2(SLJIT_ADD, STR_PTR, 0, STR_PTR, 0, SLJIT_IMM, IN_UCHARS(1));
 #if defined SUPPORT_UTF && defined COMPILE_PCRE8
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
   CMPTO(SLJIT_C_LESS, TMP1, 0, SLJIT_IMM, 0xc0, start);
   OP1(SLJIT_MOV_UB, TMP1, 0, SLJIT_MEM1(TMP1), (sljit_w)PRIV(utf8_table4) - 0xc0);
@@ -1889,7 +1891,7 @@ if (common->utf)
   }
 #endif
 #if defined SUPPORT_UTF && defined COMPILE_PCRE16
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
   CMPTO(SLJIT_C_LESS, TMP1, 0, SLJIT_IMM, 0xd800, start);
   OP2(SLJIT_AND, TMP1, 0, TMP1, 0, SLJIT_IMM, 0xfc00);
@@ -2012,7 +2014,7 @@ start = LABEL();
 leave = CMP(SLJIT_C_GREATER_EQUAL, STR_PTR, 0, STR_END, 0);
 OP1(MOV_UCHAR, TMP1, 0, SLJIT_MEM1(STR_PTR), 0);
 #ifdef SUPPORT_UTF
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   OP1(SLJIT_MOV, TMP3, 0, TMP1, 0);
 #endif
 #ifndef COMPILE_PCRE8
@@ -2028,12 +2030,12 @@ OP2(SLJIT_AND | SLJIT_SET_E, SLJIT_UNUSED, 0, TMP1, 0, TMP2, 0);
 found = JUMP(SLJIT_C_NOT_ZERO);
 
 #ifdef SUPPORT_UTF
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   OP1(SLJIT_MOV, TMP1, 0, TMP3, 0);
 #endif
 OP2(SLJIT_ADD, STR_PTR, 0, STR_PTR, 0, SLJIT_IMM, IN_UCHARS(1));
 #if defined SUPPORT_UTF && defined COMPILE_PCRE8
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
   CMPTO(SLJIT_C_LESS, TMP1, 0, SLJIT_IMM, 0xc0, start);
   OP1(SLJIT_MOV_UB, TMP1, 0, SLJIT_MEM1(TMP1), (sljit_w)PRIV(utf8_table4) - 0xc0);
@@ -2041,7 +2043,7 @@ if (common->utf)
   }
 #endif
 #if defined SUPPORT_UTF && defined COMPILE_PCRE16
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
   CMPTO(SLJIT_C_LESS, TMP1, 0, SLJIT_IMM, 0xd800, start);
   OP2(SLJIT_AND, TMP1, 0, TMP1, 0, SLJIT_IMM, 0xfc00);
@@ -2089,7 +2091,7 @@ if (caseless)
   {
   oc = TABLE_GET(req_char, common->fcc, req_char);
 #if defined SUPPORT_UCP && !(defined COMPILE_PCRE8)
-  if (req_char > 127 && common->utf)
+  if (req_char > 127 && UTF_ENABLED(common->utf))
     oc = UCD_OTHERCASE(req_char);
 #endif
   }
@@ -2202,7 +2204,7 @@ else
 #elif defined SUPPORT_UTF
   /* Here LOCALS1 has already been zeroed. */
   jump = NULL;
-  if (common->utf)
+  if (UTF_ENABLED(common->utf))
     jump = CMP(SLJIT_C_GREATER, TMP1, 0, SLJIT_IMM, 255);
 #endif /* COMPILE_PCRE8 */
   OP1(SLJIT_MOV_UB, TMP1, 0, SLJIT_MEM1(TMP1), common->ctypes);
@@ -2247,7 +2249,7 @@ else
 #elif defined SUPPORT_UTF
   OP1(SLJIT_MOV, TMP2, 0, SLJIT_IMM, 0);
   jump = NULL;
-  if (common->utf)
+  if (UTF_ENABLED(common->utf))
     jump = CMP(SLJIT_C_GREATER, TMP1, 0, SLJIT_IMM, 255);
 #endif
   OP1(SLJIT_MOV_UB, TMP2, 0, SLJIT_MEM1(TMP1), common->ctypes);
@@ -2279,7 +2281,7 @@ COND_VALUE(SLJIT_MOV, TMP2, 0, SLJIT_C_LESS_EQUAL);
 OP2(SLJIT_SUB | SLJIT_SET_E, SLJIT_UNUSED, 0, TMP1, 0, SLJIT_IMM, 0x85 - 0x0a);
 #if defined SUPPORT_UTF || defined COMPILE_PCRE16
 #ifdef COMPILE_PCRE8
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
 #endif
   COND_VALUE(SLJIT_OR, TMP2, 0, SLJIT_C_EQUAL);
@@ -2307,7 +2309,7 @@ COND_VALUE(SLJIT_OR, TMP2, 0, SLJIT_C_EQUAL);
 OP2(SLJIT_SUB | SLJIT_SET_E, SLJIT_UNUSED, 0, TMP1, 0, SLJIT_IMM, 0xa0);
 #if defined SUPPORT_UTF || defined COMPILE_PCRE16
 #ifdef COMPILE_PCRE8
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
 #endif
   COND_VALUE(SLJIT_OR, TMP2, 0, SLJIT_C_EQUAL);
@@ -2345,7 +2347,7 @@ COND_VALUE(SLJIT_MOV, TMP2, 0, SLJIT_C_LESS_EQUAL);
 OP2(SLJIT_SUB | SLJIT_SET_E, SLJIT_UNUSED, 0, TMP1, 0, SLJIT_IMM, 0x85 - 0x0a);
 #if defined SUPPORT_UTF || defined COMPILE_PCRE16
 #ifdef COMPILE_PCRE8
-if (common->utf)
+if (UTF_ENABLED(common->utf))
   {
 #endif
   COND_VALUE(SLJIT_OR | SLJIT_SET_E, TMP2, 0, SLJIT_C_EQUAL);
@@ -2516,7 +2518,7 @@ if (context->sourcereg == -1)
 
 #ifdef SUPPORT_UTF
 utflength = 1;
-if (common->utf && HAS_EXTRALEN(*cc))
+if (UTF_ENABLED(common->utf) && HAS_EXTRALEN(*cc))
   utflength += GET_EXTRALEN(*cc);
 
 do
@@ -2669,7 +2671,7 @@ if ((*cc++ & XCL_MAP) != 0)
 #ifndef COMPILE_PCRE8
   jump = CMP(SLJIT_C_GREATER, TMP1, 0, SLJIT_IMM, 255);
 #elif defined SUPPORT_UTF
-  if (common->utf)
+  if (UTF_ENABLED(common->utf))
     jump = CMP(SLJIT_C_GREATER, TMP1, 0, SLJIT_IMM, 255);
 #endif
 
@@ -2683,7 +2685,7 @@ if ((*cc++ & XCL_MAP) != 0)
 #ifndef COMPILE_PCRE8
   JUMPHERE(jump);
 #elif defined SUPPORT_UTF
-  if (common->utf)
+  if (UTF_ENABLED(common->utf))
     JUMPHERE(jump);
 #endif
   OP1(SLJIT_MOV, TMP1, 0, TMP3, 0);
@@ -2703,7 +2705,7 @@ while (*cc != XCL_END)
     {
     cc += 2;
 #ifdef SUPPORT_UTF
-    if (common->utf && HAS_EXTRALEN(cc[-1])) cc += GET_EXTRALEN(cc[-1]);
+    if (UTF_ENABLED(common->utf) && HAS_EXTRALEN(cc[-1])) cc += GET_EXTRALEN(cc[-1]);
 #endif
 #ifdef SUPPORT_UCP
     needschar = TRUE;
@@ -2713,11 +2715,11 @@ while (*cc != XCL_END)
     {
     cc += 2;
 #ifdef SUPPORT_UTF
-    if (common->utf && HAS_EXTRALEN(cc[-1])) cc += GET_EXTRALEN(cc[-1]);
+    if (UTF_ENABLED(common->utf) && HAS_EXTRALEN(cc[-1])) cc += GET_EXTRALEN(cc[-1]);
 #endif
     cc++;
 #ifdef SUPPORT_UTF
-    if (common->utf && HAS_EXTRALEN(cc[-1])) cc += GET_EXTRALEN(cc[-1]);
+    if (UTF_ENABLED(common->utf) && HAS_EXTRALEN(cc[-1])) cc += GET_EXTRALEN(cc[-1]);
 #endif
 #ifdef SUPPORT_UCP
     needschar = TRUE;
@@ -2818,7 +2820,7 @@ while (*cc != XCL_END)
     {
     cc ++;
 #ifdef SUPPORT_UTF
-    if (common->utf)
+    if (UTF_ENABLED(common->utf))
       {
       GETCHARINC(c, cc);
       }
@@ -2849,7 +2851,7 @@ while (*cc != XCL_END)
     {
     cc ++;
 #ifdef SUPPORT_UTF
-    if (common->utf)
+    if (UTF_ENABLED(common->utf))
       {
       GETCHARINC(c, cc);
       }
@@ -2858,7 +2860,7 @@ while (*cc != XCL_END)
       c = *cc++;
     SET_CHAR_OFFSET(c);
 #ifdef SUPPORT_UTF
-    if (common->utf)
+    if (UTF_ENABLED(common->utf))
       {
       GETCHARINC(c, cc);
       }
@@ -3055,7 +3057,7 @@ switch(type)
   case OP_ALLANY:
   check_input_end(common, fallbacks);
 #ifdef SUPPORT_UTF
-  if (common->utf)
+  if (UTF_ENABLED(common->utf))
     {
     OP1(MOV_UCHAR, TMP1, 0, SLJIT_MEM1(STR_PTR), 0);
     OP2(SLJIT_ADD, STR_PTR, 0, STR_PTR, 0, SLJIT_IMM, IN_UCHARS(1));
@@ -3285,7 +3287,7 @@ switch(type)
   case OP_CHARI:
   length = 1;
 #ifdef SUPPORT_UTF
-  if (common->utf && HAS_EXTRALEN(*cc)) length += GET_EXTRALEN(*cc);
+  if (UTF_ENABLED(common->utf) && HAS_EXTRALEN(*cc)) length += GET_EXTRALEN(*cc);
 #endif
   if (type == OP_CHAR || !char_has_othercase(common, cc) || char_get_othercase_bit(common, cc) != 0)
     {
@@ -3302,7 +3304,7 @@ switch(type)
   check_input_end(common, fallbacks);
   read_char(common);
 #ifdef SUPPORT_UTF
-  if (common->utf)
+  if (UTF_ENABLED(common->utf))
     {
     GETCHAR(c, cc);
     }
@@ -3321,7 +3323,7 @@ switch(type)
   check_input_end(common, fallbacks);
   length = 1;
 #ifdef SUPPORT_UTF
-  if (common->utf)
+  if (UTF_ENABLED(common->utf))
     {
 #ifdef COMPILE_PCRE8
     c = *cc;
@@ -3386,7 +3388,7 @@ switch(type)
 #ifdef COMPILE_PCRE8
   /* This check only affects 8 bit mode. In other modes, we
   always need to compare the value with 255. */
-  if (common->utf)
+  if (UTF_ENABLED(common->utf))
 #endif /* COMPILE_PCRE8 */
     {
     jump[0] = CMP(SLJIT_C_GREATER, TMP1, 0, SLJIT_IMM, 255);
@@ -3420,7 +3422,7 @@ switch(type)
   SLJIT_ASSERT(length > 0);
   OP1(SLJIT_MOV, TMP1, 0, ARGUMENTS, 0);
 #ifdef SUPPORT_UTF
-  if (common->utf)
+  if (UTF_ENABLED(common->utf))
     {
     OP1(SLJIT_MOV, TMP3, 0, SLJIT_MEM1(TMP1), SLJIT_OFFSETOF(jit_arguments, begin));
     OP1(SLJIT_MOV, TMP2, 0, SLJIT_IMM, length);
@@ -3460,7 +3462,7 @@ do
     {
     size = 1;
 #ifdef SUPPORT_UTF
-    if (common->utf && HAS_EXTRALEN(cc[1]))
+    if (UTF_ENABLED(common->utf) && HAS_EXTRALEN(cc[1]))
       size += GET_EXTRALEN(cc[1]);
 #endif
     }
@@ -3468,7 +3470,7 @@ do
     {
     size = 1;
 #ifdef SUPPORT_UTF
-    if (common->utf)
+    if (UTF_ENABLED(common->utf))
       {
       if (char_has_othercase(common, cc + 1) && char_get_othercase_bit(common, cc + 1) == 0)
         size = 0;
@@ -3571,7 +3573,7 @@ if (withchecks && !common->jscript_compat)
   add_jump(compiler, fallbacks, CMP(SLJIT_C_EQUAL, TMP1, 0, SLJIT_MEM1(SLJIT_LOCALS_REG), OVECTOR(1)));
 
 #if defined SUPPORT_UTF && defined SUPPORT_UCP
-if (common->utf && *cc == OP_REFI)
+if (UTF_ENABLED(common->utf) && *cc == OP_REFI)
   {
   SLJIT_ASSERT(TMP1 == SLJIT_TEMPORARY_REG1 && STACK_TOP == SLJIT_TEMPORARY_REG2 && TMP2 == SLJIT_TEMPORARY_REG3);
   OP1(SLJIT_MOV, TMP2, 0, SLJIT_MEM1(SLJIT_LOCALS_REG), OVECTOR(offset + 1));
@@ -4976,7 +4978,7 @@ if (end != NULL)
   {
   *end = cc + 1;
 #ifdef SUPPORT_UTF
-  if (common->utf && HAS_EXTRALEN(*cc)) *end += GET_EXTRALEN(*cc);
+  if (UTF_ENABLED(common->utf) && HAS_EXTRALEN(*cc)) *end += GET_EXTRALEN(*cc);
 #endif
   }
 return cc;
@@ -6445,8 +6447,10 @@ common->casefulcmp = NULL;
 common->caselesscmp = NULL;
 common->jscript_compat = (re->options & PCRE_JAVASCRIPT_COMPAT) != 0;
 #ifdef SUPPORT_UTF
+#ifdef SUPPORT_UTF_OPTION
 /* PCRE_UTF16 has the same value as PCRE_UTF8. */
 common->utf = (re->options & PCRE_UTF8) != 0;
+#endif
 #ifdef SUPPORT_UCP
 common->use_ucp = (re->options & PCRE_UCP) != 0;
 #endif
