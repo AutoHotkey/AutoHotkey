@@ -13165,7 +13165,7 @@ BIF_DECL(BIF_InStr)
 }
 
 
-void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, TCHAR output_mode, Var &output_var, int *offset, int pattern_count, int captured_pattern_count, LPTSTR &mem_to_free)
+void RegExSetSubpatternVars(LPCTSTR haystack, pcret *re, pcret_extra *extra, TCHAR output_mode, Var &output_var, int *offset, int pattern_count, int captured_pattern_count, LPTSTR &mem_to_free)
 {
 	// OTHERWISE, CONTINUE ON TO STORE THE SUBSTRINGS THAT MATCHED THE SUBPATTERNS (EVEN IF PCRE_ERROR_NOMATCH).
 	// For lookup performance, create a table of subpattern names indexed by subpattern number.
@@ -13173,13 +13173,13 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, TCHAR
 	bool allow_dupe_subpat_names = false; // Set default.
 	LPCTSTR name_table;
 	int name_count, name_entry_size;
-	if (   !pcre_fullinfo(re, extra, PCRE_INFO_NAMECOUNT, &name_count) // Success. Fix for v1.0.45.01: Don't check captured_pattern_count>=0 because PCRE_ERROR_NOMATCH can still have named patterns!
+	if (   !pcret_fullinfo(re, extra, PCRE_INFO_NAMECOUNT, &name_count) // Success. Fix for v1.0.45.01: Don't check captured_pattern_count>=0 because PCRE_ERROR_NOMATCH can still have named patterns!
 		&& name_count // There's at least one named subpattern.  Relies on short-circuit boolean order.
-		&& !pcre_fullinfo(re, extra, PCRE_INFO_NAMETABLE, &name_table) // Success.
-		&& !pcre_fullinfo(re, extra, PCRE_INFO_NAMEENTRYSIZE, &name_entry_size)   ) // Success.
+		&& !pcret_fullinfo(re, extra, PCRE_INFO_NAMETABLE, &name_table) // Success.
+		&& !pcret_fullinfo(re, extra, PCRE_INFO_NAMEENTRYSIZE, &name_entry_size)   ) // Success.
 	{
 		int pcre_options;
-		if (!pcre_fullinfo(re, extra, PCRE_INFO_OPTIONS, &pcre_options)) // Success.
+		if (!pcret_fullinfo(re, extra, PCRE_INFO_OPTIONS, &pcre_options)) // Success.
 			allow_dupe_subpat_names = pcre_options & PCRE_DUPNAMES;
 		// For indexing simplicity, also include an entry for the main/entire pattern at index 0 even though
 		// it's never used because the entire pattern can't have a name without enclosing it in parentheses
@@ -13191,7 +13191,11 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcre *re, pcre_extra *extra, TCHAR
 		{
 			// Below converts first two bytes of each name-table entry into the pattern number (it might be
 			// possible to simplify this, but I'm not sure if big vs. little-endian will ever be a concern).
+#ifdef UNICODE
+			subpat_name[name_table[0]] = name_table + 1;
+#else
 			subpat_name[(name_table[0] << 8) + name_table[1]] = name_table + 2; // For indexing simplicity, subpat_name[0] is for the main/entire pattern though it is never actually used for that because it can't be named without being enclosed in parentheses (in which case it becomes a subpattern).
+#endif
 			// For simplicity and unlike PHP, IsPureNumeric() isn't called to forbid numeric subpattern names.
 			// It seems the worst than could happen if it is numeric is that it would overlap/overwrite some of
 			// the numerically-indexed elements in the output-array.  Seems pretty harmless given the rarity.
@@ -13538,7 +13542,7 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ExprTokenType &aResultToke
 }
 
 
-void *RegExResolveUserCallout(LPCTSTR aCalloutParam, int aCalloutParamLength)
+void *pcret_resolve_user_callout(LPCTSTR aCalloutParam, int aCalloutParamLength)
 {
 	// If no Func is found, pcre will handle the case where aCalloutParam is a pure integer.
 	// In that case, the callout param becomes an integer between 0 and 255. No valid pointer
@@ -13551,15 +13555,15 @@ void *RegExResolveUserCallout(LPCTSTR aCalloutParam, int aCalloutParamLength)
 
 struct RegExCalloutData // L14: Used by BIF_RegEx to pass necessary info to RegExCallout.
 {
-	pcre *re;
+	pcret *re;
 	LPTSTR re_text; // original NeedleRegEx
 	int options_length; // used to adjust cb->pattern_position
 	int pattern_count; // to save calling pcre_fullinfo unnecessarily for each callout
-	pcre_extra *extra;
+	pcret_extra *extra;
 	TCHAR output_mode;
 };
 
-int RegExCallout(pcre_callout_block *cb)
+int RegExCallout(pcret_callout_block *cb)
 {
 	// It should be documented that (?C) is ignored if encountered by the hook thread,
 	// which could happen if SetTitleMatchMode,Regex and #IfWin are used. This would be a
@@ -13724,7 +13728,7 @@ int RegExCallout(pcre_callout_block *cb)
 	return number_to_return;
 }
 
-pcre *get_compiled_regex(LPTSTR aRegEx, TCHAR &aOutputMode, pcre_extra *&aExtra
+pcret *get_compiled_regex(LPTSTR aRegEx, TCHAR &aOutputMode, pcret_extra *&aExtra
 	, int *aOptionsLength, ExprTokenType *aResultToken)
 // Returns the compiled RegEx, or NULL on failure.
 // This function is called by things other than built-in functions so it should be kept general-purpose.
@@ -13737,10 +13741,9 @@ pcre *get_compiled_regex(LPTSTR aRegEx, TCHAR &aOutputMode, pcre_extra *&aExtra
 //    (but it doesn't change ErrorLevel on success, not even if aResultToken!=NULL)
 // L14: aOptionsLength is used by callouts to adjust cb->pattern_position to be relative to beginning of actual user-specified NeedleRegEx instead of string seen by PCRE.
 {	
-	if (!pcre_callout)
-	{	// L14: Ensure these are initialized, even for ::RegExMatch() (to allow (?C) in window title regexes).
-		pcre_callout = &RegExCallout;
-		pcre_resolve_user_callout = &RegExResolveUserCallout;
+	if (!pcret_callout)
+	{	// Ensure this is initialized, even for ::RegExMatch() (to allow (?C) in window title regexes).
+		pcret_callout = &RegExCallout;
 	}
 
 	// While reading from or writing to the cache, don't allow another thread entry.  This is because
@@ -13769,8 +13772,8 @@ pcre *get_compiled_regex(LPTSTR aRegEx, TCHAR &aOutputMode, pcre_extra *&aExtra
 		// required to strip off some options prior to doing a cache search seems likely to offset much of the
 		// cache's benefit.  So for this reason, as well as rarity and code size issues, this policy seems best.
 		LPTSTR re_raw;      // The RegEx's literal string pattern such as "abc.*123".
-		pcre *re_compiled; // The RegEx in compiled form.
-		pcre_extra *extra; // NULL unless a study() was done (and NULL even then if study() didn't find anything).
+		pcret *re_compiled; // The RegEx in compiled form.
+		pcret_extra *extra; // NULL unless a study() was done (and NULL even then if study() didn't find anything).
 		// int pcre_options; // Not currently needed in the cache since options are implicitly inside re_compiled.
 		int options_length; // Lexikos: See aOptionsLength comment at beginning of this function.
 		TCHAR output_mode;
@@ -13941,19 +13944,19 @@ break_both:
 	// Reaching here means that pat has been set to the beginning of the RegEx pattern itself and all options
 	// are set properly.
 
-	LPCTSTR error_msg;
+	LPCSTR error_msg;
 	TCHAR error_buf[ERRORLEVEL_SAVED_SIZE];
 	int error_code, error_offset;
-	pcre *re_compiled;
+	pcret *re_compiled;
 
 	// COMPILE THE REGEX.
-	if (   !(re_compiled = pcre_compile2(pat, pcre_options, &error_code, &error_msg, &error_offset, NULL))   )
+	if (   !(re_compiled = pcret_compile2(pat, pcre_options, &error_code, &error_msg, &error_offset, NULL))   )
 	{
 		if (aResultToken) // Only when this is non-NULL does caller want ErrorLevel changed.
 		{
 			// Since both the error code and the offset are desirable outputs, it seems best to also
 			// include descriptive error text (debatable).
-			sntprintf(error_buf, _countof(error_buf), _T("Compile error %d at offset %d: %s"), error_code
+			sntprintf(error_buf, _countof(error_buf), _T("Compile error %d at offset %d: %hs"), error_code
 				, error_offset, error_msg);
 			g_script.SetErrorLevelOrThrowStr(error_buf, aResultToken->marker);
 		}
@@ -13962,10 +13965,9 @@ break_both:
 
 	if (do_study)
 	{
-		// Currently, PCRE has no study options so that parameter is always 0.
-		// Calling pcre_study currently adds about 1.5 KB of uncompressed code size; but it seems likely to be
-		// a worthwhile option for complex RegEx's that are executed many times in a loop.
-		aExtra = pcre_study(re_compiled, 0, &error_msg); // aExtra is an output parameter for caller.
+		// Enabling JIT compilation adds about 68 KB to the final executable size, which seems to outweigh
+		// the speed-up that a minority of scripts would get.  Pass the option anyway, in case it is enabled:
+		aExtra = pcret_study(re_compiled, PCRE_STUDY_JIT_COMPILE, &error_msg); // aExtra is an output parameter for caller.
 		// Above returns NULL on failure or inability to find anything worthwhile in its study.  NULL is exactly
 		// the right value to pass to exec() to indicate "no study info".
 		// The following isn't done because:
@@ -13995,7 +13997,9 @@ break_both:
 	{
 		// Free the old cache entry's attributes in preparation for overwriting them with the new one's.
 		free(this_entry.re_raw);           // Free the uncompiled pattern.
-		pcre_free(this_entry.re_compiled); // Free the compiled pattern.
+		pcret_free(this_entry.re_compiled); // Free the compiled pattern.
+		if (this_entry.extra)
+			pcret_free_study(this_entry.extra);
 	}
 	//else the insert-position is an empty slot, which is usually the case because most scripts contain fewer than
 	// PCRE_CACHE_SIZE unique regex's.  Nothing extra needs to be done.
@@ -14046,8 +14050,8 @@ LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx)
 // Returns NULL if no match.  Otherwise, returns the address where the pattern was found in aHaystack.
 {
 	TCHAR output_mode; // Currently ignored.
-	pcre_extra *extra;
-	pcre *re;
+	pcret_extra *extra;
+	pcret *re;
 
 	// Compile the regex or get it from cache.
 	if (   !(re = get_compiled_regex(aNeedleRegEx, output_mode, extra, NULL, NULL))   ) // Compiling problem.
@@ -14060,7 +14064,7 @@ LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx)
 	int offset[RXM_INT_COUNT];
 
 	// Execute the regex.
-	int captured_pattern_count = pcre_exec(re, extra, aHaystack, (int)_tcslen(aHaystack), 0, 0, offset, RXM_INT_COUNT);
+	int captured_pattern_count = pcret_exec(re, extra, aHaystack, (int)_tcslen(aHaystack), 0, 0, offset, RXM_INT_COUNT);
 	if (captured_pattern_count < 0) // PCRE_ERROR_NOMATCH or some kind of error.
 		return NULL;
 
@@ -14071,7 +14075,7 @@ LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx)
 
 
 void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount
-	, pcre *aRE, pcre_extra *aExtra, LPTSTR aHaystack, int aHaystackLength
+	, pcret *aRE, pcret_extra *aExtra, LPTSTR aHaystack, int aHaystackLength
 	, int aStartingOffset, int aOffset[], int aNumberOfIntsInOffset)
 {
 	// Set default return value in case of early return.
@@ -14129,7 +14133,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	{
 		// Execute the expression to find the next match.
 		captured_pattern_count = (limit == 0) ? PCRE_ERROR_NOMATCH // Only when limit is exactly 0 are we done replacing.  All negative values are "replace all".
-			: pcre_exec(aRE, aExtra, aHaystack, aHaystackLength, aStartingOffset
+			: pcret_exec(aRE, aExtra, aHaystack, aHaystackLength, aStartingOffset
 				, empty_string_is_not_a_match, aOffset, aNumberOfIntsInOffset);
 
 		if (captured_pattern_count == PCRE_ERROR_NOMATCH)
@@ -14176,7 +14180,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 					// pcre_fullinfo() is a fast call, so it's called every time to simplify the code (I don't think
 					// this whole "empty_string_is_not_a_match" section of code executes for most patterns anyway,
 					// so performance seems less of a concern).
-					if (!pcre_fullinfo(aRE, aExtra, PCRE_INFO_OPTIONS, &pcre_options) // Success.
+					if (!pcret_fullinfo(aRE, aExtra, PCRE_INFO_OPTIONS, &pcre_options) // Success.
 						&& (pcre_options & PCRE_NEWLINE_ANY))
 					{
 						result[result_length++] = '\n'; // This can't overflow because the size calculations in a previous iteration reserved 3 bytes: 1 for this character, 1 for the possible LF that follows CR, and 1 for the terminator.
@@ -14327,7 +14331,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 								if (IsPureNumeric(substring_name, true, false, true)) // Seems best to allow floating point such as 1.0 because it will then get truncated to an integer.  It seems to rare that anyone would want to use floats as names.
 									ref_num = _ttoi(substring_name); // Uses _ttoi() vs. ATOI to avoid potential overlap with non-numeric names such as ${0x5}, which should probably be considered a name not a number?  In other words, seems best not to make some names that start with numbers "special" just because they happen to be hex numbers.
 								else // For simplicity, no checking is done to ensure it consists of the "32 alphanumeric characters and underscores".  Let pcre_get_stringnumber() figure that out for us.
-									ref_num = pcre_get_stringnumber(aRE, substring_name); // Returns a negative on failure, which when stored in ref_num is relied upon as an indicator.
+									ref_num = pcret_get_stringnumber(aRE, substring_name); // Returns a negative on failure, which when stored in ref_num is relied upon as an indicator.
 							}
 							//else it's too long, so it seems best (debatable) to treat it as a unmatched/unfound name, i.e. "".
 							src = closing_brace; // Set things up for the next iteration to resume at the char after "${..}"
@@ -14476,8 +14480,8 @@ BIF_DECL(BIF_RegEx)
 	LPTSTR needle = TokenToString(*aParam[1], aResultToken.buf); // Load-time validation has already ensured that at least two actual parameters are present.
 
 	TCHAR output_mode;
-	pcre_extra *extra;
-	pcre *re;
+	pcret_extra *extra;
+	pcret *re;
 	int options_length;
 
 	// COMPILE THE REGEX OR GET IT FROM CACHE.
@@ -14513,7 +14517,7 @@ BIF_DECL(BIF_RegEx)
 
 	// SET UP THE OFFSET ARRAY, which consists of int-pairs containing the start/end offset of each match.
 	int pattern_count;
-	pcre_fullinfo(re, extra, PCRE_INFO_CAPTURECOUNT, &pattern_count); // The number of capturing subpatterns (i.e. all except (?:xxx) I think). Failure is not checked because it seems too unlikely in this case.
+	pcret_fullinfo(re, extra, PCRE_INFO_CAPTURECOUNT, &pattern_count); // The number of capturing subpatterns (i.e. all except (?:xxx) I think). Failure is not checked because it seems too unlikely in this case.
 	++pattern_count; // Increment to include room for the entire-pattern match.
 	int number_of_ints_in_offset = pattern_count * 3; // PCRE uses 3 ints for each (sub)pattern: 2 for offsets and 1 for its internal use.
 	int *offset = (int *)_alloca(number_of_ints_in_offset * sizeof(int)); // _alloca() boosts performance and seems safe because subpattern_count would usually have to be ridiculously high to cause a stack overflow.
@@ -14532,7 +14536,7 @@ BIF_DECL(BIF_RegEx)
 	}
 	else
 	{	// Allocate a pcre_extra struct to pass callout_data.
-		extra = (pcre_extra *)_alloca(sizeof(pcre_extra));
+		extra = (pcret_extra *)_alloca(sizeof(pcret_extra));
 		extra->flags = PCRE_EXTRA_CALLOUT_DATA;
 	}
 	// extra->callout_data is used to pass callout_data to PCRE.
@@ -14549,7 +14553,7 @@ BIF_DECL(BIF_RegEx)
 	// OTHERWISE, THIS IS RegExMatch() not RegExReplace().
 
 	// EXECUTE THE REGEX.
-	int captured_pattern_count = pcre_exec(re, extra, haystack, haystack_length
+	int captured_pattern_count = pcret_exec(re, extra, haystack, haystack_length
 		, starting_offset, 0, offset, number_of_ints_in_offset);
 
 	int match_offset = 0; // Set default for no match/error cases below.

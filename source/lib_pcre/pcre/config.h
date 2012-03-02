@@ -36,8 +36,8 @@ of `a (PCRE_NEWLINE_ANY), namely that all of the following are considered newlin
    character codes, define this macro as 1. On systems that can use
    "configure", this can be done via --enable-ebcdic. PCRE will then assume
    that all input strings are in EBCDIC. If you do not define this macro, PCRE
-   will assume input strings are ASCII or UTF-8 Unicode. It is not possible to
-   build a version of PCRE that supports both EBCDIC and UTF-8. */
+   will assume input strings are ASCII or UTF-8/16 Unicode. It is not possible
+   to build a version of PCRE that supports both EBCDIC and UTF-8/16. */
 /* #undef EBCDIC */
 
 /* Define to 1 if you have the `bcopy' function. */
@@ -257,7 +257,7 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 #define PACKAGE_NAME "PCRE"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "PCRE 8.13"
+#define PACKAGE_STRING "PCRE 8.30"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "pcre"
@@ -266,7 +266,17 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 /* #undef PACKAGE_URL */
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "8.13"
+#define PACKAGE_VERSION "8.30"
+
+/* The value of PCREGREP_BUFSIZE determines the size of buffer used by
+   pcregrep to hold parts of the file it is searching. On systems that support
+   it, "configure" can be used to override the default, which is 8192. This is
+   also the minimum value. The actual amount of memory used by pcregrep is
+   three times this number, because it allows for the buffering of "before"
+   and "after" lines. */
+#ifndef PCREGREP_BUFSIZE
+#define PCREGREP_BUFSIZE 20480
+#endif
 
 
 /* If you are compiling for a system other than a Unix-like system or
@@ -301,6 +311,9 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 #define STDC_HEADERS 1
 #endif
 
+/* Define to enable support for Just-In-Time compiling. */
+/* #undef SUPPORT_JIT */
+
 /* Define to allow pcregrep to be linked with libbz2, so that it is able to
    handle .bz2 files. */
 /* #undef SUPPORT_LIBBZ2 */
@@ -312,28 +325,37 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
    handle .gz files. */
 /* #undef SUPPORT_LIBZ */
 
-#if defined UNICODE || defined PCRE_USE_UTF16
+#ifdef UNICODE
+
+/* Define to enable the 16 bit PCRE library. */
+#define SUPPORT_PCRE16
 
 /* Define to enable support for Unicode properties */
 #define SUPPORT_UCP
 
-/* Define to enable support for the UTF-8 Unicode encoding. This will work
+
+/* Define to enable support for the UTF-8/16 Unicode encoding. This will work
    even in an EBCDIC environment, but it is incompatible with the EBCDIC
-   macro. That is, PCRE can support *either* EBCDIC code *or* ASCII/UTF-8, but
-   not both at once. */
-#define SUPPORT_UTF8
+   macro. That is, PCRE can support *either* EBCDIC code *or* ASCII/UTF-8/16,
+   but not both at once. */
+#define SUPPORT_UTF
 
-#ifdef PCRE_USE_UTF16
-/* Define to define utf8 flag as constant TRUE, since we always use UTF-8 mode.
-   This allows the compiler optimizer to omit non-UTF-8 code that we don't need. */
-#define SUPPORT_UTF8_ONLY
+/* AutoHotkey: Define to validate UTF input. Leave undefined for performance. */
+/* #undef SUPPORT_UTF_VALIDATION */
+
+#else
+
+/* Define to enable the 8 bit PCRE library. */
+#define SUPPORT_PCRE8
+
 #endif
 
-#endif
+/* Define to enable JIT support in pcregrep. */
+/* #undef SUPPORT_PCREGREP_JIT */
 
 /* Version number of package */
 #ifndef VERSION
-#define VERSION "8.13"
+#define VERSION "8.30"
 #endif
 
 /* Define to empty if `const' does not conform to ANSI C. */

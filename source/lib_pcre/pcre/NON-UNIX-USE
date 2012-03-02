@@ -37,15 +37,16 @@ wrapper functions are a separate issue (see below).
 
 The PCRE distribution includes a "configure" file for use by the Configure/Make
 build system, as found in many Unix-like environments. There is also support
-support for CMake, which some users prefer, especially in Windows environments.
-There are some instructions for CMake under Windows in the section entitled
-"Building PCRE with CMake" below. CMake can also be used to build PCRE in
-Unix-like systems.
+for CMake, which some users prefer, especially in Windows environments. See
+the instructions for CMake under Windows in the section entitled "Building
+PCRE with CMake" below. CMake can also be used to build PCRE in Unix-like
+systems.
 
 
 GENERIC INSTRUCTIONS FOR THE PCRE C LIBRARY
 
-The following are generic comments about building the PCRE C library "by hand".
+The following are generic instructions for building the PCRE C library "by
+hand":
 
  (1) Copy or rename the file config.h.generic as config.h, and edit the macro
      settings that it contains to whatever is appropriate for your environment.
@@ -87,15 +88,12 @@ The following are generic comments about building the PCRE C library "by hand".
        pcre_internal.h
        ucp.h
 
- (5) Also ensure that you have the following file, which is #included as source
-     when building a debugging version of PCRE, and is also used by pcretest.
+ (5) For an 8-bit library, compile the following source files, setting
+     -DHAVE_CONFIG_H as a compiler option if you have set up config.h with your
+     configuration, or else use other -D settings to change the configuration
+     as required.
 
-       pcre_printint.src
-
- (6) Compile the following source files, setting -DHAVE_CONFIG_H as a compiler
-     option if you have set up config.h with your configuration, or else use
-     other -D settings to change the configuration as required.
-
+       pcre_byte_order.c
        pcre_chartables.c
        pcre_compile.c
        pcre_config.c
@@ -104,14 +102,13 @@ The following are generic comments about building the PCRE C library "by hand".
        pcre_fullinfo.c
        pcre_get.c
        pcre_globals.c
-       pcre_info.c
        pcre_maketables.c
        pcre_newline.c
        pcre_ord2utf8.c
        pcre_refcount.c
+       pcre_string_utils.c
        pcre_study.c
        pcre_tables.c
-       pcre_try_flipped.c
        pcre_ucd.c
        pcre_valid_utf8.c
        pcre_version.c
@@ -122,43 +119,92 @@ The following are generic comments about building the PCRE C library "by hand".
      sought in the current directory. Otherwise you run the risk of picking up
      a previously-installed file from somewhere else.
 
+ (6) If you have defined SUPPORT_JIT in config.h, you must also compile
+
+       pcre_jit_compile.c
+
+     This file #includes sources from the sljit subdirectory, where there
+     should be 16 files, all of whose names begin with "sljit".
+
  (7) Now link all the compiled code into an object library in whichever form
-     your system keeps such libraries. This is the basic PCRE C library. If
-     your system has static and shared libraries, you may have to do this once
-     for each type.
+     your system keeps such libraries. This is the basic PCRE C 8-bit library.
+     If your system has static and shared libraries, you may have to do this
+     once for each type.
 
- (8) Similarly, if you want to build the POSIX wrapper functions, ensure that
-     you have the pcreposix.h file and then compile pcreposix.c (remembering
-     -DHAVE_CONFIG_H if necessary). Link the result (on its own) as the
-     pcreposix library.
+ (8) If you want to build a 16-bit library (as well as, or instead of the 8-bit
+     library) repeat steps 5-7 with the following files:
 
- (9) Compile the test program pcretest.c (again, don't forget -DHAVE_CONFIG_H).
-     This needs the functions in the PCRE library when linking. It also needs
-     the pcreposix wrapper functions unless you compile it with -DNOPOSIX. The
-     pcretest.c program also needs the pcre_printint.src source file, which it
-     #includes.
+       pcre16_byte_order.c
+       pcre16_chartables.c
+       pcre16_compile.c
+       pcre16_config.c
+       pcre16_dfa_exec.c
+       pcre16_exec.c
+       pcre16_fullinfo.c
+       pcre16_get.c
+       pcre16_globals.c
+       pcre16_jit_compile.c (if SUPPORT_JIT is defined)
+       pcre16_maketables.c
+       pcre16_newline.c
+       pcre16_ord2utf16.c
+       pcre16_refcount.c
+       pcre16_string_utils.c
+       pcre16_study.c
+       pcre16_tables.c
+       pcre16_ucd.c
+       pcre16_utf16_utils.c
+       pcre16_valid_utf16.c
+       pcre16_version.c
+       pcre16_xclass.c
 
-(10) Run pcretest on the testinput files in the testdata directory, and check
-     that the output matches the corresponding testoutput files. Note that the
-     supplied files are in Unix format, with just LF characters as line
-     terminators. You may need to edit them to change this if your system uses
-     a different convention. If you are using Windows, you probably should use
-     the wintestinput3 file instead of testinput3 (and the corresponding output
-     file). This is a locale test; wintestinput3 sets the locale to "french"
-     rather than "fr_FR", and there some minor output differences.
+ (9) If you want to build the POSIX wrapper functions (which apply only to the
+     8-bit library), ensure that you have the pcreposix.h file and then compile
+     pcreposix.c (remembering -DHAVE_CONFIG_H if necessary). Link the result
+     (on its own) as the pcreposix library.
 
-(11) If you want to use the pcregrep command, compile and link pcregrep.c; it
-     uses only the basic PCRE library (it does not need the pcreposix library).
+(10) The pcretest program can be linked with either or both of the 8-bit and
+     16-bit libraries (depending on what you selected in config.h). Compile
+     pcretest.c and pcre_printint.c (again, don't forget -DHAVE_CONFIG_H) and
+     link them together with the appropriate library/ies. If you compiled an
+     8-bit library, pcretest also needs the pcreposix wrapper library unless
+     you compiled it with -DNOPOSIX.
+
+(11) Run pcretest on the testinput files in the testdata directory, and check
+     that the output matches the corresponding testoutput files. If you
+     compiled both an 8-bit and a 16-bit library, you need to run pcretest with
+     the -16 option to do 16-bit tests.
+
+     Some tests are relevant only when certain build-time options are selected.
+     For example, test 4 is for UTF-8 or UTF-16 support, and will not run if
+     you have built PCRE without it. See the comments at the start of each
+     testinput file. If you have a suitable Unix-like shell, the RunTest script
+     will run the appropriate tests for you.
+
+     Note that the supplied files are in Unix format, with just LF characters
+     as line terminators. You may need to edit them to change this if your
+     system uses a different convention. If you are using Windows, you probably
+     should use the wintestinput3 file instead of testinput3 (and the
+     corresponding output file). This is a locale test; wintestinput3 sets the
+     locale to "french" rather than "fr_FR", and there some minor output
+     differences.
+
+(12) If you have built PCRE with SUPPORT_JIT, the JIT features will be tested
+     by the testdata files. However, you might also like to build and run
+     the JIT test program, pcre_jit_test.c.
+
+(13) If you want to use the pcregrep command, compile and link pcregrep.c; it
+     uses only the basic 8-bit PCRE library (it does not need the pcreposix
+     library).
 
 
 THE C++ WRAPPER FUNCTIONS
 
 The PCRE distribution also contains some C++ wrapper functions and tests,
-contributed by Google Inc. On a system that can use "configure" and "make",
-the functions are automatically built into a library called pcrecpp. It should
-be straightforward to compile the .cc files manually on other systems. The
-files called xxx_unittest.cc are test programs for each of the corresponding
-xxx.cc files.
+applicable to the 8-bit library, which were contributed by Google Inc. On a
+system that can use "configure" and "make", the functions are automatically
+built into a library called pcrecpp. It should be straightforward to compile
+the .cc files manually on other systems. The files called xxx_unittest.cc are
+test programs for each of the corresponding xxx.cc files.
 
 
 BUILDING FOR VIRTUAL PASCAL
@@ -210,8 +256,7 @@ There are two ways of building PCRE using the "configure, make, make install"
 paradigm on Windows systems: using MinGW or using Cygwin. These are not at all
 the same thing; they are completely different from each other. There is also
 support for building using CMake, which some users find a more straightforward
-way of building PCRE under Windows. However, the tests are not run
-automatically when CMake is used.
+way of building PCRE under Windows.
 
 The MinGW home page (http://www.mingw.org/) says this:
 
@@ -238,7 +283,7 @@ On both MinGW and Cygwin, PCRE should build correctly using:
 
 This should create two libraries called libpcre and libpcreposix, and, if you
 have enabled building the C++ wrapper, a third one called libpcrecpp. These are
-independent libraries: when you like with libpcreposix or libpcrecpp you must
+independent libraries: when you link with libpcreposix or libpcrecpp you must
 also link with libpcre, which contains the basic functions. (Some earlier
 releases of PCRE included the basic libpcre functions in libpcreposix. This no
 longer happens.)
@@ -275,31 +320,37 @@ gcc and MinGW's gcc). So, a user can:
 . Build binaries that depend on cygwin1.dll by using Cygwin with the normal
   compiler flags.
 
-The test files that are supplied with PCRE are in Unix format, with LF
-characters as line terminators. It may be necessary to change the line
-terminators in order to get some of the tests to work.
-
+The test files that are supplied with PCRE are in UNIX format, with LF
+characters as line terminators. Unless your PCRE library uses a default newline
+option that includes LF as a valid newline, it may be necessary to change the
+line terminators in the test files to get some of the tests to work.
 
 BUILDING PCRE ON WINDOWS WITH CMAKE
 
 CMake is an alternative configuration facility that can be used instead of the
 traditional Unix "configure". CMake creates project files (make files, solution
 files, etc.) tailored to numerous development environments, including Visual
-Studio, Borland, Msys, MinGW, NMake, and Unix. The following instructions
-were contributed by a PCRE user.
+Studio, Borland, Msys, MinGW, NMake, and Unix.  If possible, use short paths
+with no spaces in the names for your CMake installation and your pcre
+source and build directories.
+
+The following instructions were contributed by a PCRE user.
 
 1.  Install the latest CMake version available from http://www.cmake.org/, and
     ensure that cmake\bin is on your path.
 
 2.  Unzip (retaining folder structure) the PCRE source tree into a source
-    directory such as C:\pcre.
+    directory such as C:\pcre. You should ensure your local date and time
+    is not earlier than the file dates in your source dir if the release is
+    very new.
 
-3.  Create a new, empty build directory, for example C:\pcre\build\
+3.  Create a new, empty build directory, preferably a subdirectory of the
+    source dir. For example, C:\pcre\pcre-xx\build.
 
 4.  Run cmake-gui from the Shell envirornment of your build tool, for example,
     Msys for Msys/MinGW or Visual Studio Command Prompt for VC/VC++.
 
-5.  Enter C:\pcre\pcre-xx and C:\pcre\build for the source and build
+5.  Enter C:\pcre\pcre-xx and C:\pcre\pcre-xx\build for the source and build
     directories, respectively.
 
 6.  Hit the "Configure" button.
@@ -318,7 +369,16 @@ were contributed by a PCRE user.
 11. The build directory should now contain a usable build system, be it a
     solution file for Visual Studio, makefiles for MinGW, etc. Exit from
     cmake-gui and use the generated build system with your compiler or IDE.
+    E.g., for MinGW you can run "make", or for Visual Studio, open the PCRE
+    solution, select the desired configuration (Debug, or Release, etc.) and
+    build the ALL_BUILD project.
 
+12. If during configuration with cmake-gui you've elected to build the test
+    programs, you can execute them by building the test project. E.g., for
+    MinGW: "make test"; for Visual Studio build the RUN_TESTS project. The
+    most recent build configuration is targeted by the tests. A summary of
+    test results is presented. Complete test output is subsequently
+    available for review in Testing\Temporary under your build dir.
 
 USE OF RELATIVE PATHS WITH CMAKE ON WINDOWS
 
@@ -350,20 +410,37 @@ RelativePath="pcre_chartables.c.rule">
 
 TESTING WITH RUNTEST.BAT
 
-1. Copy RunTest.bat into the directory where pcretest.exe has been created.
+If configured with CMake, building the test project ("make test" or building
+ALL_TESTS in Visual Studio) creates (and runs) pcre_test.bat (and depending
+on your configuration options, possibly other test programs) in the build
+directory. Pcre_test.bat runs RunTest.Bat with correct source and exe paths.
 
-2. Edit RunTest.bat and insert a line that indentifies the relative location of
-   the pcre source, e.g.:
+For manual testing with RunTest.bat, provided the build dir is a subdirectory
+of the source directory: Open command shell window. Chdir to the location
+of your pcretest.exe and pcregrep.exe programs. Call RunTest.bat with
+"..\RunTest.Bat" or "..\..\RunTest.bat" as appropriate.
 
-   set srcdir=..\pcre-7.4-RC3
+To run only a particular test with RunTest.Bat provide a test number argument.
 
-3. Run RunTest.bat from a command shell environment. Test outputs will
-   automatically be compared to expected results, and discrepancies will
-   identified in the console output.
+Otherwise:
 
-4. To test pcrecpp, run pcrecpp_unittest.exe, pcre_stringpiece_unittest.exe and
-   pcre_scanner_unittest.exe.
+1. Copy RunTest.bat into the directory where pcretest.exe and pcregrep.exe
+   have been created.
 
+2. Edit RunTest.bat to indentify the full or relative location of
+   the pcre source (wherein which the testdata folder resides), e.g.:
+
+   set srcdir=C:\pcre\pcre-8.20
+
+3. In a Windows command environment, chdir to the location of your bat and
+exe programs.
+
+4. Run RunTest.bat. Test outputs will automatically be compared to expected
+results, and discrepancies will be identified in the console output.
+
+To independently test the just-in-time compiler, run pcre_jit_test.exe.
+To test pcrecpp, run pcrecpp_unittest.exe, pcre_stringpiece_unittest.exe and
+pcre_scanner_unittest.exe.
 
 BUILDING UNDER WINDOWS WITH BCC5.5
 
@@ -490,12 +567,12 @@ optional component I chose to disable it.
 
 5. Known Problems
 
-I ran a the test suite, but you will have to be your own judge of whether this
+I ran the test suite, but you will have to be your own judge of whether this
 command, and this port, suits your purposes. If you find any problems that
 appear to be related to the port itself, please let me know. Please see the
 build.log file in the root of the package also.
 
 
 =========================
-Last Updated: 26 May 2010
+Last Updated: 30 December 2011
 ****

@@ -663,18 +663,20 @@ inline LPTSTR UTF8ToWide(LPCSTR str){
 
 #ifdef UNICODE
 #define UorA(u,a)      (u)
-//#define TPosToUTF8Pos  PosToUTF8Pos
-//#define TLenToUTF8Len  LenToUTF8Len
-//#define UTF8PosToTPos  UTF8PosToPos
-//#define UTF8LenToTLen  UTF8LenToLen
+#define RegExToUTF8(a) CStringUTF8FromTChar(a)
+#define TPosToUTF8Pos  PosToUTF8Pos
+#define TLenToUTF8Len  LenToUTF8Len
+#define UTF8PosToTPos  UTF8PosToPos
+#define UTF8LenToTLen  UTF8LenToLen
 #define ToUnicodeOrAsciiEx(wVirtKey, wScanCode, lpKeyState, pszBuff, wFlags, dwhkl) \
 	ToUnicodeEx((wVirtKey), (wScanCode), (lpKeyState), (LPWSTR)(pszBuff), 2, (wFlags), (dwhkl))
 #else
 #define UorA(u,a)            (a)
-//#define TPosToUTF8Pos(a,b)   (b)
-//#define TLenToUTF8Len(a,b,c) (c)
-//#define UTF8PosToTPos(a,b)   (b)
-//#define UTF8LenToTLen(a,b,c) (c)
+#define RegExToUTF8(a)       (a)
+#define TPosToUTF8Pos(a,b)   (b)
+#define TLenToUTF8Len(a,b,c) (c)
+#define UTF8PosToTPos(a,b)   (b)
+#define UTF8LenToTLen(a,b,c) (c)
 #define ToUnicodeOrAsciiEx(wVirtKey, wScanCode, lpKeyState, pszBuff, wFlags, dwhkl) \
 	ToAsciiEx((wVirtKey), (wScanCode), (lpKeyState), (LPWORD)(pszBuff), (wFlags), (dwhkl))
 #endif
