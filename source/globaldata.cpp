@@ -317,6 +317,7 @@ Action g_act[] =
 	, {_T("IfNotExist"), 1, 1, 1, NULL} // File or directory.
 	// IfMsgBox must be physically adjacent to the other IFs in this array:
 	, {_T("IfMsgBox"), 1, 1, 1, NULL} // MsgBox result (e.g. OK, YES, NO)
+
 	, {_T("MsgBox"), 0, 4, 3, NULL} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
 	, {_T("InputBox"), 1, 11, 11 H, {5, 6, 7, 8, 10, 0}} // Output var, title, prompt, hide-text (e.g. passwords), width, height, X, Y, Font (e.g. courier:8 maybe), Timeout, Default
 	, {_T("SplashTextOn"), 0, 4, 4, {1, 2, 0}} // Width, height, title, text
@@ -411,6 +412,8 @@ Action g_act[] =
 	, {_T("Try"), 0, 0, 0, NULL}
 	, {_T("Catch"), 0, 1, 0, NULL} // fincs: seems best to allow catch without a parameter
 	, {_T("Throw"), 0, 1, 1, {1, 0}}
+	, {_T("Given"), 1, 1, 1, {1, 0}}
+	, {_T("When"), 1, 1, 1, {1, 0}}
 	, {_T("{"), 0, 0, 0, NULL}, {_T("}"), 0, 0, 0, NULL}
 
 	, {_T("WinActivate"), 0, 4, 2, NULL} // Passing zero params results in activating the LastUsed window.

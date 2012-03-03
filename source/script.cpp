@@ -4916,7 +4916,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	// Loop 5 { ; Also overlaps, this time with file-pattern loop that retrieves numeric filename ending in '{'.
 	// Loop %Var% {  ; Similar, but like the above seems acceptable given extreme rarity of user intending a file pattern.
 	if ((aActionType == ACT_LOOP || aActionType == ACT_WHILE) && nArgs == 1 && arg[0][0] // A loop with exactly one, non-blank arg.
-		|| ((aActionType == ACT_FOR || aActionType == ACT_CATCH) && nArgs))
+		|| ((aActionType == ACT_FOR || aActionType == ACT_CATCH || aActionType == ACT_GIVEN) && nArgs))
 	{
 		LPTSTR arg1 = arg[nArgs - 1]; // For readability and possibly performance.
 		// A loop with the above criteria (exactly one arg) can only validly be a normal/counting loop or
@@ -4944,7 +4944,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			if (!rtrim(arg1)) // Trimmed down to nothing, so only a brace was present: remove the arg completely.
 				if (aActionType == ACT_LOOP || aActionType == ACT_CATCH)
 					nArgs = 0;    // This makes later stages recognize it as an infinite loop rather than a zero-iteration loop.
-				else // ACT_WHILE or ACT_FOR
+				else // ACT_WHILE, ACT_FOR or ACT_GIVEN
 					return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
 		}
 	}
@@ -5282,7 +5282,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 						// expression because this is an arg that's marked as a number-or-expression.
 						// So telltales avoid the need for the complex check further below.
 						if (aActionType == ACT_ASSIGNEXPR || aActionType >= ACT_FOR && aActionType <= ACT_UNTIL // i.e. FOR, WHILE or UNTIL
-							|| aActionType == ACT_THROW
+							|| aActionType >= ACT_THROW && aActionType <= ACT_WHEN // THROW, GIVEN or WHEN
 							|| StrChrAny(this_new_arg.text, EXPR_TELLTALES)) // See above.
 							this_new_arg.is_expression = true;
 						else
@@ -5307,7 +5307,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			//		a type mismatch error.
 			//
 			if (this_new_arg.is_expression && IsPureNumeric(this_new_arg.text, true, true, true)
-				&& aActionType != ACT_ASSIGNEXPR && aActionType != ACT_FOR && aActionType != ACT_THROW)
+				&& aActionType != ACT_ASSIGNEXPR && aActionType != ACT_FOR
+				&& (aActionType < ACT_THROW || aActionType > ACT_WHEN)) // Not THROW, GIVEN or WHEN.
 				this_new_arg.is_expression = false;
 
 			if (this_new_arg.is_expression)
@@ -5609,8 +5610,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				{
 					// ACT_WHILE performs less than 4% faster as a non-expression in these cases, and keeping
 					// it as an expression avoids an extra check in a performance-sensitive spot of ExpandArgs
-					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).
-					if (aActionType < ACT_FOR || aActionType > ACT_UNTIL && aActionType != ACT_THROW) // If it is FOR, WHILE, UNTIL or THROW, it would be something like "while x" in this case. Keep those as expressions for the reason above. PerformLoopFor() requires FOR's expression arg to remain an expression.
+					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).  ACT_UNTIL is treated the same way.
+					// Additionally, FOR, THROW, GIVEN and WHEN are kept as expressions in all cases to
+					// simplify the code (which works around ExpandArgs() lack of support for objects).
+					if (aActionType < ACT_FOR || aActionType > ACT_UNTIL // Not FOR, WHILE or UNTIL.
+						&& (aActionType < ACT_THROW || aActionType > ACT_WHEN)) // Not THROW, GIVEN or WHEN.
 						this_new_arg.is_expression = false; // In addition to being an optimization, doing this might also be necessary for things like "Var := ClipboardAll" to work properly.
 					// But if aActionType is ACT_ASSIGNEXPR, it's left as ACT_ASSIGNEXPR vs. ACT_ASSIGN
 					// because it might be necessary to avoid having AutoTrim take effect for := (which
@@ -9238,7 +9242,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 		if (line->mParentLine == NULL) // i.e. don't do it if it's already "owned" by an IF or ELSE.
 			line->mParentLine = aParentLine; // Can be NULL.
 
-		if (ACT_IS_IF_OR_ELSE_OR_LOOP(line->mActionType) || line->mActionType == ACT_REPEAT)
+		if (ACT_IS_IF_OR_ELSE_OR_LOOP(line->mActionType) || line->mActionType == ACT_REPEAT || line->mActionType == ACT_GIVEN)
 		{
 			// In this case, the loader should have already ensured that line->mNextLine is not NULL.
 			if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN && line->mNextLine->mAttribute == ATTR_TRUE)
@@ -9452,8 +9456,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			// so always continue on to evaluate the IF's ELSE, if present:
 			if (line_temp->mActionType == ACT_ELSE)
 			{
-				if (line->mActionType == ACT_LOOP || line->mActionType == ACT_WHILE || line->mActionType == ACT_FOR
-				  || line->mActionType == ACT_TRY || line->mActionType == ACT_REPEAT)
+				if (!ACT_IS_IF(line->mActionType))
 				{
 					 // this can't be our else, so let the caller handle it.
 					if (aMode != ONLY_ONE_LINE)
@@ -9525,6 +9528,41 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			// Otherwise, continue processing at line's new location:
 			continue;
 		} // ActionType is "IF".
+		else if (line->mActionType == ACT_GIVEN)
+		{
+			// "Hide" the arg so that ExpandArgs() doesn't evaluate it.  This is necessary because
+			// ACT_GIVEN has special handling to support objects.
+			line->mArgc = 0;
+			Line *given_line = line;
+
+			line = line->mNextLine;
+			if (line->mActionType != ACT_BLOCK_BEGIN)
+				return given_line->PreparseError(ERR_MISSING_OPEN_BRACE);
+			
+			Line *end_line;
+			for (line = line->mNextLine; line->mActionType == ACT_WHEN; line = end_line)
+			{
+				// Hide the arg so that ExpandArgs() won't evaluate it.
+				line->mArgc = 0;
+				// Find the next ACT_WHEN or ACT_BLOCK_END:
+				end_line = PreparseIfElse(line->mNextLine, UNTIL_BLOCK_END, aLoopType);
+				if (!end_line)
+					return NULL; // Error.
+				// Form a linked list of WHEN lines within this block:
+				line->mRelatedLine = end_line;
+			}
+
+			if (line->mActionType != ACT_BLOCK_END)
+				return line->PreparseError(_T("Expected WHEN or \"}\"")); // Is this even possible?
+
+			// After evaluating ACT_GIVEN, execution resumes after ACT_BLOCK_END:
+			given_line->mRelatedLine = line = end_line->mNextLine;
+
+			if (aMode == ONLY_ONE_LINE) // Return the next unprocessed line to the caller.
+				return line;
+			// Otherwise, continue processing at line's new location:
+			continue;
+		}
 
 		// Since above didn't continue, do the switch:
 		LPTSTR line_raw_arg1 = LINE_RAW_ARG1; // Resolve only once to help reduce code size.
@@ -9719,6 +9757,12 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		case ACT_CATCH:
 			// Similar to above.
 			return line->PreparseError(ERR_CATCH_WITH_NO_TRY);
+
+		case ACT_WHEN:
+			if (!line->mParentLine || !line->mParentLine->mParentLine
+				|| line->mParentLine->mParentLine->mActionType != ACT_GIVEN)
+				return line->PreparseError(ERR_WHEN_WITH_NO_GIVEN);
+			return line;
 		} // switch()
 
 		line = line->mNextLine; // If NULL due to physical end-of-script, the for-loop's condition will catch it.
@@ -12111,6 +12155,75 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			g.ThrownToken = token;
 			return FAIL;
 		}
+
+		case ACT_GIVEN:
+		{
+			Line *line_to_execute = NULL;
+
+			// Privatize our deref buf so that any function calls within any of the GIVEN/WHEN
+			// expressions can allocate and user their own separate deref buf.  Our deref buf
+			// will be reused for each expression evaluation.
+			PRIVATIZE_S_DEREF_BUF;
+
+			ExprTokenType given_value;
+			result = line->ExpandSingleArg(0, given_value, our_deref_buf, our_deref_buf_size);
+			if (result == OK)
+			{
+				// Privatize the deref buf again to avoid overwriting given_value.  Note
+				// that this introduces a new "our_deref_buf" distinct from the outer one.
+				PRIVATIZE_S_DEREF_BUF;
+				// For each WHEN:
+				for (Line *when = line->mNextLine->mNextLine; when->mActionType == ACT_WHEN; when = when->mRelatedLine)
+				{
+					ExprTokenType when_value;
+					result = when->ExpandSingleArg(0, when_value, our_deref_buf, our_deref_buf_size);
+					if (result != OK)
+						break;
+					if (TokensAreEqual(given_value, when_value))
+						line_to_execute = when->mNextLine;
+					if (when_value.symbol == SYM_OBJECT)
+						when_value.object->Release();
+					if (line_to_execute)
+						break;
+				}
+				DEPRIVATIZE_S_DEREF_BUF;
+				if (given_value.symbol == SYM_OBJECT)
+					given_value.object->Release();
+			}
+
+			DEPRIVATIZE_S_DEREF_BUF;
+
+			if (line_to_execute)
+			{
+				// Above found a matching WHEN.  Execute the lines between it and the next WHEN or block-end.
+				result = line_to_execute->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
+			}
+
+			if (result != OK || aMode == ONLY_ONE_LINE)
+			{
+				caller_jump_to_line = jump_to_line;
+				return result;
+			}
+			
+			if (jump_to_line != NULL)
+			{
+				if (jump_to_line->mParentLine != line->mParentLine)
+				{
+					caller_jump_to_line = jump_to_line;
+					return OK;
+				}
+				line = jump_to_line;
+				continue;
+			}
+			
+			// Continue execution at the line following the block-end.
+			line = line->mRelatedLine;
+			continue;
+		}
+
+		case ACT_WHEN:
+			// This is the next WHEN after one that matched, so we're done.
+			return OK;
 
 		case ACT_EXIT:
 			// If this script has no hotkeys and hasn't activated one of the hooks, EXIT will cause the

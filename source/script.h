@@ -178,6 +178,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_ELSE_WITH_NO_IF _T("ELSE with no matching IF")
 #define ERR_UNTIL_WITH_NO_LOOP _T("UNTIL with no matching LOOP")
 #define ERR_CATCH_WITH_NO_TRY _T("CATCH with no matching TRY")
+#define ERR_WHEN_WITH_NO_GIVEN _T("Unexpected WHEN")
 #define ERR_EXPECTED_BLOCK_OR_ACTION _T("Expected \"{\" or single-line action.")
 #define ERR_OUTOFMEM _T("Out of memory.")  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
 #define ERR_EXPR_TOO_LONG _T("Expression too long")
@@ -2969,6 +2970,7 @@ ResultType TokenToDoubleOrInt64(ExprTokenType &aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
 Func *TokenToFunc(ExprTokenType &aToken);
 ResultType TokenSetResult(ExprTokenType &aResultToken, LPCTSTR aResult, size_t aResultLength = -1);
+BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
 void SetWorkingDir(LPTSTR aNewDir);
