@@ -1513,9 +1513,10 @@ abnormal_end: // Currently the same as normal_end; it's separate to improve read
 	// v1.0.45: ACT_ASSIGNEXPR relies on us to set the output_var (i.e. whenever it's ARG1's is_expression==true).
 	// Our taking charge of output_var allows certain performance optimizations in other parts of this function,
 	// such as avoiding excess memcpy's and malloc's during intermediate stages.
-	if (output_var && result_to_return) // i.e. don't assign if NULL to preserve backward compatibility with scripts that rely on the old value being changed in cases where an expression fails (unlikely).
-		if (!output_var->Assign(result_to_return))
-			aResult = FAIL;
+	// v2: Leave output_var unchanged in this case so that ACT_ASSIGNEXPR behaves the same as SYM_ASSIGN.
+	//if (output_var && result_to_return) // i.e. don't assign if NULL to preserve backward compatibility with scripts that rely on the old value being changed in cases where an expression fails (unlikely).
+	//	if (!output_var->Assign(result_to_return))
+	//		aResult = FAIL;
 
 normal_end_skip_output_var:
 	for (i = mem_count; i--;) // Free any temporary memory blocks that were used.  Using reverse order might reduce memory fragmentation a little (depending on implementation of malloc).
