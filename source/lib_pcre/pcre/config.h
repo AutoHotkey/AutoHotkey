@@ -26,11 +26,8 @@ them both to 0; an emulation function will be used. */
    changed so that backslash-R matches only CR, LF, or CRLF. The build-time
    default can be overridden by the user of PCRE at runtime. On systems that
    support it, "configure" can be used to override the default. */
-/* #undef BSR_ANYCRLF */
-/* AutoHotkey: BSR_ANYCRLF above is left undefined for backward compatibility with earlier versions
-of AutoHotkey.  In any case, it might be the best default because it matches up with the default behavior
-of `a (PCRE_NEWLINE_ANY), namely that all of the following are considered newlines:
-`r, `n, `r`n, `v/VT/vertical tab/chr(0xB), `f/FF/formfeed/chr(0xC), and NEL/next-line/chr(0x85).*/
+#define BSR_ANYCRLF
+/* AutoHotkey: BSR_ANYCRLF above is defined for consistency with the default newline-matching behaviour. */
 
 /* If you are compiling for a system that uses EBCDIC instead of ASCII
    character codes, define this macro as 1. On systems that can use
