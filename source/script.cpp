@@ -12198,6 +12198,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				// Above found a matching WHEN.  Execute the lines between it and the next WHEN or block-end.
 				result = line_to_execute->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
 			}
+			else
+				jump_to_line = NULL;
 
 			if (result != OK || aMode == ONLY_ONE_LINE)
 			{
