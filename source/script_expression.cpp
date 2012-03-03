@@ -146,20 +146,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					this_token.symbol = SYM_STRING; //
 
 					if (deref->marker == cp && !cp[deref->length] && (deref+1)->is_function // %soleDeref%()
-						&& (deref->var->HasObject() // It's an object.
-						|| !deref->var->HasContents())) // It's an empty string (which may be passed to __Call).
+						&& deref->var->HasObject()) // It's an object; implies var->Type() == VAR_NORMAL.
 					{
-						// This dynamic function call deref consists of a single var containing an object
-						// or an empty string; both need special handling.
-						if (deref->var->HasObject())
-						{
-							// Push the object, not the var, in case this variable is modified in the
-							// parameter list of this function call (which is evaluated prior to SYM_FUNC).
-							this_token.symbol = SYM_OBJECT;
-							this_token.object = deref->var->Object();
-							this_token.object->AddRef();
-						}
-						// Otherwise, leave it set to the empty string.
+						// Push the object, not the var, in case this variable is modified in the
+						// parameter list of this function call (which is evaluated prior to SYM_FUNC).
+						this_token.symbol = SYM_OBJECT;
+						this_token.object = deref->var->Object();
+						this_token.object->AddRef();
 						goto push_this_token;
 					}
 					// Otherwise, it could still be %var%() where var contains a string which is too
@@ -204,7 +197,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					// Copy any chars that occur after the final deref into the buffer:
 					for (; *cp && var_name_length < MAX_VAR_NAME_LENGTH; left_buf[var_name_length++] = *cp++);
 					if (var_name_length >= MAX_VAR_NAME_LENGTH && *cp // The variable name would be too long!
-						|| !var_name_length) // It resolves to an empty string (e.g. a simple dynamic var like %Var% where Var is blank).
+						|| !var_name_length && !deref->is_function) // It resolves to an empty string (e.g. a simple dynamic var like %Var% where Var is blank) but isn't a dynamic function call, which would trigger g_MetaObject.__Call().
 						goto double_deref_fail; // For simplicity and in keeping with the tradition that expressions generally don't display runtime errors, just treat it as a blank.
 
 					// Terminate the buffer, even if nothing was written into it:

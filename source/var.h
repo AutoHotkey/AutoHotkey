@@ -262,7 +262,12 @@ public:
 	ResultType AssignStringToCodePage(LPCWSTR aBuf, int aLength = -1, UINT aCodePage = CP_ACP, DWORD aFlags = WC_NO_BEST_FIT_CHARS, char aDefChar = '?');
 	inline ResultType AssignStringW(LPCWSTR aBuf, int aLength = -1)
 	{
-		return UorA(AssignString,AssignStringToCodePage)(aBuf, aLength);
+#ifdef UNICODE
+		// Pass aExactSize=true for consistency with AssignStringTo/FromCodePage/UTF8.
+		return AssignString(aBuf, aLength, true);
+#else
+		return AssignStringToCodePage(aBuf, aLength);
+#endif
 	}
 
 	inline ResultType Assign(DWORD aValueToAssign) // For some reason, this function is actually faster when not __forceinline.
