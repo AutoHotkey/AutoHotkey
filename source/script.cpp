@@ -12084,45 +12084,26 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			if (!token) // Unlikely.
 				return line->LineError(ERR_OUTOFMEM);
 
-			// The following is based on code from PerformLoopFor()
-
-			if (!sDerefBuf)
-			{
-				sDerefBufSize = (line->mArg[0].length < MAX_NUMBER_LENGTH ? MAX_NUMBER_LENGTH : line->mArg[0].length) + 1;
-				if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
-				{
-					sDerefBufSize = 0;
-					return line->LineError(ERR_OUTOFMEM);
-				}
-			}
-
 			PRIVATIZE_S_DEREF_BUF;
-			LPTSTR our_buf_marker = our_deref_buf;
-			LPTSTR arg_deref[] = {0, 0};
-			LPTSTR strVal;
-			token->symbol = SYM_INVALID;
-			strVal = line->ExpandExpression(0, result, token, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, 0);
-			if (strVal == our_deref_buf)
-				token->mem_to_free = strVal;
+
+			result = line->ExpandSingleArg(0, *token, our_deref_buf, our_deref_buf_size);
+			
+			if (result == OK && token->symbol == SYM_STRING && token->marker == our_deref_buf)
+			{
+				// Assign ownership of our_deref_buf to token.
+				token->mem_to_free = our_deref_buf;
+				if (our_deref_buf_size > LARGE_DEREF_BUF_SIZE)
+					--sLargeDerefBufs;
+			}
 			else
 			{
-				token->mem_to_free = NULL;
 				DEPRIVATIZE_S_DEREF_BUF;
-			}
-
-			if (!strVal)
-			{
-				// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
-				delete token;
-				return result;
-			}
-
-			// Check if ExpandExpression has not returned a token at all
-			if (token->symbol == SYM_INVALID)
-			{
-				// Store the returned string in the token
-				token->symbol = SYM_STRING;
-				token->marker = strVal;
+				if (result != OK)
+				{
+					delete token;
+					return result; // Typically EARLY_EXIT or FAIL.
+				}
+				token->mem_to_free = NULL;
 			}
 
 			// Throw the newly-created token
@@ -12849,34 +12830,22 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 
 	// Save these pointers since they will be overwritten during the loop:
 	Var *var[] = { ARGVARRAW1, ARGVARRAW2 };
+
+	// Although we won't need sDerefBuf since string results aren't meaningful, the deref buf
+	// must be privatized so that any function calls within the expression don't conflict with
+	// the expression's own use of the deref buf:
+	PRIVATIZE_S_DEREF_BUF;
 	
-	if (!sDerefBuf)
-	{
-		// This must be done in case ExpandExpression() needs the deref buf for temporary storage.
-		sDerefBufSize = (mArg[2].length < MAX_NUMBER_LENGTH ? MAX_NUMBER_LENGTH : mArg[2].length) + 1; // See EXPR_BUF_SIZE macro in script_expression.cpp.
-		if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
-		{
-			sDerefBufSize = 0;
-			return LineError(ERR_OUTOFMEM);
-		}
-	}
-
-	LPTSTR our_buf_marker = sDerefBuf;
-	LPTSTR arg_deref[] = {0, 0}; // ExpandExpression checks these if it needs to expand the deref buffer.
 	ExprTokenType object_token;
-	object_token.symbol = SYM_INVALID; // Init in case ExpandExpression() resolves to a string, in which case it won't use enum_token.
+	// Load-time pre-parsing has ensured there are really three args, but mArgc == 2 so this
+	// one hasn't been evaluated yet (since ExpandArgs() doesn't support objects):
+	result = ExpandSingleArg(2, object_token, our_deref_buf, our_deref_buf_size);
+	
+	DEPRIVATIZE_S_DEREF_BUF;
 
-	// Since expressions aren't normally capable of resolving to an object (except for RETURN), we need to
-	// call ExpandExpression() directly and pass in a "result token" which will be used if the result is an
-	// object or number. Load-time pre-parsing has ensured there are really three args, but mArgc == 2 so
-	// this one hasn't been evaluated yet:
-	if (!ExpandExpression(2, result, &object_token, our_buf_marker, sDerefBuf, sDerefBufSize, arg_deref, 0))
-		// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
-		return result;
-
-	if (object_token.symbol != SYM_OBJECT)
+	if (result != OK || object_token.symbol != SYM_OBJECT)
 		// The expression didn't resolve to an object, so no enumerator is available.
-		return OK;
+		return result;
 	
 	TCHAR buf[MAX_NUMBER_SIZE]; // Small buffer which may be used by object->Invoke().
 	
