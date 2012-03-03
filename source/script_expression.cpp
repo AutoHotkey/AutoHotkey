@@ -1696,6 +1696,18 @@ double_deref_fail: // For the rare cases when the name of a dynamic function cal
 
 ResultType Line::ExpandSingleArg(int aArgIndex, ExprTokenType &aResultToken, LPTSTR &aDerefBuf, size_t &aDerefBufSize)
 {
+	ExprTokenType *postfix = mArg[aArgIndex].postfix;
+	if (postfix->symbol < SYM_DYNAMIC // i.e. any other operand type.
+		&& postfix[1].symbol == SYM_INVALID) // Exactly one token.
+	{
+		aResultToken.symbol = postfix->symbol;
+		aResultToken.value_int64 = postfix->value_int64;
+#ifdef _WIN64
+		aResultToken.buf = postfix->buf;
+#endif
+		return OK;
+	}
+
 	size_t space_needed = EXPR_BUF_SIZE(mArg[aArgIndex].length);
 
 	if (aDerefBufSize < space_needed)
