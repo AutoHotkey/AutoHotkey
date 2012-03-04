@@ -13206,7 +13206,8 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcret *re, pcret_extra *extra, TCH
 
 	if (output_mode == 'O')
 	{
-		IObject *m = RegExMatchObject::Create(haystack, offset, subpat_name, pattern_count, captured_pattern_count);
+		LPTSTR mark = (extra->flags & PCRE_EXTRA_MARK) ? *extra->mark : NULL;
+		IObject *m = RegExMatchObject::Create(haystack, offset, subpat_name, pattern_count, captured_pattern_count, mark);
 		if (m)
 			output_var.AssignSkipAddRef(m);
 		else
@@ -13357,7 +13358,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcret *re, pcret_extra *extra, TCH
 
 
 RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName
-	, int aPatternCount, int aCapturedPatternCount)
+	, int aPatternCount, int aCapturedPatternCount, LPCTSTR aMark)
 {
 	// If there was no match, seems best to not return an object:
 	if (aCapturedPatternCount < 1)
@@ -13366,6 +13367,12 @@ RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCT
 	RegExMatchObject *m = new RegExMatchObject();
 	if (!m)
 		return NULL;
+
+	if (  aMark && !(m->mMark = _tcsdup(aMark))  )
+	{
+		m->Release();
+		return NULL;
+	}
 
 	ASSERT(aCapturedPatternCount >= 1);
 	ASSERT(aPatternCount >= aCapturedPatternCount);
@@ -13522,6 +13529,11 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ExprTokenType &aResultToke
 				TokenSetResult(aResultToken, mPatternName[p]);
 			return OK;
 		}
+		else if (!_tcsicmp(name, _T("Mark")))
+		{
+			TokenSetResult(aResultToken, aParamCount == 1 && mMark ? mMark : _T(""));
+			return OK;
+		}
 		else if (_tcsicmp(name, _T("Value"))) // i.e. NOT "Value".
 		{
 			// This is something like m[n] where n is not a valid subpattern or property name,
@@ -13657,6 +13669,8 @@ int RegExCallout(pcret_callout_block *cb)
 		// Temporarily set these for use by the function below:
 		cb->offset_vector[0] = cb->start_match;
 		cb->offset_vector[1] = cb->current_position;
+		if (cd.extra->flags & PCRE_EXTRA_MARK)
+			*cd.extra->mark = (LPTSTR)cb->mark;
 		
 		// Set up local vars for capturing subpatterns.
 		RegExSetSubpatternVars(cb->subject, cd.re, cd.extra, cd.output_mode, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top, mem_to_free);
@@ -14522,8 +14536,8 @@ BIF_DECL(BIF_RegEx)
 	int number_of_ints_in_offset = pattern_count * 3; // PCRE uses 3 ints for each (sub)pattern: 2 for offsets and 1 for its internal use.
 	int *offset = (int *)_alloca(number_of_ints_in_offset * sizeof(int)); // _alloca() boosts performance and seems safe because subpattern_count would usually have to be ridiculously high to cause a stack overflow.
 
-	// L14: Currently necessary only to support callouts (?C).
-	//
+	// The following section supports callouts (?C) and (*MARK:NAME).
+	LPTSTR mark;
 	RegExCalloutData callout_data;
 	callout_data.re = re;
 	callout_data.re_text = needle;
@@ -14532,17 +14546,19 @@ BIF_DECL(BIF_RegEx)
 	callout_data.output_mode = output_mode;
 	if (extra)
 	{	// S (study) option was specified, use existing pcre_extra struct.
-		extra->flags |= PCRE_EXTRA_CALLOUT_DATA;	
+		extra->flags |= PCRE_EXTRA_CALLOUT_DATA | PCRE_EXTRA_MARK;	
 	}
 	else
 	{	// Allocate a pcre_extra struct to pass callout_data.
 		extra = (pcret_extra *)_alloca(sizeof(pcret_extra));
-		extra->flags = PCRE_EXTRA_CALLOUT_DATA;
+		extra->flags = PCRE_EXTRA_CALLOUT_DATA | PCRE_EXTRA_MARK;
 	}
 	// extra->callout_data is used to pass callout_data to PCRE.
 	extra->callout_data = &callout_data;
 	// callout_data.extra is used by RegExCallout, which only receives a pointer to callout_data.
 	callout_data.extra = extra;
+	// extra->mark is used by PCRE to return the NAME of a (*MARK:NAME), if encountered.
+	extra->mark = &mark;
 
 	if (mode_is_replace) // Handle RegExReplace() completely then return.
 	{
