@@ -7336,8 +7336,11 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	}
 	else if (!mIsReadyToExecute && !(aScope & VAR_DECLARED) && (g->CurrentFunc ? g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE : g_MustDeclare))
 	{
-		ScriptError(ERR_MUST_DECLARE, aVarName);
-		return NULL;
+		if (  !(g->CurrentFunc && _tcschr(g->CurrentFunc->mName, '.') && !_tcsnicmp(aVarName, _T("base"), 4) && aVarNameLength == 4)  ) // i.e. not "base" in a class method.
+		{
+			ScriptError(ERR_MUST_DECLARE, aVarName);
+			return NULL;
+		}
 	}
 
 	// Allocate some dynamic memory to pass to the constructor:
