@@ -6816,7 +6816,7 @@ SLJIT_FREE(function);
 int
 PRIV(jit_get_size)(void *executable_func)
 {
-return ((executable_function*)executable_func)->executable_size;
+return (int)((executable_function*)executable_func)->executable_size;
 }
 
 const char*

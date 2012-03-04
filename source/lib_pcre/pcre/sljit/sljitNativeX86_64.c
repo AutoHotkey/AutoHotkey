@@ -396,14 +396,14 @@ static int emit_do_imm32(struct sljit_compiler *compiler, sljit_ub rex, sljit_ub
 		INC_SIZE(2 + sizeof(sljit_hw));
 		*buf++ = rex;
 		*buf++ = opcode;
-		*(sljit_hw*)buf = imm;
+		*(sljit_hw*)buf = (sljit_hw)imm;
 	}
 	else {
 		buf = (sljit_ub*)ensure_buf(compiler, 1 + 1 + sizeof(sljit_hw));
 		FAIL_IF(!buf);
 		INC_SIZE(1 + sizeof(sljit_hw));
 		*buf++ = opcode;
-		*(sljit_hw*)buf = imm;
+		*(sljit_hw*)buf = (sljit_hw)imm;
 	}
 	return SLJIT_SUCCESS;
 }
@@ -600,32 +600,32 @@ static sljit_ub* emit_x86_instruction(struct sljit_compiler *compiler, int size,
 
 			if (immb != 0) {
 				if (immb <= 127 && immb >= -128)
-					*buf_ptr++ = immb; /* 8 bit displacement. */
+					*buf_ptr++ = (sljit_ub)immb; /* 8 bit displacement. */
 				else {
-					*(sljit_hw*)buf_ptr = immb; /* 32 bit displacement. */
+					*(sljit_hw*)buf_ptr = (sljit_hw)immb; /* 32 bit displacement. */
 					buf_ptr += sizeof(sljit_hw);
 				}
 			}
 		}
 		else {
 			*buf_ptr++ |= 0x04;
-			*buf_ptr++ = reg_lmap[b & 0x0f] | (reg_lmap[(b >> 4) & 0x0f] << 3) | (immb << 6);
+			*buf_ptr++ = (sljit_ub)(reg_lmap[b & 0x0f] | (reg_lmap[(b >> 4) & 0x0f] << 3) | (immb << 6));
 		}
 	}
 	else {
 		*buf_ptr++ |= 0x04;
 		*buf_ptr++ = 0x25;
-		*(sljit_hw*)buf_ptr = immb; /* 32 bit displacement. */
+		*(sljit_hw*)buf_ptr = (sljit_hw)immb; /* 32 bit displacement. */
 		buf_ptr += sizeof(sljit_hw);
 	}
 
 	if (a & SLJIT_IMM) {
 		if (flags & EX86_BYTE_ARG)
-			*buf_ptr = imma;
+			*buf_ptr = (sljit_ub)imma;
 		else if (flags & EX86_HALF_ARG)
-			*(short*)buf_ptr = imma;
+			*(short*)buf_ptr = (short)imma;
 		else if (!(flags & EX86_SHIFT_INS))
-			*(sljit_hw*)buf_ptr = imma;
+			*(sljit_hw*)buf_ptr = (sljit_hw)imma;
 	}
 
 	return !(flags & EX86_SHIFT_INS) ? buf : (buf + 1);
@@ -771,7 +771,7 @@ SLJIT_API_FUNC_ATTRIBUTE int sljit_emit_fast_return(struct sljit_compiler *compi
 
 		INC_SIZE(5 + 1);
 		*buf++ = 0x68;
-		*(sljit_hw*)buf = srcw;
+		*(sljit_hw*)buf = (sljit_hw)srcw;
 		buf += sizeof(sljit_hw);
 	}
 
