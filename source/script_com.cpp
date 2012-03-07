@@ -441,7 +441,7 @@ BIF_DECL(BIF_ComObjArray)
 			if (upperBound < lLbound)
 				cElements = 0;
 			else
-				cElements = upperBound - lLbound;
+				cElements = upperBound - lLbound + 1;
 		}
 		else
 		{
