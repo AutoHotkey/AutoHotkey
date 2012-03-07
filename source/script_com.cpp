@@ -428,8 +428,28 @@ BIF_DECL(BIF_ComObjArray)
 	ASSERT(dims <= _countof(bound)); // Prior validation should ensure aParamCount-1 never exceeds 8.
 	for (int i = 0; i < dims; ++i)
 	{
-		bound[i].cElements = (ULONG)TokenToInt64(*aParam[i + 1]);
-		bound[i].lLbound = 0;
+		LONG lLbound = 0;
+		ULONG cElements;
+
+		LPTSTR param = TokenToString(*aParam[i + 1]);
+		TCHAR* delimiter = _tcsstr(param, _T(".."));
+		if (delimiter)
+		{
+			*delimiter = '\0';
+			lLbound = ATOI(param);
+			LONG upperBound = ATOI(delimiter + 2);
+			if (upperBound < lLbound)
+				cElements = 0;
+			else
+				cElements = upperBound - lLbound;
+		}
+		else
+		{
+			cElements = (ULONG)TokenToInt64(*aParam[i + 1]);
+		}
+
+		bound[i].cElements = cElements;
+		bound[i].lLbound = lLbound;
 	}
 	SAFEARRAY *psa = SafeArrayCreate(vt, dims, bound);
 	if (psa && !SafeSetTokenObject(aResultToken, new ComObject((__int64)psa, VT_ARRAY | vt, ComObject::F_OWNVALUE)))
