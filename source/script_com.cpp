@@ -438,10 +438,7 @@ BIF_DECL(BIF_ComObjArray)
 			*delimiter = '\0';
 			lLbound = ATOI(param);
 			LONG upperBound = ATOI(delimiter + 2);
-			if (upperBound < lLbound)
-				cElements = 0;
-			else
-				cElements = upperBound - lLbound + 1;
+			cElements = upperBound - lLbound + 1;
 		}
 		else
 		{
