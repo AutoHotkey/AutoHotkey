@@ -452,7 +452,7 @@ BIF_DECL(BIF_ComObjArray)
 		bound[i].lLbound = lLbound;
 	}
 	SAFEARRAY *psa = SafeArrayCreate(vt, dims, bound);
-	if (psa && !SafeSetTokenObject(aResultToken, new ComObject((__int64)psa, VT_ARRAY | vt, ComObject::F_OWNVALUE)))
+	if (!SafeSetTokenObject(aResultToken, psa ? new ComObject((__int64)psa, VT_ARRAY | vt, ComObject::F_OWNVALUE) : NULL) && psa)
 		SafeArrayDestroy(psa);
 }
 
