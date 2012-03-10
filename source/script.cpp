@@ -9066,19 +9066,15 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					cp = omit_leading_whitespace(op_end + 1); // Have the loop process whatever lies beyond the ending quote.
 					// Let outer loop do infix_count++ for this token.
 
-					if (*cp && _tcschr(_T("+-*&~!"), *cp) && cp[1] != '=' && (cp[1] != '&' || *cp != '&')
-						&& IS_SPACE_OR_TAB(op_end[1]))
+					if (*cp && _tcschr(_T("+-*&~!"), *cp) && cp[1] != '=' && (cp[1] != '&' || *cp != '&'))
 					{
-						// The symbol following this literal string is either a unary operator, or a
-						// binary operator for which literal strings are not valid input.  Instead of
-						// treating it as a syntax error (which may be difficult for the user to see),
-						// we will insert a concat operator and allow the symbol to be interpreted as
-						// a unary operator.  The most common cases where this helps are:
-						//	MsgBox % "var's address is " &var
-						//	MsgBox % "counter is now " ++var
-						if (infix_count > MAX_TOKENS - 2) // -2 to allow for this token and the one added above (for which infix_count hasn't been incremented yet).
-							return LineError(ERR_EXPR_TOO_LONG);
-						infix[++infix_count].symbol = SYM_CONCAT;
+						// The symbol following this literal string is either a unary operator or a
+						// binary operator which can't (at least logically) be applied to a literal
+						// string. Since the user's intention isn't clear, treat it as a syntax error.
+						// The most common cases where this helps are:
+						//	MsgBox % "var's address is " &var  ; Misinterpreted as SYM_BITAND.
+						//	MsgBox % "counter is now " ++var   ; Misinterpreted as SYM_POST_INCREMENT.
+						return LineError(_T("Unexpected operator following literal string."), FAIL, cp);
 					}
 					continue; // Continue vs. break to avoid the ++cp at the bottom. Above has already set cp to be the character after this literal string's close-quote.
 
