@@ -8602,6 +8602,21 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 				ExprTokenType &this_infix_item = infix[infix_count]; // Might help reduce code size since it's referenced many places below.
 				this_infix_item.deref = NULL; // Init needed for SYM_ASSIGN and related; a non-NULL deref means it should be converted to an object-assignment.
 
+				// Auto-concat requires a space or tab for the following reasons:
+				//  - Readability.
+				//  - Compliance with the documentation.
+				//  - To simplify handling of expressions like x[y]().
+				//  - To reserve other combinations for future use; e.g. R"raw string".
+#define CHECK_AUTO_CONCAT \
+				if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)) \
+				{ \
+					if (!IS_SPACE_OR_TAB(cp[-1])) \
+						return LineError(_T("Missing space or operator before this."), FAIL, cp); \
+					if (infix_count > MAX_TOKENS - 2) \
+						return LineError(ERR_EXPR_TOO_LONG); \
+					infix[infix_count++].symbol = SYM_CONCAT; \
+				}
+
 				// CHECK IF THIS CHARACTER IS AN OPERATOR.
 				cp1 = cp[1]; // Improves performance by nearly 5% and appreciably reduces code size (at the expense of being less maintainable).
 				switch (*cp)
@@ -8784,18 +8799,17 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					// for prior to checking the below.  For example, if what immediately follows the open-paren is
 					// the string "int)", this symbol is not open-paren at all but instead the unary type-cast-to-int
 					// operator.
-					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)
-						&& IS_SPACE_OR_TAB(cp[-1])) // A space/tab is required: as documented, and to simplify handling of expressions like x[y]().
-					{
-						if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
-							return LineError(ERR_EXPR_TOO_LONG);
-						this_infix_item.symbol = SYM_CONCAT;
-						++infix_count;
-					}
+					CHECK_AUTO_CONCAT;
 					infix[infix_count].symbol = SYM_OPAREN; // MUST NOT REFER TO this_infix_item IN CASE ABOVE DID ++infix_count.
 					break;
 				case ')':
 					this_infix_item.symbol = SYM_CPAREN;
+					if (cp[1] == '(') // Possibly something like "new (getClass())(params)", which must be validated later.
+					{
+						// Handle it here to bypass the validation done by CHECK_AUTO_CONCAT.
+						infix[++infix_count].symbol = SYM_OPAREN;
+						cp++;
+					}
 					break;
 				case '[': // L31
 					if (infix_count && infix[infix_count - 1].symbol == SYM_DOT // obj.x[ ...
@@ -8832,7 +8846,12 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 				case ']': // L31
 					this_infix_item.symbol = SYM_CBRACKET;
-					this_infix_item.buf = cp; // Used to detect "obj[method_name](param)".
+					if (cp[1] == '(') // obj[methodName](param) or similar.
+					{
+						// Handle it here to bypass the validation done by CHECK_AUTO_CONCAT.
+						infix[++infix_count].symbol = SYM_OPAREN;
+						cp++;
+					}
 					break;
 				case '{':
 					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
@@ -8847,7 +8866,12 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 				case '}':
 					this_infix_item.symbol = SYM_CBRACE;
-					this_infix_item.buf = cp; // Set mainly so CBRACE can share code with CBRACKET.
+					if (cp[1] == '(') // Possibly something like "new {...}(params)", which must be validated later.
+					{
+						// Handle it here to bypass the validation done by CHECK_AUTO_CONCAT.
+						infix[++infix_count].symbol = SYM_OPAREN;
+						cp++;
+					}
 					break;
 				case '=':
 					if (cp1 == '=')
@@ -8983,9 +9007,10 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 
 				case '"': // QUOTED/LITERAL STRING.
 				case '\'':
-					cp1 = *cp; // cp1 contains the starting quote mark: " or '.
+					CHECK_AUTO_CONCAT; // This is done first to enforce the requirement of a space for auto-concat.
+					cp1 = *cp++; // cp1 now contains the starting quote mark (" or ') and cp points at the char after it.
 					// Find the end of this string literal:
-					for (int j = (int)(++cp - aArg.text); ; ++j)
+					for (int j = (int)(cp - aArg.text); ; ++j)
 					{
 						if (j >= aArg.length) // No matching end-quote. Probably impossible due to load-time validation.
 							return LineError(ERR_MISSING_CLOSE_QUOTE); // Since this error string is used in other places, compiler string pooling should result in little extra memory needed for this line.
@@ -8998,70 +9023,51 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								break;
 							}
 						}
-						if (deref && (aArg.text + j) == deref->marker) // Implies deref->marker != NULL.
+					}
+
+					if (deref) // Always true if this arg has any derefs.
+					{
+						// For each deref inside this string:
+						for ( ; deref->marker && deref->marker < op_end; cp = deref->marker + deref->length, ++deref)
 						{
-							if (infix_count > MAX_TOKENS - 6) // -6 to allow for four operands in this iteration and a mandatory two after the loop completes.
+							if (infix_count > MAX_TOKENS - 5) // Ensure enough space for this iteration and at least one substring.
 								return LineError(ERR_EXPR_TOO_LONG);
-							op_end = aArg.text + j; // This points at the deref char.
-							// MUST NOT REFER TO this_infix_item AT ANY POINT DURING THE LOOP (in case a previous iteration did ++infix_count).
-							if (op_end > cp)
+							// Output the substring preceding the deref, then concat.
+							if (cp < deref->marker)
 							{
-								// 1) If the last infix token is an operand, it could be:
-								//     - An operand preceding the quoted string: apply auto-concat.
-								//     - A deref output by a previous iteration, to be concatenated with this substring.
-								if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
-									infix[infix_count++].symbol = SYM_CONCAT;
-								// 2) Output the next literal fragment of this quoted string.
-								if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   )
+								if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, deref->marker - cp))   )
 									return LineError(ERR_OUTOFMEM);
 								infix[infix_count++].symbol = SYM_STRING;
-							}
-							// 3) If the last infix token is an operand, it could be:
-							//     - An operand preceding the quoted string: apply auto-concat.
-							//     - A substring output by the section above.
-							//     - A deref output by a previous iteration (i.e. there was no literal text between this and that).
-							//    It might not be an operand because the section above didn't output one if op_end == cp (i.e. this deref is at the beginning of the string).
-							if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)) // Both need to be checked; see above.
 								infix[infix_count++].symbol = SYM_CONCAT;
-							// 4) Output this deref.
-							if (deref->var->Type() == VAR_NORMAL)
-							{
-								infix[infix_count].symbol = SYM_VAR;
 							}
+							// Output the deref, then concat.
+							if (deref->var->Type() == VAR_NORMAL)
+								infix[infix_count].symbol = SYM_VAR;
 							else
 							{
 								infix[infix_count].symbol = SYM_DYNAMIC;
 								infix[infix_count].buf = NULL; // SYM_DYNAMIC requires that buf be set to NULL for non-double-deref vars (since there are two different types of SYM_DYNAMIC).
 							}
 							infix[infix_count++].var = deref->var;
-							// The next iteration (if any) or the section below will insert a concat operator as necessary.
-							j += deref->length; // Let the next iteration resume after the deref.
-							++deref;
-							cp = aArg.text + j; // Update cp for the substring following the final deref; it will be used below.
-							--j; // -1 to counter the loop's increment.
+							infix[infix_count++].symbol = SYM_CONCAT;
+							// Above: Even if the deref is at the end of the string, output concat and a
+							// final substring so that "%var%" always evaluates to a string, even if var
+							// contains a pure number or object.
 						}
+						this_deref = deref->marker ? deref : NULL; // Update it for later iterations.
 					}
-					// Since above didn't "return", op_end now points at the ending '"'.
+
+					ASSERT(cp <= op_end);
 					
-					this_deref = deref && deref->marker ? deref : NULL; // Update in case above changed it.
-					
-					// If the loop above output one or more substrings and/or derefs, still need to output
-					// a concat operator and the remainder of the string, EVEN IF IT IS EMPTY.  Otherwise
-					// something like ("%var%") would cause inconsistency if var contains a non-string value.
-					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
-					{
-						if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
-							return LineError(ERR_EXPR_TOO_LONG);
-						infix[infix_count++].symbol = SYM_CONCAT;
-					}
-					
-					// MUST NOT REFER TO this_infix_item IN CASE HIGHER ABOVE DID ++infix_count:
+					// Output the final substring, which may be empty for "" or "something %var%".
 					infix[infix_count].symbol = SYM_STRING;
-					if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   ) // cp was already adjusted to omit the starting quote.
+					if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   )
 						return LineError(ERR_OUTOFMEM);
 					cp = omit_leading_whitespace(op_end + 1); // Have the loop process whatever lies beyond the ending quote.
-					
-					if (*cp && _tcschr(_T("+-*&~!"), *cp) && cp[1] != '=' && (cp[1] != '&' || *cp != '&'))
+					// Let outer loop do infix_count++ for this token.
+
+					if (*cp && _tcschr(_T("+-*&~!"), *cp) && cp[1] != '=' && (cp[1] != '&' || *cp != '&')
+						&& IS_SPACE_OR_TAB(op_end[1]))
 					{
 						// The symbol following this literal string is either a unary operator, or a
 						// binary operator for which literal strings are not valid input.  Instead of
@@ -9211,13 +9217,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						if (   (cp1   == 'e' || cp1   == 'E')
 							&& (cp[2] == 'w' || cp[2] == 'W')   ) // "NEW" was found.
 						{
-							if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
-							{
-								if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
-									return LineError(ERR_EXPR_TOO_LONG);
-								this_infix_item.symbol = SYM_CONCAT;
-								++infix_count;
-							}
+							CHECK_AUTO_CONCAT;
 							// Push this pseudo-operator onto the stack.  When it is popped off the stack
 							// (perhaps because an open-parenthesis is encountered), its symbol will be
 							// changed to SYM_FUNC.
@@ -9254,13 +9254,7 @@ unquoted_literal:
 						if (!_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT, *op_end))
 							return LineError(_T("Bad numeric literal."), FAIL, cp);
 					}
-					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)) // If it's an operand, at this stage it can only be SYM_OPERAND or SYM_STRING.
-					{
-						if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
-							return LineError(ERR_EXPR_TOO_LONG);
-						this_infix_item.symbol = SYM_CONCAT;
-						++infix_count;
-					}
+					CHECK_AUTO_CONCAT;
 					// MUST NOT REFER TO this_infix_item IN CASE ABOVE DID ++infix_count:
 					// Now determine what type of literal this is: integer, floating-point or unquoted string.
 					if (op_end - cp < MAX_NUMBER_SIZE)
@@ -9297,12 +9291,7 @@ unquoted_literal:
 		DerefType &this_deref_ref = *this_deref; // Boosts performance slightly.
 		if (this_deref_ref.is_function) // Above has ensured that at this stage, this_deref!=NULL.
 		{
-			if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)) // If it's an operand, at this stage it can only be SYM_OPERAND or SYM_STRING.
-			{
-				if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
-					return LineError(ERR_EXPR_TOO_LONG);
-				infix[infix_count++].symbol = SYM_CONCAT;
-			}
+			CHECK_AUTO_CONCAT;
 			infix[infix_count].symbol = SYM_FUNC;
 			infix[infix_count].deref = this_deref;
 			// L31: Initialize param_count to zero to work with new method of parameter counting required for ObjGet/Set/Call. (See SYM_COMMA and SYM_'PAREN handling.)
@@ -9319,12 +9308,7 @@ unquoted_literal:
 			}
 			else
 			{
-				if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)) // If it's an operand, at this stage it can only be SYM_OPERAND or SYM_STRING.
-				{
-					if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
-						return LineError(ERR_EXPR_TOO_LONG);
-					infix[infix_count++].symbol = SYM_CONCAT;
-				}
+				CHECK_AUTO_CONCAT;
 				infix[infix_count].var = this_deref_ref.var; // Set this first to allow optimizations below to override it.
 				if (this_deref_ref.var->Type() == VAR_NORMAL) // VAR_ALIAS is taken into account (and resolved) by Type().
 				{
@@ -9373,13 +9357,8 @@ unquoted_literal:
 
 continue;     // To avoid falling into the label below. The label below is only reached by explicit goto.
 double_deref: // Caller has set cp to be start and op_end to be the character after the last one of the double deref.
-		if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)) // If it's an operand, at this stage it can only be SYM_OPERAND or SYM_STRING.
-		{
-			if (infix_count > MAX_TOKENS - 2) // -2 to ensure room for this operator and the operand further below.
-				return LineError(ERR_EXPR_TOO_LONG);
-			infix[infix_count++].symbol = SYM_CONCAT;
-		}
-
+		CHECK_AUTO_CONCAT;
+		
 		infix[infix_count].symbol = SYM_DYNAMIC;
 		if (   !(infix[infix_count].buf = SimpleHeap::Malloc(cp, op_end - cp))   ) // Example string: "Array%i%"
 			return LineError(ERR_OUTOFMEM);
@@ -9609,11 +9588,10 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				//--stack_count; // DON'T DO THIS.
 				stack_top.symbol = SYM_FUNC; // Change this OBRACKET to FUNC (see below).
 
-				if (this_infix->buf[1] == '(' // i.e. "]("
+				if (this_infix[1].symbol == SYM_OPAREN // i.e. "]("
 					&& !(stack_count > 1 && stack[stack_count - 2]->symbol == SYM_NEW)) // Not "new x[n]()" or "new {...}()"
 				{
 					// Appears to be a method call with a computed method name, such as x[y](prms).
-					ASSERT(this_infix[1].symbol == SYM_OPAREN);
 					if (infix_symbol == SYM_CBRACE // i.e. {...}(), seems best to reserve this for now.
 						|| in_param_list->func != &g_ObjGet // i.e. it's something like x := [y,z]().
 						|| in_param_list->param_count != 2) // i.e. the target object plus the method name = 2.
@@ -9697,6 +9675,8 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 			}
 			else if (infix_symbol == SYM_FUNC)
 				in_param_list = this_infix[-1].deref	; // Store this SYM_FUNC's deref.
+			else if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol))
+				return LineError(_T("Missing operator or space before \"(\"."));
 			else
 				in_param_list = NULL; // Allow multi-statement commas, even in cases like Func((x,y)).
 			STACK_PUSH(this_infix++);
