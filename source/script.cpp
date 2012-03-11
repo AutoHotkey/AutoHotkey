@@ -7882,6 +7882,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 					// For consistency with normal commands, mandatory parameters must not be blank.
 					if (!*arg.text && func && param_index < func->mMinParams)
 					{
+						abort = true;
 						TCHAR buf[50];
 						sntprintf(buf, _countof(buf), _T("Parameter #%i required"), i + 1);
 						return line->PreparseError(buf);
