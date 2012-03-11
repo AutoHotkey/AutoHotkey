@@ -11273,15 +11273,16 @@ BIF_DECL(BIF_InStr)
 			occurrence_number = (int)TokenToInt64(*aParam[4]);
 		// For offset validation and reverse search we need to know the length of haystack:
 		INT_PTR haystack_length = EXPR_TOKEN_LENGTH(aParam[0], haystack);
-		if (offset <= 0) // Special mode to search from the right side.
+		if (offset < 0) // Special mode to search from the right side.
 		{
+			++offset; // Convert from negative-one-based to zero-based.
 			haystack_length += offset; // i.e. reduce haystack_length by the absolute value of offset.
 			found_pos = (haystack_length >= 0) ? tcsrstr(haystack, haystack_length, needle, string_case_sense, occurrence_number) : NULL;
 			aResultToken.value_int64 = found_pos ? (found_pos - haystack + 1) : 0;  // +1 to convert to 1-based, since 0 indicates "not found".
 			return;
 		}
 		--offset; // Convert from one-based to zero-based.
-		if (offset > haystack_length || occurrence_number < 1)
+		if (offset > haystack_length || occurrence_number < 1 || offset < 0)
 		{
 			aResultToken.value_int64 = 0; // Match never found when offset is beyond length of string.
 			return;
