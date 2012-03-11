@@ -180,9 +180,10 @@ FuncEntry g_BIF[] =
 	
 	{_T("ProcessExist"), BIF_Process, 0, 1, true},
 	{_T("ProcessClose"), BIF_Process, 1, 1, true},
-	{_T("ProcessPriority"), BIF_Process, 2, 2, true},
 	{_T("ProcessWait"), BIF_Process, 1, 2, true},
 	{_T("ProcessWaitClose"), BIF_Process, 1, 2, true},
+
+	{_T("ProcessSetPriority"), BIF_ProcessSetPriority, 1, 2, false},
 
 };
 

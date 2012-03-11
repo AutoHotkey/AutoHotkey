@@ -484,7 +484,7 @@ enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero du
 enum ThreadCommands {THREAD_CMD_INVALID, THREAD_CMD_PRIORITY, THREAD_CMD_INTERRUPT, THREAD_CMD_NOTIMERS};
 
 #define PROCESS_PRIORITY_LETTERS _T("LBNAHR")
-enum ProcessCmds {PROCESS_CMD_INVALID, PROCESS_CMD_EXIST, PROCESS_CMD_CLOSE, PROCESS_CMD_PRIORITY
+enum ProcessCmds {PROCESS_CMD_INVALID, PROCESS_CMD_EXIST, PROCESS_CMD_CLOSE
 	, PROCESS_CMD_WAIT, PROCESS_CMD_WAITCLOSE};
 
 enum ControlCmds {CONTROL_CMD_INVALID, CONTROL_CMD_CHECK, CONTROL_CMD_UNCHECK
@@ -1365,7 +1365,6 @@ public:
 		if (!aBuf || !*aBuf) return PROCESS_CMD_INVALID;
 		if (!_tcsicmp(aBuf, _T("Exist"))) return PROCESS_CMD_EXIST;
 		if (!_tcsicmp(aBuf, _T("Close"))) return PROCESS_CMD_CLOSE;
-		if (!_tcsicmp(aBuf, _T("Priority"))) return PROCESS_CMD_PRIORITY;
 		if (!_tcsicmp(aBuf, _T("Wait"))) return PROCESS_CMD_WAIT;
 		if (!_tcsicmp(aBuf, _T("WaitClose"))) return PROCESS_CMD_WAITCLOSE;
 		return PROCESS_CMD_INVALID;
@@ -2832,6 +2831,7 @@ BIF_DECL(BIF_WinGet);
 BIF_DECL(BIF_WinSet);
 BIF_DECL(BIF_WinMoveTopBottom);
 BIF_DECL(BIF_Process);
+BIF_DECL(BIF_ProcessSetPriority);
 
 BIF_DECL(BIF_PerformAction);
 

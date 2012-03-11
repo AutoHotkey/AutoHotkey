@@ -1858,7 +1858,7 @@ BIF_DECL(BIF_Process)
 	ASSERT(process_cmd != PROCESS_CMD_INVALID);
 
 	HANDLE hProcess;
-	DWORD pid, priority;
+	DWORD pid;
 	
 	//aResultToken.symbol = SYM_INTEGER; // Caller already set this.
 	aResultToken.value_int64 = 0; // Set default return value: indicate failure.
@@ -1883,38 +1883,6 @@ BIF_DECL(BIF_Process)
 		}
 		// Since above didn't return, yield a PID of 0 to indicate failure.
 		return;
-
-	case PROCESS_CMD_PRIORITY:
-	{
-		LPTSTR aPriority = aParamCount > 1 ? TokenToString(*aParam[1]) : _T("");
-		switch (_totupper(*aPriority))
-		{
-		case 'L': priority = IDLE_PRIORITY_CLASS; break;
-		case 'B': priority = BELOW_NORMAL_PRIORITY_CLASS; break;
-		case 'N': priority = NORMAL_PRIORITY_CLASS; break;
-		case 'A': priority = ABOVE_NORMAL_PRIORITY_CLASS; break;
-		case 'H': priority = HIGH_PRIORITY_CLASS; break;
-		case 'R': priority = REALTIME_PRIORITY_CLASS; break;
-		default:
-			// Since above didn't break, yield a PID of 0 to indicate failure.
-			return;
-		}
-		if (pid = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId())  // Assign
-		{
-			if (hProcess = OpenProcess(PROCESS_SET_INFORMATION, FALSE, pid)) // Assign
-			{
-				// If OS doesn't support "above/below normal", seems best to default to normal rather than high/low,
-				// since "above/below normal" aren't that dramatically different from normal:
-				if (!g_os.IsWin2000orLater() && (priority == BELOW_NORMAL_PRIORITY_CLASS || priority == ABOVE_NORMAL_PRIORITY_CLASS))
-					priority = NORMAL_PRIORITY_CLASS;
-				if (SetPriorityClass(hProcess, priority))
-					aResultToken.value_int64 = pid; // Indicate success.
-				CloseHandle(hProcess);
-			}
-		}
-		// Otherwise, return a PID of 0 to indicate failure.
-		return;
-	}
 
 	case PROCESS_CMD_WAIT:
 	case PROCESS_CMD_WAITCLOSE:
@@ -1959,6 +1927,46 @@ BIF_DECL(BIF_Process)
 		} // for()
 	} // case
 	} // switch()
+}
+
+
+
+BIF_DECL(BIF_ProcessSetPriority)
+{
+	BIF_DECL_STRING_PARAM(1, aPriority);
+	BIF_DECL_STRING_PARAM(2, aProcess);
+
+	DWORD pid, priority;
+	HANDLE hProcess;
+
+	aResultToken.value_int64 = 0; // Set default.
+
+	switch (_totupper(*aPriority))
+	{
+	case 'L': priority = IDLE_PRIORITY_CLASS; break;
+	case 'B': priority = BELOW_NORMAL_PRIORITY_CLASS; break;
+	case 'N': priority = NORMAL_PRIORITY_CLASS; break;
+	case 'A': priority = ABOVE_NORMAL_PRIORITY_CLASS; break;
+	case 'H': priority = HIGH_PRIORITY_CLASS; break;
+	case 'R': priority = REALTIME_PRIORITY_CLASS; break;
+	default:
+		// Since above didn't break, yield a PID of 0 to indicate failure.
+		return;
+	}
+	if (pid = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId())  // Assign
+	{
+		if (hProcess = OpenProcess(PROCESS_SET_INFORMATION, FALSE, pid)) // Assign
+		{
+			// If OS doesn't support "above/below normal", seems best to default to normal rather than high/low,
+			// since "above/below normal" aren't that dramatically different from normal:
+			if (!g_os.IsWin2000orLater() && (priority == BELOW_NORMAL_PRIORITY_CLASS || priority == ABOVE_NORMAL_PRIORITY_CLASS))
+				priority = NORMAL_PRIORITY_CLASS;
+			if (SetPriorityClass(hProcess, priority))
+				aResultToken.value_int64 = pid; // Indicate success.
+			CloseHandle(hProcess);
+		}
+	}
+	// Otherwise, return a PID of 0 to indicate failure.
 }
 
 
