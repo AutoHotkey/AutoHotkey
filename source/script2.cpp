@@ -2121,10 +2121,6 @@ error:
 BIF_DECL(BIF_WinSet)
 {
 	BIF_DECL_STRING_PARAM(1, aValue);
-	BIF_DECL_STRING_PARAM(2, aTitle);
-	BIF_DECL_STRING_PARAM(3, aText);
-	BIF_DECL_STRING_PARAM(4, aExcludeTitle);
-	BIF_DECL_STRING_PARAM(5, aExcludeText);
 
 	WinSetAttributes attrib = Line::ConvertWinSetAttribute(aResultToken.marker + 6); // Get the "CMD" from "WinSetCMD".
 	// Since an invalid name wouldn't resolve to this function in the first place,
@@ -2138,7 +2134,7 @@ BIF_DECL(BIF_WinSet)
 	// Only the following sub-commands affect ErrorLevel:
 	bool use_errorlevel = (attrib == WINSET_STYLE || attrib == WINSET_EXSTYLE || attrib == WINSET_REGION);
 
-	HWND target_window = Line::DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1);
 	if (!target_window)
 		goto error;
 
@@ -2169,19 +2165,6 @@ BIF_DECL(BIF_WinSet)
 		SetWindowPos(target_window, topmost_or_not, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
 		break;
 	}
-
-	// Note that WINSET_TOP is not offered as an option since testing reveals it has no effect on
-	// top level (parent) windows, perhaps due to the anti focus-stealing measures in the OS.
-	case WINSET_BOTTOM:
-		// Note: SWP_NOACTIVATE must be specified otherwise the target window often/always fails to go
-		// to the bottom:
-		SetWindowPos(target_window, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
-		break;
-	case WINSET_TOP:
-		// Note: SWP_NOACTIVATE must be specified otherwise the target window often/always fails to go
-		// to the bottom:
-		SetWindowPos(target_window, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
-		break;
 
 	case WINSET_TRANSPARENT:
 	case WINSET_TRANSCOLOR:
@@ -2350,6 +2333,23 @@ error:
 	// but seems best to allow the other sub-commands to throw exceptions:
 	if (use_errorlevel || g->InTryBlock)
 		Script::SetErrorLevelOrThrow();
+}
+
+
+
+BIF_DECL(BIF_WinMoveTopBottom)
+{
+	if (HWND target_window = DetermineTargetWindow(aParam, aParamCount))
+	{
+		HWND mode = ctoupper(aResultToken.marker[7]) == 'B' ? HWND_BOTTOM : HWND_TOP;
+		// Note: SWP_NOACTIVATE must be specified otherwise the target window often fails to move:
+		if (SetWindowPos(target_window, mode, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE))
+		{
+			aResultToken.value_int64 = TRUE;
+			return;
+		}
+	}
+	aResultToken.value_int64 = FALSE;
 }
 
 
@@ -8530,6 +8530,15 @@ HWND Line::DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTit
 	else // Use the "last found" window.
 		target_window = GetValidLastUsedWindow(*g);
 	return target_window;
+}
+
+HWND DetermineTargetWindow(ExprTokenType *aParam[], int aParamCount)
+{
+	TCHAR number_buf[4][MAX_NUMBER_SIZE];
+	LPTSTR param[4];
+	for (int i = 0; i < 4; i++)
+		param[i] = i < aParamCount ? TokenToString(*aParam[i], number_buf[i]) : _T("");
+	return Line::DetermineTargetWindow(param[0], param[1], param[2], param[3]);
 }
 
 

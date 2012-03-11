@@ -508,8 +508,7 @@ enum DriveGetCmds {DRIVEGET_CMD_INVALID, DRIVEGET_CMD_LIST, DRIVEGET_CMD_FILESYS
 	, DRIVEGET_CMD_STATUSCD, DRIVEGET_CMD_CAPACITY, DRIVEGET_CMD_SPACEFREE};
 
 enum WinSetAttributes {WINSET_INVALID, WINSET_TRANSPARENT, WINSET_TRANSCOLOR, WINSET_ALWAYSONTOP
-	, WINSET_BOTTOM, WINSET_TOP, WINSET_STYLE, WINSET_EXSTYLE, WINSET_REDRAW, WINSET_ENABLED
-	, WINSET_REGION};
+	, WINSET_STYLE, WINSET_EXSTYLE, WINSET_REDRAW, WINSET_ENABLED, WINSET_REGION};
 
 
 class Label; // Forward declaration so that each can use the other.
@@ -1447,8 +1446,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("Trans")) || !_tcsicmp(aBuf, _T("Transparent"))) return WINSET_TRANSPARENT;
 		if (!_tcsicmp(aBuf, _T("TransColor"))) return WINSET_TRANSCOLOR;
 		if (!_tcsicmp(aBuf, _T("AlwaysOnTop")) || !_tcsicmp(aBuf, _T("Topmost"))) return WINSET_ALWAYSONTOP;
-		if (!_tcsicmp(aBuf, _T("Bottom"))) return WINSET_BOTTOM;
-		if (!_tcsicmp(aBuf, _T("Top"))) return WINSET_TOP;
 		if (!_tcsicmp(aBuf, _T("Style"))) return WINSET_STYLE;
 		if (!_tcsicmp(aBuf, _T("ExStyle"))) return WINSET_EXSTYLE;
 		if (!_tcsicmp(aBuf, _T("Redraw"))) return WINSET_REDRAW;
@@ -2833,6 +2830,7 @@ BIF_DECL(BIF_Exception);
 
 BIF_DECL(BIF_WinGet);
 BIF_DECL(BIF_WinSet);
+BIF_DECL(BIF_WinMoveTopBottom);
 BIF_DECL(BIF_Process);
 
 BIF_DECL(BIF_PerformAction);
@@ -2863,6 +2861,8 @@ void SetWorkingDir(LPTSTR aNewDir);
 int ConvertJoy(LPTSTR aBuf, int *aJoystickID = NULL, bool aAllowOnlyButtons = false);
 bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType);
 double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, bool aUseBoolForUpDown);
+
+HWND DetermineTargetWindow(ExprTokenType *aParam[], int aParamCount);
 
 #endif
 

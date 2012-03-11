@@ -169,13 +169,14 @@ FuncEntry g_BIF[] =
 	{_T("WinSetTransColor"), BIF_WinSet, 1, 5, false},
 	{_T("WinSetAlwaysOnTop"), BIF_WinSet, 0, 5, false},
 	{_T("WinSetTopmost"), BIF_WinSet, 0, 5, false},
-	{_T("WinSetBottom"), BIF_WinSet, 0, 5, false},
-	{_T("WinSetTop"), BIF_WinSet, 0, 5, false},
 	{_T("WinSetStyle"), BIF_WinSet, 1, 5, false},
 	{_T("WinSetExStyle"), BIF_WinSet, 1, 5, false},
 	{_T("WinSetRedraw"), BIF_WinSet, 0, 5, false},
 	{_T("WinSetEnabled"), BIF_WinSet, 1, 5, false},
 	{_T("WinSetRegion"), BIF_WinSet, 0, 5, false},
+	
+	{_T("WinMoveBottom"), BIF_WinMoveTopBottom, 0, 4, false},
+	{_T("WinMoveTop"), BIF_WinMoveTopBottom, 0, 4, false},
 	
 	{_T("ProcessExist"), BIF_Process, 0, 1, true},
 	{_T("ProcessClose"), BIF_Process, 1, 1, true},
