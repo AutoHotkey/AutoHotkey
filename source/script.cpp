@@ -174,8 +174,7 @@ FuncEntry g_BIF[] =
 	{_T("WinSetStyle"), BIF_WinSet, 1, 5, false},
 	{_T("WinSetExStyle"), BIF_WinSet, 1, 5, false},
 	{_T("WinSetRedraw"), BIF_WinSet, 0, 5, false},
-	{_T("WinSetEnable"), BIF_WinSet, 0, 5, false},
-	{_T("WinSetDisable"), BIF_WinSet, 0, 5, false},
+	{_T("WinSetEnabled"), BIF_WinSet, 1, 5, false},
 	{_T("WinSetRegion"), BIF_WinSet, 0, 5, false},
 	
 	{_T("ProcessExist"), BIF_Process, 0, 1, true},
@@ -5762,6 +5761,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				}
 				break;
 			case WINSET_TRANSCOLOR:
+			case WINSET_ENABLED:
 				if (!*new_raw_arg2)
 					return ScriptError(_T("Parameter #2 must not be blank in this case."));
 				break;
@@ -5772,8 +5772,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			case WINSET_BOTTOM:
 			case WINSET_TOP:
 			case WINSET_REDRAW:
-			case WINSET_ENABLE:
-			case WINSET_DISABLE:
 				if (*new_raw_arg2)
 					return ScriptError(ERR_PARAM2_MUST_BE_BLANK);
 				break;

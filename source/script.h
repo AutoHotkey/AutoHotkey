@@ -508,7 +508,7 @@ enum DriveGetCmds {DRIVEGET_CMD_INVALID, DRIVEGET_CMD_LIST, DRIVEGET_CMD_FILESYS
 	, DRIVEGET_CMD_STATUSCD, DRIVEGET_CMD_CAPACITY, DRIVEGET_CMD_SPACEFREE};
 
 enum WinSetAttributes {WINSET_INVALID, WINSET_TRANSPARENT, WINSET_TRANSCOLOR, WINSET_ALWAYSONTOP
-	, WINSET_BOTTOM, WINSET_TOP, WINSET_STYLE, WINSET_EXSTYLE, WINSET_REDRAW, WINSET_ENABLE, WINSET_DISABLE
+	, WINSET_BOTTOM, WINSET_TOP, WINSET_STYLE, WINSET_EXSTYLE, WINSET_REDRAW, WINSET_ENABLED
 	, WINSET_REGION};
 
 
@@ -1452,8 +1452,7 @@ public:
 		if (!_tcsicmp(aBuf, _T("Style"))) return WINSET_STYLE;
 		if (!_tcsicmp(aBuf, _T("ExStyle"))) return WINSET_EXSTYLE;
 		if (!_tcsicmp(aBuf, _T("Redraw"))) return WINSET_REDRAW;
-		if (!_tcsicmp(aBuf, _T("Enable"))) return WINSET_ENABLE;
-		if (!_tcsicmp(aBuf, _T("Disable"))) return WINSET_DISABLE;
+		if (!_tcsicmp(aBuf, _T("Enabled"))) return WINSET_ENABLED;
 		if (!_tcsicmp(aBuf, _T("Region"))) return WINSET_REGION;
 		return WINSET_INVALID;
 	}

@@ -2312,9 +2312,13 @@ BIF_DECL(BIF_WinSet)
 		goto error; // Since above didn't break, it's a failure.
 	}
 
-	case WINSET_ENABLE:
-	case WINSET_DISABLE: // These are separate sub-commands from WINSET_STYLE because merely changing the WS_DISABLED style is usually not as effective as calling EnableWindow().
-		EnableWindow(target_window, attrib == WINSET_ENABLE);
+	case WINSET_ENABLED: // This is a separate from WINSET_STYLE because merely changing the WS_DISABLED style is usually not as effective as calling EnableWindow().
+		switch (Line::ConvertOnOffToggle(aValue))
+		{
+		case TOGGLED_ON:	EnableWindow(target_window, TRUE); break;
+		case TOGGLED_OFF:	EnableWindow(target_window, FALSE); break;
+		case TOGGLE:		EnableWindow(target_window, !IsWindowEnabled(target_window)); break;
+		}
 		return;
 
 	case WINSET_REGION:
