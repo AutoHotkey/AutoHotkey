@@ -5747,40 +5747,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_PARAM3_REQUIRED);
 		break;
 
-	case ACT_WINSET:
-		if (aArgc > 0 && !line.ArgHasDeref(1))
-		{
-			switch(line.ConvertWinSetAttribute(new_raw_arg1))
-			{
-			case WINSET_TRANSPARENT:
-				if (aArgc > 1 && !line.ArgHasDeref(2))
-				{
-					value = ATOI(new_raw_arg2);
-					if (value < 0 || value > 255)
-						return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-				}
-				break;
-			case WINSET_TRANSCOLOR:
-			case WINSET_ENABLED:
-				if (!*new_raw_arg2)
-					return ScriptError(_T("Parameter #2 must not be blank in this case."));
-				break;
-			case WINSET_ALWAYSONTOP:
-				if (aArgc > 1 && !line.ArgHasDeref(2) && !line.ConvertOnOffToggle(new_raw_arg2))
-					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-				break;
-			case WINSET_BOTTOM:
-			case WINSET_TOP:
-			case WINSET_REDRAW:
-				if (*new_raw_arg2)
-					return ScriptError(ERR_PARAM2_MUST_BE_BLANK);
-				break;
-			case WINSET_INVALID:
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-			}
-		}
-		break;
-
 	case ACT_SYSGET:
 		if (!line.ArgHasDeref(2) && !line.ConvertSysGetCmd(new_raw_arg2))
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);

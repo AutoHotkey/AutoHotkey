@@ -373,7 +373,6 @@ Action g_act[] =
 	// but that is explicitly checked for, even though it is required it to be numeric in the definition here.
 	, {_T("MenuSelect"), 0, 11, false, NULL} // WinTitle, WinText, Menu name, 6 optional sub-menu names, ExcludeTitle/Text
 
-	, {_T("WinSet"), 1, 6, false, NULL} // attribute, setting, title, text, exclude-title, exclude-text
 	// WinSetTitle: Allow a minimum of zero params so that title isn't forced to be non-blank.
 	// Also, if the user passes only one param, the title of the "last used" window will be
 	// set to the string in the first param:
