@@ -9088,9 +9088,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							if (!_tcschr(EXPR_OPERAND_TERMINATORS, *op_end))
 								return LineError(ERR_INVALID_CHAR, FAIL, op_end);
 
-							// Rather than trying to predict how something like "obj.-1" will be handled, treat it as a syntax error.
-							// "obj.()" is allowed; it should mean "call the default method of obj" or "call the function object obj".
-							if (op_end == cp && *op_end != '(')
+							if (op_end == cp) // Missing identifier.
 								return LineError(ERR_INVALID_DOT, FAIL, cp-1); // Intentionally vague since the user's intention isn't clear.
 
 							// Output an operand for the text following '.'

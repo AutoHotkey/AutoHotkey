@@ -1643,21 +1643,5 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, Exp
 	}
 
 	// Allow script-defined meta-functions to override the default behaviour:
-	ResultType result = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
-	
-	if (result != INVOKE_NOT_HANDLED || !aParamCount)
-		return result;
-
-	if (IS_INVOKE_CALL && TokenIsEmptyString(*aParam[0]))
-	{
-		// Support func_var.(params) as a means to call either a function or an object-function.
-		// This can be done fairly easily in script, but not in a way that supports ByRef;
-		// and as a default behaviour, it might be more appealing for func lib authors.
-		LPCTSTR func_name = TokenToString(aThisToken, aResultToken.buf);
-		Func *func = g_script.FindFunc(func_name, EXPR_TOKEN_LENGTH((&aThisToken), func_name));
-		if (func)
-			return CallFunc(*func, aResultToken, aParam + 1, aParamCount - 1);
-	}
-
-	return result;
+	return Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
 }
