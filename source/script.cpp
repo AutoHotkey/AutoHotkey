@@ -8766,17 +8766,17 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					// for prior to checking the below.  For example, if what immediately follows the open-paren is
 					// the string "int)", this symbol is not open-paren at all but instead the unary type-cast-to-int
 					// operator.
-					CHECK_AUTO_CONCAT;
+					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)
+						&& IS_SPACE_OR_TAB(cp[-1])) // If there's no space, assume it's something valid like "new Class()" until it can be proven otherwise.
+					{
+						if (infix_count > MAX_TOKENS - 2)
+							return LineError(ERR_EXPR_TOO_LONG);
+						infix[infix_count++].symbol = SYM_CONCAT;
+					}
 					infix[infix_count].symbol = SYM_OPAREN; // MUST NOT REFER TO this_infix_item IN CASE ABOVE DID ++infix_count.
 					break;
 				case ')':
 					this_infix_item.symbol = SYM_CPAREN;
-					if (cp[1] == '(') // Possibly something like "new (getClass())(params)", which must be validated later.
-					{
-						// Handle it here to bypass the validation done by CHECK_AUTO_CONCAT.
-						infix[++infix_count].symbol = SYM_OPAREN;
-						cp++;
-					}
 					break;
 				case '[': // L31
 					if (infix_count && infix[infix_count - 1].symbol == SYM_DOT // obj.x[ ...
@@ -8813,12 +8813,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 				case ']': // L31
 					this_infix_item.symbol = SYM_CBRACKET;
-					if (cp[1] == '(') // obj[methodName](param) or similar.
-					{
-						// Handle it here to bypass the validation done by CHECK_AUTO_CONCAT.
-						infix[++infix_count].symbol = SYM_OPAREN;
-						cp++;
-					}
 					break;
 				case '{':
 					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
@@ -8833,12 +8827,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 				case '}':
 					this_infix_item.symbol = SYM_CBRACE;
-					if (cp[1] == '(') // Possibly something like "new {...}(params)", which must be validated later.
-					{
-						// Handle it here to bypass the validation done by CHECK_AUTO_CONCAT.
-						infix[++infix_count].symbol = SYM_OPAREN;
-						cp++;
-					}
 					break;
 				case '=':
 					if (cp1 == '=')
