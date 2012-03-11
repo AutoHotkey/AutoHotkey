@@ -1754,17 +1754,16 @@ public:
 	// Returns aDefault if aBuf isn't either ON, OFF, or blank.
 	{
 		if (!aBuf || !*aBuf) return NEUTRAL;
-		if (!_tcsicmp(aBuf, _T("ON"))) return TOGGLED_ON;
-		if (!_tcsicmp(aBuf, _T("OFF"))) return TOGGLED_OFF;
+		if (!_tcsicmp(aBuf, _T("On")) || !_tcscmp(aBuf, _T("1"))) return TOGGLED_ON;
+		if (!_tcsicmp(aBuf, _T("Off")) || !_tcscmp(aBuf, _T("0"))) return TOGGLED_OFF;
 		return aDefault;
 	}
 
 	static ToggleValueType ConvertOnOffAlways(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, ALWAYSON, ALWAYSOFF, or blank.
 	{
-		if (!aBuf || !*aBuf) return NEUTRAL;
-		if (!_tcsicmp(aBuf, _T("On"))) return TOGGLED_ON;
-		if (!_tcsicmp(aBuf, _T("Off"))) return TOGGLED_OFF;
+		if (ToggleValueType toggle = ConvertOnOff(aBuf))
+			return toggle;
 		if (!_tcsicmp(aBuf, _T("AlwaysOn"))) return ALWAYS_ON;
 		if (!_tcsicmp(aBuf, _T("AlwaysOff"))) return ALWAYS_OFF;
 		return aDefault;
@@ -1773,10 +1772,9 @@ public:
 	static ToggleValueType ConvertOnOffToggle(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, TOGGLE, or blank.
 	{
-		if (!aBuf || !*aBuf) return NEUTRAL;
-		if (!_tcsicmp(aBuf, _T("On"))) return TOGGLED_ON;
-		if (!_tcsicmp(aBuf, _T("Off"))) return TOGGLED_OFF;
-		if (!_tcsicmp(aBuf, _T("Toggle"))) return TOGGLE;
+		if (ToggleValueType toggle = ConvertOnOff(aBuf))
+			return toggle;
+		if (!_tcsicmp(aBuf, _T("Toggle")) || !_tcscmp(aBuf, _T("-1"))) return TOGGLE;
 		return aDefault;
 	}
 
@@ -1791,19 +1789,16 @@ public:
 	static ToggleValueType ConvertOnOffTogglePermit(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, TOGGLE, PERMIT, or blank.
 	{
-		if (!aBuf || !*aBuf) return NEUTRAL;
-		if (!_tcsicmp(aBuf, _T("On"))) return TOGGLED_ON;
-		if (!_tcsicmp(aBuf, _T("Off"))) return TOGGLED_OFF;
-		if (!_tcsicmp(aBuf, _T("Toggle"))) return TOGGLE;
+		if (ToggleValueType toggle = ConvertOnOffToggle(aBuf))
+			return toggle;
 		if (!_tcsicmp(aBuf, _T("Permit"))) return TOGGLE_PERMIT;
 		return aDefault;
 	}
 
 	static ToggleValueType ConvertBlockInput(LPTSTR aBuf)
 	{
-		if (!aBuf || !*aBuf) return NEUTRAL;  // For backward compatibility, blank is not considered INVALID.
-		if (!_tcsicmp(aBuf, _T("On"))) return TOGGLED_ON;
-		if (!_tcsicmp(aBuf, _T("Off"))) return TOGGLED_OFF;
+		if (ToggleValueType toggle = ConvertOnOff(aBuf))
+			return toggle;
 		if (!_tcsicmp(aBuf, _T("Send"))) return TOGGLE_SEND;
 		if (!_tcsicmp(aBuf, _T("Mouse"))) return TOGGLE_MOUSE;
 		if (!_tcsicmp(aBuf, _T("SendAndMouse"))) return TOGGLE_SENDANDMOUSE;
