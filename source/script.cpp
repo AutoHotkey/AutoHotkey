@@ -12355,10 +12355,10 @@ ResultType Line::Perform()
 		// Label2::
 		// ...
 		// return
-		if (*ARG2)
+		if (!IsNumeric(ARG2, true, true, true)) // Allow it to be neg. or floating point at runtime.
 		{
 			toggle = Line::ConvertOnOff(ARG2);
-			if (!toggle && !IsNumeric(ARG2, true, true, true)) // Allow it to be neg. or floating point at runtime.
+			if (!toggle)
 				return LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
 		}
 		else
