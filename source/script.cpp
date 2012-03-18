@@ -15700,11 +15700,11 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 			g_Debugger.OutputDebug(buf);
 		else
 #endif
-		result = MsgBox(buf, aErrorType == EARLY_EXIT ? MB_YESNO : MB_RETRYCANCEL);
+		result = MsgBox(buf, aErrorType == EARLY_EXIT ? MB_CANCELTRYCONTINUE : MB_RETRYCANCEL);
 
-		if (result == IDNO)
+		if (result == IDNO || result == IDCANCEL)
 			aErrorType = CRITICAL_ERROR;
-		else if (result == IDRETRY)
+		else if (result == IDRETRY || result == IDTRYAGAIN)
 			g_script.Reload(false);
 	}
 
