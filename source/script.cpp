@@ -15656,6 +15656,7 @@ ResultType Line::SetErrorsOrThrow(bool aError, DWORD aLastErrorOverride)
 
 ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo)
 {
+	int result;
 	if (!aErrorText)
 		aErrorText = _T("");
 	if (!aExtraInfo)
@@ -15699,8 +15700,12 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 			g_Debugger.OutputDebug(buf);
 		else
 #endif
-		if (MsgBox(buf, aErrorType == EARLY_EXIT ? MB_YESNO : 0) == IDNO)
+		result = MsgBox(buf, aErrorType == EARLY_EXIT ? MB_YESNO : MB_RETRYCANCEL);
+
+		if (result == IDNO)
 			aErrorType = CRITICAL_ERROR;
+		else if (result == IDRETRY)
+			g_script.Reload(false);
 	}
 
 	if (aErrorType == CRITICAL_ERROR && g_script.mIsReadyToExecute)
@@ -15814,7 +15819,10 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 			g_Debugger.OutputDebug(buf);
 		else
 #endif
-		MsgBox(buf);
+		if (MsgBox(buf, MB_RETRYCANCEL) == IDRETRY)
+		{
+			g_script.Reload(false);
+		}
 	}
 	return FAIL; // See above for why it's better to return FAIL than CRITICAL_ERROR.
 }
