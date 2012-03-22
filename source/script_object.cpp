@@ -819,8 +819,9 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		if (!min_field) // Nothing to remove.
 		{
 			// Fix for v1.1.06.03: As documented, adjust keys as if Remove(min, min) was called.
-			for (pos = min_pos; pos < mKeyOffsetObject; ++pos)
-				mFields[pos].key.i--;
+			if (max_key_type == SYM_INTEGER) // Fix for v1.1.07.02: Exclude Obj.Remove(i, "").
+				for (pos = min_pos; pos < mKeyOffsetObject; ++pos)
+					mFields[pos].key.i--;
 			// L34: Must not continue since min_pos points at the wrong key or an invalid location.
 			// As of L50, our return value when (aParamCount < 2) is the value which was removed, not
 			// the number of removed items. Since this[min_field] would return "", an empty string is
