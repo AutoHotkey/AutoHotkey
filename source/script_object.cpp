@@ -836,6 +836,7 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		switch (aResultToken.symbol = min_field->symbol)
 		{
 		case SYM_OPERAND:
+			aResultToken.symbol = SYM_STRING;
 			if (min_field->size)
 			{
 				// Detach the memory allocated for this field's string and pass it back to caller.
