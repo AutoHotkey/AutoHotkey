@@ -3740,10 +3740,13 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 				kvk[VK_RMENU].used_as_suffix = true;
 				ksc[SC_LALT].used_as_suffix = true;
 				ksc[SC_RALT].used_as_suffix = true;
-				kvk[VK_LMENU].used_as_key_up = hk.mKeyUp;
-				kvk[VK_RMENU].used_as_key_up = hk.mKeyUp;
-				ksc[SC_LALT].used_as_key_up = hk.mKeyUp;
-				ksc[SC_RALT].used_as_key_up = hk.mKeyUp;
+				if (hk.mKeyUp) // Fix for v1.1.07.03: Set only if true in case there was already an "up" hotkey.
+				{
+					kvk[VK_LMENU].used_as_key_up = true;
+					kvk[VK_RMENU].used_as_key_up = true;
+					ksc[SC_LALT].used_as_key_up = true;
+					ksc[SC_RALT].used_as_key_up = true;
+				}
 				break;
 			case VK_SHIFT:
 				// The neutral key itself is also set to be a suffix further below.
@@ -3751,20 +3754,26 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 				kvk[VK_RSHIFT].used_as_suffix = true;
 				ksc[SC_LSHIFT].used_as_suffix = true;
 				ksc[SC_RSHIFT].used_as_suffix = true;
-				kvk[VK_LSHIFT].used_as_key_up = hk.mKeyUp;
-				kvk[VK_RSHIFT].used_as_key_up = hk.mKeyUp;
-				ksc[SC_LSHIFT].used_as_key_up = hk.mKeyUp;
-				ksc[SC_RSHIFT].used_as_key_up = hk.mKeyUp;
+				if (hk.mKeyUp) // Fix for v1.1.07.03: Set only if true in case there was already an "up" hotkey.
+				{
+					kvk[VK_LSHIFT].used_as_key_up = true;
+					kvk[VK_RSHIFT].used_as_key_up = true;
+					ksc[SC_LSHIFT].used_as_key_up = true;
+					ksc[SC_RSHIFT].used_as_key_up = true;
+				}
 				break;
 			case VK_CONTROL:
 				kvk[VK_LCONTROL].used_as_suffix = true;
 				kvk[VK_RCONTROL].used_as_suffix = true;
 				ksc[SC_LCONTROL].used_as_suffix = true;
 				ksc[SC_RCONTROL].used_as_suffix = true;
-				kvk[VK_LCONTROL].used_as_key_up = hk.mKeyUp;
-				kvk[VK_RCONTROL].used_as_key_up = hk.mKeyUp;
-				ksc[SC_LCONTROL].used_as_key_up = hk.mKeyUp;
-				ksc[SC_RCONTROL].used_as_key_up = hk.mKeyUp;
+				if (hk.mKeyUp) // Fix for v1.1.07.03: Set only if true in case there was already an "up" hotkey.
+				{
+					kvk[VK_LCONTROL].used_as_key_up = true;
+					kvk[VK_RCONTROL].used_as_key_up = true;
+					ksc[SC_LCONTROL].used_as_key_up = true;
+					ksc[SC_RCONTROL].used_as_key_up = true;
+				}
 				break;
 			// Later might want to add cases for VK_LCONTROL and such, but for right now,
 			// these keys should never come up since they're done by scan code?
