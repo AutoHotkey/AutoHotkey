@@ -235,8 +235,11 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 				// because it's harmless to operate on disabled hotkeys in this way.
 				if (shk[j]->mVK == hot.mVK && HK_TYPE_CAN_BECOME_KEYBD_HOOK(shk[j]->mType) // Ordered for short-circuit performance.
 					&& shk[j]->mModifiersConsolidatedLR == hot.mModifiersConsolidatedLR)
+				{
 					shk[j]->mType = HK_KEYBD_HOOK; // Done even for Win9x (see comments above).
+					shk[j]->mKeybdHookMandatory = true; // Fix for v1.1.07.03: Prevent it from reverting back to HK_NORMAL, which would otherwise happen if j > i (i.e. the key-up hotkey is defined first).
 					// And if it's currently registered, it will be unregistered later below.
+				}
 			}
 		}
 
