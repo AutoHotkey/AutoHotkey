@@ -1118,7 +1118,8 @@ public:
 		ArgStruct &arg = mArg[aArgIndex]; // For performance.
 		// Return false if it's not of a type caller wants deemed to have derefs.
 		if (arg.type == ARG_TYPE_NORMAL)
-			return arg.deref && arg.deref[0].marker; // Relies on short-circuit boolean evaluation order to prevent NULL-deref.
+			return arg.deref && arg.deref[0].marker // Relies on short-circuit boolean evaluation order to prevent NULL-deref.
+				|| arg.is_expression; // Return true for this case since most callers assume the arg is a simple literal string if we return false.
 		else // Callers rely on input variables being seen as "true" because sometimes single isolated derefs are converted into ARG_TYPE_INPUT_VAR at load-time.
 			return (arg.type == ARG_TYPE_INPUT_VAR);
 	}
