@@ -5513,6 +5513,30 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			g_script.UpdateTrayIcon(true);  // Force the icon into the correct pause, suspend, or mIconFrozen state.
 			// And now pass this iMsg on to DefWindowProc() in case it does anything with it.
 		}
+		
+#ifdef CONFIG_DEBUGGER
+		static UINT sAttachDebuggerMessage = RegisterWindowMessage(_T("AHK_ATTACH_DEBUGGER"));
+		if (iMsg == sAttachDebuggerMessage && !g_Debugger.IsConnected())
+		{
+			char dbg_host[16] = "localhost"; // IPv4 max string len
+			char dbg_port[6] = "9000";
+
+			if (wParam)
+			{	// Convert 32-bit address to string for Debugger::Connect().
+				in_addr addr;
+				addr.S_un.S_addr = (ULONG)wParam;
+				char *tmp = inet_ntoa(addr);
+				if (tmp)
+					strcpy(dbg_host, tmp);
+			}
+			if (lParam)
+				// Convert 16-bit port number to string for Debugger::Connect().
+				_itoa(LOWORD(lParam), dbg_port, 10);
+
+			if (g_Debugger.Connect(dbg_host, dbg_port) == DEBUGGER_E_OK)
+				g_Debugger.ProcessCommands();
+		}
+#endif
 
 	} // switch()
 
