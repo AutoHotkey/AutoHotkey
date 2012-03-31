@@ -13199,7 +13199,10 @@ BIF_DECL(BIF_PerformAction)
 	// benefit, ErrorLevel is not affected by the function if it is used as the return value.
 	VarBkp el_bkp;
 	if (output_var == g_ErrorLevel)
+	{
 		g_ErrorLevel->Backup(el_bkp);
+		g_ErrorLevel->MarkInitialized();
+	}
 
 
 	// PERFORM THE ACTION
