@@ -1092,6 +1092,23 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 				hr = SafeArrayGetUBound(psa, aParamCount > 1 ? (UINT)TokenToInt64(*aParam[1]) : 1, &retval);
 			else if (!_tcsicmp(name, _T("MinIndex")))
 				hr = SafeArrayGetLBound(psa, aParamCount > 1 ? (UINT)TokenToInt64(*aParam[1]) : 1, &retval);
+			else if (!_tcsicmp(name, _T("Count")))
+			{
+				if (aParamCount > 1)
+				{
+					LONG upper, lower;
+					UINT dim = (UINT)TokenToInt64(*aParam[1]);
+					hr = SafeArrayGetUBound(psa, dim, &upper);
+					if (SUCCEEDED(hr))
+					{
+						hr = SafeArrayGetLBound(psa, dim, &lower);
+						if (SUCCEEDED(hr))
+							retval = upper - lower + 1;
+					}
+				}
+				else
+					retval = SafeArrayGetDim(psa);
+			}
 			else
 				hr = DISP_E_UNKNOWNNAME; // Seems slightly better than ignoring the call.
 			if (SUCCEEDED(hr))
