@@ -8159,7 +8159,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		{
 			bif = BIF_ComObjArray;
 			min_params = 2;
-			max_params = 9; // up to 8 dimensions
+			max_params = 10000; // no realistic limit, as with Array() function
 		}
 		else if (!_tcsicmp(suffix, _T("Query")))
 		{

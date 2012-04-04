@@ -423,9 +423,8 @@ BIF_DECL(BIF_ComObjFlags)
 BIF_DECL(BIF_ComObjArray)
 {
 	VARTYPE vt = (VARTYPE)TokenToInt64(*aParam[0]);
-	SAFEARRAYBOUND bound[8]; // Same limit as ComObject::SafeArrayInvoke().
 	int dims = aParamCount - 1;
-	ASSERT(dims <= _countof(bound)); // Prior validation should ensure aParamCount-1 never exceeds 8.
+	SAFEARRAYBOUND* bound = new SAFEARRAYBOUND[dims];
 	for (int i = 0; i < dims; ++i)
 	{
 		bound[i].cElements = (ULONG)TokenToInt64(*aParam[i + 1]);
@@ -1124,9 +1123,9 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 	}
 
 	UINT dims = SafeArrayGetDim(psa);
-	LONG index[8];
+	LONG* index = new LONG[dims];
 	// Verify correct number of parameters/dimensions (maximum 8).
-	if (dims > _countof(index) || dims != (IS_INVOKE_SET ? aParamCount - 1 : aParamCount))
+	if (dims != (IS_INVOKE_SET ? aParamCount - 1 : aParamCount))
 	{
 		g->LastError = DISP_E_BADPARAMCOUNT;
 		return OK;
