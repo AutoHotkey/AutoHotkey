@@ -431,6 +431,7 @@ BIF_DECL(BIF_ComObjArray)
 		bound[i].lLbound = 0;
 	}
 	SAFEARRAY *psa = SafeArrayCreate(vt, dims, bound);
+	delete[] bound;
 	if (!SafeSetTokenObject(aResultToken, psa ? new ComObject((__int64)psa, VT_ARRAY | vt, ComObject::F_OWNVALUE) : NULL) && psa)
 		SafeArrayDestroy(psa);
 }
@@ -1147,6 +1148,7 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 	SafeArrayLock(psa);
 
 	hr = SafeArrayPtrOfIndex(psa, index, &item);
+	delete[] index;
 	if (SUCCEEDED(hr))
 	{
 		if (IS_INVOKE_GET)
