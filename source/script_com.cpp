@@ -424,14 +424,13 @@ BIF_DECL(BIF_ComObjArray)
 {
 	VARTYPE vt = (VARTYPE)TokenToInt64(*aParam[0]);
 	int dims = aParamCount - 1;
-	SAFEARRAYBOUND* bound = new SAFEARRAYBOUND[dims];
+	SAFEARRAYBOUND* bound = (SAFEARRAYBOUND*)_alloca(dims * sizeof(SAFEARRAYBOUND));
 	for (int i = 0; i < dims; ++i)
 	{
 		bound[i].cElements = (ULONG)TokenToInt64(*aParam[i + 1]);
 		bound[i].lLbound = 0;
 	}
 	SAFEARRAY *psa = SafeArrayCreate(vt, dims, bound);
-	delete[] bound;
 	if (!SafeSetTokenObject(aResultToken, psa ? new ComObject((__int64)psa, VT_ARRAY | vt, ComObject::F_OWNVALUE) : NULL) && psa)
 		SafeArrayDestroy(psa);
 }
@@ -1124,7 +1123,7 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 	}
 
 	UINT dims = SafeArrayGetDim(psa);
-	LONG* index = new LONG[dims];
+	LONG* index = (LONG*)_alloca(dims * sizeof(LONG));
 	// Verify correct number of parameters/dimensions (maximum 8).
 	if (dims != (IS_INVOKE_SET ? aParamCount - 1 : aParamCount))
 	{
@@ -1148,7 +1147,6 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 	SafeArrayLock(psa);
 
 	hr = SafeArrayPtrOfIndex(psa, index, &item);
-	delete[] index;
 	if (SUCCEEDED(hr))
 	{
 		if (IS_INVOKE_GET)
