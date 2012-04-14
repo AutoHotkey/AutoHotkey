@@ -192,6 +192,9 @@
     <ClInclude Include="source\ahkversion.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="source\lib_pcre\pcre\pcret.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="source\resources\AutoHotkey.exe.manifest">

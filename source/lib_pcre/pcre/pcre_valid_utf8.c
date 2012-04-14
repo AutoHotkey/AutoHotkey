@@ -6,7 +6,7 @@
 and semantics are as close as possible to those of the Perl 5 language.
 
                        Written by Philip Hazel
-           Copyright (c) 1997-2009 University of Cambridge
+           Copyright (c) 1997-2012 University of Cambridge
 
 -----------------------------------------------------------------------------
 Redistribution and use in source and binary forms, with or without
@@ -103,15 +103,15 @@ Returns:       = 0    if the string is a valid UTF-8 string
 */
 
 int
-_pcre_valid_utf8(USPTR string, int length, int *erroroffset)
+PRIV(valid_utf)(PCRE_PUCHAR string, int length, int *erroroffset)
 {
-#ifdef SUPPORT_UTF8
-register USPTR p;
+#ifdef SUPPORT_UTF
+register PCRE_PUCHAR p;
 
 if (length < 0)
   {
   for (p = string; *p != 0; p++);
-  length = p - string;
+  length = (int)(p - string);
   }
 
 for (p = string; length-- > 0; p++)
@@ -123,20 +123,20 @@ for (p = string; length-- > 0; p++)
 
   if (c < 0xc0)                         /* Isolated 10xx xxxx byte */
     {
-    *erroroffset = p - string;
+    *erroroffset = (int)(p - string);
     return PCRE_UTF8_ERR20;
     }
 
   if (c >= 0xfe)                        /* Invalid 0xfe or 0xff bytes */
     {
-    *erroroffset = p - string;
+    *erroroffset = (int)(p - string);
     return PCRE_UTF8_ERR21;
     }
 
-  ab = _pcre_utf8_table4[c & 0x3f];     /* Number of additional bytes */
+  ab = PRIV(utf8_table4)[c & 0x3f];     /* Number of additional bytes */
   if (length < ab)
     {
-    *erroroffset = p - string;          /* Missing bytes */
+    *erroroffset = (int)(p - string);          /* Missing bytes */
     return ab - length;                 /* Codes ERR1 to ERR5 */
     }
   length -= ab;                         /* Length remaining */
@@ -145,7 +145,7 @@ for (p = string; length-- > 0; p++)
 
   if (((d = *(++p)) & 0xc0) != 0x80)
     {
-    *erroroffset = p - string - 1;
+    *erroroffset = (int)(p - string) - 1;
     return PCRE_UTF8_ERR6;
     }
 
@@ -160,7 +160,7 @@ for (p = string; length-- > 0; p++)
 
     case 1: if ((c & 0x3e) == 0)
       {
-      *erroroffset = p - string - 1;
+      *erroroffset = (int)(p - string) - 1;
       return PCRE_UTF8_ERR15;
       }
     break;
@@ -172,17 +172,17 @@ for (p = string; length-- > 0; p++)
     case 2:
     if ((*(++p) & 0xc0) != 0x80)     /* Third byte */
       {
-      *erroroffset = p - string - 2;
+      *erroroffset = (int)(p - string) - 2;
       return PCRE_UTF8_ERR7;
       }
     if (c == 0xe0 && (d & 0x20) == 0)
       {
-      *erroroffset = p - string - 2;
+      *erroroffset = (int)(p - string) - 2;
       return PCRE_UTF8_ERR16;
       }
     if (c == 0xed && d >= 0xa0)
       {
-      *erroroffset = p - string - 2;
+      *erroroffset = (int)(p - string) - 2;
       return PCRE_UTF8_ERR14;
       }
     break;
@@ -194,22 +194,22 @@ for (p = string; length-- > 0; p++)
     case 3:
     if ((*(++p) & 0xc0) != 0x80)     /* Third byte */
       {
-      *erroroffset = p - string - 2;
+      *erroroffset = (int)(p - string) - 2;
       return PCRE_UTF8_ERR7;
       }
     if ((*(++p) & 0xc0) != 0x80)     /* Fourth byte */
       {
-      *erroroffset = p - string - 3;
+      *erroroffset = (int)(p - string) - 3;
       return PCRE_UTF8_ERR8;
       }
     if (c == 0xf0 && (d & 0x30) == 0)
       {
-      *erroroffset = p - string - 3;
+      *erroroffset = (int)(p - string) - 3;
       return PCRE_UTF8_ERR17;
       }
     if (c > 0xf4 || (c == 0xf4 && d > 0x8f))
       {
-      *erroroffset = p - string - 3;
+      *erroroffset = (int)(p - string) - 3;
       return PCRE_UTF8_ERR13;
       }
     break;
@@ -225,22 +225,22 @@ for (p = string; length-- > 0; p++)
     case 4:
     if ((*(++p) & 0xc0) != 0x80)     /* Third byte */
       {
-      *erroroffset = p - string - 2;
+      *erroroffset = (int)(p - string) - 2;
       return PCRE_UTF8_ERR7;
       }
     if ((*(++p) & 0xc0) != 0x80)     /* Fourth byte */
       {
-      *erroroffset = p - string - 3;
+      *erroroffset = (int)(p - string) - 3;
       return PCRE_UTF8_ERR8;
       }
     if ((*(++p) & 0xc0) != 0x80)     /* Fifth byte */
       {
-      *erroroffset = p - string - 4;
+      *erroroffset = (int)(p - string) - 4;
       return PCRE_UTF8_ERR9;
       }
     if (c == 0xf8 && (d & 0x38) == 0)
       {
-      *erroroffset = p - string - 4;
+      *erroroffset = (int)(p - string) - 4;
       return PCRE_UTF8_ERR18;
       }
     break;
@@ -251,27 +251,27 @@ for (p = string; length-- > 0; p++)
     case 5:
     if ((*(++p) & 0xc0) != 0x80)     /* Third byte */
       {
-      *erroroffset = p - string - 2;
+      *erroroffset = (int)(p - string) - 2;
       return PCRE_UTF8_ERR7;
       }
     if ((*(++p) & 0xc0) != 0x80)     /* Fourth byte */
       {
-      *erroroffset = p - string - 3;
+      *erroroffset = (int)(p - string) - 3;
       return PCRE_UTF8_ERR8;
       }
     if ((*(++p) & 0xc0) != 0x80)     /* Fifth byte */
       {
-      *erroroffset = p - string - 4;
+      *erroroffset = (int)(p - string) - 4;
       return PCRE_UTF8_ERR9;
       }
     if ((*(++p) & 0xc0) != 0x80)     /* Sixth byte */
       {
-      *erroroffset = p - string - 5;
+      *erroroffset = (int)(p - string) - 5;
       return PCRE_UTF8_ERR10;
       }
     if (c == 0xfc && (d & 0x3c) == 0)
       {
-      *erroroffset = p - string - 5;
+      *erroroffset = (int)(p - string) - 5;
       return PCRE_UTF8_ERR19;
       }
     break;
@@ -283,12 +283,12 @@ for (p = string; length-- > 0; p++)
 
   if (ab > 3)
     {
-    *erroroffset = p - string - ab;
+    *erroroffset = (int)(p - string) - ab;
     return (ab == 4)? PCRE_UTF8_ERR11 : PCRE_UTF8_ERR12;
     }
   }
 
-#else  /* SUPPORT_UTF8 */
+#else  /* SUPPORT_UTF */
 (void)(string);  /* Keep picky compilers happy */
 (void)(length);
 #endif

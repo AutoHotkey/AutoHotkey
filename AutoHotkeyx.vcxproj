@@ -254,6 +254,7 @@
     <ClInclude Include="source\hotkey.h" />
     <ClInclude Include="source\keyboard_mouse.h" />
     <ClInclude Include="source\KuString.h" />
+    <ClInclude Include="source\lib_pcre\pcre\pcret.h" />
     <ClInclude Include="source\mt19937ar-cok.h" />
     <ClInclude Include="source\os_version.h" />
     <ClInclude Include="source\lib_pcre\pcre\pcre.h" />

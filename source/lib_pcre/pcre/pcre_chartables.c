@@ -26,7 +26,7 @@ unit might reference this" and so it will always be supplied to the linker. */
 
 #include "pcre_internal.h"
 
-const unsigned char _pcre_default_tables[] = {
+const pcre_uint8 PRIV(default_tables)[] = {
 
 /* This table is a lower casing table. */
 
