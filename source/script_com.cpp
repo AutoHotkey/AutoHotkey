@@ -1346,3 +1346,65 @@ IObject *GuiType::ControlGetActiveX(HWND aWnd)
 	}
 	return NULL;
 }
+
+
+#ifdef CONFIG_DEBUGGER
+
+void WriteComObjType(IDebugProperties *aDebugger, ComObject *aObject, LPCSTR aName, LPTSTR aWhichType)
+{
+	TCHAR buf[MAX_NUMBER_SIZE];
+	ExprTokenType resultToken, paramToken[2], *param[2] = { &paramToken[0], &paramToken[1] };
+	paramToken[0].symbol = SYM_OBJECT;
+	paramToken[0].object = aObject;
+	paramToken[1].symbol = SYM_STRING;
+	paramToken[1].marker = aWhichType;
+	resultToken.symbol = SYM_INTEGER;
+	resultToken.marker = _T("ComObjType");
+	resultToken.mem_to_free = NULL;
+	resultToken.buf = buf;
+	ResultType result = OK;
+	BIF_ComObjTypeOrValue(result, resultToken, param, 2);
+	aDebugger->WriteProperty(aName, resultToken);
+	if (resultToken.mem_to_free)
+		free(resultToken.mem_to_free);
+}
+
+void ComObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aDepth)
+{
+	DebugCookie rootCookie;
+	aDebugger->BeginProperty(NULL, "object", 2 + (mVarType == VT_DISPATCH)*2 + (mEventSink != NULL), rootCookie);
+	if (aPage == 0)
+	{
+		// For simplicity, assume they all fit within aPageSize.
+		
+		aDebugger->WriteProperty("Value", mVal64);
+		aDebugger->WriteProperty("VarType", mVarType);
+
+		if (mVarType == VT_DISPATCH)
+		{
+			WriteComObjType(aDebugger, this, "DispatchType", _T("Name"));
+			WriteComObjType(aDebugger, this, "DispatchIID", _T("IID"));
+		}
+		
+		if (mEventSink)
+		{
+			DebugCookie sinkCookie;
+			aDebugger->BeginProperty("EventSink", "object", 2, sinkCookie);
+			
+			if (mEventSink->mAhkObject)
+				aDebugger->WriteProperty("Object", mEventSink->mAhkObject);
+			else
+				aDebugger->WriteProperty("Prefix", mEventSink->mPrefix);
+			
+			OLECHAR buf[40];
+			if (!StringFromGUID2(mEventSink->mIID, buf, _countof(buf)))
+				*buf = 0;
+			aDebugger->WriteProperty("IID", CStringTCharFromWCharIfNeeded(buf));
+			
+			aDebugger->EndProperty(sinkCookie);
+		}
+	}
+	aDebugger->EndProperty(rootCookie);
+}
+
+#endif

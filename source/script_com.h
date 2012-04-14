@@ -89,6 +89,10 @@ public:
 			SafeArrayDestroy(mArray);
 		}
 	}
+
+#ifdef CONFIG_DEBUGGER
+	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
+#endif
 };
 
 

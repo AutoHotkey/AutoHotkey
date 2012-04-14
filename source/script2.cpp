@@ -13561,6 +13561,49 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ExprTokenType &aResultToke
 	return INVOKE_NOT_HANDLED;
 }
 
+#ifdef CONFIG_DEBUGGER
+void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
+{
+	DebugCookie rootCookie, cookie;
+	aDebugger->BeginProperty(NULL, "object", 5, rootCookie);
+	if (aPage == 0)
+	{
+		aDebugger->WriteProperty("Count", mPatternCount);
+
+		static LPSTR sNames[] = { "Value", "Pos", "Len", "Name" };
+#ifdef UNICODE
+		static LPWSTR sNamesT[] = { _T("Value"), _T("Pos"), _T("Len"), _T("Name") };
+#else
+		static LPSTR *sNamesT = sNames;
+#endif
+		char indexBuf[MAX_INTEGER_SIZE];
+		TCHAR resultBuf[MAX_NUMBER_SIZE];
+		ExprTokenType resultToken, thisTokenUnused, paramToken[2], *param[] = { &paramToken[0], &paramToken[1] };
+		for (int i = 0; i < _countof(sNames); i++)
+		{
+			aDebugger->BeginProperty(sNames[i], "array", mPatternCount - (i == 3), cookie);
+			paramToken[0].symbol = SYM_STRING;
+			paramToken[0].marker = sNamesT[i];
+			for (int p = (i == 3); p < mPatternCount; p++)
+			{
+				resultToken.symbol = SYM_STRING;
+				resultToken.marker = _T("");
+				resultToken.buf = resultBuf;
+				resultToken.mem_to_free = NULL;
+				paramToken[1].symbol = SYM_INTEGER;
+				paramToken[1].value_int64 = p;
+				Invoke(resultToken, thisTokenUnused, IT_GET, param, 2);
+				aDebugger->WriteProperty(_itoa(p, indexBuf, 10), resultToken);
+				if (resultToken.mem_to_free)
+					free(resultToken.mem_to_free);
+			}
+			aDebugger->EndProperty(cookie);
+		}
+	}
+	aDebugger->EndProperty(rootCookie);
+}
+#endif
+
 
 void *RegExResolveUserCallout(LPCTSTR aCalloutParam, int aCalloutParamLength)
 {

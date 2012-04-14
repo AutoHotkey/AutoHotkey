@@ -1519,7 +1519,7 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ExprTokenType &aResultToken, ExprToken
 	}
 	return CallFunc(*this, aResultToken, aParam, aParamCount);
 }
-	
+
 
 //
 // MetaObject - Defines behaviour of object syntax when used on a non-object value.
@@ -1579,3 +1579,30 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, Exp
 
 	return result;
 }
+
+
+#ifdef CONFIG_DEBUGGER
+
+void ObjectBase::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
+{
+	DebugCookie cookie;
+	aDebugger->BeginProperty(NULL, "object", 0, cookie);
+	//if (aPage == 0)
+	//{
+	//	// This is mostly a workaround for debugger clients which make it difficult to
+	//	// tell when a property contains an object with no child properties of its own:
+	//	aDebugger->WriteProperty("Note", _T("This object doesn't support debugging."));
+	//}
+	aDebugger->EndProperty(cookie);
+}
+
+void Func::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
+{
+	DebugCookie cookie;
+	aDebugger->BeginProperty(NULL, "object", 1, cookie);
+	if (aPage == 0)
+		aDebugger->WriteProperty("Name", mName);
+	aDebugger->EndProperty(cookie);
+}
+
+#endif
