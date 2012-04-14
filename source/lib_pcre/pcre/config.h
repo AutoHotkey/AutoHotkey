@@ -312,7 +312,7 @@ set the limit at 16000 recursions. A 64Mb stack, on the other hand, can support 
 #endif
 
 /* Define to enable support for Just-In-Time compiling. */
-#define SUPPORT_JIT
+/* #undef SUPPORT_JIT */
 
 /* Define to allow pcregrep to be linked with libbz2, so that it is able to
    handle .bz2 files. */
