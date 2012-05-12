@@ -20,7 +20,7 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 	{
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
-		return FAIL;
+		return OK; // Not FAIL, which would cause the entire thread to exit.
 	}
 
 	// When this variable goes out of scope, Var::FreeAndRestoreFunctionVars() is called (if appropriate):
