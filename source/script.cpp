@@ -15690,7 +15690,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 			, (aErrorType == FAIL && g_script.mIsReadyToExecute) ? ERR_ABORT_NO_SPACES
 			: (aErrorType == CRITICAL_ERROR || aErrorType == FAIL) ? (g_script.mIsRestart ? OLD_STILL_IN_EFFECT : WILL_EXIT)
 			: (aErrorType == EARLY_EXIT) ? _T("Continue running the script?")
-			: NULL);
+			: _T("For more details, read the documentation for #Warn."));
 
 		g_script.mCurrLine = this;  // This needs to be set in some cases where the caller didn't.
 		
