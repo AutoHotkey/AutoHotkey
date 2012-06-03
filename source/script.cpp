@@ -4407,7 +4407,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		if (!aActionType) // Above still didn't find a valid action (i.e. check aActionType again in case the above changed it).
 		{
 			if (*action_args == '(' || *action_args == '[' // v1.0.46.11: Recognize as multi-statements that start with a function, like "fn(), x:=4".  v1.0.47.03: Removed the following check to allow a close-brace to be followed by a comma-less function-call: strchr(action_args, g_delimiter).
-				|| *aLineText == '(') // Probably an expression with parentheses to control order of evaluation.
+				|| *aLineText == '(' // Probably an expression with parentheses to control order of evaluation.
+				|| !_tcsnicmp(aLineText, _T("new"), 3) && IS_SPACE_OR_TAB(aLineText[3]))
 			{
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				action_args = aLineText; // Since this is a function-call followed by a comma and some other expression, use the line's full text for later parsing.
