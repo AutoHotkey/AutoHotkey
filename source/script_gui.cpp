@@ -349,8 +349,9 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		goto return_the_result;
 	}
 
-	if (!name_length) // v1.1.04: Gui, New.
+	if (gui_command == GUI_CMD_NEW) // v1.1.04: Gui, New.  v1.1.08: now also applies to Gui, Name:New.
 	{
+		// The following comments are only applicable to Gui, New (anonymous Gui):
 		// Now that the HWND is known, we could use it as the Gui's name.  However, that isn't
 		// done because it would allow a Gui to be created using an invalid HWND as a name
 		// (and that invalid HWND could become valid for some other window, later):
@@ -361,7 +362,7 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		//
 		// Instead, A_Gui returns the HWND when mName is an empty string.
 
-		// Make the new (unnamed) window the default, for convenience:
+		// Make the new window the default, for convenience:
 		if (g->GuiDefaultWindow)
 			g->GuiDefaultWindow->Release();
 		pgui->AddRef();
