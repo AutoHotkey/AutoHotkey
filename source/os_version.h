@@ -46,6 +46,7 @@ public:
 	bool	IsWin2003(void) {return m_bWin2003;}				// Returns true if Win2003
 	bool	IsWinVista(void) {return m_bWinVista;}				// Returns true if WinVista (v1.0.44.13)
 	bool	IsWin7(void) {return m_bWin7; }						// Returns true if Win7
+	bool	IsWin8(void) {return m_bWin8; }						// Returns true if Win8
 #if defined(CONFIG_WIN9X) || defined(CONFIG_WINNT4)
 	bool	IsWin2000orLater(void) {return m_bWin2000orLater;}	// Returns true if Win2000+
 #else
@@ -115,6 +116,7 @@ private:
 	bool			m_bWinVistaOrLater;
 	bool			m_bWin7;
 	bool			m_bWin7OrLater;
+	bool			m_bWin8;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
