@@ -11699,12 +11699,18 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			// which has side-effects.  For example, "return LogThisEvent()".
 			if (aResultToken && aResultToken->symbol == SYM_STRING) // L31: Caller wants the return value, but no result has been set since caller set this default. (ExpandExpression does not use aResultToken for string values.)
 			{
-				if (ARGVAR1 && ARGVAR1->Type() == VAR_NORMAL) // Something like return var; since var may contain an object, must not use the deref'd string value.  Cached binary numbers are also returned this way as an added benefit.
+				if (ARGVAR1 && ARGVAR1->HasObject())
 				{
-					(ARGVAR1)->TokenToContents(*aResultToken);
+					// This is a plain variable reference (not an expression) and the variable
+					// contains an object.
+					ARGVAR1->TokenToContents(*aResultToken);
 				}
-				else // not a var, or a built-in var (which does not support TokenToContents()).
+				else
 				{
+					// Even if this is a var containing a cached binary number, it also contains
+					// a string which may have special formatting.  (It is certain that any var
+					// at this point already contains a string, due to ExpandArgs() being called.)
+					// So for compatibility and generally intuitive behaviour, return the string.
 					aResultToken->symbol = SYM_STRING;
 					aResultToken->marker = ARG1; // This sets it to blank if this return lacks an arg.
 				}
