@@ -2071,7 +2071,7 @@ process_completed_line:
 			if (mClassObjectCount)
 			{
 				// Check for assignment first, in case of something like "Static := 123".
-				for (cp = buf; cisalnum(*cp) || *cp == '_'; ++cp);
+				for (cp = buf; cisalnum(*cp) || *cp == '_' || *cp == '.'; ++cp);
 				if (cp > buf) // i.e. buf begins with an identifier.
 				{
 					cp = omit_leading_whitespace(cp);
@@ -7355,15 +7355,38 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			return ScriptError(ERR_INVALID_CLASS_VAR, item);
 		orig_char = *item_end;
 		*item_end = '\0'; // Temporarily terminate.
-		if (class_object->GetItem(temp_token, item))
-			return ScriptError(ERR_DUPLICATE_DECLARATION, item);
-		// Assigning class_object[item] := "" is sufficient to mark it as a class variable:
-		if (!class_object->SetItem(item, aStatic ? empty_token : int_token))
-			return ScriptError(ERR_OUTOFMEM);
-		*item_end = orig_char; // Undo termination.
+		bool item_exists = class_object->GetItem(temp_token, item);
+		if (orig_char == '.')
+		{
+			*item_end = orig_char; // Undo termination.
+			// This is something like "object.key := 5", which is only valid if "object" was
+			// previously declared (and will presumably be assigned an object at runtime).
+			// Ensure that at least the root class var exists; any further validation would
+			// be impossible since the object doesn't exist yet.
+			if (!item_exists)
+				return ScriptError(_T("Unknown class var."), item);
+			for (TCHAR *cp; *item_end == '.'; item_end = cp)
+			{
+				for (cp = item_end + 1; cisalnum(*cp) || *cp == '_'; ++cp);
+				if (cp == item_end + 1)
+					// This '.' wasn't followed by a valid identifier.  Leave item_end
+					// pointing at '.' and allow the switch() below to report the error.
+					break;
+			}
+		}
+		else
+		{
+			if (item_exists)
+				return ScriptError(ERR_DUPLICATE_DECLARATION, item);
+			// Assign class_object[item] := "" to mark it as a class variable
+			// and allow duplicate declarations to be detected:
+			if (!class_object->SetItem(item, aStatic ? empty_token : int_token))
+				return ScriptError(ERR_OUTOFMEM);
+			*item_end = orig_char; // Undo termination.
+		}
 		size_t name_length = item_end - item;
 						
-		// This section is very similar to the on in ParseAndAddLine() which deals with
+		// This section is very similar to the one in ParseAndAddLine() which deals with
 		// variable declarations, so maybe maintain them together:
 
 		item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
