@@ -853,6 +853,10 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		default:
 			aResultToken.value_int64 = min_field->n_int64; // Effectively also value_double = n_double.
 		}
+		// If the key is an object, release it now because Free() doesn't.
+		// Note that object keys can only be removed in the single-item mode.
+		if (min_key_type == SYM_OBJECT)
+			min_field->key.p->Release();
 		// Set these up as if caller did _Remove(min_key, min_key):
 		max_pos = min_pos + 1;
 		max_key.i = min_key.i; // Union copy. Used only if min_key_type == SYM_INTEGER; has no effect in other cases.
