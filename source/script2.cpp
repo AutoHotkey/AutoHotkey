@@ -15774,15 +15774,15 @@ BOOL VarToBOOL(Var &aVar)
 		aVar.MaybeWarnUninitialized();
 		return FALSE;
 	}
-	switch (aVar.IsPureNumeric()) // IsPureNumeric() vs IsNumeric() because we want to treat numeric strings like "0" as true.
+	switch (aVar.IsNumeric())
 	{
 	case PURE_INTEGER:
 		return aVar.ToInt64() != 0;
 	case PURE_FLOAT:
 		return aVar.ToDouble() != 0.0;
 	default:
-		// Since above has confirmed aVar.HasContents(), it can't contain an empty string.
-		// All other string values are considered true, even numeric strings like "0".
+		// Even a string containing all whitespace would be considered non-numeric since it's a non-blank string
+		// that isn't equal to 0.
 		return TRUE;
 	}
 }
