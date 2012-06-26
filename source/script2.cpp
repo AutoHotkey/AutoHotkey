@@ -13232,7 +13232,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcret *re, pcret_extra *extra, TCH
 
 	if (output_mode == 'O')
 	{
-		LPTSTR mark = (extra->flags & PCRE_EXTRA_MARK) ? *extra->mark : NULL;
+		LPTSTR mark = (extra->flags & PCRE_EXTRA_MARK) ? (LPTSTR)*extra->mark : NULL;
 		IObject *m = RegExMatchObject::Create(haystack, offset, subpat_name, pattern_count, captured_pattern_count, mark);
 		if (m)
 			output_var.AssignSkipAddRef(m);
@@ -13739,7 +13739,7 @@ int RegExCallout(pcret_callout_block *cb)
 		cb->offset_vector[0] = cb->start_match;
 		cb->offset_vector[1] = cb->current_position;
 		if (cd.extra->flags & PCRE_EXTRA_MARK)
-			*cd.extra->mark = (LPTSTR)cb->mark;
+			*cd.extra->mark = UorA(wchar_t *, UCHAR *) cb->mark;
 		
 		// Set up local vars for capturing subpatterns.
 		RegExSetSubpatternVars(cb->subject, cd.re, cd.extra, cd.output_mode, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top, mem_to_free);
@@ -14627,7 +14627,7 @@ BIF_DECL(BIF_RegEx)
 	// callout_data.extra is used by RegExCallout, which only receives a pointer to callout_data.
 	callout_data.extra = extra;
 	// extra->mark is used by PCRE to return the NAME of a (*MARK:NAME), if encountered.
-	extra->mark = &mark;
+	extra->mark = UorA(wchar_t **, UCHAR **) &mark;
 
 	if (mode_is_replace) // Handle RegExReplace() completely then return.
 	{

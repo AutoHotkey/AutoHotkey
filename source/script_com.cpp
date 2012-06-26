@@ -1399,7 +1399,7 @@ void ComObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int a
 			OLECHAR buf[40];
 			if (!StringFromGUID2(mEventSink->mIID, buf, _countof(buf)))
 				*buf = 0;
-			aDebugger->WriteProperty("IID", CStringTCharFromWCharIfNeeded(buf));
+			aDebugger->WriteProperty("IID", (LPTSTR)(LPCTSTR)CStringTCharFromWCharIfNeeded(buf));
 			
 			aDebugger->EndProperty(sinkCookie);
 		}
