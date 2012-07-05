@@ -756,7 +756,7 @@ LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd, DWORD aExtraA
 void FreeInterProcMem(HANDLE aHandle, LPVOID aMem);
 
 DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf);
-DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, DWORD aBufSize);
+DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, DWORD aBufSize, DWORD aFlag = 0);
 
 HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
 	, bool aUseGDIPlusIfAvailable);

@@ -1663,7 +1663,7 @@ DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf)
 
 
 
-DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, DWORD aBufSize)
+DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, DWORD aBufSize, DWORD aFlag)
 // Returns the length of the string (0 if empty).
 // Caller must ensure that size of aBuf is REALLY aBufSize (even when it knows aBufSize is more than
 // it needs) because the API apparently reads/writes parts of the buffer beyond the string it writes!
@@ -1672,7 +1672,7 @@ DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBu
 // sure is probably to actually fetch the data and check if the terminator is present.
 {
 	HKEY hkey;
-	if (RegOpenKeyEx(aRootKey, aSubkey, 0, KEY_QUERY_VALUE, &hkey) != ERROR_SUCCESS)
+	if (RegOpenKeyEx(aRootKey, aSubkey, 0, KEY_QUERY_VALUE | aFlag, &hkey) != ERROR_SUCCESS)
 	{
 		*aBuf = '\0';
 		return 0;

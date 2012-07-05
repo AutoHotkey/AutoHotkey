@@ -5802,7 +5802,19 @@ DWORD GetAHKInstallDir(LPTSTR aBuf)
 // Returns the length of the string (0 if empty).
 {
 	TCHAR buf[MAX_PATH];
-	DWORD length = ReadRegString(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\AutoHotkey"), _T("InstallDir"), buf, MAX_PATH);
+	DWORD length;
+#ifdef _WIN64
+	// First try 64-bit registry, then 32-bit registry.
+	for (DWORD flag = 0; ; flag = KEY_WOW64_32KEY)
+#else
+	// First try 32-bit registry, then 64-bit registry.
+	for (DWORD flag = 0; ; flag = KEY_WOW64_64KEY)
+#endif
+	{
+		length = ReadRegString(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\AutoHotkey"), _T("InstallDir"), buf, MAX_PATH, flag);
+		if (length || flag)
+			break;
+	}
 	if (aBuf)
 		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string).
 	return length;
