@@ -752,6 +752,7 @@ void CoordToScreen(int &aX, int &aY, int aWhichMode);
 void CoordToScreen(POINT &aPoint, int aWhichMode);
 void GetVirtualDesktopRect(RECT &aRect);
 BOOL IsProcess64Bit(HANDLE aHandle);
+BOOL IsOS64Bit();
 LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd, DWORD aExtraAccess = 0);
 void FreeInterProcMem(HANDLE aHandle, LPVOID aMem);
 

@@ -1716,6 +1716,13 @@ DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBu
 
 
 
+#ifndef _WIN64
+// Load function dynamically to allow the program to launch on Win2k/XPSP1:
+typedef BOOL (WINAPI *PFN_IsWow64Process)(HANDLE, PBOOL);
+static PFN_IsWow64Process _IsWow64Process = (PFN_IsWow64Process)GetProcAddress(GetModuleHandle(_T("kernel32"))
+	, "IsWow64Process");
+#endif
+
 BOOL IsProcess64Bit(HANDLE aHandle)
 {
 	BOOL is32on64;
@@ -1728,18 +1735,14 @@ BOOL IsProcess64Bit(HANDLE aHandle)
 	// cause this, so for simplicity just assume the target process is 64-bit (like this one).
 	return TRUE;
 #else
-	// Load function dynamically to allow the program to launch on Win2k/XPSP1:
-	typedef BOOL (WINAPI *MyIsWow64ProcessType)(HANDLE, PBOOL);
-	static MyIsWow64ProcessType MyIsWow64Process = (MyIsWow64ProcessType)GetProcAddress(GetModuleHandle(_T("kernel32"))
-		, "IsWow64Process");
-	if (MyIsWow64Process && MyIsWow64Process(GetCurrentProcess(), &is32on64))
+	if (_IsWow64Process && _IsWow64Process(GetCurrentProcess(), &is32on64))
 	{
 		if (is32on64)
 		{
 			// We're running under WOW64.  Since WOW64 only exists on 64-bit systems and on such systems
 			// 32-bit processes can run ONLY under WOW64, if the target process is also running under
 			// WOW64 it must be 32-bit; otherwise it must be 64-bit.
-			if (MyIsWow64Process(aHandle, &is32on64))
+			if (_IsWow64Process(aHandle, &is32on64))
 				return !is32on64;
 		}
 	}
@@ -1749,6 +1752,20 @@ BOOL IsProcess64Bit(HANDLE aHandle)
 	//     can cause this, so for simplicity just assume the target process is 32-bit (like this one).
 	//  c) The current process is not running under WOW64.  Since we know it is 32-bit (due to our use
 	//     of conditional compilation), the OS and all running processes must be 32-bit.
+	return FALSE;
+#endif
+}
+
+BOOL IsOS64Bit()
+{
+#ifdef _WIN64
+	// OS must be 64-bit to run this program.
+	return TRUE;
+#else
+	// If OS is 64-bit, this program must be running in WOW64.
+	BOOL is32on64;
+	if (_IsWow64Process && _IsWow64Process(GetCurrentProcess(), &is32on64))
+		return is32on64;
 	return FALSE;
 #endif
 }
