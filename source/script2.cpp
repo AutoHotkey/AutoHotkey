@@ -11101,7 +11101,7 @@ VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName)
 		{
 			if (g_os.IsWin2000())
 				version = _T("WIN_2000");
-			else
+			else if (g_os.IsWinNT4())
 				version = _T("WIN_NT4");
 		}
 	}
