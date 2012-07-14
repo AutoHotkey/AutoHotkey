@@ -12820,6 +12820,7 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 
 	for (;; ++g.mLoopIteration)
 	{
+		g_script.mCurrLine = this; // For error-reporting purposes.
 #ifdef CONFIG_DEBUGGER
 		// L31: Let the debugger break at the 'While' line each iteration. Before this change,
 		// a While loop with empty body such as While FuncWithSideEffect() {} would be "hit"
@@ -12871,6 +12872,7 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 
 bool Line::EvaluateLoopUntil(ResultType &aResult)
 {
+	g_script.mCurrLine = this; // For error-reporting purposes.
 	if (g->ListLinesIsEnabled)
 		LOG_THIS_LINE
 #ifdef CONFIG_DEBUGGER
