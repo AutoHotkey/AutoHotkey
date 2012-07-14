@@ -1209,6 +1209,17 @@ public:
 		default: if (aBufSize) *aBuf = '\0'; return aBuf;  // Make it be the empty string for REG_NONE and anything else.
 		}
 	}
+	static DWORD RegConvertView(LPTSTR aBuf)
+	{
+		if (!_tcsicmp(aBuf, _T("Default")))
+			return 0;
+		else if (!_tcscmp(aBuf, _T("32")))
+			return KEY_WOW64_32KEY;
+		else if (!_tcscmp(aBuf, _T("64")))
+			return KEY_WOW64_64KEY;
+		else
+			return -1;
+	}
 
 	static DWORD SoundConvertComponentType(LPTSTR aBuf, int *aInstanceNumber = NULL)
 	{
@@ -2778,6 +2789,7 @@ VarSizeType BIV_IsSuspended(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IsCompiled(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IsUnicode(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_FileEncoding(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_RegView(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IconHidden(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IconTip(LPTSTR aBuf, LPTSTR aVarName);

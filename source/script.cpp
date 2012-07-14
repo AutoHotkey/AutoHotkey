@@ -6083,6 +6083,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
+	case ACT_SETREGVIEW:
+		if (!line.ArgHasDeref(1) && line.RegConvertView(new_raw_arg1) == -1)
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
+		break;
+
 	case ACT_REGWRITE:
 		// Both of these checks require that at least two parameters be present.  Otherwise, the command
 		// is being used in its registry-loop mode and is validated elsewhere:
@@ -9010,6 +9015,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (!_tcscmp(lower, _T("iscritical"))) return BIV_IsCritical;
 	if (!_tcscmp(lower, _T("issuspended"))) return BIV_IsSuspended;
 	if (!_tcscmp(lower, _T("fileencoding"))) return BIV_FileEncoding;
+	if (!_tcscmp(lower, _T("regview"))) return BIV_RegView;
 
 	if (!_tcscmp(lower, _T("iconhidden"))) return BIV_IconHidden;
 	if (!_tcscmp(lower, _T("icontip"))) return BIV_IconTip;
@@ -13193,7 +13199,7 @@ ResultType Line::PerformLoopReg(ExprTokenType *aResultToken, bool &aContinueMain
 	// Open the specified subkey.  Be sure to only open with the minimum permission level so that
 	// the keys & values can be deleted or written to (though I'm not sure this would be an issue
 	// in most cases):
-	if (RegOpenKeyEx(reg_item.root_key, reg_item.subkey, 0, KEY_QUERY_VALUE | KEY_ENUMERATE_SUB_KEYS, &hRegKey) != ERROR_SUCCESS)
+	if (RegOpenKeyEx(reg_item.root_key, reg_item.subkey, 0, KEY_QUERY_VALUE | KEY_ENUMERATE_SUB_KEYS | g->RegView, &hRegKey) != ERROR_SUCCESS)
 		return OK;
 
 	// Get the count of how many values and subkeys are contained in this parent key:
@@ -15060,6 +15066,18 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS always keeps open.
 			RegCloseKey(root_key);
 		return result;
+	case ACT_SETREGVIEW:
+	{
+		DWORD reg_view = RegConvertView(ARG1);
+		// Validate the parameter even if it's not going to be used.
+		if (reg_view == -1)
+			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
+		// Since these flags cause the registry functions to fail on Win2k and have no effect on
+		// any later 32-bit OS, ignore this command when the OS is 32-bit.  Leave A_RegView blank.
+		if (IsOS64Bit())
+			g.RegView = reg_view;
+		return OK;
+	}
 
 	case ACT_OUTPUTDEBUG:
 #ifndef CONFIG_DEBUGGER

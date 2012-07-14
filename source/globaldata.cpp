@@ -510,6 +510,7 @@ Action g_act[] =
 	, {_T("RegRead"), 1, 5, 5 H, NULL} // output var, (ValueType [optional]), RegKey, RegSubkey, ValueName
 	, {_T("RegWrite"), 0, 5, 5, NULL} // ValueType, RegKey, RegSubKey, ValueName, Value (set to blank if omitted?)
 	, {_T("RegDelete"), 0, 3, 3, NULL} // RegKey, RegSubKey, ValueName
+	, {_T("SetRegView"), 1, 1, 1, NULL}
 
 	, {_T("OutputDebug"), 1, 1, 1, NULL}
 

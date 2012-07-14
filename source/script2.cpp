@@ -10860,6 +10860,22 @@ VarSizeType BIV_FileEncoding(LPTSTR aBuf, LPTSTR aVarName)
 
 
 
+VarSizeType BIV_RegView(LPTSTR aBuf, LPTSTR aVarName)
+{
+	LPCTSTR value;
+	switch (g->RegView)
+	{
+	case KEY_WOW64_32KEY: value = _T("32"); break;
+	case KEY_WOW64_64KEY: value = _T("64"); break;
+	default: value = _T("Default"); break;
+	}
+	if (aBuf)
+		_tcscpy(aBuf, value);
+	return (VarSizeType)_tcslen(value);
+}
+
+
+
 VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_INTEGER_SIZE];

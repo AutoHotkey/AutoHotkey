@@ -184,7 +184,7 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 	}
 
 	// Open the registry key
-	result = RegOpenKeyEx(aRootKey, aRegSubkey, 0, KEY_READ, &hRegKey);
+	result = RegOpenKeyEx(aRootKey, aRegSubkey, 0, KEY_READ | g->RegView, &hRegKey);
 	if (result != ERROR_SUCCESS)
 		goto finish;
 
@@ -373,7 +373,7 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	// HKCU's root level, perhaps because it's an alias for a subkey inside HKEY_USERS.  Even when RegOpenKeyEx()
 	// is used on HKCU (which is probably redundant since it's a pre-opened key?), the API can't create values
 	// there even though RegEdit can.
-	result = RegCreateKeyEx(aRootKey, aRegSubkey, 0, _T(""), REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hRegKey, &dwRes);
+	result = RegCreateKeyEx(aRootKey, aRegSubkey, 0, _T(""), REG_OPTION_NON_VOLATILE, KEY_WRITE | g->RegView, NULL, &hRegKey, &dwRes);
 	if (result != ERROR_SUCCESS)
 		goto finish;
 
@@ -493,7 +493,7 @@ LONG Line::RegRemoveSubkeys(HKEY hRegKey)
 		dwNameSize = _countof(Name)-1;
 		if (RegEnumKeyEx(hRegKey, 0, Name, &dwNameSize, NULL, NULL, NULL, &ftLastWrite) == ERROR_NO_MORE_ITEMS)
 			return ERROR_SUCCESS;
-		result = RegOpenKeyEx(hRegKey, Name, 0, KEY_READ, &hSubKey);
+		result = RegOpenKeyEx(hRegKey, Name, 0, KEY_READ | g->RegView, &hSubKey);
 		if (result != ERROR_SUCCESS)
 			break;
 		result = RegRemoveSubkeys(hSubKey);
@@ -526,7 +526,7 @@ ResultType Line::RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 
 	// Open the key we want
 	HKEY hRegKey;
-	result = RegOpenKeyEx(aRootKey, aRegSubkey, 0, KEY_READ | KEY_WRITE, &hRegKey);
+	result = RegOpenKeyEx(aRootKey, aRegSubkey, 0, KEY_READ | KEY_WRITE | g->RegView, &hRegKey);
 	if (result != ERROR_SUCCESS)
 		goto finish;
 
@@ -536,7 +536,14 @@ ResultType Line::RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 		result = RegRemoveSubkeys(hRegKey); // Delete any subitems within the key.
 		RegCloseKey(hRegKey); // Close parent key.  Not sure if this needs to be done only after the above.
 		if (result == ERROR_SUCCESS)
-			result = RegDeleteKey(aRootKey, aRegSubkey);
+		{
+			typedef LONG (WINAPI * PFN_RegDeleteKeyEx)(HKEY hKey , LPCTSTR lpSubKey , REGSAM samDesired , DWORD Reserved );
+			static PFN_RegDeleteKeyEx _RegDeleteKeyEx = (PFN_RegDeleteKeyEx)GetProcAddress(GetModuleHandle(_T("advapi32")), "RegDeleteKeyEx" WINAPI_SUFFIX);
+			if (g->RegView && _RegDeleteKeyEx)
+				result = _RegDeleteKeyEx(aRootKey, aRegSubkey, g->RegView, 0);
+			else
+				result = RegDeleteKey(aRootKey, aRegSubkey);
+		}
 	}
 	else
 	{
