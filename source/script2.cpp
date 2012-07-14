@@ -11106,6 +11106,16 @@ VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(version); // Always return the length of version, not aBuf.
 }
 
+VarSizeType BIV_Is64bitOS(LPTSTR aBuf, LPTSTR aVarName)
+{
+	if (aBuf)
+	{
+		*aBuf++ = IsOS64Bit() ? '1' : '0';
+		*aBuf = '\0';
+	}
+	return 1;
+}
+
 VarSizeType BIV_Language(LPTSTR aBuf, LPTSTR aVarName)
 // Registry locations from J-Paul Mesnage.
 {

@@ -2791,6 +2791,7 @@ VarSizeType BIV_TickCount(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_Now(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_OSType(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_Is64bitOS(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_Language(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_UserName_ComputerName(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName);
