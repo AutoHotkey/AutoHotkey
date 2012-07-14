@@ -153,6 +153,17 @@ END
 
 #include "..\ahkversion.h"
 
+#ifdef UNICODE
+#define AHK_ENC "Unicode"
+#else
+#define AHK_ENC "ANSI"
+#endif
+#ifdef _WIN64
+#define AHK_BIT "64-bit"
+#else
+#define AHK_BIT "32-bit"
+#endif
+
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION AHK_VERSION_N
  PRODUCTVERSION AHK_VERSION_N
@@ -179,7 +190,7 @@ BEGIN
             VALUE "ProductName", ""
             VALUE "ProductVersion", AHK_VERSION
 #else
-            VALUE "FileDescription", "AutoHotkey_L"
+            VALUE "FileDescription", "AutoHotkey_L " AHK_ENC " " AHK_BIT
             VALUE "FileVersion", AHK_VERSION
             VALUE "InternalName", "AutoHotkey_L"
             VALUE "LegalCopyright", "Copyright (C) 2010"
