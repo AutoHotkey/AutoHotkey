@@ -6379,7 +6379,10 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 				show_mode = SW_HIDE;
 				continue;
 			}
-			int n = _tcstol(cp + 1, &cp_end, 10);
+			// Use _tcstod vs _tcstol to support common cases like % "w" A_ScreenWidth/4 even
+			// when the current float format is something unusual.  Something like "w400.5"
+			// could be considered invalid, but is allowed for simplicity and convenience.
+			int n = (int)_tcstod(cp + 1, &cp_end);
 			if (cp_end == cp + 1) // No number.
 			{
 				cp_end = cp; // Flag it as invalid.
