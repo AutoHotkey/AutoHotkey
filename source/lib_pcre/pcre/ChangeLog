@@ -1,6 +1,297 @@
 ChangeLog for PCRE
 ------------------
 
+Version 8.30 04-February-2012
+-----------------------------
+
+1.  Renamed "isnumber" as "is_a_number" because in some Mac environments this
+    name is defined in ctype.h.
+
+2.  Fixed a bug in fixed-length calculation for lookbehinds that would show up
+    only in quite long subpatterns.
+
+3.  Removed the function pcre_info(), which has been obsolete and deprecated
+    since it was replaced by pcre_fullinfo() in February 2000.
+
+4.  For a non-anchored pattern, if (*SKIP) was given with a name that did not
+    match a (*MARK), and the match failed at the start of the subject, a
+    reference to memory before the start of the subject could occur. This bug
+    was introduced by fix 17 of release 8.21.
+
+5.  A reference to an unset group with zero minimum repetition was giving
+    totally wrong answers (in non-JavaScript-compatibility mode). For example,
+    /(another)?(\1?)test/ matched against "hello world test". This bug was
+    introduced in release 8.13.
+
+6.  Add support for 16-bit character strings (a large amount of work involving
+    many changes and refactorings).
+
+7.  RunGrepTest failed on msys because \r\n was replaced by whitespace when the
+    command "pattern=`printf 'xxx\r\njkl'`" was run. The pattern is now taken
+    from a file.
+
+8.  Ovector size of 2 is also supported by JIT based pcre_exec (the ovector size
+    rounding is not applied in this particular case).
+
+9.  The invalid Unicode surrogate codepoints U+D800 to U+DFFF are now rejected
+    if they appear, or are escaped, in patterns.
+
+10. Get rid of a number of -Wunused-but-set-variable warnings.
+
+11. The pattern /(?=(*:x))(q|)/ matches an empty string, and returns the mark
+    "x". The similar pattern /(?=(*:x))((*:y)q|)/ did not return a mark at all.
+    Oddly, Perl behaves the same way. PCRE has been fixed so that this pattern
+    also returns the mark "x". This bug applied to capturing parentheses,
+    non-capturing parentheses, and atomic parentheses. It also applied to some
+    assertions.
+
+12. Stephen Kelly's patch to CMakeLists.txt allows it to parse the version
+    information out of configure.ac instead of relying on pcre.h.generic, which
+    is not stored in the repository.
+
+13. Applied Dmitry V. Levin's patch for a more portable method for linking with
+    -lreadline.
+
+14. ZH added PCRE_CONFIG_JITTARGET; added its output to pcretest -C.
+
+15. Applied Graycode's patch to put the top-level frame on the stack rather
+    than the heap when not using the stack for recursion. This gives a
+    performance improvement in many cases when recursion is not deep.
+
+16. Experimental code added to "pcretest -C" to output the stack frame size.
+
+
+Version 8.21 12-Dec-2011
+------------------------
+
+1.  Updating the JIT compiler.
+
+2.  JIT compiler now supports OP_NCREF, OP_RREF and OP_NRREF. New test cases
+    are added as well.
+
+3.  Fix cache-flush issue on PowerPC (It is still an experimental JIT port).
+    PCRE_EXTRA_TABLES is not suported by JIT, and should be checked before
+    calling _pcre_jit_exec. Some extra comments are added.
+
+4.  (*MARK) settings inside atomic groups that do not contain any capturing
+    parentheses, for example, (?>a(*:m)), were not being passed out. This bug
+    was introduced by change 18 for 8.20.
+
+5.  Supporting of \x, \U and \u in JavaScript compatibility mode based on the
+    ECMA-262 standard.
+
+6.  Lookbehinds such as (?<=a{2}b) that contained a fixed repetition were
+    erroneously being rejected as "not fixed length" if PCRE_CASELESS was set.
+    This bug was probably introduced by change 9 of 8.13.
+
+7.  While fixing 6 above, I noticed that a number of other items were being
+    incorrectly rejected as "not fixed length". This arose partly because newer
+    opcodes had not been added to the fixed-length checking code. I have (a)
+    corrected the bug and added tests for these items, and (b) arranged for an
+    error to occur if an unknown opcode is encountered while checking for fixed
+    length instead of just assuming "not fixed length". The items that were
+    rejected were: (*ACCEPT), (*COMMIT), (*FAIL), (*MARK), (*PRUNE), (*SKIP),
+    (*THEN), \h, \H, \v, \V, and single character negative classes with fixed
+    repetitions, e.g. [^a]{3}, with and without PCRE_CASELESS.
+
+8.  A possessively repeated conditional subpattern such as (?(?=c)c|d)++ was
+    being incorrectly compiled and would have given unpredicatble results.
+
+9.  A possessively repeated subpattern with minimum repeat count greater than
+    one behaved incorrectly. For example, (A){2,}+ behaved as if it was
+    (A)(A)++ which meant that, after a subsequent mismatch, backtracking into
+    the first (A) could occur when it should not.
+
+10. Add a cast and remove a redundant test from the code.
+
+11. JIT should use pcre_malloc/pcre_free for allocation.
+
+12. Updated pcre-config so that it no longer shows -L/usr/lib, which seems
+    best practice nowadays, and helps with cross-compiling. (If the exec_prefix
+    is anything other than /usr, -L is still shown).
+
+13. In non-UTF-8 mode, \C is now supported in lookbehinds and DFA matching.
+
+14. Perl does not support \N without a following name in a [] class; PCRE now
+    also gives an error.
+
+15. If a forward reference was repeated with an upper limit of around 2000,
+    it caused the error "internal error: overran compiling workspace". The
+    maximum number of forward references (including repeats) was limited by the
+    internal workspace, and dependent on the LINK_SIZE. The code has been
+    rewritten so that the workspace expands (via pcre_malloc) if necessary, and
+    the default depends on LINK_SIZE. There is a new upper limit (for safety)
+    of around 200,000 forward references. While doing this, I also speeded up
+    the filling in of repeated forward references.
+
+16. A repeated forward reference in a pattern such as (a)(?2){2}(.) was
+    incorrectly expecting the subject to contain another "a" after the start.
+
+17. When (*SKIP:name) is activated without a corresponding (*MARK:name) earlier
+    in the match, the SKIP should be ignored. This was not happening; instead
+    the SKIP was being treated as NOMATCH. For patterns such as
+    /A(*MARK:A)A+(*SKIP:B)Z|AAC/ this meant that the AAC branch was never
+    tested.
+
+18. The behaviour of (*MARK), (*PRUNE), and (*THEN) has been reworked and is
+    now much more compatible with Perl, in particular in cases where the result
+    is a non-match for a non-anchored pattern. For example, if
+    /b(*:m)f|a(*:n)w/ is matched against "abc", the non-match returns the name
+    "m", where previously it did not return a name. A side effect of this
+    change is that for partial matches, the last encountered mark name is
+    returned, as for non matches. A number of tests that were previously not
+    Perl-compatible have been moved into the Perl-compatible test files. The
+    refactoring has had the pleasing side effect of removing one argument from
+    the match() function, thus reducing its stack requirements.
+
+19. If the /S+ option was used in pcretest to study a pattern using JIT,
+    subsequent uses of /S (without +) incorrectly behaved like /S+.
+
+21. Retrieve executable code size support for the JIT compiler and fixing
+    some warnings.
+
+22. A caseless match of a UTF-8 character whose other case uses fewer bytes did
+    not work when the shorter character appeared right at the end of the
+    subject string.
+
+23. Added some (int) casts to non-JIT modules to reduce warnings on 64-bit
+    systems.
+
+24. Added PCRE_INFO_JITSIZE to pass on the value from (21) above, and also
+    output it when the /M option is used in pcretest.
+
+25. The CheckMan script was not being included in the distribution. Also, added
+    an explicit "perl" to run Perl scripts from the PrepareRelease script
+    because this is reportedly needed in Windows.
+
+26. If study data was being save in a file and studying had not found a set of
+    "starts with" bytes for the pattern, the data written to the file (though
+    never used) was taken from uninitialized memory and so caused valgrind to
+    complain.
+
+27. Updated RunTest.bat as provided by Sheri Pierce.
+
+28. Fixed a possible uninitialized memory bug in pcre_jit_compile.c.
+
+29. Computation of memory usage for the table of capturing group names was
+    giving an unnecessarily large value.
+
+
+Version 8.20 21-Oct-2011
+------------------------
+
+1.  Change 37 of 8.13 broke patterns like [:a]...[b:] because it thought it had
+    a POSIX class. After further experiments with Perl, which convinced me that
+    Perl has bugs and confusions, a closing square bracket is no longer allowed
+    in a POSIX name. This bug also affected patterns with classes that started
+    with full stops.
+
+2.  If a pattern such as /(a)b|ac/ is matched against "ac", there is no
+    captured substring, but while checking the failing first alternative,
+    substring 1 is temporarily captured. If the output vector supplied to
+    pcre_exec() was not big enough for this capture, the yield of the function
+    was still zero ("insufficient space for captured substrings"). This cannot
+    be totally fixed without adding another stack variable, which seems a lot
+    of expense for a edge case. However, I have improved the situation in cases
+    such as /(a)(b)x|abc/ matched against "abc", where the return code
+    indicates that fewer than the maximum number of slots in the ovector have
+    been set.
+
+3.  Related to (2) above: when there are more back references in a pattern than
+    slots in the output vector, pcre_exec() uses temporary memory during
+    matching, and copies in the captures as far as possible afterwards. It was
+    using the entire output vector, but this conflicts with the specification
+    that only 2/3 is used for passing back captured substrings. Now it uses
+    only the first 2/3, for compatibility. This is, of course, another edge
+    case.
+
+4.  Zoltan Herczeg's just-in-time compiler support has been integrated into the
+    main code base, and can be used by building with --enable-jit. When this is
+    done, pcregrep automatically uses it unless --disable-pcregrep-jit or the
+    runtime --no-jit option is given.
+
+5.  When the number of matches in a pcre_dfa_exec() run exactly filled the
+    ovector, the return from the function was zero, implying that there were
+    other matches that did not fit. The correct "exactly full" value is now
+    returned.
+
+6.  If a subpattern that was called recursively or as a subroutine contained
+    (*PRUNE) or any other control that caused it to give a non-standard return,
+    invalid errors such as "Error -26 (nested recursion at the same subject
+    position)" or even infinite loops could occur.
+
+7.  If a pattern such as /a(*SKIP)c|b(*ACCEPT)|/ was studied, it stopped
+    computing the minimum length on reaching *ACCEPT, and so ended up with the
+    wrong value of 1 rather than 0. Further investigation indicates that
+    computing a minimum subject length in the presence of *ACCEPT is difficult
+    (think back references, subroutine calls), and so I have changed the code
+    so that no minimum is registered for a pattern that contains *ACCEPT.
+
+8.  If (*THEN) was present in the first (true) branch of a conditional group,
+    it was not handled as intended. [But see 16 below.]
+
+9.  Replaced RunTest.bat and CMakeLists.txt with improved versions provided by
+    Sheri Pierce.
+
+10. A pathological pattern such as /(*ACCEPT)a/ was miscompiled, thinking that
+    the first byte in a match must be "a".
+
+11. Change 17 for 8.13 increased the recursion depth for patterns like
+    /a(?:.)*?a/ drastically. I've improved things by remembering whether a
+    pattern contains any instances of (*THEN). If it does not, the old
+    optimizations are restored. It would be nice to do this on a per-group
+    basis, but at the moment that is not feasible.
+
+12. In some environments, the output of pcretest -C is CRLF terminated. This
+    broke RunTest's code that checks for the link size. A single white space
+    character after the value is now allowed for.
+
+13. RunTest now checks for the "fr" locale as well as for "fr_FR" and "french".
+    For "fr", it uses the Windows-specific input and output files.
+
+14. If (*THEN) appeared in a group that was called recursively or as a
+    subroutine, it did not work as intended. [But see next item.]
+
+15. Consider the pattern /A (B(*THEN)C) | D/ where A, B, C, and D are complex
+    pattern fragments (but not containing any | characters). If A and B are
+    matched, but there is a failure in C so that it backtracks to (*THEN), PCRE
+    was behaving differently to Perl. PCRE backtracked into A, but Perl goes to
+    D. In other words, Perl considers parentheses that do not contain any |
+    characters to be part of a surrounding alternative, whereas PCRE was
+    treading (B(*THEN)C) the same as (B(*THEN)C|(*FAIL)) -- which Perl handles
+    differently. PCRE now behaves in the same way as Perl, except in the case
+    of subroutine/recursion calls such as (?1) which have in any case always
+    been different (but PCRE had them first :-).
+
+16. Related to 15 above: Perl does not treat the | in a conditional group as
+    creating alternatives. Such a group is treated in the same way as an
+    ordinary group without any | characters when processing (*THEN). PCRE has
+    been changed to match Perl's behaviour.
+
+17. If a user had set PCREGREP_COLO(U)R to something other than 1:31, the
+    RunGrepTest script failed.
+
+18. Change 22 for version 13 caused atomic groups to use more stack. This is
+    inevitable for groups that contain captures, but it can lead to a lot of
+    stack use in large patterns. The old behaviour has been restored for atomic
+    groups that do not contain any capturing parentheses.
+
+19. If the PCRE_NO_START_OPTIMIZE option was set for pcre_compile(), it did not
+    suppress the check for a minimum subject length at run time. (If it was
+    given to pcre_exec() or pcre_dfa_exec() it did work.)
+
+20. Fixed an ASCII-dependent infelicity in pcretest that would have made it
+    fail to work when decoding hex characters in data strings in EBCDIC
+    environments.
+
+21. It appears that in at least one Mac OS environment, the isxdigit() function
+    is implemented as a macro that evaluates to its argument more than once,
+    contravening the C 90 Standard (I haven't checked a later standard). There
+    was an instance in pcretest which caused it to go wrong when processing
+    \x{...} escapes in subject strings. The has been rewritten to avoid using
+    things like p++ in the argument of isxdigit().
+
+
 Version 8.13 16-Aug-2011
 ------------------------
 
@@ -98,7 +389,7 @@ Version 8.13 16-Aug-2011
     tail recursion to cut down on stack usage. Unfortunately, now that there is
     the possibility of (*THEN) occurring in these branches, tail recursion is
     no longer possible because the return has to be checked for (*THEN). These
-    two optimizations have therefore been removed.
+    two optimizations have therefore been removed. [But see 8.20/11 above.]
 
 18. If a pattern containing \R was studied, it was assumed that \R always
     matched two bytes, thus causing the minimum subject length to be
@@ -189,7 +480,7 @@ Version 8.13 16-Aug-2011
     For example, [:a[:digit:]b:] matches "a", "b", ":", or a digit. Also,
     unescaped square brackets may also appear as part of class names. For
     example, [:a[:abc]b:] gives unknown class "[:abc]b:]". PCRE now behaves
-    more like Perl.
+    more like Perl. (But see 8.20/1 above.)
 
 38. PCRE was giving an error for \N with a braced quantifier such as {1,} (this
     was because it thought it was \N{name}, which is not supported).

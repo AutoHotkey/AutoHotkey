@@ -2192,7 +2192,7 @@ process_completed_line:
 			if (mClassObjectCount)
 			{
 				// Check for assignment first, in case of something like "Static := 123".
-				cp = find_identifier_end(buf);
+				for (cp = buf; IS_IDENTIFIER_CHAR(*cp) || *cp == '.'; ++cp);
 				if (cp > buf) // i.e. buf begins with an identifier.
 				{
 					cp = omit_leading_whitespace(cp);
@@ -4119,7 +4119,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		if (!aActionType) // Above still didn't find a valid action (i.e. check aActionType again in case the above changed it).
 		{
 			if (*action_args == '(' || *action_args == '[' // v1.0.46.11: Recognize as multi-statements that start with a function, like "fn(), x:=4".  v1.0.47.03: Removed the following check to allow a close-brace to be followed by a comma-less function-call: strchr(action_args, g_delimiter).
-				|| *aLineText == '(') // Probably an expression with parentheses to control order of evaluation.
+				|| *aLineText == '(' // Probably an expression with parentheses to control order of evaluation.
+				|| !_tcsnicmp(aLineText, _T("new"), 3) && IS_SPACE_OR_TAB(aLineText[3]))
 			{
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				action_args = aLineText; // Since this is a function-call followed by a comma and some other expression, use the line's full text for later parsing.
@@ -5264,6 +5265,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
+	case ACT_SETREGVIEW:
+		if (!line.ArgHasDeref(1) && line.RegConvertView(new_raw_arg1) == -1)
+			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
+		break;
+
 	case ACT_REGWRITE:
 		// Both of these checks require that at least two parameters be present.  Otherwise, the command
 		// is being used in its registry-loop mode and is validated elsewhere:
@@ -6297,15 +6303,38 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			return ScriptError(ERR_INVALID_CLASS_VAR, item);
 		orig_char = *item_end;
 		*item_end = '\0'; // Temporarily terminate.
-		if (class_object->GetItem(temp_token, item))
-			return ScriptError(ERR_DUPLICATE_DECLARATION, item);
-		// Assigning class_object[item] := "" is sufficient to mark it as a class variable:
-		if (!class_object->SetItem(item, aStatic ? empty_token : int_token))
-			return ScriptError(ERR_OUTOFMEM);
-		*item_end = orig_char; // Undo termination.
+		bool item_exists = class_object->GetItem(temp_token, item);
+		if (orig_char == '.')
+		{
+			*item_end = orig_char; // Undo termination.
+			// This is something like "object.key := 5", which is only valid if "object" was
+			// previously declared (and will presumably be assigned an object at runtime).
+			// Ensure that at least the root class var exists; any further validation would
+			// be impossible since the object doesn't exist yet.
+			if (!item_exists)
+				return ScriptError(_T("Unknown class var."), item);
+			for (TCHAR *cp; *item_end == '.'; item_end = cp)
+			{
+				for (cp = item_end + 1; cisalnum(*cp) || *cp == '_'; ++cp);
+				if (cp == item_end + 1)
+					// This '.' wasn't followed by a valid identifier.  Leave item_end
+					// pointing at '.' and allow the switch() below to report the error.
+					break;
+			}
+		}
+		else
+		{
+			if (item_exists)
+				return ScriptError(ERR_DUPLICATE_DECLARATION, item);
+			// Assign class_object[item] := "" to mark it as a class variable
+			// and allow duplicate declarations to be detected:
+			if (!class_object->SetItem(item, aStatic ? empty_token : int_token))
+				return ScriptError(ERR_OUTOFMEM);
+			*item_end = orig_char; // Undo termination.
+		}
 		size_t name_length = item_end - item;
 						
-		// This section is very similar to the on in ParseAndAddLine() which deals with
+		// This section is very similar to the one in ParseAndAddLine() which deals with
 		// variable declarations, so maybe maintain them together:
 
 		item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
@@ -7569,6 +7598,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (!_tcscmp(lower, _T("issuspended"))) return BIV_IsSuspended;
 	if (!_tcscmp(lower, _T("fileencoding"))) return BIV_FileEncoding;
 	if (!_tcscmp(lower, _T("msgboxresult"))) return BIV_MsgBoxResult;
+	if (!_tcscmp(lower, _T("regview"))) return BIV_RegView;
 
 	if (!_tcscmp(lower, _T("iconhidden"))) return BIV_IconHidden;
 	if (!_tcscmp(lower, _T("icontip"))) return BIV_IconTip;
@@ -7581,6 +7611,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (!_tcscmp(lower, _T("ostype"))) return BIV_OSType;
 #endif
 	if (!_tcscmp(lower, _T("osversion"))) return BIV_OSVersion;
+	if (!_tcscmp(lower, _T("is64bitos"))) return BIV_Is64bitOS;
 	if (!_tcscmp(lower, _T("language"))) return BIV_Language;
 	if (   !_tcscmp(lower, _T("computername"))
 		|| !_tcscmp(lower, _T("username"))) return BIV_UserName_ComputerName;
@@ -11124,6 +11155,7 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 
 	for (;; ++g.mLoopIteration)
 	{
+		g_script.mCurrLine = this; // For error-reporting purposes.
 #ifdef CONFIG_DEBUGGER
 		// L31: Let the debugger break at the 'While' line each iteration. Before this change,
 		// a While loop with empty body such as While FuncWithSideEffect() {} would be "hit"
@@ -11175,6 +11207,7 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 
 bool Line::EvaluateLoopUntil(ResultType &aResult)
 {
+	g_script.mCurrLine = this; // For error-reporting purposes.
 	if (g->ListLinesIsEnabled)
 		LOG_THIS_LINE
 #ifdef CONFIG_DEBUGGER
@@ -11507,7 +11540,7 @@ ResultType Line::PerformLoopReg(ExprTokenType *aResultToken, bool &aContinueMain
 	// Open the specified subkey.  Be sure to only open with the minimum permission level so that
 	// the keys & values can be deleted or written to (though I'm not sure this would be an issue
 	// in most cases):
-	if (RegOpenKeyEx(reg_item.root_key, reg_item.subkey, 0, KEY_QUERY_VALUE | KEY_ENUMERATE_SUB_KEYS, &hRegKey) != ERROR_SUCCESS)
+	if (RegOpenKeyEx(reg_item.root_key, reg_item.subkey, 0, KEY_QUERY_VALUE | KEY_ENUMERATE_SUB_KEYS | g->RegView, &hRegKey) != ERROR_SUCCESS)
 		return OK;
 
 	// Get the count of how many values and subkeys are contained in this parent key:
@@ -12950,6 +12983,18 @@ ResultType Line::Perform()
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS always keeps open.
 			RegCloseKey(root_key);
 		return result;
+	case ACT_SETREGVIEW:
+	{
+		DWORD reg_view = RegConvertView(ARG1);
+		// Validate the parameter even if it's not going to be used.
+		if (reg_view == -1)
+			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
+		// Since these flags cause the registry functions to fail on Win2k and have no effect on
+		// any later 32-bit OS, ignore this command when the OS is 32-bit.  Leave A_RegView blank.
+		if (IsOS64Bit())
+			g.RegView = reg_view;
+		return OK;
+	}
 
 	case ACT_OUTPUTDEBUG:
 #ifndef CONFIG_DEBUGGER
@@ -13880,7 +13925,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 			, (aErrorType == FAIL && g_script.mIsReadyToExecute) ? ERR_ABORT_NO_SPACES
 			: (aErrorType == CRITICAL_ERROR || aErrorType == FAIL) ? (g_script.mIsRestart ? OLD_STILL_IN_EFFECT : WILL_EXIT)
 			: (aErrorType == EARLY_EXIT) ? _T("Continue running the script?")
-			: NULL);
+			: _T("For more details, read the documentation for #Warn."));
 
 		g_script.mCurrLine = this;  // This needs to be set in some cases where the caller didn't.
 		

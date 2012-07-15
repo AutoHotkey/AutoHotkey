@@ -350,8 +350,9 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		goto return_the_result;
 	}
 
-	if (!name_length) // v1.1.04: Gui, New.
+	if (gui_command == GUI_CMD_NEW) // v1.1.04: Gui, New.  v1.1.08: now also applies to Gui, Name:New.
 	{
+		// The following comments are only applicable to Gui, New (anonymous Gui):
 		// Now that the HWND is known, we could use it as the Gui's name.  However, that isn't
 		// done because it would allow a Gui to be created using an invalid HWND as a name
 		// (and that invalid HWND could become valid for some other window, later):
@@ -362,7 +363,7 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		//
 		// Instead, A_Gui returns the HWND when mName is an empty string.
 
-		// Make the new (unnamed) window the default, for convenience:
+		// Make the new window the default, for convenience:
 		if (g->GuiDefaultWindow)
 			g->GuiDefaultWindow->Release();
 		pgui->AddRef();
@@ -2160,7 +2161,10 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	// that should be okay because those types should never consult opt.color_changed.
 	opt.color_changed = CLR_DEFAULT != (aControlType == GUI_CONTROL_LISTVIEW ? opt.color_listview : control.union_color);
 	if (opt.color_bk == CLR_DEFAULT) // i.e. the options list must have explicitly specified BackgroundDefault.
-		opt.color_bk = CLR_INVALID; // Tell things like ControlSetListViewOptions "no color change needed".
+	{
+		if (aControlType != GUI_CONTROL_TREEVIEW) // v1.1.08: Always set the back-color of a TreeView, otherwise it sends WM_CTLCOLOREDIT on Win2k/XP.
+			opt.color_bk = CLR_INVALID; // Tell things like ControlSetListViewOptions "no color change needed".
+	}
 	else if (opt.color_bk == CLR_INVALID && mBackgroundColorCtl != CLR_DEFAULT // No bk color was specified in options param.
 		&& aControlType != GUI_CONTROL_PROGRESS && aControlType != GUI_CONTROL_STATUSBAR) // And the control obeys the current "Gui, Color,, CtlBkColor".  Status bars don't obey it because it seems slightly less desirable for most people, and also because system default bar color might be diff. than system default win color on some themes.
 		// Since bkgnd color was not explicitly specified in options, use the current background color (except progress bars, which do their own thing).
@@ -6371,7 +6375,10 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 				show_mode = SW_HIDE;
 				continue;
 			}
-			int n = _tcstol(cp + 1, &cp_end, 10);
+			// Use _tcstod vs _tcstol to support common cases like % "w" A_ScreenWidth/4 even
+			// when the current float format is something unusual.  Something like "w400.5"
+			// could be considered invalid, but is allowed for simplicity and convenience.
+			int n = (int)_tcstod(cp + 1, &cp_end);
 			if (cp_end == cp + 1) // No number.
 			{
 				cp_end = cp; // Flag it as invalid.

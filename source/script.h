@@ -196,9 +196,9 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_OPTION _T("Invalid option.") // Generic message used by Gui and GuiControl/Get.
 #define ERR_MUST_DECLARE _T("This variable must be declared.")
 
-#define WARNING_USE_UNSET_VARIABLE _T("Using value of uninitialized variable.")
-#define WARNING_LOCAL_SAME_AS_GLOBAL _T("Local variable with same name as global.")
-#define WARNING_USE_ENV_VARIABLE _T("Using value of environment variable.")
+#define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
+#define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
+#define WARNING_USE_ENV_VARIABLE _T("An environment variable is being accessed; see #NoEnv.")
 
 //----------------------------------------------------------------------------------
 
@@ -1004,7 +1004,8 @@ public:
 		ArgStruct &arg = mArg[aArgIndex]; // For performance.
 		// Return false if it's not of a type caller wants deemed to have derefs.
 		if (arg.type == ARG_TYPE_NORMAL)
-			return arg.deref && arg.deref[0].marker; // Relies on short-circuit boolean evaluation order to prevent NULL-deref.
+			return arg.deref && arg.deref[0].marker // Relies on short-circuit boolean evaluation order to prevent NULL-deref.
+				|| arg.is_expression; // Return true for this case since most callers assume the arg is a simple literal string if we return false.
 		else // Callers rely on input variables being seen as "true" because sometimes single isolated derefs are converted into ARG_TYPE_INPUT_VAR at load-time.
 			return (arg.type == ARG_TYPE_INPUT_VAR);
 	}
@@ -1102,6 +1103,17 @@ public:
 		case REG_SUBKEY: tcslcpy(aBuf, _T("KEY"), aBufSize); return aBuf;  // Custom (non-standard) type.
 		default: if (aBufSize) *aBuf = '\0'; return aBuf;  // Make it be the empty string for REG_NONE and anything else.
 		}
+	}
+	static DWORD RegConvertView(LPTSTR aBuf)
+	{
+		if (!_tcsicmp(aBuf, _T("Default")))
+			return 0;
+		else if (!_tcscmp(aBuf, _T("32")))
+			return KEY_WOW64_32KEY;
+		else if (!_tcscmp(aBuf, _T("64")))
+			return KEY_WOW64_64KEY;
+		else
+			return -1;
 	}
 
 	static DWORD SoundConvertComponentType(LPTSTR aBuf, int *aInstanceNumber = NULL)
@@ -1903,6 +1915,9 @@ public:
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
 	ULONG STDMETHODCALLTYPE Release() { return 1; }
+#ifdef CONFIG_DEBUGGER
+	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
+#endif
 
 	Func(LPTSTR aFuncName, bool aIsBuiltIn) // Constructor.
 		: mName(aFuncName) // Caller gave us a pointer to dynamic memory for this.
@@ -2635,6 +2650,7 @@ VarSizeType BIV_IsCompiled(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IsUnicode(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_FileEncoding(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_MsgBoxResult(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_RegView(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IconHidden(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IconTip(LPTSTR aBuf, LPTSTR aVarName);
@@ -2650,6 +2666,7 @@ VarSizeType BIV_Now(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_OSType(LPTSTR aBuf, LPTSTR aVarName);
 #endif
 VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_Is64bitOS(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_Language(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_UserName_ComputerName(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName);

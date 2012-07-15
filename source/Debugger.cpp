@@ -1012,153 +1012,82 @@ int Debugger::WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage)
 
 int Debugger::WritePropertyXml(IObject *aObject, const char *aName, CStringA &aNameBuf, int aPage, int aPageSize, int aDepthRemaining, int aMaxEncodedSize, char *aFacet)
 {
-	INT_PTR numchildren,
-		i = aPageSize * aPage,
-		j = aPageSize * (aPage + 1);
-	size_t aNameBuf_marker = aNameBuf.GetLength();
-	Object *objptr = dynamic_cast<Object *>(aObject);
-	ComObject *comobjptr = dynamic_cast<ComObject *>(aObject);
-	char *cp;
-	int err;
+	PropertyWriter pw(*this, aObject, aName, aNameBuf, aPage, aPageSize, aDepthRemaining, aMaxEncodedSize);
+	// Ask the object to write out its properties:
+	aObject->DebugWriteProperty(&pw, aPage, aPageSize, aDepthRemaining);
+	aNameBuf.Truncate(pw.mNameLength);
+	// For simplicity/code size, instead of requiring error handling in aObject,
+	// any failure during the above sets pw.mError, which causes it to ignore
+	// any further method calls.  Since we're finished now, return the error
+	// code (even if it's "OK"):
+	return pw.mError;
+}
 
-	if (objptr)
-		numchildren = objptr->mFieldCount + (objptr->mBase != NULL);
-	else if (comobjptr)
-		numchildren = 2; // For simplicity, assume page == 0 and pagesize >= 2.
-	else
-		numchildren = 0;
+void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aDepth)
+{
+	DebugCookie cookie;
+	aDebugger->BeginProperty(NULL, "object", (int)mFieldCount + (mBase != NULL), cookie);
 
-	LPCSTR classname = typeid(*aObject).name();
-	if (!strncmp(classname, "class ", 6))
-		classname += 6;
-
-	mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"object\" classname=\"%s\" address=\"%p\" facet=\"%s\" size=\"0\" page=\"%i\" pagesize=\"%i\" children=\"1\" numchildren=\"%p\">"
-						, aName, aNameBuf.GetString(), classname, aObject, aFacet, aPage, aPageSize, numchildren);
-
-	if (aDepthRemaining)
+	if (aDepth)
 	{
-		if (objptr)
+		int i = aPageSize * aPage, j = aPageSize * (aPage + 1);
+		char buf[MAX_INTEGER_SIZE];
+
+		if (mBase)
 		{
-			Object &obj = *objptr;
-			if (obj.mBase)
+			// Since this object has a "base", let it count as the first field.
+			if (i == 0) // i.e. this is the first page.
 			{
-				// Since this object has a "base", let it count as the first field.
-				if (i == 0) // i.e. this is the first page.
-				{
-					cp = aNameBuf.GetBufferSetLength(aNameBuf_marker + 5) + aNameBuf_marker;
-					strcpy(cp, ".base");
-					aNameBuf.ReleaseBuffer();
-					aName = "base";
-					if (err = WritePropertyXml(obj.mBase, aName, aNameBuf, 0, aPageSize, aDepthRemaining - 1, aMaxEncodedSize))
-						return err;
-					// Now fall through and retrieve field[0] (unless aPageSize == 1).
-				}
-				// So 20..39 becomes 19..38 when there's a base object:
-				else --i; 
-				--j;
+				aDebugger->WriteProperty("base", mBase);
+				// Now fall through and retrieve field[0] (unless aPageSize == 1).
 			}
-			if (j > obj.mFieldCount)
-				j = obj.mFieldCount;
-			// For each field in the requested page...
-			for ( ; i < j; ++i)
-			{
-				Object::FieldType &field = obj.mFields[i];
-
-				// Append the key to the name buffer, attempting to maintain valid expression syntax.
-				// String:	var.alphanumeric or var["non-alphanumeric"]
-				// Integer:	var.123 or var[-123]
-				// Object:	var[Object(address)]
-				if (i >= obj.mKeyOffsetString) // String
-				{
-					LPTSTR tp;
-					for (tp = field.key.s; cisalnum(*tp) || *tp == '_'; ++tp);
-					bool use_dot = !*tp && tp != field.key.s; // If it got to the null-terminator, must be empty or alphanumeric.
-
-					CStringUTF8FromTChar buf(field.key.s);
-					LPCSTR key = buf.GetString();
-
-					if (use_dot)
-					{
-						// Since this string is purely composed of alphanumeric characters and/or underscore,
-						// it doesn't need any quote marks (imitating expression syntax) or escaped characters.
-						cp = aNameBuf.GetBufferSetLength(aNameBuf_marker + buf.GetLength() + 1) + aNameBuf_marker;
-						*cp++ = '.';
-						strcpy(cp, key);
-						// aNameBuf is released below.
-					}
-					else
-					{
-						// " must be replaced with "" as in expressions to remove ambiguity.
-						char c;
-						int extra = 4; // 4 for [""].  Also count double-quote marks:
-						for ( ; *key; ++key) extra += *key=='"';
-						cp = aNameBuf.GetBufferSetLength(aNameBuf_marker + buf.GetLength() + extra) + aNameBuf_marker;
-						*cp++ = '[';
-						*cp++ = '"';
-						for (key = buf.GetString(); c = *key; ++key)
-						{
-							*cp++ = c;
-							if (c == '"')
-								*cp++ = '"'; // i.e. replace " with "".  This currently doesn't match up with expression syntax, but is left this way for simplicity.
-						}
-						strcpy(cp, "\"]");
-						// aNameBuf is released below.
-					}
-				}
-				else // INT_PTR or IObject*
-				{
-					INT_PTR key = field.key.i; // Also copies field.key.p (IObject*) via union.
-					cp = aNameBuf.GetBufferSetLength(aNameBuf_marker + MAX_INTEGER_LENGTH + 10) + aNameBuf_marker; // +10 for "[Object()]"
-					sprintf(cp, (i >= obj.mKeyOffsetObject) ? "[Object(%Ii)]" : key<0 ? "[%Ii]" : ".%Ii", field.key.i);
-				}
-				aNameBuf.ReleaseBuffer();
-				aName = aNameBuf.GetString() + aNameBuf_marker;
-				if (*aName == '.') // omit '.' but not []
-					++aName;
-
-				if (err = WritePropertyXml(field, aName, aNameBuf, aPageSize, aDepthRemaining, aMaxEncodedSize))
-					return err;
-			}
+			// So 20..39 becomes 19..38 when there's a base object:
+			else --i; 
+			--j;
 		}
-		else if (comobjptr)
+		if (j > (int)mFieldCount)
+			j = (int)mFieldCount;
+		// For each field in the requested page...
+		for ( ; i < j; ++i)
 		{
-			static LPCSTR sComObjNames[] = { "__Value", "__VarType" };
-			LPCSTR name = aNameBuf.GetString();
-			size_t value_len;
-			TCHAR number_buf[MAX_NUMBER_SIZE];
-			cp = (char *)number_buf;
-			for ( ; i < 2 && i < j; ++i)
-			{
-				if (i == 0)
-					_ui64toa(comobjptr->mVal64, cp, 10);
-				else
-					_ultoa(comobjptr->mVarType, cp, 10);
-				value_len = strlen(cp);
-				mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e.%e\" type=\"integer\" facet=\"\" children=\"0\" encoding=\"base64\" size=\"%p\">"
-					, sComObjNames[i], name, sComObjNames[i], value_len);
-				mResponseBuf.WriteEncodeBase64(cp, value_len);
-				mResponseBuf.Write("</property>");
-			}
+			Object::FieldType &field = mFields[i];
+			
+			ExprTokenType value;
+			field.ToToken(value);
+
+			if (i >= mKeyOffsetString) // String
+				aDebugger->WriteProperty(CStringUTF8FromTChar(field.key.s), value);
+			else if (i >= mKeyOffsetObject)
+				aDebugger->WriteProperty(field.key.p, value);
+			else
+				aDebugger->WriteProperty(Exp32or64(_itoa,_i64toa)(field.key.i, buf, 10), value);
 		}
 	}
 
-	mResponseBuf.Write("</property>");
-
-	aNameBuf.Truncate(aNameBuf_marker);
-	return DEBUGGER_E_OK;
+	aDebugger->EndProperty(cookie);
 }
 
 int Debugger::WritePropertyXml(Object::FieldType &aField, const char *aName, CStringA &aNameBuf, int aPageSize, int aDepthRemaining, int aMaxEncodedSize)
+{
+	ExprTokenType value;
+	aField.ToToken(value);
+	return WritePropertyXml(value, aName, aNameBuf, aPageSize, aDepthRemaining, aMaxEncodedSize);
+}
+
+int Debugger::WritePropertyXml(ExprTokenType &aValue, const char *aName, CStringA &aNameBuf, int aPageSize, int aDepthRemaining, int aMaxEncodedSize)
 // This function has an equivalent WritePropertyData() for property_value, so maintain the two together.
 {
 	LPTSTR value;
 	char *type;
 	TCHAR number_buf[MAX_NUMBER_SIZE];
 
-	switch (aField.symbol)
+	switch (aValue.symbol)
 	{
+	case SYM_VAR:
+		return WritePropertyXml(*aValue.var, aMaxEncodedSize);
+
 	case SYM_STRING:
-		value = aField.marker;
+		value = aValue.marker;
 		type = "string";
 		break;
 
@@ -1166,14 +1095,14 @@ int Debugger::WritePropertyXml(Object::FieldType &aField, const char *aName, CSt
 	case SYM_FLOAT:
 		// The following tries to use the same methods to convert the number to a string as
 		// the script would use when converting a variable's cached binary number to a string:
-		if (aField.symbol == SYM_INTEGER)
+		if (aValue.symbol == SYM_INTEGER)
 		{
-			ITOA64(aField.n_int64, number_buf);
+			ITOA64(aValue.value_int64, number_buf);
 			type = "integer";
 		}
 		else
 		{
-			sntprintf(number_buf, _countof(number_buf), FORMAT_FLOAT, aField.n_double);
+			sntprintf(number_buf, _countof(number_buf), FORMAT_FLOAT, aValue.value_double);
 			type = "float";
 		}
 		value = number_buf;
@@ -1181,10 +1110,12 @@ int Debugger::WritePropertyXml(Object::FieldType &aField, const char *aName, CSt
 
 	case SYM_OBJECT:
 		// Recursively dump object.
-		return WritePropertyXml(aField.object, aName, aNameBuf, 0, aPageSize, aDepthRemaining - 1, aMaxEncodedSize);
+		return WritePropertyXml(aValue.object, aName, aNameBuf, 0, aPageSize, aDepthRemaining - 1, aMaxEncodedSize);
 
 	default:
 		ASSERT(FALSE);
+		type = "undefined";	// For maintainability.
+		value = _T("");		//
 	}
 	// If we fell through, value and type have been set appropriately above.
 	mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" facet=\"\" children=\"0\" encoding=\"base64\" size=\"", aName, aNameBuf.GetString(), type);
@@ -1192,6 +1123,37 @@ int Debugger::WritePropertyXml(Object::FieldType &aField, const char *aName, CSt
 	if (err = WritePropertyData(value, (int)_tcslen(value), aMaxEncodedSize))
 		return err;
 	return mResponseBuf.Write("</property>");
+}
+
+void Debugger::AppendKeyName(CStringA &aNameBuf, size_t aParentNameLength, const char *aName)
+{
+	const char *ccp;
+	for (ccp = aName; cisalnum(*ccp) || *ccp == '_'; ++ccp);
+	if (!*ccp && ccp != aName) // If it got to the null-terminator, must be empty or alphanumeric.
+	{
+		// Since this string is purely composed of alphanumeric characters and/or underscore,
+		// it doesn't need any quote marks (imitating expression syntax) or escaped characters.
+		aNameBuf.AppendFormat(".%s", aName);
+	}
+	else
+	{
+		// " must be replaced with "" as in expressions to remove ambiguity.
+		char c;
+		int extra = 4; // 4 for [""].  Also count double-quote marks:
+		for (ccp = aName; *ccp; ++ccp) extra += *ccp=='"';
+		char *cp = aNameBuf.GetBufferSetLength(aParentNameLength + strlen(aName) + extra) + aParentNameLength;
+		*cp++ = '[';
+		*cp++ = '"';
+		for (ccp = aName; c = *ccp; ++ccp)
+		{
+			*cp++ = c;
+			if (c == '"')
+				*cp++ = '"'; // i.e. replace " with ""
+		}
+		*cp++ = '"';
+		*cp++ = ']';
+		aNameBuf.ReleaseBuffer();
+	}
 }
 
 int Debugger::WritePropertyData(LPCTSTR aData, int aDataSize, int aMaxEncodedSize)
@@ -2577,6 +2539,96 @@ DbgStack::Entry *DbgStack::Push()
 		mTop->line = g_script.mCurrLine;
 	}
 	return ++mTop;
+}
+
+
+void Debugger::PropertyWriter::WriteProperty(LPCSTR aName, ExprTokenType &aValue)
+{
+	mDbg.AppendKeyName(mNameBuf, mNameLength, aName); // See BeginProperty() for comments about this line.
+	_WriteProperty(aValue);
+}
+
+
+void Debugger::PropertyWriter::WriteProperty(INT_PTR aKey, ExprTokenType &aValue)
+{
+	mNameBuf.AppendFormat("[%Ii]", aKey);
+	_WriteProperty(aValue);
+}
+
+
+void Debugger::PropertyWriter::WriteProperty(IObject *aKey, ExprTokenType &aValue)
+{
+	mNameBuf.AppendFormat("[Object(%Ii)]", aKey);
+	_WriteProperty(aValue);
+}
+
+
+void Debugger::PropertyWriter::_WriteProperty(ExprTokenType &aValue)
+{
+	if (mError)
+		return;
+	// Find the property's "relative" name at the end of the buffer:
+	LPCSTR name = mNameBuf.GetString() + mNameLength;
+	if (*name == '.')
+		name++;
+	// Write the property (and if it contains an object, any child properties):
+	mError = mDbg.WritePropertyXml(aValue, name, mNameBuf, mPageSize, mMaxDepth - mDepth, mMaxEncodedSize);
+	// Truncate back to the parent property name:
+	mNameBuf.Truncate(mNameLength);
+}
+
+
+void Debugger::PropertyWriter::BeginProperty(LPCSTR aName, LPCSTR aType, int aNumChildren, DebugCookie &aCookie)
+{
+	if (mError)
+		return;
+
+	mDepth++;
+
+	if (mDepth == 1) // Write <property> for the object itself.
+	{
+		LPCSTR classname = typeid(*mObject).name();
+		if (!strncmp(classname, "class ", 6))
+			classname += 6;
+
+		mError = mDbg.mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" classname=\"%s\" address=\"%p\" size=\"0\" page=\"%i\" pagesize=\"%i\" children=\"%i\" numchildren=\"%i\">"
+					, mName, mNameBuf.GetString(), aType, classname, mObject, mPage, mPageSize, aNumChildren > 0, aNumChildren);
+		return;
+	}
+
+	// aName is the raw name of this property.  Before writing it into the response,
+	// convert it to the required expression-like form.  Do this conversion within
+	// mNameBuf so it can be used for the fullname attribute:
+	mDbg.AppendKeyName(mNameBuf, mNameLength, aName);
+
+	// Find the property's "relative" name at the end of the buffer:
+	LPCSTR name = mNameBuf.GetString() + mNameLength;
+	if (*name == '.')
+		name++;
+	
+	// Save length of outer property name and update mNameLength.
+	aCookie = (DebugCookie)mNameLength;
+	mNameLength = mNameBuf.GetLength();
+
+	mError = mDbg.mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" size=\"0\" page=\"0\" pagesize=\"%i\" children=\"%i\" numchildren=\"%i\">"
+				, name, mNameBuf.GetString(), aType, mPageSize, aNumChildren > 0, aNumChildren);
+}
+
+
+void Debugger::PropertyWriter::EndProperty(DebugCookie aCookie)
+{
+	if (mError)
+		return;
+
+	mDepth--;
+
+	if (mDepth > 0) // If we just ended a child property...
+	{
+		mNameLength = (size_t)aCookie; // Restore to the value it had before BeginProperty().
+		mNameBuf.Truncate(mNameLength);
+	}
+	
+	mError = mDbg.mResponseBuf.Write("</property>");
 }
 
 

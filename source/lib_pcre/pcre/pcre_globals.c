@@ -6,7 +6,7 @@
 and semantics are as close as possible to those of the Perl 5 language.
 
                        Written by Philip Hazel
-           Copyright (c) 1997-2008 University of Cambridge
+           Copyright (c) 1997-2012 University of Cambridge
 
 -----------------------------------------------------------------------------
 Redistribution and use in source and binary forms, with or without
@@ -67,20 +67,19 @@ static void LocalPcreFree(void* aPtr)
   {
   free(aPtr);
   }
-PCRE_EXP_DATA_DEFN void *(*pcre_malloc)(size_t) = LocalPcreMalloc;
-PCRE_EXP_DATA_DEFN void  (*pcre_free)(void *) = LocalPcreFree;
-PCRE_EXP_DATA_DEFN void *(*pcre_stack_malloc)(size_t) = LocalPcreMalloc;
-PCRE_EXP_DATA_DEFN void  (*pcre_stack_free)(void *) = LocalPcreFree;
-#elif !defined VPCOMPAT
-PCRE_EXP_DATA_DEFN void *(*pcre_malloc)(size_t) = malloc;
-PCRE_EXP_DATA_DEFN void  (*pcre_free)(void *) = free;
-PCRE_EXP_DATA_DEFN void *(*pcre_stack_malloc)(size_t) = malloc;
-PCRE_EXP_DATA_DEFN void  (*pcre_stack_free)(void *) = free;
-#endif
+PCRE_EXP_DATA_DEFN void *(*PUBL(malloc))(size_t) = LocalPcreMalloc;
+PCRE_EXP_DATA_DEFN void  (*PUBL(free))(void *) = LocalPcreFree;
+PCRE_EXP_DATA_DEFN void *(*PUBL(stack_malloc))(size_t) = LocalPcreMalloc;
+PCRE_EXP_DATA_DEFN void  (*PUBL(stack_free))(void *) = LocalPcreFree;
+PCRE_EXP_DATA_DEFN int   (*PUBL(callout))(PUBL(callout_block) *) = NULL;
 
-PCRE_EXP_DATA_DEFN int   (*pcre_callout)(pcre_callout_block *) = NULL;
-#ifdef SUPPORT_CALLOUT  /* AutoHotkey: Omit the callout feature from the code until it's needed. */
-PCRE_EXP_DECL void *(*pcre_resolve_user_callout)(PCRE_STR, int) = NULL;
+#elif !defined VPCOMPAT
+PCRE_EXP_DATA_DEFN void *(*PUBL(malloc))(size_t) = malloc;
+PCRE_EXP_DATA_DEFN void  (*PUBL(free))(void *) = free;
+PCRE_EXP_DATA_DEFN void *(*PUBL(stack_malloc))(size_t) = malloc;
+PCRE_EXP_DATA_DEFN void  (*PUBL(stack_free))(void *) = free;
+PCRE_EXP_DATA_DEFN int   (*PUBL(callout))(PUBL(callout_block) *) = NULL;
+
 #endif
 
 /* End of pcre_globals.c */

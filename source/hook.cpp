@@ -1643,7 +1643,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// because the active/existing windows checked by the criteria might change before the user actually
 			// releases the key, but there doesn't seem any way around that.
 			Hotkey::CriterionFiringIsCertain(this_key.hotkey_to_fire_upon_release // firing_is_certain==false under these conditions, so no need to check it.
-				, true  // Always a key-up since it's will fire upon release.
+				, true  // Always a key-up since it will fire upon release.
 				, 0 // Not applicable here, only affects aSingleChar and return value
 				, this_key.no_suppress // Unused and won't be altered because above is "true".
 				, fire_with_no_suppress, NULL); // fire_with_no_suppress is the value we really need to get back from it.
@@ -1672,7 +1672,36 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	if (hotkey_id_temp < Hotkey::sHotkeyCount // i.e. don't call the below for Alt-tab hotkeys and similar.
 		&& !firing_is_certain  // i.e. CriterionFiringIsCertain() wasn't already called earlier.
 		&& !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type)))
-		return AllowKeyToGoToSystem;
+	{
+		// v1.1.08: Although the hotkey corresponding to this event is disabled, it may need to
+		// be suppressed if it has a counterpart (key-down or key-up) hotkey which is enabled.
+		// This can be broken down into two cases:
+		//  1) This is a key-up event and the key-down event was already suppressed.
+		//     Prior to v1.1.08, the key-up was passed through; this caused problems in a
+		//     few specific cases, such as XButton1 and XButton2 (which act when released).
+		//  2) This is a key-down event, but there is also a key-up hotkey which is enabled.
+		//     In that case, the documentation indicates the key-down will be suppressed.
+		//     Prior to v1.1.08, neither event was suppressed.
+		if (aKeyUp)
+			return this_key.hotkey_down_was_suppressed ? SuppressThisKey : AllowKeyToGoToSystem;
+		if (this_key.hotkey_to_fire_upon_release == HOTKEY_ID_INVALID)
+			return AllowKeyToGoToSystem;
+		// Otherwise, this is a key-down event with a corresponding key-up hotkey.
+		fire_with_no_suppress = false; // Reset it for the check below.
+		// This check should be identical to the section above dealing with hotkey_to_fire_upon_release:
+		Hotkey::CriterionFiringIsCertain(this_key.hotkey_to_fire_upon_release // firing_is_certain==false under these conditions, so no need to check it.
+			, true  // Always a key-up since it will fire upon release.
+			, 0 // Not applicable here, only affects aSingleChar and return value
+			, this_key.no_suppress // Unused and won't be altered because above is "true".
+			, fire_with_no_suppress, NULL); // fire_with_no_suppress is the value we really need to get back from it.
+		if (fire_with_no_suppress)
+			return AllowKeyToGoToSystem;
+		// Both this down event and the corresponding up event should be suppressed, so
+		// unset the flag which was set by the first call to CriterionFiringIsCertain():
+		this_key.no_suppress &= ~NO_SUPPRESS_NEXT_UP_EVENT;
+		this_key.hotkey_down_was_suppressed = true;
+		return SuppressThisKey;
+	}
 	hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK; // Update in case CriterionFiringIsCertain() changed the naked/raw ID.
 
 	// Now above has ensured that everything is in place for an action to be performed.
@@ -3735,10 +3764,13 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 				kvk[VK_RMENU].used_as_suffix = true;
 				ksc[SC_LALT].used_as_suffix = true;
 				ksc[SC_RALT].used_as_suffix = true;
-				kvk[VK_LMENU].used_as_key_up = hk.mKeyUp;
-				kvk[VK_RMENU].used_as_key_up = hk.mKeyUp;
-				ksc[SC_LALT].used_as_key_up = hk.mKeyUp;
-				ksc[SC_RALT].used_as_key_up = hk.mKeyUp;
+				if (hk.mKeyUp) // Fix for v1.1.07.03: Set only if true in case there was already an "up" hotkey.
+				{
+					kvk[VK_LMENU].used_as_key_up = true;
+					kvk[VK_RMENU].used_as_key_up = true;
+					ksc[SC_LALT].used_as_key_up = true;
+					ksc[SC_RALT].used_as_key_up = true;
+				}
 				break;
 			case VK_SHIFT:
 				// The neutral key itself is also set to be a suffix further below.
@@ -3746,20 +3778,26 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 				kvk[VK_RSHIFT].used_as_suffix = true;
 				ksc[SC_LSHIFT].used_as_suffix = true;
 				ksc[SC_RSHIFT].used_as_suffix = true;
-				kvk[VK_LSHIFT].used_as_key_up = hk.mKeyUp;
-				kvk[VK_RSHIFT].used_as_key_up = hk.mKeyUp;
-				ksc[SC_LSHIFT].used_as_key_up = hk.mKeyUp;
-				ksc[SC_RSHIFT].used_as_key_up = hk.mKeyUp;
+				if (hk.mKeyUp) // Fix for v1.1.07.03: Set only if true in case there was already an "up" hotkey.
+				{
+					kvk[VK_LSHIFT].used_as_key_up = true;
+					kvk[VK_RSHIFT].used_as_key_up = true;
+					ksc[SC_LSHIFT].used_as_key_up = true;
+					ksc[SC_RSHIFT].used_as_key_up = true;
+				}
 				break;
 			case VK_CONTROL:
 				kvk[VK_LCONTROL].used_as_suffix = true;
 				kvk[VK_RCONTROL].used_as_suffix = true;
 				ksc[SC_LCONTROL].used_as_suffix = true;
 				ksc[SC_RCONTROL].used_as_suffix = true;
-				kvk[VK_LCONTROL].used_as_key_up = hk.mKeyUp;
-				kvk[VK_RCONTROL].used_as_key_up = hk.mKeyUp;
-				ksc[SC_LCONTROL].used_as_key_up = hk.mKeyUp;
-				ksc[SC_RCONTROL].used_as_key_up = hk.mKeyUp;
+				if (hk.mKeyUp) // Fix for v1.1.07.03: Set only if true in case there was already an "up" hotkey.
+				{
+					kvk[VK_LCONTROL].used_as_key_up = true;
+					kvk[VK_RCONTROL].used_as_key_up = true;
+					ksc[SC_LCONTROL].used_as_key_up = true;
+					ksc[SC_RCONTROL].used_as_key_up = true;
+				}
 				break;
 			// Later might want to add cases for VK_LCONTROL and such, but for right now,
 			// these keys should never come up since they're done by scan code?

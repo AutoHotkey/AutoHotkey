@@ -13,55 +13,118 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
+    <Filter Include="Source Files\16-bit">
+      <UniqueIdentifier>{de846519-68f9-410f-8918-15084d6b0e00}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\8-bit">
+      <UniqueIdentifier>{45529d78-f22e-471e-8d00-37fc44c21bc6}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="pcre\pcre_chartables.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_chartables.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_compile.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_xclass.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_config.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_compile.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_exec.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_config.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_fullinfo.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_exec.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_get.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_fullinfo.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_globals.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_get.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_newline.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_globals.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_ord2utf8.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_jit_compile.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_refcount.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_newline.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_study.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_ord2utf16.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_tables.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_refcount.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_try_flipped.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_study.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
-    <ClCompile Include="pcre\pcre_version.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="pcre\pcre16_tables.c">
+      <Filter>Source Files\16-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre16_ucd.c">
+      <Filter>Source Files\16-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre16_valid_utf16.c">
+      <Filter>Source Files\16-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre16_version.c">
+      <Filter>Source Files\16-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre16_string_utils.c">
+      <Filter>Source Files\16-bit</Filter>
     </ClCompile>
     <ClCompile Include="pcre\pcre_xclass.c">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_chartables.c">
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_compile.c">
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_config.c">
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_exec.c">
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_fullinfo.c">
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_get.c">
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_globals.c">
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_jit_compile.c">
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_newline.c">
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_ord2utf8.c">
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_refcount.c">
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_string_utils.c">
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_study.c">
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_tables.c">
+      <Filter>Source Files\8-bit</Filter>
     </ClCompile>
     <ClCompile Include="pcre\pcre_ucd.c">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\8-bit</Filter>
+    </ClCompile>
+    <ClCompile Include="pcre\pcre_version.c">
+      <Filter>Source Files\8-bit</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

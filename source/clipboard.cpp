@@ -96,7 +96,7 @@ size_t Clipboard::Get(LPTSTR aBuf)
 			Close();
 			if (aBuf)
 				*aBuf = '\0';
-			return 0;
+			return CLIPBOARD_FAILURE; // Return this because otherwise, Contents() returns mClipMemNowLocked, which is NULL.
 		}
 		// Although GlobalSize(mClipMemNow) can yield zero in some cases -- in which case GlobalLock() should
 		// not be attempted -- it probably can't yield zero for CF_HDROP and CF_TEXT because such a thing has

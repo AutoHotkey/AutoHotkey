@@ -33,7 +33,7 @@ DWORD g_MainThreadID = GetCurrentThreadId();
 DWORD g_HookThreadID; // Not initialized by design because 0 itself might be a valid thread ID.
 CRITICAL_SECTION g_CriticalRegExCache;
 
-UINT g_DefaultScriptCodepage = UorA(CP_UTF8, CP_ACP);
+UINT g_DefaultScriptCodepage = CP_ACP;
 
 bool g_DestroyWindowCalled = false;
 HWND g_hWnd = NULL;
@@ -442,6 +442,7 @@ Action g_act[] =
 	, {_T("RegRead"), 1, 3, true, NULL} // output var, RegKey, ValueName
 	, {_T("RegWrite"), 0, 4, false, NULL} // ValueType, RegKey, ValueName, Value (set to blank if omitted?)
 	, {_T("RegDelete"), 0, 2, false, NULL} // RegKey, ValueName
+	, {_T("SetRegView"), 1, 1, false, NULL}
 
 	, {_T("OutputDebug"), 1, 1, false, NULL}
 

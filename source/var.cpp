@@ -130,6 +130,10 @@ ResultType Var::AssignClipboardAll()
 	//    (above avoids using four times the amount of memory that would otherwise be required)
 	//    UPDATE: Only the first text format is included now, since MSDN says there is no
 	//    advantage/reason to having multiple non-synthesized text formats on the clipboard.
+	//    UPDATE: MS Word 2010 (and perhaps other versions) stores CF_TEXT before CF_UNICODETEXT,
+	//    even when CF_TEXT is incomplete/inaccurate. Since there's no way to know whether it was
+	//    synthesized, it is now stored unconditionally. CF_TEXT and CF_OEMTEXT are discarded to
+	//    save memory and because they should always be synthesized correctly.
 	// CF_DIB: Always omit this if CF_DIBV5 is available (which must be present on Win2k+, at least
 	// as a synthesized format, whenever CF_DIB is present?) This policy seems likely to avoid
 	// the issue where CF_DIB occurs first yet CF_DIBV5 that comes later is *not* synthesized,
@@ -142,12 +146,11 @@ ResultType Var::AssignClipboardAll()
 	// under the theory that an app would never store both formats on the clipboard since MSDN
 	// says: "If the system provides an automatic type conversion for a particular clipboard format,
 	// there is no advantage to placing the conversion format(s) on the clipboard."
-	bool format_is_text;
 	HGLOBAL hglobal;
 	SIZE_T size;
 	UINT format;
 	VarSizeType space_needed;
-	UINT dib_format_to_omit = 0, /*meta_format_to_omit = 0,*/ text_format_to_include = 0;
+	UINT dib_format_to_omit = 0;
 	// Start space_needed off at 4 to allow room for guaranteed final termination of the variable's contents.
 	// The termination must be of the same size as format because a single-byte terminator would
 	// be read in as a format of 0x00?????? where ?????? is an access violation beyond the buffer.
@@ -163,8 +166,7 @@ ResultType Var::AssignClipboardAll()
 		}
 		// No point in calling GetLastError() since it would never be executed because the loop's
 		// condition breaks on zero return value.
-		format_is_text = (format == CF_NATIVETEXT || format == CF_OEMTEXT || format == CF_OTHERTEXT);
-		if ((format_is_text && text_format_to_include) // The first text format has already been found and included, so exclude all other text formats.
+		if (format == CF_TEXT || format == CF_OEMTEXT // This format is excluded in favour of CF_UNICODETEXT.
 			|| format == dib_format_to_omit) // ... or this format was marked excluded by a prior iteration.
 			continue;
 		// GetClipboardData() causes Task Manager to report a (sometimes large) increase in
@@ -180,8 +182,6 @@ ResultType Var::AssignClipboardAll()
 		if (hglobal = g_clip.GetClipboardDataTimeout(format))
 		{
 			space_needed += (VarSizeType)(sizeof(format) + sizeof(size) + GlobalSize(hglobal)); // The total amount of storage space required for this item.
-			if (format_is_text) // If this is true, then text_format_to_include must be 0 since above didn't "continue".
-				text_format_to_include = format;
 			if (!dib_format_to_omit)
 			{
 				if (format == CF_DIB)
@@ -235,7 +235,7 @@ ResultType Var::AssignClipboardAll()
 		}
 		// No point in calling GetLastError() since it would never be executed because the loop's
 		// condition breaks on zero return value.
-		if ((format == CF_NATIVETEXT || format == CF_OEMTEXT || format == CF_OTHERTEXT) && format != text_format_to_include
+		if (format == CF_TEXT || format == CF_OEMTEXT
 			|| format == dib_format_to_omit /*|| format == meta_format_to_omit*/)
 			continue;
 		// Although the GlobalSize() documentation implies that a valid HGLOBAL should not be zero in

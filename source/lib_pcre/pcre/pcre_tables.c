@@ -6,7 +6,7 @@
 and semantics are as close as possible to those of the Perl 5 language.
 
                        Written by Philip Hazel
-           Copyright (c) 1997-2009 University of Cambridge
+           Copyright (c) 1997-2012 University of Cambridge
 
 -----------------------------------------------------------------------------
 Redistribution and use in source and binary forms, with or without
@@ -37,6 +37,7 @@ POSSIBILITY OF SUCH DAMAGE.
 -----------------------------------------------------------------------------
 */
 
+#ifndef PCRE_INCLUDED
 
 /* This module contains some fixed tables that are used by more than one of the
 PCRE code modules. The tables are also #included by the pcretest program, which
@@ -50,11 +51,12 @@ clashes with the library. */
 
 #include "pcre_internal.h"
 
+#endif /* PCRE_INCLUDED */
 
 /* Table of sizes for the fixed-length opcodes. It's defined in a macro so that
 the definition is next to the definition of the opcodes in pcre_internal.h. */
 
-const uschar _pcre_OP_lengths[] = { OP_LENGTHS };
+const pcre_uint8 PRIV(OP_lengths)[] = { OP_LENGTHS };
 
 
 
@@ -65,33 +67,38 @@ const uschar _pcre_OP_lengths[] = { OP_LENGTHS };
 /* These are the breakpoints for different numbers of bytes in a UTF-8
 character. */
 
-#ifdef SUPPORT_UTF8
+#if (defined SUPPORT_UTF && defined COMPILE_PCRE8) \
+  || (defined PCRE_INCLUDED && defined SUPPORT_PCRE16)
 
-const int _pcre_utf8_table1[] =
+/* These tables are also required by pcretest in 16 bit mode. */
+
+const int PRIV(utf8_table1)[] =
   { 0x7f, 0x7ff, 0xffff, 0x1fffff, 0x3ffffff, 0x7fffffff};
 
-const int _pcre_utf8_table1_size = sizeof(_pcre_utf8_table1)/sizeof(int);
+const int PRIV(utf8_table1_size) = sizeof(PRIV(utf8_table1)) / sizeof(int);
 
 /* These are the indicator bits and the mask for the data bits to set in the
 first byte of a character, indexed by the number of additional bytes. */
 
-const int _pcre_utf8_table2[] = { 0,    0xc0, 0xe0, 0xf0, 0xf8, 0xfc};
-const int _pcre_utf8_table3[] = { 0xff, 0x1f, 0x0f, 0x07, 0x03, 0x01};
+const int PRIV(utf8_table2)[] = { 0,    0xc0, 0xe0, 0xf0, 0xf8, 0xfc};
+const int PRIV(utf8_table3)[] = { 0xff, 0x1f, 0x0f, 0x07, 0x03, 0x01};
 
 /* Table of the number of extra bytes, indexed by the first byte masked with
 0x3f. The highest number for a valid UTF-8 first byte is in fact 0x3d. */
 
-const uschar _pcre_utf8_table4[] = {
+const pcre_uint8 PRIV(utf8_table4)[] = {
   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
   2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
   3,3,3,3,3,3,3,3,4,4,4,4,5,5,5,5 };
 
-#ifdef SUPPORT_UCP
+#endif /* (SUPPORT_UTF && COMPILE_PCRE8) || (PCRE_INCLUDED && SUPPORT_PCRE16)*/
+
+#ifdef SUPPORT_UTF
 
 /* Table to translate from particular type value to the general value. */
 
-const int _pcre_ucp_gentype[] = {
+const int PRIV(ucp_gentype)[] = {
   ucp_C, ucp_C, ucp_C, ucp_C, ucp_C,  /* Cc, Cf, Cn, Co, Cs */
   ucp_L, ucp_L, ucp_L, ucp_L, ucp_L,  /* Ll, Lu, Lm, Lo, Lt */
   ucp_M, ucp_M, ucp_M,                /* Mc, Me, Mn */
@@ -101,6 +108,21 @@ const int _pcre_ucp_gentype[] = {
   ucp_S, ucp_S, ucp_S, ucp_S,         /* Sc, Sk, Sm, So */
   ucp_Z, ucp_Z, ucp_Z                 /* Zl, Zp, Zs */
 };
+
+#ifdef SUPPORT_JIT
+/* This table reverses PRIV(ucp_gentype). We can save the cost
+of a memory load. */
+
+const int PRIV(ucp_typerange)[] = {
+  ucp_Cc, ucp_Cs,
+  ucp_Ll, ucp_Lu,
+  ucp_Mc, ucp_Mn,
+  ucp_Nd, ucp_No,
+  ucp_Pc, ucp_Ps,
+  ucp_Sc, ucp_So,
+  ucp_Zl, ucp_Zs,
+};
+#endif /* SUPPORT_JIT */
 
 /* The pcre_utt[] table below translates Unicode property names into type and
 code values. It is searched by binary chop, so must be in collating sequence of
@@ -119,146 +141,146 @@ version. Like all other character and string literals that are compared against
 the regular expression pattern, we must use STR_ macros instead of literal
 strings to make sure that UTF-8 support works on EBCDIC platforms. */
 
-#define STRING_Any0 STR_A STR_n STR_y _T("\0")
-#define STRING_Arabic0 STR_A STR_r STR_a STR_b STR_i STR_c _T("\0")
-#define STRING_Armenian0 STR_A STR_r STR_m STR_e STR_n STR_i STR_a STR_n _T("\0")
-#define STRING_Avestan0 STR_A STR_v STR_e STR_s STR_t STR_a STR_n _T("\0")
-#define STRING_Balinese0 STR_B STR_a STR_l STR_i STR_n STR_e STR_s STR_e _T("\0")
-#define STRING_Bamum0 STR_B STR_a STR_m STR_u STR_m _T("\0")
-#define STRING_Batak0 STR_B STR_a STR_t STR_a STR_k _T("\0")
-#define STRING_Bengali0 STR_B STR_e STR_n STR_g STR_a STR_l STR_i _T("\0")
-#define STRING_Bopomofo0 STR_B STR_o STR_p STR_o STR_m STR_o STR_f STR_o _T("\0")
-#define STRING_Brahmi0 STR_B STR_r STR_a STR_h STR_m STR_i _T("\0")
-#define STRING_Braille0 STR_B STR_r STR_a STR_i STR_l STR_l STR_e _T("\0")
-#define STRING_Buginese0 STR_B STR_u STR_g STR_i STR_n STR_e STR_s STR_e _T("\0")
-#define STRING_Buhid0 STR_B STR_u STR_h STR_i STR_d _T("\0")
-#define STRING_C0 STR_C _T("\0")
-#define STRING_Canadian_Aboriginal0 STR_C STR_a STR_n STR_a STR_d STR_i STR_a STR_n STR_UNDERSCORE STR_A STR_b STR_o STR_r STR_i STR_g STR_i STR_n STR_a STR_l _T("\0")
-#define STRING_Carian0 STR_C STR_a STR_r STR_i STR_a STR_n _T("\0")
-#define STRING_Cc0 STR_C STR_c _T("\0")
-#define STRING_Cf0 STR_C STR_f _T("\0")
-#define STRING_Cham0 STR_C STR_h STR_a STR_m _T("\0")
-#define STRING_Cherokee0 STR_C STR_h STR_e STR_r STR_o STR_k STR_e STR_e _T("\0")
-#define STRING_Cn0 STR_C STR_n _T("\0")
-#define STRING_Co0 STR_C STR_o _T("\0")
-#define STRING_Common0 STR_C STR_o STR_m STR_m STR_o STR_n _T("\0")
-#define STRING_Coptic0 STR_C STR_o STR_p STR_t STR_i STR_c _T("\0")
-#define STRING_Cs0 STR_C STR_s _T("\0")
-#define STRING_Cuneiform0 STR_C STR_u STR_n STR_e STR_i STR_f STR_o STR_r STR_m _T("\0")
-#define STRING_Cypriot0 STR_C STR_y STR_p STR_r STR_i STR_o STR_t _T("\0")
-#define STRING_Cyrillic0 STR_C STR_y STR_r STR_i STR_l STR_l STR_i STR_c _T("\0")
-#define STRING_Deseret0 STR_D STR_e STR_s STR_e STR_r STR_e STR_t _T("\0")
-#define STRING_Devanagari0 STR_D STR_e STR_v STR_a STR_n STR_a STR_g STR_a STR_r STR_i _T("\0")
-#define STRING_Egyptian_Hieroglyphs0 STR_E STR_g STR_y STR_p STR_t STR_i STR_a STR_n STR_UNDERSCORE STR_H STR_i STR_e STR_r STR_o STR_g STR_l STR_y STR_p STR_h STR_s _T("\0")
-#define STRING_Ethiopic0 STR_E STR_t STR_h STR_i STR_o STR_p STR_i STR_c _T("\0")
-#define STRING_Georgian0 STR_G STR_e STR_o STR_r STR_g STR_i STR_a STR_n _T("\0")
-#define STRING_Glagolitic0 STR_G STR_l STR_a STR_g STR_o STR_l STR_i STR_t STR_i STR_c _T("\0")
-#define STRING_Gothic0 STR_G STR_o STR_t STR_h STR_i STR_c _T("\0")
-#define STRING_Greek0 STR_G STR_r STR_e STR_e STR_k _T("\0")
-#define STRING_Gujarati0 STR_G STR_u STR_j STR_a STR_r STR_a STR_t STR_i _T("\0")
-#define STRING_Gurmukhi0 STR_G STR_u STR_r STR_m STR_u STR_k STR_h STR_i _T("\0")
-#define STRING_Han0 STR_H STR_a STR_n _T("\0")
-#define STRING_Hangul0 STR_H STR_a STR_n STR_g STR_u STR_l _T("\0")
-#define STRING_Hanunoo0 STR_H STR_a STR_n STR_u STR_n STR_o STR_o _T("\0")
-#define STRING_Hebrew0 STR_H STR_e STR_b STR_r STR_e STR_w _T("\0")
-#define STRING_Hiragana0 STR_H STR_i STR_r STR_a STR_g STR_a STR_n STR_a _T("\0")
-#define STRING_Imperial_Aramaic0 STR_I STR_m STR_p STR_e STR_r STR_i STR_a STR_l STR_UNDERSCORE STR_A STR_r STR_a STR_m STR_a STR_i STR_c _T("\0")
-#define STRING_Inherited0 STR_I STR_n STR_h STR_e STR_r STR_i STR_t STR_e STR_d _T("\0")
-#define STRING_Inscriptional_Pahlavi0 STR_I STR_n STR_s STR_c STR_r STR_i STR_p STR_t STR_i STR_o STR_n STR_a STR_l STR_UNDERSCORE STR_P STR_a STR_h STR_l STR_a STR_v STR_i _T("\0")
-#define STRING_Inscriptional_Parthian0 STR_I STR_n STR_s STR_c STR_r STR_i STR_p STR_t STR_i STR_o STR_n STR_a STR_l STR_UNDERSCORE STR_P STR_a STR_r STR_t STR_h STR_i STR_a STR_n _T("\0")
-#define STRING_Javanese0 STR_J STR_a STR_v STR_a STR_n STR_e STR_s STR_e _T("\0")
-#define STRING_Kaithi0 STR_K STR_a STR_i STR_t STR_h STR_i _T("\0")
-#define STRING_Kannada0 STR_K STR_a STR_n STR_n STR_a STR_d STR_a _T("\0")
-#define STRING_Katakana0 STR_K STR_a STR_t STR_a STR_k STR_a STR_n STR_a _T("\0")
-#define STRING_Kayah_Li0 STR_K STR_a STR_y STR_a STR_h STR_UNDERSCORE STR_L STR_i _T("\0")
-#define STRING_Kharoshthi0 STR_K STR_h STR_a STR_r STR_o STR_s STR_h STR_t STR_h STR_i _T("\0")
-#define STRING_Khmer0 STR_K STR_h STR_m STR_e STR_r _T("\0")
-#define STRING_L0 STR_L _T("\0")
-#define STRING_L_AMPERSAND0 STR_L STR_AMPERSAND _T("\0")
-#define STRING_Lao0 STR_L STR_a STR_o _T("\0")
-#define STRING_Latin0 STR_L STR_a STR_t STR_i STR_n _T("\0")
-#define STRING_Lepcha0 STR_L STR_e STR_p STR_c STR_h STR_a _T("\0")
-#define STRING_Limbu0 STR_L STR_i STR_m STR_b STR_u _T("\0")
-#define STRING_Linear_B0 STR_L STR_i STR_n STR_e STR_a STR_r STR_UNDERSCORE STR_B _T("\0")
-#define STRING_Lisu0 STR_L STR_i STR_s STR_u _T("\0")
-#define STRING_Ll0 STR_L STR_l _T("\0")
-#define STRING_Lm0 STR_L STR_m _T("\0")
-#define STRING_Lo0 STR_L STR_o _T("\0")
-#define STRING_Lt0 STR_L STR_t _T("\0")
-#define STRING_Lu0 STR_L STR_u _T("\0")
-#define STRING_Lycian0 STR_L STR_y STR_c STR_i STR_a STR_n _T("\0")
-#define STRING_Lydian0 STR_L STR_y STR_d STR_i STR_a STR_n _T("\0")
-#define STRING_M0 STR_M _T("\0")
-#define STRING_Malayalam0 STR_M STR_a STR_l STR_a STR_y STR_a STR_l STR_a STR_m _T("\0")
-#define STRING_Mandaic0 STR_M STR_a STR_n STR_d STR_a STR_i STR_c _T("\0")
-#define STRING_Mc0 STR_M STR_c _T("\0")
-#define STRING_Me0 STR_M STR_e _T("\0")
-#define STRING_Meetei_Mayek0 STR_M STR_e STR_e STR_t STR_e STR_i STR_UNDERSCORE STR_M STR_a STR_y STR_e STR_k _T("\0")
-#define STRING_Mn0 STR_M STR_n _T("\0")
-#define STRING_Mongolian0 STR_M STR_o STR_n STR_g STR_o STR_l STR_i STR_a STR_n _T("\0")
-#define STRING_Myanmar0 STR_M STR_y STR_a STR_n STR_m STR_a STR_r _T("\0")
-#define STRING_N0 STR_N _T("\0")
-#define STRING_Nd0 STR_N STR_d _T("\0")
-#define STRING_New_Tai_Lue0 STR_N STR_e STR_w STR_UNDERSCORE STR_T STR_a STR_i STR_UNDERSCORE STR_L STR_u STR_e _T("\0")
-#define STRING_Nko0 STR_N STR_k STR_o _T("\0")
-#define STRING_Nl0 STR_N STR_l _T("\0")
-#define STRING_No0 STR_N STR_o _T("\0")
-#define STRING_Ogham0 STR_O STR_g STR_h STR_a STR_m _T("\0")
-#define STRING_Ol_Chiki0 STR_O STR_l STR_UNDERSCORE STR_C STR_h STR_i STR_k STR_i _T("\0")
-#define STRING_Old_Italic0 STR_O STR_l STR_d STR_UNDERSCORE STR_I STR_t STR_a STR_l STR_i STR_c _T("\0")
-#define STRING_Old_Persian0 STR_O STR_l STR_d STR_UNDERSCORE STR_P STR_e STR_r STR_s STR_i STR_a STR_n _T("\0")
-#define STRING_Old_South_Arabian0 STR_O STR_l STR_d STR_UNDERSCORE STR_S STR_o STR_u STR_t STR_h STR_UNDERSCORE STR_A STR_r STR_a STR_b STR_i STR_a STR_n _T("\0")
-#define STRING_Old_Turkic0 STR_O STR_l STR_d STR_UNDERSCORE STR_T STR_u STR_r STR_k STR_i STR_c _T("\0")
-#define STRING_Oriya0 STR_O STR_r STR_i STR_y STR_a _T("\0")
-#define STRING_Osmanya0 STR_O STR_s STR_m STR_a STR_n STR_y STR_a _T("\0")
-#define STRING_P0 STR_P _T("\0")
-#define STRING_Pc0 STR_P STR_c _T("\0")
-#define STRING_Pd0 STR_P STR_d _T("\0")
-#define STRING_Pe0 STR_P STR_e _T("\0")
-#define STRING_Pf0 STR_P STR_f _T("\0")
-#define STRING_Phags_Pa0 STR_P STR_h STR_a STR_g STR_s STR_UNDERSCORE STR_P STR_a _T("\0")
-#define STRING_Phoenician0 STR_P STR_h STR_o STR_e STR_n STR_i STR_c STR_i STR_a STR_n _T("\0")
-#define STRING_Pi0 STR_P STR_i _T("\0")
-#define STRING_Po0 STR_P STR_o _T("\0")
-#define STRING_Ps0 STR_P STR_s _T("\0")
-#define STRING_Rejang0 STR_R STR_e STR_j STR_a STR_n STR_g _T("\0")
-#define STRING_Runic0 STR_R STR_u STR_n STR_i STR_c _T("\0")
-#define STRING_S0 STR_S _T("\0")
-#define STRING_Samaritan0 STR_S STR_a STR_m STR_a STR_r STR_i STR_t STR_a STR_n _T("\0")
-#define STRING_Saurashtra0 STR_S STR_a STR_u STR_r STR_a STR_s STR_h STR_t STR_r STR_a _T("\0")
-#define STRING_Sc0 STR_S STR_c _T("\0")
-#define STRING_Shavian0 STR_S STR_h STR_a STR_v STR_i STR_a STR_n _T("\0")
-#define STRING_Sinhala0 STR_S STR_i STR_n STR_h STR_a STR_l STR_a _T("\0")
-#define STRING_Sk0 STR_S STR_k _T("\0")
-#define STRING_Sm0 STR_S STR_m _T("\0")
-#define STRING_So0 STR_S STR_o _T("\0")
-#define STRING_Sundanese0 STR_S STR_u STR_n STR_d STR_a STR_n STR_e STR_s STR_e _T("\0")
-#define STRING_Syloti_Nagri0 STR_S STR_y STR_l STR_o STR_t STR_i STR_UNDERSCORE STR_N STR_a STR_g STR_r STR_i _T("\0")
-#define STRING_Syriac0 STR_S STR_y STR_r STR_i STR_a STR_c _T("\0")
-#define STRING_Tagalog0 STR_T STR_a STR_g STR_a STR_l STR_o STR_g _T("\0")
-#define STRING_Tagbanwa0 STR_T STR_a STR_g STR_b STR_a STR_n STR_w STR_a _T("\0")
-#define STRING_Tai_Le0 STR_T STR_a STR_i STR_UNDERSCORE STR_L STR_e _T("\0")
-#define STRING_Tai_Tham0 STR_T STR_a STR_i STR_UNDERSCORE STR_T STR_h STR_a STR_m _T("\0")
-#define STRING_Tai_Viet0 STR_T STR_a STR_i STR_UNDERSCORE STR_V STR_i STR_e STR_t _T("\0")
-#define STRING_Tamil0 STR_T STR_a STR_m STR_i STR_l _T("\0")
-#define STRING_Telugu0 STR_T STR_e STR_l STR_u STR_g STR_u _T("\0")
-#define STRING_Thaana0 STR_T STR_h STR_a STR_a STR_n STR_a _T("\0")
-#define STRING_Thai0 STR_T STR_h STR_a STR_i _T("\0")
-#define STRING_Tibetan0 STR_T STR_i STR_b STR_e STR_t STR_a STR_n _T("\0")
-#define STRING_Tifinagh0 STR_T STR_i STR_f STR_i STR_n STR_a STR_g STR_h _T("\0")
-#define STRING_Ugaritic0 STR_U STR_g STR_a STR_r STR_i STR_t STR_i STR_c _T("\0")
-#define STRING_Vai0 STR_V STR_a STR_i _T("\0")
-#define STRING_Xan0 STR_X STR_a STR_n _T("\0")
-#define STRING_Xps0 STR_X STR_p STR_s _T("\0")
-#define STRING_Xsp0 STR_X STR_s STR_p _T("\0")
-#define STRING_Xwd0 STR_X STR_w STR_d _T("\0")
-#define STRING_Yi0 STR_Y STR_i _T("\0")
-#define STRING_Z0 STR_Z _T("\0")
-#define STRING_Zl0 STR_Z STR_l _T("\0")
-#define STRING_Zp0 STR_Z STR_p _T("\0")
-#define STRING_Zs0 STR_Z STR_s _T("\0")
+#define STRING_Any0 STR_A STR_n STR_y "\0"
+#define STRING_Arabic0 STR_A STR_r STR_a STR_b STR_i STR_c "\0"
+#define STRING_Armenian0 STR_A STR_r STR_m STR_e STR_n STR_i STR_a STR_n "\0"
+#define STRING_Avestan0 STR_A STR_v STR_e STR_s STR_t STR_a STR_n "\0"
+#define STRING_Balinese0 STR_B STR_a STR_l STR_i STR_n STR_e STR_s STR_e "\0"
+#define STRING_Bamum0 STR_B STR_a STR_m STR_u STR_m "\0"
+#define STRING_Batak0 STR_B STR_a STR_t STR_a STR_k "\0"
+#define STRING_Bengali0 STR_B STR_e STR_n STR_g STR_a STR_l STR_i "\0"
+#define STRING_Bopomofo0 STR_B STR_o STR_p STR_o STR_m STR_o STR_f STR_o "\0"
+#define STRING_Brahmi0 STR_B STR_r STR_a STR_h STR_m STR_i "\0"
+#define STRING_Braille0 STR_B STR_r STR_a STR_i STR_l STR_l STR_e "\0"
+#define STRING_Buginese0 STR_B STR_u STR_g STR_i STR_n STR_e STR_s STR_e "\0"
+#define STRING_Buhid0 STR_B STR_u STR_h STR_i STR_d "\0"
+#define STRING_C0 STR_C "\0"
+#define STRING_Canadian_Aboriginal0 STR_C STR_a STR_n STR_a STR_d STR_i STR_a STR_n STR_UNDERSCORE STR_A STR_b STR_o STR_r STR_i STR_g STR_i STR_n STR_a STR_l "\0"
+#define STRING_Carian0 STR_C STR_a STR_r STR_i STR_a STR_n "\0"
+#define STRING_Cc0 STR_C STR_c "\0"
+#define STRING_Cf0 STR_C STR_f "\0"
+#define STRING_Cham0 STR_C STR_h STR_a STR_m "\0"
+#define STRING_Cherokee0 STR_C STR_h STR_e STR_r STR_o STR_k STR_e STR_e "\0"
+#define STRING_Cn0 STR_C STR_n "\0"
+#define STRING_Co0 STR_C STR_o "\0"
+#define STRING_Common0 STR_C STR_o STR_m STR_m STR_o STR_n "\0"
+#define STRING_Coptic0 STR_C STR_o STR_p STR_t STR_i STR_c "\0"
+#define STRING_Cs0 STR_C STR_s "\0"
+#define STRING_Cuneiform0 STR_C STR_u STR_n STR_e STR_i STR_f STR_o STR_r STR_m "\0"
+#define STRING_Cypriot0 STR_C STR_y STR_p STR_r STR_i STR_o STR_t "\0"
+#define STRING_Cyrillic0 STR_C STR_y STR_r STR_i STR_l STR_l STR_i STR_c "\0"
+#define STRING_Deseret0 STR_D STR_e STR_s STR_e STR_r STR_e STR_t "\0"
+#define STRING_Devanagari0 STR_D STR_e STR_v STR_a STR_n STR_a STR_g STR_a STR_r STR_i "\0"
+#define STRING_Egyptian_Hieroglyphs0 STR_E STR_g STR_y STR_p STR_t STR_i STR_a STR_n STR_UNDERSCORE STR_H STR_i STR_e STR_r STR_o STR_g STR_l STR_y STR_p STR_h STR_s "\0"
+#define STRING_Ethiopic0 STR_E STR_t STR_h STR_i STR_o STR_p STR_i STR_c "\0"
+#define STRING_Georgian0 STR_G STR_e STR_o STR_r STR_g STR_i STR_a STR_n "\0"
+#define STRING_Glagolitic0 STR_G STR_l STR_a STR_g STR_o STR_l STR_i STR_t STR_i STR_c "\0"
+#define STRING_Gothic0 STR_G STR_o STR_t STR_h STR_i STR_c "\0"
+#define STRING_Greek0 STR_G STR_r STR_e STR_e STR_k "\0"
+#define STRING_Gujarati0 STR_G STR_u STR_j STR_a STR_r STR_a STR_t STR_i "\0"
+#define STRING_Gurmukhi0 STR_G STR_u STR_r STR_m STR_u STR_k STR_h STR_i "\0"
+#define STRING_Han0 STR_H STR_a STR_n "\0"
+#define STRING_Hangul0 STR_H STR_a STR_n STR_g STR_u STR_l "\0"
+#define STRING_Hanunoo0 STR_H STR_a STR_n STR_u STR_n STR_o STR_o "\0"
+#define STRING_Hebrew0 STR_H STR_e STR_b STR_r STR_e STR_w "\0"
+#define STRING_Hiragana0 STR_H STR_i STR_r STR_a STR_g STR_a STR_n STR_a "\0"
+#define STRING_Imperial_Aramaic0 STR_I STR_m STR_p STR_e STR_r STR_i STR_a STR_l STR_UNDERSCORE STR_A STR_r STR_a STR_m STR_a STR_i STR_c "\0"
+#define STRING_Inherited0 STR_I STR_n STR_h STR_e STR_r STR_i STR_t STR_e STR_d "\0"
+#define STRING_Inscriptional_Pahlavi0 STR_I STR_n STR_s STR_c STR_r STR_i STR_p STR_t STR_i STR_o STR_n STR_a STR_l STR_UNDERSCORE STR_P STR_a STR_h STR_l STR_a STR_v STR_i "\0"
+#define STRING_Inscriptional_Parthian0 STR_I STR_n STR_s STR_c STR_r STR_i STR_p STR_t STR_i STR_o STR_n STR_a STR_l STR_UNDERSCORE STR_P STR_a STR_r STR_t STR_h STR_i STR_a STR_n "\0"
+#define STRING_Javanese0 STR_J STR_a STR_v STR_a STR_n STR_e STR_s STR_e "\0"
+#define STRING_Kaithi0 STR_K STR_a STR_i STR_t STR_h STR_i "\0"
+#define STRING_Kannada0 STR_K STR_a STR_n STR_n STR_a STR_d STR_a "\0"
+#define STRING_Katakana0 STR_K STR_a STR_t STR_a STR_k STR_a STR_n STR_a "\0"
+#define STRING_Kayah_Li0 STR_K STR_a STR_y STR_a STR_h STR_UNDERSCORE STR_L STR_i "\0"
+#define STRING_Kharoshthi0 STR_K STR_h STR_a STR_r STR_o STR_s STR_h STR_t STR_h STR_i "\0"
+#define STRING_Khmer0 STR_K STR_h STR_m STR_e STR_r "\0"
+#define STRING_L0 STR_L "\0"
+#define STRING_L_AMPERSAND0 STR_L STR_AMPERSAND "\0"
+#define STRING_Lao0 STR_L STR_a STR_o "\0"
+#define STRING_Latin0 STR_L STR_a STR_t STR_i STR_n "\0"
+#define STRING_Lepcha0 STR_L STR_e STR_p STR_c STR_h STR_a "\0"
+#define STRING_Limbu0 STR_L STR_i STR_m STR_b STR_u "\0"
+#define STRING_Linear_B0 STR_L STR_i STR_n STR_e STR_a STR_r STR_UNDERSCORE STR_B "\0"
+#define STRING_Lisu0 STR_L STR_i STR_s STR_u "\0"
+#define STRING_Ll0 STR_L STR_l "\0"
+#define STRING_Lm0 STR_L STR_m "\0"
+#define STRING_Lo0 STR_L STR_o "\0"
+#define STRING_Lt0 STR_L STR_t "\0"
+#define STRING_Lu0 STR_L STR_u "\0"
+#define STRING_Lycian0 STR_L STR_y STR_c STR_i STR_a STR_n "\0"
+#define STRING_Lydian0 STR_L STR_y STR_d STR_i STR_a STR_n "\0"
+#define STRING_M0 STR_M "\0"
+#define STRING_Malayalam0 STR_M STR_a STR_l STR_a STR_y STR_a STR_l STR_a STR_m "\0"
+#define STRING_Mandaic0 STR_M STR_a STR_n STR_d STR_a STR_i STR_c "\0"
+#define STRING_Mc0 STR_M STR_c "\0"
+#define STRING_Me0 STR_M STR_e "\0"
+#define STRING_Meetei_Mayek0 STR_M STR_e STR_e STR_t STR_e STR_i STR_UNDERSCORE STR_M STR_a STR_y STR_e STR_k "\0"
+#define STRING_Mn0 STR_M STR_n "\0"
+#define STRING_Mongolian0 STR_M STR_o STR_n STR_g STR_o STR_l STR_i STR_a STR_n "\0"
+#define STRING_Myanmar0 STR_M STR_y STR_a STR_n STR_m STR_a STR_r "\0"
+#define STRING_N0 STR_N "\0"
+#define STRING_Nd0 STR_N STR_d "\0"
+#define STRING_New_Tai_Lue0 STR_N STR_e STR_w STR_UNDERSCORE STR_T STR_a STR_i STR_UNDERSCORE STR_L STR_u STR_e "\0"
+#define STRING_Nko0 STR_N STR_k STR_o "\0"
+#define STRING_Nl0 STR_N STR_l "\0"
+#define STRING_No0 STR_N STR_o "\0"
+#define STRING_Ogham0 STR_O STR_g STR_h STR_a STR_m "\0"
+#define STRING_Ol_Chiki0 STR_O STR_l STR_UNDERSCORE STR_C STR_h STR_i STR_k STR_i "\0"
+#define STRING_Old_Italic0 STR_O STR_l STR_d STR_UNDERSCORE STR_I STR_t STR_a STR_l STR_i STR_c "\0"
+#define STRING_Old_Persian0 STR_O STR_l STR_d STR_UNDERSCORE STR_P STR_e STR_r STR_s STR_i STR_a STR_n "\0"
+#define STRING_Old_South_Arabian0 STR_O STR_l STR_d STR_UNDERSCORE STR_S STR_o STR_u STR_t STR_h STR_UNDERSCORE STR_A STR_r STR_a STR_b STR_i STR_a STR_n "\0"
+#define STRING_Old_Turkic0 STR_O STR_l STR_d STR_UNDERSCORE STR_T STR_u STR_r STR_k STR_i STR_c "\0"
+#define STRING_Oriya0 STR_O STR_r STR_i STR_y STR_a "\0"
+#define STRING_Osmanya0 STR_O STR_s STR_m STR_a STR_n STR_y STR_a "\0"
+#define STRING_P0 STR_P "\0"
+#define STRING_Pc0 STR_P STR_c "\0"
+#define STRING_Pd0 STR_P STR_d "\0"
+#define STRING_Pe0 STR_P STR_e "\0"
+#define STRING_Pf0 STR_P STR_f "\0"
+#define STRING_Phags_Pa0 STR_P STR_h STR_a STR_g STR_s STR_UNDERSCORE STR_P STR_a "\0"
+#define STRING_Phoenician0 STR_P STR_h STR_o STR_e STR_n STR_i STR_c STR_i STR_a STR_n "\0"
+#define STRING_Pi0 STR_P STR_i "\0"
+#define STRING_Po0 STR_P STR_o "\0"
+#define STRING_Ps0 STR_P STR_s "\0"
+#define STRING_Rejang0 STR_R STR_e STR_j STR_a STR_n STR_g "\0"
+#define STRING_Runic0 STR_R STR_u STR_n STR_i STR_c "\0"
+#define STRING_S0 STR_S "\0"
+#define STRING_Samaritan0 STR_S STR_a STR_m STR_a STR_r STR_i STR_t STR_a STR_n "\0"
+#define STRING_Saurashtra0 STR_S STR_a STR_u STR_r STR_a STR_s STR_h STR_t STR_r STR_a "\0"
+#define STRING_Sc0 STR_S STR_c "\0"
+#define STRING_Shavian0 STR_S STR_h STR_a STR_v STR_i STR_a STR_n "\0"
+#define STRING_Sinhala0 STR_S STR_i STR_n STR_h STR_a STR_l STR_a "\0"
+#define STRING_Sk0 STR_S STR_k "\0"
+#define STRING_Sm0 STR_S STR_m "\0"
+#define STRING_So0 STR_S STR_o "\0"
+#define STRING_Sundanese0 STR_S STR_u STR_n STR_d STR_a STR_n STR_e STR_s STR_e "\0"
+#define STRING_Syloti_Nagri0 STR_S STR_y STR_l STR_o STR_t STR_i STR_UNDERSCORE STR_N STR_a STR_g STR_r STR_i "\0"
+#define STRING_Syriac0 STR_S STR_y STR_r STR_i STR_a STR_c "\0"
+#define STRING_Tagalog0 STR_T STR_a STR_g STR_a STR_l STR_o STR_g "\0"
+#define STRING_Tagbanwa0 STR_T STR_a STR_g STR_b STR_a STR_n STR_w STR_a "\0"
+#define STRING_Tai_Le0 STR_T STR_a STR_i STR_UNDERSCORE STR_L STR_e "\0"
+#define STRING_Tai_Tham0 STR_T STR_a STR_i STR_UNDERSCORE STR_T STR_h STR_a STR_m "\0"
+#define STRING_Tai_Viet0 STR_T STR_a STR_i STR_UNDERSCORE STR_V STR_i STR_e STR_t "\0"
+#define STRING_Tamil0 STR_T STR_a STR_m STR_i STR_l "\0"
+#define STRING_Telugu0 STR_T STR_e STR_l STR_u STR_g STR_u "\0"
+#define STRING_Thaana0 STR_T STR_h STR_a STR_a STR_n STR_a "\0"
+#define STRING_Thai0 STR_T STR_h STR_a STR_i "\0"
+#define STRING_Tibetan0 STR_T STR_i STR_b STR_e STR_t STR_a STR_n "\0"
+#define STRING_Tifinagh0 STR_T STR_i STR_f STR_i STR_n STR_a STR_g STR_h "\0"
+#define STRING_Ugaritic0 STR_U STR_g STR_a STR_r STR_i STR_t STR_i STR_c "\0"
+#define STRING_Vai0 STR_V STR_a STR_i "\0"
+#define STRING_Xan0 STR_X STR_a STR_n "\0"
+#define STRING_Xps0 STR_X STR_p STR_s "\0"
+#define STRING_Xsp0 STR_X STR_s STR_p "\0"
+#define STRING_Xwd0 STR_X STR_w STR_d "\0"
+#define STRING_Yi0 STR_Y STR_i "\0"
+#define STRING_Z0 STR_Z "\0"
+#define STRING_Zl0 STR_Z STR_l "\0"
+#define STRING_Zp0 STR_Z STR_p "\0"
+#define STRING_Zs0 STR_Z STR_s "\0"
 
-const tchar _pcre_utt_names[] =
+const char PRIV(utt_names)[] =
   STRING_Any0
   STRING_Arabic0
   STRING_Armenian0
@@ -398,7 +420,7 @@ const tchar _pcre_utt_names[] =
   STRING_Zp0
   STRING_Zs0;
 
-const ucp_type_table _pcre_utt[] = {
+const ucp_type_table PRIV(utt)[] = {
   {   0, PT_ANY, 0 },
   {   4, PT_SC, ucp_Arabic },
   {  11, PT_SC, ucp_Armenian },
@@ -539,10 +561,8 @@ const ucp_type_table _pcre_utt[] = {
   { 961, PT_PC, ucp_Zs }
 };
 
-const int _pcre_utt_size = sizeof(_pcre_utt)/sizeof(ucp_type_table);
+const int PRIV(utt_size) = sizeof(PRIV(utt)) / sizeof(ucp_type_table);
 
-#endif
-
-#endif  /* SUPPORT_UTF8 */
+#endif /* SUPPORT_UTF */
 
 /* End of pcre_tables.c */

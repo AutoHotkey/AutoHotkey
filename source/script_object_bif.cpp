@@ -394,7 +394,7 @@ BIF_DECL(BIF_ObjAddRefRelease)
 		aResultToken.marker = _T("");
 		return;
 	}
-	if (aResultToken.marker[3] == 'A')
+	if (ctoupper(aResultToken.marker[3]) == 'A')
 		aResultToken.value_int64 = obj->AddRef();
 	else
 		aResultToken.value_int64 = obj->Release();

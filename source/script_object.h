@@ -54,6 +54,10 @@ public:
 	// and because it is likely to be more convenient and reliable than overriding
 	// Delete(), especially with a chain of derived types.
 	virtual ~ObjectBase() {}
+
+#ifdef CONFIG_DEBUGGER
+	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
+#endif
 };	
 
 
@@ -270,6 +274,10 @@ public:
 	ResultType _Clone(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	static LPTSTR sMetaFuncName[];
+
+#ifdef CONFIG_DEBUGGER
+	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
+#endif
 };
 
 
@@ -301,8 +309,9 @@ class RegExMatchObject : public ObjectBase
 	int *mOffset;
 	LPTSTR *mPatternName;
 	int mPatternCount;
+	LPTSTR mMark;
 
-	RegExMatchObject() : mHaystack(NULL), mOffset(NULL), mPatternName(NULL), mPatternCount(0) {}
+	RegExMatchObject() : mHaystack(NULL), mOffset(NULL), mPatternName(NULL), mPatternCount(0), mMark(NULL) {}
 	
 	~RegExMatchObject()
 	{
@@ -319,11 +328,17 @@ class RegExMatchObject : public ObjectBase
 			// Free the array:
 			free(mPatternName);
 		}
+		if (mMark)
+			free(mMark);
 	}
 
 public:
 	static RegExMatchObject *Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName
-		, int aPatternCount, int aCapturedPatternCount);
+		, int aPatternCount, int aCapturedPatternCount, LPCTSTR aMark);
 	
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+#ifdef CONFIG_DEBUGGER
+	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
+#endif
 };

@@ -1385,31 +1385,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			// external ever explicitly posts a WM_QUIT to our thread's queue:
 			g_script.ExitApp(EXIT_WM_QUIT);
 			continue; // Since ExitApp() won't necessarily exit.
-
-#ifdef CONFIG_DEBUGGER
-		default:
-			static UINT sAttachDebuggerMessage = RegisterWindowMessage(_T("AHK_ATTACH_DEBUGGER"));
-			if (msg.message == sAttachDebuggerMessage && !g_Debugger.IsConnected())
-			{
-				char dbg_host[16] = "localhost"; // IPv4 max string len
-				char dbg_port[6] = "9000";
-
-				if (msg.wParam)
-				{	// Convert 32-bit address to string for Debugger::Connect().
-					in_addr addr;
-					addr.S_un.S_addr = (ULONG)msg.wParam;
-					char *tmp = inet_ntoa(addr);
-					if (tmp)
-						strcpy(dbg_host, tmp);
-				}
-				if (msg.lParam)
-					// Convert 16-bit port number to string for Debugger::Connect().
-					_itoa(LOWORD(msg.lParam), dbg_port, 10);
-
-				if (g_Debugger.Connect(dbg_host, dbg_port) == DEBUGGER_E_OK)
-					g_Debugger.ProcessCommands();
-			}
-#endif
 		} // switch()
 break_out_of_main_switch:
 
