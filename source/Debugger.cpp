@@ -1111,7 +1111,7 @@ int Debugger::WritePropertyXml(ExprTokenType &aValue, const char *aName, CString
 
 	case SYM_OBJECT:
 		// Recursively dump object.
-		return WritePropertyXml(aValue.object, aName, aNameBuf, 0, aPageSize, aDepthRemaining - 1, aMaxEncodedSize);
+		return WritePropertyXml(aValue.object, aName, aNameBuf, 0, aPageSize, aDepthRemaining, aMaxEncodedSize);
 
 	default:
 		ASSERT(FALSE);
