@@ -151,10 +151,6 @@
       <PreprocessorDefinitions>AUTOHOTKEYSC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="$(ConfigDebug)">_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
-    <PostBuildEvent>
-      <Message>Removing CheckSum from $(TargetFileName) so Ahk2Exe doesn't complain</Message>
-      <Command>"$(ProjectDir)PostBuildSC.ahk" "$(TargetPath)"</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <!-- upx compression: Release -->
   <PropertyGroup>
