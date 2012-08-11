@@ -9603,36 +9603,6 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 #ifdef AUTOHOTKEYSC
 	if (!allow_overwrite && Util_DoesFileExist(aDest))
 		return SetErrorLevelOrThrow();
-#ifdef ENABLE_EXEARC
-
-	HS_EXEArc_Read oRead;
-	// AutoIt3: Open the archive in this compiled exe.
-	// Jon gave me some details about why a password isn't needed: "The code in those libraries will
-	// only allow files to be extracted from the exe it is bound to (i.e the script that it was
-	// compiled with).  There are various checks and CRCs to make sure that it can't be used to read
-	// the files from any other exe that is passed."
-	if (oRead.Open(CStringCharFromTCharIfNeeded(g_script.mFileSpec), "") != HS_EXEARC_E_OK)
-		return LineError(ERR_EXE_CORRUPTED); // Usually caused by virus corruption. Probably impossible since it was previously opened successfully to run the main script.
-	
-	// aSource should be the same as the "file id" used to originally compress the file
-	// when it was compiled into an EXE.  So this should seek for the right file:
-	int result = oRead.FileExtract(CStringCharFromTCharIfNeeded(aSource), CStringCharFromTCharIfNeeded(aDest));
-	oRead.Close();
-
-	// v1.0.46.15: The following is a fix for the fact that a compiled script (but not an uncompiled one)
-	// that executes FileInstall somehow causes the Random command to generate the same series of random
-	// numbers every time the script launches. Perhaps the answer lies somewhere in oRead's code --
-	// something that somehow resets the static data used by init_genrand().
-	RESEED_RANDOM_GENERATOR;
-
-	success = (result == HS_EXEARC_E_OK);
-		// v1.0.48: Since extraction failure can occur more than rarely (e.g. when disk is full,
-		// permission denied, etc.), Ladiko suggested that no dialog be displayed.  The script
-		// can consult ErrorLevel to detect the failure and decide whether a MsgBox or other action
-		// is appropriate:
-		//MsgBox(aSource, 0, "Could not extract file:");
-
-#else // ENABLE_EXEARC not defined:
 
 	// Open the file first since it's the most likely to fail:
 	HANDLE hfile = CreateFile(aDest, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
@@ -9667,7 +9637,6 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 		success = false;
 	CloseHandle(hfile);
 
-#endif
 #else // AUTOHOTKEYSC not defined:
 
 	// v1.0.35.11: Must search in A_ScriptDir by default because that's where ahk2exe will search by default.
