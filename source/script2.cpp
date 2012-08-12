@@ -5505,6 +5505,16 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		g_MenuIsVisible = MENU_TYPE_NONE; // See comments in similar code in GuiWindowProc().
 		break;
 
+#ifdef CONFIG_DEBUGGER
+	case AHK_CHECK_DEBUGGER:
+		// This message is sent when data arrives on the debugger's socket.  It allows the
+		// debugger to respond to commands which are sent while the script is sleeping or
+		// waiting for messages.
+		if (g_Debugger.IsConnected() && g_Debugger.HasPendingCommand())
+			g_Debugger.ProcessCommands();
+		break;
+#endif
+
 	default:
 		// The following iMsg can't be in the switch() since it's not constant:
 		if (iMsg == WM_TASKBARCREATED && !g_NoTrayIcon) // !g_NoTrayIcon --> the tray icon should be always visible.
@@ -5534,7 +5544,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 				_itoa(LOWORD(lParam), dbg_port, 10);
 
 			if (g_Debugger.Connect(dbg_host, dbg_port) == DEBUGGER_E_OK)
-				g_Debugger.ProcessCommands();
+				g_Debugger.Break();
 		}
 #endif
 

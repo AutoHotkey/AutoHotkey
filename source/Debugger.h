@@ -40,6 +40,7 @@ freely, without restriction.
 #define DEBUGGER_E_PARSE_ERROR			1
 #define DEBUGGER_E_INVALID_OPTIONS		3
 #define DEBUGGER_E_UNIMPL_COMMAND		4
+#define DEBUGGER_E_COMMAND_UNAVAIL		5
 
 #define DEBUGGER_E_CAN_NOT_OPEN_FILE	100
 
@@ -229,6 +230,9 @@ public:
 	
 	// Receive and process commands. Returns when a continuation command is received.
 	int ProcessCommands();
+	int Break();
+	
+	bool HasPendingCommand();
 
 	// Streams
 	int WriteStreamPacket(LPCTSTR aText, LPCSTR aType);
@@ -249,6 +253,7 @@ public:
 	DEBUGGER_COMMAND(step_into);
 	DEBUGGER_COMMAND(step_over);
 	DEBUGGER_COMMAND(step_out);*/
+	DEBUGGER_COMMAND(_break);
 	DEBUGGER_COMMAND(stop);
 	
 	DEBUGGER_COMMAND(breakpoint_set);
@@ -275,7 +280,7 @@ public:
 
 	Debugger() : mSocket(INVALID_SOCKET), mInternalState(DIS_Starting)
 		, mMaxPropertyData(1024), mContinuationTransactionId(""), mStdErrMode(SR_Disabled), mStdOutMode(SR_Disabled)
-		, mMaxChildren(20), mMaxDepth(2)
+		, mMaxChildren(20), mMaxDepth(2), mDisabledHooks(0)
 	{
 	}
 
@@ -311,7 +316,8 @@ private:
 	} mCommandBuf, mResponseBuf;
 
 	enum DebuggerInternalStateType {
-		DIS_Starting,
+		DIS_None = 0,
+		DIS_Starting = DIS_None,
 		DIS_Run,
 		DIS_Break,
 		DIS_StepInto,
@@ -326,9 +332,11 @@ private:
 	} mStdErrMode, mStdOutMode;
 
 	int mContinuationDepth; // Stack depth at last continuation command, for step_into/step_over.
-	char *mContinuationTransactionId; // transaction_id of last continuation command.
+	CStringA mContinuationTransactionId; // transaction_id of last continuation command.
 
 	int mMaxPropertyData, mMaxChildren, mMaxDepth;
+
+	HookType mDisabledHooks;
 
 	
 	struct PropertyWriter : public IDebugProperties
@@ -402,7 +410,10 @@ private:
 	int SendResponse();
 	int SendErrorResponse(char *aCommandName, char *aTransactionId, int aError=999, char *aExtraAttributes=NULL);
 	int SendStandardResponse(char *aCommandName, char *aTransactionId);
-	int SendContinuationResponse(char *aStatus="break", char *aReason="ok");
+	int SendContinuationResponse(char *aCommand=NULL, char *aStatus="break", char *aReason="ok");
+
+	int EnterBreakState();
+	void ExitBreakState();
 
 	int WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine);
 

@@ -56,7 +56,7 @@ int Debugger::PreExecLine(Line *aLine)
 			aLine->mBreakpoint = NULL;
 			delete bp;
 		}
-		return ProcessCommands();
+		return Break();
 	}
 
 	if ((mInternalState == DIS_StepInto
@@ -66,6 +66,16 @@ int Debugger::PreExecLine(Line *aLine)
 		&& aLine->mActionType != ACT_BLOCK_BEGIN && (aLine->mActionType != ACT_BLOCK_END || aLine->mAttribute) // Ignore { and }; except for function-end, since we want to break there after a "return" to inspect variables while they're still in scope.
 		&& aLine->mLineNumber) // Some scripts (i.e. LowLevel/code.ahk) use mLineNumber==0 to indicate the Line has been generated and injected by the script.
 	{
+		return Break();
+	}
+	
+	// Check if a command was sent asynchronously (while the script was running).
+	// Such commands may also be detected via the AHK_CHECK_DEBUGGER message,
+	// but if the program is checking for messages infrequently or not at all,
+	// the check here is needed to ensure the debugger is responsive.
+	if (HasPendingCommand())
+	{
+		// A command was sent asynchronously.
 		return ProcessCommands();
 	}
 	
@@ -73,32 +83,69 @@ int Debugger::PreExecLine(Line *aLine)
 }
 
 
+bool Debugger::HasPendingCommand()
+// Returns true if there is data in the socket's receive buffer.
+// This is used for receiving commands asynchronously.
+{
+	u_long dataPending;
+	if (ioctlsocket(mSocket, FIONREAD, &dataPending) == 0)
+		return dataPending > 0;
+	return false;
+}
+
+
+int Debugger::EnterBreakState()
+{
+	if (mInternalState != DIS_Starting && mInternalState != DIS_Break)
+		// Send a response for the previous continuation command.
+		if (int err = SendContinuationResponse())
+			return err;
+	// Remove keyboard/mouse hooks.
+	if (mDisabledHooks = GetActiveHooks())
+		AddRemoveHooks(0, true);
+	// Set break state.
+	mInternalState = DIS_Break;
+	return DEBUGGER_E_OK;
+}
+
+
+void Debugger::ExitBreakState()
+{
+	// Restore keyboard/mouse hooks if they were previously removed.
+	if (mDisabledHooks)
+	{
+		AddRemoveHooks(mDisabledHooks, true);
+		mDisabledHooks = 0;
+	}
+}
+
+
+int Debugger::Break()
+{
+	int err = EnterBreakState();
+	if (!err)
+		err = ProcessCommands();
+	return err;
+}
+
+
 int Debugger::ProcessCommands()
 {
+	// Disable notification of READ readiness and reset socket to synchronous mode.
+	u_long zero = 0;
+	WSAAsyncSelect(mSocket, g_hWnd, 0, 0);
+	ioctlsocket(mSocket, FIONBIO, &zero);
+
 	int err;
 
-	HookType active_hooks = GetActiveHooks();
-	if (active_hooks)
-		AddRemoveHooks(0, true);
-	
-	if (mInternalState != DIS_Starting)
-	{
-		// Send response for the previous continuation command.
-		if (err = SendContinuationResponse())
-			goto ProcessCommands_err_return;
-			//return err;
-	}
-	mInternalState = DIS_Break;
+	DebuggerInternalStateType run_state = DIS_None;
 
-	for(;;)
+	for (;;)
 	{
 		int command_length;
 
 		if (err = ReceiveCommand(&command_length))
-		{	// Internal/winsock/protocol error.
-			goto ProcessCommands_err_return;
-			//return err;
-		}
+			break;
 
 		char *command = mCommandBuf.mData;
 		char *args = strchr(command, ' ');
@@ -111,15 +158,17 @@ int Debugger::ProcessCommands()
 			err = DEBUGGER_E_UNIMPL_COMMAND;
 
 			if (!strcmp(command, "run"))
-				mInternalState = DIS_Run;
+				run_state = DIS_Run;
+			else if (!strcmp(command, "break"))
+				err = _break(args);
 			else if (!strncmp(command, "step_", 5))
 			{
 				if (!strcmp(command + 5, "into"))
-					mInternalState = DIS_StepInto;
+					run_state = DIS_StepInto;
 				else if (!strcmp(command + 5, "over"))
-					mInternalState = DIS_StepOver;
+					run_state = DIS_StepOver;
 				else if (!strcmp(command + 5, "out"))
-					mInternalState = DIS_StepOut;
+					run_state = DIS_StepOut;
 			}
 			else if (!strncmp(command, "feature_", 8))
 			{
@@ -193,10 +242,9 @@ int Debugger::ProcessCommands()
 		mCommandBuf.Remove(command_length + 1);
 
 		if (err == DEBUGGER_E_INTERNAL_ERROR)
-			goto ProcessCommands_err_return;
-			//return err;
+			break;
 
-		if (err) // Command returned error, is not implemented, or is a continuation command.
+		if (err || run_state) // Command returned error, is not implemented, or is a continuation command.
 		{
 			char *transaction_id;
 			
@@ -209,12 +257,17 @@ int Debugger::ProcessCommands()
 			}
 			else transaction_id = "";
 			
-			if (mInternalState != DIS_Break) // Received a continuation command.
+			if (run_state) // Received a continuation command.
 			{
-				if (*transaction_id)
+				if (mInternalState != DIS_Break)
+					err = DEBUGGER_E_COMMAND_UNAVAIL;
+				else if (*transaction_id)
 				{
+					ExitBreakState();
+					mInternalState = run_state;
 					mContinuationDepth = mStack.Depth();
 					mContinuationTransactionId = transaction_id;
+					err = DEBUGGER_E_OK;
 					break;
 				}
 				err = DEBUGGER_E_INVALID_OPTIONS;
@@ -222,26 +275,33 @@ int Debugger::ProcessCommands()
 			
 			// Assume command (if called) has not sent a response.
 			if (err = SendErrorResponse(command, transaction_id, err))
-			{	// Internal/winsock/protocol error.
-				goto ProcessCommands_err_return;
-				//return err;
-			}
+				break;
 			
 			// Continue processing commands.
 		}
-	}
-	// Received a continuation command.
-	// Script execution should continue until a break condition is met:
-	//	If step_into was used, break on next line.
-	//	If step_out was used, break on next line after return.
-	//	If step_over was used, break on next line at same recursion depth.
-	//	Also break when an active breakpoint is reached.
-	//return DEBUGGER_E_OK;
-	err = DEBUGGER_E_OK;
 
-ProcessCommands_err_return:
-	if (active_hooks)
-		AddRemoveHooks(active_hooks, true);
+		// If a command is received asynchronously, the debugger does not
+		// enter a break state.  In that case, we need to return after each
+		// command to avoid blocking in recv().
+		if (mInternalState != DIS_Break)
+			break;
+	}
+	if (mInternalState == DIS_Break)
+	{
+		// It doesn't make sense to return if we're still in a break state,
+		// so this case should only happen if an error occurred.  Even so,
+		// FatalError() probably should have been called to disconnect the
+		// debugger, in which case mInternalState would have been reset.
+		// This section is therefore here for maintainability.
+		ExitBreakState();
+		mInternalState = DIS_Run;
+	}
+	// Register for message-based notification of data arrival.  If a command
+	// is received asynchronously, control will be passed back to the debugger
+	// to process it.  This allows the debugger engine to respond even if the
+	// script is sleeping or waiting for messages.
+	if (mSocket != INVALID_SOCKET)
+		WSAAsyncSelect(mSocket, g_hWnd, AHK_CHECK_DEBUGGER, FD_READ);
 	return err;
 }
 
@@ -321,7 +381,7 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 	else if (supported = !strcmp(feature_name, "protocol_version"))
 		setting = "1";
 	else if (supported = !strcmp(feature_name, "supports_async"))
-		setting = "0"; // TODO: Async support for status, breakpoint_set, break, etc.
+		setting = "1";
 	// Not supported: data_encoding - assume base64.
 	// Not supported: breakpoint_languages - assume only %language_name% is supported.
 	else if (supported = !strcmp(feature_name, "breakpoint_types"))
@@ -426,6 +486,14 @@ DEBUGGER_COMMAND(Debugger::feature_set)
 						, feature_name, (int)success, transaction_id);
 
 	return SendResponse();
+}
+
+DEBUGGER_COMMAND(Debugger::_break)
+{
+	DEBUGGER_COMMAND_INIT_TRANSACTION_ID;
+	if (int err = EnterBreakState())
+		return err;
+	return SendStandardResponse("break", transaction_id);
 }
 
 DEBUGGER_COMMAND(Debugger::stop)
@@ -1873,22 +1941,23 @@ int Debugger::SendStandardResponse(char *aCommandName, char *aTransactionId)
 	return SendResponse();
 }
 
-int Debugger::SendContinuationResponse(char *aStatus, char *aReason)
+int Debugger::SendContinuationResponse(char *aCommand, char *aStatus, char *aReason)
 {
-	char *command;
-
-	switch (mInternalState)
+	if (!aCommand)
 	{
-	case DIS_StepInto:	command = "step_into";	break;
-	case DIS_StepOver:	command = "step_over";	break;
-	case DIS_StepOut:	command = "step_out";	break;
-	//case DIS_Run:
-	default:
-		command = "run";
+		switch (mInternalState)
+		{
+		case DIS_StepInto:	aCommand = "step_into";	break;
+		case DIS_StepOver:	aCommand = "step_over";	break;
+		case DIS_StepOut:	aCommand = "step_out";	break;
+		case DIS_Run:		aCommand = "run";		break;
+		// Seems more useful then silently failing:
+		default:			aCommand = "";
+		}
 	}
 
 	mResponseBuf.WriteF("<response command=\"%s\" status=\"%s\" reason=\"%s\" transaction_id=\"%e\"/>"
-						, command, aStatus, aReason, mContinuationTransactionId);
+						, aCommand, aStatus, aReason, (LPCSTR)mContinuationTransactionId);
 
 	return SendResponse();
 }
@@ -2061,6 +2130,8 @@ int Debugger::Disconnect()
 	mResponseBuf.mDataUsed = 0;
 	mStdOutMode = SR_Disabled;
 	mStdErrMode = SR_Disabled;
+	if (mInternalState == DIS_Break)
+		ExitBreakState();
 	mInternalState = DIS_Starting;
 	return DEBUGGER_E_OK;
 }
@@ -2074,7 +2145,7 @@ void Debugger::Exit(ExitReasons aExitReason)
 	if (mSocket == INVALID_SOCKET)
 		return;
 	// Don't care if it fails as we may be exiting due to a previous failure.
-	SendContinuationResponse("stopped", aExitReason == EXIT_ERROR ? "error" : "ok");
+	SendContinuationResponse(NULL, "stopped", aExitReason == EXIT_ERROR ? "error" : "ok");
 	Disconnect();
 }
 
