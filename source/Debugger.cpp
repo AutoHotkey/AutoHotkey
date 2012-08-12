@@ -2121,6 +2121,7 @@ int Debugger::Disconnect()
 {
 	if (mSocket != INVALID_SOCKET)
 	{
+		shutdown(mSocket, 2);
 		closesocket(mSocket);
 		mSocket = INVALID_SOCKET;
 		WSACleanup();
