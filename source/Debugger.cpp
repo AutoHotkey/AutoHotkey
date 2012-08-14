@@ -327,8 +327,8 @@ DEBUGGER_COMMAND(Debugger::status)
 	switch (mInternalState)
 	{
 	case DIS_Starting:	status = "starting";	break;
-	case DIS_Run:		status = "running";		break;
-	default:			status = "break";
+	case DIS_Break:		status = "break";		break;
+	default:			status = "running";
 	}
 
 	mResponseBuf.WriteF("<response command=\"status\" status=\"%s\" reason=\"ok\" transaction_id=\"%e\"/>"
