@@ -56,6 +56,8 @@ freely, without restriction.
 
 #define DEBUGGER_E_INTERNAL_ERROR		998 // Unrecoverable internal error, usually the result of a Winsock error.
 
+#define DEBUGGER_E_CONTINUE				-1 // Internal code used by continuation commands.
+
 // Error messages: these are shown directly to the user, so are in the native string format.
 #define DEBUGGER_ERR_INTERNAL			_T("An internal error has occurred in the debugger engine.")
 #define DEBUGGER_ERR_DISCONNECT_PROMPT	_T("\nContinue running the script without the debugger?")
@@ -239,7 +241,7 @@ public:
 	void OutputDebug(LPCTSTR aText);
 	bool FileAppendStdOut(LPCTSTR aText);
 
-	#define DEBUGGER_COMMAND(cmd)	int cmd(char *aArgs)
+	#define DEBUGGER_COMMAND(cmd)	int cmd(char **aArgV, int aArgCount, char *aTransactionId)
 	
 	//
 	// Debugger commands.
@@ -249,12 +251,13 @@ public:
 	DEBUGGER_COMMAND(feature_get);
 	DEBUGGER_COMMAND(feature_set);
 	
-	/*DEBUGGER_COMMAND(run);
+	DEBUGGER_COMMAND(run);
 	DEBUGGER_COMMAND(step_into);
 	DEBUGGER_COMMAND(step_over);
-	DEBUGGER_COMMAND(step_out);*/
+	DEBUGGER_COMMAND(step_out);
 	DEBUGGER_COMMAND(_break);
 	DEBUGGER_COMMAND(stop);
+	DEBUGGER_COMMAND(detach);
 	
 	DEBUGGER_COMMAND(breakpoint_set);
 	DEBUGGER_COMMAND(breakpoint_get);
@@ -429,8 +432,9 @@ private:
 	int WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize);
 
 	int ParsePropertyName(const char *aFullName, int aVarScope, bool aVarMustExist, Var *&aVar, Object::FieldType *&aField);
-	int property_get_or_value(char *aArgs, bool aIsPropertyGet);
-	int redirect_std(char *aArgs, char *aCommandName);
+	int property_get_or_value(char **aArgV, int aArgCount, char *aTransactionId, bool aIsPropertyGet);
+	int redirect_std(char **aArgV, int aArgCount, char *aTransactionId, char *aCommandName);
+	int run_step(char **aArgV, int aArgCount, char *aTransactionId, char *aCommandName, DebuggerInternalStateType aNewState);
 
 	// Decode a file URI in-place.
 	void DecodeURI(char *aUri);
@@ -440,19 +444,32 @@ private:
 	static size_t Base64Decode(char *aBuf, const char *aInput, size_t aInputSize = -1);
 
 
-	// Debugger::GetNextArg
+	//typedef int (Debugger::*CommandFunc)(char **aArgV, int aArgCount, char *aTransactionId);
+	typedef DEBUGGER_COMMAND((Debugger::*CommandFunc));
+	
+	struct CommandDef
+	{
+		const char *mName;
+		CommandFunc mFunc;
+	};
+
+	static CommandDef sCommands[];
+	
+
+	// Debugger::ParseArgs
 	//
 	// Returns DEBUGGER_E_OK on success, or a DBGp error code otherwise.
-	// aArgs is set to the beginning of the next arg, or NULL if no more args.
-	// aArg is set to the arg character, or '\0' if no args.
-	// aValue is set to the value of the arg, or NULL if no value.
 	//
 	// The Xdebug/DBGp documentation is very vague about command line rules,
 	// so this function has no special treatment of quotes, backslash, etc.
 	// There is currently no way to include a literal " -" in an arg as it
 	// would be recognized as the beginning of the next arg.
 	//
-	int GetNextArg(char *&aArgs, char &aArg, char *&aValue);
+	int ParseArgs(char *aArgs, char **aArgV, int &aArgCount, char *&aTransactionId);
+	
+	// Caller must verify that aArg is within bounds:
+	inline char *ArgValue(char **aArgV, int aArg) { return aArgV[aArg] + 1; }
+	inline char  ArgChar(char **aArgV, int aArg) { return *aArgV[aArg]; }
 
 	// Fatal debugger error. Prompt user to terminate script or only disconnect debugger.
 	static int FatalError(int aErrorCode, LPCTSTR aMessage = DEBUGGER_ERR_INTERNAL DEBUGGER_ERR_DISCONNECT_PROMPT);
