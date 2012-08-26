@@ -330,7 +330,7 @@ int Debugger::ParseArgs(char *aArgs, char **aArgV, int &aArgCount, char *&aTrans
 //
 
 // Calculate base64-encoded size of data, including NULL terminator. org_size must be > 0 if unsigned.
-#define DEBUGGER_BASE64_ENCODED_SIZE(org_size) ((((DWORD)(org_size)-1)/3+1)*4 +1)
+#define DEBUGGER_BASE64_ENCODED_SIZE(org_size) ((((org_size)-1)/3+1)*4 +1)
 
 DEBUGGER_COMMAND(Debugger::status)
 {
@@ -876,6 +876,7 @@ DEBUGGER_COMMAND(Debugger::context_names)
 
 DEBUGGER_COMMAND(Debugger::context_get)
 {
+	int err;
 	char arg, *value;
 
 	int context_id = 0, depth = 0;
@@ -923,7 +924,8 @@ DEBUGGER_COMMAND(Debugger::context_get)
 		, context_id, aTransactionId);
 
 	for ( ; var < var_end; ++var)
-		WritePropertyXml(**var, mMaxPropertyData);
+		if (err = WritePropertyXml(**var, mMaxPropertyData))
+			return err;
 
 	return mResponseBuf.Write("</response>");
 }
@@ -996,7 +998,8 @@ int Debugger::WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage)
 	mResponseBuf.WriteF("<property name=\"%s\" fullname=\"%s\" type=\"%s\" facet=\"%s\" children=\"0\" encoding=\"base64\" size=\""
 						, U4T(aVar.mName), U4T(aVar.mName), type, facet);
 
-	WritePropertyData(aVar, aMaxEncodedSize);
+	if (int err = WritePropertyData(aVar, aMaxEncodedSize))
+		return err;
 
 	return mResponseBuf.Write("</property>");
 }
@@ -1112,7 +1115,7 @@ int Debugger::WritePropertyXml(ExprTokenType &aValue, const char *aName, CString
 	// If we fell through, value and type have been set appropriately above.
 	mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" facet=\"\" children=\"0\" encoding=\"base64\" size=\"", aName, aNameBuf.GetString(), type);
 	int err;
-	if (err = WritePropertyData(value, (int)_tcslen(value), aMaxEncodedSize))
+	if (err = WritePropertyData(value, _tcslen(value), aMaxEncodedSize))
 		return err;
 	return mResponseBuf.Write("</property>");
 }
@@ -1148,63 +1151,103 @@ void Debugger::AppendKeyName(CStringA &aNameBuf, size_t aParentNameLength, const
 	}
 }
 
-int Debugger::WritePropertyData(LPCTSTR aData, int aDataSize, int aMaxEncodedSize)
+int Debugger::WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncodedSize)
 // Accepts a "native" string, converts it to UTF-8, base64-encodes it and writes
 // the end of the property's size attribute followed by the base64-encoded data.
 {
-	int wide_size, value_size, space_needed; // Could use size_t, but WideCharToMultiByte is limited to int.
-	char *value;
 	int err;
 	
 #ifdef UNICODE
-	LPCWSTR wide_value = aData;
-	wide_size = aDataSize;
+	LPCWSTR utf16_value = aData;
+	size_t total_utf16_size = aDataSize;
 #else
-	CStringWCharFromChar wide_buf(aData, aDataSize);
-	LPCWSTR wide_value = wide_buf.GetString();
-	wide_size = (int)wide_buf.GetLength();
+	// ANSI mode.  For simplicity, convert the entire data to UTF-16 rather than attempting to
+	// calculate how much ANSI text will produce the right number of UTF-8 bytes (since UTF-16
+	// is needed as an intermediate step anyway).  This would fail if the string length exceeds
+	// INT_MAX, but that would only matter if we built ANSI for x64 (and we don't).
+	CStringWCharFromChar utf16_buf(aData, aDataSize);
+	LPCWSTR utf16_value = utf16_buf.GetString();
+	size_t total_utf16_size = utf16_buf.GetLength();
+	if (!total_utf16_size && aDataSize) // Conversion failed (too large?)
+		return DEBUGGER_E_INTERNAL_ERROR;
 #endif
 	
-	// Calculate the required buffer size to convert the value to UTF-8 without a null-terminator.
-	// Actual conversion is not done until we've reserved some (shared) space in mResponseBuf for it.
-	value_size = WideCharToMultiByte(CP_UTF8, 0, wide_value, wide_size, NULL, 0, NULL, NULL);
+	// The spec says: "The IDE should not read more data than the length defined in the packet
+	// header.  The IDE can determine if there is more data by using the property data length
+	// information."  This has two implications:
+	//  1) The size attribute should represent the total size, not the amount of data actually
+	//     returned (when limited by aMaxEncodedSize).  This is more useful anyway.
+	//  2) Since the data is encoded as UTF-8, the size attribute must be a UTF-8 byte count
+	//     for any comparison by the IDE to give the correct result.
+	
+	// Calculate:
+	//  - the total size in terms of UTF-8 bytes (even if that exceeds INT_MAX).
+	size_t total_utf8_size = 0;
+	//  - the maximum number of wide chars to convert, taking aMaxEncodedSize into account.
+	int utf16_size = (int)total_utf16_size;
+	//  - the required buffer size for conversion, in bytes.
+	int utf8_size = -1;
 
-	if (value_size > aMaxEncodedSize) // Limit length of source data; see below.
-		value_size = aMaxEncodedSize;
+	for (size_t i = 0; i < total_utf16_size; ++i)
+	{
+		wchar_t wc = utf16_value[i];
+		
+		int char_size;
+		if (wc <= 0x007F)
+			char_size = 1;
+		else if (wc <= 0x07FF)
+			char_size = 2;
+		else if (IS_SURROGATE_PAIR(wc, utf16_value[i+1]))
+			char_size = 4;
+		else
+			char_size = 3;
+		
+		total_utf8_size += char_size;
+
+		if (total_utf8_size > (size_t)aMaxEncodedSize)
+		{
+			if (utf16_size == total_utf16_size) // i.e. this is the first surplus char.
+			{
+				// Truncate the input; utf16_value[i] and beyond will not be converted/sent.
+				utf16_size = (int)i;
+				utf8_size = (int)(total_utf8_size - char_size);
+			}
+		}
+	}
+	if (utf8_size == -1) // Data was not limited by aMaxEncodedSize.
+		utf8_size = (int)total_utf8_size;
+	
 	// Calculate maximum length of base64-encoded data.
-	// This should also ensure there is enough space to temporarily hold the raw value (aVar.Get()).
-	space_needed = (value_size > 0) ? DEBUGGER_BASE64_ENCODED_SIZE(value_size) : sizeof(TCHAR);
-	ASSERT(space_needed >= value_size + 1);
+	int space_needed = DEBUGGER_BASE64_ENCODED_SIZE(utf8_size);
 	
 	// Reserve enough space for the data's length, "> and encoded data.
 	if (err = mResponseBuf.ExpandIfNecessary(mResponseBuf.mDataUsed + space_needed + MAX_INTEGER_LENGTH + 2))
 		return err;
+	
+	// Complete the size attribute by writing the total size, in terms of UTF-8 bytes.
+	if (err = mResponseBuf.WriteF("%u\">", total_utf8_size))
+		return err;
 
 	// Convert to UTF-8, using mResponseBuf temporarily.
-	value = mResponseBuf.mData + mResponseBuf.mDataSize - space_needed;
-	value_size = WideCharToMultiByte(CP_UTF8, 0, wide_value, wide_size, value, space_needed, NULL, NULL);
-
-	// Now that we know the actual length for sure, write the end of the size attribute.
-	mResponseBuf.WriteF("%u\">", value_size);
-
-	// Limit length of value returned based on -m arg, client-requested max_data, defaulted value, etc.
-	if (value_size > aMaxEncodedSize)
-		value_size = aMaxEncodedSize;
+	char *utf8_value = mResponseBuf.mData + mResponseBuf.mDataSize - space_needed;
+	utf8_size = WideCharToMultiByte(CP_UTF8, 0, utf16_value, utf16_size, utf8_value, utf8_size, NULL, NULL);
+	if (!utf8_size && utf16_size) // Conversion failed.
+		return DEBUGGER_E_INTERNAL_ERROR;
 
 	// Base64-encode and write the var data.
-	return mResponseBuf.WriteEncodeBase64(value, (size_t)value_size, true);
+	return mResponseBuf.WriteEncodeBase64(utf8_value, (size_t)utf8_size, true);
 }
 
 int Debugger::WritePropertyData(Var &aVar, int aMaxEncodedSize)
 {
 	CString buf;
 	LPTSTR value;
-	int value_size;
+	size_t value_size;
 
 	if (aVar.Type() == VAR_NORMAL)
 	{
 		value = aVar.Contents(TRUE, TRUE);
-		value_size = (int)aVar.CharLength();
+		value_size = aVar.CharLength();
 	}
 	else
 	{
@@ -1214,7 +1257,7 @@ int Debugger::WritePropertyData(Var &aVar, int aMaxEncodedSize)
 		else
 			return DEBUGGER_E_INTERNAL_ERROR;
 		CLOSE_CLIPBOARD_IF_OPEN; // Above may leave the clipboard open if aVar is Clipboard.
-		value_size = (int)_tcslen(value);
+		value_size = _tcslen(value);
 	}
 
 	return WritePropertyData(value, value_size, aMaxEncodedSize);
@@ -1261,7 +1304,7 @@ int Debugger::WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize)
 		ASSERT(FALSE);
 	}
 	// If we fell through, value and type have been set appropriately above.
-	return WritePropertyData(value, (int)_tcslen(value) + 1, aMaxEncodedSize);
+	return WritePropertyData(value, _tcslen(value), aMaxEncodedSize);
 }
 
 int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarMustExist, Var *&aVar, Object::FieldType *&aField)
@@ -1434,7 +1477,7 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 
 	char *name = NULL;
 	int context_id = 0, depth = 0, page = 0;
-	int max_data = aIsPropertyGet ? mMaxPropertyData : INT_MAX;
+	int max_data = aIsPropertyGet ? mMaxPropertyData : 1024*1024*1024; // Limit property_value to 1GB by default.
 
 	for (int i = 0; i < aArgCount; ++i)
 	{
@@ -1511,9 +1554,9 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 			, aTransactionId);
 		
 		if (var)
-			WritePropertyXml(*var, max_data, page);
+			err = WritePropertyXml(*var, max_data, page);
 		else
-			WritePropertyXml(*field, name, CStringA(name), mMaxChildren, mMaxDepth, max_data);
+			err = WritePropertyXml(*field, name, CStringA(name), mMaxChildren, mMaxDepth, max_data);
 	}
 	else
 	{
@@ -1522,10 +1565,12 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 			, aTransactionId);
 
 		if (var)
-			WritePropertyData(*var, max_data);
+			err = WritePropertyData(*var, max_data);
 		else
-			WritePropertyData(*field, max_data);
+			err = WritePropertyData(*field, max_data);
 	}
+	if (err)
+		return err;
 	return mResponseBuf.Write("</response>");
 }
 

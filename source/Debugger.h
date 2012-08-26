@@ -429,7 +429,7 @@ private:
 	int WritePropertyXml(ExprTokenType &aValue, const char *aName, CStringA &aNameBuf, int aPageSize, int aDepthRemaining, int aMaxEncodedSize);
 	int WritePropertyXml(Object::FieldType &aField, const char *aName, CStringA &aNameBuf, int aPageSize, int aDepthRemaining, int aMaxEncodedSize);
 
-	int WritePropertyData(LPCTSTR aData, int aDataSize, int aMaxEncodedSize);
+	int WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncodedSize);
 	int WritePropertyData(Var &aVar, int aMaxEncodedSize);
 	int WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize);
 
