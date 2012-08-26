@@ -201,7 +201,7 @@ class Debugger
 public:
 	int Connect(const char *aAddress, const char *aPort);
 	int Disconnect();
-	void Exit(ExitReasons aExitReason); // Called when exiting AutoHotkey.
+	void Exit(ExitReasons aExitReason, char *aCommandName=NULL); // Called when exiting AutoHotkey.
 	inline bool IsConnected() { return mSocket != INVALID_SOCKET; }
 	inline bool IsStepping() { return mInternalState >= DIS_StepInto; }
 	inline bool HasStdErrHook() { return mStdErrMode != SR_Disabled; }

@@ -518,7 +518,7 @@ DEBUGGER_COMMAND(Debugger::detach)
 {
 	mContinuationTransactionId = aTransactionId; // Seems more appropriate than using the previous ID (if any).
 	// User wants to stop the debugger but let the script keep running.
-	Exit(EXIT_NONE); // Anything but EXIT_ERROR.  Sends "stopped" response, then disconnects.
+	Exit(EXIT_NONE, "detach"); // Anything but EXIT_ERROR.  Sends "stopped" response, then disconnects.
 	return DEBUGGER_E_CONTINUE; // Response already sent.
 }
 
@@ -2082,12 +2082,12 @@ int Debugger::Disconnect()
 //
 // Gracefully end debug session.  Called on script exit.  Also called by "detach" DBGp command.
 //
-void Debugger::Exit(ExitReasons aExitReason)
+void Debugger::Exit(ExitReasons aExitReason, char *aCommandName)
 {
 	if (mSocket == INVALID_SOCKET)
 		return;
 	// Don't care if it fails as we may be exiting due to a previous failure.
-	SendContinuationResponse(NULL, "stopped", aExitReason == EXIT_ERROR ? "error" : "ok");
+	SendContinuationResponse(aCommandName, "stopped", aExitReason == EXIT_ERROR ? "error" : "ok");
 	Disconnect();
 }
 
