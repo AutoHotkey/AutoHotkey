@@ -618,6 +618,13 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 		for (line = line ? line->mNextLine : g_script.mFirstLine; line; line = line->mNextLine)
 			if (line->mFileIndex == file_index && line->mLineNumber >= lineno)
 			{
+				// ACT_ELSE and ACT_BLOCK_BEGIN generally don't cause PreExecLine() to be called,
+				// so any breakpoint set on one of those lines would never be hit.  Attempting to
+				// set a breakpoint on one of these should act like setting a breakpoint on a line
+				// which contains no code: put the breakpoint at the next line instead.
+				// Without this check, setting a breakpoint on a line like "else Exit" would not work.
+				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_BEGIN)
+					continue;
 				// Use the first line of code at or after lineno, like Visual Studio.
 				// To display the breakpoint correctly, an IDE should use breakpoint_get.
 				found_line = true;
