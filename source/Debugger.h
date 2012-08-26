@@ -305,12 +305,14 @@ private:
 		int Expand();
 		int ExpandIfNecessary(size_t aRequiredSize);
 		void Remove(size_t aDataSize);
+		void Clear();
 
-		Buffer() : mData(NULL), mDataSize(0), mDataUsed(0) {}
+		Buffer() : mData(NULL), mDataSize(0), mDataUsed(0), mFailed(FALSE) {}
 	
 		char *mData;
 		size_t mDataSize;
 		size_t mDataUsed;
+		BOOL mFailed;
 
 		~Buffer() {
 			if (mData)
@@ -472,7 +474,7 @@ private:
 	inline char  ArgChar(char **aArgV, int aArg) { return *aArgV[aArg]; }
 
 	// Fatal debugger error. Prompt user to terminate script or only disconnect debugger.
-	static int FatalError(int aErrorCode, LPCTSTR aMessage = DEBUGGER_ERR_INTERNAL DEBUGGER_ERR_DISCONNECT_PROMPT);
+	static int FatalError(LPCTSTR aMessage = DEBUGGER_ERR_INTERNAL DEBUGGER_ERR_DISCONNECT_PROMPT);
 };
 
 #endif

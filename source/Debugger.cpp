@@ -184,7 +184,7 @@ int Debugger::ProcessCommands()
 		int command_length;
 
 		if (err = ReceiveCommand(&command_length))
-			break;
+			break; // Already called FatalError().
 
 		char *command = mCommandBuf.mData;
 		char *args = strchr(command, ' ');
@@ -231,7 +231,7 @@ int Debugger::ProcessCommands()
 			else
 				err = SendStandardResponse(command, transaction_id);
 			if (err)
-				break;
+				break; // Already called FatalError().
 		}
 		else if (err == DEBUGGER_E_CONTINUE)
 		{
@@ -241,16 +241,16 @@ int Debugger::ProcessCommands()
 		}
 		else
 		{
+			// Clear the response buffer in case a response was partially written
+			// before the error was encountered (or the command failed because the
+			// response buffer is full and cannot be expanded).
+			mResponseBuf.Clear();
+
 			if (mSocket == INVALID_SOCKET) // Already disconnected; see FatalError().
 				break;
-			
-			ASSERT(mResponseBuf.mDataUsed == 0);
-			
-			// Assume command (if called) has not sent a response.
+
 			if (err = SendErrorResponse(command, transaction_id, err))
-				break;
-			
-			// Continue processing commands.
+				break; // Already called FatalError().
 		}
 		
 		// Remove this command and its args from the buffer.
@@ -263,16 +263,7 @@ int Debugger::ProcessCommands()
 		if (mInternalState != DIS_Break)
 			break;
 	}
-	if (mInternalState == DIS_Break)
-	{
-		// It doesn't make sense to return if we're still in a break state,
-		// so this case should only happen if an error occurred.  Even so,
-		// FatalError() probably should have been called to disconnect the
-		// debugger, in which case mInternalState would have been reset.
-		// This section is therefore here for maintainability.
-		ExitBreakState();
-		mInternalState = DIS_Run;
-	}
+	ASSERT(mInternalState != DIS_Break);
 	// Register for message-based notification of data arrival.  If a command
 	// is received asynchronously, control will be passed back to the debugger
 	// to process it.  This allows the debugger engine to respond even if the
@@ -648,10 +639,10 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 
 int Debugger::WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine)
 {
-	return mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"line\" state=\"%s\" filename=\""
-								, aBreakpoint->id, aBreakpoint->state ? "enabled" : "disabled")
-								|| mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[aLine->mFileIndex]))
-		|| mResponseBuf.WriteF("\" lineno=\"%u\"/>", aLine->mLineNumber);
+	mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"line\" state=\"%s\" filename=\""
+					, aBreakpoint->id, aBreakpoint->state ? "enabled" : "disabled");
+	mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[aLine->mFileIndex]));
+	return mResponseBuf.WriteF("\" lineno=\"%u\"/>", aLine->mLineNumber);
 }
 
 DEBUGGER_COMMAND(Debugger::breakpoint_get)
@@ -1006,9 +997,7 @@ int Debugger::WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage)
 
 	WritePropertyData(aVar, aMaxEncodedSize);
 
-	mResponseBuf.Write("</property>");
-	
-	return DEBUGGER_E_OK;
+	return mResponseBuf.Write("</property>");
 }
 
 int Debugger::WritePropertyXml(IObject *aObject, const char *aName, CStringA &aNameBuf, int aPage, int aPageSize, int aDepthRemaining, int aMaxEncodedSize, char *aFacet)
@@ -1626,7 +1615,6 @@ DEBUGGER_COMMAND(Debugger::property_set)
 
 DEBUGGER_COMMAND(Debugger::source)
 {
-	int err;
 	char arg, *value;
 
 	char *filename = NULL;
@@ -1682,8 +1670,8 @@ DEBUGGER_COMMAND(Debugger::source)
 					break; // fail.
 
 				// Reserve some space in advance to read the raw file data into.
-				if (err = mResponseBuf.WriteEncodeBase64(NULL, file_size))
-					return err;
+				if (mResponseBuf.WriteEncodeBase64(NULL, file_size) != DEBUGGER_E_OK)
+					break; // fail.
 
 				// Read into the end of the response buffer.
 				char *buf = mResponseBuf.mData + mResponseBuf.mDataSize - (file_size + 1);
@@ -1692,8 +1680,7 @@ DEBUGGER_COMMAND(Debugger::source)
 					break; // fail.
 
 				// Base64-encode and write the file data into the response buffer.
-				if (err = mResponseBuf.WriteEncodeBase64(buf, file_size))
-					return err;
+				mResponseBuf.WriteEncodeBase64(buf, file_size, true);
 			}
 			else
 			{	// RETURN SPECIFIC LINES:
@@ -1719,8 +1706,8 @@ DEBUGGER_COMMAND(Debugger::source)
 							if (line_length)
 							{
 								// Base64-encode and write this line and its trailing newline character into the response buffer.
-								if (err = mResponseBuf.WriteEncodeBase64(line_buf, line_length))
-									return err;
+								if (mResponseBuf.WriteEncodeBase64(line_buf, line_length) != DEBUGGER_E_OK)
+									goto break_outer_loop; // fail.
 							}
 							//else not enough data to encode in this iteration.
 
@@ -1735,8 +1722,8 @@ DEBUGGER_COMMAND(Debugger::source)
 				}
 
 				// Write any left-over characters (if line_remainder is 0, this does nothing).
-				if (err = mResponseBuf.WriteEncodeBase64(line_buf, line_remainder))
-					return err;
+				if (mResponseBuf.WriteEncodeBase64(line_buf, line_remainder) != DEBUGGER_E_OK)
+					break; // fail.
 
 				if (!current_line || current_line < begin_line)
 					break; // fail.
@@ -1747,12 +1734,13 @@ DEBUGGER_COMMAND(Debugger::source)
 			return mResponseBuf.Write("</response>");
 		}
 	}
+break_outer_loop:
 	if (source_file)
 		fclose(source_file);
 	// If we got here, one of the following is true:
 	//	- Something failed and used 'break'.
 	//	- The requested file is not a known source file of this script.
-	mResponseBuf.mDataUsed = 0;
+	mResponseBuf.Clear();
 	return mResponseBuf.WriteF(
 		"<response command=\"source\" success=\"0\" transaction_id=\"%e\"/>"
 		, aTransactionId);
@@ -1798,6 +1786,7 @@ DEBUGGER_COMMAND(Debugger::redirect_stderr)
 
 int Debugger::WriteStreamPacket(LPCTSTR aText, LPCSTR aType)
 {
+	ASSERT(!mResponseBuf.mFailed);
 	mResponseBuf.WriteF("<stream type=\"%s\">", aType);
 	CStringUTF8FromTChar packet(aText);
 	mResponseBuf.WriteEncodeBase64(packet, packet.GetLength() + 1); // Includes the null-terminator.
@@ -1873,10 +1862,9 @@ int Debugger::SendContinuationResponse(char *aCommand, char *aStatus, char *aRea
 //
 int Debugger::ReceiveCommand(int *aCommandLength)
 {
-	if (mSocket == INVALID_SOCKET)
-		return FatalError(DEBUGGER_E_INTERNAL_ERROR);
+	ASSERT(mSocket != INVALID_SOCKET); // Shouldn't be at this point; will be caught by recv() anyway.
+	ASSERT(!mCommandBuf.mFailed); // Should have been previously reset.
 
-	int err;
 	DWORD u = 0;
 
 	for(;;)
@@ -1893,14 +1881,14 @@ int Debugger::ReceiveCommand(int *aCommandLength)
 		}
 
 		// Init or expand the buffer as necessary.
-		if (mCommandBuf.mDataUsed == mCommandBuf.mDataSize && (err = mCommandBuf.Expand()))
-			return err;
+		if (mCommandBuf.mDataUsed == mCommandBuf.mDataSize && mCommandBuf.Expand() != DEBUGGER_E_OK)
+			return FatalError(); // This also calls mCommandBuf.Clear() via Disconnect().
 
 		// Receive and append data.
 		int bytes_received = recv(mSocket, mCommandBuf.mData + mCommandBuf.mDataUsed, (int)(mCommandBuf.mDataSize - mCommandBuf.mDataUsed), 0);
 
 		if (bytes_received == SOCKET_ERROR)
-			return FatalError(DEBUGGER_E_INTERNAL_ERROR);
+			return FatalError();
 
 		mCommandBuf.mDataUsed += bytes_received;
 	}
@@ -1912,7 +1900,8 @@ int Debugger::ReceiveCommand(int *aCommandLength)
 //
 int Debugger::SendResponse()
 {
-	int err;
+	ASSERT(!mResponseBuf.mFailed);
+
 	char response_header[DEBUGGER_RESPONSE_OVERHEAD];
 	
 	// Each message is prepended with a stringified integer representing the length of the XML data packet.
@@ -1925,20 +1914,19 @@ int Debugger::SendResponse()
 	buf += sprintf(buf, "%s", DEBUGGER_XML_TAG);
 
 	// Send the response header.
-	if (SOCKET_ERROR == send(mSocket, response_header, (int)(buf - response_header), 0))
-		return FatalError(DEBUGGER_E_INTERNAL_ERROR);
-
-	// The messages sent by the debugger engine must always be NULL terminated.
-	if (err = mResponseBuf.Write("\0", 1))
+	if (  SOCKET_ERROR == send(mSocket, response_header, (int)(buf - response_header), 0)
+	   // Messages sent by the debugger engine must always be NULL terminated.
+	   // Failure to write the last byte should be extremely rare, so no attempt
+	   // is made to recover from that condition.
+	   || DEBUGGER_E_OK != mResponseBuf.Write("\0", 1)
+	   // Send the message body.
+	   || SOCKET_ERROR == send(mSocket, mResponseBuf.mData, (int)mResponseBuf.mDataUsed, 0)  )
 	{
-		return err;
+		// Unrecoverable error: disconnect the debugger.
+		return FatalError();
 	}
 
-	// Send the message body.
-	if (SOCKET_ERROR == send(mSocket, mResponseBuf.mData, (int)mResponseBuf.mDataUsed, 0))
-		return FatalError(DEBUGGER_E_INTERNAL_ERROR);
-
-	mResponseBuf.mDataUsed = 0;
+	mResponseBuf.Clear();
 	return DEBUGGER_E_OK;
 }
 
@@ -1953,7 +1941,7 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 	SOCKET s;
 	
 	if (WSAStartup(MAKEWORD(2,2), &wsadata))
-		return FatalError(DEBUGGER_E_INTERNAL_ERROR);
+		return FatalError();
 	
 	s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
@@ -1995,6 +1983,9 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 				CStringUTF8FromTChar ide_key(CString().GetEnvironmentVariable(_T("DBGP_IDEKEY")));
 				CStringUTF8FromTChar session(CString().GetEnvironmentVariable(_T("DBGP_COOKIE")));
 
+				// Clear the buffer in case of a previous failed session.
+				mResponseBuf.Clear();
+
 				// Write init message.
 				mResponseBuf.WriteF("<init appid=\"" AHK_NAME "\" ide_key=\"%e\" session=\"%e\" thread=\"%u\" parent=\"\" language=\"" DEBUGGER_LANG_NAME "\" protocol_version=\"1.0\" fileuri=\""
 					, ide_key.GetString(), session.GetString(), GetCurrentThreadId());
@@ -2014,7 +2005,7 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 	}
 
 	WSACleanup();
-	return FatalError(DEBUGGER_E_INTERNAL_ERROR, DEBUGGER_ERR_FAILEDTOCONNECT DEBUGGER_ERR_DISCONNECT_PROMPT);
+	return FatalError(DEBUGGER_ERR_FAILEDTOCONNECT DEBUGGER_ERR_DISCONNECT_PROMPT);
 }
 
 // Debugger::Disconnect
@@ -2031,8 +2022,8 @@ int Debugger::Disconnect()
 		WSACleanup();
 	}
 	// These are reset in case we re-attach to the debugger client later:
-	mCommandBuf.mDataUsed = 0;
-	mResponseBuf.mDataUsed = 0;
+	mCommandBuf.Clear();
+	mResponseBuf.Clear();
 	mStdOutMode = SR_Disabled;
 	mStdErrMode = SR_Disabled;
 	if (mInternalState == DIS_Break)
@@ -2054,7 +2045,7 @@ void Debugger::Exit(ExitReasons aExitReason)
 	Disconnect();
 }
 
-int Debugger::FatalError(int aErrorCode, LPCTSTR aMessage)
+int Debugger::FatalError(LPCTSTR aMessage)
 {
 	g_Debugger.Disconnect();
 
@@ -2063,7 +2054,7 @@ int Debugger::FatalError(int aErrorCode, LPCTSTR aMessage)
 		// The following will exit even if the OnExit subroutine does not use ExitApp:
 		g_script.ExitApp(EXIT_ERROR, _T(""));
 	}
-	return aErrorCode;
+	return DEBUGGER_E_INTERNAL_ERROR;
 }
 
 const char *Debugger::sBase64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -2157,7 +2148,8 @@ size_t Debugger::Base64Decode(char *aBuf, const char *aInput, size_t aInputSize/
 // Write data into the buffer, expanding it as necessary.
 int Debugger::Buffer::Write(char *aData, size_t aDataSize)
 {
-	int err;
+	if (mFailed) // See WriteF() for comments.
+		return DEBUGGER_E_INTERNAL_ERROR;
 
 	if (aDataSize == -1)
 		aDataSize = strlen(aData);
@@ -2165,8 +2157,8 @@ int Debugger::Buffer::Write(char *aData, size_t aDataSize)
 	if (aDataSize == 0)
 		return DEBUGGER_E_OK;
 
-	if (err = ExpandIfNecessary(mDataUsed + aDataSize))
-		return err;
+	if (ExpandIfNecessary(mDataUsed + aDataSize) != DEBUGGER_E_OK)
+		return DEBUGGER_E_INTERNAL_ERROR;
 
 	memcpy(mData + mDataUsed, aData, aDataSize);
 	mDataUsed += aDataSize;
@@ -2176,7 +2168,15 @@ int Debugger::Buffer::Write(char *aData, size_t aDataSize)
 // Write formatted data into the buffer. Supports %s (char*), %e (char*, "&'<> escaped), %i (int), %u (unsigned int), %p (UINT_PTR).
 int Debugger::Buffer::WriteF(const char *aFormat, ...)
 {
-	int i, err;
+	if (mFailed)
+	{
+		// A prior Write() failed and the now-invalid data hasn't yet been cleared
+		// from the buffer.  Abort.  This allows numerous other parts of the code
+		// to omit error-checking.
+		return DEBUGGER_E_INTERNAL_ERROR;
+	}
+
+	int i;
 	size_t len;
 	char c;
 	const char *format_ptr, *s, *param_ptr, *entity;
@@ -2267,11 +2267,9 @@ int Debugger::Buffer::WriteF(const char *aFormat, ...)
 				mData[mDataUsed++] = *format_ptr;
 		} // for (format_ptr = aFormat; c = *format_ptr; ++format_ptr)
 
-		va_end(vl);
-
 		if (i == 0)
-			if (err = ExpandIfNecessary(mDataUsed + len))
-				return err;
+			if (ExpandIfNecessary(mDataUsed + len) != DEBUGGER_E_OK)
+				return DEBUGGER_E_INTERNAL_ERROR;
 	} // for (len = 0, i = 0; i < 2; ++i)
 
 	return DEBUGGER_E_OK;
@@ -2280,7 +2278,7 @@ int Debugger::Buffer::WriteF(const char *aFormat, ...)
 // Convert a file path to a URI and write it to the buffer.
 int Debugger::Buffer::WriteFileURI(const char *aPath)
 {
-	int err, c, len = 9; // 8 for "file:///", 1 for '\0' (written by sprintf()).
+	int c, len = 9; // 8 for "file:///", 1 for '\0' (written by sprintf()).
 
 	// Calculate required buffer size for path after encoding.
 	for (const char *ptr = aPath; c = *ptr; ++ptr)
@@ -2292,8 +2290,8 @@ int Debugger::Buffer::WriteFileURI(const char *aPath)
 	}
 
 	// Ensure the buffer contains enough space.
-	if (err = ExpandIfNecessary(mDataUsed + len))
-		return err;
+	if (ExpandIfNecessary(mDataUsed + len) != DEBUGGER_E_OK)
+		return DEBUGGER_E_INTERNAL_ERROR;
 
 	Write("file:///", 8);
 
@@ -2322,14 +2320,13 @@ int Debugger::Buffer::WriteFileURI(const char *aPath)
 
 int Debugger::Buffer::WriteEncodeBase64(const char *aInput, size_t aInputSize, bool aSkipBufferSizeCheck/* = false*/)
 {
-	int err;
 	if (aInputSize)
 	{
 		if (!aSkipBufferSizeCheck)
 		{
 			// Ensure required buffer space is available.
-			if (err = ExpandIfNecessary(mDataUsed + DEBUGGER_BASE64_ENCODED_SIZE(aInputSize)))
-				return err;
+			if (ExpandIfNecessary(mDataUsed + DEBUGGER_BASE64_ENCODED_SIZE(aInputSize)) != DEBUGGER_E_OK)
+				return DEBUGGER_E_INTERNAL_ERROR;
 		}
 		//else caller has already ensured there is enough space and wants to be absolutely sure mData isn't reallocated.
 		ASSERT(mDataUsed + aInputSize < mDataSize);
@@ -2389,6 +2386,9 @@ int Debugger::Buffer::Expand()
 // Expand as necessary to meet a minimum required size.
 int Debugger::Buffer::ExpandIfNecessary(size_t aRequiredSize)
 {
+	if (mFailed)
+		return DEBUGGER_E_INTERNAL_ERROR;
+
 	size_t new_size;
 	for (new_size = mDataSize ? mDataSize : DEBUGGER_INITIAL_BUFFER_SIZE
 		; new_size < aRequiredSize
@@ -2400,8 +2400,10 @@ int Debugger::Buffer::ExpandIfNecessary(size_t aRequiredSize)
 		char *new_data = (char*)realloc(mData, new_size);
 
 		if (new_data == NULL)
-			// Note: FatalError() calls Disconnect(), which "clears" mResponseBuf.
-			return FatalError(DEBUGGER_E_INTERNAL_ERROR);
+		{
+			mFailed = TRUE;
+			return DEBUGGER_E_INTERNAL_ERROR;
+		}
 
 		mData = new_data;
 		mDataSize = new_size;
@@ -2416,6 +2418,12 @@ void Debugger::Buffer::Remove(size_t aDataSize)
 	if (aDataSize < mDataUsed)
 		memmove(mData, mData + aDataSize, mDataUsed - aDataSize);
 	mDataUsed -= aDataSize;
+}
+
+void Debugger::Buffer::Clear()
+{
+	mDataUsed = 0;
+	mFailed = FALSE;
 }
 
 
