@@ -524,6 +524,7 @@ DEBUGGER_COMMAND(Debugger::stop)
 
 DEBUGGER_COMMAND(Debugger::detach)
 {
+	mContinuationTransactionId = aTransactionId; // Seems more appropriate than using the previous ID (if any).
 	// User wants to stop the debugger but let the script keep running.
 	Exit(EXIT_NONE); // Anything but EXIT_ERROR.  Sends "stopped" response, then disconnects.
 	return DEBUGGER_E_CONTINUE; // Response already sent.
