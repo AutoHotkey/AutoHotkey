@@ -700,7 +700,12 @@ private:
 		, LPTSTR aOptions, bool aIsPixelGetColor);
 	ResultType ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTSTR aImageFile);
 	ResultType PixelGetColor(int aX, int aY, LPTSTR aOptions);
-
+	int Line::ImageSearch2_EraseTransColor(unsigned char * Needle, int nw, int nh, unsigned char * Trans);
+	int Line::ImageSearch2_PixelAverageScan(unsigned char * Needle, int Stride, int w, int h, int * suX, int * suY);
+	int Line::ImageSearch2_WithVariance(int * Foundx, int * Foundy, unsigned char * HayStack, unsigned char * Needle, int nw, int nh, int Stride1, int Stride2, int sx2, int sy2, int v, int sd, int suX, int suY);
+	int Line::ImageSearch2_NoVariance(int * Foundx, int * Foundy, unsigned char * HayStack, unsigned char * Needle, int nw, int nh, int Stride1, int Stride2, int sx2, int sy2, int sd, int suX, int suY);
+	
+	
 	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
 
 public:
@@ -2967,6 +2972,7 @@ BIF_DECL(BIF_ComObjTypeOrValue);
 BIF_DECL(BIF_ComObjFlags);
 BIF_DECL(BIF_ComObjArray);
 BIF_DECL(BIF_ComObjQuery);
+
 
 
 BIF_DECL(BIF_Exception);
