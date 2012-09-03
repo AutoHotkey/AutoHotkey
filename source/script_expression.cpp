@@ -2212,7 +2212,14 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 			}
 		} // for each arg.
 
-		// IT'S NOT SAFE to do the following until the above loop FULLY completes because any calls made above to
+		// See "Update #3" comment above.  This must be done separately to the loop below since Contents()
+		// may cause a warning dialog, which in turn may cause a new thread to launch, thus potentially
+		// corrupting sArgDeref/sArgVar.
+		for (i = 0; i < mArgc; ++i)
+			if (arg_deref[i] == NULL)
+				arg_deref[i] = arg_var[i]->Contents();
+
+		// IT'S NOT SAFE to do the following until the above loops FULLY complete because any calls made above to
 		// ExpandExpression() might call functions, which in turn might result in a recursive call to ExpandArgs(),
 		// which in turn might change the values in the static arrays sArgDeref and sArgVar.
 		// Also, only when the loop ends normally is the following needed, since otherwise it's a failure condition.
@@ -2220,7 +2227,7 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 		// safe to set the args of this command for use by our caller, to whom we're about to return.
 		for (i = 0; i < mArgc; ++i) // Copying actual/used elements is probably faster than using memcpy to copy both entire arrays.
 		{
-			sArgDeref[i] = arg_deref[i] ? arg_deref[i] : arg_var[i]->Contents(); // See "Update #3" comment above.
+			sArgDeref[i] = arg_deref[i];
 			sArgVar[i] = arg_var[i];
 		}
 	} // mArgc > 0

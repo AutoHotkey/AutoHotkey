@@ -138,9 +138,6 @@
     <ClInclude Include="source\KuString.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="source\lib\exearc_read.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="source\lib_pcre\pcre\pcre.h">
       <Filter>Header Files</Filter>
     </ClInclude>

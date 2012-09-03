@@ -4643,7 +4643,6 @@ error:
 
 ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTSTR aImageFile)
 // Author: ImageSearch was created by Aurelian Maga.
-// Author: ImageSearch Mode 2 was created by Robert Eding using a modified version of Tic's Gdip imagesearch code.
 {
 	// Many of the following sections are similar to those in PixelSearch(), so they should be
 	// maintained together.
@@ -4664,42 +4663,17 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 	aRight  += origin.x;
 	aBottom += origin.y;
 
-	// Mode 2 (M2) has several major changes over Mode 1 (classic/standard mode).
-	// *1. It will use the alpha values of a image if they exist without the need to specify a *Trans value.
-	// *2. With variation (depending on the needle image and level of variation) searches are much faster.
-	// *4. The scan direction used to match the needle image to the haystack (screen) can be manually set. The direction
-	// meaning left->right, top->bottom or right->left, top->bottom, etc. Depending on the needle image, one scan direction
-	// over another can mean the difference between a 40 second search time and a .5 second search time.
-	// If the scan direction is not manually set, it will default to 0/1 and if the needle image is larger than 6x6 it will
-	// run a scan function that tries to calculate the best scan direction. If the needle image is not larger than 6x6 or if the
-	// scan function fails to find a "best" direction, scan direction will be set to 1.
-	// scan direction 1: left->right, top->bottom
-	// scan direction 2: left->right, bottom->top
-	// scan direction 3: right->left, bottom->top
-	// scan direction 4: right->left, top->bottom
-	// The scan direction does not effect where on the screen the needle image is matched because it is always relative to the
-	// current search position. If the search is on x10, y15 and the needle image is 8x8 with a scan direction of 3 the fist pixel
-	// checked would be x8, y8 on the needle image against x18, y23 on the haystack image.
-	// *5. If the scan direction is not manually set and the needle image is larger than 6x6 it will run a scan function to find a
-	// "unique" pixel on the needle image that is least like the rest of the needle image and use that as an initial check location
-	// before looking for the rest of the needle image. The unique pixel is selected from the corner of the image deemed most-unique.
-	// That corner is also what sets the scan direction.
-	
-	
 	// Options are done as asterisk+option to permit future expansion.
 	// Set defaults to be possibly overridden by any specified options:
 	int aVariation = 0;  // This is named aVariation vs. variation for use with the SET_COLOR_RANGE macro.
 	COLORREF trans_color = CLR_NONE; // The default must be a value that can't occur naturally in an image.
 	int icon_number = 0; // Zero means "load icon or bitmap (doesn't matter)".
 	int width = 0, height = 0;
-	int scan_direction = 0; // Added with the M2 search method.
-	int search_method = 1; // Added with the M2 search method.
 	// For icons, override the default to be 16x16 because that is what is sought 99% of the time.
 	// This new default can be overridden by explicitly specifying w0 h0:
 	LPTSTR cp = _tcsrchr(aImageFile, '.');
 	if (cp)
 	{
-		
 		++cp;
 		if (!(_tcsicmp(cp, _T("ico")) && _tcsicmp(cp, _T("exe")) && _tcsicmp(cp, _T("dll"))))
 			width = GetSystemMetrics(SM_CXSMICON), height = GetSystemMetrics(SM_CYSMICON);
@@ -4714,7 +4688,6 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 		{
 		case 'W': width = ATOI(cp + 1); break;
 		case 'H': height = ATOI(cp + 1); break;
-		case 'M': search_method = ATOI(cp + 1); break; // Added with the M2 search method.
 		default:
 			if (!_tcsnicmp(cp, _T("Icon"), 4))
 			{
@@ -4741,13 +4714,6 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 					trans_color = bgr_to_rgb(trans_color); // v1.0.44.10: See fix/comment above.
 
 			}
-			else if (!_tcsnicmp(cp, _T("SD"), 2)) // Added with the M2 search method.
-			{
-				cp += 2; // Now it's the character after the word.
-				scan_direction = ATOI(cp); // Hex or decimal input makes no difference
-				if (scan_direction < 0 || scan_direction > 4) // 0-4 are the only valid options.
-					scan_direction = 0;
-			}
 			else // Assume it's a number since that's the only other asterisk-option.
 			{
 				aVariation = ATOI(cp); // Seems okay to support hex via ATOI because the space after the number is documented as being mandatory.
@@ -4770,8 +4736,6 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 		cp = omit_leading_whitespace(cp); // This is done to make it more tolerant of having more than one space/tab between options.
 	}
 
-	// Update 2: Transparency is now supported in any filetype that supports it while using the M2 search method.	// Added with the M2 search method.
-	// The *Trans option is still present and can be used in conjunction with an images default transparent pixels.
 	// Update: Transparency is now supported in icons by using the icon's mask.  In addition, an attempt
 	// is made to support transparency in GIF, PNG, and possibly TIF files via the *Trans option, which
 	// assumes that one color in the image is transparent.  In GIFs not loaded via GDIPlus, the transparent
@@ -4785,18 +4749,7 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 	// So currently, only BMP and GIF seem to work reliably, though some of the other GDIPlus-supported
 	// formats might work too.
 	int image_type;
-	HBITMAP hbitmap_image;
-	if (search_method == 2) // Added with the M2 search method.
-		// GDIPlus properly loads bmp, gif and jpg files with alpha values that the M2 search method needs.
-		// Using GDIPlus adds some slight overhead from the dll load and unload calls but it seems ok
-		// because of the following reasons:
-		// 1. The M2 search method needs the alpha values to be correct.
-		// 2. The added time is very small (10~ MS).
-		// 3. The M2 search method is primarily used during lengthy imagesearches and is typically still faster
-		// then the M1 search method even after the added 10~ MS.
-		hbitmap_image = LoadPicture(aImageFile, width, height, image_type, icon_number, true);
-	else
-		hbitmap_image = LoadPicture(aImageFile, width, height, image_type, icon_number, false);
+	HBITMAP hbitmap_image = LoadPicture(aImageFile, width, height, image_type, icon_number, false);
 	// The comment marked OBSOLETE below is no longer true because the elimination of the high-byte via
 	// 0x00FFFFFF seems to have fixed it.  But "true" is still not passed because that should increase
 	// consistency when GIF/BMP/ICO files are used by a script on both Win9x and other OSs (since the
@@ -4885,212 +4838,149 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 		for (i = 0; i < image_pixel_count; ++i)
 			image_pixel[i] &= 0x00F8F8F8;  // Same.
 	}
-	
-	// Added with the M2 search method.
-	int found_x = NULL, found_y = NULL; // Required to be outside the code below for use at the end of the function.
-	
-	if (search_method == 2) // Added with the M2 search method.
+
+	// v1.0.44.03: The below is now done even for variation>0 mode so its results are consistent with those of
+	// non-variation mode.  This is relied upon by variation=0 mode but now also by the following line in the
+	// variation>0 section:
+	//     || image_pixel[j] == trans_color
+	// Without this change, there are cases where variation=0 would find a match but a higher variation
+	// (for the same search) wouldn't. 
+	for (i = 0; i < image_pixel_count; ++i)
+		image_pixel[i] &= 0x00FFFFFF;
+
+	// Search the specified region for the first occurrence of the image:
+	if (aVariation < 1) // Caller wants an exact match.
 	{
-		// sx1 and sy1 where removed because the haystack image is already set to the valid search area.
-		int sx2, sy2;
-		int search_unique_x = 0, search_unique_y = 0;
-		
-		// This prevents the search function from trying to find a 20 pixel wide image when it only has 19 pixels worth of search area available.
-		sx2 = screen_width - image_width;
-		sy2 = screen_height - image_height;
-		
-		// If the needle image width or height is the same as the haystack width or height these end up 0 and need to be increased by one to search properly
-		if (sx2 == 0)
-			sx2 = 1;
-		if (sy2 == 0)
-			sy2 = 1;
-		
-		// Sets any pixels matching the trans_color value to clear (alpha of 0).
-		// The function will "fail" (return 1) if the alpha value of trans_color is set. The defualt not-user-set value contains an alpha value.
-		ImageSearch2_EraseTransColor((unsigned char*)image_pixel
-									, image_width, image_height
-									, (unsigned char*)&trans_color);
-		
-		// It doesn't seem worth it to do all of the scan-direction and best-pixel processing with a needle image smaller than 6x6.
-		if (scan_direction == 0 && image_width >= 6 && image_height >= 6)
-		{
-			// This finds the "best" scan direction (left <> right/up <> down).
-			// This also finds a "check first" pixel that is least-like the rest of the needle image.
-			// If the Average Scan function doesn't find unique pixels for both the x and y values it will set them both to 0 (default).
-			scan_direction = ImageSearch2_PixelAverageScan((unsigned char*)image_pixel
-												, image_width * 4
-												, image_width, image_height
-												, &search_unique_x, &search_unique_y);
-		} else if (scan_direction == 0) // If the needle image is smaller than 6x6, scan_direction needs to be manually set.
-			scan_direction = 1;
-		
-		if (aVariation == 0)
-			// Returns 0 on success.
-			found = !ImageSearch2_NoVariance(&found_x, &found_y
-							, (unsigned char*)screen_pixel, (unsigned char*)image_pixel
-							, image_width, image_height
-							, screen_width * 4, image_width * 4
-							, sx2, sy2
-							, scan_direction
-							, search_unique_x, search_unique_y);
-		else
-			// Returns 0 on success.
-			found = !ImageSearch2_WithVariance(&found_x, &found_y
-							, (unsigned char*)screen_pixel, (unsigned char*)image_pixel
-							, image_width, image_height
-							, screen_width * 4, image_width * 4
-							, sx2, sy2
-							, aVariation, scan_direction
-							, search_unique_x, search_unique_y);
-	} else {
-		// v1.0.44.03: The below is now done even for variation>0 mode so its results are consistent with those of
-		// non-variation mode.  This is relied upon by variation=0 mode but now also by the following line in the
-		// variation>0 section:
-		//     || image_pixel[j] == trans_color
-		// Without this change, there are cases where variation=0 would find a match but a higher variation
-		// (for the same search) wouldn't. 
-		for (i = 0; i < image_pixel_count; ++i)
-			image_pixel[i] &= 0x00FFFFFF;
+		// Concerning the following use of 0x00FFFFFF, the use of 0x00F8F8F8 above is related (both have high order byte 00).
+		// The following needs to be done only when shades-of-variation mode isn't in effect because
+		// shades-of-variation mode ignores the high-order byte due to its use of macros such as GetRValue().
+		// This transformation incurs about a 15% performance decrease (percentage is fairly constant since
+		// it is proportional to the search-region size, which tends to be much larger than the search-image and
+		// is therefore the primary determination of how long the loops take). But it definitely helps find images
+		// more successfully in some cases.  For example, if a PNG file is displayed in a GUI window, this
+		// transformation allows certain bitmap search-images to be found via variation==0 when they otherwise
+		// would require variation==1 (possibly the variation==1 success is just a side-effect of it
+		// ignoring the high-order byte -- maybe a much higher variation would be needed if the high
+		// order byte were also subject to the same shades-of-variation analysis as the other three bytes [RGB]).
+		for (i = 0; i < screen_pixel_count; ++i)
+			screen_pixel[i] &= 0x00FFFFFF;
 
-		// Search the specified region for the first occurrence of the image:
-		if (aVariation < 1) // Caller wants an exact match.
+		for (i = 0; i < screen_pixel_count; ++i)
 		{
-			// Concerning the following use of 0x00FFFFFF, the use of 0x00F8F8F8 above is related (both have high order byte 00).
-			// The following needs to be done only when shades-of-variation mode isn't in effect because
-			// shades-of-variation mode ignores the high-order byte due to its use of macros such as GetRValue().
-			// This transformation incurs about a 15% performance decrease (percentage is fairly constant since
-			// it is proportional to the search-region size, which tends to be much larger than the search-image and
-			// is therefore the primary determination of how long the loops take). But it definitely helps find images
-			// more successfully in some cases.  For example, if a PNG file is displayed in a GUI window, this
-			// transformation allows certain bitmap search-images to be found via variation==0 when they otherwise
-			// would require variation==1 (possibly the variation==1 success is just a side-effect of it
-			// ignoring the high-order byte -- maybe a much higher variation would be needed if the high
-			// order byte were also subject to the same shades-of-variation analysis as the other three bytes [RGB]).
-			for (i = 0; i < screen_pixel_count; ++i)
-				screen_pixel[i] &= 0x00FFFFFF;
-
-			for (i = 0; i < screen_pixel_count; ++i)
+			// Unlike the variation-loop, the following one uses a first-pixel optimization to boost performance
+			// by about 10% because it's only 3 extra comparisons and exact-match mode is probably used more often.
+			// Before even checking whether the other adjacent pixels in the region match the image, ensure
+			// the image does not extend past the right or bottom edges of the current part of the search region.
+			// This is done for performance but more importantly to prevent partial matches at the edges of the
+			// search region from being considered complete matches.
+			// The following check is ordered for short-circuit performance.  In addition, image_mask, if
+			// non-NULL, is used to determine which pixels are transparent within the image and thus should
+			// match any color on the screen.
+			if ((screen_pixel[i] == image_pixel[0] // A screen pixel has been found that matches the image's first pixel.
+				|| image_mask && image_mask[0]     // Or: It's an icon's transparent pixel, which matches any color.
+				|| image_pixel[0] == trans_color)  // This should be okay even if trans_color==CLR_NONE, since CLR_NONE should never occur naturally in the image.
+				&& image_height <= screen_height - i/screen_width // Image is short enough to fit in the remaining rows of the search region.
+				&& image_width <= screen_width - i%screen_width)  // Image is narrow enough not to exceed the right-side boundary of the search region.
 			{
-				// Unlike the variation-loop, the following one uses a first-pixel optimization to boost performance
-				// by about 10% because it's only 3 extra comparisons and exact-match mode is probably used more often.
-				// Before even checking whether the other adjacent pixels in the region match the image, ensure
-				// the image does not extend past the right or bottom edges of the current part of the search region.
-				// This is done for performance but more importantly to prevent partial matches at the edges of the
-				// search region from being considered complete matches.
-				// The following check is ordered for short-circuit performance.  In addition, image_mask, if
-				// non-NULL, is used to determine which pixels are transparent within the image and thus should
-				// match any color on the screen.
-				if ((screen_pixel[i] == image_pixel[0] // A screen pixel has been found that matches the image's first pixel.
-					|| image_mask && image_mask[0]     // Or: It's an icon's transparent pixel, which matches any color.
-					|| image_pixel[0] == trans_color)  // This should be okay even if trans_color==CLR_NONE, since CLR_NONE should never occur naturally in the image.
-					&& image_height <= screen_height - i/screen_width // Image is short enough to fit in the remaining rows of the search region.
-					&& image_width <= screen_width - i%screen_width)  // Image is narrow enough not to exceed the right-side boundary of the search region.
+				// Check if this candidate region -- which is a subset of the search region whose height and width
+				// matches that of the image -- is a pixel-for-pixel match of the image.
+				for (found = true, x = 0, y = 0, j = 0, k = i; j < image_pixel_count; ++j)
 				{
-					// Check if this candidate region -- which is a subset of the search region whose height and width
-					// matches that of the image -- is a pixel-for-pixel match of the image.
-					for (found = true, x = 0, y = 0, j = 0, k = i; j < image_pixel_count; ++j)
-					{
-						if (!(found = (screen_pixel[k] == image_pixel[j] // At least one pixel doesn't match, so this candidate is discarded.
-							|| image_mask && image_mask[j]      // Or: It's an icon's transparent pixel, which matches any color.
-							|| image_pixel[j] == trans_color))) // This should be okay even if trans_color==CLR_NONE, since CLR none should never occur naturally in the image.
-							break;
-						if (++x < image_width) // We're still within the same row of the image, so just move on to the next screen pixel.
-							++k;
-						else // We're starting a new row of the image.
-						{
-							x = 0; // Return to the leftmost column of the image.
-							++y;   // Move one row downward in the image.
-							// Move to the next row within the current-candidate region (not the entire search region).
-							// This is done by moving vertically downward from "i" (which is the upper-left pixel of the
-							// current-candidate region) by "y" rows.
-							k = i + y*screen_width; // Verified correct.
-						}
-					}
-					if (found) // Complete match found.
+					if (!(found = (screen_pixel[k] == image_pixel[j] // At least one pixel doesn't match, so this candidate is discarded.
+						|| image_mask && image_mask[j]      // Or: It's an icon's transparent pixel, which matches any color.
+						|| image_pixel[j] == trans_color))) // This should be okay even if trans_color==CLR_NONE, since CLR none should never occur naturally in the image.
 						break;
+					if (++x < image_width) // We're still within the same row of the image, so just move on to the next screen pixel.
+						++k;
+					else // We're starting a new row of the image.
+					{
+						x = 0; // Return to the leftmost column of the image.
+						++y;   // Move one row downward in the image.
+						// Move to the next row within the current-candidate region (not the entire search region).
+						// This is done by moving vertically downward from "i" (which is the upper-left pixel of the
+						// current-candidate region) by "y" rows.
+						k = i + y*screen_width; // Verified correct.
+					}
 				}
+				if (found) // Complete match found.
+					break;
 			}
 		}
-		else // Allow colors to vary by aVariation shades; i.e. approximate match is okay.
+	}
+	else // Allow colors to vary by aVariation shades; i.e. approximate match is okay.
+	{
+		// The following section is part of the first-pixel-check optimization that improves performance by
+		// 15% or more depending on where and whether a match is found.  This section and one the follows
+		// later is commented out to reduce code size.
+		// Set high/low range for the first pixel of the image since it is the pixel most often checked
+		// (i.e. for performance).
+		//BYTE search_red1 = GetBValue(image_pixel[0]);  // Because it's RGB vs. BGR, the B value is fetched, not R (though it doesn't matter as long as everything is internally consistent here).
+		//BYTE search_green1 = GetGValue(image_pixel[0]);
+		//BYTE search_blue1 = GetRValue(image_pixel[0]); // Same comment as above.
+		//BYTE red_low1 = (aVariation > search_red1) ? 0 : search_red1 - aVariation;
+		//BYTE green_low1 = (aVariation > search_green1) ? 0 : search_green1 - aVariation;
+		//BYTE blue_low1 = (aVariation > search_blue1) ? 0 : search_blue1 - aVariation;
+		//BYTE red_high1 = (aVariation > 0xFF - search_red1) ? 0xFF : search_red1 + aVariation;
+		//BYTE green_high1 = (aVariation > 0xFF - search_green1) ? 0xFF : search_green1 + aVariation;
+		//BYTE blue_high1 = (aVariation > 0xFF - search_blue1) ? 0xFF : search_blue1 + aVariation;
+		// Above relies on the fact that the 16-bit conversion higher above was already done because like
+		// in PixelSearch, it seems more appropriate to do the 16-bit conversion prior to setting the range
+		// of high and low colors (vs. than applying 0xF8 to each of the high/low values individually).
+
+		BYTE red, green, blue;
+		BYTE search_red, search_green, search_blue;
+		BYTE red_low, green_low, blue_low, red_high, green_high, blue_high;
+
+		// The following loop is very similar to its counterpart above that finds an exact match, so maintain
+		// them together and see above for more detailed comments about it.
+		for (i = 0; i < screen_pixel_count; ++i)
 		{
-			// The following section is part of the first-pixel-check optimization that improves performance by
-			// 15% or more depending on where and whether a match is found.  This section and one the follows
-			// later is commented out to reduce code size.
-			// Set high/low range for the first pixel of the image since it is the pixel most often checked
-			// (i.e. for performance).
-			//BYTE search_red1 = GetBValue(image_pixel[0]);  // Because it's RGB vs. BGR, the B value is fetched, not R (though it doesn't matter as long as everything is internally consistent here).
-			//BYTE search_green1 = GetGValue(image_pixel[0]);
-			//BYTE search_blue1 = GetRValue(image_pixel[0]); // Same comment as above.
-			//BYTE red_low1 = (aVariation > search_red1) ? 0 : search_red1 - aVariation;
-			//BYTE green_low1 = (aVariation > search_green1) ? 0 : search_green1 - aVariation;
-			//BYTE blue_low1 = (aVariation > search_blue1) ? 0 : search_blue1 - aVariation;
-			//BYTE red_high1 = (aVariation > 0xFF - search_red1) ? 0xFF : search_red1 + aVariation;
-			//BYTE green_high1 = (aVariation > 0xFF - search_green1) ? 0xFF : search_green1 + aVariation;
-			//BYTE blue_high1 = (aVariation > 0xFF - search_blue1) ? 0xFF : search_blue1 + aVariation;
-			// Above relies on the fact that the 16-bit conversion higher above was already done because like
-			// in PixelSearch, it seems more appropriate to do the 16-bit conversion prior to setting the range
-			// of high and low colors (vs. than applying 0xF8 to each of the high/low values individually).
-
-			BYTE red, green, blue;
-			BYTE search_red, search_green, search_blue;
-			BYTE red_low, green_low, blue_low, red_high, green_high, blue_high;
-
-			// The following loop is very similar to its counterpart above that finds an exact match, so maintain
-			// them together and see above for more detailed comments about it.
-			for (i = 0; i < screen_pixel_count; ++i)
+			// The following is commented out to trade code size reduction for performance (see comment above).
+			//red = GetBValue(screen_pixel[i]);   // Because it's RGB vs. BGR, the B value is fetched, not R (though it doesn't matter as long as everything is internally consistent here).
+			//green = GetGValue(screen_pixel[i]);
+			//blue = GetRValue(screen_pixel[i]);
+			//if ((red >= red_low1 && red <= red_high1
+			//	&& green >= green_low1 && green <= green_high1
+			//	&& blue >= blue_low1 && blue <= blue_high1 // All three color components are a match, so this screen pixel matches the image's first pixel.
+			//		|| image_mask && image_mask[0]         // Or: It's an icon's transparent pixel, which matches any color.
+			//		|| image_pixel[0] == trans_color)      // This should be okay even if trans_color==CLR_NONE, since CLR none should never occur naturally in the image.
+			//	&& image_height <= screen_height - i/screen_width // Image is short enough to fit in the remaining rows of the search region.
+			//	&& image_width <= screen_width - i%screen_width)  // Image is narrow enough not to exceed the right-side boundary of the search region.
+			
+			// Instead of the above, only this abbreviated check is done:
+			if (image_height <= screen_height - i/screen_width    // Image is short enough to fit in the remaining rows of the search region.
+				&& image_width <= screen_width - i%screen_width)  // Image is narrow enough not to exceed the right-side boundary of the search region.
 			{
-				// The following is commented out to trade code size reduction for performance (see comment above).
-				//red = GetBValue(screen_pixel[i]);   // Because it's RGB vs. BGR, the B value is fetched, not R (though it doesn't matter as long as everything is internally consistent here).
-				//green = GetGValue(screen_pixel[i]);
-				//blue = GetRValue(screen_pixel[i]);
-				//if ((red >= red_low1 && red <= red_high1
-				//	&& green >= green_low1 && green <= green_high1
-				//	&& blue >= blue_low1 && blue <= blue_high1 // All three color components are a match, so this screen pixel matches the image's first pixel.
-				//		|| image_mask && image_mask[0]         // Or: It's an icon's transparent pixel, which matches any color.
-				//		|| image_pixel[0] == trans_color)      // This should be okay even if trans_color==CLR_NONE, since CLR none should never occur naturally in the image.
-				//	&& image_height <= screen_height - i/screen_width // Image is short enough to fit in the remaining rows of the search region.
-				//	&& image_width <= screen_width - i%screen_width)  // Image is narrow enough not to exceed the right-side boundary of the search region.
-				
-				// Instead of the above, only this abbreviated check is done:
-				if (image_height <= screen_height - i/screen_width    // Image is short enough to fit in the remaining rows of the search region.
-					&& image_width <= screen_width - i%screen_width)  // Image is narrow enough not to exceed the right-side boundary of the search region.
+				// Since the first pixel is a match, check the other pixels.
+				for (found = true, x = 0, y = 0, j = 0, k = i; j < image_pixel_count; ++j)
 				{
-					// Since the first pixel is a match, check the other pixels.
-					for (found = true, x = 0, y = 0, j = 0, k = i; j < image_pixel_count; ++j)
-					{
-						search_red = GetBValue(image_pixel[j]);
-						search_green = GetGValue(image_pixel[j]);
-						search_blue = GetRValue(image_pixel[j]);
-						SET_COLOR_RANGE
-						red = GetBValue(screen_pixel[k]);
-						green = GetGValue(screen_pixel[k]);
-						blue = GetRValue(screen_pixel[k]);
+   					search_red = GetBValue(image_pixel[j]);
+	   				search_green = GetGValue(image_pixel[j]);
+		   			search_blue = GetRValue(image_pixel[j]);
+					SET_COLOR_RANGE
+   					red = GetBValue(screen_pixel[k]);
+	   				green = GetGValue(screen_pixel[k]);
+		   			blue = GetRValue(screen_pixel[k]);
 
-						if (!(found = red >= red_low && red <= red_high
-							&& green >= green_low && green <= green_high
-							&& blue >= blue_low && blue <= blue_high
-								|| image_mask && image_mask[j]     // Or: It's an icon's transparent pixel, which matches any color.
-								|| image_pixel[j] == trans_color)) // This should be okay even if trans_color==CLR_NONE, since CLR_NONE should never occur naturally in the image.
-							break; // At least one pixel doesn't match, so this candidate is discarded.
-						if (++x < image_width) // We're still within the same row of the image, so just move on to the next screen pixel.
-							++k;
-						else // We're starting a new row of the image.
-						{
-							x = 0; // Return to the leftmost column of the image.
-							++y;   // Move one row downward in the image.
-							k = i + y*screen_width; // Verified correct.
-						}
+					if (!(found = red >= red_low && red <= red_high
+						&& green >= green_low && green <= green_high
+                        && blue >= blue_low && blue <= blue_high
+							|| image_mask && image_mask[j]     // Or: It's an icon's transparent pixel, which matches any color.
+							|| image_pixel[j] == trans_color)) // This should be okay even if trans_color==CLR_NONE, since CLR_NONE should never occur naturally in the image.
+						break; // At least one pixel doesn't match, so this candidate is discarded.
+					if (++x < image_width) // We're still within the same row of the image, so just move on to the next screen pixel.
+						++k;
+					else // We're starting a new row of the image.
+					{
+						x = 0; // Return to the leftmost column of the image.
+						++y;   // Move one row downward in the image.
+						k = i + y*screen_width; // Verified correct.
 					}
-					if (found) // Complete match found.
-						break;
 				}
+				if (found) // Complete match found.
+					break;
 			}
 		}
-		// Added with the M2 search method.
-		// By setting these here the return code at the end of this function can always reference found_x and found_y
-		// instead of needing to check which method was used to search for the image.
-		found_x = i%screen_width;
-		found_y = i/screen_width;
 	}
 
 	if (!found) // Must override ErrorLevel to its new value prior to the label below.
@@ -5122,415 +5012,15 @@ end:
 	// Otherwise, success.  Calculate xpos and ypos of where the match was found and adjust
 	// coords to make them relative to the position of the target window (rect will contain
 	// zeroes if this doesn't need to be done):
-	// Modified with the M2 search method.
-	// i%screen_width was replaced with found_x and i/screen_width was replaced with found_y
-	if (output_var_x && !output_var_x->Assign((aLeft + found_x) - origin.x))
+	if (output_var_x && !output_var_x->Assign((aLeft + i%screen_width) - origin.x))
 		return FAIL;
-	if (output_var_y && !output_var_y->Assign((aTop + found_y) - origin.y))
+	if (output_var_y && !output_var_y->Assign((aTop + i/screen_width) - origin.y))
 		return FAIL;
 
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 error:
 	return SetErrorLevelOrThrowStr(ERRORLEVEL_ERROR2);
-}
-
-
-
-int Line::ImageSearch2_EraseTransColor(unsigned char * Needle, int nw, int nh, unsigned char * Trans)
-{
-	int x, y;
-	int Stride;
-	
-	Stride = nw * 4; // Relies on the image being 32 bit. This is ok because the only code that calls this uses 32 bit only images.
-	
-	// Converts any pixels that match the Trans color to the alpha of 0 (clear)
-	// Any trans value with an alpha value will be ignored. This way TransBlack  can be applied but the default Trans value (0xFFFFFFFF) won't be.
-	if (Trans[3] == 0)
-	{
-		for (y = 0; y < nh; y++)
-		{
-			for (x = 0; x < nw; x++)
-			{
-				if (Needle[(4*x)+(y*Stride)+2] == Trans[2]
-				&& Needle[(4*x)+(y*Stride)+1] == Trans[1]
-				&& Needle[(4*x)+(y*Stride)] == Trans[0])
-					Needle[(4*x)+(y*Stride)+3] = 0;
-			}
-		}
-		return 0; // Successfully converted any needed values.
-	} else
-		return 1; // The Trans value is invalid (contains an alpha value).
-}
-
-
-
-int Line::ImageSearch2_NoVariance(int * Foundx, int * Foundy, unsigned char * HayStack, unsigned char * Needle, int nw, int nh, int Stride1, int Stride2, int sx2, int sy2, int sd, int suX, int suY)
-{ // Added with the M2 search method (ImageSearch)
-	int y1, y2, x1, x2, tx, ty;
-	
-	// This looks for an exact image match of the needle image in the haystack image
-	// The sx1 and sy1 values where removed because they where not used. The calling code only loads the required search area into the haystack image.
-	
-	for (y1 = 0; y1 < sy2; y1++)
-	{
-		for (x1 = 0; x1 < sx2; x1++)
-		{
-			// First-pixel matching is done with a "unique" pixel to reduce the number of false matches on larger same-color needles
-			// If a unique pixel wasn't found or the needle image is smaller then 6x6 this defaults to 0/0 - the top left pixel in the needle image
-			if (Needle[(4*suX)+(suY*Stride2)+2] == HayStack[(4*(x1 + suX))+((y1 + suY)*Stride1)+2]
-			&& Needle[(4*suX)+(suY*Stride2)+1] == HayStack[(4*(x1 + suX))+((y1 + suY)*Stride1)+1]
-			&& Needle[(4*suX)+(suY*Stride2)] == HayStack[(4*(x1 + suX))+((y1 + suY)*Stride1)])
-			{
-				// Search direction 1
-				// left -> right
-				// top -> bottom
-				if (sd == 1){
-					ty = y1;
-					for (y2 = 0; y2 < nh; y2++)
-					{
-						tx = x1;
-						for (x2 = 0; x2 < nw; x2++)
-						{
-							if (Needle[(4*x2)+(y2*Stride2)+2] == HayStack[(4*tx)+(ty*Stride1)+2]
-							&& Needle[(4*x2)+(y2*Stride2)+1] == HayStack[(4*tx)+(ty*Stride1)+1]
-							&& Needle[(4*x2)+(y2*Stride2)] == HayStack[(4*tx)+(ty*Stride1)]
-							|| Needle[(4*x2)+(y2*Stride2)+3] == 0)
-								tx++;
-							else
-								goto NoMatch;
-						}
-						ty++;
-					}
-				// Search direction 2
-				// left -> right
-				// bottom -> top
-				} else if (sd == 2){
-					ty = y1 + nh - 1;
-					for (y2 = nh - 1; y2 > -1; y2--)
-					{
-						tx = x1;
-						for (x2 = 0; x2 < nw; x2++)
-						{
-							if (Needle[(4*x2)+(y2*Stride2)+2] == HayStack[(4*tx)+(ty*Stride1)+2]
-							&& Needle[(4*x2)+(y2*Stride2)+1] == HayStack[(4*tx)+(ty*Stride1)+1]
-							&& Needle[(4*x2)+(y2*Stride2)] == HayStack[(4*tx)+(ty*Stride1)]
-							|| Needle[(4*x2)+(y2*Stride2)+3] == 0)
-								tx++;
-							else
-								goto NoMatch;
-						}
-						ty--;
-					}
-				// Search direction 3
-				// right -> left
-				// bottom -> top
-				} else if (sd == 3){
-					ty = y1 + nh - 1;
-					for (y2 = nh - 1; y2 > -1; y2--)
-					{
-						tx = x1 + nw - 1;
-						for (x2 = nw - 1; x2 > -1; x2--)
-						{
-							if (Needle[(4*x2)+(y2*Stride2)+2] == HayStack[(4*tx)+(ty*Stride1)+2]
-							&& Needle[(4*x2)+(y2*Stride2)+1] == HayStack[(4*tx)+(ty*Stride1)+1]
-							&& Needle[(4*x2)+(y2*Stride2)] == HayStack[(4*tx)+(ty*Stride1)]
-							|| Needle[(4*x2)+(y2*Stride2)+3] == 0)
-								tx--;
-							else
-								goto NoMatch;
-						}
-						ty--;
-					}
-				// Search direction 4
-				// right -> left
-				// top -> bottom
-				} else if (sd == 4){
-					ty = y1;
-					for (y2 = 0; y2 < nh; y2++)
-					{
-						tx = x1 + nw - 1;
-						for (x2 = nw - 1; x2 > -1; x2--)
-						{
-							if (Needle[(4*x2)+(y2*Stride2)+2] == HayStack[(4*tx)+(ty*Stride1)+2]
-							&& Needle[(4*x2)+(y2*Stride2)+1] == HayStack[(4*tx)+(ty*Stride1)+1]
-							&& Needle[(4*x2)+(y2*Stride2)] == HayStack[(4*tx)+(ty*Stride1)]
-							|| Needle[(4*x2)+(y2*Stride2)+3] == 0)
-								tx--;
-							else
-								goto NoMatch;
-						}
-						ty++;
-					}
-				}
-			} else
-				continue;
-			
-			// If the above code didn't goto NoMatch then the image was found
-			// Record the found position and end the search
-			Foundx[0] = x1; Foundy[0] = y1;
-			return 0;
-			NoMatch:;
-		}
-	}
-	
-	// If the above code finished without returning then no match was found
-	// The Foundx and Foundy values are only ever used if a match was found so they don't need to be set here.
-	return 1;
-}
-
-
-
-int Line::ImageSearch2_WithVariance(int * Foundx, int * Foundy, unsigned char * HayStack, unsigned char * Needle, int nw, int nh, int Stride1, int Stride2, int sx2, int sy2, int v, int sd, int suX, int suY)
-{ // Added with the M2 search method (ImageSearch)
-	int y1, y2, x1, x2, tx, ty;
-
-	// This looks for a variance image match of the needle image in the haystack image.
-	// The sx1 and sy1 values where removed because they where not used. The calling code only loads the required search area into the haystack image.
-	
-	for (y1 = 0; y1 < sy2; y1++)
-	{
-		for (x1 = 0; x1 < sx2; x1++)
-		{
-			// First-pixel matching is done with a "unique" pixel to reduce the number of false matches on larger same-color needles
-			// If a unique pixel wasn't found or the needle image is smaller then 6x6 this defaults to 0/0 - the top left pixel in the needle image
-			if (Needle[(4*suX)+(suY*Stride2)] <= HayStack[(4*(x1 + suX))+((y1 + suY)*Stride1)]+v
-			&& Needle[(4*suX)+(suY*Stride2)] >= HayStack[(4*(x1 + suX))+((y1 + suY)*Stride1)]-v)
-			{
-				// Search direction 1
-				// left -> right
-				// top -> bottom
-				if (sd == 1){
-					ty = y1;
-					for (y2 = 0; y2 < nh; y2++)
-					{
-						tx = x1;
-						for (x2 = 0; x2 < nw; x2++)
-						{
-							if (Needle[(4*x2)+(y2*Stride2)+2] <= HayStack[(4*tx)+(ty*Stride1)+2]+v
-							&& Needle[(4*x2)+(y2*Stride2)+2] >= HayStack[(4*tx)+(ty*Stride1)+2]-v
-							&& Needle[(4*x2)+(y2*Stride2)+1] <= HayStack[(4*tx)+(ty*Stride1)+1]+v
-							&& Needle[(4*x2)+(y2*Stride2)+1] >= HayStack[(4*tx)+(ty*Stride1)+1]-v
-							&& Needle[(4*x2)+(y2*Stride2)] <= HayStack[(4*tx)+(ty*Stride1)]+v
-							&& Needle[(4*x2)+(y2*Stride2)] >= HayStack[(4*tx)+(ty*Stride1)]-v
-							|| Needle[(4*x2)+(y2*Stride2)+3] == 0)
-								tx++;
-							else
-								goto NoMatch;
-						}
-						ty++;
-					}
-				// Search direction 2
-				// left -> right
-				// bottom -> top
-				} else if (sd == 2){
-					ty = y1 + nh - 1;
-					for (y2 = nh - 1; y2 > -1; y2--)
-					{
-						tx = x1;
-						for (x2 = 0; x2 < nw; x2++)
-						{
-							if (Needle[(4*x2)+(y2*Stride2)+2] <= HayStack[(4*tx)+(ty*Stride1)+2]+v
-							&& Needle[(4*x2)+(y2*Stride2)+2] >= HayStack[(4*tx)+(ty*Stride1)+2]-v
-							&& Needle[(4*x2)+(y2*Stride2)+1] <= HayStack[(4*tx)+(ty*Stride1)+1]+v
-							&& Needle[(4*x2)+(y2*Stride2)+1] >= HayStack[(4*tx)+(ty*Stride1)+1]-v
-							&& Needle[(4*x2)+(y2*Stride2)] <= HayStack[(4*tx)+(ty*Stride1)]+v
-							&& Needle[(4*x2)+(y2*Stride2)] >= HayStack[(4*tx)+(ty*Stride1)]-v
-							|| Needle[(4*x2)+(y2*Stride2)+3] == 0)
-								tx++;
-							else
-								goto NoMatch;
-						}
-						ty--;
-					}
-				// Search direction 3
-				// right -> left
-				// bottom -> top
-				} else if (sd == 3){
-					ty = y1 + nh - 1;
-					for (y2 = nh - 1; y2 > -1; y2--)
-					{
-						tx = x1 + nw - 1;
-						for (x2 = nw - 1; x2 > -1; x2--)
-						{
-							if (Needle[(4*x2)+(y2*Stride2)+2] <= HayStack[(4*tx)+(ty*Stride1)+2]+v
-							&& Needle[(4*x2)+(y2*Stride2)+2] >= HayStack[(4*tx)+(ty*Stride1)+2]-v
-							&& Needle[(4*x2)+(y2*Stride2)+1] <= HayStack[(4*tx)+(ty*Stride1)+1]+v
-							&& Needle[(4*x2)+(y2*Stride2)+1] >= HayStack[(4*tx)+(ty*Stride1)+1]-v
-							&& Needle[(4*x2)+(y2*Stride2)] <= HayStack[(4*tx)+(ty*Stride1)]+v
-							&& Needle[(4*x2)+(y2*Stride2)] >= HayStack[(4*tx)+(ty*Stride1)]-v
-							|| Needle[(4*x2)+(y2*Stride2)+3] == 0)
-								tx--;
-							else
-								goto NoMatch;
-						}
-						ty--;
-					}
-				// Search direction 4
-				// right -> left
-				// top -> bottom
-				} else if (sd == 4){
-					ty = y1;
-					for (y2 = 0; y2 < nh; y2++)
-					{
-						tx = x1 + nw - 1;
-						for (x2 = nw - 1; x2 > -1; x2--)
-						{
-							if (Needle[(4*x2)+(y2*Stride2)+2] <= HayStack[(4*tx)+(ty*Stride1)+2]+v
-							&& Needle[(4*x2)+(y2*Stride2)+2] >= HayStack[(4*tx)+(ty*Stride1)+2]-v
-							&& Needle[(4*x2)+(y2*Stride2)+1] <= HayStack[(4*tx)+(ty*Stride1)+1]+v
-							&& Needle[(4*x2)+(y2*Stride2)+1] >= HayStack[(4*tx)+(ty*Stride1)+1]-v
-							&& Needle[(4*x2)+(y2*Stride2)] <= HayStack[(4*tx)+(ty*Stride1)]+v
-							&& Needle[(4*x2)+(y2*Stride2)] >= HayStack[(4*tx)+(ty*Stride1)]-v
-							|| Needle[(4*x2)+(y2*Stride2)+3] == 0)
-								tx--;
-							else
-								goto NoMatch;
-						}
-						ty++;
-					}
-				}
-			} else
-				continue;
-			
-			// If the above code didn't goto NoMatch then the image was found.
-			// Record the found position and end the search.
-			Foundx[0] = x1; Foundy[0] = y1;
-			return 0;
-			NoMatch:;
-		}
-	}
-	
-	// If the above code finished without returning then no match was found.
-	// The Foundx and Foundy values are only ever used if a match is found so they don't need to be set here.
-	return 1;
-}
-
-
-
-int Line::ImageSearch2_PixelAverageScan(unsigned char * Needle, int Stride, int w, int h, int * suX, int * suY)
-{ // Added with the M2 search method (ImageSearch)
-	unsigned int R, G, B;
-	int i, x, y, tx, ty;
-	int RL, GL, BL;
-	int RH, GH, BH;
-	int Count, Corner;
-	int ScanDirection = 0;
-	int LastDifference, LastCount;
-	int LargestCount = 0;
-	int * SX, * SY, * SW, * SH;
-	int * buffer;
-	
-	// Allocates a single block of memory for the bounding box values below instead of 4 chunks
-	buffer = (int*) malloc(80); // 5 sets of 4 ints (5*4*4 bytes)
-	
-	for (i=0; i < 20; i++) // Blank the buffer before using it. 5*4 = 20 ints.
-		buffer[i] = 0;
-	
-	// Sets the default unique pixel to 0 incase the code below doesn't find a real one
-	suX[0] = 0;
-	suY[0] = 0;
-	
-	SX = buffer;
-	SY = SX + 5;
-	SW = SY + 5;
-	SH = SW + 5;
-	
-	// Splits the image into 4 as-close-to-equal size squares as possible
-	// Any values not set for a corner default to 0
-	SW[1] = w / 2; // Width of the top left corner
-	SH[1] = h / 2; // Height of the top left corner
-	
-	SY[2] = h / 2; // Y value of the bottom left corner
-	SW[2] = w / 2; // Width of the bottom left corner
-	SH[2] = h; // Height of the bottom left corner
-	
-	SX[3] = w / 2; // X value of the bottom right corner
-	SY[3] = h / 2; // Y value of the bottom right corner
-	SW[3] = w; // Width of the bottom right corner
-	SH[3] = h; // Height of the bottom right corner
-	
-	SX[4] = w / 2; // X value of the top right corner
-	SW[4] = w; // Width of the top right corner
-	SH[4] = h / 2; // Height of the top right corner
-	
-	// The maximum possible safe image size is 67371264 total pixels (8208 x 8208).
-	// Larger images can be used but they may give false average color readings.
-	// Seems ok seeing as a image that large would be super rare if not impossible.
-	for (Corner = 1; Corner < 5; Corner++)
-	{
-		// Resets the values to 0 for each corner
-		R = 0;
-		G = 0;
-		B = 0;
-		for (y = SY[Corner]; y < SH[Corner]; y++) // Adds up the red green and blue values for each pixel
-		{
-			for (x = SX[Corner]; x < SW[Corner]; x++)
-			{
-				R += Needle[(4*x)+(y*Stride)+2];
-				G += Needle[(4*x)+(y*Stride)+1];
-				B += Needle[(4*x)+(y*Stride)];
-			}
-		}
-		
-		// Divides the added pixel color values by the total number of pixels giving an average red green and blue color for all pixels.
-		R = R / ((SW[Corner] - SX[Corner]) * (SH[Corner] - SY[Corner]));
-		G = G / ((SW[Corner] - SX[Corner]) * (SH[Corner] - SY[Corner]));
-		B = B / ((SW[Corner] - SX[Corner]) * (SH[Corner] - SY[Corner]));
-		
-		// Sets the variance level for "average" pixels.
-		// Anything not within the variance level is deemed unique.
-		// A pixel is given a score based if the red green and blue values don't fall within the average variance levels. A higher score will override a lower score.
-		RH = R + 25;
-		RL = R - 25;
-		GH = G + 25;
-		GL = G - 25;
-		BH = B + 25;
-		BL = B - 25;
-		
-		// Resets the counters for each corner
-		Count = 0;
-		LastDifference = 0;
-		for (y = SY[Corner]; y < SH[Corner]; y++)
-		{
-			for (x = SX[Corner]; x < SW[Corner]; x++)
-			{
-				if (Needle[(4*x)+(y*Stride)+3] == 0) // If the pixel has an alpha value of 0 skip over it as it will always trigger a match on the imagesearch code
-					continue;
-				
-				LastCount = Count;
-				// Scores the pixel based on how many of the red green and blue values don't fall within the average pixel colors.
-				if (Needle[(4*x)+(y*Stride)+2] >= RH || Needle[(4*x)+(y*Stride)+2] <= RL)
-					Count ++;
-				
-				if (Needle[(4*x)+(y*Stride)+1] >= GH || Needle[(4*x)+(y*Stride)+1] <= GL)
-					Count ++;
-				
-				if (Needle[(4*x)+(y*Stride)] >= BH || Needle[(4*x)+(y*Stride)] <= BL)
-					Count ++;
-				
-				if ((Count - LastCount) > LastDifference) // If the score is higher than the last score and higher than the best unique pixel found yet; record the location and continue the search.
-				{
-					tx = x;
-					ty = y;
-					LastDifference = Count - LastCount;
-				}
-			}
-		}
-		
-		// If the total count of unique pixels is larger than the largest count found yet; record the corner the count was found in as well as the count and location of the best unique pixel for this corner of the image.
-		if (Count > LargestCount)
-		{
-			LargestCount = Count;
-			ScanDirection = Corner;
-			suX[0] = tx;
-			suY[0] = ty;
-		}
-	}
-	
-	free (buffer); // Frees the buffer created for the bounding box values.
-	
-	return ScanDirection = 0 ? 1 : ScanDirection; // The function is required to return non-zero.
 }
 
 
@@ -6015,6 +5505,16 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		g_MenuIsVisible = MENU_TYPE_NONE; // See comments in similar code in GuiWindowProc().
 		break;
 
+#ifdef CONFIG_DEBUGGER
+	case AHK_CHECK_DEBUGGER:
+		// This message is sent when data arrives on the debugger's socket.  It allows the
+		// debugger to respond to commands which are sent while the script is sleeping or
+		// waiting for messages.
+		if (g_Debugger.IsConnected() && g_Debugger.HasPendingCommand())
+			g_Debugger.ProcessCommands();
+		break;
+#endif
+
 	default:
 		// The following iMsg can't be in the switch() since it's not constant:
 		if (iMsg == WM_TASKBARCREATED && !g_NoTrayIcon) // !g_NoTrayIcon --> the tray icon should be always visible.
@@ -6044,7 +5544,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 				_itoa(LOWORD(lParam), dbg_port, 10);
 
 			if (g_Debugger.Connect(dbg_host, dbg_port) == DEBUGGER_E_OK)
-				g_Debugger.ProcessCommands();
+				g_Debugger.Break();
 		}
 #endif
 
@@ -10113,36 +9613,6 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 #ifdef AUTOHOTKEYSC
 	if (!allow_overwrite && Util_DoesFileExist(aDest))
 		return SetErrorLevelOrThrow();
-#ifdef ENABLE_EXEARC
-
-	HS_EXEArc_Read oRead;
-	// AutoIt3: Open the archive in this compiled exe.
-	// Jon gave me some details about why a password isn't needed: "The code in those libraries will
-	// only allow files to be extracted from the exe it is bound to (i.e the script that it was
-	// compiled with).  There are various checks and CRCs to make sure that it can't be used to read
-	// the files from any other exe that is passed."
-	if (oRead.Open(CStringCharFromTCharIfNeeded(g_script.mFileSpec), "") != HS_EXEARC_E_OK)
-		return LineError(ERR_EXE_CORRUPTED); // Usually caused by virus corruption. Probably impossible since it was previously opened successfully to run the main script.
-	
-	// aSource should be the same as the "file id" used to originally compress the file
-	// when it was compiled into an EXE.  So this should seek for the right file:
-	int result = oRead.FileExtract(CStringCharFromTCharIfNeeded(aSource), CStringCharFromTCharIfNeeded(aDest));
-	oRead.Close();
-
-	// v1.0.46.15: The following is a fix for the fact that a compiled script (but not an uncompiled one)
-	// that executes FileInstall somehow causes the Random command to generate the same series of random
-	// numbers every time the script launches. Perhaps the answer lies somewhere in oRead's code --
-	// something that somehow resets the static data used by init_genrand().
-	RESEED_RANDOM_GENERATOR;
-
-	success = (result == HS_EXEARC_E_OK);
-		// v1.0.48: Since extraction failure can occur more than rarely (e.g. when disk is full,
-		// permission denied, etc.), Ladiko suggested that no dialog be displayed.  The script
-		// can consult ErrorLevel to detect the failure and decide whether a MsgBox or other action
-		// is appropriate:
-		//MsgBox(aSource, 0, "Could not extract file:");
-
-#else // ENABLE_EXEARC not defined:
 
 	// Open the file first since it's the most likely to fail:
 	HANDLE hfile = CreateFile(aDest, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
@@ -10177,7 +9647,6 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 		success = false;
 	CloseHandle(hfile);
 
-#endif
 #else // AUTOHOTKEYSC not defined:
 
 	// v1.0.35.11: Must search in A_ScriptDir by default because that's where ahk2exe will search by default.
