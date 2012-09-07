@@ -151,13 +151,6 @@
       <PreprocessorDefinitions>AUTOHOTKEYSC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="$(ConfigDebug)">_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
-    <Link>
-      <AdditionalDependencies Condition="'$(Platform)'=='Win32'">$(ProjectDir)source\lib\exearc_read_mt.lib;%(AdditionalDependencies)</AdditionalDependencies>
-    </Link>
-    <PostBuildEvent>
-      <Message>Removing CheckSum from $(TargetFileName) so Ahk2Exe doesn't complain</Message>
-      <Command>"$(ProjectDir)PostBuildSC.ahk" "$(TargetPath)"</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <!-- upx compression: Release -->
   <PropertyGroup>
@@ -251,7 +244,6 @@
     <ClInclude Include="source\debug.h" />
     <ClInclude Include="source\Debugger.h" />
     <ClInclude Include="source\defines.h" />
-    <ClInclude Include="source\lib\exearc_read.h" />
     <ClInclude Include="source\globaldata.h" />
     <ClInclude Include="source\hook.h" />
     <ClInclude Include="source\hotkey.h" />

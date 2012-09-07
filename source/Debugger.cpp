@@ -39,6 +39,45 @@ CStringA g_DebuggerPort;
 int Breakpoint::sMaxId = 0;
 
 
+Debugger::CommandDef Debugger::sCommands[] =
+{
+	{"run", &run},
+	{"step_into", &step_into},
+	{"step_over", &step_over},
+	{"step_out", &step_out},
+	{"break", &_break},
+	{"stop", &stop},
+	{"detach", &detach},
+
+	{"status", &status},
+	
+	{"stack_get", &stack_get},
+	{"stack_depth", &stack_depth},
+	{"context_get", &context_get},
+	{"context_names", &context_names},
+
+	{"property_get", &property_get},
+	{"property_set", &property_set},
+	{"property_value", &property_value},
+	
+	{"feature_get", &feature_get},
+	{"feature_set", &feature_set},
+	
+	{"breakpoint_set", &breakpoint_set},
+	{"breakpoint_get", &breakpoint_get},
+	{"breakpoint_update", &breakpoint_update},
+	{"breakpoint_remove", &breakpoint_remove},
+	{"breakpoint_list", &breakpoint_list},
+
+	{"stdout", &redirect_stdout},
+	{"stderr", &redirect_stderr},
+
+	{"typemap_get", &typemap_get},
+	
+	{"source", &source},
+};
+
+
 // PreExecLine: aLine is about to execute; handle current line marker, breakpoints and step into/over/out.
 int Debugger::PreExecLine(Line *aLine)
 {
@@ -56,7 +95,7 @@ int Debugger::PreExecLine(Line *aLine)
 			aLine->mBreakpoint = NULL;
 			delete bp;
 		}
-		return ProcessCommands();
+		return Break();
 	}
 
 	if ((mInternalState == DIS_StepInto
@@ -66,6 +105,16 @@ int Debugger::PreExecLine(Line *aLine)
 		&& aLine->mActionType != ACT_BLOCK_BEGIN && (aLine->mActionType != ACT_BLOCK_END || aLine->mAttribute) // Ignore { and }; except for function-end, since we want to break there after a "return" to inspect variables while they're still in scope.
 		&& aLine->mLineNumber) // Some scripts (i.e. LowLevel/code.ahk) use mLineNumber==0 to indicate the Line has been generated and injected by the script.
 	{
+		return Break();
+	}
+	
+	// Check if a command was sent asynchronously (while the script was running).
+	// Such commands may also be detected via the AHK_CHECK_DEBUGGER message,
+	// but if the program is checking for messages infrequently or not at all,
+	// the check here is needed to ensure the debugger is responsive.
+	if (HasPendingCommand())
+	{
+		// A command was sent asynchronously.
 		return ProcessCommands();
 	}
 	
@@ -73,176 +122,206 @@ int Debugger::PreExecLine(Line *aLine)
 }
 
 
+bool Debugger::HasPendingCommand()
+// Returns true if there is data in the socket's receive buffer.
+// This is used for receiving commands asynchronously.
+{
+	u_long dataPending;
+	if (ioctlsocket(mSocket, FIONREAD, &dataPending) == 0)
+		return dataPending > 0;
+	return false;
+}
+
+
+int Debugger::EnterBreakState()
+{
+	if (mInternalState != DIS_Starting && mInternalState != DIS_Break)
+		// Send a response for the previous continuation command.
+		if (int err = SendContinuationResponse())
+			return err;
+	// Remove keyboard/mouse hooks.
+	if (mDisabledHooks = GetActiveHooks())
+		AddRemoveHooks(0, true);
+	// Set break state.
+	mInternalState = DIS_Break;
+	return DEBUGGER_E_OK;
+}
+
+
+void Debugger::ExitBreakState()
+{
+	// Restore keyboard/mouse hooks if they were previously removed.
+	if (mDisabledHooks)
+	{
+		AddRemoveHooks(mDisabledHooks, true);
+		mDisabledHooks = 0;
+	}
+}
+
+
+int Debugger::Break()
+{
+	int err = EnterBreakState();
+	if (!err)
+		err = ProcessCommands();
+	return err;
+}
+
+
+const int MAX_DBGP_ARGS = 16; // More than currently necessary.
+
 int Debugger::ProcessCommands()
 {
+	// Disable notification of READ readiness and reset socket to synchronous mode.
+	u_long zero = 0;
+	WSAAsyncSelect(mSocket, g_hWnd, 0, 0);
+	ioctlsocket(mSocket, FIONBIO, &zero);
+
 	int err;
 
-	HookType active_hooks = GetActiveHooks();
-	if (active_hooks)
-		AddRemoveHooks(0, true);
-	
-	if (mInternalState != DIS_Starting)
-	{
-		// Send response for the previous continuation command.
-		if (err = SendContinuationResponse())
-			goto ProcessCommands_err_return;
-			//return err;
-	}
-	mInternalState = DIS_Break;
-
-	for(;;)
+	for (;;)
 	{
 		int command_length;
 
 		if (err = ReceiveCommand(&command_length))
-		{	// Internal/winsock/protocol error.
-			goto ProcessCommands_err_return;
-			//return err;
-		}
+			break; // Already called FatalError().
 
 		char *command = mCommandBuf.mData;
 		char *args = strchr(command, ' ');
-		// Split command name and args.
+		char *argv[MAX_DBGP_ARGS];
+		int arg_count = 0;
+
+		// transaction_id is considered optional for the following reasons:
+		//  - The spec doesn't explicitly say it is mandatory (just "standard").
+		//  - We don't actually need it for anything.
+		//  - Rejecting the command doesn't seem useful.
+		//  - It makes manually typing DBGp commands easier.
+		char *transaction_id = "";
+
 		if (args)
+		{
+			// Split command name and args.
 			*args++ = '\0';
-
-		if (args && *args)
-		{
-			err = DEBUGGER_E_UNIMPL_COMMAND;
-
-			if (!strcmp(command, "run"))
-				mInternalState = DIS_Run;
-			else if (!strncmp(command, "step_", 5))
-			{
-				if (!strcmp(command + 5, "into"))
-					mInternalState = DIS_StepInto;
-				else if (!strcmp(command + 5, "over"))
-					mInternalState = DIS_StepOver;
-				else if (!strcmp(command + 5, "out"))
-					mInternalState = DIS_StepOut;
-			}
-			else if (!strncmp(command, "feature_", 8))
-			{
-				if (!strcmp(command + 8, "get"))
-					err = feature_get(args);
-				else if (!strcmp(command + 8, "set"))
-					err = feature_set(args);
-			}
-			else if (!strncmp(command, "breakpoint_", 11))
-			{
-				if (!strcmp(command + 11, "set"))
-					err = breakpoint_set(args);
-				else if (!strcmp(command + 11, "get"))
-					err = breakpoint_get(args);
-				else if (!strcmp(command + 11, "update"))
-					err = breakpoint_update(args);
-				else if (!strcmp(command + 11, "remove"))
-					err = breakpoint_remove(args);
-				else if (!strcmp(command + 11, "list"))
-					err = breakpoint_list(args);
-			}
-			else if (!strncmp(command, "stack_", 6))
-			{
-				if (!strcmp(command + 6, "depth"))
-					err = stack_depth(args);
-				else if (!strcmp(command + 6, "get"))
-					err = stack_get(args);
-			}
-			else if (!strncmp(command, "context_", 8))
-			{
-				if (!strcmp(command + 8, "names"))
-					err = context_names(args);
-				else if (!strcmp(command + 8, "get"))
-					err = context_get(args);
-			}
-			else if (!strncmp(command, "property_", 9))
-			{
-				if (!strcmp(command + 9, "get"))
-					err = property_get(args);
-				else if (!strcmp(command + 9, "set"))
-					err = property_set(args);
-				else if (!strcmp(command + 9, "value"))
-					err = property_value(args);
-			}
-			else if (!strcmp(command, "status"))
-				err = status(args);
-			else if (!strcmp(command, "source"))
-				err = source(args);
-			else if (!strcmp(command, "stdout"))
-				err = redirect_stdout(args);
-			else if (!strcmp(command, "stderr"))
-				err = redirect_stderr(args);
-			else if (!strcmp(command, "typemap_get"))
-				err = typemap_get(args);
-			else if (!strcmp(command, "detach"))
-			{	// User wants to stop the debugger but let the script keep running.
-				Exit(EXIT_NONE); // Anything but EXIT_ERROR.  Sends "stopped" response, then disconnects.
-				return DEBUGGER_E_OK;
-			}
-			else if (!strcmp(command, "stop"))
-			{
-				err = stop(args);
-				// Above should exit the program.
-			}
+			// Split args into arg vector.
+			err = ParseArgs(args, argv, arg_count, transaction_id);
 		}
-		else
-		{	// All commands require at least the -i arg.
-			err = DEBUGGER_E_INVALID_OPTIONS;
-		}
-
-		mCommandBuf.Remove(command_length + 1);
-
-		if (err == DEBUGGER_E_INTERNAL_ERROR)
-			goto ProcessCommands_err_return;
-			//return err;
-
-		if (err) // Command returned error, is not implemented, or is a continuation command.
+		
+		if (!err)
 		{
-			char *transaction_id;
-			
-			if (args && (transaction_id = strstr(args, "-i ")))
+			for (int i = 0; ; ++i)
 			{
-				transaction_id += 3;
-				char *transaction_id_end;
-				if (transaction_id_end = strstr(transaction_id, " -"))
-					*transaction_id_end = '\0';
-			}
-			else transaction_id = "";
-			
-			if (mInternalState != DIS_Break) // Received a continuation command.
-			{
-				if (*transaction_id)
+				if (i == _countof(sCommands))
 				{
-					mContinuationDepth = mStack.Depth();
-					mContinuationTransactionId = transaction_id;
+					err = DEBUGGER_E_UNIMPL_COMMAND;
 					break;
 				}
-				err = DEBUGGER_E_INVALID_OPTIONS;
+				if (!strcmp(sCommands[i].mName, command))
+				{
+					// EXECUTE THE DBGP COMMAND.
+					err = (this->*sCommands[i].mFunc)(argv, arg_count, transaction_id);
+					break;
+				}
 			}
-			
-			// Assume command (if called) has not sent a response.
-			if (err = SendErrorResponse(command, transaction_id, err))
-			{	// Internal/winsock/protocol error.
-				goto ProcessCommands_err_return;
-				//return err;
-			}
-			
-			// Continue processing commands.
 		}
-	}
-	// Received a continuation command.
-	// Script execution should continue until a break condition is met:
-	//	If step_into was used, break on next line.
-	//	If step_out was used, break on next line after return.
-	//	If step_over was used, break on next line at same recursion depth.
-	//	Also break when an active breakpoint is reached.
-	//return DEBUGGER_E_OK;
-	err = DEBUGGER_E_OK;
 
-ProcessCommands_err_return:
-	if (active_hooks)
-		AddRemoveHooks(active_hooks, true);
+		if (!err)
+		{
+			if (mResponseBuf.mDataUsed)
+				err = SendResponse();
+			else
+				err = SendStandardResponse(command, transaction_id);
+			if (err)
+				break; // Already called FatalError().
+		}
+		else if (err == DEBUGGER_E_CONTINUE)
+		{
+			ASSERT(mInternalState != DIS_Break);
+			// Response will be sent when the debugger breaks again.
+			err = DEBUGGER_E_OK;
+		}
+		else
+		{
+			// Clear the response buffer in case a response was partially written
+			// before the error was encountered (or the command failed because the
+			// response buffer is full and cannot be expanded).
+			mResponseBuf.Clear();
+
+			if (mSocket == INVALID_SOCKET) // Already disconnected; see FatalError().
+				break;
+
+			if (err = SendErrorResponse(command, transaction_id, err))
+				break; // Already called FatalError().
+		}
+		
+		// Remove this command and its args from the buffer.
+		// (There may be additional commands following it.)
+		if (mCommandBuf.mDataUsed) // i.e. it hasn't been cleared as a result of disconnecting.
+			mCommandBuf.Remove(command_length + 1);
+
+		// If a command is received asynchronously, the debugger does not
+		// enter a break state.  In that case, we need to return after each
+		// command to avoid blocking in recv().
+		if (mInternalState != DIS_Break)
+			break;
+	}
+	ASSERT(mInternalState != DIS_Break);
+	// Register for message-based notification of data arrival.  If a command
+	// is received asynchronously, control will be passed back to the debugger
+	// to process it.  This allows the debugger engine to respond even if the
+	// script is sleeping or waiting for messages.
+	if (mSocket != INVALID_SOCKET)
+		WSAAsyncSelect(mSocket, g_hWnd, AHK_CHECK_DEBUGGER, FD_READ);
 	return err;
+}
+
+int Debugger::ParseArgs(char *aArgs, char **aArgV, int &aArgCount, char *&aTransactionId)
+{
+	aArgCount = 0;
+
+	while (*aArgs)
+	{
+		if (aArgCount == MAX_DBGP_ARGS)
+			return DEBUGGER_E_PARSE_ERROR;
+
+		if (*aArgs != '-')
+			return DEBUGGER_E_PARSE_ERROR;
+		++aArgs;
+
+		char arg_char = *aArgs;
+		if (!arg_char)
+			return DEBUGGER_E_PARSE_ERROR;
+		
+		if (aArgs[1] == ' ' && aArgs[2] != '-')
+		{
+			// Move the arg letter onto the space.
+			*++aArgs = arg_char;
+		}
+		// Store a pointer to the arg letter, followed immediately by its value.
+		aArgV[aArgCount++] = aArgs;
+		
+		if (arg_char == 'i')
+		{
+			// Handle transaction_id here to simplify many other sections.
+			aTransactionId = aArgs + 1;
+			--aArgCount;
+		}
+
+		if (arg_char == '-') // -- base64-encoded-data
+			break;
+		
+		// Find where this arg's value ends and the next arg begins.
+		char *next_arg = strstr(aArgs + 1, " -");
+		if (!next_arg)
+			break;
+
+		// Terminate this arg.
+		*next_arg = '\0';
+		
+		// Point aArgs to the next arg's hyphen.
+		aArgs = next_arg + 1;
+	}
+
+	return DEBUGGER_E_OK;
 }
 
 
@@ -250,148 +329,99 @@ ProcessCommands_err_return:
 // DBGP COMMANDS
 //
 
-// For simple commands that accept only -i transaction_id:
-#define DEBUGGER_COMMAND_INIT_TRANSACTION_ID \
-	if (strncmp(aArgs, "-i ", 3) || strstr(aArgs + 3, " -")) \
-		return DEBUGGER_E_INVALID_OPTIONS; \
-	char *transaction_id = aArgs + 3
-
 // Calculate base64-encoded size of data, including NULL terminator. org_size must be > 0 if unsigned.
-#define DEBUGGER_BASE64_ENCODED_SIZE(org_size) ((((DWORD)(org_size)-1)/3+1)*4 +1)
+#define DEBUGGER_BASE64_ENCODED_SIZE(org_size) ((((org_size)-1)/3+1)*4 +1)
 
 DEBUGGER_COMMAND(Debugger::status)
 {
-	DEBUGGER_COMMAND_INIT_TRANSACTION_ID;
+	if (aArgCount)
+		return DEBUGGER_E_INVALID_OPTIONS;
 
 	char *status;
 	switch (mInternalState)
 	{
 	case DIS_Starting:	status = "starting";	break;
-	case DIS_Run:		status = "running";		break;
-	default:			status = "break";
+	case DIS_Break:		status = "break";		break;
+	default:			status = "running";
 	}
 
-	mResponseBuf.WriteF("<response command=\"status\" status=\"%s\" reason=\"ok\" transaction_id=\"%e\"/>"
-						, status, transaction_id);
-
-	return SendResponse();
+	return mResponseBuf.WriteF(
+		"<response command=\"status\" status=\"%s\" reason=\"ok\" transaction_id=\"%e\"/>"
+		, status, aTransactionId);
 }
 
 DEBUGGER_COMMAND(Debugger::feature_get)
 {
-	int err;
-	char arg, *value;
-
-	char *transaction_id, *feature_name;
-
-	for(;;)
-	{
-		if (err = GetNextArg(aArgs, arg, value))
-			return err;
-		if (!arg)
-			break;
-		switch (arg)
-		{
-		case 'i': transaction_id = value; break;
-		case 'n': feature_name = value; break;
-		default:
-			return DEBUGGER_E_INVALID_OPTIONS;
-		}
-	}
-
-	if (!transaction_id || !feature_name)
+	// feature_get accepts exactly one arg: -n feature_name.
+	if (aArgCount != 1 || ArgChar(aArgV, 0) != 'n')
 		return DEBUGGER_E_INVALID_OPTIONS;
+
+	char *feature_name = ArgValue(aArgV, 0);
 
 	bool supported = false; // Is %feature_name% a supported feature string?
 	char *setting = "";
 
 	if (!strncmp(feature_name, "language_", 9)) {
-		if (supported = !strcmp(feature_name + 9, "supports_threads"))
+		if (!strcmp(feature_name + 9, "supports_threads"))
 			setting = "0";
-		else if (supported = !strcmp(feature_name + 9, "name"))
+		else if (!strcmp(feature_name + 9, "name"))
 			setting = DEBUGGER_LANG_NAME;
-		else if (supported = !strcmp(feature_name + 9, "version"))
+		else if (!strcmp(feature_name + 9, "version"))
 #ifdef UNICODE
 			setting = AHK_VERSION " (Unicode)";
 #else
 			setting = AHK_VERSION;
 #endif
-	} else if (supported = !strcmp(feature_name, "encoding"))
+	} else if (!strcmp(feature_name, "encoding"))
 		setting = "UTF-8";
-	else if (supported = !strcmp(feature_name, "protocol_version"))
+	else if (!strcmp(feature_name, "protocol_version")
+			|| !strcmp(feature_name, "supports_async"))
 		setting = "1";
-	else if (supported = !strcmp(feature_name, "supports_async"))
-		setting = "0"; // TODO: Async support for status, breakpoint_set, break, etc.
 	// Not supported: data_encoding - assume base64.
 	// Not supported: breakpoint_languages - assume only %language_name% is supported.
-	else if (supported = !strcmp(feature_name, "breakpoint_types"))
+	else if (!strcmp(feature_name, "breakpoint_types"))
 		setting = "line";
-	else if (supported = !strcmp(feature_name, "multiple_sessions"))
+	else if (!strcmp(feature_name, "multiple_sessions"))
 		setting = "0";
-	else if (supported = !strcmp(feature_name, "max_data"))
+	else if (!strcmp(feature_name, "max_data"))
 		setting = _itoa(mMaxPropertyData, (char*)_alloca(MAX_INTEGER_SIZE), 10);
-	else if (supported = !strcmp(feature_name, "max_children"))
+	else if (!strcmp(feature_name, "max_children"))
 		setting = _ultoa(mMaxChildren, (char*)_alloca(MAX_INTEGER_SIZE), 10);
-	else if (supported = !strcmp(feature_name, "max_depth"))
+	else if (!strcmp(feature_name, "max_depth"))
 		setting = _ultoa(mMaxDepth, (char*)_alloca(MAX_INTEGER_SIZE), 10);
 	// TODO: STOPPING state for retrieving variable values, etc. after the script finishes, then implement supports_postmortem feature name. Requires debugger client support.
 	else
 	{
-		supported = !strcmp(feature_name, "run")
-			|| !strncmp(feature_name, "step_", 5)
-				&& (!strcmp(feature_name + 5, "into")
-				 || !strcmp(feature_name + 5, "over")
-				 || !strcmp(feature_name + 5, "out"))
-			|| !strncmp(feature_name, "feature_", 8)
-				&& (!strcmp(feature_name + 8, "get")
-				 || !strcmp(feature_name + 8, "set"))
-			|| !strncmp(feature_name, "breakpoint_", 11)
-				&& (!strcmp(feature_name + 11, "set")
-				 || !strcmp(feature_name + 11, "get")
-				 || !strcmp(feature_name + 11, "update")
-				 || !strcmp(feature_name + 11, "remove")
-				 || !strcmp(feature_name + 11, "list"))
-			|| !strncmp(feature_name, "stack_", 6)
-				&& (!strcmp(feature_name + 6, "depth")
-				 || !strcmp(feature_name + 6, "get"))
-			|| !strncmp(feature_name, "context_", 8)
-				&& (!strcmp(feature_name + 8, "names")
-				 || !strcmp(feature_name + 8, "get"))
-			|| !strncmp(feature_name, "property_", 9)
-				&& (!strcmp(feature_name + 9, "get")
-				 || !strcmp(feature_name + 9, "set")
-				 || !strcmp(feature_name + 9, "value"))
-			|| !strcmp(feature_name, "status")
-			|| !strcmp(feature_name, "source")
-			|| !strcmp(feature_name, "stdout")
-			|| !strcmp(feature_name, "stderr")
-			|| !strcmp(feature_name, "typemap_get")
-			|| !strcmp(feature_name, "detach")
-			|| !strcmp(feature_name, "stop");
+		for (int i = 0; i < _countof(sCommands); ++i)
+		{
+			if (!strcmp(sCommands[i].mName, feature_name))
+			{
+				supported = true;
+				break;
+			}
+		}
 	}
 
-	mResponseBuf.WriteF("<response command=\"feature_get\" feature_name=\"%e\" supported=\"%i\" transaction_id=\"%e\">%s</response>"
-						, feature_name, (int)supported, transaction_id, setting);
+	if (*setting)
+		supported = true;
 
-	return SendResponse();
+	return mResponseBuf.WriteF(
+		"<response command=\"feature_get\" feature_name=\"%e\" supported=\"%i\" transaction_id=\"%e\">%s</response>"
+		, feature_name, (int)supported, aTransactionId, setting);
 }
 
 DEBUGGER_COMMAND(Debugger::feature_set)
 {
-	int err;
 	char arg, *value;
 
-	char *transaction_id, *feature_name, *feature_value;
+	char *feature_name = NULL, *feature_value = NULL;
 
-	for(;;)
+	for (int i = 0; i < aArgCount; ++i)
 	{
-		if (err = GetNextArg(aArgs, arg, value))
-			return err;
-		if (!arg)
-			break;
+		arg = ArgChar(aArgV, i);
+		value = ArgValue(aArgV, i);
 		switch (arg)
 		{
-		case 'i': transaction_id = value; break;
 		case 'n': feature_name = value; break;
 		case 'v': feature_value = value; break;
 		default:
@@ -399,7 +429,7 @@ DEBUGGER_COMMAND(Debugger::feature_set)
 		}
 	}
 
-	if (!transaction_id || !feature_name || !feature_value)
+	if (!feature_name || !feature_value)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	bool success = false;
@@ -422,19 +452,60 @@ DEBUGGER_COMMAND(Debugger::feature_set)
 	else if (success = !strcmp(feature_name, "max_depth"))
 		mMaxDepth = ival;
 
-	mResponseBuf.WriteF("<response command=\"feature_set\" feature=\"%e\" success=\"%i\" transaction_id=\"%e\"/>"
-						, feature_name, (int)success, transaction_id);
+	return mResponseBuf.WriteF(
+		"<response command=\"feature_set\" feature=\"%e\" success=\"%i\" transaction_id=\"%e\"/>"
+		, feature_name, (int)success, aTransactionId);
+}
 
-	return SendResponse();
+DEBUGGER_COMMAND(Debugger::run)
+{
+	return run_step(aArgV, aArgCount, aTransactionId, "run", DIS_Run);
+}
+
+DEBUGGER_COMMAND(Debugger::step_into)
+{
+	return run_step(aArgV, aArgCount, aTransactionId, "step_into", DIS_StepInto);
+}
+
+DEBUGGER_COMMAND(Debugger::step_over)
+{
+	return run_step(aArgV, aArgCount, aTransactionId, "step_over", DIS_StepOver);
+}
+
+DEBUGGER_COMMAND(Debugger::step_out)
+{
+	return run_step(aArgV, aArgCount, aTransactionId, "step_out", DIS_StepOut);
+}
+
+int Debugger::run_step(char **aArgV, int aArgCount, char *aTransactionId, char *aCommandName, DebuggerInternalStateType aNewState)
+{
+	if (aArgCount)
+		return DEBUGGER_E_INVALID_OPTIONS;
+	
+	if (mInternalState != DIS_Break)
+		return DEBUGGER_E_COMMAND_UNAVAIL;
+
+	ExitBreakState();
+	mInternalState = aNewState;
+	mContinuationDepth = mStack.Depth();
+	mContinuationTransactionId = aTransactionId;
+	
+	// Response will be sent when the debugger breaks.
+	return DEBUGGER_E_CONTINUE;
+}
+
+DEBUGGER_COMMAND(Debugger::_break)
+{
+	if (aArgCount)
+		return DEBUGGER_E_INVALID_OPTIONS;
+	if (int err = EnterBreakState())
+		return err;
+	return DEBUGGER_E_OK;
 }
 
 DEBUGGER_COMMAND(Debugger::stop)
 {
-	// See DEBUGGER_COMMAND_INIT_TRANSACTION_ID.
-	if (!strncmp(aArgs, "-i ", 3) && !strstr(aArgs + 3, " -"))
-		mContinuationTransactionId = aArgs + 3;
-	else // Seems appropriate to ignore invalid args for stop command.
-		mContinuationTransactionId = "";
+	mContinuationTransactionId = aTransactionId;
 
 	// Call g_script.TerminateApp instead of g_script.ExitApp to bypass OnExit subroutine.
 	g_script.TerminateApp(EXIT_EXIT, 0); // This also causes this->Exit() to be called.
@@ -443,27 +514,28 @@ DEBUGGER_COMMAND(Debugger::stop)
 	return DEBUGGER_E_INTERNAL_ERROR;
 }
 
+DEBUGGER_COMMAND(Debugger::detach)
+{
+	mContinuationTransactionId = aTransactionId; // Seems more appropriate than using the previous ID (if any).
+	// User wants to stop the debugger but let the script keep running.
+	Exit(EXIT_NONE, "detach"); // Anything but EXIT_ERROR.  Sends "stopped" response, then disconnects.
+	return DEBUGGER_E_CONTINUE; // Response already sent.
+}
+
 DEBUGGER_COMMAND(Debugger::breakpoint_set)
 {
-	int err;
 	char arg, *value;
 	
-	char *type = NULL, state = BS_Enabled, *transaction_id = NULL, *filename = NULL;
+	char *type = NULL, state = BS_Enabled, *filename = NULL;
 	LineNumberType lineno = 0;
 	bool temporary = false;
 
-	for(;;)
+	for (int i = 0; i < aArgCount; ++i)
 	{
-		if (err = GetNextArg(aArgs, arg, value))
-			return err;
-		if (!arg)
-			break;
+		arg = ArgChar(aArgV, i);
+		value = ArgValue(aArgV, i);
 		switch (arg)
 		{
-		case 'i':
-			transaction_id = value;
-			break;
-
 		case 't': // type = line | call | return | exception | conditional | watch
 			type = value;
 			break;
@@ -502,9 +574,7 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 		}
 	}
 
-	if (!transaction_id || !type)
-		return DEBUGGER_E_INVALID_OPTIONS;
-	if (strcmp(type, "line")) // i.e. type != "line"
+	if (!type || strcmp(type, "line")) // i.e. type != "line"
 		return DEBUGGER_E_BREAKPOINT_TYPE;
 	if (lineno < 1)
 		return DEBUGGER_E_BREAKPOINT_INVALID;
@@ -548,6 +618,13 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 		for (line = line ? line->mNextLine : g_script.mFirstLine; line; line = line->mNextLine)
 			if (line->mFileIndex == file_index && line->mLineNumber >= lineno)
 			{
+				// ACT_ELSE and ACT_BLOCK_BEGIN generally don't cause PreExecLine() to be called,
+				// so any breakpoint set on one of those lines would never be hit.  Attempting to
+				// set a breakpoint on one of these should act like setting a breakpoint on a line
+				// which contains no code: put the breakpoint at the next line instead.
+				// Without this check, setting a breakpoint on a line like "else Exit" would not work.
+				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_BEGIN)
+					continue;
 				// Use the first line of code at or after lineno, like Visual Studio.
 				// To display the breakpoint correctly, an IDE should use breakpoint_get.
 				found_line = true;
@@ -560,10 +637,9 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 		line->mBreakpoint->state = state;
 		line->mBreakpoint->temporary = temporary;
 
-		mResponseBuf.WriteF("<response command=\"breakpoint_set\" transaction_id=\"%e\" state=\"%s\" id=\"%i\"/>"
-			, transaction_id, state ? "enabled" : "disabled", line->mBreakpoint->id);
-
-		return SendResponse();
+		return mResponseBuf.WriteF(
+			"<response command=\"breakpoint_set\" transaction_id=\"%e\" state=\"%s\" id=\"%i\"/>"
+			, aTransactionId, state ? "enabled" : "disabled", line->mBreakpoint->id);
 	}
 	// There are no lines of code beginning at or after lineno.
 	return DEBUGGER_E_BREAKPOINT_INVALID;
@@ -571,47 +647,30 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 
 int Debugger::WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine)
 {
-	return mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"line\" state=\"%s\" filename=\""
-								, aBreakpoint->id, aBreakpoint->state ? "enabled" : "disabled")
-								|| mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[aLine->mFileIndex]))
-		|| mResponseBuf.WriteF("\" lineno=\"%u\"/>", aLine->mLineNumber);
+	mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"line\" state=\"%s\" filename=\""
+					, aBreakpoint->id, aBreakpoint->state ? "enabled" : "disabled");
+	mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[aLine->mFileIndex]));
+	return mResponseBuf.WriteF("\" lineno=\"%u\"/>", aLine->mLineNumber);
 }
 
 DEBUGGER_COMMAND(Debugger::breakpoint_get)
 {
-	int err;
-	char arg, *value;
-	
-	char *transaction_id = NULL;
-	int breakpoint_id = 0; // Breakpoint IDs begin at 1.
-
-	for(;;)
-	{
-		if (err = GetNextArg(aArgs, arg, value))
-			return err;
-		if (!arg)
-			break;
-		switch (arg)
-		{
-		case 'i':	transaction_id = value;			break;
-		case 'd':	breakpoint_id = atoi(value);	break;
-		default:	return DEBUGGER_E_INVALID_OPTIONS;
-		}
-	}
-
-	if (!transaction_id || !breakpoint_id)
+	// breakpoint_get accepts exactly one arg: -d breakpoint_id.
+	if (aArgCount != 1 || ArgChar(aArgV, 0) != 'd')
 		return DEBUGGER_E_INVALID_OPTIONS;
+
+	int breakpoint_id = atoi(ArgValue(aArgV, 0));
 
 	Line *line;
 	for (line = g_script.mFirstLine; line; line = line->mNextLine)
 	{
 		if (line->mBreakpoint && line->mBreakpoint->id == breakpoint_id)
 		{
-			mResponseBuf.WriteF("<response command=\"breakpoint_get\" transaction_id=\"%e\">", transaction_id);
+			mResponseBuf.WriteF("<response command=\"breakpoint_get\" transaction_id=\"%e\">", aTransactionId);
 			WriteBreakpointXml(line->mBreakpoint, line);
 			mResponseBuf.Write("</response>");
 
-			return SendResponse();
+			return DEBUGGER_E_OK;
 		}
 	}
 
@@ -620,27 +679,18 @@ DEBUGGER_COMMAND(Debugger::breakpoint_get)
 
 DEBUGGER_COMMAND(Debugger::breakpoint_update)
 {
-	int err;
 	char arg, *value;
-	
-	char *transaction_id = NULL;
 	
 	int breakpoint_id = 0; // Breakpoint IDs begin at 1.
 	LineNumberType lineno = 0;
 	char state = -1;
 
-	for(;;)
+	for (int i = 0; i < aArgCount; ++i)
 	{
-		if (err = GetNextArg(aArgs, arg, value))
-			return err;
-		if (!arg)
-			break;
+		arg = ArgChar(aArgV, i);
+		value = ArgValue(aArgV, i);
 		switch (arg)
 		{
-		case 'i':
-			transaction_id = value;
-			break;
-
 		case 'd':
 			breakpoint_id = atoi(value);
 			break;
@@ -668,7 +718,7 @@ DEBUGGER_COMMAND(Debugger::breakpoint_update)
 		}
 	}
 
-	if (!transaction_id || !breakpoint_id)
+	if (!breakpoint_id)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	Line *line;
@@ -705,7 +755,7 @@ DEBUGGER_COMMAND(Debugger::breakpoint_update)
 			if (state != -1)
 				bp->state = state;
 
-			return SendStandardResponse("breakpoint_update", transaction_id);
+			return DEBUGGER_E_OK;
 		}
 	}
 
@@ -714,28 +764,11 @@ DEBUGGER_COMMAND(Debugger::breakpoint_update)
 
 DEBUGGER_COMMAND(Debugger::breakpoint_remove)
 {
-	int err;
-	char arg, *value;
-	
-	char *transaction_id = NULL;
-	int breakpoint_id = 0; // Breakpoint IDs begin at 1.
-
-	for(;;)
-	{
-		if (err = GetNextArg(aArgs, arg, value))
-			return err;
-		if (!arg)
-			break;
-		switch (arg)
-		{
-		case 'i':	transaction_id = value;			break;
-		case 'd':	breakpoint_id = atoi(value);	break;
-		default:	return DEBUGGER_E_INVALID_OPTIONS;
-		}
-	}
-
-	if (!transaction_id || !breakpoint_id)
+	// breakpoint_remove accepts exactly one arg: -d breakpoint_id.
+	if (aArgCount != 1 || ArgChar(aArgV, 0) != 'd')
 		return DEBUGGER_E_INVALID_OPTIONS;
+
+	int breakpoint_id = atoi(ArgValue(aArgV, 0));
 
 	Line *line;
 	for (line = g_script.mFirstLine; line; line = line->mNextLine)
@@ -745,7 +778,7 @@ DEBUGGER_COMMAND(Debugger::breakpoint_remove)
 			delete line->mBreakpoint;
 			line->mBreakpoint = NULL;
 
-			return SendStandardResponse("breakpoint_remove", transaction_id);
+			return DEBUGGER_E_OK;
 		}
 	}
 
@@ -754,9 +787,10 @@ DEBUGGER_COMMAND(Debugger::breakpoint_remove)
 
 DEBUGGER_COMMAND(Debugger::breakpoint_list)
 {
-	DEBUGGER_COMMAND_INIT_TRANSACTION_ID;
+	if (aArgCount)
+		return DEBUGGER_E_INVALID_OPTIONS;
 	
-	mResponseBuf.WriteF("<response command=\"breakpoint_list\" transaction_id=\"%e\">", transaction_id);
+	mResponseBuf.WriteF("<response command=\"breakpoint_list\" transaction_id=\"%e\">", aTransactionId);
 	
 	Line *line;
 	for (line = g_script.mFirstLine; line; line = line->mNextLine)
@@ -767,56 +801,34 @@ DEBUGGER_COMMAND(Debugger::breakpoint_list)
 		}
 	}
 
-	mResponseBuf.Write("</response>");
-
-	return SendResponse();
+	return mResponseBuf.Write("</response>");
 }
 
 DEBUGGER_COMMAND(Debugger::stack_depth)
 {
-	DEBUGGER_COMMAND_INIT_TRANSACTION_ID;
+	if (aArgCount)
+		return DEBUGGER_E_INVALID_OPTIONS;
 
-	mResponseBuf.WriteF("<response command=\"stack_depth\" depth=\"%i\" transaction_id=\"%e\"/>"
-						, mStack.Depth(), transaction_id);
-
-	return SendResponse();
+	return mResponseBuf.WriteF(
+		"<response command=\"stack_depth\" depth=\"%i\" transaction_id=\"%e\"/>"
+		, mStack.Depth(), aTransactionId);
 }
 
 DEBUGGER_COMMAND(Debugger::stack_get)
 {
-	int err;
-	char arg, *value;
-
-	char *transaction_id = NULL;
 	int depth = -1;
 
-	for(;;)
+	if (aArgCount)
 	{
-		if (err = GetNextArg(aArgs, arg, value))
-			return err;
-		if (!arg)
-			break;
-		switch (arg)
-		{
-		case 'i':
-			transaction_id = value;
-			break;
-
-		case 'd':
-			depth = atoi(value);
-			if (depth < 0 || depth >= mStack.Depth())
-				return DEBUGGER_E_INVALID_STACK_DEPTH;
-			break;
-
-		default:
+		// stack_get accepts one optional arg: -d depth.
+		if (aArgCount > 1 || ArgChar(aArgV, 0) != 'd')
 			return DEBUGGER_E_INVALID_OPTIONS;
-		}
+		depth = atoi(ArgValue(aArgV, 0));
+		if (depth < 0 || depth >= mStack.Depth())
+			return DEBUGGER_E_INVALID_STACK_DEPTH;
 	}
 
-	if (!transaction_id)
-		return DEBUGGER_E_INVALID_OPTIONS;
-
-	mResponseBuf.WriteF("<response command=\"stack_get\" transaction_id=\"%e\">", transaction_id);
+	mResponseBuf.WriteF("<response command=\"stack_get\" transaction_id=\"%e\">", aTransactionId);
 	
 	int level = 0;
 	DbgStack::Entry *se;
@@ -856,19 +868,17 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 		++level;
 	}
 
-	mResponseBuf.Write("</response>");
-
-	return SendResponse();
+	return mResponseBuf.Write("</response>");
 }
 
 DEBUGGER_COMMAND(Debugger::context_names)
 {
-	DEBUGGER_COMMAND_INIT_TRANSACTION_ID;
+	if (aArgCount)
+		return DEBUGGER_E_INVALID_OPTIONS;
 
-	mResponseBuf.WriteF("<response command=\"context_names\" transaction_id=\"%e\"><context name=\"Local\" id=\"0\"/><context name=\"Global\" id=\"1\"/></response>"
-						, transaction_id);
-
-	return SendResponse();
+	return mResponseBuf.WriteF(
+		"<response command=\"context_names\" transaction_id=\"%e\"><context name=\"Local\" id=\"0\"/><context name=\"Global\" id=\"1\"/></response>"
+		, aTransactionId);
 }
 
 DEBUGGER_COMMAND(Debugger::context_get)
@@ -876,27 +886,20 @@ DEBUGGER_COMMAND(Debugger::context_get)
 	int err;
 	char arg, *value;
 
-	char *transaction_id = NULL;
 	int context_id = 0, depth = 0;
 
-	for(;;)
+	for (int i = 0; i < aArgCount; ++i)
 	{
-		if (err = GetNextArg(aArgs, arg, value))
-			return err;
-		if (!arg)
-			break;
+		arg = ArgChar(aArgV, i);
+		value = ArgValue(aArgV, i);
 		switch (arg)
 		{
-		case 'i':	transaction_id = value;		break;
 		case 'c':	context_id = atoi(value);	break;
 		case 'd':	depth = atoi(value);		break;
 		default:
 			return DEBUGGER_E_INVALID_OPTIONS;
 		}
 	}
-
-	if (!transaction_id)
-		return DEBUGGER_E_INVALID_OPTIONS;
 
 	// TODO: Support setting/retrieving variables at a given stack depth. See also property_get_or_value and property_set.
 	if (depth != 0)
@@ -923,41 +926,40 @@ DEBUGGER_COMMAND(Debugger::context_get)
 	else
 		return DEBUGGER_E_INVALID_CONTEXT;
 
-	mResponseBuf.WriteF("<response command=\"context_get\" context=\"%i\" transaction_id=\"%e\">"
-						, context_id, transaction_id);
+	mResponseBuf.WriteF(
+		"<response command=\"context_get\" context=\"%i\" transaction_id=\"%e\">"
+		, context_id, aTransactionId);
 
 	for ( ; var < var_end; ++var)
-		WritePropertyXml(**var, mMaxPropertyData);
+		if (err = WritePropertyXml(**var, mMaxPropertyData))
+			return err;
 
-	mResponseBuf.Write("</response>");
-
-	return SendResponse();
+	return mResponseBuf.Write("</response>");
 }
 
 DEBUGGER_COMMAND(Debugger::typemap_get)
 {
-	DEBUGGER_COMMAND_INIT_TRANSACTION_ID;
+	if (aArgCount)
+		return DEBUGGER_E_INVALID_OPTIONS;
 	
-	// Send a basic type-map with string = string.
-	mResponseBuf.WriteF("<response command=\"typemap_get\" transaction_id=\"%e\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">"
-							"<map type=\"string\" name=\"string\" xsi:type=\"xsd:string\"/>"
-							"<map type=\"int\" name=\"integer\" xsi:type=\"xsd:long\"/>"
-							"<map type=\"float\" name=\"float\" xsi:type=\"xsd:double\"/>"
-							"<map type=\"object\" name=\"object\"/>"
-						"</response>"
-						, transaction_id);
-
-	return SendResponse();
+	return mResponseBuf.WriteF(
+		"<response command=\"typemap_get\" transaction_id=\"%e\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">"
+			"<map type=\"string\" name=\"string\" xsi:type=\"xsd:string\"/>"
+			"<map type=\"int\" name=\"integer\" xsi:type=\"xsd:long\"/>"
+			"<map type=\"float\" name=\"float\" xsi:type=\"xsd:double\"/>"
+			"<map type=\"object\" name=\"object\"/>"
+		"</response>"
+		, aTransactionId);
 }
 
 DEBUGGER_COMMAND(Debugger::property_get)
 {
-	return property_get_or_value(aArgs, true);
+	return property_get_or_value(aArgV, aArgCount, aTransactionId, true);
 }
 
 DEBUGGER_COMMAND(Debugger::property_value)
 {
-	return property_get_or_value(aArgs, false);
+	return property_get_or_value(aArgV, aArgCount, aTransactionId, false);
 }
 
 
@@ -1003,11 +1005,10 @@ int Debugger::WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage)
 	mResponseBuf.WriteF("<property name=\"%s\" fullname=\"%s\" type=\"%s\" facet=\"%s\" children=\"0\" encoding=\"base64\" size=\""
 						, U4T(aVar.mName), U4T(aVar.mName), type, facet);
 
-	WritePropertyData(aVar, aMaxEncodedSize);
+	if (int err = WritePropertyData(aVar, aMaxEncodedSize))
+		return err;
 
-	mResponseBuf.Write("</property>");
-	
-	return DEBUGGER_E_OK;
+	return mResponseBuf.Write("</property>");
 }
 
 int Debugger::WritePropertyXml(IObject *aObject, const char *aName, CStringA &aNameBuf, int aPage, int aPageSize, int aDepthRemaining, int aMaxEncodedSize, char *aFacet)
@@ -1110,7 +1111,7 @@ int Debugger::WritePropertyXml(ExprTokenType &aValue, const char *aName, CString
 
 	case SYM_OBJECT:
 		// Recursively dump object.
-		return WritePropertyXml(aValue.object, aName, aNameBuf, 0, aPageSize, aDepthRemaining - 1, aMaxEncodedSize);
+		return WritePropertyXml(aValue.object, aName, aNameBuf, 0, aPageSize, aDepthRemaining, aMaxEncodedSize);
 
 	default:
 		ASSERT(FALSE);
@@ -1120,7 +1121,7 @@ int Debugger::WritePropertyXml(ExprTokenType &aValue, const char *aName, CString
 	// If we fell through, value and type have been set appropriately above.
 	mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" facet=\"\" children=\"0\" encoding=\"base64\" size=\"", aName, aNameBuf.GetString(), type);
 	int err;
-	if (err = WritePropertyData(value, (int)_tcslen(value), aMaxEncodedSize))
+	if (err = WritePropertyData(value, _tcslen(value), aMaxEncodedSize))
 		return err;
 	return mResponseBuf.Write("</property>");
 }
@@ -1156,63 +1157,103 @@ void Debugger::AppendKeyName(CStringA &aNameBuf, size_t aParentNameLength, const
 	}
 }
 
-int Debugger::WritePropertyData(LPCTSTR aData, int aDataSize, int aMaxEncodedSize)
+int Debugger::WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncodedSize)
 // Accepts a "native" string, converts it to UTF-8, base64-encodes it and writes
 // the end of the property's size attribute followed by the base64-encoded data.
 {
-	int wide_size, value_size, space_needed; // Could use size_t, but WideCharToMultiByte is limited to int.
-	char *value;
 	int err;
 	
 #ifdef UNICODE
-	LPCWSTR wide_value = aData;
-	wide_size = aDataSize;
+	LPCWSTR utf16_value = aData;
+	size_t total_utf16_size = aDataSize;
 #else
-	CStringWCharFromChar wide_buf(aData, aDataSize);
-	LPCWSTR wide_value = wide_buf.GetString();
-	wide_size = (int)wide_buf.GetLength();
+	// ANSI mode.  For simplicity, convert the entire data to UTF-16 rather than attempting to
+	// calculate how much ANSI text will produce the right number of UTF-8 bytes (since UTF-16
+	// is needed as an intermediate step anyway).  This would fail if the string length exceeds
+	// INT_MAX, but that would only matter if we built ANSI for x64 (and we don't).
+	CStringWCharFromChar utf16_buf(aData, aDataSize);
+	LPCWSTR utf16_value = utf16_buf.GetString();
+	size_t total_utf16_size = utf16_buf.GetLength();
+	if (!total_utf16_size && aDataSize) // Conversion failed (too large?)
+		return DEBUGGER_E_INTERNAL_ERROR;
 #endif
 	
-	// Calculate the required buffer size to convert the value to UTF-8 without a null-terminator.
-	// Actual conversion is not done until we've reserved some (shared) space in mResponseBuf for it.
-	value_size = WideCharToMultiByte(CP_UTF8, 0, wide_value, wide_size, NULL, 0, NULL, NULL);
+	// The spec says: "The IDE should not read more data than the length defined in the packet
+	// header.  The IDE can determine if there is more data by using the property data length
+	// information."  This has two implications:
+	//  1) The size attribute should represent the total size, not the amount of data actually
+	//     returned (when limited by aMaxEncodedSize).  This is more useful anyway.
+	//  2) Since the data is encoded as UTF-8, the size attribute must be a UTF-8 byte count
+	//     for any comparison by the IDE to give the correct result.
+	
+	// Calculate:
+	//  - the total size in terms of UTF-8 bytes (even if that exceeds INT_MAX).
+	size_t total_utf8_size = 0;
+	//  - the maximum number of wide chars to convert, taking aMaxEncodedSize into account.
+	int utf16_size = (int)total_utf16_size;
+	//  - the required buffer size for conversion, in bytes.
+	int utf8_size = -1;
 
-	if (value_size > aMaxEncodedSize) // Limit length of source data; see below.
-		value_size = aMaxEncodedSize;
+	for (size_t i = 0; i < total_utf16_size; ++i)
+	{
+		wchar_t wc = utf16_value[i];
+		
+		int char_size;
+		if (wc <= 0x007F)
+			char_size = 1;
+		else if (wc <= 0x07FF)
+			char_size = 2;
+		else if (IS_SURROGATE_PAIR(wc, utf16_value[i+1]))
+			char_size = 4;
+		else
+			char_size = 3;
+		
+		total_utf8_size += char_size;
+
+		if (total_utf8_size > (size_t)aMaxEncodedSize)
+		{
+			if (utf16_size == total_utf16_size) // i.e. this is the first surplus char.
+			{
+				// Truncate the input; utf16_value[i] and beyond will not be converted/sent.
+				utf16_size = (int)i;
+				utf8_size = (int)(total_utf8_size - char_size);
+			}
+		}
+	}
+	if (utf8_size == -1) // Data was not limited by aMaxEncodedSize.
+		utf8_size = (int)total_utf8_size;
+	
 	// Calculate maximum length of base64-encoded data.
-	// This should also ensure there is enough space to temporarily hold the raw value (aVar.Get()).
-	space_needed = (value_size > 0) ? DEBUGGER_BASE64_ENCODED_SIZE(value_size) : sizeof(TCHAR);
-	ASSERT(space_needed >= value_size + 1);
+	int space_needed = DEBUGGER_BASE64_ENCODED_SIZE(utf8_size);
 	
 	// Reserve enough space for the data's length, "> and encoded data.
 	if (err = mResponseBuf.ExpandIfNecessary(mResponseBuf.mDataUsed + space_needed + MAX_INTEGER_LENGTH + 2))
 		return err;
+	
+	// Complete the size attribute by writing the total size, in terms of UTF-8 bytes.
+	if (err = mResponseBuf.WriteF("%u\">", total_utf8_size))
+		return err;
 
 	// Convert to UTF-8, using mResponseBuf temporarily.
-	value = mResponseBuf.mData + mResponseBuf.mDataSize - space_needed;
-	value_size = WideCharToMultiByte(CP_UTF8, 0, wide_value, wide_size, value, space_needed, NULL, NULL);
-
-	// Now that we know the actual length for sure, write the end of the size attribute.
-	mResponseBuf.WriteF("%u\">", value_size);
-
-	// Limit length of value returned based on -m arg, client-requested max_data, defaulted value, etc.
-	if (value_size > aMaxEncodedSize)
-		value_size = aMaxEncodedSize;
+	char *utf8_value = mResponseBuf.mData + mResponseBuf.mDataSize - space_needed;
+	utf8_size = WideCharToMultiByte(CP_UTF8, 0, utf16_value, utf16_size, utf8_value, utf8_size, NULL, NULL);
+	if (!utf8_size && utf16_size) // Conversion failed.
+		return DEBUGGER_E_INTERNAL_ERROR;
 
 	// Base64-encode and write the var data.
-	return mResponseBuf.WriteEncodeBase64(value, (size_t)value_size, true);
+	return mResponseBuf.WriteEncodeBase64(utf8_value, (size_t)utf8_size, true);
 }
 
 int Debugger::WritePropertyData(Var &aVar, int aMaxEncodedSize)
 {
 	CString buf;
 	LPTSTR value;
-	int value_size;
+	size_t value_size;
 
 	if (aVar.Type() == VAR_NORMAL)
 	{
 		value = aVar.Contents(TRUE, TRUE);
-		value_size = (int)aVar.CharLength();
+		value_size = aVar.CharLength();
 	}
 	else
 	{
@@ -1222,7 +1263,7 @@ int Debugger::WritePropertyData(Var &aVar, int aMaxEncodedSize)
 		else
 			return DEBUGGER_E_INTERNAL_ERROR;
 		CLOSE_CLIPBOARD_IF_OPEN; // Above may leave the clipboard open if aVar is Clipboard.
-		value_size = (int)_tcslen(value);
+		value_size = _tcslen(value);
 	}
 
 	return WritePropertyData(value, value_size, aMaxEncodedSize);
@@ -1269,7 +1310,7 @@ int Debugger::WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize)
 		ASSERT(FALSE);
 	}
 	// If we fell through, value and type have been set appropriately above.
-	return WritePropertyData(value, (int)_tcslen(value) + 1, aMaxEncodedSize);
+	return WritePropertyData(value, _tcslen(value), aMaxEncodedSize);
 }
 
 int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarMustExist, Var *&aVar, Object::FieldType *&aField)
@@ -1375,13 +1416,13 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 			// For simplicity, let this be any string terminated by '.' or '['.
 			// Actual expressions require it to contain only alphanumeric chars and/or '_'.
 			name_end = StrChrAny(name, _T(".[")); // This also sets it up for the next iteration.
-			key_type = IsNumeric(name); // SYM_INTEGER or SYM_STRING.
 			if (name_end)
 			{
 				c = *name_end; // Save this for the next iteration.
 				*name_end = '\0';
 			}
 			//else there won't be a next iteration.
+			key_type = IsNumeric(name); // SYM_INTEGER or SYM_STRING.
 		}
 		else
 			return DEBUGGER_E_INVALID_OPTIONS;
@@ -1435,24 +1476,21 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 }
 
 
-int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
+int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransactionId, bool aIsPropertyGet)
 {
 	int err;
 	char arg, *value;
 
-	char *transaction_id = NULL, *name = NULL;
+	char *name = NULL;
 	int context_id = 0, depth = 0, page = 0;
-	int max_data = aIsPropertyGet ? mMaxPropertyData : INT_MAX;
+	int max_data = aIsPropertyGet ? mMaxPropertyData : 1024*1024*1024; // Limit property_value to 1GB by default.
 
-	for(;;)
+	for (int i = 0; i < aArgCount; ++i)
 	{
-		if (err = GetNextArg(aArgs, arg, value))
-			return err;
-		if (!arg)
-			break;
+		arg = ArgChar(aArgV, i);
+		value = ArgValue(aArgV, i);
 		switch (arg)
 		{
-		case 'i': transaction_id = value; break;
 		// property long name
 		case 'n': name = value; break;
 		// context id - optional, default zero. see PropertyContextType enum.
@@ -1469,7 +1507,7 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 		}
 	}
 
-	if (!transaction_id || !name || max_data < 0)
+	if (!name || max_data < 0)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	// Currently only stack depth 0 (the top-most running function) is supported.
@@ -1507,36 +1545,39 @@ int Debugger::property_get_or_value(char *aArgs, bool aIsPropertyGet)
 		// As a work-around (until this is resolved by the plugin's author),
 		// we return a property with an empty value and the 'undefined' type.
 		
-		mResponseBuf.WriteF("<response command=\"property_get\" transaction_id=\"%e\"><property name=\"%e\" fullname=\"%e\" type=\"undefined\" facet=\"\" size=\"0\" children=\"0\"/></response>"
-							, transaction_id, name, name);
-
-		return SendResponse();
+		return mResponseBuf.WriteF(
+			"<response command=\"property_get\" transaction_id=\"%e\">"
+				"<property name=\"%e\" fullname=\"%e\" type=\"undefined\" facet=\"\" size=\"0\" children=\"0\"/>"
+			"</response>"
+			, aTransactionId, name, name);
 	}
 	//else var and field were set by the called function.
 
 	if (aIsPropertyGet)
 	{
-		mResponseBuf.WriteF("<response command=\"property_get\" transaction_id=\"%e\">"
-							, transaction_id);
+		mResponseBuf.WriteF(
+			"<response command=\"property_get\" transaction_id=\"%e\">"
+			, aTransactionId);
 		
 		if (var)
-			WritePropertyXml(*var, max_data, page);
+			err = WritePropertyXml(*var, max_data, page);
 		else
-			WritePropertyXml(*field, name, CStringA(name), mMaxChildren, mMaxDepth, max_data);
+			err = WritePropertyXml(*field, name, CStringA(name), mMaxChildren, mMaxDepth, max_data);
 	}
 	else
 	{
-		mResponseBuf.WriteF("<response command=\"property_value\" transaction_id=\"%e\" encoding=\"base64\" size=\""
-							, transaction_id);
+		mResponseBuf.WriteF(
+			"<response command=\"property_value\" transaction_id=\"%e\" encoding=\"base64\" size=\""
+			, aTransactionId);
 
 		if (var)
-			WritePropertyData(*var, max_data);
+			err = WritePropertyData(*var, max_data);
 		else
-			WritePropertyData(*field, max_data);
+			err = WritePropertyData(*field, max_data);
 	}
-	mResponseBuf.Write("</response>");
-
-	return SendResponse();
+	if (err)
+		return err;
+	return mResponseBuf.Write("</response>");
 }
 
 DEBUGGER_COMMAND(Debugger::property_set)
@@ -1544,18 +1585,15 @@ DEBUGGER_COMMAND(Debugger::property_set)
 	int err;
 	char arg, *value;
 
-	char *transaction_id = NULL, *name = NULL, *new_value = NULL, *type = "string";
+	char *name = NULL, *new_value = NULL, *type = "string";
 	int context_id = 0, depth = 0;
 
-	for(;;)
+	for (int i = 0; i < aArgCount; ++i)
 	{
-		if (err = GetNextArg(aArgs, arg, value))
-			return err;
-		if (!arg)
-			break;
+		arg = ArgChar(aArgV, i);
+		value = ArgValue(aArgV, i);
 		switch (arg)
 		{
-		case 'i': transaction_id = value; break;
 		// property long name
 		case 'n': name = value; break;
 		// context id - optional, default zero. see PropertyContextType enum.
@@ -1574,7 +1612,7 @@ DEBUGGER_COMMAND(Debugger::property_set)
 		}
 	}
 
-	if (!transaction_id || !name || !new_value)
+	if (!name || !new_value)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	// Currently only stack depth 0 (the top-most running function) is supported.
@@ -1622,29 +1660,24 @@ DEBUGGER_COMMAND(Debugger::property_set)
 	else
 		success = field->Assign(val);
 
-	mResponseBuf.WriteF("<response command=\"property_set\" success=\"%i\" transaction_id=\"%e\"/>"
-						, (int)success, transaction_id);
-
-	return SendResponse();
+	return mResponseBuf.WriteF(
+		"<response command=\"property_set\" success=\"%i\" transaction_id=\"%e\"/>"
+		, (int)success, aTransactionId);
 }
 
 DEBUGGER_COMMAND(Debugger::source)
 {
-	int err;
 	char arg, *value;
 
-	char *transaction_id = NULL, *filename = NULL;
+	char *filename = NULL;
 	LineNumberType begin_line = 0, end_line = UINT_MAX;
 
-	for(;;)
+	for (int i = 0; i < aArgCount; ++i)
 	{
-		if (err = GetNextArg(aArgs, arg, value))
-			return err;
-		if (!arg)
-			break;
+		arg = ArgChar(aArgV, i);
+		value = ArgValue(aArgV, i);
 		switch (arg)
 		{
-		case 'i': transaction_id = value; break;
 		case 'b': begin_line = strtoul(value, NULL, 10); break;
 		case 'e': end_line = strtoul(value, NULL, 10); break;
 		case 'f': filename = value; break;
@@ -1653,7 +1686,7 @@ DEBUGGER_COMMAND(Debugger::source)
 		}
 	}
 
-	if (!transaction_id || !filename || begin_line > end_line)
+	if (!filename || begin_line > end_line)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	int file_index;
@@ -1675,7 +1708,7 @@ DEBUGGER_COMMAND(Debugger::source)
 				return DEBUGGER_E_CAN_NOT_OPEN_FILE;
 			
 			mResponseBuf.WriteF("<response command=\"source\" success=\"1\" transaction_id=\"%e\" encoding=\"base64\">"
-								, transaction_id);
+								, aTransactionId);
 
 			if (begin_line == 0 && end_line == UINT_MAX)
 			{	// RETURN THE ENTIRE FILE:
@@ -1689,8 +1722,8 @@ DEBUGGER_COMMAND(Debugger::source)
 					break; // fail.
 
 				// Reserve some space in advance to read the raw file data into.
-				if (err = mResponseBuf.WriteEncodeBase64(NULL, file_size))
-					return err;
+				if (mResponseBuf.WriteEncodeBase64(NULL, file_size) != DEBUGGER_E_OK)
+					break; // fail.
 
 				// Read into the end of the response buffer.
 				char *buf = mResponseBuf.mData + mResponseBuf.mDataSize - (file_size + 1);
@@ -1699,8 +1732,7 @@ DEBUGGER_COMMAND(Debugger::source)
 					break; // fail.
 
 				// Base64-encode and write the file data into the response buffer.
-				if (err = mResponseBuf.WriteEncodeBase64(buf, file_size))
-					return err;
+				mResponseBuf.WriteEncodeBase64(buf, file_size, true);
 			}
 			else
 			{	// RETURN SPECIFIC LINES:
@@ -1726,8 +1758,8 @@ DEBUGGER_COMMAND(Debugger::source)
 							if (line_length)
 							{
 								// Base64-encode and write this line and its trailing newline character into the response buffer.
-								if (err = mResponseBuf.WriteEncodeBase64(line_buf, line_length))
-									return err;
+								if (mResponseBuf.WriteEncodeBase64(line_buf, line_length) != DEBUGGER_E_OK)
+									goto break_outer_loop; // fail.
 							}
 							//else not enough data to encode in this iteration.
 
@@ -1742,8 +1774,8 @@ DEBUGGER_COMMAND(Debugger::source)
 				}
 
 				// Write any left-over characters (if line_remainder is 0, this does nothing).
-				if (err = mResponseBuf.WriteEncodeBase64(line_buf, line_remainder))
-					return err;
+				if (mResponseBuf.WriteEncodeBase64(line_buf, line_remainder) != DEBUGGER_E_OK)
+					break; // fail.
 
 				if (!current_line || current_line < begin_line)
 					break; // fail.
@@ -1751,47 +1783,29 @@ DEBUGGER_COMMAND(Debugger::source)
 			}
 			fclose(source_file);
 
-			mResponseBuf.Write("</response>");
-
-			return SendResponse();
+			return mResponseBuf.Write("</response>");
 		}
 	}
+break_outer_loop:
 	if (source_file)
 		fclose(source_file);
 	// If we got here, one of the following is true:
 	//	- Something failed and used 'break'.
 	//	- The requested file is not a known source file of this script.
-	mResponseBuf.mDataUsed = 0;
-	mResponseBuf.WriteF("<response command=\"source\" success=\"0\" transaction_id=\"%e\"/>"
-						, transaction_id);
-	
-	return SendResponse();
+	mResponseBuf.Clear();
+	return mResponseBuf.WriteF(
+		"<response command=\"source\" success=\"0\" transaction_id=\"%e\"/>"
+		, aTransactionId);
 }
 
-int Debugger::redirect_std(char *aArgs, char *aCommandName)
+int Debugger::redirect_std(char **aArgV, int aArgCount, char *aTransactionId, char *aCommandName)
 {
-	int err;
-	char arg, *value;
-
-	char *transaction_id = NULL;
 	int new_mode = -1;
+	// stdout and stderr accept exactly one arg: -c mode.
+	if (aArgCount == 1 && ArgChar(aArgV, 0) == 'c')
+		new_mode = atoi(ArgValue(aArgV, 0));
 
-	for(;;)
-	{
-		if (err = GetNextArg(aArgs, arg, value))
-			return err;
-		if (!arg)
-			break;
-		switch (arg)
-		{
-		case 'i': transaction_id = value; break;
-		case 'c': new_mode = atoi(value); break;
-		default:
-			return DEBUGGER_E_INVALID_OPTIONS;
-		}
-	}
-
-	if (!transaction_id || new_mode < SR_Disabled || new_mode > SR_Redirect)
+	if (new_mode < SR_Disabled || new_mode > SR_Redirect)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	if (!stricmp(aCommandName, "stdout"))
@@ -1799,20 +1813,19 @@ int Debugger::redirect_std(char *aArgs, char *aCommandName)
 	else
 		mStdErrMode = (StreamRedirectType)new_mode;
 
-	mResponseBuf.WriteF("<response command=\"%s\" success=\"1\" transaction_id=\"%e\"/>"
-						, aCommandName, transaction_id);
-
-	return SendResponse();
+	return mResponseBuf.WriteF(
+		"<response command=\"%s\" success=\"1\" transaction_id=\"%e\"/>"
+		, aCommandName, aTransactionId);
 }
 
 DEBUGGER_COMMAND(Debugger::redirect_stdout)
 {
-	return redirect_std(aArgs, "stdout");
+	return redirect_std(aArgV, aArgCount, aTransactionId, "stdout");
 }
 
 DEBUGGER_COMMAND(Debugger::redirect_stderr)
 {
-	return redirect_std(aArgs, "stderr");
+	return redirect_std(aArgV, aArgCount, aTransactionId, "stderr");
 }
 
 //
@@ -1825,6 +1838,7 @@ DEBUGGER_COMMAND(Debugger::redirect_stderr)
 
 int Debugger::WriteStreamPacket(LPCTSTR aText, LPCSTR aType)
 {
+	ASSERT(!mResponseBuf.mFailed);
 	mResponseBuf.WriteF("<stream type=\"%s\">", aType);
 	CStringUTF8FromTChar packet(aText);
 	mResponseBuf.WriteEncodeBase64(packet, packet.GetLength() + 1); // Includes the null-terminator.
@@ -1872,22 +1886,23 @@ int Debugger::SendStandardResponse(char *aCommandName, char *aTransactionId)
 	return SendResponse();
 }
 
-int Debugger::SendContinuationResponse(char *aStatus, char *aReason)
+int Debugger::SendContinuationResponse(char *aCommand, char *aStatus, char *aReason)
 {
-	char *command;
-
-	switch (mInternalState)
+	if (!aCommand)
 	{
-	case DIS_StepInto:	command = "step_into";	break;
-	case DIS_StepOver:	command = "step_over";	break;
-	case DIS_StepOut:	command = "step_out";	break;
-	//case DIS_Run:
-	default:
-		command = "run";
+		switch (mInternalState)
+		{
+		case DIS_StepInto:	aCommand = "step_into";	break;
+		case DIS_StepOver:	aCommand = "step_over";	break;
+		case DIS_StepOut:	aCommand = "step_out";	break;
+		case DIS_Run:		aCommand = "run";		break;
+		// Seems more useful then silently failing:
+		default:			aCommand = "";
+		}
 	}
 
 	mResponseBuf.WriteF("<response command=\"%s\" status=\"%s\" reason=\"%s\" transaction_id=\"%e\"/>"
-						, command, aStatus, aReason, mContinuationTransactionId);
+						, aCommand, aStatus, aReason, (LPCSTR)mContinuationTransactionId);
 
 	return SendResponse();
 }
@@ -1899,10 +1914,9 @@ int Debugger::SendContinuationResponse(char *aStatus, char *aReason)
 //
 int Debugger::ReceiveCommand(int *aCommandLength)
 {
-	if (mSocket == INVALID_SOCKET)
-		return FatalError(DEBUGGER_E_INTERNAL_ERROR);
+	ASSERT(mSocket != INVALID_SOCKET); // Shouldn't be at this point; will be caught by recv() anyway.
+	ASSERT(!mCommandBuf.mFailed); // Should have been previously reset.
 
-	int err;
 	DWORD u = 0;
 
 	for(;;)
@@ -1919,14 +1933,14 @@ int Debugger::ReceiveCommand(int *aCommandLength)
 		}
 
 		// Init or expand the buffer as necessary.
-		if (mCommandBuf.mDataUsed == mCommandBuf.mDataSize && (err = mCommandBuf.Expand()))
-			return err;
+		if (mCommandBuf.mDataUsed == mCommandBuf.mDataSize && mCommandBuf.Expand() != DEBUGGER_E_OK)
+			return FatalError(); // This also calls mCommandBuf.Clear() via Disconnect().
 
 		// Receive and append data.
 		int bytes_received = recv(mSocket, mCommandBuf.mData + mCommandBuf.mDataUsed, (int)(mCommandBuf.mDataSize - mCommandBuf.mDataUsed), 0);
 
 		if (bytes_received == SOCKET_ERROR)
-			return FatalError(DEBUGGER_E_INTERNAL_ERROR);
+			return FatalError();
 
 		mCommandBuf.mDataUsed += bytes_received;
 	}
@@ -1938,7 +1952,8 @@ int Debugger::ReceiveCommand(int *aCommandLength)
 //
 int Debugger::SendResponse()
 {
-	int err;
+	ASSERT(!mResponseBuf.mFailed);
+
 	char response_header[DEBUGGER_RESPONSE_OVERHEAD];
 	
 	// Each message is prepended with a stringified integer representing the length of the XML data packet.
@@ -1951,20 +1966,19 @@ int Debugger::SendResponse()
 	buf += sprintf(buf, "%s", DEBUGGER_XML_TAG);
 
 	// Send the response header.
-	if (SOCKET_ERROR == send(mSocket, response_header, (int)(buf - response_header), 0))
-		return FatalError(DEBUGGER_E_INTERNAL_ERROR);
-
-	// The messages sent by the debugger engine must always be NULL terminated.
-	if (err = mResponseBuf.Write("\0", 1))
+	if (  SOCKET_ERROR == send(mSocket, response_header, (int)(buf - response_header), 0)
+	   // Messages sent by the debugger engine must always be NULL terminated.
+	   // Failure to write the last byte should be extremely rare, so no attempt
+	   // is made to recover from that condition.
+	   || DEBUGGER_E_OK != mResponseBuf.Write("\0", 1)
+	   // Send the message body.
+	   || SOCKET_ERROR == send(mSocket, mResponseBuf.mData, (int)mResponseBuf.mDataUsed, 0)  )
 	{
-		return err;
+		// Unrecoverable error: disconnect the debugger.
+		return FatalError();
 	}
 
-	// Send the message body.
-	if (SOCKET_ERROR == send(mSocket, mResponseBuf.mData, (int)mResponseBuf.mDataUsed, 0))
-		return FatalError(DEBUGGER_E_INTERNAL_ERROR);
-
-	mResponseBuf.mDataUsed = 0;
+	mResponseBuf.Clear();
 	return DEBUGGER_E_OK;
 }
 
@@ -1979,7 +1993,7 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 	SOCKET s;
 	
 	if (WSAStartup(MAKEWORD(2,2), &wsadata))
-		return FatalError(DEBUGGER_E_INTERNAL_ERROR);
+		return FatalError();
 	
 	s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
@@ -2021,6 +2035,9 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 				CStringUTF8FromTChar ide_key(CString().GetEnvironmentVariable(_T("DBGP_IDEKEY")));
 				CStringUTF8FromTChar session(CString().GetEnvironmentVariable(_T("DBGP_COOKIE")));
 
+				// Clear the buffer in case of a previous failed session.
+				mResponseBuf.Clear();
+
 				// Write init message.
 				mResponseBuf.WriteF("<init appid=\"" AHK_NAME "\" ide_key=\"%e\" session=\"%e\" thread=\"%u\" parent=\"\" language=\"" DEBUGGER_LANG_NAME "\" protocol_version=\"1.0\" fileuri=\""
 					, ide_key.GetString(), session.GetString(), GetCurrentThreadId());
@@ -2040,7 +2057,7 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 	}
 
 	WSACleanup();
-	return FatalError(DEBUGGER_E_INTERNAL_ERROR, DEBUGGER_ERR_FAILEDTOCONNECT DEBUGGER_ERR_DISCONNECT_PROMPT);
+	return FatalError(DEBUGGER_ERR_FAILEDTOCONNECT DEBUGGER_ERR_DISCONNECT_PROMPT);
 }
 
 // Debugger::Disconnect
@@ -2051,15 +2068,18 @@ int Debugger::Disconnect()
 {
 	if (mSocket != INVALID_SOCKET)
 	{
+		shutdown(mSocket, 2);
 		closesocket(mSocket);
 		mSocket = INVALID_SOCKET;
 		WSACleanup();
 	}
 	// These are reset in case we re-attach to the debugger client later:
-	mCommandBuf.mDataUsed = 0;
-	mResponseBuf.mDataUsed = 0;
+	mCommandBuf.Clear();
+	mResponseBuf.Clear();
 	mStdOutMode = SR_Disabled;
 	mStdErrMode = SR_Disabled;
+	if (mInternalState == DIS_Break)
+		ExitBreakState();
 	mInternalState = DIS_Starting;
 	return DEBUGGER_E_OK;
 }
@@ -2068,95 +2088,16 @@ int Debugger::Disconnect()
 //
 // Gracefully end debug session.  Called on script exit.  Also called by "detach" DBGp command.
 //
-void Debugger::Exit(ExitReasons aExitReason)
+void Debugger::Exit(ExitReasons aExitReason, char *aCommandName)
 {
 	if (mSocket == INVALID_SOCKET)
 		return;
 	// Don't care if it fails as we may be exiting due to a previous failure.
-	SendContinuationResponse("stopped", aExitReason == EXIT_ERROR ? "error" : "ok");
+	SendContinuationResponse(aCommandName, "stopped", aExitReason == EXIT_ERROR ? "error" : "ok");
 	Disconnect();
 }
 
-// Debugger::GetNextArg
-//
-// Used to parse args for received DBGp commands. See Debugger.h for more info.
-//
-int Debugger::GetNextArg(char *&aArgs, char &aArg, char *&aValue)
-{
-	aArg = '\0';
-
-	if (!aArgs)
-	{
-		aValue = NULL;
-		return DEBUGGER_E_OK;
-	}
-
-	// Command line args must begin with an -arg.
-	if (*aArgs != '-')
-		return DEBUGGER_E_PARSE_ERROR;
-
-	// Consume the hyphen.
-	++aArgs;
-
-	if (*aArgs == '-')
-	{	// The rest of the command line is base64-encoded data.
-		aArg = '-';
-		aValue = aArgs + 1;
-		if (*aValue == ' ')
-			++aValue;
-		aArgs = NULL;
-		return DEBUGGER_E_OK;
-	}
-	
-	aArg = *aArgs;
-	
-	if (aArg == '\0')
-		return DEBUGGER_E_PARSE_ERROR;
-
-	++aArgs;
-	if (*aArgs == ' ')
-	{
-		++aArgs;
-		if (*aArgs == '-')
-		{	// Reached the next arg; i.e. this arg has no value.
-			aValue = NULL;
-			//return DEBUGGER_E_OK;
-			// Currently every arg of every command requires a value.
-			return DEBUGGER_E_INVALID_OPTIONS;
-		}
-	}
-	// Else if *aArgs == '-', since there was no space, assume it is
-	// the value of this arg rather than the beginning of the next arg.
-	if (*aArgs == '\0')
-	{	// End of string following "-a" or "-a ".
-		aValue = NULL;
-		aArgs = NULL;
-		return DEBUGGER_E_OK;
-	}
-
-	aValue = aArgs;
-
-	// Find where this arg's value ends and the next arg begins.
-	char *next_arg = strstr(aArgs, " -");
-
-	if (next_arg != NULL)
-	{
-		// Terminate aValue.
-		*next_arg = '\0';
-		
-		// Set aArgs to the hyphen of the next arg, ready for the next call.
-		aArgs = next_arg + 1;
-	}
-	else
-	{
-		// This was the last arg.
-		aArgs = NULL;
-	}
-
-	return DEBUGGER_E_OK;
-}
-
-int Debugger::FatalError(int aErrorCode, LPCTSTR aMessage)
+int Debugger::FatalError(LPCTSTR aMessage)
 {
 	g_Debugger.Disconnect();
 
@@ -2165,7 +2106,7 @@ int Debugger::FatalError(int aErrorCode, LPCTSTR aMessage)
 		// The following will exit even if the OnExit subroutine does not use ExitApp:
 		g_script.ExitApp(EXIT_ERROR, _T(""));
 	}
-	return aErrorCode;
+	return DEBUGGER_E_INTERNAL_ERROR;
 }
 
 const char *Debugger::sBase64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -2259,7 +2200,8 @@ size_t Debugger::Base64Decode(char *aBuf, const char *aInput, size_t aInputSize/
 // Write data into the buffer, expanding it as necessary.
 int Debugger::Buffer::Write(char *aData, size_t aDataSize)
 {
-	int err;
+	if (mFailed) // See WriteF() for comments.
+		return DEBUGGER_E_INTERNAL_ERROR;
 
 	if (aDataSize == -1)
 		aDataSize = strlen(aData);
@@ -2267,8 +2209,8 @@ int Debugger::Buffer::Write(char *aData, size_t aDataSize)
 	if (aDataSize == 0)
 		return DEBUGGER_E_OK;
 
-	if (err = ExpandIfNecessary(mDataUsed + aDataSize))
-		return err;
+	if (ExpandIfNecessary(mDataUsed + aDataSize) != DEBUGGER_E_OK)
+		return DEBUGGER_E_INTERNAL_ERROR;
 
 	memcpy(mData + mDataUsed, aData, aDataSize);
 	mDataUsed += aDataSize;
@@ -2278,7 +2220,15 @@ int Debugger::Buffer::Write(char *aData, size_t aDataSize)
 // Write formatted data into the buffer. Supports %s (char*), %e (char*, "&'<> escaped), %i (int), %u (unsigned int), %p (UINT_PTR).
 int Debugger::Buffer::WriteF(const char *aFormat, ...)
 {
-	int i, err;
+	if (mFailed)
+	{
+		// A prior Write() failed and the now-invalid data hasn't yet been cleared
+		// from the buffer.  Abort.  This allows numerous other parts of the code
+		// to omit error-checking.
+		return DEBUGGER_E_INTERNAL_ERROR;
+	}
+
+	int i;
 	size_t len;
 	char c;
 	const char *format_ptr, *s, *param_ptr, *entity;
@@ -2369,11 +2319,9 @@ int Debugger::Buffer::WriteF(const char *aFormat, ...)
 				mData[mDataUsed++] = *format_ptr;
 		} // for (format_ptr = aFormat; c = *format_ptr; ++format_ptr)
 
-		va_end(vl);
-
 		if (i == 0)
-			if (err = ExpandIfNecessary(mDataUsed + len))
-				return err;
+			if (ExpandIfNecessary(mDataUsed + len) != DEBUGGER_E_OK)
+				return DEBUGGER_E_INTERNAL_ERROR;
 	} // for (len = 0, i = 0; i < 2; ++i)
 
 	return DEBUGGER_E_OK;
@@ -2382,7 +2330,7 @@ int Debugger::Buffer::WriteF(const char *aFormat, ...)
 // Convert a file path to a URI and write it to the buffer.
 int Debugger::Buffer::WriteFileURI(const char *aPath)
 {
-	int err, c, len = 9; // 8 for "file:///", 1 for '\0' (written by sprintf()).
+	int c, len = 9; // 8 for "file:///", 1 for '\0' (written by sprintf()).
 
 	// Calculate required buffer size for path after encoding.
 	for (const char *ptr = aPath; c = *ptr; ++ptr)
@@ -2394,8 +2342,8 @@ int Debugger::Buffer::WriteFileURI(const char *aPath)
 	}
 
 	// Ensure the buffer contains enough space.
-	if (err = ExpandIfNecessary(mDataUsed + len))
-		return err;
+	if (ExpandIfNecessary(mDataUsed + len) != DEBUGGER_E_OK)
+		return DEBUGGER_E_INTERNAL_ERROR;
 
 	Write("file:///", 8);
 
@@ -2424,14 +2372,13 @@ int Debugger::Buffer::WriteFileURI(const char *aPath)
 
 int Debugger::Buffer::WriteEncodeBase64(const char *aInput, size_t aInputSize, bool aSkipBufferSizeCheck/* = false*/)
 {
-	int err;
 	if (aInputSize)
 	{
 		if (!aSkipBufferSizeCheck)
 		{
 			// Ensure required buffer space is available.
-			if (err = ExpandIfNecessary(mDataUsed + DEBUGGER_BASE64_ENCODED_SIZE(aInputSize)))
-				return err;
+			if (ExpandIfNecessary(mDataUsed + DEBUGGER_BASE64_ENCODED_SIZE(aInputSize)) != DEBUGGER_E_OK)
+				return DEBUGGER_E_INTERNAL_ERROR;
 		}
 		//else caller has already ensured there is enough space and wants to be absolutely sure mData isn't reallocated.
 		ASSERT(mDataUsed + aInputSize < mDataSize);
@@ -2491,6 +2438,9 @@ int Debugger::Buffer::Expand()
 // Expand as necessary to meet a minimum required size.
 int Debugger::Buffer::ExpandIfNecessary(size_t aRequiredSize)
 {
+	if (mFailed)
+		return DEBUGGER_E_INTERNAL_ERROR;
+
 	size_t new_size;
 	for (new_size = mDataSize ? mDataSize : DEBUGGER_INITIAL_BUFFER_SIZE
 		; new_size < aRequiredSize
@@ -2502,8 +2452,10 @@ int Debugger::Buffer::ExpandIfNecessary(size_t aRequiredSize)
 		char *new_data = (char*)realloc(mData, new_size);
 
 		if (new_data == NULL)
-			// Note: FatalError() calls Disconnect(), which "clears" mResponseBuf.
-			return FatalError(DEBUGGER_E_INTERNAL_ERROR);
+		{
+			mFailed = TRUE;
+			return DEBUGGER_E_INTERNAL_ERROR;
+		}
 
 		mData = new_data;
 		mDataSize = new_size;
@@ -2514,10 +2466,17 @@ int Debugger::Buffer::ExpandIfNecessary(size_t aRequiredSize)
 // Remove data from the front of the buffer (i.e. after it is processed).
 void Debugger::Buffer::Remove(size_t aDataSize)
 {
+	ASSERT(aDataSize <= mDataUsed);
 	// Move remaining data to the front of the buffer.
 	if (aDataSize < mDataUsed)
 		memmove(mData, mData + aDataSize, mDataUsed - aDataSize);
 	mDataUsed -= aDataSize;
+}
+
+void Debugger::Buffer::Clear()
+{
+	mDataUsed = 0;
+	mFailed = FALSE;
 }
 
 

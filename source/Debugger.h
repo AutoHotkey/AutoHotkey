@@ -40,6 +40,7 @@ freely, without restriction.
 #define DEBUGGER_E_PARSE_ERROR			1
 #define DEBUGGER_E_INVALID_OPTIONS		3
 #define DEBUGGER_E_UNIMPL_COMMAND		4
+#define DEBUGGER_E_COMMAND_UNAVAIL		5
 
 #define DEBUGGER_E_CAN_NOT_OPEN_FILE	100
 
@@ -54,6 +55,8 @@ freely, without restriction.
 #define DEBUGGER_E_INVALID_CONTEXT		302
 
 #define DEBUGGER_E_INTERNAL_ERROR		998 // Unrecoverable internal error, usually the result of a Winsock error.
+
+#define DEBUGGER_E_CONTINUE				-1 // Internal code used by continuation commands.
 
 // Error messages: these are shown directly to the user, so are in the native string format.
 #define DEBUGGER_ERR_INTERNAL			_T("An internal error has occurred in the debugger engine.")
@@ -198,7 +201,7 @@ class Debugger
 public:
 	int Connect(const char *aAddress, const char *aPort);
 	int Disconnect();
-	void Exit(ExitReasons aExitReason); // Called when exiting AutoHotkey.
+	void Exit(ExitReasons aExitReason, char *aCommandName=NULL); // Called when exiting AutoHotkey.
 	inline bool IsConnected() { return mSocket != INVALID_SOCKET; }
 	inline bool IsStepping() { return mInternalState >= DIS_StepInto; }
 	inline bool HasStdErrHook() { return mStdErrMode != SR_Disabled; }
@@ -229,13 +232,16 @@ public:
 	
 	// Receive and process commands. Returns when a continuation command is received.
 	int ProcessCommands();
+	int Break();
+	
+	bool HasPendingCommand();
 
 	// Streams
 	int WriteStreamPacket(LPCTSTR aText, LPCSTR aType);
 	void OutputDebug(LPCTSTR aText);
 	bool FileAppendStdOut(LPCTSTR aText);
 
-	#define DEBUGGER_COMMAND(cmd)	int cmd(char *aArgs)
+	#define DEBUGGER_COMMAND(cmd)	int cmd(char **aArgV, int aArgCount, char *aTransactionId)
 	
 	//
 	// Debugger commands.
@@ -245,11 +251,13 @@ public:
 	DEBUGGER_COMMAND(feature_get);
 	DEBUGGER_COMMAND(feature_set);
 	
-	/*DEBUGGER_COMMAND(run);
+	DEBUGGER_COMMAND(run);
 	DEBUGGER_COMMAND(step_into);
 	DEBUGGER_COMMAND(step_over);
-	DEBUGGER_COMMAND(step_out);*/
+	DEBUGGER_COMMAND(step_out);
+	DEBUGGER_COMMAND(_break);
 	DEBUGGER_COMMAND(stop);
+	DEBUGGER_COMMAND(detach);
 	
 	DEBUGGER_COMMAND(breakpoint_set);
 	DEBUGGER_COMMAND(breakpoint_get);
@@ -275,7 +283,7 @@ public:
 
 	Debugger() : mSocket(INVALID_SOCKET), mInternalState(DIS_Starting)
 		, mMaxPropertyData(1024), mContinuationTransactionId(""), mStdErrMode(SR_Disabled), mStdOutMode(SR_Disabled)
-		, mMaxChildren(20), mMaxDepth(2)
+		, mMaxChildren(20), mMaxDepth(2), mDisabledHooks(0)
 	{
 	}
 
@@ -297,12 +305,14 @@ private:
 		int Expand();
 		int ExpandIfNecessary(size_t aRequiredSize);
 		void Remove(size_t aDataSize);
+		void Clear();
 
-		Buffer() : mData(NULL), mDataSize(0), mDataUsed(0) {}
+		Buffer() : mData(NULL), mDataSize(0), mDataUsed(0), mFailed(FALSE) {}
 	
 		char *mData;
 		size_t mDataSize;
 		size_t mDataUsed;
+		BOOL mFailed;
 
 		~Buffer() {
 			if (mData)
@@ -311,7 +321,8 @@ private:
 	} mCommandBuf, mResponseBuf;
 
 	enum DebuggerInternalStateType {
-		DIS_Starting,
+		DIS_None = 0,
+		DIS_Starting = DIS_None,
 		DIS_Run,
 		DIS_Break,
 		DIS_StepInto,
@@ -326,9 +337,11 @@ private:
 	} mStdErrMode, mStdOutMode;
 
 	int mContinuationDepth; // Stack depth at last continuation command, for step_into/step_over.
-	char *mContinuationTransactionId; // transaction_id of last continuation command.
+	CStringA mContinuationTransactionId; // transaction_id of last continuation command.
 
 	int mMaxPropertyData, mMaxChildren, mMaxDepth;
+
+	HookType mDisabledHooks;
 
 	
 	struct PropertyWriter : public IDebugProperties
@@ -402,7 +415,10 @@ private:
 	int SendResponse();
 	int SendErrorResponse(char *aCommandName, char *aTransactionId, int aError=999, char *aExtraAttributes=NULL);
 	int SendStandardResponse(char *aCommandName, char *aTransactionId);
-	int SendContinuationResponse(char *aStatus="break", char *aReason="ok");
+	int SendContinuationResponse(char *aCommand=NULL, char *aStatus="break", char *aReason="ok");
+
+	int EnterBreakState();
+	void ExitBreakState();
 
 	int WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine);
 
@@ -413,13 +429,14 @@ private:
 	int WritePropertyXml(ExprTokenType &aValue, const char *aName, CStringA &aNameBuf, int aPageSize, int aDepthRemaining, int aMaxEncodedSize);
 	int WritePropertyXml(Object::FieldType &aField, const char *aName, CStringA &aNameBuf, int aPageSize, int aDepthRemaining, int aMaxEncodedSize);
 
-	int WritePropertyData(LPCTSTR aData, int aDataSize, int aMaxEncodedSize);
+	int WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncodedSize);
 	int WritePropertyData(Var &aVar, int aMaxEncodedSize);
 	int WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize);
 
 	int ParsePropertyName(const char *aFullName, int aVarScope, bool aVarMustExist, Var *&aVar, Object::FieldType *&aField);
-	int property_get_or_value(char *aArgs, bool aIsPropertyGet);
-	int redirect_std(char *aArgs, char *aCommandName);
+	int property_get_or_value(char **aArgV, int aArgCount, char *aTransactionId, bool aIsPropertyGet);
+	int redirect_std(char **aArgV, int aArgCount, char *aTransactionId, char *aCommandName);
+	int run_step(char **aArgV, int aArgCount, char *aTransactionId, char *aCommandName, DebuggerInternalStateType aNewState);
 
 	// Decode a file URI in-place.
 	void DecodeURI(char *aUri);
@@ -429,22 +446,35 @@ private:
 	static size_t Base64Decode(char *aBuf, const char *aInput, size_t aInputSize = -1);
 
 
-	// Debugger::GetNextArg
+	//typedef int (Debugger::*CommandFunc)(char **aArgV, int aArgCount, char *aTransactionId);
+	typedef DEBUGGER_COMMAND((Debugger::*CommandFunc));
+	
+	struct CommandDef
+	{
+		const char *mName;
+		CommandFunc mFunc;
+	};
+
+	static CommandDef sCommands[];
+	
+
+	// Debugger::ParseArgs
 	//
 	// Returns DEBUGGER_E_OK on success, or a DBGp error code otherwise.
-	// aArgs is set to the beginning of the next arg, or NULL if no more args.
-	// aArg is set to the arg character, or '\0' if no args.
-	// aValue is set to the value of the arg, or NULL if no value.
 	//
 	// The Xdebug/DBGp documentation is very vague about command line rules,
 	// so this function has no special treatment of quotes, backslash, etc.
 	// There is currently no way to include a literal " -" in an arg as it
 	// would be recognized as the beginning of the next arg.
 	//
-	int GetNextArg(char *&aArgs, char &aArg, char *&aValue);
+	int ParseArgs(char *aArgs, char **aArgV, int &aArgCount, char *&aTransactionId);
+	
+	// Caller must verify that aArg is within bounds:
+	inline char *ArgValue(char **aArgV, int aArg) { return aArgV[aArg] + 1; }
+	inline char  ArgChar(char **aArgV, int aArg) { return *aArgV[aArg]; }
 
 	// Fatal debugger error. Prompt user to terminate script or only disconnect debugger.
-	static int FatalError(int aErrorCode, LPCTSTR aMessage = DEBUGGER_ERR_INTERNAL DEBUGGER_ERR_DISCONNECT_PROMPT);
+	static int FatalError(LPCTSTR aMessage = DEBUGGER_ERR_INTERNAL DEBUGGER_ERR_DISCONNECT_PROMPT);
 };
 
 #endif

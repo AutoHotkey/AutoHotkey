@@ -1483,36 +1483,6 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 #else // Stand-alone mode (there are no include files in this mode since all of them were merged into the main script at the time of compiling).
 	TextMem::Buffer textbuf(NULL, 0, false);
 
-#ifdef ENABLE_EXEARC
-	HS_EXEArc_Read oRead;
-
-	// AutoIt3: Open the archive in this compiled exe.
-	// Jon gave me some details about why a password isn't needed: "The code in those libraries will
-	// only allow files to be extracted from the exe it is bound to (i.e the script that it was
-	// compiled with).  There are various checks and CRCs to make sure that it can't be used to read
-	// the files from any other exe that is passed."
-	if (oRead.Open(CStringCharFromTCharIfNeeded(aFileSpec), "") != HS_EXEARC_E_OK)
-	{
-		MsgBox(ERR_EXE_CORRUPTED, 0, aFileSpec); // Usually caused by virus corruption.
-		return FAIL;
-	}
-	// AutoIt3: Read the script (the func allocates the memory for the buffer :) )
-	if (oRead.FileExtractToMem(">AUTOHOTKEY SCRIPT<", (UCHAR **) &textbuf.mBuffer, &textbuf.mLength) == HS_EXEARC_E_OK)
-		mCompiledHasCustomIcon = false;
-	else if (oRead.FileExtractToMem(">AHK WITH ICON<", (UCHAR **) &textbuf.mBuffer, &textbuf.mLength) == HS_EXEARC_E_OK)
-		mCompiledHasCustomIcon = true;
-	else
-	{
-		oRead.Close();							// Close the archive
-		MsgBox(_T("Could not extract script from EXE."), 0, aFileSpec);
-		return FAIL;
-	}
-
-	// AutoIt3: We have the data in RAW BINARY FORM, the script is a text file, so
-	// this means that instead of a newline character, there may also be carriage
-	// returns 0x0d 0x0a (\r\n)
-	oRead.Close(); // no longer used
-#else
 	HRSRC hRes;
 	HGLOBAL hResData;
 
@@ -1533,7 +1503,6 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		MsgBox(_T("Could not extract script from EXE."), 0, aFileSpec);
 		return FAIL;
 	}
-#endif
 
 	TextMem tmem, *fp = &tmem;
 	// NOTE: Ahk2Exe strips off the UTF-8 BOM.

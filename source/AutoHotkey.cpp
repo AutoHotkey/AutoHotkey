@@ -286,7 +286,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// Initiate debug session now if applicable.
 	if (!g_DebuggerHost.IsEmpty() && g_Debugger.Connect(g_DebuggerHost, g_DebuggerPort) == DEBUGGER_E_OK)
 	{
-		g_Debugger.ProcessCommands();
+		g_Debugger.Break();
 	}
 #endif
 

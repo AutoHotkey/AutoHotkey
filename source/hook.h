@@ -26,7 +26,7 @@ GNU General Public License for more details.
 // Also, it has been announced in OnMessage() that message numbers between WM_USER and 0x1000 are earmarked
 // for possible future use by the program, so don't use a message above 0x1000 without good reason.
 enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_DIALOG, AHK_NOTIFYICON
-	, AHK_UNUSED_MSG, AHK_EXIT_BY_RELOAD, AHK_EXIT_BY_SINGLEINSTANCE
+	, AHK_UNUSED_MSG, AHK_EXIT_BY_RELOAD, AHK_EXIT_BY_SINGLEINSTANCE, AHK_CHECK_DEBUGGER
 	// Allow some room here in between for more "exit" type msgs to be added in the future (see below comment).
 	, AHK_GUI_ACTION = WM_USER+20 // Avoid WM_USER+100/101 and vicinity.  See below comment.
 	// v1.0.43.05: On second thought, it seems better to stay close to WM_USER because the OnMessage page
