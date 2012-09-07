@@ -12941,7 +12941,7 @@ BIF_DECL(BIF_NumPut)
 	default: // size 1
 		*(unsigned char *)target = (unsigned char)TokenToInt64(token_to_write);
 	}
-	if (target_token.symbol == SYM_VAR)
+	if (right_side_bound) // Implies (target_token.symbol == SYM_VAR && !target_token.var->IsPureNumeric()).
 		target_token.var->Close(); // This updates various attributes of the variable.
 	//else the target was an raw address.  If that address is inside some variable's contents, the above
 	// attributes would already have been removed at the time the & operator was used on the variable.
