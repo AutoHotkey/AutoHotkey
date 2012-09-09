@@ -4533,8 +4533,6 @@ ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLOR
 				}
 			}
 		}
-		if (!found) // Must override ErrorLevel to its new value prior to the label below.
-			g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // "1" indicates search completed okay, but didn't find it.
 
 fast_end:
 		// If found==false when execution reaches here, ErrorLevel is already set to the right value, so just
@@ -4550,8 +4548,7 @@ fast_end:
 			DeleteObject(hbitmap_screen);
 		if (screen_pixel)
 			free(screen_pixel);
-
-		if (!found)
+		else // One of the GDI calls failed and the search wasn't carried out.
 			goto error;
 
 		// Otherwise, success.  Calculate xpos and ypos of where the match was found and adjust
@@ -4565,7 +4562,7 @@ fast_end:
 				return FAIL;
 		}
 
-		return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+		return g_ErrorLevel->Assign(found ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR); // "0" indicates success; "1" indicates search completed okay, but didn't find it.
 	}
 
 	// Otherwise (since above didn't return): fast_mode==false
