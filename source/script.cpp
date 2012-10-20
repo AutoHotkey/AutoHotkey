@@ -7857,7 +7857,9 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 					}
 					// Any non-empty ByRef parameter should be treated as an input var (unless it
 					// was explicitly flagged as an expression; that is handled later).
-					if (*arg.text && func && !func->mIsBuiltIn && func->mParam[param_index].is_byref)
+					if (*arg.text && func && !func->mIsBuiltIn // Built-in functions have no mParam array.
+						&& param_index < func->mParamCount // Safety check needed for variadic functions.
+						&& func->mParam[param_index].is_byref)
 						arg_type = ARG_TYPE_INPUT_VAR;
 					else
 						arg_type = ARG_TYPE_NORMAL;
