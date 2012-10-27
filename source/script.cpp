@@ -9472,6 +9472,9 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					// Let the caller handle this else, since it can't be ours:
 					return line_temp;
 				}
+				// Fix for v1.1.09: Correct the line hierarchy for ELSE nested in an IF/ELSE/LOOP
+				// without braces.  This is needed for named loops and perhaps other things.
+				line_temp->mParentLine = line->mParentLine;
 				// Now use line vs. line_temp to hold the new values, so that line_temp
 				// stays as a marker to the ELSE line itself:
 				line = line_temp->mNextLine;  // Set it to the else's action line.
