@@ -1550,32 +1550,53 @@ ResultType WindowSearch::SetCriteria(global_struct &aSettings, LPTSTR aTitle, LP
 			mCriteria |= CRITERION_PID;
 			mCriterionPID = ATOU(cp);
 		}
-		else if (!_tcsnicmp(cp, _T("exe"), 3))
-		{
-			cp += 3;
-			mCriteria |= CRITERION_PATH;
-			tcslcpy(mCriterionPath, omit_leading_whitespace(cp), _countof(mCriterionPath));
-			// Allow something like "ahk_exe firefox.exe" to be an exact match for the process name
-			// instead of full path, but for flexibility, always use full path when in regex mode.
-			mCriterionPathIsNameOnly = mSettings->TitleMatchMode != FIND_REGEX && !_tcschr(mCriterionPath, '\\');
-		}
-		else if (!_tcsnicmp(cp, _T("class"), 5))
+		else if (!_tcsnicmp(cp, _T("group"), 5))
 		{
 			cp += 5;
-			mCriteria |= CRITERION_CLASS;
+			mCriteria |= CRITERION_GROUP;
+			tcslcpy(buf, omit_leading_whitespace(cp), _countof(buf));
+			if (cp = StrChrAny(buf, _T(" \t"))) // Group names can't contain spaces, so terminate at the first one to exclude any "ahk_" criteria that come afterward.
+				*cp = '\0';
+			if (   !(mCriterionGroup = g_script.FindGroup(buf))   )
+				return FAIL; // No such group: Inform caller of invalid criteria.  No need to do anything else further below.
+		}
+		else
+		{
+			// Fix for v1.1.09: ahk_exe is handled with ahk_class so that it can be followed by
+			// another criterion, such as in "ahk_exe explorer.exe ahk_class CabinetWClass".
+			TCHAR *criterion = NULL;
+			if (!_tcsnicmp(cp, _T("exe"), 3))
+			{
+				cp += 3;
+				mCriteria |= CRITERION_PATH;
+				criterion = mCriterionPath;
+				
+			}
+			else if (!_tcsnicmp(cp, _T("class"), 5))
+			{
+				cp += 5;
+				mCriteria |= CRITERION_CLASS;
+				criterion = mCriterionClass;
+			}
+			else // It doesn't qualify as a special criteria name even though it starts with "ahk_".
+			{
+				--criteria_count; // Decrement criteria_count to compensate for the loop's increment.
+				continue;
+			}
+
 			// In the following line, it may have been preferable to skip only zero or one spaces rather than
 			// calling omit_leading_whitespace().  But now this should probably be kept for backward compatibility.
 			// Besides, even if it's possible for a class name to start with a space, a RegEx dot or other symbol
 			// can be used to match it via SetTitleMatchMode RegEx.
-			tcslcpy(mCriterionClass, omit_leading_whitespace(cp), _countof(mCriterionClass)); // Copy all of the remaining string to simplify the below.
-			for (cp = mCriterionClass; cp = tcscasestr(cp, _T("ahk_")); cp += 4)  // Fix for v1.0.47.06: strstr() changed to strcasestr() for consistency with the other sections.
+			tcslcpy(criterion, omit_leading_whitespace(cp), SEARCH_PHRASE_SIZE); // Copy all of the remaining string to simplify the below.
+			for (cp = criterion; cp = tcscasestr(cp, _T("ahk_")); cp += 4)  // Fix for v1.0.47.06: strstr() changed to strcasestr() for consistency with the other sections.
 			{
 				// This loop truncates any other criteria from the class criteria.  It's not a complete
 				// solution because it doesn't validate that what comes after the "ahk_" string is a
 				// valid criterion name. But for it not to be and yet also be part of some valid class
 				// name seems far too unlikely to worry about.  It would have to be a legitimate class name
 				// such as "ahk_class SomeClassName ahk_wrong".
-				if (cp == mCriterionClass) // This check prevents underflow in the next check.
+				if (cp == criterion) // This check prevents underflow in the next check.
 				{
 					*cp = '\0';
 					break;
@@ -1589,21 +1610,13 @@ ResultType WindowSearch::SetCriteria(global_struct &aSettings, LPTSTR aTitle, LP
 					//else assume this "ahk_" string is part of the literal text, continue looping in case
 					// there is a legitimate "ahk_" string after this one.
 			} // for()
-		}
-		else if (!_tcsnicmp(cp, _T("group"), 5))
-		{
-			cp += 5;
-			mCriteria |= CRITERION_GROUP;
-			tcslcpy(buf, omit_leading_whitespace(cp), _countof(buf));
-			if (cp = StrChrAny(buf, _T(" \t"))) // Group names can't contain spaces, so terminate at the first one to exclude any "ahk_" criteria that come afterward.
-				*cp = '\0';
-			if (   !(mCriterionGroup = g_script.FindGroup(buf))   )
-				return FAIL; // No such group: Inform caller of invalid criteria.  No need to do anything else further below.
-		}
-		else // It doesn't qualify as a special criteria name even though it starts with "ahk_".
-		{
-			--criteria_count; // Decrement criteria_count to compensate for the loop's increment.
-			continue;
+
+			if (criterion == mCriterionPath)
+			{
+				// Allow something like "ahk_exe firefox.exe" to be an exact match for the process name
+				// instead of full path, but for flexibility, always use full path when in regex mode.
+				mCriterionPathIsNameOnly = mSettings->TitleMatchMode != FIND_REGEX && !_tcschr(mCriterionPath, '\\');
+			}
 		}
 		// Since above didn't return or continue, a valid "ahk_" criterion has been discovered.
 		// If this is the first such criterion, any text that lies to its left should be interpreted
