@@ -6966,7 +6966,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 			break;
 
 		// Must start the search at param_start, not param_start+1, so that something like fn(, x) will be properly handled:
-		if (   !*param_start || !(param_end = StrChrAny(param_start, _T(", \t=*)")))   ) // Look for first comma, space, tab, =, or close-paren.
+		if (   !*param_start || !(param_end = StrChrAny(param_start, _T(", \t:=*)")))   ) // Look for first comma, space, tab, =, or close-paren.
 			return ScriptError(ERR_MISSING_CLOSE_PAREN, aBuf);
 
 		if (param_count >= MAX_FUNCTION_PARAMS)
@@ -6979,7 +6979,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		{
 			// Omit the ByRef keyword from further consideration:
 			param_start = omit_leading_whitespace(param_end);
-			if (   !*param_start || !(param_end = StrChrAny(param_start, _T(", \t=*)")))   ) // Look for first comma, space, tab, =, or close-paren.
+			if (   !*param_start || !(param_end = StrChrAny(param_start, _T(", \t:=*)")))   ) // Look for first comma, space, tab, =, or close-paren.
 				return ScriptError(ERR_MISSING_CLOSE_PAREN, aBuf);
 		}
 
@@ -7004,6 +7004,14 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 			// it doesn't count toward func.mMinParams or func.mParamCount.
 			++param_count;
 			break;
+		}
+
+		// v1.1.09: Allow optional parameters to be declared with := instead of =.
+		if (*param_start == ':')
+		{
+			if (param_start[1] != '=')
+				return ScriptError(ERR_BAD_OPTIONAL_PARAM, param_start);
+			++param_start;
 		}
 
 		// v1.0.35: Check if a default value is specified for this parameter and set up for the next iteration.
