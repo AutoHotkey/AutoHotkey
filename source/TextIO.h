@@ -265,10 +265,33 @@ public:
 		__int64 pos = _Tell();
 		return (pos == -1) ? -1 : pos + (mPos ? mPos - (mBuffer + mLength) : (ptrdiff_t)mLength);
 	}
-	__int64 Length() { return _Length(); }
+	__int64 Length()
+	{
+		__int64 len = _Length();
+		if (!mPos && mLength) // mBuffer contains data to write.
+		{
+			// Not len+mLength, since we might not be writing at the end of the file.
+			// Return the current position plus the amount of buffered data, except
+			// when that falls short of the current actual length of the file.
+			__int64 buf_end = _Tell() + mLength;
+			if (buf_end > len)
+				return buf_end;
+		}
+		return len;
+	}
 	__int64 Length(__int64 aLength)
 	{
-		__int64 pos = Tell();
+		// Truncating the file may mean discarding some of the data in the buffer:
+		// data read from a position after the new end-of-file, or data which should
+		// have already been written after the new end-of-file, but has been buffered.
+		// Calculating how much data should be discarded doesn't seem worthwhile, so
+		// just flush the buffer:
+		RollbackFilePointer();
+		FlushWriteBuffer();
+		// Since the buffer was just flushed, Tell() vs _Tell() doesn't matter here.
+		// Otherwise, using Tell() followed by _Seek() below would advance the pointer
+		// by the amount of buffered data, when the intention is to not move it at all.
+		__int64 pos = _Tell();
 		if (!_Seek(aLength, SEEK_SET) || !SetEndOfFile(mFile))
 			return -1;
 		// Make sure we do not extend the file again.
