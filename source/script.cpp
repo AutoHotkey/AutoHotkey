@@ -4683,37 +4683,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	{
 		switch(aOldActionType)
 		{
-		case OLD_LEFTCLICK:
-		case OLD_RIGHTCLICK:
-			// Insert an arg at the beginning of the list to indicate the mouse button.
-			arg[2] = arg[1];  arg_map[2] = arg_map[1];
-			arg[1] = arg[0];  arg_map[1] = arg_map[0];
-			arg[0] = aOldActionType == OLD_LEFTCLICK ? _T("") : _T("Right");  arg_map[0] = NULL; // "" is treated the same as "Left"
-			return AddLine(ACT_MOUSECLICK, arg, ++nArgs, arg_map);
-		case OLD_LEFTCLICKDRAG:
-		case OLD_RIGHTCLICKDRAG:
-			// Insert an arg at the beginning of the list to indicate the mouse button.
-			arg[4] = arg[3];  arg_map[4] = arg_map[3]; // Set the 5th arg to be the 4th, etc.
-			arg[3] = arg[2];  arg_map[3] = arg_map[2];
-			arg[2] = arg[1];  arg_map[2] = arg_map[1];
-			arg[1] = arg[0];  arg_map[1] = arg_map[0];
-			arg[0] = (aOldActionType == OLD_LEFTCLICKDRAG) ? _T("Left") : _T("Right");  arg_map[0] = NULL;
-			return AddLine(ACT_MOUSECLICKDRAG, arg, ++nArgs, arg_map);
-		case OLD_HIDEAUTOITWIN:
-			// This isn't a perfect mapping because the word "on" or "off" might be contained
-			// in a variable reference, in which case this conversion will be incorrect.
-			// However, variable ref. is exceedingly rare.
-			arg[1] = _tcsicmp(arg[0], _T("On")) ? _T("Icon") : _T("NoIcon");
-			arg[0] = _T("Tray"); // Assign only after we're done using the old arg[0] value above.
-			return AddLine(ACT_MENU, arg, 2, arg_map);
-		case OLD_REPEAT:
-			if (!AddLine(ACT_REPEAT, arg, nArgs, arg_map))
-				return FAIL;
-			// For simplicity, always enclose repeat-loop's contents in in a block rather
-			// than trying to detect if it has only one line:
-			return AddLine(ACT_BLOCK_BEGIN);
-		case OLD_ENDREPEAT:
-			return AddLine(ACT_BLOCK_END);
 		case OLD_WINGETACTIVETITLE:
 			arg[nArgs] = _T("A");  arg_map[nArgs] = NULL; // "A" signifies the active window.
 			++nArgs;
@@ -5739,10 +5708,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			}
 		}
 		break; // Outer switch().
-
-	case ACT_REPEAT: // These types of loops are always "NORMAL".
-		line.mAttribute = ATTR_LOOP_NORMAL;
-		break;
 
 	case ACT_WHILE: // Lexikos: ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
 		line.mAttribute = ATTR_LOOP_WHILE;
@@ -9170,7 +9135,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 		if (line->mParentLine == NULL) // i.e. don't do it if it's already "owned" by an IF or ELSE.
 			line->mParentLine = aParentLine; // Can be NULL.
 
-		if (ACT_IS_IF_OR_ELSE_OR_LOOP(line->mActionType) || line->mActionType == ACT_REPEAT)
+		if (ACT_IS_IF_OR_ELSE_OR_LOOP(line->mActionType))
 		{
 			// In this case, the loader should have already ensured that line->mNextLine is not NULL.
 			if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN && line->mNextLine->mAttribute == ATTR_TRUE)
@@ -9305,7 +9270,6 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			|| line->mActionType == ACT_LOOP
 			|| line->mActionType == ACT_WHILE
 			|| line->mActionType == ACT_FOR
-			|| line->mActionType == ACT_REPEAT
 			|| line->mActionType == ACT_TRY   )
 		{
 			// ActionType is an IF or a LOOP or a TRY.
@@ -9385,7 +9349,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			if (line_temp->mActionType == ACT_ELSE)
 			{
 				if (line->mActionType == ACT_LOOP || line->mActionType == ACT_WHILE || line->mActionType == ACT_FOR
-				  || line->mActionType == ACT_TRY || line->mActionType == ACT_REPEAT)
+				  || line->mActionType == ACT_TRY)
 				{
 					 // this can't be our else, so let the caller handle it.
 					if (aMode != ONLY_ONE_LINE)
@@ -11683,7 +11647,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		case ACT_LOOP:
 		case ACT_WHILE: // Lexikos: mAttribute should be ATTR_LOOP_WHILE.
 		case ACT_FOR: // Lexikos: mAttribute should be ATTR_LOOP_FOR.
-		case ACT_REPEAT:
 		{
 			HKEY root_key_type; // For registry loops, this holds the type of root key, independent of whether it is local or remote.
 			AttributeType attr = line->mAttribute;
@@ -11794,9 +11757,9 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					// Note that a 0 means infinite in AutoIt2 for the REPEAT command; so the following handles
 					// that too.
 					iteration_limit = line->ArgToInt64(1); // If it's negative, zero iterations will be performed automatically.
-					is_infinite = (line->mActionType == ACT_REPEAT && !iteration_limit);
+					is_infinite = false;
 				}
-				else // It's either ACT_REPEAT or an ACT_LOOP without parameters.
+				else // It's ACT_LOOP without parameters.
 				{
 					iteration_limit = 0; // Avoids debug-mode's "used without having been defined" (though it's merely passed as a parameter, not ever used in this case).
 					is_infinite = true;  // Override the default set earlier.
