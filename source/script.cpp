@@ -66,7 +66,7 @@ Script::Script()
 	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true), mMenuUseErrorLevel(false)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
-	, mIsRestart(false), mIsAutoIt2(false), mErrorStdOut(false)
+	, mIsRestart(false), mErrorStdOut(false)
 #ifdef AUTOHOTKEYSC
 	, mCompiledHasCustomIcon(false)
 #else
@@ -301,57 +301,6 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	if (   !(mFileSpec = SimpleHeap::Malloc(buf))   )  // The full spec is stored for convenience, and it's relied upon by mIncludeLibraryFunctionsThenExit.
 		return FAIL;  // It already displayed the error for us.
 	filename_marker[-1] = '\0'; // Terminate buf in this position to divide the string.
-	size_t filename_length = _tcslen(filename_marker);
-	if (   mIsAutoIt2 = (filename_length >= 4 && !_tcsicmp(filename_marker + filename_length - 4, EXT_AUTOIT2))   )
-	{
-		// Set the old/AutoIt2 defaults for maximum safety and compatibility.
-		// Standalone EXEs (compiled scripts) are always considered to be non-AutoIt2 (otherwise,
-		// the user should probably be using the AutoIt2 compiler).
-		g_AllowSameLineComments = false;
-		g_EscapeChar = '\\';
-		g.TitleFindFast = true; // In case the normal default is false.
-		g.DetectHiddenText = false;
-		// Make the mouse fast like AutoIt2, but not quite insta-move.  2 is expected to be more
-		// reliable than 1 since the AutoIt author said that values less than 2 might cause the
-		// drag to fail (perhaps just for specific apps, such as games):
-		g.DefaultMouseSpeed = 2;
-		g.KeyDelay = 20;
-		g.WinDelay = 500;
-		g.LinesPerCycle = 1;
-		g.IntervalBeforeRest = -1;  // i.e. this method is disabled by default for AutoIt2 scripts.
-		// Reduce max params so that any non escaped delimiters the user may be using literally
-		// in "window text" will still be considered literal, rather than as delimiters for
-		// args that are not supported by AutoIt2, such as exclude-title, exclude-text, MsgBox
-		// timeout, etc.  Note: Don't need to change IfWinExist and such because those already
-		// have special handling to recognize whether exclude-title is really a valid command
-		// instead (e.g. IfWinExist, title, text, Gosub, something).
-
-		// NOTE: DO NOT ADD the IfWin command series to this section, since there is special handling
-		// for parsing those commands to figure out whether they're being used in the old AutoIt2
-		// style or the new Exclude Title/Text mode.
-
-		// v1.0.40.02: The following is no longer done because a different mechanism is required now
-		// that the ARGn macros do not check whether mArgc is too small and substitute an empty string
-		// (instead, there is a loop in ExpandArgs that puts an empty string in each sArgDeref entry
-		// for which the script omitted a parameter [and that loop relies on MaxParams being absolutely
-		// accurate rather than conditional upon whether the script is of type ".aut"]).
-		//g_act[ACT_FILESELECTFILE].MaxParams -= 2;
-		//g_act[ACT_FILEREMOVEDIR].MaxParams -= 1;
-		//g_act[ACT_MSGBOX].MaxParams -= 1;
-		//g_act[ACT_INIREAD].MaxParams -= 1;
-		//g_act[ACT_STRINGREPLACE].MaxParams -= 1;
-		//g_act[ACT_STRINGGETPOS].MaxParams -= 2;
-		//g_act[ACT_WINCLOSE].MaxParams -= 3;  // -3 for these two, -2 for the others.
-		//g_act[ACT_WINKILL].MaxParams -= 3;
-		//g_act[ACT_WINACTIVATE].MaxParams -= 2;
-		//g_act[ACT_WINMINIMIZE].MaxParams -= 2;
-		//g_act[ACT_WINMAXIMIZE].MaxParams -= 2;
-		//g_act[ACT_WINRESTORE].MaxParams -= 2;
-		//g_act[ACT_WINHIDE].MaxParams -= 2;
-		//g_act[ACT_WINSHOW].MaxParams -= 2;
-		//g_act[ACT_WINSETTITLE].MaxParams -= 2;
-		//g_act[ACT_WINGETTITLE].MaxParams -= 2;
-	}
 	if (   !(mFileDir = SimpleHeap::Malloc(buf))   )
 		return FAIL;  // It already displayed the error for us.
 	if (   !(mFileName = SimpleHeap::Malloc(filename_marker))   )
@@ -2714,47 +2663,42 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 	// this line isn't a comment (though it might have a comment on its right side, which is checked below).
 	// CONTINUATION_SECTION_WITHOUT_COMMENTS would already have returned higher above if this line isn't
 	// the last line of the continuation section.
-	if (g_AllowSameLineComments)
+
+	// Handle comment-flags that appear to the right of a valid line.
+	LPTSTR cp, prevp;
+	for (cp = _tcsstr(aBuf, g_CommentFlag); cp; cp = _tcsstr(cp + g_CommentFlagLength, g_CommentFlag))
 	{
-		// Handle comment-flags that appear to the right of a valid line.  But don't
-		// allow these types of comments if the script is considers to be the AutoIt2
-		// style, to improve compatibility with old scripts that may use non-escaped
-		// comment-flags as literal characters rather than comments:
-		LPTSTR cp, prevp;
-		for (cp = _tcsstr(aBuf, g_CommentFlag); cp; cp = _tcsstr(cp + g_CommentFlagLength, g_CommentFlag))
+		// If no whitespace to its left, it's not a valid comment.
+		// We insist on this so that a semi-colon (for example) immediately after
+		// a word (as semi-colons are often used) will not be considered a comment.
+		prevp = cp - 1;
+		if (prevp < aBuf) // should never happen because we already checked above.
 		{
-			// If no whitespace to its left, it's not a valid comment.
-			// We insist on this so that a semi-colon (for example) immediately after
-			// a word (as semi-colons are often used) will not be considered a comment.
-			prevp = cp - 1;
-			if (prevp < aBuf) // should never happen because we already checked above.
+			*aBuf = '\0';
+			return 0;
+		}
+		if (IS_SPACE_OR_TAB_OR_NBSP(*prevp)) // consider it to be a valid comment flag
+		{
+			*prevp = '\0';
+			aBuf_length = rtrim_with_nbsp(aBuf, prevp - aBuf); // Since it's our responsibility to return a fully trimmed string.
+			break; // Once the first valid comment-flag is found, nothing after it can matter.
+		}
+		else // No whitespace to the left.
+			if (*prevp == g_EscapeChar) // Remove the escape char.
 			{
-				*aBuf = '\0';
-				return 0;
+				// The following isn't exactly correct because it prevents an include filename from ever
+				// containing the literal string "`;".  This is because attempts to escape the accent via
+				// "``;" are not supported.  This is documented here as a known limitation because fixing
+				// it would probably break existing scripts that rely on the fact that accents do not need
+				// to be escaped inside #Include.  Also, the likelihood of "`;" appearing literally in a
+				// legitimate #Include file seems vanishingly small.
+				tmemmove(prevp, prevp + 1, _tcslen(prevp + 1) + 1);  // +1 for the terminator.
+				--aBuf_length;
+				// Then continue looking for others.
 			}
-			if (IS_SPACE_OR_TAB_OR_NBSP(*prevp)) // consider it to be a valid comment flag
-			{
-				*prevp = '\0';
-				aBuf_length = rtrim_with_nbsp(aBuf, prevp - aBuf); // Since it's our responsibility to return a fully trimmed string.
-				break; // Once the first valid comment-flag is found, nothing after it can matter.
-			}
-			else // No whitespace to the left.
-				if (*prevp == g_EscapeChar) // Remove the escape char.
-				{
-					// The following isn't exactly correct because it prevents an include filename from ever
-					// containing the literal string "`;".  This is because attempts to escape the accent via
-					// "``;" are not supported.  This is documented here as a known limitation because fixing
-					// it would probably break existing scripts that rely on the fact that accents do not need
-					// to be escaped inside #Include.  Also, the likelihood of "`;" appearing literally in a
-					// legitimate #Include file seems vanishingly small.
-					tmemmove(prevp, prevp + 1, _tcslen(prevp + 1) + 1);  // +1 for the terminator.
-					--aBuf_length;
-					// Then continue looking for others.
-				}
-				// else there wasn't any whitespace to its left, so keep looking in case there's
-				// another further on in the line.
-		} // for()
-	} // if (g_AllowSameLineComments)
+			// else there wasn't any whitespace to its left, so keep looking in case there's
+			// another further on in the line.
+	} // for()
 
 	return aBuf_length; // The above is responsible for keeping aBufLength up-to-date with any changes to aBuf.
 }
@@ -3183,11 +3127,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	if (IS_DIRECTIVE_MATCH(_T("#ErrorStdOut")))
 	{
 		mErrorStdOut = true;
-		return CONDITION_TRUE;
-	}
-	if (IS_DIRECTIVE_MATCH(_T("#AllowSameLineComments")))  // i.e. There's no way to turn it off, only on.
-	{
-		g_AllowSameLineComments = true;
 		return CONDITION_TRUE;
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#MaxMem")))
@@ -4466,22 +4405,11 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			// as an escape char rather than a literal backslash, which is not correct.  Thus, we
 			// resolve all escapes sequences HERE in one go, from left to right.
 
-			// AutoIt2 definitely treats an escape char that occurs at the very end of
-			// a line as literal.  It seems best to also do it for these other cases too.
-			// UPDATE: I cannot reproduce the above behavior in AutoIt2.  Maybe it only
-			// does it for some commands or maybe I was mistaken.  So for now, this part
-			// is disabled:
-			//if (c == '\0' || c == ' ' || c == '\t')
-			//	literal_map[i] = 1;  // In the map, mark this char as literal.
-			//else
-			{
-				// So these are also done as well, and don't need an explicit check:
-				// g_EscapeChar , g_delimiter , (when g_CommentFlagLength > 1 ??): *g_CommentFlag
-				// Below has a final +1 to include the terminator:
-				tmemcpy(action_args + i, action_args + i + 1, _tcslen(action_args + i + 1) + 1);
-				literal_map[i] = 1;  // In the map, mark this char as literal.
-			}
-			// else: Do nothing, even if the value is zero (the string's terminator).
+			// So these are also done as well, and don't need an explicit check:
+			// g_EscapeChar , g_delimiter , (when g_CommentFlagLength > 1 ??): *g_CommentFlag
+			// Below has a final +1 to include the terminator:
+			tmemcpy(action_args + i, action_args + i + 1, _tcslen(action_args + i + 1) + 1);
+			literal_map[i] = 1;  // In the map, mark this char as literal.
 		}
 	}
 
@@ -4599,9 +4527,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	ActionTypeType subaction_type = ACT_INVALID; // Must init these.
 	ActionTypeType suboldaction_type = OLD_INVALID;
 	TCHAR subaction_name[MAX_VAR_NAME_LENGTH + 1], *subaction_end_marker = NULL, *subaction_start = NULL;
-	int max_params = max_params_override ? max_params_override
-		: (mIsAutoIt2 ? (this_action.MaxParamsAu2WithHighBit & 0x7F) // 0x7F removes the high-bit from consideration; that bit is used for an unrelated purpose.
-			: this_action.MaxParams);
+	int max_params = max_params_override ? max_params_override : this_action.MaxParams;
 	int max_params_minus_one = max_params - 1;
 	bool is_expression;
 	ActionTypeType *np;
@@ -14538,8 +14464,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		int error_count = Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1, false, g.LastError);
 		if (!error_count)
 			return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-		if (g_script.mIsAutoIt2)
-			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // For backward compatibility with v2.
 		return SetErrorLevelOrThrowInt(error_count);
 	}
 	case ACT_FILEMOVE:

@@ -498,12 +498,8 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 		if (do_assign)
 			// Just return the result of this.  Note: The clipboard var's attributes,
 			// such as mLength, are not maintained because it's a variable whose
-			// contents usually aren't under our control.  UPDATE: aTrimIt isn't
-			// needed because the clipboard is never assigned something that needs
-			// to be trimmed in this way (i.e. PerformAssign handles the trimming
-			// on its own for the clipboard, due to the fact that dereferencing
-			// into the temp buf is unnecessary when the clipboard is the target):
-			return g_clip.Set(aBuf, aLength); //, aTrimIt);
+			// contents usually aren't under our control.
+			return g_clip.Set(aBuf, aLength);
 		else
 			// We open it for write now, because some caller's don't call
 			// this function to write to the contents of the var, they

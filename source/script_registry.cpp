@@ -147,7 +147,7 @@ ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTS
 #ifdef UNICODE
 	}
 #endif
-	return g_script.mIsAutoIt2 ? OK : SetErrorLevelOrThrowBool(!result);
+	return SetErrorLevelOrThrowBool(!result);
 }
 
 
@@ -161,7 +161,7 @@ ResultType Line::IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 	GetFullPathName(aFilespec, _MAX_PATH, szFileTemp, &szFilePart);
 	BOOL result = WritePrivateProfileString(aSection, aKey, NULL, szFileTemp);  // Returns zero on failure.
 	WritePrivateProfileString(NULL, NULL, NULL, szFileTemp);	// Flush
-	return g_script.mIsAutoIt2 ? OK : SetErrorLevelOrThrowBool(!result);
+	return SetErrorLevelOrThrowBool(!result);
 }
 
 

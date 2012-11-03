@@ -60,7 +60,7 @@ public:
 	#define CLIPBOARD_FAILURE UINT_MAX
 	size_t Get(LPTSTR aBuf = NULL);
 
-	ResultType Set(LPCTSTR aBuf = NULL, UINT_PTR aLength = UINT_MAX); //, bool aTrimIt = false);
+	ResultType Set(LPCTSTR aBuf = NULL, UINT_PTR aLength = UINT_MAX);
 	LPTSTR PrepareForWrite(size_t aAllocSize);
 	ResultType Commit(UINT aFormat = CF_NATIVETEXT);
 	ResultType AbortWrite(LPTSTR aErrorMessage = _T(""));

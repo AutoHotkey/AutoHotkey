@@ -84,7 +84,6 @@ bool g_NoTrayIcon = false;
 #ifdef AUTOHOTKEYSC
 	bool g_AllowMainWindow = false;
 #endif
-bool g_AllowSameLineComments = true;
 bool g_MainTimerExists = false;
 bool g_AutoExecTimerExists = false;
 bool g_InputTimerExists = false;

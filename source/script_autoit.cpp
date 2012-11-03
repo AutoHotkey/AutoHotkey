@@ -215,14 +215,8 @@ ResultType Line::SplashTextOn(int aWidth, int aHeight, LPTSTR aTitle, LPTSTR aTe
 	// Add some caption and frame size to window:
 	aWidth += GetSystemMetrics(SM_CXFIXEDFRAME) * 2;
 	int min_height = GetSystemMetrics(SM_CYCAPTION) + (GetSystemMetrics(SM_CXFIXEDFRAME) * 2);
-	if (g_script.mIsAutoIt2)
-	{
-		// I think this is probably something like how AutoIt2 does things:
-		if (aHeight < min_height)
-			aHeight = min_height;
-	}
-	else // Use the new method that seems more friendly.
-		aHeight += min_height;
+	// This method seems more friendly than setting aHeight = min_height when aHeight < min_height.
+	aHeight += min_height;
 
 	POINT pt = CenterWindow(aWidth, aHeight); // Determine how to center the window in the region that excludes the task bar.
 

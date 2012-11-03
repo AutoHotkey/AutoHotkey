@@ -50,10 +50,7 @@ GNU General Public License for more details.
 #define WINDOW_CLASS_SPLASH _T("AutoHotkey2")
 #define WINDOW_CLASS_GUI _T("AutoHotkeyGUI") // There's a section in Script::Edit() that relies on these all starting with "AutoHotkey".
 
-#define EXT_AUTOIT2 _T(".aut")
 #define EXT_AUTOHOTKEY _T(".ahk")
-#define CONVERSION_FLAG (EXT_AUTOIT2 EXT_AUTOHOTKEY)
-#define CONVERSION_FLAG_LENGTH 8
 
 // AutoIt2 supports lines up to 16384 characters long, and we want to be able to do so too
 // so that really long lines from aut2 scripts, such as a chain of IF commands, can be

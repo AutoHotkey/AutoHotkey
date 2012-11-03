@@ -145,26 +145,12 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		}
 	}
 
-#ifndef AUTOHOTKEYSC
-	if (script_filespec)// Script filename was explicitly specified, so check if it has the special conversion flag.
-	{
-		size_t filespec_length = _tcslen(script_filespec);
-		if (filespec_length >= CONVERSION_FLAG_LENGTH)
-		{
-			LPTSTR cp = script_filespec + filespec_length - CONVERSION_FLAG_LENGTH;
-			// Now cp points to the first dot in the CONVERSION_FLAG of script_filespec (if it has one).
-			if (!_tcsicmp(cp, CONVERSION_FLAG))
-				return Line::ConvertEscapeChar(script_filespec);
-		}
-	}
-#endif
-
 	// Like AutoIt2, store the number of script parameters in the script variable %0%, even if it's zero:
 	if (   !(var = g_script.FindOrAddVar(_T("0")))   )
 		return CRITICAL_ERROR;  // Realistically should never happen.
 	var->Assign(script_param_num - 1);
 
-	global_init(*g);  // Set defaults prior to the below, since below might override them for AutoIt2 scripts.
+	global_init(*g);  // Set defaults.
 
 // Set up the basics of the script:
 #ifdef AUTOHOTKEYSC

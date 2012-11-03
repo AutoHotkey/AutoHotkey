@@ -927,11 +927,6 @@ public:
 
 	HWND DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 
-#ifndef AUTOHOTKEYSC
-	static int ConvertEscapeChar(LPTSTR aFilespec);
-	static size_t ConvertEscapeCharGetLine(LPTSTR aBuf, int aMaxCharsToRead, FILE *fp);
-#endif  // The functions above are not needed by the self-contained version.
-
 	
 	// This is in the .h file so that it's more likely the compiler's cost/benefit estimate will
 	// make it inline (since it is called from only one place).  Inline would be good since it
@@ -2628,7 +2623,6 @@ public:
 	bool mIsReadyToExecute;
 	bool mAutoExecSectionIsRunning;
 	bool mIsRestart; // The app is restarting rather than starting from scratch.
-	bool mIsAutoIt2; // Whether this script is considered to be an AutoIt2 script.
 	bool mErrorStdOut; // true if load-time syntax errors should be sent to stdout vs. a MsgBox.
 #ifdef AUTOHOTKEYSC
 	bool mCompiledHasCustomIcon; // Whether the compiled script uses a custom icon.

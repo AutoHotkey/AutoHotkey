@@ -466,8 +466,6 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 					mods_for_next_key |= MOD_LALT;
 				continue;
 			case '#':
-				if (g_script.mIsAutoIt2) // Since AutoIt2 ignores these, ignore them if script is in AutoIt2 mode.
-					continue;
 				if (!(persistent_modifiers_for_this_SendKeys & (MOD_LWIN|MOD_RWIN)))
 					mods_for_next_key |= MOD_LWIN;
 				continue;

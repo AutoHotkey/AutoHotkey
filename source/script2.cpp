@@ -5836,9 +5836,6 @@ DWORD GetAHKInstallDir(LPTSTR aBuf)
 ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInput, int aWidth, int aHeight
 	, int aX, int aY, double aTimeout, LPTSTR aDefault)
 {
-	// Note: for maximum compatibility with existing AutoIt2 scripts, do not
-	// set ErrorLevel to ERRORLEVEL_ERROR when the user presses cancel.  Instead,
-	// just set the output var to be blank.
 	if (g_nInputBoxes >= MAX_INPUTBOXES)
 	{
 		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
@@ -5895,24 +5892,14 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInpu
 	switch(result)
 	{
 	case AHK_TIMEOUT:
-		// In this case the TimerProc already set the output variable to be what the user
-		// entered.  Set ErrorLevel (in this case) even for AutoIt2 scripts since the script
-		// is explicitly using a new feature:
+		// In this case the TimerProc already set the output variable to be what the user entered.
 		return g_ErrorLevel->Assign(_T("2"));
 	case IDOK:
 	case IDCANCEL:
-		// For AutoIt2 (.aut) scripts:
-		// If the user pressed the cancel button, InputBoxProc() set the output variable to be blank so
-		// that there is a way to detect that the cancel button was pressed.  This is because
-		// the InputBox command does not set ErrorLevel for .aut scripts (to maximize backward
-		// compatibility), except when the command times out (see the help file for details).
-		// For non-AutoIt2 scripts: The output variable is set to whatever the user entered,
-		// even if the user pressed the cancel button.  This allows the cancel button to specify
-		// that a different operation should be performed on the entered text:
-		if (!g_script.mIsAutoIt2)
-			return g_ErrorLevel->Assign(result == IDCANCEL ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
-		// else don't change the value of ErrorLevel at all to retain compatibility.
-		break;
+		// The output variable is set to whatever the user entered, even if the user pressed
+		// the cancel button.  This allows the cancel button to specify that a different
+		// operation should be performed on the entered text:
+		return g_ErrorLevel->Assign(result == IDCANCEL ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
 	case -1:
 		MsgBox(_T("The InputBox window could not be displayed."));
 		// No need to set ErrorLevel since this is a runtime error that will kill the current quasi-thread.
@@ -6168,22 +6155,16 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 				return_value = (WORD)FAIL;
 			else
 			{
-				// For AutoIt2 (.aut) script:
-				// If the user presses the cancel button, we set the output variable to be blank so
-				// that there is a way to detect that the cancel button was pressed.  This is because
-				// the InputBox command does not set ErrorLevel for .aut scripts (to maximize backward
-				// compatibility), except in the case of a timeout.
-				// For non-AutoIt2 scripts: The output variable is set to whatever the user entered,
-				// even if the user pressed the cancel button.  This allows the cancel button to specify
-				// that a different operation should be performed on the entered text.
+				// The output variable is set to whatever the user entered, even if the user pressed
+				// the cancel button.  This allows the cancel button to specify that a different
+				// operation should be performed on the entered text.
 				// NOTE: ErrorLevel must not be set here because it's possible that the user has
 				// dismissed a dialog that's underneath another, active dialog, or that's currently
 				// suspended due to a timed/hotkey subroutine running on top of it.  In other words,
 				// it's only safe to set ErrorLevel when the call to DialogProc() returns in InputBox().
-				#define SET_OUTPUT_VAR_TO_BLANK (LOWORD(wParam) == IDCANCEL && g_script.mIsAutoIt2)
 				#undef INPUTBOX_VAR
 				#define INPUTBOX_VAR (CURR_INPUTBOX.output_var)
-				int space_needed = SET_OUTPUT_VAR_TO_BLANK ? 1 : GetWindowTextLength(hControl) + 1;
+				int space_needed = GetWindowTextLength(hControl) + 1;
 				// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 				// this call will set up the clipboard for writing:
 				if (INPUTBOX_VAR->AssignString(NULL, space_needed - 1) != OK)
@@ -6200,17 +6181,11 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 				else
 				{
 					// Write to the variable:
-					if (SET_OUTPUT_VAR_TO_BLANK)
-						// It's length was already set by the above call to Assign().
-						*INPUTBOX_VAR->Contents() = '\0';
-					else
-					{
-						INPUTBOX_VAR->SetCharLength((VarSizeType)GetWindowText(hControl
-							, INPUTBOX_VAR->Contents(), space_needed));
-						if (!INPUTBOX_VAR->Length())
-							// There was no text to get or GetWindowText() failed.
-							*INPUTBOX_VAR->Contents() = '\0';  // Safe because Assign() gave us a non-constant memory area.
-					}
+					INPUTBOX_VAR->SetCharLength((VarSizeType)GetWindowText(hControl
+						, INPUTBOX_VAR->Contents(), space_needed));
+					if (!INPUTBOX_VAR->Length())
+						// There was no text to get or GetWindowText() failed.
+						*INPUTBOX_VAR->Contents() = '\0';  // Safe because Assign() gave us a non-constant memory area.
 					if (INPUTBOX_VAR->Close() != OK) // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 						return_value = (WORD)FAIL;
 				}
@@ -10266,120 +10241,6 @@ HWND Line::DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTit
 
 
 
-#ifndef AUTOHOTKEYSC
-int Line::ConvertEscapeChar(LPTSTR aFilespec)
-{
-	bool aFromAutoIt2 = true;  // This function currently always uses these defaults, so they're no longer passed in.
-	TCHAR aOldChar = '\\';      //
-	TCHAR aNewChar = '`';       //
-	// Commented out since currently no need:
-	//if (aOldChar == aNewChar)
-	//{
-	//	MsgBox("Conversion: The OldChar must not be the same as the NewChar.");
-	//	return 1;
-	//}
-
-	FILE *f1, *f2;
-	if (   !(f1 = _tfopen(aFilespec, _T("r")))   )
-	{
-		MsgBox(aFilespec, 0, _T("Can't open file:")); // Short msg, and same as one below, since rare.
-		return 1; // Failure.
-	}
-
-	TCHAR new_filespec[MAX_PATH + 10];  // +10 in case StrReplace below would otherwise overflow the buffer.
-	tcslcpy(new_filespec, aFilespec, _countof(new_filespec));
-	StrReplace(new_filespec, CONVERSION_FLAG, _T("-NEW") EXT_AUTOHOTKEY, SCS_INSENSITIVE);
-
-	if (   !(f2 = _tfopen(new_filespec, _T("w")))   )
-	{
-		fclose(f1);
-		MsgBox(new_filespec, 0, _T("Can't open file:")); // Short msg, and same as previous, since rare.
-		return 1; // Failure
-	}
-
-	TCHAR buf[LINE_SIZE], *cp, next_char;
-	size_t line_count, buf_length;
-
-	for (line_count = 0;;)
-	{
-		if (   -1 == (buf_length = ConvertEscapeCharGetLine(buf, (int)(_countof(buf) - 1), f1))   )
-			break;
-		++line_count;
-
-		for (cp = buf; ; ++cp)  // Increment to skip over the symbol just found by the inner for().
-		{
-			for (; *cp && *cp != aOldChar && *cp != aNewChar; ++cp);  // Find the next escape char.
-
-			if (!*cp) // end of string.
-				break;
-
-			if (*cp == aNewChar)
-			{
-				if (buf_length < _countof(buf) - 1)  // buffer safety check
-				{
-					// Insert another of the same char to make it a pair, so that it becomes the
-					// literal version of this new escape char (e.g. ` --> ``)
-					tmemmove(cp + 1, cp, _tcslen(cp) + 1);
-					*cp = aNewChar;
-					// Increment so that the loop will resume checking at the char after this new pair.
-					// Example: `` becomes ````
-					++cp;  // Only +1 because the outer for-loop will do another increment.
-					++buf_length;
-				}
-				continue;
-			}
-
-			// Otherwise *cp == aOldChar:
-			next_char = cp[1];
-			if (next_char == aOldChar)
-			{
-				// This is a double-escape (e.g. \\ in AutoIt2).  Replace it with a single
-				// character of the same type:
-				tmemmove(cp, cp + 1, _tcslen(cp + 1) + 1);
-				--buf_length;
-			}
-			else
-				// It's just a normal escape sequence.  Even if it's not a valid escape sequence,
-				// convert it anyway because it's more failsafe to do so (the script parser will
-				// handle such things much better than we can when the script is run):
-				*cp = aNewChar;
-		}
-		// Before the line is written, also do some conversions if the source file is known to
-		// be an AutoIt2 script:
-		if (aFromAutoIt2)
-		{
-			// This will not fix all possible uses of A_ScriptDir, just those that are dereferences.
-			// For example, this would not be fixed: StringLen, length, a_ScriptDir
-			StrReplace(buf, _T("%A_ScriptDir%"), _T("%A_ScriptDir%\\"), SCS_INSENSITIVE, UINT_MAX, _countof(buf));
-			// Later can add some other, similar conversions here.
-		}
-		_fputts(buf, f2);
-	}
-
-	fclose(f1);
-	fclose(f2);
-	MsgBox(_T("The file was successfully converted."));
-	return 0;  // Return 0 on success in this case.
-}
-
-
-
-size_t Line::ConvertEscapeCharGetLine(LPTSTR aBuf, int aMaxCharsToRead, FILE *fp)
-{
-	if (!aBuf || !fp) return -1;
-	if (aMaxCharsToRead < 1) return 0;
-	if (feof(fp)) return -1; // Previous call to this function probably already read the last line.
-	if (_fgetts(aBuf, aMaxCharsToRead, fp) == NULL) // end-of-file or error
-	{
-		*aBuf = '\0';  // Reset since on error, contents added by _fgetts() are indeterminate.
-		return -1;
-	}
-	return _tcslen(aBuf);
-}
-#endif  // The functions above are not needed by the self-contained version.
-
-
-
 bool Line::FileIsFilteredOut(WIN32_FIND_DATA &aCurrentFile, FileLoopModeType aFileLoopMode
 	, LPTSTR aFilePath, size_t aFilePathLength)
 // Caller has ensured that aFilePath (if non-blank) has a trailing backslash.
@@ -11406,23 +11267,9 @@ VarSizeType BIV_ScriptName(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_ScriptDir(LPTSTR aBuf, LPTSTR aVarName)
 {
-	// v1.0.42.06: This function has been fixed not to call the following when we're called with aBuf!=NULL:
-	// strlcpy(target_buf, g_script.mFileDir, MAX_PATH);
-	// The above could crash because strlcpy() calls strncpy(), which zero fills the tail of the destination
-	// up through the limit of its capacity.  But we might have returned an estimate less than MAX_PATH
-	// when the caller called us the first time, which usually means that aBuf is smaller than MAX_PATH.
-	if (!aBuf)
-		return (VarSizeType)_tcslen(g_script.mFileDir) + 1; // +1 for conservative estimate in case g_script.mIsAutoIt2 (see below).
-	// Otherwise, write the result to the buffer and return its exact length, not an estimate:
-	size_t length = _tcslen(_tcscpy(aBuf, g_script.mFileDir)); // Caller has ensured that aBuf is large enough.
-	// If it doesn't already have a final backslash, namely due to it being a root directory,
-	// provide one so that it is backward compatible with AutoIt v2:
-	if (g_script.mIsAutoIt2 && length && aBuf[length - 1] != '\\')
-	{
-		aBuf[length++] = '\\';
-		aBuf[length] = '\0';
-	}
-	return (VarSizeType)length;
+	if (aBuf)
+		_tcscpy(aBuf, g_script.mFileDir);
+	return _tcslen(g_script.mFileDir);
 }
 
 VarSizeType BIV_ScriptFullPath(LPTSTR aBuf, LPTSTR aVarName)
