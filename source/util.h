@@ -395,6 +395,18 @@ inline size_t strip_trailing_backslash(LPTSTR aPath)
 }
 
 
+
+#define IS_IDENTIFIER_CHAR(c) (cisalnum(c) || (c) == '_' || ((UINT)(c) > 0x7F))
+template<typename T> inline T find_identifier_end(T aBuf)
+// Locates the next character which is not valid in an identifier (var, func, or obj.key name).
+{
+	while (IS_IDENTIFIER_CHAR(*aBuf)) ++aBuf;
+	return aBuf;
+}
+
+
+
+
 // Transformation is the same in either direction because the end bytes are swapped
 // and the middle byte is left as-is:
 #define bgr_to_rgb(aBGR) rgb_to_bgr(aBGR)

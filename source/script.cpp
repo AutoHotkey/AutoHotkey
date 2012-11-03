@@ -4135,7 +4135,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					LPTSTR cp;
 					for (;;) // L35: Loop to fix x.y.z() and similar.
 					{
-						for (cp = id_begin; cisalnum(*cp) || *cp == '_'; ++cp); // Find end of identifier.
+						cp = find_identifier_end(id_begin);
 						if (*cp == '(')
 						{	// Allow function/method Call as standalone expression.
 							aActionType = ACT_EXPRESSION;
@@ -5254,7 +5254,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 						{
 							// This is either the key in a key-value pair in an object literal, or a syntax
 							// error which will be caught at a later stage (since the ':' is missing its '?').
-							for (cp = op_begin; cisalnum(*cp) || *cp == '_'; ++cp);
+							cp = find_identifier_end(op_begin);
 							if (*cp != '.') // i.e. exclude x.y as that should be parsed as normal for an expression.
 							{
 								if (cp != op_end) // op contains reserved characters.
@@ -10244,17 +10244,14 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							++cp;
 
 							// Find the end of the operand (".operand"):
-							//for (op_end = cp; !strchr(EXPR_OPERAND_TERMINATORS "\"", *op_end); ++op_end);
-							for (op_end = cp; cisalnum(*op_end) || *op_end == '_'; ++op_end);
-
+							op_end = find_identifier_end(cp);
 							if (!_tcschr(EXPR_OPERAND_TERMINATORS, *op_end))
-								return LineError(_T("Only alphanumeric characters and underscore are allowed here."), FAIL, op_end);
+								return LineError(ERR_INVALID_CHAR, FAIL, op_end);
 
 							// Rather than trying to predict how something like "obj.-1" will be handled, treat it as a syntax error.
 							// "obj.()" is allowed; it should mean "call the default method of obj" or "call the function object obj".
 							if (op_end == cp && *op_end != '(')
-								// Error message is intentionally vague since user may have intended the dot to be concatenation rather than member-access.
-								return LineError(ERR_INVALID_DOT, FAIL, cp-1);
+								return LineError(ERR_INVALID_DOT, FAIL, cp-1); // Intentionally vague since the user's intention isn't clear.
 
 							bool is_new_op = false;
 							// For the '(' check below, determine if this op is part of a "new" operation, such as "new Class.NestedClass()".
