@@ -190,12 +190,12 @@ BEGIN
             VALUE "ProductName", ""
             VALUE "ProductVersion", AHK_VERSION
 #else
-            VALUE "FileDescription", "AutoHotkey_L " AHK_ENC " " AHK_BIT
+            VALUE "FileDescription", "AutoHotkey " AHK_ENC " " AHK_BIT
             VALUE "FileVersion", AHK_VERSION
-            VALUE "InternalName", "AutoHotkey_L"
-            VALUE "LegalCopyright", "Copyright (C) 2010"
+            VALUE "InternalName", "AutoHotkey"
+            VALUE "LegalCopyright", "Copyright (C) 2012"
             VALUE "OriginalFilename", "AutoHotkey.exe"
-            VALUE "ProductName", "AutoHotkey_L"
+            VALUE "ProductName", "AutoHotkey"
             VALUE "ProductVersion", AHK_VERSION
 #endif
         END
