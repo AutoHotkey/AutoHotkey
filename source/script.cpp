@@ -3581,7 +3581,7 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 
 
 ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
-	, LPTSTR aActionName, LPTSTR aEndMarker, LPTSTR aLiteralMap, size_t aLiteralMapLength)
+	, LPTSTR aLiteralMap, size_t aLiteralMapLength)
 // Returns OK or FAIL.
 // aLineText needs to be a string whose contents are modifiable (though the string won't be made any
 // longer than it is now, so it doesn't have to be of size LINE_SIZE). This helps performance by
@@ -3593,12 +3593,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 #endif
 
 	TCHAR action_name[MAX_VAR_NAME_LENGTH + 1], *end_marker;
-	if (aActionName) // i.e. this function was called recursively with explicit values for the optional params.
-	{
-		_tcscpy(action_name, aActionName);
-		end_marker = aEndMarker;
-	}
-	else if (aActionType == ACT_EXPRESSION)
+	if (aActionType == ACT_EXPRESSION)
 	{
 		*action_name = '\0';
 		end_marker = NULL; // Indicate that there is no action to mark the end of.
@@ -4158,9 +4153,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	if (aLiteralMap)
 	{
 		// Since literal map is NOT a string, just an array of char values, be sure to
-		// use memcpy() vs. _tcscpy() on it.  Also, caller's aLiteralMap starts at aEndMarker,
+		// use memcpy() vs. _tcscpy() on it.  Also, caller's aLiteralMap starts at aLineText,
 		// so adjust it so that it starts at the newly found position of action_args instead:
-		int map_offset = (int)(action_args - end_marker);  // end_marker is known not to be NULL when aLiteralMap is non-NULL.
+		int map_offset = (int)(action_args - aLineText);
 		int map_length = (int)(aLiteralMapLength - map_offset);
 		if (map_length > 0)
 			tmemcpy(literal_map, aLiteralMap + map_offset, map_length);
@@ -4448,7 +4443,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		// been determined.  Unlike the "legacy" IF commands, we want to support
 		// assignments and expressions, not just named commands, so we let the
 		// recursive call figure it out rather than calling ConvertActionType():
-		return ParseAndAddLine(subaction_start, ACT_INVALID, NULL, NULL
+		return ParseAndAddLine(subaction_start, ACT_INVALID
 			, literal_map + (subaction_start - action_args) // Pass only the relevant substring of literal_map.
 			, _tcslen(subaction_start));
 	}
