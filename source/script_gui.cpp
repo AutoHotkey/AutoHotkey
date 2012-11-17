@@ -861,6 +861,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			goto return_the_result;
 
 		case GUI_CONTROL_EDIT:
+		case GUI_CONTROL_CUSTOM: // Make it edit the default window text
 			// Note that TranslateLFtoCRLF() will return the original buffer we gave it if no translation
 			// is needed.  Otherwise, it will return a new buffer which we are responsible for freeing
 			// when done (or NULL if it failed to allocate the memory).
@@ -2124,6 +2125,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	case GUI_CONTROL_ACTIVEX:
 		opt.style_add |= WS_CLIPSIBLINGS;
 		break;
+	case GUI_CONTROL_CUSTOM:
+		opt.style_add |= WS_TABSTOP;
+		break;
 	case GUI_CONTROL_STATUSBAR:
 		// Although the following appears unnecessary, at least on XP, there's a good chance it's required
 		// on older OSes such as Win 95/NT.  On newer OSes, apparently the control shows a grip on
@@ -2418,6 +2422,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			break;
 		case GUI_CONTROL_LISTVIEW:
 		case GUI_CONTROL_TREEVIEW:
+		case GUI_CONTROL_CUSTOM:
 			opt.row_count = 5;  // Actual height will be calculated below using this.
 			break;
 		case GUI_CONTROL_GROUPBOX:
@@ -2826,6 +2831,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		case GUI_CONTROL_LISTVIEW:
 		case GUI_CONTROL_TREEVIEW:
 		case GUI_CONTROL_DATETIME: // Seems better to have wider default to fit LongDate and because drop-down calendar is fairly wide (though the latter is a weak reason).
+		case GUI_CONTROL_CUSTOM:
 			opt.width = gui_standard_width * 2;
 			break;
 		case GUI_CONTROL_UPDOWN: // Iffy, but needs some kind of default?
@@ -3824,6 +3830,13 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		}
 		break;
 	}
+
+	case GUI_CONTROL_CUSTOM:
+		if (opt.customClassAtom == 0)
+			return g_script.ScriptError(_T("A window class is required."));
+		control.hwnd = CreateWindowEx(exstyle, MAKEINTATOM(opt.customClassAtom), aText, style
+			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
+		break;
 
 	case GUI_CONTROL_STATUSBAR:
 		if (control.hwnd = CreateStatusWindow(style, aText, mHwnd, (UINT)(size_t)control_id))
@@ -5136,6 +5149,16 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			}
 			else
 				aOpt.style_remove |= TCS_BOTTOM;
+
+		else if (aControl.type == GUI_CONTROL_CUSTOM && !_tcsnicmp(next_option, _T("Class"), 5))
+		{
+			LPTSTR className = next_option + 5;
+			WNDCLASSEX wc;
+			// Retrieve the class atom (http://blogs.msdn.com/b/oldnewthing/archive/2004/10/11/240744.aspx)
+			aOpt.customClassAtom = (ATOM) GetClassInfoEx(g_hInstance, className, &wc);
+			if (aOpt.customClassAtom == 0)
+				return g_script.ScriptError(_T("Unregistered window class."), className);
+		}
 
 		// Styles (alignment/justification):
 		else if (!_tcsicmp(next_option, _T("Center")))
@@ -8227,6 +8250,9 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 					pgui->Event(control_index, nmhdr.code, GUI_EVENT_NORMAL, item.iLink + 1); // Link control uses 1-based index for g-labels
 			}
 			return 0;
+		case GUI_CONTROL_CUSTOM:
+			pgui->Event(control_index, nmhdr.code, GUI_EVENT_NONE, (UINT_PTR) &nmhdr);
+			return 0;
 		case GUI_CONTROL_STATUSBAR:
 			if (!(control.jump_to_label || (control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)))// These is checked to avoid returning TRUE below, and also for performance.
 				break; // Let default proc handle it.
@@ -8698,7 +8724,7 @@ LRESULT CALLBACK TabWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 
 
-void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEvent, UINT aEventInfo)
+void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEvent, UINT_PTR aEventInfo)
 // Caller should pass GUI_EVENT_NONE (zero) for aGuiEvent if it wants us to determine aGuiEvent based on the
 // type of control and the incoming aNotifyCode.
 // This function handles events within a GUI window that caused one of its controls to change in a meaningful
@@ -8776,7 +8802,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 				break;
 			case LBN_DBLCLK:
 				aGuiEvent = GUI_EVENT_DBLCLK;
-				aEventInfo = 1 + (UINT)SendMessage(control.hwnd, LB_GETCARETINDEX, 0, 0); // +1 to convert to one-based index.
+				aEventInfo = 1 + (UINT_PTR)SendMessage(control.hwnd, LB_GETCARETINDEX, 0, 0); // +1 to convert to one-based index.
 				break;
 			default:
 				return;
@@ -8832,6 +8858,18 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 			// the g-label twice: once for lbutton-down and once for up.
 			return;
 
+		case GUI_CONTROL_CUSTOM:
+			if (aEventInfo != 0)
+			{
+				// This is a WM_NOTIFY handler and thus we need to set A_GuiEvent to 'N'. Due to the nature
+				// of WM_NOTIFY messages we cannot use PostMessage because otherwise the NMHDR pointer becomes toast.
+				SendMessage(mHwnd, AHK_GUI_ACTION, (WPARAM)((aControlIndex << 16) | 'N'), (LPARAM) aEventInfo);
+				return;
+			}
+			// Copy the notification code to A_EventInfo.
+			aEventInfo = aNotifyCode;
+			break;
+
 		case GUI_CONTROL_SLIDER:
 			switch (aNotifyCode)
 			{
@@ -8875,7 +8913,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 		} // switch(control.type)
 	} // if (aGuiEvent == GUI_EVENT_NONE)
 
-	POST_AHK_GUI_ACTION(mHwnd, aControlIndex, aGuiEvent, aEventInfo);
+	POST_AHK_GUI_ACTION(mHwnd, aControlIndex, aGuiEvent, (LPARAM)aEventInfo);
 	// MsgSleep(-1, RETURN_AFTER_MESSAGES_SPECIAL_FILTER) is not done because "case AHK_GUI_ACTION" in GuiWindowProc()
 	// takes care of it.  See its comments for why.
 

@@ -521,7 +521,7 @@ enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero du
 	, GUI_CONTROL_LISTBOX, GUI_CONTROL_LISTVIEW, GUI_CONTROL_TREEVIEW
 	, GUI_CONTROL_EDIT, GUI_CONTROL_DATETIME, GUI_CONTROL_MONTHCAL, GUI_CONTROL_HOTKEY
 	, GUI_CONTROL_UPDOWN, GUI_CONTROL_SLIDER, GUI_CONTROL_PROGRESS, GUI_CONTROL_TAB, GUI_CONTROL_TAB2
-	, GUI_CONTROL_ACTIVEX, GUI_CONTROL_LINK, GUI_CONTROL_STATUSBAR}; // Kept last to reflect it being bottommost in switch()s (for perf), since not too often used.
+	, GUI_CONTROL_ACTIVEX, GUI_CONTROL_LINK, GUI_CONTROL_CUSTOM, GUI_CONTROL_STATUSBAR}; // Kept last to reflect it being bottommost in switch()s (for perf), since not too often used.
 
 enum ThreadCommands {THREAD_CMD_INVALID, THREAD_CMD_PRIORITY, THREAD_CMD_INTERRUPT, THREAD_CMD_NOTIMERS};
 
@@ -1494,6 +1494,7 @@ public:
 		if (!_tcsicmp(aBuf, _T("StatusBar"))) return GUI_CONTROL_STATUSBAR;
 		if (!_tcsicmp(aBuf, _T("ActiveX"))) return GUI_CONTROL_ACTIVEX;
 		if (!_tcsicmp(aBuf, _T("Link"))) return GUI_CONTROL_LINK;
+		if (!_tcsicmp(aBuf, _T("Custom"))) return GUI_CONTROL_CUSTOM;
 		return GUI_CONTROL_INVALID;
 	}
 
@@ -2345,6 +2346,7 @@ struct GuiControlOptionsType
 	bool start_new_section;
 	bool use_theme; // v1.0.32: Provides the means for the window's current setting of mUseTheme to be overridden.
 	bool listview_no_auto_sort; // v1.0.44: More maintainable and frees up GUI_CONTROL_ATTRIB_ALTBEHAVIOR for other uses.
+	ATOM customClassAtom;
 };
 
 LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam);
@@ -2504,7 +2506,7 @@ public:
 		, COLORREF *aColor = NULL);
 	static int FindFont(FontType &aFont);
 
-	void Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEvent = GUI_EVENT_NONE, UINT aEventInfo = 0);
+	void Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEvent = GUI_EVENT_NONE, UINT_PTR aEventInfo = 0);
 
 	static WORD TextToHotkey(LPTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
