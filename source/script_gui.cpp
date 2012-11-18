@@ -2545,6 +2545,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			case GUI_CONTROL_EDIT:
 			case GUI_CONTROL_DATETIME:
 			case GUI_CONTROL_HOTKEY:
+			case GUI_CONTROL_CUSTOM:
 				opt.height += GUI_CTL_VERTICAL_DEADSPACE;
 				if (style & WS_HSCROLL)
 					opt.height += GetSystemMetrics(SM_CYHSCROLL);
