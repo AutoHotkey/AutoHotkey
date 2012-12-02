@@ -585,8 +585,11 @@ private:
 	ResultType Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2);
 	ResultType DriveLock(TCHAR aDriveLetter, bool aLockIt);
 	ResultType DriveGet(LPTSTR aCmd, LPTSTR aValue);
-	ResultType SoundSetGet(LPTSTR aSetting, DWORD aComponentType, int aComponentInstance
-		, DWORD aControlType, UINT aMixerID);
+	ResultType SoundSetGet(LPTSTR aSetting, LPTSTR aComponentType, LPTSTR aControlType, LPTSTR aDevice);
+	ResultType SoundSetGet2kXP(LPTSTR aSetting, DWORD aComponentType, int aComponentInstance
+		, DWORD aControlType, LPTSTR aDevice);
+	ResultType SoundSetGetVista(LPTSTR aSetting, DWORD aComponentType, int aComponentInstance
+		, DWORD aControlType, LPTSTR aDevice);
 	ResultType SoundGetWaveVolume(HWAVEOUT aDeviceID);
 	ResultType SoundSetWaveVolume(LPTSTR aVolume, HWAVEOUT aDeviceID);
 	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
