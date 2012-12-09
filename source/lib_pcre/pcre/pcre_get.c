@@ -262,6 +262,18 @@ return GET2(entry, 0);
 }
 
 
+/* Exported function for AutoHotkey use: */
+#ifdef COMPILE_PCRE8
+PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
+pcre_get_first_set(const pcre *code, const char *stringname, int *ovector)
+#else
+PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
+pcre16_get_first_set(const pcre16 *code, PCRE_SPTR16 stringname, int *ovector)
+#endif
+{
+return get_first_set(code, stringname, ovector);
+}
+
 
 
 /*************************************************
