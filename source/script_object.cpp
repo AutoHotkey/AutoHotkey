@@ -866,6 +866,11 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		// Free each field in the range being removed.
 		mFields[pos].Free();
 
+	if (min_key_type == SYM_STRING)
+		// Free all string keys in the range being removed.
+		for (pos = min_pos; pos < max_pos; ++pos)
+			free(mFields[pos].key.s);
+
 	IndexType remaining_fields = mFieldCount - max_pos;
 	if (remaining_fields)
 		// Move remaining fields left to fill the gap left by the removed range.
