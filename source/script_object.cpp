@@ -1545,28 +1545,20 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ExprTokenType &aResultToken, Exp
 	// the default meta-functions, especially since "base" may become a reserved word in future.
 	if (aThisToken.symbol == SYM_VAR && !_tcsicmp(aThisToken.var->mName, _T("base"))
 		&& !aThisToken.var->HasContents() // Since scripts are able to assign to it, may as well let them use the assigned value.
-		&& g->CurrentFunc)
+		&& g->CurrentFunc && g->CurrentFunc->mClass) // We're in a function defined within a class (i.e. a method).
 	{
-		LPCTSTR full_name = g->CurrentFunc->mName;
-		LPCTSTR end_marker = _tcsrchr(full_name, '.');
-		Object *this_class;
-		Var *this_var;
-		if (   end_marker // Appears to be a class definition.
-			&& (this_class = g_script.FindClass(full_name, end_marker - full_name)) // Can fail if the class var was reassigned at run-time.
-			&& (this_var = g->CurrentFunc->mParam[0].var)->IsObject()   ) // Valid 'this' param.
+		if (IObject *this_class_base = g->CurrentFunc->mClass->Base())
 		{
 			ExprTokenType this_token;
 			this_token.symbol = SYM_VAR;
-			this_token.var = this_var;
-			if (IObject *this_class_base = this_class->Base())
-			{
-				ResultType result = this_class_base->Invoke(aResultToken, this_token, (aFlags & ~IF_METAFUNC) | IF_METAOBJ, aParam, aParamCount);
-				// Avoid returning INVOKE_NOT_HANDLED in this case so that our caller never
-				// shows an "uninitialized var" warning for base.Foo() in a class method.
-				return result == INVOKE_NOT_HANDLED ? OK : result;
-			}
-			return OK;
+			this_token.var = g->CurrentFunc->mParam[0].var;
+			ResultType result = this_class_base->Invoke(aResultToken, this_token, (aFlags & ~IF_METAFUNC) | IF_METAOBJ, aParam, aParamCount);
+			// Avoid returning INVOKE_NOT_HANDLED in this case so that our caller never
+			// shows an "uninitialized var" warning for base.Foo() in a class method.
+			if (result != INVOKE_NOT_HANDLED)
+				return result;
 		}
+		return OK;
 	}
 
 	// Allow script-defined meta-functions to override the default behaviour:
