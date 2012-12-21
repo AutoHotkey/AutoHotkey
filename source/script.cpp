@@ -14573,6 +14573,10 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		//	// not have any effect.  The below only takes effect if MsgBox()'s call to
 		//	// MessageBox() failed in some unexpected way:
 		//	LineError("The MsgBox could not be displayed.");
+		// v1.1.09.02: If the MsgBox failed due to invalid options, it seems better to display
+		// an error dialog than to silently exit the thread:
+		if (!result && GetLastError() == ERROR_INVALID_MSGBOX_STYLE)
+			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
 		return result ? OK : FAIL;
 	}
 
