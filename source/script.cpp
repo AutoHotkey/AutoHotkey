@@ -7363,6 +7363,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			g->CurrentFunc = init_func; // g->CurrentFunc should be NULL prior to this.
 			mLastLine = block_end->mPrevLine; // i.e. insert before block_end.
 			mLastLine->mNextLine = NULL; // For maintainability; AddLine() should overwrite it regardless.
+			mCurrLine = NULL; // Fix for v1.1.09.02: Leaving this non-NULL at best causes error messages to show irrelevant vicinity lines, and at worst causes a crash because the linked list is in an inconsistent state.
 		}
 
 		if (!ParseAndAddLine(buf, ACT_EXPRESSION))
