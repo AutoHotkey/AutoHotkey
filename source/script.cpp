@@ -13193,8 +13193,17 @@ BIF_DECL(BIF_PerformAction)
 	bool in_try = g->InTryBlock;
 	g->InTryBlock = true;
 
+	FileIndexType line_file = 0;
+	LineNumberType line_num = 0;
+	if (g_script.mCurrLine)
+	{
+		// These are used by CreateRuntimeException().
+		line_file = g_script.mCurrLine->mFileIndex;
+		line_num = g_script.mCurrLine->mLineNumber;
+	}
+
 	// Construct a Line containing the required context for ExpandArgs() and Perform().
-	Line line(0, 0, act, arg, aParamCount);
+	Line line(line_file, line_num, act, arg, aParamCount);
 
 	// Expand args BEFORE RESETTING ERRORLEVEL BELOW.
 	if (!line.ExpandArgs())
