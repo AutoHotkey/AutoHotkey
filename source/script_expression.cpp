@@ -1116,6 +1116,16 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					if (temp_var)
 					{
 						result = temp_var->Contents(FALSE); // No need to update the contents because we just want to know if the current address of mContents matches some other addresses.
+						if (result == Var::sEmptyString) // Added in v1.1.09.03.
+						{
+							// One of the following is true:
+							//   1) temp_var has zero capacity and is empty.
+							//   2) temp_var has zero capacity and contains an unflushed binary number.
+							// In the first case, AppendIfRoom() will always fail, so we want to skip it and use
+							// the "no overlap" optimization below. In the second case, calling AppendIfRoom()
+							// would produce the wrong result; e.g. (x := 0+1, x := y 0) would produce "10".
+							result = NULL;
+						}
 						if (result == left_string) // This is something like x := x . y, so simplify it to x .= y
 						{
 							// MUST DO THE ABOVE CHECK because the next section further below might free the
