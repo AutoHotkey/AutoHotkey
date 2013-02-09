@@ -123,6 +123,20 @@ GuiType *GuiType::FindGui(HWND aHwnd)
 }
 
 
+GuiType *GuiType::FindGuiParent(HWND aHwnd)
+// Returns the GuiType of aHwnd or its closest ancestor which is a Gui.
+{
+	for ( ; aHwnd; aHwnd = GetParent(aHwnd))
+	{
+		if (GuiType *gui = FindGui(aHwnd))
+			return gui;
+		if (!(GetWindowLong(aHwnd, GWL_STYLE) & WS_CHILD))
+			break;
+	}
+	return NULL;
+}
+
+
 GuiType *global_struct::GuiDefaultWindowValid()
 {
 	if (!GuiDefaultWindow)

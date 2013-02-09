@@ -487,7 +487,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			if (  (msg.message >= WM_KEYFIRST || msg.message <= WM_KEYLAST)
 				&& (focused_control = GetFocus())
 				&& (focused_parent = GetNonChildParent(focused_control))
-				&& (pgui = GuiType::FindGui(focused_parent))  )
+				&& (pgui = GuiType::FindGuiParent(GetParent(focused_control)))  )  // v1.1.09.03: Fixed to support +Parent.
 			{
 				if (pgui->mAccel) // v1.1.04: Keyboard accelerators.
 					if (TranslateAccelerator(focused_parent, pgui->mAccel, &msg))
@@ -1803,7 +1803,7 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	// Nested controls like ComboBoxes require more than a simple call to GetParent().
 	if (g->hWndLastUsed = GetNonChildParent(aWnd)) // Assign parent window as the last found window (it's ok if it's hidden).
 	{
-		pgui = GuiType::FindGui(g->hWndLastUsed);
+		pgui = GuiType::FindGuiParent(aWnd); // Fix for v1.1.09.03: Search the chain of parent windows in case this control's Gui was embedded in another Gui using +Parent.
 		if (pgui) // This parent window is a GUI window.
 		{
 			pgui->AddRef(); // Keep the pointer valid at least until the thread finishes.

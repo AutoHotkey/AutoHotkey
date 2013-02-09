@@ -2479,6 +2479,7 @@ public:
 	
 	static GuiType *FindGui(LPTSTR aName);
 	static GuiType *FindGui(HWND aHwnd);
+	static GuiType *FindGuiParent(HWND aHwnd);
 
 	static GuiType *ValidGui(GuiType *&aGuiRef); // Updates aGuiRef if it points to a destroyed Gui.
 
