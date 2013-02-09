@@ -2494,7 +2494,7 @@ public:
 			if (aHwnd = GetParent(aHwnd)) // Note that a ComboBox's drop-list (class ComboLBox) is apparently a direct child of the desktop, so this won't help us in that case.
 				index = GUI_HWND_TO_INDEX(aHwnd); // Retrieves a small negative on failure, which will be out of bounds when converted to unsigned.
 		}
-		if (index < mControlCount) // A match was found.
+		if (index < mControlCount && mControl[index].hwnd == aHwnd) // A match was found.  Fix for v1.1.09.03: Confirm it is actually one of our controls.
 			return aRetrieveIndexInstead ? (GuiControlType *)(size_t)index : mControl + index;
 		else // No match, so indicate failure.
 			return aRetrieveIndexInstead ? (GuiControlType *)NO_CONTROL_INDEX : NULL;
