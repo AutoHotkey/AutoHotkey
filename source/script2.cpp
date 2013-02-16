@@ -3312,8 +3312,6 @@ ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLOR
 				}
 			}
 		}
-		if (!found) // Must override ErrorLevel to its new value prior to the label below.
-			g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // "1" indicates search completed okay, but didn't find it.
 
 fast_end:
 		// If found==false when execution reaches here, ErrorLevel is already set to the right value, so just
@@ -3329,8 +3327,7 @@ fast_end:
 			DeleteObject(hbitmap_screen);
 		if (screen_pixel)
 			free(screen_pixel);
-
-		if (!found)
+		else // One of the GDI calls failed and the search wasn't carried out.
 			goto error;
 
 		// Otherwise, success.  Calculate xpos and ypos of where the match was found and adjust
@@ -3344,7 +3341,7 @@ fast_end:
 				return FAIL;
 		}
 
-		return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+		return g_ErrorLevel->Assign(found ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR); // "0" indicates success; "1" indicates search completed okay, but didn't find it.
 	}
 
 	// Otherwise (since above didn't return): fast_mode==false
@@ -9556,15 +9553,9 @@ VarSizeType BIV_ScriptName(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_ScriptDir(LPTSTR aBuf, LPTSTR aVarName)
 {
-	// v1.0.42.06: This function has been fixed not to call the following when we're called with aBuf!=NULL:
-	// strlcpy(target_buf, g_script.mFileDir, MAX_PATH);
-	// The above could crash because strlcpy() calls strncpy(), which zero fills the tail of the destination
-	// up through the limit of its capacity.  But we might have returned an estimate less than MAX_PATH
-	// when the caller called us the first time, which usually means that aBuf is smaller than MAX_PATH.
-	if (!aBuf)
-		return (VarSizeType)_tcslen(g_script.mFileDir);
-	// Otherwise, write the result to the buffer and return its exact length, not an estimate:
-	return (VarSizeType)_tcslen(_tcscpy(aBuf, g_script.mFileDir)); // Caller has ensured that aBuf is large enough.
+	if (aBuf)
+		_tcscpy(aBuf, g_script.mFileDir);
+	return _tcslen(g_script.mFileDir);
 }
 
 VarSizeType BIV_ScriptFullPath(LPTSTR aBuf, LPTSTR aVarName)
@@ -12392,7 +12383,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 								if (IsNumeric(substring_name, true, false, true)) // Seems best to allow floating point such as 1.0 because it will then get truncated to an integer.  It seems to rare that anyone would want to use floats as names.
 									ref_num = _ttoi(substring_name); // Uses _ttoi() vs. ATOI to avoid potential overlap with non-numeric names such as ${0x5}, which should probably be considered a name not a number?  In other words, seems best not to make some names that start with numbers "special" just because they happen to be hex numbers.
 								else // For simplicity, no checking is done to ensure it consists of the "32 alphanumeric characters and underscores".  Let pcre_get_stringnumber() figure that out for us.
-									ref_num = pcret_get_stringnumber(aRE, substring_name); // Returns a negative on failure, which when stored in ref_num is relied upon as an indicator.
+									ref_num = pcret_get_first_set(aRE, substring_name, aOffset); // Returns a negative on failure, which when stored in ref_num is relied upon as an indicator.
 							}
 							//else it's too long, so it seems best (debatable) to treat it as a unmatched/unfound name, i.e. "".
 							src = closing_brace; // Set things up for the next iteration to resume at the char after "${..}"

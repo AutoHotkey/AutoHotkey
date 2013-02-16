@@ -333,6 +333,7 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 			contents[j] = '\0'; // Terminate
 			if (!output_var.Close()) // Length() was already set by the earlier call to Assign().
 				return FAIL;
+			break;
 		}
 		default:
 			RegCloseKey(hRegKey);

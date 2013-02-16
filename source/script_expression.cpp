@@ -912,7 +912,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			ExprTokenType &left = *STACK_POP; // i.e. the right operand always comes off the stack before the left.
 			if (!IS_OPERAND(left.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
 				goto abnormal_end;
-
+			
 			if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(this_token.symbol)) // v1.0.46: Added support for various assignment operators.
 			{
 				if (left.symbol != SYM_VAR)
@@ -1052,6 +1052,16 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					if (temp_var)
 					{
 						result = temp_var->Contents(FALSE); // No need to update the contents because we just want to know if the current address of mContents matches some other addresses.
+						if (result == Var::sEmptyString) // Added in v1.1.09.03.
+						{
+							// One of the following is true:
+							//   1) temp_var has zero capacity and is empty.
+							//   2) temp_var has zero capacity and contains an unflushed binary number.
+							// In the first case, AppendIfRoom() will always fail, so we want to skip it and use
+							// the "no overlap" optimization below. In the second case, calling AppendIfRoom()
+							// would produce the wrong result; e.g. (x := 0+1, x := y 0) would produce "10".
+							result = NULL;
+						}
 						if (result == left_string) // This is something like x := x . y, so simplify it to x .= y
 						{
 							// MUST DO THE ABOVE CHECK because the next section further below might free the

@@ -6393,6 +6393,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			g->CurrentFunc = init_func; // g->CurrentFunc should be NULL prior to this.
 			mLastLine = block_end->mPrevLine; // i.e. insert before block_end.
 			mLastLine->mNextLine = NULL; // For maintainability; AddLine() should overwrite it regardless.
+			mCurrLine = NULL; // Fix for v1.1.09.02: Leaving this non-NULL at best causes error messages to show irrelevant vicinity lines, and at worst causes a crash because the linked list is in an inconsistent state.
 		}
 
 		if (!ParseAndAddLine(buf, ACT_EXPRESSION))
@@ -6835,6 +6836,7 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 			ScriptError(ERR_OUTOFMEM);
 			return NULL;
 		}
+		the_new_func->mClass = aClassObject;
 		// Also add it to the script's list of functions, to support #Warn LocalSameAsGlobal
 		// and automatic cleanup of objects in static vars on program exit.
 	}
@@ -8181,6 +8183,9 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, ActionTyp
 					// Let the caller handle this else, since it can't be ours:
 					return line_temp;
 				}
+				// Fix for v1.1.09: Correct the line hierarchy for ELSE nested in an IF/ELSE/LOOP
+				// without braces.  This is needed for named loops and perhaps other things.
+				line_temp->mParentLine = line->mParentLine;
 				// Now use line vs. line_temp to hold the new values, so that line_temp
 				// stays as a marker to the ELSE line itself:
 				line = line_temp->mNextLine;  // Set it to the else's action line.
@@ -12673,6 +12678,10 @@ ResultType Line::Perform()
 		//	// not have any effect.  The below only takes effect if MsgBox()'s call to
 		//	// MessageBox() failed in some unexpected way:
 		//	LineError("The MsgBox could not be displayed.");
+		// v1.1.09.02: If the MsgBox failed due to invalid options, it seems better to display
+		// an error dialog than to silently exit the thread:
+		if (!result && GetLastError() == ERROR_INVALID_MSGBOX_STYLE)
+			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
 		return result ? OK : FAIL;
 	}
 

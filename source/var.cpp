@@ -395,7 +395,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 			do_assign = false;
 	else // Caller provided a non-NULL buffer.
 		if (aLength == VARSIZE_MAX) // Caller wants us to determine its length.
-			aLength = (mCharContents == aBuf) ? CharLength() : (VarSizeType)_tcslen(aBuf); // v1.0.45: Added optimization check: (mContents == aBuf).
+			aLength = (mCharContents == aBuf) ? _CharLength() : (VarSizeType)_tcslen(aBuf); // v1.0.45: Added optimization check: (mContents == aBuf).  v1.1.09.03: Replaced CharLength() with _CharLength() to avoid updating contents (probably only applicable when aBuf == Var::sEmptyString).
 		//else leave aLength as the caller-specified value in case it's explicitly shorter than the apparent length.
 	if (!aBuf)
 		aBuf = _T("");  // From here on, make sure it's the empty string for all uses (read-only empty string vs. sEmptyString seems more appropriate in this case).
@@ -795,7 +795,7 @@ ResultType Var::AppendIfRoom(LPTSTR aStr, VarSizeType aLength)
 	if (var.mType != VAR_NORMAL // e.g. VAR_CLIPBOARD. Some callers do call it this way, but even if not it should be kept for maintainability.
 		|| (var.mAttrib & VAR_ATTRIB_IS_OBJECT)) // It seems best for maintainability to not handle this case here.
 		return FAIL; // CHECK THIS FIRST, BEFORE BELOW, BECAUSE CALLERS ALWAYS WANT IT TO BE A FAILURE.
-	if (!aLength) // Consider the appending of nothing (even onto unsupported things like clipboard) to be a success.
+	if (!aLength) // Consider the appending of nothing to be a success.
 		return OK;
 	VarSizeType var_length = var.LengthIgnoreBinaryClip(); // Get the apparent length because one caller is a concat that wants consistent behavior of the .= operator regardless of whether this shortcut succeeds or not.
 	VarSizeType new_length = var_length + aLength;

@@ -24,6 +24,7 @@
 #define pcret_fullinfo						pcre16_fullinfo
 #define pcret_get_named_substring			pcre16_get_named_substring
 #define pcret_get_stringnumber				pcre16_get_stringnumber
+#define pcret_get_first_set					pcre16_get_first_set
 #define pcret_get_stringtable_entries		pcre16_get_stringtable_entries
 #define pcret_get_substring					pcre16_get_substring
 #define pcret_get_substring_list			pcre16_get_substring_list
@@ -62,6 +63,7 @@
 #define pcret_fullinfo						pcre_fullinfo
 #define pcret_get_named_substring			pcre_get_named_substring
 #define pcret_get_stringnumber				pcre_get_stringnumber
+#define pcret_get_first_set					pcre_get_first_set
 #define pcret_get_stringtable_entries		pcre_get_stringtable_entries
 #define pcret_get_substring					pcre_get_substring
 #define pcret_get_substring_list			pcre_get_substring_list

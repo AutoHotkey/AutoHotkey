@@ -124,6 +124,20 @@ GuiType *GuiType::FindGui(HWND aHwnd)
 }
 
 
+GuiType *GuiType::FindGuiParent(HWND aHwnd)
+// Returns the GuiType of aHwnd or its closest ancestor which is a Gui.
+{
+	for ( ; aHwnd; aHwnd = GetParent(aHwnd))
+	{
+		if (GuiType *gui = FindGui(aHwnd))
+			return gui;
+		if (!(GetWindowLong(aHwnd, GWL_STYLE) & WS_CHILD))
+			break;
+	}
+	return NULL;
+}
+
+
 GuiType *global_struct::GuiDefaultWindowValid()
 {
 	if (!GuiDefaultWindow)
@@ -6534,10 +6548,18 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		// the window's new screen rect, including title bar, borders, etc.
 		// If the window has a border or caption this also changes top & left *slightly* from zero.
 		RECT rect = {0, 0, width, height}; // left,top,right,bottom
-		AdjustWindowRectEx(&rect, GetWindowLong(mHwnd, GWL_STYLE), GetMenu(mHwnd) ? TRUE : FALSE
+		LONG style = GetWindowLong(mHwnd, GWL_STYLE);
+		AdjustWindowRectEx(&rect, style, GetMenu(mHwnd) ? TRUE : FALSE
 			, GetWindowLong(mHwnd, GWL_EXSTYLE));
 		width = rect.right - rect.left;  // rect.left might be slightly less than zero.
 		height = rect.bottom - rect.top; // rect.top might be slightly less than zero. A status bar is properly handled since it's inside the window's client area.
+		// MSDN: "The AdjustWindowRectEx function does not take the WS_VSCROLL or WS_HSCROLL styles into
+		// account. To account for the scroll bars, call the GetSystemMetrics function with SM_CXVSCROLL
+		// or SM_CYHSCROLL."
+		if (style & WS_HSCROLL)
+			width += GetSystemMetrics(SM_CXHSCROLL);
+		if (style & WS_VSCROLL)
+			height += GetSystemMetrics(SM_CYVSCROLL);
 
 		RECT work_rect;
 		SystemParametersInfo(SPI_GETWORKAREA, 0, &work_rect, 0);  // Get desktop rect excluding task bar.

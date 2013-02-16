@@ -460,6 +460,8 @@ PCRE_EXP_DECL int  pcre16_get_named_substring(const pcre16 *, PCRE_SPTR16,
                   int *, int, PCRE_SPTR16, PCRE_SPTR16 *);
 PCRE_EXP_DECL int  pcre_get_stringnumber(const pcre *, const char *);
 PCRE_EXP_DECL int  pcre16_get_stringnumber(const pcre16 *, PCRE_SPTR16);
+PCRE_EXP_DECL int  pcre_get_first_set(const pcre *, const char *, int *); /* AutoHotkey */
+PCRE_EXP_DECL int  pcre16_get_first_set(const pcre16 *, PCRE_SPTR16, int *); /* AutoHotkey */
 PCRE_EXP_DECL int  pcre_get_stringtable_entries(const pcre *, const char *,
                   char **, char **);
 PCRE_EXP_DECL int  pcre16_get_stringtable_entries(const pcre16 *, PCRE_SPTR16,
