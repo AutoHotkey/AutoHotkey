@@ -793,7 +793,7 @@ ResultType Var::AppendIfRoom(LPTSTR aStr, VarSizeType aLength)
 	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()):
 	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
 	if (var.mType != VAR_NORMAL // e.g. VAR_CLIPBOARD. Some callers do call it this way, but even if not it should be kept for maintainability.
-		|| (var.mAttrib & VAR_ATTRIB_IS_OBJECT)) // It seems best for maintainability to not handle this case here.
+		|| (var.mAttrib & (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT))) // This check ensures n.="" correctly changes type(n) to String.
 		return FAIL; // CHECK THIS FIRST, BEFORE BELOW, BECAUSE CALLERS ALWAYS WANT IT TO BE A FAILURE.
 	if (!aLength) // Consider the appending of nothing to be a success.
 		return OK;
