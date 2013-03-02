@@ -8878,7 +8878,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 			{
 				// This is a WM_NOTIFY handler and thus we need to set A_GuiEvent to 'N'. Due to the nature
 				// of WM_NOTIFY messages we cannot use PostMessage because otherwise the NMHDR pointer becomes toast.
-				SendMessage(mHwnd, AHK_GUI_ACTION, (WPARAM)((aControlIndex << 16) | 'N'), (LPARAM) aEventInfo);
+				CustomCtrlWmNotify(aControlIndex, (LPNMHDR) aEventInfo);
 				return;
 			}
 			// Copy the notification code to A_EventInfo.
@@ -9011,6 +9011,44 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 	// would prevent them from being re-posted back to the queue (see "case AHK_GUI_ACTION" in GuiWindowProc()).
 }
 
+
+void GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
+{
+	// See MsgMonitor() in application.cpp for comments, as this method is based on the beforementioned function.
+
+	if (!INTERRUPTIBLE_IN_EMERGENCY)
+		return;
+
+	GuiControlType& aControl = mControl[aControlIndex];
+	Label& glabel = *aControl.jump_to_label;
+	Line* jumpToLine = glabel.mJumpToLine;
+
+	if (g_nThreads >= g_MaxThreadsTotal)
+		if (g_nThreads >= MAX_THREADS_EMERGENCY
+			|| jumpToLine->mActionType != ACT_EXITAPP && jumpToLine->mActionType != ACT_RELOAD)
+			return;
+
+	if (g->Priority > 0)
+		return;
+
+	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
+	tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
+	InitNewThread(0, false, true, jumpToLine->mActionType);
+	DEBUGGER_STACK_PUSH(glabel.mJumpToLine, glabel.mName)
+
+	AddRef();
+	AddRef();
+	g->GuiWindow = this;
+	g->GuiDefaultWindow = this;
+	g->GuiControlIndex = aControlIndex;
+	g->GuiEvent = 'N';
+	g->EventInfo = (DWORD_PTR) aNmHdr;
+	glabel.Execute();
+
+	DEBUGGER_STACK_POP()
+	Release();
+	ResumeUnderlyingThread(ErrorLevel_saved);
+}
 
 
 WORD GuiType::TextToHotkey(LPTSTR aText)
