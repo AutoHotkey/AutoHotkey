@@ -674,7 +674,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 				if (gui_action == GUI_EVENT_RESIZE) // This section be done after above but before pcontrol below.
 				{
-					gui_size = gui_event_info; // Temp storage until the "g" struct becomes available for the new thread.
+					gui_size = (DWORD)gui_event_info; // Temp storage until the "g" struct becomes available for the new thread.
 					gui_event_info = gui_control_index; // SizeType is stored in index in this case.
 					gui_control_index = NO_CONTROL_INDEX;
 				}
@@ -1204,7 +1204,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				{
 					LITEM item = {};
 					item.mask=LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
-					item.iLink = gui_event_info - 1;
+					item.iLink = (int)gui_event_info - 1;
 					if(SendMessage(pcontrol->hwnd,LM_GETITEM,NULL,(LPARAM)&item))
 						g_ErrorLevel->AssignString(*item.szUrl ? CStringTCharFromWCharIfNeeded(item.szUrl) : CStringTCharFromWCharIfNeeded(item.szID));
 				}
