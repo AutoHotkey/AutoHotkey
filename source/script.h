@@ -2513,7 +2513,7 @@ public:
 	static int FindFont(FontType &aFont);
 
 	void Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEvent = GUI_EVENT_NONE, UINT_PTR aEventInfo = 0);
-	void CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr);
+	int CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr);
 
 	static WORD TextToHotkey(LPTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
