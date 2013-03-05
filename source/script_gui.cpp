@@ -8266,8 +8266,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			}
 			return 0;
 		case GUI_CONTROL_CUSTOM:
-			pgui->Event(control_index, nmhdr.code, GUI_EVENT_NONE, (UINT_PTR) &nmhdr);
-			return 0;
+			return pgui->CustomCtrlWmNotify(control_index, &nmhdr);
 		case GUI_CONTROL_STATUSBAR:
 			if (!(control.jump_to_label || (control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)))// These is checked to avoid returning TRUE below, and also for performance.
 				break; // Let default proc handle it.
@@ -8874,13 +8873,6 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 			return;
 
 		case GUI_CONTROL_CUSTOM:
-			if (aEventInfo != 0)
-			{
-				// This is a WM_NOTIFY handler and thus we need to set A_GuiEvent to 'N'. Due to the nature
-				// of WM_NOTIFY messages we cannot use PostMessage because otherwise the NMHDR pointer becomes toast.
-				CustomCtrlWmNotify(aControlIndex, (LPNMHDR) aEventInfo);
-				return;
-			}
 			// Copy the notification code to A_EventInfo.
 			aEventInfo = aNotifyCode;
 			break;
@@ -9012,29 +9004,33 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 }
 
 
-void GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
+int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 {
 	// See MsgMonitor() in application.cpp for comments, as this method is based on the beforementioned function.
 
 	if (!INTERRUPTIBLE_IN_EMERGENCY)
-		return;
+		return 0;
 
 	GuiControlType& aControl = mControl[aControlIndex];
-	Label& glabel = *aControl.jump_to_label;
-	Line* jumpToLine = glabel.mJumpToLine;
+	Label* glabel = aControl.jump_to_label;
+	if (!glabel)
+		return 0;
+
+	Line* jumpToLine = glabel->mJumpToLine;
 
 	if (g_nThreads >= g_MaxThreadsTotal)
 		if (g_nThreads >= MAX_THREADS_EMERGENCY
 			|| jumpToLine->mActionType != ACT_EXITAPP && jumpToLine->mActionType != ACT_RELOAD)
-			return;
+			return 0;
 
 	if (g->Priority > 0)
-		return;
+		return 0;
 
 	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
 	tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
 	InitNewThread(0, false, true, jumpToLine->mActionType);
-	DEBUGGER_STACK_PUSH(glabel.mJumpToLine, glabel.mName)
+	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+	DEBUGGER_STACK_PUSH(jumpToLine, glabel->mName)
 
 	AddRef();
 	AddRef();
@@ -9043,11 +9039,15 @@ void GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	g->GuiControlIndex = aControlIndex;
 	g->GuiEvent = 'N';
 	g->EventInfo = (DWORD_PTR) aNmHdr;
-	glabel.Execute();
+	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
+	glabel->Execute();
+	int returnValue = (int)g_ErrorLevel->ToInt64(FALSE);
 
 	DEBUGGER_STACK_POP()
 	Release();
 	ResumeUnderlyingThread(ErrorLevel_saved);
+
+	return returnValue;
 }
 
 
