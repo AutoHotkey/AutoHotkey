@@ -8865,6 +8865,15 @@ ResultType Line::SoundGetWaveVolume(HWAVEOUT aDeviceID)
 {
 	OUTPUT_VAR->Assign(); // Init to empty string regardless of whether we succeed here.
 
+	if (g_os.IsWinVistaOrLater())
+	{
+		// For consistency and convenience when running scripts designed for XP,
+		// make the following two lines equivalent:
+		//  SoundGetWaveVolume v
+		//  SoundGet v, Wave, Volume
+		return SoundSetGetVista(NULL, MIXERLINE_COMPONENTTYPE_SRC_WAVEOUT, 1, MIXERCONTROL_CONTROLTYPE_VOLUME, ARG2);
+	}
+
 	DWORD current_vol;
 	if (waveOutGetVolume(aDeviceID, &current_vol) != MMSYSERR_NOERROR)
 		return SetErrorLevelOrThrow();
@@ -8881,6 +8890,15 @@ ResultType Line::SoundGetWaveVolume(HWAVEOUT aDeviceID)
 
 ResultType Line::SoundSetWaveVolume(LPTSTR aVolume, HWAVEOUT aDeviceID)
 {
+	if (g_os.IsWinVistaOrLater())
+	{
+		// For consistency and convenience when running scripts designed for XP,
+		// make the following two lines equivalent:
+		//  SoundSetWaveVolume %v%
+		//  SoundSet %v%, Wave, Volume
+		return SoundSetGetVista(aVolume, MIXERLINE_COMPONENTTYPE_SRC_WAVEOUT, 1, MIXERCONTROL_CONTROLTYPE_VOLUME, ARG2);
+	}
+
 	double volume = ATOF(aVolume);
 	if (volume < -100)
 		volume = -100;
