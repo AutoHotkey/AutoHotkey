@@ -487,7 +487,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			if (  (msg.message >= WM_KEYFIRST || msg.message <= WM_KEYLAST)
 				&& (focused_control = GetFocus())
 				&& (focused_parent = GetNonChildParent(focused_control))
-				&& (pgui = GuiType::FindGuiParent(GetParent(focused_control)))  )  // v1.1.09.03: Fixed to support +Parent.
+				&& (pgui = GuiType::FindGuiParent(focused_control))  )  // v1.1.09.03: Fixed to support +Parent.  v1.1.09.04: Re-fixed to work when focused_control itself is a Gui.
 			{
 				if (pgui->mAccel) // v1.1.04: Keyboard accelerators.
 					if (TranslateAccelerator(focused_parent, pgui->mAccel, &msg))
