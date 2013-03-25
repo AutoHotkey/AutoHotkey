@@ -16269,7 +16269,13 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 				shell_action = parse_buf + 1;
 				*action_end = '\0';
 				if (action_end[1])
+				{
 					shell_params = action_end + 1;
+					// Omit the space which should follow, but only one, in case spaces
+					// are meaningful to the target program.
+					if (*shell_params == ' ')
+						++shell_params;
+				}
 				// Otherwise, there's only the action in quotation marks and no params.
 			}
 			else
