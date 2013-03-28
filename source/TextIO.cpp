@@ -95,17 +95,34 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 	int dst_size; // Number of code units in destination character.
 
 	UINT codepage = mCodePage; // For performance.
+	int chr_size = (codepage == CP_UTF16) ? sizeof(WCHAR) : sizeof(CHAR);
 
-	for (;;)
+	// This is set each iteration based on how many bytes we *need* to have in the buffer.
+	// Avoid setting it higher than necessary since that can cause undesired effects with
+	// non-file handles -  such as a console waiting for a second line of input when the
+	// first line is waiting in our buffer.
+	int next_size = chr_size;
+
+	while (target_used < aBufLen)
 	{
-		// Performance note: ReadAtLeast() reads either TEXT_IO_BLOCK bytes or nothing,
-		// depending on how much data is in the buffer.  We want to either have at least
-		// two chars in the buffer (maybe \r and \n) or have the very last char of data.
-		// Byte mode: Try to read at least 4 bytes to simplify handling of 4-byte UTF-8 chars.
-		if (target_used == aBufLen || !ReadAtLeast(4) && !mLength)
+		// Ensure the buffer contains at least one CHAR/WCHAR, or all bytes of the next
+		// character as determined by a previous iteration of the loop.  Note that Read()
+		// only occurs if the buffer contains less than next_size bytes, and that this
+		// check does not occur frequently due to buffering and the inner loop below.
+		if (!ReadAtLeast(next_size) && !mLength)
 			break;
-#define LAST_READ_HIT_EOF (mLength < 4) // Could be (mLength < TEXT_IO_BLOCK), but this seems safer.
+
+		// Reset to default (see comments above).
+		next_size = chr_size;
+
+		// The following macro is used when there is insufficient data in the buffer,
+		// to determine if more data can possibly be read in.  Using mLastRead should be
+		// faster than AtEOF(), and more reliable with console/pipe handles.
+		#define LAST_READ_HIT_EOF (mLastRead == 0)
 		
+		// Because we copy mPos into a temporary variable here and update mPos at the end of
+		// each outer loop iteration, it is very important that ReadAtLeast() not be called
+		// after this point.
 		src = mPos;
 		src_end = mBuffer + mLength; // Maint: mLength is in bytes.
 		
@@ -150,6 +167,7 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 					{
 						// There's not enough data in the buffer to determine if this is \r\n.
 						// Let the next iteration handle this char after reading more data.
+						next_size = 2 * sizeof(WCHAR);
 						break;
 					}
 					// Since above didn't break or continue, this is an orphan \r.
@@ -201,6 +219,7 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 						{
 							// There's not enough data in the buffer to determine if this is \r\n.
 							// Let the next iteration handle this char after reading more data.
+							next_size = 2;
 							break;
 						}
 						// Since above didn't break or continue, this is an orphan \r.
@@ -231,15 +250,18 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 					// Ensure that the expected number of bytes are available:
 					if (src + src_size > src_end)
 					{
-						// We can't call ReadAtLeast() here since it may move the data around.
-						// Instead, rely on the outer loop to ensure that either the buffer has
-						// at least 4 bytes in it or we're at the end of the file.
-						//if (!ReadAtLeast(trail_bytes + 1))
 						if (LAST_READ_HIT_EOF)
 						{
 							mLength = 0; // Discard all remaining data, since it appears to be invalid.
-							src = NULL;  //
+							src = NULL;  // mPos is set to this outside the inner loop.
 							aBuf[target_used++] = INVALID_CHAR;
+						}
+						else
+						{
+							next_size = src_size;
+							// Let the next iteration handle this char after reading more data.
+							// If no more data is read, LAST_READ_HIT_EOF will be true and the
+							// next iteration will produce INVALID_CHAR.
 						}
 						break;
 					}

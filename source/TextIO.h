@@ -51,7 +51,7 @@ public:
 	};
 
 	TextStream()
-		: mFlags(0), mCodePage(-1), mLength(0), mBuffer(NULL), mPos(NULL)
+		: mFlags(0), mCodePage(-1), mLength(0), mBuffer(NULL), mPos(NULL), mLastRead(0)
 	{
 		SetCodePage(CP_ACP);
 	}
@@ -194,7 +194,7 @@ protected:
 		DWORD dwRead = _Read(mBuffer + mLength, aReadSize);
 		if (dwRead)
 			mLength += dwRead;
-		return dwRead;
+		return mLastRead = dwRead; // The amount read *this time*.
 	}
 	bool ReadAtLeast(DWORD aReadSize)
 	{
@@ -222,6 +222,7 @@ protected:
 
 	DWORD mFlags;
 	DWORD mLength;		// The length of available data in the buffer, in bytes.
+	DWORD mLastRead;
 	UINT  mCodePage;
 	CPINFO mCodePageInfo;
 	
