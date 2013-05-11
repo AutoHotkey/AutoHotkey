@@ -193,7 +193,7 @@ BEGIN
             VALUE "FileDescription", "AutoHotkey " AHK_ENC " " AHK_BIT
             VALUE "FileVersion", AHK_VERSION
             VALUE "InternalName", "AutoHotkey"
-            VALUE "LegalCopyright", "Copyright (C) 2012"
+            VALUE "LegalCopyright", "Copyright (C) 2003-2013"
             VALUE "OriginalFilename", "AutoHotkey.exe"
             VALUE "ProductName", "AutoHotkey"
             VALUE "ProductVersion", AHK_VERSION
