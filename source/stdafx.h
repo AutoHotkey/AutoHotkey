@@ -34,7 +34,8 @@ GNU General Public License for more details.
 // it makes available in the code, it seems best to stick with it and instead patch anything that needs it
 // (such as ToolTip).  Hopefully, ToolTip is the only thing in the current code base that needs patching
 // (perhaps the only reason it was broken in the first place was a bug or oversight by MS).
-#define _WIN32_WINNT 0x0501
+// UPDATE v1.1.10.00: Using 0x0600 for Vista/7/8's audio APIs.
+#define _WIN32_WINNT 0x0600
 #define _WIN32_IE 0x0501  // Added for v1.0.35 to have MCS_NOTODAY resolve as expected, and possibly solve other problems on newer systems.
 
 #ifdef _MSC_VER

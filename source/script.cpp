@@ -13521,8 +13521,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	SymbolType var_is_pure_numeric, value_is_pure_numeric; // For math operations.
 	vk_type vk; // For GetKeyState.
 	Label *target_label;  // For ACT_SETTIMER and ACT_HOTKEY
-	int instance_number;  // For sound commands.
-	DWORD component_type; // For sound commands.
 	__int64 device_id;  // For sound commands.  __int64 helps avoid compiler warning for some conversions.
 	bool is_remote_registry; // For Registry commands.
 	HKEY root_key; // For Registry commands.
@@ -14377,15 +14375,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_SOUNDGET:
 	case ACT_SOUNDSET:
-		device_id = *ARG4 ? ArgToInt(4) - 1 : 0;
-		if (device_id < 0)
-			device_id = 0;
-		instance_number = 1;  // Set default.
-		component_type = *ARG2 ? SoundConvertComponentType(ARG2, &instance_number) : MIXERLINE_COMPONENTTYPE_DST_SPEAKERS;
-		return SoundSetGet(mActionType == ACT_SOUNDGET ? NULL : ARG1
-			, component_type, instance_number  // Which instance of this component, 1 = first
-			, *ARG3 ? SoundConvertControlType(ARG3) : MIXERCONTROL_CONTROLTYPE_VOLUME  // Default
-			, (UINT)device_id);
+		return SoundSetGet(mActionType == ACT_SOUNDGET ? NULL : ARG1, ARG2, ARG3, ARG4);
 
 	case ACT_SOUNDGETWAVEVOLUME:
 	case ACT_SOUNDSETWAVEVOLUME:
