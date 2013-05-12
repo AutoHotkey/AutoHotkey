@@ -174,8 +174,6 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 	HKEY	hRegKey;
 	DWORD	dwRes, dwBuf, dwType;
 	LONG    result;
-	// My: Seems safest to keep the limit just below 64K in case Win95 has problems with larger values.
-	TCHAR	szRegBuffer[65535]; // Only allow reading of 64Kb from a key
 
 	if (!aRootKey)
 	{
@@ -296,25 +294,33 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 		}
 		case REG_BINARY:
 		{
-			LPBYTE pRegBuffer = (LPBYTE) szRegBuffer;
-			dwRes = sizeof(szRegBuffer);
-			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, pRegBuffer, &dwRes);
-			RegCloseKey(hRegKey);
-
-			// Although older versions treated anything other than ERROR_MORE_DATA as success,
-			// correct behaviour seems more important than backward-compatibility in this case:
-			if (result != ERROR_SUCCESS)
-			//if (result == ERROR_MORE_DATA)
-				// The API docs state that the buffer's contents are undefined in this case,
-				// so for no we don't support values larger than our buffer size:
+			// See case REG_SZ for comments.
+			dwRes = 0;
+			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, NULL, &dwRes); // Find how large the value is.
+			if (result != ERROR_SUCCESS || !dwRes) // Can't find size (realistically might never happen), or size is zero.
+			{
+				RegCloseKey(hRegKey);
 				break;
+			}
 
 			// Set up the variable to receive the contents, enlarging it if necessary.
 			// AutoIt3: Each byte will turned into 2 digits, plus a final null:
 			if (output_var.AssignString(NULL, (VarSizeType)(dwRes * 2)) != OK)
+			{
+				RegCloseKey(hRegKey);
 				return FAIL;
+			}
 			contents = output_var.Contents();
 			*contents = '\0';
+			
+			// Read the binary data into the variable, placed so that the last byte of
+			// binary data will be overwritten as the hexadecimal conversion completes.
+			LPBYTE pRegBuffer = (LPBYTE)(contents + dwRes * 2) - dwRes;
+			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, pRegBuffer, &dwRes);
+			RegCloseKey(hRegKey);
+
+			if (result != ERROR_SUCCESS)
+				break;
 
 			int j = 0;
 			DWORD i, n; // i and n must be unsigned to work
