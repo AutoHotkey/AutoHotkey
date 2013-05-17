@@ -25,6 +25,9 @@ GNU General Public License for more details.
 #include "resources/resource.h"  // For InputBox.
 #include "TextIO.h"
 #include <Psapi.h> // for GetModuleBaseName.
+
+#undef _WIN32_WINNT // v1.1.10.01: Redefine this just for these APIs, to avoid breaking some other commands on Win XP (such as Process Close).
+#define _WIN32_WINNT 0x0600 // Windows Vista
 #include <mmdeviceapi.h> // for SoundSet/SoundGet.
 #include <endpointvolume.h> // for SoundSet/SoundGet.
 
