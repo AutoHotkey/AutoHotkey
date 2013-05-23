@@ -2813,6 +2813,11 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			BIV_SpecialFolderPath(buf, _T("A_AppDataCommon"));
 			StrReplace(parameter, _T("%A_AppDataCommon%"), buf, SCS_INSENSITIVE, 1, space_remaining);
 		}
+		if (tcscasestr(parameter, _T("%A_LineFile%"))) // v1.1.10.01: This makes it easier to refer to files relative to sub-included modules
+		{
+			BIV_LineFile(buf, _T("A_LineFile"));
+			StrReplace(parameter, _T("%A_LineFile%"), buf, SCS_INSENSITIVE, 1, space_remaining);
+		}
 
 		DWORD attr = GetFileAttributes(parameter);
 		if (attr != 0xFFFFFFFF && (attr & FILE_ATTRIBUTE_DIRECTORY)) // File exists and its a directory (possibly A_ScriptDir or A_AppData set above).
