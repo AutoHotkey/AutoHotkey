@@ -169,9 +169,10 @@ FuncEntry g_BIF[] =
 	{_T("WinSetAlwaysOnTop"), BIF_WinSet, 0, 5, false},
 	{_T("WinSetStyle"), BIF_WinSet, 1, 5, false},
 	{_T("WinSetExStyle"), BIF_WinSet, 1, 5, false},
-	{_T("WinSetRedraw"), BIF_WinSet, 0, 5, false},
 	{_T("WinSetEnabled"), BIF_WinSet, 1, 5, false},
 	{_T("WinSetRegion"), BIF_WinSet, 0, 5, false},
+	
+	{_T("WinRedraw"), BIF_WinRedraw, 0, 4, false},
 	
 	{_T("WinMoveBottom"), BIF_WinMoveTopBottom, 0, 4, false},
 	{_T("WinMoveTop"), BIF_WinMoveTopBottom, 0, 4, false},

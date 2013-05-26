@@ -505,7 +505,7 @@ enum DriveGetCmds {DRIVEGET_CMD_INVALID, DRIVEGET_CMD_LIST, DRIVEGET_CMD_FILESYS
 	, DRIVEGET_CMD_STATUSCD, DRIVEGET_CMD_CAPACITY, DRIVEGET_CMD_SPACEFREE};
 
 enum WinSetAttributes {WINSET_INVALID, WINSET_TRANSPARENT, WINSET_TRANSCOLOR, WINSET_ALWAYSONTOP
-	, WINSET_STYLE, WINSET_EXSTYLE, WINSET_REDRAW, WINSET_ENABLED, WINSET_REGION};
+	, WINSET_STYLE, WINSET_EXSTYLE, WINSET_ENABLED, WINSET_REGION};
 
 
 class Label; // Forward declaration so that each can use the other.
@@ -1456,7 +1456,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("AlwaysOnTop"))) return WINSET_ALWAYSONTOP;
 		if (!_tcsicmp(aBuf, _T("Style"))) return WINSET_STYLE;
 		if (!_tcsicmp(aBuf, _T("ExStyle"))) return WINSET_EXSTYLE;
-		if (!_tcsicmp(aBuf, _T("Redraw"))) return WINSET_REDRAW;
 		if (!_tcsicmp(aBuf, _T("Enabled"))) return WINSET_ENABLED;
 		if (!_tcsicmp(aBuf, _T("Region"))) return WINSET_REGION;
 		return WINSET_INVALID;
@@ -2845,6 +2844,7 @@ BIF_DECL(BIF_Exception);
 
 BIF_DECL(BIF_WinGet);
 BIF_DECL(BIF_WinSet);
+BIF_DECL(BIF_WinRedraw);
 BIF_DECL(BIF_WinMoveTopBottom);
 BIF_DECL(BIF_Process);
 BIF_DECL(BIF_ProcessSetPriority);

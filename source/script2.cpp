@@ -2316,21 +2316,6 @@ BIF_DECL(BIF_WinSet)
 		WinSetRegion(target_window, aValue);
 		return;
 
-	case WINSET_REDRAW:
-		// Seems best to always have the last param be TRUE, for now, so that aValue can be
-		// reserved for future use such as invalidating only part of a window, etc. Also, it
-		// seems best not to call UpdateWindow(), which forces the window to immediately
-		// process a WM_PAINT message, since that might not be desirable as a default (maybe
-		// an option someday).  Other future options might include alternate methods of
-		// getting a window to redraw, such as:
-		// SendMessage(mHwnd, WM_NCPAINT, 1, 0);
-		// RedrawWindow(mHwnd, NULL, NULL, RDW_INVALIDATE|RDW_FRAME|RDW_UPDATENOW);
-		// SetWindowPos(mHwnd, NULL, 0, 0, 0, 0, SWP_DRAWFRAME|SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
-		// GetClientRect(mControl[mDefaultButtonIndex].hwnd, &client_rect);
-		// InvalidateRect(mControl[mDefaultButtonIndex].hwnd, &client_rect, TRUE);
-		InvalidateRect(target_window, NULL, TRUE);
-		break;
-
 	} // switch()
 	if (use_errorlevel)
 		Script::SetErrorLevelOrThrowBool(false);
@@ -2341,6 +2326,25 @@ error:
 	// but seems best to allow the other sub-commands to throw exceptions:
 	if (use_errorlevel || g->InTryBlock)
 		Script::SetErrorLevelOrThrow();
+}
+
+
+
+BIF_DECL(BIF_WinRedraw)
+{
+	if (HWND target_window = DetermineTargetWindow(aParam, aParamCount))
+	{
+		// Seems best to always have the last param be TRUE. Also, it seems best not to call
+		// UpdateWindow(), which forces the window to immediately process a WM_PAINT message,
+		// since that might not be desirable.  Some other methods of getting a window to redraw:
+		// SendMessage(mHwnd, WM_NCPAINT, 1, 0);
+		// RedrawWindow(mHwnd, NULL, NULL, RDW_INVALIDATE|RDW_FRAME|RDW_UPDATENOW);
+		// SetWindowPos(mHwnd, NULL, 0, 0, 0, 0, SWP_DRAWFRAME|SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+		// GetClientRect(mHwnd, &client_rect); InvalidateRect(mHwnd, &client_rect, TRUE);
+		InvalidateRect(target_window, NULL, TRUE);
+	}
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
 }
 
 
