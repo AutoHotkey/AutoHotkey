@@ -1477,9 +1477,9 @@ public:
 		if (!_tcsicmp(aBuf, _T("ExStyle"))) return WINGET_CMD_EXSTYLE;
 		if (!_tcsicmp(aBuf, _T("Transparent"))) return WINGET_CMD_TRANSPARENT;
 		if (!_tcsicmp(aBuf, _T("TransColor"))) return WINGET_CMD_TRANSCOLOR;
-		if (!_tcsnicmp(aBuf, _T("ControlList"), 11))
+		if (!_tcsnicmp(aBuf, _T("Controls"), 8))
 		{
-			aBuf += 11;
+			aBuf += 8;
 			if (!*aBuf)
 				return WINGET_CMD_CONTROLLIST;
 			if (!_tcsicmp(aBuf, _T("Hwnd")))
