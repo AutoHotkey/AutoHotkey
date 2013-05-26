@@ -1451,9 +1451,9 @@ public:
 	static WinSetAttributes ConvertWinSetAttribute(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return WINSET_INVALID;
-		if (!_tcsicmp(aBuf, _T("Trans")) || !_tcsicmp(aBuf, _T("Transparent"))) return WINSET_TRANSPARENT;
+		if (!_tcsicmp(aBuf, _T("Transparent"))) return WINSET_TRANSPARENT;
 		if (!_tcsicmp(aBuf, _T("TransColor"))) return WINSET_TRANSCOLOR;
-		if (!_tcsicmp(aBuf, _T("AlwaysOnTop")) || !_tcsicmp(aBuf, _T("Topmost"))) return WINSET_ALWAYSONTOP;
+		if (!_tcsicmp(aBuf, _T("AlwaysOnTop"))) return WINSET_ALWAYSONTOP;
 		if (!_tcsicmp(aBuf, _T("Style"))) return WINSET_STYLE;
 		if (!_tcsicmp(aBuf, _T("ExStyle"))) return WINSET_EXSTYLE;
 		if (!_tcsicmp(aBuf, _T("Redraw"))) return WINSET_REDRAW;
