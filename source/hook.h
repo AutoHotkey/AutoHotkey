@@ -87,7 +87,7 @@ enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_
 // enabled).  My only concern about this is that on some OS's, or on slower CPUs, the message may be
 // received too soon (before the dialog window actually exists) resulting in our window proc not
 // being able to ensure that it's the foreground window.  That seems unlikely, however, since
-// MessageBox() and the other dialog invocating API calls (for FileSelectFile/Folder) likely
+// MessageBox() and the other dialog invocating API calls (for FileSelect/DirSelect) likely
 // ensures its window really exists before dispatching messages.
 #define POST_AHK_DIALOG(timeout) PostMessage(g_hWnd, WM_COMMNOTIFY, AHK_DIALOG, (LPARAM)timeout);
 

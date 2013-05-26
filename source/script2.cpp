@@ -3818,7 +3818,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		break;
 	} // case AHK_NOTIFYICON
 
-	case AHK_DIALOG:  // User defined msg sent from our functions MsgBox() or FileSelectFile().
+	case AHK_DIALOG:  // User defined msg sent from our functions MsgBox() or FileSelect().
 	{
 		// Always call this to close the clipboard if it was open (e.g. due to a script
 		// line such as "MsgBox, %clipboard%" that got us here).  Seems better just to
@@ -3843,7 +3843,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			// Setting the big icon makes AutoHotkey dialogs more distinct in the Alt-tab menu.
 			// Unfortunately, it seems that setting the big icon also indirectly sets the small
 			// icon, or more precisely, that the dialog simply scales the large icon whenever
-			// a small one isn't available.  This results in the FileSelectFile dialog's title
+			// a small one isn't available.  This results in the FileSelect dialog's title
 			// being initially messed up (at least on WinXP) and also puts an unwanted icon in
 			// the title bar of each MsgBox.  So for now it's disabled:
 			//LPARAM main_icon = (LPARAM)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED);
@@ -6873,7 +6873,7 @@ void SetWorkingDir(LPTSTR aNewDir)
 	TCHAR buf[_countof(g_WorkingDir)];
 	LPTSTR actual_working_dir = g_script.mIsReadyToExecute ? g_WorkingDir : buf; // i.e. don't update g_WorkingDir when our caller is the #include directive.
 	// Other than during program startup, this should be the only place where the official
-	// working dir can change.  The exception is FileSelectFile(), which changes the working
+	// working dir can change.  The exception is FileSelect(), which changes the working
 	// dir as the user navigates from folder to folder.  However, the whole purpose of
 	// maintaining g_WorkingDir is to workaround that very issue.
 
@@ -6918,7 +6918,7 @@ void SetWorkingDir(LPTSTR aNewDir)
 
 
 
-ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGreeting, LPTSTR aFilter)
+ResultType Line::FileSelect(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGreeting, LPTSTR aFilter)
 // Since other script threads can interrupt this command while it's running, it's important that
 // this command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
 // This is because an interrupting thread usually changes the values to something inappropriate for this thread.
@@ -9232,7 +9232,7 @@ VarSizeType BIV_UserName_ComputerName(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName)
 {
-	// Use GetCurrentDirectory() vs. g_WorkingDir because any in-progress FileSelectFile()
+	// Use GetCurrentDirectory() vs. g_WorkingDir because any in-progress FileSelect()
 	// dialog is able to keep functioning even when it's quasi-thread is suspended.  The
 	// dialog can thus change the current directory as seen by the active quasi-thread even
 	// though g_WorkingDir hasn't been updated.  It might also be possible for the working

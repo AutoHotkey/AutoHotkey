@@ -882,7 +882,7 @@ ResultType Script::Edit()
 	{
 		TCHAR class_name[32];
 		GetClassName(hwnd, class_name, _countof(class_name));
-		if (!_tcscmp(class_name, _T("#32770")) || !_tcsnicmp(class_name, _T("AutoHotkey"), 10)) // MessageBox(), InputBox(), FileSelectFile(), or GUI/script-owned window.
+		if (!_tcscmp(class_name, _T("#32770")) || !_tcsnicmp(class_name, _T("AutoHotkey"), 10)) // MessageBox(), InputBox(), FileSelect(), or GUI/script-owned window.
 			hwnd = NULL;  // Exclude it from consideration.
 	}
 	if (hwnd)  // File appears to already be open for editing, so use the current window.
@@ -12588,11 +12588,11 @@ ResultType Line::Perform()
 		SetWorkingDir(ARG1);
 		return !g.ThrownToken ? OK : FAIL;
 
-	case ACT_FILESELECTFILE:
-		return FileSelectFile(ARG2, ARG3, ARG4, ARG5);
+	case ACT_FILESELECT:
+		return FileSelect(ARG2, ARG3, ARG4, ARG5);
 
-	case ACT_FILESELECTFOLDER:
-		return FileSelectFolder(ARG2, ARG3, ARG4);
+	case ACT_DIRSELECT:
+		return DirSelect(ARG2, ARG3, ARG4);
 
 	case ACT_FILEGETSHORTCUT:
 		return FileGetShortcut(ARG1);

@@ -538,13 +538,13 @@ private:
 		, DWORD aControlType, UINT aMixerID);
 	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
 	ResultType Download(LPTSTR aURL, LPTSTR aFilespec);
-	ResultType FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGreeting, LPTSTR aFilter);
+	ResultType FileSelect(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGreeting, LPTSTR aFilter);
 
 	// Bitwise flags:
 	#define FSF_ALLOW_CREATE 0x01
 	#define FSF_EDITBOX      0x02
 	#define FSF_NONEWDIALOG  0x04
-	ResultType FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGreeting);
+	ResultType DirSelect(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGreeting);
 
 	ResultType FileGetShortcut(LPTSTR aShortcutFile);
 	ResultType FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
@@ -892,8 +892,8 @@ public:
 			case ACT_FILEGETTIME:
 			case ACT_FILEGETSIZE:
 			case ACT_FILEGETVERSION:
-			case ACT_FILESELECTFILE:
-			case ACT_FILESELECTFOLDER:
+			case ACT_FILESELECT:
+			case ACT_DIRSELECT:
 			case ACT_MOUSEGETPOS:
 			case ACT_WINGETTITLE:
 			case ACT_WINGETCLASS:

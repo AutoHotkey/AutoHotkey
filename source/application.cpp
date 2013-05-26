@@ -257,15 +257,15 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				&& GetWindowThreadProcessId(fore_window, NULL) == g_MainThreadID) // And it belongs to our main thread (the main thread is the only one that owns any windows).
 			{
 				do_special_msg_filter = false; // Set default.
-                if (g_nFileDialogs) // v1.0.44.12: Also do the special Peek/msg filter below for FileSelectFile because testing shows that frequently-running timers disrupt the ability to double-click.
+                if (g_nFileDialogs) // v1.0.44.12: Also do the special Peek/msg filter below for FileSelect because testing shows that frequently-running timers disrupt the ability to double-click.
 				{
 					GetClassName(fore_window, wnd_class_name, _countof(wnd_class_name));
-					do_special_msg_filter = !_tcscmp(wnd_class_name, _T("#32770"));  // Due to checking g_nFileDialogs above, this means that this dialog is probably FileSelectFile rather than MsgBox/InputBox/FileSelectFolder (even if this guess is wrong, it seems fairly inconsequential to filter the messages since other pump beneath us on the call-stack will handle them ok).
+					do_special_msg_filter = !_tcscmp(wnd_class_name, _T("#32770"));  // Due to checking g_nFileDialogs above, this means that this dialog is probably FileSelect rather than MsgBox/InputBox/DirSelect (even if this guess is wrong, it seems fairly inconsequential to filter the messages since other pump beneath us on the call-stack will handle them ok).
 				}
 				if (!do_special_msg_filter && (focused_control = GetFocus()))
 				{
 					GetClassName(focused_control, wnd_class_name, _countof(wnd_class_name));
-					do_special_msg_filter = !_tcsicmp(wnd_class_name, _T("SysTreeView32")) // A TreeView owned by our thread has focus (includes FileSelectFolder's TreeView).
+					do_special_msg_filter = !_tcsicmp(wnd_class_name, _T("SysTreeView32")) // A TreeView owned by our thread has focus (includes DirSelect's TreeView).
 						|| !_tcsicmp(wnd_class_name, _T("SysListView32"));
 				}
 				if (do_special_msg_filter)
@@ -273,8 +273,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// v1.0.48.03: Below now applies to SysListView32 because otherwise a timer that runs
 					// while the user is dragging a rectangle around a selection (Marquee) can cause the
 					// mouse button to appear to be stuck down down after the user releases it.
-					// v1.0.44.12: Below now applies to FileSelectFile dialogs too (see reason above).
-					// v1.0.44.11: Since one of our thread's TreeViews has focus (even in FileSelectFolder), this
+					// v1.0.44.12: Below now applies to FileSelect dialogs too (see reason above).
+					// v1.0.44.11: Since one of our thread's TreeViews has focus (even in DirSelect), this
 					// section is a work-around for the fact that the TreeView's message pump (somewhere beneath
 					// us on the call stack) is apparently designed to process some mouse messages directly rather
 					// than receiving them indirectly (in its WindowProc) via our call to DispatchMessage() here
@@ -282,7 +282,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// items in a TreeView (the selection sometimes snaps back to the previously selected item),
 					// which can be reproduced by showing a TreeView while a 10ms script timer is running doing
 					// a trivial single line such as x=1.
-					// NOTE: This happens more often in FileSelectFolder dialogs, I believe because it's msg
+					// NOTE: This happens more often in DirSelect dialogs, I believe because it's msg
 					// pump is ALWAYS running but that of a GUI TreeView is running only during mouse capture
 					// (i.e. when left/right button is down).
 					// This special handling for TreeView can someday be broadened so that focused control's
@@ -1403,24 +1403,24 @@ break_out_of_main_switch:
 		// It might cause problems to dispatch such messages directly, since
 		// IsDialogMessage() is supposed to be used in lieu of DispatchMessage()
 		// for these types of messages.
-		// NOTE: THE BELOW IS CONFIRMED to be needed, at least for a FileSelectFile()
+		// NOTE: THE BELOW IS CONFIRMED to be needed, at least for a FileSelect()
 		// dialog whose quasi-thread has been suspended, and probably for some of the other
 		// types of dialogs as well:
 		if ((fore_window = GetForegroundWindow()) != NULL  // There is a foreground window.
 			&& GetWindowThreadProcessId(fore_window, NULL) == g_MainThreadID) // And it belongs to our main thread (the main thread is the only one that owns any windows).
 		{
 			GetClassName(fore_window, wnd_class_name, _countof(wnd_class_name));
-			if (!_tcscmp(wnd_class_name, _T("#32770")))  // MsgBox, InputBox, FileSelectFile/Folder dialog.
+			if (!_tcscmp(wnd_class_name, _T("#32770")))  // MsgBox, InputBox, FileSelect, DirSelect dialog.
 			{
 				g->CalledByIsDialogMessageOrDispatch = true; // In case there is any way IsDialogMessage() can call one of our own window proc's rather than that of a MsgBox, etc.
 				g->CalledByIsDialogMessageOrDispatchMsg = msg.message; // Added in v1.0.44.11 because it's known that IsDialogMessage can change the message number (e.g. WM_KEYDOWN->WM_NOTIFY for UpDowns)
 				if (IsDialogMessage(fore_window, &msg))  // This message is for it, so let it process it.
 				{
-					// If it is likely that a FileSelectFile dialog is active, this
+					// If it is likely that a FileSelect dialog is active, this
 					// section attempt to retain the current directory as the user
 					// navigates from folder to folder.  This is done because it is
 					// possible that our caller is a quasi-thread other than the one
-					// that originally launched the FileSelectFile (i.e. that dialog
+					// that originally launched the FileSelect (i.e. that dialog
 					// is in a suspended thread), in which case the user's navigation
 					// would cause the active threads working dir to change unexpectedly
 					// unless the below is done.  This is not a complete fix since if
@@ -1428,7 +1428,7 @@ break_out_of_main_switch:
 					// MessageBox()), these messages will not be detected:
 					if (g_nFileDialogs) // See MsgSleep() for comments on this.
 						// The below two messages that are likely connected with a user
-						// navigating to a different folder within the FileSelectFile dialog.
+						// navigating to a different folder within the FileSelect dialog.
 						// That avoids changing the directory for every message, since there
 						// can easily be thousands of such messages every second if the
 						// user is moving the mouse.  UPDATE: This doesn't work, so for now,
@@ -1911,7 +1911,7 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 		// the WM_NOTIFY message", calling SetCurrentDirectory() after every script
 		// line executes (which seems too high in overhead to be justified), or
 		// something similar.  Note changing to a new directory here does not seem
-		// to hurt the ongoing FileSelectFile() dialog.  In other words, the dialog
+		// to hurt the ongoing FileSelect() dialog.  In other words, the dialog
 		// does not seem to care that its changing of the directory as the user
 		// navigates is "undone" here:
 		SetCurrentDirectory(g_WorkingDir);

@@ -427,8 +427,8 @@ Action g_act[] =
 	, {_T("FileGetVersion"), 1, 2, true, NULL} // OutputVar, Filespec
 
 	, {_T("SetWorkingDir"), 1, 1, false, NULL} // New path
-	, {_T("FileSelectFile"), 1, 5, true, NULL} // output var, options, working dir, greeting, filter
-	, {_T("FileSelectFolder"), 1, 4, true, {3, 0}} // output var, root directory, options, greeting
+	, {_T("FileSelect"), 1, 5, true, NULL} // output var, options, working dir, greeting, filter
+	, {_T("DirSelect"), 1, 4, true, {3, 0}} // output var, root directory, options, greeting
 
 	, {_T("FileGetShortcut"), 1, 8, true, NULL} // Filespec, OutTarget, OutDir, OutArg, OutDescrip, OutIcon, OutIconIndex, OutShowState.
 	, {_T("FileCreateShortcut"), 2, 9, false, {8, 9, 0}} // file, lnk [, workdir, args, desc, icon, hotkey, icon_number, run_state]

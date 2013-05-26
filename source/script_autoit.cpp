@@ -1046,7 +1046,7 @@ int CALLBACK FileSelectFolderCallback(HWND hwnd, UINT uMsg, LPARAM lParam, LPARA
 
 
 
-ResultType Line::FileSelectFolder(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGreeting)
+ResultType Line::DirSelect(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGreeting)
 // Since other script threads can interrupt this command while it's running, it's important that
 // the command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
 // This is because an interrupting thread usually changes the values to something inappropriate for this thread.

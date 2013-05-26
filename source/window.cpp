@@ -1123,7 +1123,7 @@ int MsgBox(LPCTSTR aText, UINT uType, LPTSTR aTitle, double aTimeout, HWND aOwne
 	++g_nMessageBoxes;  // This value will also be used as the Timer ID if there's a timeout.
 	g->MsgBoxResult = MessageBox(aOwner, text, title, uType);
 	--g_nMessageBoxes;
-	// Above's use of aOwner: MsgBox, FileSelectFile, and other dialogs seem to consider aOwner to be NULL
+	// Above's use of aOwner: MsgBox, FileSelect, and other dialogs seem to consider aOwner to be NULL
 	// when aOwner is minimized or hidden.
 
 	DIALOG_END

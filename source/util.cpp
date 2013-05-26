@@ -1986,13 +1986,13 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		//   Gui, Add, Pic, h1, bitmap 1x2.bmp
 		// And then it falls back to GDIplus, which in the particular case above appears to traumatize the
 		// parent window (or its picture control), because the GUI window hangs (but not the script) after
-		// doing a FileSelectFolder.  For example:
-		//   Gui, Add, Button,, FileSelectFile
-		//   Gui, Add, Pic, h1, bitmap 1x2.bmp  ; Causes GUI window to hang after FileSelectFolder (due to LoadImage failing then falling back to GDIplus; i.e. GDIplus is somehow triggering the problem).
+		// doing a FileSelect.  For example:
+		//   Gui, Add, Button,, FileSelect
+		//   Gui, Add, Pic, h1, bitmap 1x2.bmp  ; Causes GUI window to hang after FileSelect (due to LoadImage failing then falling back to GDIplus; i.e. GDIplus is somehow triggering the problem).
 		//   Gui, Show
 		//   return
-		//   ButtonFileSelectFile:
-		//   FileSelectFile, outputvar
+		//   ButtonFileSelect:
+		//   FileSelect, outputvar
 		//   return
 		if (hbitmap = (HBITMAP)LoadImage(NULL, aFilespec, aImageType, desired_width, desired_height
 			, LR_LOADFROMFILE | LR_CREATEDIBSECTION))
