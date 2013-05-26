@@ -184,6 +184,12 @@ FuncEntry g_BIF[] =
 
 	{_T("ProcessSetPriority"), BIF_ProcessSetPriority, 1, 2, false},
 
+	{_T("MonitorGet"), BIF_MonitorGet, 0, 5, false},
+	{_T("MonitorGetWorkArea"), BIF_MonitorGet, 0, 5, false},
+	{_T("MonitorGetCount"), BIF_MonitorGet, 0, 0, true},
+	{_T("MonitorGetPrimary"), BIF_MonitorGet, 0, 0, true},
+	{_T("MonitorGetName"), BIF_MonitorGet, 0, 1, true},
+
 };
 
 // See Script::CreateWindows() for details about the following:
@@ -5719,7 +5725,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		break;
 
 	case ACT_SYSGET:
-		if (!line.ArgHasDeref(2) && !line.ConvertSysGetCmd(new_raw_arg2))
+		if (!line.ArgHasDeref(2) && !IsNumeric(new_raw_arg2, FALSE, FALSE, FALSE))
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
@@ -12267,8 +12273,8 @@ ResultType Line::Perform()
 	case ACT_WINGETPOS:
 		return WinGetPos(ARG5, ARG6, ARG7, ARG8);
 
-	case ACT_SYSGET:
-		return SysGet(ARG2, ARG3);
+	case ACT_SYSGET: // SysGet()
+		return output_var->Assign(GetSystemMetrics(ATOI(ARG2)));
 
 	case ACT_WINMINIMIZEALL:
 		PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 419, 0);

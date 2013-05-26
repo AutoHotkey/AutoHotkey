@@ -2868,32 +2868,18 @@ ResultType Line::EnvGet(LPTSTR aEnvVarName)
 
 
 
-ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
-// Thanks to Gregory F. Hogg of Hogg's Software for providing sample code on which this function
-// is based.
+#if defined(CONFIG_WIN9X) || defined(CONFIG_WINNT4)
+#error MonitorGet: Win9x/NT4 support was removed; to restore it, load EnumDisplayMonitors dynamically.
+#endif
+BIF_DECL(BIF_MonitorGet)
 {
-	// For simplicity and array look-up performance, this is done even for sub-commands that output to an array:
-	Var &output_var = *OUTPUT_VAR;
-	SysGetCmds cmd = ConvertSysGetCmd(aCmd);
-	// Since command names are validated at load-time, this only happens if the command name
-	// was contained in a variable reference.  But for simplicity of design here, return
-	// failure in this case (unlike other functions similar to this one):
-	if (cmd == SYSGET_CMD_INVALID)
-		return LineError(ERR_PARAM2_INVALID, FAIL, aCmd);
+	int cmd = ctoupper(aResultToken.marker[10]); // StrLen("MonitorGet") = 10
 
 	MonitorInfoPackage mip = {0};  // Improves maintainability to initialize unconditionally, here.
 	mip.monitor_info_ex.cbSize = sizeof(MONITORINFOEX); // Also improves maintainability.
 
-	// EnumDisplayMonitors() must be dynamically loaded; otherwise, the app won't launch at all on Win95/NT.
-	typedef BOOL (WINAPI* EnumDisplayMonitorsType)(HDC, LPCRECT, MONITORENUMPROC, LPARAM);
-	static EnumDisplayMonitorsType MyEnumDisplayMonitors = (EnumDisplayMonitorsType)
-		GetProcAddress(GetModuleHandle(_T("user32")), "EnumDisplayMonitors");
-
 	switch(cmd)
 	{
-	case SYSGET_CMD_METRICS: // In this case, aCmd is the value itself.
-		return output_var.Assign(GetSystemMetrics(ATOI(aCmd)));  // Input and output are both signed integers.
-
 	// For the next few cases, I'm not sure if it is possible to have zero monitors.  Obviously it's possible
 	// to not have a monitor turned on or not connected at all.  But it seems likely that these various API
 	// functions will provide a "default monitor" in the absence of a physical monitor connected to the
@@ -2901,104 +2887,61 @@ ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
 	// under some conditions.  However, on Win95/NT, "1" is assumed since there is probably no way to tell
 	// for sure if there are zero monitors except via GetSystemMetrics(SM_CMONITORS), which is a different
 	// animal as described below.
-	case SYSGET_CMD_MONITORCOUNT:
+	case 'C': // MonitorGetCount()
 		// Don't use GetSystemMetrics(SM_CMONITORS) because of this:
 		// MSDN: "GetSystemMetrics(SM_CMONITORS) counts only display monitors. This is different from
 		// EnumDisplayMonitors, which enumerates display monitors and also non-display pseudo-monitors."
-		if (!MyEnumDisplayMonitors) // Since system only supports 1 monitor, the first must be primary.
-			return output_var.Assign(1); // Assign as 1 vs. "1" to use hexadecimal display if that is in effect.
 		mip.monitor_number_to_find = COUNT_ALL_MONITORS;
-		MyEnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
-		return output_var.Assign(mip.count); // Will assign zero if the API ever returns a legitimate zero.
+		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
+		aResultToken.value_int64 = mip.count; // Will return zero if the API ever returns a legitimate zero.
+		break;
 
 	// Even if the first monitor to be retrieved by the EnumProc is always the primary (which is doubtful
 	// since there's no mention of this in the MSDN docs) it seems best to have this sub-cmd in case that
 	// policy ever changes:
-	case SYSGET_CMD_MONITORPRIMARY:
-		if (!MyEnumDisplayMonitors) // Since system only supports 1 monitor, the first must be primary.
-			return output_var.Assign(1); // Assign as 1 vs. "1" to use hexadecimal display if that is in effect.
+	case 'P': // MonitorGetPrimary()
 		// The mip struct's values have already initialized correctly for the below:
-		MyEnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
-		return output_var.Assign(mip.count); // Will assign zero if the API ever returns a legitimate zero.
+		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
+		aResultToken.value_int64 = mip.count; // Will return zero if the API ever returns a legitimate zero.
+		break;
 
-	case SYSGET_CMD_MONITORAREA:
-	case SYSGET_CMD_MONITORWORKAREA:
-		Var *output_var_left, *output_var_top, *output_var_right, *output_var_bottom;
-		// Make it longer than max var name so that FindOrAddVar() will be able to spot and report
-		// var names that are too long:
-		TCHAR var_name[MAX_VAR_NAME_LENGTH + 20];
-		// To help performance (in case the linked list of variables is huge), tell FindOrAddVar where
-		// to start the search.  Use the base array name rather than the preceding element because,
-		// for example, Array19 is alphabetically less than Array2, so we can't rely on the
-		// numerical ordering:
-		if (   !(output_var_left = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sLeft"), output_var.mName)))   )
-			return FAIL;  // It already reported the error.
-		if (   !(output_var_top = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sTop"), output_var.mName)))   )
-			return FAIL;
-		if (   !(output_var_right = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sRight"), output_var.mName)))   )
-			return FAIL;
-		if (   !(output_var_bottom = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sBottom"), output_var.mName)))   )
-			return FAIL;
+	case 0: // MonitorGet(N, Left, Top, Right, Bottom)
+	case 'W': // MonitorGetWorkArea(N, Left, Top, Right, Bottom)
+	{
+		mip.monitor_number_to_find = aParamCount ? (int)TokenToInt64(*aParam[0]) : 0;  // If this returns 0, it will default to the primary monitor.
+		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
+		if (!mip.count || (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count))
+		{
+			// With the exception of the caller having specified a non-existent monitor number, all of
+			// the ways the above can happen are probably impossible in practice.  Make all the variables
+			// blank vs. zero (and return zero) to indicate the problem.
+			for (int i = 1; i <= 4; ++i)
+				if (i < aParamCount && aParam[i]->symbol == SYM_VAR)
+					aParam[i]->var->Assign();
+			aResultToken.value_int64 = 0;
+			break;
+		}
+		// Otherwise:
+		LONG *monitor_rect = (LONG *)((cmd == 'W') ? &mip.monitor_info_ex.rcWork : &mip.monitor_info_ex.rcMonitor);
+		for (int i = 1; i <= 4; ++i) // Params: N (0), Left (1), Top, Right, Bottom.
+			if (i < aParamCount && aParam[i]->symbol == SYM_VAR)
+				aParam[i]->var->Assign(monitor_rect[i-1]);
+		aResultToken.value_int64 = 1;
+		break;
+	}
 
-		RECT monitor_rect;
-		if (MyEnumDisplayMonitors)
-		{
-			mip.monitor_number_to_find = ATOI(aValue);  // If this returns 0, it will default to the primary monitor.
-			MyEnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
-			if (!mip.count || (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count))
-			{
-				// With the exception of the caller having specified a non-existent monitor number, all of
-				// the ways the above can happen are probably impossible in practice.  Make all the variables
-				// blank vs. zero to indicate the problem.
-				output_var_left->Assign();
-				output_var_top->Assign();
-				output_var_right->Assign();
-				output_var_bottom->Assign();
-				return OK;
-			}
-			// Otherwise:
-			monitor_rect = (cmd == SYSGET_CMD_MONITORAREA) ? mip.monitor_info_ex.rcMonitor : mip.monitor_info_ex.rcWork;
-		}
-		else // Win95/NT: Since system only supports 1 monitor, the first must be primary.
-		{
-			if (cmd == SYSGET_CMD_MONITORAREA)
-			{
-				monitor_rect.left = 0;
-				monitor_rect.top = 0;
-				monitor_rect.right = GetSystemMetrics(SM_CXSCREEN);
-				monitor_rect.bottom = GetSystemMetrics(SM_CYSCREEN);
-			}
-			else // Work area
-				SystemParametersInfo(SPI_GETWORKAREA, 0, &monitor_rect, 0);  // Get desktop rect excluding task bar.
-		}
-		output_var_left->Assign(monitor_rect.left);
-		output_var_top->Assign(monitor_rect.top);
-		output_var_right->Assign(monitor_rect.right);
-		output_var_bottom->Assign(monitor_rect.bottom);
-		return OK;
-
-	case SYSGET_CMD_MONITORNAME:
-		if (MyEnumDisplayMonitors)
-		{
-			mip.monitor_number_to_find = ATOI(aValue);  // If this returns 0, it will default to the primary monitor.
-			MyEnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
-			if (!mip.count || (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count))
-				// With the exception of the caller having specified a non-existent monitor number, all of
-				// the ways the above can happen are probably impossible in practice.  Make the variable
-				// blank to indicate the problem:
-				return output_var.Assign();
-			else
-				return output_var.Assign(mip.monitor_info_ex.szDevice);
-		}
-		else // Win95/NT: There is probably no way to find out the name of the monitor.
-			return output_var.Assign();
+	case 'N': // MonitorGetName(N)
+		mip.monitor_number_to_find = aParamCount ? (int)TokenToInt64(*aParam[0]) : 0;  // If this returns 0, it will default to the primary monitor.
+		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
+		if (!mip.count || (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count))
+			// With the exception of the caller having specified a non-existent monitor number, all of
+			// the ways the above can happen are probably impossible in practice.  Make the variable
+			// blank to indicate the problem:
+			aResultToken.marker = _T("");
+		else
+			TokenSetResult(aResultToken, mip.monitor_info_ex.szDevice);
+		aResultToken.symbol = SYM_STRING;
 	} // switch()
-
-	return FAIL;  // Never executed (increases maintainability and avoids compiler warning).
 }
 
 

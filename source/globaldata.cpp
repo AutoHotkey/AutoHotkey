@@ -382,7 +382,7 @@ Action g_act[] =
 	, {_T("WinGetPos"), 0, 8, true, NULL} // Four optional output vars: xpos, ypos, width, height.  Std. 4 window params.
 	, {_T("WinGetText"), 1, 5, true, NULL} // Output var, std 4 window params.
 
-	, {_T("SysGet"), 2, 4, true, NULL} // Output-var/array, sub-cmd or sys-metrics-number, input-value1, future-use
+	, {_T("SysGet"), 2, 2, true, NULL} // Output-var, sys-metrics-number
 
 	, {_T("PostMessage"), 1, 8, false, {1, 2, 3, 0}}  // msg, wParam, lParam, Control, WinTitle, WinText, ExcludeTitle, ExcludeText
 	, {_T("SendMessage"), 1, 9, false, {1, 2, 3, 9, 0}}  // msg, wParam, lParam, Control, WinTitle, WinText, ExcludeTitle, ExcludeText, Timeout

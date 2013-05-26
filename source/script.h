@@ -425,10 +425,6 @@ enum WinGetCmds {WINGET_CMD_INVALID, WINGET_CMD_ID, WINGET_CMD_IDLAST, WINGET_CM
 	, WINGET_CMD_STYLE, WINGET_CMD_EXSTYLE, WINGET_CMD_TRANSPARENT, WINGET_CMD_TRANSCOLOR, WINGET_CMD_PROCESSPATH
 };
 
-enum SysGetCmds {SYSGET_CMD_INVALID, SYSGET_CMD_METRICS, SYSGET_CMD_MONITORCOUNT, SYSGET_CMD_MONITORPRIMARY
-	, SYSGET_CMD_MONITORAREA, SYSGET_CMD_MONITORWORKAREA, SYSGET_CMD_MONITORNAME
-};
-
 enum MenuCommands {MENU_CMD_INVALID, MENU_CMD_SHOW, MENU_CMD_USEERRORLEVEL
 	, MENU_CMD_ADD, MENU_CMD_RENAME, MENU_CMD_CHECK, MENU_CMD_UNCHECK, MENU_CMD_TOGGLECHECK
 	, MENU_CMD_ENABLE, MENU_CMD_DISABLE, MENU_CMD_TOGGLEENABLE
@@ -627,7 +623,6 @@ private:
 	ResultType WinGetText(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType WinGetPos(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType EnvGet(LPTSTR aEnvVarName);
-	ResultType SysGet(LPTSTR aCmd, LPTSTR aValue);
 	ResultType PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB, int aVariation
 		, LPTSTR aOptions, bool aIsPixelGetColor);
 	ResultType ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTSTR aImageFile);
@@ -1183,18 +1178,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("FAST"))) return FIND_FAST;
 		if (!_tcsicmp(aBuf, _T("SLOW"))) return FIND_SLOW;
 		return MATCHMODE_INVALID;
-	}
-
-	static SysGetCmds ConvertSysGetCmd(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf) return SYSGET_CMD_INVALID;
-		if (IsNumeric(aBuf)) return SYSGET_CMD_METRICS;
-		if (!_tcsicmp(aBuf, _T("MonitorCount"))) return SYSGET_CMD_MONITORCOUNT;
-		if (!_tcsicmp(aBuf, _T("MonitorPrimary"))) return SYSGET_CMD_MONITORPRIMARY;
-		if (!_tcsicmp(aBuf, _T("Monitor"))) return SYSGET_CMD_MONITORAREA; // Called "Monitor" vs. "MonitorArea" to make it easier to remember.
-		if (!_tcsicmp(aBuf, _T("MonitorWorkArea"))) return SYSGET_CMD_MONITORWORKAREA;
-		if (!_tcsicmp(aBuf, _T("MonitorName"))) return SYSGET_CMD_MONITORNAME;
-		return SYSGET_CMD_INVALID;
 	}
 
 	static MenuCommands ConvertMenuCommand(LPTSTR aBuf)
@@ -2848,6 +2831,7 @@ BIF_DECL(BIF_WinRedraw);
 BIF_DECL(BIF_WinMoveTopBottom);
 BIF_DECL(BIF_Process);
 BIF_DECL(BIF_ProcessSetPriority);
+BIF_DECL(BIF_MonitorGet);
 
 BIF_DECL(BIF_PerformAction);
 
