@@ -9006,6 +9006,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (!_tcscmp(lower, _T("ahkversion"))) return BIV_AhkVersion;
 	if (!_tcscmp(lower, _T("ahkpath"))) return BIV_AhkPath;
 	if (!_tcscmp(lower, _T("priorkey"))) return BIV_PriorKey;
+	if (!_tcscmp(lower, _T("screendpi"))) return BIV_ScreenDPI;
 
 	// Since above didn't return:
 	return (void *)VAR_NORMAL;

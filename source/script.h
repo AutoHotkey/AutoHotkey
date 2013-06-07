@@ -2861,7 +2861,7 @@ VarSizeType BIV_IPAddress(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IsAdmin(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_PtrSize(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName);
-
+VarSizeType BIV_ScreenDPI(LPTSTR aBuf, LPTSTR aVarName);
 
 
 ////////////////////////

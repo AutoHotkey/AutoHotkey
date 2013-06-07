@@ -11205,6 +11205,15 @@ VarSizeType BIV_PtrSize(LPTSTR aBuf, LPTSTR aVarName)
 
 
 
+VarSizeType BIV_ScreenDPI(LPTSTR aBuf, LPTSTR aVarName)
+{
+	if (aBuf)
+		_itot(g_ScreenDPI, aBuf, 10);
+	return aBuf ? (VarSizeType)_tcslen(aBuf) : MAX_INTEGER_SIZE;
+}
+
+
+
 VarSizeType BIV_IconHidden(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (aBuf)
