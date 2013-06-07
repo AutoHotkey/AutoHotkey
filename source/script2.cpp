@@ -205,7 +205,7 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 	splash.height = COORD_UNSPECIFIED;
 	if (aSplashImage)
 	{
-		#define SPLASH_DEFAULT_WIDTH 300
+		#define SPLASH_DEFAULT_WIDTH DPIScale(300)
 		splash.width = COORD_UNSPECIFIED;
 		splash.object_height = COORD_UNSPECIFIED;
 	}
@@ -347,6 +347,8 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 				break;
 			default:
 				splash.width = _ttoi(cp);
+				if (!aSplashImage)
+					splash.width = DPIScale(splash.width);
 			}
 			break;
 		case 'H':
@@ -356,7 +358,11 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 				cp += 3; // +3 vs. +4 due to the loop's own ++cp.
 			}
 			else // Allow any width/height to be specified so that the window can be "rolled up" to its title bar:
+			{
 				splash.height = _ttoi(cp + 1);
+				if (!aSplashImage)
+					splash.height = DPIScale(splash.height);
+			}
 			break;
 		case 'X':
 			xpos = _ttoi(cp + 1);
@@ -5875,8 +5881,8 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInpu
 	g_InputBox[g_nInputBoxes].timeout = (DWORD)(aTimeout * 1000);  // Convert to ms
 
 	// Allow 0 width or height (hides the window):
-	g_InputBox[g_nInputBoxes].width = aWidth != INPUTBOX_DEFAULT && aWidth < 0 ? 0 : aWidth;
-	g_InputBox[g_nInputBoxes].height = aHeight != INPUTBOX_DEFAULT && aHeight < 0 ? 0 : aHeight;
+	g_InputBox[g_nInputBoxes].width = aWidth != INPUTBOX_DEFAULT && aWidth < 0 ? 0 : DPIScale(aWidth);
+	g_InputBox[g_nInputBoxes].height = aHeight != INPUTBOX_DEFAULT && aHeight < 0 ? 0 : DPIScale(aHeight);
 	g_InputBox[g_nInputBoxes].xpos = aX;  // But seems okay to allow these to be negative, even if absolute coords.
 	g_InputBox[g_nInputBoxes].ypos = aY;
 	g_InputBox[g_nInputBoxes].output_var = aOutputVar;
