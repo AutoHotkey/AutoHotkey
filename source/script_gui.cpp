@@ -424,9 +424,9 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 
 	case GUI_CMD_MARGIN:
 		if (*aParam2)
-			gui.mMarginX = ATOI(aParam2); // Seems okay to allow negative margins.
+			gui.mMarginX = gui.Scale(ATOI(aParam2)); // Seems okay to allow negative margins.
 		if (*aParam3)
-			gui.mMarginY = ATOI(aParam3); // Seems okay to allow negative margins.
+			gui.mMarginY = gui.Scale(ATOI(aParam3)); // Seems okay to allow negative margins.
 		goto return_the_result;
 		
 	case GUI_CMD_MENU:
@@ -1116,16 +1116,16 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			// the B was meant to be an option letter (though in this case, none of the hex digits are
 			// currently used as option letters):
 			case 'W':
-				width = _ttoi(cp + 1);
+				width = gui.Scale(_ttoi(cp + 1));
 				break;
 			case 'H':
-				height = _ttoi(cp + 1);
+				height = gui.Scale(_ttoi(cp + 1));
 				break;
 			case 'X':
-				xpos = _ttoi(cp + 1);
+				xpos = gui.Scale(_ttoi(cp + 1));
 				break;
 			case 'Y':
-				ypos = _ttoi(cp + 1);
+				ypos = gui.Scale(_ttoi(cp + 1));
 				break;
 			}
 		}
@@ -1539,7 +1539,7 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 			result = FAIL; // It will have already displayed the error.
 			goto return_the_result;
 		}
-		var->Assign(pt.x);
+		var->Assign(gui.Unscale(pt.x));
 		if (   !(var = g_script.FindOrAddVar(var_name
 			, sntprintf(var_name, _countof(var_name), _T("%sY"), output_var.mName)
 			, always_use))   )
@@ -1547,7 +1547,7 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 			result = FAIL; // It will have already displayed the error.
 			goto return_the_result;
 		}
-		var->Assign(pt.y);
+		var->Assign(gui.Unscale(pt.y));
 		if (   !(var = g_script.FindOrAddVar(var_name
 			, sntprintf(var_name, _countof(var_name), _T("%sW"), output_var.mName)
 			, always_use))   )
@@ -1555,7 +1555,7 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 			result = FAIL; // It will have already displayed the error.
 			goto return_the_result;
 		}
-		var->Assign(rect.right - rect.left);
+		var->Assign(gui.Unscale(rect.right - rect.left));
 		if (   !(var = g_script.FindOrAddVar(var_name
 			, sntprintf(var_name, _countof(var_name), _T("%sH"), output_var.mName)
 			, always_use))   )
@@ -1563,7 +1563,7 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 			result = FAIL; // It will have already displayed the error.
 			goto return_the_result;
 		}
-		result = var->Assign(rect.bottom - rect.top);
+		result = var->Assign(gui.Unscale(rect.bottom - rect.top));
 		goto return_the_result;
 	}
 
@@ -1990,9 +1990,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	if (!mControlCount)
 	{
 		if (mMarginX == COORD_UNSPECIFIED)
-			mMarginX = (int)(1.25 * sFont[mCurrentFontIndex].point_size);  // Seems to be a good rule of thumb.
+			mMarginX = DPIScale((int)(1.25 * sFont[mCurrentFontIndex].point_size));  // Seems to be a good rule of thumb.
 		if (mMarginY == COORD_UNSPECIFIED)
-			mMarginY = (int)(0.75 * sFont[mCurrentFontIndex].point_size);  // Also seems good.
+			mMarginY = DPIScale((int)(0.75 * sFont[mCurrentFontIndex].point_size));  // Also seems good.
 		mPrevX = mMarginX;  // This makes first control be positioned correctly if it lacks both X & Y coords.
 	}
 
@@ -2569,7 +2569,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				// size so that it looks better with very large or small fonts.  The +2 seems to make
 				// it look just right on all font sizes, especially the default GUI size of 8 where the
 				// height should be about 23 to be standard(?)
-				opt.height += sFont[mCurrentFontIndex].point_size + 2;
+				opt.height += DPIScale(sFont[mCurrentFontIndex].point_size + 2);
 				break;
 			case GUI_CONTROL_GROUPBOX: // Since groups usually contain other controls, the below sizing seems best.
 				// Use row_count-2 because of the +1 added above for GUI_CONTROL_GROUPBOX.
@@ -2602,7 +2602,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			// control will not obey the height anyway.  Update: It seems better to use a small constant
 			// value to help catch bugs while still allowing the control to be created:
 			if (!calc_height_later)
-				opt.height = 30;
+				opt.height = DPIScale(30);
 			//else MONTHCAL and others must keep their "unspecified height" value for later detection.
 	}
 
@@ -4281,10 +4281,10 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 					GetNonClientArea(nc_width, nc_height);
 					// _ttoi() vs. ATOI() is used below to avoid ambiguity of "x" being hex 0x vs. a delimiter.
 					if ((pos_of_the_x = StrChrAny(next_option, _T("Xx"))) && pos_of_the_x[1]) // Kept simple due to rarity of transgressions and their being inconsequential.
-						mMinHeight = _ttoi(pos_of_the_x + 1) + nc_height;
+						mMinHeight = Scale(_ttoi(pos_of_the_x + 1)) + nc_height;
 					//else it's "MinSize333" or "MinSize333x", so leave height unchanged as documented.
 					if (pos_of_the_x != next_option) // There's no 'x' or it lies to the right of next_option.
-						mMinWidth = _ttoi(next_option) + nc_width; // _ttoi() automatically stops converting when it reaches non-numeric character.
+						mMinWidth = Scale(_ttoi(next_option)) + nc_width; // _ttoi() automatically stops converting when it reaches non-numeric character.
 					//else it's "MinSizeX333", so leave width unchanged as documented.
 				}
 				else // Since no width or height was specified:
@@ -4311,9 +4311,9 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 				{
 					GetNonClientArea(nc_width, nc_height);
 					if ((pos_of_the_x = StrChrAny(next_option, _T("Xx"))) && pos_of_the_x[1]) // Kept simple due to rarity of transgressions and their being inconsequential.
-						mMaxHeight = _ttoi(pos_of_the_x + 1) + nc_height;
+						mMaxHeight = Scale(_ttoi(pos_of_the_x + 1)) + nc_height;
 					if (pos_of_the_x != next_option) // There's no 'x' or it lies to the right of next_option.
-						mMaxWidth = _ttoi(next_option) + nc_width; // _ttoi() automatically stops converting when it reaches non-numeric character.
+						mMaxWidth = Scale(_ttoi(next_option)) + nc_width; // _ttoi() automatically stops converting when it reaches non-numeric character.
 				}
 				else // No width or height was specified. See comment in "MinSize" for details about this.
 					GetTotalWidthAndHeight(mMaxWidth, mMaxHeight); // If window hasn't yet been shown for the first time, this will set them to COORD_CENTERED, which tells the first-show routine to get the total width/height.
@@ -4344,6 +4344,9 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 			// WS_EX_TOOLWINDOW provides narrower title bar, omits task bar button, and omits
 			// entry in the alt-tab menu.
 			if (adding) mExStyle |= WS_EX_TOOLWINDOW; else mExStyle &= ~WS_EX_TOOLWINDOW;
+
+		else if (!_tcsicmp(next_option, _T("DPIScale")))
+			mUsesDPIScaling = adding;
 
 		// This one should be near the bottom since "E" is fairly vague and might be contained at the start
 		// of future option words such as Edge, Exit, etc.
@@ -5616,16 +5619,16 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 
 			case 'W':
 				if (ctoupper(*next_option) == 'P') // Use the previous control's value.
-					aOpt.width = mPrevWidth + ATOI(next_option + 1);
+					aOpt.width = mPrevWidth + Scale(ATOI(next_option + 1));
 				else
-					aOpt.width = ATOI(next_option);
+					aOpt.width = Scale(ATOI(next_option));
 				break;
 
 			case 'H':
 				if (ctoupper(*next_option) == 'P') // Use the previous control's value.
-					aOpt.height = mPrevHeight + ATOI(next_option + 1);
+					aOpt.height = mPrevHeight + Scale(ATOI(next_option + 1));
 				else
-					aOpt.height = ATOI(next_option);
+					aOpt.height = Scale(ATOI(next_option));
 				break;
 
 			case 'X':
@@ -5639,7 +5642,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 						if (!GetControlCountOnTabPage(aControl.tab_control_index, aControl.tab_index))
 						{
 							pt = GetPositionOfTabClientArea(*tab_control);
-							aOpt.x = pt.x + ATOI(next_option + 1);
+							aOpt.x = pt.x + Scale(ATOI(next_option + 1));
 							if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 								aOpt.y = pt.y + mMarginY;
 							break;
@@ -5647,7 +5650,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 						// else fall through and do it the standard way.
 					}
 					// Since above didn't break, do it the standard way.
-					aOpt.x = mPrevX + mPrevWidth + ATOI(next_option + 1);
+					aOpt.x = mPrevX + mPrevWidth + Scale(ATOI(next_option + 1));
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = mPrevY;  // Since moving in the X direction, retain the same Y as previous control.
 				}
@@ -5656,25 +5659,25 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				// the sign entirely).
 				else if (ctoupper(*next_option) == 'M') // Use the X margin
 				{
-					aOpt.x = mMarginX + ATOI(next_option + 1);
+					aOpt.x = mMarginX + Scale(ATOI(next_option + 1));
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = mMaxExtentDown + mMarginY;
 				}
 				else if (ctoupper(*next_option) == 'P') // Use the previous control's X position.
 				{
-					aOpt.x = mPrevX + ATOI(next_option + 1);
+					aOpt.x = mPrevX + Scale(ATOI(next_option + 1));
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = mPrevY;  // Since moving in the X direction, retain the same Y as previous control.
 				}
 				else if (ctoupper(*next_option) == 'S') // Use the saved X position
 				{
-					aOpt.x = mSectionX + ATOI(next_option + 1);
+					aOpt.x = mSectionX + Scale(ATOI(next_option + 1));
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = mMaxExtentDownSection + mMarginY;  // In this case, mMarginY is the padding between controls.
 				}
 				else
 				{
-					aOpt.x = ATOI(next_option);
+					aOpt.x = Scale(ATOI(next_option));
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = mMaxExtentDown + mMarginY;
 				}
@@ -5691,7 +5694,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 						if (!GetControlCountOnTabPage(aControl.tab_control_index, aControl.tab_index))
 						{
 							pt = GetPositionOfTabClientArea(*tab_control);
-							aOpt.y = pt.y + ATOI(next_option + 1);
+							aOpt.y = pt.y + Scale(ATOI(next_option + 1));
 							if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 								aOpt.x = pt.x + mMarginX;
 							break;
@@ -5699,7 +5702,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 						// else fall through and do it the standard way.
 					}
 					// Since above didn't break, do it the standard way.
-					aOpt.y = mPrevY + mPrevHeight + ATOI(next_option + 1);
+					aOpt.y = mPrevY + mPrevHeight + Scale(ATOI(next_option + 1));
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.x = mPrevX;  // Since moving in the Y direction, retain the same X as previous control.
 				}
@@ -5708,25 +5711,25 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				// the sign entirely).
 				else if (ctoupper(*next_option) == 'M') // Use the Y margin
 				{
-					aOpt.y = mMarginY + ATOI(next_option + 1);
+					aOpt.y = mMarginY + Scale(ATOI(next_option + 1));
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.x = mMaxExtentRight + mMarginX;
 				}
 				else if (ctoupper(*next_option) == 'P') // Use the previous control's Y position.
 				{
-					aOpt.y = mPrevY + ATOI(next_option + 1);
+					aOpt.y = mPrevY + Scale(ATOI(next_option + 1));
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.x = mPrevX;  // Since moving in the Y direction, retain the same X as previous control.
 				}
 				else if (ctoupper(*next_option) == 'S') // Use the saved Y position
 				{
-					aOpt.y = mSectionY + ATOI(next_option + 1);
+					aOpt.y = mSectionY + Scale(ATOI(next_option + 1));
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.x = mMaxExtentRightSection + mMarginX; // In this case, mMarginX is the padding between controls.
 				}
 				else
 				{
-					aOpt.y = ATOI(next_option);
+					aOpt.y = Scale(ATOI(next_option));
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.x = mMaxExtentRight + mMarginX;
 				}
@@ -6431,8 +6434,8 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 			case 'X': x = n; break;
 			case 'Y': y = n; break;
 			// Allow any width/height to be specified so that the window can be "rolled up" to its title bar:
-			case 'W': width = n; break;
-			case 'H': height = n; break;
+			case 'W': width = Scale(n); break;
+			case 'H': height = Scale(n); break;
 			}
 			break;
 		} // switch()
@@ -9245,10 +9248,10 @@ int GuiType::ControlGetDefaultSliderThickness(DWORD aStyle, int aThumbThickness)
 	// Provide a small margin on both sides, otherwise the bar is sometimes truncated.
 	aThumbThickness += 5; // 5 looks better than 4 in most styles/themes.
 	if (aStyle & TBS_NOTICKS) // This takes precedence over TBS_BOTH (which if present will still make the thumb flat vs. pointed).
-		return aThumbThickness;
+		return DPIScale(aThumbThickness);
 	if (aStyle & TBS_BOTH)
-		return aThumbThickness + 16;
-	return aThumbThickness + 8;
+		return DPIScale(aThumbThickness + 16);
+	return DPIScale(aThumbThickness + 8);
 }
 
 
