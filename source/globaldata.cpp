@@ -128,6 +128,19 @@ int g_HotExprLineCountMax = 0; // Current capacity of g_HotExprLines.
 UINT g_HotExprTimeout = 1000; // Timeout for #if (expression) evaluation, in milliseconds.
 HWND g_HotExprLFW = NULL; // Last Found Window of last #if expression.
 
+static int GetScreenDPI()
+{
+	// The DPI setting can be different for each screen axis, but
+	// apparently it is such a rare situation that it is not worth
+	// supporting it. So we just retrieve the X axis DPI.
+
+	HDC hdc = GetDC(NULL);
+	int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+	ReleaseDC(NULL, hdc);
+	return dpi;
+}
+
+int g_ScreenDPI = GetScreenDPI();
 MenuTypeType g_MenuIsVisible = MENU_TYPE_NONE;
 int g_nMessageBoxes = 0;
 int g_nInputBoxes = 0;
