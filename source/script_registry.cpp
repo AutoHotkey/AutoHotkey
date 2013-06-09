@@ -177,8 +177,6 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 	HKEY	hRegKey;
 	DWORD	dwRes, dwBuf, dwType;
 	LONG    result;
-	// My: Seems safest to keep the limit just below 64K in case Win95 has problems with larger values.
-	TCHAR	szRegBuffer[65535]; // Only allow reading of 64Kb from a key
 
 	if (!aRootKey)
 	{
@@ -299,25 +297,33 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 		}
 		case REG_BINARY:
 		{
-			LPBYTE pRegBuffer = (LPBYTE) szRegBuffer;
-			dwRes = sizeof(szRegBuffer);
-			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, pRegBuffer, &dwRes);
-			RegCloseKey(hRegKey);
-
-			// Although older versions treated anything other than ERROR_MORE_DATA as success,
-			// correct behaviour seems more important than backward-compatibility in this case:
-			if (result != ERROR_SUCCESS)
-			//if (result == ERROR_MORE_DATA)
-				// The API docs state that the buffer's contents are undefined in this case,
-				// so for no we don't support values larger than our buffer size:
+			// See case REG_SZ for comments.
+			dwRes = 0;
+			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, NULL, &dwRes); // Find how large the value is.
+			if (result != ERROR_SUCCESS || !dwRes) // Can't find size (realistically might never happen), or size is zero.
+			{
+				RegCloseKey(hRegKey);
 				break;
+			}
 
 			// Set up the variable to receive the contents, enlarging it if necessary.
 			// AutoIt3: Each byte will turned into 2 digits, plus a final null:
 			if (output_var.AssignString(NULL, (VarSizeType)(dwRes * 2)) != OK)
+			{
+				RegCloseKey(hRegKey);
 				return FAIL;
+			}
 			contents = output_var.Contents();
 			*contents = '\0';
+			
+			// Read the binary data into the variable, placed so that the last byte of
+			// binary data will be overwritten as the hexadecimal conversion completes.
+			LPBYTE pRegBuffer = (LPBYTE)(contents + dwRes * 2) - dwRes;
+			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, pRegBuffer, &dwRes);
+			RegCloseKey(hRegKey);
+
+			if (result != ERROR_SUCCESS)
+				break;
 
 			int j = 0;
 			DWORD i, n; // i and n must be unsigned to work
@@ -353,16 +359,8 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	HKEY	hRegKey;
 	DWORD	dwRes, dwBuf;
 
-	// My: Seems safest to keep the limit just below 64K in case Win95 has problems with larger values.
-	TCHAR szRegBuffer[65535], *buf; // Only allow writing of 64Kb to a key for Win9x, which is all it supports.
-	#define SET_REG_BUF \
-		if (g_os.IsWin9x())\
-		{\
-			tcslcpy(szRegBuffer, aValue, sizeof(szRegBuffer));\
-			buf = szRegBuffer;\
-		}\
-		else\
-			buf = aValue;
+	TCHAR *buf;
+	#define SET_REG_BUF buf = aValue;
 	
 	LONG result;
 
@@ -396,28 +394,35 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	
 	case REG_MULTI_SZ:
 	{
-		// Don't allow values over 64K for this type because aValue might not be a writable
-		// string, and we would need to write to it to temporarily change the newline delimiters
-		// into zero-delimiters.  Even if we were to require callers to give us a modifiable string,
-		// its capacity be 1 byte too small to handle the double termination that's needed
+		size_t length = _tcslen(aValue);
+		// Allocate some temporary memory because aValue might not be a writable string,
+		// and we would need to write to it to temporarily change the newline delimiters into
+		// zero-delimiters.  Even if we were to require callers to give us a modifiable string,
+		// its capacity may be 1 byte too small to handle the double termination that's needed
 		// (i.e. if the last item in the list happens to not end in a newline):
-		tcslcpy(szRegBuffer, aValue, _countof(szRegBuffer) - 1);  // -1 to leave space for a 2nd terminator.
+		buf = tmalloc(length + 2);
+		if (!buf)
+		{
+			result = ERROR_OUTOFMEMORY;
+			break;
+		}
+		tcslcpy(buf, aValue, length + 1);
 		// Double-terminate:
-		size_t length = _tcslen(szRegBuffer);
-		szRegBuffer[length + 1] = '\0';
+		buf[length + 1] = '\0';
 
 		// Remove any final newline the user may have provided since we don't want the length
 		// to include it when calling RegSetValueEx() -- it would be too large by 1:
-		if (length > 0 && szRegBuffer[length - 1] == '\n')
-			szRegBuffer[--length] = '\0';
+		if (length > 0 && buf[length - 1] == '\n')
+			buf[--length] = '\0';
 
 		// Replace the script's delimiter char with the zero-delimiter needed by RegSetValueEx():
-		for (LPTSTR cp = szRegBuffer; *cp; ++cp)
+		for (LPTSTR cp = buf; *cp; ++cp)
 			if (*cp == '\n')
 				*cp = '\0';
 
-		result = RegSetValueEx(hRegKey, aValueName, 0, REG_MULTI_SZ, (CONST BYTE *)szRegBuffer
+		result = RegSetValueEx(hRegKey, aValueName, 0, REG_MULTI_SZ, (CONST BYTE *)buf
 								, (DWORD)(length ? length + 2 : 0) * sizeof(TCHAR));
+		free(buf);
 		break;
 	}
 
@@ -440,10 +445,17 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 			break;
 		}
 
+		int nBytes = nLen / 2;
+		LPBYTE pRegBuffer = (LPBYTE) malloc(nBytes);
+		if (!pRegBuffer)
+		{
+			result = ERROR_OUTOFMEMORY;
+			break;
+		}
+
 		// Really crappy hex conversion
 		int j = 0, i = 0, nVal, nMult;
-		LPBYTE pRegBuffer = (LPBYTE) szRegBuffer;
-		while (i < nLen && j < sizeof(szRegBuffer))
+		while (i < nLen && j < nBytes)
 		{
 			nVal = 0;
 			for (nMult = 16; nMult >= 0; nMult = nMult - 15)
@@ -456,6 +468,7 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 					nVal += (((aValue[i] - 'a'))+10) * nMult;
 				else
 				{
+					free(pRegBuffer);
 					RegCloseKey(hRegKey);
 					result = ERROR_INVALID_PARAMETER;
 					goto finish;
@@ -466,6 +479,7 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 		}
 
 		result = RegSetValueEx(hRegKey, aValueName, 0, REG_BINARY, pRegBuffer, (DWORD)j);
+		free(pRegBuffer);
 		break;
 	}
 

@@ -221,7 +221,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	GuiControlType *pcontrol, *ptab_control;
 	GuiIndexType gui_control_index;
 	GuiEventType gui_action;
-	DWORD gui_event_info, gui_size;
+	DWORD_PTR gui_event_info;
+	DWORD gui_size;
 	bool *pgui_label_is_running, event_is_control_generated;
 	Label *gui_label;
 	HDROP hdrop_to_free;
@@ -648,13 +649,13 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// GUI windows might cause GuiWindowProc to fwd it back to us, creating an infinite loop.
 					goto break_out_of_main_switch; // Goto seems preferably in this case for code size & performance.
 				
-				gui_event_info =    (DWORD)msg.lParam;
+				gui_event_info =    (DWORD_PTR)msg.lParam;
 				gui_action =        LOWORD(msg.wParam);
 				gui_control_index = HIWORD(msg.wParam); // Caller has set it to NO_CONTROL_INDEX if it isn't applicable.
 
 				if (gui_action == GUI_EVENT_RESIZE) // This section be done after above but before pcontrol below.
 				{
-					gui_size = gui_event_info; // Temp storage until the "g" struct becomes available for the new thread.
+					gui_size = (DWORD)gui_event_info; // Temp storage until the "g" struct becomes available for the new thread.
 					gui_event_info = gui_control_index; // SizeType is stored in index in this case.
 					gui_control_index = NO_CONTROL_INDEX;
 				}
@@ -1165,7 +1166,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				{
 					LITEM item = {};
 					item.mask=LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
-					item.iLink = gui_event_info - 1;
+					item.iLink = (int)gui_event_info - 1;
 					if(SendMessage(pcontrol->hwnd,LM_GETITEM,NULL,(LPARAM)&item))
 						g_ErrorLevel->AssignString(*item.szUrl ? CStringTCharFromWCharIfNeeded(item.szUrl) : CStringTCharFromWCharIfNeeded(item.szID));
 				}

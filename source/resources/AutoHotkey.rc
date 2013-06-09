@@ -104,7 +104,11 @@ IDI_MAIN                ICON                    "icon_main.ico"
 IDI_SUSPEND             ICON                    "icon_suspend.ico"
 IDI_PAUSE               ICON                    "icon_pause.ico"
 IDI_PAUSE_SUSPEND       ICON                    "icon_pause_suspend.ico"
+#ifdef AUTOHOTKEYSC
+IDI_FILETYPE            ICON                    "icon_filetype_small.ico"
+#else
 IDI_FILETYPE            ICON                    "icon_filetype.ico"
+#endif
 IDI_TRAY_WIN9X          ICON                    "icon_tray_win9x.ico"
 IDI_TRAY_WIN9X_SUSPEND  ICON                    "icon_tray_win9x_suspend.ico"
 IDI_TRAY                ICON                    "icon_tray.ico"
@@ -193,7 +197,7 @@ BEGIN
             VALUE "FileDescription", "AutoHotkey " AHK_ENC " " AHK_BIT
             VALUE "FileVersion", AHK_VERSION
             VALUE "InternalName", "AutoHotkey"
-            VALUE "LegalCopyright", "Copyright (C) 2012"
+            VALUE "LegalCopyright", "Copyright (C) 2003-2013"
             VALUE "OriginalFilename", "AutoHotkey.exe"
             VALUE "ProductName", "AutoHotkey"
             VALUE "ProductVersion", AHK_VERSION
