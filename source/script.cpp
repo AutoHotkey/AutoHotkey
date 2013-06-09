@@ -2803,6 +2803,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		size_t space_remaining = LINE_SIZE - (parameter-aBuf);
 		TCHAR buf[MAX_PATH];
 		StrReplace(parameter, _T("%A_ScriptDir%"), mFileDir, SCS_INSENSITIVE, 1, space_remaining); // v1.0.35.11.  Caller has ensured string is writable.
+		StrReplace(parameter, _T("%A_LineFile%"), Line::sSourceFile[mCurrFileIndex], SCS_INSENSITIVE, 1, space_remaining); // v1.1.11: Support A_LineFile to allow paths relative to current file regardless of working dir; e.g. %A_LineFile%\..\fileinsamedir.ahk.
 		if (tcscasestr(parameter, _T("%A_AppData%"))) // v1.0.45.04: This and the next were requested by Tekl to make it easier to customize scripts on a per-user basis.
 		{
 			BIV_SpecialFolderPath(buf, _T("A_AppData"));
