@@ -116,6 +116,7 @@ extern int g_HotExprLineCountMax;
 extern UINT g_HotExprTimeout;
 extern HWND g_HotExprLFW;
 
+extern int g_ScreenDPI;
 extern MenuTypeType g_MenuIsVisible;
 extern int g_nMessageBoxes;
 extern int g_nInputBoxes;
