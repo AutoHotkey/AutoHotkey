@@ -12222,10 +12222,10 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 		_itot(gui->Unscale(HIWORD(g->GuiPoint.x)), target_buf, 10); // See comments above.
 		break;
 	case 'X':
-		_itot(g->GuiPoint.x, target_buf, 10);
+		_itot(gui->Unscale(g->GuiPoint.x), target_buf, 10);
 		break;
 	case 'Y':
-		_itot(g->GuiPoint.y, target_buf, 10);
+		_itot(gui->Unscale(g->GuiPoint.y), target_buf, 10);
 		break;
 	case '\0': // A_Gui
 		if (!*g->GuiWindow->mName) // v1.1.04: Anonymous GUI.
