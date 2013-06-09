@@ -290,6 +290,22 @@ inline void swap(T &v1, T &v2) {
 	v2=tmp;
 }
 
+// The following functions are used in GUI DPI scaling, so that
+// GUIs designed for a 96 DPI setting (i.e. using absolute coords
+// or explicit widths/sizes) can continue to run with mostly no issues.
+
+static inline int DPIScale(int x)
+{
+	extern int g_ScreenDPI;
+	return MulDiv(x, g_ScreenDPI, 96);
+}
+
+static inline int DPIUnscale(int x)
+{
+	extern int g_ScreenDPI;
+	return MulDiv(x, 96, g_ScreenDPI);
+}
+
 #define INPUTBOX_DEFAULT INT_MIN
 ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInput
 	, int aWidth, int aHeight, int aX, int aY, double aTimeout, LPTSTR aDefault);
@@ -2361,12 +2377,12 @@ class GuiType
 {
 public:
 	#define GUI_STANDARD_WIDTH_MULTIPLIER 15 // This times font size = width, if all other means of determining it are exhausted.
-	#define GUI_STANDARD_WIDTH (GUI_STANDARD_WIDTH_MULTIPLIER * sFont[mCurrentFontIndex].point_size)
+	#define GUI_STANDARD_WIDTH DPIScale(GUI_STANDARD_WIDTH_MULTIPLIER * sFont[mCurrentFontIndex].point_size)
 	// Update for v1.0.21: Reduced it to 8 vs. 9 because 8 causes the height each edit (with the
 	// default style) to exactly match that of a Combo or DropDownList.  This type of spacing seems
 	// to be what other apps use too, and seems to make edits stand out a little nicer:
-	#define GUI_CTL_VERTICAL_DEADSPACE 8
-	#define PROGRESS_DEFAULT_THICKNESS (2 * sFont[mCurrentFontIndex].point_size)
+	#define GUI_CTL_VERTICAL_DEADSPACE DPIScale(8)
+	#define PROGRESS_DEFAULT_THICKNESS DPIScale(2 * sFont[mCurrentFontIndex].point_size)
 	LPTSTR mName;
 	HWND mHwnd, mStatusBarHwnd;
 	HWND mOwner;  // The window that owns this one, if any.  Note that Windows provides no way to change owners after window creation.
@@ -2404,6 +2420,7 @@ public:
 	TabIndexType mCurrentTabIndex;// Which tab of a tab control is currently the default for newly added controls.
 	bool mGuiShowHasNeverBeenDone, mFirstActivation, mShowIsInProgress, mDestroyWindowHasBeenCalled;
 	bool mControlWidthWasSetByContents; // Whether the most recently added control was auto-width'd to fit its contents.
+	bool mUsesDPIScaling; // Whether the GUI uses DPI scaling.
 
 	#define MAX_GUI_FONTS 200  // v1.0.44.14: Increased from 100 to 200 due to feedback that 100 wasn't enough.  But to alleviate memory usage, the array is now allocated upon first use.
 	static FontType *sFont; // An array of structs, allocated upon first use.
@@ -2421,7 +2438,7 @@ public:
 		, mDefaultButtonIndex(-1), mLabelForClose(NULL), mLabelForEscape(NULL), mLabelForSize(NULL)
 		, mLabelForDropFiles(NULL), mLabelForContextMenu(NULL), mReferenceCount(1)
 		, mLabelForCloseIsRunning(false), mLabelForEscapeIsRunning(false), mLabelForSizeIsRunning(false)
-		, mLabelsHaveBeenSet(false)
+		, mLabelsHaveBeenSet(false), mUsesDPIScaling(true)
 		// The styles DS_CENTER and DS_3DLOOK appear to be ineffectual in this case.
 		// Also note that WS_CLIPSIBLINGS winds up on the window even if unspecified, which is a strong hint
 		// that it should always be used for top level windows across all OSes.  Usenet posts confirm this.
@@ -2543,6 +2560,10 @@ public:
 	void UpdateAccelerators(UserMenu &aMenu, LPACCEL aAccel, int &aAccelCount);
 	void RemoveAccelerators();
 	static bool ConvertAccelerator(LPTSTR aString, ACCEL &aAccel);
+
+	// See DPIScale() and DPIUnscale() for more details.
+	int Scale(int x) { return mUsesDPIScaling ? DPIScale(x) : x; }
+	int Unscale(int x) { return mUsesDPIScaling ? DPIUnscale(x) : x; }
 };
 
 
@@ -2861,7 +2882,7 @@ VarSizeType BIV_IPAddress(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IsAdmin(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_PtrSize(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName);
-
+VarSizeType BIV_ScreenDPI(LPTSTR aBuf, LPTSTR aVarName);
 
 
 ////////////////////////

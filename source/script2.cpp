@@ -205,7 +205,7 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 	splash.height = COORD_UNSPECIFIED;
 	if (aSplashImage)
 	{
-		#define SPLASH_DEFAULT_WIDTH 300
+		#define SPLASH_DEFAULT_WIDTH DPIScale(300)
 		splash.width = COORD_UNSPECIFIED;
 		splash.object_height = COORD_UNSPECIFIED;
 	}
@@ -347,6 +347,8 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 				break;
 			default:
 				splash.width = _ttoi(cp);
+				if (!aSplashImage)
+					splash.width = DPIScale(splash.width);
 			}
 			break;
 		case 'H':
@@ -356,7 +358,11 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 				cp += 3; // +3 vs. +4 due to the loop's own ++cp.
 			}
 			else // Allow any width/height to be specified so that the window can be "rolled up" to its title bar:
+			{
 				splash.height = _ttoi(cp + 1);
+				if (!aSplashImage)
+					splash.height = DPIScale(splash.height);
+			}
 			break;
 		case 'X':
 			xpos = _ttoi(cp + 1);
@@ -5875,8 +5881,8 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInpu
 	g_InputBox[g_nInputBoxes].timeout = (DWORD)(aTimeout * 1000);  // Convert to ms
 
 	// Allow 0 width or height (hides the window):
-	g_InputBox[g_nInputBoxes].width = aWidth != INPUTBOX_DEFAULT && aWidth < 0 ? 0 : aWidth;
-	g_InputBox[g_nInputBoxes].height = aHeight != INPUTBOX_DEFAULT && aHeight < 0 ? 0 : aHeight;
+	g_InputBox[g_nInputBoxes].width = aWidth != INPUTBOX_DEFAULT && aWidth < 0 ? 0 : DPIScale(aWidth);
+	g_InputBox[g_nInputBoxes].height = aHeight != INPUTBOX_DEFAULT && aHeight < 0 ? 0 : DPIScale(aHeight);
 	g_InputBox[g_nInputBoxes].xpos = aX;  // But seems okay to allow these to be negative, even if absolute coords.
 	g_InputBox[g_nInputBoxes].ypos = aY;
 	g_InputBox[g_nInputBoxes].output_var = aOutputVar;
@@ -11205,6 +11211,15 @@ VarSizeType BIV_PtrSize(LPTSTR aBuf, LPTSTR aVarName)
 
 
 
+VarSizeType BIV_ScreenDPI(LPTSTR aBuf, LPTSTR aVarName)
+{
+	if (aBuf)
+		_itot(g_ScreenDPI, aBuf, 10);
+	return aBuf ? (VarSizeType)_tcslen(aBuf) : MAX_INTEGER_SIZE;
+}
+
+
+
 VarSizeType BIV_IconHidden(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (aBuf)
@@ -12186,8 +12201,9 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_INTEGER_SIZE];
 	LPTSTR target_buf = aBuf ? aBuf : buf;
+	GuiType* gui = g->GuiWindow; // For performance.
 
-	if (!g->GuiWindow) // The current thread was not launched as a result of GUI action.
+	if (!gui) // The current thread was not launched as a result of GUI action.
 	{
 		*target_buf = '\0';
 		return 0;
@@ -12199,17 +12215,17 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 		// g->GuiPoint.x was overloaded to contain the size, since there are currently never any cases when
 		// A_GuiX/Y and A_GuiWidth/Height are both valid simultaneously.  It is documented that each of these
 		// variables is defined only in proper types of subroutines.
-		_itot(LOWORD(g->GuiPoint.x), target_buf, 10);
+		_itot(gui->Unscale(LOWORD(g->GuiPoint.x)), target_buf, 10);
 		// Above is always stored as decimal vs. hex, regardless of script settings.
 		break;
 	case 'H':
-		_itot(HIWORD(g->GuiPoint.x), target_buf, 10); // See comments above.
+		_itot(gui->Unscale(HIWORD(g->GuiPoint.x)), target_buf, 10); // See comments above.
 		break;
 	case 'X':
-		_itot(g->GuiPoint.x, target_buf, 10);
+		_itot(gui->Unscale(g->GuiPoint.x), target_buf, 10);
 		break;
 	case 'Y':
-		_itot(g->GuiPoint.y, target_buf, 10);
+		_itot(gui->Unscale(g->GuiPoint.y), target_buf, 10);
 		break;
 	case '\0': // A_Gui
 		if (!*g->GuiWindow->mName) // v1.1.04: Anonymous GUI.
@@ -16498,8 +16514,9 @@ BIF_DECL(BIF_StatusBar)
 
 	if (!g->GuiDefaultWindowValid()) // Always operate on thread's default window to simplify the syntax.
 		return;
+	GuiType& gui = *g->GuiDefaultWindow; // For performance.
 	HWND control_hwnd;
-	if (   !(control_hwnd = g->GuiDefaultWindow->mStatusBarHwnd)   )
+	if (   !(control_hwnd = gui.mStatusBarHwnd)   )
 		return;
 
 	HICON hicon;
@@ -16517,7 +16534,7 @@ BIF_DECL(BIF_StatusBar)
 		int edge, part[256]; // Load-time validation has ensured aParamCount is under 255, so it shouldn't overflow.
 		for (edge = 0, new_part_count = 0; new_part_count < aParamCount; ++new_part_count)
 		{
-			edge += (int)TokenToInt64(*aParam[new_part_count]); // For code simplicity, no check for negative (seems fairly harmless since the bar will simply show up with the wrong number of parts to indicate the problem).
+			edge += gui.Scale((int)TokenToInt64(*aParam[new_part_count])); // For code simplicity, no check for negative (seems fairly harmless since the bar will simply show up with the wrong number of parts to indicate the problem).
 			part[new_part_count] = edge;
 		}
 		// For code simplicity, there is currently no means to have the last part of the bar use less than
@@ -17260,7 +17277,7 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 			{
 				do_auto_size = 0; // Turn off any auto-sizing that may have been put into effect by default (such as for insertion).
 				lvc.mask |= LVCF_WIDTH;
-				lvc.cx = ATOI(next_option);
+				lvc.cx = gui.Scale(ATOI(next_option));
 			}
 		}
 
