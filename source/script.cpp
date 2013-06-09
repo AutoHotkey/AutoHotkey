@@ -7074,7 +7074,7 @@ Var *Line::ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary)
 	// Terminate the buffer, even if nothing was written into it:
 	sVarName[var_name_length] = '\0';
 
-	static Var empty_var(sVarName, (void *)VAR_NORMAL, false); // Must use sVarName here.  See comment above for why.
+	static Var empty_var(sVarName, VAR_NORMAL, NULL, false); // Must use sVarName here.  See comment above for why.
 
 	Var *found_var;
 	if (!aCreateIfNecessary)
@@ -7088,7 +7088,7 @@ Var *Line::ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary)
 			return found_var;
 		// At this point, this is either a non-existent variable or a reserved/built-in variable
 		// that was never statically referenced in the script (only dynamically), e.g. A_IPAddress%A_Index%
-		if (Script::GetVarType(sVarName) == (void *)VAR_NORMAL)
+		if (Script::GetVarType(sVarName) == VAR_NORMAL)
 			// If not found: for performance reasons, don't create it because caller just wants an empty variable.
 			return &empty_var;
 		//else it's the clipboard or some other built-in variable, so continue onward so that the
@@ -7286,8 +7286,9 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	// built-in vars in the global list for efficiency and to keep them out of ListVars.  Note that another
 	// section at loadtime displays an error for any attempt to explicitly declare built-in variables as
 	// either global or local.
-	void *var_type = GetVarType(var_name);
-	if (var_type != (void *)VAR_NORMAL || !_tcsicmp(var_name, _T("ErrorLevel"))) // Attempt to create built-in variable as local.
+	VirtualVar biv;
+	VarTypes var_type = GetVarType(var_name, &biv);
+	if (var_type != VAR_NORMAL || !_tcsicmp(var_name, _T("ErrorLevel"))) // Attempt to create built-in variable as local.
 	{
 		if (aIsLocal)
 		{
@@ -7323,7 +7324,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 		// v1.0.48: Lexikos: Current function is assume-static, so set static attribute.
 		aScope |= VAR_LOCAL_STATIC;
 
-	Var *the_new_var = new Var(new_name, var_type, aScope);
+	Var *the_new_var = new Var(new_name, var_type, &biv, aScope);
 	if (the_new_var == NULL)
 	{
 		ScriptError(ERR_OUTOFMEM);
@@ -7488,7 +7489,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 
 
 
-void *Script::GetVarType(LPTSTR aVarName)
+VarTypes Script::GetVarType(LPTSTR aVarName, VirtualVar *aBIV)
 {
 	// Convert to lowercase to help performance a little (it typically only helps loadtime performance because
 	// this function is rarely called during script-runtime).
@@ -7503,18 +7504,42 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (lowercase[0] != 'a' || lowercase[1] != '_')  // This check helps average-case performance.
 	{
 		if (   !_tcscmp(lowercase, _T("true"))
-			|| !_tcscmp(lowercase, _T("false"))) return BIV_True_False;
-		if (!_tcscmp(lowercase, _T("clipboard"))) return (void *)VAR_CLIPBOARD;
-		if (!_tcscmp(lowercase, _T("clipboardall"))) return (void *)VAR_CLIPBOARDALL;
+			|| !_tcscmp(lowercase, _T("false")))
+		{
+			if (aBIV)
+			{
+				aBIV->Get = BIV_True_False;
+    			aBIV->Set = NULL;
+			}
+			return VAR_BUILTIN;
+		}
+		if (!_tcscmp(lowercase, _T("clipboard"))) return VAR_CLIPBOARD;
+		if (!_tcscmp(lowercase, _T("clipboardall"))) return VAR_CLIPBOARDALL;
 		// Otherwise:
-		return (void *)VAR_NORMAL;
+		return VAR_NORMAL;
 	}
 
+	BuiltInVarSetType bivs = NULL;
+	if (BuiltInVarType biv = GetVarType_BIV(lowercase, bivs))
+	{
+		if (aBIV)
+		{
+			aBIV->Get = biv;
+			aBIV->Set = bivs;
+		}
+		return bivs ? VAR_VIRTUAL : VAR_BUILTIN;
+	}
+
+	return VAR_NORMAL;
+}
+
+BuiltInVarType Script::GetVarType_BIV(LPTSTR lowercase, BuiltInVarSetType &setter)
+{
 	// Otherwise, lowercase begins with "a_", so it's probably one of the built-in variables.
 	LPTSTR lower = lowercase + 2;
 
 	// Keeping the most common ones near the top helps performance a little.
-	if (!_tcscmp(lower, _T("index"))) return BIV_LoopIndex;  // A short name since it's typed so often.
+	if (!_tcscmp(lower, _T("index"))) { setter = BIV_LoopIndex_Set; return BIV_LoopIndex; }  // A short name since it's typed so often.
 
 	if (   !_tcscmp(lower, _T("mmmm"))    // Long name of month.
 		|| !_tcscmp(lower, _T("mmm"))     // 3-char abbrev. month name.
@@ -7541,7 +7566,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (   !_tcscmp(lower, _T("now"))
 		|| !_tcscmp(lower, _T("nowutc"))) return BIV_Now;
 
-	if (!_tcscmp(lower, _T("workingdir"))) return BIV_WorkingDir;
+	if (!_tcscmp(lower, _T("workingdir"))) { setter = BIV_WorkingDir_Set; return BIV_WorkingDir; }
 	if (!_tcscmp(lower, _T("initialworkingdir"))) return BIV_InitialWorkingDir;
 	if (!_tcscmp(lower, _T("scriptname"))) return BIV_ScriptName;
 	if (!_tcscmp(lower, _T("scriptdir"))) return BIV_ScriptDir;
@@ -7554,22 +7579,22 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (!_tcscmp(lower, _T("isunicode"))) return BIV_IsUnicode;	
 	if (!_tcscmp(lower, _T("ptrsize"))) return BIV_PtrSize;
 
-	if (!_tcscmp(lower, _T("titlematchmode"))) return BIV_TitleMatchMode;
-	if (!_tcscmp(lower, _T("titlematchmodespeed"))) return BIV_TitleMatchModeSpeed;
-	if (!_tcscmp(lower, _T("detecthiddenwindows"))) return BIV_DetectHiddenWindows;
-	if (!_tcscmp(lower, _T("detecthiddentext"))) return BIV_DetectHiddenText;
-	if (!_tcscmp(lower, _T("stringcasesense"))) return BIV_StringCaseSense;
-	if (!_tcscmp(lower, _T("keydelay"))) return BIV_KeyDelay;
-	if (!_tcscmp(lower, _T("windelay"))) return BIV_WinDelay;
-	if (!_tcscmp(lower, _T("controldelay"))) return BIV_ControlDelay;
-	if (!_tcscmp(lower, _T("mousedelay"))) return BIV_MouseDelay;
-	if (!_tcscmp(lower, _T("defaultmousespeed"))) return BIV_DefaultMouseSpeed;
+	if (!_tcscmp(lower, _T("titlematchmode"))) { setter = BIV_TitleMatchMode_Set; return BIV_TitleMatchMode; }
+	if (!_tcscmp(lower, _T("titlematchmodespeed"))) { setter = BIV_TitleMatchMode_Set; return BIV_TitleMatchModeSpeed; }
+	if (!_tcscmp(lower, _T("detecthiddenwindows"))) { setter = BIV_DetectHiddenWindows_Set; return BIV_DetectHiddenWindows; }
+	if (!_tcscmp(lower, _T("detecthiddentext"))) { setter = BIV_DetectHiddenText_Set; return BIV_DetectHiddenText; }
+	if (!_tcscmp(lower, _T("stringcasesense"))) { setter = BIV_StringCaseSense_Set; return BIV_StringCaseSense; }
+	if (!_tcscmp(lower, _T("keydelay"))) { setter = BIV_KeyDelay_Set; return BIV_KeyDelay; }
+	if (!_tcscmp(lower, _T("windelay"))) { setter = BIV_WinDelay_Set; return BIV_WinDelay; }
+	if (!_tcscmp(lower, _T("controldelay"))) { setter = BIV_ControlDelay_Set; return BIV_ControlDelay; }
+	if (!_tcscmp(lower, _T("mousedelay"))) { setter = BIV_MouseDelay_Set; return BIV_MouseDelay; }
+	if (!_tcscmp(lower, _T("defaultmousespeed"))) { setter = BIV_DefaultMouseSpeed_Set; return BIV_DefaultMouseSpeed; }
 	if (!_tcscmp(lower, _T("ispaused"))) return BIV_IsPaused;
 	if (!_tcscmp(lower, _T("iscritical"))) return BIV_IsCritical;
 	if (!_tcscmp(lower, _T("issuspended"))) return BIV_IsSuspended;
-	if (!_tcscmp(lower, _T("fileencoding"))) return BIV_FileEncoding;
+	if (!_tcscmp(lower, _T("fileencoding"))) { setter = BIV_FileEncoding_Set; return BIV_FileEncoding; }
 	if (!_tcscmp(lower, _T("msgboxresult"))) return BIV_MsgBoxResult;
-	if (!_tcscmp(lower, _T("regview"))) return BIV_RegView;
+	if (!_tcscmp(lower, _T("regview"))) { setter = BIV_RegView_Set; return BIV_RegView; }
 
 	if (!_tcscmp(lower, _T("iconhidden"))) return BIV_IconHidden;
 	if (!_tcscmp(lower, _T("icontip"))) return BIV_IconTip;
@@ -7619,7 +7644,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 		return (*lower >= '1' && *lower <= '4'
 			&& !lower[1]) // Make sure has only one more character rather than none or several (e.g. A_IPAddress1abc should not be match).
 			? BIV_IPAddress
-			: (void *)VAR_NORMAL; // Otherwise it can't be a match for any built-in variable.
+			: NULL; // Otherwise it can't be a match for any built-in variable.
 	}
 
 	if (!_tcsncmp(lower, _T("loop"), 4))
@@ -7647,7 +7672,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 				|| !_tcscmp(lower, _T("sizekb"))
 				|| !_tcscmp(lower, _T("sizemb"))) return BIV_LoopFileSize;
 			// Otherwise, it can't be a match for any built-in variable:
-			return (void *)VAR_NORMAL;
+			return NULL;
 		}
 
 		if (!_tcsncmp(lower, _T("reg"), 3))
@@ -7659,7 +7684,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 			if (!_tcscmp(lower, _T("name"))) return BIV_LoopRegName;
 			if (!_tcscmp(lower, _T("timemodified"))) return BIV_LoopRegTimeModified;
 			// Otherwise, it can't be a match for any built-in variable:
-			return (void *)VAR_NORMAL;
+			return NULL;
 		}
 	}
 
@@ -7673,9 +7698,9 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (!_tcscmp(lower, _T("timesincethishotkey"))) return BIV_TimeSinceThisHotkey;
 	if (!_tcscmp(lower, _T("timesincepriorhotkey"))) return BIV_TimeSincePriorHotkey;
 	if (!_tcscmp(lower, _T("endchar"))) return BIV_EndChar;
-	if (!_tcscmp(lower, _T("lasterror"))) return BIV_LastError;
+	if (!_tcscmp(lower, _T("lasterror"))) { setter = BIV_LastError_Set; return BIV_LastError; }
 
-	if (!_tcscmp(lower, _T("eventinfo"))) return BIV_EventInfo; // It's called "EventInfo" vs. "GuiEventInfo" because it applies to non-Gui events such as OnClipboardChange.
+	if (!_tcscmp(lower, _T("eventinfo"))) { setter = BIV_EventInfo_Set; return BIV_EventInfo; } // It's called "EventInfo" vs. "GuiEventInfo" because it applies to non-Gui events such as OnClipboardChange.
 	if (!_tcscmp(lower, _T("guicontrol"))) return BIV_GuiControl;
 
 	if (   !_tcscmp(lower, _T("guicontrolevent")) // v1.0.36: A_GuiEvent was added as a synonym for A_GuiControlEvent because it seems unlikely that A_GuiEvent will ever be needed for anything:
@@ -7696,7 +7721,7 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (!_tcscmp(lower, _T("priorkey"))) return BIV_PriorKey;
 
 	// Since above didn't return:
-	return (void *)VAR_NORMAL;
+	return NULL;
 }
 
 
@@ -9387,7 +9412,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 		// Put operands into the postfix array immediately, then move on to the next infix item:
 		if (IS_OPERAND(infix_symbol)) // At this stage, operands consist of only SYM_OPERAND and SYM_STRING.
 		{
-			if (infix_symbol == SYM_DYNAMIC && SYM_DYNAMIC_IS_CLIPBOARD(this_infix)) // Ordered for short-circuit performance.
+			if (infix_symbol == SYM_DYNAMIC && SYM_DYNAMIC_IS_WRITABLE(this_infix)) // Ordered for short-circuit performance.
 			{
 				// IMPORTANT: VAR_CLIPBOARD is made into SYM_VAR here, but only for assignments.
 				// This allows built-in functions and other places in the code to treat SYM_VAR
@@ -13104,7 +13129,7 @@ BIF_DECL(BIF_PerformAction)
 	
 	TCHAR number_buf[MAX_ARGS * MAX_NUMBER_SIZE]; // Enough for worst case.
 	Var *output_var;
-	Var stack_var(_T(""), (void *)VAR_NORMAL, 0);
+	Var stack_var(_T(""), VAR_NORMAL, NULL, 0);
 	// Prevent the use of SimpleHeap::Malloc().  Otherwise, each call could allocate
 	// some memory which cannot be freed until the program exits.
 	stack_var.DisableSimpleMalloc();

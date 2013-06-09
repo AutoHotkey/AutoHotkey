@@ -185,7 +185,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 };
 // These two are macros for maintainability (i.e. seeing them together here helps maintain them together).
 #define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) (token.buf) // SYM_DYNAMICs other than doubles have NULL buf, at least at the stage this macro is called.
-#define SYM_DYNAMIC_IS_CLIPBOARD(token) (!(token)->buf && (token)->var->Type() == VAR_CLIPBOARD) // i.e. it's the clipboard, not a built-in variable or double-deref.
+#define SYM_DYNAMIC_IS_WRITABLE(token) (!(token)->buf && (token)->var->Type() <= VAR_LAST_WRITABLE) // i.e. it's the clipboard, not a built-in variable or double-deref.
 
 
 struct ExprTokenType; // Forward declarations for use below.

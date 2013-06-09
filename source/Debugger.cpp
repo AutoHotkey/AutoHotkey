@@ -1343,7 +1343,7 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 		// or this variable doesn't exist
 		|| !(var = g_script.FindVar(name, name_length, NULL, aVarScope))
 			// but it is a built-in variable which hasn't been referenced yet:
-			&& g_script.GetVarType(name) > (void*)VAR_LAST_TYPE )
+			&& g_script.GetVarType(name) != VAR_NORMAL )
 		// Find or add the variable.
 		var = g_script.FindOrAddVar(name, name_length, aVarScope);
 

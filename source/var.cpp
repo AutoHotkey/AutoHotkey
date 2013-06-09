@@ -95,6 +95,8 @@ ResultType Var::AssignClipboardAll()
 		return mAliasFor->AssignClipboardAll();
 	if (mType == VAR_CLIPBOARD) // Seems pointless to do Clipboard:=ClipboardAll, and the below isn't equipped
 		return OK;              // to handle it, so make this have no effect.
+	if (mType == VAR_VIRTUAL)
+		return g_script.ScriptError(_T("Bad assignment.")); // Short message since rare.
 	if (!g_clip.Open())
 		return g_script.ScriptError(CANT_OPEN_CLIPBOARD_READ);
 
@@ -305,6 +307,14 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 		return OK; // No need to call Close() in this case.
 	}
 
+	if (mType == VAR_VIRTUAL)
+	{
+		// Rather than throwing an error, treat this as a string assignment in case the
+		// data came from FileRead with the *c option and isn't actually clipboard data.
+		//return g_script.ScriptError(_T("Bad assignment.")); // Short message since rare.
+		return AssignString(source_var.mCharContents);
+	}
+
 	// SINCE ABOVE DIDN'T RETURN, A VARIABLE CONTAINING BINARY CLIPBOARD DATA IS BEING COPIED BACK ONTO THE CLIPBOARD.
 	if (!g_clip.Open())
 		return g_script.ScriptError(CANT_OPEN_CLIPBOARD_WRITE);
@@ -417,8 +427,15 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 			// any error that occurred:
 			return g_clip.PrepareForWrite(space_needed) ? OK : FAIL;
 	}
-
 	// Since above didn't return, this variable isn't the clipboard.
+
+	if (mType == VAR_VIRTUAL)
+	{
+		if (do_assign)
+			return mVV->Set((LPTSTR)aBuf, mName);
+		// Since above didn't return, the caller wants to allocate some temporary memory for
+		// writing the value into, and should call Close() in order to commit the actual value.
+	}
 
 	if (space_needed < 2) // Variable is being assigned the empty string (or a deref that resolves to it).
 	{
@@ -569,6 +586,12 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 		// Below: Already verified that the length value will fit into VarSizeType.
 	}
 
+	if (mType == VAR_VIRTUAL)
+	{
+		// This tells Contents() not to call mVV->Get():
+		mAttrib |= VAR_ATTRIB_VIRTUAL_OPEN;
+	}
+
 	// Writing to union is safe because above already ensured that "this" isn't an alias.
 	mByteLength = aLength * sizeof(TCHAR); // aLength was verified accurate higher above.
 	return OK;
@@ -652,15 +675,19 @@ VarSizeType Var::Get(LPTSTR aBuf)
 		return length;
 	}
 
-	case VAR_CLIPBOARDALL: // There's a slight chance this case is never executed; but even if true, it should be kept for maintainability.
+	case VAR_BUILTIN: // v1.0.46.16: VAR_BUILTIN: Call the function associated with this variable to retrieve its contents.  This change reduced uncompressed coded size by 6 KB.
+		return mBIV(aBuf, mName);
+
+	case VAR_VIRTUAL:
+		return mVV->Get(aBuf, mName);
+
+	default:
+	//case VAR_CLIPBOARDALL: // There's a slight chance this case is never executed; but even if true, it should be kept for maintainability.
 		// This variable is directly handled at a higher level.  As documented, any use of ClipboardAll outside of
 		// the supported modes yields an empty string.
 		if (aBuf)
 			*aBuf = '\0';
 		return 0;
-
-	default: // v1.0.46.16: VAR_BUILTIN: Call the function associated with this variable to retrieve its contents.  This change reduced uncompressed coded size by 6 KB.
-		return mBIV(aBuf, mName);
 	} // switch(mType)
 }
 
@@ -823,7 +850,7 @@ void Var::AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 {
 	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-	if (var.mType == VAR_CLIPBOARD)
+	if (var.mType != VAR_NORMAL) // i.e. VAR_CLIPBOARD or VAR_VIRTUAL.
 	{
 		var.Assign(aNewMem, aLength); // Clipboard requires GlobalAlloc memory so can't directly accept aNewMem.  So just copy it the normal way.
 		free(aNewMem); // Caller gave it to us to take charge of, but we have no further use for it.

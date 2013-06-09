@@ -7306,7 +7306,7 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 
 
 
-void SetWorkingDir(LPTSTR aNewDir)
+void SetWorkingDir(LPTSTR aNewDir, bool aSetErrorLevel)
 // Sets ErrorLevel to indicate success/failure, but only if the script has begun runtime execution (callers
 // want that).
 // This function was added in v1.0.45.01 for the reasons commented further below.
@@ -7314,7 +7314,7 @@ void SetWorkingDir(LPTSTR aNewDir)
 {
 	if (!SetCurrentDirectory(aNewDir)) // Caused by nonexistent directory, permission denied, etc.
 	{
-		if (g_script.mIsReadyToExecute)
+		if (aSetErrorLevel && g_script.mIsReadyToExecute)
 			g_script.SetErrorLevelOrThrow();
 		return;
 	}
@@ -7363,7 +7363,7 @@ void SetWorkingDir(LPTSTR aNewDir)
 	}
 
 	// Since the above didn't return, it wants us to indicate success.
-	if (g_script.mIsReadyToExecute) // Callers want ErrorLevel changed only during script runtime.
+	if (aSetErrorLevel && g_script.mIsReadyToExecute) // Callers want ErrorLevel changed only during script runtime.
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 }
 
@@ -9170,6 +9170,21 @@ VarSizeType BIV_TitleMatchMode(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(target_buf);
 }
 
+BIV_DECL_W(BIV_TitleMatchMode_Set)
+{
+	switch (Line::ConvertTitleMatchMode((LPTSTR)aBuf))
+	{
+	case FIND_IN_LEADING_PART: g->TitleMatchMode = FIND_IN_LEADING_PART; break;
+	case FIND_ANYWHERE: g->TitleMatchMode = FIND_ANYWHERE; break;
+	case FIND_REGEX: g->TitleMatchMode = FIND_REGEX; break;
+	case FIND_EXACT: g->TitleMatchMode = FIND_EXACT; break;
+	// For simplicity, this function handles both variables.
+	case FIND_FAST: g->TitleFindFast = true; break;
+	case FIND_SLOW: g->TitleFindFast = false; break;
+	}
+	return OK;
+}
+
 VarSizeType BIV_TitleMatchModeSpeed(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (aBuf)  // For backward compatibility (due to StringCaseSense), never change the case used here:
@@ -9184,11 +9199,27 @@ VarSizeType BIV_DetectHiddenWindows(LPTSTR aBuf, LPTSTR aVarName)
 		: 3; // Room for either On or Off (in the estimation phase).
 }
 
+BIV_DECL_W(BIV_DetectHiddenWindows_Set)
+{
+	ToggleValueType toggle;
+	if ( (toggle = Line::ConvertOnOff(aBuf, NEUTRAL)) != NEUTRAL )
+		g->DetectHiddenWindows = (toggle == TOGGLED_ON);
+	return OK;
+}
+
 VarSizeType BIV_DetectHiddenText(LPTSTR aBuf, LPTSTR aVarName)
 {
 	return aBuf
 		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->DetectHiddenText ? _T("On") : _T("Off"))) // For backward compatibility (due to StringCaseSense), never change the case used here. Fixed in v1.0.42.01 to return exact length (required).
 		: 3; // Room for either On or Off (in the estimation phase).
+}
+
+BIV_DECL_W(BIV_DetectHiddenText_Set)
+{
+	ToggleValueType toggle;
+	if ( (toggle = Line::ConvertOnOff(aBuf, NEUTRAL)) != NEUTRAL )
+		g->DetectHiddenText = (toggle == TOGGLED_ON);
+	return OK;
 }
 
 VarSizeType BIV_StringCaseSense(LPTSTR aBuf, LPTSTR aVarName)
@@ -9199,12 +9230,26 @@ VarSizeType BIV_StringCaseSense(LPTSTR aBuf, LPTSTR aVarName)
 		: 6; // Room for On, Off, or Locale (in the estimation phase).
 }
 
+BIV_DECL_W(BIV_StringCaseSense_Set)
+{
+	StringCaseSenseType sense;
+	if ( (sense = Line::ConvertStringCaseSense(aBuf)) != SCS_INVALID )
+		g->StringCaseSense = sense;
+	return OK;
+}
+
 VarSizeType BIV_KeyDelay(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_INTEGER_SIZE];
 	LPTSTR target_buf = aBuf ? aBuf : buf;
 	_itot(g->KeyDelay, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
 	return (VarSizeType)_tcslen(target_buf);
+}
+
+BIV_DECL_W(BIV_KeyDelay_Set)
+{
+	g->KeyDelay = ATOI(aBuf);
+	return OK;
 }
 
 VarSizeType BIV_WinDelay(LPTSTR aBuf, LPTSTR aVarName)
@@ -9215,12 +9260,24 @@ VarSizeType BIV_WinDelay(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(target_buf);
 }
 
+BIV_DECL_W(BIV_WinDelay_Set)
+{
+	g->WinDelay = ATOI(aBuf);
+	return OK;
+}
+
 VarSizeType BIV_ControlDelay(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_INTEGER_SIZE];
 	LPTSTR target_buf = aBuf ? aBuf : buf;
 	_itot(g->ControlDelay, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
 	return (VarSizeType)_tcslen(target_buf);
+}
+
+BIV_DECL_W(BIV_ControlDelay_Set)
+{
+	g->ControlDelay = ATOI(aBuf);
+	return OK;
 }
 
 VarSizeType BIV_MouseDelay(LPTSTR aBuf, LPTSTR aVarName)
@@ -9231,12 +9288,24 @@ VarSizeType BIV_MouseDelay(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(target_buf);
 }
 
+BIV_DECL_W(BIV_MouseDelay_Set)
+{
+	g->MouseDelay = ATOI(aBuf);
+	return OK;
+}
+
 VarSizeType BIV_DefaultMouseSpeed(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_INTEGER_SIZE];
 	LPTSTR target_buf = aBuf ? aBuf : buf;
 	_itot(g->DefaultMouseSpeed, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
 	return (VarSizeType)_tcslen(target_buf);
+}
+
+BIV_DECL_W(BIV_DefaultMouseSpeed_Set)
+{
+	g->DefaultMouseSpeed = ATOI(aBuf);
+	return OK;
 }
 
 VarSizeType BIV_IsPaused(LPTSTR aBuf, LPTSTR aVarName) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
@@ -9375,6 +9444,14 @@ VarSizeType BIV_FileEncoding(LPTSTR aBuf, LPTSTR aVarName)
 	}
 }
 
+BIV_DECL_W(BIV_FileEncoding_Set)
+{
+	UINT new_encoding = Line::ConvertFileEncoding(aBuf);
+	if (new_encoding != -1)
+		g->Encoding = new_encoding;
+	return OK;
+}
+
 
 
 VarSizeType BIV_MsgBoxResult(LPTSTR aBuf, LPTSTR aVarName)
@@ -9420,6 +9497,14 @@ VarSizeType BIV_RegView(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(value);
 }
 
+BIV_DECL_W(BIV_RegView_Set)
+{
+	DWORD reg_view = Line::RegConvertView(aBuf);
+	if (reg_view != -1 && IsOS64Bit())
+		g->RegView = reg_view;
+	return OK;
+}
+
 
 
 VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName)
@@ -9428,6 +9513,12 @@ VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName)
 	LPTSTR target_buf = aBuf ? aBuf : buf;
 	_itot(g->LastError, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
 	return (VarSizeType)_tcslen(target_buf);
+}
+
+BIV_DECL_W(BIV_LastError_Set)
+{
+	SetLastError(g->LastError = ATOU(aBuf));
+	return OK;
 }
 
 
@@ -9705,6 +9796,12 @@ VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName)
 	//	? GetCurrentDirectory(MAX_PATH, aBuf)
 	//	: GetCurrentDirectory(0, NULL); // MSDN says that this is a valid way to call it on all OSes, and testing shows that it works on WinXP and 98se.
 		// Above avoids subtracting 1 to be conservative and to reduce code size (due to the need to otherwise check for zero and avoid subtracting 1 in that case).
+}
+
+BIV_DECL_W(BIV_WorkingDir_Set)
+{
+	SetWorkingDir(aBuf, false);
+	return OK;
 }
 
 VarSizeType BIV_InitialWorkingDir(LPTSTR aBuf, LPTSTR aVarName)
@@ -10267,6 +10364,12 @@ VarSizeType BIV_LoopIndex(LPTSTR aBuf, LPTSTR aVarName)
 		: MAX_INTEGER_LENGTH; // Probably performs better to return a conservative estimate for the first pass than to call ITOA64 for both passes.
 }
 
+BIV_DECL_W(BIV_LoopIndex_Set)
+{
+	g->mLoopIteration = ATOI64(aBuf);
+	return OK;
+}
+
 
 
 VarSizeType BIV_ThisFunc(LPTSTR aBuf, LPTSTR aVarName)
@@ -10526,6 +10629,12 @@ VarSizeType BIV_EventInfo(LPTSTR aBuf, LPTSTR aVarName)
 	return aBuf
 		? (VarSizeType)_tcslen(UPTRTOA(g->EventInfo, aBuf)) // Must return exact length when aBuf isn't NULL.
 		: MAX_INTEGER_LENGTH;
+}
+
+BIV_DECL_W(BIV_EventInfo_Set)
+{
+	g->EventInfo = (EventInfoType)ATOI64(aBuf);
+	return OK;
 }
 
 

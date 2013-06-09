@@ -245,14 +245,14 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				case VAR_NORMAL:
 					this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with one limited exception) is relied upon in several places such as built-in functions.
 					goto push_this_token;
-				case VAR_BUILTIN: // v1.0.48.02: Ensure it's VAR_BUILTIN prior to below because mBIV is a union with mCapacity.
-					if (this_token.var->mBIV == BIV_LoopIndex) // v1.0.48.01: Improve performance of A_Index by treating it as an integer rather than a string in expressions (avoids conversions to/from strings).
+				case VAR_VIRTUAL:
+					if (this_token.var->mVV->Get == BIV_LoopIndex) // v1.0.48.01: Improve performance of A_Index by treating it as an integer rather than a string in expressions (avoids conversions to/from strings).
 					{
 						this_token.value_int64 = g->mLoopIteration;
 						this_token.symbol = SYM_INTEGER;
 						goto push_this_token;
 					}
-					if (this_token.var->mBIV == BIV_EventInfo) // v1.0.48.02: A_EventInfo is used often enough in performance-sensitive numeric contexts to seem worth special treatment like A_Index; e.g. LV_GetText(RowText, A_EventInfo) or RegisterCallback()'s A_EventInfo.
+					if (this_token.var->mVV->Get == BIV_EventInfo) // v1.0.48.02: A_EventInfo is used often enough in performance-sensitive numeric contexts to seem worth special treatment like A_Index; e.g. LV_GetText(RowText, A_EventInfo) or RegisterCallback()'s A_EventInfo.
 					{
 						this_token.value_int64 = g->EventInfo;
 						this_token.symbol = SYM_INTEGER;
@@ -1289,7 +1289,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 		{
 			if (!sym_assign_var->Assign(this_token)) // Assign the result (based on its type) to the target variable.
 				goto abort;
-			if (sym_assign_var->Type() != VAR_CLIPBOARD)
+			if (sym_assign_var->Type() == VAR_NORMAL)
 			{
 				this_token.var = sym_assign_var;    // Make the result a variable rather than a normal operand so that its
 				this_token.symbol = SYM_VAR;        // address can be taken, and it can be passed ByRef. e.g. &(x+=1)
