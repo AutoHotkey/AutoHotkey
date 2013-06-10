@@ -4538,12 +4538,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	DerefType deref[MAX_DEREFS_PER_ARG];  // Will be used to temporarily store the var-deref locations in each arg.
 	int deref_count;  // How many items are in deref array.
 	ArgStruct *new_arg;  // We will allocate some dynamic memory for this, then hang it onto the new line.
-	size_t operand_length;
-	TCHAR orig_char;
-	LPTSTR op_begin, op_end;
-	LPTSTR this_aArgMap, this_aArg, cp;
+	LPTSTR this_aArgMap, this_aArg;
 	ActionTypeType *np;
-	bool is_function, pending_function_is_new_op = false;
 
 	//////////////////////////////////////////////////////////
 	// Build the new arg list in dynamic memory.
@@ -4750,283 +4746,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 			if (this_new_arg.is_expression)
 			{
-				// L31: There used to be a section of code here for ensuring parentheses are balanced, but that is done in ExpressionToPostfix now.
-				#define ERR_EXP_ILLEGAL_CHAR _T("The leftmost character above is illegal in an expression.") // "above" refers to the layout of the error dialog.
-				// ParseDerefs() won't consider escaped percent signs to be illegal, but in this case
-				// they should be since they have no meaning in expressions.  UPDATE for v1.0.44.11: The following
-				// is now commented out because it causes false positives (and fixing that probably isn't worth the
-				// performance & code size).  Specifically, the section below reports an error for escaped delimiters
-				// inside quotes such as x := "`%".  More importantly, it defeats the continuation section's %
-				// option; for example:
-				//   MsgBox %
-				//   (%  ; <<< This option here is defeated because it causes % to be replaced with `% at an early stage.
-				//   "%"
-				//   )
-				//if (this_aArgMap) // This arg has an arg map indicating which chars are escaped/literal vs. normal.
-				//	for (j = 0; this_new_arg.text[j]; ++j)
-				//		if (this_aArgMap[j] && this_new_arg.text[j] == g_DerefChar)
-				//			return ScriptError(ERR_EXP_ILLEGAL_CHAR, this_new_arg.text + j);
-
-				// Resolve all operands (that aren't numbers) into variable references.  Doing this here at
-				// load-time greatly improves runtime performance, especially for scripts that have a lot
-				// of variables.
-				for (op_begin = this_new_arg.text; *op_begin; op_begin = op_end)
-				{
-					if (*op_begin == '.' && op_begin[1] == '=') // v1.0.46.01: Support .=, but not any use of '.' because that is reserved as a struct/member operator.
-						op_begin += 2;
-					for (; *op_begin && _tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT, *op_begin); ++op_begin); // Skip over whitespace, operators, and parentheses.
-					if (!*op_begin) // The above loop reached the end of the string: No operands remaining.
-						break;
-
-					if (*op_begin == '\n')
-					{
-						// Allow `n unquoted in expressions so that continuation sections can be used to
-						// spread an expression across multiple lines without requiring the "Join" option;
-						// but replace them with spaces now so they don't need to be handled later on.
-						*op_begin = ' ';
-						op_end = op_begin + 1; // Continue at the next char.
-						continue;
-					}
-
-					// Now op_begin is the start of an operand, which might be a variable reference, a numeric
-					// literal, or a string literal.  If it's a string literal, it is left as-is:
-					if (*op_begin == '"' || *op_begin == '\'')
-					{
-						TCHAR in_quote = *op_begin;
-						// Find the end of this string literal:
-						for (j = (int)(op_begin - this_new_arg.text + 1); ; ++j)
-						{
-							if (j >= this_new_arg.length)
-								return ScriptError(ERR_MISSING_CLOSE_QUOTE, op_begin);
-							if (this_new_arg.text[j] == in_quote && !(this_aArgMap && this_aArgMap[j])) // A non-literal quote mark.
-							{
-								op_end = this_new_arg.text + j;
-								*op_end = '\0'; // Temporarily null-terminate.
-								// See ParseDerefs() call further below for comments.
-								if (!ParseDerefs(op_begin, this_aArgMap ? this_aArgMap + (op_begin - this_new_arg.text) : NULL
-									, deref, deref_count))
-									return FAIL;
-								*op_end++ = in_quote; // Undo termination and advance op_end to a position after the ending quote mark.
-								break;
-							}
-						}
-						// op_end is now set correctly to allow the outer loop to continue.
-						continue; // Ignore this literal string, letting the runtime expression parser recognize it.
-					}
-					
-					// Find the end of this operand (if *op_end is '\0', strchr() will find that too):
-					for (op_end = op_begin + 1; !_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT _T("\n"), *op_end); ++op_end); // Find first whitespace, operator, or paren.
-					if (*op_end == '=' && op_end[-1] == '.') // v1.0.46.01: Support .=, but not any use of '.' because that is reserved as a struct/member operator.
-						--op_end;
-					// Now op_end marks the end of this operand.  The end might be the zero terminator, an operator, etc.
-
-					// Must be done only after op_end has been set above (since loop uses op_end):
-					if (*op_begin == '.' && _tcschr(_T(" \t="), op_begin[1])) // If true, it can't be something like "5." because the dot inside would never be parsed separately in that case.  Also allows ".=" operator.
-						continue;
-					//else any '.' not followed by a space, tab, or '=' is likely a number without a leading zero,
-					// so continue on below to process it.
-
-					cp = omit_leading_whitespace(op_end);
-					if (*cp == ':' && cp[1] != '=') // Maybe the "key:" in "{key: value}".
-					{
-						cp = omit_trailing_whitespace(this_new_arg.text, op_begin - 1);
-						if (*cp == ',' || *cp == '{')
-						{
-							// This is either the key in a key-value pair in an object literal, or a syntax
-							// error which will be caught at a later stage (since the ':' is missing its '?').
-							cp = find_identifier_end(op_begin);
-							if (*cp != '.') // i.e. exclude x.y as that should be parsed as normal for an expression.
-							{
-								if (cp != op_end) // op contains reserved characters.
-									return ScriptError(_T("Quote marks are required around this key."), op_begin);
-								continue;
-							}
-						}
-					}
-
-					operand_length = op_end - op_begin;
-
-					// Check if it's AND/OR/NOT:
-					if (operand_length < 4 && operand_length > 1) // Ordered for short-circuit performance.
-					{
-						if (operand_length == 2)
-						{
-							if ((*op_begin == 'o' || *op_begin == 'O') && (op_begin[1] == 'r' || op_begin[1] == 'R'))
-							{	// "OR" was found.
-								op_begin[0] = '|'; // v1.0.45: Transform into easier-to-parse symbols for improved
-								op_begin[1] = '|'; // runtime performance and reduced code size.  v1.0.48: It no longer helps runtime performance, but it's kept because changing moving it to ExpressionToPostfix() isn't likely to have much benefit.
-								continue;
-							}
-						}
-						else // operand_length must be 3
-						{
-							switch (*op_begin)
-							{
-							case 'a':
-							case 'A':
-								if (   (op_begin[1] == 'n' || op_begin[1] == 'N') // Relies on short-circuit boolean order.
-									&& (op_begin[2] == 'd' || op_begin[2] == 'D')   )
-								{	// "AND" was found.
-									op_begin[0] = '&'; // v1.0.45: Transform into easier-to-parse symbols for
-									op_begin[1] = '&'; // improved runtime performance and reduced code size.  v1.0.48: It no longer helps runtime performance, but it's kept because changing moving it to ExpressionToPostfix() isn't likely to have much benefit.
-									op_begin[2] = ' '; // A space is used lieu of the complexity of the below.
-									// Above seems better than below even though below would make it look a little
-									// nicer in ListLines.  BELOW CAN'T WORK because this_new_arg.deref[] can contain
-									// offsets that would also need to be adjusted:
-									//memmove(op_begin + 2, op_begin + 3, _tcslen(op_begin+3)+1 ... or some expression involving this_new_arg.length this_new_arg.text);
-									//--this_new_arg.length;
-									//--op_end; // Ensure op_end is set up properly for the for-loop's post-iteration action.
-									continue;
-								}
-								break;
-
-							case 'n': // v1.0.45: Unlike "AND" and "OR" above, this one is not given a substitute
-							case 'N': // because it's not the same as the "!" operator. See SYM_LOWNOT for comments.
-								if (   (op_begin[1] == 'o' || op_begin[1] == 'O') // Relies on short-circuit boolean order.
-									&& (op_begin[2] == 't' || op_begin[2] == 'T')   )
-									continue; // "NOT" was found.
-								if (   (op_begin[1] == 'e' || op_begin[1] == 'E')
-									&& (op_begin[2] == 'w' || op_begin[2] == 'W')   ) // "new"
-								{
-									cp = omit_leading_whitespace(op_begin + 3);
-									if (!_tcschr(EXPR_OPERAND_TERMINATORS, *cp) && *cp != '"')
-									{
-										// This "new" is followed by something that looks like an operand;
-										// perhaps "new ClassVar()", which we need to avoid parsing as a
-										// function-call.  The check below intentionally excludes "new X.Y()"
-										// since it wouldn't be parsed as a function deref anyway.
-										for ( ; !_tcschr(EXPR_OPERAND_TERMINATORS, *cp); ++cp); // Find end of var.
-										pending_function_is_new_op = (*cp == '(');
-									}
-									continue;
-								}
-								break;
-							}
-						}
-					} // End of check for AND/OR/NOT.
-
-					// Temporarily terminate, which avoids at least the below issue:
-					// Two or more extremely long var names together could exceed MAX_VAR_NAME_LENGTH
-					// e.g. LongVar%LongVar2% would be too long to store in a buffer of size MAX_VAR_NAME_LENGTH.
-					// This seems pretty darn unlikely, but perhaps doubling it would be okay.
-					// UPDATE: Above is now not an issue since caller's string is temporarily terminated rather
-					// than making a copy of it.
-					orig_char = *op_end;
-					*op_end = '\0';
-
-					// Illegal characters are legal when enclosed in double quotes.  So the following is
-					// done only after the above has ensured this operand is not one enclosed entirely in
-					// double quotes.
-					// The following characters are either illegal in expressions or reserved for future use.
-					for (cp = op_begin; !_tcschr(EXPR_ILLEGAL_CHARS, *cp); ++cp); // _tcschr includes the null terminator in the search.
-					if (*cp)
-						return ScriptError(ERR_EXP_ILLEGAL_CHAR, cp);
-
-					// Below takes care of recognizing hexadecimal integers, which avoids the 'x' character
-					// inside of something like 0xFF from being detected as the name of a variable:
-					if (!IsNumeric(op_begin, true, false, true)) // Not a numeric literal.
-					{
-						if (*op_begin == '.') // L31: Check for something like "obj .property" - scientific-notation literals such as ".123e+1" may also be handled here.
-						{
-							if (_tcschr(op_begin, g_DerefChar))
-								return ScriptError(ERR_INVALID_DOT, op_begin);
-							// Skip over this scientific-notation literal or string of one or more member-access operations.
-							// This won't skip the signed exponent of a scientific-notation literal, but that should be OK
-							// as it will be recognized as purely numeric in the next iteration of this loop.
-							*op_end = orig_char;
-							continue;
-						}
-						if (ctoupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-')) // Listed first for short-circuit performance with the below.
-						{
-							// v1.0.46.11: This item appears to be a scientific-notation literal with the OPTIONAL +/- sign PRESENT on the exponent (e.g. 1.0e+001), so check that before checking if it's a variable name.
-							*op_end = orig_char; // Undo the temporary termination.
-							do // Skip over the sign and its exponent; e.g. the "+1" in "1.0e+1".  There must be a sign in this particular sci-notation number or we would never have arrived here.
-								++op_end;
-							while (*op_end >= '0' && *op_end <= '9'); // Avoid isdigit() because it sometimes causes a debug assertion failure at: (unsigned)(c + 1) <= 256 (probably only in debug mode), and maybe only when bad data got in it due to some other bug.
-							// No need to do the following because a number can't validly be followed by the ".=" operator:
-							//if (*op_end == '=' && op_end[-1] == '.') // v1.0.46.01: Support .=, but not any use of '.' because that is reserved as a struct/member operator.
-							//	--op_end;
-
-							// Double-check it really is a floating-point literal with signed exponent.
-							orig_char = *op_end;
-							*op_end = '\0';
-							if (IsNumeric(op_begin, true, false, true))
-							{
-								*op_end = orig_char;
-								continue; // Pure number, which doesn't need any processing at this stage.
-							}
-						}
-						// Since above did not "continue", this is NOT a scientific-notation literal
-						// with +/- sign present, but maybe its an object access operation such as "x.y".
-						if (cp = _tcschr(op_begin + 1, '.'))
-						{
-							// Resolve the part preceding '.' as a variable reference. The rest is handled later, in ExpressionToPostfix.
-							if (_tcschr(cp, g_DerefChar))
-								return ScriptError(ERR_INVALID_DOT, cp);
-							operand_length = cp - op_begin;
-							is_function = false;
-						}
-						else
-							is_function = (orig_char == '(');
-
-						if (is_function && pending_function_is_new_op)
-							pending_function_is_new_op = is_function = false;
-
-						// This operand must be a variable/function reference or string literal, otherwise it's
-						// a syntax error.
-						// Check explicitly for derefs since the vast majority don't have any, and this
-						// avoids the function call in those cases:
-						if (_tcschr(op_begin, g_DerefChar)) // This operand contains at least one double dereference.
-						{
-							// v1.0.47.06: Dynamic function calls are now supported.
-							//if (is_function)
-							//	return ScriptError("Dynamic function calls are not supported.", op_begin);
-							int first_deref = deref_count;
-
-							// The percent-sign derefs are parsed and added to the deref array at this stage (on a
-							// per-operand basis) rather than all at once for the entire arg because
-							// the deref array must contain both percent-sign derefs and non-%-derefs interspersed
-							// and ordered according to their physical position inside the arg, but ParseDerefs
-							// only handles percent-sign derefs, not expression derefs like x+y.  In the following
-							// example, the order of derefs must be x,i,y: if (x = Array%i% and y = 3)
-							if (!ParseDerefs(op_begin, this_aArgMap ? this_aArgMap + (op_begin - this_new_arg.text) : NULL
-								, deref, deref_count))
-								return FAIL; // It already displayed the error.  No need to undo temp. termination.
-							// And now leave this operand "raw" so that it will later be dereferenced again.
-							// In the following example, i made into a deref but the result (Array33) must be
-							// dereferenced during a second stage at runtime: if (x = Array%i%).
-
-							if (is_function) // Dynamic function call.
-								deref[first_deref].param_count = 0; // L31: Parameters are now counted by ExpressionToPostfix instead of here, but this must be initialized.
-						}
-						else // This operand is a variable name or function name (single deref).
-						{
-							#define TOO_MANY_REFS _T("Too many var/func refs.") // Short msg since so rare.
-							if (deref_count >= MAX_DEREFS_PER_ARG)
-								return ScriptError(TOO_MANY_REFS, op_begin); // Indicate which operand it ran out of space at.
-							// Store the deref's starting location, even for functions (leave it set to the start
-							// of the function's name for use when doing error reporting at other stages -- i.e.
-							// don't set it to the address of the first param or closing-paren-if-no-params):
-							deref[deref_count].marker = op_begin;
-							deref[deref_count].length = (DerefLengthType)operand_length;
-							if (deref[deref_count].is_function = is_function) // It's a function not a variable.
-								// Set to NULL to catch bugs.  It must and will be filled in at a later stage
-								// because the setting of each function's mJumpToLine relies upon the fact that
-								// functions are added to the linked list only upon being formally defined
-								// so that the most recently defined function is always last in the linked
-								// list, awaiting its mJumpToLine that will appear beneath it.
-								deref[deref_count].func = NULL;
-							else // It's a variable rather than a function.
-								if (   !(deref[deref_count].var = FindOrAddVar(op_begin, operand_length))   )
-									return FAIL; // The called function already displayed the error.
-							++deref_count; // Since above didn't "continue" or "return".
-						}
-					}
-					//else purely numeric or '?'.  Do nothing since pure numbers and '?' don't need any
-					// processing at this stage.
-					*op_end = orig_char; // Undo the temporary termination.
-				} // expression pre-parsing loop.
-			} // if (this_new_arg.is_expression)
+				if (!ParseExpressionDerefs(this_new_arg.text, this_aArgMap, deref, deref_count))
+					return FAIL;
+			}
 			else // this arg does not contain an expression.
 				if (!ParseDerefs(this_new_arg.text, this_aArgMap, deref, deref_count))
 					return FAIL; // It already displayed the error.
@@ -5896,7 +5618,7 @@ ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDere
 			break;
 		// else: Match was found; this is the deref's open-symbol.
 		if (aDerefCount >= MAX_DEREFS_PER_ARG)
-			return ScriptError(TOO_MANY_REFS, aArgText); // Short msg since so rare.
+			return ScriptError(ERR_TOO_MANY_REFS, aArgText); // Short msg since so rare.
 		DerefType &this_deref = aDeref[aDerefCount];  // For performance.
 		this_deref.marker = aArgText + j;  // Store the deref's starting location.
 		// Find the end of this deref (the next non-alphanumeric/underscore char).
@@ -5920,6 +5642,288 @@ ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDere
 		++aDerefCount;
 	} // for each dereference.
 
+	return OK;
+}
+
+ResultType Script::ParseExpressionDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount)
+{
+	LPTSTR op_begin, op_end;
+	size_t operand_length;
+	TCHAR orig_char, *cp;
+	int j;
+	bool is_function, pending_function_is_new_op = false;
+
+	#define ERR_EXP_ILLEGAL_CHAR _T("The leftmost character above is illegal in an expression.") // "above" refers to the layout of the error dialog.
+	// ParseDerefs() won't consider escaped percent signs to be illegal, but in this case
+	// they should be since they have no meaning in expressions.  UPDATE for v1.0.44.11: The following
+	// is now commented out because it causes false positives (and fixing that probably isn't worth the
+	// performance & code size).  Specifically, the section below reports an error for escaped delimiters
+	// inside quotes such as x := "`%".  More importantly, it defeats the continuation section's %
+	// option; for example:
+	//   MsgBox %
+	//   (%  ; <<< This option here is defeated because it causes % to be replaced with `% at an early stage.
+	//   "%"
+	//   )
+	//if (this_aArgMap) // This arg has an arg map indicating which chars are escaped/literal vs. normal.
+	//	for (j = 0; this_new_arg.text[j]; ++j)
+	//		if (this_aArgMap[j] && this_new_arg.text[j] == g_DerefChar)
+	//			return ScriptError(ERR_EXP_ILLEGAL_CHAR, this_new_arg.text + j);
+
+	// Resolve all operands (that aren't numbers) into variable references.  Doing this here at
+	// load-time greatly improves runtime performance, especially for scripts that have a lot
+	// of variables.
+	for (op_begin = aArgText; *op_begin; op_begin = op_end)
+	{
+		if (*op_begin == '.' && op_begin[1] == '=') // v1.0.46.01: Support .=, but not any use of '.' because that is reserved as a struct/member operator.
+			op_begin += 2;
+		for (; *op_begin && _tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT, *op_begin); ++op_begin); // Skip over whitespace, operators, and parentheses.
+		if (!*op_begin) // The above loop reached the end of the string: No operands remaining.
+			break;
+
+		if (*op_begin == '\n')
+		{
+			// Allow `n unquoted in expressions so that continuation sections can be used to
+			// spread an expression across multiple lines without requiring the "Join" option;
+			// but replace them with spaces now so they don't need to be handled later on.
+			*op_begin = ' ';
+			op_end = op_begin + 1; // Continue at the next char.
+			continue;
+		}
+
+		// Now op_begin is the start of an operand, which might be a variable reference, a numeric
+		// literal, or a string literal.  If it's a string literal, it is left as-is:
+		if (*op_begin == '"' || *op_begin == '\'')
+		{
+			TCHAR in_quote = *op_begin;
+			// Find the end of this string literal:
+			for (j = (int)(op_begin - aArgText + 1); ; ++j)
+			{
+				if (!aArgText[j])
+					return ScriptError(ERR_MISSING_CLOSE_QUOTE, op_begin);
+				if (aArgText[j] == in_quote && !(aArgMap && aArgMap[j])) // A non-literal quote mark.
+				{
+					op_end = aArgText + j;
+					*op_end = '\0'; // Temporarily null-terminate.
+					// See ParseDerefs() call further below for comments.
+					if (!ParseDerefs(op_begin, aArgMap ? aArgMap + (op_begin - aArgText) : NULL
+						, aDeref, aDerefCount))
+						return FAIL;
+					*op_end++ = in_quote; // Undo termination and advance op_end to a position after the ending quote mark.
+					break;
+				}
+			}
+			// op_end is now set correctly to allow the outer loop to continue.
+			continue; // Ignore this literal string, letting the runtime expression parser recognize it.
+		}
+					
+		// Find the end of this operand (if *op_end is '\0', strchr() will find that too):
+		for (op_end = op_begin + 1; !_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT _T("\n"), *op_end); ++op_end); // Find first whitespace, operator, or paren.
+		if (*op_end == '=' && op_end[-1] == '.') // v1.0.46.01: Support .=, but not any use of '.' because that is reserved as a struct/member operator.
+			--op_end;
+		// Now op_end marks the end of this operand.  The end might be the zero terminator, an operator, etc.
+
+		// Must be done only after op_end has been set above (since loop uses op_end):
+		if (*op_begin == '.' && _tcschr(_T(" \t="), op_begin[1])) // If true, it can't be something like "5." because the dot inside would never be parsed separately in that case.  Also allows ".=" operator.
+			continue;
+		//else any '.' not followed by a space, tab, or '=' is likely a number without a leading zero,
+		// so continue on below to process it.
+
+		cp = omit_leading_whitespace(op_end);
+		if (*cp == ':' && cp[1] != '=') // Maybe the "key:" in "{key: value}".
+		{
+			cp = omit_trailing_whitespace(aArgText, op_begin - 1);
+			if (*cp == ',' || *cp == '{')
+			{
+				// This is either the key in a key-value pair in an object literal, or a syntax
+				// error which will be caught at a later stage (since the ':' is missing its '?').
+				cp = find_identifier_end(op_begin);
+				if (*cp != '.') // i.e. exclude x.y as that should be parsed as normal for an expression.
+				{
+					if (cp != op_end) // op contains reserved characters.
+						return ScriptError(_T("Quote marks are required around this key."), op_begin);
+					continue;
+				}
+			}
+		}
+
+		operand_length = op_end - op_begin;
+
+		// Check if it's AND/OR/NOT:
+		if (operand_length < 4 && operand_length > 1) // Ordered for short-circuit performance.
+		{
+			if (operand_length == 2)
+			{
+				if ((*op_begin == 'o' || *op_begin == 'O') && (op_begin[1] == 'r' || op_begin[1] == 'R'))
+				{	// "OR" was found.
+					op_begin[0] = '|'; // v1.0.45: Transform into easier-to-parse symbols for improved
+					op_begin[1] = '|'; // runtime performance and reduced code size.  v1.0.48: It no longer helps runtime performance, but it's kept because changing moving it to ExpressionToPostfix() isn't likely to have much benefit.
+					continue;
+				}
+			}
+			else // operand_length must be 3
+			{
+				switch (*op_begin)
+				{
+				case 'a':
+				case 'A':
+					if (   (op_begin[1] == 'n' || op_begin[1] == 'N') // Relies on short-circuit boolean order.
+						&& (op_begin[2] == 'd' || op_begin[2] == 'D')   )
+					{	// "AND" was found.
+						op_begin[0] = '&'; // v1.0.45: Transform into easier-to-parse symbols for
+						op_begin[1] = '&'; // improved runtime performance and reduced code size.  v1.0.48: It no longer helps runtime performance, but it's kept because changing moving it to ExpressionToPostfix() isn't likely to have much benefit.
+						op_begin[2] = ' '; // A space is used lieu of the complexity of the below.
+						// Above seems better than below even though below would make it look a little
+						// nicer in ListLines.  BELOW CAN'T WORK because this_new_arg.deref[] can contain
+						// offsets that would also need to be adjusted:
+						//memmove(op_begin + 2, op_begin + 3, _tcslen(op_begin+3)+1 ... or some expression involving this_new_arg.length this_new_arg.text);
+						//--this_new_arg.length;
+						//--op_end; // Ensure op_end is set up properly for the for-loop's post-iteration action.
+						continue;
+					}
+					break;
+
+				case 'n': // v1.0.45: Unlike "AND" and "OR" above, this one is not given a substitute
+				case 'N': // because it's not the same as the "!" operator. See SYM_LOWNOT for comments.
+					if (   (op_begin[1] == 'o' || op_begin[1] == 'O') // Relies on short-circuit boolean order.
+						&& (op_begin[2] == 't' || op_begin[2] == 'T')   )
+						continue; // "NOT" was found.
+					if (   (op_begin[1] == 'e' || op_begin[1] == 'E')
+						&& (op_begin[2] == 'w' || op_begin[2] == 'W')   ) // "new"
+					{
+						cp = omit_leading_whitespace(op_begin + 3);
+						if (!_tcschr(EXPR_OPERAND_TERMINATORS, *cp) && *cp != '"')
+						{
+							// This "new" is followed by something that looks like an operand;
+							// perhaps "new ClassVar()", which we need to avoid parsing as a
+							// function-call.  The check below intentionally excludes "new X.Y()"
+							// since it wouldn't be parsed as a function deref anyway.
+							for ( ; !_tcschr(EXPR_OPERAND_TERMINATORS, *cp); ++cp); // Find end of var.
+							pending_function_is_new_op = (*cp == '(');
+						}
+						continue;
+					}
+					break;
+				}
+			}
+		} // End of check for AND/OR/NOT.
+
+		// Temporarily terminate, which avoids at least the below issue:
+		// Two or more extremely long var names together could exceed MAX_VAR_NAME_LENGTH
+		// e.g. LongVar%LongVar2% would be too long to store in a buffer of size MAX_VAR_NAME_LENGTH.
+		orig_char = *op_end;
+		*op_end = '\0';
+
+		// Illegal characters are legal when enclosed in double quotes.  So the following is
+		// done only after the above has ensured this operand is not one enclosed entirely in
+		// double quotes.
+		// The following characters are either illegal in expressions or reserved for future use.
+		for (cp = op_begin; !_tcschr(EXPR_ILLEGAL_CHARS, *cp); ++cp); // _tcschr includes the null terminator in the search.
+		if (*cp)
+			return ScriptError(ERR_EXP_ILLEGAL_CHAR, cp);
+
+		// Below takes care of recognizing hexadecimal integers, which avoids the 'x' character
+		// inside of something like 0xFF from being detected as the name of a variable:
+		if (!IsNumeric(op_begin, true, false, true)) // Not a numeric literal.
+		{
+			if (*op_begin == '.') // L31: Check for something like "obj .property" - scientific-notation literals such as ".123e+1" may also be handled here.
+			{
+				if (_tcschr(op_begin, g_DerefChar))
+					return ScriptError(ERR_INVALID_DOT, op_begin);
+				// Skip over this scientific-notation literal or string of one or more member-access operations.
+				// This won't skip the signed exponent of a scientific-notation literal, but that should be OK
+				// as it will be recognized as purely numeric in the next iteration of this loop.
+				*op_end = orig_char;
+				continue;
+			}
+			if (ctoupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-')) // Listed first for short-circuit performance with the below.
+			{
+				// v1.0.46.11: This item appears to be a scientific-notation literal with the OPTIONAL +/- sign PRESENT on the exponent (e.g. 1.0e+001), so check that before checking if it's a variable name.
+				*op_end = orig_char; // Undo the temporary termination.
+				do // Skip over the sign and its exponent; e.g. the "+1" in "1.0e+1".  There must be a sign in this particular sci-notation number or we would never have arrived here.
+					++op_end;
+				while (*op_end >= '0' && *op_end <= '9'); // Avoid isdigit() because it sometimes causes a debug assertion failure at: (unsigned)(c + 1) <= 256 (probably only in debug mode), and maybe only when bad data got in it due to some other bug.
+				// No need to do the following because a number can't validly be followed by the ".=" operator:
+				//if (*op_end == '=' && op_end[-1] == '.') // v1.0.46.01: Support .=, but not any use of '.' because that is reserved as a struct/member operator.
+				//	--op_end;
+
+				// Double-check it really is a floating-point literal with signed exponent.
+				orig_char = *op_end;
+				*op_end = '\0';
+				if (IsNumeric(op_begin, true, false, true))
+				{
+					*op_end = orig_char;
+					continue; // Pure number, which doesn't need any processing at this stage.
+				}
+			}
+			// Since above did not "continue", this is NOT a scientific-notation literal
+			// with +/- sign present, but maybe its an object access operation such as "x.y".
+			if (cp = _tcschr(op_begin + 1, '.'))
+			{
+				// Resolve the part preceding '.' as a variable reference. The rest is handled later, in ExpressionToPostfix.
+				if (_tcschr(cp, g_DerefChar))
+					return ScriptError(ERR_INVALID_DOT, cp);
+				operand_length = cp - op_begin;
+				is_function = false;
+			}
+			else
+				is_function = (orig_char == '(');
+
+			if (is_function && pending_function_is_new_op)
+				pending_function_is_new_op = is_function = false;
+
+			// This operand must be a variable/function reference or string literal, otherwise it's
+			// a syntax error.
+			// Check explicitly for derefs since the vast majority don't have any, and this
+			// avoids the function call in those cases:
+			if (_tcschr(op_begin, g_DerefChar)) // This operand contains at least one double dereference.
+			{
+				// v1.0.47.06: Dynamic function calls are now supported.
+				//if (is_function)
+				//	return ScriptError("Dynamic function calls are not supported.", op_begin);
+				int first_deref = aDerefCount;
+
+				// The percent-sign derefs are parsed and added to the deref array at this stage (on a
+				// per-operand basis) rather than all at once for the entire arg because
+				// the deref array must contain both percent-sign derefs and non-%-derefs interspersed
+				// and ordered according to their physical position inside the arg, but ParseDerefs
+				// only handles percent-sign derefs, not expression derefs like x+y.  In the following
+				// example, the order of derefs must be x,i,y: if (x = Array%i% and y = 3)
+				if (!ParseDerefs(op_begin, aArgMap ? aArgMap + (op_begin - aArgText) : NULL
+					, aDeref, aDerefCount))
+					return FAIL; // It already displayed the error.  No need to undo temp. termination.
+				// And now leave this operand "raw" so that it will later be dereferenced again.
+				// In the following example, i made into a deref but the result (Array33) must be
+				// dereferenced during a second stage at runtime: if (x = Array%i%).
+
+				if (is_function) // Dynamic function call.
+					aDeref[first_deref].param_count = 0; // L31: Parameters are now counted by ExpressionToPostfix instead of here, but this must be initialized.
+			}
+			else // This operand is a variable name or function name (single deref).
+			{
+				if (aDerefCount >= MAX_DEREFS_PER_ARG)
+					return ScriptError(ERR_TOO_MANY_REFS, op_begin); // Indicate which operand it ran out of space at.
+				// Store the deref's starting location, even for functions (leave it set to the start
+				// of the function's name for use when doing error reporting at other stages -- i.e.
+				// don't set it to the address of the first param or closing-paren-if-no-params):
+				aDeref[aDerefCount].marker = op_begin;
+				aDeref[aDerefCount].length = (DerefLengthType)operand_length;
+				if (aDeref[aDerefCount].is_function = is_function) // It's a function not a variable.
+					// Set to NULL to catch bugs.  It must and will be filled in at a later stage
+					// because the setting of each function's mJumpToLine relies upon the fact that
+					// functions are added to the linked list only upon being formally defined
+					// so that the most recently defined function is always last in the linked
+					// list, awaiting its mJumpToLine that will appear beneath it.
+					aDeref[aDerefCount].func = NULL;
+				else // It's a variable rather than a function.
+					if (   !(aDeref[aDerefCount].var = FindOrAddVar(op_begin, operand_length))   )
+						return FAIL; // The called function already displayed the error.
+				++aDerefCount; // Since above didn't "continue" or "return".
+			}
+		}
+		//else purely numeric or '?'.  Do nothing since pure numbers and '?' don't need any
+		// processing at this stage.
+		*op_end = orig_char; // Undo the temporary termination.
+	}
 	return OK;
 }
 

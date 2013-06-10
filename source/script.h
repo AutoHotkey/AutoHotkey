@@ -192,6 +192,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_GUI_NAME _T("Invalid Gui name.")
 #define ERR_INVALID_OPTION _T("Invalid option.") // Generic message used by Gui and GuiControl/Get.
 #define ERR_MUST_DECLARE _T("This variable must be declared.")
+#define ERR_TOO_MANY_REFS _T("Too many var/func refs.") // Short msg since so rare.
 
 #define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
@@ -2442,6 +2443,7 @@ private:
 	ResultType ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType = ACT_INVALID
 		, LPTSTR aLiteralMap = NULL, size_t aLiteralMapLength = 0);
 	ResultType ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount);
+	ResultType ParseExpressionDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount);
 	LPTSTR ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool aDisplayErrors);
 	static ActionTypeType ConvertActionType(LPTSTR aActionTypeString);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
