@@ -238,8 +238,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				} // Double-deref.
 				//else: It's a built-in variable or potential environment variable.
 
-				// Check if it's a normal variable rather than a built-in or environment variable.
-				// This happens when g_NoEnv==FALSE.
+				// Check if it's a normal variable rather than a built-in variable.
 				switch (this_token.var->Type())
   				{
 				case VAR_NORMAL:
