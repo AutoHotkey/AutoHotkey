@@ -72,7 +72,7 @@ FuncEntry g_BIF[] =
 	{_T("LTrim"), BIF_Trim, 1, 2, true},
 	{_T("RTrim"), BIF_Trim, 1, 2, true},
 	{_T("InStr"), BIF_InStr, 2, 5, true},
-	{_T("StrSplit"), BIF_StrSplit, 2, 3, true},
+	{_T("StrSplit"), BIF_StrSplit, 1, 3, true},
 	{_T("RegExMatch"), BIF_RegEx, 2, 4, true},
 	{_T("RegExReplace"), BIF_RegEx, 2, 6, true},
 
