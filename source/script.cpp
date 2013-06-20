@@ -4649,7 +4649,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 						// just pass this information along by using a combination of NULL deref and
 						// ARG_TYPE_INPUT_VAR.  Otherwise (no variable was found and #MustDeclare is
 						// not in effect) let it be resolved later if appropriate.
-						if (this_new_arg.deref || g_MustDeclare)
+						if (this_new_arg.deref || (g_MustDeclare && GetVarType(this_aArg) == VAR_NORMAL)) // i.e. don't report a false #MustDeclare error if it's a built-in var.
 							this_new_arg.type = ARG_TYPE_INPUT_VAR;
 						// Store the text even if it was converted to an input var, since it might be
 						// converted back at a later stage.  Can't use Var::mName since it might have
