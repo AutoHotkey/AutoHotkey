@@ -2583,56 +2583,99 @@ LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap, bool aAllowEscape
 
 
 
-int FindNextDelimiter(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLiteralMap)
+int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLiteralMap)
 // Returns the index of the next delimiter, taking into account quotes, parentheses, etc.
 // If the delimiter is not found, returns the length of aBuf.
 {
-	TCHAR in_quotes = 0;
-	int open_parens = 0;
+	TCHAR close_char;
 	for (int mark = aStartIndex; ; ++mark)
 	{
 		if (aBuf[mark] == aDelimiter)
 		{
-			if (!in_quotes && open_parens <= 0 && !(aLiteralMap && aLiteralMap[mark]))
-				// A delimiting comma other than one in a sub-statement or function.
-				return mark;
-			// Otherwise, its a quoted/literal comma or one in parentheses (such as function-call).
-			continue;
+			// Escaping a comma is allowed in case it has some utility.  An escaped comma
+			// acts as the multi-statement operator instead of as a delimiter, which also
+			// means that commas in continuation sections act as multi-statement by default.
+			// aDelimiter is checked in case this is a recursive call -- escaping ')', ']'
+			// or '}' should have no effect.
+			if (aDelimiter == g_delimiter && aLiteralMap && aLiteralMap[mark])
+				continue;
+			return mark;
 		}
 		switch (aBuf[mark])
 		{
-		case '"': 
-		case '\'':
-			if (!in_quotes)
- 				in_quotes = aBuf[mark];
-			else if (in_quotes == aBuf[mark] && !(aLiteralMap && aLiteralMap[mark]))
- 				in_quotes = 0;
- 			//else the other type of quote mark was used to begin this quoted string.
- 			break;
-		case '`':
-			// If the caller passed non-NULL aLiteralMap, this must be a literal ` char.
-			// Otherwise, caller wants it to escape quote marks inside strings, but not aDelimiter.
-			if (!aLiteralMap && aBuf[mark+1] == in_quotes)
-				++mark; // Skip this escape char and let the loop's increment skip the quote mark.
-			//else this is an ordinary literal ` or an escape sequence we don't need to handle.
-			break;
-		case '(': // For our purpose, "(", "[" and "{" can be treated the same.
-		case '[': // If they aren't balanced properly, a later stage will detect it.
-		case '{': //
-			if (!in_quotes) // Literal parentheses inside a quoted string should not be counted for this purpose.
-				++open_parens;
-			break;
-		case ')':
-		case ']':
-		case '}':
-			if (!in_quotes)
-				--open_parens; // If this makes it negative, validation later on will catch the syntax error.
-			break;
 		case '\0':
 			// Reached the end of the string without finding a delimiter.  Return the
 			// index of the null-terminator since that's typically what the caller wants.
 			return mark;
-		//default: some other character; just have the loop skip over it.
+		default:
+			// Not a meaningful character; just have the loop skip over it.
+			continue;
+		case '"': 
+		case '\'':
+			mark = FindTextDelim(aBuf, aBuf[mark], mark + 1, aLiteralMap);
+			if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
+				return mark; // See case '\0' for comments.
+			continue;
+		case '`':
+			// See comments at the top of the loop.
+			if (!aLiteralMap && aBuf[mark+1] == g_delimiter)
+				mark++;
+			continue;
+		//case ')':
+		//case ']':
+		//case '}':
+			// Unbalanced parentheses etc are caught at a later stage.
+			//continue;
+		case g_DerefChar:
+			// Since the check at the top of the loop didn't "return", this is the beginning
+			// of a double-deref, not the end.
+			close_char = g_DerefChar;
+			break;
+		case '(': close_char = ')'; break;
+		case '[': close_char = ']'; break;
+		case '{': close_char = '}'; break;
+		}
+		// Since above didn't "return" or "continue":
+		mark = FindExprDelim(aBuf, close_char, mark + 1, aLiteralMap);
+		if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
+			return mark; // See case '\0' for comments.
+		// Otherwise, continue the loop.
+	} // for each character.
+}
+
+
+
+int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLiteralMap)
+{
+	for (int mark = aStartIndex; ; ++mark)
+	{
+		if (aBuf[mark] == aDelimiter)
+		{
+			if (aLiteralMap && aLiteralMap[mark])
+				continue;
+			return mark;
+		}
+		switch (aBuf[mark])
+		{
+		case '\0':
+			// Reached the end of the string without finding a delimiter.  Return the
+			// index of the null-terminator since that's typically what the caller wants.
+			return mark;
+		case g_DerefChar:
+			if (!aLiteralMap || !aLiteralMap[mark])
+			{
+				// Find the corresponding end char for this deref.
+				mark = FindExprDelim(aBuf, g_DerefChar, mark + 1, aLiteralMap);
+				if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
+					return mark; // See case '\0' for comments.
+			}
+			continue;
+		case '`':
+			// This allows g_DerefChar or aDelimiter to be escaped, but since every other non-null
+			// character has no meaning here, it doesn't need to check which character it is skipping.
+			if (!aLiteralMap && aBuf[mark+1])
+				++mark;
+ 			continue;
 		}
 	}
 }

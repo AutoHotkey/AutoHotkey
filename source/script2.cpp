@@ -1821,7 +1821,7 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 		{
 			ArgStruct &this_arg = mArg[i];
 			var_to_update[i-1] = this_arg.text[0] == '&'  // Must start with '&', so things like 5+&MyVar aren't supported.
-				&& this_arg.deref && !this_arg.deref->is_function
+				&& this_arg.deref && !this_arg.deref->is_function()
 				&& this_arg.deref->var->Type() == VAR_NORMAL // Check VAR_NORMAL to be extra-certain it can't be the clipboard or a built-in variable (ExpandExpression() probably prevents taking the address of such a variable, but might not stop it from being in the deref array that way).
 				? this_arg.deref->var
 				: NULL;

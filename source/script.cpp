@@ -3787,7 +3787,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				// The search must exclude commas that are inside quoted/literal strings and those that
 				// are inside parentheses (chiefly those of function-calls, but possibly others).
 
-				item_end += FindNextDelimiter(item_end); // FIND THE NEXT "REAL" COMMA (or the end of the string).
+				item_end += FindExprDelim(item_end); // FIND THE NEXT "REAL" COMMA (or the end of the string).
 				
 				// Above has now found the final comma of this sub-statement (or the terminator if there is no comma).
 				LPTSTR terminate_here = omit_trailing_whitespace(item, item_end-1) + 1; // v1.0.47.02: Fix the fact that "x=5 , y=6" would preserve the whitespace at the end of "5".  It also fixes wrongly showing a syntax error for things like: static d="xyz"  , e = 5
@@ -3995,7 +3995,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 
 			if (aActionType) // An assignment or other type of action was discovered above.
 			{
-				if (aActionType != ACT_EXPRESSION) // i.e. it's ACT_ASSIGNEXPR
+				if (aActionType == ACT_ASSIGNEXPR)
 				{
 					// Find the first non-function comma.
 					// This is done because ACT_ASSIGNEXPR needs to make comma-separated sub-expressions
@@ -4006,8 +4006,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					// ALSO: ACT_ASSIGNEXPR is made into ACT_EXPRESSION *only* when multi-statement
 					// commas are present because it performs much better for trivial assignments,
 					// even some which aren't optimized to become non-expressions.
-					LPTSTR cp = action_args + FindNextDelimiter(action_args, g_delimiter, 2);
-					if (*cp) // Found a delimiting comma other than one in a sub-statement or function. Shouldn't need to worry about unquoted escaped commas since they don't make sense with += and -=.
+					LPTSTR cp = action_args + FindExprDelim(action_args, g_delimiter, 2);
+					if (*cp // Found a delimiting comma other than one in a sub-statement or function. Shouldn't need to worry about unquoted escaped commas since they don't make sense with += and -=.
+						|| _tcschr(action_name, g_DerefChar)) // The output var is dynamic; since expression evaluation is required anyway, handle the whole assignment as one expression.
 					{
 						// Any non-function comma qualifies this as multi-statement.
 						aActionType = ACT_EXPRESSION;
@@ -4089,6 +4090,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		{
 			if (*action_args == '(' || *action_args == '[' // v1.0.46.11: Recognize as multi-statements that start with a function, like "fn(), x:=4".  v1.0.47.03: Removed the following check to allow a close-brace to be followed by a comma-less function-call: strchr(action_args, g_delimiter).
 				|| *aLineText == '(' // Probably an expression with parentheses to control order of evaluation.
+				|| _tcschr(action_name, g_DerefChar) // Something beginning with a double-deref (which may contain expressions).
 				|| !_tcsnicmp(aLineText, _T("new"), 3) && IS_SPACE_OR_TAB(aLineText[3]))
 			{
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
@@ -4204,7 +4206,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				if (arg >= 3) // Text or Timeout
 					break;
 				// Otherwise, just jump to the next parameter so we can check it too:
-				next = FindNextDelimiter(action_args, g_delimiter, mark+2, literal_map);
+				next = FindExprDelim(action_args, g_delimiter, mark+2, literal_map);
 				continue;
 			}
 			
@@ -4333,7 +4335,12 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		is_expression = *arg[nArgs] == g_DerefChar && !*arg_map[nArgs] // It's a non-literal deref character.
 			&& IS_SPACE_OR_TAB(arg[nArgs][1]); // Followed by a space or tab.
 
-		if (!is_expression && aActionType < ACT_FIRST_COMMAND) // v2: Search for "NumericParams" for comments.
+		if (is_expression)
+		{
+			// Skip the "% " prefix.
+			mark += 2;
+		}
+		else if (aActionType < ACT_FIRST_COMMAND) // v2: Search for "NumericParams" for comments.
 		{
 			// v1.0.43.07: Fixed below to use this_action instead of g_act[aActionType] so that the
 			// numeric params of legacy commands like EnvAdd/Sub/LeftClick can be detected.  Without
@@ -4354,12 +4361,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		// Find the end of the above arg:
 		if (is_expression)
 			// Find the next delimiter, taking into account quote marks, parentheses, etc.
-			mark = FindNextDelimiter(action_args, g_delimiter, mark, literal_map);
+			mark = FindExprDelim(action_args, g_delimiter, mark, literal_map);
 		else
 			// Find the next non-literal delimiter.
-			for (; action_args[mark]; ++mark)
-				if (action_args[mark] == g_delimiter && !literal_map[mark])
-					break;
+			mark = FindTextDelim(action_args, g_delimiter, mark, literal_map);
 
 		if (action_args[mark])  // A non-literal delimiter was found.
 		{
@@ -4609,6 +4614,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					}
 					// else continue on to the below so that this input or output variable name's dynamic part
 					// (e.g. array%i%) can be partially resolved.
+					this_new_arg.is_expression = true;
 				}
 			}
 			else // this_new_arg.type == ARG_TYPE_NORMAL (excluding those input/output_vars that were converted to normal because they were blank, above).
@@ -4705,53 +4711,43 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// which is limited to LINE_SIZE. The length member was added in v1.0.44.14 to boost runtime performance.
 			this_new_arg.length = (ArgLengthType)_tcslen(this_aArg);
 			
-			// Calculate size of condensed arg map; see below for comments.
-			int argmap_size = 1; // 1 for end marker.
-			if (this_new_arg.is_expression && this_aArgMap)
-				for (j = 0; j < this_new_arg.length; ++j)
-					if (this_aArgMap[j])
-						++argmap_size;
-
-			// Allocate memory for arg text and argmap.
-			if (   !(this_new_arg.text = (LPTSTR)SimpleHeap::Malloc((this_new_arg.length + 1) * sizeof(TCHAR) + argmap_size * sizeof(ArgLengthType)))   )
+			// Allocate memory for arg text.
+			if (   !(this_new_arg.text = (LPTSTR)SimpleHeap::Malloc((this_new_arg.length + 1) * sizeof(TCHAR)))   )
 				return FAIL;  // It already displayed the error for us.
 			// Copy arg text to persistent memory.
 			tmemcpy(this_new_arg.text, this_aArg, this_new_arg.length + 1); // +1 for null terminator.
-			// If this arg is an expression, store a condensed map of escaped/literal chars after this arg's text
-			// so that ExpressionToPostfix() can detect escaped quotation marks (and possibly other things).
-			ArgLengthType *argmap = (ArgLengthType *)(this_new_arg.text + this_new_arg.length + 1);
-			if (argmap_size > 1) // Implies is_expression && this_aArgMap, and at least one escaped char.
-			{
-				// Store the offset of each escaped char and terminate with ARGMAP_END_MARKER.
-				for (j = 0, argmap_size = 0; j < this_new_arg.length; ++j)
-					if (this_aArgMap[j])
-						argmap[argmap_size++] = j;
-				argmap[argmap_size] = ARGMAP_END_MARKER;
-			}
-			else
-				// Not an expression, no arg map, or no escaped chars.  Include a
-				// terminator in all cases, for simplicity and maintainability.
-				*argmap = ARGMAP_END_MARKER;
 
-			////////////////////////////////////////////////////
-			// Build the list of dereferenced vars for this arg.
-			////////////////////////////////////////////////////
-			// Now that any escaped g_DerefChars have been marked, scan new_arg.text to
-			// determine where the variable dereferences are (if any).  In addition to helping
-			// runtime performance, this also serves to validate the script at load-time
-			// so that some errors can be caught early.  Note: this_new_arg.text is scanned rather
-			// than this_aArg because we want to establish pointers to the correct area of
-			// memory:
+			///////////////////////////////////////////
+			// Build the list of operands for this arg.
+			///////////////////////////////////////////
+			// Now that any escaped g_DerefChars and quote marks have been marked, pre-parse all
+			// operands in this_new_arg.text.  Resolving var derefs at this early stage allows
+			// #MustDeclare to be positional.  Other operands are marked at this stage to avoid
+			// some redundant processing later, and so that we don't need to make this_aArgMap
+			// persistent (i.e. all deref chars and quote marks are handled here).
+			// Note: this_new_arg.text is scanned rather than this_aArg because we want to
+			// establish pointers to the correct area of memory:
 			deref_count = 0;  // Init for each arg.
 
 			if (this_new_arg.is_expression)
 			{
-				if (!ParseExpressionDerefs(this_new_arg.text, this_aArgMap, deref, deref_count))
+				if (!ParseOperands(this_new_arg.text, this_aArgMap, deref, deref_count))
 					return FAIL;
 			}
 			else // this arg does not contain an expression.
+			{
 				if (!ParseDerefs(this_new_arg.text, this_aArgMap, deref, deref_count))
 					return FAIL; // It already displayed the error.
+
+				if (deref_count == 1)
+				{
+					// The following are implied due to the way ParseDerefs() works:
+					ASSERT(deref->type   == DT_STRING);
+					ASSERT(deref->length == this_new_arg.length);
+					// Don't bother putting it into persistent memory:
+					deref_count = 0;
+				}
+			}
 
 			//////////////////////////////////////////////////////////////
 			// Allocate mem for this arg's list of dereferenced variables.
@@ -4759,7 +4755,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			if (deref_count)
 			{
 				// +1 for the "NULL-item" terminator:
-				if (   !(this_new_arg.deref = (DerefType *)SimpleHeap::Malloc((deref_count + 1) * sizeof(DerefType)))   )
+				int extra = 1
+					// and +1 if this arg might need to be converted to a double-deref:
+					+ (aActionType == ACT_FUNC && !this_new_arg.is_expression);
+				if (   !(this_new_arg.deref = (DerefType *)SimpleHeap::Malloc((deref_count + extra) * sizeof(DerefType)))   )
 					return ScriptError(ERR_OUTOFMEM);
 				memcpy(this_new_arg.deref, deref, deref_count * sizeof(DerefType));
 				// Terminate the list of derefs with a deref that has a NULL marker:
@@ -5601,57 +5600,60 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 
 
-ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount)
+ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos, TCHAR aEndChar)
 // Caller provides modifiable aDerefCount, which might be non-zero to indicate that there are already
 // some items in the aDeref array.
 // Returns FAIL or OK.
 {
-	size_t deref_string_length; // So that overflow can be detected, this is not of type DerefLengthType.
-	size_t var_name_length;
-
-	// For each dereference found in aArgText:
-	for (int j = 0;;)
+	DerefType *last = NULL;
+	int i, j = aPos ? *aPos : 0, count = 0;
+	// For each sub-expression found in aArgText:
+	for (;;)
 	{
-		// Find next non-literal g_DerefChar:
-		for (; aArgText[j] && (aArgText[j] != g_DerefChar || (aArgMap && aArgMap[j])); ++j);
-		if (!aArgText[j])
-			break;
-		// else: Match was found; this is the deref's open-symbol.
+		i = j;
+		// Find next non-literal g_DerefChar or aEndChar, or end of string:
+		for (; aArgText[j] && (aArgText[j] != g_DerefChar && aArgText[j] != aEndChar || (aArgMap && aArgMap[j])); ++j);
+
+		// String "derefs" are needed to pair up to the '%' markers, allowing both
+		// to be optimized out if the string is empty (as on either side of %a%).
 		if (aDerefCount >= MAX_DEREFS_PER_ARG)
 			return ScriptError(ERR_TOO_MANY_REFS, aArgText); // Short msg since so rare.
 		DerefType &this_deref = aDeref[aDerefCount];  // For performance.
-		this_deref.marker = aArgText + j;  // Store the deref's starting location.
-		// Find the end of this deref (the next non-alphanumeric/underscore char).
-		for (++j; IS_IDENTIFIER_CHAR(aArgText[j]); ++j);
-		if (  !(var_name_length = aArgText + j - this_deref.marker - 1)  ) // Possible future use: something like "%%var" could be a double-deref.
-			return ScriptError(_T("Missing variable name."), aArgText); // Short msg. since so rare.
-		if (var_name_length > MAX_VAR_NAME_LENGTH)
-			return ScriptError(_T("Variable name too long."), aArgText); // Short msg. since so rare.
-		// If this deref ended at a non-literal deref char, it is considered part of the deref.
-		// This allows "%var%" to be a simple deref, "the %var." to be equivalent to "the %var%."
-		// and "%n`%" to be equivalent to "%n%`%", e.g. "100%" where n = 100.
-		if (aArgText[j] == '(') // Reserve %func() for future use rather than interpreting it as %var%().
-			return ScriptError(_T("Function calls are not supported."), aArgText);
-		if (aArgText[j] == g_DerefChar && !(aArgMap && aArgMap[j]))
-			++j;
-		deref_string_length = aArgText + j - this_deref.marker;
-		this_deref.is_function = false;
-		this_deref.length = (DerefLengthType)deref_string_length;
-		if (   !(this_deref.var = FindOrAddVar(this_deref.marker + 1, var_name_length))   )
-			return FAIL;  // The called function already displayed the error.
-		++aDerefCount;
-	} // for each dereference.
-
+		this_deref.type = aEndChar ? DT_QSTRING : DT_STRING;
+		this_deref.next = NULL;
+		this_deref.marker = aArgText + i;
+		this_deref.length = DerefLengthType(j - i);
+		this_deref.param_count = ++count;
+		aDerefCount++;
+		
+		if (last)
+			last->next = &this_deref;
+		last = &this_deref;
+		
+		if (aArgText[j] != g_DerefChar)
+			break;
+		// Recursively parse derefs within the expression.
+		j++; // Opening %
+		if (!ParseOperands(aArgText, aArgMap, aDeref, aDerefCount, &j, g_DerefChar))
+			return FAIL;
+		if (aArgText[j] != g_DerefChar) // Implies !aArgText[j].
+			return ScriptError(_T("Missing ending \"%\""), aArgText);
+		j++; // Closing %
+	}
+	if (aPos)
+		*aPos = j;
 	return OK;
 }
 
-ResultType Script::ParseExpressionDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount)
+ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos, TCHAR aEndChar)
 {
 	LPTSTR op_begin, op_end;
 	size_t operand_length;
-	TCHAR orig_char, *cp;
+	TCHAR orig_char, close_char, *cp;
 	int j;
-	bool is_function, pending_function_is_new_op = false;
+	bool is_function, pending_op_is_class = false;
+	bool is_double_deref;
+	SymbolType wordop;
 
 	#define ERR_EXP_ILLEGAL_CHAR _T("The leftmost character above is illegal in an expression.") // "above" refers to the layout of the error dialog.
 	// ParseDerefs() won't consider escaped percent signs to be illegal, but in this case
@@ -5669,67 +5671,96 @@ ResultType Script::ParseExpressionDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefT
 	//		if (this_aArgMap[j] && this_new_arg.text[j] == g_DerefChar)
 	//			return ScriptError(ERR_EXP_ILLEGAL_CHAR, this_new_arg.text + j);
 
-	// Resolve all operands (that aren't numbers) into variable references.  Doing this here at
-	// load-time greatly improves runtime performance, especially for scripts that have a lot
-	// of variables.
-	for (op_begin = aArgText; *op_begin; op_begin = op_end)
+	op_begin = aArgText;
+	if (aPos)
+		op_begin += *aPos;
+	for (; *op_begin; op_begin = op_end)
 	{
-		if (*op_begin == '.' && op_begin[1] == '=') // v1.0.46.01: Support .=, but not any use of '.' because that is reserved as a struct/member operator.
-			op_begin += 2;
-		for (; *op_begin && _tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT, *op_begin); ++op_begin); // Skip over whitespace, operators, and parentheses.
+		while (*op_begin && _tcschr(EXPR_OPERAND_TERMINATORS, *op_begin)) // Skip over whitespace, operators, and parentheses.
+		{
+			if (*op_begin == aEndChar)
+    		{
+    			if (aPos)
+    				*aPos = int(op_begin - aArgText);
+    			return OK;
+    		}
+			if (*op_begin == g_DerefChar)
+				// This is the start of a double-deref with no initial literal part.  Double-derefs are
+				// handled outside the loop for simplicity.  Breaking out of the loop means that this
+				// will be seen as an operand of zero length.
+				break;
+			switch (*op_begin)
+			{
+			case '.':
+				// This case also handles the dot in `.=` (the `=` is skipped by the next iteration).
+				// Skip the numeric literal or identifier to the right of this, if there is one.
+				// This won't skip the signed exponent of a scientific-notation literal, but that should
+				// be OK as it will be recognized as purely numeric in the next iteration of this loop.
+				do ++op_begin; while (!_tcschr(EXPR_OPERAND_TERMINATORS, *op_begin));
+				// Considered using ParseDoubleDeref() to allow derefs like x.y%z% (meaning x["y" z]),
+				// but in addition to being redundant, it would complicate things in ExpressionToPostfix().
+				continue;
+
+			default:
+				op_begin++;
+				continue;
+
+			case '\n':
+				// Allow `n unquoted in expressions so that continuation sections can be used to
+				// spread an expression across multiple lines without requiring the "Join" option;
+				// but replace them with spaces now so they don't need to be handled later on.
+				*op_begin++ = ' ';
+				continue;
+
+			// Let ExpressionToPostfix() handle mismatched parentheses etc.
+			//case ')':
+			//	return ScriptError(ERR_UNEXPECTED_CLOSE_PAREN, op_begin);
+			//case ']':
+			//	return ScriptError(ERR_UNEXPECTED_CLOSE_BRACKET, op_begin);
+			//case '}':
+			//	return ScriptError(ERR_UNEXPECTED_CLOSE_BRACE, op_begin);
+			case '(': close_char = ')'; break;
+			case '[': close_char = ']'; break;
+			case '{': close_char = '}'; break;
+			}
+			// Since above didn't "continue", recurse to handle nesting:
+			j = (int)(op_begin - aArgText + 1);
+			if (!ParseOperands(aArgText, aArgMap, aDeref, aDerefCount, &j, close_char))
+				return FAIL;
+			op_begin = aArgText + j;
+			if (*op_begin)
+				op_begin++;
+			//else:
+				// Missing close paren/bracket/brace. Let ExpressionToPostfix() handle it.
+		}
 		if (!*op_begin) // The above loop reached the end of the string: No operands remaining.
 			break;
-
-		if (*op_begin == '\n')
-		{
-			// Allow `n unquoted in expressions so that continuation sections can be used to
-			// spread an expression across multiple lines without requiring the "Join" option;
-			// but replace them with spaces now so they don't need to be handled later on.
-			*op_begin = ' ';
-			op_end = op_begin + 1; // Continue at the next char.
-			continue;
-		}
-
 		// Now op_begin is the start of an operand, which might be a variable reference, a numeric
-		// literal, or a string literal.  If it's a string literal, it is left as-is:
+		// literal, or a string literal.
+
 		if (*op_begin == '"' || *op_begin == '\'')
 		{
-			TCHAR in_quote = *op_begin;
-			// Find the end of this string literal:
-			for (j = (int)(op_begin - aArgText + 1); ; ++j)
-			{
-				if (!aArgText[j])
-					return ScriptError(ERR_MISSING_CLOSE_QUOTE, op_begin);
-				if (aArgText[j] == in_quote && !(aArgMap && aArgMap[j])) // A non-literal quote mark.
-				{
-					op_end = aArgText + j;
-					*op_end = '\0'; // Temporarily null-terminate.
-					// See ParseDerefs() call further below for comments.
-					if (!ParseDerefs(op_begin, aArgMap ? aArgMap + (op_begin - aArgText) : NULL
-						, aDeref, aDerefCount))
-						return FAIL;
-					*op_end++ = in_quote; // Undo termination and advance op_end to a position after the ending quote mark.
-					break;
-				}
-			}
+			j = (int)(op_begin - aArgText + 1);
+			if (!ParseDerefs(aArgText, aArgMap, aDeref, aDerefCount, &j, *op_begin))
+				return FAIL;
+			op_end = aArgText + j;
+			if (!*op_end)
+				return ScriptError(ERR_MISSING_CLOSE_QUOTE, op_begin);
+			++op_end;
 			// op_end is now set correctly to allow the outer loop to continue.
 			continue; // Ignore this literal string, letting the runtime expression parser recognize it.
 		}
 					
 		// Find the end of this operand (if *op_end is '\0', strchr() will find that too):
-		for (op_end = op_begin + 1; !_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT _T("\n"), *op_end); ++op_end); // Find first whitespace, operator, or paren.
-		if (*op_end == '=' && op_end[-1] == '.') // v1.0.46.01: Support .=, but not any use of '.' because that is reserved as a struct/member operator.
+		for (op_end = op_begin; !_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT, *op_end); ++op_end); // Find first whitespace, operator, or paren.
+		if (*op_end == '=' && op_end[-1] == '.') // .=
 			--op_end;
 		// Now op_end marks the end of this operand.  The end might be the zero terminator, an operator, etc.
 
-		// Must be done only after op_end has been set above (since loop uses op_end):
-		if (*op_begin == '.' && _tcschr(_T(" \t="), op_begin[1])) // If true, it can't be something like "5." because the dot inside would never be parsed separately in that case.  Also allows ".=" operator.
-			continue;
-		//else any '.' not followed by a space, tab, or '=' is likely a number without a leading zero,
-		// so continue on below to process it.
-
+		// Before checking for word operators, check if this is the "key" in {key: value}.
+		// Things like {new: true} and obj.new are allowed because there is no ambiguity.
 		cp = omit_leading_whitespace(op_end);
-		if (*cp == ':' && cp[1] != '=') // Maybe the "key:" in "{key: value}".
+		if (*cp == ':' && cp[1] != '=') // Not :=
 		{
 			cp = omit_trailing_whitespace(aArgText, op_begin - 1);
 			if (*cp == ',' || *cp == '{')
@@ -5754,10 +5785,13 @@ ResultType Script::ParseExpressionDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefT
 			if (operand_length == 2)
 			{
 				if ((*op_begin == 'o' || *op_begin == 'O') && (op_begin[1] == 'r' || op_begin[1] == 'R'))
-				{	// "OR" was found.
-					op_begin[0] = '|'; // v1.0.45: Transform into easier-to-parse symbols for improved
-					op_begin[1] = '|'; // runtime performance and reduced code size.  v1.0.48: It no longer helps runtime performance, but it's kept because changing moving it to ExpressionToPostfix() isn't likely to have much benefit.
-					continue;
+				{
+					// "OR" was found.
+					// Mark this word as an operator.  Unlike the old method of replacing "OR" with "||",
+					// this leaves ListLines more accurate.  More importantly, it allows "Hotkey, If" to
+					// recognize an expression which uses AND/OR.
+					wordop = SYM_OR;
+					goto word_operator;
 				}
 			}
 			else // operand_length must be 3
@@ -5768,48 +5802,44 @@ ResultType Script::ParseExpressionDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefT
 				case 'A':
 					if (   (op_begin[1] == 'n' || op_begin[1] == 'N') // Relies on short-circuit boolean order.
 						&& (op_begin[2] == 'd' || op_begin[2] == 'D')   )
-					{	// "AND" was found.
-						op_begin[0] = '&'; // v1.0.45: Transform into easier-to-parse symbols for
-						op_begin[1] = '&'; // improved runtime performance and reduced code size.  v1.0.48: It no longer helps runtime performance, but it's kept because changing moving it to ExpressionToPostfix() isn't likely to have much benefit.
-						op_begin[2] = ' '; // A space is used lieu of the complexity of the below.
-						// Above seems better than below even though below would make it look a little
-						// nicer in ListLines.  BELOW CAN'T WORK because this_new_arg.deref[] can contain
-						// offsets that would also need to be adjusted:
-						//memmove(op_begin + 2, op_begin + 3, _tcslen(op_begin+3)+1 ... or some expression involving this_new_arg.length this_new_arg.text);
-						//--this_new_arg.length;
-						//--op_end; // Ensure op_end is set up properly for the for-loop's post-iteration action.
-						continue;
+					{
+						// "AND" was found.  See "OR" above for comments.
+						wordop = SYM_AND;
+						goto word_operator;
 					}
 					break;
 
-				case 'n': // v1.0.45: Unlike "AND" and "OR" above, this one is not given a substitute
-				case 'N': // because it's not the same as the "!" operator. See SYM_LOWNOT for comments.
+				case 'n':
+				case 'N':
 					if (   (op_begin[1] == 'o' || op_begin[1] == 'O') // Relies on short-circuit boolean order.
 						&& (op_begin[2] == 't' || op_begin[2] == 'T')   )
-						continue; // "NOT" was found.
+					{
+						// "NOT" was found.  See "OR" above for comments.
+						wordop = SYM_LOWNOT;
+						goto word_operator;
+					}
 					if (   (op_begin[1] == 'e' || op_begin[1] == 'E')
 						&& (op_begin[2] == 'w' || op_begin[2] == 'W')   ) // "new"
 					{
 						cp = omit_leading_whitespace(op_begin + 3);
-						if (!_tcschr(EXPR_OPERAND_TERMINATORS, *cp) && *cp != '"')
+						if (IS_IDENTIFIER_CHAR(*cp) || *cp == g_DerefChar)
 						{
-							// This "new" is followed by something that looks like an operand;
-							// perhaps "new ClassVar()", which we need to avoid parsing as a
-							// function-call.  The check below intentionally excludes "new X.Y()"
-							// since it wouldn't be parsed as a function deref anyway.
-							for ( ; !_tcschr(EXPR_OPERAND_TERMINATORS, *cp); ++cp); // Find end of var.
-							pending_function_is_new_op = (*cp == '(');
+							// This "new" is followed by something that could be a class name or double-deref
+							// (but might be some other var, as in `new x.y()`).  In any case, we need to avoid
+							// parsing it as a function call.
+							pending_op_is_class = true;
 						}
-						continue;
+						// See "OR" above for comments.  Additionally, this operator will require a DerefType
+						// struct in the postfix expression phase anyway, so may as well create it here.
+						wordop = SYM_NEW;
+						goto word_operator;
 					}
 					break;
 				}
 			}
 		} // End of check for AND/OR/NOT.
 
-		// Temporarily terminate, which avoids at least the below issue:
-		// Two or more extremely long var names together could exceed MAX_VAR_NAME_LENGTH
-		// e.g. LongVar%LongVar2% would be too long to store in a buffer of size MAX_VAR_NAME_LENGTH.
+		// Temporarily terminate, for IsNumeric() and to simplify some other checks.
 		orig_char = *op_end;
 		*op_end = '\0';
 
@@ -5823,18 +5853,8 @@ ResultType Script::ParseExpressionDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefT
 
 		// Below takes care of recognizing hexadecimal integers, which avoids the 'x' character
 		// inside of something like 0xFF from being detected as the name of a variable:
-		if (!IsNumeric(op_begin, true, false, true)) // Not a numeric literal.
+		if (!IsNumeric(op_begin, true, false, true) || orig_char == g_DerefChar) // Not a numeric literal.
 		{
-			if (*op_begin == '.') // L31: Check for something like "obj .property" - scientific-notation literals such as ".123e+1" may also be handled here.
-			{
-				if (_tcschr(op_begin, g_DerefChar))
-					return ScriptError(ERR_INVALID_DOT, op_begin);
-				// Skip over this scientific-notation literal or string of one or more member-access operations.
-				// This won't skip the signed exponent of a scientific-notation literal, but that should be OK
-				// as it will be recognized as purely numeric in the next iteration of this loop.
-				*op_end = orig_char;
-				continue;
-			}
 			if (ctoupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-')) // Listed first for short-circuit performance with the below.
 			{
 				// v1.0.46.11: This item appears to be a scientific-notation literal with the OPTIONAL +/- sign PRESENT on the exponent (e.g. 1.0e+001), so check that before checking if it's a variable name.
@@ -5856,58 +5876,71 @@ ResultType Script::ParseExpressionDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefT
 				}
 			}
 			// Since above did not "continue", this is NOT a scientific-notation literal
-			// with +/- sign present, but maybe its an object access operation such as "x.y".
-			if (cp = _tcschr(op_begin + 1, '.'))
+			// with +/- sign present, but maybe it's an object access operation such as "x.y".
+			// Note that although an operand can contain a dot, it cannot begin with one.
+			if (cp = _tcschr(op_begin, '.'))
 			{
-				// Resolve the part preceding '.' as a variable reference. The rest is handled later, in ExpressionToPostfix.
-				if (_tcschr(cp, g_DerefChar))
-					return ScriptError(ERR_INVALID_DOT, cp);
+				// Resolve the part preceding the dot as a variable reference,
+				// and allow the next iteration to handle the dot.
 				operand_length = cp - op_begin;
+				*op_end = orig_char; // Unterminate at the old end position.
+				op_end = cp; // End at the dot.
+				*op_end = '\0'; // Temporarily terminate.
+				orig_char = '.';
+				// Since this operand ends with a dot, it can't be either of the following:
+				is_double_deref = false;
 				is_function = false;
 			}
-			else
-				is_function = (orig_char == '(');
-
-			if (is_function && pending_function_is_new_op)
-				pending_function_is_new_op = is_function = false;
-
-			// This operand must be a variable/function reference or string literal, otherwise it's
-			// a syntax error.
-			// Check explicitly for derefs since the vast majority don't have any, and this
-			// avoids the function call in those cases:
-			if (_tcschr(op_begin, g_DerefChar)) // This operand contains at least one double dereference.
+			else if (is_double_deref = (orig_char == g_DerefChar && aEndChar != g_DerefChar))
 			{
-				// v1.0.47.06: Dynamic function calls are now supported.
-				//if (is_function)
-				//	return ScriptError("Dynamic function calls are not supported.", op_begin);
-				int first_deref = aDerefCount;
+				// This operand is the leading literal part of a double dereference.
+				*op_end = orig_char; // Undo termination.
+				j = (int)(op_begin - aArgText);
+				if (!ParseDoubleDeref(aArgText, aArgMap, aDeref, aDerefCount, &j))
+					return FAIL;
+				op_end = aArgText + j;
+				is_function = *op_end == '('; // Dynamic function call.
+			}
+			else
+			{
+				is_function	= orig_char == '(';
+			}			
 
-				// The percent-sign derefs are parsed and added to the deref array at this stage (on a
-				// per-operand basis) rather than all at once for the entire arg because
-				// the deref array must contain both percent-sign derefs and non-%-derefs interspersed
-				// and ordered according to their physical position inside the arg, but ParseDerefs
-				// only handles percent-sign derefs, not expression derefs like x+y.  In the following
-				// example, the order of derefs must be x,i,y: if (x = Array%i% and y = 3)
-				if (!ParseDerefs(op_begin, aArgMap ? aArgMap + (op_begin - aArgText) : NULL
-					, aDeref, aDerefCount))
-					return FAIL; // It already displayed the error.  No need to undo temp. termination.
-				// And now leave this operand "raw" so that it will later be dereferenced again.
-				// In the following example, i made into a deref but the result (Array33) must be
-				// dereferenced during a second stage at runtime: if (x = Array%i%).
+			// If the "new" operator directly precedes this operand, it can't be a function name.
+			// This only applies to operands at the same recursion/nesting level as the operator.
+			if (pending_op_is_class)
+				pending_op_is_class = is_function = false;
 
-				if (is_function) // Dynamic function call.
-					aDeref[first_deref].param_count = 0; // L31: Parameters are now counted by ExpressionToPostfix instead of here, but this must be initialized.
+			if (aDerefCount >= MAX_DEREFS_PER_ARG)
+				return ScriptError(ERR_TOO_MANY_REFS, op_begin); // Indicate which operand it ran out of space at.
+
+			if (is_double_deref)
+			{
+				// Mark the end of the sub-expression which computes the variable name or function
+				// in this double-deref or dynamic function call:
+				aDeref[aDerefCount].marker = op_end;
+				aDeref[aDerefCount].length = 0;
+				if (is_function)
+				{
+					// func is initialized to NULL and left that way to indicate the call is dynamic.
+					// PreparseBlocks() relies on length == 0 meaning a dynamic function reference.
+					aDeref[aDerefCount].func = NULL;
+					aDeref[aDerefCount].type = DT_FUNC;
+				}
+				else
+					aDeref[aDerefCount].type = DT_DOUBLE;
+				++aDerefCount;
+				continue;
 			}
 			else // This operand is a variable name or function name (single deref).
 			{
-				if (aDerefCount >= MAX_DEREFS_PER_ARG)
-					return ScriptError(ERR_TOO_MANY_REFS, op_begin); // Indicate which operand it ran out of space at.
 				// Store the deref's starting location, even for functions (leave it set to the start
 				// of the function's name for use when doing error reporting at other stages -- i.e.
 				// don't set it to the address of the first param or closing-paren-if-no-params):
 				aDeref[aDerefCount].marker = op_begin;
 				aDeref[aDerefCount].length = (DerefLengthType)operand_length;
-				if (aDeref[aDerefCount].is_function = is_function) // It's a function not a variable.
+				aDeref[aDerefCount].type = is_function ? DT_FUNC : DT_VAR;
+				if (is_function)
 					// Set to NULL to catch bugs.  It must and will be filled in at a later stage
 					// because the setting of each function's mJumpToLine relies upon the fact that
 					// functions are added to the linked list only upon being formally defined
@@ -5920,9 +5953,64 @@ ResultType Script::ParseExpressionDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefT
 				++aDerefCount; // Since above didn't "continue" or "return".
 			}
 		}
-		//else purely numeric or '?'.  Do nothing since pure numbers and '?' don't need any
-		// processing at this stage.
+		else
+		{
+			// Purely numeric.  Do nothing since pure numbers don't need any processing at this stage.
+			// Clear this flag, which may have been set for something like `new 123`:
+			pending_op_is_class = false;
+		}
 		*op_end = orig_char; // Undo the temporary termination.
+		continue;
+
+word_operator:
+		if (aDerefCount >= MAX_DEREFS_PER_ARG)
+			return ScriptError(ERR_TOO_MANY_REFS, op_begin);
+		aDeref[aDerefCount].marker = op_begin;
+		aDeref[aDerefCount].length = (DerefLengthType)operand_length;
+		aDeref[aDerefCount].type = DT_WORDOP;
+		aDeref[aDerefCount].symbol = wordop;
+		aDerefCount++;
+	}
+	if (aPos)
+    	*aPos = int(op_begin - aArgText);
+	return OK;
+}
+
+ResultType Script::ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos)
+{
+	LPTSTR op_begin, dd_begin;
+	LPTSTR op_end;
+	DerefType *last = NULL;
+	int count = 0;
+	for (op_begin = dd_begin = aArgText + *aPos; ; op_begin = op_end + 1)
+	{
+		op_end = find_identifier_end(op_begin);
+		
+		// String "derefs" are needed to pair up to the '%' markers, allowing both
+		// to be optimized out if the string is empty (as on either side of %a%).
+		if (aDerefCount >= MAX_DEREFS_PER_ARG)
+			return ScriptError(ERR_TOO_MANY_REFS, op_begin);
+		DerefType &this_deref = aDeref[aDerefCount];  // For performance.
+		this_deref.type = DT_STRING;
+		this_deref.next = NULL;
+		this_deref.marker = op_begin;
+		this_deref.length = DerefLengthType(op_end - op_begin);
+		this_deref.param_count = ++count;
+		aDerefCount++;
+
+		if (last)
+			last->next = &this_deref;
+		last = &this_deref;
+
+		*aPos = int(op_end - aArgText);
+		if (*op_end != g_DerefChar)
+			break;
+		(*aPos)++;
+		if (!ParseOperands(aArgText, aArgMap, aDeref, aDerefCount, aPos, g_DerefChar))
+			return FAIL;
+		op_end = aArgText + *aPos;
+		if (*op_end != g_DerefChar)
+			return ScriptError(_T("Missing ending \"%\""), op_begin);
 	}
 	return OK;
 }
@@ -6336,7 +6424,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		item_end = omit_leading_whitespace(item_end);
 		LPTSTR right_side_of_operator = item_end; // Save for use below.
 
-		item_end += FindNextDelimiter(item_end); // Find the next comma which is not part of the initializer (or find end of string).
+		item_end += FindExprDelim(item_end); // Find the next comma which is not part of the initializer (or find end of string).
 
 		// Append "ClassNameOrThis.VarName := Initializer, " to the buffer.
 		int chars_written = _sntprintf(buf + buf_used, _countof(buf) - buf_used, _T("%s.%.*s := %.*s, ")
@@ -6973,145 +7061,6 @@ double Line::ArgIndexToDouble(int aArgIndex)
 	}
 	// Otherwise:
 	return ATOF(sArgDeref[aArgIndex]); // See ArgIndexLength() for comments.
-}
-
-
-
-Var *Line::ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary)
-// Returns NULL on failure.  Caller has ensured that none of this arg's derefs are function-calls.
-// Args that are input or output variables are normally resolved at load-time, so that
-// they contain a pointer to their Var object.  This is done for performance.  However,
-// in order to support dynamically resolved variables names like AutoIt2 (e.g. arrays),
-// we have to do some extra work here at runtime.
-// Callers specify false for aCreateIfNecessary whenever the contents of the variable
-// they're trying to find is unimportant.  For example, dynamically built input variables,
-// such as "StringLen, length, array%i%", do not need to be created if they weren't
-// previously assigned to (i.e. they weren't previously used as an output variable).
-// In the above example, the array element would never be created here.  But if the output
-// variable were dynamic, our call would have told us to create it.
-{
-	// The requested ARG isn't even present, so it can't have a variable.  Currently, this should
-	// never happen because the loading procedure ensures that input/output args are not marked
-	// as variables if they are blank (and our caller should check for this and not call in that case):
-	if (aArgIndex >= mArgc)
-		return NULL;
-	ArgStruct &this_arg = mArg[aArgIndex]; // For performance and convenience.
-
-	// Since this function isn't inline (since it's called so frequently), there isn't that much more
-	// overhead to doing this check, even though it shouldn't be needed since it's the caller's
-	// responsibility:
-	if (this_arg.type == ARG_TYPE_NORMAL) // Arg isn't an input or output variable.
-		return NULL;
-	if (!*this_arg.text) // The arg's variable is not one that needs to be dynamically resolved.
-		return VAR(this_arg); // Return the var's address that was already determined at load-time.
-	// The above might return NULL in the case where the arg is optional (i.e. the command allows
-	// the var name to be omitted).  But in that case, the caller should either never have called this
-	// function or should check for NULL upon return.  UPDATE: This actually never happens, see
-	// comment above the "if (aArgIndex >= mArgc)" line.
-
-	// Static to correspond to the static empty_var further below.  It needs the memory area
-	// to support resolving dynamic environment variables.  In the following example,
-	// the result will be blank unless the first line is present (without this fix here):
-	//null = %SystemRoot%  ; bogus line as a required workaround in versions prior to v1.0.16
-	//thing = SystemRoot
-	//StringTrimLeft, output, %thing%, 0
-	//msgbox %output%
-
-	static TCHAR sVarName[MAX_VAR_NAME_LENGTH + 1];  // Will hold the dynamically built name.
-
-	// At this point, we know the requested arg is a variable that must be dynamically resolved.
-	// This section is similar to that in ExpandArg(), so they should be maintained together:
-	LPTSTR pText = this_arg.text; // Start at the beginning of this arg's text.
-	size_t var_name_length = 0;
-
-	if (this_arg.deref) // There's at least one deref.
-	{
-		// Caller has ensured that none of these derefs are function calls (i.e. deref->is_function is alway false).
-		for (DerefType *deref = this_arg.deref  // Start off by looking for the first deref.
-			; deref->marker; ++deref)  // A deref with a NULL marker terminates the list.
-		{
-			// FOR EACH DEREF IN AN ARG (if we're here, there's at least one):
-			// Copy the chars that occur prior to deref->marker into the buffer:
-			for (; pText < deref->marker && var_name_length < MAX_VAR_NAME_LENGTH; sVarName[var_name_length++] = *pText++);
-			if (var_name_length >= MAX_VAR_NAME_LENGTH && pText < deref->marker) // The variable name would be too long!
-			{
-				// This type of error is just a warning because this function isn't set up to cause a true
-				// failure.  This is because the use of dynamically named variables is rare, and only for
-				// people who should know what they're doing.  In any case, when the caller of this
-				// function called it to resolve an output variable, it will see the the result is
-				// NULL and terminate the current subroutine.
-				#define DYNAMIC_TOO_LONG _T("This dynamically built variable name is too long.") \
-					_T("  If this variable was not intended to be dynamic, remove the % symbols from it.")
-				LineError(DYNAMIC_TOO_LONG, FAIL, this_arg.text);
-				return NULL;
-			}
-			// Now copy the contents of the dereferenced var.  For all cases, aBuf has already
-			// been verified to be large enough, assuming the value hasn't changed between the
-			// time we were called and the time the caller calculated the space needed.
-			if (deref->var->Get() > (VarSizeType)(MAX_VAR_NAME_LENGTH - var_name_length)) // The variable name would be too long!
-			{
-				LineError(DYNAMIC_TOO_LONG, FAIL, this_arg.text);
-				return NULL;
-			}
-			var_name_length += deref->var->Get(sVarName + var_name_length);
-			// Finally, jump over the dereference text. Note that in the case of an expression, there might not
-			// be any percent signs within the text of the dereference, e.g. x + y, not %x% + %y%.
-			pText += deref->length;
-		}
-	}
-
-	// Copy any chars that occur after the final deref into the buffer:
-	for (; *pText && var_name_length < MAX_VAR_NAME_LENGTH; sVarName[var_name_length++] = *pText++);
-	if (var_name_length >= MAX_VAR_NAME_LENGTH && *pText) // The variable name would be too long!
-	{
-		LineError(DYNAMIC_TOO_LONG, FAIL, this_arg.text);
-		return NULL;
-	}
-	
-	if (!var_name_length)
-	{
-		LineError(_T("This dynamic variable is blank. If this variable was not intended to be dynamic,")
-			_T(" remove the % symbols from it."), FAIL, this_arg.text);
-		return NULL;
-	}
-
-	// Terminate the buffer, even if nothing was written into it:
-	sVarName[var_name_length] = '\0';
-
-	static Var empty_var(sVarName, VAR_NORMAL, NULL, false); // Must use sVarName here.  See comment above for why.
-
-	Var *found_var;
-	if (!aCreateIfNecessary)
-	{
-		// Now we've dynamically build the variable name.  It's possible that the name is illegal,
-		// so check that (the name is automatically checked by FindOrAddVar(), so we only need to
-		// check it if we're not calling that):
-		if (!Var::ValidateName(sVarName))
-			return NULL; // Above already displayed error for us.
-		if (found_var = g_script.FindVar(sVarName, var_name_length)) // Assign.
-			return found_var;
-		// At this point, this is either a non-existent variable or a reserved/built-in variable
-		// that was never statically referenced in the script (only dynamically), e.g. A_IPAddress%A_Index%
-		if (Script::GetVarType(sVarName) == VAR_NORMAL)
-			// If not found: for performance reasons, don't create it because caller just wants an empty variable.
-			return &empty_var;
-		//else it's the clipboard or some other built-in variable, so continue onward so that the
-		// variable gets created in the variable list, which is necessary to allow it to be properly
-		// dereferenced, e.g. in a script consisting of only the following:
-		// Loop, 4
-		//     StringTrimRight, IP, A_IPAddress%A_Index%, 0
-	}
-	// Otherwise, aCreateIfNecessary is true or we want to create this variable unconditionally for the
-	// reason described above.
-	if (   !(found_var = g_script.FindOrAddVar(sVarName, var_name_length))   )
-		return NULL;  // Above will already have displayed the error.
-	if (this_arg.type == ARG_TYPE_OUTPUT_VAR && VAR_IS_READONLY(*found_var))
-	{
-		LineError(ERR_VAR_IS_READONLY, FAIL, sVarName);
-		return NULL;  // Don't return the var, preventing the caller from assigning to it.
-	}
-	else
-		return found_var;
 }
 
 
@@ -7868,7 +7817,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 				int param_index = i - has_output_var; // For maintainability.
 				
 				// Determine what type of arg this should be.
-				ArgTypeType arg_type;
+				int arg_type;
 				if (param_index < 0)
 				{
 					// Output var used for the return value, not one of the function's parameters.
@@ -7909,21 +7858,36 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 						if (  !(lone_var = (Var *)arg.deref)  )
 							return line->PreparseError(ERR_MUST_DECLARE, arg.text);
 					}
+					else if (!arg.deref)
+					{
+						// This case happens if the var doesn't exist prior to the command being
+						// parsed (but only if #MustDeclare is off), or if the var name is invalid.
+						if (  !(lone_var = FindOrAddVar(arg.text))  )
+							return NULL; // It already displayed the error.
+					}
 					else if (!arg.is_expression)
 					{
-						if (!arg.deref)
-							if (  !(lone_var = FindOrAddVar(arg.text))  )
-								return NULL; // It already displayed the error.
-						// Otherwise, it's something like Array%i%, where i has been resolved and
-						// placed in arg.deref, but the final var will be resolved at run-time.
+						// This arg was parsed as text, but needs to be an expression/dynamic var.
+						// AddLine() saved some space for us to insert this double-deref marker:
+						DerefType *last_deref;
+						for (last_deref = arg.deref; last_deref->marker; ++last_deref);
+						last_deref->type = DT_DOUBLE;
+						last_deref->marker = arg.text + arg.length;
+						last_deref->length = 0;
+						last_deref[1].marker = NULL; // NULL-terminate.
+						// Although we're going to mark this as an expression, because ParseDerefs()
+						// has pre-processed the arg, something like `%v%+1` will correctly treat
+						// `+1` as text and display an error message.
+						arg.is_expression = true;
 					}
 					else
 					{
-						// This arg is explicitly an expression (which may or may not resolve
-						// to a variable; only a sole variable reference would work for ByRef).
-						if (arg_type == ARG_TYPE_OUTPUT_VAR)
-							return line->PreparseError(ERR_PARAM1_INVALID, arg.text);
-						continue; // Leave it as it is.
+						// This arg was explicitly marked as an expression and pre-processed as such.
+						// However, since it's possible that the expression won't produce a variable,
+						// change ARG_TYPE_INPUT_VAR to ARG_TYPE_NORMAL.
+						if (arg_type == ARG_TYPE_INPUT_VAR)
+							arg_type = ARG_TYPE_NORMAL;
+						//else ExpandArgs() will ensure it produces a writable variable.
 					}
 					if (lone_var)
 					{
@@ -7934,7 +7898,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 						arg.text = _T("");
 						arg.length = 0;
 					}
-					arg.type = arg_type;
+					arg.type = (ArgTypeType)arg_type;
 				}
 				else if (arg.type == ARG_TYPE_INPUT_VAR)
 				{
@@ -7951,15 +7915,16 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 		for (i = 0; i < line->mArgc; ++i) // For each arg.
 		{
 			ArgStruct &this_arg = line->mArg[i]; // For performance and convenience.
-			// Exclude the derefs of output and input vars from consideration, since they can't
-			// be function calls:
-			if (!this_arg.is_expression) // For now, only expressions are capable of calling functions. If ever change this, might want to add a check here for this_arg.type != ARG_TYPE_NORMAL (for performance).
+			if (!*this_arg.text // Blank, or a pre-resolved input/output var.
+				 || !this_arg.is_expression && !this_arg.deref) // Plain text.
 				continue;
-			if (this_arg.deref) // No function-calls are present because the expression contains neither variables nor function calls.
+			// Otherwise, the arg will be processed by ExpressionToPostfix(), which will set is_expression
+			// based on whether the arg should be evaluated by ExpandExpression().  
+			if (this_arg.deref) // If false, no function-calls are present because the expression contains neither variables nor function calls.
 			{
 			for (deref = this_arg.deref; deref->marker; ++deref) // For each deref.
 			{
-				if (!deref->is_function)
+				if (!deref->is_function() || !deref->length) // Zero length means a dynamic function call.
 					continue;
 				if (   !(deref->func = FindFunc(deref->marker, deref->length))   )
 				{
@@ -7979,7 +7944,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 				}
 			} // for each deref of this arg
 			} // if (this_arg.deref)
-			if (!line->ExpressionToPostfix(this_arg)) // At this stage, this_arg.is_expression is known to be true. Doing this here, after the script has been loaded, might improve the compactness/adjacent-ness of the compiled expressions in memory, which might improve performance due to CPU caching.
+			if (!line->ExpressionToPostfix(this_arg)) // Doing this here, after the script has been loaded, might improve the compactness/adjacent-ness of the compiled expressions in memory, which might improve performance due to CPU caching.
 			{
 				abort = true; // So that the caller doesn't also report an error.
 				return NULL; // The function above already displayed the error msg.
@@ -8509,7 +8474,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		0,0,0,0,0,0,0  // SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_VAR, SYM_OBJECT, SYM_DYNAMIC, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
 		, 82, 82         // SYM_POST_INCREMENT, SYM_POST_DECREMENT: Highest precedence operator so that it will work even though it comes *after* a variable name (unlike other unaries, which come before).
 		, 86             // SYM_DOT
-		, 4,4,4,4,4,4    // SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE (to simplify the code, parentheses/brackets/braces must be lower than all operators in precedence).
+		, 2,2,2,2,2,2    // SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE (to simplify the code, parentheses/brackets/braces must be lower than all operators in precedence).
 		, 6              // SYM_COMMA -- Must be just above SYM_OPAREN so it doesn't pop OPARENs off the stack.
 		, 7,7,7,7,7,7,7,7,7,7,7,7  // SYM_ASSIGN_*. THESE HAVE AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for cascading assignments such as x:=y:=1 to work.
 //		, 8              // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
@@ -8522,6 +8487,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 30, 30, 30     // SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL (lower prec. than the below so that "x < 5 = var" means "result of comparison is the boolean value in var".
 		, 34, 34, 34, 34 // SYM_GT, SYM_LT, SYM_GTOE, SYM_LTOE
 		, 38             // SYM_CONCAT
+		, 4				 // SYM_LOW_CONCAT
 		, 42             // SYM_BITOR -- Seems more intuitive to have these three higher in prec. than the above, unlike C and Perl, but like Python.
 		, 46             // SYM_BITXOR
 		, 50             // SYM_BITAND
@@ -8560,24 +8526,10 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 	// TOKENIZE THE INFIX EXPRESSION INTO AN INFIX ARRAY: Avoids the performance overhead of having
 	// to re-detect whether each symbol is an operand vs. operator at multiple stages.
 	///////////////////////////////////////////////////////////////////////////////////////////////
-	// In v1.0.46.01, this section was simplified to avoid transcribing the entire expression into the
-	// deref buffer.  In addition to improving performance and reducing code size, this also solves
-	// obscure timing bugs caused by functions that have side-effects, especially in comma-separated
-	// sub-expressions.  In these cases, one part of an expression could change a built-in variable
-	// (indirectly or in the case of Clipboard, directly), an environment variable, or a double-def.
-	// For example the dynamic components of a double-deref can be changed by other parts of an
-	// expression, even one without commas.  Another example is: fn(clipboard, func_that_changes_clip()).
-	// So now, built-in & environment variables and double-derefs are resolve when they're actually
-	// encountered during the final/evaluation phase.
-	// Another benefit to deferring the resolution of these types of items is that they become eligible
-	// for short-circuiting, which further helps performance (they're quite similar to built-in
-	// functions in this respect).
 	LPTSTR op_end, cp;
-	DerefType *deref, *this_deref, *deref_start, *deref_new;
-	int derefs_in_this_double;
+	DerefType *deref, *this_deref, *deref_new;
 	int cp1; // int vs. char benchmarks slightly faster, and is slightly smaller in code size.
 	TCHAR number_buf[MAX_NUMBER_SIZE];
-	ArgLengthType *arg_map = (ArgLengthType *)(aArg.text + aArg.length + 1);
 
 	for (cp = aArg.text, deref = aArg.deref // Start at the beginning of this arg's text and look for the next deref.
 		;; ++deref, ++infix_count) // FOR EACH DEREF IN AN ARG:
@@ -8614,7 +8566,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 				if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)) \
 				{ \
 					if (!IS_SPACE_OR_TAB(cp[-1])) \
-						return LineError(_T("Missing space or operator before this."), FAIL, cp); \
+						return LineError(ERR_BAD_AUTO_CONCAT, FAIL, cp); \
 					if (infix_count > MAX_TOKENS - 2) \
 						return LineError(ERR_EXPR_TOO_LONG); \
 					infix[infix_count++].symbol = SYM_CONCAT; \
@@ -8732,7 +8684,9 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								//else it's followed by pow.  Since pow is higher precedence than unary minus,
 								// leave this unary minus as an operator so that it will take effect after the pow.
 							}
-							//else possible double deref, so leave this unary minus as an operator.
+							//else it appears to be a double deref; invalid, since names beginning with a digit are
+							// prohibited.  Either way it would be detected as an error, but interpreting it as a
+							// double-deref gives it a more intuitive error message (than ERR_BAD_AUTO_CONCAT).
 						}
 					} // Unary minus.
 					break;
@@ -8998,76 +8952,15 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 
 				case '"': // QUOTED/LITERAL STRING.
 				case '\'':
-					CHECK_AUTO_CONCAT; // This is done first to enforce the requirement of a space for auto-concat.
-					cp1 = *cp++; // cp1 now contains the starting quote mark (" or ') and cp points at the char after it.
-					// Find the end of this string literal:
-					for (int j = (int)(cp - aArg.text); ; ++j)
-					{
-						if (j >= aArg.length) // No matching end-quote. Probably impossible due to load-time validation.
-							return LineError(ERR_MISSING_CLOSE_QUOTE); // Since this error string is used in other places, compiler string pooling should result in little extra memory needed for this line.
-						if (aArg.text[j] == cp1) // i.e. this is the same type of quote mark that started the string.
-						{
-							for (; *arg_map < j; ++arg_map); // Get the next highest "escaped" offset to determine if this char is escaped.  arg_map was initialized earlier.  Relies on ARGMAP_END_MARKER being higher than any possible character offset.
-							if (*arg_map > j) // i.e. this quote mark was not escaped, so it terminates the string.
-							{
-								op_end = aArg.text + j; // This points at the ending quote.
-								break;
-							}
-						}
-					}
+					// This is the opening quote mark of a literal string.  The string itself will be
+					// handled via the "deref" list.
+					infix_count--; // Counter the loop's increment.
+					break;
 
-					if (deref) // Always true if this arg has any derefs.
-					{
-						// For each deref inside this string:
-						for ( ; deref->marker && deref->marker < op_end; cp = deref->marker + deref->length, ++deref)
-						{
-							if (infix_count > MAX_TOKENS - 5) // Ensure enough space for this iteration and at least one substring.
-								return LineError(ERR_EXPR_TOO_LONG);
-							// Output the substring preceding the deref, then concat.
-							if (cp < deref->marker)
-							{
-								if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, deref->marker - cp))   )
-									return LineError(ERR_OUTOFMEM);
-								infix[infix_count++].symbol = SYM_STRING;
-								infix[infix_count++].symbol = SYM_CONCAT;
-							}
-							// Output the deref, then concat.
-							if (deref->var->Type() == VAR_NORMAL)
-								infix[infix_count].symbol = SYM_VAR;
-							else
-							{
-								infix[infix_count].symbol = SYM_DYNAMIC;
-								infix[infix_count].buf = NULL; // SYM_DYNAMIC requires that buf be set to NULL for non-double-deref vars (since there are two different types of SYM_DYNAMIC).
-							}
-							infix[infix_count++].var = deref->var;
-							infix[infix_count++].symbol = SYM_CONCAT;
-							// Above: Even if the deref is at the end of the string, output concat and a
-							// final substring so that "%var%" always evaluates to a string, even if var
-							// contains a pure number or object.
-						}
-						this_deref = deref->marker ? deref : NULL; // Update it for later iterations.
-					}
-
-					ASSERT(cp <= op_end);
-					
-					// Output the final substring, which may be empty for "" or "something %var%".
-					infix[infix_count].symbol = SYM_STRING;
-					if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   )
-						return LineError(ERR_OUTOFMEM);
-					cp = omit_leading_whitespace(op_end + 1); // Have the loop process whatever lies beyond the ending quote.
-					// Let outer loop do infix_count++ for this token.
-
-					if (*cp && _tcschr(_T("+-*&~!"), *cp) && cp[1] != '=' && (cp[1] != '&' || *cp != '&'))
-					{
-						// The symbol following this literal string is either a unary operator or a
-						// binary operator which can't (at least logically) be applied to a literal
-						// string. Since the user's intention isn't clear, treat it as a syntax error.
-						// The most common cases where this helps are:
-						//	MsgBox % "var's address is " &var  ; Misinterpreted as SYM_BITAND.
-						//	MsgBox % "counter is now " ++var   ; Misinterpreted as SYM_POST_INCREMENT.
-						return LineError(_T("Unexpected operator following literal string."), FAIL, cp);
-					}
-					continue; // Continue vs. break to avoid the ++cp at the bottom. Above has already set cp to be the character after this literal string's close-quote.
+				case g_DerefChar:
+					// Deref char within a string, acts as concat.
+					this_infix_item.symbol = SYM_LOW_CONCAT;
+					break;
 
 				default: // NUMERIC-LITERAL, DOUBLE-DEREF, RELATIONAL OPERATOR SUCH AS "NOT", OR UNRECOGNIZED SYMBOL.
 					if (*cp == '.') // This one must be done here rather than as a "case".  See comment below.
@@ -9171,59 +9064,18 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					for (op_end = cp + 1; !_tcschr(EXPR_OPERAND_TERMINATORS, *op_end); ++op_end);
 					// Now op_end marks the end of this operand or keyword.  That end might be the zero terminator
 					// or the next operator in the expression, or just a whitespace.
-					if (this_deref && op_end >= this_deref->marker)
-						goto double_deref; // This also serves to break out of the inner for(), equivalent to a break.
-					if (*op_end == '.')
+					if (*op_end == '.') // i.e. it's a floating-point literal.
 					{
-						// Since this isn't a double deref, it can probably only be a numeric literal with decimal portion.
 						// Update op_end to include the decimal portion of the operand:
-						for (++op_end; !_tcschr(EXPR_OPERAND_TERMINATORS, *op_end); ++op_end);
+						do ++op_end; while (!_tcschr(EXPR_OPERAND_TERMINATORS, *op_end));
 					}
 
-					// Otherwise, this operand is a normal raw numeric-literal or a word-operator (and/or/not).
-					// The section below is very similar to the one used at load-time to recognize and/or/not,
-					// so it should be maintained with that section.  UPDATE for v1.0.45: The load-time parser
-					// now resolves "OR" to || and "AND" to && to improve runtime performance and reduce code size here.
-					// However, "NOT" must still be parsed here at runtime because it's not quite the same as the "!"
-					// operator (different precedence), and it seemed too much trouble to invent some special
-					// operator symbol for load-time to insert as a placeholder/substitute (especially since that
-					// symbol would appear in ListLines).
-					if (op_end-cp == 3
-						&& (cp[0] == 'n' || cp[0] == 'N')
-						&& *omit_leading_whitespace(op_end) != ':') // Exclude "not:" and "new:", which are either the key in a key-value pair or a syntax error.
-					{
-						if (   (cp1   == 'o' || cp1   == 'O')
-							&& (cp[2] == 't' || cp[2] == 'T')   ) // "NOT" was found.
-						{
-							this_infix_item.symbol = SYM_LOWNOT;
-							cp = op_end; // Have the loop process whatever lies at op_end and beyond.
-							continue; // Continue vs. break to avoid the ++cp at the bottom (though it might not matter in this case).
-						}
-						if (   (cp1   == 'e' || cp1   == 'E')
-							&& (cp[2] == 'w' || cp[2] == 'W')   ) // "NEW" was found.
-						{
-							CHECK_AUTO_CONCAT;
-							// Push this pseudo-operator onto the stack.  When it is popped off the stack
-							// (perhaps because an open-parenthesis is encountered), its symbol will be
-							// changed to SYM_FUNC.
-							if (  !(deref_new = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  )
-								return LineError(ERR_OUTOFMEM);
-							deref_new->marker = cp; // For error-reporting.
-							deref_new->param_count = 1; // Start counting at the class object, which precedes the open-parenthesis.
-							deref_new->func = &g_ObjNew;
-							infix[infix_count].symbol = SYM_NEW;
-							infix[infix_count].deref = deref_new;
-							cp = op_end; // See comments above.
-							continue;    //
-						}
-					}
 unquoted_literal:
-					// Since above didn't "continue", this item is probably a raw numeric literal (either SYM_FLOAT
-					// or SYM_INTEGER, to be differentiated later) or the "key" in "{key: value}".  Unrecognized
-					// symbols should be impossible at this stage because load-time validation would have caught
-					// them.  Any kind of unquoted alphanumeric characters (other than "NOT", which was detected
-					// above) wouldn't have reached this point because load-time pre-parsing would have marked
-					// it as a deref/var, not raw/literal text.
+					// This operand is a normal raw numeric-literal, or an unquoted literal string/key in
+					// an object literal, such as "{key: value}".  Word operators such as AND/OR/NOT/NEW
+					// and variable/function references don't reach this point as they are pre-parsed by
+					// ParseOperands() and placed into the "deref" array.  Unrecognized symbols should be
+					// impossible at this stage because prior validation would have caught them.
 					if (   (*op_end == '-' || *op_end == '+') && ctoupper(op_end[-1]) == 'E' // v1.0.46.11: It looks like scientific notation...
 						&& !(cp[0] == '0' && ctoupper(cp[1]) == 'X') // ...and it's not a hex number (this check avoids falsely detecting hex numbers that end in 'E' as exponents). This line fixed in v1.0.46.12.
 						&& !(cp[0] == '-' && cp[1] == '0' && ctoupper(cp[2]) == 'X') // ...and it's not a negative hex number (this check avoids falsely detecting hex numbers that end in 'E' as exponents). This line added as a fix in v1.0.47.03.
@@ -9274,62 +9126,170 @@ unquoted_literal:
 		if (infix_count > MAX_TOKENS - 1) // No room for the deref item below to be added.
 			return LineError(ERR_EXPR_TOO_LONG);
 		DerefType &this_deref_ref = *this_deref; // Boosts performance slightly.
-		if (this_deref_ref.is_function) // Above has ensured that at this stage, this_deref!=NULL.
+		if (this_deref_ref.is_function()) // Above has ensured that at this stage, this_deref!=NULL.
 		{
-			CHECK_AUTO_CONCAT;
+			if (this_deref_ref.length) // Non-dynamic. For dynamic calls like %x%(), auto-concat has already been handled.
+				CHECK_AUTO_CONCAT;
 			infix[infix_count].symbol = SYM_FUNC;
 			infix[infix_count].deref = this_deref;
 			// L31: Initialize param_count to zero to work with new method of parameter counting required for ObjGet/Set/Call. (See SYM_COMMA and SYM_'PAREN handling.)
 			this_deref_ref.param_count = 0;
 		}
-		else // this_deref is a variable.
+		else if (this_deref_ref.type == DT_STRING || this_deref_ref.type == DT_QSTRING)
 		{
-			if (*this_deref_ref.marker == g_DerefChar) // A double-deref because normal derefs don't start with '%'.
+			bool is_end_of_string = !this_deref_ref.next;
+			bool is_start_of_string = this_deref_ref.param_count == 1;
+			bool require_paren = this_deref_ref.param_count > 1 || this_deref_ref.next;
+
+			cp = this_deref_ref.marker; // This is done in case omit_leading_whitespace() skipped over leading whitespace of a string.
+
+			if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
+			{ 
+				TCHAR c = this_deref_ref.type == DT_QSTRING ? cp[-2] : cp[-1];
+				// See CHECK_AUTO_CONCAT macro definition for comments.
+				if (!IS_SPACE_OR_TAB(c))
+					return LineError(ERR_BAD_AUTO_CONCAT, FAIL, cp);
+				if (infix_count > MAX_TOKENS - 2)
+					return LineError(ERR_EXPR_TOO_LONG);
+				infix[infix_count++].symbol = SYM_CONCAT;
+			}
+
+			bool can_be_optimized_out = this_deref_ref.length == 0;
+			if (can_be_optimized_out)
 			{
-				// Find the end of this operand, even if that end extended into the next deref.
-				// StrChrAny() is not used because if *op_end is '\0', the _tcschr() below will find it too:
-				for (op_end = this_deref_ref.marker + this_deref_ref.length; !_tcschr(EXPR_OPERAND_TERMINATORS, *op_end); ++op_end);
-				goto double_deref;
+				// This substring is empty; can we optimize it out along with one concat op?  If this is a quoted
+				// string, at least one concat op must remain to ensure a SYM_STRING value is produced.
+				if (is_start_of_string && this_deref_ref.type == DT_QSTRING)
+				{
+					if (is_end_of_string // No second substring (this is just "").
+						|| !this_deref_ref.next->length && !this_deref_ref.next->next) // Only two substrings, and the second is also empty.
+						can_be_optimized_out = false;
+					// Otherwise: the second substring won't be optimized out, or there are more than
+					// two substrings; in either case there will be at least one concat op remaining.
+				}
+				// Otherwise: this isn't the first substring (so isn't required), or it's the first in a text arg,
+				// which will ultimately produce a string even if we optimize out all of the concat operations.
+				if (can_be_optimized_out)
+				{
+					if (*cp == g_DerefChar)
+						cp++; // Skip the deref char, which otherwise produces SYM_LOW_CONCAT.
+					else if (infix_count && infix[infix_count - 1].symbol == SYM_LOW_CONCAT)
+						infix_count--; // Undo the concat op.
+					else
+						can_be_optimized_out = false;
+				}
+			}
+
+			if (require_paren && is_start_of_string)
+			{
+				if (infix_count > MAX_TOKENS - 2)
+					return LineError(ERR_EXPR_TOO_LONG);
+				infix[infix_count].symbol = SYM_OPAREN;
+				infix_count++;
+			}
+
+			if (!can_be_optimized_out)
+			{
+				if (   !(infix[infix_count].marker = SimpleHeap::Malloc(this_deref_ref.marker, this_deref_ref.length))   )
+					return LineError(ERR_OUTOFMEM);
+				infix[infix_count].symbol = SYM_STRING;
+				infix_count++;
+			}
+			cp += this_deref_ref.length;
+
+			if (is_end_of_string)
+			{
+				if (this_deref_ref.type == DT_QSTRING)
+				{
+					cp = omit_leading_whitespace(cp + 1);
+					if (*cp && _tcschr(_T("+-*&~!"), *cp) && cp[1] != '=' && (cp[1] != '&' || *cp != '&'))
+					{
+						// The symbol following this literal string is either a unary operator or a
+						// binary operator which can't (at least logically) be applied to a literal
+						// string. Since the user's intention isn't clear, treat it as a syntax error.
+						// The most common cases where this helps are:
+						//	MsgBox % "var's address is " &var  ; Misinterpreted as SYM_BITAND.
+						//	MsgBox % "counter is now " ++var   ; Misinterpreted as SYM_POST_INCREMENT.
+						return LineError(_T("Unexpected operator following literal string."), FAIL, cp);
+					}
+				}
+				if (require_paren)
+				{
+					if (infix_count > MAX_TOKENS - 1)
+    					return LineError(ERR_EXPR_TOO_LONG);
+    				infix[infix_count].symbol = SYM_CPAREN;
+					infix_count++;
+				}
 			}
 			else
 			{
-				CHECK_AUTO_CONCAT;
-				infix[infix_count].var = this_deref_ref.var; // Set this first to allow optimizations below to override it.
-				if (this_deref_ref.var->Type() == VAR_NORMAL) // VAR_ALIAS is taken into account (and resolved) by Type().
+				// *cp must be either % (indicating an expression within the string) or the end of
+				// the arg (implying this is a top-level unquoted string and !aArg.is_expression),
+				// except that an optimization above may have skipped the '%'.
+				ASSERT(*cp == g_DerefChar || !*cp || can_be_optimized_out && cp[-1] == g_DerefChar);
+			}
+			// Counter the loop's increment.  It's done this way for simplicity, since a variable
+			// number of tokens are created by this section and the conditions are a bit convoluted.
+			infix_count--;
+			continue;
+		}
+		else if (this_deref_ref.type == DT_DOUBLE) // Marks the end of a var double-dereference.
+		{
+			infix[infix_count].symbol = SYM_DYNAMIC;
+			infix[infix_count].buf = _T(""); // Non-NULL to indicate this is a double-deref.
+		}
+		else if (this_deref_ref.type == DT_WORDOP)
+		{
+			if (this_deref_ref.symbol == SYM_NEW)
+			{
+				CHECK_AUTO_CONCAT; // Something like `"X" new C().getY()` is valid, though hardly readable.
+				// Above may have incremented infix_count.
+				infix[infix_count].symbol = SYM_NEW;
+				infix[infix_count].deref = this_deref;
+				this_deref_ref.param_count = 1; // Start counting at the class object, which precedes the open-parenthesis.
+				this_deref_ref.func = &g_ObjNew; // This overwrites this_deref_ref.symbol via the union.
+			}
+			else
+				infix[infix_count].symbol = this_deref_ref.symbol;
+		}
+		else // this_deref is a variable.
+		{
+			CHECK_AUTO_CONCAT;
+			infix[infix_count].var = this_deref_ref.var; // Set this first to allow optimizations below to override it.
+			if (this_deref_ref.var->Type() == VAR_NORMAL) // VAR_ALIAS is taken into account (and resolved) by Type().
+			{
+				// DllCall() and possibly others rely on this having been done to support changing the
+				// value of a parameter (similar to by-ref).
+				infix[infix_count].symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the clipboard in the case of expression lvalues.  Search for VAR_CLIPBOARD further below for details.
+			}
+			else // It's a built-in variable (including clipboard).
+			{
+				// The following "variables" previously had optimizations in ExpandExpression(),
+				// but since their values never change at run-time, it is better to do it here:
+				if (this_deref_ref.var->mBIV == BIV_True_False)
 				{
-					// DllCall() and possibly others rely on this having been done to support changing the
-					// value of a parameter (similar to by-ref).
-					infix[infix_count].symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the clipboard in the case of expression lvalues.  Search for VAR_CLIPBOARD further below for details.
+					infix[infix_count].symbol = SYM_INTEGER;
+					infix[infix_count].value_int64 = (ctoupper(*this_deref_ref.marker) == 'T');
 				}
-				else // It's a built-in variable (including clipboard).
+				else if (this_deref_ref.var->mBIV == BIV_PtrSize)
 				{
-					// The following "variables" previously had optimizations in ExpandExpression(),
-					// but since their values never change at run-time, it is better to do it here:
-					if (this_deref_ref.var->mBIV == BIV_True_False)
-					{
-						infix[infix_count].symbol = SYM_INTEGER;
-						infix[infix_count].value_int64 = (ctoupper(*this_deref_ref.marker) == 'T');
-					}
-					else if (this_deref_ref.var->mBIV == BIV_PtrSize)
-					{
-						infix[infix_count].symbol = SYM_INTEGER;
-						infix[infix_count].value_int64 = sizeof(void*);
-					}
-					else if (this_deref_ref.var->mBIV == BIV_IsUnicode)
-					{
+					infix[infix_count].symbol = SYM_INTEGER;
+					infix[infix_count].value_int64 = sizeof(void*);
+				}
+				else if (this_deref_ref.var->mBIV == BIV_IsUnicode)
+				{
 #ifdef UNICODE
-						infix[infix_count].symbol = SYM_INTEGER;
-						infix[infix_count].value_int64 = 1;
+					infix[infix_count].symbol = SYM_INTEGER;
+					infix[infix_count].value_int64 = 1;
 #else
-						infix[infix_count].symbol = SYM_STRING;
-						infix[infix_count].marker = _T(""); // See BIV_IsUnicode for comments about why it is blank.
+					infix[infix_count].symbol = SYM_STRING;
+					infix[infix_count].marker = _T(""); // See BIV_IsUnicode for comments about why it is blank.
 #endif
-					}
-					else
-					{
-						infix[infix_count].symbol = SYM_DYNAMIC;
-						infix[infix_count].buf = NULL; // SYM_DYNAMIC requires that buf be set to NULL for non-double-deref vars (since there are two different types of SYM_DYNAMIC).
-					}
+				}
+				else
+				{
+					infix[infix_count].symbol = SYM_DYNAMIC;
+					infix[infix_count].buf = NULL; // SYM_DYNAMIC requires that buf be set to NULL for non-double-deref vars (since there are two different types of SYM_DYNAMIC).
 				}
 			}
 		} // Handling of the var or function in this_deref.
@@ -9338,54 +9298,6 @@ unquoted_literal:
 		// be any percent signs within the text of the dereference, e.g. x + y, not %x% + %y% (unless they're
 		// deliberately double-derefs).
 		cp += this_deref_ref.length;
-		// The outer loop will now do ++infix for us.
-
-continue;     // To avoid falling into the label below. The label below is only reached by explicit goto.
-double_deref: // Caller has set cp to be start and op_end to be the character after the last one of the double deref.
-		CHECK_AUTO_CONCAT;
-		
-		infix[infix_count].symbol = SYM_DYNAMIC;
-		if (   !(infix[infix_count].buf = SimpleHeap::Malloc(cp, op_end - cp))   ) // Example string: "Array%i%"
-			return LineError(ERR_OUTOFMEM);
-
-		// Set "deref" properly for the loop to resume processing at the item after this double deref.
-		// Callers of double_deref have ensured that deref!=NULL and deref->marker!=NULL (because it
-		// doesn't make sense to have a double-deref unless caller discovered the first deref that
-		// belongs to this double deref, such as the "i" in Array%i%).
-		for (deref_start = deref, ++deref; deref->marker && deref->marker < op_end; ++deref);
-		derefs_in_this_double = (int)(deref - deref_start);
-		--deref; // Compensate for the outer loop's ++deref.
-
-		// There's insufficient room to shoehorn all the necessary data into the token, so allocate a little
-		// bit of stack memory, just enough for the number of derefs (variables) whose contents comprise the
-		// name of this double-deref variable (typically there's only one; e.g. the "i" in Array%i%).
-		if (   !(deref_new = (DerefType *)SimpleHeap::Malloc((derefs_in_this_double + 1) * sizeof(DerefType)))   ) // Provides one extra at the end as a terminator.
-			return LineError(ERR_OUTOFMEM);
-		memcpy(deref_new, deref_start, derefs_in_this_double * sizeof(DerefType));
-		deref_new[derefs_in_this_double].marker = NULL; // Put a NULL in the last item, which terminates the array.
-		for (deref_start = deref_new; deref_start->marker; ++deref_start)
-			deref_start->marker = infix[infix_count].buf + (deref_start->marker - cp); // Point each to its position in the *new* buf.
-		infix[infix_count].var = (Var *)deref_new; // Postfix evaluation uses this to build the variable's name dynamically.
-
-		if (*op_end == '(' // i.e. dynamic function call (v1.0.47.06)
-			&& !(infix_count && infix[infix_count-1].symbol == SYM_NEW)) // Not something like "new TestClass%n%()".
-		{
-			if (infix_count > MAX_TOKENS - 2) // No room for the following symbol to be added (plus the ++infix done that will be done by the outer loop).
-				return LineError(ERR_EXPR_TOO_LONG);
-			deref_start->is_function = true; // As a result of the loop above, deref_start is the null-marker deref which terminates the deref list.
-			deref_start->func = NULL; // L31: MUST BE INITIALIZED for new parameter validation method.
-			deref_start->param_count = deref_new->param_count; // param_count was set when the derefs were parsed.
-			++infix_count; // THIS CREATES ANOTHER TOKEN for the function call itself.  Order in infix is SYM_DYNAMIC + SYM_FUNC + (parameter tokens/operators).
-			infix[infix_count].symbol = SYM_FUNC;
-			infix[infix_count].deref = deref_start; // See comment below.
-			// The trick here is that this SYM_FUNC now points to one of the same deref items that the
-			// corresponding SYM_DYNAMIC does. During postfix evaluation, that allows SYM_DYNAMIC to update
-			// the attributes of that deref so that when the SYM_FUNC is executed, it will know which function
-			// to call.
-		}
-		else
-			deref_start->is_function = false;
-		cp = op_end; // Must be done only after above is done using cp: Set things up for the next iteration.
 		// The outer loop will now do ++infix for us.
 	} // For each deref in this expression, and also for the final literal/raw text to the right of the last deref.
 
@@ -9416,7 +9328,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 		// Put operands into the postfix array immediately, then move on to the next infix item:
 		if (IS_OPERAND(infix_symbol)) // At this stage, operands consist of only SYM_OPERAND and SYM_STRING.
 		{
-			if (infix_symbol == SYM_DYNAMIC && SYM_DYNAMIC_IS_WRITABLE(this_infix)) // Ordered for short-circuit performance.
+			if (infix_symbol == SYM_DYNAMIC && SYM_DYNAMIC_IS_WRITABLE(this_infix))
 			{
 				// IMPORTANT: VAR_CLIPBOARD is made into SYM_VAR here, but only for assignments.
 				// This allows built-in functions and other places in the code to treat SYM_VAR
@@ -9547,7 +9459,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 
 				// Enforce mMinParams:
 				if (func && infix_symbol == SYM_CPAREN && in_param_list->param_count < func->mMinParams
-					&& in_param_list->is_function != DEREF_VARIADIC) // Check this last since it will probably be rare.
+					&& in_param_list->type != DT_VARIADIC) // Check this last since it will probably be rare.
 					return LineError(ERR_TOO_FEW_PARAMS, FAIL, in_param_list->marker);
 			}
 				
@@ -9736,7 +9648,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 		case SYM_MULTIPLY:
 			if (in_param_list && (this_infix[1].symbol == SYM_CPAREN || this_infix[1].symbol == SYM_CBRACKET)) // Func(params*) or obj.foo[params*]
 			{
-				in_param_list->is_function = DEREF_VARIADIC;
+				in_param_list->type = DT_VARIADIC;
 				++this_infix;
 				continue;
 			}
@@ -9860,6 +9772,11 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 		SymbolType postfix_symbol = this_postfix->symbol;
 		switch (postfix_symbol)
 		{
+		case SYM_LOW_CONCAT:
+			// Now that operator precedence has been fully handled, change the symbol to simplify runtime evaluation.
+			this_postfix->symbol = SYM_CONCAT;
+			break;
+
 		case SYM_FUNC:
 			infix_symbol = this_infix->symbol;
 			// The sections below pre-process assignments to work with objects:
@@ -9991,7 +9908,12 @@ end_of_infix_to_postfix:
 
 	if (!postfix_count) // The code below relies on this check.  This can't be an empty (omitted) expression because an earlier check would've turned it into a non-expression.
 		return LineError(_T("Invalid expression."), FAIL, aArg.text);
-	
+
+	// ExpressionToPostfix() also handles unquoted string args (i.e. to support expressions
+	// between percent signs).  Now that the postfix array is constructed, is_expression
+	// should indicate how the arg should be evaluated rather than its original syntax.
+	aArg.is_expression = true;
+
 	// The following enables ExpandExpression() to be skipped in common cases for ACT_ASSIGNEXPR
 	// and ACT_RETURN.  A similar optimization used to be done for simple literal integers by
 	// storing an __int64* in arg.postfix, but this new approach allows floating-point numbers
@@ -10007,17 +9929,14 @@ end_of_infix_to_postfix:
 	{
 		if (only_symbol == SYM_DYNAMIC) // This needs some extra checks to ensure correct behaviour.
 		{
-			if (*aArg.text != '(' && *aArg.text != '+')
+			if (!SYM_DYNAMIC_IS_DOUBLE_DEREF(only_token))
 			{
-				if (SYM_DYNAMIC_IS_DOUBLE_DEREF(only_token))
+				if (only_token.var->mBIV != BIV_LoopIndex && only_token.var->mBIV != BIV_EventInfo)
 				{
 					aArg.type = ARG_TYPE_INPUT_VAR;
-					aArg.is_expression = false;
-					aArg.postfix = NULL;
-					return OK;
-				}
-				else if (only_token.var->mBIV != BIV_LoopIndex && only_token.var->mBIV != BIV_EventInfo)
-				{
+					aArg.deref = (DerefType *)only_token.var;
+					aArg.text = _T(""); // Mark it as a pre-resolved var.
+					aArg.length = 0;
 					aArg.is_expression = false;
 					aArg.postfix = NULL;
 					return OK;
@@ -10029,7 +9948,6 @@ end_of_infix_to_postfix:
 				// a string, but that seems too rare to worry about.  Furthermore, it might be resolved in
 				// a future version by allowing built-in vars to return any type of value.
 			}
-			// Otherwise, it's something like (%var%) or +A_Index, which must remain an expression.
 		}
 		else
 		{
@@ -10043,10 +9961,11 @@ end_of_infix_to_postfix:
 					return LineError(ERR_OUTOFMEM);
 				break;
 			case SYM_VAR: // SYM_VAR can only be VAR_NORMAL in this case.
-				// Ensure that ExpandArgs() ignores any text before or after the deref, as in (var).
 				// This isn't needed for ACT_ASSIGNEXPR, which does output_var->Assign(*postfix).
-				aArg.deref->marker = aArg.text;
-				aArg.deref->length = aArg.length;
+				aArg.type = ARG_TYPE_INPUT_VAR;
+				aArg.deref = (DerefType *)only_token.var;
+				aArg.text = _T(""); // Mark it as a pre-resolved var.
+				aArg.length = 0;
 				break;
 			case SYM_STRING:
 				// If this arg will be expanded normally, it needs a pointer to the final string,
@@ -12027,8 +11946,8 @@ ResultType Line::Perform()
 				//		x := 1.0
 				//		x := "quoted literal string"
 				//		x := normal_var
-				if (  !(output_var = ResolveVarOfArg(0))  )
-					return FAIL;
+				ASSERT(!*mArg[0].text); // Pre-resolved.  Dynamic assignments are handled as ACT_EXPRESSION.
+				output_var = VAR(mArg[0]);
 				return output_var->Assign(*mArg[1].postfix);
 			}
 
@@ -13302,7 +13221,7 @@ BIF_DECL(BIF_PerformAction)
 
 
 ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
-// Similar to ExpandArg(), except it parses and expands all variable references contained in aBuf.
+// Parses and expands all variable references and escape sequences contained in aBuf.
 {
 	aOutputVar = aOutputVar->ResolveAlias(); // Necessary for proper detection below of whether it's invalidly used as a source for itself.
 

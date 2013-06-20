@@ -51,7 +51,8 @@ GNU General Public License for more details.
 //    _asm mov stack, esp
 //    MsgBox(stack);
 LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType *aResultToken
-		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize)
+		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize
+		, Var **aArgVar)
 // Caller should ignore aResult unless this function returns NULL.
 // Returns a pointer to this expression's result, which can be one of the following:
 // 1) NULL, in which case aResult will be either FAIL or EARLY_EXIT to indicate the means by which the current
@@ -74,14 +75,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 	LPTSTR mem[MAX_EXPR_MEM_ITEMS]; // No init necessary.  In most cases, it will never be used.
 	int mem_count = 0; // The actual number of items in use in the above array.
 	LPTSTR result_to_return = _T(""); // By contrast, NULL is used to tell the caller to abort the current thread.  That isn't done for normal syntax errors, just critical conditions such as out-of-memory.
-	Var *output_var = (mActionType == ACT_ASSIGNEXPR) ? OUTPUT_VAR : NULL; // Resolve early because it's similar in usage/scope to the above.  Plus MUST be resolved prior to calling any script-functions since they could change the values in sArgVar[].
+	Var *output_var = (mActionType == ACT_ASSIGNEXPR && aArgIndex == 1) ? *aArgVar : NULL; // Resolve early because it's similar in usage/scope to the above.  Plus MUST be resolved prior to calling any script-functions since they could change the values in sArgVar[].
 
 	ExprTokenType *stack[MAX_TOKENS];
 	int stack_count = 0, high_water_mark = 0; // L31: high_water_mark is used to simplify object management.
 	ExprTokenType *&postfix = mArg[aArgIndex].postfix;
-
-	DerefType *deref;
-	LPTSTR cp;
 
 	///////////////////////////////
 	// EVALUATE POSTFIX EXPRESSION
@@ -111,6 +109,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 	// expression due to MAX_TOKENS (probably around MAX_TOKENS / 3).
 	#define EXPR_SMALL_MEM_LIMIT 4097 // The maximum size allowed for an item to qualify for alloca.
 	#define EXPR_ALLOCA_LIMIT 40000  // The maximum amount of alloca memory for all items.  v1.0.45: An extra precaution against stack stress in extreme/theoretical cases.
+	#define EXPR_IS_DONE (!stack_count && this_postfix[1].symbol == SYM_INVALID) // True if we've used up the last of the operators & operands.
 
 	// For each item in the postfix array: if it's an operand, push it onto stack; if it's an operator or
 	// function call, evaluate it and push its result onto the stack.  SYM_INVALID is the special symbol
@@ -137,87 +136,22 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			{
 				if (SYM_DYNAMIC_IS_DOUBLE_DEREF(this_token)) // Double-deref such as Array%i%.
 				{
-					// Start off by looking for the first deref.
-					deref = (DerefType *)this_token.var; // MUST BE DONE PRIOR TO OVERWRITING MARKER/UNION BELOW.
-					cp = this_token.buf; // Start at the beginning of this arg's text.
-					size_t var_name_length = 0;
-					
-					this_token.marker = _T("");         // Set default in case of early goto.  Must be done after above.
-					this_token.symbol = SYM_STRING; //
-
-					if (deref->marker == cp && !cp[deref->length] && (deref+1)->is_function // %soleDeref%()
-						&& deref->var->HasObject()) // It's an object; implies var->Type() == VAR_NORMAL.
+					if (!stack_count) // Prevent stack underflow.
+						goto abnormal_end;
+					ExprTokenType &right = *STACK_POP;
+					right_string = TokenToString(right, right_buf);
+					right_length = EXPR_TOKEN_LENGTH((&right), right_string);
+					// Do some basic validation to ensure a helpful error message is displayed on failure.
+					if (right_length == 0)
 					{
-						// Push the object, not the var, in case this variable is modified in the
-						// parameter list of this function call (which is evaluated prior to SYM_FUNC).
-						this_token.symbol = SYM_OBJECT;
-						this_token.object = deref->var->Object();
-						this_token.object->AddRef();
-						goto push_this_token;
+						LineError(ERR_DYNAMIC_BLANK, FAIL, mArg[aArgIndex].text);
+						goto abort;
 					}
-					// Otherwise, it could still be %var%() where var contains a string which is too
-					// long for the section below to handle.  Supporting that case doesn't seem
-					// worthwhile for the following reasons:
-					//  1) It would require some logic in the above section to allocate memory for the
-					//     string, keeping in mind that deref->var could be VAR_CLIPBOARD/BUILTIN which
-					//     can't be pushed directly onto the stack.
-					//  2) Pushing a var onto the stack would cause inconsistent behaviour if that var
-					//     is modified within the function call's parameter list (although that already
-					//     causes inconsistent behaviour if the var appears multiple times in the list).
-					//  3) Even if the %var%() case was supported, we don't know at this point whether
-					//     xxx%var%() or similar will exceed MAX_VAR_NAME_LENGTH, which means one more
-					//     inconsistency.
-					//  4) The only benefit of supporting long strings is consistency with regard to
-					//     __Call, which will probably only be used for debugging.  Future changes to
-					//     error-handling in expressions could supersede that.
-
-					// Loadtime validation has ensured that none of these derefs are function-calls
-					// (i.e. deref->is_function is alway false) with the possible exception of the final
-					// deref (the one with a NULL marker), which can be a function-call if this
-					// SYM_DYNAMIC is a dynamic call. Other than this, loadtime logic seems incapable
-					// of producing function-derefs inside something that would later be interpreted
-					// as a double-deref.
-					for (; deref->marker; ++deref)  // A deref with a NULL marker terminates the list. "deref" was initialized higher above.
+					if (right_length > MAX_VAR_NAME_LENGTH)
 					{
-						// FOR EACH DEREF IN AN ARG (if we're here, there's at least one):
-						// Copy the chars that occur prior to deref->marker into the buffer:
-						for (; cp < deref->marker && var_name_length < MAX_VAR_NAME_LENGTH; left_buf[var_name_length++] = *cp++);
-						if (var_name_length >= MAX_VAR_NAME_LENGTH && cp < deref->marker) // The variable name would be too long!
-							goto double_deref_fail; // For simplicity and in keeping with the tradition that expressions generally don't display runtime errors, just treat it as a blank.
-						// Now copy the contents of the dereferenced var.  For all cases, aBuf has already
-						// been verified to be large enough, assuming the value hasn't changed between the
-						// time we were called and the time the caller calculated the space needed.
-						if (deref->var->Get() > (VarSizeType)(MAX_VAR_NAME_LENGTH - var_name_length)) // The variable name would be too long!
-							goto double_deref_fail; // For simplicity and in keeping with the tradition that expressions generally don't display runtime errors, just treat it as a blank.
-						var_name_length += deref->var->Get(left_buf + var_name_length);
-						// Finally, jump over the dereference text:
-						cp += deref->length;
+						LineError(ERR_DYNAMIC_TOO_LONG, FAIL, right_string);
+						goto abort;
 					}
-
-					// Copy any chars that occur after the final deref into the buffer:
-					for (; *cp && var_name_length < MAX_VAR_NAME_LENGTH; left_buf[var_name_length++] = *cp++);
-					if (var_name_length >= MAX_VAR_NAME_LENGTH && *cp // The variable name would be too long!
-						|| !var_name_length && !deref->is_function) // It resolves to an empty string (e.g. a simple dynamic var like %Var% where Var is blank) but isn't a dynamic function call, which would trigger g_MetaObject.__Call().
-						goto double_deref_fail; // For simplicity and in keeping with the tradition that expressions generally don't display runtime errors, just treat it as a blank.
-
-					// Terminate the buffer, even if nothing was written into it:
-					left_buf[var_name_length] = '\0';
-
-					// v1.0.47.06 dynamic function calls: As a result of a prior loop, deref = the null-marker
-					// deref which terminates the deref list. is_function is set by the infix processing code.
-					if (deref->is_function)
-					{	
-						// Since the parameter list is evaluated between SYM_DYNAMIC and its corresponding
-						// SYM_FUNC, it is possible for a recursive script to re-evaluate this token a second
-						// time prior to actually calling the function the first time.  With the old approach
-						// of setting the SYM_FUNC's deref->func in this section, such recursion could cause
-						// the wrong function to be called.  Instead, push the function name onto the stack
-						// to await SYM_FUNC:
-						this_token.symbol = SYM_STRING;
-						this_token.marker = _tcscpy(talloca(var_name_length + 1), left_buf);
-						goto push_this_token;
-					}
-
 					// In v1.0.31, FindOrAddVar() vs. FindVar() is called below to support the passing of non-existent
 					// array elements ByRef, e.g. Var:=MyFunc(Array%i%) where the MyFunc function's parameter is
 					// defined as ByRef, would effectively create the new element Array%i% if it doesn't already exist.
@@ -226,17 +160,31 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					// since it seems relatively harmless to create a blank variable in something like var := Array%i%
 					// (though it will produce a runtime error if the double resolves to an illegal variable name such
 					// as one containing spaces).
-					if (   !(temp_var = g_script.FindOrAddVar(left_buf, var_name_length))   )
+					if (   !(temp_var = g_script.FindOrAddVar(right_string, right_length))   )
 					{
 						// Above already displayed the error.  As of v1.0.31, this type of error is displayed and
 						// causes the current thread to terminate, which seems more useful than the old behavior
 						// that tolerated anything in expressions.
 						goto abort;
 					}
-					// Otherwise, var was found or created.
+					if (aArgVar && EXPR_IS_DONE && mArg[aArgIndex].type == ARG_TYPE_OUTPUT_VAR)
+					{
+						if (VAR_IS_READONLY(*temp_var))
+						{
+							// Having this check here allows us to display the variable name rather than its contents
+							// in the error message.
+							LineError(ERR_VAR_IS_READONLY, FAIL, temp_var->mName);
+							goto abort;
+						}
+						// Take a shortcut to allow dynamic output vars to resolve to builtin vars such as Clipboard
+						// or A_WorkingDir.  For additional comments, search for "SYM_VAR is somewhat unusual".
+						aArgVar[aArgIndex] = temp_var;
+						result_to_return = _T(""); // No need to dereference it; this value won't be used but must be non-NULL.
+						goto normal_end_skip_output_var;
+					}
 					this_token.var = temp_var;
-				} // Double-deref.
-				//else: It's a built-in variable or potential environment variable.
+				}
+				//else: It's a built-in variable.
 
 				// Check if it's a normal variable rather than a built-in variable.
 				switch (this_token.var->Type())
@@ -277,7 +225,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					// Since their values never change at run-time, they are replaced at load-time
 					// with the appropriate SYM_INTEGER value.
 					//
-					break; // case VAR_BUILTIN
+					break; // case VAR_VIRTUAL
   				}
 				// Otherwise, it's a built-in variable.
 				result_size = this_token.var->Get() + 1;
@@ -377,7 +325,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				// Traditionally, expressions don't display any runtime errors.  So if the function is being
 				// called incorrectly by the script, the expression is aborted like it would be for other
 				// syntax errors:
-				if (actual_param_count < func->mMinParams && this_token.deref->is_function != DEREF_VARIADIC)
+				if (actual_param_count < func->mMinParams && this_token.deref->type != DT_VARIADIC)
 					goto abnormal_end;
 			}
 			
@@ -393,7 +341,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			// lists and stores local var backups for UDFs in func_call.  Once func_call goes out of scope,
 			// its destructor calls Var::FreeAndRestoreFunctionVars() if appropriate.
 			if (!func->Call(func_call, aResult, this_token, params, actual_param_count
-									, this_token.deref->is_function == DEREF_VARIADIC))
+									, this_token.deref->type == DT_VARIADIC))
 			{
 				// Take a shortcut because for backward compatibility, ACT_ASSIGNEXPR (and anything else
 				// for that matter) is being aborted by this type of early return (i.e. if there's an
@@ -421,7 +369,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				goto push_this_token;
 			}
 			
-			#define EXPR_IS_DONE (!stack_count && this_postfix[1].symbol == SYM_INVALID) // True if we've used up the last of the operators & operands.
 			done = EXPR_IS_DONE;
 
 			// v1.0.45: If possible, take a shortcut for performance.  Doing it this way saves at least
@@ -1351,7 +1298,7 @@ push_this_token:
 		result_to_return = TokenToBOOL(result_token) ? _T("1") : _T(""); // Return "" vs. "0" for FALSE for consistency with "goto abnormal_end" (which bypasses this section).
 		goto normal_end_skip_output_var; // ACT_IF never has an output_var.
 	}
-
+	
 	if (aResultToken)
 	{
 		switch (result_token.symbol)
@@ -1376,7 +1323,7 @@ push_this_token:
 		}
 		// Since above didn't return, the result is a string.  Continue on below to copy it into persistent memory.
 	}
-
+	
 	//
 	// Store the result of the expression in the deref buffer for the caller.
 	//
@@ -1395,8 +1342,25 @@ push_this_token:
 		 // %f probably defaults to %0.6f.  %f can handle doubles in MSVC++.
 		aTarget += sntprintf(aTarget, MAX_NUMBER_SIZE, FORMAT_FLOAT, result_token.value_double) + 1; // +1 because that's what callers want; i.e. the position after the terminator.
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
+	case SYM_VAR:
+		// SYM_VAR is somewhat unusual at this late a stage.  This next check allows ACT_FUNC to pass a variable
+		// reference to the function in cases like `SomeFunc % var := ""`.  Dynamic output vars were already handled
+		// by the SYM_DYNAMIC code.
+		if (aArgVar && mActionType == ACT_FUNC)
+		{
+			aArgVar[aArgIndex] = result_token.var; // Let the command refer to this variable directly.
+			result_to_return = _T(""); // No need to dereference it; this value won't be used but must be non-NULL.
+			goto normal_end_skip_output_var;
+		}
+		// Otherwise:
+		// It is tempting to simply return now and let ExpandArgs() decide whether the var needs to be dereferenced.
+		// However, the var's length might not fit within the amount calculated by GetExpandedArgSize(), and in that
+		// case would overflow the deref buffer.  The var can be safely returned if it won't be dereferenced, but it
+		// doesn't seem worth duplicating the ArgMustBeDereferenced() logic here given the rarity of SYM_VAR results.
+		// aArgVar[] isn't set because it would be redundant, and might cause issues if the var is modified as a
+		// side-effect of a later arg (e.g. ArgLength() might return a wrong value).
+	// FALL THROUGH TO BELOW:
 	case SYM_STRING:
-	case SYM_VAR: // SYM_VAR is somewhat unusual at this late a stage.
 		// At this stage, we know the result has to go into our deref buffer because if a way existed to
 		// avoid that, we would already have goto/returned higher above (e.g. for ACT_ASSIGNEXPR OR ACT_EXPRESSION.
 		// Also, at this stage, the pending result can exist in one of several places:
@@ -1533,18 +1497,6 @@ normal_end_skip_output_var:
 	}
 
 	return result_to_return;
-
-	// Listing the following label last should slightly improve performance because it avoids an extra "goto"
-	// in the postfix loop above the push_this_token label.  Also, keeping seldom-reached code at the end
-	// may improve how well the code fits into the CPU cache.
-double_deref_fail: // For the rare cases when the name of a dynamic function call is too long or improper.
-	// A deref with a NULL marker terminates the list, and also indicates whether this is a dynamic function
-	// call. "deref" has been set by the caller, and may or may not be the NULL marker deref.
-	for (; deref->marker; ++deref);
-	if (deref->is_function)
-		goto abnormal_end;
-	else
-		goto push_this_token;
 }
 
 
@@ -1948,12 +1900,6 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 			// it's not an input or output var.
 			if (this_arg.is_expression)
 			{
-				// v1.0.45:
-				// Make ARGVAR1 (OUTPUT_VAR) temporarily valid (the entire array is made valid only later, near the
-				// bottom of this function).  This helps the performance of ACT_ASSIGNEXPR by avoiding the need
-				// resolve a dynamic output variable like "Array%i% := (Expr)" twice: once in GetExpandedArgSize
-				// and again in ExpandExpression()).
-				*sArgVar = *arg_var; // Shouldn't need to be backed up or restored because no one beneath us on the call stack should be using it; only things that go on top of us might overwrite it, so ExpandExpr() must be sure to copy this out before it launches any script-functions.
 				// In addition to producing its return value, ExpandExpression() will alter our_buf_marker
 				// to point to the place in our_deref_buf where the next arg should be written.
 				// In addition, in some cases it will alter some of the other parameters that are arrays or
@@ -1965,7 +1911,7 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 				// a variable other than some function's local variable (and a local's contents are no
 				// longer valid due to having been freed after the call [unless it's static]).
 				arg_deref[i] = ExpandExpression(i, result, mActionType == ACT_RETURN ? aResultToken : NULL  // L31: aResultToken is used to return a non-string value. Pass NULL if mMctionType != ACT_RETURN for maintainability; non-NULL aResultToken should mean we want a token returned - this can be used in future for numeric params or array support in commands.
-					, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, extra_size);
+					, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, extra_size, arg_var);
 				extra_size = 0; // See comment below.
 				// v1.0.46.01: The whole point of passing extra_size is to allow an expression to write
 				// a large string to the deref buffer without having to expand it (i.e. if there happens to
@@ -1984,6 +1930,19 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 					result_to_return = result;
 					goto end;
 				}
+				if (this_arg.type == ARG_TYPE_OUTPUT_VAR)
+				{
+					if (!arg_var[i])
+					{
+						// This arg contains an expression which failed to produce a writable variable.
+						// The error message is vague enough to cover actual read-only vars and other
+						// expressions which don't produce any kind of variable.
+						LineError(ERR_VAR_IS_READONLY, FAIL, arg_deref[i]);
+						result_to_return = FAIL;
+						goto end;
+					}
+					//else arg_var[i] has been set to a writable variable by the double-deref code.
+				}
 				continue;
 			}
 
@@ -1996,29 +1955,15 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 				continue;
 			}
 
-			// arg_var[i] was previously set by GetExpandedArgSize() so that we don't have to determine its
-			// value again:
-			if (   !(the_only_var_of_this_arg = arg_var[i])   ) // Arg isn't an input var or singled isolated deref.
+			// arg_var[i] was previously set by GetExpandedArgSize() or ExpandExpression() above.
+			if (   !(the_only_var_of_this_arg = arg_var[i])   )
 			{
-				#define NO_DEREF (!ArgHasDeref(i + 1))
-				if (NO_DEREF)
-				{
-					arg_deref[i] = this_arg.text;  // Point the dereferenced arg to the arg text itself.
-					continue;  // Don't need to use the deref buffer in this case.
-				}
-				// Otherwise there's more than one variable in the arg, so it must be expanded in the normal,
-				// lower-performance way.
-				arg_deref[i] = our_buf_marker; // Point it to its location in the buffer.
-				if (   !(our_buf_marker = ExpandArg(our_buf_marker, i))   ) // Expand the arg into that location.
-				{
-					result_to_return = FAIL; // ExpandArg() will have already displayed the error.
-					goto end;
-				}
-				continue;
+				// Since above did not "continue" and arg_var[i] is NULL, this arg can't be an expression
+				// or input/output var and must therefore be plain text.
+				arg_deref[i] = this_arg.text;  // Point the dereferenced arg to the arg text itself.
+				continue;  // Don't need to use the deref buffer in this case.
 			}
 
-			// Since above didn't "continue", the_only_var_of_this_arg==true, so this arg resolves to
-			// only a single, naked var.
 			switch(ArgMustBeDereferenced(the_only_var_of_this_arg, i, arg_var)) // Yes, it was called by GetExpandedArgSize() too, but a review shows it's difficult to avoid this without being worse than the disease (10/22/2006).
 			{
 			case CONDITION_FALSE:
@@ -2041,7 +1986,7 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 				// in this iteration.  So instead of calling Contents() here, store a NULL value
 				// as a special indicator for the loop below to call Contents().
 				arg_deref[i] = // The following is ordered for short-circuit performance:
-					(   ACT_IS_ASSIGN(mActionType) && i == 1  // By contrast, for the below i==anything (all args):
+					(   mActionType == ACT_ASSIGNEXPR && i == 1  // By contrast, for the below i==anything (all args):
 					||  mActionType == ACT_IF
 					//|| mActionType == ACT_WHILE // Not necessary to check this one because loadtime leaves ACT_WHILE as an expression in all common cases. Also, there's no easy way to get ACT_WHILE into the range above due to the overlap of other ranges in enum_act.
 					) && the_only_var_of_this_arg->Type() == VAR_NORMAL // Otherwise, users of this optimization would have to reproduce more of the logic in ArgMustBeDereferenced().
@@ -2161,59 +2106,37 @@ VarSizeType Line::GetExpandedArgSize(Var *aArgVar[])
 	VarSizeType space_needed;
 	Var *the_only_var_of_this_arg;
 	ResultType result;
-
+	
 	// Note: the below loop is similar to the one in ExpandArgs(), so the two should be maintained together:
 	for (i = 0, space_needed = 0; i < mArgc; ++i) // FOR EACH ARG:
 	{
 		ArgStruct &this_arg = mArg[i]; // For performance and convenience.
-
-		// Accumulate the total of how much space we will need.
-		if (this_arg.type == ARG_TYPE_OUTPUT_VAR)  // These should never be included in the space calculation.
-		{
-			if (   !(aArgVar[i] = ResolveVarOfArg(i))   ) // v1.0.45: Resolve output variables too, which eliminates a ton of calls to ResolveVarOfArg() in various other functions.  This helps code size more than performance.
-				return VARSIZE_ERROR;  // The above will have already displayed the error.
-			continue;
-		}
-		// Otherwise, set default aArgVar[] (above took care of setting aArgVar[] for itself).
-		aArgVar[i] = NULL;
+		
+		aArgVar[i] = NULL; // Set default.
 
 		if (this_arg.is_expression)
 		{
-			// Now that literal strings/numbers are handled by ExpressionToPostfix(), the length used below
-			// is more room than is strictly necessary. But given how little space is typically wasted (and
-			// that only while the expression is being evaluated), it doesn't seem worth worrying about it.
-			// See other comments at macro definition.
+			// The length used below is more room than is strictly necessary, but given how little
+			// space is typically wasted (and that only while the expression is being evaluated),
+			// it doesn't seem worth worrying about it.  See other comments at macro definition.
 			space_needed += EXPR_BUF_SIZE(this_arg.length);
 			continue;
 		}
-
-		// Otherwise:
-		// Always do this check before attempting to traverse the list of dereferences, since
-		// such an attempt would be invalid in this case:
-		the_only_var_of_this_arg = NULL;
-		if (this_arg.type == ARG_TYPE_INPUT_VAR) // Previous stage has ensured that arg can't be an expression if it's an input var.
-			if (   !(the_only_var_of_this_arg = ResolveVarOfArg(i, false))   )
-				return VARSIZE_ERROR;  // The above will have already displayed the error.
-
-		if (!the_only_var_of_this_arg) // It's not an input var.
+		// Since is_expression is false, it must be plain text or a non-dynamic input/output var.
+		
+		if (this_arg.type == ARG_TYPE_OUTPUT_VAR)
 		{
-			if (NO_DEREF)
-				// Don't increase space_needed, even by 1 for the zero terminator, because
-				// the terminator isn't needed if the arg won't exist in the buffer at all.
-				continue;
-			// Now we know it has at least one deref.  If the second deref's marker is NULL,
-			// the first is the only deref in this arg.  UPDATE: The following will return
-			// false for function calls since they are always followed by a set of parentheses
-			// (empty or otherwise), thus they will never be seen as isolated by it:
-			#define SINGLE_ISOLATED_DEREF (!this_arg.deref[1].marker\
-				&& this_arg.deref[0].length == this_arg.length) // and the arg contains no literal text
-			if (SINGLE_ISOLATED_DEREF) // This also ensures the deref isn't a function-call.  10/25/2006: It might be possible to avoid the need for detecting SINGLE_ISOLATED_DEREF by transforming them into INPUT_VARs at loadtime.  I almost finished such a mod but the testing and complications with things like ListLines didn't seem worth the tiny benefit.
-				the_only_var_of_this_arg = this_arg.deref[0].var;
+			// Pre-resolved output vars should never be included in the space calculation,
+			// but we do need to store the var reference in aArgVar for our caller.
+			ASSERT(!*this_arg.text);
+			aArgVar[i] = VAR(this_arg);
+			continue;
 		}
-		if (the_only_var_of_this_arg) // i.e. check it again in case the above block changed the value.
+
+		if (this_arg.type == ARG_TYPE_INPUT_VAR)
 		{
-			// This is set for our caller so that it doesn't have to call ResolveVarOfArg() again, which
-			// would a performance hit if this variable is dynamically built and thus searched for at runtime:
+			ASSERT(!*this_arg.text);
+			the_only_var_of_this_arg = VAR(this_arg);
 			aArgVar[i] = the_only_var_of_this_arg; // For now, this is done regardless of whether it must be dereferenced.
 			if (   !(result = ArgMustBeDereferenced(the_only_var_of_this_arg, i, aArgVar))   )
 				return VARSIZE_ERROR;
@@ -2226,21 +2149,7 @@ VarSizeType Line::GetExpandedArgSize(Var *aArgVar[])
 			// being needed, so our callers should be aware that that can happen.
 			continue;
 		}
-
-		// Otherwise: This arg has more than one deref, or a single deref with some literal text around it.
-		space_needed += this_arg.length + 1; // +1 for this arg's zero terminator in the buffer.
-		if (this_arg.deref) // There's at least one deref.
-		{
-			for (DerefType *deref = this_arg.deref; deref->marker; ++deref)
-			{
-				// Replace the length of the deref's literal text with the length of its variable's contents.
-				// At this point, this_arg.is_expression is known to be false. Since non-expressions can't
-				// contain function-calls, there's no need to check deref->is_function.
-				space_needed -= deref->length;
-				space_needed += deref->var->Get(); // If an environment var, Get() will yield its length.
-			}
-		}
-	} // For each arg.
+	}
 
 	return space_needed;
 }
@@ -2291,64 +2200,11 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 	for (int i = 0; i < mArgc; ++i)
 		if (i != aArgIndex && mArg[i].type == ARG_TYPE_OUTPUT_VAR)
 		{
-			if (   !(output_var = (i < aArgIndex) ? aArgVar[i] : ResolveVarOfArg(i, false))   ) // aArgVar: See top of this function for comments.
-				return FAIL;  // It will have already displayed the error.
+			if (   !(output_var = aArgVar[i])   ) // aArgVar: See top of this function for comments.
+				return CONDITION_TRUE; // Var can't be resolved yet, so we must assume deref is required.
 			if (output_var->ResolveAlias() == aVar)
 				return CONDITION_TRUE;
 		}
 	// Otherwise:
 	return CONDITION_FALSE;
-}
-
-
-
-LPTSTR Line::ExpandArg(LPTSTR aBuf, int aArgIndex, Var *aArgVar) // 10/2/2006: Doesn't seem worth making it inline due to more complexity than expected.  It would also increase code size without being likely to help performance much.
-// Caller must ensure that aArgVar is the variable of the aArgIndex arg when it's of type ARG_TYPE_INPUT_VAR.
-// Caller must be sure not to call this for an arg that's marked as an expression, since
-// expressions are handled by a different function.  Similarly, it must ensure that none
-// of this arg's deref's are function-calls, i.e. that deref->is_function is always false.
-// Caller must ensure that aBuf is large enough to accommodate the translation
-// of the Arg.  No validation of above params is done, caller must do that.
-// Returns a pointer to the char in aBuf that occurs after the zero terminator
-// (because that's the position where the caller would normally resume writing
-// if there are more args, since the zero terminator must normally be retained
-// between args).
-{
-	ArgStruct &this_arg = mArg[aArgIndex]; // For performance and convenience.
-#ifdef _DEBUG
-	// This should never be called if the given arg is an output var, so flag that in DEBUG mode:
-	if (this_arg.type == ARG_TYPE_OUTPUT_VAR)
-	{
-		LineError(_T("DEBUG: ExpandArg() was called to expand an arg that contains only an output variable."));
-		return NULL;
-	}
-#endif
-
-	if (aArgVar)
-		// +1 so that we return the position after the terminator, as required.
-		return aBuf += aArgVar->Get(aBuf) + 1;
-
-	LPTSTR this_marker, pText = this_arg.text;  // Start at the beginning of this arg's text.
-	if (this_arg.deref) // There's at least one deref.
-	{
-		for (DerefType *deref = this_arg.deref  // Start off by looking for the first deref.
-			; deref->marker; ++deref)  // A deref with a NULL marker terminates the list.
-		{
-			// FOR EACH DEREF IN AN ARG (if we're here, there's at least one):
-			// Copy the chars that occur prior to deref->marker into the buffer:
-			for (this_marker = deref->marker; pText < this_marker; *aBuf++ = *pText++); // memcpy() is typically slower for small copies like this, at least on some hardware.
-			// Now copy the contents of the dereferenced var.  For all cases, aBuf has already
-			// been verified to be large enough, assuming the value hasn't changed between the
-			// time we were called and the time the caller calculated the space needed.
-			aBuf += deref->var->Get(aBuf); // Caller has ensured that deref->is_function==false
-			// Finally, jump over the dereference text. Note that in the case of an expression, there might not
-			// be any percent signs within the text of the dereference, e.g. x + y, not %x% + %y%.
-			pText += deref->length;
-		}
-	}
-	// Copy any chars that occur after the final deref into the buffer:
-	for (; *pText; *aBuf++ = *pText++); // memcpy() is typically slower for small copies like this, at least on some hardware.
-	// Terminate the buffer, even if nothing was written into it:
-	*aBuf++ = '\0';
-	return aBuf; // Returns the position after the terminator.
 }

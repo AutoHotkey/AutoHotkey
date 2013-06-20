@@ -860,7 +860,7 @@ public:
 		, mHowAllocated(ALLOC_NONE)
 		, mAttrib(VAR_ATTRIB_UNINITIALIZED) // Seems best not to init empty vars to VAR_ATTRIB_NOT_NUMERIC because it would reduce maintainability, plus finding out whether an empty var is numeric via IsNumeric() is a very fast operation.
 		, mScope(aScope)
-		, mName(aVarName) // Caller gave us a pointer to dynamic memory for this (or static in the case of ResolveVarOfArg()).
+		, mName(aVarName) // Caller gave us a pointer to dynamic memory for this.
 		, mType((VarTypeType)aType)
 	{
 		if (aType == VAR_BUILTIN) // Relies on the fact that numbers less than VAR_LAST_TYPE can never realistically match the address of any function.
