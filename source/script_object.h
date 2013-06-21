@@ -220,6 +220,14 @@ public:
 		return field->Assign(aValue);
 	}
 
+	bool SetItem(LPTSTR aKey, __int64 aValue)
+	{
+		ExprTokenType token;
+		token.symbol = SYM_INTEGER;
+		token.value_int64 = aValue;
+		return SetItem(aKey, token);
+	}
+
 	bool SetItem(LPTSTR aKey, IObject *aValue)
 	{
 		ExprTokenType token;
@@ -252,6 +260,7 @@ public:
 	bool InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], int aValueCount);
 
 	void EndClassDefinition();
+	Object *GetUnresolvedClass(LPTSTR &aName);
 	
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
