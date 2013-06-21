@@ -42,6 +42,7 @@ GNU General Public License for more details.
 ////////////////////
 
 
+
 ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 {
 	int window_index = *aID ? ATOI(aID) - 1 : 0;
@@ -4473,8 +4474,8 @@ ResultType InputBoxParseOptions(LPTSTR aOptions, InputBoxType &aInputBox)
 
 			switch (ctoupper(*next_option))
 			{
-			case 'W': aInputBox.width = ATOI(next_option + 1); break;
-			case 'H': aInputBox.height = ATOI(next_option + 1); break;
+			case 'W': aInputBox.width = DPIScale(ATOI(next_option + 1)); break;
+			case 'H': aInputBox.height = DPIScale(ATOI(next_option + 1)); break;
 			case 'X': aInputBox.xpos = ATOI(next_option + 1); break;
 			case 'Y': aInputBox.ypos = ATOI(next_option + 1); break;
 			case 'T': aInputBox.timeout = (DWORD)(ATOF(next_option + 1) * 1000); break;
@@ -9536,6 +9537,15 @@ VarSizeType BIV_PtrSize(LPTSTR aBuf, LPTSTR aVarName)
 
 
 
+VarSizeType BIV_ScreenDPI(LPTSTR aBuf, LPTSTR aVarName)
+{
+	if (aBuf)
+		_itot(g_ScreenDPI, aBuf, 10);
+	return aBuf ? (VarSizeType)_tcslen(aBuf) : MAX_INTEGER_SIZE;
+}
+
+
+
 VarSizeType BIV_IconHidden(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (aBuf)
@@ -10504,8 +10514,9 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_INTEGER_SIZE];
 	LPTSTR target_buf = aBuf ? aBuf : buf;
+	GuiType* gui = g->GuiWindow; // For performance.
 
-	if (!g->GuiWindow) // The current thread was not launched as a result of GUI action.
+	if (!gui) // The current thread was not launched as a result of GUI action.
 	{
 		*target_buf = '\0';
 		return 0;
@@ -10517,17 +10528,17 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 		// g->GuiPoint.x was overloaded to contain the size, since there are currently never any cases when
 		// A_GuiX/Y and A_GuiWidth/Height are both valid simultaneously.  It is documented that each of these
 		// variables is defined only in proper types of subroutines.
-		_itot(LOWORD(g->GuiPoint.x), target_buf, 10);
+		_itot(gui->Unscale(LOWORD(g->GuiPoint.x)), target_buf, 10);
 		// Above is always stored as decimal vs. hex, regardless of script settings.
 		break;
 	case 'H':
-		_itot(HIWORD(g->GuiPoint.x), target_buf, 10); // See comments above.
+		_itot(gui->Unscale(HIWORD(g->GuiPoint.x)), target_buf, 10); // See comments above.
 		break;
 	case 'X':
-		_itot(g->GuiPoint.x, target_buf, 10);
+		_itot(gui->Unscale(g->GuiPoint.x), target_buf, 10);
 		break;
 	case 'Y':
-		_itot(g->GuiPoint.y, target_buf, 10);
+		_itot(gui->Unscale(g->GuiPoint.y), target_buf, 10);
 		break;
 	case '\0': // A_Gui
 		if (!*g->GuiWindow->mName) // v1.1.04: Anonymous GUI.
@@ -14715,8 +14726,9 @@ BIF_DECL(BIF_StatusBar)
 
 	if (!g->GuiDefaultWindowValid()) // Always operate on thread's default window to simplify the syntax.
 		return;
+	GuiType& gui = *g->GuiDefaultWindow; // For performance.
 	HWND control_hwnd;
-	if (   !(control_hwnd = g->GuiDefaultWindow->mStatusBarHwnd)   )
+	if (   !(control_hwnd = gui.mStatusBarHwnd)   )
 		return;
 
 	HICON hicon;
@@ -14734,7 +14746,7 @@ BIF_DECL(BIF_StatusBar)
 		int edge, part[256]; // Load-time validation has ensured aParamCount is under 255, so it shouldn't overflow.
 		for (edge = 0, new_part_count = 0; new_part_count < aParamCount; ++new_part_count)
 		{
-			edge += (int)TokenToInt64(*aParam[new_part_count]); // For code simplicity, no check for negative (seems fairly harmless since the bar will simply show up with the wrong number of parts to indicate the problem).
+			edge += gui.Scale((int)TokenToInt64(*aParam[new_part_count])); // For code simplicity, no check for negative (seems fairly harmless since the bar will simply show up with the wrong number of parts to indicate the problem).
 			part[new_part_count] = edge;
 		}
 		// For code simplicity, there is currently no means to have the last part of the bar use less than
@@ -15477,7 +15489,7 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 			{
 				do_auto_size = 0; // Turn off any auto-sizing that may have been put into effect by default (such as for insertion).
 				lvc.mask |= LVCF_WIDTH;
-				lvc.cx = ATOI(next_option);
+				lvc.cx = gui.Scale(ATOI(next_option));
 			}
 		}
 

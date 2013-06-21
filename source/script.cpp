@@ -1254,6 +1254,15 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 		}
 	}
 
+	// Resolve any unresolved base classes.
+	if (mUnresolvedClasses)
+	{
+		if (!ResolveClasses())
+			return LOADING_FAILED;
+		mUnresolvedClasses->Release();
+		mUnresolvedClasses = NULL;
+	}
+
 #ifndef AUTOHOTKEYSC
 	if (mIncludeLibraryFunctionsThenExit)
 	{
@@ -2975,6 +2984,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		size_t space_remaining = LINE_SIZE - (parameter-aBuf);
 		StrReplace(parameter, _T("%A_ScriptDir%"), mFileDir, SCS_INSENSITIVE, 1, space_remaining); // v1.0.35.11.  Caller has ensured string is writable.
+		StrReplace(parameter, _T("%A_LineFile%"), Line::sSourceFile[mCurrFileIndex], SCS_INSENSITIVE, 1, space_remaining); // v1.1.11: Support A_LineFile to allow paths relative to current file regardless of working dir; e.g. %A_LineFile%\..\fileinsamedir.ahk.
 		if (tcscasestr(parameter, _T("%A_AppData%"))) // v1.0.45.04: This and the next were requested by Tekl to make it easier to customize scripts on a per-user basis.
 		{
 			BIV_SpecialFolderPath(buf, _T("A_AppData"));
@@ -6286,7 +6296,28 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		if (!*base_class_name)
 			return ScriptError(_T("Missing class name."), cp);
 		if (  !(base_class = FindClass(base_class_name))  )
-			return ScriptError(_T("Unknown class."), base_class_name);
+		{
+			// This class hasn't been defined yet, but it might be.  Automatically create the
+			// class, but store it in the "unresolved" list.  When its definition is encountered,
+			// it will be removed from the list.  If any classes remain in the list when the end
+			// of the script is reached, an error will be thrown.
+			if (mUnresolvedClasses && mUnresolvedClasses->GetItem(token, base_class_name))
+			{
+				// Some other class has already referenced it.  Use the existing object:
+				base_class = (Object *)token.object;
+			}
+			else
+			{
+				if (  !mUnresolvedClasses && !(mUnresolvedClasses = Object::Create())
+					|| !(base_class = Object::Create())
+					// Storing the file/line index in "__Class" instead of something like "DBG" or
+					// two separate fields helps to reduce code size and maybe memory fragmentation.
+					// It will be overwritten when the class definition is encountered.
+					|| !base_class->SetItem(_T("__Class"), ((__int64)mCurrFileIndex << 32) | mCombinedLineNumber)
+					|| !mUnresolvedClasses->SetItem(base_class_name, base_class)  )
+					return ScriptError(ERR_OUTOFMEM);
+			}
+		}
 	}
 
 	// Validate the name even if this is a nested definition, for consistency.
@@ -6330,8 +6361,26 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 
 	token.symbol = SYM_STRING;
 	token.marker = mClassName;
+	
+	if (mUnresolvedClasses)
+	{
+		ExprTokenType result_token, *param = &token;
+		result_token.symbol = SYM_STRING;
+		result_token.marker = _T("");
+		result_token.mem_to_free = NULL;
+		// Search for class and simultaneously remove it from the unresolved list:
+		mUnresolvedClasses->_Remove(result_token, &param, 1); // result_token := mUnresolvedClasses.Remove(token)
+		// If a field was found/removed, it can only be SYM_OBJECT.
+		if (result_token.symbol == SYM_OBJECT)
+		{
+			// Use this object as the class.  At least one other object already refers to it as mBase.
+			// At this point class_object["__Class"] contains the file index and line number, but it
+			// will be overwritten below.
+			class_object = (Object *)result_token.object;
+		}
+	}
 
-	if (   !(class_object = Object::Create())
+	if (   !(class_object || (class_object = Object::Create()))
 		|| !(class_object->SetItem(_T("__Class"), token))
 		|| !(mClassObjectCount
 				? outer_class->SetItem(class_name, class_object) // Assign to super_class[class_name].
@@ -6562,6 +6611,35 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
 	}
 
 	return base_object;
+}
+
+
+Object *Object::GetUnresolvedClass(LPTSTR &aName)
+// This method is only valid for mUnresolvedClass.
+{
+	if (!mFieldCount)
+		return NULL;
+	aName = mFields[0].key.s;
+	return (Object *)mFields[0].object;
+}
+
+ResultType Script::ResolveClasses()
+{
+	LPTSTR name;
+	Object *base = mUnresolvedClasses->GetUnresolvedClass(name);
+	if (!base)
+		return OK;
+	// There is at least one unresolved class.
+	ExprTokenType token;
+	if (base->GetItem(token, _T("__Class")))
+	{
+		// In this case (an object in the mUnresolvedClasses list), it is always an integer
+		// containing the file index and line number:
+		mCurrFileIndex = int(token.value_int64 >> 32);
+		mCombinedLineNumber = LineNumberType(token.value_int64);
+	}
+	mCurrLine = NULL;
+	return ScriptError(_T("Unknown class."), name);
 }
 
 
@@ -7672,6 +7750,7 @@ BuiltInVarType Script::GetVarType_BIV(LPTSTR lowercase, BuiltInVarSetType &sette
 	if (!_tcscmp(lower, _T("ahkversion"))) return BIV_AhkVersion;
 	if (!_tcscmp(lower, _T("ahkpath"))) return BIV_AhkPath;
 	if (!_tcscmp(lower, _T("priorkey"))) return BIV_PriorKey;
+	if (!_tcscmp(lower, _T("screendpi"))) return BIV_ScreenDPI;
 
 	// Since above didn't return:
 	return NULL;
