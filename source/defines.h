@@ -141,6 +141,7 @@ enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
 	, PURE_INTEGER, PURE_FLOAT
 	, SYM_STRING = PURE_NOT_NUMERIC, SYM_INTEGER = PURE_INTEGER, SYM_FLOAT = PURE_FLOAT // Specific operand types.
 #define IS_NUMERIC(symbol) ((symbol) == SYM_INTEGER || (symbol) == SYM_FLOAT) // Ordered for short-circuit performance.
+	, SYM_MISSING // Only used in parameter lists.
 	, SYM_VAR // An operand that is a variable's contents.
 	, SYM_OPERAND // Generic/undetermined type of operand.
 	, SYM_OBJECT // L31: Represents an IObject interface pointer.

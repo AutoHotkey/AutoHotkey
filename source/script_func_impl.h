@@ -12,7 +12,7 @@
 #define ParamIndexIsOmittedOrEmpty(index)  (ParamIndexIsOmitted(index) || TokenIsEmptyString(*aParam[(index)], TRUE))
 
 // For functions that don't allow "" to mean parameter is omitted.
-#define ParamIndexIsOmitted(index)  ((index) >= aParamCount)
+#define ParamIndexIsOmitted(index)  ((index) >= aParamCount || aParam[(index)]->symbol == SYM_MISSING)
 
 #define PASTE(a, b) a##b
 
@@ -24,4 +24,5 @@
 #define ParamIndexToOptionalVar(index)				(((index) < aParamCount && aParam[index]->symbol == SYM_VAR) ? aParam[index]->var : NULL)
 
 // The macro below defaults to "", since that is by far the most common default.
+// This allows it to skip the check for SYM_MISSING, which always has marker == _T("").
 #define ParamIndexToOptionalString(index, ...)		(((index) < aParamCount) ? ParamIndexToString(index, __VA_ARGS__) : _T(""))

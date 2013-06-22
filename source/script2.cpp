@@ -12907,6 +12907,7 @@ BIF_DECL(BIF_DllCall)
 			function = (void *)aParam[0]->value_int64; // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
 			break;
 		case SYM_FLOAT:
+		case SYM_MISSING:
 			g_script.SetErrorLevelOrThrowStr(_T("-1"), _T("DllCall")); // Stage 1 error: Invalid first param.
 			return;
 		default: // SYM_OPERAND (SYM_OPERAND is typically a numeric literal).
@@ -15374,6 +15375,12 @@ BIF_DECL(BIF_StrGetPut)
 					return; // Invalid length; or caller of StrGet asked for 0 chars.
 				++aParam; // Let encoding be the next param, if present.
 			}
+			else if ((*aParam)->symbol == SYM_MISSING)
+			{
+				// Length was "explicitly omitted", as in StrGet(Address,, Encoding),
+				// which allows Encoding to be an integer without specifying Length.
+				++aParam;
+			}
 			// aParam now points to aParam_end or the Encoding param.
 		}
 		if (aParam < aParam_end)
@@ -15730,6 +15737,13 @@ BIF_DECL(BIF_VarSetCapacity)
 				return;
 			}
 			// Since above didn't return:
+			if (!new_capacity && aParam[1]->symbol == SYM_MISSING)
+			{
+				// This case is likely to be rare, but allows VarSetCapacity(v,,b) to fill
+				// v with byte b up to its current capacity, rather than freeing it.
+				if (new_capacity = var.ByteCapacity())
+					new_capacity -= sizeof(TCHAR);
+			}
 			if (new_capacity)
 			{
 				var.SetCapacity(new_capacity, true, false); // This also destroys the variables contents.
@@ -16176,12 +16190,12 @@ BIF_DECL(BIF_OnMessage)
 		}
 		if (aParamCount < 2) // Single-parameter mode: Report existing item's function name.
 			return; // Everything was already set up above to yield the proper return value.
-		// Otherwise, an existing item is being assigned a new function (the function has already
-		// been verified valid above). Continue on to update this item's attributes.
+		// Otherwise, an existing item is being assigned a new function or MaxThreads limit.
+		// Continue on to update this item's attributes.
 	}
 	else // This message doesn't exist in array yet.
 	{
-		if (mode_is_delete || aParamCount < 2) // Delete or report function-name of a non-existent item.
+		if (!func) // Delete or report function-name of a non-existent item.
 			return; // Yield the default return value set earlier (an empty string).
 		// Since above didn't return, the message is to be added as a new element. The above already
 		// verified that func is not NULL.
@@ -16192,15 +16206,16 @@ BIF_DECL(BIF_OnMessage)
 		_tcscpy(buf, func->mName); // Yield the NEW name as an indicator of success. Caller has ensured that buf large enough to support max function name.
 		aResultToken.marker = buf;
 		monitor.instance_count = 0; // Reset instance_count only for new items since existing items might currently be running.
+		monitor.msg = specified_msg;
 		// Continue on to the update-or-create logic below.
 	}
 
 	// Since above didn't return, above has ensured that msg_index is the index of the existing or new
 	// MsgMonitorStruct in the array.  In addition, it has set the proper return value for us.
 	// Update those struct attributes that get the same treatment regardless of whether this is an update or creation.
-	monitor.msg = specified_msg;
-	monitor.func = func;
-	if (aParamCount > 2)
+	if (func) // i.e. not OnMessage(Msg,,MaxThreads).
+		monitor.func = func;
+	if (!ParamIndexIsOmitted(2))
 		monitor.max_instances = (short)ParamIndexToInt64(2); // No validation because it seems harmless if it's negative or some huge number.
 	else // Unspecified, so if this item is being newly created fall back to the default.
 		if (!item_already_exists)
@@ -16988,10 +17003,13 @@ BIF_DECL(BIF_LV_AddInsertModify)
 			, i = 2 - (col_start_index > 0)
 			; i < aParamCount
 			; ++i, ++lvi_sub.iSubItem)
-			if (lvi_sub.pszText = ParamIndexToString(i, buf)) // Done every time through the outer loop since it's not high-overhead, and for code simplicity.
-				if (!ListView_SetItem(control.hwnd, &lvi_sub) && mode != 'I') // Relies on short-circuit. Seems best to avoid loss of item's index in insert mode, since failure here should be rare.
-					aResultToken.value_int64 = 0; // Indicate partial failure, but attempt to continue in case it failed for reason other than "row doesn't exist".
-			// else not an operand, but it's simplest just to try to continue.
+		{
+			if (aParam[i]->symbol == SYM_MISSING) // Omitted, such as LV_Modify(1,Opt,"One",,"Three").
+				continue;
+			lvi_sub.pszText = ParamIndexToString(i, buf); // Done every time through the outer loop since it's not high-overhead, and for code simplicity.
+			if (!ListView_SetItem(control.hwnd, &lvi_sub) && mode != 'I') // Relies on short-circuit. Seems best to avoid loss of item's index in insert mode, since failure here should be rare.
+				aResultToken.value_int64 = 0; // Indicate partial failure, but attempt to continue in case it failed for reason other than "row doesn't exist".
+		}
 	} // outer for()
 
 	// When the control has no rows, work around the fact that LVM_SETITEMCOUNT delivers less than 20%
@@ -18176,12 +18194,17 @@ SymbolType TokenIsPureNumeric(ExprTokenType &aToken)
 {
 	switch(aToken.symbol)
 	{
+	case SYM_INTEGER:
+	case SYM_FLOAT:
+		return aToken.symbol;
 	case SYM_VAR:     return aToken.var->IsNonBlankIntegerOrFloat(); // Supports VAR_NORMAL and VAR_CLIPBOARD.
 	case SYM_OPERAND: return aToken.buf ? PURE_INTEGER // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
 			: IsPureNumeric(TokenToString(aToken), true, false, true);
-	case SYM_OBJECT: // L31: Fall through to below; objects are currently treated as empty strings in most cases.
-	case SYM_STRING:  return PURE_NOT_NUMERIC; // Explicitly-marked strings are not numeric, which allows numeric strings to be compared as strings rather than as numbers.
-	default: return aToken.symbol; // SYM_INTEGER or SYM_FLOAT
+	//case SYM_STRING:
+	//case SYM_OBJECT: // L31: Objects are currently treated as empty strings in most cases.
+	//case SYM_MISSING:
+	default:
+		return PURE_NOT_NUMERIC; // Explicitly-marked strings are not numeric, which allows numeric strings to be compared as strings rather than as numbers.
 	}
 }
 
@@ -18195,6 +18218,10 @@ BOOL TokenIsEmptyString(ExprTokenType &aToken) // L31
 		return !*aToken.marker;
 	case SYM_VAR:
 		return !aToken.var->HasContents();
+	//case SYM_MISSING: // This case is omitted because it currently should be
+		// impossible for all callers except for ParamIndexIsOmittedOrEmpty(),
+		// which checks for it explicitly.
+		//return TRUE;
 	default:
 		return FALSE;
 	}
@@ -18326,6 +18353,8 @@ ResultType TokenToDoubleOrInt64(ExprTokenType &aToken)
 			break;
 		case SYM_OBJECT: // L31: Treat objects as empty strings (or TRUE where appropriate).
 			aToken.object->Release(); // Must be done before converting this token to something else.
+			// FALL THROUGH TO BELOW
+		case SYM_MISSING:
 			aToken.symbol = SYM_STRING;
 			aToken.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
 			// FALL THROUGH TO BELOW

@@ -1854,8 +1854,11 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 		
 		// The following loop will have zero iterations unless at least one formal parameter lacks an actual,
 		// which should be possible only if the parameter is optional (i.e. has a default value).
-		for (j = aParamCount; j < mParamCount; ++j) // For each formal parameter that lacks an actual, provide a default value.
+		for (j = 0; j < mParamCount; ++j) // For each formal parameter that lacks an actual, provide a default value.
 		{
+			if (j < aParamCount && aParam[j]->symbol != SYM_MISSING)
+				continue;
+
 			FuncParam &this_formal_param = mParam[j]; // For performance and convenience.
 			if (this_formal_param.is_byref) // v1.0.46.13: Allow ByRef parameters to be optional by converting an omitted-actual into a non-alias formal/local.
 				this_formal_param.var->ConvertToNonAliasIfNecessary(); // Convert from alias-to-normal, if necessary.
@@ -1909,6 +1912,9 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 			
 			if (!IS_OPERAND(token.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
 				return false; // Abort expression.
+
+			if (token.symbol == SYM_MISSING)
+				continue; // Already taken care of.
 			
 			if (mParam[j].is_byref)
 			{
