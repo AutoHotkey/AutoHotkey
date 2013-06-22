@@ -13107,6 +13107,8 @@ has_valid_return_type:
 			break;
 
 		case DLL_ARG_INVALID:
+			if (aParam[i]->symbol == SYM_VAR)
+				aParam[i]->var->MaybeWarnUninitialized();
 			g_script.SetErrorLevelOrThrowStr(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
 			return;
 
