@@ -12924,21 +12924,22 @@ BIF_DECL(BIF_DllCall)
 	{
 		// Check validity of this arg's return type:
 		ExprTokenType &token = *aParam[aParamCount - 1];
-		if (IS_NUMERIC(token.symbol) || token.symbol == SYM_OBJECT) // The return type should be a string, not something purely numeric.
-		{
-			g_script.SetErrorLevelOrThrowStr(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
-			return;
-		}
 		LPTSTR return_type_string[2];
-		if (token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+		switch (token.symbol)
 		{
+		case SYM_VAR: // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 			return_type_string[0] = token.var->Contents(TRUE, TRUE);	
 			return_type_string[1] = token.var->mName; // v1.0.33.01: Improve convenience by falling back to the variable's name if the contents are not appropriate.
-		}
-		else
-		{
+			break;
+		case SYM_STRING:
+		case SYM_OPERAND:
 			return_type_string[0] = token.marker;
 			return_type_string[1] = NULL; // Added in 1.0.48.
+			break;
+		default:
+			return_type_string[0] = _T(""); // It will be detected as invalid below.
+			return_type_string[1] = NULL;
+			break;
 		}
 
 		// 64-bit note: The calling convention detection code is preserved here for script compatibility.
@@ -13015,26 +13016,25 @@ has_valid_return_type:
 	// It has also verified that the dyna_param array is large enough to hold all of the args.
 	for (arg_count = 0, i = 1; i < aParamCount; ++arg_count, i += 2)  // Same loop as used later below, so maintain them together.
 	{
-		// Check validity of this arg's type and contents:
-		if (IS_NUMERIC(aParam[i]->symbol)) // The arg type should be a string, not something purely numeric.
+		switch (aParam[i]->symbol)
 		{
-			g_script.SetErrorLevelOrThrowStr(_T("-2"), _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
-			return;
-		}
-		// Otherwise, this arg's type-name is a string as it should be, so retrieve it:
-		if (aParam[i]->symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-		{
+		case SYM_VAR: // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 			arg_type_string[0] = aParam[i]->var->Contents(TRUE, TRUE);
 			arg_type_string[1] = aParam[i]->var->mName;
 			// v1.0.33.01: arg_type_string[1] improves convenience by falling back to the variable's name
 			// if the contents are not appropriate.  In other words, both Int and "Int" are treated the same.
 			// It's done this way to allow the variable named "Int" to actually contain some other legitimate
 			// type-name such as "Str" (in case anyone ever happens to do that).
-		}
-		else
-		{
+			break;
+		case SYM_STRING:
+		case SYM_OPERAND:
 			arg_type_string[0] = aParam[i]->marker;
+			arg_type_string[1] = NULL; // Added in 1.0.48.
+			break;
+		default:
+			arg_type_string[0] = _T(""); // It will be detected as invalid below.
 			arg_type_string[1] = NULL;
+			break;
 		}
 
 		ExprTokenType &this_param = *aParam[i + 1];         // Resolved for performance and convenience.
