@@ -5881,8 +5881,8 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInpu
 	g_InputBox[g_nInputBoxes].timeout = (DWORD)(aTimeout * 1000);  // Convert to ms
 
 	// Allow 0 width or height (hides the window):
-	g_InputBox[g_nInputBoxes].width = aWidth != INPUTBOX_DEFAULT && aWidth < 0 ? 0 : DPIScale(aWidth);
-	g_InputBox[g_nInputBoxes].height = aHeight != INPUTBOX_DEFAULT && aHeight < 0 ? 0 : DPIScale(aHeight);
+	g_InputBox[g_nInputBoxes].width = aWidth != INPUTBOX_DEFAULT ? (aWidth < 0 ? 0 : DPIScale(aWidth)) : INPUTBOX_DEFAULT;
+	g_InputBox[g_nInputBoxes].height = aHeight != INPUTBOX_DEFAULT ? (aHeight < 0 ? 0 : DPIScale(aHeight)) : INPUTBOX_DEFAULT;
 	g_InputBox[g_nInputBoxes].xpos = aX;  // But seems okay to allow these to be negative, even if absolute coords.
 	g_InputBox[g_nInputBoxes].ypos = aY;
 	g_InputBox[g_nInputBoxes].output_var = aOutputVar;
