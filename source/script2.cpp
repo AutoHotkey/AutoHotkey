@@ -15761,7 +15761,9 @@ BIF_DECL(BIF_VarSetCapacity)
 			// RequestedCapacity was omitted, so the var is not altered; instead, the current capacity
 			// is reported, which seems more intuitive/useful than having it do a Free(). In this case
 			// it's an input var rather than an output var, so check if it has been initialized:
-			var.MaybeWarnUninitialized();
+			// v1.1.11.01: Support VarSetCapacity(var) as a means for the script to check if it
+			// has initialized a var.  In other words, don't show a warning even in that case.
+			//var.MaybeWarnUninitialized();
 		}
 
 		if (aResultToken.value_int64 = var.ByteCapacity()) // Don't subtract 1 here in lieu doing it below (avoids underflow).
