@@ -2198,10 +2198,11 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 	// used as an output var by the current script line:
 	Var *output_var;
 	for (int i = 0; i < mArgc; ++i)
-		if (i != aArgIndex && mArg[i].type == ARG_TYPE_OUTPUT_VAR)
+		if (mArg[i].type == ARG_TYPE_OUTPUT_VAR) // Implies i != aArgIndex, since this function is not called for output vars.
 		{
-			if (   !(output_var = aArgVar[i])   ) // aArgVar: See top of this function for comments.
-				return CONDITION_TRUE; // Var can't be resolved yet, so we must assume deref is required.
+			output_var = (i < aArgIndex) ? aArgVar[i] : mArg[i].is_expression ? NULL : VAR(mArg[i]); // aArgVar: See top of this function for comments.
+			if (!output_var) // Var hasn't been resolved yet.  To be safe, we must assume deref is required.
+				return CONDITION_TRUE;
 			if (output_var->ResolveAlias() == aVar)
 				return CONDITION_TRUE;
 		}
