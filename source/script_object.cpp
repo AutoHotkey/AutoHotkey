@@ -90,9 +90,11 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 // Object::Clone - Used for variadic function-calls.
 //
 
-Object *Object::Clone(INT_PTR aStartOffset)
+Object *Object::Clone(BOOL aExcludeIntegerKeys)
 // Creates an object and copies to it the fields at and after the given offset.
 {
+	IndexType aStartOffset = aExcludeIntegerKeys ? mKeyOffsetObject : 0;
+
 	Object *objptr = new Object();
 	if (!objptr|| aStartOffset >= mFieldCount)
 		return objptr;
@@ -190,34 +192,18 @@ Object *Object::Clone(INT_PTR aStartOffset)
 // Object::ArrayToParams - Used for variadic function-calls.
 //
 
-ResultType Object::ArrayToParams(void *&aMemToFree, ExprTokenType **&aParam, int &aParamCount, int aMinParams)
+ResultType Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params
+	, ExprTokenType **&aParam, int &aParamCount)
 // Expands this object's contents into the parameter list.  Due to the nature
 // of the parameter list, only fields with integer keys are used (named params
 // aren't supported).
 // Return value is FAIL if a required parameter was omitted or malloc() failed.
 {
-	aMemToFree = NULL; // Init in case of early return.
-	
 	// Find the first and last field to be used.
 	int start = (int)mKeyOffsetInt;
 	int end = (int)mKeyOffsetObject; // For readability.
 	while (start < end && mFields[start].key.i < 1)
 		++start; // Skip any keys <= 0 (consistent with UDF-calling behaviour).
-	
-	int field_count = end - start;
-	int extra_params = field_count ? (int)mFields[end-1].key.i : 0;
-	if (aParamCount + extra_params < aMinParams)
-		return FAIL; // Not enough params.
-	if (extra_params < 1)
-		return OK; // Nothing to do.
-	
-	// Calculate space required for ...
-	size_t space_needed = extra_params * sizeof(ExprTokenType) // ... new param tokens
-		+ (aParamCount + extra_params) * sizeof(ExprTokenType *); // ... existing and new param pointers
-	// Allocate new param list and tokens; tokens first for convenience.
-	ExprTokenType *token = (ExprTokenType *)malloc(space_needed);
-	if (!token)
-		return FAIL;
 	
 	int param_index;
 	IndexType field_index;
@@ -227,30 +213,23 @@ ResultType Object::ArrayToParams(void *&aMemToFree, ExprTokenType **&aParam, int
 	{
 		for ( ; param_index + 1 < (int)mFields[field_index].key.i; ++param_index)
 		{
-			if (aParamCount + param_index < aMinParams) // Omitted a required param.
-			{
-				free(token);
-				return FAIL;
-			}
 			token[param_index].symbol = SYM_MISSING;
 			token[param_index].marker = _T("");
 		}
 		mFields[field_index].ToToken(token[param_index]);
 	}
 	
-	ExprTokenType **param_list = (ExprTokenType **)(token + extra_params);
-
-	aParam = param_list; // Update caller's pointer.
+	ExprTokenType **param_ptr = param_list;
 
 	// Init the array of param token pointers.
 	for (param_index = 0; param_index < aParamCount; ++param_index)
-		*param_list++ = aParam[param_index]; // Caller-supplied param token.
+		*param_ptr++ = aParam[param_index]; // Caller-supplied param token.
 	for (param_index = 0; param_index < extra_params; ++param_index)
-		*param_list++ = &token[param_index]; // New param.
+		*param_ptr++ = &token[param_index]; // New param.
 
-	aMemToFree = token; // Return the memory block for caller to take care of.
+	aParam = param_list; // Update caller's pointer.
 	aParamCount += extra_params; // Update caller's count.
-
+	
 	return OK;
 }
 
