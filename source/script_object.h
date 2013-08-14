@@ -176,8 +176,8 @@ public:
 	static Object *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
 
 	// Used by Func::Call() for variadic functions/function-calls:
-	Object *Clone(INT_PTR aStartOffset = 0);
-	ResultType ArrayToParams(void *&aMemToFree, ExprTokenType **&aParam, int &aParamCount, int aMinParams);
+	Object *Clone(BOOL aExcludeIntegerKeys = false);
+	ResultType ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params, ExprTokenType **&aParam, int &aParamCount);
 	
 	inline bool GetNextItem(ExprTokenType &aToken, INT_PTR &aOffset, INT_PTR &aKey)
 	{
@@ -241,6 +241,10 @@ public:
 		for (IndexType i = 0; i < mKeyOffsetObject; ++i)
 			mFields[i].key.i -= aAmount;
 	}
+
+	int MinIndex() { return (mKeyOffsetInt < mKeyOffsetObject) ? (int)mFields[0].key.i : 0; }
+	int MaxIndex() { return (mKeyOffsetInt < mKeyOffsetObject) ? (int)mFields[mKeyOffsetObject-1].key.i : 0; }
+	bool HasNonnumericKeys() { return mKeyOffsetObject < mFieldCount; }
 
 	void SetBase(IObject *aNewBase)
 	{ 

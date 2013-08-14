@@ -716,6 +716,10 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar)
 		else
 			aVar.vt = VT_EMPTY;
 		break;
+	case SYM_MISSING:
+		aVar.vt = VT_ERROR;
+		aVar.scode = DISP_E_PARAMNOTFOUND;
+		break;
 	}
 }
 

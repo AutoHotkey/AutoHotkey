@@ -4,6 +4,7 @@
 #include "script.h"
 
 #include "script_object.h"
+#include "script_func_impl.h"
 
 
 //
@@ -62,6 +63,9 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 		
 		for (int i = 0; i + 1 < aParamCount; i += 2)
 		{
+			if (aParam[i]->symbol == SYM_MISSING || aParam[i+1]->symbol == SYM_MISSING)
+				continue; // For simplicity.
+
 			result_token.symbol = SYM_STRING;
 			result_token.marker = _T("");
 			result_token.mem_to_free = NULL;
@@ -86,9 +90,11 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 // Object::Clone - Used for variadic function-calls.
 //
 
-Object *Object::Clone(INT_PTR aStartOffset)
+Object *Object::Clone(BOOL aExcludeIntegerKeys)
 // Creates an object and copies to it the fields at and after the given offset.
 {
+	IndexType aStartOffset = aExcludeIntegerKeys ? mKeyOffsetObject : 0;
+
 	Object *objptr = new Object();
 	if (!objptr|| aStartOffset >= mFieldCount)
 		return objptr;
@@ -186,42 +192,44 @@ Object *Object::Clone(INT_PTR aStartOffset)
 // Object::ArrayToParams - Used for variadic function-calls.
 //
 
-ResultType Object::ArrayToParams(void *&aMemToFree, ExprTokenType **&aParam, int &aParamCount, int aMinParams)
-// Expands this object's contents into the parameter list. Due to the nature
-// of the parameter list, this function has the following limitations:
-//	- Only fields with integer keys are used (named parameters aren't supported).
-//	- Keys must be contiguous; if keys are non-contiguous, there must be a parameter
-//		missing somewhere.  We could assume an empty string for omitted parameters,
-//		but that would probably be counter-intuitive and scripts which come to rely
-//		on it would break if this limitation is ever removed.
-// RETURN VALUE: true if new memory was allocated for aParam; false otherwise.
+ResultType Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params
+	, ExprTokenType **&aParam, int &aParamCount)
+// Expands this object's contents into the parameter list.  Due to the nature
+// of the parameter list, only fields with integer keys are used (named params
+// aren't supported).
+// Return value is FAIL if a required parameter was omitted or malloc() failed.
 {
-	aMemToFree = NULL; // Init for maintainability.
-	int field_count = (int)(mKeyOffsetObject - mKeyOffsetInt);
-	if (aParamCount + field_count < aMinParams)
-		return FAIL; // There still won't be enough params, so give up.  Caller relies on us to do this check.
-	if (!field_count)
-		return OK; // Nothing to expand into the param list, so our work here is done.
-	FieldType *field = mFields + mKeyOffsetInt;
-	if (field->key.i != 1 || field[field_count-1].key.i != (IndexType)field_count)
-		// Keys are non-contiguous or don't start at 1.  See comments above.
-		return FAIL;
-	// Calculate space required for ...
-	size_t space_needed = field_count * sizeof(ExprTokenType) // ... new param tokens
-		+ (aParamCount + field_count) * sizeof(ExprTokenType *); // ... existing and new param pointers
-	// Allocate new param list and tokens; tokens first for convenience.
-	ExprTokenType *token = (ExprTokenType *)malloc(space_needed);
-	if (!token)
-		return FAIL;
-	ExprTokenType **param_list = (ExprTokenType **)(token + field_count);
-	memcpy(param_list, aParam, aParamCount * sizeof(ExprTokenType *)); // Copy the existing param pointers.
+	// Find the first and last field to be used.
+	int start = (int)mKeyOffsetInt;
+	int end = (int)mKeyOffsetObject; // For readability.
+	while (start < end && mFields[start].key.i < 1)
+		++start; // Skip any keys <= 0 (consistent with UDF-calling behaviour).
+	
+	int param_index;
+	IndexType field_index;
+
+	// For each extra param...
+	for (field_index = start, param_index = 0; field_index < end; ++field_index, ++param_index)
+	{
+		for ( ; param_index + 1 < (int)mFields[field_index].key.i; ++param_index)
+		{
+			token[param_index].symbol = SYM_MISSING;
+			token[param_index].marker = _T("");
+		}
+		mFields[field_index].ToToken(token[param_index]);
+	}
+	
+	ExprTokenType **param_ptr = param_list;
+
+	// Init the array of param token pointers.
+	for (param_index = 0; param_index < aParamCount; ++param_index)
+		*param_ptr++ = aParam[param_index]; // Caller-supplied param token.
+	for (param_index = 0; param_index < extra_params; ++param_index)
+		*param_ptr++ = &token[param_index]; // New param.
+
 	aParam = param_list; // Update caller's pointer.
-	param_list += aParamCount; // Point param_list at our target; past the existing params.
-	// Convert each field to a token, putting the token's address into the appropriate slot:
-	for (int i = 0; i < field_count; ++i)
-		field[i].ToToken(*(param_list[i] = &token[i]));
-	aParamCount += field_count; // Update caller's count.
-	aMemToFree = token; // Return the memory block for caller to take care of.
+	aParamCount += extra_params; // Update caller's count.
+	
 	return OK;
 }
 
@@ -671,29 +679,37 @@ void Object::EndClassDefinition()
 
 bool Object::InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], int aValueCount)
 {
-	IndexType value_count = (IndexType)aValueCount;
-	IndexType need_capacity = mFieldCount + value_count;
+	IndexType actual_count = (IndexType)aValueCount;
+	for (int i = 0; i < aValueCount; ++i)
+		if (aValue[i]->symbol == SYM_MISSING)
+			actual_count--;
+	IndexType need_capacity = mFieldCount + actual_count;
 	if (need_capacity > mFieldCountMax && !SetInternalCapacity(need_capacity))
 		// Fail.
 		return false;
 	FieldType *field = mFields + aOffset;
 	if (aOffset < mFieldCount)
-		memmove(field + value_count, field, (mFieldCount - aOffset) * sizeof(FieldType));
-	mFieldCount += value_count;
-	mKeyOffsetObject += value_count; // ints before objects
-	mKeyOffsetString += value_count; // and strings
+		memmove(field + actual_count, field, (mFieldCount - aOffset) * sizeof(FieldType));
+	mFieldCount += actual_count;
+	mKeyOffsetObject += actual_count; // ints before objects
+	mKeyOffsetString += actual_count; // and strings
 	FieldType *field_end;
 	// Set keys and copy value params into the fields.
-	for (field_end = field + value_count; field < field_end; ++field)
+	for (int i = 0; i < aValueCount; ++i, ++aKey)
 	{
-		field->key.i = aKey++;
-		field->symbol = SYM_INTEGER; // Must be init'd for Assign().
-		field->Assign(**(aValue++));
+		ExprTokenType &value = *(aValue[i]);
+		if (value.symbol != SYM_MISSING)
+		{
+			field->key.i = aKey;
+			field->symbol = SYM_INTEGER; // Must be init'd for Assign().
+			field->Assign(value);
+			field++;
+		}
 	}
 	// Adjust keys of fields which have been moved.
 	for (field_end = mFields + mKeyOffsetObject; field < field_end; ++field)
 	{
-		field->key.i += value_count; // NOT =++key.i since keys might not be contiguous.
+		field->key.i += aValueCount; // NOT =++key.i since keys might not be contiguous.
 	}
 	return true;
 }
@@ -1241,26 +1257,15 @@ ResultType STDMETHODCALLTYPE EnumBase::Invoke(ExprTokenType &aResultToken, ExprT
 
 	if (IS_INVOKE_CALL)
 	{
-		if (aParamCount && !_tcsicmp(TokenToString(*aParam[0]), _T("Next")))
+		if (aParamCount && !_tcsicmp(ParamIndexToString(0), _T("Next")))
 		{	// This is something like enum.Next(var); exclude "Next" so it is treated below as enum[var].
 			++aParam; --aParamCount;
 		}
 		else
 			return INVOKE_NOT_HANDLED;
 	}
-	Var *var0 = NULL, *var1 = NULL;
-	if (aParamCount)
-	{
-		if (aParam[0]->symbol != SYM_VAR)
-			return OK;
-		if (aParamCount > 1)
-		{
-			if (aParam[1]->symbol != SYM_VAR)
-				return OK;
-			var1 = aParam[1]->var;
-		}
-		var0 = aParam[0]->var;
-	}
+	Var *var0 = ParamIndexToOptionalVar(0);
+	Var *var1 = ParamIndexToOptionalVar(1);
 	aResultToken.symbol = SYM_INTEGER;
 	aResultToken.value_int64 = Next(var0, var1);
 	return OK;
