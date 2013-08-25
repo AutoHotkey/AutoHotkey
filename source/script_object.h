@@ -175,9 +175,12 @@ protected:
 public:
 	static Object *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
 
+	bool Append(LPTSTR aValue, size_t aValueLength = -1);
+
 	// Used by Func::Call() for variadic functions/function-calls:
 	Object *Clone(BOOL aExcludeIntegerKeys = false);
 	ResultType ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params, ExprTokenType **&aParam, int &aParamCount);
+	ResultType ArrayToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax);
 	
 	inline bool GetNextItem(ExprTokenType &aToken, INT_PTR &aOffset, INT_PTR &aKey)
 	{
@@ -187,6 +190,11 @@ public:
 		aKey = field.key.i;
 		field.ToToken(aToken);
 		return true;
+	}
+
+	int GetNumericItemCount()
+	{
+		return (int)mKeyOffsetObject;
 	}
 	
 	bool GetItem(ExprTokenType &aToken, LPTSTR aKey)

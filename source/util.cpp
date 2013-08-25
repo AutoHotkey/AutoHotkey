@@ -2681,6 +2681,39 @@ bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch)
 	return false;  // No match found.
 }
 
+
+
+LPTSTR InStrAny(LPTSTR aStr, LPTSTR aNeedle[], int aNeedleCount, size_t &aFoundLen)
+{
+	// For each character in aStr:
+	for ( ; *aStr; ++aStr)
+		// For each needle:
+		for (int i = 0; i < aNeedleCount; ++i)
+			// For each character in this needle:
+			for (LPTSTR needle_pos = aNeedle[i], str_pos = aStr; ; ++needle_pos, ++str_pos)
+			{
+				if (!*needle_pos)
+				{
+					// All characters in needle matched aStr at this position, so we've
+					// found our string.  If this needle is empty, it implicitly matches
+					// at the first position in the string.
+					aFoundLen = needle_pos - aNeedle[i];
+					return aStr;
+				}
+				// Otherwise, we haven't reached the end of the needle. If we've reached
+				// the end of aStr, *str_pos and *needle_pos won't match, so the check
+				// below will break out of the loop.
+				if (*needle_pos != *str_pos)
+					// Not a match: continue on to the next needle, or the next starting
+					// position in aStr if this is the last needle.
+					break;
+			}
+	// If the above loops completed without returning, no matches were found.
+	return NULL;
+}
+
+
+
 #if defined(_MSC_VER) && defined(_DEBUG)
 void OutputDebugStringFormat(LPCTSTR fmt, ...)
 {

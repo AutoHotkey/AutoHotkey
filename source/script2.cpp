@@ -7123,6 +7123,124 @@ ResultType Line::StringSplit(LPTSTR aArrayName, LPTSTR aInputString, LPTSTR aDel
 
 
 
+BIF_DECL(BIF_StrSplit)
+// Array := StrSplit(String [, Delimiters, OmitChars])
+// This is the v2 version of Line::StringSplit(), and as such, is kept separate from Line::StringSplit().
+// Unlike StringSplit, this function allows an array of Delimiters (vs a string of delimiter characters).
+{
+	LPTSTR aInputString = TokenToString(*aParam[0], aResultToken.buf);
+	LPTSTR *aDelimiterList = NULL;
+	int aDelimiterCount = 0;
+	LPTSTR aOmitList = _T("");
+
+	if (aParamCount > 1)
+	{
+		if (Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[1])))
+		{
+			aDelimiterCount = obj->GetNumericItemCount();
+			aDelimiterList = (LPTSTR *)_alloca(aDelimiterCount * sizeof(LPTSTR *));
+			if (!obj->ArrayToStrings(aDelimiterList, aDelimiterCount, aDelimiterCount))
+				// Array contains something other than a string.
+				goto return_empty_string;
+			for (int i = 0; i < aDelimiterCount; ++i)
+				if (!*aDelimiterList[i])
+					// Empty string in delimiter list. Although it could be treated similarly to the
+					// "no delimiter" case, it's far more likely to be an error. If ever this check
+					// is removed, the loop below must be changed to support "" as a delimiter.
+					goto return_empty_string;
+		}
+		else
+		{
+			aDelimiterList = (LPTSTR *)_alloca(sizeof(LPTSTR *));
+			*aDelimiterList = TokenToString(*aParam[1]);
+			aDelimiterCount = **aDelimiterList != '\0'; // i.e. non-empty string.
+		}
+		if (aParamCount > 2)
+			aOmitList = TokenToString(*aParam[2]);
+	}
+	
+	Object *output_array = Object::Create();
+	if (!output_array)
+		goto return_empty_string;
+	aResultToken.symbol = SYM_OBJECT;	// Set default, overridden only for critical errors.
+	aResultToken.object = output_array;	//
+
+	if (!*aInputString) // The input variable is blank, thus there will be zero elements.
+		return;
+	
+	if (aDelimiterCount) // The user provided a list of delimiters, so process the input variable normally.
+	{
+		LPTSTR contents_of_next_element, delimiter, new_starting_pos;
+		size_t element_length, delimiter_length;
+		for (contents_of_next_element = aInputString; ; )
+		{
+			if (delimiter = InStrAny(contents_of_next_element, aDelimiterList, aDelimiterCount, delimiter_length)) // A delimiter was found.
+			{
+				element_length = delimiter - contents_of_next_element;
+				if (*aOmitList && element_length > 0)
+				{
+					contents_of_next_element = omit_leading_any(contents_of_next_element, aOmitList, element_length);
+					element_length = delimiter - contents_of_next_element; // Update in case above changed it.
+					if (element_length)
+						element_length = omit_trailing_any(contents_of_next_element, aOmitList, delimiter - 1);
+				}
+				// If there are no chars to the left of the delim, or if they were all in the list of omitted
+				// chars, the variable will be assigned the empty string:
+				if (!output_array->Append(contents_of_next_element, element_length))
+					break;
+				contents_of_next_element = delimiter + delimiter_length;  // Omit the delimiter since it's never included in contents.
+			}
+			else // the entire length of contents_of_next_element is what will be stored
+			{
+				element_length = _tcslen(contents_of_next_element);
+				if (*aOmitList && element_length > 0)
+				{
+					new_starting_pos = omit_leading_any(contents_of_next_element, aOmitList, element_length);
+					element_length -= (new_starting_pos - contents_of_next_element); // Update in case above changed it.
+					contents_of_next_element = new_starting_pos;
+					if (element_length)
+						// If this is true, the string must contain at least one char that isn't in the list
+						// of omitted chars, otherwise omit_leading_any() would have already omitted them:
+						element_length = omit_trailing_any(contents_of_next_element, aOmitList
+							, contents_of_next_element + element_length - 1);
+				}
+				// If there are no chars to the left of the delim, or if they were all in the list of omitted
+				// chars, the variable will be assigned the empty string:
+				if (!output_array->Append(contents_of_next_element, element_length))
+					break;
+				// This is the only way out of the loop other than critical errors:
+				return;
+			}
+		}
+	}
+	else
+	{
+		// Otherwise aDelimiterList is empty, so store each char of aInputString in its own array element.
+		LPTSTR cp, dp;
+		for (cp = aInputString; ; ++cp)
+		{
+			if (!*cp)
+				return; // All done; result already set.
+			for (dp = aOmitList; *dp; ++dp)
+				if (*cp == *dp) // This char is a member of the omitted list, thus it is not included in the output array.
+					break;
+			if (*dp) // Omitted.
+				continue;
+			if (!output_array->Append(cp, 1))
+				break;
+		}
+	}
+	// The fact that this section is executing means that a memory allocation failed and caused the
+	// loop to break, so return a false value to let the caller detect the failure.  Empty string
+	// is used vs 0 for consistency with Object() and Array().
+	output_array->Release(); // Since we're not returning it.
+return_empty_string:
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+}
+
+
+
 ResultType Line::SplitPath(LPTSTR aFileSpec)
 {
 	Var *output_var_name = ARGVAR2;  // i.e. Param #2. Ok if NULL.

@@ -7939,6 +7939,12 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		min_params = 2;
 		max_params = 6;
 	}
+	else if (!_tcsicmp(func_name, _T("StrSplit")))
+	{
+		bif = BIF_StrSplit;
+		min_params = 1;
+		max_params = 3;
+	}
 	else if (!_tcsnicmp(func_name, _T("GetKey"), 6))
 	{
 		suffix = func_name + 6;
