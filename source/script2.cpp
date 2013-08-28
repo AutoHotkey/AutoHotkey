@@ -35,6 +35,8 @@ GNU General Public License for more details.
 #define PCRE_STATIC             // For RegEx. PCRE_STATIC tells PCRE to declare its functions for normal, static
 #include "lib_pcre/pcre/pcre.h" // linkage rather than as functions inside an external DLL.
 
+#include "script_func_impl.h"
+
 
 
 ////////////////////
@@ -11239,21 +11241,21 @@ BIF_DECL(BIF_DllCall)
 	{
 		// Check validity of this arg's return type:
 		ExprTokenType &token = *aParam[aParamCount - 1];
-		if (IS_NUMERIC(token.symbol) || token.symbol == SYM_OBJECT) // The return type should be a string, not something purely numeric.
-		{
-			g_script.SetErrorLevelOrThrowInt(-2, _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
-			return;
-		}
 		LPTSTR return_type_string[2];
-		if (token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+		switch (token.symbol)
 		{
+		case SYM_VAR: // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 			return_type_string[0] = token.var->Contents(TRUE, TRUE);	
 			return_type_string[1] = token.var->mName; // v1.0.33.01: Improve convenience by falling back to the variable's name if the contents are not appropriate.
-		}
-		else
-		{
+			break;
+		case SYM_STRING:
 			return_type_string[0] = token.marker;
 			return_type_string[1] = NULL; // Added in 1.0.48.
+			break;
+		default:
+			return_type_string[0] = _T(""); // It will be detected as invalid below.
+			return_type_string[1] = NULL;
+			break;
 		}
 
 		// 64-bit note: The calling convention detection code is preserved here for script compatibility.
@@ -11330,26 +11332,24 @@ has_valid_return_type:
 	// It has also verified that the dyna_param array is large enough to hold all of the args.
 	for (arg_count = 0, i = 1; i < aParamCount; ++arg_count, i += 2)  // Same loop as used later below, so maintain them together.
 	{
-		// Check validity of this arg's type and contents:
-		if (IS_NUMERIC(aParam[i]->symbol)) // The arg type should be a string, not something purely numeric.
+		switch (aParam[i]->symbol)
 		{
-			g_script.SetErrorLevelOrThrowInt(-2, _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
-			return;
-		}
-		// Otherwise, this arg's type-name is a string as it should be, so retrieve it:
-		if (aParam[i]->symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-		{
+		case SYM_VAR: // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 			arg_type_string[0] = aParam[i]->var->Contents(TRUE, TRUE);
 			arg_type_string[1] = aParam[i]->var->mName;
 			// v1.0.33.01: arg_type_string[1] improves convenience by falling back to the variable's name
 			// if the contents are not appropriate.  In other words, both Int and "Int" are treated the same.
 			// It's done this way to allow the variable named "Int" to actually contain some other legitimate
 			// type-name such as "Str" (in case anyone ever happens to do that).
-		}
-		else
-		{
+			break;
+		case SYM_STRING:
 			arg_type_string[0] = aParam[i]->marker;
+			arg_type_string[1] = NULL; // Added in 1.0.48.
+			break;
+		default:
+			arg_type_string[0] = _T(""); // It will be detected as invalid below.
 			arg_type_string[1] = NULL;
+			break;
 		}
 
 		ExprTokenType &this_param = *aParam[i + 1];         // Resolved for performance and convenience.
@@ -11422,6 +11422,8 @@ has_valid_return_type:
 			break;
 
 		case DLL_ARG_INVALID:
+			if (aParam[i]->symbol == SYM_VAR)
+				aParam[i]->var->MaybeWarnUninitialized();
 			g_script.SetErrorLevelOrThrowInt(-2, _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
 			return;
 
@@ -11737,11 +11739,11 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 
 	// Get the first arg, which is the string used as the source of the extraction. Call it "haystack" for clarity.
 	TCHAR haystack_buf[MAX_NUMBER_SIZE]; // A separate buf because aResultToken.buf is sometimes used to store the result.
-	LPTSTR haystack = TokenToString(*aParam[0], haystack_buf); // Remember that aResultToken.buf is part of a union, though in this case there's no danger of overwriting it since our result will always be of STRING type (not int or float).
-	INT_PTR haystack_length = (INT_PTR)EXPR_TOKEN_LENGTH(aParam[0], haystack);
+	LPTSTR haystack = ParamIndexToString(0, haystack_buf); // Remember that aResultToken.buf is part of a union, though in this case there's no danger of overwriting it since our result will always be of STRING type (not int or float).
+	INT_PTR haystack_length = (INT_PTR)ParamIndexLength(0, haystack);
 
 	// Load-time validation has ensured that at least the first two parameters are present:
-	INT_PTR starting_offset = (INT_PTR)TokenToInt64(*aParam[1]); // The one-based starting position in haystack (if any).
+	INT_PTR starting_offset = (INT_PTR)ParamIndexToInt64(1); // The one-based starting position in haystack (if any).
 	if (starting_offset > haystack_length || starting_offset == 0)
 		return; // Yield the empty string (a default set higher above).
 	if (starting_offset < 0) // Same convention as RegExMatch/Replace(): Treat negative StartingPos as a position relative to the end of the string.
@@ -11759,7 +11761,7 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 		extract_length = remaining_length_available;
 	else
 	{
-		if (   !(extract_length = (INT_PTR)TokenToInt64(*aParam[2]))   )  // It has asked to extract zero characters.
+		if (   !(extract_length = (INT_PTR)ParamIndexToInt64(2))   )  // It has asked to extract zero characters.
 			return; // Yield the empty string (a default set higher above).
 		if (extract_length < 0)
 		{
@@ -11794,8 +11796,8 @@ BIF_DECL(BIF_InStr)
 {
 	// Load-time validation has already ensured that at least two actual parameters are present.
 	TCHAR needle_buf[MAX_NUMBER_SIZE];
-	LPTSTR haystack = TokenToString(*aParam[0], aResultToken.buf);
-	LPTSTR needle = TokenToString(*aParam[1], needle_buf);
+	LPTSTR haystack = ParamIndexToString(0, aResultToken.buf);
+	LPTSTR needle = ParamIndexToString(1, needle_buf);
 	// Result type will always be an integer:
 	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
 
@@ -11806,7 +11808,7 @@ BIF_DECL(BIF_InStr)
 	//    for every call of InStr.  It's nice to be able to omit the CaseSensitive parameter every time and know that
 	//    the behavior of both InStr and its counterpart the equals operator are always consistent with each other.
 	// 3) Avoids breaking existing scripts that may pass something other than true/false for the CaseSense parameter.
-	StringCaseSenseType string_case_sense = (StringCaseSenseType)(aParamCount >= 3 && TokenToBOOL(*aParam[2]));
+	StringCaseSenseType string_case_sense = (StringCaseSenseType)(!ParamIndexIsOmitted(2) && ParamIndexToBOOL(2));
 	// Above has assigned SCS_INSENSITIVE (0) or SCS_SENSITIVE (1).  If it's insensitive, resolve it to
 	// be Locale-mode if the StringCaseSense mode is either case-sensitive or Locale-insensitive.
 	if (g->StringCaseSense != SCS_INSENSITIVE && string_case_sense == SCS_INSENSITIVE) // Ordered for short-circuit performance.
@@ -11814,15 +11816,13 @@ BIF_DECL(BIF_InStr)
 
 	LPTSTR found_pos;
 	INT_PTR offset = 0; // Set default.
-	int occurrence_number = 1; // Set default.
+	int occurrence_number = ParamIndexToOptionalInt(4, 1);
 
-	if (aParamCount >= 4) // There is a starting position present.
+	if (!ParamIndexIsOmitted(3)) // There is a starting position present.
 	{
-		offset = (INT_PTR)TokenToInt64(*aParam[3]); // i.e. the fourth arg.
-		if (aParamCount >= 5)
-			occurrence_number = (int)TokenToInt64(*aParam[4]);
+		offset = ParamIndexToIntPtr(3); // i.e. the fourth arg.
 		// For offset validation and reverse search we need to know the length of haystack:
-		INT_PTR haystack_length = EXPR_TOKEN_LENGTH(aParam[0], haystack);
+		INT_PTR haystack_length = ParamIndexLength(0, haystack);
 		if (offset < 0) // Special mode to search from the right side.
 		{
 			++offset; // Convert from negative-one-based to zero-based.
@@ -11839,7 +11839,7 @@ BIF_DECL(BIF_InStr)
 		}
 	}
 	// Since above didn't return:
-	size_t needle_length = (occurrence_number > 1) ? EXPR_TOKEN_LENGTH(aParam[1], needle) : 1; // Avoid unnecessary _tcslen() if occurrence_number == 1, which is the most common case.
+	size_t needle_length = (occurrence_number > 1) ? ParamIndexLength(1, needle) : 1; // Avoid unnecessary _tcslen() if occurrence_number == 1, which is the most common case.
 	int i;
 	for (i = 1, found_pos = haystack + offset; ; ++i, found_pos += needle_length)
 		if (!(found_pos = tcsstr2(found_pos, needle, string_case_sense)) || i == occurrence_number)
@@ -12657,12 +12657,12 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	// as the haystack, needle, or replacement (i.e. the same memory), don't set output_var_count until
 	// immediately prior to returning.  Otherwise, haystack, needle, or replacement would corrupted while
 	// it's still being used here.
-	Var *output_var_count = (aParamCount > 3 && aParam[3]->symbol == SYM_VAR) ? aParam[3]->var : NULL; // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+	Var *output_var_count = ParamIndexToOptionalVar(3); // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 	int replacement_count = 0; // This value will be stored in output_var_count, but only at the very end due to the reason above.
 
 	// Get the replacement text (if any) from the incoming parameters.  If it was omitted, treat it as "".
 	TCHAR repl_buf[MAX_NUMBER_SIZE];
-	LPTSTR replacement = (aParamCount > 2) ? TokenToString(*aParam[2], repl_buf) : _T("");
+	LPTSTR replacement = ParamIndexToOptionalString(2, repl_buf);
 
 	// In PCRE, lengths and such are confined to ints, so there's little reason for using unsigned for anything.
 	int captured_pattern_count, empty_string_is_not_a_match, match_length, ref_num
@@ -12692,7 +12692,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	}
 
 	// See if a replacement limit was specified.  If not, use the default (-1 means "replace all").
-	int limit = (aParamCount > 4) ? (int)TokenToInt64(*aParam[4]) : -1;
+	int limit = ParamIndexToOptionalInt(4, -1);
 
 	// aStartingOffset is altered further on in the loop; but for its initial value, the caller has ensured
 	// that it lies within aHaystackLength.  Also, if there are no replacements yet, haystack_pos ignores
@@ -13047,7 +13047,7 @@ BIF_DECL(BIF_RegEx)
 // Caller has set aResultToken.symbol to a default of SYM_INTEGER.
 {
 	bool mode_is_replace = ctoupper(aResultToken.marker[5]) == 'R'; // Union's marker initially contains the function name; e.g. RegEx[R]eplace.
-	LPTSTR needle = TokenToString(*aParam[1], aResultToken.buf); // Load-time validation has already ensured that at least two actual parameters are present.
+	LPTSTR needle = ParamIndexToString(1, aResultToken.buf); // Load-time validation has already ensured that at least two actual parameters are present.
 
 	pcret_extra *extra;
 	pcret *re;
@@ -13059,16 +13059,16 @@ BIF_DECL(BIF_RegEx)
 
 	// Since compiling succeeded, get info about other parameters.
 	TCHAR haystack_buf[MAX_NUMBER_SIZE];
-	LPTSTR haystack = TokenToString(*aParam[0], haystack_buf); // Load-time validation has already ensured that at least two actual parameters are present.
-	int haystack_length = (int)EXPR_TOKEN_LENGTH(aParam[0], haystack);
+	LPTSTR haystack = ParamIndexToString(0, haystack_buf); // Load-time validation has already ensured that at least two actual parameters are present.
+	int haystack_length = (int)ParamIndexLength(0, haystack);
 
 	int param_index = mode_is_replace ? 5 : 3;
 	int starting_offset;
-	if (aParamCount <= param_index)
+	if (ParamIndexIsOmitted(param_index))
 		starting_offset = 0; // The one-based starting position in haystack (if any).  Convert it to zero-based.
 	else
 	{
-		starting_offset = (int)TokenToInt64(*aParam[param_index]);
+		starting_offset = ParamIndexToInt(param_index);
 		if (starting_offset < 0) // Same convention as SubStr(): Treat negative StartingPos as a position relative to the end of the string.
 		{
 			starting_offset += haystack_length;
@@ -13166,7 +13166,7 @@ BIF_DECL(BIF_Ord)
 	// Result will always be an integer (this simplifies scripts that work with binary zeros since an
 	// empty string yields zero).
 	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
-	LPTSTR cp = TokenToString(*aParam[0], aResultToken.buf);
+	LPTSTR cp = ParamIndexToString(0, aResultToken.buf);
 #ifndef UNICODE
 	// This section could convert a single- or multi-byte character to a Unicode code point
 	// for consistency, but since the ANSI build won't be officially supported that doesn't
@@ -13183,7 +13183,7 @@ BIF_DECL(BIF_Ord)
 
 BIF_DECL(BIF_Chr)
 {
-	int param1 = (int)TokenToInt64(*aParam[0]); // Convert to INT vs. UINT so that negatives can be detected.
+	int param1 = ParamIndexToInt(0); // Convert to INT vs. UINT so that negatives can be detected.
 	LPTSTR cp = aResultToken.buf; // If necessary, it will be moved to a persistent memory location by our caller.
 	if (param1 < 0 || param1 > UorA(0x10FFFF, UCHAR_MAX))
 		*cp = '\0'; // Empty string indicates both Chr(0) and an out-of-bounds param1.
@@ -13504,6 +13504,12 @@ BIF_DECL(BIF_StrGetPut)
 					return; // Invalid length; or caller of StrGet asked for 0 chars.
 				++aParam; // Let encoding be the next param, if present.
 			}
+			else if ((*aParam)->symbol == SYM_MISSING)
+			{
+				// Length was "explicitly omitted", as in StrGet(Address,, Encoding),
+				// which allows Encoding to be an integer without specifying Length.
+				++aParam;
+			}
 			// aParam now points to aParam_end or the Encoding param.
 		}
 		if (aParam < aParam_end)
@@ -13704,7 +13710,7 @@ BIF_DECL(BIF_IsLabel)
 // often performance sensitive), it might be better to add a second parameter that tells
 // IsLabel to look up the type of label, and return it as a number or letter.
 {
-	aResultToken.value_int64 = g_script.FindLabel(TokenToString(*aParam[0], aResultToken.buf)) ? 1 : 0; // "? 1 : 0" produces 15 bytes smaller OBJ size than "!= NULL" in this case (but apparently not in comparisons like x==y ? TRUE : FALSE).
+	aResultToken.value_int64 = g_script.FindLabel(ParamIndexToString(0, aResultToken.buf)) ? 1 : 0; // "? 1 : 0" produces 15 bytes smaller OBJ size than "!= NULL" in this case (but apparently not in comparisons like x==y ? TRUE : FALSE).
 }
 
 
@@ -13732,7 +13738,7 @@ BIF_DECL(BIF_IsFunc) // Lexikos: Added for use with dynamic function calls.
 BIF_DECL(BIF_Func)
 // Returns a reference to an existing user-defined or built-in function, as an object.
 {
-	Func *func = g_script.FindFunc(TokenToString(*aParam[0], aResultToken.buf));
+	Func *func = g_script.FindFunc(ParamIndexToString(0, aResultToken.buf));
 	if (func)
 	{
 		aResultToken.symbol = SYM_OBJECT;
@@ -13764,7 +13770,7 @@ BIF_DECL(BIF_IsByRef)
 BIF_DECL(BIF_GetKeyState)
 {
 	TCHAR key_name_buf[MAX_NUMBER_SIZE]; // Because aResultToken.buf is used for something else below.
-	LPTSTR key_name = TokenToString(*aParam[0], key_name_buf);
+	LPTSTR key_name = ParamIndexToString(0, key_name_buf);
 	// Keep this in sync with GetKeyJoyState().
 	// See GetKeyJoyState() for more comments about the following lines.
 	JoyControls joy;
@@ -13785,7 +13791,7 @@ BIF_DECL(BIF_GetKeyState)
 	}
 	// Since above didn't return: There is a virtual key (not a joystick control).
 	TCHAR mode_buf[MAX_NUMBER_SIZE];
-	LPTSTR mode = (aParamCount > 1) ? TokenToString(*aParam[1], mode_buf) : _T("");
+	LPTSTR mode = ParamIndexToOptionalString(1, mode_buf);
 	KeyStateTypes key_state_type;
 	switch (ctoupper(*mode)) // Second parameter.
 	{
@@ -13804,7 +13810,7 @@ BIF_DECL(BIF_GetKeyName)
 	// Get VK and/or SC from the first parameter, which may be a key name, scXXX or vkXX.
 	// Key names are allowed even for GetKeyName() for simplicity and so that it can be
 	// used to normalise a key name; e.g. GetKeyName("Esc") returns "Escape".
-	LPTSTR key = TokenToString(*aParam[0], aResultToken.buf);
+	LPTSTR key = ParamIndexToString(0, aResultToken.buf);
 	vk_type vk = TextToVK(key, NULL, true); // Pass true for the third parameter to avoid it calling TextToSC(), in case this is something like vk23sc14F.
 	sc_type sc = TextToSC(key);
 	if (!sc)
@@ -13860,6 +13866,13 @@ BIF_DECL(BIF_VarSetCapacity)
 				return;
 			}
 			// Since above didn't return:
+			if (!new_capacity && aParam[1]->symbol == SYM_MISSING)
+			{
+				// This case is likely to be rare, but allows VarSetCapacity(v,,b) to fill
+				// v with byte b up to its current capacity, rather than freeing it.
+				if (new_capacity = var.ByteCapacity())
+					new_capacity -= sizeof(TCHAR);
+			}
 			if (new_capacity)
 			{
 				var.SetCapacity(new_capacity, true); // This also destroys the variables contents.
@@ -13891,7 +13904,9 @@ BIF_DECL(BIF_VarSetCapacity)
 			// RequestedCapacity was omitted, so the var is not altered; instead, the current capacity
 			// is reported, which seems more intuitive/useful than having it do a Free(). In this case
 			// it's an input var rather than an output var, so check if it has been initialized:
-			var.MaybeWarnUninitialized();
+			// v1.1.11.01: Support VarSetCapacity(var) as a means for the script to check if it
+			// has initialized a var.  In other words, don't show a warning even in that case.
+			//var.MaybeWarnUninitialized();
 		}
 
 		if (aResultToken.value_int64 = var.ByteCapacity()) // Don't subtract 1 here in lieu doing it below (avoids underflow).
@@ -13904,7 +13919,7 @@ BIF_DECL(BIF_VarSetCapacity)
 BIF_DECL(BIF_FileExist)
 {
 	TCHAR filename_buf[MAX_NUMBER_SIZE]; // Because aResultToken.buf is used for something else below.
-	LPTSTR filename = TokenToString(*aParam[0], filename_buf);
+	LPTSTR filename = ParamIndexToString(0, filename_buf);
 	bool want_dir = ctoupper(*aResultToken.marker) == 'D'; // i.e. DirExist().
 	aResultToken.marker = aResultToken.buf; // If necessary, it will be moved to a persistent memory location by our caller.
 	aResultToken.symbol = SYM_STRING;
@@ -13945,7 +13960,7 @@ BIF_DECL(BIF_WinExistActive)
 
 	TCHAR *param[4], param_buf[4][MAX_NUMBER_SIZE];
 	for (int j = 0; j < 4; ++j) // For each formal parameter, including optional ones.
-		param[j] = (j >= aParamCount) ? _T("") : TokenToString(*aParam[j], param_buf[j]);
+		param[j] = ParamIndexToOptionalString(j, param_buf[j]);
 
 	HWND found_hwnd = (ctoupper(bif_name[3]) == 'E') // Win[E]xist.
 		? WinExist(*g, param[0], param[1], param[2], param[3], false, true)
@@ -13969,7 +13984,7 @@ BIF_DECL(BIF_Round)
 	double multiplier;
 	if (aParamCount > 1)
 	{
-		param2 = (int)TokenToInt64(*aParam[1]);
+		param2 = ParamIndexToInt(1);
 		multiplier = qmathPow(10, param2);
 	}
 	else // Omitting the parameter is the same as explicitly specifying 0 for it.
@@ -13977,7 +13992,7 @@ BIF_DECL(BIF_Round)
 		param2 = 0;
 		multiplier = 1;
 	}
-	double value = TokenToDouble(*aParam[0]);
+	double value = ParamIndexToDouble(0);
 	aResultToken.value_double = (value >= 0.0 ? qmathFloor(value * multiplier + 0.5)
 		: qmathCeil(value * multiplier - 0.5)) / multiplier;
 
@@ -14040,7 +14055,7 @@ BIF_DECL(BIF_FloorCeil)
 	// 1) Negative vs. positive input.
 	// 2) Whether or not the input is already an integer.
 	// Therefore, do not change this without conducting a thorough test.
-	double x = TokenToDouble(*aParam[0]);
+	double x = ParamIndexToDouble(0);
 	x = (ctoupper(aResultToken.marker[0]) == 'F') ? qmathFloor(x) : qmathCeil(x);
 	// Fix for v1.0.40.05: For some inputs, qmathCeil/Floor yield a number slightly to the left of the target
 	// integer, while for others they yield one slightly to the right.  For example, Ceil(62/61) and Floor(-4/3)
@@ -14057,7 +14072,7 @@ BIF_DECL(BIF_Mod)
 {
 	// Load-time validation has already ensured there are exactly two parameters.
 	// "Cast" each operand to Int64/Double depending on whether it has a decimal point.
-	if (!TokenToDoubleOrInt64(*aParam[0]) || !TokenToDoubleOrInt64(*aParam[1])) // Non-operand or non-numeric string.
+	if (!ParamIndexToNumber(0) || !ParamIndexToNumber(1)) // Non-operand or non-numeric string.
 	{
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
@@ -14077,8 +14092,8 @@ BIF_DECL(BIF_Mod)
 	}
 	else // At least one is a floating point number.
 	{
-		double dividend = TokenToDouble(*aParam[0]);
-		double divisor = TokenToDouble(*aParam[1]);
+		double dividend = ParamIndexToDouble(0);
+		double divisor = ParamIndexToDouble(1);
 		if (divisor == 0.0) // Divide by zero.
 		{
 			aResultToken.symbol = SYM_STRING;
@@ -14129,7 +14144,7 @@ BIF_DECL(BIF_Sin)
 // is non-numeric or an empty string).
 {
 	aResultToken.symbol = SYM_FLOAT;
-	aResultToken.value_double = qmathSin(TokenToDouble(*aParam[0]));
+	aResultToken.value_double = qmathSin(ParamIndexToDouble(0));
 }
 
 
@@ -14139,7 +14154,7 @@ BIF_DECL(BIF_Cos)
 // is non-numeric or an empty string).
 {
 	aResultToken.symbol = SYM_FLOAT;
-	aResultToken.value_double = qmathCos(TokenToDouble(*aParam[0]));
+	aResultToken.value_double = qmathCos(ParamIndexToDouble(0));
 }
 
 
@@ -14149,14 +14164,14 @@ BIF_DECL(BIF_Tan)
 // is non-numeric or an empty string).
 {
 	aResultToken.symbol = SYM_FLOAT;
-	aResultToken.value_double = qmathTan(TokenToDouble(*aParam[0]));
+	aResultToken.value_double = qmathTan(ParamIndexToDouble(0));
 }
 
 
 
 BIF_DECL(BIF_ASinACos)
 {
-	double value = TokenToDouble(*aParam[0]);
+	double value = ParamIndexToDouble(0);
 	if (value > 1 || value < -1) // ASin and ACos aren't defined for such values.
 	{
 		aResultToken.symbol = SYM_STRING;
@@ -14179,7 +14194,7 @@ BIF_DECL(BIF_ATan)
 // is non-numeric or an empty string).
 {
 	aResultToken.symbol = SYM_FLOAT;
-	aResultToken.value_double = qmathAtan(TokenToDouble(*aParam[0]));
+	aResultToken.value_double = qmathAtan(ParamIndexToDouble(0));
 }
 
 
@@ -14189,14 +14204,14 @@ BIF_DECL(BIF_Exp)
 // is non-numeric or an empty string).
 {
 	aResultToken.symbol = SYM_FLOAT;
-	aResultToken.value_double = qmathExp(TokenToDouble(*aParam[0]));
+	aResultToken.value_double = qmathExp(ParamIndexToDouble(0));
 }
 
 
 
 BIF_DECL(BIF_SqrtLogLn)
 {
-	double value = TokenToDouble(*aParam[0]);
+	double value = ParamIndexToDouble(0);
 	if (value < 0) // Result is undefined in these cases, so make blank to indicate.
 	{
 		aResultToken.symbol = SYM_STRING;
@@ -14314,13 +14329,13 @@ BIF_DECL(BIF_OnMessage)
 	aResultToken.marker = _T("");
 
 	// Load-time validation has ensured there's at least one parameter for use here:
-	UINT specified_msg = (UINT)TokenToInt64(*aParam[0]); // Parameter #1
+	UINT specified_msg = (UINT)ParamIndexToInt64(0); // Parameter #1
 
 	Func *func = NULL;           // Set defaults.
 	bool mode_is_delete = false; //
-	if (aParamCount > 1) // Parameter #2 is present.
+	if (!ParamIndexIsOmitted(1)) // Parameter #2 is present.
 	{
-		LPTSTR func_name = TokenToString(*aParam[1], buf); // Resolve parameter #2.
+		LPTSTR func_name = ParamIndexToString(1, buf); // Resolve parameter #2.
 		if (*func_name)
 		{
 			if (   !(func = g_script.FindFunc(func_name))   ) // Nonexistent function.
@@ -14384,12 +14399,12 @@ BIF_DECL(BIF_OnMessage)
 		}
 		if (aParamCount < 2) // Single-parameter mode: Report existing item's function name.
 			return; // Everything was already set up above to yield the proper return value.
-		// Otherwise, an existing item is being assigned a new function (the function has already
-		// been verified valid above). Continue on to update this item's attributes.
+		// Otherwise, an existing item is being assigned a new function or MaxThreads limit.
+		// Continue on to update this item's attributes.
 	}
 	else // This message doesn't exist in array yet.
 	{
-		if (mode_is_delete || aParamCount < 2) // Delete or report function-name of a non-existent item.
+		if (!func) // Delete or report function-name of a non-existent item.
 			return; // Yield the default return value set earlier (an empty string).
 		// Since above didn't return, the message is to be added as a new element. The above already
 		// verified that func is not NULL.
@@ -14400,16 +14415,17 @@ BIF_DECL(BIF_OnMessage)
 		_tcscpy(buf, func->mName); // Yield the NEW name as an indicator of success. Caller has ensured that buf large enough to support max function name.
 		aResultToken.marker = buf;
 		monitor.instance_count = 0; // Reset instance_count only for new items since existing items might currently be running.
+		monitor.msg = specified_msg;
 		// Continue on to the update-or-create logic below.
 	}
 
 	// Since above didn't return, above has ensured that msg_index is the index of the existing or new
 	// MsgMonitorStruct in the array.  In addition, it has set the proper return value for us.
 	// Update those struct attributes that get the same treatment regardless of whether this is an update or creation.
-	monitor.msg = specified_msg;
-	monitor.func = func;
-	if (aParamCount > 2)
-		monitor.max_instances = (short)TokenToInt64(*aParam[2]); // No validation because it seems harmless if it's negative or some huge number.
+	if (func) // i.e. not OnMessage(Msg,,MaxThreads).
+		monitor.func = func;
+	if (!ParamIndexIsOmitted(2))
+		monitor.max_instances = (short)ParamIndexToInt64(2); // No validation because it seems harmless if it's negative or some huge number.
 	else // Unspecified, so if this item is being newly created fall back to the default.
 		if (!item_already_exists)
 			monitor.max_instances = 1;
@@ -14617,12 +14633,11 @@ BIF_DECL(BIF_RegisterCallback)
 	if (  !(func = TokenToFunc(*aParam[0])) || func->mIsBuiltIn  )  // Not a valid user-defined function.
 		return; // Indicate failure by yielding the default result set earlier.
 
-	LPTSTR options = (aParamCount < 2) ? _T("") : TokenToString(*aParam[1]);
-
+	LPTSTR options = ParamIndexToOptionalString(1);
 	int actual_param_count;
-	if (aParamCount > 2 && !TokenIsEmptyString(*aParam[2], TRUE)) // A parameter count was specified. Pass TRUE to warn if aParam[2] is an uninitialized var.
+	if (!ParamIndexIsOmittedOrEmpty(2)) // A parameter count was specified.
 	{
-		actual_param_count = (int)TokenToInt64(*aParam[2]);
+		actual_param_count = ParamIndexToInt(2);
 		if (   actual_param_count > func->mParamCount    // The function doesn't have enough formals to cover the specified number of actuals.
 				&& !func->mIsVariadic					 // ...and the function isn't designed to accept parameters via an array (or in this case, a pointer).
 			|| actual_param_count < func->mMinParams   ) // ...or the function has too many mandatory formals (caller specified insufficient actuals to cover them all).
@@ -14698,7 +14713,7 @@ BIF_DECL(BIF_RegisterCallback)
 	cb.callfuncptr = RegisterCallbackCStub;
 #endif
 
-	cb.event_info = (aParamCount < 4) ? (EventInfoType)(size_t)callbackfunc : (EventInfoType)TokenToInt64(*aParam[3]);
+	cb.event_info = (EventInfoType)ParamIndexToOptionalInt64(3, (size_t)callbackfunc);
 	cb.func = func;
 	cb.actual_param_count = actual_param_count;
 	cb.create_new_thread = !StrChrAny(options, _T("Ff")); // Recognize "F" as the "fast" mode that avoids creating a new thread.
@@ -14736,9 +14751,9 @@ BIF_DECL(BIF_StatusBar)
 	{
 	case 'T': // SB_SetText()
 		aResultToken.value_int64 = SendMessage(control_hwnd, SB_SETTEXT
-			, (WPARAM)((aParamCount < 2 ? 0 : TokenToInt64(*aParam[1]) - 1) // The Part# param is present.
-				| (aParamCount < 3 ? 0 : TokenToInt64(*aParam[2]) << 8)) // The uType parameter is present.
-			, (LPARAM)TokenToString(*aParam[0], buf)); // Load-time validation has ensured that there's at least one param in this mode.
+			, (WPARAM)((ParamIndexIsOmitted(1) ? 0 : ParamIndexToInt64(1) - 1) // The Part# param is present.
+				     | (ParamIndexIsOmitted(2) ? 0 : ParamIndexToInt64(2) << 8)) // The uType parameter is present.
+			, (LPARAM)ParamIndexToString(0, buf)); // Load-time validation has ensured that there's at least one param in this mode.
 		break;
 
 	case 'P': // SB_SetParts()
@@ -14746,7 +14761,7 @@ BIF_DECL(BIF_StatusBar)
 		int edge, part[256]; // Load-time validation has ensured aParamCount is under 255, so it shouldn't overflow.
 		for (edge = 0, new_part_count = 0; new_part_count < aParamCount; ++new_part_count)
 		{
-			edge += gui.Scale((int)TokenToInt64(*aParam[new_part_count])); // For code simplicity, no check for negative (seems fairly harmless since the bar will simply show up with the wrong number of parts to indicate the problem).
+			edge += gui.Scale(ParamIndexToInt(new_part_count)); // For code simplicity, no check for negative (seems fairly harmless since the bar will simply show up with the wrong number of parts to indicate the problem).
 			part[new_part_count] = edge;
 		}
 		// For code simplicity, there is currently no means to have the last part of the bar use less than
@@ -14766,14 +14781,14 @@ BIF_DECL(BIF_StatusBar)
 
 	case 'I': // SB_SetIcon()
 		int unused, icon_number;
-		icon_number = (aParamCount < 2) ? 1 : (int)TokenToInt64(*aParam[1]);
+		icon_number = ParamIndexToOptionalInt(1, 1);
 		if (icon_number == 0) // Must be != 0 to tell LoadPicture that "icon must be loaded, never a bitmap".
 			icon_number = 1;
-		if (hicon = (HICON)LoadPicture(TokenToString(*aParam[0], buf) // Load-time validation has ensured there is at least one parameter.
+		if (hicon = (HICON)LoadPicture(ParamIndexToString(0, buf) // Load-time validation has ensured there is at least one parameter.
 			, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON) // Apparently the bar won't scale them for us.
 			, unused, icon_number, false)) // Defaulting to "false" for "use GDIplus" provides more consistent appearance across multiple OSes.
 		{
-			WPARAM part_index = (aParamCount < 3) ? 0 : (WPARAM)TokenToInt64(*aParam[2]) - 1;
+			WPARAM part_index = ParamIndexIsOmitted(2) ? 0 : (WPARAM)ParamIndexToInt64(2) - 1;
 			HICON hicon_old = (HICON)SendMessage(control_hwnd, SB_GETICON, part_index, 0); // Get the old one before setting the new one.
 			// For code simplicity, the script is responsible for destroying the hicon later, if it ever destroys
 			// the window.  Though in practice, most people probably won't do this, which is usually okay (if the
@@ -14834,7 +14849,7 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 	LPTSTR options;
 	if (mode_is_count)
 	{
-		options = (aParamCount > 0) ? omit_leading_whitespace(TokenToString(*aParam[0], buf)) : _T("");
+		options = (aParamCount > 0) ? omit_leading_whitespace(ParamIndexToString(0, buf)) : _T("");
 		if (*options)
 		{
 			if (ctoupper(*options) == 'S')
@@ -14849,7 +14864,7 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 	}
 	// Since above didn't return, this is GetNext() mode.
 
-	int index = (int)((aParamCount > 0) ? TokenToInt64(*aParam[0]) - 1 : -1); // -1 to convert to zero-based.
+	int index = ParamIndexToOptionalInt(0, 0) - 1; // -1 to convert to zero-based.
 	// For flexibility, allow index to be less than -1 to avoid first-iteration complications in script loops
 	// (such as when deleting rows, which shifts the row index upward, require the search to resume at
 	// the previously found index rather than the row after it).  However, reset it to -1 to ensure
@@ -14861,7 +14876,7 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 	// even when the checkboxes style is in effect.  Otherwise, would have to fetch and check checkbox style
 	// bit for each call, which would slow down this heavily-called function.
 
-	options = (aParamCount > 1) ? TokenToString(*aParam[1], buf) : _T("");
+	options = ParamIndexToOptionalString(1, buf);
 	TCHAR first_char = ctoupper(*omit_leading_whitespace(options));
 	// To retain compatibility in the future, also allow "Check(ed)" and "Focus(ed)" since any word that
 	// starts with C or F is already supported.
@@ -14914,9 +14929,9 @@ BIF_DECL(BIF_LV_GetText)
 		return;
 
 	// Caller has ensured there is at least two parameters.
-	int row_index = (int)TokenToInt64(*aParam[1]) - 1; // -1 to convert to zero-based.
+	int row_index = ParamIndexToInt(1) - 1; // -1 to convert to zero-based.
 	// If parameter 3 is omitted, default to the first column (index 0):
-	int col_index = (aParamCount > 2) ? (int)TokenToInt64(*aParam[2]) - 1 : 0; // -1 to convert to zero-based.
+	int col_index = ParamIndexIsOmitted(2) ? 0 : ParamIndexToInt(2) - 1; // -1 to convert to zero-based.
 	if (row_index < -1 || col_index < 0) // row_index==-1 is reserved to mean "get column heading's text".
 		return;
 
@@ -14983,7 +14998,7 @@ BIF_DECL(BIF_LV_AddInsertModify)
 	}
 	else // Insert or Modify: the target row-index is their first parameter, which load-time has ensured is present.
 	{
-		index = (int)TokenToInt64(*aParam[0]) - 1; // -1 to convert to zero-based.
+		index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 		if (index < -1 || (mode != 'M' && index < 0)) // Allow -1 to mean "all rows" when in modify mode.
 			return;
 		++aParam;  // Remove the first parameter from further consideration to make Insert/Modify symmetric with Add.
@@ -14997,7 +15012,7 @@ BIF_DECL(BIF_LV_AddInsertModify)
 		return;
 	GuiControlType &control = *gui.mCurrentListView;
 
-	LPTSTR options = (aParamCount > 0) ? TokenToString(*aParam[0], buf) : _T("");
+	LPTSTR options = ParamIndexToOptionalString(0, buf);
 	bool ensure_visible = false, is_checked = false;  // Checkmark.
 	int col_start_index = 0;
 	LVITEM lvi;
@@ -15144,9 +15159,9 @@ BIF_DECL(BIF_LV_AddInsertModify)
 
 	for (j = 0; j < rows_to_change; ++j, ++lvi.iItem) // ++lvi.iItem because if the loop has more than one iteration, by definition it is modifying all rows starting at 0.
 	{
-		if (aParamCount > 1 && col_start_index == 0) // 2nd parameter: item's text (first field) is present, so include that when setting the item.
+		if (!ParamIndexIsOmitted(1) && col_start_index == 0) // 2nd parameter: item's text (first field) is present, so include that when setting the item.
 		{
-			lvi.pszText = TokenToString(*aParam[1], buf); // Fairly low-overhead, so called every iteration for simplicity (so that buf can be used for both items and subitems).
+			lvi.pszText = ParamIndexToString(1, buf); // Fairly low-overhead, so called every iteration for simplicity (so that buf can be used for both items and subitems).
 			lvi.mask |= LVIF_TEXT;
 		}
 		if (mode == 'I') // Insert or Add.
@@ -15197,10 +15212,13 @@ BIF_DECL(BIF_LV_AddInsertModify)
 			, i = 2 - (col_start_index > 0)
 			; i < aParamCount
 			; ++i, ++lvi_sub.iSubItem)
-			if (lvi_sub.pszText = TokenToString(*aParam[i], buf)) // Done every time through the outer loop since it's not high-overhead, and for code simplicity.
-				if (!ListView_SetItem(control.hwnd, &lvi_sub) && mode != 'I') // Relies on short-circuit. Seems best to avoid loss of item's index in insert mode, since failure here should be rare.
-					aResultToken.value_int64 = 0; // Indicate partial failure, but attempt to continue in case it failed for reason other than "row doesn't exist".
-			// else not an operand, but it's simplest just to try to continue.
+		{
+			if (aParam[i]->symbol == SYM_MISSING) // Omitted, such as LV_Modify(1,Opt,"One",,"Three").
+				continue;
+			lvi_sub.pszText = ParamIndexToString(i, buf); // Done every time through the outer loop since it's not high-overhead, and for code simplicity.
+			if (!ListView_SetItem(control.hwnd, &lvi_sub) && mode != 'I') // Relies on short-circuit. Seems best to avoid loss of item's index in insert mode, since failure here should be rare.
+				aResultToken.value_int64 = 0; // Indicate partial failure, but attempt to continue in case it failed for reason other than "row doesn't exist".
+		}
 	} // outer for()
 
 	// When the control has no rows, work around the fact that LVM_SETITEMCOUNT delivers less than 20%
@@ -15234,14 +15252,14 @@ BIF_DECL(BIF_LV_Delete)
 		return;
 	HWND control_hwnd = gui.mCurrentListView->hwnd;
 
-	if (aParamCount < 1)
+	if (ParamIndexIsOmitted(0))
 	{
 		aResultToken.value_int64 = SendMessage(control_hwnd, LVM_DELETEALLITEMS, 0, 0); // Returns TRUE/FALSE.
 		return;
 	}
 
 	// Since above didn't return, there is a first parameter present.
-	int index = (int)TokenToInt64(*aParam[0]) - 1; // -1 to convert to zero-based.
+	int index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 	if (index > -1)
 		aResultToken.value_int64 = SendMessage(control_hwnd, LVM_DELETEITEM, index, 0); // Returns TRUE/FALSE.
 	//else even if index==0, for safety, it seems not to do a delete-all.
@@ -15275,8 +15293,8 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 	lv_attrib_type &lv_attrib = *control.union_lv_attrib;
 
 	int index;
-	if (aParamCount > 0)
-		index = (int)TokenToInt64(*aParam[0]) - 1; // -1 to convert to zero-based.
+	if (!ParamIndexIsOmitted(0))
+		index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 	else // Zero parameters.  Load-time validation has ensured that the 'D' (delete) mode cannot have zero params.
 	{
 		if (mode == 'M')
@@ -15340,7 +15358,7 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 
 	// In addition to other reasons, must convert any numeric value to a string so that an isolated width is
 	// recognized, e.g. LV_SetCol(1, old_width + 10):
-	LPTSTR options = (aParamCount > 1) ? TokenToString(*aParam[1], buf) : _T("");
+	LPTSTR options = ParamIndexToOptionalString(1, buf);
 
 	// It's done the following way so that when in insert-mode, if the column fails to be inserted, don't
 	// have to remove the inserted array element from the lv_attrib.col array:
@@ -15500,9 +15518,9 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 	// Apply any changed justification/alignment to the fmt bit field:
 	lvc.fmt = (lvc.fmt & ~LVCFMT_JUSTIFYMASK) | new_justify;
 
-	if (aParamCount > 2) // Parameter #3 (text) is present.
+	if (!ParamIndexIsOmitted(2)) // Parameter #3 (text) is present.
 	{
-		lvc.pszText = TokenToString(*aParam[2], buf);
+		lvc.pszText = ParamIndexToString(2, buf);
 		lvc.mask |= LVCF_TEXT;
 	}
 
@@ -15578,10 +15596,10 @@ BIF_DECL(BIF_LV_SetImageList)
 	if (!gui.mCurrentListView)
 		return;
 	// Caller has ensured that there is at least one incoming parameter:
-	HIMAGELIST himl = (HIMAGELIST)TokenToInt64(*aParam[0]);
+	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0);
 	int list_type;
-	if (aParamCount > 1)
-		list_type = (int)TokenToInt64(*aParam[1]);
+	if (!ParamIndexIsOmitted(1))
+		list_type = ParamIndexToInt(1);
 	else // Auto-detect large vs. small icons based on the actual icon size in the image list.
 	{
 		int cx, cy;
@@ -15627,12 +15645,12 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 
 	if (mode == 'D') // TV_Delete
 	{
-		// If param #1 is present but is zero, for safety it seems not to do a delete-all (in case a
+		// If param #1 is present but is zero, for safety it seems best not to do a delete-all (in case a
 		// script bug is so rare that it is never caught until the script is distributed).  Another reason
 		// is that a script might do something like TV_Delete(TV_GetSelection()), which would be desired
 		// to fail not delete-all if there's ever any way for there to be no selection.
 		aResultToken.value_int64 = SendMessage(control.hwnd, TVM_DELETEITEM, 0
-			, aParamCount < 1 ? NULL : (LPARAM)TokenToInt64(*aParam[0]));
+			, ParamIndexIsOmitted(0) ? NULL : (LPARAM)ParamIndexToInt64(0));
 		return;
 	}
 
@@ -15643,15 +15661,15 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 	LPTSTR options;
 	if (add_mode) // TV_Add()
 	{
-		tvi.hParent = (aParamCount > 1) ? (HTREEITEM)TokenToInt64(*aParam[1]) : NULL;
+		tvi.hParent = ParamIndexIsOmitted(1) ? NULL : (HTREEITEM)ParamIndexToInt64(1);
 		tvi.hInsertAfter = TVI_LAST; // i.e. default is to insert the new item underneath the bottommost sibling.
-		options = (aParamCount > 2) ? TokenToString(*aParam[2], buf) : _T("");
+		options = ParamIndexToOptionalString(2, buf);
 	}
 	else // TV_Modify()
 	{
 		// NOTE: Must allow hitem==0 for TV_Modify, at least for the Sort option, because otherwise there would
 		// be no way to sort the root-level items.
-		tvi.item.hItem = (HTREEITEM)TokenToInt64(*aParam[0]); // Load-time validation has ensured there is a first parameter for TV_Modify().
+		tvi.item.hItem = (HTREEITEM)ParamIndexToInt64(0); // Load-time validation has ensured there is a first parameter for TV_Modify().
 		// For modify-mode, set default return value to be "success" from this point forward.  Note that
 		// in the case of sorting the root-level items, this will set it to zero, but since that almost
 		// always succeeds and the script rarely cares whether it succeeds or not, adding code size for that
@@ -15664,7 +15682,7 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 			return;
 		}
 		// Otherwise, there's a second parameter (even if it's 0 or "").
-		options = TokenToString(*aParam[1], buf);
+		options = ParamIndexToString(1, buf);
 	}
 
 	// Set defaults prior to options-parsing, to cover all omitted defaults:
@@ -15835,16 +15853,16 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 
 	if (add_mode) // TV_Add()
 	{
-		tvi.item.pszText = TokenToString(*aParam[0], buf);
+		tvi.item.pszText = ParamIndexToString(0, buf);
 		tvi.item.mask |= TVIF_TEXT;
 		tvi.item.hItem = TreeView_InsertItem(control.hwnd, &tvi); // Update tvi.item.hItem for convenience/maint. I'ts for use in later sections because aResultToken.value_int64 is overridden to be zero for partial failure in modify-mode.
 		aResultToken.value_int64 = (__int64)tvi.item.hItem; // Set return value.
 	}
 	else // TV_Modify()
 	{
-		if (aParamCount > 2) // An explicit empty string is allowed, which sets it to a blank value.  By contrast, if the param is omitted, the name is left changed.
+		if (!ParamIndexIsOmitted(2)) // An explicit empty string is allowed, which sets it to a blank value.  By contrast, if the param is omitted, the name is left changed.
 		{
-			tvi.item.pszText = TokenToString(*aParam[2], buf); // Reuse buf now that options (above) is done with it.
+			tvi.item.pszText = ParamIndexToString(2, buf); // Reuse buf now that options (above) is done with it.
 			tvi.item.mask |= TVIF_TEXT;
 		}
 		//else name/text parameter has been omitted, so don't change the item's name.
@@ -15919,11 +15937,9 @@ BIF_DECL(BIF_TV_GetRelatedItem)
 		return;
 	HWND control_hwnd = gui.mCurrentTreeView->hwnd;
 
-	// For all built-in functions, loadtime validation has ensured that a first parameter can be
-	// present only when it's the specified HTREEITEM.
-	HTREEITEM hitem = (aParamCount < 1) ? NULL : (HTREEITEM)TokenToInt64(*aParam[0]);
+	HTREEITEM hitem = (HTREEITEM)ParamIndexToOptionalIntPtr(0, NULL);
 
-	if (aParamCount < 2)
+	if (ParamIndexIsOmitted(1))
 	{
 		WPARAM flag;
 		TCHAR char7 = ctoupper(fn_name[7]);
@@ -15963,7 +15979,7 @@ BIF_DECL(BIF_TV_GetRelatedItem)
 	// Since above didn't return, this TV_GetNext's 2-parameter mode, which has an expanded scope that includes
 	// not just siblings, but also children and parents.  This allows a tree to be traversed from top to bottom
 	// without the script having to do something fancy.
-	TCHAR first_char_upper = ctoupper(*omit_leading_whitespace(TokenToString(*aParam[1], buf))); // Resolve parameter #2.
+	TCHAR first_char_upper = ctoupper(*omit_leading_whitespace(ParamIndexToString(1, buf))); // Resolve parameter #2.
 	bool search_checkmark;
 	if (first_char_upper == 'C')
 		search_checkmark = true;
@@ -16030,9 +16046,9 @@ BIF_DECL(BIF_TV_Get)
 	if (!get_text)
 	{
 		// Loadtime validation has ensured that param #1 and #2 are present for all these cases.
-		HTREEITEM hitem = (HTREEITEM)TokenToInt64(*aParam[0]);
+		HTREEITEM hitem = (HTREEITEM)ParamIndexToInt64(0);
 		UINT state_mask;
-		switch (ctoupper(*omit_leading_whitespace(TokenToString(*aParam[1], buf))))
+		switch (ctoupper(*omit_leading_whitespace(ParamIndexToString(1, buf))))
 		{
 		case 'E': state_mask = TVIS_EXPANDED; break; // Expanded
 		case 'C': state_mask = TVIS_STATEIMAGEMASK; break; // Checked
@@ -16063,7 +16079,7 @@ BIF_DECL(BIF_TV_Get)
 
 	TCHAR text_buf[LV_TEXT_BUF_SIZE]; // i.e. uses same size as ListView.
 	TVITEM tvi;
-	tvi.hItem = (HTREEITEM)TokenToInt64(*aParam[1]);
+	tvi.hItem = (HTREEITEM)ParamIndexToInt64(1);
 	tvi.mask = TVIF_TEXT;
 	tvi.pszText = text_buf;
 	tvi.cchTextMax = LV_TEXT_BUF_SIZE - 1; // -1 because of nagging doubt about size vs. length. Some MSDN examples subtract one), such as TabCtrl_GetItem()'s cchTextMax.
@@ -16101,12 +16117,9 @@ BIF_DECL(BIF_TV_SetImageList)
 	if (!gui.mCurrentTreeView)
 		return;
 	// Caller has ensured that there is at least one incoming parameter:
-	HIMAGELIST himl = (HIMAGELIST)TokenToInt64(*aParam[0]);
+	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0);
 	int list_type;
-	if (aParamCount > 1)
-		list_type = (int)TokenToInt64(*aParam[1]);
-	else
-		list_type = TVSIL_NORMAL;
+	list_type = ParamIndexToOptionalInt(1, TVSIL_NORMAL);
 	aResultToken.value_int64 = (__int64)TreeView_SetImageList(gui.mCurrentTreeView->hwnd, himl, list_type);
 }
 
@@ -16121,15 +16134,17 @@ BIF_DECL(BIF_IL_Create)
 // 4: Future: Height of each image [if this param is present and >0, it would mean param 3 is not being used in its TRUE/FALSE mode)
 // 5: Future: Flags/Color depth
 {
+	// The following old comment makes no sense because large icons are only used if param3 is NON-ZERO,
+	// and there was never a distinction between passing zero and omitting the param:
 	// So that param3 can be reserved as a future "specified width" param, to go along with "specified height"
 	// after it, only when the parameter is both present and numerically zero are large icons used.  Otherwise,
 	// small icons are used.
-	int param3 = aParamCount > 2 ? (int)TokenToInt64(*aParam[2]) : 0;
+	int param3 = ParamIndexToOptionalInt(2, 0);
 	aResultToken.value_int64 = (__int64)ImageList_Create(GetSystemMetrics(param3 ? SM_CXICON : SM_CXSMICON)
 		, GetSystemMetrics(param3 ? SM_CYICON : SM_CYSMICON)
 		, ILC_MASK | ILC_COLOR32  // ILC_COLOR32 or at least something higher than ILC_COLOR is necessary to support true-color icons.
-		, aParamCount > 0 ? (int)TokenToInt64(*aParam[0]) : 2    // cInitial. 2 seems a better default than one, since it might be common to have only two icons in the list.
-		, aParamCount > 1 ? (int)TokenToInt64(*aParam[1]) : 5);  // cGrow.  Somewhat arbitrary default.
+		, ParamIndexToOptionalInt(0, 2)    // cInitial. 2 seems a better default than one, since it might be common to have only two icons in the list.
+		, ParamIndexToOptionalInt(1, 5));  // cGrow.  Somewhat arbitrary default.
 }
 
 
@@ -16142,7 +16157,7 @@ BIF_DECL(BIF_IL_Destroy)
 	// Load-time validation has ensured there is at least one parameter.
 	// Returns nonzero if successful, or zero otherwise, so force it to conform to TRUE/FALSE for
 	// better consistency with other functions:
-	aResultToken.value_int64 = ImageList_Destroy((HIMAGELIST)TokenToInt64(*aParam[0])) ? 1 : 0;
+	aResultToken.value_int64 = ImageList_Destroy((HIMAGELIST)ParamIndexToInt64(0)) ? 1 : 0;
 }
 
 
@@ -16166,16 +16181,16 @@ BIF_DECL(BIF_IL_Add)
 {
 	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
 	aResultToken.value_int64 = 0; // Set default in case of early return.
-	HIMAGELIST himl = (HIMAGELIST)TokenToInt64(*aParam[0]); // Load-time validation has ensured there is a first parameter.
+	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0); // Load-time validation has ensured there is a first parameter.
 	if (!himl)
 		return;
 
-	int param3 = (aParamCount > 2) ? (int)TokenToInt64(*aParam[2]) : 0;
+	int param3 = ParamIndexToOptionalInt(2, 0);
 	int icon_number, width = 0, height = 0; // Zero width/height causes image to be loaded at its actual width/height.
-	if (aParamCount > 3) // Presence of fourth parameter switches mode to be "load a non-icon image".
+	if (!ParamIndexIsOmitted(3)) // Presence of fourth parameter switches mode to be "load a non-icon image".
 	{
 		icon_number = 0; // Zero means "load icon or bitmap (doesn't matter)".
-		if (TokenToInt64(*aParam[3])) // A value of True indicates that the image should be scaled to fit the imagelist's image size.
+		if (ParamIndexToInt64(3)) // A value of True indicates that the image should be scaled to fit the imagelist's image size.
 			ImageList_GetIconSize(himl, &width, &height); // Determine the width/height to which it should be scaled.
 		//else retain defaults of zero for width/height, which loads the image at actual size, which in turn
 		// lets ImageList_AddMasked() divide it up into separate images based on its width.
@@ -16187,7 +16202,7 @@ BIF_DECL(BIF_IL_Add)
 	}
 
 	int image_type;
-	HBITMAP hbitmap = LoadPicture(TokenToString(*aParam[1], buf) // Load-time validation has ensured there are at least two parameters.
+	HBITMAP hbitmap = LoadPicture(ParamIndexToString(1, buf) // Load-time validation has ensured there are at least two parameters.
 		, width, height, image_type, icon_number, false); // Defaulting to "false" for "use GDIplus" provides more consistent appearance across multiple OSes.
 	if (!hbitmap)
 		return;
@@ -16222,16 +16237,12 @@ BIF_DECL(BIF_Trim) // L31
 		return;
 	}
 
-	LPTSTR str = TokenToString(*aParam[0]);
+	LPTSTR str = ParamIndexToString(0);
 	LPTSTR result = str; // Prior validation has ensured at least 1 param.
-	INT_PTR extract_length = EXPR_TOKEN_LENGTH(aParam[0], str);
+	INT_PTR extract_length = ParamIndexLength(0, str);
 
 	TCHAR omit_list_buf[MAX_NUMBER_SIZE]; // Support SYM_INTEGER/SYM_FLOAT even though it doesn't seem likely to happen.
-	LPTSTR omit_list;
-	if (aParamCount > 1)
-		omit_list = TokenToString(*aParam[1], omit_list_buf);
-	else
-		omit_list = _T(" \t"); // Space and tab.
+	LPTSTR omit_list = ParamIndexIsOmitted(1) ? _T(" \t") : ParamIndexToString(1, omit_list_buf); // Default: space and tab.
 
 	if (trim_type != 'R') // i.e. it's Trim() or LTrim()
 	{
@@ -16289,12 +16300,12 @@ BIF_DECL(BIF_Type)
 
 BIF_DECL(BIF_Exception)
 {
-	LPTSTR message = TokenToString(*aParam[0], aResultToken.buf);
+	LPTSTR message = ParamIndexToString(0, aResultToken.buf);
 	TCHAR what_buf[MAX_NUMBER_SIZE], extra_buf[MAX_NUMBER_SIZE];
-	LPTSTR what = NULL, extra = _T("");
+	LPTSTR what = NULL;
 	Line *line = NULL;
 
-	if (aParamCount < 2)
+	if (ParamIndexIsOmitted(1)) // "What"
 	{
 		line = g_script.mCurrLine;
 		if (g->CurrentFunc)
@@ -16307,7 +16318,7 @@ BIF_DECL(BIF_Exception)
 	else
 	{
 #ifdef CONFIG_DEBUGGER
-		int offset = TokenIsNumeric(*aParam[1]) ? (int)TokenToInt64(*aParam[1]) : 0;
+		int offset = TokenIsNumeric(*aParam[1]) ? ParamIndexToInt(1) : 0;
 		if (offset < 0)
 		{
 			DbgStack::Entry *se = g_Debugger.mStack.mTop + offset;
@@ -16333,12 +16344,11 @@ BIF_DECL(BIF_Exception)
 		if (!what)
 		{
 			line = g_script.mCurrLine;
-			what = TokenToString(*aParam[1], what_buf);
+			what = ParamIndexToString(1, what_buf);
 		}
-
-		if (aParamCount > 2)
-			extra = TokenToString(*aParam[2], extra_buf);
 	}
+
+	LPTSTR extra = ParamIndexToOptionalString(2, extra_buf);
 
 	if (aResultToken.object = line->CreateRuntimeException(message, what, extra))
 	{
@@ -16458,7 +16468,7 @@ SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aNumType)
 		aNumType = IsNumeric(aToken.marker, true, false, true);
 		return PURE_NOT_NUMERIC;
 	default:
-		// Only SYM_OBJECT should be possible.
+		// Only SYM_OBJECT and SYM_MISSING should be possible.
 		return aNumType = PURE_NOT_NUMERIC;
 	}
 }
@@ -16472,6 +16482,10 @@ BOOL TokenIsEmptyString(ExprTokenType &aToken)
 		return !*aToken.marker;
 	case SYM_VAR:
 		return !aToken.var->HasContents();
+	//case SYM_MISSING: // This case is omitted because it currently should be
+		// impossible for all callers except for ParamIndexIsOmittedOrEmpty(),
+		// which checks for it explicitly.
+		//return TRUE;
 	default:
 		return FALSE;
 	}
@@ -16574,6 +16588,8 @@ ResultType TokenToDoubleOrInt64(ExprTokenType &aToken)
 			break;
 		case SYM_OBJECT: // L31: Treat objects as empty strings (or TRUE where appropriate).
 			aToken.object->Release(); // Must be done before converting this token to something else.
+			// FALL THROUGH TO BELOW
+		case SYM_MISSING:
 			aToken.symbol = SYM_STRING;
 			aToken.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
 			// FALL THROUGH TO BELOW

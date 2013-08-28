@@ -257,6 +257,7 @@
     <ClInclude Include="source\resources\resource.h" />
     <ClInclude Include="source\script.h" />
     <ClInclude Include="source\script_com.h" />
+    <ClInclude Include="source\script_func_impl.h" />
     <ClInclude Include="source\script_object.h" />
     <ClInclude Include="source\SimpleHeap.h" />
     <ClInclude Include="source\stdafx.h" />

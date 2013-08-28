@@ -26,7 +26,7 @@ GNU General Public License for more details.
 // Globals that are for only this module:
 static ExprOpFunc g_ObjGet(BIF_ObjInvoke, IT_GET), g_ObjSet(BIF_ObjInvoke, IT_SET);
 static ExprOpFunc g_ObjGetInPlace(BIF_ObjGetInPlace, IT_GET);
-static ExprOpFunc g_ObjNew(BIF_ObjNew, 0);
+static ExprOpFunc g_ObjNew(BIF_ObjNew, IT_CALL);
 static ExprOpFunc g_ObjPreInc(BIF_ObjIncDec, SYM_PRE_INCREMENT), g_ObjPreDec(BIF_ObjIncDec, SYM_PRE_DECREMENT)
 				, g_ObjPostInc(BIF_ObjIncDec, SYM_POST_INCREMENT), g_ObjPostDec(BIF_ObjIncDec, SYM_POST_DECREMENT);
 ExprOpFunc g_ObjCall(BIF_ObjInvoke, IT_CALL); // Also needed in script_expression.cpp.
@@ -220,7 +220,7 @@ Script::Script()
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 	, mCurrentFuncOpenBlockCount(0), mNextLineIsFunctionBody(false)
-	, mClassObjectCount(0)
+	, mClassObjectCount(0), mUnresolvedClasses(NULL)
 	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true), mMenuUseErrorLevel(false)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
@@ -8550,7 +8550,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 	// Also, dimensioning explicitly by SYM_COUNT helps enforce that at compile-time:
 	static UCHAR sPrecedence[SYM_COUNT] =  // Performance: UCHAR vs. INT benches a little faster, perhaps due to the slight reduction in code size it causes.
 	{
-		0,0,0,0,0,0,0  // SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_VAR, SYM_OBJECT, SYM_DYNAMIC, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
+		0,0,0,0,0,0,0,0  // SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_MISSING, SYM_VAR, SYM_OBJECT, SYM_DYNAMIC, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
 		, 82, 82         // SYM_POST_INCREMENT, SYM_POST_DECREMENT: Highest precedence operator so that it will work even though it comes *after* a variable name (unlike other unaries, which come before).
 		, 86             // SYM_DOT
 		, 2,2,2,2,2,2    // SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE (to simplify the code, parentheses/brackets/braces must be lower than all operators in precedence).
@@ -9472,36 +9472,33 @@ unquoted_literal:
 					// non-NULL, and that can only be the result of a previous SYM_OPAREN/BRACKET.
 					if (this_infix[-1].symbol == SYM_COMMA || this_infix[-1].symbol == stack_symbol)
 					{
-						// Possible syntax error: (, or ,, or ,)
-						// This section allows empty parameters in static function-calls by automatically
-						// inserting the default parameter's default value.  Relies on param_count check above:
-						if (infix_symbol == SYM_COMMA // i.e. not ",)" since it is more likely to be an error.
-							&& func && !func->mIsBuiltIn && in_param_list->param_count >= func->mMinParams)
+						// An empty param in something like {x:y,,w:z} is meaningless and likely to be an error.
+						// x[a,,b] could possibly be given meaning by __Set or __Get, but that doesn't seem useful
+						// enough to justify the added code for guarding against SYM_MISSING.  Ruling out empty
+						// params in x[] allows IObject::Invoke() implementations to assume that the first param
+						// (or param for IT_SET/IT_GET) is never SYM_MISSING.  However, [a,,b] is allowed as a way
+						// to create a sparse array.
+						if (stack_symbol == SYM_OBRACE || func && (int)func->mName < IT_CALL) // i.e. {} or x[]
+							return LineError(_T("Unexpected comma"), FAIL, in_param_list->marker);
+						// Also handle any missing params following this one, otherwise the this_infix[-1].symbol
+						// check would fail next iteration because we've changed it from SYM_COMMA to SYM_MISSING.
+						while (this_infix->symbol == SYM_COMMA) // For each missing parameter: (, or ,,
 						{
-							FuncParam &param = func->mParam[in_param_list->param_count];
-							// Don't use this_infix since that would prevent two consecutive blank params:
-							//this_postfix = this_infix++;
-							++this_infix; // See below.
-							this_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
-							switch (param.default_type)
-							{
-							case PARAM_DEFAULT_STR:		this_postfix->symbol = SYM_STRING;	break;  // If user defines param="123" vs param=123, assume it should be PURE_NOT_NUMERIC.  If this were SYM_OPERAND, this_infix->buf must be set to NULL.  
-							case PARAM_DEFAULT_INT:		this_postfix->symbol = SYM_INTEGER;	break;
-							case PARAM_DEFAULT_FLOAT:	this_postfix->symbol = SYM_FLOAT;	break;
-							//case PARAM_DEFAULT_NONE: Should not be possible due to mMinParams check above.
-							}
-							this_postfix->value_int64 = param.default_int64; // Union copy.
-							++postfix_count;
-							// Since this_infix is a function parameter comma and there are no more operators
-							// to pop off the stack, it does not need any further processing.  This method
-							// seems the only simple one since if we did not "consume" the comma here,
-							// this section would be re-entered in the next iteration, and the next, etc.
-							// We can't simply fall through to below since this_postfix ref must be updated.
+							postfix[postfix_count] = this_infix++;
+							postfix[postfix_count]->symbol = SYM_MISSING;
+							postfix[postfix_count]->marker = _T(""); // Simplify some cases by letting it be treated as SYM_STRING.
+							postfix[postfix_count]->circuit_token = NULL;
 							++in_param_list->param_count;
-							continue;
+							++postfix_count;
 						}
-						else
+						// Below: Detects ,) and ,] as errors.  Since the loop above doesn't handle those cases,
+						// the "continue" below would cause an infinite loop.  Additionally, it's not at all
+						// useful and so likely to be an error.
+						if (IS_CPAREN_LIKE(this_infix->symbol) // End of the list.
+							|| func && in_param_list->param_count < func->mMinParams) // Omitted a required parameter.
 							return LineError(ERR_BLANK_PARAM, FAIL, in_param_list->marker);
+						// Go back to the top to update the this_postfix ref.
+						continue;
 					}
 
 					#ifdef ENABLE_DLLCALL

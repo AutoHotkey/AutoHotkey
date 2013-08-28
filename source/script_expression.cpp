@@ -1508,39 +1508,48 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 //   space available after aParam for expanding the array of parameters for a variadic function call.
 {
 	aResult = OK; // Set default.
+	
+	Object *param_obj = NULL;
+	if (aIsVariadic) // i.e. this is a variadic function call.
+	{
+		ExprTokenType *rvalue = NULL;
+		if (mName == (LPTSTR)IT_SET && aParamCount > 1) // x[y*]:=z
+			rvalue = aParam[--aParamCount];
+		
+		--aParamCount; // i.e. make aParamCount the count of normal params.
+		if (param_obj = dynamic_cast<Object *>(TokenToObject(*aParam[aParamCount])))
+		{
+			int extra_params = param_obj->MaxIndex();
+			if (extra_params > 0 || param_obj->HasNonnumericKeys())
+			{
+				// Calculate space required for ...
+				size_t space_needed = extra_params * sizeof(ExprTokenType) // ... new param tokens
+					+ max(mParamCount, aParamCount + extra_params) * sizeof(ExprTokenType *); // ... existing and new param pointers
+				if (rvalue)
+					space_needed += sizeof(rvalue); // ... extra slot for aRValue
+				// Allocate new param list and tokens; tokens first for convenience.
+				ExprTokenType *token = (ExprTokenType *)_alloca(space_needed);
+				ExprTokenType **param_list = (ExprTokenType **)(token + extra_params);
+				// Since built-in functions don't have variables we can directly assign to,
+				// we need to expand the param object's contents into an array of tokens:
+				if (!param_obj->ArrayToParams(token, param_list, extra_params, aParam, aParamCount))
+					return false; // Abort expression.
+			}
+		}
+		if (rvalue)
+			aParam[aParamCount++] = rvalue; // In place of the variadic param.
+		// mMinParams isn't validated at load-time for variadic calls, so we must do it here:
+		if (aParamCount < mMinParams)
+			return false; // Abort expression.
+		// Otherwise, even if some params are SYM_MISSING, it is relatively safe to call the function.
+		// The TokenTo' set of functions will produce 0 or "" for missing params.  Although that isn't
+		// technically correct, it seems preferable over silently aborting the call.
+	}
 
 	if (mIsBuiltIn)
 	{
 		aResultToken.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
 		aResultToken.marker = mName;       // Inform function of which built-in function called it (allows code sharing/reduction). Can't use circuit_token because it's value is still needed later below.
-
-		if (aIsVariadic) // i.e. this is a variadic function call.
-		{
-			Object *param_obj;
-			--aParamCount; // i.e. make aParamCount the count of normal params.
-			if (param_obj = dynamic_cast<Object *>(TokenToObject(*aParam[aParamCount])))
-			{
-				void *mem_to_free;
-				// Since built-in functions don't have variables we can directly assign to,
-				// we need to expand the param object's contents into an array of tokens:
-				if (!param_obj->ArrayToParams(mem_to_free, aParam, aParamCount, mMinParams))
-					return false; // Abort expression.
-
-				// CALL THE BUILT-IN FUNCTION:
-				mBIF(aResult, aResultToken, aParam, aParamCount);
-
-				if (mem_to_free)
-					free(mem_to_free);
-				if (g->ThrownToken)
-					aResult = FAIL; // Abort thread.
-				return (aResult != EARLY_EXIT && aResult != FAIL);
-			}
-			// Caller-supplied "params*" is not an Object, so treat it like an empty list; however,
-			// mMinParams isn't validated at load-time for variadic calls, so we must do it here:
-			if (aParamCount < mMinParams)
-				return false; // Abort expression.
-			// Otherwise just call the function normally.
-		}
 
 		// CALL THE BUILT-IN FUNCTION:
 		mBIF(aResult, aResultToken, aParam, aParamCount);
@@ -1550,30 +1559,11 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 	}
 	else // It's not a built-in function, or it's a built-in that was overridden with a custom function.
 	{
-		ExprTokenType indexed_token, named_token; // Separate for code simplicity.
-		INT_PTR param_offset, param_key = -1;
-		Object *param_obj = NULL;
-		if (aIsVariadic) // i.e. this is a variadic function call.
-		{
-			--aParamCount; // i.e. make aParamCount the count of normal params.
-			// For performance, only the Object class is supported:
-			if (param_obj = dynamic_cast<Object *>(TokenToObject(*aParam[aParamCount])))
-			{
-				param_offset = -1;
-				// Below retrieves the first item with integer key >= 1, or sets
-				// param_offset to the offset of the first item with a non-int key.
-				// Performance note: this might be slow if there are many items
-				// with negative integer keys; but that should be vanishingly rare.
-				while (param_obj->GetNextItem(indexed_token, param_offset, param_key)
-						&& param_key < 1);
-			}
-		}
-
 		int j, count_of_actuals_that_have_formals;
 		count_of_actuals_that_have_formals = (aParamCount > mParamCount)
 			? mParamCount  // Omit any actuals that lack formals (this can happen when a dynamic call passes too many parameters).
 			: aParamCount;
-
+		
 		// If there are other instances of this function already running, either via recursion or
 		// an interrupted quasi-thread, back up the local variables of the instance that lies immediately
 		// beneath ours (in turn, that instance is responsible for backing up any instance that lies
@@ -1636,65 +1626,43 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 		// Set after above succeeds to ensure local vars are freed and the backup is restored (at some point):
 		aFuncCall.mFunc = this;
 		
-		// The following loop will have zero iterations unless at least one formal parameter lacks an actual,
-		// which should be possible only if the parameter is optional (i.e. has a default value).
-		for (j = aParamCount; j < mParamCount; ++j) // For each formal parameter that lacks an actual, provide a default value.
+		for (j = 0; j < mParamCount; ++j) // For each formal parameter.
 		{
 			FuncParam &this_formal_param = mParam[j]; // For performance and convenience.
-			if (this_formal_param.is_byref) // v1.0.46.13: Allow ByRef parameters to be optional by converting an omitted-actual into a non-alias formal/local.
-				this_formal_param.var->ConvertToNonAliasIfNecessary(); // Convert from alias-to-normal, if necessary.
-			// Check if this parameter has been supplied a value via a param array/object:
-			if (param_obj)
-			{
-				// Numbered parameter?
-				if (param_key == j - aParamCount + 1)
-				{
-					if (!this_formal_param.var->Assign(indexed_token))
-					{
-						aResult = FAIL; // Abort thread.
-						return false;
-					}
-					// Get the next item, which might be at [i+1] (in which case the next iteration will
-					// get indexed_token) or a later index (in which case the next iteration will get a
-					// regular default value and a later iteration may get indexed_token). If there aren't
-					// any more items, param_key will be left as-is (so this IF won't be re-entered).
-					// If there aren't any more parameters needing values, param_offset will remain the
-					// offset of the first unused item; this is relied on below to copy the remaining
-					// items into the function's "param*" array if it has one (i.e. if mIsVariadic).
-					param_obj->GetNextItem(indexed_token, param_offset, param_key);
-					// This parameter has been supplied a value, so don't assign it a default value.
-					continue;
-				}
-				// Named parameter?
-				if (param_obj->GetItem(named_token, this_formal_param.var->mName))
-				{
-					if (!this_formal_param.var->Assign(named_token))
-					{
-						aResult = FAIL; // Abort thread.
-						return false;
-					}
-					continue;
-				}
-			}
-			switch(this_formal_param.default_type)
-			{
-			case PARAM_DEFAULT_STR:   this_formal_param.var->Assign(this_formal_param.default_str);    break;
-			case PARAM_DEFAULT_INT:   this_formal_param.var->Assign(this_formal_param.default_int64);  break;
-			case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
-			default: //case PARAM_DEFAULT_NONE:
-				// Since above didn't continue, no value has been supplied for this REQUIRED parameter.
-				return false; // Abort expression.
-			}
-		}
 
-		for (j = 0; j < count_of_actuals_that_have_formals; ++j) // For each actual parameter that has a formal, assign the actual to the formal.
-		{
+			if (j >= aParamCount || aParam[j]->symbol == SYM_MISSING)
+			{
+				if (this_formal_param.is_byref) // v1.0.46.13: Allow ByRef parameters to be optional by converting an omitted-actual into a non-alias formal/local.
+					this_formal_param.var->ConvertToNonAliasIfNecessary(); // Convert from alias-to-normal, if necessary.
+
+				if (param_obj)
+				{
+					ExprTokenType named_value;
+					if (param_obj->GetItem(named_value, this_formal_param.var->mName))
+					{
+						this_formal_param.var->Assign(named_value);
+						continue;
+					}
+				}
+			
+				switch(this_formal_param.default_type)
+				{
+				case PARAM_DEFAULT_STR:   this_formal_param.var->Assign(this_formal_param.default_str);    break;
+				case PARAM_DEFAULT_INT:   this_formal_param.var->Assign(this_formal_param.default_int64);  break;
+				case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
+				default: //case PARAM_DEFAULT_NONE:
+					// No value has been supplied for this REQUIRED parameter.
+					return false; // Abort expression.
+				}
+				continue;
+			}
+
 			ExprTokenType &token = *aParam[j];
 			
 			if (!IS_OPERAND(token.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
 				return false; // Abort expression.
-			
-			if (mParam[j].is_byref)
+
+			if (this_formal_param.is_byref)
 			{
 				// Note that the previous loop might not have checked things like the following because that
 				// loop never ran unless a backup was needed:
@@ -1704,11 +1672,11 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 					// to act like regular parameters when no var was specified.  If we force script
 					// authors to pass a variable, they may pass a temporary variable which is then
 					// discarded, adding a little overhead and impacting the readability of the script.
-					mParam[j].var->ConvertToNonAliasIfNecessary();
+					this_formal_param.var->ConvertToNonAliasIfNecessary();
 				}
 				else
 				{
-					mParam[j].var->UpdateAlias(token.var); // Make the formal parameter point directly to the actual parameter's contents.
+					this_formal_param.var->UpdateAlias(token.var); // Make the formal parameter point directly to the actual parameter's contents.
 					continue;
 				}
 			}
@@ -1719,7 +1687,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 			// A SYM_VAR token can still happen because the previous loop's conversion of all
 			// by-value SYM_VAR operands into the appropriate operand symbol would not have
 			// happened if no backup was needed for this function (which is usually the case).
-			if (!mParam[j].var->Assign(token))
+			if (!this_formal_param.var->Assign(token))
 			{
 				aResult = FAIL; // Abort thread.
 				return false;
@@ -1728,29 +1696,19 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 		
 		if (mIsVariadic) // i.e. this function is capable of accepting excess params via an object/array.
 		{
-			Object *obj;
-			if (param_obj) // i.e. caller supplied an array of params.
+			// If the caller supplied an array of parameters, copy any key-value pairs with non-numbered keys;
+			// otherwise, just create a new object.  Either way, numbered params will be inserted below.
+			Object *vararg_obj = param_obj ? param_obj->Clone(true) : Object::Create();
+			if (!vararg_obj)
 			{
-				// Clone the caller's param object, excluding the numbered keys we've used:
-				if (obj = param_obj->Clone(param_offset))
-				{
-					if (mParamCount > aParamCount)
-						// Adjust numeric keys based on how many items we would've used if the "array" was contiguous:
-						obj->ReduceKeys(mParamCount - aParamCount); // Should be harmless if there are no numeric keys left.
-					//else param_offset should be 0; we didn't use any items.
-				}
+				aResult = g_script.ScriptError(ERR_OUTOFMEM, mName);
+				return false; // Abort thread.
 			}
-			else
-				obj = (Object *)Object::Create();
-			
-			if (obj)
-			{
-				if (j < aParamCount)
-					// Insert the excess parameters from the actual parameter list.
-					obj->InsertAt(0, 1, aParam + j, aParamCount - j);
-				// Assign to the "param*" var:
-				mParam[mParamCount].var->AssignSkipAddRef(obj);
-			}
+			if (j < aParamCount)
+				// Insert the excess parameters from the actual parameter list.
+				vararg_obj->InsertAt(0, 1, aParam + j, aParamCount - j);
+			// Assign to the "param*" var:
+			mParam[mParamCount].var->AssignSkipAddRef(vararg_obj);
 		}
 
 		aResult = Call(&aResultToken); // Call the UDF.

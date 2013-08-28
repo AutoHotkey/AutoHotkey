@@ -7347,12 +7347,10 @@ GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 	}
 	// Otherwise: No match found, so fall back to standard control class and/or text finding method.
 	HWND control_hwnd = ControlExist(mHwnd, aControlID);
-	if (!control_hwnd)
-		return -1; // No match found.
-	for (u = 0; u < mControlCount; ++u)
-		if (mControl[u].hwnd == control_hwnd)
-			return u;  // Match found.
-	// Otherwise: No match found.  At this stage, should be impossible if design is correct.
+	u = (GuiIndexType)FindControl(control_hwnd, true);
+	if (u < mControlCount)
+		return u;  // Match found.
+	// Otherwise: No match found.
 	return -1;
 }
 
