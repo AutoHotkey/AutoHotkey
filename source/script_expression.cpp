@@ -1755,7 +1755,10 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 		if (rvalue)
 			aParam[aParamCount++] = rvalue; // In place of the variadic param.
 		// mMinParams isn't validated at load-time for variadic calls, so we must do it here:
-		if (aParamCount < mMinParams)
+		// However, this check must be skipped for user-defined functions so that a named value
+		// can be supplied for a required parameter.  Missing required parameters are detected
+		// in the loop below by the absence of a default value.
+		if (aParamCount < mMinParams && mIsBuiltIn)
 			return false; // Abort expression.
 		// Otherwise, even if some params are SYM_MISSING, it is relatively safe to call the function.
 		// The TokenTo' set of functions will produce 0 or "" for missing params.  Although that isn't
