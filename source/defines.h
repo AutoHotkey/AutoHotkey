@@ -33,6 +33,7 @@ GNU General Public License for more details.
 
 #define AHK_NAME "AutoHotkey"
 #include "ahkversion.h"
+#define AHK_WEBSITE "http://ahkscript.org"
 
 #define T_AHK_NAME			_T(AHK_NAME)
 #define T_AHK_VERSION		_T(AHK_VERSION)

@@ -5660,8 +5660,8 @@ bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
 		ShowMainWindow(MAIN_MODE_REFRESH);
 		return true;
 	case ID_HELP_WEBSITE:
-		if (!g_script.ActionExec(_T("http://www.autohotkey.com"), _T(""), NULL, false))
-			MsgBox(_T("Could not open URL http://www.autohotkey.com in default browser."));
+		if (!g_script.ActionExec(_T(AHK_WEBSITE), _T(""), NULL, false))
+			MsgBox(_T("Could not open URL ") _T(AHK_WEBSITE) _T(" in default browser."));
 		return true;
 	default:
 		// See if this command ID is one of the user's custom menu items.  Due to the possibility
