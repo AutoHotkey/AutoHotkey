@@ -3874,8 +3874,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		} // single-iteration for-loop
 
 		// Since above didn't return, it's not a declaration such as "global MyVar".
-		if (   !(end_marker = ParseActionType(action_name, aLineText, true))   )
-			return FAIL; // It already displayed the error.
+		end_marker = ParseActionType(action_name, aLineText, true);
 	}
 	
 	// Above has ensured that end_marker is the address of the last character of the action name,
@@ -3885,13 +3884,14 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	bool could_be_named_action;
 	if (end_marker)
 	{
-		action_args = omit_leading_whitespace(end_marker + 1);
+		action_args = omit_leading_whitespace(end_marker);
 		// L34: Require that named commands and their args are delimited with a space, tab or comma.
 		// Detects errors such as "MsgBox< foo" or "If!foo" and allows things like "control[x]:=y".
-		TCHAR end_char = end_marker[1];
+		TCHAR end_char = *end_marker;
 		could_be_named_action = (end_char == g_delimiter || !end_char || IS_SPACE_OR_TAB(end_char)
 			// Allow If() and While() but something like MsgBox() should always be a function-call:
-			|| (end_char == '(' && (!_tcsicmp(action_name, _T("IF")) || !_tcsicmp(action_name, _T("WHILE")))));
+			|| (end_char == '(' && (!_tcsicmp(action_name, _T("If")) || !_tcsicmp(action_name, _T("While"))))
+			|| (end_char == '{' && (!_tcsicmp(action_name, _T("Loop")) || !_tcsicmp(action_name, _T("Try")) || !_tcsicmp(action_name, _T("Catch"))))); // Supports OTB without a space, like Loop{.
 	}
 	else
 	{
@@ -3903,168 +3903,161 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	// delimiter was omitted).
 	bool add_openbrace_afterward = false; // v1.0.41: Set default for use in supporting brace in "if (expr) {" and "Loop {".
 
-	if (*action_args == g_delimiter)
+	if (!aActionType) // i.e. the caller hasn't yet determined this line's action type.
 	{
-		// Since there's a comma, don't change aActionType because if it's ACT_INVALID, it should stay that way
-		// so that "something, += 4" is not a valid assignment or other operator, but should still be checked
-		// against the list of commands to see if it's something like "MsgBox, += 4" (in this case, a script may
-		// use the comma to avoid ambiguity).
-		// Find the start of the next token (or its ending delimiter if the token is blank such as ", ,"):
-		for (++action_args; IS_SPACE_OR_TAB(*action_args); ++action_args);
-	}
-	else if (!aActionType) // i.e. the caller hasn't yet determined this line's action type.
-	{
-			//////////////////////////////////////////////////////
-			// Detect operators and assignments such as := and +=
-			//////////////////////////////////////////////////////
-			// This section is done before the section that checks whether action_name is a valid command
-			// because it avoids ambiguity in a line such as the following:
-			//    Input := test  ; Would otherwise be confused with the Input command.
-			// But there may be times when a line like this is used:
-			//    MsgBox :=  ; i.e. it is intended to be the first parameter, not an operator.
-			// In the above case, the user can provide the optional comma to avoid the ambiguity:
-			//    MsgBox, :=
-			TCHAR action_args_2nd_char = action_args[1];
+		//////////////////////////////////////////////////////
+		// Detect operators and assignments such as := and +=
+		//////////////////////////////////////////////////////
+		// This section is done before the section that checks whether action_name is a valid command
+		// because it avoids ambiguity in a line such as the following:
+		//    Input := test  ; Would otherwise be confused with the Input command.
+		// But there may be times when a line like this is used:
+		//    MsgBox :=  ; i.e. it is intended to be the first parameter, not an operator.
+		// In the above case, the user can provide the optional comma to avoid the ambiguity:
+		//    MsgBox, :=
+		TCHAR action_args_2nd_char = action_args[1];
 
-			switch(*action_args)
+		switch(*action_args)
+		{
+		case ':':
+			// v1.0.40: Allow things like "MsgBox :: test" to be valid by insisting that '=' follows ':'.
+			if (action_args_2nd_char == '=') // i.e. :=
+				aActionType = ACT_ASSIGNEXPR;
+			break;
+		case '+':
+		case '-':
+			// Support for ++i and --i.  Do a complete validation/recognition of the operator to allow
+			// a line such as the following, which omits the first optional comma, to still be recognized
+			// as a command rather than a variable-with-operator:
+			// SetWinDelay -1
+			if (!end_marker && action_args_2nd_char == *action_args // i.e. the pre-increment/decrement operator; e.g. ++index or --index.
+				|| action_args_2nd_char == '=') // i.e. x+=y or x-=y (by contrast, post-increment/decrement is recognized only after we check for a command name to cut down on ambiguity).
+				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
+			break;
+		case '*': // *=
+		case '|': // |=
+		case '&': // &=
+		case '^': // ^=
+			if (action_args_2nd_char == '=')
+				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
+			break;
+		case '/':
+			if (action_args_2nd_char == '=' // i.e. /=
+				|| action_args_2nd_char == '/' && action_args[2] == '=') // i.e. //=
+				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
+			break;
+		//case '?': Stand-alone ternary such as true ? fn1() : fn2().  These are rare so are
+		// checked later, only after action_name has been checked to see if it's a valid command.
+		case '>':
+		case '<':
+			if (action_args_2nd_char == *action_args && action_args[2] == '=') // i.e. >>= and <<=
+				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
+			break;
+		case '.': // L34: Handle dot differently now that dot is considered an action end flag. Detects some more errors and allows some valid expressions which weren't previously allowed.
+			if (action_args_2nd_char == '=')
+			{	// Concat-assign .=
+				aActionType = ACT_EXPRESSION;
+			}
+			else
 			{
-			case ':':
-				// v1.0.40: Allow things like "MsgBox :: test" to be valid by insisting that '=' follows ':'.
-				if (action_args_2nd_char == '=') // i.e. :=
-					aActionType = ACT_ASSIGNEXPR;
-				break;
-			case '+':
-			case '-':
-				// Support for ++i and --i.  In these cases, action_name must be either "+" or "-", and the
-				// first character of action_args must match it.  Do a complete validation/recognition of the
-				// operator to allow a line such as the following, which omits the first optional comma, to
-				// still be recognized as a command rather than a variable-with-operator:
-				// SetWinDelay -1
-				if ((*action_name == *action_args && !action_name[1]) // i.e. the pre-increment/decrement operator; e.g. ++index or --index.
-					|| action_args_2nd_char == '=') // i.e. x+=y or x-=y (by contrast, post-increment/decrement is recognized only after we check for a command name to cut down on ambiguity).
-					aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
-				break;
-			case '*': // *=
-			case '|': // |=
-			case '&': // &=
-			case '^': // ^=
-				if (action_args_2nd_char == '=')
-					aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
-				break;
-			case '/':
-				if (action_args_2nd_char == '=' // i.e. /=
-					|| action_args_2nd_char == '/' && action_args[2] == '=') // i.e. //=
-					aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
-				break;
-			//case '?': Stand-alone ternary such as true ? fn1() : fn2().  These are rare so are
-			// checked later, only after action_name has been checked to see if it's a valid command.
-			case '>':
-			case '<':
-				if (action_args_2nd_char == *action_args && action_args[2] == '=') // i.e. >>= and <<=
-					aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
-				break;
-			case '.': // L34: Handle dot differently now that dot is considered an action end flag. Detects some more errors and allows some valid expressions which weren't previously allowed.
-				if (action_args_2nd_char == '=')
-				{	// Concat-assign .=
+				LPTSTR id_begin = action_args + 1;
+				LPTSTR cp;
+				for (;;) // L35: Loop to fix x.y.z() and similar.
+				{
+					cp = find_identifier_end(id_begin);
+					if (*cp == '(')
+					{	// Allow function/method Call as standalone expression.
+						aActionType = ACT_EXPRESSION;
+						break;
+					}
+					if (cp == id_begin)
+						// No valid identifier, doesn't look like a valid expression.
+						break;
+					cp = omit_leading_whitespace(cp);
+					if (*cp == '[' || !*cp // x.y[z] or x.y
+						|| cp[1] == '=' && _tcschr(_T(":+-*/|&^."), cp[0]) // Two-char assignment operator.
+						|| cp[1] == cp[0]
+							&& (   _tcschr(_T("/<>"), cp[0]) && cp[2] == '=' // //=, <<= or >>=
+								|| *cp == '+' || *cp == '-'   )) // x.y++ or x.y--
+					{	// Allow Set and bracketed Get as standalone expression.
+						aActionType = ACT_EXPRESSION;
+						break;
+					}
+					if (*cp != '.')
+						// Must be something which is not allowed as a standalone expression.
+						break;
+					id_begin = cp + 1;
+				}
+			}
+			break;
+		//default: Leave aActionType set to ACT_INVALID. This also covers case '\0' in case that's possible.
+		} // switch()
+
+		if (aActionType) // An assignment or other type of action was discovered above.
+		{
+			if (aActionType == ACT_ASSIGNEXPR)
+			{
+				// Find the first non-function comma.
+				// This is done because ACT_ASSIGNEXPR needs to make comma-separated sub-expressions
+				// into one big ACT_EXPRESSION so that the leftmost sub-expression will get evaluated
+				// prior to the others (for consistency and as documented).  However, this has at
+				// least one side-effect; namely that if expression evaluation is aborted for some
+				// reason, the assignment is skipped completely rather than assigning a blank value.
+				// ALSO: ACT_ASSIGNEXPR is made into ACT_EXPRESSION *only* when multi-statement
+				// commas are present because it performs much better for trivial assignments,
+				// even some which aren't optimized to become non-expressions.
+				LPTSTR cp = action_args + FindExprDelim(action_args, g_delimiter, 2);
+				if (*cp) // Found a delimiting comma other than one in a sub-statement or function. Shouldn't need to worry about unquoted escaped commas since they don't make sense with += and -=.
+				{
+					// Any non-function comma qualifies this as multi-statement.
 					aActionType = ACT_EXPRESSION;
 				}
 				else
 				{
-					LPTSTR id_begin = action_args + 1;
-					LPTSTR cp;
-					for (;;) // L35: Loop to fix x.y.z() and similar.
-					{
-						cp = find_identifier_end(id_begin);
-						if (*cp == '(')
-						{	// Allow function/method Call as standalone expression.
-							aActionType = ACT_EXPRESSION;
-							break;
-						}
-						if (cp == id_begin)
-							// No valid identifier, doesn't look like a valid expression.
-							break;
-						cp = omit_leading_whitespace(cp);
-						if (*cp == '[' || !*cp // x.y[z] or x.y
-							|| cp[1] == '=' && _tcschr(_T(":+-*/|&^."), cp[0]) // Two-char assignment operator.
-							|| cp[1] == cp[0]
-								&& (   _tcschr(_T("/<>"), cp[0]) && cp[2] == '=' // //=, <<= or >>=
-									|| *cp == '+' || *cp == '-'   )) // x.y++ or x.y--
-						{	// Allow Set and bracketed Get as standalone expression.
-							aActionType = ACT_EXPRESSION;
-							break;
-						}
-						if (*cp != '.')
-							// Must be something which is not allowed as a standalone expression.
-							break;
-						id_begin = cp + 1;
-					}
+					// The following converts:
+					// x := 2 -> ACT_ASSIGNEXPR, x, 2
+					*action_args = g_delimiter; // Replace the ":" with a delimiter for later parsing.
+					action_args[1] = ' '; // Remove the "=" from consideration.
 				}
-				break;
-			//default: Leave aActionType set to ACT_INVALID. This also covers case '\0' in case that's possible.
-			} // switch()
-
-			if (aActionType) // An assignment or other type of action was discovered above.
-			{
-				if (aActionType == ACT_ASSIGNEXPR)
-				{
-					// Find the first non-function comma.
-					// This is done because ACT_ASSIGNEXPR needs to make comma-separated sub-expressions
-					// into one big ACT_EXPRESSION so that the leftmost sub-expression will get evaluated
-					// prior to the others (for consistency and as documented).  However, this has at
-					// least one side-effect; namely that if expression evaluation is aborted for some
-					// reason, the assignment is skipped completely rather than assigning a blank value.
-					// ALSO: ACT_ASSIGNEXPR is made into ACT_EXPRESSION *only* when multi-statement
-					// commas are present because it performs much better for trivial assignments,
-					// even some which aren't optimized to become non-expressions.
-					LPTSTR cp = action_args + FindExprDelim(action_args, g_delimiter, 2);
-					if (*cp // Found a delimiting comma other than one in a sub-statement or function. Shouldn't need to worry about unquoted escaped commas since they don't make sense with += and -=.
-						|| _tcschr(action_name, g_DerefChar)) // The output var is dynamic; since expression evaluation is required anyway, handle the whole assignment as one expression.
-					{
-						// Any non-function comma qualifies this as multi-statement.
-						aActionType = ACT_EXPRESSION;
-					}
-					else
-					{
-						// The following converts:
-						// x := 2 -> ACT_ASSIGNEXPR, x, 2
-						*action_args = g_delimiter; // Replace the ":" with a delimiter for later parsing.
-						action_args[1] = ' '; // Remove the "=" from consideration.
-					}
-				}
-				//else it's already an isolated expression, so no changes are desired.
-				action_args = aLineText; // Since this is an assignment and/or expression, use the line's full text for later parsing.
-			} // if (aActionType)
+			}
+			//else it's already an isolated expression, so no changes are desired.
+			action_args = aLineText; // Since this is an assignment and/or expression, use the line's full text for later parsing.
+		} // if (aActionType)
 
 	} // Handling of assignments and other operators.
 	//else aActionType was already determined by the caller.
 
-	// Now the above has ensured that action_args is the first parameter itself, or empty-string if none.
-	// If action_args now starts with a delimiter, it means that the first param is blank/empty.
-
 	if (!aActionType && could_be_named_action) // Caller nor logic above has yet determined the action.
+	{
 		aActionType = ConvertActionType(action_name); // Is this line a command?
+
+		if (!aActionType)
+		{
+			if (!_tcsicmp(action_name, _T("new")) && IS_SPACE_OR_TAB(*end_marker))
+			{
+				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
+				action_args = aLineText; // Use the line's full text for later parsing.
+			}
+			else
+			{
+				aActionType = ACT_FUNC;
+				// Include the function name as an arg:
+				if (*end_marker && *action_args != g_delimiter) // Replace space or tab with comma.
+					*end_marker = g_delimiter;
+				action_args = aLineText;
+			}
+		}
+
+		if (*action_args == g_delimiter)
+		{
+			// Find the start of the next token (or its ending delimiter if the token is blank such as ", ,"):
+			for (++action_args; IS_SPACE_OR_TAB(*action_args); ++action_args);
+		}
+	}
 
 	if (!aActionType) // Didn't find any action or command in this line.
 	{
-		// v1.0.41: Support one-true brace style even if there's no space, but make it strict so that
-		// things like "Loop{ string" are reported as errors (in case user intended a file-pattern loop).
-		if (!_tcsicmp(action_name, _T("Loop{")) && !*action_args)
-		{
-			aActionType = ACT_LOOP;
-			add_openbrace_afterward = true;
-		}
-		// fincs: same as above, but for try and catch:
-		else if (!_tcsicmp(action_name, _T("try{")) && !*action_args)
-		{
-			aActionType = ACT_TRY;
-			add_openbrace_afterward = true;
-		}
-		else if (!_tcsicmp(action_name, _T("catch{")) && !*action_args)
-		{
-			aActionType = ACT_CATCH;
-			add_openbrace_afterward = true;
-		}
-		else if (_tcschr(EXPR_ALL_SYMBOLS, *action_args))
+		if (_tcschr(EXPR_ALL_SYMBOLS, *action_args))
 		{
 			LPTSTR question_mark;
 			if ((*action_args == '+' || *action_args == '-') && action_args[1] == *action_args) // Post-inc/dec. See comments further below.
@@ -4072,8 +4065,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				action_args = aLineText; // Since this is an expression, use the line's full text for later parsing.
 			}
-			else if (*action_args == '?'  // L34: Below no longer requires spaces around '?'.
-				|| (question_mark = _tcschr(action_args,'?')) && _tcschr(question_mark,':')) // Rough check (see comments below). Relies on short-circuit boolean order.
+			else if ((question_mark = _tcschr(action_args,'?')) && _tcschr(question_mark,':')) // Rough check (see comments below). Relies on short-circuit boolean order.
 			{
 				// To avoid hindering load-time error detection such as misspelled command names, allow stand-alone
 				// expressions only for things that can produce a side-effect (currently only ternaries like
@@ -4098,10 +4090,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		}
 		if (!aActionType) // Above still didn't find a valid action (i.e. check aActionType again in case the above changed it).
 		{
-			if (*action_args == '(' || *action_args == '[' // v1.0.46.11: Recognize as multi-statements that start with a function, like "fn(), x:=4".  v1.0.47.03: Removed the following check to allow a close-brace to be followed by a comma-less function-call: strchr(action_args, g_delimiter).
-				|| *aLineText == '(' // Probably an expression with parentheses to control order of evaluation.
-				|| _tcschr(action_name, g_DerefChar) // Something beginning with a double-deref (which may contain expressions).
-				|| !_tcsnicmp(aLineText, _T("new"), 3) && IS_SPACE_OR_TAB(aLineText[3]))
+			if (end_marker && (*end_marker == '(' || *end_marker == '[') // v1.0.46.11: Recognize as multi-statements that start with a function, like "fn(), x:=4".  v1.0.47.03: Removed the following check to allow a close-brace to be followed by a comma-less function-call: strchr(action_args, g_delimiter).
+				|| *action_args == g_DerefChar // Something beginning with a double-deref (which may contain expressions).
+				|| *aLineText == '(' // Probably an expression with parentheses to control order of evaluation. In this case, aLineText == action_args, so it was already handled by the condition above.
+				)
 			{
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				action_args = aLineText; // Since this is a function-call followed by a comma and some other expression, use the line's full text for later parsing.
@@ -4109,15 +4101,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			else if (*action_args == '=')
 				// v2: Give a more specific error message since the user probably meant to do an old-style assignment.
 				return ScriptError(_T("Syntax error. Did you mean to use \":=\"?"), aLineText);
-			else if (could_be_named_action)
-			{
-				// Assume this is a function; a later stage will throw up an error if it isn't.
-				aActionType = ACT_FUNC;
-				// Include the function name as an arg:
-				if (end_marker[1] && g_delimiter != *omit_leading_whitespace(end_marker + 1))
-					end_marker[1] = g_delimiter;
-				action_args = aLineText;
-			}
 			else
 				// v1.0.40: Give a more specific error message now that hotkeys can make it here due to
 				// the change that avoids the need to escape double-colons:
@@ -4475,37 +4458,18 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 inline LPTSTR Script::ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool aDisplayErrors)
 // inline since it's called so often.
 // aBufTarget should be at least MAX_VAR_NAME_LENGTH + 1 in size.
-// Returns NULL if a failure condition occurs; otherwise, the address of the last
-// character of the action name in aBufSource.
+// Returns NULL if it's not a named action; otherwise, the address of the first
+// character after the action name in aBufSource (possibly the null-terminator).
 {
 	////////////////////////////////////////////////////////
 	// Find the action name and the start of the param list.
 	////////////////////////////////////////////////////////
-	// Allows the delimiter between action-type-name and the first param to be optional by
-	// relying on the fact that action-type-names can't contain spaces. Find first char in
-	// aLineText that is a space, a delimiter, or a tab. Also search for operator symbols
-	// so that assignments and IFs without whitespace are supported, e.g. var1=5,
-	// if var2<%var3%.  Not static in case g_delimiter is allowed to vary:
-	DEFINE_END_FLAGS
-	LPTSTR end_marker = StrChrAny(aBufSource, end_flags);
-	if (end_marker) // Found a delimiter.
+	LPTSTR end_marker = find_identifier_end(aBufSource);
+	size_t action_name_length = end_marker - aBufSource;
+	if (!action_name_length || action_name_length > MAX_VAR_NAME_LENGTH)
 	{
-		if (end_marker > aBufSource) // The delimiter isn't very first char in aBufSource.
-			--end_marker;
-		// else we allow it to be the first char to support "++i" etc.
-	}
-	else // No delimiter found, so set end_marker to the location of the last char in string.
-		end_marker = aBufSource + _tcslen(aBufSource) - 1;
-	// Now end_marker is the character just prior to the first delimiter or whitespace,
-	// or (in the case of ++ and --) the first delimiter itself.  Find the end of
-	// the action-type name by omitting trailing whitespace:
-	end_marker = omit_trailing_whitespace(aBufSource, end_marker);
-	// If first char in aBufSource is a delimiter, action_name will consist of just that first char:
-	size_t action_name_length = end_marker - aBufSource + 1;
-	if (action_name_length > MAX_VAR_NAME_LENGTH)
-	{
-		if (aDisplayErrors)
-			ScriptError(ERR_UNRECOGNIZED_ACTION, aBufSource); // Short/vague message since so rare.
+		// For the "too long" case, it will ultimately be treated as an unrecognized action.
+		*aBufTarget = '\0';
 		return NULL;
 	}
 	tcslcpy(aBufTarget, aBufSource, action_name_length + 1);
@@ -9018,6 +8982,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 				case '?':
 					this_infix_item.symbol = SYM_IFF_THEN;
+					this_infix_item.buf = cp; // For error-reporting.
 					break;
 				case ':':
 					if (cp1 == '=')
