@@ -1568,7 +1568,16 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				// hotkey if there is no actual explicit key-up hotkey for it.  UPDATE: It is now possible
 				// to fall through from Case #2, so that is checked below.
 				if (hotkey_id_temp < Hotkey::sHotkeyCount && hotkey_up[hotkey_id_temp] != HOTKEY_ID_INVALID) // Relies on short-circuit boolean order.
-					hotkey_id_with_flags = hotkey_up[hotkey_id_temp];
+				{
+					if (  !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type))  )
+					{
+						// The key-down hotkey isn't eligible for firing, so fall back to the key-up hotkey:
+						hotkey_id_with_flags = hotkey_up[hotkey_id_temp];
+					}
+					//else: the key-down hotkey is eligible for firing, so leave hotkey_id_with_flags as-is
+					// and SuppressThisKeyFunc() or AllowIt() will post both hotkey-down and hotkey-up,
+					// allowing remappings and other hotkey down-up pairs to work.
+				}
 				else // Leave it at its former value unless case#2.  See comments above and below.
 					// Fix for v1.0.44.09: Since no key-up counterpart was found above (either in hotkey_up[]
 					// or via the HOTKEY_KEY_UP flag), don't fire this hotkey when it fell through from Case #2.
@@ -2244,7 +2253,15 @@ LRESULT SuppressThisKeyFunc(const HHOOK aHook, LPARAM lParam, const vk_type aVK,
 	// before the hook thread gets back another (at least on some systems, perhaps due to their
 	// system settings of the same ilk as "favor background processes").
 	if (aHotkeyIDToPost != HOTKEY_ID_INVALID)
+	{
 		PostMessage(g_hWnd, AHK_HOOK_HOTKEY, aHotkeyIDToPost, pKeyHistoryCurr->sc); // v1.0.43.03: sc is posted currently only to support the number of wheel turns (to store in A_EventInfo).
+		if (aKeyUp && hotkey_up[aHotkeyIDToPost & HOTKEY_ID_MASK] != HOTKEY_ID_INVALID)
+		{
+			// This is a key-down hotkey being triggered by releasing a prefix key.
+			// There's also a corresponding key-up hotkey, so fire it too:
+    		PostMessage(g_hWnd, AHK_HOOK_HOTKEY, hotkey_up[aHotkeyIDToPost & HOTKEY_ID_MASK], pKeyHistoryCurr->sc);
+		}
+	}
 	if (aHSwParamToPost != HOTSTRING_INDEX_INVALID)
 		PostMessage(g_hWnd, AHK_HOTSTRING, aHSwParamToPost, aHSlParamToPost);
 	return 1;
@@ -2476,7 +2493,15 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 	// Search on AHK_HOOK_HOTKEY in this file for more comments.
 	LRESULT result_to_return = CallNextHookEx(aHook, aCode, wParam, lParam);
 	if (aHotkeyIDToPost != HOTKEY_ID_INVALID)
+	{
 		PostMessage(g_hWnd, AHK_HOOK_HOTKEY, aHotkeyIDToPost, pKeyHistoryCurr->sc); // v1.0.43.03: sc is posted currently only to support the number of wheel turns (to store in A_EventInfo).
+		if (aKeyUp && hotkey_up[aHotkeyIDToPost & HOTKEY_ID_MASK] != HOTKEY_ID_INVALID)
+		{
+			// This is a key-down hotkey being triggered by releasing a prefix key.
+			// There's also a corresponding key-up hotkey, so fire it too:
+    		PostMessage(g_hWnd, AHK_HOOK_HOTKEY, hotkey_up[aHotkeyIDToPost & HOTKEY_ID_MASK], pKeyHistoryCurr->sc);
+		}
+	}
 	if (hs_wparam_to_post != HOTSTRING_INDEX_INVALID)
 		PostMessage(g_hWnd, AHK_HOTSTRING, hs_wparam_to_post, hs_lparam_to_post);
 	return result_to_return;
