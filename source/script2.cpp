@@ -5015,6 +5015,8 @@ end:
 		free(image_mask);
 	if (screen_pixel)
 		free(screen_pixel);
+	else // One of the GDI calls failed.
+		goto error;
 
 	if (!found) // Let ErrorLevel, which is either "1" or "2" as set earlier, tell the story.
 		return OK;
