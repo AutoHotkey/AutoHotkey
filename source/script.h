@@ -2770,8 +2770,7 @@ public:
 	static ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
 	static ResultType SetErrorLevelOrThrowBool(bool aError);
 	static ResultType SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat);
-	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue);
-	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat);
+	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat = NULL);
 	static ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	static void FreeExceptionToken(ExprTokenType*& aToken);
 
