@@ -13820,14 +13820,6 @@ ResultType Script::SetErrorLevelOrThrowBool(bool aError)
 	return ThrowRuntimeException(ERRORLEVEL_ERROR_STR);
 }
 
-ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
-{
-	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
-		return g_ErrorLevel->Assign(aErrorValue);
-	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return ThrowRuntimeException(ERRORLEVEL_ERROR_STR);
-}
-
 ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat)
 {
 	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)

@@ -2864,14 +2864,28 @@ ResultType Line::WinGetPos(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LP
 
 ResultType Line::EnvGet(LPTSTR aEnvVarName)
 {
+	Var *output_var = OUTPUT_VAR;
 	// Don't use a size greater than 32767 because that will cause it to fail on Win95 (tested by Robert Yalkin).
 	// According to MSDN, 32767 is exactly large enough to handle the largest variable plus its zero terminator.
+	// Update: In practice, at least on Windows 7, the limit only applies to the ANSI functions.
 	TCHAR buf[32767];
 	// GetEnvironmentVariable() could be called twice, the first time to get the actual size.  But that would
-	// probably perform worse since GetEnvironmentVariable() is a very slow function.  In addition, it would
-	// add code complexity, so it seems best to fetch it into a large buffer then just copy it to dest-var.
+	// probably perform worse since GetEnvironmentVariable() is a very slow function, so it seems best to fetch
+	// it into a large buffer then just copy it to dest-var.
 	DWORD length = GetEnvironmentVariable(aEnvVarName, buf, _countof(buf));
-	return OUTPUT_VAR->Assign(length ? buf : _T(""), length);
+	if (length >= _countof(buf))
+	{
+		// In this case, length indicates the required buffer size, and the contents of the buffer are undefined.
+		// Since our buffer is 32767 characters, the var apparently exceeds the documented limit, as can happen
+		// if the var was set with the Unicode API.
+		if (!output_var->AssignString(NULL, length - 1, true))
+			return FAIL;
+		length = GetEnvironmentVariable(aEnvVarName, output_var->Contents(), length);
+		if (!length)
+			*output_var->Contents() = '\0'; // Ensure var is null-terminated.
+		return output_var->Close();
+	}
+	return output_var->Assign(length ? buf : _T(""), length);
 }
 
 
@@ -3736,6 +3750,8 @@ end:
 		free(image_mask);
 	if (screen_pixel)
 		free(screen_pixel);
+	else // One of the GDI calls failed.
+		goto error;
 
 	if (!found) // Let ErrorLevel, which is either "1" or "2" as set earlier, tell the story.
 		return OK;
@@ -4261,8 +4277,8 @@ bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
 		ShowMainWindow(MAIN_MODE_REFRESH);
 		return true;
 	case ID_HELP_WEBSITE:
-		if (!g_script.ActionExec(_T("http://www.autohotkey.com"), _T(""), NULL, false))
-			MsgBox(_T("Could not open URL http://www.autohotkey.com in default browser."));
+		if (!g_script.ActionExec(_T(AHK_WEBSITE), _T(""), NULL, false))
+			MsgBox(_T("Could not open URL ") _T(AHK_WEBSITE) _T(" in default browser."));
 		return true;
 	default:
 		// See if this command ID is one of the user's custom menu items.  Due to the possibility
