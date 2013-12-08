@@ -8418,7 +8418,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, ActionTyp
 								if (!_tcscmp(line_raw_arg2, g_HotExprLines[i]->mArg[0].text))
 									break;
 							if (i == g_HotExprLineCount)
-								return line->PreparseError(_T("Parameter #2 must match an existing #If expression."));
+								return line->PreparseError(ERR_HOTKEY_IF_EXPR);
 						}
 						break;
 					}
@@ -10781,7 +10781,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		case ACT_THROW:
 		{
 			if (!line->mArgc)
-				return line->ThrowRuntimeException(_T("An exception was thrown."));
+				return line->ThrowRuntimeException(ERR_EXCEPTION);
 
 			ExprTokenType* token = new ExprTokenType;
 			if (!token) // Unlikely.
@@ -13222,13 +13222,21 @@ BIF_DECL(BIF_PerformAction)
 
 	if (aResult == OK) // Can be OK, FAIL or EARLY_EXIT.
 	{
-		// Return the value of the output var if there is one, or ErrorLevel if there isn't:
-		output_var->ToToken(aResultToken);
-		if (aResultToken.symbol == SYM_STRING && aResultToken.marker != Var::sEmptyString)
+		if (output_var == g_ErrorLevel && !(act == ACT_RUNWAIT || act == ACT_SENDMESSAGE))
 		{
-			// Let the caller take responsibility for the output var's memory:
-			aResultToken.marker_length = output_var->Length();
-			aResultToken.marker = aResultToken.mem_to_free = output_var->StealMem();
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = !VarToBOOL(*output_var); // Return TRUE for success, otherwise FALSE.
+		}
+		else
+		{
+			// Return the value of the output var if there is one, or ErrorLevel if there isn't:
+			output_var->ToToken(aResultToken);
+			if (aResultToken.symbol == SYM_STRING && aResultToken.marker != Var::sEmptyString)
+			{
+				// Let the caller take responsibility for the output var's memory:
+				aResultToken.marker_length = output_var->Length();
+				aResultToken.marker = aResultToken.mem_to_free = output_var->StealMem();
+			}
 		}
 	}
 	else
@@ -13249,10 +13257,10 @@ BIF_DECL(BIF_PerformAction)
 	// Important to restore this if we're not really in a TRY block:
 	g->InTryBlock = in_try;
 
-	// Restore ErrorLevel to its previous value.
-	if (output_var == g_ErrorLevel)
+	// If the command did not set ErrorLevel, restore it to its previous value.
+	if (output_var == g_ErrorLevel && !output_var->HasContents())
 	{
-		g_ErrorLevel->Free(VAR_ALWAYS_FREE);
+		g_ErrorLevel->Free(VAR_ALWAYS_FREE); // For the unlikely case that memory was allocated but not used.
 		g_ErrorLevel->Restore(el_bkp);
 	}
 	// Free the stack variable (which may have been used as an output and/or input variable).
@@ -13777,11 +13785,14 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCT
 }
 
 
+//#define SHOULD_USE_ERRORLEVEL (!g->InTryBlock) // v1 behaviour
+#define SHOULD_USE_ERRORLEVEL TRUE
+
 ResultType Line::SetErrorLevelOrThrowBool(bool aError)
 {
 	if (!aError)
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-	if (!g->InTryBlock)
+	if (SHOULD_USE_ERRORLEVEL)
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
 	return ThrowRuntimeException(ERRORLEVEL_ERROR_STR);
@@ -13789,7 +13800,7 @@ ResultType Line::SetErrorLevelOrThrowBool(bool aError)
 
 ResultType Line::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
 {
-	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
+	if ((*aErrorValue == '0' && !aErrorValue[1]) || SHOULD_USE_ERRORLEVEL)
 		return g_ErrorLevel->Assign(aErrorValue);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
 	return ThrowRuntimeException(aErrorValue);
@@ -13797,7 +13808,7 @@ ResultType Line::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
 
 ResultType Line::SetErrorLevelOrThrowInt(int aErrorValue)
 {
-	if (!aErrorValue || !g->InTryBlock)
+	if (!aErrorValue || SHOULD_USE_ERRORLEVEL)
 		return g_ErrorLevel->Assign(aErrorValue);
 	TCHAR buf[12];
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
@@ -13806,15 +13817,13 @@ ResultType Line::SetErrorLevelOrThrowInt(int aErrorValue)
 
 // Logic from the above functions is duplicated in the below functions rather than calling
 // g_script.mCurrLine->SetErrorLevelOrThrow() to squeeze out a little extra performance for
-// "success" cases.  These are done as overloads vs making aMessage optional to reduce code
-// size, since they're called from numerous places.  (Even omitted parameters are passed
-// "explicitly" in the compiled code.)
+// "success" cases.
 
 ResultType Script::SetErrorLevelOrThrowBool(bool aError)
 {
 	if (!aError)
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-	if (!g->InTryBlock)
+	if (SHOULD_USE_ERRORLEVEL)
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
 	return ThrowRuntimeException(ERRORLEVEL_ERROR_STR);
@@ -13822,7 +13831,7 @@ ResultType Script::SetErrorLevelOrThrowBool(bool aError)
 
 ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat)
 {
-	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
+	if ((*aErrorValue == '0' && !aErrorValue[1]) || SHOULD_USE_ERRORLEVEL)
 		return g_ErrorLevel->Assign(aErrorValue);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
 	return ThrowRuntimeException(aErrorValue, aWhat);
@@ -13830,7 +13839,7 @@ ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat)
 
 ResultType Script::SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat)
 {
-	if (!aErrorValue || !g->InTryBlock)
+	if (!aErrorValue || SHOULD_USE_ERRORLEVEL)
 		return g_ErrorLevel->Assign(aErrorValue);
 	TCHAR buf[12];
 	// Otherwise, an error occurred and there is a try block, so throw an exception:

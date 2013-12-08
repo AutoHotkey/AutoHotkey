@@ -1371,11 +1371,11 @@ ResultType Line::ControlFocus(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 	// chance even without it):
 	ATTACH_THREAD_INPUT
 
-	if (SetFocus(control_window))
-	{
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-		DoControlDelay;
-	}
+	bool success = SetFocus(control_window) != NULL;
+	DoControlDelay; // Done unconditionally for simplicity, and in case SetFocus() had some effect despite indicating failure.
+	// Call GetFocus() in case focus was previously NULL, since that would cause SetFocus() to return NULL even if it succeeded:
+	if (!success && GetFocus() == control_window)
+		success = true;
 
 	// Very important to detach any threads whose inputs were attached above,
 	// prior to returning, otherwise the next attempt to attach thread inputs
@@ -1383,7 +1383,7 @@ ResultType Line::ControlFocus(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 	// undesirable effect:
 	DETACH_THREAD_INPUT
 
-	return OK;
+	return SetErrorLevelOrThrowBool(!success);
 
 error:
 	return SetErrorLevelOrThrow();
@@ -1979,7 +1979,7 @@ BIF_DECL(BIF_ProcessSetPriority)
 
 
 
-ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints)
+ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints, ExprTokenType &aResultToken)
 {
 	if (!*aPoints) // Attempt to restore the window's normal/correct region.
 	{
@@ -2126,6 +2126,7 @@ ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints)
 	//else don't delete hrgn since the system has taken ownership of it.
 
 	// Since above didn't return, indicate success.
+	aResultToken.value_int64 = TRUE;
 	return Script::SetErrorLevelOrThrowBool(false);
 
 error:
@@ -2144,17 +2145,17 @@ BIF_DECL(BIF_WinSet)
 	ASSERT(attrib != WINSET_INVALID);
 
 	// Set default return value.
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T("");
-
-	// Only the following sub-commands affect ErrorLevel:
-	bool use_errorlevel = (attrib == WINSET_STYLE || attrib == WINSET_EXSTYLE || attrib == WINSET_REGION);
+	aResultToken.value_int64 = FALSE; // Indicate failure.
 
 	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1);
 	if (!target_window)
-		goto error;
+	{
+		Script::SetErrorLevelOrThrow();
+		return;
+	}
 
 	int value;
+	BOOL success = FALSE;
 	DWORD exstyle;
 
 	switch (attrib)
@@ -2162,7 +2163,7 @@ BIF_DECL(BIF_WinSet)
 	case WINSET_ALWAYSONTOP:
 	{
 		if (   !(exstyle = GetWindowLong(target_window, GWL_EXSTYLE))   )
-			return;
+			break;
 		HWND topmost_or_not;
 		switch(Line::ConvertOnOffToggle(aValue))
 		{
@@ -2170,7 +2171,9 @@ BIF_DECL(BIF_WinSet)
 		case TOGGLED_OFF: topmost_or_not = HWND_NOTOPMOST; break;
 		case NEUTRAL: // parameter was blank, so it defaults to TOGGLE.
 		case TOGGLE: topmost_or_not = (exstyle & WS_EX_TOPMOST) ? HWND_NOTOPMOST : HWND_TOPMOST; break;
-		default: return;
+		default:
+			g_script.ThrowRuntimeException(ERR_PARAM1_INVALID);
+			return;
 		}
 		// SetWindowLong() didn't seem to work, at least not on some windows.  But this does.
 		// As of v1.0.25.14, SWP_NOACTIVATE is also specified, though its absence does not actually
@@ -2178,7 +2181,7 @@ BIF_DECL(BIF_WinSet)
 		// in Win98/2000 and beyond).  Or perhaps its something to do with the presence of
 		// topmost_or_not (HWND_TOPMOST/HWND_NOTOPMOST), which might always avoid activating the
 		// window.
-		SetWindowPos(target_window, topmost_or_not, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
+		success = SetWindowPos(target_window, topmost_or_not, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 		break;
 	}
 
@@ -2208,10 +2211,10 @@ BIF_DECL(BIF_WinSet)
 		static MySetLayeredWindowAttributesType MySetLayeredWindowAttributes = (MySetLayeredWindowAttributesType)
 			GetProcAddress(GetModuleHandle(_T("user32")), "SetLayeredWindowAttributes");
 		if (!MySetLayeredWindowAttributes || !(exstyle = GetWindowLong(target_window, GWL_EXSTYLE)))
-			return;  // Do nothing on OSes that don't support it.
+			break;  // Do nothing on OSes that don't support it.
 		if (!_tcsicmp(aValue, _T("Off")))
 			// One user reported that turning off the attribute helps window's scrolling performance.
-			SetWindowLong(target_window, GWL_EXSTYLE, exstyle & ~WS_EX_LAYERED);
+			success = SetWindowLong(target_window, GWL_EXSTYLE, exstyle & ~WS_EX_LAYERED);
 		else
 		{
 			if (attrib == WINSET_TRANSPARENT)
@@ -2232,7 +2235,7 @@ BIF_DECL(BIF_WinSet)
 				else if (value > 255)
 					value = 255;
 				SetWindowLong(target_window, GWL_EXSTYLE, exstyle | WS_EX_LAYERED);
-				MySetLayeredWindowAttributes(target_window, 0, value, LWA_ALPHA);
+				success = MySetLayeredWindowAttributes(target_window, 0, value, LWA_ALPHA);
 			}
 			else // attrib == WINSET_TRANSCOLOR
 			{
@@ -2265,7 +2268,7 @@ BIF_DECL(BIF_WinSet)
 					flags = LWA_COLORKEY;
 				}
 				SetWindowLong(target_window, GWL_EXSTYLE, exstyle | WS_EX_LAYERED);
-				MySetLayeredWindowAttributes(target_window, color, value, flags);
+				success = MySetLayeredWindowAttributes(target_window, color, value, flags);
 			}
 		}
 		break;
@@ -2275,7 +2278,11 @@ BIF_DECL(BIF_WinSet)
 	case WINSET_EXSTYLE:
 	{
 		if (!*aValue)
-			goto error; // Seems best not to treat an explicit blank as zero.
+		{
+			// Seems best not to treat an explicit blank as zero.
+			g_script.ThrowRuntimeException(ERR_PARAM1_REQUIRED);
+			return;
+		}
 		int style_index = (attrib == WINSET_STYLE) ? GWL_STYLE : GWL_EXSTYLE;
 		DWORD new_style, orig_style = GetWindowLong(target_window, style_index);
 		if (!_tcschr(_T("+-^"), *aValue))
@@ -2297,7 +2304,7 @@ BIF_DECL(BIF_WinSet)
 		if (SetWindowLong(target_window, style_index, new_style) || !GetLastError()) // This is the precise way to detect success according to MSDN.
 		{
 			// Even if it indicated success, sometimes it failed anyway.  Find out for sure:
-			if (GetWindowLong(target_window, style_index) != orig_style) // Even a partial change counts as a success.
+			if (new_style == orig_style || GetWindowLong(target_window, style_index) != orig_style) // Even a partial change counts as a success.
 			{
 				// SetWindowPos is also necessary, otherwise the frame thickness entirely around the window
 				// does not get updated (just parts of it):
@@ -2305,35 +2312,31 @@ BIF_DECL(BIF_WinSet)
 				// Since SetWindowPos() probably doesn't know that the style changed, below is probably necessary
 				// too, at least in some cases:
 				InvalidateRect(target_window, NULL, TRUE); // Quite a few styles require this to become visibly manifest.
-				break; // Success. See below.
+				success = TRUE;
 			}
 		}
-		goto error; // Since above didn't break, it's a failure.
+		break;
 	}
 
-	case WINSET_ENABLED: // This is a separate from WINSET_STYLE because merely changing the WS_DISABLED style is usually not as effective as calling EnableWindow().
+	case WINSET_ENABLED: // This is separate from WINSET_STYLE because merely changing the WS_DISABLED style is usually not as effective as calling EnableWindow().
 		switch (Line::ConvertOnOffToggle(aValue))
 		{
-		case TOGGLED_ON:	EnableWindow(target_window, TRUE); break;
-		case TOGGLED_OFF:	EnableWindow(target_window, FALSE); break;
-		case TOGGLE:		EnableWindow(target_window, !IsWindowEnabled(target_window)); break;
+		case TOGGLED_ON:	success = EnableWindow(target_window, TRUE); break;
+		case TOGGLED_OFF:	success = EnableWindow(target_window, FALSE); break;
+		case TOGGLE:		success = EnableWindow(target_window, !IsWindowEnabled(target_window)); break;
+		default:
+			g_script.ThrowRuntimeException(ERR_PARAM1_INVALID);
+			return;
 		}
-		return;
+		break;
 
 	case WINSET_REGION:
-		WinSetRegion(target_window, aValue);
+		WinSetRegion(target_window, aValue, aResultToken);
 		return;
 
 	} // switch()
-	if (use_errorlevel)
-		Script::SetErrorLevelOrThrowBool(false);
-	return;
-
-error:
-	// Only STYLE, EXSTYLE and REDRAW affect ErrorLevel for compatibility reasons,
-	// but seems best to allow the other sub-commands to throw exceptions:
-	if (use_errorlevel || g->InTryBlock)
-		Script::SetErrorLevelOrThrow();
+	aResultToken.value_int64 = success;
+	Script::SetErrorLevelOrThrowBool(!success);
 }
 
 
@@ -10965,9 +10968,11 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	esp_delta = esp_start - esp_end; // Positive number means too many args were passed, negative means too few.
 	if (esp_delta && (aFlags & DC_CALL_STD))
 	{
-		*buf = 'A'; // The 'A' prefix indicates the call was made, but with too many or too few args.
-		_itot(esp_delta, buf + 1, 10);
-		g_script.SetErrorLevelOrThrowStr(buf, _T("DllCall")); // Assign buf not _itot()'s return value, which is the wrong location.
+		_itot(esp_delta, buf, 10);
+		if (esp_delta > 0)
+			g_script.ThrowRuntimeException(_T("Parameter list too large, or call requires CDecl."), _T("DllCall"), buf);
+		else
+			g_script.ThrowRuntimeException(_T("Parameter list too small."), _T("DllCall"), buf);
 	}
 	else
 #endif
@@ -10979,10 +10984,8 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		buf[0] = '0';
 		buf[1] = 'x';
 		_ultot(aException, buf + 2, 16);
-		g_script.SetErrorLevelOrThrowStr(buf, _T("DllCall")); // Positive ErrorLevel numbers are reserved for exception codes.
+		g_script.ThrowRuntimeException(ERR_EXCEPTION, _T("DllCall"), buf);
 	}
-	else
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 
 	return Res;
 }
@@ -11170,7 +11173,7 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 			if (   !hmodule_to_free  ||  !(hmodule = *hmodule_to_free = LoadLibrary(dll_name))   )
 			{
 				if (hmodule_to_free) // L31: BIF_DllCall wants us to set ErrorLevel.  ExpressionToPostfix passes NULL.
-					g_script.SetErrorLevelOrThrowInt(-3, _T("DllCall")); // Stage 3 error: DLL couldn't be loaded.
+					g_script.ThrowRuntimeException(_T("Failed to load DLL."), _T("DllCall"), dll_name);
 				return NULL;
 			}
 		if (   !(function = (void *)GetProcAddress(hmodule, function_name))   )
@@ -11193,7 +11196,7 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 		// This must be done here since only we know for certain that the dll
 		// was loaded okay (if GetModuleHandle succeeded, nothing is passed
 		// back to the caller).
-		g_script.SetErrorLevelOrThrowInt(-4, _T("DllCall")); // Stage 4 error: Function could not be found in the DLL(s).
+		g_script.ThrowRuntimeException(ERR_NONEXISTENT_FUNCTION, _T("DllCall"), _tfunction_name);
 	}
 
 	return function;
@@ -11242,7 +11245,7 @@ BIF_DECL(BIF_DllCall)
 			function = (void *)aParam[0]->value_int64; // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
 			break;
 		default: // SYM_FLOAT, SYM_OBJECT or not an operand.
-			g_script.SetErrorLevelOrThrowInt(-1, _T("DllCall")); // Stage 1 error: Invalid first param.
+			g_script.ThrowRuntimeException(ERR_PARAM1_INVALID, _T("DllCall"));
 			return;
 	}
 
@@ -11306,7 +11309,7 @@ BIF_DECL(BIF_DllCall)
 		ConvertDllArgType(return_type_string, return_attrib);
 		if (return_attrib.type == DLL_ARG_INVALID)
 		{
-			g_script.SetErrorLevelOrThrowInt(-2, _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
+			g_script.ThrowRuntimeException(_T("Invalid return type."), _T("DllCall"));
 			return;
 		}
 has_valid_return_type:
@@ -11385,7 +11388,7 @@ has_valid_return_type:
 				// to be stack memory, which would be invalid memory upon return to the caller).
 				// The complexity of this doesn't seem worth the rarity of the need, so this will be
 				// documented in the help file.
-				g_script.SetErrorLevelOrThrowInt(-2, _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
+				g_script.ThrowRuntimeException(_T("Invalid arg type."), _T("DllCall"));
 				return;
 			}
 			// Otherwise, it's a supported type of string.
@@ -11420,7 +11423,7 @@ has_valid_return_type:
 			// See the section above for comments.
 			if (IS_NUMERIC(this_param.symbol))
 			{
-				g_script.SetErrorLevelOrThrowInt(-2, _T("DllCall"));
+				g_script.ThrowRuntimeException(_T("Invalid arg type."), _T("DllCall"));
 				return;
 			}
 			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
@@ -11440,7 +11443,7 @@ has_valid_return_type:
 		case DLL_ARG_INVALID:
 			if (aParam[i]->symbol == SYM_VAR)
 				aParam[i]->var->MaybeWarnUninitialized();
-			g_script.SetErrorLevelOrThrowInt(-2, _T("DllCall")); // Stage 2 error: Invalid return type or arg type.
+			g_script.ThrowRuntimeException(_T("Invalid arg type."), _T("DllCall"));
 			return;
 
 		default: // Namely:
@@ -12543,11 +12546,12 @@ break_both:
 	{
 		if (aResultToken) // Only when this is non-NULL does caller want ErrorLevel changed.
 		{
-			// Since both the error code and the offset are desirable outputs, it seems best to also
-			// include descriptive error text (debatable).
 			sntprintf(error_buf, _countof(error_buf), _T("Compile error %d at offset %d: %hs"), error_code
 				, error_offset, error_msg);
-			g_script.SetErrorLevelOrThrowStr(error_buf, aResultToken->marker);
+			// Seems best to bring the error to the user's attention rather than letting it potentially
+			// escape their notice.  This sort of error should be corrected immediately, not handled
+			// within the script.
+			g_script.ThrowRuntimeException(error_buf, aResultToken->marker);
 		}
 		goto error;
 	}

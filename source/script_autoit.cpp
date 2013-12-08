@@ -1330,7 +1330,7 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 ResultType Line::FileRecycle(LPTSTR aFilePattern)
 {
 	if (!aFilePattern || !*aFilePattern)
-		return SetErrorLevelOrThrow();  // Since this is probably not what the user intended.
+		return LineError(ERR_PARAM1_REQUIRED);  // Since this is probably not what the user intended.
 
 	SHFILEOPSTRUCT FileOp;
 	TCHAR szFileTemp[_MAX_PATH+2];
@@ -1393,7 +1393,7 @@ ResultType Line::FileGetVersion(LPTSTR aFilespec)
 	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.
 
 	if (!aFilespec || !*aFilespec)
-		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER); // Error out, since this is probably not what the user intended.
+		return LineError(ERR_PARAM1_REQUIRED);  // Since this is probably not what the user intended.
 
 	DWORD dwUnused, dwSize;
 	if (   !(dwSize = GetFileVersionInfoSize(aFilespec, &dwUnused))   )  // No documented limit on how large it can be, so don't use _alloca().
