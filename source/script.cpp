@@ -12067,12 +12067,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					if (line->mActionType == ACT_FINALLY)
 					{
 						// Execute 'finally' block -- do not care about its return value
-						line->ExecUntil(ONLY_ONE_LINE, NULL, &jump_to_line);
-						if (jump_to_line)
-						{
-							// goto or break/continue was used as an attempt to hijack script execution during a try..finally block.
-							return g_script.mCurrLine->ThrowRuntimeException(ERR_UNALLOWED_JUMP);
-						}
+						line->ExecUntil(ONLY_ONE_LINE);
 					}
 					else
 					{
@@ -12082,10 +12077,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 						result = OK;
 					}
 				}
-			} else if (/*this_act == ACT_CATCH &&*/ g.ThrownToken && line->mActionType == ACT_FINALLY)
+			}
+			else if (/*this_act == ACT_CATCH &&*/ g.ThrownToken && line->mActionType == ACT_FINALLY)
 			{
-				// Same as above, but jumps are allowed.
-				line->ExecUntil(ONLY_ONE_LINE, NULL, &jump_to_line);
+				// Same as above.
+				line->ExecUntil(ONLY_ONE_LINE);
 			}
 			
 			if (aMode == ONLY_ONE_LINE || result != OK)
