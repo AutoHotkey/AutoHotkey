@@ -12049,9 +12049,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			{
 				// Restore the previous InTryBlock value.
 				g.InTryBlock = bSavedInTryBlock;
+				bool bHasCatch = false;
 
 				if (line->mActionType == ACT_CATCH)
 				{
+					bHasCatch = true;
 					if (g.ThrownToken)
 					{
 						// An exception was thrown and we have a 'catch' block, so let the next
@@ -12062,26 +12064,32 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					// Otherwise: no exception was thrown, so skip the 'catch' block.
 					line = line->mRelatedLine;
 				}
-				else if (g.ThrownToken)
+				if (line->mActionType == ACT_FINALLY)
 				{
-					if (line->mActionType == ACT_FINALLY)
-					{
-						// Execute 'finally' block -- do not care about its return value
-						line->ExecUntil(ONLY_ONE_LINE);
-					}
-					else
-					{
-						// An exception was thrown, but no 'catch' nor 'finally' is present.  In this case 'try'
-						// acts as a catch-all.
-						g_script.FreeExceptionToken(g.ThrownToken);
-						result = OK;
-					}
+					// Let the section below handle the FINALLY block.
+					this_act = ACT_CATCH;
+				}
+				else if (!bHasCatch)
+				{
+					// An exception was thrown, but no 'catch' nor 'finally' is present.
+					// In this case 'try' acts as a catch-all.
+					g_script.FreeExceptionToken(g.ThrownToken);
+					result = OK;
 				}
 			}
-			else if (/*this_act == ACT_CATCH &&*/ g.ThrownToken && line->mActionType == ACT_FINALLY)
+			if (this_act == ACT_CATCH && line->mActionType == ACT_FINALLY)
 			{
-				// Same as above.
-				line->ExecUntil(ONLY_ONE_LINE);
+				if (!g.ThrownToken)
+				{
+					// Let the next iteration handle the finally block.
+					continue;
+				}
+
+				// An exception was thrown, and this try..(catch)..finally block didn't handle it.
+				// Therefore we must execute the finally block before returning.
+				ResultType res = line->ExecUntil(ONLY_ONE_LINE, NULL, &jump_to_line);
+				if (jump_to_line || res == LOOP_BREAK || res == LOOP_CONTINUE)
+					return g_script.mCurrLine->LineError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			}
 			
 			if (aMode == ONLY_ONE_LINE || result != OK)
