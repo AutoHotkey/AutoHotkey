@@ -9371,17 +9371,18 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			|| line->mActionType == ACT_LOOP
 			|| line->mActionType == ACT_WHILE
 			|| line->mActionType == ACT_FOR
-			|| line->mActionType == ACT_TRY
-			|| line->mActionType == ACT_FINALLY   )
+			|| line->mActionType == ACT_TRY   )
 		{
-			// ActionType is an IF or a LOOP or a TRY or a FINALLY.
+			// ActionType is an IF or a LOOP or a TRY.
 			line_temp = line->mNextLine;  // line_temp is now this IF's or LOOP's or TRY's action-line.
 			// Update: Below is commented out because it's now impossible (since all scripts end in ACT_EXIT):
 			//if (line_temp == NULL) // This is an orphan IF/LOOP (has no action-line) at the end of the script.
 			//	return line->PreparseError(_T("Q")); // Placeholder. Formerly "This if-statement or loop has no action."
 
 			// Other things rely on this check having been done, such as "if (line->mRelatedLine != NULL)":
-			if (line_temp->mActionType == ACT_ELSE || line_temp->mActionType == ACT_BLOCK_END || line_temp->mActionType == ACT_CATCH)
+#define IS_BAD_ACTION_LINE(l) ((l)->mActionType == ACT_ELSE || (l)->mActionType == ACT_BLOCK_END || (l)->mActionType == ACT_CATCH || (l)->mActionType == ACT_FINALLY)
+
+			if (IS_BAD_ACTION_LINE(line_temp))
 				return line->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 
 			// Lexikos: This section once maintained separate variables for file-pattern, registry, file-reading
@@ -9450,8 +9451,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			// so always continue on to evaluate the IF's ELSE, if present:
 			if (line_temp->mActionType == ACT_ELSE)
 			{
-				if (line->mActionType == ACT_LOOP || line->mActionType == ACT_WHILE || line->mActionType == ACT_FOR
-				  || line->mActionType == ACT_TRY || line->mActionType == ACT_FINALLY)
+				if (line->mActionType == ACT_LOOP || line->mActionType == ACT_WHILE || line->mActionType == ACT_FOR || line->mActionType == ACT_TRY)
 				{
 					 // this can't be our else, so let the caller handle it.
 					if (aMode != ONLY_ONE_LINE)
@@ -9474,7 +9474,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				// Thus, it's commented out:
 				//if (line == NULL) // An else with no action.
 				//	return line_temp->PreparseError(_T("Q")); // Placeholder since impossible. Formerly "This ELSE has no action."
-				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_END || line->mActionType == ACT_CATCH)
+				if (IS_BAD_ACTION_LINE(line))
 					return line_temp->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 				// Assign to line rather than line_temp:
 				line = PreparseIfElse(line, ONLY_ONE_LINE, aLoopType);
@@ -9506,7 +9506,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					return line_temp;
 				}
 				line = line_temp->mNextLine;
-				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_END || line->mActionType == ACT_CATCH)
+				if (IS_BAD_ACTION_LINE(line))
 					return line_temp->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 				// Assign to line rather than line_temp:
 				line = PreparseIfElse(line, ONLY_ONE_LINE, aLoopType);
@@ -9514,10 +9514,23 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					return NULL; // Error or end-of-script.
 				// Set this CATCH's jumppoint.
 				line_temp->mRelatedLine = line;
+				// Detect and fix FINALLY.
+				if (line->mActionType == ACT_FINALLY)
+				{
+					line->mParentLine = line_temp->mParentLine;
+					Line* temp = line->mNextLine;
+					if (IS_BAD_ACTION_LINE(temp))
+						return line->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
+					line->mRelatedLine = PreparseIfElse(temp, ONLY_ONE_LINE, aLoopType);
+					if (!line->mRelatedLine)
+						return NULL; // Error or end-of-script.
+					line = line->mRelatedLine;
+				}
 			}
 			else if (line_temp->mActionType == ACT_FINALLY)
 			{
-				if (line->mActionType != ACT_TRY && line->mActionType != ACT_CATCH)
+				// This code section can only be triggered by try..finally (with no catch)
+				if (line->mActionType != ACT_TRY)
 				{
 					// Again, this is similar to the section above, so see there for comments.
 					if (aMode != ONLY_ONE_LINE)
@@ -9525,13 +9538,13 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					return line_temp;
 				}
 				line = line_temp->mNextLine;
-				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_END || line->mActionType == ACT_CATCH)
+				if (IS_BAD_ACTION_LINE(line))
 					return line_temp->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 				// Assign to line rather than line_temp:
 				line = PreparseIfElse(line, ONLY_ONE_LINE, aLoopType);
 				if (line == NULL)
 					return NULL; // Error or end-of-script.
-				// Set this TRY or CATCH's jumppoint.
+				// Set this TRY's jumppoint.
 				line_temp->mRelatedLine = line;
 			}
 			else // line doesn't have an else, so just continue processing from line_temp's position
@@ -9739,6 +9752,10 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		case ACT_CATCH:
 			// Similar to above.
 			return line->PreparseError(ERR_CATCH_WITH_NO_TRY);
+
+		case ACT_FINALLY:
+			// Similar to above.
+			return line->PreparseError(ERR_FINALLY_WITH_NO_PRECEDENT);
 		} // switch()
 
 		line = line->mNextLine; // If NULL due to physical end-of-script, the for-loop's condition will catch it.
