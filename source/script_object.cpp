@@ -18,11 +18,7 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 // Caller is responsible for making a persistent copy of the result, if appropriate.
 {
 	if (aParamCount < aFunc.mMinParams)
-	{
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
-		return OK; // Not FAIL, which would cause the entire thread to exit.
-	}
+		return g_script.ScriptError(ERR_TOO_FEW_PARAMS, aFunc.mName);
 
 	// When this variable goes out of scope, Var::FreeAndRestoreFunctionVars() is called (if appropriate):
 	FuncCallData func_call;
@@ -34,9 +30,10 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 		&& aResultToken.symbol == SYM_STRING && !aFunc.mIsBuiltIn)
 	{
 		// Make a persistent copy of the string in case it is the contents of one of the function's local variables.
-		if ( !*aResultToken.marker || !TokenSetResult(aResultToken, aResultToken.marker) )
-			// Above failed or the result is an empty string, so make sure it remains valid after we return:
+		if (!*aResultToken.marker)
 			aResultToken.marker = _T("");
+		else if (!TokenSetResult(aResultToken, aResultToken.marker))
+			result = FAIL;
 	}
 
 	return result;
@@ -205,7 +202,7 @@ Object *Object::Clone(BOOL aExcludeIntegerKeys)
 // Object::ArrayToParams - Used for variadic function-calls.
 //
 
-ResultType Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params
+void Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params
 	, ExprTokenType **&aParam, int &aParamCount)
 // Expands this object's contents into the parameter list.  Due to the nature
 // of the parameter list, only fields with integer keys are used (named params
@@ -242,8 +239,6 @@ ResultType Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_lis
 
 	aParam = param_list; // Update caller's pointer.
 	aParamCount += extra_params; // Update caller's count.
-	
-	return OK;
 }
 
 
@@ -544,6 +539,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			if (field->symbol == SYM_OBJECT)
 				// AddRef not used.  See below.
 				obj = field->object;
+			else if (!IS_INVOKE_META)
+				return g_script.ScriptError(_T("Array is not multi-dimensional."));
 		}
 		else if (!IS_INVOKE_META)
 		{
@@ -569,8 +566,11 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 					else
 					{	// Create() succeeded but Insert() failed, so free the newly created obj.
 						new_obj->Release();
+						new_obj = NULL;
 					}
 				}
+				if (!new_obj)
+					return g_script.ScriptError(ERR_OUTOFMEM);
 			}
 		}
 		if (obj) // Object was successfully found or created.
@@ -606,27 +606,34 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				else
 					field->Get(aResultToken); // L34: Corrected this to be aResultToken instead of value_param (broken by L33).
 			}
+			else
+				return g_script.ScriptError(ERR_OUTOFMEM);
 			return OK;
 		}
 	}
 
 	// GET
-	else if (field)
+	else
 	{
-		if (field->symbol == SYM_STRING)
+		if (field)
 		{
-			aResultToken.symbol = SYM_STRING;
-			// L33: Make a persistent copy; our copy might be freed indirectly by releasing this object.
-			//		Prior to L33, callers took care of this UNLESS this was the last op in an expression.
-			if (!TokenSetResult(aResultToken, field->marker))
-				aResultToken.marker = _T("");
-		}
-		else
+			if (field->symbol == SYM_STRING)
+			{
+				aResultToken.symbol = SYM_STRING;
+				// L33: Make a persistent copy; our copy might be freed indirectly by releasing this object.
+				//		Prior to L33, callers took care of this UNLESS this was the last op in an expression.
+				return TokenSetResult(aResultToken, field->marker);
+			}
 			field->Get(aResultToken);
-
-		return OK;
+			return OK;
+		}
+		// If 'this' is the target object (not its base), produce OK so that something like if(!foo.bar) is
+		// considered valid even when foo.bar has not been set.
+		if (!IS_INVOKE_META)
+			return OK;
 	}
 
+	// Fell through from one of the sections above: invocation was not handled.
 	return INVOKE_NOT_HANDLED;
 }
 
@@ -662,7 +669,7 @@ ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, Exp
 			ExprTokenType *tmp = aParam[0];
 			// v2: Always pass "this" as the first parameter.  The old behaviour of passing it only when called
 			// indirectly via mBase was confusing to many users, and isn't needed now that the script can do
-			// this.func.() instead of this.func() if they don't want to pass "this".
+			// %this.func%() instead of this.func() if they don't want to pass "this".
 			// For this type of call, "this" object is included as the first parameter.  To do this, aParam[0] is
 			// temporarily overwritten with a pointer to aThisToken.  Note that aThisToken contains the original
 			// object specified in script, not the C++ "this" which is actually a meta-object/base of that object.
@@ -672,7 +679,10 @@ ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, Exp
 			return r;
 		}
 	}
-	return INVOKE_NOT_HANDLED;
+	// The field's value is neither a function reference nor the name of a known function.
+	ExprTokenType tok;
+	aField->ToToken(tok);
+	return g_script.ScriptError(ERR_NONEXISTENT_FUNCTION, TokenToString(tok, aResultToken.buf));
 }
 
 
@@ -1609,7 +1619,7 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ExprTokenType &aResultToken, ExprToken
 		}
 		if (!TokenIsEmptyString(*aParam[0]))
 			return INVOKE_NOT_HANDLED; // Reserved.
-		// Called explicitly by script, such as by "obj.funcref.()" or "x := obj.funcref, x.()"
+		// Called explicitly by script, such as by "%obj.funcref%()" or "x := obj.funcref, x.()"
 		// rather than implicitly, like "obj.funcref()".
 		++aParam;		// Discard the "method name" parameter.
 		--aParamCount;	// 

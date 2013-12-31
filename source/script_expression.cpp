@@ -137,7 +137,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				if (SYM_DYNAMIC_IS_DOUBLE_DEREF(this_token)) // Double-deref such as Array%i%.
 				{
 					if (!stack_count) // Prevent stack underflow.
-						goto abnormal_end;
+						goto abort_with_exception;
 					ExprTokenType &right = *STACK_POP;
 					right_string = TokenToString(right, right_buf);
 					right_length = EXPR_TOKEN_LENGTH((&right), right_string);
@@ -274,7 +274,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			Func *func = this_token.deref->func;
 			actual_param_count = this_token.deref->param_count; // For performance.
 			if (actual_param_count > stack_count) // Prevent stack underflow (probably impossible if actual_param_count is accurate).
-				goto abnormal_end;
+				goto abort_with_exception;
 			// Adjust the stack early to simplify.  Above already confirmed that the following won't underflow.
 			// Pop the actual number of params involved in this function-call off the stack.
 			stack_count -= actual_param_count; // Now stack[stack_count] is the leftmost item in an array of function-parameters, which simplifies processing later on.
@@ -284,7 +284,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			{
 				// This is a dynamic function call.
 				if (!stack_count) // SYM_DYNAMIC should have pushed a function name or reference onto the stack, but a syntax error may still cause this condition.
-					goto abnormal_end;
+					goto abort_with_exception;
 				stack_count--;
 				func = TokenToFunc(*stack[stack_count]); // Supports function names and function references.
 				if (!func)
@@ -322,11 +322,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				// built-in functions would have to be reviewed, or the minimum would have to be enforced
 				// for them but not user-defined functions, which is inconsistent.  Finally, allowing too-
 				// few parameters seems like it would reduce the ability to detect script bugs at runtime.
-				// Traditionally, expressions don't display any runtime errors.  So if the function is being
-				// called incorrectly by the script, the expression is aborted like it would be for other
-				// syntax errors:
 				if (actual_param_count < func->mMinParams && this_token.deref->type != DT_VARIADIC)
-					goto abnormal_end;
+				{
+					LineError(ERR_TOO_FEW_PARAMS, FAIL, func->mName);
+					goto abort;
+				}
 			}
 			
 			// The following two steps are now done inside Func::Call:
@@ -594,10 +594,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 		// Since the above didn't goto or continue, this token must be a unary or binary operator.
 		// Get the first operand for this operator (for non-unary operators, this is the right-side operand):
 		if (!stack_count) // Prevent stack underflow.  An expression such as -*3 causes this.
-			goto abnormal_end;
+			goto abort_with_exception;
 		ExprTokenType &right = *STACK_POP;
 		if (!IS_OPERAND(right.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
-			goto abnormal_end;
+			goto abort_with_exception;
 
 		switch (this_token.symbol)
 		{
@@ -854,10 +854,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 		default: // NON-UNARY OPERATOR.
 			// GET THE SECOND (LEFT-SIDE) OPERAND FOR THIS OPERATOR:
 			if (!stack_count) // Prevent stack underflow.
-				goto abnormal_end;
+				goto abort_with_exception;
 			ExprTokenType &left = *STACK_POP; // i.e. the right operand always comes off the stack before the left.
 			if (!IS_OPERAND(left.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
-				goto abnormal_end;
+				goto abort_with_exception;
 			
 			if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(this_token.symbol)) // v1.0.46: Added support for various assignment operators.
 			{
@@ -1277,7 +1277,7 @@ push_this_token:
 		goto normal_end_skip_output_var; // Can't be any output_var for this action type. Also, leave result_to_return at its default of "".
 
 	if (stack_count != 1)  // Even for multi-statement expressions, the stack should have only one item left on it:
-		goto abnormal_end; // the overall result. Examples of errors include: () ... x y ... (x + y) (x + z) ... etc. (some of these might no longer produce this issue due to auto-concat).
+		goto abort_with_exception; // the overall result. Examples of errors include: () ... x y ... (x + y) (x + z) ... etc. (some of these might no longer produce this issue due to auto-concat).
 
 	ExprTokenType &result_token = *stack[0];  // For performance and convenience.  Even for multi-statement, the bottommost item on the stack is the final result so that things like var1:=1,var2:=2 work.
 
@@ -1461,12 +1461,12 @@ push_this_token:
 		result_to_return = _T("");
 		// result_token is still on the stack, so the object will be released below.
 		goto normal_end_skip_output_var;
-
-	default: // Result contains a non-operand symbol such as an operator.
-		goto abnormal_end;
 	} // switch (result_token.symbol)
 
 // ALL PATHS ABOVE SHOULD "GOTO".  TO CATCH BUGS, ANY THAT DON'T FALL INTO "ABORT" BELOW.
+abort_with_exception:
+	ThrowRuntimeException(ERR_EXPR_EVAL);
+	// FALL THROUGH:
 abort:
 	// The callers of this function know that the value of aResult (which contains the reason
 	// for early exit) should be considered valid/meaningful only if result_to_return is NULL.
@@ -1474,7 +1474,7 @@ abort:
 	aResult = FAIL; // Indicate reason to caller.
 	goto normal_end_skip_output_var; // output_var is skipped as part of standard abort behavior.
 
-abnormal_end: // Currently the same as normal_end; it's separate to improve readability.  When this happens, result_to_return is typically "" (unless the caller overrode that default).
+//abnormal_end: // Currently the same as normal_end; it's separate to improve readability.  When this happens, result_to_return is typically "" (unless the caller overrode that default).
 //normal_end: // This isn't currently used, but is available for future-use and readability.
 	// v1.0.45: ACT_ASSIGNEXPR relies on us to set the output_var (i.e. whenever it's ARG1's is_expression==true).
 	// Our taking charge of output_var allows certain performance optimizations in other parts of this function,
@@ -1532,8 +1532,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 				ExprTokenType **param_list = (ExprTokenType **)(token + extra_params);
 				// Since built-in functions don't have variables we can directly assign to,
 				// we need to expand the param object's contents into an array of tokens:
-				if (!param_obj->ArrayToParams(token, param_list, extra_params, aParam, aParamCount))
-					return false; // Abort expression.
+				param_obj->ArrayToParams(token, param_list, extra_params, aParam, aParamCount);
 			}
 		}
 		if (rvalue)
@@ -1543,10 +1542,13 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 		// can be supplied for a required parameter.  Missing required parameters are detected
 		// in the loop below by the absence of a default value.
 		if (aParamCount < mMinParams && mIsBuiltIn)
+		{
+			aResult = g_script.ScriptError(ERR_TOO_FEW_PARAMS, mName);
 			return false; // Abort expression.
+		}
 		// Otherwise, even if some params are SYM_MISSING, it is relatively safe to call the function.
 		// The TokenTo' set of functions will produce 0 or "" for missing params.  Although that isn't
-		// technically correct, it seems preferable over silently aborting the call.
+		// technically correct, it is simple and fairly logical.
 	}
 
 	if (mIsBuiltIn)
@@ -1655,6 +1657,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 				case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
 				default: //case PARAM_DEFAULT_NONE:
 					// No value has been supplied for this REQUIRED parameter.
+					aResult = g_script.ScriptError(ERR_PARAM_REQUIRED, this_formal_param.var->mName);
 					return false; // Abort expression.
 				}
 				continue;
@@ -1662,9 +1665,6 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 
 			ExprTokenType &token = *aParam[j];
 			
-			if (!IS_OPERAND(token.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
-				return false; // Abort expression.
-
 			if (this_formal_param.is_byref)
 			{
 				// Note that the previous loop might not have checked things like the following because that

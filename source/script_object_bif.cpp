@@ -136,13 +136,14 @@ BIF_DECL(BIF_ObjInvoke)
 				ExprTokenType base_token;
 				base_token.symbol = SYM_OBJECT;
 				base_token.object = &g_MetaObject;
-				g_MetaObject.Invoke(aResultToken, base_token, invoke_type, aParam + 1, aParamCount - 1);
+				aResult = g_MetaObject.Invoke(aResultToken, base_token, invoke_type, aParam + 1, aParamCount - 1);
 			}
 			else					// "".base
 			{
 				// Return a reference to g_MetaObject.  No need to AddRef as g_MetaObject ignores it.
 				aResultToken.symbol = SYM_OBJECT;
 				aResultToken.object = &g_MetaObject;
+				aResult = OK;
 			}
 		}
 		else
@@ -153,7 +154,14 @@ BIF_DECL(BIF_ObjInvoke)
 		}
 	}
 	if (aResult == INVOKE_NOT_HANDLED)
-		aResult = OK;
+	{
+		// Invocation not handled. Either there was no target object, or the object doesn't handle
+		// this method/property.  For Object (associative arrays), only CALL should give this result.
+		if (!obj)
+			aResult = g_script.ThrowRuntimeException(ERR_NO_OBJECT);
+		else
+			aResult = g_script.ThrowRuntimeException(ERR_NO_MEMBER, NULL, TokenToString(*aParam[0]));
+	}
 }
 	
 

@@ -163,10 +163,12 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_UNEXPECTED_CLOSE_PAREN _T("Unexpected \")\"")
 #define ERR_UNEXPECTED_CLOSE_BRACKET _T("Unexpected \"]\"")
 #define ERR_UNEXPECTED_CLOSE_BRACE _T("Unexpected \"}\"")
+#define ERR_UNEXPECTED_COMMA _T("Unexpected comma")
 #define ERR_BAD_AUTO_CONCAT _T("Missing space or operator before this.")
 #define ERR_MISSING_CLOSE_QUOTE _T("Missing close-quote") // No period after short phrases.
 #define ERR_MISSING_COMMA _T("Missing comma")             //
-#define ERR_BLANK_PARAM _T("Blank parameter")             //
+#define ERR_MISSING_PARAM_NAME _T("Missing parameter name.")
+#define ERR_PARAM_REQUIRED _T("Missing a required parameter.")
 #define ERR_TOO_MANY_PARAMS _T("Too many parameters passed to function.") // L31
 #define ERR_TOO_FEW_PARAMS _T("Too few parameters passed to function.") // L31
 #define ERR_BAD_OPTIONAL_PARAM _T("Expected \":=\"")
@@ -199,6 +201,9 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_DYNAMIC_BLANK _T("This dynamic variable is blank.  ") ERR_REMOVE_THE_PERCENT
 #define ERR_HOTKEY_IF_EXPR _T("Parameter #2 must match an existing #If expression.")
 #define ERR_EXCEPTION _T("An exception was thrown.")
+#define ERR_EXPR_EVAL _T("Error evaluating expression.  There may be a syntax error.")
+#define ERR_NO_OBJECT _T("No object to invoke.")
+#define ERR_NO_MEMBER _T("Unknown property or method.")
 
 #define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")

@@ -6091,7 +6091,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		}
 
 		if (   !(param_length = param_end - param_start)   )
-			return ScriptError(ERR_BLANK_PARAM, aBuf); // Reporting aBuf vs. param_start seems more informative since Vicinity isn't shown.
+			return ScriptError(ERR_MISSING_PARAM_NAME, aBuf); // Reporting aBuf vs. param_start seems more informative since Vicinity isn't shown.
 
 		if (this_param.var = FindVar(param_start, param_length, &insert_pos, FINDVAR_LOCAL))  // Assign.
 			return ScriptError(_T("Duplicate parameter."), param_start);
@@ -6211,7 +6211,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		{
 			param_start = omit_leading_whitespace(param_start + 1);
 			if (*param_start == ')') // If *param_start is ',' it will be caught as an error by the next iteration.
-				return ScriptError(ERR_BLANK_PARAM, aBuf); // Reporting aBuf vs. param_start seems more informative since Vicinity isn't shown.
+				return ScriptError(ERR_MISSING_PARAM_NAME, aBuf); // Reporting aBuf vs. param_start seems more informative since Vicinity isn't shown.
 		}
 		//else it's ')', in which case the next iteration will handle it.
 		// Above has ensured that param_start now points to the next parameter, or ')' if none.
@@ -9435,7 +9435,8 @@ unquoted_literal:
 
 					// Accessing this_infix[-1] here is necessarily safe since in_param_list is
 					// non-NULL, and that can only be the result of a previous SYM_OPAREN/BRACKET.
-					if (this_infix[-1].symbol == SYM_COMMA || this_infix[-1].symbol == stack_symbol)
+					SymbolType prev_sym = this_infix[-1].symbol;
+					if (prev_sym == SYM_COMMA || prev_sym == stack_symbol || prev_sym == SYM_MISSING) // Empty parameter.
 					{
 						// An empty param in something like {x:y,,w:z} is meaningless and likely to be an error.
 						// x[a,,b] could possibly be given meaning by __Set or __Get, but that doesn't seem useful
@@ -9444,58 +9445,56 @@ unquoted_literal:
 						// (or param for IT_SET/IT_GET) is never SYM_MISSING.  However, [a,,b] is allowed as a way
 						// to create a sparse array.
 						if (stack_symbol == SYM_OBRACE || func && (int)func->mName < IT_CALL) // i.e. {} or x[]
-							return LineError(_T("Unexpected comma"), FAIL, in_param_list->marker);
-						// Also handle any missing params following this one, otherwise the this_infix[-1].symbol
-						// check would fail next iteration because we've changed it from SYM_COMMA to SYM_MISSING.
-						while (this_infix->symbol == SYM_COMMA) // For each missing parameter: (, or ,,
+							return LineError(ERR_UNEXPECTED_COMMA, FAIL, in_param_list->marker);
+						if (func && in_param_list->param_count < func->mMinParams) // Is this parameter mandatory?
+							return LineError(ERR_PARAM_REQUIRED);
+						if (infix_symbol == SYM_COMMA)
 						{
-							postfix[postfix_count] = this_infix++;
-							postfix[postfix_count]->symbol = SYM_MISSING;
-							postfix[postfix_count]->marker = _T(""); // Simplify some cases by letting it be treated as SYM_STRING.
-							postfix[postfix_count]->circuit_token = NULL;
+							this_postfix = this_infix++;
+							this_postfix->symbol = SYM_MISSING;
+							this_postfix->marker = _T(""); // Simplify some cases by letting it be treated as SYM_STRING.
+							this_postfix->circuit_token = NULL;
 							++in_param_list->param_count;
 							++postfix_count;
+							continue; // Must do this to update this_postfix ref.
 						}
-						// Below: Detects ,) and ,] as errors.  Since the loop above doesn't handle those cases,
-						// the "continue" below would cause an infinite loop.  Additionally, it's not at all
-						// useful and so likely to be an error.
-						if (IS_CPAREN_LIKE(this_infix->symbol) // End of the list.
-							|| func && in_param_list->param_count < func->mMinParams) // Omitted a required parameter.
-							return LineError(ERR_BLANK_PARAM, FAIL, in_param_list->marker);
-						// Go back to the top to update the this_postfix ref.
-						continue;
+						// Otherwise: it's something like ,) or ,] -- just do nothing at this point, so that the end
+						// result is the same as without the comma.  SYM_MISSING isn't necessary here since param_count
+						// indicates the parameter is omitted.
 					}
-
-					#ifdef ENABLE_DLLCALL
-					if (func && func->mBIF == &BIF_DllCall // Implies mIsBuiltIn == true.
-						&& in_param_list->param_count == 0) // i.e. this is the end of the first param.
+					else
 					{
-						// Optimise DllCall by resolving function addresses at load-time where possible.
-						ExprTokenType &param1 = this_infix[-1]; // Safety note: this_infix is necessarily preceded by at least two tokens at this stage.
-						if (param1.symbol == SYM_STRING && this_infix[-2].symbol == SYM_OPAREN) // i.e. the first param is a single literal string and nothing else.
+						#ifdef ENABLE_DLLCALL
+						if (func && func->mBIF == &BIF_DllCall // Implies mIsBuiltIn == true.
+							&& in_param_list->param_count == 0) // i.e. this is the end of the first param.
 						{
-							void *function = GetDllProcAddress(param1.marker);
-							if (function)
+							// Optimise DllCall by resolving function addresses at load-time where possible.
+							ExprTokenType &param1 = this_infix[-1]; // Safety note: this_infix is necessarily preceded by at least two tokens at this stage.
+							if (param1.symbol == SYM_STRING && this_infix[-2].symbol == SYM_OPAREN) // i.e. the first param is a single literal string and nothing else.
 							{
-								param1.symbol = SYM_INTEGER;
-								param1.value_int64 = (__int64)function;
+								void *function = GetDllProcAddress(param1.marker);
+								if (function)
+								{
+									param1.symbol = SYM_INTEGER;
+									param1.value_int64 = (__int64)function;
+								}
+								// Otherwise, one of the following is true:
+								//  a) A file was specified and is not already loaded.  GetDllProcAddress avoids
+								//     loading any dlls since doing so may have undesired side-effects.  The file
+								//     might not exist at this stage, but might when DllCall is actually called.
+								//	b) The function could not be found.  This is not considered an error since the
+								//     absence of certain functions (e.g. IsWow64Process) may have some meaning to
+								//     the script; or the function may be non-essential.
 							}
-							// Otherwise, one of the following is true:
-							//  a) A file was specified and is not already loaded.  GetDllProcAddress avoids
-							//     loading any dlls since doing so may have undesired side-effects.  The file
-							//     might not exist at this stage, but might when DllCall is actually called.
-							//	b) The function could not be found.  This is not considered an error since the
-							//     absence of certain functions (e.g. IsWow64Process) may have some meaning to
-							//     the script; or the function may be non-essential.
 						}
+						#endif
+
+						// This is SYM_COMMA or SYM_CPAREN/BRACKET/BRACE at the end of a parameter.
+						++in_param_list->param_count;
+
+						if (stack_symbol == SYM_OBRACE && (in_param_list->param_count & 1)) // i.e. an odd number of parameters, which means no "key:" was specified.
+							return LineError(_T("Missing \"key:\" in object literal."));
 					}
-					#endif
-
-					// This is SYM_COMMA or SYM_CPAREN/BRACKET/BRACE at the end of a parameter.
-					++in_param_list->param_count;
-
-					if (stack_symbol == SYM_OBRACE && (in_param_list->param_count & 1)) // i.e. an odd number of parameters, which means no "key:" was specified.
-						return LineError(_T("Missing \"key:\" in object literal."));
 				}
 
 				// Enforce mMinParams:
@@ -12994,6 +12993,8 @@ ResultType Line::Perform()
 		}
 		else
 			output_var = NULL;
+		
+		// Runtime check not needed since dynamic functions aren't currently supported:
 		//if (param_count < func->mMinParams)
 		//	return LineError(ERR_TOO_FEW_PARAMS, FAIL, ARG1);
 

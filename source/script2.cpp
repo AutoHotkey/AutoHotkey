@@ -12084,13 +12084,12 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ExprTokenType &aResultToke
 		else if (!_tcsicmp(name, _T("Name")))
 		{
 			if (pattern_found && mPatternName && mPatternName[p])
-				TokenSetResult(aResultToken, mPatternName[p]);
+				return TokenSetResult(aResultToken, mPatternName[p]);
 			return OK;
 		}
 		else if (!_tcsicmp(name, _T("Mark")))
 		{
-			TokenSetResult(aResultToken, aParamCount == 1 && mMark ? mMark : _T(""));
-			return OK;
+			return TokenSetResult(aResultToken, aParamCount == 1 && mMark ? mMark : _T(""));
 		}
 		else if (_tcsicmp(name, _T("Value"))) // i.e. NOT "Value".
 		{
@@ -12104,8 +12103,7 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ExprTokenType &aResultToke
 	if (pattern_found)
 	{
 		// Gives the correct result even if there was no match (because length is 0):
-		TokenSetResult(aResultToken, mHaystack + mOffset[p*2], mOffset[p*2+1]);
-		return OK;
+		return TokenSetResult(aResultToken, mHaystack + mOffset[p*2], mOffset[p*2+1]);
 	}
 
 	return INVOKE_NOT_HANDLED;
@@ -16686,8 +16684,8 @@ ResultType TokenSetResult(ExprTokenType &aResultToken, LPCTSTR aResult, size_t a
 	{
 		// Caller has provided a mem_to_free (initially NULL) as a means of passing back memory we allocate here.
 		// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
-		if (   !(aResultToken.mem_to_free = tmalloc(aResultLength + 1))   ) // Out of memory. Due to rarity, don't display an error dialog (there's currently no way for a built-in function to abort the current thread anyway?)
-			return FAIL;
+		if (   !(aResultToken.mem_to_free = tmalloc(aResultLength + 1))   ) // Out of memory.
+			return g_script.ScriptError(ERR_OUTOFMEM);
 		aResultToken.marker = aResultToken.mem_to_free; // Store the address of the result for the caller.
 		aResultToken.marker_length = aResultLength; // MANDATORY FOR USERS OF MEM_TO_FREE: set marker_length to the length of the string.
 	}

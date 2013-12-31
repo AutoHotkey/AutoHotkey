@@ -863,8 +863,10 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 					length = (DWORD)TokenToInt64(*aParam[1]);
 				else
 					length = (DWORD)(mFile.Length() - mFile.Tell()); // We don't know the actual number of characters these bytes will translate to, but this should be sufficient.
-				if (length == -1 || !TokenSetResult(aResultToken, NULL, length)) // Relies on short-circuit order. TokenSetResult requires non-NULL aResult if aResultLength == -1.
+				if (length == -1)
 					break; // Return "" or throw.
+				if (!TokenSetResult(aResultToken, NULL, length)) // Only after checking length above: TokenSetResult requires non-NULL aResult if aResultLength == -1.
+					return FAIL;
 				length = mFile.Read(aResultToken.marker, length);
 				aResultToken.symbol = SYM_STRING;
 				aResultToken.marker[length] = '\0';
@@ -877,7 +879,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			if (aParamCount == 0)
 			{	// See above for comments.
 				if (!TokenSetResult(aResultToken, NULL, READ_FILE_LINE_SIZE))
-					break; // Return "" or throw.
+					return FAIL;
 				DWORD length = mFile.ReadLine(aResultToken.marker, READ_FILE_LINE_SIZE - 1);
 				aResultToken.symbol = SYM_STRING;
 				if (length && aResultToken.marker[length - 1] == '\n')
