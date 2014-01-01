@@ -64,6 +64,8 @@ enum ExecUntilMode {NORMAL_MODE, UNTIL_RETURN, UNTIL_BLOCK_END, ONLY_ONE_LINE};
 #define ATTR_LOOP_PARSE (void *)6
 #define ATTR_LOOP_WHILE (void *)7 // Lexikos: This is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
 #define ATTR_LOOP_FOR (void *)8
+#define ATTR_LOOP_OBSCURED (void *)100 // fincs: used by Line::PreparseIfElse() for ACT_FINALLY blocks.
+#define ATTR_OBSCURE(attr) ((attr) ? ATTR_LOOP_OBSCURED : ATTR_NONE)
 typedef void *AttributeType;
 
 enum FileLoopModeType {FILE_LOOP_INVALID, FILE_LOOP_FILES_ONLY, FILE_LOOP_FILES_AND_FOLDERS, FILE_LOOP_FOLDERS_ONLY};
@@ -176,6 +178,8 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_ELSE_WITH_NO_IF _T("ELSE with no matching IF")
 #define ERR_UNTIL_WITH_NO_LOOP _T("UNTIL with no matching LOOP")
 #define ERR_CATCH_WITH_NO_TRY _T("CATCH with no matching TRY")
+#define ERR_FINALLY_WITH_NO_PRECEDENT _T("FINALLY with no matching TRY or CATCH")
+#define ERR_BAD_JUMP_INSIDE_FINALLY _T("Jumps cannot exit a FINALLY block.")
 #define ERR_EXPECTED_BLOCK_OR_ACTION _T("Expected \"{\" or single-line action.")
 #define ERR_OUTOFMEM _T("Out of memory.")  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
 #define ERR_EXPR_TOO_LONG _T("Expression too long")
@@ -945,6 +949,7 @@ public:
 	Label *GetJumpTarget(bool aIsDereferenced);
 	Label *IsJumpValid(Label &aTargetLabel, bool aSilent = false);
 	BOOL IsOutsideAnyFunctionBody();
+	BOOL CheckValidFinallyJump(Line* jumpTarget);
 
 	HWND DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 
