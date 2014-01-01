@@ -9236,7 +9236,8 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 		if (line->mParentLine == NULL) // i.e. don't do it if it's already "owned" by an IF or ELSE.
 			line->mParentLine = aParentLine; // Can be NULL.
 
-		if (ACT_IS_IF_OR_ELSE_OR_LOOP(line->mActionType))
+#define ACT_IS_BLOCK_OWNER(act) (ACT_IS_IF_OR_ELSE_OR_LOOP(act) || (act) == ACT_TRY || (act) == ACT_CATCH || (act) == ACT_FINALLY)
+		if (ACT_IS_BLOCK_OWNER(line->mActionType))
 		{
 			// In this case, the loader should have already ensured that line->mNextLine is not NULL.
 			if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN && line->mNextLine->mAttribute == ATTR_TRUE)
@@ -9505,6 +9506,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 						return line_temp->PreparseError(ERR_CATCH_WITH_NO_TRY);
 					return line_temp;
 				}
+				line_temp->mParentLine = line->mParentLine;
 				line = line_temp->mNextLine;
 				if (IS_BAD_ACTION_LINE(line))
 					return line_temp->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
@@ -9521,7 +9523,9 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					Line* temp = line->mNextLine;
 					if (IS_BAD_ACTION_LINE(temp))
 						return line->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
-					line->mRelatedLine = PreparseIfElse(temp, ONLY_ONE_LINE, aLoopType);
+					// Preparse FINALLY block - obscure the loop type so that attempts to use
+					// break/continue to exit the FINALLY block are caught at load time.
+					line->mRelatedLine = PreparseIfElse(temp, ONLY_ONE_LINE, ATTR_OBSCURE(aLoopType));
 					if (!line->mRelatedLine)
 						return NULL; // Error or end-of-script.
 					line = line->mRelatedLine;
@@ -9537,11 +9541,12 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 						return line_temp->PreparseError(ERR_FINALLY_WITH_NO_PRECEDENT);
 					return line_temp;
 				}
+				line_temp->mParentLine = line->mParentLine;
 				line = line_temp->mNextLine;
 				if (IS_BAD_ACTION_LINE(line))
 					return line_temp->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 				// Assign to line rather than line_temp:
-				line = PreparseIfElse(line, ONLY_ONE_LINE, aLoopType);
+				line = PreparseIfElse(line, ONLY_ONE_LINE, ATTR_OBSCURE(aLoopType)); // ATTR_OBSCURE: see above for more details.
 				if (line == NULL)
 					return NULL; // Error or end-of-script.
 				// Set this TRY's jumppoint.
@@ -9594,6 +9599,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		case ACT_CONTINUE:
 			if (!aLoopType)
 				return line->PreparseError(_T("Break/Continue must be enclosed by a Loop."));
+			if (aLoopType == ATTR_LOOP_OBSCURED)
+				return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			if (line->mArgc)
 			{
 				if (line->ArgHasDeref(1) || line->mArg->is_expression)
@@ -9636,6 +9643,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 						loop_line = NULL;
 					}
 				}
+				if (!line->CheckValidFinallyJump(loop_line))
+					return NULL; // Error already shown.
 				line->mRelatedLine = loop_line;
 			}
 			break;
@@ -9658,6 +9667,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					// the target as invalid.
 					line->mAttribute = ATTR_TRUE; // v1.0.48.02: To improve runtime performance, mark this Gosub as having a target that is outside of any function body.
 				}
+				if (line->mActionType == ACT_GOTO && !line->CheckValidFinallyJump(((Label *)(line->mRelatedLine))->mJumpToLine))
+					return NULL; // Error already displayed above.
 				//else leave mAttribute at its line-constructor default of ATTR_NONE.
 			}
 			break;
