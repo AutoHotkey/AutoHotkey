@@ -9630,7 +9630,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	{
 		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 		// this call will set up the clipboard for writing:
-		if (output_var.SetCapacity(VarSizeType(bytes_to_read), true, false) == OK)
+		if (output_var.SetCapacity(VarSizeType(bytes_to_read) + (sizeof(wchar_t) - sizeof(TCHAR)), true, false) == OK) // SetCapacity() reserves 1 TCHAR for null-terminator.  Allow an extra byte on ANSI builds for wchar_t.
 			output_buf = (LPBYTE) output_var.Contents();
 		else
 			output_buf = NULL; // Above already displayed the error message.
