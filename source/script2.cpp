@@ -10952,6 +10952,23 @@ BOOL Line::IsOutsideAnyFunctionBody() // v1.0.48.02
 }
 
 
+BOOL Line::CheckValidFinallyJump(Line* jumpTarget) // v1.1.14
+{
+	Line* jumpParent = jumpTarget->mParentLine;
+	for (Line *ancestor = mParentLine; ancestor != NULL; ancestor = ancestor->mParentLine)
+	{
+		if (ancestor == jumpParent)
+			return TRUE; // We found the common ancestor.
+		if (ancestor->mActionType == ACT_FINALLY)
+		{
+			LineError(ERR_BAD_JUMP_INSIDE_FINALLY);
+			return FALSE; // The common ancestor is outside the FINALLY block and thus this jump is invalid.
+		}
+	}
+	return TRUE; // The common ancestor is the root of the script.
+}
+
+
 ////////////////////////
 // BUILT-IN VARIABLES //
 ////////////////////////

@@ -2449,26 +2449,27 @@ examine_line:
 			action_end = buf + buf_length; // It's done this way so that ELSE can be fully handled here; i.e. that ELSE does not have to be in the list of commands recognizable by ParseAndAddLine().
 		// The following method ensures that words or variables that start with "Else", e.g. ElseAction, are not
 		// incorrectly detected as an Else command:
-		int try_cmp = 1;
-		if (tcslicmp(buf, _T("Else"), action_end - buf) // It's not an ELSE or a TRY. ("Else"/"Try" is used vs. g_act[ACT_ELSE/TRY].Name for performance).
-		  && (try_cmp = tcslicmp(buf, _T("Try"), action_end - buf)))
+		int try_cmp = 1, finally_cmp = 1;
+		if (tcslicmp(buf, _T("Else"), action_end - buf) // It's not an ELSE, a TRY or a FINALLY. ("Else"/"Try"/"Finally" is used vs. g_act[ACT_ELSE/TRY/FINALLY].Name for performance).
+		  && (try_cmp = tcslicmp(buf, _T("Try"), action_end - buf))
+		  && (finally_cmp = tcslicmp(buf, _T("Finally"), action_end - buf)))
 		{
 			if (!ParseAndAddLine(buf))
 				return FAIL;
 		}
-		else // This line is an ELSE or a TRY, possibly with another command immediately after it (on the same line).
+		else // This line is an ELSE, a TRY or a FINALLY, possibly with another command immediately after it (on the same line).
 		{
-			// Add the ELSE or TRY directly rather than calling ParseAndAddLine() because that function
+			// Add the ELSE, TRY or FINALLY directly rather than calling ParseAndAddLine() because that function
 			// would resolve escape sequences throughout the entire length of <buf>, which we
 			// don't want because we wouldn't have access to the corresponding literal-map to
 			// figure out the proper use of escaped characters:
-			if (!AddLine(try_cmp ? ACT_ELSE : ACT_TRY))
+			if (!AddLine(try_cmp ? (finally_cmp ? ACT_ELSE : ACT_FINALLY) : ACT_TRY))
 				return FAIL;
 			mCurrLine = NULL;  // To signify that we're in transition, trying to load a new one.
 			buf = omit_leading_whitespace(action_end); // Now buf is the word after the ELSE or TRY.
-			if (*buf == g_delimiter) // Allow "else, action" and "try, action"
+			if (*buf == g_delimiter) // Allow "else, action", "try, action" and "finally, action"
 				buf = omit_leading_whitespace(buf + 1);
-			// Allow any command/action to the right of "else" or "try", including "{":
+			// Allow any command/action to the right of "else", "try" or "finally", including "{":
 			if (*buf)
 			{
 				// This is done rather than calling ParseAndAddLine() as it handles "{" in a way that
@@ -4270,7 +4271,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			aActionType = ACT_LOOP;
 			add_openbrace_afterward = true;
 		}
-		// fincs: same as above, but for try and catch:
+		// fincs: same as above, but for try, catch and finally:
 		else if (!_tcsicmp(action_name, _T("try{")) && !*action_args)
 		{
 			aActionType = ACT_TRY;
@@ -4279,6 +4280,11 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		else if (!_tcsicmp(action_name, _T("catch{")) && !*action_args)
 		{
 			aActionType = ACT_CATCH;
+			add_openbrace_afterward = true;
+		}
+		else if (!_tcsicmp(action_name, _T("finally{")) && !*action_args)
+		{
+			aActionType = ACT_FINALLY;
 			add_openbrace_afterward = true;
 		}
 		else if (_tcschr(EXPR_ALL_SYMBOLS, *action_args))
@@ -9230,7 +9236,8 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 		if (line->mParentLine == NULL) // i.e. don't do it if it's already "owned" by an IF or ELSE.
 			line->mParentLine = aParentLine; // Can be NULL.
 
-		if (ACT_IS_IF_OR_ELSE_OR_LOOP(line->mActionType))
+#define ACT_IS_BLOCK_OWNER(act) (ACT_IS_IF_OR_ELSE_OR_LOOP(act) || (act) == ACT_TRY || (act) == ACT_CATCH || (act) == ACT_FINALLY)
+		if (ACT_IS_BLOCK_OWNER(line->mActionType))
 		{
 			// In this case, the loader should have already ensured that line->mNextLine is not NULL.
 			if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN && line->mNextLine->mAttribute == ATTR_TRUE)
@@ -9374,7 +9381,9 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			//	return line->PreparseError(_T("Q")); // Placeholder. Formerly "This if-statement or loop has no action."
 
 			// Other things rely on this check having been done, such as "if (line->mRelatedLine != NULL)":
-			if (line_temp->mActionType == ACT_ELSE || line_temp->mActionType == ACT_BLOCK_END || line_temp->mActionType == ACT_CATCH)
+#define IS_BAD_ACTION_LINE(l) ((l)->mActionType == ACT_ELSE || (l)->mActionType == ACT_BLOCK_END || (l)->mActionType == ACT_CATCH || (l)->mActionType == ACT_FINALLY)
+
+			if (IS_BAD_ACTION_LINE(line_temp))
 				return line->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 
 			// Lexikos: This section once maintained separate variables for file-pattern, registry, file-reading
@@ -9443,8 +9452,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			// so always continue on to evaluate the IF's ELSE, if present:
 			if (line_temp->mActionType == ACT_ELSE)
 			{
-				if (line->mActionType == ACT_LOOP || line->mActionType == ACT_WHILE || line->mActionType == ACT_FOR
-				  || line->mActionType == ACT_TRY)
+				if (line->mActionType == ACT_LOOP || line->mActionType == ACT_WHILE || line->mActionType == ACT_FOR || line->mActionType == ACT_TRY)
 				{
 					 // this can't be our else, so let the caller handle it.
 					if (aMode != ONLY_ONE_LINE)
@@ -9467,7 +9475,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 				// Thus, it's commented out:
 				//if (line == NULL) // An else with no action.
 				//	return line_temp->PreparseError(_T("Q")); // Placeholder since impossible. Formerly "This ELSE has no action."
-				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_END || line->mActionType == ACT_CATCH)
+				if (IS_BAD_ACTION_LINE(line))
 					return line_temp->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 				// Assign to line rather than line_temp:
 				line = PreparseIfElse(line, ONLY_ONE_LINE, aLoopType);
@@ -9498,14 +9506,50 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 						return line_temp->PreparseError(ERR_CATCH_WITH_NO_TRY);
 					return line_temp;
 				}
+				line_temp->mParentLine = line->mParentLine;
 				line = line_temp->mNextLine;
-				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_END || line->mActionType == ACT_CATCH)
+				if (IS_BAD_ACTION_LINE(line))
 					return line_temp->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 				// Assign to line rather than line_temp:
 				line = PreparseIfElse(line, ONLY_ONE_LINE, aLoopType);
 				if (line == NULL)
 					return NULL; // Error or end-of-script.
 				// Set this CATCH's jumppoint.
+				line_temp->mRelatedLine = line;
+				// Detect and fix FINALLY.
+				if (line->mActionType == ACT_FINALLY)
+				{
+					line->mParentLine = line_temp->mParentLine;
+					Line* temp = line->mNextLine;
+					if (IS_BAD_ACTION_LINE(temp))
+						return line->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
+					// Preparse FINALLY block - obscure the loop type so that attempts to use
+					// break/continue to exit the FINALLY block are caught at load time.
+					line->mRelatedLine = PreparseIfElse(temp, ONLY_ONE_LINE, ATTR_OBSCURE(aLoopType));
+					if (!line->mRelatedLine)
+						return NULL; // Error or end-of-script.
+					line = line->mRelatedLine;
+				}
+			}
+			else if (line_temp->mActionType == ACT_FINALLY)
+			{
+				// This code section can only be triggered by try..finally (with no catch)
+				if (line->mActionType != ACT_TRY)
+				{
+					// Again, this is similar to the section above, so see there for comments.
+					if (aMode != ONLY_ONE_LINE)
+						return line_temp->PreparseError(ERR_FINALLY_WITH_NO_PRECEDENT);
+					return line_temp;
+				}
+				line_temp->mParentLine = line->mParentLine;
+				line = line_temp->mNextLine;
+				if (IS_BAD_ACTION_LINE(line))
+					return line_temp->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
+				// Assign to line rather than line_temp:
+				line = PreparseIfElse(line, ONLY_ONE_LINE, ATTR_OBSCURE(aLoopType)); // ATTR_OBSCURE: see above for more details.
+				if (line == NULL)
+					return NULL; // Error or end-of-script.
+				// Set this TRY's jumppoint.
 				line_temp->mRelatedLine = line;
 			}
 			else // line doesn't have an else, so just continue processing from line_temp's position
@@ -9555,6 +9599,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		case ACT_CONTINUE:
 			if (!aLoopType)
 				return line->PreparseError(_T("Break/Continue must be enclosed by a Loop."));
+			if (aLoopType == ATTR_LOOP_OBSCURED)
+				return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			if (line->mArgc)
 			{
 				if (line->ArgHasDeref(1) || line->mArg->is_expression)
@@ -9597,6 +9643,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 						loop_line = NULL;
 					}
 				}
+				if (!line->CheckValidFinallyJump(loop_line))
+					return NULL; // Error already shown.
 				line->mRelatedLine = loop_line;
 			}
 			break;
@@ -9619,6 +9667,8 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					// the target as invalid.
 					line->mAttribute = ATTR_TRUE; // v1.0.48.02: To improve runtime performance, mark this Gosub as having a target that is outside of any function body.
 				}
+				if (line->mActionType == ACT_GOTO && !line->CheckValidFinallyJump(((Label *)(line->mRelatedLine))->mJumpToLine))
+					return NULL; // Error already displayed above.
 				//else leave mAttribute at its line-constructor default of ATTR_NONE.
 			}
 			break;
@@ -9713,6 +9763,10 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		case ACT_CATCH:
 			// Similar to above.
 			return line->PreparseError(ERR_CATCH_WITH_NO_TRY);
+
+		case ACT_FINALLY:
+			// Similar to above.
+			return line->PreparseError(ERR_FINALLY_WITH_NO_PRECEDENT);
 		} // switch()
 
 		line = line->mNextLine; // If NULL due to physical end-of-script, the for-loop's condition will catch it.
@@ -11837,7 +11891,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			// PERFORM THE LOOP:
 			switch ((size_t)attr)
 			{
-			case ATTR_LOOP_NORMAL: // Listed first for performance.
+			case (size_t)ATTR_LOOP_NORMAL: // Listed first for performance.
 				bool is_infinite; // "is_infinite" is more maintainable and future-proof than using LLONG_MAX to simulate an infinite loop. Plus it gives peace-of-mind and the LLONG_MAX method doesn't measurably improve benchmarks (nor does BOOL vs. bool).
 				__int64 iteration_limit;
 				if (line->mArgc > 0) // At least one parameter is present.
@@ -11855,13 +11909,13 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				result = line->PerformLoop(aResultToken, continue_main_loop, jump_to_line, until
 					, iteration_limit, is_infinite);
 				break;
-			case ATTR_LOOP_WHILE: // Lexikos: ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
+			case (size_t)ATTR_LOOP_WHILE: // Lexikos: ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
 				result = line->PerformLoopWhile(aResultToken, continue_main_loop, jump_to_line);
 				break;
-			case ATTR_LOOP_FOR:
+			case (size_t)ATTR_LOOP_FOR:
 				result = line->PerformLoopFor(aResultToken, continue_main_loop, jump_to_line, until);
 				break;
-			case ATTR_LOOP_PARSE:
+			case (size_t)ATTR_LOOP_PARSE:
 				// The phrase "csv" is unique enough since user can always rearrange the letters
 				// to do a literal parse using C, S, and V as delimiters:
 				if (_tcsicmp(ARG3, _T("CSV")))
@@ -11869,7 +11923,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				else
 					result = line->PerformLoopParseCSV(aResultToken, continue_main_loop, jump_to_line, until);
 				break;
-			case ATTR_LOOP_READ_FILE:
+			case (size_t)ATTR_LOOP_READ_FILE:
 				{
 					TextFile tfile;
 					if (*ARG2 && tfile.Open(ARG2, DEFAULT_READ_FLAGS, g.Encoding & CP_AHKCP)) // v1.0.47: Added check for "" to avoid debug-assertion failure while in debug mode (maybe it's bad to to open file "" in release mode too).
@@ -11886,11 +11940,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 						result = OK;
 				}
 				break;
-			case ATTR_LOOP_FILEPATTERN:
+			case (size_t)ATTR_LOOP_FILEPATTERN:
 				result = line->PerformLoopFilePattern(aResultToken, continue_main_loop, jump_to_line, until
 					, file_loop_mode, recurse_subfolders, ARG1);
 				break;
-			case ATTR_LOOP_REG:
+			case (size_t)ATTR_LOOP_REG:
 				// This isn't the most efficient way to do things (e.g. the repeated calls to
 				// RegConvertRootKey()), but it the simplest way for now.  Optimization can
 				// be done at a later time:
@@ -12023,9 +12077,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			{
 				// Restore the previous InTryBlock value.
 				g.InTryBlock = bSavedInTryBlock;
+				bool bHasCatch = false;
 
 				if (line->mActionType == ACT_CATCH)
 				{
+					bHasCatch = true;
 					if (g.ThrownToken)
 					{
 						// An exception was thrown and we have a 'catch' block, so let the next
@@ -12036,16 +12092,32 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					// Otherwise: no exception was thrown, so skip the 'catch' block.
 					line = line->mRelatedLine;
 				}
-				else
+				if (line->mActionType == ACT_FINALLY)
 				{
-					if (g.ThrownToken)
-					{
-						// An exception was thrown, but no 'catch' is present.  In this case 'try'
-						// acts as a catch-all.
-						g_script.FreeExceptionToken(g.ThrownToken);
-						result = OK;
-					}
+					// Let the section below handle the FINALLY block.
+					this_act = ACT_CATCH;
 				}
+				else if (!bHasCatch)
+				{
+					// An exception was thrown, but no 'catch' nor 'finally' is present.
+					// In this case 'try' acts as a catch-all.
+					g_script.FreeExceptionToken(g.ThrownToken);
+					result = OK;
+				}
+			}
+			if (this_act == ACT_CATCH && line->mActionType == ACT_FINALLY)
+			{
+				if (!g.ThrownToken)
+				{
+					// Let the next iteration handle the finally block.
+					continue;
+				}
+
+				// An exception was thrown, and this try..(catch)..finally block didn't handle it.
+				// Therefore we must execute the finally block before returning.
+				ResultType res = line->ExecUntil(ONLY_ONE_LINE, NULL, &jump_to_line);
+				if (jump_to_line || res == LOOP_BREAK || res == LOOP_CONTINUE)
+					return g_script.mCurrLine->LineError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			}
 			
 			if (aMode == ONLY_ONE_LINE || result != OK)
@@ -12071,6 +12143,12 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		{
 			if (!line->mArgc)
 				return line->ThrowRuntimeException(_T("An exception was thrown."));
+
+			if (g.ThrownToken)
+			{
+				// This may happen if the catch is executed inside a finally block.
+				g_script.FreeExceptionToken(g.ThrownToken);
+			}
 
 			ExprTokenType* token = new ExprTokenType;
 			if (!token) // Unlikely.
@@ -12121,6 +12199,13 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			g.ExcptLine = line;
 			g.ThrownToken = token;
 			return FAIL;
+		}
+
+		case ACT_FINALLY:
+		{
+			// Directly execute next line
+			line = line->mNextLine;
+			continue;
 		}
 
 		case ACT_EXIT:
