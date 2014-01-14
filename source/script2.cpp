@@ -4581,7 +4581,7 @@ fast_end:
 		// Otherwise, success.  Calculate xpos and ypos of where the match was found and adjust
 		// coords to make them relative to the position of the target window (rect will contain
 		// zeroes if this doesn't need to be done):
-		if (!aIsPixelGetColor)
+		if (!aIsPixelGetColor && found)
 		{
 			if (output_var_x && !output_var_x->Assign((aLeft + i%screen_width) - origin.x))
 				return FAIL;
