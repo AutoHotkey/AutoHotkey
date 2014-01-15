@@ -12097,7 +12097,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					// Let the section below handle the FINALLY block.
 					this_act = ACT_CATCH;
 				}
-				else if (!bHasCatch)
+				else if (!bHasCatch && g.ThrownToken)
 				{
 					// An exception was thrown, but no 'catch' nor 'finally' is present.
 					// In this case 'try' acts as a catch-all.
