@@ -160,7 +160,7 @@ BIF_DECL(BIF_ObjInvoke)
 		if (!obj)
 			aResult = g_script.ThrowRuntimeException(ERR_NO_OBJECT);
 		else
-			aResult = g_script.ThrowRuntimeException(ERR_NO_MEMBER, NULL, TokenToString(*aParam[0]));
+			aResult = g_script.ThrowRuntimeException(ERR_NO_MEMBER, NULL, aParamCount ? TokenToString(*aParam[0]) : _T(""));
 	}
 }
 	

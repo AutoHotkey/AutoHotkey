@@ -629,7 +629,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		}
 		// If 'this' is the target object (not its base), produce OK so that something like if(!foo.bar) is
 		// considered valid even when foo.bar has not been set.
-		if (!IS_INVOKE_META)
+		if (!IS_INVOKE_META && aParamCount)
 			return OK;
 	}
 
