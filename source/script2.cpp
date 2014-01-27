@@ -13304,8 +13304,7 @@ BIF_DECL(BIF_NumGet)
 	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
 		|| right_side_bound && target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
+		aResult = g_script.ThrowRuntimeException(ERR_PARAM1_INVALID, _T("NumGet"));
 		return;
 	}
 
@@ -13419,8 +13418,7 @@ BIF_DECL(BIF_NumPut)
 			target_token.var->MaybeWarnUninitialized();
 		}
 
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
+		aResult = g_script.ThrowRuntimeException(ERR_PARAM2_INVALID, _T("NumPut"));
 		return;
 	}
 
