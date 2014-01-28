@@ -31,14 +31,15 @@ static ExprOpFunc g_ObjPreInc(BIF_ObjIncDec, SYM_PRE_INCREMENT), g_ObjPreDec(BIF
 				, g_ObjPostInc(BIF_ObjIncDec, SYM_POST_INCREMENT), g_ObjPostDec(BIF_ObjIncDec, SYM_POST_DECREMENT);
 ExprOpFunc g_ObjCall(BIF_ObjInvoke, IT_CALL); // Also needed in script_expression.cpp.
 
+#define NA MAX_FUNCTION_PARAMS
 FuncEntry g_BIF[] =
 {
 	{_T("LV_GetNext"), BIF_LV_GetNextOrCount, 0, 2, true},
 	{_T("LV_GetCount"), BIF_LV_GetNextOrCount, 0, 1, true},
-	{_T("LV_GetText"), BIF_LV_GetText, 2, 3, true},
-	{_T("LV_Add"), BIF_LV_AddInsertModify, 0, 10000, true},
-	{_T("LV_Insert"), BIF_LV_AddInsertModify, 1, 10000, true},
-	{_T("LV_Modify"), BIF_LV_AddInsertModify, 2, 10000, true},
+	{_T("LV_GetText"), BIF_LV_GetText, 2, 3, true, {1}},
+	{_T("LV_Add"), BIF_LV_AddInsertModify, 0, NA, true},
+	{_T("LV_Insert"), BIF_LV_AddInsertModify, 1, NA, true},
+	{_T("LV_Modify"), BIF_LV_AddInsertModify, 2, NA, true},
 	{_T("LV_Delete"), BIF_LV_Delete, 0, 1, true},
 	{_T("LV_InsertCol"), BIF_LV_InsertModifyDeleteCol, 1, 3, true},
 	{_T("LV_ModifyCol"), BIF_LV_InsertModifyDeleteCol, 0, 3, true},
@@ -55,7 +56,7 @@ FuncEntry g_BIF[] =
 	{_T("TV_GetSelection"), BIF_TV_GetRelatedItem, 0, 0, true},
 	{_T("TV_GetNext"), BIF_TV_GetRelatedItem, 0, 2, true},
 	{_T("TV_Get"), BIF_TV_Get, 2, 2, true},
-	{_T("TV_GetText"), BIF_TV_Get, 2, 2, true},
+	{_T("TV_GetText"), BIF_TV_Get, 2, 2, true, {1}},
 	{_T("TV_SetImageList"), BIF_TV_SetImageList, 1, 2, true},
 
 	{_T("IL_Create"), BIF_IL_Create, 0, 3, true},
@@ -73,8 +74,8 @@ FuncEntry g_BIF[] =
 	{_T("RTrim"), BIF_Trim, 1, 2, true},
 	{_T("InStr"), BIF_InStr, 2, 5, true},
 	{_T("StrSplit"), BIF_StrSplit, 1, 3, true},
-	{_T("RegExMatch"), BIF_RegEx, 2, 4, true},
-	{_T("RegExReplace"), BIF_RegEx, 2, 6, true},
+	{_T("RegExMatch"), BIF_RegEx, 2, 4, true, {3}},
+	{_T("RegExReplace"), BIF_RegEx, 2, 6, true, {4}},
 
 	{_T("GetKeyState"), BIF_GetKeyState, 1, 2, true},
 	{_T("GetKeyName"), BIF_GetKeyName, 1, 1, true},
@@ -90,9 +91,9 @@ FuncEntry g_BIF[] =
 	{_T("IsLabel"), BIF_IsLabel, 1, 1, true},
 	{_T("Func"), BIF_Func, 1, 1, true},
 	{_T("IsFunc"), BIF_IsFunc, 1, 1, true},
-	{_T("IsByRef"), BIF_IsByRef, 1, 1, true},
-	{_T("DllCall"), BIF_DllCall, 1, 10000, true},
-	{_T("VarSetCapacity"), BIF_VarSetCapacity, 1, 3, true},
+	{_T("IsByRef"), BIF_IsByRef, 1, 1, true, {1}},
+	{_T("DllCall"), BIF_DllCall, 1, NA, true},
+	{_T("VarSetCapacity"), BIF_VarSetCapacity, 1, 3, true, {1}},
 	{_T("FileExist"), BIF_FileExist, 1, 1, true},
 	{_T("DirExist"), BIF_FileExist, 1, 1, true},
 	{_T("WinExist"), BIF_WinExistActive, 0, 4, true},
@@ -117,10 +118,10 @@ FuncEntry g_BIF[] =
 	{_T("OnMessage"), BIF_OnMessage, 1, 3, true},
 	{_T("RegisterCallback"), BIF_RegisterCallback, 1, 4, true},
 	{_T("Type"), BIF_Type, 1, 1, true},
-	{_T("IsObject"), BIF_IsObject, 1, 10000, true},
+	{_T("IsObject"), BIF_IsObject, 1, NA, true},
 	
-	{_T("Object"), BIF_ObjCreate, 0, 10000, true},
-	{_T("ObjInsert"), BIF_ObjInsert, 2, 10000, true},
+	{_T("Object"), BIF_ObjCreate, 0, NA, true},
+	{_T("ObjInsert"), BIF_ObjInsert, 2, NA, true},
 	{_T("ObjRemove"), BIF_ObjRemove, 1, 3, true},
 	{_T("ObjMinIndex"), BIF_ObjMinIndex, 1, 1, true},
 	{_T("ObjMaxIndex"), BIF_ObjMaxIndex, 1, 1, true},
@@ -133,7 +134,7 @@ FuncEntry g_BIF[] =
 	{_T("ObjAddRef"), BIF_ObjAddRefRelease, 1, 1, true},
 	{_T("ObjRelease"), BIF_ObjAddRefRelease, 1, 1, true},
 
-	{_T("Array"), BIF_ObjArray, 0, 10000, true},
+	{_T("Array"), BIF_ObjArray, 0, NA, true},
 	{_T("FileOpen"), BIF_FileOpen, 2, 3, true},
 	
 	{_T("ComObject"), BIF_ComObjActive, 0, 3, true},
@@ -184,13 +185,14 @@ FuncEntry g_BIF[] =
 
 	{_T("ProcessSetPriority"), BIF_ProcessSetPriority, 1, 2, false},
 
-	{_T("MonitorGet"), BIF_MonitorGet, 0, 5, false},
-	{_T("MonitorGetWorkArea"), BIF_MonitorGet, 0, 5, false},
+	{_T("MonitorGet"), BIF_MonitorGet, 0, 5, false, {2, 3, 4, 5}},
+	{_T("MonitorGetWorkArea"), BIF_MonitorGet, 0, 5, false, {2, 3, 4, 5}},
 	{_T("MonitorGetCount"), BIF_MonitorGet, 0, 0, true},
 	{_T("MonitorGetPrimary"), BIF_MonitorGet, 0, 0, true},
 	{_T("MonitorGetName"), BIF_MonitorGet, 0, 1, true},
 
 };
+#undef NA
 
 // See Script::CreateWindows() for details about the following:
 typedef BOOL (WINAPI* AddRemoveClipboardListenerType)(HWND);
@@ -6038,6 +6040,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 				found_func->mMinParams = 0;  //
 				found_func->mJumpToLine = NULL; // Fixed for v1.0.35.12: Must reset for detection elsewhere.
 				found_func->mHasReturn = false; // For consistency.
+				found_func->mParam = NULL;
 				g->CurrentFunc = found_func;
 			}
 		}
@@ -6845,6 +6848,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	// been added to the function list.
 
 	FuncEntry bif;
+	UCHAR *bif_output_vars = NULL;
 	bif.mBIF = NULL; // Set default.
 	ActionTypeType action_type = ACT_INVALID;
 
@@ -6853,6 +6857,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		if (!_tcsicmp(g_BIF[i].mName, func_name))
 		{
 			bif = g_BIF[i]; // Struct copy.
+			bif_output_vars = g_BIF[i].mOutputVars;
 			break;
 		}
 	}
@@ -6917,6 +6922,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	pfunc->mMinParams = bif.mMinParams;
 	pfunc->mParamCount = bif.mMaxParams;
 	pfunc->mHasReturn = bif.mHasReturn;
+	pfunc->mOutputVars = bif_output_vars; // Not bif.mOutputVars, which will be invalid after we return.
 
 	return pfunc;
 }
@@ -7880,10 +7886,8 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 					}
 					// Any non-empty ByRef parameter should be treated as an input var (unless it
 					// was explicitly flagged as an expression; that is handled later).
-					if (*arg.text && func && !func->mIsBuiltIn // Built-in functions have no mParam array.
-						&& param_index < func->mParamCount // Safety check needed for variadic functions.
-						&& func->mParam[param_index].is_byref)
-						arg_type = ARG_TYPE_INPUT_VAR;
+					if (*arg.text && func && func->ArgIsOutputVar(param_index))
+						arg_type = func->mIsBuiltIn ? ARG_TYPE_OUTPUT_VAR : ARG_TYPE_INPUT_VAR; // For ByRef parameters, an input value is allowed.
 					else
 						arg_type = ARG_TYPE_NORMAL;
 				}

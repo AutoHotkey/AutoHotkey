@@ -1848,7 +1848,7 @@ class Func : public IObject
 public:
 	LPTSTR mName;
 	union {BuiltInFunctionType mBIF; Line *mJumpToLine;};
-	FuncParam *mParam;  // Will hold an array of FuncParams.
+	union {FuncParam *mParam; UCHAR *mOutputVars;}; // For UDFs, mParam will hold an array of FuncParams.
 	int mParamCount; // The number of items in the above array.  This is also the function's maximum number of params.
 	int mMinParams;  // The number of mandatory parameters (populated for both UDFs and built-in's).
 	Label *mFirstLabel, *mLastLabel; // Linked list of private labels.
@@ -1872,6 +1872,20 @@ public:
 	// is truly built-in, not its name.
 	bool mIsVariadic;
 	bool mHasReturn; // Does the function require an output var to receive the return value in command syntax mode?
+
+#define MAX_FUNC_OUTPUT_VAR 7
+	bool ArgIsOutputVar(int aIndex)
+	{
+		if (!mIsBuiltIn)
+			return aIndex <= mParamCount && mParam[aIndex].is_byref;
+		if (!mOutputVars)
+			return false;
+		++aIndex; // Convert to one-based.
+		for (int i = 0; i < MAX_FUNC_OUTPUT_VAR && mOutputVars[i]; ++i)
+			if (mOutputVars[i] == aIndex)
+				return true;
+		return false;
+	}
 
 	bool Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false);
 
@@ -1988,8 +2002,9 @@ struct FuncEntry
 {
 	LPCTSTR mName;
 	BuiltInFunctionType mBIF;
-	int mMinParams, mMaxParams;
+	UCHAR mMinParams, mMaxParams;
 	bool mHasReturn;
+	UCHAR mOutputVars[MAX_FUNC_OUTPUT_VAR];
 };
 
 
