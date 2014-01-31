@@ -222,6 +222,7 @@ BIF_DECL(BIF_ObjNew)
 		aResultToken.buf = buf;
 		if (result == FAIL)
 		{
+			new_object->Release();
 			aParam[0] = class_token; // Restore it to original caller-supplied value.
 			return;
 		}
