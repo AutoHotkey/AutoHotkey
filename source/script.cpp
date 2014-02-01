@@ -5829,7 +5829,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 
 		// Below takes care of recognizing hexadecimal integers, which avoids the 'x' character
 		// inside of something like 0xFF from being detected as the name of a variable:
-		if (!IsNumeric(op_begin, true, false, true) || orig_char == g_DerefChar) // Not a numeric literal.
+		if (!IsNumeric(op_begin, true, false, true)) // Not a numeric literal.
 		{
 			if (ctoupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-')) // Listed first for short-circuit performance with the below.
 			{
