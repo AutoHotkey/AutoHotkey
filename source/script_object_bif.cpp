@@ -72,7 +72,6 @@ BIF_DECL(BIF_ObjArray)
 //
 
 BIF_DECL(BIF_IsObject)
-// IsObject(obj) is currently equivalent to (obj && obj=""), but much more intuitive.
 {
 	int i;
 	for (i = 0; i < aParamCount && TokenToObject(*aParam[i]); ++i);
