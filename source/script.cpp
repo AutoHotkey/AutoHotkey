@@ -9840,7 +9840,6 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 							this_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
 							this_postfix->symbol = SYM_INTEGER;
 							this_postfix->value_int64 = param_count;
-							this_postfix->circuit_token = NULL;
 							postfix_count++;
 							param_count = 1; // ExpandExpression should consider there to be only one param; the others should be left on the stack.
 						}
