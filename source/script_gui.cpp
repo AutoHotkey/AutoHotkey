@@ -9025,7 +9025,7 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	ErrorLevel_Backup(ErrorLevel_saved);
 	InitNewThread(0, false, true, jumpToLine->mActionType);
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-	DEBUGGER_STACK_PUSH(jumpToLine, glabel->mName)
+	DEBUGGER_STACK_PUSH(jumpToLine, _T("GUI"))
 
 	AddRef();
 	AddRef();

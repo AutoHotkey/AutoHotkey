@@ -775,7 +775,7 @@ ResultType Script::AutoExecSection()
 		mLastPeekTime = GetTickCount();
 
 		++g_nThreads;
-		DEBUGGER_STACK_PUSH(mFirstLine, _T("auto-execute"))
+		DEBUGGER_STACK_PUSH(mFirstLine, _T("Auto-execute section"))
 		ExecUntil_result = mFirstLine->ExecUntil(UNTIL_RETURN); // Might never return (e.g. infinite loop or ExitApp).
 		DEBUGGER_STACK_POP()
 		--g_nThreads;
@@ -1010,7 +1010,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	g_AllowInterruption = FALSE; // Mark the thread just created above as permanently uninterruptible (i.e. until it finishes and is destroyed).
 
 	sExitLabelIsRunning = true;
-	DEBUGGER_STACK_PUSH(mOnExitLabel->mJumpToLine, mOnExitLabel->mName)
+	DEBUGGER_STACK_PUSH(mOnExitLabel->mJumpToLine, _T("OnExit"))
 	if (mOnExitLabel->Execute() == FAIL)
 	{
 		// If the subroutine encounters a failure condition such as a runtime error, exit immediately.
