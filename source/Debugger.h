@@ -117,6 +117,7 @@ struct DbgStack
 			Func *func; // SE_Func
 		};
 		StackEntryType type;
+		TCHAR *Name();
 	};
 
 	Entry *mBottom, *mTop, *mTopBound;
@@ -206,6 +207,11 @@ public:
 	inline bool IsStepping() { return mInternalState >= DIS_StepInto; }
 	inline bool HasStdErrHook() { return mStdErrMode != SR_Disabled; }
 	inline bool HasStdOutHook() { return mStdOutMode != SR_Disabled; }
+
+	TCHAR *WhatThrew()
+	{
+		return mStack.mTop >= mStack.mBottom ? mStack.mTop->Name() : _T("");
+	}
 
 	inline void PostExecFunctionCall(Line *aExpressionLine)
 	{

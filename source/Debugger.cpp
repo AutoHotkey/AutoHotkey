@@ -857,7 +857,7 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 				mResponseBuf.WriteF("%e (thread)", U4T(se->desc)); // %e to escape characters which desc may contain (e.g. "a & b" in hotkey name).
 				break;
 			case DbgStack::SE_Func:
-				mResponseBuf.WriteF("%s()", U4T(se->func->mName)); // %s because function names should never contain characters which need escaping.
+				mResponseBuf.WriteF("%e()", U4T(se->Name()));
 				break;
 			case DbgStack::SE_Sub:
 				mResponseBuf.WriteF("%e:", U4T(se->sub->mName)); // %e because label/hotkey names may contain almost anything.
@@ -2498,6 +2498,22 @@ DbgStack::Entry *DbgStack::Push()
 		mTop->line = g_script.mCurrLine;
 	}
 	return ++mTop;
+}
+
+
+TCHAR *DbgStack::Entry::Name()
+{
+	switch (type)
+	{
+	case SE_Sub:
+		return sub->mName;
+	case SE_Func:
+		if ((UINT_PTR)func->mName < SYM_COUNT)
+			return _T("<object>");
+		return func->mName;
+	default: // SE_Thread
+		return desc;
+	}
 }
 
 

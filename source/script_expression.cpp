@@ -1556,8 +1556,16 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 		aResultToken.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
 		aResultToken.marker = mName;       // Inform function of which built-in function called it (allows code sharing/reduction). Can't use circuit_token because it's value is still needed later below.
 
+		// Push an entry onto the debugger's stack.  This has two purposes:
+		//  1) Allow CreateRuntimeException() to know which function is throwing an exception.
+		//  2) If a UDF is called before the BIF returns, it will show on the call stack.
+		//     e.g. DllCall(RegisterCallback("F")) will show DllCall while F is running.
+		DEBUGGER_STACK_PUSH(g_script.mCurrLine, this)
+
 		// CALL THE BUILT-IN FUNCTION:
 		mBIF(aResult, aResultToken, aParam, aParamCount);
+
+		DEBUGGER_STACK_POP()
 		
 		if (g->ThrownToken)
 			aResult = FAIL; // Abort thread.

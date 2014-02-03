@@ -13732,7 +13732,16 @@ IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR
 	ExprTokenType* aParam[5*2] = { aParams + 0, aParams + 1, aParams + 2, aParams + 3, aParams + 4
 		, aParams + 5, aParams + 6, aParams + 7, aParams + 8, aParams + 9 };
 	aParams[0].symbol = SYM_STRING;  aParams[0].marker = _T("What");
-	aParams[1].symbol = SYM_STRING;  aParams[1].marker = aWhat ? (LPTSTR)aWhat : g_act[mActionType].Name;
+	aParams[1].symbol = SYM_STRING;  aParams[1].marker = aWhat ? (LPTSTR)aWhat : 
+#ifdef CONFIG_DEBUGGER
+		g_Debugger.WhatThrew();
+#else
+		// Without the debugger stack, there's no good way to determine what's throwing. It could be:
+		//g_act[mActionType].Name; // A command implemented as an Action (g_act).
+		//g->CurrentFunc->mName; // A user-defined function (perhaps when mActionType == ACT_THROW).
+		//???; // A built-in function implemented as a Func (g_BIF).
+		_T("");
+#endif
 	aParams[2].symbol = SYM_STRING;  aParams[2].marker = _T("File");
 	aParams[3].symbol = SYM_STRING;  aParams[3].marker = Line::sSourceFile[mFileIndex];
 	aParams[4].symbol = SYM_STRING;  aParams[4].marker = _T("Line");
