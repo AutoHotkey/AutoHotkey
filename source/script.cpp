@@ -9448,7 +9448,7 @@ unquoted_literal:
 						// params in x[] allows IObject::Invoke() implementations to assume that the first param
 						// (or param for IT_SET/IT_GET) is never SYM_MISSING.  However, [a,,b] is allowed as a way
 						// to create a sparse array.
-						if (stack_symbol == SYM_OBRACE || func && (int)func->mName < IT_CALL) // i.e. {} or x[]
+						if (stack_symbol == SYM_OBRACE || func && (UINT_PTR)func->mName < IT_CALL) // i.e. {} or x[]
 							return LineError(ERR_UNEXPECTED_COMMA, FAIL, in_param_list->marker);
 						if (func && in_param_list->param_count < func->mMinParams) // Is this parameter mandatory?
 							return LineError(ERR_PARAM_REQUIRED);
