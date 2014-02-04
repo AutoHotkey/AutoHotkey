@@ -2,6 +2,7 @@
 #include "TextIO.h"
 #include "script.h"
 #include "script_object.h"
+EXTERN_SCRIPT;
 
 UINT g_ACP = GetACP(); // Requires a reboot to change.
 #define INVALID_CHAR UorA(0xFFFD, '?')
@@ -739,11 +740,11 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		{
 			if (member < LastMethodPlusOne)
 				// Member requires parentheses().
-				return OK;
+				return INVOKE_NOT_HANDLED;
 			if (aParamCount != (IS_INVOKE_SET ? 1 : 0))
 				// Get: disallow File.Length[newLength] and File.Seek[dist,origin].
 				// Set: disallow File[]:=PropertyName and File["Pos",dist]:=origin.
-				return OK;
+				return g_script.ScriptError(_T("Invalid usage."));
 		}
 
 		aResultToken.symbol = SYM_INTEGER; // Set default return type -- the most common cases return integer.
@@ -784,7 +785,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				case 'F': size = 4; is_float = true; break; // Float.
 				}
 				if (!size)
-					break; // Return "" or throw.
+					return INVOKE_NOT_HANDLED; // Treat as unknown method, since 'type' is part of the method name.
 
 				union {
 						__int64 i8;
@@ -799,7 +800,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				{
 					buf.i8 = 0;
 					if ( !mFile.Read(&buf, size) )
-						break; // Return "" or throw.
+						break; // Fail.
 
 					if (is_float)
 					{
@@ -826,8 +827,8 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				}
 				else
 				{
-					if (aParamCount != 1)
-						break; // Return "" or throw.
+					if (aParamCount < 1)
+						return g_script.ScriptError(ERR_PARAM1_REQUIRED);
 
 					ExprTokenType &token_to_write = *aParam[1];
 					
@@ -846,9 +847,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 					}
 					
 					DWORD bytes_written = mFile.Write(&buf, size);
-					if (!bytes_written && g->InTryBlock)
-						break; // Throw an exception.
-					// Otherwise, we should return bytes_written even if it is 0:
+					// Return bytes_written even if it is 0:
 					aResultToken.value_int64 = bytes_written;
 				}
 				return OK;
@@ -856,7 +855,6 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			break;
 
 		case Read:
-			if (aParamCount <= 1)
 			{
 				DWORD length;
 				if (aParamCount)
@@ -864,7 +862,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				else
 					length = (DWORD)(mFile.Length() - mFile.Tell()); // We don't know the actual number of characters these bytes will translate to, but this should be sufficient.
 				if (length == -1)
-					break; // Return "" or throw.
+					break; // Fail.
 				if (!TokenSetResult(aResultToken, NULL, length)) // Only after checking length above: TokenSetResult requires non-NULL aResult if aResultLength == -1.
 					return FAIL;
 				length = mFile.Read(aResultToken.marker, length);
@@ -876,7 +874,6 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			break;
 		
 		case ReadLine:
-			if (aParamCount == 0)
 			{	// See above for comments.
 				if (!TokenSetResult(aResultToken, NULL, READ_FILE_LINE_SIZE))
 					return FAIL;
@@ -892,7 +889,6 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 
 		case Write:
 		case WriteLine:
-			if (aParamCount <= 1)
 			{
 				DWORD bytes_written = 0, chars_to_write = 0;
 				if (aParamCount)
@@ -906,20 +902,16 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 					chars_to_write += 1;
 					bytes_written += mFile.Write(_T("\n"), 1);
 				}
-				// If no data was written and some should have been, consider it a failure:
-				if (!bytes_written && chars_to_write && g->InTryBlock)
-					break; // Throw an exception.
-				// Otherwise, some data was written (partial writes are considered successful),
-				// no data was requested to be written, or no TRY block is active, so we need to
-				// return the value of bytes_written even if it is 0:
 				aResultToken.value_int64 = bytes_written;
 				return OK;
 			}
 			break;
 
 		case RawReadWrite:
-			if (aParamCount == 2)
 			{
+				if (aParamCount < 2)
+					return g_script.ScriptError(ERR_TOO_FEW_PARAMS);
+
 				bool reading = (name[3] == 'R' || name[3] == 'r');
 
 				LPVOID target;
@@ -933,10 +925,9 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 						// Too small: expand the target variable if reading; abort otherwise.
 						&& (!reading || !target_token.var->SetCapacity(size, false)) ) // Relies on short-circuit order.
 					{
-						if (g->InTryBlock)
-							break; // Throw an exception.
-						aResultToken.value_int64 = 0;
-						return OK;
+						if (reading)
+							return FAIL; // SetCapacity() already showed the error message.
+						return g_script.ScriptError(ERR_PARAM2_INVALID); // Invalid size (param #2).
 					}
 					target = target_token.var->Contents();
 				}
@@ -945,14 +936,11 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 
 				DWORD result;
 				if (target < (LPVOID)65536) // Basic sanity check to catch incoming raw addresses that are zero or blank.
-					result = 0;
+					return g_script.ScriptError(ERR_PARAM1_INVALID);
 				else if (reading)
 					result = mFile.Read(target, size);
 				else
 					result = mFile.Write(target, size);
-				if (!result && size && g->InTryBlock)
-					break; // Throw an exception.
-				// Otherwise, it was a complete or partial success, or no TRY block is active.
 				aResultToken.value_int64 = result;
 				return OK;
 			}
@@ -964,23 +952,16 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				aResultToken.value_int64 = mFile.Tell();
 				return OK;
 			}
-			else if (aParamCount <= 2)
+			else
 			{
 				__int64 distance = TokenToInt64(*aParam[1]);
 				int origin;
-				if (aParamCount == 2)
+				if (aParamCount >= 2)
 					origin = (int)TokenToInt64(*aParam[2]);
 				else // Defaulting to SEEK_END when distance is negative seems more useful than allowing it to be interpreted as an unsigned value (> 9.e18 bytes).
 					origin = (distance < 0) ? SEEK_END : SEEK_SET;
 
-				if (!mFile.Seek(distance, origin))
-				{
-					if (g->InTryBlock)
-						break; // Throw an exception.
-					aResultToken.value_int64 = 0;
-				}
-				else
-					aResultToken.value_int64 = 1;
+				aResultToken.value_int64 = mFile.Seek(distance, origin);
 				return OK;
 			}
 			break;
@@ -991,24 +972,20 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				aResultToken.value_int64 = mFile.Length();
 				return OK;
 			}
-			else if (aParamCount == 1)
+			else
 			{
 				if (-1 != (aResultToken.value_int64 = mFile.Length(TokenToInt64(*aParam[1]))))
 					return OK;
-				else // Empty string seems like a more suitable failure indicator than -1.
-					aResultToken.marker = _T("");
-					// Let below set symbol back to SYM_STRING and throw an exception if appropriate.
+				// Otherwise, fall through:
 			}
 			break;
 
 		case AtEOF:
-			if (aParamCount == 0)
-				aResultToken.value_int64 = mFile.AtEOF();
+			aResultToken.value_int64 = mFile.AtEOF();
 			return OK;
 		
 		case Handle:
-			if (aParamCount == 0)
-				aResultToken.value_int64 = (UINT_PTR) mFile.Handle();
+			aResultToken.value_int64 = (UINT_PTR) mFile.Handle();
 			return OK;
 
 		case Encoding:
@@ -1051,17 +1028,13 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		}
 
 		case Close:
-			if (aParamCount == 0)
-				mFile.Close();
+			mFile.Close();
 			return OK;
 		}
 		
 		// Since above didn't return, an error must've occurred.
 		aResultToken.symbol = SYM_STRING;
-		// marker should already be set to "".
-		if (g->InTryBlock)
-			// For simplicity, don't attempt to identify what kind of error occurred:
-			Script::ThrowRuntimeException(ERRORLEVEL_ERROR_STR, _T("FileObject"));
+		aResultToken.marker = _T(""); // Already set in most cases, but done here for maintainability.
 		return OK;
 	}
 
