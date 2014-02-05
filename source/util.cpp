@@ -263,7 +263,10 @@ __int64 YYYYMMDDSecondsUntil(LPTSTR aYYYYMMDDStart, LPTSTR aYYYYMMDDEnd, bool &a
 	if (*aYYYYMMDDStart)
 	{
 		if (!YYYYMMDDToFileTime(aYYYYMMDDStart, ftStart))
+		{
+			g_script.ScriptError(ERR_PARAM2_INVALID);
 			return 0;
+		}
 	}
 	else // Use the current time in its place.
 	{
@@ -273,7 +276,10 @@ __int64 YYYYMMDDSecondsUntil(LPTSTR aYYYYMMDDStart, LPTSTR aYYYYMMDDEnd, bool &a
 	if (*aYYYYMMDDEnd)
 	{
 		if (!YYYYMMDDToFileTime(aYYYYMMDDEnd, ftEnd))
+		{
+			g_script.ScriptError(ERR_PARAM1_INVALID);
 			return 0;
+		}
 	}
 	else // Use the current time in its place.
 	{

@@ -13499,8 +13499,12 @@ BIF_DECL(BIF_StrGetPut)
 	else
 	{
 		if (!source_string || aParamCount > 2)
-			// This is StrGet or there are too many parameters; see below.
+		{
+			// See the "Legend" above.  Either this is StrGet and Address was invalid (it can't be omitted due
+			// to prior min-param checks), or it is StrPut and there are too many parameters.
+			aResult = g_script.ScriptError(source_string ? ERR_TOO_MANY_PARAMS : ERR_PARAM1_INVALID);  // StrPut : StrGet
 			return;
+		}
 		// else this is the special measuring mode of StrPut, where Address and Length are omitted.
 		// A length of 0 when passed to the Win API conversion functions (or the code below) means
 		// "calculate the required buffer size, but don't do anything else."
@@ -13515,8 +13519,13 @@ BIF_DECL(BIF_StrGetPut)
 			if (TokenIsNumeric(**aParam))
 			{
 				length = (int)TokenToInt64(**aParam);
-				if (length < -1 || !length)
-					return; // Invalid length; or caller of StrGet asked for 0 chars.
+				if (length == 0 && !source_string)
+					return; // Get 0 chars.
+				if (length <= 0)
+				{
+					aResult = g_script.ScriptError(_T("Invalid Length."));
+					return;
+				}
 				++aParam; // Let encoding be the next param, if present.
 			}
 			else if ((*aParam)->symbol == SYM_MISSING)
@@ -13546,8 +13555,13 @@ BIF_DECL(BIF_StrGetPut)
 		// Also check for overlap, in case memcpy is used instead of MultiByteToWideChar/WideCharToMultiByte.
 		// (Behaviour for memcpy would be "undefined", whereas MBTWC/WCTBM would fail.)  Overlap in the
 		// other direction (source_string beginning inside address..length) should not be possible.
-		|| (address >= source_string && address <= ((LPTSTR)source_string + source_length)) )
+		|| (address >= source_string && address <= ((LPTSTR)source_string + source_length))
+		// The following catches StrPut(X, &Y) where Y is uninitialized or has zero capacity.
+		|| (address == Var::sEmptyString && source_length) )
+	{
+		aResult = g_script.ScriptError(source_string ? ERR_PARAM2_INVALID : ERR_PARAM1_INVALID);
 		return;
+	}
 
 	if (source_string) // StrPut
 	{
@@ -13556,12 +13570,11 @@ BIF_DECL(BIF_StrGetPut)
 
 		if (!source_length)
 		{	// Take a shortcut when source_string is empty, since some paths below might not handle it correctly.
-			if (length) {
-				if (encoding == CP_UTF16)
-					*(LPWSTR)address = '\0';
-				else
-					*(LPSTR)address = '\0';
-			}
+			ASSERT(length); // Above has verified length != 0.
+			if (encoding == CP_UTF16)
+				*(LPWSTR)address = '\0';
+			else
+				*(LPSTR)address = '\0';
 			aResultToken.value_int64 = 1;
 			return;
 		}
@@ -13774,9 +13787,8 @@ BIF_DECL(BIF_IsByRef)
 {
 	if (aParam[0]->symbol != SYM_VAR)
 	{
-		// Incorrect usage: return empty string to indicate the error.
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
+		// Incorrect usage.
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
 	}
 	else
 	{
@@ -13801,7 +13813,10 @@ BIF_DECL(BIF_GetKeyState)
 	{
 		aResultToken.symbol = SYM_STRING; // ScriptGetJoyState() also requires that this be initialized.
 		if (   !(joy = (JoyControls)ConvertJoy(key_name, &joystick_id))   )
-			aResultToken.marker = _T("");
+		{
+			// It is neither a key name nor a joystick button/axis.
+			aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		}
 		else
 		{
 			// The following must be set for ScriptGetJoyState():
@@ -13933,6 +13948,8 @@ BIF_DECL(BIF_VarSetCapacity)
 		if (aResultToken.value_int64 = var.ByteCapacity()) // Don't subtract 1 here in lieu doing it below (avoids underflow).
 			aResultToken.value_int64 -= sizeof(TCHAR); // Omit the room for the zero terminator since script capacity is defined as length vs. size.
 	} // (aParam[0]->symbol == SYM_VAR)
+	else
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
 }
 
 
@@ -14261,12 +14278,12 @@ BIF_DECL(BIF_SqrtLogLn)
 
 BIF_DECL(BIF_DateAdd)
 {
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T(""); // Set default in case of early return.
-
 	FILETIME ft;
 	if (!YYYYMMDDToFileTime(TokenToString(*aParam[0], aResultToken.buf), ft))
+	{
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
 		return;
+	}
 
 	// Use double to support a floating point value for days, hours, minutes, etc:
 	double nUnits;
@@ -14288,6 +14305,7 @@ BIF_DECL(BIF_DateAdd)
 		nUnits *= ((double)10000000 * 60 * 60 * 24);
 		break;
 	default: // Invalid
+		aResult = g_script.ScriptError(ERR_PARAM3_INVALID);
 		return;
 	}
 	// Convert ft struct to a 64-bit variable (maybe there's some way to avoid these conversions):
@@ -14299,6 +14317,7 @@ BIF_DECL(BIF_DateAdd)
 	// Convert back into ft struct:
 	ft.dwLowDateTime = ul.LowPart;
 	ft.dwHighDateTime = ul.HighPart;
+	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = FileTimeToYYYYMMDD(aResultToken.buf, ft, false);
 }
 
@@ -14317,8 +14336,7 @@ BIF_DECL(BIF_DateDiff)
 		failed);
 	if (failed) // Usually caused by an invalid component in the date-time string.
 	{
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
+		aResult = FAIL; // ScriptError() was already called.
 		return;
 	}
 	switch (ctoupper(*TokenToString(*aParam[2])))
@@ -14328,8 +14346,7 @@ BIF_DECL(BIF_DateDiff)
 	case 'H': time_until /= 60 * 60; break; // Hours
 	case 'D': time_until /= 60 * 60 * 24; break; // Days
 	default: // Invalid
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
+		aResult = g_script.ScriptError(ERR_PARAM3_INVALID);
 		return;
 	}
 	aResultToken.value_int64 = time_until;
@@ -14356,12 +14373,15 @@ BIF_DECL(BIF_OnMessage)
 	bool mode_is_delete = false; //
 	if (!ParamIndexIsOmitted(1)) // Parameter #2 is present.
 	{
-		LPTSTR func_name = ParamIndexToString(1, buf); // Resolve parameter #2.
-		if (*func_name)
+		if (!TokenIsEmptyString(*aParam[1], TRUE))
 		{
-			if (   !(func = g_script.FindFunc(func_name))   ) // Nonexistent function.
-				return; // Yield the default return value set earlier.
-			// If too many formal parameters or any are ByRef/optional, indicate failure.
+			func = TokenToFunc(*aParam[1]); // Parameter #2: function name or reference.
+			if (!func || func->mIsBuiltIn || func->mMinParams > 4)
+			{
+				aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
+				return;
+			}
+			// Obsolete: If too many formal parameters or any are ByRef/optional, indicate failure.
 			// This helps catch bugs in scripts that are assigning the wrong function to a monitor.
 			// It also preserves additional parameters for possible future use (i.e. avoids breaking
 			// existing scripts if more formal parameters are supported in a future version).
@@ -14372,9 +14392,8 @@ BIF_DECL(BIF_OnMessage)
 			// message monitor calls the function.  For these checks to actually catch an error, the
 			// author must have typed the name of the wrong function (i.e. probably not a typo), and
 			// that function must accept more than four parameters or have optional/ByRef parameters:
-			//if (func->mIsBuiltIn || func->mParamCount > 4 || func->mMinParams < func->mParamCount) // Too many params, or some are optional.
-			if (func->mIsBuiltIn || func->mMinParams > 4) // Requires too many params.
-				return; // Yield the default return value set earlier.
+			//if (func->mMinParams < func->mParamCount) // Too many params, or some are optional.
+			//	return;
 			//for (int i = 0; i < func->mParamCount; ++i) // Check if any formal parameters are ByRef.
 			//	if (func->mParam[i].is_byref)
 			//		return; // Yield the default return value set earlier.
@@ -14652,7 +14671,10 @@ BIF_DECL(BIF_RegisterCallback)
 	// Loadtime validation has ensured that at least 1 parameter is present.
 	Func *func;
 	if (  !(func = TokenToFunc(*aParam[0])) || func->mIsBuiltIn  )  // Not a valid user-defined function.
-		return; // Indicate failure by yielding the default result set earlier.
+	{
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		return;
+	}
 
 	LPTSTR options = ParamIndexToOptionalString(1);
 	int actual_param_count;
@@ -14662,7 +14684,10 @@ BIF_DECL(BIF_RegisterCallback)
 		if (   actual_param_count > func->mParamCount    // The function doesn't have enough formals to cover the specified number of actuals.
 				&& !func->mIsVariadic					 // ...and the function isn't designed to accept parameters via an array (or in this case, a pointer).
 			|| actual_param_count < func->mMinParams   ) // ...or the function has too many mandatory formals (caller specified insufficient actuals to cover them all).
-			return; // Indicate failure by yielding the default result set earlier.
+		{
+			aResult = g_script.ScriptError(ERR_PARAM3_INVALID);
+			return;
+		}
 	}
 	else // Default to the number of mandatory formal parameters in the function's definition.
 		actual_param_count = func->mMinParams;
@@ -14670,7 +14695,10 @@ BIF_DECL(BIF_RegisterCallback)
 #ifdef WIN32_PLATFORM
 	bool use_cdecl = StrChrAny(options, _T("Cc")); // Recognize "C" as the "CDecl" option.
 	if (!use_cdecl && actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).
-		return; // Indicate failure by yielding the default result set earlier.
+	{
+		aResult = g_script.ScriptError(ERR_PARAM3_INVALID);
+		return;
+	}
 #endif
 
 	// To improve callback performance, ensure there are no ByRef parameters (for simplicity: not even ones that
@@ -14678,7 +14706,10 @@ BIF_DECL(BIF_RegisterCallback)
 	// callback is called.
 	for (int i = 0; i < func->mParamCount; ++i)
 		if (func->mParam[i].is_byref)
-			return; // Yield the default return value set earlier.
+		{
+			aResult = g_script.ScriptError(ERR_PARAM1_INVALID); // Incompatible function (param #1).
+			return;
+		}
 
 	// GlobalAlloc() and dynamically-built code is the means by which a script can have an unlimited number of
 	// distinct callbacks. On Win32, GlobalAlloc is the same function as LocalAlloc: they both point to
@@ -14881,7 +14912,11 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 				aResultToken.value_int64 = SendMessage(control_hwnd, LVM_GETSELECTEDCOUNT, 0, 0);
 			else if (!_tcsnicmp(options, _T("Col"), 3)) // "Col" or "Column". Don't allow "C" by itself, so that "Checked" can be added in the future.
 				aResultToken.value_int64 = gui.mCurrentListView->union_lv_attrib->col_count;
-			//else some unsupported value, leave aResultToken.value_int64 set to zero to indicate failure.
+			else
+			{
+				aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+				return;
+			}
 		}
 		else
 			aResultToken.value_int64 = SendMessage(control_hwnd, LVM_GETITEMCOUNT, 0, 0);
@@ -14914,6 +14949,7 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 			, first_char ? LVNI_FOCUSED : LVNI_SELECTED) + 1; // +1 to convert to 1-based.
 		break;
 	case 'C': // Checkbox: Find checked items. For performance assume that the control really has checkboxes.
+	  {
 		int item_count = ListView_GetItemCount(control_hwnd);
 		for (int i = index + 1; i < item_count; ++i) // Start at index+1 to omit the first item from the search (for consistency with the other mode above).
 			if (ListView_GetCheckState(control_hwnd, i)) // Item's box is checked.
@@ -14923,6 +14959,9 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 			}
 		// Since above didn't return, no match found.  The 0/false value previously set as the default is retained.
 		break;
+	  }
+	default:
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
 	}
 }
 
@@ -14951,14 +14990,24 @@ BIF_DECL(BIF_LV_GetText)
 		return;
 	// Caller has ensured there is at least two parameters:
 	if (aParam[0]->symbol != SYM_VAR) // No output variable.  Supporting a NULL for the purpose of checking for the existence of a cell seems too rarely needed.
+	{
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
 		return;
+	}
 
-	// Caller has ensured there is at least two parameters.
 	int row_index = ParamIndexToInt(1) - 1; // -1 to convert to zero-based.
+	if (row_index < -1) // row_index==-1 is reserved to mean "get column heading's text".
+	{
+		aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
+		return;
+	}
 	// If parameter 3 is omitted, default to the first column (index 0):
 	int col_index = ParamIndexIsOmitted(2) ? 0 : ParamIndexToInt(2) - 1; // -1 to convert to zero-based.
-	if (row_index < -1 || col_index < 0) // row_index==-1 is reserved to mean "get column heading's text".
+	if (col_index < 0)
+	{
+		aResult = g_script.ScriptError(ERR_PARAM3_INVALID);
 		return;
+	}
 
 	Var &output_var = *aParam[0]->var; // It was already ensured higher above that symbol==SYM_VAR.
 	TCHAR buf[LV_TEXT_BUF_SIZE];
@@ -15025,7 +15074,10 @@ BIF_DECL(BIF_LV_AddInsertModify)
 	{
 		index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 		if (index < -1 || (mode != 'M' && index < 0)) // Allow -1 to mean "all rows" when in modify mode.
+		{
+			aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
 			return;
+		}
 		++aParam;  // Remove the first parameter from further consideration to make Insert/Modify symmetric with Add.
 		--aParamCount;
 	}
@@ -15153,11 +15205,18 @@ BIF_DECL(BIF_LV_AddInsertModify)
 			// to reserve "-Icon" in case a future way can be found to do it.
 		}
 		else if (!_tcsicmp(next_option, _T("Vis"))) // v1.0.44
+		{
 			// Since this option much more typically used with LV_Modify than LV_Add/Insert, the technique of
 			// Vis%VarContainingOneOrZero% isn't supported, to reduce code size.
 			ensure_visible = adding; // Ignored by modes other than LV_Modify(), since it's not really appropriate when adding a row (plus would add code complexity).
+		}
+		else
+		{
+			aResult = g_script.ScriptError(ERR_INVALID_OPTION, next_option);
+			*option_end = orig_char; // See comment below.
+			return;
+		}
 
-		// If the item was not handled by the above, ignore it because it is unknown.
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 	}
 
@@ -15287,7 +15346,12 @@ BIF_DECL(BIF_LV_Delete)
 	int index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 	if (index > -1)
 		aResultToken.value_int64 = SendMessage(control_hwnd, LVM_DELETEITEM, index, 0); // Returns TRUE/FALSE.
-	//else even if index==0, for safety, it seems not to do a delete-all.
+	else
+	{
+		// Even if index==0, for safety, it seems best not to do a delete-all.
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		return;
+	}
 }
 
 
@@ -15533,6 +15597,12 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 				do_auto_size = 0; // Turn off any auto-sizing that may have been put into effect by default (such as for insertion).
 				lvc.mask |= LVCF_WIDTH;
 				lvc.cx = gui.Scale(ATOI(next_option));
+			}
+			else
+			{
+				aResult = g_script.ScriptError(ERR_INVALID_OPTION);
+				*option_end = orig_char; // See comment below.
+				return;
 			}
 		}
 
@@ -15870,7 +15940,12 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 			else if (IsNumeric(next_option, false, false, false))
 				tvi.hInsertAfter = (HTREEITEM)ATOI64(next_option); // ATOI64 vs. ATOU avoids need for extra casting to avoid compiler warning.
 		}
-		//else some unknown option, just ignore it.
+		else
+		{
+			aResult = g_script.ScriptError(ERR_INVALID_OPTION, next_option);
+			*option_end = orig_char; // See comment below.
+			return;
+		}
 
 		// If the item was not handled by the above, ignore it because it is unknown.
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
@@ -16099,7 +16174,10 @@ BIF_DECL(BIF_TV_Get)
 	// Since above didn't return, this is LV_GetText().
 	// Loadtime validation has ensured that param #1 and #2 are present.
 	if (aParam[0]->symbol != SYM_VAR) // No output variable. Supporting a NULL for the purpose of checking for the existence of an item seems too rarely needed.
+	{
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
 		return;
+	}
 	Var &output_var = *aParam[0]->var;
 
 	TCHAR text_buf[LV_TEXT_BUF_SIZE]; // i.e. uses same size as ListView.
@@ -16208,7 +16286,10 @@ BIF_DECL(BIF_IL_Add)
 	aResultToken.value_int64 = 0; // Set default in case of early return.
 	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0); // Load-time validation has ensured there is a first parameter.
 	if (!himl)
+	{
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
 		return;
+	}
 
 	int param3 = ParamIndexToOptionalInt(2, 0);
 	int icon_number, width = 0, height = 0; // Zero width/height causes image to be loaded at its actual width/height.

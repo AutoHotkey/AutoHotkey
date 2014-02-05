@@ -190,7 +190,10 @@ BIF_DECL(BIF_ObjNew)
 
 	IObject *class_object = TokenToObject(*class_token);
 	if (!class_object)
+	{
+		aResult = g_script.ScriptError(_T("Missing class object for \"new\" operator."));
 		return;
+	}
 
 	Object *new_object = Object::Create();
 	if (!new_object)
@@ -397,10 +400,9 @@ BIF_METHOD(Clone)
 BIF_DECL(BIF_ObjAddRefRelease)
 {
 	IObject *obj = (IObject *)TokenToInt64(*aParam[0]);
-	if (obj < (IObject *)4096) // Rule out some obvious errors.
+	if (obj < (IObject *)65536) // Rule out some obvious errors.
 	{
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
 		return;
 	}
 	if (ctoupper(aResultToken.marker[3]) == 'A')
