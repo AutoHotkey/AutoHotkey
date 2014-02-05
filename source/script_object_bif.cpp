@@ -23,7 +23,7 @@ BIF_DECL(BIF_ObjCreate)
 			return; // symbol is already SYM_INTEGER.
 		}
 		obj = (IObject *)TokenToInt64(*aParam[0]);
-		if (obj < (IObject *)1024) // Prevent some obvious errors.
+		if (obj < (IObject *)65536) // Prevent some obvious errors.
 			obj = NULL;
 		else
 			obj->AddRef();
@@ -39,8 +39,7 @@ BIF_DECL(BIF_ObjCreate)
 	}
 	else
 	{
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
+		aResult = g_script.ScriptError(aParamCount == 1 ? ERR_PARAM1_INVALID : ERR_OUTOFMEM);
 	}
 }
 
@@ -62,8 +61,7 @@ BIF_DECL(BIF_ObjArray)
 		}
 		obj->Release();
 	}
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T("");
+	aResult = g_script.ScriptError(ERR_OUTOFMEM);
 }
 	
 
@@ -196,7 +194,10 @@ BIF_DECL(BIF_ObjNew)
 
 	Object *new_object = Object::Create();
 	if (!new_object)
+	{
+		aResult = g_script.ScriptError(ERR_OUTOFMEM);
 		return;
+	}
 
 	new_object->SetBase(class_object);
 

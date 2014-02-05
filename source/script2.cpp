@@ -2527,7 +2527,7 @@ BIF_DECL(BIF_WinGet)
 			// Otherwise, get the full path and name of the executable that owns this window.
 			TCHAR process_name[MAX_PATH];
 			GetProcessName(pid, process_name, _countof(process_name), cmd == WINGET_CMD_PROCESSNAME);
-			TokenSetResult(aResultToken, process_name);
+			aResult = TokenSetResult(aResultToken, process_name);
 		}
 		return;
 
@@ -2964,7 +2964,7 @@ BIF_DECL(BIF_MonitorGet)
 			// blank to indicate the problem:
 			aResultToken.marker = _T("");
 		else
-			TokenSetResult(aResultToken, mip.monitor_info_ex.szDevice);
+			aResult = TokenSetResult(aResultToken, mip.monitor_info_ex.szDevice);
 		aResultToken.symbol = SYM_STRING;
 	} // switch()
 }
@@ -5489,7 +5489,7 @@ BIF_DECL(BIF_StrSplit)
 	
 	Object *output_array = Object::Create();
 	if (!output_array)
-		goto return_empty_string;
+		goto outofmem;
 	aResultToken.symbol = SYM_OBJECT;	// Set default, overridden only for critical errors.
 	aResultToken.object = output_array;	//
 
@@ -5559,9 +5559,11 @@ BIF_DECL(BIF_StrSplit)
 		}
 	}
 	// The fact that this section is executing means that a memory allocation failed and caused the
-	// loop to break, so return a false value to let the caller detect the failure.  Empty string
-	// is used vs 0 for consistency with Object() and Array().
+	// loop to break, so throw an exception.
 	output_array->Release(); // Since we're not returning it.
+outofmem:
+	aResult = g_script.ScriptError(ERR_OUTOFMEM);
+	return;
 return_empty_string:
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
@@ -11803,10 +11805,7 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 	}
 	
 	// Otherwise, at least one character is being omitted from the end of haystack.
-	if (!TokenSetResult(aResultToken, result, extract_length))
-	{
-		// Yield the empty string (a default set higher above).
-	}
+	aResult = TokenSetResult(aResultToken, result, extract_length);
 }
 
 
@@ -13676,7 +13675,10 @@ BIF_DECL(BIF_StrGetPut)
 			// Convert multi-byte encoded string to UTF-16.
 			conv_length = MultiByteToWideChar(encoding, 0, (LPCSTR)address, length, NULL, 0);
 			if (!TokenSetResult(aResultToken, NULL, conv_length)) // DO NOT SUBTRACT 1, conv_length might not include a null-terminator.
+			{
+				aResult = FAIL;
 				return; // Out of memory.
+			}
 			conv_length = MultiByteToWideChar(encoding, 0, (LPCSTR)address, length, aResultToken.marker, conv_length);
 #else
 			CStringW wide_buf;
@@ -13691,7 +13693,10 @@ BIF_DECL(BIF_StrGetPut)
 			// Now convert UTF-16 to ACP.
 			conv_length = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (LPCWSTR)address, length, NULL, 0, NULL, NULL);
 			if (!TokenSetResult(aResultToken, NULL, conv_length)) // DO NOT SUBTRACT 1, conv_length might not include a null-terminator.
+			{
+				aResult = FAIL;
 				return; // Out of memory.
+			}
 			conv_length = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (LPCWSTR)address, length, aResultToken.marker, conv_length, NULL, NULL);
 #endif
 			if (conv_length && !aResultToken.marker[conv_length - 1])
@@ -13707,7 +13712,7 @@ BIF_DECL(BIF_StrGetPut)
 			if (length == 0)
 				return;	// Already set marker = "" above.
 			// Copy and null-terminate at the specified length.
-			TokenSetResult(aResultToken, (LPCTSTR)address, length);
+			aResult = TokenSetResult(aResultToken, (LPCTSTR)address, length);
 			return;
 		}
 
@@ -14687,7 +14692,11 @@ BIF_DECL(BIF_RegisterCallback)
 	// for GlobalAlloc:  "To execute dynamically generated code, use the VirtualAlloc function to allocate
 	//						memory and the VirtualProtect function to grant PAGE_EXECUTE access."
 	RCCallbackFunc *callbackfunc=(RCCallbackFunc*) GlobalAlloc(GMEM_FIXED,sizeof(RCCallbackFunc));	//allocate structure off process heap, automatically RWE and fixed.
-	if(!callbackfunc) return;
+	if (!callbackfunc)
+	{
+		aResult = g_script.ScriptError(ERR_OUTOFMEM);
+		return;
+	}
 	RCCallbackFunc &cb = *callbackfunc; // For convenience and possible code-size reduction.
 
 #ifdef WIN32_PLATFORM
@@ -16268,9 +16277,7 @@ BIF_DECL(BIF_Trim) // L31
 	if (extract_length && trim_type != 'L') // i.e. it's Trim() or RTrim();  THE LINE BELOW REQUIRES extract_length >= 1.
 		extract_length = omit_trailing_any(result, omit_list, result + extract_length - 1);
 
-	if (!TokenSetResult(aResultToken, result, extract_length))
-		// Out of memory.
-		aResultToken.marker = _T("");
+	aResult = TokenSetResult(aResultToken, result, extract_length);
 }
 
 

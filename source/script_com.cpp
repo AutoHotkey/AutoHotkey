@@ -353,7 +353,8 @@ BIF_DECL(BIF_ComObjTypeOrValue)
 					BSTR name;
 					if (SUCCEEDED(ptinfo->GetDocumentation(MEMBERID_NIL, &name, NULL, NULL, NULL)))
 					{
-						TokenSetResult(aResultToken, CStringTCharFromWCharIfNeeded(name), SysStringLen(name));
+						if (!TokenSetResult(aResultToken, CStringTCharFromWCharIfNeeded(name), SysStringLen(name)))
+							aResult = FAIL;
 						SysFreeString(name);
 					}
 				}
