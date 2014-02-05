@@ -256,8 +256,8 @@ BIF_DECL(BIF_ObjNew)
 		if (result == FAIL)
 		{
 			// Invocation failed, probably due to omitting a required parameter.
-			aResultToken.symbol = SYM_STRING;
-			aResultToken.marker = _T("");
+			new_object->Release();
+			aResult = FAIL;
 		}
 		else
 		{
