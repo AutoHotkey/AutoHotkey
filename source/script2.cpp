@@ -14405,7 +14405,7 @@ BIF_DECL(BIF_OnMessage)
 	// If this is the first use of the g_MsgMonitor array, create it now rather than later to reduce code size
 	// and help the maintainability of sections further below. The following relies on short-circuit boolean order:
 	if (!g_MsgMonitor && !(g_MsgMonitor = (MsgMonitorStruct *)malloc(sizeof(MsgMonitorStruct) * MAX_MSG_MONITORS)))
-		return; // Yield the default return value set earlier.
+		goto rare_failure;
 
 	// Check if this message already exists in the array:
 	int msg_index;
@@ -14449,11 +14449,9 @@ BIF_DECL(BIF_OnMessage)
 		// Since above didn't return, the message is to be added as a new element. The above already
 		// verified that func is not NULL.
 		if (msg_index == MAX_MSG_MONITORS) // No room in array.
-			return; // Indicate failure by yielding the default return value set earlier.
+			goto rare_failure;
 		// Otherwise, the message is to be added, so increment the total:
 		++g_MsgMonitorCount;
-		_tcscpy(buf, func->mName); // Yield the NEW name as an indicator of success. Caller has ensured that buf large enough to support max function name.
-		aResultToken.marker = buf;
 		monitor.instance_count = 0; // Reset instance_count only for new items since existing items might currently be running.
 		monitor.msg = specified_msg;
 		// Continue on to the update-or-create logic below.
@@ -14469,6 +14467,12 @@ BIF_DECL(BIF_OnMessage)
 	else // Unspecified, so if this item is being newly created fall back to the default.
 		if (!item_already_exists)
 			monitor.max_instances = 1;
+	return;
+
+rare_failure:
+	// Some kind of failure occurred which should be very rare.  Throw an exception so that script
+	// authors never need to worry about handling this error.  Use a generic message because it's rare:
+	g_script.ThrowRuntimeException(ERR_EXCEPTION);
 }
 
 
