@@ -14785,6 +14785,8 @@ BIF_DECL(BIF_RegisterCallback)
 
 #endif
 
+
+
 BIF_DECL(BIF_StatusBar)
 {
 	TCHAR mode = ctoupper(aResultToken.marker[6]); // Union's marker initially contains the function name. SB_Set[T]ext.
@@ -14796,11 +14798,17 @@ BIF_DECL(BIF_StatusBar)
 	// Control doesn't exist (i.e. no StatusBar in window).
 
 	if (!g->GuiDefaultWindowValid()) // Always operate on thread's default window to simplify the syntax.
+	{
+		aResult = g_script.ScriptError(ERR_NO_GUI);
 		return;
+	}
 	GuiType& gui = *g->GuiDefaultWindow; // For performance.
 	HWND control_hwnd;
 	if (   !(control_hwnd = gui.mStatusBarHwnd)   )
+	{
+		aResult = g_script.ScriptError(_T("No StatusBar."));
 		return;
+	}
 
 	HICON hicon;
 	switch(mode)
@@ -14878,6 +14886,22 @@ BIF_DECL(BIF_StatusBar)
 
 
 
+bool ValidGuiAndListView(ResultType &aResult)
+{
+	if (!g->GuiDefaultWindowValid())
+	{
+		aResult = g_script.ScriptError(ERR_NO_GUI);
+		return false;
+	}
+	if (!g->GuiDefaultWindow->mCurrentListView)
+	{
+		aResult = g_script.ScriptError(_T("No ListView."));
+		return false;
+	}
+	return true;
+}
+
+
 BIF_DECL(BIF_LV_GetNextOrCount)
 // LV_GetNext:
 // Returns: The index of the found item, or 0 on failure.
@@ -14895,11 +14919,9 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 	// Control doesn't exist (i.e. no ListView in window).
 	// Item not found in ListView.
 
-	if (!g->GuiDefaultWindowValid())
+	if (!ValidGuiAndListView(aResult))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	if (!gui.mCurrentListView)
-		return;
 	HWND control_hwnd = gui.mCurrentListView->hwnd;
 
 	LPTSTR options;
@@ -14983,11 +15005,10 @@ BIF_DECL(BIF_LV_GetText)
 	// Item not found in ListView.
 	// And others.
 
-	if (!g->GuiDefaultWindowValid())
+	if (!ValidGuiAndListView(aResult))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	if (!gui.mCurrentListView)
-		return;
+	
 	// Caller has ensured there is at least two parameters:
 	if (aParam[0]->symbol != SYM_VAR) // No output variable.  Supporting a NULL for the purpose of checking for the existence of a cell seems too rarely needed.
 	{
@@ -15082,11 +15103,9 @@ BIF_DECL(BIF_LV_AddInsertModify)
 		--aParamCount;
 	}
 
-	if (!g->GuiDefaultWindowValid())
+	if (!ValidGuiAndListView(aResult))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	if (!gui.mCurrentListView)
-		return;
 	GuiControlType &control = *gui.mCurrentListView;
 
 	LPTSTR options = ParamIndexToOptionalString(0, buf);
@@ -15329,11 +15348,9 @@ BIF_DECL(BIF_LV_Delete)
 	// Control doesn't exist (i.e. no ListView in window).
 	// And others as shown below.
 
-	if (!g->GuiDefaultWindowValid())
+	if (!ValidGuiAndListView(aResult))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	if (!gui.mCurrentListView)
-		return;
 	HWND control_hwnd = gui.mCurrentListView->hwnd;
 
 	if (ParamIndexIsOmitted(0))
@@ -15373,11 +15390,9 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 	// Control doesn't exist (i.e. no ListView in window).
 	// Column not found in ListView.
 
-	if (!g->GuiDefaultWindowValid())
+	if (!ValidGuiAndListView(aResult))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	if (!gui.mCurrentListView)
-		return;
 	GuiControlType &control = *gui.mCurrentListView;
 	lv_attrib_type &lv_attrib = *control.union_lv_attrib;
 
@@ -15685,11 +15700,10 @@ BIF_DECL(BIF_LV_SetImageList)
 	// Control doesn't exist (i.e. no ListView in window).
 	// Column not found in ListView.
 
-	if (!g->GuiDefaultWindowValid())
+	if (!ValidGuiAndListView(aResult))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	if (!gui.mCurrentListView)
-		return;
+	
 	// Caller has ensured that there is at least one incoming parameter:
 	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0);
 	int list_type;
@@ -15704,6 +15718,22 @@ BIF_DECL(BIF_LV_SetImageList)
 	aResultToken.value_int64 = (__int64)ListView_SetImageList(gui.mCurrentListView->hwnd, himl, list_type);
 }
 
+
+
+bool ValidGuiAndTreeView(ResultType &aResult)
+{
+	if (!g->GuiDefaultWindowValid())
+	{
+		aResult = g_script.ScriptError(ERR_NO_GUI);
+		return false;
+	}
+	if (!g->GuiDefaultWindow->mCurrentTreeView)
+	{
+		aResult = g_script.ScriptError(_T("No TreeView."));
+		return false;
+	}
+	return true;
+}
 
 
 BIF_DECL(BIF_TV_AddModifyDelete)
@@ -15731,11 +15761,9 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 	// Control doesn't exist (i.e. no TreeView in window).
 	// And others as shown below.
 
-	if (!g->GuiDefaultWindowValid())
+	if (!ValidGuiAndTreeView(aResult))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	if (!gui.mCurrentTreeView)
-		return;
 	GuiControlType &control = *gui.mCurrentTreeView;
 
 	if (mode == 'D') // TV_Delete
@@ -16030,11 +16058,9 @@ BIF_DECL(BIF_TV_GetRelatedItem)
 	// Control doesn't exist (i.e. no TreeView in window).
 	// Item not found in TreeView.
 
-	if (!g->GuiDefaultWindowValid())
+	if (!ValidGuiAndTreeView(aResult))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	if (!gui.mCurrentTreeView)
-		return;
 	HWND control_hwnd = gui.mCurrentTreeView->hwnd;
 
 	HTREEITEM hitem = (HTREEITEM)ParamIndexToOptionalIntPtr(0, NULL);
@@ -16136,11 +16162,9 @@ BIF_DECL(BIF_TV_Get)
 	// Item not found in TreeView.
 	// And others.
 
-	if (!g->GuiDefaultWindowValid())
+	if (!ValidGuiAndTreeView(aResult))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	if (!gui.mCurrentTreeView)
-		return;
 	HWND control_hwnd = gui.mCurrentTreeView->hwnd;
 
 	if (!get_text)
@@ -16214,11 +16238,10 @@ BIF_DECL(BIF_TV_SetImageList)
 	// Window doesn't exist.
 	// Control doesn't exist (i.e. no TreeView in window).
 
-	if (!g->GuiDefaultWindowValid())
+	if (!ValidGuiAndTreeView(aResult))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	if (!gui.mCurrentTreeView)
-		return;
+	
 	// Caller has ensured that there is at least one incoming parameter:
 	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0);
 	int list_type;
