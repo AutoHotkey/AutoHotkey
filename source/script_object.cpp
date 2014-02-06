@@ -572,6 +572,13 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				if (!new_obj)
 					return g_script.ScriptError(ERR_OUTOFMEM);
 			}
+			else if (IS_INVOKE_GET)
+			{
+				// Treat x[y,z] like x[y] when x[y] is not set: just return "", don't throw an exception.
+				// On the other hand, if x[y] is set to something which is not an object, the "if (field)"
+				// section above raises an error.
+				return OK;
+			}
 		}
 		if (obj) // Object was successfully found or created.
 		{
