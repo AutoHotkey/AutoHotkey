@@ -604,6 +604,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 		case SYM_ASSIGN:        // These don't need "right_is_number" to be resolved. v1.0.48.01: Also avoid
 		case SYM_CONCAT:        // resolving right_is_number for CONCAT because TokenIsPureNumeric() will take
 		case SYM_ASSIGN_CONCAT: // a long time if the string is very long and consists entirely of digits/whitespace.
+		case SYM_IS:
+		case SYM_IN:
+		case SYM_CONTAINS:
 			right_is_pure_number = right_is_number = PURE_NOT_NUMERIC; // Init for convenience/maintainability.
 		case SYM_AND:			// v2: These don't need it either since even numeric strings are considered "true".
 		case SYM_OR:			//
@@ -1097,6 +1100,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 						tmemcpy(this_token.marker, left_string, left_length);  // Not +1 because don't need the zero terminator.
 					tmemcpy(this_token.marker + left_length, right_string, right_length + 1); // +1 to include its zero terminator.
 					result_symbol = SYM_STRING;
+					break;
+
+				case SYM_IS:
+					if (!ValueIsType(this_token, left_string, right_string))
+						goto abort;
 					break;
 
 				default:
@@ -2178,3 +2186,110 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 	// Otherwise:
 	return CONDITION_FALSE;
 }
+
+
+ResultType Line::ValueIsType(ExprTokenType &aResultToken, LPTSTR aValueStr, LPTSTR aTypeStr)
+{
+	// This function is based on the original code for ACT_IFIS, with very little modification.
+	// ACT_IFIS was removed in commit 3382e6e2.
+	bool if_condition;
+	TCHAR *cp;
+	VariableTypeType variable_type = ConvertVariableTypeName(aTypeStr);
+	switch (variable_type)
+	{
+	case VAR_TYPE_NUMBER:
+		if_condition = IsNumeric(aValueStr, true, false, true);
+		break;
+	case VAR_TYPE_INTEGER:
+		if_condition = IsNumeric(aValueStr, true, false, false);  // Passes false for aAllowFloat.
+		break;
+	case VAR_TYPE_FLOAT:
+		if_condition = (IsNumeric(aValueStr, true, false, true) == PURE_FLOAT);
+		break;
+	case VAR_TYPE_TIME:
+	{
+		SYSTEMTIME st;
+		// Also insist on numeric, because even though YYYYMMDDToFileTime() will properly convert a
+		// non-conformant string such as "2004.4", for future compatibility, we don't want to
+		// report that such strings are valid times:
+		if_condition = IsNumeric(aValueStr, false, false, false) && YYYYMMDDToSystemTime(aValueStr, st, true); // Can't call Var::IsNumeric() here because it doesn't support aAllowNegative.
+		break;
+	}
+	case VAR_TYPE_DIGIT:
+		if_condition = true;
+		for (cp = aValueStr; *cp; ++cp)
+			if (!_istdigit((UCHAR)*cp))
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+	case VAR_TYPE_XDIGIT:
+		cp = aValueStr;
+		if (!_tcsnicmp(cp, _T("0x"), 2)) // Allow 0x prefix.
+			cp += 2;
+		if_condition = true;
+		for (; *cp; ++cp)
+			if (!_istxdigit((UCHAR)*cp))
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+	case VAR_TYPE_ALNUM:
+		if_condition = true;
+		for (cp = aValueStr; *cp; ++cp)
+			//if (!IsCharAlphaNumeric(*cp)) // Use this to better support chars from non-English languages.
+			if (!aisalnum(*cp)) // But some users don't like it, Chinese users for example.
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+	case VAR_TYPE_ALPHA:
+		// Like AutoIt3, the empty string is considered to be alphabetic, which is only slightly debatable.
+		if_condition = true;
+		for (cp = aValueStr; *cp; ++cp)
+			//if (!IsCharAlpha(*cp)) // Use this to better support chars from non-English languages.
+			if (!aisalpha(*cp)) // But some users don't like it, Chinese users for example.
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+	case VAR_TYPE_UPPER:
+		if_condition = true;
+		for (cp = aValueStr; *cp; ++cp)
+			//if (!IsCharUpper(*cp)) // Use this to better support chars from non-English languages.
+			if (!aisupper(*cp)) // But some users don't like it, Chinese users for example.
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+	case VAR_TYPE_LOWER:
+		if_condition = true;
+		for (cp = aValueStr; *cp; ++cp)
+			//if (!IsCharLower(*cp)) // Use this to better support chars from non-English languages.
+			if (!aislower(*cp)) // But some users don't like it, Chinese users for example.
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+	case VAR_TYPE_SPACE:
+		if_condition = true;
+		for (cp = aValueStr; *cp; ++cp)
+			if (!_istspace(*cp))
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+	default:
+		return LineError(_T("Unsupported comparison type."), FAIL, aTypeStr);
+	}
+	aResultToken.value_int64 = if_condition;
+	return OK;
+}
+

@@ -895,6 +895,8 @@ public:
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
 	ResultType EvaluateHotCriterionExpression(LPTSTR aHotkeyName); // L4: Called by MainWindowProc to handle an AHK_HOT_IF_EXPR message.
 
+	ResultType ValueIsType(ExprTokenType &aResultToken, LPTSTR aValueStr, LPTSTR aTypeStr);
+
 	ResultType Deref(Var *aOutputVar, LPTSTR aBuf);
 
 	static bool FileIsFilteredOut(WIN32_FIND_DATA &aCurrentFile, FileLoopModeType aFileLoopMode

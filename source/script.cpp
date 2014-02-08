@@ -5755,47 +5755,30 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 
 		operand_length = op_end - op_begin;
 
-		// Check if it's AND/OR/NOT:
-		if (operand_length < 4 && operand_length > 1) // Ordered for short-circuit performance.
+		// Check if it's a word operator like AND/OR/NOT:
+		if (operand_length < 9 && operand_length > 1)
 		{
-			if (operand_length == 2)
+			struct WordOp
 			{
-				if ((*op_begin == 'o' || *op_begin == 'O') && (op_begin[1] == 'r' || op_begin[1] == 'R'))
-				{
-					// "OR" was found.
-					// Mark this word as an operator.  Unlike the old method of replacing "OR" with "||",
-					// this leaves ListLines more accurate.  More importantly, it allows "Hotkey, If" to
-					// recognize an expression which uses AND/OR.
-					wordop = SYM_OR;
-					goto word_operator;
-				}
-			}
-			else // operand_length must be 3
+				LPCTSTR word;
+				SymbolType op;
+			};
+			static WordOp sWordOp[] =
 			{
-				switch (*op_begin)
+				{ _T("or"), SYM_OR },
+				{ _T("and"), SYM_AND },
+				{ _T("not"), SYM_LOWNOT },
+				{ _T("new"), SYM_NEW },
+				{ _T("is"), SYM_IS },
+				{ _T("in"), SYM_IN },
+				{ _T("contains"), SYM_CONTAINS }
+			};
+			for (int i = 0; i < _countof(sWordOp); ++i)
+			{
+				if (!_tcsnicmp(sWordOp[i].word, op_begin, operand_length))
 				{
-				case 'a':
-				case 'A':
-					if (   (op_begin[1] == 'n' || op_begin[1] == 'N') // Relies on short-circuit boolean order.
-						&& (op_begin[2] == 'd' || op_begin[2] == 'D')   )
-					{
-						// "AND" was found.  See "OR" above for comments.
-						wordop = SYM_AND;
-						goto word_operator;
-					}
-					break;
-
-				case 'n':
-				case 'N':
-					if (   (op_begin[1] == 'o' || op_begin[1] == 'O') // Relies on short-circuit boolean order.
-						&& (op_begin[2] == 't' || op_begin[2] == 'T')   )
-					{
-						// "NOT" was found.  See "OR" above for comments.
-						wordop = SYM_LOWNOT;
-						goto word_operator;
-					}
-					if (   (op_begin[1] == 'e' || op_begin[1] == 'E')
-						&& (op_begin[2] == 'w' || op_begin[2] == 'W')   ) // "new"
+					wordop = sWordOp[i].op;
+					if (wordop == SYM_NEW)
 					{
 						cp = omit_leading_whitespace(op_begin + 3);
 						if (IS_IDENTIFIER_CHAR(*cp) || *cp == g_DerefChar)
@@ -5805,15 +5788,19 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 							// parsing it as a function call.
 							pending_op_is_class = true;
 						}
-						// See "OR" above for comments.  Additionally, this operator will require a DerefType
-						// struct in the postfix expression phase anyway, so may as well create it here.
-						wordop = SYM_NEW;
-						goto word_operator;
 					}
-					break;
+					else if (wordop == SYM_IN || wordop == SYM_CONTAINS)
+					{
+						return ScriptError(_T("Word reserved for future use."), sWordOp[i].word);
+					}
+					// Mark this word as an operator.  Unlike the old method of replacing "OR" with "||",
+					// this leaves ListLines more accurate.  More importantly, it allows "Hotkey, If" to
+					// recognize an expression which uses AND/OR.  Additionally, the "NEW" operator will
+					// require a DerefType struct in the postfix expression phase anyway.
+					goto word_operator;
 				}
 			}
-		} // End of check for AND/OR/NOT.
+		} // End of word operator check.
 
 		// Temporarily terminate, for IsNumeric() and to simplify some other checks.
 		orig_char = *op_end;
@@ -8551,6 +8538,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 86             // SYM_FUNC -- Has special handling which ensures it stays tightly bound with its parameters as though it's a single operand for use by other operators; the actual value here is irrelevant.
 		, 87             // SYM_NEW.  Unlike SYM_FUNC, SYM_DOT, etc., precedence actually matters for this one.
 		, 36             // SYM_REGEXMATCH
+		, 28, 28, 28	 // SYM_IS, SYM_IN, SYM_CONTAINS
 	};
 	// Most programming languages give exponentiation a higher precedence than unary minus and logical-not.
 	// For example, -2**2 is evaluated as -(2**2), not (-2)**2 (the latter is unsupported by qmathPow anyway).
