@@ -1103,7 +1103,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					break;
 
 				case SYM_IS:
-					if (!ValueIsType(this_token, left, left_string, right_string))
+					if (!ValueIsType(this_token, left, left_string, right, right_string))
 						goto abort;
 					break;
 
@@ -2188,7 +2188,7 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 }
 
 
-ResultType Line::ValueIsType(ExprTokenType &aResultToken, ExprTokenType &aValue, LPTSTR aValueStr, LPTSTR aTypeStr)
+ResultType Line::ValueIsType(ExprTokenType &aResultToken, ExprTokenType &aValue, LPTSTR aValueStr, ExprTokenType &aType, LPTSTR aTypeStr)
 {
 	VariableTypeType variable_type = ConvertVariableTypeName(aTypeStr);
 	bool if_condition;
@@ -2203,8 +2203,14 @@ ResultType Line::ValueIsType(ExprTokenType &aResultToken, ExprTokenType &aValue,
 		}
 		// Otherwise, the comparison is invalid.
 	}
-
-	if (TokenToObject(aValue))
+	else if (IObject *type_obj = TokenToObject(aType))
+	{
+		// Is the value an object which can derive, and is it derived from type_obj?
+		Object *value_obj = dynamic_cast<Object *>(TokenToObject(aValue));
+		aResultToken.value_int64 = value_obj && value_obj->IsDerivedFrom(type_obj);
+		return OK;
+	}
+	else if (TokenToObject(aValue))
 	{
 		// Since it's an object, the only type it should match is "object" (even though aValueStr
 		// is an empty string, which matches several other types).

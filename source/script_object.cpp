@@ -779,6 +779,24 @@ void Object::EndClassDefinition()
 			if (i < --mFieldCount)
 				memmove(mFields + i, mFields + i + 1, (mFieldCount - i) * sizeof(FieldType));
 }
+
+
+//
+// Helper function for 'is' operator: is aBase a direct or indirect base object of this?
+//
+
+bool Object::IsDerivedFrom(IObject *aBase)
+{
+	IObject *ibase;
+	Object *base;
+	for (ibase = mBase; ; ibase = base->mBase)
+	{
+		if (ibase == aBase)
+			return true;
+		if (  !(base = dynamic_cast<Object *>(ibase))  )  // ibase may be NULL.
+			return false;
+	}
+}
 	
 
 //

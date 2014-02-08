@@ -266,6 +266,8 @@ public:
 	{
 		return mBase; // Callers only want to call Invoke(), so no AddRef is done.
 	}
+
+	bool IsDerivedFrom(IObject *aBase);
 	
 	// Used by Object::_Insert() and Func::Call():
 	bool InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], int aValueCount);
