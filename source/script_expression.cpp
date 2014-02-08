@@ -1103,7 +1103,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					break;
 
 				case SYM_IS:
-					if (!ValueIsType(this_token, left_string, right_string))
+					if (!ValueIsType(this_token, left, left_string, right_string))
 						goto abort;
 					break;
 
@@ -2188,13 +2188,32 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 }
 
 
-ResultType Line::ValueIsType(ExprTokenType &aResultToken, LPTSTR aValueStr, LPTSTR aTypeStr)
+ResultType Line::ValueIsType(ExprTokenType &aResultToken, ExprTokenType &aValue, LPTSTR aValueStr, LPTSTR aTypeStr)
 {
-	// This function is based on the original code for ACT_IFIS, with very little modification.
-	// ACT_IFIS was removed in commit 3382e6e2.
+	VariableTypeType variable_type = ConvertVariableTypeName(aTypeStr);
 	bool if_condition;
 	TCHAR *cp;
-	VariableTypeType variable_type = ConvertVariableTypeName(aTypeStr);
+
+	if (variable_type == VAR_TYPE_BYREF)
+	{
+		if (aValue.symbol == SYM_VAR)
+		{
+			aResultToken.value_int64 = aValue.var->ResolveAlias() != aValue.var;
+			return OK;
+		}
+		// Otherwise, the comparison is invalid.
+	}
+
+	if (TokenToObject(aValue))
+	{
+		// Since it's an object, the only type it should match is "object" (even though aValueStr
+		// is an empty string, which matches several other types).
+		aResultToken.value_int64 = variable_type == VAR_TYPE_OBJECT;
+		return OK;
+	}
+
+	// The remainder of this function is based on the original code for ACT_IFIS, which was removed
+	// in commit 3382e6e2.
 	switch (variable_type)
 	{
 	case VAR_TYPE_NUMBER:
@@ -2205,6 +2224,10 @@ ResultType Line::ValueIsType(ExprTokenType &aResultToken, LPTSTR aValueStr, LPTS
 		break;
 	case VAR_TYPE_FLOAT:
 		if_condition = (IsNumeric(aValueStr, true, false, true) == PURE_FLOAT);
+		break;
+	case VAR_TYPE_OBJECT:
+		// if aValue was an object, it was already handled above.
+		if_condition = false;
 		break;
 	case VAR_TYPE_TIME:
 	{

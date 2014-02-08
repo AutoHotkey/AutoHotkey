@@ -66,7 +66,8 @@ typedef int FileLoopModeType;
 
 enum VariableTypeType {VAR_TYPE_INVALID, VAR_TYPE_NUMBER, VAR_TYPE_INTEGER, VAR_TYPE_FLOAT
 	, VAR_TYPE_TIME	, VAR_TYPE_DIGIT, VAR_TYPE_XDIGIT, VAR_TYPE_ALNUM, VAR_TYPE_ALPHA
-	, VAR_TYPE_UPPER, VAR_TYPE_LOWER, VAR_TYPE_SPACE};
+	, VAR_TYPE_UPPER, VAR_TYPE_LOWER, VAR_TYPE_SPACE
+	, VAR_TYPE_OBJECT, VAR_TYPE_BYREF}; // v2
 
 #define ATTACH_THREAD_INPUT \
 	bool threads_are_attached = false;\
@@ -895,7 +896,7 @@ public:
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
 	ResultType EvaluateHotCriterionExpression(LPTSTR aHotkeyName); // L4: Called by MainWindowProc to handle an AHK_HOT_IF_EXPR message.
 
-	ResultType ValueIsType(ExprTokenType &aResultToken, LPTSTR aValueStr, LPTSTR aTypeStr);
+	ResultType ValueIsType(ExprTokenType &aResultToken, ExprTokenType &aValue, LPTSTR aValueStr, LPTSTR aTypeStr);
 
 	ResultType Deref(Var *aOutputVar, LPTSTR aBuf);
 
@@ -1693,6 +1694,8 @@ public:
 		if (!_tcsicmp(aBuf, _T("Integer"))) return VAR_TYPE_INTEGER;
 		if (!_tcsicmp(aBuf, _T("Float"))) return VAR_TYPE_FLOAT;
 		if (!_tcsicmp(aBuf, _T("Number"))) return VAR_TYPE_NUMBER;
+		if (!_tcsicmp(aBuf, _T("Object"))) return VAR_TYPE_OBJECT; // v2
+		if (!_tcsicmp(aBuf, _T("ByRef"))) return VAR_TYPE_BYREF; // v2
 		if (!_tcsicmp(aBuf, _T("Time"))) return VAR_TYPE_TIME;
 		if (!_tcsicmp(aBuf, _T("Date"))) return VAR_TYPE_TIME;  // "date" is just an alias for "time".
 		if (!_tcsicmp(aBuf, _T("Digit"))) return VAR_TYPE_DIGIT;
