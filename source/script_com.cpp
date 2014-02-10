@@ -72,12 +72,6 @@ BIF_DECL(BIF_ComObjGet)
 
 BIF_DECL(BIF_ComObjActive)
 {
-	if (!aParamCount) // ComObjMissing()
-	{
-		SafeSetTokenObject(aResultToken, new ComObject(DISP_E_PARAMNOTFOUND, VT_ERROR));
-		return;
-	}
-
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
 

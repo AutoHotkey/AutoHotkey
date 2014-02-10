@@ -137,7 +137,7 @@ FuncEntry g_BIF[] =
 	{_T("Array"), BIF_ObjArray, 0, NA, true},
 	{_T("FileOpen"), BIF_FileOpen, 2, 3, true},
 	
-	{_T("ComObject"), BIF_ComObjActive, 0, 3, true},
+	{_T("ComObject"), BIF_ComObjActive, 1, 3, true},
 	{_T("ComObjCreate"), BIF_ComObjCreate, 1, 2, true},
 	{_T("ComObjGet"), BIF_ComObjGet, 1, 1, true},
 	{_T("ComObjConnect"), BIF_ComObjConnect, 1, 2, true},
