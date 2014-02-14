@@ -293,6 +293,7 @@ Action g_act[] =
 	, {_T("Return"), 0, 1, false, {1, 0}}
 	, {_T("Try"), 0, 0, false, NULL}
 	, {_T("Catch"), 0, 1, false, NULL} // fincs: seems best to allow catch without a parameter
+	, {_T("Finally"), 0, 0, false, NULL}
 	, {_T("Throw"), 0, 1, false, {1, 0}}
 	, {_T("Exit"), 0, 1, false, NULL} // ExitCode
 	, {_T("ExitApp"), 0, 1, false, NULL} // ExitCode

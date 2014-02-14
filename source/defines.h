@@ -313,7 +313,7 @@ enum enum_act {
 , ACT_FOR, ACT_WHILE, ACT_UNTIL // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
 , ACT_BREAK, ACT_CONTINUE
 , ACT_GOTO, ACT_GOSUB, ACT_RETURN
-, ACT_TRY, ACT_CATCH, ACT_THROW
+, ACT_TRY, ACT_CATCH, ACT_FINALLY, ACT_THROW
 , ACT_FIRST_CONTROL_FLOW = ACT_BLOCK_BEGIN, ACT_LAST_CONTROL_FLOW = ACT_THROW
 , ACT_EXIT, ACT_EXITAPP // Excluded from the "CONTROL_FLOW" range above because they can be safely wrapped into a Func.
 , ACT_FIRST_COMMAND, ACT_MSGBOX = ACT_FIRST_COMMAND

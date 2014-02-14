@@ -3305,7 +3305,7 @@ fast_end:
 		// Otherwise, success.  Calculate xpos and ypos of where the match was found and adjust
 		// coords to make them relative to the position of the target window (rect will contain
 		// zeroes if this doesn't need to be done):
-		if (!aIsPixelGetColor)
+		if (!aIsPixelGetColor && found)
 		{
 			if (output_var_x && !output_var_x->Assign((aLeft + i%screen_width) - origin.x))
 				return FAIL;
@@ -7809,7 +7809,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	{
 		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 		// this call will set up the clipboard for writing:
-		if (output_var.SetCapacity(VarSizeType(bytes_to_read), true) == OK)
+		if (output_var.SetCapacity(VarSizeType(bytes_to_read) + (sizeof(wchar_t) - sizeof(TCHAR)), true) == OK) // SetCapacity() reserves 1 TCHAR for null-terminator.  Allow an extra byte on ANSI builds for wchar_t.
 			output_buf = (LPBYTE) output_var.Contents();
 		else
 			output_buf = NULL; // Above already displayed the error message.
@@ -9082,6 +9082,23 @@ BOOL Line::IsOutsideAnyFunctionBody() // v1.0.48.02
 		if (ancestor->mAttribute && ancestor->mActionType == ACT_BLOCK_BEGIN) // Ordered for short-circuit performance.
 			return FALSE; // Non-zero mAttribute marks an open-brace as belonging to a function's body, so indicate this line is inside a function.
 	return TRUE; // Indicate that this line is not inside any function body.
+}
+
+
+BOOL Line::CheckValidFinallyJump(Line* jumpTarget) // v1.1.14
+{
+	Line* jumpParent = jumpTarget->mParentLine;
+	for (Line *ancestor = mParentLine; ancestor != NULL; ancestor = ancestor->mParentLine)
+	{
+		if (ancestor == jumpParent)
+			return TRUE; // We found the common ancestor.
+		if (ancestor->mActionType == ACT_FINALLY)
+		{
+			LineError(ERR_BAD_JUMP_INSIDE_FINALLY);
+			return FALSE; // The common ancestor is outside the FINALLY block and thus this jump is invalid.
+		}
+	}
+	return TRUE; // The common ancestor is the root of the script.
 }
 
 

@@ -892,7 +892,13 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// UPDATE: In v1.0.41, an exception to the above is when a prefix is disabled via
 			// has_no_enabled_suffixes, in which case it seems desirable for most uses to have its
 			// suffix action fire on key-down rather than key-up.
-			if (modifiersLRnew || has_no_enabled_suffixes)
+			// UPDATE: Another exception was added so that the no-suppress prefix allows the key to function
+			// as if the custom combination wasn't defined.  For example, ~x & y:: allows x:: to retain its
+			// normal behaviour, firing the subroutine on key-down and blocking the keystroke.  This is more
+			// useful and intuitive/consistent than the old behaviour, which was to fire the suffix hotkey
+			// on key-up even though the key-down wasn't suppressed (unless either of the first two conditions
+			// below were met).
+			if (modifiersLRnew || has_no_enabled_suffixes || (this_key.no_suppress & NO_SUPPRESS_PREFIX))
 			{
 				// Check hook type too in case a script every explicitly specifies scan code zero as a hotkey:
 				hotkey_id_with_flags = (aHook == g_KeybdHook && sc_takes_precedence)
@@ -1564,7 +1570,8 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				// to fall through from Case #2, so that is checked below.
 				if (hotkey_id_temp < Hotkey::sHotkeyCount && hotkey_up[hotkey_id_temp] != HOTKEY_ID_INVALID) // Relies on short-circuit boolean order.
 				{
-					if (  !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type))  )
+					if (  fell_through_from_case2
+						|| !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type))  )
 					{
 						// The key-down hotkey isn't eligible for firing, so fall back to the key-up hotkey:
 						hotkey_id_with_flags = hotkey_up[hotkey_id_temp];
@@ -2054,15 +2061,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// *LAlt::Send {LWin down}
 			return this_key.hotkey_down_was_suppressed ? SuppressThisKey : AllowKeyToGoToSystemButDisguiseWinAlt;
 
-		// Adding the check of this_key.no_suppress fixes a pair of hotkeys such as the following by forcing
-		// tilde in front of the other:
-		// ~a & b::
-		// a::
-		// However, the converse is not done because there is another workaround for that. Search
-		// on "send a down event to make up" to find that section.
-		// Fixed in v1.0.41 to use this_key rather than referring to both kvk[aVK] and ksc[aSC].
-		// Although this bug had no known consequences, I suspect there were some obscure ones.
-		if (fire_with_no_suppress || (this_key.no_suppress & NO_SUPPRESS_PREFIX)) // Plus we know it's not a modifier since otherwise it would've returned above.
+		if (fire_with_no_suppress) // Plus we know it's not a modifier since otherwise it would've returned above.
 		{
 			// Currently not supporting the mouse buttons for the above method, because KeyEvent()
 			// doesn't support the translation of a mouse-VK into a mouse_event() call.

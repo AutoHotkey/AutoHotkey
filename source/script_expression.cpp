@@ -1615,7 +1615,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 			for (j = 0; j < aParamCount; ++j) // For each actual parameter.
 			{
 				ExprTokenType &this_param_token = *aParam[j]; // stack[stack_count] is the first actual parameter. A check higher above has already ensured that this line won't cause stack overflow.
-				if (this_param_token.symbol == SYM_VAR && !mParam[j].is_byref)
+				if (this_param_token.symbol == SYM_VAR && !(j < mParamCount && mParam[j].is_byref))
 				{
 					// Since this formal parameter is passed by value, if it's SYM_VAR, convert it to
 					// a non-var to allow the variables to be backed up and reset further below without

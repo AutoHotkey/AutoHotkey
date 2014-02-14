@@ -70,7 +70,6 @@ BIF_DECL(BIF_ObjArray)
 //
 
 BIF_DECL(BIF_IsObject)
-// IsObject(obj) is currently equivalent to (obj && obj=""), but much more intuitive.
 {
 	int i;
 	for (i = 0; i < aParamCount && TokenToObject(*aParam[i]); ++i);
@@ -234,6 +233,7 @@ BIF_DECL(BIF_ObjNew)
 		aResultToken.buf = buf;
 		if (result == FAIL)
 		{
+			new_object->Release();
 			aParam[0] = class_token; // Restore it to original caller-supplied value.
 			return;
 		}
