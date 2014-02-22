@@ -756,8 +756,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				if (hs->mHotCriterion)
 				{
 					// For details, see comments in the hotkey section of this switch().
-					// L4: Added hs->mHotExprIndex for #if (expression).
-					if (   !(criterion_found_hwnd = HotCriterionAllowsFiring(hs->mHotCriterion, hs->mHotWinTitle, hs->mHotWinText, hs->mHotExprIndex, hs->mJumpToLabel ? hs->mJumpToLabel->mName : _T("")))   )
+					if (   !(criterion_found_hwnd = HotCriterionAllowsFiring(hs->mHotCriterion, hs->mJumpToLabel ? hs->mJumpToLabel->mName : _T("")))   )
 						// Hotstring is no longer eligible to fire even though it was when the hook sent us
 						// the message.  Abort the firing even though the hook may have already started
 						// executing the hotstring by suppressing the final end-character or other actions.
@@ -765,7 +764,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						// keystrokes to the wrong window, or when the hotstring has become suspended.
 						continue;
 					// For details, see comments in the hotkey section of this switch().
-					if (!(hs->mHotCriterion == HOT_IF_ACTIVE || hs->mHotCriterion == HOT_IF_EXIST))
+					if (!(hs->mHotCriterion->Type == HOT_IF_ACTIVE || hs->mHotCriterion->Type == HOT_IF_EXIST))
 						criterion_found_hwnd = NULL; // For "NONE" and "NOT", there is no last found window.
 				}
 				else // No criterion, so it's a global hotstring.  It can always fire, but it has no "last found window".
@@ -856,9 +855,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// If this is AHK_HOOK_HOTKEY, criterion was eligible at time message was posted,
 					// but not now.  Seems best to abort (see other comments).
 				// Now that above has ensured variant is non-NULL:
-				if (variant->mHotCriterion == HOT_IF_NOT_ACTIVE || variant->mHotCriterion == HOT_IF_NOT_EXIST)
+				HotkeyCriterion *hc = variant->mHotCriterion;
+				if (!hc || hc->Type == HOT_IF_NOT_ACTIVE || hc->Type == HOT_IF_NOT_EXIST)
 					criterion_found_hwnd = NULL; // For "NONE" and "NOT", there is no last found window.
-				else if (variant->mHotCriterion == HOT_IF_EXPR) // Variants of this type may 
+				else if (hc->Type == HOT_IF_EXPR)
 					criterion_found_hwnd = g_HotExprLFW; // For #if WinExist(WinTitle) and similar.
 
 				type_of_first_line = variant->mJumpToLabel->mJumpToLine->mActionType;
@@ -1252,6 +1252,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			case AHK_HOTSTRING:
 				g.hWndLastUsed = criterion_found_hwnd; // v1.0.42. Even if the window is invalid for some reason, IsWindow() and such are called whenever the script accesses it (GetValidLastUsedWindow()).
 				g.SendLevel = hs->mInputLevel;
+				g.HotCriterion = hs->mHotCriterion; // v2: Let the Hotkey command use the criterion of this hotstring by default.
 				hs->PerformInNewThreadMadeByCaller();
 				break;
 
@@ -1272,6 +1273,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// Above also works for RunAgainAfterFinished since that feature reuses the same thread attributes set above.
 				g.hWndLastUsed = criterion_found_hwnd; // v1.0.42. Even if the window is invalid for some reason, IsWindow() and such are called whenever the script accesses it (GetValidLastUsedWindow()).
 				g.SendLevel = variant->mInputLevel;
+				g.HotCriterion = variant->mHotCriterion; // v2: Let the Hotkey command use the criterion of this hotkey variant by default.
 				hk->PerformInNewThreadMadeByCaller(*variant);
 			}
 
