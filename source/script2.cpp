@@ -13303,7 +13303,7 @@ has_valid_return_type:
     
 	if (!function) // The function's address hasn't yet been determined.
 	{
-		function = GetDllProcAddress(aParam[0]->symbol == SYM_VAR ? aParam[0]->var->Contents() : aParam[0]->marker, &hmodule_to_free);
+		function = GetDllProcAddress(TokenToString(*aParam[0]), &hmodule_to_free);
 		if (!function)
 			goto end;
 	}
