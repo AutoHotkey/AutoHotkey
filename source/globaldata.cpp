@@ -77,6 +77,7 @@ WarnMode g_Warn_UseUnsetLocal = WARNMODE_OFF;		// Used by #Warn directive.
 WarnMode g_Warn_UseUnsetGlobal = WARNMODE_OFF;		//
 WarnMode g_Warn_LocalSameAsGlobal = WARNMODE_OFF;	//
 SingleInstanceType g_AllowOnlyOneInstance = SINGLE_INSTANCE_PROMPT;
+bool g_persistent = false;  // Whether the script should stay running even after the auto-exec section finishes.
 bool g_NoTrayIcon = false;
 #ifdef AUTOHOTKEYSC
 	bool g_AllowMainWindow = false;
