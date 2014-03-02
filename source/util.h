@@ -476,6 +476,8 @@ inline double ATOF(LPCTSTR buf)
 	return IsHex(buf) ? (double)_tcstoi64(buf, NULL, 16) : _tstof(buf);
 }
 
+int FTOA(double aValue, LPTSTR aBuf, int aBufSize);
+
 #define ITOA(value, buf)	_itot(value, buf, 10)
 #define ITOA64(value, buf)	_i64tot(value, buf, 10)
 #define UTOA(value, buf)	_ultot(value, buf, 10)

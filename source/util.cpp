@@ -2775,6 +2775,30 @@ LPTSTR InStrAny(LPTSTR aStr, LPTSTR aNeedle[], int aNeedleCount, size_t &aFoundL
 
 
 
+int FTOA(double aValue, LPTSTR aBuf, int aBufSize)
+// Converts aValue to a string while trying to ensure that conversion back to double will
+// produce the same value.  Trailing 0s after the decimal point are stripped for brevity.
+// Caller must ensure there is sufficient buffer size to avoid truncating the decimal point.
+{
+	int result = sntprintf(aBuf, aBufSize, _T("%0.17f"), aValue);
+	for (int i = result; i > 0; --i)
+	{
+		if (aBuf[i - 1] != '0')
+		{
+			if (i < result)
+			{
+				if (aBuf[i - 1] == '.')
+					++i;
+				aBuf[i] = '\0';
+			}
+			return i;
+		}
+	}
+	return result;
+}
+
+
+
 #if defined(_MSC_VER) && defined(_DEBUG)
 void OutputDebugStringFormat(LPCTSTR fmt, ...)
 {

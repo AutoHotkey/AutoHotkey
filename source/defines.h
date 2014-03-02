@@ -88,8 +88,6 @@ GNU General Public License for more details.
 	#define HIMETRIC_INCH 2540
 #endif
 
-#define FORMAT_FLOAT _T("%0.6f")
-
 #define IS_32BIT(signed_value_64) (signed_value_64 >= INT_MIN && signed_value_64 <= INT_MAX)
 #define GET_BIT(buf,n) (((buf) & (1 << (n))) >> (n))
 #define SET_BIT(buf,n,val) ((val) ? ((buf) |= (1<<(n))) : (buf &= ~(1<<(n))))

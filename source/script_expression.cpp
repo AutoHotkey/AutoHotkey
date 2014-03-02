@@ -1346,9 +1346,7 @@ push_this_token:
 		// Above: +1 because that's what callers want; i.e. the position after the terminator.
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
 	case SYM_FLOAT:
-		// In case of float formats that are too long to be supported, use snprint() to restrict the length.
-		 // %f probably defaults to %0.6f.  %f can handle doubles in MSVC++.
-		aTarget += sntprintf(aTarget, MAX_NUMBER_SIZE, FORMAT_FLOAT, result_token.value_double) + 1; // +1 because that's what callers want; i.e. the position after the terminator.
+		aTarget += FTOA(result_token.value_double, aTarget, MAX_NUMBER_SIZE) + 1; // +1 because that's what callers want; i.e. the position after the terminator.
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
 	case SYM_VAR:
 		// SYM_VAR is somewhat unusual at this late a stage.  This next check allows ACT_FUNC to pass a variable

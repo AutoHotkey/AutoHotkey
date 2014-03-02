@@ -16710,7 +16710,7 @@ LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf)
 	case SYM_FLOAT:
 		if (aBuf)
 		{
-			sntprintf(aBuf, MAX_NUMBER_SIZE, FORMAT_FLOAT, aToken.value_double);
+			FTOA(aToken.value_double, aBuf, MAX_NUMBER_SIZE);
 			return aBuf;
 		}
 		//else continue on to return the default at the bottom.
