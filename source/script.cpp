@@ -13264,11 +13264,9 @@ BIF_DECL(BIF_PerformAction)
 	}
 
 	
-	// Always have LineError() throw an exception, for two reasons:
-	//  1) It would otherwise give the message that the current thread will exit, but we can't
-	//     actually make that happen.
-	//  2) If it reported an error immediately, the dialog would show our temporary line rather
-	//     than the line which actually called this function (which is far more relevant).
+	// Always have LineError() throw an exception.  If it reported an error immediately,
+	// the dialog would show our temporary line rather than the line which actually called
+	// this function (which is far more relevant).
 	bool in_try = g->InTryBlock;
 	g->InTryBlock = true;
 
