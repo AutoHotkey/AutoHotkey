@@ -1154,24 +1154,21 @@ BIF_DECL(BIF_FileOpen)
 		aFileName = TokenToString(*aParam[0], aResultToken.buf);
 
 	if (aResultToken.object = FileObject::Open(aFileName, aFlags, aEncoding & CP_AHKCP))
-		aResultToken.symbol = SYM_OBJECT;
-
-	g->LastError = GetLastError(); // Even on success, since it might provide something useful.
-	
-	if (!aResultToken.object)
 	{
-		aResultToken.value_int64 = 0; // and symbol is already SYM_INTEGER.
-		if (g->InTryBlock)
-			Script::ThrowRuntimeException(_T("Failed to open file."), _T("FileOpen"));
+		aResultToken.symbol = SYM_OBJECT;
+	}
+	else
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
 	}
 
+	g->LastError = GetLastError(); // Even on success, since it might provide something useful.
 	return;
 
 invalid_param:
-	aResultToken.value_int64 = 0;
 	g->LastError = ERROR_INVALID_PARAMETER; // For consistency.
-	if (g->InTryBlock)
-		Script::ThrowRuntimeException(ERR_PARAM2_INVALID, _T("FileOpen"));
+	aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
 }
 
 
