@@ -13307,7 +13307,9 @@ BIF_DECL(BIF_PerformAction)
 
 	if (aResult == OK) // Can be OK, FAIL or EARLY_EXIT.
 	{
-		if (output_var == g_ErrorLevel && !(act == ACT_RUNWAIT || act == ACT_SENDMESSAGE))
+		if (output_var == g_ErrorLevel 
+			&& !(act == ACT_RUNWAIT || act == ACT_SENDMESSAGE) // These two have a more useful return value.
+			&& output_var->HasContents()) // Commands which don't set ErrorLevel at all shouldn't return 1.
 		{
 			aResultToken.symbol = SYM_INTEGER;
 			aResultToken.value_int64 = !VarToBOOL(*output_var); // Return TRUE for success, otherwise FALSE.
