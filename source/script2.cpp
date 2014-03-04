@@ -14395,7 +14395,7 @@ BIF_DECL(BIF_OnMessage)
 		if (!TokenIsEmptyString(*aParam[1], TRUE))
 		{
 			func = TokenToFunc(*aParam[1]); // Parameter #2: function name or reference.
-			if (!func || func->mIsBuiltIn || func->mMinParams > 4)
+			if (!func || func->mIsBuiltIn || func->mMinParams > 4 || func->mClass)
 			{
 				aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
 				return;
