@@ -12833,16 +12833,7 @@ ResultType Line::Perform()
 		return OK;
 
 	case ACT_SETTITLEMATCHMODE:
-		switch (ConvertTitleMatchMode(ARG1))
-		{
-		case FIND_IN_LEADING_PART: g.TitleMatchMode = FIND_IN_LEADING_PART; return OK;
-		case FIND_ANYWHERE: g.TitleMatchMode = FIND_ANYWHERE; return OK;
-		case FIND_REGEX: g.TitleMatchMode = FIND_REGEX; return OK;
-		case FIND_EXACT: g.TitleMatchMode = FIND_EXACT; return OK;
-		case FIND_FAST: g.TitleFindFast = true; return OK;
-		case FIND_SLOW: g.TitleFindFast = false; return OK;
-		}
-		return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
+		return BIV_TitleMatchMode_Set(ARG1, NULL);
 
 	case ACT_FORMATTIME:
 		return FormatTime(ARG2, ARG3);
@@ -12891,17 +12882,11 @@ ResultType Line::Perform()
 	case ACT_PAUSE:
 		return ChangePauseState(ConvertOnOffToggle(ARG1), (bool)ArgToInt(2));
 	case ACT_STRINGCASESENSE:
-		if ((g.StringCaseSense = ConvertStringCaseSense(ARG1)) == SCS_INVALID)
-			g.StringCaseSense = SCS_INSENSITIVE; // For simplicity, just fall back to default if value is invalid (normally its caught at load-time; only rarely here).
-		return OK;
+		return BIV_StringCaseSense_Set(ARG1, NULL);
 	case ACT_DETECTHIDDENWINDOWS:
-		if (   (toggle = ConvertOnOff(ARG1, NEUTRAL)) != NEUTRAL   )
-			g.DetectHiddenWindows = (toggle == TOGGLED_ON);
-		return OK;
+		return BIV_DetectHiddenWindows_Set(ARG1, NULL);
 	case ACT_DETECTHIDDENTEXT:
-		if (   (toggle = ConvertOnOff(ARG1, NEUTRAL)) != NEUTRAL   )
-			g.DetectHiddenText = (toggle == TOGGLED_ON);
-		return OK;
+		return BIV_DetectHiddenText_Set(ARG1, NULL);
 	case ACT_BLOCKINPUT:
 		switch (toggle = ConvertBlockInput(ARG1))
 		{
@@ -13027,17 +13012,7 @@ ResultType Line::Perform()
 			RegCloseKey(root_key);
 		return result;
 	case ACT_SETREGVIEW:
-	{
-		DWORD reg_view = RegConvertView(ARG1);
-		// Validate the parameter even if it's not going to be used.
-		if (reg_view == -1)
-			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
-		// Since these flags cause the registry functions to fail on Win2k and have no effect on
-		// any later 32-bit OS, ignore this command when the OS is 32-bit.  Leave A_RegView blank.
-		if (IsOS64Bit())
-			g.RegView = reg_view;
-		return OK;
-	}
+		return BIV_RegView_Set(ARG1, NULL);
 
 	case ACT_OUTPUTDEBUG:
 #ifndef CONFIG_DEBUGGER
@@ -13051,13 +13026,7 @@ ResultType Line::Perform()
 		return Util_Shutdown(ArgToInt(1)) ? OK : FAIL; // Range of ARG1 is not validated in case other values are supported in the future.
 
 	case ACT_FILEENCODING:
-	{
-		UINT new_encoding = ConvertFileEncoding(ARG1);
-		if (new_encoding == -1)
-			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1); // Probably a variable, otherwise load-time validation would've caught it.
-		g.Encoding = new_encoding;
-		return OK;
-	}
+		return BIV_FileEncoding_Set(ARG1, NULL);
 
 	case ACT_FUNC:
 	{

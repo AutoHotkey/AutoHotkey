@@ -9224,6 +9224,8 @@ BIV_DECL_W(BIV_TitleMatchMode_Set)
 	// For simplicity, this function handles both variables.
 	case FIND_FAST: g->TitleFindFast = true; break;
 	case FIND_SLOW: g->TitleFindFast = false; break;
+	default:
+		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
 	}
 	return OK;
 }
@@ -9247,6 +9249,8 @@ BIV_DECL_W(BIV_DetectHiddenWindows_Set)
 	ToggleValueType toggle;
 	if ( (toggle = Line::ConvertOnOff(aBuf, NEUTRAL)) != NEUTRAL )
 		g->DetectHiddenWindows = (toggle == TOGGLED_ON);
+	else
+		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
 	return OK;
 }
 
@@ -9262,6 +9266,8 @@ BIV_DECL_W(BIV_DetectHiddenText_Set)
 	ToggleValueType toggle;
 	if ( (toggle = Line::ConvertOnOff(aBuf, NEUTRAL)) != NEUTRAL )
 		g->DetectHiddenText = (toggle == TOGGLED_ON);
+	else
+		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
 	return OK;
 }
 
@@ -9278,6 +9284,8 @@ BIV_DECL_W(BIV_StringCaseSense_Set)
 	StringCaseSenseType sense;
 	if ( (sense = Line::ConvertStringCaseSense(aBuf)) != SCS_INVALID )
 		g->StringCaseSense = sense;
+	else
+		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
 	return OK;
 }
 
@@ -9490,8 +9498,9 @@ VarSizeType BIV_FileEncoding(LPTSTR aBuf, LPTSTR aVarName)
 BIV_DECL_W(BIV_FileEncoding_Set)
 {
 	UINT new_encoding = Line::ConvertFileEncoding(aBuf);
-	if (new_encoding != -1)
-		g->Encoding = new_encoding;
+	if (new_encoding == -1)
+		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
+	g->Encoding = new_encoding;
 	return OK;
 }
 
@@ -9543,7 +9552,12 @@ VarSizeType BIV_RegView(LPTSTR aBuf, LPTSTR aVarName)
 BIV_DECL_W(BIV_RegView_Set)
 {
 	DWORD reg_view = Line::RegConvertView(aBuf);
-	if (reg_view != -1 && IsOS64Bit())
+	// Validate the parameter even if it's not going to be used.
+	if (reg_view == -1)
+		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
+	// Since these flags cause the registry functions to fail on Win2k and have no effect on
+	// any later 32-bit OS, ignore this command when the OS is 32-bit.  Leave A_RegView blank.
+	if (IsOS64Bit())
 		g->RegView = reg_view;
 	return OK;
 }
