@@ -133,24 +133,18 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		}
 	}
 
-	if (Var *var = g_script.FindOrAddVar(_T("Args"), 4, VAR_DECLARE_GLOBAL))
+	if (Var *var = g_script.FindOrAddVar(_T("A_Args"), 6, VAR_DECLARE_SUPER_GLOBAL))
 	{
-		if (i < __argc)
-		{
-			// Store the remaining args in an array and assign it to "Args".
-    		Object *args = Object::CreateFromArgV(__targv + i, __argc - i);
-    		if (!args)
-    			return CRITICAL_ERROR;  // Realistically should never happen.
-    		var->AssignSkipAddRef(args);
-		}
-		else
-		{
-			// Leave it empty, but mark it initialized so that scripts can check it without
-			// causing an unavoidable warning when #Warn is enabled.  We could assign an empty
-			// array, but if(Args) seems more convenient and meaningful than if(Args.MaxIndex()).
-    		var->MarkInitialized();
-		}
+		// Store the remaining args in an array and assign it to "Args".
+		// If there are no args, assign an empty array so that A_Args[1]
+		// and A_Args.MaxIndex() don't cause an error.
+		Object *args = Object::CreateFromArgV(__targv + i, __argc - i);
+		if (!args)
+			return CRITICAL_ERROR;  // Realistically should never happen.
+		var->AssignSkipAddRef(args);
 	}
+	else
+		return CRITICAL_ERROR;
 
 	global_init(*g);  // Set defaults.
 

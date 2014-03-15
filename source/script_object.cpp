@@ -702,6 +702,8 @@ Object *Object::CreateFromArgV(LPTSTR *aArgV, int aArgC)
 	Object *args;
 	if (  !(args = Create(NULL, 0))  )
 		return NULL;
+	if (aArgC < 1)
+		return args;
 	ExprTokenType *token = (ExprTokenType *)_alloca(aArgC * sizeof(ExprTokenType));
 	ExprTokenType **param = (ExprTokenType **)_alloca(aArgC * sizeof(ExprTokenType*));
 	for (int j = 0; j < aArgC; ++j)
