@@ -12510,7 +12510,11 @@ pcret *get_compiled_regex(LPTSTR aRegEx, pcret_extra *&aExtra, int *aOptionsLeng
 		case 'U': pcre_options |= PCRE_UNGREEDY;       break; //
 		case 'X': pcre_options |= PCRE_EXTRA;          break; //
 		case 'C': pcre_options |= PCRE_AUTO_CALLOUT;   break; // L14: PCRE_AUTO_CALLOUT causes callouts to be created with callout_number == 255 before each item in the pattern.
-		case '\a':pcre_options = (pcre_options & ~PCRE_NEWLINE_BITS) | PCRE_NEWLINE_ANY; break; // v1.0.46.06: alert/bell (i.e. `a) is used for PCRE_NEWLINE_ANY.
+		case '\a':
+			// Enable matching of any kind of newline, including Unicode newline characters.
+			// v2: \R doesn't match Unicode newlines by default, so `a also enables that.
+			pcre_options = (pcre_options & ~PCRE_NEWLINE_BITS) | PCRE_NEWLINE_ANY | PCRE_BSR_UNICODE;
+			break; 
 		case '\n':pcre_options = (pcre_options & ~PCRE_NEWLINE_BITS) | PCRE_NEWLINE_LF; break; // See below.
 			// Above option: Could alternatively have called it "LF" rather than or in addition to "`n", but that
 			// seems slightly less desirable due to potential overlap/conflict with future option letters,
