@@ -134,23 +134,6 @@ BIF_DECL(BIF_ComObjActive)
 		else if (vt == VT_DISPATCH || vt == VT_UNKNOWN)
 			((IUnknown *)llVal)->Release();
 	}
-	else if (obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0])))
-	{
-		if (aParamCount > 1)
-		{
-			// For backward-compatibility:
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.marker = _T("ComObjType");
-			BIF_ComObjTypeOrValue(aResult, aResultToken, aParam, aParamCount);
-		}
-		else if (VT_DISPATCH == obj->mVarType)
-		{
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = (__int64) obj->mDispatch; // mDispatch vs mVal64 ensures we zero the high 32 bits in 32-bit builds.
-			if (obj->mDispatch)
-				obj->mDispatch->AddRef();
-		}
-	}
 	else
 	{
 		HRESULT hr;
