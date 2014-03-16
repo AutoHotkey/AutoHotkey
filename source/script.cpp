@@ -6866,10 +6866,6 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 
 	if (!bif.mBIF)
 	{
-		if (!_tcsnicmp(func_name, _T("ComObj"), 6))
-			// Recursive call for simplicity.  This check may be removed in future.
-			return FindFunc(_T("ComObject"), 9, apInsertPos);
-
 		// The following handles calling of commands using function syntax:
 		action_type = ConvertActionType(func_name);
 		if (action_type == ACT_INVALID
