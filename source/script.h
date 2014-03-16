@@ -2904,6 +2904,7 @@ BIF_DECL(BIF_FileOpen);
 
 
 // COM interop
+BIF_DECL(BIF_ComObject);
 BIF_DECL(BIF_ComObjActive);
 BIF_DECL(BIF_ComObjCreate);
 BIF_DECL(BIF_ComObjGet);
