@@ -192,8 +192,8 @@ FuncEntry g_BIF[] =
 	{_T("MonitorGetPrimary"), BIF_MonitorGet, 0, 0, true},
 	{_T("MonitorGetName"), BIF_MonitorGet, 0, 1, true},
 
-	{_T("OnExit"), BIF_OnExitOrClipboardChange, 0, 1, false},
-	{_T("OnClipboardChange"), BIF_OnExitOrClipboardChange, 0, 1, false},
+	{_T("OnExit"), BIF_OnExitOrClipboardChange, 0, 1, true},
+	{_T("OnClipboardChange"), BIF_OnExitOrClipboardChange, 0, 1, true},
 
 };
 #undef NA
