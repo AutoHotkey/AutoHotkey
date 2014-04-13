@@ -9743,6 +9743,10 @@ BIF_DECL(BIF_OnExitOrClipboardChange)
 	{
 		aResultToken.symbol = SYM_OBJECT;
 		aResultToken.object = oldFunc;
+	} else
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
 	}
 }
 
