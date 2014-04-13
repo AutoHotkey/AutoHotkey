@@ -507,7 +507,7 @@ DEBUGGER_COMMAND(Debugger::stop)
 {
 	mContinuationTransactionId = aTransactionId;
 
-	// Call g_script.TerminateApp instead of g_script.ExitApp to bypass OnExit subroutine.
+	// Call g_script.TerminateApp instead of g_script.ExitApp to bypass OnExit function.
 	g_script.TerminateApp(EXIT_EXIT, 0); // This also causes this->Exit() to be called.
 	
 	// Should never be reached, but must be here to avoid a compile error:
@@ -2104,7 +2104,7 @@ int Debugger::FatalError(LPCTSTR aMessage)
 
 	if (IDNO == MessageBox(g_hWnd, aMessage, g_script.mFileSpec, MB_YESNO | MB_ICONSTOP | MB_SETFOREGROUND | MB_APPLMODAL))
 	{
-		// The following will exit even if the OnExit subroutine does not use ExitApp:
+		// The following will exit even if the OnExit function does not use ExitApp:
 		g_script.ExitApp(EXIT_ERROR, _T(""));
 	}
 	return DEBUGGER_E_INTERNAL_ERROR;

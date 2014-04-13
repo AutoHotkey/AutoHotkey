@@ -214,7 +214,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		// We wait until now to do this so that the prior instance's "restart" hotkey will still
 		// be available to use again after the user has fixed the script.  UPDATE: We now inform
 		// the prior instance of why it is being asked to close so that it can make that reason
-		// available to the OnExit subroutine via a built-in variable:
+		// available to the OnExit function via a built-in variable:
 		ASK_INSTANCE_TO_CLOSE(w_existing, reason_to_close_prior);
 		//PostMessage(w_existing, WM_CLOSE, 0, 0);
 
@@ -228,7 +228,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 				break;  // done waiting.
 			if (interval_count == 100)
 			{
-				// This can happen if the previous instance has an OnExit subroutine that takes a long
+				// This can happen if the previous instance has an OnExit function that takes a long
 				// time to finish, or if it's waiting for a network drive to timeout or some other
 				// operation in which it's thread is occupied.
 				if (MsgBox(_T("Could not close the previous instance of this script.  Keep waiting?"), 4) == IDNO)

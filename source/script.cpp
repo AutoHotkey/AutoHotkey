@@ -192,6 +192,9 @@ FuncEntry g_BIF[] =
 	{_T("MonitorGetPrimary"), BIF_MonitorGet, 0, 0, true},
 	{_T("MonitorGetName"), BIF_MonitorGet, 0, 1, true},
 
+	{_T("OnExit"), BIF_OnExitOrClipboardChange, 0, 1, false},
+	{_T("OnClipboardChange"), BIF_OnExitOrClipboardChange, 0, 1, false},
+
 };
 #undef NA
 
@@ -215,8 +218,8 @@ Script::Script()
 	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL), mPlaceholderLabel(NULL), mFirstStaticLine(NULL), mLastStaticLine(NULL)
 	, mThisHotkeyName(_T("")), mPriorHotkeyName(_T("")), mThisHotkeyStartTime(0), mPriorHotkeyStartTime(0)
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
-	, mNextClipboardViewer(NULL), mOnClipboardChangeIsRunning(false), mOnClipboardChangeLabel(NULL)
-	, mOnExitLabel(NULL), mExitReason(EXIT_NONE)
+	, mNextClipboardViewer(NULL), mOnClipboardChangeIsRunning(false), mOnClipboardChangeFunc(NULL)
+	, mOnExitFunc(NULL), mExitReason(EXIT_NONE)
 	, mFirstLabel(NULL), mLastLabel(NULL)
 	, mFunc(NULL), mFuncCount(0), mFuncCountMax(0)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
@@ -339,11 +342,8 @@ Script::~Script() // Destructor.
 		if (g_hWndToolTip[i] && IsWindow(g_hWndToolTip[i]))
 			DestroyWindow(g_hWndToolTip[i]);
 
-	if (mOnClipboardChangeLabel) // Remove from viewer chain.
-		if (MyRemoveClipboardListener && MyAddClipboardListener)
-			MyRemoveClipboardListener(g_hWnd); // MyAddClipboardListener was used.
-		else
-			ChangeClipboardChain(g_hWnd, mNextClipboardViewer); // SetClipboardViewer was used.
+	if (mOnClipboardChangeFunc)
+		EnableClipboardListener(false); // Remove from viewer chain.
 
 	// Close any open sound item to prevent hang-on-exit in certain operating systems or conditions.
 	// If there's any chance that a sound was played and not closed out, or that it is still playing,
@@ -615,7 +615,14 @@ ResultType Script::CreateWindows()
 		// we want to tolerate that:
 		CreateTrayIcon();
 
-	if (mOnClipboardChangeLabel)
+	return OK;
+}
+
+
+
+void Script::EnableClipboardListener(bool bEnable)
+{
+	if (bEnable)
 	{
 		if (MyAddClipboardListener && MyRemoveClipboardListener) // Should be impossible for only one of these to be NULL, but check both anyway to be safe.
 		{
@@ -624,14 +631,18 @@ ResultType Script::CreateWindows()
 			MyAddClipboardListener(g_hWnd);
 			// But this method doesn't appear to send an initial WM_CLIPBOARDUPDATE message.
 			// For consistency with the other method (below) and for backward compatibility,
-			// run the OnClipboardChange label once when the script first starts:
+			// run the OnClipboardChange function once when the script first starts:
 			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, 0, 0);
 		}
 		else
 			mNextClipboardViewer = SetClipboardViewer(g_hWnd);
+	} else
+	{
+		if (MyRemoveClipboardListener && MyAddClipboardListener)
+			MyRemoveClipboardListener(g_hWnd); // MyAddClipboardListener was used.
+		else
+			ChangeClipboardChain(g_hWnd, mNextClipboardViewer); // SetClipboardViewer was used.
 	}
-
-	return OK;
 }
 
 
@@ -718,7 +729,7 @@ ResultType Script::AutoExecSection()
 	// Now that g_MaxThreadsTotal has been permanently set by the processing of script directives like
 	// #MaxThreads, an appropriately sized array can be allocated:
 	if (   !(g_array = (global_struct *)malloc((g_MaxThreadsTotal+TOTAL_ADDITIONAL_THREADS) * sizeof(global_struct)))   )
-		return FAIL; // Due to rarity, just abort. It wouldn't be safe to run ExitApp() due to possibility of an OnExit routine.
+		return FAIL; // Due to rarity, just abort. It wouldn't be safe to run ExitApp() due to possibility of an OnExit function.
 	CopyMemory(g_array, g, sizeof(global_struct)); // Copy the temporary/startup "g" into array[0] to preserve historical behaviors that may rely on the idle thread starting with that "g".
 	g = g_array; // Must be done after above.
 
@@ -833,7 +844,7 @@ ResultType Script::AutoExecSection()
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 
 	// BEFORE DOING THE BELOW, "g" and "g_default" should be set up properly in case there's an OnExit
-	// routine (even non-persistent scripts can have one).
+	// function (even non-persistent scripts can have one).
 	// See Script::IsPersistent() for a list of conditions that cause the program to continue running.
 	if (!g_script.IsPersistent())
 		g_script.ExitApp(ExecUntil_result == FAIL ? EXIT_ERROR : EXIT_EXIT);
@@ -959,17 +970,17 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 		TerminateApp(aExitReason, CRITICAL_ERROR); // Only after the above.
 	}
 
-	// Otherwise, it's not a critical error.  Note that currently, mOnExitLabel can only be
-	// non-NULL if the script is in a runnable state (since registering an OnExit label requires
+	// Otherwise, it's not a critical error.  Note that currently, mOnExitFunc can only be
+	// non-NULL if the script is in a runnable state (since registering an OnExit function requires
 	// that a script command has executed to do it).  If this ever changes, the !mIsReadyToExecute
 	// condition should be added to the below if statement:
-	static bool sExitLabelIsRunning = false;
-	if (!mOnExitLabel || sExitLabelIsRunning)  // || !mIsReadyToExecute
+	static bool sExitFuncIsRunning = false;
+	if (!mOnExitFunc || sExitFuncIsRunning)  // || !mIsReadyToExecute
 	{
-		// In the case of sExitLabelIsRunning == true:
+		// In the case of sExitFuncIsRunning == true:
 		// There is another instance of this function beneath us on the stack.  Since we have
 		// been called, this is a true exit condition and we exit immediately.
-		// MUST NOT create a new thread when sExitLabelIsRunning because g_array allows only one
+		// MUST NOT create a new thread when sExitFuncIsRunning because g_array allows only one
 		// extra thread for ExitApp() (which allows it to run even when MAX_THREADS_EMERGENCY has
 		// been reached).  See TOTAL_ADDITIONAL_THREADS.
 		g_AllowInterruption = FALSE; // In case TerminateApp releases objects and indirectly causes
@@ -977,14 +988,12 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 		TerminateApp(aExitReason, aExitCode);
 	}
 
-	// Otherwise, the script contains the special RunOnExit label that we will run here instead
+	// Otherwise, the script contains the special OnExit function that we will run here instead
 	// of exiting.  And since it does, we know that the script is in a ready-to-execute state
-	// because that is the only way an OnExit label could have been defined in the first place.
-	// Usually, the RunOnExit subroutine will contain an Exit or ExitApp statement
-	// which results in a recursive call to this function, but this is not required (e.g. the
-	// Exit subroutine could display an "Are you sure?" prompt, and if the user chooses "No",
-	// the Exit sequence can be aborted by simply not calling ExitApp and letting the thread
-	// we create below end normally).
+	// because that is the only way an OnExit function could have been defined in the first place.
+	// The OnExit function may return true in order to abort the Exit sequence (e.g. it could
+	// display an "Are you sure?" prompt, and if the user chooses "No", it returns true, letting
+	// the thread we create below end normally).
 
 	// Next, save the current state of the globals so that they can be restored just prior
 	// to returning to our caller:
@@ -996,7 +1005,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	// to interrupt.  This is mainly done for peace-of-mind (since possible interactions due to
 	// interruptions have not been studied) and the fact that this most users would not want this
 	// subroutine to be interruptible (it usually runs quickly anyway).  Another reason to make
-	// it non-interruptible is that some OnExit subroutines might destruct things used by the
+	// it non-interruptible is that some OnExit functions might destruct things used by the
 	// script's hotkeys/timers/menu items, and activating these items during the deconstruction
 	// would not be safe.  Finally, if a logoff or shutdown is occurring, it seems best to prevent
 	// timed subroutines from running -- which might take too much time and prevent the exit from
@@ -1007,7 +1016,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	//    (Disable this item so that ExecUntil() won't automatically make our new thread uninterruptible
 	//    after it has executed a certain number of lines).
 	// 2) Mostly obsolete: If the thread we're interrupting is uninterruptible, the uninterruptible timer
-	//    might be currently pending.  When it fires, it would make the OnExit subroutine interruptible
+	//    might be currently pending.  When it fires, it would make the OnExit function interruptible
 	//    rather than the underlying subroutine.  The above fixes the first part of that problem.
 	//    The 2nd part is fixed by reinstating the timer when the uninterruptible thread is resumed.
 	//    This special handling is only necessary here -- not in other places where new threads are
@@ -1016,11 +1025,37 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	BOOL g_AllowInterruption_prev = g_AllowInterruption;  // Save current setting.
 	g_AllowInterruption = FALSE; // Mark the thread just created above as permanently uninterruptible (i.e. until it finishes and is destroyed).
 
-	sExitLabelIsRunning = true;
-	DEBUGGER_STACK_PUSH(mOnExitLabel->mJumpToLine, _T("OnExit"))
-	if (mOnExitLabel->Execute() == FAIL)
+	sExitFuncIsRunning = true;
+	DEBUGGER_STACK_PUSH(mOnExitFunc->mJumpToLine, _T("OnExit"))
+	FuncCallData func_call; // For UDFs: must remain in scope until the result has been copied into pVarResult.
+	ExprTokenType result_token;
+
+	ExprTokenType param_token;
+	param_token.symbol = SYM_STRING;
+	param_token.marker = GetExitReasonString(mExitReason);
+
+	ExprTokenType *param[1];
+	param[0] = &param_token;
+
+	TCHAR result_token_buf[MAX_NUMBER_SIZE];
+	result_token.buf = result_token_buf; // May be used below for short return values and misc purposes.
+	result_token.marker = _T("");
+	result_token.symbol = SYM_STRING;	// These must be initialized for the cleanup code below.
+	result_token.mem_to_free = NULL;	//
+
+	ResultType result;
+	mOnExitFunc->Call(func_call, result, result_token, param, 1);
+	// If the function returns true, do not terminate the script.
+	terminate_afterward = !TokenToBOOL(result_token);
+
+	if (result_token.symbol == SYM_OBJECT)
+		result_token.object->Release();
+	if (result_token.mem_to_free)
+		free(result_token.mem_to_free);
+
+	if (result == FAIL)
 	{
-		// If the subroutine encounters a failure condition such as a runtime error, exit immediately.
+		// If the function encounters a failure condition such as a runtime error, exit immediately.
 		// Otherwise, there will be no way to exit the script if the subroutine fails on each attempt.
 		TerminateApp(aExitReason, aExitCode);
 	}
@@ -1033,9 +1068,9 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	g_AllowInterruption = g_AllowInterruption_prev;  // Restore original setting.
 	ResumeUnderlyingThread(ErrorLevel_saved);
 	// If this OnExit thread is the last script thread and the script is not persistent, the above
-	// call recurses into this function.  sExitLabelIsRunning == true prevents infinite recursion
+	// call recurses into this function.  sExitFuncIsRunning == true prevents infinite recursion
 	// in that case.  It is now safe to reset:
-	sExitLabelIsRunning = false;  // In case the user wanted the thread to end normally (see above).
+	sExitFuncIsRunning = false;  // In case the user wanted the thread to end normally (see above).
 
 	return EARLY_EXIT;
 }
@@ -3605,8 +3640,6 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 		last_label->mNextLabel = the_new_label;
 	// This must be done after the above:
 	last_label = the_new_label;
-	if (!_tcsicmp(new_name, _T("OnClipboardChange")))
-		mOnClipboardChangeLabel = the_new_label;
 	return OK;
 }
 
@@ -7600,8 +7633,6 @@ BuiltInVarType Script::GetVarType_BIV(LPTSTR lowercase, BuiltInVarSetType &sette
 	if (!_tcscmp(lower, _T("iconfile"))) return BIV_IconFile;
 	if (!_tcscmp(lower, _T("iconnumber"))) return BIV_IconNumber;
 
-	if (!_tcscmp(lower, _T("exitreason"))) return BIV_ExitReason;
-
 #ifdef CONFIG_WIN9X
 	if (!_tcscmp(lower, _T("ostype"))) return BIV_OSType;
 #endif
@@ -7699,7 +7730,7 @@ BuiltInVarType Script::GetVarType_BIV(LPTSTR lowercase, BuiltInVarSetType &sette
 	if (!_tcscmp(lower, _T("endchar"))) return BIV_EndChar;
 	if (!_tcscmp(lower, _T("lasterror"))) { setter = BIV_LastError_Set; return BIV_LastError; }
 
-	if (!_tcscmp(lower, _T("eventinfo"))) { setter = BIV_EventInfo_Set; return BIV_EventInfo; } // It's called "EventInfo" vs. "GuiEventInfo" because it applies to non-Gui events such as OnClipboardChange.
+	if (!_tcscmp(lower, _T("eventinfo"))) { setter = BIV_EventInfo_Set; return BIV_EventInfo; } // It's called "EventInfo" vs. "GuiEventInfo" because it applies to non-Gui events such as RegisterCallback().
 	if (!_tcscmp(lower, _T("guicontrol"))) return BIV_GuiControl;
 
 	if (   !_tcscmp(lower, _T("guicontrolevent")) // v1.0.36: A_GuiEvent was added as a synonym for A_GuiControlEvent because it seems unlikely that A_GuiEvent will ever be needed for anything:
@@ -8436,14 +8467,6 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, ActionTyp
 					return NULL; // Error already displayed above.
 				//else leave mAttribute at its line-constructor default of ATTR_NONE.
 			}
-			break;
-
-		// These next 4 must also be done here (i.e. *after* all the script lines have been added),
-		// so that labels both above and below this line can be resolved:
-		case ACT_ONEXIT:
-			if (*line_raw_arg1 && !line->ArgHasDeref(1))
-				if (   !(line->mAttribute = FindLabel(line_raw_arg1))   )
-					return line->PreparseError(ERR_NO_LABEL);
 			break;
 
 		case ACT_HOTKEY:
@@ -12353,19 +12376,6 @@ ResultType Line::Perform()
 		DoWinDelay;
 		return OK;
 
-	case ACT_ONEXIT:
-		if (!*ARG1) // Reset to normal Exit behavior.
-		{
-			g_script.mOnExitLabel = NULL;
-			return OK;
-		}
-		// If it wasn't resolved at load-time, it must be a variable reference:
-		if (   !(target_label = (Label *)mAttribute)   )
-			if (   !(target_label = g_script.FindLabel(ARG1))   )
-				return LineError(ERR_NO_LABEL, FAIL, ARG1);
-		g_script.mOnExitLabel = target_label;
-		return OK;
-
 	case ACT_HOTKEY:
 		// mAttribute is the label resolved at loadtime, if available (for performance).
 		return Hotkey::Dynamic(THREE_ARGS, (Label *)mAttribute);
@@ -13978,7 +13988,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		// be created once it's done.  Update: Using ExitApp() now, since it's known to be
 		// more reliable:
 		//PostQuitMessage(CRITICAL_ERROR);
-		// This will attempt to run the OnExit subroutine, which should be okay since that subroutine
+		// This will attempt to run the OnExit function, which should be okay since that function
 		// will terminate the script if it encounters another runtime error:
 		g_script.ExitApp(EXIT_ERROR);
 

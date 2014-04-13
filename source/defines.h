@@ -330,7 +330,7 @@ enum enum_act {
 , ACT_STATUSBARWAIT
 , ACT_CLIPWAIT, ACT_KEYWAIT
 , ACT_SLEEP, ACT_RANDOM
-, ACT_ONEXIT, ACT_HOTKEY, ACT_SETTIMER, ACT_CRITICAL, ACT_THREAD
+, ACT_HOTKEY, ACT_SETTIMER, ACT_CRITICAL, ACT_THREAD
 , ACT_WINACTIVATE, ACT_WINACTIVATEBOTTOM
 , ACT_WINWAIT, ACT_WINWAITCLOSE, ACT_WINWAITACTIVE, ACT_WINWAITNOTACTIVE
 , ACT_WINMINIMIZE, ACT_WINMAXIMIZE, ACT_WINRESTORE
@@ -602,7 +602,7 @@ struct global_struct
 
 	HotkeyCriterion *HotCriterion;
 	TitleMatchModes TitleMatchMode;
-	int UninterruptedLineCount; // Stored as a g-struct attribute in case OnExit sub interrupts it while uninterruptible.
+	int UninterruptedLineCount; // Stored as a g-struct attribute in case OnExit func interrupts it while uninterruptible.
 	int Priority;  // This thread's priority relative to others.
 	DWORD LastError; // The result of GetLastError() after the most recent DllCall or Run.
 	GuiEventType GuiEvent; // This thread's triggering event, e.g. DblClk vs. normal click.

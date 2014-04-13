@@ -48,7 +48,7 @@ enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_
 // a custom menu item if the current quasi-thread is uninterruptible.  This is exactly the same way
 // hotkeys are buffered.  By making a thread truly uninterruptible, behavior is more consistent with
 // what most users would want, though it should be noted that this also makes it impossible for the
-// OnExit subroutine to be interrupted by a custom menu item, even one that is designed to simply
+// OnExit function to be interrupted by a custom menu item, even one that is designed to simply
 // exit the script (by means of aborting the on-exit subroutine).  Another reason to buffer the
 // selection of a custom menu item is that we don't want to interrupt the current thread if is
 // right in the middle of executing a single line, e.g. doing something with the deref buffer

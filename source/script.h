@@ -2539,7 +2539,7 @@ public:
 	LPTSTR mThisHotkeyName, mPriorHotkeyName;
 	HWND mNextClipboardViewer;
 	bool mOnClipboardChangeIsRunning;
-	Label *mOnClipboardChangeLabel, *mOnExitLabel;  // The label to run when the script terminates (NULL if none).
+	Func *mOnClipboardChangeFunc, *mOnExitFunc;  // The function to run when the script terminates (NULL if none).
 	ExitReasons mExitReason;
 
 	ScriptTimer *mFirstTimer, *mLastTimer;  // The first and last script timers in the linked list.
@@ -2682,6 +2682,8 @@ public:
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
 
+	void EnableClipboardListener(bool bEnable);
+
 	Script();
 	~Script();
 	// Note that the anchors to any linked lists will be lost when this
@@ -2730,7 +2732,6 @@ BIV_DECL_R (BIV_IconHidden);
 BIV_DECL_R (BIV_IconTip);
 BIV_DECL_R (BIV_IconFile);
 BIV_DECL_R (BIV_IconNumber);
-BIV_DECL_R (BIV_ExitReason);
 BIV_DECL_R (BIV_Space_Tab);
 BIV_DECL_R (BIV_AhkVersion);
 BIV_DECL_R (BIV_AhkPath);
@@ -2929,6 +2930,8 @@ BIF_DECL(BIF_MonitorGet);
 
 BIF_DECL(BIF_PerformAction);
 
+BIF_DECL(BIF_OnExitOrClipboardChange);
+
 
 #define BIF_DECL_STRING_PARAM(n, name) \
 	TCHAR name##_buf[MAX_NUMBER_SIZE], \
@@ -2957,6 +2960,8 @@ bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType);
 double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, bool aUseBoolForUpDown);
 
 HWND DetermineTargetWindow(ExprTokenType *aParam[], int aParamCount);
+
+LPTSTR GetExitReasonString(ExitReasons exitReason);
 
 #endif
 
