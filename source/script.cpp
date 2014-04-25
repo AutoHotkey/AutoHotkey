@@ -8163,6 +8163,9 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		}
 		else
 		{
+			// Fixed in v1.1.14.04: Avoid trying to make a Func with an invalid name. This fixes IsFunc("ComObj(") throwing an exception.
+			if (!Var::ValidateName(func_name, DISPLAY_NO_ERROR))
+				return NULL;
 			bif = BIF_ComObjActive;
 			min_params = 0;
 			max_params = 3;
