@@ -189,6 +189,8 @@ void OS_Version::Init(void)
 						m_bWin7 = true;
 					else if (m_dwMinorVersion == 2)
 						m_bWin8 = true;
+					else if (m_dwMinorVersion == 3)
+						m_bWin8_1 = true;
 				}
 				m_bWinVistaOrLater = true;
 				m_bWinXPorLater = true;
