@@ -2,9 +2,9 @@
 
 AutoHotkey is a free, open source macro-creation and automation software utility that allows users to automate repetitive tasks. It is driven by a custom scripting language that is aimed specifically at providing keyboard shortcuts, otherwise known as hotkeys.
 
-AutoHotkey_L is a fork of AutoHotkey which adds a [long list of new features](http://l.autohotkey.net/docs/AHKL_Features.htm) and fixes some bugs.
+AutoHotkey_L started as a fork of AutoHotkey but has been the main branch for some time.
 
-http://l.autohotkey.net/
+http://ahkscript.org/
 
 
 ## How to Compile ##
