@@ -15777,7 +15777,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 			g_Debugger.OutputDebug(buf);
 		else
 #endif
-		if (MsgBox(buf, aErrorType == EARLY_EXIT ? MB_YESNO : 0) == IDNO)
+		if (MsgBox(buf, MB_TOPMOST | (aErrorType == EARLY_EXIT ? MB_YESNO : 0)) == IDNO)
 			aErrorType = CRITICAL_ERROR;
 	}
 
