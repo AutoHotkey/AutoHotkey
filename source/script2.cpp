@@ -13974,6 +13974,23 @@ BIF_DECL(BIF_VarSetCapacity)
 			// v1.1.11.01: Support VarSetCapacity(var) as a means for the script to check if it
 			// has initialized a var.  In other words, don't show a warning even in that case.
 			//var.MaybeWarnUninitialized();
+
+			switch (var.IsPureNumericOrObject())
+			{
+			case VAR_ATTRIB_IS_INT64:
+			case VAR_ATTRIB_IS_DOUBLE:
+				// For consistency and maintainability, return the size of the usable space returned by
+				// &var even though in this case it is a pure __int64 or double.  Any script which uses
+				// &var intentionally in this context already knows what it's getting so has no need to
+				// call this function; therefore, the caller of this function probably expects the return
+				// value to exclude space for the null-terminator (sizeof(TCHAR)).
+				aResultToken.value_int64 = 8 - sizeof(TCHAR); // sizeof(__int64) or sizeof(double), minus 1 TCHAR.
+				return;
+			case VAR_ATTRIB_IS_OBJECT:
+				// For consistency, though it seems of dubious usefulness:
+				aResultToken.value_int64 = 0;
+				return;
+			}
 		}
 
 		if (aResultToken.value_int64 = var.ByteCapacity()) // Don't subtract 1 here in lieu doing it below (avoids underflow).
