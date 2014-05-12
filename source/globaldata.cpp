@@ -343,7 +343,7 @@ Action g_act[] =
 	, {_T("SendLevel"), 1, 1, false, {1, 0}}
 	, {_T("CoordMode"), 1, 2, false, NULL} // Attribute, screen|relative
 	, {_T("SetDefaultMouseSpeed"), 1, 1, false, {1, 0}} // speed (numeric)
-	, {_T("Click"), 0, 1, false, NULL} // Flex-list of options.
+	, {_T("Click"), 0, 6, false, NULL} // Flex-list of options.
 	, {_T("MouseMove"), 2, 4, false, {1, 2, 3, 0}} // x, y, speed, option
 	, {_T("MouseClick"), 0, 7, false, {2, 3, 4, 5, 0}} // which-button, x, y, ClickCount, speed, d=hold-down/u=release, Relative
 	, {_T("MouseClickDrag"), 1, 7, false, {2, 3, 4, 5, 6, 0}} // which-button, x1, y1, x2, y2, speed, Relative

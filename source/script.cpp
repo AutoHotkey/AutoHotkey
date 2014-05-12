@@ -12174,6 +12174,15 @@ ResultType Line::Perform()
 		return OK;
 
 	case ACT_CLICK:
+		if (mArgc > 1)
+		{
+			// Join all args so that Click(x,y) is equivalent to Click %x% %y%.  Anything longer than
+			// _countof(buf_temp) is almost certainly invalid, so simply truncate in that case.
+			*buf_temp = '\0';
+			for (int i = 0; i < mArgc; ++i)
+				sntprintfcat(buf_temp, _countof(buf_temp), _T("%s,"), sArgDeref[i]);
+			return PerformClick(buf_temp);
+		}
 		return PerformClick(ARG1);
 	case ACT_MOUSECLICKDRAG:
 		return PerformMouse(mActionType, SEVEN_ARGS);
