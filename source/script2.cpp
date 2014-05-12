@@ -12704,7 +12704,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 {
 	// Set default return value in case of early return.
 	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = aHaystack; // v1.0.46.06: aHaystack vs. "" is the new default because it seems a much safer and more convenient to return aHaystack when an unexpected PCRE-exec error occurs (such an error might otherwise cause loss of data in scripts that don't meticulously check ErrorLevel after each RegExReplace()).
+	aResultToken.marker = aHaystack;
 
 	// If an output variable was provided for the count, resolve it early in case of early goto.
 	// Fix for v1.0.47.05: In the unlikely event that output_var_count is the same script-variable as
@@ -12844,15 +12844,15 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				//result = NULL; // This tells the caller that we already freed it (i.e. from its POV, we never allocated anything).
 			//}
 
-			g_ErrorLevel->Assign(ERRORLEVEL_NONE); // All done, indicate success via ErrorLevel.
-			goto set_count_and_return;             //
+			goto set_count_and_return; // All done.
 		}
 
 		// Otherwise:
 		if (captured_pattern_count < 0) // An error other than "no match". These seem very rare, so it seems best to abort rather than yielding a partially-converted result.
 		{
-			g_script.SetErrorLevelOrThrowInt(captured_pattern_count, _T("RegExReplace")); // No error text is stored; just a negative integer (since these errors are pretty rare).
-			goto set_count_and_return; // Goto vs. break to leave aResultToken.marker set to aHaystack and replacement_count set to 0, and let ErrorLevel tell the story.
+			ITOA(captured_pattern_count, repl_buf);
+			g_script.ThrowRuntimeException(ERR_PCRE_EXEC, NULL, repl_buf);
+			goto set_count_and_return; // Goto vs. break to leave aResultToken.marker set to aHaystack and replacement_count set to 0.
 		}
 
 		// Otherwise (since above didn't return or break or continue), a match has been found (i.e.
@@ -13079,14 +13079,11 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	// All paths above should return (or goto some other label), so execution should never reach here except
 	// through goto:
 out_of_mem:
-	// Due to extreme rarity and since this is a regex execution error of sorts, use PCRE's own error code.
-	g_script.SetErrorLevelOrThrowInt(PCRE_ERROR_NOMEMORY, _T("RegExReplace"));
+	g_script.ThrowRuntimeException(ERR_OUTOFMEM);
 	if (result)
 	{
 		free(result);  // Since result is probably an non-terminated string (not to mention an incompletely created result), it seems best to free it here to remove it from any further consideration by the caller.
 		result = NULL; // Tell caller that it was freed.
-		// AND LEAVE aResultToken.marker (i.e. the final result) set to aHaystack, because the altered result is
-		// indeterminate and thus discarded.
 	}
 	// Now fall through to below so that count is set even for out-of-memory error.
 set_count_and_return:
@@ -13109,7 +13106,7 @@ BIF_DECL(BIF_RegEx)
 
 	// COMPILE THE REGEX OR GET IT FROM CACHE.
 	if (   !(re = get_compiled_regex(needle, extra, &options_length, &aResultToken))   ) // Compiling problem.
-		return; // It already set ErrorLevel and aResultToken for us. If caller provided an output var/array, it is not changed under these conditions because there's no way of knowing how many subpatterns are in the RegEx, and thus no way of knowing how far to init the array.
+		return; // It already set aResultToken for us.
 
 	// Since compiling succeeded, get info about other parameters.
 	TCHAR haystack_buf[MAX_NUMBER_SIZE];
@@ -13184,23 +13181,20 @@ BIF_DECL(BIF_RegEx)
 
 	int match_offset = 0; // Set default for no match/error cases below.
 
-	// SET THE RETURN VALUE AND ERRORLEVEL BASED ON THE RESULTS OF EXECUTING THE EXPRESSION.
+	// SET THE RETURN VALUE BASED ON THE RESULTS OF EXECUTING THE EXPRESSION.
 	if (captured_pattern_count == PCRE_ERROR_NOMATCH)
 	{
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // i.e. "no match" isn't an error.
 		aResultToken.value_int64 = 0;
-		// BUT CONTINUE ON so that the output-array (if any) is fully reset (made blank), which improves
-		// convenience for the script.
+		// BUT CONTINUE ON so that the output variable (if any) is fully reset (made blank).
 	}
 	else if (captured_pattern_count < 0) // An error other than "no match".
 	{
-		g_script.SetErrorLevelOrThrowInt(captured_pattern_count, _T("RegExMatch")); // No error text is stored; just a negative integer (since these errors are pretty rare).
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
+		TCHAR err_info[MAX_INTEGER_SIZE];
+		ITOA(captured_pattern_count, err_info);
+		g_script.ThrowRuntimeException(ERR_PCRE_EXEC, NULL, err_info);
 	}
 	else // Match found, and captured_pattern_count >= 0 (but should never be 0 in this case because that only happens when offset[] is too small, which it isn't).
 	{
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 		match_offset = offset[0];
 		aResultToken.value_int64 = match_offset + 1; // i.e. the position of the entire-pattern match is the function's return value.
 	}
