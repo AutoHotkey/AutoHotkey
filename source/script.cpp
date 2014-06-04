@@ -1028,31 +1028,16 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 
 	sExitFuncIsRunning = true;
 	DEBUGGER_STACK_PUSH(mOnExitFunc->mJumpToLine, _T("OnExit"))
-	FuncCallData func_call; // For UDFs: must remain in scope until the result has been copied into pVarResult.
+
 	ExprTokenType result_token;
-
-	ExprTokenType param_token;
-	param_token.symbol = SYM_STRING;
-	param_token.marker = GetExitReasonString(mExitReason);
-
-	ExprTokenType *param[1];
-	param[0] = &param_token;
-
 	TCHAR result_token_buf[MAX_NUMBER_SIZE];
-	result_token.buf = result_token_buf; // May be used below for short return values and misc purposes.
-	result_token.marker = _T("");
-	result_token.symbol = SYM_STRING;	// These must be initialized for the cleanup code below.
-	result_token.mem_to_free = NULL;	//
+	result_token.InitResult(result_token_buf);
 
-	ResultType result;
-	mOnExitFunc->Call(func_call, result, result_token, param, 1);
+	ResultType result = mOnExitFunc->Call(result_token, 1, FUNC_ARG_STR(GetExitReasonString(mExitReason)));
 	// If the function returns true, do not terminate the script.
 	terminate_afterward = !TokenToBOOL(result_token);
 
-	if (result_token.symbol == SYM_OBJECT)
-		result_token.object->Release();
-	if (result_token.mem_to_free)
-		free(result_token.mem_to_free);
+	result_token.Free();
 
 	if (result == FAIL)
 	{
@@ -11337,10 +11322,7 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 	int param_count;
 
 	// Set up enum_token the way Invoke expects:
-	enum_token.symbol = SYM_STRING;
-	enum_token.marker = _T("");
-	enum_token.mem_to_free = NULL;
-	enum_token.buf = buf;
+	enum_token.InitResult(buf);
 
 	// Prepare to call object._NewEnum():
 	param_tokens[0].symbol = SYM_STRING;
@@ -11399,10 +11381,7 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 		bool next_returned_true = TokenToBOOL(result_token);
 
 		// Free any memory or object which may have been returned by Invoke:
-		if (result_token.mem_to_free)
-			free(result_token.mem_to_free);
-		if (result_token.symbol == SYM_OBJECT)
-			result_token.object->Release();
+		result_token.Free();
 
 		if (!next_returned_true)
 		{	// The enumerator returned false, which means there are no more items.
@@ -13081,8 +13060,7 @@ ResultType Line::Perform()
 		ExprTokenType result_token;
 		FuncCallData func_call;
 		ResultType result;
-		result_token.buf = result_buf; // Built-in functions expect this to be available.
-		result_token.mem_to_free = NULL; // Init to allow detection below.
+		result_token.InitResult(result_buf);
 
 		// CALL THE FUNCTION.
 		func->Call(func_call, result, result_token, param, param_count);
@@ -13101,10 +13079,7 @@ ResultType Line::Perform()
 		}
 
 		// Clean up:
-		if (result_token.mem_to_free)
-			free(result_token.mem_to_free);
-		if (result_token.symbol == SYM_OBJECT)
-			result_token.object->Release();
+		result_token.Free();
 
 		if (result == EARLY_RETURN) // This would cause our caller to "return".
 			result = OK;
@@ -14155,12 +14130,8 @@ ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine)
 
 void Script::FreeExceptionToken(ExprTokenType*& aToken)
 {
-	// If an object was thrown, release it.
-	if (aToken->symbol == SYM_OBJECT)
-		aToken->object->Release();
-	// If a string was thrown and memory allocated for it, free it.
-	if (aToken->mem_to_free)
-		free(aToken->mem_to_free);
+	// Release any potential content the token may hold
+	aToken->Free();
 	// Free the token itself.
 	delete aToken;
 	// Clear caller's variable.

@@ -220,14 +220,9 @@ BIF_DECL(BIF_ObjNew)
 	if (result != INVOKE_NOT_HANDLED)
 	{
 		// See similar section below for comments.
-		if (aResultToken.symbol == SYM_OBJECT)
-			aResultToken.object->Release();
-		if (aResultToken.mem_to_free)
-		{
-			free(aResultToken.mem_to_free);
-			aResultToken.mem_to_free = NULL;
-		}
+		aResultToken.Free();
 		// Reset to defaults for __New, invoked below.
+		aResultToken.mem_to_free = NULL;
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
 		aResultToken.buf = buf;
@@ -247,15 +242,10 @@ BIF_DECL(BIF_ObjNew)
 		// Although it isn't likely to happen, if __New points at a built-in function or if mBase
 		// (or an ancestor) is not an Object (i.e. it's a ComObject), aResultToken can be set even when
 		// the result is not EARLY_RETURN.  So make sure to clean up any result we're not going to use.
-		if (aResultToken.symbol == SYM_OBJECT)
-			aResultToken.object->Release();
-		if (aResultToken.mem_to_free)
-		{
-			// This can be done by our caller, but is done here for maintainability; i.e. because
-			// some callers might expect mem_to_free to be NULL when the result isn't a string.
-			free(aResultToken.mem_to_free);
-			aResultToken.mem_to_free = NULL;
-		}
+		aResultToken.Free();
+		// This can be done by our caller, but is done here for maintainability; i.e. because
+		// some callers might expect mem_to_free to be NULL when the result isn't a string.
+		aResultToken.mem_to_free = NULL;
 		if (result == FAIL)
 		{
 			// Invocation failed, probably due to omitting a required parameter.
@@ -315,10 +305,7 @@ BIF_DECL(BIF_ObjIncDec)
 	}
 
 	// Free the object or string returned by BIF_ObjInvoke, if applicable.
-	if (temp_result.symbol == SYM_OBJECT)
-		temp_result.object->Release();
-	if (temp_result.mem_to_free)
-		free(temp_result.mem_to_free);
+	temp_result.Free();
 
 	if (current_value.symbol == PURE_NOT_NUMERIC)
 	{
@@ -354,10 +341,7 @@ BIF_DECL(BIF_ObjIncDec)
 		BIF_ObjInvoke(aResult, temp_result, param, aParamCount);
 		
 		// Dispose of the result safely.
-		if (temp_result.symbol == SYM_OBJECT)
-			temp_result.object->Release();
-		if (temp_result.mem_to_free)
-			free(temp_result.mem_to_free);
+		temp_result.Free();
 
 		// Return the previous value.
 		aResultToken.symbol = current_value.symbol;

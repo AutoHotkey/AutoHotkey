@@ -1898,6 +1898,13 @@ public:
 	}
 
 	bool Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false);
+	ResultType Call(ExprTokenType &aResultToken, int aParamCount, ...);
+
+// Macros for specifying arguments in Func::Call(aResultToken, aParamCount, ...)
+#define FUNC_ARG_INT(_arg)   SYM_INTEGER, ((__int64) (_arg))
+#define FUNC_ARG_STR(_arg)   SYM_STRING,  ((LPTSTR)  (_arg))
+#define FUNC_ARG_FLOAT(_arg) SYM_FLOAT,   ((double)  (_arg))
+#define FUNC_ARG_OBJ(_arg)   SYM_OBJECT,  ((IObject*)(_arg))
 
 	ResultType Call(ExprTokenType *aResultToken) // Making this a function vs. inline doesn't measurably impact performance.
 	{

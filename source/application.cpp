@@ -1268,30 +1268,13 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				g_script.mOnClipboardChangeIsRunning = true;
 				DEBUGGER_STACK_PUSH(g_script.mOnClipboardChangeFunc->mJumpToLine, _T("OnClipboardChange"))
 
-				FuncCallData func_call;
+				int arg = CountClipboardFormats() ? (IsClipboardFormatAvailable(CF_NATIVETEXT) || IsClipboardFormatAvailable(CF_HDROP) ? 1 : 2) : 0;
+
 				ExprTokenType result_token;
-
-				ExprTokenType param_token;
-				param_token.symbol = SYM_INTEGER;
-				param_token.value_int64 = CountClipboardFormats() ? (IsClipboardFormatAvailable(CF_NATIVETEXT) || IsClipboardFormatAvailable(CF_HDROP) ? 1 : 2) : 0;
-
-				ExprTokenType *param[1];
-				param[0] = &param_token;
-
 				TCHAR result_token_buf[MAX_NUMBER_SIZE];
-				result_token.buf = result_token_buf; // May be used below for short return values and misc purposes.
-				result_token.marker = _T("");
-				result_token.symbol = SYM_STRING;	// These must be initialized for the cleanup code below.
-				result_token.mem_to_free = NULL;	//
-
-				ResultType result;
-				g_script.mOnClipboardChangeFunc->Call(func_call, result, result_token, param, 1);
-
-				// Free the result token.
-				if (result_token.symbol == SYM_OBJECT)
-					result_token.object->Release();
-				if (result_token.mem_to_free)
-					free(result_token.mem_to_free);
+				result_token.InitResult(result_token_buf);
+				g_script.mOnClipboardChangeFunc->Call(result_token, 1, FUNC_ARG_INT(arg));
+				result_token.Free();
 
 				DEBUGGER_STACK_POP()
 				g_script.mOnClipboardChangeIsRunning = false;
@@ -1794,26 +1777,6 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	}
 	//else leave them at their init-thread defaults.
 
-	// Set up the array of parameters for Func::Call().  Benchmarks showed very little difference
-	// between this approach and the old approach of assigning directly to the function's parameters:
-	ExprTokenType param_token[4];
-	ExprTokenType *param[4];
-	// Message parameters:
-	param[0] = &param_token[0];
-	param_token[0].symbol = SYM_INTEGER;
-	param_token[0].value_int64 = (__int64)awParam;
-	param[1] = &param_token[1];
-	param_token[1].symbol = SYM_INTEGER;
-	param_token[1].value_int64 = (__int64)alParam;
-	// Message number:
-	param[2] = &param_token[2];
-	param_token[2].symbol = SYM_INTEGER;
-	param_token[2].value_int64 = aMsg;
-	// HWND:
-	param[3] = &param_token[3];
-	param_token[3].symbol = SYM_INTEGER;
-	param_token[3].value_int64 = (__int64)(size_t)aWnd;
-
 	// v1.0.38.04: Below was added to maximize responsiveness to incoming messages.  The reasoning
 	// is similar to why the same thing is done in MsgSleep() prior to its launch of a thread, so see
 	// MsgSleep for more comments:
@@ -1821,12 +1784,14 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	++monitor.instance_count;
 
 	bool block_further_processing;
-	{// Scope for func_call.
+	{// Scope for function call.
 		ExprTokenType result_token;
-		FuncCallData func_call;
-		ResultType result;
+		TCHAR result_token_buf[MAX_NUMBER_SIZE];
+		result_token.InitResult(result_token_buf);
 
-		if (func.Call(func_call, result, result_token, param, 4))
+		ResultType result = func.Call(result_token, 4, FUNC_ARG_INT(awParam), FUNC_ARG_INT(alParam), FUNC_ARG_INT(aMsg), FUNC_ARG_INT((size_t)aWnd));
+
+		if (result != FAIL && result != EARLY_EXIT)
 		{
 			// Fix for v1.0.47: Must handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value
 			// might be the contents of one of the function's local variables (which are about to be free'd).
@@ -1835,13 +1800,13 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 				aMsgReply = (LRESULT)TokenToInt64(result_token); // Use 64-bit in case it's an unsigned number greater than 0x7FFFFFFF, in which case this allows it to wrap around to a negative.
 			//else leave aMsgReply uninitialized because we'll be returning false later below, which tells our caller
 			// to ignore aMsgReply.
-			if (result_token.symbol == SYM_OBJECT)
-				result_token.object->Release();
 		}
 		else
 			// Above exited or failed.  result_token may not have been initialized, so treat it as empty:
 			block_further_processing = false;
-	}// func_call destructor causes Var::FreeAndRestoreFunctionVars() to be called here.
+
+		result_token.Free();
+	}
 	
 	DEBUGGER_STACK_POP()
 
