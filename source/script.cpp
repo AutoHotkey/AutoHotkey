@@ -5823,7 +5823,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 			};
 			for (int i = 0; i < _countof(sWordOp); ++i)
 			{
-				if (!_tcsnicmp(sWordOp[i].word, op_begin, operand_length))
+				if (!_tcsnicmp(sWordOp[i].word, op_begin, operand_length) && !sWordOp[i].word[operand_length])
 				{
 					wordop = sWordOp[i].op;
 					if (wordop == SYM_NEW)

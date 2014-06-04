@@ -1082,7 +1082,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 	LPARAM lparam = MAKELPARAM(click.x, click.y);
 
 	UINT msg_down, msg_up;
-	WPARAM wparam;
+	WPARAM wparam, wparam_up = 0;
 	bool vk_is_wheel = aVK == VK_WHEEL_UP || aVK == VK_WHEEL_DOWN;
 	bool vk_is_hwheel = aVK == VK_WHEEL_LEFT || aVK == VK_WHEEL_RIGHT; // v1.0.48: Lexikos: Support horizontal scrolling in Windows Vista and later.
 
@@ -1125,8 +1125,8 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 			case VK_LBUTTON:  msg_down = WM_LBUTTONDOWN; msg_up = WM_LBUTTONUP; wparam = MK_LBUTTON; break;
 			case VK_RBUTTON:  msg_down = WM_RBUTTONDOWN; msg_up = WM_RBUTTONUP; wparam = MK_RBUTTON; break;
 			case VK_MBUTTON:  msg_down = WM_MBUTTONDOWN; msg_up = WM_MBUTTONUP; wparam = MK_MBUTTON; break;
-			case VK_XBUTTON1: msg_down = WM_XBUTTONDOWN; msg_up = WM_XBUTTONUP; wparam = MK_XBUTTON1; break;
-			case VK_XBUTTON2: msg_down = WM_XBUTTONDOWN; msg_up = WM_XBUTTONUP; wparam = MK_XBUTTON2; break;
+			case VK_XBUTTON1: msg_down = WM_XBUTTONDOWN; msg_up = WM_XBUTTONUP; wparam_up = XBUTTON1<<16; wparam = MK_XBUTTON1|wparam_up; break;
+			case VK_XBUTTON2: msg_down = WM_XBUTTONDOWN; msg_up = WM_XBUTTONUP; wparam_up = XBUTTON2<<16; wparam = MK_XBUTTON2|wparam_up; break;
 			default: goto error; // Just do nothing since this should realistically never happen.
 		}
 	}
@@ -1179,7 +1179,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 			}
 			if (event_type != KEYDOWN) // It's either up-only or up-and-down so always to the up-event.
 			{
-				PostMessage(control_window, msg_up, 0, lparam);
+				PostMessage(control_window, msg_up, wparam_up, lparam);
 				DoControlDelay;
 			}
 		}
@@ -11563,7 +11563,7 @@ has_valid_return_type:
     
 	if (!function) // The function's address hasn't yet been determined.
 	{
-		function = GetDllProcAddress(aParam[0]->symbol == SYM_VAR ? aParam[0]->var->Contents() : aParam[0]->marker, &hmodule_to_free);
+		function = GetDllProcAddress(TokenToString(*aParam[0]), &hmodule_to_free);
 		if (!function)
 			goto end;
 	}
