@@ -9678,10 +9678,10 @@ VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(aBuf);
 }
 
-LPTSTR GetExitReasonString(ExitReasons exitReason)
+LPTSTR GetExitReasonString(ExitReasons aExitReason)
 {
 	LPTSTR str;
-	switch(exitReason)
+	switch(aExitReason)
 	{
 	case EXIT_LOGOFF: str = _T("Logoff"); break;
 	case EXIT_SHUTDOWN: str = _T("Shutdown"); break;
@@ -9707,9 +9707,9 @@ LPTSTR GetExitReasonString(ExitReasons exitReason)
 
 BIF_DECL(BIF_OnExitOrClipboardChange)
 {
-	bool bIsOnExit = ctoupper(aResultToken.marker[2]) == 'E';
-	Func*& funcPtr = bIsOnExit ? g_script.mOnExitFunc : g_script.mOnClipboardChangeFunc;
-	Func* oldFunc = funcPtr;
+	bool is_onexit = ctoupper(aResultToken.marker[2]) == 'E';
+	Func*& func_ptr = is_onexit ? g_script.mOnExitFunc : g_script.mOnClipboardChangeFunc;
+	Func* old_func = func_ptr;
 
 	if (!ParamIndexIsOmitted(0))
 	{
@@ -9717,33 +9717,35 @@ BIF_DECL(BIF_OnExitOrClipboardChange)
 		if (!TokenIsEmptyString(arg))
 		{
 			// Set a function.
-			Func* newFunc = TokenToFunc(arg);
-			if (!newFunc || newFunc->mIsBuiltIn || newFunc->mMinParams > 1 || newFunc->mClass)
+			Func* new_func = TokenToFunc(arg);
+			if (!new_func || new_func->mIsBuiltIn || new_func->mMinParams > 1 || new_func->mClass)
 			{
 				aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
 				return;
 			}
-			funcPtr = newFunc;
+			func_ptr = new_func;
 
-			if (!bIsOnExit && !oldFunc && newFunc)
+			if (!is_onexit && !old_func && new_func)
 				// Enable clipboard listener.
 				g_script.EnableClipboardListener(true);
-		} else
+		}
+		else
 		{
 			// Unregister the function.
-			funcPtr = NULL;
-			if (oldFunc)
+			func_ptr = NULL;
+			if (old_func)
 				// Disable clipboard listener.
 				g_script.EnableClipboardListener(false);
 		}
 	}
 
 	// Return old OnExit function.
-	if (oldFunc != NULL)
+	if (old_func != NULL)
 	{
 		aResultToken.symbol = SYM_OBJECT;
-		aResultToken.object = oldFunc;
-	} else
+		aResultToken.object = old_func;
+	}
+	else
 	{
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");

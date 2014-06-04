@@ -2682,7 +2682,7 @@ public:
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
 
-	void EnableClipboardListener(bool bEnable);
+	void EnableClipboardListener(bool aEnable);
 
 	Script();
 	~Script();
@@ -2961,7 +2961,7 @@ double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToke
 
 HWND DetermineTargetWindow(ExprTokenType *aParam[], int aParamCount);
 
-LPTSTR GetExitReasonString(ExitReasons exitReason);
+LPTSTR GetExitReasonString(ExitReasons aExitReason);
 
 #endif
 

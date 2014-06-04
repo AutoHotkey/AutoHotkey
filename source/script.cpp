@@ -620,9 +620,9 @@ ResultType Script::CreateWindows()
 
 
 
-void Script::EnableClipboardListener(bool bEnable)
+void Script::EnableClipboardListener(bool aEnable)
 {
-	if (bEnable)
+	if (aEnable)
 	{
 		if (MyAddClipboardListener && MyRemoveClipboardListener) // Should be impossible for only one of these to be NULL, but check both anyway to be safe.
 		{
@@ -636,7 +636,8 @@ void Script::EnableClipboardListener(bool bEnable)
 		}
 		else
 			mNextClipboardViewer = SetClipboardViewer(g_hWnd);
-	} else
+	}
+	else
 	{
 		if (MyRemoveClipboardListener && MyAddClipboardListener)
 			MyRemoveClipboardListener(g_hWnd); // MyAddClipboardListener was used.
