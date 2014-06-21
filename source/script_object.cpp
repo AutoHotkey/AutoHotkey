@@ -1485,8 +1485,9 @@ Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, IndexType
 Object::FieldType *Object::FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos)
 // Searches for a field with the given key, where the key is a token passed from script.
 {
-	if (TokenIsNumeric(key_token) == PURE_INTEGER)
-	{	// Pure integer or numeric string.
+	if (key_token.symbol == SYM_INTEGER
+		|| (key_token.symbol == SYM_VAR && key_token.var->IsPureNumeric() == PURE_INTEGER))
+	{	// Pure integer.
 		key.i = (IntKeyType)TokenToInt64(key_token);
 		key_type = SYM_INTEGER;
 	}
@@ -1495,7 +1496,7 @@ Object::FieldType *Object::FindField(ExprTokenType &key_token, LPTSTR aBuf, Symb
 		key_type = SYM_OBJECT;
 	}
 	else
-	{	// SYM_STRING or SYM_VAR (both confirmed not to be numeric); or SYM_FLOAT.
+	{	// SYM_STRING or SYM_VAR (confirmed not to be pure integer); or SYM_FLOAT.
 		key.s = TokenToString(key_token, aBuf); // Pass aBuf to allow float -> string conversion.
 		key_type = SYM_STRING;
 	}
