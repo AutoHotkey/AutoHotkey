@@ -12917,8 +12917,11 @@ bool Line::EvaluateLoopUntil(ResultType &aResult)
 	if (g_Debugger.IsConnected())
 		g_Debugger.PreExecLine(this);
 #endif
-	return (aResult = ExpandArgs()) != OK // i.e. if it fails, shortcircuit and break the loop.
-			|| LegacyResultToBOOL(ARG1); // See PerformLoopWhile() above for comments about this line.
+	aResult = ExpandArgs();
+	if (aResult != OK)
+		return true; // i.e. if it fails, break the loop.
+	aResult = LOOP_BREAK; // Break out of any recursive PerformLoopXxx() calls.
+	return LegacyResultToBOOL(ARG1); // See PerformLoopWhile() above for comments about this line.
 }
 
 
