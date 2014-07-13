@@ -6974,7 +6974,10 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 			ScriptError(_T("Invalid method name."), new_name); // Shouldn't ever happen.
 			return NULL;
 		}
-		if (!aClassObject->SetItem(key + 1, the_new_func))
+		++key;
+		if (!Var::ValidateName(key, DISPLAY_FUNC_ERROR))
+			return NULL;
+		if (!aClassObject->SetItem(key, the_new_func))
 		{
 			ScriptError(ERR_OUTOFMEM);
 			return NULL;
