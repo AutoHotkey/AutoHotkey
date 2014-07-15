@@ -215,14 +215,10 @@ public:
 	bool SetItem(LPTSTR aKey, ExprTokenType &aValue)
 	{
 		KeyType key;
-		SymbolType key_type = IsNumeric(aKey, FALSE, FALSE, FALSE); // SYM_STRING or SYM_INTEGER.
-		if (key_type == SYM_INTEGER)
-			key.i = ATOI(aKey);
-		else
-			key.s = aKey;
+		key.s = aKey;
 		IndexType insert_pos;
-		FieldType *field = FindField(key_type, key, insert_pos);
-		if (  !field && !(field = Insert(key_type, key, insert_pos))  ) // Relies on short-circuit boolean evaluation.
+		FieldType *field = FindField(SYM_STRING, key, insert_pos);
+		if (  !field && !(field = Insert(SYM_STRING, key, insert_pos))  ) // Relies on short-circuit boolean evaluation.
 			return false;
 		return field->Assign(aValue);
 	}
