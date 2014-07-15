@@ -212,15 +212,24 @@ public:
 		return true;
 	}
 	
-	bool SetItem(LPTSTR aKey, ExprTokenType &aValue)
+	bool SetItem(ExprTokenType &aKey, ExprTokenType &aValue)
 	{
-		KeyType key;
-		key.s = aKey;
 		IndexType insert_pos;
-		FieldType *field = FindField(SYM_STRING, key, insert_pos);
-		if (  !field && !(field = Insert(SYM_STRING, key, insert_pos))  ) // Relies on short-circuit boolean evaluation.
+		TCHAR buf[MAX_NUMBER_SIZE];
+		SymbolType key_type;
+		KeyType key;
+		FieldType *field = FindField(aKey, buf, key_type, key, insert_pos);
+		if (!field && !(field = Insert(key_type, key, insert_pos))) // Relies on short-circuit boolean evaluation.
 			return false;
 		return field->Assign(aValue);
+	}
+
+	bool SetItem(LPTSTR aKey, ExprTokenType &aValue)
+	{
+		ExprTokenType key;
+		key.symbol = SYM_STRING;
+		key.marker = aKey;
+		return SetItem(key, aValue);
 	}
 
 	bool SetItem(LPTSTR aKey, __int64 aValue)
@@ -273,7 +282,8 @@ public:
 	
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
-	ResultType _Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _InsertAt(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Push(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);

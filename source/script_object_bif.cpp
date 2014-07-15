@@ -379,9 +379,12 @@ BIF_DECL(BIF_Obj##name) \
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0])); \
 	if (obj) \
 		obj->_##name(aResultToken, aParam + 1, aParamCount - 1); \
+	else \
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID); \
 }
 
-BIF_METHOD(Insert)
+BIF_METHOD(InsertAt)
+BIF_METHOD(Push)
 BIF_METHOD(Remove)
 BIF_METHOD(GetCapacity)
 BIF_METHOD(SetCapacity)
@@ -409,4 +412,21 @@ BIF_DECL(BIF_ObjAddRefRelease)
 		aResultToken.value_int64 = obj->AddRef();
 	else
 		aResultToken.value_int64 = obj->Release();
+}
+
+
+//
+// ObjRawSet - set a value without invoking any meta-functions.
+//
+
+BIF_DECL(BIF_ObjRawSet)
+{
+	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
+	if (!obj)
+	{
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		return;
+	}
+	if (!obj->SetItem(*aParam[1], *aParam[2]))
+		aResult = g_script.ScriptError(ERR_OUTOFMEM);
 }

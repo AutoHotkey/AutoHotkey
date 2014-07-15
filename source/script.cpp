@@ -121,7 +121,8 @@ FuncEntry g_BIF[] =
 	{_T("IsObject"), BIF_IsObject, 1, NA, true},
 	
 	{_T("Object"), BIF_ObjCreate, 0, NA, true},
-	{_T("ObjInsert"), BIF_ObjInsert, 2, NA, true},
+	{_T("ObjInsertAt"), BIF_ObjInsertAt, 3, NA, false},
+	{_T("ObjPush"), BIF_ObjPush, 2, NA, false},
 	{_T("ObjRemove"), BIF_ObjRemove, 1, 3, true},
 	{_T("ObjMinIndex"), BIF_ObjMinIndex, 1, 1, true},
 	{_T("ObjMaxIndex"), BIF_ObjMaxIndex, 1, 1, true},
@@ -133,6 +134,7 @@ FuncEntry g_BIF[] =
 	{_T("ObjClone"), BIF_ObjClone, 1, 1, true},
 	{_T("ObjAddRef"), BIF_ObjAddRefRelease, 1, 1, true},
 	{_T("ObjRelease"), BIF_ObjAddRefRelease, 1, 1, true},
+	{_T("ObjRawSet"), BIF_ObjRawSet, 3, 3, false},
 
 	{_T("Array"), BIF_ObjArray, 0, NA, true},
 	{_T("FileOpen"), BIF_FileOpen, 2, 3, true},

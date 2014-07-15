@@ -453,8 +453,10 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				if (*name == '_')
 					++name; // ++ to exclude '_' from further consideration.
 				++aParam; --aParamCount; // Exclude the method identifier.  A prior check ensures there was at least one param in this case.
-				if (!_tcsicmp(name, _T("Insert")))
-					return _Insert(aResultToken, aParam, aParamCount);
+				if (!_tcsicmp(name, _T("InsertAt")))
+					return _InsertAt(aResultToken, aParam, aParamCount);
+				if (!_tcsicmp(name, _T("Push")))
+					return _Push(aResultToken, aParam, aParamCount);
 				if (!_tcsicmp(name, _T("Remove")))
 					return _Remove(aResultToken, aParam, aParamCount);
 				if (!_tcsicmp(name, _T("HasKey")))
@@ -842,71 +844,43 @@ bool Object::InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], in
 	return true;
 }
 
-ResultType Object::_Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
-// _Insert( key, value )
+ResultType Object::_InsertAt(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+// InsertAt(index, value1, ...)
 {
-	if (!aParamCount)
-		return OK; // Error.
+	if (aParamCount < 2)
+		return g_script.ScriptError(ERR_TOO_FEW_PARAMS);
 
 	SymbolType key_type;
 	KeyType key;
-	IndexType insert_pos, pos;
-	FieldType *field = NULL;
-
-	if (aParamCount == 1)
+	IndexType insert_pos;
+	FieldType *field = FindField(**aParam, aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
+	if (key_type != SYM_INTEGER)
+		return g_script.ScriptError(ERR_PARAM1_INVALID, key_type == SYM_STRING ? key.s : _T(""));
+		
+	if (field)
 	{
-		// Insert at the end when no key is supplied, since that is typically most useful
-		// and is also most efficient (because no int-keyed fields are moved or adjusted).
-		insert_pos = mKeyOffsetObject; // int keys end here.
-		key.i = insert_pos ? mFields[insert_pos - 1].key.i + 1 : 1;
-		key_type = SYM_INTEGER;
+		insert_pos = field - mFields; // insert_pos wasn't set in this case.
+		field = NULL; // Insert, don't overwrite.
 	}
-	else
-	{
-		field = FindField(**aParam, aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
-		if (key_type == SYM_INTEGER)
-		{
-			if (field)
-			{	// Don't overwrite this key's value; instead insert a new field.
-				insert_pos = field - mFields; // insert_pos wasn't set in this case.
-				field = NULL;
-			}
 
-			if (aParamCount > 2) // Multiple value params.  Could also handle aParamCount == 2, but the simpler method is faster.
-			{
-				if (InsertAt(insert_pos, key.i, aParam + 1, aParamCount - 1))
-				{
-					aResultToken.symbol = SYM_INTEGER;
-					aResultToken.value_int64 = aParamCount - 1;
-				}
-				return OK;
-			}
-		}
-		else
-			if (aParamCount > 2)
-				// Error: multiple values but not an integer key.
-				return OK;
-		++aParam; // See below.
-	}
-	// If we were passed only one parameter, aParam points to it.  Otherwise it
-	// was interpreted as the key and aParam now points to the next parameter.
+	if (!InsertAt(insert_pos, key.i, aParam + 1, aParamCount - 1))
+		return g_script.ScriptError(ERR_OUTOFMEM);
 	
-	if ( field || (field = Insert(key_type, key, insert_pos)) )
-	{
-		// Assign this field its new value:
-		field->Assign(**aParam);
-		// Increment any numeric keys following this one.  At this point, insert_pos always indicates the position of a field just inserted.
-		if (key_type == SYM_INTEGER)
-			for (pos = insert_pos + 1; pos < mKeyOffsetObject; ++pos)
-				++mFields[pos].key.i;
-		// Return indication of success.  If caller supplied only one parameter,
-		// return the index of the insertion.  Otherwise the caller specified the
-		// index; returning it wouldn't be as useful, so return a value guaranteed
-		// to be "true" (even if the caller specifies 0 as the index).
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = (aParamCount == 1) ? key.i : 1;
-	}
-	// else insert failed; leave aResultToken at default, empty string.  Numeric indices are *not* adjusted in this case.
+	// Leave aResultToken at its default empty value.
+	return OK;
+}
+
+ResultType Object::_Push(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+// Push(value1, ...)
+{
+	IndexType insert_pos = mKeyOffsetObject; // int keys end here.;
+	IntKeyType start_index = (insert_pos ? mFields[insert_pos - 1].key.i + 1 : 1);
+	if (!InsertAt(insert_pos, start_index, aParam, aParamCount))
+		return g_script.ScriptError(ERR_OUTOFMEM);
+
+	// Return the new "length" of the array.
+	aResultToken.symbol = SYM_INTEGER;
+	aResultToken.value_int64 = start_index + aParamCount - 1;
 	return OK;
 }
 
