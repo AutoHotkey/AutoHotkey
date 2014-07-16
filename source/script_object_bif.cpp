@@ -385,7 +385,9 @@ BIF_DECL(BIF_Obj##name) \
 
 BIF_METHOD(InsertAt)
 BIF_METHOD(Push)
+BIF_METHOD(Pop)
 BIF_METHOD(Remove)
+BIF_METHOD(RemoveAt)
 BIF_METHOD(GetCapacity)
 BIF_METHOD(SetCapacity)
 BIF_METHOD(GetAddress)

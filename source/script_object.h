@@ -284,7 +284,13 @@ public:
 
 	ResultType _InsertAt(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _Push(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	
+	enum RemoveMode { RM_RemoveKey = 0, RM_RemoveAt, RM_Pop };
+	ResultType _Remove_impl(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, RemoveMode aMode);
 	ResultType _Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _RemoveAt(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Pop(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	
 	ResultType _GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _GetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);

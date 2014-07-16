@@ -122,8 +122,10 @@ FuncEntry g_BIF[] =
 	
 	{_T("Object"), BIF_ObjCreate, 0, NA, true},
 	{_T("ObjInsertAt"), BIF_ObjInsertAt, 3, NA, false},
+	{_T("ObjRemove"), BIF_ObjRemove, 2, 3, true},
+	{_T("ObjRemoveAt"), BIF_ObjRemoveAt, 2, 3, true},
 	{_T("ObjPush"), BIF_ObjPush, 2, NA, false},
-	{_T("ObjRemove"), BIF_ObjRemove, 1, 3, true},
+	{_T("ObjPop"), BIF_ObjPop, 1, 1, false},
 	{_T("ObjMinIndex"), BIF_ObjMinIndex, 1, 1, true},
 	{_T("ObjMaxIndex"), BIF_ObjMaxIndex, 1, 1, true},
 	{_T("ObjHasKey"), BIF_ObjHasKey, 2, 2, true},

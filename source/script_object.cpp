@@ -457,6 +457,10 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 					return _InsertAt(aResultToken, aParam, aParamCount);
 				if (!_tcsicmp(name, _T("Push")))
 					return _Push(aResultToken, aParam, aParamCount);
+				if (!_tcsicmp(name, _T("Pop")))
+					return _Pop(aResultToken, aParam, aParamCount);
+				if (!_tcsicmp(name, _T("RemoveAt")))
+					return _RemoveAt(aResultToken, aParam, aParamCount);
 				if (!_tcsicmp(name, _T("Remove")))
 					return _Remove(aResultToken, aParam, aParamCount);
 				if (!_tcsicmp(name, _T("HasKey")))
@@ -645,6 +649,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	// Fell through from one of the sections above: invocation was not handled.
 	return INVOKE_NOT_HANDLED;
 }
+
 
 //
 // Internal: Object::CallField - Used by Object::Invoke to call a function/method stored in this object.
@@ -884,19 +889,19 @@ ResultType Object::_Push(ExprTokenType &aResultToken, ExprTokenType *aParam[], i
 	return OK;
 }
 
-ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
-// _Remove( [ min_key, max_key ] )
+ResultType Object::_Remove_impl(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, RemoveMode aMode)
+// Remove(first_key [, last_key := first_key])
+// RemoveAt(index [, virtual_count := 1])
+// Pop()
 {
-	if (aParamCount > 2)
-		return OK;
-
-	FieldType *min_field, *max_field;
+	FieldType *min_field;
 	IndexType min_pos, max_pos, pos;
-	SymbolType min_key_type, max_key_type;
+	SymbolType min_key_type;
 	KeyType min_key, max_key;
+	IntKeyType logical_count_removed = 1;
 
 	// Find the position of "min".
-	if (!aParamCount)
+	if (aMode == RM_Pop)
 	{
 		if (mKeyOffsetObject) // i.e. at least one int field; use _MaxIndex()
 		{
@@ -908,14 +913,36 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 			return OK;
 	}
 	else
+	{
+		if (!aParamCount)
+			return g_script.ScriptError(ERR_TOO_FEW_PARAMS);
+
 		if (min_field = FindField(*aParam[0], aResultToken.buf, min_key_type, min_key, min_pos))
 			min_pos = min_field - mFields; // else min_pos was already set by FindField.
+		
+		if (min_key_type != SYM_INTEGER && aMode != RM_RemoveKey)
+			return g_script.ScriptError(ERR_PARAM1_INVALID);
+	}
 	
-	if (aParamCount > 1)
+	if (aParamCount > 1) // Removing a range of keys.
 	{
-		// Find the position following "max".
-		if (max_field = FindField(*aParam[1], aResultToken.buf, max_key_type, max_key, max_pos))
-			max_pos = max_field - mFields + 1;
+		SymbolType max_key_type;
+		FieldType *max_field;
+		if (aMode == RM_RemoveAt)
+		{
+			logical_count_removed = (IntKeyType)TokenToInt64(*aParam[1]);
+			// Find the next position >= [aParam[1] + Count].
+			max_key_type = SYM_INTEGER;
+			max_key.i = min_key.i + logical_count_removed;
+			if (max_field = FindField(max_key_type, max_key, max_pos))
+				max_pos = max_field - mFields;
+		}
+		else
+		{
+			// Find the next position > [aParam[1]].
+			if (max_field = FindField(*aParam[1], aResultToken.buf, max_key_type, max_key, max_pos))
+				max_pos = max_field - mFields + 1;
+		}
 		// Since the order of key-types in mFields is of no logical consequence, require that both keys be the same type.
 		// Do not allow removing a range of object keys since there is probably no meaning to their order.
 		if (max_key_type != min_key_type || max_key_type == SYM_OBJECT || max_pos < min_pos
@@ -923,33 +950,23 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 			|| (max_pos == min_pos && (max_key_type == SYM_INTEGER ? max_key.i < min_key.i : _tcsicmp(max_key.s, min_key.s) < 0)))
 			// max < min, but no keys exist in that range so (max_pos < min_pos) check above didn't catch it.
 		{
-			if (min_key_type == SYM_INTEGER && max_key_type == SYM_STRING && !*max_key.s)
-				// Allow Remove(i,"") to mean "remove [i] but don't adjust keys".
-				aParamCount = 1;
-			else
-				return OK;
+			return g_script.ScriptError(ERR_PARAM2_INVALID);
 		}
 		//else if (max_pos == min_pos): specified range is valid, but doesn't match any keys.
-		//	Continue on, adjust integer keys as necessary and return 0 instead of "".
+		//	Continue on, adjust integer keys as necessary and return 0.
 	}
-	else
-		max_key_type = min_key_type;
-
-	if (aParamCount < 2)
+	else // Removing a single item.
 	{
 		if (!min_field) // Nothing to remove.
 		{
-			// Fix for v1.1.06.03: As documented, adjust keys as if Remove(min, min) was called.
-			if (max_key_type == SYM_INTEGER) // Fix for v1.1.07.02: Exclude Obj.Remove(i, "").
+			if (aMode == RM_RemoveAt)
 				for (pos = min_pos; pos < mKeyOffsetObject; ++pos)
 					mFields[pos].key.i--;
-			// L34: Must not continue since min_pos points at the wrong key or an invalid location.
-			// As of L50, our return value when (aParamCount < 2) is the value which was removed, not
-			// the number of removed items. Since this[min_field] would return "", an empty string is
-			// the only sensible value we can return here. An earlier check already ensured Remove()
-			// with no params returned "" if there was nothing to remove.
+			// Our return value when only one key is given is supposed to be the value
+			// previously at this[key], which has just been removed.  Since this[key]
+			// would return "", it makes sense to return an empty string in this case.
 			aResultToken.symbol = SYM_STRING;	
-			aResultToken.marker = _T(""); // L61: Changed from 0 to "". See comment above.
+			aResultToken.marker = _T("");
 			return OK;
 		}
 		// Since only one field (at maximum) can be removed in this mode, it
@@ -977,7 +994,7 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		// Note that object keys can only be removed in the single-item mode.
 		if (min_key_type == SYM_OBJECT)
 			min_field->key.p->Release();
-		// Set these up as if caller did _Remove(min_key, min_key):
+		// Set these up as if caller did Remove(min_key, min_key):
 		max_pos = min_pos + 1;
 		max_key.i = min_key.i; // Union copy. Used only if min_key_type == SYM_INTEGER; has no effect in other cases.
 	}
@@ -1005,16 +1022,14 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 		if (min_key_type == SYM_INTEGER)
 		{
 			mKeyOffsetObject -= actual_count_removed;
-			if (max_key_type == SYM_INTEGER)
+			if (aMode == RM_RemoveAt)
 			{
 				// Regardless of whether any fields were removed, min_pos contains the position of the field which
 				// immediately followed the specified range.  Decrement each numeric key from this position onward.
-				IntKeyType logical_count_removed = max_key.i - min_key.i + 1;
 				if (logical_count_removed > 0)
 					for (pos = min_pos; pos < mKeyOffsetObject; ++pos)
 						mFields[pos].key.i -= logical_count_removed;
 			}
-			//else max_key must be "", a special flag caller may pass to indicate keys shouldn't be adjusted.
 		}
 	}
 	if (aParamCount > 1)
@@ -1026,6 +1041,24 @@ ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[],
 	//else result was set above.
 	return OK;
 }
+
+ResultType Object::_Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	return _Remove_impl(aResultToken, aParam, aParamCount, RM_RemoveKey);
+}
+
+ResultType Object::_RemoveAt(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	return _Remove_impl(aResultToken, aParam, aParamCount, RM_RemoveAt);
+}
+
+ResultType Object::_Pop(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	// Unwanted parameters are ignored, as is conventional for dynamic calls.
+	// _Remove_impl relies on aParamCount == 0 for Pop().
+	return _Remove_impl(aResultToken, NULL, 0, RM_Pop);
+}
+
 
 ResultType Object::_MinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
