@@ -450,8 +450,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			{
 				// Since above has not handled this call and no field exists, check for built-in methods.
 				LPTSTR name = key.s;
-				if (*name == '_')
-					++name; // ++ to exclude '_' from further consideration.
 				++aParam; --aParamCount; // Exclude the method identifier.  A prior check ensures there was at least one param in this case.
 				if (!_tcsicmp(name, _T("InsertAt")))
 					return _InsertAt(aResultToken, aParam, aParamCount);
@@ -467,7 +465,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 					return _HasKey(aResultToken, aParam, aParamCount);
 				if (!_tcsicmp(name, _T("MaxIndex")))
 					return _MaxIndex(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("NewEnum")))
+				if (!_tcsicmp(name, _T("_NewEnum")))
 					return _NewEnum(aResultToken, aParam, aParamCount);
 				if (!_tcsicmp(name, _T("GetAddress")))
 					return _GetAddress(aResultToken, aParam, aParamCount);
