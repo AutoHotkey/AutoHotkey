@@ -638,7 +638,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 	case GUICONTROL_CMD_TEXT:
 		switch (control.type)
 		{
-		case GUI_CONTROL_TEXT:
+		case GUI_CONTROL_LABEL:
 		case GUI_CONTROL_LINK:
 		case GUI_CONTROL_GROUPBOX:
 			do_redraw_unconditionally = (control.attrib & GUI_CONTROL_ATTRIB_BACKGROUND_TRANS); // v1.0.40.01.
@@ -1044,7 +1044,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 		// Otherwise:
 		// The only other reason it wouldn't have already returned is to fall back to SetWindowText() here.
 		// Since above didn't return or break, it's either:
-		// 1) A control that uses the standard SetWindowText() method such as GUI_CONTROL_TEXT,
+		// 1) A control that uses the standard SetWindowText() method such as GUI_CONTROL_LABEL,
 		//    GUI_CONTROL_GROUPBOX, or GUI_CONTROL_BUTTON.
 		// 2) A radio or checkbox whose caption is being changed instead of its checked state.
 		SetWindowText(control.hwnd, aParam3); // Seems more reliable to set text before doing the redraw, plus it saves code size.
@@ -2088,7 +2088,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		break;
 	// Nothing extra for these currently:
 	//case GUI_CONTROL_RADIO: This one is handled separately above the switch().
-	//case GUI_CONTROL_TEXT:
+	//case GUI_CONTROL_LABEL:
 	//case GUI_CONTROL_MONTHCAL: Can't be focused, so no tabstop.
 	//case GUI_CONTROL_PIC:
 	//case GUI_CONTROL_GROUPBOX:
@@ -2232,7 +2232,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		break;
 
 	// Nothing extra for these currently:
-	//case GUI_CONTROL_TEXT:  Ensuring SS_BITMAP and such are absent seems too over-protective.
+	//case GUI_CONTROL_LABEL:  Ensuring SS_BITMAP and such are absent seems too over-protective.
 	//case GUI_CONTROL_LINK:
 	//case GUI_CONTROL_PIC:   SS_BITMAP/SS_ICON are applied after the control isn't created so that it doesn't try to auto-load a resource.
 	//case GUI_CONTROL_LISTVIEW:
@@ -2307,8 +2307,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			opt.x = mPrevX;
 			opt.y = mPrevY + mPrevHeight + mMarginY;  // Don't use mMaxExtentDown in this is a new column.
 		}
-		if ((aControlType == GUI_CONTROL_TEXT || aControlType == GUI_CONTROL_LINK) && mControlCount // This is a text control and there is a previous control before it.
-			&& (prev_control.type == GUI_CONTROL_TEXT || prev_control.type == GUI_CONTROL_LINK)
+		if ((aControlType == GUI_CONTROL_LABEL || aControlType == GUI_CONTROL_LINK) && mControlCount // This is a text control and there is a previous control before it.
+			&& (prev_control.type == GUI_CONTROL_LABEL || prev_control.type == GUI_CONTROL_LINK)
 			&& prev_control.tab_control_index == control.tab_control_index  // v1.0.44.03: Don't do the adjustment if
 			&& prev_control.tab_index == control.tab_index)                 // it's on another page or in another tab control.
 			// Since this text control is being auto-positioned immediately below another, provide extra
@@ -2419,7 +2419,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			break;
 		// Types not included
 		// ------------------
-		//case GUI_CONTROL_TEXT:      Rows are based on control's contents.
+		//case GUI_CONTROL_LABEL:      Rows are based on control's contents.
 		//case GUI_CONTROL_LINK:      Rows are based on control's contents.
 		//case GUI_CONTROL_PIC:       N/A
 		//case GUI_CONTROL_BUTTON:    Rows are based on control's contents.
@@ -2514,7 +2514,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				break;
 			// Types not included
 			// ------------------
-			//case GUI_CONTROL_TEXT:     Uses basic height calculated above the switch().
+			//case GUI_CONTROL_LABEL:     Uses basic height calculated above the switch().
 			//case GUI_CONTROL_LINK:     Uses basic height calculated above the switch().
 			//case GUI_CONTROL_PIC:      Uses basic height calculated above the switch() (seems OK even for pic).
 			//case GUI_CONTROL_CHECKBOX: Uses basic height calculated above the switch().
@@ -2576,14 +2576,14 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			draw_format |= DT_EXPANDTABS|DT_EDITCONTROL|DT_NOPREFIX; // v1.0.44.10: Added DT_NOPREFIX because otherwise, if the text contains & or &&, the control won't be sized properly.
 			// and now fall through and have the dimensions calculated based on what's in the control.
 			// ABOVE FALLS THROUGH TO BELOW
-		case GUI_CONTROL_TEXT:
+		case GUI_CONTROL_LABEL:
 		case GUI_CONTROL_BUTTON:
 		case GUI_CONTROL_CHECKBOX:
 		case GUI_CONTROL_RADIO:
 		case GUI_CONTROL_LINK:
 		{
 			GUI_SET_HDC
-			if (aControlType == GUI_CONTROL_TEXT)
+			if (aControlType == GUI_CONTROL_LABEL)
 			{
 				draw_format |= DT_EXPANDTABS; // Buttons can't expand tabs, so don't add this for them.
 				if (style & SS_NOPREFIX) // v1.0.44.10: This is necessary to auto-width the control properly if its contents include any ampersands.
@@ -2806,7 +2806,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			break;
 		// Types not included
 		// ------------------
-		//case GUI_CONTROL_TEXT:      Exact width should already have been calculated based on contents.
+		//case GUI_CONTROL_LABEL:      Exact width should already have been calculated based on contents.
 		//case GUI_CONTROL_LINK:      Exact width should already have been calculated based on contents.
 		//case GUI_CONTROL_PIC:       Calculated based on actual pic size if no explicit width was given.
 		//case GUI_CONTROL_BUTTON:    Exact width should already have been calculated based on contents.
@@ -2905,7 +2905,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	switch(aControlType)
 	{
-	case GUI_CONTROL_TEXT:
+	case GUI_CONTROL_LABEL:
 		// Seems best to omit SS_NOPREFIX by default so that ampersand can be used to create shortcut keys.
 		control.hwnd = CreateWindowEx(exstyle, _T("static"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
@@ -3552,7 +3552,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	case GUI_CONTROL_UPDOWN:
 		// The buddy of an up-down can meaningfully be one of the following:
 		//case GUI_CONTROL_EDIT:
-		//case GUI_CONTROL_TEXT:
+		//case GUI_CONTROL_LABEL:
 		//case GUI_CONTROL_GROUPBOX:
 		//case GUI_CONTROL_BUTTON:
 		//case GUI_CONTROL_CHECKBOX:
@@ -4647,7 +4647,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		{
 			switch(aControl.type)
 			{
-			case GUI_CONTROL_TEXT: // This one is a little tricky but the below should be appropriate in most cases:
+			case GUI_CONTROL_LABEL: // This one is a little tricky but the below should be appropriate in most cases:
 				if (adding) aOpt.style_remove |= SS_TYPEMASK; else aOpt.style_add = (aOpt.style_add & ~SS_TYPEMASK) | SS_LEFTNOWORDWRAP; // v1.0.44.10: Added SS_TYPEMASK to "else" section to provide more graceful handling for cases like "-Wrap +Center", which would otherwise put an unexpected style like SS_OWNERDRAW into effect.
 				break;
 			case GUI_CONTROL_GROUPBOX:
@@ -5138,7 +5138,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					if (adding) aOpt.style_add |= TBS_BOTH;
 					aOpt.style_remove |= TBS_LEFT;
 					break;
-				case GUI_CONTROL_TEXT:
+				case GUI_CONTROL_LABEL:
 					aOpt.style_add |= SS_CENTER;
 					aOpt.style_remove |= (SS_TYPEMASK & ~SS_CENTER); // i.e. Zero out all type-bits except SS_CENTER's bit.
 					break;
@@ -5173,7 +5173,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				case GUI_CONTROL_SLIDER:
 					aOpt.style_remove |= TBS_BOTH;
 					break;
-				case GUI_CONTROL_TEXT:
+				case GUI_CONTROL_LABEL:
 					aOpt.style_remove |= SS_TYPEMASK; // Revert to SS_LEFT because there's no way of knowing what the intended or previous value was.
 					break;
 				case GUI_CONTROL_GROUPBOX:
@@ -5227,7 +5227,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				case GUI_CONTROL_SLIDER:
 					aOpt.style_remove |= TBS_LEFT|TBS_BOTH;
 					break;
-				case GUI_CONTROL_TEXT:
+				case GUI_CONTROL_LABEL:
 					aOpt.style_add |= SS_RIGHT;
 					aOpt.style_remove |= (SS_TYPEMASK & ~SS_RIGHT); // i.e. Zero out all type-bits except SS_RIGHT's bit.
 					break;
@@ -5276,7 +5276,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					aOpt.style_add |= TBS_LEFT;
 					aOpt.style_remove |= TBS_BOTH; // Debatable.
 					break;
-				case GUI_CONTROL_TEXT:
+				case GUI_CONTROL_LABEL:
 					aOpt.style_remove |= SS_TYPEMASK; // Revert to SS_LEFT because there's no way of knowing what the intended or previous value was.
 					break;
 				case GUI_CONTROL_GROUPBOX:
@@ -5333,7 +5333,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					aOpt.style_add |= TBS_LEFT;
 					aOpt.style_remove |= TBS_BOTH;
 					break;
-				case GUI_CONTROL_TEXT:
+				case GUI_CONTROL_LABEL:
 					aOpt.style_remove |= SS_TYPEMASK; // i.e. Zero out all type-bits to expose the default of 0, which is SS_LEFT.
 					break;
 				case GUI_CONTROL_CHECKBOX:
@@ -5400,7 +5400,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				//case GUI_CONTROL_UPDOWN: Removing "left" doesn't make much sense, so only adding "right" is supported.
 				//case GUI_CONTROL_DATETIME: Removing "left" is not supported since it seems counterintuitive and too rarely needed.
 				//case GUI_CONTROL_MONTHCAL:
-				//case GUI_CONTROL_TEXT:
+				//case GUI_CONTROL_LABEL:
 				//case GUI_CONTROL_PIC:
 				//case GUI_CONTROL_DROPDOWNLIST:
 				//case GUI_CONTROL_COMBOBOX:
@@ -5488,7 +5488,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 						return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
 							: g_script.ScriptError(ERR_NO_LABEL, next_option - 1);
 				}
-				if (aControl.type == GUI_CONTROL_TEXT || aControl.type == GUI_CONTROL_PIC)
+				if (aControl.type == GUI_CONTROL_LABEL || aControl.type == GUI_CONTROL_PIC)
 					// Apply the SS_NOTIFY style *only* if the control actually has an associated action.
 					// This is because otherwise the control would steal all clicks for any other controls
 					// drawn on top of it (e.g. a picture control with some edit fields drawn on top of it).
@@ -5719,7 +5719,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 	if (aControl.hwnd)
 	{
 		DWORD current_style = GetWindowLong(aControl.hwnd, GWL_STYLE);
-		DWORD new_style = (current_style | aOpt.style_add) & ~aOpt.style_remove; // Some things such as GUI_CONTROL_TEXT+SS_TYPEMASK might rely on style_remove being applied *after* style_add.
+		DWORD new_style = (current_style | aOpt.style_add) & ~aOpt.style_remove; // Some things such as GUI_CONTROL_LABEL+SS_TYPEMASK might rely on style_remove being applied *after* style_add.
 		UINT current_value_uint; // Currently only used for Progress controls.
 
 		// Fix for v1.0.24:
@@ -5823,7 +5823,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		//case GUI_CONTROL_LISTBOX: i.e. allow LBS_NOTIFY to be removed in case anyone really wants to do that.
 		//case GUI_CONTROL_TREEVIEW:
 		//case GUI_CONTROL_EDIT:
-		//case GUI_CONTROL_TEXT:  Ensuring SS_BITMAP and such are absent seems too over-protective.
+		//case GUI_CONTROL_LABEL:  Ensuring SS_BITMAP and such are absent seems too over-protective.
 		//case GUI_CONTROL_LINK:
 		//case GUI_CONTROL_DATETIME:
 		//case GUI_CONTROL_MONTHCAL:
@@ -7199,7 +7199,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 			}
 			// Otherwise: Don't overwrite the var with a new wrapper object, since that would waste
 			// resources and cause any connected (ComObjConnect) event sinks to be disconnected.
-		case GUI_CONTROL_TEXT:
+		case GUI_CONTROL_LABEL:
 		case GUI_CONTROL_LINK:
 		case GUI_CONTROL_PIC:
 		case GUI_CONTROL_GROUPBOX:
@@ -8337,7 +8337,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				break;  // Ignore the TRANS setting for the above control types.
 			// Types not included above because they support transparent background or because the attempt
 			// to make the background transparent has no effect:
-			//case GUI_CONTROL_TEXT:         Supported via WM_CTLCOLORSTATIC
+			//case GUI_CONTROL_LABEL:         Supported via WM_CTLCOLORSTATIC
 			//case GUI_CONTROL_LINK:         Supported via WM_CTLCOLORSTATIC
 			//case GUI_CONTROL_PIC:          Supported via WM_CTLCOLORSTATIC
 			//case GUI_CONTROL_GROUPBOX:     Supported via WM_CTLCOLORSTATIC
@@ -8788,7 +8788,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 				ControlGetContents(*control.output_var, control);
 			break;
 
-		case GUI_CONTROL_TEXT:
+		case GUI_CONTROL_LABEL:
 		case GUI_CONTROL_PIC:
 			// Update: Unlike buttons, it's all-or-none for static controls.  Testing shows that if
 			// STN_DBLCLK is not checked for and the user clicks rapidly, half the clicks will be
@@ -9520,7 +9520,7 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 		{
 			switch(control.type)
 			{
-			case GUI_CONTROL_TEXT:
+			case GUI_CONTROL_LABEL:
 			case GUI_CONTROL_PIC:
 			case GUI_CONTROL_GROUPBOX:
 			case GUI_CONTROL_PROGRESS:
@@ -9791,7 +9791,7 @@ void GuiType::ControlGetPosOfFocusedItem(GuiControlType &aControl, POINT &aPoint
 
 	// Notes about control types not handled above:
 	//case GUI_CONTROL_STATUSBAR: For this and many others below, caller should never call it for this type.
-	//case GUI_CONTROL_TEXT:
+	//case GUI_CONTROL_LABEL:
 	//case GUI_CONTROL_LINK:
 	//case GUI_CONTROL_PIC:
 	//case GUI_CONTROL_GROUPBOX:

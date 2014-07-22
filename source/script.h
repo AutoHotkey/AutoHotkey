@@ -587,7 +587,7 @@ enum GuiControlGetCmds {GUICONTROLGET_CMD_INVALID, GUICONTROLGET_CMD_CONTENTS, G
 
 typedef UCHAR GuiControls;
 enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero due to things like ZeroMemory() on the struct.
-	, GUI_CONTROL_TEXT, GUI_CONTROL_PIC, GUI_CONTROL_GROUPBOX
+	, GUI_CONTROL_LABEL, GUI_CONTROL_PIC, GUI_CONTROL_GROUPBOX
 	, GUI_CONTROL_BUTTON, GUI_CONTROL_CHECKBOX, GUI_CONTROL_RADIO
 	, GUI_CONTROL_DROPDOWNLIST, GUI_CONTROL_COMBOBOX
 	, GUI_CONTROL_LISTBOX, GUI_CONTROL_LISTVIEW, GUI_CONTROL_TREEVIEW
@@ -1437,7 +1437,7 @@ public:
 	static GuiControls ConvertGuiControl(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return GUI_CONTROL_INVALID;
-		if (!_tcsicmp(aBuf, _T("Text"))) return GUI_CONTROL_TEXT;
+		if (!_tcsicmp(aBuf, _T("Label"))) return GUI_CONTROL_LABEL;
 		if (!_tcsicmp(aBuf, _T("Edit"))) return GUI_CONTROL_EDIT;
 		if (!_tcsicmp(aBuf, _T("Button"))) return GUI_CONTROL_BUTTON;
 		if (!_tcsicmp(aBuf, _T("Checkbox"))) return GUI_CONTROL_CHECKBOX;
