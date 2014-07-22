@@ -20,6 +20,243 @@ GNU General Public License for more details.
 #include "application.h" // for MsgSleep()
 #include "window.h" // for SetForegroundWindowEx()
 #include "qmath.h" // for qmathLog()
+#include "script_func_impl.h"
+
+
+ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (!aParamCount) // file[]
+			return INVOKE_NOT_HANDLED;
+		
+	LPTSTR name = ParamIndexToString(0); // Name of method or property.
+	MemberID member = INVALID;
+	--aParamCount; // Exclude name from param count.
+	++aParam; // As above, but for the param array.
+
+	// Add' must be handled differently to support AddLabel(), AddButton(), etc.
+	if (!_tcsnicmp(name, _T("Add"), 3))
+		member = M_AddControl;
+#define if_member(s,e)	else if (!_tcsicmp(name, _T(s))) member = e;
+	if_member("Destroy", M_Destroy)
+	if_member("Show", M_Show)
+	if_member("Hide", M_Hide)
+	if_member("Cancel", M_Hide) // Allow gui.Cancel() as a synonym for gui.Hide().
+	if_member("Minimize", M_Minimize)
+	if_member("Maximize", M_Maximize)
+	if_member("Restore", M_Restore)
+	if_member("SetFont", M_SetFont)
+	if_member("Options", M_Options)
+	if_member("Opt", M_Options) // Short-hand form of Options.
+	if_member("Flash", M_Flash)
+	if_member("__Handle", P_Handle) // Prefix with underscores because it is designed for advanced users.
+	if_member("Title", P_Title)
+	if_member("MarginX", P_MarginX)
+	if_member("MarginY", P_MarginY)
+	if_member("BgColor", P_BgColor)
+	if_member("CtrlColor", P_CtrlColor)
+#undef if_member
+	if (member == INVALID)
+		return INVOKE_NOT_HANDLED;
+
+	// Syntax validation:
+	if (!IS_INVOKE_CALL)
+	{
+		if (member < LastMethodPlusOne)
+			// Member requires parentheses().
+			return INVOKE_NOT_HANDLED;
+		if (aParamCount != ((IS_INVOKE_SET ? 1 : 0) + (member == P_Control ? 1 : 0)))
+			return g_script.ScriptError(_T("Invalid usage."));
+	}
+
+	if (!mHwnd)
+		return g_script.ScriptError(_T("The Gui is destroyed."));
+
+	switch (member)
+	{
+		case M_Destroy:
+			return Destroy();
+		case M_Show:
+		{
+			LPTSTR options = ParamIndexToOptionalString(0);
+			LPTSTR title = ParamIndexToOptionalString(1);
+			return Show(options, title);
+		}
+		case M_Hide:
+			return Cancel();
+		case M_Minimize:
+			// If the window is hidden, it is unhidden as a side-effect (this happens even for SW_SHOWMINNOACTIVE).
+			ShowWindow(mHwnd, SW_MINIMIZE);
+			return OK;
+		case M_Maximize:
+			ShowWindow(mHwnd, SW_MAXIMIZE);
+			return OK;
+		case M_Restore:
+			ShowWindow(mHwnd, SW_RESTORE);
+			return OK;
+		case M_Flash:
+			FlashWindow(mHwnd, ParamIndexToOptionalType(BOOL, 0, TRUE));
+			return OK;
+		case M_SetFont:
+		{
+			LPTSTR options = ParamIndexToOptionalString(0);
+			LPTSTR font_name = ParamIndexToOptionalString(1);
+			return SetCurrentFont(options, font_name);
+		}
+		case M_Options:
+		{
+			LPTSTR options = ParamIndexToOptionalString(0);
+			ToggleValueType own_dialogs = TOGGLE_INVALID;
+			if (!ParseOptions(options, own_dialogs))
+				break; // Above already displayed an error message.
+			SetOwnDialogs(own_dialogs);
+			return OK;
+		}
+		case P_Handle:
+		{
+			if (IS_INVOKE_SET)
+				return INVOKE_NOT_HANDLED;
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = (__int64)(UINT_PTR)mHwnd;
+			return OK;
+		}
+		case P_Title:
+		{
+			if (IS_INVOKE_SET)
+			{
+				aResultToken.symbol = SYM_STRING;
+				aResultToken.marker = ParamIndexToString(0);
+				SetWindowText(mHwnd, aResultToken.marker);
+				return OK;
+			} else
+			{
+				return INVOKE_NOT_HANDLED; // TODO
+			}
+		}
+		case P_MarginX:
+		case P_MarginY:
+		{
+			int& margin = member == P_MarginX ? mMarginX : mMarginY;
+			if (IS_INVOKE_SET)
+				margin = Scale(ParamIndexToInt(0)); // Seems okay to allow negative margins.
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = Unscale(margin);
+			return OK;
+		}
+		case P_BgColor:
+		case P_CtrlColor:
+		{
+			if (!IS_INVOKE_SET)
+				return INVOKE_NOT_HANDLED; // TODO
+			aResultToken.symbol = SYM_STRING;
+			aResultToken.marker = ParamIndexToString(0);
+
+			// AssignColor() takes care of deleting old brush, etc.
+			AssignColor(aResultToken.marker,
+				member == P_BgColor ? mBackgroundColorWin : mBackgroundColorCtl,
+				member == P_BgColor ? mBackgroundBrushWin : mBackgroundBrushCtl);
+
+			// As documented, ListView_SetTextBkColor/ListView_SetBkColor are not called.  Primary reasons:
+			// 1) Allows any custom color that was explicitly specified via ListView control options
+			//    to stay in effect rather than being overridden by this change.  You could argue that this
+			//    could be detected by asking the control its background color and if it matches the previous
+			//    mBackgroundColorCtl (which might be CLR_DEFAULT?), it's 99% likely it was not an
+			//    individual/explicit custom color and thus should be changed here.  But that would be even
+			//    more complexity so it seems better to keep it simple.
+			// 2) Reduce code size.
+			// The same also probably applies to TreeView as well.
+
+			if (IsWindowVisible(mHwnd))
+				// Force the window to repaint so that colors take effect immediately.
+				// UpdateWindow() isn't enough sometimes/always, so do something more aggressive:
+				InvalidateRect(mHwnd, NULL, TRUE);
+			return OK;
+		}
+	}
+
+	// Since above didn't return, an error must've occurred.
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T(""); // Already set in most cases, but done here for maintainability.
+	return FAIL;
+}
+
+
+BIF_DECL(BIF_GuiCreate)
+{
+	LPTSTR title = ParamIndexToOptionalString(0);
+	LPTSTR options = ParamIndexToOptionalString(1);
+
+	if (g_guiCount == g_guiCountMax)
+	{
+		// g_gui is full or hasn't been allocated yet, so allocate or expand it.   Start at a low
+		// number since most scripts don't use many Gui windows, and double each time for simplicity
+		// and to avoid lots of intermediate reallocations if the script creates many Gui windows.
+		int new_max = g_guiCountMax ? g_guiCountMax * 2 : 8;
+		GuiType **new_gui_array = (GuiType **)realloc(g_gui, new_max * sizeof(GuiType *));
+		if (!new_gui_array)
+		{
+			g_script.ScriptError(_T("Too many Guis.")); // Short msg since so rare.
+			return;
+		}
+		g_gui = new_gui_array;
+		g_guiCountMax = new_max;
+	}
+
+	GuiType* gui = new GuiType();
+	if (!gui)
+	{
+		g_script.ScriptError(ERR_OUTOFMEM); // Short msg since so rare.
+		return;
+	}
+
+	ToggleValueType own_dialogs = TOGGLE_INVALID;
+	if (*options && !gui->ParseOptions(options, own_dialogs))
+	{
+		delete gui;
+		return; // ParseOptions() already displayed the error.
+	}
+
+	gui->mControl = (GuiControlType *)malloc(GUI_CONTROL_BLOCK_SIZE * sizeof(GuiControlType));
+	if (!gui->mControl)
+	{
+		delete gui;
+		g_script.ScriptError(ERR_OUTOFMEM); // Short msg since so rare.
+		return;
+	}
+
+	gui->mControlCapacity = GUI_CONTROL_BLOCK_SIZE;
+
+	// Create the Gui now.
+	if (!gui->Create())
+	{
+		free(gui->mControl);
+		delete gui;
+		g_script.ScriptError(_T("Could not create Gui.")); // Short msg since so rare.
+		return;
+	}
+
+	// Set the title if one has been specified.
+	if (*title)
+		SetWindowText(gui->mHwnd, title);
+
+	gui->SetOwnDialogs(own_dialogs);
+
+	// Successful creation - add the Gui to the global list of Guis and return it
+	g_gui[g_guiCount++] = gui;
+	aResultToken.symbol = SYM_OBJECT;
+	aResultToken.object = gui;
+}
+
+
+BIF_DECL(BIF_GuiFromHwnd)
+{
+	GuiType* gui = GuiType::FindGui((HWND)ParamIndexToIntPtr(0));
+	if (gui)
+	{
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = gui;
+		gui->AddRef();
+	}
+}
 
 
 GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t *aNameLength)
@@ -194,220 +431,11 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 	ResultType result = OK; // Set default return value for use with all instances of "goto" further below.
 	// EVERYTHING below this point should use "result" and "goto return_the_result" instead of "return".
 
-	// First completely handle any sub-command that doesn't require the window to exist.
-	// In other words, don't auto-create the window before doing this command like we do
-	// for the others:
-	switch(gui_command)
-	{
-	case GUI_CMD_DESTROY:
-		if (pgui)
-			result = GuiType::Destroy(*pgui);
-		goto return_the_result;
-
-	case GUI_CMD_DEFAULT:
-		if (!pgui)
-		{
-			// Create a dummy structure to hold the name.  For simplicity and maintainability,
-			// a full GuiType structure is constructed.  We can't actually create the Gui yet,
-			// since that would prevent +Owner%N% from working and possibly break other scripts
-			// which rely on the old behaviour.
-			if (pgui = new GuiType())
-			{
-				if (pgui->mName = tmalloc(name_length + 1))
-				{
-					tmemcpy(pgui->mName, name, name_length);
-					pgui->mName[name_length] = '\0';
-				}
-				else
-				{
-					delete pgui;
-					pgui = NULL;
-				}
-			}
-		}
-		// Change the "default" member, not g->GuiWindow because that contains the original window
-		// responsible for launching this thread, which should not be changed because it is used to
-		// produce the contents of A_Gui.
-		if (pgui)
-		{
-			if (g->GuiDefaultWindow)
-				g->GuiDefaultWindow->Release();
-			pgui->AddRef();
-			g->GuiDefaultWindow = pgui;
-		}
-		else
-			result = ScriptError(ERR_OUTOFMEM);
-		goto return_the_result;
-
-	case GUI_CMD_OPTIONS:
-		// v1.0.43.09:
-		// Don't overload "+LastFound" because it would break existing scripts that rely on the window
-		// being created by +LastFound.
-		if (!_tcsicmp(aCommand, _T("+LastFoundExist")))
-		{
-			g->hWndLastUsed = pgui ? pgui->mHwnd : NULL;
-			goto return_the_result;
-		}
-		break;
-
-	case GUI_CMD_NEW: // v1.1.04: Gui, New.
-		if (_tcschr(aBuf, ':'))
-		{
-			if (pgui)
-			{
-				// Caller explicitly asked for a "new" Gui, so destroy this one:
-				GuiType::Destroy(*pgui);
-				pgui = NULL;
-			}
-		}
-		else
-		{
-			// In this case, caller has omitted the name and wants to create an "anonymous" Gui.
-			pgui = NULL; // Override pgui, which was set to the default Gui (if it exists).
-			name_length = 0; // Override name_length, which was set to the length of the default Gui name.
-			//name = _T(""); // Unnecessary since name is not expected to be null-terminated.
-			// Below will allocate an empty name, for simplicity and maintainability --
-			// this way, mName is always non-NULL and points to malloc'd memory.
-		}
-		break;
-	}
-
-
-	// If the window doesn't currently exist, don't auto-create it for those commands for
-	// which it wouldn't make sense. Note that things like FONT and COLOR are allowed to
-	// auto-create the window, since those commands can be legitimately used prior to the
-	// first "Gui Add" command.  Also, it seems best to allow SHOW even though all it will
-	// do is create and display an empty window.
+	// If the window doesn't currently exist, bail out.
 	if (!pgui)
-	{
-		switch(gui_command)
-		{
-		case GUI_CMD_SUBMIT:
-		case GUI_CMD_CANCEL:
-		case GUI_CMD_FLASH:
-		case GUI_CMD_MINIMIZE:
-		case GUI_CMD_MAXIMIZE:
-		case GUI_CMD_RESTORE:
-			goto return_the_result; // Nothing needs to be done since the window object doesn't exist.
-		}
-
-		if (g_guiCount == g_guiCountMax)
-		{
-			// g_gui is full or hasn't been allocated yet, so allocate or expand it.   Start at a low
-			// number since most scripts don't use many Gui windows, and double each time for simplicity
-			// and to avoid lots of intermediate reallocations if the script creates many Gui windows.
-			int new_max = g_guiCountMax ? g_guiCountMax * 2 : 8;
-			GuiType **new_gui_array = (GuiType **)realloc(g_gui, new_max * sizeof(GuiType *));
-			if (!new_gui_array)
-			{
-				result = FAIL; // No error displayed since extremely rare.
-				goto return_the_result;
-			}
-			g_gui = new_gui_array;
-			g_guiCountMax = new_max;
-		}
-
-		// Otherwise: Create the object and (later) its window, since all the other sub-commands below need it:
-		for (;;) // For break, to reduce repetition of cleanup-on-failure code.
-		{
-			if (pgui = new GuiType())
-			{
-				if (pgui->mControl = (GuiControlType *)malloc(GUI_CONTROL_BLOCK_SIZE * sizeof(GuiControlType)))
-				{
-					if (pgui->mName = tmalloc(name_length + 1))
-					{
-						tmemcpy(pgui->mName, name, name_length);
-						pgui->mName[name_length] = '\0';
-						pgui->mControlCapacity = GUI_CONTROL_BLOCK_SIZE;
-						g_gui[g_guiCount++] = pgui;
-						break;
-					}
-					free(pgui->mControl);
-				}
-				delete pgui;
-			}
-			result = FAIL; // No error displayed since extremely rare.
-			goto return_the_result;
-		}
-	}
+		goto return_the_result;
 
 	GuiType &gui = *pgui;  // For performance.
-
-	// Now handle any commands that should be handled prior to creation of the window in the case
-	// where the window doesn't already exist:
-	
-	LPTSTR options;
-	if (gui_command == GUI_CMD_OPTIONS)
-		options = aCommand;
-	else if (gui_command == GUI_CMD_NEW)
-		options = aParam2;
-	else
-		options = NULL;
-	
-	bool set_last_found_window = false;
-	ToggleValueType own_dialogs = TOGGLE_INVALID;
-	Var *hwnd_var = NULL;
-	if (options)
-		if (!gui.ParseOptions(options, set_last_found_window, own_dialogs, hwnd_var))
-		{
-			result = FAIL; // It already displayed the error.
-			goto return_the_result;
-		}
-
-	// Create the window if needed.  Since it should not be possible for our window to get destroyed
-	// without our knowing about it (via the explicit handling in its window proc), it shouldn't
-	// be necessary to check the result of IsWindow(gui.mHwnd):
-	if (!gui.mHwnd && !gui.Create())
-	{
-		GuiType::Destroy(gui); // Get rid of the object so that it stays in sync with the window's existence.
-		result = ScriptError(_T("Could not create window."));
-		goto return_the_result;
-	}
-
-	if (gui_command == GUI_CMD_NEW) // v1.1.04: Gui, New.  v1.1.08: now also applies to Gui, Name:New.
-	{
-		// The following comments are only applicable to Gui, New (anonymous Gui):
-		// Now that the HWND is known, we could use it as the Gui's name.  However, that isn't
-		// done because it would allow a Gui to be created using an invalid HWND as a name
-		// (and that invalid HWND could become valid for some other window, later):
-		//
-		//    Gui, New  ; Creates a new Gui and sets it as default.
-		//    Gui, Destroy  ; Destroys the Gui but does not affect g->GuiDefaultWindow or g->DialogOwner.
-		//    Gui, +LastFound  ; This would create a Gui using the HWND of the previous one as a name.
-		//
-		// Instead, A_Gui returns the HWND when mName is an empty string.
-
-		// Make the new window the default, for convenience:
-		if (g->GuiDefaultWindow)
-			g->GuiDefaultWindow->Release();
-		pgui->AddRef();
-		g->GuiDefaultWindow = pgui;
-	}
-
-	if (hwnd_var) // v1.1.04: +HwndVarName option.
-		hwnd_var->AssignHWND(gui.mHwnd);
-
-	if (options)
-	{
-		// After creating the window, apply remaining options:
-		if (set_last_found_window)
-			g->hWndLastUsed = gui.mHwnd;
-		if (own_dialogs != TOGGLE_INVALID) // v1.0.35.06: Plus or minus "OwnDialogs" was present rather than being entirely absent.
-		{
-			if (g->DialogOwner)
-				g->DialogOwner->Release();
-			if (own_dialogs == TOGGLED_ON)
-			{
-				gui.AddRef();
-				g->DialogOwner = &gui;
-			}
-			else
-				g->DialogOwner = NULL; // Reset to NULL when "-OwnDialogs" is present.
-		}
-		if (gui_command == GUI_CMD_NEW && *aParam3)
-			SetWindowText(gui.mHwnd, aParam3);
-		goto return_the_result;
-	}
 
 	GuiControls gui_control_type = GUI_CONTROL_INVALID;
 	int index;
@@ -421,13 +449,6 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 			goto return_the_result;
 		}
 		result = gui.AddControl(gui_control_type, aParam3, aParam4); // It already displayed any error.
-		goto return_the_result;
-
-	case GUI_CMD_MARGIN:
-		if (*aParam2)
-			gui.mMarginX = gui.Scale(ATOI(aParam2)); // Seems okay to allow negative margins.
-		if (*aParam3)
-			gui.mMarginY = gui.Scale(ATOI(aParam3)); // Seems okay to allow negative margins.
 		goto return_the_result;
 		
 	case GUI_CMD_MENU:
@@ -451,35 +472,6 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 			gui.UpdateAccelerators(*menu);
 		else
 			gui.RemoveAccelerators();
-		goto return_the_result;
-
-	case GUI_CMD_SHOW:
-		result = gui.Show(aParam2, aParam3);
-		goto return_the_result;
-
-	case GUI_CMD_SUBMIT:
-		result = gui.Submit(_tcsicmp(aParam2, _T("NoHide")));
-		goto return_the_result;
-
-	case GUI_CMD_CANCEL:
-		result = gui.Cancel();
-		goto return_the_result;
-
-	case GUI_CMD_MINIMIZE:
-		// If the window is hidden, it is unhidden as a side-effect (this happens even for SW_SHOWMINNOACTIVE).
-		ShowWindow(gui.mHwnd, SW_MINIMIZE);
-		goto return_the_result;
-
-	case GUI_CMD_MAXIMIZE:
-		ShowWindow(gui.mHwnd, SW_MAXIMIZE); // If the window is hidden, it is unhidden as a side-effect.
-		goto return_the_result;
-
-	case GUI_CMD_RESTORE:
-		ShowWindow(gui.mHwnd, SW_RESTORE); // If the window is hidden, it is unhidden as a side-effect.
-		goto return_the_result;
-
-	case GUI_CMD_FONT:
-		result = gui.SetCurrentFont(aParam2, aParam3);
 		goto return_the_result;
 
 	case GUI_CMD_LISTVIEW:
@@ -572,46 +564,6 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		}
 		goto return_the_result;
 	}
-		
-	case GUI_CMD_COLOR:
-		// AssignColor() takes care of deleting old brush, etc.
-		// In this case, a blank for either param means "leaving existing color alone", in which
-		// case AssignColor() is not called since it would assume CLR_NONE then.
-		if (*aParam2)
-			AssignColor(aParam2, gui.mBackgroundColorWin, gui.mBackgroundBrushWin);
-		if (*aParam3)
-		{
-			AssignColor(aParam3, gui.mBackgroundColorCtl, gui.mBackgroundBrushCtl);
-			// As documented, the following is not done.  Primary reasons:
-			// 1) Allows any custom color that was explicitly specified via "Gui, Add, ListView, BackgroundGreen"
-			//    to stay in effect rather than being overridden by this change.  You could argue that this
-			//    could be detected by asking the control its background color and if it matches the previous
-			//    mBackgroundColorCtl (which might be CLR_DEFAULT?), it's 99% likely it was not an
-			//    individual/explicit custom color and thus should be changed here.  But that would be even
-			//    more complexity so it seems better to keep it simple.
-			// 2) Reduce code size.
-			//for (GuiIndexType u = 0; u < gui.mControlCount; ++u)
-			//	if (gui.mControl[u].type == GUI_CONTROL_LISTVIEW && ListView_GetTextBkColor(..) != prev_bk_color_ctl)
-			//	{
-			//		ListView_SetTextBkColor(gui.mControl[u].hwnd, gui.mBackgroundColorCtl);
-			//		ListView_SetBkColor(gui.mControl[u].hwnd, gui.mBackgroundColorCtl);
-			//	}
-			//  ... and probably similar for TREEVIEW.
-		}
-		if (IsWindowVisible(gui.mHwnd))
-			// Force the window to repaint so that colors take effect immediately.
-			// UpdateWindow() isn't enough sometimes/always, so do something more aggressive:
-			InvalidateRect(gui.mHwnd, NULL, TRUE);
-		goto return_the_result;
-
-	case GUI_CMD_FLASH:
-		// Note that FlashWindowEx() would have to be loaded dynamically since it is not available
-		// on Win9x/NT.  But for now, just this simple method is provided.  In the future, more
-		// sophisticated parameters can be made available to flash the window a given number of times
-		// and at a certain frequency, and other options such as only-taskbar-button or only-caption.
-		// Set FlashWindowEx() for more ideas:
-		FlashWindow(gui.mHwnd, _tcsicmp(aParam2, _T("Off")) ? TRUE : FALSE);
-		goto return_the_result;
 	
 	} // switch()
 
@@ -1616,60 +1568,59 @@ HWND GuiType::sTreeWithEditInProgress = NULL;
 
 
 
-ResultType GuiType::Destroy(GuiType &gui)
-// Rather than deal with the confusion of an object destroying itself, this method is static
-// and designed to deal with one particular window index in the g_gui array.
+ResultType GuiType::Destroy()
 {
 	GuiIndexType u;
 	int i;
 
-	if (gui.mHwnd)
+	if (!mHwnd)
+		return OK; // We have already been destroyed.
+
+	// First destroy any windows owned by this window, since they will be auto-destroyed
+	// anyway due to their being owned.  By destroying them explicitly, the Destroy()
+	// function is called recursively which keeps everything relatively neat.
+	// Search right to left since Destroy() shifts items to the right of i left by 1:
+	for (i = g_guiCount; --i >= 0; )
+		if (g_gui[i]->mOwner == mHwnd)
+			g_gui[i]->Destroy();
+
+	// Testing shows that this must be done prior to calling DestroyWindow() later below, presumably
+	// because the destruction immediately destroys the status bar, or prevents it from answering messages.
+	// This seems at odds with MSDN's comment: "During the processing of [WM_DESTROY], it can be assumed
+	// that all child windows still exist".
+	if (mStatusBarHwnd) // IsWindow(gui.mStatusBarHwnd) isn't called because even if possible for it to have been destroyed, SendMessage below should return 0.
 	{
-		// First destroy any windows owned by this window, since they will be auto-destroyed
-		// anyway due to their being owned.  By destroying them explicitly, the Destroy()
-		// function is called recursively which keeps everything relatively neat.
-		// Search right to left since Destroy() shifts items to the right of i left by 1:
-		for (i = g_guiCount; --i >= 0; )
-			if (g_gui[i]->mOwner == gui.mHwnd)
-				GuiType::Destroy(*g_gui[i]);
-		// Testing shows that this must be done prior to calling DestroyWindow() later below, presumably
-		// because the destruction immediately destroys the status bar, or prevents it from answering messages.
-		// This seems at odds with MSDN's comment: "During the processing of [WM_DESTROY], it can be assumed
-		// that all child windows still exist".
-		if (gui.mStatusBarHwnd) // IsWindow(gui.mStatusBarHwnd) isn't called because even if possible for it to have been destroyed, SendMessage below should return 0.
+		// This is done because the vast majority of people wouldn't want to have to worry about it.
+		// They can always use DllCall() if they want to share the same HICON among multiple parts of
+		// the same bar, or among different windows (fairly rare).
+		HICON hicon;
+		int part_count = (int)SendMessage(mStatusBarHwnd, SB_GETPARTS, 0, NULL); // MSDN: "This message always returns the number of parts in the status bar [regardless of how it is called]".
+		for (i = 0; i < part_count; ++i)
+			if (hicon = (HICON)SendMessage(mStatusBarHwnd, SB_GETICON, i, 0))
+				DestroyIcon(hicon);
+	}
+	if (IsWindow(mHwnd)) // If WM_DESTROY called us, the window might already be partially destroyed.
+	{
+		// If this window is using a menu bar but that menu is also used by some other window, first
+		// detach the menu so that it doesn't get auto-destroyed with the window.  This is done
+		// unconditionally since such a menu will be automatically destroyed when the script exits
+		// or when the menu is destroyed explicitly via the Menu command.  It also prevents any
+		// submenus attached to the menu bar from being destroyed, since those submenus might be
+		// also used by other menus (however, this is not really an issue since menus destroyed
+		// would be automatically re-created upon next use).  But in the case of a window that
+		// is currently using a menu bar, destroying that bar in conjunction with the destruction
+		// of some other window might cause bad side effects on some/all OSes.
+		ShowWindow(mHwnd, SW_HIDE);  // Hide it to prevent re-drawing due to menu removal.
+		SetMenu(mHwnd, NULL);
+		if (!mDestroyWindowHasBeenCalled)
 		{
-			// This is done because the vast majority of people wouldn't want to have to worry about it.
-			// They can always use DllCall() if they want to share the same HICON among multiple parts of
-			// the same bar, or among different windows (fairly rare).
-			HICON hicon;
-			int part_count = (int)SendMessage(gui.mStatusBarHwnd, SB_GETPARTS, 0, NULL); // MSDN: "This message always returns the number of parts in the status bar [regardless of how it is called]".
-			for (i = 0; i < part_count; ++i)
-				if (hicon = (HICON)SendMessage(gui.mStatusBarHwnd, SB_GETICON, i, 0))
-					DestroyIcon(hicon);
+			mDestroyWindowHasBeenCalled = true;  // Signal the WM_DESTROY routine not to call us.
+			DestroyWindow(mHwnd);  // The WindowProc is immediately called and it now destroys the window.
 		}
-		if (IsWindow(gui.mHwnd)) // If WM_DESTROY called us, the window might already be partially destroyed.
-		{
-			// If this window is using a menu bar but that menu is also used by some other window, first
-			// detach the menu so that it doesn't get auto-destroyed with the window.  This is done
-			// unconditionally since such a menu will be automatically destroyed when the script exits
-			// or when the menu is destroyed explicitly via the Menu command.  It also prevents any
-			// submenus attached to the menu bar from being destroyed, since those submenus might be
-			// also used by other menus (however, this is not really an issue since menus destroyed
-			// would be automatically re-created upon next use).  But in the case of a window that
-			// is currently using a menu bar, destroying that bar in conjunction with the destruction
-			// of some other window might cause bad side effects on some/all OSes.
-			ShowWindow(gui.mHwnd, SW_HIDE);  // Hide it to prevent re-drawing due to menu removal.
-			SetMenu(gui.mHwnd, NULL);
-			if (!gui.mDestroyWindowHasBeenCalled)
-			{
-				gui.mDestroyWindowHasBeenCalled = true;  // Signal the WM_DESTROY routine not to call us.
-				DestroyWindow(gui.mHwnd);  // The WindowProc is immediately called and it now destroys the window.
-			}
-			// else WM_DESTROY was called by a function other than this one (possibly auto-destruct due to
-			// being owned by script's main window), so it would be bad to call DestroyWindow() again since
-			// it's already in progress.
-		}
-	} // if (gui.mHwnd)
+		// else WM_DESTROY was called by a function other than this one (possibly auto-destruct due to
+		// being owned by script's main window), so it would be bad to call DestroyWindow() again since
+		// it's already in progress.
+	}
 
 	// Although it is tempting to do this earlier so that any message monitors or window
 	// procedure subclasses which might have been triggered above could operate on a new
@@ -1677,7 +1628,7 @@ ResultType GuiType::Destroy(GuiType &gui)
 	// scripts since A_Gui and A_GuiControl would not be set correctly:
 	for (i = g_guiCount; --i >= 0; ) // Search right to left (newest first).
 	{
-		if (g_gui[i] == &gui)
+		if (g_gui[i] == this)
 		{
 			// Remove this item by shifting items right of it to the left by 1:
 			while (++i < g_guiCount)
@@ -1687,20 +1638,20 @@ ResultType GuiType::Destroy(GuiType &gui)
 		}
 	}
 
-	if (gui.mBackgroundBrushWin)
-		DeleteObject(gui.mBackgroundBrushWin);
-	if (gui.mBackgroundBrushCtl)
-		DeleteObject(gui.mBackgroundBrushCtl);
-	if (gui.mHdrop)
-		DragFinish(gui.mHdrop);
+	if (mBackgroundBrushWin)
+		DeleteObject(mBackgroundBrushWin);
+	if (mBackgroundBrushCtl)
+		DeleteObject(mBackgroundBrushCtl);
+	if (mHdrop)
+		DragFinish(mHdrop);
 
 	// It seems best to delete the bitmaps whenever the control changes to a new image or
 	// whenever the control is destroyed.  Otherwise, if a control or its parent window is
 	// destroyed and recreated many times, memory allocation would continue to grow from
 	// all the abandoned pointers:
-	for (u = 0; u < gui.mControlCount; ++u)
+	for (u = 0; u < mControlCount; ++u)
 	{
-		GuiControlType &control = gui.mControl[u];
+		GuiControlType &control = mControl[u];
 		if (control.type == GUI_CONTROL_PIC && control.union_hbitmap)
 		{
 			if (control.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR)
@@ -1712,40 +1663,21 @@ ResultType GuiType::Destroy(GuiType &gui)
 		else if (control.type == GUI_CONTROL_LISTVIEW) // It was ensured at an earlier stage that union_lv_attrib != NULL.
 			free(control.union_lv_attrib);
 	}
-	HICON icon_eligible_for_destruction = gui.mIconEligibleForDestruction;
-	HICON icon_eligible_for_destruction_small = gui.mIconEligibleForDestructionSmall;
+	HICON icon_eligible_for_destruction = mIconEligibleForDestruction;
+	HICON icon_eligible_for_destruction_small = mIconEligibleForDestructionSmall;
 	if (icon_eligible_for_destruction && icon_eligible_for_destruction != g_script.mCustomIcon) // v1.0.37.07.
 		DestroyIconsIfUnused(icon_eligible_for_destruction, icon_eligible_for_destruction_small); // Must be done only after removal from g_gui.
 	// For simplicity and performance, any fonts used *solely* by a destroyed window are destroyed
 	// only when the program terminates.  Another reason for this is that sometimes a destroyed window
 	// is soon recreated to use the same fonts it did before.
-	gui.RemoveAccelerators();
-	gui.mHwnd = NULL;
-	gui.mControlCount = 0; // All child windows (controls) are automatically destroyed with parent.
-	free(gui.mControl); // Free the control array, which was previously malloc'd.
-	gui.Release(); // After this, the var "gui" is invalid so should not be referenced.
+	RemoveAccelerators();
+	mHwnd = NULL;
+	mControlCount = 0; // All child windows (controls) are automatically destroyed with parent.
+	free(mControl); // Free the control array, which was previously malloc'd.
+	//Release(); // After this, the var "gui" is invalid so should not be referenced.
 	// If this Gui was the last thing keeping the script running, exit the script:
 	g_script.ExitIfNotPersistent(EXIT_DESTROY);
 	return OK;
-}
-
-void GuiType::AddRef()
-// Keeps the GuiType structure in memory so that Gui destruction can be detected
-// reliably, but does NOT guarantee that the structure's members will remain valid.
-{
-	++mReferenceCount;
-}
-
-void GuiType::Release()
-{
-	if (--mReferenceCount == 0)
-	{
-		// This should only ever happen if Destroy() has been called and has freed
-		// this structure's contents, although Destroy() mightn't necessarily be
-		// the current/last caller of this function.
-		free(mName); // Free the name, which was previously malloc'd.
-		delete this;
-	}
 }
 
 
@@ -1803,8 +1735,8 @@ ResultType GuiType::Create()
 		sGuiInitialized = true;
 	}
 
-	if (!mLabelsHaveBeenSet) // i.e. don't set the defaults if the labels were set prior to the creation of the window.
-		SetLabels(NULL);
+	//if (!mLabelsHaveBeenSet) // i.e. don't set the defaults if the labels were set prior to the creation of the window.
+	//	SetLabels(NULL);
 	// The above is done prior to creating the window so that mLabelForDropFiles can determine
 	// whether to add the WS_EX_ACCEPTFILES style.
 
@@ -2323,9 +2255,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		&& !control.jump_to_label && !(control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL))
 	{
 		TCHAR label_name[1024]; // Subroutine labels are nearly unlimited in length, so use a size to cover anything realistic.
-		if (*mName != '1' || mName[1]) // Prepend the window number for windows other than the first.
+		/*if (*mName != '1' || mName[1]) // Prepend the window number for windows other than the first.
 			_tcscpy(label_name, mName);
-		else
+		else*/
 			*label_name = '\0';
 		sntprintfcat(label_name, _countof(label_name), _T("Button%s"), aText);
 		// Remove spaces and ampersands.  Although ampersands are legal in labels, it seems
@@ -4052,7 +3984,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 
 
-ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs, Var *&aHwndVar)
+ResultType GuiType::ParseOptions(LPTSTR aOptions, ToggleValueType &aOwnDialogs)
 // This function is similar to ControlParseOptions() further below, so should be maintained alongside it.
 // Caller must have already initialized aSetLastFoundWindow/, bool &aOwnDialogs with desired starting values.
 // Caller must ensure that aOptions is a modifiable string, since this method temporarily alters it.
@@ -4239,9 +4171,10 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 			if (adding) mStyle |= WS_DISABLED; else mStyle &= ~WS_DISABLED;
 		}
 		
-		else if (!_tcsnicmp(next_option, _T("Hwnd"), 4))
-			aHwndVar = g_script.FindOrAddVar(next_option + 4);
+		//else if (!_tcsnicmp(next_option, _T("Hwnd"), 4))
+		//	aHwndVar = g_script.FindOrAddVar(next_option + 4);
 
+		/*
 		else if (!_tcsnicmp(next_option, _T("Label"), 5)) // v1.0.44.09: Allow custom label prefix for the reasons described in SetLabels().
 		{
 			if (adding)
@@ -4253,9 +4186,10 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 			// to defaults via something like +Label%A_Gui%Gui.
 			// Alternative: Could also use some char that's illegal in labels to indicate one or more of the above.
 		}
+		*/
 
-		else if (!_tcsicmp(next_option, _T("LastFound")))
-			aSetLastFoundWindow = true; // Regardless of whether "adding" is true or false.
+		//else if (!_tcsicmp(next_option, _T("LastFound")))
+		//	aSetLastFoundWindow = true; // Regardless of whether "adding" is true or false.
 
 		else if (!_tcsicmp(next_option, _T("MaximizeBox"))) // See above comment.
 			if (adding) mStyle |= WS_MAXIMIZEBOX|WS_SYSMENU; else mStyle &= ~WS_MAXIMIZEBOX;
@@ -4430,6 +4364,22 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 	}
 
 	return OK;
+}
+
+
+
+void GuiType::SetOwnDialogs(ToggleValueType state)
+{
+	if (state == TOGGLE_INVALID)
+		return;
+	if (g->DialogOwner)
+		g->DialogOwner->Release();
+	if (state == TOGGLED_ON)
+	{
+		g->DialogOwner = this;
+		AddRef();
+	} else
+		g->DialogOwner = NULL; // Reset to NULL when "-OwnDialogs" is present.
 }
 
 
@@ -8676,7 +8626,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			if (!pgui->mDestroyWindowHasBeenCalled)
 			{
 				pgui->mDestroyWindowHasBeenCalled = true; // Tell it not to call DestroyWindow(), just clean up everything else.
-				GuiType::Destroy(*pgui);
+				pgui->Destroy();
 			}
 		// Above: if mDestroyWindowHasBeenCalled==true, we were called by Destroy(), so don't call Destroy() again recursively.
 		// And in any case, pass it on to DefDlgProc() in case it does any extra cleanup:

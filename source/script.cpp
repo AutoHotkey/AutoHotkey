@@ -42,6 +42,9 @@ ExprOpFunc g_ObjGet(Op_ObjInvoke, IT_GET), g_ObjSet(Op_ObjInvoke, IT_SET); // Al
 // (passing the function's name) in an attempt to reduce code size and improve readability.
 FuncEntry g_BIF[] =
 {
+	BIF1(GuiCreate, 0, 3, true),
+	BIF1(GuiFromHwnd, 1, 1, true),
+	
 	BIFn(LV_GetNext, 0, 2, true, BIF_LV_GetNextOrCount),
 	BIFn(LV_GetCount, 0, 1, true, BIF_LV_GetNextOrCount),
 	BIF1(LV_GetText, 2, 3, true, {1}),
@@ -319,8 +322,8 @@ Script::~Script() // Destructor.
 	// This is because one GUI window might get destroyed and take with it a menu bar that is still
 	// in use by an existing GUI window.  GuiType::Destroy() adheres to this philosophy by detaching
 	// its menu bar prior to destroying its window:
-	while (g_guiCount)
-		GuiType::Destroy(*g_gui[g_guiCount-1]); // Static method to avoid problems with object destroying itself.
+	//while (g_guiCount)
+	//	g_gui[g_guiCount-1]->Destroy();
 	for (i = 0; i < GuiType::sFontCount; ++i) // Now that GUI windows are gone, delete all GUI fonts.
 		if (GuiType::sFont[i].hfont)
 			DeleteObject(GuiType::sFont[i].hfont);
@@ -4993,6 +4996,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 						return ScriptError(ERR_PARAM4_OMIT, new_raw_arg4);
 				}
 				break;
+				/*
 			case GUI_CMD_CANCEL:
 			case GUI_CMD_MINIMIZE:
 			case GUI_CMD_MAXIMIZE:
@@ -5004,10 +5008,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					return ScriptError(_T("Parameter #2 and beyond should be omitted in this case."), new_raw_arg2);
 				break;
 			case GUI_CMD_SUBMIT:
+			*/
 			case GUI_CMD_MENU:
 			case GUI_CMD_LISTVIEW:
 			case GUI_CMD_TREEVIEW:
-			case GUI_CMD_FLASH:
+			//case GUI_CMD_FLASH:
 				if (aArgc > 2)
 					return ScriptError(_T("Parameter #3 and beyond should be omitted in this case."), new_raw_arg3);
 				break;
