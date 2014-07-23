@@ -23,6 +23,10 @@ GNU General Public License for more details.
 #include "script_func_impl.h"
 
 
+// Window class atom used by Guis.
+static ATOM sGuiWinClass;
+
+
 ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (!aParamCount) // file[]
@@ -335,12 +339,13 @@ GuiType *GuiType::FindGui(LPTSTR aName)
 
 GuiType *GuiType::FindGui(HWND aHwnd)
 {
-	// The loop will usually find it on the first iteration since
-	// the #1 window is default and thus most commonly used.
-	for (int i = 0; i < g_guiCount; ++i)
-		if (g_gui[i]->mHwnd == aHwnd)
-			return g_gui[i];
-	return NULL;
+	// Check that this window is an AutoHotkey Gui.
+	ATOM atom = (ATOM)GetClassLong(aHwnd, GCW_ATOM);
+	if (atom != sGuiWinClass)
+		return NULL;
+
+	// Retrieve the GuiType object associated to it.
+	return (GuiType*)GetWindowLongPtr(aHwnd, GWLP_USERDATA);
 }
 
 
@@ -1681,8 +1686,7 @@ ResultType GuiType::Create()
 
 	// Use a separate class for GUI, which gives it a separate WindowProc and allows it to be more
 	// distinct when used with the ahk_class method of addressing windows.
-	static bool sGuiInitialized = false;
-	if (!sGuiInitialized)
+	if (!sGuiWinClass)
 	{
 		WNDCLASSEX wc = {0};
 		wc.cbSize = sizeof(wc);
@@ -1696,12 +1700,9 @@ ResultType GuiType::Create()
 		wc.hCursor = LoadCursor((HINSTANCE) NULL, IDC_ARROW);
 		wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
 		wc.cbWndExtra = DLGWINDOWEXTRA;  // So that it will be the type that uses DefDlgProc() vs. DefWindowProc().
-		if (!RegisterClassEx(&wc))
-		{
-			MsgBox(_T("RegClass")); // Short/generic msg since so rare.
-			return FAIL;
-		}
-		sGuiInitialized = true;
+		sGuiWinClass = RegisterClassEx(&wc);
+		if (!sGuiWinClass)
+			return g_script.ScriptError(_T("RegClass")); // Short/generic msg since so rare.
 	}
 
 	//if (!mLabelsHaveBeenSet) // i.e. don't set the defaults if the labels were set prior to the creation of the window.
@@ -1709,9 +1710,12 @@ ResultType GuiType::Create()
 	// The above is done prior to creating the window so that mLabelForDropFiles can determine
 	// whether to add the WS_EX_ACCEPTFILES style.
 
-	if (   !(mHwnd = CreateWindowEx(mExStyle, WINDOW_CLASS_GUI, g_script.mFileName, mStyle, 0, 0, 0, 0
+	if (   !(mHwnd = CreateWindowEx(mExStyle, MAKEINTATOM(sGuiWinClass), g_script.mFileName, mStyle, 0, 0, 0, 0
 		, mOwner, NULL, g_hInstance, NULL))   )
 		return FAIL;
+
+	// Set the user pointer in the window to this GuiType object, so that it is possible to retrieve it back from the window handle.
+	SetWindowLongPtr(mHwnd, GWLP_USERDATA, (LONG_PTR)this);
 
 	// L17: Use separate big/small icons for best results.
 	HICON big_icon, small_icon;
