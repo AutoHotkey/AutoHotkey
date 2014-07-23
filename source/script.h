@@ -2245,6 +2245,18 @@ struct lv_attrib_type
 	int row_count_hint;
 };
 
+struct GuiEvent
+{
+	union
+	{
+		LPTSTR mMethodName;
+		Func* mFunc;
+	};
+
+	GuiEvent() : mMethodName(NULL) { }
+	operator bool() { return mFunc != NULL; } // Also valid for mMethodName.
+};
+
 typedef UCHAR TabControlIndexType;
 typedef UCHAR TabIndexType;
 // Keep the below in sync with the size of the types above:
@@ -2258,7 +2270,7 @@ struct GuiControlType
 	GuiControls type;
 	#define GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL     0x01
 	#define GUI_CONTROL_ATTRIB_ALTSUBMIT           0x02
-	#define GUI_CONTROL_ATTRIB_LABEL_IS_RUNNING    0x04
+	#define GUI_CONTROL_ATTRIB_HANDLER_IS_RUNNING  0x04
 	#define GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN   0x08
 	#define GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED 0x10
 	#define GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT  0x20 // i.e. Don't conform to window/control background color; use default instead.
@@ -2268,7 +2280,7 @@ struct GuiControlType
 	TabControlIndexType tab_control_index; // Which tab control this control belongs to, if any.
 	TabIndexType tab_index; // For type==TAB, this stores the tab control's index.  For other types, it stores the page.
 	Var *output_var;
-	Label *jump_to_label;
+	GuiEvent event_handler;
 	union
 	{
 		COLORREF union_color;  // Color of the control's text.
@@ -2342,9 +2354,14 @@ public:
 	GuiIndexType mControlCapacity; // How many controls can fit into the current memory size of mControl.
 	GuiControlType *mControl; // Will become an array of controls when the window is first created.
 	GuiIndexType mDefaultButtonIndex; // Index vs. pointer is needed for some things.
-	Label *mLabelForClose, *mLabelForEscape, *mLabelForSize, *mLabelForDropFiles, *mLabelForContextMenu;
-	bool mLabelForCloseIsRunning, mLabelForEscapeIsRunning, mLabelForSizeIsRunning; // DropFiles doesn't need one of these.
-	bool mLabelsHaveBeenSet;
+	union
+	{
+		IObject* mEventSink;
+		LPTSTR mEventFuncPrefix;
+	};
+	GuiEvent mOnClose, mOnEscape, mOnSize, mOnDropFiles, mOnContextMenu;
+	bool mOnCloseIsRunning, mOnEscapeIsRunning, mOnSizeIsRunning; // DropFiles doesn't need one of these.
+	bool mHasEventSink;
 	DWORD mStyle, mExStyle; // Style of window.
 	bool mInRadioGroup; // Whether the control currently being created is inside a prior radio-group.
 	bool mUseTheme;  // Whether XP theme and styles should be applied to the parent window and subsequently added controls.
@@ -2410,10 +2427,10 @@ public:
 
 	GuiType() // Constructor
 		: mHwnd(NULL), mStatusBarHwnd(NULL), mControlCount(0), mControlCapacity(0)
-		, mDefaultButtonIndex(-1), mLabelForClose(NULL), mLabelForEscape(NULL), mLabelForSize(NULL)
-		, mLabelForDropFiles(NULL), mLabelForContextMenu(NULL)
-		, mLabelForCloseIsRunning(false), mLabelForEscapeIsRunning(false), mLabelForSizeIsRunning(false)
-		, mLabelsHaveBeenSet(false), mUsesDPIScaling(true)
+		, mDefaultButtonIndex(-1), mEventFuncPrefix(Var::sEmptyString)
+		, mOnClose(), mOnEscape(), mOnSize(), mOnDropFiles(), mOnContextMenu()
+		, mOnCloseIsRunning(false), mOnEscapeIsRunning(false), mOnSizeIsRunning(false)
+		, mHasEventSink(false), mUsesDPIScaling(true)
 		// The styles DS_CENTER and DS_3DLOOK appear to be ineffectual in this case.
 		// Also note that WS_CLIPSIBLINGS winds up on the window even if unspecified, which is a strong hint
 		// that it should always be used for top level windows across all OSes.  Usenet posts confirm this.
@@ -2456,7 +2473,8 @@ public:
 	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Create();
-	void SetLabels(LPTSTR aLabelPrefix);
+	void SetEventHandler(GuiEvent& aHandler, LPTSTR aName, bool bCopyName = true);
+	void SetEvents();
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText);
 

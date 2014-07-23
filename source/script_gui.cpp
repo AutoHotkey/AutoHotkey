@@ -226,6 +226,39 @@ BIF_DECL(BIF_GuiCreate)
 	if (*title)
 		SetWindowText(gui->mHwnd, title);
 
+	// Set the event handler if one has been specified.
+	if (!ParamIndexIsOmitted(2))
+	{
+		ExprTokenType& tok = *aParam[2];
+		if (tok.symbol == SYM_OBJECT)
+		{
+			// The caller specified an object to use as event sink.
+			gui->mHasEventSink = true;
+			gui->mEventSink = tok.object;
+			gui->mEventSink->AddRef();
+		} else
+		{
+			LPTSTR prefix = ParamIndexToString(2);
+			if (!Var::ValidateName(prefix, DISPLAY_FUNC_ERROR))
+			{
+				delete gui;
+				return; // Error already shown by above.
+			}
+
+			// The caller specified a function prefix.
+			prefix = _tcsdup(prefix);
+			if (!prefix)
+			{
+				delete gui;
+				g_script.ScriptError(ERR_OUTOFMEM); // Short msg since so rare.
+				return;
+			}
+
+			gui->mEventFuncPrefix = prefix;
+		}
+		gui->SetEvents();
+	}
+
 	gui->SetOwnDialogs(own_dialogs);
 
 	// Successful creation - add the Gui to the global list of Guis and return it
@@ -1581,11 +1614,19 @@ ResultType GuiType::Destroy()
 		}
 		else if (control.type == GUI_CONTROL_LISTVIEW) // It was ensured at an earlier stage that union_lv_attrib != NULL.
 			free(control.union_lv_attrib);
+		if (mHasEventSink && control.event_handler)
+			free(control.event_handler.mMethodName);
 	}
+
+	if (mHasEventSink)
+		mEventSink->Release();
+	else if (mEventFuncPrefix != Var::sEmptyString)
+		free(mEventFuncPrefix);
+
 	HICON icon_eligible_for_destruction = mIconEligibleForDestruction;
 	HICON icon_eligible_for_destruction_small = mIconEligibleForDestructionSmall;
 	if (icon_eligible_for_destruction && icon_eligible_for_destruction != g_script.mCustomIcon) // v1.0.37.07.
-		DestroyIconsIfUnused(icon_eligible_for_destruction, icon_eligible_for_destruction_small); // Must be done only after removal from g_gui.
+		DestroyIconsIfUnused(icon_eligible_for_destruction, icon_eligible_for_destruction_small);
 	// For simplicity and performance, any fonts used *solely* by a destroyed window are destroyed
 	// only when the program terminates.  Another reason for this is that sometimes a destroyed window
 	// is soon recreated to use the same fonts it did before.
@@ -1593,7 +1634,6 @@ ResultType GuiType::Destroy()
 	mHwnd = NULL;
 	mControlCount = 0; // All child windows (controls) are automatically destroyed with parent.
 	free(mControl); // Free the control array, which was previously malloc'd.
-	//Release(); // After this, the var "gui" is invalid so should not be referenced.
 	// If this Gui was the last thing keeping the script running, exit the script:
 	g_script.ExitIfNotPersistent(EXIT_DESTROY);
 	return OK;
@@ -1697,56 +1737,33 @@ ResultType GuiType::Create()
 
 
 
-void GuiType::SetLabels(LPTSTR aLabelPrefix)
-// v1.0.44.09: Allow custom label prefix to be set; e.g. MyGUI vs. "5Gui" or "2Gui".  This increases flexibility
-// for scripts that dynamically create a varying number of windows, and also allows multiple windows to call the
-// same set of subroutines.
-// This function mustn't assume that mHwnd is a valid window because it might not have been created yet.
-// Caller passes NULL to indicate "use default label prefix" (i.e. the WindowNumber followed by the string "Gui").
-// Caller is responsible for checking mLabelsHaveBeenSet as a pre-condition to calling us, if desired.
-// Caller must ensure that mExStyle is up-to-date if mHwnd is an existing window.  In addition, caller must
-// apply any changes to mExStyle that we make here.
+void GuiType::SetEventHandler(GuiEvent& aHandler, LPTSTR aName, bool bCopyName)
 {
-	mLabelsHaveBeenSet = true; // Although it's value only matters in some contexts, it's set unconditionally for simplicity.
-
-	#define MAX_GUI_PREFIX_LENGTH 255
-	LPTSTR label_suffix;
-	TCHAR label_name[MAX_GUI_PREFIX_LENGTH+64]; // Labels are unlimited in length, but keep prefix+suffix relatively short so that it stays reasonable (to make it easier to limit it in the future should that ever be desirable).
-	if (aLabelPrefix)
-		tcslcpy(label_name, aLabelPrefix, MAX_GUI_PREFIX_LENGTH+1); // Reserve the rest of label_name's size for the suffix below to ensure no chance of overflow.
-	else // Caller is indicating that the defaults should be used.
+	if (mHasEventSink)
 	{
-		/*if (*mName != '1' || mName[1]) // Prepend the window number for windows other than the first.
-			_stprintf(label_name, _T("%sGui"), mName);
-		else*/
-			_tcscpy(label_name, _T("Gui"));
+		if (bCopyName)
+			aName = _tcsdup(aName);
+		aHandler.mMethodName = aName;
+	} else
+	{
+		TCHAR buf[MAX_VAR_NAME_LENGTH];
+		_sntprintf(buf, _countof(buf), _T("%s%s"), mEventFuncPrefix, aName);
+		aHandler.mFunc = g_script.FindFunc(buf);
 	}
-	label_suffix = label_name + _tcslen(label_name); // This is the position at which the rest of the label name will be copied.
+}
 
-	// Find the label to run automatically when the form closes (if any):
-	_tcscpy(label_suffix, _T("Close"));
-	mLabelForClose = g_script.FindLabel(label_name);  // OK if NULL (closing the window is the same as "gui, cancel").
 
-	// Find the label to run automatically when the user presses Escape (if any):
-	_tcscpy(label_suffix, _T("Escape"));
-	mLabelForEscape = g_script.FindLabel(label_name);  // OK if NULL (pressing ESCAPE does nothing).
 
-	// Find the label to run automatically when the user resizes the window (if any):
-	_tcscpy(label_suffix, _T("Size"));
-	mLabelForSize = g_script.FindLabel(label_name);  // OK if NULL.
+void GuiType::SetEvents()
+{
+	if (!mHasEventSink && mEventFuncPrefix == Var::sEmptyString)
+		return;
 
-	// Find the label to run automatically when the user invokes context menu via AppsKey, Rightclick, or Shift-F10:
-	_tcscpy(label_suffix, _T("ContextMenu"));
-	mLabelForContextMenu = g_script.FindLabel(label_name);  // OK if NULL (leaves context menu unhandled).
-
-	// Find the label to run automatically when files are dropped onto the window:
-	_tcscpy(label_suffix, _T("DropFiles"));
-	if ((mLabelForDropFiles = g_script.FindLabel(label_name))  // OK if NULL (dropping files is disallowed).
-		&& !mHdrop) // i.e. don't allow user to visibly drop files onto window if a drop is already queued or running.
-		mExStyle |= WS_EX_ACCEPTFILES; // Makes the window accept drops. Otherwise, the WM_DROPFILES msg is not received.
-	else
-		mExStyle &= ~WS_EX_ACCEPTFILES;
-	// It is not necessary to apply any style change made above because the caller detects changes and applies them.
+	SetEventHandler(mOnClose, _T("OnClose"), false);
+	SetEventHandler(mOnEscape, _T("OnEscape"), false);
+	SetEventHandler(mOnSize, _T("OnSize"), false);
+	SetEventHandler(mOnContextMenu, _T("OnContextMenu"), false);
+	SetEventHandler(mOnDropFiles, _T("OnDropFiles"), false);
 }
 
 
@@ -2166,36 +2183,26 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////
-	// If the above didn't already set a label for this control and this control type qualifies,
-	// check if an automatic/implicit label exists for it in the script.
+	// If the above didn't already set an event handler for this control and this control type
+	// qualifies, check if an automatic/implicit event handler exists for it in the script.
 	////////////////////////////////////////////////////////////////////////////////////////////
 	if (aControlType == GUI_CONTROL_BUTTON
-		&& !control.jump_to_label && !(control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL))
+		&& !control.event_handler && !(control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL))
 	{
-		TCHAR label_name[1024]; // Subroutine labels are nearly unlimited in length, so use a size to cover anything realistic.
-		/*if (*mName != '1' || mName[1]) // Prepend the window number for windows other than the first.
-			_tcscpy(label_name, mName);
-		else*/
-			*label_name = '\0';
-		sntprintfcat(label_name, _countof(label_name), _T("Button%s"), aText);
-		// Remove spaces and ampersands.  Although ampersands are legal in labels, it seems
-		// more friendly to omit them in the automatic-label label name.  Note that a button
-		// or menu item can contain a literal ampersand by using two ampersands, such as
-		// "Save && Exit" (in this example, the auto-label would be named "ButtonSaveExit").
-		// v1.0.46.01: tabs and accents are also removed since labels can't contain them.
-		// However, colons are NOT removed because labels CAN contain them (except at the very end;
-		// but due to rarity and backward compatibility, it doesn't seem worth adding code size for that).
-		StrReplace(label_name, _T("\r"), _T(""), SCS_SENSITIVE);
-		StrReplace(label_name, _T("\n"), _T(""), SCS_SENSITIVE);
-		StrReplace(label_name, _T("\t"), _T(""), SCS_SENSITIVE);
-		StrReplace(label_name, _T(" "), _T(""), SCS_SENSITIVE);
-		StrReplace(label_name, _T("&"), _T(""), SCS_SENSITIVE);
-		StrReplace(label_name, _T("`"), _T(""), SCS_SENSITIVE);
-		// Alternate method, but seems considerably larger in code size based on OBJ size:
-		//LPTSTR string_list[] = {_T("\r"), _T("\n"), _T(" "), _T("\t"), _T("&"), _T("`"), NULL}; // \r is separate from \n in case they're ever unpaired. Last char must be NULL to terminate the list.
-		//for (LPTSTR *cp = string_list; *cp; ++cp)
-		//	StrReplace(label_name, *cp, _T(""), SCS_SENSITIVE);
-		control.jump_to_label = g_script.FindLabel(label_name);  // OK if NULL (the button will do nothing).
+		// Generate automatic event handler name.
+		TCHAR handler_name[MAX_VAR_NAME_LENGTH] = _T("Button");
+		LPTSTR cur_char = aText;
+		while (*cur_char)
+		{
+			LPTSTR end = find_identifier_end(cur_char);
+			TCHAR temp = *end;
+			*end = 0;
+			_tcsncat(handler_name, cur_char, _countof(handler_name));
+			*end = temp;
+			for (; *end && !IS_IDENTIFIER_CHAR(*end); end++); // Skip over illegal part.
+			cur_char = end;
+		}
+		SetEventHandler(control.event_handler, handler_name);
 	}
 
 	// The below will yield NULL for GUI_CONTROL_STATUSBAR because control.tab_control_index==OutOfBounds for it.
@@ -4055,6 +4062,9 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, ToggleValueType &aOwnDialogs)
 		else if (!_tcsicmp(next_option, _T("Caption")))
 			if (adding) mStyle |= WS_CAPTION; else mStyle = mStyle & ~WS_CAPTION;
 
+		else if (!_tcsicmp(next_option, _T("Drop")))
+			if (adding) mExStyle |= WS_EX_ACCEPTFILES; else mExStyle &= ~WS_EX_ACCEPTFILES;
+
 		else if (!_tcsnicmp(next_option, _T("Delimiter"), 9))
 		{
 			next_option += 9;
@@ -5358,7 +5368,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					}
 					break;
 				case 'G':
-					aControl.jump_to_label = NULL;
+					aControl.event_handler.mFunc = NULL;
 					break;
 				case 'V':
 					aControl.output_var = NULL;
@@ -5374,40 +5384,28 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			// Since above didn't "continue", there is text after the option letter, so take action accordingly.
 			switch (ctoupper(next_option[-1]))
 			{
-			case 'G': // "Gosub" a label when this control is clicked or changed.
-				// For reasons of potential future use and compatibility, don't allow subroutines to be
-				// assigned to control types that have no present use for them.  Note: GroupBoxes do
+			case 'G': // Call a function or method when this control is clicked or changed.
+				// For reasons of potential future use and compatibility, don't allow handlers to be
+				// bouund to control types that have no present use for them.  Note: GroupBoxes do
 				// no support click-detection anyway, even if the BS_NOTIFY style is given to them
 				// (this has been verified twice):
 				if (aControl.type == GUI_CONTROL_GROUPBOX || aControl.type == GUI_CONTROL_PROGRESS)
 					// If control's hwnd exists, we were called from a caller who wants ErrorLevel set
 					// instead of a message displayed:
 					return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
-						: g_script.ScriptError(_T("This control type should not have an associated subroutine.")
+						: g_script.ScriptError(_T("This control type should not have an event handler.")
 							, next_option - 1);
-				Label *candidate_label;
-				if (   !(candidate_label = g_script.FindLabel(next_option))   )
-				{
-					// If there is no explicit label, fall back to a special action if one is available
-					// for this keyword:
-					if (!_tcsicmp(next_option, _T("Cancel")))
+
+				if (!_tcsicmp(next_option, _T("Cancel")))
 						aControl.attrib |= GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL;
-					// When the below is added, it should probably be made mutually exclusive of the above, probably
-					// by devoting two bits in the field for a total of three possible implicit actions (since the
-					// fourth is reserved as 00 = no action):
-					//else if (!_tcsicmp(label_name, "Clear")) -->
-					//	control.options |= GUI_CONTROL_ATTRIB_IMPLICIT_CLEAR;
-					else // Since a non-special label was explicitly specified, it's an error that it can't be found.
-						return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
-							: g_script.ScriptError(ERR_NO_LABEL, next_option - 1);
-				}
+				else
+					SetEventHandler(aControl.event_handler, next_option);
 				if (aControl.type == GUI_CONTROL_LABEL || aControl.type == GUI_CONTROL_PIC)
 					// Apply the SS_NOTIFY style *only* if the control actually has an associated action.
 					// This is because otherwise the control would steal all clicks for any other controls
 					// drawn on top of it (e.g. a picture control with some edit fields drawn on top of it).
 					// See comments in the creation of GUI_CONTROL_PIC for more info:
 					aOpt.style_add |= SS_NOTIFY;
-				aControl.jump_to_label = candidate_label; // Will be NULL if something like gCancel (implicit was used).
 				break;
 
 			case 'T': // Tabstop (the kind that exists inside a multi-line edit control or ListBox).
@@ -6671,12 +6669,12 @@ ResultType GuiType::Cancel()
 
 
 ResultType GuiType::Close()
-// If there is a GuiClose label defined in for this event, launch it as a new thread.
-// In this case, don't close or hide the window.  It's up to the subroutine to do that
+// If there is an OnClose event handler defined, launch it as a new thread.
+// In this case, don't close or hide the window.  It's up to the handler to do that
 // if it wants to.
-// If there is no label, treat it the same as Cancel().
+// If there is no handler, treat it the same as Cancel().
 {
-	if (!mLabelForClose)
+	if (!mOnClose)
 		return Cancel();
 	POST_AHK_GUI_ACTION(mHwnd, NO_CONTROL_INDEX, GUI_EVENT_CLOSE, NO_EVENT_INFO);
 	// MsgSleep() is not done because "case AHK_GUI_ACTION" in GuiWindowProc() takes care of it.
@@ -6687,12 +6685,12 @@ ResultType GuiType::Close()
 
 
 ResultType GuiType::Escape() // Similar to close, except typically called when the user presses ESCAPE.
-// If there is a GuiEscape label defined in for this event, launch it as a new thread.
-// In this case, don't close or hide the window.  It's up to the subroutine to do that
+// If there is an OnEscape event handler defined, launch it as a new thread.
+// In this case, don't close or hide the window.  It's up to the handler to do that
 // if it wants to.
 // If there is no label, treat it the same as Cancel().
 {
-	if (!mLabelForEscape) // The user preference (via votes on forum poll) is to do nothing by default.
+	if (!mOnEscape) // The user preference (via votes on forum poll) is to do nothing by default.
 		return OK;
 	// See lengthy comments in Event() about this section:
 	POST_AHK_GUI_ACTION(mHwnd, NO_CONTROL_INDEX, GUI_EVENT_ESCAPE, NO_EVENT_INFO);
@@ -7566,7 +7564,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// Note that SIZE_MAXSHOW/SIZE_MAXHIDE don't seem to ever be received under the conditions
 		// described at MSDN, even if the window has WS_POPUP style.  Therefore, A_EventInfo will
 		// probably never contain those values, and as a result they are not documented in the help file.
-		if (pgui->mLabelForSize) // There is an event handler in the script.
+		if (pgui->mOnSize) // There is an event handler in the script.
 			POST_AHK_GUI_ACTION(hWnd, LOWORD(wParam), GUI_EVENT_RESIZE, lParam); // LOWORD(wParam) just to be sure it fits in 16-bit, but SIZE_MAXIMIZED and the others all do.
 			// MsgSleep() is not done because "case AHK_GUI_ACTION" in GuiWindowProc() takes care of it.
 			// See its comments for why.
@@ -8118,7 +8116,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				pgui->Event(control_index, nmhdr.code, GUI_EVENT_NORMAL);
 			}
 			else if (nmhdr.code == TCN_SELCHANGING)
-				if (control.output_var && control.jump_to_label) // Set the variable's contents, for use when the corresponding TCN_SELCHANGE comes in to launch the label after this.
+				if (control.output_var && control.event_handler) // Set the variable's contents, for use when the corresponding TCN_SELCHANGE comes in to launch the handler after this.
 					pgui->ControlGetContents(*control.output_var, control);
 			return 0; // 0 is appropriate for all TAB notifications.
 		case GUI_CONTROL_LINK:
@@ -8134,7 +8132,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		case GUI_CONTROL_CUSTOM:
 			return pgui->CustomCtrlWmNotify(control_index, &nmhdr);
 		case GUI_CONTROL_STATUSBAR:
-			if (!(control.jump_to_label || (control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)))// These is checked to avoid returning TRUE below, and also for performance.
+			if (!(control.event_handler || (control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)))// These is checked to avoid returning TRUE below, and also for performance.
 				break; // Let default proc handle it.
 			switch(nmhdr.code)
 			{
@@ -8410,7 +8408,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	}
 
 	case WM_CONTEXTMENU:
-		if ((pgui = GuiType::FindGui(hWnd)) && pgui->mLabelForContextMenu)
+		if ((pgui = GuiType::FindGui(hWnd)) && pgui->mOnContextMenu)
 		{
 			HWND clicked_hwnd = (HWND)wParam;
 			bool from_keyboard; // Whether Context Menu was generated from keyboard (AppsKey or Shift-F10).
@@ -8453,7 +8451,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		if (   !(pgui = GuiType::FindGui(hWnd))   )
 			break; // Let DefDlgProc() handle it.
 		HDROP hdrop = (HDROP)wParam;
-		if (!pgui->mLabelForDropFiles || pgui->mHdrop)
+		if (!pgui->mOnDropFiles || pgui->mHdrop)
 		{
 			// There is no event handler in the script, or this window is still processing a prior drop.
 			// Ignore this drop and free its memory.
@@ -8613,7 +8611,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 	if (aControlIndex >= mControlCount) // Caller probably already checked, but just to be safe.
 		return;
 	GuiControlType &control = mControl[aControlIndex];
-	if (!(control.jump_to_label || (control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)))
+	if (!(control.event_handler || (control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)))
 		return; // No label or implicit-cancel associated with this control, so no action.
 	//else continue on even if it's just GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL so that the
 	// event will get posted.  The control's output_var might also get updated, but for
@@ -8625,7 +8623,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 	// problems of buried threads, or a stack of suspended threads that might be resumed later
 	// at an unexpected time. Users of timer subs that take a long time to run should be aware, as
 	// documented in the help file, that long interruptions are then possible.
-	//if (g_nThreads >= g_MaxThreadsTotal || (aControl->attrib & GUI_CONTROL_ATTRIB_LABEL_IS_RUNNING))
+	//if (g_nThreads >= g_MaxThreadsTotal || (aControl->attrib & GUI_CONTROL_ATTRIB_HANDLER_IS_RUNNING))
 	//	continue
 
 	if (aGuiEvent == GUI_EVENT_NONE) // Caller wants us to determine aGuiEvent based on control type and aNotifyCode.
@@ -8878,7 +8876,7 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 		return 0;
 
 	GuiControlType& aControl = mControl[aControlIndex];
-	Label* glabel = aControl.jump_to_label;
+	Label* glabel = NULL; //aControl.jump_to_label; TODO
 	if (!glabel)
 		return 0;
 
@@ -9604,11 +9602,11 @@ ResultType GuiType::SelectAdjacentTab(GuiControlType &aTabControl, bool aMoveToR
 	if (!tab_count)
 		return FAIL;
 
-	// Fix for v1.0.35: Keyboard navigation of a tab control should still launch the tab's g-label
+	// Fix for v1.0.35: Keyboard navigation of a tab control should still launch the tab's event handler
 	// if it has one.  The following sets the output-var to be the control's previous tab.
 	// For simplicity, this is done unconditionally (i.e. even if the tab will not change because
 	// it's at the min or max and aWrapAround==false):
-	if (aTabControl.jump_to_label && aTabControl.output_var)
+	if (aTabControl.event_handler && aTabControl.output_var)
 		ControlGetContents(*aTabControl.output_var, aTabControl);
 
 	int selected_tab = TabCtrl_GetCurSel(aTabControl.hwnd);
@@ -9642,9 +9640,9 @@ ResultType GuiType::SelectAdjacentTab(GuiControlType &aTabControl, bool aMoveToR
 	TabCtrl_SetCurSel(aTabControl.hwnd, selected_tab);
 	ControlUpdateCurrentTab(aTabControl, aFocusFirstControl);
 
-	// Fix for v1.0.35: Keyboard navigation of a tab control should still launch the tab's g-label
+	// Fix for v1.0.35: Keyboard navigation of a tab control should still launch the tab's event handler
 	// if it has one:
-	if (aTabControl.jump_to_label) // Its output_var (if any) was already set higher above.
+	if (aTabControl.event_handler) // Its output_var (if any) was already set higher above.
 		Event(GUI_HWND_TO_INDEX(aTabControl.hwnd), TCN_SELCHANGE);
 
 	return OK;
