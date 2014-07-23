@@ -246,7 +246,7 @@ BIF_DECL(BIF_GuiFromHwnd)
 	}
 }
 
-
+// Will be removed.
 GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t *aNameLength)
 {
 	LPTSTR name_marker = NULL;
@@ -288,35 +288,7 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 		// backward-compatibility.
 	}
 
-	// Search for the Gui!
-	GuiType *found_gui = GuiType::FindGui(name);
-	
-	// If no Gui with this name exists and aName is not NULL, our caller wants to know what
-	// name to give a new Gui.  Before returning the name, ensure it is valid.  At the very
-	// least, space must be outlawed for Gui label names and +OwnerGUINAME.  Requiring the
-	// name to be valid as a variable name allows for possible future use of the Gui name
-	// as part of a variable or function name.
-	if (aName)
-	{
-		// found_gui: *aName must be set for GUI_CMD_NEW even if a GUI was found, since
-		// found_gui will be destroyed (along with found_gui->mName) and recreated. If a
-		// GUI was found, obviously the name is valid and ValidateName() can be skipped.
-		if (found_gui || gui_num || Var::ValidateName(name, false))
-		{
-			// This name is okay.
-			*aName = name_marker;
-			if (aNameLength)
-				*aNameLength = name_length;
-		}
-		// Otherwise, leave it set to NULL so our caller knows it is invalid.
-	}
-
-	return found_gui;
-}
-
-// To be removed.
-GuiType *GuiType::FindGui(LPTSTR aName)
-{
+	// Named Guis are no longer supported.
 	return NULL;
 }
 
@@ -346,13 +318,13 @@ GuiType *GuiType::FindGuiParent(HWND aHwnd)
 	return NULL;
 }
 
-
+// Will be removed.
 GuiType *global_struct::GuiDefaultWindowValid()
 {
 	if (!GuiDefaultWindow)
 	{
 		// Default Gui hasn't been set yet for this thread, so find Gui 1.
-		if (GuiDefaultWindow = GuiType::FindGui(_T("1"))) // Assignment.
+		if (GuiDefaultWindow = g_firstGui) // Assignment.
 			GuiDefaultWindow->AddRef();
 		return GuiDefaultWindow;
 	}
@@ -369,7 +341,7 @@ GuiType *GuiType::ValidGui(GuiType *&aGuiRef)
 	return aGuiRef;
 }
 
-
+// Will be removed.
 ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTSTR aParam4)
 {
 	LPTSTR aCommand;	// Set by ResolveGui().
@@ -4010,12 +3982,7 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, ToggleValueType &aOwnDialogs)
 								new_owner = (HWND)gui_num;
 						}
 					}
-					if (!new_owner)
-					{
-						// Something like +OwnerMyGui or +Owner1.
-						if (GuiType *owner_gui = FindGui(name))
-							new_owner = owner_gui->mHwnd;
-					}
+					// Named Guis are no longer supported.
 					if (new_owner && new_owner != mHwnd) // Window can't own itself!
 						mOwner = new_owner;
 					else

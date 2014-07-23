@@ -2478,8 +2478,7 @@ public:
 	ResultType ControlGetContents(Var &aOutputVar, GuiControlType &aControl, LPTSTR aMode = _T(""));
 
 	static VarSizeType ControlGetName(GuiType *aGuiWindow, GuiIndexType aControlIndex, LPTSTR aBuf);
-	
-	static GuiType *FindGui(LPTSTR aName); // To be removed.
+
 	static GuiType *FindGui(HWND aHwnd);
 	static GuiType *FindGuiParent(HWND aHwnd);
 
