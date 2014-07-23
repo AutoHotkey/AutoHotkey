@@ -226,6 +226,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	GuiEvent *gui_event;
 	ExprTokenType gui_event_args[6]; // Current maximum number of arguments for Gui event handlers.
 	int gui_event_arg_count;
+	int gui_event_ret;
 	POINT gui_point;
 	HDROP hdrop_to_free;
 	LRESULT msg_reply;
@@ -1235,7 +1236,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				DEBUGGER_STACK_PUSH(_T("Gui"))
 
 				// LAUNCH GUI THREAD:
-				pgui->CallEvent(*gui_event, gui_event_arg_count, gui_event_args);
+				gui_event_ret = pgui->CallEvent(*gui_event, gui_event_arg_count, gui_event_args);
 
 				DEBUGGER_STACK_POP()
 
@@ -1245,8 +1246,13 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// process, so don't do it here.
 				if (pgui->mHwnd)
 				{
-					if (pgui_event_is_running) // i.e. GuiClose, GuiEscape, and related window-level events.
+					if (pgui_event_is_running) // i.e. OnClose, OnEscape, and related window-level events.
+					{
 						*pgui_event_is_running = false;
+						// If the event is OnClose() and the return value is false/unspecified, hide the Gui.
+						if (gui_action == GUI_EVENT_CLOSE && !gui_event_ret)
+							pgui->Cancel();
+					}
 					else if (event_is_control_generated) // An earlier stage has ensured pcontrol isn't NULL in this case.
 						pcontrol->attrib &= ~GUI_CONTROL_ATTRIB_HANDLER_IS_RUNNING; // Must be careful to set this flag only when the event is control-generated, not for a drag-and-drop onto the control, or context menu on the control, etc.
 					if (hdrop_to_free) // This is only non-NULL when gui_action==GUI_EVENT_DROPFILES
