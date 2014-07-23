@@ -1753,6 +1753,55 @@ void GuiType::SetEventHandler(GuiEvent& aHandler, LPTSTR aName, bool bCopyName)
 }
 
 
+int GuiType::CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam[])
+{
+	// Set up real argument array
+	ExprTokenType** params = (ExprTokenType**)_alloca((aParamCount+1)*sizeof(ExprTokenType*));
+	for (int i = 0; i < aParamCount; i ++)
+		params[i+1] = aParam+i;
+
+	ExprTokenType result_token;
+	TCHAR result_token_buf[MAX_NUMBER_SIZE];
+	result_token.InitResult(result_token_buf);
+
+	ResultType result = OK;
+	FuncCallData func_call; // For UDFs: must remain in scope until the result has been copied into pVarResult.
+
+	if (mHasEventSink)
+	{
+		ExprTokenType this_token;
+		this_token.symbol = SYM_OBJECT;
+		this_token.object = mEventSink;
+
+		ExprTokenType method_name;
+		method_name.symbol = SYM_STRING;
+		method_name.marker = aHandler.mMethodName;
+		params[0] = &method_name;
+		result = mEventSink->Invoke(result_token, this_token, IT_CALL, params, aParamCount+1);
+	} else
+		aHandler.mFunc->Call(func_call, result, result_token, params+1, aParamCount);
+
+	int ret = result == OK ? (int)TokenToInt64(result_token) : 0;
+	result_token.Free();
+	return ret;
+}
+
+
+
+LPTSTR GuiType::ConvertEvent(GuiEventType evt)
+{
+	static LPTSTR sNames[] = GUI_EVENT_NAMES;
+	static TCHAR sBuf[2] = { 0, 0 };
+
+	if (evt < GUI_EVENT_FIRST_UNNAMED)
+		return sNames[evt];
+
+	// Else it's a character code - convert it to a string
+	sBuf[0] = (TCHAR)(UCHAR)evt;
+	return sBuf;
+}
+
+
 
 void GuiType::SetEvents()
 {

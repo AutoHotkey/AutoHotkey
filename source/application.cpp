@@ -207,7 +207,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 	bool msg_was_handled;
 	HWND fore_window, focused_control, focused_parent, criterion_found_hwnd;
-	TCHAR wnd_class_name[32], gui_action_errorlevel[16], *walk;
+	TCHAR wnd_class_name[32], gui_action_extra[16], *walk;
 	UserMenuItem *menu_item;
 	HotkeyIDType hk_id;
 	Hotkey *hk;
@@ -224,6 +224,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	DWORD gui_size;
 	bool *pgui_event_is_running, event_is_control_generated;
 	GuiEvent *gui_event;
+	ExprTokenType gui_event_args[6]; // Current maximum number of arguments for Gui event handlers.
+	int gui_event_arg_count;
+	POINT gui_point;
 	HDROP hdrop_to_free;
 	LRESULT msg_reply;
 	BOOL peek_result;
@@ -654,6 +657,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				gui_event_info =    (DWORD_PTR)msg.lParam;
 				gui_action =        LOWORD(msg.wParam);
 				gui_control_index = HIWORD(msg.wParam); // Caller has set it to NO_CONTROL_INDEX if it isn't applicable.
+				gui_event_arg_count = 0;
 
 				if (gui_action == GUI_EVENT_RESIZE) // This section be done after above but before pcontrol below.
 				{
@@ -1045,24 +1049,47 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			switch (msg.message)
 			{
 			case AHK_GUI_ACTION: // Listed first for performance.
-				*gui_action_errorlevel = '\0'; // Set default, which is possibly overridden below.
+				*gui_action_extra = '\0'; // Set default, which is possibly overridden below.
+
+#define EVT_ARG_ADD_STR(_value) do\
+				{ \
+					gui_event_args[gui_event_arg_count].symbol = SYM_STRING; \
+					gui_event_args[gui_event_arg_count++].marker = (_value); \
+				} while (0)
+
+#define EVT_ARG_ADD_INT(_value) do\
+				{ \
+					gui_event_args[gui_event_arg_count].symbol = SYM_INTEGER; \
+					gui_event_args[gui_event_arg_count++].value_int64 = (__int64)(_value); \
+				} while (0)
+
+#define EVT_ARG_ADD_OBJ(_value) do\
+				{ \
+					gui_event_args[gui_event_arg_count].symbol = SYM_OBJECT; \
+					gui_event_args[gui_event_arg_count++].object = (_value); \
+				} while (0)
+
+				// Set first argument
+				EVT_ARG_ADD_OBJ(event_is_control_generated ? pgui : pgui); // TODO: objectify controls
+
 				// When appropriate, the below sets g.GuiPoint (to support A_GuiX and A_GuiY).
 				switch(gui_action)
 				{
 				case GUI_EVENT_CONTEXTMENU:
 					// Caller stored 1 in gui_event_info if this context-menu was generated via the keyboard
 					// (such as AppsKey or Shift-F10):
-					g.GuiEvent = gui_event_info ? GUI_EVENT_NORMAL : GUI_EVENT_RCLK; // Must be done prior to below.
+					//EVT_ARG_ADD_STR(gui_event_info ? _T("Normal") : _T("RightClick"));
+					gui_action = gui_event_info ? GUI_EVENT_NORMAL : GUI_EVENT_RCLK; // Must be done prior to below.
 					gui_event_info = NO_EVENT_INFO; // Now that it has been used above, reset it to a default, to be conditionally overridden below.
-					g.GuiPoint = msg.pt; // Set default. v1.0.38: More accurate/customary to use msg.pt than GetCursorPos().
+					gui_point = msg.pt; // Set default. v1.0.38: More accurate/customary to use msg.pt than GetCursorPos().
 					if (pcontrol) // i.e. this context menu is for a control rather than a click somewhere in the parent window itself.
 					{
 						// By definition, pcontrol should be the focused control.  However, testing shows that
 						// it can also be the only control in a window that lacks any focus-capable controls.
 						// If the window has no controls at all, testing shows that pcontrol will be NULL,
 						// in which case GuiPoint default set earlier is retained (for AppsKey too).
-						if (g.GuiEvent == GUI_EVENT_NORMAL) // Context menu was invoked via keyboard.
-							pgui->ControlGetPosOfFocusedItem(*pcontrol, g.GuiPoint); // Since pcontrol!=NULL, find out which item is focused in this control.
+						if (gui_action == GUI_EVENT_NORMAL) // Context menu was invoked via keyboard.
+							pgui->ControlGetPosOfFocusedItem(*pcontrol, gui_point); // Since pcontrol!=NULL, find out which item is focused in this control.
 						//else this is a context-menu event that was invoked via normal mouse click.  Leave
 						// g.GuiPoint at its default set earlier.
 						switch(pcontrol->type)
@@ -1083,7 +1110,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 							break;
 						case GUI_CONTROL_TREEVIEW:
 							// Retrieves the HTREEITEM that is the true target of this event.
-							if (g.GuiEvent == GUI_EVENT_NORMAL) // AppsKey or Shift+F10.
+							if (gui_action == GUI_EVENT_NORMAL) // AppsKey or Shift+F10.
 								gui_event_info = (DWORD)SendMessage(pcontrol->hwnd, TVM_GETNEXTITEM, TVGN_CARET, NULL); // Get focused item.
 							else // Context menu invoked via right-click.  Find out which item (if any) was clicked on.
 							{
@@ -1103,13 +1130,20 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// cursor's position rather than some arbitrary center-point, or top-left point in the
 					// parent window.  This is because it might be more convenient for the user to move the
 					// mouse to select a menu item (since menu will be close to mouse cursor).
-					ScreenToWindow(g.GuiPoint, pgui->mHwnd); // For compatibility with "Menu Show", convert to window coordinates. A CoordMode option can be added to change this if desired.
+					ScreenToWindow(gui_point, pgui->mHwnd); // For compatibility with "Menu Show", convert to window coordinates. A CoordMode option can be added to change this if desired.
+					
+					// Build event arguments.
+					EVT_ARG_ADD_STR(_T("")); // TODO: control reference
+					EVT_ARG_ADD_INT(gui_event_info);
+					EVT_ARG_ADD_INT(gui_action == GUI_EVENT_RCLK ? 1 : 0);
+					EVT_ARG_ADD_INT(gui_point.x);
+					EVT_ARG_ADD_INT(gui_point.y);
 					break; // case GUI_CONTEXT_MENU.
 
 				case GUI_EVENT_DROPFILES:
-					g.GuiEvent = gui_action; // i.e. set to GUI_EVENT_DROPFILES for special use by GetGuiEvent().
-					g.GuiPoint = msg.pt; // v1.0.38: More accurate/customary to use msg.pt than GetCursorPos().
-					ScreenToWindow(g.GuiPoint, pgui->mHwnd);
+					//gui_event_id = gui_action; // i.e. set to GUI_EVENT_DROPFILES for special use by GetGuiEvent().
+					gui_point = msg.pt; // v1.0.38: More accurate/customary to use msg.pt than GetCursorPos().
+					ScreenToWindow(gui_point, pgui->mHwnd);
 					// Visually indicate that drops aren't allowed while and existing drop is still being
 					// processed. Fix for v1.0.31.02: The window's current ExStyle is fetched every time
 					// in case a non-GUI command altered it (such as making it transparent):
@@ -1119,11 +1153,13 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				case GUI_EVENT_CLOSE:
 				case GUI_EVENT_ESCAPE:
 				case GUI_EVENT_RESIZE:
-					g.GuiEvent = GUI_EVENT_NORMAL; // Set for use by GetGuiEvent(), which should consider Close/Escape "Normal" for lack of anything more specific.
 					if (gui_action == GUI_EVENT_RESIZE)
-						// Overload another member to avoid having to dedicate a member to size.  Script shouldn't
-						// look at A_GuiX inside the GuiSize label anyway (it's undefined there).
-						g.GuiPoint.x = gui_size;
+					{
+						// Build event arguments.
+						EVT_ARG_ADD_INT(gui_event_info); // Event info
+						EVT_ARG_ADD_INT(pgui->Unscale(LOWORD(gui_size))); // Width
+						EVT_ARG_ADD_INT(pgui->Unscale(HIWORD(gui_size))); // Height
+					}
 					break;
 				default: // Control-generated event (i.e. event_is_control_generated==true).
 					switch(pcontrol->type)
@@ -1131,13 +1167,13 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					case GUI_CONTROL_STATUSBAR: // An earlier stage has ensured pcontrol isn't NULL in this case.
 						// For performance reasons, this isn't done for all GUI events, just ones that
 						// have a typical use for the coords.
-						g.GuiPoint = msg.pt;
-						ScreenToWindow(g.GuiPoint, pgui->mHwnd);
+						gui_point = msg.pt;
+						ScreenToWindow(gui_point, pgui->mHwnd);
 						break;
 					case GUI_CONTROL_LISTVIEW: // v1.0.46.10: Added this section to support notifying the script of HOW the item changed.
 						if (LOBYTE(gui_action) == 'I')
 						{
-							walk = gui_action_errorlevel;
+							walk = gui_action_extra;
 							if (gui_action & AHK_LV_SELECT) // Keep this one first, and the others below in the same order, in case any scripts come to rely on the ordering of the letters within the string.
 								*walk++ = 'S';
 							else if (gui_action & AHK_LV_DESELECT)
@@ -1155,13 +1191,16 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 							//	*walk++ = 'D';
 							//else if (gui_action & AHK_LV_UNDROPHILITE)
 							//	*walk++ = 'd';
-							*walk = '\0'; // Provide terminator inside gui_action_errorlevel.
+							*walk = '\0'; // Provide terminator inside gui_action_extra.
 							gui_action = 'I'; // Done only after we're done using it above. This clears out the flags above to leave only a naked 'I'.
 						}
 						break;
 					//default: No action for any other control-generated events since caller already set things up properly.
 					}
-					g.GuiEvent = gui_action; // Set g.GuiEvent to indicate whether a double-click or other non-standard event launched it.
+
+					// Build event arguments.
+					EVT_ARG_ADD_INT(gui_event_info);
+					EVT_ARG_ADD_STR(GuiType::ConvertEvent(gui_action));
 				} // switch (msg.message)
 
 				if (pcontrol && pcontrol->type == GUI_CONTROL_LINK)
@@ -1170,10 +1209,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					item.mask=LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
 					item.iLink = (int)gui_event_info - 1;
 					if(SendMessage(pcontrol->hwnd,LM_GETITEM,NULL,(LPARAM)&item))
-						g_ErrorLevel->AssignString(*item.szUrl ? CStringTCharFromWCharIfNeeded(item.szUrl) : CStringTCharFromWCharIfNeeded(item.szID));
+						EVT_ARG_ADD_STR(*item.szUrl ? CStringTCharFromWCharIfNeeded(item.szUrl) : CStringTCharFromWCharIfNeeded(item.szID));
 				}
-				else
-					g_ErrorLevel->Assign(gui_action_errorlevel);
+				else if (*gui_action_extra)
+					EVT_ARG_ADD_STR(gui_action_extra);
 
 				// Set last found window (as documented).  It's not necessary to check IsWindow/IsWindowVisible/
 				// DetectHiddenWindows since GetValidLastUsedWindow() takes care of that whenever the script
@@ -1182,10 +1221,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// DetectHiddenWindows if the last-found window is one of the script's GUI windows [v1.0.25.13]:
 				g.hWndLastUsed = pgui->mHwnd;
 				pgui->AddRef(); // Keep the pointer valid at least until the thread finishes.
-				pgui->AddRef(); //
-				g.GuiWindow = g.GuiDefaultWindow = pgui; // GUI threads default to operating upon their own window.
-				g.GuiControlIndex = gui_control_index; // Must be set only after the "g" struct has been initialized. This will be NO_CONTROL_INDEX if the sender of the message said to do that.
-				g.EventInfo = gui_event_info; // Override the thread-default of NO_EVENT_INFO.
+				//pgui->AddRef(); //
+				//g.GuiWindow = g.GuiDefaultWindow = pgui; // GUI threads default to operating upon their own window.
+				//g.GuiControlIndex = gui_control_index; // Must be set only after the "g" struct has been initialized. This will be NO_CONTROL_INDEX if the sender of the message said to do that.
+				//g.EventInfo = gui_event_info; // Override the thread-default of NO_EVENT_INFO.
 
 				if (pgui_event_is_running) // i.e. GuiClose, GuiEscape, and related window-level events.
 					*pgui_event_is_running = true;
@@ -1195,7 +1234,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				DEBUGGER_STACK_PUSH(_T("Gui"))
 
 				// LAUNCH GUI THREAD:
-				//gui_event->Execute();
+				pgui->CallEvent(*gui_event, gui_event_arg_count, gui_event_args);
 
 				DEBUGGER_STACK_POP()
 
