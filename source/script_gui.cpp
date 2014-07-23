@@ -1506,8 +1506,8 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 		// Assign only a variable name rather than falling back to the control's text like ControlGetName,
 		// otherwise the script mightn't be able to distinguish between a control with associated variable
 		// and one which merely contains text similar to a variable name:
-		if (control.output_var)
-			result = output_var.Assign(control.output_var->mName);
+		//if (control.output_var)
+		//	result = output_var.Assign(control.output_var->mName);
 		// Otherwise: leave ErrorLevel 0 and output_var blank, indicating this control exists but has no var.
 		goto return_the_result;
 	}
@@ -3752,9 +3752,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				control.hwnd = NULL;
 				break;
 			}
-			if (control.output_var)
-				control.output_var->AssignSkipAddRef(activex_obj); // Let the var take ownership.
-			else
+			//if (control.output_var)
+			//	control.output_var->AssignSkipAddRef(activex_obj); // Let the var take ownership.
+			//else
 				activex_obj->Release(); // The script can retrieve it later via GuiControlGet.
 		}
 		break;
@@ -4995,7 +4995,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					++next_option; // Now it should point to the variable name of the buddy control.
 					// Check if there's an existing *global* variable of this name.  It must be global
 					// because the variable of a control can never be a local variable:
-					Var *var = g_script.FindVar(next_option, 0, NULL, FINDVAR_GLOBAL); // Search globals only.
+					/*Var *var = g_script.FindVar(next_option, 0, NULL, FINDVAR_GLOBAL); // Search globals only.
 					if (var)
 					{
 						var = var->ResolveAlias(); // Update it to its target if it's an alias.
@@ -5007,7 +5007,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 										aOpt.buddy1 = &mControl[u];
 									else // assume '2'
 										aOpt.buddy2 = &mControl[u];
-					}
+					}*/ // TODO: revise this part to use HWNDs
 				}
 			}
 			//else removal not supported.
@@ -5411,9 +5411,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				case 'G':
 					aControl.event_handler.mFunc = NULL;
 					break;
-				case 'V':
-					aControl.output_var = NULL;
-					break;
 				default:
 					// v1.1.04: Validate Gui options.
 					return g_script.ScriptError(ERR_INVALID_OPTION, next_option-1);
@@ -5453,53 +5450,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				if (aOpt.tabstop_count < GUI_MAX_TABSTOPS)
 					aOpt.tabstop[aOpt.tabstop_count++] = ATOU(next_option);
 				//else ignore ones beyond the maximum.
-				break;
-
-			case 'V': // Variable
-				// It seems best to allow an input-control to lack a variable, in which case its contents will be
-				// lost when the form is closed (unless fetched beforehand with something like ControlGetText).
-				// This is because it allows layout editors and other script generators to omit the variable
-				// and yet still be able to generate a runnable script.
-				Var *candidate_var;
-				if (   !(candidate_var = g_script.FindOrAddVar(next_option))   ) // Find local or global, see below.
-					// For now, this is always a critical error that stops the current quasi-thread rather
-					// than setting ErrorLevel (if ErrorLevel is called for).  This is because adding a
-					// variable can cause one of any number of different errors to be displayed, and changing
-					// all those functions to have a silent mode doesn't seem worth the trouble given how
-					// rarely 1) a control needs to get a new variable; 2) that variable name is too long
-					// or not valid.
-					return FAIL;  // It already displayed the error (e.g. name too long). Existing var (if any) is retained.
-				// Below: Must be a global variable since otherwise, "Gui Submit" would store its results
-				// in the local variables of some function that isn't even currently running.  Reporting
-				// a runtime error seems the best way to solve this overall issue since the other
-				// alternatives seem overly complicated or have worse drawbacks.  One alternative would
-				// be to do load-time resolution of vVar and store the result in the lines mAttribute.
-				// But in addition to the problems of parsing vVar out of the list at loadtime, something
-				// like % "v" VarContainingVar (i.e. an expression) and other things seems would introduce
-				// an amount of complexity at loadtime that doesn't seem worth it.  Another possibility is
-				// to review a function's lines the first time its first "Gui Add" is encountered at runtime.
-				// Any local variable that match the name of the vVar global could be made into aliases so
-				// that they point to the global instead.  But that is pretty ugly and doesn't seem worth it.
-				candidate_var = candidate_var->ResolveAlias(); // Update it to its target if it's an alias.  This might be relied upon by Gui::FindControl() and other things, and also the section below.
-				if (candidate_var->IsNonStaticLocal()) // Note that an alias can point to a local vs. global var.
-					return g_script.ScriptError(_T("A control's variable must be global or static."), next_option - 1);
-				// Another reason that the above always resolves aliases is because it allows the next
-				// check below to find true duplicates, even if different aliases are used to create the
-				// controls (i.e. if two alias both point to the same global).
-				// Check if any other control (visible or not, to avoid the complexity of a hidden control
-				// needing to be dupe-checked every time it becomes visible) on THIS gui window has the
-				// same variable.  That's an error because not only doesn't it make sense to do that,
-				// but it might be useful to uniquely identify a control by its variable name (when making
-				// changes to it, etc.)  Note that if this is the first control being added, mControlCount
-				// is now zero because this control has not yet actually been added.  That is why
-				// "u < mControlCount" is used:
-				GuiIndexType u;
-				for (u = 0; u < mControlCount; ++u)
-					if (mControl[u].output_var == candidate_var)
-						return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
-							: g_script.ScriptError(_T("The same variable cannot be used for more than one control.") // It used to say "one control per window" but that seems more confusing than it's worth.
-								, next_option - 1);
-				aControl.output_var = candidate_var;
 				break;
 
 			case 'C':  // Color
@@ -6742,92 +6692,6 @@ ResultType GuiType::Escape() // Similar to close, except typically called when t
 
 
 
-ResultType GuiType::Submit(bool aHideIt)
-// Caller has ensured that all controls have valid, non-NULL hwnds:
-{
-	if (!mHwnd) // Operating on a non-existent GUI has no effect.
-		return OK;
-
-	// Handle all non-radio controls:
-	GuiIndexType u;
-	for (u = 0; u < mControlCount; ++u)
-		if (mControl[u].output_var && mControl[u].type != GUI_CONTROL_RADIO)
-			ControlGetContents(*mControl[u].output_var, mControl[u], _T("Submit"));
-
-	// Handle GUI_CONTROL_RADIO separately so that any radio group that has a single variable
-	// to share among all its members can be given special treatment:
-	int group_radios = 0;          // The number of radio buttons in the current group.
-	int group_radios_with_var = 0; // The number of the above that have an output var.
-	Var *group_var = NULL;         // The last-found output variable of the current group.
-	int selection_number = 0;      // Which radio in the current group is selected (0 if none).
-	Var *output_var;
-	TCHAR temp[32];
-    
-	// The below uses <= so that it goes one beyond the limit.  This allows the final radio group
-	// (if any) to be noticed in the case where the very last control in the window is a radio button.
-	// This is because in such a case, there is no "terminating control" having the WS_GROUP style:
-	for (u = 0; u <= mControlCount; ++u)
-	{
-		// WS_GROUP is used to determine where one group ends and the next begins -- rather than using
-		// seeing if the control's type is radio -- because in the future it may be possible for a radio
-		// group to have other controls interspersed within it and yet still be a group for the purpose
-		// of "auto radio button (only one selected at a time)" behavior:
-		if (u == mControlCount || GetWindowLong(mControl[u].hwnd, GWL_STYLE) & WS_GROUP) // New group. Relies on short-circuit boolean order.
-		{
-			// If the prior group had exactly one output var but more than one radio in it, that
-			// var is shared among all radios (as of v1.0.20).  Otherwise:
-			// 1) If it has zero radios and/or zero variables: already fully handled by other logic.
-			// 2) It has multiple variables: the default values assigned in the loop are simply retained.
-			// 3) It has exactly one radio in it and that radio has an output var: same as above.
-			if (group_radios_with_var == 1 && group_radios > 1)
-			{
-				// Multiple buttons selected.  Since this is so rare, don't give it a distinct value.
-				// Instead, treat this the same as "none selected".  Update for v1.0.24: It is no longer
-				// directly possible to have multiple radios selected by having the word "checked" in
-				// more than one of their "Gui Add" commands.  However, there are probably other ways
-				// to get multiple buttons checked (perhaps the Control command), so this handling
-				// for multiple selections is left intact.
-				if (selection_number == -1)
-					selection_number = 0;
-				_itot(selection_number, temp, 10); // selection_number can be legitimately zero.
-				group_var->Assign(temp); // group_var should not be NULL since group_radios_with_var == 1
-			}
-			if (u == mControlCount) // The last control in the window is a radio and its group was just processed.
-				break;
-			group_radios = group_radios_with_var = selection_number = 0;
-		}
-		if (mControl[u].type == GUI_CONTROL_RADIO)
-		{
-			++group_radios;
-			if (output_var = mControl[u].output_var) // Assign.
-			{
-				++group_radios_with_var;
-				group_var = output_var; // If this group winds up having only one var, this will be it.
-			}
-			// Assign default value for now.  It will be overridden if this turns out to be the
-			// only variable in this group:
-			if (SendMessage(mControl[u].hwnd, BM_GETCHECK, 0, 0) == BST_CHECKED)
-			{
-				if (selection_number) // Multiple buttons selected, so flag this as an indeterminate state.
-					selection_number = -1;
-				else
-					selection_number = group_radios;
-				if (output_var)
-					output_var->Assign(1);
-			}
-			else
-				if (output_var)
-					output_var->Assign(0);
-		}
-	} // for()
-
-	if (aHideIt)
-		ShowWindow(mHwnd, SW_HIDE);
-	return OK;
-}
-
-
-
 VarSizeType GuiType::ControlGetName(GuiType *aGuiWindow, GuiIndexType aControlIndex, LPTSTR aBuf)
 // Caller has ensured that aGuiWindowIndex is less than MAX_GUI_WINDOWS.
 // We're returning the length of the var's contents, not the size.
@@ -6845,17 +6709,17 @@ VarSizeType GuiType::ControlGetName(GuiType *aGuiWindow, GuiIndexType aControlIn
     if (aBuf)
 	{
 		// Caller has already ensured aBuf is large enough.
-		if (control.output_var)
-			return (VarSizeType)_tcslen(_tcscpy(aBuf, control.output_var->mName));
-		else // Fall back to getting the leading characters of its caption (most often used for buttons).
+		//if (control.output_var)
+		//	return (VarSizeType)_tcslen(_tcscpy(aBuf, control.output_var->mName));
+		//else // Fall back to getting the leading characters of its caption (most often used for buttons).
 			#define A_GUICONTROL_TEXT_LENGTH (MAX_ALLOC_SIMPLE - 1)
 			return GetWindowText(control.hwnd, aBuf, A_GUICONTROL_TEXT_LENGTH + 1); // +1 is verified correct.
 			// Above: some callers don't call for a length estimate first, so they might rely on size never getting
 			// larger than the above.
 	}
 	// Otherwise, just return the length:
-	if (control.output_var)
-		return (VarSizeType)_tcslen(control.output_var->mName);
+	//if (control.output_var)
+	//	return (VarSizeType)_tcslen(control.output_var->mName);
 	// Otherwise: Fall back to getting the leading characters of its caption (most often used for buttons)
 	VarSizeType length = GetWindowTextLength(control.hwnd);
 	return (length > A_GUICONTROL_TEXT_LENGTH) ? A_GUICONTROL_TEXT_LENGTH : length;
@@ -7204,7 +7068,7 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 
 GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 // Find the index of the control that matches the string, which can be either:
-// 1) The name of a control's associated output variable.
+// 1) HWND
 // 2) Class+NN
 // 3) Control's title/caption.
 // Returns -1 if not found.
@@ -7224,34 +7088,6 @@ GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 		if (u < mControlCount)
 			return u;
 		// Otherwise: no match was found, so fall back to considering it as text.
-	}
-	// To keep things simple, the first search method is always conducted: It looks for a
-	// matching variable name, but only among the variables used by this particular window's
-	// controls (i.e. avoid ambiguity by NOT having earlier matched up aControlID against
-	// all variable names in the entire script, perhaps in PreparseBlocks() or something).
-	// UPDATE: For v1.0.31, the performance is improved by resolving the variable to its
-	// pointer first, rather than comparing the variable names for a match.  It's further
-	// improved by skipping the first loop entirely when aControlID doesn't exist as a global
-	// variable (GUI controls always have global variables, not locals).
-	Var *var;
-	if (var = g_script.FindVar(aControlID, 0, NULL, FINDVAR_GLOBAL)) // First search globals only because for backward compatibility, a GUI control whose Var* is identical to that of a global should be given precedence over a static that matches some other control.  Furthermore, since most GUI variables are global, doing this check before the static check improves avg-case performance.
-	{
-		// No need to do "var = var->ResolveAlias()" because the line above never finds locals, only globals.
-		// Similarly, there's no need to do confirm that var->IsLocal()==false.
-		for (u = 0; u < mControlCount; ++u)
-			if (mControl[u].output_var == var)
-				return u;  // Match found.
-	}
-	if (g->CurrentFunc // v1.0.46.15: Since above failed to match: if we're in a function (which is checked for performance reasons), search for a static or ByRef-that-points-to-a-global-or-static because both should be supported.
-		&& (var = g_script.FindVar(aControlID, 0, NULL, FINDVAR_LOCAL)))
-	{
-		// No need to do "var = var->ResolveAlias()" because the line above never finds locals, only globals.
-		// Similarly, there's no need to do confirm that var->IsLocal()==false.
-		var = var->ResolveAlias(); // Update it to its target if it's an alias because that's how control-var's are stored (i.e. pre-resolved, never aliases).
-		if (!var->IsNonStaticLocal()) // To be a valid control-var, it must be global, static, or a ByRef that points to a global or static.
-			for (u = 0; u < mControlCount; ++u)
-				if (mControl[u].output_var == var)
-					return u;  // Match found.
 	}
 	// Otherwise: No match found, so fall back to standard control class and/or text finding method.
 	HWND control_hwnd = ControlExist(mHwnd, aControlID);
@@ -8092,11 +7928,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		case GUI_CONTROL_DATETIME: // NMDATETIMECHANGE struct contains an NMHDR as it's first member.
 			if (nmhdr.code == DTN_DATETIMECHANGE)
 			{
-				// Although the DTN_DATETIMECHANGE notification struct contains the control's current date/time,
-				// it simplifies the code to fetch it again (performance is probably good since the control
-				// almost certainly just passes back a pointer to its self-maintained struct).
-				if (control.output_var) // Above already confirmed it has a jump_to_label (or at least an implicit cancel).
-					pgui->ControlGetContents(*control.output_var, control);
 				// Both MonthCal's year spinner (when year is clicked on) and DateTime's drop-down calendar
 				// seem to start a new message pump.  This is one of the reason things were redesigned to
 				// avoid doing a MsgSleep(-1) after posting AHK_GUI_ACTION at the bottom of Event().
@@ -8134,9 +7965,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				return 0; // 0 is appropriate for all MONTHCAL notifications.
 			}
 			// Since the above did a "break" vs. "return", the label will be launched.
-			// Update output-var if that is called for:
-			if (control.output_var) // Above already confirmed it has a jump_to_label (or at least an implicit cancel).
-				pgui->ControlGetContents(*control.output_var, control);
 			pgui->Event(control_index, nmhdr.code, gui_event);
 			return 0; // 0 is appropriate for all MONTHCAL notifications.
 
@@ -8156,9 +7984,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				pgui->ControlUpdateCurrentTab(control, true);
 				pgui->Event(control_index, nmhdr.code, GUI_EVENT_NORMAL);
 			}
-			else if (nmhdr.code == TCN_SELCHANGING)
-				if (control.output_var && control.event_handler) // Set the variable's contents, for use when the corresponding TCN_SELCHANGE comes in to launch the handler after this.
-					pgui->ControlGetContents(*control.output_var, control);
 			return 0; // 0 is appropriate for all TAB notifications.
 		case GUI_CONTROL_LINK:
 			if(nmhdr.code == NM_CLICK || nmhdr.code == NM_RETURN)
@@ -8736,9 +8561,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 			return; // No action for other notifications.
 
 		case GUI_CONTROL_HOTKEY: // The only notification sent by the hotkey control is EN_CHANGE.
-			if (control.output_var) // Above already confirmed it has a jump_to_label (or at least an implicit cancel).
-				ControlGetContents(*control.output_var, control);
-			break;
+			break; // No action.
 
 		case GUI_CONTROL_LABEL:
 		case GUI_CONTROL_PIC:
@@ -8767,8 +8590,6 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 			if (aNotifyCode == SB_THUMBPOSITION)
 			{
 				// User has pressed arrow keys or clicked down on the mouse on one of the arrows.
-				if (control.output_var) // Above already confirmed it has a jump_to_label (or at least an implicit cancel).
-					ControlGetContents(*control.output_var, control);
 				break;
 			}
 			// Otherwise, ignore all others.  SB_ENDSCROLL is received when user has released mouse after
@@ -8805,8 +8626,6 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 				// Otherwise:
 				aGuiEvent = aNotifyCode + 48; // Signal it to store an ASCII character (digit) in A_GuiControlEvent.
 			}
-			if (control.output_var) // Above already confirmed it has a jump_to_label (or at least an implicit cancel).
-				ControlGetContents(*control.output_var, control);
 			break;
 
 		// The following need no extra handling because their info is already ready to be posted as an event below:
@@ -9639,13 +9458,6 @@ ResultType GuiType::SelectAdjacentTab(GuiControlType &aTabControl, bool aMoveToR
 	if (!tab_count)
 		return FAIL;
 
-	// Fix for v1.0.35: Keyboard navigation of a tab control should still launch the tab's event handler
-	// if it has one.  The following sets the output-var to be the control's previous tab.
-	// For simplicity, this is done unconditionally (i.e. even if the tab will not change because
-	// it's at the min or max and aWrapAround==false):
-	if (aTabControl.event_handler && aTabControl.output_var)
-		ControlGetContents(*aTabControl.output_var, aTabControl);
-
 	int selected_tab = TabCtrl_GetCurSel(aTabControl.hwnd);
 	if (selected_tab == -1) // Not sure how this can happen in this case (since it has at least one tab).
 		selected_tab = aMoveToRight ? 0 : tab_count - 1; // Select the first or last tab.
@@ -9679,7 +9491,7 @@ ResultType GuiType::SelectAdjacentTab(GuiControlType &aTabControl, bool aMoveToR
 
 	// Fix for v1.0.35: Keyboard navigation of a tab control should still launch the tab's event handler
 	// if it has one:
-	if (aTabControl.event_handler) // Its output_var (if any) was already set higher above.
+	if (aTabControl.event_handler)
 		Event(GUI_HWND_TO_INDEX(aTabControl.hwnd), TCN_SELCHANGE);
 
 	return OK;
