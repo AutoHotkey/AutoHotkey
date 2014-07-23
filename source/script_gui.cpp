@@ -266,21 +266,7 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 	Line::ConvertGuiName(aBuf, aCommand, &name_marker, &name_length);
 	
 	if (!name_marker) // i.e. no name was specified.
-	{
-		if (g->GuiDefaultWindowValid())
-			return g->GuiDefaultWindow;
-		else if (g->GuiDefaultWindow) // i.e. it contains a Gui name but no valid Gui.
-			name_marker = g->GuiDefaultWindow->mName;
-		else
-			name_marker = _T("1"); // For backward-compatibility.
-		// Return the default Gui name to our caller in case it wants to create a Gui.
-		if (aName)
-			*aName = name_marker; // Caller must copy the name before releasing g->GuiDefaultWindow.
-		if (aNameLength)
-			*aNameLength = _tcslen(name_marker);
-		// GuiDefaultWindowValid() has already searched and determined the Gui does not exist.
 		return NULL;
-	}
 	
 	// Set defaults: indicate this name can't be used to create a new Gui.
 	if (aName)
@@ -340,12 +326,9 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 	return found_gui;
 }
 
-
+// To be removed.
 GuiType *GuiType::FindGui(LPTSTR aName)
 {
-	for (int i = 0; i < g_guiCount; ++i)
-		if (!_tcsicmp(g_gui[i]->mName, aName))
-			return g_gui[i];
 	return NULL;
 }
 
@@ -392,21 +375,7 @@ GuiType *global_struct::GuiDefaultWindowValid()
 GuiType *GuiType::ValidGui(GuiType *&aGuiRef)
 {
 	if (aGuiRef && !aGuiRef->mHwnd) // Gui existed but has been destroyed.
-	{
-		if (!*aGuiRef->mName) // v1.1.04: It was an anonymous GUI, so no point keeping it around.
-		{
-			aGuiRef->Release();
-			aGuiRef = NULL;
-			return NULL;
-		}
-		GuiType *recreated_gui;
-		if (   !(recreated_gui = GuiType::FindGui(aGuiRef->mName))   )
-			return NULL; // Gui is not valid, so return NULL.
-		// Gui has been recreated, so update the reference:
-		recreated_gui->AddRef();
-		aGuiRef->Release();
-		aGuiRef = recreated_gui;
-	}
+		return NULL;
 	// Above verified it either points to a valid Gui or is NULL.
 	return aGuiRef;
 }
@@ -1798,9 +1767,9 @@ void GuiType::SetLabels(LPTSTR aLabelPrefix)
 		tcslcpy(label_name, aLabelPrefix, MAX_GUI_PREFIX_LENGTH+1); // Reserve the rest of label_name's size for the suffix below to ensure no chance of overflow.
 	else // Caller is indicating that the defaults should be used.
 	{
-		if (*mName != '1' || mName[1]) // Prepend the window number for windows other than the first.
+		/*if (*mName != '1' || mName[1]) // Prepend the window number for windows other than the first.
 			_stprintf(label_name, _T("%sGui"), mName);
-		else
+		else*/
 			_tcscpy(label_name, _T("Gui"));
 	}
 	label_suffix = label_name + _tcslen(label_name); // This is the position at which the rest of the label name will be copied.

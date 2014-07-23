@@ -1330,6 +1330,7 @@ public:
 		return MENU_CMD_INVALID;
 	}
 	
+	// Will be removed.
 	static void ConvertGuiName(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName = NULL, size_t *aNameLength = NULL)
 	{
 		LPTSTR colon_pos;
@@ -1358,6 +1359,7 @@ public:
 		aCommand = omit_leading_whitespace(colon_pos + 1);
 	}
 
+	// Will be removed.
 	static GuiCommands ConvertGuiCommand(LPTSTR aBuf)
 	{
 		//if (!*aBuf || *aBuf == '+' || *aBuf == '-') // Assume a var ref that resolves to blank is "options" (for runtime flexibility).
@@ -2329,7 +2331,6 @@ public:
 	// to be what other apps use too, and seems to make edits stand out a little nicer:
 	#define GUI_CTL_VERTICAL_DEADSPACE DPIScale(8)
 	#define PROGRESS_DEFAULT_THICKNESS DPIScale(2 * sFont[mCurrentFontIndex].point_size)
-	LPTSTR mName;
 	HWND mHwnd, mStatusBarHwnd;
 	HWND mOwner;  // The window that owns this one, if any.  Note that Windows provides no way to change owners after window creation.
 	// Control IDs are higher than their index in the array by the below amount.  This offset is
@@ -2406,7 +2407,7 @@ public:
 	};
 
 	GuiType() // Constructor
-		: mName(NULL), mHwnd(NULL), mStatusBarHwnd(NULL), mControlCount(0), mControlCapacity(0)
+		: mHwnd(NULL), mStatusBarHwnd(NULL), mControlCount(0), mControlCapacity(0)
 		, mDefaultButtonIndex(-1), mLabelForClose(NULL), mLabelForEscape(NULL), mLabelForSize(NULL)
 		, mLabelForDropFiles(NULL), mLabelForContextMenu(NULL)
 		, mLabelForCloseIsRunning(false), mLabelForEscapeIsRunning(false), mLabelForSizeIsRunning(false)
@@ -2446,8 +2447,6 @@ public:
 
 	~GuiType()
 	{
-		// mName will be removed.
-		if (mName) free(mName);
 		Destroy();
 	}
 
@@ -2478,7 +2477,7 @@ public:
 
 	static VarSizeType ControlGetName(GuiType *aGuiWindow, GuiIndexType aControlIndex, LPTSTR aBuf);
 	
-	static GuiType *FindGui(LPTSTR aName);
+	static GuiType *FindGui(LPTSTR aName); // To be removed.
 	static GuiType *FindGui(HWND aHwnd);
 	static GuiType *FindGuiParent(HWND aHwnd);
 
@@ -2737,7 +2736,9 @@ public:
 		return NULL;
 	}
 
+	// Will be removed.
 	ResultType PerformGui(LPTSTR aBuf, LPTSTR aControlType, LPTSTR aOptions, LPTSTR aParam4);
+	// Will be removed.
 	static GuiType *ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName = NULL, size_t *aNameLength = NULL);
 
 	// Call this SciptError to avoid confusion with Line's error-displaying functions:
