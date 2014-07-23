@@ -131,7 +131,8 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 				aResultToken.marker = ParamIndexToString(0);
 				SetWindowText(mHwnd, aResultToken.marker);
 				return OK;
-			} else
+			}
+			else
 			{
 				return INVOKE_NOT_HANDLED; // TODO
 			}
@@ -229,14 +230,17 @@ BIF_DECL(BIF_GuiCreate)
 	// Set the event handler if one has been specified.
 	if (!ParamIndexIsOmitted(2))
 	{
-		ExprTokenType& tok = *aParam[2];
-		if (tok.symbol == SYM_OBJECT)
+		IObject* obj = TokenToObject(*aParam[2]);
+		if (obj)
 		{
 			// The caller specified an object to use as event sink.
 			gui->mHasEventSink = true;
-			gui->mEventSink = tok.object;
-			gui->mEventSink->AddRef();
-		} else
+			gui->mEventSink = obj;
+			gui->mOwnEventSink = (bool)ParamIndexToOptionalType(BOOL, 3, TRUE);
+			if (gui->mOwnEventSink)
+				gui->mEventSink->AddRef();
+		}
+		else
 		{
 			LPTSTR prefix = ParamIndexToString(2);
 			if (!Var::ValidateName(prefix, DISPLAY_FUNC_ERROR))
@@ -1619,7 +1623,10 @@ ResultType GuiType::Destroy()
 	}
 
 	if (mHasEventSink)
-		mEventSink->Release();
+	{
+		if (mOwnEventSink)
+			mEventSink->Release();
+	}
 	else if (mEventFuncPrefix != Var::sEmptyString)
 		free(mEventFuncPrefix);
 
@@ -1778,7 +1785,8 @@ int GuiType::CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam
 		method_name.marker = aHandler.mMethodName;
 		params[0] = &method_name;
 		result = mEventSink->Invoke(result_token, this_token, IT_CALL, params, aParamCount+1);
-	} else
+	}
+	else
 		aHandler.mFunc->Call(func_call, result, result_token, params+1, aParamCount);
 
 	int ret = result == OK ? (int)TokenToInt64(result_token) : 0;

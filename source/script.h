@@ -2361,7 +2361,7 @@ public:
 	};
 	GuiEvent mOnClose, mOnEscape, mOnSize, mOnDropFiles, mOnContextMenu;
 	bool mOnCloseIsRunning, mOnEscapeIsRunning, mOnSizeIsRunning; // DropFiles doesn't need one of these.
-	bool mHasEventSink;
+	bool mHasEventSink, mOwnEventSink;
 	DWORD mStyle, mExStyle; // Style of window.
 	bool mInRadioGroup; // Whether the control currently being created is inside a prior radio-group.
 	bool mUseTheme;  // Whether XP theme and styles should be applied to the parent window and subsequently added controls.

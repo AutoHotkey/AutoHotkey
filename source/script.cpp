@@ -42,7 +42,7 @@ ExprOpFunc g_ObjGet(Op_ObjInvoke, IT_GET), g_ObjSet(Op_ObjInvoke, IT_SET); // Al
 // (passing the function's name) in an attempt to reduce code size and improve readability.
 FuncEntry g_BIF[] =
 {
-	BIF1(GuiCreate, 0, 3, true),
+	BIF1(GuiCreate, 0, 4, true),
 	BIF1(GuiFromHwnd, 1, 1, true),
 	
 	BIFn(LV_GetNext, 0, 2, true, BIF_LV_GetNextOrCount),
