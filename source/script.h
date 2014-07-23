@@ -2481,7 +2481,12 @@ public:
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText);
 
 	ResultType ParseOptions(LPTSTR aOptions, ToggleValueType &aOwnDialogs);
-	void SetOwnDialogs(ToggleValueType state);
+	void SetOwnDialogs(ToggleValueType state)
+	{
+		if (state == TOGGLE_INVALID)
+			return;
+		g->DialogOwner = state == TOGGLED_ON ? mHwnd : NULL;
+	}
 	void GetNonClientArea(LONG &aWidth, LONG &aHeight);
 	void GetTotalWidthAndHeight(LONG &aWidth, LONG &aHeight);
 

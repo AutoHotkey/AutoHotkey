@@ -777,9 +777,9 @@ struct global_struct
 	GuiType *GuiWindow; // The GUI window that launched this thread.
 	GuiType *GuiDefaultWindow; // This thread's default GUI window, used except when specified "Gui, 2:Add, ..."
 	GuiType *GuiDefaultWindowValid(); // Updates and returns GuiDefaultWindow in case "Gui, Name: Default" wasn't used or the Gui has been destroyed; returns NULL if GuiDefaultWindow is invalid.
-	GuiType *DialogOwner; // This thread's GUI owner, if any.
+	HWND DialogOwner; // This thread's dialog owner, if any.
 	GuiIndexType GuiControlIndex; // The GUI control index that launched this thread.
-	#define THREAD_DIALOG_OWNER (GuiType::ValidGui(::g->DialogOwner) ? ::g->DialogOwner->mHwnd : NULL)
+	#define THREAD_DIALOG_OWNER (IsWindow(::g->DialogOwner) ? ::g->DialogOwner : NULL)
 	int WinDelay;  // negative values may be used as special flags.
 	int ControlDelay; // negative values may be used as special flags.
 	int KeyDelay;     //

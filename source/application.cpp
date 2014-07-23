@@ -1203,7 +1203,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					EVT_ARG_ADD_STR(GuiType::ConvertEvent(gui_action));
 				} // switch (msg.message)
 
-				if (pcontrol && pcontrol->type == GUI_CONTROL_LINK)
+				if (event_is_control_generated && pcontrol->type == GUI_CONTROL_LINK)
 				{
 					LITEM item = {};
 					item.mask=LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
@@ -1225,6 +1225,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				//g.GuiWindow = g.GuiDefaultWindow = pgui; // GUI threads default to operating upon their own window.
 				//g.GuiControlIndex = gui_control_index; // Must be set only after the "g" struct has been initialized. This will be NO_CONTROL_INDEX if the sender of the message said to do that.
 				//g.EventInfo = gui_event_info; // Override the thread-default of NO_EVENT_INFO.
+				pgui->SetOwnDialogs(TOGGLED_ON); // Seems like a sensible default.
 
 				if (pgui_event_is_running) // i.e. GuiClose, GuiEscape, and related window-level events.
 					*pgui_event_is_running = true;
@@ -1991,8 +1992,8 @@ void ResumeUnderlyingThread(VarBkp aSavedErrorLevel)
 	// These two may be set by any thread, so must be released here:
 	if (g->GuiDefaultWindow)
 		g->GuiDefaultWindow->Release();
-	if (g->DialogOwner)
-		g->DialogOwner->Release();
+	//if (g->DialogOwner)
+	//	g->DialogOwner->Release();
 
 	// Check if somebody has thrown an exception and it's not been caught yet
 	if (g->ThrownToken)

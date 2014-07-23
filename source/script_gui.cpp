@@ -4340,22 +4340,6 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, ToggleValueType &aOwnDialogs)
 
 
 
-void GuiType::SetOwnDialogs(ToggleValueType state)
-{
-	if (state == TOGGLE_INVALID)
-		return;
-	if (g->DialogOwner)
-		g->DialogOwner->Release();
-	if (state == TOGGLED_ON)
-	{
-		g->DialogOwner = this;
-		AddRef();
-	} else
-		g->DialogOwner = NULL; // Reset to NULL when "-OwnDialogs" is present.
-}
-
-
-
 void GuiType::GetNonClientArea(LONG &aWidth, LONG &aHeight)
 // Added for v1.0.44.13.
 // Yields only the *extra* width/height added by the windows non-client area.
