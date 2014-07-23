@@ -8909,36 +8909,32 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 		return 0;
 
 	GuiControlType& aControl = mControl[aControlIndex];
-	Label* glabel = NULL; //aControl.jump_to_label; TODO
-	if (!glabel)
+	GuiEvent& evt = aControl.event_handler;
+	if (!evt)
 		return 0;
 
-	Line* jumpToLine = glabel->mJumpToLine;
-
-	if (g_nThreads >= g_MaxThreadsTotal)
-		if (g_nThreads >= MAX_THREADS_EMERGENCY
-			|| jumpToLine->mActionType != ACT_EXITAPP && jumpToLine->mActionType != ACT_RELOAD)
-			return 0;
+	if (g_nThreads >= g_MaxThreadsTotal && g_nThreads >= MAX_THREADS_EMERGENCY)
+		return 0;
 
 	if (g->Priority > 0)
 		return 0;
 
 	VarBkp ErrorLevel_saved;
 	ErrorLevel_Backup(ErrorLevel_saved);
-	InitNewThread(0, false, true, jumpToLine->mActionType);
+	InitNewThread(0, false, true, ACT_INVALID);
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	DEBUGGER_STACK_PUSH(_T("Gui"))
 
 	AddRef();
-	AddRef();
-	g->GuiWindow = this;
-	g->GuiDefaultWindow = this;
-	g->GuiControlIndex = aControlIndex;
-	g->GuiEvent = 'N';
-	g->EventInfo = (DWORD_PTR) aNmHdr;
+	ExprTokenType param[3];
+	param[0].symbol = SYM_OBJECT;
+	param[0].object = this; // TODO: objectify controls
+	param[1].symbol = SYM_INTEGER;
+	param[1].value_int64 = (__int64)(DWORD_PTR)aNmHdr;
+	param[2].symbol = SYM_STRING;
+	param[2].marker = _T("N");
 	g_script.mLastPeekTime = GetTickCount();
-	glabel->Execute();
-	int returnValue = (int)g_ErrorLevel->ToInt64();
+	int returnValue = CallEvent(evt, 3, param);
 
 	DEBUGGER_STACK_POP()
 	Release();
