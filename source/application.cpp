@@ -1290,10 +1290,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					g.hWndLastUsed = pgui->mHwnd; // OK if NULL.
 					// This flags GUI menu items as being GUI so that the script has a way of detecting
 					// whether a given submenu's item was selected from inside a menu bar vs. a popup:
-					g.GuiEvent = GUI_EVENT_NORMAL;
-					pgui->AddRef(); // Keep the pointer valid at least until the thread finishes.
-					pgui->AddRef(); //
-					g.GuiWindow = g.GuiDefaultWindow = pgui; // But leave GuiControl at its default, which flags this event as from a menu item.
+					g.EventInfo = (EventInfoType)pgui->mHwnd;
 				}
 				DEBUGGER_STACK_PUSH(_T("Menu"))
 				menu_item->mLabel->Execute();
@@ -1808,25 +1805,9 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	
 	// Set last found window (as documented).  Can be NULL.
 	// Nested controls like ComboBoxes require more than a simple call to GetParent().
-	if (g->hWndLastUsed = GetNonChildParent(aWnd)) // Assign parent window as the last found window (it's ok if it's hidden).
-	{
-		pgui = GuiType::FindGuiParent(aWnd); // Fix for v1.1.09.03: Search the chain of parent windows in case this control's Gui was embedded in another Gui using +Parent.
-		if (pgui) // This parent window is a GUI window.
-		{
-			pgui->AddRef(); // Keep the pointer valid at least until the thread finishes.
-			pgui->AddRef(); //
-			g->GuiWindow = pgui;  // Update the built-in variable A_GUI.
-			g->GuiDefaultWindow = pgui; // Consider this a GUI thread; so it defaults to operating upon its own window.
-			GuiIndexType control_index = (GuiIndexType)(size_t)pgui->FindControl(aWnd, true); // v1.0.44.03: Call FindControl() vs. GUI_HWND_TO_INDEX so that a combobox's edit control is properly resolved to the combobox itself.
-			if (control_index < pgui->mControlCount) // Match found (relies on unsigned for out-of-bounds detection).
-				g->GuiControlIndex = control_index;
-			//else leave it at its default, which was set when the new thread was initialized.
-		}
-		//else leave the above members at their default values set when the new thread was initialized.
-	}
+	g->hWndLastUsed = GetNonChildParent(aWnd); // Assign parent window as the last found window (it's ok if it's hidden).
 	if (apMsg)
 	{
-		g->GuiPoint = apMsg->pt;
 		g->EventInfo = apMsg->time;
 	}
 	//else leave them at their init-thread defaults.

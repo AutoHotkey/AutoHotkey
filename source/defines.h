@@ -771,14 +771,10 @@ struct global_struct
 	int UninterruptedLineCount; // Stored as a g-struct attribute in case OnExit func interrupts it while uninterruptible.
 	int Priority;  // This thread's priority relative to others.
 	DWORD LastError; // The result of GetLastError() after the most recent DllCall or Run.
-	GuiEventType GuiEvent; // This thread's triggering event, e.g. DblClk vs. normal click.
 	EventInfoType EventInfo; // Not named "GuiEventInfo" because it applies to non-GUI events such as clipboard.
-	POINT GuiPoint; // The position of GuiEvent. Stored as a thread vs. window attribute so that underlying threads see their original values when resumed.
-	GuiType *GuiWindow; // The GUI window that launched this thread.
 	GuiType *GuiDefaultWindow; // This thread's default GUI window, used except when specified "Gui, 2:Add, ..."
 	GuiType *GuiDefaultWindowValid(); // Updates and returns GuiDefaultWindow in case "Gui, Name: Default" wasn't used or the Gui has been destroyed; returns NULL if GuiDefaultWindow is invalid.
 	HWND DialogOwner; // This thread's dialog owner, if any.
-	GuiIndexType GuiControlIndex; // The GUI control index that launched this thread.
 	#define THREAD_DIALOG_OWNER (IsWindow(::g->DialogOwner) ? ::g->DialogOwner : NULL)
 	int WinDelay;  // negative values may be used as special flags.
 	int ControlDelay; // negative values may be used as special flags.
@@ -886,14 +882,7 @@ inline void global_init(global_struct &g)
 	g.ThreadIsCritical = false;
 	g.Priority = 0;
 	g.LastError = 0;
-	g.GuiEvent = GUI_EVENT_NONE;
 	g.EventInfo = NO_EVENT_INFO;
-	g.GuiPoint.x = COORD_UNSPECIFIED;
-	g.GuiPoint.y = COORD_UNSPECIFIED;
-	// For these, indexes rather than pointers are stored because handles can become invalid during the
-	// lifetime of a thread (while it's suspended, or if it destroys the control or window that created itself):
-	g.GuiWindow = NULL;
-	g.GuiControlIndex = NO_CONTROL_INDEX; // Default to out-of-bounds.
 	g.GuiDefaultWindow = NULL;
 	g.WinDelay = 100;
 	g.ControlDelay = 20;

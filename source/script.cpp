@@ -7885,17 +7885,7 @@ BuiltInVarType Script::GetVarType_BIV(LPTSTR lowercase, BuiltInVarSetType &sette
 	if (!_tcscmp(lower, _T("endchar"))) return BIV_EndChar;
 	if (!_tcscmp(lower, _T("lasterror"))) { setter = BIV_LastError_Set; return BIV_LastError; }
 
-	if (!_tcscmp(lower, _T("eventinfo"))) { setter = BIV_EventInfo_Set; return BIV_EventInfo; } // It's called "EventInfo" vs. "GuiEventInfo" because it applies to non-Gui events such as RegisterCallback().
-	if (!_tcscmp(lower, _T("guicontrol"))) return BIV_GuiControl;
-
-	if (   !_tcscmp(lower, _T("guicontrolevent")) // v1.0.36: A_GuiEvent was added as a synonym for A_GuiControlEvent because it seems unlikely that A_GuiEvent will ever be needed for anything:
-		|| !_tcscmp(lower, _T("guievent"))) return BIV_GuiEvent;
-
-	if (   !_tcscmp(lower, _T("gui"))
-		|| !_tcscmp(lower, _T("guiwidth"))
-		|| !_tcscmp(lower, _T("guiheight"))
-		|| !_tcscmp(lower, _T("guix")) // Naming: Brevity seems more a benefit than would A_GuiEventX's improved clarity.
-		|| !_tcscmp(lower, _T("guiy"))) return BIV_Gui; // These can be overloaded if a GuiMove label or similar is ever needed.
+	if (!_tcscmp(lower, _T("eventinfo"))) { setter = BIV_EventInfo_Set; return BIV_EventInfo; }
 
 	if (!_tcscmp(lower, _T("timeidle"))) return BIV_TimeIdle;
 	if (!_tcscmp(lower, _T("timeidlephysical"))) return BIV_TimeIdlePhysical;
