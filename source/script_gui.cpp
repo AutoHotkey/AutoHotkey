@@ -1811,6 +1811,27 @@ LPTSTR GuiType::ConvertEvent(GuiEventType evt)
 
 
 
+IObject* GuiType::CreateDropArray(HDROP hDrop)
+{
+	TCHAR buf[MAX_PATH];
+	UINT file_count = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
+	Object* obj = Object::Create();
+	ExprTokenType tok;
+	tok.symbol = SYM_STRING;
+	tok.marker = buf;
+	ExprTokenType* pTok = &tok;
+
+	for (UINT u = 0; u < file_count; u ++)
+	{
+		DragQueryFile(hDrop, u, buf, MAX_PATH);
+		obj->InsertAt(u, u+1, &pTok, 1);
+	}
+
+	return obj;
+}
+
+
+
 void GuiType::SetEvents()
 {
 	if (!mHasEventSink && mEventFuncPrefix == Var::sEmptyString)

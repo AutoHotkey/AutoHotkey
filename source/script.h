@@ -2476,6 +2476,7 @@ public:
 	int CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam[]);
 	static LPTSTR ConvertEvent(GuiEventType evt);
 	void SetEvents();
+	static IObject* CreateDropArray(HDROP hDrop);
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText);
 

@@ -1073,7 +1073,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// Set first argument
 				EVT_ARG_ADD_OBJ(event_is_control_generated ? pgui : pgui); // TODO: objectify controls
 
-				// When appropriate, the below sets g.GuiPoint (to support A_GuiX and A_GuiY).
 				switch(gui_action)
 				{
 				case GUI_EVENT_CONTEXTMENU:
@@ -1100,7 +1099,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 							break;
 						case GUI_CONTROL_LISTVIEW:
 							// v1.0.44: I realized that it would perhaps be more correct/flexible to use ListView_HitTest()
-							// when g.GuiEvent != GUI_EVENT_NORMAL (like TreeVIew below).  However, for the following reasons,
+							// when gui_action != GUI_EVENT_NORMAL (like TreeVIew below).  However, for the following reasons,
 							// it hasn't yet been done:
 							// 1) Backward compatibility for scripts that rely on the old behavior.
 							// 2) It may be more complex to implement than TreeView's hittest due to dealing with subitems vs. items in a ListView.
@@ -1142,13 +1141,22 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					break; // case GUI_CONTEXT_MENU.
 
 				case GUI_EVENT_DROPFILES:
-					//gui_event_id = gui_action; // i.e. set to GUI_EVENT_DROPFILES for special use by GetGuiEvent().
 					gui_point = msg.pt; // v1.0.38: More accurate/customary to use msg.pt than GetCursorPos().
 					ScreenToWindow(gui_point, pgui->mHwnd);
 					// Visually indicate that drops aren't allowed while and existing drop is still being
 					// processed. Fix for v1.0.31.02: The window's current ExStyle is fetched every time
 					// in case a non-GUI command altered it (such as making it transparent):
 					SetWindowLong(pgui->mHwnd, GWL_EXSTYLE, GetWindowLong(pgui->mHwnd, GWL_EXSTYLE) & ~WS_EX_ACCEPTFILES);
+
+					// Build event arguments.
+					EVT_ARG_ADD_OBJ(GuiType::CreateDropArray(hdrop_to_free));
+					EVT_ARG_ADD_STR(_T("")); // TODO: control
+					EVT_ARG_ADD_INT(pgui->Unscale(gui_point.x));
+					EVT_ARG_ADD_INT(pgui->Unscale(gui_point.y));
+
+					// Free the drop object.
+					DragFinish(hdrop_to_free);
+					pgui->mHdrop = NULL;
 					break;
 
 				case GUI_EVENT_CLOSE:
@@ -1255,10 +1263,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					}
 					else if (event_is_control_generated) // An earlier stage has ensured pcontrol isn't NULL in this case.
 						pcontrol->attrib &= ~GUI_CONTROL_ATTRIB_HANDLER_IS_RUNNING; // Must be careful to set this flag only when the event is control-generated, not for a drag-and-drop onto the control, or context menu on the control, etc.
-					if (hdrop_to_free) // This is only non-NULL when gui_action==GUI_EVENT_DROPFILES
+					if (gui_action == GUI_EVENT_DROPFILES)
 					{
-						DragFinish(hdrop_to_free); // Since the DropFiles quasi-thread is finished, free the HDROP resources.
-						pgui->mHdrop = NULL; // Indicate that this GUI window is ready for another drop.
+						// Free the drop array.
+						gui_event_args[1].object->Release();
 						// Fix for v1.0.31.02: The window's current ExStyle is fetched every time in case a non-GUI
 						// command altered it (such as making it transparent):
 						SetWindowLong(pgui->mHwnd, GWL_EXSTYLE, GetWindowLong(pgui->mHwnd, GWL_EXSTYLE) | WS_EX_ACCEPTFILES);
