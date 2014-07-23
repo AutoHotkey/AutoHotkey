@@ -136,8 +136,7 @@ int g_nInputBoxes = 0;
 int g_nFileDialogs = 0;
 int g_nFolderDialogs = 0;
 InputBoxType g_InputBox[MAX_INPUTBOXES];
-GuiType **g_gui = NULL;
-int g_guiCount = 0, g_guiCountMax = 0;
+GuiType *g_firstGui = NULL, *g_lastGui = NULL;
 HWND g_hWndToolTip[MAX_TOOLTIPS] = {NULL};
 MsgMonitorStruct *g_MsgMonitor = NULL; // An array to be allocated upon first use (if any).
 int g_MsgMonitorCount = 0;

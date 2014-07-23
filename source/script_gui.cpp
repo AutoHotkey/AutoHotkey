@@ -189,22 +189,6 @@ BIF_DECL(BIF_GuiCreate)
 	LPTSTR title = ParamIndexToOptionalString(0);
 	LPTSTR options = ParamIndexToOptionalString(1);
 
-	if (g_guiCount == g_guiCountMax)
-	{
-		// g_gui is full or hasn't been allocated yet, so allocate or expand it.   Start at a low
-		// number since most scripts don't use many Gui windows, and double each time for simplicity
-		// and to avoid lots of intermediate reallocations if the script creates many Gui windows.
-		int new_max = g_guiCountMax ? g_guiCountMax * 2 : 8;
-		GuiType **new_gui_array = (GuiType **)realloc(g_gui, new_max * sizeof(GuiType *));
-		if (!new_gui_array)
-		{
-			g_script.ScriptError(_T("Too many Guis.")); // Short msg since so rare.
-			return;
-		}
-		g_gui = new_gui_array;
-		g_guiCountMax = new_max;
-	}
-
 	GuiType* gui = new GuiType();
 	if (!gui)
 	{
@@ -245,7 +229,7 @@ BIF_DECL(BIF_GuiCreate)
 	gui->SetOwnDialogs(own_dialogs);
 
 	// Successful creation - add the Gui to the global list of Guis and return it
-	g_gui[g_guiCount++] = gui;
+	AddGuiToList(gui);
 	aResultToken.symbol = SYM_OBJECT;
 	aResultToken.object = gui;
 }
@@ -1553,10 +1537,9 @@ ResultType GuiType::Destroy()
 	// First destroy any windows owned by this window, since they will be auto-destroyed
 	// anyway due to their being owned.  By destroying them explicitly, the Destroy()
 	// function is called recursively which keeps everything relatively neat.
-	// Search right to left since Destroy() shifts items to the right of i left by 1:
-	for (i = g_guiCount; --i >= 0; )
-		if (g_gui[i]->mOwner == mHwnd)
-			g_gui[i]->Destroy();
+	for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
+		if (gui->mOwner == mHwnd)
+			gui->Destroy();
 
 	// Testing shows that this must be done prior to calling DestroyWindow() later below, presumably
 	// because the destruction immediately destroys the status bar, or prevents it from answering messages.
@@ -1600,17 +1583,7 @@ ResultType GuiType::Destroy()
 	// procedure subclasses which might have been triggered above could operate on a new
 	// Gui using the same name as this one that's being destroyed, that could break some
 	// scripts since A_Gui and A_GuiControl would not be set correctly:
-	for (i = g_guiCount; --i >= 0; ) // Search right to left (newest first).
-	{
-		if (g_gui[i] == this)
-		{
-			// Remove this item by shifting items right of it to the left by 1:
-			while (++i < g_guiCount)
-				g_gui[i-1] = g_gui[i];
-			--g_guiCount;
-			break;
-		}
-	}
+	RemoveGuiFromList(this);
 
 	if (mBackgroundBrushWin)
 		DeleteObject(mBackgroundBrushWin);
@@ -1662,12 +1635,12 @@ void GuiType::DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall)
 {
 	if (!ahIcon) // Caller relies on this check.
 		return;
-	for (int i = 0; i < g_guiCount; ++i)
+	for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
 	{
 		// If another window is using this icon, don't destroy the because that has been reported to disrupt
 		// the window's display of the icon in some cases (apparently WM_SETICON doesn't make a copy of the
 		// icon).  The windows still using the icon will be responsible for destroying it later.
-		if (g_gui[i]->mIconEligibleForDestruction == ahIcon)
+		if (gui->mIconEligibleForDestruction == ahIcon)
 			return;
 	}
 	// Since above didn't return, this icon is not currently in use by a GUI window.  The caller has
@@ -1811,10 +1784,10 @@ void GuiType::UpdateMenuBars(HMENU aMenu)
 // use aMenu as a menu bar.  For example, if a menu item has been disabled, the grey-color
 // won't show up immediately unless the window is refreshed.
 {
-	for (int i = 0; i < g_guiCount; ++i)
+	for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
 	{
-		//if (g_gui[i]->mHwnd) // Always non-NULL for any item in g_gui.
-		if (GetMenu(g_gui[i]->mHwnd) == aMenu && IsWindowVisible(g_gui[i]->mHwnd))
+		//if (gui->mHwnd) // Always non-NULL for any item in the list.
+		if (GetMenu(gui->mHwnd) == aMenu && IsWindowVisible(gui->mHwnd))
 		{
 			// Neither of the below two calls by itself is enough for all types of changes.
 			// Thought it's possible that every type of change only needs one or the other, both
@@ -1823,14 +1796,14 @@ void GuiType::UpdateMenuBars(HMENU aMenu)
 			// (the number of rows needed to display all its items) has changed as a result
 			// of the caller's change.  In addition, I believe SetWindowPos() must be called
 			// before RedrawWindow() to prevent artifacts in some cases:
-			SetWindowPos(g_gui[i]->mHwnd, NULL, 0, 0, 0, 0, SWP_DRAWFRAME|SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+			SetWindowPos(gui->mHwnd, NULL, 0, 0, 0, 0, SWP_DRAWFRAME|SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
 			// This line is necessary at least when a single new menu item has been added:
-			RedrawWindow(g_gui[i]->mHwnd, NULL, NULL, RDW_INVALIDATE|RDW_FRAME|RDW_UPDATENOW);
+			RedrawWindow(gui->mHwnd, NULL, NULL, RDW_INVALIDATE|RDW_FRAME|RDW_UPDATENOW);
 			// RDW_UPDATENOW: Seems best so that the window is in an visible updated state when function
 			// returns.  This is because if the menu bar happens to be two rows or its size is changed
 			// in any other way, the window dimensions themselves might change, and the caller might
 			// rely on such a change being visibly finished for PixelGetColor, etc.
-			//Not enough: UpdateWindow(g_gui[i]->mHwnd);
+			//Not enough: UpdateWindow(gui->mHwnd);
 		}
 	}
 }

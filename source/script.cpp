@@ -318,12 +318,13 @@ Script::~Script() // Destructor.
 		Shell_NotifyIcon(NIM_DELETE, &mNIC); // Remove it.
 
 	int i;
-	// It is safer/easier to destroy the GUI windows prior to the menus (especially the menu bars).
+	// GUI windows are destroyed before this destructor is called as they are script objects.
+	// Therefore the comment below is obsolete and only kept for reference:
+	// "It is safer/easier to destroy the GUI windows prior to the menus (especially the menu bars).
 	// This is because one GUI window might get destroyed and take with it a menu bar that is still
 	// in use by an existing GUI window.  GuiType::Destroy() adheres to this philosophy by detaching
-	// its menu bar prior to destroying its window:
-	//while (g_guiCount)
-	//	g_gui[g_guiCount-1]->Destroy();
+	// its menu bar prior to destroying its window."
+	ASSERT(g_firstGui == NULL);
 	for (i = 0; i < GuiType::sFontCount; ++i) // Now that GUI windows are gone, delete all GUI fonts.
 		if (GuiType::sFont[i].hfont)
 			DeleteObject(GuiType::sFont[i].hfont);
@@ -881,8 +882,8 @@ bool Script::IsPersistent()
 		//|| (g_input.status == INPUT_IN_PROGRESS) // The hook is actively collecting input for the Input command.
 		|| (mNIC.hWnd && mTrayMenu->mMenuItemCount)) // The tray icon is visible and its menu has custom items.
 		return true;
-	for (int i = 0; i < g_guiCount; ++i)
-		if (IsWindowVisible(g_gui[i]->mHwnd)) // A GUI is visible.
+	for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
+		if (IsWindowVisible(gui->mHwnd)) // A GUI is visible.
 			return true;
 	// Otherwise, none of the above conditions are true; but there might still be
 	// one or more script threads running.  Caller is responsible for checking that.

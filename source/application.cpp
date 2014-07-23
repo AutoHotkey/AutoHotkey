@@ -205,7 +205,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	bool empty_the_queue_via_peek = false;
 	int messages_received = 0; // This is used to ensure we Sleep() at least a minimal amount if no messages are received.
 
-	int i;
 	bool msg_was_handled;
 	HWND fore_window, focused_control, focused_parent, criterion_found_hwnd;
 	TCHAR wnd_class_name[32], gui_action_errorlevel[16], *walk;
@@ -464,7 +463,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		// because they're >= WM_USER.  The exception is AHK_GUI_ACTION should always be handled
 		// here rather than by IsDialogMessage().  Note: g_guiCount is checked first to help
 		// performance, since all messages must come through this bottleneck.
-		if (g_guiCount && msg.hwnd && msg.hwnd != g_hWnd && !(msg.message == AHK_GUI_ACTION || msg.message == AHK_USER_MENU))
+		if (g_firstGui && msg.hwnd && msg.hwnd != g_hWnd && !(msg.message == AHK_GUI_ACTION || msg.message == AHK_USER_MENU))
 		{
 			// Relies heavily on short-circuit boolean order:
 			if (  (msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST) // v1.1.09.04: Fixed to use && vs || and therefore actually exclude other messages.
@@ -587,7 +586,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				}
 			} // if (keyboard message sent to GUI)
 
-			for (i = 0, msg_was_handled = false; i < g_guiCount; ++i)
+			msg_was_handled = false;
+			for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
 			{
 				// Note: indications are that IsDialogMessage() should not be called with NULL as
 				// its first parameter (perhaps as an attempt to get allow dialogs owned by our
@@ -599,7 +599,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				//if (g_gui[i]->mHwnd) // Always non-NULL for any item in g_gui.
 				g->CalledByIsDialogMessageOrDispatch = true;
 				g->CalledByIsDialogMessageOrDispatchMsg = msg.message; // Added in v1.0.44.11 because it's known that IsDialogMessage can change the message number (e.g. WM_KEYDOWN->WM_NOTIFY for UpDowns)
-				if (IsDialogMessage(g_gui[i]->mHwnd, &msg))
+				if (IsDialogMessage(gui->mHwnd, &msg))
 				{
 					msg_was_handled = true;
 					g->CalledByIsDialogMessageOrDispatch = false;
