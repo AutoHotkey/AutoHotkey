@@ -726,7 +726,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					{
 						// On if there's no label is the implicit action considered.
 						if (pcontrol->attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)
-							pgui->Cancel();
+							pgui->CancelOrDestroy();
 						continue; // Fully handled by the above; or there was no label.
 						// This event might lack both a handler and an action if its control was changed to be
 						// non-actionable since the time the msg was posted.
@@ -1257,9 +1257,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					if (pgui_event_is_running) // i.e. OnClose, OnEscape, and related window-level events.
 					{
 						*pgui_event_is_running = false;
-						// If the event is OnClose() and the return value is false/unspecified, hide the Gui.
+						// If the event is OnClose() and the return value is false/unspecified, hide/destroy the Gui.
 						if (gui_action == GUI_EVENT_CLOSE && !gui_event_ret)
-							pgui->Cancel();
+							pgui->CancelOrDestroy(2); // The '2' is needed because we earlier used AddRef().
 					}
 					else if (event_is_control_generated) // An earlier stage has ensured pcontrol isn't NULL in this case.
 						pcontrol->attrib &= ~GUI_CONTROL_ATTRIB_HANDLER_IS_RUNNING; // Must be careful to set this flag only when the event is control-generated, not for a drag-and-drop onto the control, or context menu on the control, etc.

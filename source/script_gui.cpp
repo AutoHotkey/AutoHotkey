@@ -236,9 +236,7 @@ BIF_DECL(BIF_GuiCreate)
 			// The caller specified an object to use as event sink.
 			gui->mHasEventSink = true;
 			gui->mEventSink = obj;
-			gui->mOwnEventSink = (bool)ParamIndexToOptionalType(BOOL, 3, TRUE);
-			if (gui->mOwnEventSink)
-				gui->mEventSink->AddRef();
+			gui->mEventSink->AddRef();
 		}
 		else
 		{
@@ -1588,12 +1586,6 @@ ResultType GuiType::Destroy()
 		// it's already in progress.
 	}
 
-	// Although it is tempting to do this earlier so that any message monitors or window
-	// procedure subclasses which might have been triggered above could operate on a new
-	// Gui using the same name as this one that's being destroyed, that could break some
-	// scripts since A_Gui and A_GuiControl would not be set correctly:
-	RemoveGuiFromList(this);
-
 	if (mBackgroundBrushWin)
 		DeleteObject(mBackgroundBrushWin);
 	if (mBackgroundBrushCtl)
@@ -1623,10 +1615,7 @@ ResultType GuiType::Destroy()
 	}
 
 	if (mHasEventSink)
-	{
-		if (mOwnEventSink)
-			mEventSink->Release();
-	}
+		mEventSink->Release();
 	else if (mEventFuncPrefix != Var::sEmptyString)
 		free(mEventFuncPrefix);
 
@@ -1641,6 +1630,11 @@ ResultType GuiType::Destroy()
 	mHwnd = NULL;
 	mControlCount = 0; // All child windows (controls) are automatically destroyed with parent.
 	free(mControl); // Free the control array, which was previously malloc'd.
+
+	// Remove the Gui from the global Gui list. Note that this also releases a reference
+	// to the object, possibly destroying it. From now on 'this' is considered to be invalid.
+	RemoveGuiFromList(this);
+
 	// If this Gui was the last thing keeping the script running, exit the script:
 	g_script.ExitIfNotPersistent(EXIT_DESTROY);
 	return OK;
@@ -6684,10 +6678,10 @@ ResultType GuiType::Close()
 // If there is an OnClose event handler defined, launch it as a new thread.
 // In this case, don't close or hide the window.  It's up to the handler to do that
 // if it wants to.
-// If there is no handler, treat it the same as Cancel().
+// If there is no handler, treat it the same as Destroy().
 {
 	if (!mOnClose)
-		return Cancel();
+		return Destroy();
 	POST_AHK_GUI_ACTION(mHwnd, NO_CONTROL_INDEX, GUI_EVENT_CLOSE, NO_EVENT_INFO);
 	// MsgSleep() is not done because "case AHK_GUI_ACTION" in GuiWindowProc() takes care of it.
 	// See its comments for why.

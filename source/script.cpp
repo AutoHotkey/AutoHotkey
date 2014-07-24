@@ -42,7 +42,7 @@ ExprOpFunc g_ObjGet(Op_ObjInvoke, IT_GET), g_ObjSet(Op_ObjInvoke, IT_SET); // Al
 // (passing the function's name) in an attempt to reduce code size and improve readability.
 FuncEntry g_BIF[] =
 {
-	BIF1(GuiCreate, 0, 4, true),
+	BIF1(GuiCreate, 0, 3, true),
 	BIF1(GuiFromHwnd, 1, 1, true),
 	
 	BIFn(LV_GetNext, 0, 2, true, BIF_LV_GetNextOrCount),
@@ -318,13 +318,13 @@ Script::~Script() // Destructor.
 		Shell_NotifyIcon(NIM_DELETE, &mNIC); // Remove it.
 
 	int i;
-	// GUI windows are destroyed before this destructor is called as they are script objects.
-	// Therefore the comment below is obsolete and only kept for reference:
-	// "It is safer/easier to destroy the GUI windows prior to the menus (especially the menu bars).
+	// It is safer/easier to destroy the GUI windows prior to the menus (especially the menu bars).
 	// This is because one GUI window might get destroyed and take with it a menu bar that is still
 	// in use by an existing GUI window.  GuiType::Destroy() adheres to this philosophy by detaching
-	// its menu bar prior to destroying its window."
-	ASSERT(g_firstGui == NULL);
+	// its menu bar prior to destroying its window.
+	GuiType* gui;
+	while (gui = g_firstGui) // Destroy any remaining GUI windows (due to e.g. circular references). Also: assignment.
+		gui->Destroy();
 	for (i = 0; i < GuiType::sFontCount; ++i) // Now that GUI windows are gone, delete all GUI fonts.
 		if (GuiType::sFont[i].hfont)
 			DeleteObject(GuiType::sFont[i].hfont);

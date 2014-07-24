@@ -2360,7 +2360,7 @@ public:
 	};
 	GuiEvent mOnClose, mOnEscape, mOnSize, mOnDropFiles, mOnContextMenu;
 	bool mOnCloseIsRunning, mOnEscapeIsRunning, mOnSizeIsRunning; // DropFiles doesn't need one of these.
-	bool mHasEventSink, mOwnEventSink;
+	bool mHasEventSink;
 	DWORD mStyle, mExStyle; // Style of window.
 	bool mInRadioGroup; // Whether the control currently being created is inside a prior radio-group.
 	bool mUseTheme;  // Whether XP theme and styles should be applied to the parent window and subsequently added controls.
@@ -2497,6 +2497,13 @@ public:
 	ResultType Show(LPTSTR aOptions, LPTSTR aTitle);
 	ResultType Clear();
 	ResultType Cancel();
+	ResultType CancelOrDestroy(ULONG minRefCount = 1)
+	{
+		// If there is only one reference left to the Gui (i.e. due to the global Gui list),
+		// destroy the Gui instead of hiding it. The extra minRefCount parameter is necessary
+		// because MsgSleep() increases the reference count of the Gui.
+		return mRefCount > minRefCount ? Cancel() : Destroy();
+	}
 	ResultType Close(); // Due to SC_CLOSE, etc.
 	ResultType Escape(); // Similar to close, except typically called when the user presses ESCAPE.
 	ResultType ControlGetContents(Var &aOutputVar, GuiControlType &aControl, LPTSTR aMode = _T(""));

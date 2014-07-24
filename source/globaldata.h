@@ -315,6 +315,7 @@ static inline void AddGuiToList(GuiType* gui)
 	g_lastGui = gui;
 	if (!g_firstGui)
 		g_firstGui = gui;
+	gui->AddRef(); // Keep the Gui alive.
 }
 
 static inline void RemoveGuiFromList(GuiType* gui)
@@ -323,6 +324,7 @@ static inline void RemoveGuiFromList(GuiType* gui)
 	GuiType *next = gui->mNextGui, *&nextPrev = next ? next->mPrevGui : g_lastGui;
 	prevNext = next;
 	nextPrev = prev;
+	gui->Release(); // Remove the reference.
 }
 
 #endif
