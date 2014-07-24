@@ -667,7 +667,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					gui_control_index = NO_CONTROL_INDEX;
 				}
 				// Below relies on the GUI_EVENT_RESIZE section above having been done:
-				pcontrol = gui_control_index < pgui->mControlCount ? pgui->mControl + gui_control_index : NULL; // Set for use in other places below.
+				pcontrol = gui_control_index < pgui->mControlCount ? pgui->mControl[gui_control_index] : NULL; // Set for use in other places below.
 
 				pgui_event_is_running = NULL; // Set default (in cases other than AHK_GUI_ACTION it is not used, so not initialized).
 				event_is_control_generated = false; // Set default.

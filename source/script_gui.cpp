@@ -204,7 +204,7 @@ BIF_DECL(BIF_GuiCreate)
 		return; // ParseOptions() already displayed the error.
 	}
 
-	gui->mControl = (GuiControlType *)malloc(GUI_CONTROL_BLOCK_SIZE * sizeof(GuiControlType));
+	gui->mControl = (GuiControlType **)malloc(GUI_CONTROL_BLOCK_SIZE * sizeof(GuiControlType*));
 	if (!gui->mControl)
 	{
 		delete gui;
@@ -446,7 +446,7 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 			GuiIndexType control_index = gui.FindControl(aParam2); // Search on either the control's variable name or its ClassNN.
 			if (control_index != -1) // Must compare directly to -1 due to unsigned.
 			{
-				GuiControlType &control = gui.mControl[control_index]; // For maintainability, and might slightly reduce code size.
+				GuiControlType &control = *gui.mControl[control_index]; // For maintainability, and might slightly reduce code size.
 				if (gui_command == GUI_CMD_LISTVIEW)
 				{
 					if (control.type == GUI_CONTROL_LISTVIEW) // v1.0.46.09: Must validate that it's the right type of control; otherwise some LV_* functions can crash due to the control not having malloc'd the special ListView struct that tracks column attributes.
@@ -560,7 +560,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 	GuiIndexType control_index = gui.FindControl(aControlID);
 	if (control_index >= gui.mControlCount) // Not found.
 		return SetErrorLevelOrThrow();
-	GuiControlType &control = gui.mControl[control_index];   // For performance and convenience.
+	GuiControlType &control = *gui.mControl[control_index];   // For performance and convenience.
 
 	// Beyond this point, errors are rare so set the default to "no error":
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
@@ -1424,7 +1424,7 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 
 	if (control_index >= gui.mControlCount) // Not found.
 		goto error;
-	GuiControlType &control = gui.mControl[control_index];   // For performance and convenience.
+	GuiControlType &control = *gui.mControl[control_index];   // For performance and convenience.
 
 	switch(guicontrolget_cmd)
 	{
@@ -1599,7 +1599,7 @@ ResultType GuiType::Destroy()
 	// all the abandoned pointers:
 	for (u = 0; u < mControlCount; ++u)
 	{
-		GuiControlType &control = mControl[u];
+		GuiControlType &control = *mControl[u];
 		if (control.type == GUI_CONTROL_PIC && control.union_hbitmap)
 		{
 			if (control.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR)
@@ -1612,6 +1612,7 @@ ResultType GuiType::Destroy()
 			free(control.union_lv_attrib);
 		if (mHasEventSink && control.event_handler)
 			free(control.event_handler.mMethodName);
+		delete &control;
 	}
 
 	if (mHasEventSink)
@@ -1882,9 +1883,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// realloc() to keep the array contiguous, which allows better-performing methods to be
 		// used to access the list of controls in various places.
 		// Expand the array by one block:
-		GuiControlType *realloc_temp;  // Needed since realloc returns NULL on failure but leaves original block allocated.
-		if (   !(realloc_temp = (GuiControlType *)realloc(mControl  // If passed NULL, realloc() will do a malloc().
-			, (mControlCapacity + GUI_CONTROL_BLOCK_SIZE) * sizeof(GuiControlType)))   ) 
+		GuiControlType **realloc_temp;  // Needed since realloc returns NULL on failure but leaves original block allocated.
+		if (   !(realloc_temp = (GuiControlType **)realloc(mControl  // If passed NULL, realloc() will do a malloc().
+			, (mControlCapacity + GUI_CONTROL_BLOCK_SIZE) * sizeof(GuiControlType*)))   )
 			return g_script.ScriptError(TOO_MANY_CONTROLS); // A non-specific msg since this error is so rare.
 		mControl = realloc_temp;
 		mControlCapacity += GUI_CONTROL_BLOCK_SIZE;
@@ -1893,7 +1894,10 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	////////////////////////////////////////////////////////////////////////////////////////
 	// Set defaults for the various options, to be overridden individually by any specified.
 	////////////////////////////////////////////////////////////////////////////////////////
-	GuiControlType &control = mControl[mControlCount];
+	//GuiControlType &control = *mControl[mControlCount];
+	GuiControlType *pcontrol = new GuiControlType();
+	mControl[mControlCount] = pcontrol;
+	GuiControlType &control = *pcontrol;
 	ZeroMemory(&control, sizeof(GuiControlType));
 
 	if (aControlType == GUI_CONTROL_TAB2) // v1.0.47.05: Replace TAB2 with TAB at an early stage to simplify the code.  The only purpose of TAB2 is to flag this as the new type of tab that avoids redrawing issues but has a new z-order that would break some existing scripts.
@@ -1904,7 +1908,10 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	if (aControlType == GUI_CONTROL_TAB)
 	{
 		if (mTabControlCount == MAX_TAB_CONTROLS)
+		{
+			delete pcontrol;
 			return g_script.ScriptError(_T("Too many tab controls.")); // Short msg since so rare.
+		}
 		// For now, don't allow a tab control to be create inside another tab control because it raises
 		// doubt and probably would create complications.  If it ever is allowed, note that
 		// control.tab_index stores this tab control's index (0 for the first tab control, 1 for the
@@ -1915,7 +1922,10 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	else if (aControlType == GUI_CONTROL_STATUSBAR)
 	{
 		if (mStatusBarHwnd)
+		{
+			delete pcontrol;
 			return g_script.ScriptError(_T("Too many status bars.")); // Short msg since so rare.
+		}
 		control.tab_control_index = MAX_TAB_CONTROLS; // Indicate that bar isn't owned by any tab control.
 		// No need to do the following because ZeroMem did it:
 		//control.tab_index = 0; // Ignored but set for maintainability/consistency.
@@ -2112,7 +2122,10 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	// Parse the list of options.
 	/////////////////////////////
 	if (!ControlParseOptions(aOptions, opt, control))
+	{
+		delete pcontrol;
 		return FAIL;  // It already displayed the error.
+	}
 
 	// The following is needed by ControlSetListViewOptions/ControlSetTreeViewOptions, and possibly others
 	// in the future. It must be done only after ControlParseOptions() so that cases where mCurrentColor
@@ -2279,8 +2292,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	// The below will yield NULL for GUI_CONTROL_STATUSBAR because control.tab_control_index==OutOfBounds for it.
 	GuiControlType *owning_tab_control = FindTabControl(control.tab_control_index); // For use in various places.
-	GuiControlType control_temp; // Contents are unused (left uninitialized for performance and to help catch bugs).
-	GuiControlType &prev_control = mControlCount ? mControl[mControlCount - 1] : control_temp; // For code size reduction, performance, and maintainability.
+	GuiControlType *prev_control = mControlCount ? mControl[mControlCount - 1] : NULL; // For code size reduction, performance, and maintainability.
 
 	////////////////////////////////////////////////////////////////////////////////////////////
 	// Automatically set the control's position in the client area if no position was specified.
@@ -2304,10 +2316,10 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			opt.x = mPrevX;
 			opt.y = mPrevY + mPrevHeight + mMarginY;  // Don't use mMaxExtentDown in this is a new column.
 		}
-		if ((aControlType == GUI_CONTROL_LABEL || aControlType == GUI_CONTROL_LINK) && mControlCount // This is a text control and there is a previous control before it.
-			&& (prev_control.type == GUI_CONTROL_LABEL || prev_control.type == GUI_CONTROL_LINK)
-			&& prev_control.tab_control_index == control.tab_control_index  // v1.0.44.03: Don't do the adjustment if
-			&& prev_control.tab_index == control.tab_index)                 // it's on another page or in another tab control.
+		if ((aControlType == GUI_CONTROL_LABEL || aControlType == GUI_CONTROL_LINK) && prev_control // This is a text control and there is a previous control before it.
+			&& (prev_control->type == GUI_CONTROL_LABEL || prev_control->type == GUI_CONTROL_LINK)
+			&& prev_control->tab_control_index == control.tab_control_index  // v1.0.44.03: Don't do the adjustment if
+			&& prev_control->tab_index == control.tab_index)                 // it's on another page or in another tab control.
 			// Since this text control is being auto-positioned immediately below another, provide extra
 			// margin space so that any edit control, dropdownlist, or other "tall input" control later added
 			// to its right in "vertical progression" mode will line up with it.
@@ -3052,8 +3064,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 					// inexplicable since the exact same technique works with "GuiControl +Default".  In any
 					// case, this is kept because it also serves to change the default button appearance later,
 					// which is received in the WindowProc via WM_COMMAND:
-					SendMessage(mControl[mDefaultButtonIndex].hwnd, BM_SETSTYLE
-						, (WPARAM)LOWORD((GetWindowLong(mControl[mDefaultButtonIndex].hwnd, GWL_STYLE) & ~BS_DEFPUSHBUTTON))
+					SendMessage(mControl[mDefaultButtonIndex]->hwnd, BM_SETSTYLE
+						, (WPARAM)LOWORD((GetWindowLong(mControl[mDefaultButtonIndex]->hwnd, GWL_STYLE) & ~BS_DEFPUSHBUTTON))
 						, MAKELPARAM(TRUE, 0)); // Redraw = yes. It's probably smart enough not to do it if the window is hidden.
 					// The below attempts to get the old button to lose its default-border failed.  This might
 					// be due to the fact that if the window hasn't yet been shown for the first time, its
@@ -3570,7 +3582,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 		// v1.0.44: Don't allow buddying of UpDown to StatusBar (this must be done prior to the next section).
 		// UPDATE: Due to rarity and user-should-know-better, this is not checked for (to reduce code size):
-		//if (mControlCount && prev_control.type == GUI_CONTROL_STATUSBAR)
+		//if (prev_control && prev_control->type == GUI_CONTROL_STATUSBAR)
 		//	style &= ~UDS_AUTOBUDDY;
 		// v1.0.42.02: The below is a fix for tab controls that contain a ListView so that up-downs in the
 		// tab control don't snap onto the tab control (due to the z-order change done by the ListView creation
@@ -3590,7 +3602,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
 			if (provide_buddy_manually) // v1.0.42.02 (see comment where provide_buddy_manually is initialized).
-				SendMessage(control.hwnd, UDM_SETBUDDY, (WPARAM)prev_control.hwnd, 0); // See StatusBar notes above.  Also, mControlCount>0 whenever provide_buddy_manually==true.
+				SendMessage(control.hwnd, UDM_SETBUDDY, (WPARAM)prev_control->hwnd, 0); // See StatusBar notes above.  Also, mControlCount>0 whenever provide_buddy_manually==true.
 			if (   mControlCount // Ensure there is a previous control to snap onto (below relies on this check).
 				&& ((style & UDS_AUTOBUDDY) || provide_buddy_manually)   )
 			{
@@ -3604,7 +3616,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				opt.height = rect.bottom - rect.top;
 				// Get its buddy's rectangle for use in two places:
 				RECT buddy_rect;
-				GetWindowRect(prev_control.hwnd, &buddy_rect);
+				GetWindowRect(prev_control->hwnd, &buddy_rect);
 				MapWindowPoints(NULL, mHwnd, (LPPOINT)&buddy_rect, 2); // Convert rect to client coordinates (not the same as GetClientRect()).
 				// Note: It does not matter if UDS_HORZ is in effect because strangely, the up-down still
 				// winds up on the left or right side of the buddy, not the top/bottom.
@@ -3625,7 +3637,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 					// Enlarge the buddy control to restore it to the size it had prior to being reduced by the
 					// buddying process:
 					buddy_rect.right += opt.width; // Must be updated for use in two places.
-					MoveWindow(prev_control.hwnd, buddy_rect.left, buddy_rect.top
+					MoveWindow(prev_control->hwnd, buddy_rect.left, buddy_rect.top
 						, buddy_rect.right - buddy_rect.left, buddy_rect.bottom - buddy_rect.top, TRUE);
 				}
 				// Set x/y and width/height to be that of combined/buddied control so that auto-positioning
@@ -3642,7 +3654,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 					opt.width = buddy_rect.right - rect.left;
 					//and opt.x set to the x position of the up-down, since it's on the leftmost side.
 				// Leave opt.y and opt.height as-is.
-				if (!opt.range_changed && prev_control.type == GUI_CONTROL_LISTBOX)
+				if (!opt.range_changed && prev_control->type == GUI_CONTROL_LISTBOX)
 				{
 					// ListBox buddy needs an inverted UpDown (if the UpDown is vertical) to work the way
 					// you'd expect.
@@ -3777,7 +3789,10 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	case GUI_CONTROL_CUSTOM:
 		if (opt.customClassAtom == 0)
+		{
+			delete pcontrol;
 			return g_script.ScriptError(_T("A window class is required."));
+		}
 		control.hwnd = CreateWindowEx(exstyle, MAKEINTATOM(opt.customClassAtom), aText, style
 			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
 		break;
@@ -3808,7 +3823,10 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	// Below also serves as a bug check, i.e. GUI_CONTROL_INVALID or some unknown type.
 	if (!control.hwnd)
+	{
+		delete pcontrol;
 		return g_script.ScriptError(_T("Can't create control."));
+	}
 	// Otherwise the above control creation succeeded.
 	++mControlCount;
 	mControlWidthWasSetByContents = control_width_was_set_by_contents; // Set for use by next control, if any.
@@ -3960,7 +3978,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 		// As documented, always start new section for very first control, but never if this control is GUI_CONTROL_STATUSBAR.
 		if (opt.start_new_section || mControlCount == 1 // aControlType!=GUI_CONTROL_STATUSBAR due to check higher above.
-			|| (mControlCount == 2 && mControl[0].type == GUI_CONTROL_STATUSBAR)) // This is the first non-statusbar control.
+			|| (mControlCount == 2 && mControl[0]->type == GUI_CONTROL_STATUSBAR)) // This is the first non-statusbar control.
 		{
 			mSectionX = opt.x;
 			mSectionY = opt.y;
@@ -5690,8 +5708,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				{
 					// First remove the style from the old default button, if there is one:
                     if (mDefaultButtonIndex < mControlCount)
-						SendMessage(mControl[mDefaultButtonIndex].hwnd, BM_SETSTYLE
-							, (WPARAM)LOWORD((GetWindowLong(mControl[mDefaultButtonIndex].hwnd, GWL_STYLE) & ~BS_DEFPUSHBUTTON))
+						SendMessage(mControl[mDefaultButtonIndex]->hwnd, BM_SETSTYLE
+							, (WPARAM)LOWORD((GetWindowLong(mControl[mDefaultButtonIndex]->hwnd, GWL_STYLE) & ~BS_DEFPUSHBUTTON))
 							, MAKELPARAM(TRUE, 0)); // Redraw = yes. It's probably smart enough not to do it if the window is hidden.
 					mDefaultButtonIndex = aControlIndex;
 					// This will alter the control id received via WM_COMMAND when the user presses ENTER:
@@ -6357,7 +6375,7 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 			height = 0;
 			for (GuiIndexType u = 0; u < mControlCount; ++u)
 			{
-				GuiControlType &control = mControl[u];
+				GuiControlType &control = *mControl[u];
 				if (control.type != GUI_CONTROL_STATUSBAR // Status bar is compensated for in a diff. way.
 					&& GetWindowLong(control.hwnd, GWL_STYLE) & WS_VISIBLE) // Don't use IsWindowVisible() in case parent window is hidden.
 				{
@@ -6431,8 +6449,8 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		// of the control's tab should result in a TCN_SELCHANGE notification.
 		if (mTabControlCount)
 			for (GuiIndexType u = 0; u < mControlCount; ++u)
-				if (mControl[u].type == GUI_CONTROL_TAB)
-					ControlUpdateCurrentTab(mControl[u], false); // Pass false so that default/z-order focus is used across entire window.
+				if (mControl[u]->type == GUI_CONTROL_TAB)
+					ControlUpdateCurrentTab(*mControl[u], false); // Pass false so that default/z-order focus is used across entire window.
 		// By default, center the window if this is the first time it's being shown:
 		if (x == COORD_UNSPECIFIED)
 			x = COORD_CENTERED;
@@ -6720,7 +6738,7 @@ VarSizeType GuiType::ControlGetName(GuiType *aGuiWindow, GuiIndexType aControlIn
 			*aBuf = '\0';
 		return 0;
 	}
-	GuiControlType &control = aGuiWindow->mControl[aControlIndex]; // For performance and convenience.
+	GuiControlType &control = *aGuiWindow->mControl[aControlIndex]; // For performance and convenience.
     if (aBuf)
 	{
 		// Caller has already ensured aBuf is large enough.
@@ -7131,9 +7149,9 @@ int GuiType::FindGroup(GuiIndexType aControlIndex, GuiIndexType &aGroupStart, Gu
 	int group_radios = 0; // This and next are both init'd to 0 not 1 because the first loop checks aControlIndex itself.
 	for (aGroupStart = aControlIndex;; --aGroupStart)
 	{
-		if (mControl[aGroupStart].type == GUI_CONTROL_RADIO)
+		if (mControl[aGroupStart]->type == GUI_CONTROL_RADIO)
 			++group_radios;
-		if (!aGroupStart || GetWindowLong(mControl[aGroupStart].hwnd, GWL_STYLE) & WS_GROUP)
+		if (!aGroupStart || GetWindowLong(mControl[aGroupStart]->hwnd, GWL_STYLE) & WS_GROUP)
 			break;
 	}
 	// Now find the control after the last control (or mControlCount if none).  Must start at +1
@@ -7142,9 +7160,9 @@ int GuiType::FindGroup(GuiIndexType aControlIndex, GuiIndexType &aGroupStart, Gu
 	for (aGroupEnd = aControlIndex + 1; aGroupEnd < mControlCount; ++aGroupEnd)
 	{
 		// Unlike the previous loop, this one must do this check prior to the next one:
-		if (GetWindowLong(mControl[aGroupEnd].hwnd, GWL_STYLE) & WS_GROUP)
+		if (GetWindowLong(mControl[aGroupEnd]->hwnd, GWL_STYLE) & WS_GROUP)
 			break;
-		if (mControl[aGroupEnd].type == GUI_CONTROL_RADIO)
+		if (mControl[aGroupEnd]->type == GUI_CONTROL_RADIO)
 			++group_radios;
 	}
 	return group_radios;
@@ -7534,7 +7552,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// is from a menu, [high order word] is zero."
 		GuiIndexType control_index = GUI_ID_TO_INDEX(id); // Convert from ID to array index. Relies on unsigned to flag as out-of-bounds.
 		if (control_index < pgui->mControlCount // Relies on short-circuit boolean order.
-			&& pgui->mControl[control_index].hwnd == (HWND)lParam) // Handles match (this filters out bogus msgs).
+			&& pgui->mControl[control_index]->hwnd == (HWND)lParam) // Handles match (this filters out bogus msgs).
 			pgui->Event(control_index, HIWORD(wParam));
 			// v1.0.35: And now pass it on to DefDlgProc() in case it needs to see certain types of messages.
 		break;
@@ -7559,7 +7577,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		control_index = (GuiIndexType)GUI_ID_TO_INDEX(nmhdr.idFrom); // Convert from ID to array index.  Relies on unsigned to flag as out-of-bounds.
 		if (control_index >= pgui->mControlCount)
 			break;  // Invalid to us, but perhaps meaningful DefDlgProc(), so let it handle it.
-		GuiControlType &control = pgui->mControl[control_index]; // For performance and convenience.
+		GuiControlType &control = *pgui->mControl[control_index]; // For performance and convenience.
 		if (control.hwnd != nmhdr.hwndFrom) // Handles match (this filters out bogus msgs).
 			break;
 
@@ -8246,10 +8264,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// Otherwise, it might be a tab control with custom tab colors:
 		control_index = (GuiIndexType)GUI_ID_TO_INDEX(lpdis->CtlID); // Convert from ID to array index. Relies on unsigned to flag as out-of-bounds.
 		if (control_index >= pgui->mControlCount // Relies on short-circuit eval order.
-			|| pgui->mControl[control_index].hwnd != lpdis->hwndItem  // Handles do not match (this filters out bogus msgs).
-			|| pgui->mControl[control_index].type != GUI_CONTROL_TAB) // In case this msg can be received for other types.
+			|| pgui->mControl[control_index]->hwnd != lpdis->hwndItem  // Handles do not match (this filters out bogus msgs).
+			|| pgui->mControl[control_index]->type != GUI_CONTROL_TAB) // In case this msg can be received for other types.
 			break;
-		GuiControlType &control = pgui->mControl[control_index]; // For performance & convenience.
+		GuiControlType &control = *pgui->mControl[control_index]; // For performance & convenience.
 		if (pgui->mBackgroundBrushWin && !(control.attrib & GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT))
 		{
 			FillRect(lpdis->hDC, &lpdis->rcItem, pgui->mBackgroundBrushWin); // Fill the tab itself.
@@ -8491,7 +8509,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 {
 	if (aControlIndex >= mControlCount) // Caller probably already checked, but just to be safe.
 		return;
-	GuiControlType &control = mControl[aControlIndex];
+	GuiControlType &control = *mControl[aControlIndex];
 	if (!(control.event_handler || (control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)))
 		return; // No label or implicit-cancel associated with this control, so no action.
 	//else continue on even if it's just GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL so that the
@@ -8750,7 +8768,7 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	if (!INTERRUPTIBLE_IN_EMERGENCY)
 		return 0;
 
-	GuiControlType& aControl = mControl[aControlIndex];
+	GuiControlType& aControl = *mControl[aControlIndex];
 	GuiEvent& evt = aControl.event_handler;
 	if (!evt)
 		return 0;
@@ -8926,9 +8944,9 @@ void GuiType::ControlCheckRadioButton(GuiControlType &aControl, GuiIndexType aCo
 		HWND first_radio_in_group = NULL;
 		// Find the first radio in this control group:
 		for (GuiIndexType u = radio_start; u < radio_end; ++u)
-			if (mControl[u].type == GUI_CONTROL_RADIO) // Since a group can have non-radio controls in it.
+			if (mControl[u]->type == GUI_CONTROL_RADIO) // Since a group can have non-radio controls in it.
 			{
-				first_radio_in_group = mControl[u].hwnd;
+				first_radio_in_group = mControl[u]->hwnd;
 				break;
 			}
 		// The below can't be done until after the above because it would remove the tabstop style
@@ -9240,9 +9258,9 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 	for (GuiIndexType u = 0; u < mControlCount; ++u)
 	{
 		// Note aTabControl.tab_index stores aTabControl's tab_control_index (true only for type GUI_CONTROL_TAB).
-		if (mControl[u].tab_control_index != aTabControl.tab_index) // This control is not in this tab control.
+		if (mControl[u]->tab_control_index != aTabControl.tab_index) // This control is not in this tab control.
 			continue;
-		GuiControlType &control = mControl[u]; // Probably helps performance; certainly improves conciseness.
+		GuiControlType &control = *mControl[u]; // Probably helps performance; certainly improves conciseness.
 		member_of_current_tab = (control.tab_index == curr_tab_index);
 		will_be_visible = !hide_all && member_of_current_tab && !(control.attrib & GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN);
 		will_be_enabled = !disable_all && member_of_current_tab && !(control.attrib & GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED);
@@ -9374,9 +9392,9 @@ GuiControlType *GuiType::FindTabControl(TabControlIndexType aTabControlIndex)
 		return NULL;
 	TabControlIndexType tab_control_index = 0;
 	for (GuiIndexType u = 0; u < mControlCount; ++u)
-		if (mControl[u].type == GUI_CONTROL_TAB)
+		if (mControl[u]->type == GUI_CONTROL_TAB)
 			if (tab_control_index == aTabControlIndex)
-				return &mControl[u];
+				return mControl[u];
 			else
 				++tab_control_index;
 	return NULL; // Since above didn't return, indicate failure.
@@ -9432,7 +9450,7 @@ int GuiType::GetControlCountOnTabPage(TabControlIndexType aTabControlIndex, TabI
 {
 	int count = 0;
 	for (GuiIndexType u = 0; u < mControlCount; ++u)
-		if (mControl[u].tab_index == aTabIndex && mControl[u].tab_control_index == aTabControlIndex) // This boolean order helps performance.
+		if (mControl[u]->tab_index == aTabIndex && mControl[u]->tab_control_index == aTabControlIndex) // This boolean order helps performance.
 			++count;
 	return count;
 }
