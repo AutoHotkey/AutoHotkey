@@ -328,6 +328,12 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 }
 
 
+ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	return INVOKE_NOT_HANDLED;
+}
+
+
 GuiType *GuiType::FindGui(HWND aHwnd)
 {
 	// Check that this window is an AutoHotkey Gui.
@@ -1599,20 +1605,8 @@ ResultType GuiType::Destroy()
 	// all the abandoned pointers:
 	for (u = 0; u < mControlCount; ++u)
 	{
-		GuiControlType &control = *mControl[u];
-		if (control.type == GUI_CONTROL_PIC && control.union_hbitmap)
-		{
-			if (control.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR)
-				DestroyIcon((HICON)control.union_hbitmap); // Works on cursors too.  See notes in LoadPicture().
-			else // union_hbitmap is a bitmap rather than an icon or cursor.
-				DeleteObject(control.union_hbitmap);
-			//else do nothing, since it isn't the right type to have a valid union_hbitmap member.
-		}
-		else if (control.type == GUI_CONTROL_LISTVIEW) // It was ensured at an earlier stage that union_lv_attrib != NULL.
-			free(control.union_lv_attrib);
-		if (mHasEventSink && control.event_handler)
-			free(control.event_handler.mMethodName);
-		delete &control;
+		mControl[u]->Destroy();
+		mControl[u]->Release(); // Release() vs delete because the script may still have references to it.
 	}
 
 	if (mHasEventSink)
@@ -1639,6 +1633,25 @@ ResultType GuiType::Destroy()
 	// If this Gui was the last thing keeping the script running, exit the script:
 	g_script.ExitIfNotPersistent(EXIT_DESTROY);
 	return OK;
+}
+
+
+void GuiControlType::Destroy()
+{
+	if (type == GUI_CONTROL_PIC && union_hbitmap)
+	{
+		if (attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR)
+			DestroyIcon((HICON)union_hbitmap); // Works on cursors too.  See notes in LoadPicture().
+		else // union_hbitmap is a bitmap rather than an icon or cursor.
+			DeleteObject(union_hbitmap);
+		//else do nothing, since it isn't the right type to have a valid union_hbitmap member.
+	}
+	else if (type == GUI_CONTROL_LISTVIEW) // It was ensured at an earlier stage that union_lv_attrib != NULL.
+		free(union_lv_attrib);
+	if (gui->mHasEventSink && event_handler)
+		free(event_handler.mMethodName);
+	hwnd = NULL;
+	gui = NULL;
 }
 
 
@@ -1894,11 +1907,10 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	////////////////////////////////////////////////////////////////////////////////////////
 	// Set defaults for the various options, to be overridden individually by any specified.
 	////////////////////////////////////////////////////////////////////////////////////////
-	//GuiControlType &control = *mControl[mControlCount];
 	GuiControlType *pcontrol = new GuiControlType();
 	mControl[mControlCount] = pcontrol;
 	GuiControlType &control = *pcontrol;
-	ZeroMemory(&control, sizeof(GuiControlType));
+	control.Initialize(this);
 
 	if (aControlType == GUI_CONTROL_TAB2) // v1.0.47.05: Replace TAB2 with TAB at an early stage to simplify the code.  The only purpose of TAB2 is to flag this as the new type of tab that avoids redrawing issues but has a new z-order that would break some existing scripts.
 	{
@@ -5026,21 +5038,14 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				if (which_buddy) // i.e. it's not the zero terminator
 				{
 					++next_option; // Now it should point to the variable name of the buddy control.
-					// Check if there's an existing *global* variable of this name.  It must be global
-					// because the variable of a control can never be a local variable:
-					/*Var *var = g_script.FindVar(next_option, 0, NULL, FINDVAR_GLOBAL); // Search globals only.
-					if (var)
+					GuiIndexType u = FindControl(next_option);
+					if (u < mControlCount)
 					{
-						var = var->ResolveAlias(); // Update it to its target if it's an alias.
-						if (!var->IsLocal()) // Must be global.  Note that an alias can point to a local vs. global var.
-							// Below relies on GuiIndexType underflow:
-							for (GuiIndexType u = mControlCount - 1; u < mControlCount; --u) // Search in reverse for better avg-case performance.
-								if (mControl[u].output_var == var)
-									if (which_buddy == '1')
-										aOpt.buddy1 = &mControl[u];
-									else // assume '2'
-										aOpt.buddy2 = &mControl[u];
-					}*/ // TODO: revise this part to use HWNDs
+						if (which_buddy == '1')
+							aOpt.buddy1 = mControl[u];
+						else // assume '2'
+							aOpt.buddy2 = mControl[u];
+					}
 				}
 			}
 			//else removal not supported.
@@ -8788,7 +8793,7 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	AddRef();
 	ExprTokenType param[3];
 	param[0].symbol = SYM_OBJECT;
-	param[0].object = this; // TODO: objectify controls
+	param[0].object = &aControl;
 	param[1].symbol = SYM_INTEGER;
 	param[1].value_int64 = (__int64)(DWORD_PTR)aNmHdr;
 	param[2].symbol = SYM_STRING;

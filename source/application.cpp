@@ -1071,7 +1071,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				} while (0)
 
 				// Set first argument
-				EVT_ARG_ADD_OBJ(event_is_control_generated ? pgui : pgui); // TODO: objectify controls
+				EVT_ARG_ADD_OBJ(event_is_control_generated ? (IObject*)pcontrol : (IObject*)pgui);
 
 				switch(gui_action)
 				{
@@ -1133,7 +1133,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					ScreenToWindow(gui_point, pgui->mHwnd); // For compatibility with "Menu Show", convert to window coordinates. A CoordMode option can be added to change this if desired.
 					
 					// Build event arguments.
-					EVT_ARG_ADD_STR(_T("")); // TODO: control reference
+					if (pcontrol)
+						EVT_ARG_ADD_OBJ(pcontrol);
+					else
+						EVT_ARG_ADD_STR(_T(""));
 					EVT_ARG_ADD_INT(gui_event_info);
 					EVT_ARG_ADD_INT(gui_action == GUI_EVENT_RCLK ? 1 : 0);
 					EVT_ARG_ADD_INT(gui_point.x);
@@ -1150,7 +1153,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 					// Build event arguments.
 					EVT_ARG_ADD_OBJ(GuiType::CreateDropArray(hdrop_to_free));
-					EVT_ARG_ADD_STR(_T("")); // TODO: control
+					if (pcontrol)
+						EVT_ARG_ADD_OBJ(pcontrol);
+					else
+						EVT_ARG_ADD_STR(_T(""));
 					EVT_ARG_ADD_INT(pgui->Unscale(gui_point.x));
 					EVT_ARG_ADD_INT(pgui->Unscale(gui_point.y));
 

@@ -2262,8 +2262,9 @@ typedef UCHAR TabIndexType;
 // Keep the below in sync with the size of the types above:
 #define MAX_TAB_CONTROLS 255  // i.e. the value 255 itself is reserved to mean "doesn't belong to a tab".
 #define MAX_TABS_PER_CONTROL 256
-struct GuiControlType
+struct GuiControlType : public ObjectBase
 {
+	GuiType* gui; // Below code relies on this being the first field.
 	HWND hwnd;
 	// Keep any fields that are smaller than 4 bytes adjacent to each other.  This conserves memory
 	// due to byte-alignment.  It has been verified to save 4 bytes per struct in this case:
@@ -2290,6 +2291,16 @@ struct GuiControlType
 	};
 	#define USES_FONT_AND_TEXT_COLOR(type) !(type == GUI_CONTROL_PIC || type == GUI_CONTROL_UPDOWN \
 		|| type == GUI_CONTROL_SLIDER || type == GUI_CONTROL_PROGRESS)
+
+	void Initialize(GuiType* owner)
+	{
+		// Zerofill all the members of this object (except for ObjectBase members)
+		ZeroMemory(&gui, (char*)(this+1) - (char*)&gui);
+		gui = owner;
+	}
+
+	void Destroy(); // Called by GuiType::Destroy().
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
 struct GuiControlOptionsType
