@@ -29,17 +29,23 @@ static ATOM sGuiWinClass;
 
 ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (!aParamCount) // file[]
+	if (!aParamCount) // gui[]
 			return INVOKE_NOT_HANDLED;
 		
 	LPTSTR name = ParamIndexToString(0); // Name of method or property.
 	MemberID member = INVALID;
+	GuiControls ctrl_type = GUI_CONTROL_INVALID; // For AddControl.
 	--aParamCount; // Exclude name from param count.
 	++aParam; // As above, but for the param array.
 
 	// Add' must be handled differently to support AddLabel(), AddButton(), etc.
 	if (!_tcsnicmp(name, _T("Add"), 3))
+	{
 		member = M_AddControl;
+		ctrl_type = Line::ConvertGuiControl(name+3);
+		if (ctrl_type == GUI_CONTROL_INVALID)
+			return g_script.ScriptError(_T("Invalid control type."), name+3);
+	}
 #define if_member(s,e)	else if (!_tcsicmp(name, _T(s))) member = e;
 	if_member("Destroy", M_Destroy)
 	if_member("Show", M_Show)
@@ -77,6 +83,21 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 
 	switch (member)
 	{
+		case M_AddControl: // Probably the most common method.
+		{
+			LPTSTR text = ParamIndexToOptionalString(0);
+			LPTSTR options = ParamIndexToOptionalString(1);
+			GuiControlType* pcontrol = NULL;
+			ResultType result = AddControl(ctrl_type, options, text, pcontrol);
+			if (result == OK)
+			{
+				// Return the control object.
+				aResultToken.symbol = SYM_OBJECT;
+				aResultToken.object = pcontrol;
+				aResultToken.object->AddRef();
+			} // else: above already displayed an error message.
+			return result;
+		}
 		case M_Destroy:
 			return Destroy();
 		case M_Show:
@@ -178,9 +199,9 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 		}
 	}
 
-	// Since above didn't return, an error must've occurred.
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T(""); // Already set in most cases, but done here for maintainability.
+	// Since above did not return, we assume failure. The following could be done, but it is not necessary.
+	//aResultToken.symbol = SYM_STRING;
+	//aResultToken.marker = _T("");
 	return FAIL;
 }
 
@@ -413,14 +434,6 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 
 	switch (gui_command)
 	{
-	case GUI_CMD_ADD:
-		if (   !(gui_control_type = Line::ConvertGuiControl(aParam2))   )
-		{
-			result = ScriptError(ERR_PARAM2_INVALID, aParam2);
-			goto return_the_result;
-		}
-		result = gui.AddControl(gui_control_type, aParam3, aParam4); // It already displayed any error.
-		goto return_the_result;
 		
 	case GUI_CMD_MENU:
 		UserMenu *menu;
@@ -1885,9 +1898,11 @@ void GuiType::UpdateMenuBars(HMENU aMenu)
 
 
 
-ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText)
+ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& pControl)
 // Caller must have ensured that mHwnd is non-NULL (i.e. that the parent window already exists).
 {
+	pControl = NULL; // Initialize return pointer.
+
 	#define TOO_MANY_CONTROLS _T("Too many controls.") // Short msg since so rare.
 	if (mControlCount >= MAX_CONTROLS_PER_GUI)
 		return g_script.ScriptError(TOO_MANY_CONTROLS);
@@ -3841,6 +3856,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	}
 	// Otherwise the above control creation succeeded.
 	++mControlCount;
+	pControl = pcontrol;
 	mControlWidthWasSetByContents = control_width_was_set_by_contents; // Set for use by next control, if any.
 	if (opt.hwnd_output_var) // v1.0.46.01.
 		opt.hwnd_output_var->AssignHWND(control.hwnd);

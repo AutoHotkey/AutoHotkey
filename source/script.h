@@ -568,11 +568,7 @@ enum BuiltInFunctionID {
 // (since an item can't be both selected an deselected simultaneously), one value in each pair is available
 // for future use such as LVIS_CUT.
 
-enum GuiCommands {GUI_CMD_INVALID, /*GUI_CMD_OPTIONS,*/ GUI_CMD_ADD, /*GUI_CMD_MARGIN,*/ GUI_CMD_MENU
-	, /*GUI_CMD_SHOW, GUI_CMD_SUBMIT, GUI_CMD_CANCEL, GUI_CMD_MINIMIZE, GUI_CMD_MAXIMIZE, GUI_CMD_RESTORE
-	, GUI_CMD_DESTROY, GUI_CMD_FONT,*/ GUI_CMD_TAB, GUI_CMD_LISTVIEW, GUI_CMD_TREEVIEW, /*GUI_CMD_DEFAULT
-	, GUI_CMD_COLOR, GUI_CMD_FLASH, GUI_CMD_NEW*/
-};
+enum GuiCommands {GUI_CMD_INVALID, GUI_CMD_MENU, GUI_CMD_TAB, GUI_CMD_LISTVIEW, GUI_CMD_TREEVIEW};
 
 enum GuiControlCmds {GUICONTROL_CMD_INVALID, GUICONTROL_CMD_OPTIONS, GUICONTROL_CMD_CONTENTS, GUICONTROL_CMD_TEXT
 	, GUICONTROL_CMD_MOVE, GUICONTROL_CMD_MOVEDRAW, GUICONTROL_CMD_FOCUS, GUICONTROL_CMD_ENABLE, GUICONTROL_CMD_DISABLE
@@ -1362,26 +1358,10 @@ public:
 	// Will be removed.
 	static GuiCommands ConvertGuiCommand(LPTSTR aBuf)
 	{
-		//if (!*aBuf || *aBuf == '+' || *aBuf == '-') // Assume a var ref that resolves to blank is "options" (for runtime flexibility).
-		//	return GUI_CMD_OPTIONS;
-		if (!_tcsicmp(aBuf, _T("Add"))) return GUI_CMD_ADD;
-		//if (!_tcsicmp(aBuf, _T("Show"))) return GUI_CMD_SHOW;
-		//if (!_tcsicmp(aBuf, _T("Submit"))) return GUI_CMD_SUBMIT;
-		//if (!_tcsicmp(aBuf, _T("Cancel")) || !_tcsicmp(aBuf, _T("Hide"))) return GUI_CMD_CANCEL;
-		//if (!_tcsicmp(aBuf, _T("Minimize"))) return GUI_CMD_MINIMIZE;
-		//if (!_tcsicmp(aBuf, _T("Maximize"))) return GUI_CMD_MAXIMIZE;
-		//if (!_tcsicmp(aBuf, _T("Restore"))) return GUI_CMD_RESTORE;
-		//if (!_tcsicmp(aBuf, _T("Destroy"))) return GUI_CMD_DESTROY;
-		//if (!_tcsicmp(aBuf, _T("Margin"))) return GUI_CMD_MARGIN;
 		if (!_tcsicmp(aBuf, _T("Menu"))) return GUI_CMD_MENU;
-		//if (!_tcsicmp(aBuf, _T("Font"))) return GUI_CMD_FONT;
 		if (!_tcsicmp(aBuf, _T("Tab"))) return GUI_CMD_TAB;
 		if (!_tcsicmp(aBuf, _T("ListView"))) return GUI_CMD_LISTVIEW;
 		if (!_tcsicmp(aBuf, _T("TreeView"))) return GUI_CMD_TREEVIEW;
-		//if (!_tcsicmp(aBuf, _T("Default"))) return GUI_CMD_DEFAULT;
-		//if (!_tcsicmp(aBuf, _T("Color"))) return GUI_CMD_COLOR;
-		//if (!_tcsicmp(aBuf, _T("Flash"))) return GUI_CMD_FLASH;
-		//if (!_tcsicmp(aBuf, _T("New"))) return GUI_CMD_NEW;
 		return GUI_CMD_INVALID;
 	}
 
@@ -2489,7 +2469,7 @@ public:
 	void SetEvents();
 	static IObject* CreateDropArray(HDROP hDrop);
 	static void UpdateMenuBars(HMENU aMenu);
-	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText);
+	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& pControl);
 
 	ResultType ParseOptions(LPTSTR aOptions, ToggleValueType &aOwnDialogs);
 	void SetOwnDialogs(ToggleValueType state)

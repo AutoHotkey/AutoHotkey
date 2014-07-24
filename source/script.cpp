@@ -4987,16 +4987,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			{
 			case GUI_CMD_INVALID:
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-			case GUI_CMD_ADD:
-				if (aArgc > 1 && !line.ArgHasDeref(2))
-				{
-					GuiControls control_type;
-					if (   !(control_type = line.ConvertGuiControl(new_raw_arg2))   )
-						return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-					if (control_type == GUI_CONTROL_TREEVIEW && aArgc > 3) // Reserve it for future use such as a tab-indented continuation section that lists the tree hierarchy.
-						return ScriptError(ERR_PARAM4_OMIT, new_raw_arg4);
-				}
-				break;
 				/*
 			case GUI_CMD_CANCEL:
 			case GUI_CMD_MINIMIZE:
