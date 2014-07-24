@@ -578,7 +578,6 @@ enum GuiControlCmds {GUICONTROL_CMD_INVALID, GUICONTROL_CMD_OPTIONS, GUICONTROL_
 
 enum GuiControlGetCmds {GUICONTROLGET_CMD_INVALID, GUICONTROLGET_CMD_CONTENTS, GUICONTROLGET_CMD_POS
 	, GUICONTROLGET_CMD_FOCUS, GUICONTROLGET_CMD_FOCUSV, GUICONTROLGET_CMD_ENABLED, GUICONTROLGET_CMD_VISIBLE
-	, GUICONTROLGET_CMD_HWND, GUICONTROLGET_CMD_NAME
 };
 
 typedef UCHAR GuiControls;
@@ -1365,6 +1364,7 @@ public:
 		return GUI_CMD_INVALID;
 	}
 
+	// Will be removed.
 	static GuiControlCmds ConvertGuiControlCmd(LPTSTR aBuf)
 	{
 		// If it's blank without a deref, that's CONTENTS.  Otherwise, assume it's OPTIONS for better
@@ -1403,6 +1403,7 @@ public:
 		return GUICONTROL_CMD_INVALID;
 	}
 
+	// Will be removed.
 	static GuiControlGetCmds ConvertGuiControlGetCmd(LPTSTR aBuf)
 	{
 		if (!*aBuf) return GUICONTROLGET_CMD_CONTENTS; // The implicit command when nothing was specified.
@@ -1411,8 +1412,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("FocusV"))) return GUICONTROLGET_CMD_FOCUSV; // Returns variable vs. ClassNN.
 		if (!_tcsicmp(aBuf, _T("Enabled"))) return GUICONTROLGET_CMD_ENABLED;
 		if (!_tcsicmp(aBuf, _T("Visible"))) return GUICONTROLGET_CMD_VISIBLE;
-		if (!_tcsicmp(aBuf, _T("Hwnd"))) return GUICONTROLGET_CMD_HWND;
-		if (!_tcsicmp(aBuf, _T("Name"))) return GUICONTROLGET_CMD_NAME;
 		return GUICONTROLGET_CMD_INVALID;
 	}
 
@@ -2279,6 +2278,18 @@ struct GuiControlType : public ObjectBase
 		gui = owner;
 	}
 
+	enum MemberID
+	{
+		INVALID = 0,
+
+		// Methods
+		LastMethodPlusOne,
+
+		// Properties
+		P_Handle,
+		P_Gui,
+	};
+
 	void Destroy(); // Called by GuiType::Destroy().
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
@@ -2288,7 +2299,6 @@ struct GuiControlOptionsType
 	DWORD style_add, style_remove, exstyle_add, exstyle_remove, listview_style;
 	int listview_view; // Viewing mode, such as LVS_ICON, LVS_REPORT.  Int vs. DWORD to more easily use any negative value as "invalid".
 	HIMAGELIST himagelist;
-	Var *hwnd_output_var; // v1.0.46.01: Allows a script to retrieve the control's HWND upon creation of control.
 	int x, y, width, height;  // Position info.
 	float row_count;
 	int choice;  // Which item of a DropDownList/ComboBox/ListBox to initially choose.

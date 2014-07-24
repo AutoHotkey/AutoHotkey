@@ -173,6 +173,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 		{
 			if (!IS_INVOKE_SET)
 				return INVOKE_NOT_HANDLED; // TODO
+
 			aResultToken.symbol = SYM_STRING;
 			aResultToken.marker = ParamIndexToString(0);
 
@@ -351,7 +352,53 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 
 ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	return INVOKE_NOT_HANDLED;
+	if (!aParamCount) // ctrl[]
+			return INVOKE_NOT_HANDLED;
+		
+	LPTSTR name = ParamIndexToString(0); // Name of method or property.
+	MemberID member = INVALID;
+	--aParamCount; // Exclude name from param count.
+	++aParam; // As above, but for the param array.
+
+	// Check for this early.
+	if (!hwnd)
+		return g_script.ScriptError(_T("The control is destroyed."));
+
+#define if_member(s,e) else if (!_tcsicmp(name, _T(s))) member = e;
+	if_member("Hwnd", P_Handle)
+	if_member("Gui", P_Gui)
+#undef if_member
+
+	if (member == INVALID)
+		return INVOKE_NOT_HANDLED;
+
+	// Syntax validation:
+	if (!IS_INVOKE_CALL)
+	{
+		if (member < LastMethodPlusOne)
+			// Member requires parentheses().
+			return INVOKE_NOT_HANDLED;
+		if (aParamCount != (IS_INVOKE_SET ? 1 : 0))
+			return g_script.ScriptError(_T("Invalid usage."));
+	}
+
+	switch (member)
+	{
+		case P_Handle:
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = (__int64)(UINT_PTR)hwnd;
+			return OK;
+		case P_Gui:
+			aResultToken.symbol = SYM_OBJECT;
+			aResultToken.object = gui;
+			aResultToken.object->AddRef();
+			return OK;
+	}
+
+	// Since above did not return, we assume failure. The following could be done, but it is not necessary.
+	//aResultToken.symbol = SYM_STRING;
+	//aResultToken.marker = _T("");
+	return FAIL;
 }
 
 
@@ -1513,21 +1560,6 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 		// 2) IsWindowVisible() uses a different standard of detection than simply checking WS_VISIBLE.
 		result = output_var.Assign(IsWindowVisible(control.hwnd) ? 1 : 0); // Force pure boolean 0/1.
 		goto return_the_result;
-
-	case GUICONTROLGET_CMD_HWND: // v1.0.46.16: Although it overlaps with HwndOutputVar, Majkinetor wanted this to help with encapsulation/modularization.
-		result = output_var.AssignHWND(control.hwnd); // See also: CONTROLGET_CMD_HWND
-		goto return_the_result;
-
-	case GUICONTROLGET_CMD_NAME:
-	{
-		// Assign only a variable name rather than falling back to the control's text like ControlGetName,
-		// otherwise the script mightn't be able to distinguish between a control with associated variable
-		// and one which merely contains text similar to a variable name:
-		//if (control.output_var)
-		//	result = output_var.Assign(control.output_var->mName);
-		// Otherwise: leave ErrorLevel 0 and output_var blank, indicating this control exists but has no var.
-		goto return_the_result;
-	}
 	} // switch()
 
 	result = FAIL;  // Should never be reached, but avoids compiler warning and improves bug detection.
@@ -3858,8 +3890,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	++mControlCount;
 	pControl = pcontrol;
 	mControlWidthWasSetByContents = control_width_was_set_by_contents; // Set for use by next control, if any.
-	if (opt.hwnd_output_var) // v1.0.46.01.
-		opt.hwnd_output_var->AssignHWND(control.hwnd);
 
 	if (control.type == GUI_CONTROL_RADIO)
 	{
@@ -4762,8 +4792,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			if (adding) aOpt.style_add |= WS_GROUP; else aOpt.style_remove |= WS_GROUP;
 		else if (!_tcsicmp(next_option, _T("Theme")))
 			aOpt.use_theme = adding;
-		else if (!_tcsnicmp(next_option, _T("Hwnd"), 4))
-			aOpt.hwnd_output_var = g_script.FindOrAddVar(next_option + 4);
 
 		// Picture / ListView
 		else if (!_tcsnicmp(next_option, _T("Icon"), 4)) // Caller should ignore aOpt.icon_number if it isn't applicable for this control type.
