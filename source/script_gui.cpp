@@ -52,7 +52,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 	if_member("Options", M_Options)
 	if_member("Opt", M_Options) // Short-hand form of Options.
 	if_member("Flash", M_Flash)
-	if_member("__Handle", P_Handle) // Prefix with underscores because it is designed for advanced users.
+	if_member("Hwnd", P_Handle)
 	if_member("Title", P_Title)
 	if_member("MarginX", P_MarginX)
 	if_member("MarginY", P_MarginY)
