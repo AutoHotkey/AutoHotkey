@@ -1,1 +1,2 @@
 #define BIF_DECL(name) BIF_ResultType name(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+#define BIF_DECL_GUICTRL(name) BIF_ResultType name(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, GuiControlType& control)

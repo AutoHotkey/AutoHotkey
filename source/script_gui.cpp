@@ -378,6 +378,51 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 	return NULL;
 }
 
+typedef void (*GuiCtrlSpecialFunc)(BIF_DECL_PARAMS, GuiControlType& aControl);
+struct GuiCtrlSpecialFuncInfo
+{
+	LPTSTR name;
+	GuiCtrlSpecialFunc func;
+	int min_params;
+};
+
+static const GuiCtrlSpecialFuncInfo sListViewFuncs[] =
+{
+	{_T("GetNext"), BIF_LV_GetNextOrCount, 0 },
+	{_T("GetCount"), BIF_LV_GetNextOrCount, 0 },
+	{_T("GetText"), BIF_LV_GetText, 2 },
+	{_T("Add"), BIF_LV_AddInsertModify, 0 },
+	{_T("Insert"), BIF_LV_AddInsertModify, 1 },
+	{_T("Modify"), BIF_LV_AddInsertModify, 2 },
+	{_T("Delete"), BIF_LV_Delete, 0 },
+	{_T("InsertCol"), BIF_LV_InsertModifyDeleteCol, 1 },
+	{_T("ModifyCol"), BIF_LV_InsertModifyDeleteCol, 0 },
+	{_T("DeleteCol"), BIF_LV_InsertModifyDeleteCol, 1 },
+	{_T("SetImageList"), BIF_LV_SetImageList, 1 },
+};
+
+static const GuiCtrlSpecialFuncInfo sTreeViewFuncs[] =
+{
+	{_T("Add"), BIF_TV_AddModifyDelete, 1 },
+	{_T("Modify"), BIF_TV_AddModifyDelete, 1 },
+	{_T("Delete"), BIF_TV_AddModifyDelete, 0 },
+	{_T("GetParent"), BIF_TV_GetRelatedItem, 1 },
+	{_T("GetChild"), BIF_TV_GetRelatedItem, 1 },
+	{_T("GetPrev"), BIF_TV_GetRelatedItem, 1 },
+	{_T("GetCount"), BIF_TV_GetRelatedItem, 0 },
+	{_T("GetSelection"), BIF_TV_GetRelatedItem, 0 },
+	{_T("GetNext"), BIF_TV_GetRelatedItem, 0 },
+	{_T("Get"), BIF_TV_Get, 2 },
+	{_T("GetText"), BIF_TV_Get, 2 },
+	{_T("SetImageList"), BIF_TV_SetImageList, 1 },
+};
+
+static const GuiCtrlSpecialFuncInfo sStatusBarFuncs[] =
+{
+	{_T("SetText"), BIF_StatusBar, 1 },
+	{_T("SetParts"), BIF_StatusBar, 0 },
+	{_T("SetIcon"), BIF_StatusBar, 1 },
+};
 
 ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
@@ -386,6 +431,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 		
 	LPTSTR name = ParamIndexToString(0); // Name of method or property.
 	MemberID member = INVALID;
+	GuiCtrlSpecialFunc func = NULL; // For ListView/TreeView/StatusBar-specific methods.
 	--aParamCount; // Exclude name from param count.
 	++aParam; // As above, but for the param array.
 
@@ -402,7 +448,40 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 		if (0) ((void)0);
 		if_member("UseTab", M_Tab_UseTab)
 	}
+	else if (type == GUI_CONTROL_LISTVIEW || type == GUI_CONTROL_TREEVIEW || type == GUI_CONTROL_STATUSBAR)
+	{
+		const GuiCtrlSpecialFuncInfo* func_info = NULL;
+		int func_count = 0;
+		switch (type)
+		{
+			case GUI_CONTROL_LISTVIEW:  func_info = sListViewFuncs;  func_count = _countof(sListViewFuncs);  break;
+			case GUI_CONTROL_TREEVIEW:  func_info = sTreeViewFuncs;  func_count = _countof(sTreeViewFuncs);  break;
+			case GUI_CONTROL_STATUSBAR: func_info = sStatusBarFuncs; func_count = _countof(sStatusBarFuncs); break;
+		}
+		for (int i = 0; i < func_count; i ++)
+		{
+			if (!_tcsicmp(name, func_info[i].name))
+			{
+				func_info = func_info + i;
+				func = func_info->func;
+				break;
+			}
+		}
+		if (!func || aParamCount < func_info->min_params)
+			return INVOKE_NOT_HANDLED;
+	}
 #undef if_member
+
+	if (func)
+	{
+		// Set up aResultToken to what BIFs expect.
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.marker = name;
+		// Call the function.
+		ResultType result = OK;
+		func(result, aResultToken, aParam, aParamCount, *this);
+		return result;
+	}
 
 	if (member == INVALID)
 		return INVOKE_NOT_HANDLED;
@@ -494,29 +573,6 @@ GuiType *GuiType::FindGuiParent(HWND aHwnd)
 }
 
 // Will be removed.
-GuiType *global_struct::GuiDefaultWindowValid()
-{
-	if (!GuiDefaultWindow)
-	{
-		// Default Gui hasn't been set yet for this thread, so find Gui 1.
-		if (GuiDefaultWindow = g_firstGui) // Assignment.
-			GuiDefaultWindow->AddRef();
-		return GuiDefaultWindow;
-	}
-	// Update GuiDefaultWindow if it has been destroyed and recreated.
-	return GuiType::ValidGui(GuiDefaultWindow);
-}
-
-// Will be removed.
-GuiType *GuiType::ValidGui(GuiType *&aGuiRef)
-{
-	if (aGuiRef && !aGuiRef->mHwnd) // Gui existed but has been destroyed.
-		return NULL;
-	// Above verified it either points to a valid Gui or is NULL.
-	return aGuiRef;
-}
-
-// Will be removed.
 ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTSTR aParam4)
 {
 	LPTSTR aCommand;	// Set by ResolveGui().
@@ -568,31 +624,6 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 			gui.UpdateAccelerators(*menu);
 		else
 			gui.RemoveAccelerators();
-		goto return_the_result;
-
-	case GUI_CMD_LISTVIEW:
-	case GUI_CMD_TREEVIEW:
-		if (*aParam2)
-		{
-			GuiIndexType control_index = gui.FindControl(aParam2); // Search on either the control's variable name or its ClassNN.
-			if (control_index != -1) // Must compare directly to -1 due to unsigned.
-			{
-				GuiControlType &control = *gui.mControl[control_index]; // For maintainability, and might slightly reduce code size.
-				if (gui_command == GUI_CMD_LISTVIEW)
-				{
-					if (control.type == GUI_CONTROL_LISTVIEW) // v1.0.46.09: Must validate that it's the right type of control; otherwise some LV_* functions can crash due to the control not having malloc'd the special ListView struct that tracks column attributes.
-						gui.mCurrentListView = &control;
-					//else mismatched control type, so just leave it unchanged.
-				}
-				else // GUI_CMD_TREEVIEW
-				{
-					if (control.type == GUI_CONTROL_TREEVIEW)
-						gui.mCurrentTreeView = &control;
-					//else mismatched control type, so just leave it unchanged.
-				}
-			}
-			//else it seems best never to change it to be "no control" since it doesn't seem to have much use.
-		}
 		goto return_the_result;
 	
 	} // switch()
@@ -3272,7 +3303,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				break;
 			}
 			// Otherwise:
-			mCurrentListView = &control;
 			ZeroMemory(control.union_lv_attrib, sizeof(lv_attrib_type));
 			control.union_lv_attrib->sorted_by_col = -1; // Indicate that there is currently no sort order.
 			control.union_lv_attrib->no_auto_sort = opt.listview_no_auto_sort;
@@ -3378,7 +3408,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		if (control.hwnd = CreateWindowEx(exstyle, WC_TREEVIEW, _T(""), style, opt.x, opt.y
 			, opt.width, opt.height == COORD_UNSPECIFIED ? 200 : opt.height, mHwnd, control_id, g_hInstance, NULL))
 		{
-			mCurrentTreeView = &control;
 			if (opt.checked)
 				// Testing confirms that unless the following advice is applied, an item's checkbox cannot
 				// be checked immediately after the item is created:

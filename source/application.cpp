@@ -1990,12 +1990,6 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 
 void ResumeUnderlyingThread(VarBkp aSavedErrorLevel)
 {
-	// These two may be set by any thread, so must be released here:
-	if (g->GuiDefaultWindow)
-		g->GuiDefaultWindow->Release();
-	//if (g->DialogOwner)
-	//	g->DialogOwner->Release();
-
 	// Check if somebody has thrown an exception and it's not been caught yet
 	if (g->ThrownToken)
 		// Display an error message

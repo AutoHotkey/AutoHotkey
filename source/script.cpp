@@ -44,39 +44,10 @@ FuncEntry g_BIF[] =
 {
 	BIF1(GuiCreate, 0, 3, true),
 	BIF1(GuiFromHwnd, 1, 1, true),
-	
-	BIFn(LV_GetNext, 0, 2, true, BIF_LV_GetNextOrCount),
-	BIFn(LV_GetCount, 0, 1, true, BIF_LV_GetNextOrCount),
-	BIF1(LV_GetText, 2, 3, true, {1}),
-	BIFn(LV_Add, 0, NA, true, BIF_LV_AddInsertModify),
-	BIFn(LV_Insert, 1, NA, true, BIF_LV_AddInsertModify),
-	BIFn(LV_Modify, 2, NA, true, BIF_LV_AddInsertModify),
-	BIF1(LV_Delete,  0, 1, true),
-	BIFn(LV_InsertCol, 1, 3, true, BIF_LV_InsertModifyDeleteCol),
-	BIFn(LV_ModifyCol, 0, 3, true, BIF_LV_InsertModifyDeleteCol),
-	BIFn(LV_DeleteCol, 1, 1, true, BIF_LV_InsertModifyDeleteCol),
-	BIF1(LV_SetImageList, 1, 2, true),
-	
-	BIFn(TV_Add, 1, 3, true, BIF_TV_AddModifyDelete),
-	BIFn(TV_Modify, 1, 3, true, BIF_TV_AddModifyDelete),
-	BIFn(TV_Delete, 0, 1, true, BIF_TV_AddModifyDelete),
-	BIFn(TV_GetNext, 0, 2, true, BIF_TV_GetRelatedItem),
-	BIFn(TV_GetPrev, 1, 1, true, BIF_TV_GetRelatedItem),
-	BIFn(TV_GetParent, 1, 1, true, BIF_TV_GetRelatedItem),
-	BIFn(TV_GetChild, 1, 1, true, BIF_TV_GetRelatedItem),
-	BIFn(TV_GetSelection, 0, 0, true, BIF_TV_GetRelatedItem),
-	BIFn(TV_GetCount, 0, 0, true, BIF_TV_GetRelatedItem),
-	BIF1(TV_Get, 2, 2, true),
-	BIFn(TV_GetText, 2, 2, true, BIF_TV_Get, {1}),
-	BIF1(TV_SetImageList, 1, 2, true),
 
 	BIF1(IL_Create, 0, 3, true),
 	BIF1(IL_Destroy, 1, 1, true),
 	BIF1(IL_Add, 2, 4, true),
-	
-	BIFn(SB_SetText, 1, 3, true, BIF_StatusBar),
-	BIFn(SB_SetParts, 0, 255, true, BIF_StatusBar),
-	BIFn(SB_SetIcon, 1, 3, true, BIF_StatusBar),
 
 	BIF1(StrLen, 1, 1, true),
 	BIF1(SubStr, 2, 3, true),
@@ -4987,33 +4958,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			{
 			case GUI_CMD_INVALID:
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-				/*
-			case GUI_CMD_CANCEL:
-			case GUI_CMD_MINIMIZE:
-			case GUI_CMD_MAXIMIZE:
-			case GUI_CMD_RESTORE:
-			case GUI_CMD_DESTROY:
-			case GUI_CMD_DEFAULT:
-			case GUI_CMD_OPTIONS:
-				if (aArgc > 1)
-					return ScriptError(_T("Parameter #2 and beyond should be omitted in this case."), new_raw_arg2);
-				break;
-			case GUI_CMD_SUBMIT:
-			*/
 			case GUI_CMD_MENU:
-			case GUI_CMD_LISTVIEW:
-			case GUI_CMD_TREEVIEW:
-			//case GUI_CMD_FLASH:
 				if (aArgc > 2)
 					return ScriptError(_T("Parameter #3 and beyond should be omitted in this case."), new_raw_arg3);
 				break;
-			// No action for these since they have a varying number of optional params:
-			//case GUI_CMD_NEW:
-			//case GUI_CMD_SHOW:
-			//case GUI_CMD_FONT:
-			//case GUI_CMD_MARGIN:
-			//case GUI_CMD_TAB:
-			//case GUI_CMD_COLOR: No load-time param validation to avoid larger EXE size.
 			}
 		}
 		break;

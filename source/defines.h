@@ -772,8 +772,6 @@ struct global_struct
 	int Priority;  // This thread's priority relative to others.
 	DWORD LastError; // The result of GetLastError() after the most recent DllCall or Run.
 	EventInfoType EventInfo; // Not named "GuiEventInfo" because it applies to non-GUI events such as clipboard.
-	GuiType *GuiDefaultWindow; // This thread's default GUI window, used except when specified "Gui, 2:Add, ..."
-	GuiType *GuiDefaultWindowValid(); // Updates and returns GuiDefaultWindow in case "Gui, Name: Default" wasn't used or the Gui has been destroyed; returns NULL if GuiDefaultWindow is invalid.
 	HWND DialogOwner; // This thread's dialog owner, if any.
 	#define THREAD_DIALOG_OWNER (IsWindow(::g->DialogOwner) ? ::g->DialogOwner : NULL)
 	int WinDelay;  // negative values may be used as special flags.
@@ -845,7 +843,6 @@ inline void global_clear_state(global_struct &g)
 	g.UninterruptedLineCount = 0;
 	g.DialogOwner = NULL;
 	g.CalledByIsDialogMessageOrDispatch = false; // CalledByIsDialogMessageOrDispatchMsg doesn't need to be cleared because it's value is only considered relevant when CalledByIsDialogMessageOrDispatch==true.
-	g.GuiDefaultWindow = NULL;
 	// Above line is done because allowing it to be permanently changed by the auto-exec section
 	// seems like it would cause more confusion that it's worth.  A change to the global default
 	// or even an override/always-use-this-window-number mode can be added if there is ever a
@@ -883,7 +880,6 @@ inline void global_init(global_struct &g)
 	g.Priority = 0;
 	g.LastError = 0;
 	g.EventInfo = NO_EVENT_INFO;
-	g.GuiDefaultWindow = NULL;
 	g.WinDelay = 100;
 	g.ControlDelay = 20;
 	g.KeyDelay = 10;

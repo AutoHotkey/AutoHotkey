@@ -384,6 +384,7 @@ struct ArgStruct
 
 // The following macro is used for definitions and declarations of built-in functions:
 #define BIF_DECL(name) void name(BIF_DECL_PARAMS)
+#define BIF_DECL_GUICTRL(name) void name(BIF_DECL_PARAMS, GuiControlType& control)
 
 #define _f__oneline(act)		do { act } while (0)		// Make the macro safe to use like a function, under if(), etc.
 #define _f__ret(act)			_f__oneline( act; return; )	// BIFs have no return value.
@@ -568,7 +569,7 @@ enum BuiltInFunctionID {
 // (since an item can't be both selected an deselected simultaneously), one value in each pair is available
 // for future use such as LVIS_CUT.
 
-enum GuiCommands {GUI_CMD_INVALID, GUI_CMD_MENU, GUI_CMD_LISTVIEW, GUI_CMD_TREEVIEW};
+enum GuiCommands {GUI_CMD_INVALID, GUI_CMD_MENU};
 
 enum GuiControlCmds {GUICONTROL_CMD_INVALID, GUICONTROL_CMD_OPTIONS, GUICONTROL_CMD_CONTENTS, GUICONTROL_CMD_TEXT
 	, GUICONTROL_CMD_MOVE, GUICONTROL_CMD_MOVEDRAW, GUICONTROL_CMD_FOCUS, GUICONTROL_CMD_ENABLE, GUICONTROL_CMD_DISABLE
@@ -1358,8 +1359,6 @@ public:
 	static GuiCommands ConvertGuiCommand(LPTSTR aBuf)
 	{
 		if (!_tcsicmp(aBuf, _T("Menu"))) return GUI_CMD_MENU;
-		if (!_tcsicmp(aBuf, _T("ListView"))) return GUI_CMD_LISTVIEW;
-		if (!_tcsicmp(aBuf, _T("TreeView"))) return GUI_CMD_TREEVIEW;
 		return GUI_CMD_INVALID;
 	}
 
@@ -2366,7 +2365,6 @@ public:
 	bool mInRadioGroup; // Whether the control currently being created is inside a prior radio-group.
 	bool mUseTheme;  // Whether XP theme and styles should be applied to the parent window and subsequently added controls.
 	TCHAR mDelimiter;  // The default field delimiter when adding items to ListBox, DropDownList, ListView, etc.
-	GuiControlType *mCurrentListView, *mCurrentTreeView; // The ListView and TreeView upon which the LV/TV functions operate.
 	int mCurrentFontIndex;
 	COLORREF mCurrentColor;       // The default color of text in controls.
 	COLORREF mBackgroundColorWin; // The window's background color itself.
@@ -2441,7 +2439,6 @@ public:
 		, mExStyle(0) // This and the above should not be used once the window has been created since they might get out of date.
 		, mInRadioGroup(false), mUseTheme(true), mOwner(NULL), mDelimiter('|')
 		, mCurrentFontIndex(FindOrCreateFont()) // Must call this in constructor to ensure sFont array is never NULL while a GUI object exists.  Omit params to tell it to find or create DEFAULT_GUI_FONT.
-		, mCurrentListView(NULL), mCurrentTreeView(NULL)
 		, mTabControlCount(0), mCurrentTabControlIndex(MAX_TAB_CONTROLS), mCurrentTabIndex(0)
 		, mCurrentColor(CLR_DEFAULT)
 		, mBackgroundColorWin(CLR_DEFAULT), mBackgroundBrushWin(NULL)
@@ -2513,8 +2510,6 @@ public:
 
 	static GuiType *FindGui(HWND aHwnd);
 	static GuiType *FindGuiParent(HWND aHwnd);
-
-	static GuiType *ValidGui(GuiType *&aGuiRef); // Updates aGuiRef if it points to a destroyed Gui.
 
 	GuiIndexType FindControl(LPTSTR aControlID);
 	GuiControlType *FindControl(HWND aHwnd, bool aRetrieveIndexInstead = false)
@@ -2962,19 +2957,19 @@ BIF_DECL(BIF_RegisterCallback);
 BIF_DECL(BIF_GuiCreate);
 BIF_DECL(BIF_GuiFromHwnd);
 
-BIF_DECL(BIF_StatusBar);
+BIF_DECL_GUICTRL(BIF_StatusBar);
 
-BIF_DECL(BIF_LV_GetNextOrCount);
-BIF_DECL(BIF_LV_GetText);
-BIF_DECL(BIF_LV_AddInsertModify);
-BIF_DECL(BIF_LV_Delete);
-BIF_DECL(BIF_LV_InsertModifyDeleteCol);
-BIF_DECL(BIF_LV_SetImageList);
+BIF_DECL_GUICTRL(BIF_LV_GetNextOrCount);
+BIF_DECL_GUICTRL(BIF_LV_GetText);
+BIF_DECL_GUICTRL(BIF_LV_AddInsertModify);
+BIF_DECL_GUICTRL(BIF_LV_Delete);
+BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol);
+BIF_DECL_GUICTRL(BIF_LV_SetImageList);
 
-BIF_DECL(BIF_TV_AddModifyDelete);
-BIF_DECL(BIF_TV_GetRelatedItem);
-BIF_DECL(BIF_TV_Get);
-BIF_DECL(BIF_TV_SetImageList);
+BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete);
+BIF_DECL_GUICTRL(BIF_TV_GetRelatedItem);
+BIF_DECL_GUICTRL(BIF_TV_Get);
+BIF_DECL_GUICTRL(BIF_TV_SetImageList);
 
 BIF_DECL(BIF_IL_Create);
 BIF_DECL(BIF_IL_Destroy);
