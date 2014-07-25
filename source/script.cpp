@@ -4943,28 +4943,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		break;
 
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
-		
-	case ACT_GUI:
-		if (aArgc > 0 && !line.ArgHasDeref(1))
-		{
-			LPTSTR command, name;
-			ResolveGui(new_raw_arg1, command, &name);
-			if (!name)
-				return ScriptError(ERR_INVALID_GUI_NAME, new_raw_arg1);
-
-			GuiCommands gui_cmd = line.ConvertGuiCommand(command);
-
-			switch (gui_cmd)
-			{
-			case GUI_CMD_INVALID:
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-			case GUI_CMD_MENU:
-				if (aArgc > 2)
-					return ScriptError(_T("Parameter #3 and beyond should be omitted in this case."), new_raw_arg3);
-				break;
-			}
-		}
-		break;
 
 	case ACT_LOOP_FILE:
 	case ACT_LOOP_REG:
@@ -12915,9 +12893,6 @@ ResultType Line::Perform()
 
 	case ACT_MENU:
 		return g_script.PerformMenu(SIX_ARGS); // L17: Changed from FIVE_ARGS to access previously "reserved" arg (for use by Menu,,Icon).
-
-	case ACT_GUI:
-		return g_script.PerformGui(FOUR_ARGS);
 
 	case ACT_GUICONTROL:
 		return GuiControl(THREE_ARGS);

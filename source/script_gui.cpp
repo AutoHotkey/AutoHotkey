@@ -61,6 +61,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 	if_member("Hwnd", P_Handle)
 	if_member("Title", P_Title)
 	if_member("Control", P_Control)
+	if_member("Menu", P_Menu)
 	if_member("MarginX", P_MarginX)
 	if_member("MarginY", P_MarginY)
 	if_member("BgColor", P_BgColor)
@@ -163,6 +164,18 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 				GetWindowText(mHwnd, aResultToken.marker, length+1);
 				return OK;
 			}
+		}
+		case P_Menu:
+		{
+			if (IS_INVOKE_SET)
+			{
+				ResultType result = SetMenu(ParamIndexToString(0));
+				if (result != OK)
+					return result; // Already displayed error.
+			}
+			aResultToken.symbol = SYM_STRING;
+			aResultToken.marker = _T(""); // TODO
+			return OK;
 		}
 		case P_Control:
 		{
@@ -572,71 +585,30 @@ GuiType *GuiType::FindGuiParent(HWND aHwnd)
 	return NULL;
 }
 
-// Will be removed.
-ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTSTR aParam4)
+ResultType GuiType::SetMenu(LPTSTR aMenuName)
 {
-	LPTSTR aCommand;	// Set by ResolveGui().
-	LPTSTR name;		// Set by ResolveGui() if it returns NULL.
-	size_t name_length;	//
-	GuiType *pgui = ResolveGui(aBuf, aCommand, &name, &name_length);
-	if (!pgui && !name)
-		return ScriptError(ERR_INVALID_GUI_NAME, aBuf);
-	
-	GuiCommands gui_command = Line::ConvertGuiCommand(aCommand);
-	if (gui_command == GUI_CMD_INVALID)
-		// This is caught at load-time 99% of the time and can only occur here if the sub-command name
-		// or Gui name is contained in a variable reference.
-		return ScriptError(ERR_PARAM1_INVALID, aCommand);
-
-	PRIVATIZE_S_DEREF_BUF;  // See comments in GuiControl() about this.
-	ResultType result = OK; // Set default return value for use with all instances of "goto" further below.
-	// EVERYTHING below this point should use "result" and "goto return_the_result" instead of "return".
-
-	// If the window doesn't currently exist, bail out.
-	if (!pgui)
-		goto return_the_result;
-
-	GuiType &gui = *pgui;  // For performance.
-
-	GuiControls gui_control_type = GUI_CONTROL_INVALID;
-
-	switch (gui_command)
+	UserMenu *menu;
+	if (*aMenuName)
 	{
-		
-	case GUI_CMD_MENU:
-		UserMenu *menu;
-		if (*aParam2)
-		{
-			// By design, the below will give a slightly misleading error if the specified menu is the
-			// TRAY menu, since it should be obvious that it cannot be used as a menu bar (since it
-			// must always be of the popup type):
-			if (   !(menu = FindMenu(aParam2)) || menu == g_script.mTrayMenu   ) // Relies on short-circuit boolean.
-			{
-				result = ScriptError(ERR_MENU, aParam2);
-				goto return_the_result;
-			}
-			menu->Create(MENU_TYPE_BAR);  // Ensure the menu physically exists and is the "non-popup" type (for a menu bar).
-		}
-		else
-			menu = NULL;
-		SetMenu(gui.mHwnd, menu ? menu->mMenu : NULL);  // Add or remove the menu.
-		if (menu) // v1.1.04: Keyboard accelerators.
-			gui.UpdateAccelerators(*menu);
-		else
-			gui.RemoveAccelerators();
-		goto return_the_result;
-	
-	} // switch()
-
-	result = FAIL;  // Should never be reached, but avoids compiler warning and improves bug detection.
-
-return_the_result:
-	DEPRIVATIZE_S_DEREF_BUF;
-	return result;
+		// By design, the below will give a slightly misleading error if the specified menu is the
+		// TRAY menu, since it should be obvious that it cannot be used as a menu bar (since it
+		// must always be of the popup type):
+		if (   !(menu = g_script.FindMenu(aMenuName)) || menu == g_script.mTrayMenu   ) // Relies on short-circuit boolean.
+			return g_script.ScriptError(ERR_MENU, aMenuName);
+		menu->Create(MENU_TYPE_BAR);  // Ensure the menu physically exists and is the "non-popup" type (for a menu bar).
+	}
+	else
+		menu = NULL;
+	::SetMenu(mHwnd, menu ? menu->mMenu : NULL);  // Add or remove the menu.
+	if (menu) // v1.1.04: Keyboard accelerators.
+		UpdateAccelerators(*menu);
+	else
+		RemoveAccelerators();
+	return OK;
 }
 
 
-
+// Will be removed.
 ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 {
 	GuiType *pgui = Script::ResolveGui(aCommand, aCommand);
@@ -1453,7 +1425,7 @@ error:
 }
 
 
-
+// Will be removed.
 ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 {
 	Var &output_var = *OUTPUT_VAR;
@@ -1656,7 +1628,7 @@ ResultType GuiType::Destroy()
 		// is currently using a menu bar, destroying that bar in conjunction with the destruction
 		// of some other window might cause bad side effects on some/all OSes.
 		ShowWindow(mHwnd, SW_HIDE);  // Hide it to prevent re-drawing due to menu removal.
-		SetMenu(mHwnd, NULL);
+		::SetMenu(mHwnd, NULL);
 		if (!mDestroyWindowHasBeenCalled)
 		{
 			mDestroyWindowHasBeenCalled = true;  // Signal the WM_DESTROY routine not to call us.

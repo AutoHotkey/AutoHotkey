@@ -1297,15 +1297,13 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// This flags GUI menu items as being GUI so that the script has a way of detecting
 					// whether a given submenu's item was selected from inside a menu bar vs. a popup:
 					g.EventInfo = (EventInfoType)pgui->mHwnd;
+					pgui->AddRef();
 				}
 				DEBUGGER_STACK_PUSH(_T("Menu"))
 				menu_item->mLabel->Execute();
 				DEBUGGER_STACK_POP()
 				if (pgui)
-				{
-					pgui->Release(); // g.GuiWindow
-					//g.GuiDefaultWindow->Release(); // This is done by ResumeUnderlyingThread().
-				}
+					pgui->Release();
 				break;
 
 			case AHK_HOTSTRING:

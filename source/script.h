@@ -569,8 +569,6 @@ enum BuiltInFunctionID {
 // (since an item can't be both selected an deselected simultaneously), one value in each pair is available
 // for future use such as LVIS_CUT.
 
-enum GuiCommands {GUI_CMD_INVALID, GUI_CMD_MENU};
-
 enum GuiControlCmds {GUICONTROL_CMD_INVALID, GUICONTROL_CMD_OPTIONS, GUICONTROL_CMD_CONTENTS, GUICONTROL_CMD_TEXT
 	, GUICONTROL_CMD_MOVE, GUICONTROL_CMD_MOVEDRAW, GUICONTROL_CMD_FOCUS, GUICONTROL_CMD_ENABLE, GUICONTROL_CMD_DISABLE
 	, GUICONTROL_CMD_SHOW, GUICONTROL_CMD_HIDE, GUICONTROL_CMD_CHOOSE, GUICONTROL_CMD_CHOOSESTRING
@@ -725,7 +723,9 @@ private:
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlGet(LPTSTR aCommand, LPTSTR aValue, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	// Will be removed.
 	ResultType GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3);
+	// Will be removed.
 	ResultType GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3);
 	ResultType StatusBarGetText(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
@@ -1353,13 +1353,6 @@ public:
 		if (aNameLength)
 			*aNameLength = name_length;
 		aCommand = omit_leading_whitespace(colon_pos + 1);
-	}
-
-	// Will be removed.
-	static GuiCommands ConvertGuiCommand(LPTSTR aBuf)
-	{
-		if (!_tcsicmp(aBuf, _T("Menu"))) return GUI_CMD_MENU;
-		return GUI_CMD_INVALID;
 	}
 
 	// Will be removed.
@@ -2475,6 +2468,7 @@ public:
 	static LPTSTR ConvertEvent(GuiEventType evt);
 	void SetEvents();
 	static IObject* CreateDropArray(HDROP hDrop);
+	ResultType SetMenu(LPTSTR aMenuName);
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& pControl);
 
@@ -2764,8 +2758,6 @@ public:
 		return NULL;
 	}
 
-	// Will be removed.
-	ResultType PerformGui(LPTSTR aBuf, LPTSTR aControlType, LPTSTR aOptions, LPTSTR aParam4);
 	// Will be removed.
 	static GuiType *ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName = NULL, size_t *aNameLength = NULL);
 
