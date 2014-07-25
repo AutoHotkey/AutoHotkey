@@ -60,6 +60,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 	if_member("Flash", M_Flash)
 	if_member("Hwnd", P_Handle)
 	if_member("Title", P_Title)
+	if_member("Control", P_Control)
 	if_member("MarginX", P_MarginX)
 	if_member("MarginY", P_MarginY)
 	if_member("BgColor", P_BgColor)
@@ -155,8 +156,36 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 			}
 			else
 			{
-				return INVOKE_NOT_HANDLED; // TODO
+				int length = GetWindowTextLength(mHwnd);
+				ResultType result = TokenSetResult(aResultToken, NULL, length);
+				if (result != OK)
+					return result; // Already displayed error.
+				GetWindowText(mHwnd, aResultToken.marker, length+1);
+				return OK;
 			}
+		}
+		case P_Control:
+		{
+			ExprTokenType& tok = *aParam[0];
+			GuiControlType* ctrl = NULL;
+			if (tok.symbol == SYM_INTEGER || tok.symbol == SYM_VAR && tok.var->IsNumeric() == SYM_INTEGER)
+			{
+				HWND hWnd = (HWND)(UINT_PTR)TokenToInt64(tok);
+				ctrl = FindControl(hWnd);
+
+			} else
+			{
+				GuiIndexType u = FindControl(TokenToString(tok));
+				if (u < mControlCount)
+					ctrl = mControl[u];
+			}
+			if (!ctrl)
+				return g_script.ScriptError(_T("The specified control does not exist."));
+
+			aResultToken.symbol = SYM_OBJECT;
+			aResultToken.object = ctrl;
+			aResultToken.object->AddRef();
+			return OK;
 		}
 		case P_MarginX:
 		case P_MarginY:
@@ -385,10 +414,14 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 	switch (member)
 	{
 		case P_Handle:
+			if (IS_INVOKE_SET)
+				return INVOKE_NOT_HANDLED;
 			aResultToken.symbol = SYM_INTEGER;
 			aResultToken.value_int64 = (__int64)(UINT_PTR)hwnd;
 			return OK;
 		case P_Gui:
+			if (IS_INVOKE_SET)
+				return INVOKE_NOT_HANDLED;
 			aResultToken.symbol = SYM_OBJECT;
 			aResultToken.object = gui;
 			aResultToken.object->AddRef();
@@ -441,7 +474,7 @@ GuiType *global_struct::GuiDefaultWindowValid()
 	return GuiType::ValidGui(GuiDefaultWindow);
 }
 
-
+// Will be removed.
 GuiType *GuiType::ValidGui(GuiType *&aGuiRef)
 {
 	if (aGuiRef && !aGuiRef->mHwnd) // Gui existed but has been destroyed.
