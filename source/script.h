@@ -568,7 +568,7 @@ enum BuiltInFunctionID {
 // (since an item can't be both selected an deselected simultaneously), one value in each pair is available
 // for future use such as LVIS_CUT.
 
-enum GuiCommands {GUI_CMD_INVALID, GUI_CMD_MENU, GUI_CMD_TAB, GUI_CMD_LISTVIEW, GUI_CMD_TREEVIEW};
+enum GuiCommands {GUI_CMD_INVALID, GUI_CMD_MENU, GUI_CMD_LISTVIEW, GUI_CMD_TREEVIEW};
 
 enum GuiControlCmds {GUICONTROL_CMD_INVALID, GUICONTROL_CMD_OPTIONS, GUICONTROL_CMD_CONTENTS, GUICONTROL_CMD_TEXT
 	, GUICONTROL_CMD_MOVE, GUICONTROL_CMD_MOVEDRAW, GUICONTROL_CMD_FOCUS, GUICONTROL_CMD_ENABLE, GUICONTROL_CMD_DISABLE
@@ -1358,7 +1358,6 @@ public:
 	static GuiCommands ConvertGuiCommand(LPTSTR aBuf)
 	{
 		if (!_tcsicmp(aBuf, _T("Menu"))) return GUI_CMD_MENU;
-		if (!_tcsicmp(aBuf, _T("Tab"))) return GUI_CMD_TAB;
 		if (!_tcsicmp(aBuf, _T("ListView"))) return GUI_CMD_LISTVIEW;
 		if (!_tcsicmp(aBuf, _T("TreeView"))) return GUI_CMD_TREEVIEW;
 		return GUI_CMD_INVALID;
@@ -2283,6 +2282,7 @@ struct GuiControlType : public ObjectBase
 		INVALID = 0,
 
 		// Methods
+		M_Tab_UseTab,
 		LastMethodPlusOne,
 
 		// Properties
