@@ -5419,8 +5419,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			{
 			case GUICONTROLGET_CMD_INVALID:
 				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-			case GUICONTROLGET_CMD_CONTENTS:
-				break; // Do nothing, since Param4 is optional in this case.
 			default: // All commands except the above should have a blank parameter here.
 				if (*new_raw_arg4) // Currently true for all, since it's a FutureUse param.
 					return ScriptError(ERR_PARAM4_MUST_BE_BLANK, new_raw_arg4);

@@ -475,6 +475,10 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 	if_member("Hwnd", P_Handle)
 	if_member("Gui", P_Gui)
 	if_member("ClassNN", P_ClassNN)
+	if_member("Text", P_Text)
+	if_member("Value", P_Value)
+	if_member("Enabled", P_Enabled)
+	if_member("Visible", P_Visible)
 	else if (type == GUI_CONTROL_TAB)
 	{
 		// Tab methods/properties
@@ -565,6 +569,13 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 			aResultToken.marker = cah.class_name;
 			return OK;
 		}
+
+		case P_Text:
+		case P_Value:
+			if (IS_INVOKE_SET)
+				return INVOKE_NOT_HANDLED; // TODO
+			else
+				return gui->ControlGetContents(aResultToken, *this, member == P_Text);
 
 		case M_Tab_UseTab:
 		{
@@ -1506,12 +1517,6 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 
 	switch(guicontrolget_cmd)
 	{
-	case GUICONTROLGET_CMD_CONTENTS:
-		// Because the below returns FAIL only if a critical error occurred, g_ErrorLevel is
-		// left at NONE as set above for all cases.
-		result = gui.ControlGetContents(output_var, control, aParam3);
-		goto return_the_result;
-
 	case GUICONTROLGET_CMD_POS:
 	{
 		// In this case, output_var itself is not used directly, but is instead used to:
@@ -6786,11 +6791,10 @@ ResultType GuiType::Escape() // Similar to close, except typically called when t
 
 
 
-ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl, LPTSTR aMode)
+ResultType GuiType::ControlGetContents(ExprTokenType &aResultToken, GuiControlType &aControl, bool bText)
 {
 	LPTSTR cp;
-	TCHAR buf[1024]; // For various uses.
-	bool submit_mode = !_tcsicmp(aMode, _T("Submit"));
+	LPTSTR buf = aResultToken.buf; // For various uses.
 	int pos;
 	LRESULT sel_count, i;  // LRESULT is a signed type (same as int/long).
 	SYSTEMTIME st[2];
@@ -6806,22 +6810,27 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 			pos = (int)SendMessage(aControl.hwnd, UDM_GETPOS32, 0, 0);
 		else // 16-bit.  Must cast to short to omit the error portion (see comment above).
 			pos = (short)SendMessage(aControl.hwnd, UDM_GETPOS, 0, 0);
-		return aOutputVar.Assign(pos);
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = pos;
+		return OK;
 
 	case GUI_CONTROL_SLIDER: // Doesn't seem useful to ever retrieve the control's actual caption, which is invisible.
-		return aOutputVar.Assign(ControlInvertSliderIfNeeded(aControl, (int)SendMessage(aControl.hwnd, TBM_GETPOS, 0, 0)));
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = ControlInvertSliderIfNeeded(aControl, (int)SendMessage(aControl.hwnd, TBM_GETPOS, 0, 0));
 		// Above assigns it as a signed value because testing shows a slider can have part or all of its
 		// available range consist of negative values.  32-bit values are supported if the range is set
 		// with the right messages.
+		return OK;
 
 	case GUI_CONTROL_PROGRESS:
-		return submit_mode ? OK : aOutputVar.Assign((int)SendMessage(aControl.hwnd, PBM_GETPOS, 0, 0));
-		// Above does not save to control during submit mode, since progress bars do not receive
-		// user input so it seems wasteful 99% of the time.  "GuiControlGet, MyProgress" can be used instead.
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = (int)SendMessage(aControl.hwnd, PBM_GETPOS, 0, 0);
+		return OK;
 
 	case GUI_CONTROL_DATETIME:
-		return aOutputVar.Assign(DateTime_GetSystemtime(aControl.hwnd, st) == GDT_VALID
-			? SystemTimeToYYYYMMDD(buf, st[0]) : _T("")); // Blank string whenever GDT_NONE/GDT_ERROR.
+		aResultToken.marker = DateTime_GetSystemtime(aControl.hwnd, st) == GDT_VALID
+			? SystemTimeToYYYYMMDD(buf, st[0]) : _T(""); // Blank string whenever GDT_NONE/GDT_ERROR.
+		return OK;
 
 	case GUI_CONTROL_MONTHCAL:
 		if (GetWindowLong(aControl.hwnd, GWL_STYLE) & MCS_MULTISELECT)
@@ -6835,22 +6844,26 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 			SystemTimeToYYYYMMDD(buf, st[0]);
 			buf[8] = '-'; // Retain only the first 8 chars to omit the time portion, which is unreliable (not relevant anyway).
 			SystemTimeToYYYYMMDD(buf + 9, st[1]);
-			return aOutputVar.Assign(buf, 17); // Limit to 17 chars to omit the time portion of the second timestamp.
+			buf[17] = 0; // Limit to 17 chars to omit the time portion of the second timestamp.
 		}
 		else
 		{
 			MonthCal_GetCurSel(aControl.hwnd, st);
-			return aOutputVar.Assign(SystemTimeToYYYYMMDD(buf, st[0]), 8); // Limit to 8 chars to omit the time portion, which is unreliable (not relevant anyway).
+			SystemTimeToYYYYMMDD(buf, st[0]);
+			buf[8] = 0; // Limit to 8 chars to omit the time portion, which is unreliable (not relevant anyway).
 		}
+		aResultToken.marker = buf;
+		return OK;
 
 	case GUI_CONTROL_HOTKEY:
 		// Testing shows that neither GetWindowText() nor WM_GETTEXT can pull anything out of a hotkey
 		// control, so the only type of retrieval that can be offered is the HKM_GETHOTKEY method:
 		HotkeyToText((WORD)SendMessage(aControl.hwnd, HKM_GETHOTKEY, 0, 0), buf);
-		return aOutputVar.Assign(buf);
+		aResultToken.marker = buf;
+		return OK;
 	} // switch (aControl.type)
 
-	if (_tcsicmp(aMode, _T("Text"))) // Non-text, i.e. don't unconditionally use the simple GetWindowText() method.
+	if (!bText) // Non-text, i.e. don't unconditionally use the simple GetWindowText() method.
 	{
 		// The caller wants the contents of the control, which is often different from its
 		// caption/text.  Any control types not mentioned in the switch() below will fall through
@@ -6862,25 +6875,22 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 		{
 		case GUI_CONTROL_CHECKBOX:
 		case GUI_CONTROL_RADIO:
-			// Submit() handles GUI_CONTROL_RADIO on its own, but other callers might need us to handle it.
-			// In addition, rather than handling multi-radio groups that share a single output variable
-			// in a special way, it's kept simple here because:
-			// 1) It's more flexible (there might be cases when the user wants to get the value of
-			//    a single radio in the group, not the group's currently-checked button).
-			// 2) The multi-radio handling seems too complex to be justified given how rarely users would
-			//    want such behavior (since "Submit, NoHide" can be used as a substitute).
+			aResultToken.symbol = SYM_INTEGER;
 			switch (SendMessage(aControl.hwnd, BM_GETCHECK, 0, 0))
 			{
 			case BST_CHECKED:
-				return aOutputVar.Assign(1);
+				aResultToken.value_int64 = 1;
+				return OK;
 			case BST_UNCHECKED:
-				return aOutputVar.Assign(0);
+				aResultToken.value_int64 = 0;
+				return OK;
 			case BST_INDETERMINATE:
 				// Seems better to use a value other than blank because blank might sometimes represent the
 				// state of an uninitialized or unfetched control.  In other words, a blank variable often
 				// has an external meaning that transcends the more specific meaning often desirable when
 				// retrieving the state of the control:
-				return aOutputVar.Assign(-1);
+				aResultToken.value_int64 = -1;
+				return OK;
 			}
 			return FAIL; // Shouldn't be reached since ZERO(BST_UNCHECKED) is returned on failure.
 
@@ -6888,9 +6898,12 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 			if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
 			{
 				index = SendMessage(aControl.hwnd, CB_GETCURSEL, 0, 0); // Get index of currently selected item.
-				if (index == CB_ERR) // Maybe happens only if DROPDOWNLIST has no items at all, so ErrorLevel is not changed.
-					return aOutputVar.Assign();
-				return aOutputVar.Assign((int)index + 1);
+				if (index != CB_ERR) // Maybe happens only if DROPDOWNLIST has no items at all, so ErrorLevel is not changed.
+				{
+					aResultToken.symbol = SYM_INTEGER;
+					aResultToken.value_int64 = (int)index + 1;
+				}
+				return OK;
 			}
 			break; // Fall through to the normal GetWindowText() method, which works for DDLs but not ComboBoxes.
 
@@ -6905,7 +6918,8 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 				// item's position should be retrieved in AltSubmit mode (even for non-AltSubmit mode, this
 				// should be done because the case of the item in the drop-list is usually preferable to any
 				// varying case the user may have manually typed).
-				if (GetWindowText(aControl.hwnd, buf, _countof(buf))) // Buf size should be enough for anything realistic.
+				TCHAR tempBuf[1024];
+				if (GetWindowText(aControl.hwnd, tempBuf, _countof(tempBuf)))
 				{
 					index = SendMessage(aControl.hwnd, CB_FINDSTRINGEXACT, -1, (LPARAM)&buf); // It's not case sensitive.
 					if (index == CB_ERR)
@@ -6915,40 +6929,40 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 					break; // Same comment as above.
 			}
 			if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
-				return aOutputVar.Assign((int)index + 1);
+			{
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = (int)index + 1;
+				return OK;
+			}
 			length = SendMessage(aControl.hwnd, CB_GETLBTEXTLEN, (WPARAM)index, 0);
 			if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-				return aOutputVar.Assign();
+				return OK; // Return empty string (default).
 			// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
 			// being when the item's text is retrieved.  This should be harmless, since there are many
 			// other precedents where a variable is sized to something larger than it winds up carrying.
 			// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 			// this call will set up the clipboard for writing:
-			if (aOutputVar.AssignString(NULL, (VarSizeType)length) != OK)
-				return FAIL;  // It already displayed the error.
-			length = SendMessage(aControl.hwnd, CB_GETLBTEXT, (WPARAM)index, (LPARAM)aOutputVar.Contents());
+			if (TokenSetResult(aResultToken, NULL, length) != OK)
+				return FAIL; // It already displayed the error.
+			length = SendMessage(aControl.hwnd, CB_GETLBTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
 			if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-			{
-				aOutputVar.Close();
-				return aOutputVar.Assign();
-			}
-			aOutputVar.SetCharLength(length);  // Update it to the actual length, which can vary from the estimate.
-			return aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
+				return OK; // Return empty string (default).
+			return OK;
 
 		case GUI_CONTROL_LISTBOX:
 			if (GetWindowLong(aControl.hwnd, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
 			{
 				sel_count = SendMessage(aControl.hwnd, LB_GETSELCOUNT, 0, 0);
 				if (sel_count < 1)  // <=0 to check for LB_ERR too (but it should be impossible in this case).
-					return aOutputVar.Assign();
+					return OK;
 				int *item = (int *)malloc(sel_count * sizeof(int)); // dynamic since there can be a very large number of items.
 				if (!item)
-					return aOutputVar.Assign();
+					return OK;
 				sel_count = SendMessage(aControl.hwnd, LB_GETSELITEMS, (WPARAM)sel_count, (LPARAM)item);
 				if (sel_count < 1)  // 0 or LB_ERR, but both these conditions should be impossible in this case.
 				{
 					free(item);
-					return aOutputVar.Assign();
+					return OK;
 				}
 				if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the positions, not the text retrieved.
 				{
@@ -6971,19 +6985,14 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 						if (item_length == LB_ERR) // Realistically impossible based on MSDN.
 						{
 							free(item);
-							return aOutputVar.Assign();
+							return OK;
 						}
 						length += item_length;
 					}
 				}
-				// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
-				// being when the item's text is retrieved.  This should be harmless, since there are many
-				// other precedents where a variable is sized to something larger than it winds up carrying.
-				// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-				// this call will set up the clipboard for writing:
-				if (aOutputVar.AssignString(NULL, (VarSizeType)length) != OK)
+				if (TokenSetResult(aResultToken, NULL, length) != OK)
 					return FAIL;  // It already displayed the error.
-				cp = aOutputVar.Contents(); // Init for both of the loops below.
+				cp = aResultToken.marker; // Init for both of the loops below.
 				if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the positions, not the text retrieved.
 				{
 					// In this case, the original length estimate should be the same as the actual, so
@@ -7026,54 +7035,51 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 			{
 				index = SendMessage(aControl.hwnd, LB_GETCURSEL, 0, 0); // Get index of currently selected item.
 				if (index == LB_ERR) // There is no selection (or very rarely, some other type of problem).
-					return aOutputVar.Assign();
+					return OK;
 				if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
-					return aOutputVar.Assign((int)index + 1);
+				{
+					aResultToken.symbol = SYM_INTEGER;
+					aResultToken.value_int64 = (int)index + 1;
+					return OK;
+				}
 				length = SendMessage(aControl.hwnd, LB_GETTEXTLEN, (WPARAM)index, 0);
 				if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-					return aOutputVar.Assign();
-				// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
-				// being when the item's text is retrieved.  This should be harmless, since there are many
-				// other precedents where a variable is sized to something larger than it winds up carrying.
-				// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-				// this call will set up the clipboard for writing:
-				if (aOutputVar.AssignString(NULL, (VarSizeType)length) != OK)
+					return OK;
+				if (TokenSetResult(aResultToken, NULL, length) != OK)
 					return FAIL;  // It already displayed the error.
-				length = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)index, (LPARAM)aOutputVar.Contents());
+				length = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
 				if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-				{
-					aOutputVar.Close();
-					return aOutputVar.Assign();
-				}
+					return OK;
 			}
-			aOutputVar.SetCharLength(length);  // Update it to the actual length, which can vary from the estimate.
-			return aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
+			return OK;
 
 		case GUI_CONTROL_TAB:
 			index = TabCtrl_GetCurSel(aControl.hwnd); // Get index of currently selected item.
 			if (index == -1) // There is no selection (maybe happens only if it has no tabs at all), so ErrorLevel is not changed.
-				return aOutputVar.Assign();
+				return OK;
 			if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the index, not the text retrieved.
-				return aOutputVar.Assign((int)index + 1);
+			{
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = (int)index + 1;
+				return OK;
+			}
 			// Otherwise: Get the stored name/caption of this tab:
 			TCITEM tci;
 			tci.mask = TCIF_TEXT;
 			tci.pszText = buf;
-			tci.cchTextMax = _countof(buf) - 1; // MSDN example uses -1.
+			tci.cchTextMax = MAX_NUMBER_SIZE-1; // MSDN example uses -1.
 			if (TabCtrl_GetItem(aControl.hwnd, index, &tci))
-				return aOutputVar.Assign(tci.pszText);
-			return aOutputVar.Assign();
+				aResultToken.marker = buf;
+			return OK;
 
 		case GUI_CONTROL_ACTIVEX:
-			if (!submit_mode)
+			// Below returns a new ComObject wrapper:
+			if (IObject *activex_obj = ControlGetActiveX(aControl.hwnd))
 			{
-				// Below returns a new ComObject wrapper, not the one originally stored in aControl.output_var:
-				if (IObject *activex_obj = ControlGetActiveX(aControl.hwnd))
-					return aOutputVar.AssignSkipAddRef(activex_obj);
-				return aOutputVar.Assign();
+				aResultToken.symbol = SYM_OBJECT;
+				aResultToken.object = activex_obj;
 			}
-			// Otherwise: Don't overwrite the var with a new wrapper object, since that would waste
-			// resources and cause any connected (ComObjConnect) event sinks to be disconnected.
+			return OK;
 		case GUI_CONTROL_LABEL:
 		case GUI_CONTROL_LINK:
 		case GUI_CONTROL_PIC:
@@ -7083,12 +7089,6 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 		case GUI_CONTROL_LISTVIEW: // LV and TV do not obey Submit. Instead, more flexible methods are available to the script.
 		case GUI_CONTROL_TREEVIEW: //
 		//GUI_CONTROL_ACTIVEX: // May have fallen through from above.
-			if (submit_mode) // In submit mode, do not waste memory & cpu time to save the above.
-				// There doesn't seem to be a strong/net advantage to setting the vars to be blank
-				// because even if that were done, it seems it would not do much to reserve flexibility
-				// for future features in which these associated variables are used for a purpose other
-				// than uniquely identifying the control with GuiControl & GuiControlGet.
-				return OK;
 			//else an explicit Get was called on the control, so it seems best to try to get it's text (if any).
 			break;
 		// Types specifically not handled here.  They will be handled by the section below this switch():
@@ -7103,24 +7103,19 @@ ResultType GuiType::ControlGetContents(Var &aOutputVar, GuiControlType &aControl
 	// 3) This control is a ComboBox, but it lacks a selected item, so any text entered by the user
 	//    into the control's edit field is fetched instead.
 
-	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-	// this call will set up the clipboard for writing:
+	// Set up the result token.
 	int length = GetWindowTextLength(aControl.hwnd); // Might be zero, which is properly handled below.
-	if (aOutputVar.AssignString(NULL, (VarSizeType)length) != OK)
-		return FAIL;  // It already displayed the error.
-	// Update length using the actual length, rather than the estimate provided by GetWindowTextLength():
-	if (   !(aOutputVar.SetCharLength(GetWindowText(aControl.hwnd, aOutputVar.Contents(), (int)(length + 1))))   )
-		// There was no text to get.  Set to blank explicitly just to be sure.
-		*aOutputVar.Contents() = '\0';  // Safe because Assign() gave us a non-constant memory area.
-	else if (aControl.type == GUI_CONTROL_EDIT) // Auto-translate CRLF to LF for better compatibility with other script commands.
+	if (TokenSetResult(aResultToken, NULL, length) != OK)
+		return FAIL; // It already displayed the error.
+	GetWindowText(aControl.hwnd, aResultToken.marker, length+1);
+	if (aControl.type == GUI_CONTROL_EDIT) // Auto-translate CRLF to LF for better compatibility with other script commands.
 	{
 		// Since edit controls tend to have many hard returns in them, use "true" for the last param to
 		// enhance performance.  This performance gain is extreme when the control contains thousands
 		// of CRLFs:
-		StrReplace(aOutputVar.Contents(), _T("\r\n"), _T("\n"), SCS_SENSITIVE);
-		aOutputVar.SetCharLength(_tcslen(aOutputVar.Contents()));
+		StrReplace(aResultToken.marker, _T("\r\n"), _T("\n"), SCS_SENSITIVE);
 	}
-	return aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
+	return OK;
 }
 
 

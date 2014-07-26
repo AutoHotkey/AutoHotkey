@@ -575,7 +575,7 @@ enum GuiControlCmds {GUICONTROL_CMD_INVALID, GUICONTROL_CMD_OPTIONS, GUICONTROL_
 	, GUICONTROL_CMD_FONT
 };
 
-enum GuiControlGetCmds {GUICONTROLGET_CMD_INVALID, GUICONTROLGET_CMD_CONTENTS, GUICONTROLGET_CMD_POS
+enum GuiControlGetCmds {GUICONTROLGET_CMD_INVALID, GUICONTROLGET_CMD_POS
 	, GUICONTROLGET_CMD_ENABLED, GUICONTROLGET_CMD_VISIBLE
 };
 
@@ -1397,7 +1397,6 @@ public:
 	// Will be removed.
 	static GuiControlGetCmds ConvertGuiControlGetCmd(LPTSTR aBuf)
 	{
-		if (!*aBuf) return GUICONTROLGET_CMD_CONTENTS; // The implicit command when nothing was specified.
 		if (!_tcsicmp(aBuf, _T("Pos"))) return GUICONTROLGET_CMD_POS;
 		if (!_tcsicmp(aBuf, _T("Enabled"))) return GUICONTROLGET_CMD_ENABLED;
 		if (!_tcsicmp(aBuf, _T("Visible"))) return GUICONTROLGET_CMD_VISIBLE;
@@ -2279,6 +2278,10 @@ struct GuiControlType : public ObjectBase
 		P_Handle,
 		P_Gui,
 		P_ClassNN,
+		P_Text,
+		P_Value,
+		P_Enabled,
+		P_Visible,
 	};
 
 	void Destroy(); // Called by GuiType::Destroy().
@@ -2498,7 +2501,7 @@ public:
 	}
 	ResultType Close(); // Due to SC_CLOSE, etc.
 	ResultType Escape(); // Similar to close, except typically called when the user presses ESCAPE.
-	ResultType ControlGetContents(Var &aOutputVar, GuiControlType &aControl, LPTSTR aMode = _T(""));
+	ResultType ControlGetContents(ExprTokenType &aResultToken, GuiControlType &aControl, bool bText = false);
 
 	static GuiType *FindGui(HWND aHwnd);
 	static GuiType *FindGuiParent(HWND aHwnd);
