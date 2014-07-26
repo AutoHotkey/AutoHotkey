@@ -5405,29 +5405,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		}
 		break;
 
-	case ACT_GUICONTROLGET:
-		if (aArgc > 1 && !line.ArgHasDeref(2))
-		{
-			LPTSTR command, name;
-			ResolveGui(new_raw_arg2, command, &name);
-			if (!name)
-				return ScriptError(ERR_INVALID_GUI_NAME, new_raw_arg2);
-
-			GuiControlGetCmds guicontrolget_cmd = line.ConvertGuiControlGetCmd(command);
-			// This first check's error messages take precedence over the next check's:
-			switch (guicontrolget_cmd)
-			{
-			case GUICONTROLGET_CMD_INVALID:
-				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-			default: // All commands except the above should have a blank parameter here.
-				if (*new_raw_arg4) // Currently true for all, since it's a FutureUse param.
-					return ScriptError(ERR_PARAM4_MUST_BE_BLANK, new_raw_arg4);
-			}
-			// else it can be optionally blank, in which case the output variable is used as the
-			// ControlID also.
-		}
-		break;
-
 	case ACT_DRIVE:
 		if (aArgc > 0 && !line.ArgHasDeref(1))
 		{
@@ -12889,9 +12866,6 @@ ResultType Line::Perform()
 
 	case ACT_GUICONTROL:
 		return GuiControl(THREE_ARGS);
-
-	case ACT_GUICONTROLGET:
-		return GuiControlGet(ARG2, ARG3, ARG4);
 
 	////////////////////////////////////////////////////////////////////////////////////////
 	// For these, it seems best not to report an error during runtime if there's

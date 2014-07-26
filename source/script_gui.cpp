@@ -477,6 +477,8 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 	if_member("ClassNN", P_ClassNN)
 	if_member("Text", P_Text)
 	if_member("Value", P_Value)
+	if_member("Pos", P_Pos)
+	if_member("Position", P_Pos)
 	if_member("Enabled", P_Enabled)
 	if_member("Visible", P_Visible)
 	else if (type == GUI_CONTROL_TAB)
@@ -576,6 +578,55 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 				return INVOKE_NOT_HANDLED; // TODO
 			else
 				return gui->ControlGetContents(aResultToken, *this, member == P_Text);
+
+		case P_Pos:
+		{
+			if (IS_INVOKE_SET)
+				return INVOKE_NOT_HANDLED; // TODO: maybe redirect to ctrl.Move(value)?
+
+			RECT rect;
+			GetWindowRect(hwnd, &rect);
+			POINT pt = {rect.left, rect.top};
+			ScreenToClient(gui->mHwnd, &pt);  // Failure seems too rare to check for.
+
+			ExprTokenType tok[8];
+			ExprTokenType* param[8] = { tok+0, tok+1, tok+2, tok+3, tok+4, tok+5, tok+6, tok+7 };
+			tok[0].symbol = SYM_STRING;  tok[0].marker = _T("x");
+			tok[1].symbol = SYM_INTEGER; tok[1].value_int64 = gui->Unscale(pt.x);
+			tok[2].symbol = SYM_STRING;  tok[2].marker = _T("y");
+			tok[3].symbol = SYM_INTEGER; tok[3].value_int64 = gui->Unscale(pt.y);
+			tok[4].symbol = SYM_STRING;  tok[4].marker = _T("w");
+			tok[5].symbol = SYM_INTEGER; tok[5].value_int64 = gui->Unscale(rect.right-rect.left);
+			tok[6].symbol = SYM_STRING;  tok[6].marker = _T("h");
+			tok[7].symbol = SYM_INTEGER; tok[7].value_int64 = gui->Unscale(rect.bottom-rect.top);
+			IObject* obj = Object::Create(param, 8);
+			if (!obj)
+				return g_script.ScriptError(ERR_OUTOFMEM); // Short msg since so rare.
+
+			aResultToken.symbol = SYM_OBJECT;
+			aResultToken.object = obj;
+			return OK;
+		}
+
+		case P_Enabled:
+		{
+			if (IS_INVOKE_SET)
+				return INVOKE_NOT_HANDLED; // TODO
+
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = IsWindowEnabled(hwnd) ? 1 : 0;
+			return OK;
+		}
+
+		case P_Visible:
+		{
+			if (IS_INVOKE_SET)
+				return INVOKE_NOT_HANDLED; // TODO
+
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = IsWindowVisible(hwnd) ? 1 : 0;
+			return OK;
+		}
 
 		case M_Tab_UseTab:
 		{
@@ -1466,120 +1517,6 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 		//InvalidateRect(control.hwnd, NULL, TRUE);
 		//InvalidateRect(tab_control->hwnd, NULL, TRUE);
 	}
-
-return_the_result:
-	DEPRIVATIZE_S_DEREF_BUF;
-	return result;
-
-error:
-	result = SetErrorLevelOrThrow();
-	goto return_the_result;
-}
-
-
-// Will be removed.
-ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
-{
-	Var &output_var = *OUTPUT_VAR;
-	GuiType *pgui = Script::ResolveGui(aCommand, aCommand);
-	GuiControlGetCmds guicontrolget_cmd = Line::ConvertGuiControlGetCmd(aCommand);
-	if (guicontrolget_cmd == GUICONTROLGET_CMD_INVALID)
-		// This is caught at load-time 99% of the time and can only occur here if the sub-command name
-		// or Gui name is contained in a variable reference.  Since it's so rare, the handling of it is
-		// debatable, but to keep it simple just set ErrorLevel:
-		return SetErrorLevelOrThrow();
-	if (!pgui)
-		// This departs from the tradition used by PerformGui() but since this type of error is rare,
-		// and since use ErrorLevel adds a little bit of flexibility (since the script's current thread
-		// is not unconditionally aborted), this seems best:
-		return SetErrorLevelOrThrow();
-	
-	GuiType &gui = *pgui;  // For performance.
-	if (!*aControlID) // In this case, default to the name of the output variable, as documented.
-		aControlID = output_var.mName;
-
-	// Beyond this point, errors are rare so set the default to "no error":
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-
-	PRIVATIZE_S_DEREF_BUF;  // GuiControlGet() needs this in case it triggers a callback in the script (e.g. subclassing). See also the comments in GuiControl().
-	ResultType result = OK; // Set default return value for use with all instances of "goto" further below.
-	// EVERYTHING below this point should use "result" and "goto return_the_result" instead of "return".
-
-	GuiIndexType control_index = gui.FindControl(aControlID);
-
-	// Fix for v1.1.03: Set output_var only after calling FindControl() so that something like the following will work:  ControlGet Control, Hwnd,, %Control%
-	if (guicontrolget_cmd != GUICONTROLGET_CMD_POS) // v1.0.46.09: Avoid resetting the variable for the POS mode, since it uses and array and the user might want the existing contents of the GUI variable retained.
-		output_var.Assign(); // Set default to be blank for all commands except POS, for consistency.
-
-	if (control_index >= gui.mControlCount) // Not found.
-		goto error;
-	GuiControlType &control = *gui.mControl[control_index];   // For performance and convenience.
-
-	switch(guicontrolget_cmd)
-	{
-	case GUICONTROLGET_CMD_POS:
-	{
-		// In this case, output_var itself is not used directly, but is instead used to:
-		// 1) Help performance by giving us the location in the linked list of variables of
-		//    where to find the X/Y/W/H "array elements".
-		// 2) Simplify the code by avoiding the need to classify GuiControlGet's param #1
-		//    as something that is only sometimes a variable.
-		RECT rect;
-		GetWindowRect(control.hwnd, &rect);
-		POINT pt = {rect.left, rect.top};
-		ScreenToClient(gui.mHwnd, &pt);  // Failure seems too rare to check for.
-		// Make it longer than Max var name so that FindOrAddVar() will be able to spot and report
-		// var names that are too long:
-		TCHAR var_name[MAX_VAR_NAME_LENGTH + 20];
-		Var *var;
-		if (   !(var = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sX"), output_var.mName)))   )
-		{
-			result = FAIL; // It will have already displayed the error.
-			goto return_the_result;
-		}
-		var->Assign(gui.Unscale(pt.x));
-		if (   !(var = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sY"), output_var.mName)))   )
-		{
-			result = FAIL; // It will have already displayed the error.
-			goto return_the_result;
-		}
-		var->Assign(gui.Unscale(pt.y));
-		if (   !(var = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sW"), output_var.mName)))   )
-		{
-			result = FAIL; // It will have already displayed the error.
-			goto return_the_result;
-		}
-		var->Assign(gui.Unscale(rect.right - rect.left));
-		if (   !(var = g_script.FindOrAddVar(var_name
-			, sntprintf(var_name, _countof(var_name), _T("%sH"), output_var.mName)))   )
-		{
-			result = FAIL; // It will have already displayed the error.
-			goto return_the_result;
-		}
-		result = var->Assign(gui.Unscale(rect.bottom - rect.top));
-		goto return_the_result;
-	}
-
-	case GUICONTROLGET_CMD_ENABLED:
-		// See commment below.
-		result = output_var.Assign(IsWindowEnabled(control.hwnd) ? 1 : 0); // Force pure boolean 0/1.
-		goto return_the_result;
-
-	case GUICONTROLGET_CMD_VISIBLE:
-		// From working on Window Spy, I seem to remember that IsWindowVisible() uses different standards
-		// for determining visibility than simply checking for WS_VISIBLE is the control and its parent
-		// window.  If so, it might be undocumented in MSDN.  It is mentioned here to explain why
-		// this "visible" sub-cmd is kept separate from some figure command such as "GuiControlGet, Out, Style":
-		// 1) The style method is cumbersome to script with since it requires bitwise operations afterward.
-		// 2) IsWindowVisible() uses a different standard of detection than simply checking WS_VISIBLE.
-		result = output_var.Assign(IsWindowVisible(control.hwnd) ? 1 : 0); // Force pure boolean 0/1.
-		goto return_the_result;
-	} // switch()
-
-	result = FAIL;  // Should never be reached, but avoids compiler warning and improves bug detection.
 
 return_the_result:
 	DEPRIVATIZE_S_DEREF_BUF;

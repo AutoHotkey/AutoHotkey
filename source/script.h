@@ -575,10 +575,6 @@ enum GuiControlCmds {GUICONTROL_CMD_INVALID, GUICONTROL_CMD_OPTIONS, GUICONTROL_
 	, GUICONTROL_CMD_FONT
 };
 
-enum GuiControlGetCmds {GUICONTROLGET_CMD_INVALID, GUICONTROLGET_CMD_POS
-	, GUICONTROLGET_CMD_ENABLED, GUICONTROLGET_CMD_VISIBLE
-};
-
 typedef UCHAR GuiControls;
 enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero due to things like ZeroMemory() on the struct.
 	, GUI_CONTROL_LABEL, GUI_CONTROL_PIC, GUI_CONTROL_GROUPBOX
@@ -725,8 +721,6 @@ private:
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	// Will be removed.
 	ResultType GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3);
-	// Will be removed.
-	ResultType GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3);
 	ResultType StatusBarGetText(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType StatusBarWait(LPTSTR aTextToWaitFor, LPTSTR aSeconds, LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
@@ -996,7 +990,6 @@ public:
 			case ACT_CONTROLGETFOCUS:
 			case ACT_CONTROLGETTEXT:
 			case ACT_CONTROLGET:
-			case ACT_GUICONTROLGET:
 			case ACT_STATUSBARGETTEXT:
 			case ACT_INPUTBOX:
 			case ACT_RANDOM:
@@ -1392,15 +1385,6 @@ public:
 		if (!_tcsnicmp(aBuf, _T("Hide"), 4)) return invert ? GUICONTROL_CMD_SHOW : GUICONTROL_CMD_HIDE;
 
 		return GUICONTROL_CMD_INVALID;
-	}
-
-	// Will be removed.
-	static GuiControlGetCmds ConvertGuiControlGetCmd(LPTSTR aBuf)
-	{
-		if (!_tcsicmp(aBuf, _T("Pos"))) return GUICONTROLGET_CMD_POS;
-		if (!_tcsicmp(aBuf, _T("Enabled"))) return GUICONTROLGET_CMD_ENABLED;
-		if (!_tcsicmp(aBuf, _T("Visible"))) return GUICONTROLGET_CMD_VISIBLE;
-		return GUICONTROLGET_CMD_INVALID;
 	}
 
 	static GuiControls ConvertGuiControl(LPTSTR aBuf)
@@ -2280,6 +2264,7 @@ struct GuiControlType : public ObjectBase
 		P_ClassNN,
 		P_Text,
 		P_Value,
+		P_Pos,
 		P_Enabled,
 		P_Visible,
 	};
