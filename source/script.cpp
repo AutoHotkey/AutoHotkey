@@ -5390,9 +5390,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 			case GUICONTROL_CMD_CONTENTS:
 			case GUICONTROL_CMD_TEXT:
-			case GUICONTROL_CMD_MOVEDRAW:
 				break; // Do nothing for the above commands since Param3 is optional.
-			case GUICONTROL_CMD_MOVE:
 			case GUICONTROL_CMD_CHOOSE:
 			case GUICONTROL_CMD_CHOOSESTRING:
 				if (!*new_raw_arg3)

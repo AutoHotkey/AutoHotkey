@@ -474,6 +474,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 #define if_member(s,e) else if (!_tcsicmp(name, _T(s))) member = e;
 	if_member("Opt", M_Options)
 	if_member("Options", M_Options)
+	if_member("Move", M_Move)
 	if_member("Focus", M_Focus)
 	if_member("Hwnd", P_Handle)
 	if_member("Gui", P_Gui)
@@ -550,6 +551,9 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 		case M_Focus:
 			SetFocus(hwnd);
 			return OK;
+
+		case M_Move:
+			return gui->ControlMove(*this, ParamIndexToOptionalString(0), (bool)ParamIndexToOptionalType(BOOL,1,FALSE));
 
 		case P_Handle:
 			if (IS_INVOKE_SET)
@@ -800,6 +804,87 @@ void GuiType::ControlSetVisible(GuiControlType &aControl, bool bVisible)
 		// Update the control so that its current tab's controls will all be shown or hidden (now
 		// that the tab control itself has just been shown or hidden):
 		ControlUpdateCurrentTab(aControl, false);
+}
+
+
+ResultType GuiType::ControlMove(GuiControlType &aControl, LPTSTR aPos, bool bDraw)
+{
+	RECT rect;
+	int xpos = COORD_UNSPECIFIED;
+	int ypos = COORD_UNSPECIFIED;
+	int width = COORD_UNSPECIFIED;
+	int height = COORD_UNSPECIFIED;
+
+	for (LPTSTR cp = aPos; *cp; ++cp)
+	{
+		switch(ctoupper(*cp))
+		{
+		// For options such as W, H, X and Y:
+		// Use _ttoi() vs. ATOI() to avoid interpreting something like 0x01B as hex when in fact
+		// the B was meant to be an option letter (though in this case, none of the hex digits are
+		// currently used as option letters):
+		case 'W':
+			width = Scale(_ttoi(cp + 1));
+			break;
+		case 'H':
+			height = Scale(_ttoi(cp + 1));
+			break;
+		case 'X':
+			xpos = Scale(_ttoi(cp + 1));
+			break;
+		case 'Y':
+			ypos = Scale(_ttoi(cp + 1));
+			break;
+		}
+	}
+
+	GetWindowRect(aControl.hwnd, &rect); // Failure seems too rare to check for.
+	POINT dest_pt = {rect.left, rect.top};
+	ScreenToClient(mHwnd, &dest_pt); // Set default x/y target position, to be possibly overridden below.
+	if (xpos != COORD_UNSPECIFIED)
+		dest_pt.x = xpos;
+	if (ypos != COORD_UNSPECIFIED)
+		dest_pt.y = ypos;
+
+	if (!MoveWindow(aControl.hwnd, dest_pt.x, dest_pt.y
+		, width == COORD_UNSPECIFIED ? rect.right - rect.left : width
+		, height == COORD_UNSPECIFIED ? rect.bottom - rect.top : height
+		, TRUE))  // Do repaint.
+		return g_script.ScriptError(_T("Can't move control.")); // Short msg since so rare.
+
+	// Note that GUI_CONTROL_UPDOWN has no special handling here.  This is because unlike slider buddies,
+	// whose only purpose is to label the control, an up-down's is also content-linked to it, so the
+	// inability to move the up-down to separate it from its buddy would be a loss of flexibility.  For
+	// this reason and also to reduce code size, the control is not re-buddied to snap them together.
+	if (aControl.type == GUI_CONTROL_SLIDER) // It seems buddies don't move automatically, so trigger the move.
+	{
+		HWND buddy1 = (HWND)SendMessage(aControl.hwnd, TBM_GETBUDDY, TRUE, 0);
+		HWND buddy2 = (HWND)SendMessage(aControl.hwnd, TBM_GETBUDDY, FALSE, 0);
+		if (buddy1)
+		{
+			SendMessage(aControl.hwnd, TBM_SETBUDDY, TRUE, (LPARAM)buddy1);
+			// It doesn't always redraw the buddies correctly, at least on XP, so do it manually:
+			InvalidateRect(buddy1, NULL, TRUE);
+		}
+		if (buddy2)
+		{
+			SendMessage(aControl.hwnd, TBM_SETBUDDY, FALSE, (LPARAM)buddy2);
+			InvalidateRect(buddy2, NULL, TRUE);
+		}
+	}
+
+	// v1.0.41.02: To prevent severe flickering when resizing ListViews and other controls,
+	// the MOVE mode now avoids doing the invalidate-rect, but the MOVEDRAW mode does do it.
+	if (bDraw)
+	{
+		// This must be done, at least in cases such as GroupBox under certain themes/conditions.
+		// More than just control.hwnd must be invalided, otherwise the interior of the GroupBox retains
+		// a ghost image of whatever was in it before the move:
+		GetWindowRect(aControl.hwnd, &rect); // Limit it to only that part of the client area that is receiving the rect.
+		MapWindowPoints(NULL, mHwnd, (LPPOINT)&rect, 2); // Convert rect to client coordinates (not the same as GetClientRect()).
+		InvalidateRect(mHwnd, &rect, TRUE); // Seems safer to use TRUE, not knowing all possible overlaps, etc.
+	}
+	return OK;
 }
 
 
@@ -1271,86 +1356,6 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 		if (do_redraw_unconditionally)
 			break;
 		goto return_the_result;
-
-	case GUICONTROL_CMD_MOVE:
-	case GUICONTROL_CMD_MOVEDRAW:
-	{
-		int xpos = COORD_UNSPECIFIED;
-		int ypos = COORD_UNSPECIFIED;
-		int width = COORD_UNSPECIFIED;
-		int height = COORD_UNSPECIFIED;
-
-		for (LPTSTR cp = aParam3; *cp; ++cp)
-		{
-			switch(ctoupper(*cp))
-			{
-			// For options such as W, H, X and Y:
-			// Use _ttoi() vs. ATOI() to avoid interpreting something like 0x01B as hex when in fact
-			// the B was meant to be an option letter (though in this case, none of the hex digits are
-			// currently used as option letters):
-			case 'W':
-				width = gui.Scale(_ttoi(cp + 1));
-				break;
-			case 'H':
-				height = gui.Scale(_ttoi(cp + 1));
-				break;
-			case 'X':
-				xpos = gui.Scale(_ttoi(cp + 1));
-				break;
-			case 'Y':
-				ypos = gui.Scale(_ttoi(cp + 1));
-				break;
-			}
-		}
-
-		GetWindowRect(control.hwnd, &rect); // Failure seems too rare to check for.
-		POINT dest_pt = {rect.left, rect.top};
-		ScreenToClient(gui.mHwnd, &dest_pt); // Set default x/y target position, to be possibly overridden below.
-		if (xpos != COORD_UNSPECIFIED)
-			dest_pt.x = xpos;
-		if (ypos != COORD_UNSPECIFIED)
-			dest_pt.y = ypos;
-
-		if (!MoveWindow(control.hwnd, dest_pt.x, dest_pt.y
-			, width == COORD_UNSPECIFIED ? rect.right - rect.left : width
-			, height == COORD_UNSPECIFIED ? rect.bottom - rect.top : height
-			, TRUE))  // Do repaint.
-			goto error;
-
-		// Note that GUI_CONTROL_UPDOWN has no special handling here.  This is because unlike slider buddies,
-		// whose only purpose is to label the control, an up-down's is also content-linked to it, so the
-		// inability to move the up-down to separate it from its buddy would be a loss of flexibility.  For
-		// this reason and also to reduce code size, the control is not re-buddied to snap them together.
-		if (control.type == GUI_CONTROL_SLIDER) // It seems buddies don't move automatically, so trigger the move.
-		{
-			HWND buddy1 = (HWND)SendMessage(control.hwnd, TBM_GETBUDDY, TRUE, 0);
-			HWND buddy2 = (HWND)SendMessage(control.hwnd, TBM_GETBUDDY, FALSE, 0);
-			if (buddy1)
-			{
-				SendMessage(control.hwnd, TBM_SETBUDDY, TRUE, (LPARAM)buddy1);
-				// It doesn't always redraw the buddies correctly, at least on XP, so do it manually:
-				InvalidateRect(buddy1, NULL, TRUE);
-			}
-			if (buddy2)
-			{
-				SendMessage(control.hwnd, TBM_SETBUDDY, FALSE, (LPARAM)buddy2);
-				InvalidateRect(buddy2, NULL, TRUE);
-			}
-		}
-
-		// v1.0.41.02: To prevent severe flickering when resizing ListViews and other controls,
-		// the MOVE mode now avoids doing the invalidate-rect, but the MOVEDRAW mode does do it.
-		if (guicontrol_cmd == GUICONTROL_CMD_MOVEDRAW)
-		{
-			// This must be done, at least in cases such as GroupBox under certain themes/conditions.
-			// More than just control.hwnd must be invalided, otherwise the interior of the GroupBox retains
-			// a ghost image of whatever was in it before the move:
-			GetWindowRect(control.hwnd, &rect); // Limit it to only that part of the client area that is receiving the rect.
-			MapWindowPoints(NULL, gui.mHwnd, (LPPOINT)&rect, 2); // Convert rect to client coordinates (not the same as GetClientRect()).
-			InvalidateRect(gui.mHwnd, &rect, TRUE); // Seems safer to use TRUE, not knowing all possible overlaps, etc.
-		}
-		goto return_the_result;
-	}
 
 	case GUICONTROL_CMD_CHOOSE:
 	case GUICONTROL_CMD_CHOOSESTRING:
