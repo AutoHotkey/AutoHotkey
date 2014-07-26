@@ -472,6 +472,8 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 		return g_script.ScriptError(_T("The control is destroyed."));
 
 #define if_member(s,e) else if (!_tcsicmp(name, _T(s))) member = e;
+	if_member("Opt", M_Options)
+	if_member("Options", M_Options)
 	if_member("Hwnd", P_Handle)
 	if_member("Gui", P_Gui)
 	if_member("ClassNN", P_ClassNN)
@@ -537,6 +539,13 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 
 	switch (member)
 	{
+		case M_Options:
+		{
+			GuiControlOptionsType go; // Its contents not currently used here, but it might be in the future.
+			gui->ControlInitOptions(go, *this);
+			return gui->ControlParseOptions(ParamIndexToOptionalString(0), go, *this, GUI_HWND_TO_INDEX(hwnd));
+		}
+
 		case P_Handle:
 			if (IS_INVOKE_SET)
 				return INVOKE_NOT_HANDLED;
@@ -761,14 +770,6 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 
 	switch (guicontrol_cmd)
 	{
-
-	case GUICONTROL_CMD_OPTIONS:
-	{
-		GuiControlOptionsType go; // Its contents not currently used here, but it might be in the future.
-		gui.ControlInitOptions(go, control);
-		result = gui.ControlParseOptions(aCommand, go, control, control_index);
-		goto return_the_result;
-	}
 
 	case GUICONTROL_CMD_CONTENTS:
 	case GUICONTROL_CMD_TEXT:
