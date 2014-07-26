@@ -475,6 +475,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 	if_member("Opt", M_Options)
 	if_member("Options", M_Options)
 	if_member("Move", M_Move)
+	if_member("UpdateFont", M_UpdateFont)
 	if_member("Focus", M_Focus)
 	if_member("Hwnd", P_Handle)
 	if_member("Gui", P_Gui)
@@ -550,6 +551,10 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 
 		case M_Focus:
 			SetFocus(hwnd);
+			return OK;
+
+		case M_UpdateFont:
+			gui->ControlUpdateFont(*this);
 			return OK;
 
 		case M_Move:
@@ -885,6 +890,36 @@ ResultType GuiType::ControlMove(GuiControlType &aControl, LPTSTR aPos, bool bDra
 		InvalidateRect(mHwnd, &rect, TRUE); // Seems safer to use TRUE, not knowing all possible overlaps, etc.
 	}
 	return OK;
+}
+
+
+void GuiType::ControlUpdateFont(GuiControlType &aControl)
+{
+	// Done regardless of USES_FONT_AND_TEXT_COLOR to allow future OSes or common control updates
+	// to be given an explicit font, even though it would have no effect currently:
+	SendMessage(aControl.hwnd, WM_SETFONT, (WPARAM)sFont[mCurrentFontIndex].hfont, 0);
+	if (USES_FONT_AND_TEXT_COLOR(aControl.type)) // Must check this to avoid corrupting union_hbitmap.
+	{
+		if (aControl.type != GUI_CONTROL_LISTVIEW) // Must check this to avoid corrupting union col attribs.
+			aControl.union_color = mCurrentColor; // Used by WM_CTLCOLORSTATIC et. al. for some types of controls.
+		switch (aControl.type)
+		{
+		case GUI_CONTROL_LISTVIEW:
+			ListView_SetTextColor(aControl.hwnd, mCurrentColor); // Must use mCurrentColor not aControl.union_color, see above.
+			break;
+		case GUI_CONTROL_TREEVIEW:
+			TreeView_SetTextColor(aControl.hwnd, mCurrentColor);
+			break;
+		case GUI_CONTROL_DATETIME:
+			// Since message MCM_SETCOLOR != DTM_SETMCCOLOR, can't combine the two types:
+			DateTime_SetMonthCalColor(aControl.hwnd, MCSC_TEXT, mCurrentColor); // Hopefully below will revert to default if color is CLR_DEFAULT.
+			break;
+		case GUI_CONTROL_MONTHCAL:
+			MonthCal_SetColor(aControl.hwnd, MCSC_TEXT, mCurrentColor); // Hopefully below will revert to default if color is CLR_DEFAULT.
+			break;
+		}
+	}
+	InvalidateRect(aControl.hwnd, NULL, TRUE); // Required for refresh, at least for edit controls, probably some others.
 }
 
 
@@ -1479,36 +1514,6 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			SendMessage(gui.mHwnd, WM_COMMAND, (WPARAM)MAKELONG(control_id, y_msg), (LPARAM)control.hwnd);
 		goto return_the_result;
 	} // case
-
-	case GUICONTROL_CMD_FONT:
-		// Done regardless of USES_FONT_AND_TEXT_COLOR to allow future OSes or common control updates
-		// to be given an explicit font, even though it would have no effect currently:
-		SendMessage(control.hwnd, WM_SETFONT, (WPARAM)gui.sFont[gui.mCurrentFontIndex].hfont, 0);
-		if (USES_FONT_AND_TEXT_COLOR(control.type)) // Must check this to avoid corrupting union_hbitmap.
-		{
-			if (control.type != GUI_CONTROL_LISTVIEW) // Must check this to avoid corrupting union col attribs.
-				control.union_color = gui.mCurrentColor; // Used by WM_CTLCOLORSTATIC et. al. for some types of controls.
-			switch (control.type)
-			{
-			case GUI_CONTROL_LISTVIEW:
-				ListView_SetTextColor(control.hwnd, gui.mCurrentColor); // Must use gui.mCurrentColor not control.union_color, see above.
-				break;
-			case GUI_CONTROL_TREEVIEW:
-				TreeView_SetTextColor(control.hwnd, gui.mCurrentColor);
-				break;
-			case GUI_CONTROL_DATETIME:
-				// Since message MCM_SETCOLOR != DTM_SETMCCOLOR, can't combine the two types:
-				DateTime_SetMonthCalColor(control.hwnd, MCSC_TEXT, gui.mCurrentColor); // Hopefully below will revert to default if color is CLR_DEFAULT.
-				break;
-			case GUI_CONTROL_MONTHCAL:
-				MonthCal_SetColor(control.hwnd, MCSC_TEXT, gui.mCurrentColor); // Hopefully below will revert to default if color is CLR_DEFAULT.
-				break;
-			}
-		}
-		InvalidateRect(control.hwnd, NULL, TRUE); // Required for refresh, at least for edit controls, probably some others.
-		// Note: The DateTime_SetMonthCalFont() macro is not used for GUI_CONTROL_DATETIME because
-		// WM_SETFONT+InvalidateRect() above appear to be sufficient for it too.
-		goto return_the_result;
 	} // switch()
 
 	// If the above didn't return, it wants this check:
