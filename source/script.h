@@ -2890,21 +2890,8 @@ BIF_DECL(BIF_ObjIncDec); // Pseudo-operator.
 BIF_DECL(BIF_ObjAddRefRelease);
 BIF_DECL(BIF_ObjRawSet);
 // Built-ins also available as methods -- these are available as functions for use primarily by overridden methods (i.e. where using the built-in methods isn't possible as they're no longer accessible).
-BIF_DECL(BIF_ObjInsertAt);
-BIF_DECL(BIF_ObjPush);
-BIF_DECL(BIF_ObjPop);
-BIF_DECL(BIF_ObjRemove);
-BIF_DECL(BIF_ObjRemoveAt);
-BIF_DECL(BIF_ObjRemoveRange);
-BIF_DECL(BIF_ObjRemoveRangeAt);
-BIF_DECL(BIF_ObjGetCapacity);
-BIF_DECL(BIF_ObjSetCapacity);
-BIF_DECL(BIF_ObjGetAddress);
-BIF_DECL(BIF_ObjMaxIndex);
-BIF_DECL(BIF_ObjMinIndex);
+BIF_DECL(BIF_ObjXXX);
 BIF_DECL(BIF_ObjNewEnum);
-BIF_DECL(BIF_ObjHasKey);
-BIF_DECL(BIF_ObjClone);
 
 
 // Advanced file IO interfaces

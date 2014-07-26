@@ -449,36 +449,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			if (IS_INVOKE_CALL)
 			{
 				// Since above has not handled this call and no field exists, check for built-in methods.
-				LPTSTR name = key.s;
-				++aParam; --aParamCount; // Exclude the method identifier.  A prior check ensures there was at least one param in this case.
-				if (!_tcsicmp(name, _T("InsertAt")))
-					return _InsertAt(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("Push")))
-					return _Push(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("Pop")))
-					return _Pop(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("RemoveAt")))
-					return _RemoveAt(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("Remove")))
-					return _Remove(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("HasKey")))
-					return _HasKey(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("MaxIndex")))
-					return _MaxIndex(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("_NewEnum")))
-					return _NewEnum(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("GetAddress")))
-					return _GetAddress(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("SetCapacity")))
-					return _SetCapacity(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("GetCapacity")))
-					return _GetCapacity(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("MinIndex")))
-					return _MinIndex(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("Clone")))
-					return _Clone(aResultToken, aParam, aParamCount);
-				// For maintainability: explicitly return since above has done ++aParam, --aParamCount.
-				return INVOKE_NOT_HANDLED;
+				return CallBuiltin(key.s, aResultToken, aParam + 1, aParamCount - 1); // +/- 1 to exclude the method identifier.
 			}
 			//
 			// BUILT-IN "BASE" PROPERTY
@@ -645,6 +616,63 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	}
 
 	// Fell through from one of the sections above: invocation was not handled.
+	return INVOKE_NOT_HANDLED;
+}
+
+
+ResultType Object::CallBuiltin(LPCTSTR aName, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	switch (toupper(*aName))
+	{
+	case 'I':
+		if (!_tcsicmp(aName, _T("InsertAt")))
+			return _InsertAt(aResultToken, aParam, aParamCount);
+		break;
+	case 'P':
+		if (!_tcsicmp(aName, _T("Push")))
+			return _Push(aResultToken, aParam, aParamCount);
+		if (!_tcsicmp(aName, _T("Pop")))
+			return _Pop(aResultToken, aParam, aParamCount);
+		break;
+	case 'R':
+		if (!_tcsnicmp(aName, _T("Remove"), 6))
+		{
+			aName += 6;
+			if (!*aName)
+				return _Remove(aResultToken, aParam, aParamCount);
+			if (!_tcsicmp(aName, _T("At")))
+				return _RemoveAt(aResultToken, aParam, aParamCount);
+		}
+		break;
+	case 'H':
+		if (!_tcsicmp(aName, _T("HasKey")))
+			return _HasKey(aResultToken, aParam, aParamCount);
+		break;
+	case 'M':
+		if (!_tcsicmp(aName, _T("MaxIndex")))
+			return _MaxIndex(aResultToken, aParam, aParamCount);
+		if (!_tcsicmp(aName, _T("MinIndex")))
+			return _MinIndex(aResultToken, aParam, aParamCount);
+		break;
+	case '_':
+		if (!_tcsicmp(aName, _T("_NewEnum")))
+			return _NewEnum(aResultToken, aParam, aParamCount);
+		break;
+	case 'G':
+		if (!_tcsicmp(aName, _T("GetAddress")))
+			return _GetAddress(aResultToken, aParam, aParamCount);
+		if (!_tcsicmp(aName, _T("GetCapacity")))
+			return _GetCapacity(aResultToken, aParam, aParamCount);
+		break;
+	case 'S':
+		if (!_tcsicmp(aName, _T("SetCapacity")))
+			return _SetCapacity(aResultToken, aParam, aParamCount);
+		break;
+	case 'C':
+		if (!_tcsicmp(aName, _T("Clone")))
+			return _Clone(aResultToken, aParam, aParamCount);
+		break;
+	}
 	return INVOKE_NOT_HANDLED;
 }
 

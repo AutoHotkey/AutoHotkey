@@ -282,6 +282,8 @@ public:
 	
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
+	ResultType CallBuiltin(LPCTSTR aMethod, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+
 	ResultType _InsertAt(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _Push(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	

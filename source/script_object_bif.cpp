@@ -370,32 +370,31 @@ BIF_DECL(BIF_ObjIncDec)
 // Functions for accessing built-in methods (even if obscured by a user-defined method).
 //
 
-#define BIF_METHOD(name) \
-BIF_DECL(BIF_Obj##name) \
-{ \
-	aResultToken.symbol = SYM_STRING; \
-	aResultToken.marker = _T(""); \
-	\
-	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0])); \
-	if (obj) \
-		obj->_##name(aResultToken, aParam + 1, aParamCount - 1); \
-	else \
-		aResult = g_script.ScriptError(ERR_PARAM1_INVALID); \
+BIF_DECL(BIF_ObjXXX)
+{
+	LPTSTR method_name = aResultToken.marker + 3;
+
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+	
+	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
+	if (obj)
+		aResult = obj->CallBuiltin(method_name, aResultToken, aParam + 1, aParamCount - 1);
+	else
+		aResult = g_script.ScriptError(ERR_NO_OBJECT);
 }
 
-BIF_METHOD(InsertAt)
-BIF_METHOD(Push)
-BIF_METHOD(Pop)
-BIF_METHOD(Remove)
-BIF_METHOD(RemoveAt)
-BIF_METHOD(GetCapacity)
-BIF_METHOD(SetCapacity)
-BIF_METHOD(GetAddress)
-BIF_METHOD(MaxIndex)
-BIF_METHOD(MinIndex)
-BIF_METHOD(NewEnum)
-BIF_METHOD(HasKey)
-BIF_METHOD(Clone)
+BIF_DECL(BIF_ObjNewEnum)
+{
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+	
+	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
+	if (obj)
+		aResult = obj->_NewEnum(aResultToken, NULL, 0); // Parameters are ignored.
+	else
+		aResult = g_script.ScriptError(ERR_NO_OBJECT);
+}
 
 
 //
