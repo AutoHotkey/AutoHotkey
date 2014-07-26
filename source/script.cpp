@@ -5425,11 +5425,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				if (*new_raw_arg4) // Currently true for all, since it's a FutureUse param.
 					return ScriptError(ERR_PARAM4_MUST_BE_BLANK, new_raw_arg4);
 			}
-			if (guicontrolget_cmd == GUICONTROLGET_CMD_FOCUS || guicontrolget_cmd == GUICONTROLGET_CMD_FOCUSV)
-			{
-				if (*new_raw_arg3)
-					return ScriptError(ERR_PARAM3_MUST_BE_BLANK, new_raw_arg3);
-			}
 			// else it can be optionally blank, in which case the output variable is used as the
 			// ControlID also.
 		}

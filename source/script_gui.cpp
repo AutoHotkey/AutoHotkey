@@ -61,6 +61,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 	if_member("Hwnd", P_Handle)
 	if_member("Title", P_Title)
 	if_member("Control", P_Control)
+	if_member("FocusedCtrl", P_FocusedCtrl)
 	if_member("Menu", P_Menu)
 	if_member("MarginX", P_MarginX)
 	if_member("MarginY", P_MarginY)
@@ -179,6 +180,9 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 		}
 		case P_Control:
 		{
+			if (IS_INVOKE_SET)
+				return INVOKE_NOT_HANDLED;
+
 			ExprTokenType& tok = *aParam[0];
 			GuiControlType* ctrl = NULL;
 			if (tok.symbol == SYM_INTEGER || tok.symbol == SYM_VAR && tok.var->IsPureNumeric() == SYM_INTEGER)
@@ -198,6 +202,21 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 			aResultToken.symbol = SYM_OBJECT;
 			aResultToken.object = ctrl;
 			aResultToken.object->AddRef();
+			return OK;
+		}
+		case P_FocusedCtrl:
+		{
+			if (IS_INVOKE_SET)
+				return INVOKE_NOT_HANDLED;
+
+			HWND hwnd = GetFocus();
+			GuiControlType* pcontrol = hwnd ? FindControl(hwnd) : NULL;
+			if (pcontrol)
+			{
+				aResultToken.symbol = SYM_OBJECT;
+				aResultToken.object = pcontrol;
+				aResultToken.object->AddRef();
+			}
 			return OK;
 		}
 		case P_MarginX:
@@ -1452,37 +1471,6 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 	PRIVATIZE_S_DEREF_BUF;  // GuiControlGet() needs this in case it triggers a callback in the script (e.g. subclassing). See also the comments in GuiControl().
 	ResultType result = OK; // Set default return value for use with all instances of "goto" further below.
 	// EVERYTHING below this point should use "result" and "goto return_the_result" instead of "return".
-
-	// Handle GUICONTROLGET_CMD_FOCUS(V) early since it doesn't need a specified ControlID:
-	if (guicontrolget_cmd == GUICONTROLGET_CMD_FOCUS || guicontrolget_cmd == GUICONTROLGET_CMD_FOCUSV)
-	{
-		output_var.Assign(); // Set default to be blank (in case of failure).
-		class_and_hwnd_type cah;
-		cah.hwnd = GetFocus();
-		GuiControlType *pcontrol;
-		if (!cah.hwnd || !(pcontrol = gui.FindControl(cah.hwnd))) // Relies on short-circuit boolean order.
-			goto error;
-		TCHAR focused_control[WINDOW_CLASS_SIZE];
-		if (guicontrolget_cmd == GUICONTROLGET_CMD_FOCUSV) // v1.0.43.06.
-			// GUI_HWND_TO_INDEX vs FindControl() is enough because FindControl() was already called above:
-			GuiType::ControlGetName(pgui, GUI_HWND_TO_INDEX(pcontrol->hwnd), focused_control);
-		else // GUICONTROLGET_CMD_FOCUS (ClassNN mode)
-		{
-			// This section is the same as that in ControlGetFocus():
-			cah.class_name = focused_control;
-			if (!GetClassName(cah.hwnd, focused_control, _countof(focused_control) - 5)) // -5 to allow room for sequence number.
-				goto error;
-			cah.class_count = 0;  // Init for the below.
-			cah.is_found = false; // Same.
-			EnumChildWindows(gui.mHwnd, EnumChildFindSeqNum, (LPARAM)&cah);
-			if (!cah.is_found) // Should be impossible due to FindControl() having already found it above.
-				goto error;
-			// Append the class sequence number onto the class name set the output param to be that value:
-			sntprintfcat(focused_control, _countof(focused_control), _T("%d"), cah.class_count);
-		}
-		result = output_var.Assign(focused_control); // And leave ErrorLevel set to NONE.
-		goto return_the_result;
-	}
 
 	GuiIndexType control_index = gui.FindControl(aControlID);
 
@@ -6770,41 +6758,6 @@ ResultType GuiType::Escape() // Similar to close, except typically called when t
 	// MsgSleep() is not done because "case AHK_GUI_ACTION" in GuiWindowProc() takes care of it.
 	// See its comments for why.
 	return OK;
-}
-
-
-
-VarSizeType GuiType::ControlGetName(GuiType *aGuiWindow, GuiIndexType aControlIndex, LPTSTR aBuf)
-// Caller has ensured that aGuiWindowIndex is less than MAX_GUI_WINDOWS.
-// We're returning the length of the var's contents, not the size.
-{
-	// Relies on short-circuit boolean order:
-	if (aControlIndex >= MAX_CONTROLS_PER_GUI // Must check this first due to short-circuit boolean.  A non-GUI thread or one triggered by GuiClose/Escape or Gui menu bar.
-		|| !(aGuiWindow && aGuiWindow->mHwnd) // Gui Window no longer exists.
-		|| aControlIndex >= aGuiWindow->mControlCount) // Gui control no longer exists, perhaps because window was destroyed and recreated with fewer controls.
-	{
-		if (aBuf)
-			*aBuf = '\0';
-		return 0;
-	}
-	GuiControlType &control = *aGuiWindow->mControl[aControlIndex]; // For performance and convenience.
-    if (aBuf)
-	{
-		// Caller has already ensured aBuf is large enough.
-		//if (control.output_var)
-		//	return (VarSizeType)_tcslen(_tcscpy(aBuf, control.output_var->mName));
-		//else // Fall back to getting the leading characters of its caption (most often used for buttons).
-			#define A_GUICONTROL_TEXT_LENGTH (MAX_ALLOC_SIMPLE - 1)
-			return GetWindowText(control.hwnd, aBuf, A_GUICONTROL_TEXT_LENGTH + 1); // +1 is verified correct.
-			// Above: some callers don't call for a length estimate first, so they might rely on size never getting
-			// larger than the above.
-	}
-	// Otherwise, just return the length:
-	//if (control.output_var)
-	//	return (VarSizeType)_tcslen(control.output_var->mName);
-	// Otherwise: Fall back to getting the leading characters of its caption (most often used for buttons)
-	VarSizeType length = GetWindowTextLength(control.hwnd);
-	return (length > A_GUICONTROL_TEXT_LENGTH) ? A_GUICONTROL_TEXT_LENGTH : length;
 }
 
 

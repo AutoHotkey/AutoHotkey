@@ -576,7 +576,7 @@ enum GuiControlCmds {GUICONTROL_CMD_INVALID, GUICONTROL_CMD_OPTIONS, GUICONTROL_
 };
 
 enum GuiControlGetCmds {GUICONTROLGET_CMD_INVALID, GUICONTROLGET_CMD_CONTENTS, GUICONTROLGET_CMD_POS
-	, GUICONTROLGET_CMD_FOCUS, GUICONTROLGET_CMD_FOCUSV, GUICONTROLGET_CMD_ENABLED, GUICONTROLGET_CMD_VISIBLE
+	, GUICONTROLGET_CMD_ENABLED, GUICONTROLGET_CMD_VISIBLE
 };
 
 typedef UCHAR GuiControls;
@@ -1399,8 +1399,6 @@ public:
 	{
 		if (!*aBuf) return GUICONTROLGET_CMD_CONTENTS; // The implicit command when nothing was specified.
 		if (!_tcsicmp(aBuf, _T("Pos"))) return GUICONTROLGET_CMD_POS;
-		if (!_tcsicmp(aBuf, _T("Focus"))) return GUICONTROLGET_CMD_FOCUS;
-		if (!_tcsicmp(aBuf, _T("FocusV"))) return GUICONTROLGET_CMD_FOCUSV; // Returns variable vs. ClassNN.
 		if (!_tcsicmp(aBuf, _T("Enabled"))) return GUICONTROLGET_CMD_ENABLED;
 		if (!_tcsicmp(aBuf, _T("Visible"))) return GUICONTROLGET_CMD_VISIBLE;
 		return GUICONTROLGET_CMD_INVALID;
@@ -2409,6 +2407,7 @@ public:
 		P_Handle,
 		P_Title,
 		P_Control,
+		P_FocusedCtrl,
 		P_BgColor,
 		P_CtrlColor,
 		P_MarginX,
@@ -2499,8 +2498,6 @@ public:
 	ResultType Close(); // Due to SC_CLOSE, etc.
 	ResultType Escape(); // Similar to close, except typically called when the user presses ESCAPE.
 	ResultType ControlGetContents(Var &aOutputVar, GuiControlType &aControl, LPTSTR aMode = _T(""));
-
-	static VarSizeType ControlGetName(GuiType *aGuiWindow, GuiIndexType aControlIndex, LPTSTR aBuf);
 
 	static GuiType *FindGui(HWND aHwnd);
 	static GuiType *FindGuiParent(HWND aHwnd);
