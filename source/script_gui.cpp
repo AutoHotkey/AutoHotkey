@@ -474,12 +474,14 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 #define if_member(s,e) else if (!_tcsicmp(name, _T(s))) member = e;
 	if_member("Hwnd", P_Handle)
 	if_member("Gui", P_Gui)
+	if_member("ClassNN", P_ClassNN)
 	else if (type == GUI_CONTROL_TAB)
 	{
 		// Tab methods/properties
 		if (0) ((void)0);
 		if_member("UseTab", M_Tab_UseTab)
 	}
+#undef if_member
 	else if (type == GUI_CONTROL_LISTVIEW || type == GUI_CONTROL_TREEVIEW || type == GUI_CONTROL_STATUSBAR)
 	{
 		const GuiCtrlSpecialFuncInfo* func_info = NULL;
@@ -502,7 +504,6 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 		if (!func || aParamCount < func_info->min_params)
 			return INVOKE_NOT_HANDLED;
 	}
-#undef if_member
 
 	if (func)
 	{
@@ -543,6 +544,27 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 			aResultToken.object = gui;
 			aResultToken.object->AddRef();
 			return OK;
+		case P_ClassNN:
+		{
+			if (IS_INVOKE_SET)
+				return INVOKE_NOT_HANDLED;
+			class_and_hwnd_type cah;
+			cah.hwnd = hwnd;
+			cah.class_name = aResultToken.buf;
+			if (!GetClassName(cah.hwnd, cah.class_name, MAX_NUMBER_SIZE - 5)) // -5 to allow room for sequence number.
+				return g_script.ScriptError(_T("Class name too long.")); // Short msg since so rare.
+			cah.class_count = 0;  // Init for the below.
+			cah.is_found = false; // Same.
+			EnumChildWindows(gui->mHwnd, EnumChildFindSeqNum, (LPARAM)&cah);
+			if (!cah.is_found) // Should be impossible due to FindControl() having already found it above.
+				return g_script.ScriptError(_T("Cannot find control.")); // Short msg since so rare.
+			// Append the class sequence number onto the class name set the output param to be that value:
+			sntprintfcat(cah.class_name, MAX_NUMBER_SIZE, _T("%d"), cah.class_count);
+
+			aResultToken.symbol = SYM_STRING;
+			aResultToken.marker = cah.class_name;
+			return OK;
+		}
 
 		case M_Tab_UseTab:
 		{
@@ -1832,6 +1854,8 @@ int GuiType::CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam
 	else
 		aHandler.mFunc->Call(func_call, result, result_token, params+1, aParamCount);
 
+	if (result == EARLY_RETURN)
+		result = OK;
 	int ret = result == OK ? (int)TokenToInt64(result_token) : 0;
 	result_token.Free();
 	return ret;

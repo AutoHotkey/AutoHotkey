@@ -2278,6 +2278,7 @@ struct GuiControlType : public ObjectBase
 		// Properties
 		P_Handle,
 		P_Gui,
+		P_ClassNN,
 	};
 
 	void Destroy(); // Called by GuiType::Destroy().
