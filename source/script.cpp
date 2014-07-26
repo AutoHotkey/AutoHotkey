@@ -5373,31 +5373,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		}
 		break;
 
-	case ACT_GUICONTROL:
-		if (!*new_raw_arg2) // ControlID
-			return ScriptError(ERR_PARAM2_REQUIRED);
-		if (aArgc > 0 && !line.ArgHasDeref(1))
-		{
-			LPTSTR command, name;
-			ResolveGui(new_raw_arg1, command, &name);
-			if (!name)
-				return ScriptError(ERR_INVALID_GUI_NAME, new_raw_arg1);
-
-			GuiControlCmds guicontrol_cmd = line.ConvertGuiControlCmd(command);
-			switch (guicontrol_cmd)
-			{
-			case GUICONTROL_CMD_INVALID:
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-			case GUICONTROL_CMD_CONTENTS:
-			case GUICONTROL_CMD_TEXT:
-				break; // Do nothing for the above commands since Param3 is optional.
-			default: // All commands except the above should have a blank Text parameter.
-				if (*new_raw_arg3)
-					return ScriptError(ERR_PARAM3_MUST_BE_BLANK, new_raw_arg3);
-			}
-		}
-		break;
-
 	case ACT_DRIVE:
 		if (aArgc > 0 && !line.ArgHasDeref(1))
 		{
@@ -12856,9 +12831,6 @@ ResultType Line::Perform()
 
 	case ACT_MENU:
 		return g_script.PerformMenu(SIX_ARGS); // L17: Changed from FIVE_ARGS to access previously "reserved" arg (for use by Menu,,Icon).
-
-	case ACT_GUICONTROL:
-		return GuiControl(THREE_ARGS);
 
 	////////////////////////////////////////////////////////////////////////////////////////
 	// For these, it seems best not to report an error during runtime if there's

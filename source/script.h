@@ -200,7 +200,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_LINE_IN_CLASS_DEF _T("Not a valid method, class or property definition.")
 #define ERR_INVALID_LINE_IN_PROPERTY_DEF _T("Not a valid property getter/setter.")
 #define ERR_INVALID_GUI_NAME _T("Invalid Gui name.")
-#define ERR_INVALID_OPTION _T("Invalid option.") // Generic message used by Gui and GuiControl/Get.
+#define ERR_INVALID_OPTION _T("Invalid option.") // Generic message used by the Gui system.
 #define ERR_MUST_DECLARE _T("This variable must be declared.")
 #define ERR_REMOVE_THE_PERCENT _T("If this variable was not intended to be dynamic, remove the % symbols from it.")
 #define ERR_DYNAMIC_TOO_LONG _T("This dynamically built variable name is too long.  ") ERR_REMOVE_THE_PERCENT
@@ -569,9 +569,6 @@ enum BuiltInFunctionID {
 // (since an item can't be both selected an deselected simultaneously), one value in each pair is available
 // for future use such as LVIS_CUT.
 
-enum GuiControlCmds {GUICONTROL_CMD_INVALID, GUICONTROL_CMD_CONTENTS, GUICONTROL_CMD_TEXT
-};
-
 typedef UCHAR GuiControls;
 enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero due to things like ZeroMemory() on the struct.
 	, GUI_CONTROL_LABEL, GUI_CONTROL_PIC, GUI_CONTROL_GROUPBOX
@@ -716,8 +713,6 @@ private:
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlGet(LPTSTR aCommand, LPTSTR aValue, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	// Will be removed.
-	ResultType GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3);
 	ResultType StatusBarGetText(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType StatusBarWait(LPTSTR aTextToWaitFor, LPTSTR aSeconds, LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
@@ -1343,25 +1338,6 @@ public:
 		if (aNameLength)
 			*aNameLength = name_length;
 		aCommand = omit_leading_whitespace(colon_pos + 1);
-	}
-
-	// Will be removed.
-	static GuiControlCmds ConvertGuiControlCmd(LPTSTR aBuf)
-	{
-		// If it's blank without a deref, that's CONTENTS.  Otherwise, assume it's OPTIONS for better
-		// runtime flexibility (i.e. user can leave the variable blank to make the command do nothing).
-		// Fix for v1.0.40.11: Since the above is counterintuitive and undocumented, it has been fixed
-		// to behave the way most users would expect; that is, the contents of any deref in parameter 1
-		// will behave the same as when such contents is present literally as parameter 1.  Another
-		// reason for doing this is that otherwise, there is no way to specify the CONTENTS sub-command
-		// in a variable.  For example, the following wouldn't work:
-		// GuiControl, %WindowNumber%:, ...
-		// GuiControl, %WindowNumberWithColon%, ...
-		if (!*aBuf)
-			return GUICONTROL_CMD_CONTENTS;
-		if (!_tcsicmp(aBuf, _T("Text"))) return GUICONTROL_CMD_TEXT;
-
-		return GUICONTROL_CMD_INVALID;
 	}
 
 	static GuiControls ConvertGuiControl(LPTSTR aBuf)
@@ -2502,6 +2478,7 @@ public:
 
 	static WORD TextToHotkey(LPTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
+	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, bool bText);
 	void ControlSetEnabled(GuiControlType &aControl, bool bEnabled);
 	void ControlSetVisible(GuiControlType &aControl, bool bVisible);
 	ResultType ControlMove(GuiControlType &aControl, LPTSTR aPos, bool bDraw);
@@ -2730,9 +2707,6 @@ public:
 					return mi;
 		return NULL;
 	}
-
-	// Will be removed.
-	static GuiType *ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName = NULL, size_t *aNameLength = NULL);
 
 	// Call this SciptError to avoid confusion with Line's error-displaying functions:
 	ResultType ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T("")); // , ResultType aErrorType = FAIL);
