@@ -620,7 +620,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 		case P_Enabled:
 		{
 			if (IS_INVOKE_SET)
-				return INVOKE_NOT_HANDLED; // TODO
+				gui->ControlSetEnabled(*this, (bool)ParamIndexToBOOL(0));
 
 			aResultToken.symbol = SYM_INTEGER;
 			aResultToken.value_int64 = IsWindowEnabled(hwnd) ? 1 : 0;
@@ -630,7 +630,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 		case P_Visible:
 		{
 			if (IS_INVOKE_SET)
-				return INVOKE_NOT_HANDLED; // TODO
+				gui->ControlSetVisible(*this, (bool)ParamIndexToBOOL(0));
 
 			aResultToken.symbol = SYM_INTEGER;
 			aResultToken.value_int64 = IsWindowVisible(hwnd) ? 1 : 0;
@@ -717,6 +717,84 @@ ResultType GuiType::SetMenu(LPTSTR aMenuName)
 	else
 		RemoveAccelerators();
 	return OK;
+}
+
+
+void GuiType::ControlSetEnabled(GuiControlType &aControl, bool bEnabled)
+{
+	GuiControlType *tab_control;
+	int selection_index;
+
+	// GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED is maintained for use with tab controls.  It allows controls
+	// on inactive tabs to be marked for later enabling.  It also allows explicitly disabled controls to
+	// stay disabled even when their tab/page becomes active. It is updated unconditionally for simplicity
+	// and maintainability.  
+	if (bEnabled)
+		aControl.attrib &= ~GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED;
+	else
+		aControl.attrib |= GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED;
+	if (tab_control = FindTabControl(aControl.tab_control_index)) // It belongs to a tab control that already exists.
+	{
+		if (GetWindowLong(tab_control->hwnd, GWL_STYLE) & WS_DISABLED) // But its tab control is disabled...
+			return;
+		selection_index = TabCtrl_GetCurSel(tab_control->hwnd);
+		if (selection_index != aControl.tab_index && selection_index != -1)
+			// There is no current tab/page or the one selected is not this control's:
+			// Do not disable or re-enable the control in this case.
+			// v1.0.48.04: Above now also checks for -1, which is a tab control containing zero tabs/pages.
+			// The controls on such a tab control might be wrongly/inadvertently visible because
+			// ControlUpdateCurrentTab() isn't capable of handling that situation.  Since fixing
+			// ControlUpdateCurrentTab() would reduce backward compatibility -- and in case anyone is
+			// using tabless tab controls for anything -- it seems best to allow these "wrongly visible"
+			// controls to be explicitly manipulated by GuiControl Enable/Disable and Hide/Show.
+			return;
+	}
+		
+	// L23: Restrict focus workaround to when the control is/was actually focused. Fixes a bug introduced by L13: enabling or disabling a control caused the active Edit control to reselect its text.
+	bool gui_control_was_focused = GetForegroundWindow() == mHwnd && GetFocus() == aControl.hwnd;
+
+	// Since above didn't return, act upon the enabled/disable:
+	EnableWindow(aControl.hwnd, bEnabled);
+		
+	// L23: Only if EnableWindow removed the keyboard focus entirely, reset the focus.
+	if (gui_control_was_focused && !GetFocus())
+		SetFocus(mHwnd);
+		
+	if (aControl.type == GUI_CONTROL_TAB) // This control is a tab control.
+		// Update the control so that its current tab's controls will all be enabled or disabled (now
+		// that the tab control itself has just been enabled or disabled):
+		ControlUpdateCurrentTab(aControl, false);
+}
+
+
+
+void GuiType::ControlSetVisible(GuiControlType &aControl, bool bVisible)
+{
+	GuiControlType *tab_control;
+	int selection_index;
+
+	// GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN is maintained for use with tab controls.  It allows controls
+	// on inactive tabs to be marked for later showing.  It also allows explicitly hidden controls to
+	// stay hidden even when their tab/page becomes active. It is updated unconditionally for simplicity
+	// and maintainability.
+	if (bVisible)
+		aControl.attrib &= ~GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN;
+	else
+		aControl.attrib |= GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN;
+	if (tab_control = FindTabControl(aControl.tab_control_index)) // It belongs to a tab control that already exists.
+	{
+		if (!(GetWindowLong(tab_control->hwnd, GWL_STYLE) & WS_VISIBLE)) // But its tab control is hidden...
+			return;
+		selection_index = TabCtrl_GetCurSel(tab_control->hwnd);
+		if (selection_index != aControl.tab_index && selection_index != -1)
+			return; // v1.0.48.04: Concerning the line above, see comments in ControlSetEnabled.
+	}
+	// Since above didn't return, act upon the show/hide:
+	ShowWindow(aControl.hwnd, bVisible ? SW_SHOWNOACTIVATE : SW_HIDE);
+	if (aControl.type == GUI_CONTROL_TAB) // This control is a tab control.
+		// Update the control so that its current tab's controls will all be shown or hidden (now
+		// that the tab control itself has just been shown or hidden):
+		ControlUpdateCurrentTab(aControl, false);
 }
 
 
@@ -1276,79 +1354,6 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 			goto return_the_result;
 		} // else
 		goto error;
-
-	case GUICONTROL_CMD_ENABLE:
-	case GUICONTROL_CMD_DISABLE:
-	{
-		// GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED is maintained for use with tab controls.  It allows controls
-		// on inactive tabs to be marked for later enabling.  It also allows explicitly disabled controls to
-		// stay disabled even when their tab/page becomes active. It is updated unconditionally for simplicity
-		// and maintainability.  
-		if (guicontrol_cmd == GUICONTROL_CMD_ENABLE)
-			control.attrib &= ~GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED;
-		else
-			control.attrib |= GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED;
-		if (tab_control = gui.FindTabControl(control.tab_control_index)) // It belongs to a tab control that already exists.
-		{
-			
-			if (GetWindowLong(tab_control->hwnd, GWL_STYLE) & WS_DISABLED) // But its tab control is disabled...
-				goto return_the_result;
-			selection_index = TabCtrl_GetCurSel(tab_control->hwnd);
-			if (selection_index != control.tab_index && selection_index != -1)
-				// There is no current tab/page or the one selected is not this control's:
-				// Do not disable or re-enable the control in this case.
-				// v1.0.48.04: Above now also checks for -1, which is a tab control containing zero tabs/pages.
-				// The controls on such a tab control might be wrongly/inadvertently visible because
-				// ControlUpdateCurrentTab() isn't capable of handling that situation.  Since fixing
-				// ControlUpdateCurrentTab() would reduce backward compatibility -- and in case anyone is
-				// using tabless tab controls for anything -- it seems best to allow these "wrongly visible"
-				// controls to be explicitly manipulated by GuiControl Enable/Disable and Hide/Show.
-				goto return_the_result;
-		}
-		
-		// L23: Restrict focus workaround to when the control is/was actually focused. Fixes a bug introduced by L13: enabling or disabling a control caused the active Edit control to reselect its text.
-		bool gui_control_was_focused = GetForegroundWindow() == gui.mHwnd && GetFocus() == control.hwnd;
-
-		// Since above didn't return, act upon the enabled/disable:
-		EnableWindow(control.hwnd, guicontrol_cmd == GUICONTROL_CMD_ENABLE);
-		
-		// L23: Only if EnableWindow removed the keyboard focus entirely, reset the focus.
-		if (gui_control_was_focused && !GetFocus())
-			SetFocus(gui.mHwnd);
-		
-		if (control.type == GUI_CONTROL_TAB) // This control is a tab control.
-			// Update the control so that its current tab's controls will all be enabled or disabled (now
-			// that the tab control itself has just been enabled or disabled):
-			gui.ControlUpdateCurrentTab(control, false);
-		goto return_the_result;
-	}
-
-	case GUICONTROL_CMD_SHOW:
-	case GUICONTROL_CMD_HIDE:
-		// GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN is maintained for use with tab controls.  It allows controls
-		// on inactive tabs to be marked for later showing.  It also allows explicitly hidden controls to
-		// stay hidden even when their tab/page becomes active. It is updated unconditionally for simplicity
-		// and maintainability.
-		if (guicontrol_cmd == GUICONTROL_CMD_SHOW)
-			control.attrib &= ~GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN;
-		else
-			control.attrib |= GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN;
-		if (tab_control = gui.FindTabControl(control.tab_control_index)) // It belongs to a tab control that already exists.
-		{
-			
-			if (!(GetWindowLong(tab_control->hwnd, GWL_STYLE) & WS_VISIBLE)) // But its tab control is hidden...
-				goto return_the_result;
-			selection_index = TabCtrl_GetCurSel(tab_control->hwnd);
-			if (selection_index != control.tab_index && selection_index != -1)
-				goto return_the_result; // v1.0.48.04: Concerning the line above, see comments in GUICONTROL_CMD_DISABLE.
-		}
-		// Since above didn't return, act upon the show/hide:
-		ShowWindow(control.hwnd, guicontrol_cmd == GUICONTROL_CMD_SHOW ? SW_SHOWNOACTIVATE : SW_HIDE);
-		if (control.type == GUI_CONTROL_TAB) // This control is a tab control.
-			// Update the control so that its current tab's controls will all be shown or hidden (now
-			// that the tab control itself has just been shown or hidden):
-			gui.ControlUpdateCurrentTab(control, false);
-		goto return_the_result;
 
 	case GUICONTROL_CMD_CHOOSE:
 	case GUICONTROL_CMD_CHOOSESTRING:

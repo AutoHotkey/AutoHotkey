@@ -570,8 +570,8 @@ enum BuiltInFunctionID {
 // for future use such as LVIS_CUT.
 
 enum GuiControlCmds {GUICONTROL_CMD_INVALID, GUICONTROL_CMD_CONTENTS, GUICONTROL_CMD_TEXT
-	, GUICONTROL_CMD_MOVE, GUICONTROL_CMD_MOVEDRAW, GUICONTROL_CMD_FOCUS, GUICONTROL_CMD_ENABLE, GUICONTROL_CMD_DISABLE
-	, GUICONTROL_CMD_SHOW, GUICONTROL_CMD_HIDE, GUICONTROL_CMD_CHOOSE, GUICONTROL_CMD_CHOOSESTRING
+	, GUICONTROL_CMD_MOVE, GUICONTROL_CMD_MOVEDRAW, GUICONTROL_CMD_FOCUS
+	, GUICONTROL_CMD_CHOOSE, GUICONTROL_CMD_CHOOSESTRING
 	, GUICONTROL_CMD_FONT
 };
 
@@ -1369,18 +1369,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("Choose"))) return GUICONTROL_CMD_CHOOSE;
 		if (!_tcsicmp(aBuf, _T("ChooseString"))) return GUICONTROL_CMD_CHOOSESTRING;
 		if (!_tcsicmp(aBuf, _T("Font"))) return GUICONTROL_CMD_FONT;
-
-		// v1.0.38.02: Anything not already returned from above supports an optional boolean suffix.
-		// The following example would hide the control: GuiControl, Show%VarContainingFalse%, MyControl
-		// To support hex (due to the 'x' in it), search from the left rather than the right for the
-		// first digit:
-		LPTSTR suffix;
-		for (suffix = aBuf; *suffix && !_istdigit(*suffix); ++suffix);
-		bool invert = (*suffix ? !ATOI(suffix) : false);
-		if (!_tcsnicmp(aBuf, _T("Enable"), 6)) return invert ? GUICONTROL_CMD_DISABLE : GUICONTROL_CMD_ENABLE;
-		if (!_tcsnicmp(aBuf, _T("Disable"), 7)) return invert ? GUICONTROL_CMD_ENABLE : GUICONTROL_CMD_DISABLE;
-		if (!_tcsnicmp(aBuf, _T("Show"), 4)) return invert ? GUICONTROL_CMD_HIDE : GUICONTROL_CMD_SHOW;
-		if (!_tcsnicmp(aBuf, _T("Hide"), 4)) return invert ? GUICONTROL_CMD_SHOW : GUICONTROL_CMD_HIDE;
 
 		return GUICONTROL_CMD_INVALID;
 	}
@@ -2519,6 +2507,8 @@ public:
 
 	static WORD TextToHotkey(LPTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
+	void ControlSetEnabled(GuiControlType &aControl, bool bEnabled);
+	void ControlSetVisible(GuiControlType &aControl, bool bVisible);
 	void ControlCheckRadioButton(GuiControlType &aControl, GuiIndexType aControlIndex, WPARAM aCheckType);
 	void ControlSetUpDownOptions(GuiControlType &aControl, GuiControlOptionsType &aOpt);
 	int ControlGetDefaultSliderThickness(DWORD aStyle, int aThumbThickness);
