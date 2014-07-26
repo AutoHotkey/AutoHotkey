@@ -1060,9 +1060,6 @@ ResultType Object::_Pop(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 
 ResultType Object::_MinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	if (aParamCount)
-		return OK;
-
 	if (mKeyOffsetObject) // i.e. there are fields with integer keys
 	{
 		aResultToken.symbol = SYM_INTEGER;
@@ -1074,9 +1071,6 @@ ResultType Object::_MinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[
 
 ResultType Object::_MaxIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	if (aParamCount)
-		return OK;
-
 	if (mKeyOffsetObject) // i.e. there are fields with integer keys
 	{
 		aResultToken.symbol = SYM_INTEGER;
@@ -1088,7 +1082,7 @@ ResultType Object::_MaxIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[
 
 ResultType Object::_GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	if (aParamCount == 1)
+	if (aParamCount)
 	{
 		SymbolType key_type;
 		KeyType key;
@@ -1103,7 +1097,7 @@ ResultType Object::_GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 		}
 		// else wrong type of field; leave aResultToken at default, empty string.
 	}
-	else if (aParamCount == 0)
+	else // aParamCount == 0
 	{
 		aResultToken.symbol = SYM_INTEGER;
 		aResultToken.value_int64 = mFieldCountMax;
@@ -1112,17 +1106,16 @@ ResultType Object::_GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 }
 
 ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
-// _SetCapacity( [field_name,] new_capacity )
+// SetCapacity([field_name,] new_capacity)
 {
-	if ((aParamCount != 1 && aParamCount != 2) || !TokenIsNumeric(*aParam[aParamCount - 1]))
-		// Invalid or missing param(s); return default empty string.
-		return OK;
+	if (!aParamCount || !TokenIsNumeric(*aParam[aParamCount - 1]))
+		return g_script.ScriptError(ERR_PARAM_INVALID);
+
 	__int64 desired_capacity = TokenToInt64(*aParam[aParamCount - 1]);
-	if (aParamCount == 2) // Field name was specified.
+	if (aParamCount >= 2) // Field name was specified.
 	{
 		if (desired_capacity < 0) // Check before sign is dropped.
-			// Bad param.
-			return OK;
+			return g_script.ScriptError(ERR_PARAM2_INVALID);
 		size_t desired_size = (size_t)desired_capacity;
 
 		SymbolType key_type;
@@ -1137,7 +1130,7 @@ ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 			// Field was successfully found or inserted.
 			if (field->symbol != SYM_STRING)
 				// Wrong type of field.
-				return OK;
+				return g_script.ScriptError(ERR_INVALID_VALUE);
 			if (!desired_size)
 			{	// Caller specified zero - empty the field but do not remove it.
 				field->Assign(NULL);
@@ -1161,15 +1154,19 @@ ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 				// Return new size, minus one char reserved for null-terminator.
 				aResultToken.symbol = SYM_INTEGER;
 				aResultToken.value_int64 = _TSIZE(desired_size - 1);
+				return OK;
 			}
-			//else out of memory.
 		}
-		return OK;
+		// Out of memory.  Throw an error, otherwise scripts might assume success and end up corrupting the heap:
+		return g_script.ScriptError(ERR_OUTOFMEM);
 	}
-	IndexType desired_count = (IndexType)desired_capacity;
 	// else aParamCount == 1: set the capacity of this object.
+	IndexType desired_count = (IndexType)desired_capacity;
 	if (desired_count < mFieldCount)
-	{	// It doesn't seem intuitive to allow _SetCapacity to truncate the fields array.
+	{
+		// It doesn't seem intuitive to allow SetCapacity to truncate the fields array, so just reallocate
+		// as necessary to remove any unused space.  Allow negative values since SetCapacity(-1) seems more
+		// intuitive than SetCapacity(0) when the contents aren't being discarded.
 		desired_count = mFieldCount;
 	}
 	if (!desired_count)
@@ -1187,72 +1184,68 @@ ResultType Object::_SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aPar
 	{
 		aResultToken.symbol = SYM_INTEGER;
 		aResultToken.value_int64 = mFieldCountMax;
+		return OK;
 	}
-	return OK;
+	// At this point, failure isn't critical since nothing is being stored yet.  However, it might be easier to
+	// debug if an error is thrown here rather than possibly later, when the array attempts to resize itself to
+	// fit new items.  This also avoids the need for scripts to check if the return value is less than expected:
+	return g_script.ScriptError(ERR_OUTOFMEM);
 }
 
 ResultType Object::_GetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
-// _GetAddress( key )
+// GetAddress(key)
 {
-	if (aParamCount == 1)
-	{
-		SymbolType key_type;
-		KeyType key;
-		IndexType insert_pos;
-		FieldType *field;
+	if (!aParamCount)
+		return g_script.ScriptError(ERR_TOO_FEW_PARAMS);
+	
+	SymbolType key_type;
+	KeyType key;
+	IndexType insert_pos;
+	FieldType *field;
 
-		if ( (field = FindField(*aParam[0], aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
-			&& field->symbol == SYM_STRING && field->size )
-		{
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = (__int64)field->marker;
-		}
-		// else field has no memory allocated; leave aResultToken at default, empty string.
+	if ( (field = FindField(*aParam[0], aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
+		&& field->symbol == SYM_STRING && field->size )
+	{
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = (__int64)field->marker;
 	}
+	// else field has no memory allocated; leave aResultToken at default, empty string.
 	return OK;
 }
 
 ResultType Object::_NewEnum(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	if (aParamCount == 0)
-	{
-		IObject *newenum;
-		if (newenum = new Enumerator(this))
-		{
-			aResultToken.symbol = SYM_OBJECT;
-			aResultToken.object = newenum;
-		}
-	}
+	IObject *newenum = new Enumerator(this);
+	if (!newenum)
+		return g_script.ScriptError(ERR_OUTOFMEM);
+	aResultToken.symbol = SYM_OBJECT;
+	aResultToken.object = newenum;
 	return OK;
 }
 
 ResultType Object::_HasKey(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	if (aParamCount == 1)
-	{
-		SymbolType key_type;
-		KeyType key;
-		INT_PTR insert_pos;
-		FieldType *field = FindField(**aParam, aResultToken.buf, key_type, key, insert_pos);
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = (field != NULL);
-	}
+	if (!aParamCount)
+		return g_script.ScriptError(ERR_TOO_FEW_PARAMS);
+	
+	SymbolType key_type;
+	KeyType key;
+	INT_PTR insert_pos;
+	FieldType *field = FindField(**aParam, aResultToken.buf, key_type, key, insert_pos);
+	aResultToken.symbol = SYM_INTEGER;
+	aResultToken.value_int64 = (field != NULL);
 	return OK;
 }
 
 ResultType Object::_Clone(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	if (aParamCount == 0)
-	{
-		Object *clone = Clone();
-		if (clone)
-		{
-			if (mBase)
-				(clone->mBase = mBase)->AddRef();
-			aResultToken.object = clone;
-			aResultToken.symbol = SYM_OBJECT;
-		}
-	}
+	Object *clone = Clone();
+	if (!clone)
+		return g_script.ScriptError(ERR_OUTOFMEM);	
+	if (mBase)
+		(clone->mBase = mBase)->AddRef();
+	aResultToken.object = clone;
+	aResultToken.symbol = SYM_OBJECT;
 	return OK;
 }
 
