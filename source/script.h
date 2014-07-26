@@ -570,7 +570,7 @@ enum BuiltInFunctionID {
 // for future use such as LVIS_CUT.
 
 enum GuiControlCmds {GUICONTROL_CMD_INVALID, GUICONTROL_CMD_CONTENTS, GUICONTROL_CMD_TEXT
-	, GUICONTROL_CMD_MOVE, GUICONTROL_CMD_MOVEDRAW, GUICONTROL_CMD_FOCUS
+	, GUICONTROL_CMD_MOVE, GUICONTROL_CMD_MOVEDRAW
 	, GUICONTROL_CMD_CHOOSE, GUICONTROL_CMD_CHOOSESTRING
 	, GUICONTROL_CMD_FONT
 };
@@ -1365,7 +1365,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("Text"))) return GUICONTROL_CMD_TEXT;
 		if (!_tcsicmp(aBuf, _T("Move"))) return GUICONTROL_CMD_MOVE;
 		if (!_tcsicmp(aBuf, _T("MoveDraw"))) return GUICONTROL_CMD_MOVEDRAW;
-		if (!_tcsicmp(aBuf, _T("Focus"))) return GUICONTROL_CMD_FOCUS;
 		if (!_tcsicmp(aBuf, _T("Choose"))) return GUICONTROL_CMD_CHOOSE;
 		if (!_tcsicmp(aBuf, _T("ChooseString"))) return GUICONTROL_CMD_CHOOSESTRING;
 		if (!_tcsicmp(aBuf, _T("Font"))) return GUICONTROL_CMD_FONT;
@@ -2242,6 +2241,7 @@ struct GuiControlType : public ObjectBase
 
 		// Methods
 		M_Options,
+		M_Focus,
 		M_Tab_UseTab,
 		LastMethodPlusOne,
 

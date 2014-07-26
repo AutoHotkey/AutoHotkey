@@ -474,6 +474,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 #define if_member(s,e) else if (!_tcsicmp(name, _T(s))) member = e;
 	if_member("Opt", M_Options)
 	if_member("Options", M_Options)
+	if_member("Focus", M_Focus)
 	if_member("Hwnd", P_Handle)
 	if_member("Gui", P_Gui)
 	if_member("ClassNN", P_ClassNN)
@@ -545,6 +546,10 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 			gui->ControlInitOptions(go, *this);
 			return gui->ControlParseOptions(ParamIndexToOptionalString(0), go, *this, GUI_HWND_TO_INDEX(hwnd));
 		}
+
+		case M_Focus:
+			SetFocus(hwnd);
+			return OK;
 
 		case P_Handle:
 			if (IS_INVOKE_SET)
@@ -1346,14 +1351,6 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 		}
 		goto return_the_result;
 	}
-
-	case GUICONTROL_CMD_FOCUS:
-		if (SetFocus(control.hwnd))
-		{
-			result = OK;
-			goto return_the_result;
-		} // else
-		goto error;
 
 	case GUICONTROL_CMD_CHOOSE:
 	case GUICONTROL_CMD_CHOOSESTRING:
