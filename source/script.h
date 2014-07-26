@@ -570,7 +570,6 @@ enum BuiltInFunctionID {
 // for future use such as LVIS_CUT.
 
 enum GuiControlCmds {GUICONTROL_CMD_INVALID, GUICONTROL_CMD_CONTENTS, GUICONTROL_CMD_TEXT
-	, GUICONTROL_CMD_CHOOSE, GUICONTROL_CMD_CHOOSESTRING
 };
 
 typedef UCHAR GuiControls;
@@ -1361,8 +1360,6 @@ public:
 		if (!*aBuf)
 			return GUICONTROL_CMD_CONTENTS;
 		if (!_tcsicmp(aBuf, _T("Text"))) return GUICONTROL_CMD_TEXT;
-		if (!_tcsicmp(aBuf, _T("Choose"))) return GUICONTROL_CMD_CHOOSE;
-		if (!_tcsicmp(aBuf, _T("ChooseString"))) return GUICONTROL_CMD_CHOOSESTRING;
 
 		return GUICONTROL_CMD_INVALID;
 	}
@@ -2238,6 +2235,7 @@ struct GuiControlType : public ObjectBase
 		M_Options,
 		M_Focus,
 		M_Move,
+		M_Choose,
 		M_UpdateFont,
 		M_Tab_UseTab,
 		LastMethodPlusOne,
@@ -2508,6 +2506,7 @@ public:
 	void ControlSetVisible(GuiControlType &aControl, bool bVisible);
 	ResultType ControlMove(GuiControlType &aControl, LPTSTR aPos, bool bDraw);
 	void ControlUpdateFont(GuiControlType &aControl);
+	ResultType ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, int aExtraActions = 0);
 	void ControlCheckRadioButton(GuiControlType &aControl, GuiIndexType aControlIndex, WPARAM aCheckType);
 	void ControlSetUpDownOptions(GuiControlType &aControl, GuiControlOptionsType &aOpt);
 	int ControlGetDefaultSliderThickness(DWORD aStyle, int aThumbThickness);

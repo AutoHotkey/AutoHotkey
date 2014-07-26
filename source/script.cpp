@@ -5391,11 +5391,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			case GUICONTROL_CMD_CONTENTS:
 			case GUICONTROL_CMD_TEXT:
 				break; // Do nothing for the above commands since Param3 is optional.
-			case GUICONTROL_CMD_CHOOSE:
-			case GUICONTROL_CMD_CHOOSESTRING:
-				if (!*new_raw_arg3)
-					return ScriptError(_T("Parameter #3 must not be blank in this case."));
-				break;
 			default: // All commands except the above should have a blank Text parameter.
 				if (*new_raw_arg3)
 					return ScriptError(ERR_PARAM3_MUST_BE_BLANK, new_raw_arg3);

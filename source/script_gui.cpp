@@ -192,7 +192,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 
 			} else
 			{
-				GuiIndexType u = FindControl(TokenToString(tok));
+				GuiIndexType u = FindControl(TokenToString(tok, aResultToken.buf));
 				if (u < mControlCount)
 					ctrl = mControl[u];
 			}
@@ -475,6 +475,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 	if_member("Opt", M_Options)
 	if_member("Options", M_Options)
 	if_member("Move", M_Move)
+	if_member("Choose", M_Choose)
 	if_member("UpdateFont", M_UpdateFont)
 	if_member("Focus", M_Focus)
 	if_member("Hwnd", P_Handle)
@@ -559,6 +560,11 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 
 		case M_Move:
 			return gui->ControlMove(*this, ParamIndexToOptionalString(0), (bool)ParamIndexToOptionalType(BOOL,1,FALSE));
+			
+		case M_Choose:
+			if (aParamCount == 0)
+				return INVOKE_NOT_HANDLED;
+			return gui->ControlChoose(*this, *aParam[0], ParamIndexToOptionalInt(1, 0));
 
 		case P_Handle:
 			if (IS_INVOKE_SET)
@@ -664,10 +670,10 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 				BOOL exact_match = (BOOL)ParamIndexToOptionalType(BOOL, 1, FALSE);
 				ExprTokenType& param = *aParam[0];
 				TabControlIndexType index = -1;
-				if (param.symbol == SYM_INTEGER || param.symbol == SYM_VAR && param.var->IsPureNumeric())
+				if (param.symbol == SYM_INTEGER || param.symbol == SYM_VAR && param.var->IsPureNumeric() == SYM_INTEGER)
 					index = (int)TokenToInt64(param)-1;
 				else
-					index = gui->FindTabIndexByName(*this, TokenToString(param), exact_match);
+					index = gui->FindTabIndexByName(*this, TokenToString(param, aResultToken.buf), exact_match);
 				if (index < 0 || index > (MAX_TABS_PER_CONTROL - 1))
 					return g_script.ScriptError(_T("Invalid tab index or name."));
 				gui->mCurrentTabIndex = index;
@@ -923,6 +929,116 @@ void GuiType::ControlUpdateFont(GuiControlType &aControl)
 }
 
 
+ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, int aExtraActions)
+{
+	int selection_index = -1;
+	bool is_choose_string = !(aParam.symbol == SYM_INTEGER || aParam.symbol == SYM_VAR && aParam.var->IsPureNumeric() == SYM_INTEGER);
+	TCHAR buf[MAX_NUMBER_SIZE];
+	
+	if (aExtraActions < 0 || aExtraActions > 2)
+		return g_script.ScriptError(ERR_PARAM2_INVALID);
+
+	if (aControl.type == GUI_CONTROL_TAB)
+	{
+		// Generating the TCN_SELCHANGING and TCN_SELCHANGE messages manually is fairly complex since they
+		// need a struct and who knows whether it's even valid for sources other than the tab controls
+		// themselves to generate them.  I would use TabCtrl_SetCurFocus(), but that is shot down by
+		// the fact that it only generates TCN_SELCHANGING and TCN_SELCHANGE if the tab control lacks
+		// the TCS_BUTTONS style, which would make it an incomplete/inconsistent solution.  But I guess
+		// it's better than nothing as long as it's documented.
+		// MSDN: "If the tab control does not have the TCS_BUTTONS style, changing the focus also changes
+		// selected tab. In this case, the tab control sends the TCN_SELCHANGING and TCN_SELCHANGE
+		// notification messages to its parent window.
+		// Automatically switch to CHOOSESTRING if parameter isn't numeric:
+		if (is_choose_string)
+			selection_index = FindTabIndexByName(aControl, TokenToString(aParam, buf)); // Returns -1 on failure.
+		else
+			selection_index = (int)TokenToInt64(aParam) - 1;
+		if (selection_index < 0 || selection_index > MAX_TABS_PER_CONTROL - 1)
+			return g_script.ScriptError(_T("Invalid tab index or name."));
+		int previous_selection_index = TabCtrl_GetCurSel(aControl.hwnd);
+		if (!aExtraActions || (GetWindowLong(aControl.hwnd, GWL_STYLE) & TCS_BUTTONS))
+		{
+			if (TabCtrl_SetCurSel(aControl.hwnd, selection_index) == -1)
+				goto error;
+			// In this case but not the "else" below, must update the tab to show the proper controls:
+			if (previous_selection_index != selection_index)
+				ControlUpdateCurrentTab(aControl, aExtraActions > 0); // And set focus if the more forceful aExtraActions was done.
+		}
+		else // There is an extra_action and it's not TCS_BUTTONS, so extra_action is possible via TabCtrl_SetCurFocus.
+		{
+			TabCtrl_SetCurFocus(aControl.hwnd, selection_index); // No return value, so check for success below.
+			if (TabCtrl_GetCurSel(aControl.hwnd) != selection_index)
+				goto error;
+		}
+		return OK;
+	}
+	// Otherwise, it's not a tab control, but a ListBox/DropDownList/Combo or other control:
+	UINT msg, x_msg, y_msg;
+	switch(aControl.type)
+	{
+	case GUI_CONTROL_DROPDOWNLIST:
+	case GUI_CONTROL_COMBOBOX:
+		msg = is_choose_string ? CB_SELECTSTRING : CB_SETCURSEL;
+		x_msg = CBN_SELCHANGE;
+		y_msg = CBN_SELENDOK;
+		break;
+	case GUI_CONTROL_LISTBOX:
+		if (GetWindowLong(aControl.hwnd, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
+			// MSDN: Do not use [LB_SELECTSTRING] with a list box that has the LBS_MULTIPLESEL or the
+			// LBS_EXTENDEDSEL styles:
+			msg = is_choose_string ? LB_FINDSTRING : LB_SETSEL;
+		else // single-select listbox
+			msg = is_choose_string ? LB_SELECTSTRING : LB_SETCURSEL;
+		x_msg = LBN_SELCHANGE;
+		y_msg = LBN_DBLCLK;
+		break;
+	default:  // Not a supported control type.
+		return g_script.ScriptError(_T("Choose() is only allowed on Tab, DDL, ComboBox and ListBox controls."));
+	} // switch(control.type)
+
+	if (is_choose_string)
+	{
+		if (msg == LB_FINDSTRING)
+		{
+			// This msg is needed for multi-select listbox because LB_SELECTSTRING is not supported
+			// in this case.
+			LRESULT found_item = SendMessage(aControl.hwnd, msg, -1, (LPARAM)TokenToString(aParam, buf));
+			if (found_item == CB_ERR) // CB_ERR == LB_ERR
+				goto error;
+			if (SendMessage(aControl.hwnd, LB_SETSEL, TRUE, found_item) == CB_ERR) // CB_ERR == LB_ERR
+				goto error;
+		}
+		else // Fixed 1 to be -1 in v1.0.35.05:
+			if (SendMessage(aControl.hwnd, msg, -1, (LPARAM)TokenToString(aParam, buf)) == CB_ERR) // CB_ERR == LB_ERR
+				goto error;
+	}
+	else // Choose by position vs. string.
+	{
+		selection_index = (int)TokenToInt64(aParam) - 1;
+		if (selection_index < -1)
+			goto error;
+		if (msg == LB_SETSEL) // Multi-select, so use the cumulative method.
+		{
+			if (SendMessage(aControl.hwnd, msg, selection_index >= 0, selection_index) == CB_ERR) // CB_ERR == LB_ERR
+				goto error;
+		}
+		else
+			if (SendMessage(aControl.hwnd, msg, selection_index, 0) == CB_ERR && selection_index != -1) // CB_ERR == LB_ERR
+				goto error;
+	}
+	int control_id = GUI_HWND_TO_INDEX(aControl.hwnd);
+	if (aExtraActions > 0)
+		SendMessage(mHwnd, WM_COMMAND, (WPARAM)MAKELONG(control_id, x_msg), (LPARAM)aControl.hwnd);
+	if (aExtraActions > 1)
+		SendMessage(mHwnd, WM_COMMAND, (WPARAM)MAKELONG(control_id, y_msg), (LPARAM)aControl.hwnd);
+	return OK;
+
+error:
+	return g_script.ScriptError(_T("Could not choose.")); // Short msg since so rare.
+}
+
+
 // Will be removed.
 ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 {
@@ -967,7 +1083,6 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 	GuiControlType *tab_control;
 	int new_pos;
 	SYSTEMTIME st[2];
-	int selection_index;
 	bool do_redraw_if_in_tab = false;
 	bool do_redraw_unconditionally = false;
 
@@ -1391,129 +1506,6 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 		if (do_redraw_unconditionally)
 			break;
 		goto return_the_result;
-
-	case GUICONTROL_CMD_CHOOSE:
-	case GUICONTROL_CMD_CHOOSESTRING:
-	{
-		int extra_actions = 0; // Set default.
-		if (*aParam3 == gui.mDelimiter) // First extra action.
-		{
-			++aParam3; // Omit this pipe char from further consideration below.
-			++extra_actions;
-		}
-		if (control.type == GUI_CONTROL_TAB)
-		{
-			// Generating the TCN_SELCHANGING and TCN_SELCHANGE messages manually is fairly complex since they
-			// need a struct and who knows whether it's even valid for sources other than the tab controls
-			// themselves to generate them.  I would use TabCtrl_SetCurFocus(), but that is shot down by
-			// the fact that it only generates TCN_SELCHANGING and TCN_SELCHANGE if the tab control lacks
-			// the TCS_BUTTONS style, which would make it an incomplete/inconsistent solution.  But I guess
-			// it's better than nothing as long as it's documented.
-			// MSDN: "If the tab control does not have the TCS_BUTTONS style, changing the focus also changes
-			// selected tab. In this case, the tab control sends the TCN_SELCHANGING and TCN_SELCHANGE
-			// notification messages to its parent window. 
-			// Automatically switch to CHOOSESTRING if parameter isn't numeric:
-			if (guicontrol_cmd == GUICONTROL_CMD_CHOOSE && !IsNumeric(aParam3, true, false))
-				guicontrol_cmd = GUICONTROL_CMD_CHOOSESTRING;
-			if (guicontrol_cmd == GUICONTROL_CMD_CHOOSESTRING)
-				selection_index = gui.FindTabIndexByName(control, aParam3); // Returns -1 on failure.
-			else
-				selection_index = ATOI(aParam3) - 1;
-			if (selection_index < 0 || selection_index > MAX_TABS_PER_CONTROL - 1)
-				goto error;
-			int previous_selection_index = TabCtrl_GetCurSel(control.hwnd);
-			if (!extra_actions || (GetWindowLong(control.hwnd, GWL_STYLE) & TCS_BUTTONS))
-			{
-				if (TabCtrl_SetCurSel(control.hwnd, selection_index) == -1)
-					goto error;
-				// In this case but not the "else" below, must update the tab to show the proper controls:
-				if (previous_selection_index != selection_index)
-					gui.ControlUpdateCurrentTab(control, extra_actions > 0); // And set focus if the more forceful extra_actions was done.
-			}
-			else // There is an extra_action and it's not TCS_BUTTONS, so extra_action is possible via TabCtrl_SetCurFocus.
-			{
-				TabCtrl_SetCurFocus(control.hwnd, selection_index); // No return value, so check for success below.
-				if (TabCtrl_GetCurSel(control.hwnd) != selection_index)
-					goto error;
-			}
-			goto return_the_result;
-		}
-		// Otherwise, it's not a tab control, but a ListBox/DropDownList/Combo or other control:
-		if (*aParam3 == gui.mDelimiter && control.type != GUI_CONTROL_TAB) // Second extra action.
-		{
-			++aParam3; // Omit this pipe char from further consideration below.
-			++extra_actions;
-		}
-		if (guicontrol_cmd == GUICONTROL_CMD_CHOOSE && !IsNumeric(aParam3, true, false)) // Must be done only after the above.
-			guicontrol_cmd = GUICONTROL_CMD_CHOOSESTRING;
-		UINT msg, x_msg, y_msg;
-		switch(control.type)
-		{
-		case GUI_CONTROL_DROPDOWNLIST:
-		case GUI_CONTROL_COMBOBOX:
-			msg = (guicontrol_cmd == GUICONTROL_CMD_CHOOSE) ? CB_SETCURSEL : CB_SELECTSTRING;
-			x_msg = CBN_SELCHANGE;
-			y_msg = CBN_SELENDOK;
-			break;
-		case GUI_CONTROL_LISTBOX:
-			if (GetWindowLong(control.hwnd, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
-			{
-				if (guicontrol_cmd == GUICONTROL_CMD_CHOOSE)
-					msg = LB_SETSEL;
-				else
-					// MSDN: Do not use [LB_SELECTSTRING] with a list box that has the LBS_MULTIPLESEL or the
-					// LBS_EXTENDEDSEL styles:
-					msg = LB_FINDSTRING;
-			}
-			else // single-select listbox
-				if (guicontrol_cmd == GUICONTROL_CMD_CHOOSE)
-					msg = LB_SETCURSEL;
-				else
-					msg = LB_SELECTSTRING;
-			x_msg = LBN_SELCHANGE;
-			y_msg = LBN_DBLCLK;
-			break;
-		default:  // Not a supported control type.
-			goto error;
-		} // switch(control.type)
-
-		if (guicontrol_cmd == GUICONTROL_CMD_CHOOSESTRING)
-		{
-			if (msg == LB_FINDSTRING)
-			{
-				// This msg is needed for multi-select listbox because LB_SELECTSTRING is not supported
-				// in this case.
-				LRESULT found_item = SendMessage(control.hwnd, msg, -1, (LPARAM)aParam3);
-				if (found_item == CB_ERR) // CB_ERR == LB_ERR
-					goto error;
-				if (SendMessage(control.hwnd, LB_SETSEL, TRUE, found_item) == CB_ERR) // CB_ERR == LB_ERR
-					goto error;
-			}
-			else // Fixed 1 to be -1 in v1.0.35.05:
-				if (SendMessage(control.hwnd, msg, -1, (LPARAM)aParam3) == CB_ERR) // CB_ERR == LB_ERR
-					goto error;
-		}
-		else // Choose by position vs. string.
-		{
-			selection_index = ATOI(aParam3) - 1;
-			if (selection_index < -1)
-				goto error;
-			if (msg == LB_SETSEL) // Multi-select, so use the cumulative method.
-			{
-				if (SendMessage(control.hwnd, msg, selection_index >= 0, selection_index) == CB_ERR) // CB_ERR == LB_ERR
-					goto error;
-			}
-			else
-				if (SendMessage(control.hwnd, msg, selection_index, 0) == CB_ERR && selection_index != -1) // CB_ERR == LB_ERR
-					goto error;
-		}
-		int control_id = GUI_INDEX_TO_ID(control_index);
-		if (extra_actions > 0)
-			SendMessage(gui.mHwnd, WM_COMMAND, (WPARAM)MAKELONG(control_id, x_msg), (LPARAM)control.hwnd);
-		if (extra_actions > 1)
-			SendMessage(gui.mHwnd, WM_COMMAND, (WPARAM)MAKELONG(control_id, y_msg), (LPARAM)control.hwnd);
-		goto return_the_result;
-	} // case
 	} // switch()
 
 	// If the above didn't return, it wants this check:
