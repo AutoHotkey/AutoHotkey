@@ -4083,15 +4083,10 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, ToggleValueType &aOwnDialogs)
 					HWND new_owner = NULL;
 					if (IsNumeric(name, TRUE, FALSE) == PURE_INTEGER) // Allow negatives, for flexibility.
 					{
-						__int64 gui_num = ATOI64(name);
-						if (gui_num < 1 || gui_num > 99 || (option_end - name) > 2) // See similar checks in ResolveGui() for comments.
-						{
-							// Something like +Owner%Hwnd%, where Hwnd may or may not be a Gui.
-							if (IsWindow((HWND)gui_num))
-								new_owner = (HWND)gui_num;
-						}
+						HWND hwnd = (HWND)ATOI64(name);
+						if (IsWindow(hwnd))
+							new_owner = hwnd;
 					}
-					// Named Guis are no longer supported.
 					if (new_owner && new_owner != mHwnd) // Window can't own itself!
 						mOwner = new_owner;
 					else
