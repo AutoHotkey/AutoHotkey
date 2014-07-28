@@ -454,27 +454,20 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			//
 			// BUILT-IN "BASE" PROPERTY
 			//
-			else if (param_count_excluding_rvalue == 1 && !_tcsicmp(key.s, _T("base")))
+			else if (param_count_excluding_rvalue == 1)
 			{
-				if (IS_INVOKE_SET)
-				// "base" must be handled before inserting a new field.
+				if (!_tcsicmp(key.s, _T("base")))
 				{
-					IObject *obj = TokenToObject(*aParam[1]);
-					if (obj)
+					if (IS_INVOKE_SET)
 					{
-						obj->AddRef(); // for mBase
-						obj->AddRef(); // for aResultToken
-						aResultToken.symbol = SYM_OBJECT;
-						aResultToken.object = obj;
+						IObject *obj = TokenToObject(*aParam[1]);
+						if (obj)
+							obj->AddRef(); // for mBase
+						if (mBase)
+							mBase->Release();
+						mBase = obj; // May be NULL.
 					}
-					// else leave as empty string.
-					if (mBase)
-						mBase->Release();
-					mBase = obj; // May be NULL.
-					return OK;
-				}
-				else // GET
-				{
+	
 					if (mBase)
 					{
 						aResultToken.symbol = SYM_OBJECT;
@@ -483,6 +476,10 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 					}
 					// else leave as empty string.
 					return OK;
+				}
+				else if (!_tcsicmp(key.s, _T("Length")) && IS_INVOKE_GET)
+				{
+					return _Length(aResultToken);
 				}
 			}
 		} // if (!IS_INVOKE_META && key_type == SYM_STRING)
@@ -648,11 +645,9 @@ ResultType Object::CallBuiltin(LPCTSTR aName, ExprTokenType &aResultToken, ExprT
 		if (!_tcsicmp(aName, _T("HasKey")))
 			return _HasKey(aResultToken, aParam, aParamCount);
 		break;
-	case 'M':
-		if (!_tcsicmp(aName, _T("MaxIndex")))
-			return _MaxIndex(aResultToken, aParam, aParamCount);
-		if (!_tcsicmp(aName, _T("MinIndex")))
-			return _MinIndex(aResultToken, aParam, aParamCount);
+	case 'L':
+		if (!_tcsicmp(aName, _T("Length")))
+			return _Length(aResultToken);
 		break;
 	case '_':
 		if (!_tcsicmp(aName, _T("_NewEnum")))
@@ -929,7 +924,7 @@ ResultType Object::_Remove_impl(ExprTokenType &aResultToken, ExprTokenType *aPar
 	// Find the position of "min".
 	if (aMode == RM_Pop)
 	{
-		if (mKeyOffsetObject) // i.e. at least one int field; use _MaxIndex()
+		if (mKeyOffsetObject) // i.e. at least one int field; use Length()
 		{
 			min_field = &mFields[min_pos = mKeyOffsetObject - 1];
 			min_key = min_field->key;
@@ -1086,25 +1081,10 @@ ResultType Object::_Pop(ExprTokenType &aResultToken, ExprTokenType *aParam[], in
 }
 
 
-ResultType Object::_MinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::_Length(ExprTokenType &aResultToken)
 {
-	if (mKeyOffsetObject) // i.e. there are fields with integer keys
-	{
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = (__int64)mFields[0].key.i;
-	}
-	// else no integer keys; leave aResultToken at default, empty string.
-	return OK;
-}
-
-ResultType Object::_MaxIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
-{
-	if (mKeyOffsetObject) // i.e. there are fields with integer keys
-	{
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = (__int64)mFields[mKeyOffsetObject - 1].key.i;
-	}
-	// else no integer keys; leave aResultToken at default, empty string.
+	aResultToken.symbol = SYM_INTEGER;
+	aResultToken.value_int64 = mKeyOffsetObject ? (__int64)mFields[mKeyOffsetObject - 1].key.i : 0;
 	return OK;
 }
 
