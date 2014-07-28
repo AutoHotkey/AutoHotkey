@@ -893,7 +893,7 @@ public:
 	double ArgIndexToDouble(int aArgIndex);
 	size_t ArgIndexLength(int aArgIndex);
 
-	ResultType ExpandArgs(ExprTokenType *aResultToken = NULL, VarSizeType aSpaceNeeded = VARSIZE_ERROR, Var *aArgVar[] = NULL);
+	ResultType ExpandArgs(ExprTokenType *aResultToken = NULL);
 	VarSizeType GetExpandedArgSize(Var *aArgVar[]);
 	LPTSTR ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType *aResultToken
 		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize

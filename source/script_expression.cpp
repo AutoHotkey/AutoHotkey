@@ -1761,7 +1761,7 @@ FuncCallData::~FuncCallData()
 
 
 
-ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeeded, Var *aArgVar[])
+ResultType Line::ExpandArgs(ExprTokenType *aResultToken)
 // Caller should either provide both or omit both of the parameters.  If provided, it means
 // caller already called GetExpandedArgSize for us.
 // Returns OK, FAIL, or EARLY_EXIT.  EARLY_EXIT occurs when a function-call inside an expression
@@ -1781,36 +1781,20 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken, VarSizeType aSpaceNeede
 	// more memory if needed.  Second pass: dereference the args into the buffer.
 
 	// First pass. It takes into account the same things as 2nd pass.
-	size_t space_needed;
-	if (aSpaceNeeded == VARSIZE_ERROR)
-	{
-		space_needed = GetExpandedArgSize(arg_var);
-		if (space_needed == VARSIZE_ERROR)
-			return FAIL;  // It will have already displayed the error.
-	}
-	else // Caller already determined it.
-	{
-		space_needed = aSpaceNeeded;
-		for (i = 0; i < mArgc; ++i) // Copying only the actual/used elements is probably faster than using memcpy to copy both entire arrays.
-			arg_var[i] = aArgVar[i]; // Init to values determined by caller, which helps performance if any of the args are dynamic variables.
-	}
+	size_t space_needed = GetExpandedArgSize(arg_var);
+	if (space_needed == VARSIZE_ERROR)
+		return FAIL;  // It will have already displayed the error.
 
-	// Only allocate the buf at the last possible moment,
-	// when it's sure the buffer will be used (improves performance when only a short
-	// script with no derefs is being run):
+	// Only allocate the buf at the last possible moment, when it's sure the buffer will be used
+	// (improves performance when only a short script with no derefs is being run):
 	if (space_needed > sDerefBufSize)
 	{
 		// KNOWN LIMITATION: The memory utilization of *recursive* user-defined functions is rather high because
-		// of the size of DEREF_BUF_EXPAND_INCREMENT, which is used to create a new deref buffer for each
-		// layer of recursion.  So if a UDF recurses deeply, say 100 layers, about 1600 MB (16KB*100) of
-		// memory would be temporarily allocated, which in a worst-case scenario would cause swapping and
-		// kill performance.  Perhaps the best solution to this is to dynamically change the size of
-		// DEREF_BUF_EXPAND_INCREMENT (via a new global variable) in the expression evaluation section that
-		// detects that a UDF has another instance of itself on the call stack.  To ensure proper collapse-back
-		// out of nested udfs and threads, the old value should be backed up, the new smaller increment set,
-		// then the old size should be passed to FreeAndRestoreFunctionVars() so that it can restore it.
-		// However, given the rarity of deep recursion, this doesn't seem worth the extra code size and loss of
-		// performance.
+		// of the size of DEREF_BUF_EXPAND_INCREMENT, which is used to create a new deref buffer for each layer
+		// of recursion.  Due to limited stack space, the limit of recursion is about 300 to 800 layers depending
+		// on the build.  For 800 layers on Unicode, about 25MB (32KB*800) of memory would be temporarily allocated,
+		// which in a worst-case scenario would cause swapping and kill performance.  However, on most systems it
+		// wouldn't be an issue, and the bigger problem is that recursion may be limited to ~300 layers.
 		size_t increments_needed = space_needed / DEREF_BUF_EXPAND_INCREMENT;
 		if (space_needed % DEREF_BUF_EXPAND_INCREMENT)  // Need one more if above division truncated it.
 			++increments_needed;
