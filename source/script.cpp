@@ -3983,6 +3983,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			{
 				LPTSTR id_begin = action_args + 1;
 				LPTSTR cp;
+				bool has_space_or_tab;
 				for (;;) // L35: Loop to fix x.y.z() and similar.
 				{
 					cp = find_identifier_end(id_begin);
@@ -3994,6 +3995,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					if (cp == id_begin)
 						// No valid identifier, doesn't look like a valid expression.
 						break;
+					has_space_or_tab = IS_SPACE_OR_TAB(*cp);
 					cp = omit_leading_whitespace(cp);
 					if (*cp == '[' || !*cp // x.y[z] or x.y
 						|| cp[1] == '=' && _tcschr(_T(":+-*/|&^."), cp[0]) // Two-char assignment operator.
@@ -4005,8 +4007,18 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 						break;
 					}
 					if (*cp != '.')
-						// Must be something which is not allowed as a standalone expression.
+					{
+						if (has_space_or_tab || *cp == g_delimiter)
+						{
+							id_begin[-1] = g_delimiter; // Separate target object from method name.
+							if (*cp != g_delimiter)
+								cp[-1] = g_delimiter; // Separate method name from parameters.
+							action_args = aLineText;
+							aActionType = ACT_METHOD;
+						}
+						//else: Neither a command nor a legal standalone expression.
 						break;
+					}
 					id_begin = cp + 1;
 				}
 			}
@@ -13010,6 +13022,7 @@ ResultType Line::Perform()
 		return BIV_FileEncoding_Set(ARG1, NULL);
 
 	case ACT_FUNC:
+	case ACT_METHOD:
 	{
 		ExprTokenType param_tok[MAX_ARGS], *param_ptr[MAX_ARGS];
 		for (int i = 0; i < mArgc; ++i)
@@ -13019,13 +13032,13 @@ ResultType Line::Perform()
 		if (result != OK) // Probably FAIL or EARLY_EXIT.
 			return result;
 
-		Func *func = (Func *)mAttribute;
+		Func *func = (Func *)mAttribute; // NULL for ACT_METHOD.
 		//if (!func && !(func = g_script.FindFunc(ARG1)))
 		//	return LineError(ERR_NONEXISTENT_FUNCTION, FAIL, ARG1);
 		
 		int param_count = mArgc - 1;
 		int arg = 1;
-		if (param_count && func->mHasReturn)
+		if (param_count && func && func->mHasReturn)
 		{
 			// Above: mArg[1].type isn't checked because the output var is optional and
 			// might have been omitted, in which case type would be ARG_TYPE_NORMAL.
@@ -13065,8 +13078,32 @@ ResultType Line::Perform()
 		result_token.buf = result_buf; // Built-in functions expect this to be available.
 		result_token.mem_to_free = NULL; // Init to allow detection below.
 
-		// CALL THE FUNCTION.
-		func->Call(func_call, result, result_token, param_ptr, param_count);
+		if (func) // ACT_FUNC
+		{
+			func->Call(func_call, result, result_token, param_ptr, param_count);
+		}
+		else // ACT_METHOD
+		{
+			if (ARGVAR1)
+			{
+				// This could only be a plain var reference, for which param_tok[0] wasn't set.
+				if (IObject *object = ARGVAR1->ToObject())
+				{
+					param_tok[0].symbol = SYM_OBJECT;
+					param_tok[0].object = object;
+					object->AddRef(); // Release() will be called below.
+				}
+			}
+			// Otherwise, it's not a plain var reference so must be something like X.Y (in X.Y.Z).
+			if (param_tok[0].symbol == SYM_OBJECT)
+			{
+				result_token.symbol = SYM_STRING;
+				result_token.marker = _T("");
+				result = param_tok[0].object->Invoke(result_token, param_tok[0], IT_CALL, param_ptr, param_count);
+			}
+			else
+				result = LineError(ERR_NO_OBJECT);
+		}
 
 		if (output_var)
 		{
@@ -13616,6 +13653,8 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 		int i = 0;
 		if (mActionType == ACT_FUNC)
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), mArg[i++].text);
+		else if (mActionType == ACT_METHOD)
+			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s.%s"), *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName, mArg[1].text), i = 2;
 		else
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), g_act[mActionType].Name);
 		for ( ; i < mArgc; ++i)

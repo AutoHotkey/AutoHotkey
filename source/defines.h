@@ -303,7 +303,7 @@ enum enum_act {
 // Seems best to make ACT_INVALID zero so that it will be the ZeroMemory() default within
 // any POD structures that contain an action_type field:
   ACT_INVALID = FAIL  // These should both be zero for initialization and function-return-value purposes.
-, ACT_ASSIGNEXPR, ACT_FUNC
+, ACT_ASSIGNEXPR, ACT_METHOD, ACT_FUNC
 // Actions above this line take care of calling ExpandArgs() for themselves (ACT_EXPANDS_ITS_OWN_ARGS).
 , ACT_EXPRESSION
 // Keep ACT_BLOCK_BEGIN as the first "control flow" action, for range checks with ACT_FIRST_CONTROL_FLOW:
