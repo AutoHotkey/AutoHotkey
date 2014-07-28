@@ -4563,6 +4563,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			this_aArgMap = aArgMap ? aArgMap[i] : NULL; // Same.
 			ArgStruct &this_new_arg = new_arg[i];       // Same.
 			this_new_arg.is_expression = false;         // Set default early, for maintainability.
+			this_new_arg.postfix = NULL;                // Same.  ExpressionToPostfix() may override it even when setting is_expression back to false.
 
 			// Before allocating memory for this Arg's text, first check if it's a pure
 			// variable.  If it is, we store it differently (and there's no need to resolve
@@ -10078,7 +10079,7 @@ end_of_infix_to_postfix:
 				break;
 			}
 			aArg.is_expression = false;
-			if (mActionType != ACT_ASSIGNEXPR && mActionType != ACT_RETURN)
+			if (mActionType != ACT_ASSIGNEXPR && mActionType != ACT_RETURN && mActionType != ACT_FUNC)
 				return OK;
 			// Otherwise, continue on below to copy the postfix token into persistent memory.
 		}
@@ -10269,9 +10270,9 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		// Note: Only one line at a time be expanded via the above function.  So be sure
 		// to store any parts of a line that are needed prior to moving on to the next
 		// line (e.g. control stmts such as IF and LOOP).
-		if (line->mActionType != ACT_ASSIGNEXPR && line->mActionType != ACT_WHILE && line->mActionType != ACT_THROW)
+		if (!ACT_EXPANDS_ITS_OWN_ARGS(line->mActionType)) // Not ACT_ASSIGNEXPR, ACT_FUNC, ACT_WHILE or ACT_THROW.
 		{
-			result = line->ExpandArgs(aResultToken);
+			result = line->ExpandArgs(line->mActionType == ACT_RETURN ? aResultToken : NULL);
 			// As of v1.0.31, ExpandArgs() will also return EARLY_EXIT if a function call inside one of this
 			// line's expressions did an EXIT.
 			if (result != OK)
@@ -10506,24 +10507,13 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				}
 				else // Not a var, or not one that supports ToToken().
 				{
-					if (line->mArg[0].postfix && !line->mArg[0].is_expression) // Lone numeric or string literal.
-					{
-						aResultToken->symbol = line->mArg[0].postfix->symbol;
-#ifndef _WIN64
-						if (aResultToken->symbol == SYM_STRING)
-							aResultToken->marker = line->mArg[0].postfix->marker; // Avoid union copy in this case since some callers use aResultToken.buf to make the string persistent.
-						else
-#endif
-						aResultToken->value_int64 = line->mArg[0].postfix->value_int64; // Union copy.
-					}
-					else // An expression which returned a string, or a lone dynamic/built-in var deref.
-					{
-						aResultToken->symbol = SYM_STRING;
-						aResultToken->marker = ARG1; // This sets it to blank if this return lacks an arg.
-					}
+					// ExpandArgs() or ExpandExpression() takes care of assigning aResultToken
+					// if it was a number or object, but leaves it unset for strings.
+					//aResultToken->symbol = SYM_STRING; // The check above verified it is already SYM_STRING.
+					aResultToken->marker = ARG1;
 				}
 			}
-			//else the return value, if any, is discarded.
+			// Otherwise, the return value either has already been set or is being discarded.
 			if (aMode != UNTIL_RETURN)
 				// Tells the caller to return early if it's not the Gosub that directly
 				// brought us into this subroutine.  i.e. it allows us to escape from
@@ -13043,6 +13033,14 @@ ResultType Line::Perform()
 
 	case ACT_FUNC:
 	{
+		ExprTokenType param_tok[MAX_ARGS], *param_ptr[MAX_ARGS];
+		for (int i = 0; i < mArgc; ++i)
+			param_tok[i].symbol = SYM_STRING; // Set default.  ExpandArgs() might not set it.
+
+		result = ExpandArgs(param_tok);
+		if (result != OK) // Probably FAIL or EARLY_EXIT.
+			return result;
+
 		Func *func = (Func *)mAttribute;
 		//if (!func && !(func = g_script.FindFunc(ARG1)))
 		//	return LineError(ERR_NONEXISTENT_FUNCTION, FAIL, ARG1);
@@ -13066,20 +13064,20 @@ ResultType Line::Perform()
 		//if (param_count < func->mMinParams)
 		//	return LineError(ERR_TOO_FEW_PARAMS, FAIL, ARG1);
 
-		ExprTokenType params[MAX_ARGS], *param[MAX_ARGS];
 		for (int i = 0; i < param_count; ++i, ++arg)
 		{
-			param[i] = &params[i];
 			if (sArgVar[arg] && sArgVar[arg]->Type() == VAR_NORMAL) // Only normal variables can be SYM_VAR.
 			{
-				params[i].symbol = SYM_VAR;
-				params[i].var = sArgVar[arg];
+				param_tok[arg].symbol = SYM_VAR;
+				param_tok[arg].var = sArgVar[arg];
 			}
 			else
 			{
-				params[i].symbol = SYM_STRING;
-				params[i].marker = sArgDeref[arg];
+				if (param_tok[arg].symbol == SYM_STRING) // i.e. still at the default we set.
+					param_tok[arg].marker = sArgDeref[arg];
+				//else use the type and value set by ExpandArgs().
 			}
+			param_ptr[i] = &param_tok[arg];
 		}
 		
 		TCHAR result_buf[MAX_NUMBER_SIZE];
@@ -13090,7 +13088,7 @@ ResultType Line::Perform()
 		result_token.mem_to_free = NULL; // Init to allow detection below.
 
 		// CALL THE FUNCTION.
-		func->Call(func_call, result, result_token, param, param_count);
+		func->Call(func_call, result, result_token, param_ptr, param_count);
 
 		if (output_var)
 		{
@@ -13110,6 +13108,9 @@ ResultType Line::Perform()
 			free(result_token.mem_to_free);
 		if (result_token.symbol == SYM_OBJECT)
 			result_token.object->Release();
+		for (int i = 0; i < mArgc; ++i)
+			if (param_tok[i].symbol == SYM_OBJECT)
+				param_tok[i].object->Release();
 
 		if (result == EARLY_RETURN) // This would cause our caller to "return".
 			result = OK;

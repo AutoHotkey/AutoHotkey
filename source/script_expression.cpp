@@ -1761,7 +1761,7 @@ FuncCallData::~FuncCallData()
 
 
 
-ResultType Line::ExpandArgs(ExprTokenType *aResultToken)
+ResultType Line::ExpandArgs(ExprTokenType *aResultTokens)
 // Caller should either provide both or omit both of the parameters.  If provided, it means
 // caller already called GetExpandedArgSize for us.
 // Returns OK, FAIL, or EARLY_EXIT.  EARLY_EXIT occurs when a function-call inside an expression
@@ -1868,7 +1868,7 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken)
 				// for use in arg_var[] (for performance) because only rarely does an expression yield
 				// a variable other than some function's local variable (and a local's contents are no
 				// longer valid due to having been freed after the call [unless it's static]).
-				arg_deref[i] = ExpandExpression(i, result, mActionType == ACT_RETURN ? aResultToken : NULL  // L31: aResultToken is used to return a non-string value. Pass NULL if mMctionType != ACT_RETURN for maintainability; non-NULL aResultToken should mean we want a token returned - this can be used in future for numeric params or array support in commands.
+				arg_deref[i] = ExpandExpression(i, result, aResultTokens ? &aResultTokens[i] : NULL
 					, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, extra_size, arg_var);
 				extra_size = 0; // See comment below.
 				// v1.0.46.01: The whole point of passing extra_size is to allow an expression to write
@@ -1916,6 +1916,12 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultToken)
 			// arg_var[i] was previously set by GetExpandedArgSize() or ExpandExpression() above.
 			if (   !(the_only_var_of_this_arg = arg_var[i])   )
 			{
+				if (aResultTokens && this_arg.postfix)
+				{
+					// Since above did not "continue", this arg must have been an expression which was
+					// converted back to a plain value.  *postfix is a single numeric or string literal.
+					aResultTokens[i] = *this_arg.postfix;
+				}
 				// Since above did not "continue" and arg_var[i] is NULL, this arg can't be an expression
 				// or input/output var and must therefore be plain text.
 				arg_deref[i] = this_arg.text;  // Point the dereferenced arg to the arg text itself.
@@ -2049,6 +2055,16 @@ end:
 	// such as WinWait, that large deref buffer would never get freed.
 	if (sDerefBufSize > LARGE_DEREF_BUF_SIZE)
 		SET_DEREF_TIMER(10000) // Reset the timer right before the deref buf is possibly about to become idle.
+
+	if (aResultTokens && result_to_return != OK)
+	{
+		// For maintainability, release any objects here.  Caller was responsible for ensuring
+		// aResultTokens is initialized and has at least mArgc elements.  Caller must assume
+		// contents of aResultTokens are invalid if we return != OK.
+		for (int i = 0; i < mArgc; ++i)
+			if (aResultTokens[i].symbol == SYM_OBJECT)
+				aResultTokens[i].object->Release();
+	}
 
 	return result_to_return;
 }

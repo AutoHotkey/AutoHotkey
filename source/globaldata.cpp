@@ -263,12 +263,12 @@ Action g_act[] =
 	// ASSIGNEXPR: Give it a name for Line::ToText().
 	// 1st param is the target, 2nd (optional) is the value:
 	, {_T(":="), 2, 2, false, {2, 0}} // Same, though param #2 is flagged as numeric so that expression detection is automatic.  "H" (high-bit) doesn't appear to be needed even when ACT_ASSIGNEXPR calls AssignBinaryClip() because that AssignBinaryClip() checks for source==dest.
+	, {_T(""), 1, MAX_ARGS, true, NULL} // Command-style function-call (ACT_FUNC).
 
 	// ACT_EXPRESSION, which is a stand-alone expression outside of any IF or assignment-command;
 	// e.g. fn1(123, fn2(y)) or x&=3
 	// Its name should be "" so that Line::ToText() will properly display it.
 	, {_T(""), 1, 1, false, {1, 0}}
-	, {_T(""), 1, MAX_ARGS, true, NULL} // Command-style function-call (ACT_FUNC).
 	, {_T("{"), 0, 0, false, NULL}, {_T("}"), 0, 0, false, NULL}
 
 	, {_T("Else"), 0, 0, false, NULL}
