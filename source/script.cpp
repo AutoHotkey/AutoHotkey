@@ -6450,7 +6450,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		item_end += FindExprDelim(item_end); // Find the next comma which is not part of the initializer (or find end of string).
 
 		// Append "ClassNameOrThis.VarName := Initializer, " to the buffer.
-		int chars_written = _sntprintf(buf + buf_used, _countof(buf) - buf_used, _T("ObjInsert(%s,\"%.*s\",(%.*s)), ")
+		int chars_written = _sntprintf(buf + buf_used, _countof(buf) - buf_used, _T("ObjRawSet(%s,\"%.*s\",(%.*s)), ")
 			, aStatic ? mClassName : _T("this"), name_length, item, item_end - right_side_of_operator, right_side_of_operator);
 		if (chars_written < 0)
 			return ScriptError(_T("Declaration too long.")); // Short message since should be rare.
