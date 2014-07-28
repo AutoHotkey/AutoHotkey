@@ -178,6 +178,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 						}
 						// Take a shortcut to allow dynamic output vars to resolve to builtin vars such as Clipboard
 						// or A_WorkingDir.  For additional comments, search for "SYM_VAR is somewhat unusual".
+						// This also ensures that the var's content is not transferred to aResultToken, which means
+						// that PerformLoopFor() is not required to check for/release an object in args 0 and 1.
 						aArgVar[aArgIndex] = temp_var;
 						result_to_return = _T(""); // No need to dereference it; this value won't be used but must be non-NULL.
 						goto normal_end_skip_output_var;

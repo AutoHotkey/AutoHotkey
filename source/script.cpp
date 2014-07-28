@@ -8018,16 +8018,6 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 				return line->PreparseError(_T("Improper line below this.")); // Short message since so rare. A function must not be defined directly below an IF/ELSE/LOOP because runtime evaluation won't handle it properly.
 			}
 
-			if (line->mActionType == ACT_FOR)
-			{
-				ASSERT(line->mArgc == 3);
-				// Now that this FOR's expression has been pre-parsed, exclude it from mArgc so that ExpandArgs()
-				// won't evaluate it -- PerformLoopFor() needs to call ExpandExpression() directly in order to
-				// receive the object reference which is the result of the expression.
-				line->mArgc--;
-			}
-
-
 			// Make the line immediately following each ELSE, IF or LOOP be enclosed by that stmt.
 			// This is done to make it illegal for a Goto or Gosub to jump into a deeper layer,
 			// such as in this example:
@@ -11271,41 +11261,28 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 	Line *jump_to_line;
 	global_struct &g = *::g; // Might slightly speed up the loop below.
 
-	// Save these pointers since they will be overwritten during the loop:
-	Var *var[] = { ARGVARRAW1, ARGVARRAW2 };
-	
-	if (!sDerefBuf)
-	{
-		// This must be done in case ExpandExpression() needs the deref buf for temporary storage.
-		sDerefBufSize = (mArg[2].length < MAX_NUMBER_LENGTH ? MAX_NUMBER_LENGTH : mArg[2].length) + 1; // See EXPR_BUF_SIZE macro in script_expression.cpp.
-		if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
-		{
-			sDerefBufSize = 0;
-			return LineError(ERR_OUTOFMEM);
-		}
-	}
+	ExprTokenType param_tokens[3];
+	for (int i = 0; i < 3; ++i)
+		param_tokens[i].symbol = SYM_INVALID; // Set default.  ExpandArgs() doesn't always set it.
 
-	LPTSTR our_buf_marker = sDerefBuf;
-	LPTSTR arg_deref[] = {0, 0}; // ExpandExpression checks these if it needs to expand the deref buffer.
-	ExprTokenType object_token;
-	object_token.symbol = SYM_INVALID; // Init in case ExpandExpression() resolves to a string, in which case it won't use enum_token.
-
-	// Since expressions aren't normally capable of resolving to an object (except for RETURN), we need to
-	// call ExpandExpression() directly and pass in a "result token" which will be used if the result is an
-	// object or number. Load-time pre-parsing has ensured there are really three args, but mArgc == 2 so
-	// this one hasn't been evaluated yet:
-	if (!ExpandExpression(2, result, &object_token, our_buf_marker, sDerefBuf, sDerefBufSize, arg_deref, 0))
+	result = ExpandArgs(param_tokens);
+	if (result != OK)
 		// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
 		return result;
 
-	if (object_token.symbol != SYM_OBJECT)
+	// Not required because the tokens aren't used for ARG_TYPE_OUTPUT_VAR:
+	//if (param_tokens[0].symbol == SYM_OBJECT)
+	//    param_tokens[0].object->Release();
+	if (param_tokens[2].symbol != SYM_OBJECT)
 		// The expression didn't resolve to an object, so no enumerator is available.
 		return OK;
+	
+	// Save these pointers since they will be overwritten during the loop:
+	Var *var[] = { ARGVARRAW1, ARGVARRAW2 };
 	
 	TCHAR buf[MAX_NUMBER_SIZE]; // Small buffer which may be used by object->Invoke().
 	
 	ExprTokenType enum_token;
-	ExprTokenType param_tokens[3];
 	ExprTokenType *params[] = { param_tokens, param_tokens+1, param_tokens+2 };
 	int param_count;
 
@@ -11319,8 +11296,9 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 	param_tokens[0].symbol = SYM_STRING;
 	param_tokens[0].marker = _T("_NewEnum");
 
-	object_token.object->Invoke(enum_token, object_token, IT_CALL, params, 1);
-	object_token.object->Release(); // This object reference is no longer needed.
+	// enum := object._NewEnum()
+	param_tokens[2].object->Invoke(enum_token, param_tokens[2], IT_CALL, params, 1);
+	param_tokens[2].object->Release(); // This object reference is no longer needed.
 
 	if (enum_token.mem_to_free)
 		// Invoke returned memory for us to free.

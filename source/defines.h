@@ -386,7 +386,7 @@ enum enum_act {
 #define ACT_IS_LOOP(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_WHILE)
 #define ACT_IS_IF_OR_ELSE_OR_LOOP(ActionType) (ActionType <= ACT_WHILE && ActionType >= ACT_ELSE)
 #define ACT_LOOP_ALLOWS_UNTIL(ActionType) (ActionType <= ACT_FOR && ActionType >= ACT_LOOP) // UNTIL is currently unsupported with WHILE, for performance/code size (doesn't seem useful anyway).
-#define ACT_EXPANDS_ITS_OWN_ARGS(ActionType) (ActionType <= ACT_FUNC || ActionType == ACT_WHILE || ActionType == ACT_THROW)
+#define ACT_EXPANDS_ITS_OWN_ARGS(ActionType) (ActionType <= ACT_FUNC || ActionType == ACT_WHILE || ActionType == ACT_FOR || ActionType == ACT_THROW)
 
 // For convenience in many places.  Must cast to int to avoid loss of negative values.
 #define BUF_SPACE_REMAINING ((int)(aBufSize - (aBuf - aBuf_orig)))
