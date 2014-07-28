@@ -357,6 +357,16 @@ public:
 		return (mType == VAR_ALIAS) ? mAliasFor->mObject : mObject;
 	}
 
+	IObject *ToObject()
+	{
+		if (mType == VAR_ALIAS)
+			return mAliasFor->ToObject();
+		if (IsObject())
+			return mObject;
+		MaybeWarnUninitialized();
+		return NULL;
+	}
+
 	void ReleaseObject() // Not inline or __forceinline since our caller is not performance-critical.
 	// Caller has ensured that IsObject() == true, not just HasObject().
 	{
