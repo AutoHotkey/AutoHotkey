@@ -9675,7 +9675,8 @@ unquoted_literal:
 			}
 			else if (infix_symbol == SYM_FUNC)
 				in_param_list = this_infix[-1].deref	; // Store this SYM_FUNC's deref.
-			else if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol))
+			else if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol)
+				&& this_infix[-1].symbol != SYM_MISSING) // Workaround for X(,(something)), where SYM_COMMA has been replaced with SYM_MISSING.
 				return LineError(_T("Missing operator or space before \"(\"."));
 			else
 				in_param_list = NULL; // Allow multi-statement commas, even in cases like Func((x,y)).
