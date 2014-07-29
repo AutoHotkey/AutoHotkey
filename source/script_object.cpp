@@ -373,6 +373,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				// Propagate EARLY_RETURN in case this was the __Call meta-function of a
 				// "function object" which is used as a meta-function of some other object.
 				return EARLY_RETURN; // TODO: Detection of 'return' vs 'return empty_value'.
+			if (r != OK) // Likely FAIL or EARLY_EXIT.
+				return r;
 		}
 	}
 	
