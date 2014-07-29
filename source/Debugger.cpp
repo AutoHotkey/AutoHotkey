@@ -1033,7 +1033,6 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 	if (aDepth)
 	{
 		int i = aPageSize * aPage, j = aPageSize * (aPage + 1);
-		char buf[MAX_INTEGER_SIZE];
 
 		if (mBase)
 		{
@@ -1062,7 +1061,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			else if (i >= mKeyOffsetObject)
 				aDebugger->WriteProperty(field.key.p, value);
 			else
-				aDebugger->WriteProperty(Exp32or64(_itoa,_i64toa)(field.key.i, buf, 10), value);
+				aDebugger->WriteProperty(field.key.i, value);
 		}
 	}
 

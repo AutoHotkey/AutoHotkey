@@ -1057,6 +1057,18 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 						// never change; it will always contain the true name of this hotkey, namely its
 						// keystroke+modifiers (e.g. ^!c).
 					}
+					// v1.1.15: Allow the ~tilde prefix to be added/removed from an existing hotkey variant.
+					if (variant->mNoSuppress = suffix_has_tilde)
+					{
+						hk->mNoSuppress |= AT_LEAST_ONE_VARIANT_HAS_TILDE;
+						if (!hk->mKeybdHookMandatory)
+						{
+							update_all_hotkeys = true; // Since it may be switching from reg to k-hook.
+							hk->mKeybdHookMandatory = true; // See Hotkey::AddVariant() for comments.
+						}
+					}
+					else
+						hk->mNoSuppress |= AT_LEAST_ONE_VARIANT_LACKS_TILDE;
 				}
 				else // No existing variant matching current #IfWin criteria, so create a new variant.
 				{
@@ -1149,7 +1161,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 			}
 		} // for()
 	} // if (*aOptions)
-
+		
 	if (update_all_hotkeys)
 		ManifestAllHotkeysHotstringsHooks(); // See its comments for why it's done in so many of the above situations.
 

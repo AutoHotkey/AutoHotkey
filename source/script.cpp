@@ -11262,8 +11262,11 @@ bool Line::EvaluateLoopUntil(ResultType &aResult)
 	if (g_Debugger.IsConnected())
 		g_Debugger.PreExecLine(this);
 #endif
-	return (aResult = ExpandArgs()) != OK // i.e. if it fails, shortcircuit and break the loop.
-			|| ResultToBOOL(ARG1); // See PerformLoopWhile() above for comments about this line.
+	aResult = ExpandArgs();
+	if (aResult != OK)
+		return true; // i.e. if it fails, break the loop.
+	aResult = LOOP_BREAK; // Break out of any recursive PerformLoopXxx() calls.
+	return ResultToBOOL(ARG1); // See PerformLoopWhile() above for comments about this line.
 }
 
 
@@ -13999,7 +14002,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 			g_Debugger.OutputDebug(buf);
 		else
 #endif
-		if (MsgBox(buf, aErrorType == EARLY_EXIT ? MB_YESNO : 0) == IDNO)
+		if (MsgBox(buf, MB_TOPMOST | (aErrorType == EARLY_EXIT ? MB_YESNO : 0)) == IDNO)
 			aErrorType = CRITICAL_ERROR;
 	}
 

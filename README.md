@@ -16,7 +16,11 @@ AutoHotkey_L is developed with [Microsoft Visual C++ 2010 Express](http://www.mi
   - Select the appropriate Build and Platform.
   - Build.
 
-Visual Studio 2010 or MSBuild in the Windows SDK may also work.
+Windows 7.1 SDK may be required for x64 builds.  Installing the SDK compilers and Visual Studio 2010 SP1 together can prove difficult; see [KB2519277](http://support.microsoft.com/kb/2519277) for the solution.
+
+Visual Studio 2010 or MSBuild in the Windows 7.1 SDK (with Visual C++ 2010 compilers installed) should also work.
+
+Visual Studio 2013 will work if the Platform Toolset is changed in the project settings, but does not support Windows XP SP2 or earlier.
 
 
 ## Build Configurations ##

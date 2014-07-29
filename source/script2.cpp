@@ -12156,7 +12156,6 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 #else
 		static LPSTR *sNamesT = sNames;
 #endif
-		char indexBuf[MAX_INTEGER_SIZE];
 		TCHAR resultBuf[MAX_NUMBER_SIZE];
 		ExprTokenType resultToken, thisTokenUnused, paramToken[2], *param[] = { &paramToken[0], &paramToken[1] };
 		for (int i = 0; i < _countof(sNames); i++)
@@ -12173,7 +12172,7 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 				paramToken[1].symbol = SYM_INTEGER;
 				paramToken[1].value_int64 = p;
 				Invoke(resultToken, thisTokenUnused, IT_GET, param, 2);
-				aDebugger->WriteProperty(_itoa(p, indexBuf, 10), resultToken);
+				aDebugger->WriteProperty(p, resultToken);
 				if (resultToken.mem_to_free)
 					free(resultToken.mem_to_free);
 			}
