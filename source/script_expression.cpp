@@ -126,7 +126,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 		// 2) Using a particular variable very frequently might help compiler to optimize that variable to
 		//    generate faster code.
 		ExprTokenType &this_token = *(ExprTokenType *)_alloca(sizeof(ExprTokenType)); // Saves a lot of stack space, and seems to perform just as well as something like the following (at the cost of ~82 byte increase in OBJ code size): ExprTokenType &this_token = new_token[new_token_count++]  // array size MAX_TOKENS
-		this_token = *this_postfix; // Struct copy. See comment section above.
+		this_token.CopyExprFrom(*this_postfix); // See comment section above.
 
 		// At this stage, operands in the postfix array should be SYM_STRING, SYM_INTEGER, SYM_FLOAT or SYM_DYNAMIC.
 		// But all are checked since that operation is just as fast:
@@ -650,7 +650,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				{
 					// This will be the final result of this AND/OR because it's right branch was
 					// discarded above without having been evaluated nor any of its functions called:
-					this_token = right;
+					this_token.CopyValueFrom(right);
 					right.symbol = SYM_INTEGER; // i.e if it was SYM_OBJECT, don't call Release() for this copy of the pointer.
 					break;
 				}
@@ -878,7 +878,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 						goto abort;
 					if (left.var->Type() == VAR_CLIPBOARD) // v1.0.46.01: Clipboard is present as SYM_VAR, but only for assign-to-clipboard so that built-in functions and other code sections don't need handling for VAR_CLIPBOARD.
 					{
-						this_token = right; // Struct copy.  Doing it this way is more maintainable than other methods, and is unlikely to perform much worse.
+						this_token.CopyValueFrom(right); // Doing it this way is more maintainable than other methods, and is unlikely to perform much worse.
 						right.symbol = SYM_INTEGER; // i.e if it was SYM_OBJECT (which would be pointless in this case, but could happen), don't call Release() for this copy of the pointer.
 					}
 					else
@@ -1922,7 +1922,9 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultTokens)
 				{
 					// Since above did not "continue", this arg must have been an expression which was
 					// converted back to a plain value.  *postfix is a single numeric or string literal.
-					aResultTokens[i] = *this_arg.postfix;
+					// CopyValueFrom() avoids overwriting buf, which is important for ACT_RETURN when
+					// called by some callers (such as CallFunc()) which use TokenSetResult().
+					aResultTokens[i].CopyValueFrom(*this_arg.postfix);
 				}
 				// Since above did not "continue" and arg_var[i] is NULL, this arg can't be an expression
 				// or input/output var and must therefore be plain text.

@@ -10096,7 +10096,7 @@ end_of_infix_to_postfix:
 	for (i = 0; i < postfix_count; ++i) // Copy the postfix array in physically sorted order into the new postfix array.
 	{
 		ExprTokenType &new_token = aArg.postfix[i];
-		new_token = *postfix[i]; // Struct copy.
+		new_token.CopyExprFrom(*postfix[i]);
 		if (new_token.symbol <= SYM_AND && new_token.symbol >= SYM_IFF_ELSE) // Adjust each circuit_token address to be relative to the new array rather than the temp/infix array.
 		{
 			// circuit_token should always be non-NULL at this point.

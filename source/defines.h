@@ -280,7 +280,21 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	// The above two probably need to be adjacent to each other to conserve memory due to 8-byte alignment,
 	// which is the default alignment (for performance reasons) in any struct that contains 8-byte members
 	// such as double and __int64.
-	ExprTokenType & operator = (ExprTokenType &other)
+
+	inline void CopyValueFrom(ExprTokenType &other)
+	// Copies the value of a token without overwriting buf, which may still be needed.
+	{
+		symbol = other.symbol;
+#ifndef _WIN64
+		if (symbol == SYM_STRING)
+			marker = other.marker; // Avoid overwriting buf via the union.
+		else
+#endif
+			value_int64 = other.value_int64; // Union copy.
+	}
+
+	inline void CopyExprFrom(ExprTokenType &other)
+	// Copies all fields typically needed in a postfix expression.
 	{
 		value_int64 = other.value_int64;
 #ifdef _WIN64
@@ -288,6 +302,11 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 #endif
 		symbol = other.symbol;
 		// Don't copy mem_to_free since that's only needed for SYM_FUNC result token, which doesn't use this operator.
+	}
+
+private: // Force code to use one of the above methods, for clarity.
+	ExprTokenType & operator = (ExprTokenType &other)
+	{
 		return *this;
 	}
 };

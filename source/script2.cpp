@@ -14203,7 +14203,7 @@ BIF_DECL(BIF_Abs)
 	// that it might produce inconsistent results depending on whether the operand is
 	// generic (SYM_OPERAND) and numeric.  In other words, abs() shouldn't treat a
 	// sub-expression differently than a numeric literal.
-	aResultToken = *aParam[0]; // Structure/union copy.
+	aResultToken.CopyValueFrom(*aParam[0]);
 	// v1.0.40.06: TokenToDoubleOrInt64() and here has been fixed to set proper result to be empty string
 	// when the incoming parameter is non-numeric.
 	if (!TokenToDoubleOrInt64(aResultToken)) // "Cast" token to Int64/Double depending on whether it has a decimal point.
