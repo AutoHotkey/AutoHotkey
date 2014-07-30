@@ -10512,8 +10512,13 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				{
 					// ExpandArgs() or ExpandExpression() takes care of assigning aResultToken
 					// if it was a number or object, but leaves it unset for strings.
+					// The exception is that expressions consisting of just a literal string are
+					// optimized to skip ExpandExpression() and just assign the string token.
+					// In that case, arg.text contains quote marks which we want to omit
+					// (the quote marks are left for ListLines and Line::VicinityToText()).
 					//aResultToken->symbol = SYM_STRING; // The check above verified it is already SYM_STRING.
-					aResultToken->marker = ARG1;
+					if (!*aResultToken->marker) // i.e. it really hasn't been set.
+						aResultToken->marker = ARG1;
 				}
 			}
 			// Otherwise, the return value either has already been set or is being discarded.
