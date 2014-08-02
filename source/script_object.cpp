@@ -466,7 +466,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 
 		// Since the base object didn't handle this op, check for built-in properties/methods.
 		// This must apply only to the original target object (aThisToken), not one of its bases.
-		if (!IS_INVOKE_META && key_type == SYM_STRING)
+		if (!IS_INVOKE_META && key_type == SYM_STRING && !field) // v1.1.16: Check field again so if __Call sets a field, it gets called.
 		{
 			//
 			// BUILT-IN METHODS
