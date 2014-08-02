@@ -1762,7 +1762,7 @@ FuncCallData::~FuncCallData()
 }
 
 
-ResultType Func::Call(ExprTokenType &aResultToken, int aParamCount, ...)
+ResultType Func::Call(FuncCallData &aFuncCall, ExprTokenType &aResultToken, int aParamCount, ...)
 {
 	// Detect variadic function calls
 	bool is_variadic = false;
@@ -1799,9 +1799,8 @@ ResultType Func::Call(ExprTokenType &aResultToken, int aParamCount, ...)
 	va_end(va);
 
 	// Perform function call
-	FuncCallData func_call; // For UDFs: must remain in scope until the result has been copied into pVarResult.
 	ResultType result;
-	Call(func_call, result, aResultToken, aParam, aParamCount, is_variadic);
+	Call(aFuncCall, result, aResultToken, aParam, aParamCount, is_variadic);
 	return result;
 }
 

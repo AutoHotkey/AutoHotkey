@@ -1270,10 +1270,11 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 				int arg = CountClipboardFormats() ? (IsClipboardFormatAvailable(CF_NATIVETEXT) || IsClipboardFormatAvailable(CF_HDROP) ? 1 : 2) : 0;
 
+				FuncCallData func_call;
 				ExprTokenType result_token;
 				TCHAR result_token_buf[MAX_NUMBER_SIZE];
 				result_token.InitResult(result_token_buf);
-				g_script.mOnClipboardChangeFunc->Call(result_token, 1, FUNC_ARG_INT(arg));
+				g_script.mOnClipboardChangeFunc->Call(func_call, result_token, 1, FUNC_ARG_INT(arg));
 				result_token.Free();
 
 				DEBUGGER_STACK_POP()
@@ -1784,12 +1785,13 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	++monitor.instance_count;
 
 	bool block_further_processing;
-	{// Scope for function call.
+	{// Scope for func_call.
+		FuncCallData func_call;
 		ExprTokenType result_token;
 		TCHAR result_token_buf[MAX_NUMBER_SIZE];
 		result_token.InitResult(result_token_buf);
 
-		ResultType result = func.Call(result_token, 4, FUNC_ARG_INT(awParam), FUNC_ARG_INT(alParam), FUNC_ARG_INT(aMsg), FUNC_ARG_INT((size_t)aWnd));
+		ResultType result = func.Call(func_call, result_token, 4, FUNC_ARG_INT(awParam), FUNC_ARG_INT(alParam), FUNC_ARG_INT(aMsg), FUNC_ARG_INT((size_t)aWnd));
 
 		if (result != FAIL && result != EARLY_EXIT)
 		{

@@ -1033,11 +1033,12 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	sExitFuncIsRunning = true;
 	DEBUGGER_STACK_PUSH(mOnExitFunc->mJumpToLine, _T("OnExit"))
 
+	FuncCallData func_call;
 	ExprTokenType result_token;
 	TCHAR result_token_buf[MAX_NUMBER_SIZE];
 	result_token.InitResult(result_token_buf);
 
-	ResultType result = mOnExitFunc->Call(result_token, 1, FUNC_ARG_STR(GetExitReasonString(mExitReason)));
+	ResultType result = mOnExitFunc->Call(func_call, result_token, 1, FUNC_ARG_STR(GetExitReasonString(mExitReason)));
 	// If the function returns true, do not terminate the script.
 	terminate_afterward = !TokenToBOOL(result_token);
 

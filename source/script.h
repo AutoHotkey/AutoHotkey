@@ -1900,7 +1900,7 @@ public:
 	}
 
 	bool Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false);
-	ResultType Call(ExprTokenType &aResultToken, int aParamCount, ...);
+	ResultType Call(FuncCallData &aFuncCall, ExprTokenType &aResultToken, int aParamCount, ...);
 
 // Macros for specifying arguments in Func::Call(aResultToken, aParamCount, ...)
 #define FUNC_ARG_INT(_arg)   SYM_INTEGER, ((__int64) (_arg))
