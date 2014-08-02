@@ -12212,10 +12212,7 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 			paramToken[0].marker = sNamesT[i];
 			for (int p = (i == 3); p < mPatternCount; p++)
 			{
-				resultToken.symbol = SYM_STRING;
-				resultToken.marker = _T("");
-				resultToken.buf = resultBuf;
-				resultToken.mem_to_free = NULL;
+				resultToken.InitResult(resultBuf);
 				paramToken[1].symbol = SYM_INTEGER;
 				paramToken[1].value_int64 = p;
 				Invoke(resultToken, thisTokenUnused, IT_GET, param, 2);

@@ -309,6 +309,27 @@ private: // Force code to use one of the above methods, for clarity.
 	{
 		return *this;
 	}
+
+public:
+	// Utility function for initializing result tokens.
+	void InitResult(LPTSTR aResultBuf)
+	{
+		symbol = SYM_STRING;
+		marker = _T("");
+		buf = aResultBuf; // May be used for short return values and misc purposes.
+		mem_to_free = NULL;
+	}
+
+	// Utility function for properly freeing a token's contents.
+	void Free()
+	{
+		// If the token contains an object, release it.
+		if (symbol == SYM_OBJECT)
+			object->Release();
+		// If the token has memory allocated for it, free it.
+		if (mem_to_free)
+			free(mem_to_free);
+	}
 };
 #define MAX_TOKENS 512 // Max number of operators/operands.  Seems enough to handle anything realistic, while conserving call-stack space.
 #define STACK_PUSH(token_ptr) stack[stack_count++] = token_ptr

@@ -302,10 +302,7 @@ bool Object::Delete()
 		DEPRIVATIZE_S_DEREF_BUF; // L33: See above.
 
 		// L33: Release result if given, although typically there should not be one:
-		if (result_token.mem_to_free)
-			free(result_token.mem_to_free);
-		if (result_token.symbol == SYM_OBJECT)
-			result_token.object->Release();
+		result_token.Free();
 
 		// Above may pass the script a reference to this object to allow cleanup routines to free any
 		// associated resources.  Deleting it is only safe if the script no longer holds any references

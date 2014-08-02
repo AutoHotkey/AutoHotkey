@@ -1762,6 +1762,50 @@ FuncCallData::~FuncCallData()
 }
 
 
+ResultType Func::Call(ExprTokenType &aResultToken, int aParamCount, ...)
+{
+	// Detect variadic function calls
+	bool is_variadic = false;
+	if (aParamCount < 0)
+	{
+		is_variadic = true;
+		aParamCount = -aParamCount;
+	}
+
+	// Allocate and build the parameter array
+	ExprTokenType **aParam = (ExprTokenType**) _alloca(aParamCount*sizeof(ExprTokenType*));
+	ExprTokenType *args    = (ExprTokenType*)  _alloca(aParamCount*sizeof(ExprTokenType));
+	va_list va;
+	va_start(va, aParamCount);
+	for (int i = 0; i < aParamCount; i ++)
+	{
+		ExprTokenType *cur_arg = &args[i];
+		aParam[i] = cur_arg;
+
+		// Initialize the argument structure
+		cur_arg->symbol = va_arg(va, SymbolType);
+		cur_arg->value_int64 = 0;
+		cur_arg->buf = NULL;
+
+		// Fill in the argument value
+		switch (cur_arg->symbol)
+		{
+			case SYM_INTEGER: cur_arg->value_int64  = va_arg(va, __int64);  break;
+			case SYM_STRING:  cur_arg->marker       = va_arg(va, LPTSTR);   break;
+			case SYM_FLOAT:   cur_arg->value_double = va_arg(va, double);   break;
+			case SYM_OBJECT:  cur_arg->object       = va_arg(va, IObject*); break;
+		}
+	}
+	va_end(va);
+
+	// Perform function call
+	FuncCallData func_call; // For UDFs: must remain in scope until the result has been copied into pVarResult.
+	ResultType result;
+	Call(func_call, result, aResultToken, aParam, aParamCount, is_variadic);
+	return result;
+}
+
+
 
 ResultType Line::ExpandArgs(ExprTokenType *aResultTokens)
 // Caller should either provide both or omit both of the parameters.  If provided, it means
