@@ -10036,7 +10036,6 @@ end_of_infix_to_postfix:
 	SymbolType only_symbol = only_token.symbol;
 	if (   postfix_count == 1 && IS_OPERAND(only_symbol) // This expression is a lone operand, like (1) or "string".
 		&& (mActionType < ACT_FOR || mActionType > ACT_UNTIL) // It's not FOR, WHILE or UNTIL, which require actual expressions.
-		&& (mActionType != ACT_THROW) // It's not THROW, which requires an actual expression.
 		&& (only_symbol != SYM_STRING || mActionType != ACT_SENDMESSAGE && mActionType != ACT_POSTMESSAGE)   ) // It's not something like SendMessage WM_SETTEXT,,"New text" (which requires the leading quote mark to be present).
 	{
 		if (only_symbol == SYM_DYNAMIC) // This needs some extra checks to ensure correct behaviour.
@@ -10876,45 +10875,32 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			if (!token) // Unlikely.
 				return line->LineError(ERR_OUTOFMEM);
 
-			// The following is based on code from PerformLoopFor()
+			token->symbol = SYM_STRING; // Set default. ExpandArgs() mightn't set it.
+			token->mem_to_free = NULL;
 
-			if (!sDerefBuf)
-			{
-				sDerefBufSize = (line->mArg[0].length < MAX_NUMBER_LENGTH ? MAX_NUMBER_LENGTH : line->mArg[0].length) + 1;
-				if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
-				{
-					sDerefBufSize = 0;
-					return line->LineError(ERR_OUTOFMEM);
-				}
-			}
-
-			PRIVATIZE_S_DEREF_BUF;
-			LPTSTR our_buf_marker = our_deref_buf;
-			LPTSTR arg_deref[] = {0, 0};
-			LPTSTR strVal;
-			token->symbol = SYM_INVALID;
-			strVal = line->ExpandExpression(0, result, token, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, 0);
-			if (strVal == our_deref_buf)
-				token->mem_to_free = strVal;
-			else
-			{
-				token->mem_to_free = NULL;
-				DEPRIVATIZE_S_DEREF_BUF;
-			}
-
-			if (!strVal)
+			result = line->ExpandArgs(token);
+			if (result != OK)
 			{
 				// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
 				delete token;
 				return result;
 			}
 
-			// Check if ExpandExpression has not returned a token at all
-			if (token->symbol == SYM_INVALID)
+			if (ARGVAR1) // Currently this is non-NULL only if the arg was a simple var reference, in which case token wasn't written to because ExpandExpression() wasn't called.
+				ARGVAR1->ToToken(*token);
+			if (token->symbol == SYM_STRING)
 			{
-				// Store the returned string in the token
-				token->symbol = SYM_STRING;
-				token->marker = strVal;
+				// Throwing a string is pretty rare, so keep it simple:
+				token->marker_length = ArgLength(1);
+				token->marker = token->mem_to_free = tmalloc(token->marker_length + 1);
+				if (!token->mem_to_free)
+				{
+					delete token;
+					// See ThrowRuntimeException() for comments.
+					MsgBox(ERR_OUTOFMEM ERR_ABORT);
+					return FAIL;
+				}
+				tmemcpy(token->marker, ARG1, token->marker_length + 1);
 			}
 
 			// Throw the newly-created token
