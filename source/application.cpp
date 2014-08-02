@@ -783,9 +783,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				type_of_first_line = hs->mJumpToLabel->mJumpToLine->mActionType;
 				break;
 
-			case AHK_CLIPBOARD_CHANGE: // Due to the presence of an OnClipboardChange label in the script.
-				// Caller has ensured that mOnClipboardChangeLabel is a non-NULL, valid pointer.
-				type_of_first_line = g_script.mOnClipboardChangeLabel->mJumpToLine->mActionType;
+			case AHK_CLIPBOARD_CHANGE: // Due to the registration of an OnClipboardChange function in the script.
+				if (g_script.mOnClipboardChangeFunc)
+					type_of_first_line = g_script.mOnClipboardChangeFunc->mJumpToLine->mActionType;
 				break;
 
 			default: // hotkey
@@ -926,7 +926,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			case AHK_HOTSTRING:
 				priority = hs->mPriority;
 				break;
-			case AHK_CLIPBOARD_CHANGE: // Due to the presence of an OnClipboardChange label in the script.
+			case AHK_CLIPBOARD_CHANGE: // Due to the registration of an OnClipboardChange function in the script.
 				if (g_script.mOnClipboardChangeIsRunning)
 					continue;
 				priority = 0;  // Always use default for now.
@@ -1257,15 +1257,46 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				break;
 
 			case AHK_CLIPBOARD_CHANGE:
-				g.EventInfo = CountClipboardFormats() ? (IsClipboardFormatAvailable(CF_NATIVETEXT) || IsClipboardFormatAvailable(CF_HDROP) ? 1 : 2) : 0;
+			{
+				// Sometimes OnClipboardChange messages are processed after the function is unregistered.
+				if (!g_script.mOnClipboardChangeFunc)
+					break;
+
 				// ACT_IS_ALWAYS_ALLOWED() was already checked above.
-				// The message poster has ensured that g_script.mOnClipboardChangeLabel is non-NULL and valid.
+
+				// Call the OnClipboardChange function.
 				g_script.mOnClipboardChangeIsRunning = true;
-				DEBUGGER_STACK_PUSH(g_script.mOnClipboardChangeLabel->mJumpToLine, _T("OnClipboardChange"))
-				g_script.mOnClipboardChangeLabel->Execute();
+				DEBUGGER_STACK_PUSH(g_script.mOnClipboardChangeFunc->mJumpToLine, _T("OnClipboardChange"))
+
+				FuncCallData func_call;
+				ExprTokenType result_token;
+
+				ExprTokenType param_token;
+				param_token.symbol = SYM_INTEGER;
+				param_token.value_int64 = CountClipboardFormats() ? (IsClipboardFormatAvailable(CF_NATIVETEXT) || IsClipboardFormatAvailable(CF_HDROP) ? 1 : 2) : 0;
+
+				ExprTokenType *param[1];
+				param[0] = &param_token;
+
+				TCHAR result_token_buf[MAX_NUMBER_SIZE];
+				result_token.buf = result_token_buf; // May be used below for short return values and misc purposes.
+				result_token.marker = _T("");
+				result_token.symbol = SYM_STRING;	// These must be initialized for the cleanup code below.
+				result_token.mem_to_free = NULL;	//
+
+				ResultType result;
+				g_script.mOnClipboardChangeFunc->Call(func_call, result, result_token, param, 1);
+
+				// Free the result token.
+				if (result_token.symbol == SYM_OBJECT)
+					result_token.object->Release();
+				if (result_token.mem_to_free)
+					free(result_token.mem_to_free);
+
 				DEBUGGER_STACK_POP()
 				g_script.mOnClipboardChangeIsRunning = false;
 				break;
+			}
 
 			default: // hotkey
 				if (IS_WHEEL_VK(hk->mVK)) // If this is true then also: msg.message==AHK_HOOK_HOTKEY

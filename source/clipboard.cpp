@@ -357,7 +357,7 @@ HANDLE Clipboard::GetClipboardDataTimeout(UINT uFormat)
 // GetClipboardData() is unable to start a data stream from the application that actually serves up the data).
 // If cases where the first call to GetClipboardData() fails, a subsequent call will often succeed if you give
 // the owning application (such as Excel and Word) a little time to catch up.  This is especially necessary in
-// the OnClipboardChange label, where sometimes a clipboard-change notification comes in before the owning
+// the OnClipboardChange function, where sometimes a clipboard-change notification comes in before the owning
 // app has finished preparing its data for subsequent readers of the clipboard.
 {
 #ifdef DEBUG_BY_LOGGING_CLIPBOARD_FORMATS  // Provides a convenient log of clipboard formats for analysis.

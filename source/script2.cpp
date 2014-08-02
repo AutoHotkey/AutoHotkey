@@ -4002,7 +4002,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			// to the user having chosen Exit from the menu.
 			//
 			// Leave it up to ExitApp() to decide whether to terminate based upon whether
-			// there is an OnExit subroutine, whether that subroutine is already running at
+			// there is an OnExit function, whether that function is already running at
 			// the time a new WM_CLOSE is received, etc.  It's also its responsibility to call
 			// DestroyWindow() upon termination so that the WM_DESTROY message winds up being
 			// received and process in this function (which is probably necessary for a clean
@@ -4022,11 +4022,11 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	case AHK_EXIT_BY_RELOAD:
 		g_script.ExitApp(EXIT_RELOAD);
-		return 0; // Whether ExitApp() terminates depends on whether there's an OnExit subroutine and what it does.
+		return 0; // Whether ExitApp() terminates depends on whether there's an OnExit function and what it does.
 
 	case AHK_EXIT_BY_SINGLEINSTANCE:
 		g_script.ExitApp(EXIT_SINGLEINSTANCE);
-		return 0; // Whether ExitApp() terminates depends on whether there's an OnExit subroutine and what it does.
+		return 0; // Whether ExitApp() terminates depends on whether there's an OnExit function and what it does.
 
 	case WM_DESTROY:
 		if (hWnd == g_hWnd) // i.e. not anything other than the main window.
@@ -4036,9 +4036,9 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 				// even though we didn't call DestroyWindow() ourselves (e.g. via DefWindowProc() receiving
 				// and acting upon a WM_CLOSE or us calling DestroyWindow() directly) -- perhaps the window
 				// is being forcibly closed or something else abnormal happened.  Make a best effort to run
-				// the OnExit subroutine, if present, even without a main window (testing on an earlier
+				// the OnExit function, if present, even without a main window (testing on an earlier
 				// versions shows that most commands work fine without the window). Pass the empty string
-				// to tell it to terminate after running the OnExit subroutine:
+				// to tell it to terminate after running the OnExit function:
 				g_script.ExitApp(EXIT_DESTROY, _T(""));
 			// Do not do PostQuitMessage() here because we don't know the proper exit code.
 			// MSDN: "The exit value returned to the system must be the wParam parameter of
@@ -4080,7 +4080,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	case WM_CLIPBOARDUPDATE: // For Vista and later.
 	case WM_DRAWCLIPBOARD:
-		if (g_script.mOnClipboardChangeLabel) // In case it's a bogus msg, it's our responsibility to avoid posting the msg if there's no label to launch.
+		if (g_script.mOnClipboardChangeFunc) // In case it's a bogus msg, it's our responsibility to avoid posting the msg if there's no function to execute.
 			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, 0, 0); // It's done this way to buffer it when the script is uninterruptible, etc.  v1.0.44: Post to g_hWnd vs. NULL so that notifications aren't lost when script is displaying a MsgBox or other dialog.
 		if (g_script.mNextClipboardViewer) // Will be NULL if there are no other windows in the chain, or if we're on Vista or later and used AddClipboardFormatListener instead of SetClipboardViewer (in which case iMsg should be WM_CLIPBOARDUPDATE).
 			SendMessageTimeout(g_script.mNextClipboardViewer, iMsg, wParam, lParam, SMTO_ABORTIFHUNG, 2000, &dwTemp);
@@ -4265,7 +4265,7 @@ bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
 	case ID_TRAY_EXIT:
 	case ID_FILE_EXIT:
 		g_script.ExitApp(EXIT_MENU);  // More reliable than PostQuitMessage(), which has been known to fail in rare cases.
-		return true; // If there is an OnExit subroutine, the above might not actually exit.
+		return true; // If there is an OnExit function, the above might not actually exit.
 	case ID_VIEW_LINES:
 		ShowMainWindow(MAIN_MODE_LINES);
 		return true;
@@ -9678,16 +9678,16 @@ VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(aBuf);
 }
 
-VarSizeType BIV_ExitReason(LPTSTR aBuf, LPTSTR aVarName)
+LPTSTR GetExitReasonString(ExitReasons aExitReason)
 {
 	LPTSTR str;
-	switch(g_script.mExitReason)
+	switch(aExitReason)
 	{
 	case EXIT_LOGOFF: str = _T("Logoff"); break;
 	case EXIT_SHUTDOWN: str = _T("Shutdown"); break;
 	// Since the below are all relatively rare, except WM_CLOSE perhaps, they are all included
 	// as one word to cut down on the number of possible words (it's easier to write OnExit
-	// routines to cover all possibilities if there are fewer of them).
+	// functions to cover all possibilities if there are fewer of them).
 	case EXIT_WM_QUIT:
 	case EXIT_CRITICAL:
 	case EXIT_DESTROY:
@@ -9700,9 +9700,56 @@ VarSizeType BIV_ExitReason(LPTSTR aBuf, LPTSTR aVarName)
 	default:  // EXIT_NONE or unknown value (unknown would be considered a bug if it ever happened).
 		str = _T("");
 	}
-	if (aBuf)
-		_tcscpy(aBuf, str);
-	return (VarSizeType)_tcslen(str);
+	return str;
+}
+
+
+
+BIF_DECL(BIF_OnExitOrClipboardChange)
+{
+	bool is_onexit = ctoupper(aResultToken.marker[2]) == 'E';
+	Func*& func_ptr = is_onexit ? g_script.mOnExitFunc : g_script.mOnClipboardChangeFunc;
+	Func* old_func = func_ptr;
+
+	if (!ParamIndexIsOmitted(0))
+	{
+		ExprTokenType& arg = *aParam[0];
+		if (!TokenIsEmptyString(arg))
+		{
+			// Set a function.
+			Func* new_func = TokenToFunc(arg);
+			if (!new_func || new_func->mIsBuiltIn || new_func->mMinParams > 1 || new_func->mClass)
+			{
+				aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+				return;
+			}
+			func_ptr = new_func;
+
+			if (!is_onexit && !old_func && new_func)
+				// Enable clipboard listener.
+				g_script.EnableClipboardListener(true);
+		}
+		else
+		{
+			// Unregister the function.
+			func_ptr = NULL;
+			if (old_func)
+				// Disable clipboard listener.
+				g_script.EnableClipboardListener(false);
+		}
+	}
+
+	// Return old OnExit function.
+	if (old_func != NULL)
+	{
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = old_func;
+	}
+	else
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+	}
 }
 
 
@@ -11549,7 +11596,7 @@ has_valid_return_type:
 		// Call ScriptErrror() so that the user knows *which* DllCall is at fault:
 		g->InTryBlock = false; // do not throw an exception
 		g_script.ScriptError(_T("This DllCall requires a prior VarSetCapacity. The program is now unstable and will exit."));
-		g_script.ExitApp(EXIT_CRITICAL); // Called this way, it will run the OnExit routine, which is debatable because it could cause more good than harm, but might avoid loss of data if the OnExit routine does something important.
+		g_script.ExitApp(EXIT_CRITICAL); // Called this way, it will run the OnExit function, which is debatable because it could cause more good than harm, but might avoid loss of data if the OnExit function does something important.
 	}
 
 	// It seems best to have the above take precedence over "exception_occurred" below.

@@ -358,7 +358,6 @@ Action g_act[] =
 	, {_T("Sleep"), 1, 1, false, {1, 0}} // Sleep time in ms (numeric)
 	, {_T("Random"), 0, 3, false, {2, 3, 0}} // Output var, Min, Max (Note: MinParams is 1 so that param2 can be blank).
 
-	, {_T("OnExit"), 0, 2, false, NULL}  // Optional label, future use (since labels are allowed to contain commas)
 	, {_T("Hotkey"), 1, 3, false, NULL}  // Mod+Keys, Label/Action (blank to avoid changing curr. label), Options
 	, {_T("SetTimer"), 0, 3, false, {3, 0}}  // Label (or dereference that resolves to a label), period (or ON/OFF), Priority
 	, {_T("Critical"), 0, 1, false, NULL}  // On|Off
