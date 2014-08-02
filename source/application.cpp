@@ -1270,12 +1270,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 				int arg = CountClipboardFormats() ? (IsClipboardFormatAvailable(CF_NATIVETEXT) || IsClipboardFormatAvailable(CF_HDROP) ? 1 : 2) : 0;
 
-				FuncCallData func_call;
-				ExprTokenType result_token;
-				TCHAR result_token_buf[MAX_NUMBER_SIZE];
-				result_token.InitResult(result_token_buf);
-				g_script.mOnClipboardChangeFunc->Call(func_call, result_token, 1, FUNC_ARG_INT(arg));
-				result_token.Free();
+				FuncResult result_token;
+				g_script.mOnClipboardChangeFunc->Call(result_token, 1, FUNC_ARG_INT(arg));
+				result_token.Free(); // Result not needed.
 
 				DEBUGGER_STACK_POP()
 				g_script.mOnClipboardChangeIsRunning = false;
@@ -1785,30 +1782,24 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	++monitor.instance_count;
 
 	bool block_further_processing;
-	{// Scope for func_call.
-		FuncCallData func_call;
-		ExprTokenType result_token;
-		TCHAR result_token_buf[MAX_NUMBER_SIZE];
-		result_token.InitResult(result_token_buf);
+	
+	FuncResult result_token;
 
-		ResultType result = func.Call(func_call, result_token, 4, FUNC_ARG_INT(awParam), FUNC_ARG_INT(alParam), FUNC_ARG_INT(aMsg), FUNC_ARG_INT((size_t)aWnd));
-
-		if (result != FAIL && result != EARLY_EXIT)
-		{
-			// Fix for v1.0.47: Must handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value
-			// might be the contents of one of the function's local variables (which are about to be free'd).
-			block_further_processing = !TokenIsEmptyString(result_token); // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
-			if (block_further_processing)
-				aMsgReply = (LRESULT)TokenToInt64(result_token); // Use 64-bit in case it's an unsigned number greater than 0x7FFFFFFF, in which case this allows it to wrap around to a negative.
-			//else leave aMsgReply uninitialized because we'll be returning false later below, which tells our caller
-			// to ignore aMsgReply.
-		}
-		else
-			// Above exited or failed.  result_token may not have been initialized, so treat it as empty:
-			block_further_processing = false;
-
-		result_token.Free();
+	if (func.Call(result_token, 4, FUNC_ARG_INT(awParam), FUNC_ARG_INT(alParam), FUNC_ARG_INT(aMsg), FUNC_ARG_INT((size_t)aWnd)))
+	{
+		// Fix for v1.0.47: Must handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value
+		// might be the contents of one of the function's local variables (which are about to be free'd).
+		block_further_processing = !TokenIsEmptyString(result_token);
+		if (block_further_processing)
+			aMsgReply = (LRESULT)TokenToInt64(result_token); // Use 64-bit in case it's an unsigned number greater than 0x7FFFFFFF, in which case this allows it to wrap around to a negative.
+		//else leave aMsgReply uninitialized because we'll be returning false later below, which tells our caller
+		// to ignore aMsgReply.
 	}
+	else
+		// Above exited or failed.  result_token may not have been initialized, so treat it as empty:
+		block_further_processing = false;
+
+	result_token.Free();
 	
 	DEBUGGER_STACK_POP()
 

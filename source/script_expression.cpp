@@ -50,7 +50,7 @@ GNU General Public License for more details.
 //    DWORD stack
 //    _asm mov stack, esp
 //    MsgBox(stack);
-LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType *aResultToken
+LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *aResultToken
 		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize
 		, Var **aArgVar)
 // Caller should ignore aResult unless this function returns NULL.
@@ -324,50 +324,48 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				// built-in functions would have to be reviewed, or the minimum would have to be enforced
 				// for them but not user-defined functions, which is inconsistent.  Finally, allowing too-
 				// few parameters seems like it would reduce the ability to detect script bugs at runtime.
-				if (actual_param_count < func->mMinParams && this_token.deref->type != DT_VARIADIC)
-				{
-					LineError(ERR_TOO_FEW_PARAMS, FAIL, func->mName);
-					goto abort;
-				}
+				// Param count is now checked in Func::Call(), so doesn't need to be checked here.
 			}
 			
 			// The following two steps are now done inside Func::Call:
 			//this_token.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
 			//this_token.marker = func.mName;  // Inform function of which built-in function called it (allows code sharing/reduction).
-			this_token.buf = left_buf;       // mBIF() can use this to store a string result, and for other purposes.
 			
-			this_token.mem_to_free = NULL; // Init to detect whether the called function allocates it.
+			// This is now handled by ResultToken below:
+			//this_token.buf = left_buf;       // mBIF() can use this to store a string result, and for other purposes.
+			//this_token.mem_to_free = NULL; // Init to detect whether the called function allocates it.
 			
-			FuncCallData func_call;
-			// Call the user-defined or built-in function.  Func::Call takes care of variadic parameter
-			// lists and stores local var backups for UDFs in func_call.  Once func_call goes out of scope,
-			// its destructor calls Var::FreeAndRestoreFunctionVars() if appropriate.
-			if (!func->Call(func_call, aResult, this_token, params, actual_param_count
-									, this_token.deref->type == DT_VARIADIC))
+			ResultToken result_token;
+			result_token.InitResult(left_buf); // But we'll take charge of its contents INSTEAD of calling Free().
+
+			// Call the user-defined or built-in function.
+			if (!func->Call(result_token, params, actual_param_count, this_token.deref->type == DT_VARIADIC))
 			{
-				// Take a shortcut because for backward compatibility, ACT_ASSIGNEXPR (and anything else
-				// for that matter) is being aborted by this type of early return (i.e. if there's an
-				// output_var, its contents are left as-is).  In other words, this expression will have
-				// no result storable by the outside world.
-				if (aResult != OK) // i.e. EARLY_EXIT or FAIL
-					result_to_return = NULL; // Use NULL to inform our caller that this thread is finished (whether through normal means such as Exit or a critical error).
-					// Above: The callers of this function know that the value of aResult (which already contains the
-					// reason for early exit) should be considered valid/meaningful only if result_to_return is NULL.
+				// Func::Call returning false indicates an EARLY_EXIT or FAIL result, meaning that the
+				// thread should exit or transfer control to a Catch statement.  Abort the remainder
+				// of this expression and pass the result back to our caller:
+				aResult = result_token.Result();
+				result_to_return = NULL; // Use NULL to inform our caller that this thread is finished (whether through normal means such as Exit or a critical error).
+				// Above: The callers of this function know that the value of aResult (which already contains the
+				// reason for early exit) should be considered valid/meaningful only if result_to_return is NULL.
 				goto normal_end_skip_output_var; // output_var is left unchanged in these cases.
 			}
 
 #ifdef CONFIG_DEBUGGER
 			// See PostExecFunctionCall() itself for comments.
-			g_Debugger.PostExecFunctionCall(this);
+			if (g_Debugger.IsConnected())
+				g_Debugger.PostExecFunctionCall(this);
 #endif
 			g_script.mCurrLine = this; // For error-reporting.
 
-			if (this_token.symbol != SYM_STRING)
+			if (result_token.symbol != SYM_STRING)
 			{
 				// No need for make_result_persistent or early Assign().  Any numeric or object result can
 				// be considered final because it's already stored in permanent memory (the token itself).
 				// Additionally, this_token.mem_to_free is assumed to be NULL since the result is not
 				// a string; i.e. the function would've had no need to return memory to us.
+				this_token.symbol = result_token.symbol;
+				this_token.value_int64 = result_token.value_int64;
 				goto push_this_token;
 			}
 			
@@ -384,8 +382,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			{
 				if (mActionType == ACT_EXPRESSION) // Isolated expression: Outermost function call's result will be ignored, so no need to store it.
 				{
-					if (this_token.mem_to_free)
-						free(this_token.mem_to_free); // Don't bother putting it into mem[].
+					result_token.Free(); // Since we're not taking charge of it in this case.
 					goto normal_end_skip_output_var; // No output_var is possible for ACT_EXPRESSION.
 				}
 				internal_output_var = output_var; // NULL unless this is ACT_ASSIGNEXPR.
@@ -401,7 +398,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				internal_output_var = NULL;
 			
 			// RELIES ON THE IS_NUMERIC() CHECK above having been done first.
-			result = this_token.marker; // Marker can be used because symbol will never be SYM_VAR in this case.
+			result = result_token.marker; // Marker can be used because symbol will never be SYM_VAR in this case.
 
 			if (internal_output_var
 				&& !(g->CurrentFunc == func && internal_output_var->IsNonStaticLocal())) // Ordered for short-circuit performance.
@@ -418,14 +415,14 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				// In most cases, the string stored in mem_to_free (if it has been set) is the same address as
 				// this_token.marker (i.e. what is named "result" further below), because that's what the
 				// built-in functions are normally using the memory for.
-				if (this_token.mem_to_free == this_token.marker) // marker is checked in case caller alloc'd mem but didn't use it as its actual result.  Relies on the fact that marker is never NULL.
+				if (result_token.mem_to_free == result_token.marker) // marker is checked in case caller alloc'd mem but didn't use it as its actual result.  Relies on the fact that marker is never NULL.
 				{
 					// So now, turn over responsibility for this memory to the variable. The called function
 					// is responsible for having stored the length of what's in the memory as an overload of
 					// this_token.buf, but only when that memory is the result (currently might always be true).
 					// AcceptNewMem() will shrink the memory for us, via _expand(), if there's a lot of
 					// extra/unused space in it.
-					internal_output_var->AcceptNewMem(this_token.mem_to_free, this_token.marker_length);
+					internal_output_var->AcceptNewMem(result_token.mem_to_free, result_token.marker_length);
 				}
 				else
 				{
@@ -444,8 +441,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 						// v1.0.45: This mode improves performance by avoiding the need to copy the result into
 						// more persistent memory, then avoiding the need to copy it into the defer buffer (which
 						// also avoids the possibility of needing to expand that buffer).
-						if (!internal_output_var->Assign(this_token.marker)) // Marker can be used because symbol will never be SYM_VAR in this case.
-							goto abort;										 // ALSO: Assign() contains an optimization that avoids actually doing the mem-copying if output_var is being assigned to itself (which can happen in cases like RegExMatch()).
+						if (!internal_output_var->Assign(result_token.marker)) // Marker can be used because symbol will never be SYM_VAR in this case.
+							goto abort;										   // ALSO: Assign() contains an optimization that avoids actually doing the mem-copying if output_var is being assigned to itself (which can happen in cases like RegExMatch()).
 					}
 				}
 				if (done)
@@ -460,21 +457,22 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			// Otherwise, there's no output_var or the expression isn't finished yet, so do normal processing.
 				
 			make_result_persistent = true; // Set default.
+			this_token.symbol = SYM_STRING;
 
 			// RESTORE THE CIRCUIT TOKEN (after handling what came back inside it):
-			if (this_token.mem_to_free) // The called function allocated some memory and turned it over to us.
+			if (result_token.mem_to_free) // The called function allocated some memory and turned it over to us.
 			{
 				if (mem_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
 				{
 					LineError(ERR_OUTOFMEM, FAIL, func->mName);
 					goto abort;
 				}
-				if (this_token.mem_to_free == this_token.marker) // mem_to_free is checked in case caller alloc'd mem but didn't use it as its actual result.
+				if (result_token.mem_to_free == result_token.marker) // mem_to_free is checked in case caller alloc'd mem but didn't use it as its actual result.
 				{
 					make_result_persistent = false; // Override the default set higher above.
 				}
 				// Mark it to be freed at the time we return.
-				mem[mem_count++] = this_token.mem_to_free;
+				mem[mem_count++] = result_token.mem_to_free;
 			}
 			//else this_token.mem_to_free==NULL, so the BIF just called didn't allocate memory to give to us.
 			
@@ -482,7 +480,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			// at all.  Therefore, handle them fully now, which should improve performance (since it
 			// avoids all the other checking later on).  It also doesn't hurt code size because this
 			// check avoids having to check for empty string in other sections later on.
-			if (!*this_token.marker) // Various make-persistent sections further below may rely on this check.
+			if (!*result_token.marker) // Various make-persistent sections further below may rely on this check.
 			{
 				this_token.marker = _T(""); // Ensure it's a constant memory area, not a buf that might get overwritten soon.
 				goto push_this_token; // For code simplicity, the optimization for numeric results is done at a later stage.
@@ -1472,7 +1470,7 @@ push_this_token:
 
 // ALL PATHS ABOVE SHOULD "GOTO".  TO CATCH BUGS, ANY THAT DON'T FALL INTO "ABORT" BELOW.
 abort_with_exception:
-	ThrowRuntimeException(ERR_EXPR_EVAL);
+	LineError(ERR_EXPR_EVAL);
 	// FALL THROUGH:
 abort:
 	// The callers of this function know that the value of aResult (which contains the reason
@@ -1508,14 +1506,8 @@ normal_end_skip_output_var:
 
 
 
-bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic)
-// aFuncCall: Caller passes a variable which should go out of scope after the function call's result
-//   has been used; this automatically frees and restores a UDFs local vars (where applicable).
-// aSpaceAvailable: -1 indicates this is a regular function call.  Otherwise this must be the amount of
-//   space available after aParam for expanding the array of parameters for a variadic function call.
+bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic)
 {
-	aResult = OK; // Set default.
-	
 	Object *param_obj = NULL;
 	if (aIsVariadic) // i.e. this is a variadic function call.
 	{
@@ -1544,22 +1536,25 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 		}
 		if (rvalue)
 			aParam[aParamCount++] = rvalue; // In place of the variadic param.
-		// mMinParams isn't validated at load-time for variadic calls, so we must do it here:
-		// However, this check must be skipped for user-defined functions so that a named value
-		// can be supplied for a required parameter.  Missing required parameters are detected
-		// in the loop below by the absence of a default value.
-		if (aParamCount < mMinParams && mIsBuiltIn)
+	}
+
+	if (mIsBuiltIn)
+	{
+		// mMinParams is validated at load-time where possible; so not for variadic or dynamic calls,
+		// nor for calls via objects.  This check could be avoided for normal calls by instead checking
+		// in each of the above cases, but any performance gain would probably be marginal and not worth
+		// the slightly larger code size and loss of maintainability.  This check is not done for UDFS
+		// since param_obj might contain the remaining parameters as name-value pairs.  Missing required
+		// parameters are instead detected by the absence of a default value.
+		if (aParamCount < mMinParams)
 		{
-			aResult = g_script.ScriptError(ERR_TOO_FEW_PARAMS, mName);
+			aResultToken.Error(ERR_TOO_FEW_PARAMS, mName);
 			return false; // Abort expression.
 		}
 		// Otherwise, even if some params are SYM_MISSING, it is relatively safe to call the function.
 		// The TokenTo' set of functions will produce 0 or "" for missing params.  Although that isn't
 		// technically correct, it is simple and fairly logical.
-	}
 
-	if (mIsBuiltIn)
-	{
 		aResultToken.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
 		aResultToken.marker = mName;       // Inform function of which built-in function called it (allows code sharing/reduction). Can't use circuit_token because it's value is still needed later below.
 
@@ -1570,15 +1565,21 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 		DEBUGGER_STACK_PUSH(g_script.mCurrLine, this)
 
 		// CALL THE BUILT-IN FUNCTION:
-		mBIF(aResult, aResultToken, aParam, aParamCount);
+		mBIF(aResultToken, aParam, aParamCount);
 
 		DEBUGGER_STACK_POP()
 		
-		if (g->ThrownToken)
-			aResult = FAIL; // Abort thread.
+		// There shouldn't be any need to check g->ThrownToken since built-in functions
+		// currently throw exceptions via aResultToken.Error():
+		//if (g->ThrownToken)
+		//	aResultToken.SetExitResult(FAIL); // Abort thread.
 	}
 	else // It's not a built-in function, or it's a built-in that was overridden with a custom function.
 	{
+		ResultType result;
+		VarBkp *backup = NULL;
+		int backup_count;
+
 		int j, count_of_actuals_that_have_formals;
 		count_of_actuals_that_have_formals = (aParamCount > mParamCount)
 			? mParamCount  // Omit any actuals that lack formals (this can happen when a dynamic call passes too many parameters).
@@ -1630,9 +1631,9 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 			// if that parameter or local var is assigned a value by any other means during our call
 			// to it, new memory will be allocated to hold that value rather than overwriting the
 			// underlying recursed/interrupted instance's memory, which it will need intact when it's resumed.
-			if (!Var::BackupFunctionVars(*this, aFuncCall.mBackup, aFuncCall.mBackupCount)) // Out of memory.
+			if (!Var::BackupFunctionVars(*this, backup, backup_count)) // Out of memory.
 			{
-				aResult = g_script.ScriptError(ERR_OUTOFMEM, mName);
+				aResultToken.Error(ERR_OUTOFMEM, mName);
 				return false;
 			}
 		} // if (func.mInstances > 0)
@@ -1643,9 +1644,6 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 		// instances of this function on the call-stack and yet SYM_VAR to be one of this function's own
 		// locals or formal params because it would have no legitimate origin.
 
-		// Set after above succeeds to ensure local vars are freed and the backup is restored (at some point):
-		aFuncCall.mFunc = this;
-		
 		for (j = 0; j < mParamCount; ++j) // For each formal parameter.
 		{
 			FuncParam &this_formal_param = mParam[j]; // For performance and convenience.
@@ -1672,8 +1670,8 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 				case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
 				default: //case PARAM_DEFAULT_NONE:
 					// No value has been supplied for this REQUIRED parameter.
-					aResult = g_script.ScriptError(ERR_PARAM_REQUIRED, this_formal_param.var->mName);
-					return false; // Abort expression.
+					aResultToken.Error(ERR_PARAM_REQUIRED, this_formal_param.var->mName); // Abort thread.
+					goto free_and_return;
 				}
 				continue;
 			}
@@ -1707,8 +1705,8 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 			// happened if no backup was needed for this function (which is usually the case).
 			if (!this_formal_param.var->Assign(token))
 			{
-				aResult = FAIL; // Abort thread.
-				return false;
+				aResultToken.SetExitResult(FAIL); // Abort thread.
+				goto free_and_return;
 			}
 		} // for each formal parameter.
 		
@@ -1719,8 +1717,8 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 			Object *vararg_obj = param_obj ? param_obj->Clone(true) : Object::Create();
 			if (!vararg_obj)
 			{
-				aResult = g_script.ScriptError(ERR_OUTOFMEM, mName);
-				return false; // Abort thread.
+				aResultToken.Error(ERR_OUTOFMEM, mName); // Abort thread.
+				goto free_and_return;
 			}
 			if (j < aParamCount)
 				// Insert the excess parameters from the actual parameter list.
@@ -1729,16 +1727,15 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 			mParam[mParamCount].var->AssignSkipAddRef(vararg_obj);
 		}
 
-		aResult = Call(&aResultToken); // Call the UDF.
-	}
-	return (aResult != EARLY_EXIT && aResult != FAIL);
-}
+		result = Call(&aResultToken); // Call the UDF.
+		
+		// Setting this unconditionally isn't likely to perform any worse than checking for EXIT/FAIL,
+		// and likely produces smaller code.  Currently EARLY_RETURN results are possible and must be
+		// passed back in case this is a meta-function, but this should be revised at some point since
+		// most of our callers only expect OK, FAIL or EARLY_EXIT.
+		aResultToken.SetResult(result);
 
-// This is used for maintainability: to ensure it's never forgotten and to reduce code repetition.
-FuncCallData::~FuncCallData()
-{
-	if (mFunc) // mFunc != NULL implies it is a UDF and Var::BackupFunctionVars() has succeeded.
-	{
+free_and_return:
 		// Free the memory of all the just-completed function's local variables.  This is done in
 		// both of the following cases:
 		// 1) There are other instances of this function beneath us on the call-stack: Must free
@@ -1757,20 +1754,15 @@ FuncCallData::~FuncCallData()
 		//    c) To yield results consistent with when the same function is called while other instances
 		//       of itself exist on the call stack.  In other words, it would be inconsistent to make
 		//       all variables blank for case #1 above but not do it here in case #2.
-		Var::FreeAndRestoreFunctionVars(*mFunc, mBackup, mBackupCount);
+		Var::FreeAndRestoreFunctionVars(*this, backup, backup_count);
 	}
+	return !aResultToken.Exited(); // i.e. aResultToken.SetExitResult() or aResultToken.Error() was not called.
 }
 
 
-ResultType Func::Call(FuncCallData &aFuncCall, ExprTokenType &aResultToken, int aParamCount, ...)
+bool Func::Call(ResultToken &aResultToken, int aParamCount, ...)
 {
-	// Detect variadic function calls
-	bool is_variadic = false;
-	if (aParamCount < 0)
-	{
-		is_variadic = true;
-		aParamCount = -aParamCount;
-	}
+	ASSERT(aParamCount >= 0);
 
 	// Allocate and build the parameter array
 	ExprTokenType **aParam = (ExprTokenType**) _alloca(aParamCount*sizeof(ExprTokenType*));
@@ -1799,14 +1791,12 @@ ResultType Func::Call(FuncCallData &aFuncCall, ExprTokenType &aResultToken, int 
 	va_end(va);
 
 	// Perform function call
-	ResultType result;
-	Call(aFuncCall, result, aResultToken, aParam, aParamCount, is_variadic);
-	return result;
+	return Call(aResultToken, aParam, aParamCount);
 }
 
 
 
-ResultType Line::ExpandArgs(ExprTokenType *aResultTokens)
+ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 // Caller should either provide both or omit both of the parameters.  If provided, it means
 // caller already called GetExpandedArgSize for us.
 // Returns OK, FAIL, or EARLY_EXIT.  EARLY_EXIT occurs when a function-call inside an expression
@@ -1965,8 +1955,8 @@ ResultType Line::ExpandArgs(ExprTokenType *aResultTokens)
 				{
 					// Since above did not "continue", this arg must have been an expression which was
 					// converted back to a plain value.  *postfix is a single numeric or string literal.
-					// CopyValueFrom() avoids overwriting buf, which is important for ACT_RETURN when
-					// called by some callers (such as CallFunc()) which use TokenSetResult().
+					// CopyValueFrom() avoids overwriting buf for maintainability, since some callers
+					// might want to use TokenSetResult() to make the result persistent.
 					aResultTokens[i].CopyValueFrom(*this_arg.postfix);
 				}
 				// Since above did not "continue" and arg_var[i] is NULL, this arg can't be an expression

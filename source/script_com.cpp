@@ -74,7 +74,7 @@ BIF_DECL(BIF_ComObject)
 {
 	if (!TokenIsNumeric(*aParam[0]))
 	{
-		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		aResultToken.Error(ERR_PARAM1_INVALID);
 		return;
 	}
 		
@@ -86,7 +86,7 @@ BIF_DECL(BIF_ComObject)
 	{
 		if (!TokenIsNumeric(*aParam[1]))
 		{
-			aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
+			aResultToken.Error(ERR_PARAM2_INVALID);
 			return;
 		}
 		// ComObject(vt, value [, flags])
@@ -131,7 +131,7 @@ BIF_DECL(BIF_ComObject)
 	ComObject *obj;
 	if (  !(obj = new ComObject(llVal, vt, flags))  )
 	{
-		aResult = g_script.ScriptError(ERR_OUTOFMEM);
+		aResultToken.Error(ERR_OUTOFMEM);
 		// Do any cleanup that the object may have been expected to do:
 		if (vt == VT_DISPATCH || vt == VT_UNKNOWN)
 			((IUnknown *)llVal)->Release();
@@ -345,8 +345,7 @@ BIF_DECL(BIF_ComObjTypeOrValue)
 					BSTR name;
 					if (SUCCEEDED(ptinfo->GetDocumentation(MEMBERID_NIL, &name, NULL, NULL, NULL)))
 					{
-						if (!TokenSetResult(aResultToken, CStringTCharFromWCharIfNeeded(name), SysStringLen(name)))
-							aResult = FAIL;
+						TokenSetResult(aResultToken, CStringTCharFromWCharIfNeeded(name), SysStringLen(name));
 						SysFreeString(name);
 					}
 				}
@@ -494,20 +493,19 @@ bool SafeSetTokenObject(ExprTokenType &aToken, IObject *aObject)
 	{
 		aToken.symbol = SYM_STRING;
 		aToken.marker = _T("");
-		aToken.mem_to_free = NULL; // Only needed for some callers.
 		return false;
 	}
 }
 
 
-void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true)
+void VariantToToken(VARIANT &aVar, ResultToken &aToken, bool aRetainVar = true)
 {
+	aToken.mem_to_free = NULL; // Set default.
 	switch (aVar.vt)
 	{
 	case VT_BSTR:
 		aToken.symbol = SYM_STRING;
-		aToken.marker = _T("");		// Set defaults.
-		aToken.mem_to_free = NULL;	//
+		aToken.marker = _T(""); // Set default.
 		size_t len;
 		if (len = SysStringLen(aVar.bstrVal))
 		{
@@ -602,7 +600,6 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 	case VT_NULL:
 		aToken.symbol = SYM_STRING;
 		aToken.marker = _T("");
-		aToken.mem_to_free = NULL;
 		break;
 	default:
 		{
@@ -637,7 +634,7 @@ void AssignVariant(Var &aArg, VARIANT &aVar, bool aRetainVar = true)
 			VariantClear(&aVar);
 		return;
 	}
-	ExprTokenType token;
+	ResultToken token;
 	VariantToToken(aVar, token, aRetainVar);
 	switch (token.symbol)
 	{
@@ -654,6 +651,7 @@ void AssignVariant(Var &aArg, VARIANT &aVar, bool aRetainVar = true)
 		aArg.Assign(token);
 		break;
 	}
+	//token.Free(); // Above already took care of mem_to_free and object.
 }
 
 
@@ -812,7 +810,7 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	if (cArgs > MAX_COM_PARAMS) // Probably won't happen in any real-world script.
 		cArgs = MAX_COM_PARAMS; // Just omit the rest of the params.
 
-	ExprTokenType param_token[MAX_FUNCTION_PARAMS];
+	ResultToken param_token[MAX_FUNCTION_PARAMS];
 	ExprTokenType *param[MAX_FUNCTION_PARAMS];
 	
 	for (UINT i = 1; i <= cArgs; ++i)
@@ -831,13 +829,8 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	param_token[cArgs + 1].object = mObject;
 	param[cArgs + 1] = &param_token[cArgs + 1];
 
-	ExprTokenType result_token;
-	TCHAR result_token_buf[MAX_NUMBER_SIZE];
-	result_token.InitResult(result_token_buf);
-
 	HRESULT result_to_return;
-
-	FuncCallData func_call; // For UDFs: must remain in scope until the result has been copied into pVarResult.
+	FuncResult result_token;
 
 	if (mAhkObject)
 	{
@@ -860,10 +853,8 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 		// Call function by name (= prefix . method_name).
 		Func *func = g_script.FindFunc(funcName);
 
-		ResultType result;
-
 		// Call the function.
-		if (func && func->Call(func_call, result, result_token, param + 1, cArgs + 1))
+		if (func && func->Call(result_token, param + 1, cArgs + 1))
 			result_to_return = S_OK;
 		else
 			result_to_return = DISP_E_MEMBERNOTFOUND; // Indicate result_token should not be used below.
@@ -871,18 +862,11 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 
 	if (pVarResult && result_to_return == S_OK)
 		TokenToVariant(result_token, *pVarResult);
-	result_token.Free();
 
 	// Clean up:
+	result_token.Free();
 	for (UINT i = 1; i <= cArgs; ++i)
-	{
-		// Release COM wrapper objects:
-		if (param_token[i].symbol == SYM_OBJECT)
-			param_token[i].object->Release();
-		// Free any temporary memory used to hold strings; see VariantToToken().
-		else if (param_token[i].symbol == SYM_STRING && param_token[i].mem_to_free)
-			free(param_token[i].mem_to_free);
-	}
+		param_token[i].Free();
 
 	return S_OK;
 }
@@ -941,7 +925,7 @@ void ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
 		ComError(hr);
 }
 
-ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType STDMETHODCALLTYPE ComObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (aParamCount < (IS_INVOKE_SET ? 2 : 1))
 	{
@@ -1033,7 +1017,7 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 	return	OK;
 }
 
-ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	HRESULT hr = S_OK;
 	SAFEARRAY *psa = (SAFEARRAY*)mVal64;
@@ -1318,17 +1302,17 @@ IObject *GuiType::ControlGetActiveX(HWND aWnd)
 void WriteComObjType(IDebugProperties *aDebugger, ComObject *aObject, LPCSTR aName, LPTSTR aWhichType)
 {
 	TCHAR buf[MAX_NUMBER_SIZE];
-	ExprTokenType resultToken, paramToken[2], *param[2] = { &paramToken[0], &paramToken[1] };
-	paramToken[0].symbol = SYM_OBJECT;
-	paramToken[0].object = aObject;
-	paramToken[1].symbol = SYM_STRING;
-	paramToken[1].marker = aWhichType;
+	ResultToken resultToken;
 	resultToken.symbol = SYM_INTEGER;
 	resultToken.marker = _T("ComObjType");
 	resultToken.mem_to_free = NULL;
 	resultToken.buf = buf;
-	ResultType result = OK;
-	BIF_ComObjTypeOrValue(result, resultToken, param, 2);
+	ExprTokenType paramToken[2], *param[2] = { &paramToken[0], &paramToken[1] };
+	paramToken[0].symbol = SYM_OBJECT;
+	paramToken[0].object = aObject;
+	paramToken[1].symbol = SYM_STRING;
+	paramToken[1].marker = aWhichType;
+	BIF_ComObjTypeOrValue(resultToken, param, 2);
 	aDebugger->WriteProperty(aName, resultToken);
 	if (resultToken.mem_to_free)
 		free(resultToken.mem_to_free);

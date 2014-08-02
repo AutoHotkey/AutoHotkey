@@ -1979,7 +1979,7 @@ BIF_DECL(BIF_ProcessSetPriority)
 
 
 
-ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints, ExprTokenType &aResultToken)
+ResultType WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
 {
 	if (!*aPoints) // Attempt to restore the window's normal/correct region.
 	{
@@ -2172,7 +2172,7 @@ BIF_DECL(BIF_WinSet)
 		case NEUTRAL: // parameter was blank, so it defaults to TOGGLE.
 		case TOGGLE: topmost_or_not = (exstyle & WS_EX_TOPMOST) ? HWND_NOTOPMOST : HWND_TOPMOST; break;
 		default:
-			g_script.ThrowRuntimeException(ERR_PARAM1_INVALID);
+			aResultToken.Error(ERR_PARAM1_INVALID);
 			return;
 		}
 		// SetWindowLong() didn't seem to work, at least not on some windows.  But this does.
@@ -2280,7 +2280,7 @@ BIF_DECL(BIF_WinSet)
 		if (!*aValue)
 		{
 			// Seems best not to treat an explicit blank as zero.
-			g_script.ThrowRuntimeException(ERR_PARAM1_REQUIRED);
+			aResultToken.Error(ERR_PARAM1_REQUIRED);
 			return;
 		}
 		int style_index = (attrib == WINSET_STYLE) ? GWL_STYLE : GWL_EXSTYLE;
@@ -2325,7 +2325,7 @@ BIF_DECL(BIF_WinSet)
 		case TOGGLED_OFF:	success = EnableWindow(target_window, FALSE); break;
 		case TOGGLE:		success = EnableWindow(target_window, !IsWindowEnabled(target_window)); break;
 		default:
-			g_script.ThrowRuntimeException(ERR_PARAM1_INVALID);
+			aResultToken.Error(ERR_PARAM1_INVALID);
 			return;
 		}
 		break;
@@ -2440,7 +2440,7 @@ ResultType Line::WinGetClass(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, 
 
 
 
-void WinGetList(ExprTokenType &aResultToken, WinGetCmds aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+void WinGetList(ResultToken &aResultToken, WinGetCmds aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 // Helper function for WinGet() to avoid having a WindowSearch object on its stack (since that object
 // normally isn't needed).
 {
@@ -2467,7 +2467,7 @@ void WinGetList(ExprTokenType &aResultToken, WinGetCmds aCmd, LPTSTR aTitle, LPT
 	}
 }
 
-void WinGetControlList(ExprTokenType &aResultToken, HWND aTargetWindow, bool aFetchHWNDs); // Forward declaration.
+void WinGetControlList(ResultToken &aResultToken, HWND aTargetWindow, bool aFetchHWNDs); // Forward declaration.
 
 
 
@@ -2527,7 +2527,7 @@ BIF_DECL(BIF_WinGet)
 			// Otherwise, get the full path and name of the executable that owns this window.
 			TCHAR process_name[MAX_PATH];
 			GetProcessName(pid, process_name, _countof(process_name), cmd == WINGET_CMD_PROCESSNAME);
-			aResult = TokenSetResult(aResultToken, process_name);
+			TokenSetResult(aResultToken, process_name);
 		}
 		return;
 
@@ -2640,7 +2640,7 @@ BIF_DECL(BIF_WinGet)
 
 
 
-void WinGetControlList(ExprTokenType &aResultToken, HWND aTargetWindow, bool aFetchHWNDs)
+void WinGetControlList(ResultToken &aResultToken, HWND aTargetWindow, bool aFetchHWNDs)
 // Caller must ensure that aTargetWindow is non-NULL and valid.
 // Every control is fetched rather than just a list of distinct class names (possibly with a
 // second script array containing the quantity of each class) because it's conceivable that the
@@ -2958,14 +2958,14 @@ BIF_DECL(BIF_MonitorGet)
 	case 'N': // MonitorGetName(N)
 		mip.monitor_number_to_find = aParamCount ? (int)TokenToInt64(*aParam[0]) : 0;  // If this returns 0, it will default to the primary monitor.
 		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
+		aResultToken.symbol = SYM_STRING;
 		if (!mip.count || (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count))
 			// With the exception of the caller having specified a non-existent monitor number, all of
 			// the ways the above can happen are probably impossible in practice.  Make the variable
 			// blank to indicate the problem:
 			aResultToken.marker = _T("");
 		else
-			aResult = TokenSetResult(aResultToken, mip.monitor_info_ex.szDevice);
-		aResultToken.symbol = SYM_STRING;
+			TokenSetResult(aResultToken, mip.monitor_info_ex.szDevice);
 	} // switch()
 }
 
@@ -5564,7 +5564,7 @@ BIF_DECL(BIF_StrSplit)
 	// loop to break, so throw an exception.
 	output_array->Release(); // Since we're not returning it.
 outofmem:
-	aResult = g_script.ScriptError(ERR_OUTOFMEM);
+	aResultToken.Error(ERR_OUTOFMEM);
 	return;
 return_empty_string:
 	aResultToken.symbol = SYM_STRING;
@@ -5805,34 +5805,20 @@ int SortRandom(const void *a1, const void *a2)
 int SortUDF(const void *a1, const void *a2)
 // See comments in prior function for details.
 {
-	// Need to check if backup of function's variables is needed in case:
-	// 1) The UDF is assigned to more than one callback, in which case the UDF could be running more than one
-	//    simultaneously.
-	// 2) The callback is intended to be reentrant (e.g. a subclass/WindowProc that doesn't Critical).
-	// 3) Script explicitly calls the UDF in addition to using it as a callback.
-	//
-	// See ExpandExpression() for detailed comments about the following section.
-	VarBkp *var_backup = NULL;  // If needed, it will hold an array of VarBkp objects.
-	int var_backup_count; // The number of items in the above array.
-	if (g_SortFunc->mInstances > 0) // Backup is needed.
-		if (!Var::BackupFunctionVars(*g_SortFunc, var_backup, var_backup_count)) // Out of memory.
-			return 0; // Since out-of-memory is so rare, it seems justifiable not to have any error reporting and instead just say "these items are equal".
-
 	// The following isn't necessary because by definition, the current thread isn't paused because it's the
 	// thing that called the sort in the first place.
 	//g_script.UpdateTrayIcon();
 
-	ExprTokenType result_token; // L31
-	g_SortFunc->mParam[0].var->Assign(*(LPTSTR *)a1); // For simplicity and due to extreme rarity, parameters beyond
-	g_SortFunc->mParam[1].var->Assign(*(LPTSTR *)a2); // the first 2 aren't populated even if they have default values.
-	if (g_SortFunc->mParamCount > 2)
-		g_SortFunc->mParam[2].var->Assign((__int64)(*(LPTSTR *)a2 - *(LPTSTR *)a1)); // __int64 to allow for a list greater than 2 GB, though that is currently impossible.
-	g_SortFunc->Call(&result_token); // Call the UDF.
+	FuncResult result_token;
+
+	LPTSTR aStr1 = *(LPTSTR *)a1;
+	LPTSTR aStr2 = *(LPTSTR *)a2;
+	bool returned = g_SortFunc->Call(result_token, 2, FUNC_ARG_STR(aStr1), FUNC_ARG_STR(aStr2), FUNC_ARG_INT(aStr2 - aStr1));
 
 	// MUST handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value might be
 	// the contents of one of the function's local variables (which are about to be free'd).
 	int returned_int;
-	if (!TokenIsEmptyString(result_token)) // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
+	if (returned && !TokenIsEmptyString(result_token))
 	{
 		// Using float vs. int makes sort up to 46% slower, so decided to use int. Must use ATOI64 vs. ATOI
 		// because otherwise a negative might overflow/wrap into a positive (at least with the MSVC++
@@ -5846,14 +5832,11 @@ int SortUDF(const void *a1, const void *a2)
 			returned_int = -1;
 		else
 			returned_int = 0;
-
-		if (result_token.symbol == SYM_OBJECT) // L31
-			result_token.object->Release();
 	}
 	else
 		returned_int = 0;
 
-	Var::FreeAndRestoreFunctionVars(*g_SortFunc, var_backup, var_backup_count);
+	result_token.Free();
 	return returned_int;
 }
 
@@ -9720,7 +9703,7 @@ BIF_DECL(BIF_OnExitOrClipboardChange)
 			Func* new_func = TokenToFunc(arg);
 			if (!new_func || new_func->mIsBuiltIn || new_func->mMinParams > 1 || new_func->mClass)
 			{
-				aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+				aResultToken.Error(ERR_PARAM1_INVALID);
 				return;
 			}
 			func_ptr = new_func;
@@ -11327,7 +11310,7 @@ BIF_DECL(BIF_DllCall)
 			function = (void *)aParam[0]->value_int64; // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
 			break;
 		default: // SYM_FLOAT, SYM_OBJECT or not an operand.
-			g_script.ThrowRuntimeException(ERR_PARAM1_INVALID, _T("DllCall"));
+			aResultToken.Error(ERR_PARAM1_INVALID);
 			return;
 	}
 
@@ -11391,7 +11374,7 @@ BIF_DECL(BIF_DllCall)
 		ConvertDllArgType(return_type_string, return_attrib);
 		if (return_attrib.type == DLL_ARG_INVALID)
 		{
-			g_script.ThrowRuntimeException(_T("Invalid return type."), _T("DllCall"));
+			aResultToken.Error(_T("Invalid return type."));
 			return;
 		}
 has_valid_return_type:
@@ -11470,7 +11453,7 @@ has_valid_return_type:
 				// to be stack memory, which would be invalid memory upon return to the caller).
 				// The complexity of this doesn't seem worth the rarity of the need, so this will be
 				// documented in the help file.
-				g_script.ThrowRuntimeException(_T("Invalid arg type."), _T("DllCall"));
+				aResultToken.Error(_T("Invalid arg type."));
 				return;
 			}
 			// Otherwise, it's a supported type of string.
@@ -11505,7 +11488,7 @@ has_valid_return_type:
 			// See the section above for comments.
 			if (IS_NUMERIC(this_param.symbol))
 			{
-				g_script.ThrowRuntimeException(_T("Invalid arg type."), _T("DllCall"));
+				aResultToken.Error(_T("Invalid arg type."));
 				return;
 			}
 			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
@@ -11525,7 +11508,7 @@ has_valid_return_type:
 		case DLL_ARG_INVALID:
 			if (aParam[i]->symbol == SYM_VAR)
 				aParam[i]->var->MaybeWarnUninitialized();
-			g_script.ThrowRuntimeException(_T("Invalid arg type."), _T("DllCall"));
+			aResultToken.Error(_T("Invalid arg type."));
 			return;
 
 		default: // Namely:
@@ -11599,17 +11582,16 @@ has_valid_return_type:
 		g_script.ExitApp(EXIT_CRITICAL); // Called this way, it will run the OnExit function, which is debatable because it could cause more good than harm, but might avoid loss of data if the OnExit function does something important.
 	}
 
-	// It seems best to have the above take precedence over "exception_occurred" below.
-	if (exception_occurred)
+	if (g->ThrownToken)
 	{
 		// If the called function generated an exception, I think it's impossible for the return value
 		// to be valid/meaningful since it the function never returned properly.  Confirmation of this
 		// would be good, but in the meantime it seems best to make the return value an empty string as
 		// an indicator that the call failed (in addition to ErrorLevel).
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
+		aResultToken.SetExitResult(FAIL);
 		// But continue on to write out any output parameters because the called function might have
-		// had a chance to update them before aborting.
+		// had a chance to update them before aborting.  They might be of some use in debugging the
+		// issue, though the script would have to catch the exception to be able to inspect them.
 	}
 	else // The call was successful.  Interpret and store the return value.
 	{
@@ -11885,7 +11867,7 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 	}
 	
 	// Otherwise, at least one character is being omitted from the end of haystack.
-	aResult = TokenSetResult(aResultToken, result, extract_length);
+	TokenSetResult(aResultToken, result, extract_length);
 }
 
 
@@ -12081,7 +12063,7 @@ RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCT
 	return m;
 }
 
-ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (aParamCount < 1 || aParamCount > 2 || IS_INVOKE_SET)
 		return INVOKE_NOT_HANDLED;
@@ -12204,7 +12186,8 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 		static LPSTR *sNamesT = sNames;
 #endif
 		TCHAR resultBuf[MAX_NUMBER_SIZE];
-		ExprTokenType resultToken, thisTokenUnused, paramToken[2], *param[] = { &paramToken[0], &paramToken[1] };
+		ResultToken resultToken;
+		ExprTokenType thisTokenUnused, paramToken[2], *param[] = { &paramToken[0], &paramToken[1] };
 		for (int i = 0; i < _countof(sNames); i++)
 		{
 			aDebugger->BeginProperty(sNames[i], "array", mPatternCount - (i == 3), cookie);
@@ -12212,7 +12195,7 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 			paramToken[0].marker = sNamesT[i];
 			for (int p = (i == 3); p < mPatternCount; p++)
 			{
-				resultToken.InitResult(resultBuf);
+				resultToken.InitResult(resultBuf); // Init before EACH invoke.
 				paramToken[1].symbol = SYM_INTEGER;
 				paramToken[1].value_int64 = p;
 				Invoke(resultToken, thisTokenUnused, IT_GET, param, 2);
@@ -12374,15 +12357,14 @@ int RegExCallout(pcret_callout_block *cb)
 	//++cb->start_match;
 	//++cb->current_position;
 
-	ExprTokenType result_token;
+	FuncResult result_token;
 	ResultType result = func.Call(&result_token); // Call the UDF.
 
 	// MUST handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value
 	// might be the contents of one of the function's local variables (which are about to be freed).
 	int number_to_return = (int)TokenToInt64(result_token); // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
-	if (result_token.symbol == SYM_OBJECT) // L31
-		result_token.object->Release();
-
+	
+	result_token.Free();
 	Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
 
 	g->EventInfo = EventInfo_saved;
@@ -12400,7 +12382,7 @@ int RegExCallout(pcret_callout_block *cb)
 	return number_to_return;
 }
 
-pcret *get_compiled_regex(LPTSTR aRegEx, pcret_extra *&aExtra, int *aOptionsLength, ExprTokenType *aResultToken)
+pcret *get_compiled_regex(LPTSTR aRegEx, pcret_extra *&aExtra, int *aOptionsLength, ResultToken *aResultToken)
 // Returns the compiled RegEx, or NULL on failure.
 // This function is called by things other than built-in functions so it should be kept general-purpose.
 // Upon failure, if aResultToken!=NULL:
@@ -12621,14 +12603,14 @@ break_both:
 	// COMPILE THE REGEX.
 	if (   !(re_compiled = pcret_compile2(pat, pcre_options, &error_code, &error_msg, &error_offset, NULL))   )
 	{
-		if (aResultToken) // Only when this is non-NULL does caller want ErrorLevel changed.
+		if (aResultToken) // A non-NULL value indicates our caller is RegExMatch() or RegExReplace() in a script.
 		{
 			sntprintf(error_buf, _countof(error_buf), _T("Compile error %d at offset %d: %hs"), error_code
 				, error_offset, error_msg);
 			// Seems best to bring the error to the user's attention rather than letting it potentially
 			// escape their notice.  This sort of error should be corrected immediately, not handled
-			// within the script.
-			g_script.ThrowRuntimeException(error_buf, aResultToken->marker);
+			// within the script (such as by checking ErrorLevel).
+			aResultToken->Error(error_buf);
 		}
 		goto error;
 	}
@@ -12702,12 +12684,6 @@ match_found: // RegEx was found in the cache at position sLastFound, so return t
 	return sCache[sLastFound].re_compiled; // Indicate success.
 
 error: // Since NULL is returned here, caller should ignore the contents of the output parameters.
-	if (aResultToken)
-	{
-		aResultToken->symbol = SYM_STRING;
-		aResultToken->marker = _T("");
-	}
-
 	LeaveCriticalSection(&g_CriticalRegExCache);
 	return NULL; // Indicate failure.
 }
@@ -12741,7 +12717,7 @@ LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx)
 
 
 
-void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount
+void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount
 	, pcret *aRE, pcret_extra *aExtra, LPTSTR aHaystack, int aHaystackLength
 	, int aStartingOffset, int aOffset[], int aNumberOfIntsInOffset)
 {
@@ -12894,7 +12870,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 		if (captured_pattern_count < 0) // An error other than "no match". These seem very rare, so it seems best to abort rather than yielding a partially-converted result.
 		{
 			ITOA(captured_pattern_count, repl_buf);
-			g_script.ThrowRuntimeException(ERR_PCRE_EXEC, NULL, repl_buf);
+			aResultToken.Error(ERR_PCRE_EXEC, repl_buf);
 			goto set_count_and_return; // Goto vs. break to leave aResultToken.marker set to aHaystack and replacement_count set to 0.
 		}
 
@@ -13122,7 +13098,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 	// All paths above should return (or goto some other label), so execution should never reach here except
 	// through goto:
 out_of_mem:
-	g_script.ThrowRuntimeException(ERR_OUTOFMEM);
+	aResultToken.Error(ERR_OUTOFMEM);
 	if (result)
 	{
 		free(result);  // Since result is probably an non-terminated string (not to mention an incompletely created result), it seems best to free it here to remove it from any further consideration by the caller.
@@ -13234,7 +13210,7 @@ BIF_DECL(BIF_RegEx)
 	{
 		TCHAR err_info[MAX_INTEGER_SIZE];
 		ITOA(captured_pattern_count, err_info);
-		g_script.ThrowRuntimeException(ERR_PCRE_EXEC, NULL, err_info);
+		aResultToken.Error(ERR_PCRE_EXEC, err_info);
 	}
 	else // Match found, and captured_pattern_count >= 0 (but should never be 0 in this case because that only happens when offset[] is too small, which it isn't).
 	{
@@ -13377,7 +13353,7 @@ BIF_DECL(BIF_NumGet)
 	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
 		|| right_side_bound && target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
-		aResult = g_script.ThrowRuntimeException(ERR_PARAM1_INVALID, _T("NumGet"));
+		aResultToken.Error(ERR_PARAM1_INVALID);
 		return;
 	}
 
@@ -13491,7 +13467,7 @@ BIF_DECL(BIF_NumPut)
 			target_token.var->MaybeWarnUninitialized();
 		}
 
-		aResult = g_script.ThrowRuntimeException(ERR_PARAM2_INVALID, _T("NumPut"));
+		aResultToken.Error(ERR_PARAM2_INVALID);
 		return;
 	}
 
@@ -13576,7 +13552,7 @@ BIF_DECL(BIF_StrGetPut)
 		{
 			// See the "Legend" above.  Either this is StrGet and Address was invalid (it can't be omitted due
 			// to prior min-param checks), or it is StrPut and there are too many parameters.
-			aResult = g_script.ScriptError(source_string ? ERR_TOO_MANY_PARAMS : ERR_PARAM1_INVALID);  // StrPut : StrGet
+			aResultToken.Error(source_string ? ERR_TOO_MANY_PARAMS : ERR_PARAM1_INVALID);  // StrPut : StrGet
 			return;
 		}
 		// else this is the special measuring mode of StrPut, where Address and Length are omitted.
@@ -13597,7 +13573,7 @@ BIF_DECL(BIF_StrGetPut)
 					return; // Get 0 chars.
 				if (length <= 0)
 				{
-					aResult = g_script.ScriptError(_T("Invalid Length."));
+					aResultToken.Error(_T("Invalid Length."));
 					return;
 				}
 				++aParam; // Let encoding be the next param, if present.
@@ -13633,7 +13609,7 @@ BIF_DECL(BIF_StrGetPut)
 		// The following catches StrPut(X, &Y) where Y is uninitialized or has zero capacity.
 		|| (address == Var::sEmptyString && source_length) )
 	{
-		aResult = g_script.ScriptError(source_string ? ERR_PARAM2_INVALID : ERR_PARAM1_INVALID);
+		aResultToken.Error(source_string ? ERR_PARAM2_INVALID : ERR_PARAM1_INVALID);
 		return;
 	}
 
@@ -13762,10 +13738,7 @@ BIF_DECL(BIF_StrGetPut)
 			// Convert multi-byte encoded string to UTF-16.
 			conv_length = MultiByteToWideChar(encoding, 0, (LPCSTR)address, length, NULL, 0);
 			if (!TokenSetResult(aResultToken, NULL, conv_length)) // DO NOT SUBTRACT 1, conv_length might not include a null-terminator.
-			{
-				aResult = FAIL;
 				return; // Out of memory.
-			}
 			conv_length = MultiByteToWideChar(encoding, 0, (LPCSTR)address, length, aResultToken.marker, conv_length);
 #else
 			CStringW wide_buf;
@@ -13799,7 +13772,7 @@ BIF_DECL(BIF_StrGetPut)
 			if (length == 0)
 				return;	// Already set marker = "" above.
 			// Copy and null-terminate at the specified length.
-			aResult = TokenSetResult(aResultToken, (LPCTSTR)address, length);
+			TokenSetResult(aResultToken, (LPCTSTR)address, length);
 			return;
 		}
 
@@ -13862,7 +13835,7 @@ BIF_DECL(BIF_IsByRef)
 	if (aParam[0]->symbol != SYM_VAR)
 	{
 		// Incorrect usage.
-		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		aResultToken.Error(ERR_PARAM1_INVALID);
 	}
 	else
 	{
@@ -13889,7 +13862,7 @@ BIF_DECL(BIF_GetKeyState)
 		if (   !(joy = (JoyControls)ConvertJoy(key_name, &joystick_id))   )
 		{
 			// It is neither a key name nor a joystick button/axis.
-			aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+			aResultToken.Error(ERR_PARAM1_INVALID);
 		}
 		else
 		{
@@ -14040,7 +14013,7 @@ BIF_DECL(BIF_VarSetCapacity)
 			aResultToken.value_int64 -= sizeof(TCHAR); // Omit the room for the zero terminator since script capacity is defined as length vs. size.
 	} // (aParam[0]->symbol == SYM_VAR)
 	else
-		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		aResultToken.Error(ERR_PARAM1_INVALID);
 }
 
 
@@ -14372,7 +14345,7 @@ BIF_DECL(BIF_DateAdd)
 	FILETIME ft;
 	if (!YYYYMMDDToFileTime(TokenToString(*aParam[0], aResultToken.buf), ft))
 	{
-		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		aResultToken.Error(ERR_PARAM1_INVALID);
 		return;
 	}
 
@@ -14396,7 +14369,7 @@ BIF_DECL(BIF_DateAdd)
 		nUnits *= ((double)10000000 * 60 * 60 * 24);
 		break;
 	default: // Invalid
-		aResult = g_script.ScriptError(ERR_PARAM3_INVALID);
+		aResultToken.Error(ERR_PARAM3_INVALID);
 		return;
 	}
 	// Convert ft struct to a 64-bit variable (maybe there's some way to avoid these conversions):
@@ -14427,7 +14400,7 @@ BIF_DECL(BIF_DateDiff)
 		failed);
 	if (failed) // Usually caused by an invalid component in the date-time string.
 	{
-		aResult = FAIL; // ScriptError() was already called.
+		aResultToken.SetExitResult(FAIL); // ScriptError() was already called.
 		return;
 	}
 	switch (ctoupper(*TokenToString(*aParam[2])))
@@ -14437,7 +14410,7 @@ BIF_DECL(BIF_DateDiff)
 	case 'H': time_until /= 60 * 60; break; // Hours
 	case 'D': time_until /= 60 * 60 * 24; break; // Days
 	default: // Invalid
-		aResult = g_script.ScriptError(ERR_PARAM3_INVALID);
+		aResultToken.Error(ERR_PARAM3_INVALID);
 		return;
 	}
 	aResultToken.value_int64 = time_until;
@@ -14469,7 +14442,7 @@ BIF_DECL(BIF_OnMessage)
 			func = TokenToFunc(*aParam[1]); // Parameter #2: function name or reference.
 			if (!func || func->mIsBuiltIn || func->mMinParams > 4 || func->mClass)
 			{
-				aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
+				aResultToken.Error(ERR_PARAM2_INVALID);
 				return;
 			}
 			// Obsolete: If too many formal parameters or any are ByRef/optional, indicate failure.
@@ -14563,7 +14536,7 @@ BIF_DECL(BIF_OnMessage)
 rare_failure:
 	// Some kind of failure occurred which should be very rare.  Throw an exception so that script
 	// authors never need to worry about handling this error.  Use a generic message because it's rare:
-	g_script.ThrowRuntimeException(ERR_EXCEPTION);
+	aResultToken.Error(ERR_EXCEPTION);
 }
 
 
@@ -14712,13 +14685,12 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 
 	g_script.mLastPeekTime = GetTickCount(); // Somewhat debatable, but might help minimize interruptions when the callback is called via message (e.g. subclassing a control; overriding a WindowProc).
 
-	ExprTokenType result_token; // L31
+	FuncResult result_token;
 	func.Call(&result_token); // Call the UDF.  Call()'s own return value (e.g. EARLY_EXIT or FAIL) is ignored because it wouldn't affect the handling below.
 
 	UINT_PTR number_to_return = (UINT_PTR)TokenToInt64(result_token); // L31: For simplicity, DEFAULT_CB_RETURN_VALUE is not used - DEFAULT_CB_RETURN_VALUE is 0, which TokenToInt64 will return if the token is empty.
-	if (result_token.symbol == SYM_OBJECT) // L31
-		result_token.object->Release();
-
+	
+	result_token.Free();
 	Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count); // ABOVE must be done BEFORE this because return_value might be the contents of one of the function's local variables (which are about to be free'd).
 
 	if (cb.create_new_thread)
@@ -14767,7 +14739,7 @@ BIF_DECL(BIF_RegisterCallback)
 	Func *func;
 	if (  !(func = TokenToFunc(*aParam[0])) || func->mIsBuiltIn  )  // Not a valid user-defined function.
 	{
-		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		aResultToken.Error(ERR_PARAM1_INVALID);
 		return;
 	}
 
@@ -14780,7 +14752,7 @@ BIF_DECL(BIF_RegisterCallback)
 				&& !func->mIsVariadic					 // ...and the function isn't designed to accept parameters via an array (or in this case, a pointer).
 			|| actual_param_count < func->mMinParams   ) // ...or the function has too many mandatory formals (caller specified insufficient actuals to cover them all).
 		{
-			aResult = g_script.ScriptError(ERR_PARAM3_INVALID);
+			aResultToken.Error(ERR_PARAM3_INVALID);
 			return;
 		}
 	}
@@ -14791,7 +14763,7 @@ BIF_DECL(BIF_RegisterCallback)
 	bool use_cdecl = StrChrAny(options, _T("Cc")); // Recognize "C" as the "CDecl" option.
 	if (!use_cdecl && actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).
 	{
-		aResult = g_script.ScriptError(ERR_PARAM3_INVALID);
+		aResultToken.Error(ERR_PARAM3_INVALID);
 		return;
 	}
 #endif
@@ -14802,7 +14774,7 @@ BIF_DECL(BIF_RegisterCallback)
 	for (int i = 0; i < func->mParamCount; ++i)
 		if (func->mParam[i].is_byref)
 		{
-			aResult = g_script.ScriptError(ERR_PARAM1_INVALID); // Incompatible function (param #1).
+			aResultToken.Error(ERR_PARAM1_INVALID); // Incompatible function (param #1).
 			return;
 		}
 
@@ -14820,7 +14792,7 @@ BIF_DECL(BIF_RegisterCallback)
 	RCCallbackFunc *callbackfunc=(RCCallbackFunc*) GlobalAlloc(GMEM_FIXED,sizeof(RCCallbackFunc));	//allocate structure off process heap, automatically RWE and fixed.
 	if (!callbackfunc)
 	{
-		aResult = g_script.ScriptError(ERR_OUTOFMEM);
+		aResultToken.Error(ERR_OUTOFMEM);
 		return;
 	}
 	RCCallbackFunc &cb = *callbackfunc; // For convenience and possible code-size reduction.
@@ -14894,14 +14866,14 @@ BIF_DECL(BIF_StatusBar)
 
 	if (!g->GuiDefaultWindowValid()) // Always operate on thread's default window to simplify the syntax.
 	{
-		aResult = g_script.ScriptError(ERR_NO_GUI);
+		aResultToken.Error(ERR_NO_GUI);
 		return;
 	}
 	GuiType& gui = *g->GuiDefaultWindow; // For performance.
 	HWND control_hwnd;
 	if (   !(control_hwnd = gui.mStatusBarHwnd)   )
 	{
-		aResult = g_script.ScriptError(_T("No StatusBar."));
+		aResultToken.Error(_T("No StatusBar."));
 		return;
 	}
 
@@ -14981,16 +14953,16 @@ BIF_DECL(BIF_StatusBar)
 
 
 
-bool ValidGuiAndListView(ResultType &aResult)
+bool ValidGuiAndListView(ResultToken &aResultToken)
 {
 	if (!g->GuiDefaultWindowValid())
 	{
-		aResult = g_script.ScriptError(ERR_NO_GUI);
+		aResultToken.Error(ERR_NO_GUI);
 		return false;
 	}
 	if (!g->GuiDefaultWindow->mCurrentListView)
 	{
-		aResult = g_script.ScriptError(_T("No ListView."));
+		aResultToken.Error(_T("No ListView."));
 		return false;
 	}
 	return true;
@@ -15014,7 +14986,7 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 	// Control doesn't exist (i.e. no ListView in window).
 	// Item not found in ListView.
 
-	if (!ValidGuiAndListView(aResult))
+	if (!ValidGuiAndListView(aResultToken))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	HWND control_hwnd = gui.mCurrentListView->hwnd;
@@ -15031,7 +15003,7 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 				aResultToken.value_int64 = gui.mCurrentListView->union_lv_attrib->col_count;
 			else
 			{
-				aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+				aResultToken.Error(ERR_PARAM1_INVALID);
 				return;
 			}
 		}
@@ -15078,7 +15050,7 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 		break;
 	  }
 	default:
-		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		aResultToken.Error(ERR_PARAM1_INVALID);
 	}
 }
 
@@ -15100,28 +15072,28 @@ BIF_DECL(BIF_LV_GetText)
 	// Item not found in ListView.
 	// And others.
 
-	if (!ValidGuiAndListView(aResult))
+	if (!ValidGuiAndListView(aResultToken))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	
 	// Caller has ensured there is at least two parameters:
 	if (aParam[0]->symbol != SYM_VAR) // No output variable.  Supporting a NULL for the purpose of checking for the existence of a cell seems too rarely needed.
 	{
-		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		aResultToken.Error(ERR_PARAM1_INVALID);
 		return;
 	}
 
 	int row_index = ParamIndexToInt(1) - 1; // -1 to convert to zero-based.
 	if (row_index < -1) // row_index==-1 is reserved to mean "get column heading's text".
 	{
-		aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
+		aResultToken.Error(ERR_PARAM2_INVALID);
 		return;
 	}
 	// If parameter 3 is omitted, default to the first column (index 0):
 	int col_index = ParamIndexIsOmitted(2) ? 0 : ParamIndexToInt(2) - 1; // -1 to convert to zero-based.
 	if (col_index < 0)
 	{
-		aResult = g_script.ScriptError(ERR_PARAM3_INVALID);
+		aResultToken.Error(ERR_PARAM3_INVALID);
 		return;
 	}
 
@@ -15191,14 +15163,14 @@ BIF_DECL(BIF_LV_AddInsertModify)
 		index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 		if (index < -1 || (mode != 'M' && index < 0)) // Allow -1 to mean "all rows" when in modify mode.
 		{
-			aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+			aResultToken.Error(ERR_PARAM1_INVALID);
 			return;
 		}
 		++aParam;  // Remove the first parameter from further consideration to make Insert/Modify symmetric with Add.
 		--aParamCount;
 	}
 
-	if (!ValidGuiAndListView(aResult))
+	if (!ValidGuiAndListView(aResultToken))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	GuiControlType &control = *gui.mCurrentListView;
@@ -15326,7 +15298,7 @@ BIF_DECL(BIF_LV_AddInsertModify)
 		}
 		else
 		{
-			aResult = g_script.ScriptError(ERR_INVALID_OPTION, next_option);
+			aResultToken.Error(ERR_INVALID_OPTION, next_option);
 			*option_end = orig_char; // See comment below.
 			return;
 		}
@@ -15443,7 +15415,7 @@ BIF_DECL(BIF_LV_Delete)
 	// Control doesn't exist (i.e. no ListView in window).
 	// And others as shown below.
 
-	if (!ValidGuiAndListView(aResult))
+	if (!ValidGuiAndListView(aResultToken))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	HWND control_hwnd = gui.mCurrentListView->hwnd;
@@ -15461,7 +15433,7 @@ BIF_DECL(BIF_LV_Delete)
 	else
 	{
 		// Even if index==0, for safety, it seems best not to do a delete-all.
-		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		aResultToken.Error(ERR_PARAM1_INVALID);
 		return;
 	}
 }
@@ -15485,7 +15457,7 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 	// Control doesn't exist (i.e. no ListView in window).
 	// Column not found in ListView.
 
-	if (!ValidGuiAndListView(aResult))
+	if (!ValidGuiAndListView(aResultToken))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	GuiControlType &control = *gui.mCurrentListView;
@@ -15710,7 +15682,7 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 			}
 			else
 			{
-				aResult = g_script.ScriptError(ERR_INVALID_OPTION);
+				aResultToken.Error(ERR_INVALID_OPTION);
 				*option_end = orig_char; // See comment below.
 				return;
 			}
@@ -15795,7 +15767,7 @@ BIF_DECL(BIF_LV_SetImageList)
 	// Control doesn't exist (i.e. no ListView in window).
 	// Column not found in ListView.
 
-	if (!ValidGuiAndListView(aResult))
+	if (!ValidGuiAndListView(aResultToken))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	
@@ -15815,16 +15787,16 @@ BIF_DECL(BIF_LV_SetImageList)
 
 
 
-bool ValidGuiAndTreeView(ResultType &aResult)
+bool ValidGuiAndTreeView(ResultToken &aResultToken)
 {
 	if (!g->GuiDefaultWindowValid())
 	{
-		aResult = g_script.ScriptError(ERR_NO_GUI);
+		aResultToken.Error(ERR_NO_GUI);
 		return false;
 	}
 	if (!g->GuiDefaultWindow->mCurrentTreeView)
 	{
-		aResult = g_script.ScriptError(_T("No TreeView."));
+		aResultToken.Error(_T("No TreeView."));
 		return false;
 	}
 	return true;
@@ -15856,7 +15828,7 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 	// Control doesn't exist (i.e. no TreeView in window).
 	// And others as shown below.
 
-	if (!ValidGuiAndTreeView(aResult))
+	if (!ValidGuiAndTreeView(aResultToken))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	GuiControlType &control = *gui.mCurrentTreeView;
@@ -16065,7 +16037,7 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 		}
 		else
 		{
-			aResult = g_script.ScriptError(ERR_INVALID_OPTION, next_option);
+			aResultToken.Error(ERR_INVALID_OPTION, next_option);
 			*option_end = orig_char; // See comment below.
 			return;
 		}
@@ -16153,7 +16125,7 @@ BIF_DECL(BIF_TV_GetRelatedItem)
 	// Control doesn't exist (i.e. no TreeView in window).
 	// Item not found in TreeView.
 
-	if (!ValidGuiAndTreeView(aResult))
+	if (!ValidGuiAndTreeView(aResultToken))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	HWND control_hwnd = gui.mCurrentTreeView->hwnd;
@@ -16257,7 +16229,7 @@ BIF_DECL(BIF_TV_Get)
 	// Item not found in TreeView.
 	// And others.
 
-	if (!ValidGuiAndTreeView(aResult))
+	if (!ValidGuiAndTreeView(aResultToken))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	HWND control_hwnd = gui.mCurrentTreeView->hwnd;
@@ -16294,7 +16266,7 @@ BIF_DECL(BIF_TV_Get)
 	// Loadtime validation has ensured that param #1 and #2 are present.
 	if (aParam[0]->symbol != SYM_VAR) // No output variable. Supporting a NULL for the purpose of checking for the existence of an item seems too rarely needed.
 	{
-		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		aResultToken.Error(ERR_PARAM1_INVALID);
 		return;
 	}
 	Var &output_var = *aParam[0]->var;
@@ -16333,7 +16305,7 @@ BIF_DECL(BIF_TV_SetImageList)
 	// Window doesn't exist.
 	// Control doesn't exist (i.e. no TreeView in window).
 
-	if (!ValidGuiAndTreeView(aResult))
+	if (!ValidGuiAndTreeView(aResultToken))
 		return;
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	
@@ -16405,7 +16377,7 @@ BIF_DECL(BIF_IL_Add)
 	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0); // Load-time validation has ensured there is a first parameter.
 	if (!himl)
 	{
-		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		aResultToken.Error(ERR_PARAM1_INVALID);
 		return;
 	}
 
@@ -16476,7 +16448,7 @@ BIF_DECL(BIF_Trim) // L31
 	if (extract_length && trim_type != 'L') // i.e. it's Trim() or RTrim();  THE LINE BELOW REQUIRES extract_length >= 1.
 		extract_length = omit_trailing_any(result, omit_list, result + extract_length - 1);
 
-	aResult = TokenSetResult(aResultToken, result, extract_length);
+	TokenSetResult(aResultToken, result, extract_length);
 }
 
 
@@ -16873,26 +16845,26 @@ Func *TokenToFunc(ExprTokenType &aToken)
 
 
 
-ResultType TokenSetResult(ExprTokenType &aResultToken, LPCTSTR aResult, size_t aResultLength)
+ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength)
 // Utility function for handling memory allocation and return to callers of built-in functions; based on BIF_SubStr.
 // Returns FAIL if malloc failed, in which case our caller is responsible for returning a sensible default value.
 {
-	if (aResultLength == -1)
-		aResultLength = _tcslen(aResult); // Caller must not pass NULL for aResult in this case.
-	if (aResultLength <= MAX_NUMBER_LENGTH) // v1.0.46.01: Avoid malloc() for small strings.  However, this improves speed by only 10% in a test where random 25-byte strings were extracted from a 700 KB string (probably because VC++'s malloc()/free() are very fast for small allocations).
+	if (aLength == -1)
+		aLength = _tcslen(aValue); // Caller must not pass NULL for aResult in this case.
+	if (aLength <= MAX_NUMBER_LENGTH) // v1.0.46.01: Avoid malloc() for small strings.  However, this improves speed by only 10% in a test where random 25-byte strings were extracted from a 700 KB string (probably because VC++'s malloc()/free() are very fast for small allocations).
 		aResultToken.marker = aResultToken.buf; // Store the address of the result for the caller.
 	else
 	{
 		// Caller has provided a mem_to_free (initially NULL) as a means of passing back memory we allocate here.
 		// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
-		if (   !(aResultToken.mem_to_free = tmalloc(aResultLength + 1))   ) // Out of memory.
-			return g_script.ScriptError(ERR_OUTOFMEM);
+		if (   !(aResultToken.mem_to_free = tmalloc(aLength + 1))   ) // Out of memory.
+			return aResultToken.Error(ERR_OUTOFMEM);
 		aResultToken.marker = aResultToken.mem_to_free; // Store the address of the result for the caller.
-		aResultToken.marker_length = aResultLength; // MANDATORY FOR USERS OF MEM_TO_FREE: set marker_length to the length of the string.
+		aResultToken.marker_length = aLength; // MANDATORY FOR USERS OF MEM_TO_FREE: set marker_length to the length of the string.
 	}
-	if (aResult) // Caller may pass NULL to retrieve a buffer of sufficient size.
-		tmemcpy(aResultToken.marker, aResult, aResultLength);
-	aResultToken.marker[aResultLength] = '\0'; // Must be done separately from the memcpy() because the memcpy() might just be taking a substring (i.e. long before result's terminator).
+	if (aValue) // Caller may pass NULL to retrieve a buffer of sufficient size.
+		tmemcpy(aResultToken.marker, aValue, aLength);
+	aResultToken.marker[aLength] = '\0'; // Must be done separately from the memcpy() because the memcpy() might just be taking a substring (i.e. long before result's terminator).
 	return OK;
 }
 

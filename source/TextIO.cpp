@@ -688,8 +688,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		Close
 	};
 
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
-	// Reference: MetaObject::Invoke
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 	{
 		if (!aParamCount) // file[]
 			return INVOKE_NOT_HANDLED;
@@ -744,7 +743,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			if (aParamCount != (IS_INVOKE_SET ? 1 : 0))
 				// Get: disallow File.Length[newLength] and File.Seek[dist,origin].
 				// Set: disallow File[]:=PropertyName and File["Pos",dist]:=origin.
-				return g_script.ScriptError(_T("Invalid usage."));
+				return aResultToken.Error(_T("Invalid usage."));
 		}
 
 		aResultToken.symbol = SYM_INTEGER; // Set default return type -- the most common cases return integer.
@@ -828,7 +827,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				else
 				{
 					if (aParamCount < 1)
-						return g_script.ScriptError(ERR_PARAM1_REQUIRED);
+						return aResultToken.Error(ERR_PARAM1_REQUIRED);
 
 					ExprTokenType &token_to_write = *aParam[1];
 					
@@ -910,7 +909,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		case RawReadWrite:
 			{
 				if (aParamCount < 2)
-					return g_script.ScriptError(ERR_TOO_FEW_PARAMS);
+					return aResultToken.Error(ERR_TOO_FEW_PARAMS);
 
 				bool reading = (name[3] == 'R' || name[3] == 'r');
 
@@ -927,7 +926,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 					{
 						if (reading)
 							return FAIL; // SetCapacity() already showed the error message.
-						return g_script.ScriptError(ERR_PARAM2_INVALID); // Invalid size (param #2).
+						return aResultToken.Error(ERR_PARAM2_INVALID); // Invalid size (param #2).
 					}
 					target = target_token.var->Contents();
 				}
@@ -936,7 +935,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 
 				DWORD result;
 				if (target < (LPVOID)65536) // Basic sanity check to catch incoming raw addresses that are zero or blank.
-					return g_script.ScriptError(ERR_PARAM1_INVALID);
+					return aResultToken.Error(ERR_PARAM1_INVALID);
 				else if (reading)
 					result = mFile.Read(target, size);
 				else
@@ -1168,7 +1167,7 @@ BIF_DECL(BIF_FileOpen)
 
 invalid_param:
 	g->LastError = ERROR_INVALID_PARAMETER; // For consistency.
-	aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
+	aResultToken.Error(ERR_PARAM2_INVALID);
 }
 
 

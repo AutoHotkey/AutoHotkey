@@ -39,7 +39,7 @@ BIF_DECL(BIF_ObjCreate)
 	}
 	else
 	{
-		aResult = g_script.ScriptError(aParamCount == 1 ? ERR_PARAM1_INVALID : ERR_OUTOFMEM);
+		aResultToken.Error(aParamCount == 1 ? ERR_PARAM1_INVALID : ERR_OUTOFMEM);
 	}
 }
 
@@ -61,7 +61,7 @@ BIF_DECL(BIF_ObjArray)
 		}
 		obj->Release();
 	}
-	aResult = g_script.ScriptError(ERR_OUTOFMEM);
+	aResultToken.Error(ERR_OUTOFMEM);
 }
 	
 
@@ -107,6 +107,7 @@ BIF_DECL(BIF_ObjInvoke)
 	else
 		obj = NULL;
     
+	ResultType result;
     if (obj)
 	{
 		bool param_is_var = obj_param->symbol == SYM_VAR;
@@ -115,12 +116,12 @@ BIF_DECL(BIF_ObjInvoke)
 			// This is not necessary for SYM_OBJECT since that reference is already counted and cannot be released before we return.  Each object
 			// could take care not to delete itself prematurely, but it seems more proper, more reliable and more maintainable to handle it here.
 			obj->AddRef();
-        aResult = obj->Invoke(aResultToken, *obj_param, invoke_type, aParam, aParamCount);
+        result = obj->Invoke(aResultToken, *obj_param, invoke_type, aParam, aParamCount);
 		if (param_is_var)
 			obj->Release();
 	}
 	// Invoke meta-functions of g_MetaObject.
-	else if (INVOKE_NOT_HANDLED == (aResult = g_MetaObject.Invoke(aResultToken, *obj_param, invoke_type | IF_META, aParam, aParamCount)))
+	else if (INVOKE_NOT_HANDLED == (result = g_MetaObject.Invoke(aResultToken, *obj_param, invoke_type | IF_META, aParam, aParamCount)))
 	{
 		// Since above did not handle it, check for attempts to access .base of non-object value (g_MetaObject itself).
 		if (   invoke_type != IT_CALL // Exclude things like "".base().
@@ -133,14 +134,14 @@ BIF_DECL(BIF_ObjInvoke)
 				ExprTokenType base_token;
 				base_token.symbol = SYM_OBJECT;
 				base_token.object = &g_MetaObject;
-				aResult = g_MetaObject.Invoke(aResultToken, base_token, invoke_type, aParam + 1, aParamCount - 1);
+				result = g_MetaObject.Invoke(aResultToken, base_token, invoke_type, aParam + 1, aParamCount - 1);
 			}
 			else					// "".base
 			{
 				// Return a reference to g_MetaObject.  No need to AddRef as g_MetaObject ignores it.
 				aResultToken.symbol = SYM_OBJECT;
 				aResultToken.object = &g_MetaObject;
-				aResult = OK;
+				result = OK;
 			}
 		}
 		else
@@ -150,14 +151,18 @@ BIF_DECL(BIF_ObjInvoke)
 				obj_param->var->MaybeWarnUninitialized();
 		}
 	}
-	if (aResult == INVOKE_NOT_HANDLED)
+	if (result == INVOKE_NOT_HANDLED)
 	{
 		// Invocation not handled. Either there was no target object, or the object doesn't handle
 		// this method/property.  For Object (associative arrays), only CALL should give this result.
 		if (!obj)
-			aResult = g_script.ThrowRuntimeException(ERR_NO_OBJECT);
+			aResultToken.Error(ERR_NO_OBJECT);
 		else
-			aResult = g_script.ThrowRuntimeException(ERR_NO_MEMBER, NULL, aParamCount ? TokenToString(*aParam[0]) : _T(""));
+			aResultToken.Error(ERR_NO_MEMBER, aParamCount ? TokenToString(*aParam[0]) : _T(""));
+	}
+	else if (result == FAIL || result == EARLY_EXIT) // For maintainability: SetExitResult() might not have been called.
+	{
+		aResultToken.SetExitResult(result);
 	}
 }
 	
@@ -172,7 +177,7 @@ BIF_DECL(BIF_ObjGetInPlace)
 	// those cases. Otherwise we have one visible parameter, which indicates the number of
 	// actual parameters below it on the stack.
 	aParamCount = aParamCount ? (int)TokenToInt64(*aParam[0]) : 2; // x[<n-1 params>] : x.y
-	BIF_ObjInvoke(aResult, aResultToken, aParam - aParamCount, aParamCount);
+	BIF_ObjInvoke(aResultToken, aParam - aParamCount, aParamCount);
 }
 
 
@@ -190,14 +195,14 @@ BIF_DECL(BIF_ObjNew)
 	IObject *class_object = TokenToObject(*class_token);
 	if (!class_object)
 	{
-		aResult = g_script.ScriptError(_T("Missing class object for \"new\" operator."));
+		aResultToken.Error(_T("Missing class object for \"new\" operator."));
 		return;
 	}
 
 	Object *new_object = Object::Create();
 	if (!new_object)
 	{
-		aResult = g_script.ScriptError(ERR_OUTOFMEM);
+		aResultToken.Error(ERR_OUTOFMEM);
 		return;
 	}
 
@@ -219,6 +224,13 @@ BIF_DECL(BIF_ObjNew)
 	result = class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, 1);
 	if (result != INVOKE_NOT_HANDLED)
 	{
+		if (result != OK)
+		{
+			new_object->Release();
+			aParam[0] = class_token; // Restore it to original caller-supplied value.
+			aResultToken.SetExitResult(result);
+			return;
+		}
 		// See similar section below for comments.
 		aResultToken.Free();
 		// Reset to defaults for __New, invoked below.
@@ -226,42 +238,32 @@ BIF_DECL(BIF_ObjNew)
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
 		aResultToken.buf = buf;
-		if (result == FAIL)
-		{
-			new_object->Release();
-			aParam[0] = class_token; // Restore it to original caller-supplied value.
-			return;
-		}
 	}
 	
 	// __New may be defined by the script for custom initialization code.
 	name_token.marker = Object::sMetaFuncName[4]; // __New
 	result = class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, aParamCount);
-	if (result != EARLY_RETURN)
+	if (result == EARLY_RETURN || !TokenIsEmptyString(aResultToken))
 	{
-		// Although it isn't likely to happen, if __New points at a built-in function or if mBase
-		// (or an ancestor) is not an Object (i.e. it's a ComObject), aResultToken can be set even when
-		// the result is not EARLY_RETURN.  So make sure to clean up any result we're not going to use.
-		aResultToken.Free();
-		// This can be done by our caller, but is done here for maintainability; i.e. because
-		// some callers might expect mem_to_free to be NULL when the result isn't a string.
-		aResultToken.mem_to_free = NULL;
-		if (result == FAIL)
-		{
-			// Invocation failed, probably due to omitting a required parameter.
-			new_object->Release();
-			aResult = FAIL;
-		}
-		else
-		{
-			// Either it wasn't handled (i.e. neither this class nor any of its super-classes define __New()),
-			// or there was no explicit "return", so just return the new object.
-			aResultToken.symbol = SYM_OBJECT;
-			aResultToken.object = new_object;
-		}
+		// __New() returned a value in aResultToken, so use it as our result.  aResultToken is checked
+		// for the unlikely case that class_object is not an Object (perhaps it's a ComObject) or __New
+		// points to a built-in function.  The older behaviour for those cases was to free the unexpected
+		// return value, but this requires less code and might be useful somehow.
+		new_object->Release();
+	}
+	else if (result == FAIL || result == EARLY_EXIT)
+	{
+		// An error was raised within __New() or while trying to call it.
+		new_object->Release();
+		aResultToken.SetExitResult(result);
 	}
 	else
-		new_object->Release();
+	{
+		// Either it wasn't handled (i.e. neither this class nor any of its super-classes define __New()),
+		// or there was no explicit "return", so just return the new object.
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = new_object;
+	}
 	aParam[0] = class_token;
 }
 
@@ -276,8 +278,7 @@ BIF_DECL(BIF_ObjIncDec)
 	// the type of increment/decrement to be performed on this object's field.
 	SymbolType op = (SymbolType)(INT_PTR)aResultToken.marker;
 
-	ExprTokenType temp_result, current_value, value_to_set;
-
+	ResultToken temp_result;
 	// Set the defaults expected by BIF_ObjInvoke:
 	temp_result.symbol = SYM_INTEGER;
 	temp_result.marker = (LPTSTR)IT_GET;
@@ -286,11 +287,12 @@ BIF_DECL(BIF_ObjIncDec)
 
 	// Retrieve the current value.  Do it this way instead of calling Object::Invoke
 	// so that if aParam[0] is not an object, g_MetaObject is correctly invoked.
-	BIF_ObjInvoke(aResult, temp_result, aParam, aParamCount);
+	BIF_ObjInvoke(temp_result, aParam, aParamCount);
 
-	if (aResult == FAIL || aResult == EARLY_EXIT)
+	if (temp_result.Exited())
 		return;
 
+	ExprTokenType current_value, value_to_set;
 	switch (value_to_set.symbol = current_value.symbol = TokenIsNumeric(temp_result))
 	{
 	case PURE_INTEGER:
@@ -327,7 +329,7 @@ BIF_DECL(BIF_ObjIncDec)
 		aResultToken.marker = (LPTSTR)IT_SET;
 		// Set the new value and pass the return value of the invocation back to our caller.
 		// This should be consistent with something like x.y := x.y + 1.
-		BIF_ObjInvoke(aResult, aResultToken, param, aParamCount);
+		BIF_ObjInvoke(aResultToken, param, aParamCount);
 	}
 	else // SYM_POST_INCREMENT || SYM_POST_DECREMENT
 	{
@@ -338,7 +340,7 @@ BIF_DECL(BIF_ObjIncDec)
 		temp_result.mem_to_free = NULL;
 		
 		// Set the new value.
-		BIF_ObjInvoke(aResult, temp_result, param, aParamCount);
+		BIF_ObjInvoke(temp_result, param, aParamCount);
 		
 		// Dispose of the result safely.
 		temp_result.Free();
@@ -363,9 +365,12 @@ BIF_DECL(BIF_ObjXXX)
 	
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
 	if (obj)
-		aResult = obj->CallBuiltin(method_name, aResultToken, aParam + 1, aParamCount - 1);
+	{
+		if (!obj->CallBuiltin(method_name, aResultToken, aParam + 1, aParamCount - 1))
+			aResultToken.SetExitResult(FAIL);
+	}
 	else
-		aResult = g_script.ScriptError(ERR_NO_OBJECT);
+		aResultToken.Error(ERR_NO_OBJECT);
 }
 
 BIF_DECL(BIF_ObjNewEnum)
@@ -375,9 +380,12 @@ BIF_DECL(BIF_ObjNewEnum)
 	
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
 	if (obj)
-		aResult = obj->_NewEnum(aResultToken, NULL, 0); // Parameters are ignored.
+	{
+		if (!obj->_NewEnum(aResultToken, NULL, 0)) // Parameters are ignored.
+			aResultToken.SetExitResult(FAIL);
+	}
 	else
-		aResult = g_script.ScriptError(ERR_NO_OBJECT);
+		aResultToken.Error(ERR_NO_OBJECT);
 }
 
 
@@ -390,7 +398,7 @@ BIF_DECL(BIF_ObjAddRefRelease)
 	IObject *obj = (IObject *)TokenToInt64(*aParam[0]);
 	if (obj < (IObject *)65536) // Rule out some obvious errors.
 	{
-		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		aResultToken.Error(ERR_PARAM1_INVALID);
 		return;
 	}
 	if (ctoupper(aResultToken.marker[3]) == 'A')
@@ -409,9 +417,9 @@ BIF_DECL(BIF_ObjRawSet)
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
 	if (!obj)
 	{
-		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		aResultToken.Error(ERR_PARAM1_INVALID);
 		return;
 	}
 	if (!obj->SetItem(*aParam[1], *aParam[2]))
-		aResult = g_script.ScriptError(ERR_OUTOFMEM);
+		aResultToken.Error(ERR_OUTOFMEM);
 }

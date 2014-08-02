@@ -191,13 +191,14 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 
 
 struct ExprTokenType; // Forward declarations for use below.
+struct ResultToken;
 struct IDebugProperties;
 
 
 struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 {
 	// See script_object.cpp for comments.
-	virtual ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount) = 0;
+	virtual ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount) = 0;
 	
 	// Simple reference-counting mechanism.  Usage should be similar to IUnknown (COM).
 	// Some scripts may rely on these being at the same offset as IUnknown::AddRef/Release.
@@ -259,8 +260,8 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 			union // These nested structs and unions minimize the token size by overlapping data.
 			{
 				IObject *object;
-				DerefType *deref; // for SYM_FUNC
-				Var *var;         // for SYM_VAR (and SYM_DYNAMIC when buf is NULL)
+				DerefType *deref;  // for SYM_FUNC
+				Var *var;          // for SYM_VAR (and SYM_DYNAMIC when buf is NULL)
 				LPTSTR marker;     // for SYM_STRING
 				ExprTokenType *circuit_token; // for short-circuit operators
 			};
@@ -275,11 +276,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	// available in places and thus help performance.  This is because if it were stored and the marker
 	// or SYM_VAR's var pointed to a location that was changed as a side effect of an expression's
 	// call to a script function, the length would then be invalid.
-	SymbolType symbol; // Short-circuit benchmark is currently much faster with this and the next beneath the union, perhaps due to CPU optimizations for 8-byte alignment.
-	LPTSTR mem_to_free; // Used only with aResultToken. TODO: Move into separate ResultTokenType struct.
-	// The above two probably need to be adjacent to each other to conserve memory due to 8-byte alignment,
-	// which is the default alignment (for performance reasons) in any struct that contains 8-byte members
-	// such as double and __int64.
+	SymbolType symbol;
 
 	inline void CopyValueFrom(ExprTokenType &other)
 	// Copies the value of a token without overwriting buf, which may still be needed.
@@ -309,8 +306,15 @@ private: // Force code to use one of the above methods, for clarity.
 	{
 		return *this;
 	}
+};
+#define MAX_TOKENS 512 // Max number of operators/operands.  Seems enough to handle anything realistic, while conserving call-stack space.
+#define STACK_PUSH(token_ptr) stack[stack_count++] = token_ptr
+#define STACK_POP stack[--stack_count]  // To be used as the r-value for an assignment.
 
-public:
+struct ResultToken : public ExprTokenType
+{
+	LPTSTR mem_to_free;
+
 	// Utility function for initializing result tokens.
 	void InitResult(LPTSTR aResultBuf)
 	{
@@ -318,6 +322,7 @@ public:
 		marker = _T("");
 		buf = aResultBuf; // May be used for short return values and misc purposes.
 		mem_to_free = NULL;
+		result = OK;
 	}
 
 	// Utility function for properly freeing a token's contents.
@@ -330,10 +335,39 @@ public:
 		if (mem_to_free)
 			free(mem_to_free);
 	}
+
+	ResultType SetExitResult(ResultType aResult)
+	{
+		ASSERT(aResult == FAIL || aResult == EARLY_EXIT);
+		return result = aResult;
+	}
+
+	ResultType SetResult(ResultType aResult) // See comments for 'result' below.
+	{
+		return result = aResult;
+	}
+
+	bool Exited()
+	{
+		return result == FAIL || result == EARLY_EXIT;
+	}
+
+	ResultType Result()
+	{
+		return result;
+	}
+
+	ResultType Error(LPCTSTR aErrorText);
+	ResultType Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo);
+
+private:
+	// Currently can't be included in the value union because meta-functions
+	// need the EARLY_RETURN result *and* return value passed back.  However,
+	// probably best to keep it separate for code size and maintainability.
+	// Struct size is a non-issue since there is only one ResultToken per
+	// function call on the stack (or MAX_ARGS for ACT_FUNC/ACT_METHOD).
+	ResultType result;
 };
-#define MAX_TOKENS 512 // Max number of operators/operands.  Seems enough to handle anything realistic, while conserving call-stack space.
-#define STACK_PUSH(token_ptr) stack[stack_count++] = token_ptr
-#define STACK_POP stack[--stack_count]  // To be used as the r-value for an assignment.
 
 // But the array that goes with these actions is in globaldata.cpp because
 // otherwise it would be a little cumbersome to declare the extern version
@@ -697,7 +731,7 @@ struct global_struct
 	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
 	bool ListLinesIsEnabled;
 	UINT Encoding;
-	ExprTokenType* ThrownToken;
+	ResultToken* ThrownToken;
 	Line* ExcptLine;
 	bool InTryBlock;
 };

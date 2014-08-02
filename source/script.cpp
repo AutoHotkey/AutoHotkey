@@ -1032,24 +1032,17 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 
 	sExitFuncIsRunning = true;
 	DEBUGGER_STACK_PUSH(mOnExitFunc->mJumpToLine, _T("OnExit"))
-
-	FuncCallData func_call;
-	ExprTokenType result_token;
-	TCHAR result_token_buf[MAX_NUMBER_SIZE];
-	result_token.InitResult(result_token_buf);
-
-	ResultType result = mOnExitFunc->Call(func_call, result_token, 1, FUNC_ARG_STR(GetExitReasonString(mExitReason)));
+	
+	FuncResult result_token;
+	bool returned = mOnExitFunc->Call(result_token, 1, FUNC_ARG_STR(GetExitReasonString(mExitReason)));
+	
+	// If the function encounters a failure condition such as a runtime error, exit immediately.
+	// Otherwise, there will be no way to exit the script if the subroutine fails on each attempt.
 	// If the function returns true, do not terminate the script.
-	terminate_afterward = !TokenToBOOL(result_token);
+	terminate_afterward = terminate_afterward || !returned || !TokenToBOOL(result_token);
 
 	result_token.Free();
-
-	if (result == FAIL)
-	{
-		// If the function encounters a failure condition such as a runtime error, exit immediately.
-		// Otherwise, there will be no way to exit the script if the subroutine fails on each attempt.
-		TerminateApp(aExitReason, aExitCode);
-	}
+	
 	DEBUGGER_STACK_POP()
 
 	if (terminate_afterward)
@@ -6370,7 +6363,8 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	
 	if (mUnresolvedClasses)
 	{
-		ExprTokenType result_token, *param = &token;
+		ExprTokenType *param = &token;
+		ResultToken result_token;
 		result_token.symbol = SYM_STRING;
 		result_token.marker = _T("");
 		result_token.mem_to_free = NULL;
@@ -10162,7 +10156,7 @@ void Line::FreeDerefBufIfLarge()
 
 
 
-ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Line **apJumpToLine)
+ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line **apJumpToLine)
 // Start executing at "this" line, stop when aMode indicates.
 // RECURSIVE: Handles all lines that involve flow-control.
 // aMode can be UNTIL_RETURN, UNTIL_BLOCK_END, ONLY_ONE_LINE.
@@ -10872,7 +10866,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				g_script.FreeExceptionToken(g.ThrownToken);
 			}
 
-			ExprTokenType* token = new ExprTokenType;
+			ResultToken* token = new ResultToken;
 			if (!token) // Unlikely.
 				return line->LineError(ERR_OUTOFMEM);
 
@@ -11108,7 +11102,7 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 }
 
 
-ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+ResultType Line::PerformLoop(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 	, __int64 aIterationLimit, bool aIsInfinite) // bool performs better than BOOL in current benchmarks for this.
 // This performs much better (by at least 7%) as a function than as inline code, probably because
 // it's only called to set up the loop, not each time through the loop.
@@ -11195,7 +11189,7 @@ ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoo
 	// maintained together.
 
 // Lexikos: ACT_WHILE
-ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine)
+ResultType Line::PerformLoopWhile(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine)
 {
 	ResultType result;
 	Line *jump_to_line;
@@ -11272,34 +11266,35 @@ bool Line::EvaluateLoopUntil(ResultType &aResult)
 
 
 
-ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil)
+ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil)
 {
 	ResultType result;
 	Line *jump_to_line;
 	global_struct &g = *::g; // Might slightly speed up the loop below.
 
-	ExprTokenType param_tokens[3];
-	for (int i = 0; i < 3; ++i)
-		param_tokens[i].symbol = SYM_INVALID; // Set default.  ExpandArgs() doesn't always set it.
+	ResultToken param_tokens[3];
+	// param_tokens[0..1] aren't used because those args are ARG_TYPE_OUTPUT_VAR.
+	param_tokens[2].InitResult(NULL); // buf can be NULL because this isn't ACT_RETURN.
 
 	result = ExpandArgs(param_tokens);
 	if (result != OK)
 		// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
 		return result;
 
-	// Not required because the tokens aren't used for ARG_TYPE_OUTPUT_VAR:
-	//if (param_tokens[0].symbol == SYM_OBJECT)
-	//    param_tokens[0].object->Release();
-	if (param_tokens[2].symbol != SYM_OBJECT)
+	if (param_tokens[2].symbol != SYM_OBJECT) // Only [2] is checked; see above.
+	{
 		// The expression didn't resolve to an object, so no enumerator is available.
+		if (param_tokens[2].mem_to_free)
+			free(param_tokens[2].mem_to_free);
 		return OK;
+	}
 	
 	// Save these pointers since they will be overwritten during the loop:
 	Var *var[] = { ARGVARRAW1, ARGVARRAW2 };
 	
 	TCHAR buf[MAX_NUMBER_SIZE]; // Small buffer which may be used by object->Invoke().
 	
-	ExprTokenType enum_token;
+	ResultToken enum_token;
 	ExprTokenType *params[] = { param_tokens, param_tokens+1, param_tokens+2 };
 	int param_count;
 
@@ -11345,7 +11340,7 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 
 	IObject &enumerator = *enum_token.object; // Might perform better as a reference?
 
-	ExprTokenType result_token;
+	ResultToken result_token;
 
 	// Now that the enumerator expression has been evaluated, init A_Index:
 	g.mLoopIteration = 1;
@@ -11353,10 +11348,7 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 	for (;; ++g.mLoopIteration)
 	{
 		// Set up result_token the way Invoke expects; each Invoke() will change some or all of these:
-		result_token.symbol = SYM_STRING;
-		result_token.marker = _T("");
-		result_token.mem_to_free = NULL;
-		result_token.buf = buf;
+		result_token.InitResult(buf);
 
 		// Call enumerator.Next(var1, var2)
 		enumerator.Invoke(result_token, enum_token, IT_CALL, params, param_count);
@@ -11406,7 +11398,7 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 
 
 
-ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 	, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LPTSTR aFilePattern)
 // Note: Even if aFilePattern is just a directory (i.e. with not wildcard pattern), it seems best
 // not to append "\\*.*" to it because the pattern might be a script variable that the user wants
@@ -11561,7 +11553,7 @@ ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aCont
 
 
 
-ResultType Line::PerformLoopReg(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+ResultType Line::PerformLoopReg(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 	, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, HKEY aRootKeyType, HKEY aRootKey, LPTSTR aRegSubkey)
 // aRootKeyType is the type of root key, independent of whether it's local or remote.
 // This is used because there's no easy way to determine which root key a remote HKEY
@@ -11695,7 +11687,7 @@ ResultType Line::PerformLoopReg(ExprTokenType *aResultToken, bool &aContinueMain
 
 
 
-ResultType Line::PerformLoopParse(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil)
+ResultType Line::PerformLoopParse(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil)
 {
 	if (!*ARG1) // Since the input variable's contents are blank, the loop will execute zero times.
 		return OK;
@@ -11817,7 +11809,7 @@ ResultType Line::PerformLoopParse(ExprTokenType *aResultToken, bool &aContinueMa
 
 
 
-ResultType Line::PerformLoopParseCSV(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil)
+ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil)
 // This function is similar to PerformLoopParse() so the two should be maintained together.
 // See PerformLoopParse() for comments about the below (comments have been mostly stripped
 // from this function).
@@ -11955,7 +11947,7 @@ ResultType Line::PerformLoopParseCSV(ExprTokenType *aResultToken, bool &aContinu
 
 
 
-ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+ResultType Line::PerformLoopReadFile(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 	, TextStream *aReadFile, LPTSTR aWriteFileName)
 {
 	LoopReadFileStruct loop_info(aReadFile, aWriteFileName);
@@ -13010,9 +13002,10 @@ ResultType Line::Perform()
 	case ACT_FUNC:
 	case ACT_METHOD:
 	{
-		ExprTokenType param_tok[MAX_ARGS], *param_ptr[MAX_ARGS];
+		ResultToken param_tok[MAX_ARGS];
+		ExprTokenType *param_ptr[MAX_ARGS];
 		for (int i = 0; i < mArgc; ++i)
-			param_tok[i].symbol = SYM_STRING; // Set default.  ExpandArgs() might not set it.
+			param_tok[i].InitResult(NULL); // Passing NULL is okay in this case since buf is only used for ACT_RETURN.
 
 		result = ExpandArgs(param_tok);
 		if (result != OK) // Probably FAIL or EARLY_EXIT.
@@ -13057,15 +13050,12 @@ ResultType Line::Perform()
 			param_ptr[i] = &param_tok[arg];
 		}
 		
-		TCHAR result_buf[MAX_NUMBER_SIZE];
-		ExprTokenType result_token;
-		FuncCallData func_call;
-		ResultType result;
-		result_token.InitResult(result_buf);
-
+		FuncResult result_token;
+		
 		if (func) // ACT_FUNC
 		{
-			func->Call(func_call, result, result_token, param_ptr, param_count);
+			func->Call(result_token, param_ptr, param_count);
+			result = result_token.Result();
 		}
 		else // ACT_METHOD
 		{
@@ -13081,11 +13071,7 @@ ResultType Line::Perform()
 			}
 			// Otherwise, it's not a plain var reference so must be something like X.Y (in X.Y.Z).
 			if (param_tok[0].symbol == SYM_OBJECT)
-			{
-				result_token.symbol = SYM_STRING;
-				result_token.marker = _T("");
 				result = param_tok[0].object->Invoke(result_token, param_tok[0], IT_CALL, param_ptr, param_count);
-			}
 			else
 				result = LineError(ERR_NO_OBJECT);
 		}
@@ -13099,15 +13085,17 @@ ResultType Line::Perform()
 				output_var->AcceptNewMem(result_token.marker, result_token.marker_length);
 				result_token.mem_to_free = NULL;
 			}
+			else if (result == FAIL || result == EARLY_EXIT)
+				output_var->Assign();
 			else
-				output_var->Assign(result_token);
+				if (!output_var->Assign(result_token))
+					result = FAIL;
 		}
 
 		// Clean up:
 		result_token.Free();
 		for (int i = 0; i < mArgc; ++i)
-			if (param_tok[i].symbol == SYM_OBJECT)
-				param_tok[i].object->Release();
+			param_tok[i].Free();
 
 		if (result == EARLY_RETURN) // This would cause our caller to "return".
 			result = OK;
@@ -13230,7 +13218,7 @@ BIF_DECL(BIF_PerformAction)
 			// INPUT var for all known commands.
 			sntprintf(aResultToken.buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
 				, i+1, aResultToken.marker);
-			Script::ThrowRuntimeException(aResultToken.buf, aResultToken.marker);
+			aResultToken.Error(aResultToken.buf);
 			stack_var.Free(VAR_ALWAYS_FREE); // It might've been used as an input var.
 			return;
 		}
@@ -13283,9 +13271,9 @@ BIF_DECL(BIF_PerformAction)
 
 
 	// PERFORM THE ACTION
-	aResult = line.Perform();
+	ResultType result = line.Perform();
 
-	if (aResult == OK) // Can be OK, FAIL or EARLY_EXIT.
+	if (result == OK) // Can be OK, FAIL or EARLY_EXIT.
 	{
 		if (output_var == g_ErrorLevel 
 			&& !(act == ACT_RUNWAIT || act == ACT_SENDMESSAGE) // These two have a more useful return value.
@@ -13315,9 +13303,8 @@ BIF_DECL(BIF_PerformAction)
 			// comment and also because our line exists only until this function returns.
 			g->ExcptLine = g_script.mCurrLine;
 		}
-		// Set the result to an empty string for maintainability.
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
+		// Pass back the result code (FAIL or EARLY_EXIT).
+		aResultToken.SetExitResult(result);
 	}
 
 
@@ -13832,8 +13819,8 @@ ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTST
 	if (g->ThrownToken)
 		g_script.FreeExceptionToken(g->ThrownToken);
 
-	ExprTokenType *token;
-	if (   !(token = new ExprTokenType)
+	ResultToken *token;
+	if (   !(token = new ResultToken)
 		|| !(token->object = CreateRuntimeException(aErrorText, aWhat, aExtraInfo))   )
 	{
 		// Out of memory. It's likely that we were called for this very reason.
@@ -14102,7 +14089,21 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 
 
 
-ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine)
+__declspec(noinline)
+ResultType ResultToken::Error(LPCTSTR aErrorText)
+{
+	return SetExitResult(g_script.ScriptError(aErrorText));
+}
+
+__declspec(noinline)
+ResultType ResultToken::Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
+{
+	return SetExitResult(g_script.ScriptError(aErrorText, aExtraInfo));
+}
+
+
+
+ResultType Script::UnhandledException(ResultToken*& aToken, Line* aLine)
 {
 	LPCTSTR message = _T(""), extra = _T("");
 	TCHAR extra_buf[MAX_NUMBER_SIZE], message_buf[MAX_NUMBER_SIZE];
@@ -14158,7 +14159,7 @@ ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine)
 	return FAIL;
 }
 
-void Script::FreeExceptionToken(ExprTokenType*& aToken)
+void Script::FreeExceptionToken(ResultToken*& aToken)
 {
 	// Release any potential content the token may hold
 	aToken->Free();

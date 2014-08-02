@@ -68,7 +68,7 @@ public:
 class EnumBase : public ObjectBase
 {
 public:
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	virtual int Next(Var *aOutputVar1, Var *aOutputVar2) = 0;
 };
 	
@@ -169,7 +169,7 @@ protected:
 		return SetInternalCapacity(mFieldCountMax ? mFieldCountMax * 2 : 4);
 	}
 	
-	ResultType CallField(FieldType *aField, ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallField(FieldType *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	
 public:
 	static Object *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
@@ -280,26 +280,26 @@ public:
 	void EndClassDefinition();
 	Object *GetUnresolvedClass(LPTSTR &aName);
 	
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
-	ResultType CallBuiltin(LPCTSTR aMethod, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallBuiltin(LPCTSTR aMethod, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
-	ResultType _InsertAt(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _Push(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _InsertAt(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Push(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	
 	enum RemoveMode { RM_RemoveKey = 0, RM_RemoveAt, RM_Pop };
-	ResultType _Remove_impl(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, RemoveMode aMode);
-	ResultType _Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _RemoveAt(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _Pop(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Remove_impl(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, RemoveMode aMode);
+	ResultType _Remove(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _RemoveAt(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Pop(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	
-	ResultType _GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _GetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _Length(ExprTokenType &aResultToken);
-	ResultType _NewEnum(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _HasKey(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _Clone(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _GetCapacity(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _SetCapacity(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _GetAddress(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Length(ResultToken &aResultToken);
+	ResultType _NewEnum(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _HasKey(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Clone(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	static LPTSTR sMetaFuncName[];
 
@@ -322,7 +322,7 @@ public:
 	ULONG STDMETHODCALLTYPE Release() { return 1; }
 	bool Delete() { return false; }
 
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
 extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object values.
@@ -364,7 +364,7 @@ public:
 	static RegExMatchObject *Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName
 		, int aPatternCount, int aCapturedPatternCount, LPCTSTR aMark);
 	
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 #ifdef CONFIG_DEBUGGER
 	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);

@@ -370,7 +370,7 @@ struct ArgStruct
 	ExprTokenType *postfix;  // An array of tokens in postfix order. Also used for ACT_(NOT)BETWEEN to store pre-converted binary integers.
 };
 
-#define BIF_DECL_PARAMS ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount
+#define BIF_DECL_PARAMS ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount
 
 // The following macro is used for definitions and declarations of built-in functions:
 #define BIF_DECL(name) void name(BIF_DECL_PARAMS)
@@ -562,17 +562,17 @@ class Line
 private:
 	ResultType EvaluateCondition();
 	bool EvaluateLoopUntil(ResultType &aResult);
-	ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+	ResultType Line::PerformLoop(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 		, __int64 aIterationLimit, bool aIsInfinite);
-	ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+	ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LPTSTR aFilePattern);
-	ResultType PerformLoopReg(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+	ResultType PerformLoopReg(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, HKEY aRootKeyType, HKEY aRootKey, LPTSTR aRegSubkey);
-	ResultType PerformLoopParse(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil);
-	ResultType Line::PerformLoopParseCSV(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil);
-	ResultType PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil, TextStream *aReadFile, LPTSTR aWriteFileName);
-	ResultType PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
-	ResultType PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil); // Lexikos: ACT_FOR.
+	ResultType PerformLoopParse(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil);
+	ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil);
+	ResultType PerformLoopReadFile(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil, TextStream *aReadFile, LPTSTR aWriteFileName);
+	ResultType PerformLoopWhile(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
+	ResultType PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil); // Lexikos: ACT_FOR.
 	ResultType Perform();
 	friend BIF_DECL(BIF_PerformAction);
 
@@ -854,7 +854,7 @@ public:
 
 	static void FreeDerefBufIfLarge();
 
-	ResultType ExecUntil(ExecUntilMode aMode, ExprTokenType *apReturnValue = NULL, Line **apJumpToLine = NULL);
+	ResultType ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken = NULL, Line **apJumpToLine = NULL);
 
 	// The following are characters that can't legally occur after an AND or OR.  It excludes all unary operators
 	// "!~*&-+" as well as the parentheses chars "()":
@@ -893,9 +893,9 @@ public:
 	double ArgIndexToDouble(int aArgIndex);
 	size_t ArgIndexLength(int aArgIndex);
 
-	ResultType ExpandArgs(ExprTokenType *aResultTokens = NULL);
+	ResultType ExpandArgs(ResultToken *aResultTokens = NULL);
 	VarSizeType GetExpandedArgSize(Var *aArgVar[]);
-	LPTSTR ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType *aResultToken
+	LPTSTR ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *aResultToken
 		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize
 		, Var **aArgVar = NULL);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
@@ -1844,13 +1844,14 @@ struct FuncParam
 	union {LPTSTR default_str; __int64 default_int64; double default_double;};
 };
 
-struct FuncCallData
+struct FuncResult : public ResultToken
 {
-	Func *mFunc; // If non-NULL, indicates this is a UDF whose vars will need to be freed/restored later.
-	VarBkp *mBackup; // For UDFs.
-	int mBackupCount;
-	FuncCallData() : mFunc(NULL), mBackup(NULL), mBackupCount(0) { }
-	~FuncCallData();
+	TCHAR mRetValBuf[MAX_NUMBER_SIZE];
+
+	FuncResult()
+	{
+		InitResult(mRetValBuf);
+	}
 };
 
 typedef BIF_DECL((* BuiltInFunctionType));
@@ -1899,23 +1900,18 @@ public:
 		return false;
 	}
 
-	bool Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false);
-	ResultType Call(FuncCallData &aFuncCall, ExprTokenType &aResultToken, int aParamCount, ...);
+	// bool result indicates whether aResultToken contains a value (i.e. false for FAIL/EARLY_EXIT).
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false);
+	bool Call(ResultToken &aResultToken, int aParamCount, ...);
 
 // Macros for specifying arguments in Func::Call(aResultToken, aParamCount, ...)
-#define FUNC_ARG_INT(_arg)   SYM_INTEGER, ((__int64) (_arg))
-#define FUNC_ARG_STR(_arg)   SYM_STRING,  ((LPTSTR)  (_arg))
-#define FUNC_ARG_FLOAT(_arg) SYM_FLOAT,   ((double)  (_arg))
-#define FUNC_ARG_OBJ(_arg)   SYM_OBJECT,  ((IObject*)(_arg))
+#define FUNC_ARG_INT(_arg)   SYM_INTEGER, static_cast<__int64>(_arg)
+#define FUNC_ARG_STR(_arg)   SYM_STRING,  static_cast<LPTSTR>(_arg)
+#define FUNC_ARG_FLOAT(_arg) SYM_FLOAT,   static_cast<double>(_arg)
+#define FUNC_ARG_OBJ(_arg)   SYM_OBJECT,  static_cast<IObject *>(_arg)
 
-	ResultType Call(ExprTokenType *aResultToken) // Making this a function vs. inline doesn't measurably impact performance.
+	ResultType Call(ResultToken *aResultToken)
 	{
-		if (aResultToken) // L31: Return value is returned via token rather than char** to support objects (and binary numbers as an added benefit).
-		{
-			// Init to default in case function doesn't return a value or it EXITs or fails.
-			aResultToken->symbol = SYM_STRING;
-			aResultToken->marker = _T("");
-		}
 		// Launch the function similar to Gosub (i.e. not as a new quasi-thread):
 		// The performance gain of conditionally passing NULL in place of result (when this is the
 		// outermost function call of a line consisting only of function calls, namely ACT_EXPRESSION)
@@ -1974,7 +1970,7 @@ public:
 	}
 
 	// IObject.
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
 	ULONG STDMETHODCALLTYPE Release() { return 1; }
 #ifdef CONFIG_DEBUGGER
@@ -2007,12 +2003,14 @@ class ExprOpFunc : public Func
 	// These are not inserted into the script's function list, so mName is used only to pass a simple
 	// identifier to mBIF (currently only BIF_ObjInvoke).
 public:
-	ExprOpFunc(BuiltInFunctionType aBIF, INT_PTR aID, int aMinParams = 1, int aParamCount = 1000)
+	ExprOpFunc(BuiltInFunctionType aBIF, INT_PTR aID)
 		: Func((LPTSTR)aID, true)
 	{
 		mBIF = aBIF;
-		mMinParams = aMinParams;	// These are only enforced in some cases.
-		mParamCount = aParamCount;	//
+		// Allow any number of parameters, since these functions aren't called directly by users
+		// and might break the rules in some cases, such as BIF_ObjGetInPlace() having "0" visible
+		// parameters but actually reading 2 which are then also passed to the next function call.
+		mParamCount = 1000;
 	}
 };
 
@@ -2681,13 +2679,13 @@ public:
 
 	void PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount);
 
-	static ResultType UnhandledException(ExprTokenType*& aToken, Line* aLine);
+	static ResultType UnhandledException(ResultToken*& aToken, Line* aLine);
 	static ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
 	static ResultType SetErrorLevelOrThrowBool(bool aError);
 	static ResultType SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat = NULL);
 	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat = NULL);
 	static ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
-	static void FreeExceptionToken(ExprTokenType*& aToken);
+	static void FreeExceptionToken(ResultToken*& aToken);
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
 
@@ -2953,7 +2951,7 @@ LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL);
 ResultType TokenToDoubleOrInt64(ExprTokenType &aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
 Func *TokenToFunc(ExprTokenType &aToken);
-ResultType TokenSetResult(ExprTokenType &aResultToken, LPCTSTR aResult, size_t aResultLength = -1);
+ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
 void SetWorkingDir(LPTSTR aNewDir, bool aSetErrorLevel = true);
