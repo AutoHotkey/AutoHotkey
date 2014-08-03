@@ -336,6 +336,15 @@ struct ResultToken : public ExprTokenType
 			free(mem_to_free);
 	}
 
+	void StealMem(Var *aVar);
+	
+	void AcceptMem(LPTSTR aNewMem, size_t aLength)
+	{
+		symbol = SYM_STRING;
+		marker = mem_to_free = aNewMem;
+		marker_length = aLength;
+	}
+	
 	ResultType SetExitResult(ResultType aResult)
 	{
 		ASSERT(aResult == FAIL || aResult == EARLY_EXIT);

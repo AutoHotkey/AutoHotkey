@@ -399,16 +399,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			// RELIES ON THE IS_NUMERIC() CHECK above having been done first.
 			result = result_token.marker; // Marker can be used because symbol will never be SYM_VAR in this case.
 
-			if (internal_output_var
-				&& !(g->CurrentFunc == func && internal_output_var->IsNonStaticLocal())) // Ordered for short-circuit performance.
-				// Above line is a fix for v1.0.45.03: It detects whether output_var is among the variables
-				// that are about to be restored from backup.  If it is, we can't assign to it now
-				// because it's currently a local that belongs to the instance we're in the middle of
-				// calling; i.e. it doesn't belong to our instance (which is beneath it on the call stack
-				// until after the restore-from-backup is done later below).  And we can't assign "result"
-				// to it *after* the restore because by then result may have been freed (if it happens to be
-				// a local variable too).  Therefore, continue on to the normal method, which will check
-				// whether "result" needs to be stored in more persistent memory.
+			if (internal_output_var)
 			{
 				// Check if the called function allocated some memory for its result and turned it over to us.
 				// In most cases, the string stored in mem_to_free (if it has been set) is the same address as
@@ -458,17 +449,23 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			make_result_persistent = true; // Set default.
 			this_token.symbol = SYM_STRING;
 
-			// RESTORE THE CIRCUIT TOKEN (after handling what came back inside it):
 			if (result_token.mem_to_free) // The called function allocated some memory and turned it over to us.
 			{
+				if (result_token.mem_to_free == result_token.marker) // mem_to_free is checked in case caller alloc'd mem but didn't use it as its actual result.
+				{
+					if (done && aResultToken)
+					{
+						// Return this memory block to our caller.  This is handled here rather than
+						// at a later stage in order to avoid an unnecessary _tcslen() call.
+						aResultToken->AcceptMem(result_to_return = result_token.marker, result_token.marker_length);
+						goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
+					}
+					make_result_persistent = false; // Override the default set higher above.
+				}
 				if (mem_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
 				{
 					LineError(ERR_OUTOFMEM, FAIL, func->mName);
 					goto abort;
-				}
-				if (result_token.mem_to_free == result_token.marker) // mem_to_free is checked in case caller alloc'd mem but didn't use it as its actual result.
-				{
-					make_result_persistent = false; // Override the default set higher above.
 				}
 				// Mark it to be freed at the time we return.
 				mem[mem_count++] = result_token.mem_to_free;
@@ -485,31 +482,37 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				goto push_this_token; // For code simplicity, the optimization for numeric results is done at a later stage.
 			}
 
+			if (make_result_persistent) // At this stage, this means that the above wasn't able to determine its correct value yet.
 			if (func->mIsBuiltIn)
 			{
 				// Since above didn't goto, "result" is not SYM_INTEGER/FLOAT/VAR, and not "".  Therefore, it's
 				// either a pointer to static memory (such as a constant string), or more likely the small buf
 				// we gave to the BIF for storing small strings.  For simplicity assume it's the buf, which is
 				// volatile and must be made persistent if called for below.
-				if (make_result_persistent) // At this stage, this means that the above wasn't able to determine its correct value yet.
-					make_result_persistent = !done;
+				make_result_persistent = !done;
 			}
 			else // It's not a built-in function.
 			{
-				// Since above didn't goto:
-				// The result just returned may need to be copied to a more persistent location.  This is done right
-				// away if the result is the contents of a local variable (since all locals are about to be freed
-				// and overwritten), which is assumed to be the case if it's not in the new deref buf because it's
-				// difficult to distinguish between when the function returned one of its own local variables
-				// rather than a global or a string/numeric literal).  The only exceptions are covered below.
+				// Since above didn't goto, the result may need to be copied to a more persistent location.
+
+				// For UDFs, "result" can be any of the following (some of which were handled above):
+				//	- mem_to_free:  Passed back from some other function call.
+				//	- mem_to_free:  The result of a concat (if other allocation methods were unavailable).
+				//	- mem_to_free:  "Stolen" from a local var by ToReturnValue().
+				//	- left_buf:  A local var's contents, copied into result_token.buf by ToReturnValue().
+				//	- sDerefBuf:  Any other string result of ExpandExpression().
+				//	- sDerefBuf:  A value copied from a variable by ExpandArgs():  return just_a_var
+				//	- A literal string which was optimized into a non-expression:  return "just a string"
+				//	- The Contents() of a static or global variable, which ExpandArgs() determined did not need
+				//	  to be dereferenced. Only applies when !is_expression; i.e.  return static_var
+
 				// Old method, not necessary to be so thorough because "return" always puts its result as the
 				// very first item in its deref buf.  So this is commented out in favor of the line below it:
 				//if (result < sDerefBuf || result >= sDerefBuf + sDerefBufSize)
 				if (result != sDerefBuf) // Not in their deref buffer (yields correct result even if sDerefBuf is NULL; also, see above.)
-					// In this case, the result must be assumed to be one of their local variables (since there's
-					// no way to distinguish between that and a literal string such as "abc"?). So it should be
-					// immediately copied since if it's a local, it's about to be freed.
-					make_result_persistent = true;
+					// In this case, the result can probably only be left_buf or the Contents() of a var,
+					// either of which may need to be made persistent if the expression isn't finished:
+					make_result_persistent = !done;
 				else // The result must be in their deref buffer, perhaps due to something like "return x+3" or "return bif()" on their part.
 				{
 					make_result_persistent = false; // Set default to be possibly overridden below.
@@ -532,7 +535,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					//else done==true, so don't have to make it persistent here because the final stage will
 					// copy it from their deref buf into ours (since theirs is only deleted later, by our caller).
 					// In this case, leave make_result_persistent set to false.
-				} // This is the end of the section that determines the value of "make_result_persistent" for UDFs.
+				}
+				// This is the end of the section that determines the value of "make_result_persistent" for UDFs.
 			}
 
 			if (make_result_persistent) // Both UDFs and built-in functions have ensured make_result_persistent is set.
@@ -1323,6 +1327,23 @@ push_this_token:
 			{
 				result_token.var->ToToken(*aResultToken);
 				goto normal_end_skip_output_var; // result_to_return is left at its default of "".
+			}
+			if (mActionType == ACT_RETURN && result_token.var->ToReturnValue(*aResultToken))
+			{
+				// This is a non-static local var and the call above has either transferred its memory block
+				// into aResultToken or copied its value into aResultToken->buf.  This should be faster than
+				// copying it into the deref buffer, and also allows binary data to be retained.
+				// "case ACT_RETURN:" does something similar for non-expressions like "return local_var".
+				goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
+			}
+			break;
+		case SYM_STRING:
+			if (mem_count && result_token.marker == mem[mem_count - 1])
+			{
+				// Pass this mem item back to caller instead of freeing it when we return.
+				aResultToken->AcceptMem(result_to_return = result_token.marker, _tcslen(result_token.marker));
+				--mem_count;
+				goto normal_end_skip_output_var;
 			}
 		}
 		// Since above didn't return, the result is a string.  Continue on below to copy it into persistent memory.

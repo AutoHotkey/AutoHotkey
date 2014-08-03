@@ -10503,15 +10503,10 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			// which is desirable *even* if aResultToken is NULL (i.e. the caller will be
 			// ignoring the return value) in case the return's expression calls a function
 			// which has side-effects.  For example, "return LogThisEvent()".
-			if (aResultToken && aResultToken->symbol == SYM_STRING && line->mArgc) // Caller wants the return value, but no result has been set since caller set this default. (ExpandExpression does not use aResultToken for string values.)
+			if (aResultToken && aResultToken->symbol == SYM_STRING && line->mArgc // Caller wants the return value, but since symbol == string, ExpandExpression() might not have set it.
+				&& !aResultToken->mem_to_free) // Doesn't already contain a dynamic memory block.
 			{
-				if (ARGVAR1 && ARGVAR1->Type() == VAR_NORMAL) // Something like "return var".
-				{
-					// If this var contains a pure number or object, the following allows
-					// it to be returned correctly instead of being converted to a string:
-					ARGVAR1->ToToken(*aResultToken);
-				}
-				else // Not a var, or not one that supports ToToken().
+				if (!ARGVAR1 || !ARGVAR1->ToReturnValue(*aResultToken)) // For something like "return local_var", ToReturnValue() handles it.
 				{
 					// ExpandArgs() or ExpandExpression() takes care of assigning aResultToken
 					// if it was a number or object, but leaves it unset for strings.
@@ -10520,7 +10515,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 					// In that case, arg.text contains quote marks which we want to omit
 					// (the quote marks are left for ListLines and Line::VicinityToText()).
 					//aResultToken->symbol = SYM_STRING; // The check above verified it is already SYM_STRING.
-					if (!*aResultToken->marker) // i.e. it really hasn't been set.
+					if (!*aResultToken->marker) // i.e. it really hasn't been set (or it was set to "", but ARG1 is also "").
 						aResultToken->marker = ARG1;
 				}
 			}
@@ -13291,13 +13286,8 @@ BIF_DECL(BIF_PerformAction)
 		else
 		{
 			// Return the value of the output var if there is one, or ErrorLevel if there isn't:
-			output_var->ToToken(aResultToken);
-			if (aResultToken.symbol == SYM_STRING && aResultToken.marker != Var::sEmptyString)
-			{
-				// Let the caller take responsibility for the output var's memory:
-				aResultToken.marker_length = output_var->Length();
-				aResultToken.marker = aResultToken.mem_to_free = output_var->StealMem();
-			}
+			if (!output_var->MoveMemToResultToken(aResultToken))
+				output_var->ToToken(aResultToken);
 		}
 	}
 	else

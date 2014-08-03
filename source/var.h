@@ -503,6 +503,46 @@ public:
 		}
 	}
 
+	bool MoveMemToResultToken(ResultToken &aResultToken)
+	// Caller must ensure mType == VAR_NORMAL.
+	{
+		if (mHowAllocated == ALLOC_MALLOC // malloc() is our allocator...
+			&& ((mAttrib & (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_UNINITIALIZED)) == 0)
+			&& mByteCapacity) // ...and we actually have memory allocated.
+		{
+			// Caller has determined that this var's value won't be needed anymore, so avoid
+			// an extra malloc and copy by moving this var's memory block into aResultToken:
+			aResultToken.StealMem(this);
+			return true;
+		}
+		return false;
+	}
+
+	bool ToReturnValue(ResultToken &aResultToken)
+	{
+		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		// Caller may have checked the following, but check it anyway for maintainability:
+		if ((var.mAttrib & (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_UNINITIALIZED)) != 0)
+		{
+			var.ToToken(aResultToken);
+			return true;
+		}
+		if (!var.IsNonStaticLocal())
+			return false;
+		// Var is local.  Since the function is returning, we won't be needing its value.
+		if (var.mHowAllocated == ALLOC_MALLOC && var.mByteCapacity)
+			// var.mCharContents was allocated with malloc(); pass it back to the caller.
+			aResultToken.StealMem(this);
+		else
+			// Copy contents into aResultToken.buf, which is always large enough because
+			// MAX_ALLOC_SIMPLE < MAX_NUMBER_LENGTH.  mCharContents is used vs Contents()
+			// because this isn't a number and therefore never needs UpdateContents().
+			// Although Contents() should be harmless, we want to be absolutely sure
+			// length isn't increased since that could cause buffer overflow.
+			memcpy(aResultToken.marker = aResultToken.buf, var.mCharContents, var.mByteLength + sizeof(TCHAR));
+		return true;
+	}
+
 	void DisableSimpleMalloc()
 	// Caller must ensure that mType == VAR_NORMAL and mByteCapacity == 0.
 	{
@@ -915,5 +955,13 @@ public:
 #pragma pack(pop) // Calling pack with no arguments restores the default value (which is 8, but "the alignment of a member will be on a boundary that is either a multiple of n or a multiple of the size of the member, whichever is smaller.")
 
 #pragma warning(pop)
+
+inline void ResultToken::StealMem(Var *aVar)
+// Caller must ensure that aVar->mType == VAR_NORMAL and aVar->mHowAllocated == ALLOC_MALLOC.
+{
+	symbol = SYM_STRING;
+	marker_length = aVar->Length();
+	marker = mem_to_free = aVar->StealMem();
+}
 
 #endif
