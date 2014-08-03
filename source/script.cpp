@@ -10026,16 +10026,16 @@ end_of_infix_to_postfix:
 	// storing an __int64* in arg.postfix, but this new approach allows floating-point numbers
 	// and literal strings to be optimized, and the pure numeric status of floats to be retained.
 	// Unlike the old method, numeric literals are reformatted to look exactly like they would if
-	// this remained an expression; for example, MsgBox % 1.0 shows "1.000000" instead of "1.0".
+	// this remained an expression; for example, MsgBox % 1.00 shows "1.0" instead of "1.00".
 	ExprTokenType &only_token = *postfix[0];
 	SymbolType only_symbol = only_token.symbol;
 	if (   postfix_count == 1 && IS_OPERAND(only_symbol) // This expression is a lone operand, like (1) or "string".
-		&& (mActionType < ACT_FOR || mActionType > ACT_UNTIL) // It's not FOR, WHILE or UNTIL, which require actual expressions.
+		&& (mActionType < ACT_FOR || mActionType > ACT_UNTIL) // It's not WHILE or UNTIL, which currently perform better as expressions, or FOR, which performs the same but currently expects aResultToken to always be set.
 		&& (only_symbol != SYM_STRING || mActionType != ACT_SENDMESSAGE && mActionType != ACT_POSTMESSAGE)   ) // It's not something like SendMessage WM_SETTEXT,,"New text" (which requires the leading quote mark to be present).
 	{
 		if (only_symbol == SYM_DYNAMIC) // This needs some extra checks to ensure correct behaviour.
 		{
-			if (!SYM_DYNAMIC_IS_DOUBLE_DEREF(only_token))
+			if (!SYM_DYNAMIC_IS_DOUBLE_DEREF(only_token)) // Checked for maintainability. Should always be the case since double-deref always has multiple tokens.
 			{
 				if (only_token.var->mBIV != BIV_LoopIndex && only_token.var->mBIV != BIV_EventInfo)
 				{
@@ -10624,7 +10624,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				result = line->PerformLoop(aResultToken, continue_main_loop, jump_to_line, until
 					, iteration_limit, is_infinite);
 				break;
-			case ACT_WHILE: // Lexikos: ATTR_LOOP_WHILE is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
+			case ACT_WHILE:
 				result = line->PerformLoopWhile(aResultToken, continue_main_loop, jump_to_line);
 				break;
 			case ACT_FOR:
@@ -11283,10 +11283,16 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 
 	if (param_tokens[2].symbol != SYM_OBJECT) // Only [2] is checked; see above.
 	{
-		// The expression didn't resolve to an object, so no enumerator is available.
 		if (param_tokens[2].mem_to_free)
 			free(param_tokens[2].mem_to_free);
-		return OK;
+		// The following would need to be checked if the "non-expression" optimization
+		// was enabled for ACT_FOR (currently it does not improve performance):
+		//if (  !(ARGVARRAW3 && (param_tokens[2].object = ARGVARRAW3->ToObject()))  )
+			// The expression didn't resolve to an object, so no enumerator is available.
+			return OK;
+		// Arg was a simple var ref, so not evaluated as an expression, but it contained an object.
+		//param_tokens[2].symbol = SYM_OBJECT;
+		//param_tokens[2].object->AddRef();
 	}
 	
 	// Save these pointers since they will be overwritten during the loop:

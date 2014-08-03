@@ -109,7 +109,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 	// expression due to MAX_TOKENS (probably around MAX_TOKENS / 3).
 	#define EXPR_SMALL_MEM_LIMIT 4097 // The maximum size allowed for an item to qualify for alloca.
 	#define EXPR_ALLOCA_LIMIT 40000  // The maximum amount of alloca memory for all items.  v1.0.45: An extra precaution against stack stress in extreme/theoretical cases.
-	#define EXPR_IS_DONE (!stack_count && this_postfix[1].symbol == SYM_INVALID) // True if we've used up the last of the operators & operands.
+	#define EXPR_IS_DONE (!stack_count && this_postfix[1].symbol == SYM_INVALID) // True if we've used up the last of the operators & operands.  Non-zero stack_count combined with SYM_INVALID would indicate an error (an exception will be thrown later, so don't take any shortcuts).
 
 	// For each item in the postfix array: if it's an operand, push it onto stack; if it's an operator or
 	// function call, evaluate it and push its result onto the stack.  SYM_INVALID is the special symbol
@@ -181,8 +181,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						// This also ensures that the var's content is not transferred to aResultToken, which means
 						// that PerformLoopFor() is not required to check for/release an object in args 0 and 1.
 						aArgVar[aArgIndex] = temp_var;
-						result_to_return = _T(""); // No need to dereference it; this value won't be used but must be non-NULL.
-						goto normal_end_skip_output_var;
+						goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
 					}
 					this_token.var = temp_var;
 				}
@@ -441,8 +440,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						// v1.0.45: This mode improves performance by avoiding the need to copy the result into
 						// more persistent memory, then avoiding the need to copy it into the defer buffer (which
 						// also avoids the possibility of needing to expand that buffer).
-						if (!internal_output_var->Assign(result_token.marker)) // Marker can be used because symbol will never be SYM_VAR in this case.
-							goto abort;										   // ALSO: Assign() contains an optimization that avoids actually doing the mem-copying if output_var is being assigned to itself (which can happen in cases like RegExMatch()).
+						if (!internal_output_var->Assign(result, result_length)) // Assign() contains an optimization that avoids actually doing the mem-copying if output_var is being assigned to itself (which can happen in cases like RegExMatch()).
+							goto abort;
 					}
 				}
 				if (done)
@@ -1318,14 +1317,12 @@ push_this_token:
 			aResultToken->value_int64 = result_token.value_int64; // Union copy.
 			if (result_token.symbol == SYM_OBJECT)
 				result_token.object->AddRef();
-			result_to_return = _T(""); // Must not return NULL; any other value is OK (and will be ignored).
-			goto normal_end_skip_output_var;
+			goto normal_end_skip_output_var; // result_to_return is left at its default of "".
 		case SYM_VAR:
 			if (result_token.var->IsPureNumericOrObject())
 			{
 				result_token.var->ToToken(*aResultToken);
-				result_to_return = _T("");
-				goto normal_end_skip_output_var;
+				goto normal_end_skip_output_var; // result_to_return is left at its default of "".
 			}
 		}
 		// Since above didn't return, the result is a string.  Continue on below to copy it into persistent memory.
@@ -1354,8 +1351,7 @@ push_this_token:
 		if (aArgVar && mActionType == ACT_FUNC)
 		{
 			aArgVar[aArgIndex] = result_token.var; // Let the command refer to this variable directly.
-			result_to_return = _T(""); // No need to dereference it; this value won't be used but must be non-NULL.
-			goto normal_end_skip_output_var;
+			goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
 		}
 		// Otherwise:
 		// It is tempting to simply return now and let ExpandArgs() decide whether the var needs to be dereferenced.
@@ -1462,8 +1458,10 @@ push_this_token:
 		aTarget += result_size;
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
 
-	case SYM_OBJECT: // L31: Objects are always treated as empty strings; except with ACT_RETURN, which was handled above, and any usage which expects a boolean result.
-		result_to_return = _T("");
+	case SYM_OBJECT:
+		// At this point we aren't capable of returning an object, otherwise above would have
+		// already returned.  The documented fallback behaviour is for the object to be treated
+		// as an empty string, so just leave result_to_return at its default value of _T("").
 		// result_token is still on the stack, so the object will be released below.
 		goto normal_end_skip_output_var;
 	} // switch (result_token.symbol)
@@ -1771,21 +1769,21 @@ bool Func::Call(ResultToken &aResultToken, int aParamCount, ...)
 	va_start(va, aParamCount);
 	for (int i = 0; i < aParamCount; i ++)
 	{
-		ExprTokenType *cur_arg = &args[i];
-		aParam[i] = cur_arg;
+		ExprTokenType &cur_arg = args[i];
+		aParam[i] = &cur_arg;
 
 		// Initialize the argument structure
-		cur_arg->symbol = va_arg(va, SymbolType);
-		cur_arg->value_int64 = 0;
-		cur_arg->buf = NULL;
+		cur_arg.symbol = va_arg(va, SymbolType);
+		cur_arg.value_int64 = 0;
+		cur_arg.buf = NULL;
 
 		// Fill in the argument value
-		switch (cur_arg->symbol)
+		switch (cur_arg.symbol)
 		{
-			case SYM_INTEGER: cur_arg->value_int64  = va_arg(va, __int64);  break;
-			case SYM_STRING:  cur_arg->marker       = va_arg(va, LPTSTR);   break;
-			case SYM_FLOAT:   cur_arg->value_double = va_arg(va, double);   break;
-			case SYM_OBJECT:  cur_arg->object       = va_arg(va, IObject*); break;
+			case SYM_INTEGER: cur_arg.value_int64  = va_arg(va, __int64);  break;
+			case SYM_STRING:  cur_arg.marker       = va_arg(va, LPTSTR);   break;
+			case SYM_FLOAT:   cur_arg.value_double = va_arg(va, double);   break;
+			case SYM_OBJECT:  cur_arg.object       = va_arg(va, IObject*); break;
 		}
 	}
 	va_end(va);
@@ -1989,7 +1987,7 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 				arg_deref[i] = // The following is ordered for short-circuit performance:
 					(   mActionType == ACT_ASSIGNEXPR && i == 1  // By contrast, for the below i==anything (all args):
 					||  mActionType == ACT_IF
-					//|| mActionType == ACT_WHILE // Not necessary to check this one because loadtime leaves ACT_WHILE as an expression in all common cases. Also, there's no easy way to get ACT_WHILE into the range above due to the overlap of other ranges in enum_act.
+					//|| mActionType == ACT_WHILE // Not necessary to check this one because loadtime leaves ACT_WHILE as an expression in all common cases.
 					) && the_only_var_of_this_arg->Type() == VAR_NORMAL // Otherwise, users of this optimization would have to reproduce more of the logic in ArgMustBeDereferenced().
 					? _T("") : NULL; // See "Update #2" and later comments above.
 				break;
@@ -2099,8 +2097,7 @@ end:
 		// aResultTokens is initialized and has at least mArgc elements.  Caller must assume
 		// contents of aResultTokens are invalid if we return != OK.
 		for (int i = 0; i < mArgc; ++i)
-			if (aResultTokens[i].symbol == SYM_OBJECT)
-				aResultTokens[i].object->Release();
+			aResultTokens[i].Free();
 	}
 
 	return result_to_return;
