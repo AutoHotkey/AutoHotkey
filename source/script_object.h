@@ -361,8 +361,8 @@ class RegExMatchObject : public ObjectBase
 	}
 
 public:
-	static RegExMatchObject *Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName
-		, int aPatternCount, int aCapturedPatternCount, LPCTSTR aMark);
+	static ResultType Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName
+		, int aPatternCount, int aCapturedPatternCount, LPCTSTR aMark, IObject *&aNewObject);
 	
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 

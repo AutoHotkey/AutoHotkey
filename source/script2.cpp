@@ -11928,9 +11928,8 @@ BIF_DECL(BIF_InStr)
 }
 
 
-void RegExSetMatchVar(LPCTSTR haystack, pcret *re, pcret_extra *extra, Var &output_var, int *offset, int pattern_count, int captured_pattern_count)
+ResultType RegExCreateMatchArray(LPCTSTR haystack, pcret *re, pcret_extra *extra, int *offset, int pattern_count, int captured_pattern_count, IObject *&match_object)
 {
-	// OTHERWISE, CONTINUE ON TO STORE THE SUBSTRINGS THAT MATCHED THE SUBPATTERNS (EVEN IF PCRE_ERROR_NOMATCH).
 	// For lookup performance, create a table of subpattern names indexed by subpattern number.
 	LPCTSTR *subpat_name = NULL; // Set default as "no subpattern names present or available".
 	bool allow_dupe_subpat_names = false; // Set default.
@@ -11968,29 +11967,27 @@ void RegExSetMatchVar(LPCTSTR haystack, pcret *re, pcret_extra *extra, Var &outp
 	// happens unless bad inputs were given.  So due to rarity, just leave subpat_name==NULL; i.e. "no named subpatterns".
 
 	LPTSTR mark = (extra->flags & PCRE_EXTRA_MARK) ? (LPTSTR)*extra->mark : NULL;
-	IObject *m = RegExMatchObject::Create(haystack, offset, subpat_name, pattern_count, captured_pattern_count, mark);
-	if (m)
-		output_var.AssignSkipAddRef(m);
-	else
-		output_var.Assign();
+	return RegExMatchObject::Create(haystack, offset, subpat_name, pattern_count, captured_pattern_count, mark, match_object);
 }
 
 
-RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName
-	, int aPatternCount, int aCapturedPatternCount, LPCTSTR aMark)
+ResultType RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName
+	, int aPatternCount, int aCapturedPatternCount, LPCTSTR aMark, IObject *&aNewObject)
 {
+	aNewObject = NULL;
+
 	// If there was no match, seems best to not return an object:
 	if (aCapturedPatternCount < 1)
-		return NULL;
+		return OK;
 
 	RegExMatchObject *m = new RegExMatchObject();
 	if (!m)
-		return NULL;
+		return FAIL;
 
 	if (  aMark && !(m->mMark = _tcsdup(aMark))  )
 	{
 		m->Release();
-		return NULL;
+		return FAIL;
 	}
 
 	ASSERT(aCapturedPatternCount >= 1);
@@ -12010,7 +12007,7 @@ RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCT
 	   || !(m->mOffset = (int *)malloc(aPatternCount * 2 * sizeof(int *)))  )
 	{
 		m->Release(); // This also frees m->mHaystack if it is non-NULL.
-		return NULL;
+		return FAIL;
 	}
 	
 	int p, i, pos, len;
@@ -12044,8 +12041,8 @@ RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCT
 		// Allocate array of pointers.
 		if (  !(m->mPatternName = (LPTSTR *)malloc(aPatternCount * sizeof(LPTSTR *)))  )
 		{
-			m->Release();
-			return NULL;
+			m->Release(); // Also frees other things allocated above.
+			return FAIL;
 		}
 
 		// Copy names and initialize array.
@@ -12060,7 +12057,8 @@ RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCT
 	}
 
 	// Since above didn't return, the object has been set up successfully.
-	return m;
+	aNewObject = m;
+	return OK;
 }
 
 ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -12229,6 +12227,7 @@ struct RegExCalloutData // L14: Used by BIF_RegEx to pass necessary info to RegE
 	int options_length; // used to adjust cb->pattern_position
 	int pattern_count; // to save calling pcre_fullinfo unnecessarily for each callout
 	pcret_extra *extra;
+	ResultToken *result_token;
 };
 
 int RegExCallout(pcret_callout_block *cb)
@@ -12249,6 +12248,7 @@ int RegExCallout(pcret_callout_block *cb)
 
 	if (!cb->callout_data)
 		return 0;
+	RegExCalloutData &cd = *(RegExCalloutData *)cb->callout_data;
 
 	Func *callout_func = (Func *)cb->user_callout;
 	if (!callout_func)
@@ -12256,29 +12256,31 @@ int RegExCallout(pcret_callout_block *cb)
 		Var *pcre_callout_var = g_script.FindVar(_T("pcre_callout"), 12); // This may be a local of the UDF which called RegExMatch/Replace().
 		if (!pcre_callout_var)
 			return 0; // Seems best to ignore the callout rather than aborting the match.
-
-		callout_func = g_script.FindFunc(pcre_callout_var->Contents(), pcre_callout_var->Length());
+		ExprTokenType token;
+		token.symbol = SYM_VAR;
+		token.var = pcre_callout_var;
+		callout_func = TokenToFunc(token); // Allow name or reference.
 		if (!callout_func || callout_func->mIsBuiltIn)
-			return 0; // Could abort by returning PCRE_ERROR_CALLOUT, but ErrorLevel "-9" isn't very informative.
+		{
+			if (!pcre_callout_var->HasContents()) // Var exists but is empty.
+				return 0;
+			// Could be an invalid name, or the name of a built-in function.
+			cd.result_token->Error(_T("Invalid pcre_callout"));
+			return PCRE_ERROR_CALLOUT;
+		}
 	}
 
-	Func &func = *callout_func; // For simplicity and to keep the following section close to similar sections in OnMessage, RegisterCallbackCStub, etc.
-	RegExCalloutData cd = *(RegExCalloutData *)cb->callout_data;
+	Func &func = *callout_func;
 
 	// Adjust offset to account for options, which are excluded from the regex passed to PCRE.
 	cb->pattern_position += cd.options_length;
 	
-
-	// See ExpandExpression() for detailed comments about the following section.
-	VarBkp *var_backup = NULL;   // If needed, it will hold an array of VarBkp objects.
-	int var_backup_count; // The number of items in the above array.
-	if (func.mInstances > 0) // Backup is needed.
-		if (!Var::BackupFunctionVars(func, var_backup, var_backup_count)) // Out of memory.
-			return PCRE_ERROR_NOMEMORY;
-
+	// Save EventInfo to be restored when we return.
 	EventInfoType EventInfo_saved = g->EventInfo;
 
 	g->EventInfo = (EventInfoType) cb;
+	
+	FuncResult result_token;
 
 	/*
 	callout_number:		should be available since callout number can be specified within (?C...).
@@ -12298,85 +12300,51 @@ int RegExCallout(pcret_callout_block *cb)
 	version:			not important.
 	*/
 
-	if (func.mParamCount > 0)
+	// Since matching is still in progress, these *should* be -1.
+	// For maintainability and peace of mind, save them anyway:
+	int offset[] = { cb->offset_vector[0], cb->offset_vector[1] };
+		
+	// Temporarily set these for use by the function below:
+	cb->offset_vector[0] = cb->start_match;
+	cb->offset_vector[1] = cb->current_position;
+	if (cd.extra->flags & PCRE_EXTRA_MARK)
+		*cd.extra->mark = UorA(wchar_t *, UCHAR *) cb->mark;
+	
+	IObject *match_object;
+	if (!RegExCreateMatchArray(cb->subject, cd.re, cd.extra, cb->offset_vector, cd.pattern_count, cb->capture_top, match_object))
 	{
-		// UnquotedOutputVar
-		Var &output_var = *func.mParam[0].var;
-
-		Func *prev_func = g->CurrentFunc;
-		// Set local vars of callout func where applicable.
-		g->CurrentFunc = &func;
-
-		// Since matching is still in progress, these *should* be -1.
-		// For maintainability and peace of mind, save them anyway:
-		int offset[] = { cb->offset_vector[0], cb->offset_vector[1] };
-		
-		// Temporarily set these for use by the function below:
-		cb->offset_vector[0] = cb->start_match;
-		cb->offset_vector[1] = cb->current_position;
-		if (cd.extra->flags & PCRE_EXTRA_MARK)
-			*cd.extra->mark = UorA(wchar_t *, UCHAR *) cb->mark;
-		
-		// Set up local vars for capturing subpatterns.
-		RegExSetMatchVar(cb->subject, cd.re, cd.extra, output_var, cb->offset_vector, cd.pattern_count, cb->capture_top);
-
-		// Restore to former offsets (probably -1):
-		cb->offset_vector[0] = offset[0];
-		cb->offset_vector[1] = offset[1];
-		
-		// Restore g.CurrentFunc - func.Call() will also save, overwrite and restore it.
-		g->CurrentFunc = prev_func;
-
-		if (func.mParamCount > 1)
-		{
-			// Callout number
-			func.mParam[1].var->Assign(cb->callout_number);
-
-			if (func.mParamCount > 2)
-			{
-				// FoundPos (distinct from Match.Pos, which hasn't been set yet)
-				func.mParam[2].var->Assign(cb->start_match + 1);
-
-				if (func.mParamCount > 3)
-				{
-					// Haystack
-					func.mParam[3].var->AssignString(cb->subject, cb->subject_length);
-				
-					if (func.mParamCount > 4)
-					{
-						// NeedleRegEx
-						func.mParam[4].var->Assign(cd.re_text);
-					}
-				}
-			}
-		}
+		cd.result_token->Error(ERR_OUTOFMEM);
+		return PCRE_ERROR_CALLOUT; // Abort.
 	}
 
+	// Restore to former offsets (probably -1):
+	cb->offset_vector[0] = offset[0];
+	cb->offset_vector[1] = offset[1];
+	
 	// Make all string positions one-based. UPDATE: offset_vector cannot be modified, so for consistency don't do this:
 	//++cb->pattern_position;
 	//++cb->start_match;
 	//++cb->current_position;
 
-	FuncResult result_token;
-	ResultType result = func.Call(&result_token); // Call the UDF.
-
-	// MUST handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value
-	// might be the contents of one of the function's local variables (which are about to be freed).
-	int number_to_return = (int)TokenToInt64(result_token); // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
+	func.Call(result_token, 5
+		, FUNC_ARG_OBJ(match_object)
+		, FUNC_ARG_INT(cb->callout_number)
+		, FUNC_ARG_INT(cb->start_match + 1) // FoundPos (distinct from Match.Pos, which hasn't been set yet)
+		, FUNC_ARG_STR(const_cast<LPTSTR>(cb->subject)) // Haystack
+		, FUNC_ARG_STR(cd.re_text)); // NeedleRegEx
+	
+	int number_to_return;
+	if (result_token.Exited())
+	{
+		number_to_return = PCRE_ERROR_CALLOUT;
+		cd.result_token->SetExitResult(result_token.Result());
+	}
+	else
+		number_to_return = (int)TokenToInt64(result_token);
 	
 	result_token.Free();
-	Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count);
 
 	g->EventInfo = EventInfo_saved;
-
-	if (result == FAIL)
-	{
-		// If a runtime error occurred, the user probably expects the thread to exit.  That can't
-		// be easily done, so as a compromise, just abort matching.  If an exception was thrown,
-		// the actual return value doesn't matter as long as matching is aborted, since execution
-		// will be transferred to the CATCH block.
-		number_to_return = PCRE_ERROR_NOMATCH;
-	}
 
 	// Behaviour of return values is defined by PCRE.
 	return number_to_return;
@@ -12869,8 +12837,11 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		// Otherwise:
 		if (captured_pattern_count < 0) // An error other than "no match". These seem very rare, so it seems best to abort rather than yielding a partially-converted result.
 		{
-			ITOA(captured_pattern_count, repl_buf);
-			aResultToken.Error(ERR_PCRE_EXEC, repl_buf);
+			if (!aResultToken.Exited()) // Checked in case a callout exited/raised an error.
+			{
+				ITOA(captured_pattern_count, repl_buf);
+				aResultToken.Error(ERR_PCRE_EXEC, repl_buf);
+			}
 			goto set_count_and_return; // Goto vs. break to leave aResultToken.marker set to aHaystack and replacement_count set to 0.
 		}
 
@@ -13170,6 +13141,7 @@ BIF_DECL(BIF_RegEx)
 	callout_data.re_text = needle;
 	callout_data.options_length = options_length;
 	callout_data.pattern_count = pattern_count;
+	callout_data.result_token = &aResultToken;
 	if (extra)
 	{	// S (study) option was specified, use existing pcre_extra struct.
 		extra->flags |= PCRE_EXTRA_CALLOUT_DATA | PCRE_EXTRA_MARK;	
@@ -13208,6 +13180,8 @@ BIF_DECL(BIF_RegEx)
 	}
 	else if (captured_pattern_count < 0) // An error other than "no match".
 	{
+		if (aResultToken.Exited()) // A callout exited/raised an error.
+			return;
 		TCHAR err_info[MAX_INTEGER_SIZE];
 		ITOA(captured_pattern_count, err_info);
 		aResultToken.Error(ERR_PCRE_EXEC, err_info);
@@ -13223,7 +13197,13 @@ BIF_DECL(BIF_RegEx)
 
 	Var &output_var = *aParam[2]->var; // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 	
-	RegExSetMatchVar(haystack, re, extra, output_var, offset, pattern_count, captured_pattern_count);
+	IObject *match_object;
+	if (!RegExCreateMatchArray(haystack, re, extra, offset, pattern_count, captured_pattern_count, match_object))
+		aResultToken.Error(ERR_OUTOFMEM);
+	if (match_object)
+		output_var.AssignSkipAddRef(match_object);
+	else // Out-of-memory or there were no captured patterns.
+		output_var.Assign();
 }
 
 
