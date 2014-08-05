@@ -10085,7 +10085,7 @@ end_of_infix_to_postfix:
 				break;
 			}
 			aArg.is_expression = false;
-			if (mActionType != ACT_ASSIGNEXPR && mActionType != ACT_RETURN && mActionType != ACT_FUNC)
+			if (mActionType > ACT_FUNC && mActionType != ACT_RETURN) // Excludes ACT_ASSIGNEXPR, ACT_METHOD, ACT_FUNC and ACT_RETURN.
 				return OK;
 			// Otherwise, continue on below to copy the postfix token into persistent memory.
 		}
@@ -13013,8 +13013,6 @@ ResultType Line::Perform()
 			return result;
 
 		Func *func = (Func *)mAttribute; // NULL for ACT_METHOD.
-		//if (!func && !(func = g_script.FindFunc(ARG1)))
-		//	return LineError(ERR_NONEXISTENT_FUNCTION, FAIL, ARG1);
 		
 		int param_count = mArgc - 1;
 		int arg = 1;
@@ -13031,10 +13029,6 @@ ResultType Line::Perform()
 		else
 			output_var = NULL;
 		
-		// Runtime check not needed since dynamic functions aren't currently supported:
-		//if (param_count < func->mMinParams)
-		//	return LineError(ERR_TOO_FEW_PARAMS, FAIL, ARG1);
-
 		for (int i = 0; i < param_count; ++i, ++arg)
 		{
 			if (sArgVar[arg] && sArgVar[arg]->Type() == VAR_NORMAL) // Only normal variables can be SYM_VAR.
