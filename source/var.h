@@ -344,31 +344,7 @@ public:
 		return OK;
 	}
 
-	ResultType AssignSkipAddRef(IObject *aValueToAssign)
-	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-
-		var.Free(); // If var contains an object, this will Release() it.  It will also clear any string contents and free memory if appropriate.
-		
-		var.mObject = aValueToAssign;
-		
-		// Already done by Free() above:
-		//mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_UNINITIALIZED);
-
-		// Mark this variable to indicate it contains an object.
-		// Currently nothing should attempt to cache a number in a variable which contains an object, but it may become
-		// possible if a "default property" mechanism is introduced for implicitly converting an object to a string/number.
-		// There are at least two ways the caching mechanism could conflict with objects:
-		//  1) Caching a number would overwrite mObject.
-		//	2) Caching a number or flagging the variable as "non-numeric" would give incorrect results if the object's
-		//	   default property can implicitly change (and this change cannot be detected in order to invalidate the cache).
-		// Including VAR_ATTRIB_CACHE_DISABLED below should prevent caching from ever occurring for a variable containing an object.
-		// Including VAR_ATTRIB_NOT_NUMERIC below allows IsNonBlankIntegerOrFloat to return early if it is passed an object.
-		var.mAttrib |= VAR_ATTRIB_OBJECT | VAR_ATTRIB_CACHE_DISABLED | VAR_ATTRIB_NOT_NUMERIC;
-
-		return OK;
-	}
+	ResultType AssignSkipAddRef(IObject *aValueToAssign);
 
 	inline ResultType Assign(IObject *aValueToAssign)
 	{

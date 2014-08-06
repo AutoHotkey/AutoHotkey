@@ -145,6 +145,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_NONEXISTENT_VARIANT _T("Nonexistent hotkey variant (IfWin).")
 #define ERR_NONEXISTENT_FUNCTION _T("Call to nonexistent function.")
 #define ERR_EXE_CORRUPTED _T("EXE corrupted")
+#define ERR_INVALID_VALUE _T("Invalid value.")
 #define ERR_PARAM1_INVALID _T("Parameter #1 invalid.")
 #define ERR_PARAM2_INVALID _T("Parameter #2 invalid.")
 #define ERR_PARAM3_INVALID _T("Parameter #3 invalid.")
