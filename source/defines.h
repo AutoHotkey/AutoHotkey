@@ -186,8 +186,8 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_INVALID = SYM_COUNT // Some callers may rely on YIELDS_AN_OPERAND(SYM_INVALID)==false.
 };
 // These two are macros for maintainability (i.e. seeing them together here helps maintain them together).
-#define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) ((token).buf) // SYM_DYNAMICs other than doubles have NULL buf, at least at the stage this macro is called.
-#define SYM_DYNAMIC_IS_WRITABLE(token) (!(token)->buf && (token)->var->Type() <= VAR_LAST_WRITABLE) // i.e. it's the clipboard, not a built-in variable or double-deref.
+#define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) (!(token).var) // SYM_DYNAMICs are either double-derefs or built-in vars.
+#define SYM_DYNAMIC_IS_WRITABLE(token) ((token)->var && (token)->var->Type() <= VAR_LAST_WRITABLE) // i.e. it's the clipboard, not a built-in variable or double-deref.
 
 
 struct ExprTokenType; // Forward declarations for use below.
@@ -261,13 +261,13 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 			{
 				IObject *object;
 				DerefType *deref;  // for SYM_FUNC
-				Var *var;          // for SYM_VAR (and SYM_DYNAMIC when buf is NULL)
+				Var *var;          // for SYM_VAR and SYM_DYNAMIC
 				LPTSTR marker;     // for SYM_STRING
 				ExprTokenType *circuit_token; // for short-circuit operators
 			};
 			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).
 			{
-				LPTSTR buf; // Used by SYM_FUNC (helps built-in functions), SYM_DYNAMIC, and perhaps other misc. purposes.
+				LPTSTR buf; // Used by SYM_FUNC (helps built-in functions) and perhaps other misc. purposes.
 				size_t marker_length; // Used only with aResultToken. TODO: Move into separate ResultTokenType struct.
 			};
 		};  

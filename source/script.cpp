@@ -9347,7 +9347,7 @@ unquoted_literal:
 		else if (this_deref_ref.type == DT_DOUBLE) // Marks the end of a var double-dereference.
 		{
 			infix[infix_count].symbol = SYM_DYNAMIC;
-			infix[infix_count].buf = _T(""); // Non-NULL to indicate this is a double-deref.
+			infix[infix_count].var = NULL; // Indicate this is a double-deref.
 		}
 		else if (this_deref_ref.type == DT_WORDOP)
 		{
@@ -9400,7 +9400,6 @@ unquoted_literal:
 				else
 				{
 					infix[infix_count].symbol = SYM_DYNAMIC;
-					infix[infix_count].buf = NULL; // SYM_DYNAMIC requires that buf be set to NULL for non-double-deref vars (since there are two different types of SYM_DYNAMIC).
 				}
 			}
 		} // Handling of the var or function in this_deref.
