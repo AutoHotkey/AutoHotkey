@@ -736,6 +736,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 		case SYM_CONCAT:        // resolving right_is_number for CONCAT because TokenIsPureNumeric() will take
 		case SYM_ASSIGN_CONCAT: // a long time if the string is very long and consists entirely of digits/whitespace.
 		case SYM_COMMA:
+		case SYM_ADDRESS:
 			break;
 		default:
 			// If the operand is still generic/undetermined, find out whether it is a string, integer, or float:
