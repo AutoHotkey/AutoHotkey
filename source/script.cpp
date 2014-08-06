@@ -10036,7 +10036,8 @@ end_of_infix_to_postfix:
 		{
 			if (!SYM_DYNAMIC_IS_DOUBLE_DEREF(only_token)) // Checked for maintainability. Should always be the case since double-deref always has multiple tokens.
 			{
-				if (only_token.var->mBIV != BIV_LoopIndex && only_token.var->mBIV != BIV_EventInfo)
+				if ( !(only_token.var->mType == VAR_VIRTUAL
+					&& (only_token.var->mVV->Get == BIV_LoopIndex || only_token.var->mVV->Get == BIV_EventInfo)) )
 				{
 					aArg.type = ARG_TYPE_INPUT_VAR;
 					aArg.deref = (DerefType *)only_token.var;
