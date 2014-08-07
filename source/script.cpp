@@ -13021,8 +13021,8 @@ ResultType Line::Perform()
 
 		Func *func = (Func *)mAttribute; // NULL for ACT_METHOD.
 		
-		int param_count = mArgc - 1;
-		int arg = 1;
+		int arg = (mActionType == ACT_FUNC); // i.e. include ACT_METHOD's target object but not ACT_FUNC's function name.
+		int param_count = mArgc - arg;
 		if (param_count && func && func->mHasReturn)
 		{
 			// Above: mArg[1].type isn't checked because the output var is optional and
@@ -13057,26 +13057,18 @@ ResultType Line::Perform()
 		if (func) // ACT_FUNC
 		{
 			func->Call(result_token, param_ptr, param_count);
-			result = result_token.Result();
 		}
 		else // ACT_METHOD
 		{
-			if (ARGVAR1)
-			{
-				// This could only be a plain var reference, for which param_tok[0] wasn't set.
-				if (IObject *object = ARGVAR1->ToObject())
-				{
-					param_tok[0].symbol = SYM_OBJECT;
-					param_tok[0].object = object;
-					object->AddRef(); // Release() will be called below.
-				}
-			}
-			// Otherwise, it's not a plain var reference so must be something like X.Y (in X.Y.Z).
-			if (param_tok[0].symbol == SYM_OBJECT)
-				result = param_tok[0].object->Invoke(result_token, param_tok[0], IT_CALL, param_ptr, param_count);
-			else
-				result = LineError(ERR_NO_OBJECT);
+			// Call BIF_ObjInvoke() instead of invoking the object to ensure all of the normal behaviour
+			// of method calls is in effect, including g_MetaObject and base.Method calling a base-class.
+			// param_tok[0] is always either SYM_VAR set by ExpandArgs() or the result of an expression
+			// such as the "var.id" in "var.id.method".
+			result_token.symbol = SYM_INTEGER;
+			result_token.marker = (LPTSTR)IT_CALL;
+			BIF_ObjInvoke(result_token, param_ptr, param_count);
 		}
+		result = result_token.Result();
 
 		if (output_var)
 		{
