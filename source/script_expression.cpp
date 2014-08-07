@@ -451,17 +451,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 			if (result_token.mem_to_free) // The called function allocated some memory and turned it over to us.
 			{
-				if (result_token.mem_to_free == result_token.marker) // mem_to_free is checked in case caller alloc'd mem but didn't use it as its actual result.
+				// mem_to_free == marker is checked only in debug mode because it should always be true.
+				// Other sections rely on mem_to_free not needing to be freed if symbol != SYM_STRING,
+				// so users of mem_to_free must never use it other than to return the result.
+				ASSERT(result_token.mem_to_free == result_token.marker);
+				if (done && aResultToken)
 				{
-					if (done && aResultToken)
-					{
-						// Return this memory block to our caller.  This is handled here rather than
-						// at a later stage in order to avoid an unnecessary _tcslen() call.
-						aResultToken->AcceptMem(result_to_return = result_token.marker, result_token.marker_length);
-						goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
-					}
-					make_result_persistent = false; // Override the default set higher above.
+					// Return this memory block to our caller.  This is handled here rather than
+					// at a later stage in order to avoid an unnecessary _tcslen() call.
+					aResultToken->AcceptMem(result_to_return = result_token.marker, result_token.marker_length);
+					goto normal_end_skip_output_var;
 				}
+				make_result_persistent = false; // Override the default set higher above.
 				if (mem_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
 				{
 					LineError(ERR_OUTOFMEM, FAIL, func->mName);
