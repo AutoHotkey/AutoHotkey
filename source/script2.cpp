@@ -5471,13 +5471,13 @@ BIF_DECL(BIF_StrSplit)
 			aDelimiterList = (LPTSTR *)_alloca(aDelimiterCount * sizeof(LPTSTR *));
 			if (!obj->ArrayToStrings(aDelimiterList, aDelimiterCount, aDelimiterCount))
 				// Array contains something other than a string.
-				goto return_empty_string;
+				goto throw_invalid_delimiter;
 			for (int i = 0; i < aDelimiterCount; ++i)
 				if (!*aDelimiterList[i])
 					// Empty string in delimiter list. Although it could be treated similarly to the
 					// "no delimiter" case, it's far more likely to be an error. If ever this check
 					// is removed, the loop below must be changed to support "" as a delimiter.
-					goto return_empty_string;
+					goto throw_invalid_delimiter;
 		}
 		else
 		{
@@ -5491,7 +5491,7 @@ BIF_DECL(BIF_StrSplit)
 	
 	Object *output_array = Object::Create();
 	if (!output_array)
-		goto outofmem;
+		goto throw_outofmem;
 	aResultToken.symbol = SYM_OBJECT;	// Set default, overridden only for critical errors.
 	aResultToken.object = output_array;	//
 
@@ -5563,12 +5563,11 @@ BIF_DECL(BIF_StrSplit)
 	// The fact that this section is executing means that a memory allocation failed and caused the
 	// loop to break, so throw an exception.
 	output_array->Release(); // Since we're not returning it.
-outofmem:
+throw_outofmem:
 	aResultToken.Error(ERR_OUTOFMEM);
 	return;
-return_empty_string:
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T("");
+throw_invalid_delimiter:
+	aResultToken.Error(ERR_PARAM2_INVALID);
 }
 
 
