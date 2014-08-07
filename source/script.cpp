@@ -4010,7 +4010,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 						break;
 					has_space_or_tab = IS_SPACE_OR_TAB(*cp);
 					cp = omit_leading_whitespace(cp);
-					if (*cp == '[' || !*cp // x.y[z] or x.y
+					if (*cp == '[' // x.y[z]
 						|| cp[1] == '=' && _tcschr(_T(":+-*/|&^."), cp[0]) // Two-char assignment operator.
 						|| cp[1] == cp[0]
 							&& (   _tcschr(_T("/<>"), cp[0]) && cp[2] == '=' // //=, <<= or >>=
@@ -4021,10 +4021,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					}
 					if (*cp != '.')
 					{
-						if (has_space_or_tab || *cp == g_delimiter)
+						if (!*cp || has_space_or_tab || *cp == g_delimiter)
 						{
 							id_begin[-1] = g_delimiter; // Separate target object from method name.
-							if (*cp != g_delimiter)
+							if (has_space_or_tab && *cp != g_delimiter)
 								cp[-1] = g_delimiter; // Separate method name from parameters.
 							action_args = aLineText;
 							aActionType = ACT_METHOD;
