@@ -7986,6 +7986,13 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 			}
 			line->mAttribute = func;
 		}
+		else if (line->mActionType == ACT_METHOD)
+		{
+			// For consistency with x.1(), treat literal integers as pure integers, although it
+			// might never be used in practice:
+			if (IsNumeric(line->mArg[1].text))
+				line->mArg[1].is_expression = true;
+		}
 
 		// Check if any of each arg's derefs are function calls.  If so, do some validation and
 		// preprocessing to set things up for better runtime performance:
