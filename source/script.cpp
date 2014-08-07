@@ -9584,20 +9584,24 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		case ACT_BLOCK_END:
 			if (line->mAttribute == ATTR_TRUE) // This is the closing brace of a function definition.
 				sInFunctionBody = FALSE; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
+#ifdef _DEBUG
 			if (aMode == ONLY_ONE_LINE)
 				 // Syntax error.  The caller would never expect this single-line to be an
 				 // end-block.  UPDATE: I think this is impossible because callers only use
 				 // aMode == ONLY_ONE_LINE when aStartingLine's ActionType is already
 				 // known to be an IF or a BLOCK_BEGIN:
 				return line->PreparseError(_T("Q")); // Placeholder (see above). Formerly "Unexpected end-of-block (single)."
-			if (UNTIL_BLOCK_END)
+			if (aMode == UNTIL_BLOCK_END)
+#endif
 				// Return line rather than line->mNextLine because, if we're at the end of
 				// the script, it's up to the caller to differentiate between that condition
 				// and the condition where NULL is an error indicator.
 				return line;
+#ifdef _DEBUG
 			// Otherwise, we found an end-block we weren't looking for.  This should be
 			// impossible since the block pre-parsing already balanced all the blocks?
 			return line->PreparseError(_T("Q")); // Placeholder (see above). Formerly "Unexpected end-of-block (multi)."
+#endif
 		case ACT_BREAK:
 		case ACT_CONTINUE:
 			if (!aLoopType)
