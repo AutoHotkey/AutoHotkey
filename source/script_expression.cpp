@@ -69,16 +69,16 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 {
 	LPTSTR target = aTarget; // "target" is used to track our usage (current position) within the aTarget buffer.
 
-	// The following must be defined early so that mem_count is initialized and the array is guaranteed to be
+	// The following must be defined early so that to_free_count is initialized and the array is guaranteed to be
 	// "in scope" in case of early "goto" (goto substantially boosts performance and reduces code size here).
 	#define MAX_EXPR_MEM_ITEMS 200 // v1.0.47.01: Raised from 100 because a line consisting entirely of concat operators can exceed it.  However, there's probably not much point to going much above MAX_TOKENS/2 because then it would reach the MAX_TOKENS limit first.
-	LPTSTR mem[MAX_EXPR_MEM_ITEMS]; // No init necessary.  In most cases, it will never be used.
-	int mem_count = 0; // The actual number of items in use in the above array.
+	ExprTokenType *to_free[MAX_EXPR_MEM_ITEMS]; // No init necessary.  In many cases, it will never be used.
+	int to_free_count = 0; // The actual number of items in use in the above array.
 	LPTSTR result_to_return = _T(""); // By contrast, NULL is used to tell the caller to abort the current thread.  That isn't done for normal syntax errors, just critical conditions such as out-of-memory.
 	Var *output_var = (mActionType == ACT_ASSIGNEXPR && aArgIndex == 1) ? *aArgVar : NULL; // Resolve early because it's similar in usage/scope to the above.  Plus MUST be resolved prior to calling any script-functions since they could change the values in sArgVar[].
 
 	ExprTokenType *stack[MAX_TOKENS];
-	int stack_count = 0, high_water_mark = 0; // L31: high_water_mark is used to simplify object management.
+	int stack_count = 0;
 	ExprTokenType *&postfix = mArg[aArgIndex].postfix;
 
 	///////////////////////////////
@@ -253,15 +253,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				}
 				else // Need to create some new persistent memory for our temporary use.
 				{
-					if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
-						|| !(mem[mem_count] = tmalloc(result_size)))
+					if (to_free_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
+						|| !(result = tmalloc(result_size)))
 					{
 						LineError(ERR_OUTOFMEM, FAIL, this_token.var->mName);
 						goto abort;
 					}
-					// Point result to its new, more persistent location:
-					result = mem[mem_count];
-					++mem_count; // Must be done last.
+					to_free[to_free_count++] = &this_token;
 				}
 				this_token.var->Get(result); // MUST USE "result" TO AVOID OVERWRITING MARKER/VAR UNION.
 				this_token.marker = result;  // Must be done after above because marker and var overlap in union.
@@ -300,10 +298,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// That is, each extra (SYM_OPAREN, SYM_COMMA or SYM_CPAREN) token in infix
 					// effectively reserves one stack slot.
 					if (actual_param_count)
-					{
 						memmove(params + 1, params, actual_param_count * sizeof(ExprTokenType *));
-						high_water_mark++; // If this isn't done and the last param is an object, it won't be released.
-					}
 					// Insert an empty string:
 					params[0] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
 					params[0]->symbol = SYM_STRING;
@@ -363,8 +358,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				// be considered final because it's already stored in permanent memory (the token itself).
 				// Additionally, this_token.mem_to_free is assumed to be NULL since the result is not
 				// a string; i.e. the function would've had no need to return memory to us.
-				this_token.symbol = result_token.symbol;
 				this_token.value_int64 = result_token.value_int64;
+				this_token.symbol = result_token.symbol;
+				if (this_token.symbol == SYM_OBJECT)
+				{
+					if (to_free_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
+					{
+						this_token.object->Release();
+						LineError(ERR_OUTOFMEM);
+						goto abort;
+					}
+					to_free[to_free_count++] = &this_token;
+				}
 				goto push_this_token;
 			}
 			
@@ -463,13 +468,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					goto normal_end_skip_output_var;
 				}
 				make_result_persistent = false; // Override the default set higher above.
-				if (mem_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
+				if (to_free_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
 				{
 					LineError(ERR_OUTOFMEM, FAIL, func->mName);
 					goto abort;
 				}
 				// Mark it to be freed at the time we return.
-				mem[mem_count++] = result_token.mem_to_free;
+				to_free[to_free_count++] = &this_token;
+				// For maintainability, do this here instead of letting it be done below.  This might
+				// be necessary if a function ever returns binary data starting with a binary zero,
+				// due to the check for empty string below:
+				this_token.marker = result_token.marker; 
+				goto push_this_token;
 			}
 			//else this_token.mem_to_free==NULL, so the BIF just called didn't allocate memory to give to us.
 			
@@ -568,15 +578,14 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// - There's insufficient room at the end of the deref buf to store the return value
 					//   (unusual because the deref buf expands in block-increments, and also because
 					//   return values are usually small, such as numbers).
-					if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
-						|| !(mem[mem_count] = tmalloc(result_size)))
+					if (to_free_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
+						|| !(this_token.marker = tmalloc(result_size)))
 					{
 						LineError(ERR_OUTOFMEM, FAIL, func->mName);
 						goto abort;
 					}
-					// Make the token's result the new, more persistent location:
-					this_token.marker = (LPTSTR)tmemcpy(mem[mem_count], result, result_size); // Benches slightly faster than strcpy().
-					++mem_count; // Must be done last.
+					tmemcpy(this_token.marker, result, result_size); // Benches slightly faster than strcpy().
+					to_free[to_free_count++] = &this_token;
 				}
 			}
 			else // make_result_persistent==false
@@ -653,7 +662,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// This will be the final result of this AND/OR because it's right branch was
 					// discarded above without having been evaluated nor any of its functions called:
 					this_token.CopyValueFrom(right);
-					right.symbol = SYM_INTEGER; // i.e if it was SYM_OBJECT, don't call Release() for this copy of the pointer.
+					// Any SYM_OBJECT on our stack was already put into to_free[], so if this is SYM_OBJECT,
+					// there's no need to do anything; we actually MUST NOT AddRef() unless we also put it
+					// into to_free[].
 					break;
 				}
 			}
@@ -881,7 +892,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (left.var->Type() == VAR_CLIPBOARD) // v1.0.46.01: Clipboard is present as SYM_VAR, but only for assign-to-clipboard so that built-in functions and other code sections don't need handling for VAR_CLIPBOARD.
 					{
 						this_token.CopyValueFrom(right); // Doing it this way is more maintainable than other methods, and is unlikely to perform much worse.
-						right.symbol = SYM_INTEGER; // i.e if it was SYM_OBJECT (which would be pointless in this case, but could happen), don't call Release() for this copy of the pointer.
 					}
 					else
 					{
@@ -1091,13 +1101,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					else // Need to create some new persistent memory for our temporary use.
 					{
 						// See the nearly identical section higher above for comments:
-						if (mem_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
-							|| !(this_token.marker = mem[mem_count] = tmalloc(result_size)))
+						if (to_free_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
+							|| !(this_token.marker = tmalloc(result_size)))
 						{
 							LineError(ERR_OUTOFMEM);
 							goto abort;
 						}
-						++mem_count;
+						to_free[to_free_count++] = &this_token;
 					}
 					if (left_length)
 						tmemcpy(this_token.marker, left_string, left_length);  // Not +1 because don't need the zero terminator.
@@ -1259,22 +1269,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		}
 
 push_this_token:
-		while (high_water_mark > stack_count)
-		{
-			// Release any objects which have been previously popped off the stack. This seems to be the
-			// simplest way to do it as tokens are popped off the stack at multiple points, but only this
-			// one point where parameters are pushed.  high_water_mark allows us to determine if there were
-			// tokens on the stack before returning, regardless of how expression evaluation ended (abort,
-			// abnormal_end, normal_end_skip_output_var...).  This method also ensures any objects passed as
-			// parameters to a function (such as ObjGet()) are released *AFTER* the return value is made
-			// persistent, which is important if the return value refers to the object's memory (but that
-			// might currently never happen?).
-			--high_water_mark;
-			if (stack[high_water_mark]->symbol == SYM_OBJECT)
-				stack[high_water_mark]->object->Release();
-		}
 		STACK_PUSH(&this_token);   // Push the result onto the stack for use as an operand by a future operator.
-		high_water_mark = stack_count;
 	} // For each item in the postfix array.
 
 	// Although ACT_EXPRESSION was already checked higher above for function calls, there are other ways besides
@@ -1339,11 +1334,11 @@ push_this_token:
 			}
 			break;
 		case SYM_STRING:
-			if (mem_count && result_token.marker == mem[mem_count - 1])
+			if (to_free_count && to_free[to_free_count - 1] == &result_token)
 			{
 				// Pass this mem item back to caller instead of freeing it when we return.
 				aResultToken->AcceptMem(result_to_return = result_token.marker, _tcslen(result_token.marker));
-				--mem_count;
+				--to_free_count;
 				goto normal_end_skip_output_var;
 			}
 		}
@@ -1510,15 +1505,12 @@ abort:
 	//		aResult = FAIL;
 
 normal_end_skip_output_var:
-	for (i = mem_count; i--;) // Free any temporary memory blocks that were used.  Using reverse order might reduce memory fragmentation a little (depending on implementation of malloc).
-		free(mem[i]);
-
-	// L31: Release any objects which have been previous pushed onto the stack and not yet released.
-	while (high_water_mark)
-	{	// See similar section under push_this_token for comments.
-		--high_water_mark;
-		if (stack[high_water_mark]->symbol == SYM_OBJECT)
-			stack[high_water_mark]->object->Release();
+	for (i = to_free_count; i--;) // Free any temporary memory blocks that were used.  Using reverse order might reduce memory fragmentation a little (depending on implementation of malloc).
+	{
+		if (to_free[i]->symbol == SYM_STRING)
+			free(to_free[i]->marker);
+		else // SYM_OBJECT
+			to_free[i]->object->Release();
 	}
 
 	return result_to_return;
