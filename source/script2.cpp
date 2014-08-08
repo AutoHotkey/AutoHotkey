@@ -13598,12 +13598,15 @@ BIF_DECL(BIF_StrGetPut)
 		aResultToken.symbol = SYM_INTEGER; // All paths below return an integer.
 
 		if (!source_length)
-		{	// Take a shortcut when source_string is empty, since some paths below might not handle it correctly.
-			ASSERT(length); // Above has verified length != 0.
-			if (encoding == CP_UTF16)
-				*(LPWSTR)address = '\0';
-			else
-				*(LPSTR)address = '\0';
+		{
+			// Take a shortcut when source_string is empty, since some paths below might not handle it correctly.
+			if (length) // true except when in measuring mode.
+			{
+				if (encoding == CP_UTF16)
+					*(LPWSTR)address = '\0';
+				else
+					*(LPSTR)address = '\0';
+			}
 			aResultToken.value_int64 = 1;
 			return;
 		}
