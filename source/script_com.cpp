@@ -511,17 +511,11 @@ void VariantToToken(VARIANT &aVar, ResultToken &aToken, bool aRetainVar = true)
 		{
 #ifdef UNICODE
 			if (aRetainVar)
-			{
 				// It's safe to pass back the actual BSTR from aVar in this case.
 				aToken.marker = aVar.bstrVal;
-			}
-			// Allocate some memory to pass back to caller:
-			else if (aToken.mem_to_free = tmalloc(len + 1))
-			{
-				aToken.marker = aToken.mem_to_free;
-				aToken.marker_length = len;
-				tmemcpy(aToken.marker, aVar.bstrVal, len + 1); // +1 for null-terminator
-			}
+			else
+				// Allocate some memory to pass back to caller:
+				aToken.Malloc(aVar.bstrVal, len);
 #else
 			CStringCharFromWChar buf(aVar.bstrVal, len);
 			len = buf.GetLength(); // Get ANSI length.

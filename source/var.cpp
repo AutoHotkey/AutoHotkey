@@ -1122,3 +1122,14 @@ __forceinline void Var::MaybeWarnUninitialized()
 			g_script.WarnUninitializedVar(this);
 	}
 }
+
+
+
+LPTSTR ResultToken::Malloc(LPTSTR aValue, size_t aLength)
+{
+	if (  !(mem_to_free = tmalloc(aLength + 1))  )
+		return NULL;
+	symbol = SYM_STRING;
+	marker_length = aLength;
+	return tmemcpy(marker = mem_to_free, aValue, aLength + 1); // +1 to include the null-terminator.
+}

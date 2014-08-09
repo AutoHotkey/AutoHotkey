@@ -959,9 +959,7 @@ public:
 inline void ResultToken::StealMem(Var *aVar)
 // Caller must ensure that aVar->mType == VAR_NORMAL and aVar->mHowAllocated == ALLOC_MALLOC.
 {
-	symbol = SYM_STRING;
-	marker_length = aVar->Length();
-	marker = mem_to_free = aVar->StealMem();
+	AcceptMem(aVar->StealMem(), aVar->Length());
 }
 
 #endif

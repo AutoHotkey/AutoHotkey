@@ -345,6 +345,8 @@ struct ResultToken : public ExprTokenType
 		marker_length = aLength;
 	}
 	
+	LPTSTR Malloc(LPTSTR aValue, size_t aLength);
+	
 	ResultType SetExitResult(ResultType aResult)
 	{
 		ASSERT(aResult == FAIL || aResult == EARLY_EXIT);

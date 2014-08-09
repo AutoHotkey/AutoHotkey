@@ -950,8 +950,8 @@ ResultType Object::_Remove_impl(ResultToken &aResultToken, ExprTokenType *aParam
 			// Our return value when only one key is given is supposed to be the value
 			// previously at this[key], which has just been removed.  Since this[key]
 			// would return "", it makes sense to return an empty string in this case.
-			aResultToken.symbol = SYM_STRING;	
-			aResultToken.marker = _T("");
+			//aResultToken.symbol = SYM_STRING; // Already set by caller.
+			//aResultToken.marker = _T("");
 			return OK;
 		}
 		// Since only one field (at maximum) can be removed in this mode, it
@@ -962,8 +962,7 @@ ResultType Object::_Remove_impl(ResultToken &aResultToken, ExprTokenType *aParam
 			if (min_field->size)
 			{
 				// Detach the memory allocated for this field's string and pass it back to caller.
-				aResultToken.mem_to_free = aResultToken.marker = min_field->marker;
-				aResultToken.marker_length = _tcslen(aResultToken.marker); // NOT min_field->size, which is the allocation size.
+				aResultToken.AcceptMem(min_field->marker, _tcslen(min_field->marker)); // Must use _tcslen() and NOT min_field->size, which is the capacity.
 				min_field->size = 0; // Prevent Free() from freeing min_field->marker.
 			}
 			//else aResultToken already contains an empty string.

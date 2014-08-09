@@ -10888,16 +10888,13 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			if (token->symbol == SYM_STRING)
 			{
 				// Throwing a string is pretty rare, so keep it simple:
-				token->marker_length = ArgLength(1);
-				token->marker = token->mem_to_free = tmalloc(token->marker_length + 1);
-				if (!token->mem_to_free)
+				if (!token->Malloc(token->marker, ArgLength(1)))
 				{
 					delete token;
 					// See ThrowRuntimeException() for comments.
 					MsgBox(ERR_OUTOFMEM ERR_ABORT);
 					return FAIL;
 				}
-				tmemcpy(token->marker, ARG1, token->marker_length + 1);
 			}
 
 			// Throw the newly-created token
