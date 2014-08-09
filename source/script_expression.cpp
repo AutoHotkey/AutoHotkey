@@ -1319,6 +1319,12 @@ push_this_token:
 				result_token.object->AddRef();
 			goto normal_end_skip_output_var; // result_to_return is left at its default of "".
 		case SYM_VAR:
+			// This check must be done first to allow a variable containing a number or object to be passed ByRef:
+			if (mActionType == ACT_FUNC || mActionType == ACT_METHOD)
+			{
+				aArgVar[aArgIndex] = result_token.var; // Let the command refer to this variable directly.
+				goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
+			}
 			if (result_token.var->IsPureNumericOrObject())
 			{
 				result_token.var->ToToken(*aResultToken);
@@ -1362,15 +1368,8 @@ push_this_token:
 		aTarget += FTOA(result_token.value_double, aTarget, MAX_NUMBER_SIZE) + 1; // +1 because that's what callers want; i.e. the position after the terminator.
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
 	case SYM_VAR:
-		// SYM_VAR is somewhat unusual at this late a stage.  This next check allows ACT_FUNC to pass a variable
-		// reference to the function in cases like `SomeFunc % var := ""`.  Dynamic output vars were already handled
-		// by the SYM_DYNAMIC code.
-		if (aArgVar && mActionType == ACT_FUNC)
-		{
-			aArgVar[aArgIndex] = result_token.var; // Let the command refer to this variable directly.
-			goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
-		}
-		// Otherwise:
+		// SYM_VAR is somewhat unusual at this late a stage.  Dynamic output vars were already handled by the
+		// SYM_DYNAMIC code, while ACT_FUNC and ACT_METHOD were handled above.
 		// It is tempting to simply return now and let ExpandArgs() decide whether the var needs to be dereferenced.
 		// However, the var's length might not fit within the amount calculated by GetExpandedArgSize(), and in that
 		// case would overflow the deref buffer.  The var can be safely returned if it won't be dereferenced, but it
