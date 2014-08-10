@@ -10037,6 +10037,7 @@ end_of_infix_to_postfix:
 	SymbolType only_symbol = only_token.symbol;
 	if (   postfix_count == 1 && IS_OPERAND(only_symbol) // This expression is a lone operand, like (1) or "string".
 		&& (mActionType < ACT_FOR || mActionType > ACT_UNTIL) // It's not WHILE or UNTIL, which currently perform better as expressions, or FOR, which performs the same but currently expects aResultToken to always be set.
+		&& (mActionType != ACT_THROW) // Exclude THROW to simplify variable handling (ensures vars are always dereferenced).
 		&& (only_symbol != SYM_STRING || mActionType != ACT_SENDMESSAGE && mActionType != ACT_POSTMESSAGE)   ) // It's not something like SendMessage WM_SETTEXT,,"New text" (which requires the leading quote mark to be present).
 	{
 		if (only_symbol == SYM_DYNAMIC) // This needs some extra checks to ensure correct behaviour.
@@ -10092,7 +10093,7 @@ end_of_infix_to_postfix:
 				break;
 			}
 			aArg.is_expression = false;
-			if (mActionType > ACT_FUNC && mActionType != ACT_RETURN) // Excludes ACT_ASSIGNEXPR, ACT_METHOD, ACT_FUNC and ACT_RETURN.
+			if (!ACT_USES_SIMPLE_POSTFIX(mActionType))
 				return OK;
 			// Otherwise, continue on below to copy the postfix token into persistent memory.
 		}
@@ -10883,12 +10884,13 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				return result;
 			}
 
-			if (ARGVAR1) // Currently this is non-NULL only if the arg was a simple var reference, in which case token wasn't written to because ExpandExpression() wasn't called.
-				ARGVAR1->ToToken(*token);
-			if (token->symbol == SYM_STRING)
+			if (token->symbol == SYM_STRING && !token->mem_to_free)
 			{
-				// Throwing a string is pretty rare, so keep it simple:
-				if (!token->Malloc(token->marker, ArgLength(1)))
+				// There are a couple of shortcuts we could take here, but they aren't taken
+				// because throwing a string is pretty rare and not a performance priority.
+				// Shortcut #1: Assign _T("") if ARG1 is empty.
+				// Shortcut #2: Take over sDerefBuf if ARG1 == sDerefBuf.
+				if (!token->Malloc(token->marker, _tcslen(token->marker)))
 				{
 					delete token;
 					// See ThrowRuntimeException() for comments.
@@ -13035,16 +13037,19 @@ ResultType Line::Perform()
 		
 		for (int i = 0; i < param_count; ++i, ++arg)
 		{
-			if (sArgVar[arg] && sArgVar[arg]->Type() == VAR_NORMAL) // Only normal variables can be SYM_VAR.
+			if (sArgVar[arg])
 			{
-				param_tok[arg].symbol = SYM_VAR;
-				param_tok[arg].var = sArgVar[arg];
-			}
-			else
-			{
-				if (param_tok[arg].symbol == SYM_STRING) // i.e. still at the default we set.
+				if (sArgVar[arg]->Type() == VAR_NORMAL) // Only normal variables can be SYM_VAR.
+				{
+					param_tok[arg].symbol = SYM_VAR;
+					param_tok[arg].var = sArgVar[arg];
+				}
+				else
+				{
+					// This arg must be a simple built-in var reference, not an expression.
+					// ExpandArgs() didn't set marker in this case, so set it now:
 					param_tok[arg].marker = sArgDeref[arg];
-				//else use the type and value set by ExpandArgs().
+				}
 			}
 			param_ptr[i] = &param_tok[arg];
 		}

@@ -1471,6 +1471,8 @@ push_this_token:
 		else // Deref buf is already large enough to fit the string.
 			if (aTarget != result) // Currently, might be always true.
 				tmemmove(aTarget, result, result_size); // memmove() vs. memcpy() in this case, since source and dest might overlap (i.e. "target" may have been used to put temporary things into aTarget, but those things are no longer needed and now safe to overwrite).
+		if (aResultToken)
+			aResultToken->marker = aTarget;
 		aTarget += result_size;
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
 
@@ -1975,6 +1977,9 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 				arg_deref[i] = this_arg.text;  // Point the dereferenced arg to the arg text itself.
 				continue;  // Don't need to use the deref buffer in this case.
 			}
+			// Since above didn't continue, this arg is a plain variable reference.
+			// Even if aResultTokens != NULL, it isn't set because our callers handle vars
+			// in different ways (and checking sArgVar is easier than checking for SYM_VAR).
 
 			switch(ArgMustBeDereferenced(the_only_var_of_this_arg, i, arg_var)) // Yes, it was called by GetExpandedArgSize() too, but a review shows it's difficult to avoid this without being worse than the disease (10/22/2006).
 			{
