@@ -599,6 +599,32 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 
 
 
+ResultType Var::AssignSkipAddRef(IObject *aValueToAssign)
+{
+	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
+	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+
+	if (var.mType != VAR_NORMAL)
+	{
+		aValueToAssign->Release();
+		return g_script.ScriptError(ERR_INVALID_VALUE, _T("An object."));
+	}
+
+	var.Free(); // If var contains an object, this will Release() it.  It will also clear any string contents and free memory if appropriate.
+		
+	var.mObject = aValueToAssign;
+		
+	// Already done by Free() above:
+	//mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_UNINITIALIZED);
+
+	// Mark this variable to indicate it contains an object (objects are never considered numeric).
+	var.mAttrib |= VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_NOT_NUMERIC;
+
+	return OK;
+}
+
+
+
 VarSizeType Var::Get(LPTSTR aBuf)
 // Returns the length of this var's contents.  In addition, if aBuf isn't NULL, it will copy the contents into aBuf.
 {

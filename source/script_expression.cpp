@@ -621,6 +621,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		case SYM_IN:
 		case SYM_CONTAINS:
 			right_is_pure_number = right_is_number = PURE_NOT_NUMERIC; // Init for convenience/maintainability.
+		case SYM_ADDRESS:
 		case SYM_AND:			// v2: These don't need it either since even numeric strings are considered "true".
 		case SYM_OR:			//
 		case SYM_LOWNOT:		//

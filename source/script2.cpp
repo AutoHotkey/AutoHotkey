@@ -8343,8 +8343,10 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	// v1.0.35.11: Must search in A_ScriptDir by default because that's where ahk2exe will search by default.
 	// The old behavior was to search in A_WorkingDir, which seems pointless because ahk2exe would never
 	// be able to use that value if the script changes it while running.
+	TCHAR aDestPath[MAX_PATH];
+	GetFullPathName(aDest, MAX_PATH, aDestPath, NULL);
 	SetCurrentDirectory(g_script.mFileDir);
-	success = CopyFile(aSource, aDest, !allow_overwrite);
+	success = CopyFile(aSource, aDestPath, !allow_overwrite);
 	SetCurrentDirectory(g_WorkingDir); // Restore to proper value.
 
 #endif

@@ -328,23 +328,7 @@ public:
 		return OK;
 	}
 
-	ResultType AssignSkipAddRef(IObject *aValueToAssign)
-	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		if (var.mType == VAR_VIRTUAL)
-		{
-			// Virtual vars don't accept objects. Must also be careful not to overwrite mVV union.
-			return var.mVV->Set(_T(""), var.mName);
-		}
-		var.Free(); // If var contains an object, this will Release() it.  It will also clear any string contents and free memory if appropriate.
-		var.mObject = aValueToAssign;
-		// Already done by Free() above:
-		//mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
-		// Mark this variable to indicate it contains an object (objects are never considered numeric).
-		var.mAttrib |= VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_NOT_NUMERIC;
-		return OK;
-	}
+	ResultType AssignSkipAddRef(IObject *aValueToAssign);
 
 	inline ResultType Assign(IObject *aValueToAssign)
 	{
