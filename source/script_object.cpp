@@ -540,18 +540,11 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// L34: Assigning an empty string no longer removes the field.
 			if ( (field || (field = Insert(key_type, key, insert_pos))) && field->Assign(value_param) )
 			{
-				if (field->symbol == SYM_STRING)
-				{
-					// Use value_param since our copy may be freed prematurely in some (possibly rare) cases:
-					aResultToken.symbol = SYM_STRING;
-					aResultToken.marker = TokenToString(value_param);
-				}
-				else
-					field->Get(aResultToken); // L34: Corrected this to be aResultToken instead of value_param (broken by L33).
+				// See the similar call below for comments.
+				field->Get(aResultToken);
+				return OK;
 			}
-			else
-				return aResultToken.Error(ERR_OUTOFMEM);
-			return OK;
+			return aResultToken.Error(ERR_OUTOFMEM);
 		}
 	}
 
@@ -560,13 +553,14 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	{
 		if (field)
 		{
-			if (field->symbol == SYM_STRING)
-			{
-				aResultToken.symbol = SYM_STRING;
-				// L33: Make a persistent copy; our copy might be freed indirectly by releasing this object.
-				//		Prior to L33, callers took care of this UNLESS this was the last op in an expression.
-				return TokenSetResult(aResultToken, field->marker);
-			}
+			// Caller takes care of copying the result into persistent memory when necessary, and must
+			// ensure this is done before they Release() this object.  For ExpandExpression(), there are
+			// two different danger scenarios:
+			//   1) Command % {value:"string"}.value  ; Temporary object could be released prematurely.
+			//   2) Fn( obj.value, obj := "" )        ; Object is freed by the assignment.
+			// For #1, SYM_OBJECT refs are released after the result of the expression is copied into the
+			// deref buf (as of commit d1ab199).  For #2, the value is copied immediately after we return,
+			// because the result of any BIF is assumed to be volatile if expression eval isn't finished.
 			field->Get(aResultToken);
 			return OK;
 		}
