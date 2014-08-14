@@ -2508,8 +2508,6 @@ TCHAR *DbgStack::Entry::Name()
 	case SE_Sub:
 		return sub->mName;
 	case SE_Func:
-		if ((UINT_PTR)func->mName < SYM_COUNT)
-			return _T("<object>");
 		return func->mName;
 	default: // SE_Thread
 		return desc;

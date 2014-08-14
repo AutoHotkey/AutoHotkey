@@ -23,184 +23,193 @@ GNU General Public License for more details.
 #include "application.h" // for MsgSleep()
 #include "TextIO.h"
 
-// Globals that are for only this module:
-static ExprOpFunc g_ObjGet(BIF_ObjInvoke, IT_GET), g_ObjSet(BIF_ObjInvoke, IT_SET);
+// Globals that are for only this module (mostly):
 static ExprOpFunc g_ObjGetInPlace(BIF_ObjGetInPlace, IT_GET);
 static ExprOpFunc g_ObjNew(BIF_ObjNew, IT_CALL);
 static ExprOpFunc g_ObjPreInc(BIF_ObjIncDec, SYM_PRE_INCREMENT), g_ObjPreDec(BIF_ObjIncDec, SYM_PRE_DECREMENT)
 				, g_ObjPostInc(BIF_ObjIncDec, SYM_POST_INCREMENT), g_ObjPostDec(BIF_ObjIncDec, SYM_POST_DECREMENT);
 ExprOpFunc g_ObjCall(BIF_ObjInvoke, IT_CALL); // Also needed in script_expression.cpp.
+ExprOpFunc g_ObjGet(BIF_ObjInvoke, IT_GET), g_ObjSet(BIF_ObjInvoke, IT_SET); // Also needed in script_object_bif.cpp.
 
 #define NA MAX_FUNCTION_PARAMS
+#define BIFn(name, minp, maxp, hasret, bif, ...) {_T(#name), bif, minp, maxp, hasret, FID_##name, __VA_ARGS__}
+#define BIF1(name, minp, maxp, hasret, ...) {_T(#name), BIF_##name, minp, maxp, hasret, 0, __VA_ARGS__}
+// The following array defines all built-in functions, their min and max parameter counts,
+// whether command-style calls give them an output var for the result, and which real C++
+// function contains their implementation.  The macros above are used to reduce repetition
+// and implement code-sharing: BIFs which share a C++ function are assigned an integer ID,
+// defined in the BuiltInFunctionID enum.  This is used instead of the previous method
+// (passing the function's name) in an attempt to reduce code size and improve readability.
 FuncEntry g_BIF[] =
 {
-	{_T("LV_GetNext"), BIF_LV_GetNextOrCount, 0, 2, true},
-	{_T("LV_GetCount"), BIF_LV_GetNextOrCount, 0, 1, true},
-	{_T("LV_GetText"), BIF_LV_GetText, 2, 3, true, {1}},
-	{_T("LV_Add"), BIF_LV_AddInsertModify, 0, NA, true},
-	{_T("LV_Insert"), BIF_LV_AddInsertModify, 1, NA, true},
-	{_T("LV_Modify"), BIF_LV_AddInsertModify, 2, NA, true},
-	{_T("LV_Delete"), BIF_LV_Delete, 0, 1, true},
-	{_T("LV_InsertCol"), BIF_LV_InsertModifyDeleteCol, 1, 3, true},
-	{_T("LV_ModifyCol"), BIF_LV_InsertModifyDeleteCol, 0, 3, true},
-	{_T("LV_DeleteCol"), BIF_LV_InsertModifyDeleteCol, 1, 1, true},
-	{_T("LV_SetImageList"), BIF_LV_SetImageList, 1, 2, true},
+	BIFn(LV_GetNext, 0, 2, true, BIF_LV_GetNextOrCount),
+	BIFn(LV_GetCount, 0, 1, true, BIF_LV_GetNextOrCount),
+	BIF1(LV_GetText, 2, 3, true, {1}),
+	BIFn(LV_Add, 0, NA, true, BIF_LV_AddInsertModify),
+	BIFn(LV_Insert, 1, NA, true, BIF_LV_AddInsertModify),
+	BIFn(LV_Modify, 2, NA, true, BIF_LV_AddInsertModify),
+	BIF1(LV_Delete,  0, 1, true),
+	BIFn(LV_InsertCol, 1, 3, true, BIF_LV_InsertModifyDeleteCol),
+	BIFn(LV_ModifyCol, 0, 3, true, BIF_LV_InsertModifyDeleteCol),
+	BIFn(LV_DeleteCol, 1, 1, true, BIF_LV_InsertModifyDeleteCol),
+	BIF1(LV_SetImageList, 1, 2, true),
 	
-	{_T("TV_Add"), BIF_TV_AddModifyDelete, 1, 3, true},
-	{_T("TV_Modify"), BIF_TV_AddModifyDelete, 1, 3, true},
-	{_T("TV_Delete"), BIF_TV_AddModifyDelete, 0, 1, true},
-	{_T("TV_GetParent"), BIF_TV_GetRelatedItem, 1, 1, true},
-	{_T("TV_GetChild"), BIF_TV_GetRelatedItem, 1, 1, true},
-	{_T("TV_GetPrev"), BIF_TV_GetRelatedItem, 1, 1, true},
-	{_T("TV_GetCount"), BIF_TV_GetRelatedItem, 0, 0, true},
-	{_T("TV_GetSelection"), BIF_TV_GetRelatedItem, 0, 0, true},
-	{_T("TV_GetNext"), BIF_TV_GetRelatedItem, 0, 2, true},
-	{_T("TV_Get"), BIF_TV_Get, 2, 2, true},
-	{_T("TV_GetText"), BIF_TV_Get, 2, 2, true, {1}},
-	{_T("TV_SetImageList"), BIF_TV_SetImageList, 1, 2, true},
+	BIFn(TV_Add, 1, 3, true, BIF_TV_AddModifyDelete),
+	BIFn(TV_Modify, 1, 3, true, BIF_TV_AddModifyDelete),
+	BIFn(TV_Delete, 0, 1, true, BIF_TV_AddModifyDelete),
+	BIFn(TV_GetNext, 0, 2, true, BIF_TV_GetRelatedItem),
+	BIFn(TV_GetPrev, 1, 1, true, BIF_TV_GetRelatedItem),
+	BIFn(TV_GetParent, 1, 1, true, BIF_TV_GetRelatedItem),
+	BIFn(TV_GetChild, 1, 1, true, BIF_TV_GetRelatedItem),
+	BIFn(TV_GetSelection, 0, 0, true, BIF_TV_GetRelatedItem),
+	BIFn(TV_GetCount, 0, 0, true, BIF_TV_GetRelatedItem),
+	BIF1(TV_Get, 2, 2, true),
+	BIFn(TV_GetText, 2, 2, true, BIF_TV_Get, {1}),
+	BIF1(TV_SetImageList, 1, 2, true),
 
-	{_T("IL_Create"), BIF_IL_Create, 0, 3, true},
-	{_T("IL_Destroy"), BIF_IL_Destroy, 1, 1, true},
-	{_T("IL_Add"), BIF_IL_Add, 2, 4, true},
+	BIF1(IL_Create, 0, 3, true),
+	BIF1(IL_Destroy, 1, 1, true),
+	BIF1(IL_Add, 2, 4, true),
 	
-	{_T("SB_SetText"), BIF_StatusBar, 1, 3, true},
-	{_T("SB_SetParts"), BIF_StatusBar, 0, 255, true},
-	{_T("SB_SetIcon"), BIF_StatusBar, 1, 3, true},
+	BIFn(SB_SetText, 1, 3, true, BIF_StatusBar),
+	BIFn(SB_SetParts, 0, 255, true, BIF_StatusBar),
+	BIFn(SB_SetIcon, 1, 3, true, BIF_StatusBar),
 
-	{_T("StrLen"), BIF_StrLen, 1, 1, true},
-	{_T("SubStr"), BIF_SubStr, 2, 3, true},
-	{_T("Trim"), BIF_Trim, 1, 2, true},
-	{_T("LTrim"), BIF_Trim, 1, 2, true},
-	{_T("RTrim"), BIF_Trim, 1, 2, true},
-	{_T("InStr"), BIF_InStr, 2, 5, true},
-	{_T("StrSplit"), BIF_StrSplit, 1, 3, true},
-	{_T("RegExMatch"), BIF_RegEx, 2, 4, true, {3}},
-	{_T("RegExReplace"), BIF_RegEx, 2, 6, true, {4}},
+	BIF1(StrLen, 1, 1, true),
+	BIF1(SubStr, 2, 3, true),
+	BIFn(Trim, 1, 2, true, BIF_Trim),
+	BIFn(LTrim, 1, 2, true, BIF_Trim),
+	BIFn(RTrim, 1, 2, true, BIF_Trim),
+	BIF1(InStr, 2, 5, true),
+	BIF1(StrSplit, 1, 3, true),
+	BIFn(RegExMatch, 2, 4, true, BIF_RegEx, {3}),
+	BIFn(RegExReplace, 2, 6, true, BIF_RegEx, {4}),
 
-	{_T("GetKeyState"), BIF_GetKeyState, 1, 2, true},
-	{_T("GetKeyName"), BIF_GetKeyName, 1, 1, true},
-	{_T("GetKeyVK"), BIF_GetKeyName, 1, 1, true},
-	{_T("GetKeySC"), BIF_GetKeyName, 1, 1, true},
+	BIF1(GetKeyState, 1, 2, true),
+	BIFn(GetKeyName, 1, 1, true, BIF_GetKeyName),
+	BIFn(GetKeyVK, 1, 1, true, BIF_GetKeyName),
+	BIFn(GetKeySC, 1, 1, true, BIF_GetKeyName),
 
-	{_T("Ord"), BIF_Ord, 1, 1, true},
-	{_T("Chr"), BIF_Chr, 1, 1, true},
-	{_T("StrGet"), BIF_StrGetPut, 1, 3, true},
-	{_T("StrPut"), BIF_StrGetPut, 1, 4, true},
-	{_T("NumGet"), BIF_NumGet, 1, 3, true},
-	{_T("NumPut"), BIF_NumPut, 2, 4, true},
-	{_T("IsLabel"), BIF_IsLabel, 1, 1, true},
-	{_T("Func"), BIF_Func, 1, 1, true},
-	{_T("IsFunc"), BIF_IsFunc, 1, 1, true},
-	{_T("IsByRef"), BIF_IsByRef, 1, 1, true, {1}},
-	{_T("DllCall"), BIF_DllCall, 1, NA, true},
-	{_T("VarSetCapacity"), BIF_VarSetCapacity, 1, 3, true, {1}},
-	{_T("FileExist"), BIF_FileExist, 1, 1, true},
-	{_T("DirExist"), BIF_FileExist, 1, 1, true},
-	{_T("WinExist"), BIF_WinExistActive, 0, 4, true},
-	{_T("WinActive"), BIF_WinExistActive, 0, 4, true},
-	{_T("Round"), BIF_Round, 1, 2, true},
-	{_T("Floor"), BIF_FloorCeil, 1, 1, true},
-	{_T("Ceil"), BIF_FloorCeil, 1, 1, true},
-	{_T("Mod"), BIF_Mod, 2, 2, true},
-	{_T("Abs"), BIF_Abs, 1, 1, true},
-	{_T("Sin"), BIF_Sin, 1, 1, true},
-	{_T("Cos"), BIF_Cos, 1, 1, true},
-	{_T("Tan"), BIF_Tan, 1, 1, true},
-	{_T("ASin"), BIF_ASinACos, 1, 1, true},
-	{_T("ACos"), BIF_ASinACos, 1, 1, true},
-	{_T("ATan"), BIF_ATan, 1, 1, true},
-	{_T("Exp"), BIF_Exp, 1, 1, true},
-	{_T("Sqrt"), BIF_SqrtLogLn, 1, 1, true},
-	{_T("Log"), BIF_SqrtLogLn, 1, 1, true},
-	{_T("Ln"), BIF_SqrtLogLn, 1, 1, true},
-	{_T("DateAdd"), BIF_DateAdd, 3, 3, true},
-	{_T("DateDiff"), BIF_DateDiff, 3, 3, true},
-	{_T("OnMessage"), BIF_OnMessage, 1, 3, true},
-	{_T("RegisterCallback"), BIF_RegisterCallback, 1, 4, true},
-	{_T("Type"), BIF_Type, 1, 1, true},
-	{_T("IsObject"), BIF_IsObject, 1, NA, true},
+	BIF1(Ord, 1, 1, true),
+	BIF1(Chr, 1, 1, true),
+	BIFn(StrGet, 1, 3, true, BIF_StrGetPut),
+	BIFn(StrPut, 1, 4, true, BIF_StrGetPut),
+	BIF1(NumGet, 1, 3, true),
+	BIF1(NumPut, 2, 4, true),
+	BIF1(IsLabel, 1, 1, true),
+	BIF1(Func, 1, 1, true),
+	BIF1(IsFunc, 1, 1, true),
+	BIF1(IsByRef, 1, 1, true, {1}),
+	BIF1(DllCall, 1, NA, true),
+	BIF1(VarSetCapacity, 1, 3, true, {1}),
+	BIFn(FileExist, 1, 1, true, BIF_FileExist),
+	BIFn(DirExist, 1, 1, true, BIF_FileExist),
+	BIFn(WinExist, 0, 4, true, BIF_WinExistActive),
+	BIFn(WinActive, 0, 4, true, BIF_WinExistActive),
+	BIF1(Round, 1, 2, true),
+	BIFn(Floor, 1, 1, true, BIF_FloorCeil),
+	BIFn(Ceil, 1, 1, true, BIF_FloorCeil),
+	BIF1(Mod, 2, 2, true),
+	BIF1(Abs, 1, 1, true),
+	BIF1(Sin, 1, 1, true),
+	BIF1(Cos, 1, 1, true),
+	BIF1(Tan, 1, 1, true),
+	BIFn(ASin, 1, 1, true, BIF_ASinACos),
+	BIFn(ACos, 1, 1, true, BIF_ASinACos),
+	BIF1(ATan, 1, 1, true),
+	BIF1(Exp, 1, 1, true),
+	BIFn(Sqrt, 1, 1, true, BIF_SqrtLogLn),
+	BIFn(Log, 1, 1, true, BIF_SqrtLogLn),
+	BIFn(Ln, 1, 1, true, BIF_SqrtLogLn),
+	BIF1(DateAdd, 3, 3, true),
+	BIF1(DateDiff, 3, 3, true),
+	BIF1(OnMessage, 1, 3, true),
+	BIF1(RegisterCallback, 1, 4, true),
+	BIF1(Type, 1, 1, true),
+	BIF1(IsObject, 1, NA, true),
 	
-	{_T("Object"), BIF_ObjCreate, 0, NA, true},
-	{_T("ObjAddRef"), BIF_ObjAddRefRelease, 1, 1, true},
-	{_T("ObjRelease"), BIF_ObjAddRefRelease, 1, 1, true},
-	{_T("ObjRawSet"), BIF_ObjRawSet, 3, 3, false},
+	BIF1(Object, 0, NA, true),
+	BIFn(ObjAddRef, 1, 1, true, BIF_ObjAddRefRelease),
+	BIFn(ObjRelease, 1, 1, true, BIF_ObjAddRefRelease),
+	BIF1(ObjRawSet, 3, 3, false),
 
-	{_T("ObjInsertAt"), BIF_ObjXXX, 3, NA, false},
-	{_T("ObjRemove"), BIF_ObjXXX, 2, 3, true},
-	{_T("ObjRemoveAt"), BIF_ObjXXX, 2, 3, true},
-	{_T("ObjPush"), BIF_ObjXXX, 2, NA, false},
-	{_T("ObjPop"), BIF_ObjXXX, 1, 1, false},
-	{_T("ObjLength"), BIF_ObjXXX, 1, 1, true},
-	{_T("ObjHasKey"), BIF_ObjXXX, 2, 2, true},
-	{_T("ObjGetCapacity"), BIF_ObjXXX, 1, 2, true},
-	{_T("ObjSetCapacity"), BIF_ObjXXX, 2, 3, true},
-	{_T("ObjGetAddress"), BIF_ObjXXX, 2, 2, true},
-	{_T("ObjNewEnum"), BIF_ObjNewEnum, 1, 1, true},
-	{_T("ObjClone"), BIF_ObjXXX, 1, 1, true},
+	BIFn(ObjInsertAt, 3, NA, false, BIF_ObjXXX),
+	BIFn(ObjRemove, 2, 3, true, BIF_ObjXXX),
+	BIFn(ObjRemoveAt, 2, 3, true, BIF_ObjXXX),
+	BIFn(ObjPush, 2, NA, false, BIF_ObjXXX),
+	BIFn(ObjPop, 1, 1, false, BIF_ObjXXX),
+	BIFn(ObjLength, 1, 1, true, BIF_ObjXXX),
+	BIFn(ObjHasKey, 2, 2, true, BIF_ObjXXX),
+	BIFn(ObjGetCapacity, 1, 2, true, BIF_ObjXXX),
+	BIFn(ObjSetCapacity, 2, 3, true, BIF_ObjXXX),
+	BIFn(ObjGetAddress, 2, 2, true, BIF_ObjXXX),
+	BIFn(ObjClone, 1, 1, true, BIF_ObjXXX),
+	BIF1(ObjNewEnum, 1, 1, true),
 
-	{_T("Array"), BIF_ObjArray, 0, NA, true},
-	{_T("FileOpen"), BIF_FileOpen, 2, 3, true},
+	BIF1(Array, 0, NA, true),
+	BIF1(FileOpen, 2, 3, true),
 	
-	{_T("ComObject"), BIF_ComObject, 1, 3, true},
-	{_T("ComObjActive"), BIF_ComObjActive, 1, 1, true},
-	{_T("ComObjCreate"), BIF_ComObjCreate, 1, 2, true},
-	{_T("ComObjGet"), BIF_ComObjGet, 1, 1, true},
-	{_T("ComObjConnect"), BIF_ComObjConnect, 1, 2, true},
-	{_T("ComObjError"), BIF_ComObjError, 0, 1, true},
-	{_T("ComObjType"), BIF_ComObjTypeOrValue, 1, 2, true},
-	{_T("ComObjValue"), BIF_ComObjTypeOrValue, 1, 1, true},
-	{_T("ComObjFlags"), BIF_ComObjFlags, 1, 3, true},
-	{_T("ComObjArray"), BIF_ComObjArray, 2, 9, true},
-	{_T("ComObjQuery"), BIF_ComObjQuery, 2, 3, true},
+	BIF1(ComObject, 1, 3, true),
+	BIF1(ComObjActive, 1, 1, true),
+	BIF1(ComObjCreate, 1, 2, true),
+	BIF1(ComObjGet, 1, 1, true),
+	BIF1(ComObjConnect, 1, 2, true),
+	BIF1(ComObjError, 0, 1, true),
+	BIFn(ComObjType, 1, 2, true, BIF_ComObjTypeOrValue),
+	BIFn(ComObjValue, 1, 1, true, BIF_ComObjTypeOrValue),
+	BIF1(ComObjFlags, 1, 3, true),
+	BIF1(ComObjArray, 2, 9, true),
+	BIF1(ComObjQuery, 2, 3, true),
 	
-	{_T("Exception"), BIF_Exception, 1, 3, true},
+	BIF1(Exception, 1, 3, true),
 
-	{_T("WinGetID"), BIF_WinGet, 0, 4, true},
-	{_T("WinGetIDLast"), BIF_WinGet, 0, 4, true},
-	{_T("WinGetPID"), BIF_WinGet, 0, 4, true},
-	{_T("WinGetProcessName"), BIF_WinGet, 0, 4, true},
-	{_T("WinGetProcessPath"), BIF_WinGet, 0, 4, true},
-	{_T("WinGetCount"), BIF_WinGet, 0, 4, true},
-	{_T("WinGetList"), BIF_WinGet, 0, 4, true},
-	{_T("WinGetMinMax"), BIF_WinGet, 0, 4, true},
-	{_T("WinGetControls"), BIF_WinGet, 0, 4, true},
-	{_T("WinGetControlsHwnd"), BIF_WinGet, 0, 4, true},
-	{_T("WinGetTransparent"), BIF_WinGet, 0, 4, true},
-	{_T("WinGetTransColor"), BIF_WinGet, 0, 4, true},
-	{_T("WinGetStyle"), BIF_WinGet, 0, 4, true},
-	{_T("WinGetExStyle"), BIF_WinGet, 0, 4, true},
+	BIFn(WinGetID, 0, 4, true, BIF_WinGet),
+	BIFn(WinGetIDLast, 0, 4, true, BIF_WinGet),
+	BIFn(WinGetPID, 0, 4, true, BIF_WinGet),
+	BIFn(WinGetProcessName, 0, 4, true, BIF_WinGet),
+	BIFn(WinGetProcessPath, 0, 4, true, BIF_WinGet),
+	BIFn(WinGetCount, 0, 4, true, BIF_WinGet),
+	BIFn(WinGetList, 0, 4, true, BIF_WinGet),
+	BIFn(WinGetMinMax, 0, 4, true, BIF_WinGet),
+	BIFn(WinGetControls, 0, 4, true, BIF_WinGet),
+	BIFn(WinGetControlsHwnd, 0, 4, true, BIF_WinGet),
+	BIFn(WinGetTransparent, 0, 4, true, BIF_WinGet),
+	BIFn(WinGetTransColor, 0, 4, true, BIF_WinGet),
+	BIFn(WinGetStyle, 0, 4, true, BIF_WinGet),
+	BIFn(WinGetExStyle, 0, 4, true, BIF_WinGet),
 
-	{_T("WinSetTransparent"), BIF_WinSet, 1, 5, false},
-	{_T("WinSetTransColor"), BIF_WinSet, 1, 5, false},
-	{_T("WinSetAlwaysOnTop"), BIF_WinSet, 0, 5, false},
-	{_T("WinSetStyle"), BIF_WinSet, 1, 5, false},
-	{_T("WinSetExStyle"), BIF_WinSet, 1, 5, false},
-	{_T("WinSetEnabled"), BIF_WinSet, 1, 5, false},
-	{_T("WinSetRegion"), BIF_WinSet, 0, 5, false},
+	BIFn(WinSetTransparent, 1, 5, false, BIF_WinSet),
+	BIFn(WinSetTransColor, 1, 5, false, BIF_WinSet),
+	BIFn(WinSetAlwaysOnTop, 0, 5, false, BIF_WinSet),
+	BIFn(WinSetStyle, 1, 5, false, BIF_WinSet),
+	BIFn(WinSetExStyle, 1, 5, false, BIF_WinSet),
+	BIFn(WinSetEnabled, 1, 5, false, BIF_WinSet),
+	BIFn(WinSetRegion, 0, 5, false, BIF_WinSet),
 	
-	{_T("WinRedraw"), BIF_WinRedraw, 0, 4, false},
+	BIF1(WinRedraw, 0, 4, false),
 	
-	{_T("WinMoveBottom"), BIF_WinMoveTopBottom, 0, 4, false},
-	{_T("WinMoveTop"), BIF_WinMoveTopBottom, 0, 4, false},
+	BIFn(WinMoveBottom, 0, 4, false, BIF_WinMoveTopBottom),
+	BIFn(WinMoveTop, 0, 4, false, BIF_WinMoveTopBottom),
 	
-	{_T("ProcessExist"), BIF_Process, 0, 1, true},
-	{_T("ProcessClose"), BIF_Process, 1, 1, true},
-	{_T("ProcessWait"), BIF_Process, 1, 2, true},
-	{_T("ProcessWaitClose"), BIF_Process, 1, 2, true},
+	BIFn(ProcessExist, 0, 1, true, BIF_Process),
+	BIFn(ProcessClose, 1, 1, true, BIF_Process),
+	BIFn(ProcessWait, 1, 2, true, BIF_Process),
+	BIFn(ProcessWaitClose, 1, 2, true, BIF_Process),
 
-	{_T("ProcessSetPriority"), BIF_ProcessSetPriority, 1, 2, false},
+	BIF1(ProcessSetPriority, 1, 2, false),
 
-	{_T("MonitorGet"), BIF_MonitorGet, 0, 5, false, {2, 3, 4, 5}},
-	{_T("MonitorGetWorkArea"), BIF_MonitorGet, 0, 5, false, {2, 3, 4, 5}},
-	{_T("MonitorGetCount"), BIF_MonitorGet, 0, 0, true},
-	{_T("MonitorGetPrimary"), BIF_MonitorGet, 0, 0, true},
-	{_T("MonitorGetName"), BIF_MonitorGet, 0, 1, true},
+	BIFn(MonitorGet, 0, 5, false, BIF_MonitorGet, {2, 3, 4, 5}),
+	BIFn(MonitorGetWorkArea, 0, 5, false, BIF_MonitorGet, {2, 3, 4, 5}),
+	BIFn(MonitorGetCount, 0, 0, true, BIF_MonitorGet),
+	BIFn(MonitorGetPrimary, 0, 0, true, BIF_MonitorGet),
+	BIFn(MonitorGetName, 0, 1, true, BIF_MonitorGet),
 
-	{_T("OnExit"), BIF_OnExitOrClipboardChange, 0, 1, true},
-	{_T("OnClipboardChange"), BIF_OnExitOrClipboardChange, 0, 1, true},
-
+	BIFn(OnExit, 0, 1, true, BIF_OnExitOrClipboardChange),
+	BIFn(OnClipboardChange, 0, 1, true, BIF_OnExitOrClipboardChange),
 };
 #undef NA
+#undef BIFn
+#undef BIF1
 
 // See Script::CreateWindows() for details about the following:
 typedef BOOL (WINAPI* AddRemoveClipboardListenerType)(HWND);
@@ -6910,36 +6919,27 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		bif.mBIF = BIF_PerformAction;
 		bif.mMinParams = g_act[action_type].MinParams;
 		bif.mMaxParams = g_act[action_type].MaxParams;
+		bif.mName = g_act[action_type].Name;
 		
-		// Func::mName is overloaded to contain the name, param types and action type.  +1 for '\0'
-		LPTSTR new_name = (LPTSTR)SimpleHeap::Malloc((aFuncNameLength + bif.mMaxParams + 2) * sizeof(TCHAR));
-		if (!new_name)
+		// For performance, the action and arg types are "precalculated" and stored in Func::mOutputVars,
+		// which should never be used for its other purpose because the ActionType appropriate for this
+		// command should be used instead of ACT_FUNC -> BIF_PerformAction -> ActionType.
+		bif_output_vars = (UCHAR *)SimpleHeap::Malloc(bif.mMaxParams + 1);
+		if (!bif_output_vars)
 			return NULL;
-		
-		// For performance, the action and arg types are cached in Func::mName, which is
-		// accessible from BIF_PerformAction via aResultToken.marker.  But since mName
-		// needs to point to the correct name, we adjust it here so that it points into
-		// the middle of the memory block, where the extra data ends and the name begins:
-		TCHAR *type = new_name;
-		new_name += bif.mMaxParams + 1;
-		_tcscpy(new_name, g_act[action_type].Name);
-		int i;
+		// Store the action type:
+		bif_output_vars[0] = (TCHAR)action_type;
 		// Store the arg types:
-		for (i = 0; i < bif.mMaxParams; ++i)
-			type[i] = (TCHAR)Line::ArgIsVar(action_type, i);
-		// Store the action type (now at new_name[-1]):
-		type[i] = (TCHAR)action_type;
+		for (int i = 0; i < bif.mMaxParams; ++i)
+			bif_output_vars[i + 1] = (TCHAR)Line::ArgIsVar(action_type, i);
 		// If the command's first arg is an output var (and its second arg isn't), it will
 		// be used as the return value.  So adjust min/max params in that case.
-		if (bif.mMaxParams && type[0] == ARG_TYPE_OUTPUT_VAR && type[1] != ARG_TYPE_OUTPUT_VAR)
+		if (bif.mMaxParams && bif_output_vars[1] == ARG_TYPE_OUTPUT_VAR && bif_output_vars[2] != ARG_TYPE_OUTPUT_VAR)
 		{
 			if (bif.mMinParams)
 				bif.mMinParams--;
 			bif.mMaxParams--;
 		}
-
-		// Pass this pointer to AddFunc():
-		bif.mName = new_name;
 	}
 
 	// Since above didn't return, this is a built-in function that hasn't yet been added to the list.
@@ -6951,7 +6951,8 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	pfunc->mMinParams = bif.mMinParams;
 	pfunc->mParamCount = bif.mMaxParams;
 	pfunc->mHasReturn = bif.mHasReturn;
-	pfunc->mOutputVars = bif_output_vars; // Not bif.mOutputVars, which will be invalid after we return.
+	pfunc->mID = (BuiltInFunctionID)bif.mID;
+	pfunc->mOutputVars = bif_output_vars; // Not bif.mOutputVars, which is on the stack (and bif_output_vars may have been overridden above).
 
 	return pfunc;
 }
@@ -9521,7 +9522,7 @@ unquoted_literal:
 						// params in x[] allows IObject::Invoke() implementations to assume that the first param
 						// (or param for IT_SET/IT_GET) is never SYM_MISSING.  However, [a,,b] is allowed as a way
 						// to create a sparse array.
-						if (stack_symbol == SYM_OBRACE || func && (UINT_PTR)func->mName < IT_CALL) // i.e. {} or x[]
+						if (stack_symbol == SYM_OBRACE || (func == &g_ObjGet || func == &g_ObjSet)) // i.e. {} or x[]
 							return LineError(ERR_UNEXPECTED_COMMA, FAIL, in_param_list->marker);
 						if (func && in_param_list->param_count < func->mMinParams) // Is this parameter mandatory?
 							return LineError(ERR_PARAM_REQUIRED);
@@ -13071,7 +13072,7 @@ ResultType Line::Perform()
 			// param_tok[0] is always either SYM_VAR set by ExpandArgs() or the result of an expression
 			// such as the "var.id" in "var.id.method".
 			result_token.symbol = SYM_INTEGER;
-			result_token.marker = (LPTSTR)IT_CALL;
+			result_token.func = &g_ObjCall;
 			BIF_ObjInvoke(result_token, param_ptr, param_count);
 		}
 		result = result_token.Result();
@@ -13133,11 +13134,12 @@ ResultType Line::Perform()
 
 BIF_DECL(BIF_PerformAction)
 {
-	// aResultToken.marker was overloaded to pass us the name of the function,
-	// which in this case is immediately preceded by the arg types and action type.
-	ActionTypeType act = (ActionTypeType)aResultToken.marker[-1];
-	int max_params = g_act[act].MaxParams;
-	TCHAR *arg_type = aResultToken.marker - (max_params + 1);
+	// mOutputVars was overloaded to contain the action type and arg types.
+	UCHAR *arg_type = aResultToken.func->mOutputVars;
+	ActionTypeType act = *arg_type++;
+	// Use func rather than g_act as the latter is less likely to be in the CPU cache:
+	int min_params = aResultToken.func->mMinParams;
+	int max_params = aResultToken.func->mParamCount;
 	
 	// An array of args is constructed containing the var or text of each parameter,
 	// which is then used by ExpandArgs() to populate sArgDeref[] and sArgVar[].  This
@@ -13205,7 +13207,7 @@ BIF_DECL(BIF_PerformAction)
 		}
 
 		// If this arg is optional and an empty string was passed, make it ARG_TYPE_NORMAL.
-		if (i >= g_act[act].MinParams && aParam[i]->symbol == SYM_STRING && !*aParam[i]->marker)
+		if (i >= min_params && aParam[i]->symbol == SYM_STRING && !*aParam[i]->marker)
 			arg[i].type = ARG_TYPE_NORMAL;
 		else
 			arg[i].type = (ArgTypeType)arg_type[i];
@@ -13217,10 +13219,9 @@ BIF_DECL(BIF_PerformAction)
 			// can only happen for OUTPUT vars since the stack_var workaround above covers the
 			// INPUT var for all known commands.
 			sntprintf(aResultToken.buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
-				, i+1, aResultToken.marker);
-			aResultToken.Error(aResultToken.buf);
+				, i+1, aResultToken.func->mName);
 			stack_var.Free(VAR_ALWAYS_FREE); // It might've been used as an input var.
-			return;
+			_f_throw(aResultToken.buf);
 		}
 		
 		arg[i].text = TokenToString(*aParam[i], number_buf + (i * MAX_NUMBER_SIZE));
@@ -14087,12 +14088,19 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 __declspec(noinline)
 ResultType ResultToken::Error(LPCTSTR aErrorText)
 {
-	return SetExitResult(g_script.ScriptError(aErrorText));
+	// Defining this overload separately rather than making aErrorInfo optional reduces code size
+	// by not requiring the compiler to 'push' the second parameter's default value at each call site.
+	return Error(aErrorText, _T(""));
 }
 
 __declspec(noinline)
 ResultType ResultToken::Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 {
+	// These two assertions should always pass, since anything else would imply returning a value,
+	// not throwing an error.  If they don't, the memory/object might not be freed since the caller
+	// isn't expecting a value, or they might be freed twice (if the callee already freed it).
+	ASSERT(!mem_to_free);
+	ASSERT(symbol != SYM_OBJECT);
 	return SetExitResult(g_script.ScriptError(aErrorText, aExtraInfo));
 }
 

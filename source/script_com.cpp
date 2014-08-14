@@ -320,7 +320,7 @@ BIF_DECL(BIF_ComObjTypeOrValue)
 		aResultToken.marker = _T("");
 		return;
 	}
-	if (ctoupper(aResultToken.marker[6]) == 'V')
+	if (_f_callee_id == FID_ComObjValue)
 	{
 		aResultToken.value_int64 = obj->mVal64;
 	}
@@ -1298,7 +1298,10 @@ void WriteComObjType(IDebugProperties *aDebugger, ComObject *aObject, LPCSTR aNa
 	TCHAR buf[MAX_NUMBER_SIZE];
 	ResultToken resultToken;
 	resultToken.symbol = SYM_INTEGER;
-	resultToken.marker = _T("ComObjType");
+	static Func *ComObjType = NULL;
+	if (!ComObjType)
+		ComObjType = g_script.FindFunc(_T("ComObjType")); // FIXME: Probably better to split ComObjType and ComObjValue.
+	resultToken.func = ComObjType;
 	resultToken.mem_to_free = NULL;
 	resultToken.buf = buf;
 	ExprTokenType paramToken[2], *param[2] = { &paramToken[0], &paramToken[1] };

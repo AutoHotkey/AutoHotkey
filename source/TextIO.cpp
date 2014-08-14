@@ -743,7 +743,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			if (aParamCount != (IS_INVOKE_SET ? 1 : 0))
 				// Get: disallow File.Length[newLength] and File.Seek[dist,origin].
 				// Set: disallow File[]:=PropertyName and File["Pos",dist]:=origin.
-				return aResultToken.Error(_T("Invalid usage."));
+				_o_throw(ERR_INVALID_USAGE);
 		}
 
 		aResultToken.symbol = SYM_INTEGER; // Set default return type -- the most common cases return integer.
@@ -827,7 +827,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				else
 				{
 					if (aParamCount < 1)
-						return aResultToken.Error(ERR_PARAM1_REQUIRED);
+						_o_throw(ERR_PARAM1_REQUIRED);
 
 					ExprTokenType &token_to_write = *aParam[1];
 					
@@ -881,7 +881,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				if (length && aResultToken.marker[length - 1] == '\n')
 					--length;
 				aResultToken.marker[length] = '\0';
-				aResultToken.buf = (LPTSTR)(size_t) length;
+				aResultToken.marker_length = length;
 				return OK;
 			}
 			break;
@@ -909,7 +909,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		case RawReadWrite:
 			{
 				if (aParamCount < 2)
-					return aResultToken.Error(ERR_TOO_FEW_PARAMS);
+					_o_throw(ERR_TOO_FEW_PARAMS);
 
 				bool reading = (name[3] == 'R' || name[3] == 'r');
 
@@ -926,7 +926,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 					{
 						if (reading)
 							return FAIL; // SetCapacity() already showed the error message.
-						return aResultToken.Error(ERR_PARAM2_INVALID); // Invalid size (param #2).
+						_o_throw(ERR_PARAM2_INVALID); // Invalid size (param #2).
 					}
 					target = target_token.var->Contents();
 				}
@@ -935,7 +935,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 
 				DWORD result;
 				if (target < (LPVOID)65536) // Basic sanity check to catch incoming raw addresses that are zero or blank.
-					return aResultToken.Error(ERR_PARAM1_INVALID);
+					_o_throw(ERR_PARAM1_INVALID);
 				else if (reading)
 					result = mFile.Read(target, size);
 				else
@@ -1171,7 +1171,7 @@ BIF_DECL(BIF_FileOpen)
 
 invalid_param:
 	g->LastError = ERROR_INVALID_PARAMETER; // For consistency.
-	aResultToken.Error(ERR_PARAM2_INVALID);
+	_f_throw(ERR_PARAM2_INVALID);
 }
 
 

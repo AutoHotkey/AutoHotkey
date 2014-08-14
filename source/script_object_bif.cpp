@@ -6,11 +6,13 @@
 #include "script_object.h"
 
 
+extern ExprOpFunc g_ObjGet, g_ObjSet;
+
 //
-// BIF_ObjCreate - Object()
+// Object()
 //
 
-BIF_DECL(BIF_ObjCreate)
+BIF_DECL(BIF_Object)
 {
 	IObject *obj = NULL;
 
@@ -19,8 +21,7 @@ BIF_DECL(BIF_ObjCreate)
 		if (obj = TokenToObject(*aParam[0]))
 		{	// Allow &obj == Object(obj), but AddRef() for equivalence with ComObjActive(comobj).
 			obj->AddRef();
-			aResultToken.value_int64 = (__int64)obj;
-			return; // symbol is already SYM_INTEGER.
+			_f_return_i((__int64)obj);
 		}
 		obj = (IObject *)TokenToInt64(*aParam[0]);
 		if (obj < (IObject *)65536) // Prevent some obvious errors.
@@ -33,35 +34,30 @@ BIF_DECL(BIF_ObjCreate)
 
 	if (obj)
 	{
-		aResultToken.symbol = SYM_OBJECT;
-		aResultToken.object = obj;
-		// DO NOT ADDREF: after we return, the only reference will be in aResultToken.
+		// DO NOT ADDREF: the caller takes responsibility for the only reference.
+		_f_return(obj);
 	}
 	else
-	{
-		aResultToken.Error(aParamCount == 1 ? ERR_PARAM1_INVALID : ERR_OUTOFMEM);
-	}
+		_f_throw(aParamCount == 1 ? ERR_PARAM1_INVALID : ERR_OUTOFMEM);
 }
 
 
 //
-// BIF_ObjArray - Array(items*)
+// BIF_Array - Array(items*)
 //
 
-BIF_DECL(BIF_ObjArray)
+BIF_DECL(BIF_Array)
 {
 	Object *obj = Object::Create();
 	if (obj)
 	{
 		if (!aParamCount || obj->InsertAt(0, 1, aParam, aParamCount))
 		{
-			aResultToken.symbol = SYM_OBJECT;
-			aResultToken.object = obj;
-			return;
+			_f_return(obj);
 		}
 		obj->Release();
 	}
-	aResultToken.Error(ERR_OUTOFMEM);
+	_f_throw(ERR_OUTOFMEM);
 }
 	
 
@@ -73,7 +69,7 @@ BIF_DECL(BIF_IsObject)
 {
 	int i;
 	for (i = 0; i < aParamCount && TokenToObject(*aParam[i]); ++i);
-	aResultToken.value_int64 = (__int64)(i == aParamCount); // TRUE if all are objects.
+	_f_return_b(i == aParamCount); // TRUE if all are objects.  Caller has ensured aParamCount > 0.
 }
 	
 
@@ -83,15 +79,11 @@ BIF_DECL(BIF_IsObject)
 
 BIF_DECL(BIF_ObjInvoke)
 {
-    int invoke_type;
+    int invoke_type = _f_callee_id;
     IObject *obj;
     ExprTokenType *obj_param;
 
-	// Since ObjGet/ObjSet/ObjCall are not publicly accessible as functions, Func::mName
-	// (passed via aResultToken.marker) contains the actual flag rather than a name.
-	invoke_type = (int)(INT_PTR)aResultToken.marker;
-
-	// Set default return value; ONLY AFTER THE ABOVE.
+	// Set default return value for Invoke().
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
     
@@ -156,9 +148,9 @@ BIF_DECL(BIF_ObjInvoke)
 		// Invocation not handled. Either there was no target object, or the object doesn't handle
 		// this method/property.  For Object (associative arrays), only CALL should give this result.
 		if (!obj)
-			aResultToken.Error(ERR_NO_OBJECT);
+			_f_throw(ERR_NO_OBJECT);
 		else
-			aResultToken.Error(ERR_NO_MEMBER, aParamCount ? TokenToString(*aParam[0]) : _T(""));
+			_f_throw(ERR_NO_MEMBER, aParamCount ? TokenToString(*aParam[0]) : _T(""));
 	}
 	else if (result == FAIL || result == EARLY_EXIT) // For maintainability: SetExitResult() might not have been called.
 	{
@@ -187,6 +179,7 @@ BIF_DECL(BIF_ObjGetInPlace)
 
 BIF_DECL(BIF_ObjNew)
 {
+	// Set default return value for Invoke().
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
 
@@ -194,17 +187,11 @@ BIF_DECL(BIF_ObjNew)
 
 	IObject *class_object = TokenToObject(*class_token);
 	if (!class_object)
-	{
-		aResultToken.Error(_T("Missing class object for \"new\" operator."));
-		return;
-	}
+		_f_throw(ERR_NEW_NO_CLASS);
 
 	Object *new_object = Object::Create();
 	if (!new_object)
-	{
-		aResultToken.Error(ERR_OUTOFMEM);
-		return;
-	}
+		_f_throw(ERR_OUTOFMEM);
 
 	new_object->SetBase(class_object);
 
@@ -215,7 +202,7 @@ BIF_DECL(BIF_ObjNew)
 	aParam[0] = &name_token;
 
 	ResultType result;
-	LPTSTR buf = aResultToken.buf; // In case Invoke overwrites it via the union.
+	LPTSTR buf = aResultToken.buf; // In case Invoke overwrites aResultToken.buf via the union.
 
 	// __Init was added so that instance variables can be initialized in the correct order
 	// (beginning at the root class and ending at class_object) before __New is called.
@@ -274,14 +261,12 @@ BIF_DECL(BIF_ObjNew)
 
 BIF_DECL(BIF_ObjIncDec)
 {
-	// Func::mName (which aResultToken.marker is set to) has been overloaded to pass
-	// the type of increment/decrement to be performed on this object's field.
-	SymbolType op = (SymbolType)(INT_PTR)aResultToken.marker;
+	SymbolType op = (SymbolType)_f_callee_id;
 
 	ResultToken temp_result;
 	// Set the defaults expected by BIF_ObjInvoke:
 	temp_result.symbol = SYM_INTEGER;
-	temp_result.marker = (LPTSTR)IT_GET;
+	temp_result.func = &g_ObjGet;
 	temp_result.buf = aResultToken.buf;
 	temp_result.mem_to_free = NULL;
 
@@ -326,16 +311,16 @@ BIF_DECL(BIF_ObjIncDec)
 
 	if (op == SYM_PRE_INCREMENT || op == SYM_PRE_DECREMENT)
 	{
-		aResultToken.marker = (LPTSTR)IT_SET;
+		aResultToken.func = &g_ObjSet;
 		// Set the new value and pass the return value of the invocation back to our caller.
 		// This should be consistent with something like x.y := x.y + 1.
 		BIF_ObjInvoke(aResultToken, param, aParamCount);
 	}
 	else // SYM_POST_INCREMENT || SYM_POST_DECREMENT
 	{
-		// Must be re-initialized (and must use IT_SET instead of IT_GET):
+		// Must be re-initialized (and must use g_ObjSet instead of g_ObjGet):
 		temp_result.symbol = SYM_INTEGER;
-		temp_result.marker = (LPTSTR)IT_SET;
+		temp_result.func = &g_ObjSet;
 		temp_result.buf = aResultToken.buf;
 		temp_result.mem_to_free = NULL;
 		
@@ -358,34 +343,23 @@ BIF_DECL(BIF_ObjIncDec)
 
 BIF_DECL(BIF_ObjXXX)
 {
-	LPTSTR method_name = aResultToken.marker + 3;
-
 	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T("");
+	aResultToken.marker = _T(""); // Set default for CallBuiltin().
 	
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
 	if (obj)
-	{
-		if (!obj->CallBuiltin(method_name, aResultToken, aParam + 1, aParamCount - 1))
-			aResultToken.SetExitResult(FAIL);
-	}
+		obj->CallBuiltin(_f_callee_id, aResultToken, aParam + 1, aParamCount - 1);
 	else
-		aResultToken.Error(ERR_NO_OBJECT);
+		_f_throw(ERR_NO_OBJECT);
 }
 
 BIF_DECL(BIF_ObjNewEnum)
 {
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T("");
-	
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
 	if (obj)
-	{
-		if (!obj->_NewEnum(aResultToken, NULL, 0)) // Parameters are ignored.
-			aResultToken.SetExitResult(FAIL);
-	}
+		obj->_NewEnum(aResultToken, NULL, 0); // Parameters are ignored.  _NewEnum() sets return value or status.
 	else
-		aResultToken.Error(ERR_NO_OBJECT);
+		_f_throw(ERR_NO_OBJECT);
 }
 
 
@@ -397,14 +371,11 @@ BIF_DECL(BIF_ObjAddRefRelease)
 {
 	IObject *obj = (IObject *)TokenToInt64(*aParam[0]);
 	if (obj < (IObject *)65536) // Rule out some obvious errors.
-	{
-		aResultToken.Error(ERR_PARAM1_INVALID);
-		return;
-	}
-	if (ctoupper(aResultToken.marker[3]) == 'A')
-		aResultToken.value_int64 = obj->AddRef();
+		_f_throw(ERR_PARAM1_INVALID);
+	if (_f_callee_id == FID_ObjAddRef)
+		_f_return_i(obj->AddRef());
 	else
-		aResultToken.value_int64 = obj->Release();
+		_f_return_i(obj->Release());
 }
 
 
@@ -416,10 +387,8 @@ BIF_DECL(BIF_ObjRawSet)
 {
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
 	if (!obj)
-	{
-		aResultToken.Error(ERR_PARAM1_INVALID);
-		return;
-	}
+		_f_throw(ERR_PARAM1_INVALID);
 	if (!obj->SetItem(*aParam[1], *aParam[2]))
-		aResultToken.Error(ERR_OUTOFMEM);
+		_f_throw(ERR_OUTOFMEM);
+	_f_return_empty;
 }

@@ -210,7 +210,16 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_NO_OBJECT _T("No object to invoke.")
 #define ERR_NO_MEMBER _T("Unknown property or method.")
 #define ERR_NO_GUI _T("No default GUI.")
+#define ERR_NO_STATUSBAR _T("No StatusBar.")
+#define ERR_NO_LISTVIEW _T("No ListView.")
+#define ERR_NO_TREEVIEW _T("No TreeView.")
 #define ERR_PCRE_EXEC _T("PCRE execution error.")
+#define ERR_ARRAY_NOT_MULTIDIM _T("Array is not multi-dimensional.")
+#define ERR_NEW_NO_CLASS _T("Missing class object for \"new\" operator.")
+#define ERR_INVALID_ARG_TYPE _T("Invalid arg type.")
+#define ERR_INVALID_RETURN_TYPE _T("Invalid return type.")
+#define ERR_INVALID_LENGTH _T("Invalid Length.")
+#define ERR_INVALID_USAGE _T("Invalid usage.")
 
 #define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
@@ -375,6 +384,38 @@ struct ArgStruct
 // The following macro is used for definitions and declarations of built-in functions:
 #define BIF_DECL(name) void name(BIF_DECL_PARAMS)
 
+#define _f__oneline(act)		do { act } while (0)		// Make the macro safe to use like a function, under if(), etc.
+#define _f__ret(act)			_f__oneline( act; return; )	// BIFs have no return value.
+#define _o__ret(act)			return (act)				// IObject::Invoke() returns ResultType.
+// The following macros are used in built-in functions and objects to reduce code repetition
+// and facilitate changes to the script "ABI" (i.e. the way in which parameters and return
+// values are passed around).  For instance, the built-in functions might someday be exposed
+// via COM IDispatch or coupled with different scripting languages.
+#define _f_return(...)			_f__ret(aResultToken.Return(__VA_ARGS__))
+#define _o_return(...)			_o__ret(aResultToken.Return(__VA_ARGS__))
+#define _f_throw(...)			_f__ret(aResultToken.Error(__VA_ARGS__))
+#define _o_throw(...)			_o__ret(aResultToken.Error(__VA_ARGS__))
+// The _f_set_retval macros should be used with care because the integer macros assume symbol
+// is set to its default value; i.e. don't set a string and then attempt to return an integer.
+// It is also best for maintainability to avoid setting mem_to_free or an object without
+// returning if there's any chance _f_throw() will be used, since in that case the caller
+// may or may not Free() the result.  _f_set_retval_i() may also invalidate _f_retval_buf.
+//#define _f_set_retval(...)		aResultToken.Return(__VA_ARGS__)  // Overrides the default return value but doesn't return.
+#define _f_set_retval_i(n)		(aResultToken.value_int64 = static_cast<__int64>(n)) // Assumes symbol == SYM_INTEGER, the default for BIFs.
+#define _f_set_retval_p(...)	aResultToken.ReturnPtr(__VA_ARGS__) // Overrides the default return value but doesn't return.  Arg must already be in persistent memory.
+#define _f_return_i(n)			_f__ret(_f_set_retval_i(n)) // Return an integer.  Reduces code size vs _f_return() by assuming symbol == SYM_INTEGER, the default for BIFs.
+#define _f_return_b				_f_return_i // Boolean.  Currently just returns an int because we have no boolean type.
+#define _f_return_p(...)		_f__ret(_f_set_retval_p(__VA_ARGS__)) // Return a string which is already in persistent memory.
+#define _o_return_p(...)		_o__ret(_f_set_retval_p(__VA_ARGS__)) // Return a string which is already in persistent memory.
+#define _f_return_retval		return  // Return the value set by _f_set_retval().
+#define _f_return_empty			_f_return_p(_T(""), 0)
+#define _o_return_empty			return OK  // Default return value for Invoke is "".
+#define _o_return_or_throw(p)	if (p) _o_return(p); else _o_throw(ERR_OUTOFMEM);
+#define _f_retval_buf			(aResultToken.buf)
+#define _f_retval_buf_size		MAX_NUMBER_SIZE
+#define _f_number_buf			_f_retval_buf  // An alias to show intended usage, and in case the buffer size is changed.
+#define _f_callee_id			(aResultToken.func->mID)
+
 
 // Some of these lengths and such are based on the MSDN example at
 // http://msdn.microsoft.com/library/default.asp?url=/library/en-us/sysinfo/base/enumerating_registry_subkeys.asp:
@@ -472,17 +513,45 @@ enum JoyControls {JOYCTRL_INVALID, JOYCTRL_XPOS, JOYCTRL_YPOS, JOYCTRL_ZPOS
 };
 #define IS_JOYSTICK_BUTTON(joy) (joy >= JOYCTRL_1 && joy <= JOYCTRL_BUTTON_MAX)
 
-enum WinGetCmds {WINGET_CMD_INVALID, WINGET_CMD_ID, WINGET_CMD_IDLAST, WINGET_CMD_PID, WINGET_CMD_PROCESSNAME
-	, WINGET_CMD_COUNT, WINGET_CMD_LIST, WINGET_CMD_MINMAX, WINGET_CMD_CONTROLLIST, WINGET_CMD_CONTROLLISTHWND
-	, WINGET_CMD_STYLE, WINGET_CMD_EXSTYLE, WINGET_CMD_TRANSPARENT, WINGET_CMD_TRANSCOLOR, WINGET_CMD_PROCESSPATH
-};
-
 enum MenuCommands {MENU_CMD_INVALID, MENU_CMD_SHOW, MENU_CMD_USEERRORLEVEL
 	, MENU_CMD_ADD, MENU_CMD_RENAME, MENU_CMD_CHECK, MENU_CMD_UNCHECK, MENU_CMD_TOGGLECHECK
 	, MENU_CMD_ENABLE, MENU_CMD_DISABLE, MENU_CMD_TOGGLEENABLE
 	, MENU_CMD_STANDARD, MENU_CMD_NOSTANDARD, MENU_CMD_COLOR, MENU_CMD_DEFAULT, MENU_CMD_NODEFAULT
 	, MENU_CMD_DELETE, MENU_CMD_DELETEALL, MENU_CMD_TIP, MENU_CMD_ICON, MENU_CMD_NOICON
 	, MENU_CMD_CLICK, MENU_CMD_MAINWINDOW, MENU_CMD_NOMAINWINDOW
+};
+
+// Each line in the enumeration below corresponds to a group of built-in functions (defined
+// in g_BIF) which are implemented using a single C++ function.  These IDs are passed to the
+// C++ function to tell it which function is being called.  Each group starts at ID 0 in case
+// it helps the compiler to reduce code size.
+enum BuiltInFunctionID {
+	FID_LV_GetNext = 0, FID_LV_GetCount,
+	FID_LV_Add = 0, FID_LV_Insert, FID_LV_Modify,
+	FID_LV_InsertCol = 0, FID_LV_ModifyCol, FID_LV_DeleteCol,
+	FID_TV_Add = 0, FID_TV_Modify, FID_TV_Delete,
+	FID_TV_GetNext = 0, FID_TV_GetPrev, FID_TV_GetParent, FID_TV_GetChild, FID_TV_GetSelection, FID_TV_GetCount,
+	FID_TV_Get = 0, FID_TV_GetText,
+	FID_SB_SetText = 0, FID_SB_SetParts, FID_SB_SetIcon,
+	FID_Trim = 0, FID_LTrim, FID_RTrim,
+	FID_RegExMatch = 0, FID_RegExReplace,
+	FID_GetKeyName = 0, FID_GetKeyVK = 1, FID_GetKeySC,
+	FID_StrGet = 0, FID_StrPut,
+	FID_FileExist = 0, FID_DirExist,
+	FID_WinExist = 0, FID_WinActive,
+	FID_Floor = 0, FID_Ceil,
+	FID_ASin = 0, FID_ACos,
+	FID_Sqrt = 0, FID_Log, FID_Ln,
+	FID_ObjAddRef = 0, FID_ObjRelease,
+	FID_ObjInsertAt = 0, FID_ObjRemove, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjGetAddress, FID_ObjClone,
+	FID_ObjNewEnum, // Used by Object::CallBuiltin(); must follow on from the line above.
+	FID_ComObjType = 0, FID_ComObjValue,
+	FID_WinGetID = 0, FID_WinGetIDLast, FID_WinGetPID, FID_WinGetProcessName, FID_WinGetProcessPath, FID_WinGetCount, FID_WinGetList, FID_WinGetMinMax, FID_WinGetControls, FID_WinGetControlsHwnd, FID_WinGetTransparent, FID_WinGetTransColor, FID_WinGetStyle, FID_WinGetExStyle,
+	FID_WinSetTransparent = 0, FID_WinSetTransColor, FID_WinSetAlwaysOnTop, FID_WinSetStyle, FID_WinSetExStyle, FID_WinSetEnabled, FID_WinSetRegion,
+	FID_WinMoveBottom = 0, FID_WinMoveTop,
+	FID_ProcessExist = 0, FID_ProcessClose, FID_ProcessWait, FID_ProcessWaitClose, 
+	FID_MonitorGet = 0, FID_MonitorGetWorkArea, FID_MonitorGetCount, FID_MonitorGetPrimary, FID_MonitorGetName, 
+	FID_OnExit = 0, FID_OnClipboardChange
 };
 
 #define AHK_LV_SELECT       0x0100
@@ -551,9 +620,6 @@ enum DriveCmds {DRIVE_CMD_INVALID, DRIVE_CMD_EJECT, DRIVE_CMD_LOCK, DRIVE_CMD_UN
 enum DriveGetCmds {DRIVEGET_CMD_INVALID, DRIVEGET_CMD_LIST, DRIVEGET_CMD_FILESYSTEM, DRIVEGET_CMD_LABEL
 	, DRIVEGET_CMD_SERIAL, DRIVEGET_CMD_TYPE, DRIVEGET_CMD_STATUS
 	, DRIVEGET_CMD_STATUSCD, DRIVEGET_CMD_CAPACITY, DRIVEGET_CMD_SPACEFREE};
-
-enum WinSetAttributes {WINSET_INVALID, WINSET_TRANSPARENT, WINSET_TRANSCOLOR, WINSET_ALWAYSONTOP
-	, WINSET_STYLE, WINSET_EXSTYLE, WINSET_ENABLED, WINSET_REGION};
 
 
 class Label; // Forward declaration so that each can use the other.
@@ -1490,48 +1556,6 @@ public:
 		return DRIVEGET_CMD_INVALID;
 	}
 
-	static WinSetAttributes ConvertWinSetAttribute(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf) return WINSET_INVALID;
-		if (!_tcsicmp(aBuf, _T("Transparent"))) return WINSET_TRANSPARENT;
-		if (!_tcsicmp(aBuf, _T("TransColor"))) return WINSET_TRANSCOLOR;
-		if (!_tcsicmp(aBuf, _T("AlwaysOnTop"))) return WINSET_ALWAYSONTOP;
-		if (!_tcsicmp(aBuf, _T("Style"))) return WINSET_STYLE;
-		if (!_tcsicmp(aBuf, _T("ExStyle"))) return WINSET_EXSTYLE;
-		if (!_tcsicmp(aBuf, _T("Enabled"))) return WINSET_ENABLED;
-		if (!_tcsicmp(aBuf, _T("Region"))) return WINSET_REGION;
-		return WINSET_INVALID;
-	}
-
-
-	static WinGetCmds ConvertWinGetCmd(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf) return WINGET_CMD_ID;  // If blank, return the default command.
-		if (!_tcsicmp(aBuf, _T("ID"))) return WINGET_CMD_ID;
-		if (!_tcsicmp(aBuf, _T("IDLast"))) return WINGET_CMD_IDLAST;
-		if (!_tcsicmp(aBuf, _T("PID"))) return WINGET_CMD_PID;
-		if (!_tcsicmp(aBuf, _T("ProcessName"))) return WINGET_CMD_PROCESSNAME;
-		if (!_tcsicmp(aBuf, _T("ProcessPath"))) return WINGET_CMD_PROCESSPATH;
-		if (!_tcsicmp(aBuf, _T("Count"))) return WINGET_CMD_COUNT;
-		if (!_tcsicmp(aBuf, _T("List"))) return WINGET_CMD_LIST;
-		if (!_tcsicmp(aBuf, _T("MinMax"))) return WINGET_CMD_MINMAX;
-		if (!_tcsicmp(aBuf, _T("Style"))) return WINGET_CMD_STYLE;
-		if (!_tcsicmp(aBuf, _T("ExStyle"))) return WINGET_CMD_EXSTYLE;
-		if (!_tcsicmp(aBuf, _T("Transparent"))) return WINGET_CMD_TRANSPARENT;
-		if (!_tcsicmp(aBuf, _T("TransColor"))) return WINGET_CMD_TRANSCOLOR;
-		if (!_tcsnicmp(aBuf, _T("Controls"), 8))
-		{
-			aBuf += 8;
-			if (!*aBuf)
-				return WINGET_CMD_CONTROLLIST;
-			if (!_tcsicmp(aBuf, _T("Hwnd")))
-				return WINGET_CMD_CONTROLLISTHWND;
-			// Otherwise fall through to the below.
-		}
-		// Otherwise:
-		return WINGET_CMD_INVALID;
-	}
-
 	static ToggleValueType ConvertOnOff(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, or blank.
 	{
@@ -1860,12 +1884,21 @@ class Func : public IObject
 {
 public:
 	LPTSTR mName;
-	union {BuiltInFunctionType mBIF; Line *mJumpToLine;};
-	union {FuncParam *mParam; UCHAR *mOutputVars;}; // For UDFs, mParam will hold an array of FuncParams.
-	int mParamCount; // The number of items in the above array.  This is also the function's maximum number of params.
+	union {
+		struct { // User-defined functions.
+			Line *mJumpToLine;
+			FuncParam *mParam; // Holds an array of FuncParams (array length: mParamCount).
+			Object *mClass; // The class which this Func was defined in, if applicable.
+		};
+		struct { // Built-in functions.
+			BuiltInFunctionType mBIF;
+			UCHAR *mOutputVars; // String of indices indicating which params are output vars (for ACT_FUNC and BIF_PerformAction).
+			BuiltInFunctionID mID; // For code sharing: this function's ID in the group of functions which share the same C++ function.
+		};
+	};
+	int mParamCount; // The function's maximum number of parameters.  For UDFs, also the number of items in the mParam array.
 	int mMinParams;  // The number of mandatory parameters (populated for both UDFs and built-in's).
 	Label *mFirstLabel, *mLastLabel; // Linked list of private labels.
-	Object *mClass; // The class which this Func was defined in, if applicable.
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	Var **mGlobalVar; // Array of global declarations.
 	int mVarCount, mVarCountMax, mLazyVarCount, mGlobalVarCount; // Count of items in the above array as well as the maximum capacity.
@@ -1979,10 +2012,10 @@ public:
 
 	Func(LPTSTR aFuncName, bool aIsBuiltIn) // Constructor.
 		: mName(aFuncName) // Caller gave us a pointer to dynamic memory for this.
-		, mBIF(NULL)
-		, mParam(NULL), mParamCount(0), mMinParams(0)
+		, mBIF(NULL) // Also initializes mJumpToLine via union.
+		, mParam(NULL), mParamCount(0), mMinParams(0) // Also initializes mOutputVar via union (mParam).
 		, mFirstLabel(NULL), mLastLabel(NULL)
-		, mClass(NULL)
+		, mClass(NULL) // Also initializes mID via union.
 		, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 		, mGlobalVar(NULL), mGlobalVarCount(0)
 		, mInstances(0)
@@ -2003,10 +2036,11 @@ class ExprOpFunc : public Func
 	// These are not inserted into the script's function list, so mName is used only to pass a simple
 	// identifier to mBIF (currently only BIF_ObjInvoke).
 public:
-	ExprOpFunc(BuiltInFunctionType aBIF, INT_PTR aID)
-		: Func((LPTSTR)aID, true)
+	ExprOpFunc(BuiltInFunctionType aBIF, int aID)
+		: Func(_T("<object>"), true) // Name is used by the debugger.
 	{
 		mBIF = aBIF;
+		mID = (BuiltInFunctionID)aID;
 		// Allow any number of parameters, since these functions aren't called directly by users
 		// and might break the rules in some cases, such as BIF_ObjGetInPlace() having "0" visible
 		// parameters but actually reading 2 which are then also passed to the next function call.
@@ -2021,6 +2055,7 @@ struct FuncEntry
 	BuiltInFunctionType mBIF;
 	UCHAR mMinParams, mMaxParams;
 	bool mHasReturn;
+	UCHAR mID;
 	UCHAR mOutputVars[MAX_FUNC_OUTPUT_VAR];
 };
 
@@ -2887,8 +2922,8 @@ BIF_DECL(BIF_Type);
 
 
 BIF_DECL(BIF_IsObject);
-BIF_DECL(BIF_ObjCreate);
-BIF_DECL(BIF_ObjArray);
+BIF_DECL(BIF_Object);
+BIF_DECL(BIF_Array);
 BIF_DECL(BIF_ObjInvoke); // Pseudo-operator. See script_object.cpp for comments.
 BIF_DECL(BIF_ObjGetInPlace); // Pseudo-operator.
 BIF_DECL(BIF_ObjNew); // Pseudo-operator.

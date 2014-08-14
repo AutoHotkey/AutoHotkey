@@ -311,6 +311,7 @@ private: // Force code to use one of the above methods, for clarity.
 #define STACK_PUSH(token_ptr) stack[stack_count++] = token_ptr
 #define STACK_POP stack[--stack_count]  // To be used as the r-value for an assignment.
 
+class Func;
 struct ResultToken : public ExprTokenType
 {
 	LPTSTR mem_to_free;
@@ -346,6 +347,39 @@ struct ResultToken : public ExprTokenType
 	}
 	
 	LPTSTR Malloc(LPTSTR aValue, size_t aLength);
+
+	ResultType Return(LPTSTR aValue, size_t aLength = -1);
+	ResultType ReturnPtr(LPTSTR aValue, size_t aLength = -1)
+	// Return a string which is already in persistent memory.
+	{
+		ASSERT(aValue);
+		symbol = SYM_STRING;
+		marker = aValue;
+		return OK;
+	}
+	ResultType Return(__int64 aValue)
+	{
+		symbol = SYM_INTEGER;
+		value_int64 = aValue;
+		return OK;
+	}
+	ResultType Return(int aValue) { return Return((__int64)aValue); }
+	ResultType Return(UINT aValue) { return Return((__int64)aValue); }
+	ResultType Return(DWORD aValue) { return Return((__int64)aValue); }
+	ResultType Return(UINT64 aValue) { return Return((__int64)aValue); }
+	ResultType Return(double aValue)
+	{
+		symbol = SYM_FLOAT;
+		value_double = aValue;
+		return OK;
+	}
+	ResultType Return(IObject *aValue)
+	// Caller must AddRef() if appropriate and must not pass NULL.
+	{
+		symbol = SYM_OBJECT;
+		object = aValue;
+		return OK;
+	}
 	
 	ResultType SetExitResult(ResultType aResult)
 	{
@@ -370,6 +404,8 @@ struct ResultToken : public ExprTokenType
 
 	ResultType Error(LPCTSTR aErrorText);
 	ResultType Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo);
+
+	Func *func; // For maintainability, this is separate from the ExprTokenType union.  Its main uses are func->mID and func->mOutputVars.
 
 private:
 	// Currently can't be included in the value union because meta-functions

@@ -1860,40 +1860,32 @@ BIF_DECL(BIF_Process)
 {
 	BIF_DECL_STRING_PARAM(1, aProcess);
 
-	ProcessCmds process_cmd = Line::ConvertProcessCmd(aResultToken.marker + 7);
-	// Since an invalid name wouldn't resolve to this function in the first place,
-	// the following check should be unnecessary:
-	ASSERT(process_cmd != PROCESS_CMD_INVALID);
-
 	HANDLE hProcess;
 	DWORD pid;
 	
-	//aResultToken.symbol = SYM_INTEGER; // Caller already set this.
-	aResultToken.value_int64 = 0; // Set default return value: indicate failure.
-
+	BuiltInFunctionID process_cmd = _f_callee_id;
 	switch (process_cmd)
 	{
-	case PROCESS_CMD_EXIST:
+	case FID_ProcessExist:
 		// Return the discovered PID or zero if none.
-		aResultToken.value_int64 = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId();
-		return; 
+		_f_return_i(*aProcess ? ProcessExist(aProcess) : GetCurrentProcessId());
 
-	case PROCESS_CMD_CLOSE:
+	case FID_ProcessClose:
+		_f_set_retval_i(0); // Set default.
 		if (pid = ProcessExist(aProcess))  // Assign
 		{
 			if (hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid))
 			{
 				if (TerminateProcess(hProcess, 0))
-					aResultToken.value_int64 = pid; // Indicate success.
+					_f_set_retval_i(pid); // Indicate success.
 				CloseHandle(hProcess);
-				return;
 			}
 		}
 		// Since above didn't return, yield a PID of 0 to indicate failure.
-		return;
+		_f_return_retval;
 
-	case PROCESS_CMD_WAIT:
-	case PROCESS_CMD_WAITCLOSE:
+	case FID_ProcessWait:
+	case FID_ProcessWaitClose:
 	{
 		// This section is similar to that used for WINWAIT and RUNWAIT:
 		bool wait_indefinitely;
@@ -1913,12 +1905,11 @@ BIF_DECL(BIF_Process)
 		for (;;)
 		{ // Always do the first iteration so that at least one check is done.
 			pid = ProcessExist(aProcess);
-			if ((process_cmd == PROCESS_CMD_WAIT) == (pid != 0)) // i.e. condition of this cmd is satisfied.
+			if ((process_cmd == FID_ProcessWait) == (pid != 0)) // i.e. condition of this cmd is satisfied.
 			{
 				// For WaitClose: Since PID cannot always be determined (i.e. if process never existed,
 				// there was no need to wait for it to close), for consistency, return 0 on success.
-				aResultToken.value_int64 = pid;
-				return;
+				_f_return_i(pid);
 			}
 			// Must cast to int or any negative result will be lost due to DWORD type:
 			if (wait_indefinitely || (int)(sleep_duration - (GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)
@@ -1929,8 +1920,7 @@ BIF_DECL(BIF_Process)
 			{
 				// Return 0 if "Process Wait" times out; or the PID of the process that still exists
 				// if "Process WaitClose" times out.
-				aResultToken.value_int64 = pid;
-				return;
+				_f_return_i(pid);
 			}
 		} // for()
 	} // case
@@ -1947,8 +1937,6 @@ BIF_DECL(BIF_ProcessSetPriority)
 	DWORD pid, priority;
 	HANDLE hProcess;
 
-	aResultToken.value_int64 = 0; // Set default.
-
 	switch (_totupper(*aPriority))
 	{
 	case 'L': priority = IDLE_PRIORITY_CLASS; break;
@@ -1958,9 +1946,10 @@ BIF_DECL(BIF_ProcessSetPriority)
 	case 'H': priority = HIGH_PRIORITY_CLASS; break;
 	case 'R': priority = REALTIME_PRIORITY_CLASS; break;
 	default:
-		// Since above didn't break, yield a PID of 0 to indicate failure.
-		return;
+		// Since above didn't break, aPriority was invalid.
+		_f_throw(ERR_PARAM1_INVALID);
 	}
+
 	if (pid = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId())  // Assign
 	{
 		if (hProcess = OpenProcess(PROCESS_SET_INFORMATION, FALSE, pid)) // Assign
@@ -1969,12 +1958,13 @@ BIF_DECL(BIF_ProcessSetPriority)
 			// since "above/below normal" aren't that dramatically different from normal:
 			if (!g_os.IsWin2000orLater() && (priority == BELOW_NORMAL_PRIORITY_CLASS || priority == ABOVE_NORMAL_PRIORITY_CLASS))
 				priority = NORMAL_PRIORITY_CLASS;
-			if (SetPriorityClass(hProcess, priority))
-				aResultToken.value_int64 = pid; // Indicate success.
+			if (!SetPriorityClass(hProcess, priority))
+				pid = 0; // Indicate failure.
 			CloseHandle(hProcess);
 		}
 	}
 	// Otherwise, return a PID of 0 to indicate failure.
+	_f_return_i(pid);
 }
 
 
@@ -2139,28 +2129,21 @@ BIF_DECL(BIF_WinSet)
 {
 	BIF_DECL_STRING_PARAM(1, aValue);
 
-	WinSetAttributes attrib = Line::ConvertWinSetAttribute(aResultToken.marker + 6); // Get the "CMD" from "WinSetCMD".
-	// Since an invalid name wouldn't resolve to this function in the first place,
-	// the following check should be unnecessary:
-	ASSERT(attrib != WINSET_INVALID);
-
-	// Set default return value.
-	aResultToken.value_int64 = FALSE; // Indicate failure.
-
 	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1);
 	if (!target_window)
 	{
 		Script::SetErrorLevelOrThrow();
-		return;
+		_f_return_b(FALSE);
 	}
 
 	int value;
 	BOOL success = FALSE;
 	DWORD exstyle;
+	BuiltInFunctionID cmd = _f_callee_id;
 
-	switch (attrib)
+	switch (cmd)
 	{
-	case WINSET_ALWAYSONTOP:
+	case FID_WinSetAlwaysOnTop:
 	{
 		if (   !(exstyle = GetWindowLong(target_window, GWL_EXSTYLE))   )
 			break;
@@ -2172,8 +2155,7 @@ BIF_DECL(BIF_WinSet)
 		case NEUTRAL: // parameter was blank, so it defaults to TOGGLE.
 		case TOGGLE: topmost_or_not = (exstyle & WS_EX_TOPMOST) ? HWND_NOTOPMOST : HWND_TOPMOST; break;
 		default:
-			aResultToken.Error(ERR_PARAM1_INVALID);
-			return;
+			_f_throw(ERR_PARAM1_INVALID);
 		}
 		// SetWindowLong() didn't seem to work, at least not on some windows.  But this does.
 		// As of v1.0.25.14, SWP_NOACTIVATE is also specified, though its absence does not actually
@@ -2185,8 +2167,8 @@ BIF_DECL(BIF_WinSet)
 		break;
 	}
 
-	case WINSET_TRANSPARENT:
-	case WINSET_TRANSCOLOR:
+	case FID_WinSetTransparent:
+	case FID_WinSetTransColor:
 	{
 		// IMPORTANT (when considering future enhancements to these commands): Unlike
 		// SetLayeredWindowAttributes(), which works on Windows 2000, GetLayeredWindowAttributes()
@@ -2217,7 +2199,7 @@ BIF_DECL(BIF_WinSet)
 			success = SetWindowLong(target_window, GWL_EXSTYLE, exstyle & ~WS_EX_LAYERED);
 		else
 		{
-			if (attrib == WINSET_TRANSPARENT)
+			if (cmd == FID_WinSetTransparent)
 			{
 				// Update to the below for v1.0.23: WS_EX_LAYERED can now be removed via the above:
 				// NOTE: It seems best never to remove the WS_EX_LAYERED attribute, even if the value is 255
@@ -2237,7 +2219,7 @@ BIF_DECL(BIF_WinSet)
 				SetWindowLong(target_window, GWL_EXSTYLE, exstyle | WS_EX_LAYERED);
 				success = MySetLayeredWindowAttributes(target_window, 0, value, LWA_ALPHA);
 			}
-			else // attrib == WINSET_TRANSCOLOR
+			else // cmd == FID_WinSetTransColor
 			{
 				// The reason WINSET_TRANSCOLOR accepts both the color and an optional transparency settings
 				// is that calling SetLayeredWindowAttributes() with only the LWA_COLORKEY flag causes the
@@ -2274,16 +2256,15 @@ BIF_DECL(BIF_WinSet)
 		break;
 	}
 
-	case WINSET_STYLE:
-	case WINSET_EXSTYLE:
+	case FID_WinSetStyle:
+	case FID_WinSetExStyle:
 	{
 		if (!*aValue)
 		{
 			// Seems best not to treat an explicit blank as zero.
-			aResultToken.Error(ERR_PARAM1_REQUIRED);
-			return;
+			_f_throw(ERR_PARAM1_REQUIRED);
 		}
-		int style_index = (attrib == WINSET_STYLE) ? GWL_STYLE : GWL_EXSTYLE;
+		int style_index = (cmd == FID_WinSetStyle) ? GWL_STYLE : GWL_EXSTYLE;
 		DWORD new_style, orig_style = GetWindowLong(target_window, style_index);
 		if (!_tcschr(_T("+-^"), *aValue))
 			new_style = ATOU(aValue); // No prefix, so this new style will entirely replace the current style.
@@ -2318,25 +2299,24 @@ BIF_DECL(BIF_WinSet)
 		break;
 	}
 
-	case WINSET_ENABLED: // This is separate from WINSET_STYLE because merely changing the WS_DISABLED style is usually not as effective as calling EnableWindow().
+	case FID_WinSetEnabled: // This is separate from WINSET_STYLE because merely changing the WS_DISABLED style is usually not as effective as calling EnableWindow().
 		switch (Line::ConvertOnOffToggle(aValue))
 		{
 		case TOGGLED_ON:	success = EnableWindow(target_window, TRUE); break;
 		case TOGGLED_OFF:	success = EnableWindow(target_window, FALSE); break;
 		case TOGGLE:		success = EnableWindow(target_window, !IsWindowEnabled(target_window)); break;
 		default:
-			aResultToken.Error(ERR_PARAM1_INVALID);
-			return;
+			_f_throw(ERR_PARAM1_INVALID);
 		}
 		break;
 
-	case WINSET_REGION:
+	case FID_WinSetRegion:
 		WinSetRegion(target_window, aValue, aResultToken);
 		return;
 
 	} // switch()
-	aResultToken.value_int64 = success;
 	Script::SetErrorLevelOrThrowBool(!success);
+	_f_return_b(success);
 }
 
 
@@ -2354,8 +2334,7 @@ BIF_DECL(BIF_WinRedraw)
 		// GetClientRect(mHwnd, &client_rect); InvalidateRect(mHwnd, &client_rect, TRUE);
 		InvalidateRect(target_window, NULL, TRUE);
 	}
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T("");
+	_f_return_empty;
 }
 
 
@@ -2364,15 +2343,14 @@ BIF_DECL(BIF_WinMoveTopBottom)
 {
 	if (HWND target_window = DetermineTargetWindow(aParam, aParamCount))
 	{
-		HWND mode = ctoupper(aResultToken.marker[7]) == 'B' ? HWND_BOTTOM : HWND_TOP;
+		HWND mode = _f_callee_id == FID_WinMoveBottom ? HWND_BOTTOM : HWND_TOP;
 		// Note: SWP_NOACTIVATE must be specified otherwise the target window often fails to move:
 		if (SetWindowPos(target_window, mode, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE))
 		{
-			aResultToken.value_int64 = TRUE;
-			return;
+			_f_return_b(TRUE);
 		}
 	}
-	aResultToken.value_int64 = FALSE;
+	_f_return_b(FALSE);
 }
 
 
@@ -2440,31 +2418,25 @@ ResultType Line::WinGetClass(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, 
 
 
 
-void WinGetList(ResultToken &aResultToken, WinGetCmds aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+void WinGetList(ResultToken &aResultToken, BuiltInFunctionID aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 // Helper function for WinGet() to avoid having a WindowSearch object on its stack (since that object
 // normally isn't needed).
 {
 	WindowSearch ws;
 	ws.mFindLastMatch = true; // Must set mFindLastMatch to get all matches rather than just the first.
-	if (aCmd == WINGET_CMD_LIST)
+	if (aCmd == FID_WinGetList)
 		if (  !(ws.mArray = Object::Create())  )
-			return;
+			_f_throw(ERR_OUTOFMEM);
 	// If aTitle is ahk_id nnnn, the Enum() below will be inefficient.  However, ahk_id is almost unheard of
 	// in this context because it makes little sense, so no extra code is added to make that case efficient.
 	if (ws.SetCriteria(*g, aTitle, aText, aExcludeTitle, aExcludeText)) // These criteria allow the possibility of a match.
 		EnumWindows(EnumParentFind, (LPARAM)&ws);
 	//else leave ws.mFoundCount set to zero (by the constructor).
-	if (aCmd == WINGET_CMD_LIST)
-	{
+	if (aCmd == FID_WinGetList)
 		// Return the array even if it is empty:
-		aResultToken.symbol = SYM_OBJECT;
-		aResultToken.object = ws.mArray;
-	}
-	else
-	{
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = ws.mFoundCount;
-	}
+		_f_return(ws.mArray);
+	else // FID_WinGetCount
+		_f_return_i(ws.mFoundCount);
 }
 
 void WinGetControlList(ResultToken &aResultToken, HWND aTargetWindow, bool aFetchHWNDs); // Forward declaration.
@@ -2478,61 +2450,53 @@ BIF_DECL(BIF_WinGet)
 	BIF_DECL_STRING_PARAM(3, aExcludeTitle);
 	BIF_DECL_STRING_PARAM(4, aExcludeText);
 
-	WinGetCmds cmd = Line::ConvertWinGetCmd(aResultToken.marker + 6); // Get the "CMD" from "WinGetCMD".
-	// Since an invalid name wouldn't resolve to this function in the first place,
-	// the following check should be unnecessary:
-	ASSERT(cmd != WINGET_CMD_INVALID);
+	BuiltInFunctionID cmd = _f_callee_id;
 
-	// Set default return value (it's done this way so that sub-commands which
-	// return a short string can simply write directly into aResultToken.buf):
-	aResultToken.symbol = SYM_STRING;
-	*aResultToken.buf = '\0';
-	aResultToken.marker = aResultToken.buf;
+	LPTSTR result = _f_retval_buf;
+	*result = '\0'; // Set default return value.
 
 	bool target_window_determined = true;  // Set default.
 	HWND target_window;
 	IF_USE_FOREGROUND_WINDOW(g->DetectHiddenWindows, aTitle, aText, aExcludeTitle, aExcludeText)
 	else if (!(*aTitle || *aText || *aExcludeTitle || *aExcludeText)
-		&& !(cmd == WINGET_CMD_LIST || cmd == WINGET_CMD_COUNT)) // v1.0.30.02/v1.0.30.03: Have "list"/"count" get all windows on the system when there are no parameters.
+		&& !(cmd == FID_WinGetList || cmd == FID_WinGetCount)) // v1.0.30.02/v1.0.30.03: Have "list"/"count" get all windows on the system when there are no parameters.
 		target_window = GetValidLastUsedWindow(*g);
 	else
 		target_window_determined = false;  // A different method is required.
 
 	switch(cmd)
 	{
-	case WINGET_CMD_ID:
-	case WINGET_CMD_IDLAST:
+	case FID_WinGetID:
+	case FID_WinGetIDLast:
 		if (!target_window_determined)
-			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText, cmd == WINGET_CMD_IDLAST);
+			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText, cmd == FID_WinGetIDLast);
 		if (target_window)
-			HwndToString(target_window, aResultToken.buf);
+			HwndToString(target_window, result);
 		// Otherwise, return the default value.
-		return;
+		break;
 
-	case WINGET_CMD_PID:
-	case WINGET_CMD_PROCESSNAME:
-	case WINGET_CMD_PROCESSPATH:
+	case FID_WinGetPID:
+	case FID_WinGetProcessName:
+	case FID_WinGetProcessPath:
 		if (!target_window_determined)
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 		if (target_window)
 		{
 			DWORD pid;
 			GetWindowThreadProcessId(target_window, &pid);
-			if (cmd == WINGET_CMD_PID)
+			if (cmd == FID_WinGetPID)
 			{
-				aResultToken.symbol = SYM_INTEGER;
-				aResultToken.value_int64 = pid;
-				return;
+				_f_return_i(pid);
 			}
 			// Otherwise, get the full path and name of the executable that owns this window.
 			TCHAR process_name[MAX_PATH];
-			GetProcessName(pid, process_name, _countof(process_name), cmd == WINGET_CMD_PROCESSNAME);
-			TokenSetResult(aResultToken, process_name);
+			GetProcessName(pid, process_name, _countof(process_name), cmd == FID_WinGetProcessName);
+			_f_return(process_name);
 		}
-		return;
+		break;
 
-	case WINGET_CMD_COUNT:
-	case WINGET_CMD_LIST:
+	case FID_WinGetCount:
+	case FID_WinGetList:
 		// LIST retrieves a list of HWNDs for the windows that match the given criteria and stores them in
 		// an array.  The number of items in the array is stored in the base array name (unlike
 		// StringSplit, which stores them in array element #0).  This is done for performance reasons
@@ -2544,32 +2508,28 @@ BIF_DECL(BIF_WinGet)
 		// breaks from the StringSplit tradition:
 		if (target_window_determined)
 		{
-			if (cmd == WINGET_CMD_COUNT)
+			if (cmd == FID_WinGetCount)
 			{
-				aResultToken.symbol = SYM_INTEGER;
-				aResultToken.value_int64 = (target_window != NULL); // i.e. 1 if a window was found.
-				return;
+				_f_return_i(target_window != NULL); // i.e. 1 if a window was found.
 			}
-			// Otherwise, it's WINGET_CMD_LIST:
+			// Otherwise, it's FID_WinGetList:
 			Object *arr = Object::Create();
 			if (!arr)
-				return;
+				_f_throw(ERR_OUTOFMEM);
 			TCHAR buf[MAX_INTEGER_SIZE];
 			if (target_window)
 				// Since the target window has been determined, we know that it is the only window
 				// to be put into the array:
 				arr->Append(HwndToString(target_window, buf));
 			// Otherwise, return an empty array.
-			aResultToken.symbol = SYM_OBJECT;
-			aResultToken.object = arr;
-			return;
+			_f_return(arr);
 		}
 		// Otherwise, the target window(s) have not yet been determined and a special method
 		// is required to gather them.
 		WinGetList(aResultToken, cmd, aTitle, aText, aExcludeTitle, aExcludeText); // Outsourced to avoid having a WindowSearch object on this function's stack.
 		return;
 
-	case WINGET_CMD_MINMAX:
+	case FID_WinGetMinMax:
 		if (!target_window_determined)
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 		// Testing shows that it's not possible for a minimized window to also be maximized (under
@@ -2577,34 +2537,33 @@ BIF_DECL(BIF_WinGet)
 		// is no other way to determine what the restoration size and maximized state will be for a
 		// minimized window.
 		if (!target_window)
-			return;
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = IsZoomed(target_window) ? 1 : (IsIconic(target_window) ? -1 : 0);
-		return;
+			break;
+		_f_return_i(IsZoomed(target_window) ? 1 : (IsIconic(target_window) ? -1 : 0));
 
-	case WINGET_CMD_CONTROLLIST:
-	case WINGET_CMD_CONTROLLISTHWND:
-		if (!target_window_determined)
-			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
-		if (target_window)
-			WinGetControlList(aResultToken, target_window, cmd == WINGET_CMD_CONTROLLISTHWND);
-		return;
-
-	case WINGET_CMD_STYLE:
-	case WINGET_CMD_EXSTYLE:
+	case FID_WinGetControls:
+	case FID_WinGetControlsHwnd:
 		if (!target_window_determined)
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 		if (!target_window)
-			return;
-		_stprintf(aResultToken.buf, _T("0x%08X"), GetWindowLong(target_window, cmd == WINGET_CMD_STYLE ? GWL_STYLE : GWL_EXSTYLE));
+			break;
+		WinGetControlList(aResultToken, target_window, cmd == FID_WinGetControlsHwnd);
 		return;
 
-	case WINGET_CMD_TRANSPARENT:
-	case WINGET_CMD_TRANSCOLOR:
+	case FID_WinGetStyle:
+	case FID_WinGetExStyle:
 		if (!target_window_determined)
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 		if (!target_window)
-			return;
+			break;
+		_stprintf(result, _T("0x%08X"), GetWindowLong(target_window, cmd == FID_WinGetStyle ? GWL_STYLE : GWL_EXSTYLE));
+		break;
+
+	case FID_WinGetTransparent:
+	case FID_WinGetTransColor:
+		if (!target_window_determined)
+			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
+		if (!target_window)
+			break;
 		typedef BOOL (WINAPI *MyGetLayeredWindowAttributesType)(HWND, COLORREF*, BYTE*, DWORD*);
 		static MyGetLayeredWindowAttributesType MyGetLayeredWindowAttributes = (MyGetLayeredWindowAttributesType)
 			GetProcAddress(GetModuleHandle(_T("user32")), "GetLayeredWindowAttributes");
@@ -2615,27 +2574,27 @@ BIF_DECL(BIF_WinGet)
 		// SetLayeredWindowAttributes(), which works on Windows 2000, GetLayeredWindowAttributes()
 		// is supported only on XP or later.
 		if (!MyGetLayeredWindowAttributes || !(MyGetLayeredWindowAttributes(target_window, &color, &alpha, &flags)))
-			return;
-		if (cmd == WINGET_CMD_TRANSPARENT)
+			break;
+		if (cmd == FID_WinGetTransparent)
 		{
 			if (flags & LWA_ALPHA)
 			{
-				aResultToken.symbol = SYM_INTEGER;
-				aResultToken.value_int64 = (UINT)alpha;
+				_f_return_i(alpha);
 			}
 		}
-		else // WINGET_CMD_TRANSCOLOR
+		else // FID_WinGetTransColor
 		{
 			if (flags & LWA_COLORKEY)
 			{
 				// Store in hex format to aid in debugging scripts.  Also, the color is always
 				// stored in RGB format, since that's what WinSet uses:
-				_stprintf(aResultToken.buf, _T("0x%06X"), bgr_to_rgb(color));
+				_stprintf(result, _T("0x%06X"), bgr_to_rgb(color));
 			}
 			// Otherwise, this window does not have a transparent color (or it's not accessible to us,
 			// perhaps for reasons described at MSDN GetLayeredWindowAttributes()).
 		}
 	}
+	_f_return_p(result);
 }
 
 
@@ -2648,12 +2607,11 @@ void WinGetControlList(ResultToken &aResultToken, HWND aTargetWindow, bool aFetc
 {
 	control_list_type cl; // A big struct containing room to store class names and counts for each.
 	if (  !(cl.target_array = Object::Create())  )
-		return;
+		_f_throw(ERR_OUTOFMEM);
 	CL_INIT_CONTROL_LIST(cl)
 	cl.fetch_hwnds = aFetchHWNDs;
 	EnumChildWindows(aTargetWindow, EnumChildGetControlList, (LPARAM)&cl);
-	aResultToken.symbol = SYM_OBJECT;
-	aResultToken.object = cl.target_array;
+	_f_return(cl.target_array);
 }
 
 
@@ -2898,12 +2856,11 @@ ResultType Line::EnvGet(LPTSTR aEnvVarName)
 #endif
 BIF_DECL(BIF_MonitorGet)
 {
-	int cmd = ctoupper(aResultToken.marker[10]); // StrLen("MonitorGet") = 10
-
 	MonitorInfoPackage mip = {0};  // Improves maintainability to initialize unconditionally, here.
 	mip.monitor_info_ex.cbSize = sizeof(MONITORINFOEX); // Also improves maintainability.
 
-	switch(cmd)
+	BuiltInFunctionID cmd = _f_callee_id;
+	switch (cmd)
 	{
 	// For the next few cases, I'm not sure if it is possible to have zero monitors.  Obviously it's possible
 	// to not have a monitor turned on or not connected at all.  But it seems likely that these various API
@@ -2912,26 +2869,25 @@ BIF_DECL(BIF_MonitorGet)
 	// under some conditions.  However, on Win95/NT, "1" is assumed since there is probably no way to tell
 	// for sure if there are zero monitors except via GetSystemMetrics(SM_CMONITORS), which is a different
 	// animal as described below.
-	case 'C': // MonitorGetCount()
+	case FID_MonitorGetCount:
 		// Don't use GetSystemMetrics(SM_CMONITORS) because of this:
 		// MSDN: "GetSystemMetrics(SM_CMONITORS) counts only display monitors. This is different from
 		// EnumDisplayMonitors, which enumerates display monitors and also non-display pseudo-monitors."
 		mip.monitor_number_to_find = COUNT_ALL_MONITORS;
 		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
-		aResultToken.value_int64 = mip.count; // Will return zero if the API ever returns a legitimate zero.
-		break;
+		_f_return_i(mip.count); // Will return zero if the API ever returns a legitimate zero.
 
 	// Even if the first monitor to be retrieved by the EnumProc is always the primary (which is doubtful
 	// since there's no mention of this in the MSDN docs) it seems best to have this sub-cmd in case that
 	// policy ever changes:
-	case 'P': // MonitorGetPrimary()
+	case FID_MonitorGetPrimary:
 		// The mip struct's values have already initialized correctly for the below:
 		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
-		aResultToken.value_int64 = mip.count; // Will return zero if the API ever returns a legitimate zero.
-		break;
+		_f_return_i(mip.count); // Will return zero if the API ever returns a legitimate zero.
 
-	case 0: // MonitorGet(N, Left, Top, Right, Bottom)
-	case 'W': // MonitorGetWorkArea(N, Left, Top, Right, Bottom)
+	case FID_MonitorGet:
+	case FID_MonitorGetWorkArea:
+	// Params: N, Left, Top, Right, Bottom
 	{
 		mip.monitor_number_to_find = aParamCount ? (int)TokenToInt64(*aParam[0]) : 0;  // If this returns 0, it will default to the primary monitor.
 		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
@@ -2943,29 +2899,26 @@ BIF_DECL(BIF_MonitorGet)
 			for (int i = 1; i <= 4; ++i)
 				if (i < aParamCount && aParam[i]->symbol == SYM_VAR)
 					aParam[i]->var->Assign();
-			aResultToken.value_int64 = 0;
-			break;
+			_f_return_b(FALSE);
 		}
 		// Otherwise:
-		LONG *monitor_rect = (LONG *)((cmd == 'W') ? &mip.monitor_info_ex.rcWork : &mip.monitor_info_ex.rcMonitor);
+		LONG *monitor_rect = (LONG *)((cmd == FID_MonitorGetWorkArea) ? &mip.monitor_info_ex.rcWork : &mip.monitor_info_ex.rcMonitor);
 		for (int i = 1; i <= 4; ++i) // Params: N (0), Left (1), Top, Right, Bottom.
 			if (i < aParamCount && aParam[i]->symbol == SYM_VAR)
 				aParam[i]->var->Assign(monitor_rect[i-1]);
-		aResultToken.value_int64 = 1;
-		break;
+		_f_return_b(TRUE);
 	}
 
-	case 'N': // MonitorGetName(N)
+	case FID_MonitorGetName: // Param: N
 		mip.monitor_number_to_find = aParamCount ? (int)TokenToInt64(*aParam[0]) : 0;  // If this returns 0, it will default to the primary monitor.
 		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
-		aResultToken.symbol = SYM_STRING;
 		if (!mip.count || (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count))
 			// With the exception of the caller having specified a non-existent monitor number, all of
-			// the ways the above can happen are probably impossible in practice.  Make the variable
+			// the ways the above can happen are probably impossible in practice.  Make the return value
 			// blank to indicate the problem:
-			aResultToken.marker = _T("");
+			_f_return_empty;
 		else
-			TokenSetResult(aResultToken, mip.monitor_info_ex.szDevice);
+			_f_return(mip.monitor_info_ex.szDevice);
 	} // switch()
 }
 
@@ -5458,7 +5411,7 @@ ResultType Line::StringReplace()
 
 BIF_DECL(BIF_StrSplit)
 {
-	LPTSTR aInputString = TokenToString(*aParam[0], aResultToken.buf);
+	LPTSTR aInputString = ParamIndexToString(0, _f_number_buf);
 	LPTSTR *aDelimiterList = NULL;
 	int aDelimiterCount = 0;
 	LPTSTR aOmitList = _T("");
@@ -5492,11 +5445,9 @@ BIF_DECL(BIF_StrSplit)
 	Object *output_array = Object::Create();
 	if (!output_array)
 		goto throw_outofmem;
-	aResultToken.symbol = SYM_OBJECT;	// Set default, overridden only for critical errors.
-	aResultToken.object = output_array;	//
 
 	if (!*aInputString) // The input variable is blank, thus there will be zero elements.
-		return;
+		_f_return(output_array);
 	
 	if (aDelimiterCount) // The user provided a list of delimiters, so process the input variable normally.
 	{
@@ -5539,7 +5490,7 @@ BIF_DECL(BIF_StrSplit)
 				if (!output_array->Append(contents_of_next_element, element_length))
 					break;
 				// This is the only way out of the loop other than critical errors:
-				return;
+				_f_return(output_array);
 			}
 		}
 	}
@@ -5550,7 +5501,7 @@ BIF_DECL(BIF_StrSplit)
 		for (cp = aInputString; ; ++cp)
 		{
 			if (!*cp)
-				return; // All done; result already set.
+				_f_return(output_array); // All done.
 			for (dp = aOmitList; *dp; ++dp)
 				if (*cp == *dp) // This char is a member of the omitted list, thus it is not included in the output array.
 					break;
@@ -5563,11 +5514,13 @@ BIF_DECL(BIF_StrSplit)
 	// The fact that this section is executing means that a memory allocation failed and caused the
 	// loop to break, so throw an exception.
 	output_array->Release(); // Since we're not returning it.
+	// Below: Using goto probably won't reduce code size (due to compiler optimizations), but keeping
+	// rarely executed code at the end of the function might help performance due to cache utilization.
 throw_outofmem:
-	aResultToken.Error(ERR_OUTOFMEM);
-	return;
+	// Either goto was used or FELL THROUGH FROM ABOVE.
+	_f_throw(ERR_OUTOFMEM);
 throw_invalid_delimiter:
-	aResultToken.Error(ERR_PARAM2_INVALID);
+	_f_throw(ERR_PARAM2_INVALID);
 }
 
 
@@ -9691,7 +9644,7 @@ LPTSTR GetExitReasonString(ExitReasons aExitReason)
 
 BIF_DECL(BIF_OnExitOrClipboardChange)
 {
-	bool is_onexit = ctoupper(aResultToken.marker[2]) == 'E';
+	bool is_onexit = _f_callee_id == FID_OnExit;
 	Func*& func_ptr = is_onexit ? g_script.mOnExitFunc : g_script.mOnClipboardChangeFunc;
 	Func* old_func = func_ptr;
 
@@ -9703,10 +9656,8 @@ BIF_DECL(BIF_OnExitOrClipboardChange)
 			// Set a function.
 			Func* new_func = TokenToFunc(arg);
 			if (!new_func || new_func->mIsBuiltIn || new_func->mMinParams > 1 || new_func->mClass)
-			{
-				aResultToken.Error(ERR_PARAM1_INVALID);
-				return;
-			}
+				_f_throw(ERR_PARAM1_INVALID);
+
 			func_ptr = new_func;
 
 			if (!is_onexit && !old_func && new_func)
@@ -9725,15 +9676,9 @@ BIF_DECL(BIF_OnExitOrClipboardChange)
 
 	// Return old OnExit function.
 	if (old_func != NULL)
-	{
-		aResultToken.symbol = SYM_OBJECT;
-		aResultToken.object = old_func;
-	}
+		_f_return(old_func);
 	else
-	{
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
-	}
+		_f_return_empty;
 }
 
 
@@ -11311,8 +11256,7 @@ BIF_DECL(BIF_DllCall)
 			function = (void *)aParam[0]->value_int64; // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
 			break;
 		default: // SYM_FLOAT, SYM_OBJECT or not an operand.
-			aResultToken.Error(ERR_PARAM1_INVALID);
-			return;
+			_f_throw(ERR_PARAM1_INVALID);
 	}
 
 	// Determine the type of return value.
@@ -11374,10 +11318,7 @@ BIF_DECL(BIF_DllCall)
 
 		ConvertDllArgType(return_type_string, return_attrib);
 		if (return_attrib.type == DLL_ARG_INVALID)
-		{
-			aResultToken.Error(_T("Invalid return type."));
-			return;
-		}
+			_f_throw(ERR_INVALID_RETURN_TYPE);
 has_valid_return_type:
 		--aParamCount;  // Remove the last parameter from further consideration.
 #ifdef WIN32_PLATFORM
@@ -11454,8 +11395,7 @@ has_valid_return_type:
 				// to be stack memory, which would be invalid memory upon return to the caller).
 				// The complexity of this doesn't seem worth the rarity of the need, so this will be
 				// documented in the help file.
-				aResultToken.Error(_T("Invalid arg type."));
-				return;
+				_f_throw(ERR_INVALID_ARG_TYPE);
 			}
 			// Otherwise, it's a supported type of string.
 			this_dyna_param.ptr = TokenToString(this_param); // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
@@ -11488,10 +11428,7 @@ has_valid_return_type:
 		case DLL_ARG_xSTR:
 			// See the section above for comments.
 			if (IS_NUMERIC(this_param.symbol))
-			{
-				aResultToken.Error(_T("Invalid arg type."));
-				return;
-			}
+				_f_throw(ERR_INVALID_ARG_TYPE);
 			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
 			pStr[arg_count] = new UorA(CStringCharFromWChar,CStringWCharFromChar)(TokenToString(this_param));
 			this_dyna_param.ptr = pStr[arg_count]->GetBuffer();
@@ -11509,8 +11446,7 @@ has_valid_return_type:
 		case DLL_ARG_INVALID:
 			if (aParam[i]->symbol == SYM_VAR)
 				aParam[i]->var->MaybeWarnUninitialized();
-			aResultToken.Error(_T("Invalid arg type."));
-			return;
+			_f_throw(ERR_INVALID_ARG_TYPE);
 
 		default: // Namely:
 		//case DLL_ARG_INT:
@@ -11801,16 +11737,12 @@ end:
 
 
 BIF_DECL(BIF_StrLen)
-// Caller has ensured that SYM_VAR's Type() is VAR_NORMAL and that it's either not an environment
-// variable or the caller wants environment variables treated as having zero length.
-// Result is always an integer (caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need
-// to set it here).
 {
 	// Loadtime validation has ensured that there's exactly one actual parameter.
 	// Calling Length() is always valid for SYM_VAR because SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-	aResultToken.value_int64 = (aParam[0]->symbol == SYM_VAR)
+	_f_return_i((aParam[0]->symbol == SYM_VAR)
 		? (aParam[0]->var->MaybeWarnUninitialized(), aParam[0]->var->Length())
-		: _tcslen(TokenToString(*aParam[0], aResultToken.buf));  // Allow StrLen(numeric_expr) for flexibility.
+		: _tcslen(ParamIndexToString(0, _f_number_buf)));  // Allow StrLen(numeric_expr) for flexibility.
 }
 
 
@@ -11818,18 +11750,17 @@ BIF_DECL(BIF_StrLen)
 BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 {
 	// Set default return value in case of early return.
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T("");
+	_f_set_retval_p(_T(""), 0);
 
 	// Get the first arg, which is the string used as the source of the extraction. Call it "haystack" for clarity.
-	TCHAR haystack_buf[MAX_NUMBER_SIZE]; // A separate buf because aResultToken.buf is sometimes used to store the result.
-	LPTSTR haystack = ParamIndexToString(0, haystack_buf); // Remember that aResultToken.buf is part of a union, though in this case there's no danger of overwriting it since our result will always be of STRING type (not int or float).
+	TCHAR haystack_buf[MAX_NUMBER_SIZE]; // A separate buf because _f_number_buf is sometimes used to store the result.
+	LPTSTR haystack = ParamIndexToString(0, haystack_buf);
 	INT_PTR haystack_length = (INT_PTR)ParamIndexLength(0, haystack);
 
 	// Load-time validation has ensured that at least the first two parameters are present:
 	INT_PTR starting_offset = (INT_PTR)ParamIndexToInt64(1); // The one-based starting position in haystack (if any).
 	if (starting_offset > haystack_length || starting_offset == 0)
-		return; // Yield the empty string (a default set higher above).
+		_f_return_retval; // Yield the empty string (a default set higher above).
 	if (starting_offset < 0) // Same convention as RegExMatch/Replace(): Treat negative StartingPos as a position relative to the end of the string.
 	{
 		starting_offset += haystack_length;
@@ -11846,12 +11777,12 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 	else
 	{
 		if (   !(extract_length = (INT_PTR)ParamIndexToInt64(2))   )  // It has asked to extract zero characters.
-			return; // Yield the empty string (a default set higher above).
+			_f_return_retval; // Yield the empty string (a default set higher above).
 		if (extract_length < 0)
 		{
 			extract_length += remaining_length_available; // Result is the number of characters to be extracted (i.e. after omitting the number of chars specified in extract_length).
 			if (extract_length < 1) // It has asked to omit all characters.
-				return; // Yield the empty string (a default set higher above).
+				_f_return_retval; // Yield the empty string (a default set higher above).
 		}
 		else // extract_length > 0
 			if (extract_length > remaining_length_available)
@@ -11863,12 +11794,13 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 
 	if (extract_length == remaining_length_available) // All of haystack is desired (starting at starting_offset).
 	{
-		aResultToken.marker = result; // No need for any copying or termination, just send back part of haystack.
-		return;                       // Caller and Var:Assign() know that overlap is possible, so this seems safe.
+		// No need for any copying or termination, just send back part of haystack.
+		// Caller and Var:Assign() know that overlap is possible, so this seems safe.
+		_f_return_p(result, extract_length);
 	}
 	
 	// Otherwise, at least one character is being omitted from the end of haystack.
-	TokenSetResult(aResultToken, result, extract_length);
+	_f_return(result, extract_length);
 }
 
 
@@ -11877,11 +11809,9 @@ BIF_DECL(BIF_InStr)
 {
 	// Load-time validation has already ensured that at least two actual parameters are present.
 	TCHAR needle_buf[MAX_NUMBER_SIZE];
-	LPTSTR haystack = ParamIndexToString(0, aResultToken.buf);
+	LPTSTR haystack = ParamIndexToString(0, _f_number_buf);
 	LPTSTR needle = ParamIndexToString(1, needle_buf);
-	// Result type will always be an integer:
-	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
-
+	
 	// v1.0.43.03: Rather than adding a third value to the CaseSensitive parameter, it seems better to
 	// obey StringCaseSense because:
 	// 1) It matches the behavior of the equal operator (=) in expressions.
@@ -11909,15 +11839,11 @@ BIF_DECL(BIF_InStr)
 			++offset; // Convert from negative-one-based to zero-based.
 			haystack_length += offset; // i.e. reduce haystack_length by the absolute value of offset.
 			found_pos = (haystack_length >= 0) ? tcsrstr(haystack, haystack_length, needle, string_case_sense, occurrence_number) : NULL;
-			aResultToken.value_int64 = found_pos ? (found_pos - haystack + 1) : 0;  // +1 to convert to 1-based, since 0 indicates "not found".
-			return;
+			_f_return_i(found_pos ? (found_pos - haystack + 1) : 0);  // +1 to convert to 1-based, since 0 indicates "not found".
 		}
 		--offset; // Convert from one-based to zero-based.
 		if (offset > haystack_length || occurrence_number < 1 || offset < 0)
-		{
-			aResultToken.value_int64 = 0; // Match never found when offset is beyond length of string.
-			return;
-		}
+			_f_return_i(0); // Match never found when offset is beyond length of string.
 	}
 	// Since above didn't return:
 	size_t needle_length = (occurrence_number > 1) ? ParamIndexLength(1, needle) : 1; // Avoid unnecessary _tcslen() if occurrence_number == 1, which is the most common case.
@@ -11925,7 +11851,7 @@ BIF_DECL(BIF_InStr)
 	for (i = 1, found_pos = haystack + offset; ; ++i, found_pos += needle_length)
 		if (!(found_pos = tcsstr2(found_pos, needle, string_case_sense)) || i == occurrence_number)
 			break;
-	aResultToken.value_int64 = found_pos ? (found_pos - haystack + 1) : 0;
+	_f_return_i(found_pos ? (found_pos - haystack + 1) : 0);
 }
 
 
@@ -12117,39 +12043,30 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken,
 		if (!_tcsicmp(name, _T("Pos")))
 		{
 			if (pattern_found)
-			{
-				aResultToken.symbol = SYM_INTEGER;
-				aResultToken.value_int64 = mOffset[2*p] + 1;
-			}
+				_o_return(mOffset[2*p] + 1);
 			return OK;
 		}
 		else if (!_tcsicmp(name, _T("Len")))
 		{
 			if (pattern_found)
-			{
-				aResultToken.symbol = SYM_INTEGER;
-				aResultToken.value_int64 = mOffset[2*p + 1];
-			}
+				_o_return(mOffset[2*p + 1]);
 			return OK;
 		}
 		else if (!_tcsicmp(name, _T("Count")))
 		{
 			if (aParamCount == 1)
-			{
-				aResultToken.symbol = SYM_INTEGER;
-				aResultToken.value_int64 = mPatternCount - 1; // Return number of subpatterns (exclude overall match).
-			}
+				_o_return(mPatternCount - 1); // Return number of subpatterns (exclude overall match).
 			return OK;
 		}
 		else if (!_tcsicmp(name, _T("Name")))
 		{
 			if (pattern_found && mPatternName && mPatternName[p])
-				return TokenSetResult(aResultToken, mPatternName[p]);
+				_o_return(mPatternName[p]);
 			return OK;
 		}
 		else if (!_tcsicmp(name, _T("Mark")))
 		{
-			return TokenSetResult(aResultToken, aParamCount == 1 && mMark ? mMark : _T(""));
+			_o_return(aParamCount == 1 && mMark ? mMark : _T(""));
 		}
 		else if (_tcsicmp(name, _T("Value"))) // i.e. NOT "Value".
 		{
@@ -12163,7 +12080,7 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken,
 	if (pattern_found)
 	{
 		// Gives the correct result even if there was no match (because length is 0):
-		return TokenSetResult(aResultToken, mHaystack + mOffset[p*2], mOffset[p*2+1]);
+		_o_return(mHaystack + mOffset[p*2], mOffset[p*2+1]);
 	}
 
 	return INVOKE_NOT_HANDLED;
@@ -13088,8 +13005,8 @@ BIF_DECL(BIF_RegEx)
 // This function is the initial entry point for both RegExMatch() and RegExReplace().
 // Caller has set aResultToken.symbol to a default of SYM_INTEGER.
 {
-	bool mode_is_replace = ctoupper(aResultToken.marker[5]) == 'R'; // Union's marker initially contains the function name; e.g. RegEx[R]eplace.
-	LPTSTR needle = ParamIndexToString(1, aResultToken.buf); // Load-time validation has already ensured that at least two actual parameters are present.
+	bool mode_is_replace = _f_callee_id == FID_RegExReplace;
+	LPTSTR needle = ParamIndexToString(1, _f_number_buf); // Caller has already ensured that at least two actual parameters are present.
 
 	pcret_extra *extra;
 	pcret *re;
@@ -13213,18 +13130,17 @@ BIF_DECL(BIF_Ord)
 {
 	// Result will always be an integer (this simplifies scripts that work with binary zeros since an
 	// empty string yields zero).
-	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
-	LPTSTR cp = ParamIndexToString(0, aResultToken.buf);
+	LPTSTR cp = ParamIndexToString(0, _f_number_buf);
 #ifndef UNICODE
 	// This section could convert a single- or multi-byte character to a Unicode code point
 	// for consistency, but since the ANSI build won't be officially supported that doesn't
 	// seem necessary.
 #else
 	if (IS_SURROGATE_PAIR(cp[0], cp[1]))
-		aResultToken.value_int64 = ((cp[0] - 0xd800) << 10) + (cp[1] - 0xdc00) + 0x10000;
+		_f_return_i(((cp[0] - 0xd800) << 10) + (cp[1] - 0xdc00) + 0x10000);
 	else
 #endif
-		aResultToken.value_int64 = (TBYTE)*cp;
+		_f_return_i((TBYTE)*cp);
 }
 
 
@@ -13232,7 +13148,7 @@ BIF_DECL(BIF_Ord)
 BIF_DECL(BIF_Chr)
 {
 	int param1 = ParamIndexToInt(0); // Convert to INT vs. UINT so that negatives can be detected.
-	LPTSTR cp = aResultToken.buf; // If necessary, it will be moved to a persistent memory location by our caller.
+	LPTSTR cp = _f_retval_buf; // If necessary, it will be moved to a persistent memory location by our caller.
 	if (param1 < 0 || param1 > UorA(0x10FFFF, UCHAR_MAX))
 		*cp = '\0'; // Empty string indicates both Chr(0) and an out-of-bounds param1.
 #ifdef UNICODE
@@ -13251,8 +13167,7 @@ BIF_DECL(BIF_Chr)
 		cp[0] = param1;
 		cp[1] = '\0';
 	}
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = cp;
+	_f_return_p(cp);
 }
 
 
@@ -13294,7 +13209,7 @@ BIF_DECL(BIF_NumGet)
 	}
 	else // An explicit "type" is present.
 	{
-		LPTSTR type = TokenToString(*aParam[2], aResultToken.buf);
+		LPTSTR type = TokenToString(*aParam[2]); // No need to pass aBuf since any numeric value would not be recognized anyway.
 		if (ctoupper(*type) == 'U') // Unsigned.
 		{
 			++type; // Remove the first character from further consideration.
@@ -13334,8 +13249,7 @@ BIF_DECL(BIF_NumGet)
 	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
 		|| right_side_bound && target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
-		aResultToken.Error(ERR_PARAM1_INVALID);
-		return;
+		_f_throw(ERR_PARAM1_INVALID);
 	}
 
 	switch(size)
@@ -13403,7 +13317,7 @@ BIF_DECL(BIF_NumPut)
 
 	if (aParamCount > 3) // The "type" parameter is present (which is somewhat unusual).
 	{
-		LPTSTR type = TokenToString(*aParam[3], aResultToken.buf);
+		LPTSTR type = TokenToString(*aParam[3]); // No need to pass aBuf since any numeric value would not be recognized anyway.
 		if (ctoupper(*type) == 'U') // Unsigned; but in the case of NumPut, it matters only for UInt64.
 		{
 			is_unsigned = TRUE;
@@ -13447,9 +13361,7 @@ BIF_DECL(BIF_NumPut)
 			// not this time, which seems too rare to justify checking this every time.
 			target_token.var->MaybeWarnUninitialized();
 		}
-
-		aResultToken.Error(ERR_PARAM2_INVALID);
-		return;
+		_f_throw(ERR_PARAM2_INVALID);
 	}
 
 	switch(size)
@@ -13490,11 +13402,11 @@ BIF_DECL(BIF_StrGetPut)
 
 	LPCVOID source_string; // This may hold an intermediate UTF-16 string in ANSI builds.
 	int source_length;
-	if (ctoupper(aResultToken.marker[3]) == 'P')
+	if (_f_callee_id == FID_StrPut)
 	{
 		// StrPut(String, Address[, Length][, Encoding])
 		ExprTokenType &source_token = *aParam[0];
-		source_string = (LPCVOID)TokenToString(source_token, aResultToken.buf); // Safe to use aResultToken.buf since StrPut won't use TokenSetResult.
+		source_string = (LPCVOID)TokenToString(source_token, _f_number_buf); // Safe to use _f_number_buf since StrPut won't use it for the result.
 		source_length = (int)((source_token.symbol == SYM_VAR) ? source_token.var->CharLength() : _tcslen((LPCTSTR)source_string));
 		++aParam; // Remove the String param from further consideration.
 	}
@@ -13533,8 +13445,7 @@ BIF_DECL(BIF_StrGetPut)
 		{
 			// See the "Legend" above.  Either this is StrGet and Address was invalid (it can't be omitted due
 			// to prior min-param checks), or it is StrPut and there are too many parameters.
-			aResultToken.Error(source_string ? ERR_TOO_MANY_PARAMS : ERR_PARAM1_INVALID);  // StrPut : StrGet
-			return;
+			_f_throw(source_string ? ERR_TOO_MANY_PARAMS : ERR_PARAM1_INVALID);  // StrPut : StrGet
 		}
 		// else this is the special measuring mode of StrPut, where Address and Length are omitted.
 		// A length of 0 when passed to the Win API conversion functions (or the code below) means
@@ -13553,10 +13464,7 @@ BIF_DECL(BIF_StrGetPut)
 				if (length == 0 && !source_string)
 					return; // Get 0 chars.
 				if (length <= 0)
-				{
-					aResultToken.Error(_T("Invalid Length."));
-					return;
-				}
+					_f_throw(ERR_INVALID_LENGTH);
 				++aParam; // Let encoding be the next param, if present.
 			}
 			else if ((*aParam)->symbol == SYM_MISSING)
@@ -13590,14 +13498,13 @@ BIF_DECL(BIF_StrGetPut)
 		// The following catches StrPut(X, &Y) where Y is uninitialized or has zero capacity.
 		|| (address == Var::sEmptyString && source_length) )
 	{
-		aResultToken.Error(source_string ? ERR_PARAM2_INVALID : ERR_PARAM1_INVALID);
-		return;
+		_f_throw(source_string ? ERR_PARAM2_INVALID : ERR_PARAM1_INVALID);
 	}
 
 	if (source_string) // StrPut
 	{
 		int char_count; // Either bytes or characters, depending on the target encoding.
-		aResultToken.symbol = SYM_INTEGER; // All paths below return an integer.
+		aResultToken.symbol = SYM_INTEGER; // Most paths below return an integer.
 
 		if (!source_length)
 		{
@@ -13775,7 +13682,7 @@ BIF_DECL(BIF_IsLabel)
 // often performance sensitive), it might be better to add a second parameter that tells
 // IsLabel to look up the type of label, and return it as a number or letter.
 {
-	aResultToken.value_int64 = g_script.FindLabel(ParamIndexToString(0, aResultToken.buf)) ? 1 : 0; // "? 1 : 0" produces 15 bytes smaller OBJ size than "!= NULL" in this case (but apparently not in comparisons like x==y ? TRUE : FALSE).
+	_f_return_b(g_script.FindLabel(ParamIndexToString(0, _f_number_buf)) ? 1 : 0);
 }
 
 
@@ -13795,7 +13702,7 @@ BIF_DECL(BIF_IsFunc) // Lexikos: Added for use with dynamic function calls.
 // indicate to the caller not only that the function exists, but also how many parameters are required.
 {
 	Func *func = TokenToFunc(*aParam[0]);
-	aResultToken.value_int64 = func ? (__int64)func->mMinParams+1 : 0;
+	_f_return_i(func ? (__int64)func->mMinParams+1 : 0);
 }
 
 
@@ -13803,14 +13710,11 @@ BIF_DECL(BIF_IsFunc) // Lexikos: Added for use with dynamic function calls.
 BIF_DECL(BIF_Func)
 // Returns a reference to an existing user-defined or built-in function, as an object.
 {
-	Func *func = g_script.FindFunc(ParamIndexToString(0, aResultToken.buf));
+	Func *func = g_script.FindFunc(ParamIndexToString(0, _f_number_buf));
 	if (func)
-	{
-		aResultToken.symbol = SYM_OBJECT;
-		aResultToken.object = func;
-	}
+		_f_return(func);
 	else
-		aResultToken.value_int64 = 0;
+		_f_return_empty;
 }
 
 
@@ -13819,13 +13723,12 @@ BIF_DECL(BIF_IsByRef)
 	if (aParam[0]->symbol != SYM_VAR)
 	{
 		// Incorrect usage.
-		aResultToken.Error(ERR_PARAM1_INVALID);
+		_f_throw(ERR_PARAM1_INVALID);
 	}
 	else
 	{
 		// Return true if the var is an alias for another var.
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = (aParam[0]->var->ResolveAlias() != aParam[0]->var);
+		_f_return_b(aParam[0]->var->ResolveAlias() != aParam[0]->var);
 	}
 }
 
@@ -13833,7 +13736,7 @@ BIF_DECL(BIF_IsByRef)
 
 BIF_DECL(BIF_GetKeyState)
 {
-	TCHAR key_name_buf[MAX_NUMBER_SIZE]; // Because aResultToken.buf is used for something else below.
+	TCHAR key_name_buf[MAX_NUMBER_SIZE]; // Because _f_retval_buf is used for something else below.
 	LPTSTR key_name = ParamIndexToString(0, key_name_buf);
 	// Keep this in sync with GetKeyJoyState().
 	// See GetKeyJoyState() for more comments about the following lines.
@@ -13842,18 +13745,15 @@ BIF_DECL(BIF_GetKeyState)
 	vk_type vk = TextToVK(key_name);
 	if (!vk)
 	{
-		aResultToken.symbol = SYM_STRING; // ScriptGetJoyState() also requires that this be initialized.
 		if (   !(joy = (JoyControls)ConvertJoy(key_name, &joystick_id))   )
 		{
 			// It is neither a key name nor a joystick button/axis.
-			aResultToken.Error(ERR_PARAM1_INVALID);
+			_f_throw(ERR_PARAM1_INVALID);
 		}
-		else
-		{
-			// The following must be set for ScriptGetJoyState():
-			aResultToken.marker = aResultToken.buf; // If necessary, it will be moved to a persistent memory location by our caller.
-			ScriptGetJoyState(joy, joystick_id, aResultToken, true);
-		}
+		// The following must be set for ScriptGetJoyState():
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _f_retval_buf; // If necessary, it will be moved to a persistent memory location by our caller.
+		ScriptGetJoyState(joy, joystick_id, aResultToken, true);
 		return;
 	}
 	// Since above didn't return: There is a virtual key (not a joystick control).
@@ -13877,7 +13777,7 @@ BIF_DECL(BIF_GetKeyName)
 	// Get VK and/or SC from the first parameter, which may be a key name, scXXX or vkXX.
 	// Key names are allowed even for GetKeyName() for simplicity and so that it can be
 	// used to normalise a key name; e.g. GetKeyName("Esc") returns "Escape".
-	LPTSTR key = ParamIndexToString(0, aResultToken.buf);
+	LPTSTR key = ParamIndexToString(0, _f_number_buf);
 	vk_type vk = TextToVK(key, NULL, true); // Pass true for the third parameter to avoid it calling TextToSC(), in case this is something like vk23sc14F.
 	sc_type sc = TextToSC(key);
 	if (!sc)
@@ -13890,19 +13790,15 @@ BIF_DECL(BIF_GetKeyName)
 	else if (!vk)
 		vk = sc_to_vk(sc);
 
-	switch (ctoupper(aResultToken.marker[6]))
+	switch (_f_callee_id)
 	{
-	case 'V': // GetKey[V]K
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = vk;
-		break;
-	case 'S': // GetKey[S]C
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = sc;
-		break;
-	default: // GetKey[N]ame
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = GetKeyName(vk, sc, aResultToken.buf, MAX_NUMBER_SIZE, _T(""));
+	case FID_GetKeyVK:
+		_f_return_i(vk);
+	case FID_GetKeySC:
+		_f_return_i(sc);
+	//case FID_GetKeyName:
+	default:
+		_f_return_p(GetKeyName(vk, sc, _f_retval_buf, _f_retval_buf_size, _T("")));
 	}
 }
 
@@ -13997,21 +13893,19 @@ BIF_DECL(BIF_VarSetCapacity)
 			aResultToken.value_int64 -= sizeof(TCHAR); // Omit the room for the zero terminator since script capacity is defined as length vs. size.
 	} // (aParam[0]->symbol == SYM_VAR)
 	else
-		aResultToken.Error(ERR_PARAM1_INVALID);
+		_f_throw(ERR_PARAM1_INVALID);
 }
 
 
 
 BIF_DECL(BIF_FileExist)
 {
-	TCHAR filename_buf[MAX_NUMBER_SIZE]; // Because aResultToken.buf is used for something else below.
+	TCHAR filename_buf[MAX_NUMBER_SIZE]; // Because _f_number_buf is used for something else below.
 	LPTSTR filename = ParamIndexToString(0, filename_buf);
-	bool want_dir = ctoupper(*aResultToken.marker) == 'D'; // i.e. DirExist().
-	aResultToken.marker = aResultToken.buf; // If necessary, it will be moved to a persistent memory location by our caller.
-	aResultToken.symbol = SYM_STRING;
+	LPTSTR buf = _f_retval_buf; // If necessary, it will be moved to a persistent memory location by our caller.
 	DWORD attr;
 	if (DoesFilePatternExist(filename, &attr)
-		&& (!want_dir || (attr & FILE_ATTRIBUTE_DIRECTORY)))
+		&& (_f_callee_id != FID_DirExist || (attr & FILE_ATTRIBUTE_DIRECTORY)))
 	{
 		// Yield the attributes of the first matching file.  If not match, yield an empty string.
 		// This relies upon the fact that a file's attributes are never legitimately zero, which
@@ -14021,38 +13915,36 @@ BIF_DECL(BIF_FileExist)
 		// "RASHNDOCT").  Although this is unconfirmed, it's easy to handle that possibility here by
 		// checking for a blank string.  This allows FileExist() to report boolean TRUE rather than FALSE
 		// for such "mystery files":
-		FileAttribToStr(aResultToken.marker, attr);
-		if (!*aResultToken.marker) // See above.
+		FileAttribToStr(buf, attr);
+		if (!*buf) // See above.
 		{
 			// The attributes might be all 0, but more likely the file has some of the newer attributes
 			// such as FILE_ATTRIBUTE_ENCRYPTED (or has undefined attributes).  So rather than storing attr as
 			// a hex number (which could be zero and thus defeat FileExist's ability to detect the file), it
 			// seems better to store some arbitrary letter (other than those in "RASHNDOCT") so that FileExist's
 			// return value is seen as boolean "true".
-			aResultToken.marker[0] = 'X';
-			aResultToken.marker[1] = '\0';
+			buf[0] = 'X';
+			buf[1] = '\0';
 		}
 	}
 	else // Empty string is the indicator of "not found" (seems more consistent than using an integer 0, since caller might rely on it being SYM_STRING).
-		*aResultToken.marker = '\0';
+		*buf = '\0';
+	_f_return_p(buf);
 }
 
 
 
 BIF_DECL(BIF_WinExistActive)
 {
-	LPTSTR bif_name = aResultToken.marker;  // Save this early for maintainability (it is the name of the function, provided by the caller).
-	aResultToken.symbol = SYM_STRING; // Returns a string to preserve hex format.
-
 	TCHAR *param[4], param_buf[4][MAX_NUMBER_SIZE];
 	for (int j = 0; j < 4; ++j) // For each formal parameter, including optional ones.
 		param[j] = ParamIndexToOptionalString(j, param_buf[j]);
 
-	HWND found_hwnd = (ctoupper(bif_name[3]) == 'E') // Win[E]xist.
+	HWND found_hwnd = _f_callee_id == FID_WinExist
 		? WinExist(*g, param[0], param[1], param[2], param[3], false, true)
 		: WinActive(*g, param[0], param[1], param[2], param[3], true);
 
-	aResultToken.marker = HwndToString(found_hwnd, aResultToken.buf);
+	_f_return_p(HwndToString(found_hwnd, _f_retval_buf)); // Returns a string to preserve hex format.
 }
 
 
@@ -14061,8 +13953,6 @@ BIF_DECL(BIF_Round)
 // For simplicity and backward compatibility, this always yields something numeric (or a string that's numeric).
 // Even Round(empty_or_unintialized_var) is zero rather than "".
 {
-	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
-
 	// In the future, a string conversion algorithm might be better to avoid the loss
 	// of 64-bit integer precision that is currently caused by the use of doubles in
 	// the calculation:
@@ -14079,14 +13969,14 @@ BIF_DECL(BIF_Round)
 		multiplier = 1;
 	}
 	double value = ParamIndexToDouble(0);
-	aResultToken.value_double = (value >= 0.0 ? qmathFloor(value * multiplier + 0.5)
+	value = (value >= 0.0 ? qmathFloor(value * multiplier + 0.5)
 		: qmathCeil(value * multiplier - 0.5)) / multiplier;
 
 	// If incoming value is an integer, it seems best for flexibility to convert it to a
 	// floating point number whenever the second param is >0.  That way, it can be used
 	// to "cast" integers into floats.  Conversely, it seems best to yield an integer
 	// whenever the second param is <=0 or omitted.
-	if (param2 > 0) // aResultToken.value_double already contains the result.
+	if (param2 > 0)
 	{
 		// v1.0.44.01: Since Round (in its param2>0 mode) is almost always used to facilitate some kind of
 		// display or output of the number (hardly ever for intentional reducing the precision of a floating
@@ -14109,9 +13999,9 @@ BIF_DECL(BIF_Round)
 		// Also, a new parameter an be added someday to trim excess trailing zeros from param2>0's result
 		// (e.g. Round(3.50, 2, true) can be 3.5 rather than 3.50), but this seems less often desired due to
 		// column alignment and other goals where consistency is important.
-		_stprintf(buf, _T("%0.*f"), param2, aResultToken.value_double); // %f can handle doubles in MSVC++.
-		aResultToken.marker = buf;
-		aResultToken.symbol = SYM_STRING;
+		LPTSTR buf = _f_retval_buf;
+		int len = _stprintf(buf, _T("%0.*f"), param2, value); // %f can handle doubles in MSVC++.
+		_f_return_p(buf, len);
 	}
 	else
 		// Fix for v1.0.47.04: See BIF_FloorCeil() for explanation of this fix.  Currently, the only known example
@@ -14120,9 +14010,8 @@ BIF_DECL(BIF_Round)
 		//   myRounded1 := Round( myNumber, -1 )  ; Stores 1040 (correct).
 		//   ChartModule := DllCall("LoadLibrary", "str", "rmchart.dll")
 		//   myRounded2 := Round( myNumber, -1 )  ; Stores 1039 (wrong).
-		aResultToken.value_int64 = (__int64)(aResultToken.value_double + (aResultToken.value_double > 0 ? 0.2 : -0.2));
-		// Formerly above was: aResultToken.value_int64 = (__int64)aResultToken.value_double;
-		// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
+		_f_return_i((__int64)(value + (value > 0 ? 0.2 : -0.2)));
+		// Formerly above simply returned (__int64)value.
 }
 
 
@@ -14142,14 +14031,13 @@ BIF_DECL(BIF_FloorCeil)
 	// 2) Whether or not the input is already an integer.
 	// Therefore, do not change this without conducting a thorough test.
 	double x = ParamIndexToDouble(0);
-	x = (ctoupper(aResultToken.marker[0]) == 'F') ? qmathFloor(x) : qmathCeil(x);
+	x = (_f_callee_id == FID_Floor) ? qmathFloor(x) : qmathCeil(x);
 	// Fix for v1.0.40.05: For some inputs, qmathCeil/Floor yield a number slightly to the left of the target
 	// integer, while for others they yield one slightly to the right.  For example, Ceil(62/61) and Floor(-4/3)
 	// yield a double that would give an incorrect answer if it were simply truncated to an integer via
 	// type casting.  The below seems to fix this without breaking the answers for other inputs (which is
 	// surprisingly harder than it seemed).  There is a similar fix in BIF_Round().
-	aResultToken.value_int64 = (__int64)(x + (x > 0 ? 0.2 : -0.2));
-	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
+	_f_return_i((__int64)(x + (x > 0 ? 0.2 : -0.2)));
 }
 
 
@@ -14159,37 +14047,24 @@ BIF_DECL(BIF_Mod)
 	// Load-time validation has already ensured there are exactly two parameters.
 	// "Cast" each operand to Int64/Double depending on whether it has a decimal point.
 	if (!ParamIndexToNumber(0) || !ParamIndexToNumber(1)) // Non-operand or non-numeric string.
-	{
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
-		return;
-	}
+		_f_return_empty;
+
 	if (aParam[0]->symbol == SYM_INTEGER && aParam[1]->symbol == SYM_INTEGER)
 	{
 		if (!aParam[1]->value_int64) // Divide by zero.
-		{
-			aResultToken.symbol = SYM_STRING;
-			aResultToken.marker = _T("");
-		}
+			_f_return_empty;
 		else
 			// For performance, % is used vs. qmath for integers.
-			// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
-			aResultToken.value_int64 = aParam[0]->value_int64 % aParam[1]->value_int64;
+			_f_return_i(aParam[0]->value_int64 % aParam[1]->value_int64);
 	}
 	else // At least one is a floating point number.
 	{
 		double dividend = ParamIndexToDouble(0);
 		double divisor = ParamIndexToDouble(1);
 		if (divisor == 0.0) // Divide by zero.
-		{
-			aResultToken.symbol = SYM_STRING;
-			aResultToken.marker = _T("");
-		}
+			_f_return_empty;
 		else
-		{
-			aResultToken.symbol = SYM_FLOAT;
-			aResultToken.value_double = qmathFmod(dividend, divisor);
-		}
+			_f_return(qmathFmod(dividend, divisor));
 	}
 }
 
@@ -14229,8 +14104,7 @@ BIF_DECL(BIF_Sin)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
-	aResultToken.symbol = SYM_FLOAT;
-	aResultToken.value_double = qmathSin(ParamIndexToDouble(0));
+	_f_return(qmathSin(ParamIndexToDouble(0)));
 }
 
 
@@ -14239,8 +14113,7 @@ BIF_DECL(BIF_Cos)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
-	aResultToken.symbol = SYM_FLOAT;
-	aResultToken.value_double = qmathCos(ParamIndexToDouble(0));
+	_f_return(qmathCos(ParamIndexToDouble(0)));
 }
 
 
@@ -14249,8 +14122,7 @@ BIF_DECL(BIF_Tan)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
-	aResultToken.symbol = SYM_FLOAT;
-	aResultToken.value_double = qmathTan(ParamIndexToDouble(0));
+	_f_return(qmathTan(ParamIndexToDouble(0)));
 }
 
 
@@ -14260,16 +14132,14 @@ BIF_DECL(BIF_ASinACos)
 	double value = ParamIndexToDouble(0);
 	if (value > 1 || value < -1) // ASin and ACos aren't defined for such values.
 	{
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
+		_f_return_empty;
 	}
 	else
 	{
 		// For simplicity and backward compatibility, a numeric result is always returned in this case (even if
 		// the input is non-numeric or an empty string).
-		aResultToken.symbol = SYM_FLOAT;
 		// Below: marker contains either "ASin" or "ACos"
-		aResultToken.value_double = (ctoupper(aResultToken.marker[1]) == 'S') ? qmathAsin(value) : qmathAcos(value);
+		_f_return((_f_callee_id == FID_ASin) ? qmathAsin(value) : qmathAcos(value));
 	}
 }
 
@@ -14279,8 +14149,7 @@ BIF_DECL(BIF_ATan)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
-	aResultToken.symbol = SYM_FLOAT;
-	aResultToken.value_double = qmathAtan(ParamIndexToDouble(0));
+	_f_return(qmathAtan(ParamIndexToDouble(0)));
 }
 
 
@@ -14289,8 +14158,7 @@ BIF_DECL(BIF_Exp)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
-	aResultToken.symbol = SYM_FLOAT;
-	aResultToken.value_double = qmathExp(ParamIndexToDouble(0));
+	_f_return(qmathExp(ParamIndexToDouble(0)));
 }
 
 
@@ -14300,24 +14168,18 @@ BIF_DECL(BIF_SqrtLogLn)
 	double value = ParamIndexToDouble(0);
 	if (value < 0) // Result is undefined in these cases, so make blank to indicate.
 	{
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
+		_f_return_empty;
 	}
 	else
 	{
 		// For simplicity and backward compatibility, a numeric result is always returned in this case (even if
 		// the input is non-numeric or an empty string).
-		aResultToken.symbol = SYM_FLOAT;
-		switch (ctoupper(aResultToken.marker[1]))
+		switch (_f_callee_id)
 		{
-		case 'Q': // S[q]rt
-			aResultToken.value_double = qmathSqrt(value);
-			break;
-		case 'O': // L[o]g
-			aResultToken.value_double = qmathLog10(value);
-			break;
-		default: // L[n]
-			aResultToken.value_double = qmathLog(value);
+		case FID_Sqrt:	_f_return(qmathSqrt(value));
+		case FID_Log:	_f_return(qmathLog10(value));
+		//case FID_Ln:
+		default:		_f_return(qmathLog(value));
 		}
 	}
 }
@@ -14327,11 +14189,8 @@ BIF_DECL(BIF_SqrtLogLn)
 BIF_DECL(BIF_DateAdd)
 {
 	FILETIME ft;
-	if (!YYYYMMDDToFileTime(TokenToString(*aParam[0], aResultToken.buf), ft))
-	{
-		aResultToken.Error(ERR_PARAM1_INVALID);
-		return;
-	}
+	if (!YYYYMMDDToFileTime(ParamIndexToString(0, _f_number_buf), ft))
+		_f_throw(ERR_PARAM1_INVALID);
 
 	// Use double to support a floating point value for days, hours, minutes, etc:
 	double nUnits;
@@ -14353,8 +14212,7 @@ BIF_DECL(BIF_DateAdd)
 		nUnits *= ((double)10000000 * 60 * 60 * 24);
 		break;
 	default: // Invalid
-		aResultToken.Error(ERR_PARAM3_INVALID);
-		return;
+		_f_throw(ERR_PARAM3_INVALID);
 	}
 	// Convert ft struct to a 64-bit variable (maybe there's some way to avoid these conversions):
 	ULARGE_INTEGER ul;
@@ -14365,8 +14223,7 @@ BIF_DECL(BIF_DateAdd)
 	// Convert back into ft struct:
 	ft.dwLowDateTime = ul.LowPart;
 	ft.dwHighDateTime = ul.HighPart;
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = FileTimeToYYYYMMDD(aResultToken.buf, ft, false);
+	_f_return_p(FileTimeToYYYYMMDD(_f_retval_buf, ft, false));
 }
 
 
@@ -14375,29 +14232,28 @@ BIF_DECL(BIF_DateDiff)
 {
 	// Since above didn't return, the command is being used to subtract date-time values.
 	bool failed;
-	// If either ARG2 or output_var->Contents() is blank, it will default to the current time:
+	// If either parameter is blank, it will default to the current time:
 	__int64 time_until; // Declaring separate from initializing avoids compiler warning when not inside a block.
 	TCHAR number_buf[MAX_NUMBER_SIZE]; // Additional buf used in case both parameters are pure numbers.
 	time_until = YYYYMMDDSecondsUntil(
-		TokenToString(*aParam[1], aResultToken.buf),
-		TokenToString(*aParam[0], number_buf),
+		ParamIndexToString(1, _f_number_buf),
+		ParamIndexToString(0, number_buf),
 		failed);
 	if (failed) // Usually caused by an invalid component in the date-time string.
 	{
 		aResultToken.SetExitResult(FAIL); // ScriptError() was already called.
 		return;
 	}
-	switch (ctoupper(*TokenToString(*aParam[2])))
+	switch (ctoupper(*ParamIndexToString(2)))
 	{
 	case 'S': break;
 	case 'M': time_until /= 60; break; // Minutes
 	case 'H': time_until /= 60 * 60; break; // Hours
 	case 'D': time_until /= 60 * 60 * 24; break; // Days
 	default: // Invalid
-		aResultToken.Error(ERR_PARAM3_INVALID);
-		return;
+		_f_throw(ERR_PARAM3_INVALID);
 	}
-	aResultToken.value_int64 = time_until;
+	_f_return_i(time_until);
 }
 
 
@@ -14409,10 +14265,8 @@ BIF_DECL(BIF_OnMessage)
 // 2: Name of the function that will monitor the message.
 // 3: (FUTURE): A flex-list of space-delimited option words/letters.
 {
-	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
 	// Set default result in case of early return; a blank value:
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T("");
+	_f_set_retval_p(_T(""), 0);
 
 	// Load-time validation has ensured there's at least one parameter for use here:
 	UINT specified_msg = (UINT)ParamIndexToInt64(0); // Parameter #1
@@ -14425,10 +14279,7 @@ BIF_DECL(BIF_OnMessage)
 		{
 			func = TokenToFunc(*aParam[1]); // Parameter #2: function name or reference.
 			if (!func || func->mIsBuiltIn || func->mMinParams > 4 || func->mClass)
-			{
-				aResultToken.Error(ERR_PARAM2_INVALID);
-				return;
-			}
+				_f_throw(ERR_PARAM2_INVALID);
 			// Obsolete: If too many formal parameters or any are ByRef/optional, indicate failure.
 			// This helps catch bugs in scripts that are assigning the wrong function to a monitor.
 			// It also preserves additional parameters for possible future use (i.e. avoids breaking
@@ -14466,8 +14317,7 @@ BIF_DECL(BIF_OnMessage)
 	if (item_already_exists)
 	{
 		// In all cases, yield the OLD function's name as the return value:
-		_tcscpy(buf, monitor.func->mName); // Caller has ensured that buf large enough to support max function name.
-		aResultToken.marker = buf;
+		_f_set_retval_p(monitor.func->mName); // Func::mName is already in persistent memory.
 		if (mode_is_delete)
 		{
 			// The msg-monitor is deleted from the array for two reasons:
@@ -14483,17 +14333,17 @@ BIF_DECL(BIF_OnMessage)
 			--g_MsgMonitorCount;  // Must be done prior to the below.
 			if (msg_index < g_MsgMonitorCount) // An element other than the last is being removed. Shift the array to cover/delete it.
 				MoveMemory(g_MsgMonitor+msg_index, g_MsgMonitor+msg_index+1, sizeof(MsgMonitorStruct)*(g_MsgMonitorCount-msg_index));
-			return;
+			_f_return_retval;
 		}
 		if (aParamCount < 2) // Single-parameter mode: Report existing item's function name.
-			return; // Everything was already set up above to yield the proper return value.
+			_f_return_retval; // Everything was already set up above to yield the proper return value.
 		// Otherwise, an existing item is being assigned a new function or MaxThreads limit.
 		// Continue on to update this item's attributes.
 	}
 	else // This message doesn't exist in array yet.
 	{
 		if (!func) // Delete or report function-name of a non-existent item.
-			return; // Yield the default return value set earlier (an empty string).
+			_f_return_retval; // Yield the default return value set earlier (an empty string).
 		// Since above didn't return, the message is to be added as a new element. The above already
 		// verified that func is not NULL.
 		if (msg_index == MAX_MSG_MONITORS) // No room in array.
@@ -14515,12 +14365,12 @@ BIF_DECL(BIF_OnMessage)
 	else // Unspecified, so if this item is being newly created fall back to the default.
 		if (!item_already_exists)
 			monitor.max_instances = 1;
-	return;
+	_f_return_retval;
 
 rare_failure:
 	// Some kind of failure occurred which should be very rare.  Throw an exception so that script
 	// authors never need to worry about handling this error.  Use a generic message because it's rare:
-	aResultToken.Error(ERR_EXCEPTION);
+	_f_throw(ERR_EXCEPTION);
 }
 
 
@@ -14715,17 +14565,10 @@ BIF_DECL(BIF_RegisterCallback)
 //
 // Author: RegisterCallback() was created by Jonathan Rennison (JGR).
 {
-	// Set default result in case of early return; a blank value:
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T("");
-
 	// Loadtime validation has ensured that at least 1 parameter is present.
 	Func *func;
 	if (  !(func = TokenToFunc(*aParam[0])) || func->mIsBuiltIn  )  // Not a valid user-defined function.
-	{
-		aResultToken.Error(ERR_PARAM1_INVALID);
-		return;
-	}
+		_f_throw(ERR_PARAM1_INVALID);
 
 	LPTSTR options = ParamIndexToOptionalString(1);
 	int actual_param_count;
@@ -14736,8 +14579,7 @@ BIF_DECL(BIF_RegisterCallback)
 				&& !func->mIsVariadic					 // ...and the function isn't designed to accept parameters via an array (or in this case, a pointer).
 			|| actual_param_count < func->mMinParams   ) // ...or the function has too many mandatory formals (caller specified insufficient actuals to cover them all).
 		{
-			aResultToken.Error(ERR_PARAM3_INVALID);
-			return;
+			_f_throw(ERR_PARAM3_INVALID);
 		}
 	}
 	else // Default to the number of mandatory formal parameters in the function's definition.
@@ -14747,8 +14589,7 @@ BIF_DECL(BIF_RegisterCallback)
 	bool use_cdecl = StrChrAny(options, _T("Cc")); // Recognize "C" as the "CDecl" option.
 	if (!use_cdecl && actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).
 	{
-		aResultToken.Error(ERR_PARAM3_INVALID);
-		return;
+		_f_throw(ERR_PARAM3_INVALID);
 	}
 #endif
 
@@ -14757,10 +14598,7 @@ BIF_DECL(BIF_RegisterCallback)
 	// callback is called.
 	for (int i = 0; i < func->mParamCount; ++i)
 		if (func->mParam[i].is_byref)
-		{
-			aResultToken.Error(ERR_PARAM1_INVALID); // Incompatible function (param #1).
-			return;
-		}
+			_f_throw(ERR_PARAM1_INVALID); // Incompatible function (param #1).
 
 	// GlobalAlloc() and dynamically-built code is the means by which a script can have an unlimited number of
 	// distinct callbacks. On Win32, GlobalAlloc is the same function as LocalAlloc: they both point to
@@ -14775,10 +14613,7 @@ BIF_DECL(BIF_RegisterCallback)
 	//						memory and the VirtualProtect function to grant PAGE_EXECUTE access."
 	RCCallbackFunc *callbackfunc=(RCCallbackFunc*) GlobalAlloc(GMEM_FIXED,sizeof(RCCallbackFunc));	//allocate structure off process heap, automatically RWE and fixed.
 	if (!callbackfunc)
-	{
-		aResultToken.Error(ERR_OUTOFMEM);
-		return;
-	}
+		_f_throw(ERR_OUTOFMEM);
 	RCCallbackFunc &cb = *callbackfunc; // For convenience and possible code-size reduction.
 
 #ifdef WIN32_PLATFORM
@@ -14830,8 +14665,7 @@ BIF_DECL(BIF_RegisterCallback)
 	DWORD dwOldProtect;
 	VirtualProtect(callbackfunc, sizeof(RCCallbackFunc), PAGE_EXECUTE_READWRITE, &dwOldProtect);
 
-	aResultToken.symbol = SYM_INTEGER; // Override the default set earlier.
-	aResultToken.value_int64 = (__int64)callbackfunc; // Yield the callable address as the result.
+	_f_return_i((__int64)callbackfunc); // Yield the callable address as the result.
 }
 
 #endif
@@ -14840,38 +14674,25 @@ BIF_DECL(BIF_RegisterCallback)
 
 BIF_DECL(BIF_StatusBar)
 {
-	TCHAR mode = ctoupper(aResultToken.marker[6]); // Union's marker initially contains the function name. SB_Set[T]ext.
-	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
-	aResultToken.value_int64 = 0; // Set default return value. Must be done only after consulting marker above.
-	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
-	// the following conditions:
-	// Window doesn't exist.
-	// Control doesn't exist (i.e. no StatusBar in window).
+	LPTSTR buf = _f_number_buf; // Must be saved early since below overwrites the union (better maintainability too).
 
 	if (!g->GuiDefaultWindowValid()) // Always operate on thread's default window to simplify the syntax.
-	{
-		aResultToken.Error(ERR_NO_GUI);
-		return;
-	}
+		_f_throw(ERR_NO_GUI);
 	GuiType& gui = *g->GuiDefaultWindow; // For performance.
 	HWND control_hwnd;
 	if (   !(control_hwnd = gui.mStatusBarHwnd)   )
-	{
-		aResultToken.Error(_T("No StatusBar."));
-		return;
-	}
+		_f_throw(ERR_NO_STATUSBAR);
 
 	HICON hicon;
-	switch(mode)
+	switch (_f_callee_id)
 	{
-	case 'T': // SB_SetText()
-		aResultToken.value_int64 = SendMessage(control_hwnd, SB_SETTEXT
+	case FID_SB_SetText:
+		_f_return_b(SendMessage(control_hwnd, SB_SETTEXT
 			, (WPARAM)((ParamIndexIsOmitted(1) ? 0 : ParamIndexToInt64(1) - 1) // The Part# param is present.
 				     | (ParamIndexIsOmitted(2) ? 0 : ParamIndexToInt64(2) << 8)) // The uType parameter is present.
-			, (LPARAM)ParamIndexToString(0, buf)); // Load-time validation has ensured that there's at least one param in this mode.
-		break;
+			, (LPARAM)ParamIndexToString(0, buf))); // Caller has ensured that there's at least one param in this mode.
 
-	case 'P': // SB_SetParts()
+	case FID_SB_SetParts:
 		LRESULT old_part_count, new_part_count;
 		int edge, part[256]; // Load-time validation has ensured aParamCount is under 255, so it shouldn't overflow.
 		for (edge = 0, new_part_count = 0; new_part_count < aParamCount; ++new_part_count)
@@ -14890,11 +14711,12 @@ BIF_DECL(BIF_StatusBar)
 				if (hicon = (HICON)SendMessage(control_hwnd, SB_GETICON, i, 0))
 					DestroyIcon(hicon);
 
-		aResultToken.value_int64 = SendMessage(control_hwnd, SB_SETPARTS, new_part_count, (LPARAM)part)
-			? (__int64)control_hwnd : 0; // Return HWND to provide an easy means for the script to get the bar's HWND.
-		break;
+		_f_return_b(SendMessage(control_hwnd, SB_SETPARTS, new_part_count, (LPARAM)part)
+			? (__int64)control_hwnd : 0); // Return HWND to provide an easy means for the script to get the bar's HWND.
 
-	case 'I': // SB_SetIcon()
+	//case FID_SB_SetIcon:
+	default:
+		_f_set_retval_i(0); // Set default return value.
 		int unused, icon_number;
 		icon_number = ParamIndexToOptionalInt(1, 1);
 		if (icon_number == 0) // Must be != 0 to tell LoadPicture that "icon must be loaded, never a bitmap".
@@ -14910,7 +14732,7 @@ BIF_DECL(BIF_StatusBar)
 			// script doesn't load too many) since they're all destroyed by the system upon program termination.
 			if (SendMessage(control_hwnd, SB_SETICON, part_index, (LPARAM)hicon))
 			{
-				aResultToken.value_int64 = (__int64)hicon; // Override the 0 default. This allows the script to destroy the HICON later when it doesn't need it (see comments above too).
+				_f_set_retval_i((size_t)hicon); // Override the 0 default. This allows the script to destroy the HICON later when it doesn't need it (see comments above too).
 				if (hicon_old)
 					// Although the old icon is automatically destroyed here, the script can call SendMessage(SB_SETICON)
 					// itself if it wants to work with HICONs directly (for performance reasons, etc.)
@@ -14918,10 +14740,10 @@ BIF_DECL(BIF_StatusBar)
 			}
 			else
 				DestroyIcon(hicon);
-				//And leave aResultToken.value_int64 at its default value.
+				// And leave retval at its default value (0).
 		}
-		//else can't load icon, so leave aResultToken.value_int64 at its default value.
-		break;
+		//else can't load icon, so leave retval at its default value (0).
+		_f_return_retval;
 	// SB_SetTipText() not implemented (though can be done via SendMessage in the script) because the conditions
 	// under which tooltips are displayed don't seem like something a script would want very often:
 	// This ToolTip text is displayed in two situations: 
@@ -14946,7 +14768,7 @@ bool ValidGuiAndListView(ResultToken &aResultToken)
 	}
 	if (!g->GuiDefaultWindow->mCurrentListView)
 	{
-		aResultToken.Error(_T("No ListView."));
+		aResultToken.Error(ERR_NO_LISTVIEW);
 		return false;
 	}
 	return true;
@@ -14961,39 +14783,25 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 // 2: Options string.
 // 3: (FUTURE): Possible for use with LV_FindItem (though I think it can only search item text, not subitem text).
 {
-	bool mode_is_count = ctoupper(aResultToken.marker[6]) == 'C'; // Union's marker initially contains the function name. LV_Get[C]ount.  Bug-fixed for v1.0.43.09.
-	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
-	aResultToken.value_int64 = 0; // Set default return value. Must be done only after consulting marker above.
-	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
-	// the following conditions:
-	// Window doesn't exist.
-	// Control doesn't exist (i.e. no ListView in window).
-	// Item not found in ListView.
-
 	if (!ValidGuiAndListView(aResultToken))
-		return;
+		return; // Result was set by the above call.
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	HWND control_hwnd = gui.mCurrentListView->hwnd;
 
 	LPTSTR options;
-	if (mode_is_count)
+	if (_f_callee_id == FID_LV_GetCount)
 	{
-		options = (aParamCount > 0) ? omit_leading_whitespace(ParamIndexToString(0, buf)) : _T("");
+		options = (aParamCount > 0) ? omit_leading_whitespace(ParamIndexToString(0, _f_number_buf)) : _T("");
 		if (*options)
 		{
 			if (ctoupper(*options) == 'S')
-				aResultToken.value_int64 = SendMessage(control_hwnd, LVM_GETSELECTEDCOUNT, 0, 0);
+				_f_return_i(SendMessage(control_hwnd, LVM_GETSELECTEDCOUNT, 0, 0));
 			else if (!_tcsnicmp(options, _T("Col"), 3)) // "Col" or "Column". Don't allow "C" by itself, so that "Checked" can be added in the future.
-				aResultToken.value_int64 = gui.mCurrentListView->union_lv_attrib->col_count;
+				_f_return_i(gui.mCurrentListView->union_lv_attrib->col_count);
 			else
-			{
-				aResultToken.Error(ERR_PARAM1_INVALID);
-				return;
-			}
+				_f_throw(ERR_PARAM1_INVALID);
 		}
-		else
-			aResultToken.value_int64 = SendMessage(control_hwnd, LVM_GETITEMCOUNT, 0, 0);
-		return;
+		_f_return_i(SendMessage(control_hwnd, LVM_GETITEMCOUNT, 0, 0));
 	}
 	// Since above didn't return, this is GetNext() mode.
 
@@ -15009,7 +14817,7 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 	// even when the checkboxes style is in effect.  Otherwise, would have to fetch and check checkbox style
 	// bit for each call, which would slow down this heavily-called function.
 
-	options = ParamIndexToOptionalString(1, buf);
+	options = ParamIndexToOptionalString(1, _f_number_buf);
 	TCHAR first_char = ctoupper(*omit_leading_whitespace(options));
 	// To retain compatibility in the future, also allow "Check(ed)" and "Focus(ed)" since any word that
 	// starts with C or F is already supported.
@@ -15018,23 +14826,19 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 	{
 	case '\0': // Listed first for performance.
 	case 'F':
-		aResultToken.value_int64 = ListView_GetNextItem(control_hwnd, index
-			, first_char ? LVNI_FOCUSED : LVNI_SELECTED) + 1; // +1 to convert to 1-based.
-		break;
+		_f_return_i(ListView_GetNextItem(control_hwnd, index
+			, first_char ? LVNI_FOCUSED : LVNI_SELECTED) + 1); // +1 to convert to 1-based.
 	case 'C': // Checkbox: Find checked items. For performance assume that the control really has checkboxes.
 	  {
 		int item_count = ListView_GetItemCount(control_hwnd);
 		for (int i = index + 1; i < item_count; ++i) // Start at index+1 to omit the first item from the search (for consistency with the other mode above).
 			if (ListView_GetCheckState(control_hwnd, i)) // Item's box is checked.
-			{
-				aResultToken.value_int64 = i + 1; // +1 to convert from zero-based to one-based.
-				return;
-			}
-		// Since above didn't return, no match found.  The 0/false value previously set as the default is retained.
-		break;
+				_f_return_i(i + 1); // +1 to convert from zero-based to one-based.
+		// Since above didn't return, no match found.
+		_f_return_i(0);
 	  }
 	default:
-		aResultToken.Error(ERR_PARAM1_INVALID);
+		_f_throw(ERR_PARAM1_INVALID);
 	}
 }
 
@@ -15048,41 +14852,25 @@ BIF_DECL(BIF_LV_GetText)
 // 2: Row index (one-based when it comes in).
 // 3: Column index (one-based when it comes in).
 {
-	aResultToken.value_int64 = 0; // Set default return value.
-	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
-	// the following conditions:
-	// Window doesn't exist.
-	// Control doesn't exist (i.e. no ListView in window).
-	// Item not found in ListView.
-	// And others.
-
 	if (!ValidGuiAndListView(aResultToken))
-		return;
+		return; // Result was set by the above call.
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	
 	// Caller has ensured there is at least two parameters:
 	if (aParam[0]->symbol != SYM_VAR) // No output variable.  Supporting a NULL for the purpose of checking for the existence of a cell seems too rarely needed.
-	{
-		aResultToken.Error(ERR_PARAM1_INVALID);
-		return;
-	}
+		_f_throw(ERR_PARAM1_INVALID);
 
 	int row_index = ParamIndexToInt(1) - 1; // -1 to convert to zero-based.
 	if (row_index < -1) // row_index==-1 is reserved to mean "get column heading's text".
-	{
-		aResultToken.Error(ERR_PARAM2_INVALID);
-		return;
-	}
+		_f_throw(ERR_PARAM2_INVALID);
 	// If parameter 3 is omitted, default to the first column (index 0):
 	int col_index = ParamIndexIsOmitted(2) ? 0 : ParamIndexToInt(2) - 1; // -1 to convert to zero-based.
 	if (col_index < 0)
-	{
-		aResultToken.Error(ERR_PARAM3_INVALID);
-		return;
-	}
+		_f_throw(ERR_PARAM3_INVALID);
 
 	Var &output_var = *aParam[0]->var; // It was already ensured higher above that symbol==SYM_VAR.
 	TCHAR buf[LV_TEXT_BUF_SIZE];
+	bool result;
 
 	if (row_index == -1) // Special mode to get column's text.
 	{
@@ -15090,7 +14878,7 @@ BIF_DECL(BIF_LV_GetText)
 		lvc.cchTextMax = LV_TEXT_BUF_SIZE - 1;  // See notes below about -1.
 		lvc.pszText = buf;
 		lvc.mask = LVCF_TEXT;
-		if (aResultToken.value_int64 = SendMessage(gui.mCurrentListView->hwnd, LVM_GETCOLUMN, col_index, (LPARAM)&lvc)) // Assign.
+		if (result = SendMessage(gui.mCurrentListView->hwnd, LVM_GETCOLUMN, col_index, (LPARAM)&lvc)) // Assign.
 			output_var.Assign(lvc.pszText); // See notes below about why pszText is used instead of buf (might apply to this too).
 		else // On failure, it seems best to also clear the output var for better consistency and in case the script doesn't check the return value.
 			output_var.Assign();
@@ -15107,7 +14895,7 @@ BIF_DECL(BIF_LV_GetText)
 		lvi.cchTextMax = LV_TEXT_BUF_SIZE - 1; // Note that LVM_GETITEM doesn't update this member to reflect the new length.
 		// Unlike LVM_GETITEMTEXT, LVM_GETITEM indicates success or failure, which seems more useful/preferable
 		// as a return value since a text length of zero would be ambiguous: could be an empty field or a failure.
-		if (aResultToken.value_int64 = SendMessage(gui.mCurrentListView->hwnd, LVM_GETITEM, 0, (LPARAM)&lvi)) // Assign
+		if (result = SendMessage(gui.mCurrentListView->hwnd, LVM_GETITEM, 0, (LPARAM)&lvi)) // Assign
 			// Must use lvi.pszText vs. buf because MSDN says: "Applications should not assume that the text will
 			// necessarily be placed in the specified buffer. The control may instead change the pszText member
 			// of the structure to point to the new text rather than place it in the buffer."
@@ -15115,6 +14903,7 @@ BIF_DECL(BIF_LV_GetText)
 		else // On failure, it seems best to also clear the output var for better consistency and in case the script doesn't check the return value.
 			output_var.Assign();
 	}
+	_f_return_b(result);
 }
 
 
@@ -15127,35 +14916,26 @@ BIF_DECL(BIF_LV_AddInsertModify)
 // 3 and beyond: Additional field text.
 // In Add/Insert mode, if there are no text fields present, a blank for is appended/inserted.
 {
-	TCHAR mode = ctoupper(aResultToken.marker[3]); // Union's marker initially contains the function name. e.g. LV_[I]nsert.
-	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
-	aResultToken.value_int64 = 0; // Set default return value. Must be done only after consulting marker above.
-	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
-	// the following conditions:
-	// Window doesn't exist.
-	// Control doesn't exist (i.e. no ListView in window).
-	// And others as shown below.
+	BuiltInFunctionID mode = _f_callee_id;
+	LPTSTR buf = _f_number_buf; // Resolve macro early for maintainability.
 
 	int index;
-	if (mode == 'A') // For Add mode (A), use INT_MAX as a signal to append the item rather than inserting it.
+	if (mode == FID_LV_Add) // For Add mode, use INT_MAX as a signal to append the item rather than inserting it.
 	{
 		index = INT_MAX;
-		mode = 'I'; // Add has now been set up to be the same as insert, so change the mode to simplify other things.
+		mode = FID_LV_Insert; // Add has now been set up to be the same as insert, so change the mode to simplify other things.
 	}
 	else // Insert or Modify: the target row-index is their first parameter, which load-time has ensured is present.
 	{
 		index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
-		if (index < -1 || (mode != 'M' && index < 0)) // Allow -1 to mean "all rows" when in modify mode.
-		{
-			aResultToken.Error(ERR_PARAM1_INVALID);
-			return;
-		}
+		if (index < -1 || (mode != FID_LV_Modify && index < 0)) // Allow -1 to mean "all rows" when in modify mode.
+			_f_throw(ERR_PARAM1_INVALID);
 		++aParam;  // Remove the first parameter from further consideration to make Insert/Modify symmetric with Add.
 		--aParamCount;
 	}
 
 	if (!ValidGuiAndListView(aResultToken))
-		return;
+		return; // Result was set by the above call.
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	GuiControlType &control = *gui.mCurrentListView;
 
@@ -15242,7 +15022,7 @@ BIF_DECL(BIF_LV_AddInsertModify)
 			next_option += 5;
 			if (*next_option && !ATOI(next_option)) // If it's Check0, invert the mode to become "unchecked".
 				adding = !adding;
-			if (mode == 'M') // v1.0.46.10: Do this section only for Modify, not Add/Insert, to avoid generating an extra "unchecked" notification when a row is added/inserted with an initial state of "checked".  In other words, the script now receives only a "checked" notification, not an "unchecked+checked". Search on is_checked for more comments.
+			if (mode == FID_LV_Modify) // v1.0.46.10: Do this section only for Modify, not Add/Insert, to avoid generating an extra "unchecked" notification when a row is added/inserted with an initial state of "checked".  In other words, the script now receives only a "checked" notification, not an "unchecked+checked". Search on is_checked for more comments.
 			{
 				lvi.stateMask |= LVIS_STATEIMAGEMASK;
 				lvi.state |= adding ? 0x2000 : 0x1000; // The #1 image is "unchecked" and the #2 is "checked".
@@ -15309,7 +15089,7 @@ BIF_DECL(BIF_LV_AddInsertModify)
 		lvi.iItem = index; // Which row to operate upon.  This can be a huge number such as 999999 if the caller wanted to append vs. insert.
 	}
 	lvi.iSubItem = 0;  // Always zero to operate upon the item vs. sub-item (subitems have their own LVITEM struct).
-	aResultToken.value_int64 = 1; // Set default from this point forward to be true/success. It will be overridden in insert mode to be the index of the new row.
+	int result = 1; // Set default from this point forward to be true/success. It will be overridden in insert mode to be the index of the new row.
 
 	for (j = 0; j < rows_to_change; ++j, ++lvi.iItem) // ++lvi.iItem because if the loop has more than one iteration, by definition it is modifying all rows starting at 0.
 	{
@@ -15318,18 +15098,17 @@ BIF_DECL(BIF_LV_AddInsertModify)
 			lvi.pszText = ParamIndexToString(1, buf); // Fairly low-overhead, so called every iteration for simplicity (so that buf can be used for both items and subitems).
 			lvi.mask |= LVIF_TEXT;
 		}
-		if (mode == 'I') // Insert or Add.
+		if (mode == FID_LV_Insert) // Insert or Add.
 		{
 			// Note that ListView_InsertItem() will append vs. insert if the index is too large, in which case
 			// it returns the items new index (which will be the last item in the list unless the control has
 			// auto-sort style).
-			// Below uses +1 to convert from zero-based to 1-based.  This also converts a failure result of -1 to 0.
-			if (   !(aResultToken.value_int64 = ListView_InsertItem(control.hwnd, &lvi) + 1)   )
-				return; // Since item can't be inserted, no reason to try attaching any subitems to it.
+			if (   -1 == (lvi_sub.iItem = ListView_InsertItem(control.hwnd, &lvi))   )
+				_f_return_i(0); // Since item can't be inserted, no reason to try attaching any subitems to it.
 			// Update iItem with the actual index assigned to the item, which might be different than the
 			// specified index if the control has an auto-sort style in effect.  This new iItem value
 			// is used for ListView_SetCheckState() and for the attaching of any subitems to this item.
-			lvi_sub.iItem = (int)aResultToken.value_int64 - 1;  // -1 to convert back to zero-based.
+			result = lvi_sub.iItem + 1; // Convert from zero-based to 1-based.
 			// For add/insert (but not modify), testing shows that checkmark must be added only after
 			// the item has been inserted rather than provided in the lvi.state/stateMask fields.
 			// MSDN confirms this by saying "When an item is added with [LVS_EX_CHECKBOXES],
@@ -15347,7 +15126,7 @@ BIF_DECL(BIF_LV_AddInsertModify)
 			// discovers that lvi.mask==LVIF_STATE and lvi.stateMask==0).
 			// By design (to help catch script bugs), a failure here does not revert to append mode.
 			if (!ListView_SetItem(control.hwnd, &lvi)) // Returns TRUE/FALSE.
-				aResultToken.value_int64 = 0; // Indicate partial failure, but attempt to continue in case it failed for reason other than "row doesn't exist".
+				result = 0; // Indicate partial failure, but attempt to continue in case it failed for reason other than "row doesn't exist".
 			lvi_sub.iItem = lvi.iItem; // In preparation for modifying any subitems that need it.
 			if (ensure_visible) // Seems best to do this one prior to "select" below.
 				SendMessage(control.hwnd, LVM_ENSUREVISIBLE, lvi.iItem, FALSE); // PartialOK==FALSE is somewhat arbitrary.
@@ -15370,19 +15149,21 @@ BIF_DECL(BIF_LV_AddInsertModify)
 			if (aParam[i]->symbol == SYM_MISSING) // Omitted, such as LV_Modify(1,Opt,"One",,"Three").
 				continue;
 			lvi_sub.pszText = ParamIndexToString(i, buf); // Done every time through the outer loop since it's not high-overhead, and for code simplicity.
-			if (!ListView_SetItem(control.hwnd, &lvi_sub) && mode != 'I') // Relies on short-circuit. Seems best to avoid loss of item's index in insert mode, since failure here should be rare.
-				aResultToken.value_int64 = 0; // Indicate partial failure, but attempt to continue in case it failed for reason other than "row doesn't exist".
+			if (!ListView_SetItem(control.hwnd, &lvi_sub) && mode != FID_LV_Insert) // Relies on short-circuit. Seems best to avoid loss of item's index in insert mode, since failure here should be rare.
+				result = 0; // Indicate partial failure, but attempt to continue in case it failed for reason other than "row doesn't exist".
 		}
 	} // outer for()
 
 	// When the control has no rows, work around the fact that LVM_SETITEMCOUNT delivers less than 20%
 	// of its full benefit unless done after the first row is added (at least on XP SP1).  A non-zero
 	// row_count_hint tells us that this message should be sent after the row has been inserted/appended:
-	if (control.union_lv_attrib->row_count_hint > 0 && mode == 'I')
+	if (control.union_lv_attrib->row_count_hint > 0 && mode == FID_LV_Insert)
 	{
 		SendMessage(control.hwnd, LVM_SETITEMCOUNT, control.union_lv_attrib->row_count_hint, 0); // Last parameter should be 0 for LVS_OWNERDATA (verified if you look at the definition of ListView_SetItemCount macro).
 		control.union_lv_attrib->row_count_hint = 0; // Reset so that it only gets set once per request.
 	}
+
+	_f_return_i(result);
 }
 
 
@@ -15392,34 +15173,21 @@ BIF_DECL(BIF_LV_Delete)
 // Parameters:
 // 1: Row index (one-based when it comes in).
 {
-	aResultToken.value_int64 = 0; // Set default return value.
-	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
-	// the following conditions:
-	// Window doesn't exist.
-	// Control doesn't exist (i.e. no ListView in window).
-	// And others as shown below.
-
 	if (!ValidGuiAndListView(aResultToken))
-		return;
+		return; // Result was set by the above call.
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	HWND control_hwnd = gui.mCurrentListView->hwnd;
 
 	if (ParamIndexIsOmitted(0))
-	{
-		aResultToken.value_int64 = SendMessage(control_hwnd, LVM_DELETEALLITEMS, 0, 0); // Returns TRUE/FALSE.
-		return;
-	}
+		_f_return_b(SendMessage(control_hwnd, LVM_DELETEALLITEMS, 0, 0)); // Returns TRUE/FALSE.
 
 	// Since above didn't return, there is a first parameter present.
 	int index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 	if (index > -1)
-		aResultToken.value_int64 = SendMessage(control_hwnd, LVM_DELETEITEM, index, 0); // Returns TRUE/FALSE.
+		_f_return_b(SendMessage(control_hwnd, LVM_DELETEITEM, index, 0)); // Returns TRUE/FALSE.
 	else
-	{
 		// Even if index==0, for safety, it seems best not to do a delete-all.
-		aResultToken.Error(ERR_PARAM1_INVALID);
-		return;
-	}
+		_f_throw(ERR_PARAM1_INVALID);
 }
 
 
@@ -15432,17 +15200,12 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 // 3: New text of column
 // There are also some special modes when only zero or one parameter is present, see below.
 {
-	TCHAR mode = ctoupper(aResultToken.marker[3]); // Union's marker initially contains the function name. LV_[I]nsertCol.
-	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
-	aResultToken.value_int64 = 0; // Set default return value. Must be done only after consulting marker above.
-	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
-	// the following conditions:
-	// Window doesn't exist.
-	// Control doesn't exist (i.e. no ListView in window).
-	// Column not found in ListView.
+	BuiltInFunctionID mode = _f_callee_id;
+	LPTSTR buf = _f_number_buf; // Resolve macro early for maintainability.
+	_f_set_retval_i(0); // Set default return value.
 
 	if (!ValidGuiAndListView(aResultToken))
-		return;
+		return; // Result was set by the above call.
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	GuiControlType &control = *gui.mCurrentListView;
 	lv_attrib_type &lv_attrib = *control.union_lv_attrib;
@@ -15452,27 +15215,26 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 		index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 	else // Zero parameters.  Load-time validation has ensured that the 'D' (delete) mode cannot have zero params.
 	{
-		if (mode == 'M')
+		if (mode == FID_LV_ModifyCol)
 		{
 			if (GuiType::ControlGetListViewMode(control.hwnd) != LVS_REPORT)
-				return; // And leave aResultToken.value_int64 at 0 to indicate failure.
+				_f_return_retval; // Return 0 to indicate failure.
 			// Otherwise:
-			aResultToken.value_int64 = 1; // Always successful (for consistency), regardless of what happens below.
 			// v1.0.36.03: Don't attempt to auto-size the columns while the view is not report-view because
 			// that causes any subsequent switch to the "list" view to be corrupted (invisible icons and items):
 			for (int i = 0; ; ++i) // Don't limit it to lv_attrib.col_count in case script added extra columns via direct API calls.
 				if (!ListView_SetColumnWidth(control.hwnd, i, LVSCW_AUTOSIZE)) // Failure means last column has already been processed.
-					break; // Break vs. return in case the loop has zero iterations due to zero columns (not currently possible, but helps maintainability).
-			return;
+					break;
+			_f_return_b(1); // Always successful, regardless of what happened in the loop above.
 		}
 		// Since above didn't return, mode must be 'I' (insert).
 		index = lv_attrib.col_count; // When no insertion index was specified, append to the end of the list.
 	}
 
 	// Do this prior to checking if index is in bounds so that it can support columns beyond LV_MAX_COLUMNS:
-	if (mode == 'D') // Delete a column.  In this mode, index parameter was made mandatory via load-time validation.
+	if (mode == FID_LV_DeleteCol) // Delete a column.  In this mode, index parameter was made mandatory via load-time validation.
 	{
-		if (aResultToken.value_int64 = ListView_DeleteColumn(control.hwnd, index))  // Returns TRUE/FALSE.
+		if (ListView_DeleteColumn(control.hwnd, index))  // Returns TRUE/FALSE.
 		{
 			// It's important to note that when the user slides columns around via drag and drop, the
 			// column index as seen by the script is not changed.  This is fortunate because otherwise,
@@ -15484,23 +15246,24 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 				--lv_attrib.col_count; // Must be done prior to the below.
 			if (index < lv_attrib.col_count) // When a column other than the last was removed, adjust the array so that it stays in sync with actual columns.
 				MoveMemory(lv_attrib.col+index, lv_attrib.col+index+1, sizeof(lv_col_type)*(lv_attrib.col_count-index));
+			_f_set_retval_i(1);
 		}
-		return;
+		_f_return_retval;
 	}
 	// Do this prior to checking if index is in bounds so that it can support columns beyond LV_MAX_COLUMNS:
-	if (mode == 'M' && aParamCount < 2) // A single parameter is a special modify-mode to auto-size that column.
+	if (mode == FID_LV_ModifyCol && aParamCount < 2) // A single parameter is a special modify-mode to auto-size that column.
 	{
 		// v1.0.36.03: Don't attempt to auto-size the columns while the view is not report-view because
 		// that causes any subsequent switch to the "list" view to be corrupted (invisible icons and items):
 		if (GuiType::ControlGetListViewMode(control.hwnd) == LVS_REPORT)
-			aResultToken.value_int64 = ListView_SetColumnWidth(control.hwnd, index, LVSCW_AUTOSIZE);
-		//else leave aResultToken.value_int64 set to 0.
-		return;
+			_f_set_retval_i(ListView_SetColumnWidth(control.hwnd, index, LVSCW_AUTOSIZE));
+		//else leave retval set to 0.
+		_f_return_retval;
 	}
-	if (mode == 'I')
+	if (mode == FID_LV_InsertCol)
 	{
 		if (lv_attrib.col_count >= LV_MAX_COLUMNS) // No room to insert or append.
-			return;
+			_f_return_retval;
 		if (index >= lv_attrib.col_count) // For convenience, fall back to "append" when index too large.
 			index = lv_attrib.col_count;
 	}
@@ -15509,7 +15272,7 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 	// since col-attrib array can get out of sync with actual columns that way).
 
 	if (index < 0 || index >= LV_MAX_COLUMNS) // For simplicity, do nothing else if index out of bounds.
-		return; // Avoid array under/overflow below.
+		_f_return_retval; // Avoid array under/overflow below.
 
 	// In addition to other reasons, must convert any numeric value to a string so that an isolated width is
 	// recognized, e.g. LV_SetCol(1, old_width + 10):
@@ -15518,18 +15281,18 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 	// It's done the following way so that when in insert-mode, if the column fails to be inserted, don't
 	// have to remove the inserted array element from the lv_attrib.col array:
 	lv_col_type temp_col = {0}; // Init unconditionally even though only needed for mode=='I'.
-	lv_col_type &col = (mode == 'I') ? temp_col : lv_attrib.col[index]; // Done only after index has been confirmed in-bounds.
+	lv_col_type &col = (mode == FID_LV_InsertCol) ? temp_col : lv_attrib.col[index]; // Done only after index has been confirmed in-bounds.
 
 	LVCOLUMN lvc;
 	lvc.mask = LVCF_FMT;
-	if (mode == 'M') // Fetch the current format so that it's possible to leave parts of it unaltered.
+	if (mode == FID_LV_ModifyCol) // Fetch the current format so that it's possible to leave parts of it unaltered.
 		ListView_GetColumn(control.hwnd, index, &lvc);
 	else // Mode is "insert".
 		lvc.fmt = 0;
 
 	// Init defaults prior to parsing options:
 	bool sort_now = false;
-	int do_auto_size = (mode == 'I') ? LVSCW_AUTOSIZE_USEHEADER : 0;  // Default to auto-size for new columns.
+	int do_auto_size = (mode == FID_LV_InsertCol) ? LVSCW_AUTOSIZE_USEHEADER : 0;  // Default to auto-size for new columns.
 	TCHAR sort_now_direction = 'A'; // Ascending.
 	int new_justify = lvc.fmt & LVCFMT_JUSTIFYMASK; // Simplifies the handling of the justification bitfield.
 	//lvc.iSubItem = 0; // Not necessary if the LVCF_SUBITEM mask-bit is absent.
@@ -15666,7 +15429,7 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 			}
 			else
 			{
-				aResultToken.Error(ERR_INVALID_OPTION);
+				aResultToken.Error(ERR_INVALID_OPTION, next_option);
 				*option_end = orig_char; // See comment below.
 				return;
 			}
@@ -15685,10 +15448,10 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 		lvc.mask |= LVCF_TEXT;
 	}
 
-	if (mode == 'M') // Modify vs. Insert (Delete was already returned from, higher above).
+	if (mode == FID_LV_ModifyCol) // Modify vs. Insert (Delete was already returned from, higher above).
 		// For code simplicity, this is called unconditionally even if nothing internal the control's column
 		// needs updating.  This seems justified given how rarely columns are modified.
-		aResultToken.value_int64 = ListView_SetColumn(control.hwnd, index, &lvc); // Returns TRUE/FALSE.
+		_f_set_retval_i(ListView_SetColumn(control.hwnd, index, &lvc)); // Returns TRUE/FALSE.
 	else // Insert
 	{
 		// It's important to note that when the user slides columns around via drag and drop, the
@@ -15709,9 +15472,9 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 		// only it's displayed position:
 		//lvc.mask |= LVCF_ORDER;
 		//lvc.iOrder = index + 1;
-		if (   !(aResultToken.value_int64 = ListView_InsertColumn(control.hwnd, index, &lvc) + 1)   ) // +1 to convert the new index to 1-based.
-			return; // Since column could not be inserted, return so that below, sort-now, etc. are not done.
-		index = (int)aResultToken.value_int64 - 1; // Update in case some other index was assigned. -1 to convert back to zero-based.
+		if (   -1 == (index = ListView_InsertColumn(control.hwnd, index, &lvc))   )
+			_f_return_retval; // Since column could not be inserted, return so that below, sort-now, etc. are not done.
+		_f_set_retval_i(index + 1); // +1 to convert the new index to 1-based.
 		if (index < lv_attrib.col_count) // Since col is not being appended to the end, make room in the array to insert this column.
 			MoveMemory(lv_attrib.col+index+1, lv_attrib.col+index, sizeof(lv_col_type)*(lv_attrib.col_count-index));
 			// Above: Shift columns to the right by one.
@@ -15728,12 +15491,14 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 	// Auto-size is done only at this late a stage, in case column was just created above.
 	// Note that ListView_SetColumn() apparently does not support LVSCW_AUTOSIZE_USEHEADER for it's "cx" member.
 	if (do_auto_size && GuiType::ControlGetListViewMode(control.hwnd) == LVS_REPORT)
-		ListView_SetColumnWidth(control.hwnd, index, do_auto_size); // aResultToken.value_int64 was previous set to the more important result above.
+		ListView_SetColumnWidth(control.hwnd, index, do_auto_size); // retval was previously set to the more important result above.
 	//else v1.0.36.03: Don't attempt to auto-size the columns while the view is not report-view because
 	// that causes any subsequent switch to the "list" view to be corrupted (invisible icons and items).
 
 	if (sort_now)
 		GuiType::LV_Sort(control, index, false, sort_now_direction);
+
+	_f_return_retval;
 }
 
 
@@ -15744,15 +15509,8 @@ BIF_DECL(BIF_LV_SetImageList)
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
 // 2: Optional: Type of list.
 {
-	aResultToken.value_int64 = 0; // Set default return value.
-	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
-	// the following conditions:
-	// Window doesn't exist.
-	// Control doesn't exist (i.e. no ListView in window).
-	// Column not found in ListView.
-
 	if (!ValidGuiAndListView(aResultToken))
-		return;
+		return; // Result was set by the above call.
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	
 	// Caller has ensured that there is at least one incoming parameter:
@@ -15766,7 +15524,7 @@ BIF_DECL(BIF_LV_SetImageList)
 		ImageList_GetIconSize(himl, &cx, &cy);
 		list_type = (cx > GetSystemMetrics(SM_CXSMICON)) ? LVSIL_NORMAL : LVSIL_SMALL;
 	}
-	aResultToken.value_int64 = (__int64)ListView_SetImageList(gui.mCurrentListView->hwnd, himl, list_type);
+	_f_return_i((size_t)ListView_SetImageList(gui.mCurrentListView->hwnd, himl, list_type));
 }
 
 
@@ -15780,7 +15538,7 @@ bool ValidGuiAndTreeView(ResultToken &aResultToken)
 	}
 	if (!g->GuiDefaultWindow->mCurrentTreeView)
 	{
-		aResultToken.Error(_T("No TreeView."));
+		aResultToken.Error(ERR_NO_TREEVIEW);
 		return false;
 	}
 	return true;
@@ -15803,34 +15561,28 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 // Parameters for TV_Delete():
 //    1: ID of item to delete (if omitted, all items are deleted).
 {
-	TCHAR mode = ctoupper(aResultToken.marker[3]); // Union's marker initially contains the function name. e.g. TV_[A]dd.
-	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
-	aResultToken.value_int64 = 0; // Set default return value. Must be done only after consulting marker above.
-	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
-	// the following conditions:
-	// Window doesn't exist.
-	// Control doesn't exist (i.e. no TreeView in window).
-	// And others as shown below.
+	BuiltInFunctionID mode = _f_callee_id;
+	LPTSTR buf = _f_number_buf; // Resolve macro early for maintainability.
 
 	if (!ValidGuiAndTreeView(aResultToken))
-		return;
+		return; // Result was set by the above call.
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	GuiControlType &control = *gui.mCurrentTreeView;
 
-	if (mode == 'D') // TV_Delete
+	if (mode == FID_TV_Delete)
 	{
 		// If param #1 is present but is zero, for safety it seems best not to do a delete-all (in case a
 		// script bug is so rare that it is never caught until the script is distributed).  Another reason
 		// is that a script might do something like TV_Delete(TV_GetSelection()), which would be desired
 		// to fail not delete-all if there's ever any way for there to be no selection.
-		aResultToken.value_int64 = SendMessage(control.hwnd, TVM_DELETEITEM, 0
-			, ParamIndexIsOmitted(0) ? NULL : (LPARAM)ParamIndexToInt64(0));
-		return;
+		_f_return_i(SendMessage(control.hwnd, TVM_DELETEITEM, 0
+			, ParamIndexIsOmitted(0) ? NULL : (LPARAM)ParamIndexToInt64(0)));
 	}
 
 	// Since above didn't return, this is TV_Add() or TV_Modify().
 	TVINSERTSTRUCT tvi; // It contains a TVITEMEX, which is okay even if MSIE pre-4.0 on Win95/NT because those OSes will simply never access the new/bottommost item in the struct.
-	bool add_mode = (mode == 'A'); // For readability & maint.
+	bool add_mode = (mode == FID_TV_Add); // For readability & maint.
+	HTREEITEM retval;
 
 	LPTSTR options;
 	if (add_mode) // TV_Add()
@@ -15838,6 +15590,7 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 		tvi.hParent = ParamIndexIsOmitted(1) ? NULL : (HTREEITEM)ParamIndexToInt64(1);
 		tvi.hInsertAfter = TVI_LAST; // i.e. default is to insert the new item underneath the bottommost sibling.
 		options = ParamIndexToOptionalString(2, buf);
+		retval = 0; // Set default return value.
 	}
 	else // TV_Modify()
 	{
@@ -15848,12 +15601,12 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 		// in the case of sorting the root-level items, this will set it to zero, but since that almost
 		// always succeeds and the script rarely cares whether it succeeds or not, adding code size for that
 		// doesn't seem worth it:
-		aResultToken.value_int64 = (size_t)tvi.item.hItem;
+		retval = tvi.item.hItem; // Set default return value.
 		if (aParamCount < 2) // In one-parameter mode, simply select the item.
 		{
 			if (!TreeView_SelectItem(control.hwnd, tvi.item.hItem))
-				aResultToken.value_int64 = 0; // Override the HTREEITEM default value set above.
-			return;
+				retval = 0; // Override the HTREEITEM default value set above.
+			_f_return_i((size_t)retval);
 		}
 		// Otherwise, there's a second parameter (even if it's 0 or "").
 		options = ParamIndexToString(1, buf);
@@ -15968,7 +15721,7 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 				// expands/collapses of that same item.  Also, TVE_TOGGLE is not currently supported because it seems
 				// like it would be too rarely used.
 				if (!TreeView_Expand(control.hwnd, tvi.item.hItem, adding ? TVE_EXPAND : TVE_COLLAPSE))
-					aResultToken.value_int64 = 0; // Indicate partial failure by overriding the HTREEITEM return value set earlier.
+					retval = 0; // Indicate partial failure by overriding the HTREEITEM return value set earlier.
 					// It seems that despite what MSDN says, failure is returned when collapsing and item that is
 					// already collapsed, but not when expanding an item that is already expanded.  For performance
 					// reasons and rarity of script caring, it seems best not to try to adjust/fix this.
@@ -16010,7 +15763,7 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 				// doesn't often care about such failures.  It does result in the loss of the HTREEITEM return
 				// value, but even if that call is nested in another, the zero should produce no effect in most cases.
 				if (!TreeView_SortChildren(control.hwnd, tvi.item.hItem, FALSE)) // Best default seems no-recurse, since typically this is used after a user edits merely a single item.
-					aResultToken.value_int64 = 0; // Indicate partial failure by overriding the HTREEITEM return value set earlier.
+					retval = 0; // Indicate partial failure by overriding the HTREEITEM return value set earlier.
 		}
 		else if (add_mode) // MUST BE LISTED LAST DUE TO "ELSE IF": Options valid only for TV_Add().
 		{
@@ -16034,8 +15787,8 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 	{
 		tvi.item.pszText = ParamIndexToString(0, buf);
 		tvi.item.mask |= TVIF_TEXT;
-		tvi.item.hItem = TreeView_InsertItem(control.hwnd, &tvi); // Update tvi.item.hItem for convenience/maint. I'ts for use in later sections because aResultToken.value_int64 is overridden to be zero for partial failure in modify-mode.
-		aResultToken.value_int64 = (__int64)tvi.item.hItem; // Set return value.
+		tvi.item.hItem = TreeView_InsertItem(control.hwnd, &tvi); // Update tvi.item.hItem for convenience/maint. It's for use in later sections because retval is overridden to be zero for partial failure in modify-mode.
+		retval = tvi.item.hItem; // Set return value.
 	}
 	else // TV_Modify()
 	{
@@ -16047,7 +15800,7 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 		//else name/text parameter has been omitted, so don't change the item's name.
 		if (tvi.item.mask != LVIF_STATE || tvi.item.stateMask) // An item's property or one of the state bits needs changing.
 			if (!TreeView_SetItem(control.hwnd, &tvi.itemex))
-				aResultToken.value_int64 = 0; // Indicate partial failure by overriding the HTREEITEM return value set earlier.
+				retval = 0; // Indicate partial failure by overriding the HTREEITEM return value set earlier.
 	}
 
 	if (ensure_visible) // Seems best to do this one prior to "select" below.
@@ -16056,7 +15809,9 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 		TreeView_Select(control.hwnd, tvi.item.hItem, TVGN_FIRSTVISIBLE); // Return value is also ignored due to rarity, code size, and because most people wouldn't care about a failure even if for some reason it failed.
 	if (select_flag)
 		if (!TreeView_Select(control.hwnd, tvi.item.hItem, select_flag) && !add_mode) // Relies on short-circuit boolean order.
-			aResultToken.value_int64 = 0; // When not in add-mode, indicate partial failure by overriding the return value set earlier (add-mode should always return the new item's ID).
+			retval = 0; // When not in add-mode, indicate partial failure by overriding the return value set earlier (add-mode should always return the new item's ID).
+
+	_f_return_i((size_t)retval);
 }
 
 
@@ -16100,17 +15855,8 @@ BIF_DECL(BIF_TV_GetRelatedItem)
 // but also children and parents, which allows a tree to be traversed from top to bottom without the script
 // having to do something fancy.
 {
-	LPTSTR fn_name = aResultToken.marker; // Save early for maintainability: Union's marker initially contains the function name. TV_Get[S]election.
-	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
-	aResultToken.value_int64 = 0; // Set default return value. Must be done only after saving marker above.
-	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
-	// the following conditions:
-	// Window doesn't exist.
-	// Control doesn't exist (i.e. no TreeView in window).
-	// Item not found in TreeView.
-
 	if (!ValidGuiAndTreeView(aResultToken))
-		return;
+		return; // Result was set by the above call.
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	HWND control_hwnd = gui.mCurrentTreeView->hwnd;
 
@@ -16119,73 +15865,62 @@ BIF_DECL(BIF_TV_GetRelatedItem)
 	if (ParamIndexIsOmitted(1))
 	{
 		WPARAM flag;
-		TCHAR char7 = ctoupper(fn_name[7]);
-		switch(ctoupper(fn_name[6]))
+		switch (_f_callee_id)
 		{
-		case 'S': flag = TVGN_CARET; break; // TV_GetSelection(). TVGN_CARET is focused item.
-		case 'P': flag = (char7 == 'A') ? TVGN_PARENT : TVGN_PREVIOUS; break; // TV_GetParent/Prev.
-		case 'N': flag = (aParamCount < 1 || !hitem) ? TVGN_ROOT : TVGN_NEXT; break; // TV_GetNext(no-parameters) yields very first item in Tree (TVGN_ROOT).
+		case FID_TV_GetSelection: flag = TVGN_CARET; break; // TVGN_CARET is the focused item.
+		case FID_TV_GetParent: flag = TVGN_PARENT; break;
+		case FID_TV_GetChild: flag = TVGN_CHILD; break;
+		case FID_TV_GetPrev: flag = TVGN_PREVIOUS; break;
+		case FID_TV_GetNext: flag = !hitem ? TVGN_ROOT : TVGN_NEXT; break; // TV_GetNext(no-parameters) yields very first item in Tree (TVGN_ROOT).
 		// Above: It seems best to treat hitem==0 as "get root", even though it sacrifices some error detection,
 		// because not doing so would be inconsistent with the fact that TV_GetNext(0, "Full") does get the root
 		// (which needs to be retained to make script loops to traverse entire tree easier).
-		case 'C':
-			if (char7 == 'O') // i.e. the "CO" in TV_GetCount().
-			{
-				// There's a known bug mentioned at MSDN that a TreeView might report a negative count when there
-				// are more than 32767 items in it (though of course HTREEITEM values are never negative since they're
-				// defined as unsigned pseudo-addresses)).  But apparently, that bug only applies to Visual Basic and/or
-				// older OSes, because testing shows that SendMessage(TVM_GETCOUNT) returns 32800+ when there are more
-				// than 32767 items in the tree, even without casting to unsigned.  So I'm not sure exactly what the
-				// story is with this, so for now just casting to UINT rather than something less future-proof like WORD:
-				// Older note, apparently unneeded at least on XP SP2: Cast to WORD to convert -1 through -32768 to the
-				// positive counterparts.
-				aResultToken.value_int64 = (UINT)SendMessage(control_hwnd, TVM_GETCOUNT, 0, 0);
-				return;
-			}
-			// Since above didn't return, it's TV_GetChild():
-			flag = TVGN_CHILD;
-			break;
+		//case FID_TV_GetCount:
+		default:
+			// There's a known bug mentioned at MSDN that a TreeView might report a negative count when there
+			// are more than 32767 items in it (though of course HTREEITEM values are never negative since they're
+			// defined as unsigned pseudo-addresses).  But apparently, that bug only applies to Visual Basic and/or
+			// older OSes, because testing shows that SendMessage(TVM_GETCOUNT) returns 32800+ when there are more
+			// than 32767 items in the tree, even without casting to unsigned.  So I'm not sure exactly what the
+			// story is with this, so for now just casting to UINT rather than something less future-proof like WORD:
+			// Older note, apparently unneeded at least on XP SP2: Cast to WORD to convert -1 through -32768 to the
+			// positive counterparts.
+			_f_return_i((UINT)SendMessage(control_hwnd, TVM_GETCOUNT, 0, 0));
 		}
 		// Apparently there's no direct call to get the topmost ancestor of an item, presumably because it's rarely
 		// needed.  Therefore, no such mode is provide here yet (the syntax TV_GetParent(hitem, true) could be supported
 		// if it's ever needed).
-		aResultToken.value_int64 = SendMessage(control_hwnd, TVM_GETNEXTITEM, flag, (LPARAM)hitem);
-		return;
+		_f_return_i(SendMessage(control_hwnd, TVM_GETNEXTITEM, flag, (LPARAM)hitem));
 	}
 
 	// Since above didn't return, this TV_GetNext's 2-parameter mode, which has an expanded scope that includes
 	// not just siblings, but also children and parents.  This allows a tree to be traversed from top to bottom
 	// without the script having to do something fancy.
-	TCHAR first_char_upper = ctoupper(*omit_leading_whitespace(ParamIndexToString(1, buf))); // Resolve parameter #2.
+	TCHAR first_char_upper = ctoupper(*omit_leading_whitespace(ParamIndexToString(1, _f_number_buf))); // Resolve parameter #2.
 	bool search_checkmark;
 	if (first_char_upper == 'C')
 		search_checkmark = true;
 	else if (first_char_upper == 'F')
 		search_checkmark = false;
 	else // Reserve other option letters/words for future use by being somewhat strict.
-		return; // Retain the default value of 0 set for aResultToken.value_int64 higher above.
+		_f_throw(ERR_PARAM2_INVALID);
 
 	// When an actual item was specified, search begins at the item *after* it.  Otherwise (when NULL):
 	// It's a special mode that always considers the root node first.  Otherwise, there would be no way
 	// to start the search at the very first item in the tree to find out whether it's checked or not.
 	hitem = GetNextTreeItem(control_hwnd, hitem); // Handles the comment above.
 	if (!search_checkmark) // Simple tree traversal, so just return the next item (if any).
-	{
-		aResultToken.value_int64 = (__int64)hitem; // OK if NULL.
-		return;
-	}
+		_f_return_i((size_t)hitem); // OK if NULL.
 
 	// Otherwise, search for the next item having a checkmark. For performance, it seems best to assume that
 	// the control has the checkbox style (the script would realistically never call it otherwise, so the
 	// control's style isn't checked.
 	for (; hitem; hitem = GetNextTreeItem(control_hwnd, hitem))
 		if (TreeView_GetCheckState(control_hwnd, hitem) == 1) // 0 means unchecked, -1 means "no checkbox image".
-		{
-			aResultToken.value_int64 = (__int64)hitem;
-			return;
-		}
+			_f_return_i((size_t)hitem); // OK if NULL.
 	// Since above didn't return, the entire tree starting at the specified item has been searched,
-	// with no match found.  Retain the default value of 0 set for aResultToken.value_int64 higher above.
+	// with no match found.
+	_f_return_i(0);
 }
 
 
@@ -16203,18 +15938,10 @@ BIF_DECL(BIF_TV_Get)
 //       simplifies the code since there is currently no easy means of passing back large strings to our caller).
 //    2: HTREEITEM.
 {
-	bool get_text = (ctoupper(aResultToken.marker[6]) == 'T'); // Union's marker initially contains the function name. e.g. TV_Get[T]ext.
-	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
-	aResultToken.value_int64 = 0; // Set default return value. Must be done only after consulting marker above.
-	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
-	// the following conditions:
-	// Window doesn't exist.
-	// Control doesn't exist (i.e. no TreeView in window).
-	// Item not found in TreeView.
-	// And others.
+	bool get_text = _f_callee_id == FID_TV_GetText;
 
 	if (!ValidGuiAndTreeView(aResultToken))
-		return;
+		return; // Result was set by the above call.
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	HWND control_hwnd = gui.mCurrentTreeView->hwnd;
 
@@ -16223,7 +15950,7 @@ BIF_DECL(BIF_TV_Get)
 		// Loadtime validation has ensured that param #1 and #2 are present for all these cases.
 		HTREEITEM hitem = (HTREEITEM)ParamIndexToInt64(0);
 		UINT state_mask;
-		switch (ctoupper(*omit_leading_whitespace(ParamIndexToString(1, buf))))
+		switch (ctoupper(*omit_leading_whitespace(ParamIndexToString(1, _f_number_buf))))
 		{
 		case 'E': state_mask = TVIS_EXPANDED; break; // Expanded
 		case 'C': state_mask = TVIS_STATEIMAGEMASK; break; // Checked
@@ -16237,22 +15964,19 @@ BIF_DECL(BIF_TV_Get)
 		UINT result = state_mask & (UINT)SendMessage(control_hwnd, TVM_GETITEMSTATE, (WPARAM)hitem, state_mask);
 		if (state_mask == TVIS_STATEIMAGEMASK)
 		{
-			if (result == 0x2000) // It has a checkmark state image.
-				aResultToken.value_int64 = (size_t)hitem; // Override 0 set earlier. More useful than returning 1 since it allows function-call nesting.
+			if (result != 0x2000) // It doesn't have a checkmark state image.
+				hitem = 0;
 		}
 		else // For all others, anything non-zero means the flag is present.
-            if (result)
-				aResultToken.value_int64 = (size_t)hitem; // Override 0 set earlier. More useful than returning 1 since it allows function-call nesting.
-		return;
+            if (!result) // Flag not present.
+				hitem = 0;
+		_f_return_i((size_t)hitem);
 	}
 
 	// Since above didn't return, this is LV_GetText().
 	// Loadtime validation has ensured that param #1 and #2 are present.
 	if (aParam[0]->symbol != SYM_VAR) // No output variable. Supporting a NULL for the purpose of checking for the existence of an item seems too rarely needed.
-	{
-		aResultToken.Error(ERR_PARAM1_INVALID);
-		return;
-	}
+		_f_throw(ERR_PARAM1_INVALID);
 	Var &output_var = *aParam[0]->var;
 
 	TCHAR text_buf[LV_TEXT_BUF_SIZE]; // i.e. uses same size as ListView.
@@ -16268,11 +15992,14 @@ BIF_DECL(BIF_TV_Get)
 		// necessarily be placed in the specified buffer. The control may instead change the pszText member
 		// of the structure to point to the new text rather than place it in the buffer."
 		output_var.Assign(tvi.pszText);
-		aResultToken.value_int64 = (size_t)tvi.hItem; // More useful than returning 1 since it allows function-call nesting.
 	}
-	else // On failure, it seems best to also clear the output var for better consistency and in case the script doesn't check the return value.
+	else
+	{
+		// On failure, it seems best to also clear the output var for better consistency and in case the script doesn't check the return value.
 		output_var.Assign();
-		// And leave aResultToken.value_int64 set to its default of 0.
+		tvi.hItem = 0; // Return 0.
+	}
+	_f_return_i((size_t)tvi.hItem); // More useful than returning 1 since it allows function-call nesting.
 }
 
 
@@ -16283,21 +16010,15 @@ BIF_DECL(BIF_TV_SetImageList)
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
 // 2: Optional: Type of list.
 {
-	aResultToken.value_int64 = 0; // Set default return value.
-	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
-	// the following conditions:
-	// Window doesn't exist.
-	// Control doesn't exist (i.e. no TreeView in window).
-
 	if (!ValidGuiAndTreeView(aResultToken))
-		return;
+		return; // Result was set by the above call.
 	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
 	
 	// Caller has ensured that there is at least one incoming parameter:
 	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0);
 	int list_type;
 	list_type = ParamIndexToOptionalInt(1, TVSIL_NORMAL);
-	aResultToken.value_int64 = (__int64)TreeView_SetImageList(gui.mCurrentTreeView->hwnd, himl, list_type);
+	_f_return_i((size_t)TreeView_SetImageList(gui.mCurrentTreeView->hwnd, himl, list_type));
 }
 
 
@@ -16317,11 +16038,11 @@ BIF_DECL(BIF_IL_Create)
 	// after it, only when the parameter is both present and numerically zero are large icons used.  Otherwise,
 	// small icons are used.
 	int param3 = ParamIndexToOptionalInt(2, 0);
-	aResultToken.value_int64 = (__int64)ImageList_Create(GetSystemMetrics(param3 ? SM_CXICON : SM_CXSMICON)
+	_f_return_i((size_t)ImageList_Create(GetSystemMetrics(param3 ? SM_CXICON : SM_CXSMICON)
 		, GetSystemMetrics(param3 ? SM_CYICON : SM_CYSMICON)
 		, ILC_MASK | ILC_COLOR32  // ILC_COLOR32 or at least something higher than ILC_COLOR is necessary to support true-color icons.
 		, ParamIndexToOptionalInt(0, 2)    // cInitial. 2 seems a better default than one, since it might be common to have only two icons in the list.
-		, ParamIndexToOptionalInt(1, 5));  // cGrow.  Somewhat arbitrary default.
+		, ParamIndexToOptionalInt(1, 5)));  // cGrow.  Somewhat arbitrary default.
 }
 
 
@@ -16334,7 +16055,7 @@ BIF_DECL(BIF_IL_Destroy)
 	// Load-time validation has ensured there is at least one parameter.
 	// Returns nonzero if successful, or zero otherwise, so force it to conform to TRUE/FALSE for
 	// better consistency with other functions:
-	aResultToken.value_int64 = ImageList_Destroy((HIMAGELIST)ParamIndexToInt64(0)) ? 1 : 0;
+	_f_return_i(ImageList_Destroy((HIMAGELIST)ParamIndexToInt64(0)) ? 1 : 0);
 }
 
 
@@ -16356,14 +16077,9 @@ BIF_DECL(BIF_IL_Add)
 // The parameters above (at least #4) can be overloaded in the future calling ImageList_GetImageInfo() to determine
 // whether the imagelist has a mask.
 {
-	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
-	aResultToken.value_int64 = 0; // Set default in case of early return.
 	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0); // Load-time validation has ensured there is a first parameter.
 	if (!himl)
-	{
-		aResultToken.Error(ERR_PARAM1_INVALID);
-		return;
-	}
+		_f_throw(ERR_PARAM1_INVALID);
 
 	int param3 = ParamIndexToOptionalInt(2, 0);
 	int icon_number, width = 0, height = 0; // Zero width/height causes image to be loaded at its actual width/height.
@@ -16382,57 +16098,57 @@ BIF_DECL(BIF_IL_Add)
 	}
 
 	int image_type;
-	HBITMAP hbitmap = LoadPicture(ParamIndexToString(1, buf) // Load-time validation has ensured there are at least two parameters.
+	HBITMAP hbitmap = LoadPicture(ParamIndexToString(1, _f_number_buf) // Caller has ensured there are at least two parameters.
 		, width, height, image_type, icon_number, false); // Defaulting to "false" for "use GDIplus" provides more consistent appearance across multiple OSes.
 	if (!hbitmap)
-		return;
+		_f_return_i(0);
 
+	int index;
 	if (image_type == IMAGE_BITMAP) // In this mode, param3 is always assumed to be an RGB color.
 	{
 		// Return the index of the new image or 0 on failure.
-		aResultToken.value_int64 = ImageList_AddMasked(himl, hbitmap, rgb_to_bgr((int)param3)) + 1; // +1 to convert to one-based.
+		index = ImageList_AddMasked(himl, hbitmap, rgb_to_bgr((int)param3)) + 1; // +1 to convert to one-based.
 		DeleteObject(hbitmap);
 	}
 	else // ICON or CURSOR.
 	{
 		// Return the index of the new image or 0 on failure.
-		aResultToken.value_int64 = ImageList_AddIcon(himl, (HICON)hbitmap) + 1; // +1 to convert to one-based.
+		index = ImageList_AddIcon(himl, (HICON)hbitmap) + 1; // +1 to convert to one-based.
 		DestroyIcon((HICON)hbitmap); // Works on cursors too.  See notes in LoadPicture().
 	}
+	_f_return_i(index);
 }
 
 
 
 BIF_DECL(BIF_Trim) // L31
 {
-	TCHAR trim_type = ctoupper(*aResultToken.marker); // aResultToken.marker points to the name of the Func which was called.
+	BuiltInFunctionID trim_type = _f_callee_id;
 
-	// All return values are SYM_STRING, so set that now:
-	aResultToken.symbol = SYM_STRING;
+	LPTSTR buf = _f_retval_buf;
+	LPTSTR str = ParamIndexToString(0, buf);
 
-	if (IS_NUMERIC(aParam[0]->symbol))
+	if (str == buf) // IS_NUMERIC(aParam[0]->symbol)
 	{
 		// Take a shortcut for SYM_INTEGER/SYM_FLOAT.
-		aResultToken.marker = TokenToString(*aParam[0], aResultToken.buf);
-		return;
+		_f_return_p(str);
 	}
 
-	LPTSTR str = ParamIndexToString(0);
 	LPTSTR result = str; // Prior validation has ensured at least 1 param.
 	INT_PTR extract_length = ParamIndexLength(0, str);
 
 	TCHAR omit_list_buf[MAX_NUMBER_SIZE]; // Support SYM_INTEGER/SYM_FLOAT even though it doesn't seem likely to happen.
 	LPTSTR omit_list = ParamIndexIsOmitted(1) ? _T(" \t") : ParamIndexToString(1, omit_list_buf); // Default: space and tab.
 
-	if (trim_type != 'R') // i.e. it's Trim() or LTrim()
+	if (trim_type != FID_RTrim) // i.e. it's Trim() or LTrim()
 	{
 		result = omit_leading_any(result, omit_list, extract_length);
 		extract_length -= (result - str); // Adjust for omitted characters.
 	}
-	if (extract_length && trim_type != 'L') // i.e. it's Trim() or RTrim();  THE LINE BELOW REQUIRES extract_length >= 1.
+	if (extract_length && trim_type != FID_LTrim) // i.e. it's Trim() or RTrim();  THE LINE BELOW REQUIRES extract_length >= 1.
 		extract_length = omit_trailing_any(result, omit_list, result + extract_length - 1);
 
-	TokenSetResult(aResultToken, result, extract_length);
+	_f_return(result, extract_length);
 }
 
 
@@ -16440,19 +16156,19 @@ BIF_DECL(BIF_Trim) // L31
 BIF_DECL(BIF_Type)
 // Returns the pure type of the given value.
 {
-	aResultToken.symbol = SYM_STRING;
+	LPTSTR type;
 	if (aParam[0]->symbol == SYM_VAR)
 		aParam[0]->var->ToToken(*aParam[0]);
 	switch (aParam[0]->symbol)
 	{
 	case SYM_STRING:
-		aResultToken.marker = _T("String");
+		type = _T("String");
 		break;
 	case SYM_INTEGER:
-		aResultToken.marker = _T("Integer");
+		type = _T("Integer");
 		break;
 	case SYM_FLOAT:
-		aResultToken.marker = _T("Float");
+		type = _T("Float");
 		break;
 	case SYM_OBJECT:
 	{
@@ -16462,23 +16178,24 @@ BIF_DECL(BIF_Type)
 		LPCSTR name = typeid(*aParam[0]->object).name();
 		if (!strncmp(name, "class ", 6))
 			name += 6;
-		if (MultiByteToWideChar(CP_ACP, 0, name, -1, aResultToken.buf, MAX_NUMBER_SIZE))
-		{
-			aResultToken.marker = aResultToken.buf;
+		type = _f_retval_buf;
+		if (MultiByteToWideChar(CP_ACP, 0, name, -1, type, _f_retval_buf_size))
 			break;
-		}
-		// Otherwise, fall through:
+		// Otherwise, the call above failed, so fall through (should never happen):
 	}
-	default: // No other cases should be possible, but have a default anyway for maintainability.
-		aResultToken.marker = _T("");
+	default:
+		// Default for maintainability.  Could be SYM_MISSING, but it would have to be intentional: %'type'%(,).
+		// Also may have fallen through from above.
+		type = _T("");
 	}
+	_f_return(type);
 }
 
 
 
 BIF_DECL(BIF_Exception)
 {
-	LPTSTR message = ParamIndexToString(0, aResultToken.buf);
+	LPTSTR message = ParamIndexToString(0, _f_number_buf);
 	TCHAR what_buf[MAX_NUMBER_SIZE], extra_buf[MAX_NUMBER_SIZE];
 	LPTSTR what = NULL;
 	Line *line = NULL;
@@ -16538,7 +16255,7 @@ BIF_DECL(BIF_Exception)
 	{
 		// Out of memory. Seems best to alert the user.
 		MsgBox(ERR_OUTOFMEM);
-		aResultToken.value_int64 = 0;
+		_f_return_empty;
 	}
 }
 
@@ -16850,6 +16567,16 @@ ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLen
 		tmemcpy(aResultToken.marker, aValue, aLength);
 	aResultToken.marker[aLength] = '\0'; // Must be done separately from the memcpy() because the memcpy() might just be taking a substring (i.e. long before result's terminator).
 	return OK;
+}
+
+
+
+ResultType ResultToken::Return(LPTSTR aValue, size_t aLength)
+// Copy and return a string.
+{
+	ASSERT(aValue);
+	symbol = SYM_STRING;
+	return TokenSetResult(*this, aValue, aLength);
 }
 
 

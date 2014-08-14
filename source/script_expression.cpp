@@ -321,13 +321,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				// Param count is now checked in Func::Call(), so doesn't need to be checked here.
 			}
 			
-			// The following two steps are now done inside Func::Call:
-			//this_token.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
-			//this_token.marker = func.mName;  // Inform function of which built-in function called it (allows code sharing/reduction).
+			// The following two steps are done for built-in functions inside Func::Call:
+			//result_token.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
+			//result_token.func = func;          // Inform function of which built-in function called it (allows code sharing/reduction).
 			
-			// This is now handled by ResultToken below:
-			//this_token.buf = left_buf;       // mBIF() can use this to store a string result, and for other purposes.
-			//this_token.mem_to_free = NULL; // Init to detect whether the called function allocates it.
+			// This is done by ResultToken below:
+			//result_token.buf = left_buf;       // mBIF() can use this to store a string result, and for other purposes.
+			//result_token.mem_to_free = NULL;   // Init to detect whether the called function allocates it.
 			
 			ResultToken result_token;
 			result_token.InitResult(left_buf); // But we'll take charge of its contents INSTEAD of calling Free().
@@ -1570,7 +1570,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		// technically correct, it is simple and fairly logical.
 
 		aResultToken.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
-		aResultToken.marker = mName;       // Inform function of which built-in function called it (allows code sharing/reduction). Can't use circuit_token because it's value is still needed later below.
+		aResultToken.func = this;          // Inform function of which built-in function called it (allows code sharing/reduction).
 
 		// Push an entry onto the debugger's stack.  This has two purposes:
 		//  1) Allow CreateRuntimeException() to know which function is throwing an exception.
