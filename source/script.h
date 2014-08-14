@@ -543,8 +543,7 @@ enum BuiltInFunctionID {
 	FID_ASin = 0, FID_ACos,
 	FID_Sqrt = 0, FID_Log, FID_Ln,
 	FID_ObjAddRef = 0, FID_ObjRelease,
-	FID_ObjInsertAt = 0, FID_ObjRemove, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjGetAddress, FID_ObjClone,
-	FID_ObjNewEnum, // Used by Object::CallBuiltin(); must follow on from the line above.
+	FID_ObjInsertAt = 0, FID_ObjRemove, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjGetAddress, FID_ObjClone, FID_ObjNewEnum,
 	FID_ComObjType = 0, FID_ComObjValue,
 	FID_WinGetID = 0, FID_WinGetIDLast, FID_WinGetPID, FID_WinGetProcessName, FID_WinGetProcessPath, FID_WinGetCount, FID_WinGetList, FID_WinGetMinMax, FID_WinGetControls, FID_WinGetControlsHwnd, FID_WinGetTransparent, FID_WinGetTransColor, FID_WinGetStyle, FID_WinGetExStyle,
 	FID_WinSetTransparent = 0, FID_WinSetTransColor, FID_WinSetAlwaysOnTop, FID_WinSetStyle, FID_WinSetExStyle, FID_WinSetEnabled, FID_WinSetRegion,
@@ -2932,7 +2931,6 @@ BIF_DECL(BIF_ObjAddRefRelease);
 BIF_DECL(BIF_ObjRawSet);
 // Built-ins also available as methods -- these are available as functions for use primarily by overridden methods (i.e. where using the built-in methods isn't possible as they're no longer accessible).
 BIF_DECL(BIF_ObjXXX);
-BIF_DECL(BIF_ObjNewEnum);
 
 
 // Advanced file IO interfaces

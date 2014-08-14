@@ -353,15 +353,6 @@ BIF_DECL(BIF_ObjXXX)
 		_f_throw(ERR_NO_OBJECT);
 }
 
-BIF_DECL(BIF_ObjNewEnum)
-{
-	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
-	if (obj)
-		obj->_NewEnum(aResultToken, NULL, 0); // Parameters are ignored.  _NewEnum() sets return value or status.
-	else
-		_f_throw(ERR_NO_OBJECT);
-}
-
 
 //
 // ObjAddRef/ObjRelease - used with pointers rather than object references.

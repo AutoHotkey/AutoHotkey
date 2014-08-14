@@ -144,7 +144,7 @@ FuncEntry g_BIF[] =
 	BIFn(ObjSetCapacity, 2, 3, true, BIF_ObjXXX),
 	BIFn(ObjGetAddress, 2, 2, true, BIF_ObjXXX),
 	BIFn(ObjClone, 1, 1, true, BIF_ObjXXX),
-	BIF1(ObjNewEnum, 1, 1, true),
+	BIFn(ObjNewEnum, 1, 1, true, BIF_ObjXXX),
 
 	BIF1(Array, 0, NA, true),
 	BIF1(FileOpen, 2, 3, true),
