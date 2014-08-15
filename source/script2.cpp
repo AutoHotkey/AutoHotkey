@@ -715,11 +715,10 @@ ResultType Line::PerformWait()
 	{
 		if (   !(vk = TextToVK(ARG1))   )
 		{
-			if (   !(joy = (JoyControls)ConvertJoy(ARG1, &joystick_id))   ) // Not a valid key name.
-				// Indicate immediate timeout (if timeout was specified) or error.
-				return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+			joy = (JoyControls)ConvertJoy(ARG1, &joystick_id);
 			if (!IS_JOYSTICK_BUTTON(joy)) // Currently, only buttons are supported.
-				return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+				// It's either an invalid key name or an unsupported Joy-something.
+				return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
 		}
 		// Set defaults:
 		wait_for_keydown = false;  // The default is to wait for the key to be released.
@@ -745,9 +744,6 @@ ResultType Line::PerformWait()
 				break;
 			}
 		}
-		// The following must be set for ScriptGetJoyState():
-		token.symbol = SYM_STRING;
-		token.marker = buf;
 	}
 	else if (   (mActionType != ACT_RUNWAIT && mActionType != ACT_CLIPWAIT && *ARG3)
 		|| (mActionType == ACT_CLIPWAIT && *ARG1)   )
@@ -847,7 +843,7 @@ ResultType Line::PerformWait()
 			}
 			else // Waiting for joystick button
 			{
-				if ((bool)ScriptGetJoyState(joy, joystick_id, token, false) == wait_for_keydown)
+				if (ScriptGetJoyState(joy, joystick_id, token, buf) == wait_for_keydown)
 					return OK;
 			}
 			break;
@@ -6176,43 +6172,6 @@ end:
 		free(mem_to_free);
 	g_SortFunc = sort_func_orig;
 	return result_to_return;
-}
-
-
-
-ResultType Line::GetKeyJoyState(LPTSTR aKeyName, LPTSTR aOption)
-// Keep this in sync with FUNC_GETKEYSTATE.
-{
-	Var &output_var = *OUTPUT_VAR;
-	JoyControls joy;
-	int joystick_id;
-	vk_type vk = TextToVK(aKeyName);
-    if (!vk)
-	{
-		if (   !(joy = (JoyControls)ConvertJoy(aKeyName, &joystick_id))   )
-			return output_var.Assign(_T(""));
-		// Since the above didn't return, joy contains a valid joystick button/control ID.
-		// Caller needs a token with a buffer of at least this size:
-		TCHAR buf[MAX_NUMBER_SIZE];
-		ExprTokenType token;
-		token.symbol = SYM_STRING; // These must be set as defaults for ScriptGetJoyState().
-		token.marker = buf;        //
-		ScriptGetJoyState(joy, joystick_id, token, false);
-		// Above: ScriptGetJoyState() returns FAIL and sets output_var to be blank if the result is
-		// indeterminate or there was a problem reading the joystick.  But we don't want such a failure
-		// to be considered a "critical failure" that will exit the current quasi-thread, so its result
-		// is discarded.
-		return output_var.Assign(token); // Write the result based on whether the token is a string or number.
-	}
-	// Otherwise: There is a virtual key (not a joystick control).
-	KeyStateTypes key_state_type;
-	switch (ctoupper(*aOption))
-	{
-	case 'T': key_state_type = KEYSTATE_TOGGLE; break; // Whether a toggleable key such as CapsLock is currently turned on.
-	case 'P': key_state_type = KEYSTATE_PHYSICAL; break; // Physical state of key.
-	default: key_state_type = KEYSTATE_LOGICAL;
-	}
-	return output_var.Assign(ScriptGetKeyState(vk, key_state_type));
 }
 
 
@@ -13739,10 +13698,7 @@ BIF_DECL(BIF_GetKeyState)
 			// It is neither a key name nor a joystick button/axis.
 			_f_throw(ERR_PARAM1_INVALID);
 		}
-		// The following must be set for ScriptGetJoyState():
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _f_retval_buf; // If necessary, it will be moved to a persistent memory location by our caller.
-		ScriptGetJoyState(joy, joystick_id, aResultToken, true);
+		ScriptGetJoyState(joy, joystick_id, aResultToken, _f_retval_buf);
 		return;
 	}
 	// Since above didn't return: There is a virtual key (not a joystick control).
@@ -16685,20 +16641,20 @@ bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType)
 
 
 
-double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, bool aUseBoolForUpDown)
+bool ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, LPTSTR aBuf)
 // Caller must ensure that aToken.marker is a buffer large enough to handle the longest thing put into
 // it here, which is currently jc.szPname (size=32). Caller has set aToken.symbol to be SYM_STRING.
-// For buttons: Returns 0 if "up", non-zero if down.
-// For axes and other controls: Returns a number indicating that controls position or status.
-// If there was a problem determining the position/state, aToken is made blank and zero is returned.
-// Also returns zero in cases where a non-numerical result is requested, such as the joystick name.
-// In those cases, caller should use aToken.marker as the result.
+// aToken is used for the value being returned by GetKeyState() to the script, while this function's
+// bool return value is used only by KeyWait, so is false for "up" and true for "down".
+// If there was a problem determining the position/state, aToken is made blank and false is returned.
 {
 	// Set default in case of early return.
-	*aToken.marker = '\0'; // Blank vs. string "0" serves as an indication of failure.
+	aToken.symbol = SYM_STRING;
+	aToken.marker = aBuf;
+	*aBuf = '\0'; // Blank vs. string "0" serves as an indication of failure.
 
 	if (!aJoy) // Currently never called this way.
-		return 0; // And leave aToken set to blank.
+		return false; // And leave aToken set to blank.
 
 	bool aJoy_is_button = IS_JOYSTICK_BUTTON(aJoy);
 
@@ -16717,20 +16673,12 @@ double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToke
 		jie.dwSize = sizeof(JOYINFOEX);
 		jie.dwFlags = JOY_RETURNALL;
 		if (joyGetPosEx(aJoystickID, &jie) != JOYERR_NOERROR)
-			return 0; // And leave aToken set to blank.
+			return false; // And leave aToken set to blank.
 		if (aJoy_is_button)
 		{
 			bool is_down = ((jie.dwButtons >> (aJoy - JOYCTRL_1)) & (DWORD)0x01);
-			if (aUseBoolForUpDown) // i.e. Down==true and Up==false
-			{
-				aToken.symbol = SYM_INTEGER; // Override default type.
-				aToken.value_int64 = is_down; // Forced to be 1 or 0 above, since it's "bool".
-			}
-			else
-			{
-				aToken.marker[0] = is_down ? 'D' : 'U';
-				aToken.marker[1] = '\0';
-			}
+			aToken.symbol = SYM_INTEGER; // Override default type.
+			aToken.value_int64 = is_down; // Always 1 or 0, since it's "bool" (and if not for that, bitwise-and).
 			return is_down;
 		}
 	}
@@ -16767,34 +16715,33 @@ double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToke
 		result_double = range ? 100 * (double)jie.dwVpos / range : jie.dwVpos;
 		break;
 
-	case JOYCTRL_POV:  // Need to explicitly compare against JOY_POVCENTERED because it's a WORD not a DWORD.
-		if (jie.dwPOV == JOY_POVCENTERED)
+	case JOYCTRL_POV:
+		aToken.symbol = SYM_INTEGER; // Override default type.
+		if (jie.dwPOV == JOY_POVCENTERED) // Need to explicitly compare against JOY_POVCENTERED because it's a WORD not a DWORD.
 		{
-			// Retain default SYM_STRING type.
-			_tcscpy(aToken.marker, _T("-1")); // Assign as string to ensure its written exactly as "-1". Documented behavior.
-			return -1;
+			aToken.value_int64 = -1;
+			return false;
 		}
 		else
 		{
-			aToken.symbol = SYM_INTEGER; // Override default type.
 			aToken.value_int64 = jie.dwPOV;
-			return jie.dwPOV;
+			return true;
 		}
 		// No break since above always returns.
 
 	case JOYCTRL_NAME:
 		_tcscpy(aToken.marker, jc.szPname);
-		return 0;  // Returns zero in cases where a non-numerical result is obtained.
+		return false; // Return value not used.
 
 	case JOYCTRL_BUTTONS:
 		aToken.symbol = SYM_INTEGER; // Override default type.
-		aToken.value_int64 = jc.wNumButtons;
-		return jc.wNumButtons;  // wMaxButtons is the *driver's* max supported buttons.
+		aToken.value_int64 = jc.wNumButtons; // wMaxButtons is the *driver's* max supported buttons.
+		return false; // Return value not used.
 
 	case JOYCTRL_AXES:
 		aToken.symbol = SYM_INTEGER; // Override default type.
 		aToken.value_int64 = jc.wNumAxes; // wMaxAxes is the *driver's* max supported axes.
-		return jc.wNumAxes;
+		return false; // Return value not used.
 
 	case JOYCTRL_INFO:
 		buf_ptr = aToken.marker;
@@ -16815,7 +16762,7 @@ double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToke
 				*buf_ptr++ = 'C';
 		}
 		*buf_ptr = '\0'; // Final termination.
-		return 0;  // Returns zero in cases where a non-numerical result is obtained.
+		return false; // Return value not used.
 	} // switch()
 
 	// If above didn't return, the result should now be in result_double.

@@ -646,7 +646,6 @@ private:
 	ResultType StringReplace();
 	ResultType SplitPath(LPTSTR aFileSpec);
 	ResultType PerformSort(LPTSTR aContents, LPTSTR aOptions);
-	ResultType GetKeyJoyState(LPTSTR aKeyName, LPTSTR aOption);
 	ResultType DriveSpace(LPTSTR aPath, bool aGetFreeSpace);
 	ResultType Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2);
 	ResultType DriveLock(TCHAR aDriveLetter, bool aLockIt);
@@ -998,7 +997,6 @@ public:
 			case ACT_STRINGLOWER:
 			case ACT_STRINGUPPER:
 			case ACT_STRINGREPLACE:
-			case ACT_GETKEYSTATE:
 			case ACT_CONTROLGETFOCUS:
 			case ACT_CONTROLGETTEXT:
 			case ACT_CONTROLGET:
@@ -2991,7 +2989,7 @@ LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
 void SetWorkingDir(LPTSTR aNewDir, bool aSetErrorLevel = true);
 int ConvertJoy(LPTSTR aBuf, int *aJoystickID = NULL, bool aAllowOnlyButtons = false);
 bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType);
-double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, bool aUseBoolForUpDown);
+bool ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, LPTSTR aBuf);
 
 HWND DetermineTargetWindow(ExprTokenType *aParam[], int aParamCount);
 

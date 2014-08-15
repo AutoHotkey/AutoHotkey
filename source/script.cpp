@@ -5491,13 +5491,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
 		break;
 
-	case ACT_GETKEYSTATE:
-		// v1.0.44.03: Don't validate single-character key names because although a character like ü might have no
-		// matching VK in system's default layout, that layout could change to something which does have a VK for it.
-		if (aArgc > 1 && !line.ArgHasDeref(2) && _tcslen(new_raw_arg2) > 1 && !TextToVK(new_raw_arg2) && !ConvertJoy(new_raw_arg2))
-			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		break;
-
 	case ACT_KEYWAIT: // v1.0.44.03: See comment above.
 		if (aArgc > 0 && !line.ArgHasDeref(1) && _tcslen(new_raw_arg1) > 1 && !TextToVK(new_raw_arg1) && !ConvertJoy(new_raw_arg1))
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
@@ -12488,9 +12481,6 @@ ResultType Line::Perform()
 				group->CloseAndGoToNext(*ARG2 && !_tcsicmp(ARG2, _T("R")));  // Note: It will take care of DoWinDelay if needed.
 		//else nonexistent group: By design, do nothing.
 		return OK;
-
-	case ACT_GETKEYSTATE:
-		return GetKeyJoyState(ARG2, ARG3);
 
 	case ACT_RANDOM:
 	{
