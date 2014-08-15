@@ -74,10 +74,10 @@ BIF_DECL(BIF_IsObject)
 	
 
 //
-// BIF_ObjInvoke - Handles ObjGet/Set/Call() and get/set/call syntax.
+// Op_ObjInvoke - Handles the object operators: x.y, x[y], x.y(), x.y := z, etc.
 //
 
-BIF_DECL(BIF_ObjInvoke)
+BIF_DECL(Op_ObjInvoke)
 {
     int invoke_type = _f_callee_id;
     IObject *obj;
@@ -160,24 +160,24 @@ BIF_DECL(BIF_ObjInvoke)
 	
 
 //
-// BIF_ObjGetInPlace - Handles part of a compound assignment like x.y += z.
+// Op_ObjGetInPlace - Handles part of a compound assignment like x.y += z.
 //
 
-BIF_DECL(BIF_ObjGetInPlace)
+BIF_DECL(Op_ObjGetInPlace)
 {
 	// Since the most common cases have two params, the "param count" param is omitted in
 	// those cases. Otherwise we have one visible parameter, which indicates the number of
 	// actual parameters below it on the stack.
 	aParamCount = aParamCount ? (int)TokenToInt64(*aParam[0]) : 2; // x[<n-1 params>] : x.y
-	BIF_ObjInvoke(aResultToken, aParam - aParamCount, aParamCount);
+	Op_ObjInvoke(aResultToken, aParam - aParamCount, aParamCount);
 }
 
 
 //
-// BIF_ObjNew - Handles "new" as in "new Class()".
+// Op_ObjNew - Handles "new" as in "new Class()".
 //
 
-BIF_DECL(BIF_ObjNew)
+BIF_DECL(Op_ObjNew)
 {
 	// Set default return value for Invoke().
 	aResultToken.symbol = SYM_STRING;
@@ -256,15 +256,15 @@ BIF_DECL(BIF_ObjNew)
 
 
 //
-// BIF_ObjIncDec - Handles pre/post-increment/decrement for object fields, such as ++x[y].
+// Op_ObjIncDec - Handles pre/post-increment/decrement for object fields, such as ++x[y].
 //
 
-BIF_DECL(BIF_ObjIncDec)
+BIF_DECL(Op_ObjIncDec)
 {
 	SymbolType op = (SymbolType)_f_callee_id;
 
 	ResultToken temp_result;
-	// Set the defaults expected by BIF_ObjInvoke:
+	// Set the defaults expected by Op_ObjInvoke:
 	temp_result.symbol = SYM_INTEGER;
 	temp_result.func = &g_ObjGet;
 	temp_result.buf = aResultToken.buf;
@@ -272,7 +272,7 @@ BIF_DECL(BIF_ObjIncDec)
 
 	// Retrieve the current value.  Do it this way instead of calling Object::Invoke
 	// so that if aParam[0] is not an object, g_MetaObject is correctly invoked.
-	BIF_ObjInvoke(temp_result, aParam, aParamCount);
+	Op_ObjInvoke(temp_result, aParam, aParamCount);
 
 	if (temp_result.Exited())
 		return;
@@ -291,7 +291,7 @@ BIF_DECL(BIF_ObjIncDec)
 		break;
 	}
 
-	// Free the object or string returned by BIF_ObjInvoke, if applicable.
+	// Free the object or string returned by Op_ObjInvoke, if applicable.
 	temp_result.Free();
 
 	if (current_value.symbol == PURE_NOT_NUMERIC)
@@ -314,7 +314,7 @@ BIF_DECL(BIF_ObjIncDec)
 		aResultToken.func = &g_ObjSet;
 		// Set the new value and pass the return value of the invocation back to our caller.
 		// This should be consistent with something like x.y := x.y + 1.
-		BIF_ObjInvoke(aResultToken, param, aParamCount);
+		Op_ObjInvoke(aResultToken, param, aParamCount);
 	}
 	else // SYM_POST_INCREMENT || SYM_POST_DECREMENT
 	{
@@ -325,7 +325,7 @@ BIF_DECL(BIF_ObjIncDec)
 		temp_result.mem_to_free = NULL;
 		
 		// Set the new value.
-		BIF_ObjInvoke(temp_result, param, aParamCount);
+		Op_ObjInvoke(temp_result, param, aParamCount);
 		
 		// Dispose of the result safely.
 		temp_result.Free();

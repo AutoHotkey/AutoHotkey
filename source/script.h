@@ -2032,16 +2032,15 @@ public:
 
 class ExprOpFunc : public Func
 {	// ExprOpFunc: Used in combination with SYM_FUNC to implement certain operations in expressions.
-	// These are not inserted into the script's function list, so mName is used only to pass a simple
-	// identifier to mBIF (currently only BIF_ObjInvoke).
+	// These are not inserted into the script's function list, so mName is used only by the debugger.
 public:
 	ExprOpFunc(BuiltInFunctionType aBIF, int aID)
-		: Func(_T("<object>"), true) // Name is used by the debugger.
+		: Func(_T("<object>"), true)
 	{
 		mBIF = aBIF;
 		mID = (BuiltInFunctionID)aID;
 		// Allow any number of parameters, since these functions aren't called directly by users
-		// and might break the rules in some cases, such as BIF_ObjGetInPlace() having "0" visible
+		// and might break the rules in some cases, such as Op_ObjGetInPlace() having 0 *visible*
 		// parameters but actually reading 2 which are then also passed to the next function call.
 		mParamCount = 1000;
 	}
@@ -2923,14 +2922,16 @@ BIF_DECL(BIF_Type);
 BIF_DECL(BIF_IsObject);
 BIF_DECL(BIF_Object);
 BIF_DECL(BIF_Array);
-BIF_DECL(BIF_ObjInvoke); // Pseudo-operator. See script_object.cpp for comments.
-BIF_DECL(BIF_ObjGetInPlace); // Pseudo-operator.
-BIF_DECL(BIF_ObjNew); // Pseudo-operator.
-BIF_DECL(BIF_ObjIncDec); // Pseudo-operator.
 BIF_DECL(BIF_ObjAddRefRelease);
 BIF_DECL(BIF_ObjRawSet);
 // Built-ins also available as methods -- these are available as functions for use primarily by overridden methods (i.e. where using the built-in methods isn't possible as they're no longer accessible).
 BIF_DECL(BIF_ObjXXX);
+
+// Expression operators implemented via SYM_FUNC:
+BIF_DECL(Op_ObjInvoke);
+BIF_DECL(Op_ObjGetInPlace);
+BIF_DECL(Op_ObjIncDec);
+BIF_DECL(Op_ObjNew);
 
 
 // Advanced file IO interfaces

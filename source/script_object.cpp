@@ -306,7 +306,7 @@ Object::~Object()
 
 
 //
-// Object::Invoke - Called by BIF_ObjInvoke when script explicitly interacts with an object.
+// Object::Invoke
 //
 
 ResultType STDMETHODCALLTYPE Object::Invoke(

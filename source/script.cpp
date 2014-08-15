@@ -24,12 +24,12 @@ GNU General Public License for more details.
 #include "TextIO.h"
 
 // Globals that are for only this module (mostly):
-static ExprOpFunc g_ObjGetInPlace(BIF_ObjGetInPlace, IT_GET);
-static ExprOpFunc g_ObjNew(BIF_ObjNew, IT_CALL);
-static ExprOpFunc g_ObjPreInc(BIF_ObjIncDec, SYM_PRE_INCREMENT), g_ObjPreDec(BIF_ObjIncDec, SYM_PRE_DECREMENT)
-				, g_ObjPostInc(BIF_ObjIncDec, SYM_POST_INCREMENT), g_ObjPostDec(BIF_ObjIncDec, SYM_POST_DECREMENT);
-ExprOpFunc g_ObjCall(BIF_ObjInvoke, IT_CALL); // Also needed in script_expression.cpp.
-ExprOpFunc g_ObjGet(BIF_ObjInvoke, IT_GET), g_ObjSet(BIF_ObjInvoke, IT_SET); // Also needed in script_object_bif.cpp.
+static ExprOpFunc g_ObjGetInPlace(Op_ObjGetInPlace, IT_GET);
+static ExprOpFunc g_ObjNew(Op_ObjNew, IT_CALL);
+static ExprOpFunc g_ObjPreInc(Op_ObjIncDec, SYM_PRE_INCREMENT), g_ObjPreDec(Op_ObjIncDec, SYM_PRE_DECREMENT)
+				, g_ObjPostInc(Op_ObjIncDec, SYM_POST_INCREMENT), g_ObjPostDec(Op_ObjIncDec, SYM_POST_DECREMENT);
+ExprOpFunc g_ObjCall(Op_ObjInvoke, IT_CALL); // Also needed in script_expression.cpp.
+ExprOpFunc g_ObjGet(Op_ObjInvoke, IT_GET), g_ObjSet(Op_ObjInvoke, IT_SET); // Also needed in script_object_bif.cpp.
 
 #define NA MAX_FUNCTION_PARAMS
 #define BIFn(name, minp, maxp, hasret, bif, ...) {_T(#name), bif, minp, maxp, hasret, FID_##name, __VA_ARGS__}
@@ -9944,7 +9944,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					// Post-increment/decrement has higher precedence, so check for it first:
 					if (infix_symbol == SYM_POST_INCREMENT || infix_symbol == SYM_POST_DECREMENT)
 					{
-						// Replace the func with BIF_ObjIncDec to perform the operation. This has
+						// Replace the func with Op_ObjIncDec to perform the operation. This has
 						// the same effect as the section above with x.y(z) := 1; i.e. x.y(z)++ is
 						// equivalent to x.y[z]++.  This is done for consistency, simplicity and
 						// because x.y(z)++ would otherwise be a useless syntax error.
@@ -13067,13 +13067,13 @@ ResultType Line::Perform()
 		}
 		else // ACT_METHOD
 		{
-			// Call BIF_ObjInvoke() instead of invoking the object to ensure all of the normal behaviour
+			// Call Op_ObjInvoke() instead of invoking the object to ensure all of the normal behaviour
 			// of method calls is in effect, including g_MetaObject and base.Method calling a base-class.
 			// param_tok[0] is always either SYM_VAR set by ExpandArgs() or the result of an expression
 			// such as the "var.id" in "var.id.method".
 			result_token.symbol = SYM_INTEGER;
 			result_token.func = &g_ObjCall;
-			BIF_ObjInvoke(result_token, param_ptr, param_count);
+			Op_ObjInvoke(result_token, param_ptr, param_count);
 		}
 		result = result_token.Result();
 
