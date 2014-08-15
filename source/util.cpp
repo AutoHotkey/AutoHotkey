@@ -398,7 +398,7 @@ SymbolType IsNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
 						++aBuf; // Omit it from further consideration so that the outer loop doesn't see it as an extra/illegal sign.
 					if (aBuf[1] < '0' || aBuf[1] > '9')
 						// Even if it is an 'e', ensure what follows it is a valid exponent.  Some callers rely
-						// on this check, such as ones that expect "0.6e" to be non-numeric (for "SetFormat Float") 
+						// on this check, such as ones that expect "0.6e" to be non-numeric.
 						return PURE_NOT_NUMERIC;
 					has_exponent = true;
 					has_decimal_point = true; // For simplicity, since a decimal point after the exponent isn't valid.

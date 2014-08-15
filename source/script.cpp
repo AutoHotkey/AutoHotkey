@@ -6979,7 +6979,7 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 	tcslcpy(func_name, aFuncName, aFuncNameLength + 1);  // See explanation above.  +1 to convert length to size.
 
 	if (!aClassObject && !Var::ValidateName(func_name, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
-		// Above already displayed error for us.  This can happen at loadtime or runtime (e.g. StringSplit).
+		// Above already displayed error for us.
 		return NULL;
 
 	// If this function is built-in, caller wants us to store the pointer as-is.  It is either a
@@ -9448,7 +9448,7 @@ unquoted_literal:
 		stack_symbol = stack[stack_count - 1]->symbol; // Frequently used, so resolve only once to help performance.
 
 		// Put operands into the postfix array immediately, then move on to the next infix item:
-		if (IS_OPERAND(infix_symbol)) // At this stage, operands consist of only SYM_OPERAND and SYM_STRING.
+		if (IS_OPERAND(infix_symbol))
 		{
 			if (infix_symbol == SYM_DYNAMIC && SYM_DYNAMIC_IS_WRITABLE(this_infix))
 			{

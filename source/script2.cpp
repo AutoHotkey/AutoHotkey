@@ -10303,21 +10303,11 @@ VarSizeType BIV_LoopFileAttrib(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_LoopFileSize(LPTSTR aBuf, LPTSTR aVarName)
 {
-	// Don't use MAX_INTEGER_LENGTH in case user has selected a very long float format via SetFormat.
-	TCHAR str[128];
+	TCHAR str[MAX_INTEGER_SIZE];
 	LPTSTR target_buf = aBuf ? aBuf : str;
 	*target_buf = '\0';  // Set default.
 	if (g->mLoopFile)
 	{
-
-		// UPDATE: 64-bit ints are now standard, so the following is obsolete:
-		// It's a documented limitation that the size will show as negative if
-		// greater than 2 gig, and will be wrong if greater than 4 gig.  For files
-		// that large, scripts should use the KB version of this function instead.
-		// If a file is over 4gig, set the value to be the maximum size (-1 when
-		// expressed as a signed integer, since script variables are based entirely
-		// on 32-bit signed integers due to the use of ATOI(), etc.).
-		//sprintf(str, "%d%", g->mLoopFile->nFileSizeHigh ? -1 : (int)g->mLoopFile->nFileSizeLow);
 		ULARGE_INTEGER ul;
 		ul.HighPart = g->mLoopFile->nFileSizeHigh;
 		ul.LowPart = g->mLoopFile->nFileSizeLow;
@@ -11521,10 +11511,9 @@ has_valid_return_type:
 
 	if (g->ThrownToken)
 	{
-		// If the called function generated an exception, I think it's impossible for the return value
-		// to be valid/meaningful since it the function never returned properly.  Confirmation of this
-		// would be good, but in the meantime it seems best to make the return value an empty string as
-		// an indicator that the call failed (in addition to ErrorLevel).
+		// A script exception was thrown by DynaCall(), either because the called function threw a
+		// SEH exception or because the stdcall parameter list was the wrong size.  Set FAIL result
+		// to indicate to our caller that a script exception was thrown:
 		aResultToken.SetExitResult(FAIL);
 		// But continue on to write out any output parameters because the called function might have
 		// had a chance to update them before aborting.  They might be of some use in debugging the
@@ -11807,7 +11796,7 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 
 BIF_DECL(BIF_InStr)
 {
-	// Load-time validation has already ensured that at least two actual parameters are present.
+	// Caller has already ensured that at least two actual parameters are present.
 	TCHAR needle_buf[MAX_NUMBER_SIZE];
 	LPTSTR haystack = ParamIndexToString(0, _f_number_buf);
 	LPTSTR needle = ParamIndexToString(1, needle_buf);
@@ -13018,7 +13007,7 @@ BIF_DECL(BIF_RegEx)
 
 	// Since compiling succeeded, get info about other parameters.
 	TCHAR haystack_buf[MAX_NUMBER_SIZE];
-	LPTSTR haystack = ParamIndexToString(0, haystack_buf); // Load-time validation has already ensured that at least two actual parameters are present.
+	LPTSTR haystack = ParamIndexToString(0, haystack_buf); // Caller has already ensured that at least two actual parameters are present.
 	int haystack_length = (int)ParamIndexLength(0, haystack);
 
 	int param_index = mode_is_replace ? 5 : 3;
@@ -13994,8 +13983,9 @@ BIF_DECL(BIF_Round)
 		// someday to omit certain calls when very simply situations allow it).  In addition, twice as slow is
 		// not going to impact the vast majority of scripts since as mentioned above, Round (in its param2>0
 		// mode) is almost always used for displaying data, not for intensive operations within a expressions.
-		// AS DOCUMENTED: Round(..., positive_number) doesn't obey SetFormat (nor scientific notation).
-		// The script can force Round(x, 2) to obey SetFormat by adding 0 to the result (if it wants).
+		// AS DOCUMENTED: Round(..., positive_number) displays exactly positive_number decimal places, which
+		// might be inconsistent with normal float->string conversion.  If it wants, the script can force the
+		// result to be formatted the normal way (omitting trailing 0s) by adding 0 to the result.
 		// Also, a new parameter an be added someday to trim excess trailing zeros from param2>0's result
 		// (e.g. Round(3.50, 2, true) can be 3.5 rather than 3.50), but this seems less often desired due to
 		// column alignment and other goals where consistency is important.
@@ -14073,13 +14063,6 @@ BIF_DECL(BIF_Mod)
 
 BIF_DECL(BIF_Abs)
 {
-	// Unlike TRANS_CMD_ABS, which removed the minus sign from the string if it had one,
-	// this is done in a more traditional way.  It's hard to imagine needing the minus
-	// sign removal method here since a negative hex literal such as -0xFF seems too rare
-	// to worry about.  One additional reason not to remove minus signs from strings is
-	// that it might produce inconsistent results depending on whether the operand is
-	// generic (SYM_OPERAND) and numeric.  In other words, abs() shouldn't treat a
-	// sub-expression differently than a numeric literal.
 	if (!TokenToDoubleOrInt64(*aParam[0], aResultToken)) // "Cast" token to Int64/Double depending on whether it has a decimal point.
 		// Non-operand or non-numeric string. TokenToDoubleOrInt64() has already set the token to be an
 		// empty string for us.
@@ -16436,7 +16419,7 @@ LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf)
 // Supports Type() VAR_NORMAL and VAR-CLIPBOARD.
 // Returns "" on failure to simplify logic in callers.  Otherwise, it returns either aBuf (if aBuf was needed
 // for the conversion) or the token's own string.  aBuf may be NULL, in which case the caller presumably knows
-// that this token is SYM_STRING or SYM_OPERAND (or caller wants "" back for anything other than those).
+// that this token is SYM_STRING or SYM_VAR (or the caller wants "" back for anything other than those).
 // If aBuf is not NULL, caller has ensured that aBuf is at least MAX_NUMBER_SIZE in size.
 {
 	switch (aToken.symbol)
