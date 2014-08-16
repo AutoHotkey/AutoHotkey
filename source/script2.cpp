@@ -13763,17 +13763,27 @@ BIF_DECL(BIF_VarSetCapacity)
 		Var &var = *aParam[0]->var; // For performance and convenience. SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 		if (aParamCount > 1) // Second parameter is present.
 		{
-			// in bytes
-			VarSizeType new_capacity = (VarSizeType)TokenToInt64(*aParam[1]);
-			if (new_capacity == -1) // Adjust variable's internal length. Since new_capacity is unsigned, compare directly to -1 rather than doing <0.
+			__int64 param1 = TokenToInt64(*aParam[1]);
+			// Check for invalid values, in particular small negatives which end up large when converted
+			// to unsigned.  Var::AssignString used to have a similar check, but integer overflow caused
+			// by "* sizeof(TCHAR)" allowed some errors to go undetected.  For this same reason, we can't
+			// simply rely on SetCapacity() calling malloc() and then detecting failure.
+			if ((unsigned __int64)param1 > MAXINT_PTR)
 			{
-				// Seems more useful to report length vs. capacity in this special case. Scripts might be able
-				// to use this to boost performance.
-				aResultToken.value_int64 = var.ByteLength() = ((VarSizeType)_tcslen(var.Contents()) * sizeof(TCHAR)); // Performance: Length() and Contents() will update mContents if necessary, it's unlikely to be necessary under the circumstances of this call.  In any case, it seems appropriate to do it this way.
-				var.Close(); // v1.0.44.14: Removes attributes like VAR_ATTRIB_BINARY_CLIP (if present) because it seems more flexible to convert binary-to-normal rather than checking IsBinaryClip() then doing nothing if it binary.
-				return;
+				if (param1 == -1) // Adjust variable's internal length.
+				{
+					// Seems more useful to report length vs. capacity in this special case. Scripts might be able
+					// to use this to boost performance.
+					aResultToken.value_int64 = var.ByteLength() = ((VarSizeType)_tcslen(var.Contents()) * sizeof(TCHAR)); // Performance: Length() and Contents() will update mContents if necessary, it's unlikely to be necessary under the circumstances of this call.  In any case, it seems appropriate to do it this way.
+					var.Close(); // v1.0.44.14: Removes attributes like VAR_ATTRIB_BINARY_CLIP (if present) because it seems more flexible to convert binary-to-normal rather than checking IsBinaryClip() then doing nothing if it binary.
+					return;
+				}
+				// x64: it's negative but not -1.
+				// x86: it's either >2GB or negative and not -1.
+				_f_throw(ERR_PARAM2_INVALID, TokenToString(*aParam[1], _f_number_buf));
 			}
 			// Since above didn't return:
+			size_t new_capacity = (size_t)param1; // in bytes
 			if (!new_capacity && aParam[1]->symbol == SYM_MISSING)
 			{
 				// This case is likely to be rare, but allows VarSetCapacity(v,,b) to fill
@@ -13783,9 +13793,12 @@ BIF_DECL(BIF_VarSetCapacity)
 			}
 			if (new_capacity)
 			{
-				var.SetCapacity(new_capacity, true); // This also destroys the variables contents.
-				// in characters
-				VarSizeType capacity;
+				if (!var.SetCapacity(new_capacity, true)) // This also destroys the variables contents.
+				{
+					aResultToken.SetExitResult(FAIL); // ScriptError() was already called.
+					return;
+				}
+				VarSizeType capacity; // in characters
 				if (aParamCount > 2 && (capacity = var.Capacity()) > 1) // Third parameter is present and var has enough capacity to make FillMemory() meaningful.
 				{
 					--capacity; // Convert to script-POV capacity. To avoid underflow, do this only now that Capacity() is known not to be zero.
