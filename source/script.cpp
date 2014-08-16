@@ -6978,13 +6978,14 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 	if (mClassObjectCount) // Class method or property getter/setter.
 	{
 		Object *class_object = mClassObject[mClassObjectCount - 1];
-		LPTSTR full_name;
-		
+
 		// Build the fully-qualified method name for A_ThisFunc and ListVars:
-		*param_start = '\0'; // Temporarily terminate.
-		if (  !(full_name = (LPTSTR)SimpleHeap::Malloc((_tcslen(mClassName) + _tcslen(aBuf) + 2) * sizeof(TCHAR)))  ) // +2 for dot and null-terminator.
-			return FAIL;
-		_stprintf(full_name, _T("%s.%s"), mClassName, aBuf);
+		// AddFunc() enforces a limit of MAX_VAR_NAME_LENGTH characters for function names, which is relied
+		// on by FindFunc(), BIF_OnMessage() and perhaps others.  For simplicity, allow one extra char to be
+		// printed and rely on AddFunc() detecting that the name is too long.
+		TCHAR full_name[MAX_VAR_NAME_LENGTH + 1 + 1]; // Extra +1 for null terminator.
+		_sntprintf(full_name, MAX_VAR_NAME_LENGTH + 1, _T("%s.%.*s"), mClassName, (param_start - aBuf), aBuf);
+		full_name[MAX_VAR_NAME_LENGTH + 1] = '\0'; // Must terminate at this exact point if _sntprintf hit the limit.
 
 		// Check for duplicates and determine insert_pos:
 		Func *found_func;
@@ -6992,10 +6993,8 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		if (!mClassProperty && class_object->GetItem(found_item, aBuf) // Must be done in addition to the below to detect conflicting var/method declarations.
 			|| (found_func = FindFunc(full_name, 0, &insert_pos))) // Must be done to determine insert_pos.
 		{
-			*param_start = '(';
 			return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
 		}
-		*param_start = '('; // Undo termination.
 
 		// Below passes class_object for AddFunc() to store the func "by reference" in it:
 		if (  !(g->CurrentFunc = AddFunc(full_name, 0, false, insert_pos, class_object))  )
