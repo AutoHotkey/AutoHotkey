@@ -612,13 +612,23 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 				{
 					mByteCapacity = 0;             // Invariant: Anyone setting mCapacity to 0 must also set
 					mCharContents = sEmptyString;  // mContents to the empty string.
-					mByteLength = 0;               // mAttrib was already updated higher above.
 				}
-				// IMPORTANT: else it's the empty string (a constant) or it points to memory on SimpleHeap,
-				// so don't change mContents/Capacity (that would cause a memory leak for reasons described elsewhere).
-				// Also, don't bother making the variable blank and its length zero.  Just leave its contents
-				// untouched due to the rarity of out-of-memory and the fact that the script thread will be terminated
-				// anyway, so in most cases won't care what the contents are.
+				else
+				{
+					// IMPORTANT: It's the empty string (a constant) or it points to memory on SimpleHeap, so don't
+					// change mContents/Capacity (that would cause a memory leak for reasons described elsewhere).
+					// Make the var empty for the following reasons:
+					//  1) This condition could be caused by the script requesting a very high (possibly invalid)
+					//     capacity with VarSetCapacity().  The script might be handling the failure using TRY/CATCH,
+					//     so we want the result to be sane.
+					//  2) It's safer and more maintainable.  For instance, VarSetCapacity() sets length to 0, which
+					//     can produce bad/undefined results if there is no null-terminator at mCharContents[Length()]
+					//     as some other parts of the code assume.
+					//  3) It's more consistent.  If this var contained a binary number or object, it has already
+					//     been cleared by "mAttrib &=" above.
+					*mCharContents = '\0'; // If it's sEmptyString, that's okay too because it's writable.
+				}
+				mByteLength = 0; // mAttrib was already updated higher above.
 				return g_script.ScriptError(ERR_OUTOFMEM); // since an error is most likely to occur at runtime.
 			}
 
@@ -658,7 +668,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize,
 	{
 		// Init for greater robustness/safety (the ongoing conflict between robustness/redundancy and performance).
 		// This has been in effect for so long that some callers probably rely on it.
-		*mCharContents = '\0'; // If it's sEmptyVar, that's okay too because it's writable.
+		*mCharContents = '\0'; // If it's sEmptyString, that's okay too because it's writable.
 		// We've done everything except the actual assignment.  Let the caller handle that.
 		// Also, the length will be set below to the expected length in case the caller
 		// doesn't override this.
