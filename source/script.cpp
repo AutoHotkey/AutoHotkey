@@ -6953,36 +6953,36 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 
 
 Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos, Object *aClassObject)
-// This function should probably not be called by anyone except FindOrAddFunc, which has already done
-// the dupe-checking.
 // Returns the address of the new function or NULL on failure.
 // The caller must already have verified that this isn't a duplicate function.
 {
 	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = _tcslen(aFuncName);
 
-	if (aFuncNameLength > MAX_VAR_NAME_LENGTH)
+	if (aFuncNameLength > MAX_VAR_NAME_LENGTH) // FindFunc(), BIF_OnMessage() and perhaps others rely on this limit being enforced.
 	{
 		ScriptError(_T("Function name too long."), aFuncName);
 		return NULL;
 	}
 
-	// Make a temporary copy that includes only the first aFuncNameLength characters from aFuncName:
-	TCHAR func_name[MAX_VAR_NAME_LENGTH + 1];
-	tcslcpy(func_name, aFuncName, aFuncNameLength + 1);  // See explanation above.  +1 to convert length to size.
+	LPTSTR new_name;
+	if (!aIsBuiltIn)
+	{
+		// ValidateName requires that the name be null-terminated, but it isn't in this case.
+		// Doing this first saves doing tcslcpy() into a temporary buffer, and won't leak memory
+		// since the script currently always exits if an error occurs anywhere below:
+		new_name = SimpleHeap::Malloc((LPTSTR)aFuncName, aFuncNameLength);
+		if (!new_name)
+			return NULL; // Above already displayed the error for us.
 
-	if (!aClassObject && !Var::ValidateName(func_name, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
-		// Above already displayed error for us.
-		return NULL;
-
-	// If this function is built-in, caller wants us to store the pointer as-is.  It is either a
-	// pointer to static memory (just a name) or a memory block containing the name and additional
-	// information (for BIF_PerformAction).  Otherwise, allocate some dynamic memory to pass to
-	// the constructor:
-	LPTSTR new_name = aIsBuiltIn ? (LPTSTR)aFuncName : SimpleHeap::Malloc(func_name, aFuncNameLength);
-	if (!new_name)
-		// It already displayed the error for us.
-		return NULL;
+		if (!aClassObject && !Var::ValidateName(new_name, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
+			return NULL; // Above already displayed the error for us.
+	}
+	else // aIsBuiltIn == true
+	{
+		// aFuncName already points to a valid null-terminated name in persistent memory.
+		new_name = (LPTSTR)aFuncName;
+	}
 
 	Func *the_new_func = new Func(new_name, aIsBuiltIn);
 	if (!the_new_func)
