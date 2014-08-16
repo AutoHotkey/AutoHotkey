@@ -7993,9 +7993,19 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 		for (i = 0; i < line->mArgc; ++i) // For each arg.
 		{
 			ArgStruct &this_arg = line->mArg[i]; // For performance and convenience.
-			if (!*this_arg.text // Blank, or a pre-resolved input/output var.
-				 || !this_arg.is_expression && !this_arg.deref) // Plain text.
+			if (!*this_arg.text) // Blank, or a pre-resolved input/output var.
 				continue;
+			if (!this_arg.is_expression && !this_arg.deref) // Plain text.
+			{
+				if (ACT_USES_SIMPLE_POSTFIX(line->mActionType))
+				{
+					// This ensures ExpandArgs() always sets aResultTokens[i].marker.
+					this_arg.postfix = (ExprTokenType *)SimpleHeap::Malloc(sizeof(ExprTokenType));
+					this_arg.postfix->symbol = SYM_STRING;
+					this_arg.postfix->marker = this_arg.text;
+				}
+				continue;
+			}
 			// Otherwise, the arg will be processed by ExpressionToPostfix(), which will set is_expression
 			// based on whether the arg should be evaluated by ExpandExpression().  
 			if (this_arg.deref) // If false, no function-calls are present because the expression contains neither variables nor function calls.
