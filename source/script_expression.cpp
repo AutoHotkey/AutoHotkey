@@ -961,7 +961,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_EQUAL:     this_token.value_int64 = !((g->StringCaseSense == SCS_INSENSITIVE)
 										? _tcsicmp(left_string, right_string)
 										: lstrcmpi(left_string, right_string)); break; // i.e. use the "more correct mode" except when explicitly told to use the fast mode (v1.0.43.03).
-				case SYM_EQUALCASE: this_token.value_int64 = !_tcscmp(left_string, right_string); break; // Case sensitive.
+				case SYM_EQUALCASE: // Case sensitive.  Also supports binary data.
+					// Support basic equality checking of binary data by using tmemcmp rather than _tcscmp.
+					// The results should be the same for strings, but faster.  Length must be checked first
+					// since tmemcmp wouldn't stop at the null-terminator (and that's why we're using it).
+					// As a result, the comparison is much faster when the length differs.
+					this_token.value_int64 = (left_length == right_length) && !tmemcmp(left_string, right_string, left_length);
+					break; 
 				// The rest all obey g->StringCaseSense since they have no case sensitive counterparts:
 				case SYM_NOTEQUAL:  this_token.value_int64 = g_tcscmp(left_string, right_string) ? 1 : 0; break;
 				case SYM_GT:        this_token.value_int64 = g_tcscmp(left_string, right_string) > 0; break;
