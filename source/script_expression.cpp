@@ -1790,8 +1790,6 @@ bool Func::Call(ResultToken &aResultToken, int aParamCount, ...)
 
 		// Initialize the argument structure
 		cur_arg.symbol = va_arg(va, SymbolType);
-		cur_arg.value_int64 = 0;
-		cur_arg.buf = NULL;
 
 		// Fill in the argument value
 		switch (cur_arg.symbol)
@@ -1969,8 +1967,6 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 				{
 					// Since above did not "continue", this arg must have been an expression which was
 					// converted back to a plain value.  *postfix is a single numeric or string literal.
-					// CopyValueFrom() avoids overwriting buf for maintainability, since some callers
-					// might want to use TokenSetResult() to make the result persistent.
 					aResultTokens[i].CopyValueFrom(*this_arg.postfix);
 				}
 				// Since above did not "continue" and arg_var[i] is NULL, this arg can't be an expression

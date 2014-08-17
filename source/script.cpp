@@ -9064,7 +9064,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 				case '?':
 					this_infix_item.symbol = SYM_IFF_THEN;
-					this_infix_item.buf = cp; // For error-reporting.
+					this_infix_item.marker = cp; // For error-reporting.
 					break;
 				case ':':
 					if (cp1 == '=')
@@ -9073,7 +9073,10 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						this_infix_item.symbol = SYM_ASSIGN;
 					}
 					else
+					{
 						this_infix_item.symbol = SYM_IFF_ELSE;
+						this_infix_item.marker = cp; // For error-reporting.
+					}
 					break;
 
 				case '"': // QUOTED/LITERAL STRING.
@@ -9591,7 +9594,7 @@ unquoted_literal:
 				--stack_count; // Remove this open-paren from the stack, since it is now complete.
 				++this_infix;  // Since this pair of parentheses is done, move on to the next token in the infix expression.
 
-				in_param_list = (DerefType *)stack[stack_count]->buf; // Restore in_param_list to the value it had when SYM_OPAREN was pushed onto the stack.
+				in_param_list = stack[stack_count]->outer_deref; // Restore in_param_list to the value it had when SYM_OPAREN was pushed onto the stack.
 
 				if (stack[stack_count-1]->symbol == SYM_FUNC) // i.e. topmost item on stack is SYM_FUNC.
 				{
@@ -9616,7 +9619,7 @@ unquoted_literal:
 						return LineError(_T("Unsupported method call syntax."), FAIL, in_param_list->marker); // Error message is a bit vague since this can be x[y,z]() or x.y[z]().
 					stack_top.deref->func = &g_ObjCall; // Override the default now that we know this is a method-call.
 					++this_infix; // Skip SYM_CBRACKET so this_infix points to SYM_OPAREN.
-					this_infix->buf = stack_top.buf; // This contains the old value of in_param_list.
+					this_infix->outer_deref = stack_top.outer_deref; // This contains the old value of in_param_list.
 					// Push the open-paren over stack_top (which is now SYM_FUNC) so it will be handled
 					// like an ordinary function call when a comma or the close-paren is encountered.
 					STACK_PUSH(this_infix++);
@@ -9626,7 +9629,7 @@ unquoted_literal:
 				}
 
 				++this_infix; // Since this pair of brackets is done, move on to the next token in the infix expression.
-				in_param_list = (DerefType *)stack_top.buf; // Restore in_param_list to the value it had when '[' was pushed onto the stack.					
+				in_param_list = stack_top.outer_deref; // Restore in_param_list to the value it had when '[' was pushed onto the stack.					
 				goto standard_pop_into_postfix; // Pop the token (now SYM_FUNC) into the postfix array to immediately follow its params.
 			}
 
@@ -9661,7 +9664,7 @@ unquoted_literal:
 // ABOVE CASE FALLS INTO BELOW.
 		case SYM_OPAREN:
 			// Open-parentheses always go on the stack to await their matching close-parentheses.
-			this_infix->buf = (LPTSTR)in_param_list; // L31: Save current value on the stack with this SYM_OPAREN.
+			this_infix->outer_deref = in_param_list; // Save current value on the stack with this SYM_OPAREN.
 			if (stack_symbol == SYM_NEW // Something like "new Class()".
 				&& this_infix[-1].symbol != SYM_NEW) // Not "new (Class)" or "new(Class)".
 			{
@@ -9692,7 +9695,7 @@ unquoted_literal:
 				in_param_list = stack[stack_count - 1]->deref;
 			}
 			else if (infix_symbol == SYM_FUNC)
-				in_param_list = this_infix[-1].deref	; // Store this SYM_FUNC's deref.
+				in_param_list = this_infix[-1].deref; // Store this SYM_FUNC's deref.
 			else if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol)
 				&& this_infix[-1].symbol != SYM_MISSING) // Workaround for X(,(something)), where SYM_COMMA has been replaced with SYM_MISSING.
 				return LineError(_T("Missing operator or space before \"(\"."));
@@ -9703,7 +9706,7 @@ unquoted_literal:
 			
 		case SYM_OBRACKET:
 		case SYM_OBRACE:
-			this_infix->buf = (LPTSTR)in_param_list; // Save current value on the stack with this SYM_OBRACKET.
+			this_infix->outer_deref = in_param_list; // Save current value on the stack with this SYM_OBRACKET.
 			in_param_list = this_infix->deref; // This deref holds param_count and other info for the current parameter list.
 			STACK_PUSH(this_infix++); // Push this '[' onto the stack to await its ']'.
 			break;
@@ -9983,13 +9986,13 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			// Point this short-circuit operator to the end of its right operand.
 			ExprTokenType *iff_end = postfix[postfix_count - 1];
 			if (this_postfix == iff_end) // i.e. the last token is the operator itself.
-				return LineError(_T("Missing operand"), FAIL, this_postfix->buf);
+				return LineError(_T("Missing operand"), FAIL, this_postfix->marker);
 			// Point the original token already in postfix to the end of its right branch:
 			this_postfix->circuit_token = iff_end;
 			continue; // This token was already put into postfix by an earlier stage, so skip it this time.
 		}
 		case SYM_IFF_THEN:
-			return LineError(_T("A \"?\" is missing its \":\""), FAIL, this_postfix->buf);
+			return LineError(_T("A \"?\" is missing its \":\""), FAIL, this_postfix->marker);
 		
 		default:
 			if (!IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(postfix_symbol))

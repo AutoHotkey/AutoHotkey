@@ -267,7 +267,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 			};
 			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).
 			{
-				LPTSTR buf; // Used by SYM_FUNC (helps built-in functions) and perhaps other misc. purposes.
+				DerefType *outer_deref; // Used by ExpressionToPostfix().
 				size_t marker_length; // Used only with aResultToken. TODO: Move into separate ResultTokenType struct.
 			};
 		};  
@@ -279,26 +279,16 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	SymbolType symbol;
 
 	inline void CopyValueFrom(ExprTokenType &other)
-	// Copies the value of a token without overwriting buf, which may still be needed.
+	// Copies the value of a token (by reference where applicable).  Does not object->AddRef().
 	{
+		value_int64 = other.value_int64; // Union copy.
 		symbol = other.symbol;
-#ifndef _WIN64
-		if (symbol == SYM_STRING)
-			marker = other.marker; // Avoid overwriting buf via the union.
-		else
-#endif
-			value_int64 = other.value_int64; // Union copy.
 	}
 
 	inline void CopyExprFrom(ExprTokenType &other)
 	// Copies all fields typically needed in a postfix expression.
 	{
-		value_int64 = other.value_int64;
-#ifdef _WIN64
-		buf = other.buf; // Already covered by above on x86.
-#endif
-		symbol = other.symbol;
-		// Don't copy mem_to_free since that's only needed for SYM_FUNC result token, which doesn't use this operator.
+		return CopyValueFrom(other); // Currently nothing needs to be done differently.
 	}
 
 private: // Force code to use one of the above methods, for clarity.
@@ -314,7 +304,8 @@ private: // Force code to use one of the above methods, for clarity.
 class Func;
 struct ResultToken : public ExprTokenType
 {
-	LPTSTR mem_to_free;
+	LPTSTR buf; // Points to a buffer of _f_retval_buf_size characters for returning short strings and misc purposes.
+	LPTSTR mem_to_free; // Callee stores memory allocated for the result here.  Must be NULL or equal to marker.
 
 	// Utility function for initializing result tokens.
 	void InitResult(LPTSTR aResultBuf)
