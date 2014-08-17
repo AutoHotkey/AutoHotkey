@@ -11686,11 +11686,10 @@ end:
 
 BIF_DECL(BIF_StrLen)
 {
-	// Loadtime validation has ensured that there's exactly one actual parameter.
-	// Calling Length() is always valid for SYM_VAR because SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-	_f_return_i((aParam[0]->symbol == SYM_VAR)
-		? (aParam[0]->var->MaybeWarnUninitialized(), aParam[0]->var->Length())
-		: _tcslen(ParamIndexToString(0, _f_number_buf)));  // Allow StrLen(numeric_expr) for flexibility.
+	// Caller has ensured that there's exactly one actual parameter.
+	size_t length;
+	ParamIndexToString(0, _f_number_buf, &length); // Allow StrLen(numeric_expr) for flexibility.
+	_f_return_i(length);
 }
 
 
@@ -11702,8 +11701,8 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 
 	// Get the first arg, which is the string used as the source of the extraction. Call it "haystack" for clarity.
 	TCHAR haystack_buf[MAX_NUMBER_SIZE]; // A separate buf because _f_number_buf is sometimes used to store the result.
-	LPTSTR haystack = ParamIndexToString(0, haystack_buf);
-	INT_PTR haystack_length = (INT_PTR)ParamIndexLength(0, haystack);
+	INT_PTR haystack_length;
+	LPTSTR haystack = ParamIndexToString(0, haystack_buf, (size_t *)&haystack_length);
 
 	// Load-time validation has ensured that at least the first two parameters are present:
 	INT_PTR starting_offset = (INT_PTR)ParamIndexToInt64(1); // The one-based starting position in haystack (if any).
@@ -11757,8 +11756,10 @@ BIF_DECL(BIF_InStr)
 {
 	// Caller has already ensured that at least two actual parameters are present.
 	TCHAR needle_buf[MAX_NUMBER_SIZE];
-	LPTSTR haystack = ParamIndexToString(0, _f_number_buf);
-	LPTSTR needle = ParamIndexToString(1, needle_buf);
+	INT_PTR haystack_length;
+	LPTSTR haystack = ParamIndexToString(0, _f_number_buf, (size_t *)&haystack_length);
+	size_t needle_length;
+	LPTSTR needle = ParamIndexToString(1, needle_buf, &needle_length);
 	
 	// v1.0.43.03: Rather than adding a third value to the CaseSensitive parameter, it seems better to
 	// obey StringCaseSense because:
@@ -11781,7 +11782,6 @@ BIF_DECL(BIF_InStr)
 	{
 		offset = ParamIndexToIntPtr(3); // i.e. the fourth arg.
 		// For offset validation and reverse search we need to know the length of haystack:
-		INT_PTR haystack_length = ParamIndexLength(0, haystack);
 		if (offset < 0) // Special mode to search from the right side.
 		{
 			++offset; // Convert from negative-one-based to zero-based.
@@ -11794,7 +11794,6 @@ BIF_DECL(BIF_InStr)
 			_f_return_i(0); // Match never found when offset is beyond length of string.
 	}
 	// Since above didn't return:
-	size_t needle_length = (occurrence_number > 1) ? ParamIndexLength(1, needle) : 1; // Avoid unnecessary _tcslen() if occurrence_number == 1, which is the most common case.
 	int i;
 	for (i = 1, found_pos = haystack + offset; ; ++i, found_pos += needle_length)
 		if (!(found_pos = tcsstr2(found_pos, needle, string_case_sense)) || i == occurrence_number)
@@ -12049,19 +12048,17 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 #else
 		static LPSTR *sNamesT = sNames;
 #endif
-		TCHAR resultBuf[MAX_NUMBER_SIZE];
+		TCHAR resultBuf[_f_retval_buf_size];
 		ResultToken resultToken;
 		ExprTokenType thisTokenUnused, paramToken[2], *param[] = { &paramToken[0], &paramToken[1] };
 		for (int i = 0; i < _countof(sNames); i++)
 		{
 			aDebugger->BeginProperty(sNames[i], "array", mPatternCount - (i == 3), cookie);
-			paramToken[0].symbol = SYM_STRING;
-			paramToken[0].marker = sNamesT[i];
+			paramToken[0].SetValue(sNamesT[i]);
 			for (int p = (i == 3); p < mPatternCount; p++)
 			{
 				resultToken.InitResult(resultBuf); // Init before EACH invoke.
-				paramToken[1].symbol = SYM_INTEGER;
-				paramToken[1].value_int64 = p;
+				paramToken[1].SetValue(p);
 				Invoke(resultToken, thisTokenUnused, IT_GET, param, 2);
 				aDebugger->WriteProperty(p, resultToken);
 				if (resultToken.mem_to_free)
@@ -12555,10 +12552,6 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	, pcret *aRE, pcret_extra *aExtra, LPTSTR aHaystack, int aHaystackLength
 	, int aStartingOffset, int aOffset[], int aNumberOfIntsInOffset)
 {
-	// Set default return value in case of early return.
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = aHaystack;
-
 	// If an output variable was provided for the count, resolve it early in case of early goto.
 	// Fix for v1.0.47.05: In the unlikely event that output_var_count is the same script-variable as
 	// as the haystack, needle, or replacement (i.e. the same memory), don't set output_var_count until
@@ -12682,21 +12675,18 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				// Set RegExMatch()'s return value to be "result":
 				aResultToken.marker = result;  // Caller will take care of freeing result's memory.
 			}
-			// Section below is obsolete but is retained for its comments.
-			//else // No replacements were actually done, so just return the original string to avoid malloc+memcpy
-			// (in addition, returning the original might help the caller make other optimizations).
-			//{
-				// Already set as a default earlier, so commented out:
-				//aResultToken.marker = aHaystack;
-				// Not necessary to set output-var (length) for caller except when we allocated memory for the caller:
-				//result_length = aHaystackLength; // result_length is an alias for an output parameter, so update for maintainability even though currently callers don't use it when no alloc of mem_to_free.
-				//
+			else // No replacements were actually done, so just return the original string to avoid malloc+memcpy
+				 // (in addition, returning the original might help the caller make other optimizations).
+			{
+				aResultToken.marker = aHaystack;
+				aResultToken.marker_length = aHaystackLength;
+				
 				// There's no need to do the following because it should already be that way when replacement_count==0.
 				//if (result)
 				//	free(result);
 				//result = NULL; // This tells the caller that we already freed it (i.e. from its POV, we never allocated anything).
-			//}
-
+			}
+			aResultToken.symbol = SYM_STRING;
 			goto set_count_and_return; // All done.
 		}
 
@@ -12708,7 +12698,7 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				ITOA(captured_pattern_count, repl_buf);
 				aResultToken.Error(ERR_PCRE_EXEC, repl_buf);
 			}
-			goto set_count_and_return; // Goto vs. break to leave aResultToken.marker set to aHaystack and replacement_count set to 0.
+			goto set_count_and_return; // Goto vs. break to leave replacement_count set to 0.
 		}
 
 		// Otherwise (since above didn't return or break or continue), a match has been found (i.e.
@@ -12966,8 +12956,9 @@ BIF_DECL(BIF_RegEx)
 
 	// Since compiling succeeded, get info about other parameters.
 	TCHAR haystack_buf[MAX_NUMBER_SIZE];
-	LPTSTR haystack = ParamIndexToString(0, haystack_buf); // Caller has already ensured that at least two actual parameters are present.
-	int haystack_length = (int)ParamIndexLength(0, haystack);
+	size_t temp_length;
+	LPTSTR haystack = ParamIndexToString(0, haystack_buf, &temp_length); // Caller has already ensured that at least two actual parameters are present.
+	int haystack_length = (int)temp_length;
 
 	int param_index = mode_is_replace ? 5 : 3;
 	int starting_offset;
@@ -13097,8 +13088,12 @@ BIF_DECL(BIF_Chr)
 {
 	int param1 = ParamIndexToInt(0); // Convert to INT vs. UINT so that negatives can be detected.
 	LPTSTR cp = _f_retval_buf; // If necessary, it will be moved to a persistent memory location by our caller.
+	int len;
 	if (param1 < 0 || param1 > UorA(0x10FFFF, UCHAR_MAX))
+	{
 		*cp = '\0'; // Empty string indicates both Chr(0) and an out-of-bounds param1.
+		len = 0;
+	}
 #ifdef UNICODE
 	else if (param1 >= 0x10000)
 	{
@@ -13106,6 +13101,7 @@ BIF_DECL(BIF_Chr)
 		cp[0] = 0xd800 + ((param1 >> 10) & 0x3ff);
 		cp[1] = 0xdc00 + ( param1        & 0x3ff);
 		cp[2] = '\0';
+		len = 2;
 	}
 #else
 	// See #ifndef in BIF_Ord for related comment.
@@ -13114,8 +13110,9 @@ BIF_DECL(BIF_Chr)
 	{
 		cp[0] = param1;
 		cp[1] = '\0';
+		len = 1; // Even if param1 == 0.
 	}
-	_f_return_p(cp);
+	_f_return_p(cp, len);
 }
 
 
@@ -13602,7 +13599,7 @@ BIF_DECL(BIF_StrGetPut)
 				--conv_length; // Exclude null-terminator.
 			else
 				aResultToken.marker[conv_length] = '\0';
-			aResultToken.marker_length = conv_length; // Update this in case TokenSetResult used mem_to_free.
+			aResultToken.marker_length = conv_length; // Update it.
 			return;
 		}
 		else if (length > -1)
@@ -16076,16 +16073,16 @@ BIF_DECL(BIF_Trim) // L31
 	BuiltInFunctionID trim_type = _f_callee_id;
 
 	LPTSTR buf = _f_retval_buf;
-	LPTSTR str = ParamIndexToString(0, buf);
+	size_t extract_length;
+	LPTSTR str = ParamIndexToString(0, buf, &extract_length);
 
 	if (str == buf) // IS_NUMERIC(aParam[0]->symbol)
 	{
 		// Take a shortcut for SYM_INTEGER/SYM_FLOAT.
-		_f_return_p(str);
+		_f_return_p(str, extract_length);
 	}
 
 	LPTSTR result = str; // Prior validation has ensured at least 1 param.
-	INT_PTR extract_length = ParamIndexLength(0, str);
 
 	TCHAR omit_list_buf[MAX_NUMBER_SIZE]; // Support SYM_INTEGER/SYM_FLOAT even though it doesn't seem likely to happen.
 	LPTSTR omit_list = ParamIndexIsOmitted(1) ? _T(" \t") : ParamIndexToString(1, omit_list_buf); // Default: space and tab.
@@ -16384,36 +16381,48 @@ double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex)
 
 
 
-LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf)
+LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf, size_t *aLength)
 // Supports Type() VAR_NORMAL and VAR-CLIPBOARD.
 // Returns "" on failure to simplify logic in callers.  Otherwise, it returns either aBuf (if aBuf was needed
 // for the conversion) or the token's own string.  aBuf may be NULL, in which case the caller presumably knows
 // that this token is SYM_STRING or SYM_VAR (or the caller wants "" back for anything other than those).
 // If aBuf is not NULL, caller has ensured that aBuf is at least MAX_NUMBER_SIZE in size.
 {
+	LPTSTR result;
 	switch (aToken.symbol)
 	{
 	case SYM_VAR: // Caller has ensured that any SYM_VAR's Type() is VAR_NORMAL.
-		return aToken.var->Contents(); // Contents() vs. mContents to support VAR_CLIPBOARD, and in case mContents needs to be updated by Contents().
+		if (aLength)
+			*aLength = aToken.var->Length(); // Might also update mCharContents.
+		return aToken.var->Contents(); // Contents() vs. mCharContents in case mCharContents needs to be updated by Contents().
 	case SYM_STRING:
-		return aToken.marker;
+		result = aToken.marker;
+		if (aLength)
+		{
+			if (aToken.marker_length == -1)
+				break; // Call _tcslen(result) below.
+			*aLength = aToken.marker_length;
+		}
+		return result;
 	case SYM_INTEGER:
-		if (aBuf)
-			return ITOA64(aToken.value_int64, aBuf);
-		//else continue on to return the default at the bottom.
+		result = aBuf ? ITOA64(aToken.value_int64, aBuf) : _T("");
 		break;
 	case SYM_FLOAT:
 		if (aBuf)
 		{
-			FTOA(aToken.value_double, aBuf, MAX_NUMBER_SIZE);
+			int length = FTOA(aToken.value_double, aBuf, MAX_NUMBER_SIZE);
+			if (aLength)
+				*aLength = length;
 			return aBuf;
 		}
 		//else continue on to return the default at the bottom.
-		break;
 	//case SYM_OBJECT: // Treat objects as empty strings (or TRUE where appropriate).
-	//default: // Not an operand: continue on to return the default at the bottom.
+	default:
+		result = _T("");
 	}
-	return _T("");
+	if (aLength) // Caller wants to know the string's length as well.
+		*aLength = _tcslen(result);
+	return result;
 }
 
 
@@ -16440,7 +16449,6 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 		default:
 			aOutput.symbol = SYM_STRING;
 			aOutput.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
-			// FALL THROUGH TO BELOW
 			return FAIL;
 	}
 	// Since above didn't return, interpret "str" as a number.
@@ -16511,11 +16519,11 @@ ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLen
 		if (   !(aResultToken.mem_to_free = tmalloc(aLength + 1))   ) // Out of memory.
 			return aResultToken.Error(ERR_OUTOFMEM);
 		aResultToken.marker = aResultToken.mem_to_free; // Store the address of the result for the caller.
-		aResultToken.marker_length = aLength; // MANDATORY FOR USERS OF MEM_TO_FREE: set marker_length to the length of the string.
 	}
 	if (aValue) // Caller may pass NULL to retrieve a buffer of sufficient size.
 		tmemcpy(aResultToken.marker, aValue, aLength);
 	aResultToken.marker[aLength] = '\0'; // Must be done separately from the memcpy() because the memcpy() might just be taking a substring (i.e. long before result's terminator).
+	aResultToken.marker_length = aLength;
 	return OK;
 }
 

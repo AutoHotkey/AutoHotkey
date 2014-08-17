@@ -1079,6 +1079,7 @@ int Debugger::WritePropertyXml(ExprTokenType &aValue, const char *aName, CString
 // This function has an equivalent WritePropertyData() for property_value, so maintain the two together.
 {
 	LPTSTR value;
+	size_t value_length = -1;
 	char *type;
 	TCHAR number_buf[MAX_NUMBER_SIZE];
 
@@ -1089,6 +1090,7 @@ int Debugger::WritePropertyXml(ExprTokenType &aValue, const char *aName, CString
 
 	case SYM_STRING:
 		value = aValue.marker;
+		value_length = aValue.marker_length;
 		type = "string";
 		break;
 
@@ -1121,7 +1123,7 @@ int Debugger::WritePropertyXml(ExprTokenType &aValue, const char *aName, CString
 	// If we fell through, value and type have been set appropriately above.
 	mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" facet=\"\" children=\"0\" encoding=\"base64\" size=\"", aName, aNameBuf.GetString(), type);
 	int err;
-	if (err = WritePropertyData(value, _tcslen(value), aMaxEncodedSize))
+	if (err = WritePropertyData(value, value_length == -1 ? _tcslen(value) : value_length, aMaxEncodedSize))
 		return err;
 	return mResponseBuf.Write("</property>");
 }
@@ -1639,19 +1641,16 @@ DEBUGGER_COMMAND(Debugger::property_set)
 	ExprTokenType val;
 	if (!strcmp(type, "integer"))
 	{
-		val.symbol = SYM_INTEGER;
-		val.value_int64 = _atoi64(new_value);
+		val.SetValue(_atoi64(new_value));
 	}
 	else if (!strcmp(type, "float"))
 	{
-		val.symbol = SYM_FLOAT;
-		val.value_double = atof(new_value);
+		val.SetValue(atof(new_value));
 	}
 	else // Assume type is "string", since that's the only other supported type.
 	{
 		StringUTF8ToTChar(new_value, val_buf, (int)Base64Decode(new_value, new_value));
-		val.symbol = SYM_STRING;
-		val.marker = (LPTSTR)val_buf.GetString();
+		val.SetValue((LPTSTR)val_buf.GetString(), val_buf.GetLength());
 	}
 
 	bool success;

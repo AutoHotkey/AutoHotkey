@@ -7,8 +7,6 @@
 #define ParamIndexToNumber(index, output)			TokenToDoubleOrInt64(*aParam[(index)], output)
 #define ParamIndexToBOOL(index)						TokenToBOOL(*aParam[(index)])
 
-#define ParamIndexLength(index, param_as_string)	EXPR_TOKEN_LENGTH(aParam[index], param_as_string)
-
 // For functions that allow "" to mean parameter is omitted.
 #define ParamIndexIsOmittedOrEmpty(index)  (ParamIndexIsOmitted(index) || TokenIsEmptyString(*aParam[(index)], TRUE))
 

@@ -268,20 +268,53 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).
 			{
 				DerefType *outer_deref; // Used by ExpressionToPostfix().
-				size_t marker_length; // Used only with aResultToken. TODO: Move into separate ResultTokenType struct.
+				size_t marker_length;
 			};
 		};  
 	};
-	// Note that marker's str-length should not be stored in this struct, even though it might be readily
-	// available in places and thus help performance.  This is because if it were stored and the marker
-	// or SYM_VAR's var pointed to a location that was changed as a side effect of an expression's
-	// call to a script function, the length would then be invalid.
 	SymbolType symbol;
+
+	ExprTokenType() {}
+	ExprTokenType(__int64 aValue) { SetValue(aValue); }
+	ExprTokenType(double aValue) { SetValue(aValue); }
+	ExprTokenType(IObject *aValue) { SetValue(aValue); }
+	ExprTokenType(LPTSTR aValue, size_t aLength = -1) { SetValue(aValue, aLength); }
+	
+	void SetValue(__int64 aValue)
+	{
+		symbol = SYM_INTEGER;
+		value_int64 = aValue;
+	}
+	void SetValue(int aValue) { SetValue((__int64)aValue); }
+	void SetValue(UINT aValue) { SetValue((__int64)aValue); }
+	void SetValue(UINT64 aValue) { SetValue((__int64)aValue); }
+	void SetValue(double aValue)
+	{
+		symbol = SYM_FLOAT;
+		value_double = aValue;
+	}
+	void SetValue(LPTSTR aValue, size_t aLength = -1)
+	{
+		ASSERT(aValue);
+		symbol = SYM_STRING;
+		marker = aValue;
+		marker_length = aLength;
+	}
+	void SetValue(IObject *aValue)
+	// Caller must AddRef() if appropriate.
+	{
+		symbol = SYM_OBJECT;
+		object = aValue;
+	}
 
 	inline void CopyValueFrom(ExprTokenType &other)
 	// Copies the value of a token (by reference where applicable).  Does not object->AddRef().
 	{
 		value_int64 = other.value_int64; // Union copy.
+#ifdef _WIN64
+		// For simplicity/smaller code size, don't bother checking symbol == SYM_STRING.
+		marker_length = other.marker_length; // Already covered by the above on x86.
+#endif
 		symbol = other.symbol;
 	}
 
@@ -291,7 +324,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 		return CopyValueFrom(other); // Currently nothing needs to be done differently.
 	}
 
-private: // Force code to use one of the above methods, for clarity.
+private: // Force code to use one of the CopyFrom() methods, for clarity.
 	ExprTokenType & operator = (ExprTokenType &other)
 	{
 		return *this;
@@ -312,7 +345,8 @@ struct ResultToken : public ExprTokenType
 	{
 		symbol = SYM_STRING;
 		marker = _T("");
-		buf = aResultBuf; // May be used for short return values and misc purposes.
+		marker_length = -1; // Helps code size to do this here instead of in ReturnPtr(), which should be inlined.
+		buf = aResultBuf;
 		mem_to_free = NULL;
 		result = OK;
 	}
@@ -340,18 +374,24 @@ struct ResultToken : public ExprTokenType
 	LPTSTR Malloc(LPTSTR aValue, size_t aLength);
 
 	ResultType Return(LPTSTR aValue, size_t aLength = -1);
-	ResultType ReturnPtr(LPTSTR aValue, size_t aLength = -1)
-	// Return a string which is already in persistent memory.
+	ResultType ReturnPtr(LPTSTR aValue)
+	// Return a null-terminated string which is already in persistent memory.
 	{
 		ASSERT(aValue);
 		symbol = SYM_STRING;
 		marker = aValue;
+		//marker_length is left at its default value, -1.  Caller will call _tcslen().
+		return OK;
+	}
+	ResultType ReturnPtr(LPTSTR aValue, size_t aLength)
+	// Return a string which is already in persistent memory.
+	{
+		SetValue(aValue, aLength);
 		return OK;
 	}
 	ResultType Return(__int64 aValue)
 	{
-		symbol = SYM_INTEGER;
-		value_int64 = aValue;
+		SetValue(aValue);
 		return OK;
 	}
 	ResultType Return(int aValue) { return Return((__int64)aValue); }
@@ -360,8 +400,7 @@ struct ResultToken : public ExprTokenType
 	ResultType Return(UINT64 aValue) { return Return((__int64)aValue); }
 	ResultType Return(double aValue)
 	{
-		symbol = SYM_FLOAT;
-		value_double = aValue;
+		SetValue(aValue);
 		return OK;
 	}
 	ResultType Return(IObject *aValue)

@@ -867,7 +867,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				length = mFile.Read(aResultToken.marker, length);
 				aResultToken.symbol = SYM_STRING;
 				aResultToken.marker[length] = '\0';
-				aResultToken.marker_length = length; // Update marker_length to the actual number of characters read. Only strictly necessary in some cases; see TokenSetResult.
+				aResultToken.marker_length = length; // Update marker_length to the actual number of characters read.
 				return OK;
 			}
 			break;
@@ -889,16 +889,15 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		case Write:
 		case WriteLine:
 			{
-				DWORD bytes_written = 0, chars_to_write = 0;
+				DWORD bytes_written = 0;
+				size_t chars_to_write = 0;
 				if (aParamCount)
 				{
-					LPTSTR param1 = TokenToString(*aParam[1], aResultToken.buf);
-					chars_to_write = (DWORD)EXPR_TOKEN_LENGTH(aParam[1], param1);
-					bytes_written = mFile.Write(param1, chars_to_write);
+					LPTSTR param1 = TokenToString(*aParam[1], aResultToken.buf, &chars_to_write);
+					bytes_written = mFile.Write(param1, (DWORD)chars_to_write);
 				}
 				if (member == WriteLine && (bytes_written || !chars_to_write)) // i.e. don't attempt it if above failed.
 				{
-					chars_to_write += 1;
 					bytes_written += mFile.Write(_T("\n"), 1);
 				}
 				aResultToken.value_int64 = bytes_written;

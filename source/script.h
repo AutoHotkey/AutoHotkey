@@ -2842,12 +2842,6 @@ BIV_DECL_R (BIV_ScreenDPI);
 ////////////////////////
 // BUILT-IN FUNCTIONS //
 ////////////////////////
-// Caller has ensured that SYM_VAR's Type() is VAR_NORMAL and that it's either not an environment
-// variable or the caller wants environment variables treated as having zero length.
-#define EXPR_TOKEN_LENGTH(token_raw, token_as_string) \
-( (token_raw->symbol == SYM_VAR && !token_raw->var->IsBinaryClip()) \
-	? token_raw->var->Length()\
-	: _tcslen(token_as_string) )
 
 #ifdef ENABLE_DLLCALL
 bool IsDllArgTypeName(LPTSTR name);
@@ -2979,7 +2973,7 @@ BOOL TokenIsEmptyString(ExprTokenType &aToken);
 BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar); // Same as TokenIsEmptyString but optionally warns if the token is an uninitialized var.
 __int64 TokenToInt64(ExprTokenType &aToken);
 double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE);
-LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL);
+LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL, size_t *aLength = NULL);
 ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOutput);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
 Func *TokenToFunc(ExprTokenType &aToken);

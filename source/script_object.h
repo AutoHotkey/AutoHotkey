@@ -226,26 +226,17 @@ public:
 
 	bool SetItem(LPTSTR aKey, ExprTokenType &aValue)
 	{
-		ExprTokenType key;
-		key.symbol = SYM_STRING;
-		key.marker = aKey;
-		return SetItem(key, aValue);
+		return SetItem(ExprTokenType(aKey), aValue);
 	}
 
 	bool SetItem(LPTSTR aKey, __int64 aValue)
 	{
-		ExprTokenType token;
-		token.symbol = SYM_INTEGER;
-		token.value_int64 = aValue;
-		return SetItem(aKey, token);
+		return SetItem(aKey, ExprTokenType(aValue));
 	}
 
 	bool SetItem(LPTSTR aKey, IObject *aValue)
 	{
-		ExprTokenType token;
-		token.symbol = SYM_OBJECT;
-		token.object = aValue;
-		return SetItem(aKey, token);
+		return SetItem(aKey, ExprTokenType(aValue));
 	}
 
 	void ReduceKeys(INT_PTR aAmount)

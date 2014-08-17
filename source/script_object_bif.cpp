@@ -208,6 +208,7 @@ BIF_DECL(Op_ObjNew)
 	// (beginning at the root class and ending at class_object) before __New is called.
 	// It shouldn't be explicitly defined by the user, but auto-generated in DefineClassVars().
 	name_token.marker = _T("__Init");
+	name_token.marker_length = 6;
 	result = class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, 1);
 	if (result != INVOKE_NOT_HANDLED)
 	{
@@ -224,11 +225,13 @@ BIF_DECL(Op_ObjNew)
 		aResultToken.mem_to_free = NULL;
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
+		aResultToken.marker_length = -1;
 		aResultToken.buf = buf;
 	}
 	
 	// __New may be defined by the script for custom initialization code.
-	name_token.marker = Object::sMetaFuncName[4]; // __New
+	name_token.marker = _T("__New");
+	name_token.marker_length = 5;
 	result = class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, aParamCount);
 	if (result == EARLY_RETURN || !TokenIsEmptyString(aResultToken))
 	{
@@ -289,19 +292,15 @@ BIF_DECL(Op_ObjIncDec)
 		value_to_set.value_double = (current_value.value_double = TokenToDouble(temp_result))
 			+ ((op == SYM_POST_INCREMENT || op == SYM_PRE_INCREMENT) ? +1 : -1);
 		break;
+
+	default: // PURE_NOT_NUMERIC == SYM_STRING.
+		// Value is non-numeric, so assign and return "".
+		value_to_set.marker = _T(""); value_to_set.marker_length = 0;
+		current_value.marker = _T(""); current_value.marker_length = 0;
 	}
 
 	// Free the object or string returned by Op_ObjInvoke, if applicable.
 	temp_result.Free();
-
-	if (current_value.symbol == PURE_NOT_NUMERIC)
-	{
-		// Value is non-numeric, so assign and return "".
-		value_to_set.symbol = SYM_STRING;
-		value_to_set.marker = _T("");
-		//current_value.symbol = SYM_STRING; // Already done (SYM_STRING == PURE_NOT_NUMERIC).
-		current_value.marker = _T("");
-	}
 
 	// Although it's likely our caller's param array has enough space to hold the extra
 	// parameter, there's no way to know for sure whether it's safe, so we allocate our own:
@@ -319,7 +318,6 @@ BIF_DECL(Op_ObjIncDec)
 	else // SYM_POST_INCREMENT || SYM_POST_DECREMENT
 	{
 		// Must be re-initialized (and must use g_ObjSet instead of g_ObjGet):
-		temp_result.symbol = SYM_INTEGER;
 		temp_result.func = &g_ObjSet;
 		temp_result.buf = aResultToken.buf;
 		temp_result.mem_to_free = NULL;
@@ -332,7 +330,10 @@ BIF_DECL(Op_ObjIncDec)
 
 		// Return the previous value.
 		aResultToken.symbol = current_value.symbol;
-		aResultToken.value_int64 = current_value.value_int64; // Union copy.
+		aResultToken.value_int64 = current_value.value_int64; // Union copy.  Includes marker_length on x86.
+#ifdef _WIN64
+		aResultToken.marker_length = current_value.marker_length; // For simplicity, symbol isn't checked.
+#endif
 	}
 }
 

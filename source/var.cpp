@@ -78,7 +78,7 @@ ResultType Var::Assign(ExprTokenType &aToken)
 	case SYM_FLOAT:   return Assign(aToken.value_double); // Listed last because it's probably the least common.
 	}
 	// Since above didn't return, it can only be SYM_STRING.
-	return Assign(aToken.marker);
+	return Assign(aToken.marker, aToken.marker_length);
 }
 
 
@@ -300,7 +300,7 @@ ResultType Var::AssignBinaryClip(Var &aSourceVar)
 	{
 		if (this == &source_var) // i.e. source == destination.  Aliases were already resolved.
 			return OK;
-		if (!SetCapacity(source_var.mByteLength, true)) // source_var.mLength vs. Length() is okay (see above).
+		if (!SetCapacity(source_var.mByteLength, true)) // Also sets length.  source_var.mByteLength vs. Length() is okay (see above).
 			return FAIL; // Above should have already reported the error.
 		memcpy(mByteContents, source_var.mByteContents, source_var.mByteLength + sizeof(TCHAR)); // Add sizeof(TCHAR) not sizeof(format). Contents() vs. a variable for the same because mContents might have just changed due Assign() above.
 		mAttrib |= VAR_ATTRIB_BINARY_CLIP; // VAR_ATTRIB_CACHE and VAR_ATTRIB_CONTENTS_OUT_OF_DATE were already removed by earlier call to Assign().
@@ -1153,6 +1153,8 @@ __forceinline void Var::MaybeWarnUninitialized()
 
 LPTSTR ResultToken::Malloc(LPTSTR aValue, size_t aLength)
 {
+	if (aLength == -1)
+		aLength = _tcslen(aValue);
 	if (  !(mem_to_free = tmalloc(aLength + 1))  )
 		return NULL;
 	symbol = SYM_STRING;

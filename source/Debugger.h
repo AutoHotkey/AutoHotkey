@@ -380,29 +380,9 @@ private:
 		{
 		}
 
-		void WriteProperty(LPCSTR aName, LPTSTR aValue)
-		{
-			ExprTokenType value;
-			value.symbol = SYM_STRING;
-			value.marker = aValue;
-			WriteProperty(aName, value);
-		}
-
-		void WriteProperty(LPCSTR aName, __int64 aValue)
-		{
-			ExprTokenType value;
-			value.symbol = SYM_INTEGER;
-			value.value_int64 = aValue;
-			WriteProperty(aName, value);
-		}
-		
-		void WriteProperty(LPCSTR aName, IObject *aValue)
-		{
-			ExprTokenType value;
-			value.symbol = SYM_OBJECT;
-			value.object = aValue;
-			WriteProperty(aName, value);
-		}
+		void WriteProperty(LPCSTR aName, LPTSTR aValue)    { WriteProperty(aName, ExprTokenType(aValue)); }
+		void WriteProperty(LPCSTR aName, __int64 aValue)   { WriteProperty(aName, ExprTokenType(aValue)); }
+		void WriteProperty(LPCSTR aName, IObject *aValue)  { WriteProperty(aName, ExprTokenType(aValue)); }
 
 		void WriteProperty(LPCSTR aName, ExprTokenType &aValue);
 		void WriteProperty(INT_PTR aKey, ExprTokenType &aValue);

@@ -139,8 +139,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (!stack_count) // Prevent stack underflow.
 						goto abort_with_exception;
 					ExprTokenType &right = *STACK_POP;
-					right_string = TokenToString(right, right_buf);
-					right_length = EXPR_TOKEN_LENGTH((&right), right_string);
+					right_string = TokenToString(right, right_buf, &right_length);
 					// Do some basic validation to ensure a helpful error message is displayed on failure.
 					if (right_length == 0)
 					{
@@ -196,14 +195,12 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case VAR_VIRTUAL:
 					if (this_token.var->mVV->Get == BIV_LoopIndex) // v1.0.48.01: Improve performance of A_Index by treating it as an integer rather than a string in expressions (avoids conversions to/from strings).
 					{
-						this_token.value_int64 = g->mLoopIteration;
-						this_token.symbol = SYM_INTEGER;
+						this_token.SetValue(g->mLoopIteration);
 						goto push_this_token;
 					}
 					if (this_token.var->mVV->Get == BIV_EventInfo) // v1.0.48.02: A_EventInfo is used often enough in performance-sensitive numeric contexts to seem worth special treatment like A_Index; e.g. LV_GetText(RowText, A_EventInfo) or RegisterCallback()'s A_EventInfo.
 					{
-						this_token.value_int64 = g->EventInfo;
-						this_token.symbol = SYM_INTEGER;
+						this_token.SetValue(g->EventInfo);
 						goto push_this_token;
 					}
 					// ABOVE: Goto's and simple assignments (like the SYM_INTEGER ones above) are only a few
@@ -232,8 +229,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				result_size = this_token.var->Get() + 1;
 				if (result_size == 1)
 				{
-					this_token.marker = _T("");
-					this_token.symbol = SYM_STRING;
+					this_token.SetValue(_T(""), 0);
 					goto push_this_token;
 				}
 				// Otherwise, it's a built-in variable which is not empty. Need some memory to store it.
@@ -261,8 +257,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					}
 					to_free[to_free_count++] = &this_token;
 				}
-				this_token.var->Get(result); // MUST USE "result" TO AVOID OVERWRITING MARKER/VAR UNION.
+				result_length = this_token.var->Get(result);
 				this_token.marker = result;  // Must be done after above because marker and var overlap in union.
+				this_token.marker_length = result_length;
 				this_token.symbol = SYM_STRING;
 			} // if (this_token.symbol == SYM_DYNAMIC)
 			goto push_this_token;
@@ -401,8 +398,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			else
 				internal_output_var = NULL;
 			
-			// RELIES ON THE IS_NUMERIC() CHECK above having been done first.
-			result = result_token.marker; // Marker can be used because symbol will never be SYM_VAR in this case.
+			// RELIES ON THE SYM_STRING CHECK above having been done first.
+			result        = result_token.marker;
+			result_length = result_token.marker_length;
+			if (result_length == -1)
+				result_length = (VarSizeType)_tcslen(result);
 
 			if (internal_output_var)
 			{
@@ -410,8 +410,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				// In most cases, the string stored in mem_to_free (if it has been set) is the same address as
 				// this_token.marker (i.e. what is named "result" further below), because that's what the
 				// built-in functions are normally using the memory for.
-				if (result_token.mem_to_free == result_token.marker) // marker is checked in case caller alloc'd mem but didn't use it as its actual result.  Relies on the fact that marker is never NULL.
+				if (result_token.mem_to_free)
 				{
+					ASSERT(result_token.mem_to_free == result); // See similar line below for comments.
 					// So now, turn over responsibility for this memory to the variable. The called function
 					// is responsible for having stored the length of what's in the memory as an overload of
 					// this_token.buf, but only when that memory is the result (currently might always be true).
@@ -421,7 +422,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				}
 				else
 				{
-					result_length = (VarSizeType)_tcslen(result);
 					// 1.0.46.06: If the UDF has stored its result in its deref buffer, take possession
 					// of that buffer, which saves a memcpy of a potentially huge string.  The cost
 					// of this is that if there are any other UDF-calls pending after this one, the
@@ -453,18 +453,19 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				
 			make_result_persistent = true; // Set default.
 			this_token.symbol = SYM_STRING;
+			this_token.marker_length = result_length;
 
 			if (result_token.mem_to_free) // The called function allocated some memory and turned it over to us.
 			{
-				// mem_to_free == marker is checked only in debug mode because it should always be true.
+				// mem_to_free == result is checked only in debug mode because it should always be true.
 				// Other sections rely on mem_to_free not needing to be freed if symbol != SYM_STRING,
 				// so users of mem_to_free must never use it other than to return the result.
-				ASSERT(result_token.mem_to_free == result_token.marker);
+				ASSERT(result_token.mem_to_free == result);
 				if (done && aResultToken)
 				{
 					// Return this memory block to our caller.  This is handled here rather than
 					// at a later stage in order to avoid an unnecessary _tcslen() call.
-					aResultToken->AcceptMem(result_to_return = result_token.marker, result_token.marker_length);
+					aResultToken->AcceptMem(result_to_return = result, result_length);
 					goto normal_end_skip_output_var;
 				}
 				make_result_persistent = false; // Override the default set higher above.
@@ -475,11 +476,12 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				}
 				// Mark it to be freed at the time we return.
 				to_free[to_free_count++] = &this_token;
-				// For maintainability, do this here instead of letting it be done below.  This might
-				// be necessary if a function ever returns binary data starting with a binary zero,
-				// due to the check for empty string below:
-				this_token.marker = result_token.marker; 
-				goto push_this_token;
+				// If this memory block could be passed back to our caller or assigned to an output var,
+				// it was already done above.  So even if a local var's memory block was returned and it
+				// had binary data beyond its "length", there's no one left who would use it.  Otherwise,
+				// we would need to push here to avoid the result_length == 0 check below:
+				//this_token.marker = result;
+				//goto push_this_token;
 			}
 			//else this_token.mem_to_free==NULL, so the BIF just called didn't allocate memory to give to us.
 			
@@ -487,10 +489,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			// at all.  Therefore, handle them fully now, which should improve performance (since it
 			// avoids all the other checking later on).  It also doesn't hurt code size because this
 			// check avoids having to check for empty string in other sections later on.
-			if (!*result_token.marker) // Various make-persistent sections further below may rely on this check.
+			if (result_length == 0) // Various make-persistent sections further below may rely on this check.
 			{
 				this_token.marker = _T(""); // Ensure it's a constant memory area, not a buf that might get overwritten soon.
-				goto push_this_token; // For code simplicity, the optimization for numeric results is done at a later stage.
+				goto push_this_token;
 			}
 
 			if (make_result_persistent) // At this stage, this means that the above wasn't able to determine its correct value yet.
@@ -555,17 +557,17 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				// BELOW RELIES ON THE ABOVE ALWAYS HAVING VERIFIED AND FULLY HANDLED RESULT BEING AN EMPTY STRING.
 				// So now we know result isn't an empty string, which in turn ensures that size > 1 and length > 0,
 				// which might be relied upon by things further below.
-				result_size = _tcslen(result) + 1; // No easy way to avoid strlen currently. Maybe some future revisions to architecture will provide a length.
+				result_size = result_length + 1;
 				// Must cast to int to avoid loss of negative values:
 				if (result_size <= aDerefBufSize - (target - aDerefBuf)) // There is room at the end of our deref buf, so use it.
 				{
 					// Make the token's result the new, more persistent location:
-					this_token.marker = (LPTSTR)tmemcpy(target, result, result_size); // Benches slightly faster than strcpy().
+					this_token.marker = tmemcpy(target, result, result_size); // Benches slightly faster than strcpy().
 					target += result_size; // Point it to the location where the next string would be written.
 				}
 				else if (result_size < EXPR_SMALL_MEM_LIMIT && alloca_usage < EXPR_ALLOCA_LIMIT) // See comments at EXPR_SMALL_MEM_LIMIT.
 				{
-					this_token.marker = (LPTSTR)tmemcpy((LPTSTR)talloca(result_size), result, result_size); // Benches slightly faster than strcpy().
+					this_token.marker = tmemcpy(talloca(result_size), result, result_size); // Benches slightly faster than strcpy().
 					alloca_usage += result_size; // This might put alloca_usage over the limit by as much as EXPR_SMALL_MEM_LIMIT, but that is fine because it's more of a guideline than a limit.
 				}
 				else // Need to create some new persistent memory for our temporary use.
@@ -680,8 +682,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 		case SYM_LOWNOT:  // The operator-word "not".
 		case SYM_HIGHNOT: // The symbol '!'. Both NOTs are equivalent at this stage because precedence was already acted upon by infix-to-postfix.
-			this_token.value_int64 = !TokenToBOOL(right);
-			this_token.symbol = SYM_INTEGER; // Result is always one or zero.
+			this_token.SetValue(!TokenToBOOL(right)); // Result is always one or zero.
 			break;
 
 		case SYM_NEGATIVE:  // Unary-minus.
@@ -691,15 +692,14 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				this_token.value_double = -TokenToDouble(right, FALSE); // Pass FALSE for aCheckForHex since PURE_FLOAT is never hex.
 			else // String.
 			{
-				// Seems best to consider the application of unary minus to a string, even a quoted string
-				// literal such as "15", to be a failure.  UPDATE: For v1.0.25.06, invalid operations like
-				// this instead treat the operand as an empty string.  This avoids aborting a long, complex
-				// expression entirely just because on of its operands is invalid.  However, the net effect
-				// in most cases might be the same, since the empty string is a non-numeric result and thus
-				// will cause any operator it is involved with to treat its other operand as a string too.
-				// And the result of a math operation on two strings is typically an empty string.
-				this_token.marker = _T("");
-				this_token.symbol = SYM_STRING;
+				// Seems best to consider the application of unary minus to a string to be a failure.
+				// UPDATE: For v1.0.25.06, invalid operations like this instead treat the operand as an
+				// empty string.  This avoids aborting a long, complex expression entirely just because
+				// one of its operands is invalid.  However, the net effect in most cases might be the same,
+				// since the empty string is a non-numeric result and thus will cause any operator it is
+				// involved with to treat its other operand as a string too.  And the result of a math
+				// operation on two strings is typically an empty string.
+				this_token.SetValue(_T(""), 0);
 				break;
 			}
 			// Since above didn't "break":
@@ -749,10 +749,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					}
 					//else post_op against non-numeric target-var.  Fall through to below to yield blank result.
 				}
-				//else target isn't a var.  Fall through to below to yield blank result.
-				this_token.marker = _T("");          // Make the result blank to indicate invalid operation
-				this_token.symbol = SYM_STRING;  // (assign to non-lvalue or increment/decrement a non-number).
-				break;
+				//else target isn't a var, so yield blank result.
+				this_token.SetValue(_T(""), 0); // Make the result blank to indicate invalid operation
+				break;                          // (assign to non-lvalue or increment/decrement a non-number).
 			} // end of "invalid operation" block.
 
 			// DUE TO CODE SIZE AND PERFORMANCE decided not to support things like the following:
@@ -803,8 +802,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		case SYM_ADDRESS: // Take the address of a variable.
 			if (IObject *obj = TokenToObject(right))
 			{
-				this_token.symbol = SYM_INTEGER;
-				this_token.value_int64 = (__int64)obj;
+				this_token.SetValue((__int64)obj);
 			}
 			else if (right.symbol == SYM_VAR) // At this stage, SYM_VAR is always a normal variable, never a built-in one, so taking its address should be safe.
 			{
@@ -820,10 +818,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 		case SYM_DEREF:   // Dereference an address to retrieve a single byte.
 		case SYM_BITNOT:  // The tilde (~) operator.
-			if (right_is_number == PURE_NOT_NUMERIC) // String.  Seems best to consider the application of '*' or '~' to a string, even a quoted string literal such as "15", to be a failure.
+			if (right_is_number == PURE_NOT_NUMERIC) // String.  Seems best to consider the application of '*' or '~' to a non-numeric string to be a failure.
 			{
-				this_token.marker = _T("");
-				this_token.symbol = SYM_STRING;
+				this_token.SetValue(_T(""), 0);
 				break;
 			}
 			// Since above didn't "break": right_is_number is PURE_INTEGER or PURE_FLOAT.
@@ -881,8 +878,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			{
 				if (left.symbol != SYM_VAR)
 				{
-					this_token.marker = _T("");          // Make the result blank to indicate invalid operation
-					this_token.symbol = SYM_STRING;  // (assign to non-lvalue).
+					this_token.SetValue(_T(""), 0); // Make the result blank to indicate invalid operation (assign to non-lvalue).
 					break; // Equivalent to "goto push_this_token" in this case.
 				}
 				switch(this_token.symbol)
@@ -949,8 +945,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// comparison operators as unsupported than for (obj == "") to evaluate to true.
 					if (right_obj || left_obj)
 					{
-						this_token.value_int64 = (this_token.symbol != SYM_NOTEQUAL) == (right_obj == left_obj);
-						this_token.symbol = SYM_INTEGER; // Must be set *after* above checks symbol.
+						this_token.SetValue((this_token.symbol != SYM_NOTEQUAL) == (right_obj == left_obj));
 						goto push_this_token;
 					}
 				}
@@ -958,8 +953,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				// Above check has ensured that at least one of them is a string.  But the other
 				// one might be a number such as in 5+10="15", in which 5+10 would be a numerical
 				// result being compared to the raw string literal "15".
-				right_string = TokenToString(right, right_buf);
-				left_string = TokenToString(left, left_buf);
+				right_string = TokenToString(right, right_buf, &right_length);
+				left_string = TokenToString(left, left_buf, &left_length);
 				result_symbol = SYM_INTEGER; // Set default.  Boolean results are treated as integers.
 				switch(this_token.symbol)
 				{
@@ -980,7 +975,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// Binary clipboard is ignored because it's documented that except for certain features,
 					// binary clipboard variables are seen only up to the first binary zero (mostly to
 					// simplify the code).
-					right_length = (right.symbol == SYM_VAR) ? right.var->LengthIgnoreBinaryClip() : _tcslen(right_string);
 					if (sym_assign_var // Since "right" is being appended onto a variable ("left"), an optimization is possible.
 						&& sym_assign_var->AppendIfRoom(right_string, (VarSizeType)right_length)) // But only if the target variable has enough remaining capacity.
 					{
@@ -992,7 +986,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						goto push_this_token; // Skip over all other sections such as subsequent checks of sym_assign_var because it was all taken care of here.
 					}
 					// Otherwise, fall back to the other concat methods:
-					left_length = (left.symbol == SYM_VAR) ? left.var->LengthIgnoreBinaryClip() : _tcslen(left_string);
 					result_size = right_length + left_length + 1;
 
 					if (sym_assign_var)  // Fix for v1.0.48: These 2 lines were added, and they must take
@@ -1096,7 +1089,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					}
 					else if (result_size < EXPR_SMALL_MEM_LIMIT && alloca_usage < EXPR_ALLOCA_LIMIT) // See comments at EXPR_SMALL_MEM_LIMIT.
 					{
-						this_token.marker = (LPTSTR)talloca(result_size);
+						this_token.marker = talloca(result_size);
 						alloca_usage += result_size; // This might put alloca_usage over the limit by as much as EXPR_SMALL_MEM_LIMIT, but that is fine because it's more of a guideline than a limit.
 					}
 					else // Need to create some new persistent memory for our temporary use.
@@ -1113,6 +1106,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (left_length)
 						tmemcpy(this_token.marker, left_string, left_length);  // Not +1 because don't need the zero terminator.
 					tmemcpy(this_token.marker + left_length, right_string, right_length + 1); // +1 to include its zero terminator.
+					this_token.marker_length = result_size - 1;
 					result_symbol = SYM_STRING;
 					break;
 
@@ -1123,8 +1117,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 				default:
 					// Other operators do not support string operands, so the result is an empty string.
-					this_token.marker = _T("");
-					result_symbol = SYM_STRING;
+					this_token.SetValue(_T(""), 0);
 				}
 				this_token.symbol = result_symbol; // Must be done only after the switch() above.
 			}
@@ -1166,6 +1159,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (right_int64 == 0) // Divide by zero produces blank result (perhaps will produce exception if scripts ever support exception handlers).
 					{
 						this_token.marker = _T("");
+						this_token.marker_length = 0;
 						result_symbol = SYM_STRING;
 					}
 					else
@@ -1179,6 +1173,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					{
 						// Return a consistent result rather than something that varies:
 						this_token.marker = _T("");
+						this_token.marker_length = 0;
 						result_symbol = SYM_STRING;
 					}
 					else // We have a valid base and exponent and both are integers, so the calculation will always have a defined result.
@@ -1213,6 +1208,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (right_double == 0.0) // Divide by zero produces blank result (perhaps will produce exception if script's ever support exception handlers).
 					{
 						this_token.marker = _T("");
+						this_token.marker_length = 0;
 						result_symbol = SYM_STRING;
 					}
 					else
@@ -1237,6 +1233,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						|| left_was_negative && qmathFmod(right_double, 1.0) != 0.0) // Negative base, but exponent isn't close enough to being an integer: unsupported (to simplify code).
 					{
 						this_token.marker = _T("");
+						this_token.marker_length = 0;
 						result_symbol = SYM_STRING;
 					}
 					else
@@ -1344,7 +1341,7 @@ push_this_token:
 			if (to_free_count && to_free[to_free_count - 1] == &result_token)
 			{
 				// Pass this mem item back to caller instead of freeing it when we return.
-				aResultToken->AcceptMem(result_to_return = result_token.marker, _tcslen(result_token.marker));
+				aResultToken->AcceptMem(result_to_return = result_token.marker, result_token.marker_length);
 				--to_free_count;
 				goto normal_end_skip_output_var;
 			}
@@ -1395,7 +1392,7 @@ push_this_token:
 		else
 		{
 			result = result_token.marker;
-			result_size = _tcslen(result) + 1;
+			result_size = result_token.marker_length + 1; // At this stage, marker_length should always be valid, not -1.
 		}
 
 		// Notes about the macro below:
@@ -1473,7 +1470,10 @@ push_this_token:
 			if (aTarget != result) // Currently, might be always true.
 				tmemmove(aTarget, result, result_size); // memmove() vs. memcpy() in this case, since source and dest might overlap (i.e. "target" may have been used to put temporary things into aTarget, but those things are no longer needed and now safe to overwrite).
 		if (aResultToken)
+		{
 			aResultToken->marker = aTarget;
+			aResultToken->marker_length = result_size - 1;
+		}
 		aTarget += result_size;
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
 
@@ -1795,7 +1795,10 @@ bool Func::Call(ResultToken &aResultToken, int aParamCount, ...)
 		switch (cur_arg.symbol)
 		{
 			case SYM_INTEGER: cur_arg.value_int64  = va_arg(va, __int64);  break;
-			case SYM_STRING:  cur_arg.marker       = va_arg(va, LPTSTR);   break;
+			case SYM_STRING:
+				cur_arg.marker = va_arg(va, LPTSTR);
+				cur_arg.marker_length = -1;
+				break;
 			case SYM_FLOAT:   cur_arg.value_double = va_arg(va, double);   break;
 			case SYM_OBJECT:  cur_arg.object       = va_arg(va, IObject*); break;
 		}

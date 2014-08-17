@@ -456,6 +456,7 @@ public:
 			break;
 		default: // Not a pure number.
 			aToken.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
+			aToken.marker_length = 0;
 			return FAIL;
 		}
 		return OK; // Since above didn't return, indicate success.
@@ -468,22 +469,18 @@ public:
 		switch (var.mAttrib & VAR_ATTRIB_TYPES)
 		{
 		case VAR_ATTRIB_IS_INT64:
-			aToken.symbol = SYM_INTEGER;
-			aToken.value_int64 = var.mContentsInt64;
+			aToken.SetValue(var.mContentsInt64);
 			return;
 		case VAR_ATTRIB_IS_DOUBLE:
-			aToken.symbol = SYM_FLOAT;
-			aToken.value_double = var.mContentsDouble;
+			aToken.SetValue(var.mContentsDouble);
 			return;
 		case VAR_ATTRIB_IS_OBJECT:
-			aToken.symbol = SYM_OBJECT;
-			aToken.object = var.mObject;
+			aToken.SetValue(var.mObject);
 			aToken.object->AddRef();
 			return;
 		default:
 			// VAR_ATTRIB_BINARY_CLIP or 0.
-			aToken.symbol = SYM_STRING;
-			aToken.marker = var.Contents();
+			aToken.SetValue(var.Contents(), var.Length());
 		}
 	}
 
@@ -515,15 +512,20 @@ public:
 			return false;
 		// Var is local.  Since the function is returning, we won't be needing its value.
 		if (var.mHowAllocated == ALLOC_MALLOC && var.mByteCapacity)
+		{
 			// var.mCharContents was allocated with malloc(); pass it back to the caller.
 			aResultToken.StealMem(this);
+		}
 		else
+		{
 			// Copy contents into aResultToken.buf, which is always large enough because
 			// MAX_ALLOC_SIMPLE < MAX_NUMBER_LENGTH.  mCharContents is used vs Contents()
 			// because this isn't a number and therefore never needs UpdateContents().
 			// Although Contents() should be harmless, we want to be absolutely sure
 			// length isn't increased since that could cause buffer overflow.
 			memcpy(aResultToken.marker = aResultToken.buf, var.mCharContents, var.mByteLength + sizeof(TCHAR));
+			aResultToken.marker_length = var.mByteLength / sizeof(TCHAR);
+		}
 		return true;
 	}
 
@@ -717,7 +719,7 @@ public:
 		//if (var.mType == VAR_NORMAL)
 		{
 			if (var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE)
-				var.UpdateContents();  // Update mContents (and indirectly, mLength).
+				var.UpdateContents();  // Update mContents (and indirectly, mByteLength).
 			return var.mByteLength;
 		}
 		// Since the length of the clipboard isn't normally tracked, we just return a

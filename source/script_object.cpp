@@ -192,6 +192,7 @@ void Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int
 		{
 			token[param_index].symbol = SYM_MISSING;
 			token[param_index].marker = _T("");
+			token[param_index].marker_length = 0;
 		}
 		mFields[field_index].ToToken(token[param_index]);
 	}
@@ -243,18 +244,8 @@ bool Object::Delete()
 			// undesirable to call the super-class' __Delete() meta-function for this.
 			return ObjectBase::Delete();
 
-		ExprTokenType this_token, param_token, *param;
-		
 		FuncResult result_token;
-		//result_token.marker = _T("");
-		//result_token.symbol = SYM_STRING;
-
-		this_token.symbol = SYM_OBJECT;
-		this_token.object = this;
-
-		param_token.symbol = SYM_STRING;
-		param_token.marker = sMetaFuncName[3]; // "__Delete"
-		param = &param_token;
+		ExprTokenType this_token(this), param_token(_T("__Delete"), 8), *param = &param_token;
 
 		// L33: Privatize the last recursion layer's deref buffer in case it is in use by our caller.
 		// It's done here rather than in Var::FreeAndRestoreFunctionVars (even though the below might
@@ -518,9 +509,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		if (obj) // Object was successfully found or created.
 		{
 			// obj now contains a pointer to the object contained by this field, possibly newly created above.
-			ExprTokenType obj_token;
-			obj_token.symbol = SYM_OBJECT;
-			obj_token.object = obj;
+			ExprTokenType obj_token(obj);
 			// References in obj_token and obj weren't counted (AddRef wasn't called), so Release() does not
 			// need to be called before returning, and accessing obj after calling Invoke() would not be safe
 			// since it could Release() the object (by overwriting our field via script) as a side-effect.
@@ -659,9 +648,7 @@ ResultType Object::CallField(FieldType *aField, ResultToken &aResultToken, ExprT
 {
 	if (aField->symbol == SYM_OBJECT)
 	{
-		ExprTokenType field_token;
-		field_token.symbol = SYM_OBJECT;
-		field_token.object = aField->object;
+		ExprTokenType field_token(aField->object);
 		ExprTokenType *tmp = aParam[0];
 		// Something must be inserted into the parameter list to remove any ambiguity between an intentionally
 		// and directly called function of 'that' object and one of our parameters matching an existing name.
@@ -714,8 +701,7 @@ Object *Object::CreateFromArgV(LPTSTR *aArgV, int aArgC)
 	ExprTokenType **param = (ExprTokenType **)_alloca(aArgC * sizeof(ExprTokenType*));
 	for (int j = 0; j < aArgC; ++j)
 	{
-		token[j].symbol = SYM_STRING;
-		token[j].marker = aArgV[j];
+		token[j].SetValue(aArgV[j]);
 		param[j] = &token[j];
 	}
 	if (!args->InsertAt(0, 1, param, aArgC))
@@ -982,6 +968,8 @@ ResultType Object::_Remove_impl(ResultToken &aResultToken, ExprTokenType *aParam
 			aResultToken.object = min_field->object;
 			min_field->symbol = SYM_INTEGER; // Prevent Free() from calling object->Release(), instead of calling AddRef().
 			break;
+		//case SYM_INTEGER:
+		//case SYM_FLOAT:
 		default:
 			aResultToken.value_int64 = min_field->n_int64; // Effectively also value_double = n_double.
 		}
@@ -1283,13 +1271,7 @@ bool Object::FieldType::Assign(ExprTokenType &aParam)
 	switch (val->symbol)
 	{
 	case SYM_STRING:
-		return Assign(val->marker);
-	case SYM_INTEGER:
-	case SYM_FLOAT:
-		Free(); // Free string or object, if applicable.
-		symbol = val->symbol; // Either SYM_INTEGER or SYM_FLOAT.  Set symbol *after* calling Free().
-		n_int64 = val->value_int64; // Also handles value_double via union.
-		break;
+		return Assign(val->marker, val->marker_length);
 	case SYM_OBJECT:
 		Free(); // Free string or object, if applicable.
 		symbol = SYM_OBJECT; // Set symbol *after* calling Free().
@@ -1298,8 +1280,13 @@ bool Object::FieldType::Assign(ExprTokenType &aParam)
 			object->AddRef();
 		// Otherwise, take ownership of the ref in temp.
 		break;
+	//case SYM_INTEGER:
+	//case SYM_FLOAT:
 	default:
-		ASSERT(FALSE);
+		Free(); // Free string or object, if applicable.
+		symbol = val->symbol; // Either SYM_INTEGER or SYM_FLOAT.  Set symbol *after* calling Free().
+		n_int64 = val->value_int64; // Also handles value_double via union.
+		break;
 	}
 	return true;
 }
@@ -1367,7 +1354,7 @@ int Object::Enumerator::Next(Var *aKey, Var *aVal)
 			switch (field.symbol)
 			{
 			case SYM_STRING:	aVal->AssignString(field.marker);	break;
-			case SYM_INTEGER:	aVal->Assign(field.n_int64);			break;
+			case SYM_INTEGER:	aVal->Assign(field.n_int64);		break;
 			case SYM_FLOAT:		aVal->Assign(field.n_double);		break;
 			case SYM_OBJECT:	aVal->Assign(field.object);			break;
 			}
@@ -1586,7 +1573,7 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ResultToken &aResultToken, ExprTokenTy
 
 MetaObject g_MetaObject;
 
-LPTSTR Object::sMetaFuncName[] = { _T("__Get"), _T("__Set"), _T("__Call"), _T("__Delete"), _T("__New") };
+LPTSTR Object::sMetaFuncName[] = { _T("__Get"), _T("__Set"), _T("__Call") };
 
 ResultType STDMETHODCALLTYPE MetaObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {

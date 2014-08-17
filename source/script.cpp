@@ -6348,11 +6348,13 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 			class_var->Scope() = VAR_DECLARE_SUPER_GLOBAL;
 	}
 	
-	if (_tcslen(mClassName) + _tcslen(class_name) + 1 >= _countof(mClassName)) // +1 for '.'
+	size_t length = _tcslen(mClassName), extra_length = _tcslen(class_name) + 1; // +1 for '.'
+	if (length + extra_length >= _countof(mClassName))
 		return ScriptError(_T("Full class name is too long."));
-	if (*mClassName)
-		_tcscat(mClassName, _T("."));
-	_tcscat(mClassName, class_name);
+	if (length)
+		mClassName[length++] = '.';
+	tmemcpy(mClassName + length, class_name, extra_length); // Includes null-terminator.
+	length += extra_length - 1; // -1 to exclude the null-terminator.
 
 	// For now, it seems more useful to detect a duplicate as an error rather than as
 	// a continuation of the previous definition.  Partial definitions might be allowed
@@ -6360,16 +6362,13 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	if (class_object)
 		return ScriptError(_T("Duplicate class definition."), aBuf);
 
-	token.symbol = SYM_STRING;
-	token.marker = mClassName;
+	token.SetValue(mClassName, length);
 	
 	if (mUnresolvedClasses)
 	{
 		ExprTokenType *param = &token;
 		ResultToken result_token;
-		result_token.symbol = SYM_STRING;
-		result_token.marker = _T("");
-		result_token.mem_to_free = NULL;
+		result_token.symbol = SYM_STRING; // Init for detecting SYM_OBJECT below.
 		// Search for class and simultaneously remove it from the unresolved list:
 		mUnresolvedClasses->_Remove(result_token, &param, 1); // result_token := mUnresolvedClasses.Remove(token)
 		// If a field was found/removed, it can only be SYM_OBJECT.
@@ -6402,11 +6401,9 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 	LPTSTR item, item_end;
 	TCHAR orig_char, buf[LINE_SIZE];
 	size_t buf_used = 0;
-	ExprTokenType temp_token, empty_token, int_token;
-	empty_token.symbol = SYM_STRING;
-	empty_token.marker = _T("");
-	int_token.symbol = SYM_INTEGER; // Value used to mark instance variables.
-	int_token.value_int64 = 1;      //
+	ExprTokenType temp_token;
+	ExprTokenType empty_token(_T(""), 0);
+	ExprTokenType int_token(1i64); // Used to mark instance variables.
 					
 	for (item = omit_leading_whitespace(aBuf); *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
 	{
@@ -8003,6 +8000,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 					this_arg.postfix = (ExprTokenType *)SimpleHeap::Malloc(sizeof(ExprTokenType));
 					this_arg.postfix->symbol = SYM_STRING;
 					this_arg.postfix->marker = this_arg.text;
+					this_arg.postfix->marker_length = this_arg.length;
 				}
 				continue;
 			}
@@ -9146,14 +9144,14 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							{
 								// Seems best to treat obj.1 as obj[1] rather than obj["1"].
 								// But what about obj.001?  That's also treated as obj[1] for now.
-								infix[infix_count].symbol = SYM_INTEGER;
-								infix[infix_count].value_int64 = ATOI64(number_buf);
+								infix[infix_count].SetValue(ATOI64(number_buf));
 							}
 							else
 							{
-								infix[infix_count].symbol = SYM_STRING;
-								if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   )
-									return LineError(ERR_OUTOFMEM);
+								LPTSTR str = SimpleHeap::Malloc(cp, op_end - cp);
+								if (!str)
+									return FAIL; // Malloc already displayed an error message.
+								infix[infix_count].SetValue(str, op_end - cp);
 							}
 
 							++infix_count;
@@ -9237,8 +9235,10 @@ unquoted_literal:
 						break;
 					default:
 						// SYM_STRING: either the "key" in "{key: value}" or a syntax error (might be impossible).
-						if (   !(infix[infix_count].marker = SimpleHeap::Malloc(cp, op_end - cp))   )
-							return LineError(ERR_OUTOFMEM);
+						LPTSTR str = SimpleHeap::Malloc(cp, op_end - cp);
+						if (!str)
+							return FAIL; // Malloc already displayed an error message.
+						infix[infix_count].SetValue(str, op_end - cp);
 					}
 					cp = op_end; // Have the loop process whatever lies at op_end and beyond.
 					continue; // "Continue" to avoid the ++cp at the bottom.
@@ -9319,9 +9319,10 @@ unquoted_literal:
 
 			if (!can_be_optimized_out)
 			{
-				if (   !(infix[infix_count].marker = SimpleHeap::Malloc(this_deref_ref.marker, this_deref_ref.length))   )
+				LPTSTR str = SimpleHeap::Malloc(this_deref_ref.marker, this_deref_ref.length);
+				if (!str)
 					return LineError(ERR_OUTOFMEM);
-				infix[infix_count].symbol = SYM_STRING;
+				infix[infix_count].SetValue(str, this_deref_ref.length);
 				infix_count++;
 			}
 			cp += this_deref_ref.length;
@@ -9397,22 +9398,18 @@ unquoted_literal:
 				// but since their values never change at run-time, it is better to do it here:
 				if (this_deref_ref.var->mBIV == BIV_True_False)
 				{
-					infix[infix_count].symbol = SYM_INTEGER;
-					infix[infix_count].value_int64 = (ctoupper(*this_deref_ref.marker) == 'T');
+					infix[infix_count].SetValue(ctoupper(*this_deref_ref.marker) == 'T');
 				}
 				else if (this_deref_ref.var->mBIV == BIV_PtrSize)
 				{
-					infix[infix_count].symbol = SYM_INTEGER;
-					infix[infix_count].value_int64 = sizeof(void*);
+					infix[infix_count].SetValue(sizeof(void*));
 				}
 				else if (this_deref_ref.var->mBIV == BIV_IsUnicode)
 				{
 #ifdef UNICODE
-					infix[infix_count].symbol = SYM_INTEGER;
-					infix[infix_count].value_int64 = 1;
+					infix[infix_count].SetValue(1);
 #else
-					infix[infix_count].symbol = SYM_STRING;
-					infix[infix_count].marker = _T(""); // See BIV_IsUnicode for comments about why it is blank.
+					infix[infix_count].SetValue(_T(""), 0); // See BIV_IsUnicode for comments about why it is blank.
 #endif
 				}
 				else
@@ -9558,10 +9555,7 @@ unquoted_literal:
 							{
 								void *function = GetDllProcAddress(param1.marker);
 								if (function)
-								{
-									param1.symbol = SYM_INTEGER;
-									param1.value_int64 = (__int64)function;
-								}
+									param1.SetValue((__int64)function);
 								// Otherwise, one of the following is true:
 								//  a) A file was specified and is not already loaded.  GetDllProcAddress avoids
 								//     loading any dlls since doing so may have undesired side-effects.  The file
@@ -10886,6 +10880,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 
 			token->symbol = SYM_STRING; // Set default. ExpandArgs() mightn't set it.
 			token->mem_to_free = NULL;
+			token->marker_length = -1;
 
 			result = line->ExpandArgs(token);
 			if (result != OK)
@@ -10901,7 +10896,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				// because throwing a string is pretty rare and not a performance priority.
 				// Shortcut #1: Assign _T("") if ARG1 is empty.
 				// Shortcut #2: Take over sDerefBuf if ARG1 == sDerefBuf.
-				if (!token->Malloc(token->marker, _tcslen(token->marker)))
+				if (!token->Malloc(token->marker, token->marker_length))
 				{
 					delete token;
 					// See ThrowRuntimeException() for comments.
@@ -11320,8 +11315,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 	enum_token.InitResult(buf);
 
 	// Prepare to call object._NewEnum():
-	param_tokens[0].symbol = SYM_STRING;
-	param_tokens[0].marker = _T("_NewEnum");
+	param_tokens[0].SetValue(_T("_NewEnum"), 8);
 
 	// enum := object._NewEnum()
 	param_tokens[2].object->Invoke(enum_token, param_tokens[2], IT_CALL, params, 1);
@@ -11342,7 +11336,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 		var[1]->Backup(var_bkp[1]);
 
 	// Prepare parameters for the loop below: enum.Next(var1 [, var2])
-	param_tokens[0].marker = _T("Next");
+	param_tokens[0].SetValue(_T("Next"), 4);
 	param_tokens[1].symbol = SYM_VAR;
 	param_tokens[1].var = var[0];
 	if (var[1])
@@ -11365,7 +11359,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 
 	for (;; ++g.mLoopIteration)
 	{
-		// Set up result_token the way Invoke expects; each Invoke() will change some or all of these:
+		// Set up result_token for each Invoke:
 		result_token.InitResult(buf);
 
 		// Call enumerator.Next(var1, var2)
@@ -13054,9 +13048,10 @@ ResultType Line::Perform()
 				}
 				else
 				{
-					// This arg must be a simple built-in var reference, not an expression.
-					// ExpandArgs() didn't set marker in this case, so set it now:
+					// This arg must be a simple built-in var reference, not an expression (since that would only
+					// set sArgVar[] for VAR_NORMAL).  ExpandArgs() didn't set marker in this case, so set it now:
 					param_tok[arg].marker = sArgDeref[arg];
+					param_tok[arg].marker_length = -1;
 				}
 			}
 			param_ptr[i] = &param_tok[arg];
@@ -13283,14 +13278,13 @@ BIF_DECL(BIF_PerformAction)
 			&& !(act == ACT_RUNWAIT || act == ACT_SENDMESSAGE) // These two have a more useful return value.
 			&& output_var->HasContents()) // Commands which don't set ErrorLevel at all shouldn't return 1.
 		{
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = !VarToBOOL(*output_var); // Return TRUE for success, otherwise FALSE.
+			aResultToken.Return(!VarToBOOL(*output_var)); // Return TRUE for success, otherwise FALSE.
 		}
 		else
 		{
 			// Return the value of the output var if there is one, or ErrorLevel if there isn't:
 			if (!output_var->MoveMemToResultToken(aResultToken))
-				output_var->ToToken(aResultToken);
+				output_var->ToToken(aResultToken); // It's a number, object or Var::sEmptyString.
 		}
 	}
 	else
@@ -13782,28 +13776,28 @@ IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR
 	ExprTokenType aParams[5*2]; int aParamCount = 4*2;
 	ExprTokenType* aParam[5*2] = { aParams + 0, aParams + 1, aParams + 2, aParams + 3, aParams + 4
 		, aParams + 5, aParams + 6, aParams + 7, aParams + 8, aParams + 9 };
-	aParams[0].symbol = SYM_STRING;  aParams[0].marker = _T("What");
-	aParams[1].symbol = SYM_STRING;  aParams[1].marker = aWhat ? (LPTSTR)aWhat : 
+	aParams[0].SetValue(_T("What"), 4);
+	aParams[1].SetValue(aWhat ? (LPTSTR)aWhat : 
 #ifdef CONFIG_DEBUGGER
-		g_Debugger.WhatThrew();
+		g_Debugger.WhatThrew());
 #else
 		// Without the debugger stack, there's no good way to determine what's throwing. It could be:
 		//g_act[mActionType].Name; // A command implemented as an Action (g_act).
 		//g->CurrentFunc->mName; // A user-defined function (perhaps when mActionType == ACT_THROW).
 		//???; // A built-in function implemented as a Func (g_BIF).
-		_T("");
+		_T(""));
 #endif
-	aParams[2].symbol = SYM_STRING;  aParams[2].marker = _T("File");
-	aParams[3].symbol = SYM_STRING;  aParams[3].marker = Line::sSourceFile[mFileIndex];
-	aParams[4].symbol = SYM_STRING;  aParams[4].marker = _T("Line");
-	aParams[5].symbol = SYM_INTEGER; aParams[5].value_int64 = mLineNumber;
-	aParams[6].symbol = SYM_STRING;  aParams[6].marker = _T("Message");
-	aParams[7].symbol = SYM_STRING;  aParams[7].marker = (LPTSTR)aErrorText;
+	aParams[2].SetValue(_T("File"), 4);
+	aParams[3].SetValue(Line::sSourceFile[mFileIndex]);
+	aParams[4].SetValue(_T("Line"), 4);
+	aParams[5].SetValue(mLineNumber);
+	aParams[6].SetValue(_T("Message"), 7);
+	aParams[7].SetValue((LPTSTR)aErrorText);
 	if (aExtraInfo && *aExtraInfo)
 	{
 		aParamCount += 2;
-		aParams[8].symbol = SYM_STRING; aParams[8].marker = _T("Extra");
-		aParams[9].symbol = SYM_STRING; aParams[9].marker = (LPTSTR)aExtraInfo;
+		aParams[8].SetValue(_T("Extra"), 5);
+		aParams[9].SetValue((LPTSTR)aExtraInfo);
 	}
 
 	return Object::Create(aParam, aParamCount);
