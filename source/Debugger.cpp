@@ -1282,7 +1282,7 @@ int Debugger::WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize)
 	switch (aField.symbol)
 	{
 	case SYM_STRING:
-		value = aField.marker;
+		value = aField.string;
 		type = "string";
 		break;
 
@@ -1450,8 +1450,7 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 				else
 				{
 					sBaseField->symbol = SYM_STRING;
-					sBaseField->marker = _T("");
-					sBaseField->size = 0;
+					sBaseField->string.Init();
 				}
 				field = sBaseField;
 				// If this is the end of 'name', sBaseField will be returned to our caller.

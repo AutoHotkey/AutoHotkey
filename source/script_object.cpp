@@ -128,25 +128,13 @@ Object *Object::Clone(BOOL aExcludeIntegerKeys)
 		switch (dst.symbol = src.symbol)
 		{
 		case SYM_STRING:
-			if (dst.size = src.size)
-			{
-				if (dst.marker = tmalloc(dst.size))
-				{
-					// Since user may have stored binary data, copy the entire field:
-					tmemcpy(dst.marker, src.marker, src.size);
-					continue;
-				}
-				// Since above didn't continue: allocation failed.
+			dst.string.Init();
+			if (!dst.Assign(src.string, src.string.Length(), true)) // Pass true to conserve memory (no space is allowed for future expansion).
 				++failure_count; // See failure comment further above.
-			}
-			dst.marker = Var::sEmptyString;
-			dst.size = 0;
 			break;
-
 		case SYM_OBJECT:
 			(dst.object = src.object)->AddRef();
 			break;
-
 		//case SYM_INTEGER:
 		//case SYM_FLOAT:
 		default:
@@ -219,7 +207,7 @@ ResultType Object::ArrayToStrings(LPTSTR *aStrings, int &aStringCount, int aStri
 	int i, j;
 	for (i = 0, j = 0; i < aStringsMax && j < mKeyOffsetObject; ++j)
 		if (SYM_STRING == mFields[j].symbol)
-			aStrings[i++] = mFields[j].marker;
+			aStrings[i++] = mFields[j].string;
 		else
 			return FAIL;
 	aStringCount = i;
@@ -663,7 +651,7 @@ ResultType Object::CallField(FieldType *aField, ResultToken &aResultToken, ExprT
 	}
 	else if (aField->symbol == SYM_STRING)
 	{
-		Func *func = g_script.FindFunc(aField->marker);
+		Func *func = g_script.FindFunc(aField->string, aField->string.Length());
 		if (func)
 		{
 			ExprTokenType *tmp = aParam[0];
@@ -739,22 +727,8 @@ bool Object::Append(LPTSTR aValue, size_t aValueLength)
 	// this function, so the last integer key == the number of integer keys.
 	field.key.i = mKeyOffsetObject;
 
-	field.symbol = SYM_STRING;
-	if (aValueLength) // i.e. a non-empty string was supplied.
-	{
-		++aValueLength; // Convert length to size.
-		if (field.marker = tmalloc(aValueLength))
-		{
-			tmemcpy(field.marker, aValue, aValueLength);
-			field.marker[aValueLength-1] = '\0';
-			field.size = aValueLength;
-			return true;
-		}
-		// Otherwise, mem alloc failed; assign an empty string.
-	}
-	field.marker = Var::sEmptyString;
-	field.size = 0;
-	return (aValueLength == 0); // i.e. true if caller supplied an empty string.
+	field.symbol = SYM_INVALID; // Init for Assign(): indicate that it does not contain a valid string or object.
+	return field.Assign(aValue, aValueLength, true); // Pass true to conserve memory (no space is allowed for future expansion).
 }
 
 
@@ -821,7 +795,7 @@ bool Object::InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], in
 		if (value.symbol != SYM_MISSING)
 		{
 			field->key.i = aKey;
-			field->symbol = SYM_INTEGER; // Must be init'd for Assign().
+			field->symbol = SYM_INVALID; // Init for Assign(): indicate that it does not contain a valid string or object.
 			field->Assign(value);
 			field++;
 		}
@@ -956,17 +930,14 @@ ResultType Object::_Remove_impl(ResultToken &aResultToken, ExprTokenType *aParam
 		switch (aResultToken.symbol = min_field->symbol)
 		{
 		case SYM_STRING:
-			if (min_field->size)
-			{
-				// Detach the memory allocated for this field's string and pass it back to caller.
-				aResultToken.AcceptMem(min_field->marker, _tcslen(min_field->marker)); // Must use _tcslen() and NOT min_field->size, which is the capacity.
-				min_field->size = 0; // Prevent Free() from freeing min_field->marker.
-			}
-			//else aResultToken already contains an empty string.
+			// For simplicity, just discard the memory of min_field->marker (can't return it as-is
+			// since the string isn't at the start of its memory block).  Scripts can use the 2-param
+			// mode to avoid any performance penalty this may incur.
+			TokenSetResult(aResultToken, min_field->string, min_field->string.Length());
 			break;
 		case SYM_OBJECT:
 			aResultToken.object = min_field->object;
-			min_field->symbol = SYM_INTEGER; // Prevent Free() from calling object->Release(), instead of calling AddRef().
+			min_field->symbol = SYM_INVALID; // Prevent Free() from calling object->Release(), since caller is taking ownership of the ref.
 			break;
 		//case SYM_INTEGER:
 		//case SYM_FLOAT:
@@ -977,9 +948,8 @@ ResultType Object::_Remove_impl(ResultToken &aResultToken, ExprTokenType *aParam
 		// Note that object keys can only be removed in the single-item mode.
 		if (min_key_type == SYM_OBJECT)
 			min_field->key.p->Release();
-		// Set these up as if caller did Remove(min_key, min_key):
+		// Set max_pos for the loops below.
 		max_pos = min_pos + 1;
-		max_key.i = min_key.i; // Union copy. Used only if min_key_type == SYM_INTEGER; has no effect in other cases.
 	}
 
 	for (pos = min_pos; pos < max_pos; ++pos)
@@ -1059,7 +1029,8 @@ ResultType Object::_GetCapacity(ResultToken &aResultToken, ExprTokenType *aParam
 		if ( (field = FindField(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
 			&& field->symbol == SYM_STRING )
 		{
-			_o_return(field->size ? _TSIZE(field->size - 1) : 0); // -1 to exclude null-terminator.
+			size_t size = field->string.Capacity();
+			_o_return(size ? _TSIZE(size - 1) : 0); // -1 to exclude null-terminator.
 		}
 		//else: wrong type of field, so return an empty string.
 	}
@@ -1087,7 +1058,6 @@ ResultType Object::_SetCapacity(ResultToken &aResultToken, ExprTokenType *aParam
 		KeyType key;
 		IndexType insert_pos;
 		FieldType *field;
-		LPTSTR buf;
 
 		if ( (field = FindField(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
 			|| (field = Insert(key_type, key, insert_pos)) )
@@ -1097,26 +1067,25 @@ ResultType Object::_SetCapacity(ResultToken &aResultToken, ExprTokenType *aParam
 				// Wrong type of field.
 				_o_throw(ERR_INVALID_VALUE);
 			if (!desired_size)
-			{	// Caller specified zero - empty the field but do not remove it.
-				field->Assign(NULL);
+			{
+				// Caller specified zero - empty the field but do not remove it.
+				field->Clear();
 				_o_return(0);
 			}
 #ifdef UNICODE
 			// Convert size in bytes to size in chars.
 			desired_size = (desired_size >> 1) + (desired_size & 1);
 #endif
-			// Like VarSetCapacity, always reserve one char for the null-terminator.
-			++desired_size;
-			// Unlike VarSetCapacity, allow fields to shrink; preserve existing data up to min(new size, old size).
-			// size is checked because if it is 0, marker is Var::sEmptyString which we can't pass to realloc.
-			if (buf = trealloc(field->size ? field->marker : NULL, desired_size))
+			size_t length = field->string.Length();
+			if (desired_size < length)
+				desired_size = length; // Consistent with Object.SetCapacity(n): never truncate data.
+			// Unlike VarSetCapacity: allow fields to shrink, preserves existing data.
+			if (field->string.SetCapacity(desired_size + 1)) // Like VarSetCapacity, reserve one char for the null-terminator.
 			{
-				buf[desired_size - 1] = '\0'; // Terminate at the new end of data.
-				field->marker = buf;
-				field->size = desired_size;
-				// Return new size, minus one char reserved for null-terminator.
-				_o_return(_TSIZE(desired_size - 1));
+				// Return new size, excluding null-terminator.
+				_o_return(_TSIZE(desired_size));
 			}
+			// Since above didn't return, it failed.
 		}
 		// Out of memory.  Throw an error, otherwise scripts might assume success and end up corrupting the heap:
 		_o_throw(ERR_OUTOFMEM);
@@ -1163,9 +1132,9 @@ ResultType Object::_GetAddress(ResultToken &aResultToken, ExprTokenType *aParam[
 	FieldType *field;
 
 	if ( (field = FindField(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
-		&& field->symbol == SYM_STRING && field->size )
+		&& field->symbol == SYM_STRING && field->string.Capacity() != 0 )
 	{
-		_o_return((__int64)field->marker);
+		_o_return((__int64)field->string.Value());
 	}
 	//else: field has no memory allocated, so return an empty string.
 	_o_return_empty;
@@ -1203,30 +1172,36 @@ ResultType Object::_Clone(ResultToken &aResultToken, ExprTokenType *aParam[], in
 // Object::FieldType
 //
 
+void Object::FieldType::Clear()
+{
+	Free();
+	symbol = SYM_STRING;
+	string.Init();
+}
+
 bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
 {
-	if (!str || !*str && (len == -1 || !len)) // If empty string or null pointer, free our contents.  Passing len >= 1 allows copying \0, so don't check *str in that case.  Ordered for short-circuit performance (len is usually -1).
-	{
-		Free();
-		symbol = SYM_STRING;
-		marker = Var::sEmptyString;
-		size = 0;
-		return true;
-	}
-	
 	if (len == -1)
 		len = _tcslen(str);
 
-	if (symbol != SYM_STRING || len >= size)
+	if (!len) // Check len, not *str, since it might be binary data or not null-terminated.
+	{
+		Clear();
+		return true;
+	}
+
+	if (symbol != SYM_STRING || len >= string.Capacity())
 	{
 		Free(); // Free object or previous buffer (which was too small).
 		symbol = SYM_STRING;
+		string.Init();
+
 		size_t new_size = len + 1;
 		if (!exact_size)
 		{
 			// Use size calculations equivalent to Var:
-			if (new_size < 16) // v1.0.45.03: Added this new size to prevent all local variables in a recursive
-				new_size = 16; // function from having a minimum size of MAX_PATH.  16 seems like a good size because it holds nearly any number.  It seems counterproductive to go too small because each malloc, no matter how small, could have around 40 bytes of overhead.
+			if (new_size < 16)
+				new_size = 16; // 16 seems like a good size because it holds nearly any number.  It seems counterproductive to go too small because each malloc has overhead.
 			else if (new_size < MAX_PATH)
 				new_size = MAX_PATH;  // An amount that will fit all standard filenames seems good.
 			else if (new_size < (160 * 1024)) // MAX_PATH to 160 KB or less -> 10% extra.
@@ -1238,17 +1213,15 @@ bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
 			else  // 6400 KB or more: Cap the extra margin at some reasonable compromise of speed vs. mem usage: 64 KB
 				new_size += (64 * 1024);
 		}
-		if ( !(marker = tmalloc(new_size)) )
-		{
-			marker = Var::sEmptyString;
-			size = 0;
-			return false; // See "Sanity check" above.
-		}
-		size = new_size;
+		if (!string.SetCapacity(new_size))
+			return false; // And leave string empty (as set by Free() above).
 	}
 	// else we have a buffer with sufficient capacity already.
 
-	tmemcpy(marker, str, len + 1); // +1 for null-terminator.
+	LPTSTR buf = string.Value();
+	tmemcpy(buf, str, len);
+	buf[len] = '\0'; // Must be done separately since some callers pass a substring.
+	string.Length() = len;
 	return true; // Success.
 }
 
@@ -1293,10 +1266,19 @@ bool Object::FieldType::Assign(ExprTokenType &aParam)
 
 void Object::FieldType::Get(ExprTokenType &result)
 {
-	result.symbol = symbol;
-	result.value_int64 = n_int64; // Union copy.
-	if (symbol == SYM_OBJECT)
+	switch (result.symbol = symbol) // Assign.
+	{
+	case SYM_STRING:
+		result.marker = string;
+		result.marker_length = string.Length();
+		break;
+	case SYM_OBJECT:
 		object->AddRef();
+		result.object = object;
+		break;
+	default:
+		result.value_int64 = n_int64; // Union copy.
+	}
 }
 
 void Object::FieldType::Free()
@@ -1304,10 +1286,9 @@ void Object::FieldType::Free()
 // entirely or the Object is being deleted.  See Object::Delete.
 // CONTAINED VALUE WILL NOT BE VALID AFTER THIS FUNCTION RETURNS.
 {
-	if (symbol == SYM_STRING) {
-		if (size)
-			free(marker);
-	} else if (symbol == SYM_OBJECT)
+	if (symbol == SYM_STRING)
+		string.Free();
+	else if (symbol == SYM_OBJECT)
 		object->Release();
 }
 
@@ -1353,7 +1334,7 @@ int Object::Enumerator::Next(Var *aKey, Var *aVal)
 		{
 			switch (field.symbol)
 			{
-			case SYM_STRING:	aVal->AssignString(field.marker);	break;
+			case SYM_STRING:	aVal->AssignString(field.string, field.string.Length());	break;
 			case SYM_INTEGER:	aVal->Assign(field.n_int64);		break;
 			case SYM_FLOAT:		aVal->Assign(field.n_double);		break;
 			case SYM_OBJECT:	aVal->Assign(field.object);			break;
@@ -1489,10 +1470,9 @@ Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, IndexType at
 			key.p->AddRef();
 	}
 	
-	field.marker = _T(""); // Init for maintainability.
-	field.size = 0; // Init to ensure safe behaviour in Assign().
 	field.key = key; // Above has already copied string or called key.p->AddRef() as appropriate.
 	field.symbol = SYM_STRING;
+	field.string.Init(); // Initialize to empty string.  Caller will likely reassign.
 
 	return &field;
 }

@@ -71,7 +71,55 @@ public:
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	virtual int Next(Var *aOutputVar1, Var *aOutputVar2) = 0;
 };
-	
+
+
+//
+// FlatVector - utility class.
+//
+
+template <typename T>
+class FlatVector
+{
+	struct Data
+	{
+		size_t size;
+		size_t length;
+		T value[1];
+	};
+	Data *data;
+	static Data Empty;
+public:
+	void Init() // Not a constructor because this class is used in a union.
+	{
+		data = &Empty;
+	}
+	void Free()
+	{
+		if (data != &Empty)
+		{
+			free(data);
+			data = &Empty;
+		}
+	}
+	bool SetCapacity(size_t new_size)
+	{
+		Data *d = (data == &Empty) ? NULL : data;
+		const size_t header_size = sizeof(Data) - sizeof(T);
+		if (  !(d = (Data *)realloc(d, new_size * sizeof(T) + header_size))  )
+			return false;
+		data = d;
+		data->size = new_size;
+		return true;
+	}
+	size_t &Length() { return data->length; }
+	size_t Capacity() { return data->size; }
+	T *Value() { return data->value; }
+	operator T *() { return Value(); }
+};
+
+template <typename T>
+typename FlatVector<T>::Data FlatVector<T>::Empty;
+
 
 //
 // Object - Scriptable associative array.
@@ -88,24 +136,23 @@ protected:
 		IntKeyType i;
 		IObject *p;
 	};
+	typedef FlatVector<TCHAR> String;
 	struct FieldType
 	{
 		union { // Which of its members is used depends on the value of symbol, below.
 			__int64 n_int64;	// for SYM_INTEGER
 			double n_double;	// for SYM_FLOAT
 			IObject *object;	// for SYM_OBJECT
-			struct {
-				LPTSTR marker;		// for SYM_STRING
-				size_t size;		// for SYM_STRING; allows reuse of allocated memory. For UNICODE: count in characters
-			};
+			String string;		// for SYM_STRING
 		};
 		// key and symbol probably need to be adjacent to each other to conserve memory due to 8-byte alignment.
 		KeyType key;
 		SymbolType symbol;
-		
+
 		inline IntKeyType CompareKey(IntKeyType val) { return val - key.i; }  // Used by both int and object since they are stored separately.
 		inline int CompareKey(LPTSTR val) { return _tcsicmp(val, key.s); }
 
+		void Clear();
 		bool Assign(LPTSTR str, size_t len = -1, bool exact_size = false);
 		bool Assign(ExprTokenType &val);
 		void Get(ExprTokenType &result);
