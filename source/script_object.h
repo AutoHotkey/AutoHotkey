@@ -296,6 +296,21 @@ public:
 
 
 //
+// Property: Invoked when a derived object gets/sets the corresponding key.
+//
+
+class Property : public ObjectBase
+{
+public:
+	Func *mGet, *mSet;
+
+	Property() : mGet(NULL), mSet(NULL) { }
+	
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+};
+
+
+//
 // MetaObject:	Used only by g_MetaObject (not every meta-object); see comments below.
 //
 class MetaObject : public Object
