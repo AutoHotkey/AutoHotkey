@@ -9657,9 +9657,6 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 
 	if (result)
 	{
-		output_buf[bytes_actually_read] = 0; // Ensure text is terminated where indicated.
-		output_buf[bytes_actually_read + 1] = 0; // wchar_t consumes two bytes
-
 		if (!is_binary_clipboard) // text mode, do UTF-8 and UTF-16LE BOM checking
 		{
 			bool has_bom;
@@ -9684,8 +9681,10 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			{
 #ifndef UNICODE
 				if (codepage == CP_ACP || codepage == GetACP())
-				{	// Avoid any unnecessary conversion or copying by using our malloc'd buffer directly.
+				{
+					// Avoid any unnecessary conversion or copying by using our malloc'd buffer directly.
 					// This should be worth doing since the string must otherwise be converted to UTF-16 and back.
+					output_buf[bytes_actually_read] = 0; // Ensure text is terminated where indicated.
 					output_var.AcceptNewMem((LPTSTR)output_buf, bytes_actually_read);
 					output_buf = NULL; // AcceptNewMem took charge of it.
 				}
@@ -9708,6 +9707,18 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 					return FAIL;
 				return SetErrorLevelOrThrowBool(false);
 			}
+			// Although binary clipboard data is always null-terminated, this might be some other kind
+			// of binary data or actually text (but the caller passed *c to skip codepage conversion),
+			// so might not be terminated.  Ensure the data is null-terminated:
+			DWORD terminate_at = bytes_actually_read;
+#ifdef UNICODE
+			// Since the data might be interpreted as UTF-16, we need to ensure the null-terminator is
+			// aligned correctly, like "xxxx 0000" and not "xx00 00??" (where xx is valid data and ??
+			// is an uninitialized byte).
+			if (terminate_at & 1) // Odd number of bytes.
+				output_buf[terminate_at++] = 0; // Put an extra zero byte in and move the actual terminator right one byte.
+#endif
+			*LPTSTR(output_buf + terminate_at) = 0;
 		}
 
 		// Since a larger string is being replaced with a smaller, there's a good chance the 2 GB
