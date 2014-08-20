@@ -9600,12 +9600,6 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	if (hfile == INVALID_HANDLE_VALUE)      // in cases like these (and it seems best even if max_bytes_to_load was specified).
 		return SetErrorsOrThrow(true);
 
-	if (is_binary_clipboard && output_var.Type() == VAR_CLIPBOARD)
-		return ReadClipboardFromFile(hfile);
-
-	// Otherwise, if is_binary_clipboard, load it directly into a normal variable.  The data in the
-	// clipboard file should already have the (UINT)0 as its ending terminator.
-
 	unsigned __int64 bytes_to_read = GetFileSize64(hfile);
 	if (bytes_to_read == ULLONG_MAX) // GetFileSize64() failed.
 	{
@@ -9626,7 +9620,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	}
 
 	LPBYTE output_buf;
-	if (is_binary_clipboard)
+	if (is_binary_clipboard && output_var.Type() != VAR_CLIPBOARD) // i.e. if it's the clipboard, don't write directly into it.
 	{
 		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 		// this call will set up the clipboard for writing:
@@ -9637,14 +9631,18 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	}
 	else
 	{
-		// Allocate a temporary buffer; output_var will be assigned the text after conversion.
+		// Either we're reading text and need an intermediate buffer to allow text conversion,
+		// or we're reading binary clipboard data into the Clipboard and need a temporary buffer
+		// to read into before calling SetClipboardData().
 		output_buf = (LPBYTE) malloc(size_t(bytes_to_read + sizeof(wchar_t)));
+		if (!output_buf)
+			LineError(ERR_OUTOFMEM);
 	}
 	if (!output_buf)
 	{
 		CloseHandle(hfile);
 		// ErrorLevel doesn't matter now because the current quasi-thread will be aborted.
-		return is_binary_clipboard ? FAIL : LineError(ERR_OUTOFMEM);
+		return FAIL;
 	}
 
 	DWORD bytes_actually_read;
@@ -9699,6 +9697,17 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			if (output_buf) // i.e. it wasn't "claimed" above.
 				free(output_buf);
 			output_buf = (LPBYTE) output_var.Contents();
+		}
+		else // is_binary_clipboard == true
+		{
+			if (output_var.Type() == VAR_CLIPBOARD) // Reading binary clipboard data directly back onto the clipboard.
+			{
+				result = Var::SetClipboardAll(output_buf, bytes_actually_read) == OK;
+				free(output_buf);
+				if (!result)
+					return FAIL;
+				return SetErrorLevelOrThrowBool(false);
+			}
 		}
 
 		// Since a larger string is being replaced with a smaller, there's a good chance the 2 GB
@@ -9839,13 +9848,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 				// 1) Duplicate clipboard formats not making sense (i.e. two CF_TEXT formats would cause the
 				//    first to be overwritten by the second when restoring to clipboard).
 				// 2) There is a 4-byte zero terminator at the end of the file.
-				HANDLE hFile;
-				DWORD dwWritten;
-				if (   (hFile = CreateFile(aFilespec, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL)) == INVALID_HANDLE_VALUE   ) // Overwrite.
-					return SetErrorsOrThrow(true);
-				result = WriteFile(hFile, ARGVAR1->Contents(), (DWORD)ARGVAR1->ByteLength(), &dwWritten, NULL); // In this case, WriteFile() will return non-zero on success, 0 on failure.
-				CloseHandle(hFile);
-				return SetErrorsOrThrow(!result);
+				return WriteClipboardToFile(aFilespec, ARGVAR1);
 			}
 		}
 		// Auto-detection avoids the need to have to translate \r\n to \n when reading
@@ -9909,182 +9912,45 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 
 
 
-ResultType Line::WriteClipboardToFile(LPTSTR aFilespec)
+ResultType Line::WriteClipboardToFile(LPTSTR aFilespec, Var *aBinaryClipVar)
 // Returns OK or FAIL.  If OK, it sets ErrorLevel to the appropriate result.
 // If the clipboard is empty, a zero length file will be written, which seems best for its consistency.
 {
-	// This method used is very similar to that used in PerformAssign(), so see that section
-	// for a large quantity of comments.
+	LPVOID data;
+	size_t data_size;
+	if (aBinaryClipVar)
+	{
+		// Get clipboard data from a variable.
+		data = aBinaryClipVar->Contents();
+		data_size = aBinaryClipVar->ByteLength();
+	}
+	else
+	{
+		// Get the clipboard's current contents.
+		if (!Var::GetClipboardAll(NULL, &data, &data_size))
+		{
+			g->LastError = 0; // To avoid possible confusion, don't leave it at its previous value.
+			return FAIL;
+		}
+	}
 
-	if (!g_clip.Open())
-		return LineError(CANT_OPEN_CLIPBOARD_READ); // Make this a critical/stop error since it's unusual and something the user would probably want to know about.
+	BOOL success = FALSE; // Set default.
+	DWORD bytes_to_write = (DWORD)data_size;
 
 	HANDLE hfile = CreateFile(aFilespec, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL); // Overwrite. Unsharable (since reading the file while it is being written would probably produce bad data in this case).
-	if (hfile == INVALID_HANDLE_VALUE)
+	if (hfile != INVALID_HANDLE_VALUE)
 	{
-		g->LastError = GetLastError();
-		g_clip.Close();
-		return SetErrorLevelOrThrow();
+		DWORD bytes_written = 0;
+		if (data) // Can be NULL if data_size == 0.
+			WriteFile(hfile, data, bytes_to_write, &bytes_written, NULL);
+		success = (bytes_written == bytes_to_write); // Even if both are zero.
 	}
-	
-	UINT format;
-	HGLOBAL hglobal;
-	LPVOID hglobal_locked;
-	SIZE_T size;
-	DWORD bytes_written;
-	BOOL result;
-	bool format_is_text, format_is_dib, format_is_meta;
-	bool text_was_already_written = false, dib_was_already_written = false, meta_was_already_written = false;
+	g->LastError = GetLastError(); // Always done, for simplicity.  Must be called before CloseHandle().
+	if (hfile != INVALID_HANDLE_VALUE)
+		CloseHandle(hfile); // Close file.
+	free(data); // Free ClipboardAll data.  Can be NULL.
 
-	g->LastError = 0; // Set default.
-
-	for (format = 0; format = EnumClipboardFormats(format);)
-	{
-		switch (format)
-		{
-		case CF_BITMAP:
-		case CF_ENHMETAFILE:
-		case CF_DSPENHMETAFILE:
-			// These formats appear to be specific handle types, not always safe to call GlobalSize() for.
-			continue;
-		}
-
-		format_is_text = (format == CF_NATIVETEXT || format == CF_OEMTEXT || format == CF_OTHERTEXT);
-		format_is_dib = (format == CF_DIB || format == CF_DIBV5);
-		format_is_meta = (format == CF_METAFILEPICT);
-
-		// Only write one Text and one Dib format, omitting the others to save space.  See
-		// similar section in PerformAssign() for details:
-		if (format_is_text && text_was_already_written
-			|| format_is_dib && dib_was_already_written
-			|| format_is_meta && meta_was_already_written)
-			continue;
-
-		if (format_is_text)
-			text_was_already_written = true;
-		else if (format_is_dib)
-			dib_was_already_written = true;
-		else if (format_is_meta)
-			meta_was_already_written = true;
-
-		if ((hglobal = g_clip.GetClipboardDataTimeout(format)) // Relies on short-circuit boolean order:
-			&& (!(size = GlobalSize(hglobal)) || (hglobal_locked = GlobalLock(hglobal)))) // Size of zero or lock succeeded: Include this format.
-		{
-			if (!WriteFile(hfile, &format, sizeof(format), &bytes_written, NULL)
-				|| !WriteFile(hfile, &size, sizeof(size), &bytes_written, NULL))
-			{
-				result = FALSE;
-				g->LastError = GetLastError();
-				if (size)
-					GlobalUnlock(hglobal); // hglobal not hglobal_locked.
-				break; // File might be in an incomplete state now, but that's okay because the reading process checks for that.
-			}
-
-			if (size)
-			{
-				result = WriteFile(hfile, hglobal_locked, (DWORD)size, &bytes_written, NULL);
-				g->LastError = GetLastError();
-				GlobalUnlock(hglobal); // hglobal not hglobal_locked.
-				if (!result)
-					break; // File might be in an incomplete state now, but that's okay because the reading process checks for that.
-			}
-			//else hglobal_locked is not valid, so don't reference it or unlock it. In other words, 0 bytes are written for this format.
-		}
-	}
-
-	g_clip.Close();
-
-	if (!format) // Since the loop was not terminated as a result of a failed WriteFile(), write the 4-byte terminator (otherwise, omit it to avoid further corrupting the file).
-	{
-		result = WriteFile(hfile, &format, sizeof(format), &bytes_written, NULL);
-		g->LastError = GetLastError();
-	}
-
-	CloseHandle(hfile);
-
-	return SetErrorLevelOrThrowBool(!result);
-}
-
-
-
-ResultType Line::ReadClipboardFromFile(HANDLE hfile)
-// Returns OK or FAIL.  If OK, ErrorLevel is overridden from the callers ERRORLEVEL_ERROR setting to
-// ERRORLEVEL_SUCCESS, if appropriate.  This function also closes hfile before returning.
-// The method used here is very similar to that used in PerformAssign(), so see that section
-// for a large quantity of comments.
-{
-	if (!g_clip.Open())
-	{
-		g->LastError = GetLastError(); // Probably the error set by OpenClipboard().
-		CloseHandle(hfile);
-		return LineError(CANT_OPEN_CLIPBOARD_WRITE); // Make this a critical/stop error since it's unusual and something the user would probably want to know about.
-	}
-	EmptyClipboard(); // Failure is not checked for since it's probably impossible under these conditions.
-
-	UINT format;
-	HGLOBAL hglobal;
-	LPVOID hglobal_locked;
-	SIZE_T size;
-	DWORD bytes_read;
-
-    if (!ReadFile(hfile, &format, sizeof(format), &bytes_read, NULL) || bytes_read < sizeof(format))
-	{
-		g->LastError = GetLastError();
-		g_clip.Close();
-		CloseHandle(hfile);
-		return SetErrorLevelOrThrow();
-	}
-
-	g->LastError = 0; // Set default.
-
-	while (format)
-	{
-		if (!ReadFile(hfile, &size, sizeof(size), &bytes_read, NULL) || bytes_read < sizeof(size))
-		{
-			g->LastError = GetLastError();
-			break; // Leave what's already on the clipboard intact since it might be better than nothing.
-		}
-
-		if (   !(hglobal = GlobalAlloc(GMEM_MOVEABLE, size))   ) // size==0 is okay.
-		{
-			g_clip.Close();
-			CloseHandle(hfile);
-			return LineError(ERR_OUTOFMEM); // Short msg since so rare.
-		}
-
-		if (size) // i.e. Don't try to lock memory of size zero.  It won't work and it's not needed.
-		{
-			if (   !(hglobal_locked = GlobalLock(hglobal))   )
-			{
-				GlobalFree(hglobal);
-				g_clip.Close();
-				CloseHandle(hfile);
-				return LineError(_T("GlobalLock")); // Short msg since so rare.
-			}
-			if (!ReadFile(hfile, hglobal_locked, (DWORD)size, &bytes_read, NULL) || bytes_read < size)
-			{
-				g->LastError = GetLastError();
-				GlobalUnlock(hglobal);
-				GlobalFree(hglobal); // Seems best not to do SetClipboardData for incomplete format (especially without zeroing the unused portion of global_locked).
-				break; // Leave what's already on the clipboard intact since it might be better than nothing.
-			}
-			GlobalUnlock(hglobal);
-		}
-		//else hglobal is just an empty format, but store it for completeness/accuracy (e.g. CF_BITMAP).
-
-		SetClipboardData(format, hglobal); // The system now owns hglobal.
-
-		if (!ReadFile(hfile, &format, sizeof(format), &bytes_read, NULL) || bytes_read < sizeof(format))
-		{
-			g->LastError = GetLastError();
-			break;
-		}
-	}
-
-	g_clip.Close();
-	CloseHandle(hfile);
-
-	return SetErrorLevelOrThrowBool(format != 0);
+	return SetErrorLevelOrThrowBool(!success); // Set ErrorLevel based on result.
 }
 
 
