@@ -9620,7 +9620,8 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	}
 
 	LPBYTE output_buf;
-	if (is_binary_clipboard && output_var.Type() != VAR_CLIPBOARD) // i.e. if it's the clipboard, don't write directly into it.
+	bool output_buf_is_var = is_binary_clipboard && output_var.Type() != VAR_CLIPBOARD;
+	if (output_buf_is_var) 
 	{
 		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 		// this call will set up the clipboard for writing:
@@ -9696,6 +9697,15 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			if (output_buf) // i.e. it wasn't "claimed" above.
 				free(output_buf);
 			output_buf = (LPBYTE) output_var.Contents();
+			if (translate_crlf_to_lf)
+			{
+				// Since a larger string is being replaced with a smaller, there's a good chance the 2 GB
+				// address limit will not be exceeded by StrReplace even if the file is close to the
+				// 1 GB limit as described above:
+				VarSizeType var_length = output_var.CharLength();
+				StrReplace((LPTSTR)output_buf, _T("\r\n"), _T("\n"), SCS_SENSITIVE, UINT_MAX, -1, NULL, &var_length);
+				output_var.SetCharLength(var_length);
+			}
 		}
 		else // is_binary_clipboard == true
 		{
@@ -9719,15 +9729,12 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 				output_buf[terminate_at++] = 0; // Put an extra zero byte in and move the actual terminator right one byte.
 #endif
 			*LPTSTR(output_buf + terminate_at) = 0;
+			// Update the output var's length.  In this case the script wants the actual data size rather
+			// than the "usable" length.  v1.1.16: Although it might change the behaviour of some scripts,
+			// it seems safer to use the "rounded up" size than an odd byte count, which would cause the
+			// last byte to be truncated due to integer division in Var::CharLength().
+			output_var.ByteLength() = terminate_at;
 		}
-
-		// Since a larger string is being replaced with a smaller, there's a good chance the 2 GB
-		// address limit will not be exceeded by StrReplace even if the file is close to the
-		// 1 GB limit as described above:
-		if (translate_crlf_to_lf)
-			StrReplace((LPTSTR) output_buf, _T("\r\n"), _T("\n"), SCS_SENSITIVE); // Safe only because larger string is being replaced with smaller.
-		output_var.ByteLength() = is_binary_clipboard ? bytes_actually_read // In this case the script wants the actual data size rather than the "usable" length.
-			: _tcslen((LPCTSTR) output_buf) * sizeof(TCHAR); // In case file contains binary zeroes, explicitly calculate the "usable" length so that it's accurate.
 	}
 	else
 	{
@@ -9739,7 +9746,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 		// avoid storing a potentially non-terminated string in the variable.
 		*((LPTSTR)output_buf) = '\0'; // Assign() at this point would fail for the clipboard since it's already open for writing.
 		output_var.ByteLength() = 0;
-		if (!is_binary_clipboard)
+		if (!output_buf_is_var)
 			free(output_buf);
 	}
 

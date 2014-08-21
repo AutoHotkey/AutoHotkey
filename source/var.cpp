@@ -377,6 +377,18 @@ ResultType Var::GetClipboardAll(Var *aOutputVar, void **aData, size_t *aDataSize
 
 	if (aOutputVar)
 	{
+#ifdef UNICODE
+		// v1.1.16: Although it might change the behaviour of some scripts, it seems safer
+		// to use the "rounded up" size than an odd byte count, which would cause the last
+		// byte to be truncated due to integer division in Var::CharLength().
+		if (actual_space_used & 1) // Odd number of bytes.
+		{
+			// Add one byte to form a complete WCHAR.  This should always be safe because
+			// aOutputVar->SetCapacity() always allocates an even number of bytes.
+			((LPBYTE)binary_contents)[sizeof(UINT)] = 0; // binary_contents points at the "final termination" UINT.
+			++actual_space_used;
+		}
+#endif
 		aOutputVar->mByteLength = actual_space_used;
 		aOutputVar->mAttrib |= VAR_ATTRIB_BINARY_CLIP; // VAR_ATTRIB_CONTENTS_OUT_OF_DATE and VAR_ATTRIB_CACHE were already removed by earlier call to SetCapacity().
 	}
