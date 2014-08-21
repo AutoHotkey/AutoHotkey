@@ -3409,15 +3409,11 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 		//	MySetLayeredWindowAttributes(target_window, color, alpha, flags);
 		// The above is why there is currently no "on" or "toggle" sub-command, just "Off".
 
-		// Must fetch the below at runtime, otherwise the program can't even be launched on Win9x/NT.
-		// Also, since the color of an HBRUSH can't be easily determined (since it can be a pattern and
+		// Since the color of an HBRUSH can't be easily determined (since it can be a pattern and
 		// since there seem to be no easy API calls to discover the colors of pixels in an HBRUSH),
 		// the following is not yet implemented: Use window's own class background color (via
 		// GetClassLong) if aValue is entirely blank.
-		typedef BOOL (WINAPI *MySetLayeredWindowAttributesType)(HWND, COLORREF, BYTE, DWORD);
-		static MySetLayeredWindowAttributesType MySetLayeredWindowAttributes = (MySetLayeredWindowAttributesType)
-			GetProcAddress(GetModuleHandle(_T("user32")), "SetLayeredWindowAttributes");
-		if (!MySetLayeredWindowAttributes || !(exstyle = GetWindowLong(target_window, GWL_EXSTYLE)))
+		if (  !(exstyle = GetWindowLong(target_window, GWL_EXSTYLE))  )
 			return OK;  // Do nothing on OSes that don't support it.
 		if (!_tcsicmp(aValue, _T("Off")))
 			// One user reported that turning off the attribute helps window's scrolling performance.
@@ -3442,7 +3438,7 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 				else if (value > 255)
 					value = 255;
 				SetWindowLong(target_window, GWL_EXSTYLE, exstyle | WS_EX_LAYERED);
-				MySetLayeredWindowAttributes(target_window, 0, value, LWA_ALPHA);
+				SetLayeredWindowAttributes(target_window, 0, value, LWA_ALPHA);
 			}
 			else // attrib == WINSET_TRANSCOLOR
 			{
@@ -3475,7 +3471,7 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 					flags = LWA_COLORKEY;
 				}
 				SetWindowLong(target_window, GWL_EXSTYLE, exstyle | WS_EX_LAYERED);
-				MySetLayeredWindowAttributes(target_window, color, value, flags);
+				SetLayeredWindowAttributes(target_window, color, value, flags);
 			}
 		}
 		break;
