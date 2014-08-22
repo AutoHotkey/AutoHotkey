@@ -767,8 +767,12 @@ void Object::EndClassDefinition()
 	// value (currently any integer, since static initializers haven't been evaluated yet).
 	for (IndexType i = mFieldCount - 1; i >= 0; --i)
 		if (mFields[i].symbol == SYM_INTEGER)
+		{
+			if (i >= mKeyOffsetString) // Must be checked since key can be an integer, such as for "0 := (expr)".
+				free(mFields[i].key.s);
 			if (i < --mFieldCount)
 				memmove(mFields + i, mFields + i + 1, (mFieldCount - i) * sizeof(FieldType));
+		}
 }
 	
 
