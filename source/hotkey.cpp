@@ -2211,7 +2211,7 @@ LPTSTR Hotkey::ListHotkeys(LPTSTR aBuf, int aBufSize)
 {
 	LPTSTR aBuf_orig = aBuf;
 	// Save vertical space by limiting newlines here:
-	aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("Type\tOff?\tRunning\tName\r\n")
+	aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("Type\tOff?\tLevel\tRunning\tName\r\n")
 							 _T("-------------------------------------------------------------------\r\n"));
 	// Start at the oldest and continue up through the newest:
 	for (int i = 0; i < sHotkeyCount; ++i)
@@ -2267,9 +2267,26 @@ LPTSTR Hotkey::ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline)
 			}
 	}
 
-	aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s%s\t%s\t%s\t%s")
+	TCHAR level_str[7]; // Room for "99-100".
+	int min_level = 100, max_level = -1;
+	for (vp = mFirstVariant; vp; vp = vp->mNextVariant)
+	{
+		if (min_level > vp->mInputLevel)
+			min_level = vp->mInputLevel;
+		if (max_level < vp->mInputLevel)
+			max_level = vp->mInputLevel;
+	}
+	if (min_level != max_level)
+		_stprintf(level_str, _T("%i-%i"), min_level, max_level);
+	else if (min_level)
+		ITOA(min_level, level_str);
+	else // Show nothing for level 0.
+		*level_str = '\0';
+
+	aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s%s\t%s\t%s\t%s\t%s")
 		, htype, (mType == HK_NORMAL && !mIsRegistered) ? _T("(no)") : _T("")
 		, enabled_str
+		, level_str
 		, existing_threads_str
 		, mName);
 	if (aAppendNewline && BUF_SPACE_REMAINING >= 2)
