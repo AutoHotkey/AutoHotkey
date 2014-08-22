@@ -9520,10 +9520,12 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	// Caller must check ErrorLevel to distinguish between an empty file and an error.
 	output_var.Assign();
 
+	const DWORD DWORD_MAX = ~0;
+
 	// Set default options:
 	bool translate_crlf_to_lf = false;
 	bool is_binary_clipboard = false;
-	unsigned __int64 max_bytes_to_load = VARSIZE_MAX-2; // NOT ULLONG_MAX; see comments near bytes_to_read below.  -2 to avoid overflow when calling malloc().
+	unsigned __int64 max_bytes_to_load = ULLONG_MAX; // By default, fail if the file is too large.  See comments near bytes_to_read below.
 	UINT codepage = g->Encoding & CP_AHKCP;
 
 	// It's done as asterisk+option letter to permit future expansion.  A plain asterisk such as used
@@ -9542,11 +9544,6 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			break;
 		case 'M': // Maximum number of bytes to load.
 			max_bytes_to_load = ATOU64(cp + 1); // Relies upon the fact that it ceases conversion upon reaching a space or tab.
-#ifndef _WIN64
-			// See near bytes_to_read below for comments.
-			if (max_bytes_to_load > SIZE_MAX)
-				max_bytes_to_load = SIZE_MAX;
-#endif
 			// Skip over the digits of this option in case it's the last option.
 			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
 				return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
@@ -9605,9 +9602,25 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	}
 	// In addition to imposing the limit set by the *M option, the following check prevents an error
 	// caused by 64 to 32-bit truncation -- that is, a file size of 0x100000001 would be truncated to
-	// 0x1, allowing the command to complete even though it should fail.
-	if (bytes_to_read > max_bytes_to_load) // Default (and absolute maximum) limit is SIZE_MAX.
+	// 0x1, allowing the command to complete even though it should fail.  UPDATE: This check was never
+	// sufficient since max_bytes_to_load could exceed DWORD_MAX on x64 (prior to v1.1.16).  It's now
+	// checked separately below to try to match the documented behaviour (truncating the data only to
+	// the caller-specified limit).
+	if (bytes_to_read > max_bytes_to_load) // This is the limit set by the caller.
 		bytes_to_read = max_bytes_to_load;
+	// Fixed for v1.1.16: Show an error message if the file is larger than DWORD_MAX, otherwise the
+	// truncation issue described above could occur.  Reading more than DWORD_MAX could be supported
+	// by calling ReadFile() in a loop, but it seems unlikely that a script will genuinely want to
+	// do this AND actually be able to allocate a 4GB+ memory block (having 4GB of total free memory
+	// is usually not sufficient, perhaps due to memory fragmentation).
+#ifdef _WIN64
+	if (bytes_to_read > DWORD_MAX)
+#else
+	// Reserve 2 bytes to avoid integer overflow below.  Although any amount larger than 2GB is almost
+	// guaranteed to fail at the malloc stage, that might change if we ever become large address aware.
+	if (bytes_to_read > DWORD_MAX - sizeof(wchar_t))
+#endif
+		return LineError(ERR_OUTOFMEM); // Using this instead of "File too large." to reduce code size, since this condition is very rare (and malloc succeeding would be even rarer).
 
 	if (!bytes_to_read)
 	{
