@@ -1746,9 +1746,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 					}
 
 					// If the item was not handled by the above, ignore it because it is unknown.
-
 					*option_end = orig_char; // Undo the temporary termination.
-
 				} // for() each item in option list
 
 				// "has_continuation_section" indicates whether the line we're about to construct is partially

@@ -14612,8 +14612,7 @@ void RegExReplace(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aPar
 				// the current character over literally then advance to the next character to resume normal searching.
 				empty_string_is_not_a_match = 0; // Reset so that the next iteration starts off with the normal matching method.
 #ifdef UNICODE
-				// Need to avoid chopping a Unicode character into pieces. Further complicating this is the
-				// fact that the number of UTF-8 code units may differ from the number of UTF-16 code units.
+				// Need to avoid chopping a supplementary Unicode character in half.
 				WCHAR c = haystack_pos[0];
 				if (IS_SURROGATE_PAIR(c, haystack_pos[1])) // i.e. one supplementary character.
 				{
@@ -17670,7 +17669,6 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 			else if (IsPureNumeric(next_option, false, false, false))
 				tvi.hInsertAfter = (HTREEITEM)ATOI64(next_option); // ATOI64 vs. ATOU avoids need for extra casting to avoid compiler warning.
 		}
-		//else some unknown option, just ignore it.
 
 		// If the item was not handled by the above, ignore it because it is unknown.
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
