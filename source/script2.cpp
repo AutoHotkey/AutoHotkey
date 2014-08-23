@@ -13806,40 +13806,49 @@ RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCT
 	// array items that weren't captured.
 	m->mPatternCount = aPatternCount;
 	
-	// Copy haystack.  Must copy the whole haystack since it is possible (though rare) for a
-	// subpattern to precede the overall match - for instance, if \K is used or a subpattern
-	// is captured inside a look-behind assertion.
-	if (  !(m->mHaystack = _tcsdup(aHaystack))
-	   // Allocate memory for a copy of the offset array.
-	   || !(m->mOffset = (int *)malloc(aPatternCount * 2 * sizeof(int *)))  )
+	// Allocate memory for a copy of the offset array.
+	if (  !(m->mOffset = (int *)malloc(aPatternCount * 2 * sizeof(int *)))  )
 	{
-		m->Release(); // This also frees m->mHaystack if it is non-NULL.
+		m->Release();
 		return NULL;
 	}
-	
-	int p, i, pos, len;
+	// memcpy currently benchmarks slightly faster on x64 than copying offsets in the loop below:
+	memcpy(m->mOffset, aOffset, aPatternCount * 2 * sizeof(int));
 
-	// Convert start/end offsets to offset and length.
-	for (p = 0, i = 0; p < aCapturedPatternCount; ++p)
+	// Do some pre-processing:
+	//  - Locate the smallest portion of haystack that contains all matches.
+	//  - Convert end offsets to lengths.
+	int min_offset = INT_MAX, max_offset = -1;
+	for (int p = 0; p < aPatternCount; ++p)
 	{
-		if (aOffset[i] < 0)
+		if (m->mOffset[p*2] > -1)
 		{
-			pos = -1;
-			len = 0;
+			// Substring is non-empty, so ensure we copy this portion of haystack.
+			if (min_offset > m->mOffset[p*2])
+				min_offset = m->mOffset[p*2];
+			if (max_offset < m->mOffset[p*2+1])
+				max_offset = m->mOffset[p*2+1];
 		}
-		else
-		{
-			pos = aOffset[i];
-			len = aOffset[i+1] - pos;
-		}
-		m->mOffset[i++] = pos;
-		m->mOffset[i++] = len;
+		// Convert end offset to length.
+		m->mOffset[p*2+1] -= m->mOffset[p*2];
 	}
-	// Initialize the remainder of the offset vector (patterns which were not captured):
-	for ( ; p < aPatternCount; ++p)
+	
+	// Copy only the portion of aHaystack which contains matches.  This can be much faster
+	// than copying the whole string for larger haystacks.  For instance, searching for "GNU"
+	// in the GPL v2 (18120 chars) and producing a match object is about 5 times faster with
+	// this optimization than without if caller passes us the haystack length, and about 50
+	// times faster than the old code which used _tcsdup().  However, the difference is much
+	// smaller for small strings.
+	if (min_offset < max_offset) // There are non-empty matches.
 	{
-		m->mOffset[i++] = -1;
-		m->mOffset[i++] = 0;
+		int our_haystack_size = (max_offset - min_offset) + 1;
+		if (  !(m->mHaystack = tmalloc(our_haystack_size))  )
+		{
+			m->Release();
+			return NULL;
+		}
+		tmemcpy(m->mHaystack, aHaystack + min_offset, our_haystack_size);
+		m->mHaystackStart = min_offset;
 	}
 
 	// Copy subpattern names.
@@ -13854,7 +13863,7 @@ RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCT
 
 		// Copy names and initialize array.
 		m->mPatternName[0] = NULL;
-		for (p = 1; p < aPatternCount; ++p)
+		for (int p = 1; p < aPatternCount; ++p)
 			if (aPatternName[p])
 				// A failed allocation here seems rare and the consequences would be
 				// negligible, so in that case just act as if the subpattern has no name.
@@ -13969,7 +13978,7 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ExprTokenType &aResultToke
 	if (pattern_found)
 	{
 		// Gives the correct result even if there was no match (because length is 0):
-		TokenSetResult(aResultToken, mHaystack + mOffset[p*2], mOffset[p*2+1]);
+		TokenSetResult(aResultToken, mHaystack - mHaystackStart + mOffset[p*2], mOffset[p*2+1]);
 		return OK;
 	}
 

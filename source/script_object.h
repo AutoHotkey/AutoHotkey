@@ -335,6 +335,7 @@ extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object va
 class RegExMatchObject : public ObjectBase
 {
 	LPTSTR mHaystack;
+	int mHaystackStart;
 	int *mOffset;
 	LPTSTR *mPatternName;
 	int mPatternCount;
