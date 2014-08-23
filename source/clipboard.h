@@ -50,7 +50,7 @@ public:
 	// number of attempts from 20 to 40 because Jason (Payam) reported
 	// that he was getting an error on rare occasions (but not reproducible).
 	ResultType Open();
-	HANDLE GetClipboardDataTimeout(UINT uFormat);
+	HANDLE GetClipboardDataTimeout(UINT uFormat, BOOL *aNullIsOkay = NULL);
 
 	// Below: Whether the clipboard is ready to be written to.  Note that the clipboard is not
 	// usually physically open even when this is true, unless the caller specifically opened
