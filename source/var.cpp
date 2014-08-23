@@ -237,6 +237,7 @@ ResultType Var::GetClipboardAll(Var *aOutputVar, void **aData, size_t *aDataSize
 	UINT format;
 	VarSizeType space_needed;
 	UINT dib_format_to_omit = 0;
+	BOOL save_null_data;
 	// Start space_needed off at 4 to allow room for guaranteed final termination of the variable's contents.
 	// The termination must be of the same size as format because a single-byte terminator would
 	// be read in as a format of 0x00?????? where ?????? is an access violation beyond the buffer.
@@ -265,7 +266,7 @@ ResultType Var::GetClipboardAll(Var *aOutputVar, void **aData, size_t *aDataSize
 		// text). Because of this example, it seems likely it can fail in other places or under
 		// other circumstances, perhaps by design of the app. Therefore, be tolerant of failures
 		// because partially saving the clipboard seems much better than aborting the operation.
-		if (hglobal = g_clip.GetClipboardDataTimeout(format))
+		if (hglobal = g_clip.GetClipboardDataTimeout(format, &save_null_data))
 		{
 			space_needed += (VarSizeType)(sizeof(format) + sizeof(size) + GlobalSize(hglobal)); // The total amount of storage space required for this item.
 			if (!dib_format_to_omit)
@@ -284,6 +285,8 @@ ResultType Var::GetClipboardAll(Var *aOutputVar, void **aData, size_t *aDataSize
 			//		meta_format_to_omit = CF_ENHMETAFILE;
 			//}
 		}
+		else if (save_null_data)
+			space_needed += (VarSizeType)(sizeof(format) + sizeof(size));
 		//else omit this format from consideration.
 	}
 
@@ -346,8 +349,14 @@ ResultType Var::GetClipboardAll(Var *aOutputVar, void **aData, size_t *aDataSize
 		// size, it does happen, at least in MS Word and for CF_BITMAP.  Therefore, in order to save
 		// the clipboard as accurately as possible, also save formats whose size is zero.  Note that
 		// GlobalLock() fails to work on hglobals of size zero, so don't do it for them.
-		if ((hglobal = g_clip.GetClipboardDataTimeout(format)) // This and the next line rely on short-circuit boolean order.
-			&& (!(size = GlobalSize(hglobal)) || (hglobal_locked = GlobalLock(hglobal)))) // Size of zero or lock succeeded: Include this format.
+		hglobal = g_clip.GetClipboardDataTimeout(format, &save_null_data);
+		if (hglobal)
+			size = GlobalSize(hglobal);
+		else if (save_null_data)
+			size = 0; // This format usually has NULL data.
+		else
+			continue; // GetClipboardData() failed: skip this format.
+		if (!size || (hglobal_locked = GlobalLock(hglobal))) // Size of zero or lock succeeded: Include this format.
 		{
 			// Any changes made to how things are stored here should also be made to the size-estimation
 			// phase so that space_needed matches what is done here:
@@ -459,12 +468,17 @@ ResultType Var::SetClipboardAll(void *aData, size_t aDataSize)
 		binary_contents = next;
 		if ((next = (char *)binary_contents + size) > binary_contents_max)
 			break;
-		if (   !(hglobal = GlobalAlloc(GMEM_MOVEABLE, size))   ) // size==0 is okay.
+		// v1.1.16: Always allocate a non-zero amount, since testing shows that SetClipboardData()
+		// fails when passed a zero-length HGLOBAL, at least on Windows 8.  Zero-initialize using
+		// GMEM_ZEROINIT since GlobalAlloc() might return a block larger than requested.  Although
+		// it isn't necessarily safer (depending on what programs do with this format), it should
+		// at least be more consistent than leaving it uninitialized, if anything ever uses it.
+		if (   !(hglobal = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, size + (size == 0)))   )
 		{
 			g_clip.Close();
 			return g_script.ScriptError(ERR_OUTOFMEM); // Short msg since so rare.
 		}
-		if (size) // i.e. Don't try to lock memory of size zero.  It won't work and it's not needed.
+		if (size) // i.e. Don't try to lock memory of size zero.  It's not needed.
 		{
 			if (   !(hglobal_locked = GlobalLock(hglobal))   )
 			{
