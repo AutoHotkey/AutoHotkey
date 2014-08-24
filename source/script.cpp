@@ -7870,7 +7870,8 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 #endif
 				}
 				has_output_var = func->mHasReturn; // Does it need an output var?
-				if (param_count - has_output_var < func->mMinParams)
+				if (param_count // There are parameters; i.e. the next line won't produce a negative count if the output var is omitted.
+					&& (param_count - has_output_var < func->mMinParams))
 				{
 					abort = true;
 					return line->PreparseError(ERR_TOO_FEW_PARAMS);
