@@ -13646,7 +13646,7 @@ BIF_DECL(BIF_IsFunc) // Lexikos: Added for use with dynamic function calls.
 BIF_DECL(BIF_Func)
 // Returns a reference to an existing user-defined or built-in function, as an object.
 {
-	Func *func = g_script.FindFunc(ParamIndexToString(0, _f_number_buf));
+	Func *func = TokenToFunc(*aParam[0]);
 	if (func)
 		_f_return(func);
 	else
