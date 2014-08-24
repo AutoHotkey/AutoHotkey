@@ -14097,7 +14097,7 @@ ResultType ResultToken::Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 	// These two assertions should always pass, since anything else would imply returning a value,
 	// not throwing an error.  If they don't, the memory/object might not be freed since the caller
 	// isn't expecting a value, or they might be freed twice (if the callee already freed it).
-	ASSERT(!mem_to_free);
+	//ASSERT(!mem_to_free); // At least one caller frees it after calling this function.
 	ASSERT(symbol != SYM_OBJECT);
 	return SetExitResult(g_script.ScriptError(aErrorText, aExtraInfo));
 }

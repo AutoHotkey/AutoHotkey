@@ -12693,12 +12693,12 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		// Otherwise:
 		if (captured_pattern_count < 0) // An error other than "no match". These seem very rare, so it seems best to abort rather than yielding a partially-converted result.
 		{
-			if (!aResultToken.Exited()) // Checked in case a callout exited/raised an error.
+			if (!aResultToken.Exited()) // Checked in case a callout already exited/raised an error.
 			{
 				ITOA(captured_pattern_count, repl_buf);
 				aResultToken.Error(ERR_PCRE_EXEC, repl_buf);
 			}
-			goto set_count_and_return; // Goto vs. break to leave replacement_count set to 0.
+			goto abort; // Goto vs. break to leave replacement_count set to 0.
 		}
 
 		// Otherwise (since above didn't return or break or continue), a match has been found (i.e.
@@ -12926,6 +12926,7 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	// through goto:
 out_of_mem:
 	aResultToken.Error(ERR_OUTOFMEM);
+abort:
 	if (result)
 	{
 		free(result);  // Since result is probably an non-terminated string (not to mention an incompletely created result), it seems best to free it here to remove it from any further consideration by the caller.
