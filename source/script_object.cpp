@@ -1260,7 +1260,7 @@ bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
 			else if (new_size < (1600 * 1024))  // 160 to 1600 KB -> 16 KB extra
 				new_size += (16 * 1024);
 			else if (new_size < (6400 * 1024)) // 1600 to 6400 KB -> 1% extra
-				new_size = (size_t)(new_size * 1.01);
+				new_size += (new_size / 100);
 			else  // 6400 KB or more: Cap the extra margin at some reasonable compromise of speed vs. mem usage: 64 KB
 				new_size += (64 * 1024);
 		}
