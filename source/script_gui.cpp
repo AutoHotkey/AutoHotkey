@@ -8137,8 +8137,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				// problem, it seems best to do it the "correct" way.
 				DWORD pos;
 				pos = GetMessagePos();
-				ht.pt.x = LOWORD(pos);
-				ht.pt.y = HIWORD(pos);
+				ht.pt.x = (short)LOWORD(pos);
+				ht.pt.y = (short)HIWORD(pos);
 				ScreenToClient(control.hwnd, &ht.pt);
 				event_info = (DWORD)(size_t)TreeView_HitTest(control.hwnd, &ht);
 				break;
