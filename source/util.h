@@ -489,15 +489,15 @@ int FTOA(double aValue, LPTSTR aBuf, int aBufSize);
 #endif
 
 
-inline LPTSTR HwndToString(HWND aHwnd, LPTSTR aBuf)
-{
-	aBuf[0] = '0';
-	aBuf[1] = 'x';
-	// Use _ultot for performance on 32-bit systems and _ui64tot on 64-bit systems in case it's
-	// possible for HWNDs to have non-zero upper 32-bits:
-	Exp32or64(_ultot,_ui64tot)((size_t)aHwnd, aBuf + 2, 16);
-	return aBuf;
-}
+//inline LPTSTR HwndToString(HWND aHwnd, LPTSTR aBuf)
+//{
+//	aBuf[0] = '0';
+//	aBuf[1] = 'x';
+//	// Use _ultot for performance on 32-bit systems and _ui64tot on 64-bit systems in case it's
+//	// possible for HWNDs to have non-zero upper 32-bits:
+//	Exp32or64(_ultot,_ui64tot)((size_t)aHwnd, aBuf + 2, 16);
+//	return aBuf;
+//}
 
 
 //inline LPTSTR tcscatmove(LPTSTR aDst, LPCTSTR aSrc)

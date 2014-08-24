@@ -25,13 +25,7 @@ TCHAR Var::sEmptyString[] = _T(""); // For explanation, see its declaration in .
 
 ResultType Var::AssignHWND(HWND aWnd)
 {
-	// For backward compatibility, tradition, and the fact that operations involving HWNDs tend not to
-	// be nearly as performance-critical as pure-math expressions, HWNDs are stored as a hex string,
-	// and thus UpdateBinaryInt64() isn't called here.
-	// Older comment: Always assign as hex for better compatibility with Spy++ and other apps that
-	// report window handles.
-	TCHAR buf[MAX_INTEGER_SIZE];
-	return Assign(HwndToString(aWnd, buf));
+	return Assign((size_t)aWnd);
 }
 
 

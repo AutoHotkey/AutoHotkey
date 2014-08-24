@@ -2467,7 +2467,7 @@ BIF_DECL(BIF_WinGet)
 		if (!target_window_determined)
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText, cmd == FID_WinGetIDLast);
 		if (target_window)
-			HwndToString(target_window, result);
+			_f_return((size_t)target_window);
 		// Otherwise, return the default value.
 		break;
 
@@ -2493,15 +2493,7 @@ BIF_DECL(BIF_WinGet)
 
 	case FID_WinGetCount:
 	case FID_WinGetList:
-		// LIST retrieves a list of HWNDs for the windows that match the given criteria and stores them in
-		// an array.  The number of items in the array is stored in the base array name (unlike
-		// StringSplit, which stores them in array element #0).  This is done for performance reasons
-		// (so that element #0 doesn't have to be looked up at runtime), but mostly because of the
-		// complexity of resolving a parameter than can be either an output-var or an array name at
-		// load-time -- namely that if param #1 were allowed to be an array name, there is ambiguity
-		// about where the name of the array is actually stored depending on whether param#1 was literal
-		// text or a deref.  So it's easier and performs better just to do it this way, even though it
-		// breaks from the StringSplit tradition:
+		// LIST returns an array of HWNDs for the windows that match the given criteria.
 		if (target_window_determined)
 		{
 			if (cmd == FID_WinGetCount)
@@ -2512,11 +2504,10 @@ BIF_DECL(BIF_WinGet)
 			Object *arr = Object::Create();
 			if (!arr)
 				_f_throw(ERR_OUTOFMEM);
-			TCHAR buf[MAX_INTEGER_SIZE];
 			if (target_window)
 				// Since the target window has been determined, we know that it is the only window
 				// to be put into the array:
-				arr->Append(HwndToString(target_window, buf));
+				arr->Append((__int64)(size_t)target_window);
 			// Otherwise, return an empty array.
 			_f_return(arr);
 		}
@@ -2551,8 +2542,7 @@ BIF_DECL(BIF_WinGet)
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 		if (!target_window)
 			break;
-		_stprintf(result, _T("0x%08X"), GetWindowLong(target_window, cmd == FID_WinGetStyle ? GWL_STYLE : GWL_EXSTYLE));
-		break;
+		_f_return(GetWindowLong(target_window, cmd == FID_WinGetStyle ? GWL_STYLE : GWL_EXSTYLE));
 
 	case FID_WinGetTransparent:
 	case FID_WinGetTransColor:
@@ -2615,17 +2605,18 @@ void WinGetControlList(ResultToken &aResultToken, HWND aTargetWindow, bool aFetc
 BOOL CALLBACK EnumChildGetControlList(HWND aWnd, LPARAM lParam)
 {
 	control_list_type &cl = *(control_list_type *)lParam;  // For performance and convenience.
-	TCHAR line[WINDOW_CLASS_SIZE + 5];  // +5 to allow room for the sequence number to be appended later below.
-	int line_length;
 
 	// cl.fetch_hwnds==true is a new mode in v1.0.43.06+ to help performance of AHK Window Info and other
 	// scripts that want to operate directly on the HWNDs.
 	if (cl.fetch_hwnds)
 	{
-		HwndToString(aWnd, line);
+		cl.target_array->Append((__int64)(size_t)aWnd);
 	}
 	else // The mode that fetches ClassNN vs. HWND.
 	{
+		TCHAR line[WINDOW_CLASS_SIZE + 5];  // +5 to allow room for the sequence number to be appended later below.
+		int line_length;
+
 		// Note: IsWindowVisible(aWnd) is not checked because although Window Spy does not reveal
 		// hidden controls if the mouse happens to be hovering over one, it does include them in its
 		// sequence numbering (which is a relieve, since results are probably much more consistent
@@ -2659,9 +2650,9 @@ BOOL CALLBACK EnumChildGetControlList(HWND aWnd, LPARAM lParam)
 		}
 
 		_itot(cl.class_count[class_index], line + line_length, 10); // Append the seq. number to line.
+		
+		cl.target_array->Append(line); // Append class name+seq. number to the array.
 	}
-
-	cl.target_array->Append(line); // Append hwnd or class name+seq. number to the array.
 
 	return TRUE; // Continue enumeration through all the windows.
 }
@@ -10061,7 +10052,9 @@ VarSizeType BIV_ScriptFullPath(LPTSTR aBuf, LPTSTR aVarName)
 VarSizeType BIV_ScriptHwnd(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (aBuf)
-		return (VarSizeType)_tcslen(HwndToString(g_hWnd, aBuf));
+		// For consistency with all of the other commands which return HWNDs as
+		// pure integers, this is formatted as decimal rather than hexadecimal:
+		return (VarSizeType)_tcslen(ITOA64((size_t)g_hWnd, aBuf));
 	return MAX_INTEGER_LENGTH;
 }
 
@@ -13897,7 +13890,7 @@ BIF_DECL(BIF_WinExistActive)
 		? WinExist(*g, param[0], param[1], param[2], param[3], false, true)
 		: WinActive(*g, param[0], param[1], param[2], param[3], true);
 
-	_f_return_p(HwndToString(found_hwnd, _f_retval_buf)); // Returns a string to preserve hex format.
+	_f_return((size_t)found_hwnd);
 }
 
 

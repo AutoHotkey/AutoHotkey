@@ -703,17 +703,14 @@ Object *Object::CreateFromArgV(LPTSTR *aArgV, int aArgC)
 
 
 //
-// Helper function for StringSplit()
+// Helper function for StrSplit/WinGetList/WinGetControls
 //
 
-bool Object::Append(LPTSTR aValue, size_t aValueLength)
+bool Object::Append(ExprTokenType &aValue)
 {
 	if (mFieldCount == mFieldCountMax && !Expand()) // Attempt to expand if at capacity.
 		return false;
 
-	if (aValueLength == -1)
-		aValueLength = _tcslen(aValue);
-	
 	FieldType &field = mFields[mKeyOffsetObject];
 	if (mKeyOffsetObject < mFieldCount)
 		// For maintainability. This might never be done, because our caller
@@ -728,7 +725,7 @@ bool Object::Append(LPTSTR aValue, size_t aValueLength)
 	field.key.i = mKeyOffsetObject;
 
 	field.symbol = SYM_INVALID; // Init for Assign(): indicate that it does not contain a valid string or object.
-	return field.Assign(aValue, aValueLength, true); // Pass true to conserve memory (no space is allowed for future expansion).
+	return field.Assign(aValue);
 }
 
 

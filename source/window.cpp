@@ -1820,9 +1820,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 
 	if (mArray) // Probably not thread-safe, so hook thread must call only with NULL mArray.
 	{
-		// Use hex strings for consistency with WinExist() and because it is more conventional:
-		TCHAR buf[MAX_INTEGER_SIZE];
-		mArray->Append(HwndToString(mFoundParent, buf));
+		mArray->Append((__int64)(size_t)mFoundParent);
 		// No error reporting currently, since should be very rare.
 	}
 
