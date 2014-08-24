@@ -18,11 +18,6 @@ BIF_DECL(BIF_Object)
 
 	if (aParamCount == 1) // L33: POTENTIALLY UNSAFE - Cast IObject address to object reference.
 	{
-		if (obj = TokenToObject(*aParam[0]))
-		{	// Allow &obj == Object(obj), but AddRef() for equivalence with ComObjActive(comobj).
-			obj->AddRef();
-			_f_return_i((__int64)obj);
-		}
 		obj = (IObject *)TokenToInt64(*aParam[0]);
 		if (obj < (IObject *)65536) // Prevent some obvious errors.
 			obj = NULL;
