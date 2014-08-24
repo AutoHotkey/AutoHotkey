@@ -16105,7 +16105,7 @@ BIF_DECL(BIF_Type)
 {
 	LPTSTR type;
 	if (aParam[0]->symbol == SYM_VAR)
-		aParam[0]->var->ToToken(*aParam[0]);
+		aParam[0]->var->ToTokenSkipAddRef(*aParam[0]);
 	switch (aParam[0]->symbol)
 	{
 	case SYM_STRING:

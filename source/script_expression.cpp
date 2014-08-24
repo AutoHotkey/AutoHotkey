@@ -1644,7 +1644,9 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 					// DllCall() relies on the fact that this transformation is only done for user
 					// functions, not built-in ones such as DllCall().  This is because DllCall()
 					// sometimes needs the variable of a parameter for use as an output parameter.
-					this_param_token.var->ToToken(this_param_token);
+					// Skip AddRef() if this is an object because Release() won't be called, and
+					// AddRef() will be called when the object is assigned to a parameter.
+					this_param_token.var->ToTokenSkipAddRef(this_param_token);
 				}
 			}
 			// BackupFunctionVars() will also clear each local variable and formal parameter so that

@@ -1235,7 +1235,7 @@ bool Object::FieldType::Assign(ExprTokenType &aParam)
 		// format of a literal number such as 0x123 or 00001, and even less likely for a number stored
 		// in an object (even implicitly via a variadic function).  If the value is eventually passed
 		// to a COM method call, it can be important that it is passed as VT_I4 and not VT_BSTR.
-		aParam.var->ToToken(temp);
+		aParam.var->ToTokenSkipAddRef(temp); // Skip AddRef() if applicable because it's called below.
 		val = &temp;
 	}
 	else
@@ -1249,9 +1249,7 @@ bool Object::FieldType::Assign(ExprTokenType &aParam)
 		Free(); // Free string or object, if applicable.
 		symbol = SYM_OBJECT; // Set symbol *after* calling Free().
 		object = val->object;
-		if (aParam.symbol != SYM_VAR)
-			object->AddRef();
-		// Otherwise, take ownership of the ref in temp.
+		object->AddRef();
 		break;
 	//case SYM_INTEGER:
 	//case SYM_FLOAT:

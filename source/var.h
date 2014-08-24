@@ -462,7 +462,7 @@ public:
 		return OK; // Since above didn't return, indicate success.
 	}
 
-	void ToToken(ExprTokenType &aToken)
+	void ToTokenSkipAddRef(ExprTokenType &aToken)
 	// See ToDoubleOrInt64 for comments.
 	{
 		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
@@ -476,12 +476,18 @@ public:
 			return;
 		case VAR_ATTRIB_IS_OBJECT:
 			aToken.SetValue(var.mObject);
-			aToken.object->AddRef();
 			return;
 		default:
 			// VAR_ATTRIB_BINARY_CLIP or 0.
 			aToken.SetValue(var.Contents(), var.Length());
 		}
+	}
+
+	void ToToken(ExprTokenType &aToken)
+	{
+		ToTokenSkipAddRef(aToken);
+		if (aToken.symbol == SYM_OBJECT)
+			aToken.object->AddRef();
 	}
 
 	bool MoveMemToResultToken(ResultToken &aResultToken)

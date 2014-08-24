@@ -649,7 +649,7 @@ void AssignVariant(Var &aArg, VARIANT &aVar, bool aRetainVar = true)
 void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar)
 {
 	if (aToken.symbol == SYM_VAR)
-		aToken.var->ToToken(aToken);
+		aToken.var->ToTokenSkipAddRef(aToken);
 
 	switch(aToken.symbol)
 	{
