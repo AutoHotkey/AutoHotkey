@@ -7553,7 +7553,7 @@ ResultType Line::FileSelect(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGreetin
 ResultType Line::FileCreateDir(LPTSTR aDirSpec)
 {
 	if (!aDirSpec || !*aDirSpec)
-		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
+		return LineError(ERR_PARAM1_REQUIRED);
 
 	DWORD attr = GetFileAttributes(aDirSpec);
 	if (attr != 0xFFFFFFFF)  // aDirSpec already exists.
@@ -7628,14 +7628,14 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 #endif
 			// Skip over the digits of this option in case it's the last option.
 			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
-				return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
+				return LineError(ERR_PARAM1_INVALID);
 			--cp; // Standardize it to make it conform to the other options, for use below.
 			break;
 		case 'P':
 			codepage = _ttoi(cp + 1);
 			// Skip over the digits of this option in case it's the last option.
 			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
-				return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
+				return LineError(ERR_PARAM1_INVALID);
 			--cp; // Standardize it to make it conform to the other options, for use below.
 			break;
 		case 'T': // Text mode.
@@ -7816,7 +7816,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	if (aCurrentReadFile) // It always takes precedence over aFilespec.
 		aFilespec = aCurrentReadFile->mWriteFileName;
 	if (!*aFilespec) // Nothing to write to (caller relies on this check).
-		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
+		return LineError(ERR_PARAM2_REQUIRED);
 
 	TextStream *ts = aCurrentReadFile ? aCurrentReadFile->mWriteFile : NULL;
 	bool file_was_already_open = ts;
@@ -7893,7 +7893,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 		
 		UINT codepage = mArgc > 2 ? ConvertFileEncoding(ARG3) : g->Encoding;
 		if (codepage == -1) // ARG3 was invalid.
-			return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
+			return LineError(ERR_PARAM3_INVALID, FAIL, ARG3);
 		
 		ASSERT( (~CP_AHKNOBOM) == CP_AHKCP );
 		// codepage may include CP_AHKNOBOM, in which case below will not add BOM_UTFxx flag.
@@ -8117,10 +8117,7 @@ ResultType Line::FileDelete()
 	LPTSTR aFilePattern = ARG1;
 
 	if (!*aFilePattern)
-	{
-		// Let ErrorLevel indicate an error, since this is probably not what the user intended.
-		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
-	}
+		return LineError(ERR_PARAM1_REQUIRED); // Throw an error, since this is probably not what the user intended.
 
 	if (!StrChrAny(aFilePattern, _T("?*")))
 	{
@@ -8273,7 +8270,7 @@ ResultType Line::FileGetAttrib(LPTSTR aFilespec)
 	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.
 
 	if (!aFilespec || !*aFilespec)
-		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
+		return LineError(ERR_PARAM2_REQUIRED);
 
 	DWORD attr = GetFileAttributes(aFilespec);
 	if (attr == 0xFFFFFFFF)  // Failure, probably because file doesn't exist.
@@ -8524,7 +8521,7 @@ ResultType Line::FileGetTime(LPTSTR aFilespec, TCHAR aWhichTime)
 	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.
 
 	if (!aFilespec || !*aFilespec)
-		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
+		return LineError(ERR_PARAM2_REQUIRED);
 
 	// Don't use CreateFile() & FileGetSize() size they will fail to work on a file that's in use.
 	// Research indicates that this method has no disadvantages compared to the other method.
@@ -8564,7 +8561,7 @@ int Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
 	{
 		if (!*aFilePattern)
 		{
-			SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
+			LineError(ERR_PARAM2_REQUIRED);
 			return 0;
 		}
 		if (aOperateOnFolders == FILE_LOOP_INVALID) // In case runtime dereference of a var was an invalid value.
@@ -8771,7 +8768,7 @@ ResultType Line::FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity)
 	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.
 
 	if (!aFilespec || !*aFilespec)
-		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER); // Let ErrorLevel indicate an error, since this is probably not what the user intended.
+		return LineError(ERR_PARAM2_REQUIRED); // Throw an error, since this is probably not what the user intended.
 
 	// Don't use CreateFile() & FileGetSize() because they will fail to work on a file that's in use.
 	// Research indicates that this method has no disadvantages compared to the other method.
