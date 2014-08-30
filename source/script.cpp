@@ -1042,8 +1042,16 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	sExitFuncIsRunning = true;
 	DEBUGGER_STACK_PUSH(mOnExitFunc->mJumpToLine, _T("OnExit"))
 	
+	// Set the parameter to be either the exit code or the exit reason:
 	FuncResult result_token;
-	bool returned = mOnExitFunc->Call(result_token, 1, FUNC_ARG_STR(GetExitReasonString(mExitReason)));
+	ExprTokenType arg, *args[] = { &arg };
+	if (mExitReason == EXIT_EXIT)
+		arg.SetValue(aExitCode);
+	else
+		arg.SetValue(GetExitReasonString(mExitReason));
+
+	// Call the function.
+	bool returned = mOnExitFunc->Call(result_token, args, 1);
 	
 	// If the function encounters a failure condition such as a runtime error, exit immediately.
 	// Otherwise, there will be no way to exit the script if the subroutine fails on each attempt.
