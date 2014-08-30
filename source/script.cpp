@@ -638,15 +638,9 @@ void Script::EnableClipboardListener(bool aEnable)
 	if (aEnable)
 	{
 		if (MyAddClipboardListener && MyRemoveClipboardListener) // Should be impossible for only one of these to be NULL, but check both anyway to be safe.
-		{
 			// The old clipboard viewer chain method is prone to break when some other application uses
 			// it incorrectly.  This newer method should be more reliable, but requires Vista or later:
 			MyAddClipboardListener(g_hWnd);
-			// But this method doesn't appear to send an initial WM_CLIPBOARDUPDATE message.
-			// For consistency with the other method (below) and for backward compatibility,
-			// run the OnClipboardChange function once when the script first starts:
-			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, 0, 0);
-		}
 		else
 			mNextClipboardViewer = SetClipboardViewer(g_hWnd);
 	}

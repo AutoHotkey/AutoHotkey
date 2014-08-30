@@ -9605,11 +9605,13 @@ BIF_DECL(BIF_OnExitOrClipboardChange)
 			if (!new_func || new_func->mIsBuiltIn || new_func->mMinParams > 1 || new_func->mClass)
 				_f_throw(ERR_PARAM1_INVALID);
 
-			func_ptr = new_func;
-
-			if (!is_onexit && !old_func && new_func)
+			if (!is_onexit && !old_func)
 				// Enable clipboard listener.
 				g_script.EnableClipboardListener(true);
+			
+			// Setting this only after the above prevents it from being called as a result of calling
+			// SetClipboardViewer (if that method was used):
+			func_ptr = new_func;
 		}
 		else
 		{
