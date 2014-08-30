@@ -877,6 +877,7 @@ bool Script::IsPersistent()
 		|| g_persistent // #Persistent has been used somewhere in the script.
 		|| g_script.mTimerEnabledCount // At least one script timer is currently enabled.
 		|| g_MsgMonitorCount // At least one message monitor is active (installed by OnMessage).
+		|| mOnClipboardChangeFunc // The script is monitoring clipboard changes.
 		// The following isn't checked because there has to be at least one script thread
 		// running for it to be true, in which case we shouldn't have been called:
 		//|| (g_input.status == INPUT_IN_PROGRESS) // The hook is actively collecting input for the Input command.
