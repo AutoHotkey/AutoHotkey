@@ -4,7 +4,7 @@
 #define ParamIndexToInt(index)						(int)ParamIndexToInt64(index)
 #define ParamIndexToIntPtr(index)					(INT_PTR)ParamIndexToInt64(index)
 #define ParamIndexToDouble(index)					TokenToDouble(*aParam[(index)])
-#define ParamIndexToNumber(index)					TokenToDoubleOrInt64(*aParam[(index)])
+#define ParamIndexToNumber(index, output)			TokenToDoubleOrInt64(*aParam[(index)], output)
 
 #define ParamIndexLength(index, param_as_string)	EXPR_TOKEN_LENGTH(aParam[index], param_as_string)
 
