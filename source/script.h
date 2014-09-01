@@ -3015,7 +3015,7 @@ BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar); // S
 __int64 TokenToInt64(ExprTokenType &aToken, BOOL aIsPureInteger = FALSE);
 double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE, BOOL aIsPureFloat = FALSE);
 LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL);
-ResultType TokenToDoubleOrInt64(ExprTokenType &aToken);
+ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOutput);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
 Func *TokenToFunc(ExprTokenType &aToken);
 ResultType TokenSetResult(ExprTokenType &aResultToken, LPCTSTR aResult, size_t aResultLength = -1);

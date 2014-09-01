@@ -15996,15 +15996,16 @@ BIF_DECL(BIF_Mod)
 {
 	// Load-time validation has already ensured there are exactly two parameters.
 	// "Cast" each operand to Int64/Double depending on whether it has a decimal point.
-	if (!ParamIndexToNumber(0) || !ParamIndexToNumber(1)) // Non-operand or non-numeric string.
+	ExprTokenType param0, param1;
+	if (!ParamIndexToNumber(0, param0) || !ParamIndexToNumber(1, param1)) // Non-operand or non-numeric string.
 	{
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
 		return;
 	}
-	if (aParam[0]->symbol == SYM_INTEGER && aParam[1]->symbol == SYM_INTEGER)
+	if (param0.symbol == SYM_INTEGER && param1.symbol == SYM_INTEGER)
 	{
-		if (!aParam[1]->value_int64) // Divide by zero.
+		if (!param1.value_int64) // Divide by zero.
 		{
 			aResultToken.symbol = SYM_STRING;
 			aResultToken.marker = _T("");
@@ -16012,12 +16013,12 @@ BIF_DECL(BIF_Mod)
 		else
 			// For performance, % is used vs. qmath for integers.
 			// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
-			aResultToken.value_int64 = aParam[0]->value_int64 % aParam[1]->value_int64;
+			aResultToken.value_int64 = param0.value_int64 % param1.value_int64;
 	}
 	else // At least one is a floating point number.
 	{
-		double dividend = ParamIndexToDouble(0);
-		double divisor = ParamIndexToDouble(1);
+		double dividend = TokenToDouble(param0);
+		double divisor = TokenToDouble(param1);
 		if (divisor == 0.0) // Divide by zero.
 		{
 			aResultToken.symbol = SYM_STRING;
@@ -16042,10 +16043,7 @@ BIF_DECL(BIF_Abs)
 	// that it might produce inconsistent results depending on whether the operand is
 	// generic (SYM_OPERAND) and numeric.  In other words, abs() shouldn't treat a
 	// sub-expression differently than a numeric literal.
-	aResultToken = *aParam[0]; // Structure/union copy.
-	// v1.0.40.06: TokenToDoubleOrInt64() and here has been fixed to set proper result to be empty string
-	// when the incoming parameter is non-numeric.
-	if (!TokenToDoubleOrInt64(aResultToken)) // "Cast" token to Int64/Double depending on whether it has a decimal point.
+	if (!TokenToDoubleOrInt64(*aParam[0], aResultToken)) // "Cast" token to Int64/Double depending on whether it has a decimal point.
 		// Non-operand or non-numeric string. TokenToDoubleOrInt64() has already set the token to be an
 		// empty string for us.
 		return;
@@ -18380,52 +18378,51 @@ LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf)
 
 
 
-ResultType TokenToDoubleOrInt64(ExprTokenType &aToken)
+ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOutput)
 // Converts aToken's contents to a numeric value, either int64 or double (whichever is more appropriate).
 // Returns FAIL when aToken isn't an operand or is but contains a string that isn't purely numeric.
 {
 	LPTSTR str;
-	switch (aToken.symbol)
+	switch (aInput.symbol)
 	{
 		case SYM_INTEGER:
 		case SYM_FLOAT:
+			aOutput.symbol = aInput.symbol;
+			aOutput.value_int64 = aInput.value_int64;
 			return OK;
 		case SYM_VAR:
-			return aToken.var->TokenToDoubleOrInt64(aToken);
+			return aInput.var->ToDoubleOrInt64(aOutput);
 		case SYM_STRING:   // v1.0.40.06: Fixed to be listed explicitly so that "default" case can return failure.
-			str = aToken.marker;
+			str = aInput.marker;
 			break;
 		case SYM_OPERAND:
-			if (aToken.buf) // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
+			if (aInput.buf) // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
 			{
-				aToken.symbol = SYM_INTEGER;
-				aToken.value_int64 = *(__int64 *)aToken.buf;
+				aOutput.symbol = SYM_INTEGER;
+				aOutput.value_int64 = *(__int64 *)aInput.buf;
 				return OK;
 			}
 			// Otherwise:
-			str = aToken.marker;
 			break;
-		case SYM_OBJECT: // L31: Treat objects as empty strings (or TRUE where appropriate).
-			aToken.object->Release(); // Must be done before converting this token to something else.
+		//case SYM_OBJECT: // L31: Treat objects as empty strings (or TRUE where appropriate).
+		//case SYM_MISSING:
+		default:
+			aOutput.symbol = SYM_STRING;
+			aOutput.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
 			// FALL THROUGH TO BELOW
-		case SYM_MISSING:
-			aToken.symbol = SYM_STRING;
-			aToken.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
-			// FALL THROUGH TO BELOW
-		default:  // Not an operand. Haven't found a way to produce this situation yet, but safe to assume it's possible.
 			return FAIL;
 	}
 	// Since above didn't return, interpret "str" as a number.
-	switch (aToken.symbol = IsPureNumeric(str, true, false, true))
+	switch (aOutput.symbol = IsPureNumeric(str, true, false, true))
 	{
 	case PURE_INTEGER:
-		aToken.value_int64 = ATOI64(str);
+		aOutput.value_int64 = ATOI64(str);
 		break;
 	case PURE_FLOAT:
-		aToken.value_double = ATOF(str);
+		aOutput.value_double = ATOF(str);
 		break;
 	default: // Not a pure number.
-		aToken.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
+		aOutput.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
 		return FAIL;
 	}
 	return OK; // Since above didn't return, indicate success.
