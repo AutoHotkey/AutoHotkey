@@ -11454,6 +11454,17 @@ void Line::FreeDerefBufIfLarge()
 
 
 
+// Maintain a circular queue of the lines most recently executed:
+#define LOG_LINE(line) \
+{ \
+	sLog[sLogNext] = line; \
+	sLogTick[sLogNext++] = GetTickCount(); \
+	if (sLogNext >= LINE_LOG_SIZE) \
+		sLogNext = 0; \
+}
+
+
+
 ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Line **apJumpToLine)
 // Start executing at "this" line, stop when aMode indicates.
 // RECURSIVE: Handles all lines that involve flow-control.
@@ -11560,18 +11571,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
         g_script.mCurrLine = line;  // Simplifies error reporting when we get deep into function calls.
 
 		if (g.ListLinesIsEnabled)
-		{
-			// Maintain a circular queue of the lines most recently executed:
-			sLog[sLogNext] = line; // The code actually runs faster this way than if this were combined with the above.
-			// Get a fresh tick in case tick_now is out of date.  Strangely, it makes benchmarks 3% faster
-			// on my system with this line than without it, but that's probably just a quirk of the build
-			// or the CPU's caching.  It was already shown previously that the released version of 1.0.09
-			// was almost 2% faster than an early version of this version (yet even now, that prior version
-			// benchmarks slower than this one, which I can't explain).
-			sLogTick[sLogNext++] = GetTickCount();  // Incrementing here vs. separately benches a little faster.
-			if (sLogNext >= LINE_LOG_SIZE)
-				sLogNext = 0;
-		}
+			LOG_LINE(line)
 
 #ifdef CONFIG_DEBUGGER
 		if (g_Debugger.IsConnected() && line->mActionType != ACT_WHILE) // L31: PreExecLine of ACT_WHILE is now handled in PerformLoopWhile() where inspecting A_Index will yield the correct result.
@@ -12862,6 +12862,9 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 
 	g_script.mCurrLine = this; // Added in v1.1.16 to fix A_LineFile and A_LineNumber.
 
+	if (g->ListLinesIsEnabled)
+		LOG_LINE(this)
+
 	// EVALUATE THE EXPRESSION
 	result = ExpandArgs();
 	if (result == OK)
@@ -12963,16 +12966,6 @@ ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoo
 
 
 
-#define LOG_THIS_LINE \
-	{\
-		sLog[sLogNext] = this;\
-		sLogTick[sLogNext++] = GetTickCount();\
-		if (sLogNext >= LINE_LOG_SIZE)\
-			sLogNext = 0;\
-	}
-	// The lines above are the similar to those used in ExecUntil(), so the two should be
-	// maintained together.
-
 // Lexikos: ACT_WHILE
 ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine)
 {
@@ -13025,7 +13018,7 @@ ResultType Line::PerformLoopWhile(ExprTokenType *aResultToken, bool &aContinueMa
 		// at the end of the loop rather than the beginning because ExecUntil already added the
 		// line once immediately before the first iteration.
 		if (g.ListLinesIsEnabled)
-			LOG_THIS_LINE
+			LOG_LINE(this)
 	} // for()
 	return OK; // The script's loop is now over.
 }
@@ -13036,7 +13029,7 @@ bool Line::EvaluateLoopUntil(ResultType &aResult)
 {
 	g_script.mCurrLine = this; // For error-reporting purposes.
 	if (g->ListLinesIsEnabled)
-		LOG_THIS_LINE
+		LOG_LINE(this);
 #ifdef CONFIG_DEBUGGER
 	// Let the debugger break at or step onto UNTIL.
 	if (g_Debugger.IsConnected())
