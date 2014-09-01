@@ -12860,6 +12860,8 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 	g_script.mThisHotkeyStartTime = // Updated for consistency.
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
 
+	g_script.mCurrLine = this; // Added in v1.1.16 to fix A_LineFile and A_LineNumber.
+
 	// EVALUATE THE EXPRESSION
 	result = ExpandArgs();
 	if (result == OK)
