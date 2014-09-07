@@ -1983,7 +1983,7 @@ struct FuncCallData
 
 typedef BIF_DECL((* BuiltInFunctionType));
 
-class Func : public IObject
+class Func : public IObjectComCompatible
 {
 public:
 	LPTSTR mName;

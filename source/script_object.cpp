@@ -1620,10 +1620,15 @@ ResultType STDMETHODCALLTYPE Property::Invoke(ExprTokenType &aResultToken, ExprT
 
 ResultType STDMETHODCALLTYPE Func::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (!aParamCount)
-		return INVOKE_NOT_HANDLED;
+	LPTSTR member;
 
-	LPTSTR member = TokenToString(*aParam[0]);
+	if (!aParamCount)
+	{
+		member = _T("");
+		aFlags |= IF_FUNCOBJ;
+	}
+	else
+		member = TokenToString(*aParam[0]);
 
 	if (!IS_INVOKE_CALL)
 	{
