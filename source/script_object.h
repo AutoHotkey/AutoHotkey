@@ -13,7 +13,7 @@
 // ObjectBase - Common base class, implements reference counting.
 //
 
-class DECLSPEC_NOVTABLE ObjectBase : public IObject
+class DECLSPEC_NOVTABLE ObjectBase : public IObjectComCompatible
 {
 protected:
 	ULONG mRefCount;
@@ -207,6 +207,14 @@ public:
 		FieldType &field = mFields[aOffset];
 		aKey = field.key.i;
 		field.ToToken(aToken);
+		return true;
+	}
+
+	inline bool GetItemOffset(ExprTokenType &aToken, INT_PTR aOffset)
+	{
+		if (aOffset >= mKeyOffsetObject)
+			return false;
+		mFields[aOffset].ToToken(aToken);
 		return true;
 	}
 
