@@ -399,14 +399,25 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		// inconsistent with __Get and __Call.  That check was removed for v1.1.16 in order
 		// to implement property accessors, and a check was added below to retain the old
 		// behaviour for compatibility -- this should be changed in v2.
-		if (IS_INVOKE_META) // v1.1.16: See above.
+
+		static Property sProperty;
+
+		// v1.1.16: Handle class property accessors:
+		if (field && field->symbol == SYM_OBJECT && *(void **)field->object == *(void **)&sProperty)
 		{
-			// Handle class properties with getter/setter:
-			if (field && field->symbol == SYM_OBJECT && dynamic_cast<Property *>(field->object))
+			// The "type check" above is used for speed.  Simple benchmarks of x[1] where x := [[]]
+			// shows this check to not affect performance, whereas dynamic_cast<> hurt performance by
+			// about 25% and typeid()== by about 20%.  We can safely assume that the vtable pointer is
+			// stored at the beginning of the object even though it isn't guaranteed by the C++ standard,
+			// since COM fundamentally requires it:  http://msdn.microsoft.com/en-us/library/dd757710
+			Property *prop = (Property *)field->object;
+			if (IS_INVOKE_SET ? prop->CanSet() : prop->CanGet())
 			{
 				if (aParamCount > 2 && IS_INVOKE_SET)
 				{
-					// Do some shuffling to put value before the other parameters:
+					// Do some shuffling to put value before the other parameters.  This relies on above
+					// having verified that we're handling this invocation; otherwise the parameters would
+					// need to be swapped back later in case they're passed to a base's meta-function.
 					ExprTokenType *value = aParam[aParamCount - 1];
 					for (int i = aParamCount - 1; i > 1; --i)
 						aParam[i] = aParam[i - 1];
@@ -417,22 +428,19 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				// Pass IF_FUNCOBJ so that it'll pass all parameters to the getter/setter.
 				// For a functor Object, we would need to pass a token representing "this" Property,
 				// but since Property::Invoke doesn't use it, we pass our aThisToken for simplicity.
-				ResultType result = field->object->Invoke(aResultToken, aThisToken, aFlags | IF_FUNCOBJ, aParam, aParamCount);
+				ResultType result = prop->Invoke(aResultToken, aThisToken, aFlags | IF_FUNCOBJ, aParam, aParamCount);
 				aParam[0] = name_token;
-				if (result == EARLY_RETURN)
-					result = OK;
-				if (result != INVOKE_NOT_HANDLED)
-					return result;
-				// The property was missing get/set (whichever this invocation is), so continue as
-				// if the property itself wasn't defined.
-				field = NULL;
-				findfield_after_calling_base = false;
+				return result == EARLY_RETURN ? OK : result;
 			}
-			else if (IS_INVOKE_SET && param_count_excluding_rvalue == 1) // For compatibility - see above.
-			{
-				field = NULL;
-				param_count_excluding_rvalue = 0;
-			}
+			// The property was missing get/set (whichever this invocation is), so continue as
+			// if the property itself wasn't defined.
+			field = NULL;
+			findfield_after_calling_base = false;
+		}
+		else if (IS_INVOKE_META && IS_INVOKE_SET && param_count_excluding_rvalue == 1) // v1.1.16: For compatibility with earlier versions - see above.
+		{
+			field = NULL;
+			param_count_excluding_rvalue = 0;
 		}
 	}
 	else

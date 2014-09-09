@@ -74,6 +74,24 @@ public:
 	
 
 //
+// Property: Invoked when a derived object gets/sets the corresponding key.
+//
+
+class Property : public ObjectBase
+{
+public:
+	Func *mGet, *mSet;
+
+	bool CanGet() { return mGet; }
+	bool CanSet() { return mSet; }
+
+	Property() : mGet(NULL), mSet(NULL) { }
+	
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+};
+
+
+//
 // Object - Scriptable associative array.
 //
 
@@ -292,21 +310,6 @@ public:
 #ifdef CONFIG_DEBUGGER
 	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
 #endif
-};
-
-
-//
-// Property: Invoked when a derived object gets/sets the corresponding key.
-//
-
-class Property : public ObjectBase
-{
-public:
-	Func *mGet, *mSet;
-
-	Property() : mGet(NULL), mSet(NULL) { }
-	
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
 
