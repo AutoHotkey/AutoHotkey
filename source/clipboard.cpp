@@ -70,7 +70,7 @@ size_t Clipboard::Get(LPTSTR aBuf)
 			Close(CANT_OPEN_CLIPBOARD_READ);
 			return CLIPBOARD_FAILURE;
 		}
-		if (   !(mClipMemNow = g_clip.GetClipboardDataTimeout(clipboard_contains_files ? CF_HDROP : CF_NATIVETEXT))   )
+		if (   !(mClipMemNow = g_clip.GetClipboardDataTimeout(clipboard_contains_text ? CF_NATIVETEXT : CF_HDROP))   )
 		{
 			// v1.0.47.04: Commented out the following that had been in effect when clipboard_contains_files==false:
 			//    Close("GetClipboardData"); // Short error message since so rare.
@@ -109,7 +109,12 @@ size_t Clipboard::Get(LPTSTR aBuf)
 		// Otherwise: Update length after every successful new open&lock:
 		// Determine the length (size - 1) of the buffer than would be
 		// needed to hold what's on the clipboard:
-		if (clipboard_contains_files)
+		if (clipboard_contains_text)
+		{
+			// See below for comments.
+			mLength = _tcslen(mClipMemNowLocked);
+		}
+		else // clipboard_contains_files
 		{
 			if (file_count = DragQueryFile((HDROP)mClipMemNowLocked, 0xFFFFFFFF, _T(""), 0))
 			{
@@ -120,8 +125,6 @@ size_t Clipboard::Get(LPTSTR aBuf)
 			else
 				mLength = 0;
 		}
-		else // clipboard_contains_text
-			mLength = _tcslen(mClipMemNowLocked);
 		if (mLength >= CLIPBOARD_FAILURE) // Can't realistically happen, so just indicate silent failure.
 			return CLIPBOARD_FAILURE;
 	}
@@ -136,7 +139,16 @@ size_t Clipboard::Get(LPTSTR aBuf)
 		// the overhead of having to close and reopen the clipboard.
 
 	// Otherwise:
-	if (clipboard_contains_files)
+	if (clipboard_contains_text) // Fixed for v1.1.16.02: Prefer text over files if both are present.
+	{
+		// Because the clipboard is being retrieved as text, return this text even if
+		// the clipboard also contains files.  Contents() relies on this since it only
+		// calls Get() once and does not provide a buffer.  Contents() would be used
+		// in "c := Clipboard" or "MsgBox %Clipboard%" because ArgMustBeDereferenced()
+		// returns true only if the clipboard contains files but not text.
+		_tcscpy(aBuf, mClipMemNowLocked);  // Caller has already ensured that aBuf is large enough.
+	}
+	else // clipboard_contains_files
 	{
 		if (file_count = DragQueryFile((HDROP)mClipMemNowLocked, 0xFFFFFFFF, _T(""), 0))
 			for (i = 0; i < file_count; ++i)
@@ -152,8 +164,6 @@ size_t Clipboard::Get(LPTSTR aBuf)
 			}
 		// else aBuf has already been terminated upon entrance to this function.
 	}
-	else
-		_tcscpy(aBuf, mClipMemNowLocked);  // Caller has already ensured that aBuf is large enough.
 	// Fix for v1.0.37: Close() is no longer called here because it prevents the clipboard variable
 	// from being referred to more than once in a line.  For example:
 	// Msgbox %Clipboard%%Clipboard%
