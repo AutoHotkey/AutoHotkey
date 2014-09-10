@@ -10645,16 +10645,30 @@ ResultType Line::FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity)
 
 	if (!aFilespec || !*aFilespec)
 		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER); // Let ErrorLevel indicate an error, since this is probably not what the user intended.
+	
+	BOOL got_file_size;
+	__int64 size;
 
-	// Don't use CreateFile() & FileGetSize() because they will fail to work on a file that's in use.
-	// Research indicates that this method has no disadvantages compared to the other method.
-	WIN32_FIND_DATA found_file;
-	HANDLE file_search = FindFirstFile(aFilespec, &found_file);
-	if (file_search == INVALID_HANDLE_VALUE)
-		return SetErrorsOrThrow(true); // Let ErrorLevel tell the story.
-	FindClose(file_search);
+	// Try CreateFile() and GetFileSizeEx() first, since they can be more accurate. 
+	// See "Why is the file size reported incorrectly for files that are still being written to?"
+	// http://blogs.msdn.com/b/oldnewthing/archive/2011/12/26/10251026.aspx
+	HANDLE hfile = CreateFile(aFilespec, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
+		, NULL, OPEN_EXISTING, 0, NULL);
+	if (hfile != INVALID_HANDLE_VALUE)
+	{
+		got_file_size = GetFileSizeEx(hfile, (PLARGE_INTEGER)&size);
+		CloseHandle(hfile);
+	}
 
-	unsigned __int64 size = ((unsigned __int64)found_file.nFileSizeHigh << 32) | found_file.nFileSizeLow;
+	if (!got_file_size)
+	{
+		WIN32_FIND_DATA found_file;
+		HANDLE file_search = FindFirstFile(aFilespec, &found_file);
+		if (file_search == INVALID_HANDLE_VALUE)
+			return SetErrorsOrThrow(true); // Let ErrorLevel tell the story.
+		FindClose(file_search);
+		size = ((__int64)found_file.nFileSizeHigh << 32) | found_file.nFileSizeLow;
+	}
 
 	switch(ctoupper(*aGranularity))
 	{
@@ -10669,7 +10683,7 @@ ResultType Line::FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity)
 	}
 
 	SetErrorsOrThrow(false, 0); // Indicate success.
-	return OUTPUT_VAR->Assign((__int64)(size > ULLONG_MAX ? -1 : size)); // i.e. don't allow it to wrap around.
+	return OUTPUT_VAR->Assign(size);
 	// The below comment is obsolete in light of the switch to 64-bit integers.  But it might
 	// be good to keep for background:
 	// Currently, the above is basically subject to a 2 gig limit, I believe, after which the
