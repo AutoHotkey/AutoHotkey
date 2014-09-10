@@ -678,7 +678,7 @@ void AssignVariant(Var &aArg, VARIANT &aVar, bool aRetainVar = true)
 }
 
 
-void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar)
+void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, BOOL aVarIsArg)
 {
 	if (aToken.symbol == SYM_VAR)
 		aToken.var->TokenToContents(aToken);
@@ -726,13 +726,30 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar)
 		break;
 	case SYM_OBJECT:
 		if (ComObject *obj = dynamic_cast<ComObject *>(aToken.object))
+		{
 			obj->ToVariant(aVar);
-		else if (aVar.pdispVal = dynamic_cast<IDispatch *>(aToken.object))
-			aVar.vt = VT_DISPATCH;
+			if (!aVarIsArg)
+			{
+				if (aVar.vt == VT_DISPATCH || aVar.vt == VT_UNKNOWN)
+				{
+					if (aVar.punkVal)
+						aVar.punkVal->AddRef();
+				}
+				else if ((aVar.vt & ~VT_TYPEMASK) == VT_ARRAY && (obj->mFlags & ComObject::F_OWNVALUE))
+				{
+					// Copy array since both sides will call Destroy().
+					if (FAILED(SafeArrayCopy(aVar.parray, &aVar.parray)))
+						aVar.vt = VT_EMPTY;
+				}
+			}
+		}
 		else
-			aVar.vt = VT_EMPTY;
-		if ((aVar.vt == VT_DISPATCH || aVar.vt == VT_UNKNOWN) && aVar.punkVal)
-			aVar.punkVal->AddRef();
+		{
+			aVar.vt = VT_DISPATCH;
+			aVar.pdispVal = aToken.object;
+			if (!aVarIsArg)
+				aToken.object->AddRef();
+		}
 		break;
 	case SYM_MISSING:
 		aVar.vt = VT_ERROR;
@@ -955,7 +972,7 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 
 		for (int i = 0; i < aParamCount; i++)
 		{
-			TokenToVariant(*aParam[aParamCount-i], rgvarg[i]);
+			TokenToVariant(*aParam[aParamCount-i], rgvarg[i], TRUE);
 		}
 
 		dispparams.rgvarg = rgvarg;
@@ -993,11 +1010,10 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 
 	for (int i = 0; i < aParamCount; i++)
 	{
-		// For SYM_OBJECT, rgvarg[i] might be a shallow copy of a ComObject, in which case calling VariantClear would
-		// free its contents prematurely.  However, VT_DISPATCH and VT_UNKNOWN must be cleared since VariantToToken()
-		// called AddRef().  VT_DISPATCH can be an IObjectComCompatible or from a ComObject.
-		if (aParam[aParamCount-i]->symbol != SYM_OBJECT || rgvarg[i].vt == VT_DISPATCH || rgvarg[i].vt == VT_UNKNOWN)
-			VariantClear(&rgvarg[i]);
+		// TokenToVariant() in "arg" mode never calls AddRef() or SafeArrayCopy(), so the arg needs to be freed
+		// only if it is a BSTR and not one which came from a ComObject wrapper (such as ComObject(9, pbstr)).
+		if (rgvarg[i].vt == VT_BSTR && aParam[aParamCount-i]->symbol != SYM_OBJECT)
+			SysFreeString(rgvarg[i].bstrVal);
 	}
 
 	if	(FAILED(hr))
@@ -1115,25 +1131,16 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 		else // SET
 		{
 			ExprTokenType &rvalue = *aParam[dims];
-			TokenToVariant(rvalue, var);
+			TokenToVariant(rvalue, var, FALSE);
 			// Above may have set var.vt to VT_BSTR (a newly allocated string or one passed via ComObject),
 			// VT_DISPATCH or VT_UNKNOWN (in which case it called AddRef()).  Unless the value is converted
 			// to some other type, it is copied by pointer into the array; so we never clear var itself.
 			if (item_type == VT_VARIANT)
 			{
-				if ((var.vt & ~VT_TYPEMASK) == VT_ARRAY // Implies rvalue contains a ComObject.
-					&& (((ComObject *)rvalue.object)->mFlags & F_OWNVALUE))
-				{
-					// Copy array since both sides will call Destroy().
-					hr = VariantCopy((VARIANTARG *)item, &var);
-				}
-				else
-				{
-					// Free existing value.
-					VariantClear((VARIANTARG *)item);
-					// Write new value (shallow copy).
-					memcpy(item, &var, sizeof(VARIANT));
-				}
+				// Free existing value.
+				VariantClear((VARIANTARG *)item);
+				// Write new value (shallow copy).
+				memcpy(item, &var, sizeof(VARIANT));
 			}
 			else
 			{
@@ -1461,7 +1468,7 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	default:
 		result_to_return = S_OK;
 		if (pVarResult)
-			TokenToVariant(result_token, *pVarResult);
+			TokenToVariant(result_token, *pVarResult, FALSE);
 	}
 
 	if (result_token.symbol == SYM_OBJECT)
