@@ -2650,7 +2650,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		mCombinedLineNumber = saved_line_number;
 	}
 
-	if (mClassObjectCount) // or mClassProperty, which implies mClassObjectCount != 0.
+	if (mClassObjectCount && !source_file_index) // or mClassProperty, which implies mClassObjectCount != 0.
 	{
 		// A class definition has not been closed with "}".  Previously this was detected by adding
 		// the open and close braces as lines, but this way is simpler and has less overhead.
