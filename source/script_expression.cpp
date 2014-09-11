@@ -806,10 +806,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			}
 			else if (right.symbol == SYM_VAR) // At this stage, SYM_VAR is always a normal variable, never a built-in one, so taking its address should be safe.
 			{
-				if (right.var->IsPureNumeric())
-					this_token.value_int64 = (__int64)&right.var->mContentsInt64; // Since the value is a pure number, this seems more useful and less confusing than returning the address of a numeric string.
+				Var *right_var = right.var->ResolveAlias();
+				if (right_var->IsPureNumeric())
+					this_token.value_int64 = (__int64)&right_var->mContentsInt64; // Since the value is a pure number, this seems more useful and less confusing than returning the address of a numeric string.
 				else
-					this_token.value_int64 = (__int64)right.var->Contents(); // Contents() vs. mContents to support VAR_CLIPBOARD, and in case mContents needs to be updated by Contents().
+					this_token.value_int64 = (__int64)right_var->Contents(); // Contents() vs. mContents to support VAR_CLIPBOARD, and in case mContents needs to be updated by Contents().
 				this_token.symbol = SYM_INTEGER;
 			}
 			else // Syntax error: operand is not an object or a variable reference.
