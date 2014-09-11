@@ -18417,6 +18417,7 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 				return OK;
 			}
 			// Otherwise:
+			str = aInput.marker;
 			break;
 		//case SYM_OBJECT: // L31: Treat objects as empty strings (or TRUE where appropriate).
 		//case SYM_MISSING:
