@@ -1276,6 +1276,20 @@ void Object::FieldType::Get(ExprTokenType &result)
 	}
 }
 
+void Object::FieldType::ToToken(ExprTokenType &aToken)
+// Used when we want the value as is, in a token.  Does not AddRef() or copy strings.
+{
+	switch (aToken.symbol = symbol) // Assign.
+	{
+	case SYM_STRING:
+		aToken.marker = string;
+		aToken.marker_length = string.Length();
+		break;
+	default:
+		aToken.value_int64 = n_int64; // Union copy.
+	}
+}
+
 void Object::FieldType::Free()
 // Only the value is freed, since keys only need to be freed when a field is removed
 // entirely or the Object is being deleted.  See Object::Delete.

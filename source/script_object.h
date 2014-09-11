@@ -158,11 +158,7 @@ protected:
 		void Get(ExprTokenType &result);
 		void Free();
 	
-		inline void ToToken(ExprTokenType &aToken) // Used when we want the value as is, in a token.  Does not AddRef() or copy strings.
-		{
-			aToken.value_int64 = n_int64;
-			aToken.symbol = symbol;
-		}
+		inline void ToToken(ExprTokenType &aToken); // Used when we want the value as is, in a token.  Does not AddRef() or copy strings.
 	};
 
 	class Enumerator : public EnumBase
