@@ -351,8 +351,9 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 {
 	SymbolType key_type;
 	KeyType key;
-    FieldType *field;
+    FieldType *field, *prop_field;
 	IndexType insert_pos;
+	Property *prop = NULL; // Set default.
 
 	// If this is some object's base and is being invoked in that capacity, call
 	//	__Get/__Set/__Call as defined in this base object before searching further.
@@ -378,7 +379,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		}
 	}
 	
-	bool findfield_after_calling_base;
 	int param_count_excluding_rvalue = aParamCount;
 
 	if (IS_INVOKE_SET)
@@ -391,7 +391,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	if (param_count_excluding_rvalue)
 	{
 		field = FindField(*aParam[0], aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
-		findfield_after_calling_base = true; // Set default.
 
 		// There used to be a check prior to the FindField() call above which avoided searching
 		// for base[field] when performing an assignment.  As an unintended side-effect, it was
@@ -410,7 +409,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// about 25% and typeid()== by about 20%.  We can safely assume that the vtable pointer is
 			// stored at the beginning of the object even though it isn't guaranteed by the C++ standard,
 			// since COM fundamentally requires it:  http://msdn.microsoft.com/en-us/library/dd757710
-			Property *prop = (Property *)field->object;
+			prop = (Property *)field->object;
+			prop_field = field;
 			if (IS_INVOKE_SET ? prop->CanSet() : prop->CanGet())
 			{
 				if (aParamCount > 2 && IS_INVOKE_SET)
@@ -435,7 +435,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// The property was missing get/set (whichever this invocation is), so continue as
 			// if the property itself wasn't defined.
 			field = NULL;
-			findfield_after_calling_base = false;
 		}
 		else if (IS_INVOKE_META && IS_INVOKE_SET && param_count_excluding_rvalue == 1) // v1.1.16: For compatibility with earlier versions - see above.
 		{
@@ -445,7 +444,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	}
 	else
 	{
-		findfield_after_calling_base = false;
 		key_type = SYM_INVALID; // Allow key_type checks below without requiring that param_count_excluding_rvalue also be checked.
 		field = NULL;
 	}
@@ -462,14 +460,19 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// find and execute a specific meta-function (__new or __delete) but don't want any base
 			// object to invoke __call.  So if this is already a meta-invocation, don't change aFlags.
 			ResultType r = mBase->Invoke(aResultToken, aThisToken, aFlags | (IS_INVOKE_META ? 0 : IF_META), aParam, aParamCount);
-			if (r != INVOKE_NOT_HANDLED)
+			if (r != INVOKE_NOT_HANDLED // Base handled it.
+				|| !param_count_excluding_rvalue) // Nothing left to do in this case.
 				return r;
 
 			// Since the above may have inserted or removed fields (including the specified one),
 			// insert_pos may no longer be correct or safe.  Updating field also allows a meta-function
 			// to initialize a field and allow processing to continue as if it already existed.
-			if (findfield_after_calling_base)
-				field = FindField(key_type, key, /*out*/ insert_pos);
+			field = FindField(key_type, key, /*out*/ insert_pos);
+			if (prop)
+				if (field && field->symbol == SYM_OBJECT && field->object == prop)
+					prop_field = field; // Must update this pointer.
+				else
+					prop = NULL; // field was reassigned or removed, so ignore the property.
 		}
 
 		// Since the base object didn't handle this op, check for built-in properties/methods.
@@ -589,8 +592,11 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				Object *new_obj = new Object();
 				if (new_obj)
 				{
-					if ( field = Insert(key_type, key, insert_pos) )
-					{	// Don't do field->Assign() since it would do AddRef() and we would need to counter with Release().
+					if ( field = prop ? prop_field : Insert(key_type, key, insert_pos) )
+					{
+						if (prop) // Otherwise, field is already empty.
+							prop->Release();
+						// Don't do field->Assign() since it would do AddRef() and we would need to counter with Release().
 						field->symbol = SYM_OBJECT;
 						field->object = obj = new_obj;
 					}
@@ -623,7 +629,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		{
 			ExprTokenType &value_param = *aParam[1];
 			// L34: Assigning an empty string no longer removes the field.
-			if ( (field || (field = Insert(key_type, key, insert_pos))) && field->Assign(value_param) )
+			if ( (field || (field = prop ? prop_field : Insert(key_type, key, insert_pos)))
+				&& field->Assign(value_param) )
 			{
 				if (field->symbol == SYM_OPERAND)
 				{
