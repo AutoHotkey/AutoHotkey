@@ -613,9 +613,25 @@ bool TextFile::_Open(LPCTSTR aFileSpec, DWORD aFlags)
 	}
 	dwShareMode = ((aFlags >> 8) & (FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE));
 
-	// FILE_FLAG_SEQUENTIAL_SCAN is set, as sequential accesses are quite common for text files handling.
-	mFile = CreateFile(aFileSpec, dwDesiredAccess, dwShareMode, NULL, dwCreationDisposition,
-		(aFlags & (EOL_CRLF | EOL_ORPHAN_CR)) ? FILE_FLAG_SEQUENTIAL_SCAN : 0, NULL);
+	if (*aFileSpec != '*')
+		// FILE_FLAG_SEQUENTIAL_SCAN is set, as sequential accesses are quite common for text files handling.
+		mFile = CreateFile(aFileSpec, dwDesiredAccess, dwShareMode, NULL, dwCreationDisposition,
+			(aFlags & (EOL_CRLF | EOL_ORPHAN_CR)) ? FILE_FLAG_SEQUENTIAL_SCAN : 0, NULL);
+	else // v1.1.17: allow FileOpen("*", "r|w") to open stdin/stdout/stderr ("**" for stderr). Also needed by /RunStdIn.
+	{
+		int mode = aFlags & ACCESS_MODE_MASK;
+		switch (aFlags & ACCESS_MODE_MASK)
+		{
+			case READ:
+				mFile = GetStdHandle(STD_INPUT_HANDLE);
+				break;
+			case WRITE:
+				mFile = GetStdHandle(aFileSpec[1] != '*' ? STD_OUTPUT_HANDLE : STD_ERROR_HANDLE);
+				break;
+			default:
+				return false;
+		}
+	}
 
 	return mFile != INVALID_HANDLE_VALUE;
 }
