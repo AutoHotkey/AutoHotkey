@@ -258,6 +258,17 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	TCHAR def_buf[MAX_PATH + 1], exe_buf[MAX_PATH + 1];
 	if (!aScriptFilename) // v1.0.46.08: Change in policy: store the default script in the My Documents directory rather than in Program Files.  It's more correct and solves issues that occur due to Vista's file-protection scheme.
 	{
+		if (g_RunStdIn) // v1.1.17: /RunStdIn
+		{
+			GetCurrentDirectory(_countof(buf), buf);
+			mFileSpec = SimpleHeap::Malloc(_T("<stdin>"));
+			mFileName = mFileSpec;
+			mFileDir = SimpleHeap::Malloc(buf);
+			// Seems best to disable #SingleInstance and enable #NoEnv for stdin scripts.
+			g_AllowOnlyOneInstance = SINGLE_INSTANCE_OFF;
+			g_NoEnv = true;
+			goto skip_script_name_parsing;
+		}
 		// Since no script-file was specified on the command line, use the default name.
 		// For portability, first check if there's an <EXENAME>.ahk file in the current directory.
 		LPTSTR suffix, dot;
@@ -305,6 +316,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		return FAIL;  // It already displayed the error for us.
 	if (   !(mFileName = SimpleHeap::Malloc(filename_marker))   )
 		return FAIL;  // It already displayed the error for us.
+skip_script_name_parsing:
 #ifdef AUTOHOTKEYSC
 	// Omit AutoHotkey from the window title, like AutoIt3 does for its compiled scripts.
 	// One reason for this is to reduce backlash if evil-doers create viruses and such
@@ -947,7 +959,7 @@ UINT Script::LoadFromFile(bool aScriptWasNotspecified)
 	if (!mFileSpec || !*mFileSpec) return LOADING_FAILED;
 
 #ifndef AUTOHOTKEYSC  // When not in stand-alone mode, read an external script file.
-	DWORD attr = GetFileAttributes(mFileSpec);
+	DWORD attr = !g_RunStdIn ? GetFileAttributes(mFileSpec) : 0; // v1.1.17: /RunStdIn
 	if (attr == MAXDWORD) // File does not exist or lacking the authorization to get its attributes.
 	{
 		TCHAR buf[MAX_PATH + 256];
@@ -1033,7 +1045,7 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 	// function library auto-inclusions to be processed correctly.
 
 	// Load the main script file.  This will also load any files it includes with #Include.
-	if (   LoadIncludedFile(mFileSpec, false, false) != OK
+	if (   LoadIncludedFile(!g_RunStdIn ? mFileSpec : NULL, false, false) != OK
 		|| !AddLine(ACT_EXIT)) // Fix for v1.0.47.04: Add an Exit because otherwise, a script that ends in an IF-statement will crash in PreparseBlocks() because PreparseBlocks() expects every IF-statements mNextLine to be non-NULL (helps loading performance too).
 		return LOADING_FAILED;
 
@@ -1259,8 +1271,6 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 #define HOTKEY_FLAG _T("::")
 #define HOTKEY_FLAG_LENGTH 2
 {
-	if (!aFileSpec || !*aFileSpec) return FAIL;
-
 #ifndef AUTOHOTKEYSC
 	if (Line::sSourceFileCount >= Line::sMaxSourceFiles)
 	{
@@ -1296,7 +1306,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		// location of the filespec already dynamically allocated:
 		Line::sSourceFile[source_file_index] = mFileSpec;
 #ifndef AUTOHOTKEYSC  // The "else" part below should never execute for compiled scripts since they never include anything (other than the main/combined script).
-	else
+	else if (aFileSpec)
 	{
 		// Get the full path in case aFileSpec has a relative path.  This is done so that duplicates
 		// can be reliably detected (we only want to avoid including a given file more than once):
@@ -1326,7 +1336,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 #ifndef AUTOHOTKEYSC
 	TextFile tfile, *fp = &tfile;
-	if (!tfile.Open(aFileSpec, DEFAULT_READ_FLAGS, g_DefaultScriptCodepage))
+	if (!tfile.Open(aFileSpec ? aFileSpec : _T("*"), DEFAULT_READ_FLAGS, g_DefaultScriptCodepage))
 	{
 		if (aIgnoreLoadFailure)
 			return OK;
