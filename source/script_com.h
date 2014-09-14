@@ -50,6 +50,7 @@ public:
 		IDispatch *mDispatch;
 		IUnknown *mUnknown;
 		SAFEARRAY *mArray;
+		void *mValPtr;
 		__int64 mVal64; // Allow 64-bit values when ComObject is used as a VARIANT in 32-bit builds.
 	};
 	ComEvent *mEventSink;

@@ -759,6 +759,108 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, BOOL aVarIsArg)
 }
 
 
+HRESULT TokenToVarType(ExprTokenType &aToken, VARTYPE aVarType, void *apValue)
+// Copy the value of a given token into a variable of the given VARTYPE.
+{
+	if (aVarType == VT_VARIANT)
+	{
+		VariantClear((VARIANT *)apValue);
+		TokenToVariant(aToken, *(VARIANT *)apValue, FALSE);
+		return S_OK;
+	}
+
+#define U 0 // Unsupported in SAFEARRAY/VARIANT.
+#define P sizeof(void *)
+	// Unfortunately there appears to be no function to get the size of a given VARTYPE,
+	// and VariantCopyInd() copies in the wrong direction.  An alternative approach to
+	// the following would be to switch(aVarType) and copy using the appropriate pointer
+	// type, but disassembly shows that approach produces larger code and internally uses
+	// an array of sizes like this anyway:
+	static char vt_size[] = {U,U,2,4,4,8,8,8,P,P,4,2,0,P,0,U,1,1,2,4,8,8,4,4,U,U,U,U,U,U,U,U,U,U,U,U,U,P,P};
+	size_t vsize = (aVarType < _countof(vt_size)) ? vt_size[aVarType] : 0;
+	if (!vsize)
+		return DISP_E_BADVARTYPE;
+#undef P
+#undef U
+
+	VARIANT src;
+	TokenToVariant(aToken, src, FALSE);
+	// Above may have set var.vt to VT_BSTR (a newly allocated string or one passed via ComObject),
+	// VT_DISPATCH or VT_UNKNOWN (in which case it called AddRef()).  The value is either freed by
+	// VariantChangeType() or moved into *apValue, so we don't free it except on failure.
+	if (src.vt != aVarType)
+	{
+		// Attempt to coerce var to the correct type:
+		HRESULT hr = VariantChangeType(&src, &src, 0, aVarType);
+		if (FAILED(hr))
+		{
+			VariantClear(&src);
+			return hr;
+		}
+	}
+	// Free existing value.
+	if (aVarType == VT_UNKNOWN || aVarType == VT_DISPATCH)
+	{
+		IUnknown *punk = *(IUnknown **)apValue;
+		if (punk)
+			punk->Release();
+	}
+	else if (aVarType == VT_BSTR)
+	{
+		SysFreeString(*(BSTR *)apValue);
+	}
+	// Write new value (shallow copy).
+	memcpy(apValue, &src.lVal, vsize);
+	return S_OK;
+}
+
+
+void VarTypeToToken(VARTYPE aVarType, void *apValue, ExprTokenType &aToken)
+// Copy a value of the given VARTYPE into a token.
+{
+	VARIANT src, dst;
+	src.vt = VT_BYREF | aVarType;
+	src.pbVal = (BYTE *)apValue;
+	dst.vt = VT_EMPTY;
+	if (FAILED(VariantCopyInd(&dst, &src)))
+		dst.vt = VT_EMPTY;
+	VariantToToken(dst, aToken, false);
+}
+
+
+void RValueToResultToken(ExprTokenType &aRValue, ExprTokenType &aResultToken)
+// Support function for chaining assignments.  Provides consistent results when aRValue has been
+// converted to a VARIANT.  Passes wrapper objects as is, whereas VariantToToken would return
+// either a simple value or a new wrapper object.
+{
+	switch (aRValue.symbol)
+	{
+	case SYM_OPERAND:
+		if (aRValue.buf)
+		{
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = *(__int64 *)aRValue.buf;
+			break;
+		}
+		// FALL THROUGH to next case:
+	case SYM_STRING:
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = aRValue.marker;
+		break;
+	case SYM_OBJECT:
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = aRValue.object;
+		aResultToken.object->AddRef();
+		break;
+	case SYM_INTEGER:
+	case SYM_FLOAT:
+		aResultToken.symbol = aRValue.symbol;
+		aResultToken.value_int64 = aRValue.value_int64;
+		break;
+	}
+}
+
+
 bool g_ComErrorNotify = true;
 
 void ComError(HRESULT hr, LPTSTR name, EXCEPINFO* pei)
@@ -941,9 +1043,29 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 {
 	if (aParamCount < (IS_INVOKE_SET ? 2 : 1))
 	{
-		// Something like x[] or x[]:=y -- reserved for possible future use.  However, it could
+		HRESULT hr = DISP_E_BADPARAMCOUNT; // Set default.
+		// Something like x[] or x[]:=y.
+		if (mVarType & VT_BYREF)
+		{
+			VARTYPE item_type = mVarType & VT_TYPEMASK;
+			if (aParamCount) // Implies SET.
+			{
+				hr = TokenToVarType(*aParam[0], item_type, mValPtr);
+				if (SUCCEEDED(hr))
+				{
+					RValueToResultToken(*aParam[0], aResultToken);
+					return OK;
+				}
+			}
+			else // !aParamCount: Implies GET.
+			{
+				VarTypeToToken(item_type, mValPtr, aResultToken);
+				return OK;
+			}
+		}
+		// For other types, this syntax is reserved for possible future use.  However, it could
 		// be x[prms*] where prms is an empty array or not an array at all, so raise an error:
-		ComError(g->LastError = DISP_E_BADPARAMCOUNT);
+		ComError(g->LastError = hr);
 		return OK;
 	}
 
@@ -1104,7 +1226,6 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 		index[i] = (LONG)TokenToInt64(*aParam[i]);
 	}
 
-	VARIANT var = {0};
 	void *item;
 
 	SafeArrayLock(psa);
@@ -1114,91 +1235,18 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 	{
 		if (IS_INVOKE_GET)
 		{
-			if (item_type == VT_VARIANT)
-			{
-				// Make shallow copy of the VARIANT item.
-				memcpy(&var, item, sizeof(VARIANT));
-			}
-			else
-			{
-				// Build VARIANT with shallow copy of the item.
-				var.vt = item_type;
-				memcpy(&var.lVal, item, SafeArrayGetElemsize(psa));
-			}
-			// Copy value into result token.
-			VariantToToken(var, aResultToken);
+			VarTypeToToken(item_type, item, aResultToken);
 		}
 		else // SET
 		{
 			ExprTokenType &rvalue = *aParam[dims];
-			TokenToVariant(rvalue, var, FALSE);
-			// Above may have set var.vt to VT_BSTR (a newly allocated string or one passed via ComObject),
-			// VT_DISPATCH or VT_UNKNOWN (in which case it called AddRef()).  Unless the value is converted
-			// to some other type, it is copied by pointer into the array; so we never clear var itself.
-			if (item_type == VT_VARIANT)
-			{
-				// Free existing value.
-				VariantClear((VARIANTARG *)item);
-				// Write new value (shallow copy).
-				memcpy(item, &var, sizeof(VARIANT));
-			}
-			else
-			{
-				if (var.vt != item_type)
-				{
-					// Attempt to coerce var to the correct type:
-					hr = VariantChangeType(&var, &var, 0, item_type);
-					if (FAILED(hr))
-					{
-						VariantClear(&var);
-						goto unlock_and_return;
-					}
-				}
-				// Free existing value.
-				if (item_type == VT_UNKNOWN || item_type == VT_DISPATCH)
-				{
-					IUnknown *punk = ((IUnknown **)item)[0];
-					if (punk)
-						punk->Release();
-				}
-				else if (item_type == VT_BSTR)
-				{
-					SysFreeString(*((BSTR *)item));
-				}
-				// Write new value (shallow copy).
-				memcpy(item, &var.lVal, SafeArrayGetElemsize(psa));
-			}
-			// Allow chaining - using the following rather than VariantToToken allows any wrapper objects to
-			// be passed along rather than being coerced to a simple value or a new wrapper being created.
-			switch (rvalue.symbol)
-			{
-			case SYM_OPERAND:
-				if (rvalue.buf)
-				{
-					aResultToken.symbol = SYM_INTEGER;
-					aResultToken.value_int64 = *(__int64 *)rvalue.buf;
-					break;
-				}
-				// FALL THROUGH to next case:
-			case SYM_STRING:
-				aResultToken.symbol = SYM_STRING;
-				aResultToken.marker = rvalue.marker;
-				break;
-			case SYM_OBJECT:
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = rvalue.object;
-				aResultToken.object->AddRef();
-				break;
-			case SYM_INTEGER:
-			case SYM_FLOAT:
-				aResultToken.symbol = rvalue.symbol;
-				aResultToken.value_int64 = rvalue.value_int64;
-				break;
-			}
+			hr = TokenToVarType(rvalue, item_type, item);
+			if (SUCCEEDED(hr))
+				RValueToResultToken(rvalue, aResultToken);
+			// Otherwise, leave aResultToken blank.
 		}
 	}
 
-unlock_and_return:
 	SafeArrayUnlock(psa);
 
 	g->LastError = hr;
