@@ -88,8 +88,6 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			g_ForceLaunch = true;
 		else if (!_tcsicmp(param, _T("/ErrorStdOut")))
 			g_script.mErrorStdOut = true;
-		else if (!_tcsicmp(param, _T("/RunStdIn")))
-			g_RunStdIn = true;
 #ifndef AUTOHOTKEYSC // i.e. the following switch is recognized only by AutoHotkey.exe (especially since recognizing new switches in compiled scripts can break them, unlike AutoHotkey.exe).
 		else if (!_tcsicmp(param, _T("/iLib"))) // v1.0.47: Build an include-file so that ahk2exe can include library functions called by the script.
 		{
@@ -139,12 +137,11 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		else // since this is not a recognized switch, the end of the [Switches] section has been reached (by design).
 		{
 			switch_processing_is_complete = true;  // No more switches allowed after this point.
-#ifndef AUTOHOTKEYSC
-			if (!g_RunStdIn)
-				script_filespec = param;  // The first unrecognized switch must be the script filespec, by design.
-			else
+#ifdef AUTOHOTKEYSC
+			--i; // Make the loop process this item again so that it will be treated as a script param.
+#else
+			script_filespec = param;  // The first unrecognized switch must be the script filespec, by design.
 #endif
-				--i; // Make the loop process this item again so that it will be treated as a script param.
 		}
 	}
 
