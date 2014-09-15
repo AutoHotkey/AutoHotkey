@@ -1913,7 +1913,6 @@ void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEvent
 		}
 
 		// If the item was not handled by the above, ignore it because it is unknown.
-
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 	} // for() each item in option list
 

@@ -122,6 +122,24 @@ typename FlatVector<T>::Data FlatVector<T>::Empty;
 
 
 //
+// Property: Invoked when a derived object gets/sets the corresponding key.
+//
+
+class Property : public ObjectBase
+{
+public:
+	Func *mGet, *mSet;
+
+	bool CanGet() { return mGet; }
+	bool CanSet() { return mSet; }
+
+	Property() : mGet(NULL), mSet(NULL) { }
+	
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+};
+
+
+//
 // Object - Scriptable associative array.
 //
 
@@ -371,6 +389,7 @@ extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object va
 class RegExMatchObject : public ObjectBase
 {
 	LPTSTR mHaystack;
+	int mHaystackStart;
 	int *mOffset;
 	LPTSTR *mPatternName;
 	int mPatternCount;

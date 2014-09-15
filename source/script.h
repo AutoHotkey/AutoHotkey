@@ -197,7 +197,8 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_UNQUOTED_NON_ALNUM _T("Unquoted literals may only consist of alphanumeric characters/underscore.")
 #define ERR_DUPLICATE_DECLARATION _T("Duplicate declaration.")
 #define ERR_INVALID_CLASS_VAR _T("Invalid class variable declaration.")
-#define ERR_INVALID_LINE_IN_CLASS_DEF _T("Expected assignment or class/method definition.")
+#define ERR_INVALID_LINE_IN_CLASS_DEF _T("Not a valid method, class or property definition.")
+#define ERR_INVALID_LINE_IN_PROPERTY_DEF _T("Not a valid property getter/setter.")
 #define ERR_INVALID_GUI_NAME _T("Invalid Gui name.")
 #define ERR_INVALID_OPTION _T("Invalid option.") // Generic message used by Gui and GuiControl/Get.
 #define ERR_MUST_DECLARE _T("This variable must be declared.")
@@ -671,8 +672,7 @@ private:
 	ResultType FileCreateDir(LPTSTR aDirSpec);
 	ResultType FileRead(LPTSTR aFilespec);
 	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *aCurrentReadFile);
-	ResultType WriteClipboardToFile(LPTSTR aFilespec);
-	ResultType ReadClipboardFromFile(HANDLE hfile);
+	ResultType WriteClipboardToFile(LPTSTR aFilespec, Var *aBinaryClipVar = NULL);
 	ResultType FileDelete();
 	ResultType FileRecycle(LPTSTR aFilePattern);
 	ResultType FileRecycleEmpty(LPTSTR aDriveLetter);
@@ -2535,6 +2535,8 @@ private:
 	Object *mClassObject[MAX_NESTED_CLASSES]; // Class definition currently being parsed.
 	TCHAR mClassName[MAX_CLASS_NAME_LENGTH + 1]; // Only used during load-time.
 	Object *mUnresolvedClasses;
+	Property *mClassProperty;
+	LPTSTR mClassPropertyDef;
 
 	// These two track the file number and line number in that file of the line currently being loaded,
 	// which simplifies calls to ScriptError() and LineError() (reduces the number of params that must be passed).
@@ -2649,6 +2651,7 @@ public:
 
 	ResultType DefineClass(LPTSTR aBuf);
 	ResultType DefineClassVars(LPTSTR aBuf, bool aStatic);
+	ResultType DefineClassProperty(LPTSTR aBuf);
 	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
 	ResultType ResolveClasses();
 

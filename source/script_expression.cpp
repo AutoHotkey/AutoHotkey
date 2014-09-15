@@ -1212,7 +1212,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_MULTIPLY: this_token.value_double = left_double * right_double; break;
 				case SYM_DIVIDE:
 				case SYM_FLOORDIVIDE:
-					if (right_double == 0.0) // Divide by zero produces blank result (perhaps will produce exception if script's ever support exception handlers).
+					if (right_double == 0.0) // Divide by zero produces blank result.
 					{
 						this_token.marker = _T("");
 						this_token.marker_length = 0;

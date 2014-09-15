@@ -2180,15 +2180,11 @@ BIF_DECL(BIF_WinSet)
 		//	MySetLayeredWindowAttributes(target_window, color, alpha, flags);
 		// The above is why there is currently no "on" or "toggle" sub-command, just "Off".
 
-		// Must fetch the below at runtime, otherwise the program can't even be launched on Win9x/NT.
-		// Also, since the color of an HBRUSH can't be easily determined (since it can be a pattern and
+		// Since the color of an HBRUSH can't be easily determined (since it can be a pattern and
 		// since there seem to be no easy API calls to discover the colors of pixels in an HBRUSH),
 		// the following is not yet implemented: Use window's own class background color (via
 		// GetClassLong) if aValue is entirely blank.
-		typedef BOOL (WINAPI *MySetLayeredWindowAttributesType)(HWND, COLORREF, BYTE, DWORD);
-		static MySetLayeredWindowAttributesType MySetLayeredWindowAttributes = (MySetLayeredWindowAttributesType)
-			GetProcAddress(GetModuleHandle(_T("user32")), "SetLayeredWindowAttributes");
-		if (!MySetLayeredWindowAttributes || !(exstyle = GetWindowLong(target_window, GWL_EXSTYLE)))
+		if (  !(exstyle = GetWindowLong(target_window, GWL_EXSTYLE))  )
 			break;  // Do nothing on OSes that don't support it.
 		if (!_tcsicmp(aValue, _T("Off")))
 			// One user reported that turning off the attribute helps window's scrolling performance.
@@ -2213,7 +2209,7 @@ BIF_DECL(BIF_WinSet)
 				else if (value > 255)
 					value = 255;
 				SetWindowLong(target_window, GWL_EXSTYLE, exstyle | WS_EX_LAYERED);
-				success = MySetLayeredWindowAttributes(target_window, 0, value, LWA_ALPHA);
+				success = SetLayeredWindowAttributes(target_window, 0, value, LWA_ALPHA);
 			}
 			else // cmd == FID_WinSetTransColor
 			{
@@ -2246,7 +2242,7 @@ BIF_DECL(BIF_WinSet)
 					flags = LWA_COLORKEY;
 				}
 				SetWindowLong(target_window, GWL_EXSTYLE, exstyle | WS_EX_LAYERED);
-				success = MySetLayeredWindowAttributes(target_window, color, value, flags);
+				success = SetLayeredWindowAttributes(target_window, color, value, flags);
 			}
 		}
 		break;
@@ -7590,10 +7586,12 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	// Caller must check ErrorLevel to distinguish between an empty file and an error.
 	output_var.Assign();
 
+	const DWORD DWORD_MAX = ~0;
+
 	// Set default options:
 	bool translate_crlf_to_lf = false;
 	bool is_binary_clipboard = false;
-	unsigned __int64 max_bytes_to_load = VARSIZE_MAX-2; // NOT ULLONG_MAX; see comments near bytes_to_read below.  -2 to avoid overflow when calling malloc().
+	unsigned __int64 max_bytes_to_load = ULLONG_MAX; // By default, fail if the file is too large.  See comments near bytes_to_read below.
 	UINT codepage = g->Encoding & CP_AHKCP;
 
 	// It's done as asterisk+option letter to permit future expansion.  A plain asterisk such as used
@@ -7612,11 +7610,6 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			break;
 		case 'M': // Maximum number of bytes to load.
 			max_bytes_to_load = ATOU64(cp + 1); // Relies upon the fact that it ceases conversion upon reaching a space or tab.
-#ifndef _WIN64
-			// See near bytes_to_read below for comments.
-			if (max_bytes_to_load > SIZE_MAX)
-				max_bytes_to_load = SIZE_MAX;
-#endif
 			// Skip over the digits of this option in case it's the last option.
 			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
 				return LineError(ERR_PARAM1_INVALID);
@@ -7666,12 +7659,6 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	if (hfile == INVALID_HANDLE_VALUE)      // in cases like these (and it seems best even if max_bytes_to_load was specified).
 		return SetErrorsOrThrow(true);
 
-	if (is_binary_clipboard && output_var.Type() == VAR_CLIPBOARD)
-		return ReadClipboardFromFile(hfile);
-
-	// Otherwise, if is_binary_clipboard, load it directly into a normal variable.  The data in the
-	// clipboard file should already have the (UINT)0 as its ending terminator.
-
 	unsigned __int64 bytes_to_read = GetFileSize64(hfile);
 	if (bytes_to_read == ULLONG_MAX) // GetFileSize64() failed.
 	{
@@ -7681,9 +7668,25 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	}
 	// In addition to imposing the limit set by the *M option, the following check prevents an error
 	// caused by 64 to 32-bit truncation -- that is, a file size of 0x100000001 would be truncated to
-	// 0x1, allowing the command to complete even though it should fail.
-	if (bytes_to_read > max_bytes_to_load) // Default (and absolute maximum) limit is SIZE_MAX.
+	// 0x1, allowing the command to complete even though it should fail.  UPDATE: This check was never
+	// sufficient since max_bytes_to_load could exceed DWORD_MAX on x64 (prior to v1.1.16).  It's now
+	// checked separately below to try to match the documented behaviour (truncating the data only to
+	// the caller-specified limit).
+	if (bytes_to_read > max_bytes_to_load) // This is the limit set by the caller.
 		bytes_to_read = max_bytes_to_load;
+	// Fixed for v1.1.16: Show an error message if the file is larger than DWORD_MAX, otherwise the
+	// truncation issue described above could occur.  Reading more than DWORD_MAX could be supported
+	// by calling ReadFile() in a loop, but it seems unlikely that a script will genuinely want to
+	// do this AND actually be able to allocate a 4GB+ memory block (having 4GB of total free memory
+	// is usually not sufficient, perhaps due to memory fragmentation).
+#ifdef _WIN64
+	if (bytes_to_read > DWORD_MAX)
+#else
+	// Reserve 2 bytes to avoid integer overflow below.  Although any amount larger than 2GB is almost
+	// guaranteed to fail at the malloc stage, that might change if we ever become large address aware.
+	if (bytes_to_read > DWORD_MAX - sizeof(wchar_t))
+#endif
+		return LineError(ERR_OUTOFMEM); // Using this instead of "File too large." to reduce code size, since this condition is very rare (and malloc succeeding would be even rarer).
 
 	if (!bytes_to_read)
 	{
@@ -7692,7 +7695,8 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	}
 
 	LPBYTE output_buf;
-	if (is_binary_clipboard)
+	bool output_buf_is_var = is_binary_clipboard && output_var.Type() != VAR_CLIPBOARD;
+	if (output_buf_is_var) 
 	{
 		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 		// this call will set up the clipboard for writing:
@@ -7703,14 +7707,18 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	}
 	else
 	{
-		// Allocate a temporary buffer; output_var will be assigned the text after conversion.
+		// Either we're reading text and need an intermediate buffer to allow text conversion,
+		// or we're reading binary clipboard data into the Clipboard and need a temporary buffer
+		// to read into before calling SetClipboardData().
 		output_buf = (LPBYTE) malloc(size_t(bytes_to_read + sizeof(wchar_t)));
+		if (!output_buf)
+			LineError(ERR_OUTOFMEM);
 	}
 	if (!output_buf)
 	{
 		CloseHandle(hfile);
 		// ErrorLevel doesn't matter now because the current quasi-thread will be aborted.
-		return is_binary_clipboard ? FAIL : LineError(ERR_OUTOFMEM);
+		return FAIL;
 	}
 
 	DWORD bytes_actually_read;
@@ -7725,9 +7733,6 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 
 	if (result)
 	{
-		output_buf[bytes_actually_read] = 0; // Ensure text is terminated where indicated.
-		output_buf[bytes_actually_read + 1] = 0; // wchar_t consumes two bytes
-
 		if (!is_binary_clipboard) // text mode, do UTF-8 and UTF-16LE BOM checking
 		{
 			bool has_bom;
@@ -7752,8 +7757,10 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			{
 #ifndef UNICODE
 				if (codepage == CP_ACP || codepage == GetACP())
-				{	// Avoid any unnecessary conversion or copying by using our malloc'd buffer directly.
+				{
+					// Avoid any unnecessary conversion or copying by using our malloc'd buffer directly.
 					// This should be worth doing since the string must otherwise be converted to UTF-16 and back.
+					output_buf[bytes_actually_read] = 0; // Ensure text is terminated where indicated.
 					output_var.AcceptNewMem((LPTSTR)output_buf, bytes_actually_read);
 					output_buf = NULL; // AcceptNewMem took charge of it.
 				}
@@ -7765,15 +7772,44 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			if (output_buf) // i.e. it wasn't "claimed" above.
 				free(output_buf);
 			output_buf = (LPBYTE) output_var.Contents();
+			if (translate_crlf_to_lf)
+			{
+				// Since a larger string is being replaced with a smaller, there's a good chance the 2 GB
+				// address limit will not be exceeded by StrReplace even if the file is close to the
+				// 1 GB limit as described above:
+				VarSizeType var_length = output_var.CharLength();
+				StrReplace((LPTSTR)output_buf, _T("\r\n"), _T("\n"), SCS_SENSITIVE, UINT_MAX, -1, NULL, &var_length);
+				output_var.SetCharLength(var_length);
+			}
 		}
-
-		// Since a larger string is being replaced with a smaller, there's a good chance the 2 GB
-		// address limit will not be exceeded by StrReplace even if the file is close to the
-		// 1 GB limit as described above:
-		if (translate_crlf_to_lf)
-			StrReplace((LPTSTR) output_buf, _T("\r\n"), _T("\n"), SCS_SENSITIVE); // Safe only because larger string is being replaced with smaller.
-		output_var.ByteLength() = is_binary_clipboard ? bytes_actually_read // In this case the script wants the actual data size rather than the "usable" length.
-			: _tcslen((LPCTSTR) output_buf) * sizeof(TCHAR); // In case file contains binary zeroes, explicitly calculate the "usable" length so that it's accurate.
+		else // is_binary_clipboard == true
+		{
+			if (output_var.Type() == VAR_CLIPBOARD) // Reading binary clipboard data directly back onto the clipboard.
+			{
+				result = Var::SetClipboardAll(output_buf, bytes_actually_read) == OK;
+				free(output_buf);
+				if (!result)
+					return FAIL;
+				return SetErrorLevelOrThrowBool(false);
+			}
+			// Although binary clipboard data is always null-terminated, this might be some other kind
+			// of binary data or actually text (but the caller passed *c to skip codepage conversion),
+			// so might not be terminated.  Ensure the data is null-terminated:
+			DWORD terminate_at = bytes_actually_read;
+#ifdef UNICODE
+			// Since the data might be interpreted as UTF-16, we need to ensure the null-terminator is
+			// aligned correctly, like "xxxx 0000" and not "xx00 00??" (where xx is valid data and ??
+			// is an uninitialized byte).
+			if (terminate_at & 1) // Odd number of bytes.
+				output_buf[terminate_at++] = 0; // Put an extra zero byte in and move the actual terminator right one byte.
+#endif
+			*LPTSTR(output_buf + terminate_at) = 0;
+			// Update the output var's length.  In this case the script wants the actual data size rather
+			// than the "usable" length.  v1.1.16: Although it might change the behaviour of some scripts,
+			// it seems safer to use the "rounded up" size than an odd byte count, which would cause the
+			// last byte to be truncated due to integer division in Var::CharLength().
+			output_var.ByteLength() = terminate_at;
+		}
 	}
 	else
 	{
@@ -7785,7 +7821,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 		// avoid storing a potentially non-terminated string in the variable.
 		*((LPTSTR)output_buf) = '\0'; // Assign() at this point would fail for the clipboard since it's already open for writing.
 		output_var.ByteLength() = 0;
-		if (!is_binary_clipboard)
+		if (!output_buf_is_var)
 			free(output_buf);
 	}
 
@@ -7850,13 +7886,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 				// 1) Duplicate clipboard formats not making sense (i.e. two CF_TEXT formats would cause the
 				//    first to be overwritten by the second when restoring to clipboard).
 				// 2) There is a 4-byte zero terminator at the end of the file.
-				HANDLE hFile;
-				DWORD dwWritten;
-				if (   (hFile = CreateFile(aFilespec, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL)) == INVALID_HANDLE_VALUE   ) // Overwrite.
-					return SetErrorsOrThrow(true);
-				result = WriteFile(hFile, ARGVAR1->Contents(), (DWORD)ARGVAR1->ByteLength(), &dwWritten, NULL); // In this case, WriteFile() will return non-zero on success, 0 on failure.
-				CloseHandle(hFile);
-				return SetErrorsOrThrow(!result);
+				return WriteClipboardToFile(aFilespec, ARGVAR1);
 			}
 		}
 		// Auto-detection avoids the need to have to translate \r\n to \n when reading
@@ -7920,182 +7950,45 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 
 
 
-ResultType Line::WriteClipboardToFile(LPTSTR aFilespec)
+ResultType Line::WriteClipboardToFile(LPTSTR aFilespec, Var *aBinaryClipVar)
 // Returns OK or FAIL.  If OK, it sets ErrorLevel to the appropriate result.
 // If the clipboard is empty, a zero length file will be written, which seems best for its consistency.
 {
-	// This method used is very similar to that used in AssignClipboardAll(), so see that section
-	// for a large quantity of comments.
+	LPVOID data;
+	size_t data_size;
+	if (aBinaryClipVar)
+	{
+		// Get clipboard data from a variable.
+		data = aBinaryClipVar->Contents();
+		data_size = aBinaryClipVar->ByteLength();
+	}
+	else
+	{
+		// Get the clipboard's current contents.
+		if (!Var::GetClipboardAll(NULL, &data, &data_size))
+		{
+			g->LastError = 0; // To avoid possible confusion, don't leave it at its previous value.
+			return FAIL;
+		}
+	}
 
-	if (!g_clip.Open())
-		return LineError(CANT_OPEN_CLIPBOARD_READ); // Make this a critical/stop error since it's unusual and something the user would probably want to know about.
+	BOOL success = FALSE; // Set default.
+	DWORD bytes_to_write = (DWORD)data_size;
 
 	HANDLE hfile = CreateFile(aFilespec, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL); // Overwrite. Unsharable (since reading the file while it is being written would probably produce bad data in this case).
-	if (hfile == INVALID_HANDLE_VALUE)
+	if (hfile != INVALID_HANDLE_VALUE)
 	{
-		g->LastError = GetLastError();
-		g_clip.Close();
-		return SetErrorLevelOrThrow();
+		DWORD bytes_written = 0;
+		if (data) // Can be NULL if data_size == 0.
+			WriteFile(hfile, data, bytes_to_write, &bytes_written, NULL);
+		success = (bytes_written == bytes_to_write); // Even if both are zero.
 	}
-	
-	UINT format;
-	HGLOBAL hglobal;
-	LPVOID hglobal_locked;
-	SIZE_T size;
-	DWORD bytes_written;
-	BOOL result;
-	bool format_is_text, format_is_dib, format_is_meta;
-	bool text_was_already_written = false, dib_was_already_written = false, meta_was_already_written = false;
+	g->LastError = GetLastError(); // Always done, for simplicity.  Must be called before CloseHandle().
+	if (hfile != INVALID_HANDLE_VALUE)
+		CloseHandle(hfile); // Close file.
+	free(data); // Free ClipboardAll data.  Can be NULL.
 
-	g->LastError = 0; // Set default.
-
-	for (format = 0; format = EnumClipboardFormats(format);)
-	{
-		switch (format)
-		{
-		case CF_BITMAP:
-		case CF_ENHMETAFILE:
-		case CF_DSPENHMETAFILE:
-			// These formats appear to be specific handle types, not always safe to call GlobalSize() for.
-			continue;
-		}
-
-		format_is_text = (format == CF_NATIVETEXT || format == CF_OEMTEXT || format == CF_OTHERTEXT);
-		format_is_dib = (format == CF_DIB || format == CF_DIBV5);
-		format_is_meta = (format == CF_METAFILEPICT);
-
-		// Only write one Text and one Dib format, omitting the others to save space.  See
-		// similar section in AssignClipboardAll() for details:
-		if (format_is_text && text_was_already_written
-			|| format_is_dib && dib_was_already_written
-			|| format_is_meta && meta_was_already_written)
-			continue;
-
-		if (format_is_text)
-			text_was_already_written = true;
-		else if (format_is_dib)
-			dib_was_already_written = true;
-		else if (format_is_meta)
-			meta_was_already_written = true;
-
-		if ((hglobal = g_clip.GetClipboardDataTimeout(format)) // Relies on short-circuit boolean order:
-			&& (!(size = GlobalSize(hglobal)) || (hglobal_locked = GlobalLock(hglobal)))) // Size of zero or lock succeeded: Include this format.
-		{
-			if (!WriteFile(hfile, &format, sizeof(format), &bytes_written, NULL)
-				|| !WriteFile(hfile, &size, sizeof(size), &bytes_written, NULL))
-			{
-				result = FALSE;
-				g->LastError = GetLastError();
-				if (size)
-					GlobalUnlock(hglobal); // hglobal not hglobal_locked.
-				break; // File might be in an incomplete state now, but that's okay because the reading process checks for that.
-			}
-
-			if (size)
-			{
-				result = WriteFile(hfile, hglobal_locked, (DWORD)size, &bytes_written, NULL);
-				g->LastError = GetLastError();
-				GlobalUnlock(hglobal); // hglobal not hglobal_locked.
-				if (!result)
-					break; // File might be in an incomplete state now, but that's okay because the reading process checks for that.
-			}
-			//else hglobal_locked is not valid, so don't reference it or unlock it. In other words, 0 bytes are written for this format.
-		}
-	}
-
-	g_clip.Close();
-
-	if (!format) // Since the loop was not terminated as a result of a failed WriteFile(), write the 4-byte terminator (otherwise, omit it to avoid further corrupting the file).
-	{
-		result = WriteFile(hfile, &format, sizeof(format), &bytes_written, NULL);
-		g->LastError = GetLastError();
-	}
-
-	CloseHandle(hfile);
-
-	return SetErrorLevelOrThrowBool(!result);
-}
-
-
-
-ResultType Line::ReadClipboardFromFile(HANDLE hfile)
-// Returns OK or FAIL.  If OK, ErrorLevel is overridden from the callers ERRORLEVEL_ERROR setting to
-// ERRORLEVEL_SUCCESS, if appropriate.  This function also closes hfile before returning.
-// The method used here is very similar to that used in AssignClipboardAll(), so see that section
-// for a large quantity of comments.
-{
-	if (!g_clip.Open())
-	{
-		g->LastError = GetLastError(); // Probably the error set by OpenClipboard().
-		CloseHandle(hfile);
-		return LineError(CANT_OPEN_CLIPBOARD_WRITE); // Make this a critical/stop error since it's unusual and something the user would probably want to know about.
-	}
-	EmptyClipboard(); // Failure is not checked for since it's probably impossible under these conditions.
-
-	UINT format;
-	HGLOBAL hglobal;
-	LPVOID hglobal_locked;
-	SIZE_T size;
-	DWORD bytes_read;
-
-    if (!ReadFile(hfile, &format, sizeof(format), &bytes_read, NULL) || bytes_read < sizeof(format))
-	{
-		g->LastError = GetLastError();
-		g_clip.Close();
-		CloseHandle(hfile);
-		return SetErrorLevelOrThrow();
-	}
-
-	g->LastError = 0; // Set default.
-
-	while (format)
-	{
-		if (!ReadFile(hfile, &size, sizeof(size), &bytes_read, NULL) || bytes_read < sizeof(size))
-		{
-			g->LastError = GetLastError();
-			break; // Leave what's already on the clipboard intact since it might be better than nothing.
-		}
-
-		if (   !(hglobal = GlobalAlloc(GMEM_MOVEABLE, size))   ) // size==0 is okay.
-		{
-			g_clip.Close();
-			CloseHandle(hfile);
-			return LineError(ERR_OUTOFMEM); // Short msg since so rare.
-		}
-
-		if (size) // i.e. Don't try to lock memory of size zero.  It won't work and it's not needed.
-		{
-			if (   !(hglobal_locked = GlobalLock(hglobal))   )
-			{
-				GlobalFree(hglobal);
-				g_clip.Close();
-				CloseHandle(hfile);
-				return LineError(_T("GlobalLock")); // Short msg since so rare.
-			}
-			if (!ReadFile(hfile, hglobal_locked, (DWORD)size, &bytes_read, NULL) || bytes_read < size)
-			{
-				g->LastError = GetLastError();
-				GlobalUnlock(hglobal);
-				GlobalFree(hglobal); // Seems best not to do SetClipboardData for incomplete format (especially without zeroing the unused portion of global_locked).
-				break; // Leave what's already on the clipboard intact since it might be better than nothing.
-			}
-			GlobalUnlock(hglobal);
-		}
-		//else hglobal is just an empty format, but store it for completeness/accuracy (e.g. CF_BITMAP).
-
-		SetClipboardData(format, hglobal); // The system now owns hglobal.
-
-		if (!ReadFile(hfile, &format, sizeof(format), &bytes_read, NULL) || bytes_read < sizeof(format))
-		{
-			g->LastError = GetLastError();
-			break;
-		}
-	}
-
-	g_clip.Close();
-	CloseHandle(hfile);
-
-	return SetErrorLevelOrThrowBool(format != 0);
+	return SetErrorLevelOrThrowBool(!success); // Set ErrorLevel based on result.
 }
 
 
@@ -8760,16 +8653,30 @@ ResultType Line::FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity)
 
 	if (!aFilespec || !*aFilespec)
 		return LineError(ERR_PARAM2_REQUIRED); // Throw an error, since this is probably not what the user intended.
+	
+	BOOL got_file_size;
+	__int64 size;
 
-	// Don't use CreateFile() & FileGetSize() because they will fail to work on a file that's in use.
-	// Research indicates that this method has no disadvantages compared to the other method.
-	WIN32_FIND_DATA found_file;
-	HANDLE file_search = FindFirstFile(aFilespec, &found_file);
-	if (file_search == INVALID_HANDLE_VALUE)
-		return SetErrorsOrThrow(true); // Let ErrorLevel tell the story.
-	FindClose(file_search);
+	// Try CreateFile() and GetFileSizeEx() first, since they can be more accurate. 
+	// See "Why is the file size reported incorrectly for files that are still being written to?"
+	// http://blogs.msdn.com/b/oldnewthing/archive/2011/12/26/10251026.aspx
+	HANDLE hfile = CreateFile(aFilespec, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
+		, NULL, OPEN_EXISTING, 0, NULL);
+	if (hfile != INVALID_HANDLE_VALUE)
+	{
+		got_file_size = GetFileSizeEx(hfile, (PLARGE_INTEGER)&size);
+		CloseHandle(hfile);
+	}
 
-	unsigned __int64 size = ((unsigned __int64)found_file.nFileSizeHigh << 32) | found_file.nFileSizeLow;
+	if (!got_file_size)
+	{
+		WIN32_FIND_DATA found_file;
+		HANDLE file_search = FindFirstFile(aFilespec, &found_file);
+		if (file_search == INVALID_HANDLE_VALUE)
+			return SetErrorsOrThrow(true); // Let ErrorLevel tell the story.
+		FindClose(file_search);
+		size = ((__int64)found_file.nFileSizeHigh << 32) | found_file.nFileSizeLow;
+	}
 
 	switch(ctoupper(*aGranularity))
 	{
@@ -8784,7 +8691,7 @@ ResultType Line::FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity)
 	}
 
 	SetErrorsOrThrow(false, 0); // Indicate success.
-	return OUTPUT_VAR->Assign((__int64)(size > ULLONG_MAX ? -1 : size)); // i.e. don't allow it to wrap around.
+	return OUTPUT_VAR->Assign(size);
 	// The below comment is obsolete in light of the switch to 64-bit integers.  But it might
 	// be good to keep for background:
 	// Currently, the above is basically subject to a 2 gig limit, I believe, after which the
@@ -11865,40 +11772,49 @@ ResultType RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aP
 	// array items that weren't captured.
 	m->mPatternCount = aPatternCount;
 	
-	// Copy haystack.  Must copy the whole haystack since it is possible (though rare) for a
-	// subpattern to precede the overall match - for instance, if \K is used or a subpattern
-	// is captured inside a look-behind assertion.
-	if (  !(m->mHaystack = _tcsdup(aHaystack))
-	   // Allocate memory for a copy of the offset array.
-	   || !(m->mOffset = (int *)malloc(aPatternCount * 2 * sizeof(int *)))  )
+	// Allocate memory for a copy of the offset array.
+	if (  !(m->mOffset = (int *)malloc(aPatternCount * 2 * sizeof(int *)))  )
 	{
-		m->Release(); // This also frees m->mHaystack if it is non-NULL.
+		m->Release();
 		return FAIL;
 	}
-	
-	int p, i, pos, len;
+	// memcpy currently benchmarks slightly faster on x64 than copying offsets in the loop below:
+	memcpy(m->mOffset, aOffset, aPatternCount * 2 * sizeof(int));
 
-	// Convert start/end offsets to offset and length.
-	for (p = 0, i = 0; p < aCapturedPatternCount; ++p)
+	// Do some pre-processing:
+	//  - Locate the smallest portion of haystack that contains all matches.
+	//  - Convert end offsets to lengths.
+	int min_offset = INT_MAX, max_offset = -1;
+	for (int p = 0; p < aPatternCount; ++p)
 	{
-		if (aOffset[i] < 0)
+		if (m->mOffset[p*2] > -1)
 		{
-			pos = -1;
-			len = 0;
+			// Substring is non-empty, so ensure we copy this portion of haystack.
+			if (min_offset > m->mOffset[p*2])
+				min_offset = m->mOffset[p*2];
+			if (max_offset < m->mOffset[p*2+1])
+				max_offset = m->mOffset[p*2+1];
 		}
-		else
-		{
-			pos = aOffset[i];
-			len = aOffset[i+1] - pos;
-		}
-		m->mOffset[i++] = pos;
-		m->mOffset[i++] = len;
+		// Convert end offset to length.
+		m->mOffset[p*2+1] -= m->mOffset[p*2];
 	}
-	// Initialize the remainder of the offset vector (patterns which were not captured):
-	for ( ; p < aPatternCount; ++p)
+	
+	// Copy only the portion of aHaystack which contains matches.  This can be much faster
+	// than copying the whole string for larger haystacks.  For instance, searching for "GNU"
+	// in the GPL v2 (18120 chars) and producing a match object is about 5 times faster with
+	// this optimization than without if caller passes us the haystack length, and about 50
+	// times faster than the old code which used _tcsdup().  However, the difference is much
+	// smaller for small strings.
+	if (min_offset < max_offset) // There are non-empty matches.
 	{
-		m->mOffset[i++] = -1;
-		m->mOffset[i++] = 0;
+		int our_haystack_size = (max_offset - min_offset) + 1;
+		if (  !(m->mHaystack = tmalloc(our_haystack_size))  )
+		{
+			m->Release();
+			return FAIL;
+		}
+		tmemcpy(m->mHaystack, aHaystack + min_offset, our_haystack_size);
+		m->mHaystackStart = min_offset;
 	}
 
 	// Copy subpattern names.
@@ -11913,7 +11829,7 @@ ResultType RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aP
 
 		// Copy names and initialize array.
 		m->mPatternName[0] = NULL;
-		for (p = 1; p < aPatternCount; ++p)
+		for (int p = 1; p < aPatternCount; ++p)
 			if (aPatternName[p])
 				// A failed allocation here seems rare and the consequences would be
 				// negligible, so in that case just act as if the subpattern has no name.
@@ -12019,7 +11935,7 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken,
 	if (pattern_found)
 	{
 		// Gives the correct result even if there was no match (because length is 0):
-		_o_return(mHaystack + mOffset[p*2], mOffset[p*2+1]);
+		_o_return(mHaystack - mHaystackStart + mOffset[p*2], mOffset[p*2+1]);
 	}
 
 	return INVOKE_NOT_HANDLED;
@@ -12608,8 +12524,7 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				// the current character over literally then advance to the next character to resume normal searching.
 				empty_string_is_not_a_match = 0; // Reset so that the next iteration starts off with the normal matching method.
 #ifdef UNICODE
-				// Need to avoid chopping a Unicode character into pieces. Further complicating this is the
-				// fact that the number of UTF-8 code units may differ from the number of UTF-16 code units.
+				// Need to avoid chopping a supplementary Unicode character in half.
 				WCHAR c = haystack_pos[0];
 				if (IS_SURROGATE_PAIR(c, haystack_pos[1])) // i.e. one supplementary character.
 				{

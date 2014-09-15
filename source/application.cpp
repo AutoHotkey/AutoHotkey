@@ -299,8 +299,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// to be in chronological order by checking the timestamps of each Peek first message, and
 					// then fetching the one that's oldest (since it should be the one that's been waiting the
 					// longest and thus generally should be ahead of the other Peek's message in the queue):
+					UINT filter_max = (IsInterruptible() ? UINT_MAX : WM_HOTKEY - 1); // Fixed in v1.1.16 to not use MSG_FILTER_MAX, which would produce 0 when IsInterruptible(). Although WM_MOUSELAST+1..0 seems to produce the right results, MSDN does not indicate that it is valid.
 #define PEEK1(mode) PeekMessage(&msg, NULL, 0, WM_MOUSEFIRST-1, mode) // Relies on the fact that WM_MOUSEFIRST < MSG_FILTER_MAX
-#define PEEK2(mode) PeekMessage(&msg, NULL, WM_MOUSELAST+1, MSG_FILTER_MAX, mode)
+#define PEEK2(mode) PeekMessage(&msg, NULL, WM_MOUSELAST+1, filter_max, mode)
 					if (!PEEK1(PM_NOREMOVE))  // Since no message in Peek1, safe to always use Peek2's (even if it has no message either).
 						peek_result = PEEK2(PM_REMOVE);
 					else // Peek1 has a message.  So if Peek2 does too, compare their timestamps.

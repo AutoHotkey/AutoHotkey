@@ -253,6 +253,8 @@ public:
 	ResultType AssignHWND(HWND aWnd);
 	ResultType Assign(Var &aVar);
 	ResultType Assign(ExprTokenType &aToken);
+	static ResultType GetClipboardAll(Var *aOutputVar, void **aData, size_t *aDataSize);
+	static ResultType SetClipboardAll(void *aData, size_t aDataSize);
 	ResultType AssignClipboardAll();
 	ResultType AssignBinaryClip(Var &aSourceVar);
 	// Assign(char *, ...) has been break into four methods below.

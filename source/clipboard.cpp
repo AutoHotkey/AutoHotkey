@@ -70,7 +70,7 @@ size_t Clipboard::Get(LPTSTR aBuf)
 			Close(CANT_OPEN_CLIPBOARD_READ);
 			return CLIPBOARD_FAILURE;
 		}
-		if (   !(mClipMemNow = g_clip.GetClipboardDataTimeout(clipboard_contains_files ? CF_HDROP : CF_NATIVETEXT))   )
+		if (   !(mClipMemNow = g_clip.GetClipboardDataTimeout(clipboard_contains_text ? CF_NATIVETEXT : CF_HDROP))   )
 		{
 			// v1.0.47.04: Commented out the following that had been in effect when clipboard_contains_files==false:
 			//    Close("GetClipboardData"); // Short error message since so rare.
@@ -109,7 +109,12 @@ size_t Clipboard::Get(LPTSTR aBuf)
 		// Otherwise: Update length after every successful new open&lock:
 		// Determine the length (size - 1) of the buffer than would be
 		// needed to hold what's on the clipboard:
-		if (clipboard_contains_files)
+		if (clipboard_contains_text)
+		{
+			// See below for comments.
+			mLength = _tcslen(mClipMemNowLocked);
+		}
+		else // clipboard_contains_files
 		{
 			if (file_count = DragQueryFile((HDROP)mClipMemNowLocked, 0xFFFFFFFF, _T(""), 0))
 			{
@@ -120,8 +125,6 @@ size_t Clipboard::Get(LPTSTR aBuf)
 			else
 				mLength = 0;
 		}
-		else // clipboard_contains_text
-			mLength = _tcslen(mClipMemNowLocked);
 		if (mLength >= CLIPBOARD_FAILURE) // Can't realistically happen, so just indicate silent failure.
 			return CLIPBOARD_FAILURE;
 	}
@@ -136,7 +139,16 @@ size_t Clipboard::Get(LPTSTR aBuf)
 		// the overhead of having to close and reopen the clipboard.
 
 	// Otherwise:
-	if (clipboard_contains_files)
+	if (clipboard_contains_text) // Fixed for v1.1.16.02: Prefer text over files if both are present.
+	{
+		// Because the clipboard is being retrieved as text, return this text even if
+		// the clipboard also contains files.  Contents() relies on this since it only
+		// calls Get() once and does not provide a buffer.  Contents() would be used
+		// in "c := Clipboard" or "MsgBox %Clipboard%" because ArgMustBeDereferenced()
+		// returns true only if the clipboard contains files but not text.
+		_tcscpy(aBuf, mClipMemNowLocked);  // Caller has already ensured that aBuf is large enough.
+	}
+	else // clipboard_contains_files
 	{
 		if (file_count = DragQueryFile((HDROP)mClipMemNowLocked, 0xFFFFFFFF, _T(""), 0))
 			for (i = 0; i < file_count; ++i)
@@ -152,8 +164,6 @@ size_t Clipboard::Get(LPTSTR aBuf)
 			}
 		// else aBuf has already been terminated upon entrance to this function.
 	}
-	else
-		_tcscpy(aBuf, mClipMemNowLocked);  // Caller has already ensured that aBuf is large enough.
 	// Fix for v1.0.37: Close() is no longer called here because it prevents the clipboard variable
 	// from being referred to more than once in a line.  For example:
 	// Msgbox %Clipboard%%Clipboard%
@@ -349,7 +359,8 @@ ResultType Clipboard::Close(LPTSTR aErrorMessage)
 
 
 
-HANDLE Clipboard::GetClipboardDataTimeout(UINT uFormat)
+HANDLE Clipboard::GetClipboardDataTimeout(UINT uFormat, BOOL *aNullIsOkay)
+// Update for v1.1.16: The comments below are obsolete; search for "v1.1.16" for related comments.
 // Same as GetClipboardData() except that it doesn't give up if the first call to GetClipboardData() fails.
 // Instead, it continues to retry the operation for the number of milliseconds in g_ClipboardTimeout.
 // This is necessary because GetClipboardData() has been observed to fail in repeatable situations (this
@@ -363,6 +374,9 @@ HANDLE Clipboard::GetClipboardDataTimeout(UINT uFormat)
 #ifdef DEBUG_BY_LOGGING_CLIPBOARD_FORMATS  // Provides a convenient log of clipboard formats for analysis.
 	static FILE *fp = fopen("c:\\debug_clipboard_formats.txt", "w");
 #endif
+
+	if (aNullIsOkay)
+		*aNullIsOkay = FALSE; // Set default.
 
 	TCHAR format_name[MAX_PATH + 1]; // MSDN's RegisterClipboardFormat() doesn't document any max length, but the ones we're interested in certainly don't exceed MAX_PATH.
 	if (uFormat < 0xC000 || uFormat > 0xFFFF) // It's a registered format (you're supposed to verify in-range before calling GetClipboardFormatName()).  Also helps performance.
@@ -400,12 +414,41 @@ HANDLE Clipboard::GetClipboardDataTimeout(UINT uFormat)
 			// "An outgoing call cannot be made since the application is dispatching an input-synchronous call."
 			|| !_tcsicmp(format_name, _T("Native")) || !_tcsicmp(format_name, _T("Embed Source"))   )
 			return NULL;
+		if (!_tcsicmp(format_name, _T("MSDEVColumnSelect")) || !_tcsicmp(format_name, _T("MSDEVLineSelect")))
+		{
+			// v1.1.16: These formats are used by Visual Studio, Scintilla controls and perhaps others for
+			// copying whole lines and rectangular blocks.  Because their very presence/absence is used as
+			// a boolean indicator, the data is irrelevant.  Presumably for this reason, Scintilla controls
+			// set NULL data, though doing so and then not handling WM_RENDERFORMAT is probably invalid.
+			// Note newer versions of Visual Studio use "VisualStudioEditorOperationsLineCutCopyClipboardTag"
+			// for line copy, but that doesn't need to be handled here because it has non-NULL data (and the
+			// latest unreleased Scintilla [as at 2014-08-19] uses both, so we can discard the long one).
+			// Since we just want to preserve this format's presence, indicate to caller that NULL is okay:
+			if (aNullIsOkay) // i.e. caller passed a variable for us to set.
+				*aNullIsOkay = TRUE;
+			return NULL;
+		}
 	}
 
 #ifdef DEBUG_BY_LOGGING_CLIPBOARD_FORMATS
 	_ftprintf(fp, _T("%04X\t%s\n"), uFormat, format_name);  // Since fclose() is never called, the program has to exit to close/release the file.
 #endif
 
+#ifndef ENABLE_CLIPBOARDGETDATA_TIMEOUT
+	// v1.1.16: The timeout and retry behaviour of this function is currently disabled, since it does more
+	// harm than good.  It previously did NO GOOD WHATSOEVER, because SLEEP_WITHOUT_INTERRUPTION indirectly
+	// calls g_clip.Close() via CLOSE_CLIPBOARD_IF_OPEN, so any subsequent attempts to retrieve data by us
+	// or our caller always fail.  The main point of failure where retrying helps is OpenClipboard(), when
+	// another program has the clipboard open -- and that's handled elsewhere.  If the timeout is re-enabled
+	// for this function, the following format will need to be excluded to prevent unnecessary delays:
+	//  - FileContents (CSTR_FILECONTENTS): MSDN says it is used "to transfer data as if it were a file,
+	//    regardless of how it is actually stored".  For example, it could be a file inside a zip folder.
+	//    However, on Windows 8 it seems to also be present for normal files.  It might be possible to
+	//    retrieve its data via OleGetClipboard(), though it could be very large.
+
+	// Just return the data, even if NULL:
+	return GetClipboardData(uFormat);
+#else
 	HANDLE h;
 	for (DWORD start_time = GetTickCount();;)
 	{
@@ -438,6 +481,7 @@ HANDLE Clipboard::GetClipboardDataTimeout(UINT uFormat)
 		// the deref buffer if this object's caller gave it any pointers into that memory area):
 		SLEEP_WITHOUT_INTERRUPTION(INTERVAL_UNSPECIFIED)
 	}
+#endif
 }
 
 

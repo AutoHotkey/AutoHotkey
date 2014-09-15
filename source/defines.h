@@ -242,6 +242,7 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define IF_METAFUNC			0x20000 // Indicates Invoke should call a meta-function before checking the object's fields.
 #define IF_META				(IF_METAOBJ | IF_METAFUNC)	// Flags for regular recursion into base object.
 #define IF_FUNCOBJ			0x40000 // Indicates 'this' is a function, being called via another object (aParam[0]).
+#define IF_NEWENUM			0x80000 // Workaround for COM objects which don't resolve "_NewEnum" to DISPID_NEWENUM.
 
 
 struct DerefType; // Forward declarations for use below.

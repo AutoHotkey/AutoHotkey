@@ -964,13 +964,22 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ResultToken &aResultToken, ExprTo
 		}
 	}
 
+	HRESULT	hr;
+	if (aFlags & IF_NEWENUM)
+	{
+		hr = S_OK;
+		dispid = DISPID_NEWENUM;
+	}
+	else
+	{
 #ifdef UNICODE
-	HRESULT	hr = mDispatch->GetIDsOfNames(IID_NULL, &aName, 1, LOCALE_USER_DEFAULT, &dispid);
+		hr = mDispatch->GetIDsOfNames(IID_NULL, &aName, 1, LOCALE_USER_DEFAULT, &dispid);
 #else
-	CStringWCharFromChar cnvbuf(aName);
-	LPOLESTR cnvbuf_ptr = (LPOLESTR)(LPCWSTR) cnvbuf;
-	HRESULT	hr = mDispatch->GetIDsOfNames(IID_NULL, &cnvbuf_ptr, 1, LOCALE_USER_DEFAULT, &dispid);
+		CStringWCharFromChar cnvbuf(aName);
+		LPOLESTR cnvbuf_ptr = (LPOLESTR)(LPCWSTR)cnvbuf;
+		hr = mDispatch->GetIDsOfNames(IID_NULL, &cnvbuf_ptr, 1, LOCALE_USER_DEFAULT, &dispid);
 #endif
+	}
 	if (SUCCEEDED(hr)
 		// For obj.x:=y where y is a ComObject, invoke PROPERTYPUTREF first:
 		&& !(IS_INVOKE_SET && rgvarg[0].vt == VT_DISPATCH && SUCCEEDED(mDispatch->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_PROPERTYPUTREF, &dispparams, NULL, NULL, NULL))

@@ -239,7 +239,7 @@ Script::Script()
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 	, mCurrentFuncOpenBlockCount(0), mNextLineIsFunctionBody(false)
-	, mClassObjectCount(0), mUnresolvedClasses(NULL)
+	, mClassObjectCount(0), mUnresolvedClasses(NULL), mClassProperty(NULL), mClassPropertyDef(NULL)
 	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true), mMenuUseErrorLevel(false)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
@@ -1505,7 +1505,11 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	LPTSTR buf = buf1, next_buf = buf2; // Oscillate between bufs to improve performance (avoids memcpy from buf2 to buf1).
 	size_t buf_length, next_buf_length, suffix_length;
 	bool pending_buf_has_brace;
-	bool pending_buf_is_class; // True for class definition, false for function definition/call.
+	enum {
+		Pending_Func,
+		Pending_Class,
+		Pending_Property
+	} pending_buf_type;
 
 #ifndef AUTOHOTKEYSC
 	TextFile tfile, *fp = &tfile;
@@ -1945,9 +1949,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 					}
 
 					// If the item was not handled by the above, ignore it because it is unknown.
-
 					*option_end = orig_char; // Undo the temporary termination.
-
 				} // for() each item in option list
 
 				// "has_continuation_section" indicates whether the line we're about to construct is partially
@@ -2097,13 +2099,17 @@ process_completed_line:
 			// Could use *g_act[ACT_BLOCK_BEGIN].Name instead of '{', but it seems too elaborate to be worth it.
 			if (*buf == '{' || pending_buf_has_brace) // v1.0.41: Support one-true-brace, e.g. fn(...) {
 			{
-				if (pending_buf_is_class)
+				switch (pending_buf_type)
 				{
+				case Pending_Class:
 					if (!DefineClass(pending_buf))
 						return FAIL;
-				}
-				else
-				{
+					break;
+				case Pending_Property:
+					if (!DefineClassProperty(pending_buf))
+						return FAIL;
+					break;
+				case Pending_Func:
 					// Note that two consecutive function definitions aren't possible:
 					// fn1()
 					// fn2()
@@ -2128,26 +2134,26 @@ process_completed_line:
 							return FAIL;
 						mCurrLine = NULL; // L30: Prevents showing misleading vicinity lines if the line after a OTB function def is a syntax error.
 					}
+					break;
+#ifdef _DEBUG
+				default:
+					return ScriptError(_T("DEBUG: pending_buf_type has an unexpected value."));
+#endif
 				}
 			}
 			else // It's a function call on a line by itself, such as fn(x). It can't be if(..) because another section checked that.
 			{
-				if (pending_buf_is_class) // Missing open-brace for class definition.
+				if (pending_buf_type != Pending_Func) // Missing open-brace for class definition.
 					return ScriptError(ERR_MISSING_OPEN_BRACE, pending_buf);
 				if (mClassObjectCount && !g->CurrentFunc) // Unexpected function call in class definition.
-					return ScriptError(ERR_INVALID_LINE_IN_CLASS_DEF, pending_buf);
+					return ScriptError(mClassProperty ? ERR_MISSING_OPEN_BRACE : ERR_INVALID_LINE_IN_CLASS_DEF, pending_buf);
 				if (!ParseAndAddLine(pending_buf, ACT_EXPRESSION))
 					return FAIL;
 				mCurrLine = NULL; // Prevents showing misleading vicinity lines if the line after a function call is a syntax error.
 			}
 			*pending_buf = '\0'; // Reset now that it's been fully handled, as an indicator for subsequent iterations.
-			if (pending_buf_is_class)
+			if (pending_buf_type != Pending_Func) // Class or property.
 			{
-				// We have the "{" for this class, either in pending_buf (OTB) or in buf (the line after).
-				// Add a block-begin so that PreparseBlocks() will point at this line if the block-end is
-				// missing.  Without this, such errors mightn't be detected at all.
-				if (!AddLine(ACT_BLOCK_BEGIN))
-					return FAIL;
 				if (!pending_buf_has_brace)
 				{
 					// This is the open-brace of a class definition, so requires no further processing.
@@ -2168,10 +2174,22 @@ process_completed_line:
 
 		if (*buf == '}' && mClassObjectCount && !g->CurrentFunc)
 		{
+			cp = buf;
+			if (mClassProperty)
+			{
+				// Close this property definition.
+				mClassProperty = NULL;
+				if (mClassPropertyDef)
+				{
+					free(mClassPropertyDef);
+					mClassPropertyDef = NULL;
+				}
+				cp = omit_leading_whitespace(cp + 1);
+			}
 			// Handling this before the two sections below allows a function or class definition
 			// to begin immediately after the close-brace of a previous class definition.
 			// This loop allows something like }}} to terminate multiple nested classes:
-			for (cp = buf; *cp == '}' && mClassObjectCount; cp = omit_leading_whitespace(cp + 1))
+			for ( ; *cp == '}' && mClassObjectCount; cp = omit_leading_whitespace(cp + 1))
 			{
 				// End of class definition.
 				--mClassObjectCount;
@@ -2182,15 +2200,35 @@ process_completed_line:
 					*cp1 = '\0';
 				else
 					*mClassName = '\0';
-				// Add a block-end to counter the block-begin, for validation purposes.
-				if (!AddLine(ACT_BLOCK_END))
-					return FAIL;
 			}
 			// cp now points at the next non-whitespace char after the brace.
 			if (!*cp)
 				goto continue_main_loop;
 			// Otherwise, there is something following this close-brace, so continue on below to process it.
 			tmemmove(buf, cp, buf_length = _tcslen(cp));
+		}
+
+		if (mClassProperty && !g->CurrentFunc) // This is checked before IsFunction() to prevent method definitions inside a property.
+		{
+			if (!_tcsnicmp(buf, _T("Get"), 3) || !_tcsnicmp(buf, _T("Set"), 3))
+			{
+				LPTSTR cp = omit_leading_whitespace(buf + 3);
+				if ( !*cp || (*cp == '{' && !cp[1]) )
+				{
+					// Defer this line until the next line comes in to simplify handling of '{' and OTB.
+					// For simplicity, pass the property definition to DefineFunc instead of the actual
+					// line text, even though it makes some error messages a bit inaccurate. (That would
+					// happen anyway when DefineFunc() finds a syntax error in the parameter list.)
+					_tcscpy(pending_buf, mClassPropertyDef);
+					LPTSTR dot = _tcschr(pending_buf, '.');
+					dot[1] = *buf; // Replace the x in property.xet(params).
+					pending_buf_line_number = mCombinedLineNumber;
+					pending_buf_has_brace = *cp == '{';
+					pending_buf_type = Pending_Func;
+					goto continue_main_loop;
+				}
+			}
+			return ScriptError(ERR_INVALID_LINE_IN_PROPERTY_DEF, buf);
 		}
 
 		// By doing the following section prior to checking for hotkey and hotstring labels, double colons do
@@ -2203,7 +2241,7 @@ process_completed_line:
 			// a function call vs. definition:
 			_tcscpy(pending_buf, buf);
 			pending_buf_line_number = mCombinedLineNumber;
-			pending_buf_is_class = false;
+			pending_buf_type = Pending_Func;
 			goto continue_main_loop; // In lieu of "continue", for performance.
 		}
 		
@@ -2214,7 +2252,7 @@ process_completed_line:
 				// Defer this line until the next line comes in to simplify handling of '{' and OTB:
 				_tcscpy(pending_buf, class_name);
 				pending_buf_line_number = mCombinedLineNumber;
-				pending_buf_is_class = true;
+				pending_buf_type = Pending_Class;
 				goto continue_main_loop; // In lieu of "continue", for performance.
 			}
 
@@ -2230,6 +2268,21 @@ process_completed_line:
 						if (!DefineClassVars(buf, false)) // See above for comments.
 							return FAIL;
 						goto continue_main_loop;
+					}
+					if ( !*cp || *cp == '[' || (*cp == '{' && !cp[1]) ) // Property
+					{
+						size_t length = _tcslen(buf);
+						if (pending_buf_has_brace = (buf[length - 1] == '{'))
+						{
+							// Omit '{' and trailing whitespace from further consideration.
+							rtrim(buf, length - 1);
+						}
+						
+						// Defer this line until the next line comes in to simplify handling of '{' and OTB:
+						_tcscpy(pending_buf, buf);
+						pending_buf_line_number = mCombinedLineNumber;
+						pending_buf_type = Pending_Property;
+						goto continue_main_loop; // In lieu of "continue", for performance.
 					}
 				}
 				if (!_tcsnicmp(buf, _T("Static"), 6) && IS_SPACE_OR_TAB(buf[6]))
@@ -2649,7 +2702,7 @@ examine_line:
 			{
 				buf_length = _tcslen(buf); // Update.
 				mCurrLine = NULL;  // To signify that we're in transition, trying to load a new line.
-				goto examine_line; // Have the main loop process the contents of "buf" as though it came in from the script.
+				goto process_completed_line; // Have the main loop process the contents of "buf" as though it came in from the script.
 			}
 			goto continue_main_loop; // It's just a naked "{" or "}", so no more processing needed for this line.
 		}
@@ -2808,11 +2861,20 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		// alternatives due to the use of "continue" in some places above.
 		saved_line_number = mCombinedLineNumber;
 		mCombinedLineNumber = pending_buf_line_number; // Done so that any syntax errors that occur during the calls below will report the correct line number.
-		if (pending_buf_is_class)
+		if (pending_buf_type != Pending_Func)
 			return ScriptError(pending_buf_has_brace ? ERR_MISSING_CLOSE_BRACE : ERR_MISSING_OPEN_BRACE, pending_buf);
 		if (!ParseAndAddLine(pending_buf, ACT_EXPRESSION)) // Must be function call vs. definition since otherwise the above would have detected the opening brace beneath it and already cleared pending_function.
 			return FAIL;
 		mCombinedLineNumber = saved_line_number;
+	}
+
+	if (mClassObjectCount && !source_file_index) // or mClassProperty, which implies mClassObjectCount != 0.
+	{
+		// A class definition has not been closed with "}".  Previously this was detected by adding
+		// the open and close braces as lines, but this way is simpler and has less overhead.
+		// The downside is that the line number won't be shown; however, the class name will.
+		// Seems okay not to show mClassProperty->mName since the class is missing "}" as well.
+		return ScriptError(ERR_MISSING_CLOSE_BRACE, mClassName);
 	}
 
 	++mCombinedLineNumber; // L40: Put the implicit ACT_EXIT on the line after the last physical line (for the debugger).
@@ -6040,25 +6102,27 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 	LPTSTR param_end, param_start = _tcschr(aBuf, '('); // Caller has ensured that this will return non-NULL.
 	int insert_pos;
 	
-	if (mClassObjectCount)
+	if (mClassObjectCount) // Class method or property getter/setter.
 	{
 		Object *class_object = mClassObject[mClassObjectCount - 1];
-		LPTSTR full_name;
+
 		// Build the fully-qualified method name for A_ThisFunc and ListVars:
-		*param_start = '\0'; // Temporarily terminate.
-		if (  !(full_name = (LPTSTR)SimpleHeap::Malloc((_tcslen(mClassName) + _tcslen(aBuf) + 2) * sizeof(TCHAR)))  ) // +2 for dot and null-terminator.
-			return FAIL;
-		_stprintf(full_name, _T("%s.%s"), mClassName, aBuf);
+		// AddFunc() enforces a limit of MAX_VAR_NAME_LENGTH characters for function names, which is relied
+		// on by FindFunc(), BIF_OnMessage() and perhaps others.  For simplicity, allow one extra char to be
+		// printed and rely on AddFunc() detecting that the name is too long.
+		TCHAR full_name[MAX_VAR_NAME_LENGTH + 1 + 1]; // Extra +1 for null terminator.
+		_sntprintf(full_name, MAX_VAR_NAME_LENGTH + 1, _T("%s.%.*s"), mClassName, (param_start - aBuf), aBuf);
+		full_name[MAX_VAR_NAME_LENGTH + 1] = '\0'; // Must terminate at this exact point if _sntprintf hit the limit.
+
 		// Check for duplicates and determine insert_pos:
 		Func *found_func;
 		ExprTokenType found_item;
-		if (class_object->GetItem(found_item, aBuf) // Must be done in addition to the below to detect conflicting var/method declarations.
+		if (!mClassProperty && class_object->GetItem(found_item, aBuf) // Must be done in addition to the below to detect conflicting var/method declarations.
 			|| (found_func = FindFunc(full_name, 0, &insert_pos))) // Must be done to determine insert_pos.
 		{
-			*param_start = '(';
 			return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
 		}
-		*param_start = '('; // Undo termination.
+
 		// Below passes class_object for AddFunc() to store the func "by reference" in it:
 		if (  !(g->CurrentFunc = AddFunc(full_name, 0, false, insert_pos, class_object))  )
 			return FAIL;
@@ -6105,6 +6169,18 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		param[0].is_byref = false;
 		++param_count;
 		++func.mMinParams;
+
+		if (mClassProperty && toupper(param_start[-3]) == 'S') // Set
+		{
+			// Unlike __Set, the property setters accept the value as the second parameter,
+			// so that we can make it automatic here and make variadic properties easier.
+			if (  !(param[1].var = FindOrAddVar(_T("value"), 5, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM))  )
+				return FAIL;
+			param[1].default_type = PARAM_DEFAULT_NONE;
+			param[1].is_byref = false;
+			++param_count;
+			++func.mMinParams;
+		}
 	}
 
 	for (param_start = omit_leading_whitespace(param_start + 1);;)
@@ -6394,6 +6470,41 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	class_object->SetBase(base_class); // May be NULL.
 
 	++mClassObjectCount;
+	return OK;
+}
+
+
+ResultType Script::DefineClassProperty(LPTSTR aBuf)
+{
+	LPTSTR name_end = find_identifier_end(aBuf);
+	if (*name_end == '.')
+		return ScriptError(ERR_INVALID_LINE_IN_CLASS_DEF, aBuf);
+
+	LPTSTR param_start = omit_leading_whitespace(name_end);
+	if (*param_start == '[')
+	{
+		LPTSTR param_end = aBuf + _tcslen(aBuf);
+		if (param_end[-1] != ']')
+			return ScriptError(ERR_MISSING_CLOSE_BRACKET, aBuf);
+		*param_start = '(';
+		param_end[-1] = ')';
+	}
+	else
+		param_start = _T("()");
+	
+	// Save the property name and parameter list for later use with DefineFunc().
+	mClassPropertyDef = tmalloc(_tcslen(aBuf) + 7); // +7 for ".Get()\0"
+	if (!mClassPropertyDef)
+		return ScriptError(ERR_OUTOFMEM);
+	_stprintf(mClassPropertyDef, _T("%.*s.Get%s"), int(name_end - aBuf), aBuf, param_start);
+
+	Object *class_object = mClassObject[mClassObjectCount - 1];
+	*name_end = 0; // Terminate for aBuf use below.
+	if (class_object->GetItem(ExprTokenType(), aBuf))
+		return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
+	mClassProperty = new Property();
+	if (!mClassProperty || !class_object->SetItem(aBuf, mClassProperty))
+		return ScriptError(ERR_OUTOFMEM);
 	return OK;
 }
 
@@ -7002,11 +7113,19 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 		++key;
 		if (!Var::ValidateName(key, DISPLAY_FUNC_ERROR))
 			return NULL;
-		if (!aClassObject->SetItem(key, the_new_func))
+		if (mClassProperty)
 		{
-			ScriptError(ERR_OUTOFMEM);
-			return NULL;
+			if (toupper(*key) == 'G')
+				mClassProperty->mGet = the_new_func;
+			else
+				mClassProperty->mSet = the_new_func;
 		}
+		else
+			if (!aClassObject->SetItem(key, the_new_func))
+			{
+				ScriptError(ERR_OUTOFMEM);
+				return NULL;
+			}
 		the_new_func->mClass = aClassObject;
 		// Also add it to the script's list of functions, to support #Warn LocalSameAsGlobal
 		// and automatic cleanup of objects in static vars on program exit.
@@ -10173,6 +10292,17 @@ void Line::FreeDerefBufIfLarge()
 
 
 
+// Maintain a circular queue of the lines most recently executed:
+#define LOG_LINE(line) \
+{ \
+	sLog[sLogNext] = line; \
+	sLogTick[sLogNext++] = GetTickCount(); \
+	if (sLogNext >= LINE_LOG_SIZE) \
+		sLogNext = 0; \
+}
+
+
+
 ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line **apJumpToLine)
 // Start executing at "this" line, stop when aMode indicates.
 // RECURSIVE: Handles all lines that involve flow-control.
@@ -10268,18 +10398,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
         g_script.mCurrLine = line;  // Simplifies error reporting when we get deep into function calls.
 
 		if (g.ListLinesIsEnabled)
-		{
-			// Maintain a circular queue of the lines most recently executed:
-			sLog[sLogNext] = line; // The code actually runs faster this way than if this were combined with the above.
-			// Get a fresh tick in case tick_now is out of date.  Strangely, it makes benchmarks 3% faster
-			// on my system with this line than without it, but that's probably just a quirk of the build
-			// or the CPU's caching.  It was already shown previously that the released version of 1.0.09
-			// was almost 2% faster than an early version of this version (yet even now, that prior version
-			// benchmarks slower than this one, which I can't explain).
-			sLogTick[sLogNext++] = GetTickCount();  // Incrementing here vs. separately benches a little faster.
-			if (sLogNext >= LINE_LOG_SIZE)
-				sLogNext = 0;
-		}
+			LOG_LINE(line)
 
 #ifdef CONFIG_DEBUGGER
 		if (g_Debugger.IsConnected() && line->mActionType != ACT_WHILE) // L31: PreExecLine of ACT_WHILE is now handled in PerformLoopWhile() where inspecting A_Index will yield the correct result.
@@ -11088,6 +11207,11 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 	g_script.mThisHotkeyStartTime = // Updated for consistency.
 	g_script.mLastPeekTime = GetTickCount();
 
+	g_script.mCurrLine = this; // Added in v1.1.16 to fix A_LineFile and A_LineNumber.
+
+	if (g->ListLinesIsEnabled)
+		LOG_LINE(this)
+
 	// EVALUATE THE EXPRESSION
 	result = ExpandArgs();
 	if (result == OK)
@@ -11189,16 +11313,6 @@ ResultType Line::PerformLoop(ResultToken *aResultToken, bool &aContinueMainLoop,
 
 
 
-#define LOG_THIS_LINE \
-	{\
-		sLog[sLogNext] = this;\
-		sLogTick[sLogNext++] = GetTickCount();\
-		if (sLogNext >= LINE_LOG_SIZE)\
-			sLogNext = 0;\
-	}
-	// The lines above are the similar to those used in ExecUntil(), so the two should be
-	// maintained together.
-
 // Lexikos: ACT_WHILE
 ResultType Line::PerformLoopWhile(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine)
 {
@@ -11251,7 +11365,7 @@ ResultType Line::PerformLoopWhile(ResultToken *aResultToken, bool &aContinueMain
 		// at the end of the loop rather than the beginning because ExecUntil already added the
 		// line once immediately before the first iteration.
 		if (g.ListLinesIsEnabled)
-			LOG_THIS_LINE
+			LOG_LINE(this)
 	} // for()
 	return OK; // The script's loop is now over.
 }
@@ -11262,7 +11376,7 @@ bool Line::EvaluateLoopUntil(ResultType &aResult)
 {
 	g_script.mCurrLine = this; // For error-reporting purposes.
 	if (g->ListLinesIsEnabled)
-		LOG_THIS_LINE
+		LOG_LINE(this);
 #ifdef CONFIG_DEBUGGER
 	// Let the debugger break at or step onto UNTIL.
 	if (g_Debugger.IsConnected())
@@ -11322,7 +11436,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 	param_tokens[0].SetValue(_T("_NewEnum"), 8);
 
 	// enum := object._NewEnum()
-	param_tokens[2].object->Invoke(enum_token, param_tokens[2], IT_CALL, params, 1);
+	param_tokens[2].object->Invoke(enum_token, param_tokens[2], IT_CALL | IF_NEWENUM, params, 1);
 	param_tokens[2].object->Release(); // This object reference is no longer needed.
 
 	if (enum_token.mem_to_free)
