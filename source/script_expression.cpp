@@ -468,7 +468,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					aResultToken->AcceptMem(result_to_return = result, result_length);
 					goto normal_end_skip_output_var;
 				}
-				make_result_persistent = false; // Override the default set higher above.
 				if (to_free_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
 				{
 					LineError(ERR_OUTOFMEM, FAIL, func->mName);
@@ -476,12 +475,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				}
 				// Mark it to be freed at the time we return.
 				to_free[to_free_count++] = &this_token;
-				// If this memory block could be passed back to our caller or assigned to an output var,
-				// it was already done above.  So even if a local var's memory block was returned and it
-				// had binary data beyond its "length", there's no one left who would use it.  Otherwise,
-				// we would need to push here to avoid the result_length == 0 check below:
-				//this_token.marker = result;
-				//goto push_this_token;
+				// Invariant: any string token put in to_free must have marker set to the memory block
+				// to be freed.  marker = result is set further below, but only when result_length != 0.
+				this_token.marker = result;
+				goto push_this_token;
 			}
 			//else this_token.mem_to_free==NULL, so the BIF just called didn't allocate memory to give to us.
 			
