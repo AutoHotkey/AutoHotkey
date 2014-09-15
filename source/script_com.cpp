@@ -1441,8 +1441,10 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	//  - foo.bar() and foo.bar[] in C#.  There's no way to differentiate, so we just use METHOD
 	//    when there are parameters to cover the most common cases.  Both will work with user-
 	//    defined properties (v1.1.16+) since they can be "called", but won't work with __Get.
+	//  - foo[bar] and foo(bar) in C# both use METHOD|GET with DISPID_VALUE.
+	//  - foo(bar) (but not foo[bar]) in JScript uses METHOD|GET with DISPID_VALUE.
 	int flags = (wFlags & (DISPATCH_PROPERTYPUT | DISPATCH_PROPERTYPUTREF)) ? IT_SET
-		: ((wFlags & DISPATCH_PROPERTYGET) && !((wFlags & DISPATCH_METHOD) && cArgs)) ? IT_GET : IT_CALL;
+		: (wFlags & DISPATCH_METHOD) ? IT_CALL : IT_GET;
 	
 	ExprTokenType **first_param = param;
 	int param_count = cArgs;
@@ -1468,12 +1470,14 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 			// This approach works well for Func, but not for an Object implementing __Call,
 			// which always expects a method name or the object whose method is being called:
 			//flags = (IT_CALL|IF_FUNCOBJ);
+			//++first_param;
 			// This is consistent with %func%():
 			param_token[0].symbol = SYM_STRING;
 			param_token[0].marker = _T("");
 			param[0] = &param_token[0];
 			++param_count;
-			//++first_param;
+			if (wFlags & DISPATCH_PROPERTYGET)
+				flags |= IF_CALL_FUNC_ONLY;
 		}
 		else
 			++first_param;
