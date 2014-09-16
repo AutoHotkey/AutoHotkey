@@ -13832,8 +13832,8 @@ RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCT
 	// Do some pre-processing:
 	//  - Locate the smallest portion of haystack that contains all matches.
 	//  - Convert end offsets to lengths.
-	int min_offset = INT_MAX, max_offset = -1;
-	for (int p = 0; p < aPatternCount; ++p)
+	int p, min_offset = INT_MAX, max_offset = -1;
+	for (p = 0; p < aCapturedPatternCount; ++p)
 	{
 		if (m->mOffset[p*2] > -1)
 		{
@@ -13845,6 +13845,14 @@ RegExMatchObject *RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCT
 		}
 		// Convert end offset to length.
 		m->mOffset[p*2+1] -= m->mOffset[p*2];
+	}
+	// Initialize the remainder of the offset vector (patterns which were not captured),
+	// which have indeterminate values if we're called by a regex callout and therefore
+	// can't be handled the same way as in the loop above.
+	for ( ; p < aPatternCount; ++p)
+	{
+		m->mOffset[p*2] = -1;
+		m->mOffset[p*2+1] = 0;
 	}
 	
 	// Copy only the portion of aHaystack which contains matches.  This can be much faster
