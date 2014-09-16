@@ -1121,7 +1121,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 				default:
 					// Other operators do not support string operands, so the result is an empty string.
-					this_token.SetValue(_T(""), 0);
+					this_token.marker = _T("");
+					this_token.marker_length = 0;
+					result_symbol = SYM_STRING;
 				}
 				this_token.symbol = result_symbol; // Must be done only after the switch() above.
 			}
