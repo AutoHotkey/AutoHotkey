@@ -1052,26 +1052,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			case AHK_GUI_ACTION: // Listed first for performance.
 				*gui_action_extra = '\0'; // Set default, which is possibly overridden below.
 
-#define EVT_ARG_ADD_STR(_value) do\
-				{ \
-					gui_event_args[gui_event_arg_count].symbol = SYM_STRING; \
-					gui_event_args[gui_event_arg_count++].marker = (_value); \
-				} while (0)
-
-#define EVT_ARG_ADD_INT(_value) do\
-				{ \
-					gui_event_args[gui_event_arg_count].symbol = SYM_INTEGER; \
-					gui_event_args[gui_event_arg_count++].value_int64 = (__int64)(_value); \
-				} while (0)
-
-#define EVT_ARG_ADD_OBJ(_value) do\
-				{ \
-					gui_event_args[gui_event_arg_count].symbol = SYM_OBJECT; \
-					gui_event_args[gui_event_arg_count++].object = (_value); \
-				} while (0)
+#define EVT_ARG_ADD(_value) gui_event_args[gui_event_arg_count++].SetValue(_value)
 
 				// Set first argument
-				EVT_ARG_ADD_OBJ(event_is_control_generated ? (IObject*)pcontrol : (IObject*)pgui);
+				EVT_ARG_ADD(event_is_control_generated ? (IObject*)pcontrol : (IObject*)pgui);
 
 				switch(gui_action)
 				{
@@ -1134,13 +1118,13 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					
 					// Build event arguments.
 					if (pcontrol)
-						EVT_ARG_ADD_OBJ(pcontrol);
+						EVT_ARG_ADD(pcontrol);
 					else
-						EVT_ARG_ADD_STR(_T(""));
-					EVT_ARG_ADD_INT(gui_event_info);
-					EVT_ARG_ADD_INT(gui_action == GUI_EVENT_RCLK ? 1 : 0);
-					EVT_ARG_ADD_INT(gui_point.x);
-					EVT_ARG_ADD_INT(gui_point.y);
+						EVT_ARG_ADD(_T(""));
+					EVT_ARG_ADD((__int64)gui_event_info);
+					EVT_ARG_ADD(gui_action == GUI_EVENT_RCLK ? 1 : 0);
+					EVT_ARG_ADD(gui_point.x);
+					EVT_ARG_ADD(gui_point.y);
 					break; // case GUI_CONTEXT_MENU.
 
 				case GUI_EVENT_DROPFILES:
@@ -1152,13 +1136,13 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					SetWindowLong(pgui->mHwnd, GWL_EXSTYLE, GetWindowLong(pgui->mHwnd, GWL_EXSTYLE) & ~WS_EX_ACCEPTFILES);
 
 					// Build event arguments.
-					EVT_ARG_ADD_OBJ(GuiType::CreateDropArray(hdrop_to_free));
+					EVT_ARG_ADD(GuiType::CreateDropArray(hdrop_to_free));
 					if (pcontrol)
-						EVT_ARG_ADD_OBJ(pcontrol);
+						EVT_ARG_ADD(pcontrol);
 					else
-						EVT_ARG_ADD_STR(_T(""));
-					EVT_ARG_ADD_INT(pgui->Unscale(gui_point.x));
-					EVT_ARG_ADD_INT(pgui->Unscale(gui_point.y));
+						EVT_ARG_ADD(_T(""));
+					EVT_ARG_ADD(pgui->Unscale(gui_point.x));
+					EVT_ARG_ADD(pgui->Unscale(gui_point.y));
 
 					// Free the drop object.
 					DragFinish(hdrop_to_free);
@@ -1171,9 +1155,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					if (gui_action == GUI_EVENT_RESIZE)
 					{
 						// Build event arguments.
-						EVT_ARG_ADD_INT(gui_event_info); // Event info
-						EVT_ARG_ADD_INT(pgui->Unscale(LOWORD(gui_size))); // Width
-						EVT_ARG_ADD_INT(pgui->Unscale(HIWORD(gui_size))); // Height
+						EVT_ARG_ADD((__int64)gui_event_info); // Event info
+						EVT_ARG_ADD(pgui->Unscale(LOWORD(gui_size))); // Width
+						EVT_ARG_ADD(pgui->Unscale(HIWORD(gui_size))); // Height
 					}
 					break;
 				default: // Control-generated event (i.e. event_is_control_generated==true).
@@ -1214,8 +1198,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					}
 
 					// Build event arguments.
-					EVT_ARG_ADD_INT(gui_event_info);
-					EVT_ARG_ADD_STR(GuiType::ConvertEvent(gui_action));
+					EVT_ARG_ADD((__int64)gui_event_info);
+					EVT_ARG_ADD(GuiType::ConvertEvent(gui_action));
 				} // switch (msg.message)
 
 				if (event_is_control_generated && pcontrol->type == GUI_CONTROL_LINK)
@@ -1224,10 +1208,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					item.mask=LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
 					item.iLink = (int)gui_event_info - 1;
 					if(SendMessage(pcontrol->hwnd,LM_GETITEM,NULL,(LPARAM)&item))
-						EVT_ARG_ADD_STR(*item.szUrl ? CStringTCharFromWCharIfNeeded(item.szUrl) : CStringTCharFromWCharIfNeeded(item.szID));
+						EVT_ARG_ADD(*item.szUrl ? CStringTCharFromWCharIfNeeded(item.szUrl) : CStringTCharFromWCharIfNeeded(item.szID));
 				}
 				else if (*gui_action_extra)
-					EVT_ARG_ADD_STR(gui_action_extra);
+					EVT_ARG_ADD(gui_action_extra);
 
 				// Set last found window (as documented).  It's not necessary to check IsWindow/IsWindowVisible/
 				// DetectHiddenWindows since GetValidLastUsedWindow() takes care of that whenever the script

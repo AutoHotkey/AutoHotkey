@@ -27,10 +27,10 @@ GNU General Public License for more details.
 static ATOM sGuiWinClass;
 
 
-ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (!aParamCount) // gui[]
-			return INVOKE_NOT_HANDLED;
+		return INVOKE_NOT_HANDLED;
 		
 	LPTSTR name = ParamIndexToString(0); // Name of method or property.
 	MemberID member = INVALID;
@@ -44,7 +44,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 		member = M_AddControl;
 		ctrl_type = Line::ConvertGuiControl(name+3);
 		if (ctrl_type == GUI_CONTROL_INVALID)
-			return g_script.ScriptError(_T("Invalid control type."), name+3);
+			_o_throw(_T("Invalid control type."), name+3);
 	}
 #define if_member(s,e)	else if (!_tcsicmp(name, _T(s))) member = e;
 	if_member("Destroy", M_Destroy)
@@ -78,11 +78,11 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 			// Member requires parentheses().
 			return INVOKE_NOT_HANDLED;
 		if (aParamCount != ((IS_INVOKE_SET ? 1 : 0) + (member == P_Control ? 1 : 0)))
-			return g_script.ScriptError(_T("Invalid usage."));
+			_o_throw(_T("Invalid usage."));
 	}
 
 	if (!mHwnd)
-		return g_script.ScriptError(_T("The Gui is destroyed."));
+		_o_throw(_T("The Gui is destroyed."));
 
 	switch (member)
 	{
@@ -94,10 +94,8 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 			ResultType result = AddControl(ctrl_type, options, text, pcontrol);
 			if (result == OK)
 			{
-				// Return the control object.
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = pcontrol;
-				aResultToken.object->AddRef();
+				pcontrol->AddRef();
+				_o_return(pcontrol);
 			} // else: above already displayed an error message.
 			return result;
 		}
@@ -114,16 +112,16 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 		case M_Minimize:
 			// If the window is hidden, it is unhidden as a side-effect (this happens even for SW_SHOWMINNOACTIVE).
 			ShowWindow(mHwnd, SW_MINIMIZE);
-			return OK;
+			_o_return_empty;
 		case M_Maximize:
 			ShowWindow(mHwnd, SW_MAXIMIZE);
-			return OK;
+			_o_return_empty;
 		case M_Restore:
 			ShowWindow(mHwnd, SW_RESTORE);
-			return OK;
+			_o_return_empty;
 		case M_Flash:
 			FlashWindow(mHwnd, ParamIndexToOptionalType(BOOL, 0, TRUE));
-			return OK;
+			_o_return_empty;
 		case M_SetFont:
 		{
 			LPTSTR options = ParamIndexToOptionalString(0);
@@ -143,16 +141,13 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 		{
 			if (IS_INVOKE_SET)
 				return INVOKE_NOT_HANDLED;
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = (__int64)(UINT_PTR)mHwnd;
-			return OK;
+			_o_return((__int64)(UINT_PTR)mHwnd);
 		}
 		case P_Title:
 		{
 			if (IS_INVOKE_SET)
 			{
-				aResultToken.symbol = SYM_STRING;
-				aResultToken.marker = ParamIndexToString(0);
+				_f_set_retval_p(ParamIndexToString(0));
 				SetWindowText(mHwnd, aResultToken.marker);
 				return OK;
 			}
@@ -174,9 +169,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 				if (result != OK)
 					return result; // Already displayed error.
 			}
-			aResultToken.symbol = SYM_STRING;
-			aResultToken.marker = _T(""); // TODO
-			return OK;
+			_o_return_empty; // TODO
 		}
 		case P_Control:
 		{
@@ -197,12 +190,10 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 					ctrl = mControl[u];
 			}
 			if (!ctrl)
-				return g_script.ScriptError(_T("The specified control does not exist."));
+				_o_throw(_T("The specified control does not exist."));
 
-			aResultToken.symbol = SYM_OBJECT;
-			aResultToken.object = ctrl;
-			aResultToken.object->AddRef();
-			return OK;
+			ctrl->AddRef();
+			_o_return(ctrl);
 		}
 		case P_FocusedCtrl:
 		{
@@ -213,9 +204,8 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 			GuiControlType* pcontrol = hwnd ? FindControl(hwnd) : NULL;
 			if (pcontrol)
 			{
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = pcontrol;
-				aResultToken.object->AddRef();
+				pcontrol->AddRef();
+				aResultToken.Return(pcontrol);
 			}
 			return OK;
 		}
@@ -225,9 +215,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 			int& margin = member == P_MarginX ? mMarginX : mMarginY;
 			if (IS_INVOKE_SET)
 				margin = Scale(ParamIndexToInt(0)); // Seems okay to allow negative margins.
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = Unscale(margin);
-			return OK;
+			_o_return(Unscale(margin));
 		}
 		case P_BgColor:
 		case P_CtrlColor:
@@ -235,8 +223,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 			if (!IS_INVOKE_SET)
 				return INVOKE_NOT_HANDLED; // TODO
 
-			aResultToken.symbol = SYM_STRING;
-			aResultToken.marker = ParamIndexToString(0);
+			_f_set_retval_p(ParamIndexToString(0));
 
 			// AssignColor() takes care of deleting old brush, etc.
 			AssignColor(aResultToken.marker,
@@ -261,9 +248,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ExprTokenType &aResultToken, ExprTo
 		}
 	}
 
-	// Since above did not return, we assume failure. The following could be done, but it is not necessary.
-	//aResultToken.symbol = SYM_STRING;
-	//aResultToken.marker = _T("");
+	// Since above did not return, we assume failure.
 	return FAIL;
 }
 
@@ -275,10 +260,7 @@ BIF_DECL(BIF_GuiCreate)
 
 	GuiType* gui = new GuiType();
 	if (!gui)
-	{
-		g_script.ScriptError(ERR_OUTOFMEM); // Short msg since so rare.
-		return;
-	}
+		_f_throw(ERR_OUTOFMEM); // Short msg since so rare.
 
 	ToggleValueType own_dialogs = TOGGLE_INVALID;
 	if (*options && !gui->ParseOptions(options, own_dialogs))
@@ -291,8 +273,7 @@ BIF_DECL(BIF_GuiCreate)
 	if (!gui->mControl)
 	{
 		delete gui;
-		g_script.ScriptError(ERR_OUTOFMEM); // Short msg since so rare.
-		return;
+		_f_throw(ERR_OUTOFMEM); // Short msg since so rare.
 	}
 
 	gui->mControlCapacity = GUI_CONTROL_BLOCK_SIZE;
@@ -302,8 +283,7 @@ BIF_DECL(BIF_GuiCreate)
 	{
 		free(gui->mControl);
 		delete gui;
-		g_script.ScriptError(_T("Could not create Gui.")); // Short msg since so rare.
-		return;
+		_f_throw(_T("Could not create Gui.")); // Short msg since so rare.
 	}
 
 	// Set the title if one has been specified.
@@ -335,8 +315,7 @@ BIF_DECL(BIF_GuiCreate)
 			if (!prefix)
 			{
 				delete gui;
-				g_script.ScriptError(ERR_OUTOFMEM); // Short msg since so rare.
-				return;
+				_f_throw(ERR_OUTOFMEM); // Short msg since so rare.
 			}
 
 			gui->mEventFuncPrefix = prefix;
@@ -348,8 +327,7 @@ BIF_DECL(BIF_GuiCreate)
 
 	// Successful creation - add the Gui to the global list of Guis and return it
 	AddGuiToList(gui);
-	aResultToken.symbol = SYM_OBJECT;
-	aResultToken.object = gui;
+	_f_return(gui);
 }
 
 
@@ -358,72 +336,79 @@ BIF_DECL(BIF_GuiFromHwnd)
 	GuiType* gui = GuiType::FindGui((HWND)ParamIndexToIntPtr(0));
 	if (gui)
 	{
-		aResultToken.symbol = SYM_OBJECT;
-		aResultToken.object = gui;
 		gui->AddRef();
+		_f_return(gui);
 	}
 }
 
-typedef void (*GuiCtrlSpecialFunc)(BIF_DECL_PARAMS, GuiControlType& aControl);
-struct GuiCtrlSpecialFuncInfo
+typedef void (*GuiCtrlFunc)(BIF_DECL_PARAMS, GuiControlType& aControl, BuiltInFunctionID aCallerID);
+struct GuiCtrlFuncInfo
 {
 	LPTSTR name;
-	GuiCtrlSpecialFunc func;
-	int min_params;
+	GuiCtrlFunc func;
+	USHORT fid;
+	USHORT min_params;
 };
 
-static const GuiCtrlSpecialFuncInfo sListViewFuncs[] =
+#define FUN1(name, minp, bif) {_T(#name), bif, 0, minp }
+#define FUNn(name, minp, bif, cat) {_T(#name), bif, FID_##cat##_##name, minp }
+
+static const GuiCtrlFuncInfo sListViewFuncs[] =
 {
-	{_T("GetNext"), BIF_LV_GetNextOrCount, 0 },
-	{_T("GetCount"), BIF_LV_GetNextOrCount, 0 },
-	{_T("GetText"), BIF_LV_GetText, 2 },
-	{_T("Add"), BIF_LV_AddInsertModify, 0 },
-	{_T("Insert"), BIF_LV_AddInsertModify, 1 },
-	{_T("Modify"), BIF_LV_AddInsertModify, 2 },
-	{_T("Delete"), BIF_LV_Delete, 0 },
-	{_T("InsertCol"), BIF_LV_InsertModifyDeleteCol, 1 },
-	{_T("ModifyCol"), BIF_LV_InsertModifyDeleteCol, 0 },
-	{_T("DeleteCol"), BIF_LV_InsertModifyDeleteCol, 1 },
-	{_T("SetImageList"), BIF_LV_SetImageList, 1 },
+	FUNn(GetNext, 0, BIF_LV_GetNextOrCount, LV),
+	FUNn(GetCount, 0, BIF_LV_GetNextOrCount, LV),
+	FUN1(GetText, 0, BIF_LV_GetText),
+	FUNn(Add, 0, BIF_LV_AddInsertModify, LV),
+	FUNn(Insert, 0, BIF_LV_AddInsertModify, LV),
+	FUNn(Modify, 0, BIF_LV_AddInsertModify, LV),
+	FUN1(Delete, 0, BIF_LV_Delete),
+	FUNn(InsertCol, 0, BIF_LV_InsertModifyDeleteCol, LV),
+	FUNn(ModifyCol, 0, BIF_LV_InsertModifyDeleteCol, LV),
+	FUNn(DeleteCol, 0, BIF_LV_InsertModifyDeleteCol, LV),
+	FUN1(SetImageList, 0, BIF_LV_SetImageList),
 };
 
-static const GuiCtrlSpecialFuncInfo sTreeViewFuncs[] =
+static const GuiCtrlFuncInfo sTreeViewFuncs[] =
 {
-	{_T("Add"), BIF_TV_AddModifyDelete, 1 },
-	{_T("Modify"), BIF_TV_AddModifyDelete, 1 },
-	{_T("Delete"), BIF_TV_AddModifyDelete, 0 },
-	{_T("GetParent"), BIF_TV_GetRelatedItem, 1 },
-	{_T("GetChild"), BIF_TV_GetRelatedItem, 1 },
-	{_T("GetPrev"), BIF_TV_GetRelatedItem, 1 },
-	{_T("GetCount"), BIF_TV_GetRelatedItem, 0 },
-	{_T("GetSelection"), BIF_TV_GetRelatedItem, 0 },
-	{_T("GetNext"), BIF_TV_GetRelatedItem, 0 },
-	{_T("Get"), BIF_TV_Get, 2 },
-	{_T("GetText"), BIF_TV_Get, 2 },
-	{_T("SetImageList"), BIF_TV_SetImageList, 1 },
+	FUNn(Add, 1, BIF_TV_AddModifyDelete, TV),
+	FUNn(Modify, 1, BIF_TV_AddModifyDelete, TV),
+	FUNn(Delete, 0, BIF_TV_AddModifyDelete, TV),
+	FUNn(GetParent, 1, BIF_TV_GetRelatedItem, TV),
+	FUNn(GetChild, 1, BIF_TV_GetRelatedItem, TV),
+	FUNn(GetPrev, 1, BIF_TV_GetRelatedItem, TV),
+	FUNn(GetCount, 0, BIF_TV_GetRelatedItem, TV),
+	FUNn(GetSelection, 0, BIF_TV_GetRelatedItem, TV),
+	FUNn(GetNext, 0, BIF_TV_GetRelatedItem, TV),
+	FUNn(Get, 2, BIF_TV_Get, TV),
+	FUNn(GetText, 2, BIF_TV_Get, TV),
+	FUN1(SetImageList, 1, BIF_TV_SetImageList),
 };
 
-static const GuiCtrlSpecialFuncInfo sStatusBarFuncs[] =
+static const GuiCtrlFuncInfo sStatusBarFuncs[] =
 {
-	{_T("SetText"), BIF_StatusBar, 1 },
-	{_T("SetParts"), BIF_StatusBar, 0 },
-	{_T("SetIcon"), BIF_StatusBar, 1 },
+	FUNn(SetText, 1, BIF_StatusBar, SB),
+	FUNn(SetParts, 0, BIF_StatusBar, SB),
+	FUNn(SetIcon, 1, BIF_StatusBar, SB),
 };
 
-ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+#undef FUN1
+#undef FUNn
+
+ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (!aParamCount) // ctrl[]
-			return INVOKE_NOT_HANDLED;
+		return INVOKE_NOT_HANDLED;
 		
 	LPTSTR name = ParamIndexToString(0); // Name of method or property.
 	MemberID member = INVALID;
-	GuiCtrlSpecialFunc func = NULL; // For ListView/TreeView/StatusBar-specific methods.
+	GuiCtrlFunc func = NULL; // For ListView/TreeView/StatusBar-specific methods.
+	BuiltInFunctionID func_id; // As above.
 	--aParamCount; // Exclude name from param count.
 	++aParam; // As above, but for the param array.
 
 	// Check for this early.
 	if (!hwnd)
-		return g_script.ScriptError(_T("The control is destroyed."));
+		_o_throw(_T("The control is destroyed."));
 
 #define if_member(s,e) else if (!_tcsicmp(name, _T(s))) member = e;
 	if_member("Opt", M_Options)
@@ -450,7 +435,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 #undef if_member
 	else if (type == GUI_CONTROL_LISTVIEW || type == GUI_CONTROL_TREEVIEW || type == GUI_CONTROL_STATUSBAR)
 	{
-		const GuiCtrlSpecialFuncInfo* func_info = NULL;
+		const GuiCtrlFuncInfo* func_info = NULL;
 		int func_count = 0;
 		switch (type)
 		{
@@ -464,6 +449,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 			{
 				func_info = func_info + i;
 				func = func_info->func;
+				func_id = (BuiltInFunctionID)func_info->fid;
 				break;
 			}
 		}
@@ -473,13 +459,11 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 
 	if (func)
 	{
-		// Set up aResultToken to what BIFs expect.
+		// Set up aResultToken to what the TV/LV/SB functions expect.
 		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.marker = name;
 		// Call the function.
-		ResultType result = OK;
-		func(result, aResultToken, aParam, aParamCount, *this);
-		return result;
+		func(aResultToken, aParam, aParamCount, *this, func_id);
+		return aResultToken.Result();
 	}
 
 	if (member == INVALID)
@@ -492,7 +476,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 			// Member requires parentheses().
 			return INVOKE_NOT_HANDLED;
 		if (aParamCount != (IS_INVOKE_SET ? 1 : 0))
-			return g_script.ScriptError(_T("Invalid usage."));
+			_o_throw(_T("Invalid usage."));
 	}
 
 	switch (member)
@@ -506,11 +490,11 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 
 		case M_Focus:
 			SetFocus(hwnd);
-			return OK;
+			_o_return_empty;
 
 		case M_UpdateFont:
 			gui->ControlUpdateFont(*this);
-			return OK;
+			_o_return_empty;
 
 		case M_Move:
 			return gui->ControlMove(*this, ParamIndexToOptionalString(0), (bool)ParamIndexToOptionalType(BOOL,1,FALSE));
@@ -523,43 +507,37 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 		case P_Handle:
 			if (IS_INVOKE_SET)
 				return INVOKE_NOT_HANDLED;
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = (__int64)(UINT_PTR)hwnd;
-			return OK;
+			_o_return((__int64)(UINT_PTR)hwnd);
 		case P_Gui:
 			if (IS_INVOKE_SET)
 				return INVOKE_NOT_HANDLED;
-			aResultToken.symbol = SYM_OBJECT;
-			aResultToken.object = gui;
-			aResultToken.object->AddRef();
-			return OK;
+			gui->AddRef();
+			_o_return(gui);
 		case P_ClassNN:
 		{
 			if (IS_INVOKE_SET)
 				return INVOKE_NOT_HANDLED;
 			class_and_hwnd_type cah;
 			cah.hwnd = hwnd;
-			cah.class_name = aResultToken.buf;
-			if (!GetClassName(cah.hwnd, cah.class_name, MAX_NUMBER_SIZE - 5)) // -5 to allow room for sequence number.
-				return g_script.ScriptError(_T("Class name too long.")); // Short msg since so rare.
+			cah.class_name = _f_retval_buf;
+			if (!GetClassName(cah.hwnd, cah.class_name, _f_retval_buf_size - 5)) // -5 to allow room for sequence number.
+				_o_throw(_T("Class name too long.")); // Short msg since so rare.
 			cah.class_count = 0;  // Init for the below.
 			cah.is_found = false; // Same.
 			EnumChildWindows(gui->mHwnd, EnumChildFindSeqNum, (LPARAM)&cah);
 			if (!cah.is_found) // Should be impossible due to FindControl() having already found it above.
-				return g_script.ScriptError(_T("Cannot find control.")); // Short msg since so rare.
+				_o_throw(_T("Cannot find control.")); // Short msg since so rare.
 			// Append the class sequence number onto the class name set the output param to be that value:
-			sntprintfcat(cah.class_name, MAX_NUMBER_SIZE, _T("%d"), cah.class_count);
+			sntprintfcat(cah.class_name, _f_retval_buf_size, _T("%d"), cah.class_count);
 
-			aResultToken.symbol = SYM_STRING;
-			aResultToken.marker = cah.class_name;
-			return OK;
+			_o_return_p(cah.class_name);
 		}
 
 		case P_Text:
 		case P_Value:
 			if (IS_INVOKE_SET)
 			{
-				aResultToken.marker = ParamIndexToString(0, aResultToken.buf);
+				_f_set_retval_p(ParamIndexToString(0, _f_retval_buf));
 				return gui->ControlSetContents(*this, aResultToken.marker, member == P_Text);
 			}
 			else
@@ -577,41 +555,30 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 
 			ExprTokenType tok[8];
 			ExprTokenType* param[8] = { tok+0, tok+1, tok+2, tok+3, tok+4, tok+5, tok+6, tok+7 };
-			tok[0].symbol = SYM_STRING;  tok[0].marker = _T("x");
-			tok[1].symbol = SYM_INTEGER; tok[1].value_int64 = gui->Unscale(pt.x);
-			tok[2].symbol = SYM_STRING;  tok[2].marker = _T("y");
-			tok[3].symbol = SYM_INTEGER; tok[3].value_int64 = gui->Unscale(pt.y);
-			tok[4].symbol = SYM_STRING;  tok[4].marker = _T("w");
-			tok[5].symbol = SYM_INTEGER; tok[5].value_int64 = gui->Unscale(rect.right-rect.left);
-			tok[6].symbol = SYM_STRING;  tok[6].marker = _T("h");
-			tok[7].symbol = SYM_INTEGER; tok[7].value_int64 = gui->Unscale(rect.bottom-rect.top);
+			tok[0].SetValue(_T("x"));
+			tok[1].SetValue(gui->Unscale(pt.x));
+			tok[2].SetValue(_T("y"));
+			tok[3].SetValue(gui->Unscale(pt.y));
+			tok[4].SetValue(_T("w"));
+			tok[5].SetValue(gui->Unscale(rect.right-rect.left));
+			tok[6].SetValue(_T("h"));
+			tok[7].SetValue(gui->Unscale(rect.bottom-rect.top));
 			IObject* obj = Object::Create(param, 8);
-			if (!obj)
-				return g_script.ScriptError(ERR_OUTOFMEM); // Short msg since so rare.
-
-			aResultToken.symbol = SYM_OBJECT;
-			aResultToken.object = obj;
-			return OK;
+			_o_return_or_throw(obj);
 		}
 
 		case P_Enabled:
 		{
 			if (IS_INVOKE_SET)
 				gui->ControlSetEnabled(*this, (bool)ParamIndexToBOOL(0));
-
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = IsWindowEnabled(hwnd) ? 1 : 0;
-			return OK;
+			_o_return(IsWindowEnabled(hwnd) ? 1 : 0);
 		}
 
 		case P_Visible:
 		{
 			if (IS_INVOKE_SET)
 				gui->ControlSetVisible(*this, (bool)ParamIndexToBOOL(0));
-
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = IsWindowVisible(hwnd) ? 1 : 0;
-			return OK;
+			_o_return(IsWindowVisible(hwnd) ? 1 : 0);
 		}
 
 		case M_Tab_UseTab:
@@ -632,19 +599,17 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ExprTokenType &aResultToken,
 				else
 					index = gui->FindTabIndexByName(*this, TokenToString(param, aResultToken.buf), exact_match);
 				if (index < 0 || index > (MAX_TABS_PER_CONTROL - 1))
-					return g_script.ScriptError(_T("Invalid tab index or name."));
+					_o_throw(_T("Invalid tab index or name."));
 				gui->mCurrentTabIndex = index;
 			}
 			if (gui->mCurrentTabIndex != prev_tab_index || gui->mCurrentTabControlIndex != prev_tab_control_index)
 				gui->mInRadioGroup = false; // A fix for v1.0.38.02, see comments at similar line above.
 
-			return OK;
+			_o_return_empty;
 		}
 	}
 
-	// Since above did not return, we assume failure. The following could be done, but it is not necessary.
-	//aResultToken.symbol = SYM_STRING;
-	//aResultToken.marker = _T("");
+	// Since above did not return, we assume failure.
 	return FAIL;
 }
 
@@ -890,7 +855,7 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 {
 	int selection_index = -1;
 	bool is_choose_string = !(aParam.symbol == SYM_INTEGER || aParam.symbol == SYM_VAR && aParam.var->IsPureNumeric() == SYM_INTEGER);
-	TCHAR buf[MAX_NUMBER_SIZE];
+	TCHAR buf[_f_retval_buf_size];
 	
 	if (aExtraActions < 0 || aExtraActions > 2)
 		return g_script.ScriptError(ERR_PARAM2_INVALID);
@@ -1706,27 +1671,24 @@ int GuiType::CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam
 	for (int i = 0; i < aParamCount; i ++)
 		params[i+1] = aParam+i;
 
-	ExprTokenType result_token;
-	TCHAR result_token_buf[MAX_NUMBER_SIZE];
+	ResultToken result_token;
+	TCHAR result_token_buf[_f_retval_buf_size];
 	result_token.InitResult(result_token_buf);
 
 	ResultType result = OK;
-	FuncCallData func_call; // For UDFs: must remain in scope until the result has been copied into pVarResult.
 
 	if (mHasEventSink)
 	{
-		ExprTokenType this_token;
-		this_token.symbol = SYM_OBJECT;
-		this_token.object = mEventSink;
-
-		ExprTokenType method_name;
-		method_name.symbol = SYM_STRING;
-		method_name.marker = aHandler.mMethodName;
+		ExprTokenType this_token(mEventSink);
+		ExprTokenType method_name(aHandler.mMethodName);
 		params[0] = &method_name;
 		result = mEventSink->Invoke(result_token, this_token, IT_CALL, params, aParamCount+1);
 	}
 	else
-		aHandler.mFunc->Call(func_call, result, result_token, params+1, aParamCount);
+	{
+		aHandler.mFunc->Call(result_token, params+1, aParamCount);
+		result = result_token.Result();
+	}
 
 	if (result == EARLY_RETURN)
 		result = OK;
@@ -1757,9 +1719,7 @@ IObject* GuiType::CreateDropArray(HDROP hDrop)
 	TCHAR buf[MAX_PATH];
 	UINT file_count = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
 	Object* obj = Object::Create();
-	ExprTokenType tok;
-	tok.symbol = SYM_STRING;
-	tok.marker = buf;
+	ExprTokenType tok(buf);
 	ExprTokenType* pTok = &tok;
 
 	for (UINT u = 0; u < file_count; u ++)
@@ -6655,10 +6615,10 @@ ResultType GuiType::Escape() // Similar to close, except typically called when t
 
 
 
-ResultType GuiType::ControlGetContents(ExprTokenType &aResultToken, GuiControlType &aControl, bool bText)
+ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, bool bText)
 {
 	LPTSTR cp;
-	LPTSTR buf = aResultToken.buf; // For various uses.
+	LPTSTR buf = _f_retval_buf; // For various uses.
 	int pos;
 	LRESULT sel_count, i;  // LRESULT is a signed type (same as int/long).
 	SYSTEMTIME st[2];
@@ -6674,27 +6634,20 @@ ResultType GuiType::ControlGetContents(ExprTokenType &aResultToken, GuiControlTy
 			pos = (int)SendMessage(aControl.hwnd, UDM_GETPOS32, 0, 0);
 		else // 16-bit.  Must cast to short to omit the error portion (see comment above).
 			pos = (short)SendMessage(aControl.hwnd, UDM_GETPOS, 0, 0);
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = pos;
-		return OK;
+		_o_return(pos);
 
 	case GUI_CONTROL_SLIDER: // Doesn't seem useful to ever retrieve the control's actual caption, which is invisible.
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = ControlInvertSliderIfNeeded(aControl, (int)SendMessage(aControl.hwnd, TBM_GETPOS, 0, 0));
+		_o_return(ControlInvertSliderIfNeeded(aControl, (int)SendMessage(aControl.hwnd, TBM_GETPOS, 0, 0)));
 		// Above assigns it as a signed value because testing shows a slider can have part or all of its
 		// available range consist of negative values.  32-bit values are supported if the range is set
 		// with the right messages.
-		return OK;
 
 	case GUI_CONTROL_PROGRESS:
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = (int)SendMessage(aControl.hwnd, PBM_GETPOS, 0, 0);
-		return OK;
+		_o_return((int)SendMessage(aControl.hwnd, PBM_GETPOS, 0, 0));
 
 	case GUI_CONTROL_DATETIME:
-		aResultToken.marker = DateTime_GetSystemtime(aControl.hwnd, st) == GDT_VALID
-			? SystemTimeToYYYYMMDD(buf, st[0]) : _T(""); // Blank string whenever GDT_NONE/GDT_ERROR.
-		return OK;
+		_o_return_p(DateTime_GetSystemtime(aControl.hwnd, st) == GDT_VALID
+			? SystemTimeToYYYYMMDD(buf, st[0]) : _T("")); // Blank string whenever GDT_NONE/GDT_ERROR.
 
 	case GUI_CONTROL_MONTHCAL:
 		if (GetWindowLong(aControl.hwnd, GWL_STYLE) & MCS_MULTISELECT)
@@ -6716,15 +6669,13 @@ ResultType GuiType::ControlGetContents(ExprTokenType &aResultToken, GuiControlTy
 			SystemTimeToYYYYMMDD(buf, st[0]);
 			buf[8] = 0; // Limit to 8 chars to omit the time portion, which is unreliable (not relevant anyway).
 		}
-		aResultToken.marker = buf;
-		return OK;
+		_o_return_p(buf);
 
 	case GUI_CONTROL_HOTKEY:
 		// Testing shows that neither GetWindowText() nor WM_GETTEXT can pull anything out of a hotkey
 		// control, so the only type of retrieval that can be offered is the HKM_GETHOTKEY method:
 		HotkeyToText((WORD)SendMessage(aControl.hwnd, HKM_GETHOTKEY, 0, 0), buf);
-		aResultToken.marker = buf;
-		return OK;
+		_o_return_p(buf);
 	} // switch (aControl.type)
 
 	if (!bText) // Non-text, i.e. don't unconditionally use the simple GetWindowText() method.
@@ -6739,22 +6690,18 @@ ResultType GuiType::ControlGetContents(ExprTokenType &aResultToken, GuiControlTy
 		{
 		case GUI_CONTROL_CHECKBOX:
 		case GUI_CONTROL_RADIO:
-			aResultToken.symbol = SYM_INTEGER;
 			switch (SendMessage(aControl.hwnd, BM_GETCHECK, 0, 0))
 			{
 			case BST_CHECKED:
-				aResultToken.value_int64 = 1;
-				return OK;
+				_o_return(1);
 			case BST_UNCHECKED:
-				aResultToken.value_int64 = 0;
-				return OK;
+				_o_return(0);
 			case BST_INDETERMINATE:
 				// Seems better to use a value other than blank because blank might sometimes represent the
 				// state of an uninitialized or unfetched control.  In other words, a blank variable often
 				// has an external meaning that transcends the more specific meaning often desirable when
 				// retrieving the state of the control:
-				aResultToken.value_int64 = -1;
-				return OK;
+				_o_return(-1);
 			}
 			return FAIL; // Shouldn't be reached since ZERO(BST_UNCHECKED) is returned on failure.
 
@@ -6763,11 +6710,8 @@ ResultType GuiType::ControlGetContents(ExprTokenType &aResultToken, GuiControlTy
 			{
 				index = SendMessage(aControl.hwnd, CB_GETCURSEL, 0, 0); // Get index of currently selected item.
 				if (index != CB_ERR) // Maybe happens only if DROPDOWNLIST has no items at all, so ErrorLevel is not changed.
-				{
-					aResultToken.symbol = SYM_INTEGER;
-					aResultToken.value_int64 = (int)index + 1;
-				}
-				return OK;
+					_o_return((int)index + 1);
+				_o_return_empty;
 			}
 			break; // Fall through to the normal GetWindowText() method, which works for DDLs but not ComboBoxes.
 
@@ -6793,11 +6737,7 @@ ResultType GuiType::ControlGetContents(ExprTokenType &aResultToken, GuiControlTy
 					break; // Same comment as above.
 			}
 			if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
-			{
-				aResultToken.symbol = SYM_INTEGER;
-				aResultToken.value_int64 = (int)index + 1;
-				return OK;
-			}
+				_o_return((int)index + 1);
 			length = SendMessage(aControl.hwnd, CB_GETLBTEXTLEN, (WPARAM)index, 0);
 			if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
 				return OK; // Return empty string (default).
@@ -6810,7 +6750,7 @@ ResultType GuiType::ControlGetContents(ExprTokenType &aResultToken, GuiControlTy
 				return FAIL; // It already displayed the error.
 			length = SendMessage(aControl.hwnd, CB_GETLBTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
 			if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-				return OK; // Return empty string (default).
+				_o_return_empty; // Return empty string (default).
 			return OK;
 
 		case GUI_CONTROL_LISTBOX:
@@ -6818,15 +6758,15 @@ ResultType GuiType::ControlGetContents(ExprTokenType &aResultToken, GuiControlTy
 			{
 				sel_count = SendMessage(aControl.hwnd, LB_GETSELCOUNT, 0, 0);
 				if (sel_count < 1)  // <=0 to check for LB_ERR too (but it should be impossible in this case).
-					return OK;
+					_o_return_empty;
 				int *item = (int *)malloc(sel_count * sizeof(int)); // dynamic since there can be a very large number of items.
 				if (!item)
-					return OK;
+					_o_return_empty;
 				sel_count = SendMessage(aControl.hwnd, LB_GETSELITEMS, (WPARAM)sel_count, (LPARAM)item);
 				if (sel_count < 1)  // 0 or LB_ERR, but both these conditions should be impossible in this case.
 				{
 					free(item);
-					return OK;
+					_o_return_empty;
 				}
 				if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the positions, not the text retrieved.
 				{
@@ -6849,7 +6789,7 @@ ResultType GuiType::ControlGetContents(ExprTokenType &aResultToken, GuiControlTy
 						if (item_length == LB_ERR) // Realistically impossible based on MSDN.
 						{
 							free(item);
-							return OK;
+							_o_return_empty;
 						}
 						length += item_length;
 					}
@@ -6899,51 +6839,40 @@ ResultType GuiType::ControlGetContents(ExprTokenType &aResultToken, GuiControlTy
 			{
 				index = SendMessage(aControl.hwnd, LB_GETCURSEL, 0, 0); // Get index of currently selected item.
 				if (index == LB_ERR) // There is no selection (or very rarely, some other type of problem).
-					return OK;
+					_o_return_empty;
 				if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
-				{
-					aResultToken.symbol = SYM_INTEGER;
-					aResultToken.value_int64 = (int)index + 1;
-					return OK;
-				}
+					_o_return((int)index + 1);
 				length = SendMessage(aControl.hwnd, LB_GETTEXTLEN, (WPARAM)index, 0);
 				if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-					return OK;
+					_o_return_empty;
 				if (TokenSetResult(aResultToken, NULL, length) != OK)
 					return FAIL;  // It already displayed the error.
 				length = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
 				if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-					return OK;
+					_o_return_empty;
 			}
 			return OK;
 
 		case GUI_CONTROL_TAB:
 			index = TabCtrl_GetCurSel(aControl.hwnd); // Get index of currently selected item.
 			if (index == -1) // There is no selection (maybe happens only if it has no tabs at all), so ErrorLevel is not changed.
-				return OK;
+				_o_return_empty;
 			if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the index, not the text retrieved.
-			{
-				aResultToken.symbol = SYM_INTEGER;
-				aResultToken.value_int64 = (int)index + 1;
-				return OK;
-			}
+				_o_return((int)index + 1);
 			// Otherwise: Get the stored name/caption of this tab:
 			TCITEM tci;
 			tci.mask = TCIF_TEXT;
 			tci.pszText = buf;
-			tci.cchTextMax = MAX_NUMBER_SIZE-1; // MSDN example uses -1.
+			tci.cchTextMax = _f_retval_buf_size-1; // MSDN example uses -1.
 			if (TabCtrl_GetItem(aControl.hwnd, index, &tci))
-				aResultToken.marker = buf;
-			return OK;
+				_o_return_p(buf);
+			_o_return_empty;
 
 		case GUI_CONTROL_ACTIVEX:
 			// Below returns a new ComObject wrapper:
 			if (IObject *activex_obj = ControlGetActiveX(aControl.hwnd))
-			{
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = activex_obj;
-			}
-			return OK;
+				_o_return(activex_obj);
+			_o_return_empty;
 		case GUI_CONTROL_LABEL:
 		case GUI_CONTROL_LINK:
 		case GUI_CONTROL_PIC:
@@ -8672,12 +8601,9 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 
 	AddRef();
 	ExprTokenType param[3];
-	param[0].symbol = SYM_OBJECT;
-	param[0].object = &aControl;
-	param[1].symbol = SYM_INTEGER;
-	param[1].value_int64 = (__int64)(DWORD_PTR)aNmHdr;
-	param[2].symbol = SYM_STRING;
-	param[2].marker = _T("N");
+	param[0].SetValue(&aControl);
+	param[1].SetValue((__int64)(DWORD_PTR)aNmHdr);
+	param[2].SetValue(_T("N"));
 	g_script.mLastPeekTime = GetTickCount();
 	int returnValue = CallEvent(evt, 3, param);
 

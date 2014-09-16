@@ -384,7 +384,7 @@ struct ArgStruct
 
 // The following macro is used for definitions and declarations of built-in functions:
 #define BIF_DECL(name) void name(BIF_DECL_PARAMS)
-#define BIF_DECL_GUICTRL(name) void name(BIF_DECL_PARAMS, GuiControlType& control)
+#define BIF_DECL_GUICTRL(name) void name(BIF_DECL_PARAMS, GuiControlType& control, BuiltInFunctionID aCallerID)
 
 #define _f__oneline(act)		do { act } while (0)		// Make the macro safe to use like a function, under if(), etc.
 #define _f__ret(act)			_f__oneline( act; return; )	// BIFs have no return value.
@@ -2228,7 +2228,7 @@ struct GuiControlType : public ObjectBase
 	};
 
 	void Destroy(); // Called by GuiType::Destroy().
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
 struct GuiControlOptionsType
@@ -2407,7 +2407,7 @@ public:
 
 	ResultType Destroy();
 	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Create();
 	void SetEventHandler(GuiEvent& aHandler, LPTSTR aName, bool bCopyName = true);
 	int CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam[]);
@@ -2444,7 +2444,7 @@ public:
 	}
 	ResultType Close(); // Due to SC_CLOSE, etc.
 	ResultType Escape(); // Similar to close, except typically called when the user presses ESCAPE.
-	ResultType ControlGetContents(ExprTokenType &aResultToken, GuiControlType &aControl, bool bText = false);
+	ResultType ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, bool bText = false);
 
 	static GuiType *FindGui(HWND aHwnd);
 	static GuiType *FindGuiParent(HWND aHwnd);
