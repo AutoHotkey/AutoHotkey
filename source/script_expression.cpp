@@ -979,12 +979,15 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// Binary clipboard is ignored because it's documented that except for certain features,
 					// binary clipboard variables are seen only up to the first binary zero (mostly to
 					// simplify the code).
-					if (sym_assign_var // Since "right" is being appended onto a variable ("left"), an optimization is possible.
-						&& sym_assign_var->AppendIfRoom(right_string, (VarSizeType)right_length)) // But only if the target variable has enough remaining capacity.
+					if (sym_assign_var && sym_assign_var->Type() == VAR_NORMAL) // Since "right" is being appended onto a variable ("left"), an optimization is possible.
 					{
-						// AppendIfRoom() always fails for VAR_CLIPBOARD, so below won't execute for it (which is
-						// good because don't want clipboard to stay as SYM_VAR after the assignment. This is
-						// because it simplifies the code not to have to worry about VAR_CLIPBOARD in BIFs, etc.)
+						// Append() is particularly efficient when the var already has room to append the value,
+						// but improves performance even in other cases by avoiding an extra memcpy and allocating
+						// extra space for future expansion.  It is necessary to completely handle this case here
+						// because otherwise this_token might need to be put into to_mem[], in which case it must
+						// not be converted to SYM_VAR.
+						if (!sym_assign_var->Append(right_string, (VarSizeType)right_length))
+							goto abort;
 						this_token.var = sym_assign_var; // Make the result a variable rather than a normal operand so that its
 						this_token.symbol = SYM_VAR;     // address can be taken, and it can be passed ByRef. e.g. &(x+=1)
 						goto push_this_token; // Skip over all other sections such as subsequent checks of sym_assign_var because it was all taken care of here.

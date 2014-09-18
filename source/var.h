@@ -560,6 +560,7 @@ public:
 	#define VAR_NEVER_FREE                     3
 	#define VAR_FREE_IF_LARGE                  4
 	void Free(int aWhenToFree = VAR_ALWAYS_FREE, bool aExcludeAliasesAndRequireInit = false);
+	ResultType Append(LPTSTR aStr, VarSizeType aLength);
 	ResultType AppendIfRoom(LPTSTR aStr, VarSizeType aLength);
 	void AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength);
 	void SetLengthFromContents();

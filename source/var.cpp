@@ -925,6 +925,34 @@ ResultType Var::AppendIfRoom(LPTSTR aStr, VarSizeType aLength)
 
 
 
+ResultType Var::Append(LPTSTR aStr, VarSizeType aLength)
+// Caller must ensure that Type() == VAR_NORMAL.
+{
+	if (mType == VAR_ALIAS)
+		return mAliasFor->Append(aStr, aLength);
+	if (AppendIfRoom(aStr, aLength))
+		return OK;
+	// Since above didn't return, we need to allocate space and postpone freeing our current value
+	// until after it is copied into the new buffer.
+	LPTSTR old_contents = mCharContents; // Caller has ensured UpdateContents() was called if necessary.
+	VarSizeType old_length = _CharLength();
+	VarSizeType old_capacity = (mHowAllocated == ALLOC_MALLOC) ? mByteCapacity : 0;
+	if (old_capacity)
+		mByteCapacity = 0; // Prevent the call below from freeing it.
+	if (!AssignString(NULL, _CharLength() + aLength))
+	{
+		mByteCapacity = old_capacity; // Restore this since the contents are being left as is.
+		return FAIL;
+	}
+	tmemcpy(mCharContents, old_contents, old_length);
+	tmemcpy(mCharContents + old_length, aStr, aLength + 1);
+	if (old_capacity)
+		free(old_contents);
+	return OK;
+}
+
+
+
 void Var::AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 // Caller provides a new malloc'd memory block (currently must be non-NULL).  That block and its
 // contents are directly hung onto this variable in place of its old block, which is freed (except
