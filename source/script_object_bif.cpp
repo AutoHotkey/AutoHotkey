@@ -263,17 +263,19 @@ BIF_DECL(Op_ObjIncDec)
 
 	ResultToken temp_result;
 	// Set the defaults expected by Op_ObjInvoke:
+	temp_result.InitResult(aResultToken.buf);
 	temp_result.symbol = SYM_INTEGER;
 	temp_result.func = &g_ObjGet;
-	temp_result.buf = aResultToken.buf;
-	temp_result.mem_to_free = NULL;
 
 	// Retrieve the current value.  Do it this way instead of calling Object::Invoke
 	// so that if aParam[0] is not an object, g_MetaObject is correctly invoked.
 	Op_ObjInvoke(temp_result, aParam, aParamCount);
 
-	if (temp_result.Exited())
+	if (temp_result.Exited()) // Implies no return value.
+	{
+		aResultToken.SetExitResult(temp_result.Result());
 		return;
+	}
 
 	ExprTokenType current_value, value_to_set;
 	switch (value_to_set.symbol = current_value.symbol = TokenIsNumeric(temp_result))
@@ -313,12 +315,18 @@ BIF_DECL(Op_ObjIncDec)
 	else // SYM_POST_INCREMENT || SYM_POST_DECREMENT
 	{
 		// Must be re-initialized (and must use g_ObjSet instead of g_ObjGet):
+		temp_result.InitResult(aResultToken.buf);
+		temp_result.symbol = SYM_INTEGER;
 		temp_result.func = &g_ObjSet;
-		temp_result.buf = aResultToken.buf;
-		temp_result.mem_to_free = NULL;
 		
 		// Set the new value.
 		Op_ObjInvoke(temp_result, param, aParamCount);
+
+		if (temp_result.Exited()) // Implies no return value.
+		{
+			aResultToken.SetExitResult(temp_result.Result());
+			return;
+		}
 		
 		// Dispose of the result safely.
 		temp_result.Free();
