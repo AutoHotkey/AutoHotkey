@@ -1401,7 +1401,8 @@ STDMETHODIMP IObjectComCompatible::GetIDsOfNames(REFIID riid, LPOLESTR *rgszName
 #ifdef UNICODE
 	LPTSTR name = *rgszNames;
 #else
-	CStringCharFromWChar name(*rgszNames);
+	CStringCharFromWChar name_buf(*rgszNames);
+	LPTSTR name = const_cast<LPTSTR>(name_buf.GetString());
 #endif
 	if ( !(g_IdToName || (g_IdToName = Object::Create())) ||
 		 !(g_NameToId || (g_NameToId = Object::Create())) )
