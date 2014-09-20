@@ -2416,7 +2416,7 @@ public:
 	static IObject* CreateDropArray(HDROP hDrop);
 	ResultType SetMenu(LPTSTR aMenuName);
 	static void UpdateMenuBars(HMENU aMenu);
-	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& pControl);
+	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& pControl, Object *aObj = NULL);
 
 	ResultType ParseOptions(LPTSTR aOptions, ToggleValueType &aOwnDialogs);
 	void SetOwnDialogs(ToggleValueType state)
@@ -2431,7 +2431,7 @@ public:
 	ResultType ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &aOpt, GuiControlType &aControl
 		, GuiIndexType aControlIndex = -1); // aControlIndex is not needed upon control creation.
 	void ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aControl);
-	void ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt = NULL);
+	void ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt = NULL, Object *aObj = NULL);
 	ResultType Show(LPTSTR aOptions, LPTSTR aTitle);
 	ResultType Clear();
 	ResultType Cancel();
@@ -2478,7 +2478,7 @@ public:
 
 	static WORD TextToHotkey(LPTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
-	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, bool bText);
+	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, bool bText, Object *aObj = NULL);
 	void ControlSetEnabled(GuiControlType &aControl, bool bEnabled);
 	void ControlSetVisible(GuiControlType &aControl, bool bVisible);
 	ResultType ControlMove(GuiControlType &aControl, LPTSTR aPos, bool bDraw);

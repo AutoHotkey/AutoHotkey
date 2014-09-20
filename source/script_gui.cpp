@@ -27,6 +27,14 @@ GNU General Public License for more details.
 static ATOM sGuiWinClass;
 
 
+// Helper function used to convert a token to a script object.
+static Object* TokenToScriptObject(ExprTokenType &token)
+{
+	IObject* obj = TokenToObject(token);
+	return obj ? dynamic_cast<Object*>(obj) : NULL;
+}
+
+
 ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (!aParamCount) // gui[]
@@ -90,8 +98,9 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		{
 			LPTSTR text = ParamIndexToOptionalString(0);
 			LPTSTR options = ParamIndexToOptionalString(1);
+			Object *text_obj = ParamIndexIsOmitted(0) ? NULL : TokenToScriptObject(*aParam[0]);
 			GuiControlType* pcontrol = NULL;
-			ResultType result = AddControl(ctrl_type, options, text, pcontrol);
+			ResultType result = AddControl(ctrl_type, options, text, pcontrol, text_obj);
 			if (result == OK)
 			{
 				pcontrol->AddRef();
@@ -255,7 +264,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 
 BIF_DECL(BIF_GuiCreate)
 {
-	LPTSTR title = ParamIndexToOptionalString(0);
+	LPTSTR title = ParamIndexToOptionalString(0, _f_number_buf);
 	LPTSTR options = ParamIndexToOptionalString(1);
 
 	GuiType* gui = new GuiType();
@@ -539,7 +548,13 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			if (IS_INVOKE_SET)
 			{
 				_f_set_retval_p(ParamIndexToString(0, _f_retval_buf));
-				return gui->ControlSetContents(*this, aResultToken.marker, member == P_Text);
+				Object* obj = TokenToScriptObject(*aParam[0]);
+				if (obj)
+				{
+					obj->AddRef();
+					aResultToken.SetValue(obj);
+				}
+				return gui->ControlSetContents(*this, aResultToken.marker, member == P_Text, obj);
 			}
 			else
 				return gui->ControlGetContents(aResultToken, *this, member == P_Text);
@@ -962,7 +977,7 @@ error:
 }
 
 
-ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContents, bool bText)
+ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContents, bool bText, Object *aObj)
 {
 	GuiIndexType control_index = GUI_HWND_TO_INDEX(aControl.hwnd);
 
@@ -1352,10 +1367,11 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 			//if (guicontrol_cmd == GUICONTROL_CMD_TEXT)
 			//	break;
 			bool list_replaced;
-			if (*aContents == mDelimiter) // The signal to overwrite rather than append to the list.
+			if (aObj || *aContents == mDelimiter) // The signal to overwrite rather than append to the list.
 			{
 				list_replaced = true;
-				++aContents;  // Exclude the initial pipe from further consideration.
+				if (*aContents)
+					++aContents;  // Exclude the initial pipe from further consideration.
 				int msg;
 				switch (aControl.type)
 				{
@@ -1368,7 +1384,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 			}
 			else
 				list_replaced = false;
-			ControlAddContents(aControl, aContents, 0);
+			ControlAddContents(aControl, aContents, 0, NULL, aObj);
 			if (aControl.type == GUI_CONTROL_TAB && list_replaced)
 			{
 				// In case replacement tabs deleted the currently active tab, update the tab.
@@ -1772,7 +1788,7 @@ void GuiType::UpdateMenuBars(HMENU aMenu)
 
 
 
-ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& pControl)
+ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& pControl, Object *aObj)
 // Caller must have ensured that mHwnd is non-NULL (i.e. that the parent window already exists).
 {
 	pControl = NULL; // Initialize return pointer.
@@ -3775,7 +3791,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	///////////////////////////////////////////////////
 	// Add any content to the control and set its font.
 	///////////////////////////////////////////////////
-	ControlAddContents(control, aText, opt.choice); // Must be done after font-set above so that ListView columns can be auto-sized to fit their text.
+	ControlAddContents(control, aText, opt.choice, NULL, aObj); // Must be done after font-set above so that ListView columns can be auto-sized to fit their text.
 
 	if (control.type == GUI_CONTROL_TAB && opt.row_count > 0)
 	{
@@ -5891,13 +5907,13 @@ void GuiType::ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aC
 
 
 
-void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt)
+void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt, Object *aObj)
 // If INT_MIN is specified for aChoice, aControl should be the ListView to which a new row is being added.
 // In that case, aOpt should be non-NULL.
 // Caller must ensure that aContent is a writable memory area, since this function temporarily
 // alters the string.
 {
-	if (!*aContent)
+	if (!*aContent && !aObj)
 		return;
 
 	UINT msg_add, msg_select;
@@ -5923,10 +5939,12 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 		return; // e.g. GUI_CONTROL_SLIDER, which the caller should handle.
 	}
 
-	bool temporarily_terminated;
+	bool temporarily_terminated = false;
 	LPTSTR this_field, next_field;
 	LRESULT item_index;
 	int requested_index = 0;
+	TCHAR num_buf[MAX_NUMBER_SIZE];
+	INT_PTR obj_off = -1, obj_key = 0;
 
 	// For tab controls:
 	TCITEM tci;
@@ -5938,15 +5956,22 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 	lvc.mask = LVCF_TEXT; // Simpler just to init unconditionally rather than checking control type.
 
 	// Check *this_field at the top too, in case list ends in delimiter.
-	for (this_field = aContent; *this_field;)
+	for (this_field = aContent; aObj || *this_field;)
 	{
+		if (aObj)
+		{
+			ExprTokenType tok;
+			if (!aObj->GetNextItem(tok, obj_off, obj_key))
+				break;
+			this_field = TokenToString(tok, num_buf);
+		}
 		// Decided to use pipe as delimiter, rather than comma, because it makes the script more readable.
 		// For example, it's easier to pick out the list of choices at a glance rather than having to
 		// figure out where the commas delimit the beginning and end of "real" parameters vs. those params
 		// that are a self-contained CSV list.  Of course, the pipe character itself is "sacrificed" and
 		// cannot be used literally due to this method.  That limitation can now be avoided by specifying
 		// a custom delimiter.
-		if (next_field = _tcschr(this_field, mDelimiter)) // Assign
+		else if (next_field = _tcschr(this_field, mDelimiter)) // Assign
 		{
 			*next_field = '\0';  // Temporarily terminate (caller has ensured this is safe).
 			temporarily_terminated = true;
@@ -6004,7 +6029,8 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 				// It can also be the zero terminator if the list ends in a delimiter, e.g. item1|item2||
 			}
 		}
-		this_field = next_field;
+		if (!aObj)
+			this_field = next_field;
 	} // for()
 
 	if (aControl.type == GUI_CONTROL_LISTVIEW)
