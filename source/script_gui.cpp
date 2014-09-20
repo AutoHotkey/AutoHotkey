@@ -35,6 +35,35 @@ static Object* TokenToScriptObject(ExprTokenType &token)
 }
 
 
+// Enumerator for GuiType objects.
+class GuiTypeEnum : public EnumBase
+{
+	GuiType& m_gui;
+	int m_pos;
+public:
+	GuiTypeEnum(GuiType &gui) : m_gui(gui), m_pos(0)
+	{
+		m_gui.AddRef();
+	}
+
+	~GuiTypeEnum()
+	{
+		m_gui.Release();
+	}
+
+	virtual int Next(Var *aOutputVar1, Var *aOutputVar2)
+	{
+		if (m_pos == m_gui.mControlCount)
+			return 0;
+		GuiControlType* ctrl = m_gui.mControl[m_pos++];
+		aOutputVar1->AssignHWND(ctrl->hwnd);
+		if (aOutputVar2)
+			aOutputVar2->Assign(ctrl);
+		return 1;
+	}
+};
+
+
 ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (!aParamCount) // gui[]
@@ -66,6 +95,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	if_member("Options", M_Options)
 	if_member("Opt", M_Options) // Short-hand form of Options.
 	if_member("Flash", M_Flash)
+	if_member("_NewEnum", M_NewEnum)
 	if_member("Hwnd", P_Handle)
 	if_member("Title", P_Title)
 	if_member("Control", P_Control)
@@ -145,6 +175,12 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 				break; // Above already displayed an error message.
 			SetOwnDialogs(own_dialogs);
 			return OK;
+		}
+		case M_NewEnum:
+		{
+			if (IObject *obj = new GuiTypeEnum(*this))
+				_o_return(obj);
+			_o_throw(ERR_OUTOFMEM); // Short msg since so rare.
 		}
 		case P_Handle:
 		{
