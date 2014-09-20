@@ -6611,7 +6611,6 @@ ResultType GuiType::Escape() // Similar to close, except typically called when t
 
 ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, bool bText)
 {
-	LPTSTR cp;
 	LPTSTR buf = _f_retval_buf; // For various uses.
 	int pos;
 	LRESULT sel_count, i;  // LRESULT is a signed type (same as int/long).
@@ -6762,72 +6761,44 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 					free(item);
 					_o_return_empty;
 				}
-				if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the positions, not the text retrieved.
+
+				// Create object for storing the selected items.
+				Object *ret = Object::Create();
+				if (!ret)
 				{
-					// Accumulate the length of delimited list of positions.
-					// length is initialized to sel_count - 1 to account for all the delimiter
-					// characters in the list, one delim after each item except the last:
-					for (length = sel_count - 1, i = 0; i < sel_count; ++i)
-					{
-						_itot(item[i] + 1, buf, 10);  // +1 to convert from zero-based to 1-based.
-						length += _tcslen(buf);
-					}
+					free(item);
+					_o_throw(ERR_OUTOFMEM); // Short msg since so rare.
 				}
-				else
+
+				for (length = sel_count - 1, i = 0; i < sel_count; ++i)
 				{
-					// Accumulate the length of delimited list of selected items (not positions in this case).
-					// See above loop for more comments.
-					for (length = sel_count - 1, i = 0; i < sel_count; ++i)
+					if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the positions, not the text retrieved.
+						ret->Append(item[i] + 1); // +1 to convert from zero-based to 1-based.
+					else // Store item text vs. position.
 					{
 						item_length = SendMessage(aControl.hwnd, LB_GETTEXTLEN, (WPARAM)item[i], 0);
 						if (item_length == LB_ERR) // Realistically impossible based on MSDN.
 						{
 							free(item);
-							_o_return_empty;
+							ret->Release();
+							_o_throw(_T("LB_GETTEXTLEN")); // Short msg since so rare.
 						}
-						length += item_length;
-					}
-				}
-				if (TokenSetResult(aResultToken, NULL, length) != OK)
-					return FAIL;  // It already displayed the error.
-				cp = aResultToken.marker; // Init for both of the loops below.
-				if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the positions, not the text retrieved.
-				{
-					// In this case, the original length estimate should be the same as the actual, so
-					// it is not re-accumulated.
-					// See above loop for more comments.
-					for (i = 0; i < sel_count; ++i)
-					{
-						if (i) // Serves to add delimiter after each item except the last (helps parsing loop).
-							*cp++ = mDelimiter;
-						_itot(item[i] + 1, cp, 10);  // +1 to convert from zero-based to 1-based.
-						cp += _tcslen(cp);  // Point it to the terminator in preparation for the next write.
-					}
-				}
-				else // Store item text vs. position.
-				{
-					// See above loop for more comments.
-					for (length = sel_count - 1, i = 0; i < sel_count; ++i)
-					{
-						if (i) // Serves to add delimiter after each item except the last (helps parsing loop).
-							*cp++ = mDelimiter;
-						// Above:
-						// A hard-coded pipe delimiter is used for now because it seems fairly easy to
-						// add an option later for a custom delimiter (such as '\n') via an Param4 of
-						// GuiControlGetText and/or an option-word in "Gui Add".  The reason pipe is
-						// used as a delimiter is that it allows the selection to be easily inserted
-						// into another ListBox because it's already in the right format with the
-						// right delimiter.  In addition, literal pipes should be rare since that is
-						// the delimiter used when inserting and appending entries into a ListBox.
-						item_length = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)item[i], (LPARAM)cp);
-						if (item_length > 0) // Given the way it was called, LB_ERR (-1) should be impossible based on MSDN docs.  But if it happens, just skip that field.
+						LPTSTR temp = tmalloc(item_length+1);
+						if (!temp)
 						{
-							length += item_length; // Accumulate actual vs. estimated length.
-							cp += item_length;  // Point it to the terminator in preparation for the next write.
+							free(item);
+							ret->Release();
+							_o_throw(ERR_OUTOFMEM); // Short msg since so rare.
 						}
+						LRESULT lr = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)item[i], (LPARAM)temp);
+						if (lr > 0) // Given the way it was called, LB_ERR (-1) should be impossible based on MSDN docs.
+							ret->Append(temp, item_length);
+						free(temp);
 					}
 				}
+
 				free(item);
+				_o_return(ret);
 			}
 			else // Single-select ListBox style.
 			{
