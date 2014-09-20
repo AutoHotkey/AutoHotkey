@@ -339,6 +339,7 @@ BIF_DECL(BIF_GuiFromHwnd)
 		gui->AddRef();
 		_f_return(gui);
 	}
+	_f_return_empty;
 }
 
 typedef void (*GuiCtrlFunc)(BIF_DECL_PARAMS, GuiControlType& aControl, BuiltInFunctionID aCallerID);
@@ -483,7 +484,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 	{
 		case M_Options:
 		{
-			GuiControlOptionsType go; // Its contents not currently used here, but it might be in the future.
+			GuiControlOptionsType go; // Its contents are not currently used here, but they might be in the future.
 			gui->ControlInitOptions(go, *this);
 			return gui->ControlParseOptions(ParamIndexToOptionalString(0), go, *this, GUI_HWND_TO_INDEX(hwnd));
 		}
@@ -1675,24 +1676,17 @@ int GuiType::CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam
 	TCHAR result_token_buf[_f_retval_buf_size];
 	result_token.InitResult(result_token_buf);
 
-	ResultType result = OK;
-
 	if (mHasEventSink)
 	{
 		ExprTokenType this_token(mEventSink);
 		ExprTokenType method_name(aHandler.mMethodName);
 		params[0] = &method_name;
-		result = mEventSink->Invoke(result_token, this_token, IT_CALL, params, aParamCount+1);
+		mEventSink->Invoke(result_token, this_token, IT_CALL, params, aParamCount+1);
 	}
 	else
-	{
 		aHandler.mFunc->Call(result_token, params+1, aParamCount);
-		result = result_token.Result();
-	}
 
-	if (result == EARLY_RETURN)
-		result = OK;
-	int ret = result == OK ? (int)TokenToInt64(result_token) : 0;
+	int ret = result_token.Exited() ? 0 : (int)TokenToInt64(result_token);
 	result_token.Free();
 	return ret;
 }
