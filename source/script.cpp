@@ -10258,6 +10258,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							deref_new->param_count = 1; // Initially one parameter: the target object.
 						}
 						deref_new->marker = cp; // For error-reporting.
+						deref_new->is_function = true;
 						this_infix_item.deref = deref_new;
 					}
 					// This SYM_OBRACKET will be converted to SYM_FUNC after we determine what type of operation
@@ -10277,6 +10278,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					if (  !(deref_new = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  )
 						return LineError(ERR_OUTOFMEM);
 					deref_new->func = g_script.FindFunc(_T("Object"));
+					deref_new->is_function = true;
 					deref_new->param_count = 0;
 					deref_new->marker = cp; // For error-reporting.
 					this_infix_item.deref = deref_new;
@@ -10394,6 +10396,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						if (   !(this_infix_item.deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))   )
 							return LineError(ERR_OUTOFMEM);
 						this_infix_item.deref->func = g_script.FindFunc(_T("RegExMatch"));
+						this_infix_item.deref->is_function = true;
 						this_infix_item.deref->param_count = 2;
 						this_infix_item.symbol = SYM_REGEXMATCH;
 					}
@@ -10545,6 +10548,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								return LineError(ERR_OUTOFMEM);
 							new_deref->marker = cp - 1; // Not typically needed, set for error-reporting.
 							new_deref->param_count = 2; // Initially two parameters: the object and identifier.
+							new_deref->is_function = true;
 							
 							if (*op_end == '(' && !is_new_op)
 							{
@@ -10620,6 +10624,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							deref_new->marker = cp; // For error-reporting.
 							deref_new->param_count = 1; // Start counting at the class object, which precedes the open-parenthesis.
 							deref_new->func = &g_ObjNew;
+							deref_new->is_function = true;
 							infix[infix_count].symbol = SYM_NEW;
 							infix[infix_count].deref = deref_new;
 							cp = op_end; // See comments above.
@@ -11294,6 +11299,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 						if (  !(that_postfix->deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  ) // Must be persistent memory, unlike that_postfix itself.
 							return LineError(ERR_OUTOFMEM);
 						that_postfix->deref->func = &g_ObjGetInPlace;
+						that_postfix->deref->is_function = true;
 						that_postfix->deref->param_count = param_count;
 						that_postfix->circuit_token = NULL;
 					}
