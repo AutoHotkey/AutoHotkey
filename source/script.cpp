@@ -10171,6 +10171,7 @@ end_of_infix_to_postfix:
 	if (   postfix_count == 1 && IS_OPERAND(only_symbol) // This expression is a lone operand, like (1) or "string".
 		&& (mActionType < ACT_FOR || mActionType > ACT_UNTIL) // It's not WHILE or UNTIL, which currently perform better as expressions, or FOR, which performs the same but currently expects aResultToken to always be set.
 		&& (mActionType != ACT_THROW) // Exclude THROW to simplify variable handling (ensures vars are always dereferenced).
+		&& (only_symbol != SYM_VAR || mActionType != ACT_RETURN) // "return var" is kept as an expression for correct handling of local vars (see "ToReturnValue") and ByRef.
 		&& (only_symbol != SYM_STRING || mActionType != ACT_SENDMESSAGE && mActionType != ACT_POSTMESSAGE)   ) // It's not something like SendMessage WM_SETTEXT,,"New text" (which requires the leading quote mark to be present).
 	{
 		if (only_symbol == SYM_DYNAMIC) // This needs some extra checks to ensure correct behaviour.
@@ -10644,23 +10645,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			// which is desirable *even* if aResultToken is NULL (i.e. the caller will be
 			// ignoring the return value) in case the return's expression calls a function
 			// which has side-effects.  For example, "return LogThisEvent()".
-			if (aResultToken && aResultToken->symbol == SYM_STRING && line->mArgc // Caller wants the return value, but since symbol == string, ExpandExpression() might not have set it.
-				&& !aResultToken->mem_to_free) // Doesn't already contain a dynamic memory block.
-			{
-				if (!ARGVAR1 || !ARGVAR1->ToReturnValue(*aResultToken)) // For something like "return local_var", ToReturnValue() handles it.
-				{
-					// ExpandArgs() or ExpandExpression() takes care of assigning aResultToken
-					// if it was a number or object, but leaves it unset for strings.
-					// The exception is that expressions consisting of just a literal string are
-					// optimized to skip ExpandExpression() and just assign the string token.
-					// In that case, arg.text contains quote marks which we want to omit
-					// (the quote marks are left for ListLines and Line::VicinityToText()).
-					//aResultToken->symbol = SYM_STRING; // The check above verified it is already SYM_STRING.
-					if (!*aResultToken->marker) // i.e. it really hasn't been set (or it was set to "", but ARG1 is also "").
-						aResultToken->marker = ARG1;
-				}
-			}
-			// Otherwise, the return value either has already been set or is being discarded.
 			if (aMode != UNTIL_RETURN)
 				// Tells the caller to return early if it's not the Gosub that directly
 				// brought us into this subroutine.  i.e. it allows us to escape from

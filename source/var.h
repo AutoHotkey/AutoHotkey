@@ -510,19 +510,27 @@ public:
 	bool ToReturnValue(ResultToken &aResultToken)
 	{
 		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		// Caller may have checked the following, but check it anyway for maintainability:
-		if ((var.mAttrib & (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_UNINITIALIZED)) != 0)
+		// Caller may have checked attrib/type, but check it anyway for maintainability:
+		if ((var.mAttrib & (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_UNINITIALIZED)) != 0
+			// For static/global variables, return a direct pointer to Contents() and
+			// let the caller copy it into persistent memory if needed.
+			|| !var.IsNonStaticLocal())
 		{
 			var.ToToken(aResultToken);
 			return true;
 		}
-		if (!var.IsNonStaticLocal())
+		if (mType == VAR_ALIAS)
+			// This var is an alias for another var.  Even though the target is local,
+			// there's no quick way to determine if it's a local of this function, so
+			// it's best to assume that we can't steal its memory.  Instead we rely on
+			// ExpandExpression copying the string into the deref buffer.
 			return false;
-		// Var is local.  Since the function is returning, we won't be needing its value.
+		// Var is local.  Since the function is returning, the var is about to be freed.
+		// Instead of copying and then freeing its contents, let the caller take ownership:
 		if (var.mHowAllocated == ALLOC_MALLOC && var.mByteCapacity)
 		{
 			// var.mCharContents was allocated with malloc(); pass it back to the caller.
-			aResultToken.StealMem(this);
+			aResultToken.StealMem(&var);
 		}
 		else
 		{
