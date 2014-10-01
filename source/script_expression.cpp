@@ -1488,8 +1488,8 @@ push_this_token:
 	case SYM_OBJECT:
 		// At this point we aren't capable of returning an object, otherwise above would have
 		// already returned.  The documented fallback behaviour is for the object to be treated
-		// as an empty string, so just leave result_to_return at its default value of _T("").
-		// result_token is still on the stack, so the object will be released below.
+		// as an empty string.
+		result_to_return = _T("");
 		goto normal_end_skip_output_var;
 	} // switch (result_token.symbol)
 
