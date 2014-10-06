@@ -554,6 +554,7 @@ enum BuiltInFunctionID {
 	FID_Trim = 0, FID_LTrim, FID_RTrim,
 	FID_RegExMatch = 0, FID_RegExReplace,
 	FID_GetKeyName = 0, FID_GetKeyVK = 1, FID_GetKeySC,
+	FID_StrLower = 0, FID_StrUpper,
 	FID_StrGet = 0, FID_StrPut,
 	FID_FileExist = 0, FID_DirExist,
 	FID_WinExist = 0, FID_WinActive,
@@ -954,8 +955,6 @@ public:
 			{
 			case ACT_ASSIGNEXPR:
 			case ACT_DEREF:
-			case ACT_STRINGLOWER:
-			case ACT_STRINGUPPER:
 			case ACT_CONTROLGETFOCUS:
 			case ACT_CONTROLGETTEXT:
 			case ACT_STATUSBARGETTEXT:
@@ -3022,6 +3021,7 @@ BIF_DECL(BIF_DllCall);
 BIF_DECL(BIF_StrLen);
 BIF_DECL(BIF_SubStr);
 BIF_DECL(BIF_InStr);
+BIF_DECL(BIF_StrCase);
 BIF_DECL(BIF_StrSplit);
 BIF_DECL(BIF_StrReplace);
 BIF_DECL(BIF_RegEx);

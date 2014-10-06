@@ -57,6 +57,8 @@ FuncEntry g_BIF[] =
 	BIFn(RTrim, 1, 2, true, BIF_Trim),
 	BIF1(InStr, 2, 5, true),
 	BIF1(StrSplit, 1, 3, true),
+	BIFn(StrLower, 1, 2, true, BIF_StrCase),
+	BIFn(StrUpper, 1, 2, true, BIF_StrCase),
 	BIF1(StrReplace, 2, 5, true, {4}),
 	BIFn(RegExMatch, 2, 4, true, BIF_RegEx, {3}),
 	BIFn(RegExReplace, 2, 6, true, BIF_RegEx, {4}),
@@ -11716,7 +11718,7 @@ ResultType Line::Perform()
 // The function should not be called to perform any flow-control actions such as
 // Goto, Gosub, Return, Block-Begin, Block-End, If, Else, etc.
 {
-	TCHAR buf_temp[MAX_REG_ITEM_SIZE], *contents; // For registry and other things.
+	TCHAR buf_temp[MAX_REG_ITEM_SIZE]; // For registry and other things.
 	WinGroup *group; // For the group commands.
 	Var *output_var = OUTPUT_VAR; // Okay if NULL. Users of it should only consider it valid if their first arg is actually an output_variable.
 	global_struct &g = *::g; // Reduces code size due to replacing so many g-> with g. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
@@ -11798,34 +11800,6 @@ ResultType Line::Perform()
 		//    x&=3
 		//    var ? func() : x:=y
 		return OK;
-
-	case ACT_STRINGLOWER:
-	case ACT_STRINGUPPER:
-		contents = output_var->Contents(TRUE, TRUE); // Set default.	
-		if (contents != ARG2 || output_var->Type() != VAR_NORMAL) // It's compared this way in case ByRef/aliases are involved.  This will detect even them.
-		{
-			// Clipboard is involved and/or source != dest.  Do it the more comprehensive way.
-			// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-			// this call will set up the clipboard for writing.
-			// Fix for v1.0.45.02: The v1.0.45 change where the value is assigned directly without sizing the
-			// variable first doesn't work in cases when the variable is the clipboard.  This is because the
-			// clipboard's buffer is changeable (for the case conversion later below) only when using the following
-			// approach, not a simple "assign then modify its Contents()".
-			if (output_var->AssignString(NULL, ArgLength(2)) != OK) // The length is in characters, so AssignString(NULL, ...)
-				return FAIL;
-			contents = output_var->Contents(); // Do this only after the above might have changed the contents mem address.
-			// Copy the input variable's text directly into the output variable:
-			_tcscpy(contents, ARG2);
-		}
-		//else input and output are the same, normal variable; so nothing needs to be copied over.  Just leave
-		// contents at the default set earlier, then convert its case.
-		if (*ARG3 && ctoupper(*ARG3) == 'T' && !*(ARG3 + 1)) // Convert to title case.
-			StrToTitleCase(contents);
-		else if (mActionType == ACT_STRINGLOWER)
-			CharLower(contents);
-		else
-			CharUpper(contents);
-		return output_var->Close();  // In case it's the clipboard.
 
 	case ACT_DEREF:
 		return Deref(OUTPUT_VAR, ARG2);

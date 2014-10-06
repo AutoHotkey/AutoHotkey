@@ -295,8 +295,6 @@ Action g_act[] =
 
 	, {_T("Deref"), 2, 2, true, NULL}  // output var, value
 
-	, {_T("StrLower"), 2, 3, false, NULL} // output var, input var, T = Title Case
-	, {_T("StrUpper"), 2, 3, false, NULL} // output var, input var, T = Title Case
 	, {_T("SplitPath"), 1, 6, true, NULL} // InputFilespec, OutName, OutDir, OutExt, OutNameNoExt, OutDrive
 	, {_T("Sort"), 2, 3, false, NULL} // OutputVar, InputText, Options
 
