@@ -11387,8 +11387,11 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 	global_struct &g = *::g; // Might slightly speed up the loop below.
 
 	ResultToken param_tokens[3];
-	// param_tokens[0..1] aren't used because those args are ARG_TYPE_OUTPUT_VAR.
-	param_tokens[2].InitResult(NULL); // buf can be NULL because this isn't ACT_RETURN.
+	// param_tokens[0..1] aren't used because those args are ARG_TYPE_OUTPUT_VAR,
+	// but must be initialized for the cleanup code in ExpandArgs() which runs if
+	// a runtime error occurred and/or the thread is exiting.
+	for (int i = 0; i < _countof(param_tokens); ++i)
+		param_tokens[i].InitResult(NULL); // buf can be NULL because this isn't ACT_RETURN.
 
 	result = ExpandArgs(param_tokens);
 	if (result != OK)
