@@ -15274,6 +15274,147 @@ BIF_DECL(BIF_NumGet)
 
 
 
+BIF_DECL(BIF_Format)
+{
+	LPCTSTR fmt = ParamIndexToString(0), lit, cp, cp_end, cp_spec;
+	LPTSTR target = NULL;
+	int size = 0, spec_len;
+	int param, last_param;
+	TCHAR number_buf[MAX_NUMBER_SIZE];
+	TCHAR spec[12+MAX_INTEGER_LENGTH*2];
+	ExprTokenType value;
+	*spec = '%';
+
+	for (;;)
+	{
+		last_param = 0;
+
+		for (lit = cp = fmt;; )
+		{
+			// Find next placeholder.
+			for (cp_end = cp; *cp_end && *cp_end != '{'; ++cp_end);
+			if (cp_end > lit)
+			{
+				// Handle literal text to the left of the placeholder.
+				if (target)
+					tmemcpy(target, lit, cp_end - lit), target += cp_end - lit;
+				else
+					size += int(cp_end - lit);
+				lit = cp_end; // Mark this as the next literal character (to be overridden below if it's a valid placeholder).
+			}
+			cp = cp_end;
+			if (!*cp)
+				break;
+			// else: Implies *cp == '{'.
+			++cp;
+			if ((*cp == '{' || *cp == '}') && cp[1] == '}') // {{} or {}}
+			{
+				if (target)
+					*target++ = *cp;
+				else
+					++size;
+				cp += 2;
+				lit = cp; // Mark this as the next literal character.
+				continue;
+			}
+			
+			// Index.
+			for (cp_end = cp; *cp_end >= '0' && *cp_end <= '9'; ++cp_end);
+			if (cp_end > cp)
+				param = ATOI(cp), cp = cp_end;
+			else
+				param = last_param + 1;
+			if (param >= aParamCount) // Invalid parameter index.
+				continue;
+
+			// Optional format specifier.
+			if (*cp == ':')
+			{
+				cp_spec = ++cp;
+				// Skip valid format specifier options.
+				for (cp = cp_spec; *cp && _tcschr(_T("-+0 #"), *cp); ++cp); // flags
+				for ( ; *cp >= '0' && *cp <= '9'; ++cp); // width
+				if (*cp == '.') do ++cp; while (*cp >= '0' && *cp <= '9'); // .precision
+				spec_len = int(cp - cp_spec);
+				// For now, size specifiers (h | l | ll | w | I | I32 | I64) are not supported.
+				
+				if (spec_len + 4 >= _countof(spec)) // Format specifier too long (probably invalid).
+					continue;
+				// Copy options, if any (+1 to leave the leading %).
+				tmemcpy(spec + 1, cp_spec, spec_len);
+				++spec_len; // Include the leading %.
+
+				if (_tcschr(_T("diouxX"), *cp))
+				{
+					spec[spec_len++] = 'I';
+					spec[spec_len++] = '6';
+					spec[spec_len++] = '4';
+					// Integer value; apply I64 prefix to avoid truncation.
+					value.value_int64 = ParamIndexToInt64(param);
+					spec[spec_len++] = *cp++;
+				}
+				else if (_tcschr(_T("eEfgGaA"), *cp))
+				{
+					value.value_double = ParamIndexToDouble(param);
+					spec[spec_len++] = *cp++;
+				}
+				else if (_tcschr(_T("cCp"), *cp))
+				{
+					// Input is an integer or pointer, but I64 prefix should not be applied.
+					value.value_int64 = ParamIndexToInt64(param);
+					spec[spec_len++] = *cp++;
+				}
+				else
+				{
+					spec[spec_len++] = 's'; // Default to string if not specified.
+					if (*cp == 's')
+						++cp;
+				}
+			}
+			else
+			{
+				// spec[0] contains '%'.
+				spec[1] = 's';
+				spec_len = 2;
+			}
+			if (spec[spec_len - 1] == 's')
+			{
+				value.marker = ParamIndexToString(param, number_buf);
+			}
+			spec[spec_len] = '\0';
+			
+			if (*cp != '}') // Syntax error.
+				continue;
+			++cp;
+			lit = cp; // Mark this as the next literal character.
+
+			// Now that validation is complete, set last_param for use by the next {} or {:fmt}.
+			last_param = param;
+			
+			if (target)
+				target += _stprintf(target, spec, value.value_int64);
+			else
+				size += _sctprintf(spec, value.value_int64);
+		}
+		if (target)
+		{
+			// Finished second pass.
+			*target = '\0';
+			return;
+		}
+		// Finished first pass (calculating required size).
+		if (!TokenSetResult(aResultToken, NULL, size))
+		{
+			aResult = FAIL;
+			return;
+		}
+		aResultToken.symbol = SYM_STRING;
+		target = aResultToken.marker;
+	}
+}
+
+
+
 BIF_DECL(BIF_NumPut)
 {
 	// Load-time validation has ensured that at least the first two parameters are present.
