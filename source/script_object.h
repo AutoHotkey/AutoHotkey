@@ -104,11 +104,13 @@ public:
 	bool SetCapacity(size_t new_size)
 	{
 		Data *d = (data == &Empty) ? NULL : data;
+		size_t length = data->length;
 		const size_t header_size = sizeof(Data) - sizeof(T);
 		if (  !(d = (Data *)realloc(d, new_size * sizeof(T) + header_size))  )
 			return false;
 		data = d;
 		data->size = new_size;
+		data->length = length; // Only strictly necessary if NULL was passed to realloc.
 		return true;
 	}
 	size_t &Length() { return data->length; }
