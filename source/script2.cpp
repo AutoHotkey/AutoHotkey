@@ -14707,10 +14707,9 @@ BIF_DECL_GUICTRL(BIF_LV_GetNextOrCount)
 
 
 BIF_DECL_GUICTRL(BIF_LV_GetText)
-// Returns: 1 on success and 0 on failure.
+// Returns: Text on success.
+// Throws on failure.
 // Parameters:
-// 1: Output variable (doing it this way allows success/fail return value to more closely mirror the API and
-//    simplifies the code since there is currently no easy means of passing back large strings to our caller).
 // 2: Row index (one-based when it comes in).
 // 3: Column index (one-based when it comes in).
 {
@@ -14718,20 +14717,15 @@ BIF_DECL_GUICTRL(BIF_LV_GetText)
 	// the following conditions:
 	// Item not found in ListView.
 	// And others.
-	
-	// Caller has ensured there is at least two parameters:
-	if (aParam[0]->symbol != SYM_VAR) // No output variable.  Supporting a NULL for the purpose of checking for the existence of a cell seems too rarely needed.
-		_f_throw(ERR_PARAM1_INVALID);
 
-	int row_index = ParamIndexToInt(1) - 1; // -1 to convert to zero-based.
+	int row_index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 	if (row_index < -1) // row_index==-1 is reserved to mean "get column heading's text".
-		_f_throw(ERR_PARAM2_INVALID);
-	// If parameter 3 is omitted, default to the first column (index 0):
-	int col_index = ParamIndexIsOmitted(2) ? 0 : ParamIndexToInt(2) - 1; // -1 to convert to zero-based.
+		_f_throw(ERR_PARAM1_INVALID);
+	// If parameter 2 is omitted, default to the first column (index 0):
+	int col_index = ParamIndexIsOmitted(1) ? 0 : ParamIndexToInt(1) - 1; // -1 to convert to zero-based.
 	if (col_index < 0)
-		_f_throw(ERR_PARAM3_INVALID);
+		_f_throw(ERR_PARAM2_INVALID);
 
-	Var &output_var = *aParam[0]->var; // It was already ensured higher above that symbol==SYM_VAR.
 	TCHAR buf[LV_TEXT_BUF_SIZE];
 	bool result;
 
@@ -14742,9 +14736,9 @@ BIF_DECL_GUICTRL(BIF_LV_GetText)
 		lvc.pszText = buf;
 		lvc.mask = LVCF_TEXT;
 		if (result = SendMessage(control.hwnd, LVM_GETCOLUMN, col_index, (LPARAM)&lvc)) // Assign.
-			output_var.Assign(lvc.pszText); // See notes below about why pszText is used instead of buf (might apply to this too).
-		else // On failure, it seems best to also clear the output var for better consistency and in case the script doesn't check the return value.
-			output_var.Assign();
+			_f_return(lvc.pszText); // See notes below about why pszText is used instead of buf (might apply to this too).
+		else // On failure, it seems best to throw.
+			_f_throw(_T("Error while retrieving text."));
 	}
 	else // Get row's indicated item or subitem text.
 	{
@@ -14762,11 +14756,10 @@ BIF_DECL_GUICTRL(BIF_LV_GetText)
 			// Must use lvi.pszText vs. buf because MSDN says: "Applications should not assume that the text will
 			// necessarily be placed in the specified buffer. The control may instead change the pszText member
 			// of the structure to point to the new text rather than place it in the buffer."
-			output_var.Assign(lvi.pszText);
-		else // On failure, it seems best to also clear the output var for better consistency and in case the script doesn't check the return value.
-			output_var.Assign();
+			_f_return(lvi.pszText);
+		else // On failure, it seems best to throw.
+			_f_throw(_T("Error while retrieving text."));
 	}
-	_f_return_b(result);
 }
 
 
@@ -15756,11 +15749,10 @@ BIF_DECL_GUICTRL(BIF_TV_Get)
 //    1: HTREEITEM.
 //    2: Name of attribute to get.
 // TV.GetText()
-// Returns: 1 on success and 0 on failure.
+// Returns: Text on success.
+// Throws on failure.
 // Parameters:
-//    1: Output variable (doing it this way allows success/fail return value to more closely mirror the API and
-//       simplifies the code since there is currently no easy means of passing back large strings to our caller).
-//    2: HTREEITEM.
+//    1: HTREEITEM.
 {
 	bool get_text = aCallerID == FID_TV_GetText;
 
@@ -15794,15 +15786,9 @@ BIF_DECL_GUICTRL(BIF_TV_Get)
 		_f_return_i((size_t)hitem);
 	}
 
-	// Since above didn't return, this is LV.GetText().
-	// Loadtime validation has ensured that param #1 and #2 are present.
-	if (aParam[0]->symbol != SYM_VAR) // No output variable. Supporting a NULL for the purpose of checking for the existence of an item seems too rarely needed.
-		_f_throw(ERR_PARAM1_INVALID);
-	Var &output_var = *aParam[0]->var;
-
 	TCHAR text_buf[LV_TEXT_BUF_SIZE]; // i.e. uses same size as ListView.
 	TVITEM tvi;
-	tvi.hItem = (HTREEITEM)ParamIndexToInt64(1);
+	tvi.hItem = (HTREEITEM)ParamIndexToInt64(0);
 	tvi.mask = TVIF_TEXT;
 	tvi.pszText = text_buf;
 	tvi.cchTextMax = LV_TEXT_BUF_SIZE - 1; // -1 because of nagging doubt about size vs. length. Some MSDN examples subtract one), such as TabCtrl_GetItem()'s cchTextMax.
@@ -15812,15 +15798,13 @@ BIF_DECL_GUICTRL(BIF_TV_Get)
 		// Must use tvi.pszText vs. text_buf because MSDN says: "Applications should not assume that the text will
 		// necessarily be placed in the specified buffer. The control may instead change the pszText member
 		// of the structure to point to the new text rather than place it in the buffer."
-		output_var.Assign(tvi.pszText);
+		_f_return(tvi.pszText);
 	}
 	else
 	{
-		// On failure, it seems best to also clear the output var for better consistency and in case the script doesn't check the return value.
-		output_var.Assign();
-		tvi.hItem = 0; // Return 0.
+		// On failure, it seems best to throw an exception.
+		_f_throw(_T("Error while retrieving text."));
 	}
-	_f_return_i((size_t)tvi.hItem); // More useful than returning 1 since it allows function-call nesting.
 }
 
 

@@ -403,15 +403,15 @@ static const GuiCtrlFuncInfo sListViewFuncs[] =
 {
 	FUNn(GetNext, 0, BIF_LV_GetNextOrCount, LV),
 	FUNn(GetCount, 0, BIF_LV_GetNextOrCount, LV),
-	FUN1(GetText, 0, BIF_LV_GetText),
+	FUN1(GetText, 1, BIF_LV_GetText),
 	FUNn(Add, 0, BIF_LV_AddInsertModify, LV),
-	FUNn(Insert, 0, BIF_LV_AddInsertModify, LV),
-	FUNn(Modify, 0, BIF_LV_AddInsertModify, LV),
+	FUNn(Insert, 1, BIF_LV_AddInsertModify, LV),
+	FUNn(Modify, 2, BIF_LV_AddInsertModify, LV),
 	FUN1(Delete, 0, BIF_LV_Delete),
-	FUNn(InsertCol, 0, BIF_LV_InsertModifyDeleteCol, LV),
+	FUNn(InsertCol, 1, BIF_LV_InsertModifyDeleteCol, LV),
 	FUNn(ModifyCol, 0, BIF_LV_InsertModifyDeleteCol, LV),
-	FUNn(DeleteCol, 0, BIF_LV_InsertModifyDeleteCol, LV),
-	FUN1(SetImageList, 0, BIF_LV_SetImageList),
+	FUNn(DeleteCol, 1, BIF_LV_InsertModifyDeleteCol, LV),
+	FUN1(SetImageList, 1, BIF_LV_SetImageList),
 };
 
 static const GuiCtrlFuncInfo sTreeViewFuncs[] =
@@ -426,7 +426,7 @@ static const GuiCtrlFuncInfo sTreeViewFuncs[] =
 	FUNn(GetSelection, 0, BIF_TV_GetRelatedItem, TV),
 	FUNn(GetNext, 0, BIF_TV_GetRelatedItem, TV),
 	FUNn(Get, 2, BIF_TV_Get, TV),
-	FUNn(GetText, 2, BIF_TV_Get, TV),
+	FUNn(GetText, 1, BIF_TV_Get, TV),
 	FUN1(SetImageList, 1, BIF_TV_SetImageList),
 };
 
@@ -499,8 +499,10 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 				break;
 			}
 		}
-		if (!func || aParamCount < func_info->min_params)
+		if (!func)
 			return INVOKE_NOT_HANDLED;
+		if (aParamCount < func_info->min_params)
+			_o_throw(_T("Invalid usage."));
 	}
 
 	if (func)
