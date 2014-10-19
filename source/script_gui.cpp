@@ -265,15 +265,21 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		case P_BgColor:
 		case P_CtrlColor:
 		{
+			COLORREF &color = member == P_BgColor ? mBackgroundColorWin : mBackgroundColorCtl;
+			HBRUSH   &brush = member == P_BgColor ? mBackgroundBrushWin : mBackgroundBrushCtl;
+
 			if (!IS_INVOKE_SET)
-				return INVOKE_NOT_HANDLED; // TODO
+			{
+				if (color == CLR_DEFAULT)
+					_o_return_empty;
+				_sntprintf(_f_retval_buf, _f_retval_buf_size, _T("%06X"), bgr_to_rgb(color));
+				_o_return_p(_f_retval_buf);
+			}
 
 			_f_set_retval_p(ParamIndexToString(0));
 
 			// AssignColor() takes care of deleting old brush, etc.
-			AssignColor(aResultToken.marker,
-				member == P_BgColor ? mBackgroundColorWin : mBackgroundColorCtl,
-				member == P_BgColor ? mBackgroundBrushWin : mBackgroundBrushCtl);
+			AssignColor(aResultToken.marker, color, brush);
 
 			// As documented, ListView_SetTextBkColor/ListView_SetBkColor are not called.  Primary reasons:
 			// 1) Allows any custom color that was explicitly specified via ListView control options
