@@ -116,7 +116,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			// Member requires parentheses().
 			return INVOKE_NOT_HANDLED;
 		if (aParamCount != ((IS_INVOKE_SET ? 1 : 0) + (member == P_Control ? 1 : 0)))
-			_o_throw(_T("Invalid usage."));
+			_o_throw(ERR_INVALID_USAGE);
 	}
 
 	if (!mHwnd)
@@ -508,7 +508,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 		if (!func)
 			return INVOKE_NOT_HANDLED;
 		if (aParamCount < func_info->min_params)
-			_o_throw(_T("Invalid usage."));
+			_o_throw(ERR_TOO_FEW_PARAMS);
 	}
 
 	if (func)
@@ -530,7 +530,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			// Member requires parentheses().
 			return INVOKE_NOT_HANDLED;
 		if (aParamCount != (IS_INVOKE_SET ? 1 : 0))
-			_o_throw(_T("Invalid usage."));
+			_o_throw(ERR_INVALID_USAGE);
 	}
 
 	switch (member)
@@ -560,17 +560,17 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 
 		case P_Handle:
 			if (IS_INVOKE_SET)
-				return INVOKE_NOT_HANDLED;
+				_o_throw(ERR_INVALID_USAGE);
 			_o_return((__int64)(UINT_PTR)hwnd);
 		case P_Gui:
 			if (IS_INVOKE_SET)
-				return INVOKE_NOT_HANDLED;
+				_o_throw(ERR_INVALID_USAGE);
 			gui->AddRef();
 			_o_return(gui);
 		case P_ClassNN:
 		{
 			if (IS_INVOKE_SET)
-				return INVOKE_NOT_HANDLED;
+				_o_throw(ERR_INVALID_USAGE);
 			class_and_hwnd_type cah;
 			cah.hwnd = hwnd;
 			cah.class_name = _f_retval_buf;
@@ -606,7 +606,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 		case P_Pos:
 		{
 			if (IS_INVOKE_SET)
-				return INVOKE_NOT_HANDLED; // TODO: maybe redirect to ctrl.Move(value)?
+				_o_throw(ERR_INVALID_USAGE); // TODO: maybe redirect to ctrl.Move(value)?
 
 			RECT rect;
 			GetWindowRect(hwnd, &rect);
