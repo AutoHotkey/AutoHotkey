@@ -14180,7 +14180,7 @@ BIF_DECL(BIF_OnMessage)
 	if (item_already_exists)
 	{
 		// In all cases, yield the OLD function's name as the return value:
-		_f_set_retval_p(monitor.func->mName); // Func::mName is already in persistent memory.
+		_f_set_retval_p(monitor.func->mName, -1); // Func::mName is already in persistent memory.
 		if (mode_is_delete)
 		{
 			// The msg-monitor is deleted from the array for two reasons:
