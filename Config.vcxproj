@@ -23,6 +23,7 @@
     
     <!-- global setting -->
     <WholeProgramOptimization Condition="!$(ConfigDebug)">true</WholeProgramOptimization>
+	<GenerateManifest>false</GenerateManifest>
     
   </PropertyGroup>
   <ItemDefinitionGroup>
