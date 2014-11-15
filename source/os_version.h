@@ -82,7 +82,7 @@ public:
 #endif
 
 	DWORD	BuildNumber(void) {return m_dwBuildNumber;}
-	LPCTSTR CSD(void) {return m_szCSDVersion;}
+	//LPCTSTR CSD(void) {return m_szCSDVersion;}
 
 private:
 	// Variables
@@ -91,7 +91,7 @@ private:
 	DWORD			m_dwMajorVersion;			// Major OS version
 	DWORD			m_dwMinorVersion;			// Minor OS version
 	DWORD			m_dwBuildNumber;			// Build number
-	TCHAR			m_szCSDVersion [256];
+	//TCHAR			m_szCSDVersion [256];
 
 #ifdef CONFIG_WIN9X
 	bool			m_bWinNT;
