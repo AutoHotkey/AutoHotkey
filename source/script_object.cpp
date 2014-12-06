@@ -697,7 +697,15 @@ ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, Exp
 		aParam[0] = tmp;
 		return r;
 	}
-	else if (aField->symbol == SYM_OPERAND)
+	if (aFlags & IF_CALL_FUNC_ONLY)
+	{
+		if (aField->symbol == SYM_OPERAND)
+			TokenSetResult(aResultToken, aField->marker);
+		else
+			aField->Get(aResultToken);
+		return OK;
+	}
+	if (aField->symbol == SYM_OPERAND)
 	{
 		Func *func = g_script.FindFunc(aField->marker);
 		if (func)
@@ -1620,12 +1628,17 @@ ResultType STDMETHODCALLTYPE Property::Invoke(ExprTokenType &aResultToken, ExprT
 
 ResultType STDMETHODCALLTYPE Func::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
+	LPTSTR member;
+
 	if (!aParamCount)
-		return INVOKE_NOT_HANDLED;
+	{
+		member = _T("");
+		aFlags |= IF_FUNCOBJ;
+	}
+	else
+		member = TokenToString(*aParam[0]);
 
-	LPTSTR member = TokenToString(*aParam[0]);
-
-	if (!IS_INVOKE_CALL)
+	if (!IS_INVOKE_CALL && !(aFlags & IF_FUNCOBJ))
 	{
 		if (IS_INVOKE_SET || aParamCount > 1)
 			return INVOKE_NOT_HANDLED;

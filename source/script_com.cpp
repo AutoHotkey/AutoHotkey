@@ -8,6 +8,10 @@
 // IID__IObject -- .NET's System.Object:
 const IID IID__Object = {0x65074F7F, 0x63C0, 0x304E, 0xAF, 0x0A, 0xD5, 0x17, 0x41, 0xCB, 0x4A, 0x8D};
 
+// Identifies an AutoHotkey object which was passed to a COM API and back again:
+const IID IID_IObjectComCompatible = { 0x619f7e25, 0x6d89, 0x4eb4, 0xb2, 0xfb, 0x18, 0xe7, 0xc7, 0x3c, 0xe, 0xa6 };
+
+
 
 BIF_DECL(BIF_ComObjCreate)
 {
@@ -592,6 +596,16 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 	case VT_DISPATCH:
 		if (aVar.punkVal)
 		{
+			IObjectComCompatible *pobj;
+			if (SUCCEEDED(aVar.punkVal->QueryInterface(IID_IObjectComCompatible, (void**)&pobj)))
+			{
+				aToken.object = pobj;
+				aToken.symbol = SYM_OBJECT;
+				if (!aRetainVar)
+					// QI called AddRef, so Release this reference.
+					aVar.punkVal->Release();
+				break;
+			}
 			if (aToken.object = new ComObject((__int64)aVar.punkVal, aVar.vt))
 			{
 				aToken.symbol = SYM_OBJECT;
@@ -664,7 +678,7 @@ void AssignVariant(Var &aArg, VARIANT &aVar, bool aRetainVar = true)
 }
 
 
-void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar)
+void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, BOOL aVarIsArg)
 {
 	if (aToken.symbol == SYM_VAR)
 		aToken.var->TokenToContents(aToken);
@@ -712,13 +726,136 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar)
 		break;
 	case SYM_OBJECT:
 		if (ComObject *obj = dynamic_cast<ComObject *>(aToken.object))
+		{
 			obj->ToVariant(aVar);
+			if (!aVarIsArg)
+			{
+				if (aVar.vt == VT_DISPATCH || aVar.vt == VT_UNKNOWN)
+				{
+					if (aVar.punkVal)
+						aVar.punkVal->AddRef();
+				}
+				else if ((aVar.vt & ~VT_TYPEMASK) == VT_ARRAY && (obj->mFlags & ComObject::F_OWNVALUE))
+				{
+					// Copy array since both sides will call Destroy().
+					if (FAILED(SafeArrayCopy(aVar.parray, &aVar.parray)))
+						aVar.vt = VT_EMPTY;
+				}
+			}
+		}
 		else
-			aVar.vt = VT_EMPTY;
+		{
+			aVar.vt = VT_DISPATCH;
+			aVar.pdispVal = aToken.object;
+			if (!aVarIsArg)
+				aToken.object->AddRef();
+		}
 		break;
 	case SYM_MISSING:
 		aVar.vt = VT_ERROR;
 		aVar.scode = DISP_E_PARAMNOTFOUND;
+		break;
+	}
+}
+
+
+HRESULT TokenToVarType(ExprTokenType &aToken, VARTYPE aVarType, void *apValue)
+// Copy the value of a given token into a variable of the given VARTYPE.
+{
+	if (aVarType == VT_VARIANT)
+	{
+		VariantClear((VARIANT *)apValue);
+		TokenToVariant(aToken, *(VARIANT *)apValue, FALSE);
+		return S_OK;
+	}
+
+#define U 0 // Unsupported in SAFEARRAY/VARIANT.
+#define P sizeof(void *)
+	// Unfortunately there appears to be no function to get the size of a given VARTYPE,
+	// and VariantCopyInd() copies in the wrong direction.  An alternative approach to
+	// the following would be to switch(aVarType) and copy using the appropriate pointer
+	// type, but disassembly shows that approach produces larger code and internally uses
+	// an array of sizes like this anyway:
+	static char vt_size[] = {U,U,2,4,4,8,8,8,P,P,4,2,0,P,0,U,1,1,2,4,8,8,4,4,U,U,U,U,U,U,U,U,U,U,U,U,U,P,P};
+	size_t vsize = (aVarType < _countof(vt_size)) ? vt_size[aVarType] : 0;
+	if (!vsize)
+		return DISP_E_BADVARTYPE;
+#undef P
+#undef U
+
+	VARIANT src;
+	TokenToVariant(aToken, src, FALSE);
+	// Above may have set var.vt to VT_BSTR (a newly allocated string or one passed via ComObject),
+	// VT_DISPATCH or VT_UNKNOWN (in which case it called AddRef()).  The value is either freed by
+	// VariantChangeType() or moved into *apValue, so we don't free it except on failure.
+	if (src.vt != aVarType)
+	{
+		// Attempt to coerce var to the correct type:
+		HRESULT hr = VariantChangeType(&src, &src, 0, aVarType);
+		if (FAILED(hr))
+		{
+			VariantClear(&src);
+			return hr;
+		}
+	}
+	// Free existing value.
+	if (aVarType == VT_UNKNOWN || aVarType == VT_DISPATCH)
+	{
+		IUnknown *punk = *(IUnknown **)apValue;
+		if (punk)
+			punk->Release();
+	}
+	else if (aVarType == VT_BSTR)
+	{
+		SysFreeString(*(BSTR *)apValue);
+	}
+	// Write new value (shallow copy).
+	memcpy(apValue, &src.lVal, vsize);
+	return S_OK;
+}
+
+
+void VarTypeToToken(VARTYPE aVarType, void *apValue, ExprTokenType &aToken)
+// Copy a value of the given VARTYPE into a token.
+{
+	VARIANT src, dst;
+	src.vt = VT_BYREF | aVarType;
+	src.pbVal = (BYTE *)apValue;
+	dst.vt = VT_EMPTY;
+	if (FAILED(VariantCopyInd(&dst, &src)))
+		dst.vt = VT_EMPTY;
+	VariantToToken(dst, aToken, false);
+}
+
+
+void RValueToResultToken(ExprTokenType &aRValue, ExprTokenType &aResultToken)
+// Support function for chaining assignments.  Provides consistent results when aRValue has been
+// converted to a VARIANT.  Passes wrapper objects as is, whereas VariantToToken would return
+// either a simple value or a new wrapper object.
+{
+	switch (aRValue.symbol)
+	{
+	case SYM_OPERAND:
+		if (aRValue.buf)
+		{
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = *(__int64 *)aRValue.buf;
+			break;
+		}
+		// FALL THROUGH to next case:
+	case SYM_STRING:
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = aRValue.marker;
+		break;
+	case SYM_OBJECT:
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = aRValue.object;
+		aResultToken.object->AddRef();
+		break;
+	case SYM_INTEGER:
+	case SYM_FLOAT:
+		aResultToken.symbol = aRValue.symbol;
+		aResultToken.value_int64 = aRValue.value_int64;
 		break;
 	}
 }
@@ -783,31 +920,6 @@ STDMETHODIMP ComEvent::QueryInterface(REFIID riid, void **ppv)
 	}
 }
 
-STDMETHODIMP_(ULONG) ComEvent::AddRef()
-{
-	return ++mRefCount;
-}
-
-STDMETHODIMP_(ULONG) ComEvent::Release()
-{
-	if (--mRefCount)
-		return mRefCount;
-	delete this;
-	return 0;
-}
-
-STDMETHODIMP ComEvent::GetTypeInfoCount(UINT *pctinfo)
-{
-	*pctinfo = 0;
-	return S_OK;
-}
-
-STDMETHODIMP ComEvent::GetTypeInfo(UINT itinfo, LCID lcid, ITypeInfo **pptinfo)
-{
-	*pptinfo = NULL;
-	return E_NOTIMPL;
-}
-
 STDMETHODIMP ComEvent::GetIDsOfNames(REFIID riid, LPOLESTR *rgszNames, UINT cNames, LCID lcid, DISPID *rgDispId)
 {
 	return mTypeInfo->GetIDsOfNames(rgszNames, cNames, rgDispId);
@@ -824,95 +936,52 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	if (FAILED(mTypeInfo->GetNames(dispIdMember, &memberName, 1, &nNames)))
 		return DISP_E_MEMBERNOTFOUND;
 
-	// Copy method name into our buffer, applying prefix and converting if necessary.
-	TCHAR funcName[256];
-	sntprintf(funcName, _countof(funcName), _T("%s%ws"), mPrefix, memberName);
-	SysFreeString(memberName);
-
 	UINT cArgs = pDispParams->cArgs;
 	const UINT ADDITIONAL_PARAMS = 2; // mObject (passed by us) and mAhkObject (passed by Object::Invoke).
 	const UINT MAX_COM_PARAMS = MAX_FUNCTION_PARAMS - ADDITIONAL_PARAMS;
 	if (cArgs > MAX_COM_PARAMS) // Probably won't happen in any real-world script.
 		cArgs = MAX_COM_PARAMS; // Just omit the rest of the params.
 
-	ExprTokenType param_token[MAX_FUNCTION_PARAMS];
-	ExprTokenType *param[MAX_FUNCTION_PARAMS];
-	
-	for (UINT i = 1; i <= cArgs; ++i)
-	{
-		VARIANTARG *pvar = &pDispParams->rgvarg[cArgs-i];
-		while (pvar->vt == (VT_BYREF | VT_VARIANT))
-			pvar = pvar->pvarVal;
-		VariantToToken(*pvar, param_token[i]);
-		param[i] = &param_token[i];
-	}
+	// Make a temporary copy of pDispParams to allow us to insert one:
+	DISPPARAMS dispParams;
+	VARIANTARG *vargs = (VARIANTARG *)_alloca((cArgs + 1) * sizeof(VARIANTARG));
+	memcpy(&dispParams, pDispParams, sizeof(dispParams));
+	memcpy(vargs, pDispParams->rgvarg, cArgs * sizeof(VARIANTARG));
+	dispParams.rgvarg = vargs;
 	
 	// Pass our object last for either of the following cases:
 	//	a) Our caller doesn't include its IDispatch interface pointer in the parameter list.
 	//	b) The script needs a reference to the original wrapper object; i.e. mObject.
-	param_token[cArgs + 1].symbol = SYM_OBJECT;
-	param_token[cArgs + 1].object = mObject;
-	param[cArgs + 1] = &param_token[cArgs + 1];
+	vargs[cArgs].vt = VT_DISPATCH;
+	vargs[cArgs].pdispVal = mObject;
+	++cArgs;
 
-	ExprTokenType result_token;
-	TCHAR result_token_buf[MAX_NUMBER_SIZE];
-	result_token.buf = result_token_buf; // May be used below for short return values and misc purposes.
-	result_token.marker = _T("");
-	result_token.symbol = SYM_STRING;	// These must be initialized for the cleanup code below.
-	result_token.mem_to_free = NULL;	//
-
-	HRESULT result_to_return;
-
-	FuncCallData func_call; // For UDFs: must remain in scope until the result has been copied into pVarResult.
+	HRESULT hr;
+	IDispatch *func;
+	DISPID dispid;
 
 	if (mAhkObject)
 	{
-		ExprTokenType this_token;
-		this_token.symbol = SYM_OBJECT;
-		this_token.object = mAhkObject;
-
-		param_token[0].symbol = SYM_STRING;
-		param_token[0].marker = funcName;
-		param[0] = &param_token[0];
-
-		// Call method of mAhkObject by name.
-		if (mAhkObject->Invoke(result_token, this_token, IT_CALL, param, cArgs + 2) != INVOKE_NOT_HANDLED)
-			result_to_return = S_OK;
-		else
-			result_to_return = DISP_E_MEMBERNOTFOUND;
+		func = mAhkObject;
+		hr = func->GetIDsOfNames(IID_NULL, &memberName, 1, lcid, &dispid);
 	}
 	else
 	{
-		// Call function by name (= prefix . method_name).
-		Func *func = g_script.FindFunc(funcName);
-
-		ResultType result;
-
-		// Call the function.
-		if (func && func->Call(func_call, result, result_token, param + 1, cArgs + 1))
-			result_to_return = S_OK;
-		else
-			result_to_return = DISP_E_MEMBERNOTFOUND; // Indicate result_token should not be used below.
+		// Copy method name into our buffer, applying prefix and converting if necessary.
+		TCHAR funcName[256];
+		sntprintf(funcName, _countof(funcName), _T("%s%ws"), mPrefix, memberName);
+		// Find the script function:
+		func = g_script.FindFunc(funcName);
+		dispid = DISPID_VALUE;
+		hr = func ? S_OK : DISP_E_MEMBERNOTFOUND;
 	}
+	SysFreeString(memberName);
 
-	if (pVarResult && result_to_return == S_OK)
-		TokenToVariant(result_token, *pVarResult);
-	if (result_token.symbol == SYM_OBJECT)
-		result_token.object->Release();
-	if (result_token.mem_to_free)
-		free(result_token.mem_to_free);
+	if (SUCCEEDED(hr))
+		hr = func->Invoke(dispid, riid, lcid, wFlags, &dispParams, pVarResult, pExcepInfo, puArgErr);
 
-	// Clean up:
-	for (UINT i = 1; i <= cArgs; ++i)
-	{
-		// Release COM wrapper objects:
-		if (param_token[i].symbol == SYM_OBJECT)
-			param_token[i].object->Release();
-		// Free any temporary memory used to hold strings; see VariantToToken().
-		else if (param_token[i].symbol == SYM_STRING && param_token[i].mem_to_free)
-			free(param_token[i].mem_to_free);
-	}
-
+	// It's hard to say what our caller will do if DISP_E_MEMBERNOTFOUND is returned,
+	// so just return S_OK as in previous versions:
 	return S_OK;
 }
 
@@ -974,9 +1043,29 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 {
 	if (aParamCount < (IS_INVOKE_SET ? 2 : 1))
 	{
-		// Something like x[] or x[]:=y -- reserved for possible future use.  However, it could
+		HRESULT hr = DISP_E_BADPARAMCOUNT; // Set default.
+		// Something like x[] or x[]:=y.
+		if (mVarType & VT_BYREF)
+		{
+			VARTYPE item_type = mVarType & VT_TYPEMASK;
+			if (aParamCount) // Implies SET.
+			{
+				hr = TokenToVarType(*aParam[0], item_type, mValPtr);
+				if (SUCCEEDED(hr))
+				{
+					RValueToResultToken(*aParam[0], aResultToken);
+					return OK;
+				}
+			}
+			else // !aParamCount: Implies GET.
+			{
+				VarTypeToToken(item_type, mValPtr, aResultToken);
+				return OK;
+			}
+		}
+		// For other types, this syntax is reserved for possible future use.  However, it could
 		// be x[prms*] where prms is an empty array or not an array at all, so raise an error:
-		ComError(g->LastError = DISP_E_BADPARAMCOUNT);
+		ComError(g->LastError = hr);
 		return OK;
 	}
 
@@ -1005,7 +1094,7 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 
 		for (int i = 0; i < aParamCount; i++)
 		{
-			TokenToVariant(*aParam[aParamCount-i], rgvarg[i]);
+			TokenToVariant(*aParam[aParamCount-i], rgvarg[i], TRUE);
 		}
 
 		dispparams.rgvarg = rgvarg;
@@ -1043,11 +1132,10 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 
 	for (int i = 0; i < aParamCount; i++)
 	{
-		// If this param is SYM_OBJECT, it is either an unsupported object (in which case rgvarg[i] is empty)
-		// or a ComObject, in which case rgvarg[i] is a shallow copy and calling VariantClear would free the
-		// caller's data prematurely. Even VT_DISPATCH should not be cleared since TokenToVariant didn't AddRef.
-		if (aParam[aParamCount-i]->symbol != SYM_OBJECT)
-			VariantClear(&rgvarg[i]);
+		// TokenToVariant() in "arg" mode never calls AddRef() or SafeArrayCopy(), so the arg needs to be freed
+		// only if it is a BSTR and not one which came from a ComObject wrapper (such as ComObject(9, pbstr)).
+		if (rgvarg[i].vt == VT_BSTR && aParam[aParamCount-i]->symbol != SYM_OBJECT)
+			SysFreeString(rgvarg[i].bstrVal);
 	}
 
 	if	(FAILED(hr))
@@ -1138,7 +1226,6 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 		index[i] = (LONG)TokenToInt64(*aParam[i]);
 	}
 
-	VARIANT var = {0};
 	void *item;
 
 	SafeArrayLock(psa);
@@ -1148,101 +1235,18 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 	{
 		if (IS_INVOKE_GET)
 		{
-			if (item_type == VT_VARIANT)
-			{
-				// Make shallow copy of the VARIANT item.
-				memcpy(&var, item, sizeof(VARIANT));
-			}
-			else
-			{
-				// Build VARIANT with shallow copy of the item.
-				var.vt = item_type;
-				memcpy(&var.lVal, item, SafeArrayGetElemsize(psa));
-			}
-			// Copy value into result token.
-			VariantToToken(var, aResultToken);
+			VarTypeToToken(item_type, item, aResultToken);
 		}
 		else // SET
 		{
 			ExprTokenType &rvalue = *aParam[dims];
-			TokenToVariant(rvalue, var);
-			if ((var.vt == VT_DISPATCH || var.vt == VT_UNKNOWN) && var.punkVal)
-				var.punkVal->AddRef();
-			// Otherwise: it could be VT_BSTR, in which case TokenToVariant created a new BSTR which we want to
-			// put directly it into the array rather than copying it, since it would only be freed later anyway.
-			if (item_type == VT_VARIANT)
-			{
-				if ((var.vt & ~VT_TYPEMASK) == VT_ARRAY // Implies rvalue contains a ComObject.
-					&& (((ComObject *)rvalue.object)->mFlags & F_OWNVALUE))
-				{
-					// Copy array since both sides will call Destroy().
-					hr = VariantCopy((VARIANTARG *)item, &var);
-				}
-				else
-				{
-					// Free existing value.
-					VariantClear((VARIANTARG *)item);
-					// Write new value (shallow copy).
-					memcpy(item, &var, sizeof(VARIANT));
-				}
-			}
-			else
-			{
-				if (var.vt != item_type)
-				{
-					// Attempt to coerce var to the correct type:
-					hr = VariantChangeType(&var, &var, 0, item_type);
-					if (FAILED(hr))
-					{
-						VariantClear(&var);
-						goto unlock_and_return;
-					}
-				}
-				// Free existing value.
-				if (item_type == VT_UNKNOWN || item_type == VT_DISPATCH)
-				{
-					IUnknown *punk = ((IUnknown **)item)[0];
-					if (punk)
-						punk->Release();
-				}
-				else if (item_type == VT_BSTR)
-				{
-					SysFreeString(*((BSTR *)item));
-				}
-				// Write new value (shallow copy).
-				memcpy(item, &var.lVal, SafeArrayGetElemsize(psa));
-			}
-			// Allow chaining - using the following rather than VariantToToken allows any wrapper objects to
-			// be passed along rather than being coerced to a simple value or a new wrapper being created.
-			switch (rvalue.symbol)
-			{
-			case SYM_OPERAND:
-				if (rvalue.buf)
-				{
-					aResultToken.symbol = SYM_INTEGER;
-					aResultToken.value_int64 = *(__int64 *)rvalue.buf;
-					break;
-				}
-				// FALL THROUGH to next case:
-			case SYM_STRING:
-				aResultToken.symbol = SYM_STRING;
-				aResultToken.marker = rvalue.marker;
-				break;
-			case SYM_OBJECT:
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = rvalue.object;
-				aResultToken.object->AddRef();
-				break;
-			case SYM_INTEGER:
-			case SYM_FLOAT:
-				aResultToken.symbol = rvalue.symbol;
-				aResultToken.value_int64 = rvalue.value_int64;
-				break;
-			}
+			hr = TokenToVarType(rvalue, item_type, item);
+			if (SUCCEEDED(hr))
+				RValueToResultToken(rvalue, aResultToken);
+			// Otherwise, leave aResultToken blank.
 		}
 	}
 
-unlock_and_return:
 	SafeArrayUnlock(psa);
 
 	g->LastError = hr;
@@ -1358,6 +1362,184 @@ IObject *GuiType::ControlGetActiveX(HWND aWnd)
 		}
 	}
 	return NULL;
+}
+
+
+STDMETHODIMP IObjectComCompatible::QueryInterface(REFIID riid, void **ppv)
+{
+	if (riid == IID_IDispatch || riid == IID_IUnknown || riid == IID_IObjectComCompatible)
+	{
+		AddRef();
+		//*ppv = static_cast<IDispatch *>(this);
+		*ppv = this;
+		return S_OK;
+	}
+	else
+	{
+		*ppv = NULL;
+		return E_NOINTERFACE;
+	}
+}
+
+STDMETHODIMP IObjectComCompatible::GetTypeInfoCount(UINT *pctinfo)
+{
+	*pctinfo = 0;
+	return S_OK;
+}
+
+STDMETHODIMP IObjectComCompatible::GetTypeInfo(UINT itinfo, LCID lcid, ITypeInfo **pptinfo)
+{
+	*pptinfo = NULL;
+	return E_NOTIMPL;
+}
+
+static Object *g_IdToName;
+static Object *g_NameToId;
+
+STDMETHODIMP IObjectComCompatible::GetIDsOfNames(REFIID riid, LPOLESTR *rgszNames, UINT cNames, LCID lcid, DISPID *rgDispId)
+{
+#ifdef UNICODE
+	LPTSTR name = *rgszNames;
+#else
+	CStringCharFromWChar name_buf(*rgszNames);
+	LPTSTR name = const_cast<LPTSTR>(name_buf.GetString());
+#endif
+	if ( !(g_IdToName || (g_IdToName = Object::Create())) ||
+		 !(g_NameToId || (g_NameToId = Object::Create())) )
+		return E_OUTOFMEMORY;
+	ExprTokenType id;
+	if (!g_NameToId->GetItem(id, name))
+	{
+		if (!g_IdToName->Append(name))
+			return E_OUTOFMEMORY;
+		id.symbol = SYM_INTEGER;
+		id.value_int64 = g_IdToName->GetNumericItemCount();
+		if (!g_NameToId->SetItem(name, id))
+			return E_OUTOFMEMORY;
+	}
+	*rgDispId = (DISPID)id.value_int64;
+	if (cNames == 1)
+		return S_OK;
+	for (UINT i = 1; i < cNames; ++i)
+		rgDispId[i] = DISPID_UNKNOWN;
+	return DISP_E_UNKNOWNNAME;
+}
+
+STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
+{
+	ExprTokenType param_token[MAX_FUNCTION_PARAMS];
+	ExprTokenType *param[MAX_FUNCTION_PARAMS];
+	ExprTokenType result_token;
+	TCHAR result_token_buf[MAX_NUMBER_SIZE];
+	
+	UINT cArgs = pDispParams->cArgs;
+	if (cArgs >= MAX_FUNCTION_PARAMS) // Probably won't happen in any real-world script.
+		cArgs = MAX_FUNCTION_PARAMS - 1; // Just omit the rest of the params.
+
+	// PUT is probably never combined with GET/METHOD, so is handled first.  Some common problem
+	// cases which combine GET and METHOD include:
+	//  - Foo.Bar in VBScript.
+	//  - foo.bar() and foo.bar[] in C#.  There's no way to differentiate, so we just use METHOD
+	//    when there are parameters to cover the most common cases.  Both will work with user-
+	//    defined properties (v1.1.16+) since they can be "called", but won't work with __Get.
+	//  - foo[bar] and foo(bar) in C# both use METHOD|GET with DISPID_VALUE.
+	//  - foo(bar) (but not foo[bar]) in JScript uses METHOD|GET with DISPID_VALUE.
+	int flags = (wFlags & (DISPATCH_PROPERTYPUT | DISPATCH_PROPERTYPUTREF)) ? IT_SET
+		: (wFlags & DISPATCH_METHOD) ? IT_CALL : IT_GET;
+	
+	ExprTokenType **first_param = param;
+	int param_count = cArgs;
+	
+	if (dispIdMember > 0)
+	{
+		if (!g_IdToName->GetItemOffset(param_token[0], dispIdMember - 1))
+			return DISP_E_MEMBERNOTFOUND;
+		if (IsPureNumeric(param_token[0].marker, FALSE, FALSE)) // o[1] in JScript produces a numeric name.
+		{
+			param_token[0].symbol = SYM_INTEGER;
+			param_token[0].value_int64 = ATOI(param_token[0].marker);
+		}
+		param[0] = &param_token[0];
+		++param_count;
+	}
+	else
+	{
+		if (dispIdMember != DISPID_VALUE)
+			return DISP_E_MEMBERNOTFOUND;
+		if (flags == IT_CALL)
+		{
+			// This approach works well for Func, but not for an Object implementing __Call,
+			// which always expects a method name or the object whose method is being called:
+			//flags = (IT_CALL|IF_FUNCOBJ);
+			//++first_param;
+			// This is consistent with %func%():
+			param_token[0].symbol = SYM_STRING;
+			param_token[0].marker = _T("");
+			param[0] = &param_token[0];
+			++param_count;
+			if (wFlags & DISPATCH_PROPERTYGET)
+				flags |= IF_CALL_FUNC_ONLY;
+		}
+		else
+			++first_param;
+	}
+	
+	for (UINT i = 1; i <= cArgs; ++i)
+	{
+		VARIANTARG *pvar = &pDispParams->rgvarg[cArgs-i];
+		while (pvar->vt == (VT_BYREF | VT_VARIANT))
+			pvar = pvar->pvarVal;
+		VariantToToken(*pvar, param_token[i]);
+		param[i] = &param_token[i];
+	}
+	
+	FuncCallData func_call; // For UDFs: must remain in scope until the result has been copied into pVarResult.
+	
+	result_token.buf = result_token_buf; // May be used below for short return values and misc purposes.
+	result_token.marker = _T("");
+	result_token.symbol = SYM_STRING;	// These must be initialized for the cleanup code below.
+	result_token.mem_to_free = NULL;	//
+	
+	ExprTokenType this_token;
+	this_token.symbol = SYM_OBJECT;
+	this_token.object = this;
+
+	HRESULT result_to_return;
+
+	// Call method of mAhkObject by name.
+	switch (static_cast<IObject *>(this)->Invoke(result_token, this_token, flags, first_param, param_count))
+	{
+	case FAIL:
+		result_to_return = E_FAIL;
+		break;
+	case INVOKE_NOT_HANDLED:
+		if (flags == IT_CALL)
+		{
+			result_to_return = DISP_E_MEMBERNOTFOUND;
+			break;
+		}
+	default:
+		result_to_return = S_OK;
+		if (pVarResult)
+			TokenToVariant(result_token, *pVarResult, FALSE);
+	}
+
+	if (result_token.symbol == SYM_OBJECT)
+		result_token.object->Release();
+	if (result_token.mem_to_free)
+		free(result_token.mem_to_free);
+
+	for (UINT i = 1; i <= cArgs; ++i)
+	{
+		// Release objects (some or all of which may have been created by VariantToToken()):
+		if (param_token[i].symbol == SYM_OBJECT)
+			param_token[i].object->Release();
+		// Free any temporary memory used to hold strings; see VariantToToken().
+		else if (param_token[i].symbol == SYM_STRING && param_token[i].mem_to_free)
+			free(param_token[i].mem_to_free);
+	}
+
+	return result_to_return;
 }
 
 

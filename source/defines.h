@@ -196,18 +196,26 @@ struct IDebugProperties;
 
 
 struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
+	: public IDispatch
 {
 	// See script_object.cpp for comments.
 	virtual ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount) = 0;
 	
-	// Simple reference-counting mechanism.  Usage should be similar to IUnknown (COM).
-	// Some scripts may rely on these being at the same offset as IUnknown::AddRef/Release.
-	virtual ULONG STDMETHODCALLTYPE AddRef(void) = 0;
-    virtual ULONG STDMETHODCALLTYPE Release(void) = 0;
-
 #ifdef CONFIG_DEBUGGER
 	virtual void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aMaxDepth) = 0;
 #endif
+};
+
+
+struct DECLSPEC_NOVTABLE IObjectComCompatible : public IObject
+{
+	STDMETHODIMP QueryInterface(REFIID riid, void **ppv);
+	//STDMETHODIMP_(ULONG) AddRef() = 0;
+	//STDMETHODIMP_(ULONG) Release() = 0;
+	STDMETHODIMP GetTypeInfoCount(UINT *pctinfo);
+	STDMETHODIMP GetTypeInfo(UINT itinfo, LCID lcid, ITypeInfo **pptinfo);
+	STDMETHODIMP GetIDsOfNames(REFIID riid, LPOLESTR *rgszNames, UINT cNames, LCID lcid, DISPID *rgDispId);
+	STDMETHODIMP Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr);
 };
 
 
@@ -243,6 +251,7 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define IF_META				(IF_METAOBJ | IF_METAFUNC)	// Flags for regular recursion into base object.
 #define IF_FUNCOBJ			0x40000 // Indicates 'this' is a function, being called via another object (aParam[0]).
 #define IF_NEWENUM			0x80000 // Workaround for COM objects which don't resolve "_NewEnum" to DISPID_NEWENUM.
+#define IF_CALL_FUNC_ONLY	0x100000 // Used by IDispatch: call only if value is a function.
 
 
 struct DerefType; // Forward declarations for use below.
