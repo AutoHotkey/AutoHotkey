@@ -288,6 +288,13 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	if (!GetFullPathName(aScriptFilename, _countof(buf), buf, NULL)) // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
 		return FAIL; // Due to rarity, no error msg, just abort.
 #endif
+	if (g_RunStdIn = (*aScriptFilename == '*' && !aScriptFilename[1])) // v1.1.17: Read script from stdin.
+	{
+		// Seems best to disable #SingleInstance and enable #NoEnv for stdin scripts.
+		g_AllowOnlyOneInstance = SINGLE_INSTANCE_OFF;
+		g_NoEnv = true;
+	}
+	else // i.e. don't call the following function for stdin.
 	// Using the correct case not only makes it look better in title bar & tray tool tip,
 	// it also helps with the detection of "this script already running" since otherwise
 	// it might not find the dupe if the same script name is launched with different
@@ -947,7 +954,7 @@ UINT Script::LoadFromFile(bool aScriptWasNotspecified)
 	if (!mFileSpec || !*mFileSpec) return LOADING_FAILED;
 
 #ifndef AUTOHOTKEYSC  // When not in stand-alone mode, read an external script file.
-	DWORD attr = GetFileAttributes(mFileSpec);
+	DWORD attr = g_RunStdIn ? 0 : GetFileAttributes(mFileSpec); // v1.1.17: Don't check if reading script from stdin.
 	if (attr == MAXDWORD) // File does not exist or lacking the authorization to get its attributes.
 	{
 		TCHAR buf[MAX_PATH + 256];
@@ -1033,7 +1040,7 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 	// function library auto-inclusions to be processed correctly.
 
 	// Load the main script file.  This will also load any files it includes with #Include.
-	if (   LoadIncludedFile(mFileSpec, false, false) != OK
+	if (   LoadIncludedFile(g_RunStdIn ? _T("*") : mFileSpec, false, false) != OK
 		|| !AddLine(ACT_EXIT)) // Fix for v1.0.47.04: Add an Exit because otherwise, a script that ends in an IF-statement will crash in PreparseBlocks() because PreparseBlocks() expects every IF-statements mNextLine to be non-NULL (helps loading performance too).
 		return LOADING_FAILED;
 
