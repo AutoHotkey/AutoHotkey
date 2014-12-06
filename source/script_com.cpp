@@ -1438,7 +1438,7 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 
 	// PUT is probably never combined with GET/METHOD, so is handled first.  Some common problem
 	// cases which combine GET and METHOD include:
-	//  - Foo.Bar in VBScript, so we use GET if there are no parameters.
+	//  - Foo.Bar in VBScript.
 	//  - foo.bar() and foo.bar[] in C#.  There's no way to differentiate, so we just use METHOD
 	//    when there are parameters to cover the most common cases.  Both will work with user-
 	//    defined properties (v1.1.16+) since they can be "called", but won't work with __Get.
