@@ -994,7 +994,7 @@ _T("; launches a web site in the default browser.  The second is Control+Alt+N\n
 _T("; and it launches a new Notepad window (or activates an existing one).  To\n")
 _T("; try out these hotkeys, run AutoHotkey again, which will load this file.\n")
 _T("\n")
-_T("#z::Run www.autohotkey.com\n")
+_T("#z::Run http://ahkscript.org\n")
 _T("\n")
 _T("^!n::\n")
 _T("IfWinExist Untitled - Notepad\n")
