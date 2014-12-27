@@ -7539,7 +7539,8 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			mCurrLine = NULL; // Fix for v1.1.09.02: Leaving this non-NULL at best causes error messages to show irrelevant vicinity lines, and at worst causes a crash because the linked list is in an inconsistent state.
 		}
 
-		if (!ParseAndAddLine(buf, ACT_EXPRESSION))
+		LPTSTR arg[] = { ConvertEscapeSequences(buf, g_EscapeChar, false) };
+		if (!AddLine(ACT_EXPRESSION, arg, UCHAR_MAX + 1)) // v1.1.17: Avoid pointing labels at this line by passing UCHAR_MAX+ for aArgc.
 			return FAIL; // Above already displayed the error.
 		
 		if (aStatic)
