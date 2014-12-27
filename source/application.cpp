@@ -560,7 +560,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// inside an edit.  The following check relies heavily on short-circuit eval. order.
 				if (   msg.message == WM_KEYDOWN
 					&& (msg.wParam == VK_ESCAPE || msg.wParam == VK_TAB // v1.0.38.03: Added VK_TAB handling for "WantTab".
-						|| (msg.wParam == 'A' && (GetKeyState(VK_CONTROL) & 0x8000))) // v1.0.44: Added support for "WantCtrlA".
+						|| (msg.wParam == 'A' && (GetKeyState(VK_CONTROL) & 0x8000) // v1.0.44: Added support for "WantCtrlA".
+							&& !(GetKeyState(VK_RMENU) & 0x8000))) // v1.1.17: Exclude AltGr+A (Ctrl+Alt+A).
 					&& (pcontrol = pgui->FindControl(focused_control))
 					&& pcontrol->type == GUI_CONTROL_EDIT)
 				{
