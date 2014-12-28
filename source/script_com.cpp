@@ -1461,12 +1461,14 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 		}
 		param[0] = &param_token[0];
 		++param_count;
+		if (flags == IT_CALL && (wFlags & DISPATCH_PROPERTYGET))
+			flags |= IF_CALL_FUNC_ONLY;
 	}
 	else
 	{
 		if (dispIdMember != DISPID_VALUE)
 			return DISP_E_MEMBERNOTFOUND;
-		if (flags == IT_CALL)
+		if (flags == IT_CALL && !(wFlags & DISPATCH_PROPERTYGET))
 		{
 			// This approach works well for Func, but not for an Object implementing __Call,
 			// which always expects a method name or the object whose method is being called:
@@ -1477,11 +1479,13 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 			param_token[0].marker = _T("");
 			param[0] = &param_token[0];
 			++param_count;
-			if (wFlags & DISPATCH_PROPERTYGET)
-				flags |= IF_CALL_FUNC_ONLY;
 		}
 		else
+		{
+			if (flags == IT_CALL) // Obj(X) in VBScript and C#, or Obj[X] in C#
+				flags = IT_GET|IF_FUNCOBJ;
 			++first_param;
+		}
 	}
 	
 	for (UINT i = 1; i <= cArgs; ++i)
@@ -1492,8 +1496,6 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 		VariantToToken(*pvar, param_token[i]);
 		param[i] = &param_token[i];
 	}
-	
-	FuncCallData func_call; // For UDFs: must remain in scope until the result has been copied into pVarResult.
 	
 	result_token.buf = result_token_buf; // May be used below for short return values and misc purposes.
 	result_token.marker = _T("");
@@ -1507,21 +1509,30 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	HRESULT result_to_return;
 
 	// Call method of mAhkObject by name.
-	switch (static_cast<IObject *>(this)->Invoke(result_token, this_token, flags, first_param, param_count))
+	for (;;)
 	{
-	case FAIL:
-		result_to_return = E_FAIL;
-		break;
-	case INVOKE_NOT_HANDLED:
-		if (flags == IT_CALL)
+		switch (static_cast<IObject *>(this)->Invoke(result_token, this_token, flags, first_param, param_count))
 		{
-			result_to_return = DISP_E_MEMBERNOTFOUND;
+		case FAIL:
+			result_to_return = E_FAIL;
 			break;
+		case INVOKE_NOT_HANDLED:
+			if ((flags & IT_BITMASK) != IT_GET)
+			{
+				if (wFlags & DISPATCH_PROPERTYGET)
+				{
+					flags = IT_GET;
+					continue;
+				}
+				result_to_return = DISP_E_MEMBERNOTFOUND;
+				break;
+			}
+		default:
+			result_to_return = S_OK;
+			if (pVarResult)
+				TokenToVariant(result_token, *pVarResult, FALSE);
 		}
-	default:
-		result_to_return = S_OK;
-		if (pVarResult)
-			TokenToVariant(result_token, *pVarResult, FALSE);
+		break;
 	}
 
 	if (result_token.symbol == SYM_OBJECT)
