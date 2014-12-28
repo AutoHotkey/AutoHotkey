@@ -680,6 +680,20 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // aParam[0] contains the identifier of this field or an empty space (for __Get etc.).
 {
+	if (aFlags & IF_CALL_FUNC_ONLY)
+	{
+		switch (aField->symbol)
+		{
+		case SYM_OPERAND:
+			TokenSetResult(aResultToken, aField->marker);
+			return OK;
+		default:
+			if (aField->symbol == SYM_OBJECT && dynamic_cast<Func *>(aField->object))
+				break;
+			aField->Get(aResultToken);
+			return OK;
+		}
+	}
 	if (aField->symbol == SYM_OBJECT)
 	{
 		ExprTokenType field_token;
@@ -696,14 +710,6 @@ ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, Exp
 		ResultType r = aField->object->Invoke(aResultToken, field_token, IT_CALL | IF_FUNCOBJ, aParam, aParamCount);
 		aParam[0] = tmp;
 		return r;
-	}
-	if (aFlags & IF_CALL_FUNC_ONLY)
-	{
-		if (aField->symbol == SYM_OPERAND)
-			TokenSetResult(aResultToken, aField->marker);
-		else
-			aField->Get(aResultToken);
-		return OK;
 	}
 	if (aField->symbol == SYM_OPERAND)
 	{
