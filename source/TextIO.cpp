@@ -588,7 +588,7 @@ DWORD TextStream::Write(LPCVOID aBuf, DWORD aBufLen)
 //
 // TextFile
 //
-bool TextFile::_Open(LPCTSTR aFileSpec, DWORD aFlags)
+bool TextFile::_Open(LPCTSTR aFileSpec, DWORD &aFlags)
 {
 	_Close();
 	DWORD dwDesiredAccess, dwShareMode, dwCreationDisposition;
@@ -614,6 +614,38 @@ bool TextFile::_Open(LPCTSTR aFileSpec, DWORD aFlags)
 	}
 	dwShareMode = ((aFlags >> 8) & (FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE));
 
+	if (*aFileSpec == '*')
+	{
+		// v1.1.17: Allow FileOpen("*", "r|w") to open stdin/stdout/stderr ("**" for stderr).
+		// Can also be used to read script text from stdin, by passing "*" as the filename.
+		DWORD nStdHandle = 0;
+		switch (aFlags & ACCESS_MODE_MASK)
+		{
+		case WRITE:
+			if (!aFileSpec[1])
+				nStdHandle = STD_OUTPUT_HANDLE;
+			else if (aFileSpec[1] == '*' && !aFileSpec[2])
+				nStdHandle = STD_ERROR_HANDLE;
+			break;
+		case READ:
+			if (!aFileSpec[1])
+				nStdHandle = STD_INPUT_HANDLE;
+			break;
+		}
+		if (nStdHandle) // It was * or ** and not something invalid like *Somefile.
+		{
+			HANDLE hstd = GetStdHandle(nStdHandle);
+			if (hstd == NULL)// || !DuplicateHandle(GetCurrentProcess(), hstd, GetCurrentProcess(), &hstd, 0, FALSE, DUPLICATE_SAME_ACCESS))
+				return false;
+			aFlags = (aFlags & ~ACCESS_MODE_MASK) | USEHANDLE; // Avoid calling CloseHandle(), since we don't own it.
+			mFile = hstd; // Only now that we know it's not NULL.
+			return true;
+		}
+		// For any case not handled above, such as WRITE|READ combined or *** or *Somefile,
+		// it should be detected as an error below by CreateFile() failing (or if not, it's
+		// somehow valid and should not be treated as an error).
+	}
+	
 	// FILE_FLAG_SEQUENTIAL_SCAN is set, as sequential accesses are quite common for text files handling.
 	mFile = CreateFile(aFileSpec, dwDesiredAccess, dwShareMode, NULL, dwCreationDisposition,
 		(aFlags & (EOL_CRLF | EOL_ORPHAN_CR)) ? FILE_FLAG_SEQUENTIAL_SCAN : 0, NULL);
@@ -1177,7 +1209,7 @@ invalid_param:
 //
 // TextMem
 //
-bool TextMem::_Open(LPCTSTR aFileSpec, DWORD aFlags)
+bool TextMem::_Open(LPCTSTR aFileSpec, DWORD &aFlags)
 {
 	ASSERT( (aFlags & ACCESS_MODE_MASK) == TextStream::READ ); // Only read mode is supported.
 

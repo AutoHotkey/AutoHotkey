@@ -4312,6 +4312,8 @@ vk_type sc_to_vk(sc_type aSC)
 	//case SC_NUMPADEND:   return VK_NUMPAD1;
 	//case SC_NUMPADPGUP:  return VK_NUMPAD9;
 	//case SC_NUMPADPGDN:  return VK_NUMPAD3;	
+
+	case SC_APPSKEY:	return VK_APPS; // Added in v1.1.17.00.
 	}
 
 	// Use the OS API call to resolve any not manually set above.  This should correctly

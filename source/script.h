@@ -1877,7 +1877,7 @@ struct FuncResult : public ResultToken
 
 typedef BIF_DECL((* BuiltInFunctionType));
 
-class Func : public IObject
+class Func : public IObjectComCompatible
 {
 public:
 	LPTSTR mName;
@@ -2859,6 +2859,7 @@ BIF_DECL(BIF_StrSplit);
 BIF_DECL(BIF_RegEx);
 BIF_DECL(BIF_Ord);
 BIF_DECL(BIF_Chr);
+BIF_DECL(BIF_Format);
 BIF_DECL(BIF_NumGet);
 BIF_DECL(BIF_NumPut);
 BIF_DECL(BIF_StrGetPut);

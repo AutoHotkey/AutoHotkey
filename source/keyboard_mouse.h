@@ -136,6 +136,8 @@ EXTERN_G;
 #define SC_LWIN 0x15B
 #define SC_RWIN 0x15C
 
+#define SC_APPSKEY 0x15D
+
 // UPDATE for v1.0.39: Changed sc_type to USHORT vs. UINT to save memory in structs such as sc_hotkey.
 // This saves 60K of memory in one place, and possibly there are other large savings too.
 // The following older comment dates back to 2003/inception and I don't remember its exact intent,

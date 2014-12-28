@@ -128,7 +128,7 @@ public:
 
 protected:
 	// IO abstraction
-	virtual bool    _Open(LPCTSTR aFileSpec, DWORD aFlags) = 0;
+	virtual bool    _Open(LPCTSTR aFileSpec, DWORD &aFlags) = 0;
 	virtual void    _Close() = 0;
 	virtual DWORD   _Read(LPVOID aBuffer, DWORD aBufSize) = 0;
 	virtual DWORD   _Write(LPCVOID aBuffer, DWORD aBufSize) = 0;
@@ -301,7 +301,7 @@ public:
 	}
 	HANDLE  Handle() { RollbackFilePointer(); FlushWriteBuffer(); return mFile; }
 protected:
-	virtual bool    _Open(LPCTSTR aFileSpec, DWORD aFlags);
+	virtual bool    _Open(LPCTSTR aFileSpec, DWORD &aFlags);
 	virtual void    _Close();
 	virtual DWORD   _Read(LPVOID aBuffer, DWORD aBufSize);
 	virtual DWORD   _Write(LPCVOID aBuffer, DWORD aBufSize);
@@ -343,7 +343,7 @@ public:
 	}
 	virtual ~TextMem() { _Close(); }
 protected:
-	virtual bool    _Open(LPCTSTR aFileSpec, DWORD aFlags);
+	virtual bool    _Open(LPCTSTR aFileSpec, DWORD &aFlags);
 	virtual void    _Close();
 	virtual DWORD   _Read(LPVOID aBuffer, DWORD aBufSize);
 	virtual DWORD   _Write(LPCVOID aBuffer, DWORD aBufSize);

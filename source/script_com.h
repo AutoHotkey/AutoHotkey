@@ -5,9 +5,8 @@ extern bool g_ComErrorNotify;
 
 
 class ComObject;
-class ComEvent : public IDispatch
+class ComEvent : public ObjectBase
 {
-	DWORD mRefCount;
 	DWORD mCookie;
 	ComObject *mObject;
 	ITypeInfo *mTypeInfo;
@@ -17,17 +16,19 @@ class ComEvent : public IDispatch
 
 public:
 	STDMETHODIMP QueryInterface(REFIID riid, void **ppv);
-	STDMETHODIMP_(ULONG) AddRef();
-	STDMETHODIMP_(ULONG) Release();
-	STDMETHODIMP GetTypeInfoCount(UINT *pctinfo);
-	STDMETHODIMP GetTypeInfo(UINT itinfo, LCID lcid, ITypeInfo **pptinfo);
 	STDMETHODIMP GetIDsOfNames(REFIID riid, LPOLESTR *rgszNames, UINT cNames, LCID lcid, DISPID *rgDispId);
 	STDMETHODIMP Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr);
+	
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+	{
+		// Currently ComEvent objects are never exposed to the AutoHotkey side.
+		return INVOKE_NOT_HANDLED;
+	}
 
 	void Connect(LPTSTR pfx = NULL, IObject *ahkObject = NULL);
 
 	ComEvent(ComObject *obj, ITypeInfo *tinfo, IID iid)
-		: mRefCount(1), mCookie(0), mObject(obj), mTypeInfo(tinfo), mIID(iid), mAhkObject(NULL)
+		: mCookie(0), mObject(obj), mTypeInfo(tinfo), mIID(iid), mAhkObject(NULL)
 	{
 	}
 	~ComEvent()
@@ -49,6 +50,7 @@ public:
 		IDispatch *mDispatch;
 		IUnknown *mUnknown;
 		SAFEARRAY *mArray;
+		void *mValPtr;
 		__int64 mVal64; // Allow 64-bit values when ComObject is used as a VARIANT in 32-bit builds.
 	};
 	ComEvent *mEventSink;
@@ -63,7 +65,7 @@ public:
 	{
 		aVar.vt = mVarType;
 		aVar.llVal = mVal64;
-		// Caller expects this ComObject to last longer than aVar, so no need to AddRef():
+		// Caller handles this if needed:
 		//if (VT_DISPATCH == mVarType && mDispatch)
 		//	mDispatch->AddRef();
 	}
