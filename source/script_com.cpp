@@ -946,15 +946,15 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	DISPPARAMS dispParams;
 	VARIANTARG *vargs = (VARIANTARG *)_alloca((cArgs + 1) * sizeof(VARIANTARG));
 	memcpy(&dispParams, pDispParams, sizeof(dispParams));
-	memcpy(vargs, pDispParams->rgvarg, cArgs * sizeof(VARIANTARG));
+	memcpy(vargs + 1, pDispParams->rgvarg, cArgs * sizeof(VARIANTARG));
 	dispParams.rgvarg = vargs;
 	
-	// Pass our object last for either of the following cases:
+	// Pass our object last (right-to-left) for either of the following cases:
 	//	a) Our caller doesn't include its IDispatch interface pointer in the parameter list.
 	//	b) The script needs a reference to the original wrapper object; i.e. mObject.
-	vargs[cArgs].vt = VT_DISPATCH;
-	vargs[cArgs].pdispVal = mObject;
-	++dispParams.cArgs;
+	vargs[0].vt = VT_DISPATCH;
+	vargs[0].pdispVal = mObject;
+	dispParams.cArgs = ++cArgs;
 
 	HRESULT hr;
 	IDispatch *func;
