@@ -954,7 +954,7 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	//	b) The script needs a reference to the original wrapper object; i.e. mObject.
 	vargs[cArgs].vt = VT_DISPATCH;
 	vargs[cArgs].pdispVal = mObject;
-	++cArgs;
+	++dispParams.cArgs;
 
 	HRESULT hr;
 	IDispatch *func;
