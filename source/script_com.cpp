@@ -1508,13 +1508,35 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 
 	HRESULT result_to_return;
 
-	// Call method of mAhkObject by name.
 	for (;;)
 	{
 		switch (static_cast<IObject *>(this)->Invoke(result_token, this_token, flags, first_param, param_count))
 		{
 		case FAIL:
 			result_to_return = E_FAIL;
+			if (g->ThrownToken)
+			{
+				Object *obj;
+				if (pExcepInfo && (obj = dynamic_cast<Object*>(TokenToObject(*g->ThrownToken)))) // MSDN: pExcepInfo "Can be NULL"
+				{
+					ZeroMemory(pExcepInfo, sizeof(EXCEPINFO));
+					pExcepInfo->scode = result_to_return = DISP_E_EXCEPTION;
+					
+					#define SysStringFromToken(...) \
+						SysAllocString(CStringWCharFromTCharIfNeeded(TokenToString(__VA_ARGS__)))
+
+					ExprTokenType token;
+					if (obj->GetItem(token, _T("Message")))
+						pExcepInfo->bstrDescription = SysStringFromToken(token, result_token_buf);
+					if (obj->GetItem(token, _T("What")))
+						pExcepInfo->bstrSource = SysStringFromToken(token, result_token_buf);
+					if (obj->GetItem(token, _T("File")))
+						pExcepInfo->bstrHelpFile = SysStringFromToken(token, result_token_buf);
+					if (obj->GetItem(token, _T("Line")))
+						pExcepInfo->dwHelpContext = (DWORD)TokenToInt64(token);
+				}
+				g_script.FreeExceptionToken(g->ThrownToken);
+			}
 			break;
 		case INVOKE_NOT_HANDLED:
 			if ((flags & IT_BITMASK) != IT_GET)
