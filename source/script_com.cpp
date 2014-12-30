@@ -44,13 +44,13 @@ BIF_DECL(BIF_ComObjCreate)
 			
 			// Return dispatchable object.
 			if ( !(aResultToken.object = new ComObject(pdisp)) )
-				break;
+				_f_throw(ERR_OUTOFMEM);
 			aResultToken.symbol = SYM_OBJECT;
 		}
 		return;
 	}
 	_f_set_retval_p(_T(""), 0);
-	ComError(hr);
+	ComError(hr, aResultToken);
 }
 
 
@@ -67,9 +67,10 @@ BIF_DECL(BIF_ComObjGet)
 			return;
 		}
 		pdisp->Release();
+		_f_throw(ERR_OUTOFMEM);
 	}
 	_f_set_retval_p(_T(""), 0);
-	ComError(hr);
+	ComError(hr, aResultToken);
 }
 
 
@@ -161,7 +162,9 @@ BIF_DECL(BIF_ComObjActive)
 		if (SUCCEEDED(hr))
 		{
 			IDispatch *pdisp;
-			if (SUCCEEDED(punk->QueryInterface(IID_IDispatch, (void **)&pdisp)))
+			hr = punk->QueryInterface(IID_IDispatch, (void **)&pdisp);
+			punk->Release();
+			if (SUCCEEDED(hr))
 			{
 				if (ComObject *obj = new ComObject(pdisp))
 				{
@@ -170,15 +173,14 @@ BIF_DECL(BIF_ComObjActive)
 				}
 				else
 				{
-					hr = E_OUTOFMEMORY;
 					pdisp->Release();
+					_f_throw(ERR_OUTOFMEM);
 				}
 			}
-			punk->Release();
 		}
 	}
 	if (FAILED(hr))
-		ComError(hr);
+		ComError(hr, aResultToken);
 }
 
 
@@ -293,14 +295,15 @@ BIF_DECL(BIF_ComObjConnect)
 			if (aParamCount < 2)
 				obj->mEventSink->Connect(); // Disconnect.
 			else
-				obj->mEventSink->Connect(TokenToString(*aParam[1]), TokenToObject(*aParam[1]));
+				if (!obj->mEventSink->Connect(TokenToString(*aParam[1]), TokenToObject(*aParam[1])))
+					aResultToken.SetExitResult(FAIL);
 			return;
 		}
 
-		ComError(E_NOINTERFACE);
+		ComError(E_NOINTERFACE, aResultToken);
 	}
 	else
-		ComError(-1); // "No COM object"
+		ComError(-1, aResultToken); // "No COM object"
 }
 
 
@@ -444,7 +447,7 @@ BIF_DECL(BIF_ComObjQuery)
 		if (punk < (IUnknown *)65536) // Error-detection: the first 64KB of address space is always invalid.
 		{
 			g->LastError = E_INVALIDARG; // For consistency.
-			ComError(-1);
+			ComError(-1, aResultToken);
 			return;
 		}
 	}
@@ -823,7 +826,15 @@ void RValueToResultToken(ExprTokenType &aRValue, ExprTokenType &aResultToken)
 
 bool g_ComErrorNotify = true;
 
-void ComError(HRESULT hr, LPTSTR name, EXCEPINFO* pei)
+ResultType ComError(HRESULT hr)
+{
+	ResultToken errorToken;
+	errorToken.SetResult(OK);
+	ComError(hr, errorToken);
+	return errorToken.Result();
+}
+
+void ComError(HRESULT hr, ResultToken &aResultToken, LPTSTR name, EXCEPINFO* pei)
 {
 	if (hr != DISP_E_EXCEPTION)
 		pei = NULL;
@@ -852,7 +863,8 @@ void ComError(HRESULT hr, LPTSTR name, EXCEPINFO* pei)
 			error_text = buf;
 		}
 
-		g_script.mCurrLine->LineError(error_text, EARLY_EXIT, name);
+		if (g_script.mCurrLine->LineError(error_text, EARLY_EXIT, name) == FAIL)
+			aResultToken.SetExitResult(FAIL); // An exception was thrown.
 	}
 
 	if (pei)
@@ -945,7 +957,7 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	return S_OK;
 }
 
-void ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
+ResultType ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
 {
 	HRESULT hr;
 
@@ -994,9 +1006,10 @@ void ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
 			_tcscpy(mPrefix, pfx);
 		else
 			*mPrefix = '\0'; // For maintainability.
+		return OK;
 	}
 	else
-		ComError(hr);
+		return ComError(hr);
 }
 
 ResultType STDMETHODCALLTYPE ComObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1025,8 +1038,8 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ResultToken &aResultToken, ExprTo
 		}
 		// For other types, this syntax is reserved for possible future use.  However, it could
 		// be x[prms*] where prms is an empty array or not an array at all, so raise an error:
-		ComError(g->LastError = hr);
-		return OK;
+		ComError(g->LastError = hr, aResultToken);
+		return aResultToken.Result();
 	}
 
 	if (mVarType != VT_DISPATCH || !mDispatch)
@@ -1035,8 +1048,8 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ResultToken &aResultToken, ExprTo
 			return SafeArrayInvoke(aResultToken, aFlags, aParam, aParamCount);
 		// Otherwise: this object can't be invoked.
 		g->LastError = DISP_E_BADVARTYPE; // Seems more informative than -1.
-		ComError(-1);
-		return OK;
+		ComError(-1, aResultToken);
+		return aResultToken.Result();
 	}
 
 	static DISPID dispidParam = DISPID_PROPERTYPUT;
@@ -1113,7 +1126,7 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ResultToken &aResultToken, ExprTo
 
 	if	(FAILED(hr))
 	{
-		ComError(hr, aName, &excepinfo);
+		ComError(hr, aResultToken, aName, &excepinfo);
 	}
 	else if	(IS_INVOKE_SET)
 	{
@@ -1128,7 +1141,7 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ResultToken &aResultToken, ExprTo
 	}
 
 	g->LastError = hr;
-	return	OK;
+	return	aResultToken.Result();
 }
 
 ResultType ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1173,8 +1186,8 @@ ResultType ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aFlags, Exp
 		}
 		g->LastError = hr;
 		if (FAILED(hr))
-			ComError(hr);
-		return OK;
+			ComError(hr, aResultToken);
+		return aResultToken.Result();
 	}
 
 	UINT dims = SafeArrayGetDim(psa);
@@ -1221,8 +1234,8 @@ ResultType ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aFlags, Exp
 
 	g->LastError = hr;
 	if (FAILED(hr))
-		ComError(hr);
-	return OK;
+		ComError(hr, aResultToken);
+	return aResultToken.Result();
 }
 
 

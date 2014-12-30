@@ -25,7 +25,7 @@ public:
 		return INVOKE_NOT_HANDLED;
 	}
 
-	void Connect(LPTSTR pfx = NULL, IObject *ahkObject = NULL);
+	ResultType Connect(LPTSTR pfx = NULL, IObject *ahkObject = NULL);
 
 	ComEvent(ComObject *obj, ITypeInfo *tinfo, IID iid)
 		: mCookie(0), mObject(obj), mTypeInfo(tinfo), mIID(iid), mAhkObject(NULL)
@@ -135,7 +135,7 @@ public:
 };
 
 
-void ComError(HRESULT, LPTSTR = _T(""), EXCEPINFO* = NULL);
+void ComError(HRESULT, ResultToken &, LPTSTR = _T(""), EXCEPINFO* = NULL);
 
 bool SafeSetTokenObject(ExprTokenType &aToken, IObject *aObject);
 
