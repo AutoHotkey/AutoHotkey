@@ -9975,7 +9975,8 @@ ResultType Line::WriteClipboardToFile(LPTSTR aFilespec, Var *aBinaryClipVar)
 	g->LastError = GetLastError(); // Always done, for simplicity.  Must be called before CloseHandle().
 	if (hfile != INVALID_HANDLE_VALUE)
 		CloseHandle(hfile); // Close file.
-	free(data); // Free ClipboardAll data.  Can be NULL.
+	if (!aBinaryClipVar)
+		free(data); // Free ClipboardAll data.  Can be NULL.
 
 	return SetErrorLevelOrThrowBool(!success); // Set ErrorLevel based on result.
 }
