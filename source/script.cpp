@@ -9594,15 +9594,24 @@ unquoted_literal:
 		// Put operands into the postfix array immediately, then move on to the next infix item:
 		if (IS_OPERAND(infix_symbol))
 		{
-			if (infix_symbol == SYM_DYNAMIC && SYM_DYNAMIC_IS_WRITABLE(this_infix))
+			if (infix_symbol == SYM_DYNAMIC)
 			{
 				// IMPORTANT: VAR_CLIPBOARD is made into SYM_VAR here, but only for assignments.
 				// This allows built-in functions and other places in the code to treat SYM_VAR
 				// as though it's always VAR_NORMAL, which reduces code size and improves maintainability.
+				// Similarly, is_lvalue is set so that a dynamically resolved VAR_VIRTUAL or VAR_CLIPBOARD
+				// will yield SYM_VAR if it's the target of an assignment.
 				sym_prev = this_infix[1].symbol; // Resolve to help macro's code size and performance.
 				if (IS_ASSIGNMENT_OR_POST_OP(sym_prev) // Post-op must be checked for VAR_CLIPBOARD (by contrast, it seems unnecessary to check it for others; see comments below).
 					|| stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT) // Stack *not* infix.
-					this_infix->symbol = SYM_VAR; // Convert clipboard or environment variable into SYM_VAR.
+				{
+					if (SYM_DYNAMIC_IS_WRITABLE(this_infix))
+						this_infix->symbol = SYM_VAR; // Convert to SYM_VAR.
+					else
+						this_infix->is_lvalue = TRUE; // Mark this as the target of an assignment.
+				}
+				else
+					this_infix->is_lvalue = FALSE;
 				// Above logic might not be perfect because it doesn't check for parens such as (var):=x,
 				// and possibly other obscure types of assignments.
 			}

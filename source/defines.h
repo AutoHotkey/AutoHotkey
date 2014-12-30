@@ -279,6 +279,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 			{
 				DerefType *outer_deref; // Used by ExpressionToPostfix().
 				size_t marker_length;
+				BOOL is_lvalue;		// for SYM_DYNAMIC
 			};
 		};  
 	};
