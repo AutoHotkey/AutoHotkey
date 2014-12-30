@@ -3,6 +3,7 @@
 #include "script.h"
 #include "script_object.h"
 #include "script_com.h"
+#include <DispEx.h>
 
 
 // IID__IObject -- .NET's System.Object:
@@ -1115,12 +1116,25 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 	else
 	{
 #ifdef UNICODE
-		hr = mDispatch->GetIDsOfNames(IID_NULL, &aName, 1, LOCALE_USER_DEFAULT, &dispid);
+		LPOLESTR wname = aName;
 #else
 		CStringWCharFromChar cnvbuf(aName);
-		LPOLESTR cnvbuf_ptr = (LPOLESTR)(LPCWSTR)cnvbuf;
-		hr = mDispatch->GetIDsOfNames(IID_NULL, &cnvbuf_ptr, 1, LOCALE_USER_DEFAULT, &dispid);
+		LPOLESTR wname = (LPOLESTR)(LPCWSTR)cnvbuf;
 #endif
+		hr = mDispatch->GetIDsOfNames(IID_NULL, &wname, 1, LOCALE_USER_DEFAULT, &dispid);
+		if (hr == DISP_E_UNKNOWNNAME && IS_INVOKE_SET) // v1.1.18: Retry with IDispatchEx if supported, to allow creating new properties.
+		{
+			IDispatchEx *dispEx;
+			if (SUCCEEDED(mDispatch->QueryInterface<IDispatchEx>(&dispEx)))
+			{
+				BSTR bname = SysAllocString(wname);
+				// fdexNameEnsure gives us a new ID if needed, though GetIDsOfNames() will
+				// still fail for some objects until after the assignment is performed below.
+				hr = dispEx->GetDispID(bname, fdexNameEnsure, &dispid);
+				SysFreeString(bname);
+				dispEx->Release();
+			}
+		}
 	}
 	if (SUCCEEDED(hr)
 		// For obj.x:=y where y is a ComObject, invoke PROPERTYPUTREF first:
