@@ -3,6 +3,7 @@
 #include "script.h"
 #include "script_object.h"
 #include "script_com.h"
+#include <DispEx.h>
 
 
 // IID__IObject -- .NET's System.Object:
@@ -905,15 +906,15 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	DISPPARAMS dispParams;
 	VARIANTARG *vargs = (VARIANTARG *)_alloca((cArgs + 1) * sizeof(VARIANTARG));
 	memcpy(&dispParams, pDispParams, sizeof(dispParams));
-	memcpy(vargs, pDispParams->rgvarg, cArgs * sizeof(VARIANTARG));
+	memcpy(vargs + 1, pDispParams->rgvarg, cArgs * sizeof(VARIANTARG));
 	dispParams.rgvarg = vargs;
 	
-	// Pass our object last for either of the following cases:
+	// Pass our object last (right-to-left) for either of the following cases:
 	//	a) Our caller doesn't include its IDispatch interface pointer in the parameter list.
 	//	b) The script needs a reference to the original wrapper object; i.e. mObject.
-	vargs[cArgs].vt = VT_DISPATCH;
-	vargs[cArgs].pdispVal = mObject;
-	++dispParams.cArgs;
+	vargs[0].vt = VT_DISPATCH;
+	vargs[0].pdispVal = mObject;
+	dispParams.cArgs = ++cArgs;
 
 	HRESULT hr;
 	IDispatch *func;
@@ -1074,12 +1075,25 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ResultToken &aResultToken, ExprTo
 	else
 	{
 #ifdef UNICODE
-		hr = mDispatch->GetIDsOfNames(IID_NULL, &aName, 1, LOCALE_USER_DEFAULT, &dispid);
+		LPOLESTR wname = aName;
 #else
 		CStringWCharFromChar cnvbuf(aName);
-		LPOLESTR cnvbuf_ptr = (LPOLESTR)(LPCWSTR)cnvbuf;
-		hr = mDispatch->GetIDsOfNames(IID_NULL, &cnvbuf_ptr, 1, LOCALE_USER_DEFAULT, &dispid);
+		LPOLESTR wname = (LPOLESTR)(LPCWSTR)cnvbuf;
 #endif
+		hr = mDispatch->GetIDsOfNames(IID_NULL, &wname, 1, LOCALE_USER_DEFAULT, &dispid);
+		if (hr == DISP_E_UNKNOWNNAME && IS_INVOKE_SET) // v1.1.18: Retry with IDispatchEx if supported, to allow creating new properties.
+		{
+			IDispatchEx *dispEx;
+			if (SUCCEEDED(mDispatch->QueryInterface<IDispatchEx>(&dispEx)))
+			{
+				BSTR bname = SysAllocString(wname);
+				// fdexNameEnsure gives us a new ID if needed, though GetIDsOfNames() will
+				// still fail for some objects until after the assignment is performed below.
+				hr = dispEx->GetDispID(bname, fdexNameEnsure, &dispid);
+				SysFreeString(bname);
+				dispEx->Release();
+			}
+		}
 	}
 	if (SUCCEEDED(hr)
 		// For obj.x:=y where y is a ComObject, invoke PROPERTYPUTREF first:
@@ -1415,12 +1429,14 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 		}
 		param[0] = &param_token[0];
 		++param_count;
+		if (flags == IT_CALL && (wFlags & DISPATCH_PROPERTYGET))
+			flags |= IF_CALL_FUNC_ONLY;
 	}
 	else
 	{
 		if (dispIdMember != DISPID_VALUE)
 			return DISP_E_MEMBERNOTFOUND;
-		if (flags == IT_CALL)
+		if (flags == IT_CALL && !(wFlags & DISPATCH_PROPERTYGET))
 		{
 			// This approach works well for Func, but not for an Object implementing __Call,
 			// which always expects a method name or the object whose method is being called:
@@ -1431,11 +1447,13 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 			param_token[0].marker = _T("");
 			param[0] = &param_token[0];
 			++param_count;
-			if (wFlags & DISPATCH_PROPERTYGET)
-				flags |= IF_CALL_FUNC_ONLY;
 		}
 		else
+		{
+			if (flags == IT_CALL) // Obj(X) in VBScript and C#, or Obj[X] in C#
+				flags = IT_GET|IF_FUNCOBJ;
 			++first_param;
+		}
 	}
 	
 	for (UINT i = 1; i <= cArgs; ++i)
@@ -1454,22 +1472,53 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	HRESULT result_to_return;
 	FuncResult result_token;
 
-	// Call method of mAhkObject by name.
-	switch (static_cast<IObject *>(this)->Invoke(result_token, this_token, flags, first_param, param_count))
+	for (;;)
 	{
-	case FAIL:
-		result_to_return = E_FAIL;
-		break;
-	case INVOKE_NOT_HANDLED:
-		if (flags == IT_CALL)
+		switch (static_cast<IObject *>(this)->Invoke(result_token, this_token, flags, first_param, param_count))
 		{
-			result_to_return = DISP_E_MEMBERNOTFOUND;
+		case FAIL:
+			result_to_return = E_FAIL;
+			if (g->ThrownToken)
+			{
+				Object *obj;
+				if (pExcepInfo && (obj = dynamic_cast<Object*>(TokenToObject(*g->ThrownToken)))) // MSDN: pExcepInfo "Can be NULL"
+				{
+					ZeroMemory(pExcepInfo, sizeof(EXCEPINFO));
+					pExcepInfo->scode = result_to_return = DISP_E_EXCEPTION;
+					
+					#define SysStringFromToken(...) \
+						SysAllocString(CStringWCharFromTCharIfNeeded(TokenToString(__VA_ARGS__)))
+
+					ExprTokenType token;
+					if (obj->GetItem(token, _T("Message")))
+						pExcepInfo->bstrDescription = SysStringFromToken(token, result_token.buf);
+					if (obj->GetItem(token, _T("What")))
+						pExcepInfo->bstrSource = SysStringFromToken(token, result_token.buf);
+					if (obj->GetItem(token, _T("File")))
+						pExcepInfo->bstrHelpFile = SysStringFromToken(token, result_token.buf);
+					if (obj->GetItem(token, _T("Line")))
+						pExcepInfo->dwHelpContext = (DWORD)TokenToInt64(token);
+				}
+				g_script.FreeExceptionToken(g->ThrownToken);
+			}
 			break;
+		case INVOKE_NOT_HANDLED:
+			if ((flags & IT_BITMASK) != IT_GET)
+			{
+				if (wFlags & DISPATCH_PROPERTYGET)
+				{
+					flags = IT_GET;
+					continue;
+				}
+				result_to_return = DISP_E_MEMBERNOTFOUND;
+				break;
+			}
+		default:
+			result_to_return = S_OK;
+			if (pVarResult)
+				TokenToVariant(result_token, *pVarResult, FALSE);
 		}
-	default:
-		result_to_return = S_OK;
-		if (pVarResult)
-			TokenToVariant(result_token, *pVarResult, FALSE);
+		break;
 	}
 
 	// Clean up:

@@ -668,6 +668,20 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 ResultType Object::CallField(FieldType *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // aParam[0] contains the identifier of this field or an empty space (for __Get etc.).
 {
+	if (aFlags & IF_CALL_FUNC_ONLY)
+	{
+		switch (aField->symbol)
+		{
+		case SYM_STRING:
+			TokenSetResult(aResultToken, aField->string, aField->string.Length());
+			return OK;
+		default:
+			if (aField->symbol == SYM_OBJECT && dynamic_cast<Func *>(aField->object))
+				break;
+			aField->Get(aResultToken);
+			return OK;
+		}
+	}
 	if (aField->symbol == SYM_OBJECT)
 	{
 		ExprTokenType field_token(aField->object);
@@ -682,14 +696,6 @@ ResultType Object::CallField(FieldType *aField, ResultToken &aResultToken, ExprT
 		ResultType r = aField->object->Invoke(aResultToken, field_token, IT_CALL | IF_FUNCOBJ, aParam, aParamCount);
 		aParam[0] = tmp;
 		return r;
-	}
-	if (aFlags & IF_CALL_FUNC_ONLY)
-	{
-		if (aField->symbol == SYM_STRING)
-			TokenSetResult(aResultToken, aField->string, aField->string.Length());
-		else
-			aField->Get(aResultToken);
-		return OK;
 	}
 	if (aField->symbol == SYM_STRING)
 	{
