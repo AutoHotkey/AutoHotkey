@@ -315,7 +315,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						memmove(params + 1, params, actual_param_count * sizeof(ExprTokenType *));
 					// Insert an empty string:
 					params[0] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
-					params[0]->SetValue(_T(""), 0);
+					params[0]->SetValue(_T("Call"), 4);
 					params--; // Include the object, which is already in the right place.
 					actual_param_count += 2;
 					extern ExprOpFunc g_ObjCall;

@@ -1472,7 +1472,7 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 			//++first_param;
 			// This is consistent with %func%():
 			param_token[0].symbol = SYM_STRING;
-			param_token[0].marker = _T("");
+			param_token[0].marker = _T("Call");
 			param[0] = &param_token[0];
 			++param_count;
 		}
