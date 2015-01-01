@@ -1658,7 +1658,7 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ResultToken &aResultToken, ExprTokenTy
 				_o_return(FALSE);
 			}
 		}
-		if (_tcsicmp(member, _T("Call")) && !TokenIsEmptyString(*aParam[0]))
+		if (_tcsicmp(member, _T("Call")))
 			return INVOKE_NOT_HANDLED; // Reserved.
 		// Called explicitly by script, such as by "%obj.funcref%()" or "x := obj.funcref, x.()"
 		// rather than implicitly, like "obj.funcref()".
