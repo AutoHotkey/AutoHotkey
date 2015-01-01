@@ -1122,17 +1122,32 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 		LPOLESTR wname = (LPOLESTR)(LPCWSTR)cnvbuf;
 #endif
 		hr = mDispatch->GetIDsOfNames(IID_NULL, &wname, 1, LOCALE_USER_DEFAULT, &dispid);
-		if (hr == DISP_E_UNKNOWNNAME && IS_INVOKE_SET) // v1.1.18: Retry with IDispatchEx if supported, to allow creating new properties.
+		if (hr == DISP_E_UNKNOWNNAME) // v1.1.18: Retry with IDispatchEx if supported, to allow creating new properties.
 		{
-			IDispatchEx *dispEx;
-			if (SUCCEEDED(mDispatch->QueryInterface<IDispatchEx>(&dispEx)))
+			if (IS_INVOKE_SET)
 			{
-				BSTR bname = SysAllocString(wname);
-				// fdexNameEnsure gives us a new ID if needed, though GetIDsOfNames() will
-				// still fail for some objects until after the assignment is performed below.
-				hr = dispEx->GetDispID(bname, fdexNameEnsure, &dispid);
-				SysFreeString(bname);
-				dispEx->Release();
+				IDispatchEx *dispEx;
+				if (SUCCEEDED(mDispatch->QueryInterface<IDispatchEx>(&dispEx)))
+				{
+					BSTR bname = SysAllocString(wname);
+					// fdexNameEnsure gives us a new ID if needed, though GetIDsOfNames() will
+					// still fail for some objects until after the assignment is performed below.
+					hr = dispEx->GetDispID(bname, fdexNameEnsure, &dispid);
+					SysFreeString(bname);
+					dispEx->Release();
+				}
+			}
+			else if (IS_INVOKE_CALL && TokenIsEmptyString(*aParam[0]))
+			{
+				// Fn.() and %Fn%() both produce this condition.  aParam[0] is checked instead of aName
+				// because aName is also empty if an object was passed, as for Fn[Obj]() or {X: Fn}.X().
+				// Although allowing JScript functions to act as methods of AutoHotkey objects could be
+				// useful, a different approach would be needed to pass 'this', such as:
+				//  - IDispatchEx::InvokeEx with the named arg DISPID_THIS.
+				//  - Fn.call(this) -- this would also work with AutoHotkey functions, but would break
+				//    existing meta-function scripts.
+				dispid = DISPID_VALUE;
+				hr = S_OK;
 			}
 		}
 	}
