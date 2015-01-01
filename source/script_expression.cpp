@@ -233,6 +233,14 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// with the appropriate SYM_INTEGER value.
 					//
 					break; // case VAR_VIRTUAL
+				default:
+					if (this_token.is_lvalue)
+					{
+						// Having this check here allows us to display the variable name rather than its contents
+						// in the error message.
+						LineError(ERR_VAR_IS_READONLY, FAIL, this_token.var->mName);
+						goto abort;
+					}
   				}
 				// Otherwise, it's a built-in variable.
 				result_size = this_token.var->Get() + 1;
