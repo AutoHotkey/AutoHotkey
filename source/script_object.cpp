@@ -556,12 +556,22 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	// CALL
 	if (IS_INVOKE_CALL)
 	{
-		if (field)
+		if (!field)
+			return INVOKE_NOT_HANDLED;
+		// v1.1.18.00: The following flag is set whenever a COM client invokes with METHOD|PROPERTYGET,
+		// such as X.Y in VBScript or C#.  Some convenience is gained at the expense of purity by treating
+		// it as METHOD if X.Y is a Func object or PROPERTYGET in any other case.
+		// v1.1.18.01: Handling this flag here rather than in CallField() has the following benefits:
+		//  - Reduces code duplication.
+		//  - Fixes X.__Call being returned instead of being called, if X.__Call is a string.
+		//  - Allows X.Y(Z) and similar to work like X.Y[Z], instead of ignoring the extra parameters.
+		if ( !(aFlags & IF_CALL_FUNC_ONLY) || (field->symbol == SYM_OBJECT && dynamic_cast<Func *>(field->object)) )
 			return CallField(field, aResultToken, aThisToken, aFlags, aParam, aParamCount);
+		aFlags = (aFlags & ~(IT_BITMASK | IF_CALL_FUNC_ONLY)) | IT_GET;
 	}
 
 	// MULTIPARAM[x,y] -- may be SET[x,y]:=z or GET[x,y], but always treated like GET[x].
-	else if (param_count_excluding_rvalue > 1)
+	if (param_count_excluding_rvalue > 1)
 	{
 		// This is something like this[x,y] or this[x,y]:=z.  Since it wasn't handled by a meta-mechanism above,
 		// handle only the "x" part (automatically creating and storing an object if this[x] didn't already exist
@@ -680,20 +690,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 ResultType Object::CallField(FieldType *aField, ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // aParam[0] contains the identifier of this field or an empty space (for __Get etc.).
 {
-	if (aFlags & IF_CALL_FUNC_ONLY)
-	{
-		switch (aField->symbol)
-		{
-		case SYM_OPERAND:
-			TokenSetResult(aResultToken, aField->marker);
-			return OK;
-		default:
-			if (aField->symbol == SYM_OBJECT && dynamic_cast<Func *>(aField->object))
-				break;
-			aField->Get(aResultToken);
-			return OK;
-		}
-	}
 	if (aField->symbol == SYM_OBJECT)
 	{
 		ExprTokenType field_token;
