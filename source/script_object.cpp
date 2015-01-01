@@ -1633,10 +1633,7 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ExprTokenType &aResultToken, ExprToken
 	LPTSTR member;
 
 	if (!aParamCount)
-	{
-		member = _T("");
 		aFlags |= IF_FUNCOBJ;
-	}
 	else
 		member = TokenToString(*aParam[0]);
 
@@ -1720,7 +1717,7 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ExprTokenType &aResultToken, ExprToken
 			}
 			return OK;
 		}
-		if (!TokenIsEmptyString(*aParam[0]))
+		if (_tcsicmp(member, _T("Call")) && !TokenIsEmptyString(*aParam[0]))
 			return INVOKE_NOT_HANDLED; // Reserved.
 		// Called explicitly by script, such as by "obj.funcref.()" or "x := obj.funcref, x.()"
 		// rather than implicitly, like "obj.funcref()".
