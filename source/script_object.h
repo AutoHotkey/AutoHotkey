@@ -65,7 +65,7 @@ public:
 // EnumBase - Base class for enumerator objects following standard syntax.
 //
 
-class EnumBase : public ObjectBase
+class DECLSPEC_NOVTABLE EnumBase : public ObjectBase
 {
 public:
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
