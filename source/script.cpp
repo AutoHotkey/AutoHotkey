@@ -666,7 +666,7 @@ ResultType Script::AutoExecSection()
 		mLastScriptRest = mLastPeekTime = GetTickCount();
 
 		++g_nThreads;
-		DEBUGGER_STACK_PUSH(mFirstLine, _T("auto-execute"))
+		DEBUGGER_STACK_PUSH(_T("Auto-execute"))
 		ExecUntil_result = mFirstLine->ExecUntil(UNTIL_RETURN); // Might never return (e.g. infinite loop or ExitApp).
 		DEBUGGER_STACK_POP()
 		--g_nThreads;
@@ -871,7 +871,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	g_AllowInterruption = FALSE; // Mark the thread just created above as permanently uninterruptible (i.e. until it finishes and is destroyed).
 
 	sExitLabelIsRunning = true;
-	DEBUGGER_STACK_PUSH(mOnExitLabel->mJumpToLine, mOnExitLabel->mName)
+	DEBUGGER_STACK_PUSH(_T("OnExit"))
 	if (mOnExitLabel->Execute() == FAIL)
 	{
 		// If the subroutine encounters a failure condition such as a runtime error, exit immediately.
@@ -12868,7 +12868,7 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 	// Critical seems to improve reliability, either because the thread completes faster (i.e. before the timeout) or because we check for messages less often.
 	InitNewThread(0, false, true, ACT_CRITICAL);
 	ResultType result;
-	DEBUGGER_STACK_PUSH(this, _T("#If"))
+	DEBUGGER_STACK_PUSH(_T("#If"))
 
 	// Update A_ThisHotkey, useful if #If calls a function to do its dirty work.
 	LPTSTR prior_hotkey_name[] = { g_script.mThisHotkeyName, g_script.mPriorHotkeyName };

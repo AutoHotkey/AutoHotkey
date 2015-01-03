@@ -861,7 +861,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 		Unregister(); // This takes care of other details for us.
 	++aVariant.mExistingThreads;  // This is the thread count for this particular hotkey only.
 	ResultType result;
-	DEBUGGER_STACK_PUSH(aVariant.mJumpToLabel->mJumpToLine, g_script.mThisHotkeyName)
+	DEBUGGER_STACK_PUSH(g_script.mThisHotkeyName)
 	result = aVariant.mJumpToLabel->Execute();
 	DEBUGGER_STACK_POP()
 	--aVariant.mExistingThreads;
@@ -2359,7 +2359,7 @@ ResultType Hotstring::PerformInNewThreadMadeByCaller()
 	g_script.mThisHotkeyModifiersLR = 0;
 	++mExistingThreads;  // This is the thread count for this particular hotstring only.
 	ResultType result;
-	DEBUGGER_STACK_PUSH(mJumpToLabel->mJumpToLine, g_script.mThisHotkeyName)
+	DEBUGGER_STACK_PUSH(g_script.mThisHotkeyName)
 	result = mJumpToLabel->Execute();
 	DEBUGGER_STACK_POP()
 	--mExistingThreads;
