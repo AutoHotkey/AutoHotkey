@@ -1940,7 +1940,7 @@ public:
 		Label *prev_label =g->CurrentLabel; // This will be non-NULL when a subroutine is called from inside another subroutine.
 		g->CurrentLabel = this;
 		ResultType result;
-		DEBUGGER_STACK_PUSH(mJumpToLine, this)
+		DEBUGGER_STACK_PUSH(this)
 		// I'm pretty sure it's not valid for the following call to ExecUntil() to tell us to jump
 		// somewhere, because the called function, or a layer even deeper, should handle the goto
 		// prior to returning to us?  So the last parameter is omitted:
@@ -2052,7 +2052,7 @@ public:
 		++mInstances;
 
 		ResultType result;
-		DEBUGGER_STACK_PUSH(mJumpToLine, this)
+		DEBUGGER_STACK_PUSH(this)
 		result = mJumpToLine->ExecUntil(UNTIL_BLOCK_END, aResultToken);
 #ifdef CONFIG_DEBUGGER
 		if (g_Debugger.IsConnected())

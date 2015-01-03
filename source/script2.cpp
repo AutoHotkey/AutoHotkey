@@ -16513,7 +16513,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 		// See MsgSleep() for comments about the following section.
 		tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
 		InitNewThread(0, false, true, func.mJumpToLine->mActionType);
-		DEBUGGER_STACK_PUSH(func.mJumpToLine, func.mName)
+		DEBUGGER_STACK_PUSH(_T("Callback"))
 	}
 	else // Backup/restore only A_EventInfo. This avoids callbacks changing A_EventInfo for the current thread/context (that would be counterintuitive and a source of script bugs).
 	{

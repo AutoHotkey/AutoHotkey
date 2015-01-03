@@ -833,35 +833,46 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 	
 	int level = 0;
 	DbgStack::Entry *se;
-	FileIndexType file_index;
-	LineNumberType line_number;
 	for (se = mStack.mTop; se >= mStack.mBottom; --se)
 	{
 		if (depth == -1 || depth == level)
 		{
-			if (se == mStack.mTop && mCurrLine) // See PreExecLine() for comments.
+			Line *line;
+			if (se == mStack.mTop)
 			{
-				file_index = mCurrLine->mFileIndex;
-				line_number = mCurrLine->mLineNumber;
+				ASSERT(mCurrLine); // Should always be valid.
+				line = mCurrLine; // See PreExecLine() for comments.
+			}
+			else if (se->type == DbgStack::SE_Thread)
+			{
+				// !se->line implies se->type == SE_Thread.
+				if (se[1].type == DbgStack::SE_Func)
+					line = se[1].func->mJumpToLine;
+				else if (se[1].type == DbgStack::SE_Sub)
+					line = se[1].sub->mJumpToLine;
+				else
+					// The auto-execute thread is probably the only one that can exist without
+					// a Sub or Func entry immediately above it.  As se != mStack.mTop, se->line
+					// has been set to a non-NULL by DbgStack::Push().
+					line = se->line;
 			}
 			else
 			{
-				file_index = se->line->mFileIndex;
-				line_number = se->line->mLineNumber;
+				line = se->line;
 			}
 			mResponseBuf.WriteF("<stack level=\"%i\" type=\"file\" filename=\"", level);
-			mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[file_index]));
-			mResponseBuf.WriteF("\" lineno=\"%u\" where=\"", line_number);
+			mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[line->mFileIndex]));
+			mResponseBuf.WriteF("\" lineno=\"%u\" where=\"", line->mLineNumber);
 			switch (se->type)
 			{
 			case DbgStack::SE_Thread:
-				mResponseBuf.WriteF("%e (thread)", U4T(se->desc)); // %e to escape characters which desc may contain (e.g. "a & b" in hotkey name).
+				mResponseBuf.WriteF("%e thread", U4T(se->desc)); // %e to escape characters which desc may contain (e.g. "a & b" in hotkey name).
 				break;
 			case DbgStack::SE_Func:
 				mResponseBuf.WriteF("%s()", U4T(se->func->mName)); // %s because function names should never contain characters which need escaping.
 				break;
 			case DbgStack::SE_Sub:
-				mResponseBuf.WriteF("%e:", U4T(se->sub->mName)); // %e because label/hotkey names may contain almost anything.
+				mResponseBuf.WriteF("%e sub", U4T(se->sub->mName)); // %e because label/hotkey names may contain almost anything.
 				break;
 			}
 			mResponseBuf.Write("\"/>");
@@ -2047,6 +2058,10 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 
 				if (SendResponse() == DEBUGGER_E_OK)
 				{
+					// mCurrLine isn't updated unless the debugger is connected, so set it now.
+					// g_script.mCurrLine should always be non-NULL after the script is loaded,
+					// even if no threads are active.
+					mCurrLine = g_script.mCurrLine;
 					return DEBUGGER_E_OK;
 				}
 
@@ -2499,6 +2514,30 @@ DbgStack::Entry *DbgStack::Push()
 		mTop->line = g_script.mCurrLine;
 	}
 	return ++mTop;
+}
+
+void DbgStack::Push(TCHAR *aDesc)
+{
+	Entry &s = *Push();
+	s.line = NULL;
+	s.desc = aDesc;
+	s.type = SE_Thread;
+}
+	
+void DbgStack::Push(Label *aSub)
+{
+	Entry &s = *Push();
+	s.line = aSub->mJumpToLine;
+	s.sub  = aSub;
+	s.type = SE_Sub;
+}
+	
+void DbgStack::Push(Func *aFunc)
+{
+	Entry &s = *Push();
+	s.line = aFunc->mJumpToLine;
+	s.func = aFunc;
+	s.type = SE_Func;
 }
 
 
