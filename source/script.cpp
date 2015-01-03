@@ -871,14 +871,14 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	g_AllowInterruption = FALSE; // Mark the thread just created above as permanently uninterruptible (i.e. until it finishes and is destroyed).
 
 	sExitLabelIsRunning = true;
-	DEBUGGER_STACK_PUSH(_T("OnExit"))
-	if (mOnExitLabel->Execute() == FAIL)
+	
+	if (mOnExitLabel->ExecuteInNewThread(_T("OnExit")) == FAIL)
 	{
 		// If the subroutine encounters a failure condition such as a runtime error, exit immediately.
 		// Otherwise, there will be no way to exit the script if the subroutine fails on each attempt.
 		TerminateApp(aExitReason, aExitCode);
 	}
-	DEBUGGER_STACK_POP()
+	
 	sExitLabelIsRunning = false;  // In case the user wanted the thread to end normally (see above).
 
 	if (terminate_afterward)

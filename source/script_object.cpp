@@ -1750,6 +1750,14 @@ ResultType LabelPtr::Execute() const
 	return CallMethod(mObject, mObject, _T("call")); // Lower-case for compatibility with JScript.
 }
 
+ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc) const
+{
+	DEBUGGER_STACK_PUSH(aNewThreadDesc)
+	ResultType result = Execute();
+	DEBUGGER_STACK_POP()
+	return result;
+}
+
 
 LabelPtr::CallableType LabelPtr::getType(IObject *aObject)
 {

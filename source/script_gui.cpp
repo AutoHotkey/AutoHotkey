@@ -9033,7 +9033,6 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
 	InitNewThread(0, false, true, type_of_first_line);
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-	DEBUGGER_STACK_PUSH(_T("Gui"))
 
 	AddRef();
 	AddRef();
@@ -9043,10 +9042,11 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	g->GuiEvent = 'N';
 	g->EventInfo = (DWORD_PTR) aNmHdr;
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
-	glabel->Execute();
+	
+	glabel->ExecuteInNewThread(_T("Gui"));
+	
 	int returnValue = (int)g_ErrorLevel->ToInt64(FALSE);
 
-	DEBUGGER_STACK_POP()
 	Release();
 	ResumeUnderlyingThread(ErrorLevel_saved);
 

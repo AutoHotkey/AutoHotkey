@@ -1998,6 +1998,7 @@ public:
 	LabelPtr() : mObject(NULL) {}
 	LabelPtr(IObject *object) : mObject(object) {}
 	ResultType Execute() const;
+	ResultType ExecuteInNewThread(TCHAR *aNewThreadDesc) const;
 	const LabelPtr* operator-> () { return this; } // Act like a pointer.
 	operator void *() const { return mObject; } // For comparisons and boolean eval.
 	

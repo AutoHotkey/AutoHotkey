@@ -860,10 +860,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 	if (unregistered_during_thread) // Do it every time through the loop in case the hotkey is re-registered by its own subroutine.
 		Unregister(); // This takes care of other details for us.
 	++aVariant.mExistingThreads;  // This is the thread count for this particular hotkey only.
-	ResultType result;
-	DEBUGGER_STACK_PUSH(g_script.mThisHotkeyName)
-	result = aVariant.mJumpToLabel->Execute();
-	DEBUGGER_STACK_POP()
+	ResultType result = aVariant.mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName);
 	--aVariant.mExistingThreads;
 	if (unregistered_during_thread)
 		Register();
@@ -2359,9 +2356,7 @@ ResultType Hotstring::PerformInNewThreadMadeByCaller()
 	g_script.mThisHotkeyModifiersLR = 0;
 	++mExistingThreads;  // This is the thread count for this particular hotstring only.
 	ResultType result;
-	DEBUGGER_STACK_PUSH(g_script.mThisHotkeyName)
-	result = mJumpToLabel->Execute();
-	DEBUGGER_STACK_POP()
+	result = LabelPtr(mJumpToLabel)->ExecuteInNewThread(g_script.mThisHotkeyName);
 	--mExistingThreads;
 	return result ? OK : FAIL;	// Return OK on all non-failure results.
 }

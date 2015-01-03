@@ -1234,12 +1234,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				else if (event_is_control_generated) // An earlier stage has ensured pcontrol isn't NULL in this case.
 					pcontrol->attrib |= GUI_CONTROL_ATTRIB_LABEL_IS_RUNNING; // Must be careful to set this flag only when the event is control-generated, not for a drag-and-drop onto the control, or context menu on the control, etc.
 
-				DEBUGGER_STACK_PUSH(_T("Gui"))
-
 				// LAUNCH GUI THREAD:
-				label_to_call->Execute();
-
-				DEBUGGER_STACK_POP()
+				label_to_call->ExecuteInNewThread(_T("Gui"));
 
 				// Bug-fix for v1.0.22: If the above ExecUntil() performed a "Gui Destroy", the
 				// pointers below are now invalid so should not be dereferenced.  In such a case,
@@ -1283,9 +1279,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					pgui->AddRef(); //
 					g.GuiWindow = g.GuiDefaultWindow = pgui; // But leave GuiControl at its default, which flags this event as from a menu item.
 				}
-				DEBUGGER_STACK_PUSH(_T("Menu"))
-				menu_item->mLabel->Execute();
-				DEBUGGER_STACK_POP()
+				label_to_call->ExecuteInNewThread(_T("Menu"));
 				if (pgui)
 				{
 					pgui->Release(); // g.GuiWindow
@@ -1305,9 +1299,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// ACT_IS_ALWAYS_ALLOWED() was already checked above.
 				// The message poster has ensured that g_script.mOnClipboardChangeLabel is non-NULL and valid.
 				g_script.mOnClipboardChangeIsRunning = true;
-				DEBUGGER_STACK_PUSH(_T("OnClipboardChange"))
-				g_script.mOnClipboardChangeLabel->Execute();
-				DEBUGGER_STACK_POP()
+				label_to_call->ExecuteInNewThread(_T("OnClipboardChange"));
 				g_script.mOnClipboardChangeIsRunning = false;
 				break;
 
@@ -1680,9 +1672,7 @@ bool CheckScriptTimers()
 		// launches new threads.
 
 		++timer.mExistingThreads;
-		DEBUGGER_STACK_PUSH(_T("Timer"))
-		timer.mLabel->Execute();
-		DEBUGGER_STACK_POP()
+		timer.mLabel->ExecuteInNewThread(_T("Timer"));
 		--timer.mExistingThreads;
 	} // for() each timer.
 
