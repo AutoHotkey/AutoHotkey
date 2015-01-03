@@ -2060,8 +2060,12 @@ public:
 			if (result == EARLY_RETURN)
 			{
 				// Find the end of this function.
-				Line *line;
-				for (line = mJumpToLine; line && (line->mActionType != ACT_BLOCK_END || !line->mAttribute); line = line->mNextLine);
+				//Line *line;
+				//for (line = mJumpToLine; line && (line->mActionType != ACT_BLOCK_END || !line->mAttribute); line = line->mNextLine);
+				// Since mJumpToLine points at the first line *inside* the body, mJumpToLine->mPrevLine
+				// is the block-begin.  That line's mRelatedLine is the line *after* the block-end, so
+				// use it's mPrevLine.  mRelatedLine is guaranteed to be non-NULL by load-time logic.
+				Line *line = mJumpToLine->mPrevLine->mRelatedLine->mPrevLine;
 				// Give user the opportunity to inspect variables before returning.
 				if (line)
 					g_Debugger.PreExecLine(line);
