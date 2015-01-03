@@ -21,7 +21,7 @@ GNU General Public License for more details.
 #include "window.h" // for SetForegroundWindowEx()
 
 
-ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2)
+ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var)
 {
 	if (mMenuUseErrorLevel)
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Set default, which is "none" for the Menu command.
@@ -323,7 +323,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 
 	// Seems best to avoid performance enhancers such as (Label *)mAttribute here, since the "Menu"
 	// command has so many modes of operation that would be difficult to parse at load-time:
-	Label *target_label = NULL;  // Set default.
+	IObject *target_label = NULL;  // Set default.
 	UserMenu *submenu = NULL;    // Set default.
 	if (menu_command == MENU_CMD_ADD && !update_exiting_item_options) // Labels and submenus are only used in conjunction with the ADD command.
 	{
@@ -343,7 +343,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 					RETURN_MENU_ERROR(_T("Submenu must not contain its parent menu."), aParam4);
 			}
 			else // It's a label.
-				if (   !(target_label = FindLabel(aParam4))   )
+				if (   !(target_label = FindCallable(aParam4, aParam4Var))   )
 					RETURN_MENU_ERROR(ERR_NO_LABEL, aParam4);
 		}
 	}
@@ -588,7 +588,7 @@ ResultType Script::ScriptDeleteMenu(UserMenu *aMenu)
 
 
 
-ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, LPTSTR aOptions)
+ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions)
 // Caller must have already ensured that aName does not yet exist as a user-defined menu item
 // in this->mMenu.
 {
@@ -630,7 +630,7 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, Label *aLabel, UserMenu
 
 
 
-UserMenuItem::UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, UserMenu *aMenu)
+UserMenuItem::UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, UserMenu *aMenu)
 // UserMenuItem Constructor.
 	: mName(aName), mNameCapacity(aNameCapacity), mMenuID(aMenuID), mLabel(aLabel), mSubmenu(aSubmenu), mMenu(aMenu)
 	, mPriority(0) // default priority = 0
@@ -709,7 +709,7 @@ ResultType UserMenu::DeleteAllItems()
 
 
 
-ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, Label *aLabel, UserMenu *aSubmenu, LPTSTR aOptions)
+ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions)
 // Modify the label, submenu, or options of a menu item (exactly one of these should be NULL and the
 // other not except when updating only the options).
 // If a menu item becomes a submenu, we don't relinquish its ID in case it's ever made a normal item

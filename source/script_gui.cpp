@@ -623,7 +623,7 @@ return_the_result:
 
 
 
-ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
+ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, Var *aParam3Var)
 {
 	GuiType *pgui = Script::ResolveGui(aCommand, aCommand);
 	GuiControlCmds guicontrol_cmd = Line::ConvertGuiControlCmd(aCommand);
@@ -677,7 +677,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 	{
 		GuiControlOptionsType go; // Its contents not currently used here, but it might be in the future.
 		gui.ControlInitOptions(go, control);
-		result = gui.ControlParseOptions(aCommand, go, control, control_index);
+		result = gui.ControlParseOptions(aCommand, go, control, control_index, aParam3Var);
 		goto return_the_result;
 	}
 
@@ -1873,23 +1873,23 @@ void GuiType::SetLabels(LPTSTR aLabelPrefix)
 
 	// Find the label to run automatically when the form closes (if any):
 	_tcscpy(label_suffix, _T("Close"));
-	mLabelForClose = g_script.FindLabel(label_name);  // OK if NULL (closing the window is the same as "gui, cancel").
+	mLabelForClose = g_script.FindCallable(label_name);  // OK if NULL (closing the window is the same as "gui, cancel").
 
 	// Find the label to run automatically when the user presses Escape (if any):
 	_tcscpy(label_suffix, _T("Escape"));
-	mLabelForEscape = g_script.FindLabel(label_name);  // OK if NULL (pressing ESCAPE does nothing).
+	mLabelForEscape = g_script.FindCallable(label_name);  // OK if NULL (pressing ESCAPE does nothing).
 
 	// Find the label to run automatically when the user resizes the window (if any):
 	_tcscpy(label_suffix, _T("Size"));
-	mLabelForSize = g_script.FindLabel(label_name);  // OK if NULL.
+	mLabelForSize = g_script.FindCallable(label_name);  // OK if NULL.
 
 	// Find the label to run automatically when the user invokes context menu via AppsKey, Rightclick, or Shift-F10:
 	_tcscpy(label_suffix, _T("ContextMenu"));
-	mLabelForContextMenu = g_script.FindLabel(label_name);  // OK if NULL (leaves context menu unhandled).
+	mLabelForContextMenu = g_script.FindCallable(label_name);  // OK if NULL (leaves context menu unhandled).
 
 	// Find the label to run automatically when files are dropped onto the window:
 	_tcscpy(label_suffix, _T("DropFiles"));
-	if ((mLabelForDropFiles = g_script.FindLabel(label_name))  // OK if NULL (dropping files is disallowed).
+	if ((mLabelForDropFiles = g_script.FindCallable(label_name))  // OK if NULL (dropping files is disallowed).
 		&& !mHdrop) // i.e. don't allow user to visibly drop files onto window if a drop is already queued or running.
 		mExStyle |= WS_EX_ACCEPTFILES; // Makes the window accept drops. Otherwise, the WM_DROPFILES msg is not received.
 	else
@@ -2345,7 +2345,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		//LPTSTR string_list[] = {_T("\r"), _T("\n"), _T(" "), _T("\t"), _T("&"), _T("`"), NULL}; // \r is separate from \n in case they're ever unpaired. Last char must be NULL to terminate the list.
 		//for (LPTSTR *cp = string_list; *cp; ++cp)
 		//	StrReplace(label_name, *cp, _T(""), SCS_SENSITIVE);
-		control.jump_to_label = g_script.FindLabel(label_name);  // OK if NULL (the button will do nothing).
+		control.jump_to_label = g_script.FindCallable(label_name);  // OK if NULL (the button will do nothing).
 	}
 
 	// The below will yield NULL for GUI_CONTROL_STATUSBAR because control.tab_control_index==OutOfBounds for it.
@@ -4480,7 +4480,7 @@ void GuiType::GetTotalWidthAndHeight(LONG &aWidth, LONG &aHeight)
 
 
 ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &aOpt, GuiControlType &aControl
-	, GuiIndexType aControlIndex)
+	, GuiIndexType aControlIndex, Var *aParam3Var)
 // Caller must have already initialized aOpt with zeroes or any other desired starting values.
 // Caller must ensure that aOptions is a modifiable string, since this method temporarily alters it.
 {
@@ -5481,7 +5481,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			}
 
 			++next_option;  // Above has already verified that next_option isn't the empty string.
-			if (!*next_option)
+			if (!*next_option && !(adding && aParam3Var && aParam3Var->HasObject()))
 			{
 				// The option word consists of only one character, so consider it valid only if it doesn't
 				// require an arg.  Example: An isolated "H" should not cause the height to be set to zero.
@@ -5522,8 +5522,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
 						: g_script.ScriptError(_T("This control type should not have an associated subroutine.")
 							, next_option - 1);
-				Label *candidate_label;
-				if (   !(candidate_label = g_script.FindLabel(next_option))   )
+				IObject *candidate_label;
+				if (   !(candidate_label = g_script.FindCallable(next_option, aParam3Var))   )
 				{
 					// If there is no explicit label, fall back to a special action if one is available
 					// for this keyword:
@@ -9015,15 +9015,15 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 		return 0;
 
 	GuiControlType& aControl = mControl[aControlIndex];
-	Label* glabel = aControl.jump_to_label;
+	LabelRef &glabel = aControl.jump_to_label;
 	if (!glabel)
 		return 0;
 
-	Line* jumpToLine = glabel->mJumpToLine;
+	ActionTypeType type_of_first_line = glabel->TypeOfFirstLine();
 
 	if (g_nThreads >= g_MaxThreadsTotal)
 		if (g_nThreads >= MAX_THREADS_EMERGENCY
-			|| jumpToLine->mActionType != ACT_EXITAPP && jumpToLine->mActionType != ACT_RELOAD)
+			|| type_of_first_line != ACT_EXITAPP && type_of_first_line != ACT_RELOAD)
 			return 0;
 
 	if (g->Priority > 0)
@@ -9031,7 +9031,7 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 
 	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
 	tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
-	InitNewThread(0, false, true, jumpToLine->mActionType);
+	InitNewThread(0, false, true, type_of_first_line);
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	DEBUGGER_STACK_PUSH(_T("Gui"))
 

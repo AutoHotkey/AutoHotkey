@@ -895,7 +895,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 
 
 
-ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions, Label *aJumpToLabel)
+ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions, IObject *aJumpToLabel)
 // Creates, updates, enables, or disables a hotkey dynamically (while the script is running).
 // Returns OK or FAIL.
 {
@@ -958,7 +958,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	HookActionType hook_action = 0; // Set default.
 	if (!aJumpToLabel) // It wasn't provided by caller (resolved at load-time).
 		if (   !(hook_action = ConvertAltTab(aLabelName, true))   )
-			if (   *aLabelName && !(aJumpToLabel = g_script.FindLabel(aLabelName))   )
+			if (   *aLabelName && !(aJumpToLabel = g_script.FindCallable(aLabelName))   )
 				RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, ERR_NO_LABEL, aLabelName);
 	// Above has ensured that aJumpToLabel and hook_action can't both be non-zero.  Furthermore,
 	// both can be zero/NULL only when the caller is updating an existing hotkey to have new options
@@ -1073,7 +1073,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 						// v1.0.42: However, this only needs to be done if Suspend is currently turned on,
 						// since otherwise the change in exempt status can't change whether this variant is
 						// currently in effect.
-						if (variant->mEnabled && g_IsSuspended && aJumpToLabel->IsExemptFromSuspend() != variant->mJumpToLabel->IsExemptFromSuspend())
+						if (variant->mEnabled && g_IsSuspended && LabelPtr(aJumpToLabel)->IsExemptFromSuspend() != variant->mJumpToLabel->IsExemptFromSuspend())
 							update_all_hotkeys = true;
 						variant->mJumpToLabel = aJumpToLabel; // Must be done only after the above has finished using the old mJumpToLabel.
 						// Older comment:
@@ -1198,7 +1198,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 
 
 
-Hotkey *Hotkey::AddHotkey(Label *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel)
+Hotkey *Hotkey::AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel)
 // Caller provides aJumpToLabel rather than a Line* because at the time a hotkey or hotstring
 // is created, the label's destination line is not yet known.  So the label is used a placeholder.
 // Caller must ensure that either aJumpToLabel or aName is not NULL.
@@ -1226,7 +1226,7 @@ Hotkey *Hotkey::AddHotkey(Label *aJumpToLabel, HookActionType aHookAction, LPTST
 
 
 
-Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction, LPTSTR aName
+Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName
 	, bool aSuffixHasTilde, bool aUseErrorLevel)
 // Constructor.
 // Caller provides aJumpToLabel rather than a Line* because at the time a hotkey or hotstring
@@ -1270,7 +1270,7 @@ Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction
 		return;
 	}
 
-	LPTSTR hotkey_name = aName ? aName : aJumpToLabel->mName;
+	LPTSTR hotkey_name = aName;
 	if (!TextInterpret(hotkey_name, this, aUseErrorLevel)) // The called function already displayed the error.
 		return;
 
@@ -1571,7 +1571,7 @@ HotkeyVariant *Hotkey::FindVariant()
 
 
 
-HotkeyVariant *Hotkey::AddVariant(Label *aJumpToLabel, bool aSuffixHasTilde)
+HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde)
 // Returns NULL upon out-of-memory; otherwise, the address of the new variant.
 // Even if aJumpToLabel is NULL, a non-NULL mJumpToLabel will be stored in each variant so that
 // NULL doesn't have to be constantly checked during script runtime.

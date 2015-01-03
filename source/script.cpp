@@ -2415,7 +2415,7 @@ examine_line:
 					}
 				}
 				else // No parent hotkey yet, so create it.
-					if (   !(hk = Hotkey::AddHotkey(mLastLabel, hook_action, NULL, suffix_has_tilde, false))   )
+					if (   !(hk = Hotkey::AddHotkey(mLastLabel, hook_action, mLastLabel->mName, suffix_has_tilde, false))   )
 						return FAIL; // It already displayed the error.
 			}
 			goto continue_main_loop; // In lieu of "continue", for performance.
@@ -3424,7 +3424,7 @@ void ScriptTimer::Disable()
 
 
 
-ResultType Script::UpdateOrCreateTimer(Label *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
+ResultType Script::UpdateOrCreateTimer(IObject *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
 	, bool aUpdatePriorityOnly)
 // Caller should specific a blank aPeriod to prevent the timer's period from being changed
 // (i.e. if caller just wants to turn on or off an existing timer).  But if it does this
@@ -3514,6 +3514,23 @@ Label *Script::FindLabel(LPTSTR aLabelName)
 		if (!_tcsicmp(label->mName, aLabelName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			return label; // Match found.
 	return NULL; // No match found.
+}
+
+
+
+IObject *Script::FindCallable(LPTSTR aLabelName, Var *aVar)
+{
+	if (aVar && aVar->HasObject())
+		return aVar->Object();
+	if (*aLabelName)
+	{
+		if (Label *label = FindLabel(aLabelName))
+			return label;
+		if (Func *func = FindFunc(aLabelName))
+			if (func->mMinParams == 0)
+				return func;
+	}
+	return NULL;
 }
 
 
@@ -6591,6 +6608,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			case GUICONTROL_CMD_CONTENTS:
 			case GUICONTROL_CMD_TEXT:
 			case GUICONTROL_CMD_MOVEDRAW:
+			case GUICONTROL_CMD_OPTIONS:
 				break; // Do nothing for the above commands since Param3 is optional.
 			case GUICONTROL_CMD_MOVE:
 			case GUICONTROL_CMD_CHOOSE:
@@ -9816,7 +9834,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		// so that labels both above and below this line can be resolved:
 		case ACT_ONEXIT:
 			if (*line_raw_arg1 && !line->ArgHasDeref(1))
-				if (   !(line->mAttribute = FindLabel(line_raw_arg1))   )
+				if (   !(line->mAttribute = FindCallable(line_raw_arg1))   )
 					return line->PreparseError(ERR_NO_LABEL);
 			break;
 
@@ -9855,7 +9873,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					return line->PreparseError(ERR_PARAM1_INVALID);
 				}
 				if (*line_raw_arg2 && !line->ArgHasDeref(2))
-					if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
+					if (   !(line->mAttribute = FindCallable(line_raw_arg2))   )
 						if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
 							return line->PreparseError(ERR_NO_LABEL);
 			}
@@ -9863,7 +9881,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 
 		case ACT_SETTIMER:
 			if (*line_raw_arg1 && !line->ArgHasDeref(1))
-				if (   !(line->mAttribute = FindLabel(line_raw_arg1))   )
+				if (   !(line->mAttribute = FindCallable(line_raw_arg1))   )
 					return line->PreparseError(ERR_NO_LABEL);
 			if (*line_raw_arg2 && !line->ArgHasDeref(2))
 				if (!Line::ConvertOnOff(line_raw_arg2) && !IsPureNumeric(line_raw_arg2, true) // v1.0.46.16: Allow negatives to support the new run-only-once mode.
@@ -13829,7 +13847,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	size_t source_length; // For String commands.
 	SymbolType var_is_pure_numeric, value_is_pure_numeric; // For math operations.
 	vk_type vk; // For GetKeyState.
-	Label *target_label;  // For ACT_SETTIMER and ACT_HOTKEY
+	IObject *target_label;  // For ACT_SETTIMER, ACT_HOTKEY and ACT_ONEXIT
 	__int64 device_id;  // For sound commands.  __int64 helps avoid compiler warning for some conversions.
 	bool is_remote_registry; // For Registry commands.
 	HKEY root_key; // For Registry commands.
@@ -14466,27 +14484,26 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return OK;
 
 	case ACT_ONEXIT:
-		if (!*ARG1) // Reset to normal Exit behavior.
-		{
-			g_script.mOnExitLabel = NULL;
-			return OK;
-		}
 		// If it wasn't resolved at load-time, it must be a variable reference:
-		if (   !(target_label = (Label *)mAttribute)   )
-			if (   !(target_label = g_script.FindLabel(ARG1))   )
-				return LineError(ERR_NO_LABEL, FAIL, ARG1);
+		if (   !(target_label = (IObject *)mAttribute)   )
+			if (   !(target_label = g_script.FindCallable(ARG1, ARGVAR1)) && *ARG1   )
+					return LineError(ERR_NO_LABEL, FAIL, ARG1);
 		g_script.mOnExitLabel = target_label;
 		return OK;
 
 	case ACT_HOTKEY:
 		// mAttribute is the label resolved at loadtime, if available (for performance).
-		return Hotkey::Dynamic(THREE_ARGS, (Label *)mAttribute);
+		if (   !(target_label = (IObject *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
+			if (ARGVAR2 && ARGVAR2->HasObject()) // Allow: Hotkey %KeyName%, %VarWithObject%
+				target_label = ARGVAR2->Object(); // AddRef() will be called later, when it is stored.
+		return Hotkey::Dynamic(THREE_ARGS, target_label);
 
 	case ACT_SETTIMER: // A timer is being created, changed, or enabled/disabled.
 		// Note that only one timer per label is allowed because the label is the unique identifier
 		// that allows us to figure out whether to "update or create" when searching the list of timers.
-		if (   !(target_label = (Label *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
-			if (   !(target_label = (*ARG1 ? g_script.FindLabel(ARG1) : g.CurrentLabel))   )
+		if (   !(target_label = (IObject *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
+			if (   !(target_label = g_script.FindCallable(ARG1, ARGVAR1))
+				&& !(!*ARG1 && (target_label = g.CurrentLabel))   )
 				return LineError(ERR_NO_LABEL, FAIL, ARG1);
 		// And don't update mAttribute (leave it NULL) because we want ARG1 to be dynamically resolved
 		// every time the command is executed (in case the contents of the referenced variable change).
@@ -14589,7 +14606,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		if (   !(group = (WinGroup *)mAttribute)   )
 			if (   !(group = g_script.FindGroup(ARG1, true))   )  // Last parameter -> create-if-not-found.
 				return FAIL;  // It already displayed the error for us.
-		target_label = NULL;
+		Label *target_label = NULL;
 		if (*ARG4)
 		{
 			if (   !(target_label = (Label *)mRelatedLine)   ) // Jump target hasn't been resolved yet, probably due to it being a deref.
@@ -15054,13 +15071,13 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return FormatTime(ARG2, ARG3);
 
 	case ACT_MENU:
-		return g_script.PerformMenu(SIX_ARGS); // L17: Changed from FIVE_ARGS to access previously "reserved" arg (for use by Menu,,Icon).
+		return g_script.PerformMenu(SIX_ARGS, ARGVAR4); // L17: Changed from FIVE_ARGS to access previously "reserved" arg (for use by Menu,,Icon).
 
 	case ACT_GUI:
 		return g_script.PerformGui(FOUR_ARGS);
 
 	case ACT_GUICONTROL:
-		return GuiControl(THREE_ARGS);
+		return GuiControl(THREE_ARGS, ARGVAR3);
 
 	case ACT_GUICONTROLGET:
 		return GuiControlGet(ARG2, ARG3, ARG4);
@@ -16300,7 +16317,7 @@ LPTSTR Script::ListKeyHistory(LPTSTR aBuf, int aBufSize) // aBufSize should be a
 	TCHAR timer_list[128] = _T("");
 	for (ScriptTimer *timer = mFirstTimer; timer != NULL; timer = timer->mNextTimer)
 		if (timer->mEnabled)
-			sntprintfcat(timer_list, _countof(timer_list) - 3, _T("%s "), timer->mLabel->mName); // Allow room for "..."
+			sntprintfcat(timer_list, _countof(timer_list) - 3, _T("%s "), timer->mLabel->Name()); // Allow room for "..."
 	if (*timer_list)
 	{
 		size_t length = _tcslen(timer_list);

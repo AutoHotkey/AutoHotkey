@@ -214,7 +214,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	Hotkey *hk;
 	USHORT variant_id;
 	HotkeyVariant *variant;
-	ActionTypeType type_of_first_line;
 	int priority;
 	Hotstring *hs;
 	GuiType *pgui; // This is just a temp variable and should not be referred to once the below has been determined.
@@ -224,7 +223,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	DWORD_PTR gui_event_info;
 	DWORD gui_size;
 	bool *pgui_label_is_running, event_is_control_generated;
-	Label *gui_label;
 	HDROP hdrop_to_free;
 	DWORD tick_before, tick_after;
 	LRESULT msg_reply;
@@ -654,6 +652,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		case WM_HOTKEY:        // As a result of this app having previously called RegisterHotkey(), or from TriggerJoyHotkeys().
 		case AHK_USER_MENU:    // The user selected a custom menu item.
 		{
+			LabelPtr label_to_call;
+
 			hdrop_to_free = NULL;  // Set default for this message's processing (simplifies code).
 			switch(msg.message)
 			{
@@ -689,22 +689,22 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				switch(gui_action)
 				{
 				case GUI_EVENT_RESIZE: // This is the signal to run the window's OnEscape label. Listed first for performance.
-					if (   !(gui_label = pgui->mLabelForSize)   ) // In case it became NULL since the msg was posted.
+					if (   !(label_to_call = pgui->mLabelForSize)   ) // In case it became NULL since the msg was posted.
 						continue;
 					pgui_label_is_running = &pgui->mLabelForSizeIsRunning;
 					break;
 				case GUI_EVENT_CLOSE:  // This is the signal to run the window's OnClose label.
-					if (   !(gui_label = pgui->mLabelForClose)   ) // In case it became NULL since the msg was posted.
+					if (   !(label_to_call = pgui->mLabelForClose)   ) // In case it became NULL since the msg was posted.
 						continue;
 					pgui_label_is_running = &pgui->mLabelForCloseIsRunning;
 					break;
 				case GUI_EVENT_ESCAPE: // This is the signal to run the window's OnEscape label.
-					if (   !(gui_label = pgui->mLabelForEscape)   ) // In case it became NULL since the msg was posted.
+					if (   !(label_to_call = pgui->mLabelForEscape)   ) // In case it became NULL since the msg was posted.
 						continue;
 					pgui_label_is_running = &pgui->mLabelForEscapeIsRunning;
 					break;
 				case GUI_EVENT_CONTEXTMENU:
-					if (   !(gui_label = pgui->mLabelForContextMenu)   ) // In case it became NULL since the msg was posted.
+					if (   !(label_to_call = pgui->mLabelForContextMenu)   ) // In case it became NULL since the msg was posted.
 						continue;
 					// UPDATE: Must allow multiple threads because otherwise the user cannot right-click twice
 					// consecutively (the second click is blocked because the menu is still displayed at the
@@ -717,7 +717,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					break;
 				case GUI_EVENT_DROPFILES: // This is the signal to run the window's DropFiles label.
 					hdrop_to_free = pgui->mHdrop; // This variable simplifies the code further below.
-					if (   !(gui_label = pgui->mLabelForDropFiles) // In case it became NULL since the msg was posted.
+					if (   !(label_to_call = pgui->mLabelForDropFiles) // In case it became NULL since the msg was posted.
 						|| !hdrop_to_free // Checked just in case, so that the below can query it.
 						|| !(gui_event_info = DragQueryFile(hdrop_to_free, 0xFFFFFFFF, NULL, 0))   ) // Probably impossible, but if it ever can happen, seems best to ignore it.
 					{
@@ -736,7 +736,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				default: // This is an action from a particular control in the GUI window.
 					if (!pcontrol) // gui_control_index was beyond the quantity of controls, possibly due to parent window having been destroyed since the msg was sent (or bogus msg).
 						continue;  // Discarding an invalid message here is relied upon both other sections below.
-					if (   !(gui_label = pcontrol->jump_to_label)   )
+					if (   !(label_to_call = pcontrol->jump_to_label)   )
 					{
 						// On if there's no label is the implicit action considered.
 						if (pcontrol->attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)
@@ -756,7 +756,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					event_is_control_generated = true; // As opposed to a drag-and-drop or context-menu event that targets a specific control.
 					// And leave pgui_label_is_running at its default of NULL because it doesn't apply to these.
 				} // switch(gui_action)
-				type_of_first_line = gui_label->mJumpToLine->mActionType; // Above would already have discarded this message if it there was no label.
+				// label_to_call has been set; above would already have discarded this message if it there was no label.
 				break; // case AHK_GUI_ACTION
 
 			case AHK_USER_MENU: // user-defined menu item
@@ -767,7 +767,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// the menu):
 				if (!menu_item->mLabel)
 					continue;
-				type_of_first_line = menu_item->mLabel->mJumpToLine->mActionType;
+				label_to_call = menu_item->mLabel;
 				break;
 
 			case AHK_HOTSTRING:
@@ -802,12 +802,12 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// Since this isn't an auto-replace hotstring, set this value to support
 				// the built-in variable A_EndChar:
 				g_script.mEndChar = hs->mEndCharRequired ? (char)LOWORD(msg.lParam) : 0; // v1.0.48.04: Explicitly set 0 when hs->mEndCharRequired==false because LOWORD is used for something else in that case.
-				type_of_first_line = hs->mJumpToLabel->mJumpToLine->mActionType;
+				label_to_call = hs->mJumpToLabel;
 				break;
 
 			case AHK_CLIPBOARD_CHANGE: // Due to the presence of an OnClipboardChange label in the script.
 				// Caller has ensured that mOnClipboardChangeLabel is a non-NULL, valid pointer.
-				type_of_first_line = g_script.mOnClipboardChangeLabel->mJumpToLine->mActionType;
+				label_to_call = g_script.mOnClipboardChangeLabel;
 				break;
 
 			default: // hotkey
@@ -882,8 +882,12 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				else if (variant->mHotCriterion == HOT_IF_EXPR) // Variants of this type may 
 					criterion_found_hwnd = g_HotExprLFW; // For #if WinExist(WinTitle) and similar.
 
-				type_of_first_line = variant->mJumpToLabel->mJumpToLine->mActionType;
+				label_to_call = variant->mJumpToLabel;
 			} // switch(msg.message)
+
+			// label_to_call has been set to the label, function or object which is
+			// about to be called, though it might not be called via label_to_call.
+			ActionTypeType type_of_first_line = label_to_call->TypeOfFirstLine();
 
 			if (g_nThreads >= g_MaxThreadsTotal)
 			{
@@ -1233,7 +1237,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				DEBUGGER_STACK_PUSH(_T("Gui"))
 
 				// LAUNCH GUI THREAD:
-				gui_label->Execute();
+				label_to_call->Execute();
 
 				DEBUGGER_STACK_POP()
 
@@ -1663,7 +1667,7 @@ bool CheckScriptTimers()
 		// Pass false as 3rd param below because ++g_nThreads should be done only once rather than
 		// for each Init(), and also it's not necessary to call update the tray icon since timers
 		// won't run if there is any paused thread, thus the icon can't currently be showing "paused".
-		InitNewThread(timer.mPriority, false, false, timer.mLabel->mJumpToLine->mActionType);
+		InitNewThread(timer.mPriority, false, false, timer.mLabel->TypeOfFirstLine());
 
 		// The above also resets g_script.mLinesExecutedThisCycle to zero, which should slightly
 		// increase the expectation that any short timed subroutine will run all the way through
