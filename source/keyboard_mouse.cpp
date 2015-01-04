@@ -3829,13 +3829,68 @@ LPTSTR VKtoKeyName(vk_type aVK, LPTSTR aBuf, int aBufSize, bool aUseFallback)
 	}
 	// Since above didn't return, no match was found.  Try to map it to
 	// a character or use the default format for an unknown key code:
-	if (*aBuf = (TCHAR)MapVirtualKey(aVK, MAPVK_VK_TO_CHAR))
+	if (*aBuf = VKtoChar(aVK))
 		aBuf[1] = '\0';
 	else if (aUseFallback && aVK)
 		sntprintf(aBuf, aBufSize, _T("vk%02X"), aVK);
 	else
 		*aBuf = '\0';
 	return aBuf;
+}
+
+
+TCHAR VKtoChar(vk_type aVK, HKL aKeybdLayout)
+// Given a VK code, returns the character that an unmodified keypress would produce
+// on the given keyboard layout.  Defaults to the script's own layout if omitted.
+// Using this rather than MapVirtualKey() fixes some inconsistency that used to
+// exist between 'A'-'Z' and every other key.
+{
+	if (!aKeybdLayout)
+		aKeybdLayout = GetKeyboardLayout(0);
+	
+	// MapVirtualKeyEx() always produces 'A'-'Z' for those keys regardless of keyboard layout,
+	// but for any other keys it produces the correct results, so we'll use it:
+	if (aVK > 'Z' || aVK < 'A')
+		return (TCHAR)MapVirtualKeyEx(aVK, MAPVK_VK_TO_CHAR, aKeybdLayout);
+
+	// For any other keys, 
+	TCHAR ch[3], ch_not_used[2];
+	BYTE key_state[256];
+	ZeroMemory(key_state, sizeof(key_state));
+	TCHAR dead_char = 0;
+	int n;
+
+	// If there's a pending dead-key char in aKeybdLayout's buffer, it would modify the result.
+	// We don't want that to happen, so as a workaround we pass a key-code which doesn't combine
+	// with any dead chars, and will therefore pull it out.  VK_DECIMAL is used because it is
+	// almost always valid; see http://www.siao2.com/2007/10/27/5717859.aspx
+	if (ToUnicodeOrAsciiEx(VK_DECIMAL, 0, key_state, ch, 0, aKeybdLayout) == 2)
+	{
+		// Save the char to be later re-injected.
+		dead_char = ch[0];
+	}
+	// Retrieve the character that corresponds to aVK, if any.
+	n = ToUnicodeOrAsciiEx(aVK, 0, key_state, ch, 0, aKeybdLayout);
+	if (n < 0) // aVK is a dead key, and we've just placed it into aKeybdLayout's buffer.
+	{
+		// Flush it out in the same manner as before (see above).
+		ToUnicodeOrAsciiEx(VK_DECIMAL, 0, key_state, ch_not_used, 0, aKeybdLayout);
+	}
+	if (dead_char)
+	{
+		// Re-inject the dead-key char so that user input is not interrupted.
+		// To do this, we need to find the right VK and modifier key combination:
+		modLR_type modLR;
+		vk_type dead_vk = CharToVKAndModifiers(dead_char, &modLR, aKeybdLayout);
+		if (dead_vk)
+		{
+			AdjustKeyState(key_state, modLR);
+			ToUnicodeOrAsciiEx(dead_vk, 0, key_state, ch_not_used, 0, aKeybdLayout);
+		}
+		//else: can't do it.
+	}
+	// ch[0] is set even for n < 0, but might not be for n == 0.
+	return n ? ch[0] : 0;
 }
 
 
