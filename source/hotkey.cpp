@@ -1047,12 +1047,12 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 			}
 			
 			// v1.1.15: Allow the ~tilde prefix to be added/removed from an existing hotkey variant.
-			// v1.1.18.01: Apply this change even if aJumpToLabel is omitted.
+			// v1.1.19: Apply this change even if aJumpToLabel is omitted.
 			if (variant->mNoSuppress = suffix_has_tilde)
 				hk->mNoSuppress |= AT_LEAST_ONE_VARIANT_HAS_TILDE;
 			else
 				hk->mNoSuppress |= AT_LEAST_ONE_VARIANT_LACKS_TILDE;
-			// v1.1.18.01: Allow the $UseHook prefix to be added to an existing hotkey.
+			// v1.1.19: Allow the $UseHook prefix to be added to an existing hotkey.
 			if (!hk->mKeybdHookMandatory && (variant->mNoSuppress || hook_is_mandatory))
 			{
 				update_all_hotkeys = true; // Since it may be switching from reg to k-hook.

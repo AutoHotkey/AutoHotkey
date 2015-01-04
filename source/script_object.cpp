@@ -558,10 +558,10 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	{
 		if (!field)
 			return INVOKE_NOT_HANDLED;
-		// v1.1.18.00: The following flag is set whenever a COM client invokes with METHOD|PROPERTYGET,
+		// v1.1.18: The following flag is set whenever a COM client invokes with METHOD|PROPERTYGET,
 		// such as X.Y in VBScript or C#.  Some convenience is gained at the expense of purity by treating
 		// it as METHOD if X.Y is a Func object or PROPERTYGET in any other case.
-		// v1.1.18.01: Handling this flag here rather than in CallField() has the following benefits:
+		// v1.1.19: Handling this flag here rather than in CallField() has the following benefits:
 		//  - Reduces code duplication.
 		//  - Fixes X.__Call being returned instead of being called, if X.__Call is a string.
 		//  - Allows X.Y(Z) and similar to work like X.Y[Z], instead of ignoring the extra parameters.
