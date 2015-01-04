@@ -197,9 +197,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="source\resources\AutoHotkey.exe.manifest">
-      <Filter>Resource Files</Filter>
-    </None>
     <None Include="source\resources\icon_filetype.ico">
       <Filter>Resource Files</Filter>
     </None>
@@ -236,6 +233,9 @@
     </CustomBuild>
     <CustomBuild Include="source\libx64call\x64stub.asm">
       <Filter>Assembly Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="source\resources\AutoHotkey.exe.manifest">
+      <Filter>Resource Files</Filter>
     </CustomBuild>
   </ItemGroup>
 </Project>
