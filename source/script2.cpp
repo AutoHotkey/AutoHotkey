@@ -12400,6 +12400,7 @@ VarSizeType BIV_TimeIdle(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple cal
 {
 	if (!aBuf) // IMPORTANT: Conservative estimate because tick might change between 1st & 2nd calls.
 		return MAX_INTEGER_LENGTH;
+#ifdef CONFIG_WIN9X
 	*aBuf = '\0';  // Set default.
 	if (g_os.IsWin2000orLater()) // Checked in case the function is present in the OS but "not implemented".
 	{
@@ -12415,6 +12416,15 @@ VarSizeType BIV_TimeIdle(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple cal
 				ITOA64(GetTickCount() - lii.dwTime, aBuf);
 		}
 	}
+#else
+	// Not Win9x: Calling it directly should (in theory) produce smaller code size.
+	LASTINPUTINFO lii;
+	lii.cbSize = sizeof(lii);
+	if (GetLastInputInfo(&lii))
+		ITOA64(GetTickCount() - lii.dwTime, aBuf);
+	else
+		*aBuf = '\0';
+#endif
 	return (VarSizeType)_tcslen(aBuf);
 }
 
