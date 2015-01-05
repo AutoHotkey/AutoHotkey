@@ -849,9 +849,10 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 	// in which case we would want SendKeys() to take note of these modifiers even
 	// if it was called from an ExecUntil() other than ours here:
 	g_script.mThisHotkeyModifiersLR = mModifiersConsolidatedLR;
+
+#ifdef CONFIG_WIN9X
 	bool unregistered_during_thread = mUnregisterDuringThread && mIsRegistered;
 
-	// LAUNCH HOTKEY SUBROUTINE:
 	// For v1.0.23, the below allows the $ hotkey prefix to unregister the hotkey on
 	// Windows 9x, which allows the send command to send the hotkey itself without
 	// causing an infinite loop of keystrokes.  For simplicity, the hotkey is kept
@@ -859,14 +860,20 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 	// selectively do it before and after each Send command of the thread:
 	if (unregistered_during_thread) // Do it every time through the loop in case the hotkey is re-registered by its own subroutine.
 		Unregister(); // This takes care of other details for us.
+#endif
+
+	// LAUNCH HOTKEY SUBROUTINE:
 	++aVariant.mExistingThreads;  // This is the thread count for this particular hotkey only.
 	ResultType result;
 	DEBUGGER_STACK_PUSH(g_script.mThisHotkeyName)
 	result = aVariant.mJumpToLabel->Execute();
 	DEBUGGER_STACK_POP()
 	--aVariant.mExistingThreads;
+
+#ifdef CONFIG_WIN9X
 	if (unregistered_during_thread)
 		Register();
+#endif
 
 	if (result == FAIL)
 		aVariant.mRunAgainAfterFinished = false;  // Ensure this is reset due to the error.
@@ -1095,9 +1102,11 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 						// Require the hook for all variants of this hotkey if any variant requires it.
 						// This seems more intuitive than the old behaviour, which required $ or #UseHook
 						// to be used on the *first* variant, even though it affected all variants.
+#ifdef CONFIG_WIN9X
 						if (g_os.IsWin9x())
 							hk->mUnregisterDuringThread = true;
 						else
+#endif
 							hk->mKeybdHookMandatory = true;
 					}
 				}
@@ -1248,7 +1257,9 @@ Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction
 	, mModifiersConsolidatedLR(0)
 	, mType(HK_NORMAL) // Default unless overridden to become mouse, joystick, hook, etc.
 	, mVK_WasSpecifiedByNumber(false)
+#ifdef CONFIG_WIN9X
 	, mUnregisterDuringThread(false)
+#endif
 	, mIsRegistered(false)
 	, mParentEnabled(true)
 	, mHookAction(aHookAction)   // Alt-tab and possibly other uses.
@@ -1739,12 +1750,14 @@ LPTSTR Hotkey::TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperti
 				aProperties->suffix_has_tilde = true; // If this is the prefix's tilde rather than the suffix, it will be overridden later below.
 			break;
 		case '$':
+#ifdef CONFIG_WIN9X
 			if (g_os.IsWin9x())
 			{
 				if (aThisHotkey)
 					aThisHotkey->mUnregisterDuringThread = true;
 			}
 			else
+#endif
 				if (aThisHotkey)
 					aThisHotkey->mKeybdHookMandatory = true; // This flag will be ignored if TextToKey() decides this is a JOYSTICK or MOUSE hotkey.
 				// else ignore the flag and try to register normally, which in most cases seems better

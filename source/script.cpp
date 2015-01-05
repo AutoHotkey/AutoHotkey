@@ -2407,9 +2407,11 @@ examine_line:
 							// Require the hook for all variants of this hotkey if any variant requires it.
 							// This seems more intuitive than the old behaviour, which required $ or #UseHook
 							// to be used on the *first* variant, even though it affected all variants.
+#ifdef CONFIG_WIN9X
 							if (g_os.IsWin9x())
 								hk->mUnregisterDuringThread = true;
 							else
+#endif
 								hk->mKeybdHookMandatory = true;
 						}
 					}
