@@ -67,9 +67,7 @@ Script::Script()
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
 	, mIsRestart(false), mErrorStdOut(false)
-#ifdef AUTOHOTKEYSC
-	, mCompiledHasCustomIcon(false)
-#else
+#ifndef AUTOHOTKEYSC
 	, mIncludeLibraryFunctionsThenExit(NULL)
 #endif
 	, mLinesExecutedThisCycle(0), mUninterruptedLineCountMax(1000), mUninterruptibleTime(15)
@@ -365,7 +363,12 @@ ResultType Script::CreateWindows()
 	//wc.style = 0;  // CS_HREDRAW | CS_VREDRAW
 	//wc.cbClsExtra = 0;
 	//wc.cbWndExtra = 0;
-	wc.hIcon = wc.hIconSm = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
+	// Load the main icon in the two sizes needed throughout the program:
+	g_IconLarge = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
+	int cxsmicon = GetSystemMetrics(SM_CXSMICON);
+	g_IconSmall = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, cxsmicon, cxsmicon, 0);
+	wc.hIcon = g_IconLarge;
+	wc.hIconSm = g_IconSmall;
 	wc.hCursor = LoadCursor((HINSTANCE) NULL, IDC_ARROW);
 	wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);  // Needed for ProgressBar. Old: (HBRUSH)GetStockObject(WHITE_BRUSH);
 	wc.lpszMenuName = MAKEINTRESOURCE(IDR_MENU_MAIN); // NULL; // "MainMenu";
@@ -552,12 +555,7 @@ void Script::CreateTrayIcon()
 	mNIC.uID = AHK_NOTIFYICON; // This is also used for the ID, see TRANSLATE_AHK_MSG for details.
 	mNIC.uFlags = NIF_MESSAGE | NIF_TIP | NIF_ICON;
 	mNIC.uCallbackMessage = AHK_NOTIFYICON;
-#ifdef AUTOHOTKEYSC
-	// i.e. don't override the user's custom icon:
-	mNIC.hIcon = mCustomIconSmall ? mCustomIconSmall : (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(mCompiledHasCustomIcon ? IDI_MAIN : g_IconTray), IMAGE_ICON, 0, 0, LR_SHARED);
-#else // L17: Always use small icon for tray.
-	mNIC.hIcon = mCustomIconSmall ? mCustomIconSmall : (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(g_IconTray), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
-#endif
+	mNIC.hIcon = mCustomIconSmall ? mCustomIconSmall : g_IconSmall;
 	UPDATE_TIP_FIELD
 	// If we were called due to an Explorer crash, I don't think it's necessary to call
 	// Shell_NotifyIcon() to remove the old tray icon because it was likely destroyed
@@ -582,15 +580,12 @@ void Script::UpdateTrayIcon(bool aForceUpdate)
 	else if (g->IsPaused)
 		icon = IDI_PAUSE;
 	else if (g_IsSuspended)
-		icon = g_IconTraySuspend;
+		icon = IDI_SUSPEND;
 	else
-#ifdef AUTOHOTKEYSC
-		icon = mCompiledHasCustomIcon ? IDI_MAIN : g_IconTray;  // i.e. don't override the user's custom icon.
-#else
-		icon = g_IconTray;
-#endif
+		icon = IDI_MAIN;
 	// Use the custom tray icon if the icon is normal (non-paused & non-suspended):
 	mNIC.hIcon = (mCustomIconSmall && (mIconFrozen || (!g->IsPaused && !g_IsSuspended))) ? mCustomIconSmall // L17: Always use small icon for tray.
+		: (icon == IDI_MAIN) ? g_IconSmall // Use the pre-loaded small icon for best quality.
 		: (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(icon), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED for simplicity and performance more than to conserve memory in this case.
 	if (Shell_NotifyIcon(NIM_MODIFY, &mNIC))
 	{
@@ -1358,9 +1353,9 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 #else
 	if (hRes = FindResource(NULL, _T(">AUTOHOTKEY SCRIPT<"), MAKEINTRESOURCE(RT_RCDATA)))
 #endif
-		mCompiledHasCustomIcon = false;
+	{}
 	else if (hRes = FindResource(NULL, _T(">AHK WITH ICON<"), MAKEINTRESOURCE(RT_RCDATA)))
-		mCompiledHasCustomIcon = true;
+	{}
 	
 	if ( !( hRes 
 			&& (textbuf.mLength = SizeofResource(NULL, hRes))

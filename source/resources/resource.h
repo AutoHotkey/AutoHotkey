@@ -21,9 +21,6 @@
 #define IDI_PAUSE_SUSPEND               208
 #define IDR_MENU_MAIN                   211
 #define IDR_ACCELERATOR1                212
-#define IDI_TRAY_WIN9X                  228
-#define IDI_TRAY_WIN9X_SUSPEND          229
-#define IDI_TRAY						230 // L31: Separate from IDI_MAIN so that LoadImage gets the correct 16x16 icon (vs the 32x32 icon).
 #define IDS_DEF_LOGFILE                 301
 #define IDS_DEF_MAXSIZE                 302
 #define IDS_DEF_SHRINKTOSIZE            303

@@ -201,20 +201,8 @@ Script g_script;
 Clipboard g_clip;
 OS_Version g_os;  // OS version object, courtesy of AutoIt3.
 
-#ifdef CONFIG_WIN9X
-// THIS MUST BE DONE AFTER the g_os object is initialized above:
-// These are conditional because on these OSes, only standard-palette 16-color icons are supported,
-// which would cause the normal icons to look mostly gray when used with in the tray.  So we use
-// special 16x16x16 icons, but only for the tray because these OSes display the nicer icons okay
-// in places other than the tray.  Also note that the red icons look okay, at least on Win98,
-// because they are "red enough" not to suffer the graying effect from the palette shifting done
-// by the OS:
-// Update: Win2k is the only remaining OS which this code is relevant to, and that's barely
-// supported.  The current icons don't look too bad on Win2k, so the 16-color icons are omitted
-// and the following are instead defined as consts in globaldata.h.
-int g_IconTray = (g_os.IsWinXPorLater() || g_os.IsWinMeorLater()) ? IDI_TRAY : IDI_TRAY_WIN9X;
-int g_IconTraySuspend = (g_IconTray == IDI_TRAY) ? IDI_SUSPEND : IDI_TRAY_WIN9X_SUSPEND;
-#endif
+HICON g_IconSmall;
+HICON g_IconLarge;
 
 DWORD g_OriginalTimeout;
 

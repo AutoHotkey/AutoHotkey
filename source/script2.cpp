@@ -633,7 +633,10 @@ ResultType Line::Splash(LPTSTR aOptions, LPTSTR aSubText, LPTSTR aMainText, LPTS
 			small_icon = (LPARAM)g_script.mCustomIconSmall; // Should always be non-NULL when mCustomIcon is non-NULL.
 		}
 		else
-			big_icon = small_icon = (LPARAM)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
+		{
+			big_icon = (LPARAM)g_IconLarge;
+			small_icon = (LPARAM)g_IconSmall;
+		}
 
 		if (style & WS_SYSMENU)
 			SendMessage(splash.hwnd, WM_SETICON, ICON_SMALL, small_icon);
@@ -6030,7 +6033,10 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 			small_icon = (LPARAM)g_script.mCustomIconSmall; // Should always be non-NULL when mCustomIcon is non-NULL.
 		}
 		else
-			big_icon = small_icon = (LPARAM)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
+		{
+			big_icon = (LPARAM)g_IconLarge;
+			small_icon = (LPARAM)g_IconSmall;
+		}
 
 		SendMessage(hWndDlg, WM_SETICON, ICON_SMALL, small_icon);
 		SendMessage(hWndDlg, WM_SETICON, ICON_BIG, big_icon);

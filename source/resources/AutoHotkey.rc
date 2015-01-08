@@ -112,11 +112,6 @@ IDI_FILETYPE            ICON                    "icon_filetype_small.ico"
 #else
 IDI_FILETYPE            ICON                    "icon_filetype.ico"
 #endif
-#ifdef CONFIG_WIN9X
-IDI_TRAY_WIN9X          ICON                    "icon_tray_win9x.ico"
-IDI_TRAY_WIN9X_SUSPEND  ICON                    "icon_tray_win9x_suspend.ico"
-#endif
-IDI_TRAY                ICON                    "icon_tray.ico"
 
 /////////////////////////////////////////////////////////////////////////////
 //
