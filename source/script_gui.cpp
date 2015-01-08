@@ -1790,7 +1790,8 @@ ResultType GuiType::Create()
 		wc.lpszClassName = WINDOW_CLASS_GUI;
 		wc.hInstance = g_hInstance;
 		wc.lpfnWndProc = GuiWindowProc;
-		wc.hIcon = wc.hIconSm = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
+		wc.hIcon = g_IconLarge;
+		wc.hIconSm = g_IconSmall;
 		wc.style = CS_DBLCLKS; // v1.0.44.12: CS_DBLCLKS is accepted as a good default by nearly everyone.  It causes the window to receive WM_LBUTTONDBLCLK, WM_RBUTTONDBLCLK, and WM_MBUTTONDBLCLK (even without this, all windows receive WM_NCLBUTTONDBLCLK, WM_NCMBUTTONDBLCLK, and WM_NCRBUTTONDBLCLK).
 			// CS_HREDRAW and CS_VREDRAW are not included above because they cause extra flickering.  It's generally better for a window to manage its own redrawing when it's resized.
 		wc.hCursor = LoadCursor((HINSTANCE) NULL, IDC_ARROW);
@@ -1821,9 +1822,12 @@ ResultType GuiType::Create()
 		mIconEligibleForDestructionSmall = small_icon = g_script.mCustomIconSmall; // Should always be non-NULL if mCustomIcon is non-NULL.
 	}
 	else
-		big_icon = small_icon = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
-		// Unlike mCustomIcon, leave mIconEligibleForDestruction NULL because a shared HICON such as one
-		// loaded via LR_SHARED should never be destroyed.
+	{
+		big_icon = g_IconLarge;
+		small_icon = g_IconSmall;
+		// Unlike mCustomIcon, leave mIconEligibleForDestruction NULL because these
+		// icons are used for various other purposes and should never be destroyed.
+	}
 	// Setting the small icon puts it in the upper left corner of the dialog window.
 	// Setting the big icon makes the dialog show up correctly in the Alt-Tab menu (but big seems to
 	// have no effect unless the window is unowned, i.e. it has a button on the task bar).

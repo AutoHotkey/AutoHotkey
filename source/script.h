@@ -2669,9 +2669,7 @@ public:
 	bool mAutoExecSectionIsRunning;
 	bool mIsRestart; // The app is restarting rather than starting from scratch.
 	bool mErrorStdOut; // true if load-time syntax errors should be sent to stdout vs. a MsgBox.
-#ifdef AUTOHOTKEYSC
-	bool mCompiledHasCustomIcon; // Whether the compiled script uses a custom icon.
-#else
+#ifndef AUTOHOTKEYSC
 	TextStream *mIncludeLibraryFunctionsThenExit;
 #endif
 	__int64 mLinesExecutedThisCycle; // Use 64-bit to match the type of g->LinesPerCycle
