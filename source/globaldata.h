@@ -169,8 +169,13 @@ EXTERN_SCRIPT;
 EXTERN_CLIPBOARD;
 EXTERN_OSVER;
 
+#ifdef CONFIG_WIN9X
 extern int g_IconTray;
 extern int g_IconTraySuspend;
+#else
+const int g_IconTray = IDI_TRAY;
+const int g_IconTraySuspend = IDI_SUSPEND;
+#endif
 
 extern DWORD g_OriginalTimeout;
 
