@@ -266,7 +266,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 			&& (dot = _tcsrchr(suffix, '.')) // Find extension part of name.
 			&& dot - exe_buf + 5 < _countof(exe_buf)  ) // Enough space in buffer?
 		{
-			_tcscpy(dot, _T(".ahk"));
+			_tcscpy(dot, EXT_AUTOHOTKEY);
 		}
 		else // Very unlikely.
 			return FAIL;
@@ -7663,7 +7663,7 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 	LPTSTR char_after_last_backslash, terminate_here;
 	DWORD attr;
 
-	#define FUNC_LIB_EXT _T(".ahk")
+	#define FUNC_LIB_EXT EXT_AUTOHOTKEY
 	#define FUNC_LIB_EXT_LENGTH (_countof(FUNC_LIB_EXT) - 1)
 	#define FUNC_LOCAL_LIB _T("\\Lib\\") // Needs leading and trailing backslash.
 	#define FUNC_LOCAL_LIB_LENGTH (_countof(FUNC_LOCAL_LIB) - 1)
