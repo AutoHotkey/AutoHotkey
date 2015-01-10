@@ -2287,7 +2287,7 @@ HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, i
 
 	// If the module is already loaded as an executable, LoadLibraryEx returns its handle.
 	// Otherwise each call will receive its own handle to a data file mapping.
-	HMODULE hdatafile = LoadLibraryEx(aFilespec, NULL, LOAD_LIBRARY_AS_DATAFILE);
+	HMODULE hdatafile = aFilespec ? LoadLibraryEx(aFilespec, NULL, LOAD_LIBRARY_AS_DATAFILE) : g_hInstance;
 	if (hdatafile)
 	{
 		int group_icon_id = (aIconNumber < 0 ? -aIconNumber : ResourceIndexToId(hdatafile, (LPCTSTR)RT_GROUP_ICON, aIconNumber ? aIconNumber : 1));
@@ -2304,21 +2304,59 @@ HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, i
 			&& (hresdata = LoadResource(hdatafile, hres))
 			&& (presdata = LockResource(hresdata)))
 		{
-			// LookupIconIdFromDirectoryEx seems to use whichever is larger of aWidth or aHeight,
-			// so one or the other may safely be -1. However, since this behaviour is undocumented,
-			// treat -1 as "same as other dimension":
-			int icon_id = LookupIconIdFromDirectoryEx((PBYTE)presdata, TRUE, aWidth == -1 ? aHeight : aWidth, aHeight == -1 ? aWidth : aHeight, 0);
-			if (icon_id
-				&& (hres = FindResource(hdatafile, MAKEINTRESOURCE(icon_id), RT_ICON))
+#pragma pack(push, 1) // For RESDIR, mainly.
+			struct NEWHEADER {
+				WORD Reserved;
+				WORD ResType;
+				WORD ResCount;
+			};
+			struct ICONRESDIR {
+				BYTE Width;
+				BYTE Height;
+				BYTE ColorCount;
+				BYTE reserved;
+			};
+			// Note that the definition of RESDIR at http://msdn.microsoft.com/en-us/library/ms648026 is
+			// completely wrong as at 2015-01-10, but the correct definition is posted in the comments.
+			struct RESDIR {
+				ICONRESDIR Icon;
+				WORD Planes;
+				WORD BitCount;
+				DWORD BytesInRes;
+				WORD IconCursorId;
+			};
+#pragma pack(pop)
+
+			if (aWidth == -1)
+				aWidth = aHeight;
+			if (aWidth == 0)
+				aWidth = GetSystemMetrics(SM_CXICON);
+
+			NEWHEADER *resHead = (NEWHEADER *)presdata;
+			WORD resCount = resHead->ResCount;
+			RESDIR *resDir = (RESDIR *)(resHead + 1), *chosen = resDir; // Default to the first icon.
+			for (int i = 1; i < resCount; ++i)
+			{
+				// Find the closest match for size, preferring the next larger icon if there's
+				// no exact match.  Normally the system will just pick the closest size, but
+				// at least for our icon, the 32x32 icon rendered at 20x20 looks much better
+				// than the 16x16 icon rendered at 20x20 (i.e. small icon size for 125% DPI).
+				if (resDir[i].Icon.Width > chosen->Icon.Width
+					? chosen->Icon.Width < aWidth // Current icon smaller than desired, so up-size.
+					: resDir[i].Icon.Width >= aWidth) // Current icon larger than desired, so down-size (without going below aWidth).
+					chosen = &resDir[i];
+			}
+			if (   (hres = FindResource(hdatafile, MAKEINTRESOURCE(chosen->IconCursorId), RT_ICON))
 				&& (hresdata = LoadResource(hdatafile, hres))
-				&& (presdata = LockResource(hresdata)))
+				&& (presdata = LockResource(hresdata))   )
 			{
 				hicon = CreateIconFromResourceEx((PBYTE)presdata, SizeofResource(hdatafile, hres), TRUE, 0x30000, 0, 0, 0);
 			}
 		}
 
 		// Decrements the executable module's reference count or frees the data file mapping.
-		FreeLibrary(hdatafile);
+		if (aFilespec)
+			FreeLibrary(hdatafile);
 	}
 
 	// L20: Fall back to ExtractIcon if the above method failed. This may work on some versions of Windows where

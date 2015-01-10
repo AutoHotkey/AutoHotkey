@@ -364,9 +364,8 @@ ResultType Script::CreateWindows()
 	//wc.cbClsExtra = 0;
 	//wc.cbWndExtra = 0;
 	// Load the main icon in the two sizes needed throughout the program:
-	g_IconLarge = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
-	int cxsmicon = GetSystemMetrics(SM_CXSMICON);
-	g_IconSmall = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, cxsmicon, cxsmicon, 0);
+	g_IconLarge = ExtractIconFromExecutable(NULL, -IDI_MAIN, 0, 0);
+	g_IconSmall = ExtractIconFromExecutable(NULL, -IDI_MAIN, GetSystemMetrics(SM_CXSMICON), 0);
 	wc.hIcon = g_IconLarge;
 	wc.hIconSm = g_IconSmall;
 	wc.hCursor = LoadCursor((HINSTANCE) NULL, IDC_ARROW);
