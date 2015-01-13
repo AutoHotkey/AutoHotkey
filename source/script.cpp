@@ -6910,8 +6910,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	{
 		for (Label *label = mLastLabel; label != NULL && label->mJumpToLine == NULL; label = label->mPrevLabel)
 		{
-			if (line.mActionType == ACT_BLOCK_BEGIN && line.mAttribute == ATTR_TRUE) // Non-zero mAttribute signifies the open-brace of a function body.
-				return ScriptError(_T("A label must not point to a function."));
 			if (line.mActionType == ACT_ELSE || line.mActionType == ACT_UNTIL || line.mActionType == ACT_CATCH)
 				return ScriptError(_T("A label must not point to an ELSE or UNTIL or CATCH."));
 			// The following is inaccurate; each block-end is in fact owned by its block-begin
@@ -7242,6 +7240,47 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		memcpy(func.mParam, param, size);
 	}
 	//else leave func.mParam/mParamCount set to their NULL/0 defaults.
+
+	if (mLastLabel && !mLastLabel->mJumpToLine)
+	{
+		// Check all variants of all hotkeys, since there might be multiple variants
+		// of various hotkeys defined in a row, such as:
+		// ^a::
+		// #IfWinActive B
+		// ^a::
+		// ^b::
+		//    somefunc(){ ...
+		for (int i = 0; i < Hotkey::sHotkeyCount; ++i)
+		{
+			for (HotkeyVariant *v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
+			{
+				Label *label = v->mJumpToLabel->ToLabel(); // Might be a function.
+				if (label && !label->mJumpToLine) // This hotkey label is pointing at this function.
+				{
+					// Update the hotkey to use this function instead of the label.
+					v->mJumpToLabel = &func;
+
+					// Remove this hotkey label from the list.  Each label is removed as the corresponding
+					// hotkey variant is found so that any generic labels that might be mixed in are left
+					// in the list and detected as errors later.
+					if (label->mPrevLabel)
+						label->mPrevLabel->mNextLabel = label->mNextLabel;
+					else
+						mFirstLabel = label->mNextLabel;
+					if (label->mNextLabel)
+						label->mNextLabel->mPrevLabel = label->mPrevLabel;
+					else
+						mLastLabel = label->mPrevLabel;
+				}
+			}
+		}
+		if (mLastLabel && !mLastLabel->mJumpToLine)
+			// There are one or more non-hotkey labels pointing at this function.
+			return ScriptError(_T("A label must not point to a function."), mLastLabel->mName);
+		// Since above didn't return, the label or labels must have been hotkey labels.
+		if (func.mMinParams)
+			return ScriptError(_T("Parameters of hotkey functions must be optional."), aBuf);
+	}
 
 	// Indicate success:
 	func.mGlobalVar = aFuncGlobalVar; // Give func.mGlobalVar its address, to be used for any var declarations inside this function's body.

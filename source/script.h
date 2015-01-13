@@ -2001,6 +2001,8 @@ public:
 	ResultType ExecuteInNewThread(TCHAR *aNewThreadDesc) const;
 	const LabelPtr* operator-> () { return this; } // Act like a pointer.
 	operator void *() const { return mObject; } // For comparisons and boolean eval.
+
+	Label *ToLabel() const { return getType(mObject) == Callable_Label ? (Label *)mObject : NULL; }
 	
 	// Helper methods for legacy code which deals with Labels.
 	bool IsExemptFromSuspend() const;
