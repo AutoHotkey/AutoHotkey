@@ -2221,10 +2221,6 @@ public:
 		, mExistingThreads(0), mTimeLastRun(0)
 		, mEnabled(false), mRunOnlyOnce(false), mNextTimer(NULL)  // Note that mEnabled must default to false for the counts to be right.
 	{}
-	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	void operator delete(void *aPtr) {}
-	void operator delete[](void *aPtr) {}
 };
 
 
@@ -2787,6 +2783,7 @@ public:
 	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
 	ResultType UpdateOrCreateTimer(IObject *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
 		, bool aUpdatePriorityOnly);
+	void DeleteTimer(IObject *aLabel);
 
 	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[]);
 #ifndef AUTOHOTKEYSC

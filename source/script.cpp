@@ -3502,6 +3502,28 @@ ResultType Script::UpdateOrCreateTimer(IObject *aLabel, LPTSTR aPeriod, LPTSTR a
 
 
 
+void Script::DeleteTimer(IObject *aLabel)
+{
+	ScriptTimer *timer, *previous = NULL;
+	for (timer = mFirstTimer; timer != NULL; previous = timer, timer = timer->mNextTimer)
+		if (timer->mLabel == aLabel) // Match found.
+		{
+			// Remove it from the list.
+			if (previous)
+				previous->mNextTimer = timer->mNextTimer;
+			else
+				mFirstTimer = timer->mNextTimer;
+			// Disable it.
+			if (timer->mEnabled)
+				timer->Disable(); // Keeps track of mTimerEnabledCount and whether the main timer is needed.
+			// Delete the timer, automatically releasing it's reference to the object.
+			delete timer;
+			break;
+		}
+}
+
+
+
 Label *Script::FindLabel(LPTSTR aLabelName)
 // Returns the first label whose name matches aLabelName, or NULL if not found.
 // v1.0.42: Since duplicates labels are now possible (to support #IfWin variants of a particular
@@ -9924,6 +9946,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 					return line->PreparseError(ERR_NO_LABEL);
 			if (*line_raw_arg2 && !line->ArgHasDeref(2))
 				if (!Line::ConvertOnOff(line_raw_arg2) && !IsPureNumeric(line_raw_arg2, true) // v1.0.46.16: Allow negatives to support the new run-only-once mode.
+					&& _tcsicmp(line_raw_arg2, _T("Delete"))
 					&& !line->mArg[1].is_expression) // v1.0.46.10: Don't consider expressions THAT CONTAIN NO VARIABLES OR FUNCTION-CALLS like "% 2*500" to be a syntax error.
 					return line->PreparseError(ERR_PARAM2_INVALID);
 			break;
@@ -14557,7 +14580,14 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		{
 			toggle = Line::ConvertOnOff(ARG2);
 			if (!toggle && !IsPureNumeric(ARG2, true, true, true)) // Allow it to be neg. or floating point at runtime.
+			{
+				if (!_tcsicmp(ARG2, _T("Delete")))
+				{
+					g_script.DeleteTimer(target_label);
+					return OK;
+				}
 				return LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
+			}
 		}
 		else
 			toggle = TOGGLE_INVALID;
