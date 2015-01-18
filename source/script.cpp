@@ -5730,6 +5730,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				line.mAttribute = ATTR_LOOP_READ_FILE;
 			else if (!_tcsicmp(new_raw_arg1, _T("Parse")))
 				line.mAttribute = ATTR_LOOP_PARSE;
+			else if (!_tcsicmp(new_raw_arg1, _T("Reg")))
+				line.mAttribute = ATTR_LOOP_NEW_REG;
+			else if (!_tcsicmp(new_raw_arg1, _T("Files")))
+				line.mAttribute = ATTR_LOOP_NEW_FILES;
 			else // the 1st arg can either be a Root Key or a File Pattern, depending on the type of loop.
 			{
 				line.mAttribute = line.RegConvertRootKey(new_raw_arg1) ? ATTR_LOOP_REG : ATTR_LOOP_FILEPATTERN;
@@ -11814,10 +11818,15 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		{
 			HKEY root_key_type; // For registry loops, this holds the type of root key, independent of whether it is local or remote.
 			AttributeType attr = line->mAttribute;
-			if (attr == ATTR_LOOP_REG)
-				root_key_type = RegConvertRootKey(ARG1);
-			else if (ATTR_LOOP_IS_UNKNOWN_OR_NONE(attr))
+			switch ((size_t)attr)
 			{
+			case (size_t)ATTR_LOOP_REG:
+				root_key_type = RegConvertRootKey(ARG1);
+				break;
+			case (size_t)ATTR_LOOP_NEW_REG:
+				root_key_type = RegConvertKey(ARG2); // ARG1 is the word "Reg".
+				break;
+			case (size_t)ATTR_LOOP_UNKNOWN:
 				// Since it couldn't be determined at load-time (probably due to derefs),
 				// determine whether it's a file-loop, registry-loop or a normal/counter loop.
 				// But don't change the value of line->mAttribute because that's our
@@ -11863,19 +11872,34 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			// HANDLE ANY ERROR CONDITIONS THAT CAN ABORT THE LOOP:
 			FileLoopModeType file_loop_mode;
 			bool recurse_subfolders;
-			if (attr == ATTR_LOOP_FILEPATTERN)
+			switch ((size_t)attr)
 			{
-				file_loop_mode = (line->mArgc <= 1) ? FILE_LOOP_FILES_ONLY : ConvertLoopMode(ARG2);
+			case (size_t)ATTR_LOOP_FILEPATTERN:
+				// Loop, FilePattern [, IncludeFolders?, Recurse?]
+				file_loop_mode = ConvertLoopMode(ARG2);
 				if (file_loop_mode == FILE_LOOP_INVALID)
 					return line->LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
 				recurse_subfolders = (*ARG3 == '1' && !*(ARG3 + 1));
-			}
-			else if (attr == ATTR_LOOP_REG)
-			{
-				file_loop_mode = (line->mArgc <= 2) ? FILE_LOOP_FILES_ONLY : ConvertLoopMode(ARG3);
+				break;
+			case (size_t)ATTR_LOOP_REG:
+			case (size_t)ATTR_LOOP_NEW_REG:
+			case (size_t)ATTR_LOOP_NEW_FILES:
+				if (attr == ATTR_LOOP_REG)
+				{
+					// Loop, RootKey [, Key, IncludeSubkeys?, Recurse?]
+					file_loop_mode = ConvertLoopMode(ARG3);
+					recurse_subfolders = (*ARG4 == '1' && !*(ARG4 + 1));
+				}
+				else
+				{
+					// Loop, Reg, RootKey\Key [, Mode]
+					// Loop, Files, Pattern [, Mode]
+					file_loop_mode = ConvertLoopModeString(ARG3);
+					if (recurse_subfolders = (file_loop_mode & FILE_LOOP_RECURSE))
+						file_loop_mode &= ~FILE_LOOP_RECURSE; // Eliminate the flag from further consideration.
+				}
 				if (file_loop_mode == FILE_LOOP_INVALID)
 					return line->LineError(ERR_PARAM3_INVALID, FAIL, ARG3);
-				recurse_subfolders = (*ARG4 == '1' && !*(ARG4 + 1));
 			}
 
 			// ONLY AFTER THE ABOVE IS IT CERTAIN THE LOOP WILL LAUNCH (i.e. there was no error or early return).
@@ -11963,20 +11987,27 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				}
 				break;
 			case (size_t)ATTR_LOOP_FILEPATTERN:
+			case (size_t)ATTR_LOOP_NEW_FILES:
 				result = line->PerformLoopFilePattern(aResultToken, continue_main_loop, jump_to_line, until
-					, file_loop_mode, recurse_subfolders, ARG1);
+					, file_loop_mode, recurse_subfolders, attr == ATTR_LOOP_FILEPATTERN ? ARG1 : ARG2);
 				break;
 			case (size_t)ATTR_LOOP_REG:
+			case (size_t)ATTR_LOOP_NEW_REG:
 				// This isn't the most efficient way to do things (e.g. the repeated calls to
 				// RegConvertRootKey()), but it the simplest way for now.  Optimization can
 				// be done at a later time:
 				bool is_remote_registry;
 				HKEY root_key;
-				if (root_key = RegConvertRootKey(ARG1, &is_remote_registry)) // This will open the key if it's remote.
+				LPTSTR subkey;
+				if (attr == ATTR_LOOP_REG)
+					root_key = RegConvertRootKey(ARG1, &is_remote_registry), subkey = ARG2; // This will open the key if it's remote.
+				else
+					root_key = RegConvertKey(ARG2, &subkey, &is_remote_registry);
+				if (root_key) 
 				{
-					// root_key_type needs to be passed in order to support GetLoopRegKey():
+					// root_key_type needs to be passed in order to support A_LoopRegKey:
 					result = line->PerformLoopReg(aResultToken, continue_main_loop, jump_to_line, until
-						, file_loop_mode, recurse_subfolders, root_key_type, root_key, ARG2);
+						, file_loop_mode, recurse_subfolders, root_key_type, root_key, subkey);
 					if (is_remote_registry)
 						RegCloseKey(root_key);
 				}
