@@ -9830,6 +9830,12 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 			}
 			break;
 
+		case ACT_RETURN:
+			for (Line *parent = line->mParentLine; parent; parent = parent->mParentLine)
+				if (parent->mActionType == ACT_FINALLY)
+					return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
+			break;
+
 		// These next 4 must also be done here (i.e. *after* all the script lines have been added),
 		// so that labels both above and below this line can be resolved:
 		case ACT_ONEXIT:
@@ -12270,16 +12276,15 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			}
 			if (this_act == ACT_CATCH && line->mActionType == ACT_FINALLY)
 			{
-				if (!g.ThrownToken)
-				{
+				if (result == OK && !jump_to_line)
 					// Let the next iteration handle the finally block.
 					continue;
-				}
 
 				// An exception was thrown, and this try..(catch)..finally block didn't handle it.
 				// Therefore we must execute the finally block before returning.
-				ResultType res = line->ExecUntil(ONLY_ONE_LINE, NULL, &jump_to_line);
-				if (jump_to_line || res == LOOP_BREAK || res == LOOP_CONTINUE)
+				Line *invalid_jump; // Don't overwrite jump_to_line in case the try block used goto.
+				ResultType res = line->ExecUntil(ONLY_ONE_LINE, NULL, &invalid_jump);
+				if (invalid_jump || res == LOOP_BREAK || res == LOOP_CONTINUE || res == EARLY_RETURN)
 					return g_script.mCurrLine->LineError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			}
 			
