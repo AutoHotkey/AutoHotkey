@@ -89,9 +89,15 @@ information. For example, " C" indicates Windows 95 OSR2 and " A" indicates Wind
 
 void OS_Version::Init(void)
 {
+	typedef int (WINAPI * GetVersionType)(OSVERSIONINFOW *Info);
+	static GetVersionType _RtlGetVersion = (GetVersionType)GetProcAddress(GetModuleHandle(_T("ntdll.dll")), "RtlGetVersion");
+
 	// Get details of the OS we are running on
-	m_OSvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-	GetVersionEx(&m_OSvi);
+	m_OSvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOW);
+	if (_RtlGetVersion)
+		_RtlGetVersion(&m_OSvi);
+	else
+		GetVersionExW(&m_OSvi);
 
 	// Populate Major and Minor version numbers
 	m_dwMajorVersion	= m_OSvi.dwMajorVersion;

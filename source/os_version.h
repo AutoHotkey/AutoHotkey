@@ -86,7 +86,7 @@ public:
 
 private:
 	// Variables
-	OSVERSIONINFO	m_OSvi;						// OS Version data
+	OSVERSIONINFOW	m_OSvi;						// OS Version data
 
 	DWORD			m_dwMajorVersion;			// Major OS version
 	DWORD			m_dwMinorVersion;			// Minor OS version
