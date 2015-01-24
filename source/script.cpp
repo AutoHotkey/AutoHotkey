@@ -2430,7 +2430,9 @@ examine_line:
 						// This hotkey uses a single-character key name, which could be valid on some other
 						// keyboard layout.  Allow the script to start, but warn the user about the problem.
 						// Note that this hotkey's label is still valid even though the hotkey wasn't created.
+#ifndef AUTOHOTKEYSC
 						if (!mIncludeLibraryFunctionsThenExit) // Current keyboard layout is not relevant in /iLib mode.
+#endif
 						{
 							sntprintf(msg_text, _countof(msg_text), _T("Note: The hotkey %s will not be active because it does not exist in the current keyboard layout."), buf);
 							MsgBox(msg_text);
