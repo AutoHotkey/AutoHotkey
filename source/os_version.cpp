@@ -104,9 +104,11 @@ void OS_Version::Init(void)
 	m_dwMinorVersion	= m_OSvi.dwMinorVersion;
 	m_dwBuildNumber		= m_OSvi.dwBuildNumber;
 
-	/* // AutoHotkey: This is disabled because we never use it.  If it's ever re-enabled,
-	   // consider halving the size of m_szCSDVersion, to match szCSDVersion.  No idea why
-	   // it was set so large in the first place.
+	// Compose human-readable version number.
+	_vsntprintf(m_szVersion, _countof(m_szVersion)-1, _T("%u.%u.%u"), (va_list)&m_OSvi.dwMajorVersion);
+	m_szVersion[_countof(m_szVersion)-1] = '\0'; // For the slim chance that it's too long to fit in the buffer (and therefore wasn't null-terminated).
+
+	/* // AutoHotkey: This is disabled because we never use it.
 	
 	int		i;
 	int		nTemp;
