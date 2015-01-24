@@ -680,18 +680,17 @@ ResultType Object::CallField(FieldType *aField, ResultToken &aResultToken, ExprT
 {
 	if (aField->symbol == SYM_OBJECT)
 	{
-		ExprTokenType field_token(aField->object);
-		ExprTokenType *tmp = aParam[0];
-		// Something must be inserted into the parameter list to remove any ambiguity between an intentionally
-		// and directly called function of 'that' object and one of our parameters matching an existing name.
-		// Rather than inserting something like an empty string, it seems more useful to insert 'this' object,
-		// allowing 'that' to change (via __Call) the behaviour of a "function-call" which operates on 'this'.
-		// Consequently, if 'that[this]' contains a value, it is invoked; seems obscure but rare, and could
-		// also be of use (for instance, as a means to remove the 'this' parameter or replace it with 'that').
-		aParam[0] = &aThisToken;
-		ResultType r = aField->object->Invoke(aResultToken, field_token, IT_CALL | IF_FUNCOBJ, aParam, aParamCount);
-		aParam[0] = tmp;
-		return r;
+		// Allocate a new array of param pointers that we can modify.
+		ExprTokenType **params = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
+		// Shallow copy; points to the same tokens.  Skip aParam[0], which contains
+		// the key used to find aField.  We want to invoke aField.Call(this, aParams*).
+		memcpy(params + 2, aParam + 1, (aParamCount - 1) * sizeof(ExprTokenType*));
+		// Where fn = this[key], call fn.call(this, params*).
+		ExprTokenType field_token(aField->object); // fn
+		ExprTokenType method_name(_T("call"), 4); // Works with JScript functions as well, unlike "Call".
+		params[0] = &method_name; // call
+		params[1] = &aThisToken; // this
+		return aField->object->Invoke(aResultToken, field_token, IT_CALL, params, aParamCount + 1);
 	}
 	if (aField->symbol == SYM_STRING)
 	{
