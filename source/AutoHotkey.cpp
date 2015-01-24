@@ -181,8 +181,10 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 #endif
 	if (load_result == LOADING_FAILED) // Error during load (was already displayed by the function call).
 	{
+#ifndef AUTOHOTKEYSC
 		if (g_script.mIncludeLibraryFunctionsThenExit)
 			g_script.mIncludeLibraryFunctionsThenExit->Close(); // Flush its buffer to disk.
+#endif
 		return CRITICAL_ERROR;  // Should return this value because PostQuitMessage() also uses it.
 	}
 	if (!load_result) // LoadFromFile() relies upon us to do this check.  No script was loaded or we're in /iLib mode, so nothing more to do.
