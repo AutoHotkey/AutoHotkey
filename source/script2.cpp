@@ -16339,41 +16339,44 @@ BIF_DECL(BIF_OnMessage)
 	// Load-time validation has ensured there's at least one parameter for use here:
 	UINT specified_msg = (UINT)ParamIndexToInt64(0); // Parameter #1
 
-	Func *func = NULL;           // Set defaults.
+	IObject *callback = NULL;    // Set defaults.
 	bool mode_is_delete = false; //
+	bool legacy_mode = true;     //
 	if (!ParamIndexIsOmitted(1)) // Parameter #2 is present.
 	{
-		LPTSTR func_name = ParamIndexToString(1, buf); // Resolve parameter #2.
-		if (*func_name)
+		Func *func; // Func for validation of parameters, where possible.
+		if (TokenIsEmptyString(*aParam[1])) // Explicitly blank function name ("") means delete this item.  By contrast, an omitted second parameter means "give me current function of this message".
 		{
-			if (   !(func = g_script.FindFunc(func_name))   ) // Nonexistent function.
-				return; // Yield the default return value set earlier.
-			// If too many formal parameters or any are ByRef/optional, indicate failure.
-			// This helps catch bugs in scripts that are assigning the wrong function to a monitor.
-			// It also preserves additional parameters for possible future use (i.e. avoids breaking
-			// existing scripts if more formal parameters are supported in a future version).
-			// Lexikos: The flexibility of allowing ByRef and optional parameters seems to outweigh
-			// the small chance that these checks will actually catch an error and the even smaller
-			// chance that any parameters will be added in future.  For instance, a function may be
-			// called directly by the script to set or retrieve static vars which are used when the
-			// message monitor calls the function.  For these checks to actually catch an error, the
-			// author must have typed the name of the wrong function (i.e. probably not a typo), and
-			// that function must accept more than four parameters or have optional/ByRef parameters:
-			//if (func->mIsBuiltIn || func->mParamCount > 4 || func->mMinParams < func->mParamCount) // Too many params, or some are optional.
-			if (func->mIsBuiltIn || func->mMinParams > 4) // Requires too many params.
-				return; // Yield the default return value set earlier.
-			//for (int i = 0; i < func->mParamCount; ++i) // Check if any formal parameters are ByRef.
-			//	if (func->mParam[i].is_byref)
-			//		return; // Yield the default return value set earlier.
-		}
-		else // Explicitly blank function name ("") means delete this item.  By contrast, an omitted second parameter means "give me current function of this message".
 			mode_is_delete = true;
+			func = NULL;
+		}
+		else if (callback = TokenToObject(*aParam[1]))
+		{
+			func = dynamic_cast<Func *>(callback);
+			legacy_mode = false; // Since the caller passed a reference, use the new mode.
+		}
+		else
+		{
+			callback = func = g_script.FindFunc(TokenToString(*aParam[1]));
+		}
+		// Notes about func validation: ByRef and optional parameters are allowed for flexibility.
+		// For example, a function may be called directly by the script to set static vars which
+		// are used when a message arrives.  Raising an error might help catch bugs, but only in
+		// very rare cases where a valid but wrong function name is given *and* that function has
+		// ByRef or optional parameters.
+		// If the parameter was not an empty string, an object or a valid function...
+		if (!mode_is_delete && (!callback || func && (func->mIsBuiltIn || func->mMinParams > 4)))
+		{
+			if (!legacy_mode)
+				aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
+			return; // Yield the default return value set earlier.
+		}
 	}
 
 	// If this is the first use of the g_MsgMonitor array, create it now rather than later to reduce code size
 	// and help the maintainability of sections further below. The following relies on short-circuit boolean order:
 	if (!g_MsgMonitor && !(g_MsgMonitor = (MsgMonitorStruct *)malloc(sizeof(MsgMonitorStruct) * MAX_MSG_MONITORS)))
-		return; // Yield the default return value set earlier.
+		goto rare_failure;
 
 	// Check if this message already exists in the array:
 	int msg_index;
@@ -16383,11 +16386,11 @@ BIF_DECL(BIF_OnMessage)
 	bool item_already_exists = (msg_index < g_MsgMonitorCount);
 	MsgMonitorStruct &monitor = g_MsgMonitor[msg_index == MAX_MSG_MONITORS ? 0 : msg_index]; // The 0th item is just a placeholder.
 
+	IObject *return_value_on_success;
 	if (item_already_exists)
 	{
-		// In all cases, yield the OLD function's name as the return value:
-		_tcscpy(buf, monitor.func->mName); // Caller has ensured that buf large enough to support max function name.
-		aResultToken.marker = buf;
+		// In all cases, yield the OLD function as the return value:
+		return_value_on_success = monitor.func;
 		if (mode_is_delete)
 		{
 			// The msg-monitor is deleted from the array for two reasons:
@@ -16403,25 +16406,25 @@ BIF_DECL(BIF_OnMessage)
 			--g_MsgMonitorCount;  // Must be done prior to the below.
 			if (msg_index < g_MsgMonitorCount) // An element other than the last is being removed. Shift the array to cover/delete it.
 				MoveMemory(g_MsgMonitor+msg_index, g_MsgMonitor+msg_index+1, sizeof(MsgMonitorStruct)*(g_MsgMonitorCount-msg_index));
-			return;
+			goto return_success;
 		}
 		if (aParamCount < 2) // Single-parameter mode: Report existing item's function name.
-			return; // Everything was already set up above to yield the proper return value.
+			goto return_success;
 		// Otherwise, an existing item is being assigned a new function or MaxThreads limit.
 		// Continue on to update this item's attributes.
 	}
 	else // This message doesn't exist in array yet.
 	{
-		if (!func) // Delete or report function-name of a non-existent item.
+		if (!callback) // Delete or report function-name of a non-existent item.
 			return; // Yield the default return value set earlier (an empty string).
 		// Since above didn't return, the message is to be added as a new element. The above already
 		// verified that func is not NULL.
 		if (msg_index == MAX_MSG_MONITORS) // No room in array.
-			return; // Indicate failure by yielding the default return value set earlier.
+			goto rare_failure;
 		// Otherwise, the message is to be added, so increment the total:
 		++g_MsgMonitorCount;
-		_tcscpy(buf, func->mName); // Yield the NEW name as an indicator of success. Caller has ensured that buf large enough to support max function name.
-		aResultToken.marker = buf;
+		return_value_on_success = legacy_mode ? callback // Yield the NEW function as an indicator of success.
+			: NULL; // Yield an empty string since there's no previous function and an exception would be thrown on failure.
 		monitor.instance_count = 0; // Reset instance_count only for new items since existing items might currently be running.
 		monitor.msg = specified_msg;
 		// Continue on to the update-or-create logic below.
@@ -16430,13 +16433,40 @@ BIF_DECL(BIF_OnMessage)
 	// Since above didn't return, above has ensured that msg_index is the index of the existing or new
 	// MsgMonitorStruct in the array.  In addition, it has set the proper return value for us.
 	// Update those struct attributes that get the same treatment regardless of whether this is an update or creation.
-	if (func) // i.e. not OnMessage(Msg,,MaxThreads).
-		monitor.func = func;
+	if (callback) // i.e. not OnMessage(Msg,,MaxThreads).
+		monitor.func = callback;
 	if (!ParamIndexIsOmitted(2))
 		monitor.max_instances = (short)ParamIndexToInt64(2); // No validation because it seems harmless if it's negative or some huge number.
 	else // Unspecified, so if this item is being newly created fall back to the default.
 		if (!item_already_exists)
 			monitor.max_instances = 1;
+
+return_success:
+	if (legacy_mode)
+	{
+		// For backward-compatibility, return functions by name.
+		if (Func *func = dynamic_cast<Func *>(return_value_on_success))
+		{
+			_tcscpy(buf, func->mName); // Caller has ensured that buf large enough to support max function name.
+			aResultToken.marker = buf;
+			return;
+		}
+	}
+	// Since above didn't return, either legacy mode isn't in effect or the object is not a Func.
+	if (return_value_on_success)
+	{
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = return_value_on_success;
+		aResultToken.object->AddRef();
+	}
+	return;
+
+rare_failure:
+	if (legacy_mode)
+		return; // Indicate failure by yielding the default return value set earlier.
+	// Some kind of failure occurred which should be very rare.  Throw an exception so that script
+	// authors never need to worry about handling this error.  Use a generic message because it's rare:
+	g_script.ThrowRuntimeException(ERR_EXCEPTION);
 }
 
 

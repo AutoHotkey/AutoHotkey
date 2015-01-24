@@ -1773,7 +1773,9 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	// Otherwise, the script is monitoring this message, so continue on.
 
 	MsgMonitorStruct &monitor = g_MsgMonitor[msg_index]; // For performance and convenience.
-	Func &func = *monitor.func;                          // Above, but also in case monitor item gets deleted while the function is running (e.g. by the function itself).
+	IObject *func = monitor.func;                        // Above, but also in case monitor item gets deleted while the function is running (e.g. by the function itself).
+	
+	ActionTypeType type_of_first_line = LabelPtr(func)->TypeOfFirstLine();
 
 	// Many of the things done below are similar to the thread-launch procedure used in MsgSleep(),
 	// so maintain them together and see MsgSleep() for more detailed comments.
@@ -1782,7 +1784,7 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 		// 1) The omitted action types seem too obscure to grant always-run permission for msg-monitor events.
 		// 2) Reduction in code size.
 		if (g_nThreads >= MAX_THREADS_EMERGENCY // To avoid array overflow, this limit must by obeyed except where otherwise documented.
-			|| func.mJumpToLine->mActionType != ACT_EXITAPP && func.mJumpToLine->mActionType != ACT_RELOAD)
+			|| type_of_first_line != ACT_EXITAPP && type_of_first_line != ACT_RELOAD)
 			return false;
 	if (monitor.instance_count >= monitor.max_instances || g->Priority > 0) // Monitor is already running more than the max number of instances, or existing thread's priority is too high to be interrupted.
 		return false;
@@ -1791,7 +1793,7 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	// See MsgSleep() for comments about the following section.
 	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
 	tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
-	InitNewThread(0, false, true, func.mJumpToLine->mActionType);
+	InitNewThread(0, false, true, type_of_first_line);
 	DEBUGGER_STACK_PUSH(_T("OnMessage")) // Push a "thread" onto the debugger's stack.  For simplicity and performance, use the function name vs something like "message 0x123".
 
 	GuiType *pgui = NULL;
@@ -1820,55 +1822,52 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 		g->EventInfo = apMsg->time;
 	}
 	//else leave them at their init-thread defaults.
-
-	// Set up the array of parameters for Func::Call().  Benchmarks showed very little difference
-	// between this approach and the old approach of assigning directly to the function's parameters:
-	ExprTokenType param_token[4];
-	ExprTokenType *param[4];
-	// Message parameters:
-	param[0] = &param_token[0];
-	param_token[0].symbol = SYM_INTEGER;
-	param_token[0].value_int64 = (__int64)awParam;
-	param[1] = &param_token[1];
-	param_token[1].symbol = SYM_INTEGER;
-	param_token[1].value_int64 = (__int64)alParam;
-	// Message number:
-	param[2] = &param_token[2];
-	param_token[2].symbol = SYM_INTEGER;
-	param_token[2].value_int64 = aMsg;
-	// HWND:
-	param[3] = &param_token[3];
-	param_token[3].symbol = SYM_INTEGER;
-	param_token[3].value_int64 = (__int64)(size_t)aWnd;
-
+	
 	// v1.0.38.04: Below was added to maximize responsiveness to incoming messages.  The reasoning
 	// is similar to why the same thing is done in MsgSleep() prior to its launch of a thread, so see
 	// MsgSleep for more comments:
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
 	++monitor.instance_count;
 
-	bool block_further_processing;
-	{// Scope for func_call.
-		ExprTokenType result_token;
-		FuncCallData func_call;
-		ResultType result;
+	// Set up the array of parameters for func->Invoke().
+	ExprTokenType param_token[5];
+	param_token[0].symbol = SYM_STRING; param_token[0].marker = _T("Call");
+	param_token[1].symbol = SYM_INTEGER; param_token[1].value_int64 = (__int64)awParam;
+	param_token[2].symbol = SYM_INTEGER; param_token[2].value_int64 = (__int64)alParam;
+	param_token[3].symbol = SYM_INTEGER; param_token[3].value_int64 = aMsg;
+	param_token[4].symbol = SYM_INTEGER; param_token[4].value_int64 = (__int64)(size_t)aWnd;
 
-		if (func.Call(func_call, result, result_token, param, 4))
-		{
-			// Fix for v1.0.47: Must handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value
-			// might be the contents of one of the function's local variables (which are about to be free'd).
-			block_further_processing = !TokenIsEmptyString(result_token); // No need to check the following because they're implied for *return_value!=0: result != EARLY_EXIT && result != FAIL;
-			if (block_further_processing)
-				aMsgReply = (LRESULT)TokenToInt64(result_token); // Use 64-bit in case it's an unsigned number greater than 0x7FFFFFFF, in which case this allows it to wrap around to a negative.
-			//else leave aMsgReply uninitialized because we'll be returning false later below, which tells our caller
-			// to ignore aMsgReply.
-			if (result_token.symbol == SYM_OBJECT)
-				result_token.object->Release();
-		}
-		else
-			// Above exited or failed.  result_token may not have been initialized, so treat it as empty:
-			block_further_processing = false;
-	}// func_call destructor causes Var::FreeAndRestoreFunctionVars() to be called here.
+	ExprTokenType *param[_countof(param_token)];
+	for (int i = 0; i < _countof(param); ++i)
+		param[i] = param_token + i;
+
+	bool block_further_processing;
+
+	ExprTokenType this_token;
+	this_token.symbol = SYM_OBJECT;
+	this_token.object = func;
+
+	ExprTokenType result_token;
+	TCHAR result_buf[MAX_NUMBER_SIZE];
+	result_token.marker = _T("");
+	result_token.symbol = SYM_STRING;
+	result_token.mem_to_free = NULL;
+	result_token.buf = result_buf;
+
+	func->Invoke(result_token, this_token, IT_CALL, param, _countof(param));
+	// The result of Invoke is ignored; whatever it was, this thread is finished.
+	// Exit has the same result as returning "" due to initialization above.
+
+	block_further_processing = !TokenIsEmptyString(result_token);
+	if (block_further_processing)
+		aMsgReply = (LRESULT)TokenToInt64(result_token); // Use 64-bit in case it's an unsigned number greater than 0x7FFFFFFF, in which case this allows it to wrap around to a negative.
+	//else leave aMsgReply uninitialized because we'll be returning false later below, which tells our caller
+	// to ignore aMsgReply.
+
+	if (result_token.mem_to_free)
+		free(result_token.mem_to_free);
+	if (result_token.symbol == SYM_OBJECT)
+		result_token.object->Release();
 	
 	DEBUGGER_STACK_POP()
 

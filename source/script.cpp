@@ -12367,7 +12367,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		case ACT_THROW:
 		{
 			if (!line->mArgc)
-				return line->ThrowRuntimeException(_T("An exception was thrown."));
+				return line->ThrowRuntimeException(ERR_EXCEPTION);
 
 			if (g.ThrownToken)
 			{
