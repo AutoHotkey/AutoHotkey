@@ -156,8 +156,8 @@ EXTERN_SCRIPT;
 EXTERN_CLIPBOARD;
 EXTERN_OSVER;
 
-extern int g_IconTray;
-extern int g_IconTraySuspend;
+extern HICON g_IconSmall;
+extern HICON g_IconLarge;
 
 extern DWORD g_OriginalTimeout;
 

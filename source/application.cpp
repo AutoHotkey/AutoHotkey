@@ -1192,7 +1192,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				else if (event_is_control_generated) // An earlier stage has ensured pcontrol isn't NULL in this case.
 					pcontrol->attrib |= GUI_CONTROL_ATTRIB_LABEL_IS_RUNNING; // Must be careful to set this flag only when the event is control-generated, not for a drag-and-drop onto the control, or context menu on the control, etc.
 
-				DEBUGGER_STACK_PUSH(gui_label->mJumpToLine, _T("GUI"))
+				DEBUGGER_STACK_PUSH(_T("Gui"))
 
 				// LAUNCH GUI THREAD:
 				gui_label->Execute();
@@ -1241,7 +1241,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					pgui->AddRef(); //
 					g.GuiWindow = g.GuiDefaultWindow = pgui; // But leave GuiControl at its default, which flags this event as from a menu item.
 				}
-				DEBUGGER_STACK_PUSH(menu_item->mLabel->mJumpToLine, _T("Menu"))
+				DEBUGGER_STACK_PUSH(_T("Menu"))
 				menu_item->mLabel->Execute();
 				DEBUGGER_STACK_POP()
 				if (pgui)
@@ -1268,7 +1268,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 				// Call the OnClipboardChange function.
 				g_script.mOnClipboardChangeIsRunning = true;
-				DEBUGGER_STACK_PUSH(g_script.mOnClipboardChangeFunc->mJumpToLine, _T("OnClipboardChange"))
+				DEBUGGER_STACK_PUSH(_T("OnClipboardChange"))
 
 				int arg = CountClipboardFormats() ? (IsClipboardFormatAvailable(CF_NATIVETEXT) || IsClipboardFormatAvailable(CF_HDROP) ? 1 : 2) : 0;
 
@@ -1626,7 +1626,7 @@ bool CheckScriptTimers()
 		InitNewThread(timer.mPriority, false, false, timer.mLabel->mJumpToLine->mActionType);
 
 		++timer.mExistingThreads;
-		DEBUGGER_STACK_PUSH(timer.mLabel->mJumpToLine, _T("Timer"))
+		DEBUGGER_STACK_PUSH(_T("Timer"))
 		timer.mLabel->Execute();
 		DEBUGGER_STACK_POP()
 		--timer.mExistingThreads;
@@ -1748,7 +1748,7 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	VarBkp ErrorLevel_saved;
 	ErrorLevel_Backup(ErrorLevel_saved);
 	InitNewThread(0, false, true, func.mJumpToLine->mActionType);
-	DEBUGGER_STACK_PUSH(func.mJumpToLine, _T("Message monitor")) // Push a "thread" onto the debugger's stack.  For simplicity and performance, use the function name vs something like "message 0x123".
+	DEBUGGER_STACK_PUSH(_T("OnMessage")) // Push a "thread" onto the debugger's stack.  For simplicity and performance, use the function name vs something like "message 0x123".
 
 	GuiType *pgui = NULL;
 	

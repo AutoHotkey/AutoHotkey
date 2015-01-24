@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0" xmlns:v3="urn:schemas-microsoft-com:asm.v3">
 <assemblyIdentity
 	version="2.0.00.00"
-	processorArchitecture="*"
 	name="AutoHotkey"
 	type="win32"
 />
@@ -19,6 +18,19 @@
 	</dependentAssembly>
 </dependency>
 <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+  <!--
+    This section has two important effects:
+     - Prevent the Program Compatibility Assistant from popping up if Windows
+       thinks something went wrong (such as if "setup" exits too quickly).
+     - Allow OS version number checks to work correctly on Windows 8.1.
+    
+    If the VC++ manifest tool is enabled, it adds redundant xmlns prefixes and
+    declarations to this node and each of its child nodes.  This causes bloat,
+    and having two xmlns attributes on a node causes XP SP2 systems to blue-
+    screen just by running the program once or twice.  It can be avoided by
+    using an explicit namespace prefix here, but instead we just avoid the
+    manifest tool entirely and do our own processing to minimize size.
+  -->
   <application>
     <!-- Windows 8.1 -->
     <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
@@ -30,9 +42,19 @@
     <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
   </application>
 </compatibility>
-<asmv3:application>
-	<asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">
+<v3:application>
+	<v3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">
 		<dpiAware>true</dpiAware>
-	</asmv3:windowsSettings>
-</asmv3:application>
+	</v3:windowsSettings>
+</v3:application>
+<v3:trustInfo>
+  <v3:security>
+    <v3:requestedPrivileges>
+      <!-- This prevents UAC from using heuristics to detect the program as an installer.
+           It's normally inserted by the VC++ manifest tool, which is disabled for this
+           project for reasons described above. -->
+      <v3:requestedExecutionLevel level="asInvoker" uiAccess="false" />
+    </v3:requestedPrivileges>
+  </v3:security>
+</v3:trustInfo>
 </assembly>

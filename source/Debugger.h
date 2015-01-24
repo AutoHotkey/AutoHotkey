@@ -165,33 +165,13 @@ struct DbgStack
 		--mTop;
 	}
 
-	void Push(Line *aLine, TCHAR *aDesc)
-	{
-		Entry &s = *Push();
-		s.line = aLine;
-		s.desc = aDesc;
-		s.type = SE_Thread;
-	}
-	
-	void Push(Line *aLine, Label *aSub)
-	{
-		Entry &s = *Push();
-		s.line = aLine;
-		s.sub  = aSub;
-		s.type = SE_Sub;
-	}
-	
-	void Push(Line *aLine, Func *aFunc)
-	{
-		Entry &s = *Push();
-		s.line = aLine;
-		s.func = aFunc;
-		s.type = SE_Func;
-	}
+	void Push(TCHAR *aDesc);
+	void Push(Label *aSub);
+	void Push(Func *aFunc);
 };
 
-#define DEBUGGER_STACK_PUSH(aLine, aInfo)	g_Debugger.mStack.Push(aLine, aInfo);
-#define DEBUGGER_STACK_POP()				g_Debugger.mStack.Pop();
+#define DEBUGGER_STACK_PUSH(aWhat)	g_Debugger.mStack.Push(aWhat);
+#define DEBUGGER_STACK_POP()		g_Debugger.mStack.Pop();
 
 
 enum PropertyContextType {PC_Local=0, PC_Global};

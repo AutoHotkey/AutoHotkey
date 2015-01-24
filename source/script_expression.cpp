@@ -1601,7 +1601,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		//  1) Allow CreateRuntimeException() to know which function is throwing an exception.
 		//  2) If a UDF is called before the BIF returns, it will show on the call stack.
 		//     e.g. DllCall(RegisterCallback("F")) will show DllCall while F is running.
-		DEBUGGER_STACK_PUSH(g_script.mCurrLine, this)
+		DEBUGGER_STACK_PUSH(this)
 
 		// CALL THE BUILT-IN FUNCTION:
 		mBIF(aResultToken, aParam, aParamCount);

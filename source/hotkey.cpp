@@ -842,9 +842,10 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 	// in which case we would want SendKeys() to take note of these modifiers even
 	// if it was called from an ExecUntil() other than ours here:
 	g_script.mThisHotkeyModifiersLR = mModifiersConsolidatedLR;
+
+#ifdef CONFIG_WIN9X
 	bool unregistered_during_thread = mUnregisterDuringThread && mIsRegistered;
 
-	// LAUNCH HOTKEY SUBROUTINE:
 	// For v1.0.23, the below allows the $ hotkey prefix to unregister the hotkey on
 	// Windows 9x, which allows the send command to send the hotkey itself without
 	// causing an infinite loop of keystrokes.  For simplicity, the hotkey is kept
@@ -852,14 +853,20 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 	// selectively do it before and after each Send command of the thread:
 	if (unregistered_during_thread) // Do it every time through the loop in case the hotkey is re-registered by its own subroutine.
 		Unregister(); // This takes care of other details for us.
+#endif
+
+	// LAUNCH HOTKEY SUBROUTINE:
 	++aVariant.mExistingThreads;  // This is the thread count for this particular hotkey only.
 	ResultType result;
-	DEBUGGER_STACK_PUSH(aVariant.mJumpToLabel->mJumpToLine, _T("Hotkey"))
+	DEBUGGER_STACK_PUSH(g_script.mThisHotkeyName)
 	result = aVariant.mJumpToLabel->Execute();
 	DEBUGGER_STACK_POP()
 	--aVariant.mExistingThreads;
+
+#ifdef CONFIG_WIN9X
 	if (unregistered_during_thread)
 		Register();
+#endif
 
 	if (result == FAIL)
 		aVariant.mRunAgainAfterFinished = false;  // Ensure this is reset due to the error.
@@ -1033,6 +1040,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				// their interdependencies, will be re-initialized correctly.
 				update_all_hotkeys = true;
 			}
+			
 			// If the above changed the action from an Alt-tab type to non-alt-tab, there may be a label present
 			// to be applied to the existing variant (or created as a new variant).
 			if (aJumpToLabel) // COMMAND (update hotkey): Hotkey, Name, LabelName [, Options]
@@ -1057,18 +1065,6 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 						// never change; it will always contain the true name of this hotkey, namely its
 						// keystroke+modifiers (e.g. ^!c).
 					}
-					// v1.1.15: Allow the ~tilde prefix to be added/removed from an existing hotkey variant.
-					if (variant->mNoSuppress = suffix_has_tilde)
-					{
-						hk->mNoSuppress |= AT_LEAST_ONE_VARIANT_HAS_TILDE;
-						if (!hk->mKeybdHookMandatory)
-						{
-							update_all_hotkeys = true; // Since it may be switching from reg to k-hook.
-							hk->mKeybdHookMandatory = true; // See Hotkey::AddVariant() for comments.
-						}
-					}
-					else
-						hk->mNoSuppress |= AT_LEAST_ONE_VARIANT_LACKS_TILDE;
 				}
 				else // No existing variant matching current #IfWin criteria, so create a new variant.
 				{
@@ -1076,20 +1072,43 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 						RETURN_HOTKEY_ERROR(HOTKEY_EL_MEM, ERR_OUTOFMEM, aHotkeyName);
 					variant_was_just_created = true;
 					update_all_hotkeys = true;
-					if (hook_is_mandatory || (!g_os.IsWin9x() && g_ForceKeybdHook))
-					{
-						// Require the hook for all variants of this hotkey if any variant requires it.
-						// This seems more intuitive than the old behaviour, which required $ or #UseHook
-						// to be used on the *first* variant, even though it affected all variants.
-						if (g_os.IsWin9x())
-							hk->mUnregisterDuringThread = true;
-						else
-							hk->mKeybdHookMandatory = true;
-					}
+					// It seems undesirable for #UseHook to be applied to a hotkey just because it's options
+					// were updated with the Hotkey command; therefore, #UseHook is only applied for newly
+					// created variants such as this one.  For others, the $ prefix can be applied.
+					if (g_ForceKeybdHook && !g_os.IsWin9x())
+						hook_is_mandatory = true;
 				}
 			}
-			//else NULL label, so either it just became an alt-tab hotkey above, or it's "Hotkey, Name,, Options".
-			// Either way, continue on and let the error-catch below report it if it qualifies as an error.
+			else
+				// NULL label, so either it just became an alt-tab hotkey above, or it's "Hotkey, Name,, Options".
+				if (!variant) // Below relies on this check.
+					break; // Let the error-catch below report it as an error.
+#ifdef CONFIG_WIN9X
+			if (g_os.IsWin9x())
+			{
+				if (hook_is_mandatory)
+					hk->mUnregisterDuringThread = true;
+				// Skip the checks below, since the tilde prefix and #UseHook are ignored on Win9x.
+				break;
+			}
+#endif
+			// v1.1.15: Allow the ~tilde prefix to be added/removed from an existing hotkey variant.
+			// v1.1.19: Apply this change even if aJumpToLabel is omitted.  This is redundant if
+			// variant_was_just_created, but checking that condition seems counter-productive.
+			if (variant->mNoSuppress = suffix_has_tilde)
+				hk->mNoSuppress |= AT_LEAST_ONE_VARIANT_HAS_TILDE;
+			else
+				hk->mNoSuppress |= AT_LEAST_ONE_VARIANT_LACKS_TILDE;
+				
+			// v1.1.19: Allow the $UseHook prefix to be added to an existing hotkey.
+			if (!hk->mKeybdHookMandatory && (hook_is_mandatory || suffix_has_tilde))
+			{
+				// Require the hook for all variants of this hotkey if any variant requires it.
+				// This seems more intuitive than the old behaviour, which required $ or #UseHook
+				// to be used on the *first* variant, even though it affected all variants.
+				update_all_hotkeys = true; // Since it may be switching from reg to k-hook.
+				hk->mKeybdHookMandatory = true;
+			}
 		} // Hotkey already existed.
 		break;
 	} // switch(hook_action)
@@ -1204,7 +1223,7 @@ Hotkey *Hotkey::AddHotkey(Label *aJumpToLabel, HookActionType aHookAction, LPTST
 	if (!shk[sNextID]->mConstructedOK)
 	{
 		delete shk[sNextID];  // SimpleHeap allows deletion of most recently added item.
-		return NULL;  // The constructor already displayed the error (or updated ErrorLevelevel).
+		return NULL;  // The constructor already displayed the error (or updated ErrorLevel).
 	}
 	++sNextID;
 	return shk[sNextID - 1]; // Indicate success by returning the new hotkey.
@@ -1234,7 +1253,9 @@ Hotkey::Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction
 	, mModifiersConsolidatedLR(0)
 	, mType(HK_NORMAL) // Default unless overridden to become mouse, joystick, hook, etc.
 	, mVK_WasSpecifiedByNumber(false)
+#ifdef CONFIG_WIN9X
 	, mUnregisterDuringThread(false)
+#endif
 	, mIsRegistered(false)
 	, mParentEnabled(true)
 	, mHookAction(aHookAction)   // Alt-tab and possibly other uses.
@@ -1647,8 +1668,8 @@ ResultType Hotkey::TextInterpret(LPTSTR aName, Hotkey *aThisHotkey, bool aUseErr
 	*end_of_term1 = '\0';
 	ResultType result = TextToKey(term1, aName, true, aThisHotkey, aUseErrorLevel);
 	*end_of_term1 = ctemp;  // Undo the termination.
-	if (result == FAIL)
-		return FAIL;
+	if (result != OK)
+		return result;
 	term2 += COMPOSITE_DELIMITER_LENGTH;
 	term2 = omit_leading_whitespace(term2);
 	// Even though modifiers on keys already modified by a mModifierVK are not supported, call
@@ -1721,12 +1742,14 @@ LPTSTR Hotkey::TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperti
 				aProperties->suffix_has_tilde = true; // If this is the prefix's tilde rather than the suffix, it will be overridden later below.
 			break;
 		case '$':
+#ifdef CONFIG_WIN9X
 			if (g_os.IsWin9x())
 			{
 				if (aThisHotkey)
 					aThisHotkey->mUnregisterDuringThread = true;
 			}
 			else
+#endif
 				if (aThisHotkey)
 					aThisHotkey->mKeybdHookMandatory = true; // This flag will be ignored if TextToKey() decides this is a JOYSTICK or MOUSE hotkey.
 				// else ignore the flag and try to register normally, which in most cases seems better
@@ -1884,15 +1907,13 @@ ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier,
 					g_ErrorLevel->Assign(HOTKEY_EL_UNSUPPORTED_PREFIX);
 				else
 				{
-					// In this case, aThisHotkey is NOT checked because it seems better to yield a double
-					// syntax error at load-time (once for Hotkey failure and again for "unrecognized action"
-					// than to show only the generic error message.  Note that the Hotkey command (at runtime)
-					// also uses the below to show a single error dialog.
 					sntprintf(error_text, _countof(error_text), _T("\"%s\" is not allowed as a prefix key."), aText);
-					if (g_script.mIsReadyToExecute) // Dynamically registered via the Hotkey command.
-						g_script.ScriptError(error_text);
-					else
-						MsgBox(error_text);
+					g_script.ScriptError(error_text, aHotkeyName);
+					// When aThisHotkey==NULL, return CONDITION_FALSE to indicate to our caller that it's
+					// an invalid hotkey and we've already shown the error message.  Unlike the old method,
+					// this method respects /ErrorStdOut and avoids the second, generic error message.
+					if (!aThisHotkey)
+						return CONDITION_FALSE;
 				}
 				return FAIL;
 			}
@@ -1916,11 +1937,22 @@ ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier,
 			if (   !(temp_sc = (sc_type)ConvertJoy(aText, &joystick_id, true))   )  // Is there a joystick control/button?
 			{
 				if (aUseErrorLevel)
+				{
 					// Tempting to store the name of the invalid key in ErrorLevel, but because it might
 					// be really long, it seems best not to.  Another reason is that the keyname could
 					// conceivably be the same as one of the other/reserved ErrorLevel numbers.
 					g_ErrorLevel->Assign(HOTKEY_EL_INVALID_KEYNAME);
-				else if (aThisHotkey)
+					return FAIL;
+				}
+				if (!aText[1] && !g_script.mIsReadyToExecute)
+				{
+					// At load time, single-character key names are always considered valid but show a
+					// warning if they can't be registered as hotkeys on the current keyboard layout.
+					if (!aThisHotkey) // First stage: caller wants to differentiate this case from others.
+						return CONDITION_TRUE;
+					return FAIL; // Second stage: return FAIL to avoid creating an invalid hotkey.
+				}
+				if (aThisHotkey)
 				{
 					// If it fails while aThisHotkey!=NULL, that should mean that this was called as
 					// a result of the Hotkey command rather than at loadtime.  This is because at 
@@ -2341,7 +2373,7 @@ ResultType Hotstring::PerformInNewThreadMadeByCaller()
 	g_script.mThisHotkeyModifiersLR = 0;
 	++mExistingThreads;  // This is the thread count for this particular hotstring only.
 	ResultType result;
-	DEBUGGER_STACK_PUSH(mJumpToLabel->mJumpToLine, _T("Hotstring"))
+	DEBUGGER_STACK_PUSH(g_script.mThisHotkeyName)
 	result = mJumpToLabel->Execute();
 	DEBUGGER_STACK_POP()
 	--mExistingThreads;

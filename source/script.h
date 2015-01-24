@@ -1833,7 +1833,7 @@ public:
 		Label *prev_label =g->CurrentLabel; // This will be non-NULL when a subroutine is called from inside another subroutine.
 		g->CurrentLabel = this;
 		ResultType result;
-		DEBUGGER_STACK_PUSH(mJumpToLine, this)
+		DEBUGGER_STACK_PUSH(this)
 		// I'm pretty sure it's not valid for the following call to ExecUntil() to tell us to jump
 		// somewhere, because the called function, or a layer even deeper, should handle the goto
 		// prior to returning to us?  So the last parameter is omitted:
@@ -1973,7 +1973,7 @@ public:
 		++mInstances;
 
 		ResultType result;
-		DEBUGGER_STACK_PUSH(mJumpToLine, this)
+		DEBUGGER_STACK_PUSH(this)
 		result = mJumpToLine->ExecUntil(UNTIL_BLOCK_END, aResultToken);
 #ifdef CONFIG_DEBUGGER
 		if (g_Debugger.IsConnected())
@@ -1981,8 +1981,12 @@ public:
 			if (result == EARLY_RETURN)
 			{
 				// Find the end of this function.
-				Line *line;
-				for (line = mJumpToLine; line && (line->mActionType != ACT_BLOCK_END || !line->mAttribute); line = line->mNextLine);
+				//Line *line;
+				//for (line = mJumpToLine; line && (line->mActionType != ACT_BLOCK_END || !line->mAttribute); line = line->mNextLine);
+				// Since mJumpToLine points at the first line *inside* the body, mJumpToLine->mPrevLine
+				// is the block-begin.  That line's mRelatedLine is the line *after* the block-end, so
+				// use it's mPrevLine.  mRelatedLine is guaranteed to be non-NULL by load-time logic.
+				Line *line = mJumpToLine->mPrevLine->mRelatedLine->mPrevLine;
 				// Give user the opportunity to inspect variables before returning.
 				if (line)
 					g_Debugger.PreExecLine(line);
@@ -2601,9 +2605,7 @@ public:
 	bool mAutoExecSectionIsRunning;
 	bool mIsRestart; // The app is restarting rather than starting from scratch.
 	bool mErrorStdOut; // true if load-time syntax errors should be sent to stdout vs. a MsgBox.
-#ifdef AUTOHOTKEYSC
-	bool mCompiledHasCustomIcon; // Whether the compiled script uses a custom icon.
-#else
+#ifndef AUTOHOTKEYSC
 	TextStream *mIncludeLibraryFunctionsThenExit;
 #endif
 	int mUninterruptedLineCountMax; // 32-bit for performance (since huge values seem unnecessary here).

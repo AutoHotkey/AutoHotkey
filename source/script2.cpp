@@ -4614,7 +4614,10 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 			small_icon = (LPARAM)g_script.mCustomIconSmall; // Should always be non-NULL when mCustomIcon is non-NULL.
 		}
 		else
-			big_icon = small_icon = (LPARAM)LoadImage(g_hInstance, MAKEINTRESOURCE(IDI_MAIN), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED to conserve memory (since the main icon is loaded for so many purposes).
+		{
+			big_icon = (LPARAM)g_IconLarge;
+			small_icon = (LPARAM)g_IconSmall;
+		}
 
 		SendMessage(hWndDlg, WM_SETICON, ICON_SMALL, small_icon);
 		SendMessage(hWndDlg, WM_SETICON, ICON_BIG, big_icon);
@@ -10535,6 +10538,7 @@ VarSizeType BIV_TimeIdle(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple cal
 {
 	if (!aBuf) // IMPORTANT: Conservative estimate because tick might change between 1st & 2nd calls.
 		return MAX_INTEGER_LENGTH;
+#ifdef CONFIG_WIN9X
 	*aBuf = '\0';  // Set default.
 	if (g_os.IsWin2000orLater()) // Checked in case the function is present in the OS but "not implemented".
 	{
@@ -10550,6 +10554,15 @@ VarSizeType BIV_TimeIdle(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple cal
 				ITOA64(GetTickCount() - lii.dwTime, aBuf);
 		}
 	}
+#else
+	// Not Win9x: Calling it directly should (in theory) produce smaller code size.
+	LASTINPUTINFO lii;
+	lii.cbSize = sizeof(lii);
+	if (GetLastInputInfo(&lii))
+		ITOA64(GetTickCount() - lii.dwTime, aBuf);
+	else
+		*aBuf = '\0';
+#endif
 	return (VarSizeType)_tcslen(aBuf);
 }
 
@@ -14449,7 +14462,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 		// See MsgSleep() for comments about the following section.
 		ErrorLevel_Backup(ErrorLevel_saved);
 		InitNewThread(0, false, true, func.mJumpToLine->mActionType);
-		DEBUGGER_STACK_PUSH(func.mJumpToLine, _T("Callback"))
+		DEBUGGER_STACK_PUSH(_T("Callback"))
 	}
 	else // Backup/restore only A_EventInfo. This avoids callbacks changing A_EventInfo for the current thread/context (that would be counterintuitive and a source of script bugs).
 	{

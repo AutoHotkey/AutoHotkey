@@ -295,7 +295,11 @@
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
-    <None Include="source\resources\AutoHotkey.exe.manifest" />
+    <CustomBuild Include="source\resources\AutoHotkey.exe.manifest">
+      <Command>cscript.exe //NoLogo "$(SolutionDir)source\scripts\minman.js" "%(FullPath)" "$(SolutionDir)temp\AutoHotkey.exe.manifest"</Command>
+      <Outputs>$(SolutionDir)temp\AutoHotkey.exe.manifest</Outputs>
+      <SubType>Designer</SubType>
+    </CustomBuild>
     <None Include="source\resources\icon_filetype.ico" />
     <None Include="source\resources\icon_main.ico" />
     <None Include="source\resources\icon_pause.ico" />
