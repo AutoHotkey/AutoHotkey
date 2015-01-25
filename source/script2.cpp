@@ -16404,6 +16404,7 @@ BIF_DECL(BIF_OnMessage)
 			// occur while the monitor is currently running, which requires more complex handling within
 			// MsgMonitor() (see its comments for details).
 			--g_MsgMonitorCount;  // Must be done prior to the below.
+			monitor.func->Release();
 			if (msg_index < g_MsgMonitorCount) // An element other than the last is being removed. Shift the array to cover/delete it.
 				MoveMemory(g_MsgMonitor+msg_index, g_MsgMonitor+msg_index+1, sizeof(MsgMonitorStruct)*(g_MsgMonitorCount-msg_index));
 			goto return_success;
@@ -16427,6 +16428,7 @@ BIF_DECL(BIF_OnMessage)
 			: NULL; // Yield an empty string since there's no previous function and an exception would be thrown on failure.
 		monitor.instance_count = 0; // Reset instance_count only for new items since existing items might currently be running.
 		monitor.msg = specified_msg;
+		monitor.func = NULL;
 		// Continue on to the update-or-create logic below.
 	}
 
@@ -16434,7 +16436,12 @@ BIF_DECL(BIF_OnMessage)
 	// MsgMonitorStruct in the array.  In addition, it has set the proper return value for us.
 	// Update those struct attributes that get the same treatment regardless of whether this is an update or creation.
 	if (callback) // i.e. not OnMessage(Msg,,MaxThreads).
+	{
+		callback->AddRef(); // Keep the object alive while it's in g_MsgMonitor.
+		if (monitor.func)
+			monitor.func->Release();
 		monitor.func = callback;
+	}
 	if (!ParamIndexIsOmitted(2))
 		monitor.max_instances = (short)ParamIndexToInt64(2); // No validation because it seems harmless if it's negative or some huge number.
 	else // Unspecified, so if this item is being newly created fall back to the default.
