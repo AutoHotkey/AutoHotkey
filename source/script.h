@@ -2596,6 +2596,7 @@ private:
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	int mCurrentFuncOpenBlockCount; // While loading the script, this is how many blocks are currently open in the current function's body.
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
+	bool mNoUpdateLabels;
 
 #define MAX_NESTED_CLASSES 5
 #define MAX_CLASS_NAME_LENGTH UCHAR_MAX
@@ -2637,6 +2638,7 @@ private:
 	// were member functions of class Line, a check for NULL would have to
 	// be done before dereferencing any line's mNextLine, for example:
 	Line *PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd = false, Line *aParentLine = NULL);
+	ResultType PreparseStaticLines(Line *aStartingLine);
 	Line *PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode = NORMAL_MODE, AttributeType aLoopType = ATTR_NONE);
 
 public:

@@ -61,7 +61,7 @@ Script::Script()
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
-	, mCurrentFuncOpenBlockCount(0), mNextLineIsFunctionBody(false)
+	, mCurrentFuncOpenBlockCount(0), mNextLineIsFunctionBody(false), mNoUpdateLabels(false)
 	, mClassObjectCount(0), mUnresolvedClasses(NULL), mClassProperty(NULL), mClassPropertyDef(NULL)
 	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true), mMenuUseErrorLevel(false)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
@@ -1038,48 +1038,13 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 		|| !AddLine(ACT_EXIT)) // Fix for v1.0.47.04: Add an Exit because otherwise, a script that ends in an IF-statement will crash in PreparseBlocks() because PreparseBlocks() expects every IF-statements mNextLine to be non-NULL (helps loading performance too).
 		return LOADING_FAILED;
 
-	// BELOW: Aside from setting up {} blocks, PreparseBlocks() resolves function references in expressions.
-	// Originally PreparseBlocks() resolved all function references in one sweep. Since func lib auto-inclusions
-	// are appended to the main script, they were automatically handled by a later iteration of the loop inside
-	// PreparseBlocks(). However, the introduction of #If and Static initializers bring some complications:
-	//   (a) Function-calls in the main script, #If expressions or Static initializers can cause auto-inclusions.
-	//   (b) Auto-inclusions can introduce more function-calls.
-	//   (c) Auto-inclusions can introduce more #If expressions or Static initializers.
-	// The loop below handles these potentially "recursive" cases.
-	Line *last_line_processed = NULL, *last_static_processed = NULL;
-	int expr_line_index = 0;
-	for (;;)
-	{
-		// Check for any unprocessed #if expressions:
-		for ( ; expr_line_index < g_HotExprLineCount; ++expr_line_index)
-		{
-			Line *line = g_HotExprLines[expr_line_index];
-			if (!PreparseBlocks(line))
-				return LOADING_FAILED;
-			// Search for "ACT_EXPRESSION will be changed to ACT_IFEXPR" for comments about the following line:
-			line->mActionType = ACT_IFEXPR;
-		}
-		// Check for any unprocessed static initializers:
-		if (last_static_processed != mLastStaticLine)
-		{
-			if (!PreparseBlocks(last_static_processed ? last_static_processed->mNextLine : mFirstStaticLine))
-				return LOADING_FAILED;
-			last_static_processed = mLastStaticLine;
-		}
-		// Check for any unprocessed lines in the main script:
-		if (last_line_processed != mLastLine)
-		{
-			if (!PreparseBlocks(last_line_processed ? last_line_processed->mNextLine : mFirstLine))
-				return LOADING_FAILED; // Error was already displayed by the above call.
-			last_line_processed = mLastLine;
-		}
-		// Since #If expressions and Static initializers can't directly bring about more #If expressions or Static
-		// initializers, the fact that no new lines have been added to the script since the last iteration means
-		// all lines in the main script, all #If expressions and all Static initializers have been processed.
-		else break;
-	}
+	if (!PreparseBlocks(mFirstLine))
+		return LOADING_FAILED; // Error was already displayed by the above call.
 	// ABOVE: In v1.0.47, the above may have auto-included additional files from the userlib/stdlib.
 	// That's why the above is done prior to adding the EXIT lines and other things below.
+
+	// Preparse static initializers and #if expressions.
+	PreparseStaticLines(mFirstLine);
 	if (mFirstStaticLine)
 	{
 		// Prepend all Static initializers to the beginning of the auto-execute section.
@@ -2996,50 +2961,36 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			g_HotExprIndex = -1;
 			return CONDITION_TRUE;
 		}
-
-		Func *currentFunc = g->CurrentFunc;
-		// Ensure variable references are global:
-		g->CurrentFunc = NULL;
-
-		ConvertEscapeSequences(parameter, g_EscapeChar, false); // Normally done in ParseAndAddLine().
-
-		// ACT_EXPRESSION will be changed to ACT_IFEXPR after PreparseBlocks() is called so that EvaluateCondition()
-		// can be used and because ACT_EXPRESSION is designed to discard its result (since it normally would not be
-		// used). This can't be done before PreparseBlocks() is called since this isn't really an IF (it has no body).
-		if (!AddLine(ACT_EXPRESSION, &parameter, UCHAR_MAX + 1)) // UCHAR_MAX signals AddLine to avoid pointing any pending labels or functions at the new line.
-			return FAIL; // Above already displayed the error message.
+		
+		Func *current_func = g->CurrentFunc;
+		g->CurrentFunc = NULL; // Use global scope.
+		mNoUpdateLabels = true; // Avoid pointing any pending labels at this line.
+		
+		if (!ParseAndAddLine(parameter, ACT_HOTKEY_IF, 0, _T(""))) // Pass non-NULL for aActionName.
+			return FAIL;
+		
+		mNoUpdateLabels = false;
+		g->CurrentFunc = current_func;
+		
 		Line *hot_expr_line = mLastLine;
-
-		// Remove the newly added line from the actual script.
-		if (mFirstLine == mLastLine)
-			mFirstLine = NULL;
-		mLastLine = mLastLine->mPrevLine;
-		if (mLastLine) // Will be NULL if no actual code precedes the #if.
-			mLastLine->mNextLine = NULL;
-		mCurrLine = mLastLine;
-
-		// Restore to previous value:
-		g->CurrentFunc = currentFunc;
 
 		// Set the new criterion.
 		g_HotCriterion = HOT_IF_EXPR;
 		// Use the expression text to identify hotkey variants.
 		g_HotWinTitle = hot_expr_line->mArg[0].text;
 		g_HotWinText = _T("");
-
 		if (g_HotExprLineCount + 1 > g_HotExprLineCountMax)
 		{	// Allocate or reallocate g_HotExprLines.
 			g_HotExprLineCountMax += 100;
 			g_HotExprLines = (Line**)realloc(g_HotExprLines, g_HotExprLineCountMax * sizeof(Line**));
+			if (!g_HotExprLines)
+				return ScriptError(ERR_OUTOFMEM);
 		}
 		g_HotExprIndex = g_HotExprLineCount++;
 		g_HotExprLines[g_HotExprIndex] = hot_expr_line;
-		// VicinityToText() assumes lines are linked both ways, so clear mPrevLine in case an error occurs when this line is validated.
-		hot_expr_line->mPrevLine = NULL;
-		// The lines could be linked to simplify function resolution (i.e. allow calling PreparseBlocks() for all lines instead of once for each line) -- However, this would cause confusing/irrelevant vicinity lines to be shown if an error occurs.
-
 		return CONDITION_TRUE;
 	}
+
 	// L4: Allow #if timeout to be adjusted.
 	if (IS_DIRECTIVE_MATCH(_T("#IfTimeout")))
 	{
@@ -3750,6 +3701,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 
 				item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
 
+				LPTSTR the_operator = item_end;
 				bool convert_the_operator;
 				switch(*item_end)
 				{
@@ -3775,7 +3727,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					// replaced with ".:=" and fail was up to chance.  (Testing showed it failed only in Debug mode.)
 					convert_the_operator = false;
 				}
-				LPTSTR right_side_of_operator = item_end; // Save for use by VAR_DECLARE_STATIC below.
 
 				// Since above didn't "continue", this declared variable also has an initializer.
 				// Add that initializer as a separate line to be executed at runtime. Separate lines
@@ -3797,101 +3748,52 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				TCHAR orig_char = *terminate_here;
 				*terminate_here = '\0'; // Temporarily terminate (it might already be the terminator, but that's harmless).
 
+				// PERFORMANCE: As of v1.0.48 (with cached binary numbers and pre-postfixed expressions),
+				// assignments of literal integers to variables are up to 10% slower when done as a combined
+				// (comma-separated) expression rather than each as a separate line.  However,  this slowness
+				// eventually disappears and may even reverse as more and more such expressions are combined
+				// into a single expression (e.g. the following is almost the same speed either way:
+				// x:=1,y:=22,z:=333,a:=4444,b:=55555).  By contrast, assigning a literal string, another
+				// variable, or a complex expression is the opposite: they are always faster when done via
+				// commas, and they continue to get faster and faster as more expressions are merged into a
+				// single comma-separated expression. In light of this, a future version could combine ONLY
+				// those declarations that have initializers into a single comma-separately expression rather
+				// than making a separate expression for each.  However, since it's not always faster to do
+				// so (e.g. x:=0,y:=1 is faster as separate statements), and since it is somewhat rare to
+				// have a long chain of initializers, and since these performance differences are documented,
+				// it might not be worth changing.
+				LPTSTR line_to_add;
+				TCHAR new_buf[LINE_SIZE]; // Declared outside the braces below so that it stays in scope long enough. Using so much stack space here and in caller seems unlikely to affect performance, so _alloca seems unlikely to help.
+				if (convert_the_operator) // Convert first '=' in item to be ":=".
+				{
+					// Prevent any chance of overflow by using new_buf (overflow might otherwise occur in cases
+					// such as this sub-statement being the very last one in the declaration list, and being
+					// at the limit of the buffer's capacity).
+					StrReplace(_tcscpy(new_buf, item), _T("="), _T(":="), SCS_SENSITIVE, 1); // Can't overflow because there's only one replacement and we know item's length can't be that close to the capacity limit.
+					line_to_add = new_buf;
+				}
+				else
+					line_to_add = item;
 				if (declare_type == VAR_DECLARE_STATIC)
 				{
-					LPTSTR args[] = {var->mName, ConvertEscapeSequences(omit_leading_whitespace(right_side_of_operator), g_EscapeChar, false)};
-					// UCHAR_MAX signals AddLine to avoid pointing any pending labels or functions at the new line.
-					// Otherwise, ParseAndAddLine could be used like in the section below to optimize simple
-					// assignments, but that would be nearly pointless for static initializers anyway:
-					if (!AddLine(ACT_ASSIGNEXPR, args, UCHAR_MAX + 2)) 
-						return FAIL; // Above already displayed the error.
-					mLastLine = mLastLine->mPrevLine; // Restore mLastLine to the last non-'static' line, but leave mCurrLine set to the new line.
-					mLastLine->mNextLine = NULL; // Remove the new line from the main script's linked list of lines. For maintainability: AddLine() unconditionally overwrites mLastLine->mNextLine anyway.
-					if (mLastStaticLine)
-						mLastStaticLine->mNextLine = mCurrLine;
-					else
-						mFirstStaticLine = mCurrLine;
-					mCurrLine->mPrevLine = mLastStaticLine; // Even if NULL. Must be set otherwise VicinityToText() will show the wrong line if this one or one "near" it has an error.
-					mLastStaticLine = mCurrLine;
-
-					// Some of the checks below could be used to "optimize" static initializers, but since they
-					// will only be executed once each anyway, it doesn't seem useful.  Making them expressions
-					// should be overall more consistent and saves worrying about cases like the following,
-					// which previously gave unexpected results:  static var := "literal" . "literal"
-					/*
-					// The following is similar to the code used to support default values for function parameters.
-					// So maybe maintain them together.
-					right_side_of_operator = omit_leading_whitespace(right_side_of_operator);
-					if (!_tcsicmp(right_side_of_operator, _T("false")))
-						var->Assign(_T("0"));
-					else if (!_tcsicmp(right_side_of_operator, _T("true")))
-						var->Assign(_T("1"));
-					else // The only other supported initializers are "string", integers, and floats.
-					{
-						// Vars could be supported here via FindVar(), but only globals ABOVE this point in
-						// the script would be supported (since other globals don't exist yet; in fact, even
-						// those that do exist don't have any contents yet, so it would be pointless). So it
-						// seems best to wait until full/comprehensive support for expressions is
-						// studied/designed for both statics and parameter-default-values.
-						if (*right_side_of_operator == '"' && terminate_here[-1] == '"') // Quoted/literal string.
-						{
-							++right_side_of_operator; // Omit the opening-quote from further consideration.
-							terminate_here[-1] = '\0'; // Remove the close-quote from further consideration.
-							ConvertEscapeSequences(right_side_of_operator, g_EscapeChar, false); // Raw escape sequences like `n haven't been converted yet, so do it now.
-							// Convert all pairs of quotes into single literal quotes:
-							StrReplace(right_side_of_operator, _T("\"\""), _T("\""), SCS_SENSITIVE);
-						}
-						else // It's not a quoted string (nor the empty string); or it has a missing ending quote (rare).
-						{
-							if (!IsPureNumeric(right_side_of_operator, true, false, true)) // It's not a number, and since we're here it's not a quoted/literal string either.
-								return ScriptError(_T("Unsupported static initializer."), right_side_of_operator);
-							//else it's an int or float, so just assign the numeric string itself (there
-							// doesn't seem to be any need to convert it to float/int first, though that would
-							// make things more consistent such as storing .1 as 0.1).
-						}
-						if (*right_side_of_operator) // It can be "" in cases such as "" being specified literally in the script, in which case nothing needs to be done because all variables start off as "".
-							var->Assign(right_side_of_operator);
-					}
-					*/
+					// Avoid pointing labels or the function's mJumpToLine at a static declaration.
+					mNoUpdateLabels = true;
 				}
-				else // A non-static initializer, so a line of code must be produced that will be executed at runtime every time the function is called.
+				else if (belongs_to_if_or_else_or_loop && !open_brace_was_added) // v1.0.46.01: Put braces to allow initializers to work even directly under an IF/ELSE/LOOP.  Note that the braces aren't added or needed for static initializers.
 				{
-					// PERFORMANCE: As of v1.0.48 (with cached binary numbers and pre-postfixed expressions),
-					// assignments of literal integers to variables are up to 10% slower when done as a combined
-					// (comma-separated) expression rather than each as a separate line.  However,  this slowness
-					// eventually disappears and may even reverse as more and more such expressions are combined
-					// into a single expression (e.g. the following is almost the same speed either way:
-					// x:=1,y:=22,z:=333,a:=4444,b:=55555).  By contrast, assigning a literal string, another
-					// variable, or a complex expression is the opposite: they are always faster when done via
-					// commas, and they continue to get faster and faster as more expressions are merged into a
-					// single comma-separated expression. In light of this, a future version could combine ONLY
-					// those declarations that have initializers into a single comma-separately expression rather
-					// than making a separate expression for each.  However, since it's not always faster to do
-					// so (e.g. x:=0,y:=1 is faster as separate statements), and since it is somewhat rare to
-					// have a long chain of initializers, and since these performance differences are documented,
-					// it might not be worth changing.
-					LPTSTR line_to_add;
-					TCHAR new_buf[LINE_SIZE]; // Declared outside the braces below so that it stays in scope long enough. Using so much stack space here and in caller seems unlikely to affect performance, so _alloca seems unlikely to help.
-					if (convert_the_operator) // Convert first '=' in item to be ":=".
-					{
-						// Prevent any chance of overflow by using new_buf (overflow might otherwise occur in cases
-						// such as this sub-statement being the very last one in the declaration list, and being
-						// at the limit of the buffer's capacity).
-						StrReplace(_tcscpy(new_buf, item), _T("="), _T(":="), SCS_SENSITIVE, 1); // Can't overflow because there's only one replacement and we know item's length can't be that close to the capacity limit.
-						line_to_add = new_buf;
-					}
-					else
-						line_to_add = item;
-					if (belongs_to_if_or_else_or_loop && !open_brace_was_added) // v1.0.46.01: Put braces to allow initializers to work even directly under an IF/ELSE/LOOP.  Note that the braces aren't added or needed for static initializers.
-					{
-						if (!AddLine(ACT_BLOCK_BEGIN))
-							return FAIL;
-						open_brace_was_added = true;
-					}
-					// Call Parse() vs. AddLine() because it detects and optimizes simple assignments into
-					// non-expressions for faster runtime execution.
-					if (!ParseAndAddLine(line_to_add)) // For simplicity and maintainability, call self rather than trying to set things up properly to stay in self.
-						return FAIL; // Above already displayed the error.
+					if (!AddLine(ACT_BLOCK_BEGIN))
+						return FAIL;
+					open_brace_was_added = true;
+				}
+				// Call Parse() vs. AddLine() because it detects and optimizes simple assignments into
+				// non-expressions for faster runtime execution.
+				if (!ParseAndAddLine(line_to_add)) // For simplicity and maintainability, call self rather than trying to set things up properly to stay in self.
+					return FAIL; // Above already displayed the error.
+				if (declare_type == VAR_DECLARE_STATIC)
+				{
+					mNoUpdateLabels = false;
+					mLastLine->mAttribute = (AttributeType)mLastLine->mActionType;
+					mLastLine->mActionType = ACT_STATIC; // Mark this line for the preparser.
 				}
 
 				*terminate_here = orig_char; // Undo the temporary termination.
@@ -5059,7 +4961,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		do_update_labels = false;
 	}
 	else
-		do_update_labels = true;
+		do_update_labels = !mNoUpdateLabels;
 
 	Var *target_var;
 	DerefType deref[MAX_DEREFS_PER_ARG];  // Will be used to temporarily store the var-deref locations in each arg.
@@ -7516,12 +7418,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		Line *block_end;
 		Func *init_func = NULL;
 		
-		if (aStatic)
-		{
-			mLastLine = mLastStaticLine;
-			mFirstLine = mFirstStaticLine;
-		}
-		else
+		if (!aStatic)
 		{
 			ExprTokenType token;
 			if (class_object->GetItem(token, _T("__Init")) && token.symbol == SYM_OBJECT
@@ -7559,18 +7456,15 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			mCurrLine = NULL; // Fix for v1.1.09.02: Leaving this non-NULL at best causes error messages to show irrelevant vicinity lines, and at worst causes a crash because the linked list is in an inconsistent state.
 		}
 
-		LPTSTR arg[] = { ConvertEscapeSequences(buf, g_EscapeChar, false) };
-		if (!AddLine(ACT_EXPRESSION, arg, UCHAR_MAX + 1)) // v1.1.17: Avoid pointing labels at this line by passing UCHAR_MAX+ for aArgc.
+		mNoUpdateLabels = true;
+		if (!ParseAndAddLine(buf))
 			return FAIL; // Above already displayed the error.
+		mNoUpdateLabels = false;
 		
 		if (aStatic)
 		{
-			if (!mFirstStaticLine)
-				mFirstStaticLine = mLastLine;
-			mLastStaticLine = mLastLine;
-			// The following is necessary if there weren't any executable lines above this static
-			// initializer (i.e. mFirstLine was NULL and has been set to the newly created line):
-			mFirstLine = script_first_line;
+			mLastLine->mAttribute = (AttributeType)mLastLine->mActionType;
+			mLastLine->mActionType = ACT_STATIC; // Mark this line for the preparser.
 		}
 		else
 		{
@@ -7582,9 +7476,9 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			// mFirstLine should be left as it is: if it was NULL, it now contains a pointer to our
 			// __init function's block-begin, which is now the very first executable line in the script.
 			g->CurrentFunc = NULL;
+			// Restore mLastLine so that any subsequent script lines are added at the correct point.
+			mLastLine = script_last_line;
 		}
-		// Restore mLastLine so that any subsequent script lines are added at the correct point.
-		mLastLine = script_last_line;
 	}
 	return OK;
 }
@@ -9395,7 +9289,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 		if (ACT_IS_BLOCK_OWNER(line->mActionType))
 		{
 			// In this case, the loader should have already ensured that line->mNextLine is not NULL.
-			if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN && line->mNextLine->mAttribute == ATTR_TRUE)
+			if (!line->mNextLine || line->mNextLine->mActionType == ACT_BLOCK_BEGIN && line->mNextLine->mAttribute == ATTR_TRUE)
 			{
 				abort = true; // So that the caller doesn't also report an error.
 				return line->PreparseError(_T("Improper line below this.")); // Short message since so rare. A function must not be defined directly below an IF/ELSE/LOOP because runtime evaluation won't handle it properly.
@@ -9503,6 +9397,55 @@ Line *Script::PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd, Line *aPar
 	// when we're recursed, and in that case the above would have returned.  Thus,
 	// we're not recursed upon reaching this line:
 	return mLastLine;
+}
+
+
+ResultType Script::PreparseStaticLines(Line *aStartingLine)
+// Combining this and PreparseExpressions() into one loop/function currently increases
+// code size enough to affect the final EXE size, contrary to expectation.
+{
+	// Remove static var initializers and #if expression lines from the main line list so
+	// that they won't be executed or interfere with PreparseBlocks().  This used to be done
+	// at an earlier stage, but that required multiple PreparseBlocks() calls to account for
+	// lines added by lib auto-includes.  Thus, it's now done after PreparseExpressions().
+	for (Line *next_line, *prev_line, *line = aStartingLine; line; line = next_line)
+	{
+		next_line = line->mNextLine; // Save these since may be overwritten below.
+		prev_line = line->mPrevLine; //
+
+		switch (line->mActionType)
+		{
+		case ACT_STATIC:
+			// Override mActionType so ACT_STATIC doesn't have to be handled at runtime:
+			line->mActionType = (ActionTypeType)line->mAttribute;
+			// Add this line to the list of static initializers, which will be inserted above
+			// the auto-execute section later.  The main line list will be corrected below.
+			line->mPrevLine = mLastStaticLine;
+			if (mLastStaticLine)
+				mLastStaticLine->mNextLine = line;
+			else
+				mFirstStaticLine = line;
+			mLastStaticLine = line;
+			break;
+		case ACT_HOTKEY_IF:
+			// It's already been added to g_HotExprLines[], so just remove it from the script (below).
+			// Override mActionType so ACT_HOTKEY_IF doesn't have to be handled by EvaluateCondition():
+			line->mActionType = ACT_IFEXPR;
+			break;
+		default:
+			continue;
+		}
+		// Since above didn't "continue", remove this line from the main script.
+		if (prev_line)
+			prev_line->mNextLine = next_line;
+		else // Must have been the first line; set the new first line.
+			mFirstLine = next_line;
+		if (next_line)
+			next_line->mPrevLine = prev_line;
+		else
+			mLastLine = prev_line;
+	}
+	return OK;
 }
 
 

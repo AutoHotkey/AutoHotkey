@@ -310,6 +310,7 @@ enum enum_act {
 , ACT_ASSIGN, ACT_ASSIGNEXPR, ACT_EXPRESSION, ACT_ADD, ACT_SUB, ACT_MULT, ACT_DIV
 , ACT_ASSIGN_FIRST = ACT_ASSIGN, ACT_ASSIGN_LAST = ACT_DIV
 , ACT_ELSE   // Parsed at a lower level than most commands to support same-line ELSE-actions (e.g. "else if").
+, ACT_STATIC
 , ACT_IFIN, ACT_IFNOTIN, ACT_IFCONTAINS, ACT_IFNOTCONTAINS, ACT_IFIS, ACT_IFISNOT
 , ACT_IFBETWEEN, ACT_IFNOTBETWEEN
 , ACT_IFEXPR  // i.e. if (expr)
@@ -380,6 +381,7 @@ enum enum_act {
 , ACT_EXITAPP
 , ACT_SHUTDOWN
 , ACT_FILEENCODING
+, ACT_HOTKEY_IF
 // Make these the last ones before the count so they will be less often processed.  This helps
 // performance because this one doesn't actually have a keyword so will never result
 // in a match anyway.  UPDATE: No longer used because Run/RunWait is now required, which greatly
