@@ -11946,6 +11946,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				// Rather than having PerformLoop() handle LOOP_BREAK specifically, tell our caller to jump to
 				// the line *after* the loop's body. This is always a jump our caller must handle, unlike GOTO:
 				caller_jump_to_line = line->mRelatedLine->mRelatedLine;
+				if (caller_jump_to_line->mActionType == ACT_UNTIL)
+					caller_jump_to_line = caller_jump_to_line->mNextLine;
 			}
 			return LOOP_BREAK;
 
