@@ -2640,6 +2640,7 @@ private:
 	ResultType PreparseExpressions(Line *aStartingLine);
 	ResultType PreparseStaticLines(Line *aStartingLine);
 	Line *PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode = NORMAL_MODE, Line *aParentLine = NULL, const AttributeType aLoopType = ATTR_NONE);
+	Line *PreparseCommands(Line *aStartingLine);
 
 public:
 	Line *mCurrLine;     // Seems better to make this public than make Line our friend.

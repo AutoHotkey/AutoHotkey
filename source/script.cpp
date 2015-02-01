@@ -1117,7 +1117,8 @@ _T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
 		return LOADING_FAILED;
 	mPlaceholderLabel->mJumpToLine = mLastLine; // To follow the rule "all labels should have a non-NULL line before the script starts running".
 
-	if (!PreparseBlocks(mFirstLine))
+	if (   !PreparseBlocks(mFirstLine)
+		|| !PreparseCommands(mFirstLine)   )
 		return LOADING_FAILED; // Error was already displayed by the above calls.
 
 	// Use FindOrAdd, not Add, because the user may already have added it simply by
@@ -9314,10 +9315,6 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 // Will return NULL to the top-level caller if there's an error, or if
 // mLastLine is NULL (i.e. the script is empty).
 {
-	static BOOL sInFunctionBody = FALSE; // Improves loadtime performance by allowing IsOutsideAnyFunctionBody() to be called only when necessary.
-
-	// Don't check aStartingLine here at top: only do it at the bottom
-	// for it's differing return values.
 	Line *line_temp;
 
 	for (Line *line = aStartingLine; line != NULL;)
@@ -9466,9 +9463,6 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 		} // ActionType is IF/LOOP/TRY.
 
 		// Since above didn't continue, do the switch:
-		LPTSTR line_raw_arg1 = LINE_RAW_ARG1; // Resolve only once to help reduce code size.
-		LPTSTR line_raw_arg2 = LINE_RAW_ARG2; //
-
 		switch (line->mActionType)
 		{
 		case ACT_BLOCK_BEGIN:
@@ -9477,7 +9471,6 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 				if (aParentLine && ACT_IS_LINE_PARENT(aParentLine->mActionType))
 					// A function must not be defined directly below an IF/ELSE/LOOP because runtime evaluation won't handle it properly.
 					return line->PreparseError(_T("Unexpected function"));
-				sInFunctionBody = TRUE; // Must be set only for mAttribute == ATTR_TRUE because functions can of course contain types of blocks other than the function's own block.
 			}
 			line_temp = PreparseBlocks(line->mNextLine, UNTIL_BLOCK_END, line, line->mAttribute ? 0 : aLoopType); // mAttribute usage: don't consider a function's body to be inside the loop, since it can be called from outside.
 			// "line" is now either NULL due to an error, or the location of the END_BLOCK itself.
@@ -9490,8 +9483,6 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			line = line_temp;
 			break;
 		case ACT_BLOCK_END:
-			if (line->mAttribute == ATTR_TRUE) // This is the closing brace of a function definition.
-				sInFunctionBody = FALSE; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
 			if (aMode == UNTIL_BLOCK_END)
 				// Return line rather than line->mNextLine because, if we're at the end of
 				// the script, it's up to the caller to differentiate between that condition
@@ -9505,6 +9496,84 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 				return line->PreparseError(_T("Break/Continue must be enclosed by a Loop."));
 			if (aLoopType == ATTR_LOOP_OBSCURED)
 				return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
+			break;
+
+		case ACT_ELSE:
+			// This happens if there's an extra ELSE in this scope level that has no IF:
+			return line->PreparseError(ERR_ELSE_WITH_NO_IF);
+
+		case ACT_UNTIL:
+			// Similar to above.
+			return line->PreparseError(ERR_UNTIL_WITH_NO_LOOP);
+
+		case ACT_CATCH:
+			// Similar to above.
+			return line->PreparseError(ERR_CATCH_WITH_NO_TRY);
+
+		case ACT_FINALLY:
+			// Similar to above.
+			return line->PreparseError(ERR_FINALLY_WITH_NO_PRECEDENT);
+		} // switch()
+
+		line = line->mNextLine; // If NULL due to physical end-of-script, the for-loop's condition will catch it.
+		if (aMode == ONLY_ONE_LINE) // Return the next unprocessed line to the caller.
+			// In this case, line shouldn't be (and probably can't be?) NULL because the line after
+			// a single-line action shouldn't be the physical end of the script.  That's because
+			// the loader has ensured that all scripts now end in ACT_EXIT.  And that final
+			// ACT_EXIT should never be parsed here in ONLY_ONE_LINE mode because the only time
+			// that mode is used is for the action of an IF, an ELSE, or possibly a LOOP.
+			// In all of those cases, the final ACT_EXIT line in the script (which is explicitly
+			// inserted by the loader) cannot be the line that was just processed by the
+			// switch().  Therefore, the above assignment should not have set line to NULL
+			// (which is good because NULL would probably be construed as "failure" by our
+			// caller in this case):
+			return line;
+		// else just continue the for-loop at the new value of line.
+	} // for()
+
+	// End of script has been reached.  line is now NULL so don't dereference it.
+
+	// If we were still looking for an EndBlock to match up with a begin, that's an error.
+	// This indicates that at least one BLOCK_BEGIN is missing a BLOCK_END.  Let the error
+	// message point at the most recent BLOCK_BEGIN (aParentLine) rather than at mLastLine,
+	// which points to an EXIT which was added automatically by LoadFromFile().
+	if (aMode == UNTIL_BLOCK_END)
+		return aParentLine->PreparseError(ERR_MISSING_CLOSE_BRACE);
+
+	// If we were told to process a single line, we were recursed and it should have returned above,
+	// so it's an error here (can happen if we were called with aStartingLine == NULL?):
+	if (aMode == ONLY_ONE_LINE)
+		return mLastLine->PreparseError(_T("Q")); // Placeholder since probably impossible.  Formerly "The script ended while an action was still expected."
+
+	// Otherwise, return something non-NULL to indicate success to the top-level caller:
+	return mLastLine;
+}
+
+
+
+Line *Script::PreparseCommands(Line *aStartingLine)
+// Preparse any commands which might rely on blocks having been fully preparsed,
+// such as any command which has a jump target (label).
+{
+	bool in_function_body = false;
+
+	for (Line *line = aStartingLine; line; line = line->mNextLine)
+	{
+		LPTSTR line_raw_arg1 = LINE_RAW_ARG1; // Resolve only once to help reduce code size.
+		LPTSTR line_raw_arg2 = LINE_RAW_ARG2; //
+		
+		switch (line->mActionType)
+		{
+		case ACT_BLOCK_BEGIN:
+			if (line->mAttribute == ATTR_TRUE) // This is the opening brace of a function definition.
+				in_function_body = true; // Must be set only for mAttribute == ATTR_TRUE because functions can of course contain types of blocks other than the function's own block.
+			break;
+		case ACT_BLOCK_END:
+			if (line->mAttribute == ATTR_TRUE) // This is the closing brace of a function definition.
+				in_function_body = FALSE; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
+			break;
+		case ACT_BREAK:
+		case ACT_CONTINUE:
 			if (line->mArgc)
 			{
 				if (line->ArgHasDeref(1) || line->mArg->is_expression)
@@ -9562,7 +9631,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			{
 				if (!line->GetJumpTarget(false))
 					return NULL; // Error was already displayed by called function.
-				if (sInFunctionBody && ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
+				if (in_function_body && ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
 				{
 					if (line->mActionType == ACT_GOTO)
 						return line->PreparseError(_T("A Goto cannot jump from inside a function to outside."));
@@ -9582,7 +9651,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 				if (parent->mActionType == ACT_FINALLY)
 					return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			break;
-
+			
 		// These next 4 must also be done here (i.e. *after* all the script lines have been added),
 		// so that labels both above and below this line can be resolved:
 		case ACT_ONEXIT:
@@ -9659,57 +9728,9 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 				//return IsJumpValid(label->mJumpToLine);
 			}
 			break;
-
-		case ACT_ELSE:
-			// Should never happen because the part that handles the if's, above, should find
-			// all the elses and handle them.  UPDATE: This happens if there's
-			// an extra ELSE in this scope level that has no IF:
-			return line->PreparseError(ERR_ELSE_WITH_NO_IF);
-
-		case ACT_UNTIL:
-			// Similar to above.
-			return line->PreparseError(ERR_UNTIL_WITH_NO_LOOP);
-
-		case ACT_CATCH:
-			// Similar to above.
-			return line->PreparseError(ERR_CATCH_WITH_NO_TRY);
-
-		case ACT_FINALLY:
-			// Similar to above.
-			return line->PreparseError(ERR_FINALLY_WITH_NO_PRECEDENT);
-		} // switch()
-
-		line = line->mNextLine; // If NULL due to physical end-of-script, the for-loop's condition will catch it.
-		if (aMode == ONLY_ONE_LINE) // Return the next unprocessed line to the caller.
-			// In this case, line shouldn't be (and probably can't be?) NULL because the line after
-			// a single-line action shouldn't be the physical end of the script.  That's because
-			// the loader has ensured that all scripts now end in ACT_EXIT.  And that final
-			// ACT_EXIT should never be parsed here in ONLY_ONE_LINE mode because the only time
-			// that mode is used is for the action of an IF, an ELSE, or possibly a LOOP.
-			// In all of those cases, the final ACT_EXIT line in the script (which is explicitly
-			// inserted by the loader) cannot be the line that was just processed by the
-			// switch().  Therefore, the above assignment should not have set line to NULL
-			// (which is good because NULL would probably be construed as "failure" by our
-			// caller in this case):
-			return line;
-		// else just continue the for-loop at the new value of line.
+		}
 	} // for()
-
-	// End of script has been reached.  line is now NULL so don't dereference it.
-
-	// If we were still looking for an EndBlock to match up with a begin, that's an error.
-	// This indicates that at least one BLOCK_BEGIN is missing a BLOCK_END.  Let the error
-	// message point at the most recent BLOCK_BEGIN (aParentLine) rather than at mLastLine,
-	// which points to an EXIT which was added automatically by LoadFromFile().
-	if (aMode == UNTIL_BLOCK_END)
-		return aParentLine->PreparseError(ERR_MISSING_CLOSE_BRACE);
-
-	// If we were told to process a single line, we were recursed and it should have returned above,
-	// so it's an error here (can happen if we were called with aStartingLine == NULL?):
-	if (aMode == ONLY_ONE_LINE)
-		return mLastLine->PreparseError(_T("Q")); // Placeholder since probably impossible.  Formerly "The script ended while an action was still expected."
-
-	// Otherwise, return something non-NULL to indicate success to the top-level caller:
+	// Return something non-NULL to indicate success:
 	return mLastLine;
 }
 
