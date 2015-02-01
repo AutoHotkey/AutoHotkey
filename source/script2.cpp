@@ -2520,22 +2520,13 @@ ResultType Line::ControlGetFocus(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTit
 	if (!target_window)
 		goto error;
 
-	// Unlike many of the other Control commands, this one requires AttachThreadInput().
-	ATTACH_THREAD_INPUT
-
-	class_and_hwnd_type cah;
-	cah.hwnd = GetFocus();  // Do this now that our thread is attached to the target window's.
-
-	// Very important to detach any threads whose inputs were attached above,
-	// prior to returning, otherwise the next attempt to attach thread inputs
-	// for these particular windows may result in a hung thread or other
-	// undesirable effect:
-	DETACH_THREAD_INPUT
-
-	if (!cah.hwnd)
+	GUITHREADINFO guithreadInfo = { sizeof(GUITHREADINFO) };
+	if (!GetGUIThreadInfo(GetWindowThreadProcessId(target_window, NULL), &guithreadInfo))
 		goto error;
 
+	class_and_hwnd_type cah;
 	TCHAR class_name[WINDOW_CLASS_SIZE];
+	cah.hwnd = guithreadInfo.hwndFocus;
 	cah.class_name = class_name;
 	if (!GetClassName(cah.hwnd, class_name, _countof(class_name) - 5)) // -5 to allow room for sequence number.
 		goto error;
