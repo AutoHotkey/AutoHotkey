@@ -9616,6 +9616,8 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 						loop_line = NULL;
 					}
 				}
+				if (in_function_body && loop_line->IsOutsideAnyFunctionBody())
+					return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
 				if (!line->CheckValidFinallyJump(loop_line))
 					return NULL; // Error already shown.
 				line->mRelatedLine = loop_line;
@@ -9634,7 +9636,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 				if (in_function_body && ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
 				{
 					if (line->mActionType == ACT_GOTO)
-						return line->PreparseError(_T("A Goto cannot jump from inside a function to outside."));
+						return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
 					// Since this Gosub and its target line are both inside a function, they must both
 					// be in the same function because otherwise GetJumpTarget() would have reported
 					// the target as invalid.
