@@ -2241,7 +2241,6 @@ examine_line:
 				cp = hotkey_flag; // Set default, conditionally overridden below (v1.0.44.07).
 				// v1.0.40: Check if this is a remap rather than hotkey:
 				if (   *hotkey_flag // This hotkey's action is on the same line as its label.
-					&& ((remap_source_vk = TextToVK(cp1 = Hotkey::TextToModifiers(buf, NULL))) || !cp[1]) // Allow it through if !cp[1] so that it will give a more sensible warning (or two) about the keyboard layout instead of a generic error.
 					&& (remap_dest_vk = hotkey_flag[1] ? TextToVK(cp = Hotkey::TextToModifiers(hotkey_flag, NULL)) : 0xFF)   ) // And the action appears to be a remap destination rather than a command.
 					// For above:
 					// Fix for v1.0.44.07: Set remap_dest_vk to 0xFF if hotkey_flag's length is only 1 because:
@@ -2257,6 +2256,7 @@ examine_line:
 					// would trigger such a bug.
 				{
 					// These will be ignored in other stages if it turns out not to be a remap later below:
+					remap_source_vk = TextToVK(cp1 = Hotkey::TextToModifiers(buf, NULL)); // An earlier stage verified that it's a valid hotkey, though VK could be zero.
 					remap_source_is_mouse = IsMouseVK(remap_source_vk);
 					remap_dest_is_mouse = IsMouseVK(remap_dest_vk);
 					remap_keybd_to_mouse = !remap_source_is_mouse && remap_dest_is_mouse;
