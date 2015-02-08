@@ -131,6 +131,7 @@ extern int g_guiCount, g_guiCountMax;
 extern HWND g_hWndToolTip[MAX_TOOLTIPS];
 extern MsgMonitorStruct *g_MsgMonitor; // An array to be allocated upon first use (if any).
 extern int g_MsgMonitorCount;
+extern MsgMonitorInstance *g_TopMsgMonitor;
 
 extern UCHAR g_SortCaseSensitive;
 extern bool g_SortNumeric;

@@ -155,6 +155,7 @@ int g_guiCount = 0, g_guiCountMax = 0;
 HWND g_hWndToolTip[MAX_TOOLTIPS] = {NULL};
 MsgMonitorStruct *g_MsgMonitor = NULL; // An array to be allocated upon first use (if any).
 int g_MsgMonitorCount = 0;
+MsgMonitorInstance *g_TopMsgMonitor = NULL;
 
 // Init not needed for these:
 UCHAR g_SortCaseSensitive;

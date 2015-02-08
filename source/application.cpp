@@ -1732,6 +1732,7 @@ void PollJoysticks()
 
 
 
+inline bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg, LRESULT &aMsgReply);
 bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg, LRESULT &aMsgReply)
 // Returns false if the message is not being monitored, or it is but the called function indicated
 // that the message should be given its normal processing.  Returns true when the caller should
@@ -1762,19 +1763,36 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	if (!INTERRUPTIBLE_IN_EMERGENCY)
 		return false;
 
+	bool result = false; // Set default: Tell the caller to give this message any additional/default processing.
+	MsgMonitorInstance inst;
+	inst.previous = g_TopMsgMonitor;
+	g_TopMsgMonitor = &inst; // Register this instance so that index can be adjusted by BIF_OnMessage if an item is deleted.
+
 	// Linear search vs. binary search should perform better on average because the vast majority
 	// of message monitoring scripts are expected to monitor only a few message numbers.
-	int msg_index, msg_count_orig;
-	for (msg_count_orig = g_MsgMonitorCount, msg_index = 0; msg_index < g_MsgMonitorCount; ++msg_index)
-		if (g_MsgMonitor[msg_index].msg == aMsg)
-			break;
-	if (msg_index == g_MsgMonitorCount) // No match found, so the script isn't monitoring this message.
-		return false; // Tell the caller to give this message any additional/default processing.
-	// Otherwise, the script is monitoring this message, so continue on.
+	// Search in reverse to give priority to message monitors added most recently (for the new mode
+	// which allows multiple monitors).  It's done this way rather than inserting at the beginning
+	// to avoid having to shuffle items twice when a monitor is temporarily added then removed.
+	for (inst.index = g_MsgMonitorCount - 1; inst.index >= 0; --inst.index)
+		if (g_MsgMonitor[inst.index].msg == aMsg)
+		{
+			if (MsgMonitor(inst, aWnd, aMsg, awParam, alParam, apMsg, aMsgReply))
+			{
+				result = true;
+				break;
+			}
+		}
 
-	MsgMonitorStruct &monitor = g_MsgMonitor[msg_index]; // For performance and convenience.
-	IObject *func = monitor.func;                        // Above, but also in case monitor item gets deleted while the function is running (e.g. by the function itself).
-	
+	g_TopMsgMonitor = inst.previous;
+	return result;
+}
+
+bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg, LRESULT &aMsgReply)
+{
+	MsgMonitorStruct *monitor = &g_MsgMonitor[aInstance.index];
+	bool is_legacy_monitor = monitor->is_legacy_monitor;
+	int msg_count_orig = g_MsgMonitorCount;
+	IObject *func = monitor->func; // In case monitor item gets deleted while the function is running (e.g. by the function itself).
 	ActionTypeType type_of_first_line = LabelPtr(func)->TypeOfFirstLine();
 
 	// Many of the things done below are similar to the thread-launch procedure used in MsgSleep(),
@@ -1786,7 +1804,7 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 		if (g_nThreads >= MAX_THREADS_EMERGENCY // To avoid array overflow, this limit must by obeyed except where otherwise documented.
 			|| type_of_first_line != ACT_EXITAPP && type_of_first_line != ACT_RELOAD)
 			return false;
-	if (monitor.instance_count >= monitor.max_instances || g->Priority > 0) // Monitor is already running more than the max number of instances, or existing thread's priority is too high to be interrupted.
+	if (monitor->instance_count >= monitor->max_instances || g->Priority > 0) // Monitor is already running more than the max number of instances, or existing thread's priority is too high to be interrupted.
 		return false;
 	// Since above didn't return, the launch of the new thread is now considered unavoidable.
 
@@ -1827,7 +1845,7 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	// is similar to why the same thing is done in MsgSleep() prior to its launch of a thread, so see
 	// MsgSleep for more comments:
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
-	++monitor.instance_count;
+	++monitor->instance_count;
 
 	// Set up the array of parameters for func->Invoke().
 	ExprTokenType param_token[5];
@@ -1879,44 +1897,28 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 
 	ResumeUnderlyingThread(ErrorLevel_saved);
 
-	// Check that the msg_index item still exists (it may have been deleted during the thread that just finished,
-	// either by the thread itself or some other thread that interrupted it).  BIF_OnMessage has been sure to
-	// reset deleted array elements to have a NULL func.  Even so, the following scenario could happen:
-	// 1) The message element is deleted.
-	// 2) It is recreated to be the same as before, but now it has a different array index.
-	// 3) It's instance_count member would have been set to 0 upon creation, and the thread for the same
-	//    message might have launched the same function we did above, or some other.
-	// 4) Everything seems okay in this case, especially given its rarity.
+	// Check that the msg monitor still exists (it may have been deleted during the thread that just finished,
+	// either by the thread itself or some other thread that interrupted it).  The following cases are possible:
+	// 1) This msg monitor is deleted, so g_MsgMonitor[aInstance.index] is either an obsolete array item
+	//    or some other msg monitor.  Ensure this item matches before decrementing instance_count.
+	// 2) An older msg monitor is deleted, so aInstance.index has been adjusted by BIF_OnMessage
+	//    and still points at the correct monitor.
+	// 3) This msg monitor is deleted and recreated.  aInstance.index might point to the new monitor,
+	//    in which case instance_count is zero and must not be decremented.  If other monitors were also
+	//    deleted, aInstance.index might point at a different monitor or an obsolete array item.
+	// 4) A newer msg monitor is deleted; nothing needs to be done since this item wasn't affected.
+	// 5) Some other msg monitor is created; nothing needs to be done since it's added at the end of the list.
 	//
-	// But what if step 2 above created the same msg+func in the same position as before?  It's instance_count
-	// member would have been wrongly decremented, which would have allowed this msg-monitor thread to launch
-	// a thread beyond max-threads while it was technically still running above.  This scenario seems too rare
-	// and the consequences too small to justify the extra code size, so it is documented here as a known limitation.
-	//
-	// Thus, if "monitor" is defunct due to deletion, decrementing its instance_count is harmless.
-	// However, "monitor" might have been reused by BIF_OnMessage() to create a new msg-monitor, so the
-	// thing that must be checked is the message number to avoid wrongly decrementing some other msg-monitor's
-	// instance_count.  Update: Check g_MsgMonitorCount in case it has shrunk (which could leave
-	// "monitor" pointing to an element in the array that is now unused/obsolete).
-	if (g_MsgMonitorCount >= msg_count_orig && monitor.msg == aMsg)
+	// If "monitor" is defunct due to deletion, decrementing its instance_count is harmless.  However,
+	// "monitor" might have been reused by BIF_OnMessage() to create a new msg monitor, so it must be
+	// checked to avoid wrongly decrementing some other msg monitor's instance_count.
+	monitor = &g_MsgMonitor[aInstance.index];
+	if (monitor->msg == aMsg && (is_legacy_monitor ? monitor->is_legacy_monitor : monitor->func == func))
 	{
-		if (monitor.instance_count) // Avoid going negative, which might otherwise be possible in weird circumstances described in other comments.
-			--monitor.instance_count;
+		if (monitor->instance_count) // Avoid going negative, which might otherwise be possible in weird circumstances described in other comments.
+			--monitor->instance_count;
 	}
-	else // "monitor" is now some other msg-monitor (or an obsolete item in array), so do don't change it (see above comments).
-	{
-		// Fix for v1.0.44.10: If OnMessage is called from *inside* some other monitor function in a way that
-		// deletes a message monitor, monitor.instance_count wouldn't get decremented (but only if the
-		// message(s) that were deleted lay to the left of it in the array).  So check if the monitor is
-		// somewhere else in the array and if found (i.e. it didn't delete itself), update it.
-		for (msg_index = 0; msg_index < g_MsgMonitorCount; ++msg_index)
-			if (g_MsgMonitor[msg_index].msg == aMsg)
-			{
-				if (g_MsgMonitor[msg_index].instance_count) // Avoid going negative, which might otherwise be possible in weird circumstances described in other comments.
-					--g_MsgMonitor[msg_index].instance_count;
-				break;
-			}
-	}
+	//else "monitor" is now some other msg-monitor, so do don't change it (see above comments).
 
 	return block_further_processing; // If false, the caller will ignore aMsgReply and process this message normally. If true, aMsgReply contains the reply the caller should immediately send for this message.
 }

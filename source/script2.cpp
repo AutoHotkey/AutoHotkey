@@ -16339,9 +16339,24 @@ BIF_DECL(BIF_OnMessage)
 	// Load-time validation has ensured there's at least one parameter for use here:
 	UINT specified_msg = (UINT)ParamIndexToInt64(0); // Parameter #1
 
-	IObject *callback = NULL;    // Set defaults.
-	bool mode_is_delete = false; //
-	bool legacy_mode = true;     //
+	// Set defaults:
+	IObject *callback = NULL;
+	bool mode_is_delete = false;
+	bool legacy_mode = true;
+	int max_instances = 1;
+
+	if (!ParamIndexIsOmitted(2))
+	{
+		int max_instances = (int)ParamIndexToInt64(2);
+		// For backward-compatibility, values between MAX_INSTANCES+1 and SHORT_MAX must be supported.
+		if (max_instances > MsgMonitorStruct::MAX_INSTANCES) // MAX_INSTANCES >= MAX_THREADS_LIMIT.
+			max_instances = MsgMonitorStruct::MAX_INSTANCES;
+		// If less than 1, the message monitor will never be called, so delete it.  This is required
+		// for the new mode, where many monitors can be added for a single message provided that each
+		// one has a different callback, passed by reference.
+		if (max_instances < 1)
+			mode_is_delete = true;
+	}
 	if (!ParamIndexIsOmitted(1)) // Parameter #2 is present.
 	{
 		Func *func; // Func for validation of parameters, where possible.
@@ -16381,18 +16396,28 @@ BIF_DECL(BIF_OnMessage)
 	// Check if this message already exists in the array:
 	int msg_index;
 	for (msg_index = 0; msg_index < g_MsgMonitorCount; ++msg_index)
-		if (g_MsgMonitor[msg_index].msg == specified_msg)
+		if (g_MsgMonitor[msg_index].msg == specified_msg
+			&& (legacy_mode ? g_MsgMonitor[msg_index].is_legacy_monitor : g_MsgMonitor[msg_index].func == callback))
 			break;
 	bool item_already_exists = (msg_index < g_MsgMonitorCount);
 	MsgMonitorStruct &monitor = g_MsgMonitor[msg_index == MAX_MSG_MONITORS ? 0 : msg_index]; // The 0th item is just a placeholder.
 
-	IObject *return_value_on_success;
 	if (item_already_exists)
 	{
-		// In all cases, yield the OLD function as the return value:
-		return_value_on_success = monitor.func;
+		if (legacy_mode) // Implies monitor.is_legacy_monitor, which means a Func was registered by name.
+			// In all cases, yield the OLD function's name as the return value:
+			aResultToken.marker = ((Func *)monitor.func)->mName;
 		if (mode_is_delete)
 		{
+			// Adjust the index of any active message monitors affected by this deletion.  This allows a
+			// message monitor to delete older message monitors while still allowing any remaining monitors
+			// of that message to be called (when there are multiple).  Monitors at index >= msg_index can
+			// be deleted because the list is iterated from right to left.
+			for (MsgMonitorInstance *inst = g_TopMsgMonitor; inst; inst = inst->previous)
+				// Below: Not >= because the MsgMonitor() loop wants index-1 to be the next item.
+				// Also index must always be >= 0 so that MsgMonitor() can check g_MsgMonitor[index].
+				if (inst->index > msg_index)
+					inst->index--;
 			// The msg-monitor is deleted from the array for two reasons:
 			// 1) It improves performance because every incoming message for the app now needs to be compared
 			//    to one less filter. If the count will now be zero, performance is improved even more because
@@ -16407,10 +16432,10 @@ BIF_DECL(BIF_OnMessage)
 			monitor.func->Release();
 			if (msg_index < g_MsgMonitorCount) // An element other than the last is being removed. Shift the array to cover/delete it.
 				MoveMemory(g_MsgMonitor+msg_index, g_MsgMonitor+msg_index+1, sizeof(MsgMonitorStruct)*(g_MsgMonitorCount-msg_index));
-			goto return_success;
+			return;
 		}
 		if (aParamCount < 2) // Single-parameter mode: Report existing item's function name.
-			goto return_success;
+			return;
 		// Otherwise, an existing item is being assigned a new function or MaxThreads limit.
 		// Continue on to update this item's attributes.
 	}
@@ -16424,11 +16449,13 @@ BIF_DECL(BIF_OnMessage)
 			goto rare_failure;
 		// Otherwise, the message is to be added, so increment the total:
 		++g_MsgMonitorCount;
-		return_value_on_success = legacy_mode ? callback // Yield the NEW function as an indicator of success.
-			: NULL; // Yield an empty string since there's no previous function and an exception would be thrown on failure.
+		if (legacy_mode)
+			// For backward-compatibility, return the function's name on success:
+			aResultToken.marker = ((Func *)callback)->mName;
 		monitor.instance_count = 0; // Reset instance_count only for new items since existing items might currently be running.
 		monitor.msg = specified_msg;
 		monitor.func = NULL;
+		monitor.is_legacy_monitor = legacy_mode;
 		// Continue on to the update-or-create logic below.
 	}
 
@@ -16442,30 +16469,9 @@ BIF_DECL(BIF_OnMessage)
 			monitor.func->Release();
 		monitor.func = callback;
 	}
-	if (!ParamIndexIsOmitted(2))
-		monitor.max_instances = (short)ParamIndexToInt64(2); // No validation because it seems harmless if it's negative or some huge number.
-	else // Unspecified, so if this item is being newly created fall back to the default.
-		if (!item_already_exists)
-			monitor.max_instances = 1;
-
-return_success:
-	if (legacy_mode)
-	{
-		// For backward-compatibility, return functions by name.
-		if (Func *func = dynamic_cast<Func *>(return_value_on_success))
-		{
-			_tcscpy(buf, func->mName); // Caller has ensured that buf large enough to support max function name.
-			aResultToken.marker = buf;
-			return;
-		}
-	}
-	// Since above didn't return, either legacy mode isn't in effect or the object is not a Func.
-	if (return_value_on_success)
-	{
-		aResultToken.symbol = SYM_OBJECT;
-		aResultToken.object = return_value_on_success;
-		aResultToken.object->AddRef();
-	}
+	if (!item_already_exists || !ParamIndexIsOmitted(2))
+		monitor.max_instances = max_instances;
+	// Otherwise, the parameter was omitted so leave max_instances at its current value.
 	return;
 
 rare_failure:

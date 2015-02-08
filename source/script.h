@@ -2231,8 +2231,17 @@ struct MsgMonitorStruct
 	IObject *func;
 	UINT msg;
 	// Keep any members smaller than 4 bytes adjacent to save memory:
-	short instance_count;  // Distinct from func.mInstances because the script might have called the function explicitly.
-	short max_instances; // v1.0.47: Support more than one thread.
+	static const UCHAR MAX_INSTANCES = MAX_THREADS_LIMIT; // For maintainability.  Causes a compiler warning if MAX_THREADS_LIMIT > MAX_UCHAR.
+	UCHAR instance_count; // Distinct from func.mInstances because the script might have called the function explicitly.
+	UCHAR max_instances; // v1.0.47: Support more than one thread.
+	bool is_legacy_monitor; // true if this is the backwards-compatible "singleton" monitor for this message.
+};
+
+
+struct MsgMonitorInstance
+{
+	MsgMonitorInstance *previous;
+	int index;
 };
 
 
