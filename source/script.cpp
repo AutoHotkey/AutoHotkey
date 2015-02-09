@@ -2891,7 +2891,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				// Restore the working directory so that any ordinary #includes will work correctly.
 				SetCurrentDirectory(buf);
 				// If any file was included, consider it a success; i.e. allow #include <lib> and #include <lib_func>.
-				if (!error_was_shown && file_was_found || ignore_load_failure)
+				if (!error_was_shown && (file_was_found || ignore_load_failure))
 					return CONDITION_TRUE;
 				*parameter_end = '>'; // Restore '>' for display to the user.
 				return error_was_shown ? FAIL : ScriptError(_T("Function library not found."), aBuf);
