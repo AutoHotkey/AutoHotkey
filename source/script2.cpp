@@ -16347,7 +16347,7 @@ BIF_DECL(BIF_OnMessage)
 
 	if (!ParamIndexIsOmitted(2))
 	{
-		int max_instances = (int)ParamIndexToInt64(2);
+		max_instances = (int)ParamIndexToInt64(2);
 		// For backward-compatibility, values between MAX_INSTANCES+1 and SHORT_MAX must be supported.
 		if (max_instances > MsgMonitorStruct::MAX_INSTANCES) // MAX_INSTANCES >= MAX_THREADS_LIMIT.
 			max_instances = MsgMonitorStruct::MAX_INSTANCES;
