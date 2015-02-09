@@ -16344,19 +16344,23 @@ BIF_DECL(BIF_OnMessage)
 	bool mode_is_delete = false;
 	bool legacy_mode = true;
 	int max_instances = 1;
+	bool call_it_first = true;
 
-	if (!ParamIndexIsOmitted(2))
+	if (!ParamIndexIsOmitted(2)) // Parameter #3 is present.
 	{
 		max_instances = (int)ParamIndexToInt64(2);
 		// For backward-compatibility, values between MAX_INSTANCES+1 and SHORT_MAX must be supported.
 		if (max_instances > MsgMonitorStruct::MAX_INSTANCES) // MAX_INSTANCES >= MAX_THREADS_LIMIT.
 			max_instances = MsgMonitorStruct::MAX_INSTANCES;
-		// If less than 1, the message monitor will never be called, so delete it.  This is required
-		// for the new mode, where many monitors can be added for a single message provided that each
-		// one has a different callback, passed by reference.
-		if (max_instances < 1)
+		if (max_instances < 0) // MaxThreads < 0 is a signal to assign this monitor the lowest priority.
+		{
+			call_it_first = false; // Call it after any older monitors.  No effect if already registered.
+			max_instances = -max_instances; // Convert to positive.
+		}
+		else if (max_instances == 0) // It would never be called, so this is used as a signal to delete the item.
 			mode_is_delete = true;
 	}
+
 	if (!ParamIndexIsOmitted(1)) // Parameter #2 is present.
 	{
 		Func *func; // Func for validation of parameters, where possible.
@@ -16400,7 +16404,24 @@ BIF_DECL(BIF_OnMessage)
 			&& (legacy_mode ? g_MsgMonitor[msg_index].is_legacy_monitor : g_MsgMonitor[msg_index].func == callback))
 			break;
 	bool item_already_exists = (msg_index < g_MsgMonitorCount);
-	MsgMonitorStruct &monitor = g_MsgMonitor[msg_index == MAX_MSG_MONITORS ? 0 : msg_index]; // The 0th item is just a placeholder.
+	if (!item_already_exists)
+	{
+		if (!callback) // Delete or report function-name of a non-existent item.
+			return; // Yield the default return value set earlier (an empty string).
+		if (msg_index == MAX_MSG_MONITORS) // No room in the array.
+			goto rare_failure;
+		// From this point on, it is certain that an item will be added to the array.
+		if (!call_it_first) // Call it last.
+		{
+			msg_index = 0; // Because the array is iterated right-to-left, index 0 is called last.
+			if (g_MsgMonitorCount) // Shift existing items to make room.
+				MoveMemory(g_MsgMonitor+1, g_MsgMonitor, sizeof(MsgMonitorStruct)*g_MsgMonitorCount);
+			for (MsgMonitorInstance *inst = g_TopMsgMonitor; inst; inst = inst->previous)
+				inst->index++; // Correct the index of each running monitor.
+		}
+	}
+
+	MsgMonitorStruct &monitor = g_MsgMonitor[msg_index];
 
 	if (item_already_exists)
 	{
@@ -16439,15 +16460,9 @@ BIF_DECL(BIF_OnMessage)
 		// Otherwise, an existing item is being assigned a new function or MaxThreads limit.
 		// Continue on to update this item's attributes.
 	}
-	else // This message doesn't exist in array yet.
+	else // This message doesn't exist in the array yet, so is to be added as a new element.
 	{
-		if (!callback) // Delete or report function-name of a non-existent item.
-			return; // Yield the default return value set earlier (an empty string).
-		// Since above didn't return, the message is to be added as a new element. The above already
-		// verified that func is not NULL.
-		if (msg_index == MAX_MSG_MONITORS) // No room in array.
-			goto rare_failure;
-		// Otherwise, the message is to be added, so increment the total:
+		// The above already verified that callback is not NULL and there is room in the array.
 		++g_MsgMonitorCount;
 		if (legacy_mode)
 			// For backward-compatibility, return the function's name on success:
