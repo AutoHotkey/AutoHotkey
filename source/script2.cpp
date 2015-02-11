@@ -1468,23 +1468,23 @@ ResultType Line::Input()
 	vk_type vk;
 	sc_type sc = 0;
 	modLR_type modifiersLR;
-	size_t key_text_length;
+	size_t key_text_length, single_char_count = 0;
 	TCHAR *end_pos, single_char_string[2];
 	single_char_string[1] = '\0'; // Init its second character once, since the loop only changes the first char.
 
-	for (; *aEndKeys; ++aEndKeys) // This a modified version of the processing loop used in SendKeys().
+	for (TCHAR *end_key = aEndKeys; *end_key; ++end_key) // This a modified version of the processing loop used in SendKeys().
 	{
 		vk = 0; // Set default.  Not strictly necessary but more maintainable.
 		*single_char_string = '\0';  // Set default as "this key name is not a single-char string".
 
-		switch (*aEndKeys)
+		switch (*end_key)
 		{
 		case '}': continue;  // Important that these be ignored.
 		case '{':
 		{
-			if (   !(end_pos = _tcschr(aEndKeys + 1, '}'))   )
+			if (   !(end_pos = _tcschr(end_key + 1, '}'))   )
 				continue;  // Do nothing, just ignore the unclosed '{' and continue.
-			if (   !(key_text_length = end_pos - aEndKeys - 1)   )
+			if (   !(key_text_length = end_pos - end_key - 1)   )
 			{
 				if (end_pos[1] == '}') // The string "{}}" has been encountered, which is interpreted as a single "}".
 				{
@@ -1500,26 +1500,28 @@ ResultType Line::Input()
 			// v1.0.45: Fixed this section to differentiate between } and ] (and also { and [, as well as
 			// anything else enclosed in {} that requires END_KEY_WITH_SHIFT/END_KEY_WITHOUT_SHIFT consideration.
 			modifiersLR = 0;  // Init prior to below.
-			if (vk = TextToVK(aEndKeys + 1, &modifiersLR, true))
+			if (vk = TextToVK(end_key + 1, &modifiersLR, true))
 			{
 				if (key_text_length == 1)
-					*single_char_string = aEndKeys[1];
+					*single_char_string = end_key[1];
 				//else leave it at its default of "not a single-char key-name".
 			}
 			else // No virtual key, so try to find a scan code.
-				if (sc = TextToSC(aEndKeys + 1))
+				if (sc = TextToSC(end_key + 1))
 					end_sc[sc] = END_KEY_ENABLED;
 
 			*end_pos = '}';  // undo the temporary termination
 
-			aEndKeys = end_pos;  // In prep for aEndKeys++ at the bottom of the loop.
+			end_key = end_pos;  // In prep for ++end_key at the top of the loop.
 			break; // Break out of the switch() and do the vk handling beneath it (if there is a vk).
 		}
 
 		default:
-			*single_char_string = *aEndKeys;
-			modifiersLR = 0;  // Init prior to below.
-			vk = TextToVK(single_char_string, &modifiersLR, true);
+			// Don't translate this character to a VK.  Instead, count the number of characters
+			// not wrapped in {}, then record them all in an array for use as "end chars".  This
+			// approach allows end chars to adapt to the keyboard layout of the active window.
+			single_char_count++;
+			continue;
 		} // switch()
 
 		if (vk) // A valid virtual key code was discovered above.
@@ -1543,6 +1545,32 @@ ResultType Line::Input()
 			}
 		}
 	} // for()
+
+	g_input.EndChars = _T("");
+	if (single_char_count)
+	{
+		// See single_char_count++ above for comments.
+		g_input.EndChars = talloca(single_char_count + 1);
+		TCHAR *dst, *src;
+		for (dst = g_input.EndChars, src = aEndKeys; *src; ++src)
+		{
+			switch (*src)
+			{
+			case '{':
+				if (end_pos = _tcschr(src + 1, '}'))
+				{
+					if (end_pos == src+1 && end_pos[1] == '}')
+						end_pos++; // Skip {}}.
+					src = end_pos; // Skip the {key}.
+				}
+				// Otherwise, just ignore the '{'.
+			case '}':
+				continue;
+			}
+			*dst++ = *src;
+		}
+		*dst = '\0';
+	}
 
 	/////////////////////////////////////////////////
 	// Parse aMatchList into an array of key phrases:
@@ -1748,7 +1776,12 @@ ResultType Line::Input()
 	case INPUT_TERMINATED_BY_ENDKEY:
 	{
 		TCHAR key_name[128] = _T("EndKey:");
-		if (g_input.EndingRequiredShift)
+		if (g_input.EndingChar)
+		{
+			key_name[7] = g_input.EndingChar;
+			key_name[8] = '\0';
+		}
+		else if (g_input.EndingRequiredShift)
 		{
 			// Since the only way a shift key can be required in our case is if it's a key whose name
 			// is a single char (such as a shifted punctuation mark), use a diff. method to look up the

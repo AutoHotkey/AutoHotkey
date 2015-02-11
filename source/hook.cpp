@@ -2559,6 +2559,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				g_input.EndedBySC = g_input.EndSC[aSC];
 				g_input.EndingVK = aVK;
 				g_input.EndingSC = aSC;
+				g_input.EndingChar = 0;
 				// Don't change this line:
 				g_input.EndingRequiredShift = shift_must_be_down && (g_modifiersLR_logical & (MOD_LSHIFT | MOD_RSHIFT));
 				if (!do_monitor_hotstring)
@@ -3083,27 +3084,21 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// in progress (which we know is the case otherwise other opportunities to return above would
 	// have done so).  Hotstrings (if any) have already been fully handled by the above.
 
-	#define ADD_INPUT_CHAR(ch) \
-		if (g_input.BufferLength < g_input.BufferLengthMax)\
-		{\
-			g_input.buffer[g_input.BufferLength++] = ch;\
-			g_input.buffer[g_input.BufferLength] = '\0';\
-		}
-	ADD_INPUT_CHAR(ch[0])
-	if (char_count > 1)
-		// MSDN: "This usually happens when a dead-key character (accent or diacritic) stored in the
-		// keyboard layout cannot be composed with the specified virtual key to form a single character."
-		ADD_INPUT_CHAR(ch[1])
-	if (!g_input.MatchCount) // The match list is empty.
+	for (int i = 0; i < char_count; ++i)
 	{
-		if (g_input.BufferLength >= g_input.BufferLengthMax)
-			g_input.status = INPUT_LIMIT_REACHED;
-		return treat_as_visible;
+		if (g_input.CaseSensitive ? _tcschr(g_input.EndChars, ch[i]) : ltcschr(g_input.EndChars, ch[i]))
+		{
+			g_input.status = INPUT_TERMINATED_BY_ENDKEY;
+			g_input.EndingChar = ch[i]; // EndingVK etc. are ignored when this is non-zero.
+			return treat_as_visible;
+		}
+		if (g_input.BufferLength == g_input.BufferLengthMax)
+			break;
+		g_input.buffer[g_input.BufferLength++] = ch[i];
+		g_input.buffer[g_input.BufferLength] = '\0';
 	}
-	// else even if BufferLengthMax has been reached, check if there's a match because a match should take
-	// precedence over the length limit.
 
-	// Otherwise, check if the buffer now matches any of the key phrases:
+	// Check if the buffer now matches any of the key phrases, if there are any:
 	if (g_input.FindAnywhere)
 	{
 		if (g_input.CaseSensitive)
