@@ -13110,7 +13110,8 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 		}
 	}
 
-	LPTSTR our_buf_marker = sDerefBuf;
+	PRIVATIZE_S_DEREF_BUF;
+	LPTSTR our_buf_marker = our_deref_buf;
 	LPTSTR arg_deref[] = {0, 0}; // ExpandExpression checks these if it needs to expand the deref buffer.
 	ExprTokenType object_token;
 	object_token.symbol = SYM_INVALID; // Init in case ExpandExpression() resolves to a string, in which case it won't use enum_token.
@@ -13119,7 +13120,12 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 	// call ExpandExpression() directly and pass in a "result token" which will be used if the result is an
 	// object or number. Load-time pre-parsing has ensured there are really three args, but mArgc == 2 so
 	// this one hasn't been evaluated yet:
-	if (!ExpandExpression(2, result, &object_token, our_buf_marker, sDerefBuf, sDerefBufSize, arg_deref, 0))
+	if (ExpandExpression(2, result, &object_token, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, 0))
+		result = OK;
+	
+	DEPRIVATIZE_S_DEREF_BUF
+
+	if (result == FAIL || result == EARLY_EXIT)
 		// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
 		return result;
 
