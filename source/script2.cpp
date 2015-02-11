@@ -1767,8 +1767,15 @@ ResultType Line::Input()
 			*(key_name + 7 + count) = '\0';  // Terminate the string.
 		}
 		else
+		{
 			g_input.EndedBySC ? SCtoKeyName(g_input.EndingSC, key_name + 7, _countof(key_name) - 7)
 				: VKtoKeyName(g_input.EndingVK, key_name + 7, _countof(key_name) - 7);
+			// For partial backward-compatibility, keys A-Z are upper-cased when handled by VK,
+			// but only if they actually correspond to those characters.  If this wasn't done,
+			// the character would always be lowercase since the shift state is not considered.
+			if (key_name[7] >= 'a' && key_name[7] <= 'z')
+				key_name[7] -= 32;
+		}
 		g_ErrorLevel->Assign(key_name);
 		break;
 	}
