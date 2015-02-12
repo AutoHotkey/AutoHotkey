@@ -1870,9 +1870,7 @@ bool Debugger::FileAppendStdOut(LPCTSTR aText)
 {
 	if (mStdOutMode != SR_Disabled) // i.e. SR_Copy or SR_Redirect
 		WriteStreamPacket(aText, "stdout");
-	if (mStdOutMode != SR_Redirect) // i.e. SR_Disabled or SR_Copy
-		return _fputts(aText, stdout) >= 0;
-	return true;
+	return mStdOutMode == SR_Redirect;
 }
 
 int Debugger::SendErrorResponse(char *aCommandName, char *aTransactionId, int aError, char *aExtraAttributes)

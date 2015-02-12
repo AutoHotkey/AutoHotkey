@@ -16171,7 +16171,7 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 	else
 		OutputDebugString(buf);
 #else
-		g_Debugger.FileAppendStdOut(buf);
+		g_Debugger.FileAppendStdOut(buf) || _fputts(buf, stdout);
 	else
 		g_Debugger.OutputDebug(buf);
 #endif
