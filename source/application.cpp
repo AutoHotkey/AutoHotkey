@@ -1766,6 +1766,7 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	bool result = false; // Set default: Tell the caller to give this message any additional/default processing.
 	MsgMonitorInstance inst;
 	inst.previous = g_TopMsgMonitor;
+	inst.count = g_MsgMonitorCount;
 	g_TopMsgMonitor = &inst; // Register this instance so that index can be adjusted by BIF_OnMessage if an item is deleted.
 
 	// Linear search vs. binary search should perform better on average because the vast majority
@@ -1773,7 +1774,7 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	// Search in reverse to give priority to message monitors added most recently (for the new mode
 	// which allows multiple monitors).  It's done this way rather than inserting at the beginning
 	// to avoid having to shuffle items twice when a monitor is temporarily added then removed.
-	for (inst.index = g_MsgMonitorCount - 1; inst.index >= 0; --inst.index)
+	for (inst.index = 0; inst.index < inst.count; ++inst.index)
 		if (g_MsgMonitor[inst.index].msg == aMsg)
 		{
 			if (MsgMonitor(inst, aWnd, aMsg, awParam, alParam, apMsg, aMsgReply))
@@ -1912,14 +1913,16 @@ bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awPa
 	// If "monitor" is defunct due to deletion, decrementing its instance_count is harmless.  However,
 	// "monitor" might have been reused by BIF_OnMessage() to create a new msg monitor, so it must be
 	// checked to avoid wrongly decrementing some other msg monitor's instance_count.
-	monitor = &g_MsgMonitor[aInstance.index];
-	if (monitor->msg == aMsg && (is_legacy_monitor ? monitor->is_legacy_monitor : monitor->func == func))
+	if (aInstance.index >= 0)
 	{
-		if (monitor->instance_count) // Avoid going negative, which might otherwise be possible in weird circumstances described in other comments.
-			--monitor->instance_count;
+		monitor = &g_MsgMonitor[aInstance.index];
+		if (monitor->msg == aMsg && (is_legacy_monitor ? monitor->is_legacy_monitor : monitor->func == func))
+		{
+			if (monitor->instance_count) // Avoid going negative, which might otherwise be possible in weird circumstances described in other comments.
+				--monitor->instance_count;
+		}
+		//else "monitor" is now some other msg-monitor, so do don't change it (see above comments).
 	}
-	//else "monitor" is now some other msg-monitor, so do don't change it (see above comments).
-
 	return block_further_processing; // If false, the caller will ignore aMsgReply and process this message normally. If true, aMsgReply contains the reply the caller should immediately send for this message.
 }
 

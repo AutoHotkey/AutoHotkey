@@ -16344,7 +16344,7 @@ BIF_DECL(BIF_OnMessage)
 	bool mode_is_delete = false;
 	bool legacy_mode = true;
 	int max_instances = 1;
-	bool call_it_first = true;
+	bool call_it_last = true;
 
 	if (!ParamIndexIsOmitted(2)) // Parameter #3 is present.
 	{
@@ -16354,7 +16354,7 @@ BIF_DECL(BIF_OnMessage)
 			max_instances = MsgMonitorStruct::MAX_INSTANCES;
 		if (max_instances < 0) // MaxThreads < 0 is a signal to assign this monitor the lowest priority.
 		{
-			call_it_first = false; // Call it after any older monitors.  No effect if already registered.
+			call_it_last = false; // Call it after any older monitors.  No effect if already registered.
 			max_instances = -max_instances; // Convert to positive.
 		}
 		else if (max_instances == 0) // It would never be called, so this is used as a signal to delete the item.
@@ -16411,13 +16411,18 @@ BIF_DECL(BIF_OnMessage)
 		if (msg_index == MAX_MSG_MONITORS) // No room in the array.
 			goto rare_failure;
 		// From this point on, it is certain that an item will be added to the array.
-		if (!call_it_first) // Call it last.
+		if (!call_it_last) // Call it first.
 		{
 			msg_index = 0; // Because the array is iterated right-to-left, index 0 is called last.
 			if (g_MsgMonitorCount) // Shift existing items to make room.
 				MoveMemory(g_MsgMonitor+1, g_MsgMonitor, sizeof(MsgMonitorStruct)*g_MsgMonitorCount);
 			for (MsgMonitorInstance *inst = g_TopMsgMonitor; inst; inst = inst->previous)
+			{
 				inst->index++; // Correct the index of each running monitor.
+				inst->count++; // Iterate the same set of items which existed before.
+				// By contrast, count isn't adjusted when adding at the end because we do not
+				// want new items to be called by messages received before they were registered.
+			}
 		}
 	}
 
@@ -16435,10 +16440,11 @@ BIF_DECL(BIF_OnMessage)
 			// of that message to be called (when there are multiple).  Monitors at index >= msg_index can
 			// be deleted because the list is iterated from right to left.
 			for (MsgMonitorInstance *inst = g_TopMsgMonitor; inst; inst = inst->previous)
-				// Below: Not >= because the MsgMonitor() loop wants index-1 to be the next item.
-				// Also index must always be >= 0 so that MsgMonitor() can check g_MsgMonitor[index].
-				if (inst->index > msg_index)
-					inst->index--;
+			{
+				if (inst->index >= msg_index && inst->index >= 0)
+					inst->index--; // So index+1 is the next item.
+				inst->count--;
+			}
 			// The msg-monitor is deleted from the array for two reasons:
 			// 1) It improves performance because every incoming message for the app now needs to be compared
 			//    to one less filter. If the count will now be zero, performance is improved even more because
