@@ -5066,6 +5066,33 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				this_new_arg.type = ARG_TYPE_INPUT_VAR;
 			else
 				this_new_arg.type = Line::ArgIsVar(aActionType, i);
+
+			// v1.0.29: Allow expressions in any parameter that starts with % followed by a space
+			// or tab. This should be unambiguous because spaces and tabs are illegal in variable names.
+			// Since there's little if any benefit to allowing input and output variables to be
+			// dynamically built via expression, for now it is disallowed.  If ever allow it,
+			// need to review other sections to ensure they will tolerate it.  Also, the following
+			// would probably need revision to get it to be detected as an output-variable:
+			// % Array%i% = value
+			if (*this_aArg == g_DerefChar && !(this_aArgMap && *this_aArgMap) // It's a non-literal deref character.
+				&& IS_SPACE_OR_TAB(this_aArg[1])) // Followed by a space or tab.
+			{
+				if (this_new_arg.type == ARG_TYPE_OUTPUT_VAR // Command requires a variable, not an expression.
+					|| aActionType == ACT_SORT || ACT_IS_IF(aActionType)) // Sort and If commands depend on it being a variable.
+					return ScriptError(_T("Unexpected %"), this_aArg); // Short message since it's rare.
+				this_new_arg.type = ARG_TYPE_NORMAL; // If this was an input var, make it a normal expression.
+				this_new_arg.is_expression = true;
+				// Omit the percent sign and the space after it from further consideration.
+				this_aArg += 2;
+				if (this_aArgMap)
+					this_aArgMap += 2;
+				// ACT_ASSIGN isn't capable of dealing with expressions because ExecUntil() does not
+				// call ExpandArgs() automatically for it.  Thus its function, PerformAssign(), would
+				// not be given the expanded result of the expression.
+				if (aActionType == ACT_ASSIGN)
+					aActionType = ACT_ASSIGNEXPR;
+			}
+
 			// Since some vars are optional, the below allows them all to be blank or
 			// not present in the arg list.  If a mandatory var is blank at this stage,
 			// it's okay because all mandatory args are validated to be non-blank elsewhere:
@@ -5107,30 +5134,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					}
 					// else continue on to the below so that this input or output variable name's dynamic part
 					// (e.g. array%i%) can be partially resolved.
-				}
-			}
-			else // this_new_arg.type == ARG_TYPE_NORMAL (excluding those input/output_vars that were converted to normal because they were blank, above).
-			{
-				// v1.0.29: Allow expressions in any parameter that starts with % followed by a space
-				// or tab. This should be unambiguous because spaces and tabs are illegal in variable names.
-				// Since there's little if any benefit to allowing input and output variables to be
-				// dynamically built via expression, for now it is disallowed.  If ever allow it,
-				// need to review other sections to ensure they will tolerate it.  Also, the following
-				// would probably need revision to get it to be detected as an output-variable:
-				// % Array%i% = value
-				if (*this_aArg == g_DerefChar && !(this_aArgMap && *this_aArgMap) // It's a non-literal deref character.
-					&& IS_SPACE_OR_TAB(this_aArg[1])) // Followed by a space or tab.
-				{
-					this_new_arg.is_expression = true;
-					// Omit the percent sign and the space after it from further consideration.
-					this_aArg += 2;
-					if (this_aArgMap)
-						this_aArgMap += 2;
-					// ACT_ASSIGN isn't capable of dealing with expressions because ExecUntil() does not
-					// call ExpandArgs() automatically for it.  Thus its function, PerformAssign(), would
-					// not be given the expanded result of the expression.
-					if (aActionType == ACT_ASSIGN)
-						aActionType = ACT_ASSIGNEXPR;
 				}
 			}
 
