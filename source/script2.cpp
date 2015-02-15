@@ -1458,6 +1458,62 @@ ResultType Line::Input()
 	// active input prior to us didn't fail and it it needs to know how its input
 	// was terminated):
 	g_input.status = INPUT_OFF;
+	
+	//////////////////////////////////////////
+	// Set default options and parse aOptions:
+	//////////////////////////////////////////
+	g_input.BackspaceIsUndo = true;
+	g_input.CaseSensitive = false;
+	g_input.IgnoreAHKInput = false;
+	g_input.TranscribeModifiedKeys = false;
+	g_input.Visible = false;
+	g_input.FindAnywhere = false;
+	g_input.BufferLengthMax = INPUT_BUFFER_SIZE - 1;
+	int timeout = 0;
+	bool endchar_mode = false;
+	for (LPTSTR cp = aOptions; *cp; ++cp)
+	{
+		switch(ctoupper(*cp))
+		{
+		case 'B':
+			g_input.BackspaceIsUndo = false;
+			break;
+		case 'C':
+			g_input.CaseSensitive = true;
+			break;
+		case 'I':
+			g_input.IgnoreAHKInput = true;
+			break;
+		case 'M':
+			g_input.TranscribeModifiedKeys = true;
+			break;
+		case 'L':
+			// Use atoi() vs. ATOI() to avoid interpreting something like 0x01C as hex
+			// when in fact the C was meant to be an option letter:
+			g_input.BufferLengthMax = _ttoi(cp + 1);
+			if (g_input.BufferLengthMax > INPUT_BUFFER_SIZE - 1)
+				g_input.BufferLengthMax = INPUT_BUFFER_SIZE - 1;
+			break;
+		case 'T':
+			// Although ATOF() supports hex, it's been documented in the help file that hex should
+			// not be used (see comment above) so if someone does it anyway, some option letters
+			// might be misinterpreted:
+			timeout = (int)(ATOF(cp + 1) * 1000);
+			break;
+		case 'V':
+			g_input.Visible = true;
+			break;
+		case '*':
+			g_input.FindAnywhere = true;
+			break;
+		case 'E':
+			// Interpret single-character keys as characters rather than converting them to VK codes.
+			// This tends to work better when using multiple keyboard layouts, but changes behaviour:
+			// for instance, an end char of "." cannot be triggered while holding Alt.
+			endchar_mode = true;
+			break;
+		}
+	}
 
 	//////////////////////////////////////////////
 	// Set up sparse arrays according to aEndKeys:
@@ -1494,19 +1550,24 @@ ResultType Line::Input()
 				else // Empty braces {} were encountered.
 					continue;  // do nothing: let it proceed to the }, which will then be ignored.
 			}
+			if (key_text_length == 1) // A single-char key name, such as {.} or {{}.
+			{
+				if (endchar_mode) // Handle this single-char key name by char code, not by VK.
+				{
+					// Although it might be sometimes useful to treat "x" as a character and "{x}" as a key,
+					// "{{}" and "{}}" can't be included without the extra braces.  {vkNN} can still be used
+					// to handle the key by VK instead of by character.
+					single_char_count++;
+					continue; // It will be processed by another section.
+				}
+				*single_char_string = end_key[1]; // Only used when vk != 0.
+			}
 
 			*end_pos = '\0';  // temporarily terminate the string here.
 
-			// v1.0.45: Fixed this section to differentiate between } and ] (and also { and [, as well as
-			// anything else enclosed in {} that requires END_KEY_WITH_SHIFT/END_KEY_WITHOUT_SHIFT consideration.
 			modifiersLR = 0;  // Init prior to below.
-			if (vk = TextToVK(end_key + 1, &modifiersLR, true))
-			{
-				if (key_text_length == 1)
-					*single_char_string = end_key[1];
-				//else leave it at its default of "not a single-char key-name".
-			}
-			else // No virtual key, so try to find a scan code.
+			if (  !(vk = TextToVK(end_key + 1, &modifiersLR, true))  )
+				// No virtual key, so try to find a scan code.
 				if (sc = TextToSC(end_key + 1))
 					end_sc[sc] = END_KEY_ENABLED;
 
@@ -1517,20 +1578,21 @@ ResultType Line::Input()
 		}
 
 		default:
-			// Don't translate this character to a VK.  Instead, count the number of characters
-			// not wrapped in {}, then record them all in an array for use as "end chars".  This
-			// approach allows end chars to adapt to the keyboard layout of the active window.
-			single_char_count++;
-			continue;
+			if (endchar_mode)
+			{
+				single_char_count++;
+				continue; // It will be processed by another section.
+			}
+			*single_char_string = *end_key;
+			modifiersLR = 0;  // Init prior to below.
+			vk = TextToVK(single_char_string, &modifiersLR, true);
 		} // switch()
 
 		if (vk) // A valid virtual key code was discovered above.
 		{
 			end_vk[vk] |= END_KEY_ENABLED; // Use of |= is essential for cases such as ";:".
 			// Insist the shift key be down to form genuinely different symbols --
-			// namely punctuation marks -- but not for alphabetic chars.  In the
-			// future, an option can be added to the Options param to treat
-			// end chars as case sensitive (if there is any demand for that):
+			// namely punctuation marks -- but not for alphabetic chars.
 			if (*single_char_string && !IsCharAlpha(*single_char_string)) // v1.0.46.05: Added check for "*single_char_string" so that non-single-char strings like {F9} work as end keys even when the Shift key is being held down (this fixes the behavior to be like it was in pre-v1.0.45).
 			{
 				// Now we know it's not alphabetic, and it's not a key whose name
@@ -1559,9 +1621,11 @@ ResultType Line::Input()
 			case '{':
 				if (end_pos = _tcschr(src + 1, '}'))
 				{
-					if (end_pos == src+1 && end_pos[1] == '}')
-						end_pos++; // Skip {}}.
-					src = end_pos; // Skip the {key}.
+					if (end_pos == src + 1 && end_pos[1] == '}') // {}}
+						end_pos++;
+					if (end_pos == src + 2)
+						*dst++ = src[1]; // Copy the single character from between the braces.
+					src = end_pos; // Skip '{key'.  Loop does ++src to skip the '}'.
 				}
 				// Otherwise, just ignore the '{'.
 			case '}':
@@ -1681,56 +1745,11 @@ ResultType Line::Input()
 	//////////////////////////////////////////////////////////////
 	// Initialize buffers and state variables for use by the hook:
 	//////////////////////////////////////////////////////////////
-	// Set the defaults that will be in effect unless overridden by an item in aOptions:
-	g_input.BackspaceIsUndo = true;
-	g_input.CaseSensitive = false;
-	g_input.IgnoreAHKInput = false;
-	g_input.TranscribeModifiedKeys = false;
-	g_input.Visible = false;
-	g_input.FindAnywhere = false;
-	int timeout = 0;  // Set default.
 	TCHAR input_buf[INPUT_BUFFER_SIZE] = _T(""); // Will contain the actual input from the user.
 	g_input.buffer = input_buf;
 	g_input.BufferLength = 0;
-	g_input.BufferLengthMax = INPUT_BUFFER_SIZE - 1;
+	// g_input.BufferLengthMax was set in the option parsing section.
 
-	for (LPTSTR cp = aOptions; *cp; ++cp)
-	{
-		switch(ctoupper(*cp))
-		{
-		case 'B':
-			g_input.BackspaceIsUndo = false;
-			break;
-		case 'C':
-			g_input.CaseSensitive = true;
-			break;
-		case 'I':
-			g_input.IgnoreAHKInput = true;
-			break;
-		case 'M':
-			g_input.TranscribeModifiedKeys = true;
-			break;
-		case 'L':
-			// Use atoi() vs. ATOI() to avoid interpreting something like 0x01C as hex
-			// when in fact the C was meant to be an option letter:
-			g_input.BufferLengthMax = _ttoi(cp + 1);
-			if (g_input.BufferLengthMax > INPUT_BUFFER_SIZE - 1)
-				g_input.BufferLengthMax = INPUT_BUFFER_SIZE - 1;
-			break;
-		case 'T':
-			// Although ATOF() supports hex, it's been documented in the help file that hex should
-			// not be used (see comment above) so if someone does it anyway, some option letters
-			// might be misinterpreted:
-			timeout = (int)(ATOF(cp + 1) * 1000);
-			break;
-		case 'V':
-			g_input.Visible = true;
-			break;
-		case '*':
-			g_input.FindAnywhere = true;
-			break;
-		}
-	}
 	// Point the global addresses to our memory areas on the stack:
 	g_input.EndVK = end_vk;
 	g_input.EndSC = end_sc;
