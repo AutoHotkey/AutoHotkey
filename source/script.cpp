@@ -2459,7 +2459,6 @@ examine_line:
 				cp = hotkey_flag; // Set default, conditionally overridden below (v1.0.44.07).
 				// v1.0.40: Check if this is a remap rather than hotkey:
 				if (   *hotkey_flag // This hotkey's action is on the same line as its label.
-					&& ((remap_source_vk = TextToVK(cp1 = Hotkey::TextToModifiers(buf, NULL))) || !cp[1]) // Allow it through if !cp[1] so that it will give a more sensible warning (or two) about the keyboard layout instead of a generic error.
 					&& (remap_dest_vk = hotkey_flag[1] ? TextToVK(cp = Hotkey::TextToModifiers(hotkey_flag, NULL)) : 0xFF)   ) // And the action appears to be a remap destination rather than a command.
 					// For above:
 					// Fix for v1.0.44.07: Set remap_dest_vk to 0xFF if hotkey_flag's length is only 1 because:
@@ -2475,6 +2474,7 @@ examine_line:
 					// would trigger such a bug.
 				{
 					// These will be ignored in other stages if it turns out not to be a remap later below:
+					remap_source_vk = TextToVK(cp1 = Hotkey::TextToModifiers(buf, NULL)); // An earlier stage verified that it's a valid hotkey, though VK could be zero.
 					remap_source_is_mouse = IsMouseVK(remap_source_vk);
 					remap_dest_is_mouse = IsMouseVK(remap_dest_vk);
 					remap_keybd_to_mouse = !remap_source_is_mouse && remap_dest_is_mouse;
@@ -2648,7 +2648,9 @@ examine_line:
 						// This hotkey uses a single-character key name, which could be valid on some other
 						// keyboard layout.  Allow the script to start, but warn the user about the problem.
 						// Note that this hotkey's label is still valid even though the hotkey wasn't created.
+#ifndef AUTOHOTKEYSC
 						if (!mIncludeLibraryFunctionsThenExit) // Current keyboard layout is not relevant in /iLib mode.
+#endif
 						{
 							sntprintf(msg_text, _countof(msg_text), _T("Note: The hotkey %s will not be active because it does not exist in the current keyboard layout."), buf);
 							MsgBox(msg_text);
@@ -3108,7 +3110,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				// Restore the working directory.
 				SetCurrentDirectory(buf);
 				// If any file was included, consider it a success; i.e. allow #include <lib> and #include <lib_func>.
-				if (!error_was_shown && file_was_found || ignore_load_failure)
+				if (!error_was_shown && (file_was_found || ignore_load_failure))
 					return CONDITION_TRUE;
 				*parameter_end = '>'; // Restore '>' for display to the user.
 				return error_was_shown ? FAIL : ScriptError(_T("Function library not found."), aBuf);
@@ -8628,6 +8630,12 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, ActionTyp
 			}
 			break;
 
+		case ACT_RETURN:
+			for (Line *parent = line->mParentLine; parent; parent = parent->mParentLine)
+				if (parent->mActionType == ACT_FINALLY)
+					return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
+			break;
+
 		case ACT_HOTKEY:
 			if (!line->ArgHasDeref(1))
 			{
@@ -10701,6 +10709,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				// Rather than having PerformLoop() handle LOOP_BREAK specifically, tell our caller to jump to
 				// the line *after* the loop's body. This is always a jump our caller must handle, unlike GOTO:
 				caller_jump_to_line = line->mRelatedLine->mRelatedLine;
+				if (caller_jump_to_line->mActionType == ACT_UNTIL)
+					caller_jump_to_line = caller_jump_to_line->mNextLine;
 			}
 			return LOOP_BREAK;
 
@@ -10984,16 +10994,15 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			}
 			if (this_act == ACT_CATCH && line->mActionType == ACT_FINALLY)
 			{
-				if (!g.ThrownToken)
-				{
+				if (result == OK && !jump_to_line)
 					// Let the next iteration handle the finally block.
 					continue;
-				}
 
 				// An exception was thrown, and this try..(catch)..finally block didn't handle it.
 				// Therefore we must execute the finally block before returning.
-				ResultType res = line->ExecUntil(ONLY_ONE_LINE, NULL, &jump_to_line);
-				if (jump_to_line || res == LOOP_BREAK || res == LOOP_CONTINUE)
+				Line *invalid_jump; // Don't overwrite jump_to_line in case the try block used goto.
+				ResultType res = line->ExecUntil(ONLY_ONE_LINE, NULL, &invalid_jump);
+				if (invalid_jump || res == LOOP_BREAK || res == LOOP_CONTINUE || res == EARLY_RETURN)
 					return g_script.mCurrLine->LineError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			}
 			
@@ -14349,7 +14358,7 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 	else
 		OutputDebugString(buf);
 #else
-		g_Debugger.FileAppendStdOut(buf);
+		g_Debugger.FileAppendStdOut(buf) || _fputts(buf, stdout);
 	else
 		g_Debugger.OutputDebug(buf);
 #endif

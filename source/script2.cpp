@@ -1296,22 +1296,14 @@ ResultType Line::ControlGetFocus(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTit
 	if (!target_window)
 		goto error;
 
-	// Unlike many of the other Control commands, this one requires AttachThreadInput().
-	ATTACH_THREAD_INPUT
-
-	class_and_hwnd_type cah;
-	cah.hwnd = GetFocus();  // Do this now that our thread is attached to the target window's.
-
-	// Very important to detach any threads whose inputs were attached above,
-	// prior to returning, otherwise the next attempt to attach thread inputs
-	// for these particular windows may result in a hung thread or other
-	// undesirable effect:
-	DETACH_THREAD_INPUT
-
-	if (!cah.hwnd)
+	GUITHREADINFO guithreadInfo;
+	guithreadInfo.cbSize = sizeof(GUITHREADINFO);
+	if (!GetGUIThreadInfo(GetWindowThreadProcessId(target_window, NULL), &guithreadInfo))
 		goto error;
 
+	class_and_hwnd_type cah;
 	TCHAR class_name[WINDOW_CLASS_SIZE];
+	cah.hwnd = guithreadInfo.hwndFocus;
 	cah.class_name = class_name;
 	if (!GetClassName(cah.hwnd, class_name, _countof(class_name) - 5)) // -5 to allow room for sequence number.
 		goto error;
@@ -7855,18 +7847,20 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	bool open_as_binary = (*aFilespec == '*');
 	if (open_as_binary)
 	{
-		// Do not do this because it's possible for filenames to start with a space
-		// (even though Explorer itself won't let you create them that way):
-		//write_filespec = omit_leading_whitespace(write_filespec + 1);
-		// Instead just do this:
-		++aFilespec;
-		if (!*aFilespec) // Naked "*" means write to stdout.
-#ifndef CONFIG_DEBUGGER
-			// Avoid puts() in case it bloats the code in some compilers. i.e. _fputts() is already used,
-			// so using it again here shouldn't bloat it:
-			return SetErrorsOrThrow(_fputts(aBuf, stdout) == TEOF); // "returns a nonnegative value if it is successful. On an error, fputs returns EOF, and fputws returns WEOF."
-#else
-			return SetErrorsOrThrow(!g_Debugger.FileAppendStdOut(aBuf));
+		if (aFilespec[1] && (aFilespec[1] != '*' || !aFilespec[2])) // i.e. it's not just * (stdout) or ** (stderr).
+		{
+			// Do not do this because it's possible for filenames to start with a space
+			// (even though Explorer itself won't let you create them that way):
+			//write_filespec = omit_leading_whitespace(write_filespec + 1);
+			// Instead just do this:
+			++aFilespec;
+		}
+#ifdef CONFIG_DEBUGGER
+		else if (!aFilespec[1] && g_Debugger.FileAppendStdOut(aBuf))
+		{
+			// StdOut has been redirected to the debugger, so return.
+			return SetErrorsOrThrow(false, 0);
+		}
 #endif
 	}
 	else if (!file_was_already_open) // As of 1.0.25, auto-detect binary if that mode wasn't explicitly specified.

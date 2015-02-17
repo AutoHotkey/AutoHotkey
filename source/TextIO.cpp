@@ -621,6 +621,9 @@ bool TextFile::_Open(LPCTSTR aFileSpec, DWORD &aFlags)
 		DWORD nStdHandle = 0;
 		switch (aFlags & ACCESS_MODE_MASK)
 		{
+		case APPEND:
+			// Allow FileAppend to write to stdout/stderr via TextStream.
+			aFlags = (aFlags & ~ACCESS_MODE_MASK) | READ;
 		case WRITE:
 			if (!aFileSpec[1])
 				nStdHandle = STD_OUTPUT_HANDLE;
