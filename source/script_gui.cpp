@@ -6594,9 +6594,9 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		// account. To account for the scroll bars, call the GetSystemMetrics function with SM_CXVSCROLL
 		// or SM_CYHSCROLL."
 		if (style & WS_HSCROLL)
-			width += GetSystemMetrics(SM_CXHSCROLL);
+			height += GetSystemMetrics(SM_CYHSCROLL);
 		if (style & WS_VSCROLL)
-			height += GetSystemMetrics(SM_CYVSCROLL);
+			width += GetSystemMetrics(SM_CXVSCROLL);
 
 		RECT work_rect;
 		SystemParametersInfo(SPI_GETWORKAREA, 0, &work_rect, 0);  // Get desktop rect excluding task bar.
