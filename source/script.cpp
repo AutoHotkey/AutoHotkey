@@ -154,7 +154,7 @@ FuncEntry g_BIF[] =
 	BIF1(ComObjActive, 1, 1, true),
 	BIF1(ComObjCreate, 1, 2, true),
 	BIF1(ComObjGet, 1, 1, true),
-	BIF1(ComObjConnect, 1, 2, true),
+	BIF1(ComObjConnect, 1, 2, false),
 	BIF1(ComObjError, 0, 1, true),
 	BIFn(ComObjType, 1, 2, true, BIF_ComObjTypeOrValue),
 	BIFn(ComObjValue, 1, 1, true, BIF_ComObjTypeOrValue),
