@@ -4111,6 +4111,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 						break;
 					has_space_or_tab = IS_SPACE_OR_TAB(*cp);
 					cp = omit_leading_whitespace(cp);
+					if (*cp) // Avoid checking cp[1] and cp[2] when !*cp.
 					if (*cp == '[' // x.y[z]
 						|| cp[1] == '=' && _tcschr(_T(":+-*/|&^."), cp[0]) // Two-char assignment operator.
 						|| cp[1] == cp[0]
