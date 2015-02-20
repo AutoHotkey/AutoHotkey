@@ -11684,7 +11684,7 @@ VarSizeType BIV_Caret(LPTSTR aBuf, LPTSTR aVarName)
 	// of where the caret was at one precise instant in time.  This is because the X and Y vars are resolved
 	// separately by the script, and due to split second timing, they might otherwise not be accurate with
 	// respect to each other.  This method also helps performance since it avoids unnecessary calls to
-	// ATTACH_THREAD_INPUT.
+	// GetGUIThreadInfo().
 	static HWND sForeWinPrev = NULL;
 	static DWORD sTimestamp = GetTickCount();
 	static POINT sPoint;
@@ -11703,17 +11703,19 @@ VarSizeType BIV_Caret(LPTSTR aBuf, LPTSTR aVarName)
 	if (target_window != sForeWinPrev || now_tick - sTimestamp > 5) // Different window or too much time has passed.
 	{
 		// Otherwise:
-		ATTACH_THREAD_INPUT
-		sResult = GetCaretPos(&sPoint);
-		HWND focused_control = GetFocus();  // Also relies on threads being attached.
-		DETACH_THREAD_INPUT
+		GUITHREADINFO info;
+		info.cbSize = sizeof(GUITHREADINFO);
+		sResult = GetGUIThreadInfo(GetWindowThreadProcessId(target_window, NULL), &info) // Got info okay...
+			&& info.hwndCaret; // ...and there is a caret.
 		if (!sResult)
 		{
 			*aBuf = '\0';
 			return 0;
 		}
+		sPoint.x = info.rcCaret.left;
+		sPoint.y = info.rcCaret.top;
 		// Unconditionally convert to screen coordinates, for simplicity.
-		ClientToScreen(focused_control ? focused_control : target_window, &sPoint);
+		ClientToScreen(info.hwndCaret, &sPoint);
 		// Now convert back to whatever is expected for the current mode.
 		POINT origin = {0};
 		CoordToScreen(origin, COORD_MODE_CARET);
