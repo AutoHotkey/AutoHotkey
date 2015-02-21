@@ -8658,8 +8658,8 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	AddRef();
 	ExprTokenType param[3];
 	param[0].SetValue(&aControl);
-	param[1].SetValue((__int64)(DWORD_PTR)aNmHdr);
 	param[2].SetValue(_T("N"));
+	param[1].SetValue((__int64)(DWORD_PTR)aNmHdr);
 	g_script.mLastPeekTime = GetTickCount();
 	int returnValue = CallEvent(evt, 3, param);
 
