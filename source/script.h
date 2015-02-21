@@ -2170,6 +2170,7 @@ struct GuiControlType : public ObjectBase
 {
 	GuiType* gui; // Below code relies on this being the first field.
 	HWND hwnd;
+	LPTSTR name;
 	// Keep any fields that are smaller than 4 bytes adjacent to each other.  This conserves memory
 	// due to byte-alignment.  It has been verified to save 4 bytes per struct in this case:
 	GuiControls type;

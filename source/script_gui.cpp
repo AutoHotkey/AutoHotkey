@@ -1641,6 +1641,8 @@ void GuiControlType::Destroy()
 		free(union_lv_attrib);
 	if (gui->mHasEventSink && event_handler)
 		free(event_handler.mMethodName);
+	if (name)
+		free(name);
 	hwnd = NULL;
 	gui = NULL;
 }
@@ -5422,6 +5424,11 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				case 'G':
 					aControl.event_handler.mFunc = NULL;
 					break;
+				case 'V':
+					if (aControl.name)
+						free(aControl.name);
+					aControl.name = NULL;
+					break;
 				default:
 					// v1.1.04: Validate Gui options.
 					return g_script.ScriptError(ERR_INVALID_OPTION, next_option-1);
@@ -5461,6 +5468,14 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				if (aOpt.tabstop_count < GUI_MAX_TABSTOPS)
 					aOpt.tabstop[aOpt.tabstop_count++] = ATOU(next_option);
 				//else ignore ones beyond the maximum.
+				break;
+
+			case 'V': // Name (originally: Variable)
+				// Make sure the name isn't already taken.
+				for (GuiIndexType u = 0; u < mControlCount; ++u)
+					if (mControl[u]->name && _tcsicmp(mControl[u]->name, next_option) == 0)
+						return g_script.ScriptError(_T("There already exists a control with the specified name."), next_option);
+				aControl.name = _tcsdup(next_option);
 				break;
 
 			case 'C':  // Color
@@ -6985,8 +7000,9 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 // Find the index of the control that matches the string, which can be either:
 // 1) HWND
-// 2) Class+NN
-// 3) Control's title/caption.
+// 2) Name
+// 3) Class+NN
+// 4) Control's title/caption.
 // Returns -1 if not found.
 {
 	// v1.0.44.08: Added the following check.  Without it, ControlExist() (further below) would retrieve the
@@ -7005,6 +7021,10 @@ GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 			return u;
 		// Otherwise: no match was found, so fall back to considering it as text.
 	}
+	// Try to find the control with the specified name.
+	for (u = 0; u < mControlCount; ++u)
+		if (mControl[u]->name && _tcsicmp(mControl[u]->name, aControlID) == 0)
+			return u;
 	// Otherwise: No match found, so fall back to standard control class and/or text finding method.
 	HWND control_hwnd = ControlExist(mHwnd, aControlID);
 	u = (GuiIndexType)FindControl(control_hwnd, true);
