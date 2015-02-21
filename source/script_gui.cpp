@@ -106,6 +106,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	if_member("Options", M_Options)
 	if_member("Opt", M_Options) // Short-hand form of Options.
 	if_member("Flash", M_Flash)
+	if_member("Submit", M_Submit)
 	if_member("_NewEnum", M_NewEnum)
 	if_member("Hwnd", P_Handle)
 	if_member("Title", P_Title)
@@ -187,6 +188,11 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 				break; // Above already displayed an error message.
 			SetOwnDialogs(own_dialogs);
 			return OK;
+		}
+		case M_Submit:
+		{
+			bool hide_it = (bool)ParamIndexToOptionalType(BOOL,0,TRUE);
+			return Submit(aResultToken, hide_it);
 		}
 		case M_NewEnum:
 		{
@@ -6723,6 +6729,114 @@ ResultType GuiType::Escape() // Similar to close, except typically called when t
 	POST_AHK_GUI_ACTION(mHwnd, NO_CONTROL_INDEX, GUI_EVENT_ESCAPE, NO_EVENT_INFO);
 	// MsgSleep() is not done because "case AHK_GUI_ACTION" in GuiWindowProc() takes care of it.
 	// See its comments for why.
+	return OK;
+}
+
+
+
+ResultType GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
+// Caller has ensured that all controls have valid, non-NULL hwnds:
+{
+	if (!mHwnd) // Operating on a non-existent GUI has no effect.
+		_o_return_empty;
+
+	Object* ret = Object::Create();
+	if (!ret)
+		_o_throw(ERR_OUTOFMEM);
+
+	// Handle all non-radio controls:
+	GuiIndexType u;
+	for (u = 0; u < mControlCount; ++u)
+	{
+		GuiControlType& control = *mControl[u]; // For performance and readability.
+		if (control.name == NULL) // Skip the control if it does not have a name
+			continue;
+
+		if (control.type != GUI_CONTROL_RADIO)
+		{
+			TCHAR temp_buf[MAX_NUMBER_SIZE];
+			ResultToken value;
+			value.InitResult(temp_buf);
+
+			ControlGetContents(value, control);
+			if (!ret->SetItem(control.name, value))
+			{
+				ret->Release();
+				_o_throw(ERR_OUTOFMEM);
+			}
+		}
+	}
+
+	// Handle GUI_CONTROL_RADIO separately so that any radio group that has a single name
+	// to share among all its members can be given special treatment:
+	int group_radios = 0;           // The number of radio buttons in the current group.
+	int group_radios_with_name = 0; // The number of the above that have a name.
+	LPTSTR group_name = NULL;       // The last-found name of the current group.
+	int selection_number = 0;       // Which radio in the current group is selected (0 if none).
+	LPTSTR output_name;
+
+	// The below uses <= so that it goes one beyond the limit.  This allows the final radio group
+	// (if any) to be noticed in the case where the very last control in the window is a radio button.
+	// This is because in such a case, there is no "terminating control" having the WS_GROUP style:
+	for (u = 0; u <= mControlCount; ++u)
+	{
+		GuiControlType& control = *mControl[u]; // For performance and readability.
+
+		// WS_GROUP is used to determine where one group ends and the next begins -- rather than using
+		// seeing if the control's type is radio -- because in the future it may be possible for a radio
+		// group to have other controls interspersed within it and yet still be a group for the purpose
+		// of "auto radio button (only one selected at a time)" behavior:
+		if (u == mControlCount || GetWindowLong(control.hwnd, GWL_STYLE) & WS_GROUP) // New group. Relies on short-circuit boolean order.
+		{
+			// If the prior group had more than one radio in it but only one had a name, that
+			// name is shared among all radios (as of v1.0.20).  Otherwise:
+			// 1) If it has zero radios and/or zero names: already fully handled by other logic.
+			// 2) It has multiple names: the default values assigned in the loop are simply retained.
+			// 3) It has exactly one radio in it and that radio has a name: same as above.
+			if (group_radios_with_name == 1 && group_radios > 1)
+			{
+				// Multiple buttons selected.  Since this is so rare, don't give it a distinct value.
+				// Instead, treat this the same as "none selected".  Update for v1.0.24: It is no longer
+				// directly possible to have multiple radios selected by having the word "checked" in
+				// more than one of their AddCtrl commands.  However, there are probably other ways
+				// to get multiple buttons checked (perhaps the Control command), so this handling
+				// for multiple selections is left intact.
+				if (selection_number == -1)
+					selection_number = 0;
+				ret->SetItem(group_name, selection_number); // group_var should not be NULL since group_radios_with_name == 1
+			}
+			if (u == mControlCount) // The last control in the window is a radio and its group was just processed.
+				break;
+			group_radios = group_radios_with_name = selection_number = 0;
+		}
+		if (control.type == GUI_CONTROL_RADIO)
+		{
+			++group_radios;
+			if (output_name = control.name) // Assign.
+			{
+				++group_radios_with_name;
+				group_name = output_name; // If this group winds up having only one name, this will be it.
+			}
+			// Assign default value for now.  It will be overridden if this turns out to be the
+			// only name in this group:
+			if (SendMessage(control.hwnd, BM_GETCHECK, 0, 0) == BST_CHECKED)
+			{
+				if (selection_number) // Multiple buttons selected, so flag this as an indeterminate state.
+					selection_number = -1;
+				else
+					selection_number = group_radios;
+				if (output_name)
+					ret->SetItem(output_name, 1);
+			}
+			else
+				if (output_name)
+					ret->SetItem(output_name, 0LL);
+		}
+	} // for()
+
+	if (aHideIt)
+		ShowWindow(mHwnd, SW_HIDE);
+	_o_return(ret);
 	return OK;
 }
 

@@ -2347,6 +2347,7 @@ public:
 		M_Maximize,
 		M_Restore,
 		M_Flash,
+		M_Submit,
 		M_NewEnum,
 
 		LastMethodPlusOne,
@@ -2445,6 +2446,7 @@ public:
 	}
 	ResultType Close(); // Due to SC_CLOSE, etc.
 	ResultType Escape(); // Similar to close, except typically called when the user presses ESCAPE.
+	ResultType Submit(ResultToken &aResultToken, bool aHideIt);
 	ResultType ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, bool bText = false);
 
 	static GuiType *FindGui(HWND aHwnd);
