@@ -117,7 +117,8 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			return INVOKE_NOT_HANDLED;
 		if (aParamCount != ((IS_INVOKE_SET ? 1 : 0) + (member == P_Control ? 1 : 0)))
 			_o_throw(ERR_INVALID_USAGE);
-	}
+	} else if (IS_INVOKE_CALL && member > LastMethodPlusOne)
+		return INVOKE_NOT_HANDLED; // Properties cannot be used using CALL syntax.
 
 	if (!mHwnd)
 		_o_throw(_T("The Gui is destroyed."));
@@ -552,7 +553,8 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			return INVOKE_NOT_HANDLED;
 		if (aParamCount != (IS_INVOKE_SET ? 1 : 0))
 			_o_throw(ERR_INVALID_USAGE);
-	}
+	} else if (IS_INVOKE_CALL && member > LastMethodPlusOne)
+		return INVOKE_NOT_HANDLED; // Properties cannot be used using CALL syntax.
 
 	switch (member)
 	{
