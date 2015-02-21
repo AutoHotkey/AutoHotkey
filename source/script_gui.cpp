@@ -384,11 +384,32 @@ BIF_DECL(BIF_GuiCreate)
 
 BIF_DECL(BIF_GuiFromHwnd)
 {
-	GuiType* gui = GuiType::FindGui((HWND)ParamIndexToIntPtr(0));
+	HWND hwnd = (HWND)ParamIndexToIntPtr(0);
+	BOOL recurse_parent = ParamIndexToOptionalType(BOOL, 1, FALSE);
+	
+	GuiType* gui = recurse_parent ? GuiType::FindGuiParent(hwnd) : GuiType::FindGui(hwnd);
 	if (gui)
 	{
 		gui->AddRef();
 		_f_return(gui);
+	}
+	_f_return_empty;
+}
+
+
+BIF_DECL(BIF_GuiCtrlFromHwnd)
+{
+	HWND hwnd = (HWND)ParamIndexToIntPtr(0);
+
+	GuiType* gui = GuiType::FindGuiParent(hwnd);
+	if (gui)
+	{
+		GuiControlType* ctrl = gui->FindControl(hwnd);
+		if (ctrl)
+		{
+			ctrl->AddRef();
+			_f_return(ctrl);
+		}
 	}
 	_f_return_empty;
 }

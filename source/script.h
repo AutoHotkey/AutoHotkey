@@ -2895,6 +2895,7 @@ BIF_DECL(BIF_RegisterCallback);
 // Gui
 BIF_DECL(BIF_GuiCreate);
 BIF_DECL(BIF_GuiFromHwnd);
+BIF_DECL(BIF_GuiCtrlFromHwnd);
 
 BIF_DECL_GUICTRL(BIF_StatusBar);
 

@@ -43,7 +43,8 @@ ExprOpFunc g_ObjGet(Op_ObjInvoke, IT_GET), g_ObjSet(Op_ObjInvoke, IT_SET); // Al
 FuncEntry g_BIF[] =
 {
 	BIF1(GuiCreate, 0, 3, true),
-	BIF1(GuiFromHwnd, 1, 1, true),
+	BIF1(GuiFromHwnd, 1, 2, true),
+	BIF1(GuiCtrlFromHwnd, 1, 1, true),
 
 	BIF1(IL_Create, 0, 3, true),
 	BIF1(IL_Destroy, 1, 1, true),
