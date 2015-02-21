@@ -79,7 +79,18 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	if (!_tcsnicmp(name, _T("Add"), 3))
 	{
 		member = M_AddControl;
-		ctrl_type = Line::ConvertGuiControl(name+3);
+		LPTSTR ctrl_type_name = NULL;
+		if (name[3])
+			ctrl_type_name = name+3;
+		else
+		{
+			if (aParamCount < 1)
+				_o_throw(ERR_INVALID_USAGE);
+			ctrl_type_name = ParamIndexToString(0);
+			--aParamCount; // Exclude control type from param count.
+			++aParam; // As above, but for the param array.
+		}
+		ctrl_type = Line::ConvertGuiControl(ctrl_type_name);
 		if (ctrl_type == GUI_CONTROL_INVALID)
 			_o_throw(_T("Invalid control type."), name+3);
 	}
