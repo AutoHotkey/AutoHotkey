@@ -18299,26 +18299,22 @@ BIF_DECL(BIF_Exception)
 	{
 #ifdef CONFIG_DEBUGGER
 		int offset = TokenIsPureNumeric(*aParam[1]) ? ParamIndexToInt(1) : 0;
-		if (offset < 0)
+		if (offset < 0 && offset >= (g_Debugger.mStack.mBottom - g_Debugger.mStack.mTop)) // (mBottom - mTop) is safe against overflow, unlike (se >= mBottom). 
 		{
 			DbgStack::Entry *se = g_Debugger.mStack.mTop + offset;
-			if (se >= g_Debugger.mStack.mBottom)
+			// Self-contained loop to ensure the entry belongs to the current thread
+			// (below also relies on this loop to verify se[1].type != SE_Thread):
+			while (++offset <= 0 && g_Debugger.mStack.mTop[offset].type != DbgStack::SE_Thread); // Relies on short-circuit evaluation.
+			if (offset == 1)
 			{
-				// Self-contained loop to ensure the entry belongs to the current thread
-				// (below also relies on this loop to verify se[1].type != SE_Thread):
-				while (++offset <= 0 && g_Debugger.mStack.mTop[offset].type != DbgStack::SE_Thread); // Relies on short-circuit evaluation.
-				if (offset == 1)
-				{
-					line = se->line;
-					// se->line contains the line at the given offset from the top of the stack.
-					// Rather than returning the name of the function or sub which contains that
-					// line, return the name of the function or sub which that line called.
-					// In other words, an offset of -1 gives the name of the current function and
-					// the file and number of the line which it was called from.
-					what = se[1].type == DbgStack::SE_Func ? se[1].func->mName : se[1].sub->mName;
-				}
+				line = se->line;
+				// se->line contains the line at the given offset from the top of the stack.
+				// Rather than returning the name of the function or sub which contains that
+				// line, return the name of the function or sub which that line called.
+				// In other words, an offset of -1 gives the name of the current function and
+				// the file and number of the line which it was called from.
+				what = se[1].type == DbgStack::SE_Func ? se[1].func->mName : se[1].sub->mName;
 			}
-			// Otherwise, not a valid offset.
 		}
 #endif
 		if (!what)
