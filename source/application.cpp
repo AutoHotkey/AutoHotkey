@@ -208,7 +208,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	int i;
 	bool msg_was_handled;
 	HWND fore_window, focused_control, focused_parent, criterion_found_hwnd;
-	TCHAR wnd_class_name[32], gui_action_errorlevel[16], *walk;
+	TCHAR wnd_class_name[32], gui_action_extra[16], *walk;
 	UserMenuItem *menu_item;
 	HotkeyIDType hk_id;
 	Hotkey *hk;
@@ -222,7 +222,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	GuiEventType gui_action;
 	DWORD_PTR gui_event_info;
 	DWORD gui_size;
-	bool *pgui_label_is_running, event_is_control_generated;
+	bool *pgui_event_is_running, event_is_control_generated;
+	ExprTokenType gui_event_args[6]; // Current maximum number of arguments for Gui event handlers.
+	int gui_event_arg_count;
+	INT_PTR gui_event_ret;
 	HDROP hdrop_to_free;
 	DWORD tick_before, tick_after;
 	LRESULT msg_reply;
@@ -673,6 +676,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				gui_event_info =    (DWORD_PTR)msg.lParam;
 				gui_action =        LOWORD(msg.wParam);
 				gui_control_index = HIWORD(msg.wParam); // Caller has set it to NO_CONTROL_INDEX if it isn't applicable.
+				gui_event_arg_count = 0;
 
 				if (gui_action == GUI_EVENT_RESIZE) // This section be done after above but before pcontrol below.
 				{
@@ -683,7 +687,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// Below relies on the GUI_EVENT_RESIZE section above having been done:
 				pcontrol = gui_control_index < pgui->mControlCount ? pgui->mControl + gui_control_index : NULL; // Set for use in other places below.
 
-				pgui_label_is_running = NULL; // Set default (in cases other than AHK_GUI_ACTION it is not used, so not initialized).
+				pgui_event_is_running = NULL; // Set default (in cases other than AHK_GUI_ACTION it is not used, so not initialized).
 				event_is_control_generated = false; // Set default.
 
 				switch(gui_action)
@@ -691,17 +695,17 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				case GUI_EVENT_RESIZE: // This is the signal to run the window's OnEscape label. Listed first for performance.
 					if (   !(label_to_call = pgui->mLabelForSize)   ) // In case it became NULL since the msg was posted.
 						continue;
-					pgui_label_is_running = &pgui->mLabelForSizeIsRunning;
+					pgui_event_is_running = &pgui->mLabelForSizeIsRunning;
 					break;
 				case GUI_EVENT_CLOSE:  // This is the signal to run the window's OnClose label.
 					if (   !(label_to_call = pgui->mLabelForClose)   ) // In case it became NULL since the msg was posted.
 						continue;
-					pgui_label_is_running = &pgui->mLabelForCloseIsRunning;
+					pgui_event_is_running = &pgui->mLabelForCloseIsRunning;
 					break;
 				case GUI_EVENT_ESCAPE: // This is the signal to run the window's OnEscape label.
 					if (   !(label_to_call = pgui->mLabelForEscape)   ) // In case it became NULL since the msg was posted.
 						continue;
-					pgui_label_is_running = &pgui->mLabelForEscapeIsRunning;
+					pgui_event_is_running = &pgui->mLabelForEscapeIsRunning;
 					break;
 				case GUI_EVENT_CONTEXTMENU:
 					if (   !(label_to_call = pgui->mLabelForContextMenu)   ) // In case it became NULL since the msg was posted.
@@ -711,11 +715,11 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// instant of the click.  The following older reason is probably not entirely correct because
 					// the display of a popup menu via "Menu, MyMenu, Show" will spin off a new thread if the
 					// user selects an item in the menu:
-					// Unlike most other Gui labels, it seems best by default to allow GuiContextMenu to be
+					// Unlike most other Gui event handlers, it seems best by default to allow GuiContextMenu to be
 					// launched multiple times so that multiple items in the menu can be running simultaneously
-					// as separate threads.  Therefore, leave pgui_label_is_running at its default of NULL.
+					// as separate threads.  Therefore, leave pgui_event_is_running at its default of NULL.
 					break;
-				case GUI_EVENT_DROPFILES: // This is the signal to run the window's DropFiles label.
+				case GUI_EVENT_DROPFILES: // This is the signal to run the window's DropFiles event handler.
 					hdrop_to_free = pgui->mHdrop; // This variable simplifies the code further below.
 					if (   !(label_to_call = pgui->mLabelForDropFiles) // In case it became NULL since the msg was posted.
 						|| !hdrop_to_free // Checked just in case, so that the below can query it.
@@ -728,10 +732,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						}
 						continue;
 					}
-					// It is not necessary to check if the label is running in this case because
+					// It is not necessary to check if the event handler is running in this case because
 					// the caller who posted this message to us has ensured that it's the only message in the queue
 					// or in progress (by virtue of pgui->mHdrop being NULL at the time the message was posted).
-					// Therefore, leave pgui_label_is_running at its default of NULL.
+					// Therefore, leave pgui_event_is_running at its default of NULL.
 					break;
 				default: // This is an action from a particular control in the GUI window.
 					if (!pcontrol) // gui_control_index was beyond the quantity of controls, possibly due to parent window having been destroyed since the msg was sent (or bogus msg).
@@ -742,10 +746,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						if (pcontrol->attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)
 							pgui->Cancel();
 						continue; // Fully handled by the above; or there was no label.
-						// This event might lack both a label and an action if its control was changed to be
+						// This event might lack both a handler and an action if its control was changed to be
 						// non-actionable since the time the msg was posted.
 					}
-					// Above has confirmed it has a label, so now it's valid to check if that label is already running.
+					// Above has confirmed it has a handler, so now it's valid to check if that label is already running.
 					// It seems best by default not to allow multiple threads for the same control.
 					// Such events are discarded because it seems likely that most script designers
 					// would want to see the effects of faulty design (e.g. long running timers or
@@ -754,7 +758,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					if (pcontrol->attrib & GUI_CONTROL_ATTRIB_LABEL_IS_RUNNING)
 						continue;
 					event_is_control_generated = true; // As opposed to a drag-and-drop or context-menu event that targets a specific control.
-					// And leave pgui_label_is_running at its default of NULL because it doesn't apply to these.
+					// And leave pgui_event_is_running at its default of NULL because it doesn't apply to these.
 				} // switch(gui_action)
 				// label_to_call has been set; above would already have discarded this message if it there was no label.
 				break; // case AHK_GUI_ACTION
@@ -922,8 +926,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			switch(msg.message)
 			{
 			case AHK_GUI_ACTION: // Listed first for performance.
-				if (pgui_label_is_running && *pgui_label_is_running) // GuiSize/Close/Escape/etc. These subroutines are currently limited to one thread each.
-					continue; // hdrop_to_free: Not necessary to check it because it's always NULL when pgui_label_is_running is non-NULL.
+				if (pgui_event_is_running && *pgui_event_is_running) // GuiSize/Close/Escape/etc. These subroutines are currently limited to one thread each.
+					continue; // hdrop_to_free: Not necessary to check it because it's always NULL when pgui_event_is_running is non-NULL.
 				//else the check wasn't needed because it was done elsewhere (GUI_EVENT_DROPFILES) or the
 				// action is not thread-restricted (GUI_EVENT_CONTEXTMENU).
 				// And since control-specific events were already checked for "already running" higher above, this
@@ -1077,7 +1081,12 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			switch (msg.message)
 			{
 			case AHK_GUI_ACTION: // Listed first for performance.
-				*gui_action_errorlevel = '\0'; // Set default, which is possibly overridden below.
+				*gui_action_extra = '\0'; // Set default, which is possibly overridden below.
+#define EVT_ARG_ADD(_value) gui_event_args[gui_event_arg_count++].SetValue(_value)
+
+				// Set first argument
+				EVT_ARG_ADD((size_t)(event_is_control_generated ? pcontrol->hwnd : pgui->mHwnd));
+
 				// When appropriate, the below sets g.GuiPoint (to support A_GuiX and A_GuiY).
 				switch(gui_action)
 				{
@@ -1136,6 +1145,16 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// parent window.  This is because it might be more convenient for the user to move the
 					// mouse to select a menu item (since menu will be close to mouse cursor).
 					ScreenToWindow(g.GuiPoint, pgui->mHwnd); // For compatibility with "Menu Show", convert to window coordinates. A CoordMode option can be added to change this if desired.
+
+					// Build event arguments.
+					if (pcontrol)
+						EVT_ARG_ADD((size_t)pcontrol->hwnd);
+					else
+						EVT_ARG_ADD(_T(""));
+					EVT_ARG_ADD((size_t)gui_event_info);
+					EVT_ARG_ADD(g.GuiEvent == GUI_EVENT_RCLK ? 1 : 0);
+					EVT_ARG_ADD(g.GuiPoint.x);
+					EVT_ARG_ADD(g.GuiPoint.y);
 					break; // case GUI_CONTEXT_MENU.
 
 				case GUI_EVENT_DROPFILES:
@@ -1146,6 +1165,15 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// processed. Fix for v1.0.31.02: The window's current ExStyle is fetched every time
 					// in case a non-GUI command altered it (such as making it transparent):
 					SetWindowLong(pgui->mHwnd, GWL_EXSTYLE, GetWindowLong(pgui->mHwnd, GWL_EXSTYLE) & ~WS_EX_ACCEPTFILES);
+
+					// Build event arguments.
+					EVT_ARG_ADD(GuiType::CreateDropArray(hdrop_to_free));
+					if (pcontrol)
+						EVT_ARG_ADD((size_t)pcontrol->hwnd);
+					else
+						EVT_ARG_ADD(_T(""));
+					EVT_ARG_ADD(pgui->Unscale(g.GuiPoint.x));
+					EVT_ARG_ADD(pgui->Unscale(g.GuiPoint.y));
 					break;
 
 				case GUI_EVENT_CLOSE:
@@ -1153,9 +1181,16 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				case GUI_EVENT_RESIZE:
 					g.GuiEvent = GUI_EVENT_NORMAL; // Set for use by GetGuiEvent(), which should consider Close/Escape "Normal" for lack of anything more specific.
 					if (gui_action == GUI_EVENT_RESIZE)
+					{
 						// Overload another member to avoid having to dedicate a member to size.  Script shouldn't
 						// look at A_GuiX inside the GuiSize label anyway (it's undefined there).
 						g.GuiPoint.x = gui_size;
+						
+						// Build event arguments.
+						EVT_ARG_ADD((__int64)gui_event_info); // Event info
+						EVT_ARG_ADD(pgui->Unscale(LOWORD(gui_size))); // Width
+						EVT_ARG_ADD(pgui->Unscale(HIWORD(gui_size))); // Height
+					}
 					break;
 				default: // Control-generated event (i.e. event_is_control_generated==true).
 					switch(pcontrol->type)
@@ -1169,7 +1204,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					case GUI_CONTROL_LISTVIEW: // v1.0.46.10: Added this section to support notifying the script of HOW the item changed.
 						if (LOBYTE(gui_action) == 'I')
 						{
-							walk = gui_action_errorlevel;
+							walk = gui_action_extra;
 							if (gui_action & AHK_LV_SELECT) // Keep this one first, and the others below in the same order, in case any scripts come to rely on the ordering of the letters within the string.
 								*walk++ = 'S';
 							else if (gui_action & AHK_LV_DESELECT)
@@ -1187,35 +1222,47 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 							//	*walk++ = 'D';
 							//else if (gui_action & AHK_LV_UNDROPHILITE)
 							//	*walk++ = 'd';
-							*walk = '\0'; // Provide terminator inside gui_action_errorlevel.
+							*walk = '\0'; // Provide terminator inside gui_action_extra.
 							gui_action = 'I'; // Done only after we're done using it above. This clears out the flags above to leave only a naked 'I'.
 						}
 						break;
 					//default: No action for any other control-generated events since caller already set things up properly.
 					}
 					g.GuiEvent = gui_action; // Set g.GuiEvent to indicate whether a double-click or other non-standard event launched it.
+
+					// Build event arguments.
+					EVT_ARG_ADD(GuiType::ConvertEvent(gui_action));
+					EVT_ARG_ADD((__int64)gui_event_info);
 				} // switch (msg.message)
 
-				// We're still in case AHK_GUI_ACTION; other cases have their own handling for g.EventInfo.
-				// gui_event_info is a separate variable because it is sometimes set before g.EventInfo is available
-				// for the new thread.
-				// v1.0.44: For the following reasons, make ErrorLevel mirror A_EventInfo only when it
-				// is documented to do so for backward compatibility:
-				// 1) Avoids slight performance drain of having to convert a number to text and store it in ErrorLevel.
-				// 2) Reserves ErrorLevel for potential future uses.
-				if (gui_action == GUI_EVENT_RESIZE || gui_action == GUI_EVENT_DROPFILES)
-					g_ErrorLevel->Assign(gui_event_info); // For backward compatibility.
-				//this might not be the best place to put this, but other places would need a larger gui_action_errorlevel buffer or a new variable.
-				else if(pcontrol && pcontrol->type == GUI_CONTROL_LINK)
+				if (event_is_control_generated && pcontrol->type == GUI_CONTROL_LINK)
 				{
 					LITEM item = {};
-					item.mask=LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
+					item.mask = LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
 					item.iLink = (int)gui_event_info - 1;
-					if(SendMessage(pcontrol->hwnd,LM_GETITEM,NULL,(LPARAM)&item))
-						g_ErrorLevel->AssignString(*item.szUrl ? CStringTCharFromWCharIfNeeded(item.szUrl) : CStringTCharFromWCharIfNeeded(item.szID));
+					if (SendMessage(pcontrol->hwnd, LM_GETITEM, NULL, (LPARAM)&item))
+					{
+						g_ErrorLevel->AssignString(CStringTCharFromWCharIfNeeded(*item.szUrl ? item.szUrl : item.szID));
+						EVT_ARG_ADD(g_ErrorLevel->Contents());
+					}
 				}
 				else
-					g_ErrorLevel->Assign(gui_action_errorlevel); // Helps reserve it for future use. See explanation above.
+				{
+					if (*gui_action_extra)
+						EVT_ARG_ADD(gui_action_extra);
+
+					// We're still in case AHK_GUI_ACTION; other cases have their own handling for g.EventInfo.
+					// gui_event_info is a separate variable because it is sometimes set before g.EventInfo is available
+					// for the new thread.
+					// v1.0.44: For the following reasons, make ErrorLevel mirror A_EventInfo only when it
+					// is documented to do so for backward compatibility:
+					// 1) Avoids slight performance drain of having to convert a number to text and store it in ErrorLevel.
+					// 2) Reserves ErrorLevel for potential future uses.
+					if (gui_action == GUI_EVENT_RESIZE || gui_action == GUI_EVENT_DROPFILES)
+						g_ErrorLevel->Assign(gui_event_info); // For backward compatibility.
+					else 
+						g_ErrorLevel->Assign(gui_action_extra); // Helps reserve it for future use. See explanation above.
+				}
 
 				// Set last found window (as documented).  It's not necessary to check IsWindow/IsWindowVisible/
 				// DetectHiddenWindows since GetValidLastUsedWindow() takes care of that whenever the script
@@ -1229,13 +1276,13 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				g.GuiControlIndex = gui_control_index; // Must be set only after the "g" struct has been initialized. This will be NO_CONTROL_INDEX if the sender of the message said to do that.
 				g.EventInfo = gui_event_info; // Override the thread-default of NO_EVENT_INFO.
 
-				if (pgui_label_is_running) // i.e. GuiClose, GuiEscape, and related window-level events.
-					*pgui_label_is_running = true;
+				if (pgui_event_is_running) // i.e. GuiClose, GuiEscape, and related window-level events.
+					*pgui_event_is_running = true;
 				else if (event_is_control_generated) // An earlier stage has ensured pcontrol isn't NULL in this case.
 					pcontrol->attrib |= GUI_CONTROL_ATTRIB_LABEL_IS_RUNNING; // Must be careful to set this flag only when the event is control-generated, not for a drag-and-drop onto the control, or context menu on the control, etc.
 
 				// LAUNCH GUI THREAD:
-				label_to_call->ExecuteInNewThread(_T("Gui"));
+				label_to_call->ExecuteInNewThread(_T("Gui"), gui_event_args, gui_event_arg_count, &gui_event_ret);
 
 				// Bug-fix for v1.0.22: If the above ExecUntil() performed a "Gui Destroy", the
 				// pointers below are now invalid so should not be dereferenced.  In such a case,
@@ -1243,12 +1290,19 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// process, so don't do it here.
 				if (pgui->mHwnd)
 				{
-					if (pgui_label_is_running) // i.e. GuiClose, GuiEscape, and related window-level events.
-						*pgui_label_is_running = false;
+					if (pgui_event_is_running) // i.e. GuiClose, GuiEscape, and related window-level events.
+					{
+						*pgui_event_is_running = false;
+						// For non-legacy CLOSE events, close the GUI by default if the function didn't return true.
+						if (gui_action == GUI_EVENT_CLOSE && !gui_event_ret && !label_to_call->ToLabel())
+							pgui->Cancel();
+					}
 					else if (event_is_control_generated) // An earlier stage has ensured pcontrol isn't NULL in this case.
 						pcontrol->attrib &= ~GUI_CONTROL_ATTRIB_LABEL_IS_RUNNING; // Must be careful to set this flag only when the event is control-generated, not for a drag-and-drop onto the control, or context menu on the control, etc.
-					if (hdrop_to_free) // This is only non-NULL when gui_action==GUI_EVENT_DROPFILES
+					
+					if (gui_action == GUI_EVENT_DROPFILES) // This is only non-NULL when gui_action==GUI_EVENT_DROPFILES
 					{
+						gui_event_args[1].object->Release(); // Free the drop array.
 						DragFinish(hdrop_to_free); // Since the DropFiles quasi-thread is finished, free the HDROP resources.
 						pgui->mHdrop = NULL; // Indicate that this GUI window is ready for another drop.
 						// Fix for v1.0.31.02: The window's current ExStyle is fetched every time in case a non-GUI

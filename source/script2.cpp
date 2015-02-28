@@ -12370,18 +12370,8 @@ VarSizeType BIV_GuiEvent(LPTSTR aBuf, LPTSTR aVarName)
 	}
 
 	// Otherwise, this event is not GUI_EVENT_DROPFILES, so use standard modes of operation.
-	static LPTSTR sNames[] = GUI_EVENT_NAMES;
-	if (!aBuf)
-		return (g.GuiEvent < GUI_EVENT_FIRST_UNNAMED) ? (VarSizeType)_tcslen(sNames[g.GuiEvent]) : 1;
-	// Otherwise:
-	if (g.GuiEvent < GUI_EVENT_FIRST_UNNAMED)
-		return (VarSizeType)_tcslen(_tcscpy(aBuf, sNames[g.GuiEvent]));
-	else // g.GuiEvent is assumed to be an ASCII value, such as a digit.  This supports Slider controls.
-	{
-		*aBuf++ = (TCHAR)(UCHAR)g.GuiEvent;
-		*aBuf = '\0';
-		return 1;
-	}
+	LPTSTR event_string = GuiType::ConvertEvent(g.GuiEvent);
+	return (VarSizeType)_tcslen(aBuf ? _tcscpy(aBuf, event_string) : event_string);
 }
 
 
@@ -18450,6 +18440,9 @@ BOOL LegacyVarToBOOL(Var &aVar)
 
 BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber)
 {
+	if (aTokenIsNumber == SYM_INVALID) // Omitted.
+		aTokenIsNumber = TokenIsPureNumeric(aToken);
+
 	switch (aTokenIsNumber)
 	{
 	case PURE_INTEGER: // Probably the most common; e.g. both sides of "if (x>3 and x<6)" are the number 1/0.

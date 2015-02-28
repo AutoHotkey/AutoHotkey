@@ -1402,7 +1402,7 @@ push_this_token:
 non_null_circuit_token:
 			// Cast this left-branch result to true/false, then determine whether it should cause its
 			// parent AND/OR/IFF to short-circuit.
-			left_branch_is_true = TokenToBOOL(this_token, TokenIsPureNumeric(this_token));
+			left_branch_is_true = TokenToBOOL(this_token);
 			if (this_token.circuit_token->symbol == SYM_IFF_THEN)
 			{
 				if (!left_branch_is_true) // The ternary's condition is false.

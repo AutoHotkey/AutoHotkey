@@ -1998,8 +1998,8 @@ protected:
 public:
 	LabelPtr() : mObject(NULL) {}
 	LabelPtr(IObject *object) : mObject(object) {}
-	ResultType Execute() const;
-	ResultType ExecuteInNewThread(TCHAR *aNewThreadDesc) const;
+	ResultType ExecuteInNewThread(TCHAR *aNewThreadDesc
+		, ExprTokenType *aParamValue = NULL, int aParamCount = 0, INT_PTR *aRetVal = NULL) const;
 	const LabelPtr* operator-> () { return this; } // Act like a pointer.
 	operator void *() const { return mObject; } // For comparisons and boolean eval.
 
@@ -2573,6 +2573,8 @@ public:
 	void AddRef();
 	void Release();
 	void SetLabels(LPTSTR aLabelPrefix);
+	static LPTSTR ConvertEvent(GuiEventType evt);
+	static IObject* CreateDropArray(HDROP hDrop);
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText);
 
@@ -2625,7 +2627,7 @@ public:
 	static int FindFont(FontType &aFont);
 
 	void Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEvent = GUI_EVENT_NONE, UINT_PTR aEventInfo = 0);
-	int CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr);
+	LRESULT CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr);
 
 	static WORD TextToHotkey(LPTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
@@ -2822,7 +2824,7 @@ public:
 	WinGroup *FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound = false);
 	ResultType AddGroup(LPTSTR aGroupName);
 	Label *FindLabel(LPTSTR aLabelName);
-	IObject *FindCallable(LPTSTR aLabelName, Var *aVar = NULL);
+	IObject *FindCallable(LPTSTR aLabelName, Var *aVar = NULL, int aParamCount = 0);
 
 	ResultType DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, bool aUpdateLastError, WORD aShowWindow
 		, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, LPTSTR aSystemErrorText);
@@ -3101,7 +3103,7 @@ BIF_DECL(BIF_Exception);
 
 BOOL LegacyResultToBOOL(LPTSTR aResult);
 BOOL LegacyVarToBOOL(Var &aVar);
-BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber);
+BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber = SYM_INVALID);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
 BOOL TokenIsEmptyString(ExprTokenType &aToken);
 BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar); // Same as TokenIsEmptyString but optionally warns if the token is an uninitialized var.

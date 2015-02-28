@@ -47,9 +47,11 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 // CallMethod - Invoke a method with no parameters, discarding the result.
 //
 
-ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName, int aExtraFlags = 0)
+ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
+	, ExprTokenType *aParamValue = NULL, int aParamCount = 0, INT_PTR *aRetVal = NULL // For event handlers.
+	, int aExtraFlags = 0) // For Object.__Delete().
 {
-	ExprTokenType result_token, this_token, param_token, *param;
+	ExprTokenType result_token, this_token, name_token;
 		
 	TCHAR result_buf[MAX_NUMBER_SIZE];
 	result_token.marker = _T("");
@@ -60,11 +62,18 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName, int
 	this_token.symbol = SYM_OBJECT;
 	this_token.object = aThis;
 
-	param_token.symbol = SYM_STRING;
-	param_token.marker = aMethodName;
-	param = &param_token;
+	++aParamCount; // For the method name.
+	ExprTokenType **param = (ExprTokenType **)_alloca(aParamCount * sizeof(ExprTokenType *));
+	name_token.symbol = SYM_STRING;
+	name_token.marker = aMethodName;
+	param[0] = &name_token;
+	for (int i = 1; i < aParamCount; ++i)
+		param[i] = aParamValue + (i-1);
 
-	ResultType result = aInvokee->Invoke(result_token, this_token, IT_CALL | aExtraFlags, &param, 1);
+	ResultType result = aInvokee->Invoke(result_token, this_token, IT_CALL | aExtraFlags, param, aParamCount);
+
+	if (aRetVal)
+		*aRetVal = (INT_PTR)TokenToInt64(result_token);
 
 	if (result_token.mem_to_free)
 		free(result_token.mem_to_free);
@@ -306,7 +315,7 @@ bool Object::Delete()
 		// executed much less often in most cases.
 		PRIVATIZE_S_DEREF_BUF;
 
-		CallMethod(mBase, this, sMetaFuncName[3], IF_METAOBJ); // base.__Delete()
+		CallMethod(mBase, this, sMetaFuncName[3], NULL, 0, NULL, IF_METAOBJ); // base.__Delete()
 
 		DEPRIVATIZE_S_DEREF_BUF; // L33: See above.
 
@@ -1745,15 +1754,10 @@ ResultType STDMETHODCALLTYPE Label::Invoke(ExprTokenType &aResultToken, ExprToke
 	return Execute();
 }
 
-ResultType LabelPtr::Execute() const
-{
-	return CallMethod(mObject, mObject, _T("call")); // Lower-case for compatibility with JScript.
-}
-
-ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc) const
+ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aParamValue, int aParamCount, INT_PTR *aRetVal) const
 {
 	DEBUGGER_STACK_PUSH(aNewThreadDesc)
-	ResultType result = Execute();
+	ResultType result = CallMethod(mObject, mObject, _T("call"), aParamValue, aParamCount, aRetVal); // Lower-case "call" for compatibility with JScript.
 	DEBUGGER_STACK_POP()
 	return result;
 }

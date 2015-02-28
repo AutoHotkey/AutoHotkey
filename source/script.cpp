@@ -3540,7 +3540,7 @@ Label *Script::FindLabel(LPTSTR aLabelName)
 
 
 
-IObject *Script::FindCallable(LPTSTR aLabelName, Var *aVar)
+IObject *Script::FindCallable(LPTSTR aLabelName, Var *aVar, int aParamCount)
 {
 	if (aVar && aVar->HasObject())
 		return aVar->Object();
@@ -3549,7 +3549,7 @@ IObject *Script::FindCallable(LPTSTR aLabelName, Var *aVar)
 		if (Label *label = FindLabel(aLabelName))
 			return label;
 		if (Func *func = FindFunc(aLabelName))
-			if (func->mMinParams == 0)
+			if (func->mMinParams <= aParamCount)
 				return func;
 	}
 	return NULL;
@@ -13250,7 +13250,7 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 			result_token.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
 		}
 
-		bool next_returned_true = TokenToBOOL(result_token, TokenIsPureNumeric(result_token));
+		bool next_returned_true = TokenToBOOL(result_token);
 
 		// Free any memory or object which may have been returned by Invoke:
 		if (result_token.mem_to_free)

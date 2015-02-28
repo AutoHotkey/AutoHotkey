@@ -1845,6 +1845,41 @@ ResultType GuiType::Create()
 
 
 
+LPTSTR GuiType::ConvertEvent(GuiEventType evt)
+{
+	static LPTSTR sNames[] = GUI_EVENT_NAMES;
+	static TCHAR sBuf[2] = { 0, 0 };
+
+	if (evt < GUI_EVENT_FIRST_UNNAMED)
+		return sNames[evt];
+
+	// Else it's a character code - convert it to a string
+	sBuf[0] = (TCHAR)(UCHAR)evt;
+	return sBuf;
+}
+
+
+
+IObject* GuiType::CreateDropArray(HDROP hDrop)
+{
+	TCHAR buf[MAX_PATH];
+	UINT file_count = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
+	Object* obj = Object::Create();
+	ExprTokenType tok;
+	tok.SetValue(buf);
+	ExprTokenType* pTok = &tok;
+
+	for (UINT u = 0; u < file_count; u++)
+	{
+		DragQueryFile(hDrop, u, buf, MAX_PATH);
+		obj->InsertAt(u, u+1, &pTok, 1);
+	}
+
+	return obj;
+}
+
+
+
 void GuiType::SetLabels(LPTSTR aLabelPrefix)
 // v1.0.44.09: Allow custom label prefix to be set; e.g. MyGUI vs. "5Gui" or "2Gui".  This increases flexibility
 // for scripts that dynamically create a varying number of windows, and also allows multiple windows to call the
@@ -1873,23 +1908,23 @@ void GuiType::SetLabels(LPTSTR aLabelPrefix)
 
 	// Find the label to run automatically when the form closes (if any):
 	_tcscpy(label_suffix, _T("Close"));
-	mLabelForClose = g_script.FindCallable(label_name);  // OK if NULL (closing the window is the same as "gui, cancel").
+	mLabelForClose = g_script.FindCallable(label_name, NULL, 1);  // OK if NULL (closing the window is the same as "gui, cancel").
 
 	// Find the label to run automatically when the user presses Escape (if any):
 	_tcscpy(label_suffix, _T("Escape"));
-	mLabelForEscape = g_script.FindCallable(label_name);  // OK if NULL (pressing ESCAPE does nothing).
+	mLabelForEscape = g_script.FindCallable(label_name, NULL, 1);  // OK if NULL (pressing ESCAPE does nothing).
 
 	// Find the label to run automatically when the user resizes the window (if any):
 	_tcscpy(label_suffix, _T("Size"));
-	mLabelForSize = g_script.FindCallable(label_name);  // OK if NULL.
+	mLabelForSize = g_script.FindCallable(label_name, NULL, 4);  // OK if NULL.
 
 	// Find the label to run automatically when the user invokes context menu via AppsKey, Rightclick, or Shift-F10:
 	_tcscpy(label_suffix, _T("ContextMenu"));
-	mLabelForContextMenu = g_script.FindCallable(label_name);  // OK if NULL (leaves context menu unhandled).
+	mLabelForContextMenu = g_script.FindCallable(label_name, NULL, 6);  // OK if NULL (leaves context menu unhandled).
 
 	// Find the label to run automatically when files are dropped onto the window:
 	_tcscpy(label_suffix, _T("DropFiles"));
-	if ((mLabelForDropFiles = g_script.FindCallable(label_name))  // OK if NULL (dropping files is disallowed).
+	if ((mLabelForDropFiles = g_script.FindCallable(label_name, NULL, 5))  // OK if NULL (dropping files is disallowed).
 		&& !mHdrop) // i.e. don't allow user to visibly drop files onto window if a drop is already queued or running.
 		mExStyle |= WS_EX_ACCEPTFILES; // Makes the window accept drops. Otherwise, the WM_DROPFILES msg is not received.
 	else
@@ -2345,7 +2380,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		//LPTSTR string_list[] = {_T("\r"), _T("\n"), _T(" "), _T("\t"), _T("&"), _T("`"), NULL}; // \r is separate from \n in case they're ever unpaired. Last char must be NULL to terminate the list.
 		//for (LPTSTR *cp = string_list; *cp; ++cp)
 		//	StrReplace(label_name, *cp, _T(""), SCS_SENSITIVE);
-		control.jump_to_label = g_script.FindCallable(label_name);  // OK if NULL (the button will do nothing).
+		control.jump_to_label = g_script.FindCallable(label_name, NULL, 4);  // OK if NULL (the button will do nothing).
 	}
 
 	// The below will yield NULL for GUI_CONTROL_STATUSBAR because control.tab_control_index==OutOfBounds for it.
@@ -5523,7 +5558,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 						: g_script.ScriptError(_T("This control type should not have an associated subroutine.")
 							, next_option - 1);
 				IObject *candidate_label;
-				if (   !(candidate_label = g_script.FindCallable(next_option, aParam3Var))   )
+				if (   !(candidate_label = g_script.FindCallable(next_option, aParam3Var, 4))   )
 				{
 					// If there is no explicit label, fall back to a special action if one is available
 					// for this keyword:
@@ -9007,7 +9042,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 }
 
 
-int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
+LRESULT GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 {
 	// See MsgMonitor() in application.cpp for comments, as this method is based on the beforementioned function.
 
@@ -9042,10 +9077,18 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	g->GuiEvent = 'N';
 	g->EventInfo = (DWORD_PTR) aNmHdr;
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
+
+	ExprTokenType param[3];
+	param[0].SetValue((size_t)aControl.hwnd);
+	param[1].SetValue(_T("N"));
+	param[2].SetValue((size_t)aNmHdr);
+
+	INT_PTR returnValue;
 	
-	glabel->ExecuteInNewThread(_T("Gui"));
+	glabel->ExecuteInNewThread(_T("Gui"), param, 3, &returnValue);
 	
-	int returnValue = (int)g_ErrorLevel->ToInt64(FALSE);
+	if (glabel->ToLabel()) // It's a label, not a function or object.
+		returnValue = (INT_PTR)g_ErrorLevel->ToInt64(FALSE);
 
 	Release();
 	ResumeUnderlyingThread(ErrorLevel_saved);
