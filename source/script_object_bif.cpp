@@ -51,16 +51,10 @@ BIF_DECL(BIF_ObjCreate)
 
 BIF_DECL(BIF_ObjArray)
 {
-	Object *obj = Object::Create();
-	if (obj)
+	if (aResultToken.object = Object::CreateArray(aParam, aParamCount))
 	{
-		if (!aParamCount || obj->InsertAt(0, 1, aParam, aParamCount))
-		{
-			aResultToken.symbol = SYM_OBJECT;
-			aResultToken.object = obj;
-			return;
-		}
-		obj->Release();
+		aResultToken.symbol = SYM_OBJECT;
+		return;
 	}
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
@@ -395,4 +389,27 @@ BIF_DECL(BIF_ObjAddRefRelease)
 		aResultToken.value_int64 = obj->AddRef();
 	else
 		aResultToken.value_int64 = obj->Release();
+}
+
+
+//
+// ObjBindMethod(Obj, Method, Params...)
+//
+
+BIF_DECL(BIF_ObjBindMethod)
+{
+	IObject *func, *bound_func;
+	if (  !(func = TokenToObject(*aParam[0]))
+		&& !(func = TokenToFunc(*aParam[0]))  )
+	{
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		return;
+	}
+	if (  !(bound_func = BoundFunc::Bind(func, aParam + 1, aParamCount - 1, IT_CALL))  )
+	{
+		aResult = g_script.ScriptError(ERR_OUTOFMEM);
+		return;
+	}
+	aResultToken.symbol = SYM_OBJECT;
+	aResultToken.object = bound_func;
 }
