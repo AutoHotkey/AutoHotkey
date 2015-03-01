@@ -2365,6 +2365,7 @@ public:
 		P_MarginX,
 		P_MarginY,
 		P_Menu,
+		P_OnEvent,
 	};
 
 	GuiType() // Constructor

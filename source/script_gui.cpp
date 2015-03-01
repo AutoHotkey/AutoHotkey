@@ -72,6 +72,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	LPTSTR name = ParamIndexToString(0); // Name of method or property.
 	MemberID member = INVALID;
 	GuiControls ctrl_type = GUI_CONTROL_INVALID; // For AddControl.
+	GuiEvent* pEvent = NULL; // For gui.OnEvent.
 	--aParamCount; // Exclude name from param count.
 	++aParam; // As above, but for the param array.
 
@@ -93,6 +94,21 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		ctrl_type = Line::ConvertGuiControl(ctrl_type_name);
 		if (ctrl_type == GUI_CONTROL_INVALID)
 			_o_throw(_T("Invalid control type."), name+3);
+	} else if (!_tcsnicmp(name, _T("On"), 2))
+	{
+		member = P_OnEvent;
+		if (!_tcsicmp(name+2, _T("Close")))
+			pEvent = &mOnClose;
+		else if (!_tcsicmp(name+2, _T("Escape")))
+			pEvent = &mOnEscape;
+		else if (!_tcsicmp(name+2, _T("Size")))
+			pEvent = &mOnSize;
+		else if (!_tcsicmp(name+2, _T("DropFiles")))
+			pEvent = &mOnDropFiles;
+		else if (!_tcsicmp(name+2, _T("ContextMenu")))
+			pEvent = &mOnContextMenu;
+		else
+			_o_throw(_T("Invalid event name."), name);
 	}
 #define if_member(s,e)	else if (!_tcsicmp(name, _T(s))) member = e;
 	if_member("Destroy", M_Destroy)
@@ -234,6 +250,8 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			}
 			_o_return_empty; // TODO
 		}
+		case P_OnEvent:
+			return EventHandlerProp(aResultToken, *pEvent, aParam, IS_INVOKE_SET);
 		case P_Control:
 		{
 			if (IS_INVOKE_SET)
