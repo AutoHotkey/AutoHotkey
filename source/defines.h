@@ -294,6 +294,12 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	// The above two probably need to be adjacent to each other to conserve memory due to 8-byte alignment,
 	// which is the default alignment (for performance reasons) in any struct that contains 8-byte members
 	// such as double and __int64.
+
+	ExprTokenType() {}
+	ExprTokenType(__int64 aValue) { SetValue(aValue); }
+	ExprTokenType(double aValue) { SetValue(aValue); }
+	ExprTokenType(IObject *aValue) { SetValue(aValue); }
+	ExprTokenType(LPTSTR aValue) { SetValue(aValue); }
 	
 	void SetValue(__int64 aValue)
 	{

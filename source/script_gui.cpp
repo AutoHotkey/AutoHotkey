@@ -1865,8 +1865,7 @@ IObject* GuiType::CreateDropArray(HDROP hDrop)
 	TCHAR buf[MAX_PATH];
 	UINT file_count = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
 	Object* obj = Object::Create();
-	ExprTokenType tok;
-	tok.SetValue(buf);
+	ExprTokenType tok(buf);
 	ExprTokenType* pTok = &tok;
 
 	for (UINT u = 0; u < file_count; u++)
