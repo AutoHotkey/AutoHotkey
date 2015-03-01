@@ -510,6 +510,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 	if_member("Focus", M_Focus)
 	if_member("Hwnd", P_Handle)
 	if_member("Gui", P_Gui)
+	if_member("Event", P_Event)
 	if_member("ClassNN", P_ClassNN)
 	if_member("Text", P_Text)
 	if_member("Value", P_Value)
@@ -625,6 +626,34 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			sntprintfcat(cah.class_name, _f_retval_buf_size, _T("%d"), cah.class_count);
 
 			_o_return_p(cah.class_name);
+		}
+
+		case P_Event:
+		{
+			if (IS_INVOKE_SET)
+			{
+				if (IObject* obj = TokenToObject(*aParam[0]))
+					gui->SetEventHandler(event_handler, obj);
+				else
+				{
+					LPTSTR name = ParamIndexToString(0);
+					gui->SetEventHandler(event_handler, name);
+					if (!event_handler)
+						_o_throw(_T("The specified event handler does not exist."), name);
+				}
+			}
+
+			if (!event_handler)
+				_o_return_empty;
+			else if (event_handler.mIsObject)
+			{
+				IObject* ret = event_handler.mObject;
+				ret->AddRef();
+				_o_return(ret);
+			} else if (gui->mHasEventSink)
+				_o_return_p(event_handler.mMethodName);
+			else
+				_o_return(event_handler.mFunc);
 		}
 
 		case P_Text:
@@ -1645,8 +1674,7 @@ void GuiControlType::Destroy()
 	}
 	else if (type == GUI_CONTROL_LISTVIEW) // It was ensured at an earlier stage that union_lv_attrib != NULL.
 		free(union_lv_attrib);
-	if (gui->mHasEventSink && event_handler)
-		free(event_handler.mMethodName);
+	gui->ClearEventHandler(event_handler);
 	if (name)
 		free(name);
 	hwnd = NULL;
@@ -1751,8 +1779,27 @@ ResultType GuiType::Create()
 
 
 
+void GuiType::ClearEventHandler(GuiEvent& aHandler)
+{
+	if (aHandler.mIsObject)
+	{
+		aHandler.mIsObject = false;
+		aHandler.mObject->Release();
+	}
+	else if (mHasEventSink && aHandler.mMethodName)
+		free(aHandler.mMethodName);
+
+	aHandler.mFunc = NULL; // Union set.
+}
+
+
 void GuiType::SetEventHandler(GuiEvent& aHandler, LPTSTR aName, bool bCopyName)
 {
+	ClearEventHandler(aHandler);
+
+	if (!aName || !*aName)
+		return;
+
 	if (mHasEventSink)
 	{
 		if (bCopyName)
@@ -1767,6 +1814,16 @@ void GuiType::SetEventHandler(GuiEvent& aHandler, LPTSTR aName, bool bCopyName)
 }
 
 
+void GuiType::SetEventHandler(GuiEvent& aHandler, IObject* aObject)
+{
+	ClearEventHandler(aHandler);
+	aHandler.mIsObject = true;
+	aHandler.mObject = aObject;
+	aObject->AddRef();
+}
+
+
+
 int GuiType::CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam[])
 {
 	// Set up real argument array
@@ -1778,12 +1835,13 @@ int GuiType::CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam
 	TCHAR result_token_buf[_f_retval_buf_size];
 	result_token.InitResult(result_token_buf);
 
-	if (mHasEventSink)
+	if (aHandler.mIsObject || mHasEventSink)
 	{
-		ExprTokenType this_token(mEventSink);
-		ExprTokenType method_name(aHandler.mMethodName);
+		IObject* pThis = aHandler.mIsObject ? aHandler.mObject : mEventSink;
+		ExprTokenType this_token(pThis);
+		ExprTokenType method_name(aHandler.mIsObject ? _T("Call") : aHandler.mMethodName);
 		params[0] = &method_name;
-		mEventSink->Invoke(result_token, this_token, IT_CALL, params, aParamCount+1);
+		pThis->Invoke(result_token, this_token, IT_CALL, params, aParamCount+1);
 	}
 	else
 		aHandler.mFunc->Call(result_token, params+1, aParamCount);
@@ -5428,7 +5486,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					}
 					break;
 				case 'G':
-					aControl.event_handler.mFunc = NULL;
+					ClearEventHandler(aControl.event_handler);
 					break;
 				case 'V':
 					if (aControl.name)
@@ -5461,7 +5519,11 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				if (!_tcsicmp(next_option, _T("Cancel")))
 						aControl.attrib |= GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL;
 				else
+				{
 					SetEventHandler(aControl.event_handler, next_option);
+					if (!mHasEventSink && !aControl.event_handler)
+						return g_script.ScriptError(_T("The specified event handler does not exist."), next_option);
+				}
 				if (aControl.type == GUI_CONTROL_LABEL || aControl.type == GUI_CONTROL_PIC)
 					// Apply the SS_NOTIFY style *only* if the control actually has an associated action.
 					// This is because otherwise the control would steal all clicks for any other controls

@@ -2155,10 +2155,13 @@ struct GuiEvent
 	{
 		LPTSTR mMethodName;
 		Func* mFunc;
+		IObject* mObject;
 	};
 
-	GuiEvent() : mMethodName(NULL) { }
-	operator bool() { return mFunc != NULL; } // Also valid for mMethodName.
+	bool mIsObject;
+
+	GuiEvent() : mMethodName(NULL), mIsObject(false) { }
+	operator bool() { return mFunc != NULL; } // Also valid for the other members.
 };
 
 typedef UCHAR TabControlIndexType;
@@ -2220,6 +2223,7 @@ struct GuiControlType : public ObjectBase
 		// Properties
 		P_Handle,
 		P_Gui,
+		P_Event,
 		P_ClassNN,
 		P_Text,
 		P_Value,
@@ -2411,7 +2415,9 @@ public:
 	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Create();
+	void ClearEventHandler(GuiEvent& aHandler);
 	void SetEventHandler(GuiEvent& aHandler, LPTSTR aName, bool bCopyName = true);
+	void SetEventHandler(GuiEvent& aHandler, IObject* aObject);
 	int CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam[]);
 	static LPTSTR ConvertEvent(GuiEventType evt);
 	void SetEvents();
