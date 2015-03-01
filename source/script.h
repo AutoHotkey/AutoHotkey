@@ -2153,15 +2153,14 @@ struct GuiEvent
 {
 	union
 	{
-		LPTSTR mMethodName;
-		Func* mFunc;
 		IObject* mObject;
+		LPTSTR mMethodName;
 	};
 
-	bool mIsObject;
+	bool mIsMethod;
 
-	GuiEvent() : mMethodName(NULL), mIsObject(false) { }
-	operator bool() { return mFunc != NULL; } // Also valid for the other members.
+	GuiEvent() : mObject(NULL), mIsMethod(false) { }
+	operator bool() { return mObject != NULL; } // Also valid for the other members.
 };
 
 typedef UCHAR TabControlIndexType;
@@ -2416,11 +2415,13 @@ public:
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Create();
 	void ClearEventHandler(GuiEvent& aHandler);
-	void SetEventHandler(GuiEvent& aHandler, LPTSTR aName, bool bCopyName = true);
+	void SetEventHandler(GuiEvent& aHandler, LPTSTR aName);
 	void SetEventHandler(GuiEvent& aHandler, IObject* aObject);
+	ResultType EventHandlerProp(ResultToken& aResultToken, GuiEvent& aHandler, ExprTokenType* aParam[], bool aIsSet);
 	int CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam[]);
 	static LPTSTR ConvertEvent(GuiEventType evt);
 	void SetEvents();
+	void ClearEvents();
 	static IObject* CreateDropArray(HDROP hDrop);
 	ResultType SetMenu(LPTSTR aMenuName);
 	static void UpdateMenuBars(HMENU aMenu);

@@ -629,32 +629,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 		}
 
 		case P_Event:
-		{
-			if (IS_INVOKE_SET)
-			{
-				if (IObject* obj = TokenToObject(*aParam[0]))
-					gui->SetEventHandler(event_handler, obj);
-				else
-				{
-					LPTSTR name = ParamIndexToString(0);
-					gui->SetEventHandler(event_handler, name);
-					if (!event_handler)
-						_o_throw(_T("The specified event handler does not exist."), name);
-				}
-			}
-
-			if (!event_handler)
-				_o_return_empty;
-			else if (event_handler.mIsObject)
-			{
-				IObject* ret = event_handler.mObject;
-				ret->AddRef();
-				_o_return(ret);
-			} else if (gui->mHasEventSink)
-				_o_return_p(event_handler.mMethodName);
-			else
-				_o_return(event_handler.mFunc);
-		}
+			return gui->EventHandlerProp(aResultToken, event_handler, aParam, IS_INVOKE_SET);
 
 		case P_Text:
 		case P_Value:
@@ -1635,6 +1610,8 @@ ResultType GuiType::Destroy()
 		mControl[u]->Release(); // Release() vs delete because the script may still have references to it.
 	}
 
+	ClearEvents();
+
 	if (mHasEventSink)
 		mEventSink->Release();
 	else if (mEventFuncPrefix != Var::sEmptyString)
@@ -1781,19 +1758,20 @@ ResultType GuiType::Create()
 
 void GuiType::ClearEventHandler(GuiEvent& aHandler)
 {
-	if (aHandler.mIsObject)
-	{
-		aHandler.mIsObject = false;
-		aHandler.mObject->Release();
-	}
-	else if (mHasEventSink && aHandler.mMethodName)
-		free(aHandler.mMethodName);
+	if (!aHandler.mObject) // Union get.
+		return;
 
-	aHandler.mFunc = NULL; // Union set.
+	if (aHandler.mIsMethod)
+	{
+		free(aHandler.mMethodName);
+		aHandler.mIsMethod = false;
+	} else
+		aHandler.mObject->Release();
+	aHandler.mObject = NULL; // Union set.
 }
 
 
-void GuiType::SetEventHandler(GuiEvent& aHandler, LPTSTR aName, bool bCopyName)
+void GuiType::SetEventHandler(GuiEvent& aHandler, LPTSTR aName)
 {
 	ClearEventHandler(aHandler);
 
@@ -1802,14 +1780,13 @@ void GuiType::SetEventHandler(GuiEvent& aHandler, LPTSTR aName, bool bCopyName)
 
 	if (mHasEventSink)
 	{
-		if (bCopyName)
-			aName = _tcsdup(aName);
-		aHandler.mMethodName = aName;
+		aHandler.mMethodName = _tcsdup(aName);
+		aHandler.mIsMethod = true;
 	} else
 	{
 		TCHAR buf[MAX_VAR_NAME_LENGTH];
 		_sntprintf(buf, _countof(buf), _T("%s%s"), mEventFuncPrefix, aName);
-		aHandler.mFunc = g_script.FindFunc(buf);
+		aHandler.mObject = g_script.FindFunc(buf);
 	}
 }
 
@@ -1817,7 +1794,6 @@ void GuiType::SetEventHandler(GuiEvent& aHandler, LPTSTR aName, bool bCopyName)
 void GuiType::SetEventHandler(GuiEvent& aHandler, IObject* aObject)
 {
 	ClearEventHandler(aHandler);
-	aHandler.mIsObject = true;
 	aHandler.mObject = aObject;
 	aObject->AddRef();
 }
@@ -1835,20 +1811,44 @@ int GuiType::CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam
 	TCHAR result_token_buf[_f_retval_buf_size];
 	result_token.InitResult(result_token_buf);
 
-	if (aHandler.mIsObject || mHasEventSink)
-	{
-		IObject* pThis = aHandler.mIsObject ? aHandler.mObject : mEventSink;
-		ExprTokenType this_token(pThis);
-		ExprTokenType method_name(aHandler.mIsObject ? _T("Call") : aHandler.mMethodName);
-		params[0] = &method_name;
-		pThis->Invoke(result_token, this_token, IT_CALL, params, aParamCount+1);
-	}
-	else
-		aHandler.mFunc->Call(result_token, params+1, aParamCount);
+	IObject* pThis = aHandler.mIsMethod ? mEventSink : aHandler.mObject;
+	ExprTokenType this_token(pThis);
+	ExprTokenType method_name(aHandler.mIsMethod ? aHandler.mMethodName : _T("Call"));
+	params[0] = &method_name;
+	pThis->Invoke(result_token, this_token, IT_CALL, params, aParamCount+1);
 
 	int ret = result_token.Exited() ? 0 : (int)TokenToInt64(result_token);
 	result_token.Free();
 	return ret;
+}
+
+
+
+ResultType GuiType::EventHandlerProp(ResultToken& aResultToken, GuiEvent& aHandler, ExprTokenType* aParam[], bool aIsSet)
+{
+	if (aIsSet)
+	{
+		if (IObject* obj = TokenToObject(*aParam[0]))
+			SetEventHandler(aHandler, obj);
+		else
+		{
+			LPTSTR name = ParamIndexToString(0);
+			SetEventHandler(aHandler, name);
+			if (!aHandler)
+				_o_throw(_T("The specified event handler does not exist."), name);
+		}
+	}
+
+	if (!aHandler)
+		_o_return_empty;
+	else if (aHandler.mIsMethod)
+		_o_return_p(aHandler.mMethodName);
+	else
+	{
+		IObject* ret = aHandler.mObject;
+		ret->AddRef();
+		_o_return(ret);
+	}
 }
 
 
@@ -1892,11 +1892,28 @@ void GuiType::SetEvents()
 	if (!mHasEventSink && mEventFuncPrefix == Var::sEmptyString)
 		return;
 
-	SetEventHandler(mOnClose, _T("OnClose"), false);
-	SetEventHandler(mOnEscape, _T("OnEscape"), false);
-	SetEventHandler(mOnSize, _T("OnSize"), false);
-	SetEventHandler(mOnContextMenu, _T("OnContextMenu"), false);
-	SetEventHandler(mOnDropFiles, _T("OnDropFiles"), false);
+	SetEventHandler(mOnClose, _T("OnClose"));
+	SetEventHandler(mOnEscape, _T("OnEscape"));
+	SetEventHandler(mOnSize, _T("OnSize"));
+	SetEventHandler(mOnContextMenu, _T("OnContextMenu"));
+	SetEventHandler(mOnDropFiles, _T("OnDropFiles"));
+
+	if (mOnDropFiles && !mOnDropFiles.mIsMethod)
+	{
+		mExStyle |= WS_EX_ACCEPTFILES; // Makes the window accept drops.
+		SetWindowLongPtr(mHwnd, GWL_EXSTYLE, mExStyle);
+	}
+}
+
+
+
+void GuiType::ClearEvents()
+{
+	ClearEventHandler(mOnClose);
+	ClearEventHandler(mOnEscape);
+	ClearEventHandler(mOnSize);
+	ClearEventHandler(mOnContextMenu);
+	ClearEventHandler(mOnDropFiles);
 }
 
 
