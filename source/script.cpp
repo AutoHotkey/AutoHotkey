@@ -871,14 +871,16 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	g_AllowInterruption = FALSE; // Mark the thread just created above as permanently uninterruptible (i.e. until it finishes and is destroyed).
 
 	sExitLabelIsRunning = true;
+	DEBUGGER_STACK_PUSH(_T("OnExit"))
 	
-	if (mOnExitLabel->ExecuteInNewThread(_T("OnExit")) == FAIL)
+	if (mOnExitLabel->Execute() == FAIL)
 	{
 		// If the subroutine encounters a failure condition such as a runtime error, exit immediately.
 		// Otherwise, there will be no way to exit the script if the subroutine fails on each attempt.
 		TerminateApp(aExitReason, aExitCode);
 	}
 	
+	DEBUGGER_STACK_POP()
 	sExitLabelIsRunning = false;  // In case the user wanted the thread to end normally (see above).
 
 	if (terminate_afterward)
@@ -9895,7 +9897,7 @@ Line *Script::PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode, Attribute
 		// so that labels both above and below this line can be resolved:
 		case ACT_ONEXIT:
 			if (*line_raw_arg1 && !line->ArgHasDeref(1))
-				if (   !(line->mAttribute = FindCallable(line_raw_arg1))   )
+				if (   !(line->mAttribute = FindLabel(line_raw_arg1))   )
 					return line->PreparseError(ERR_NO_LABEL);
 			break;
 
@@ -13909,7 +13911,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	size_t source_length; // For String commands.
 	SymbolType var_is_pure_numeric, value_is_pure_numeric; // For math operations.
 	vk_type vk; // For GetKeyState.
-	IObject *target_label;  // For ACT_SETTIMER, ACT_HOTKEY and ACT_ONEXIT
 	__int64 device_id;  // For sound commands.  __int64 helps avoid compiler warning for some conversions.
 	bool is_remote_registry; // For Registry commands.
 	HKEY root_key; // For Registry commands.
@@ -14546,21 +14547,29 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return OK;
 
 	case ACT_ONEXIT:
+	{
+		Label *target_label;
 		// If it wasn't resolved at load-time, it must be a variable reference:
-		if (   !(target_label = (IObject *)mAttribute)   )
-			if (   !(target_label = g_script.FindCallable(ARG1, ARGVAR1)) && *ARG1   )
+		if (   !(target_label = (Label *)mAttribute)   )
+			if (   *ARG1 && !(target_label = g_script.FindLabel(ARG1))   )
 					return LineError(ERR_NO_LABEL, FAIL, ARG1);
 		g_script.mOnExitLabel = target_label;
 		return OK;
+	}
 
 	case ACT_HOTKEY:
+	{
+		IObject *target_label;
 		// mAttribute is the label resolved at loadtime, if available (for performance).
 		if (   !(target_label = (IObject *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
 			if (ARGVAR2 && ARGVAR2->HasObject()) // Allow: Hotkey %KeyName%, %VarWithObject%
 				target_label = ARGVAR2->Object(); // AddRef() will be called later, when it is stored.
 		return Hotkey::Dynamic(THREE_ARGS, target_label);
+	}
 
 	case ACT_SETTIMER: // A timer is being created, changed, or enabled/disabled.
+	{
+		IObject *target_label;
 		// Note that only one timer per label is allowed because the label is the unique identifier
 		// that allows us to figure out whether to "update or create" when searching the list of timers.
 		if (   !(target_label = (IObject *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
@@ -14603,6 +14612,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		default: g_script.UpdateOrCreateTimer(target_label, ARG2, ARG3, true, !*ARG2 && *ARG3);
 		}
 		return OK;
+	}
 
 	case ACT_CRITICAL:
 	{

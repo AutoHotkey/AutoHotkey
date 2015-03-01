@@ -2735,7 +2735,7 @@ public:
 	HWND mNextClipboardViewer;
 	bool mOnClipboardChangeIsRunning;
 	Label *mOnClipboardChangeLabel;
-	LabelRef mOnExitLabel;  // The label to run when the script terminates (NULL if none).
+	Label *mOnExitLabel;  // The label to run when the script terminates (NULL if none).
 	ExitReasons mExitReason;
 
 	ScriptTimer *mFirstTimer, *mLastTimer;  // The first and last script timers in the linked list.
