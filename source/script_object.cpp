@@ -2,6 +2,7 @@
 #include "defines.h"
 #include "globaldata.h"
 #include "script.h"
+#include "application.h"
 
 #include "script_object.h"
 #include "script_func_impl.h"
@@ -48,8 +49,8 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 //
 
 ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
-	, ExprTokenType *aParamValue = NULL, int aParamCount = 0, INT_PTR *aRetVal = NULL // For event handlers.
-	, int aExtraFlags = 0) // For Object.__Delete().
+	, ExprTokenType *aParamValue, int aParamCount, INT_PTR *aRetVal // For event handlers.
+	, int aExtraFlags) // For Object.__Delete().
 {
 	ExprTokenType result_token, this_token, name_token;
 		
@@ -72,8 +73,14 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 
 	ResultType result = aInvokee->Invoke(result_token, this_token, IT_CALL | aExtraFlags, param, aParamCount);
 
-	if (aRetVal)
+	if (aRetVal) // This is done regardless of result as some callers don't initialize it:
 		*aRetVal = (INT_PTR)TokenToInt64(result_token);
+
+	if (result != EARLY_EXIT && result != FAIL)
+	{
+		// Indicate to caller whether an integer value was returned (for MsgMonitor()).
+		result = TokenIsEmptyString(result_token) ? OK : EARLY_RETURN;
+	}
 
 	if (result_token.mem_to_free)
 		free(result_token.mem_to_free);
@@ -1807,6 +1814,34 @@ LPTSTR LabelPtr::Name() const
 	case Callable_Func: return ((Func *)mObject)->mName;
 	default: return _T("Object");
 	}
+}
+
+
+
+ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex)
+{
+	ResultType result = OK;
+	INT_PTR retval = 0;
+	
+	for (MsgMonitorInstance inst (*this); inst.index < inst.count; ++inst.index)
+	{
+		if (inst.index >= aInitNewThreadIndex) // Re-initialize the thread.
+			InitNewThread(0, true, false, ACT_INVALID);
+		
+		IObject *func = mMonitor[inst.index].func;
+
+		if (!CallMethod(func, func, _T("call"), aParamValue, aParamCount, &retval))
+		{
+			result = FAIL; // Callback encountered an error.
+			break;
+		}
+		if (retval)
+		{
+			result = CONDITION_TRUE;
+			break;
+		}
+	}
+	return result;
 }
 
 

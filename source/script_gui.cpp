@@ -7701,7 +7701,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	// CalledByIsDialogMessageOrDispatch for any threads beneath it.  Although this may technically be
 	// unnecessary, it adds maintainability.
 	LRESULT msg_reply;
-	if (g_MsgMonitorCount // Count is checked here to avoid function-call overhead.
+	if (g_MsgMonitor.Count() // Count is checked here to avoid function-call overhead.
 		&& (!g->CalledByIsDialogMessageOrDispatch || g->CalledByIsDialogMessageOrDispatchMsg != iMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
 		&& MsgMonitor(hWnd, iMsg, wParam, lParam, NULL, msg_reply))
 		return msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.

@@ -466,7 +466,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 		// For max. flexibility, it seems best to allow the message filter to have the first
 		// crack at looking at the message, before even TRANSLATE_AHK_MSG:
-		if (g_MsgMonitorCount && MsgMonitor(msg.hwnd, msg.message, msg.wParam, msg.lParam, &msg, msg_reply))  // Count is checked here to avoid function-call overhead.
+		if (g_MsgMonitor.Count() && MsgMonitor(msg.hwnd, msg.message, msg.wParam, msg.lParam, &msg, msg_reply))  // Count is checked here to avoid function-call overhead.
 		{
 			continue; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
 			// NOTE: Above does "continue" and ignores msg_reply.  This is because testing shows that
@@ -810,8 +810,12 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				break;
 
 			case AHK_CLIPBOARD_CHANGE: // Due to the presence of an OnClipboardChange label in the script.
-				// Caller has ensured that mOnClipboardChangeLabel is a non-NULL, valid pointer.
+				// If there's a legacy OnClipboardChange label, set label_to_call so that the label's
+				// jump-to-line is used for ACT_IS_ALWAYS_ALLOWED() and Critical considerations.
+				// Otherwise, use the placeholder label to simplify the code.
 				label_to_call = g_script.mOnClipboardChangeLabel;
+				if (!label_to_call)
+					label_to_call = g_script.mPlaceholderLabel;
 				break;
 
 			default: // hotkey
@@ -1348,14 +1352,21 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				break;
 
 			case AHK_CLIPBOARD_CHANGE:
+			{
 				g.EventInfo = CountClipboardFormats() ? (IsClipboardFormatAvailable(CF_NATIVETEXT) || IsClipboardFormatAvailable(CF_HDROP) ? 1 : 2) : 0;
 				g_ErrorLevel->Assign(g.EventInfo); // For backward compatibility.
+				ExprTokenType param ((__int64)g.EventInfo);
 				// ACT_IS_ALWAYS_ALLOWED() was already checked above.
-				// The message poster has ensured that g_script.mOnClipboardChangeLabel is non-NULL and valid.
 				g_script.mOnClipboardChangeIsRunning = true;
-				label_to_call->ExecuteInNewThread(_T("OnClipboardChange"));
+				DEBUGGER_STACK_PUSH(_T("OnClipboardChange"))
+				if (g_script.mOnClipboardChangeLabel)
+					g_script.mOnClipboardChangeLabel->Execute();
+				if (!msg.wParam)
+					g_script.mOnClipboardChange.Call(&param, 1, g_script.mOnClipboardChangeLabel ? 0 : 1);
+				DEBUGGER_STACK_POP()
 				g_script.mOnClipboardChangeIsRunning = false;
 				break;
+			}
 
 			default: // hotkey
 				if (IS_WHEEL_VK(hk->mVK)) // If this is true then also: msg.message==AHK_HOOK_HOTKEY
@@ -1818,16 +1829,10 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 		return false;
 
 	bool result = false; // Set default: Tell the caller to give this message any additional/default processing.
-	MsgMonitorInstance inst;
-	inst.previous = g_TopMsgMonitor;
-	inst.count = g_MsgMonitorCount;
-	g_TopMsgMonitor = &inst; // Register this instance so that index can be adjusted by BIF_OnMessage if an item is deleted.
+	MsgMonitorInstance inst (g_MsgMonitor); // Register this instance so that index can be adjusted by BIF_OnMessage if an item is deleted.
 
 	// Linear search vs. binary search should perform better on average because the vast majority
 	// of message monitoring scripts are expected to monitor only a few message numbers.
-	// Search in reverse to give priority to message monitors added most recently (for the new mode
-	// which allows multiple monitors).  It's done this way rather than inserting at the beginning
-	// to avoid having to shuffle items twice when a monitor is temporarily added then removed.
 	for (inst.index = 0; inst.index < inst.count; ++inst.index)
 		if (g_MsgMonitor[inst.index].msg == aMsg)
 		{
@@ -1838,7 +1843,6 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 			}
 		}
 
-	g_TopMsgMonitor = inst.previous;
 	return result;
 }
 
@@ -1846,7 +1850,6 @@ bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awPa
 {
 	MsgMonitorStruct *monitor = &g_MsgMonitor[aInstance.index];
 	bool is_legacy_monitor = monitor->is_legacy_monitor;
-	int msg_count_orig = g_MsgMonitorCount;
 	IObject *func = monitor->func; // In case monitor item gets deleted while the function is running (e.g. by the function itself).
 	ActionTypeType type_of_first_line = LabelPtr(func)->TypeOfFirstLine();
 
@@ -1903,45 +1906,25 @@ bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awPa
 	++monitor->instance_count;
 
 	// Set up the array of parameters for func->Invoke().
-	ExprTokenType param_token[5];
-	param_token[0].symbol = SYM_STRING; param_token[0].marker = _T("Call");
-	param_token[1].symbol = SYM_INTEGER; param_token[1].value_int64 = (__int64)awParam;
-	param_token[2].symbol = SYM_INTEGER; param_token[2].value_int64 = (__int64)alParam;
-	param_token[3].symbol = SYM_INTEGER; param_token[3].value_int64 = aMsg;
-	param_token[4].symbol = SYM_INTEGER; param_token[4].value_int64 = (__int64)(size_t)aWnd;
+	ExprTokenType param[] =
+	{
+		(__int64)awParam,
+		(__int64)alParam,
+		(__int64)aMsg,
+		(__int64)(size_t)aWnd
+	};
 
-	ExprTokenType *param[_countof(param_token)];
-	for (int i = 0; i < _countof(param); ++i)
-		param[i] = param_token + i;
+	ResultType result;
+	INT_PTR retval;
 
-	bool block_further_processing;
+	result = CallMethod(func, func, _T("call"), param, _countof(param), &retval);
 
-	ExprTokenType this_token;
-	this_token.symbol = SYM_OBJECT;
-	this_token.object = func;
-
-	ExprTokenType result_token;
-	TCHAR result_buf[MAX_NUMBER_SIZE];
-	result_token.marker = _T("");
-	result_token.symbol = SYM_STRING;
-	result_token.mem_to_free = NULL;
-	result_token.buf = result_buf;
-
-	func->Invoke(result_token, this_token, IT_CALL, param, _countof(param));
-	// The result of Invoke is ignored; whatever it was, this thread is finished.
-	// Exit has the same result as returning "" due to initialization above.
-
-	block_further_processing = !TokenIsEmptyString(result_token);
+	bool block_further_processing = (result == EARLY_RETURN);
 	if (block_further_processing)
-		aMsgReply = (LRESULT)TokenToInt64(result_token); // Use 64-bit in case it's an unsigned number greater than 0x7FFFFFFF, in which case this allows it to wrap around to a negative.
+		aMsgReply = (LRESULT)retval;
 	//else leave aMsgReply uninitialized because we'll be returning false later below, which tells our caller
 	// to ignore aMsgReply.
 
-	if (result_token.mem_to_free)
-		free(result_token.mem_to_free);
-	if (result_token.symbol == SYM_OBJECT)
-		result_token.object->Release();
-	
 	DEBUGGER_STACK_POP()
 
 	if (pgui) // i.e. we set g->GuiWindow and g->GuiDefaultWindow above.

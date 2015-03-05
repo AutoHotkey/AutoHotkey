@@ -254,6 +254,12 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define IF_CALL_FUNC_ONLY	0x100000 // Used by IDispatch: call only if value is a function.
 
 
+// Helper function for event handlers and __Delete:
+ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
+	, ExprTokenType *aParamValue = NULL, int aParamCount = 0, INT_PTR *aRetVal = NULL // For event handlers.
+	, int aExtraFlags = 0); // For Object.__Delete().
+
+
 struct DerefType; // Forward declarations for use below.
 class Var;        //
 struct ExprTokenType  // Something in the compiler hates the name TokenType, so using a different name.

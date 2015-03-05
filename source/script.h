@@ -2238,11 +2238,45 @@ struct MsgMonitorStruct
 };
 
 
+struct MsgMonitorInstance;
+class MsgMonitorList
+{
+	MsgMonitorStruct *mMonitor;
+	MsgMonitorInstance *mTop;
+	int mCount, mCountMax;
+
+	friend struct MsgMonitorInstance;
+
+public:
+	MsgMonitorStruct *Find(UINT aMsg, IObject *aCallback, bool aIsLegacyMode);
+	MsgMonitorStruct *Add(UINT aMsg, IObject *aCallback, bool aIsLegacyMode, bool aAppend = TRUE);
+	void Remove(MsgMonitorStruct *aMonitor);
+	ResultType Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex); // Used for OnExit and OnClipboardChange, but not OnMessage.
+
+	MsgMonitorStruct& operator[] (const int aIndex) { return mMonitor[aIndex]; }
+	int Count() { return mCount; }
+
+	MsgMonitorList() : mCount(0), mCountMax(0), mMonitor(NULL) {}
+};
+
+
 struct MsgMonitorInstance
 {
+	MsgMonitorList &list;
 	MsgMonitorInstance *previous;
 	int index;
 	int count;
+
+	MsgMonitorInstance(MsgMonitorList &aList)
+		: list(aList), previous(aList.mTop), index(0), count(aList.mCount)
+	{
+		aList.mTop = this;
+	}
+
+	~MsgMonitorInstance()
+	{
+		list.mTop = previous;
+	}
 };
 
 
@@ -2732,10 +2766,11 @@ public:
 	TCHAR mThisMenuItemName[MAX_MENU_NAME_LENGTH + 1];
 	TCHAR mThisMenuName[MAX_MENU_NAME_LENGTH + 1];
 	LPTSTR mThisHotkeyName, mPriorHotkeyName;
+	MsgMonitorList mOnExit, mOnClipboardChange; // Lists of event handlers for OnExit() and OnClipboardChange().
+	Label *mOnClipboardChangeLabel; // Separate from mOnClipboardChange for backward-compatibility reasons.
+	Label *mOnExitLabel;  // The label to run when the script terminates (NULL if none).
 	HWND mNextClipboardViewer;
 	bool mOnClipboardChangeIsRunning;
-	Label *mOnClipboardChangeLabel;
-	Label *mOnExitLabel;  // The label to run when the script terminates (NULL if none).
 	ExitReasons mExitReason;
 
 	ScriptTimer *mFirstTimer, *mLastTimer;  // The first and last script timers in the linked list.
@@ -2780,6 +2815,7 @@ public:
     
 	ResultType Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestart);
 	ResultType CreateWindows();
+	void EnableClipboardListener(bool aEnable);
 	void EnableOrDisableViewMenuItems(HMENU aMenu, UINT aFlags);
 	void CreateTrayIcon();
 	void UpdateTrayIcon(bool aForceUpdate = false);
@@ -3038,6 +3074,7 @@ BIF_DECL(BIF_Exp);
 BIF_DECL(BIF_SqrtLogLn);
 
 BIF_DECL(BIF_OnMessage);
+BIF_DECL(BIF_OnExitOrClipboard);
 
 #ifdef ENABLE_REGISTERCALLBACK
 BIF_DECL(BIF_RegisterCallback);
@@ -3120,6 +3157,7 @@ void SetWorkingDir(LPTSTR aNewDir);
 int ConvertJoy(LPTSTR aBuf, int *aJoystickID = NULL, bool aAllowOnlyButtons = false);
 bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType);
 double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, bool aUseBoolForUpDown);
+LPTSTR GetExitReasonString(ExitReasons aExitReason);
 
 #endif
 

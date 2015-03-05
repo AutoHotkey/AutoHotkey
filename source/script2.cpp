@@ -5062,7 +5062,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	// See GuiWindowProc() for details about this first section:
 	LRESULT msg_reply;
-	if (g_MsgMonitorCount // Count is checked here to avoid function-call overhead.
+	if (g_MsgMonitor.Count() // Count is checked here to avoid function-call overhead.
 		&& (!g->CalledByIsDialogMessageOrDispatch || g->CalledByIsDialogMessageOrDispatchMsg != iMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
 		&& MsgMonitor(hWnd, iMsg, wParam, lParam, NULL, msg_reply))
 		return msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
@@ -5461,8 +5461,8 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	case WM_CLIPBOARDUPDATE: // For Vista and later.
 	case WM_DRAWCLIPBOARD:
-		if (g_script.mOnClipboardChangeLabel) // In case it's a bogus msg, it's our responsibility to avoid posting the msg if there's no label to launch.
-			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, 0, 0); // It's done this way to buffer it when the script is uninterruptible, etc.  v1.0.44: Post to g_hWnd vs. NULL so that notifications aren't lost when script is displaying a MsgBox or other dialog.
+		if (g_script.mOnClipboardChangeLabel || g_script.mOnClipboardChange.Count()) // In case it's a bogus msg, it's our responsibility to avoid posting the msg if there's no label to launch.
+			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, !g_script.mIsReadyToExecute, 0); // It's done this way to buffer it when the script is uninterruptible, etc.  v1.0.44: Post to g_hWnd vs. NULL so that notifications aren't lost when script is displaying a MsgBox or other dialog.
 		if (g_script.mNextClipboardViewer) // Will be NULL if there are no other windows in the chain, or if we're on Vista or later and used AddClipboardFormatListener instead of SetClipboardViewer (in which case iMsg should be WM_CLIPBOARDUPDATE).
 			SendMessageTimeout(g_script.mNextClipboardViewer, iMsg, wParam, lParam, SMTO_ABORTIFHUNG, 2000, &dwTemp);
 		return 0;
@@ -5946,7 +5946,7 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 {
 	// See GuiWindowProc() for details about this first part:
 	LRESULT msg_reply;
-	if (g_MsgMonitorCount // Count is checked here to avoid function-call overhead.
+	if (g_MsgMonitor.Count() // Count is checked here to avoid function-call overhead.
 		&& (!g->CalledByIsDialogMessageOrDispatch || g->CalledByIsDialogMessageOrDispatchMsg != uMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
 		&& MsgMonitor(hWndDlg, uMsg, wParam, lParam, NULL, msg_reply))
 		return (BOOL)msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
@@ -11331,6 +11331,8 @@ VarSizeType BIV_IconNumber(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(UTOA(g_script.mCustomIconNumber, target_buf));
 }
 
+
+
 VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
 {
 	const int bufSize = 32;
@@ -11359,7 +11361,9 @@ VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(aBuf);
 }
 
-VarSizeType BIV_ExitReason(LPTSTR aBuf, LPTSTR aVarName)
+
+
+LPTSTR GetExitReasonString(ExitReasons aExitReason)
 {
 	LPTSTR str;
 	switch(g_script.mExitReason)
@@ -11381,6 +11385,12 @@ VarSizeType BIV_ExitReason(LPTSTR aBuf, LPTSTR aVarName)
 	default:  // EXIT_NONE or unknown value (unknown would be considered a bug if it ever happened).
 		str = _T("");
 	}
+	return str;
+}
+
+VarSizeType BIV_ExitReason(LPTSTR aBuf, LPTSTR aVarName)
+{
+	LPTSTR str = GetExitReasonString(g_script.mExitReason);
 	if (aBuf)
 		_tcscpy(aBuf, str);
 	return (VarSizeType)_tcslen(str);
@@ -16382,41 +16392,24 @@ BIF_DECL(BIF_OnMessage)
 		}
 	}
 
-	// If this is the first use of the g_MsgMonitor array, create it now rather than later to reduce code size
-	// and help the maintainability of sections further below. The following relies on short-circuit boolean order:
-	if (!g_MsgMonitor && !(g_MsgMonitor = (MsgMonitorStruct *)malloc(sizeof(MsgMonitorStruct) * MAX_MSG_MONITORS)))
-		goto rare_failure;
-
 	// Check if this message already exists in the array:
-	int msg_index;
-	for (msg_index = 0; msg_index < g_MsgMonitorCount; ++msg_index)
-		if (g_MsgMonitor[msg_index].msg == specified_msg
-			&& (legacy_mode ? g_MsgMonitor[msg_index].is_legacy_monitor : g_MsgMonitor[msg_index].func == callback))
-			break;
-	bool item_already_exists = (msg_index < g_MsgMonitorCount);
+	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(specified_msg, callback, legacy_mode);
+	bool item_already_exists = (pmonitor != NULL);
 	if (!item_already_exists)
 	{
 		if (!callback) // Delete or report function-name of a non-existent item.
 			return; // Yield the default return value set earlier (an empty string).
-		if (msg_index == MAX_MSG_MONITORS) // No room in the array.
-			goto rare_failure;
 		// From this point on, it is certain that an item will be added to the array.
-		if (!call_it_last) // Call it first.
+		if (  !(pmonitor = g_MsgMonitor.Add(specified_msg, callback, legacy_mode))  )
 		{
-			msg_index = 0; // Because the array is iterated right-to-left, index 0 is called last.
-			if (g_MsgMonitorCount) // Shift existing items to make room.
-				MoveMemory(g_MsgMonitor+1, g_MsgMonitor, sizeof(MsgMonitorStruct)*g_MsgMonitorCount);
-			for (MsgMonitorInstance *inst = g_TopMsgMonitor; inst; inst = inst->previous)
-			{
-				inst->index++; // Correct the index of each running monitor.
-				inst->count++; // Iterate the same set of items which existed before.
-				// By contrast, count isn't adjusted when adding at the end because we do not
-				// want new items to be called by messages received before they were registered.
-			}
+			if (!legacy_mode)
+				aResult = g_script.ScriptError(ERR_OUTOFMEM);
+			// Otherwise, indicate failure by yielding the default return value set earlier.
+			return;
 		}
 	}
 
-	MsgMonitorStruct &monitor = g_MsgMonitor[msg_index];
+	MsgMonitorStruct &monitor = *pmonitor;
 
 	if (item_already_exists)
 	{
@@ -16425,16 +16418,6 @@ BIF_DECL(BIF_OnMessage)
 			aResultToken.marker = ((Func *)monitor.func)->mName;
 		if (mode_is_delete)
 		{
-			// Adjust the index of any active message monitors affected by this deletion.  This allows a
-			// message monitor to delete older message monitors while still allowing any remaining monitors
-			// of that message to be called (when there are multiple).  Monitors at index >= msg_index can
-			// be deleted because the list is iterated from right to left.
-			for (MsgMonitorInstance *inst = g_TopMsgMonitor; inst; inst = inst->previous)
-			{
-				if (inst->index >= msg_index && inst->index >= 0)
-					inst->index--; // So index+1 is the next item.
-				inst->count--;
-			}
 			// The msg-monitor is deleted from the array for two reasons:
 			// 1) It improves performance because every incoming message for the app now needs to be compared
 			//    to one less filter. If the count will now be zero, performance is improved even more because
@@ -16445,10 +16428,7 @@ BIF_DECL(BIF_OnMessage)
 			// The main disadvantage to deleting message filters from the array is that the deletion might
 			// occur while the monitor is currently running, which requires more complex handling within
 			// MsgMonitor() (see its comments for details).
-			--g_MsgMonitorCount;  // Must be done prior to the below.
-			monitor.func->Release();
-			if (msg_index < g_MsgMonitorCount) // An element other than the last is being removed. Shift the array to cover/delete it.
-				MoveMemory(g_MsgMonitor+msg_index, g_MsgMonitor+msg_index+1, sizeof(MsgMonitorStruct)*(g_MsgMonitorCount-msg_index));
+			g_MsgMonitor.Remove(pmonitor);
 			return;
 		}
 		if (aParamCount < 2) // Single-parameter mode: Report existing item's function name.
@@ -16456,24 +16436,20 @@ BIF_DECL(BIF_OnMessage)
 		// Otherwise, an existing item is being assigned a new function or MaxThreads limit.
 		// Continue on to update this item's attributes.
 	}
-	else // This message doesn't exist in the array yet, so is to be added as a new element.
+	else // This message was newly added to the array.
 	{
 		// The above already verified that callback is not NULL and there is room in the array.
-		++g_MsgMonitorCount;
 		if (legacy_mode)
 			// For backward-compatibility, return the function's name on success:
 			aResultToken.marker = ((Func *)callback)->mName;
 		monitor.instance_count = 0; // Reset instance_count only for new items since existing items might currently be running.
-		monitor.msg = specified_msg;
-		monitor.func = NULL;
-		monitor.is_legacy_monitor = legacy_mode;
 		// Continue on to the update-or-create logic below.
 	}
 
 	// Since above didn't return, above has ensured that msg_index is the index of the existing or new
 	// MsgMonitorStruct in the array.  In addition, it has set the proper return value for us.
 	// Update those struct attributes that get the same treatment regardless of whether this is an update or creation.
-	if (callback) // i.e. not OnMessage(Msg,,MaxThreads).
+	if (callback && callback != monitor.func) // Callback is being registered or changed.
 	{
 		callback->AddRef(); // Keep the object alive while it's in g_MsgMonitor.
 		if (monitor.func)
@@ -16483,14 +16459,135 @@ BIF_DECL(BIF_OnMessage)
 	if (!item_already_exists || !ParamIndexIsOmitted(2))
 		monitor.max_instances = max_instances;
 	// Otherwise, the parameter was omitted so leave max_instances at its current value.
-	return;
+}
 
-rare_failure:
-	if (legacy_mode)
-		return; // Indicate failure by yielding the default return value set earlier.
-	// Some kind of failure occurred which should be very rare.  Throw an exception so that script
-	// authors never need to worry about handling this error.  Use a generic message because it's rare:
-	g_script.ThrowRuntimeException(ERR_EXCEPTION);
+
+MsgMonitorStruct *MsgMonitorList::Find(UINT aMsg, IObject *aCallback, bool aIsLegacyMode)
+{
+	for (int i = 0; i < mCount; ++i)
+		if (mMonitor[i].msg == aMsg
+			&& (aIsLegacyMode ? mMonitor[i].is_legacy_monitor : mMonitor[i].func == aCallback))
+			return mMonitor + i;
+	return NULL;
+}
+
+
+MsgMonitorStruct *MsgMonitorList::Add(UINT aMsg, IObject *aCallback, bool aIsLegacyMode, bool aAppend)
+{
+	if (mCount == mCountMax)
+	{
+		int new_count = mCountMax ? mCountMax * mCountMax : 16;
+		void *new_array = realloc(mMonitor, new_count * sizeof(MsgMonitorStruct));
+		if (!new_array)
+			return NULL;
+		mMonitor = (MsgMonitorStruct *)new_array;
+		mCountMax = new_count;
+	}
+	MsgMonitorStruct *new_mon;
+	if (!aAppend)
+	{
+		for (MsgMonitorInstance *inst = mTop; inst; inst = inst->previous)
+		{
+			inst->index++; // Correct the index of each running monitor.
+			inst->count++; // Iterate the same set of items which existed before.
+			// By contrast, count isn't adjusted when adding at the end because we do not
+			// want new items to be called by messages received before they were registered.
+		}
+		// Shift existing items to make room.
+		memmove(mMonitor + 1, mMonitor, mCount * sizeof(MsgMonitorStruct));
+		new_mon = mMonitor;
+	}
+	else
+		new_mon = mMonitor + mCount;
+
+	++mCount;
+	new_mon->func = aCallback;
+	new_mon->msg = aMsg;
+	//new_mon->instance_count = 0;
+	//new_mon->max_instances = 1;
+	new_mon->is_legacy_monitor = aIsLegacyMode;
+	return new_mon;
+}
+
+
+void MsgMonitorList::Remove(MsgMonitorStruct *aMonitor)
+{
+	ASSERT(aMonitor >= mMonitor && aMonitor < mMonitor + mCount);
+
+	int mon_index = int(aMonitor - mMonitor);
+	// Adjust the index of any active message monitors affected by this deletion.  This allows a
+	// message monitor to delete older message monitors while still allowing any remaining monitors
+	// of that message to be called (when there are multiple).
+	for (MsgMonitorInstance *inst = mTop; inst; inst = inst->previous)
+	{
+		if (inst->index >= mon_index && inst->index >= 0)
+			inst->index--; // So index+1 is the next item.
+		inst->count--;
+	}
+	// Remove the item from the array.
+	--mCount;  // Must be done prior to the below.
+	IObject *release_me = aMonitor->func;
+	if (mon_index < mCount) // An element other than the last is being removed. Shift the array to cover/delete it.
+		memmove(aMonitor, aMonitor + 1, (mCount - mon_index) * sizeof(MsgMonitorStruct));
+	release_me->Release(); // Must be called after the above in case it calls a __delete() meta-function.
+}
+
+
+BIF_DECL(BIF_OnExitOrClipboard)
+{
+	bool is_onexit = toupper(aResultToken.marker[2]) == 'E';
+	aResultToken.SetValue(_T("")); // In all cases there is no return value.
+	MsgMonitorList &handlers = is_onexit ? g_script.mOnExit : g_script.mOnClipboardChange;
+
+	IObject *callback;
+	if (callback = TokenToFunc(*aParam[0]))
+	{
+		// Ensure this function is a valid one.
+		if (((Func *)callback)->mMinParams > 1)
+			callback = NULL;
+	}
+	else
+		callback = TokenToObject(*aParam[0]);
+	if (!callback)
+	{
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		return;
+	}
+	
+	int mode = 1; // Default.
+	if (!ParamIndexIsOmitted(1))
+		mode = ParamIndexToInt(1);
+
+	MsgMonitorStruct *existing = handlers.Find(0, callback, false);
+
+	switch (mode)
+	{
+	case  1:
+	case -1:
+		if (existing)
+			return;
+		if (!is_onexit)
+		{
+			// Do this before adding the handler so that it won't be called as a result of the
+			// SetClipboardViewer() call on Windows XP.  This won't cause existing handlers to
+			// be called because in that case the clipboard listener is already enabled.
+			g_script.EnableClipboardListener(true);
+		}
+		if (!handlers.Add(0, callback, false, mode == 1))
+			aResult = g_script.ScriptError(ERR_OUTOFMEM);
+		break;
+	case  0:
+		if (existing)
+			handlers.Remove(existing);
+		break;
+	default:
+		aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
+		break;
+	}
+	// In case the above enabled the clipboard listener but failed to add the handler,
+	// do this even if mode != 0:
+	if (!is_onexit && !g_script.mOnClipboardChangeLabel && !handlers.Count())
+		g_script.EnableClipboardListener(false);
 }
 
 
