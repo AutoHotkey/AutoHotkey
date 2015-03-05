@@ -16501,6 +16501,7 @@ MsgMonitorStruct *MsgMonitorList::Add(UINT aMsg, IObject *aCallback, bool aIsLeg
 		new_mon = mMonitor + mCount;
 
 	++mCount;
+	aCallback->AddRef();
 	new_mon->func = aCallback;
 	new_mon->msg = aMsg;
 	//new_mon->instance_count = 0;
