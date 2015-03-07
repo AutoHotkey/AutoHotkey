@@ -15350,6 +15350,7 @@ BIF_DECL(BIF_Format)
 	int param, last_param;
 	TCHAR number_buf[MAX_NUMBER_SIZE];
 	TCHAR spec[12+MAX_INTEGER_LENGTH*2];
+	TCHAR custom_format;
 	ExprTokenType value;
 	*spec = '%';
 
@@ -15395,6 +15396,8 @@ BIF_DECL(BIF_Format)
 			if (param >= aParamCount) // Invalid parameter index.
 				continue;
 
+			custom_format = 0; // Set default.
+
 			// Optional format specifier.
 			if (*cp == ':')
 			{
@@ -15435,6 +15438,8 @@ BIF_DECL(BIF_Format)
 				else
 				{
 					spec[spec_len++] = 's'; // Default to string if not specified.
+					if (_tcschr(_T("ULlTt"), *cp))
+						custom_format = toupper(*cp++);
 					if (*cp == 's')
 						++cp;
 				}
@@ -15460,7 +15465,17 @@ BIF_DECL(BIF_Format)
 			last_param = param;
 			
 			if (target)
-				target += _stprintf(target, spec, value.value_int64);
+			{
+				int len = _stprintf(target, spec, value.value_int64);
+				switch (custom_format)
+				{
+				case 0: break; // Might help performance to list this first.
+				case 'U': CharUpper(target); break;
+				case 'L': CharLower(target); break;
+				case 'T': StrToTitleCase(target); break;
+				}
+				target += len;
+			}
 			else
 				size += _sctprintf(spec, value.value_int64);
 		}
