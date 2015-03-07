@@ -3,6 +3,7 @@
 #include "script.h"
 #include "script_object.h"
 #include "script_com.h"
+#include "script_func_impl.h"
 #include <DispEx.h>
 
 
@@ -1064,10 +1065,12 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 				return OK;
 			}
 		}
-		// For other types, this syntax is reserved for possible future use.  However, it could
-		// be x[prms*] where prms is an empty array or not an array at all, so raise an error:
-		ComError(g->LastError = hr);
-		return OK;
+		if ((mVarType & VT_ARRAY) // Not meaningful for SafeArrays.
+			|| IS_INVOKE_SET) // Wouldn't be handled correctly below and probably has no real-world use.
+		{
+			ComError(g->LastError = hr);
+			return OK;
+		}
 	}
 
 	if (mVarType != VT_DISPATCH || !mDispatch)
@@ -1080,41 +1083,26 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 		return OK;
 	}
 
-	static DISPID dispidParam = DISPID_PROPERTYPUT;
-	DISPPARAMS dispparams = {NULL, NULL, 0, 0};
-	VARIANTARG *rgvarg;
-	EXCEPINFO excepinfo = {0};
-	VARIANT varResult = {0};
 	DISPID dispid;
-
-	LPTSTR aName = TokenToString(*aParam[0], aResultToken.buf);
-
-	if (--aParamCount)
-	{
-		rgvarg = (VARIANTARG *)_alloca(sizeof(VARIANTARG) * aParamCount);
-
-		for (int i = 0; i < aParamCount; i++)
-		{
-			TokenToVariant(*aParam[aParamCount-i], rgvarg[i], TRUE);
-		}
-
-		dispparams.rgvarg = rgvarg;
-		dispparams.cArgs = aParamCount;
-		if (IS_INVOKE_SET)
-		{
-			dispparams.rgdispidNamedArgs = &dispidParam;
-			dispparams.cNamedArgs = 1;
-		}
-	}
-
+	LPTSTR aName;
 	HRESULT	hr;
 	if (aFlags & IF_NEWENUM)
 	{
 		hr = S_OK;
 		dispid = DISPID_NEWENUM;
+		aName = _T("_NewEnum"); // Init for ComError().
+	}
+	else if (!aParamCount || aParam[0]->symbol == SYM_MISSING)
+	{
+		// v1.1.20: a[,b] is now permitted.  Rather than treating it the same as 
+		// an empty string, invoke the object's default/"value" property/method.
+		hr = S_OK;
+		dispid = DISPID_VALUE;
+		aName = _T("");
 	}
 	else
 	{
+		aName = TokenToString(*aParam[0], aResultToken.buf);
 #ifdef UNICODE
 		LPOLESTR wname = aName;
 #else
@@ -1150,7 +1138,37 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 				hr = S_OK;
 			}
 		}
+		if (FAILED(hr))
+			aParamCount = 0; // Skip parameter conversion and cleanup.
 	}
+	
+	static DISPID dispidParam = DISPID_PROPERTYPUT;
+	DISPPARAMS dispparams = {NULL, NULL, 0, 0};
+	VARIANTARG *rgvarg;
+	EXCEPINFO excepinfo = {0};
+	VARIANT varResult = {0};
+	
+	if (aParamCount)
+		--aParamCount; // Exclude the member name, if any.
+
+	if (aParamCount)
+	{
+		rgvarg = (VARIANTARG *)_alloca(sizeof(VARIANTARG) * aParamCount);
+
+		for (int i = 0; i < aParamCount; i++)
+		{
+			TokenToVariant(*aParam[aParamCount-i], rgvarg[i], TRUE);
+		}
+
+		dispparams.rgvarg = rgvarg;
+		dispparams.cArgs = aParamCount;
+		if (IS_INVOKE_SET)
+		{
+			dispparams.rgdispidNamedArgs = &dispidParam;
+			dispparams.cNamedArgs = 1;
+		}
+	}
+
 	if (SUCCEEDED(hr)
 		// For obj.x:=y where y is a ComObject, invoke PROPERTYPUTREF first:
 		&& !(IS_INVOKE_SET && rgvarg[0].vt == VT_DISPATCH && SUCCEEDED(mDispatch->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_PROPERTYPUTREF, &dispparams, NULL, NULL, NULL))

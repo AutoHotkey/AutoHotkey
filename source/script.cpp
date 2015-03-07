@@ -10864,14 +10864,6 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 					// non-NULL, and that can only be the result of a previous SYM_OPAREN/BRACKET.
 					if (this_infix[-1].symbol == SYM_COMMA || this_infix[-1].symbol == stack_symbol)
 					{
-						// An empty param in something like {x:y,,w:z} is meaningless and likely to be an error.
-						// x[a,,b] could possibly be given meaning by __Set or __Get, but that doesn't seem useful
-						// enough to justify the added code for guarding against SYM_MISSING.  Ruling out empty
-						// params in x[] allows IObject::Invoke() implementations to assume that the first param
-						// (or param for IT_SET/IT_GET) is never SYM_MISSING.  However, [a,,b] is allowed as a way
-						// to create a sparse array.
-						if (stack_symbol == SYM_OBRACE || func && (int)func->mName < IT_CALL) // i.e. {} or x[]
-							return LineError(_T("Unexpected comma"), FAIL, in_param_list->marker);
 						// Also handle any missing params following this one, otherwise the this_infix[-1].symbol
 						// check would fail next iteration because we've changed it from SYM_COMMA to SYM_MISSING.
 						while (this_infix->symbol == SYM_COMMA) // For each missing parameter: (, or ,,
@@ -10959,8 +10951,17 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 					ASSERT(this_infix[1].symbol == SYM_OPAREN);
 					if (infix_symbol == SYM_CBRACE // i.e. {...}(), seems best to reserve this for now.
 						|| in_param_list->func != &g_ObjGet // i.e. it's something like x := [y,z]().
-						|| in_param_list->param_count != 2) // i.e. the target object plus the method name = 2.
+						|| in_param_list->param_count > 2) // i.e. x[y, ...]().
 						return LineError(_T("Unsupported method call syntax."), FAIL, in_param_list->marker); // Error message is a bit vague since this can be x[y,z]() or x.y[z]().
+					if (in_param_list->param_count == 1) // Just the target object; no method name: x[](...)
+					{
+						in_param_list->param_count++;
+						postfix[postfix_count] = this_infix;
+						postfix[postfix_count]->symbol = SYM_MISSING;
+						postfix[postfix_count]->marker = _T(""); // Simplify some cases by letting it be treated as SYM_STRING.
+						postfix[postfix_count]->circuit_token = NULL;
+						++postfix_count;
+					}
 					stack_top.deref->func = &g_ObjCall; // Override the default now that we know this is a method-call.
 					++this_infix; // Skip SYM_CBRACKET so this_infix points to SYM_OPAREN.
 					this_infix->buf = stack_top.buf; // This contains the old value of in_param_list.

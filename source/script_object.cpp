@@ -423,7 +423,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		--param_count_excluding_rvalue;
 	}
 	
-	if (param_count_excluding_rvalue)
+	if (param_count_excluding_rvalue && aParam[0]->symbol != SYM_MISSING)
 	{
 		field = FindField(*aParam[0], aResultToken.buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
 
@@ -473,8 +473,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		}
 		else if (IS_INVOKE_META && IS_INVOKE_SET && param_count_excluding_rvalue == 1) // v1.1.16: For compatibility with earlier versions - see above.
 		{
+			key_type = SYM_INVALID;
 			field = NULL;
-			param_count_excluding_rvalue = 0;
 		}
 	}
 	else
@@ -496,7 +496,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// object to invoke __call.  So if this is already a meta-invocation, don't change aFlags.
 			ResultType r = mBase->Invoke(aResultToken, aThisToken, aFlags | (IS_INVOKE_META ? 0 : IF_META), aParam, aParamCount);
 			if (r != INVOKE_NOT_HANDLED // Base handled it.
-				|| !param_count_excluding_rvalue) // Nothing left to do in this case.
+				|| key_type == SYM_INVALID) // Nothing left to do in this case.
 				return r;
 
 			// Since the above may have inserted or removed fields (including the specified one),
