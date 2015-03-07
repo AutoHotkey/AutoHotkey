@@ -9035,8 +9035,8 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	if (g->Priority > 0)
 		return 0;
 
-	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
-	tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
+	VarBkp ErrorLevel_saved;
+	g_ErrorLevel->Backup(ErrorLevel_saved);
 	InitNewThread(0, false, true, jumpToLine->mActionType);
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	DEBUGGER_STACK_PUSH(_T("Gui"))
