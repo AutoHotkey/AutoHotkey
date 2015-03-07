@@ -1321,6 +1321,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				break;
 
 			case AHK_USER_MENU: // user-defined menu item
+			{
 				// Below: the menu type is passed with the message so that its value will be in sync
 				// with the timestamp of the message (in case this message has been stuck in the
 				// queue for a long time):
@@ -1337,13 +1338,20 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					pgui->AddRef(); //
 					g.GuiWindow = g.GuiDefaultWindow = pgui; // But leave GuiControl at its default, which flags this event as from a menu item.
 				}
-				label_to_call->ExecuteInNewThread(_T("Menu"));
+				ExprTokenType param[] =
+				{
+					g_script.mThisMenuItemName,
+					(__int64)(g_script.ThisMenuItemPos() + 1), // +1 to convert zero-based to one-based.
+					g_script.mThisMenuName
+				};
+				label_to_call->ExecuteInNewThread(_T("Menu"), param, _countof(param));
 				if (pgui)
 				{
 					pgui->Release(); // g.GuiWindow
 					//g.GuiDefaultWindow->Release(); // This is done by ResumeUnderlyingThread().
 				}
 				break;
+			}
 
 			case AHK_HOTSTRING:
 				g.hWndLastUsed = criterion_found_hwnd; // v1.0.42. Even if the window is invalid for some reason, IsWindow() and such are called whenever the script accesses it (GetValidLastUsedWindow()).

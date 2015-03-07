@@ -343,7 +343,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 					RETURN_MENU_ERROR(_T("Submenu must not contain its parent menu."), aParam4);
 			}
 			else // It's a label.
-				if (   !(target_label = FindCallable(aParam4, aParam4Var))   )
+				if (   !(target_label = FindCallable(aParam4, aParam4Var, 3))   )
 					RETURN_MENU_ERROR(ERR_NO_LABEL, aParam4);
 		}
 	}
