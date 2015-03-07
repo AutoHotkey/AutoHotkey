@@ -22,7 +22,7 @@ GNU General Public License for more details.
 #include "qmath.h" // for qmathLog()
 
 
-GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t *aNameLength)
+GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t *aNameLength, LPTSTR aControlID)
 {
 	LPTSTR name_marker = NULL;
 	size_t name_length = 0;
@@ -30,6 +30,14 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 	
 	if (!name_marker) // i.e. no name was specified.
 	{
+		// v1.1.20: Support omitting the GUI name when specifying a control by HWND.
+		if (aControlID && IsPureNumeric(aControlID, TRUE, FALSE) == PURE_INTEGER)
+		{
+			HWND control_hwnd = (HWND)ATOI64(aControlID);
+			if (GuiType *pgui = GuiType::FindGuiParent(control_hwnd))
+				return pgui;
+		}
+
 		if (g->GuiDefaultWindowValid())
 			return g->GuiDefaultWindow;
 		else if (g->GuiDefaultWindow) // i.e. it contains a Gui name but no valid Gui.
@@ -625,7 +633,7 @@ return_the_result:
 
 ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, Var *aParam3Var)
 {
-	GuiType *pgui = Script::ResolveGui(aCommand, aCommand);
+	GuiType *pgui = Script::ResolveGui(aCommand, aCommand, NULL, 0, aControlID);
 	GuiControlCmds guicontrol_cmd = Line::ConvertGuiControlCmd(aCommand);
 	if (guicontrol_cmd == GUICONTROL_CMD_INVALID)
 		// This is caught at load-time 99% of the time and can only occur here if the sub-command name
@@ -1443,7 +1451,7 @@ error:
 ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3)
 {
 	Var &output_var = *OUTPUT_VAR;
-	GuiType *pgui = Script::ResolveGui(aCommand, aCommand);
+	GuiType *pgui = Script::ResolveGui(aCommand, aCommand, NULL, 0, aControlID);
 	GuiControlGetCmds guicontrolget_cmd = Line::ConvertGuiControlGetCmd(aCommand);
 	if (guicontrolget_cmd == GUICONTROLGET_CMD_INVALID)
 		// This is caught at load-time 99% of the time and can only occur here if the sub-command name
