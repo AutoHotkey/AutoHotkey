@@ -10647,7 +10647,7 @@ ResultType Line::FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity)
 	if (!aFilespec || !*aFilespec)
 		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER); // Let ErrorLevel indicate an error, since this is probably not what the user intended.
 	
-	BOOL got_file_size;
+	BOOL got_file_size = false;
 	__int64 size;
 
 	// Try CreateFile() and GetFileSizeEx() first, since they can be more accurate. 
