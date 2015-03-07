@@ -85,6 +85,17 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 	return obj;
 }
 
+Object *Object::CreateArray(ExprTokenType *aValue[], int aValueCount)
+{
+	Object *obj = new Object();
+	if (obj && aValueCount && !obj->InsertAt(0, 1, aValue, aValueCount))
+	{
+		obj->Release(); // InsertAt failed.
+		obj = NULL;
+	}
+	return obj;
+}
+
 
 //
 // Object::Clone - Used for variadic function-calls.
@@ -193,7 +204,7 @@ Object *Object::Clone(BOOL aExcludeIntegerKeys)
 //
 
 ResultType Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params
-	, ExprTokenType **&aParam, int &aParamCount)
+	, ExprTokenType **aParam, int aParamCount)
 // Expands this object's contents into the parameter list.  Due to the nature
 // of the parameter list, only fields with integer keys are used (named params
 // aren't supported).
@@ -227,9 +238,6 @@ ResultType Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_lis
 	for (param_index = 0; param_index < extra_params; ++param_index)
 		*param_ptr++ = &token[param_index]; // New param.
 
-	aParam = param_list; // Update caller's pointer.
-	aParamCount += extra_params; // Update caller's count.
-	
 	return OK;
 }
 
@@ -1717,6 +1725,16 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ExprTokenType &aResultToken, ExprToken
 			}
 			return OK;
 		}
+		else if (!_tcsicmp(member, _T("Bind")))
+		{
+			if (BoundFunc *bf = BoundFunc::Bind(this, aParam+1, aParamCount-1, IT_CALL | IF_FUNCOBJ))
+			{
+				aResultToken.symbol = SYM_OBJECT;
+				aResultToken.object = bf;
+				return OK;
+			}
+			return g_script.ScriptError(ERR_OUTOFMEM);
+		}
 		if (_tcsicmp(member, _T("Call")) && !TokenIsEmptyString(*aParam[0]))
 			return INVOKE_NOT_HANDLED; // Reserved.
 		// Called explicitly by script, such as by "obj.funcref.()" or "x := obj.funcref, x.()"
@@ -1725,6 +1743,61 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ExprTokenType &aResultToken, ExprToken
 		--aParamCount;	// 
 	}
 	return CallFunc(*this, aResultToken, aParam, aParamCount);
+}
+
+
+ResultType STDMETHODCALLTYPE BoundFunc::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (  !(aFlags & IF_FUNCOBJ) && aParamCount  )
+	{
+		// No methods/properties implemented yet, except Call().
+		if (!TokenIsEmptyString(*aParam[0]) && _tcsicmp(TokenToString(*aParam[0]), _T("Call")))
+			return INVOKE_NOT_HANDLED; // Reserved.
+		++aParam;
+		--aParamCount;
+	}
+
+	// Combine the bound parameters with the supplied parameters.
+	int bound_count = mParams->MaxIndex();
+	if (bound_count > 0)
+	{
+		ExprTokenType *token = (ExprTokenType *)_alloca(bound_count * sizeof(ExprTokenType));
+		ExprTokenType **param = (ExprTokenType **)_alloca((bound_count + aParamCount) * sizeof(ExprTokenType *));
+		mParams->ArrayToParams(token, param, bound_count, NULL, 0);
+		memcpy(param + bound_count, aParam, aParamCount * sizeof(ExprTokenType *));
+		aParam = param;
+		aParamCount += bound_count;
+	}
+
+	ExprTokenType this_token;
+	this_token.symbol = SYM_OBJECT;
+	this_token.object = mFunc;
+
+	// Call the function or object.
+	return mFunc->Invoke(aResultToken, this_token, mFlags, aParam, aParamCount);
+	//return CallFunc(*mFunc, aResultToken, params, param_count);
+}
+
+BoundFunc *BoundFunc::Bind(IObject *aFunc, ExprTokenType **aParam, int aParamCount, int aFlags)
+{
+	if (Object *params = Object::CreateArray(aParam, aParamCount))
+	{
+		if (BoundFunc *bf = new BoundFunc(aFunc, params, aFlags))
+		{
+			aFunc->AddRef();
+			// bf has taken over our reference to params.
+			return bf;
+		}
+		// malloc failure; release params and return.
+		params->Release();
+	}
+	return NULL;
+}
+
+BoundFunc::~BoundFunc()
+{
+	mFunc->Release();
+	mParams->Release();
 }
 
 

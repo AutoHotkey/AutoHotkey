@@ -192,12 +192,13 @@ protected:
 	
 public:
 	static Object *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
+	static Object *CreateArray(ExprTokenType *aValue[] = NULL, int aValueCount = 0);
 
 	bool Append(LPTSTR aValue, size_t aValueLength = -1);
 
 	// Used by Func::Call() for variadic functions/function-calls:
 	Object *Clone(BOOL aExcludeIntegerKeys = false);
-	ResultType ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params, ExprTokenType **&aParam, int &aParamCount);
+	ResultType ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params, ExprTokenType **aParam, int aParamCount);
 	ResultType ArrayToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax);
 	
 	inline bool GetNextItem(ExprTokenType &aToken, INT_PTR &aOffset, INT_PTR &aKey)
@@ -338,6 +339,27 @@ public:
 };
 
 extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object values.
+
+
+//
+// BoundFunc
+//
+
+class BoundFunc : public ObjectBase
+{
+	IObject *mFunc; // Future use: bind a BoundFunc or other object.
+	Object *mParams;
+	int mFlags;
+	BoundFunc(IObject *aFunc, Object *aParams, int aFlags)
+		: mFunc(aFunc), mParams(aParams), mFlags(aFlags)
+	{}
+
+public:
+	static BoundFunc *Bind(IObject *aFunc, ExprTokenType **aParam, int aParamCount, int aFlags);
+	~BoundFunc();
+
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+};
 
 
 //
