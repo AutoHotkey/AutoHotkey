@@ -771,6 +771,21 @@ ret0:
 
 
 
+LPTSTR ltcschr(LPCTSTR haystack, TCHAR ch)
+{
+	LPCTSTR cp;
+	UINT lch = ltolower(ch);
+	for (cp = haystack;; ++cp)
+	{
+		if (ltolower(*cp) == lch)
+			return (LPTSTR)cp;
+		if (!*cp) // Implies lch != 0.
+			return NULL;
+	}
+}
+
+
+
 LPTSTR lstrcasestr(LPCTSTR phaystack, LPCTSTR pneedle)
 // This is the locale-obeying variant of strcasestr.  It uses CharUpper/Lower in place of toupper/lower,
 // which sees chars like ä as the same as Ä (depending on code page/locale).  This function is about

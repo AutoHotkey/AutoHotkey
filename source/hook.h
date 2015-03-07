@@ -184,8 +184,10 @@ struct input_type
 	InputStatusType status;
 	UCHAR *EndVK; // A sparse array that indicates which VKs terminate the input.
 	UCHAR *EndSC; // A sparse array that indicates which SCs terminate the input.
+	TCHAR *EndChars; // A string of characters that should terminate the input.
 	vk_type EndingVK; // The hook puts the terminating key into one of these if that's how it was terminated.
 	sc_type EndingSC;
+	TCHAR EndingChar;
 	bool EndedBySC;  // Whether the Ending key was one handled by VK or SC.
 	bool EndingRequiredShift;  // Whether the key that terminated the input was one that needed the SHIFT key.
 	LPTSTR *match; // Array of strings, each string is a match-phrase which if entered, terminates the input.
