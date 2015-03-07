@@ -7760,10 +7760,24 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			mmi.ptMinTrackSize.x = pgui->mMinWidth;
 		if (pgui->mMinHeight >= 0)
 			mmi.ptMinTrackSize.y = pgui->mMinHeight;
-		if (pgui->mMaxWidth >= 0)   // mmi.ptMaxSize.x/y aren't changed because it seems the OS
-			mmi.ptMaxTrackSize.x = pgui->mMaxWidth; // automatically uses ptMaxTrackSize for them, at least when
-		if (pgui->mMaxHeight >= 0)   // ptMaxTrackSize is smaller than the system's default for
-			mmi.ptMaxTrackSize.y = pgui->mMaxHeight; // mmi.ptMaxSize.
+		// mmi.ptMaxSize.x/y aren't changed because it seems the OS automatically uses ptMaxTrackSize
+		// for them, at least when ptMaxTrackSize is smaller than the system's default for mmi.ptMaxSize.
+		if (pgui->mMaxWidth >= 0)
+		{
+			mmi.ptMaxTrackSize.x = pgui->mMaxWidth;
+			// If the user applies a MaxSize less than MinSize, MinSize appears to take precedence except
+			// that the window behaves oddly when dragging the left or top edge outward.  This adjustment
+			// removes the odd behaviour but does not visibly affect the size limits.  The user-specified
+			// MaxSize and MinSize are retained, so applying -MinSize lets MaxSize take effect.
+			if (mmi.ptMaxTrackSize.x < mmi.ptMinTrackSize.x)
+				mmi.ptMaxTrackSize.x = mmi.ptMinTrackSize.x;
+		}
+		if (pgui->mMaxHeight >= 0)
+		{
+			mmi.ptMaxTrackSize.y = pgui->mMaxHeight;
+			if (mmi.ptMaxTrackSize.y < mmi.ptMinTrackSize.y) // See above for comments.
+				mmi.ptMaxTrackSize.y = mmi.ptMinTrackSize.y;
+		}
 		return 0; // "If an application processes this message, it should return zero."
 	}
 
