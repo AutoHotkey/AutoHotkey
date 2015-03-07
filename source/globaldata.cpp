@@ -289,6 +289,8 @@ Action g_act[] =
 	, {_T("/="), 2, 2, 2, {2, 0}}
 
 	, {_T("Else"), 0, 0, 0, NULL}
+	
+	, {_T("Static"), 1, 1, 1, {1, 0}} // ACT_STATIC (used only at load time).
 
 	, {_T("in"), 2, 2, 2, NULL}, {_T("not in"), 2, 2, 2, NULL}
 	, {_T("contains"), 2, 2, 2, NULL}, {_T("not contains"), 2, 2, 2, NULL}  // Very similar to "in" and "not in"
@@ -409,8 +411,8 @@ Action g_act[] =
 	, {_T("Break"), 0, 1, 1, NULL}, {_T("Continue"), 0, 1, 1, NULL}
 	, {_T("Try"), 0, 0, 0, NULL}
 	, {_T("Catch"), 0, 1, 0, NULL} // fincs: seems best to allow catch without a parameter
-	, {_T("Throw"), 0, 1, 1, {1, 0}}
 	, {_T("Finally"), 0, 0, 0, NULL}
+	, {_T("Throw"), 0, 1, 1, {1, 0}}
 	, {_T("{"), 0, 0, 0, NULL}, {_T("}"), 0, 0, 0, NULL}
 
 	, {_T("WinActivate"), 0, 4, 2, NULL} // Passing zero params results in activating the LastUsed window.
@@ -550,6 +552,8 @@ Action g_act[] =
 	, {_T("Shutdown"), 1, 1, 1, {1, 0}} // Seems best to make the first param (the flag/code) mandatory.
 
 	, {_T("FileEncoding"), 0, 1, 1, NULL}
+
+	, {_T("#If"), 0, 1, 1, {1, 0}}
 };
 // Below is the most maintainable way to determine the actual count?
 // Due to C++ lang. restrictions, can't easily make this a const because constants

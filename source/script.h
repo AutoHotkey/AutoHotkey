@@ -181,6 +181,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_CATCH_WITH_NO_TRY _T("CATCH with no matching TRY")
 #define ERR_FINALLY_WITH_NO_PRECEDENT _T("FINALLY with no matching TRY or CATCH")
 #define ERR_BAD_JUMP_INSIDE_FINALLY _T("Jumps cannot exit a FINALLY block.")
+#define ERR_BAD_JUMP_OUT_OF_FUNCTION _T("Cannot jump from inside a function to outside.")
 #define ERR_EXPECTED_BLOCK_OR_ACTION _T("Expected \"{\" or single-line action.")
 #define ERR_OUTOFMEM _T("Out of memory.")  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
 #define ERR_EXPR_TOO_LONG _T("Expression too long")
@@ -2596,6 +2597,7 @@ private:
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	int mCurrentFuncOpenBlockCount; // While loading the script, this is how many blocks are currently open in the current function's body.
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
+	bool mNoUpdateLabels;
 
 #define MAX_NESTED_CLASSES 5
 #define MAX_CLASS_NAME_LENGTH UCHAR_MAX
@@ -2636,8 +2638,10 @@ private:
 	// if aStartingLine is allowed to be NULL (for recursive calls).  If they
 	// were member functions of class Line, a check for NULL would have to
 	// be done before dereferencing any line's mNextLine, for example:
-	Line *PreparseBlocks(Line *aStartingLine, bool aFindBlockEnd = false, Line *aParentLine = NULL);
-	Line *PreparseIfElse(Line *aStartingLine, ExecUntilMode aMode = NORMAL_MODE, AttributeType aLoopType = ATTR_NONE);
+	ResultType PreparseExpressions(Line *aStartingLine);
+	ResultType PreparseStaticLines(Line *aStartingLine);
+	Line *PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode = NORMAL_MODE, Line *aParentLine = NULL, const AttributeType aLoopType = ATTR_NONE);
+	Line *PreparseCommands(Line *aStartingLine);
 
 public:
 	Line *mCurrLine;     // Seems better to make this public than make Line our friend.
