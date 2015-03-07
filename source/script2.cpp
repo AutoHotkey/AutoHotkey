@@ -6446,7 +6446,8 @@ BOOL CALLBACK EnumChildFindPoint(HWND aWnd, LPARAM lParam)
 // the specified point (the point should be in screen coordinates).
 {
 	point_and_hwnd_type &pah = *(point_and_hwnd_type *)lParam;  // For performance and convenience.
-	if (!IsWindowVisible(aWnd)) // Omit hidden controls, like Window Spy does.
+	if (!IsWindowVisible(aWnd) // Omit hidden controls, like Window Spy does.
+		|| !IsWindowEnabled(aWnd)) // Also omit disabled controls, since testing shows that the OS doesn't send mouse messages to them.
 		return TRUE;
 	RECT rect;
 	if (!GetWindowRect(aWnd, &rect))
