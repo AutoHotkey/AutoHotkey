@@ -174,11 +174,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	//CreateMutex(NULL, FALSE, script_filespec); // script_filespec seems a good choice for uniqueness.
 	//if (!g_ForceLaunch && !restart_mode && GetLastError() == ERROR_ALREADY_EXISTS)
 
-#ifdef AUTOHOTKEYSC
 	UINT load_result = g_script.LoadFromFile();
-#else
-	UINT load_result = g_script.LoadFromFile(script_filespec == NULL);
-#endif
 	if (load_result == LOADING_FAILED) // Error during load (was already displayed by the function call).
 	{
 #ifndef AUTOHOTKEYSC

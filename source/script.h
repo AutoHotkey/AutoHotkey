@@ -2830,11 +2830,7 @@ public:
 	ResultType Reload(bool aDisplayErrors);
 	ResultType ExitApp(ExitReasons aExitReason, LPTSTR aBuf = NULL, int ExitCode = 0);
 	void TerminateApp(ExitReasons aExitReason, int aExitCode); // L31: Added aExitReason. See script.cpp.
-#ifdef AUTOHOTKEYSC
 	LineNumberType LoadFromFile();
-#else
-	LineNumberType LoadFromFile(bool aScriptWasNotspecified);
-#endif
 	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
 	ResultType UpdateOrCreateTimer(IObject *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
 		, bool aUpdatePriorityOnly);

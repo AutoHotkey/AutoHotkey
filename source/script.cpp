@@ -274,10 +274,22 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 			if (filespec_length + _tcslen(suffix) + 1 > _countof(def_buf))
 				return FAIL; // Very rare, so for simplicity just abort.
 			_tcscpy(aScriptFilename + filespec_length, suffix); // Append the filename: .ahk vs. .ini seems slightly better in terms of clarity and usefulness (e.g. the ability to double click the default script to launch it).
-			// Now everything is set up right because even if aScriptFilename is a nonexistent file, the
-			// user will be prompted to create it by a stage further below.
+			if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF)
+			{
+				_tcscpy(dot, _T(".chm")); // Replace the ".ahk" which was inserted earlier.
+				if (GetFileAttributes(exe_buf) != 0xFFFFFFFF) // Avoids hh.exe showing an error message if the file doesn't exist.
+				{
+					_sntprintf(buf, _countof(buf), _T("\"ms-its:%s::/docs/Welcome.htm\""), exe_buf);
+					if (ActionExec(_T("hh.exe"), buf, exe_buf, false, _T("Max")))
+						return FAIL;
+				}
+				// Since above didn't return, the help file is missing or failed to launch,
+				// so continue on and let the missing script file be reported as an error.
+				// This will happen for AutoHotkeyU32.exe because AutoHotkeyU32.chm doesn't
+				// exist (seems fine to just show an error message in such cases).
+			}
 		}
-		//else since the legacy .ini file exists, everything is now set up right. (The file might be a directory, but that isn't checked due to rarity.)
+		//else since the file exists, everything is now set up right. (The file might be a directory, but that isn't checked due to rarity.)
 	}
 	// In case the script is a relative filespec (relative to current working dir):
 	if (!GetFullPathName(aScriptFilename, _countof(buf), buf, NULL)) // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
@@ -984,11 +996,7 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 
 
 
-#ifdef AUTOHOTKEYSC
 UINT Script::LoadFromFile()
-#else
-UINT Script::LoadFromFile(bool aScriptWasNotspecified)
-#endif
 // Returns the number of non-comment lines that were loaded, or LOADING_FAILED on error.
 {
 	mNoHotkeyLabels = true;  // Indicate that there are no hotkey labels, since we're (re)loading the entire file.
@@ -1000,72 +1008,8 @@ UINT Script::LoadFromFile(bool aScriptWasNotspecified)
 	if (attr == MAXDWORD) // File does not exist or lacking the authorization to get its attributes.
 	{
 		TCHAR buf[MAX_PATH + 256];
-		if (aScriptWasNotspecified) // v1.0.46.09: Give a more descriptive prompt to help users get started.
-		{
-			sntprintf(buf, _countof(buf),
-_T("To help you get started, would you like to create a sample script in the My Documents folder?\n")
-_T("\n")
-_T("Press YES to create and display the sample script.\n")
-_T("Press NO to exit.\n"));
-		}
-		else // Mostly for backward compatibility, also prompt to create if an explicitly specified script doesn't exist.
-			sntprintf(buf, _countof(buf), _T("The script file \"%s\" does not exist.  Create it now?"), mFileSpec);
-		int response = MsgBox(buf, MB_YESNO);
-		if (response != IDYES)
-			return 0;
-		FILE *fp2 = _tfopen(mFileSpec, _T("a"));
-		if (!fp2)
-		{
-			MsgBox(_T("Could not create file, perhaps because the current directory is read-only")
-				_T(" or has insufficient permissions."));
-			return LOADING_FAILED;
-		}
-		_fputts(
-_T("; IMPORTANT INFO ABOUT GETTING STARTED: Lines that start with a\n")
-_T("; semicolon, such as this one, are comments.  They are not executed.\n")
-_T("\n")
-_T("; This script has a special filename and path because it is automatically\n")
-_T("; launched when you run the program directly.  Also, any text file whose\n")
-_T("; name ends in .ahk is associated with the program, which means that it\n")
-_T("; can be launched simply by double-clicking it.  You can have as many .ahk\n")
-_T("; files as you want, located in any folder.  You can also run more than\n")
-_T("; one .ahk file simultaneously and each will get its own tray icon.\n")
-_T("\n")
-_T("; SAMPLE HOTKEYS: Below are two sample hotkeys.  The first is Win+Z and it\n")
-_T("; launches a web site in the default browser.  The second is Control+Alt+N\n")
-_T("; and it launches a new Notepad window (or activates an existing one).  To\n")
-_T("; try out these hotkeys, run AutoHotkey again, which will load this file.\n")
-_T("\n")
-_T("#z::Run http://ahkscript.org\n")
-_T("\n")
-_T("^!n::\n")
-_T("IfWinExist Untitled - Notepad\n")
-_T("\tWinActivate\n")
-_T("else\n")
-_T("\tRun Notepad\n")
-_T("return\n")
-_T("\n")
-_T("\n")
-_T("; Note: From now on whenever you run AutoHotkey directly, this script\n")
-_T("; will be loaded.  So feel free to customize it to suit your needs.\n")
-_T("\n")
-_T("; Please read the QUICK-START TUTORIAL near the top of the help file.\n")
-_T("; It explains how to perform common automation tasks such as sending\n")
-_T("; keystrokes and mouse clicks.  It also explains more about hotkeys.\n")
-, fp2);
-		fclose(fp2);
-		// One or both of the below would probably fail -- at least on Win95 -- if mFileSpec ever
-		// has spaces in it (since it's passed as the entire param string).  So enclose the filename
-		// in double quotes.  I don't believe the directory needs to be in double quotes since it's
-		// a separate field within the CreateProcess() and ShellExecute() structures:
-		sntprintf(buf, _countof(buf), _T("\"%s\""), mFileSpec);
-		if (!ActionExec(_T("edit"), buf, mFileDir, false))
-			if (!ActionExec(_T("notepad.exe"), buf, mFileDir, false))
-			{
-				MsgBox(_T("Can't open script.")); // Short msg since so rare.
-				return LOADING_FAILED;
-			}
-		// future: have it wait for the process to close, then try to open the script again:
+		sntprintf(buf, _countof(buf), _T("Script file not found:\n%s"), mFileSpec);
+		MsgBox(buf, MB_ICONHAND);
 		return 0;
 	}
 #endif
