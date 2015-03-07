@@ -5116,7 +5116,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	// See GuiWindowProc() for details about this first section:
 	LRESULT msg_reply;
-	if (g_MsgMonitorCount // Count is checked here to avoid function-call overhead.
+	if (g_MsgMonitor.Count() // Count is checked here to avoid function-call overhead.
 		&& (!g->CalledByIsDialogMessageOrDispatch || g->CalledByIsDialogMessageOrDispatchMsg != iMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
 		&& MsgMonitor(hWnd, iMsg, wParam, lParam, NULL, msg_reply))
 		return msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
@@ -5515,8 +5515,8 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	case WM_CLIPBOARDUPDATE: // For Vista and later.
 	case WM_DRAWCLIPBOARD:
-		if (g_script.mOnClipboardChangeLabel) // In case it's a bogus msg, it's our responsibility to avoid posting the msg if there's no label to launch.
-			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, 0, 0); // It's done this way to buffer it when the script is uninterruptible, etc.  v1.0.44: Post to g_hWnd vs. NULL so that notifications aren't lost when script is displaying a MsgBox or other dialog.
+		if (g_script.mOnClipboardChangeLabel || g_script.mOnClipboardChange.Count()) // In case it's a bogus msg, it's our responsibility to avoid posting the msg if there's no label to launch.
+			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, !g_script.mIsReadyToExecute, 0); // It's done this way to buffer it when the script is uninterruptible, etc.  v1.0.44: Post to g_hWnd vs. NULL so that notifications aren't lost when script is displaying a MsgBox or other dialog.
 		if (g_script.mNextClipboardViewer) // Will be NULL if there are no other windows in the chain, or if we're on Vista or later and used AddClipboardFormatListener instead of SetClipboardViewer (in which case iMsg should be WM_CLIPBOARDUPDATE).
 			SendMessageTimeout(g_script.mNextClipboardViewer, iMsg, wParam, lParam, SMTO_ABORTIFHUNG, 2000, &dwTemp);
 		return 0;
@@ -6000,7 +6000,7 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 {
 	// See GuiWindowProc() for details about this first part:
 	LRESULT msg_reply;
-	if (g_MsgMonitorCount // Count is checked here to avoid function-call overhead.
+	if (g_MsgMonitor.Count() // Count is checked here to avoid function-call overhead.
 		&& (!g->CalledByIsDialogMessageOrDispatch || g->CalledByIsDialogMessageOrDispatchMsg != uMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
 		&& MsgMonitor(hWndDlg, uMsg, wParam, lParam, NULL, msg_reply))
 		return (BOOL)msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
@@ -11390,6 +11390,8 @@ VarSizeType BIV_IconNumber(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(UTOA(g_script.mCustomIconNumber, target_buf));
 }
 
+
+
 VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
 {
 	const int bufSize = 32;
@@ -11418,7 +11420,9 @@ VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(aBuf);
 }
 
-VarSizeType BIV_ExitReason(LPTSTR aBuf, LPTSTR aVarName)
+
+
+LPTSTR GetExitReasonString(ExitReasons aExitReason)
 {
 	LPTSTR str;
 	switch(g_script.mExitReason)
@@ -11440,6 +11444,12 @@ VarSizeType BIV_ExitReason(LPTSTR aBuf, LPTSTR aVarName)
 	default:  // EXIT_NONE or unknown value (unknown would be considered a bug if it ever happened).
 		str = _T("");
 	}
+	return str;
+}
+
+VarSizeType BIV_ExitReason(LPTSTR aBuf, LPTSTR aVarName)
+{
+	LPTSTR str = GetExitReasonString(g_script.mExitReason);
 	if (aBuf)
 		_tcscpy(aBuf, str);
 	return (VarSizeType)_tcslen(str);
@@ -12224,10 +12234,8 @@ VarSizeType BIV_ThisMenuItem(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(g_script.mThisMenuItemName);
 }
 
-VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName)
+UINT Script::ThisMenuItemPos()
 {
-	if (!aBuf) // To avoid doing possibly high-overhead calls twice, merely return a conservative estimate for the first pass.
-		return MAX_INTEGER_LENGTH;
 	// The menu item's position is discovered through this process -- rather than doing
 	// something higher performance such as storing the menu handle or pointer to menu/item
 	// object in g_script -- because those things tend to be volatile.  For example, a menu
@@ -12235,25 +12243,22 @@ VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName)
 	// time this variable is referenced in the script.  Thus, by definition, this variable
 	// contains the CURRENT position of the most recently selected menu item within its
 	// CURRENT menu.
-	if (*g_script.mThisMenuName && *g_script.mThisMenuItemName)
-	{
-		UserMenu *menu = g_script.FindMenu(g_script.mThisMenuName);
-		if (menu)
-		{
-			// If the menu does not physically exist yet (perhaps due to being destroyed as a result
-			// of DeleteAll, Delete, or some other operation), create it so that the position of the
-			// item can be determined.  This is done for consistency in behavior.
-			if (!menu->mMenu)
-				menu->Create();
-			UINT menu_item_pos = menu->GetItemPos(g_script.mThisMenuItemName);
-			if (menu_item_pos < UINT_MAX) // Success
-				return (VarSizeType)_tcslen(UTOA(menu_item_pos + 1, aBuf)); // +1 to convert from zero-based to 1-based.
-		}
-	}
+	UserMenu *menu = FindMenu(mThisMenuName);
+	return menu ? menu->GetItemPos(mThisMenuItemName) : UINT_MAX;
+}
+
+VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName)
+{
+	if (!aBuf) // To avoid doing possibly high-overhead calls twice, merely return a conservative estimate for the first pass.
+		return MAX_INTEGER_LENGTH;
+	UINT menu_item_pos = g_script.ThisMenuItemPos();
+	if (menu_item_pos < UINT_MAX) // Success
+		return (VarSizeType)_tcslen(UTOA(menu_item_pos + 1, aBuf)); // +1 to convert from zero-based to 1-based.
 	// Otherwise:
 	*aBuf = '\0';
 	return 0;
 }
+
 
 VarSizeType BIV_ThisMenu(LPTSTR aBuf, LPTSTR aVarName)
 {
@@ -12431,18 +12436,8 @@ VarSizeType BIV_GuiEvent(LPTSTR aBuf, LPTSTR aVarName)
 	}
 
 	// Otherwise, this event is not GUI_EVENT_DROPFILES, so use standard modes of operation.
-	static LPTSTR sNames[] = GUI_EVENT_NAMES;
-	if (!aBuf)
-		return (g.GuiEvent < GUI_EVENT_FIRST_UNNAMED) ? (VarSizeType)_tcslen(sNames[g.GuiEvent]) : 1;
-	// Otherwise:
-	if (g.GuiEvent < GUI_EVENT_FIRST_UNNAMED)
-		return (VarSizeType)_tcslen(_tcscpy(aBuf, sNames[g.GuiEvent]));
-	else // g.GuiEvent is assumed to be an ASCII value, such as a digit.  This supports Slider controls.
-	{
-		*aBuf++ = (TCHAR)(UCHAR)g.GuiEvent;
-		*aBuf = '\0';
-		return 1;
-	}
+	LPTSTR event_string = GuiType::ConvertEvent(g.GuiEvent);
+	return (VarSizeType)_tcslen(aBuf ? _tcscpy(aBuf, event_string) : event_string);
 }
 
 
@@ -16410,55 +16405,83 @@ BIF_DECL(BIF_OnMessage)
 	// Load-time validation has ensured there's at least one parameter for use here:
 	UINT specified_msg = (UINT)ParamIndexToInt64(0); // Parameter #1
 
-	Func *func = NULL;           // Set defaults.
-	bool mode_is_delete = false; //
-	if (!ParamIndexIsOmitted(1)) // Parameter #2 is present.
+	// Set defaults:
+	IObject *callback = NULL;
+	bool mode_is_delete = false;
+	bool legacy_mode = true;
+	int max_instances = 1;
+	bool call_it_last = true;
+
+	if (!ParamIndexIsOmitted(2)) // Parameter #3 is present.
 	{
-		LPTSTR func_name = ParamIndexToString(1, buf); // Resolve parameter #2.
-		if (*func_name)
+		max_instances = (int)ParamIndexToInt64(2);
+		// For backward-compatibility, values between MAX_INSTANCES+1 and SHORT_MAX must be supported.
+		if (max_instances > MsgMonitorStruct::MAX_INSTANCES) // MAX_INSTANCES >= MAX_THREADS_LIMIT.
+			max_instances = MsgMonitorStruct::MAX_INSTANCES;
+		if (max_instances < 0) // MaxThreads < 0 is a signal to assign this monitor the lowest priority.
 		{
-			if (   !(func = g_script.FindFunc(func_name))   ) // Nonexistent function.
-				return; // Yield the default return value set earlier.
-			// If too many formal parameters or any are ByRef/optional, indicate failure.
-			// This helps catch bugs in scripts that are assigning the wrong function to a monitor.
-			// It also preserves additional parameters for possible future use (i.e. avoids breaking
-			// existing scripts if more formal parameters are supported in a future version).
-			// Lexikos: The flexibility of allowing ByRef and optional parameters seems to outweigh
-			// the small chance that these checks will actually catch an error and the even smaller
-			// chance that any parameters will be added in future.  For instance, a function may be
-			// called directly by the script to set or retrieve static vars which are used when the
-			// message monitor calls the function.  For these checks to actually catch an error, the
-			// author must have typed the name of the wrong function (i.e. probably not a typo), and
-			// that function must accept more than four parameters or have optional/ByRef parameters:
-			//if (func->mIsBuiltIn || func->mParamCount > 4 || func->mMinParams < func->mParamCount) // Too many params, or some are optional.
-			if (func->mIsBuiltIn || func->mMinParams > 4) // Requires too many params.
-				return; // Yield the default return value set earlier.
-			//for (int i = 0; i < func->mParamCount; ++i) // Check if any formal parameters are ByRef.
-			//	if (func->mParam[i].is_byref)
-			//		return; // Yield the default return value set earlier.
+			call_it_last = false; // Call it after any older monitors.  No effect if already registered.
+			max_instances = -max_instances; // Convert to positive.
 		}
-		else // Explicitly blank function name ("") means delete this item.  By contrast, an omitted second parameter means "give me current function of this message".
+		else if (max_instances == 0) // It would never be called, so this is used as a signal to delete the item.
 			mode_is_delete = true;
 	}
 
-	// If this is the first use of the g_MsgMonitor array, create it now rather than later to reduce code size
-	// and help the maintainability of sections further below. The following relies on short-circuit boolean order:
-	if (!g_MsgMonitor && !(g_MsgMonitor = (MsgMonitorStruct *)malloc(sizeof(MsgMonitorStruct) * MAX_MSG_MONITORS)))
-		return; // Yield the default return value set earlier.
+	if (!ParamIndexIsOmitted(1)) // Parameter #2 is present.
+	{
+		Func *func; // Func for validation of parameters, where possible.
+		if (TokenIsEmptyString(*aParam[1])) // Explicitly blank function name ("") means delete this item.  By contrast, an omitted second parameter means "give me current function of this message".
+		{
+			mode_is_delete = true;
+			func = NULL;
+		}
+		else if (callback = TokenToObject(*aParam[1]))
+		{
+			func = dynamic_cast<Func *>(callback);
+			legacy_mode = false; // Since the caller passed a reference, use the new mode.
+		}
+		else
+		{
+			callback = func = g_script.FindFunc(TokenToString(*aParam[1]));
+		}
+		// Notes about func validation: ByRef and optional parameters are allowed for flexibility.
+		// For example, a function may be called directly by the script to set static vars which
+		// are used when a message arrives.  Raising an error might help catch bugs, but only in
+		// very rare cases where a valid but wrong function name is given *and* that function has
+		// ByRef or optional parameters.
+		// If the parameter was not an empty string, an object or a valid function...
+		if (!mode_is_delete && (!callback || func && (func->mIsBuiltIn || func->mMinParams > 4)))
+		{
+			if (!legacy_mode)
+				aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
+			return; // Yield the default return value set earlier.
+		}
+	}
 
 	// Check if this message already exists in the array:
-	int msg_index;
-	for (msg_index = 0; msg_index < g_MsgMonitorCount; ++msg_index)
-		if (g_MsgMonitor[msg_index].msg == specified_msg)
-			break;
-	bool item_already_exists = (msg_index < g_MsgMonitorCount);
-	MsgMonitorStruct &monitor = g_MsgMonitor[msg_index == MAX_MSG_MONITORS ? 0 : msg_index]; // The 0th item is just a placeholder.
+	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(specified_msg, callback, legacy_mode);
+	bool item_already_exists = (pmonitor != NULL);
+	if (!item_already_exists)
+	{
+		if (!callback) // Delete or report function-name of a non-existent item.
+			return; // Yield the default return value set earlier (an empty string).
+		// From this point on, it is certain that an item will be added to the array.
+		if (  !(pmonitor = g_MsgMonitor.Add(specified_msg, callback, legacy_mode))  )
+		{
+			if (!legacy_mode)
+				aResult = g_script.ScriptError(ERR_OUTOFMEM);
+			// Otherwise, indicate failure by yielding the default return value set earlier.
+			return;
+		}
+	}
+
+	MsgMonitorStruct &monitor = *pmonitor;
 
 	if (item_already_exists)
 	{
-		// In all cases, yield the OLD function's name as the return value:
-		_tcscpy(buf, monitor.func->mName); // Caller has ensured that buf large enough to support max function name.
-		aResultToken.marker = buf;
+		if (legacy_mode) // Implies monitor.is_legacy_monitor, which means a Func was registered by name.
+			// In all cases, yield the OLD function's name as the return value:
+			aResultToken.marker = ((Func *)monitor.func)->mName;
 		if (mode_is_delete)
 		{
 			// The msg-monitor is deleted from the array for two reasons:
@@ -16471,43 +16494,167 @@ BIF_DECL(BIF_OnMessage)
 			// The main disadvantage to deleting message filters from the array is that the deletion might
 			// occur while the monitor is currently running, which requires more complex handling within
 			// MsgMonitor() (see its comments for details).
-			--g_MsgMonitorCount;  // Must be done prior to the below.
-			if (msg_index < g_MsgMonitorCount) // An element other than the last is being removed. Shift the array to cover/delete it.
-				MoveMemory(g_MsgMonitor+msg_index, g_MsgMonitor+msg_index+1, sizeof(MsgMonitorStruct)*(g_MsgMonitorCount-msg_index));
+			g_MsgMonitor.Remove(pmonitor);
 			return;
 		}
 		if (aParamCount < 2) // Single-parameter mode: Report existing item's function name.
-			return; // Everything was already set up above to yield the proper return value.
+			return;
 		// Otherwise, an existing item is being assigned a new function or MaxThreads limit.
 		// Continue on to update this item's attributes.
 	}
-	else // This message doesn't exist in array yet.
+	else // This message was newly added to the array.
 	{
-		if (!func) // Delete or report function-name of a non-existent item.
-			return; // Yield the default return value set earlier (an empty string).
-		// Since above didn't return, the message is to be added as a new element. The above already
-		// verified that func is not NULL.
-		if (msg_index == MAX_MSG_MONITORS) // No room in array.
-			return; // Indicate failure by yielding the default return value set earlier.
-		// Otherwise, the message is to be added, so increment the total:
-		++g_MsgMonitorCount;
-		_tcscpy(buf, func->mName); // Yield the NEW name as an indicator of success. Caller has ensured that buf large enough to support max function name.
-		aResultToken.marker = buf;
+		// The above already verified that callback is not NULL and there is room in the array.
+		if (legacy_mode)
+			// For backward-compatibility, return the function's name on success:
+			aResultToken.marker = ((Func *)callback)->mName;
 		monitor.instance_count = 0; // Reset instance_count only for new items since existing items might currently be running.
-		monitor.msg = specified_msg;
 		// Continue on to the update-or-create logic below.
 	}
 
 	// Since above didn't return, above has ensured that msg_index is the index of the existing or new
 	// MsgMonitorStruct in the array.  In addition, it has set the proper return value for us.
 	// Update those struct attributes that get the same treatment regardless of whether this is an update or creation.
-	if (func) // i.e. not OnMessage(Msg,,MaxThreads).
-		monitor.func = func;
-	if (!ParamIndexIsOmitted(2))
-		monitor.max_instances = (short)ParamIndexToInt64(2); // No validation because it seems harmless if it's negative or some huge number.
-	else // Unspecified, so if this item is being newly created fall back to the default.
-		if (!item_already_exists)
-			monitor.max_instances = 1;
+	if (callback && callback != monitor.func) // Callback is being registered or changed.
+	{
+		callback->AddRef(); // Keep the object alive while it's in g_MsgMonitor.
+		if (monitor.func)
+			monitor.func->Release();
+		monitor.func = callback;
+	}
+	if (!item_already_exists || !ParamIndexIsOmitted(2))
+		monitor.max_instances = max_instances;
+	// Otherwise, the parameter was omitted so leave max_instances at its current value.
+}
+
+
+MsgMonitorStruct *MsgMonitorList::Find(UINT aMsg, IObject *aCallback, bool aIsLegacyMode)
+{
+	for (int i = 0; i < mCount; ++i)
+		if (mMonitor[i].msg == aMsg
+			&& (aIsLegacyMode ? mMonitor[i].is_legacy_monitor : mMonitor[i].func == aCallback))
+			return mMonitor + i;
+	return NULL;
+}
+
+
+MsgMonitorStruct *MsgMonitorList::Add(UINT aMsg, IObject *aCallback, bool aIsLegacyMode, bool aAppend)
+{
+	if (mCount == mCountMax)
+	{
+		int new_count = mCountMax ? mCountMax * mCountMax : 16;
+		void *new_array = realloc(mMonitor, new_count * sizeof(MsgMonitorStruct));
+		if (!new_array)
+			return NULL;
+		mMonitor = (MsgMonitorStruct *)new_array;
+		mCountMax = new_count;
+	}
+	MsgMonitorStruct *new_mon;
+	if (!aAppend)
+	{
+		for (MsgMonitorInstance *inst = mTop; inst; inst = inst->previous)
+		{
+			inst->index++; // Correct the index of each running monitor.
+			inst->count++; // Iterate the same set of items which existed before.
+			// By contrast, count isn't adjusted when adding at the end because we do not
+			// want new items to be called by messages received before they were registered.
+		}
+		// Shift existing items to make room.
+		memmove(mMonitor + 1, mMonitor, mCount * sizeof(MsgMonitorStruct));
+		new_mon = mMonitor;
+	}
+	else
+		new_mon = mMonitor + mCount;
+
+	++mCount;
+	aCallback->AddRef();
+	new_mon->func = aCallback;
+	new_mon->msg = aMsg;
+	//new_mon->instance_count = 0;
+	//new_mon->max_instances = 1;
+	new_mon->is_legacy_monitor = aIsLegacyMode;
+	return new_mon;
+}
+
+
+void MsgMonitorList::Remove(MsgMonitorStruct *aMonitor)
+{
+	ASSERT(aMonitor >= mMonitor && aMonitor < mMonitor + mCount);
+
+	int mon_index = int(aMonitor - mMonitor);
+	// Adjust the index of any active message monitors affected by this deletion.  This allows a
+	// message monitor to delete older message monitors while still allowing any remaining monitors
+	// of that message to be called (when there are multiple).
+	for (MsgMonitorInstance *inst = mTop; inst; inst = inst->previous)
+	{
+		if (inst->index >= mon_index && inst->index >= 0)
+			inst->index--; // So index+1 is the next item.
+		inst->count--;
+	}
+	// Remove the item from the array.
+	--mCount;  // Must be done prior to the below.
+	IObject *release_me = aMonitor->func;
+	if (mon_index < mCount) // An element other than the last is being removed. Shift the array to cover/delete it.
+		memmove(aMonitor, aMonitor + 1, (mCount - mon_index) * sizeof(MsgMonitorStruct));
+	release_me->Release(); // Must be called after the above in case it calls a __delete() meta-function.
+}
+
+
+BIF_DECL(BIF_OnExitOrClipboard)
+{
+	bool is_onexit = toupper(aResultToken.marker[2]) == 'E';
+	aResultToken.SetValue(_T("")); // In all cases there is no return value.
+	MsgMonitorList &handlers = is_onexit ? g_script.mOnExit : g_script.mOnClipboardChange;
+
+	IObject *callback;
+	if (callback = TokenToFunc(*aParam[0]))
+	{
+		// Ensure this function is a valid one.
+		if (((Func *)callback)->mMinParams > 1)
+			callback = NULL;
+	}
+	else
+		callback = TokenToObject(*aParam[0]);
+	if (!callback)
+	{
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		return;
+	}
+	
+	int mode = 1; // Default.
+	if (!ParamIndexIsOmitted(1))
+		mode = ParamIndexToInt(1);
+
+	MsgMonitorStruct *existing = handlers.Find(0, callback, false);
+
+	switch (mode)
+	{
+	case  1:
+	case -1:
+		if (existing)
+			return;
+		if (!is_onexit)
+		{
+			// Do this before adding the handler so that it won't be called as a result of the
+			// SetClipboardViewer() call on Windows XP.  This won't cause existing handlers to
+			// be called because in that case the clipboard listener is already enabled.
+			g_script.EnableClipboardListener(true);
+		}
+		if (!handlers.Add(0, callback, false, mode == 1))
+			aResult = g_script.ScriptError(ERR_OUTOFMEM);
+		break;
+	case  0:
+		if (existing)
+			handlers.Remove(existing);
+		break;
+	default:
+		aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
+		break;
+	}
+	// In case the above enabled the clipboard listener but failed to add the handler,
+	// do this even if mode != 0:
+	if (!is_onexit && !g_script.mOnClipboardChangeLabel && !handlers.Count())
+		g_script.EnableClipboardListener(false);
 }
 
 
@@ -18453,6 +18600,9 @@ BOOL LegacyVarToBOOL(Var &aVar)
 
 BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber)
 {
+	if (aTokenIsNumber == SYM_INVALID) // Omitted.
+		aTokenIsNumber = TokenIsPureNumeric(aToken);
+
 	switch (aTokenIsNumber)
 	{
 	case PURE_INTEGER: // Probably the most common; e.g. both sides of "if (x>3 and x<6)" are the number 1/0.

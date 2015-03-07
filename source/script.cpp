@@ -210,11 +210,8 @@ Script::~Script() // Destructor.
 	if (g_hFontSplash) // The splash window itself should auto-destroyed, since it's owned by main.
 		DeleteObject(g_hFontSplash);
 
-	if (mOnClipboardChangeLabel) // Remove from viewer chain.
-		if (MyRemoveClipboardListener && MyAddClipboardListener)
-			MyRemoveClipboardListener(g_hWnd); // MyAddClipboardListener was used.
-		else
-			ChangeClipboardChain(g_hWnd, mNextClipboardViewer); // SetClipboardViewer was used.
+	if (mOnClipboardChangeLabel || mOnClipboardChange.Count()) // Remove from viewer chain.
+		EnableClipboardListener(false);
 
 	// Close any open sound item to prevent hang-on-exit in certain operating systems or conditions.
 	// If there's any chance that a sound was played and not closed out, or that it is still playing,
@@ -508,6 +505,19 @@ ResultType Script::CreateWindows()
 		CreateTrayIcon();
 
 	if (mOnClipboardChangeLabel)
+		EnableClipboardListener(true);
+
+	return OK;
+}
+
+
+
+void Script::EnableClipboardListener(bool aEnable)
+{
+	static bool sEnabled = false;
+	if (aEnable == sEnabled) // Simplifies BIF_OnExitOrClipboardChange.
+		return;
+	if (aEnable)
 	{
 		if (MyAddClipboardListener && MyRemoveClipboardListener) // Should be impossible for only one of these to be NULL, but check both anyway to be safe.
 		{
@@ -517,13 +527,30 @@ ResultType Script::CreateWindows()
 			// But this method doesn't appear to send an initial WM_CLIPBOARDUPDATE message.
 			// For consistency with the other method (below) and for backward compatibility,
 			// run the OnClipboardChange label once when the script first starts:
-			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, 0, 0);
+			if (!mIsReadyToExecute)
+			{
+				// Pass 1 for wParam so that MsgSleep() will call only the legacy OnClipboardChange label,
+				// not any functions which are registered between now and when the message is handled.
+				PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, 1, 0);
+			}
 		}
 		else
+		{
 			mNextClipboardViewer = SetClipboardViewer(g_hWnd);
+			// SetClipboardViewer() sends a WM_DRAWCLIPBOARD message and causes MainWindowProc()
+			// to be called before returning.  MainWindowProc() posts an AHK_CLIPBOARD_CHANGE
+			// message only if an OnClipboardChange label exists, since mOnClipboardChange.Count()
+			// is always 0 at this point.  It also uses wParam for the reason described above.
+		}
 	}
-
-	return OK;
+	else
+	{
+		if (MyRemoveClipboardListener && MyAddClipboardListener)
+			MyRemoveClipboardListener(g_hWnd); // MyAddClipboardListener was used.
+		else
+			ChangeClipboardChain(g_hWnd, mNextClipboardViewer); // SetClipboardViewer was used.
+	}
+	sEnabled = aEnable;
 }
 
 
@@ -806,23 +833,21 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 		MessageBox(g_hWnd, buf, g_script.mFileSpec, MB_OK | MB_SETFOREGROUND | MB_APPLMODAL);
 		TerminateApp(aExitReason, CRITICAL_ERROR); // Only after the above.
 	}
-
-	// Otherwise, it's not a critical error.  Note that currently, mOnExitLabel can only be
-	// non-NULL if the script is in a runnable state (since registering an OnExit label requires
-	// that a script command has executed to do it).  If this ever changes, the !mIsReadyToExecute
-	// condition should be added to the below if statement:
-	static bool sExitLabelIsRunning = false;
-	if (!mOnExitLabel || sExitLabelIsRunning)  // || !mIsReadyToExecute
+	// Otherwise, it's not a critical error.
+	static bool sOnExitIsRunning = false, sExitAppShouldTerminate = true;
+	if (sOnExitIsRunning || !mIsReadyToExecute)
 	{
-		// In the case of sExitLabelIsRunning == true:
-		// There is another instance of this function beneath us on the stack.  Since we have
-		// been called, this is a true exit condition and we exit immediately.
-		// MUST NOT create a new thread when sExitLabelIsRunning because g_array allows only one
-		// extra thread for ExitApp() (which allows it to run even when MAX_THREADS_EMERGENCY has
-		// been reached).  See TOTAL_ADDITIONAL_THREADS.
-		g_AllowInterruption = FALSE; // In case TerminateApp releases objects and indirectly causes
-		g->IsPaused = false;		 // more script to be executed.
-		TerminateApp(aExitReason, aExitCode);
+		// There is another instance of this function beneath us on the stack, executing an
+		// OnExit subroutine or function.  If a legacy OnExit sub is running, we still need
+		// to execute any other OnExit callbacks before exiting.  Otherwise ExitApp should
+		// terminate the app.
+		if (sExitAppShouldTerminate)
+			TerminateApp(aExitReason, aExitCode); // exit early for maintainability.
+		sExitAppShouldTerminate = true; // Signal our other instance that ExitApp was called.
+		return EARLY_EXIT; // Exit the thread (our other instance will call TerminateApp).
+		// MUST NOT create a new thread when sOnExitIsRunning because g_array allows only one
+		// extra thread for ExitApp() (which allows it to run even when MAX_THREADS_EMERGENCY
+		// has been reached).  See TOTAL_ADDITIONAL_THREADS for details.
 	}
 
 	// Otherwise, the script contains the special RunOnExit label that we will run here instead
@@ -864,19 +889,42 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	BOOL g_AllowInterruption_prev = g_AllowInterruption;  // Save current setting.
 	g_AllowInterruption = FALSE; // Mark the thread just created above as permanently uninterruptible (i.e. until it finishes and is destroyed).
 
-	sExitLabelIsRunning = true;
+	sOnExitIsRunning = true;
 	DEBUGGER_STACK_PUSH(_T("OnExit"))
-	if (mOnExitLabel->Execute() == FAIL)
+
+	terminate_afterward = true; // Set default - see below for comments.
+	
+	// When a legacy OnExit label is present, the default behaviour is to exit the script only if
+	// it calls ExitApp.  Therefore to make OnExit() useful in a script which uses legacy OnExit,
+	// we need to prevent ExitApp from actually terminating the app:
+	sExitAppShouldTerminate = false;
+	// If the subroutine encounters a failure condition such as a runtime error, exit afterward.
+	// Otherwise, there will be no way to exit the script if the subroutine fails on each attempt.
+	if (mOnExitLabel && mOnExitLabel->Execute() && !sExitAppShouldTerminate)
 	{
-		// If the subroutine encounters a failure condition such as a runtime error, exit immediately.
-		// Otherwise, there will be no way to exit the script if the subroutine fails on each attempt.
-		TerminateApp(aExitReason, aExitCode);
+		// The subroutine completed normally and did not call ExitApp, so don't exit.
+		terminate_afterward = false;
 	}
+	sExitAppShouldTerminate = true;
+
+	// If an OnExit label was called and didn't call ExitApp, terminate_afterward was set to false,
+	// so the script isn't exiting.  Otherwise, call the chain of OnExit functions:
+	if (terminate_afterward)
+	{
+		ExprTokenType param (GetExitReasonString(aExitReason));
+		if (mOnExit.Call(&param, 1, mOnExitLabel ? 0 : 1) == CONDITION_TRUE)
+			terminate_afterward = false; // A handler returned true to prevent exit.
+	}
+	
 	DEBUGGER_STACK_POP()
-	sExitLabelIsRunning = false;  // In case the user wanted the thread to end normally (see above).
+	sOnExitIsRunning = false;  // In case the user wanted the thread to end normally (see above).
 
 	if (terminate_afterward)
+	{
+		g_AllowInterruption = FALSE; // In case TerminateApp releases objects and indirectly causes
+		g->IsPaused = false;		 // more script to be executed.
 		TerminateApp(aExitReason, aExitCode);
+	}
 
 	// Otherwise:
 	ResumeUnderlyingThread(ErrorLevel_saved);
@@ -2389,7 +2437,7 @@ examine_line:
 					}
 				}
 				else // No parent hotkey yet, so create it.
-					if (   !(hk = Hotkey::AddHotkey(mLastLabel, hook_action, NULL, suffix_has_tilde, false))   )
+					if (   !(hk = Hotkey::AddHotkey(mLastLabel, hook_action, mLastLabel->mName, suffix_has_tilde, false))   )
 					{
 						if (hotkey_validity != CONDITION_TRUE)
 							return FAIL; // It already displayed the error.
@@ -3396,7 +3444,7 @@ void ScriptTimer::Disable()
 
 
 
-ResultType Script::UpdateOrCreateTimer(Label *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
+ResultType Script::UpdateOrCreateTimer(IObject *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
 	, bool aUpdatePriorityOnly)
 // Caller should specific a blank aPeriod to prevent the timer's period from being changed
 // (i.e. if caller just wants to turn on or off an existing timer).  But if it does this
@@ -3474,6 +3522,28 @@ ResultType Script::UpdateOrCreateTimer(Label *aLabel, LPTSTR aPeriod, LPTSTR aPr
 
 
 
+void Script::DeleteTimer(IObject *aLabel)
+{
+	ScriptTimer *timer, *previous = NULL;
+	for (timer = mFirstTimer; timer != NULL; previous = timer, timer = timer->mNextTimer)
+		if (timer->mLabel == aLabel) // Match found.
+		{
+			// Remove it from the list.
+			if (previous)
+				previous->mNextTimer = timer->mNextTimer;
+			else
+				mFirstTimer = timer->mNextTimer;
+			// Disable it.
+			if (timer->mEnabled)
+				timer->Disable(); // Keeps track of mTimerEnabledCount and whether the main timer is needed.
+			// Delete the timer, automatically releasing it's reference to the object.
+			delete timer;
+			break;
+		}
+}
+
+
+
 Label *Script::FindLabel(LPTSTR aLabelName)
 // Returns the first label whose name matches aLabelName, or NULL if not found.
 // v1.0.42: Since duplicates labels are now possible (to support #IfWin variants of a particular
@@ -3486,6 +3556,23 @@ Label *Script::FindLabel(LPTSTR aLabelName)
 		if (!_tcsicmp(label->mName, aLabelName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			return label; // Match found.
 	return NULL; // No match found.
+}
+
+
+
+IObject *Script::FindCallable(LPTSTR aLabelName, Var *aVar, int aParamCount)
+{
+	if (aVar && aVar->HasObject())
+		return aVar->Object();
+	if (*aLabelName)
+	{
+		if (Label *label = FindLabel(aLabelName))
+			return label;
+		if (Func *func = FindFunc(aLabelName))
+			if (func->mMinParams <= aParamCount)
+				return func;
+	}
+	return NULL;
 }
 
 
@@ -6514,6 +6601,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			case GUICONTROL_CMD_CONTENTS:
 			case GUICONTROL_CMD_TEXT:
 			case GUICONTROL_CMD_MOVEDRAW:
+			case GUICONTROL_CMD_OPTIONS:
 				break; // Do nothing for the above commands since Param3 is optional.
 			case GUICONTROL_CMD_MOVE:
 			case GUICONTROL_CMD_CHOOSE:
@@ -6815,8 +6903,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	{
 		for (Label *label = mLastLabel; label != NULL && label->mJumpToLine == NULL; label = label->mPrevLabel)
 		{
-			if (line.mActionType == ACT_BLOCK_BEGIN && line.mAttribute == ATTR_TRUE) // Non-zero mAttribute signifies the open-brace of a function body.
-				return ScriptError(_T("A label must not point to a function."));
 			if (line.mActionType == ACT_ELSE || line.mActionType == ACT_UNTIL || line.mActionType == ACT_CATCH)
 				return ScriptError(_T("A label must not point to an ELSE or UNTIL or CATCH."));
 			// The following is inaccurate; each block-end is in fact owned by its block-begin
@@ -7147,6 +7233,47 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		memcpy(func.mParam, param, size);
 	}
 	//else leave func.mParam/mParamCount set to their NULL/0 defaults.
+
+	if (mLastLabel && !mLastLabel->mJumpToLine)
+	{
+		// Check all variants of all hotkeys, since there might be multiple variants
+		// of various hotkeys defined in a row, such as:
+		// ^a::
+		// #IfWinActive B
+		// ^a::
+		// ^b::
+		//    somefunc(){ ...
+		for (int i = 0; i < Hotkey::sHotkeyCount; ++i)
+		{
+			for (HotkeyVariant *v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
+			{
+				Label *label = v->mJumpToLabel->ToLabel(); // Might be a function.
+				if (label && !label->mJumpToLine) // This hotkey label is pointing at this function.
+				{
+					// Update the hotkey to use this function instead of the label.
+					v->mJumpToLabel = &func;
+
+					// Remove this hotkey label from the list.  Each label is removed as the corresponding
+					// hotkey variant is found so that any generic labels that might be mixed in are left
+					// in the list and detected as errors later.
+					if (label->mPrevLabel)
+						label->mPrevLabel->mNextLabel = label->mNextLabel;
+					else
+						mFirstLabel = label->mNextLabel;
+					if (label->mNextLabel)
+						label->mNextLabel->mPrevLabel = label->mPrevLabel;
+					else
+						mLastLabel = label->mPrevLabel;
+				}
+			}
+		}
+		if (mLastLabel && !mLastLabel->mJumpToLine)
+			// There are one or more non-hotkey labels pointing at this function.
+			return ScriptError(_T("A label must not point to a function."), mLastLabel->mName);
+		// Since above didn't return, the label or labels must have been hotkey labels.
+		if (func.mMinParams)
+			return ScriptError(_T("Parameters of hotkey functions must be optional."), aBuf);
+	}
 
 	// Indicate success:
 	func.mGlobalVar = aFuncGlobalVar; // Give func.mGlobalVar its address, to be used for any var declarations inside this function's body.
@@ -8095,6 +8222,11 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		// script-loading process comes across any explicit uses of #SingleInstance, which would
 		// override the default set here.
 		g_persistent = true;
+	}
+	else if (!_tcsicmp(func_name, _T("OnExit")) || !_tcsicmp(func_name, _T("OnClipboardChange")))
+	{
+		bif = BIF_OnExitOrClipboard;
+		max_params = 2;
 	}
 #ifdef ENABLE_REGISTERCALLBACK
 	else if (!_tcsicmp(func_name, _T("RegisterCallback")))
@@ -9698,7 +9830,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 					return line->PreparseError(ERR_PARAM1_INVALID);
 				}
 				if (*line_raw_arg2 && !line->ArgHasDeref(2))
-					if (   !(line->mAttribute = FindLabel(line_raw_arg2))   )
+					if (   !(line->mAttribute = FindCallable(line_raw_arg2))   )
 						if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
 							return line->PreparseError(ERR_NO_LABEL);
 			}
@@ -9706,10 +9838,11 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 
 		case ACT_SETTIMER:
 			if (*line_raw_arg1 && !line->ArgHasDeref(1))
-				if (   !(line->mAttribute = FindLabel(line_raw_arg1))   )
+				if (   !(line->mAttribute = FindCallable(line_raw_arg1))   )
 					return line->PreparseError(ERR_NO_LABEL);
 			if (*line_raw_arg2 && !line->ArgHasDeref(2))
 				if (!Line::ConvertOnOff(line_raw_arg2) && !IsPureNumeric(line_raw_arg2, true) // v1.0.46.16: Allow negatives to support the new run-only-once mode.
+					&& _tcsicmp(line_raw_arg2, _T("Delete"))
 					&& !line->mArg[1].is_expression) // v1.0.46.10: Don't consider expressions THAT CONTAIN NO VARIABLES OR FUNCTION-CALLS like "% 2*500" to be a syntax error.
 					return line->PreparseError(ERR_PARAM2_INVALID);
 			break;
@@ -12079,7 +12212,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		case ACT_THROW:
 		{
 			if (!line->mArgc)
-				return line->ThrowRuntimeException(_T("An exception was thrown."));
+				return line->ThrowRuntimeException(ERR_EXCEPTION);
 
 			if (g.ThrownToken)
 			{
@@ -12968,7 +13101,7 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 			result_token.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
 		}
 
-		bool next_returned_true = TokenToBOOL(result_token, TokenIsPureNumeric(result_token));
+		bool next_returned_true = TokenToBOOL(result_token);
 
 		// Free any memory or object which may have been returned by Invoke:
 		if (result_token.mem_to_free)
@@ -13627,7 +13760,6 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	size_t source_length; // For String commands.
 	SymbolType var_is_pure_numeric, value_is_pure_numeric; // For math operations.
 	vk_type vk; // For GetKeyState.
-	Label *target_label;  // For ACT_SETTIMER and ACT_HOTKEY
 	__int64 device_id;  // For sound commands.  __int64 helps avoid compiler warning for some conversions.
 	bool is_remote_registry; // For Registry commands.
 	HKEY root_key; // For Registry commands.
@@ -14264,27 +14396,34 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return OK;
 
 	case ACT_ONEXIT:
-		if (!*ARG1) // Reset to normal Exit behavior.
-		{
-			g_script.mOnExitLabel = NULL;
-			return OK;
-		}
+	{
+		Label *target_label;
 		// If it wasn't resolved at load-time, it must be a variable reference:
 		if (   !(target_label = (Label *)mAttribute)   )
-			if (   !(target_label = g_script.FindLabel(ARG1))   )
-				return LineError(ERR_NO_LABEL, FAIL, ARG1);
+			if (   *ARG1 && !(target_label = g_script.FindLabel(ARG1))   )
+					return LineError(ERR_NO_LABEL, FAIL, ARG1);
 		g_script.mOnExitLabel = target_label;
 		return OK;
+	}
 
 	case ACT_HOTKEY:
+	{
+		IObject *target_label;
 		// mAttribute is the label resolved at loadtime, if available (for performance).
-		return Hotkey::Dynamic(THREE_ARGS, (Label *)mAttribute);
+		if (   !(target_label = (IObject *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
+			if (ARGVAR2 && ARGVAR2->HasObject()) // Allow: Hotkey %KeyName%, %VarWithObject%
+				target_label = ARGVAR2->Object(); // AddRef() will be called later, when it is stored.
+		return Hotkey::Dynamic(THREE_ARGS, target_label);
+	}
 
 	case ACT_SETTIMER: // A timer is being created, changed, or enabled/disabled.
+	{
+		IObject *target_label;
 		// Note that only one timer per label is allowed because the label is the unique identifier
 		// that allows us to figure out whether to "update or create" when searching the list of timers.
-		if (   !(target_label = (Label *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
-			if (   !(target_label = (*ARG1 ? g_script.FindLabel(ARG1) : g.CurrentLabel))   )
+		if (   !(target_label = (IObject *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
+			if (   !(target_label = g_script.FindCallable(ARG1, ARGVAR1))
+				&& !(!*ARG1 && (target_label = g.CurrentLabel))   )
 				return LineError(ERR_NO_LABEL, FAIL, ARG1);
 		// And don't update mAttribute (leave it NULL) because we want ARG1 to be dynamically resolved
 		// every time the command is executed (in case the contents of the referenced variable change).
@@ -14299,7 +14438,14 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		{
 			toggle = Line::ConvertOnOff(ARG2);
 			if (!toggle && !IsPureNumeric(ARG2, true, true, true)) // Allow it to be neg. or floating point at runtime.
+			{
+				if (!_tcsicmp(ARG2, _T("Delete")))
+				{
+					g_script.DeleteTimer(target_label);
+					return OK;
+				}
 				return LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
+			}
 		}
 		else
 			toggle = TOGGLE_INVALID;
@@ -14315,6 +14461,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		default: g_script.UpdateOrCreateTimer(target_label, ARG2, ARG3, true, !*ARG2 && *ARG3);
 		}
 		return OK;
+	}
 
 	case ACT_CRITICAL:
 	{
@@ -14387,7 +14534,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		if (   !(group = (WinGroup *)mAttribute)   )
 			if (   !(group = g_script.FindGroup(ARG1, true))   )  // Last parameter -> create-if-not-found.
 				return FAIL;  // It already displayed the error for us.
-		target_label = NULL;
+		Label *target_label = NULL;
 		if (*ARG4)
 		{
 			if (   !(target_label = (Label *)mRelatedLine)   ) // Jump target hasn't been resolved yet, probably due to it being a deref.
@@ -14852,13 +14999,13 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return FormatTime(ARG2, ARG3);
 
 	case ACT_MENU:
-		return g_script.PerformMenu(SIX_ARGS); // L17: Changed from FIVE_ARGS to access previously "reserved" arg (for use by Menu,,Icon).
+		return g_script.PerformMenu(SIX_ARGS, ARGVAR4); // L17: Changed from FIVE_ARGS to access previously "reserved" arg (for use by Menu,,Icon).
 
 	case ACT_GUI:
 		return g_script.PerformGui(FOUR_ARGS);
 
 	case ACT_GUICONTROL:
-		return GuiControl(THREE_ARGS);
+		return GuiControl(THREE_ARGS, ARGVAR3);
 
 	case ACT_GUICONTROLGET:
 		return GuiControlGet(ARG2, ARG3, ARG4);
@@ -16098,7 +16245,7 @@ LPTSTR Script::ListKeyHistory(LPTSTR aBuf, int aBufSize) // aBufSize should be a
 	TCHAR timer_list[128] = _T("");
 	for (ScriptTimer *timer = mFirstTimer; timer != NULL; timer = timer->mNextTimer)
 		if (timer->mEnabled)
-			sntprintfcat(timer_list, _countof(timer_list) - 3, _T("%s "), timer->mLabel->mName); // Allow room for "..."
+			sntprintfcat(timer_list, _countof(timer_list) - 3, _T("%s "), timer->mLabel->Name()); // Allow room for "..."
 	if (*timer_list)
 	{
 		size_t length = _tcslen(timer_list);

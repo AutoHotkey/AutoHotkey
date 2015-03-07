@@ -203,6 +203,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_LINE_IN_PROPERTY_DEF _T("Not a valid property getter/setter.")
 #define ERR_INVALID_GUI_NAME _T("Invalid Gui name.")
 #define ERR_INVALID_OPTION _T("Invalid option.") // Generic message used by Gui and GuiControl/Get.
+#define ERR_EXCEPTION _T("An exception was thrown.")
 
 #define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
@@ -699,7 +700,7 @@ private:
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlGet(LPTSTR aCommand, LPTSTR aValue, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3);
+	ResultType GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, Var *aParam3Var);
 	ResultType GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3);
 	ResultType StatusBarGetText(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
@@ -1867,6 +1868,14 @@ public:
 		return (!*aX && !*aY) || (*aX && *aY) ? OK : FAIL;
 	}
 
+	bool IsExemptFromSuspend()
+	{
+		// Hotkey and Hotstring subroutines whose first line is the Suspend command are exempt from
+		// being suspended themselves except when their first parameter is the literal
+		// word "on":
+		return mActionType == ACT_SUSPEND && (!mArgc || ArgHasDeref(1) || _tcsicmp(mArg[0].text, _T("On")));
+	}
+
 	static LPTSTR LogToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR VicinityToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false);
@@ -1919,7 +1928,7 @@ public:
 
 
 
-class Label
+class Label : public IObjectComCompatible
 {
 public:
 	LPTSTR mName;
@@ -1928,11 +1937,8 @@ public:
 
 	bool IsExemptFromSuspend()
 	{
-		// Hotkey and Hotstring subroutines whose first line is the Suspend command are exempt from
-		// being suspended themselves except when their first parameter is the literal
-		// word "on":
-		return mJumpToLine->mActionType == ACT_SUSPEND && (!mJumpToLine->mArgc || mJumpToLine->ArgHasDeref(1)
-			|| _tcsicmp(mJumpToLine->mArg[0].text, _T("On")));
+		// See Line::IsExemptFromSuspend() for comments.
+		return mJumpToLine->IsExemptFromSuspend();
 	}
 
 	ResultType Execute()
@@ -1960,6 +1966,83 @@ public:
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
+
+	// IObject.
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
+	ULONG STDMETHODCALLTYPE Release() { return 1; }
+#ifdef CONFIG_DEBUGGER
+	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth) {}
+#endif
+};
+
+
+
+// This class encapsulates a pointer to an object which can be called by a timer,
+// hotkey, etc.  It provides common functionality that wouldn't be suitable for the
+// base IObject interface, but is needed for detection of "Suspend" or "Critical"
+// prior to calling the sub or function.
+class LabelPtr
+{
+protected:
+	IObject *mObject;
+	
+	enum CallableType
+	{
+		Callable_Label,
+		Callable_Func,
+		Callable_Object
+	};
+	static Line *getJumpToLine(IObject *aObject);
+	static CallableType getType(IObject *aObject);
+
+public:
+	LabelPtr() : mObject(NULL) {}
+	LabelPtr(IObject *object) : mObject(object) {}
+	ResultType ExecuteInNewThread(TCHAR *aNewThreadDesc
+		, ExprTokenType *aParamValue = NULL, int aParamCount = 0, INT_PTR *aRetVal = NULL) const;
+	const LabelPtr* operator-> () { return this; } // Act like a pointer.
+	operator void *() const { return mObject; } // For comparisons and boolean eval.
+
+	Label *ToLabel() const { return getType(mObject) == Callable_Label ? (Label *)mObject : NULL; }
+	
+	// Helper methods for legacy code which deals with Labels.
+	bool IsExemptFromSuspend() const;
+	ActionTypeType TypeOfFirstLine() const;
+	LPTSTR Name() const;
+};
+
+// LabelPtr with automatic reference-counting, for storing an object safely,
+// such as in a HotkeyVariant, UserMenuItem, etc.  In future, this could be
+// replaced with a more general smart pointer class.
+class LabelRef : public LabelPtr
+{
+public:
+	LabelRef() : LabelPtr() {}
+	LabelRef(IObject *object) : LabelPtr(object)
+	{
+		if (object)
+			object->AddRef();
+	}
+	LabelRef(const LabelPtr &other) : LabelPtr(other)
+	{
+		if (mObject)
+			mObject->AddRef();
+	}
+	LabelRef & operator = (IObject *object)
+	{
+		if (object)
+			object->AddRef();
+		if (mObject)
+			mObject->Release();
+		mObject = object;
+		return *this;
+	}
+	~LabelRef()
+	{
+		if (mObject)
+			mObject->Release();
+	}
 };
 
 
@@ -2129,7 +2212,7 @@ public:
 class ScriptTimer
 {
 public:
-	Label *mLabel;
+	LabelRef mLabel;
 	DWORD mPeriod; // v1.0.36.33: Changed from int to DWORD to double its capacity.
 	DWORD mTimeLastRun;  // TickCount
 	int mPriority;  // Thread priority relative to other threads, default 0.
@@ -2138,27 +2221,67 @@ public:
 	bool mRunOnlyOnce;
 	ScriptTimer *mNextTimer;  // Next items in linked list
 	void ScriptTimer::Disable();
-	ScriptTimer(Label *aLabel)
+	ScriptTimer(IObject *aLabel)
 		#define DEFAULT_TIMER_PERIOD 250
 		: mLabel(aLabel), mPeriod(DEFAULT_TIMER_PERIOD), mPriority(0) // Default is always 0.
 		, mExistingThreads(0), mTimeLastRun(0)
 		, mEnabled(false), mRunOnlyOnce(false), mNextTimer(NULL)  // Note that mEnabled must default to false for the counts to be right.
 	{}
-	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	void operator delete(void *aPtr) {}
-	void operator delete[](void *aPtr) {}
 };
 
 
 
 struct MsgMonitorStruct
 {
-	Func *func;
+	IObject *func;
 	UINT msg;
 	// Keep any members smaller than 4 bytes adjacent to save memory:
-	short instance_count;  // Distinct from func.mInstances because the script might have called the function explicitly.
-	short max_instances; // v1.0.47: Support more than one thread.
+	static const UCHAR MAX_INSTANCES = MAX_THREADS_LIMIT; // For maintainability.  Causes a compiler warning if MAX_THREADS_LIMIT > MAX_UCHAR.
+	UCHAR instance_count; // Distinct from func.mInstances because the script might have called the function explicitly.
+	UCHAR max_instances; // v1.0.47: Support more than one thread.
+	bool is_legacy_monitor; // true if this is the backwards-compatible "singleton" monitor for this message.
+};
+
+
+struct MsgMonitorInstance;
+class MsgMonitorList
+{
+	MsgMonitorStruct *mMonitor;
+	MsgMonitorInstance *mTop;
+	int mCount, mCountMax;
+
+	friend struct MsgMonitorInstance;
+
+public:
+	MsgMonitorStruct *Find(UINT aMsg, IObject *aCallback, bool aIsLegacyMode);
+	MsgMonitorStruct *Add(UINT aMsg, IObject *aCallback, bool aIsLegacyMode, bool aAppend = TRUE);
+	void Remove(MsgMonitorStruct *aMonitor);
+	ResultType Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex); // Used for OnExit and OnClipboardChange, but not OnMessage.
+
+	MsgMonitorStruct& operator[] (const int aIndex) { return mMonitor[aIndex]; }
+	int Count() { return mCount; }
+
+	MsgMonitorList() : mCount(0), mCountMax(0), mMonitor(NULL) {}
+};
+
+
+struct MsgMonitorInstance
+{
+	MsgMonitorList &list;
+	MsgMonitorInstance *previous;
+	int index;
+	int count;
+
+	MsgMonitorInstance(MsgMonitorList &aList)
+		: list(aList), previous(aList.mTop), index(0), count(aList.mCount)
+	{
+		aList.mTop = this;
+	}
+
+	~MsgMonitorInstance()
+	{
+		list.mTop = previous;
+	}
 };
 
 
@@ -2192,10 +2315,10 @@ public:
 	{
 	}
 
-	ResultType AddItem(LPTSTR aName, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, LPTSTR aOptions);
+	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions);
 	ResultType DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev);
 	ResultType DeleteAllItems();
-	ResultType ModifyItem(UserMenuItem *aMenuItem, Label *aLabel, UserMenu *aSubmenu, LPTSTR aOptions);
+	ResultType ModifyItem(UserMenuItem *aMenuItem, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions);
 	void UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions);
 	ResultType RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName);
 	ResultType UpdateName(UserMenuItem *aMenuItem, LPTSTR aNewName);
@@ -2234,7 +2357,7 @@ public:
 	LPTSTR mName;  // Dynamically allocated.
 	size_t mNameCapacity;
 	UINT mMenuID;
-	Label *mLabel;
+	LabelRef mLabel;
 	UserMenu *mSubmenu;
 	UserMenu *mMenu;  // The menu to which this item belongs.  Needed to support script var A_ThisMenu.
 	int mPriority;
@@ -2262,7 +2385,7 @@ public:
 	};
 
 	// Constructor:
-	UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, Label *aLabel, UserMenu *aSubmenu, UserMenu *aMenu);
+	UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, UserMenu *aMenu);
 
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
@@ -2331,7 +2454,7 @@ struct GuiControlType
 	TabControlIndexType tab_control_index; // Which tab control this control belongs to, if any.
 	TabIndexType tab_index; // For type==TAB, this stores the tab control's index.  For other types, it stores the page.
 	Var *output_var;
-	Label *jump_to_label;
+	LabelRef jump_to_label;
 	union
 	{
 		COLORREF union_color;  // Color of the control's text.
@@ -2405,7 +2528,7 @@ public:
 	GuiControlType *mControl; // Will become an array of controls when the window is first created.
 	GuiIndexType mDefaultButtonIndex; // Index vs. pointer is needed for some things.
 	ULONG mReferenceCount; // For keeping this structure in memory during execution of the Gui's labels.
-	Label *mLabelForClose, *mLabelForEscape, *mLabelForSize, *mLabelForDropFiles, *mLabelForContextMenu;
+	LabelPtr mLabelForClose, mLabelForEscape, mLabelForSize, mLabelForDropFiles, mLabelForContextMenu; // These aren't reference counted, as they can only be a Func or Label, not a dynamic object.
 	bool mLabelForCloseIsRunning, mLabelForEscapeIsRunning, mLabelForSizeIsRunning; // DropFiles doesn't need one of these.
 	bool mLabelsHaveBeenSet;
 	DWORD mStyle, mExStyle; // Style of window.
@@ -2489,6 +2612,8 @@ public:
 	void AddRef();
 	void Release();
 	void SetLabels(LPTSTR aLabelPrefix);
+	static LPTSTR ConvertEvent(GuiEventType evt);
+	static IObject* CreateDropArray(HDROP hDrop);
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText);
 
@@ -2497,7 +2622,7 @@ public:
 	void GetTotalWidthAndHeight(LONG &aWidth, LONG &aHeight);
 
 	ResultType ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &aOpt, GuiControlType &aControl
-		, GuiIndexType aControlIndex = -1); // aControlIndex is not needed upon control creation.
+		, GuiIndexType aControlIndex = -1, Var *aParam3Var = NULL); // aControlIndex is not needed upon control creation.
 	void ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aControl);
 	void ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt = NULL);
 	ResultType Show(LPTSTR aOptions, LPTSTR aTitle);
@@ -2541,7 +2666,7 @@ public:
 	static int FindFont(FontType &aFont);
 
 	void Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEvent = GUI_EVENT_NONE, UINT_PTR aEventInfo = 0);
-	int CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr);
+	LRESULT CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr);
 
 	static WORD TextToHotkey(LPTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
@@ -2649,9 +2774,11 @@ public:
 	TCHAR mThisMenuItemName[MAX_MENU_NAME_LENGTH + 1];
 	TCHAR mThisMenuName[MAX_MENU_NAME_LENGTH + 1];
 	LPTSTR mThisHotkeyName, mPriorHotkeyName;
+	MsgMonitorList mOnExit, mOnClipboardChange; // Lists of event handlers for OnExit() and OnClipboardChange().
+	Label *mOnClipboardChangeLabel; // Separate from mOnClipboardChange for backward-compatibility reasons.
+	Label *mOnExitLabel;  // The label to run when the script terminates (NULL if none).
 	HWND mNextClipboardViewer;
 	bool mOnClipboardChangeIsRunning;
-	Label *mOnClipboardChangeLabel, *mOnExitLabel;  // The label to run when the script terminates (NULL if none).
 	ExitReasons mExitReason;
 
 	ScriptTimer *mFirstTimer, *mLastTimer;  // The first and last script timers in the linked list.
@@ -2694,6 +2821,7 @@ public:
     
 	ResultType Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestart);
 	ResultType CreateWindows();
+	void EnableClipboardListener(bool aEnable);
 	void EnableOrDisableViewMenuItems(HMENU aMenu, UINT aFlags);
 	void CreateTrayIcon();
 	void UpdateTrayIcon(bool aForceUpdate = false);
@@ -2708,8 +2836,9 @@ public:
 	LineNumberType LoadFromFile(bool aScriptWasNotspecified);
 #endif
 	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
-	ResultType UpdateOrCreateTimer(Label *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
+	ResultType UpdateOrCreateTimer(IObject *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
 		, bool aUpdatePriorityOnly);
+	void DeleteTimer(IObject *aLabel);
 
 	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[]);
 #ifndef AUTOHOTKEYSC
@@ -2737,6 +2866,7 @@ public:
 	WinGroup *FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound = false);
 	ResultType AddGroup(LPTSTR aGroupName);
 	Label *FindLabel(LPTSTR aLabelName);
+	IObject *FindCallable(LPTSTR aLabelName, Var *aVar = NULL, int aParamCount = 0);
 
 	ResultType DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, bool aUpdateLastError, WORD aShowWindow
 		, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, LPTSTR aSystemErrorText);
@@ -2747,9 +2877,10 @@ public:
 	LPTSTR ListVars(LPTSTR aBuf, int aBufSize);
 	LPTSTR ListKeyHistory(LPTSTR aBuf, int aBufSize);
 
-	ResultType PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2); // L17: Added aOptions2 for Icon sub-command (icon width). Arg was previously reserved/unused.
+	ResultType PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var); // L17: Added aOptions2 for Icon sub-command (icon width). Arg was previously reserved/unused.
 	UserMenu *FindMenu(LPTSTR aMenuName);
 	UserMenu *AddMenu(LPTSTR aMenuName);
+	UINT ThisMenuItemPos();
 	ResultType ScriptDeleteMenu(UserMenu *aMenu);
 	UserMenuItem *FindMenuItemByID(UINT aID)
 	{
@@ -2950,6 +3081,7 @@ BIF_DECL(BIF_Exp);
 BIF_DECL(BIF_SqrtLogLn);
 
 BIF_DECL(BIF_OnMessage);
+BIF_DECL(BIF_OnExitOrClipboard);
 
 #ifdef ENABLE_REGISTERCALLBACK
 BIF_DECL(BIF_RegisterCallback);
@@ -3016,7 +3148,7 @@ BIF_DECL(BIF_Exception);
 
 BOOL LegacyResultToBOOL(LPTSTR aResult);
 BOOL LegacyVarToBOOL(Var &aVar);
-BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber);
+BOOL TokenToBOOL(ExprTokenType &aToken, SymbolType aTokenIsNumber = SYM_INVALID);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
 BOOL TokenIsEmptyString(ExprTokenType &aToken);
 BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar); // Same as TokenIsEmptyString but optionally warns if the token is an uninitialized var.
@@ -3033,6 +3165,7 @@ void SetWorkingDir(LPTSTR aNewDir);
 int ConvertJoy(LPTSTR aBuf, int *aJoystickID = NULL, bool aAllowOnlyButtons = false);
 bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType);
 double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, bool aUseBoolForUpDown);
+LPTSTR GetExitReasonString(ExitReasons aExitReason);
 
 #endif
 

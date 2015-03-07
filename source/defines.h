@@ -254,6 +254,12 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define IF_CALL_FUNC_ONLY	0x100000 // Used by IDispatch: call only if value is a function.
 
 
+// Helper function for event handlers and __Delete:
+ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
+	, ExprTokenType *aParamValue = NULL, int aParamCount = 0, INT_PTR *aRetVal = NULL // For event handlers.
+	, int aExtraFlags = 0); // For Object.__Delete().
+
+
 struct DerefType; // Forward declarations for use below.
 class Var;        //
 struct ExprTokenType  // Something in the compiler hates the name TokenType, so using a different name.
@@ -294,6 +300,39 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	// The above two probably need to be adjacent to each other to conserve memory due to 8-byte alignment,
 	// which is the default alignment (for performance reasons) in any struct that contains 8-byte members
 	// such as double and __int64.
+
+	ExprTokenType() {}
+	ExprTokenType(__int64 aValue) { SetValue(aValue); }
+	ExprTokenType(double aValue) { SetValue(aValue); }
+	ExprTokenType(IObject *aValue) { SetValue(aValue); }
+	ExprTokenType(LPTSTR aValue) { SetValue(aValue); }
+	
+	void SetValue(__int64 aValue)
+	{
+		symbol = SYM_INTEGER;
+		value_int64 = aValue;
+	}
+	void SetValue(int aValue) { SetValue((__int64)aValue); }
+	void SetValue(UINT aValue) { SetValue((__int64)aValue); }
+	void SetValue(UINT64 aValue) { SetValue((__int64)aValue); }
+	void SetValue(double aValue)
+	{
+		symbol = SYM_FLOAT;
+		value_double = aValue;
+	}
+	void SetValue(LPTSTR aValue)
+	{
+		ASSERT(aValue);
+		symbol = SYM_STRING;
+		marker = aValue;
+	}
+	void SetValue(IObject *aValue)
+	// Caller must AddRef() if appropriate.
+	{
+		ASSERT(aValue);
+		symbol = SYM_OBJECT;
+		object = aValue;
+	}
 };
 #define MAX_TOKENS 512 // Max number of operators/operands.  Seems enough to handle anything realistic, while conserving call-stack space.
 #define STACK_PUSH(token_ptr) stack[stack_count++] = token_ptr

@@ -2,6 +2,7 @@
 #include "defines.h"
 #include "globaldata.h"
 #include "script.h"
+#include "application.h"
 
 #include "script_object.h"
 #include "script_func_impl.h"
@@ -38,6 +39,53 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 			// Above failed or the result is an empty string, so make sure it remains valid after we return:
 			aResultToken.marker = _T("");
 	}
+
+	return result;
+}
+
+
+//
+// CallMethod - Invoke a method with no parameters, discarding the result.
+//
+
+ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
+	, ExprTokenType *aParamValue, int aParamCount, INT_PTR *aRetVal // For event handlers.
+	, int aExtraFlags) // For Object.__Delete().
+{
+	ExprTokenType result_token, this_token, name_token;
+		
+	TCHAR result_buf[MAX_NUMBER_SIZE];
+	result_token.marker = _T("");
+	result_token.symbol = SYM_STRING;
+	result_token.mem_to_free = NULL;
+	result_token.buf = result_buf;
+
+	this_token.symbol = SYM_OBJECT;
+	this_token.object = aThis;
+
+	++aParamCount; // For the method name.
+	ExprTokenType **param = (ExprTokenType **)_alloca(aParamCount * sizeof(ExprTokenType *));
+	name_token.symbol = SYM_STRING;
+	name_token.marker = aMethodName;
+	param[0] = &name_token;
+	for (int i = 1; i < aParamCount; ++i)
+		param[i] = aParamValue + (i-1);
+
+	ResultType result = aInvokee->Invoke(result_token, this_token, IT_CALL | aExtraFlags, param, aParamCount);
+
+	if (aRetVal) // This is done regardless of result as some callers don't initialize it:
+		*aRetVal = (INT_PTR)TokenToInt64(result_token);
+
+	if (result != EARLY_EXIT && result != FAIL)
+	{
+		// Indicate to caller whether an integer value was returned (for MsgMonitor()).
+		result = TokenIsEmptyString(result_token) ? OK : EARLY_RETURN;
+	}
+
+	if (result_token.mem_to_free)
+		free(result_token.mem_to_free);
+	if (result_token.symbol == SYM_OBJECT)
+		result_token.object->Release();
 
 	return result;
 }
@@ -276,36 +324,15 @@ bool Object::Delete()
 			// undesirable to call the super-class' __Delete() meta-function for this.
 			return ObjectBase::Delete();
 
-		ExprTokenType result_token, this_token, param_token, *param;
-		
-		TCHAR dummy_buf[MAX_NUMBER_SIZE];
-		result_token.marker = _T("");
-		result_token.symbol = SYM_STRING;
-		result_token.mem_to_free = NULL;
-		result_token.buf = dummy_buf; // This is required in the case where __Delete returns a short string (although there's no good reason to ever do that).
-
-		this_token.symbol = SYM_OBJECT;
-		this_token.object = this;
-
-		param_token.symbol = SYM_STRING;
-		param_token.marker = sMetaFuncName[3]; // "__Delete"
-		param = &param_token;
-
 		// L33: Privatize the last recursion layer's deref buffer in case it is in use by our caller.
 		// It's done here rather than in Var::FreeAndRestoreFunctionVars or CallFunc (even though the
 		// below might not actually call any script functions) because this function is probably
 		// executed much less often in most cases.
 		PRIVATIZE_S_DEREF_BUF;
 
-		mBase->Invoke(result_token, this_token, IT_CALL | IF_METAOBJ, &param, 1);
+		CallMethod(mBase, this, sMetaFuncName[3], NULL, 0, NULL, IF_METAOBJ); // base.__Delete()
 
 		DEPRIVATIZE_S_DEREF_BUF; // L33: See above.
-
-		// L33: Release result if given, although typically there should not be one:
-		if (result_token.mem_to_free)
-			free(result_token.mem_to_free);
-		if (result_token.symbol == SYM_OBJECT)
-			result_token.object->Release();
 
 		// Above may pass the script a reference to this object to allow cleanup routines to free any
 		// associated resources.  Deleting it is only safe if the script no longer holds any references
@@ -1799,6 +1826,97 @@ BoundFunc::~BoundFunc()
 	mFunc->Release();
 	mParams->Release();
 }
+
+
+ResultType STDMETHODCALLTYPE Label::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	// Labels are never returned to script, so no need to check flags or parameters.
+	return Execute();
+}
+
+ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aParamValue, int aParamCount, INT_PTR *aRetVal) const
+{
+	DEBUGGER_STACK_PUSH(aNewThreadDesc)
+	ResultType result = CallMethod(mObject, mObject, _T("call"), aParamValue, aParamCount, aRetVal); // Lower-case "call" for compatibility with JScript.
+	DEBUGGER_STACK_POP()
+	return result;
+}
+
+
+LabelPtr::CallableType LabelPtr::getType(IObject *aObject)
+{
+	static const Func sFunc(NULL, false);
+	// Comparing [[vfptr]] produces smaller code and is perhaps 10% faster than dynamic_cast<>.
+	void *vfptr = *(void **)aObject;
+	if (vfptr == *(void **)g_script.mPlaceholderLabel)
+		return Callable_Label;
+	if (vfptr == *(void **)&sFunc)
+		return Callable_Func;
+	return Callable_Object;
+}
+
+Line *LabelPtr::getJumpToLine(IObject *aObject)
+{
+	switch (getType(aObject))
+	{
+	case Callable_Label: return ((Label *)aObject)->mJumpToLine;
+	case Callable_Func: return ((Func *)aObject)->mJumpToLine;
+	default: return NULL;
+	}
+}
+
+bool LabelPtr::IsExemptFromSuspend() const
+{
+	if (Line *line = getJumpToLine(mObject))
+		return line->IsExemptFromSuspend();
+	return false;
+}
+
+ActionTypeType LabelPtr::TypeOfFirstLine() const
+{
+	if (Line *line = getJumpToLine(mObject))
+		return line->mActionType;
+	return ACT_INVALID;
+}
+
+LPTSTR LabelPtr::Name() const
+{
+	switch (getType(mObject))
+	{
+	case Callable_Label: return ((Label *)mObject)->mName;
+	case Callable_Func: return ((Func *)mObject)->mName;
+	default: return _T("Object");
+	}
+}
+
+
+
+ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex)
+{
+	ResultType result = OK;
+	INT_PTR retval = 0;
+	
+	for (MsgMonitorInstance inst (*this); inst.index < inst.count; ++inst.index)
+	{
+		if (inst.index >= aInitNewThreadIndex) // Re-initialize the thread.
+			InitNewThread(0, true, false, ACT_INVALID);
+		
+		IObject *func = mMonitor[inst.index].func;
+
+		if (!CallMethod(func, func, _T("call"), aParamValue, aParamCount, &retval))
+		{
+			result = FAIL; // Callback encountered an error.
+			break;
+		}
+		if (retval)
+		{
+			result = CONDITION_TRUE;
+			break;
+		}
+	}
+	return result;
+}
+
 
 
 //
