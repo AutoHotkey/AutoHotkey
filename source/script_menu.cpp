@@ -1404,17 +1404,18 @@ UINT UserMenu::GetSubmenuPos(HMENU ahMenu)
 
 
 UINT UserMenu::GetItemPos(LPTSTR aMenuItemName)
-// aMenuItemName will be searched for in this->mMenu.
-// Returns UINT_MAX if this->mMenu is NULL or if aMenuItemName can't be found in this->mMenu.
+// aMenuItemName will be searched for in this menu.
+// Returns UINT_MAX if aMenuItemName can't be found.
 {
-	if (!mMenu)
-		return UINT_MAX;
-	int menu_item_count = GetMenuItemCount(mMenu);
-	TCHAR buf[MAX_MENU_NAME_LENGTH + 2];  // +2 due to uncertainty over whether GetMenuString()'s nMaxCount includes room for terminator.
-	for (int i = 0; i < menu_item_count; ++i)
-		if (GetMenuString(mMenu, i, buf, _countof(buf) - 1, MF_BYPOSITION))
-			if (!lstrcmpi(buf, aMenuItemName))  // A case insensitive match was found.
-				return i;
+	int i = 0;
+	// It seems more proper to use the original menu item name as set by the Menu command
+	// rather than GetMenuString() as in v1.1.19 and earlier since our only caller always
+	// passes an item name which originally came from item->mName.  If the item names are
+	// out of sync (i.e. the user modified the item via the Win32 API), this method may
+	// be more reliable.  It should also be faster and smaller.
+	for (UserMenuItem *item = mFirstMenuItem; item; item = item->mNextMenuItem, ++i)
+		if (!lstrcmpi(item->mName, aMenuItemName))
+			return i;
 	return UINT_MAX;  // No match found.
 }
 

@@ -12173,10 +12173,8 @@ VarSizeType BIV_ThisMenuItem(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(g_script.mThisMenuItemName);
 }
 
-VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName)
+UINT Script::ThisMenuItemPos()
 {
-	if (!aBuf) // To avoid doing possibly high-overhead calls twice, merely return a conservative estimate for the first pass.
-		return MAX_INTEGER_LENGTH;
 	// The menu item's position is discovered through this process -- rather than doing
 	// something higher performance such as storing the menu handle or pointer to menu/item
 	// object in g_script -- because those things tend to be volatile.  For example, a menu
@@ -12184,25 +12182,22 @@ VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName)
 	// time this variable is referenced in the script.  Thus, by definition, this variable
 	// contains the CURRENT position of the most recently selected menu item within its
 	// CURRENT menu.
-	if (*g_script.mThisMenuName && *g_script.mThisMenuItemName)
-	{
-		UserMenu *menu = g_script.FindMenu(g_script.mThisMenuName);
-		if (menu)
-		{
-			// If the menu does not physically exist yet (perhaps due to being destroyed as a result
-			// of DeleteAll, Delete, or some other operation), create it so that the position of the
-			// item can be determined.  This is done for consistency in behavior.
-			if (!menu->mMenu)
-				menu->Create();
-			UINT menu_item_pos = menu->GetItemPos(g_script.mThisMenuItemName);
-			if (menu_item_pos < UINT_MAX) // Success
-				return (VarSizeType)_tcslen(UTOA(menu_item_pos + 1, aBuf)); // +1 to convert from zero-based to 1-based.
-		}
-	}
+	UserMenu *menu = FindMenu(mThisMenuName);
+	return menu ? menu->GetItemPos(mThisMenuItemName) : UINT_MAX;
+}
+
+VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName)
+{
+	if (!aBuf) // To avoid doing possibly high-overhead calls twice, merely return a conservative estimate for the first pass.
+		return MAX_INTEGER_LENGTH;
+	UINT menu_item_pos = g_script.ThisMenuItemPos();
+	if (menu_item_pos < UINT_MAX) // Success
+		return (VarSizeType)_tcslen(UTOA(menu_item_pos + 1, aBuf)); // +1 to convert from zero-based to 1-based.
 	// Otherwise:
 	*aBuf = '\0';
 	return 0;
 }
+
 
 VarSizeType BIV_ThisMenu(LPTSTR aBuf, LPTSTR aVarName)
 {

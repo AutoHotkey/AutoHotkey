@@ -2874,6 +2874,7 @@ public:
 	ResultType PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var); // L17: Added aOptions2 for Icon sub-command (icon width). Arg was previously reserved/unused.
 	UserMenu *FindMenu(LPTSTR aMenuName);
 	UserMenu *AddMenu(LPTSTR aMenuName);
+	UINT ThisMenuItemPos();
 	ResultType ScriptDeleteMenu(UserMenu *aMenu);
 	UserMenuItem *FindMenuItemByID(UINT aID)
 	{
