@@ -83,15 +83,17 @@ public:
 
 	DWORD	BuildNumber(void) {return m_dwBuildNumber;}
 	//LPCTSTR CSD(void) {return m_szCSDVersion;}
+	LPCTSTR Version() {return m_szVersion;}
 
 private:
 	// Variables
-	OSVERSIONINFO	m_OSvi;						// OS Version data
+	OSVERSIONINFOW	m_OSvi;						// OS Version data
 
 	DWORD			m_dwMajorVersion;			// Major OS version
 	DWORD			m_dwMinorVersion;			// Minor OS version
 	DWORD			m_dwBuildNumber;			// Build number
-	//TCHAR			m_szCSDVersion [256];
+	//TCHAR			m_szCSDVersion[128];
+	TCHAR			m_szVersion[32];			// "Major.Minor.Build" -- longest known number is 9 chars (plus terminator), but 32 should be future-proof.
 
 #ifdef CONFIG_WIN9X
 	bool			m_bWinNT;

@@ -11468,7 +11468,7 @@ VarSizeType BIV_OSType(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName)
 {
-	LPCTSTR version = _T("");  // Init for maintainability.
+	LPCTSTR version = g_os.Version();  // Init for new or unrecognized OSes.
 	if (g_os.IsWinNT()) // "NT" includes all NT-kernel OSes: NT4/2000/XP/2003/Vista/7/8/etc.
 	{
 		if (g_os.IsWinXP())
