@@ -847,20 +847,25 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	}
 	// Otherwise, it's not a critical error.
 	static bool sOnExitIsRunning = false, sExitAppShouldTerminate = true;
+	static int sExitCode;
 	if (sOnExitIsRunning || !mIsReadyToExecute)
 	{
 		// There is another instance of this function beneath us on the stack, executing an
 		// OnExit subroutine or function.  If a legacy OnExit sub is running, we still need
 		// to execute any other OnExit callbacks before exiting.  Otherwise ExitApp should
-		// terminate the app.
-		if (sExitAppShouldTerminate)
-			TerminateApp(aExitReason, aExitCode); // exit early for maintainability.
+		// terminate the app.  Causes of script exit other than ExitApp are expected to
+		// terminate the app immediately even if OnExit is running.
+		if (sExitAppShouldTerminate || aExitReason != EXIT_EXIT)
+			TerminateApp(aExitReason, aExitCode); // Exit early; don't run the OnExit callbacks (again).
+		if (*Line::sArgDeref[0]) // ExitApp with a parameter -- relies on the aExitReason check above.
+			sExitCode = aExitCode; // Override the previous exit code.
 		sExitAppShouldTerminate = true; // Signal our other instance that ExitApp was called.
 		return EARLY_EXIT; // Exit the thread (our other instance will call TerminateApp).
 		// MUST NOT create a new thread when sOnExitIsRunning because g_array allows only one
 		// extra thread for ExitApp() (which allows it to run even when MAX_THREADS_EMERGENCY
 		// has been reached).  See TOTAL_ADDITIONAL_THREADS for details.
 	}
+	sExitCode = aExitCode;
 
 	// Otherwise, the script contains the special RunOnExit label that we will run here instead
 	// of exiting.  And since it does, we know that the script is in a ready-to-execute state
@@ -923,8 +928,8 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	// so the script isn't exiting.  Otherwise, call the chain of OnExit functions:
 	if (terminate_afterward)
 	{
-		ExprTokenType param (GetExitReasonString(aExitReason));
-		if (mOnExit.Call(&param, 1, mOnExitLabel ? 0 : 1) == CONDITION_TRUE)
+		ExprTokenType param[] = { GetExitReasonString(aExitReason), (__int64)sExitCode };
+		if (mOnExit.Call(param, _countof(param), mOnExitLabel ? 0 : 1) == CONDITION_TRUE)
 			terminate_afterward = false; // A handler returned true to prevent exit.
 	}
 	

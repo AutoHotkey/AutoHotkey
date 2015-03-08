@@ -16626,7 +16626,7 @@ BIF_DECL(BIF_OnExitOrClipboard)
 	if (callback = TokenToFunc(*aParam[0]))
 	{
 		// Ensure this function is a valid one.
-		if (((Func *)callback)->mMinParams > 1)
+		if (((Func *)callback)->mMinParams > 2)
 			callback = NULL;
 	}
 	else
