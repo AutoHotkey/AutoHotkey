@@ -404,7 +404,9 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// identified the field (or in this case an empty space) to replace with aThisToken when appropriate.
 			memcpy(meta_params + 1, aParam, aParamCount * sizeof(ExprTokenType*));
 
+			Line *curr_line = g_script.mCurrLine;
 			ResultType r = CallField(field, aResultToken, aThisToken, aFlags, meta_params, aParamCount + 1);
+			g_script.mCurrLine = curr_line; // Allows exceptions thrown by later meta-functions to report a more appropriate line.
 			if (r == EARLY_RETURN)
 				// Propagate EARLY_RETURN in case this was the __Call meta-function of a
 				// "function object" which is used as a meta-function of some other object.
