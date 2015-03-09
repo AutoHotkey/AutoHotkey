@@ -846,6 +846,8 @@ inline void global_init(global_struct &g)
 	// 6 to always be in effect as the default for future releases).
 }
 
+#define ERRORLEVEL_SAVED_SIZE 128 // The size that can be remembered (saved & restored) if a thread is interrupted. Big in case user put something bigger than a number in g_ErrorLevel.
+
 #ifdef UNICODE
 #define WINAPI_SUFFIX "W"
 #define PROCESS_API_SUFFIX "W" // used by Process32First and Process32Next

@@ -14523,7 +14523,7 @@ break_both:
 	// are set properly.
 
 	LPCSTR error_msg;
-	TCHAR error_buf[128];
+	TCHAR error_buf[ERRORLEVEL_SAVED_SIZE];
 	int error_code, error_offset;
 	pcret *re_compiled;
 
@@ -16719,7 +16719,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 #endif
 	Func &func = *cb.func; // For performance and convenience.
 
-	VarBkp ErrorLevel_saved;
+	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
 	EventInfoType EventInfo_saved;
 	BOOL pause_after_execute;
 
@@ -16745,7 +16745,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 		if (g_nThreads >= g_MaxThreadsTotal) // Since this is a callback, it seems too rare to make an exemption for functions whose first line is ExitApp. In any case, to avoid array overflow, g_MaxThreadsTotal must not be exceeded except where otherwise documented.
 			return DEFAULT_CB_RETURN_VALUE;
 		// See MsgSleep() for comments about the following section.
-		g_ErrorLevel->Backup(ErrorLevel_saved);
+		tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
 		InitNewThread(0, false, true, func.mJumpToLine->mActionType);
 		DEBUGGER_STACK_PUSH(_T("Callback"))
 	}

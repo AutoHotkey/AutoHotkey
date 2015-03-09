@@ -878,8 +878,8 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 
 	// Next, save the current state of the globals so that they can be restored just prior
 	// to returning to our caller:
-	VarBkp ErrorLevel_saved;
-	g_ErrorLevel->Backup(ErrorLevel_saved); // Save caller's errorlevel.
+	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
+	tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved)); // Save caller's errorlevel.
 	InitNewThread(0, true, true, ACT_INVALID); // Uninterruptibility is handled below. Since this special thread should always run, no checking of g_MaxThreadsTotal is done before calling this.
 
 	// Turn on uninterruptibility to forbid any hotkeys, timers, or user defined menu items
@@ -12739,8 +12739,8 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 		return CONDITION_FALSE;
 
 	// See MsgSleep() for comments about the following section.
-	VarBkp ErrorLevel_saved;
-	g_ErrorLevel->Backup(ErrorLevel_saved);
+	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
+	tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved));
 	// Critical seems to improve reliability, either because the thread completes faster (i.e. before the timeout) or because we check for messages less often.
 	InitNewThread(0, false, true, ACT_CRITICAL);
 	ResultType result;
