@@ -1684,6 +1684,10 @@ bool CheckScriptTimers()
 			// Since this is the first subroutine that will be launched during this call to
 			// this function, we know it will wind up running at least one subroutine, so
 			// certain changes are made:
+			// Back up the current ErrorLevel for later restoration.  This must be done prior
+			// to ++g below if ErrorLevel has VAR_ATTRIB_CONTENTS_OUT_OF_DATE, otherwise its
+			// value will be formatted according to the (uninitialized) settings in g[1].
+			tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved)); 
 			// Increment the count of quasi-threads only once because this instance of this
 			// function will never create more than 1 thread (i.e. if there is more than one
 			// enabled timer subroutine, the will always be run sequentially by this instance).
@@ -1693,7 +1697,6 @@ bool CheckScriptTimers()
 			// seems best since some timed subroutines might take a long time to run:
 			++g_nThreads; // These are the counterparts the decrements that will be done further
 			++g;          // below by ResumeUnderlyingThread().
-			tcslcpy(ErrorLevel_saved, g_ErrorLevel->Contents(), _countof(ErrorLevel_saved)); // Back up the current ErrorLevel for later restoration.
 			// But never kill the main timer, since the mere fact that we're here means that
 			// there's at least one enabled timed subroutine.  Though later, performance can
 			// be optimized by killing it if there's exactly one enabled subroutine, or if
