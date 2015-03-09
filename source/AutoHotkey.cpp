@@ -273,9 +273,11 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	if (!g_os.IsWinXPorLater())
 	{
 		// Since InitCommonControls() is apparently incapable of initializing DateTime and MonthCal
-		// controls, InitCommonControlsEx() must be called.  But since Ex() requires comctl32.dll
-		// 4.70+, must get the function's address dynamically in case the program is running on
-		// Windows 95/NT without the updated DLL (otherwise the program would not launch at all).
+		// controls, InitCommonControlsEx() must be called.
+#if defined(CONFIG_WIN9X) || defined(CONFIG_WINNT4)
+		// Since Ex() requires comctl32.dll 4.70+, must get the function's address dynamically
+		// in case the program is running on Windows 95/NT without the updated DLL (otherwise
+		// the program would not launch at all).
 		typedef BOOL (WINAPI *MyInitCommonControlsExType)(LPINITCOMMONCONTROLSEX);
 		MyInitCommonControlsExType MyInitCommonControlsEx = (MyInitCommonControlsExType)
 			GetProcAddress(GetModuleHandle(_T("comctl32")), "InitCommonControlsEx"); // LoadLibrary shouldn't be necessary because comctl32 in linked by compiler.
@@ -288,6 +290,13 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		}
 		else // InitCommonControlsEx not available, so must revert to non-Ex() to make controls work on Win95/NT4.
 			InitCommonControls();
+#else
+		// Currently only needed on Win2k, since Win9x is unsupported.
+		INITCOMMONCONTROLSEX icce;
+		icce.dwSize = sizeof(INITCOMMONCONTROLSEX);
+		icce.dwICC = ICC_WIN95_CLASSES | ICC_DATE_CLASSES; // ICC_WIN95_CLASSES is equivalent to calling InitCommonControls().
+		InitCommonControlsEx(&icce);
+#endif
 	}
 
 #ifdef CONFIG_DEBUGGER
