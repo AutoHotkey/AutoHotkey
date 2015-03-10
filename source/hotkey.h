@@ -65,7 +65,7 @@ ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR a
 
 struct HotkeyVariant
 {
-	Label *mJumpToLabel;
+	LabelRef mJumpToLabel;
 	HotkeyCriterion *mHotCriterion;
 	HotkeyVariant *mNextVariant;
 	DWORD mRunAgainTime;
@@ -139,7 +139,7 @@ private:
 
 	// For now, constructor & destructor are private so that only static methods can create new
 	// objects.  This allow proper tracking of which OS hotkey IDs have been used.
-	Hotkey(HotkeyIDType aID, Label *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel);
+	Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel);
 	~Hotkey() {if (mIsRegistered) Unregister();}
 
 public:
@@ -196,11 +196,11 @@ public:
 	#define HOTKEY_EL_NOREG              51
 	#define HOTKEY_EL_MAXCOUNT           98 // 98 allows room for other ErrorLevels to be added in between.
 	#define HOTKEY_EL_MEM                99
-	static ResultType Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions, Label *aJumpToLabel);
+	static ResultType Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions, IObject *aJumpToLabel);
 
-	static Hotkey *AddHotkey(Label *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel);
+	static Hotkey *AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel);
 	HotkeyVariant *FindVariant();
-	HotkeyVariant *AddVariant(Label *aJumpToLabel, bool aSuffixHasTilde);
+	HotkeyVariant *AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde);
 	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC);
 	HotkeyVariant *CriterionAllowsFiring(HWND *aFoundHWND = NULL);
 	static HotkeyVariant *CriterionAllowsFiring(HotkeyIDType aHotkeyID, HWND &aFoundHWND);
@@ -238,8 +238,8 @@ public:
 		// the number of currently active threads drops below the max.  But doing such
 		// might make "infinite key loops" harder to catch because the rate of incoming hotkeys
 		// would be slowed down to prevent the subroutines from running concurrently:
-		return aVariant.mExistingThreads < aVariant.mMaxThreads
-			|| (ACT_IS_ALWAYS_ALLOWED(aVariant.mJumpToLabel->mJumpToLine->mActionType)); // See below.
+		ActionTypeType act = aVariant.mJumpToLabel->TypeOfFirstLine();
+		return aVariant.mExistingThreads < aVariant.mMaxThreads || (ACT_IS_ALWAYS_ALLOWED(act)); // See below.
 		// Although our caller may have already called ACT_IS_ALWAYS_ALLOWED(), it was for a different reason.
 	}
 

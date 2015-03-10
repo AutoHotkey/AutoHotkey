@@ -43,14 +43,10 @@ BIF_DECL(BIF_Object)
 
 BIF_DECL(BIF_Array)
 {
-	Object *obj = Object::Create();
-	if (obj)
+	if (aResultToken.object = Object::CreateArray(aParam, aParamCount))
 	{
-		if (!aParamCount || obj->InsertAt(0, 1, aParam, aParamCount))
-		{
-			_f_return(obj);
-		}
-		obj->Release();
+		aResultToken.symbol = SYM_OBJECT;
+		return;
 	}
 	_f_throw(ERR_OUTOFMEM);
 }
@@ -371,6 +367,24 @@ BIF_DECL(BIF_ObjAddRefRelease)
 		_f_return_i(obj->AddRef());
 	else
 		_f_return_i(obj->Release());
+}
+
+
+//
+// ObjBindMethod(Obj, Method, Params...)
+//
+
+BIF_DECL(BIF_ObjBindMethod)
+{
+	IObject *func, *bound_func;
+	if (  !(func = TokenToObject(*aParam[0]))
+		&& !(func = TokenToFunc(*aParam[0]))  )
+	{
+		_f_throw(ERR_PARAM1_INVALID);
+	}
+	if (  !(bound_func = BoundFunc::Bind(func, aParam + 1, aParamCount - 1, IT_CALL))  )
+		_f_throw(ERR_OUTOFMEM);
+	_f_return(bound_func);
 }
 
 
