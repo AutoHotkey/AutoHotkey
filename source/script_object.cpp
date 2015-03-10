@@ -1708,7 +1708,7 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ResultToken &aResultToken, ExprTokenTy
 				aResultToken.object = bf;
 				return OK;
 			}
-			_o_throw(ERR_OUTOFMEM);
+			return g_script.ScriptError(ERR_OUTOFMEM);
 		}
 		if (_tcsicmp(member, _T("Call")))
 			return INVOKE_NOT_HANDLED; // Reserved.

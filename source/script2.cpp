@@ -14306,7 +14306,6 @@ BIF_DECL(BIF_OnMessage)
 	// Set defaults:
 	IObject *callback = NULL;
 	bool mode_is_delete = false;
-	bool legacy_mode = true;
 	int max_instances = 1;
 	bool call_it_last = true;
 
@@ -14328,20 +14327,10 @@ BIF_DECL(BIF_OnMessage)
 	if (!ParamIndexIsOmitted(1)) // Parameter #2 is present.
 	{
 		Func *func; // Func for validation of parameters, where possible.
-		if (TokenIsEmptyString(*aParam[1])) // Explicitly blank function name ("") means delete this item.  By contrast, an omitted second parameter means "give me current function of this message".
-		{
-			mode_is_delete = true;
-			func = NULL;
-		}
-		else if (callback = TokenToObject(*aParam[1]))
-		{
+		if (callback = TokenToObject(*aParam[1]))
 			func = dynamic_cast<Func *>(callback);
-			legacy_mode = false; // Since the caller passed a reference, use the new mode.
-		}
 		else
-		{
 			callback = func = g_script.FindFunc(TokenToString(*aParam[1]));
-		}
 		// Notes about func validation: ByRef and optional parameters are allowed for flexibility.
 		// For example, a function may be called directly by the script to set static vars which
 		// are used when a message arrives.  Raising an error might help catch bugs, but only in
@@ -14349,37 +14338,25 @@ BIF_DECL(BIF_OnMessage)
 		// ByRef or optional parameters.
 		// If the parameter was not an empty string, an object or a valid function...
 		if (!mode_is_delete && (!callback || func && (func->mIsBuiltIn || func->mMinParams > 4)))
-		{
-			if (!legacy_mode)
-				_f_throw(ERR_PARAM2_INVALID);
-			return; // Yield the default return value set earlier.
-		}
+			_f_throw(ERR_PARAM2_INVALID);
 	}
 
 	// Check if this message already exists in the array:
-	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(specified_msg, callback, legacy_mode);
+	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(specified_msg, callback);
 	bool item_already_exists = (pmonitor != NULL);
 	if (!item_already_exists)
 	{
 		if (!callback) // Delete or report function-name of a non-existent item.
-			return; // Yield the default return value set earlier (an empty string).
+			_f_return_retval; // Yield the default return value set earlier (an empty string).
 		// From this point on, it is certain that an item will be added to the array.
-		if (  !(pmonitor = g_MsgMonitor.Add(specified_msg, callback, legacy_mode, call_it_last))  )
-		{
-			if (!legacy_mode)
-				_f_throw(ERR_OUTOFMEM);
-			// Otherwise, indicate failure by yielding the default return value set earlier.
-			return;
-		}
+		if (  !(pmonitor = g_MsgMonitor.Add(specified_msg, callback, call_it_last))  )
+			_f_throw(ERR_OUTOFMEM);
 	}
 
 	MsgMonitorStruct &monitor = *pmonitor;
 
 	if (item_already_exists)
 	{
-		if (legacy_mode) // Implies monitor.is_legacy_monitor, which means a Func was registered by name.
-			// In all cases, yield the OLD function's name as the return value:
-			_f_set_retval_p(((Func *)monitor.func)->mName, -1); // Func::mName is already in persistent memory.
 		if (mode_is_delete)
 		{
 			// The msg-monitor is deleted from the array for two reasons:
@@ -14403,9 +14380,6 @@ BIF_DECL(BIF_OnMessage)
 	else // This message was newly added to the array.
 	{
 		// The above already verified that callback is not NULL and there is room in the array.
-		if (legacy_mode)
-			// For backward-compatibility, return the function's name on success:
-			aResultToken.marker = ((Func *)callback)->mName;
 		monitor.instance_count = 0; // Reset instance_count only for new items since existing items might currently be running.
 		// Continue on to the update-or-create logic below.
 	}
@@ -14427,17 +14401,16 @@ BIF_DECL(BIF_OnMessage)
 }
 
 
-MsgMonitorStruct *MsgMonitorList::Find(UINT aMsg, IObject *aCallback, bool aIsLegacyMode)
+MsgMonitorStruct *MsgMonitorList::Find(UINT aMsg, IObject *aCallback)
 {
 	for (int i = 0; i < mCount; ++i)
-		if (mMonitor[i].msg == aMsg
-			&& (aIsLegacyMode ? mMonitor[i].is_legacy_monitor : mMonitor[i].func == aCallback))
+		if (mMonitor[i].msg == aMsg && mMonitor[i].func == aCallback)
 			return mMonitor + i;
 	return NULL;
 }
 
 
-MsgMonitorStruct *MsgMonitorList::Add(UINT aMsg, IObject *aCallback, bool aIsLegacyMode, bool aAppend)
+MsgMonitorStruct *MsgMonitorList::Add(UINT aMsg, IObject *aCallback, bool aAppend)
 {
 	if (mCount == mCountMax)
 	{
@@ -14471,7 +14444,6 @@ MsgMonitorStruct *MsgMonitorList::Add(UINT aMsg, IObject *aCallback, bool aIsLeg
 	new_mon->msg = aMsg;
 	//new_mon->instance_count = 0;
 	//new_mon->max_instances = 1;
-	new_mon->is_legacy_monitor = aIsLegacyMode;
 	return new_mon;
 }
 
@@ -14521,7 +14493,7 @@ BIF_DECL(BIF_OnExitOrClipboard)
 	if (!ParamIndexIsOmitted(1))
 		mode = ParamIndexToInt(1);
 
-	MsgMonitorStruct *existing = handlers.Find(0, callback, false);
+	MsgMonitorStruct *existing = handlers.Find(0, callback);
 
 	switch (mode)
 	{
@@ -14536,7 +14508,7 @@ BIF_DECL(BIF_OnExitOrClipboard)
 			// be called because in that case the clipboard listener is already enabled.
 			g_script.EnableClipboardListener(true);
 		}
-		if (!handlers.Add(0, callback, false, mode == 1))
+		if (!handlers.Add(0, callback, mode == 1))
 			_f_throw(ERR_OUTOFMEM);
 		break;
 	case  0:

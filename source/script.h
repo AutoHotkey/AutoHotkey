@@ -2174,7 +2174,6 @@ struct MsgMonitorStruct
 	static const UCHAR MAX_INSTANCES = MAX_THREADS_LIMIT; // For maintainability.  Causes a compiler warning if MAX_THREADS_LIMIT > MAX_UCHAR.
 	UCHAR instance_count; // Distinct from func.mInstances because the script might have called the function explicitly.
 	UCHAR max_instances; // v1.0.47: Support more than one thread.
-	bool is_legacy_monitor; // true if this is the backwards-compatible "singleton" monitor for this message.
 };
 
 
@@ -2188,8 +2187,8 @@ class MsgMonitorList
 	friend struct MsgMonitorInstance;
 
 public:
-	MsgMonitorStruct *Find(UINT aMsg, IObject *aCallback, bool aIsLegacyMode);
-	MsgMonitorStruct *Add(UINT aMsg, IObject *aCallback, bool aIsLegacyMode, bool aAppend = TRUE);
+	MsgMonitorStruct *Find(UINT aMsg, IObject *aCallback);
+	MsgMonitorStruct *Add(UINT aMsg, IObject *aCallback, bool aAppend = TRUE);
 	void Remove(MsgMonitorStruct *aMonitor);
 	ResultType Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex); // Used for OnExit and OnClipboardChange, but not OnMessage.
 

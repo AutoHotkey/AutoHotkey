@@ -1786,7 +1786,6 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg, LRESULT &aMsgReply)
 {
 	MsgMonitorStruct *monitor = &g_MsgMonitor[aInstance.index];
-	bool is_legacy_monitor = monitor->is_legacy_monitor;
 	IObject *func = monitor->func; // In case monitor item gets deleted while the function is running (e.g. by the function itself).
 	ActionTypeType type_of_first_line = LabelPtr(func)->TypeOfFirstLine();
 
@@ -1890,7 +1889,7 @@ bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awPa
 	if (aInstance.index >= 0)
 	{
 		monitor = &g_MsgMonitor[aInstance.index];
-		if (monitor->msg == aMsg && (is_legacy_monitor ? monitor->is_legacy_monitor : monitor->func == func))
+		if (monitor->msg == aMsg && monitor->func == func)
 		{
 			if (monitor->instance_count) // Avoid going negative, which might otherwise be possible in weird circumstances described in other comments.
 				--monitor->instance_count;

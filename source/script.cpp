@@ -124,7 +124,7 @@ FuncEntry g_BIF[] =
 	BIFn(Ln, 1, 1, true, BIF_SqrtLogLn),
 	BIF1(DateAdd, 3, 3, true),
 	BIF1(DateDiff, 3, 3, true),
-	BIF1(OnMessage, 1, 3, true),
+	BIF1(OnMessage, 1, 3, false),
 	BIF1(RegisterCallback, 1, 4, true),
 	BIF1(Type, 1, 1, true),
 	BIF1(IsObject, 1, NA, true),
