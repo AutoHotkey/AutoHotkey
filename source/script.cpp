@@ -856,7 +856,11 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 		// terminate the app.  Causes of script exit other than ExitApp are expected to
 		// terminate the app immediately even if OnExit is running.
 		if (sExitAppShouldTerminate || aExitReason != EXIT_EXIT)
+		{
+			g_AllowInterruption = FALSE; // In case TerminateApp releases objects and indirectly causes
+			g->IsPaused = false;		 // more script to be executed.
 			TerminateApp(aExitReason, aExitCode); // Exit early; don't run the OnExit callbacks (again).
+		}
 		if (*Line::sArgDeref[0]) // ExitApp with a parameter -- relies on the aExitReason check above.
 			sExitCode = aExitCode; // Override the previous exit code.
 		sExitAppShouldTerminate = true; // Signal our other instance that ExitApp was called.
