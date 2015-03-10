@@ -16482,7 +16482,7 @@ BIF_DECL(BIF_OnMessage)
 		if (!callback) // Delete or report function-name of a non-existent item.
 			return; // Yield the default return value set earlier (an empty string).
 		// From this point on, it is certain that an item will be added to the array.
-		if (  !(pmonitor = g_MsgMonitor.Add(specified_msg, callback, legacy_mode))  )
+		if (  !(pmonitor = g_MsgMonitor.Add(specified_msg, callback, legacy_mode, call_it_last))  )
 		{
 			if (!legacy_mode)
 				aResult = g_script.ScriptError(ERR_OUTOFMEM);
