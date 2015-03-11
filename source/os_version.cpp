@@ -151,8 +151,10 @@ void OS_Version::Init(void)
 #ifdef CONFIG_WINNT4
 	m_bWinNT4	= false;	m_bWinNT4orLater	= false;
 #endif
-	m_bWin2000	= false;	m_bWin2000orLater	= false;
-	m_bWinXP	= false;	m_bWinXPorLater		= false;
+#ifdef CONFIG_WIN2K
+	m_bWin2000	= false;	m_bWin2000orLater	= false;	m_bWinXPorLater	= false;
+#endif
+	m_bWinXP	= false;
 	m_bWin2003  = false;
 	m_bWinVista = false;	m_bWinVistaOrLater	= false;
 	m_bWin7		= false;	m_bWin7OrLater		= false;
@@ -179,12 +181,16 @@ void OS_Version::Init(void)
 #ifdef CONFIG_WINNT4
 				m_bWinNT4orLater = true;
 #endif
+#ifdef CONFIG_WIN2K
 				m_bWin2000orLater = true;
 				if ( m_dwMinorVersion == 0 )	// Win2000
 					m_bWin2000 = true;
 				else // minor is 1 (XP), 2 (2003), or beyond.
+#endif
 				{
+#ifdef CONFIG_WIN2K
 					m_bWinXPorLater = true;
+#endif
 					if ( m_dwMinorVersion == 1 )
 						m_bWinXP = true;
 					else if ( m_dwMinorVersion == 2 )
@@ -205,8 +211,10 @@ void OS_Version::Init(void)
 						m_bWin8_1 = true;
 				}
 				m_bWinVistaOrLater = true;
+#ifdef CONFIG_WIN2K
 				m_bWinXPorLater = true;
 				m_bWin2000orLater = true;
+#endif
 #ifdef CONFIG_WINNT4
 				m_bWinNT4orLater = true;
 #endif
@@ -216,8 +224,10 @@ void OS_Version::Init(void)
 				{
 					m_bWin7OrLater = true;
 					m_bWinVistaOrLater = true;
+#ifdef CONFIG_WIN2K
 					m_bWinXPorLater = true;
 					m_bWin2000orLater = true;
+#endif
 #ifdef CONFIG_WINNT4
 					m_bWinNT4orLater = true;
 #endif

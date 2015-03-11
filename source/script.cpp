@@ -1009,8 +1009,6 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 		// MUST NOT create a new thread when sOnExitIsRunning because g_array allows only one
 		// extra thread for ExitApp() (which allows it to run even when MAX_THREADS_EMERGENCY has
 		// been reached).  See TOTAL_ADDITIONAL_THREADS.
-		g_AllowInterruption = FALSE; // In case TerminateApp releases objects and indirectly causes
-		g->IsPaused = false;		 // more script to be executed.
 		TerminateApp(aExitReason, aExitCode);
 	}
 
@@ -1061,11 +1059,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 
 	if (result != CONDITION_TRUE // OnExit function did not return true to prevent exit.
 		|| terminate_afterward) // Caller requested we exit unconditionally.
-	{
-		g_AllowInterruption = FALSE; // In case TerminateApp releases objects and indirectly causes
-		g->IsPaused = false;		 // more script to be executed.
 		TerminateApp(aExitReason, aExitCode);
-	}
 
 	// Otherwise:
 	g_AllowInterruption = g_AllowInterruption_prev;  // Restore original setting.
@@ -1087,6 +1081,11 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 	// L31: Release objects stored in variables, where possible.
 	if (aExitCode != CRITICAL_ERROR) // i.e. Avoid making matters worse if CRITICAL_ERROR.
 	{
+		// Ensure the current thread is not paused and can't be interrupted
+		// in case one or more objects need to call a __delete meta-function.
+		g_AllowInterruption = FALSE;
+		g->IsPaused = false;
+
 		int v, i;
 		for (v = 0; v < mVarCount; ++v)
 			if (mVar[v]->IsObject())

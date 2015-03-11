@@ -17008,8 +17008,12 @@ DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNam
 		: GetModuleFileNameEx(hproc, NULL, aBuf, aBufSize);
 
 	typedef DWORD (WINAPI *MyGetName)(HANDLE, LPTSTR, DWORD);
+#ifdef CONFIG_WIN2K
 	// This must be loaded dynamically or the program will probably not launch at all on Win2k:
 	static MyGetName lpfnGetName = (MyGetName)GetProcAddress(GetModuleHandle(_T("psapi")), "GetProcessImageFileName" WINAPI_SUFFIX);;
+#else
+	static MyGetName lpfnGetName = &GetProcessImageFileName;
+#endif
 
 	if (!buf_length && lpfnGetName)
 	{
