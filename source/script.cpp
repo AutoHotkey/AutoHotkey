@@ -3129,7 +3129,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		// Set the new criterion.
 		if (  !(g->HotCriterion = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))  )
-			return FAIL;
+			return ScriptError(ERR_OUTOFMEM);
 		g->HotCriterion->Type = HOT_IF_EXPR;
 		g->HotCriterion->ExprLine = hot_expr_line;
 		g->HotCriterion->WinTitle = hot_expr_line->mArg[0].text;
