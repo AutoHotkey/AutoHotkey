@@ -254,6 +254,12 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define IF_CALL_FUNC_ONLY	0x100000 // Used by IDispatch: call only if value is a function.
 
 
+// Helper function for event handlers and __Delete:
+ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
+	, ExprTokenType *aParamValue = NULL, int aParamCount = 0, INT_PTR *aRetVal = NULL // For event handlers.
+	, int aExtraFlags = 0); // For Object.__Delete().
+
+
 struct DerefType; // Forward declarations for use below.
 class Var;        //
 struct ExprTokenType  // Something in the compiler hates the name TokenType, so using a different name.
@@ -285,6 +291,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	};
 	SymbolType symbol;
 
+
 	ExprTokenType() {}
 	ExprTokenType(__int64 aValue) { SetValue(aValue); }
 	ExprTokenType(double aValue) { SetValue(aValue); }
@@ -314,6 +321,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	void SetValue(IObject *aValue)
 	// Caller must AddRef() if appropriate.
 	{
+		ASSERT(aValue);
 		symbol = SYM_OBJECT;
 		object = aValue;
 	}
@@ -472,12 +480,14 @@ enum enum_act {
 // Keep ACT_BLOCK_BEGIN as the first "control flow" action, for range checks with ACT_FIRST_CONTROL_FLOW:
 , ACT_BLOCK_BEGIN, ACT_BLOCK_END
 , ACT_ELSE   // Parsed at a lower level than most commands to support same-line ELSE-actions (e.g. "else if").
+, ACT_STATIC
+, ACT_HOTKEY_IF // Must be before ACT_FIRST_COMMAND.
 , ACT_FIRST_NAMED_ACTION, ACT_IF = ACT_FIRST_NAMED_ACTION
 , ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE
 , ACT_FOR, ACT_WHILE, ACT_UNTIL // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
 , ACT_BREAK, ACT_CONTINUE
 , ACT_GOTO, ACT_GOSUB, ACT_RETURN
-, ACT_TRY, ACT_CATCH, ACT_FINALLY, ACT_THROW
+, ACT_TRY, ACT_CATCH, ACT_FINALLY, ACT_THROW // Keep TRY, CATCH and FINALLY together and in this order for range checks.
 , ACT_FIRST_CONTROL_FLOW = ACT_BLOCK_BEGIN, ACT_LAST_CONTROL_FLOW = ACT_THROW
 , ACT_EXIT, ACT_EXITAPP // Excluded from the "CONTROL_FLOW" range above because they can be safely wrapped into a Func.
 , ACT_FIRST_COMMAND, ACT_MSGBOX = ACT_FIRST_COMMAND
@@ -546,8 +556,8 @@ enum enum_act {
 #define ACT_IS_CONTROL_FLOW(ActionType) (ActionType <= ACT_LAST_CONTROL_FLOW && ActionType >= ACT_FIRST_CONTROL_FLOW)
 #define ACT_IS_IF(ActionType) (ActionType == ACT_IF)
 #define ACT_IS_LOOP(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_WHILE)
-#define ACT_IS_IF_OR_ELSE_OR_LOOP(ActionType) (ActionType <= ACT_WHILE && ActionType >= ACT_ELSE)
-#define ACT_LOOP_ALLOWS_UNTIL(ActionType) (ActionType <= ACT_FOR && ActionType >= ACT_LOOP) // UNTIL is currently unsupported with WHILE, for performance/code size (doesn't seem useful anyway).
+#define ACT_IS_LINE_PARENT(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
+	|| ACT_IS_LOOP(ActionType) || (ActionType >= ACT_TRY && ActionType <= ACT_FINALLY))
 #define ACT_EXPANDS_ITS_OWN_ARGS(ActionType) (ActionType <= ACT_FUNC || ActionType == ACT_WHILE || ActionType == ACT_FOR || ActionType == ACT_THROW)
 #define ACT_USES_SIMPLE_POSTFIX(ActionType) (ActionType <= ACT_FUNC || ActionType == ACT_RETURN) // Actions which are optimized to use arg.postfix when is_expression == false, via the "only_token" optimization.
 

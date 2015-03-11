@@ -1571,6 +1571,8 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 				// Since built-in functions don't have variables we can directly assign to,
 				// we need to expand the param object's contents into an array of tokens:
 				param_obj->ArrayToParams(token, param_list, extra_params, aParam, aParamCount);
+				aParam = param_list;
+				aParamCount += extra_params;
 			}
 		}
 		if (rvalue)

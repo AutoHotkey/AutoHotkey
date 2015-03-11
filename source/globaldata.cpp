@@ -138,8 +138,7 @@ int g_nFolderDialogs = 0;
 InputBoxType g_InputBox[MAX_INPUTBOXES];
 GuiType *g_firstGui = NULL, *g_lastGui = NULL;
 HWND g_hWndToolTip[MAX_TOOLTIPS] = {NULL};
-MsgMonitorStruct *g_MsgMonitor = NULL; // An array to be allocated upon first use (if any).
-int g_MsgMonitorCount = 0;
+MsgMonitorList g_MsgMonitor;
 
 // Init not needed for these:
 UCHAR g_SortCaseSensitive;
@@ -266,6 +265,9 @@ Action g_act[] =
 	, {_T("{"), 0, 0, false, NULL}, {_T("}"), 0, 0, false, NULL}
 
 	, {_T("Else"), 0, 0, false, NULL}
+	
+	, {_T("Static"), 1, 1, 1, {1, 0}} // ACT_STATIC (used only at load time).
+	, {_T("#If"), 0, 1, 1, {1, 0}}
 
 	, {_T("If"), 1, 1, false, {1, 0}}
 	, {_T("Loop"), 0, 1, false, {1, 0}} // IterationCount

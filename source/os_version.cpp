@@ -89,9 +89,15 @@ information. For example, " C" indicates Windows 95 OSR2 and " A" indicates Wind
 
 void OS_Version::Init(void)
 {
+	typedef int (WINAPI * GetVersionType)(OSVERSIONINFOW *Info);
+	static GetVersionType _RtlGetVersion = (GetVersionType)GetProcAddress(GetModuleHandle(_T("ntdll.dll")), "RtlGetVersion");
+
 	// Get details of the OS we are running on
-	m_OSvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-	GetVersionEx(&m_OSvi);
+	m_OSvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOW);
+	if (_RtlGetVersion)
+		_RtlGetVersion(&m_OSvi);
+	else
+		GetVersionExW(&m_OSvi);
 
 	// Populate Major and Minor version numbers
 	m_dwMajorVersion	= m_OSvi.dwMajorVersion;
@@ -102,9 +108,7 @@ void OS_Version::Init(void)
 	_sntprintf(m_szVersion, _countof(m_szVersion)-1, _T("%u.%u.%u"), m_dwMajorVersion, m_dwMinorVersion, m_dwBuildNumber);
 	m_szVersion[_countof(m_szVersion)-1] = '\0'; // For the slim chance that it's too long to fit in the buffer (and therefore wasn't null-terminated).
 
-	/* // AutoHotkey: This is disabled because we never use it.  If it's ever re-enabled,
-	   // consider halving the size of m_szCSDVersion, to match szCSDVersion.  No idea why
-	   // it was set so large in the first place.
+	/* // AutoHotkey: This is disabled because we never use it.
 	
 	int		i;
 	int		nTemp;
@@ -147,8 +151,10 @@ void OS_Version::Init(void)
 #ifdef CONFIG_WINNT4
 	m_bWinNT4	= false;	m_bWinNT4orLater	= false;
 #endif
-	m_bWin2000	= false;	m_bWin2000orLater	= false;
-	m_bWinXP	= false;	m_bWinXPorLater		= false;
+#ifdef CONFIG_WIN2K
+	m_bWin2000	= false;	m_bWin2000orLater	= false;	m_bWinXPorLater	= false;
+#endif
+	m_bWinXP	= false;
 	m_bWin2003  = false;
 	m_bWinVista = false;	m_bWinVistaOrLater	= false;
 	m_bWin7		= false;	m_bWin7OrLater		= false;
@@ -175,12 +181,16 @@ void OS_Version::Init(void)
 #ifdef CONFIG_WINNT4
 				m_bWinNT4orLater = true;
 #endif
+#ifdef CONFIG_WIN2K
 				m_bWin2000orLater = true;
 				if ( m_dwMinorVersion == 0 )	// Win2000
 					m_bWin2000 = true;
 				else // minor is 1 (XP), 2 (2003), or beyond.
+#endif
 				{
+#ifdef CONFIG_WIN2K
 					m_bWinXPorLater = true;
+#endif
 					if ( m_dwMinorVersion == 1 )
 						m_bWinXP = true;
 					else if ( m_dwMinorVersion == 2 )
@@ -201,8 +211,10 @@ void OS_Version::Init(void)
 						m_bWin8_1 = true;
 				}
 				m_bWinVistaOrLater = true;
+#ifdef CONFIG_WIN2K
 				m_bWinXPorLater = true;
 				m_bWin2000orLater = true;
+#endif
 #ifdef CONFIG_WINNT4
 				m_bWinNT4orLater = true;
 #endif
@@ -212,8 +224,10 @@ void OS_Version::Init(void)
 				{
 					m_bWin7OrLater = true;
 					m_bWinVistaOrLater = true;
+#ifdef CONFIG_WIN2K
 					m_bWinXPorLater = true;
 					m_bWin2000orLater = true;
+#endif
 #ifdef CONFIG_WINNT4
 					m_bWinNT4orLater = true;
 #endif

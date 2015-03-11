@@ -6581,9 +6581,9 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		// account. To account for the scroll bars, call the GetSystemMetrics function with SM_CXVSCROLL
 		// or SM_CYHSCROLL."
 		if (style & WS_HSCROLL)
-			width += GetSystemMetrics(SM_CXHSCROLL);
+			height += GetSystemMetrics(SM_CYHSCROLL);
 		if (style & WS_VSCROLL)
-			height += GetSystemMetrics(SM_CYVSCROLL);
+			width += GetSystemMetrics(SM_CXVSCROLL);
 
 		RECT work_rect;
 		SystemParametersInfo(SPI_GETWORKAREA, 0, &work_rect, 0);  // Get desktop rect excluding task bar.
@@ -7550,7 +7550,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	// CalledByIsDialogMessageOrDispatch for any threads beneath it.  Although this may technically be
 	// unnecessary, it adds maintainability.
 	LRESULT msg_reply;
-	if (g_MsgMonitorCount // Count is checked here to avoid function-call overhead.
+	if (g_MsgMonitor.Count() // Count is checked here to avoid function-call overhead.
 		&& (!g->CalledByIsDialogMessageOrDispatch || g->CalledByIsDialogMessageOrDispatchMsg != iMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
 		&& MsgMonitor(hWnd, iMsg, wParam, lParam, NULL, msg_reply))
 		return msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
@@ -7605,10 +7605,24 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			mmi.ptMinTrackSize.x = pgui->mMinWidth;
 		if (pgui->mMinHeight >= 0)
 			mmi.ptMinTrackSize.y = pgui->mMinHeight;
-		if (pgui->mMaxWidth >= 0)   // mmi.ptMaxSize.x/y aren't changed because it seems the OS
-			mmi.ptMaxTrackSize.x = pgui->mMaxWidth; // automatically uses ptMaxTrackSize for them, at least when
-		if (pgui->mMaxHeight >= 0)   // ptMaxTrackSize is smaller than the system's default for
-			mmi.ptMaxTrackSize.y = pgui->mMaxHeight; // mmi.ptMaxSize.
+		// mmi.ptMaxSize.x/y aren't changed because it seems the OS automatically uses ptMaxTrackSize
+		// for them, at least when ptMaxTrackSize is smaller than the system's default for mmi.ptMaxSize.
+		if (pgui->mMaxWidth >= 0)
+		{
+			mmi.ptMaxTrackSize.x = pgui->mMaxWidth;
+			// If the user applies a MaxSize less than MinSize, MinSize appears to take precedence except
+			// that the window behaves oddly when dragging the left or top edge outward.  This adjustment
+			// removes the odd behaviour but does not visibly affect the size limits.  The user-specified
+			// MaxSize and MinSize are retained, so applying -MinSize lets MaxSize take effect.
+			if (mmi.ptMaxTrackSize.x < mmi.ptMinTrackSize.x)
+				mmi.ptMaxTrackSize.x = mmi.ptMinTrackSize.x;
+		}
+		if (pgui->mMaxHeight >= 0)
+		{
+			mmi.ptMaxTrackSize.y = pgui->mMaxHeight;
+			if (mmi.ptMaxTrackSize.y < mmi.ptMinTrackSize.y) // See above for comments.
+				mmi.ptMaxTrackSize.y = mmi.ptMinTrackSize.y;
+		}
 		return 0; // "If an application processes this message, it should return zero."
 	}
 
@@ -8425,7 +8439,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		{
 			HWND clicked_hwnd = (HWND)wParam;
 			bool from_keyboard; // Whether Context Menu was generated from keyboard (AppsKey or Shift-F10).
-			if (   !(from_keyboard = (lParam == 0xFFFFFFFF))   ) // Mouse click vs. keyboard event.
+			if (   !(from_keyboard = (lParam == -1))   ) // Mouse click vs. keyboard event.
 			{
 				// If the click occurred above the client area, assume it was in title/menu bar or border.
 				// Let default proc handle it.
@@ -8875,7 +8889,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 }
 
 
-int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
+LRESULT GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 {
 	// See MsgMonitor() in application.cpp for comments, as this method is based on the beforementioned function.
 
@@ -8897,7 +8911,6 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	ErrorLevel_Backup(ErrorLevel_saved);
 	InitNewThread(0, false, true, ACT_INVALID);
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-	DEBUGGER_STACK_PUSH(_T("Gui"))
 
 	AddRef();
 	ExprTokenType param[3];
@@ -8907,7 +8920,6 @@ int GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	g_script.mLastPeekTime = GetTickCount();
 	int returnValue = CallEvent(evt, 3, param);
 
-	DEBUGGER_STACK_POP()
 	Release();
 	ResumeUnderlyingThread(ErrorLevel_saved);
 

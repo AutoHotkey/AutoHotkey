@@ -41,7 +41,11 @@ public:
 	bool	IsWin9x(void) {return false;}
 #endif
 
+#ifdef CONFIG_WIN2K
 	bool	IsWin2000(void) {return m_bWin2000;}				// Returns true if Win2000
+#else
+	bool	IsWin2000(void) {return false;}
+#endif
 	bool	IsWinXP(void) {return m_bWinXP;}					// Returns true if WinXP
 	bool	IsWin2003(void) {return m_bWin2003;}				// Returns true if Win2003
 	bool	IsWinVista(void) {return m_bWinVista;}				// Returns true if WinVista (v1.0.44.13)
@@ -53,7 +57,11 @@ public:
 #else
 	bool	IsWin2000orLater(void) {return true;}
 #endif
+#ifdef CONFIG_WIN2K
 	bool	IsWinXPorLater(void) {return m_bWinXPorLater;}		// Returns true if WinXP+
+#else
+	bool	IsWinXPorLater(void) {return true;}
+#endif
 	bool	IsWinVistaOrLater(void) {return m_bWinVistaOrLater;}// Returns true if WinVista or later (v1.0.48.01)
 	bool	IsWin7OrLater(void) {return m_bWin7OrLater; }		// Returns true if Win7+
 
@@ -87,7 +95,7 @@ public:
 
 private:
 	// Variables
-	OSVERSIONINFO	m_OSvi;						// OS Version data
+	OSVERSIONINFOW	m_OSvi;						// OS Version data
 
 	DWORD			m_dwMajorVersion;			// Major OS version
 	DWORD			m_dwMinorVersion;			// Minor OS version
@@ -110,10 +118,12 @@ private:
 	bool			m_bWinNT4;
 	bool			m_bWinNT4orLater;
 #endif
+#ifdef CONFIG_WIN2K
 	bool			m_bWin2000;
 	bool			m_bWin2000orLater; // For simplicity, this is always left in even though it is not used when !(CONFIG_WIN9X || CONFIG_WINNT4).
-	bool			m_bWinXP;
 	bool			m_bWinXPorLater;
+#endif
+	bool			m_bWinXP;
 	bool			m_bWin2003;
 	bool			m_bWinVista;
 	bool			m_bWinVistaOrLater;

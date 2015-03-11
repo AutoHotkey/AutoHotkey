@@ -36,11 +36,21 @@ HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR a
 	if (USE_FOREGROUND_WINDOW(aTitle, aText, aExcludeTitle, aExcludeText))
 	{
 		// User asked us to activate the "active" window, which by definition already is.
-		// However, if the active (foreground) window is hidden and DetectHiddenWindows is
-		// off, the below will set target_window to be NULL, which seems like the most
-		// consistent result to use:
 		SET_TARGET_TO_ALLOWABLE_FOREGROUND(aSettings.DetectHiddenWindows)
-		return target_window;
+		// The documented behavior is "If a matching window is already active, that window
+		// will be kept active"; however, if the active (foreground) window is hidden and
+		// DetectHiddenWindows is off, that window isn't a match and so we should search
+		// for a matching window.
+		if (target_window) // Added in v1.1.20.
+		{
+			// The window is already active, but might be minimized.  The behavior in
+			// v1.1.19 and earlier was to leave it minimized, but it seems more useful
+			// and intuitive to restore it.  The documentation says "If the window is
+			// minimized, it is automatically restored prior to being activated."
+			if (IsIconic(target_window))
+				ShowWindow(target_window, SW_RESTORE);
+			return target_window;
+		}
 	}
 
 	if (!aFindLastMatch && !*aTitle && !*aText && !*aExcludeTitle && !*aExcludeText)

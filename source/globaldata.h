@@ -114,8 +114,7 @@ extern int g_nFolderDialogs;
 extern InputBoxType g_InputBox[MAX_INPUTBOXES];
 extern GuiType *g_firstGui, *g_lastGui;
 extern HWND g_hWndToolTip[MAX_TOOLTIPS];
-extern MsgMonitorStruct *g_MsgMonitor; // An array to be allocated upon first use (if any).
-extern int g_MsgMonitorCount;
+extern MsgMonitorList g_MsgMonitor;
 
 extern UCHAR g_SortCaseSensitive;
 extern bool g_SortNumeric;

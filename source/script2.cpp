@@ -268,6 +268,62 @@ ResultType Line::Input()
 	// active input prior to us didn't fail and it it needs to know how its input
 	// was terminated):
 	g_input.status = INPUT_OFF;
+	
+	//////////////////////////////////////////
+	// Set default options and parse aOptions:
+	//////////////////////////////////////////
+	g_input.BackspaceIsUndo = true;
+	g_input.CaseSensitive = false;
+	g_input.IgnoreAHKInput = false;
+	g_input.TranscribeModifiedKeys = false;
+	g_input.Visible = false;
+	g_input.FindAnywhere = false;
+	g_input.BufferLengthMax = INPUT_BUFFER_SIZE - 1;
+	int timeout = 0;
+	bool endchar_mode = false;
+	for (LPTSTR cp = aOptions; *cp; ++cp)
+	{
+		switch(ctoupper(*cp))
+		{
+		case 'B':
+			g_input.BackspaceIsUndo = false;
+			break;
+		case 'C':
+			g_input.CaseSensitive = true;
+			break;
+		case 'I':
+			g_input.IgnoreAHKInput = true;
+			break;
+		case 'M':
+			g_input.TranscribeModifiedKeys = true;
+			break;
+		case 'L':
+			// Use atoi() vs. ATOI() to avoid interpreting something like 0x01C as hex
+			// when in fact the C was meant to be an option letter:
+			g_input.BufferLengthMax = _ttoi(cp + 1);
+			if (g_input.BufferLengthMax > INPUT_BUFFER_SIZE - 1)
+				g_input.BufferLengthMax = INPUT_BUFFER_SIZE - 1;
+			break;
+		case 'T':
+			// Although ATOF() supports hex, it's been documented in the help file that hex should
+			// not be used (see comment above) so if someone does it anyway, some option letters
+			// might be misinterpreted:
+			timeout = (int)(ATOF(cp + 1) * 1000);
+			break;
+		case 'V':
+			g_input.Visible = true;
+			break;
+		case '*':
+			g_input.FindAnywhere = true;
+			break;
+		case 'E':
+			// Interpret single-character keys as characters rather than converting them to VK codes.
+			// This tends to work better when using multiple keyboard layouts, but changes behaviour:
+			// for instance, an end char of "." cannot be triggered while holding Alt.
+			endchar_mode = true;
+			break;
+		}
+	}
 
 	//////////////////////////////////////////////
 	// Set up sparse arrays according to aEndKeys:
@@ -278,23 +334,23 @@ ResultType Line::Input()
 	vk_type vk;
 	sc_type sc = 0;
 	modLR_type modifiersLR;
-	size_t key_text_length;
+	size_t key_text_length, single_char_count = 0;
 	TCHAR *end_pos, single_char_string[2];
 	single_char_string[1] = '\0'; // Init its second character once, since the loop only changes the first char.
 
-	for (; *aEndKeys; ++aEndKeys) // This a modified version of the processing loop used in SendKeys().
+	for (TCHAR *end_key = aEndKeys; *end_key; ++end_key) // This a modified version of the processing loop used in SendKeys().
 	{
 		vk = 0; // Set default.  Not strictly necessary but more maintainable.
 		*single_char_string = '\0';  // Set default as "this key name is not a single-char string".
 
-		switch (*aEndKeys)
+		switch (*end_key)
 		{
 		case '}': continue;  // Important that these be ignored.
 		case '{':
 		{
-			if (   !(end_pos = _tcschr(aEndKeys + 1, '}'))   )
+			if (   !(end_pos = _tcschr(end_key + 1, '}'))   )
 				continue;  // Do nothing, just ignore the unclosed '{' and continue.
-			if (   !(key_text_length = end_pos - aEndKeys - 1)   )
+			if (   !(key_text_length = end_pos - end_key - 1)   )
 			{
 				if (end_pos[1] == '}') // The string "{}}" has been encountered, which is interpreted as a single "}".
 				{
@@ -304,30 +360,40 @@ ResultType Line::Input()
 				else // Empty braces {} were encountered.
 					continue;  // do nothing: let it proceed to the }, which will then be ignored.
 			}
+			if (key_text_length == 1) // A single-char key name, such as {.} or {{}.
+			{
+				if (endchar_mode) // Handle this single-char key name by char code, not by VK.
+				{
+					// Although it might be sometimes useful to treat "x" as a character and "{x}" as a key,
+					// "{{}" and "{}}" can't be included without the extra braces.  {vkNN} can still be used
+					// to handle the key by VK instead of by character.
+					single_char_count++;
+					continue; // It will be processed by another section.
+				}
+				*single_char_string = end_key[1]; // Only used when vk != 0.
+			}
 
 			*end_pos = '\0';  // temporarily terminate the string here.
 
-			// v1.0.45: Fixed this section to differentiate between } and ] (and also { and [, as well as
-			// anything else enclosed in {} that requires END_KEY_WITH_SHIFT/END_KEY_WITHOUT_SHIFT consideration.
 			modifiersLR = 0;  // Init prior to below.
-			if (vk = TextToVK(aEndKeys + 1, &modifiersLR, true))
-			{
-				if (key_text_length == 1)
-					*single_char_string = aEndKeys[1];
-				//else leave it at its default of "not a single-char key-name".
-			}
-			else // No virtual key, so try to find a scan code.
-				if (sc = TextToSC(aEndKeys + 1))
+			if (  !(vk = TextToVK(end_key + 1, &modifiersLR, true))  )
+				// No virtual key, so try to find a scan code.
+				if (sc = TextToSC(end_key + 1))
 					end_sc[sc] = END_KEY_ENABLED;
 
 			*end_pos = '}';  // undo the temporary termination
 
-			aEndKeys = end_pos;  // In prep for aEndKeys++ at the bottom of the loop.
+			end_key = end_pos;  // In prep for ++end_key at the top of the loop.
 			break; // Break out of the switch() and do the vk handling beneath it (if there is a vk).
 		}
 
 		default:
-			*single_char_string = *aEndKeys;
+			if (endchar_mode)
+			{
+				single_char_count++;
+				continue; // It will be processed by another section.
+			}
+			*single_char_string = *end_key;
 			modifiersLR = 0;  // Init prior to below.
 			vk = TextToVK(single_char_string, &modifiersLR, true);
 		} // switch()
@@ -336,9 +402,7 @@ ResultType Line::Input()
 		{
 			end_vk[vk] |= END_KEY_ENABLED; // Use of |= is essential for cases such as ";:".
 			// Insist the shift key be down to form genuinely different symbols --
-			// namely punctuation marks -- but not for alphabetic chars.  In the
-			// future, an option can be added to the Options param to treat
-			// end chars as case sensitive (if there is any demand for that):
+			// namely punctuation marks -- but not for alphabetic chars.
 			if (*single_char_string && !IsCharAlpha(*single_char_string)) // v1.0.46.05: Added check for "*single_char_string" so that non-single-char strings like {F9} work as end keys even when the Shift key is being held down (this fixes the behavior to be like it was in pre-v1.0.45).
 			{
 				// Now we know it's not alphabetic, and it's not a key whose name
@@ -353,6 +417,34 @@ ResultType Line::Input()
 			}
 		}
 	} // for()
+
+	g_input.EndChars = _T("");
+	if (single_char_count)
+	{
+		// See single_char_count++ above for comments.
+		g_input.EndChars = talloca(single_char_count + 1);
+		TCHAR *dst, *src;
+		for (dst = g_input.EndChars, src = aEndKeys; *src; ++src)
+		{
+			switch (*src)
+			{
+			case '{':
+				if (end_pos = _tcschr(src + 1, '}'))
+				{
+					if (end_pos == src + 1 && end_pos[1] == '}') // {}}
+						end_pos++;
+					if (end_pos == src + 2)
+						*dst++ = src[1]; // Copy the single character from between the braces.
+					src = end_pos; // Skip '{key'.  Loop does ++src to skip the '}'.
+				}
+				// Otherwise, just ignore the '{'.
+			case '}':
+				continue;
+			}
+			*dst++ = *src;
+		}
+		*dst = '\0';
+	}
 
 	/////////////////////////////////////////////////
 	// Parse aMatchList into an array of key phrases:
@@ -463,56 +555,11 @@ ResultType Line::Input()
 	//////////////////////////////////////////////////////////////
 	// Initialize buffers and state variables for use by the hook:
 	//////////////////////////////////////////////////////////////
-	// Set the defaults that will be in effect unless overridden by an item in aOptions:
-	g_input.BackspaceIsUndo = true;
-	g_input.CaseSensitive = false;
-	g_input.IgnoreAHKInput = false;
-	g_input.TranscribeModifiedKeys = false;
-	g_input.Visible = false;
-	g_input.FindAnywhere = false;
-	int timeout = 0;  // Set default.
 	TCHAR input_buf[INPUT_BUFFER_SIZE] = _T(""); // Will contain the actual input from the user.
 	g_input.buffer = input_buf;
 	g_input.BufferLength = 0;
-	g_input.BufferLengthMax = INPUT_BUFFER_SIZE - 1;
+	// g_input.BufferLengthMax was set in the option parsing section.
 
-	for (LPTSTR cp = aOptions; *cp; ++cp)
-	{
-		switch(ctoupper(*cp))
-		{
-		case 'B':
-			g_input.BackspaceIsUndo = false;
-			break;
-		case 'C':
-			g_input.CaseSensitive = true;
-			break;
-		case 'I':
-			g_input.IgnoreAHKInput = true;
-			break;
-		case 'M':
-			g_input.TranscribeModifiedKeys = true;
-			break;
-		case 'L':
-			// Use atoi() vs. ATOI() to avoid interpreting something like 0x01C as hex
-			// when in fact the C was meant to be an option letter:
-			g_input.BufferLengthMax = _ttoi(cp + 1);
-			if (g_input.BufferLengthMax > INPUT_BUFFER_SIZE - 1)
-				g_input.BufferLengthMax = INPUT_BUFFER_SIZE - 1;
-			break;
-		case 'T':
-			// Although ATOF() supports hex, it's been documented in the help file that hex should
-			// not be used (see comment above) so if someone does it anyway, some option letters
-			// might be misinterpreted:
-			timeout = (int)(ATOF(cp + 1) * 1000);
-			break;
-		case 'V':
-			g_input.Visible = true;
-			break;
-		case '*':
-			g_input.FindAnywhere = true;
-			break;
-		}
-	}
 	// Point the global addresses to our memory areas on the stack:
 	g_input.EndVK = end_vk;
 	g_input.EndSC = end_sc;
@@ -554,7 +601,12 @@ ResultType Line::Input()
 	case INPUT_TERMINATED_BY_ENDKEY:
 	{
 		TCHAR key_name[128] = _T("EndKey:");
-		if (g_input.EndingRequiredShift)
+		if (g_input.EndingChar)
+		{
+			key_name[7] = g_input.EndingChar;
+			key_name[8] = '\0';
+		}
+		else if (g_input.EndingRequiredShift)
 		{
 			// Since the only way a shift key can be required in our case is if it's a key whose name
 			// is a single char (such as a shifted punctuation mark), use a diff. method to look up the
@@ -573,8 +625,15 @@ ResultType Line::Input()
 			*(key_name + 7 + count) = '\0';  // Terminate the string.
 		}
 		else
+		{
 			g_input.EndedBySC ? SCtoKeyName(g_input.EndingSC, key_name + 7, _countof(key_name) - 7)
 				: VKtoKeyName(g_input.EndingVK, key_name + 7, _countof(key_name) - 7);
+			// For partial backward-compatibility, keys A-Z are upper-cased when handled by VK,
+			// but only if they actually correspond to those characters.  If this wasn't done,
+			// the character would always be lowercase since the shift state is not considered.
+			if (key_name[7] >= 'a' && key_name[7] <= 'z')
+				key_name[7] -= 32;
+		}
 		g_ErrorLevel->Assign(key_name);
 		break;
 	}
@@ -3717,7 +3776,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	// See GuiWindowProc() for details about this first section:
 	LRESULT msg_reply;
-	if (g_MsgMonitorCount // Count is checked here to avoid function-call overhead.
+	if (g_MsgMonitor.Count() // Count is checked here to avoid function-call overhead.
 		&& (!g->CalledByIsDialogMessageOrDispatch || g->CalledByIsDialogMessageOrDispatchMsg != iMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
 		&& MsgMonitor(hWnd, iMsg, wParam, lParam, NULL, msg_reply))
 		return msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
@@ -4008,7 +4067,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	case WM_CLIPBOARDUPDATE: // For Vista and later.
 	case WM_DRAWCLIPBOARD:
-		if (g_script.mOnClipboardChangeFunc) // In case it's a bogus msg, it's our responsibility to avoid posting the msg if there's no function to execute.
+		if (g_script.mOnClipboardChange.Count()) // In case it's a bogus msg, it's our responsibility to avoid posting the msg if there's no function to call.
 			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, 0, 0); // It's done this way to buffer it when the script is uninterruptible, etc.  v1.0.44: Post to g_hWnd vs. NULL so that notifications aren't lost when script is displaying a MsgBox or other dialog.
 		if (g_script.mNextClipboardViewer) // Will be NULL if there are no other windows in the chain, or if we're on Vista or later and used AddClipboardFormatListener instead of SetClipboardViewer (in which case iMsg should be WM_CLIPBOARDUPDATE).
 			SendMessageTimeout(g_script.mNextClipboardViewer, iMsg, wParam, lParam, SMTO_ABORTIFHUNG, 2000, &dwTemp);
@@ -4522,7 +4581,7 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 {
 	// See GuiWindowProc() for details about this first part:
 	LRESULT msg_reply;
-	if (g_MsgMonitorCount // Count is checked here to avoid function-call overhead.
+	if (g_MsgMonitor.Count() // Count is checked here to avoid function-call overhead.
 		&& (!g->CalledByIsDialogMessageOrDispatch || g->CalledByIsDialogMessageOrDispatchMsg != uMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
 		&& MsgMonitor(hWndDlg, uMsg, wParam, lParam, NULL, msg_reply))
 		return (BOOL)msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
@@ -4968,7 +5027,8 @@ BOOL CALLBACK EnumChildFindPoint(HWND aWnd, LPARAM lParam)
 // the specified point (the point should be in screen coordinates).
 {
 	point_and_hwnd_type &pah = *(point_and_hwnd_type *)lParam;  // For performance and convenience.
-	if (!IsWindowVisible(aWnd)) // Omit hidden controls, like Window Spy does.
+	if (!IsWindowVisible(aWnd) // Omit hidden controls, like Window Spy does.
+		|| !IsWindowEnabled(aWnd)) // Also omit disabled controls, since testing shows that the OS doesn't send mouse messages to them.
 		return TRUE;
 	RECT rect;
 	if (!GetWindowRect(aWnd, &rect))
@@ -8652,7 +8712,7 @@ ResultType Line::FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity)
 	if (!aFilespec || !*aFilespec)
 		return LineError(ERR_PARAM2_REQUIRED); // Throw an error, since this is probably not what the user intended.
 	
-	BOOL got_file_size;
+	BOOL got_file_size = false;
 	__int64 size;
 
 	// Try CreateFile() and GetFileSizeEx() first, since they can be more accurate. 
@@ -9439,6 +9499,8 @@ VarSizeType BIV_IconNumber(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(UTOA(g_script.mCustomIconNumber, target_buf));
 }
 
+
+
 VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
 {
 	const int bufSize = 32;
@@ -9467,6 +9529,8 @@ VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(aBuf);
 }
 
+
+
 LPTSTR GetExitReasonString(ExitReasons aExitReason)
 {
 	LPTSTR str;
@@ -9490,49 +9554,6 @@ LPTSTR GetExitReasonString(ExitReasons aExitReason)
 		str = _T("");
 	}
 	return str;
-}
-
-
-
-BIF_DECL(BIF_OnExitOrClipboardChange)
-{
-	bool is_onexit = _f_callee_id == FID_OnExit;
-	Func*& func_ptr = is_onexit ? g_script.mOnExitFunc : g_script.mOnClipboardChangeFunc;
-	Func* old_func = func_ptr;
-
-	if (!ParamIndexIsOmitted(0))
-	{
-		ExprTokenType& arg = *aParam[0];
-		if (!TokenIsEmptyString(arg))
-		{
-			// Set a function.
-			Func* new_func = TokenToFunc(arg);
-			if (!new_func || new_func->mIsBuiltIn || new_func->mMinParams > 1 || new_func->mClass)
-				_f_throw(ERR_PARAM1_INVALID);
-
-			if (!is_onexit && !old_func)
-				// Enable clipboard listener.
-				g_script.EnableClipboardListener(true);
-			
-			// Setting this only after the above prevents it from being called as a result of calling
-			// SetClipboardViewer (if that method was used):
-			func_ptr = new_func;
-		}
-		else
-		{
-			// Unregister the function.
-			func_ptr = NULL;
-			if (old_func)
-				// Disable clipboard listener.
-				g_script.EnableClipboardListener(false);
-		}
-	}
-
-	// Return old OnExit function.
-	if (old_func != NULL)
-		_f_return(old_func);
-	else
-		_f_return_empty;
 }
 
 
@@ -9812,7 +9833,7 @@ VarSizeType BIV_Caret(LPTSTR aBuf, LPTSTR aVarName)
 	// of where the caret was at one precise instant in time.  This is because the X and Y vars are resolved
 	// separately by the script, and due to split second timing, they might otherwise not be accurate with
 	// respect to each other.  This method also helps performance since it avoids unnecessary calls to
-	// ATTACH_THREAD_INPUT.
+	// GetGUIThreadInfo().
 	static HWND sForeWinPrev = NULL;
 	static DWORD sTimestamp = GetTickCount();
 	static POINT sPoint;
@@ -9831,17 +9852,19 @@ VarSizeType BIV_Caret(LPTSTR aBuf, LPTSTR aVarName)
 	if (target_window != sForeWinPrev || now_tick - sTimestamp > 5) // Different window or too much time has passed.
 	{
 		// Otherwise:
-		ATTACH_THREAD_INPUT
-		sResult = GetCaretPos(&sPoint);
-		HWND focused_control = GetFocus();  // Also relies on threads being attached.
-		DETACH_THREAD_INPUT
+		GUITHREADINFO info;
+		info.cbSize = sizeof(GUITHREADINFO);
+		sResult = GetGUIThreadInfo(GetWindowThreadProcessId(target_window, NULL), &info) // Got info okay...
+			&& info.hwndCaret; // ...and there is a caret.
 		if (!sResult)
 		{
 			*aBuf = '\0';
 			return 0;
 		}
+		sPoint.x = info.rcCaret.left;
+		sPoint.y = info.rcCaret.top;
 		// Unconditionally convert to screen coordinates, for simplicity.
-		ClientToScreen(focused_control ? focused_control : target_window, &sPoint);
+		ClientToScreen(info.hwndCaret, &sPoint);
 		// Now convert back to whatever is expected for the current mode.
 		POINT origin = {0};
 		CoordToScreen(origin, COORD_MODE_CARET);
@@ -10289,10 +10312,8 @@ VarSizeType BIV_ThisMenuItem(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(g_script.mThisMenuItemName);
 }
 
-VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName)
+UINT Script::ThisMenuItemPos()
 {
-	if (!aBuf) // To avoid doing possibly high-overhead calls twice, merely return a conservative estimate for the first pass.
-		return MAX_INTEGER_LENGTH;
 	// The menu item's position is discovered through this process -- rather than doing
 	// something higher performance such as storing the menu handle or pointer to menu/item
 	// object in g_script -- because those things tend to be volatile.  For example, a menu
@@ -10300,25 +10321,22 @@ VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName)
 	// time this variable is referenced in the script.  Thus, by definition, this variable
 	// contains the CURRENT position of the most recently selected menu item within its
 	// CURRENT menu.
-	if (*g_script.mThisMenuName && *g_script.mThisMenuItemName)
-	{
-		UserMenu *menu = g_script.FindMenu(g_script.mThisMenuName);
-		if (menu)
-		{
-			// If the menu does not physically exist yet (perhaps due to being destroyed as a result
-			// of DeleteAll, Delete, or some other operation), create it so that the position of the
-			// item can be determined.  This is done for consistency in behavior.
-			if (!menu->mMenu)
-				menu->Create();
-			UINT menu_item_pos = menu->GetItemPos(g_script.mThisMenuItemName);
-			if (menu_item_pos < UINT_MAX) // Success
-				return (VarSizeType)_tcslen(UTOA(menu_item_pos + 1, aBuf)); // +1 to convert from zero-based to 1-based.
-		}
-	}
+	UserMenu *menu = FindMenu(mThisMenuName);
+	return menu ? menu->GetItemPos(mThisMenuItemName) : UINT_MAX;
+}
+
+VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName)
+{
+	if (!aBuf) // To avoid doing possibly high-overhead calls twice, merely return a conservative estimate for the first pass.
+		return MAX_INTEGER_LENGTH;
+	UINT menu_item_pos = g_script.ThisMenuItemPos();
+	if (menu_item_pos < UINT_MAX) // Success
+		return (VarSizeType)_tcslen(UTOA(menu_item_pos + 1, aBuf)); // +1 to convert from zero-based to 1-based.
 	// Otherwise:
 	*aBuf = '\0';
 	return 0;
 }
+
 
 VarSizeType BIV_ThisMenu(LPTSTR aBuf, LPTSTR aVarName)
 {
@@ -13035,6 +13053,7 @@ BIF_DECL(BIF_Format)
 	int param, last_param;
 	TCHAR number_buf[MAX_NUMBER_SIZE];
 	TCHAR spec[12+MAX_INTEGER_LENGTH*2];
+	TCHAR custom_format;
 	ExprTokenType value;
 	*spec = '%';
 
@@ -13080,6 +13099,8 @@ BIF_DECL(BIF_Format)
 			if (param >= aParamCount) // Invalid parameter index.
 				continue;
 
+			custom_format = 0; // Set default.
+
 			// Optional format specifier.
 			if (*cp == ':')
 			{
@@ -13120,6 +13141,8 @@ BIF_DECL(BIF_Format)
 				else
 				{
 					spec[spec_len++] = 's'; // Default to string if not specified.
+					if (_tcschr(_T("ULlTt"), *cp))
+						custom_format = toupper(*cp++);
 					if (*cp == 's')
 						++cp;
 				}
@@ -13145,7 +13168,17 @@ BIF_DECL(BIF_Format)
 			last_param = param;
 			
 			if (target)
-				target += _stprintf(target, spec, value.value_int64);
+			{
+				int len = _stprintf(target, spec, value.value_int64);
+				switch (custom_format)
+				{
+				case 0: break; // Might help performance to list this first.
+				case 'U': CharUpper(target); break;
+				case 'L': CharLower(target); break;
+				case 'T': StrToTitleCase(target); break;
+				}
+				target += len;
+			}
 			else
 				size += _sctprintf(spec, value.value_int64);
 		}
@@ -14152,56 +14185,61 @@ BIF_DECL(BIF_OnMessage)
 	// Set default result in case of early return; a blank value:
 	_f_set_retval_p(_T(""), 0);
 
-	// Load-time validation has ensured there's at least one parameter for use here:
+	// Prior validation has ensured there's at least two parameters:
 	UINT specified_msg = (UINT)ParamIndexToInt64(0); // Parameter #1
 
-	Func *func = NULL;           // Set defaults.
-	bool mode_is_delete = false; //
-	if (!ParamIndexIsOmitted(1)) // Parameter #2 is present.
+	// Set defaults:
+	IObject *callback = NULL;
+	bool mode_is_delete = false;
+	int max_instances = 1;
+	bool call_it_last = true;
+
+	if (!ParamIndexIsOmitted(2)) // Parameter #3 is present.
 	{
-		if (!TokenIsEmptyString(*aParam[1], TRUE))
+		max_instances = (int)ParamIndexToInt64(2);
+		// For backward-compatibility, values between MAX_INSTANCES+1 and SHORT_MAX must be supported.
+		if (max_instances > MsgMonitorStruct::MAX_INSTANCES) // MAX_INSTANCES >= MAX_THREADS_LIMIT.
+			max_instances = MsgMonitorStruct::MAX_INSTANCES;
+		if (max_instances < 0) // MaxThreads < 0 is a signal to assign this monitor the lowest priority.
 		{
-			func = TokenToFunc(*aParam[1]); // Parameter #2: function name or reference.
-			if (!func || func->mIsBuiltIn || func->mMinParams > 4 || func->mClass)
-				_f_throw(ERR_PARAM2_INVALID);
-			// Obsolete: If too many formal parameters or any are ByRef/optional, indicate failure.
-			// This helps catch bugs in scripts that are assigning the wrong function to a monitor.
-			// It also preserves additional parameters for possible future use (i.e. avoids breaking
-			// existing scripts if more formal parameters are supported in a future version).
-			// Lexikos: The flexibility of allowing ByRef and optional parameters seems to outweigh
-			// the small chance that these checks will actually catch an error and the even smaller
-			// chance that any parameters will be added in future.  For instance, a function may be
-			// called directly by the script to set or retrieve static vars which are used when the
-			// message monitor calls the function.  For these checks to actually catch an error, the
-			// author must have typed the name of the wrong function (i.e. probably not a typo), and
-			// that function must accept more than four parameters or have optional/ByRef parameters:
-			//if (func->mMinParams < func->mParamCount) // Too many params, or some are optional.
-			//	return;
-			//for (int i = 0; i < func->mParamCount; ++i) // Check if any formal parameters are ByRef.
-			//	if (func->mParam[i].is_byref)
-			//		return; // Yield the default return value set earlier.
+			call_it_last = false; // Call it after any older monitors.  No effect if already registered.
+			max_instances = -max_instances; // Convert to positive.
 		}
-		else // Explicitly blank function name ("") means delete this item.  By contrast, an omitted second parameter means "give me current function of this message".
+		else if (max_instances == 0) // It would never be called, so this is used as a signal to delete the item.
 			mode_is_delete = true;
 	}
 
-	// If this is the first use of the g_MsgMonitor array, create it now rather than later to reduce code size
-	// and help the maintainability of sections further below. The following relies on short-circuit boolean order:
-	if (!g_MsgMonitor && !(g_MsgMonitor = (MsgMonitorStruct *)malloc(sizeof(MsgMonitorStruct) * MAX_MSG_MONITORS)))
-		goto rare_failure;
+	// Parameter #2: The callback to add or remove.  Must be an object or a function name.
+	Func *func; // Func for validation of parameters, where possible.
+	if (callback = TokenToObject(*aParam[1]))
+		func = dynamic_cast<Func *>(callback);
+	else
+		callback = func = g_script.FindFunc(TokenToString(*aParam[1]));
+	// Notes about func validation: ByRef and optional parameters are allowed for flexibility.
+	// For example, a function may be called directly by the script to set static vars which
+	// are used when a message arrives.  Raising an error might help catch bugs, but only in
+	// very rare cases where a valid but wrong function name is given *and* that function has
+	// ByRef or optional parameters.
+	// If the parameter is not an object or a valid function...
+	if (!callback || func && (func->mIsBuiltIn || func->mMinParams > 4))
+		_f_throw(ERR_PARAM2_INVALID);
 
 	// Check if this message already exists in the array:
-	int msg_index;
-	for (msg_index = 0; msg_index < g_MsgMonitorCount; ++msg_index)
-		if (g_MsgMonitor[msg_index].msg == specified_msg)
-			break;
-	bool item_already_exists = (msg_index < g_MsgMonitorCount);
-	MsgMonitorStruct &monitor = g_MsgMonitor[msg_index == MAX_MSG_MONITORS ? 0 : msg_index]; // The 0th item is just a placeholder.
+	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(specified_msg, callback);
+	bool item_already_exists = (pmonitor != NULL);
+	if (!item_already_exists)
+	{
+		if (mode_is_delete) // Delete a non-existent item.
+			_f_return_retval; // Yield the default return value set earlier (an empty string).
+		// From this point on, it is certain that an item will be added to the array.
+		if (  !(pmonitor = g_MsgMonitor.Add(specified_msg, callback, call_it_last))  )
+			_f_throw(ERR_OUTOFMEM);
+	}
+
+	MsgMonitorStruct &monitor = *pmonitor;
 
 	if (item_already_exists)
 	{
-		// In all cases, yield the OLD function's name as the return value:
-		_f_set_retval_p(monitor.func->mName, -1); // Func::mName is already in persistent memory.
 		if (mode_is_delete)
 		{
 			// The msg-monitor is deleted from the array for two reasons:
@@ -14214,9 +14252,7 @@ BIF_DECL(BIF_OnMessage)
 			// The main disadvantage to deleting message filters from the array is that the deletion might
 			// occur while the monitor is currently running, which requires more complex handling within
 			// MsgMonitor() (see its comments for details).
-			--g_MsgMonitorCount;  // Must be done prior to the below.
-			if (msg_index < g_MsgMonitorCount) // An element other than the last is being removed. Shift the array to cover/delete it.
-				MoveMemory(g_MsgMonitor+msg_index, g_MsgMonitor+msg_index+1, sizeof(MsgMonitorStruct)*(g_MsgMonitorCount-msg_index));
+			g_MsgMonitor.Remove(pmonitor);
 			_f_return_retval;
 		}
 		if (aParamCount < 2) // Single-parameter mode: Report existing item's function name.
@@ -14224,37 +14260,151 @@ BIF_DECL(BIF_OnMessage)
 		// Otherwise, an existing item is being assigned a new function or MaxThreads limit.
 		// Continue on to update this item's attributes.
 	}
-	else // This message doesn't exist in array yet.
+	else // This message was newly added to the array.
 	{
-		if (!func) // Delete or report function-name of a non-existent item.
-			_f_return_retval; // Yield the default return value set earlier (an empty string).
-		// Since above didn't return, the message is to be added as a new element. The above already
-		// verified that func is not NULL.
-		if (msg_index == MAX_MSG_MONITORS) // No room in array.
-			goto rare_failure;
-		// Otherwise, the message is to be added, so increment the total:
-		++g_MsgMonitorCount;
+		// The above already verified that callback is not NULL and there is room in the array.
 		monitor.instance_count = 0; // Reset instance_count only for new items since existing items might currently be running.
-		monitor.msg = specified_msg;
 		// Continue on to the update-or-create logic below.
 	}
 
 	// Since above didn't return, above has ensured that msg_index is the index of the existing or new
 	// MsgMonitorStruct in the array.  In addition, it has set the proper return value for us.
 	// Update those struct attributes that get the same treatment regardless of whether this is an update or creation.
-	if (func) // i.e. not OnMessage(Msg,,MaxThreads).
-		monitor.func = func;
-	if (!ParamIndexIsOmitted(2))
-		monitor.max_instances = (short)ParamIndexToInt64(2); // No validation because it seems harmless if it's negative or some huge number.
-	else // Unspecified, so if this item is being newly created fall back to the default.
-		if (!item_already_exists)
-			monitor.max_instances = 1;
+	if (callback && callback != monitor.func) // Callback is being registered or changed.
+	{
+		callback->AddRef(); // Keep the object alive while it's in g_MsgMonitor.
+		if (monitor.func)
+			monitor.func->Release();
+		monitor.func = callback;
+	}
+	if (!item_already_exists || !ParamIndexIsOmitted(2))
+		monitor.max_instances = max_instances;
+	// Otherwise, the parameter was omitted so leave max_instances at its current value.
 	_f_return_retval;
+}
 
-rare_failure:
-	// Some kind of failure occurred which should be very rare.  Throw an exception so that script
-	// authors never need to worry about handling this error.  Use a generic message because it's rare:
-	_f_throw(ERR_EXCEPTION);
+
+MsgMonitorStruct *MsgMonitorList::Find(UINT aMsg, IObject *aCallback)
+{
+	for (int i = 0; i < mCount; ++i)
+		if (mMonitor[i].msg == aMsg && mMonitor[i].func == aCallback)
+			return mMonitor + i;
+	return NULL;
+}
+
+
+MsgMonitorStruct *MsgMonitorList::Add(UINT aMsg, IObject *aCallback, bool aAppend)
+{
+	if (mCount == mCountMax)
+	{
+		int new_count = mCountMax ? mCountMax * mCountMax : 16;
+		void *new_array = realloc(mMonitor, new_count * sizeof(MsgMonitorStruct));
+		if (!new_array)
+			return NULL;
+		mMonitor = (MsgMonitorStruct *)new_array;
+		mCountMax = new_count;
+	}
+	MsgMonitorStruct *new_mon;
+	if (!aAppend)
+	{
+		for (MsgMonitorInstance *inst = mTop; inst; inst = inst->previous)
+		{
+			inst->index++; // Correct the index of each running monitor.
+			inst->count++; // Iterate the same set of items which existed before.
+			// By contrast, count isn't adjusted when adding at the end because we do not
+			// want new items to be called by messages received before they were registered.
+		}
+		// Shift existing items to make room.
+		memmove(mMonitor + 1, mMonitor, mCount * sizeof(MsgMonitorStruct));
+		new_mon = mMonitor;
+	}
+	else
+		new_mon = mMonitor + mCount;
+
+	++mCount;
+	aCallback->AddRef();
+	new_mon->func = aCallback;
+	new_mon->msg = aMsg;
+	//new_mon->instance_count = 0;
+	//new_mon->max_instances = 1;
+	return new_mon;
+}
+
+
+void MsgMonitorList::Remove(MsgMonitorStruct *aMonitor)
+{
+	ASSERT(aMonitor >= mMonitor && aMonitor < mMonitor + mCount);
+
+	int mon_index = int(aMonitor - mMonitor);
+	// Adjust the index of any active message monitors affected by this deletion.  This allows a
+	// message monitor to delete older message monitors while still allowing any remaining monitors
+	// of that message to be called (when there are multiple).
+	for (MsgMonitorInstance *inst = mTop; inst; inst = inst->previous)
+	{
+		if (inst->index >= mon_index && inst->index >= 0)
+			inst->index--; // So index+1 is the next item.
+		inst->count--;
+	}
+	// Remove the item from the array.
+	--mCount;  // Must be done prior to the below.
+	IObject *release_me = aMonitor->func;
+	if (mon_index < mCount) // An element other than the last is being removed. Shift the array to cover/delete it.
+		memmove(aMonitor, aMonitor + 1, (mCount - mon_index) * sizeof(MsgMonitorStruct));
+	release_me->Release(); // Must be called after the above in case it calls a __delete() meta-function.
+}
+
+
+BIF_DECL(BIF_OnExitOrClipboard)
+{
+	bool is_onexit = _f_callee_id == FID_OnExit;
+	_f_set_retval_p(_T("")); // In all cases there is no return value.
+	MsgMonitorList &handlers = is_onexit ? g_script.mOnExit : g_script.mOnClipboardChange;
+
+	IObject *callback;
+	if (callback = TokenToFunc(*aParam[0]))
+	{
+		// Ensure this function is a valid one.
+		if (((Func *)callback)->mMinParams > 2)
+			callback = NULL;
+	}
+	else
+		callback = TokenToObject(*aParam[0]);
+	if (!callback)
+		_f_throw(ERR_PARAM1_INVALID);
+	
+	int mode = 1; // Default.
+	if (!ParamIndexIsOmitted(1))
+		mode = ParamIndexToInt(1);
+
+	MsgMonitorStruct *existing = handlers.Find(0, callback);
+
+	switch (mode)
+	{
+	case  1:
+	case -1:
+		if (existing)
+			return;
+		if (!is_onexit)
+		{
+			// Do this before adding the handler so that it won't be called as a result of the
+			// SetClipboardViewer() call on Windows XP.  This won't cause existing handlers to
+			// be called because in that case the clipboard listener is already enabled.
+			g_script.EnableClipboardListener(true);
+		}
+		if (!handlers.Add(0, callback, mode == 1))
+			_f_throw(ERR_OUTOFMEM);
+		break;
+	case  0:
+		if (existing)
+			handlers.Remove(existing);
+		break;
+	default:
+		_f_throw(ERR_PARAM2_INVALID);
+	}
+	// In case the above enabled the clipboard listener but failed to add the handler,
+	// do this even if mode != 0:
+	if (!is_onexit && !handlers.Count())
+		g_script.EnableClipboardListener(false);
 }
 
 
@@ -16017,26 +16167,22 @@ BIF_DECL(BIF_Exception)
 	{
 #ifdef CONFIG_DEBUGGER
 		int offset = TokenIsNumeric(*aParam[1]) ? ParamIndexToInt(1) : 0;
-		if (offset < 0)
+		if (offset < 0 && offset >= (g_Debugger.mStack.mBottom - g_Debugger.mStack.mTop)) // (mBottom - mTop) is safe against overflow, unlike (se >= mBottom). 
 		{
 			DbgStack::Entry *se = g_Debugger.mStack.mTop + offset;
-			if (se >= g_Debugger.mStack.mBottom)
+			// Self-contained loop to ensure the entry belongs to the current thread
+			// (below also relies on this loop to verify se[1].type != SE_Thread):
+			while (++offset <= 0 && g_Debugger.mStack.mTop[offset].type != DbgStack::SE_Thread); // Relies on short-circuit evaluation.
+			if (offset == 1)
 			{
-				// Self-contained loop to ensure the entry belongs to the current thread
-				// (below also relies on this loop to verify se[1].type != SE_Thread):
-				while (++offset <= 0 && g_Debugger.mStack.mTop[offset].type != DbgStack::SE_Thread); // Relies on short-circuit evaluation.
-				if (offset == 1)
-				{
-					line = se->line;
-					// se->line contains the line at the given offset from the top of the stack.
-					// Rather than returning the name of the function or sub which contains that
-					// line, return the name of the function or sub which that line called.
-					// In other words, an offset of -1 gives the name of the current function and
-					// the file and number of the line which it was called from.
-					what = se[1].type == DbgStack::SE_Func ? se[1].func->mName : se[1].sub->mName;
-				}
+				line = se->line;
+				// se->line contains the line at the given offset from the top of the stack.
+				// Rather than returning the name of the function or sub which contains that
+				// line, return the name of the function or sub which that line called.
+				// In other words, an offset of -1 gives the name of the current function and
+				// the file and number of the line which it was called from.
+				what = se[1].type == DbgStack::SE_Func ? se[1].func->mName : se[1].sub->mName;
 			}
-			// Otherwise, not a valid offset.
 		}
 #endif
 		if (!what)
@@ -16664,8 +16810,12 @@ DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNam
 		: GetModuleFileNameEx(hproc, NULL, aBuf, aBufSize);
 
 	typedef DWORD (WINAPI *MyGetName)(HANDLE, LPTSTR, DWORD);
+#ifdef CONFIG_WIN2K
 	// This must be loaded dynamically or the program will probably not launch at all on Win2k:
 	static MyGetName lpfnGetName = (MyGetName)GetProcAddress(GetModuleHandle(_T("psapi")), "GetProcessImageFileName" WINAPI_SUFFIX);;
+#else
+	static MyGetName lpfnGetName = &GetProcessImageFileName;
+#endif
 
 	if (!buf_length && lpfnGetName)
 	{
