@@ -835,7 +835,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 // make the situation even worse).
 {
 	mExitReason = aExitReason;
-	bool terminate_afterward = aBuf && !*aBuf;
+	bool caller_requested_termination = aBuf && !*aBuf;
 	if (aBuf && *aBuf)
 	{
 		TCHAR buf[1024];
@@ -913,7 +913,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	sOnExitIsRunning = true;
 	DEBUGGER_STACK_PUSH(_T("OnExit"))
 
-	terminate_afterward = true; // Set default - see below for comments.
+	bool terminate_afterward = true; // Set default - see below for comments.
 	
 	// When a legacy OnExit label is present, the default behaviour is to exit the script only if
 	// it calls ExitApp.  Therefore to make OnExit() useful in a script which uses legacy OnExit,
@@ -940,7 +940,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	DEBUGGER_STACK_POP()
 	sOnExitIsRunning = false;  // In case the user wanted the thread to end normally (see above).
 
-	if (terminate_afterward)
+	if (terminate_afterward || caller_requested_termination)
 	{
 		g_AllowInterruption = FALSE; // In case TerminateApp releases objects and indirectly causes
 		g->IsPaused = false;		 // more script to be executed.
