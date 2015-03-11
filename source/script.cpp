@@ -7896,8 +7896,20 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 	DerefType *deref;
 	for (Line *line = aStartingLine; line; line = line->mNextLine)
 	{
+		switch (line->mActionType)
+		{
+		// These first two are needed to support local variables with ACT_FUNC/ACT_METHOD below:
+		case ACT_BLOCK_BEGIN:
+			if (line->mAttribute)
+				g->CurrentFunc = (Func *)line->mAttribute;
+			break;
+		case ACT_BLOCK_END:
+			if (line->mAttribute)
+				g->CurrentFunc = NULL;
+			break;
+
 		// Preparse command-style function calls:
-		if (line->mActionType == ACT_FUNC)
+		case ACT_FUNC:
 		{
 			ArgStruct &first_arg = line->mArg[0]; // Contains the function name.
 			int param_count = line->mArgc - 1; // This is not the final parameter count since it includes the output var (if present).
@@ -8033,14 +8045,15 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 				}
 			}
 			line->mAttribute = func;
+			break;
 		}
-		else if (line->mActionType == ACT_METHOD)
-		{
+		case ACT_METHOD:
 			// For consistency with x.1(), treat literal integers as pure integers, although it
 			// might never be used in practice:
 			if (IsNumeric(line->mArg[1].text))
 				line->mArg[1].is_expression = true;
-		}
+			break;
+		} // switch (line->mActionType)
 
 		// Check if any of each arg's derefs are function calls.  If so, do some validation and
 		// preprocessing to set things up for better runtime performance:
