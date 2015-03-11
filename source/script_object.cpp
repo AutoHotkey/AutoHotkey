@@ -240,7 +240,6 @@ void Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int
 		*param_ptr++ = aParam[param_index]; // Caller-supplied param token.
 	for (param_index = 0; param_index < extra_params; ++param_index)
 		*param_ptr++ = &token[param_index]; // New param.
-
 }
 
 
@@ -364,8 +363,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			//if (r == EARLY_RETURN)
 				// Propagate EARLY_RETURN in case this was the __Call meta-function of a
 				// "function object" which is used as a meta-function of some other object.
-				//return EARLY_RETURN; // return r below:
-			if (r != OK) // Likely FAIL or EARLY_EXIT.
+				//return EARLY_RETURN; // TODO: Detection of 'return' vs 'return empty_value'.
+			if (r != OK) // Likely EARLY_RETURN, FAIL or EARLY_EXIT.
 				return r;
 		}
 	}

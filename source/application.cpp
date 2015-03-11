@@ -741,7 +741,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					event_is_control_generated = true; // As opposed to a drag-and-drop or context-menu event that targets a specific control.
 					// And leave pgui_event_is_running at its default of NULL because it doesn't apply to these.
 				} // switch(gui_action)
-				// label_to_call has been set; above would already have discarded this message if it there was no label.
+				// label_to_call has been set; above would already have discarded this message if there was no label.
 				break; // case AHK_GUI_ACTION
 
 			case AHK_USER_MENU: // user-defined menu item
