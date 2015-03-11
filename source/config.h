@@ -37,3 +37,7 @@
 #define CONFIG_WIN9X
 #define CONFIG_WINNT4
 #endif
+
+#ifndef _WIN64
+#define CONFIG_WIN2K
+#endif
