@@ -14300,7 +14300,7 @@ BIF_DECL(BIF_OnMessage)
 	// Set default result in case of early return; a blank value:
 	_f_set_retval_p(_T(""), 0);
 
-	// Load-time validation has ensured there's at least one parameter for use here:
+	// Prior validation has ensured there's at least two parameters:
 	UINT specified_msg = (UINT)ParamIndexToInt64(0); // Parameter #1
 
 	// Set defaults:
@@ -14324,29 +14324,27 @@ BIF_DECL(BIF_OnMessage)
 			mode_is_delete = true;
 	}
 
-	if (!ParamIndexIsOmitted(1)) // Parameter #2 is present.
-	{
-		Func *func; // Func for validation of parameters, where possible.
-		if (callback = TokenToObject(*aParam[1]))
-			func = dynamic_cast<Func *>(callback);
-		else
-			callback = func = g_script.FindFunc(TokenToString(*aParam[1]));
-		// Notes about func validation: ByRef and optional parameters are allowed for flexibility.
-		// For example, a function may be called directly by the script to set static vars which
-		// are used when a message arrives.  Raising an error might help catch bugs, but only in
-		// very rare cases where a valid but wrong function name is given *and* that function has
-		// ByRef or optional parameters.
-		// If the parameter was not an empty string, an object or a valid function...
-		if (!mode_is_delete && (!callback || func && (func->mIsBuiltIn || func->mMinParams > 4)))
-			_f_throw(ERR_PARAM2_INVALID);
-	}
+	// Parameter #2: The callback to add or remove.  Must be an object or a function name.
+	Func *func; // Func for validation of parameters, where possible.
+	if (callback = TokenToObject(*aParam[1]))
+		func = dynamic_cast<Func *>(callback);
+	else
+		callback = func = g_script.FindFunc(TokenToString(*aParam[1]));
+	// Notes about func validation: ByRef and optional parameters are allowed for flexibility.
+	// For example, a function may be called directly by the script to set static vars which
+	// are used when a message arrives.  Raising an error might help catch bugs, but only in
+	// very rare cases where a valid but wrong function name is given *and* that function has
+	// ByRef or optional parameters.
+	// If the parameter is not an object or a valid function...
+	if (!callback || func && (func->mIsBuiltIn || func->mMinParams > 4))
+		_f_throw(ERR_PARAM2_INVALID);
 
 	// Check if this message already exists in the array:
 	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(specified_msg, callback);
 	bool item_already_exists = (pmonitor != NULL);
 	if (!item_already_exists)
 	{
-		if (!callback) // Delete or report function-name of a non-existent item.
+		if (mode_is_delete) // Delete a non-existent item.
 			_f_return_retval; // Yield the default return value set earlier (an empty string).
 		// From this point on, it is certain that an item will be added to the array.
 		if (  !(pmonitor = g_MsgMonitor.Add(specified_msg, callback, call_it_last))  )
