@@ -1057,12 +1057,10 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	ExprTokenType param[] = { GetExitReasonString(aExitReason), (__int64)aExitCode };
 	ResultType result = mOnExit.Call(param, _countof(param), 1);
 	
-	if (!terminate_afterward) // Caller hasn't requested that we exit unconditionally.
-		terminate_afterward = (result != CONDITION_TRUE); // True if a handler returned true to prevent exit.
-
 	DEBUGGER_STACK_POP()
 
-	if (terminate_afterward)
+	if (result != CONDITION_TRUE // OnExit function did not return true to prevent exit.
+		|| terminate_afterward) // Caller requested we exit unconditionally.
 	{
 		g_AllowInterruption = FALSE; // In case TerminateApp releases objects and indirectly causes
 		g->IsPaused = false;		 // more script to be executed.
