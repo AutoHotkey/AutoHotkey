@@ -1991,7 +1991,7 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 
 
 
-void ResumeUnderlyingThread(VarBkp aSavedErrorLevel)
+void ResumeUnderlyingThread(VarBkp &aSavedErrorLevel)
 {
 	// These two may be set by any thread, so must be released here:
 	if (g->GuiDefaultWindow)
