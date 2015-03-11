@@ -765,11 +765,6 @@ ResultType Object::CallField(FieldType *aField, ResultToken &aResultToken, ExprT
 
 Object *Object::CreateFromArgV(LPTSTR *aArgV, int aArgC)
 {
-	Object *args;
-	if (  !(args = Create(NULL, 0))  )
-		return NULL;
-	if (aArgC < 1)
-		return args;
 	ExprTokenType *token = (ExprTokenType *)_alloca(aArgC * sizeof(ExprTokenType));
 	ExprTokenType **param = (ExprTokenType **)_alloca(aArgC * sizeof(ExprTokenType*));
 	for (int j = 0; j < aArgC; ++j)
@@ -777,12 +772,7 @@ Object *Object::CreateFromArgV(LPTSTR *aArgV, int aArgC)
 		token[j].SetValue(aArgV[j]);
 		param[j] = &token[j];
 	}
-	if (!args->InsertAt(0, 1, param, aArgC))
-	{
-		args->Release();
-		return NULL;
-	}
-	return args;
+	return CreateArray(param, aArgC);
 }
 
 
