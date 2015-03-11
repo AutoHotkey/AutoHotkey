@@ -283,7 +283,7 @@ bool Object::Delete()
 		// less often in most cases.
 		PRIVATIZE_S_DEREF_BUF;
 
-		CallMethod(mBase, this, sMetaFuncName[3], NULL, 0, NULL, IF_METAOBJ); // base.__Delete()
+		CallMethod(mBase, this, _T("__Delete"), NULL, 0, NULL, IF_METAOBJ); // base.__Delete()
 
 		DEPRIVATIZE_S_DEREF_BUF; // L33: See above.
 

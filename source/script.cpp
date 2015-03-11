@@ -7746,8 +7746,20 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 	DerefType *deref;
 	for (Line *line = aStartingLine; line; line = line->mNextLine)
 	{
+		switch (line->mActionType)
+		{
+		// These first two are needed to support local variables with ACT_FUNC/ACT_METHOD below:
+		case ACT_BLOCK_BEGIN:
+			if (line->mAttribute)
+				g->CurrentFunc = (Func *)line->mAttribute;
+			break;
+		case ACT_BLOCK_END:
+			if (line->mAttribute)
+				g->CurrentFunc = NULL;
+			break;
+
 		// Preparse command-style function calls:
-		if (line->mActionType == ACT_FUNC)
+		case ACT_FUNC:
 		{
 			ArgStruct &first_arg = line->mArg[0]; // Contains the function name.
 			int param_count = line->mArgc - 1; // This is not the final parameter count since it includes the output var (if present).
@@ -7883,14 +7895,15 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 				}
 			}
 			line->mAttribute = func;
+			break;
 		}
-		else if (line->mActionType == ACT_METHOD)
-		{
+		case ACT_METHOD:
 			// For consistency with x.1(), treat literal integers as pure integers, although it
 			// might never be used in practice:
 			if (IsNumeric(line->mArg[1].text))
 				line->mArg[1].is_expression = true;
-		}
+			break;
+		} // switch (line->mActionType)
 
 		// Check if any of each arg's derefs are function calls.  If so, do some validation and
 		// preprocessing to set things up for better runtime performance:
@@ -8239,8 +8252,6 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 // Preparse any commands which might rely on blocks having been fully preparsed,
 // such as any command which has a jump target (label).
 {
-	bool in_function_body = false;
-
 	for (Line *line = aStartingLine; line; line = line->mNextLine)
 	{
 		LPTSTR line_raw_arg1 = LINE_RAW_ARG1; // Resolve only once to help reduce code size.
@@ -8250,11 +8261,11 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 		{
 		case ACT_BLOCK_BEGIN:
 			if (line->mAttribute) // This is the opening brace of a function definition.
-				in_function_body = true; // Must be set only for mAttribute == ATTR_TRUE because functions can of course contain types of blocks other than the function's own block.
+				g->CurrentFunc = (Func *)line->mAttribute; // Must be set only for mAttribute == ATTR_TRUE because functions can of course contain types of blocks other than the function's own block.
 			break;
 		case ACT_BLOCK_END:
 			if (line->mAttribute) // This is the closing brace of a function definition.
-				in_function_body = false; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
+				g->CurrentFunc = NULL; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
 			break;
 		case ACT_BREAK:
 		case ACT_CONTINUE:
@@ -8300,7 +8311,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 						loop_line = NULL;
 					}
 				}
-				if (in_function_body && loop_line->IsOutsideAnyFunctionBody())
+				if (g->CurrentFunc && loop_line->IsOutsideAnyFunctionBody())
 					return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
 				if (!line->CheckValidFinallyJump(loop_line))
 					return NULL; // Error already shown.
@@ -8317,7 +8328,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 			{
 				if (!line->GetJumpTarget(false))
 					return NULL; // Error was already displayed by called function.
-				if (in_function_body && ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
+				if (g->CurrentFunc && ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
 				{
 					if (line->mActionType == ACT_GOTO)
 						return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
