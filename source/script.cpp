@@ -8402,8 +8402,6 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 // Preparse any commands which might rely on blocks having been fully preparsed,
 // such as any command which has a jump target (label).
 {
-	bool in_function_body = false;
-
 	for (Line *line = aStartingLine; line; line = line->mNextLine)
 	{
 		LPTSTR line_raw_arg1 = LINE_RAW_ARG1; // Resolve only once to help reduce code size.
@@ -8413,11 +8411,11 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 		{
 		case ACT_BLOCK_BEGIN:
 			if (line->mAttribute) // This is the opening brace of a function definition.
-				in_function_body = true; // Must be set only for mAttribute == ATTR_TRUE because functions can of course contain types of blocks other than the function's own block.
+				g->CurrentFunc = (Func *)line->mAttribute; // Must be set only for mAttribute == ATTR_TRUE because functions can of course contain types of blocks other than the function's own block.
 			break;
 		case ACT_BLOCK_END:
 			if (line->mAttribute) // This is the closing brace of a function definition.
-				in_function_body = false; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
+				g->CurrentFunc = NULL; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
 			break;
 		case ACT_BREAK:
 		case ACT_CONTINUE:
@@ -8463,7 +8461,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 						loop_line = NULL;
 					}
 				}
-				if (in_function_body && loop_line->IsOutsideAnyFunctionBody())
+				if (g->CurrentFunc && loop_line->IsOutsideAnyFunctionBody())
 					return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
 				if (!line->CheckValidFinallyJump(loop_line))
 					return NULL; // Error already shown.
@@ -8480,7 +8478,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 			{
 				if (!line->GetJumpTarget(false))
 					return NULL; // Error was already displayed by called function.
-				if (in_function_body && ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
+				if (g->CurrentFunc && ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
 				{
 					if (line->mActionType == ACT_GOTO)
 						return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
