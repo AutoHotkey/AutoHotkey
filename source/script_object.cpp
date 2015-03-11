@@ -251,7 +251,7 @@ Object *Object::Clone(BOOL aExcludeIntegerKeys)
 // Object::ArrayToParams - Used for variadic function-calls.
 //
 
-ResultType Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params
+void Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params
 	, ExprTokenType **aParam, int aParamCount)
 // Expands this object's contents into the parameter list.  Due to the nature
 // of the parameter list, only fields with integer keys are used (named params
@@ -285,8 +285,6 @@ ResultType Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_lis
 		*param_ptr++ = aParam[param_index]; // Caller-supplied param token.
 	for (param_index = 0; param_index < extra_params; ++param_index)
 		*param_ptr++ = &token[param_index]; // New param.
-
-	return OK;
 }
 
 
@@ -407,11 +405,11 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			Line *curr_line = g_script.mCurrLine;
 			ResultType r = CallField(field, aResultToken, aThisToken, aFlags, meta_params, aParamCount + 1);
 			g_script.mCurrLine = curr_line; // Allows exceptions thrown by later meta-functions to report a more appropriate line.
-			if (r == EARLY_RETURN)
+			//if (r == EARLY_RETURN)
 				// Propagate EARLY_RETURN in case this was the __Call meta-function of a
 				// "function object" which is used as a meta-function of some other object.
-				return EARLY_RETURN; // TODO: Detection of 'return' vs 'return empty_value'.
-			if (r != OK) // Likely FAIL or EARLY_EXIT.
+				//return EARLY_RETURN; // TODO: Detection of 'return' vs 'return empty_value'.
+			if (r != OK) // Likely EARLY_RETURN, FAIL or EARLY_EXIT.
 				return r;
 		}
 	}

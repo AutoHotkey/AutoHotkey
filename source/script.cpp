@@ -527,7 +527,7 @@ ResultType Script::CreateWindows()
 void Script::EnableClipboardListener(bool aEnable)
 {
 	static bool sEnabled = false;
-	if (aEnable == sEnabled) // Simplifies BIF_OnExitOrClipboardChange.
+	if (aEnable == sEnabled) // Simplifies BIF_OnExitOrClipboard.
 		return;
 	if (aEnable)
 	{
@@ -9453,9 +9453,8 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 
 			// Recurse to group the line or lines which are this line's action or body as a
 			// single entity and find the line below it.  This must be done even if line_temp
-			// isn't an IF/ELSE/LOOP/BLOCK_BEGIN because other line types, such as Goto and
-			// Gosub, need to be preparsed by this function even if they are the single-line
-			// actions of an IF or an ELSE.
+			// isn't an IF/ELSE/LOOP/BLOCK_BEGIN because all lines need mParentLine set by this
+			// function, and some other types such as BREAK/CONTINUE also need special handling.
 			line_temp = PreparseBlocks(line_temp, ONLY_ONE_LINE, line, line->mAttribute ? line->mAttribute : aLoopType);
 			// If not an error, line_temp is now either:
 			// 1) If this if's/loop's action was a BEGIN_BLOCK: The line after the end of the block.
@@ -9555,7 +9554,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 		case ACT_BLOCK_BEGIN:
 			if (line->mAttribute == ATTR_TRUE) // This is the opening brace of a function definition.
 			{
-				if (aParentLine && ACT_IS_LINE_PARENT(aParentLine->mActionType))
+				if (aParentLine && aParentLine->mActionType != ACT_BLOCK_BEGIN) // Implies ACT_IS_LINE_PARENT(aParentLine->mActionType).  Functions are allowed inside blocks.
 					// A function must not be defined directly below an IF/ELSE/LOOP because runtime evaluation won't handle it properly.
 					return line->PreparseError(_T("Unexpected function"));
 			}
@@ -9657,7 +9656,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 			break;
 		case ACT_BLOCK_END:
 			if (line->mAttribute == ATTR_TRUE) // This is the closing brace of a function definition.
-				in_function_body = FALSE; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
+				in_function_body = false; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
 			break;
 		case ACT_BREAK:
 		case ACT_CONTINUE:

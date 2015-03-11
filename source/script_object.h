@@ -198,7 +198,7 @@ public:
 
 	// Used by Func::Call() for variadic functions/function-calls:
 	Object *Clone(BOOL aExcludeIntegerKeys = false);
-	ResultType ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params, ExprTokenType **aParam, int aParamCount);
+	void ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params, ExprTokenType **aParam, int aParamCount);
 	ResultType ArrayToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax);
 	
 	inline bool GetNextItem(ExprTokenType &aToken, INT_PTR &aOffset, INT_PTR &aKey)
