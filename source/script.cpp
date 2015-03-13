@@ -8171,15 +8171,6 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			|| ACT_IS_LOOP(line->mActionType) // LOOP, WHILE or FOR.
 			|| line->mActionType == ACT_TRY) // CATCH and FINALLY are excluded so they're caught as errors below.
 		{
-			if (line->mActionType == ACT_FOR)
-			{
-				ASSERT(line->mArgc == 3);
-				// Now that this FOR's expression has been pre-parsed, exclude it from mArgc so that ExpandArgs()
-				// won't evaluate it -- PerformLoopFor() needs to call ExpandExpression() directly in order to
-				// receive the object reference which is the result of the expression.
-				line->mArgc--;
-			}
-
 			line_temp = line->mNextLine;  // line_temp is now this IF's or LOOP's or TRY's action-line.
 			// The following is commented out because all scripts end in ACT_EXIT:
 			//if (line_temp == NULL) // This is an orphan IF/LOOP (has no action-line) at the end of the script.
