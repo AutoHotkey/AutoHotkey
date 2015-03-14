@@ -519,46 +519,9 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			//
 			if (IS_INVOKE_CALL)
 			{
-				// Since above has not handled this call and no field exists, check for built-in methods.
-				LPTSTR name = key.s;
-				++aParam; --aParamCount; // Exclude the method identifier.  A prior check ensures there was at least one param in this case.
-				if (!_tcsicmp(name, _T("InsertAt")))
-					return _InsertAt(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("Push")))
-					return _Push(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("Pop")))
-					return _Pop(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("RemoveAt")))
-					return _RemoveAt(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("Delete")))
-					return _Delete(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("Length")))
-					return _Length(aResultToken, aParam, aParamCount);
-				if (*name == '_') // Prefix supported for backward-compatibility.
-					++name; // ++ to exclude '_' from further consideration.
-				if (!_tcsicmp(name, _T("HasKey")))
-					return _HasKey(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("MaxIndex")))
-					return _MaxIndex(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("NewEnum")))
-					return _NewEnum(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("GetAddress")))
-					return _GetAddress(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("SetCapacity")))
-					return _SetCapacity(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("GetCapacity")))
-					return _GetCapacity(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("MinIndex")))
-					return _MinIndex(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("Clone")))
-					return _Clone(aResultToken, aParam, aParamCount);
-				// Deprecated methods:
-				if (!_tcsicmp(name, _T("Insert")))
-					return _Insert(aResultToken, aParam, aParamCount);
-				if (!_tcsicmp(name, _T("Remove")))
-					return _Remove(aResultToken, aParam, aParamCount);
-				// For maintainability: explicitly return since above has done ++aParam, --aParamCount.
-				return INVOKE_NOT_HANDLED;
+				// Since above has not handled this call and no field exists,
+				// it can only be a built-in method or unknown.  This handles both:
+				return CallBuiltin(GetBuiltinID(key.s), aResultToken, aParam + 1, aParamCount - 1); // +/- 1 to exclude the method identifier.
 			}
 			//
 			// BUILT-IN "BASE" PROPERTY
@@ -728,6 +691,112 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		return OK;
 	}
 
+	return INVOKE_NOT_HANDLED;
+}
+
+
+int Object::GetBuiltinID(LPCTSTR aName)
+{
+	// Newer methods which do not support the _ prefix:
+	switch (toupper(*aName))
+	{
+	case 'L':
+		if (!_tcsicmp(aName, _T("Length")))
+			return FID_ObjLength;
+		break;
+	case 'P':
+		if (!_tcsicmp(aName, _T("Push")))
+			return FID_ObjPush;
+		if (!_tcsicmp(aName, _T("Pop")))
+			return FID_ObjPop;
+		break;
+	case 'I':
+		if (!_tcsicmp(aName, _T("InsertAt")))
+			return FID_ObjInsertAt;
+		break;
+	case 'R':
+		if (!_tcsicmp(aName, _T("RemoveAt")))
+			return FID_ObjRemoveAt;
+		break;
+	case 'D':
+		if (!_tcsicmp(aName, _T("Delete")))
+			return FID_ObjDelete;
+		break;
+	}
+	// Older methods which support the _ prefix:
+	if (*aName == '_')
+		++aName; // Exclude the prefix from further consideration.
+	switch (toupper(*aName))
+	{
+	case 'H':
+		if (!_tcsicmp(aName, _T("HasKey")))
+			return FID_ObjHasKey;
+		break;
+	case 'N':
+		if (!_tcsicmp(aName, _T("NewEnum")))
+			return FID_ObjNewEnum;
+		break;
+	case 'G':
+		if (!_tcsicmp(aName, _T("GetAddress")))
+			return FID_ObjGetAddress;
+		if (!_tcsicmp(aName, _T("GetCapacity")))
+			return FID_ObjGetCapacity;
+		break;
+	case 'S':
+		if (!_tcsicmp(aName, _T("SetCapacity")))
+			return FID_ObjSetCapacity;
+		break;
+	case 'C':
+		if (!_tcsicmp(aName, _T("Clone")))
+			return FID_ObjClone;
+		break;
+	case 'M':
+		if (!_tcsicmp(aName, _T("MaxIndex")))
+			return FID_ObjMaxIndex;
+		if (!_tcsicmp(aName, _T("MinIndex")))
+			return FID_ObjMinIndex;
+		break;
+	// Deprecated methods:
+	case 'I':
+		if (!_tcsicmp(aName, _T("Insert")))
+			return FID_ObjInsert;
+		break;
+	case 'R':
+		if (!_tcsicmp(aName, _T("Remove")))
+			return FID_ObjRemove;
+		break;
+	}
+	return -1;
+}
+
+
+ResultType Object::CallBuiltin(int aID, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	switch (aID)
+	{
+	#define case_method(name) \
+		case FID_Obj##name: \
+			return _##name(aResultToken, aParam, aParamCount)
+	// Putting more frequently called methods first might help performance.
+	case_method(Length);
+	case_method(HasKey);
+	case_method(MaxIndex);
+	case_method(NewEnum);
+	case_method(Push);
+	case_method(Pop);
+	case_method(InsertAt);
+	case_method(RemoveAt);
+	case_method(Delete);
+	case_method(MinIndex);
+	case_method(GetAddress);
+	case_method(SetCapacity);
+	case_method(GetCapacity);
+	case_method(Clone);
+	// Deprecated methods:
+	case_method(Insert);
+	case_method(Remove);
+	#undef case_method
+	}
 	return INVOKE_NOT_HANDLED;
 }
 

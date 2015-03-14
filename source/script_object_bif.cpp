@@ -350,14 +350,20 @@ BIF_DECL(BIF_ObjIncDec)
 //
 
 #define BIF_METHOD(name) \
-BIF_DECL(BIF_Obj##name) \
-{ \
-	aResultToken.symbol = SYM_STRING; \
-	aResultToken.marker = _T(""); \
-	\
-	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0])); \
-	if (obj) \
-		obj->_##name(aResultToken, aParam + 1, aParamCount - 1); \
+	BIF_DECL(BIF_Obj##name) { \
+		if (!BIF_ObjMethod(FID_Obj##name, aResultToken, aParam, aParamCount)) \
+			aResult = FAIL; \
+	}
+
+ResultType BIF_ObjMethod(int aID, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+
+	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
+	if (!obj)
+		return OK; // Return "".
+	return obj->CallBuiltin(aID, aResultToken, aParam + 1, aParamCount - 1);
 }
 
 BIF_METHOD(Insert)

@@ -9,6 +9,13 @@
 
 #define INVOKE_NOT_HANDLED	CONDITION_FALSE
 
+enum ObjectMethodID { // Partially ported from v2 BuiltInFunctionID.  Used for code sharing.
+	FID_ObjInsertAt, FID_ObjDelete, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength
+	, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjGetAddress, FID_ObjClone
+	, FID_ObjNewEnum, FID_ObjMaxIndex, FID_ObjMinIndex, FID_ObjRemove, FID_ObjInsert
+};
+
+
 //
 // ObjectBase - Common base class, implements reference counting.
 //
@@ -308,6 +315,9 @@ public:
 	Object *GetUnresolvedClass(LPTSTR &aName);
 	
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	int GetBuiltinID(LPCTSTR aName);
+	ResultType CallBuiltin(int aID, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	ResultType _Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _InsertAt(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
