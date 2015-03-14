@@ -846,7 +846,7 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 			else if (se->type == DbgStack::SE_Thread)
 			{
 				// !se->line implies se->type == SE_Thread.
-				if (se[1].type == DbgStack::SE_Func)
+				if (se[1].type == DbgStack::SE_Func && !se[1].func->mIsBuiltIn)
 					line = se[1].func->mJumpToLine;
 				else if (se[1].type == DbgStack::SE_Sub)
 					line = se[1].sub->mJumpToLine;
