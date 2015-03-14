@@ -8216,8 +8216,14 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		}
 		// All of these functions require the "object" parameter,
 		// but it is excluded from the counts below for clarity:
-		BIF_OBJ_CASE(Insert, 		1, 10000) // [key,] value [, value2, ...]
+		BIF_OBJ_CASE(Insert,		1, 10000) // [key,] value [, value2, ...]
+		BIF_OBJ_CASE(InsertAt,		2, 10000) // index, value [, value2, ...]
+		BIF_OBJ_CASE(Push,			1, 10000)
+		BIF_OBJ_CASE(Delete, 		1, 2) // min_key [, max_key]
 		BIF_OBJ_CASE(Remove, 		0, 2) // [min_key, max_key]
+		BIF_OBJ_CASE(RemoveAt,      1, 2) // position [, count]
+		BIF_OBJ_CASE(Pop,			0, 0)
+		BIF_OBJ_CASE(Length, 		0, 0)
 		BIF_OBJ_CASE(MinIndex, 		0, 0)
 		BIF_OBJ_CASE(MaxIndex, 		0, 0)
 		BIF_OBJ_CASE(HasKey,		1, 1) // key
@@ -8230,6 +8236,12 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 #undef BIF_OBJ_CASE
 		else if (!_tcsicmp(suffix, _T("AddRef")) || !_tcsicmp(suffix, _T("Release")))
 			bif = BIF_ObjAddRefRelease;
+		else if (!_tcsicmp(suffix, _T("RawSet")))
+		{
+			bif = BIF_ObjRawSet;
+			min_params = 3;
+			max_params = 3;
+		}
 		else return NULL;
 	}
 	else if (!_tcsicmp(func_name, _T("Array")))

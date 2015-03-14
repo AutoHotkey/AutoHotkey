@@ -361,10 +361,16 @@ BIF_DECL(BIF_Obj##name) \
 }
 
 BIF_METHOD(Insert)
+BIF_METHOD(InsertAt)
+BIF_METHOD(Push)
+BIF_METHOD(Pop)
+BIF_METHOD(Delete)
 BIF_METHOD(Remove)
+BIF_METHOD(RemoveAt)
 BIF_METHOD(GetCapacity)
 BIF_METHOD(SetCapacity)
 BIF_METHOD(GetAddress)
+BIF_METHOD(Length)
 BIF_METHOD(MaxIndex)
 BIF_METHOD(MinIndex)
 BIF_METHOD(NewEnum)
@@ -412,4 +418,21 @@ BIF_DECL(BIF_ObjBindMethod)
 	}
 	aResultToken.symbol = SYM_OBJECT;
 	aResultToken.object = bound_func;
+}
+
+
+//
+// ObjRawSet - set a value without invoking any meta-functions.
+//
+
+BIF_DECL(BIF_ObjRawSet)
+{
+	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
+	if (!obj)
+	{
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		return;
+	}
+	if (!obj->SetItem(*aParam[1], *aParam[2]))
+		aResult = g_script.ScriptError(ERR_OUTOFMEM);
 }
