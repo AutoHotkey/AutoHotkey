@@ -1171,15 +1171,15 @@ public:
 		// \ * + = | : ; " ? ,
 		// The following is a list of illegal characters in a computer name:
 		// regEx.Pattern = "`|~|!|@|#|\$|\^|\&|\*|\(|\)|\=|\+|{|}|\\|;|:|'|<|>|/|\?|\||%"
-		return RegConvertKey(aBuf, NULL, aIsRemoteRegistry, true);
+		return RegConvertKey(aBuf, REG_OLD_SYNTAX, NULL, aIsRemoteRegistry);
 	}
-	static HKEY RegConvertKey(LPTSTR aBuf, LPTSTR *aSubkey = NULL, bool *aIsRemoteRegistry = NULL, bool aLegacySyntax = false)
+	static HKEY RegConvertKey(LPTSTR aBuf, RegSyntax aSyntax, LPTSTR *aSubkey = NULL, bool *aIsRemoteRegistry = NULL)
 	{
 		const size_t COMPUTER_NAME_BUF_SIZE = 128;
 
 		LPTSTR key_name_pos = aBuf, computer_name_end = NULL;
 
-		if (aLegacySyntax) // Legacy mode:  ComputerName:RootKey
+		if (aSyntax != REG_NEW_SYNTAX) // Legacy mode:  ComputerName:RootKey
 		{
 			if (computer_name_end = _tcsrchr(aBuf, ':'))
 			{
@@ -1188,12 +1188,15 @@ public:
 				key_name_pos = omit_leading_whitespace(computer_name_end + 1);
 			}
 		}
-		else if (*aBuf == '\\' && aBuf[1] == '\\') // Something like \\ComputerName\HKLM.
+		if (aSyntax != REG_OLD_SYNTAX)
 		{
-			if (  !(computer_name_end = _tcschr(aBuf + 2, '\\'))
-				|| (computer_name_end - aBuf) >= COMPUTER_NAME_BUF_SIZE  )
-				return NULL;
-			key_name_pos = computer_name_end + 1;
+			if (*aBuf == '\\' && aBuf[1] == '\\') // Something like \\ComputerName\HKLM.
+			{
+				if (  !(computer_name_end = _tcschr(aBuf + 2, '\\'))
+					|| (computer_name_end - aBuf) >= COMPUTER_NAME_BUF_SIZE  )
+					return NULL;
+				key_name_pos = computer_name_end + 1;
+			}
 		}
 
 		// Copy root key name into temporary buffer for use by _tcsicmp().
@@ -1207,12 +1210,17 @@ public:
 		}
 		key_name[i] = '\0';
 
-		if (key_name_pos[i] && aLegacySyntax) // There's a \SubKey, but caller wasn't expecting one.
+		if (key_name_pos[i] && aSyntax == REG_OLD_SYNTAX) // There's a \SubKey, but caller wasn't expecting one.
 			return NULL;
 
 		// Set output parameters for caller.
 		if (aSubkey)
-			*aSubkey = key_name_pos + i + (key_name_pos[i] == '\\');
+		{
+			if (key_name_pos[i] != '\\') // No subkey (not even a blank one).
+				*aSubkey = (aSyntax == REG_NEW_SYNTAX) ? _T("") : NULL; // In REG_EITHER_SYNTAX mode, caller wants to know it was omitted.
+			else
+				*aSubkey = key_name_pos + i + 1; // +1 for the slash.
+		}
 		if (aIsRemoteRegistry)
 			*aIsRemoteRegistry = (computer_name_end != NULL);
 

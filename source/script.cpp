@@ -5985,7 +5985,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		// Even the earliest known version of AutoHotkey (v0.207) did not use the ValueType parameter.
 		// Example of obsolete syntax:  RegRead, OutVar, REG_SZ, HKEY_CURRENT_USER, Software\Winamp,
 		// The following detects it as an error, since REG_SZ is not a valid root key:
-		if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertRootKey(new_raw_arg2))
+		if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertKey(new_raw_arg2, REG_EITHER_SYNTAX))
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
@@ -6001,13 +6001,13 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		{
 			if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertValueType(new_raw_arg1))
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-			if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertRootKey(new_raw_arg2))
+			if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertKey(new_raw_arg2, REG_EITHER_SYNTAX))
 				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		}
 		break;
 
 	case ACT_REGDELETE:
-		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertRootKey(new_raw_arg1))
+		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertKey(new_raw_arg1, REG_EITHER_SYNTAX))
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
@@ -11839,7 +11839,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				root_key_type = RegConvertRootKey(ARG1);
 				break;
 			case (size_t)ATTR_LOOP_NEW_REG:
-				root_key_type = RegConvertKey(ARG2); // ARG1 is the word "Reg".
+				root_key_type = RegConvertKey(ARG2, REG_NEW_SYNTAX); // ARG1 is the word "Reg".
 				break;
 			case (size_t)ATTR_LOOP_UNKNOWN:
 				// Since it couldn't be determined at load-time (probably due to derefs),
@@ -12017,7 +12017,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				if (attr == ATTR_LOOP_REG)
 					root_key = RegConvertRootKey(ARG1, &is_remote_registry), subkey = ARG2; // This will open the key if it's remote.
 				else
-					root_key = RegConvertKey(ARG2, &subkey, &is_remote_registry);
+					root_key = RegConvertKey(ARG2, REG_NEW_SYNTAX, &subkey, &is_remote_registry);
 				if (root_key) 
 				{
 					// root_key_type needs to be passed in order to support A_LoopRegKey:
@@ -13760,6 +13760,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	__int64 device_id;  // For sound commands.  __int64 helps avoid compiler warning for some conversions.
 	bool is_remote_registry; // For Registry commands.
 	HKEY root_key; // For Registry commands.
+	LPTSTR subkey, value_name, value;
 	ResultType result;  // General purpose.
 
 	// Even though the loading-parser already checked, check again, for now,
@@ -15141,7 +15142,12 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			// Also, do not use RegCloseKey() on this, even if it's a remote key, since our caller handles that:
 			return RegRead(g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name);
 		// Otherwise:
-		result = RegRead(root_key = RegConvertRootKey(ARG2, &is_remote_registry), ARG3, ARG4);
+		root_key = RegConvertKey(ARG2, REG_EITHER_SYNTAX, &subkey, &is_remote_registry);
+		if (!subkey) // Old syntax (root key without slash).
+			subkey = ARG3, value_name = ARG4;
+		else // New syntax (root key combined with subkey).
+			value_name = ARG3;
+		result = RegRead(root_key, subkey, value_name);
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS keeps always-open.
 			RegCloseKey(root_key);
 		return result;
@@ -15152,8 +15158,13 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			// g.mLoopRegItem->type is an unsupported type:
 			return RegWrite(g.mLoopRegItem->type, g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name, ARG1);
 		// Otherwise:
-		result = RegWrite(RegConvertValueType(ARG1), root_key = RegConvertRootKey(ARG2, &is_remote_registry)
-			, ARG3, ARG4, ARG5); // If RegConvertValueType(ARG1) yields REG_NONE, RegWrite() will set ErrorLevel rather than displaying a runtime error.
+		root_key = RegConvertKey(ARG2, REG_EITHER_SYNTAX, &subkey, &is_remote_registry);
+		if (!subkey) // Old syntax (root key without slash).
+			subkey = ARG3, value_name = ARG4, value = ARG5;
+		else // New syntax (root key combined with subkey).
+			value_name = ARG3, value = ARG4;
+		result = RegWrite(RegConvertValueType(ARG1), root_key, subkey, value_name, value);
+		// If the value type or root_key are invalid, RegWrite() has set ErrorLevel rather than displaying a runtime error.
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS keeps always-open.
 			RegCloseKey(root_key);
 		return result;
@@ -15172,7 +15183,12 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 				return RegDelete(g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name);
 		}
 		// Otherwise:
-		result = RegDelete(root_key = RegConvertRootKey(ARG1, &is_remote_registry), ARG2, ARG3);
+		root_key = RegConvertKey(ARG1, REG_EITHER_SYNTAX, &subkey, &is_remote_registry);
+		if (!subkey) // Old syntax (root key without slash).
+			subkey = ARG2, value_name = ARG3;
+		else // New syntax (root key combined with subkey).
+			value_name = ARG2;
+		result = RegDelete(root_key, subkey, value_name);
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS always keeps open.
 			RegCloseKey(root_key);
 		return result;

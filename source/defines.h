@@ -133,6 +133,8 @@ enum ToggleValueType {TOGGLE_INVALID = 0, TOGGLED_ON, TOGGLED_OFF, ALWAYS_ON, AL
 // In addition, BIF_InStr relies on SCS_SENSITIVE being 1:
 enum StringCaseSenseType {SCS_INSENSITIVE, SCS_SENSITIVE, SCS_INSENSITIVE_LOCALE, SCS_INSENSITIVE_LOGICAL, SCS_INVALID};
 
+enum RegSyntax {REG_OLD_SYNTAX, REG_NEW_SYNTAX, REG_EITHER_SYNTAX};
+
 enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
 {
 	// The sPrecedence array in ExpandExpression() must be kept in sync with any additions, removals,
