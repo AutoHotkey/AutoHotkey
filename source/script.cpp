@@ -8063,6 +8063,12 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		min_params = 2;
 		max_params = 6;
 	}
+	else if (!_tcsicmp(func_name, _T("StrReplace")))
+	{
+		bif = BIF_StrReplace;
+		min_params = 3;
+		max_params = 5;
+	}
 	else if (!_tcsicmp(func_name, _T("StrSplit")))
 	{
 		bif = BIF_StrSplit;

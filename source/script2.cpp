@@ -7311,6 +7311,42 @@ return_empty_string:
 
 
 
+BIF_DECL(BIF_StrReplace)
+{
+	TCHAR old_buf[MAX_NUMBER_SIZE], new_buf[MAX_NUMBER_SIZE];
+	// Must use aResultToken.buf for source in case StrReplace() performs no replacements:
+	LPTSTR source = ParamIndexToString(0, aResultToken.buf);	// Parameter #1: Haystack
+	size_t length = ParamIndexLength(0, source);
+	LPTSTR oldstr = ParamIndexToString(1, old_buf);				// Parameter #2: SearchText
+	LPTSTR newstr = ParamIndexToOptionalString(2, new_buf);		// Parameter #3: ReplaceText
+	Var *output_var_count = ParamIndexToOptionalVar(3);			// Parameter #4: OutputVarCount
+	UINT replacement_limit = (UINT)ParamIndexToOptionalInt64(4, UINT_MAX); // Parameter #5: Limit
+
+	LPTSTR dest;
+	UINT found_count = StrReplace(source, oldstr, newstr, (StringCaseSenseType)g->StringCaseSense
+		, replacement_limit, -1, &dest, &length);
+
+	if (!dest) // Failure due to out of memory.
+	{
+		aResult = g_script.ScriptError(ERR_OUTOFMEM);
+		return;
+	}
+
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = dest;
+
+	if (dest != source) // StrReplace() allocated new memory rather than returning "source" to us unaltered.
+	{
+		aResultToken.mem_to_free = dest; // Let caller know it needs to be freed.
+		aResultToken.marker_length = length; // Must always be set if using mem_to_free.
+	}
+
+	if (output_var_count)
+		output_var_count->Assign((DWORD)found_count);
+}
+
+
+
 ResultType Line::SplitPath(LPTSTR aFileSpec)
 {
 	Var *output_var_name = ARGVAR2;  // i.e. Param #2. Ok if NULL.
