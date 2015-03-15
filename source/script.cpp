@@ -5078,7 +5078,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				&& IS_SPACE_OR_TAB(this_aArg[1])) // Followed by a space or tab.
 			{
 				if (this_new_arg.type == ARG_TYPE_OUTPUT_VAR // Command requires a variable, not an expression.
-					|| aActionType == ACT_SORT || ACT_IS_IF(aActionType)) // Sort and If commands depend on it being a variable.
+					|| this_new_arg.type == ARG_TYPE_INPUT_VAR // Exclude NORMAL args from the check below.
+						&& (aActionType == ACT_SORT || ACT_IS_IF(aActionType))) // Sort and If commands depend on arg 0 being a variable.
 					return ScriptError(_T("Unexpected %"), this_aArg); // Short message since it's rare.
 				this_new_arg.type = ARG_TYPE_NORMAL; // If this was an input var, make it a normal expression.
 				this_new_arg.is_expression = true;
