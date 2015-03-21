@@ -10081,7 +10081,7 @@ end_of_infix_to_postfix:
 				break;
 			}
 			aArg.is_expression = false;
-			if (!ACT_USES_SIMPLE_POSTFIX(mActionType))
+			if (!ACT_USES_SIMPLE_POSTFIX(mActionType) && !(mActionType == ACT_STATIC && (int)mAttribute == ACT_ASSIGNEXPR))
 				return OK;
 			// Otherwise, continue on below to copy the postfix token into persistent memory.
 		}
