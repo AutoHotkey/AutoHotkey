@@ -213,6 +213,7 @@ struct point_and_hwnd_type
 	RECT rect_found;
 	HWND hwnd_found;
 	double distance;
+	bool ignore_disabled_controls; // Used in EnumChildFindPoint for ControlClick; should normally be initialized to false.
 };
 
 

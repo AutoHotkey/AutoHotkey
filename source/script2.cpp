@@ -2281,6 +2281,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 		// whether aControl contains X and Y coordinates.  That way, if a control class happens to be
 		// named something like "X1 Y1", it will still be found by giving precedence to class names.
 		point_and_hwnd_type pah = {0};
+		pah.ignore_disabled_controls = true; // v1.1.20: Ignore disabled controls.
 		// Parse the X an Y coordinates in a strict way to reduce ambiguity with control names and also
 		// to keep the code simple.
 		LPTSTR cp = omit_leading_whitespace(aControl);
@@ -6447,7 +6448,7 @@ BOOL CALLBACK EnumChildFindPoint(HWND aWnd, LPARAM lParam)
 {
 	point_and_hwnd_type &pah = *(point_and_hwnd_type *)lParam;  // For performance and convenience.
 	if (!IsWindowVisible(aWnd) // Omit hidden controls, like Window Spy does.
-		|| !IsWindowEnabled(aWnd)) // Also omit disabled controls, since testing shows that the OS doesn't send mouse messages to them.
+		|| (pah.ignore_disabled_controls && !IsWindowEnabled(aWnd))) // For ControlClick, also omit disabled controls, since testing shows that the OS doesn't post mouse messages to them.
 		return TRUE;
 	RECT rect;
 	if (!GetWindowRect(aWnd, &rect))
