@@ -111,6 +111,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 	#define EXPR_ALLOCA_LIMIT 40000  // The maximum amount of alloca memory for all items.  v1.0.45: An extra precaution against stack stress in extreme/theoretical cases.
 	#define EXPR_IS_DONE (!stack_count && this_postfix[1].symbol == SYM_INVALID) // True if we've used up the last of the operators & operands.  Non-zero stack_count combined with SYM_INVALID would indicate an error (an exception will be thrown later, so don't take any shortcuts).
 
+	#define EXPR_NAN_STR	_T("NaN")
+	#define EXPR_NAN_LEN	(_countof(EXPR_NAN_STR)-1)
+	#define EXPR_NAN		EXPR_NAN_STR, EXPR_NAN_LEN
+
 	// For each item in the postfix array: if it's an operand, push it onto stack; if it's an operator or
 	// function call, evaluate it and push its result onto the stack.  SYM_INVALID is the special symbol
 	// that marks the end of the postfix array.
@@ -706,13 +710,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			else // String.
 			{
 				// Seems best to consider the application of unary minus to a string to be a failure.
-				// UPDATE: For v1.0.25.06, invalid operations like this instead treat the operand as an
-				// empty string.  This avoids aborting a long, complex expression entirely just because
-				// one of its operands is invalid.  However, the net effect in most cases might be the same,
-				// since the empty string is a non-numeric result and thus will cause any operator it is
-				// involved with to treat its other operand as a string too.  And the result of a math
-				// operation on two strings is typically an empty string.
-				this_token.SetValue(_T(""), 0);
+				this_token.SetValue(EXPR_NAN);
 				break;
 			}
 			// Since above didn't "break":
@@ -729,7 +727,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			if (right_is_number == PURE_NOT_NUMERIC) // Invalid operation.
 			{
 				right.var->MaybeWarnUninitialized(); // This line should always be reached if the var is uninitialized.
-				right.var->Assign(); // If target var contains "" or "non-numeric text", make it blank. Clipboard is also supported here.
+				right.var->Assign(EXPR_NAN); // Clipboard is also supported here.
 				if (is_pre_op)
 				{
 					// v1.0.46.01: For consistency, it seems best to make the result of a pre-op be a
@@ -746,8 +744,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// inc/dec.  So fall through to make the result blank because clipboard isn't allowed as
 					// SYM_VAR beyond this point (to simplify the code and improve maintainability).
 				}
-				this_token.SetValue(_T(""), 0); // Make the result blank to indicate invalid operation
-				break;                          // (assign to non-lvalue or increment/decrement a non-number).
+				this_token.SetValue(EXPR_NAN); // Indicate invalid operation (increment/decrement a non-number).
+				break;
 			} // end of "invalid operation" block.
 
 			// DUE TO CODE SIZE AND PERFORMANCE decided not to support things like the following:
@@ -831,7 +829,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		case SYM_BITNOT:  // The tilde (~) operator.
 			if (right_is_number == PURE_NOT_NUMERIC) // String.  Seems best to consider the application of '*' or '~' to a non-numeric string to be a failure.
 			{
-				this_token.SetValue(_T(""), 0);
+				this_token.SetValue(EXPR_NAN);
 				break;
 			}
 			// Since above didn't "break": right_is_number is PURE_INTEGER or PURE_FLOAT.
@@ -1134,9 +1132,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					break;
 
 				default:
-					// Other operators do not support string operands, so the result is an empty string.
-					this_token.marker = _T("");
-					this_token.marker_length = 0;
+					// Other operators do not support non-numeric operands, so the result is NaN (not a number).
+					this_token.marker = EXPR_NAN_STR;
+					this_token.marker_length = EXPR_NAN_LEN;
 					result_symbol = SYM_STRING;
 				}
 				this_token.symbol = result_symbol; // Must be done only after the switch() above.
@@ -1176,10 +1174,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// Since it's integer division, no need for explicit floor() of the result.
 					// Also, performance is much higher for integer vs. float division, which is part
 					// of the justification for a separate operator.
-					if (right_int64 == 0) // Divide by zero produces blank result (perhaps will produce exception if scripts ever support exception handlers).
+					if (right_int64 == 0) // Divide by zero produces "not a number".
 					{
-						this_token.marker = _T("");
-						this_token.marker_length = 0;
+						this_token.marker = EXPR_NAN_STR;
+						this_token.marker_length = EXPR_NAN_LEN;
 						result_symbol = SYM_STRING;
 					}
 					else
@@ -1192,8 +1190,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (!left_int64 && right_int64 < 0) // In essence, this is divide-by-zero.
 					{
 						// Return a consistent result rather than something that varies:
-						this_token.marker = _T("");
-						this_token.marker_length = 0;
+						this_token.marker = EXPR_NAN_STR;
+						this_token.marker_length = EXPR_NAN_LEN;
 						result_symbol = SYM_STRING;
 					}
 					else // We have a valid base and exponent and both are integers, so the calculation will always have a defined result.
@@ -1225,10 +1223,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_MULTIPLY: this_token.value_double = left_double * right_double; break;
 				case SYM_DIVIDE:
 				case SYM_FLOORDIVIDE:
-					if (right_double == 0.0) // Divide by zero produces blank result.
+					if (right_double == 0.0) // Divide by zero produces "not a number".
 					{
-						this_token.marker = _T("");
-						this_token.marker_length = 0;
+						this_token.marker = EXPR_NAN_STR;
+						this_token.marker_length = EXPR_NAN_LEN;
 						result_symbol = SYM_STRING;
 					}
 					else
@@ -1252,8 +1250,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (left_double == 0.0 && right_double < 0  // In essence, this is divide-by-zero.
 						|| left_was_negative && qmathFmod(right_double, 1.0) != 0.0) // Negative base, but exponent isn't close enough to being an integer: unsupported (to simplify code).
 					{
-						this_token.marker = _T("");
-						this_token.marker_length = 0;
+						this_token.marker = EXPR_NAN_STR;
+						this_token.marker_length = EXPR_NAN_LEN;
 						result_symbol = SYM_STRING;
 					}
 					else
