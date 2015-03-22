@@ -13990,6 +13990,10 @@ BIF_DECL(BIF_WinExistActive)
 
 
 
+#define If_NaN_return_NaN(ParamIndex) \
+	if (!TokenIsNumeric(*aParam[(ParamIndex)])) \
+		_f_return(EXPR_NAN)
+
 BIF_DECL(BIF_Round)
 // For simplicity, this always yields something numeric (or a string that's numeric).
 // Even Round(empty_or_unintialized_var) is zero rather than "" or "NaN".
@@ -14001,6 +14005,7 @@ BIF_DECL(BIF_Round)
 	double multiplier;
 	if (aParamCount > 1)
 	{
+		If_NaN_return_NaN(1);
 		param2 = ParamIndexToInt(1);
 		multiplier = qmathPow(10, param2);
 	}
@@ -14009,6 +14014,7 @@ BIF_DECL(BIF_Round)
 		param2 = 0;
 		multiplier = 1;
 	}
+	If_NaN_return_NaN(0);
 	double value = ParamIndexToDouble(0);
 	value = (value >= 0.0 ? qmathFloor(value * multiplier + 0.5)
 		: qmathCeil(value * multiplier - 0.5)) / multiplier;
@@ -14067,6 +14073,7 @@ BIF_DECL(BIF_FloorCeil)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
+	If_NaN_return_NaN(0);
 	// The qmath routines are used because Floor() and Ceil() are deceptively difficult to implement in a way
 	// that gives the correct result in all permutations of the following:
 	// 1) Negative vs. positive input.
@@ -14114,8 +14121,7 @@ BIF_DECL(BIF_Mod)
 BIF_DECL(BIF_Abs)
 {
 	if (!TokenToDoubleOrInt64(*aParam[0], aResultToken)) // "Cast" token to Int64/Double depending on whether it has a decimal point.
-		// Non-operand or non-numeric string. TokenToDoubleOrInt64() has already set the token to be an
-		// empty string for us.
+		// Non-operand or non-numeric string. TokenToDoubleOrInt64() has already set the result to "NaN".
 		return;
 	if (aResultToken.symbol == SYM_INTEGER)
 	{
@@ -14135,6 +14141,7 @@ BIF_DECL(BIF_Sin)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
+	If_NaN_return_NaN(0);
 	_f_return(qmathSin(ParamIndexToDouble(0)));
 }
 
@@ -14144,6 +14151,7 @@ BIF_DECL(BIF_Cos)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
+	If_NaN_return_NaN(0);
 	_f_return(qmathCos(ParamIndexToDouble(0)));
 }
 
@@ -14153,6 +14161,7 @@ BIF_DECL(BIF_Tan)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
+	If_NaN_return_NaN(0);
 	_f_return(qmathTan(ParamIndexToDouble(0)));
 }
 
@@ -14160,6 +14169,7 @@ BIF_DECL(BIF_Tan)
 
 BIF_DECL(BIF_ASinACos)
 {
+	If_NaN_return_NaN(0);
 	double value = ParamIndexToDouble(0);
 	if (value > 1 || value < -1) // ASin and ACos aren't defined for such values.
 	{
@@ -14179,6 +14189,7 @@ BIF_DECL(BIF_ATan)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
+	If_NaN_return_NaN(0);
 	_f_return(qmathAtan(ParamIndexToDouble(0)));
 }
 
@@ -14188,6 +14199,7 @@ BIF_DECL(BIF_Exp)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
+	If_NaN_return_NaN(0);
 	_f_return(qmathExp(ParamIndexToDouble(0)));
 }
 
@@ -14195,6 +14207,7 @@ BIF_DECL(BIF_Exp)
 
 BIF_DECL(BIF_SqrtLogLn)
 {
+	If_NaN_return_NaN(0);
 	double value = ParamIndexToDouble(0);
 	if (value < 0) // Result is undefined in these cases.
 	{
