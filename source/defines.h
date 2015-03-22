@@ -189,6 +189,10 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 #define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) (!(token).var) // SYM_DYNAMICs are either double-derefs or built-in vars.
 #define SYM_DYNAMIC_IS_WRITABLE(token) ((token)->var && (token)->var->Type() <= VAR_LAST_WRITABLE) // i.e. it's the clipboard, not a built-in variable or double-deref.
 
+#define EXPR_NAN_STR	_T("NaN")
+#define EXPR_NAN_LEN	(_countof(EXPR_NAN_STR)-1)
+#define EXPR_NAN		EXPR_NAN_STR, EXPR_NAN_LEN
+
 
 struct ExprTokenType; // Forward declarations for use below.
 struct ResultToken;

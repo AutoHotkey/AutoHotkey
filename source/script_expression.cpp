@@ -111,10 +111,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 	#define EXPR_ALLOCA_LIMIT 40000  // The maximum amount of alloca memory for all items.  v1.0.45: An extra precaution against stack stress in extreme/theoretical cases.
 	#define EXPR_IS_DONE (!stack_count && this_postfix[1].symbol == SYM_INVALID) // True if we've used up the last of the operators & operands.  Non-zero stack_count combined with SYM_INVALID would indicate an error (an exception will be thrown later, so don't take any shortcuts).
 
-	#define EXPR_NAN_STR	_T("NaN")
-	#define EXPR_NAN_LEN	(_countof(EXPR_NAN_STR)-1)
-	#define EXPR_NAN		EXPR_NAN_STR, EXPR_NAN_LEN
-
 	// For each item in the postfix array: if it's an operand, push it onto stack; if it's an operator or
 	// function call, evaluate it and push its result onto the stack.  SYM_INVALID is the special symbol
 	// that marks the end of the postfix array.

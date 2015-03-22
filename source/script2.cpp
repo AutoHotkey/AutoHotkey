@@ -13991,8 +13991,8 @@ BIF_DECL(BIF_WinExistActive)
 
 
 BIF_DECL(BIF_Round)
-// For simplicity and backward compatibility, this always yields something numeric (or a string that's numeric).
-// Even Round(empty_or_unintialized_var) is zero rather than "".
+// For simplicity, this always yields something numeric (or a string that's numeric).
+// Even Round(empty_or_unintialized_var) is zero rather than "" or "NaN".
 {
 	// In the future, a string conversion algorithm might be better to avoid the loss
 	// of 64-bit integer precision that is currently caused by the use of doubles in
@@ -14089,26 +14089,24 @@ BIF_DECL(BIF_Mod)
 	// Load-time validation has already ensured there are exactly two parameters.
 	// "Cast" each operand to Int64/Double depending on whether it has a decimal point.
 	ExprTokenType param0, param1;
-	if (!ParamIndexToNumber(0, param0) || !ParamIndexToNumber(1, param1)) // Non-operand or non-numeric string.
-		_f_return_empty;
-
-	if (param0.symbol == SYM_INTEGER && param1.symbol == SYM_INTEGER)
+	if (ParamIndexToNumber(0, param0) && ParamIndexToNumber(1, param1)) // Both are numeric.
 	{
-		if (!param1.value_int64) // Divide by zero.
-			_f_return_empty;
-		else
-			// For performance, % is used vs. qmath for integers.
-			_f_return_i(param0.value_int64 % param1.value_int64);
+		if (param0.symbol == SYM_INTEGER && param1.symbol == SYM_INTEGER) // Both are integers.
+		{
+			if (param1.value_int64) // Not divide by zero.
+				// For performance, % is used vs. qmath for integers.
+				_f_return_i(param0.value_int64 % param1.value_int64);
+		}
+		else // At least one is a floating point number.
+		{
+			double dividend = TokenToDouble(param0);
+			double divisor = TokenToDouble(param1);
+			if (divisor != 0.0) // Not divide by zero.
+				_f_return(qmathFmod(dividend, divisor));
+		}
 	}
-	else // At least one is a floating point number.
-	{
-		double dividend = TokenToDouble(param0);
-		double divisor = TokenToDouble(param1);
-		if (divisor == 0.0) // Divide by zero.
-			_f_return_empty;
-		else
-			_f_return(qmathFmod(dividend, divisor));
-	}
+	// Since above didn't return, one or both parameters were invalid.
+	_f_return_p(EXPR_NAN);
 }
 
 
@@ -14165,13 +14163,12 @@ BIF_DECL(BIF_ASinACos)
 	double value = ParamIndexToDouble(0);
 	if (value > 1 || value < -1) // ASin and ACos aren't defined for such values.
 	{
-		_f_return_empty;
+		_f_return_p(EXPR_NAN);
 	}
 	else
 	{
 		// For simplicity and backward compatibility, a numeric result is always returned in this case (even if
 		// the input is non-numeric or an empty string).
-		// Below: marker contains either "ASin" or "ACos"
 		_f_return((_f_callee_id == FID_ASin) ? qmathAsin(value) : qmathAcos(value));
 	}
 }
@@ -14199,9 +14196,9 @@ BIF_DECL(BIF_Exp)
 BIF_DECL(BIF_SqrtLogLn)
 {
 	double value = ParamIndexToDouble(0);
-	if (value < 0) // Result is undefined in these cases, so make blank to indicate.
+	if (value < 0) // Result is undefined in these cases.
 	{
-		_f_return_empty;
+		_f_return_p(EXPR_NAN);
 	}
 	else
 	{
@@ -16647,7 +16644,7 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 		//case SYM_MISSING:
 		default:
 			aOutput.symbol = SYM_STRING;
-			aOutput.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
+			aOutput.marker = EXPR_NAN_STR; // For completeness.  Some callers such as BIF_Abs() rely on this being done.
 			return FAIL;
 	}
 	// Since above didn't return, interpret "str" as a number.
@@ -16660,7 +16657,7 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 		aOutput.value_double = ATOF(str);
 		break;
 	default: // Not a pure number.
-		aOutput.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
+		aOutput.marker = EXPR_NAN_STR; // For completeness.  Some callers such as BIF_Abs() rely on this being done.
 		return FAIL;
 	}
 	return OK; // Since above didn't return, indicate success.

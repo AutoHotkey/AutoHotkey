@@ -457,8 +457,8 @@ public:
 			aToken.value_double = var.ToDouble();
 			break;
 		default: // Not a pure number.
-			aToken.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
-			aToken.marker_length = 0;
+			aToken.marker = EXPR_NAN_STR; // For completeness.  Some callers such as BIF_Abs() rely on this being done.
+			aToken.marker_length = EXPR_NAN_LEN;
 			return FAIL;
 		}
 		return OK; // Since above didn't return, indicate success.
