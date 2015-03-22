@@ -723,46 +723,29 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		case SYM_POST_DECREMENT: // += and -= at load-time or during the tokenizing phase higher above because 
 		case SYM_PRE_INCREMENT:  // it might introduce precedence problems, plus the post-inc/dec's nature is
 		case SYM_PRE_DECREMENT:  // unique among all the operators in that it pushes an operand before the evaluation.
+			if (right.symbol != SYM_VAR) // Syntax error.
+				goto abort_with_exception;
 			is_pre_op = (this_token.symbol >= SYM_PRE_INCREMENT); // Store this early because its symbol will soon be overwritten.
-			if (right.symbol != SYM_VAR || right_is_number == PURE_NOT_NUMERIC) // Invalid operation.
+			if (right_is_number == PURE_NOT_NUMERIC) // Invalid operation.
 			{
-				if (right.symbol == SYM_VAR) // Thus due to the above check, it's a non-numeric target such as ++i when "i" is blank or contains text. This line was fixed in v1.0.46.16.
+				right.var->MaybeWarnUninitialized(); // This line should always be reached if the var is uninitialized.
+				right.var->Assign(); // If target var contains "" or "non-numeric text", make it blank. Clipboard is also supported here.
+				if (is_pre_op)
 				{
-					right.var->MaybeWarnUninitialized(); // This line should always be reached if the var is uninitialized.
-					right.var->Assign(); // If target var contains "" or "non-numeric text", make it blank. Clipboard is also supported here.
-					if (is_pre_op)
+					// v1.0.46.01: For consistency, it seems best to make the result of a pre-op be a
+					// variable whenever a variable came in.  This allows its address to be taken, and it
+					// to be passed by reference, and other SYM_VAR behaviors, even if the operation itself
+					// produces a blank value.
+					if (right.var->Type() == VAR_NORMAL)
 					{
-						// v1.0.46.01: For consistency, it seems best to make the result of a pre-op be a
-						// variable whenever a variable came in.  This allows its address to be taken, and it
-						// to be passed by reference, and other SYM_VAR behaviors, even if the operation itself
-						// produces a blank value.
-						// KNOWN LIMITATION: Although this behavior is convenient to have, I realize now
-						// that it produces at least one weird effect: whenever a binary operator's operands
-						// both use a pre-op on the same variable, or whenever two or more of a function-call's
-						// parameters both do a pre-op on the same variable, that variable will have the same
-						// value at the time the binary operator or function-call is evaluated.  For example:
-						//    y = 1
-						//    x = ++y + ++y  ; Yields 6 not 5.
-						// However, if you think about the situations anyone would intentionally want to do
-						// the above or a function-call with two or more pre-ops in its parameters, it seems
-						// so extremely rare that retaining the existing behavior might be superior because of:
-						// 1) Convenience: It allows ++x to be passed ByRef, it's address taken.  Less importantly,
-						//    it also allows ++++x to work.
-						// 2) Backward compatibility: Some existing scripts probably already rely on the fact that
-						//    ++x and --x produce an lvalue (though it's undocumented).
-						if (right.var->Type() == VAR_NORMAL)
-						{
-							this_token.var = right.var;  // Make the result a variable rather than a normal operand so that its
-							this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(++x)
-							break;
-						}
-						//else VAR_CLIPBOARD, which is allowed in only when it's the lvalue of an assignment or
-						// inc/dec.  So fall through to make the result blank because clipboard isn't allowed as
-						// SYM_VAR beyond this point (to simplify the code and improve maintainability).
+						this_token.var = right.var;  // Make the result a variable rather than a normal operand so that its
+						this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(++x)
+						break;
 					}
-					//else post_op against non-numeric target-var.  Fall through to below to yield blank result.
+					//else VAR_CLIPBOARD, which is allowed in only when it's the lvalue of an assignment or
+					// inc/dec.  So fall through to make the result blank because clipboard isn't allowed as
+					// SYM_VAR beyond this point (to simplify the code and improve maintainability).
 				}
-				//else target isn't a var, so yield blank result.
 				this_token.SetValue(_T(""), 0); // Make the result blank to indicate invalid operation
 				break;                          // (assign to non-lvalue or increment/decrement a non-number).
 			} // end of "invalid operation" block.
@@ -791,6 +774,20 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			{
 				// Push the variable itself so that the operation will have already taken effect for whoever
 				// uses this operand/result in the future (i.e. pre-op vs. post-op).
+				// KNOWN LIMITATION: Although this behavior is convenient to have, I realize now
+				// that it produces at least one weird effect: whenever a binary operator's operands
+				// both use a pre-op on the same variable, or whenever two or more of a function-call's
+				// parameters both do a pre-op on the same variable, that variable will have the same
+				// value at the time the binary operator or function-call is evaluated.  For example:
+				//    y = 1
+				//    x = ++y + ++y  ; Yields 6 not 5.
+				// However, if you think about the situations anyone would intentionally want to do
+				// the above or a function-call with two or more pre-ops in its parameters, it seems
+				// so extremely rare that retaining the existing behavior might be superior because of:
+				// 1) Convenience: It allows ++x to be passed ByRef, it's address taken.  Less importantly,
+				//    it also allows ++++x to work.
+				// 2) Backward compatibility: Some existing scripts probably already rely on the fact that
+				//    ++x and --x produce an lvalue (though it's undocumented).
 				if (right.var->Type() == VAR_NORMAL)
 				{
 					this_token.var = right.var;  // Make the result a variable rather than a normal operand so that its
@@ -890,11 +887,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			
 			if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(this_token.symbol)) // v1.0.46: Added support for various assignment operators.
 			{
-				if (left.symbol != SYM_VAR)
-				{
-					this_token.SetValue(_T(""), 0); // Make the result blank to indicate invalid operation (assign to non-lvalue).
-					break; // Equivalent to "goto push_this_token" in this case.
-				}
+				if (left.symbol != SYM_VAR) // Syntax error.
+					goto abort_with_exception;
+
 				switch(this_token.symbol)
 				{
 				case SYM_ASSIGN: // Listed first for performance (it's probably the most common because things like ++ and += aren't expressions when they're by themselves on a line).
