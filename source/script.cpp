@@ -8583,7 +8583,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 54, 54         // SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT
 		, 58, 58         // SYM_ADD, SYM_SUBTRACT
 		, 62, 62, 62     // SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
-		, 67,67,67,67,67 // SYM_NEGATIVE (unary minus), SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT, SYM_ADDRESS, SYM_DEREF
+		, 67,67,67,67,67,67 // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT, SYM_ADDRESS, SYM_DEREF
 		// NOTE: THE ABOVE MUST BE AN ODD NUMBER to indicate right-to-left evaluation order, which was added in v1.0.46 to support consecutive unary operators such as !*var !!var (!!var can be used to convert a value into a pure 1/0 boolean).
 //		, 68             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 72             // SYM_POWER (see note below).  Associativity kept as left-to-right for backward compatibility (e.g. 2**2**3 is 4**3=64 not 2**8=256).
@@ -8705,8 +8705,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							++cp; // An additional increment to have loop skip over the operator's second symbol.
 							this_infix_item.symbol = SYM_PRE_INCREMENT;
 						}
-						else // Remove unary pluses from consideration since they do not change the calculation.
-							--infix_count; // Counteract the loop's increment.
+						else // Unary plus.
+							this_infix_item.symbol = SYM_POSITIVE; // Added in v2 for symmetry with SYM_NEGATIVE; i.e. if -x produces NaN, so should +x.
 					}
 					break;
 				case '-':

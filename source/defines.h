@@ -175,7 +175,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT // << >>  ALSO: SYM_BITSHIFTRIGHT MUST BE KEPT LAST AMONG THE BIT OPERATORS BECAUSE IT'S USED IN A RANGE-CHECK.
 	, SYM_ADD, SYM_SUBTRACT
 	, SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
-	, SYM_NEGATIVE, SYM_HIGHNOT, SYM_BITNOT, SYM_ADDRESS, SYM_DEREF  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
+	, SYM_NEGATIVE, SYM_POSITIVE, SYM_HIGHNOT, SYM_BITNOT, SYM_ADDRESS, SYM_DEREF  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
 	, SYM_POWER    // See comments near precedence array for why this takes precedence over SYM_NEGATIVE.
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
 	, SYM_FUNC     // A call to a function.

@@ -717,6 +717,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			this_token.symbol = right_is_number;
 			break;
 
+		case SYM_POSITIVE: // Added in v2 for symmetry with SYM_NEGATIVE; i.e. if -x produces NaN, so should +x.
+			if (right_is_number)
+				TokenToDoubleOrInt64(right, this_token);
+			else
+				this_token.SetValue(EXPR_NAN); // For consistency with unary minus (see above).
+			break;
+
 		case SYM_POST_INCREMENT: // These were added in v1.0.46.  It doesn't seem worth translating them into
 		case SYM_POST_DECREMENT: // += and -= at load-time or during the tokenizing phase higher above because 
 		case SYM_PRE_INCREMENT:  // it might introduce precedence problems, plus the post-inc/dec's nature is
