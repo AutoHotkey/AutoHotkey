@@ -7312,6 +7312,42 @@ return_empty_string:
 
 
 
+BIF_DECL(BIF_StrReplace)
+{
+	TCHAR old_buf[MAX_NUMBER_SIZE], new_buf[MAX_NUMBER_SIZE];
+	// Must use aResultToken.buf for source in case StrReplace() performs no replacements:
+	LPTSTR source = ParamIndexToString(0, aResultToken.buf);	// Parameter #1: Haystack
+	size_t length = ParamIndexLength(0, source);
+	LPTSTR oldstr = ParamIndexToString(1, old_buf);				// Parameter #2: SearchText
+	LPTSTR newstr = ParamIndexToOptionalString(2, new_buf);		// Parameter #3: ReplaceText
+	Var *output_var_count = ParamIndexToOptionalVar(3);			// Parameter #4: OutputVarCount
+	UINT replacement_limit = (UINT)ParamIndexToOptionalInt64(4, UINT_MAX); // Parameter #5: Limit
+
+	LPTSTR dest;
+	UINT found_count = StrReplace(source, oldstr, newstr, (StringCaseSenseType)g->StringCaseSense
+		, replacement_limit, -1, &dest, &length);
+
+	if (!dest) // Failure due to out of memory.
+	{
+		aResult = g_script.ScriptError(ERR_OUTOFMEM);
+		return;
+	}
+
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = dest;
+
+	if (dest != source) // StrReplace() allocated new memory rather than returning "source" to us unaltered.
+	{
+		aResultToken.mem_to_free = dest; // Let caller know it needs to be freed.
+		aResultToken.marker_length = length; // Must always be set if using mem_to_free.
+	}
+
+	if (output_var_count)
+		output_var_count->Assign((DWORD)found_count);
+}
+
+
+
 ResultType Line::SplitPath(LPTSTR aFileSpec)
 {
 	Var *output_var_name = ARGVAR2;  // i.e. Param #2. Ok if NULL.
@@ -15207,12 +15243,20 @@ BIF_DECL(BIF_RegEx)
 
 
 
-BIF_DECL(BIF_Asc)
+BIF_DECL(BIF_Ord)
 {
 	// Result will always be an integer (this simplifies scripts that work with binary zeros since an
 	// empty string yields zero).
 	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
-	aResultToken.value_int64 = (TBYTE)*ParamIndexToString(0, aResultToken.buf);
+	LPTSTR cp = ParamIndexToString(0, aResultToken.buf);
+#ifndef UNICODE
+	// Always return a single byte in ANSI mode.
+#else
+	if (toupper(*aResultToken.marker) == 'O' && IS_SURROGATE_PAIR(cp[0], cp[1])) // Ord().
+		aResultToken.value_int64 = ((cp[0] - 0xd800) << 10) + (cp[1] - 0xdc00) + 0x10000;
+	else
+#endif
+		aResultToken.value_int64 = (TBYTE)*cp;
 }
 
 
@@ -15221,8 +15265,17 @@ BIF_DECL(BIF_Chr)
 {
 	int param1 = ParamIndexToInt(0); // Convert to INT vs. UINT so that negatives can be detected.
 	LPTSTR cp = aResultToken.buf; // If necessary, it will be moved to a persistent memory location by our caller.
-	if (param1 < 0 || param1 > TRANS_CHAR_MAX)
+	if (param1 < 0 || param1 > UorA(0x10FFFF, UCHAR_MAX))
 		*cp = '\0'; // Empty string indicates both Chr(0) and an out-of-bounds param1.
+#ifdef UNICODE
+	else if (param1 >= 0x10000)
+	{
+		param1 -= 0x10000;
+		cp[0] = 0xd800 + ((param1 >> 10) & 0x3ff);
+		cp[1] = 0xdc00 + ( param1        & 0x3ff);
+		cp[2] = '\0';
+	}
+#endif
 	else
 	{
 		cp[0] = param1;

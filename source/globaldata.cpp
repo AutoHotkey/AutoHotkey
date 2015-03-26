@@ -506,9 +506,8 @@ Action g_act[] =
 	, {_T("IniDelete"), 2, 3, 3, NULL} // Filespec, Section, Key
 
 	// These require so few parameters due to registry loops, which provide the missing parameter values
-	// automatically.  In addition, RegRead can't require more than 1 param since the 2nd param is
-	// an option/obsolete parameter:
-	, {_T("RegRead"), 1, 5, 5 H, NULL} // output var, (ValueType [optional]), RegKey, RegSubkey, ValueName
+	// automatically:
+	, {_T("RegRead"), 1, 4, 4 H, NULL} // OutputVar, RegKey, RegSubkey, ValueName
 	, {_T("RegWrite"), 0, 5, 5, NULL} // ValueType, RegKey, RegSubKey, ValueName, Value (set to blank if omitted?)
 	, {_T("RegDelete"), 0, 3, 3, NULL} // RegKey, RegSubKey, ValueName
 	, {_T("SetRegView"), 1, 1, 1, NULL}

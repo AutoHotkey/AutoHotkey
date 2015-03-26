@@ -64,11 +64,19 @@ enum ExecUntilMode {NORMAL_MODE, UNTIL_RETURN, UNTIL_BLOCK_END, ONLY_ONE_LINE};
 #define ATTR_LOOP_PARSE (void *)6
 #define ATTR_LOOP_WHILE (void *)7 // Lexikos: This is used to differentiate ACT_WHILE from ACT_LOOP, allowing code to be shared.
 #define ATTR_LOOP_FOR (void *)8
+#define ATTR_LOOP_NEW_REG (void *)9
+#define ATTR_LOOP_NEW_FILES (void *)10
 #define ATTR_LOOP_OBSCURED (void *)100 // fincs: used by Line::PreparseIfElse() for ACT_FINALLY blocks.
 #define ATTR_OBSCURE(attr) ((attr) ? ATTR_LOOP_OBSCURED : ATTR_NONE)
 typedef void *AttributeType;
 
-enum FileLoopModeType {FILE_LOOP_INVALID, FILE_LOOP_FILES_ONLY, FILE_LOOP_FILES_AND_FOLDERS, FILE_LOOP_FOLDERS_ONLY};
+typedef int FileLoopModeType;
+#define FILE_LOOP_INVALID		0
+#define FILE_LOOP_FILES_ONLY	1
+#define FILE_LOOP_FOLDERS_ONLY	2
+#define FILE_LOOP_RECURSE		4
+#define FILE_LOOP_FILES_AND_FOLDERS (FILE_LOOP_FILES_ONLY | FILE_LOOP_FOLDERS_ONLY)
+
 enum VariableTypeType {VAR_TYPE_INVALID, VAR_TYPE_NUMBER, VAR_TYPE_INTEGER, VAR_TYPE_FLOAT
 	, VAR_TYPE_TIME	, VAR_TYPE_DIGIT, VAR_TYPE_XDIGIT, VAR_TYPE_ALNUM, VAR_TYPE_ALPHA
 	, VAR_TYPE_UPPER, VAR_TYPE_LOWER, VAR_TYPE_SPACE};
@@ -1163,32 +1171,80 @@ public:
 		// \ * + = | : ; " ? ,
 		// The following is a list of illegal characters in a computer name:
 		// regEx.Pattern = "`|~|!|@|#|\$|\^|\&|\*|\(|\)|\=|\+|{|}|\\|;|:|'|<|>|/|\?|\||%"
+		return RegConvertKey(aBuf, REG_OLD_SYNTAX, NULL, aIsRemoteRegistry);
+	}
+	static HKEY RegConvertKey(LPTSTR aBuf, RegSyntax aSyntax, LPTSTR *aSubkey = NULL, bool *aIsRemoteRegistry = NULL)
+	{
+		const size_t COMPUTER_NAME_BUF_SIZE = 128;
 
-		LPTSTR colon_pos = _tcsrchr(aBuf, ':');
-		LPTSTR key_name = colon_pos ? omit_leading_whitespace(colon_pos + 1) : aBuf;
-		if (aIsRemoteRegistry) // Caller wanted the below put into the output parameter.
-			*aIsRemoteRegistry = (colon_pos != NULL);
-		HKEY root_key = NULL; // Set default.
+		LPTSTR key_name_pos = aBuf, computer_name_end = NULL;
+
+		if (aSyntax != REG_NEW_SYNTAX) // Legacy mode:  ComputerName:RootKey
+		{
+			if (computer_name_end = _tcsrchr(aBuf, ':'))
+			{
+				if ((computer_name_end - aBuf) >= COMPUTER_NAME_BUF_SIZE)
+					return NULL;
+				key_name_pos = omit_leading_whitespace(computer_name_end + 1);
+			}
+		}
+		if (aSyntax != REG_OLD_SYNTAX)
+		{
+			if (*aBuf == '\\' && aBuf[1] == '\\') // Something like \\ComputerName\HKLM.
+			{
+				if (  !(computer_name_end = _tcschr(aBuf + 2, '\\'))
+					|| (computer_name_end - aBuf) >= COMPUTER_NAME_BUF_SIZE  )
+					return NULL;
+				key_name_pos = computer_name_end + 1;
+			}
+		}
+
+		// Copy root key name into temporary buffer for use by _tcsicmp().
+		TCHAR key_name[20];
+		int i;
+		for (i = 0; key_name_pos[i] && key_name_pos[i] != '\\'; ++i)
+		{
+			if (i == 19)
+				return NULL; // Too long to be valid.
+			key_name[i] = key_name_pos[i];
+		}
+		key_name[i] = '\0';
+
+		if (key_name_pos[i] && aSyntax == REG_OLD_SYNTAX) // There's a \SubKey, but caller wasn't expecting one.
+			return NULL;
+
+		// Set output parameters for caller.
+		if (aSubkey)
+		{
+			if (key_name_pos[i] != '\\') // No subkey (not even a blank one).
+				*aSubkey = (aSyntax == REG_NEW_SYNTAX) ? _T("") : NULL; // In REG_EITHER_SYNTAX mode, caller wants to know it was omitted.
+			else
+				*aSubkey = key_name_pos + i + 1; // +1 for the slash.
+		}
+		if (aIsRemoteRegistry)
+			*aIsRemoteRegistry = (computer_name_end != NULL);
+
+		HKEY root_key;
 		if (!_tcsicmp(key_name, _T("HKLM")) || !_tcsicmp(key_name, _T("HKEY_LOCAL_MACHINE")))       root_key = HKEY_LOCAL_MACHINE;
 		else if (!_tcsicmp(key_name, _T("HKCR")) || !_tcsicmp(key_name, _T("HKEY_CLASSES_ROOT")))   root_key = HKEY_CLASSES_ROOT;
 		else if (!_tcsicmp(key_name, _T("HKCC")) || !_tcsicmp(key_name, _T("HKEY_CURRENT_CONFIG"))) root_key = HKEY_CURRENT_CONFIG;
 		else if (!_tcsicmp(key_name, _T("HKCU")) || !_tcsicmp(key_name, _T("HKEY_CURRENT_USER")))   root_key = HKEY_CURRENT_USER;
 		else if (!_tcsicmp(key_name, _T("HKU")) || !_tcsicmp(key_name, _T("HKEY_USERS")))           root_key = HKEY_USERS;
-		if (!root_key)  // Invalid or unsupported root key name.
+		else // Invalid or unsupported root key name.
 			return NULL;
-		if (!aIsRemoteRegistry || !colon_pos) // Either caller didn't want it opened, or it doesn't need to be.
+
+		if (!aIsRemoteRegistry || !computer_name_end) // Either caller didn't want it opened, or it doesn't need to be.
 			return root_key; // If it's a remote key, this value should only be used by the caller as an indicator.
 		// Otherwise, it's a remote computer whose registry the caller wants us to open:
 		// It seems best to require the two leading backslashes in case the computer name contains
 		// spaces (just in case spaces are allowed on some OSes or perhaps for Unix interoperability, etc.).
 		// Therefore, make no attempt to trim leading and trailing spaces from the computer name:
-		TCHAR computer_name[128];
+		TCHAR computer_name[COMPUTER_NAME_BUF_SIZE];
 		tcslcpy(computer_name, aBuf, _countof(computer_name));
-		computer_name[colon_pos - aBuf] = '\0';
+		computer_name[computer_name_end - aBuf] = '\0';
 		HKEY remote_key;
 		return (RegConnectRegistry(computer_name, root_key, &remote_key) == ERROR_SUCCESS) ? remote_key : NULL;
 	}
-
 	static LPTSTR RegConvertRootKey(LPTSTR aBuf, size_t aBufSize, HKEY aRootKey)
 	{
 		// switch() doesn't directly support expression of type HKEY:
@@ -1750,6 +1806,37 @@ public:
 		}
 		// Otherwise:
 		return FILE_LOOP_INVALID;
+	}
+
+	static FileLoopModeType ConvertLoopModeString(LPTSTR aBuf)
+	{
+		for (FileLoopModeType mode = FILE_LOOP_INVALID;;)
+		{
+			switch (ctoupper(*aBuf++))
+			{
+			// For simplicity, both are allowed with either kind of loop:
+			case 'F': // Files
+			case 'V': // Values
+				mode |= FILE_LOOP_FILES_ONLY;
+				break;
+			case 'D': // Directories
+			case 'K': // Keys
+				mode |= FILE_LOOP_FOLDERS_ONLY;
+				break;
+			case 'R':
+				mode |= FILE_LOOP_RECURSE;
+				break;
+			case ' ':  // Allow whitespace.
+			case '\t': //
+				break;
+			case '\0':
+				if ((mode & FILE_LOOP_FILES_AND_FOLDERS) == 0)
+					mode |= FILE_LOOP_FILES_ONLY; // Set default.
+				return mode;
+			default: // Invalid character.
+				return FILE_LOOP_INVALID;
+			}
+ 		}
 	}
 
 	static int ConvertMsgBoxResult(LPTSTR aBuf)
@@ -3048,8 +3135,9 @@ BIF_DECL(BIF_StrLen);
 BIF_DECL(BIF_SubStr);
 BIF_DECL(BIF_InStr);
 BIF_DECL(BIF_StrSplit);
+BIF_DECL(BIF_StrReplace);
 BIF_DECL(BIF_RegEx);
-BIF_DECL(BIF_Asc);
+BIF_DECL(BIF_Ord);
 BIF_DECL(BIF_Chr);
 BIF_DECL(BIF_Format);
 BIF_DECL(BIF_NumGet);
@@ -3113,12 +3201,19 @@ BIF_DECL(BIF_ObjNew); // Pseudo-operator.
 BIF_DECL(BIF_ObjIncDec); // Pseudo-operator.
 BIF_DECL(BIF_ObjAddRefRelease);
 BIF_DECL(BIF_ObjBindMethod);
+BIF_DECL(BIF_ObjRawSet);
 // Built-ins also available as methods -- these are available as functions for use primarily by overridden methods (i.e. where using the built-in methods isn't possible as they're no longer accessible).
 BIF_DECL(BIF_ObjInsert);
+BIF_DECL(BIF_ObjInsertAt);
+BIF_DECL(BIF_ObjPush);
+BIF_DECL(BIF_ObjPop);
+BIF_DECL(BIF_ObjDelete);
 BIF_DECL(BIF_ObjRemove);
+BIF_DECL(BIF_ObjRemoveAt);
 BIF_DECL(BIF_ObjGetCapacity);
 BIF_DECL(BIF_ObjSetCapacity);
 BIF_DECL(BIF_ObjGetAddress);
+BIF_DECL(BIF_ObjLength);
 BIF_DECL(BIF_ObjMaxIndex);
 BIF_DECL(BIF_ObjMinIndex);
 BIF_DECL(BIF_ObjNewEnum);

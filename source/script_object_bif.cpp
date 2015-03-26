@@ -350,21 +350,33 @@ BIF_DECL(BIF_ObjIncDec)
 //
 
 #define BIF_METHOD(name) \
-BIF_DECL(BIF_Obj##name) \
-{ \
-	aResultToken.symbol = SYM_STRING; \
-	aResultToken.marker = _T(""); \
-	\
-	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0])); \
-	if (obj) \
-		obj->_##name(aResultToken, aParam + 1, aParamCount - 1); \
+	BIF_DECL(BIF_Obj##name) { \
+		if (!BIF_ObjMethod(FID_Obj##name, aResultToken, aParam, aParamCount)) \
+			aResult = FAIL; \
+	}
+
+ResultType BIF_ObjMethod(int aID, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+
+	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
+	if (!obj)
+		return OK; // Return "".
+	return obj->CallBuiltin(aID, aResultToken, aParam + 1, aParamCount - 1);
 }
 
 BIF_METHOD(Insert)
+BIF_METHOD(InsertAt)
+BIF_METHOD(Push)
+BIF_METHOD(Pop)
+BIF_METHOD(Delete)
 BIF_METHOD(Remove)
+BIF_METHOD(RemoveAt)
 BIF_METHOD(GetCapacity)
 BIF_METHOD(SetCapacity)
 BIF_METHOD(GetAddress)
+BIF_METHOD(Length)
 BIF_METHOD(MaxIndex)
 BIF_METHOD(MinIndex)
 BIF_METHOD(NewEnum)
@@ -412,4 +424,21 @@ BIF_DECL(BIF_ObjBindMethod)
 	}
 	aResultToken.symbol = SYM_OBJECT;
 	aResultToken.object = bound_func;
+}
+
+
+//
+// ObjRawSet - set a value without invoking any meta-functions.
+//
+
+BIF_DECL(BIF_ObjRawSet)
+{
+	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
+	if (!obj)
+	{
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		return;
+	}
+	if (!obj->SetItem(*aParam[1], *aParam[2]))
+		aResult = g_script.ScriptError(ERR_OUTOFMEM);
 }

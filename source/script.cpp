@@ -5066,6 +5066,34 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				this_new_arg.type = ARG_TYPE_INPUT_VAR;
 			else
 				this_new_arg.type = Line::ArgIsVar(aActionType, i);
+
+			// v1.0.29: Allow expressions in any parameter that starts with % followed by a space
+			// or tab. This should be unambiguous because spaces and tabs are illegal in variable names.
+			// Since there's little if any benefit to allowing input and output variables to be
+			// dynamically built via expression, for now it is disallowed.  If ever allow it,
+			// need to review other sections to ensure they will tolerate it.  Also, the following
+			// would probably need revision to get it to be detected as an output-variable:
+			// % Array%i% = value
+			if (*this_aArg == g_DerefChar && !(this_aArgMap && *this_aArgMap) // It's a non-literal deref character.
+				&& IS_SPACE_OR_TAB(this_aArg[1])) // Followed by a space or tab.
+			{
+				if (this_new_arg.type == ARG_TYPE_OUTPUT_VAR // Command requires a variable, not an expression.
+					|| this_new_arg.type == ARG_TYPE_INPUT_VAR // Exclude NORMAL args from the check below.
+						&& (aActionType == ACT_SORT || ACT_IS_IF(aActionType))) // Sort and If commands depend on arg 0 being a variable.
+					return ScriptError(_T("Unexpected %"), this_aArg); // Short message since it's rare.
+				this_new_arg.type = ARG_TYPE_NORMAL; // If this was an input var, make it a normal expression.
+				this_new_arg.is_expression = true;
+				// Omit the percent sign and the space after it from further consideration.
+				this_aArg += 2;
+				if (this_aArgMap)
+					this_aArgMap += 2;
+				// ACT_ASSIGN isn't capable of dealing with expressions because ExecUntil() does not
+				// call ExpandArgs() automatically for it.  Thus its function, PerformAssign(), would
+				// not be given the expanded result of the expression.
+				if (aActionType == ACT_ASSIGN)
+					aActionType = ACT_ASSIGNEXPR;
+			}
+
 			// Since some vars are optional, the below allows them all to be blank or
 			// not present in the arg list.  If a mandatory var is blank at this stage,
 			// it's okay because all mandatory args are validated to be non-blank elsewhere:
@@ -5107,30 +5135,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					}
 					// else continue on to the below so that this input or output variable name's dynamic part
 					// (e.g. array%i%) can be partially resolved.
-				}
-			}
-			else // this_new_arg.type == ARG_TYPE_NORMAL (excluding those input/output_vars that were converted to normal because they were blank, above).
-			{
-				// v1.0.29: Allow expressions in any parameter that starts with % followed by a space
-				// or tab. This should be unambiguous because spaces and tabs are illegal in variable names.
-				// Since there's little if any benefit to allowing input and output variables to be
-				// dynamically built via expression, for now it is disallowed.  If ever allow it,
-				// need to review other sections to ensure they will tolerate it.  Also, the following
-				// would probably need revision to get it to be detected as an output-variable:
-				// % Array%i% = value
-				if (*this_aArg == g_DerefChar && !(this_aArgMap && *this_aArgMap) // It's a non-literal deref character.
-					&& IS_SPACE_OR_TAB(this_aArg[1])) // Followed by a space or tab.
-				{
-					this_new_arg.is_expression = true;
-					// Omit the percent sign and the space after it from further consideration.
-					this_aArg += 2;
-					if (this_aArgMap)
-						this_aArgMap += 2;
-					// ACT_ASSIGN isn't capable of dealing with expressions because ExecUntil() does not
-					// call ExpandArgs() automatically for it.  Thus its function, PerformAssign(), would
-					// not be given the expanded result of the expression.
-					if (aActionType == ACT_ASSIGN)
-						aActionType = ACT_ASSIGNEXPR;
 				}
 			}
 
@@ -5730,6 +5734,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				line.mAttribute = ATTR_LOOP_READ_FILE;
 			else if (!_tcsicmp(new_raw_arg1, _T("Parse")))
 				line.mAttribute = ATTR_LOOP_PARSE;
+			else if (!_tcsicmp(new_raw_arg1, _T("Reg")))
+				line.mAttribute = ATTR_LOOP_NEW_REG;
+			else if (!_tcsicmp(new_raw_arg1, _T("Files")))
+				line.mAttribute = ATTR_LOOP_NEW_FILES;
 			else // the 1st arg can either be a Root Key or a File Pattern, depending on the type of loop.
 			{
 				line.mAttribute = line.RegConvertRootKey(new_raw_arg1) ? ATTR_LOOP_REG : ATTR_LOOP_FILEPATTERN;
@@ -5974,18 +5982,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		break;
 
 	case ACT_REGREAD:
-		// The below has two checks in case the user is using the 5-param method with the 5th parameter
-		// being blank to indicate that the key's "default" value should be read.  For example:
-		// RegRead, OutVar, REG_SZ, HKEY_CURRENT_USER, Software\Winamp,
-		if (aArgc > 4 || line.RegConvertValueType(new_raw_arg2))
-		{
-			// The obsolete 5-param method is being used, wherein ValueType is the 2nd param.
-			if (*new_raw_arg3 && !line.ArgHasDeref(3) && !line.RegConvertRootKey(new_raw_arg3))
-				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-		}
-		else // 4-param method.
-			if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertRootKey(new_raw_arg2))
-				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
+		// v1.1.21: The undocumented and obsolete 5-param syntax from AutoIt v2 is no longer supported.
+		// Even the earliest known version of AutoHotkey (v0.207) did not use the ValueType parameter.
+		// Example of obsolete syntax:  RegRead, OutVar, REG_SZ, HKEY_CURRENT_USER, Software\Winamp,
+		// The following detects it as an error, since REG_SZ is not a valid root key:
+		if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertKey(new_raw_arg2, REG_EITHER_SYNTAX))
+			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
 	case ACT_SETREGVIEW:
@@ -6000,13 +6002,13 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		{
 			if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertValueType(new_raw_arg1))
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-			if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertRootKey(new_raw_arg2))
+			if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertKey(new_raw_arg2, REG_EITHER_SYNTAX))
 				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		}
 		break;
 
 	case ACT_REGDELETE:
-		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertRootKey(new_raw_arg1))
+		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertKey(new_raw_arg1, REG_EITHER_SYNTAX))
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
@@ -8056,6 +8058,12 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		min_params = 2;
 		max_params = 6;
 	}
+	else if (!_tcsicmp(func_name, _T("StrReplace")))
+	{
+		bif = BIF_StrReplace;
+		min_params = 3;
+		max_params = 5;
+	}
 	else if (!_tcsicmp(func_name, _T("StrSplit")))
 	{
 		bif = BIF_StrSplit;
@@ -8075,8 +8083,8 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		else
 			return NULL;
 	}
-	else if (!_tcsicmp(func_name, _T("Asc")))
-		bif = BIF_Asc;
+	else if (!_tcsicmp(func_name, _T("Ord")) || !_tcsicmp(func_name, _T("Asc")))
+		bif = BIF_Ord;
 	else if (!_tcsicmp(func_name, _T("Chr")))
 		bif = BIF_Chr;
 	else if (!_tcsicmp(func_name, _T("Format")))
@@ -8209,8 +8217,14 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		}
 		// All of these functions require the "object" parameter,
 		// but it is excluded from the counts below for clarity:
-		BIF_OBJ_CASE(Insert, 		1, 10000) // [key,] value [, value2, ...]
+		BIF_OBJ_CASE(Insert,		1, 10000) // [key,] value [, value2, ...]
+		BIF_OBJ_CASE(InsertAt,		2, 10000) // index, value [, value2, ...]
+		BIF_OBJ_CASE(Push,			1, 10000)
+		BIF_OBJ_CASE(Delete, 		1, 2) // min_key [, max_key]
 		BIF_OBJ_CASE(Remove, 		0, 2) // [min_key, max_key]
+		BIF_OBJ_CASE(RemoveAt,      1, 2) // position [, count]
+		BIF_OBJ_CASE(Pop,			0, 0)
+		BIF_OBJ_CASE(Length, 		0, 0)
 		BIF_OBJ_CASE(MinIndex, 		0, 0)
 		BIF_OBJ_CASE(MaxIndex, 		0, 0)
 		BIF_OBJ_CASE(HasKey,		1, 1) // key
@@ -8223,6 +8237,12 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 #undef BIF_OBJ_CASE
 		else if (!_tcsicmp(suffix, _T("AddRef")) || !_tcsicmp(suffix, _T("Release")))
 			bif = BIF_ObjAddRefRelease;
+		else if (!_tcsicmp(suffix, _T("RawSet")))
+		{
+			bif = BIF_ObjRawSet;
+			min_params = 3;
+			max_params = 3;
+		}
 		else return NULL;
 	}
 	else if (!_tcsicmp(func_name, _T("Array")))
@@ -11814,10 +11834,15 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		{
 			HKEY root_key_type; // For registry loops, this holds the type of root key, independent of whether it is local or remote.
 			AttributeType attr = line->mAttribute;
-			if (attr == ATTR_LOOP_REG)
-				root_key_type = RegConvertRootKey(ARG1);
-			else if (ATTR_LOOP_IS_UNKNOWN_OR_NONE(attr))
+			switch ((size_t)attr)
 			{
+			case (size_t)ATTR_LOOP_REG:
+				root_key_type = RegConvertRootKey(ARG1);
+				break;
+			case (size_t)ATTR_LOOP_NEW_REG:
+				root_key_type = RegConvertKey(ARG2, REG_NEW_SYNTAX); // ARG1 is the word "Reg".
+				break;
+			case (size_t)ATTR_LOOP_UNKNOWN:
 				// Since it couldn't be determined at load-time (probably due to derefs),
 				// determine whether it's a file-loop, registry-loop or a normal/counter loop.
 				// But don't change the value of line->mAttribute because that's our
@@ -11863,19 +11888,34 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			// HANDLE ANY ERROR CONDITIONS THAT CAN ABORT THE LOOP:
 			FileLoopModeType file_loop_mode;
 			bool recurse_subfolders;
-			if (attr == ATTR_LOOP_FILEPATTERN)
+			switch ((size_t)attr)
 			{
-				file_loop_mode = (line->mArgc <= 1) ? FILE_LOOP_FILES_ONLY : ConvertLoopMode(ARG2);
+			case (size_t)ATTR_LOOP_FILEPATTERN:
+				// Loop, FilePattern [, IncludeFolders?, Recurse?]
+				file_loop_mode = ConvertLoopMode(ARG2);
 				if (file_loop_mode == FILE_LOOP_INVALID)
 					return line->LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
 				recurse_subfolders = (*ARG3 == '1' && !*(ARG3 + 1));
-			}
-			else if (attr == ATTR_LOOP_REG)
-			{
-				file_loop_mode = (line->mArgc <= 2) ? FILE_LOOP_FILES_ONLY : ConvertLoopMode(ARG3);
+				break;
+			case (size_t)ATTR_LOOP_REG:
+			case (size_t)ATTR_LOOP_NEW_REG:
+			case (size_t)ATTR_LOOP_NEW_FILES:
+				if (attr == ATTR_LOOP_REG)
+				{
+					// Loop, RootKey [, Key, IncludeSubkeys?, Recurse?]
+					file_loop_mode = ConvertLoopMode(ARG3);
+					recurse_subfolders = (*ARG4 == '1' && !*(ARG4 + 1));
+				}
+				else
+				{
+					// Loop, Reg, RootKey\Key [, Mode]
+					// Loop, Files, Pattern [, Mode]
+					file_loop_mode = ConvertLoopModeString(ARG3);
+					if (recurse_subfolders = (file_loop_mode & FILE_LOOP_RECURSE))
+						file_loop_mode &= ~FILE_LOOP_RECURSE; // Eliminate the flag from further consideration.
+				}
 				if (file_loop_mode == FILE_LOOP_INVALID)
 					return line->LineError(ERR_PARAM3_INVALID, FAIL, ARG3);
-				recurse_subfolders = (*ARG4 == '1' && !*(ARG4 + 1));
 			}
 
 			// ONLY AFTER THE ABOVE IS IT CERTAIN THE LOOP WILL LAUNCH (i.e. there was no error or early return).
@@ -11963,20 +12003,27 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				}
 				break;
 			case (size_t)ATTR_LOOP_FILEPATTERN:
+			case (size_t)ATTR_LOOP_NEW_FILES:
 				result = line->PerformLoopFilePattern(aResultToken, continue_main_loop, jump_to_line, until
-					, file_loop_mode, recurse_subfolders, ARG1);
+					, file_loop_mode, recurse_subfolders, attr == ATTR_LOOP_FILEPATTERN ? ARG1 : ARG2);
 				break;
 			case (size_t)ATTR_LOOP_REG:
+			case (size_t)ATTR_LOOP_NEW_REG:
 				// This isn't the most efficient way to do things (e.g. the repeated calls to
 				// RegConvertRootKey()), but it the simplest way for now.  Optimization can
 				// be done at a later time:
 				bool is_remote_registry;
 				HKEY root_key;
-				if (root_key = RegConvertRootKey(ARG1, &is_remote_registry)) // This will open the key if it's remote.
+				LPTSTR subkey;
+				if (attr == ATTR_LOOP_REG)
+					root_key = RegConvertRootKey(ARG1, &is_remote_registry), subkey = ARG2; // This will open the key if it's remote.
+				else
+					root_key = RegConvertKey(ARG2, REG_NEW_SYNTAX, &subkey, &is_remote_registry);
+				if (root_key) 
 				{
-					// root_key_type needs to be passed in order to support GetLoopRegKey():
+					// root_key_type needs to be passed in order to support A_LoopRegKey:
 					result = line->PerformLoopReg(aResultToken, continue_main_loop, jump_to_line, until
-						, file_loop_mode, recurse_subfolders, root_key_type, root_key, ARG2);
+						, file_loop_mode, recurse_subfolders, root_key_type, root_key, subkey);
 					if (is_remote_registry)
 						RegCloseKey(root_key);
 				}
@@ -13714,6 +13761,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	__int64 device_id;  // For sound commands.  __int64 helps avoid compiler warning for some conversions.
 	bool is_remote_registry; // For Registry commands.
 	HKEY root_key; // For Registry commands.
+	LPTSTR subkey, value_name, value;
 	ResultType result;  // General purpose.
 
 	// Even though the loading-parser already checked, check again, for now,
@@ -15095,10 +15143,12 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			// Also, do not use RegCloseKey() on this, even if it's a remote key, since our caller handles that:
 			return RegRead(g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name);
 		// Otherwise:
-		if (mArgc > 4 || RegConvertValueType(ARG2)) // The obsolete 5-param method (ARG2 is unused).
-			result = RegRead(root_key = RegConvertRootKey(ARG3, &is_remote_registry), ARG4, ARG5);
-		else
-			result = RegRead(root_key = RegConvertRootKey(ARG2, &is_remote_registry), ARG3, ARG4);
+		root_key = RegConvertKey(ARG2, REG_EITHER_SYNTAX, &subkey, &is_remote_registry);
+		if (!subkey) // Old syntax (root key without slash).
+			subkey = ARG3, value_name = ARG4;
+		else // New syntax (root key combined with subkey).
+			value_name = ARG3;
+		result = RegRead(root_key, subkey, value_name);
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS keeps always-open.
 			RegCloseKey(root_key);
 		return result;
@@ -15109,8 +15159,13 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			// g.mLoopRegItem->type is an unsupported type:
 			return RegWrite(g.mLoopRegItem->type, g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name, ARG1);
 		// Otherwise:
-		result = RegWrite(RegConvertValueType(ARG1), root_key = RegConvertRootKey(ARG2, &is_remote_registry)
-			, ARG3, ARG4, ARG5); // If RegConvertValueType(ARG1) yields REG_NONE, RegWrite() will set ErrorLevel rather than displaying a runtime error.
+		root_key = RegConvertKey(ARG2, REG_EITHER_SYNTAX, &subkey, &is_remote_registry);
+		if (!subkey) // Old syntax (root key without slash).
+			subkey = ARG3, value_name = ARG4, value = ARG5;
+		else // New syntax (root key combined with subkey).
+			value_name = ARG3, value = ARG4;
+		result = RegWrite(RegConvertValueType(ARG1), root_key, subkey, value_name, value);
+		// If the value type or root_key are invalid, RegWrite() has set ErrorLevel rather than displaying a runtime error.
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS keeps always-open.
 			RegCloseKey(root_key);
 		return result;
@@ -15129,7 +15184,12 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 				return RegDelete(g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name);
 		}
 		// Otherwise:
-		result = RegDelete(root_key = RegConvertRootKey(ARG1, &is_remote_registry), ARG2, ARG3);
+		root_key = RegConvertKey(ARG1, REG_EITHER_SYNTAX, &subkey, &is_remote_registry);
+		if (!subkey) // Old syntax (root key without slash).
+			subkey = ARG2, value_name = ARG3;
+		else // New syntax (root key combined with subkey).
+			value_name = ARG2;
+		result = RegDelete(root_key, subkey, value_name);
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS always keeps open.
 			RegCloseKey(root_key);
 		return result;
