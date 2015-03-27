@@ -287,8 +287,8 @@ Action g_act[] =
 	, {_T("Catch"), 0, 1, false, NULL} // fincs: seems best to allow catch without a parameter
 	, {_T("Finally"), 0, 0, false, NULL}
 	, {_T("Throw"), 0, 1, false, {1, 0}}
-	, {_T("Exit"), 0, 1, false, NULL} // ExitCode
-	, {_T("ExitApp"), 0, 1, false, NULL} // ExitCode
+	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
+	, {_T("ExitApp"), 0, 1, false, {1, 0}} // ExitCode
 
 	, {_T("MsgBox"), 0, 4, false, NULL} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
 	, {_T("InputBox"), 1, 5, true, NULL} // OutputVar, Title, Prompt, Options, Default

@@ -4688,7 +4688,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// Experimental v2 behaviour: Where function syntax could've been used but isn't, require %
 			// for expressions.  This doesn't include control flow statements such as IF, WHILE, FOR, etc.
 			// since we want those to always be expressions (and function syntax can't be used for those).
-			if (aActionType < ACT_FIRST_COMMAND // See above.
+			if (!this_new_arg.is_expression // It hasn't been explicitly % marked as an expression.
 				&& (np = g_act[aActionType].NumericParams)) // This command has at least one numeric parameter.
 			{
 				// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
@@ -4697,12 +4697,18 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				{
 					if (*np == i_plus_one) // This arg is enforced to be purely numeric.
 					{
-						//if (aActionType == ACT_WINMOVE)
-						//{
-						//	if (i < 2) // This is the first or second arg, which are title/text vs. X/Y when aArgc > 2.
-						//		if (aArgc > 2) // Title/text are not numeric/expressions.
-						//			break; // The loop is over because this arg was found in the list.
-						//}
+						if (aActionType == ACT_WINMOVE)
+						{
+							if (i < 2) // This is the first or second arg, which are title/text vs. X/Y when aArgc > 2.
+								if (aArgc > 2) // Title/text are not numeric.
+									break; // The loop is over because this arg was found in the list.
+						}
+						if (aActionType >= ACT_FIRST_COMMAND) // See above for comments.
+						{
+							if (!IsNumeric(this_aArg, true, true, true) && !_tcschr(this_aArg, g_DerefChar))
+								return ScriptError(_T("This parameter must be a number, %variable% or % expression."), this_aArg);
+							break;
+						}
 						// Otherwise, it is an expression.
 						this_new_arg.is_expression = true;
 						break; // The loop is over if this arg is found in the list of mandatory-numeric args.
