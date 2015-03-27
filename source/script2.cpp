@@ -11352,7 +11352,11 @@ has_valid_return_type:
 	{
 		function = GetDllProcAddress(TokenToString(*aParam[0]), &hmodule_to_free);
 		if (!function)
+		{
+			// GetDllProcAddress has thrown the appropriate exception.
+			aResultToken.SetExitResult(FAIL);
 			goto end;
+		}
 	}
 
 	////////////////////////
