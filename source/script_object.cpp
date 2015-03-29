@@ -645,21 +645,19 @@ int Object::GetBuiltinID(LPCTSTR aName)
 		if (!_tcsicmp(aName, _T("InsertAt")))
 			return FID_ObjInsertAt;
 		break;
+	case 'R':
+		if (!_tcsicmp(aName, _T("RemoveAt")))
+			return FID_ObjRemoveAt;
+		break;
+	case 'D':
+		if (!_tcsicmp(aName, _T("Delete")))
+			return FID_ObjDelete;
+		break;
 	case 'P':
 		if (!_tcsicmp(aName, _T("Push")))
 			return FID_ObjPush;
 		if (!_tcsicmp(aName, _T("Pop")))
 			return FID_ObjPop;
-		break;
-	case 'R':
-		if (!_tcsnicmp(aName, _T("Remove"), 6))
-		{
-			aName += 6;
-			if (!*aName)
-				return FID_ObjRemove;
-			if (!_tcsicmp(aName, _T("At")))
-				return FID_ObjRemoveAt;
-		}
 		break;
 	case 'H':
 		if (!_tcsicmp(aName, _T("HasKey")))
@@ -687,6 +685,12 @@ int Object::GetBuiltinID(LPCTSTR aName)
 		if (!_tcsicmp(aName, _T("Clone")))
 			return FID_ObjClone;
 		break;
+	case 'M':
+		if (!_tcsicmp(aName, _T("MaxIndex")))
+			return FID_ObjMaxIndex;
+		if (!_tcsicmp(aName, _T("MinIndex")))
+			return FID_ObjMinIndex;
+		break;
 	}
 	return -1;
 }
@@ -697,7 +701,7 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 	switch (aID)
 	{
 	case FID_ObjInsertAt:		return _InsertAt(aResultToken, aParam, aParamCount);
-	case FID_ObjRemove:			return _Remove(aResultToken, aParam, aParamCount);
+	case FID_ObjDelete:			return _Delete(aResultToken, aParam, aParamCount);
 	case FID_ObjRemoveAt:		return _RemoveAt(aResultToken, aParam, aParamCount);
 	case FID_ObjPush:			return _Push(aResultToken, aParam, aParamCount);
 	case FID_ObjPop:			return _Pop(aResultToken, aParam, aParamCount);
@@ -708,6 +712,8 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 	case FID_ObjGetAddress:		return _GetAddress(aResultToken, aParam, aParamCount);
 	case FID_ObjClone:			return _Clone(aResultToken, aParam, aParamCount);
 	case FID_ObjNewEnum:		return _NewEnum(aResultToken, aParam, aParamCount);
+	case FID_ObjMaxIndex:		return _MaxIndex(aResultToken);
+	case FID_ObjMinIndex:		return _MinIndex(aResultToken);
 	}
 	return INVOKE_NOT_HANDLED;
 }
@@ -1070,7 +1076,7 @@ ResultType Object::_Remove_impl(ResultToken &aResultToken, ExprTokenType *aParam
 	return OK;
 }
 
-ResultType Object::_Remove(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::_Delete(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	return _Remove_impl(aResultToken, aParam, aParamCount, RM_RemoveKey);
 }
@@ -1090,7 +1096,24 @@ ResultType Object::_Pop(ResultToken &aResultToken, ExprTokenType *aParam[], int 
 
 ResultType Object::_Length(ResultToken &aResultToken)
 {
-	_o_return(mKeyOffsetObject ? mFields[mKeyOffsetObject - 1].key.i : 0);
+	IntKeyType max_index = mKeyOffsetObject ? mFields[mKeyOffsetObject - 1].key.i : 0;
+	_o_return(max_index > 0 ? max_index : 0);
+}
+
+ResultType Object::_MaxIndex(ResultToken &aResultToken)
+{
+	if (mKeyOffsetObject)
+		_o_return(mFields[mKeyOffsetObject - 1].key.i);
+	else
+		_o_return_empty;
+}
+
+ResultType Object::_MinIndex(ResultToken &aResultToken)
+{
+	if (mKeyOffsetObject)
+		_o_return(mFields[0].key.i);
+	else
+		_o_return_empty;
 }
 
 ResultType Object::_GetCapacity(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)

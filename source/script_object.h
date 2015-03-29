@@ -355,7 +355,7 @@ public:
 	
 	enum RemoveMode { RM_RemoveKey = 0, RM_RemoveAt, RM_Pop };
 	ResultType _Remove_impl(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, RemoveMode aMode);
-	ResultType _Remove(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Delete(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _RemoveAt(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _Pop(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	
@@ -363,6 +363,8 @@ public:
 	ResultType _SetCapacity(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _GetAddress(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _Length(ResultToken &aResultToken);
+	ResultType _MaxIndex(ResultToken &aResultToken);
+	ResultType _MinIndex(ResultToken &aResultToken);
 	ResultType _NewEnum(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _HasKey(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _Clone(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
