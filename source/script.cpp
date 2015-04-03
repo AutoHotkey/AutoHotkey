@@ -7404,7 +7404,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 					
 	for (item = omit_leading_whitespace(aBuf); *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
 	{
-		for (item_end = item; cisalnum(*item_end) || *item_end == '_'; ++item_end); // Find end of identifier.
+		item_end = find_identifier_end(item);
 		if (item_end == item)
 			return ScriptError(ERR_INVALID_CLASS_VAR, item);
 		orig_char = *item_end;
