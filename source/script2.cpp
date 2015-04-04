@@ -16533,7 +16533,7 @@ BIF_DECL(BIF_OnMessage)
 	bool item_already_exists = (pmonitor != NULL);
 	if (!item_already_exists)
 	{
-		if (!callback) // Delete or report function-name of a non-existent item.
+		if (!callback || mode_is_delete) // Delete or report function-name of a non-existent item.
 			return; // Yield the default return value set earlier (an empty string).
 		// From this point on, it is certain that an item will be added to the array.
 		if (  !(pmonitor = g_MsgMonitor.Add(specified_msg, callback, legacy_mode, call_it_last))  )
