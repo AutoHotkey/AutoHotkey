@@ -6945,12 +6945,14 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 	{
 		Object *class_object = mClassObject[mClassObjectCount - 1];
 
+		*param_start = '\0'; // Temporarily terminate, for simplicity.
+
 		// Build the fully-qualified method name for A_ThisFunc and ListVars:
 		// AddFunc() enforces a limit of MAX_VAR_NAME_LENGTH characters for function names, which is relied
 		// on by FindFunc(), BIF_OnMessage() and perhaps others.  For simplicity, allow one extra char to be
 		// printed and rely on AddFunc() detecting that the name is too long.
 		TCHAR full_name[MAX_VAR_NAME_LENGTH + 1 + 1]; // Extra +1 for null terminator.
-		_sntprintf(full_name, MAX_VAR_NAME_LENGTH + 1, _T("%s.%.*s"), mClassName, (param_start - aBuf), aBuf);
+		_sntprintf(full_name, MAX_VAR_NAME_LENGTH + 1, _T("%s.%s"), mClassName, aBuf);
 		full_name[MAX_VAR_NAME_LENGTH + 1] = '\0'; // Must terminate at this exact point if _sntprintf hit the limit.
 
 		// Check for duplicates and determine insert_pos:
@@ -6959,8 +6961,10 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		if (!mClassProperty && class_object->GetItem(found_item, aBuf) // Must be done in addition to the below to detect conflicting var/method declarations.
 			|| (found_func = FindFunc(full_name, 0, &insert_pos))) // Must be done to determine insert_pos.
 		{
-			return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
+			return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf); // The parameters are omitted due to temporary termination above.  This might make it more obvious why "X[]" and "X()" are considered duplicates.
 		}
+		
+		*param_start = '('; // Undo temporary termination.
 
 		// Below passes class_object for AddFunc() to store the func "by reference" in it:
 		if (  !(g->CurrentFunc = AddFunc(full_name, 0, false, insert_pos, class_object))  )
