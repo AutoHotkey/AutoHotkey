@@ -1917,7 +1917,6 @@ process_completed_line:
 
 		if (*buf == '}' && mClassObjectCount && !g->CurrentFunc)
 		{
-			cp = buf;
 			if (mClassProperty)
 			{
 				// Close this property definition.
@@ -1927,12 +1926,8 @@ process_completed_line:
 					free(mClassPropertyDef);
 					mClassPropertyDef = NULL;
 				}
-				cp = omit_leading_whitespace(cp + 1);
 			}
-			// Handling this before the two sections below allows a function or class definition
-			// to begin immediately after the close-brace of a previous class definition.
-			// This loop allows something like }}} to terminate multiple nested classes:
-			for ( ; *cp == '}' && mClassObjectCount; cp = omit_leading_whitespace(cp + 1))
+			else
 			{
 				// End of class definition.
 				--mClassObjectCount;
@@ -1944,11 +1939,14 @@ process_completed_line:
 				else
 					*mClassName = '\0';
 			}
-			// cp now points at the next non-whitespace char after the brace.
-			if (!*cp)
-				goto continue_main_loop;
-			// Otherwise, there is something following this close-brace, so continue on below to process it.
-			tmemmove(buf, cp, buf_length = _tcslen(cp));
+			// Allow multiple end-braces or other declarations to the right of "}":
+			if (   *(buf = omit_leading_whitespace(buf + 1))   )
+			{
+				buf_length = _tcslen(buf); // Update.
+				mCurrLine = NULL;  // To signify that we're in transition, trying to load a new line.
+				goto process_completed_line; // Have the main loop process the contents of "buf" as though it came in from the script.
+			}
+			goto continue_main_loop; // It's just a naked "{" or "}", so no more processing needed for this line.
 		}
 
 		if (mClassProperty && !g->CurrentFunc) // This is checked before IsFunction() to prevent method definitions inside a property.
