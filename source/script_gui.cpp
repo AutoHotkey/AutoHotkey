@@ -2201,10 +2201,15 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// BIF_StatusBar() for more comments.
 		opt.style_add |= SBARS_TOOLTIPS;
 		break;
+	case GUI_CONTROL_MONTHCAL:
+		// Testing indicates that although the MonthCal attached to a DateTime control can be navigated using
+		// the keyboard on Win2k/XP, standalone MonthCal controls don't support it, except on Vista and later.
+		if (g_os.IsWinVistaOrLater())
+			opt.style_add |= WS_TABSTOP;
+		break;
 	// Nothing extra for these currently:
 	//case GUI_CONTROL_RADIO: This one is handled separately above the switch().
 	//case GUI_CONTROL_TEXT:
-	//case GUI_CONTROL_MONTHCAL: Can't be focused, so no tabstop.
 	//case GUI_CONTROL_PIC:
 	//case GUI_CONTROL_GROUPBOX:
 		// v1.0.44.11: The following was commented out for GROUPBOX to avoid unwanted wrapping of last letter when
