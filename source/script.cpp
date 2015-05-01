@@ -11819,6 +11819,14 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				caller_jump_to_line = line->mRelatedLine->mRelatedLine;
 				if (caller_jump_to_line->mActionType == ACT_UNTIL)
 					caller_jump_to_line = caller_jump_to_line->mNextLine;
+				// Return OK instead of LOOP_BREAK to handle it like GOTO.  Returning LOOP_BREAK would
+				// cause the following to behave incorrectly (as described in the comments):
+				// If (True)  ; LOOP_BREAK takes precedence, causing this ExecUntil() layer to return.
+				//     Loop, 1  ; Non-NULL jump-to-line causes the LOOP_BREAK result to propagate.
+				//         Loop, 1
+				//             Break, 2
+				// MsgBox, This message would not be displayed.
+				return OK;
 			}
 			return LOOP_BREAK;
 
