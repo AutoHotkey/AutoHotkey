@@ -34,6 +34,15 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	g_hInstance = hInstance;
 	InitializeCriticalSection(&g_CriticalRegExCache); // v1.0.45.04: Must be done early so that it's unconditional, so that DeleteCriticalSection() in the script destructor can also be unconditional (deleting when never initialized can crash, at least on Win 9x).
 
+	// v1.1.22+: This is done unconditionally, on startup, so that any attempts to read a drive
+	// that has no media (and possibly other errors) won't cause the system to display an error
+	// dialog that the script can't suppress.  This is known to affect floppy drives and some
+	// but not all CD/DVD drives.  MSDN says: "Best practice is that all applications call the
+	// process-wide SetErrorMode function with a parameter of SEM_FAILCRITICALERRORS at startup."
+	// Note that in previous versions, this was done by the Drive/DriveGet commands and not
+	// reverted afterward, so it affected all subsequent commands.
+	SetErrorMode(SEM_FAILCRITICALERRORS);
+
 	if (!GetCurrentDirectory(_countof(g_WorkingDir), g_WorkingDir)) // Needed for the FileSelectFile() workaround.
 		*g_WorkingDir = '\0';
 	// Unlike the below, the above must not be Malloc'd because the contents can later change to something

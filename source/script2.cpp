@@ -8086,8 +8086,6 @@ ResultType Line::DriveSpace(LPTSTR aPath, bool aGetFreeSpace)
 		buf[length] = '\0';
 	}
 
-	SetErrorMode(SEM_FAILCRITICALERRORS); // If target drive is a floppy, this avoids a dialog prompting to insert a disk.
-
 	// The program won't launch at all on Win95a (original Win95) unless the function address is resolved
 	// at runtime:
 	typedef BOOL (WINAPI *GetDiskFreeSpaceExType)(LPCTSTR, PULARGE_INTEGER, PULARGE_INTEGER, PULARGE_INTEGER);
@@ -8191,7 +8189,6 @@ ResultType Line::Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2) // aValue not
 
 	case DRIVE_CMD_LABEL: // Note that it is possible and allowed for the new label to be blank.
 		DRIVE_SET_PATH
-		SetErrorMode(SEM_FAILCRITICALERRORS);  // So that a floppy drive doesn't prompt for a disk
 		return SetErrorLevelOrThrowBool(!SetVolumeLabel(path, aValue2));
 
 	} // switch()
@@ -8302,7 +8299,6 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 	if (drive_get_cmd == DRIVEGET_CMD_SETLABEL) // The is retained for backward compatibility even though the Drive cmd is normally used.
 	{
 		DRIVE_SET_PATH
-		SetErrorMode(SEM_FAILCRITICALERRORS); // If drive is a floppy, prevents pop-up dialog prompting to insert disk.
 		LPTSTR new_label = omit_leading_whitespace(aCmd + 9);  // Example: SetLabel:MyLabel
 		return g_ErrorLevel->Assign(SetVolumeLabel(path, new_label) ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
 	}
@@ -8339,8 +8335,6 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 		UCHAR letter;
 		TCHAR buf[128], *buf_ptr;
 
-		SetErrorMode(SEM_FAILCRITICALERRORS); // If drive is a floppy, prevents pop-up dialog prompting to insert disk.
-
 		for (found_drives_count = 0, letter = 'A'; letter <= 'Z'; ++letter)
 		{
 			buf_ptr = buf;
@@ -8366,7 +8360,6 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 		TCHAR volume_name[256];
 		TCHAR file_system[256];
 		DRIVE_SET_PATH
-		SetErrorMode(SEM_FAILCRITICALERRORS); // If drive is a floppy, prevents pop-up dialog prompting to insert disk.
 		DWORD serial_number, max_component_length, file_system_flags;
 		if (!GetVolumeInformation(path, volume_name, _countof(volume_name) - 1, &serial_number, &max_component_length
 			, &file_system_flags, file_system, _countof(file_system) - 1))
@@ -8383,7 +8376,6 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 	case DRIVEGET_CMD_TYPE:
 	{
 		DRIVE_SET_PATH
-		SetErrorMode(SEM_FAILCRITICALERRORS); // If drive is a floppy, prevents pop-up dialog prompting to insert disk.
 		switch (GetDriveType(path))
 		{
 		case DRIVE_UNKNOWN:   output_var.Assign(_T("Unknown")); break;
@@ -8401,7 +8393,6 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 	case DRIVEGET_CMD_STATUS:
 	{
 		DRIVE_SET_PATH
-		SetErrorMode(SEM_FAILCRITICALERRORS); // If drive is a floppy, prevents pop-up dialog prompting to insert disk.
 		DWORD sectors_per_cluster, bytes_per_sector, free_clusters, total_clusters;
 		switch (GetDiskFreeSpace(path, &sectors_per_cluster, &bytes_per_sector, &free_clusters, &total_clusters)
 			? ERROR_SUCCESS : GetLastError())
