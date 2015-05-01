@@ -194,6 +194,99 @@ BIF_DECL(BIF_ComObjActive)
 }
 
 
+ITypeInfo *GetClassTypeInfo(IUnknown *aUnk)
+{
+	BOOL found = false;
+	ITypeInfo *ptinfo;
+	TYPEATTR *typeattr;
+
+	// Find class typeinfo via IProvideClassInfo if available.
+	// Testing shows this works in some cases where the IDispatch method fails,
+	// such as for an HTMLDivElement object from an IE11 WebBrowser control.
+	IProvideClassInfo *ppci;
+	if (SUCCEEDED(aUnk->QueryInterface<IProvideClassInfo>(&ppci)))
+	{
+		found = SUCCEEDED(ppci->GetClassInfo(&ptinfo));
+		ppci->Release();
+		if (found)
+			return ptinfo;
+	}
+
+	//
+	// Find class typeinfo via IDispatch.
+	//
+	IDispatch *pdsp;
+	ITypeLib *ptlib;
+	IID iid;
+	if (SUCCEEDED(aUnk->QueryInterface<IDispatch>(&pdsp)))
+	{
+		// Get IID and typelib of this object's IDispatch implementation.
+		if (SUCCEEDED(pdsp->GetTypeInfo(0, LOCALE_USER_DEFAULT, &ptinfo)))
+		{
+			UINT index;
+			if (SUCCEEDED(ptinfo->GetTypeAttr(&typeattr)))
+			{
+				iid = typeattr->guid;
+				ptinfo->ReleaseTypeAttr(typeattr);
+				found = SUCCEEDED(ptinfo->GetContainingTypeLib(&ptlib, &index));
+			}
+			ptinfo->Release();
+		}
+		pdsp->Release();
+	}
+
+	if (!found)
+		// No typelib to search through, so give up.
+		return NULL;
+	found = false;
+
+	UINT ctinfo = ptlib->GetTypeInfoCount();
+	for (UINT i = 0; i < ctinfo; i++)
+	{
+		TYPEKIND typekind;
+		// Consider only classes:
+		if (FAILED(ptlib->GetTypeInfoType(i, &typekind)) || typekind != TKIND_COCLASS
+			|| FAILED(ptlib->GetTypeInfo(i, &ptinfo)))
+			continue;
+
+		WORD cImplTypes = 0;
+		if (SUCCEEDED(ptinfo->GetTypeAttr(&typeattr)))
+		{
+			cImplTypes = typeattr->cImplTypes;
+			ptinfo->ReleaseTypeAttr(typeattr);
+		}
+
+		for (UINT j = 0; j < cImplTypes; j++)
+		{
+			INT flags;
+			if (SUCCEEDED(ptinfo->GetImplTypeFlags(j, &flags)) && flags == IMPLTYPEFLAG_FDEFAULT)
+			{
+				// This is the default interface of the class.
+				HREFTYPE reftype;
+				ITypeInfo *prinfo;
+				if (SUCCEEDED(ptinfo->GetRefTypeOfImplType(j, &reftype))
+					&& SUCCEEDED(ptinfo->GetRefTypeInfo(reftype, &prinfo)))
+				{
+					if (SUCCEEDED(prinfo->GetTypeAttr(&typeattr)))
+					{
+						// If the IID matches, this is probably the right class.
+						found = iid == typeattr->guid;
+						prinfo->ReleaseTypeAttr(typeattr);
+					}
+					prinfo->Release();
+				}
+				break;
+			}
+		}
+		if (found)
+			break;
+		ptinfo->Release();
+	}
+	ptlib->Release();
+	return found ? ptinfo : NULL;
+}
+
+
 BIF_DECL(BIF_ComObjConnect)
 {
 	aResultToken.symbol = SYM_STRING;
@@ -201,104 +294,46 @@ BIF_DECL(BIF_ComObjConnect)
 
 	if (ComObject *obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0])))
 	{
-		if (!obj->mEventSink && VT_DISPATCH == obj->mVarType && obj->mDispatch)
+		if ((obj->mVarType != VT_DISPATCH && obj->mVarType != VT_UNKNOWN) || !obj->mUnknown)
 		{
-			ITypeLib *ptlib;
-			ITypeInfo *ptinfo;
+			ComError(-1); // Previously E_NOINTERFACE.
+			return;
+		}
+		
+		ITypeInfo *ptinfo;
+		if (  !obj->mEventSink && (ptinfo = GetClassTypeInfo(obj->mUnknown))  )
+		{
 			TYPEATTR *typeattr;
-			IID iid;
-			BOOL found = false;
-
-			if (SUCCEEDED(obj->mDispatch->GetTypeInfo(0, LOCALE_USER_DEFAULT, &ptinfo)))
+			WORD cImplTypes = 0;
+			if (SUCCEEDED(ptinfo->GetTypeAttr(&typeattr)))
 			{
-				UINT index;
-				if (SUCCEEDED(ptinfo->GetTypeAttr(&typeattr)))
-				{
-					iid = typeattr->guid;
-					ptinfo->ReleaseTypeAttr(typeattr);
-					found = SUCCEEDED(ptinfo->GetContainingTypeLib(&ptlib, &index));
-				}
-				ptinfo->Release();
+				cImplTypes = typeattr->cImplTypes;
+				ptinfo->ReleaseTypeAttr(typeattr);
 			}
 
-			if (found)
+			for(UINT j = 0; j < cImplTypes; j++)
 			{
-				found = false;
-				UINT ctinfo = ptlib->GetTypeInfoCount();
-				for (UINT i = 0; i < ctinfo; i++)
+				INT flags;
+				HREFTYPE reftype;
+				ITypeInfo *prinfo;
+				if (SUCCEEDED(ptinfo->GetImplTypeFlags(j, &flags)) && flags == (IMPLTYPEFLAG_FDEFAULT | IMPLTYPEFLAG_FSOURCE)
+					&& SUCCEEDED(ptinfo->GetRefTypeOfImplType(j, &reftype))
+					&& SUCCEEDED(ptinfo->GetRefTypeInfo(reftype, &prinfo)))
 				{
-					TYPEKIND typekind;
-					if (FAILED(ptlib->GetTypeInfoType(i, &typekind)) || typekind != TKIND_COCLASS
-						|| FAILED(ptlib->GetTypeInfo(i, &ptinfo)))
-						continue;
-
-					WORD cImplTypes = 0;
-					if (SUCCEEDED(ptinfo->GetTypeAttr(&typeattr)))
+					if (SUCCEEDED(prinfo->GetTypeAttr(&typeattr)))
 					{
-						cImplTypes = typeattr->cImplTypes;
-						ptinfo->ReleaseTypeAttr(typeattr);
-					}
-
-					for (UINT j = 0; j < cImplTypes; j++)
-					{
-						INT flags;
-						if (SUCCEEDED(ptinfo->GetImplTypeFlags(j, &flags)) && flags == IMPLTYPEFLAG_FDEFAULT)
+						if (typeattr->typekind == TKIND_DISPATCH)
 						{
-							HREFTYPE reftype;
-							ITypeInfo *prinfo;
-							if (SUCCEEDED(ptinfo->GetRefTypeOfImplType(j, &reftype))
-								&& SUCCEEDED(ptinfo->GetRefTypeInfo(reftype, &prinfo)))
-							{
-								if (SUCCEEDED(prinfo->GetTypeAttr(&typeattr)))
-								{
-									found = iid == typeattr->guid;
-									prinfo->ReleaseTypeAttr(typeattr);
-								}
-								prinfo->Release();
-							}
+							obj->mEventSink = new ComEvent(obj, prinfo, typeattr->guid);
+							prinfo->ReleaseTypeAttr(typeattr);
 							break;
 						}
+						prinfo->ReleaseTypeAttr(typeattr);
 					}
-					if (found)
-						break;
-					ptinfo->Release();
+					prinfo->Release();
 				}
-				ptlib->Release();
 			}
-
-			if (found)
-			{
-				WORD cImplTypes = 0;
-				if (SUCCEEDED(ptinfo->GetTypeAttr(&typeattr)))
-				{
-					cImplTypes = typeattr->cImplTypes;
-					ptinfo->ReleaseTypeAttr(typeattr);
-				}
-
-				for(UINT j = 0; j < cImplTypes; j++)
-				{
-					INT flags;
-					HREFTYPE reftype;
-					ITypeInfo *prinfo;
-					if (SUCCEEDED(ptinfo->GetImplTypeFlags(j, &flags)) && flags == (IMPLTYPEFLAG_FDEFAULT | IMPLTYPEFLAG_FSOURCE)
-						&& SUCCEEDED(ptinfo->GetRefTypeOfImplType(j, &reftype))
-						&& SUCCEEDED(ptinfo->GetRefTypeInfo(reftype, &prinfo)))
-					{
-						if (SUCCEEDED(prinfo->GetTypeAttr(&typeattr)))
-						{
-							if (typeattr->typekind == TKIND_DISPATCH)
-							{
-								obj->mEventSink = new ComEvent(obj, prinfo, typeattr->guid);
-								prinfo->ReleaseTypeAttr(typeattr);
-								break;
-							}
-							prinfo->ReleaseTypeAttr(typeattr);
-						}
-						prinfo->Release();
-					}
-				}
-				ptinfo->Release();
-			}
+			ptinfo->Release();
 		}
 
 		if (obj->mEventSink)
