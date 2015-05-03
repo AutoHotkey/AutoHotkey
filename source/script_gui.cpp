@@ -2196,10 +2196,15 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// BIF_StatusBar() for more comments.
 		opt.style_add |= SBARS_TOOLTIPS;
 		break;
+	case GUI_CONTROL_MONTHCAL:
+		// Testing indicates that although the MonthCal attached to a DateTime control can be navigated using
+		// the keyboard on Win2k/XP, standalone MonthCal controls don't support it, except on Vista and later.
+		if (g_os.IsWinVistaOrLater())
+			opt.style_add |= WS_TABSTOP;
+		break;
 	// Nothing extra for these currently:
 	//case GUI_CONTROL_RADIO: This one is handled separately above the switch().
 	//case GUI_CONTROL_TEXT:
-	//case GUI_CONTROL_MONTHCAL: Can't be focused, so no tabstop.
 	//case GUI_CONTROL_PIC:
 	//case GUI_CONTROL_GROUPBOX:
 	//case GUI_CONTROL_PROGRESS:
@@ -2653,7 +2658,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	if (opt.height == COORD_UNSPECIFIED || opt.width == COORD_UNSPECIFIED)
 	{
 		// Set defaults:
-		int extra_width = 0;
+		int extra_width = 0, extra_height = 0;
 		UINT draw_format = DT_CALCRECT;
 
 		switch (aControlType)
@@ -2710,6 +2715,12 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				// too much width (namely 4 vs. 2).
 				GetTextMetrics(hdc, &tm);
 				extra_width += GetSystemMetrics(SM_CXMENUCHECK) + tm.tmAveCharWidth + 2; // v1.0.40.03: Reverted to +2 vs. +3 (it had been changed to +3 in v1.0.40.01).
+			}
+			if ((style & WS_BORDER) && (aControlType == GUI_CONTROL_TEXT || aControlType == GUI_CONTROL_LINK))
+			{
+				// This seems to be necessary only for Text and Link controls:
+				extra_width = 2 * GetSystemMetrics(SM_CXBORDER);
+				extra_height = 2 * GetSystemMetrics(SM_CYBORDER);
 			}
 			if (opt.width != COORD_UNSPECIFIED) // Since a width was given, auto-expand the height via word-wrapping.
 				draw_format |= DT_WORDBREAK;
@@ -2821,7 +2832,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			// when the comments above are carefully considered).
 			if (opt.height == COORD_UNSPECIFIED || (draw_height > opt.height && aControlType != GUI_CONTROL_EDIT))
 			{
-				opt.height = draw_height;
+				opt.height = draw_height + extra_height;
 				if (aControlType == GUI_CONTROL_EDIT)
 				{
 					opt.height += GUI_CTL_VERTICAL_DEADSPACE;

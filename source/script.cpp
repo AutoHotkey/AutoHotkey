@@ -2075,7 +2075,6 @@ process_completed_line:
 
 		if (*buf == '}' && mClassObjectCount && !g->CurrentFunc)
 		{
-			cp = buf;
 			if (mClassProperty)
 			{
 				// Close this property definition.
@@ -2085,12 +2084,8 @@ process_completed_line:
 					free(mClassPropertyDef);
 					mClassPropertyDef = NULL;
 				}
-				cp = omit_leading_whitespace(cp + 1);
 			}
-			// Handling this before the two sections below allows a function or class definition
-			// to begin immediately after the close-brace of a previous class definition.
-			// This loop allows something like }}} to terminate multiple nested classes:
-			for ( ; *cp == '}' && mClassObjectCount; cp = omit_leading_whitespace(cp + 1))
+			else
 			{
 				// End of class definition.
 				--mClassObjectCount;
@@ -2102,11 +2097,14 @@ process_completed_line:
 				else
 					*mClassName = '\0';
 			}
-			// cp now points at the next non-whitespace char after the brace.
-			if (!*cp)
-				goto continue_main_loop;
-			// Otherwise, there is something following this close-brace, so continue on below to process it.
-			tmemmove(buf, cp, buf_length = _tcslen(cp));
+			// Allow multiple end-braces or other declarations to the right of "}":
+			if (   *(buf = omit_leading_whitespace(buf + 1))   )
+			{
+				buf_length = _tcslen(buf); // Update.
+				mCurrLine = NULL;  // To signify that we're in transition, trying to load a new line.
+				goto process_completed_line; // Have the main loop process the contents of "buf" as though it came in from the script.
+			}
+			goto continue_main_loop; // It's just a naked "{" or "}", so no more processing needed for this line.
 		}
 
 		if (mClassProperty && !g->CurrentFunc) // This is checked before IsFunction() to prevent method definitions inside a property.
@@ -6038,12 +6036,14 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 	{
 		Object *class_object = mClassObject[mClassObjectCount - 1];
 
+		*param_start = '\0'; // Temporarily terminate, for simplicity.
+
 		// Build the fully-qualified method name for A_ThisFunc and ListVars:
 		// AddFunc() enforces a limit of MAX_VAR_NAME_LENGTH characters for function names, which is relied
 		// on by FindFunc(), BIF_OnMessage() and perhaps others.  For simplicity, allow one extra char to be
 		// printed and rely on AddFunc() detecting that the name is too long.
 		TCHAR full_name[MAX_VAR_NAME_LENGTH + 1 + 1]; // Extra +1 for null terminator.
-		_sntprintf(full_name, MAX_VAR_NAME_LENGTH + 1, _T("%s.%.*s"), mClassName, (param_start - aBuf), aBuf);
+		_sntprintf(full_name, MAX_VAR_NAME_LENGTH + 1, _T("%s.%s"), mClassName, aBuf);
 		full_name[MAX_VAR_NAME_LENGTH + 1] = '\0'; // Must terminate at this exact point if _sntprintf hit the limit.
 
 		// Check for duplicates and determine insert_pos:
@@ -6052,8 +6052,10 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		if (!mClassProperty && class_object->GetItem(found_item, aBuf) // Must be done in addition to the below to detect conflicting var/method declarations.
 			|| (found_func = FindFunc(full_name, 0, &insert_pos))) // Must be done to determine insert_pos.
 		{
-			return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
+			return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf); // The parameters are omitted due to temporary termination above.  This might make it more obvious why "X[]" and "X()" are considered duplicates.
 		}
+		
+		*param_start = '('; // Undo temporary termination.
 
 		// Below passes class_object for AddFunc() to store the func "by reference" in it:
 		if (  !(g->CurrentFunc = AddFunc(full_name, 0, false, insert_pos, class_object))  )
@@ -6494,7 +6496,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 					
 	for (item = omit_leading_whitespace(aBuf); *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
 	{
-		item_end = find_identifier_end(item); // Find end of identifier.
+		item_end = find_identifier_end(item);
 		if (item_end == item)
 			return ScriptError(ERR_INVALID_CLASS_VAR, item);
 		orig_char = *item_end;
@@ -10524,6 +10526,14 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				caller_jump_to_line = line->mRelatedLine->mRelatedLine;
 				if (caller_jump_to_line->mActionType == ACT_UNTIL)
 					caller_jump_to_line = caller_jump_to_line->mNextLine;
+				// Return OK instead of LOOP_BREAK to handle it like GOTO.  Returning LOOP_BREAK would
+				// cause the following to behave incorrectly (as described in the comments):
+				// If (True)  ; LOOP_BREAK takes precedence, causing this ExecUntil() layer to return.
+				//     Loop, 1  ; Non-NULL jump-to-line causes the LOOP_BREAK result to propagate.
+				//         Loop, 1
+				//             Break, 2
+				// MsgBox, This message would not be displayed.
+				return OK;
 			}
 			return LOOP_BREAK;
 
