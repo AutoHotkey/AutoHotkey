@@ -286,7 +286,7 @@ BIF_DECL(BIF_ComObjConnect)
 	{
 		if ((obj->mVarType != VT_DISPATCH && obj->mVarType != VT_UNKNOWN) || !obj->mUnknown)
 		{
-			ComError(-1); // Previously E_NOINTERFACE.
+			ComError(-1, aResultToken); // Previously E_NOINTERFACE.
 			return;
 		}
 		
