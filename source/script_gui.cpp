@@ -2736,6 +2736,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			draw_rect.bottom = (opt.height == COORD_UNSPECIFIED) ? 0 : opt.height;
 
 			int draw_height;
+			TCHAR last_char = 0;
 
 			// Since a Link control's text contains markup which isn't actually rendered, we need
 			// to strip it out before calling DrawText or it will put out the size calculation:
@@ -2809,16 +2810,44 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				
 				*dst = '\0';
 
+				if (dst > aTextCopy)
+					last_char = dst[-1];
+
 				// If no text, "H" is used in case the function requires a non-empty string to give consistent results:
 				draw_height = DrawText(hdc, *aTextCopy ? aTextCopy : _T("H"), -1, &draw_rect, draw_format);
 				
 				delete[] aTextCopy;
 			}
 			else
+			{
 				// If no text, "H" is used in case the function requires a non-empty string to give consistent results:
 				draw_height = DrawText(hdc, *aText ? aText : _T("H"), -1, &draw_rect, draw_format);
+				if (*aText)
+					last_char = aText[_tcslen(aText)-1];
+			}
 			
 			int draw_width = draw_rect.right - draw_rect.left;
+
+			switch (aControlType)
+			{
+			case GUI_CONTROL_BUTTON:
+				if (contains_bs_multiline_if_applicable) // BS_MULTILINE style prevents the control from utilizing the extra space.
+					break;
+			case GUI_CONTROL_TEXT:
+			case GUI_CONTROL_EDIT:
+				if (!last_char)
+					break;
+				// draw_rect doesn't include the overhang of the last character, so adjust for that
+				// to avoid clipping of italic fonts and other fonts where characters overlap.
+				// This is currently only done for Text, Edit and Button controls because the other
+				// control types won't utilize the extra space (they are apparently clipped according
+				// to what the OS erroneously calculates the width of the text to be).
+				ABC abc;
+				if (GetCharABCWidths(hdc, last_char, last_char, &abc))
+					if (abc.abcC < 0)
+						draw_width -= abc.abcC;
+			}
+
 			// Even if either height or width was already explicitly specified above, it seems best to
 			// override it if DrawText() says it's not big enough.  REASONING: It seems too rare that
 			// someone would want to use an explicit height/width to selectively hide part of a control's
