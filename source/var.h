@@ -962,7 +962,8 @@ public:
 inline void ResultToken::StealMem(Var *aVar)
 // Caller must ensure that aVar->mType == VAR_NORMAL and aVar->mHowAllocated == ALLOC_MALLOC.
 {
-	AcceptMem(aVar->StealMem(), aVar->Length());
+	VarSizeType length = aVar->Length(); // Must not be combined with the line below, as the compiler is free to evaluate parameters in whatever order.
+	AcceptMem(aVar->StealMem(), length);
 }
 
 #endif
