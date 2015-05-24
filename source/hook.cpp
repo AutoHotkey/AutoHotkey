@@ -3456,7 +3456,7 @@ int sort_most_general_before_least(const void *a1, const void *a2)
 		mod_a2_merged |= ConvertModifiersLR(b2.modifiersLR);
 
 	// Check for equality first to avoid a possible infinite loop where two identical sets are subsets of each other:
-	if (mod_a1_merged == mod_a1_merged)
+	if (mod_a1_merged == mod_a2_merged)
 	{
 		// Here refine it further to handle a case such as ^a and >^a.  We want ^a to be considered
 		// more general so that it won't override >^a altogether:
