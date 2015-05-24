@@ -287,8 +287,6 @@ Action g_act[] =
 	, {_T("*="), 2, 2, 2, {2, 0}}
 	, {_T("/="), 2, 2, 2, {2, 0}}
 
-	, {_T("Else"), 0, 0, 0, NULL}
-	
 	, {_T("Static"), 1, 1, 1, {1, 0}} // ACT_STATIC (used only at load time).
 
 	, {_T("in"), 2, 2, 2, NULL}, {_T("not in"), 2, 2, 2, NULL}
@@ -317,6 +315,9 @@ Action g_act[] =
 	, {_T("IfNotExist"), 1, 1, 1, NULL} // File or directory.
 	// IfMsgBox must be physically adjacent to the other IFs in this array:
 	, {_T("IfMsgBox"), 1, 1, 1, NULL} // MsgBox result (e.g. OK, YES, NO)
+
+	, {_T("Else"), 0, 0, 0, NULL} // No args; it has special handling to support same-line ELSE-actions (e.g. "else if").
+
 	, {_T("MsgBox"), 0, 4, 3, NULL} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
 	, {_T("InputBox"), 1, 11, 11 H, {5, 6, 7, 8, 10, 0}} // Output var, title, prompt, hide-text (e.g. passwords), width, height, X, Y, Font (e.g. courier:8 maybe), Timeout, Default
 	, {_T("SplashTextOn"), 0, 4, 4, {1, 2, 0}} // Width, height, title, text

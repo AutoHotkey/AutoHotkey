@@ -1338,7 +1338,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 	// File is now open, read lines from it.
 
-	LPTSTR hotkey_flag, cp, cp1, action_end, hotstring_start, hotstring_options;
+	LPTSTR hotkey_flag, cp, cp1, hotstring_start, hotstring_options;
 	Hotkey *hk;
 	LineNumberType pending_buf_line_number, saved_line_number;
 	HookActionType hook_action;
@@ -2477,51 +2477,12 @@ examine_line:
 			}
 			goto continue_main_loop; // It's just a naked "{" or "}", so no more processing needed for this line.
 		}
-		// First do a little special handling to support actions on the same line as their
-		// ELSE or TRY, e.g.:
-		// else if x = 1
-		// try someFunction()
-		// This is done here rather than in ParseAndAddLine() because it's fairly
-		// complicated to do there (already tried it) mostly due to the fact that
-		// literal_map has to be properly passed in a recursive call to itself, as well
-		// as properly detecting special commands that don't have keywords such as
-		// IF comparisons, ACT_ASSIGN, +=, -=, etc.
-		// v1.0.41: '{' was added to the line below to support no spaces inside "}else{".
-		if (!(action_end = StrChrAny(buf, _T("\t ,{")))) // Position of first tab/space/comma/open-brace.  For simplicity, a non-standard g_delimiter is not supported.
-			action_end = buf + buf_length; // It's done this way so that ELSE can be fully handled here; i.e. that ELSE does not have to be in the list of commands recognizable by ParseAndAddLine().
-		// The following method ensures that words or variables that start with "Else", e.g. ElseAction, are not
-		// incorrectly detected as an Else command:
-		int try_cmp = 1, finally_cmp = 1;
-		if (tcslicmp(buf, _T("Else"), action_end - buf) // It's not an ELSE, a TRY or a FINALLY. ("Else"/"Try"/"Finally" is used vs. g_act[ACT_ELSE/TRY/FINALLY].Name for performance).
-		  && (try_cmp = tcslicmp(buf, _T("Try"), action_end - buf))
-		  && (finally_cmp = tcslicmp(buf, _T("Finally"), action_end - buf)))
-		{
-			if (!ParseAndAddLine(buf))
-				return FAIL;
-		}
-		else // This line is an ELSE, a TRY or a FINALLY, possibly with another command immediately after it (on the same line).
-		{
-			// Add the ELSE, TRY or FINALLY directly rather than calling ParseAndAddLine() because that function
-			// would resolve escape sequences throughout the entire length of <buf>, which we
-			// don't want because we wouldn't have access to the corresponding literal-map to
-			// figure out the proper use of escaped characters:
-			if (!AddLine(try_cmp ? (finally_cmp ? ACT_ELSE : ACT_FINALLY) : ACT_TRY))
-				return FAIL;
-			mCurrLine = NULL;  // To signify that we're in transition, trying to load a new one.
-			buf = omit_leading_whitespace(action_end); // Now buf is the word after the ELSE or TRY.
-			if (*buf == g_delimiter) // Allow "else, action", "try, action" and "finally, action"
-				buf = omit_leading_whitespace(buf + 1);
-			// Allow any command/action to the right of "else", "try" or "finally", including "{":
-			if (*buf)
-			{
-				// This is done rather than calling ParseAndAddLine() as it handles "{" in a way that
-				// anything to the right of it is considered an arg of that line and is basically ignored.
-				buf_length = _tcslen(buf); // Update.
-				mCurrLine = NULL;  // To signify that we're in transition, trying to load a new line.
-				goto examine_line; // Have the main loop process the contents of "buf" as though it came in from the script.
-			}
-			// Otherwise, there was either no same-line action, so do nothing.
-		}
+
+		// Parse the command, assignment or expression, including any same-line open brace or sub-action
+		// for ELSE, TRY, CATCH or FINALLY.  Unlike braces at the start of a line (processed above), this
+		// does not allow directives or labels to the right of the command.
+		if (!ParseAndAddLine(buf))
+			return FAIL;
 
 continue_main_loop: // This method is used in lieu of "continue" for performance and code size reduction.
 		if (remap_dest_vk)
@@ -4293,28 +4254,24 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	{
 		// v1.0.41: Support one-true brace style even if there's no space, but make it strict so that
 		// things like "Loop{ string" are reported as errors (in case user intended a file-pattern loop).
-		if (!_tcsicmp(action_name, _T("Loop{")) && !*action_args)
+		if (*action_args == '{')
 		{
-			aActionType = ACT_LOOP;
-			add_openbrace_afterward = true;
+			switch (ActionTypeType otb_act = ConvertActionType(action_name))
+			{
+			case ACT_LOOP:
+				add_openbrace_afterward = true;
+				if (action_args[1]) // See above.
+					break;
+				//else fall through:
+			case ACT_ELSE:
+			case ACT_TRY:
+			case ACT_CATCH:
+			case ACT_FINALLY:
+				aActionType = otb_act;
+				break;
+			}
 		}
-		// fincs: same as above, but for try, catch and finally:
-		else if (!_tcsicmp(action_name, _T("try{")) && !*action_args)
-		{
-			aActionType = ACT_TRY;
-			add_openbrace_afterward = true;
-		}
-		else if (!_tcsicmp(action_name, _T("catch{")) && !*action_args)
-		{
-			aActionType = ACT_CATCH;
-			add_openbrace_afterward = true;
-		}
-		else if (!_tcsicmp(action_name, _T("finally{")) && !*action_args)
-		{
-			aActionType = ACT_FINALLY;
-			add_openbrace_afterward = true;
-		}
-		else if (_tcschr(EXPR_ALL_SYMBOLS, *action_args))
+		if (!aActionType && _tcschr(EXPR_ALL_SYMBOLS, *action_args))
 		{
 			LPTSTR question_mark;
 			if ((*action_args == '+' || *action_args == '-') && action_args[1] == *action_args) // Post-inc/dec. See comments further below.
@@ -4375,6 +4332,30 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				// the change that avoids the need to escape double-colons:
 				return ScriptError(_tcsstr(aLineText, HOTKEY_FLAG) ? _T("Invalid hotkey.") : ERR_UNRECOGNIZED_ACTION, aLineText);
 		}
+	}
+	switch (aActionType)
+	{
+	case ACT_CATCH:
+		if (*action_args != '{') // i.e. "Catch varname" must be handled a different way.
+			break;
+	case ACT_ELSE:
+	case ACT_TRY:
+	case ACT_FINALLY:
+		if (!AddLine(aActionType))
+			return FAIL;
+		if (*action_args == '{')
+		{
+			if (!AddLine(ACT_BLOCK_BEGIN))
+				return FAIL;
+			action_args = omit_leading_whitespace(action_args + 1);
+		}
+		if (!*action_args)
+			return OK;
+		// Call self recursively to parse the sub-action.  Doing this before the args are
+		// processed any further avoids some complexity, since literal_map would otherwise
+		// have to be passed recursively, in which case the action name is also expected.
+		//mCurrLine = NULL; // Seems more useful to leave this set to the line added above.
+		return ParseAndAddLine(action_args);
 	}
 
 	Action &this_action = aActionType ? g_act[aActionType] : g_old_act[aOldActionType];
