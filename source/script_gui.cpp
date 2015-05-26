@@ -8270,7 +8270,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			} // switch(nmhdr.code).
 
 			// Since above didn't return, make it an event.
-			if (!ignore_unless_alt_submit || (control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))
+			if (gui_event != '*' // An unknown notification; seems best to call DefDlgProc() but not the control's g-label in this case.
+				&& (!ignore_unless_alt_submit || (control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT)))
 				pgui->Event(control_index, nmhdr.code, gui_event, event_info);
 
 			// After the event, explicitly return a special value for any notifications that absolutely
