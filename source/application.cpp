@@ -1652,7 +1652,7 @@ bool CheckScriptTimers()
 	if (g_nPausedThreads > 0 || !g->AllowTimers || g_nThreads >= g_MaxThreadsTotal || !IsInterruptible()) // See above.
 		return false;
 
-	ScriptTimer *ptimer;
+	ScriptTimer *ptimer, *next_timer;
 	BOOL at_least_one_timer_launched;
 	DWORD tick_start;
 	TCHAR ErrorLevel_saved[ERRORLEVEL_SAVED_SIZE];
@@ -1662,11 +1662,14 @@ bool CheckScriptTimers()
 
 	for (at_least_one_timer_launched = FALSE, ptimer = g_script.mFirstTimer
 		; ptimer != NULL
-		; ptimer = ptimer->mNextTimer)
+		; ptimer = next_timer)
 	{
 		ScriptTimer &timer = *ptimer; // For performance and convenience.
 		if (!timer.mEnabled || timer.mExistingThreads > 0 || timer.mPriority < g->Priority) // thread priorities
+		{
+			next_timer = timer.mNextTimer;
 			continue;
+		}
 
 		tick_start = GetTickCount(); // Call GetTickCount() every time in case a previous iteration of the loop took a long time to execute.
 		// As of v1.0.36.03, the following subtracts two DWORDs to support intervals of 49.7 vs. 24.8 days.
@@ -1676,7 +1679,10 @@ bool CheckScriptTimers()
 		// suspended/hibernated for 50+ days), the next launch of the affected timer(s) will be delayed
 		// by up to 100% of their periods.  See IsInterruptible() for more discussion.
 		if (tick_start - timer.mTimeLastRun < (DWORD)timer.mPeriod) // Timer is not yet due to run.
+		{
+			next_timer = timer.mNextTimer;
 			continue;
+		}
 		// Otherwise, this timer is due to run.
 		if (!at_least_one_timer_launched) // This will be the first timer launched here.
 		{
@@ -1750,6 +1756,15 @@ bool CheckScriptTimers()
 		++timer.mExistingThreads;
 		timer.mLabel->ExecuteInNewThread(_T("Timer"));
 		--timer.mExistingThreads;
+
+		// Resolve the next timer only now, in case other timers were created or deleted while
+		// this timer was executing.  Must be done before the timer is potentially deleted below.
+		next_timer = timer.mNextTimer;
+		// If the script attempted to delete this timer while it was executing, mLabel was set
+		// to NULL and it is now time to delete the timer.  mExistingThreads == 0 is implied
+		// at this point since timers are only allowed one thread.
+		if (timer.mLabel == NULL)
+			g_script.DeleteTimer(NULL);
 	} // for() each timer.
 
 	if (at_least_one_timer_launched) // Since at least one subroutine was run above, restore various values for our caller.

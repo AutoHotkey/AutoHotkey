@@ -3437,6 +3437,19 @@ void Script::DeleteTimer(IObject *aLabel)
 	for (timer = mFirstTimer; timer != NULL; previous = timer, timer = timer->mNextTimer)
 		if (timer->mLabel == aLabel) // Match found.
 		{
+			if (timer->mExistingThreads)
+			{
+				if (!aLabel) // Caller requested we delete a previously marked timer which
+					continue; // has now finished, but this one hasn't, so keep looking.
+				// In this case we can't delete the timer yet, so mark it for later deletion.
+				timer->mLabel = NULL;
+				// Clearing mLabel:
+				//  1) Marks the timer to be deleted after its last thread finishes.
+				//  2) Ensures any subsequently created timer will get default settings.
+				//  3) Allows the object to be freed before the timer subroutine returns
+				//     if all other references to it are released.
+				break;
+			}
 			// Remove it from the list.
 			if (previous)
 				previous->mNextTimer = timer->mNextTimer;
@@ -3445,7 +3458,7 @@ void Script::DeleteTimer(IObject *aLabel)
 			// Disable it.
 			if (timer->mEnabled)
 				timer->Disable(); // Keeps track of mTimerEnabledCount and whether the main timer is needed.
-			// Delete the timer, automatically releasing it's reference to the object.
+			// Delete the timer, automatically releasing its reference to the object.
 			delete timer;
 			break;
 		}
