@@ -8550,8 +8550,8 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 					return line->PreparseError(ERR_PARAM1_INVALID);
 				}
 				if (*line_raw_arg2 && !line->ArgHasDeref(2))
-					if (   !(line->mAttribute = FindCallable(line_raw_arg2))   )
-						if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
+					if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
+						if (   !(line->mAttribute = FindCallable(line_raw_arg2))   )
 							return line->PreparseError(ERR_NO_LABEL);
 			}
 			break;
