@@ -948,6 +948,7 @@ public:
 		LPTSTR end_flags = _T(" ,(\t<>:=+-*/!~&|^[.?");
 		// L31: Added '[' for standalone ObjSet/Get to work as ACT_EXPRESSION.  "Get" is allowed for simplicity and for future use with functions-as-values (e.g. varContainingFunc[]).
 		// L34: Added '.' and changed dot handling to fix x.=y, improve support in other areas, catch more errors and give slightly better error messages.
+		// v1.1.22.01: Added '{' to simplify OTB handling for else/try/finally.
 
 	#define ArgLength(aArgNum) ArgIndexLength((aArgNum)-1)
 	#define ArgToDouble(aArgNum) ArgIndexToDouble((aArgNum)-1)

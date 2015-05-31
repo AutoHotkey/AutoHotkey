@@ -3214,7 +3214,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 	{
 		if (!defer_win_release)
 		{
-			if (ctrl_nor_shift_nor_alt_down && MOD_RWIN && sSendMode != SM_PLAY)
+			if (ctrl_nor_shift_nor_alt_down && aDisguiseUpWinAlt && sSendMode != SM_PLAY)
 				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Disguise key release to suppress Start Menu.
 			KeyEvent(KEYUP, VK_RWIN, 0, NULL, false, aExtraInfo);
 		}
