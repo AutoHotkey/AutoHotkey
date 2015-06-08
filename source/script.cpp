@@ -4350,13 +4350,12 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	/////////////////////////////////////////////////////////////
 	// MaxParams has already been verified as being <= MAX_ARGS.
 	// Any g_delimiter-delimited items beyond MaxParams will be included in a lump inside the last param:
-	int nArgs, nArgs_plus_one;
+	int nArgs;
 	LPTSTR arg[MAX_ARGS], arg_map[MAX_ARGS];
 	TCHAR *subaction_start = NULL;
 	int max_params = max_params_override ? max_params_override : this_action.MaxParams;
 	int max_params_minus_one = max_params - 1;
 	bool is_expression;
-	ActionTypeType *np;
 
 	for (nArgs = mark = 0; action_args[mark] && nArgs < max_params; ++nArgs)
 	{
@@ -4392,23 +4391,21 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			// Skip the "% " prefix.
 			mark += 2;
 		}
+		/*
+		// Since this part of the loop never executes for the last arg of a command (due to the 
+		// nArgs == max_params_minus_one check above) and currently all control flow statements
+		// accept expressions only in their last or only arg, the following block is not needed:
 		else if (aActionType < ACT_FIRST_COMMAND) // v2: Search for "NumericParams" for comments.
 		{
-			// v1.0.43.07: Fixed below to use this_action instead of g_act[aActionType] so that the
-			// numeric params of legacy commands like EnvAdd/Sub/LeftClick can be detected.  Without
-			// this fix, the last comma in a line like "EnvSub, var, Add(2, 3)" is seen as a parameter
-			// delimiter, which causes a loadtime syntax error.
-			if (np = this_action.NumericParams) // This command has at least one numeric parameter.
-			{
-				// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
-				nArgs_plus_one = nArgs + 1;
-				for (; *np; ++np)
-					if (*np == nArgs_plus_one) // This arg is enforced to be purely numeric.
-						break;
-				if (*np) // Match found, so this is a purely numeric arg.
+			int nArgs_plus_one = nArgs + 1;
+			for (ActionTypeType *np = this_action.NumericParams; *np; ++np)
+				if (*np == nArgs_plus_one) // This arg is enforced to be purely numeric.
+				{
 					is_expression = true;
-			}
+					break;
+				}
 		}
+		*/
 
 		// Find the end of the above arg:
 		if (is_expression)
@@ -4702,12 +4699,14 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// Experimental v2 behaviour: Where function syntax could've been used but isn't, require %
 			// for expressions.  This doesn't include control flow statements such as IF, WHILE, FOR, etc.
 			// since we want those to always be expressions (and function syntax can't be used for those).
-			if (!this_new_arg.is_expression // It hasn't been explicitly % marked as an expression.
-				&& (np = g_act[aActionType].NumericParams)) // This command has at least one numeric parameter.
+			if (!this_new_arg.is_expression) // It hasn't been explicitly % marked as an expression.
 			{
-				// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
+				// Check for parameters of control flow statements which are marked as expressions,
+				// and parameters of commands which are marked as numeric.  Since numeric parameters aren't
+				// expressions by default anymore, non-numeric values like 'some_variable' are flagged as
+				// errors to ease the transition from v1.
 				i_plus_one = i + 1;
-				for (; *np; ++np)
+				for (np = g_act[aActionType].NumericParams; *np; ++np)
 				{
 					if (*np == i_plus_one) // This arg is enforced to be purely numeric.
 					{
