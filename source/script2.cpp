@@ -11617,26 +11617,10 @@ VarSizeType BIV_Is64bitOS(LPTSTR aBuf, LPTSTR aVarName)
 }
 
 VarSizeType BIV_Language(LPTSTR aBuf, LPTSTR aVarName)
-// Registry locations from J-Paul Mesnage.
 {
-	TCHAR buf[MAX_PATH];
-	VarSizeType length;
-	if (g_os.IsWinNT())  // NT/2k/XP+
-		length = g_os.IsWin2000orLater()
-			? ReadRegString(HKEY_LOCAL_MACHINE, _T("SYSTEM\\CurrentControlSet\\Control\\Nls\\Language"), _T("InstallLanguage"), buf, MAX_PATH)
-			: ReadRegString(HKEY_LOCAL_MACHINE, _T("SYSTEM\\CurrentControlSet\\Control\\Nls\\Language"), _T("Default"), buf, MAX_PATH); // NT4
-	else // Win9x
-	{
-		length = ReadRegString(HKEY_USERS, _T(".DEFAULT\\Control Panel\\Desktop\\ResourceLocale"), _T(""), buf, MAX_PATH);
-		if (length > 3)
-		{
-			length -= 4;
-			memmove(buf, buf + 4, length + 1); // +1 to include the zero terminator.
-		}
-	}
 	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string).
-	return length;
+		_stprintf(aBuf, _T("%04hX"), GetSystemDefaultUILanguage());
+	return 4;
 }
 
 VarSizeType BIV_UserName_ComputerName(LPTSTR aBuf, LPTSTR aVarName)
