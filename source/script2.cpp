@@ -5632,14 +5632,29 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 
 
+void LaunchAutoHotkeyUtil(LPTSTR aFile)
+{
+    TCHAR buf_temp[2048];
+	// ActionExec()'s CreateProcess() is currently done in a way that prefers enclosing double quotes:
+	*buf_temp = '"';
+	// Try GetAHKInstallDir() first so that compiled scripts running on machines that happen
+	// to have AHK installed will still be able to fetch the help file and Window Spy:
+	if (!GetAHKInstallDir(buf_temp + 1))
+		// Even if this is the self-contained version (AUTOHOTKEYSC), attempt to launch anyway in
+		// case the user has put a copy of the file in the same dir with the compiled script:
+		_tcscpy(buf_temp + 1, g_script.mOurEXEDir);
+	sntprintfcat(buf_temp, _countof(buf_temp), _T("\\%s\""), aFile);
+	// Attempt to run the file:
+	if (!g_script.ActionExec(buf_temp, _T(""), NULL, false)) // Use "" vs. NULL to specify that there are no params at all.
+		MsgBox(buf_temp, 0, _T("Could not launch file:"));
+}
+
 bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
 // See if an item was selected from the tray menu or main menu.  Note that it is possible
 // for one of the standard menu items to be triggered from a GUI menu if the menu or one of
 // its submenus was modified with the "menu, MenuName, Standard" command.
 // Returns true if the message is fully handled here, false otherwise.
 {
-    TCHAR buf_temp[2048];  // For various uses.
-
 	switch (aMenuItemID)
 	{
 	case ID_TRAY_OPEN:
@@ -5656,43 +5671,11 @@ bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
 		return true;
 	case ID_TRAY_WINDOWSPY:
 	case ID_FILE_WINDOWSPY:
-		// ActionExec()'s CreateProcess() is currently done in a way that prefers enclosing double quotes:
-		*buf_temp = '"';
-		// Try GetAHKInstallDir() first so that compiled scripts running on machines that happen
-		// to have AHK installed will still be able to fetch the help file:
-		if (GetAHKInstallDir(buf_temp + 1))
-			sntprintfcat(buf_temp, _countof(buf_temp), _T("\\AU3_Spy.exe\""));
-		else
-			// Mostly this ELSE is here in case AHK isn't installed (i.e. the user just
-			// copied the files over without running the installer).  But also:
-			// Even if this is the self-contained version (AUTOHOTKEYSC), attempt to launch anyway in
-			// case the user has put a copy of WindowSpy in the same dir with the compiled script:
-			// ActionExec()'s CreateProcess() is currently done in a way that prefers enclosing double quotes:
-			sntprintfcat(buf_temp, _countof(buf_temp), _T("%sAU3_Spy.exe\""), g_script.mOurEXEDir);
-		if (!g_script.ActionExec(buf_temp, _T(""), NULL, false))
-			MsgBox(buf_temp, 0, _T("Could not launch Window Spy:"));
+		LaunchAutoHotkeyUtil(_T("AU3_Spy.exe"));
 		return true;
 	case ID_TRAY_HELP:
 	case ID_HELP_USERMANUAL:
-		// ActionExec()'s CreateProcess() is currently done in a way that prefers enclosing double quotes:
-		*buf_temp = '"';
-		// Try GetAHKInstallDir() first so that compiled scripts running on machines that happen
-		// to have AHK installed will still be able to fetch the help file:
-		if (GetAHKInstallDir(buf_temp + 1))
-			sntprintfcat(buf_temp, _countof(buf_temp), _T("\\AutoHotkey.chm\""));
-		else
-			// Even if this is the self-contained version (AUTOHOTKEYSC), attempt to launch anyway in
-			// case the user has put a copy of the help file in the same dir with the compiled script:
-			// Also, for this one I saw it report failure once on Win98SE even though the help file did
-			// wind up getting launched.  Couldn't repeat it.  So in response to that try explicit "hh.exe":
-			sntprintfcat(buf_temp, _countof(buf_temp), _T("%sAutoHotkey.chm\""), g_script.mOurEXEDir);
-		if (!g_script.ActionExec(_T("hh.exe"), buf_temp, NULL, false))
-		{
-			// Try it without the hh.exe in case .CHM is associate with some other application
-			// in some OSes:
-			if (!g_script.ActionExec(buf_temp, _T(""), NULL, false)) // Use "" vs. NULL to specify that there are no params at all.
-				MsgBox(buf_temp, 0, _T("Could not launch help file:"));
-		}
+		LaunchAutoHotkeyUtil(_T("AutoHotkey.chm"));
 		return true;
 	case ID_TRAY_SUSPEND:
 	case ID_FILE_SUSPEND:

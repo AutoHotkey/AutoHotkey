@@ -348,7 +348,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 			LPTSTR last_backslash = _tcsrchr(buf, '\\');
 			if (!last_backslash) // probably can't happen due to the nature of GetModuleFileName().
 				mOurEXEDir = _T("");
-			last_backslash[1] = '\0'; // i.e. keep the trailing backslash for convenience.
+			*last_backslash = '\0';
 			if (   !(mOurEXEDir = SimpleHeap::Malloc(buf + 1))   ) // +1 to omit the leading double-quote.
 				return FAIL;  // It already displayed the error for us.
 		}
