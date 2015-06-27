@@ -805,7 +805,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// Otherwise, continue on and let a new thread be created to handle this hotstring.
 				// Since this isn't an auto-replace hotstring, set this value to support
 				// the built-in variable A_EndChar:
-				g_script.mEndChar = hs->mEndCharRequired ? (char)LOWORD(msg.lParam) : 0; // v1.0.48.04: Explicitly set 0 when hs->mEndCharRequired==false because LOWORD is used for something else in that case.
+				g_script.mEndChar = hs->mEndCharRequired ? (TCHAR)LOWORD(msg.lParam) : 0; // v1.0.48.04: Explicitly set 0 when hs->mEndCharRequired==false because LOWORD is used for something else in that case.
 				label_to_call = hs->mJumpToLabel;
 				break;
 
