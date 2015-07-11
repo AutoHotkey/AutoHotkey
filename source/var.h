@@ -457,8 +457,8 @@ public:
 			aToken.value_double = var.ToDouble();
 			break;
 		default: // Not a pure number.
-			aToken.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
-			aToken.marker_length = 0;
+			aToken.marker = EXPR_NAN_STR; // For completeness.  Some callers such as BIF_Abs() rely on this being done.
+			aToken.marker_length = EXPR_NAN_LEN;
 			return FAIL;
 		}
 		return OK; // Since above didn't return, indicate success.
@@ -962,7 +962,8 @@ public:
 inline void ResultToken::StealMem(Var *aVar)
 // Caller must ensure that aVar->mType == VAR_NORMAL and aVar->mHowAllocated == ALLOC_MALLOC.
 {
-	AcceptMem(aVar->StealMem(), aVar->Length());
+	VarSizeType length = aVar->Length(); // Must not be combined with the line below, as the compiler is free to evaluate parameters in whatever order.
+	AcceptMem(aVar->StealMem(), length);
 }
 
 #endif

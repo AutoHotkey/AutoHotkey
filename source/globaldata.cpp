@@ -264,12 +264,11 @@ Action g_act[] =
 	, {_T(""), 1, 1, false, {1, 0}}
 	, {_T("{"), 0, 0, false, NULL}, {_T("}"), 0, 0, false, NULL}
 
-	, {_T("Else"), 0, 0, false, NULL}
-	
-	, {_T("Static"), 1, 1, 1, {1, 0}} // ACT_STATIC (used only at load time).
-	, {_T("#If"), 0, 1, 1, {1, 0}}
+	, {_T("Static"), 1, 1, false, {1, 0}} // ACT_STATIC (used only at load time).
+	, {_T("#If"), 0, 1, false, {1, 0}}
 
 	, {_T("If"), 1, 1, false, {1, 0}}
+	, {_T("Else"), 0, 0, false, NULL} // No args; it has special handling to support same-line ELSE-actions (e.g. "else if").
 	, {_T("Loop"), 0, 1, false, {1, 0}} // IterationCount
 	, {_T("LoopFiles"), 1, 2, false, NULL} // FilePattern [, Mode] -- LoopFiles vs LoopFile for clarity.
 	, {_T("LoopReg"), 1, 2, false, NULL} // Key [, Mode]
@@ -286,8 +285,8 @@ Action g_act[] =
 	, {_T("Catch"), 0, 1, false, NULL} // fincs: seems best to allow catch without a parameter
 	, {_T("Finally"), 0, 0, false, NULL}
 	, {_T("Throw"), 0, 1, false, {1, 0}}
-	, {_T("Exit"), 0, 1, false, NULL} // ExitCode
-	, {_T("ExitApp"), 0, 1, false, NULL} // ExitCode
+	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
+	, {_T("ExitApp"), 0, 1, false, {1, 0}} // ExitCode
 
 	, {_T("MsgBox"), 0, 4, false, NULL} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
 	, {_T("InputBox"), 1, 5, true, NULL} // OutputVar, Title, Prompt, Options, Default

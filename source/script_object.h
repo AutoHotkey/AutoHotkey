@@ -145,6 +145,8 @@ public:
 // Object - Scriptable associative array.
 //
 
+#define ObjParseIntKey(s, endptr) Exp32or64(UorA(wcstol,strtol),UorA(_wcstoi64,_strtoi64))(s, endptr, 10) // Convert string to IntKeyType, setting errno = ERANGE if overflow occurs.
+
 class Object : public ObjectBase
 {
 protected:
@@ -222,6 +224,8 @@ protected:
 	FieldType *FindField(T val, IndexType left, IndexType right, IndexType &insert_pos);
 	FieldType *FindField(SymbolType key_type, KeyType key, IndexType &insert_pos);	
 	FieldType *FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos);
+
+	void ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type, KeyType &key);
 	
 	FieldType *Insert(SymbolType key_type, KeyType key, IndexType at);
 
@@ -355,7 +359,7 @@ public:
 	
 	enum RemoveMode { RM_RemoveKey = 0, RM_RemoveAt, RM_Pop };
 	ResultType _Remove_impl(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, RemoveMode aMode);
-	ResultType _Remove(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Delete(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _RemoveAt(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _Pop(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	
@@ -363,6 +367,8 @@ public:
 	ResultType _SetCapacity(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _GetAddress(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _Length(ResultToken &aResultToken);
+	ResultType _MaxIndex(ResultToken &aResultToken);
+	ResultType _MinIndex(ResultToken &aResultToken);
 	ResultType _NewEnum(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _HasKey(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _Clone(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);

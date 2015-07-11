@@ -706,65 +706,55 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			else // String.
 			{
 				// Seems best to consider the application of unary minus to a string to be a failure.
-				// UPDATE: For v1.0.25.06, invalid operations like this instead treat the operand as an
-				// empty string.  This avoids aborting a long, complex expression entirely just because
-				// one of its operands is invalid.  However, the net effect in most cases might be the same,
-				// since the empty string is a non-numeric result and thus will cause any operator it is
-				// involved with to treat its other operand as a string too.  And the result of a math
-				// operation on two strings is typically an empty string.
-				this_token.SetValue(_T(""), 0);
+				this_token.SetValue(EXPR_NAN);
 				break;
 			}
 			// Since above didn't "break":
 			this_token.symbol = right_is_number;
 			break;
 
+		case SYM_POSITIVE: // Added in v2 for symmetry with SYM_NEGATIVE; i.e. if -x produces NaN, so should +x.
+			if (right_is_number)
+				TokenToDoubleOrInt64(right, this_token);
+			else
+				this_token.SetValue(EXPR_NAN); // For consistency with unary minus (see above).
+			break;
+
 		case SYM_POST_INCREMENT: // These were added in v1.0.46.  It doesn't seem worth translating them into
 		case SYM_POST_DECREMENT: // += and -= at load-time or during the tokenizing phase higher above because 
 		case SYM_PRE_INCREMENT:  // it might introduce precedence problems, plus the post-inc/dec's nature is
 		case SYM_PRE_DECREMENT:  // unique among all the operators in that it pushes an operand before the evaluation.
+			if (right.symbol != SYM_VAR) // Syntax error.
+				goto abort_with_exception;
 			is_pre_op = (this_token.symbol >= SYM_PRE_INCREMENT); // Store this early because its symbol will soon be overwritten.
-			if (right.symbol != SYM_VAR || right_is_number == PURE_NOT_NUMERIC) // Invalid operation.
+			if (!*right.var->Contents()) // It's empty (this also serves to display a warning if applicable).
 			{
-				if (right.symbol == SYM_VAR) // Thus due to the above check, it's a non-numeric target such as ++i when "i" is blank or contains text. This line was fixed in v1.0.46.16.
+				// For convenience, treat an empty variable as zero for ++ and --.
+				// Consistent with v1 ++/-- when not combined with another expression.
+				right.var->Assign(0);
+				right_is_number = PURE_INTEGER;
+			}
+			else if (right_is_number == PURE_NOT_NUMERIC) // Not empty and not numeric: invalid operation.
+			{
+				right.var->Assign(EXPR_NAN); // Clipboard is also supported here.
+				if (is_pre_op)
 				{
-					right.var->MaybeWarnUninitialized(); // This line should always be reached if the var is uninitialized.
-					right.var->Assign(); // If target var contains "" or "non-numeric text", make it blank. Clipboard is also supported here.
-					if (is_pre_op)
+					// v1.0.46.01: For consistency, it seems best to make the result of a pre-op be a
+					// variable whenever a variable came in.  This allows its address to be taken, and it
+					// to be passed by reference, and other SYM_VAR behaviors, even if the operation itself
+					// produces a blank value.
+					if (right.var->Type() == VAR_NORMAL)
 					{
-						// v1.0.46.01: For consistency, it seems best to make the result of a pre-op be a
-						// variable whenever a variable came in.  This allows its address to be taken, and it
-						// to be passed by reference, and other SYM_VAR behaviors, even if the operation itself
-						// produces a blank value.
-						// KNOWN LIMITATION: Although this behavior is convenient to have, I realize now
-						// that it produces at least one weird effect: whenever a binary operator's operands
-						// both use a pre-op on the same variable, or whenever two or more of a function-call's
-						// parameters both do a pre-op on the same variable, that variable will have the same
-						// value at the time the binary operator or function-call is evaluated.  For example:
-						//    y = 1
-						//    x = ++y + ++y  ; Yields 6 not 5.
-						// However, if you think about the situations anyone would intentionally want to do
-						// the above or a function-call with two or more pre-ops in its parameters, it seems
-						// so extremely rare that retaining the existing behavior might be superior because of:
-						// 1) Convenience: It allows ++x to be passed ByRef, it's address taken.  Less importantly,
-						//    it also allows ++++x to work.
-						// 2) Backward compatibility: Some existing scripts probably already rely on the fact that
-						//    ++x and --x produce an lvalue (though it's undocumented).
-						if (right.var->Type() == VAR_NORMAL)
-						{
-							this_token.var = right.var;  // Make the result a variable rather than a normal operand so that its
-							this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(++x)
-							break;
-						}
-						//else VAR_CLIPBOARD, which is allowed in only when it's the lvalue of an assignment or
-						// inc/dec.  So fall through to make the result blank because clipboard isn't allowed as
-						// SYM_VAR beyond this point (to simplify the code and improve maintainability).
+						this_token.var = right.var;  // Make the result a variable rather than a normal operand so that its
+						this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(++x)
+						break;
 					}
-					//else post_op against non-numeric target-var.  Fall through to below to yield blank result.
+					//else VAR_CLIPBOARD, which is allowed in only when it's the lvalue of an assignment or
+					// inc/dec.  So fall through to make the result blank because clipboard isn't allowed as
+					// SYM_VAR beyond this point (to simplify the code and improve maintainability).
 				}
-				//else target isn't a var, so yield blank result.
-				this_token.SetValue(_T(""), 0); // Make the result blank to indicate invalid operation
-				break;                          // (assign to non-lvalue or increment/decrement a non-number).
+				this_token.SetValue(EXPR_NAN); // Indicate invalid operation (increment/decrement a non-number).
+				break;
 			} // end of "invalid operation" block.
 
 			// DUE TO CODE SIZE AND PERFORMANCE decided not to support things like the following:
@@ -791,6 +781,20 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			{
 				// Push the variable itself so that the operation will have already taken effect for whoever
 				// uses this operand/result in the future (i.e. pre-op vs. post-op).
+				// KNOWN LIMITATION: Although this behavior is convenient to have, I realize now
+				// that it produces at least one weird effect: whenever a binary operator's operands
+				// both use a pre-op on the same variable, or whenever two or more of a function-call's
+				// parameters both do a pre-op on the same variable, that variable will have the same
+				// value at the time the binary operator or function-call is evaluated.  For example:
+				//    y = 1
+				//    x = ++y + ++y  ; Yields 6 not 5.
+				// However, if you think about the situations anyone would intentionally want to do
+				// the above or a function-call with two or more pre-ops in its parameters, it seems
+				// so extremely rare that retaining the existing behavior might be superior because of:
+				// 1) Convenience: It allows ++x to be passed ByRef, it's address taken.  Less importantly,
+				//    it also allows ++++x to work.
+				// 2) Backward compatibility: Some existing scripts probably already rely on the fact that
+				//    ++x and --x produce an lvalue (though it's undocumented).
 				if (right.var->Type() == VAR_NORMAL)
 				{
 					this_token.var = right.var;  // Make the result a variable rather than a normal operand so that its
@@ -834,7 +838,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		case SYM_BITNOT:  // The tilde (~) operator.
 			if (right_is_number == PURE_NOT_NUMERIC) // String.  Seems best to consider the application of '*' or '~' to a non-numeric string to be a failure.
 			{
-				this_token.SetValue(_T(""), 0);
+				this_token.SetValue(EXPR_NAN);
 				break;
 			}
 			// Since above didn't "break": right_is_number is PURE_INTEGER or PURE_FLOAT.
@@ -890,11 +894,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			
 			if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(this_token.symbol)) // v1.0.46: Added support for various assignment operators.
 			{
-				if (left.symbol != SYM_VAR)
-				{
-					this_token.SetValue(_T(""), 0); // Make the result blank to indicate invalid operation (assign to non-lvalue).
-					break; // Equivalent to "goto push_this_token" in this case.
-				}
+				if (left.symbol != SYM_VAR) // Syntax error.
+					goto abort_with_exception;
+
 				switch(this_token.symbol)
 				{
 				case SYM_ASSIGN: // Listed first for performance (it's probably the most common because things like ++ and += aren't expressions when they're by themselves on a line).
@@ -925,6 +927,14 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				// Since above didn't goto or break out of the outer loop, this is an assignment other than
 				// SYM_ASSIGN, so it needs further evaluation later below before the assignment will actually be made.
 				sym_assign_var = left.var; // This tells the bottom of this switch() to do extra steps for this assignment.
+				if ((this_token.symbol == SYM_ADD || this_token.symbol == SYM_SUBTRACT)
+					&& !*sym_assign_var->Contents()) // It's empty (this also serves to display a warning if applicable).
+				{
+					// For convenience, treat an empty variable as zero for += and -=.
+					// Consistent with v1 EnvAdd/EnvSub or +=/-= when not combined with another expression.
+					left.symbol = SYM_INTEGER;
+					left.value_int64 = 0;
+				}
 			}
 
 			// The following section needs done even for assignments such as += because the type of value
@@ -1139,9 +1149,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					break;
 
 				default:
-					// Other operators do not support string operands, so the result is an empty string.
-					this_token.marker = _T("");
-					this_token.marker_length = 0;
+					// Other operators do not support non-numeric operands, so the result is NaN (not a number).
+					this_token.marker = EXPR_NAN_STR;
+					this_token.marker_length = EXPR_NAN_LEN;
 					result_symbol = SYM_STRING;
 				}
 				this_token.symbol = result_symbol; // Must be done only after the switch() above.
@@ -1181,10 +1191,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// Since it's integer division, no need for explicit floor() of the result.
 					// Also, performance is much higher for integer vs. float division, which is part
 					// of the justification for a separate operator.
-					if (right_int64 == 0) // Divide by zero produces blank result (perhaps will produce exception if scripts ever support exception handlers).
+					if (right_int64 == 0) // Divide by zero produces "not a number".
 					{
-						this_token.marker = _T("");
-						this_token.marker_length = 0;
+						this_token.marker = EXPR_NAN_STR;
+						this_token.marker_length = EXPR_NAN_LEN;
 						result_symbol = SYM_STRING;
 					}
 					else
@@ -1197,8 +1207,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (!left_int64 && right_int64 < 0) // In essence, this is divide-by-zero.
 					{
 						// Return a consistent result rather than something that varies:
-						this_token.marker = _T("");
-						this_token.marker_length = 0;
+						this_token.marker = EXPR_NAN_STR;
+						this_token.marker_length = EXPR_NAN_LEN;
 						result_symbol = SYM_STRING;
 					}
 					else // We have a valid base and exponent and both are integers, so the calculation will always have a defined result.
@@ -1230,10 +1240,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_MULTIPLY: this_token.value_double = left_double * right_double; break;
 				case SYM_DIVIDE:
 				case SYM_FLOORDIVIDE:
-					if (right_double == 0.0) // Divide by zero produces blank result.
+					if (right_double == 0.0) // Divide by zero produces "not a number".
 					{
-						this_token.marker = _T("");
-						this_token.marker_length = 0;
+						this_token.marker = EXPR_NAN_STR;
+						this_token.marker_length = EXPR_NAN_LEN;
 						result_symbol = SYM_STRING;
 					}
 					else
@@ -1257,8 +1267,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (left_double == 0.0 && right_double < 0  // In essence, this is divide-by-zero.
 						|| left_was_negative && qmathFmod(right_double, 1.0) != 0.0) // Negative base, but exponent isn't close enough to being an integer: unsupported (to simplify code).
 					{
-						this_token.marker = _T("");
-						this_token.marker_length = 0;
+						this_token.marker = EXPR_NAN_STR;
+						this_token.marker_length = EXPR_NAN_LEN;
 						result_symbol = SYM_STRING;
 					}
 					else

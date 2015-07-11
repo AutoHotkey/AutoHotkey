@@ -7,6 +7,8 @@
 #include "script_object.h"
 #include "script_func_impl.h"
 
+#include <errno.h> // For ERANGE.
+
 
 //
 // CallMethod - Invoke a method with no parameters, discarding the result.
@@ -645,21 +647,19 @@ int Object::GetBuiltinID(LPCTSTR aName)
 		if (!_tcsicmp(aName, _T("InsertAt")))
 			return FID_ObjInsertAt;
 		break;
+	case 'R':
+		if (!_tcsicmp(aName, _T("RemoveAt")))
+			return FID_ObjRemoveAt;
+		break;
+	case 'D':
+		if (!_tcsicmp(aName, _T("Delete")))
+			return FID_ObjDelete;
+		break;
 	case 'P':
 		if (!_tcsicmp(aName, _T("Push")))
 			return FID_ObjPush;
 		if (!_tcsicmp(aName, _T("Pop")))
 			return FID_ObjPop;
-		break;
-	case 'R':
-		if (!_tcsnicmp(aName, _T("Remove"), 6))
-		{
-			aName += 6;
-			if (!*aName)
-				return FID_ObjRemove;
-			if (!_tcsicmp(aName, _T("At")))
-				return FID_ObjRemoveAt;
-		}
 		break;
 	case 'H':
 		if (!_tcsicmp(aName, _T("HasKey")))
@@ -687,6 +687,12 @@ int Object::GetBuiltinID(LPCTSTR aName)
 		if (!_tcsicmp(aName, _T("Clone")))
 			return FID_ObjClone;
 		break;
+	case 'M':
+		if (!_tcsicmp(aName, _T("MaxIndex")))
+			return FID_ObjMaxIndex;
+		if (!_tcsicmp(aName, _T("MinIndex")))
+			return FID_ObjMinIndex;
+		break;
 	}
 	return -1;
 }
@@ -697,7 +703,7 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 	switch (aID)
 	{
 	case FID_ObjInsertAt:		return _InsertAt(aResultToken, aParam, aParamCount);
-	case FID_ObjRemove:			return _Remove(aResultToken, aParam, aParamCount);
+	case FID_ObjDelete:			return _Delete(aResultToken, aParam, aParamCount);
 	case FID_ObjRemoveAt:		return _RemoveAt(aResultToken, aParam, aParamCount);
 	case FID_ObjPush:			return _Push(aResultToken, aParam, aParamCount);
 	case FID_ObjPop:			return _Pop(aResultToken, aParam, aParamCount);
@@ -708,6 +714,8 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 	case FID_ObjGetAddress:		return _GetAddress(aResultToken, aParam, aParamCount);
 	case FID_ObjClone:			return _Clone(aResultToken, aParam, aParamCount);
 	case FID_ObjNewEnum:		return _NewEnum(aResultToken, aParam, aParamCount);
+	case FID_ObjMaxIndex:		return _MaxIndex(aResultToken);
+	case FID_ObjMinIndex:		return _MinIndex(aResultToken);
 	}
 	return INVOKE_NOT_HANDLED;
 }
@@ -1070,7 +1078,7 @@ ResultType Object::_Remove_impl(ResultToken &aResultToken, ExprTokenType *aParam
 	return OK;
 }
 
-ResultType Object::_Remove(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::_Delete(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	return _Remove_impl(aResultToken, aParam, aParamCount, RM_RemoveKey);
 }
@@ -1090,7 +1098,24 @@ ResultType Object::_Pop(ResultToken &aResultToken, ExprTokenType *aParam[], int 
 
 ResultType Object::_Length(ResultToken &aResultToken)
 {
-	_o_return(mKeyOffsetObject ? mFields[mKeyOffsetObject - 1].key.i : 0);
+	IntKeyType max_index = mKeyOffsetObject ? mFields[mKeyOffsetObject - 1].key.i : 0;
+	_o_return(max_index > 0 ? max_index : 0);
+}
+
+ResultType Object::_MaxIndex(ResultToken &aResultToken)
+{
+	if (mKeyOffsetObject)
+		_o_return(mFields[mKeyOffsetObject - 1].key.i);
+	else
+		_o_return_empty;
+}
+
+ResultType Object::_MinIndex(ResultToken &aResultToken)
+{
+	if (mKeyOffsetObject)
+		_o_return(mFields[0].key.i);
+	else
+		_o_return_empty;
 }
 
 ResultType Object::_GetCapacity(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
@@ -1495,24 +1520,85 @@ Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, IndexType
 	}
 }
 
+void Object::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type, KeyType &key)
+// Converts key_token to the appropriate key_type and key.
+// The exact type of the key is not preserved, since that often produces confusing behaviour;
+// for example, guis[WinExist()] := x ... x := guis[A_Gui] would fail because A_Gui returns a
+// string.  Strings are converted to integers only where conversion back to string produces
+// the same string, so for instance, "01" and " 1 " and "+0x8000" are left as strings.
+// Integers which are too large for IntKeyType are converted to strings, to avoid data loss.
+{
+	SymbolType inner_type = key_token.symbol;
+	if (inner_type == SYM_VAR)
+	{
+		switch (key_token.var->IsPureNumericOrObject())
+		{
+		case VAR_ATTRIB_IS_INT64:	inner_type = SYM_INTEGER; break;
+		case VAR_ATTRIB_IS_OBJECT:	inner_type = SYM_OBJECT; break;
+		case VAR_ATTRIB_IS_DOUBLE:	inner_type = SYM_FLOAT; break;
+		default:					inner_type = SYM_STRING; break;
+		}
+	}
+	if (inner_type == SYM_OBJECT)
+	{
+		key_type = SYM_OBJECT;
+		key.p = TokenToObject(key_token);
+		return;
+	}
+	if (inner_type == SYM_INTEGER)
+	{
+		__int64 token_int = TokenToInt64(key_token);
+		key.i = IntKeyType(token_int);
+		if (__int64(key.i) == token_int) // Confirm round trip is possible.
+		{
+			key_type = SYM_INTEGER;
+			return;
+		}
+		// Round trip isn't possible, so store it as a string.
+	}
+	key_type = SYM_STRING; // Set default for simplicity.
+	key.s = TokenToString(key_token, buf);
+	if (inner_type == SYM_STRING)
+	{
+		// Only SYM_STRING needs to be checked in this way, because SYM_INTEGER already
+		// returned an integer if possible, and SYM_FLOAT never produces a decimal integer.
+		LPTSTR cp = key.s;
+		if (*cp == '-')
+		{
+			++cp;
+			if (*cp == '0')
+				return; // Things like "-0" or "-0x1" or "-007" won't round trip.
+		}
+		if (*cp == '0')
+		{
+			// "0" on its own will round trip, but anything else with a leading "0" will not.
+			if (!cp[1])
+			{
+				key.i = 0;
+				key_type = SYM_INTEGER;
+			}
+			return;
+		}
+		if (*cp <= '9' && *cp >= '1') // Rule out many non-numeric values and leading '+' or whitespace.
+		{
+			LPTSTR endptr;
+			errno = 0; // Clear any previous error number.
+			IntKeyType i = ObjParseIntKey(key.s, &endptr);
+			if (errno != ERANGE // The number is not too large for IntKeyType.
+				&& !*endptr) // There is no trailing whitespace or other non-numeric suffix.
+			{
+				key.i = i;
+				key_type = SYM_INTEGER;
+				return; // For maintainability.
+			}
+		}
+	}
+}
+
 Object::FieldType *Object::FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos)
 // Searches for a field with the given key, where the key is a token passed from script.
 {
-	if (key_token.symbol == SYM_INTEGER
-		|| (key_token.symbol == SYM_VAR && key_token.var->IsPureNumeric() == PURE_INTEGER))
-	{	// Pure integer.
-		key.i = (IntKeyType)TokenToInt64(key_token);
-		key_type = SYM_INTEGER;
-	}
-	else if (key.p = TokenToObject(key_token))
-	{	// SYM_OBJECT or SYM_VAR which contains an object.
-		key_type = SYM_OBJECT;
-	}
-	else
-	{	// SYM_STRING or SYM_VAR (confirmed not to be pure integer); or SYM_FLOAT.
-		key.s = TokenToString(key_token, aBuf); // Pass aBuf to allow float -> string conversion.
-		key_type = SYM_STRING;
-	}
+	ConvertKey(key_token, aBuf, key_type, key);
 	return FindField(key_type, key, insert_pos);
 }
 	
@@ -1697,7 +1783,7 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ResultToken &aResultToken, ExprTokenTy
 				aResultToken.object = bf;
 				return OK;
 			}
-			return g_script.ScriptError(ERR_OUTOFMEM);
+			_o_throw(ERR_OUTOFMEM);
 		}
 		if (_tcsicmp(member, _T("Call")))
 			return INVOKE_NOT_HANDLED; // Reserved.

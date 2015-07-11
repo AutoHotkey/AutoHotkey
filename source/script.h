@@ -546,7 +546,7 @@ enum BuiltInFunctionID {
 	FID_ASin = 0, FID_ACos,
 	FID_Sqrt = 0, FID_Log, FID_Ln,
 	FID_ObjAddRef = 0, FID_ObjRelease,
-	FID_ObjInsertAt = 0, FID_ObjRemove, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjGetAddress, FID_ObjClone, FID_ObjNewEnum,
+	FID_ObjInsertAt = 0, FID_ObjDelete, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength, FID_ObjMaxIndex, FID_ObjMinIndex, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjGetAddress, FID_ObjClone, FID_ObjNewEnum,
 	FID_ComObjType = 0, FID_ComObjValue,
 	FID_WinGetID = 0, FID_WinGetIDLast, FID_WinGetPID, FID_WinGetProcessName, FID_WinGetProcessPath, FID_WinGetCount, FID_WinGetList, FID_WinGetMinMax, FID_WinGetControls, FID_WinGetControlsHwnd, FID_WinGetTransparent, FID_WinGetTransColor, FID_WinGetStyle, FID_WinGetExStyle,
 	FID_WinSetTransparent = 0, FID_WinSetTransColor, FID_WinSetAlwaysOnTop, FID_WinSetStyle, FID_WinSetExStyle, FID_WinSetEnabled, FID_WinSetRegion,
@@ -925,11 +925,6 @@ public:
 	//    : & x::hotkey action
 	//    : & *::abbrev with leading colon::
 	#define IS_HOTSTRING_OPTION(chr) (cisalnum(chr) || _tcschr(_T("?*- \t"), chr))
-	// The characters below are ordered with most-often used ones first, for performance:
-	#define DEFINE_END_FLAGS \
-		LPTSTR end_flags = _T(" ,(\t<>:=+-*/!~&|^[.?");
-		// L31: Added '[' for standalone ObjSet/Get to work as ACT_EXPRESSION.  "Get" is allowed for simplicity and for future use with functions-as-values (e.g. varContainingFunc[]).
-		// L34: Added '.' and changed dot handling to fix x.=y, improve support in other areas, catch more errors and give slightly better error messages.
 
 	#define ArgLength(aArgNum) ArgIndexLength((aArgNum)-1)
 	#define ArgToDouble(aArgNum) ArgIndexToDouble((aArgNum)-1)

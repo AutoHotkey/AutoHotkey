@@ -1080,6 +1080,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 		// whether aControl contains X and Y coordinates.  That way, if a control class happens to be
 		// named something like "X1 Y1", it will still be found by giving precedence to class names.
 		point_and_hwnd_type pah = {0};
+		pah.ignore_disabled_controls = true; // v1.1.20: Ignore disabled controls.
 		// Parse the X an Y coordinates in a strict way to reduce ambiguity with control names and also
 		// to keep the code simple.
 		LPTSTR cp = omit_leading_whitespace(aControl);
@@ -5028,7 +5029,7 @@ BOOL CALLBACK EnumChildFindPoint(HWND aWnd, LPARAM lParam)
 {
 	point_and_hwnd_type &pah = *(point_and_hwnd_type *)lParam;  // For performance and convenience.
 	if (!IsWindowVisible(aWnd) // Omit hidden controls, like Window Spy does.
-		|| !IsWindowEnabled(aWnd)) // Also omit disabled controls, since testing shows that the OS doesn't send mouse messages to them.
+		|| (pah.ignore_disabled_controls && !IsWindowEnabled(aWnd))) // For ControlClick, also omit disabled controls, since testing shows that the OS doesn't post mouse messages to them.
 		return TRUE;
 	RECT rect;
 	if (!GetWindowRect(aWnd, &rect))
@@ -6238,8 +6239,6 @@ ResultType Line::DriveSpace(LPTSTR aPath, bool aGetFreeSpace)
 		buf[length] = '\0';
 	}
 
-	SetErrorMode(SEM_FAILCRITICALERRORS); // If target drive is a floppy, this avoids a dialog prompting to insert a disk.
-
 	// MSDN: "The GetDiskFreeSpaceEx function returns correct values for all volumes, including those
 	// that are greater than 2 gigabytes."
 	__int64 free_space;
@@ -6326,7 +6325,6 @@ ResultType Line::Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2) // aValue not
 
 	case DRIVE_CMD_LABEL: // Note that it is possible and allowed for the new label to be blank.
 		DRIVE_SET_PATH
-		SetErrorMode(SEM_FAILCRITICALERRORS);  // So that a floppy drive doesn't prompt for a disk
 		return SetErrorLevelOrThrowBool(!SetVolumeLabel(path, aValue2));
 
 	} // switch()
@@ -6466,8 +6464,6 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 		UCHAR letter;
 		TCHAR buf[128], *buf_ptr;
 
-		SetErrorMode(SEM_FAILCRITICALERRORS); // If drive is a floppy, prevents pop-up dialog prompting to insert disk.
-
 		for (found_drives_count = 0, letter = 'A'; letter <= 'Z'; ++letter)
 		{
 			buf_ptr = buf;
@@ -6493,7 +6489,6 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 		TCHAR volume_name[256];
 		TCHAR file_system[256];
 		DRIVE_SET_PATH
-		SetErrorMode(SEM_FAILCRITICALERRORS); // If drive is a floppy, prevents pop-up dialog prompting to insert disk.
 		DWORD serial_number, max_component_length, file_system_flags;
 		if (!GetVolumeInformation(path, volume_name, _countof(volume_name) - 1, &serial_number, &max_component_length
 			, &file_system_flags, file_system, _countof(file_system) - 1))
@@ -6510,7 +6505,6 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 	case DRIVEGET_CMD_TYPE:
 	{
 		DRIVE_SET_PATH
-		SetErrorMode(SEM_FAILCRITICALERRORS); // If drive is a floppy, prevents pop-up dialog prompting to insert disk.
 		switch (GetDriveType(path))
 		{
 		case DRIVE_UNKNOWN:   output_var.Assign(_T("Unknown")); break;
@@ -6528,7 +6522,6 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 	case DRIVEGET_CMD_STATUS:
 	{
 		DRIVE_SET_PATH
-		SetErrorMode(SEM_FAILCRITICALERRORS); // If drive is a floppy, prevents pop-up dialog prompting to insert disk.
 		DWORD sectors_per_cluster, bytes_per_sector, free_clusters, total_clusters;
 		switch (GetDiskFreeSpace(path, &sectors_per_cluster, &bytes_per_sector, &free_clusters, &total_clusters)
 			? ERROR_SUCCESS : GetLastError())
@@ -11236,7 +11229,11 @@ has_valid_return_type:
 	{
 		function = GetDllProcAddress(TokenToString(*aParam[0]), &hmodule_to_free);
 		if (!function)
+		{
+			// GetDllProcAddress has thrown the appropriate exception.
+			aResultToken.SetExitResult(FAIL);
 			goto end;
+		}
 	}
 
 	////////////////////////
@@ -13874,9 +13871,13 @@ BIF_DECL(BIF_WinExistActive)
 
 
 
+#define If_NaN_return_NaN(ParamIndex) \
+	if (!TokenIsNumeric(*aParam[(ParamIndex)])) \
+		_f_return(EXPR_NAN)
+
 BIF_DECL(BIF_Round)
-// For simplicity and backward compatibility, this always yields something numeric (or a string that's numeric).
-// Even Round(empty_or_unintialized_var) is zero rather than "".
+// For simplicity, this always yields something numeric (or a string that's numeric).
+// Even Round(empty_or_unintialized_var) is zero rather than "" or "NaN".
 {
 	// In the future, a string conversion algorithm might be better to avoid the loss
 	// of 64-bit integer precision that is currently caused by the use of doubles in
@@ -13885,6 +13886,7 @@ BIF_DECL(BIF_Round)
 	double multiplier;
 	if (aParamCount > 1)
 	{
+		If_NaN_return_NaN(1);
 		param2 = ParamIndexToInt(1);
 		multiplier = qmathPow(10, param2);
 	}
@@ -13893,6 +13895,7 @@ BIF_DECL(BIF_Round)
 		param2 = 0;
 		multiplier = 1;
 	}
+	If_NaN_return_NaN(0);
 	double value = ParamIndexToDouble(0);
 	value = (value >= 0.0 ? qmathFloor(value * multiplier + 0.5)
 		: qmathCeil(value * multiplier - 0.5)) / multiplier;
@@ -13951,6 +13954,7 @@ BIF_DECL(BIF_FloorCeil)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
+	If_NaN_return_NaN(0);
 	// The qmath routines are used because Floor() and Ceil() are deceptively difficult to implement in a way
 	// that gives the correct result in all permutations of the following:
 	// 1) Negative vs. positive input.
@@ -13973,26 +13977,24 @@ BIF_DECL(BIF_Mod)
 	// Load-time validation has already ensured there are exactly two parameters.
 	// "Cast" each operand to Int64/Double depending on whether it has a decimal point.
 	ExprTokenType param0, param1;
-	if (!ParamIndexToNumber(0, param0) || !ParamIndexToNumber(1, param1)) // Non-operand or non-numeric string.
-		_f_return_empty;
-
-	if (param0.symbol == SYM_INTEGER && param1.symbol == SYM_INTEGER)
+	if (ParamIndexToNumber(0, param0) && ParamIndexToNumber(1, param1)) // Both are numeric.
 	{
-		if (!param1.value_int64) // Divide by zero.
-			_f_return_empty;
-		else
-			// For performance, % is used vs. qmath for integers.
-			_f_return_i(param0.value_int64 % param1.value_int64);
+		if (param0.symbol == SYM_INTEGER && param1.symbol == SYM_INTEGER) // Both are integers.
+		{
+			if (param1.value_int64) // Not divide by zero.
+				// For performance, % is used vs. qmath for integers.
+				_f_return_i(param0.value_int64 % param1.value_int64);
+		}
+		else // At least one is a floating point number.
+		{
+			double dividend = TokenToDouble(param0);
+			double divisor = TokenToDouble(param1);
+			if (divisor != 0.0) // Not divide by zero.
+				_f_return(qmathFmod(dividend, divisor));
+		}
 	}
-	else // At least one is a floating point number.
-	{
-		double dividend = TokenToDouble(param0);
-		double divisor = TokenToDouble(param1);
-		if (divisor == 0.0) // Divide by zero.
-			_f_return_empty;
-		else
-			_f_return(qmathFmod(dividend, divisor));
-	}
+	// Since above didn't return, one or both parameters were invalid.
+	_f_return_p(EXPR_NAN);
 }
 
 
@@ -14000,8 +14002,7 @@ BIF_DECL(BIF_Mod)
 BIF_DECL(BIF_Abs)
 {
 	if (!TokenToDoubleOrInt64(*aParam[0], aResultToken)) // "Cast" token to Int64/Double depending on whether it has a decimal point.
-		// Non-operand or non-numeric string. TokenToDoubleOrInt64() has already set the token to be an
-		// empty string for us.
+		// Non-operand or non-numeric string. TokenToDoubleOrInt64() has already set the result to "NaN".
 		return;
 	if (aResultToken.symbol == SYM_INTEGER)
 	{
@@ -14021,6 +14022,7 @@ BIF_DECL(BIF_Sin)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
+	If_NaN_return_NaN(0);
 	_f_return(qmathSin(ParamIndexToDouble(0)));
 }
 
@@ -14030,6 +14032,7 @@ BIF_DECL(BIF_Cos)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
+	If_NaN_return_NaN(0);
 	_f_return(qmathCos(ParamIndexToDouble(0)));
 }
 
@@ -14039,6 +14042,7 @@ BIF_DECL(BIF_Tan)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
+	If_NaN_return_NaN(0);
 	_f_return(qmathTan(ParamIndexToDouble(0)));
 }
 
@@ -14046,16 +14050,16 @@ BIF_DECL(BIF_Tan)
 
 BIF_DECL(BIF_ASinACos)
 {
+	If_NaN_return_NaN(0);
 	double value = ParamIndexToDouble(0);
 	if (value > 1 || value < -1) // ASin and ACos aren't defined for such values.
 	{
-		_f_return_empty;
+		_f_return_p(EXPR_NAN);
 	}
 	else
 	{
 		// For simplicity and backward compatibility, a numeric result is always returned in this case (even if
 		// the input is non-numeric or an empty string).
-		// Below: marker contains either "ASin" or "ACos"
 		_f_return((_f_callee_id == FID_ASin) ? qmathAsin(value) : qmathAcos(value));
 	}
 }
@@ -14066,6 +14070,7 @@ BIF_DECL(BIF_ATan)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
+	If_NaN_return_NaN(0);
 	_f_return(qmathAtan(ParamIndexToDouble(0)));
 }
 
@@ -14075,6 +14080,7 @@ BIF_DECL(BIF_Exp)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
+	If_NaN_return_NaN(0);
 	_f_return(qmathExp(ParamIndexToDouble(0)));
 }
 
@@ -14082,10 +14088,11 @@ BIF_DECL(BIF_Exp)
 
 BIF_DECL(BIF_SqrtLogLn)
 {
+	If_NaN_return_NaN(0);
 	double value = ParamIndexToDouble(0);
-	if (value < 0) // Result is undefined in these cases, so make blank to indicate.
+	if (value < 0) // Result is undefined in these cases.
 	{
-		_f_return_empty;
+		_f_return_p(EXPR_NAN);
 	}
 	else
 	{
@@ -16448,7 +16455,7 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 		//case SYM_MISSING:
 		default:
 			aOutput.symbol = SYM_STRING;
-			aOutput.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
+			aOutput.marker = EXPR_NAN_STR; // For completeness.  Some callers such as BIF_Abs() rely on this being done.
 			return FAIL;
 	}
 	// Since above didn't return, interpret "str" as a number.
@@ -16461,7 +16468,7 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 		aOutput.value_double = ATOF(str);
 		break;
 	default: // Not a pure number.
-		aOutput.marker = _T(""); // For completeness.  Some callers such as BIF_Abs() rely on this being done.
+		aOutput.marker = EXPR_NAN_STR; // For completeness.  Some callers such as BIF_Abs() rely on this being done.
 		return FAIL;
 	}
 	return OK; // Since above didn't return, indicate success.

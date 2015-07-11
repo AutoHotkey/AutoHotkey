@@ -2199,10 +2199,15 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// BIF_StatusBar() for more comments.
 		opt.style_add |= SBARS_TOOLTIPS;
 		break;
+	case GUI_CONTROL_MONTHCAL:
+		// Testing indicates that although the MonthCal attached to a DateTime control can be navigated using
+		// the keyboard on Win2k/XP, standalone MonthCal controls don't support it, except on Vista and later.
+		if (g_os.IsWinVistaOrLater())
+			opt.style_add |= WS_TABSTOP;
+		break;
 	// Nothing extra for these currently:
 	//case GUI_CONTROL_RADIO: This one is handled separately above the switch().
 	//case GUI_CONTROL_LABEL:
-	//case GUI_CONTROL_MONTHCAL: Can't be focused, so no tabstop.
 	//case GUI_CONTROL_PIC:
 	//case GUI_CONTROL_GROUPBOX:
 	//case GUI_CONTROL_PROGRESS:
@@ -2648,7 +2653,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	if (opt.height == COORD_UNSPECIFIED || opt.width == COORD_UNSPECIFIED)
 	{
 		// Set defaults:
-		int extra_width = 0;
+		int extra_width = 0, extra_height = 0;
 		UINT draw_format = DT_CALCRECT;
 
 		switch (aControlType)
@@ -2706,6 +2711,12 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				GetTextMetrics(hdc, &tm);
 				extra_width += GetSystemMetrics(SM_CXMENUCHECK) + tm.tmAveCharWidth + 2; // v1.0.40.03: Reverted to +2 vs. +3 (it had been changed to +3 in v1.0.40.01).
 			}
+			if ((style & WS_BORDER) && (aControlType == GUI_CONTROL_TEXT || aControlType == GUI_CONTROL_LINK))
+			{
+				// This seems to be necessary only for Text and Link controls:
+				extra_width = 2 * GetSystemMetrics(SM_CXBORDER);
+				extra_height = 2 * GetSystemMetrics(SM_CYBORDER);
+			}
 			if (opt.width != COORD_UNSPECIFIED) // Since a width was given, auto-expand the height via word-wrapping.
 				draw_format |= DT_WORDBREAK;
 
@@ -2716,6 +2727,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			draw_rect.bottom = (opt.height == COORD_UNSPECIFIED) ? 0 : opt.height;
 
 			int draw_height;
+			TCHAR last_char = 0;
 
 			// Since a Link control's text contains markup which isn't actually rendered, we need
 			// to strip it out before calling DrawText or it will put out the size calculation:
@@ -2789,16 +2801,44 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				
 				*dst = '\0';
 
+				if (dst > aTextCopy)
+					last_char = dst[-1];
+
 				// If no text, "H" is used in case the function requires a non-empty string to give consistent results:
 				draw_height = DrawText(hdc, *aTextCopy ? aTextCopy : _T("H"), -1, &draw_rect, draw_format);
 				
 				delete[] aTextCopy;
 			}
 			else
+			{
 				// If no text, "H" is used in case the function requires a non-empty string to give consistent results:
 				draw_height = DrawText(hdc, *aText ? aText : _T("H"), -1, &draw_rect, draw_format);
+				if (*aText)
+					last_char = aText[_tcslen(aText)-1];
+			}
 			
 			int draw_width = draw_rect.right - draw_rect.left;
+
+			switch (aControlType)
+			{
+			case GUI_CONTROL_BUTTON:
+				if (contains_bs_multiline_if_applicable) // BS_MULTILINE style prevents the control from utilizing the extra space.
+					break;
+			case GUI_CONTROL_TEXT:
+			case GUI_CONTROL_EDIT:
+				if (!last_char)
+					break;
+				// draw_rect doesn't include the overhang of the last character, so adjust for that
+				// to avoid clipping of italic fonts and other fonts where characters overlap.
+				// This is currently only done for Text, Edit and Button controls because the other
+				// control types won't utilize the extra space (they are apparently clipped according
+				// to what the OS erroneously calculates the width of the text to be).
+				ABC abc;
+				if (GetCharABCWidths(hdc, last_char, last_char, &abc))
+					if (abc.abcC < 0)
+						draw_width -= abc.abcC;
+			}
+
 			// Even if either height or width was already explicitly specified above, it seems best to
 			// override it if DrawText() says it's not big enough.  REASONING: It seems too rare that
 			// someone would want to use an explicit height/width to selectively hide part of a control's
@@ -2816,7 +2856,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			// when the comments above are carefully considered).
 			if (opt.height == COORD_UNSPECIFIED || (draw_height > opt.height && aControlType != GUI_CONTROL_EDIT))
 			{
-				opt.height = draw_height;
+				opt.height = draw_height + extra_height;
 				if (aControlType == GUI_CONTROL_EDIT)
 				{
 					opt.height += GUI_CTL_VERTICAL_DEADSPACE;
@@ -8067,7 +8107,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			} // switch(nmhdr.code).
 
 			// Since above didn't return, make it an event.
-			if (!ignore_unless_alt_submit || (control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))
+			if (gui_event != '*' // An unknown notification; seems best to call DefDlgProc() but not the control's g-label in this case.
+				&& (!ignore_unless_alt_submit || (control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT)))
 				pgui->Event(control_index, nmhdr.code, gui_event, event_info);
 
 			// After the event, explicitly return a special value for any notifications that absolutely

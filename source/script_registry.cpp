@@ -179,10 +179,7 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 	LONG    result;
 
 	if (!aRootKey)
-	{
-		result = ERROR_INVALID_PARAMETER; // Indicate the error.
-		goto finish;
-	}
+		return LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
 
 	// Open the registry key
 	result = RegOpenKeyEx(aRootKey, aRegSubkey, 0, KEY_READ | g->RegView, &hRegKey);
@@ -364,11 +361,10 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	
 	LONG result;
 
-	if (!aRootKey || aValueType == REG_NONE || aValueType == REG_SUBKEY) // Can't write to these.
-	{
-		result = ERROR_INVALID_PARAMETER; // Indicate the error.
-		goto finish;
-	}
+	if (aValueType == REG_NONE || aValueType == REG_SUBKEY) // Can't write to these.
+		return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
+	if (!aRootKey)
+		return LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
 
 	// Open/Create the registry key
 	// The following works even on root keys (i.e. blank subkey), although values can't be created/written to
@@ -531,16 +527,14 @@ ResultType Line::RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 {
 	LONG result;
 
+	if (!aRootKey)
+		return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
 	// Fix for v1.0.48: Don't remove the entire key if it's a root key!  According to MSDN,
 	// the root key would be opened by RegOpenKeyEx() further below whenever aRegSubkey is NULL
 	// or an empty string. aValueName is also checked to preserve the ability to delete a value
 	// that exists directly under a root key.
-	if (   !aRootKey
-		|| (!aRegSubkey || !*aRegSubkey) && (!aValueName || !*aValueName)   ) // See comment above.
-	{
-		result = ERROR_INVALID_PARAMETER;
-		goto finish;
-	}
+	if (  (!aRegSubkey || !*aRegSubkey) && (!aValueName || !*aValueName)  )
+		return LineError(_T("Cannot delete root key"));
 
 	// Open the key we want
 	HKEY hRegKey;

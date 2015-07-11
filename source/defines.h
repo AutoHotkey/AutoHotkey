@@ -175,7 +175,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT // << >>  ALSO: SYM_BITSHIFTRIGHT MUST BE KEPT LAST AMONG THE BIT OPERATORS BECAUSE IT'S USED IN A RANGE-CHECK.
 	, SYM_ADD, SYM_SUBTRACT
 	, SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
-	, SYM_NEGATIVE, SYM_HIGHNOT, SYM_BITNOT, SYM_ADDRESS, SYM_DEREF  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
+	, SYM_NEGATIVE, SYM_POSITIVE, SYM_HIGHNOT, SYM_BITNOT, SYM_ADDRESS, SYM_DEREF  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
 	, SYM_POWER    // See comments near precedence array for why this takes precedence over SYM_NEGATIVE.
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
 	, SYM_FUNC     // A call to a function.
@@ -188,6 +188,10 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 // These two are macros for maintainability (i.e. seeing them together here helps maintain them together).
 #define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) (!(token).var) // SYM_DYNAMICs are either double-derefs or built-in vars.
 #define SYM_DYNAMIC_IS_WRITABLE(token) ((token)->var && (token)->var->Type() <= VAR_LAST_WRITABLE) // i.e. it's the clipboard, not a built-in variable or double-deref.
+
+#define EXPR_NAN_STR	_T("")
+#define EXPR_NAN_LEN	0
+#define EXPR_NAN		EXPR_NAN_STR, EXPR_NAN_LEN
 
 
 struct ExprTokenType; // Forward declarations for use below.
@@ -479,18 +483,18 @@ enum enum_act {
 , ACT_EXPRESSION
 // Keep ACT_BLOCK_BEGIN as the first "control flow" action, for range checks with ACT_FIRST_CONTROL_FLOW:
 , ACT_BLOCK_BEGIN, ACT_BLOCK_END
-, ACT_ELSE   // Parsed at a lower level than most commands to support same-line ELSE-actions (e.g. "else if").
 , ACT_STATIC
 , ACT_HOTKEY_IF // Must be before ACT_FIRST_COMMAND.
 , ACT_FIRST_NAMED_ACTION, ACT_IF = ACT_FIRST_NAMED_ACTION
+, ACT_ELSE
 , ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE
 , ACT_FOR, ACT_WHILE, ACT_UNTIL // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
 , ACT_BREAK, ACT_CONTINUE
 , ACT_GOTO, ACT_GOSUB, ACT_RETURN
 , ACT_TRY, ACT_CATCH, ACT_FINALLY, ACT_THROW // Keep TRY, CATCH and FINALLY together and in this order for range checks.
 , ACT_FIRST_CONTROL_FLOW = ACT_BLOCK_BEGIN, ACT_LAST_CONTROL_FLOW = ACT_THROW
-, ACT_EXIT, ACT_EXITAPP // Excluded from the "CONTROL_FLOW" range above because they can be safely wrapped into a Func.
-, ACT_FIRST_COMMAND, ACT_MSGBOX = ACT_FIRST_COMMAND
+, ACT_FIRST_COMMAND, ACT_EXIT = ACT_FIRST_COMMAND, ACT_EXITAPP // Excluded from the "CONTROL_FLOW" range above because they can be safely wrapped into a Func.
+, ACT_MSGBOX
 , ACT_INPUTBOX, ACT_TOOLTIP, ACT_TRAYTIP, ACT_INPUT
 , ACT_DEREF, ACT_STRINGLOWER, ACT_STRINGUPPER
 , ACT_STRINGREPLACE, ACT_SPLITPATH, ACT_SORT
