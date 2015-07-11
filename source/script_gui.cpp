@@ -2711,7 +2711,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				GetTextMetrics(hdc, &tm);
 				extra_width += GetSystemMetrics(SM_CXMENUCHECK) + tm.tmAveCharWidth + 2; // v1.0.40.03: Reverted to +2 vs. +3 (it had been changed to +3 in v1.0.40.01).
 			}
-			if ((style & WS_BORDER) && (aControlType == GUI_CONTROL_TEXT || aControlType == GUI_CONTROL_LINK))
+			if ((style & WS_BORDER) && (aControlType == GUI_CONTROL_LABEL || aControlType == GUI_CONTROL_LINK))
 			{
 				// This seems to be necessary only for Text and Link controls:
 				extra_width = 2 * GetSystemMetrics(SM_CXBORDER);
@@ -2824,7 +2824,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			case GUI_CONTROL_BUTTON:
 				if (contains_bs_multiline_if_applicable) // BS_MULTILINE style prevents the control from utilizing the extra space.
 					break;
-			case GUI_CONTROL_TEXT:
+			case GUI_CONTROL_LABEL:
 			case GUI_CONTROL_EDIT:
 				if (!last_char)
 					break;

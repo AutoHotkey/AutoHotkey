@@ -873,7 +873,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 			// label_to_call has been set to the label, function or object which is
 			// about to be called, though it might not be called via label_to_call.
-			ActionTypeType type_of_first_line = label_to_call->TypeOfFirstLine();
+			ActionTypeType type_of_first_line = label_to_call ? label_to_call->TypeOfFirstLine() : ACT_INVALID;
 
 			if (g_nThreads >= g_MaxThreadsTotal)
 			{
@@ -1237,8 +1237,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 				// LAUNCH GUI THREAD:
 				gui_event_ret = pgui->CallEvent(*gui_event, gui_event_arg_count, gui_event_args);
-
-				DEBUGGER_STACK_POP()
 
 				// Bug-fix for v1.0.22: If the above ExecUntil() performed a "Gui Destroy", the
 				// pointers below are now invalid so should not be dereferenced.  In such a case,
