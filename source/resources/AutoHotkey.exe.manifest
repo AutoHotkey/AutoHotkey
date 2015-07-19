@@ -22,7 +22,8 @@
     This section has two important effects:
      - Prevent the Program Compatibility Assistant from popping up if Windows
        thinks something went wrong (such as if "setup" exits too quickly).
-     - Allow OS version number checks to work correctly on Windows 8.1.
+     - Obsolete: Allow OS version number checks to work correctly on Windows 8.1.
+       (This was superseded by the change from GetVersionEx to RtlGetVersion.)
     
     If the VC++ manifest tool is enabled, it adds redundant xmlns prefixes and
     declarations to this node and each of its child nodes.  This causes bloat,
@@ -32,6 +33,8 @@
     manifest tool entirely and do our own processing to minimize size.
   -->
   <application>
+    <!-- Windows 10 -->
+    <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
     <!-- Windows 8.1 -->
     <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
     <!-- Windows Vista -->
