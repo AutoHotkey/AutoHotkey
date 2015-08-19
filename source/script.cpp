@@ -7171,6 +7171,9 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		// Above has ensured that param_start now points to the next parameter, or ')' if none.
 	} // for() each formal parameter.
 
+	if (param_start[1]) // Something follows the ')' other than OTB (which was handled at an earlier stage).
+		return ScriptError(ERR_INVALID_FUNCDECL, aBuf);
+
 	if (param_count)
 	{
 		// Allocate memory only for the actual number of parameters actually present.
