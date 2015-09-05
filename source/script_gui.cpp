@@ -1723,6 +1723,7 @@ ResultType GuiType::Destroy(GuiType &gui)
 		}
 		else if (control.type == GUI_CONTROL_LISTVIEW) // It was ensured at an earlier stage that union_lv_attrib != NULL.
 			free(control.union_lv_attrib);
+		control.jump_to_label = NULL; // Release any user-defined object/BoundFunc used as a g-label.
 	}
 	HICON icon_eligible_for_destruction = gui.mIconEligibleForDestruction;
 	HICON icon_eligible_for_destruction_small = gui.mIconEligibleForDestructionSmall;
