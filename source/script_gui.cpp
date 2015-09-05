@@ -494,7 +494,7 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		if (*aParam2)
 		{
 			GuiIndexType control_index = gui.FindControl(aParam2); // Search on either the control's variable name or its ClassNN.
-			if (control_index != -1) // Must compare directly to -1 due to unsigned.
+			if (control_index < gui.mControlCount)
 			{
 				GuiControlType &control = gui.mControl[control_index]; // For maintainability, and might slightly reduce code size.
 				if (gui_command == GUI_CMD_LISTVIEW)
@@ -7406,7 +7406,7 @@ GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 	{
 		// v1.1.04: Allow Gui controls to be referenced by HWND.  There is some risk of breaking
 		// scripts, but only if the text of one control contains the HWND of another control.
-		u = (GuiIndexType)FindControl((HWND)ATOI64(aControlID), true);
+		u = FindControlIndex((HWND)ATOI64(aControlID));
 		if (u < mControlCount)
 			return u;
 		// Otherwise: no match was found, so fall back to considering it as text.
@@ -7441,11 +7441,7 @@ GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 	}
 	// Otherwise: No match found, so fall back to standard control class and/or text finding method.
 	HWND control_hwnd = ControlExist(mHwnd, aControlID);
-	u = (GuiIndexType)FindControl(control_hwnd, true);
-	if (u < mControlCount)
-		return u;  // Match found.
-	// Otherwise: No match found.
-	return -1;
+	return FindControlIndex(control_hwnd);
 }
 
 

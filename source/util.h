@@ -65,8 +65,8 @@ EXTERN_G;  // For ITOA() and related functions' use of g->FormatIntAsHex
 // v1.0.43.04: The following are macros to avoid crash bugs caused by improper casting, namely a failure to cast
 // a signed char to UCHAR before promoting it to LPSTR, which crashes since CharLower/Upper would interpret
 // such a high unsigned value as an address rather than a single char.
-#define ltolower(ch) (TBYTE)CharLower((LPTSTR)(TBYTE)(ch))  // "L" prefix stands for "locale", like lstrcpy.
-#define ltoupper(ch) (TBYTE)CharUpper((LPTSTR)(TBYTE)(ch))  // For performance, some callers don't want return value cast to char.
+#define ltolower(ch) (TBYTE)(UINT_PTR)CharLower((LPTSTR)(TBYTE)(ch))  // "L" prefix stands for "locale", like lstrcpy.
+#define ltoupper(ch) (TBYTE)(UINT_PTR)CharUpper((LPTSTR)(TBYTE)(ch))  // For performance, some callers don't want return value cast to char.
 
 
 // Locale independent ctype (applied to the ASCII characters only)

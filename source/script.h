@@ -2726,7 +2726,7 @@ public:
 	static GuiType *ValidGui(GuiType *&aGuiRef); // Updates aGuiRef if it points to a destroyed Gui.
 
 	GuiIndexType FindControl(LPTSTR aControlID);
-	GuiControlType *FindControl(HWND aHwnd, bool aRetrieveIndexInstead = false)
+	GuiIndexType FindControlIndex(HWND aHwnd)
 	{
 		GuiIndexType index = GUI_HWND_TO_INDEX(aHwnd); // Retrieves a small negative on failure, which will be out of bounds when converted to unsigned.
 		if (index >= mControlCount) // Not found yet; try again with parent.
@@ -2738,10 +2738,16 @@ public:
 				index = GUI_HWND_TO_INDEX(aHwnd); // Retrieves a small negative on failure, which will be out of bounds when converted to unsigned.
 		}
 		if (index < mControlCount && mControl[index].hwnd == aHwnd) // A match was found.  Fix for v1.1.09.03: Confirm it is actually one of our controls.
-			return aRetrieveIndexInstead ? (GuiControlType *)(size_t)index : mControl + index;
+			return index;
 		else // No match, so indicate failure.
-			return aRetrieveIndexInstead ? (GuiControlType *)NO_CONTROL_INDEX : NULL;
+			return NO_CONTROL_INDEX;
 	}
+	GuiControlType *FindControl(HWND aHwnd)
+	{
+		GuiIndexType index = FindControlIndex(aHwnd);
+		return index == NO_CONTROL_INDEX ? NULL : mControl + index;
+	}
+
 	int FindGroup(GuiIndexType aControlIndex, GuiIndexType &aGroupStart, GuiIndexType &aGroupEnd);
 
 	ResultType SetCurrentFont(LPTSTR aOptions, LPTSTR aFontName);

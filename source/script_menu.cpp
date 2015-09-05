@@ -1578,7 +1578,7 @@ BOOL UserMenu::OwnerMeasureItem(LPMEASUREITEMSTRUCT aParam)
 {
 	UserMenuItem *menu_item = g_script.FindMenuItemByID(aParam->itemID);
 	if (!menu_item) // L26: Check if the menu item is one with a submenu.
-		menu_item = g_script.FindMenuItemBySubmenu((HMENU)aParam->itemID);
+		menu_item = g_script.FindMenuItemBySubmenu((HMENU)(UINT_PTR)aParam->itemID); // Extra cast avoids warning C4312.
 
 	if (!menu_item || !menu_item->mIcon)
 		return FALSE;
@@ -1606,7 +1606,7 @@ BOOL UserMenu::OwnerDrawItem(LPDRAWITEMSTRUCT aParam)
 {
 	UserMenuItem *menu_item = g_script.FindMenuItemByID(aParam->itemID);
 	if (!menu_item) // L26: Check if the menu item is one with a submenu.
-		menu_item = g_script.FindMenuItemBySubmenu((HMENU)aParam->itemID);
+		menu_item = g_script.FindMenuItemBySubmenu((HMENU)(UINT_PTR)aParam->itemID); // Extra cast avoids warning C4312.
 
 	if (!menu_item || !menu_item->mIcon)
 		return FALSE;

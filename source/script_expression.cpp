@@ -922,7 +922,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				if (right_int64 < 0 || right_int64 > UINT_MAX)
 					this_token.value_int64 = ~right_int64;
 				else // See comments at TRANS_CMD_BITNOT for why it's done this way:
-					this_token.value_int64 = (size_t)~(DWORD)right_int64; // Casting this way avoids compiler warning.
+					this_token.value_int64 = (size_t)(DWORD)~(DWORD)right_int64; // Casting this way avoids compiler warning.
 			}
 			else // SYM_DEREF
 			{

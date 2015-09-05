@@ -830,7 +830,7 @@ public:
 		}
 		else
 		{
-			mType = (VarTypeType)aType;
+			mType = (VarTypeType)(UINT_PTR)aType;
 			mByteCapacity = 0; // This also initializes mBIV within the same union.
 			if (mType != VAR_NORMAL)
 				mAttrib = 0; // Any vars that aren't VAR_NORMAL are considered initialized, by definition.

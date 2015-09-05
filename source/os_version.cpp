@@ -30,6 +30,7 @@
 
 #include "os_version.h"
 
+#pragma warning(disable: 4996) // Ignore GetVersionEx deprecation.
 
 /*
 OSVERSIONINFO structure details
