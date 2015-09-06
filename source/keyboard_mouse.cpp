@@ -2981,10 +2981,10 @@ ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue)
 		return starting_state;
 	if (starting_state == aToggleValue) // It's already in the desired state, so just return the state.
 		return starting_state;
-	if (aVK == VK_NUMLOCK)
+	//if (aVK == VK_NUMLOCK) // v1.1.22.05: This also applies to CapsLock and ScrollLock.
 	{
 #ifdef CONFIG_WIN9X
-		if (g_os.IsWin9x())
+		if (g_os.IsWin9x() && aVK == VK_NUMLOCK)
 		{
 			// For Win9x, we want to set the state unconditionally to be sure it's right.  This is because
 			// the retrieval of the Capslock state, for example, is unreliable, at least under Win98se
@@ -2996,12 +2996,24 @@ ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue)
 		}
 #endif
 		// Otherwise, NT/2k/XP:
+		// If the key is being held down, sending a KEYDOWNANDUP won't change its toggle
+		// state unless the key is "released" first.  This has been confirmed for NumLock,
+		// CapsLock and ScrollLock on Windows 2000 (in a VM) and Windows 10.
+		// Examples where problems previously occurred:
+		//   ~CapsLock & x::Send abc  ; Produced "ABC"
+		//   ~CapsLock::Send abc  ; Alternated between "abc" and "ABC", even without {Blind}
+		//   ~ScrollLock::SetScrollLockState Off  ; Failed to change state
+		// The behaviour can still be observed by sending the keystrokes manually:
+		//   ~NumLock::Send {NumLock}  ; No effect
+		//   ~NumLock::Send {NumLock up}{NumLock}  ; OK
+		// OLD COMMENTS:
 		// Sending an extra up-event first seems to prevent the problem where the Numlock
 		// key's indicator light doesn't change to reflect its true state (and maybe its
 		// true state doesn't change either).  This problem tends to happen when the key
 		// is pressed while the hook is forcing it to be either ON or OFF (or it suppresses
 		// it because it's a hotkey).  Needs more testing on diff. keyboards & OSes:
-		KeyEvent(KEYUP, aVK);
+		if (IsKeyDown2kXP(aVK))
+			KeyEvent(KEYUP, aVK);
 	}
 	// Since it's not already in the desired state, toggle it:
 	KeyEvent(KEYDOWNANDUP, aVK);
