@@ -6790,6 +6790,11 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 	case SW_SHOWNORMAL:
 	case SW_MAXIMIZE:
 	case SW_RESTORE:
+		if (GetAncestor(mHwnd, GA_ROOT) != mHwnd) // It's a child window, perhaps due to the +Parent option.
+			// Since this is a child window, SetForegroundWindowEx will fail and fall back to the "two-alts"
+			// method of forcing activation, which causes some messages to be discarded due to the temporary
+			// modal menu loop.  So don't even try it.
+			break;
 		if (mHwnd != GetForegroundWindow())
 			SetForegroundWindowEx(mHwnd);   // In the above modes, try to force it to the foreground as documented.
 		if (mFirstActivation)
