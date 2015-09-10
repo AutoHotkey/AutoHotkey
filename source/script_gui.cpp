@@ -8479,6 +8479,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			break;
 		if (text_color_was_changed = (pcontrol->type != GUI_CONTROL_PIC && pcontrol->union_color != CLR_DEFAULT))
 			SetTextColor((HDC)wParam, pcontrol->union_color);
+		else
+			// Always set a text color in case a brush will be returned below.  If this isn't done and
+			// a brush is returned, the system will use whatever color was set before; probably black.
+			SetTextColor((HDC)wParam, GetSysColor(COLOR_WINDOWTEXT));
 
 		if (pcontrol->attrib & GUI_CONTROL_ATTRIB_BACKGROUND_TRANS)
 		{
