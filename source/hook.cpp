@@ -457,12 +457,12 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	// the notch count from pKeyHistoryCurr->sc.
 	if (aVK == VK_PACKET) // Win2k/XP: VK_PACKET is used to send Unicode characters as if they were keystrokes.  sc is a 16-bit character code in that case.
 	{
-		pKeyHistoryCurr->sc = (sc_type)((PKBDLLHOOKSTRUCT)lParam)->scanCode;
+		pKeyHistoryCurr->sc = aSC = (sc_type)((PKBDLLHOOKSTRUCT)lParam)->scanCode; // Get the full value; aSC was truncated by the caller.
 		pKeyHistoryCurr->event_type = 'U'; // Give it a unique identifier even though it can be distinguished by the 4-digit "SC".  'U' vs 'u' to avoid confusion with 'u'=up.
-		// Artificial character input via VK_PACKET isn't supported by hotkeys, hotstrings or Input and
-		// probably shouldn't do anything, so just return now to avoid confusing aSC for a real scancode.
-		//aSC = 0;
-		return 0;
+		// Artificial character input via VK_PACKET isn't supported by hotkeys, since they always work via
+		// keycode, but hotstrings and Input are supported via the macro below when #InputLevel is non-zero.
+		// Must return now to avoid misinterpreting aSC as an actual scancode in the code below.
+		return AllowKeyToGoToSystem;
 	}
 	//else: Use usual modified value.
 	pKeyHistoryCurr->sc = aSC; // Will be zero if our caller is the mouse hook (except for wheel notch count).
@@ -2538,7 +2538,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	bool do_input = g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && aIsIgnored);
 
 	UCHAR end_key_attributes;
-	if (do_input)
+	if (do_input && aVK != VK_PACKET)
 	{
 		end_key_attributes = g_input.EndVK[aVK];
 		if (!end_key_attributes)
@@ -2657,6 +2657,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	}
 
 
+	int char_count;
 	TBYTE ch[3];
 	BYTE key_state[256];
 	memcpy(key_state, g_PhysicalKeyState, 256);
@@ -2674,9 +2675,24 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// with more keyboard layouts under 2k/XP than ToAscii() does (though if true, there is no MSDN explanation). 
 	// UPDATE: In v1.0.44.03, need to use ToAsciiEx() anyway because of the adapt-to-active-window-layout feature.
 	Get_active_window_keybd_layout // Defines the variables active_window and active_window_keybd_layout for use below.
-	int char_count = ToUnicodeOrAsciiEx(aVK, aEvent.scanCode  // Uses the original scan code, not the adjusted "sc" one.
-		, key_state, ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
-	if (!char_count) // No translation for this key.
+
+	if (aVK == VK_PACKET)
+	{
+		// VK_PACKET corresponds to a SendInput event with the KEYEVENTF_UNICODE flag.
+#ifdef UNICODE
+		char_count = 1; // SendInput only supports a single 16-bit character code.
+		ch[0] = (TBYTE)aSC; // No translation needed.
+#else
+		// Convert the Unicode character to ANSI, dropping any that can't be converted.
+		char_count = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (WCHAR *)&aSC, 1, (CHAR *)ch, _countof(ch), NULL, NULL);
+#endif
+	}
+	else
+	{
+		char_count = ToUnicodeOrAsciiEx(aVK, aEvent.scanCode  // Uses the original scan code, not the adjusted "sc" one.
+			, key_state, ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
+	}
+	if (!char_count) // No translation for this key (or for VK_PACKET, this character).
 		return treat_as_visible;
 
 	// More notes about dead keys: The dead key behavior of Enter/Space/Backspace is already properly
