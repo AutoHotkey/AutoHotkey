@@ -45,7 +45,11 @@ BIF_DECL(BIF_ComObjCreate)
 			
 			// Return dispatchable object.
 			if ( !(aResultToken.object = new ComObject(pdisp)) )
-				_f_throw(ERR_OUTOFMEM);
+			{
+				pdisp->Release();
+				hr = E_OUTOFMEMORY;
+				break;
+			}
 			aResultToken.symbol = SYM_OBJECT;
 		}
 		return;
@@ -67,8 +71,8 @@ BIF_DECL(BIF_ComObjGet)
 			aResultToken.symbol = SYM_OBJECT;
 			return;
 		}
+		hr = E_OUTOFMEMORY;
 		pdisp->Release();
-		_f_throw(ERR_OUTOFMEM);
 	}
 	_f_set_retval_p(_T(""), 0);
 	ComError(hr, aResultToken);
@@ -171,17 +175,14 @@ BIF_DECL(BIF_ComObjActive)
 				{
 					aResultToken.symbol = SYM_OBJECT;
 					aResultToken.object = obj;
+					return;
 				}
-				else
-				{
-					pdisp->Release();
-					_f_throw(ERR_OUTOFMEM);
-				}
+				hr = E_OUTOFMEMORY;
+				pdisp->Release();
 			}
 		}
 	}
-	if (FAILED(hr))
-		ComError(hr, aResultToken);
+	ComError(hr, aResultToken);
 }
 
 
@@ -450,7 +451,8 @@ BIF_DECL(BIF_ComObjArray)
 	VARTYPE vt = (VARTYPE)TokenToInt64(*aParam[0]);
 	SAFEARRAYBOUND bound[8]; // Same limit as ComObject::SafeArrayInvoke().
 	int dims = aParamCount - 1;
-	ASSERT(dims <= _countof(bound)); // Prior validation should ensure aParamCount-1 never exceeds 8.
+	if (dims > _countof(bound)) // Possible only for dynamic function calls.
+		dims = _countof(bound);
 	for (int i = 0; i < dims; ++i)
 	{
 		bound[i].cElements = (ULONG)TokenToInt64(*aParam[i + 1]);
