@@ -1075,7 +1075,7 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ResultToken &aResultToken, ExprTo
 		if ((mVarType & VT_ARRAY) // Not meaningful for SafeArrays.
 			|| IS_INVOKE_SET) // Wouldn't be handled correctly below and probably has no real-world use.
 		{
-			ComError(g->LastError = hr, aResultToken);
+			ComError(hr, aResultToken);
 			return aResultToken.Result();
 		}
 	}
@@ -1085,7 +1085,6 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ResultToken &aResultToken, ExprTo
 		if (mVarType & VT_ARRAY)
 			return SafeArrayInvoke(aResultToken, aFlags, aParam, aParamCount);
 		// Otherwise: this object can't be invoked.
-		g->LastError = DISP_E_BADVARTYPE; // Seems more informative than -1.
 		ComError(-1, aResultToken);
 		return aResultToken.Result();
 	}
@@ -1208,7 +1207,6 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ResultToken &aResultToken, ExprTo
 		VariantToToken(varResult, aResultToken, false);
 	}
 
-	g->LastError = hr;
 	return	aResultToken.Result();
 }
 
@@ -1252,7 +1250,6 @@ ResultType ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aFlags, Exp
 				aResultToken.value_int64 = retval;
 			}
 		}
-		g->LastError = hr;
 		if (FAILED(hr))
 			ComError(hr, aResultToken);
 		return aResultToken.Result();
@@ -1263,7 +1260,7 @@ ResultType ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aFlags, Exp
 	// Verify correct number of parameters/dimensions (maximum 8).
 	if (dims > _countof(index) || dims != (IS_INVOKE_SET ? aParamCount - 1 : aParamCount))
 	{
-		g->LastError = DISP_E_BADPARAMCOUNT;
+		ComError(DISP_E_BADPARAMCOUNT, aResultToken);
 		return OK;
 	}
 	// Build array of indices from parameters.
@@ -1271,7 +1268,7 @@ ResultType ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aFlags, Exp
 	{
 		if (!TokenIsNumeric(*aParam[i]))
 		{
-			g->LastError = E_INVALIDARG;
+			ComError(DISP_E_BADINDEX, aResultToken);
 			return OK;
 		}
 		index[i] = (LONG)TokenToInt64(*aParam[i]);
@@ -1300,7 +1297,6 @@ ResultType ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aFlags, Exp
 
 	SafeArrayUnlock(psa);
 
-	g->LastError = hr;
 	if (FAILED(hr))
 		ComError(hr, aResultToken);
 	return aResultToken.Result();
