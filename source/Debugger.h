@@ -1,4 +1,4 @@
-/*
+﻿/*
 Debugger.h
 
 Original code by Steve Gray.

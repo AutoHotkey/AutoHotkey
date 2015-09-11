@@ -1,4 +1,4 @@
-/*
+ï»¿/*
 AutoHotkey
 
 Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
@@ -1393,7 +1393,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		// to support automatic "include once" behavior.  So just ignore repeats:
 		if (!aAllowDuplicateInclude)
 			for (int f = 0; f < source_file_index; ++f) // Here, source_file_index==Line::sSourceFileCount
-				if (!lstrcmpi(Line::sSourceFile[f], full_path)) // Case insensitive like the file system (testing shows that "Ä" == "ä" in the NTFS, which is hopefully how lstrcmpi works regardless of locale).
+				if (!lstrcmpi(Line::sSourceFile[f], full_path)) // Case insensitive like the file system (testing shows that "Ã„" == "Ã¤" in the NTFS, which is hopefully how lstrcmpi works regardless of locale).
 					return OK;
 		// The file is added to the list further below, after the file has been opened, in case the
 		// opening fails and aIgnoreLoadFailure==true.
@@ -1451,12 +1451,12 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	HGLOBAL hResData;
 
 #ifdef _DEBUG
-	if (hRes = FindResource(NULL, _T("AHK"), MAKEINTRESOURCE(RT_RCDATA)))
+	if (hRes = FindResource(NULL, _T("AHK"), RT_RCDATA))
 #else
-	if (hRes = FindResource(NULL, _T(">AUTOHOTKEY SCRIPT<"), MAKEINTRESOURCE(RT_RCDATA)))
+	if (hRes = FindResource(NULL, _T(">AUTOHOTKEY SCRIPT<"), RT_RCDATA))
 #endif
 	{}
-	else if (hRes = FindResource(NULL, _T(">AHK WITH ICON<"), MAKEINTRESOURCE(RT_RCDATA)))
+	else if (hRes = FindResource(NULL, _T(">AHK WITH ICON<"), RT_RCDATA))
 	{}
 	
 	if ( !( hRes 
@@ -2359,7 +2359,7 @@ examine_line:
 					&& (remap_dest_vk = hotkey_flag[1] ? TextToVK(cp = Hotkey::TextToModifiers(hotkey_flag, NULL)) : 0xFF)   ) // And the action appears to be a remap destination rather than a command.
 					// For above:
 					// Fix for v1.0.44.07: Set remap_dest_vk to 0xFF if hotkey_flag's length is only 1 because:
-					// 1) It allows a destination key that doesn't exist in the keyboard layout (such as 6::ð in
+					// 1) It allows a destination key that doesn't exist in the keyboard layout (such as 6::Ã° in
 					//    English).
 					// 2) It improves performance a little by not calling TextToVK except when the destination key
 					//    might be a mouse button or some longer key name whose actual/correct VK value is relied
@@ -2581,11 +2581,11 @@ examine_line:
 				// v1.0.44.03: Don't allow anything that ends in "::" (other than a line consisting only
 				// of "::") to be a normal label.  Assume it's a command instead (if it actually isn't, a
 				// later stage will report it as "invalid hotkey"). This change avoids the situation in
-				// which a hotkey like ^!ä:: is seen as invalid because the current keyboard layout doesn't
-				// have a "ä" key. Without this change, if such a hotkey appears at the top of the script,
+				// which a hotkey like ^!Ã¤:: is seen as invalid because the current keyboard layout doesn't
+				// have a "Ã¤" key. Without this change, if such a hotkey appears at the top of the script,
 				// its subroutine would execute immediately as a normal label, which would be especially
 				// bad if the hotkey were something like the "Shutdown" command.
-				// Update: Hotkeys with single-character names like ^!ä are now handled earlier, so that
+				// Update: Hotkeys with single-character names like ^!Ã¤ are now handled earlier, so that
 				// anything else with double-colon can be detected as an error.  The checks above prevent
 				// something like foo:: from being interpreted as a generic label, so when the line fails
 				// to resolve to a command or expression, an error message will be shown.
@@ -6280,6 +6280,9 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		// Above has ensured that param_start now points to the next parameter, or ')' if none.
 	} // for() each formal parameter.
 
+	if (param_start[1]) // Something follows the ')' other than OTB (which was handled at an earlier stage).
+		return ScriptError(ERR_INVALID_FUNCDECL, aBuf);
+
 	if (param_count)
 	{
 		// Allocate memory only for the actual number of parameters actually present.
@@ -6578,7 +6581,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 
 		// Append "ClassNameOrThis.VarName := Initializer, " to the buffer.
 		int chars_written = _sntprintf(buf + buf_used, _countof(buf) - buf_used, _T("ObjRawSet(%s,\"%.*s\",(%.*s)), ")
-			, aStatic ? mClassName : _T("this"), name_length, item, item_end - right_side_of_operator, right_side_of_operator);
+			, aStatic ? mClassName : _T("this"), (int)name_length, item, (int)(item_end - right_side_of_operator), right_side_of_operator);
 		if (chars_written < 0)
 			return ScriptError(_T("Declaration too long.")); // Short message since should be rare.
 		buf_used += chars_written;
@@ -8146,7 +8149,7 @@ ResultType Script::PreparseStaticLines(Line *aStartingLine)
 		{
 		case ACT_STATIC:
 			// Override mActionType so ACT_STATIC doesn't have to be handled at runtime:
-			line->mActionType = (ActionTypeType)line->mAttribute;
+			line->mActionType = (ActionTypeType)(UINT_PTR)line->mAttribute;
 			// Add this line to the list of static initializers, which will be inserted above
 			// the auto-execute section later.  The main line list will be corrected below.
 			line->mPrevLine = mLastStaticLine;
@@ -12241,7 +12244,7 @@ ResultType Line::Perform()
 		return EnvGet(ARG2);
 
 	case ACT_ENVSET:
-		// MSDN: "If [the 2nd] parameter is NULL, the variable is deleted from the current process’s environment."
+		// MSDN: "If [the 2nd] parameter is NULL, the variable is deleted from the current processâ€™s environment."
 		// My: Though it seems okay, for now, just to set it to be blank if the user omitted the 2nd param or
 		// left it blank (AutoIt3 does this too).  Also, no checking is currently done to ensure that ARG2
 		// isn't longer than 32K, since future OSes may support longer env. vars.  SetEnvironmentVariable()

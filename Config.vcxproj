@@ -23,7 +23,7 @@
     
     <!-- global setting -->
     <WholeProgramOptimization Condition="!$(ConfigDebug)">true</WholeProgramOptimization>
-	<GenerateManifest>false</GenerateManifest>
+    <GenerateManifest>false</GenerateManifest>
     
   </PropertyGroup>
   <ItemDefinitionGroup>
@@ -95,6 +95,22 @@
     </Link>
   </ItemDefinitionGroup>
   
+  <!--
+    VC++ 2010, 2012, 2013 and 2015 all default to v100 toolset.  v100 produces smaller
+    x86 (but not x64) binaries than v140 and is easier to target Win2k with, so use it
+    if present.  Otherwise, try to fall back to an appropriate toolset.  Note that if
+    VC++ Express 2010 is installed, there might be x86 compilers but no x64.
+  -->
+  <PropertyGroup Condition="'$(PlatformToolset)' == '' and '$(VCTargetsPath10)' != '' and !Exists('$(VCTargetsPath10)\Platforms\$(Platform)\Microsoft.Cpp.$(Platform).Targets')">
+    <PlatformToolset Condition="Exists('$(VCTargetsPath11)')">v110</PlatformToolset>
+    <PlatformToolset Condition="Exists('$(VCTargetsPath12)')">v120</PlatformToolset>
+    <PlatformToolset Condition="Exists('$(VCTargetsPath14)')">v140</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!-- Disable the upgrade prompt when first opening the project. -->
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+
   <!-- import compiler and platform defaults -->
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />

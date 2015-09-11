@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #define TEXT_IO_BLOCK	8192
 

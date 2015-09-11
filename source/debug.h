@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // This file debugging defines some macros like MFC does.
 
 #ifndef TRACE

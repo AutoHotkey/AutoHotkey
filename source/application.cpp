@@ -1,4 +1,4 @@
-/*
+﻿/*
 AutoHotkey
 
 Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
@@ -1825,7 +1825,7 @@ bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awPa
 			pgui->AddRef(); //
 			g->GuiWindow = pgui;  // Update the built-in variable A_GUI.
 			g->GuiDefaultWindow = pgui; // Consider this a GUI thread; so it defaults to operating upon its own window.
-			GuiIndexType control_index = (GuiIndexType)(size_t)pgui->FindControl(aWnd, true); // v1.0.44.03: Call FindControl() vs. GUI_HWND_TO_INDEX so that a combobox's edit control is properly resolved to the combobox itself.
+			GuiIndexType control_index = pgui->FindControlIndex(aWnd); // v1.0.44.03: Call FindControlIndex() vs. GUI_HWND_TO_INDEX so that a combobox's edit control is properly resolved to the combobox itself.
 			if (control_index < pgui->mControlCount) // Match found (relies on unsigned for out-of-bounds detection).
 				g->GuiControlIndex = control_index;
 			//else leave it at its default, which was set when the new thread was initialized.

@@ -1,4 +1,4 @@
-/* This file is part of KuShellExtension
+﻿/* This file is part of KuShellExtension
  * Copyright (C) 2008-2009 Kai-Chieh Ku (kjackie@gmail.com)
  *
  * This program is free software; you can redistribute it and/or

@@ -1,4 +1,4 @@
-/*
+﻿/*
  *    Stack-less Just-In-Time compiler
  *
  *    Copyright 2009-2012 Zoltan Herczeg (hzmester@freemail.hu). All rights reserved.

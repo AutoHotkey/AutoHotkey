@@ -1,4 +1,4 @@
-/*
+Ôªø/*
 AutoHotkey
 
 Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
@@ -452,12 +452,12 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	// the notch count from pKeyHistoryCurr->sc.
 	if (aVK == VK_PACKET) // Win2k/XP: VK_PACKET is used to send Unicode characters as if they were keystrokes.  sc is a 16-bit character code in that case.
 	{
-		pKeyHistoryCurr->sc = (sc_type)((PKBDLLHOOKSTRUCT)lParam)->scanCode;
+		pKeyHistoryCurr->sc = aSC = (sc_type)((PKBDLLHOOKSTRUCT)lParam)->scanCode; // Get the full value; aSC was truncated by the caller.
 		pKeyHistoryCurr->event_type = 'U'; // Give it a unique identifier even though it can be distinguished by the 4-digit "SC".  'U' vs 'u' to avoid confusion with 'u'=up.
-		// Artificial character input via VK_PACKET isn't supported by hotkeys, hotstrings or Input and
-		// probably shouldn't do anything, so just return now to avoid confusing aSC for a real scancode.
-		//aSC = 0;
-		return 0;
+		// Artificial character input via VK_PACKET isn't supported by hotkeys, since they always work via
+		// keycode, but hotstrings and Input are supported via the macro below when #InputLevel is non-zero.
+		// Must return now to avoid misinterpreting aSC as an actual scancode in the code below.
+		return AllowKeyToGoToSystem;
 	}
 	//else: Use usual modified value.
 	pKeyHistoryCurr->sc = aSC; // Will be zero if our caller is the mouse hook (except for wheel notch count).
@@ -2533,7 +2533,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	bool do_input = g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && aIsIgnored);
 
 	UCHAR end_key_attributes;
-	if (do_input)
+	if (do_input && aVK != VK_PACKET)
 	{
 		end_key_attributes = g_input.EndVK[aVK];
 		if (!end_key_attributes)
@@ -2652,6 +2652,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	}
 
 
+	int char_count;
 	TBYTE ch[3];
 	BYTE key_state[256];
 	memcpy(key_state, g_PhysicalKeyState, 256);
@@ -2669,9 +2670,24 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// with more keyboard layouts under 2k/XP than ToAscii() does (though if true, there is no MSDN explanation). 
 	// UPDATE: In v1.0.44.03, need to use ToAsciiEx() anyway because of the adapt-to-active-window-layout feature.
 	Get_active_window_keybd_layout // Defines the variables active_window and active_window_keybd_layout for use below.
-	int char_count = ToUnicodeOrAsciiEx(aVK, aEvent.scanCode  // Uses the original scan code, not the adjusted "sc" one.
-		, key_state, ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
-	if (!char_count) // No translation for this key.
+
+	if (aVK == VK_PACKET)
+	{
+		// VK_PACKET corresponds to a SendInput event with the KEYEVENTF_UNICODE flag.
+#ifdef UNICODE
+		char_count = 1; // SendInput only supports a single 16-bit character code.
+		ch[0] = (TBYTE)aSC; // No translation needed.
+#else
+		// Convert the Unicode character to ANSI, dropping any that can't be converted.
+		char_count = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (WCHAR *)&aSC, 1, (CHAR *)ch, _countof(ch), NULL, NULL);
+#endif
+	}
+	else
+	{
+		char_count = ToUnicodeOrAsciiEx(aVK, aEvent.scanCode  // Uses the original scan code, not the adjusted "sc" one.
+			, key_state, ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
+	}
+	if (!char_count) // No translation for this key (or for VK_PACKET, this character).
 		return treat_as_visible;
 
 	// More notes about dead keys: The dead key behavior of Enter/Space/Backspace is already properly
@@ -2696,7 +2712,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// (for which the dead key is pending): ToAsciiEx() consumes previous/pending dead key, which causes the
 	// active window's call of ToAsciiEx() to fail to see a dead key. So unless the program reinserts the dead key
 	// after the call to ToAsciiEx() but before allowing the dead key's successor key to pass through to the
-	// active window, that window would see a non-diacritic like "u" instead of ˚.  In other words, the program
+	// active window, that window would see a non-diacritic like "u" instead of √ª.  In other words, the program
 	// "uses up" the dead key to populate its own hotstring buffer, depriving the active window of the dead key.
 	//
 	// JAVA ISSUE: Hotstrings are known to disrupt dead keys in Java apps on some systems (though not my XP one).
@@ -2835,7 +2851,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				}
 				else // case insensitive
 					// v1.0.43.03: Using CharLower vs. tolower seems the best default behavior (even though slower)
-					// so that languages in which the higher ANSI characters are common will see "ƒ" == "‰", etc.
+					// so that languages in which the higher ANSI characters are common will see "√Ñ" == "√§", etc.
 					for (; cphs >= hs.mString; --cpbuf, --cphs)
 						if (ltolower(*cpbuf) != ltolower(*cphs)) // v1.0.43.04: Fixed crash by properly casting to UCHAR (via macro).
 							break;
@@ -3047,9 +3063,9 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// dead key reinserted below, which in turn would cause the hotstring's first backspace to fire
 	// the dead key (which kills the backspace, turning it into the dead key character itself).
 	// For example:
-	// :*:js·::jsmith@somedomain.com
+	// :*:js√°::jsmith@somedomain.com
 	// On the Spanish (Mexico) keyboard layout, one would type accent (English left bracket) followed by
-	// the letter "a" to produce ·.
+	// the letter "a" to produce √°.
 	if (dead_key_sequence_complete)
 	{
 		vk_type vk_to_send = sPendingDeadKeyVK; // To facilitate early reset below.

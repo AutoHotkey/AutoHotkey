@@ -1,4 +1,4 @@
-/*
+﻿/*
 AutoHotkey
 
 Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
@@ -1657,7 +1657,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 		// Subtract 1 because of that nagging doubt about size vs. length. Some MSDN examples subtract one,
 		// such as TabCtrl_GetItem()'s cchTextMax:
 		local_lvi.i32.cchTextMax = LV_REMOTE_BUF_SIZE - 1; // Note that LVM_GETITEM doesn't update this member to reflect the new length.
-		local_lvi.i32.pszText = (UINT)p_remote_text; 
+		local_lvi.i32.pszText = (UINT)(UINT_PTR)p_remote_text; // Extra cast avoids a truncation warning (C4311).
 	}
 
 	LRESULT i, next, length, total_length;
@@ -8153,7 +8153,7 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	HRSRC res;
 	HGLOBAL res_load;
 	LPVOID res_lock;
-	if ( (res = FindResource(NULL, source, MAKEINTRESOURCE(RT_RCDATA)))
+	if ( (res = FindResource(NULL, source, RT_RCDATA))
 	  && (res_load = LoadResource(NULL, res))
 	  && (res_lock = LockResource(res_load))  )
 	{
@@ -10398,7 +10398,7 @@ VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
 		break;
 	case '\0': // A_Gui
 		if (!*g->GuiWindow->mName) // v1.1.04: Anonymous GUI.
-			return _stprintf(target_buf, _T("0x%Ix"), g->GuiWindow->mHwnd);
+			return _stprintf(target_buf, _T("0x%Ix"), (UINT_PTR)g->GuiWindow->mHwnd);
 		if (aBuf)
 			_tcscpy(aBuf, g->GuiWindow->mName);
 		return _tcslen(g->GuiWindow->mName);

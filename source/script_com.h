@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 
 extern bool g_ComErrorNotify;

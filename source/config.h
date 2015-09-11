@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // This file defines some macros for compile-time configurations.
 // (Like many projects on *nix that using autotools.)
 

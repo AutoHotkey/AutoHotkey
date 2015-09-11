@@ -1,4 +1,4 @@
-/*
+﻿/*
 AutoHotkey
 
 Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
@@ -197,6 +197,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_DOT _T("Ambiguous or invalid use of \".\"")
 #define ERR_UNQUOTED_NON_ALNUM _T("Unquoted literals may only consist of alphanumeric characters/underscore.")
 #define ERR_DUPLICATE_DECLARATION _T("Duplicate declaration.")
+#define ERR_INVALID_FUNCDECL _T("Invalid function declaration.")
 #define ERR_INVALID_CLASS_VAR _T("Invalid class variable declaration.")
 #define ERR_INVALID_LINE_IN_CLASS_DEF _T("Not a valid method, class or property definition.")
 #define ERR_INVALID_LINE_IN_PROPERTY_DEF _T("Not a valid property getter/setter.")
@@ -2571,7 +2572,7 @@ public:
 	static GuiType *ValidGui(GuiType *&aGuiRef); // Updates aGuiRef if it points to a destroyed Gui.
 
 	GuiIndexType FindControl(LPTSTR aControlID);
-	GuiControlType *FindControl(HWND aHwnd, bool aRetrieveIndexInstead = false)
+	GuiIndexType FindControlIndex(HWND aHwnd)
 	{
 		GuiIndexType index = GUI_HWND_TO_INDEX(aHwnd); // Retrieves a small negative on failure, which will be out of bounds when converted to unsigned.
 		if (index >= mControlCount) // Not found yet; try again with parent.
@@ -2583,10 +2584,16 @@ public:
 				index = GUI_HWND_TO_INDEX(aHwnd); // Retrieves a small negative on failure, which will be out of bounds when converted to unsigned.
 		}
 		if (index < mControlCount && mControl[index].hwnd == aHwnd) // A match was found.  Fix for v1.1.09.03: Confirm it is actually one of our controls.
-			return aRetrieveIndexInstead ? (GuiControlType *)(size_t)index : mControl + index;
+			return index;
 		else // No match, so indicate failure.
-			return aRetrieveIndexInstead ? (GuiControlType *)NO_CONTROL_INDEX : NULL;
+			return NO_CONTROL_INDEX;
 	}
+	GuiControlType *FindControl(HWND aHwnd)
+	{
+		GuiIndexType index = FindControlIndex(aHwnd);
+		return index == NO_CONTROL_INDEX ? NULL : mControl + index;
+	}
+
 	int FindGroup(GuiIndexType aControlIndex, GuiIndexType &aGroupStart, GuiIndexType &aGroupEnd);
 
 	ResultType SetCurrentFont(LPTSTR aOptions, LPTSTR aFontName);

@@ -9,18 +9,18 @@ http://ahkscript.org/
 
 ## How to Compile ##
 
-AutoHotkey_L is developed with [Microsoft Visual C++ 2010 Express](http://www.microsoft.com/visualstudio/en-us/products/2010-editions/visual-cpp-express), which is a free download from Microsoft.
+AutoHotkey is developed with [Microsoft Visual Studio Community 2015 Express](https://www.visualstudio.com/products/visual-studio-community-vs), which is a free download from Microsoft.
 
   - Get the source code.
-  - Open AutoHotkeyx.sln in VC++ 2010 Express.
+  - Open AutoHotkeyx.sln in Visual Studio.
   - Select the appropriate Build and Platform.
   - Build.
 
-Windows 7.1 SDK may be required for x64 builds.  Installing the SDK compilers and Visual Studio 2010 SP1 together can prove difficult; see [KB2519277](http://support.microsoft.com/kb/2519277) for the solution.
+The project is configured to build with the Visual C++ 2010 toolset if available, primarily to facilitate Windows 2000 support but also because it appears to produce smaller 32-bit binaries than later versions. If the 2010 toolset is not available for a given platform, the project should automatically fall back to v140 (2015), v120 (2013) or v110 (2012).
 
-Visual Studio 2010 or MSBuild in the Windows 7.1 SDK (with Visual C++ 2010 compilers installed) should also work.
+Note that the fallback toolsets do not support targetting Windows XP. For that, install VS 2010 or change the platform toolset to v110_xp, v120_xp or v140_xp (if installed).
 
-Visual Studio 2013 will work if the Platform Toolset is changed in the project settings, but does not support Windows XP SP2 or earlier.
+The project should also build in Visual C++ 2010, 2012 or 2013.
 
 
 ## Build Configurations ##
@@ -44,4 +44,4 @@ AutoHotkeyx.vcxproj includes the following Platforms:
   - **Win32**: for Windows 32-bit.
   - **x64**: for Windows x64.
 
-Visual C++ 2010 officially supports XP SP2 and later.  AutoHotkey_L supports Windows XP pre-SP2 and Windows 2000 via an asm patch (win2kcompat.asm).  Older versions are not supported.
+Visual C++ 2010 officially supports XP SP2 and later.  AutoHotkey supports Windows XP pre-SP2 and Windows 2000 via an asm patch (win2kcompat.asm).  Older versions are not supported.

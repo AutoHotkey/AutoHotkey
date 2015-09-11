@@ -1,4 +1,4 @@
-/*
+﻿/*
 Debugger.cpp - Main body of AutoHotkey debugger engine.
 
 Original code by Steve Gray.

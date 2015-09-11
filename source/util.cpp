@@ -1,4 +1,4 @@
-/*
+ï»¿/*
 AutoHotkey
 
 Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
@@ -796,7 +796,7 @@ LPTSTR ltcschr(LPCTSTR haystack, TCHAR ch)
 
 LPTSTR lstrcasestr(LPCTSTR phaystack, LPCTSTR pneedle)
 // This is the locale-obeying variant of strcasestr.  It uses CharUpper/Lower in place of toupper/lower,
-// which sees chars like ä as the same as Ä (depending on code page/locale).  This function is about
+// which sees chars like Ã¤ as the same as Ã„ (depending on code page/locale).  This function is about
 // 1 to 8 times slower than strcasestr() depending on factors such as how many partial matches for needle
 // are in haystack.
 // License: GNU GPL
@@ -2239,7 +2239,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		// a cursor to be retained if the specified size happens to match the actual size of the
 		// cursor.  This is because normally, it seems that CopyImage() omits cursor animation
 		// from the new object.  MSDN: "LR_COPYRETURNORG returns the original hImage if it satisfies
-		// the criteria for the copy—that is, correct dimensions and color depth—in which case the
+		// the criteria for the copyâ€”that is, correct dimensions and color depthâ€”in which case the
 		// LR_COPYDELETEORG flag is ignored. If this flag is not specified, a new object is always created."
 		// KNOWN BUG: Calling CopyImage() when the source image is tiny and the destination width/height
 		// is also small (e.g. 1) causes a divide-by-zero exception.
@@ -2275,7 +2275,7 @@ struct ResourceIndexToIdEnumData
 {
 	int find_index;
 	int index;
-	int result;
+	LPTSTR result;
 };
 
 BOOL CALLBACK ResourceIndexToIdEnumProc(HMODULE hModule, LPCTSTR lpszType, LPTSTR lpszName, LONG_PTR lParam)
@@ -2284,19 +2284,20 @@ BOOL CALLBACK ResourceIndexToIdEnumProc(HMODULE hModule, LPCTSTR lpszType, LPTST
 	
 	if (++enum_data.index == enum_data.find_index)
 	{
-		enum_data.result = (int)lpszName;
+		enum_data.result = lpszName;
 		return FALSE; // Stop
 	}
 	return TRUE; // Continue
 }
 
-// L17: Find integer ID of resource from one-based index. i.e. IconNumber -> resource ID.
-int ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex)
+// L17: Find ID of resource from one-based index. i.e. IconNumber -> resource ID.
+// v1.1.22.05: Return LPTSTR since some (very few) icons have a string ID.
+LPTSTR ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex)
 {
 	ResourceIndexToIdEnumData enum_data;
 	enum_data.find_index = aIndex;
 	enum_data.index = 0;
-	enum_data.result = -1; // Return value of -1 indicates failure, since ID 0 may be valid.
+	enum_data.result = NULL; // Zero is probably not a valid integer ID; I think it would be compiled as "0" (string).
 
 	EnumResourceNames(aModule, aType, &ResourceIndexToIdEnumProc, (LONG_PTR)&enum_data);
 
@@ -2313,7 +2314,9 @@ HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, i
 	HMODULE hdatafile = aFilespec ? LoadLibraryEx(aFilespec, NULL, LOAD_LIBRARY_AS_DATAFILE) : g_hInstance;
 	if (hdatafile)
 	{
-		int group_icon_id = (aIconNumber < 0 ? -aIconNumber : ResourceIndexToId(hdatafile, (LPCTSTR)RT_GROUP_ICON, aIconNumber ? aIconNumber : 1));
+		LPTSTR group_icon_id = (aIconNumber < 0)
+			? MAKEINTRESOURCE(-aIconNumber)
+			: ResourceIndexToId(hdatafile, (LPCTSTR)RT_GROUP_ICON, aIconNumber ? aIconNumber : 1);
 
 		HRSRC hres;
 		HGLOBAL hresdata;
@@ -2323,7 +2326,7 @@ HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, i
 		// that the pointer returned by LockResource is valid until the *module* containing
 		// the resource is unloaded. Testing seems to indicate that unloading a module indeed
 		// unloads or invalidates any resources it contains.
-		if ((hres = FindResource(hdatafile, MAKEINTRESOURCE(group_icon_id), RT_GROUP_ICON))
+		if ((hres = FindResource(hdatafile, group_icon_id, RT_GROUP_ICON))
 			&& (hresdata = LoadResource(hdatafile, hres))
 			&& (presdata = LockResource(hresdata)))
 		{
