@@ -456,9 +456,15 @@ BIF_DECL(BIF_ComObjArray)
 		bound[i].cElements = (ULONG)TokenToInt64(*aParam[i + 1]);
 		bound[i].lLbound = 0;
 	}
-	SAFEARRAY *psa = SafeArrayCreate(vt, dims, bound);
-	if (!SafeSetTokenObject(aResultToken, psa ? new ComObject((__int64)psa, VT_ARRAY | vt, ComObject::F_OWNVALUE) : NULL) && psa)
+	if (SAFEARRAY *psa = SafeArrayCreate(vt, dims, bound))
+	{
+		if (ComObject *obj = new ComObject((__int64)psa, VT_ARRAY | vt, ComObject::F_OWNVALUE))
+		{
+			_f_return(obj);
+		}
 		SafeArrayDestroy(psa);
+	}
+	_f_throw(!(vt > 1 && vt < 0x18 && vt != 0xF) ? ERR_PARAM1_INVALID : ERR_OUTOFMEM);
 }
 
 
