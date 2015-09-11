@@ -908,7 +908,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 			return g_script.ScriptError(ERR_PARAM1_INVALID);
 		if (!SetHotkeyCriterion(hot_criterion, aLabelName, aOptions)) // Currently, it only fails upon out-of-memory.
 			return FAIL;
-		return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+		return OK;
 	}
 
 	// L4: Allow "Hotkey, If, exact-expression-text" to reference existing #if expressions.
@@ -938,7 +938,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				}
 			}
 		}
-		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+		return OK;
 	}
 
 	// For maintainability (and script readability), don't support "U" as a substitute for "UseErrorLevel",
