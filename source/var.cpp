@@ -1,4 +1,4 @@
-/*
+ï»¿/*
 AutoHotkey
 
 Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
@@ -1301,7 +1301,7 @@ ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError)
 		// used characters in variables names:
 		c = *cp;  // For performance.
 		if (!cisalnum(c) // It's not a core/legacy alphanumeric.
-			&& !(c & ~0x7F) // It's not an extended ASCII character such as €/¶/¿ (for simplicity and backward compatibility, these are always allowed).
+			&& !(c & ~0x7F) // It's not an extended ASCII character such as â‚¬/Â¶/Â¿ (for simplicity and backward compatibility, these are always allowed).
 			&& !_tcschr(_T("_$#@"), c)) // It's not a permitted punctuation mark.  L31: Removed [], now reserved for array/object indexing. Also removed ? while I was at it.
 		{
 			if (aDisplayError)

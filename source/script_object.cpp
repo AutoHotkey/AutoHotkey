@@ -1,4 +1,4 @@
-#include "stdafx.h" // pre-compiled headers
+﻿#include "stdafx.h" // pre-compiled headers
 #include "defines.h"
 #include "globaldata.h"
 #include "script.h"

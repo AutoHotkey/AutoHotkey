@@ -1,4 +1,4 @@
-
+﻿
 #define ParamIndexToString(index, ...)				TokenToString(*aParam[(index)], __VA_ARGS__)
 #define ParamIndexToInt64(index)					TokenToInt64(*aParam[(index)])
 #define ParamIndexToInt(index)						(int)ParamIndexToInt64(index)

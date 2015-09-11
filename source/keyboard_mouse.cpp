@@ -1,4 +1,4 @@
-/*
+ï»¿/*
 AutoHotkey
 
 Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
@@ -629,9 +629,9 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 				{
 					// v1.0.40: SendKeySpecial sends only keybd_event keystrokes, not ControlSend style
 					// keystrokes.
-					// v1.0.43.07: Added check of event_type!=KEYUP, which causes something like Send {ð up} to
+					// v1.0.43.07: Added check of event_type!=KEYUP, which causes something like Send {Ã° up} to
 					// do nothing if the curr. keyboard layout lacks such a key.  This is relied upon by remappings
-					// such as F1::ð (i.e. a destination key that doesn't have a VK, at least in English).
+					// such as F1::Ã° (i.e. a destination key that doesn't have a VK, at least in English).
 					if (event_type != KEYUP) // In this mode, mods_for_next_key and event_type are ignored due to being unsupported.
 					{
 						if (aTargetWindow)
@@ -1083,8 +1083,8 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 // Caller must be aware that keystrokes are sent directly (i.e. never to a target window via ControlSend mode).
 // It must also be aware that the event type KEYDOWNANDUP is always what's used since there's no way
-// to support anything else.  Furthermore, there's no way to support "modifiersLR_for_next_key" such as ^€
-// (assuming € is a character for which SendKeySpecial() is required in the current layout).
+// to support anything else.  Furthermore, there's no way to support "modifiersLR_for_next_key" such as ^â‚¬
+// (assuming â‚¬ is a character for which SendKeySpecial() is required in the current layout).
 // This function uses some of the same code as SendKey() above, so maintain them together.
 {
 	// Caller must verify that aRepeatCount > 1.
@@ -1177,7 +1177,7 @@ void SendASC(LPCTSTR aAscii)
 	// Changing the modifier state via SetModifierLRState() (rather than some more error-prone multi-step method)
 	// also ensures that the ALT key is pressed down only after releasing any shift key that needed it above.
 	// Otherwise, the OS's switch-keyboard-layout hotkey would be triggered accidentally; e.g. the following
-	// in English layout: Send ~~âÂ{^}.
+	// in English layout: Send ~~Ã¢Ã‚{^}.
 	//
 	// Make sure modifier state is correct: ALT pressed down and other modifiers UP
 	// because CTRL and SHIFT seem to interfere with this technique if they are down,
@@ -3319,7 +3319,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 			if (sTargetLayoutHasAltGr == CONDITION_TRUE) // Note that KeyEvent() might have just changed the value of sTargetLayoutHasAltGr.
 			{
 				// Indicate that control is both down and required down so that the section after this one won't
-				// release it.  Without this fix, a hotkey that sends an AltGr char such as "^ä:: SendRaw, {"
+				// release it.  Without this fix, a hotkey that sends an AltGr char such as "^Ã¤:: SendRaw, {"
 				// would fail to work under German layout because left-alt would be released after right-alt
 				// goes down.
 				aModifiersLRnow |= MOD_LCONTROL; // To reflect what KeyEvent() did above.

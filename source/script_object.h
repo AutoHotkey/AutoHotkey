@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #define INVOKE_TYPE			(aFlags & IT_BITMASK)
 #define IS_INVOKE_SET		(aFlags & IT_SET)

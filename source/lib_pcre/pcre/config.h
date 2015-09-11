@@ -1,4 +1,4 @@
-/* config.h.  Generated from config.h.in by configure.  */
+﻿/* config.h.  Generated from config.h.in by configure.  */
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
 #include "../../config.h" // Allow AutoHotkey config.h to define charset (_MBCS or UNICODE).

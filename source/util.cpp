@@ -1,4 +1,4 @@
-/*
+ï»¿/*
 AutoHotkey
 
 Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
@@ -788,7 +788,7 @@ LPTSTR ltcschr(LPCTSTR haystack, TCHAR ch)
 
 LPTSTR lstrcasestr(LPCTSTR phaystack, LPCTSTR pneedle)
 // This is the locale-obeying variant of strcasestr.  It uses CharUpper/Lower in place of toupper/lower,
-// which sees chars like ä as the same as Ä (depending on code page/locale).  This function is about
+// which sees chars like Ã¤ as the same as Ã„ (depending on code page/locale).  This function is about
 // 1 to 8 times slower than strcasestr() depending on factors such as how many partial matches for needle
 // are in haystack.
 // License: GNU GPL
@@ -2231,7 +2231,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		// a cursor to be retained if the specified size happens to match the actual size of the
 		// cursor.  This is because normally, it seems that CopyImage() omits cursor animation
 		// from the new object.  MSDN: "LR_COPYRETURNORG returns the original hImage if it satisfies
-		// the criteria for the copy—that is, correct dimensions and color depth—in which case the
+		// the criteria for the copyâ€”that is, correct dimensions and color depthâ€”in which case the
 		// LR_COPYDELETEORG flag is ignored. If this flag is not specified, a new object is always created."
 		// KNOWN BUG: Calling CopyImage() when the source image is tiny and the destination width/height
 		// is also small (e.g. 1) causes a divide-by-zero exception.

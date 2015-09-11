@@ -1,4 +1,4 @@
-/*
+Ôªø/*
 AutoHotkey
 
 Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
@@ -2717,7 +2717,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// (for which the dead key is pending): ToAsciiEx() consumes previous/pending dead key, which causes the
 	// active window's call of ToAsciiEx() to fail to see a dead key. So unless the program reinserts the dead key
 	// after the call to ToAsciiEx() but before allowing the dead key's successor key to pass through to the
-	// active window, that window would see a non-diacritic like "u" instead of ˚.  In other words, the program
+	// active window, that window would see a non-diacritic like "u" instead of √ª.  In other words, the program
 	// "uses up" the dead key to populate its own hotstring buffer, depriving the active window of the dead key.
 	//
 	// JAVA ISSUE: Hotstrings are known to disrupt dead keys in Java apps on some systems (though not my XP one).
@@ -2856,7 +2856,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				}
 				else // case insensitive
 					// v1.0.43.03: Using CharLower vs. tolower seems the best default behavior (even though slower)
-					// so that languages in which the higher ANSI characters are common will see "ƒ" == "‰", etc.
+					// so that languages in which the higher ANSI characters are common will see "√Ñ" == "√§", etc.
 					for (; cphs >= hs.mString; --cpbuf, --cphs)
 						if (ltolower(*cpbuf) != ltolower(*cphs)) // v1.0.43.04: Fixed crash by properly casting to UCHAR (via macro).
 							break;
@@ -3068,9 +3068,9 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// dead key reinserted below, which in turn would cause the hotstring's first backspace to fire
 	// the dead key (which kills the backspace, turning it into the dead key character itself).
 	// For example:
-	// :*:js·::jsmith@somedomain.com
+	// :*:js√°::jsmith@somedomain.com
 	// On the Spanish (Mexico) keyboard layout, one would type accent (English left bracket) followed by
-	// the letter "a" to produce ·.
+	// the letter "a" to produce √°.
 	if (dead_key_sequence_complete)
 	{
 		vk_type vk_to_send = sPendingDeadKeyVK; // To facilitate early reset below.

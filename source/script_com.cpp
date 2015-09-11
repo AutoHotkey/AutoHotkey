@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "globaldata.h"
 #include "script.h"
 #include "script_object.h"

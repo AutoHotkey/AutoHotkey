@@ -1,4 +1,4 @@
-/*
+ï»¿/*
 AutoHotkey
 
 Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
@@ -601,7 +601,7 @@ inline LPTSTR HwndToString(HWND aHwnd, LPTSTR aBuf)
 
 
 // v1.0.43.03: The following macros support the new "StringCaseSense Locale" setting.  This setting performs
-// 1 to 10 times slower for most things, but has the benefit of seeing characters like ä and Ä as identical
+// 1 to 10 times slower for most things, but has the benefit of seeing characters like Ã¤ and Ã„ as identical
 // when insensitive.  MSDN implies that lstrcmpi() is the same as:
 //     CompareString(LOCALE_USER_DEFAULT, NORM_IGNORECASE, ...)
 // Note that when MSDN talks about the "word sort" vs. "string sort", it does not mean that strings like

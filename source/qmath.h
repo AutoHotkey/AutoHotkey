@@ -1,4 +1,4 @@
-/* ==== ArtNouveaU Quick Math ~ qmath.h ==================================
+﻿/* ==== ArtNouveaU Quick Math ~ qmath.h ==================================
 
    WATCOM C/C++ Standard Libraries replacement for tiny code.
    Copyright (C) 1997 by the gang at ArtNouveaU, All Rights Reserved.
