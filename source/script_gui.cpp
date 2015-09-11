@@ -2689,7 +2689,12 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			if (style & WS_VSCROLL)
 				extra_width += GetSystemMetrics(SM_CXVSCROLL);
 			// DT_EDITCONTROL: "the average character width is calculated in the same manner as for an edit control"
-			// It might help some aspects of the estimate conducted below.
+			// Although it's hard to say exactly what the quote above means, DT_EDITCONTROL definitely
+			// affects the width of tab stops (making this consistent with Edit controls) and therefore
+			// must be included.  It also excludes the last line if it is empty, which is undesirable,
+			// so we need to compensate for that:
+			if (*aText && aText[_tcslen(aText)-1] == '\n')
+				extra_height += tm.tmHeight + tm.tmExternalLeading;
 			// Also include DT_EXPANDTABS under the assumption that if there are tabs present, the user
 			// intended for them to be there because a multiline edit would expand them (rather than trying
 			// to worry about whether this control *might* become auto-multiline after this point.
