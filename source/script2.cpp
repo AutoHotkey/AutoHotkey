@@ -29,7 +29,10 @@ GNU General Public License for more details.
 #undef _WIN32_WINNT // v1.1.10.01: Redefine this just for these APIs, to avoid breaking some other commands on Win XP (such as Process Close).
 #define _WIN32_WINNT 0x0600 // Windows Vista
 #include <mmdeviceapi.h> // for SoundSet/SoundGet.
+#pragma warning(push)
+#pragma warning(disable:4091) // Work around a bug in the SDK used by the v140_xp toolset.
 #include <endpointvolume.h> // for SoundSet/SoundGet.
+#pragma warning(pop)
 
 #define PCRE_STATIC             // For RegEx. PCRE_STATIC tells PCRE to declare its functions for normal, static
 #include "lib_pcre/pcre/pcre.h" // linkage rather than as functions inside an external DLL.

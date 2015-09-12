@@ -102,9 +102,8 @@
     VC++ Express 2010 is installed, there might be x86 compilers but no x64.
   -->
   <PropertyGroup Condition="'$(PlatformToolset)' == '' and '$(VCTargetsPath10)' != '' and !Exists('$(VCTargetsPath10)\Platforms\$(Platform)\Microsoft.Cpp.$(Platform).Targets')">
-    <PlatformToolset Condition="Exists('$(VCTargetsPath11)')">v110</PlatformToolset>
-    <PlatformToolset Condition="Exists('$(VCTargetsPath12)')">v120</PlatformToolset>
-    <PlatformToolset Condition="Exists('$(VCTargetsPath14)')">v140</PlatformToolset>
+    <PlatformToolset>v$(VisualStudioVersion.Replace('.',''))</PlatformToolset>
+    <PlatformToolset Condition="Exists('$(VCTargetsPath)\Platforms\$(Platform)\PlatformToolsets\$(PlatformToolset)_xp')">$(PlatformToolset)_xp</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup>
     <!-- Disable the upgrade prompt when first opening the project. -->
