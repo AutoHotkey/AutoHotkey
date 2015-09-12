@@ -6224,11 +6224,14 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 		return;
 
 	UINT msg_add, msg_select;
+	int requested_index = 0;
 
 	switch (aControl.type)
 	{
-	case GUI_CONTROL_LISTVIEW:
 	case GUI_CONTROL_TAB: // These cases must be listed anyway to do a break vs. return, so might as well init conditionally rather than unconditionally.
+		requested_index = TabCtrl_GetItemCount(aControl.hwnd); // So that tabs are "appended at the end of the control's list", as documented for GuiControl.
+		// Fall through:
+	case GUI_CONTROL_LISTVIEW:
 		msg_add = 0;
 		msg_select = 0;
 		break;
@@ -6249,7 +6252,6 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 	bool temporarily_terminated;
 	LPTSTR this_field, next_field;
 	LRESULT item_index;
-	int requested_index = 0;
 
 	// For tab controls:
 	TCITEM tci;
