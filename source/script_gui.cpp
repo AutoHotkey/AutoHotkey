@@ -1055,10 +1055,8 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, 
 			// what the target control's type is:
 			//if (guicontrol_cmd == GUICONTROL_CMD_TEXT)
 			//	break;
-			bool list_replaced;
 			if (*aParam3 == gui.mDelimiter) // The signal to overwrite rather than append to the list.
 			{
-				list_replaced = true;
 				++aParam3;  // Exclude the initial pipe from further consideration.
 				int msg;
 				switch (control.type)
@@ -1070,26 +1068,19 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, 
 				}
 				SendMessage(control.hwnd, msg, 0, 0);  // Delete all items currently in the list.
 			}
-			else
-				list_replaced = false;
 			gui.ControlAddContents(control, aParam3, 0);
-			if (control.type == GUI_CONTROL_TAB && list_replaced)
+			if (control.type == GUI_CONTROL_TAB)
 			{
-				// In case replacement tabs deleted the currently active tab, update the tab.
+				// In case the active tab has changed or been deleted, update the tab.
 				// The "false" param will cause focus to jump to first item in z-order if
 				// the control that previously had focus was inside a tab that was just
 				// deleted (seems okay since this kind of operation is fairly rare):
 				gui.ControlUpdateCurrentTab(control, false);
 				// Must invalidate part of parent window to get controls to redraw correctly, at least
 				// in the following case: Tab that is currently active still exists and is still active
-				// after the tab-rebuild done above.
-				// For simplicity, invalidate the whole thing since changing the quantity/names of tabs
-				// while the window is visible is rare.  NOTE: It might be necessary to invalidate
-				// the entire window *anyway* in case some of this tab's controls exist outside its
-				// boundaries (e.g. TCS_BUTTONS).  Another reason is the fact that there have been
-				// problems retrieving an accurate client area for tab controls when they have certain
-				// styles such as TCS_VERTICAL:
-				InvalidateRect(gui.mHwnd, NULL, TRUE); // TRUE = Seems safer to erase, not knowing all possible overlaps.
+				// after the tab-rebuild done above.  Currently ControlUpdateCurrentTab already does
+				// this, even if the selected tab has not changed or if there is now no tab selected.
+				//InvalidateRect(gui.mHwnd, NULL, TRUE); // TRUE = Seems safer to erase, not knowing all possible overlaps.
 			}
 			goto return_the_result; // Don't break since don't the other actions below to be taken.
 		} // inner switch() for control's type for contents/txt sub-commands.
@@ -1221,6 +1212,11 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, 
 				// ControlUpdateCurrentTab() would reduce backward compatibility -- and in case anyone is
 				// using tabless tab controls for anything -- it seems best to allow these "wrongly visible"
 				// controls to be explicitly manipulated by GuiControl Enable/Disable and Hide/Show.
+				// UPDATE: ControlUpdateCurrentTab() has been fixed, so the controls won't be visible
+				// unless the script specifically made them so.  The check is kept in case it is of
+				// some use.  Prior to the fix, the controls would have only been visible if the tab
+				// control previously had a tab but it was deleted, since controls are created in a
+				// hidden state if the tab they are on is not selected.
 				goto return_the_result;
 		}
 		
@@ -9568,8 +9564,10 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 // Handles the selection of a new tab in a tab control.
 {
 	int curr_tab_index = TabCtrl_GetCurSel(aTabControl.hwnd);
-	if (curr_tab_index == -1) // No tab is selected.  Maybe only happens if the tab control has no tabs at all.
-		return;
+	// If there's no tab selected, any controls contained by the tab control should be hidden.
+	// This can happen if all tabs are removed, such as by GuiControl,,TabCtl,|
+	//if (curr_tab_index == -1) // No tab is selected.
+	//	return;
 
 	// Fix for v1.0.23:
 	// If the tab control lacks the visible property, hide all its controls on all its tabs.
