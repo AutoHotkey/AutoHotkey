@@ -4762,6 +4762,11 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				EnableWindow(aControl.hwnd, adding ? FALSE : TRUE);
 			else
 				if (adding) aOpt.style_add |= WS_DISABLED; else aOpt.style_remove |= WS_DISABLED;
+			// Update the "explicitly" flags so that switching tabs won't reset the control's state.
+			if (adding)
+				aControl.attrib |= GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED;
+			else
+				aControl.attrib &= ~GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED;
 		}
 		else if (!_tcsnicmp(next_option, _T("Hidden"), 6))
 		{
@@ -4780,6 +4785,11 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				ShowWindow(aControl.hwnd, adding ? SW_HIDE : SW_SHOWNOACTIVATE);
 			else
 				if (adding) aOpt.style_remove |= WS_VISIBLE; else aOpt.style_add |= WS_VISIBLE;
+			// Update the "explicitly" flags so that switching tabs won't reset the control's state.
+			if (adding)
+				aControl.attrib |= GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN;
+			else
+				aControl.attrib &= ~GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN;
 		}
 		else if (!_tcsicmp(next_option, _T("Wrap")))
 		{
