@@ -787,58 +787,10 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, 
 			// omit legitimate spaces and tabs that might exist at the beginning of a real filename (file
 			// names can start with spaces).
 
-			// See comments in AddControl():
-			int image_type;
-			if (   !(control.union_hbitmap = LoadPicture(aParam3, width, height, image_type, icon_number
-				, control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))   )
+			// See comments in ControlLoadPicture():
+			if (!gui.ControlLoadPicture(control, aParam3, width, height, icon_number))
 				goto error;
-			DWORD style = GetWindowLong(control.hwnd, GWL_STYLE);
-			DWORD style_image_type = style & 0x0F;
-			style &= ~0x0F;  // Purge the low-order four bits in case style-image-type needs to be altered below.
-			if (image_type == IMAGE_BITMAP)
-			{
-				if (style_image_type != SS_BITMAP)
-					SetWindowLong(control.hwnd, GWL_STYLE, style | SS_BITMAP);
-			}
-			else // Icon or Cursor.
-				if (style_image_type != SS_ICON) // Must apply SS_ICON or such handles cannot be displayed.
-					SetWindowLong(control.hwnd, GWL_STYLE, style | SS_ICON);
-			// LoadPicture() uses CopyImage() to scale the image, which seems to provide better scaling
-			// quality than using MoveWindow() (followed by redrawing the parent window) on the static
-			// control that contains the image.
-			SendMessage(control.hwnd, STM_SETIMAGE, image_type, (LPARAM)control.union_hbitmap); // Always returns NULL due to previous call to STM_SETIMAGE above.
-			// Fix for 1.0.40.12: The below was added because STM_SETIMAGE above may have caused the control to
-			// create a new hbitmap (possibly only for alpha channel bitmaps on XP, but might also apply to icons),
-			// in which case we now have two handles: the one inside the control and the one from which
-			// it was copied.  Task Manager confirms that the control does not delete the original
-			// handle when it creates a new handle.  Rather than waiting until later to delete the handle,
-			// it seems best to do it here so that:
-			// 1) The script uses less memory during the time that the picture control exists.
-			// 2) Don't have to delete two handles (control.union_hbitmap and the one returned by STM_SETIMAGE)
-			//    when the time comes to change the image inside the control.
-			//
-			// MSDN: "With Microsoft Windows XP, if the bitmap passed in the STM_SETIMAGE message contains pixels
-			// with non-zero alpha, the static control takes a copy of the bitmap. This copied bitmap is returned
-			// by the next STM_SETIMAGE message... if it does not check and release the bitmaps returned from
-			// STM_SETIMAGE messages, the bitmaps are leaked."
-			HBITMAP hbitmap_actual;
-			if (   (hbitmap_actual = (HBITMAP)SendMessage(control.hwnd, STM_GETIMAGE, image_type, 0)) // Assign
-				&& hbitmap_actual != control.union_hbitmap   )  // The control decided to make a new handle.
-			{
-				if (image_type == IMAGE_BITMAP)
-					DeleteObject(control.union_hbitmap);
-				else // Icon or cursor.
-					DestroyIcon((HICON)control.union_hbitmap); // Works on cursors too.
-				// In additional to improving maintainability, the following might also be necessary to allow
-				// Gui::Destroy() to avoid  a memory leak when the picture control is destroyed as a result
-				// of its parent being destroyed (though I've read that the control is supposed to destroy its
-				// hbitmap when it was directly responsible for creating it originally [but not otherwise]):
-				control.union_hbitmap = hbitmap_actual;
-			}
-			if (image_type == IMAGE_BITMAP)
-				control.attrib &= ~GUI_CONTROL_ATTRIB_ALTBEHAVIOR;  // Flag it as a bitmap so that DeleteObject vs. DestroyIcon will be called for it.
-			else // Cursor or Icon, which are functionally identical.
-				control.attrib |= GUI_CONTROL_ATTRIB_ALTBEHAVIOR;
+			
 			// Fix for v1.0.33.02: If this control belongs to a tab control and is visible (i.e. its page
 			// in the tab control is the current page), must redraw the tab control to get the picture/icon
 			// to update correctly.  v1.0.40.01: Pictures such as .Gif sometimes disappear (even if they're
@@ -3088,42 +3040,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			, opt.x, opt.y, opt.width, opt.height  // OK if zero, control creation should still succeed.
 			, mHwnd, control_id, g_hInstance, NULL))
 		{
-			// In light of the below, it seems best to delete the bitmaps whenever the control changes
-			// to a new image or whenever the control is destroyed.  Otherwise, if a control or its
-			// parent window is destroyed and recreated many times, memory allocation would continue
-			// to grow from all the abandoned pointers.
-			// MSDN: "When you are finished using a bitmap...loaded without specifying the LR_SHARED flag,
-			// you can release its associated memory by calling...DeleteObject."
-			// MSDN: "The system automatically deletes these resources when the process that created them
-			// terminates, however, calling the appropriate function saves memory and decreases the size
-			// of the process's working set."
-			// LoadPicture() uses CopyImage() to scale the image, which seems to provide better scaling
-			// quality than using MoveWindow() (followed by redrawing the parent window) on the static
-			// control that contains the image.
-			int image_type;
-			if (   !(control.union_hbitmap = LoadPicture(aText, opt.width, opt.height, image_type, opt.icon_number
-				, control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))   )
-				break;  // By design, no error is reported.  The picture is simply not displayed, nor is its
-						// style set to SS_BITMAP/SS_ICON, which allows the control to have the specified size
-						// yet lack an image (SS_BITMAP/SS_ICON tend to cause the control to auto-size to
-						// zero dimensions).
-			// For image to display correctly, must apply SS_ICON for cursors/icons and SS_BITMAP for bitmaps.
-			// This style change is made *after* the control is created so that the act of creation doesn't
-			// attempt to load the image from a resource (which as documented by SS_ICON/SS_BITMAP, would happen
-			// since text is interpreted as the name of a bitmap in the resource file).
-			SetWindowLong(control.hwnd, GWL_STYLE, style | (image_type == IMAGE_BITMAP ? SS_BITMAP : SS_ICON));
-			// Above uses ~0x0F to ensure the lowest four/five bits are pure.
-			// Also note that it does not seem correct to use SS_TYPEMASK if bitmaps/icons can also have
-			// any of the following styles.  MSDN confirms(?) this by saying that SS_TYPEMASK is out of date
-			// and should not be used:
-			//#define SS_ETCHEDHORZ       0x00000010L
-			//#define SS_ETCHEDVERT       0x00000011L
-			//#define SS_ETCHEDFRAME      0x00000012L
-			SendMessage(control.hwnd, STM_SETIMAGE, (WPARAM)image_type, (LPARAM)control.union_hbitmap);
-			if (image_type == IMAGE_BITMAP)
-				control.attrib &= ~GUI_CONTROL_ATTRIB_ALTBEHAVIOR;  // Flag it as a bitmap so that DeleteObject vs. DestroyIcon will be called for it.
-			else // Cursor or Icon, which are functionally identical for our purposes.
-				control.attrib |= GUI_CONTROL_ATTRIB_ALTBEHAVIOR;
+			if (!ControlLoadPicture(control, aText, opt.width, opt.height, opt.icon_number))
+				break;
 			// UPDATE ABOUT THE BELOW: Rajat says he can't get the Smart GUI working without
 			// the controls retaining their original numbering/z-order.  This has to do with the fact
 			// that TEXT controls and PIC controls are both static.  If only PIC controls were reordered,
@@ -6364,6 +6282,101 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 		SendMessage(aControl.hwnd, msg_select, (WPARAM)TRUE, (LPARAM)aChoice);
 	else
 		SendMessage(aControl.hwnd, msg_select, (WPARAM)aChoice, 0);  // Select this item.
+}
+
+
+
+ResultType GuiType::ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilename, int aWidth, int aHeight, int aIconNumber)
+{
+	// In light of the below, it seems best to delete the bitmaps whenever the control changes
+	// to a new image or whenever the control is destroyed.  Otherwise, if a control or its
+	// parent window is destroyed and recreated many times, memory allocation would continue
+	// to grow from all the abandoned pointers.
+	// MSDN: "When you are finished using a bitmap...loaded without specifying the LR_SHARED flag,
+	// you can release its associated memory by calling...DeleteObject."
+	// MSDN: "The system automatically deletes these resources when the process that created them
+	// terminates, however, calling the appropriate function saves memory and decreases the size
+	// of the process's working set."
+	// LoadPicture() uses CopyImage() to scale the image, which seems to provide better scaling
+	// quality than using MoveWindow() (followed by redrawing the parent window) on the static
+	// control that contains the image.
+	int image_type;
+	if (!(aControl.union_hbitmap = LoadPicture(aFilename, aWidth, aHeight, image_type, aIconNumber
+		, aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT)))
+	{
+		// By design, no error is reported.  The picture is simply not displayed, nor is its
+		// style set to SS_BITMAP/SS_ICON, which allows the control to have the specified size
+		// yet lack an image (SS_BITMAP/SS_ICON tend to cause the control to auto-size to
+		// zero dimensions).
+		return FAIL;
+	}
+	if (image_type == IMAGE_ICON && (aControl.attrib & GUI_CONTROL_ATTRIB_BACKGROUND_TRANS))
+	{
+		// Static controls don't appear to support background transparency with icons,
+		// so convert the icon to a bitmap.
+		if (HBITMAP hbitmap = IconToBitmap32((HICON)aControl.union_hbitmap, false))
+		{
+			DestroyIcon((HICON)aControl.union_hbitmap);
+			aControl.union_hbitmap = hbitmap;
+			image_type = IMAGE_BITMAP;
+		}
+	}
+	// For image to display correctly, must apply SS_ICON for cursors/icons and SS_BITMAP for bitmaps.
+	// This style change is made *after* the control is created so that the act of creation doesn't
+	// attempt to load the image from a resource (which as documented by SS_ICON/SS_BITMAP, would happen
+	// since text is interpreted as the name of a bitmap in the resource file).
+	DWORD style = GetWindowLong(aControl.hwnd, GWL_STYLE);
+	DWORD style_image_type = style & 0x0F;
+	style &= ~0x0F;  // Purge the low-order four bits in case style-image-type needs to be altered below.
+	if (image_type == IMAGE_BITMAP)
+	{
+		if (style_image_type != SS_BITMAP)
+			SetWindowLong(aControl.hwnd, GWL_STYLE, style | SS_BITMAP);
+	}
+	else // Icon or Cursor.
+		if (style_image_type != SS_ICON) // Must apply SS_ICON or such handles cannot be displayed.
+			SetWindowLong(aControl.hwnd, GWL_STYLE, style | SS_ICON);
+	// Above uses ~0x0F to ensure the lowest four/five bits are pure.
+	// Also note that it does not seem correct to use SS_TYPEMASK if bitmaps/icons can also have
+	// any of the following styles.  MSDN confirms(?) this by saying that SS_TYPEMASK is out of date
+	// and should not be used:
+	//#define SS_ETCHEDHORZ       0x00000010L
+	//#define SS_ETCHEDVERT       0x00000011L
+	//#define SS_ETCHEDFRAME      0x00000012L
+	SendMessage(aControl.hwnd, STM_SETIMAGE, (WPARAM)image_type, (LPARAM)aControl.union_hbitmap);
+	// Fix for 1.0.40.12: The below was added because STM_SETIMAGE above may have caused the control to
+	// create a new hbitmap (possibly only for alpha channel bitmaps on XP, but might also apply to icons),
+	// in which case we now have two handles: the one inside the control and the one from which
+	// it was copied.  Task Manager confirms that the control does not delete the original
+	// handle when it creates a new handle.  Rather than waiting until later to delete the handle,
+	// it seems best to do it here so that:
+	// 1) The script uses less memory during the time that the picture control exists.
+	// 2) Don't have to delete two handles (control.union_hbitmap and the one returned by STM_SETIMAGE)
+	//    when the time comes to change the image inside the control.
+	//
+	// MSDN: "With Microsoft Windows XP, if the bitmap passed in the STM_SETIMAGE message contains pixels
+	// with non-zero alpha, the static control takes a copy of the bitmap. This copied bitmap is returned
+	// by the next STM_SETIMAGE message... if it does not check and release the bitmaps returned from
+	// STM_SETIMAGE messages, the bitmaps are leaked."
+	HBITMAP hbitmap_actual;
+	if ((hbitmap_actual = (HBITMAP)SendMessage(aControl.hwnd, STM_GETIMAGE, image_type, 0)) // Assign
+		&& hbitmap_actual != aControl.union_hbitmap)  // The control decided to make a new handle.
+	{
+		if (image_type == IMAGE_BITMAP)
+			DeleteObject(aControl.union_hbitmap);
+		else // Icon or cursor.
+			DestroyIcon((HICON)aControl.union_hbitmap); // Works on cursors too.
+		// In additional to improving maintainability, the following might also be necessary to allow
+		// Gui::Destroy() to avoid a memory leak when the picture control is destroyed as a result
+		// of its parent being destroyed (though I've read that the control is supposed to destroy its
+		// hbitmap when it was directly responsible for creating it originally [but not otherwise]):
+		aControl.union_hbitmap = hbitmap_actual;
+	}
+	if (image_type == IMAGE_BITMAP)
+		aControl.attrib &= ~GUI_CONTROL_ATTRIB_ALTBEHAVIOR;  // Flag it as a bitmap so that DeleteObject vs. DestroyIcon will be called for it.
+	else // Cursor or Icon, which are functionally identical for our purposes.
+		aControl.attrib |= GUI_CONTROL_ATTRIB_ALTBEHAVIOR;
+	return OK;
 }
 
 
