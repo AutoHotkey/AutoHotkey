@@ -1072,6 +1072,8 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, 
 			if (control.type == GUI_CONTROL_TAB)
 			{
 				// In case the active tab has changed or been deleted, update the tab.
+				// First, update the tab control's dialog (if any) to match its display area.
+				gui.UpdateTabDialog(control.hwnd);
 				// The "false" param will cause focus to jump to first item in z-order if
 				// the control that previously had focus was inside a tab that was just
 				// deleted (seems okay since this kind of operation is fairly rare):
@@ -1131,7 +1133,7 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, 
 
 		GetWindowRect(control.hwnd, &rect); // Failure seems too rare to check for.
 		POINT dest_pt = {rect.left, rect.top};
-		ScreenToClient(gui.mHwnd, &dest_pt); // Set default x/y target position, to be possibly overridden below.
+		ScreenToClient(GetParent(control.hwnd), &dest_pt); // Set default x/y target position, to be possibly overridden below.
 		if (xpos != COORD_UNSPECIFIED)
 			dest_pt.x = xpos;
 		if (ypos != COORD_UNSPECIFIED)
@@ -1997,11 +1999,21 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	////////////////////////////////////////////////////////////////////////////////////////
 	GuiControlType &control = mControl[mControlCount];
 	ZeroMemory(&control, sizeof(GuiControlType));
+	
+	GuiControlOptionsType opt;
+	ControlInitOptions(opt, control);
+	// aOpt.checked is already okay since BST_UNCHECKED == 0
+	// Similarly, the zero-init of "control" higher above set the right values for password_char, new_section, etc.
 
 	if (aControlType == GUI_CONTROL_TAB2) // v1.0.47.05: Replace TAB2 with TAB at an early stage to simplify the code.  The only purpose of TAB2 is to flag this as the new type of tab that avoids redrawing issues but has a new z-order that would break some existing scripts.
 	{
 		aControlType = GUI_CONTROL_TAB;
 		control.attrib |= GUI_CONTROL_ATTRIB_ALTBEHAVIOR; // v1.0.47.05: A means for new scripts to solve redrawing problems in tab controls at the cost of putting the tab control after its controls in the z-order.
+	}
+	else if (aControlType == GUI_CONTROL_TAB3)
+	{
+		aControlType = GUI_CONTROL_TAB;
+		opt.tab_control_uses_dialog = true;
 	}
 	if (aControlType == GUI_CONTROL_TAB)
 	{
@@ -2040,10 +2052,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	}
 
 	control.type = aControlType; // Improves maintainability to do this early, but must be done after TAB2 vs. TAB is resolved higher above.
-	GuiControlOptionsType opt;
-	ControlInitOptions(opt, control);
-	// aOpt.checked is already okay since BST_UNCHECKED == 0
-	// Similarly, the zero-init of "control" higher above set the right values for password_char, new_section, etc.
 
 	/////////////////////////////////////////////////
 	// Set control-specific defaults for any options.
@@ -2176,7 +2184,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// Override the normal default, requiring a manual +Theme in the control's options.  This is done
 		// because themed tabs have a gradient background that is currently not well supported by the method
 		// used here (controls' backgrounds do not match the gradient):
-		opt.use_theme = false;
+		if (!opt.tab_control_uses_dialog)
+			opt.use_theme = false;
 		opt.style_add |= WS_TABSTOP|TCS_MULTILINE;
 		break;
 	case GUI_CONTROL_ACTIVEX:
@@ -2336,13 +2345,13 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// TCS_OWNERDRAWFIXED is required to implement custom Text color in the tabs.
 		// For some reason, it's also required for TabWindowProc's WM_ERASEBKGND to be able to
 		// override the background color of the control's interior, at least when an XP theme is in effect.
-		// (which is currently impossible since theme is always removed from a tab).
-		// Even if that weren't the case, would still want owner-draw because otherwise the background
-		// color of the tab-text would be different than the tab's interior, which testing shows looks
-		// pretty strange.
 		if (mBackgroundBrushWin && !(control.attrib & GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT)
 			|| control.union_color != CLR_DEFAULT)
+		{
 			style |= TCS_OWNERDRAWFIXED;
+			// Even if use_theme is true, the theme won't be applied due to the above style.
+			opt.use_theme = false; // Let CreateTabDialog() know not to enable the theme.
+		}
 		else
 			style &= ~TCS_OWNERDRAWFIXED;
 		break;
@@ -2411,7 +2420,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			// Since this control belongs to a tab control and that tab control already exists,
 			// Position it relative to the tab control's client area upper-left corner if this
 			// is the first control on this particular tab/page:
-			POINT pt = GetPositionOfTabClientArea(*owning_tab_control);
+			POINT pt = GetPositionOfTabDisplayArea(*owning_tab_control);
 			// Since both coords were unspecified, position this control at the upper left corner of its page.
 			opt.x = pt.x + mMarginX;
 			opt.y = pt.y + mMarginY;
@@ -3028,6 +3037,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	RECT rect;
 	LPTSTR malloc_buf;
 	HMENU control_id = (HMENU)(size_t)GUI_INDEX_TO_ID(mControlCount); // Cast to size_t avoids compiler warning.
+	HWND parent_hwnd = mHwnd;
 
 	bool font_was_set = false;          // "
 	bool is_parent_visible = IsWindowVisible(mHwnd) && !IsIconic(mHwnd);
@@ -3047,6 +3057,16 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	{
 		if (owning_tab_control) // Its tab control exists...
 		{
+			HWND tab_dialog = (HWND)GetProp(owning_tab_control->hwnd, _T("ahk_dlg"));
+			if (tab_dialog)
+			{
+				// Controls in a Tab3 control are created as children of an invisible dialog window
+				// rather than as siblings of the tab control.  This solves some visual glitches.
+				parent_hwnd = tab_dialog;
+				POINT pt = { opt.x, opt.y };
+				MapWindowPoints(mHwnd, parent_hwnd, &pt, 1); // Translate from GUI client area to tab client area.
+				opt.x = pt.x, opt.y = pt.y;
+			}
 			if (!(GetWindowLong(owning_tab_control->hwnd, GWL_STYLE) & WS_VISIBLE) // Don't use IsWindowVisible().
 				|| TabCtrl_GetCurSel(owning_tab_control->hwnd) != control.tab_index)
 				// ... but it's not set to the page/tab that contains this control, or the entire tab control is hidden.
@@ -3064,13 +3084,13 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	case GUI_CONTROL_TEXT:
 		// Seems best to omit SS_NOPREFIX by default so that ampersand can be used to create shortcut keys.
 		control.hwnd = CreateWindowEx(exstyle, _T("static"), aText, style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL);
 		break;
 
 	case GUI_CONTROL_LINK:
 		// Seems best to omit LWS_NOPREFIX by default so that ampersand can be used to create shortcut keys.
 		control.hwnd = CreateWindowEx(exstyle, _T("SysLink"), aText, style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL);
 		break;
 
 	case GUI_CONTROL_PIC:
@@ -3082,7 +3102,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// filename is possible:
 		if (control.hwnd = CreateWindowEx(exstyle, _T("static"), aText, style
 			, opt.x, opt.y, opt.width, opt.height  // OK if zero, control creation should still succeed.
-			, mHwnd, control_id, g_hInstance, NULL))
+			, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			// In light of the below, it seems best to delete the bitmaps whenever the control changes
 			// to a new image or whenever the control is destroyed.  Otherwise, if a control or its
@@ -3187,7 +3207,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// should be rarely present anyway.  Also, BS_NOTIFY seems to have no effect on GroupBoxes (it
 		// never sends any BN_CLICKED/BN_DBLCLK messages).  This has been verified twice.
 		control.hwnd = CreateWindowEx(exstyle, _T("button"), aText, style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL);
 		break;
 
 	case GUI_CONTROL_BUTTON:
@@ -3196,7 +3216,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// In addition, this causes automatic wrapping to occur if the user specified a width
 		// too small to fit the entire line.
 		if (control.hwnd = CreateWindowEx(exstyle, _T("button"), aText, style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			if (style & BS_DEFPUSHBUTTON)
 			{
@@ -3245,7 +3265,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// to send BN_DBLCLK messages, any rapid clicks by the user on (for example) a tri-state checkbox
 		// are seen only as one click for the purpose of changing the box's state.
 		if (control.hwnd = CreateWindowEx(exstyle, _T("button"), aText, style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			if (opt.checked != BST_UNCHECKED) // Set the specified state.
 				SendMessage(control.hwnd, BM_SETCHECK, opt.checked, 0);
@@ -3254,7 +3274,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	case GUI_CONTROL_RADIO:
 		control.hwnd = CreateWindowEx(exstyle, _T("button"), aText, style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL);
 		// opt.checked is handled later below.
 		break;
 
@@ -3271,7 +3291,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// isn't that useful anymore anyway since GuiControl(Get) can access controls directly by
 		// their current output-var names:
 		if (control.hwnd = CreateWindowEx(exstyle, _T("Combobox"), _T(""), style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			// Set font unconditionally to simplify calculations, which help ensure that at least one item
 			// in the DropDownList/Combo is visible when the list drops down:
@@ -3306,7 +3326,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	case GUI_CONTROL_LISTBOX:
 		// See GUI_CONTROL_COMBOBOX above for why empty string is passed in as the caption:
 		if (control.hwnd = CreateWindowEx(exstyle, _T("Listbox"), _T(""), style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			if (opt.tabstop_count)
 				SendMessage(control.hwnd, LB_SETTABSTOPS, opt.tabstop_count, (LPARAM)opt.tabstop);
@@ -3349,7 +3369,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		if (opt.listview_view != LV_VIEW_TILE) // It was ensured earlier that listview_view can be set to LV_VIEW_TILE only for XP or later.
 			style = (style & ~LVS_TYPEMASK) | opt.listview_view; // Create control in the correct view mode whenever possible (TILE is the exception because it can't be expressed via style).
 		if (control.hwnd = CreateWindowEx(exstyle, WC_LISTVIEW, _T(""), style, opt.x, opt.y // exstyle does apply to ListViews.
-			, opt.width, opt.height == COORD_UNSPECIFIED ? 200 : opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.width, opt.height == COORD_UNSPECIFIED ? 200 : opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			if (   !(control.union_lv_attrib = (lv_attrib_type *)malloc(sizeof(lv_attrib_type)))   )
 			{
@@ -3465,7 +3485,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	case GUI_CONTROL_TREEVIEW:
 		if (control.hwnd = CreateWindowEx(exstyle, WC_TREEVIEW, _T(""), style, opt.x, opt.y
-			, opt.width, opt.height == COORD_UNSPECIFIED ? 200 : opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.width, opt.height == COORD_UNSPECIFIED ? 200 : opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			mCurrentTreeView = &control;
 			if (opt.checked)
@@ -3524,7 +3544,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// when done (or NULL if it failed to allocate the memory).
 		malloc_buf = (*aText && (style & ES_MULTILINE)) ? TranslateLFtoCRLF(aText) : aText;
 		if (control.hwnd = CreateWindowEx(exstyle, _T("edit"), malloc_buf ? malloc_buf : aText, style  // malloc_buf is checked again in case mem alloc failed.
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			// As documented in MSDN, setting a password char will have no effect for multi-line edits
 			// since they do not support password/mask char.
@@ -3570,7 +3590,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			style |= DTS_SHOWNONE;
 		//else it's blank, so retain the default DTS_SHORTDATEFORMAT (0x0000).
 		if (control.hwnd = CreateWindowEx(exstyle, DATETIMEPICK_CLASS, _T(""), style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			if (use_custom_format)
 				DateTime_SetFormat(control.hwnd, aText);
@@ -3602,7 +3622,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// It will be resized after creation by querying the control:
 		if (control.hwnd = CreateWindowEx(exstyle, MONTHCAL_CLASS, _T(""), style, opt.x, opt.y
 			, opt.width < 0 ? 100 : opt.width  // Negative width has special meaning upon creation (see below).
-			, opt.height == COORD_UNSPECIFIED ? 100 : opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.height == COORD_UNSPECIFIED ? 100 : opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			if (style & MCS_MULTISELECT) // Must do this prior to setting initial contents in case contents is a range greater than 7 days.
 				MonthCal_SetMaxSelCount(control.hwnd, 366); // 7 days seems too restrictive a default, so expand.
@@ -3694,7 +3714,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// In this case, not only doesn't the caption appear anywhere, it's not set either (or at least
 		// not retrievable via GetWindowText()):
 		if (control.hwnd = CreateWindowEx(exstyle, HOTKEY_CLASS, _T(""), style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			if (*aText)
 				SendMessage(control.hwnd, HKM_SETHOTKEY, TextToHotkey(aText), 0);
@@ -3746,7 +3766,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// retrieved and used to figure out how to resize the buddy in cases where its width-set-automatically
 		// -based-on-contents should not be squished as a result of buddying.
 		if (control.hwnd = CreateWindowEx(exstyle, UPDOWN_CLASS, _T(""), style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			if (provide_buddy_manually) // v1.0.42.02 (see comment where provide_buddy_manually is initialized).
 				SendMessage(control.hwnd, UDM_SETBUDDY, (WPARAM)prev_control.hwnd, 0); // See StatusBar notes above.  Also, mControlCount>0 whenever provide_buddy_manually==true.
@@ -3756,7 +3776,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				// Since creation of a buddied up-down ignored the specified x/y and width/height, update them
 				// for use here and also later below for updating mMaxExtentRight, etc.
 				GetWindowRect(control.hwnd, &rect);
-				MapWindowPoints(NULL, mHwnd, (LPPOINT)&rect, 2); // Convert rect to client coordinates (not the same as GetClientRect()).
+				MapWindowPoints(NULL, parent_hwnd, (LPPOINT)&rect, 2); // Convert rect to client coordinates (not the same as GetClientRect()).
 				opt.x = rect.left;
 				opt.y = rect.top;
 				opt.width = rect.right - rect.left;
@@ -3764,7 +3784,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				// Get its buddy's rectangle for use in two places:
 				RECT buddy_rect;
 				GetWindowRect(prev_control.hwnd, &buddy_rect);
-				MapWindowPoints(NULL, mHwnd, (LPPOINT)&buddy_rect, 2); // Convert rect to client coordinates (not the same as GetClientRect()).
+				MapWindowPoints(NULL, parent_hwnd, (LPPOINT)&buddy_rect, 2); // Convert rect to client coordinates (not the same as GetClientRect()).
 				// Note: It does not matter if UDS_HORZ is in effect because strangely, the up-down still
 				// winds up on the left or right side of the buddy, not the top/bottom.
 				if (mControlWidthWasSetByContents)
@@ -3830,7 +3850,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	case GUI_CONTROL_SLIDER:
 		if (control.hwnd = CreateWindowEx(exstyle, TRACKBAR_CLASS, _T(""), style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			ControlSetSliderOptions(control, opt); // Fix for v1.0.25.08: This must be done prior to the below.
 			// The control automatically deals with out-of-range values by setting slider to min or max.
@@ -3845,7 +3865,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	case GUI_CONTROL_PROGRESS:
 		if (control.hwnd = CreateWindowEx(exstyle, PROGRESS_CLASS, _T(""), style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			// Progress bars don't default to mBackgroundColorCtl for their background color because it
 			// would be undesired by the user 99% of the time (it usually would look bad since the bar's
@@ -3864,24 +3884,18 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	case GUI_CONTROL_TAB:
 		if (control.hwnd = CreateWindowEx(exstyle, WC_TABCONTROL, _T(""), style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
-			// For v1.0.23, theme is removed unconditionally for Tab controls because if an XP theme is
-			// in effect, causing a non-solid background (such as an off-white gradient/fade), there are
-			// many complications to getting the sub-controls' background to match the gradient.
-			// The small advantages (styled tab appearance, yellow-bar hot-tracking, and the dubious
-			// cosmetic appeal of the gradient itself) do not seem to outweigh the added complications.
-			// The main approaches to supporting a themed tab control in the future are:
-			// 1) Making a brush from a bitmap/snapshot of the background and applying that to Radios,
-			//    Checkboxes, and GroupBoxes (and possibly other future control types).
-			// 2) Using CreateDialog() or such to make a dialog window (child of main window, not
-			//    child of the tab control).  The tab's controls are then made children of this dialog
-			//    and automatically get the right background appearance by virtue of a call to
-			//    EnableThemeDialogTexture().  It seems this call only works on true dialogs and their
-			//    children.
-			// See this and especially its responses: http://www.codeproject.com/wtl/ThemedDialog.asp#xx727162xx
-			// The following is no longer done because it was handled above via opt.use_theme:
-			//do_strip_theme = true;
+			if (opt.tab_control_uses_dialog) // It's a Tab3 control.
+			{
+				// Create a child dialog to host the controls for all tabs.
+				if (!CreateTabDialog(control, opt))
+				{
+					DestroyWindow(control.hwnd);
+					control.hwnd = NULL;
+					break;
+				}
+			}
 			// After a new tab control is created, default all subsequently created controls to belonging
 			// to the first tab of this tab control: 
 			mCurrentTabControlIndex = mTabControlCount;
@@ -3891,9 +3905,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			g_TabClassProc = (WNDPROC)SetWindowLongPtr(control.hwnd, GWLP_WNDPROC, (LONG_PTR)TabWindowProc);
 			// Doesn't work to remove theme background from tab:
 			//MyEnableThemeDialogTexture(control.hwnd, ETDT_DISABLE);
-			// This attempt to apply theme to the entire dialog window also has no effect, probably
-			// because ETDT_ENABLETAB only works with true dialog windows (e.g. CreateDialog()):
-			//MyEnableThemeDialogTexture(mHwnd, ETDT_ENABLETAB);
 			// The above require the following line:
 			//#include <uxtheme.h> // For EnableThemeDialogTexture()'s constants.
 		}
@@ -3916,7 +3927,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			// If any of the above calls failed, attempt to create the window anyway:
 		}
 		if (control.hwnd = CreateWindowEx(exstyle, _T("AtlAxWin"), aText, style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL))
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			IObject *activex_obj;
 			// This is done even if no output_var, to ensure the control was successfully created:
@@ -3938,7 +3949,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		if (opt.customClassAtom == 0)
 			return g_script.ScriptError(_T("A window class is required."));
 		control.hwnd = CreateWindowEx(exstyle, MAKEINTATOM(opt.customClassAtom), aText, style
-			, opt.x, opt.y, opt.width, opt.height, mHwnd, control_id, g_hInstance, NULL);
+			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL);
 		break;
 
 	case GUI_CONTROL_STATUSBAR:
@@ -4046,6 +4057,14 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		//	opt.width = rect.right - rect.left;
 		MoveWindow(control.hwnd, opt.x, opt.y, opt.width, opt.height, TRUE); // Repaint, since parent might be visible.
 	}
+	else if (control.type == GUI_CONTROL_TAB && opt.tab_control_uses_dialog)
+	{
+		// Update this tab control's dialog to match the tab's display area.  This should be done
+		// whenever the display area changes, such as when tabs are added for the first time or the
+		// number of tab rows changes.  It's not done if (opt.row_count > 0), because the section
+		// above would have already triggered an update via MoveWindow/WM_WINDOWPOSCHANGED.
+		UpdateTabDialog(control.hwnd);
+	}
 
 	if (retrieve_dimensions) // Update to actual size for use later below.
 	{
@@ -4078,7 +4097,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	// its inside a tab control.  Perhaps this could be done by subclassing the ListView or Tab control
 	// and having it do something different or additional in response to WM_ERASEBKGND.  It might
 	// also be done in the parent window's proc in response to WM_ERASEBKGND.
-	if (owning_tab_control)
+	if (owning_tab_control && parent_hwnd == mHwnd) // The control is on a tab control which is its sibling.
 	{
 		// Fix for v1.0.35: Probably due to clip-siblings, adding a control within the area of a tab control
 		// does not properly draw the control.  This seems to apply to most/all control types.
@@ -4103,6 +4122,14 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	if (aControlType != GUI_CONTROL_STATUSBAR) // i.e. don't let status bar affect positioning of controls relative to each other.
 	{
+		if (parent_hwnd != mHwnd) // This control is in a tab dialog.
+		{
+			// Translate the coordinates back to Gui-relative client coordinates.
+			POINT pt = { opt.x, opt.y };
+			MapWindowPoints(parent_hwnd, mHwnd, &pt, 1);
+			opt.x = pt.x, opt.y = pt.y;
+		}
+
 		////////////////////////////////////////////////////////////////////////////////////////////////////
 		// Save the details of this control's position for possible use in auto-positioning the next control.
 		////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -5740,7 +5767,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 						// is the first control on this particular tab/page:
 						if (!GetControlCountOnTabPage(aControl.tab_control_index, aControl.tab_index))
 						{
-							pt = GetPositionOfTabClientArea(*tab_control);
+							pt = GetPositionOfTabDisplayArea(*tab_control);
 							aOpt.x = pt.x + offset;
 							if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 								aOpt.y = pt.y + mMarginY;
@@ -5793,7 +5820,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 						// is the first control on this particular tab/page:
 						if (!GetControlCountOnTabPage(aControl.tab_control_index, aControl.tab_index))
 						{
-							pt = GetPositionOfTabClientArea(*tab_control);
+							pt = GetPositionOfTabDisplayArea(*tab_control);
 							aOpt.y = pt.y + offset;
 							if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 								aOpt.x = pt.x + mMarginX;
@@ -8841,20 +8868,32 @@ LRESULT CALLBACK TabWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	GuiControlType *pcontrol;
 	HWND parent_window;
 
-	if (iMsg == WM_ERASEBKGND)
+	switch (iMsg)
 	{
+	case WM_ERASEBKGND:
+	case WM_WINDOWPOSCHANGED:
 		parent_window = GetParent(hWnd);
 		// Relies on short-circuit boolean order:
-		if (   (pgui = GuiType::FindGui(parent_window)) && (pcontrol = pgui->FindControl(hWnd))
-			&& pgui->mBackgroundBrushWin && !(pcontrol->attrib & GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT)   )
+		if (  !(pgui = GuiType::FindGui(parent_window)) || !(pcontrol = pgui->FindControl(hWnd))  )
+			break;
+		switch (iMsg)
 		{
-			// Can't use SetBkColor(), need an real brush to fill it.
+		case WM_ERASEBKGND:
+			if (!pgui->mBackgroundBrushWin || (pcontrol->attrib & GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT))
+				break; // Let default proc handle it.
+			// Can't use SetBkColor(), need a real brush to fill it.
 			RECT clipbox;
 			GetClipBox((HDC)wParam, &clipbox);
 			FillRect((HDC)wParam, &clipbox, pgui->mBackgroundBrushWin);
 			return 1; // "An application should return nonzero if it erases the background."
+		case WM_WINDOWPOSCHANGED:
+			if ((LPWINDOWPOS(lParam)->flags & (SWP_NOMOVE | SWP_NOSIZE)) != (SWP_NOMOVE | SWP_NOSIZE)) // i.e. moved, resized or both.
+			{
+				// Update this tab control's dialog, if it has one, to match the new size/position.
+				pgui->UpdateTabDialog(hWnd);
+				break;
+			}
 		}
-		//else let default proc handle it.
 	}
 
 	// This will handle anything not already fully handled and returned from above:
@@ -9557,6 +9596,10 @@ bool GuiType::ControlOverrideBkColor(GuiControlType &aControl)
 	if (!mTabControlCount || !(ptab_control = FindTabControl(aControl.tab_control_index))
 		|| !(ptab_control->attrib & GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT)) // Relies on short-circuit boolean order.
 		return false;  // Override not needed because control isn't on a tab, or it's tab has same color as window.
+	if (GetParent(aControl.hwnd) != mHwnd)
+		// Even if the control doesn't lie entirely within the tab control's display area,
+		// it is only visible within that area due to the parent-child relationship.
+		return true;
 	// Does this control lie mostly inside the tab?  Note that controls can belong to a tab page even though
 	// they aren't physically located inside the page.
 	RECT overlap_rect, tab_rect, control_rect;
@@ -9626,6 +9669,12 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 	//if (!(tab_style & TCS_VERTICAL) || (tab_style & TCS_RIGHT) || !(tab_style & TCS_BUTTONS))
 	//	TabCtrl_AdjustRect(aTabControl.hwnd, FALSE, &tab_rect); // Reduce it to just the area without the tabs, since the tabs have already been redrawn.
 
+	HWND tab_dialog = (HWND)GetProp(aTabControl.hwnd, _T("ahk_dlg"));
+	if (tab_dialog)
+		// Hiding the tab dialog and showing after re-enabling redraw solves an issue with ActiveX
+		// WebBrowser controls not being redrawn (seems to be a WM_SETREDRAW glitch).
+		ShowWindow(tab_dialog, SW_HIDE);
+
 	// For a likely cleaner transition between tabs, disable redrawing until the switch is complete.
 	// Doing it this way also serves to refresh a tab whose controls have just been disabled via
 	// something like "GuiControl, Disable, MyTab", which would otherwise not happen because unlike
@@ -9646,6 +9695,9 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 		member_of_current_tab = (control.tab_index == curr_tab_index);
 		will_be_visible = !hide_all && member_of_current_tab && !(control.attrib & GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN);
 		will_be_enabled = !disable_all && member_of_current_tab && !(control.attrib & GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED);
+		// Above: Disabling the control when it's not on the current tab means that it can't be
+		// activated, even by a keyboard shorcut - for instance, a button with text "&Click me"
+		// could be activated by pressing Alt+C if the control was enabled but hidden.
 		// Don't use IsWindowVisible() because if the parent window is hidden, I think that will
 		// always say that the controls are hidden too.  In any case, IsWindowVisible() does not
 		// work correctly for this when the window is first shown:
@@ -9654,37 +9706,18 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 		has_enabled_style = !(style & WS_DISABLED);
 		// Showing/hiding/enabling/disabling only when necessary might cut down on redrawing:
 		control_state_altered = false;  // Set default.
-		if (will_be_visible)
+		if (will_be_visible != has_visible_style)
 		{
-			if (!has_visible_style)
-			{
-				ShowWindow(control.hwnd, SW_SHOWNOACTIVATE);
-				control_state_altered = true;
-			}
+			ShowWindow(control.hwnd, will_be_visible ? SW_SHOWNOACTIVATE : SW_HIDE);
+			control_state_altered = true;
 		}
-		else
-			if (has_visible_style)
-			{
-				ShowWindow(control.hwnd, SW_HIDE);
-				control_state_altered = true;
-			}
-		if (will_be_enabled)
+		if (will_be_enabled != has_enabled_style)
 		{
-			if (!has_enabled_style)
-			{
-				EnableWindow(control.hwnd, TRUE);
-				control_state_altered = true;
-			}
+			// Note that it seems to make sense to disable even text/pic/groupbox controls because
+			// they can receive clicks and double clicks (except GroupBox).
+			EnableWindow(control.hwnd, will_be_enabled);
+			control_state_altered = true;
 		}
-		else
-			if (has_enabled_style)
-			{
-				// Note that it seems to make sense to disable even text/pic/groupbox controls because
-				// they can receive clicks and double clicks (except GroupBox).
-				EnableWindow(control.hwnd, FALSE);
-				control_state_altered = true;
-			}
-
 		if (control_state_altered)
 		{
 			// If this altered control lies at least partially outside the tab's interior,
@@ -9739,6 +9772,9 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 
 	if (parent_is_visible_and_not_minimized) // Fix for v1.0.25.14.  See further above for details.
 		SendMessage(mHwnd, WM_SETREDRAW, TRUE, 0); // Re-enable drawing before below so that tab can be focused below.
+
+	if (tab_dialog)
+		ShowWindow(tab_dialog, SW_SHOW);
 
 	// In case tab is empty or there is no control capable of receiving focus, focus the tab itself
 	// instead.  This allows the Ctrl-Pgdn/Pgup keyboard shortcuts to continue to navigate within
@@ -9839,28 +9875,39 @@ int GuiType::GetControlCountOnTabPage(TabControlIndexType aTabControlIndex, TabI
 
 
 
-POINT GuiType::GetPositionOfTabClientArea(GuiControlType &aTabControl)
-// Gets position of tab control relative to parent window's client area.
+void GuiType::GetTabDisplayAreaRect(HWND aTabControlHwnd, RECT &aRect)
+// Gets coordinates of tab control's display area relative to parent window's client area.
 {
-	RECT rect, entire_rect;
-	GetWindowRect(aTabControl.hwnd, &entire_rect);
-	POINT pt = {entire_rect.left, entire_rect.top};
-	ScreenToClient(mHwnd, &pt);
-	GetClientRect(aTabControl.hwnd, &rect); // Used because the coordinates of its upper-left corner are (0,0).
-	DWORD style = GetWindowLong(aTabControl.hwnd, GWL_STYLE);
+	RECT rect;
+	GetClientRect(aTabControlHwnd, &rect); // Used because the coordinates of its upper-left corner are (0,0).
+	DWORD style = GetWindowLong(aTabControlHwnd, GWL_STYLE);
 	// Tabs on left (TCS_BUTTONS only) require workaround, at least on XP.  Otherwise pt.x will be much too large.
 	// This has been confirmed to be true even when theme has been stripped off the tab control.
 	bool workaround = !(style & TCS_RIGHT) && (style & (TCS_VERTICAL | TCS_BUTTONS)) == (TCS_VERTICAL | TCS_BUTTONS);
 	if (workaround)
-		SetWindowLong(aTabControl.hwnd, GWL_STYLE, style & ~TCS_BUTTONS);
-	TabCtrl_AdjustRect(aTabControl.hwnd, FALSE, &rect); // Retrieve the area beneath the tabs.
+		SetWindowLong(aTabControlHwnd, GWL_STYLE, style & ~TCS_BUTTONS);
+	TabCtrl_AdjustRect(aTabControlHwnd, FALSE, &rect); // Retrieve the area beneath the tabs.
+	int offset_x = -2;  // -2 because testing shows that X (but not Y) is off by exactly 2.
 	if (workaround)
 	{
-		SetWindowLong(aTabControl.hwnd, GWL_STYLE, style);
-		pt.x += 5 * TabCtrl_GetRowCount(aTabControl.hwnd); // Adjust for the fact that buttons are wider than tabs.
+		SetWindowLong(aTabControlHwnd, GWL_STYLE, style);
+		offset_x += 5 * TabCtrl_GetRowCount(aTabControlHwnd); // Adjust for the fact that buttons are wider than tabs.
 	}
-	pt.x += rect.left - 2;  // -2 because testing shows that X (but not Y) is off by exactly 2.
-	pt.y += rect.top;
+	MapWindowPoints(aTabControlHwnd, mHwnd, (LPPOINT)&rect, 2); // Convert tab-control-relative coordinates to Gui-relative.
+	aRect.left = rect.left + offset_x;
+	aRect.right = rect.right;
+	aRect.top = rect.top;
+	aRect.bottom = rect.bottom;
+}
+
+
+
+POINT GuiType::GetPositionOfTabDisplayArea(GuiControlType &aTabControl)
+// Gets position of tab control's display area relative to parent window's client area.
+{
+	RECT rect;
+	GetTabDisplayAreaRect(aTabControl.hwnd, rect);
+	POINT pt = { rect.left, rect.top };
 	return pt;
 }
 
@@ -9917,6 +9964,178 @@ ResultType GuiType::SelectAdjacentTab(GuiControlType &aTabControl, bool aMoveToR
 		Event(GUI_HWND_TO_INDEX(aTabControl.hwnd), TCN_SELCHANGE);
 
 	return OK;
+}
+
+
+
+ResultType GuiType::CreateTabDialog(GuiControlType &aTabControl, GuiControlOptionsType &aOpt)
+// Creates a dialog to host controls for a tab control.
+{
+	HWND tab_dialog;
+	struct MYDLG : DLGTEMPLATE
+	{
+		WORD wNoMenu;
+		WORD wStdClass;
+		WORD wNoTitle;
+	};
+	MYDLG dlg;
+	ZeroMemory(&dlg, sizeof(dlg));
+	dlg.style = WS_VISIBLE | WS_CHILD | DS_CONTROL; // DS_CONTROL enables proper tab navigation and possibly other things.
+	//dlg.dwExtendedStyle = WS_EX_CONTROLPARENT; // Redundant; DS_CONTROL causes this to be applied.
+	// Create the dialog.
+	tab_dialog = CreateDialogIndirect(g_hInstance, &dlg, mHwnd, TabDialogProc);
+	if (!tab_dialog)
+		return FAIL;
+	// SetProp: Seems more maintainable than overloading control.union_color.
+	if (!SetProp(aTabControl.hwnd, _T("ahk_dlg"), tab_dialog))
+	{
+		DestroyWindow(tab_dialog);
+		return FAIL;
+	}
+	LONG attrib = 0;
+	if (aOpt.use_theme)
+	{
+		// Apply a tab control background to the tab dialog.  This also affects
+		// the backgrounds of some controls, such as Radio and Groupbox controls.
+		MyEnableThemeDialogTexture(tab_dialog, 6); // ETDT_ENABLETAB = 6
+		attrib |= TABDIALOG_ATTRIB_THEMED;
+	}
+	if (aTabControl.attrib & GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT)
+		attrib |= TABDIALOG_ATTRIB_BACKGROUND_DEFAULT;
+	SetWindowLongPtr(tab_dialog, GWLP_USERDATA, attrib);
+	if (!((mExStyle = GetWindowLong(mHwnd, GWL_EXSTYLE)) & WS_EX_CONTROLPARENT))
+		// WS_EX_CONTROLPARENT must be applied to the parent window as well as the
+		// tab dialog to allow tab navigation to work correctly.  With it applied
+		// only to the tab dialog, tabbing out of a multi-line edit control won't
+		// work if it is the last control on a tab.
+		SetWindowLong(mHwnd, GWL_EXSTYLE, mExStyle |= WS_EX_CONTROLPARENT);
+	return OK;
+}
+
+
+
+void GuiType::UpdateTabDialog(HWND aTabControlHwnd)
+// Positions a tab control's container dialog to fill the tab control's display area.
+{
+	HWND tab_dialog = (HWND)GetProp(aTabControlHwnd, _T("ahk_dlg"));
+	if (tab_dialog) // It's a Tab3 control.
+	{
+		RECT rect;
+		GetTabDisplayAreaRect(aTabControlHwnd, rect);
+		MoveWindow(tab_dialog, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, TRUE);
+	}
+}
+
+
+
+HBRUSH CreateTabDialogBrush(HWND aDlg, HDC aCompatibleDC)
+{
+	HBRUSH brush = NULL;
+	RECT rect;
+	GetClientRect(aDlg, &rect);
+	if (HDC bitmap_dc = CreateCompatibleDC(aCompatibleDC))
+	{
+		if (HBITMAP bitmap = CreateCompatibleBitmap(aCompatibleDC, rect.right, rect.bottom))
+		{
+			HBITMAP prev_bitmap = (HBITMAP)SelectObject(bitmap_dc, bitmap);
+
+			// Print the tab control into the bitmap.
+			SendMessage(aDlg, WM_PRINTCLIENT, (WPARAM)bitmap_dc, PRF_CLIENT);
+
+			// Create a brush from the bitmap.
+			brush = CreatePatternBrush(bitmap);
+
+			SelectObject(bitmap_dc, prev_bitmap);
+			DeleteObject(bitmap);
+		}
+		DeleteDC(bitmap_dc);
+	}
+	return brush;
+}
+
+
+
+INT_PTR CALLBACK TabDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+	switch (uMsg)
+	{
+	// Messages to be forwarded to the main GUI window:
+	case WM_COMMAND:
+	case WM_NOTIFY:
+	case WM_VSCROLL: // These two should only be received for sliders and up-downs.
+	case WM_HSCROLL: //
+	case WM_CONTEXTMENU:
+	//case WM_DROPFILES: // Not sent to the tab dialog since it doesn't accept drop.
+	case WM_CTLCOLOREDIT:
+	case WM_CTLCOLORLISTBOX:
+	case WM_CTLCOLORSTATIC:
+	case WM_CTLCOLORBTN: // Not used directly, but might be used by script.
+	case WM_CTLCOLORSCROLLBAR: // As above.
+		if (GuiType *pgui = GuiType::FindGui(GetParent(hDlg)))
+		{
+			// For Slider and Link controls to look right in a themed tab control, this custom
+			// handling is needed.  This also handles other controls for simplicity, although
+			// there are easier methods available for them:
+			//  - Text/Picture: BackgroundTrans works (and overrides this section)
+			//  - Check/Radio/Group: EnableThemeDialogTexture() is enough
+			GuiControlType *pcontrol;
+			if (   uMsg == WM_CTLCOLORSTATIC
+				&& (TABDIALOG_ATTRIB_THEMED & GetWindowLongPtr(hDlg, GWLP_USERDATA))
+				&& (pcontrol = pgui->FindControl((HWND)lParam))
+				&& !(pcontrol->attrib & GUI_CONTROL_ATTRIB_BACKGROUND_TRANS)   )
+			{
+				HDC hdc = (HDC)wParam;
+				HBRUSH brush = (HBRUSH)GetProp(hDlg, _T("br"));
+				if (!brush)
+				{
+					// Create a pattern brush based on a bitmap of this tab dialog's background.
+					if (brush = CreateTabDialogBrush(hDlg, hdc))
+						SetProp(hDlg, _T("br"), brush);
+				}
+				if (brush)
+				{
+					// Tell the control to draw its background using our pattern brush.
+					POINT pt = { 0,0 };
+					MapWindowPoints(hDlg, (HWND)lParam, &pt, 1);
+					SetBrushOrgEx(hdc, pt.x, pt.y, NULL);
+					SetBkMode(hdc, TRANSPARENT); // Affects text rendering.
+					return (INT_PTR)brush;
+				}
+			}
+			// Forward this message to the GUI:
+			LRESULT result = SendMessage(pgui->mHwnd, uMsg, wParam, lParam);
+			if (uMsg >= WM_CTLCOLOREDIT && uMsg <= WM_CTLCOLORSTATIC)
+				return (INT_PTR)result;
+			// Except for WM_CTLCOLOR messages and a few others, DialogProcs are expected to
+			// return more specific results with SetWindowLong.
+			SetWindowLongPtr(hDlg, DWLP_MSGRESULT, result);
+			return TRUE;
+		}
+		break;
+	// Messages handled by the tab dialog:
+	case WM_CTLCOLORDLG:
+		if (GuiType *pgui = GuiType::FindGui(GetParent(hDlg)))
+		{
+			// Apply the main GUI's background window color if any, unless the tab control
+			// was created with a theme or -Background.
+			if (  pgui->mBackgroundBrushWin
+				&& !((TABDIALOG_ATTRIB_BACKGROUND_DEFAULT | TABDIALOG_ATTRIB_THEMED) & GetWindowLongPtr(hDlg, GWLP_USERDATA))  )
+			{
+				SetBkColor((HDC)wParam, pgui->mBackgroundColorWin);
+				return (INT_PTR)pgui->mBackgroundBrushWin;
+			}
+		}
+		break;
+	case WM_WINDOWPOSCHANGED: // Recreate the brush when the tab dialog is resized.
+	case WM_DESTROY: // Delete the brush when the window is destroyed.
+		if (HBRUSH brush = (HBRUSH)GetProp(hDlg, _T("br"))) // br was set by WM_CTLCOLORSTATIC above.
+		{
+			RemoveProp(hDlg, _T("br"));
+			DeleteObject(brush);
+		}
+		break;
+	}
+	return FALSE;
 }
 
 

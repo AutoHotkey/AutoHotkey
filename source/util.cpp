@@ -2577,23 +2577,23 @@ HRESULT MySetWindowTheme(HWND hwnd, LPCWSTR pszSubAppName, LPCWSTR pszSubIdList)
 
 
 
-//HRESULT MyEnableThemeDialogTexture(HWND hwnd, DWORD dwFlags)
-//{
-//	// The library must be loaded dynamically, otherwise the app will not launch on OSes older than XP.
-//	// Theme DLL is normally available only on XP+, but an attempt to load it is made unconditionally
-//	// in case older OSes can ever have it.
-//	HRESULT hresult = !S_OK; // Set default as "failure".
-//	HINSTANCE hinstTheme = LoadLibrary(_T("uxtheme"));
-//	if (hinstTheme)
-//	{
-//		typedef HRESULT (WINAPI *MyEnableThemeDialogTextureType)(HWND, DWORD);
-//  		MyEnableThemeDialogTextureType DynEnableThemeDialogTexture = (MyEnableThemeDialogTextureType)GetProcAddress(hinstTheme, "EnableThemeDialogTexture");
-//		if (DynEnableThemeDialogTexture)
-//			hresult = DynEnableThemeDialogTexture(hwnd, dwFlags);
-//		FreeLibrary(hinstTheme);
-//	}
-//	return hresult;
-//}
+HRESULT MyEnableThemeDialogTexture(HWND hwnd, DWORD dwFlags)
+{
+	// The library must be loaded dynamically, otherwise the app will not launch on OSes older than XP.
+	// Theme DLL is normally available only on XP+, but an attempt to load it is made unconditionally
+	// in case older OSes can ever have it.
+	HRESULT hresult = !S_OK; // Set default as "failure".
+	HINSTANCE hinstTheme = LoadLibrary(_T("uxtheme"));
+	if (hinstTheme)
+	{
+		typedef HRESULT (WINAPI *MyEnableThemeDialogTextureType)(HWND, DWORD);
+  		MyEnableThemeDialogTextureType DynEnableThemeDialogTexture = (MyEnableThemeDialogTextureType)GetProcAddress(hinstTheme, "EnableThemeDialogTexture");
+		if (DynEnableThemeDialogTexture)
+			hresult = DynEnableThemeDialogTexture(hwnd, dwFlags);
+		FreeLibrary(hinstTheme);
+	}
+	return hresult;
+}
 
 
 
