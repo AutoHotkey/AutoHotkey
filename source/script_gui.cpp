@@ -7838,15 +7838,19 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			static int run_num = 0;
 			static int last_run = 0;
 			int dbg = 0;
-			int old_x_page = 0;
-			int old_y_page = 0;
+			//int old_x_page = 0;
+			//int old_y_page = 0;
 			char buf[2048];
+
+			int Top, Left, Bottom, Right, GuiWidth, GuiHeight;
+			//Left = Top = 9999;
+			//Right = Bottom = 0;
 
 			run_num++;
 
 			GetClientRect(pgui->mHwnd, &client_rect);
-			old_x_page = pgui->mHScrollInfo->nPage;
-			old_y_page = pgui->mVScrollInfo->nPage;
+			//old_x_page = pgui->mHScrollInfo->nPage;
+			//old_y_page = pgui->mVScrollInfo->nPage;
 
 			pgui->mHScrollInfo->nMax = pgui->mMaxExtentRight;
 			pgui->mHScrollInfo->nPage = client_rect.right;
@@ -7854,66 +7858,53 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			pgui->mVScrollInfo->nMax = pgui->mMaxExtentDown;
 			pgui->mVScrollInfo->nPage = client_rect.bottom;
 
-
+			/*
 			if (run_num - last_run == 2) {
 				// Catch runs that interrupt another
 				sprintf(buf, "WM_SIZE: run: %d, last_run: %d. THIS RUN INTERRUPTS ANOTHER, ABORTING...\n", run_num, last_run);
 				OutputDebugStringA(buf);
 				return 0;
 			}
+			*/
 			SetScrollInfo(pgui->mHwnd, SB_HORZ, pgui->mHScrollInfo, true);	// Why does false not seem to stop this code from getting interrupted?
 			SetScrollInfo(pgui->mHwnd, SB_VERT, pgui->mVScrollInfo, true);
 
 			if (run_num - last_run == 2) {
-				sprintf(buf, "WM_SIZE: run: %d, last_run: %d. JUST RETURNED FROM AN INTERRUPTED RUN...\n", run_num, last_run);
-				OutputDebugStringA(buf);
+				// Re-Get scrollbar info before proceeding
+				//sprintf(buf, "WM_SIZE: run: %d, last_run: %d. JUST RETURNED FROM AN INTERRUPTED RUN...\n", run_num, last_run);
+				//OutputDebugStringA(buf);
 				GetScrollInfo(pgui->mHwnd, SB_HORZ, pgui->mHScrollInfo);
 				GetScrollInfo(pgui->mHwnd, SB_VERT, pgui->mVScrollInfo);
+				GetClientRect(pgui->mHwnd, &client_rect);
 				dbg = 1;
 			}
-			else {
-				sprintf(buf, "WM_SIZE: run: %d, last: %d, Client Height: %d, Gui Height: %d, nPos: %d \n", run_num, last_run, pgui->mMaxExtentDown, client_rect.bottom, pgui->mVScrollInfo->nPos);
-				OutputDebugStringA(buf);
-			}
-			// By this point, both scrollbars have redrawn, and disappeared if not needed.
-			// Re-Get scrollbar info before proceeding?
+			// By this point, both scrollbars have redrawn, and disappeared if not needed, and the Scrollinfos / client rect should be current.
+			Top = pgui->mVScrollInfo->nMin - pgui->mVScrollInfo->nPos;
+			Bottom = Top + pgui->mVScrollInfo->nMax;
+			Left = pgui->mHScrollInfo->nMin - pgui->mHScrollInfo->nPos;
+			Right = Left + pgui->mHScrollInfo->nMax;
+			GuiWidth = client_rect.right;
+			GuiHeight = client_rect.bottom;
 
+			sprintf(buf, "WM_SIZE: Client Height: %d, GuiHeight: %d, Top: %d, Bottom: %d\n", pgui->mVScrollInfo->nMax, GuiHeight, Top, Bottom );
+			OutputDebugStringA(buf);
+			if (Left < 0 && Right < GuiWidth)
+				xDrag = abs(Left) > GuiWidth - Right ? GuiWidth - Right : abs(Left);
 
-			last_run = run_num;
-			// Only if the content is bigger than the viewport
-			if (pgui->mHScrollInfo->nMax >= pgui->mHScrollInfo->nPage) {
-				// Is the thumbtrack at the end?
-				if (pgui->mHScrollInfo->nPos + pgui->mHScrollInfo->nPage >= pgui->mHScrollInfo->nMax) {
-					//ScrollWindow(pgui->mHwnd, 0, yDrag, NULL, NULL);
-					xDrag = pgui->mHScrollInfo->nPage - old_x_page;
-					if (xDrag > 0) {
-						pgui->mHScrollInfo->nPos -= xDrag;
-					}
-
+			if (Top < 0 && Bottom < GuiHeight) {
+				if (abs(Top) > GuiHeight - Bottom) {
+					yDrag = GuiHeight - Bottom;
 				}
-			}
-			// Only if the content is bigger than the viewport
-			if (pgui->mVScrollInfo->nMax >= pgui->mVScrollInfo->nPage) {
-				// Is the thumbtrack at the end?
-				if (pgui->mVScrollInfo->nPos + pgui->mVScrollInfo->nPage >= pgui->mVScrollInfo->nMax) {
-					//ScrollWindow(pgui->mHwnd, 0, yDrag, NULL, NULL);
-					yDrag = pgui->mVScrollInfo->nPage - old_y_page;
-					if (yDrag > 0) {
-						pgui->mVScrollInfo->nPos -= yDrag;
-					}
-
+				else {
+					yDrag = abs(Top);
 				}
-			}
-			if (xDrag < 0) {
-				xDrag = 0;
-			}
-			if (yDrag < 0) {
-				yDrag = 0;
 			}
 			if (xDrag || yDrag) {
 				sprintf(buf, "WM_SIZE: run: %d, TRIGGERING MOVE OF: x: %d, y: %d \n", run_num, xDrag, yDrag);
 				OutputDebugStringA(buf);
 				ScrollWindow(pgui->mHwnd, xDrag, yDrag, NULL, NULL);
+				pgui->mHScrollInfo->nPos -= xDrag;
+				pgui->mVScrollInfo->nPos -= yDrag;
 			}
 
 		}
