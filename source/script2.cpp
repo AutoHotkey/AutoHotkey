@@ -16986,6 +16986,18 @@ BIF_DECL(BIF_RegisterCallback)
 
 #endif
 
+
+
+BIF_DECL(BIF_MenuGetHandle)
+{
+	UserMenu *menu = g_script.FindMenu(ParamIndexToString(0, aResultToken.buf));
+	if (menu && !menu->mMenu)
+		menu->Create(); // On failure (rare), we just return 0.
+	aResultToken.value_int64 = menu ? (__int64)(UINT_PTR)menu->mMenu : 0;
+}
+
+
+
 BIF_DECL(BIF_StatusBar)
 {
 	TCHAR mode = ctoupper(aResultToken.marker[6]); // Union's marker initially contains the function name. SB_Set[T]ext.

@@ -3174,6 +3174,8 @@ BIF_DECL(BIF_OnExitOrClipboard);
 BIF_DECL(BIF_RegisterCallback);
 #endif
 
+BIF_DECL(BIF_MenuGetHandle);
+
 BIF_DECL(BIF_StatusBar);
 
 BIF_DECL(BIF_LV_GetNextOrCount);
