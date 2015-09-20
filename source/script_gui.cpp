@@ -7836,84 +7836,74 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			int xDrag = 0;
 			int yDrag = 0;
 			static int run_num = 0;
+			static int last_run = 0;
 			int dbg = 0;
+			int old_x_page = 0;
 			int old_y_page = 0;
+			char buf[2048];
+
+			run_num++;
 
 			GetClientRect(pgui->mHwnd, &client_rect);
-			if (run_num == 1) {
-				dbg = 1;
-			}
-			
+			old_x_page = pgui->mHScrollInfo->nPage;
 			old_y_page = pgui->mVScrollInfo->nPage;
-			run_num++;
+
 			pgui->mHScrollInfo->nMax = pgui->mMaxExtentRight;
 			pgui->mHScrollInfo->nPage = client_rect.right;
 
 			pgui->mVScrollInfo->nMax = pgui->mMaxExtentDown;
 			pgui->mVScrollInfo->nPage = client_rect.bottom;
 
-			SetScrollInfo(pgui->mHwnd, SB_VERT, pgui->mVScrollInfo, 0);
-			SetScrollInfo(pgui->mHwnd, SB_HORZ, pgui->mHScrollInfo, 0);
 
+			if (run_num - last_run == 2) {
+				sprintf(buf, "WM_SIZE: run: %d, last_run: %d. THIS RUN INTERRUPTS ANOTHER, ABORTING...\n", run_num, last_run);
+				OutputDebugStringA(buf);
+				return 0;
+			}
+			SetScrollInfo(pgui->mHwnd, SB_HORZ, pgui->mHScrollInfo, true);
+			SetScrollInfo(pgui->mHwnd, SB_VERT, pgui->mVScrollInfo, true);
+
+			// By this point, both scrollbars have redrawn, and disappeared if not needed.
+			// Re-Get scrollbar info before proceeding?
 			
-			char buf[2048];
 			sprintf(buf, "WM_SIZE: run: %d, Client Height: %d, Gui Height: %d, nPos: %d \n", run_num, pgui->mMaxExtentDown, client_rect.bottom, pgui->mVScrollInfo->nPos);
 			OutputDebugStringA(buf);
 
+			last_run = run_num;
+			// Only if the content is bigger than the viewport
+			if (pgui->mHScrollInfo->nMax >= pgui->mHScrollInfo->nPage) {
+				// Is the thumbtrack at the end?
+				if (pgui->mHScrollInfo->nPos + pgui->mHScrollInfo->nPage >= pgui->mHScrollInfo->nMax) {
+					//ScrollWindow(pgui->mHwnd, 0, yDrag, NULL, NULL);
+					xDrag = pgui->mHScrollInfo->nPage - old_x_page;
+					if (xDrag > 0) {
+						pgui->mHScrollInfo->nPos -= xDrag;
+					}
+
+				}
+			}
 			// Only if the content is bigger than the viewport
 			if (pgui->mVScrollInfo->nMax >= pgui->mVScrollInfo->nPage) {
 				// Is the thumbtrack at the end?
 				if (pgui->mVScrollInfo->nPos + pgui->mVScrollInfo->nPage >= pgui->mVScrollInfo->nMax) {
-					dbg = 1;
 					//ScrollWindow(pgui->mHwnd, 0, yDrag, NULL, NULL);
 					yDrag = pgui->mVScrollInfo->nPage - old_y_page;
 					if (yDrag > 0) {
-						ScrollWindow(pgui->mHwnd, 0, yDrag, NULL, NULL);
 						pgui->mVScrollInfo->nPos -= yDrag;
 					}
 
 				}
 			}
+			if (xDrag < 0) {
+				xDrag = 0;
+			}
+			if (yDrag < 0) {
+				yDrag = 0;
+			}
+			ScrollWindow(pgui->mHwnd, xDrag, yDrag, NULL, NULL);
 
-			/*
-			//int xAmount = ((xAmount = pgui->mHScrollInfo->nPos + pgui->mHScrollInfo->nPage) > pgui->mMaxExtentRight) ? xAmount - pgui->mMaxExtentRight : 0;
-			//int yAmount = ((yAmount = pgui->mVScrollInfo->nPos + pgui->mVScrollInfo->nPage) > pgui->mMaxExtentDown) ? yAmount - pgui->mMaxExtentDown : 0;
-			bool aIsVScroll = pgui->mStyle & WS_VSCROLL, aIsHScroll = pgui->mStyle & WS_HSCROLL;
-			bool aVScroll = true, aHScroll = true;
-			if (aIsVScroll)
-			{
-				pgui->mVScrollInfo->nMax = pgui->mMaxExtentDown;
-				pgui->mVScrollInfo->nPage = client_rect.bottom - client_rect.top;
-				if (aIsHScroll && pgui->mVScrollInfo->nPage > pgui->mVScrollInfo->nMax)
-					if (pgui->mHScrollInfo->nPage <= pgui->mHScrollInfo->nMax)
-					{
-						pgui->mHScrollInfo->nPage += GetSystemMetrics(SM_CYVSCROLL);
-						client_rect.right += GetSystemMetrics(SM_CYVSCROLL);
-						aHScroll = false;
-					}
-				SetScrollInfo(pgui->mHwnd, SB_VERT, pgui->mVScrollInfo, 0);
-			}
-			if (aIsHScroll)
-			{
-				pgui->mHScrollInfo->nMax = pgui->mMaxExtentRight;
-				pgui->mHScrollInfo->nPage = client_rect.right - client_rect.left;
-				if (aIsVScroll && pgui->mHScrollInfo->nPage > pgui->mHScrollInfo->nMax)
-					if (pgui->mVScrollInfo->nPage <= pgui->mVScrollInfo->nMax)
-					{
-						pgui->mVScrollInfo->nPage += GetSystemMetrics(SM_CYHSCROLL);
-						client_rect.bottom += GetSystemMetrics(SM_CYHSCROLL);
-						aVScroll = false;
-					}
-				SetScrollInfo(pgui->mHwnd, SB_HORZ, pgui->mHScrollInfo, 0);
-			}
-			int yAmount = !aIsVScroll ? 0 : (client_rect.bottom - client_rect.top) - pgui->mVScrollInfo->nPage;
-			int xAmount = !aIsHScroll ? 0 : (client_rect.right - client_rect.left) - pgui->mHScrollInfo->nPage;
-			//if (xAmount || yAmount)
-			//	ScrollWindow(pgui->mHwnd, !aVScroll || pgui->mHScrollInfo->nPos == 0 ? 0 : xAmount, !aHScroll || pgui->mVScrollInfo->nPos == 0 ? 0 : yAmount, NULL, NULL);
-			//GetScrollInfo(pgui->mHwnd, SB_VERT, pgui->mVScrollInfo);
-			//GetScrollInfo(pgui->mHwnd, SB_HORZ, pgui->mHScrollInfo);
-			*/
 		}
+
 		return 0; // "If an application processes this message, it should return zero."
 				  // Testing shows that the window still resizes correctly (controls are revealed as the window
 				  // is expanded) even if the event isn't passed on to the default proc.
