@@ -2400,6 +2400,7 @@ public:
 	}
 
 	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions);
+	void InternalAppendMenu(UINT aFlags, UINT aMenuID, UserMenu *aSubmenu, LPTSTR aName);
 	ResultType DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev);
 	ResultType DeleteAllItems();
 	ResultType ModifyItem(UserMenuItem *aMenuItem, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions);
@@ -2964,6 +2965,7 @@ public:
 	LPTSTR ListKeyHistory(LPTSTR aBuf, int aBufSize);
 
 	ResultType PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var); // L17: Added aOptions2 for Icon sub-command (icon width). Arg was previously reserved/unused.
+	UINT GetFreeMenuItemID();
 	UserMenu *FindMenu(LPTSTR aMenuName);
 	UserMenu *AddMenu(LPTSTR aMenuName);
 	UINT ThisMenuItemPos();

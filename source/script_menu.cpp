@@ -263,7 +263,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 	case MENU_CMD_ADD:
 		if (*aParam3) // Since a menu item name was given, it's not a separator line.
 			break;    // Let a later switch() handle it.
-		if (!menu->AddItem(_T(""), 0, NULL, NULL, _T("")))
+		if (!menu->AddItem(_T(""), GetFreeMenuItemID(), NULL, NULL, _T(""))) // Even separators get an ID, so that they can be modified later using the position& notation.
 			RETURN_MENU_ERROR(ERR_OUTOFMEM, _T(""));  // Out of mem should be the only possibility in this case.
 		return OK;
 	case MENU_CMD_DELETE:
@@ -311,7 +311,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 		RETURN_MENU_ERROR(_T("Parameter #3 must not be blank in this case."), _T(""));
 
 	// Find the menu item name AND its previous item (needed for the DELETE command) in the linked list:
-	UserMenuItem *mi, *menu_item = NULL, *menu_item_prev = NULL; // Set defaults.
+	UserMenuItem *menu_item = NULL, *menu_item_prev = NULL; // Set defaults.
 	size_t length_aParam3 = _tcslen(aParam3);
 	// Check if the caller identified the menu item by position/index rather than by name.
 	// This should be reasonably backwards-compatible, as any scripts that want literally
@@ -368,59 +368,10 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 			RETURN_MENU_ERROR(_T("Nonexistent menu item."), aParam3);
 
 		// Otherwise: Adding a new item that doesn't yet exist.
-		// Need to find a menuID that isn't already in use by one of the other menu items.
-		// But also need to conserve menu items since only a relatively small number of IDs is available.
-		// Can't simply use ID_USER_FIRST + mMenuItemCount because: 1) There might be more than one
-		// user defined menu; 2) a menu item in the middle of the list may have been deleted,
-		// in which case that value would already be in use by the last item.
-		// Update: Now using caching of last successfully found free-ID to greatly improve avg.
-		// performance, especially for menus that contain thousands of items and submenus, such as
-		// ones that are built to mirror an entire nested directory structure.  Caching should
-		// improve performance even after all menu IDs within the available range have been
-		// allocated once (via adding and deleting menus + menu items) since large blocks of free IDs
-		// should be free, and on average, the caching will exploit these large free blocks.  However,
-		// if large amounts of menus and menu items are continually deleted and re-added by a script,
-		// the pool of free IDs will become fragmented over time, which will reduce performance.
-		// Since that kind of script behavior seems very rare, no attempt is made to "defragment".
-		// If more performance is needed in the future (seems unlikely for 99.9999% of scripts),
-		// could maintain an field of ~64000 bits, each bit representing whether a menu item ID is
-		// free.  Then, every time a menu or one or more of its IDs is deleted or added, the corresponding
-		// ID could be marked as free/taken.  That would add quite a bit of complexity to the menu
-		// delete code, however, and it would reduce the overall maintainability.  So it definitely
-		// doesn't seem worth it, especially since Windows XP seems to have trouble even displaying
-		// menus larger than around 15000-25000 items.
-		static UINT sLastFreeID = ID_USER_FIRST - 1;
-		// Increment by one for each new search, both due to the above line and because the
-		// last-found free ID has a high likelihood of still being in use:
-		++sLastFreeID;
-		bool id_in_use;
-		UserMenu *m;
-		// Note that the i variable is used to force the loop to complete exactly one full
-		// circuit through all available IDs, regardless of where the starting/cached value:
-		for (int i = 0; i < (ID_USER_LAST - ID_USER_FIRST + 1); ++i, ++sLastFreeID) // FOR EACH ID
-		{
-			if (sLastFreeID > ID_USER_LAST)
-				sLastFreeID = ID_USER_FIRST;  // Wrap around to the beginning so that one complete circuit is made.
-			id_in_use = false;  // Reset the default each iteration (overridden if the below finds a match).
-			for (m = mFirstMenu; m; m = m->mNextMenu) // FOR EACH MENU
-			{
-				for (mi = m->mFirstMenuItem; mi; mi = mi->mNextMenuItem) // FOR EACH MENU ITEM
-				{
-					if (mi->mMenuID == sLastFreeID)
-					{
-						id_in_use = true;
-						break;
-					}
-				}
-				if (id_in_use) // No point in searching the other menus, since it's now known to be in use.
-					break;
-			}
-			if (!id_in_use) // Break before the loop increments sLastFreeID.
-				break;
-		}
-		if (id_in_use) // All ~64000 IDs are in use!
+		UINT item_id = GetFreeMenuItemID();
+		if (!item_id) // All ~64000 IDs are in use!
 			RETURN_MENU_ERROR(_T("Too many menu items."), aParam3); // Short msg since so rare.
-		if (!menu->AddItem(aParam3, sLastFreeID, target_label, submenu, aOptions))
+		if (!menu->AddItem(aParam3, item_id, target_label, submenu, aOptions))
 			RETURN_MENU_ERROR(_T("Menu item name too long."), aParam3); // Can also happen due to out-of-mem, but that's too rare to display.
 		return OK;  // Item has been successfully added with the correct properties.
 	} // if (!menu_item)
@@ -561,9 +512,66 @@ ResultType Script::ScriptDeleteMenu(UserMenu *aMenu)
 
 
 
+UINT Script::GetFreeMenuItemID()
+// Returns an unused menu item ID, or 0 if all IDs are used.
+{
+	// Need to find a menuID that isn't already in use by one of the other menu items.
+	// But also need to conserve menu items since only a relatively small number of IDs is available.
+	// Can't simply use ID_USER_FIRST + mMenuItemCount because: 1) There might be more than one
+	// user defined menu; 2) a menu item in the middle of the list may have been deleted,
+	// in which case that value would already be in use by the last item.
+	// Update: Now using caching of last successfully found free-ID to greatly improve avg.
+	// performance, especially for menus that contain thousands of items and submenus, such as
+	// ones that are built to mirror an entire nested directory structure.  Caching should
+	// improve performance even after all menu IDs within the available range have been
+	// allocated once (via adding and deleting menus + menu items) since large blocks of free IDs
+	// should be free, and on average, the caching will exploit these large free blocks.  However,
+	// if large amounts of menus and menu items are continually deleted and re-added by a script,
+	// the pool of free IDs will become fragmented over time, which will reduce performance.
+	// Since that kind of script behavior seems very rare, no attempt is made to "defragment".
+	// If more performance is needed in the future (seems unlikely for 99.9999% of scripts),
+	// could maintain an field of ~64000 bits, each bit representing whether a menu item ID is
+	// free.  Then, every time a menu or one or more of its IDs is deleted or added, the corresponding
+	// ID could be marked as free/taken.  That would add quite a bit of complexity to the menu
+	// delete code, however, and it would reduce the overall maintainability.  So it definitely
+	// doesn't seem worth it, especially since Windows XP seems to have trouble even displaying
+	// menus larger than around 15000-25000 items.
+	static UINT sLastFreeID = ID_USER_FIRST - 1;
+	// Increment by one for each new search, both due to the above line and because the
+	// last-found free ID has a high likelihood of still being in use:
+	++sLastFreeID;
+	bool id_in_use;
+	// Note that the i variable is used to force the loop to complete exactly one full
+	// circuit through all available IDs, regardless of where the starting/cached value:
+	for (int i = 0; i < (ID_USER_LAST - ID_USER_FIRST + 1); ++i, ++sLastFreeID) // FOR EACH ID
+	{
+		if (sLastFreeID > ID_USER_LAST)
+			sLastFreeID = ID_USER_FIRST;  // Wrap around to the beginning so that one complete circuit is made.
+		id_in_use = false;  // Reset the default each iteration (overridden if the below finds a match).
+		for (UserMenu *m = mFirstMenu; m; m = m->mNextMenu) // FOR EACH MENU
+		{
+			for (UserMenuItem *mi = m->mFirstMenuItem; mi; mi = mi->mNextMenuItem) // FOR EACH MENU ITEM
+			{
+				if (mi->mMenuID == sLastFreeID)
+				{
+					id_in_use = true;
+					break;
+				}
+			}
+			if (id_in_use) // No point in searching the other menus, since it's now known to be in use.
+				break;
+		}
+		if (!id_in_use) // Break before the loop increments sLastFreeID.
+			break;
+	}
+	return id_in_use ? 0 : sLastFreeID;
+}
+
+
+
 // Macros for use with the below methods:
-#define aMenuItem_ID (aMenuItem->mSubmenu ? GetSubmenuPos(aMenuItem->mSubmenu->mMenu) : aMenuItem->mMenuID)
-#define aMenuItem_MF_BY (aMenuItem->mSubmenu ? MF_BYPOSITION : MF_BYCOMMAND)
+#define aMenuItem_ID		aMenuItem->mMenuID
+#define aMenuItem_MF_BY		MF_BYCOMMAND
 #define UPDATE_GUI_MENU_BARS(menu_type, hmenu) \
 	if (menu_type == MENU_TYPE_BAR && g_guiCount)\
 		GuiType::UpdateMenuBars(hmenu); // Above: If it's not a popup, it's probably a menu bar.
@@ -641,6 +649,28 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMe
 
 
 
+void UserMenu::InternalAppendMenu(UINT aFlags, UINT aMenuID, UserMenu *aSubmenu, LPTSTR aName)
+// Appends an item to mMenu and and ensures the new item's ID is set.
+{
+	AppendMenu(mMenu, aFlags, aSubmenu ? (UINT_PTR)aSubmenu->mMenu : aMenuID, aName);
+	if (aFlags & (MF_SEPARATOR | MF_POPUP))
+	{
+		// Although MF_SEPARATOR causes AppendMenu() to ignore the ID and MF_POPUP prevents
+		// us from passing the ID, it is apparently valid for those menu items to have an ID.
+		// Set the ID here to simplify identifying the menu item later.  In particular, this
+		// makes it possible to identify separator items for removal/renaming without having
+		// to calculate the position (allowing multiple separators and taking into account
+		// Menu::mIncludeStandardItems and whether those items are at the top or bottom).
+		MENUITEMINFO mii;
+		mii.cbSize = sizeof(mii);
+		mii.fMask = MIIM_ID;
+		mii.wID = aMenuID;
+		SetMenuItemInfo(mMenu, GetMenuItemCount(mMenu) - 1, TRUE, &mii);
+	}
+}
+
+
+
 UserMenuItem::UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, UserMenu *aMenu)
 // UserMenuItem Constructor.
 	: mName(aName), mNameCapacity(aNameCapacity), mMenuID(aMenuID), mLabel(aLabel), mSubmenu(aSubmenu), mMenu(aMenu)
@@ -652,8 +682,8 @@ UserMenuItem::UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, IOb
 	{
 		if (aSubmenu) // Ensure the menu is created so that AppendMenu() will function properly.
 			aSubmenu->Create();
-		AppendMenu(aMenu->mMenu, (*aName ? MF_STRING : MF_SEPARATOR) | (aSubmenu ? MF_POPUP : 0)
-			, aSubmenu ? (UINT_PTR)aSubmenu->mMenu : aMenuID, aName);
+		UINT flags = (*aName ? MF_STRING : MF_SEPARATOR) | (aSubmenu ? MF_POPUP : 0);
+		aMenu->InternalAppendMenu(flags, aMenuID, aSubmenu, aName);
 		UPDATE_GUI_MENU_BARS(aMenu->mMenuType, aMenu->mMenu)
 	}
 }
@@ -753,12 +783,9 @@ ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, IObject *aLabel, UserMe
 
 	MENUITEMINFO mii;
 	mii.cbSize = sizeof(mii);
-	mii.fMask = MIIM_SUBMENU | MIIM_ID;
+	mii.fMask = MIIM_SUBMENU;
 	mii.hSubMenu = aSubmenu ? aSubmenu->mMenu : NULL;
-	// If this submenu is being back into a normal menu item, the ID must be re-specified
-	// because an item that was formerly submenu will not have a real ID due to OS behavior:
-	mii.wID = aMenuItem->mMenuID;
-	if (SetMenuItemInfo(mMenu, aMenuItem_ID, aMenuItem->mSubmenu != NULL, &mii))
+	if (SetMenuItemInfo(mMenu, aMenuItem->mMenuID, FALSE, &mii))
 	{
 		// Submenu was just made into a different submenu or converted into a normal menu item.
 		// Since the OS (as an undocumented side effect) sometimes destroys the menu itself when
@@ -805,8 +832,7 @@ ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName)
 
 	MENUITEMINFO mii;
 	mii.cbSize = sizeof(mii);
-	mii.fMask = MIIM_TYPE;
-	mii.dwTypeData = aNewName;
+	mii.fMask = 0;
 
 	if (*aNewName)
 	{
@@ -814,6 +840,16 @@ ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName)
 		for (UserMenuItem *mi = mFirstMenuItem; mi; mi = mi->mNextMenuItem)
 			if (!lstrcmpi(mi->mName, aNewName)) // Match found (case insensitive).
 				return FAIL; // Caller should display an error message.
+		if (!*aMenuItem->mName && aMenuItem->mEnabled)
+		{
+			// This item is currently a separator and hasn't been specifically disabled by
+			// the script, but has been disabled by virtue of the fact that it's a separator.
+			// Retrieve the current (checked/unchecked/default) state and set things up so the
+			// item gets re-enabled below.
+			mii.fMask |= MIIM_STATE;
+			GetMenuItemInfo(mMenu, aMenuItem->mMenuID, FALSE, &mii);
+			mii.fState &= ~MFS_DISABLED;
+		}
 		mii.fType = MFT_STRING;
 	}
 	else // converting into a separator
@@ -822,25 +858,33 @@ ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName)
 		// ID_TRAY_OPEN is not set to be the default for the self-contained version, since it lacks that menu item.
 		CHANGE_DEFAULT_IF_NEEDED
 		mii.fType = MFT_SEPARATOR;
-		if (aMenuItem->mSubmenu)  // Converting submenu into a separator.
-		{
-			mii.fMask |= MIIM_SUBMENU;
-			mii.hSubMenu = NULL;
-		}
+		// Testing shows that if an item is converted into a separator and back into a
+		// normal item, it retains its submenu.  So don't set the submenu to NULL, since
+		// it's not necessary and would result in the OS destroying the submenu:
+		//if (aMenuItem->mSubmenu)  // Converting submenu into a separator.
+		//{
+		//	mii.fMask |= MIIM_SUBMENU;
+		//	mii.hSubMenu = NULL;
+		//}
 	}
-	
+
+	mii.fMask |= MIIM_TYPE;
+	mii.dwTypeData = aNewName;
+
 	// v1.1.04: If the new and old names both have accelerators, call UpdateAccelerators() if they
 	// are different. Otherwise call it if only one is NULL (i.e. accelerator was added or removed).
 	LPTSTR old_accel = _tcschr(aMenuItem->mName, '\t'), new_accel = _tcschr(aNewName, '\t');
 	bool update_accel = old_accel && new_accel ? _tcsicmp(old_accel, new_accel) : old_accel != new_accel;
 
 	// Failure is rare enough in the below that no attempt is made to undo the above:
-	BOOL result = SetMenuItemInfo(mMenu, aMenuItem_ID, aMenuItem->mSubmenu != NULL, &mii);
+	BOOL result = SetMenuItemInfo(mMenu, aMenuItem->mMenuID, FALSE, &mii);
 	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
 	if (  !(result && UpdateName(aMenuItem, aNewName))  )
 		return FAIL;
 	if (update_accel) // v1.1.04: Above determined this item's accelerator was changed.
 		UpdateAccelerators(); // Must not be done until after mName is updated.
+	if (*aNewName)
+		ApplyItemIcon(aMenuItem); // If any.  Simpler to call this than combine it into the logic above.
 	return OK;
 }
 
@@ -870,7 +914,6 @@ ResultType UserMenu::UpdateName(UserMenuItem *aMenuItem, LPTSTR aNewName)
 	else // It will become a separator.
 	{
 		*aMenuItem->mName = '\0'; // Safe because even if it's capacity is 1 byte, it's a writable byte.
-		aMenuItem->mMenuID = 0; // Free up an ID since separators currently can't be converted back into items.
 	}
 	return OK;
 }
@@ -1067,7 +1110,7 @@ ResultType UserMenu::Create(MenuTypeType aMenuType)
 			if (!mi->mSubmenu->Create())
 				return FAIL;
 		}
-		AppendMenu(mMenu, flags, mi->mSubmenu ? (UINT_PTR)mi->mSubmenu->mMenu : mi->mMenuID, mi->mName);
+		InternalAppendMenu(flags, mi->mMenuID, mi->mSubmenu, mi->mName);
 		
 		if (mi->mIcon) // L17: Check mIcon/mBitmap union, apply icon if necessary.
 			ApplyItemIcon(mi);
@@ -1386,30 +1429,6 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 	// ExitApp
 	MsgSleep(-1);
 	return OK;
-}
-
-
-
-UINT UserMenu::GetSubmenuPos(HMENU ahMenu)
-// ahMenu will be searched for in this->mMenu.
-// Returns UINT_MAX if this->mMenu is NULL, ahMenu is NULL, or if ahMenu can't be found in this->mMenu.
-// Testing shows that neither ModifyMenu() nor SetMenuItemInfo() nor any other Menu modifying
-// API call will accept aMenuItem->mMenuID or aMenuItem->mSubmenu as a way to uniquely
-// identify the menu item we want to change (even though GetMenuItemInfo indicates that
-// aMenuItem->mSubmenu is the "ID" of sorts).  Thus, the menu item can only be modified
-// by position.  Rather than having to maintain each submenu's position in every menu, thus
-// making the code less maintainable since you always have to worry about standard menu items
-// being added to the top vs. bottom of the menu, other menu items being inserted via
-// InsertMenu() (if that is ever allowed), etc. -- just loop through the menu to find the
-// right item, then return that to the caller so that it can modify the submenu based on position:
-{
-	if (!ahMenu || !mMenu)
-		return UINT_MAX;
-	int menu_item_count = GetMenuItemCount(mMenu);
-	for (int i = 0; i < menu_item_count; ++i)
-		if (GetSubMenu(mMenu, i) == ahMenu)
-			return i;
-	return UINT_MAX;
 }
 
 
