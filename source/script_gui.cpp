@@ -7827,7 +7827,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			static int run_num = 0;
 			static int last_run = 0;
 			int dbg = 0;
-			char buf[2048];
+			//char buf[2048];
 
 			int Top, Left, Bottom, Right, GuiWidth, GuiHeight;
 
@@ -8521,7 +8521,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			bool bar = iMsg == WM_VSCROLL;
 
 			GetScrollInfo(pgui->mHwnd, bar, &aScrollInfo);
-			int new_pos = aScrollInfo.nPos;
+			unsigned int new_pos = aScrollInfo.nPos;
 			switch (wParam & 0xFFFF)
 			{
 			case SB_THUMBTRACK:
@@ -8551,9 +8551,9 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			}
 
 			// Constrain scrollbar position to valid values
-			if (new_pos + aScrollInfo.nPage > aScrollInfo.nMax)
+			if (new_pos + aScrollInfo.nPage > (unsigned int)aScrollInfo.nMax)
 				new_pos = aScrollInfo.nMax - aScrollInfo.nPage;
-			else if (new_pos < aScrollInfo.nMin)
+			else if (new_pos < (unsigned int)aScrollInfo.nMin)
 				new_pos = aScrollInfo.nMin;
 
 			ScrollWindow(pgui->mHwnd, bar ? 0 : aScrollInfo.nPos - new_pos, bar ? aScrollInfo.nPos - new_pos : 0, 0, 0);
