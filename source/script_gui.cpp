@@ -7849,6 +7849,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			run_num++;
 
 			GetClientRect(pgui->mHwnd, &client_rect);
+			if (pgui->mHScrollInfo->nPage < pgui->mHScrollInfo->nMax)
+				client_rect.bottom += GetSystemMetrics(SM_CYHSCROLL);
+			if (pgui->mVScrollInfo->nPage < pgui->mVScrollInfo->nMax)
+				client_rect.right += GetSystemMetrics(SM_CYVSCROLL);
 			//old_x_page = pgui->mHScrollInfo->nPage;
 			//old_y_page = pgui->mVScrollInfo->nPage;
 
@@ -7869,15 +7873,17 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			SetScrollInfo(pgui->mHwnd, SB_HORZ, pgui->mHScrollInfo, true);	// Why does false not seem to stop this code from getting interrupted?
 			SetScrollInfo(pgui->mHwnd, SB_VERT, pgui->mVScrollInfo, true);
 
+			/*
 			if (run_num - last_run == 2) {
 				// Re-Get scrollbar info before proceeding
-				//sprintf(buf, "WM_SIZE: run: %d, last_run: %d. JUST RETURNED FROM AN INTERRUPTED RUN...\n", run_num, last_run);
-				//OutputDebugStringA(buf);
+				sprintf(buf, "WM_SIZE: run: %d, last_run: %d. JUST RETURNED FROM AN INTERRUPTED RUN...\n", run_num, last_run);
+				OutputDebugStringA(buf);
 				GetScrollInfo(pgui->mHwnd, SB_HORZ, pgui->mHScrollInfo);
 				GetScrollInfo(pgui->mHwnd, SB_VERT, pgui->mVScrollInfo);
 				GetClientRect(pgui->mHwnd, &client_rect);
 				dbg = 1;
 			}
+			*/
 			// By this point, both scrollbars have redrawn, and disappeared if not needed, and the Scrollinfos / client rect should be current.
 			Top = pgui->mVScrollInfo->nMin - pgui->mVScrollInfo->nPos;
 			Bottom = Top + pgui->mVScrollInfo->nMax;
@@ -7900,8 +7906,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				}
 			}
 			if (xDrag || yDrag) {
-				sprintf(buf, "WM_SIZE: run: %d, TRIGGERING MOVE OF: x: %d, y: %d \n", run_num, xDrag, yDrag);
-				OutputDebugStringA(buf);
+				//sprintf(buf, "WM_SIZE: run: %d, TRIGGERING MOVE OF: x: %d, y: %d \n", run_num, xDrag, yDrag);
+				//OutputDebugStringA(buf);
 				ScrollWindow(pgui->mHwnd, xDrag, yDrag, NULL, NULL);
 				pgui->mHScrollInfo->nPos -= xDrag;
 				pgui->mVScrollInfo->nPos -= yDrag;
