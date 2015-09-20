@@ -49,6 +49,9 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <PlatformToolset>v100</PlatformToolset>
+  </PropertyGroup>
   <!-- import common config -->
   <Import Project="..\..\Config.vcxproj" />
   <!-- platform: win32 -->
