@@ -7856,18 +7856,28 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 
 			if (run_num - last_run == 2) {
+				// Catch runs that interrupt another
 				sprintf(buf, "WM_SIZE: run: %d, last_run: %d. THIS RUN INTERRUPTS ANOTHER, ABORTING...\n", run_num, last_run);
 				OutputDebugStringA(buf);
 				return 0;
 			}
-			SetScrollInfo(pgui->mHwnd, SB_HORZ, pgui->mHScrollInfo, true);
+			SetScrollInfo(pgui->mHwnd, SB_HORZ, pgui->mHScrollInfo, true);	// Why does false not seem to stop this code from getting interrupted?
 			SetScrollInfo(pgui->mHwnd, SB_VERT, pgui->mVScrollInfo, true);
 
+			if (run_num - last_run == 2) {
+				sprintf(buf, "WM_SIZE: run: %d, last_run: %d. JUST RETURNED FROM AN INTERRUPTED RUN...\n", run_num, last_run);
+				OutputDebugStringA(buf);
+				GetScrollInfo(pgui->mHwnd, SB_HORZ, pgui->mHScrollInfo);
+				GetScrollInfo(pgui->mHwnd, SB_VERT, pgui->mVScrollInfo);
+				dbg = 1;
+			}
+			else {
+				sprintf(buf, "WM_SIZE: run: %d, last: %d, Client Height: %d, Gui Height: %d, nPos: %d \n", run_num, last_run, pgui->mMaxExtentDown, client_rect.bottom, pgui->mVScrollInfo->nPos);
+				OutputDebugStringA(buf);
+			}
 			// By this point, both scrollbars have redrawn, and disappeared if not needed.
 			// Re-Get scrollbar info before proceeding?
-			
-			sprintf(buf, "WM_SIZE: run: %d, Client Height: %d, Gui Height: %d, nPos: %d \n", run_num, pgui->mMaxExtentDown, client_rect.bottom, pgui->mVScrollInfo->nPos);
-			OutputDebugStringA(buf);
+
 
 			last_run = run_num;
 			// Only if the content is bigger than the viewport
@@ -7900,7 +7910,11 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			if (yDrag < 0) {
 				yDrag = 0;
 			}
-			ScrollWindow(pgui->mHwnd, xDrag, yDrag, NULL, NULL);
+			if (xDrag || yDrag) {
+				sprintf(buf, "WM_SIZE: run: %d, TRIGGERING MOVE OF: x: %d, y: %d \n", run_num, xDrag, yDrag);
+				OutputDebugStringA(buf);
+				ScrollWindow(pgui->mHwnd, xDrag, yDrag, NULL, NULL);
+			}
 
 		}
 
