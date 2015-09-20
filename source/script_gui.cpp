@@ -7838,23 +7838,20 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			static int run_num = 0;
 			static int last_run = 0;
 			int dbg = 0;
-			//int old_x_page = 0;
-			//int old_y_page = 0;
 			char buf[2048];
 
 			int Top, Left, Bottom, Right, GuiWidth, GuiHeight;
-			//Left = Top = 9999;
-			//Right = Bottom = 0;
 
 			run_num++;
 
 			GetClientRect(pgui->mHwnd, &client_rect);
-			if (pgui->mHScrollInfo->nPage < pgui->mHScrollInfo->nMax)
+
+			/*
+			if (pgui->mHScrollInfo->nPage < pgui->mHScrollInfo->nMax && client_rect.bottom >= pgui->mHScrollInfo->nMax)
 				client_rect.bottom += GetSystemMetrics(SM_CYHSCROLL);
-			if (pgui->mVScrollInfo->nPage < pgui->mVScrollInfo->nMax)
+			if (pgui->mVScrollInfo->nPage < pgui->mVScrollInfo->nMax && client_rect.right >= pgui->mVScrollInfo->nMax)
 				client_rect.right += GetSystemMetrics(SM_CYVSCROLL);
-			//old_x_page = pgui->mHScrollInfo->nPage;
-			//old_y_page = pgui->mVScrollInfo->nPage;
+			*/
 
 			pgui->mHScrollInfo->nMax = pgui->mMaxExtentRight;
 			pgui->mHScrollInfo->nPage = client_rect.right;
@@ -7892,19 +7889,14 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			GuiWidth = client_rect.right;
 			GuiHeight = client_rect.bottom;
 
-			sprintf(buf, "WM_SIZE: Client Height: %d, GuiHeight: %d, Top: %d, Bottom: %d\n", pgui->mVScrollInfo->nMax, GuiHeight, Top, Bottom );
-			OutputDebugStringA(buf);
+			//sprintf(buf, "WM_SIZE: Client Height: %d, GuiHeight: %d, Top: %d, Bottom: %d\n", pgui->mVScrollInfo->nMax, GuiHeight, Top, Bottom );
+			//OutputDebugStringA(buf);
 			if (Left < 0 && Right < GuiWidth)
 				xDrag = abs(Left) > GuiWidth - Right ? GuiWidth - Right : abs(Left);
 
-			if (Top < 0 && Bottom < GuiHeight) {
-				if (abs(Top) > GuiHeight - Bottom) {
-					yDrag = GuiHeight - Bottom;
-				}
-				else {
-					yDrag = abs(Top);
-				}
-			}
+			if (Top < 0 && Bottom < GuiHeight)
+				yDrag = abs(Top) > GuiHeight - Bottom ? GuiHeight - Bottom : abs(Top);
+
 			if (xDrag || yDrag) {
 				//sprintf(buf, "WM_SIZE: run: %d, TRIGGERING MOVE OF: x: %d, y: %d \n", run_num, xDrag, yDrag);
 				//OutputDebugStringA(buf);
