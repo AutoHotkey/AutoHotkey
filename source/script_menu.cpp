@@ -312,10 +312,21 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 
 	// Find the menu item name AND its previous item (needed for the DELETE command) in the linked list:
 	UserMenuItem *mi, *menu_item = NULL, *menu_item_prev = NULL; // Set defaults.
+	size_t length_aParam3 = _tcslen(aParam3);
+	// Check if the caller identified the menu item by position/index rather than by name.
+	// This should be reasonably backwards-compatible, as any scripts that want literally
+	// "1&" as menu item text would have to actually write "1&&".
+	int index_to_find = -1;
+	if (length_aParam3 > 1
+		&& aParam3[length_aParam3 - 1] == '&' // Use the same convention as WinMenuSelectItem: 1&, 2&, 3&...
+		&& aParam3[length_aParam3 - 2] != '&') // Not &&, which means one literal &.
+		index_to_find = ATOI(aParam3) - 1; // Yields -1 if aParam3 doesn't start with a number.
+	int current_index = 0;
 	for (menu_item = menu->mFirstMenuItem
 		; menu_item
-		; menu_item_prev = menu_item, menu_item = menu_item->mNextMenuItem)
-		if (!lstrcmpi(menu_item->mName, aParam3)) // Match found (case insensitive).
+		; menu_item_prev = menu_item, menu_item = menu_item->mNextMenuItem, ++current_index)
+		if (current_index == index_to_find // Found by index.
+			|| !lstrcmpi(menu_item->mName, aParam3)) // Found by case-insensitive text match.
 			break;
 
 	// Whether an existing menu item's options should be updated without updating its submenu or label:
@@ -350,7 +361,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 
 	if (!menu_item)  // menu item doesn't exist, so create it (but only if the command is ADD).
 	{
-		if (menu_command != MENU_CMD_ADD)
+		if (menu_command != MENU_CMD_ADD || index_to_find != -1)
 			// Seems best not to create menu items on-demand like this because they might get put into
 			// an incorrect position (i.e. it seems better than menu changes be kept separate from
 			// menu additions):
