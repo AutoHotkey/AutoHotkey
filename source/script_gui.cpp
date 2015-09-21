@@ -4137,6 +4137,13 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			if (bottom > mMaxExtentDownSection)
 				mMaxExtentDownSection = bottom;
 		}
+		if (mHScrollInfo)
+		{
+			mHScrollInfo->nMax = mMaxExtentRight;
+			SetScrollInfo(mHwnd, SB_HORZ, mHScrollInfo, true);
+			mVScrollInfo->nMax = mMaxExtentDown;
+			SetScrollInfo(mHwnd, SB_VERT, mVScrollInfo, true);
+		}
 	}
 
 	return OK;
@@ -7800,7 +7807,58 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	switch (iMsg)
 	{
 		// case WM_CREATE: --> Do nothing extra because DefDlgProc() appears to be sufficient.
+	case WM_MOUSEWHEEL:
+		if (!(pgui = GuiType::FindGui(hWnd)))
+			break; // Let default proc handle it.
+		if (pgui->mStyle & WS_VSCROLL)
+		{
+			static short SCROLL_STEP = 10;
+			static SCROLLINFO aScrollInfo = { sizeof(SCROLLINFO), SIF_ALL };
 
+			GetScrollInfo(pgui->mHwnd, true, &aScrollInfo);
+			short scrolllines = ((short)HIWORD(wParam)) / 120 * SCROLL_STEP * -1;
+			int new_pos = aScrollInfo.nPos + scrolllines;
+	
+			// Constrain scrollbar position to valid values
+			if (new_pos + (int)aScrollInfo.nPage > aScrollInfo.nMax)
+				new_pos = aScrollInfo.nMax - aScrollInfo.nPage;
+			else if (new_pos < aScrollInfo.nMin)
+				new_pos = aScrollInfo.nMin;
+
+			ScrollWindow(pgui->mHwnd, 0, aScrollInfo.nPos - new_pos, 0, 0);
+			// Update ScrollInfo structure
+			pgui->mVScrollInfo->nPos = new_pos;
+
+			aScrollInfo.nPos = new_pos;
+			SetScrollInfo(pgui->mHwnd, true, &aScrollInfo, true);
+		}
+		break;
+	case WM_MOUSEHWHEEL:
+		if (!(pgui = GuiType::FindGui(hWnd)))
+			break; // Let default proc handle it.
+		if (pgui->mStyle & WS_HSCROLL)
+		{
+			static short SCROLL_STEP = 10;
+			static SCROLLINFO aScrollInfo = { sizeof(SCROLLINFO), SIF_ALL };
+
+			GetScrollInfo(pgui->mHwnd, false, &aScrollInfo);
+			short scrolllines = ((short)HIWORD(wParam)) / 120 * SCROLL_STEP * -1;
+			int new_pos = aScrollInfo.nPos + scrolllines;
+
+			// Constrain scrollbar position to valid values
+			if (new_pos + (int)aScrollInfo.nPage > aScrollInfo.nMax)
+				new_pos = aScrollInfo.nMax - aScrollInfo.nPage;
+			else if (new_pos < aScrollInfo.nMin)
+				new_pos = aScrollInfo.nMin;
+
+			ScrollWindow(pgui->mHwnd, aScrollInfo.nPos - new_pos, 0, 0, 0);
+			// Update ScrollInfo structure
+			pgui->mHScrollInfo->nPos = new_pos;
+
+			aScrollInfo.nPos = new_pos;
+			SetScrollInfo(pgui->mHwnd, false, &aScrollInfo, true);
+		}
+		break;
 	case WM_SIZE: // Listed first for performance.
 		if (!(pgui = GuiType::FindGui(hWnd)))
 			break; // Let default proc handle it.
@@ -7835,13 +7893,15 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 			GetClientRect(pgui->mHwnd, &client_rect);
 
-			/*
-			if (pgui->mHScrollInfo->nPage < pgui->mHScrollInfo->nMax && client_rect.bottom >= pgui->mHScrollInfo->nMax)
+			if (client_rect.bottom + ((int)pgui->mHScrollInfo->nPage <= pgui->mHScrollInfo->nMax 
+					? GetSystemMetrics(SM_CYHSCROLL) : 0) >= pgui->mMaxExtentDown 
+				&& client_rect.right + ((int)pgui->mVScrollInfo->nPage <= pgui->mVScrollInfo->nMax 
+					? GetSystemMetrics(SM_CYVSCROLL) : 0) >= pgui->mMaxExtentRight)
+			{
 				client_rect.bottom += GetSystemMetrics(SM_CYHSCROLL);
-			if (pgui->mVScrollInfo->nPage < pgui->mVScrollInfo->nMax && client_rect.right >= pgui->mVScrollInfo->nMax)
 				client_rect.right += GetSystemMetrics(SM_CYVSCROLL);
-			*/
-
+			}
+			
 			pgui->mHScrollInfo->nMax = pgui->mMaxExtentRight;
 			pgui->mHScrollInfo->nPage = client_rect.right;
 
@@ -8521,7 +8581,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			bool bar = iMsg == WM_VSCROLL;
 
 			GetScrollInfo(pgui->mHwnd, bar, &aScrollInfo);
-			unsigned int new_pos = aScrollInfo.nPos;
+			int new_pos = aScrollInfo.nPos;
 			switch (wParam & 0xFFFF)
 			{
 			case SB_THUMBTRACK:
@@ -8551,9 +8611,9 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			}
 
 			// Constrain scrollbar position to valid values
-			if (new_pos + aScrollInfo.nPage > (unsigned int)aScrollInfo.nMax)
+			if (new_pos + (int)aScrollInfo.nPage > aScrollInfo.nMax)
 				new_pos = aScrollInfo.nMax - aScrollInfo.nPage;
-			else if (new_pos < (unsigned int)aScrollInfo.nMin)
+			else if (new_pos < aScrollInfo.nMin)
 				new_pos = aScrollInfo.nMin;
 
 			ScrollWindow(pgui->mHwnd, bar ? 0 : aScrollInfo.nPos - new_pos, bar ? aScrollInfo.nPos - new_pos : 0, 0, 0);
