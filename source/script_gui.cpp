@@ -4307,13 +4307,34 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 			if (adding) mStyle |= WS_BORDER; else mStyle &= ~WS_BORDER;
 
 		else if (!_tcsicmp(next_option, _T("Scroll")))
-			if (adding) mStyle |= WS_VSCROLL, mStyle |= WS_HSCROLL; else mStyle &= ~WS_VSCROLL, mStyle &= ~WS_HSCROLL;
+			if (adding)
+				mStyle |= WS_VSCROLL, mStyle |= WS_HSCROLL;
+			else
+			{
+				if (mHScroll)
+					ScrollWindow(mHwnd, mHScroll->nPos - mHScroll->nMin, mVScroll->nPos - mVScroll->nMin, NULL, NULL);
+				mStyle &= ~WS_VSCROLL, mStyle &= ~WS_HSCROLL;
+			}
 
 		else if (!_tcsicmp(next_option, _T("HScroll")))
-			if (adding) mStyle |= WS_HSCROLL; else mStyle &= ~WS_HSCROLL;
+			if (adding)
+				mStyle |= WS_HSCROLL;
+			else
+			{
+				mStyle &= ~WS_HSCROLL;
+				if (mHScroll)
+					ScrollWindow(mHwnd, mHScroll->nPos - mHScroll->nMin, 0, NULL, NULL);
+			}
 
 		else if (!_tcsicmp(next_option, _T("VScroll")))
-			if (adding) mStyle |= WS_VSCROLL; else mStyle &= ~WS_VSCROLL;
+			if (adding)
+				mStyle |= WS_VSCROLL;
+			else
+			{
+				mStyle &= ~WS_VSCROLL;
+				if (mHScroll)
+					ScrollWindow(mHwnd, 0, mVScroll->nPos - mVScroll->nMin, NULL, NULL);
+			}
 
 		else if (!_tcsicmp(next_option, _T("Caption")))
 			if (adding) mStyle |= WS_CAPTION; else mStyle = mStyle & ~WS_CAPTION;
