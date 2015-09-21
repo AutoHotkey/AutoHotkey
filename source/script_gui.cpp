@@ -4306,9 +4306,14 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 		else if (!_tcsicmp(next_option, _T("Border")))
 			if (adding) mStyle |= WS_BORDER; else mStyle &= ~WS_BORDER;
 
-
 		else if (!_tcsicmp(next_option, _T("Scroll")))
 			if (adding) mStyle |= WS_VSCROLL, mStyle |= WS_HSCROLL; else mStyle &= ~WS_VSCROLL, mStyle &= ~WS_HSCROLL;
+
+		else if (!_tcsicmp(next_option, _T("HScroll")))
+			if (adding) mStyle |= WS_HSCROLL; else mStyle &= ~WS_HSCROLL;
+
+		else if (!_tcsicmp(next_option, _T("VScroll")))
+			if (adding) mStyle |= WS_VSCROLL; else mStyle &= ~WS_VSCROLL;
 
 		else if (!_tcsicmp(next_option, _T("Caption")))
 			if (adding) mStyle |= WS_CAPTION; else mStyle = mStyle & ~WS_CAPTION;
