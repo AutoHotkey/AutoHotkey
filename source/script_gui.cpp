@@ -7818,7 +7818,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			GetScrollInfo(pgui->mHwnd, true, &aScrollInfo);
 			short scrolllines = ((short)HIWORD(wParam)) / 120 * SCROLL_STEP * -1;
 			int new_pos = aScrollInfo.nPos + scrolllines;
-			if ((int)pgui->mHScrollInfo->nPage > pgui->mHScrollInfo->nMax)
+			if ((int)pgui->mVScrollInfo->nPage > pgui->mVScrollInfo->nMax)
 				break;
 			// Constrain scrollbar position to valid values
 			if (new_pos + (int)aScrollInfo.nPage > aScrollInfo.nMax)
@@ -7846,7 +7846,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			short scrolllines = ((short)HIWORD(wParam)) / 120 * SCROLL_STEP * -1;
 			int new_pos = aScrollInfo.nPos + scrolllines;
 
-			if ((int)pgui->mVScrollInfo->nPage > pgui->mVScrollInfo->nMax)
+			if ((int)pgui->mHScrollInfo->nPage > pgui->mHScrollInfo->nMax)
 				break;
 
 			// Constrain scrollbar position to valid values
