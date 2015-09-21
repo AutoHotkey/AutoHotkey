@@ -4137,12 +4137,12 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			if (bottom > mMaxExtentDownSection)
 				mMaxExtentDownSection = bottom;
 		}
-		if (mHScrollInfo)
+		if (mHScroll)
 		{
-			mHScrollInfo->nMax = mMaxExtentRight;
-			SetScrollInfo(mHwnd, SB_HORZ, mHScrollInfo, true);
-			mVScrollInfo->nMax = mMaxExtentDown;
-			SetScrollInfo(mHwnd, SB_VERT, mVScrollInfo, true);
+			mHScroll->nMax = mMaxExtentRight;
+			SetScrollInfo(mHwnd, SB_HORZ, mHScroll, true);
+			mVScroll->nMax = mMaxExtentDown;
+			SetScrollInfo(mHwnd, SB_VERT, mVScroll, true);
 		}
 	}
 
@@ -6584,14 +6584,14 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 	// both of those commands into one).
 	bool allow_move_window;
 	RECT rect;
-	if (!mVScrollInfo)
+	if (!mVScroll)
 	{
-		mHScrollInfo = new SCROLLINFO;
-		mVScrollInfo = new SCROLLINFO;
-		memset(mHScrollInfo, 0, sizeof(SCROLLINFO));
-		memset(mVScrollInfo, 0, sizeof(SCROLLINFO));
-		mHScrollInfo->cbSize = mVScrollInfo->cbSize = sizeof(SCROLLINFO);
-		mHScrollInfo->fMask = mVScrollInfo->fMask = SIF_RANGE | SIF_PAGE;
+		mHScroll = new SCROLLINFO;
+		mVScroll = new SCROLLINFO;
+		memset(mHScroll, 0, sizeof(SCROLLINFO));
+		memset(mVScroll, 0, sizeof(SCROLLINFO));
+		mHScroll->cbSize = mVScroll->cbSize = sizeof(SCROLLINFO);
+		mHScroll->fMask = mVScroll->fMask = SIF_RANGE | SIF_PAGE;
 	}
 	if (allow_move_window = !IsIconic(mHwnd)) // Call IsIconic() again in case above changed the window's state.
 	{
@@ -7818,7 +7818,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			GetScrollInfo(pgui->mHwnd, true, &aScrollInfo);
 			short scrolllines = ((short)HIWORD(wParam)) / 120 * SCROLL_STEP * -1;
 			int new_pos = aScrollInfo.nPos + scrolllines;
-	
+			if ((int)pgui->mVScroll->nPage > pgui->mVScroll->nMax)
+				break;
 			// Constrain scrollbar position to valid values
 			if (new_pos + (int)aScrollInfo.nPage > aScrollInfo.nMax)
 				new_pos = aScrollInfo.nMax - aScrollInfo.nPage;
@@ -7827,7 +7828,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 			ScrollWindow(pgui->mHwnd, 0, aScrollInfo.nPos - new_pos, 0, 0);
 			// Update ScrollInfo structure
-			pgui->mVScrollInfo->nPos = new_pos;
+			pgui->mVScroll->nPos = new_pos;
 
 			aScrollInfo.nPos = new_pos;
 			SetScrollInfo(pgui->mHwnd, true, &aScrollInfo, true);
@@ -7845,6 +7846,9 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			short scrolllines = ((short)HIWORD(wParam)) / 120 * SCROLL_STEP * -1;
 			int new_pos = aScrollInfo.nPos + scrolllines;
 
+			if ((int)pgui->mHScroll->nPage > pgui->mHScroll->nMax)
+				break;
+
 			// Constrain scrollbar position to valid values
 			if (new_pos + (int)aScrollInfo.nPage > aScrollInfo.nMax)
 				new_pos = aScrollInfo.nMax - aScrollInfo.nPage;
@@ -7853,12 +7857,13 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 			ScrollWindow(pgui->mHwnd, aScrollInfo.nPos - new_pos, 0, 0, 0);
 			// Update ScrollInfo structure
-			pgui->mHScrollInfo->nPos = new_pos;
+			pgui->mHScroll->nPos = new_pos;
 
 			aScrollInfo.nPos = new_pos;
 			SetScrollInfo(pgui->mHwnd, false, &aScrollInfo, true);
 		}
 		break;
+
 	case WM_SIZE: // Listed first for performance.
 		if (!(pgui = GuiType::FindGui(hWnd)))
 			break; // Let default proc handle it.
@@ -7880,78 +7885,48 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		if (pgui->mStyle & WS_HSCROLL || pgui->mStyle & WS_VSCROLL)
 		{
 			RECT client_rect;
-			int xDrag = 0;
-			int yDrag = 0;
-			static int run_num = 0;
-			static int last_run = 0;
-			int dbg = 0;
-			//char buf[2048];
-
-			int Top, Left, Bottom, Right, GuiWidth, GuiHeight;
-
-			run_num++;
+			SCROLLINFO *aHScroll = pgui->mHScroll, *aVScroll = pgui->mVScroll;
 
 			GetClientRect(pgui->mHwnd, &client_rect);
 
-			if (client_rect.bottom + ((int)pgui->mHScrollInfo->nPage <= pgui->mHScrollInfo->nMax 
+			if (client_rect.bottom + ((int)aHScroll->nPage <= aHScroll->nMax
 					? GetSystemMetrics(SM_CYHSCROLL) : 0) >= pgui->mMaxExtentDown 
-				&& client_rect.right + ((int)pgui->mVScrollInfo->nPage <= pgui->mVScrollInfo->nMax 
+				&& client_rect.right + ((int)aVScroll->nPage <= aVScroll->nMax
 					? GetSystemMetrics(SM_CYVSCROLL) : 0) >= pgui->mMaxExtentRight)
 			{
 				client_rect.bottom += GetSystemMetrics(SM_CYHSCROLL);
 				client_rect.right += GetSystemMetrics(SM_CYVSCROLL);
 			}
 			
-			pgui->mHScrollInfo->nMax = pgui->mMaxExtentRight;
-			pgui->mHScrollInfo->nPage = client_rect.right;
+			aHScroll->nMax = pgui->mMaxExtentRight;
+			aHScroll->nPage = client_rect.right;
 
-			pgui->mVScrollInfo->nMax = pgui->mMaxExtentDown;
-			pgui->mVScrollInfo->nPage = client_rect.bottom;
+			aVScroll->nMax = pgui->mMaxExtentDown;
+			aVScroll->nPage = client_rect.bottom;
+			if (pgui->mStyle & WS_HSCROLL)
+				SetScrollInfo(pgui->mHwnd, SB_HORZ, aHScroll, true);
+			if (pgui->mStyle & WS_VSCROLL)
+				SetScrollInfo(pgui->mHwnd, SB_VERT, aVScroll, true);
 
-			/*
-			if (run_num - last_run == 2) {
-				// Catch runs that interrupt another
-				sprintf(buf, "WM_SIZE: run: %d, last_run: %d. THIS RUN INTERRUPTS ANOTHER, ABORTING...\n", run_num, last_run);
-				OutputDebugStringA(buf);
-				return 0;
-			}
-			*/
-			SetScrollInfo(pgui->mHwnd, SB_HORZ, pgui->mHScrollInfo, true);	// Why does false not seem to stop this code from getting interrupted?
-			SetScrollInfo(pgui->mHwnd, SB_VERT, pgui->mVScrollInfo, true);
+			// By this point, both scrollbars have redrawn, and disappeared if not needed
+			// SCROLLINFO and client_rect are current.
+			int xDrag = 0, yDrag = 0;
+			if (pgui->mStyle & WS_HSCROLL && aHScroll->nPos && aHScroll->nMax - aHScroll->nPos < client_rect.right)
+				if (aHScroll->nPos > client_rect.right - aHScroll->nMax - aHScroll->nPos)
+					xDrag = client_rect.right - aHScroll->nMax - aHScroll->nPos;
+				else
+					xDrag = aHScroll->nPos;
 
-			/*
-			if (run_num - last_run == 2) {
-				// Re-Get scrollbar info before proceeding
-				sprintf(buf, "WM_SIZE: run: %d, last_run: %d. JUST RETURNED FROM AN INTERRUPTED RUN...\n", run_num, last_run);
-				OutputDebugStringA(buf);
-				GetScrollInfo(pgui->mHwnd, SB_HORZ, pgui->mHScrollInfo);
-				GetScrollInfo(pgui->mHwnd, SB_VERT, pgui->mVScrollInfo);
-				GetClientRect(pgui->mHwnd, &client_rect);
-				dbg = 1;
-			}
-			*/
-			// By this point, both scrollbars have redrawn, and disappeared if not needed, and the Scrollinfos / client rect should be current.
-			Top = pgui->mVScrollInfo->nMin - pgui->mVScrollInfo->nPos;
-			Bottom = Top + pgui->mVScrollInfo->nMax;
-			Left = pgui->mHScrollInfo->nMin - pgui->mHScrollInfo->nPos;
-			Right = Left + pgui->mHScrollInfo->nMax;
-			GuiWidth = client_rect.right;
-			GuiHeight = client_rect.bottom;
-
-			//sprintf(buf, "WM_SIZE: Client Height: %d, GuiHeight: %d, Top: %d, Bottom: %d\n", pgui->mVScrollInfo->nMax, GuiHeight, Top, Bottom );
-			//OutputDebugStringA(buf);
-			if (Left < 0 && Right < GuiWidth)
-				xDrag = abs(Left) > GuiWidth - Right ? GuiWidth - Right : abs(Left);
-
-			if (Top < 0 && Bottom < GuiHeight)
-				yDrag = abs(Top) > GuiHeight - Bottom ? GuiHeight - Bottom : abs(Top);
+			if (pgui->mStyle & WS_VSCROLL && aVScroll->nPos && aVScroll->nMax - aVScroll->nPos < client_rect.bottom)
+				if (aVScroll->nPos > client_rect.bottom - (aVScroll->nMax - aVScroll->nPos))
+					yDrag = client_rect.bottom - (aVScroll->nMax - aVScroll->nPos);
+				else 
+					yDrag = aVScroll->nPos;
 
 			if (xDrag || yDrag) {
-				//sprintf(buf, "WM_SIZE: run: %d, TRIGGERING MOVE OF: x: %d, y: %d \n", run_num, xDrag, yDrag);
-				//OutputDebugStringA(buf);
 				ScrollWindow(pgui->mHwnd, xDrag, yDrag, NULL, NULL);
-				pgui->mHScrollInfo->nPos -= xDrag;
-				pgui->mVScrollInfo->nPos -= yDrag;
+				aHScroll->nPos -= xDrag; 
+				aVScroll->nPos -= yDrag;
 			}
 
 		}
@@ -8619,9 +8594,9 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			ScrollWindow(pgui->mHwnd, bar ? 0 : aScrollInfo.nPos - new_pos, bar ? aScrollInfo.nPos - new_pos : 0, 0, 0);
 			// Update ScrollInfo structure
 			if (bar)
-				pgui->mVScrollInfo->nPos = new_pos;
+				pgui->mVScroll->nPos = new_pos;
 			else
-				pgui->mHScrollInfo->nPos = new_pos;
+				pgui->mHScroll->nPos = new_pos;
 
 			aScrollInfo.nPos = new_pos;
 			SetScrollInfo(pgui->mHwnd, bar, &aScrollInfo, true);
