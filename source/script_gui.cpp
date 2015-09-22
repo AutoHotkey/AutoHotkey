@@ -4137,7 +4137,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			if (bottom > mMaxExtentDownSection)
 				mMaxExtentDownSection = bottom;
 		}
-		if (mHScroll)
+		if (mHScroll) // Scroll has been already initialized, update it
 		{
 			mHScroll->nMax = mMaxExtentRight;
 			SetScrollInfo(mHwnd, SB_HORZ, mHScroll, true);
@@ -7916,18 +7916,18 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			GetClientRect(pgui->mHwnd, &client_rect);
 
 			if (client_rect.bottom + ((int)aHScroll->nPage <= aHScroll->nMax
-					? GetSystemMetrics(SM_CYHSCROLL) : 0) >= pgui->mMaxExtentDown 
+					? GetSystemMetrics(SM_CYHSCROLL) : 0) >= pgui->mMaxExtentDown + pgui->mMarginX
 				&& client_rect.right + ((int)aVScroll->nPage <= aVScroll->nMax
-					? GetSystemMetrics(SM_CYVSCROLL) : 0) >= pgui->mMaxExtentRight)
+					? GetSystemMetrics(SM_CYVSCROLL) : 0) >= pgui->mMaxExtentRight + pgui->mMarginY)
 			{
 				client_rect.bottom += GetSystemMetrics(SM_CYHSCROLL);
 				client_rect.right += GetSystemMetrics(SM_CYVSCROLL);
 			}
 			
-			aHScroll->nMax = pgui->mMaxExtentRight;
+			aHScroll->nMax = pgui->mMaxExtentRight + pgui->mMarginY;
 			aHScroll->nPage = client_rect.right;
 
-			aVScroll->nMax = pgui->mMaxExtentDown;
+			aVScroll->nMax = pgui->mMaxExtentDown + pgui->mMarginX;
 			aVScroll->nPage = client_rect.bottom;
 			if (pgui->mStyle & WS_HSCROLL)
 				SetScrollInfo(pgui->mHwnd, SB_HORZ, aHScroll, true);
