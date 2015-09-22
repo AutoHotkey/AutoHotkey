@@ -7938,8 +7938,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			// SCROLLINFO and client_rect are current.
 			int xDrag = 0, yDrag = 0;
 			if (pgui->mStyle & WS_HSCROLL && aHScroll->nPos && aHScroll->nMax - aHScroll->nPos < client_rect.right)
-				if (aHScroll->nPos > client_rect.right - aHScroll->nMax - aHScroll->nPos)
-					xDrag = client_rect.right - aHScroll->nMax - aHScroll->nPos;
+				if (aHScroll->nPos > client_rect.right - (aHScroll->nMax - aHScroll->nPos))
+					xDrag = client_rect.right - (aHScroll->nMax - aHScroll->nPos);
 				else
 					xDrag = aHScroll->nPos;
 
