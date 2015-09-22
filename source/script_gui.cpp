@@ -7910,25 +7910,23 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// Update Scroll
 		if (pgui->mStyle & WS_HSCROLL || pgui->mStyle & WS_VSCROLL)
 		{
-			RECT client_rect;
 			SCROLLINFO *aHScroll = pgui->mHScroll, *aVScroll = pgui->mVScroll;
-
-			GetClientRect(pgui->mHwnd, &client_rect);
-
-			if (client_rect.bottom + ((int)aHScroll->nPage <= aHScroll->nMax
+			int client_right = LOWORD(lParam),client_bottom = HIWORD(lParam);
+			
+			if (client_bottom + ((int)aHScroll->nPage <= aHScroll->nMax
 					? GetSystemMetrics(SM_CYHSCROLL) : 0) >= pgui->mMaxExtentDown + pgui->mMarginX
-				&& client_rect.right + ((int)aVScroll->nPage <= aVScroll->nMax
+				&& client_right + ((int)aVScroll->nPage <= aVScroll->nMax
 					? GetSystemMetrics(SM_CYVSCROLL) : 0) >= pgui->mMaxExtentRight + pgui->mMarginY)
 			{
-				client_rect.bottom += GetSystemMetrics(SM_CYHSCROLL);
-				client_rect.right += GetSystemMetrics(SM_CYVSCROLL);
+				client_bottom += GetSystemMetrics(SM_CYHSCROLL);
+				client_right += GetSystemMetrics(SM_CYVSCROLL);
 			}
 			
 			aHScroll->nMax = pgui->mMaxExtentRight + pgui->mMarginY;
-			aHScroll->nPage = client_rect.right;
+			aHScroll->nPage = client_right;
 
 			aVScroll->nMax = pgui->mMaxExtentDown + pgui->mMarginX;
-			aVScroll->nPage = client_rect.bottom;
+			aVScroll->nPage = client_bottom;
 			if (pgui->mStyle & WS_HSCROLL)
 				SetScrollInfo(pgui->mHwnd, SB_HORZ, aHScroll, true);
 			if (pgui->mStyle & WS_VSCROLL)
@@ -7937,15 +7935,15 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			// By this point, both scrollbars have redrawn, and disappeared if not needed
 			// SCROLLINFO and client_rect are current.
 			int xDrag = 0, yDrag = 0;
-			if (pgui->mStyle & WS_HSCROLL && aHScroll->nPos && aHScroll->nMax - aHScroll->nPos < client_rect.right)
-				if (aHScroll->nPos > client_rect.right - (aHScroll->nMax - aHScroll->nPos))
-					xDrag = client_rect.right - (aHScroll->nMax - aHScroll->nPos);
+			if (pgui->mStyle & WS_HSCROLL && aHScroll->nPos && aHScroll->nMax - aHScroll->nPos < client_right)
+				if (aHScroll->nPos > client_right - (aHScroll->nMax - aHScroll->nPos))
+					xDrag = client_right - (aHScroll->nMax - aHScroll->nPos);
 				else
 					xDrag = aHScroll->nPos;
 
-			if (pgui->mStyle & WS_VSCROLL && aVScroll->nPos && aVScroll->nMax - aVScroll->nPos < client_rect.bottom)
-				if (aVScroll->nPos > client_rect.bottom - (aVScroll->nMax - aVScroll->nPos))
-					yDrag = client_rect.bottom - (aVScroll->nMax - aVScroll->nPos);
+			if (pgui->mStyle & WS_VSCROLL && aVScroll->nPos && aVScroll->nMax - aVScroll->nPos < client_bottom)
+				if (aVScroll->nPos > client_bottom - (aVScroll->nMax - aVScroll->nPos))
+					yDrag = client_bottom - (aVScroll->nMax - aVScroll->nPos);
 				else 
 					yDrag = aVScroll->nPos;
 
