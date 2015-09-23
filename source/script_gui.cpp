@@ -7869,7 +7869,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			static SCROLLINFO aScrollInfo = { sizeof(SCROLLINFO), SIF_ALL };
 
 			GetScrollInfo(pgui->mHwnd, false, &aScrollInfo);
-			short scrolllines = ((short)HIWORD(wParam)) / 120 * SCROLL_STEP * -1;
+			short scrolllines = ((short)HIWORD(wParam)) / 120 * SCROLL_STEP;
 			int new_pos = aScrollInfo.nPos + scrolllines;
 
 			if ((int)pgui->mHScroll->nPage > pgui->mHScroll->nMax)
